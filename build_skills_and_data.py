@@ -36,6 +36,8 @@ MT5_PASSWORD=
 MT5_SERVER=
 MEXC_API_KEY=
 MEXC_API_SECRET=
+CLOUD_DB_URL=
+CLOUD_DB_TOKEN=
 """
 
 DATA_FEEDS_PATH = "config/data_feeds_config.json"
@@ -60,6 +62,17 @@ DATA_FEEDS_CONFIG = {
             "rest_endpoint": "https://api.whale-alert.io/v1/transactions",
             "poll_interval_sec": 30,
         },
+    },
+    "cloud_sync": {
+        "push_interval_sec": 5,
+        "fetch_interval_sec": 15,
+        "batch_max_records": 500,
+        "reconnect_backoff_sec": [1, 2, 4, 8, 16],
+    },
+    "telemetry": {
+        "interval_ms": 75,
+        "bind_host": "127.0.0.1",
+        "bind_port": 8080,
     },
 }
 

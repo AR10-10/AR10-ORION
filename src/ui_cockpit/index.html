@@ -96,7 +96,9 @@
             else el.classList.add('signal-flat');
         }
 
-        const ws = new WebSocket(`ws://${window.location.host}/ws`);
+        // Sob o Túnel Reverso a página chega via https:// — o canal sobe como wss://
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
             document.getElementById('sensorial-status').innerText = data.sensorial_status;
