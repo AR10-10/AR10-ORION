@@ -152,6 +152,8 @@ body {
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
+    /* Centro óptico: o bloco de dados ocupa o coração da placa */
+    justify-content: center;
     box-shadow: inset 0 0 18px rgba(0, 242, 255, 0.04);
 }
 
@@ -176,9 +178,10 @@ body {
 
 h2 {
     font-family: 'Orbitron', sans-serif;
-    font-size: 1.1rem;
+    /* Tipografia fluida: legível do iPad ao monitor de mesa */
+    font-size: clamp(1.1rem, 1.4vw, 1.7rem);
     margin-top: 0;
-    margin-bottom: 4mm;
+    margin-bottom: 5mm;
     letter-spacing: 3px;
     text-transform: uppercase;
     color: var(--sys-cyan);
@@ -188,10 +191,11 @@ h2 {
 .stat-row {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 3mm;
-    font-size: 1.05rem;
+    align-items: baseline;
+    margin-bottom: 4mm;
+    font-size: clamp(1.05rem, 1.2vw, 1.55rem);
     border-bottom: 1px solid rgba(0, 242, 255, 0.06);
-    padding-bottom: 1mm;
+    padding-bottom: 1.5mm;
 }
 
 .label { opacity: var(--opacity-ambient); }
