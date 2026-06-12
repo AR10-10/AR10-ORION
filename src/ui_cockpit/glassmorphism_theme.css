@@ -1,0 +1,137 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&display=swap');
+
+:root {
+    --cyan-neon: #00f3ff;
+    --magenta-neon: #ff007f;
+    --amber-neon: #ffaa00;
+    --vitals-neon: #00ff66;
+    --bg-dark: #020208;
+    --glass-bg: rgba(2, 2, 8, 0.6);
+    --glass-border: rgba(255, 255, 255, 0.05);
+}
+
+body {
+    background-color: var(--bg-dark);
+    color: #e2e8f0;
+    font-family: 'Share Tech Mono', monospace;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+/* 16mm de Margem Protetora nas bordas externas de acordo com as regras de design */
+.cockpit-container {
+    width: calc(100vw - 32mm);
+    height: calc(100vh - 32mm);
+    margin: 16mm;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    /* 8mm exatos de vão (Gap) entre as placas de vidro */
+    gap: 8mm;
+    box-sizing: border-box;
+}
+
+/* Vidro Esfumaçado (Glassmorphism) */
+.panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 6mm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+h2 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.25rem;
+    margin-top: 0;
+    margin-bottom: 4mm;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 3mm;
+    font-size: 1.1rem;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
+    padding-bottom: 1mm;
+}
+
+/* Sincronização Óptica de Paletas */
+.neon-cyan {
+    border-color: rgba(0, 243, 255, 0.15);
+    box-shadow: inset 0 0 15px rgba(0, 243, 255, 0.05);
+}
+.neon-cyan h2,.neon-cyan.cyan-pulse {
+    color: var(--cyan-neon);
+    text-shadow: 0 0 8px rgba(0, 243, 255, 0.5);
+}
+
+.neon-magenta {
+    border-color: rgba(255, 0, 127, 0.15);
+    box-shadow: inset 0 0 15px rgba(255, 0, 127, 0.05);
+}
+.neon-magenta h2,.neon-magenta.magenta-pulse {
+    color: var(--magenta-neon);
+    text-shadow: 0 0 8px rgba(255, 0, 127, 0.5);
+}
+
+.neon-amber {
+    border-color: rgba(255, 170, 0, 0.15);
+    box-shadow: inset 0 0 15px rgba(255, 170, 0, 0.05);
+}
+.neon-amber h2,.neon-amber.amber-pulse {
+    color: var(--amber-neon);
+    text-shadow: 0 0 8px rgba(255, 170, 0, 0.5);
+}
+
+.neon-vitals {
+    border-color: rgba(0, 255, 102, 0.15);
+    box-shadow: inset 0 0 15px rgba(0, 255, 102, 0.05);
+}
+.neon-vitals h2,.neon-vitals.vitals-pulse {
+    color: var(--vitals-neon);
+    text-shadow: 0 0 8px rgba(0, 255, 102, 0.5);
+}
+
+/* Animações dos Sinais Vitais */
+@keyframes pulseCyan {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; text-shadow: 0 0 12px var(--cyan-neon); }
+    100% { opacity: 0.7; }
+}
+.cyan-pulse { animation: pulseCyan 1.5s infinite; }
+
+@keyframes pulseMagenta {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; text-shadow: 0 0 12px var(--magenta-neon); }
+    100% { opacity: 0.7; }
+}
+.magenta-pulse { animation: pulseMagenta 1.5s infinite; }
+
+@keyframes pulseAmber {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; text-shadow: 0 0 12px var(--amber-neon); }
+    100% { opacity: 0.7; }
+}
+.amber-pulse { animation: pulseAmber 1.5s infinite; }
+
+@keyframes pulseVitals {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; text-shadow: 0 0 12px var(--vitals-neon); }
+    100% { opacity: 0.7; }
+}
+.vitals-pulse { animation: pulseVitals 2s infinite; }
+
+.value { font-weight: bold; }\n
