@@ -8,72 +8,94 @@
 </head>
 <body>
     <div class="cockpit-container">
-        <div class="panel neon-cyan">
+        <!-- Circuitos orgânicos: o fluxo nervoso entre os quadrantes -->
+        <div class="circuit-layer">
+            <div class="circuit-line h"></div>
+            <div class="circuit-line v"></div>
+            <div class="circuit-pulse h-flow"></div>
+            <div class="circuit-pulse v-flow"></div>
+            <div class="circuit-node"></div>
+        </div>
+
+        <div class="panel">
             <h2>1. Sensorial Roots</h2>
             <div class="stat-row">
                 <span class="label">Status WSS:</span>
-                <span class="value cyan-pulse" id="sensorial-status">CONECTANDO...</span>
+                <span class="value sys-pulse" id="sensorial-status">CONECTANDO...</span>
             </div>
             <div class="stat-row">
                 <span class="label">Order Flow Rate:</span>
                 <span class="value" id="ticks-rate">0 Ticks/s</span>
             </div>
-            <div class="stat-row">
+            <div class="stat-row dim">
                 <span class="label">Audio Squawk:</span>
                 <span class="value">Aguardando Feed</span>
             </div>
         </div>
 
-        <div class="panel neon-magenta">
+        <div class="panel">
             <h2>2. Core Cognition</h2>
-            <div class="stat-row">
+            <div class="stat-row dim">
                 <span class="label">xLSTM Backbone:</span>
                 <span class="value" id="xlstm-state">ESTÁVEL</span>
             </div>
             <div class="stat-row">
                 <span class="label">VDB Memory Recall:</span>
-                <span class="value magenta-pulse" id="vdb-recall">INATIVO</span>
+                <span class="value sys-pulse" id="vdb-recall">INATIVO</span>
             </div>
-            <div class="stat-row">
+            <div class="stat-row dim">
                 <span class="label">Consolidação Sono:</span>
                 <span class="value">Pronto</span>
             </div>
         </div>
 
-        <div class="panel neon-amber" id="operational-panel">
+        <div class="panel" id="operational-panel">
             <h2>3. Operational Crown</h2>
             <div class="stat-row">
+                <span class="label">Posição Atual:</span>
+                <span class="value signal-flat" id="position-side">FLAT</span>
+            </div>
+            <div class="stat-row">
+                <span class="label">PnL Sessão:</span>
+                <span class="value signal-flat" id="session-pnl">0.00%</span>
+            </div>
+            <div class="stat-row">
                 <span class="label">Cortisol (Stress):</span>
-                <span class="value amber-pulse" id="cortisol-val">0.10</span>
+                <span class="value" id="cortisol-val">0.10</span>
             </div>
-            <div class="stat-row">
-                <span class="label">Dopamina (Lucro):</span>
-                <span class="value" id="dopamine-val">0.50</span>
-            </div>
-            <div class="stat-row">
+            <div class="stat-row dim">
                 <span class="label">MEXC Gateway:</span>
                 <span class="value">Air-Gap Ativo</span>
             </div>
         </div>
 
-        <div class="panel neon-vitals">
+        <div class="panel">
             <h2>4. System Vitals</h2>
-            <div class="stat-row">
+            <div class="stat-row dim">
                 <span class="label">RAM Principal:</span>
                 <span class="value" id="ram-usage">0%</span>
             </div>
-            <div class="stat-row">
+            <div class="stat-row dim">
                 <span class="label">VRAM Alocada:</span>
                 <span class="value" id="vram-usage">0 GB</span>
             </div>
-            <div class="stat-row">
+            <div class="stat-row dim">
                 <span class="label">Purgador Linfático:</span>
-                <span class="value vitals-pulse">Homeostase</span>
+                <span class="value">Homeostase</span>
             </div>
         </div>
     </div>
 
     <script>
+        const CORTISOL_PAIN_THRESHOLD = 0.60;
+
+        function setSignal(el, side) {
+            el.classList.remove('signal-long', 'signal-short', 'signal-flat');
+            if (side === 'LONG') el.classList.add('signal-long');
+            else if (side === 'SHORT') el.classList.add('signal-short');
+            else el.classList.add('signal-flat');
+        }
+
         const ws = new WebSocket(`ws://${window.location.host}/ws`);
         ws.onmessage = (event) => {
             const data = JSON.parse(event.data);
@@ -81,11 +103,25 @@
             document.getElementById('ticks-rate').innerText = `${data.ticks_per_sec} Ticks/s`;
             document.getElementById('xlstm-state').innerText = data.xlstm_state;
             document.getElementById('vdb-recall').innerText = data.vdb_recall;
-            document.getElementById('cortisol-val').innerText = data.cortisol.toFixed(2);
-            document.getElementById('dopamine-val').innerText = data.dopamine.toFixed(2);
             document.getElementById('ram-usage').innerText = `${data.ram_usage}%`;
             document.getElementById('vram-usage').innerText = `${data.vram_usage} GB`;
+
+            // Código Óptico de Trade: só a ação recebe Verde/Vermelho
+            const sideEl = document.getElementById('position-side');
+            sideEl.innerText = data.position_side;
+            setSignal(sideEl, data.position_side);
+
+            const pnlEl = document.getElementById('session-pnl');
+            pnlEl.innerText = `${data.session_pnl >= 0 ? '+' : ''}${data.session_pnl.toFixed(2)}%`;
+            setSignal(pnlEl, data.session_pnl > 0 ? 'LONG' : data.session_pnl < 0 ? 'SHORT' : 'FLAT');
+
+            // Dor (Cortisol): âmbar somente em modo de proteção
+            const cortisolEl = document.getElementById('cortisol-val');
+            cortisolEl.innerText = data.cortisol.toFixed(2);
+            const inPain = data.cortisol >= CORTISOL_PAIN_THRESHOLD;
+            cortisolEl.classList.toggle('alert-pain', inPain);
+            document.getElementById('operational-panel').classList.toggle('pain-state', inPain);
         };
     </script>
 </body>
-</html>\n
+</html>

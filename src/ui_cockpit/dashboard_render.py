@@ -1,4 +1,5 @@
 import asyncio
+import itertools
 import logging
 import os
 from aiohttp import web
@@ -17,14 +18,26 @@ async def websocket_handler(request):
     logger.info("📡 Cockpit UI: Terminal conectado ao fluxo nervoso.")
     
     try:
-        # Loop assíncrono de telemetria simulada para teste da interface
-        while not ws.closed:
+        # Loop assíncrono de telemetria simulada para teste da interface.
+        # position_side/session_pnl alimentam o Código Óptico de Trade
+        # (Verde #00FF9D = LONG, Vermelho #FF3E52 = SHORT).
+        sides = itertools.cycle(["LONG", "SHORT", "FLAT"])
+        side, pnl, cortisol = next(sides), 0.0, 0.15
+        for tick in itertools.count():
+            if ws.closed:
+                break
+            if tick % 8 == 0:
+                side = next(sides)
+            pnl += 0.12 if side == "LONG" else -0.09 if side == "SHORT" else 0.0
+            cortisol = min(0.95, max(0.05, cortisol + (0.05 if pnl < 0 else -0.03)))
             await ws.send_json({
                 "sensorial_status": "ONLINE",
                 "ticks_per_sec": 1450,
                 "xlstm_state": "ESTÁVEL",
                 "vdb_recall": "ATIVO",
-                "cortisol": 0.15,
+                "position_side": side,
+                "session_pnl": round(pnl, 2),
+                "cortisol": round(cortisol, 2),
                 "dopamine": 0.55,
                 "ram_usage": 42.1,
                 "vram_usage": 3.1

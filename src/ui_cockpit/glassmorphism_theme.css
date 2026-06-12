@@ -1,18 +1,36 @@
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&display=swap');
 
+/* ============================================================
+   AR10 ORION V5.0 — TEMA "CIBORGUE" (TECHNOLOGY INTEGRATION)
+   Preto absoluto + circuitos orgânicos. A cor é reservada à
+   ação de trading (Verde/Vermelho); a estrutura vive em Ciano.
+   ============================================================ */
+
 :root {
-    --cyan-neon: #00f3ff;
-    --magenta-neon: #ff007f;
-    --amber-neon: #ffaa00;
-    --vitals-neon: #00ff66;
-    --bg-dark: #020208;
-    --glass-bg: rgba(2, 2, 8, 0.6);
-    --glass-border: rgba(255, 255, 255, 0.05);
+    /* Código Óptico de Trade (Padrão de Elite) */
+    --long-green: #00FF9D;     /* LONG / Compra */
+    --short-red: #FF3E52;      /* SHORT / Venda */
+    --sys-cyan: #00F2FF;       /* Energia / Sistema */
+    --alert-amber: #FFB800;    /* Dor / Cortisol */
+
+    --bg-void: #000000;
+    --metal-hi: rgba(18, 22, 26, 0.85);
+    --metal-lo: rgba(4, 6, 8, 0.95);
+    --line-cyan: rgba(0, 242, 255, 0.12);
+    --text-primary: #c9d4d9;
+
+    /* Hierarquia óptica: dado não vital recua da visão */
+    --opacity-vital: 1;
+    --opacity-ambient: 0.45;
 }
 
 body {
-    background-color: var(--bg-dark);
-    color: #e2e8f0;
+    background-color: var(--bg-void);
+    /* Profundidade orgânica sobre o preto absoluto */
+    background-image:
+        radial-gradient(ellipse 80% 60% at 50% 45%, rgba(0, 242, 255, 0.04), transparent 70%),
+        radial-gradient(ellipse 40% 30% at 50% 50%, rgba(0, 242, 255, 0.03), transparent 60%);
+    color: var(--text-primary);
     font-family: 'Share Tech Mono', monospace;
     margin: 0;
     padding: 0;
@@ -24,114 +42,201 @@ body {
     overflow: hidden;
 }
 
-/* 16mm de Margem Protetora nas bordas externas de acordo com as regras de design */
+/* 16mm de Margem Protetora nas bordas externas */
 .cockpit-container {
+    position: relative;
     width: calc(100vw - 32mm);
     height: calc(100vh - 32mm);
     margin: 16mm;
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: 1fr 1fr;
-    /* 8mm exatos de vão (Gap) entre as placas de vidro */
+    /* 8mm exatos de vão entre as placas */
     gap: 8mm;
     box-sizing: border-box;
 }
 
-/* Vidro Esfumaçado (Glassmorphism) */
+/* ------------------------------------------------------------
+   CIRCUITOS ORGÂNICOS — os dados "pulsam" entre os painéis
+   ------------------------------------------------------------ */
+.circuit-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.circuit-line {
+    position: absolute;
+    background: linear-gradient(90deg, transparent, var(--line-cyan) 30%, var(--line-cyan) 70%, transparent);
+}
+.circuit-line.h {
+    top: 50%;
+    left: 6%;
+    right: 6%;
+    height: 1px;
+}
+.circuit-line.v {
+    left: 50%;
+    top: 4%;
+    bottom: 4%;
+    width: 1px;
+    background: linear-gradient(180deg, transparent, var(--line-cyan) 30%, var(--line-cyan) 70%, transparent);
+}
+
+/* Nó sináptico central: ponto de fusão dos quatro quadrantes */
+.circuit-node {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    margin: -3px 0 0 -3px;
+    border-radius: 50%;
+    background: var(--sys-cyan);
+    box-shadow: 0 0 10px var(--sys-cyan), 0 0 24px rgba(0, 242, 255, 0.4);
+    animation: synapseBeat 2.4s ease-in-out infinite;
+}
+
+/* Pulso de dados percorrendo o circuito */
+.circuit-pulse {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--sys-cyan);
+    box-shadow: 0 0 8px var(--sys-cyan);
+    opacity: 0;
+}
+.circuit-pulse.h-flow {
+    top: calc(50% - 2px);
+    left: 6%;
+    animation: flowAcross 5s linear infinite;
+}
+.circuit-pulse.v-flow {
+    left: calc(50% - 2px);
+    top: 4%;
+    animation: flowDown 7s linear infinite;
+    animation-delay: 2.5s;
+}
+
+@keyframes synapseBeat {
+    0%, 100% { transform: scale(1); opacity: 0.7; }
+    50% { transform: scale(1.5); opacity: 1; }
+}
+@keyframes flowAcross {
+    0% { transform: translateX(0); opacity: 0; }
+    8% { opacity: 0.9; }
+    92% { opacity: 0.9; }
+    100% { transform: translateX(calc(88vw - 32mm)); opacity: 0; }
+}
+@keyframes flowDown {
+    0% { transform: translateY(0); opacity: 0; }
+    8% { opacity: 0.9; }
+    92% { opacity: 0.9; }
+    100% { transform: translateY(calc(92vh - 32mm)); opacity: 0; }
+}
+
+/* ------------------------------------------------------------
+   PLACAS — vidro sobre liga metálica escura
+   ------------------------------------------------------------ */
 .panel {
-    background: var(--glass-bg);
+    position: relative;
+    z-index: 1;
+    background: linear-gradient(150deg, var(--metal-hi), var(--metal-lo));
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid var(--glass-border);
+    border: 1px solid var(--line-cyan);
     border-radius: 12px;
     padding: 6mm;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
+    box-shadow: inset 0 0 18px rgba(0, 242, 255, 0.04);
+}
+
+/* Porta de conexão: onde o circuito entra na placa */
+.panel::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: -3px;
+    width: 5px;
+    height: 5px;
+    margin-top: -2.5px;
+    border-radius: 50%;
+    background: var(--sys-cyan);
+    opacity: 0.35;
+    box-shadow: 0 0 6px var(--sys-cyan);
+}
+.panel:nth-child(even)::after {
+    right: auto;
+    left: -3px;
 }
 
 h2 {
     font-family: 'Orbitron', sans-serif;
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     margin-top: 0;
     margin-bottom: 4mm;
-    letter-spacing: 2px;
+    letter-spacing: 3px;
     text-transform: uppercase;
+    color: var(--sys-cyan);
+    text-shadow: 0 0 8px rgba(0, 242, 255, 0.35);
 }
 
 .stat-row {
     display: flex;
     justify-content: space-between;
     margin-bottom: 3mm;
-    font-size: 1.1rem;
-    border-bottom: 1px dashed rgba(255, 255, 255, 0.05);
+    font-size: 1.05rem;
+    border-bottom: 1px solid rgba(0, 242, 255, 0.06);
     padding-bottom: 1mm;
 }
 
-/* Sincronização Óptica de Paletas */
-.neon-cyan {
-    border-color: rgba(0, 243, 255, 0.15);
-    box-shadow: inset 0 0 15px rgba(0, 243, 255, 0.05);
+.label { opacity: var(--opacity-ambient); }
+.value { font-weight: bold; }
+
+/* Dado não vital para a decisão: recua para a periferia da visão */
+.dim { opacity: var(--opacity-ambient); }
+
+/* ------------------------------------------------------------
+   CÓDIGO ÓPTICO DE TRADE — única fonte de cor de ação
+   ------------------------------------------------------------ */
+.signal-long {
+    color: var(--long-green);
+    text-shadow: 0 0 10px rgba(0, 255, 157, 0.6);
 }
-.neon-cyan h2,.neon-cyan.cyan-pulse {
-    color: var(--cyan-neon);
-    text-shadow: 0 0 8px rgba(0, 243, 255, 0.5);
+.signal-short {
+    color: var(--short-red);
+    text-shadow: 0 0 10px rgba(255, 62, 82, 0.6);
+}
+.signal-flat {
+    color: var(--text-primary);
+    opacity: var(--opacity-ambient);
 }
 
-.neon-magenta {
-    border-color: rgba(255, 0, 127, 0.15);
-    box-shadow: inset 0 0 15px rgba(255, 0, 127, 0.05);
+/* Energia / fluxo de sistema (estrutura, nunca decisão) */
+.sys-pulse {
+    color: var(--sys-cyan);
+    animation: pulseSystem 2s ease-in-out infinite;
 }
-.neon-magenta h2,.neon-magenta.magenta-pulse {
-    color: var(--magenta-neon);
-    text-shadow: 0 0 8px rgba(255, 0, 127, 0.5);
-}
-
-.neon-amber {
-    border-color: rgba(255, 170, 0, 0.15);
-    box-shadow: inset 0 0 15px rgba(255, 170, 0, 0.05);
-}
-.neon-amber h2,.neon-amber.amber-pulse {
-    color: var(--amber-neon);
-    text-shadow: 0 0 8px rgba(255, 170, 0, 0.5);
+@keyframes pulseSystem {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; text-shadow: 0 0 12px var(--sys-cyan); }
 }
 
-.neon-vitals {
-    border-color: rgba(0, 255, 102, 0.15);
-    box-shadow: inset 0 0 15px rgba(0, 255, 102, 0.05);
+/* Dor (Cortisol elevado): o organismo inteiro sinaliza âmbar */
+.alert-pain {
+    color: var(--alert-amber) !important;
+    text-shadow: 0 0 10px rgba(255, 184, 0, 0.6);
+    animation: pulsePain 1.2s ease-in-out infinite;
 }
-.neon-vitals h2,.neon-vitals.vitals-pulse {
-    color: var(--vitals-neon);
-    text-shadow: 0 0 8px rgba(0, 255, 102, 0.5);
+.panel.pain-state {
+    border-color: rgba(255, 184, 0, 0.3);
+    box-shadow: inset 0 0 18px rgba(255, 184, 0, 0.06);
 }
-
-/* Animações dos Sinais Vitais */
-@keyframes pulseCyan {
-    0% { opacity: 0.7; }
-    50% { opacity: 1; text-shadow: 0 0 12px var(--cyan-neon); }
-    100% { opacity: 0.7; }
+@keyframes pulsePain {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
 }
-.cyan-pulse { animation: pulseCyan 1.5s infinite; }
-
-@keyframes pulseMagenta {
-    0% { opacity: 0.7; }
-    50% { opacity: 1; text-shadow: 0 0 12px var(--magenta-neon); }
-    100% { opacity: 0.7; }
-}
-.magenta-pulse { animation: pulseMagenta 1.5s infinite; }
-
-@keyframes pulseAmber {
-    0% { opacity: 0.7; }
-    50% { opacity: 1; text-shadow: 0 0 12px var(--amber-neon); }
-    100% { opacity: 0.7; }
-}
-.amber-pulse { animation: pulseAmber 1.5s infinite; }
-
-@keyframes pulseVitals {
-    0% { opacity: 0.7; }
-    50% { opacity: 1; text-shadow: 0 0 12px var(--vitals-neon); }
-    100% { opacity: 0.7; }
-}
-.vitals-pulse { animation: pulseVitals 2s infinite; }
-
-.value { font-weight: bold; }\n
