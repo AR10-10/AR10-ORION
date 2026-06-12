@@ -38,6 +38,8 @@ MEXC_API_KEY=
 MEXC_API_SECRET=
 CLOUD_DB_URL=
 CLOUD_DB_TOKEN=
+# Token exigido para POST /ingest vindo através do túnel reverso
+INGEST_TOKEN=
 """
 
 DATA_FEEDS_PATH = "config/data_feeds_config.json"

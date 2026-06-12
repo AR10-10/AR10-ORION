@@ -66,6 +66,7 @@ class DataService:
         credentials = load_credentials()
         self.cloud_url = credentials.get("CLOUD_DB_URL", "").rstrip("/")
         self.cloud_token = credentials.get("CLOUD_DB_TOKEN", "")
+        self.ingest_token = credentials.get("INGEST_TOKEN", "")
 
         self.started_at = time.time()
         # Estado vivo do organismo, atualizado via /ingest pelos módulos locais
@@ -99,8 +100,22 @@ class DataService:
             "buffered_snapshots": len(self.outbound_buffer),
         })
 
+    # Cabeçalhos que só existem quando a requisição atravessou o túnel/proxy.
+    # Módulos locais batem direto no loopback, sem nenhum deles.
+    PROXY_HEADERS = ("CF-Connecting-IP", "X-Forwarded-For", "Tailscale-User-Login")
+
     async def ingest(self, request):
-        """Módulos do organismo (loopback) injetam estado fresco aqui."""
+        """
+        Módulos do organismo (loopback) injetam estado fresco aqui.
+        Escrita vinda através do túnel exige Bearer INGEST_TOKEN — sem isso,
+        qualquer pessoa com a URL pública poderia falsificar telemetria.
+        """
+        came_through_tunnel = any(h in request.headers for h in self.PROXY_HEADERS)
+        if came_through_tunnel:
+            expected = f"Bearer {self.ingest_token}" if self.ingest_token else None
+            if expected is None or request.headers.get("Authorization") != expected:
+                logger.warning("⛔ /ingest externo recusado (token ausente ou inválido).")
+                raise web.HTTPForbidden(reason="INGEST_TOKEN inválido")
         payload = await request.json()
         self.state.update({k: v for k, v in payload.items() if k in self.state})
         self.outbound_buffer.append({"ts": time.time(), **payload})
