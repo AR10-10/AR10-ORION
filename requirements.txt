@@ -1,0 +1,5 @@
+# Servidor + núcleo do organismo (instalação rápida)
+aiohttp>=3.9
+numpy>=1.26
+psutil>=5.9
+backoff>=2.2

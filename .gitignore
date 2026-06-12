@@ -10,3 +10,6 @@ data/episodic_memory_cache/*
 # Artefatos Python
 __pycache__/
 *.pyc
+
+# Ambiente virtual local
+.venv/

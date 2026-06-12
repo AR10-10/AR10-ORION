@@ -1,0 +1,4 @@
+# Cérebro neural (Córtex xLSTM, Hipocampo, Plasticidade LoRA, Purgador CUDA)
+# Instalação pesada (~2GB+). Necessário apenas para run_organism.py completo;
+# o servidor do Cockpit (src/api/data_service.py) NÃO depende disto.
+torch>=2.2
