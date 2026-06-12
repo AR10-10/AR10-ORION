@@ -1,0 +1,12 @@
+# Cofre de credenciais — gerado por build_skills_and_data.py, nunca versionar
+config/encrypted_credentials.env
+
+# Caches da camada física de dados (apenas a árvore é versionada via .gitkeep)
+data/feature_store/*
+data/raw_ticks_cache/*
+data/episodic_memory_cache/*
+!data/*/.gitkeep
+
+# Artefatos Python
+__pycache__/
+*.pyc

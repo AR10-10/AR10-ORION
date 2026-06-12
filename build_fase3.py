@@ -153,10 +153,10 @@ def build_fase3():
 
     for filepath, content in files_to_create.items():
         with open(filepath, "w", encoding="utf-8") as file:
-            file.write(content.strip() + "\\n")
+            file.write(content.strip() + "\n")
         print(f"📄 Arquivo gravado: {filepath}")
 
-    print("\\n✅ FASE 3 implantada localmente com sucesso! O núcleo lógico-matemático está pronto.")
+    print("\n✅ FASE 3 implantada localmente com sucesso! O núcleo lógico-matemático está pronto.")
 
 if __name__ == "__main__":
     build_fase3()

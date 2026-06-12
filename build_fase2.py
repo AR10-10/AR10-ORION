@@ -128,10 +128,10 @@ def build_fase2():
 
     for filepath, content in files_to_create.items():
         with open(filepath, "w", encoding="utf-8") as file:
-            file.write(content.strip() + "\\n")
+            file.write(content.strip() + "\n")
         print(f"📄 Arquivo gravado: {filepath}")
 
-    print("\\n✅ FASE 2 implantada localmente com sucesso! Sensores Read-Only acoplados.")
+    print("\n✅ FASE 2 implantada localmente com sucesso! Sensores Read-Only acoplados.")
 
 if __name__ == "__main__":
     build_fase2()

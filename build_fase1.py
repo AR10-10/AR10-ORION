@@ -278,10 +278,10 @@ def build_structure():
     # Escrita Física em Disco
     for filepath, content in files_to_create.items():
         with open(filepath, "w", encoding="utf-8") as file:
-            file.write(content.strip() + "\\n")
+            file.write(content.strip() + "\n")
         print(f"📄 Arquivo gravado: {filepath}")
 
-    print("\\n✅ FASE 1 implantada localmente com sucesso! Todo o núcleo basal está pronto.")
+    print("\n✅ FASE 1 implantada localmente com sucesso! Todo o núcleo basal está pronto.")
 
 if __name__ == "__main__":
     build_structure()

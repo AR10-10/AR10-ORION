@@ -1,0 +1,44 @@
+{
+    "mode": "READ_ONLY",
+    "air_gap_enforced": true,
+    "feeds": {
+        "binance_spot": {
+            "ws_endpoint": "wss://stream.binance.com:9443/ws",
+            "streams": [
+                "btcusdt@depth20@100ms",
+                "btcusdt@aggTrade"
+            ],
+            "reconnect_backoff_sec": [
+                1,
+                2,
+                4,
+                8,
+                16
+            ]
+        },
+        "okx_public": {
+            "ws_endpoint": "wss://ws.okx.com:8443/ws/v5/public",
+            "channels": [
+                {
+                    "channel": "books",
+                    "instId": "BTC-USDT"
+                },
+                {
+                    "channel": "trades",
+                    "instId": "BTC-USDT"
+                }
+            ],
+            "reconnect_backoff_sec": [
+                1,
+                2,
+                4,
+                8,
+                16
+            ]
+        },
+        "onchain_whales": {
+            "rest_endpoint": "https://api.whale-alert.io/v1/transactions",
+            "poll_interval_sec": 30
+        }
+    }
+}

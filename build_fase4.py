@@ -96,10 +96,10 @@ def build_fase4():
 
     for filepath, content in files_to_create.items():
         with open(filepath, "w", encoding="utf-8") as file:
-            file.write(content.strip() + "\\n")
+            file.write(content.strip() + "\n")
         print(f"📄 Arquivo gravado: {filepath}")
 
-    print("\\n✅ FASE 4 implantada localmente com sucesso! Vias Motoras prontas para execução Air-Gap.")
+    print("\n✅ FASE 4 implantada localmente com sucesso! Vias Motoras prontas para execução Air-Gap.")
 
 if __name__ == "__main__":
     build_fase4()
