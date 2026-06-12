@@ -6,6 +6,9 @@ REM roda o diagnostico real e sobe o servidor do Cockpit.
 REM ============================================================
 cd /d %~dp0
 
+REM Atalho na Area de Trabalho (criado automaticamente na primeira execucao)
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$d=[Environment]::GetFolderPath('Desktop'); $p=Join-Path $d 'AR10 Orion.lnk'; if(!(Test-Path $p)){ $w=New-Object -ComObject WScript.Shell; $s=$w.CreateShortcut($p); $s.TargetPath='%~dp0start_orion.bat'; $s.WorkingDirectory='%~dp0'; $s.Description='AR10 Orion V5.0 - Servidor do Organismo'; $s.IconLocation='%SystemRoot%\System32\shell32.dll,13'; $s.Save(); Write-Host '[OK] Atalho criado na Area de Trabalho: AR10 Orion' }" 2>nul
+
 if not exist .venv (
     echo [1/5] Criando ambiente virtual...
     python -m venv .venv

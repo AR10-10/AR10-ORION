@@ -230,7 +230,41 @@ h2 {
     50% { opacity: 1; text-shadow: 0 0 12px var(--sys-cyan); }
 }
 
-/* Dor (Cortisol elevado): o organismo inteiro sinaliza âmbar */
+/* Transição óptica do painel operacional: a placa acompanha a ação */
+.panel.long-state {
+    border-color: rgba(0, 255, 157, 0.3);
+    box-shadow: inset 0 0 18px rgba(0, 255, 157, 0.05);
+}
+.panel.short-state {
+    border-color: rgba(255, 62, 82, 0.3);
+    box-shadow: inset 0 0 18px rgba(255, 62, 82, 0.05);
+}
+
+/* ------------------------------------------------------------
+   VOZ DO CIBORGUE — telemetria vocal (sintetizador local)
+   ------------------------------------------------------------ */
+#voice-btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: clamp(0.85rem, 0.9vw, 1.1rem);
+    padding: 1mm 3mm;
+    border-radius: 4px;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid var(--line-cyan);
+    color: var(--text-primary);
+    opacity: var(--opacity-ambient);
+    transition: all 0.3s ease;
+}
+#voice-btn.voice-active {
+    opacity: 1;
+    color: var(--sys-cyan);
+    border-color: rgba(0, 242, 255, 0.5);
+    text-shadow: 0 0 6px var(--sys-cyan);
+    box-shadow: 0 0 8px rgba(0, 242, 255, 0.25);
+}
+
+/* Dor (Cortisol elevado): o organismo inteiro sinaliza âmbar.
+   Declarado por último: dor prevalece sobre long/short-state. */
 .alert-pain {
     color: var(--alert-amber) !important;
     text-shadow: 0 0 10px rgba(255, 184, 0, 0.6);

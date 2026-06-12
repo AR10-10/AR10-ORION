@@ -47,6 +47,10 @@
                 <span class="label">Consolidação Sono:</span>
                 <span class="value">Pronto</span>
             </div>
+            <div class="stat-row">
+                <span class="label">Voz do Ciborgue:</span>
+                <button id="voice-btn" onclick="toggleVoice()">ATIVAR SINC</button>
+            </div>
         </div>
 
         <div class="panel" id="operational-panel">
@@ -96,6 +100,59 @@
             else el.classList.add('signal-flat');
         }
 
+        // ------------------------------------------------------------
+        // VOZ DO CIBORGUE — sintetizador local offline (latência <300ms)
+        // Exige um gesto do usuário (clique) para desbloquear o áudio.
+        // ------------------------------------------------------------
+        const synth = window.speechSynthesis;
+        let voiceEnabled = false;
+        let lastPosition = 'FLAT';
+        let lastStressState = 'NORMAL';
+
+        function toggleVoice() {
+            const btn = document.getElementById('voice-btn');
+            voiceEnabled = !voiceEnabled;
+            if (voiceEnabled) {
+                btn.innerText = 'SINC: ONLINE';
+                btn.classList.add('voice-active');
+                speakLocal('Sincronização de áudio tática estabelecida. Telemetria vocal online.');
+            } else {
+                btn.innerText = 'ATIVAR SINC';
+                btn.classList.remove('voice-active');
+                if (synth) synth.cancel();
+            }
+        }
+
+        function speakLocal(text) {
+            if (!voiceEnabled || !synth) return;
+            synth.cancel(); // Descarta filas: o tempo de resposta vale mais que o histórico
+            const utterance = new SpeechSynthesisUtterance(text);
+            const voices = synth.getVoices();
+            const localVoice = voices.find(v => v.lang.startsWith('pt'))
+                || voices.find(v => v.name.includes('David') || v.name.includes('Alex'));
+            if (localVoice) utterance.voice = localVoice;
+            utterance.rate = 1.25;  // Ritmo operacional HFT
+            utterance.pitch = 0.95; // Tom focado e sóbrio
+            synth.speak(utterance);
+        }
+
+        function announcePosition(side) {
+            if (side === lastPosition) return;
+            if (side === 'LONG') speakLocal('Executando compra tática. Posição long iniciada.');
+            else if (side === 'SHORT') speakLocal('Executando venda tática. Posição short iniciada.');
+            else speakLocal('Posição finalizada. Retornando ao estado estável de monitoramento.');
+            lastPosition = side;
+        }
+
+        function announceStress(inPain) {
+            if (inPain && lastStressState !== 'CRITICAL') {
+                speakLocal('Aviso tático de risco. Nível de cortisol elevado. Amígdala acionou limites de segurança.');
+                lastStressState = 'CRITICAL';
+            } else if (!inPain) {
+                lastStressState = 'NORMAL';
+            }
+        }
+
         // Sob o Túnel Reverso a página chega via https:// — o canal sobe como wss://
         const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
         const ws = new WebSocket(`${wsProtocol}://${window.location.host}/ws`);
@@ -117,12 +174,21 @@
             pnlEl.innerText = `${data.session_pnl >= 0 ? '+' : ''}${data.session_pnl.toFixed(2)}%`;
             setSignal(pnlEl, data.session_pnl > 0 ? 'LONG' : data.session_pnl < 0 ? 'SHORT' : 'FLAT');
 
+            // Transição óptica do painel operacional acompanha a posição
+            const opPanel = document.getElementById('operational-panel');
+            opPanel.classList.toggle('long-state', data.position_side === 'LONG');
+            opPanel.classList.toggle('short-state', data.position_side === 'SHORT');
+
             // Dor (Cortisol): âmbar somente em modo de proteção
             const cortisolEl = document.getElementById('cortisol-val');
             cortisolEl.innerText = data.cortisol.toFixed(2);
             const inPain = data.cortisol >= CORTISOL_PAIN_THRESHOLD;
             cortisolEl.classList.toggle('alert-pain', inPain);
-            document.getElementById('operational-panel').classList.toggle('pain-state', inPain);
+            opPanel.classList.toggle('pain-state', inPain);
+
+            // Telemetria vocal
+            announcePosition(data.position_side);
+            announceStress(inPain);
         };
     </script>
 </body>
