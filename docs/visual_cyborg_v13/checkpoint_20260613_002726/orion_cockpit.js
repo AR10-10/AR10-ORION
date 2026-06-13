@@ -165,7 +165,7 @@ function rollingRsi(candles, period = 14) {
 function setActiveTab(tabName) {
   const tabs = Array.from(document.querySelectorAll(".app-tab")).map((button) => button.dataset.tab);
   const safeTab = tabs.includes(tabName) ? tabName : "overview";
-  document.querySelectorAll(".app-tab, .rail-tab, .command-tab").forEach((button) => {
+  document.querySelectorAll(".app-tab").forEach((button) => {
     button.classList.toggle("active", button.dataset.tab === safeTab);
   });
   document.querySelectorAll(".tab-page").forEach((page) => {
@@ -499,8 +499,6 @@ function renderMarket(data) {
   const biasCard = document.querySelector(".bias-card");
   if (biasCard) biasCard.className = `scenario-card bias-card info-card ${biasClass(data.bias)}`;
   setText("marketSymbol", `${data.symbol} / ${data.interval}`);
-  setText("commandSymbol", data.symbol || "AGUARDANDO");
-  setText("commandInterval", data.interval || "AGUARDANDO");
   setText("marketBias", readableBias(data.bias));
   setText("marketNarrative", data.narrative);
   setText("marketPrice", priceText(data.price));
@@ -578,30 +576,10 @@ function renderComposite(telemetry, matrix, market) {
   const volatilityLabel = volatility > 0.012 ? "ALTA" : volatility > 0.006 ? "MODERADA" : "BAIXA";
   const momentumLabel = market.pressure.long > market.pressure.short ? "COMPRADOR" : market.pressure.short > market.pressure.long ? "VENDEDOR" : "NEUTRO";
   const modelConfidence = telemetry.brain.cortex.confidence || market.confidence;
-  const closes = candles.map((c) => Number(c.close)).filter(Number.isFinite);
-  const returns = closes.slice(1).map((close, idx) => closes[idx] ? (close - closes[idx]) / closes[idx] : 0);
-  const avgReturn = returns.length ? returns.reduce((sum, value) => sum + value, 0) / returns.length : null;
-  const returnStd = returns.length ? Math.sqrt(returns.reduce((sum, value) => sum + ((value - avgReturn) ** 2), 0) / returns.length) : null;
-  const totalReturn = closes.length > 1 ? (closes[closes.length - 1] - closes[0]) / closes[0] : null;
-  let peak = closes[0] || 0;
-  let maxDrawdown = 0;
-  closes.forEach((close) => {
-    peak = Math.max(peak, close);
-    if (peak > 0) maxDrawdown = Math.min(maxDrawdown, (close - peak) / peak);
-  });
-  const winRate = returns.length ? returns.filter((value) => value > 0).length / returns.length : null;
-  const regimeStrength = Math.min(1, Math.abs((market.signals.ema_20 - market.signals.ema_50) / Math.max(market.price, 1)) * 42);
-  const quantRegime = trend === "ALTA" && market.confidence >= 0.58 ? "TREND FOLLOWING" : trend === "BAIXA" && market.confidence >= 0.58 ? "DOWNTREND WATCH" : "RANGE / WAIT";
 
   setText("globalLatency", `${Math.round((telemetry.oscillator.rate_hz || 1) * 10)} ms`);
   setText("globalSync", telemetry.guardrails.fail_closed ? "100%" : "STALE");
   setText("feedActiveCount", `${activeFeeds}/${telemetry.feeds.items.length} ativas`);
-  setText("vitalCore", telemetry.guardrails.fail_closed ? "100%" : "STALE");
-  setText("vitalIntegrity", market.source.startsWith("fallback") ? "STALE" : "100%");
-  setText("vitalLatency", `${Math.round((telemetry.oscillator.rate_hz || 1) * 10)} ms`);
-  setText("vitalSensors", `${activeFeeds}/${telemetry.feeds.items.length}`);
-  setText("vitalMemory", `${telemetry.brain.hippocampus.length} episodios`);
-  setText("vitalHeartbeat", now.toLocaleTimeString("pt-BR"));
   setText("entropyLabel", telemetry.brain.amygdala.feed_drift_input < 0.25 ? "BAIXA ENTROPIA - MERCADO ESTAVEL" : "ENTROPIA EM OBSERVACAO");
   setText("tickerSymbol", market.symbol.replace("USDT", "/USDT"));
   setText("tickerPrice", priceText(market.price));
@@ -624,9 +602,6 @@ function renderComposite(telemetry, matrix, market) {
   setText("deepSnapshotStatus", "PRELIMINARY SNAPSHOT");
   setText("deepScenarioBadge", shortSignal(market.bias));
   setText("reportHash", `SHA ${payloadHash}`);
-  setText("quantRegimeBadge", quantRegime);
-  setText("quantPerfBadge", totalReturn === null ? "SEM DADO" : `${percentText(Math.abs(totalReturn))} janela`);
-  setText("modelConsensusBadge", shortSignal(market.bias));
   setText("microPressureBadge", readablePressure(market.pressure.bias));
   setText("liquidityMapStatus", market.source_consensus.active_lanes > 0 ? "DERIVADO CANDLES" : "STALE");
   setText("bookDataAge", "L2 INDISPONIVEL");
@@ -753,47 +728,6 @@ function renderComposite(telemetry, matrix, market) {
     ["VALIDATING", telemetry.guardrails.fail_closed ? "fail-closed" : "STALE"],
   ].map(([step, value]) => `<div><b>${step}</b><span>${value}</span></div>`).join(""));
 
-  setHtml("quantMetrics", [
-    ["Regime atual", quantRegime],
-    ["Forca do regime", percentText(regimeStrength)],
-    ["Entropia mercado", fmt.format(telemetry.brain.amygdala.feed_drift_input)],
-    ["Volatilidade candle", returnStd === null ? "SEM DADO" : percentText(returnStd)],
-    ["Retorno janela", totalReturn === null ? "SEM DADO" : percentText(totalReturn)],
-    ["Win rate candle", winRate === null ? "SEM DADO" : percentText(winRate)],
-  ].map(([label, value]) => `<div><span>${label}</span><b>${value}</b></div>`).join(""));
-
-  const equityPoints = closes.length > 1 ? closes.slice(-60).map((close) => ((close - closes[0]) / closes[0])) : [];
-  setHtml("quantEquity", equityPoints.map((value, idx) => {
-    const left = equityPoints.length <= 1 ? 0 : (idx / (equityPoints.length - 1)) * 100;
-    const top = 50 - Math.max(-38, Math.min(38, value * 420));
-    return `<i class="${value >= 0 ? "long" : "short"}" style="left:${left.toFixed(2)}%;top:${top.toFixed(2)}%"></i>`;
-  }).join(""));
-
-  setHtml("quantPerformance", [
-    ["Retorno", totalReturn === null ? "SEM DADO" : percentText(totalReturn)],
-    ["Vol anualizada proxy", returnStd === null ? "SEM DADO" : percentText(returnStd * Math.sqrt(Math.max(1, returns.length)))],
-    ["Max drawdown", percentText(maxDrawdown)],
-    ["Sharpe proxy", avgReturn === null || !returnStd ? "SEM DADO" : fmt.format(avgReturn / returnStd)],
-    ["Eficiencia", percentText(market.confidence)],
-  ].map(([label, value]) => `<div><span>${label}</span><b>${value}</b></div>`).join(""));
-
-  setHtml("featureBars", [
-    ["Momentum", Math.min(1, Math.abs(market.signals.ema_20 - market.signals.ema_50) / Math.max(market.price, 1) * 80)],
-    ["Orderflow imbalance", Math.max(market.pressure.long, market.pressure.short)],
-    ["RSI regime", Math.min(1, Math.abs(market.signals.rsi_14 - 50) / 50)],
-    ["Volume relativo", Math.min(1, market.signals.volume_ratio)],
-    ["Volatilidade", Math.min(1, volatility * 65)],
-    ["Fonte publica", market.source_consensus.active_lanes / Math.max(1, market.source_consensus.total_lanes)],
-  ].map(([label, value]) => `<div><span>${label}</span><i style="width:${Math.round(value * 100)}%"></i><b>${fmt.format(value)}</b></div>`).join(""));
-
-  setHtml("modelConsensus", [
-    ["AR10 Cyborg", shortSignal(market.bias), market.confidence],
-    ["Cortex", telemetry.brain.cortex.trend || "WARMUP", modelConfidence],
-    ["Amigdala", telemetry.brain.amygdala.state || "WARMUP", 1 - telemetry.brain.amygdala.cortisol],
-    ["KAN Challenger", "SHADOW ONLY", 0],
-    ["Consenso agregado", shortSignal(market.bias), market.confidence],
-  ].map(([model, signal, confidence]) => `<div><b>${model}</b><span>${signal}</span><i style="width:${Math.round(Math.max(0, confidence) * 100)}%"></i></div>`).join(""));
-
   setHtml("deepEngines", [
     ["Cortex", telemetry.brain.cortex.trend],
     ["Amigdala", telemetry.brain.amygdala.state],
@@ -822,33 +756,6 @@ function renderComposite(telemetry, matrix, market) {
     ["BID", market.levels.support_zone?.[0], "INDISPONIVEL L2", "bid"],
   ];
   setHtml("orderBookLadder", ladderRows.map(([side, price, qty, cls], idx) => `<div class="ladder-row ${cls}"><span>${priceText(price || market.price)}</span><i style="width:${idx === 2 ? 100 : 35 + idx * 12}%"></i><b>${side} ${qty}</b></div>`).join(""));
-  const visibleHigh = candles.length ? Math.max(...candles.map((c) => c.high)) : null;
-  const visibleLow = candles.length ? Math.min(...candles.map((c) => c.low)) : null;
-  const visibleRange = visibleHigh && visibleLow ? visibleHigh - visibleLow : 1;
-  const heatmapMarks = [
-    ["Liquidation Heatmap", "INDISPONIVEL", null, "blocked liquidation"],
-    ["Order Book Heatmap", "INDISPONIVEL L2", null, "blocked orderbook"],
-    ["Resistencia", priceText(market.levels.resistance), market.levels.resistance, "ask"],
-    ["Preco / Mid", priceText(market.price), market.price, "mid"],
-    ["Suporte", priceText(market.levels.support), market.levels.support, "bid"],
-    ["Visible Range", visibleHigh === null ? "SEM DADO" : `${priceText(visibleHigh)} - ${priceText(visibleLow)}`, null, "range"],
-  ];
-  setHtml("liquidityHeatmap", `
-    <div class="heatmap-stage">
-      <div class="heatmap-axis"><span>${visibleHigh === null ? "SEM DADO" : priceText(visibleHigh)}</span><span>${visibleLow === null ? "SEM DADO" : priceText(visibleLow)}</span></div>
-      <div class="heatmap-candle-trace">${candles.slice(-42).map((c, idx, series) => {
-        const left = series.length <= 1 ? 50 : 4 + ((idx / (series.length - 1)) * 92);
-        const height = Math.max(10, (Math.abs(c.close - c.open) / visibleRange) * 85);
-        const top = 88 - (((Math.max(c.close, c.open) - visibleLow) / visibleRange) * 78);
-        return `<i class="${c.close >= c.open ? "long" : "short"}" style="left:${Math.max(3, Math.min(96, left)).toFixed(2)}%;top:${Math.max(8, Math.min(86, top)).toFixed(2)}%;height:${height.toFixed(2)}%"></i>`;
-      }).join("")}</div>
-      ${heatmapMarks.map(([label, value, price, cls]) => {
-        const y = price && visibleHigh && visibleLow ? 91 - (((price - visibleLow) / visibleRange) * 78) : null;
-        const pos = y === null ? "" : `style="top:${Math.max(9, Math.min(88, y)).toFixed(2)}%"`;
-        return `<div class="heatmap-mark ${cls}" ${pos}><b>${label}</b><span>${value}</span></div>`;
-      }).join("")}
-      <div class="heatmap-honesty">Mapa visual derivado de candles publicos. L2, liquidacoes e slippage permanecem indisponiveis sem conector autenticado.</div>
-    </div>`);
   setHtml("imbalanceGrid", [
     ["OBI", "INDISPONIVEL L2"],
     ["Imbalance Volume", percentText(Math.max(market.pressure.long, market.pressure.short))],
@@ -1251,15 +1158,11 @@ document.querySelectorAll(".nexus-card").forEach((card) => {
     if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 });
-document.querySelectorAll(".app-tab, .rail-tab, .command-tab").forEach((button) => {
+document.querySelectorAll(".app-tab").forEach((button) => {
   button.addEventListener("click", () => {
     setActiveTab(button.dataset.tab);
     history.replaceState(null, "", `#${button.dataset.tab}`);
   });
-});
-document.getElementById("commandAnalyze").addEventListener("click", () => {
-  setActiveTab("deep");
-  history.replaceState(null, "", "#deep");
 });
 document.querySelectorAll("[data-analysis-state]").forEach((button) => {
   button.addEventListener("click", () => {

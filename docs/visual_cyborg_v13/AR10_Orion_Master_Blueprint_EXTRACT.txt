@@ -1,0 +1,109 @@
+PDF: C:\Users\mv\.codex\codex-remote-attachments\019eba8d-56dc-74f3-b407-218a98fec490\6C7598E2-9150-43F5-B92F-CCC0421ACADF\1-AR10_Orion_Master_Blueprint.pdf
+PAGES: 4
+
+--- PAGE 1 ---
+AR10 ORION V5.0
+DOCUMENTO MESTRE DE ARQUITETURA (MASTER BLUEPRINT)
+ESPECIFICAÇÃO PARA WORKSPACE MULTIAGENTE (AGENTIC SWARM)
+1. DIRETRIZES OPERACIONAIS PARA A IA
+(SISTEMA DE AGENTES)
+Este documento é a Planta Mãe (Scaffold Blueprint) do sistema AR10 Orion V5.0. Ele
+define a estrutura exata, os padrões de projeto (Design Patterns) e a nomenclatura
+industrial que deve ser rigorosamente seguida pela inteligência artificial local durante o
+desenvolvimento. Desvios não são permitidos.
+ATENÇÃO IA DESENVOLVEDORA: Você operará em um formato de Agentic Workflow
+com separação estrita de responsabilidades (Separation of Concerns). Não crie nomes
+arbitrários para pastas ou arquivos. Utilize o inventário abaixo.
+
+--- PAGE 2 ---
+2. TOPOLOGIA DO ECOSSISTEMA MULTIAGENTE
+O desenvolvimento e a execução do sistema são divididos em 5 Agentes de IA
+Especializados:
+[AGENTE 1] Sensory_Agent (Visão & Audição)
+Escopo: Ingestão de dados HFT, WebSockets e APIs REST.
+Padrão:Read-Only / Air-Gap. Este agente apenas escuta o mercado (Binance, OKX, On-chain,
+X/Twitter). É proibido de ter credenciais de execução de ordens. 
+[AGENTE 2] Cognitive_Agent (Córtex Neural)
+Escopo: Processamento matemático e motor de decisão.
+Padrão:Neuromorphic Fusion / HNSW Vector Embedding. Utiliza PyTorch com tensores
+vetorizados. Sem loops 'for' no fluxo principal. Calcula a entropia do vetor e o nível de estresse
+(Cortisol). 
+[AGENTE 3] Motor_Agent (Vias Executoras)
+Escopo: Roteamento de ordens para corretoras.
+Padrão:Zero-Latency Execution Pipeline. Conecta-se via MT5 ou APIs Cripto (MEXC)
+estritamente para envio de ordens LONG/SHORT e gerenciamento de travas (Circuit Breaker). 
+[AGENTE 4] UI_Voice_Agent (Cockpit & Cyborg TTS)
+Escopo: Interface de usuário, telemetria em tempo real e síntese de voz.
+Padrão:Glassmorphism UI / Asynchronous WebSockets / Web Speech API. Responsável
+pela renderização do painel no navegador e pela voz robótica local (latência zero, sem
+dependência de APIs externas). 
+[AGENTE 5] Core_Survival_Agent (Sistemas Vitais)
+Escopo: Memória, estabilidade e sincronismo do sistema operacional.
+Padrão:IPC Zero-Copy / Drift-Free Temporal Oscillator / Garbage Collection. Expurgador
+linfático de memória (libera RAM/CUDA automaticamente) e relógio atômico interno. 
+
+--- PAGE 3 ---
+3. ÁRVORE DE DIRETÓRIOS ESTRITA
+(SCAFFOLDING)
+A inteligência artificial deve instanciar a seguinte árvore exata de arquivos para garantir a
+integridade do sistema:
+AR10_ORION_WORKSPACE/
+├── .cursorrules                  # (Instruções Globais do Agente)
+├── run_organism.py               # (Lançador do Sistema Central)
+├── config/
+│   ├── encrypted_credentials.env
+│   └── settings_hft.yaml
+├── data/
+│   ├── episodic_memory_cache/    # (Banco Vetorial de Memória)
+│   └── raw_ticks_cache/
+└── src/
+    ├── core/
+    │   ├── memory_ipc.py         # (Zero-Copy Bus)
+    │   ├── time_oscillator.py
+    │   └── lymphatic_purge.py    # (CUDA/RAM Cleaner)
+    ├── sensors/
+    │   ├── ingestion_websockets.py
+    │   └── sentiment_scraper.py
+    ├── brain/
+    │   ├── neural_fusion.py      # (Math/PyTorch Tensors)
+    │   └── stress_cortisol.py
+    ├── motor_cortex/
+    │   ├── mt5_bridge.py
+    │   └── mexc_execution.py
+    └── ui_cockpit/
+        ├── dashboard_render.py   # (FastAPI / WebSockets Backend)
+        ├── index.html            # (Frontend e Web Speech API)
+        └── glassmorphism.css     # (Estilos Táticos 16mm/8mm)
+
+--- PAGE 4 ---
+4. DIRETRIZES DE RENDERIZAÇÃO VISUAL E UX (O
+ROSTO)
+O Cockpit UI é a interface vital do Android. A IA responsável pelo Front-end
+(UI_Voice_Agent) deve codificar o arquivo CSS e HTML seguindo as métricas visuais
+exatas estipuladas nas imagens de referência.
+MÉTRICAS DE ENGENHARIA FRONT-END EXIGIDAS:
+Estilo Padrão: Glassmorphism (Efeito de vidro translúcido com blur reativo).
+Ergonomia Tática (Gaps): Margens externas estritas de 16mm. Espaçamento
+entre os quadrantes (grid gaps) estritamente de 8mm.
+Topologia de Cores (Néon):
+Tick Feed & Latência: Cian Néon (#00f3ff)
+Sinais Long / Saúde: Verde Esmeralda (#39ff14)
+Sinais Short / Insights: Magenta Néon (#ff007f)
+Nível de Cortisol / Alertas: Âmbar (#ffaa00)
+Voz Integrada: Uso da Web Speech API no index.html para síntese militar
+cibernética (entonação robótica, taxa de fala 1.15).
+[REFERÊNCIA VISUAL OBRIGATÓRIA ANEXADA AO PROJETO]
+A IA DEVE GARANTIR QUE A RENDERIZAÇÃO DO index.html + css
+SEJA 100% IDÊNTICA AO PADRÃO DE IMAGENS DE ALTA DENSIDADE
+ENVIADAS PELO OPERADOR (AR10). O LAYOUT DEVE CONTER ABAS
+SUPERIORES E TERMINAL HFT INFERIOR COM FUNDO '#0A1128'. 
+AR10 ORION ECOSYSTEM - CLASSIFICADO - GERADO VIA ENG. DE PROMPT AVANÇADA
+LATÊNCIA ZERO | NEUROMORPHIC AI | ALTA FREQUÊNCIA 
+• 
+• 
+• 
+◦ 
+◦ 
+◦ 
+◦ 
+• 
