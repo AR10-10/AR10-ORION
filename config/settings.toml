@@ -1,24 +1,18 @@
-[organism]
-designation = "AR10 Orion V5.0 (Digital Android)"
-mode = "HFT_CRYPTO"
-air_gap_enforced = true
+[runtime]
+mode = "READ_ONLY"
+shadow_assisted = true
+real_orders_enabled = false
+live_enabled = false
+demo_orders_enabled = false
+panel_host = "127.0.0.1"
+panel_port = 8970
 
-[entropy_thresholds]
-ram_critical_pct = 85.0
-cuda_critical_pct = 80.0
-cuda_fragmentation_tolerance = 0.15
-garbage_collection_interval_sec = 60
+[brain]
+entropy_alert_threshold = 0.72
+cortisol_alert_threshold = 0.66
+dopamine_target = 0.61
 
-[temporal_oscillator]
-base_tick_rate_hz = 1000
-max_drift_tolerance_ms = 1.5
-
-[personality_matrix]
-base_cortisol_level = 0.1
-risk_aversion_multiplier = 1.5
-surprise_threshold = 0.8
-dopamine_reward_scale = 1.0
-
-[ui_cockpit]
-grid_gap_mm = 8
-margin_protection_mm = 16
+[feeds]
+public_only = true
+copy_large_databases = false
+copy_secrets = false

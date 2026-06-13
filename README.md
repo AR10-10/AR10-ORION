@@ -1,81 +1,68 @@
-# AR10 ORION V5.0 — Digital Android (HFT Cripto)
+# AR10 Orion Cyborg
 
-Organismo agêntico autônomo com Cockpit UI "Ciborgue", servido pelo host
-local (latência zero) e acessível globalmente via Túnel Reverso.
+Fonte unica oficial do AR10 Orion Cyborg.
 
-## Instalação rápida (chegou em casa, quer rodar agora)
+## Estado operacional
 
-Requisitos: **Python 3.10+** e **Git** instalados.
+- Modo: `READ_ONLY / SHADOW_ASSISTIDO`
+- Ordens reais: bloqueadas
+- Ordens demo: bloqueadas
+- Live trading: bloqueado
+- Gateways: telemetria e estado seguro
+- Interface: painel unico `AR10 ORION CYBORG`
+- Servidor local: `http://127.0.0.1:8970`
 
-```bash
-# 1. Baixar o sistema
-git clone https://github.com/AR10-10/AR10-ORION.git
-cd AR10-ORION
+## Abrir no PC
 
-# 2. Subir tudo (Windows)
-start_orion.bat
+Use o atalho da Area de Trabalho:
 
-# 2. Subir tudo (Linux/Mac)
-bash start_orion.sh
+`AR10 ORION - INICIAR CASA`
+
+Ou rode pela raiz do projeto:
+
+```powershell
+.\INICIAR_AR10_ORION_CASA.bat
 ```
 
-O script faz, nesta ordem: cria o ambiente virtual → instala dependências →
-gera a infraestrutura (`build_skills_and_data.py`) → roda o **diagnóstico
-com testes reais** (`run_diagnostics.py`) → sobe o servidor.
+Esse launcher:
 
-Cockpit no navegador local: **http://127.0.0.1:8080**
+1. Para qualquer processo antigo usando a porta `8970`.
+2. Inicia o servidor pela pasta GitHub.
+3. Abre o painel local.
+4. Inicia um Cloudflare Quick Tunnel.
+5. Salva a URL externa em `runtime/TUNNEL_URL.txt`.
+6. Atualiza o link `AR10 ORION - LINK IPAD.url` na Area de Trabalho.
 
-## Credenciais (cofre blindado)
+## Abrir no iPad ou outro computador
 
-O arquivo `config/encrypted_credentials.env` é gerado localmente com
-permissão `0600` e **nunca sobe para o GitHub**. Preencha na sua máquina:
+Depois de iniciar o sistema, abra a URL salva em:
 
-```
-MT5_ACCOUNT_ID=     MT5_PASSWORD=      MT5_SERVER=
-MEXC_API_KEY=       MEXC_API_SECRET=
-CLOUD_DB_URL=       CLOUD_DB_TOKEN=    INGEST_TOKEN=
-```
+`runtime/TUNNEL_URL.txt`
 
-`INGEST_TOKEN`: segredo longo qualquer — exigido para escrita no `/ingest`
-vinda de fora do host (proteção do túnel).
+Enquanto nao houver dominio fixo, a URL sera temporaria `https://*.trycloudflare.com`.
+Quando o dominio for comprado/configurado, o launcher pode ser trocado para Cloudflare Named Tunnel.
 
-## Acesso global (iPad) — Túnel Reverso
+## Parar
 
-Com o servidor rodando, em outro terminal:
+Use o atalho:
 
-```bash
-# Teste imediato (URL temporária, sem conta):
-cloudflared tunnel --url http://localhost:8080
+`AR10 ORION - PARAR`
 
-# Produção (URL fixa): ver túnel nomeado + Cloudflare Access na doc do PR #1
-```
+Ou rode:
 
-O `wss://` da telemetria é terminado pelo túnel automaticamente; nenhuma
-porta é aberta no roteador.
-
-## Testes reais a qualquer momento
-
-```bash
-python run_diagnostics.py
+```powershell
+.\PARAR_AR10_ORION_CASA.bat
 ```
 
-Verifica ambiente, infraestrutura, servidor vivo, segurança do `/ingest`
-e cadência do WebSocket (50–100ms). Sai com código 0 = pronto para operar.
+## Fonte unica
 
-## Cérebro neural completo (opcional, instalação pesada)
+O projeto GitHub e a casa oficial. Projetos antigos ficam apenas como fonte de mineracao controlada e quarentena, nunca como versoes vivas paralelas.
 
-```bash
-pip install -r requirements-neural.txt   # torch (~2GB+)
-python run_organism.py                   # núcleo basal a 1000 Hz
-```
+## Guardrails
 
-## Arquitetura
-
-- `src/api/data_service.py` — nó central: Cockpit UI, telemetria WebSocket
-  75ms, sync assíncrono com a nuvem (push/fetch com backoff)
-- `src/ui_cockpit/` — tema "Ciborgue": preto absoluto, circuitos orgânicos,
-  LONG `#00FF9D` / SHORT `#FF3E52` / Sistema `#00F2FF` / Dor `#FFB800`
-- `src/agent_skills/` — order flow (L2), mitigação de risco (cortisol,
-  circuit breaker) e auto-evolução (propõe mutação de alpha LoRA)
-- `src/brain/`, `src/core/`, `src/sensors/`, `src/motor_cortex/` — fases 1–4
-  do organismo (ver `DOCUMENTO MESTRE`)
+- `real_orders_enabled=false`
+- `live_enabled=false`
+- `demo_orders_enabled=false`
+- `order_send=false`
+- Sem copia de secrets.
+- Sem copia bruta de bancos grandes.

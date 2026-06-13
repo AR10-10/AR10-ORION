@@ -1,0 +1,27 @@
+﻿[
+    {
+        "path":  "src\\ui_cockpit\\assets\\index.html",
+        "sha256":  "1359491E642E4F786A4A0987F1DDE716E92DAB4213C945BF5E253462F2F3BCD4",
+        "bytes":  26283
+    },
+    {
+        "path":  "src\\ui_cockpit\\assets\\glassmorphism_theme.css",
+        "sha256":  "5779395C1E700685B98A83FB869EFBAC74741CC20F0378014970008C61F3AC50",
+        "bytes":  29006
+    },
+    {
+        "path":  "src\\ui_cockpit\\assets\\orion_cockpit.js",
+        "sha256":  "68AC928DED81CC7047C020A61D50C3DC5F55876AC0B01C8EBBA34FF20DEE6589",
+        "bytes":  50701
+    },
+    {
+        "path":  "src\\ui_cockpit\\dashboard_render.py",
+        "sha256":  "C5C96128A6233DD4EDD447B2EB97E2DEC6F8C4EA95A216862EE7E9DF1DE8DB6D",
+        "bytes":  5123
+    },
+    {
+        "path":  "README.md",
+        "sha256":  "7AF64847CA2BDCCC7D56A3E185230006816FA76C21864AFA73B6E8FB3EC004B2",
+        "bytes":  1492
+    }
+]

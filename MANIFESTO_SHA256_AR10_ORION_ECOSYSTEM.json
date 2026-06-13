@@ -1,0 +1,628 @@
+﻿{
+    "generated_at":  "2026-06-12T19:06:54.2621714-03:00",
+    "project":  "AR10_ORION_COCKPIT",
+    "build":  "luxury-v11",
+    "mode":  "READ_ONLY",
+    "local_url":  "http://127.0.0.1:8970",
+    "tunnel_url":  "https://often-badge-hygiene-oldest.trycloudflare.com",
+    "official_shell_count":  1,
+    "official_web_route_count":  1,
+    "active_tab_count":  1,
+    "active_page_count":  1,
+    "tab_button_count":  6,
+    "tab_page_count":  6,
+    "vision_field_count":  1,
+    "system_projector_count":  1,
+    "duplicate_window_count":  0,
+    "parallel_app_count":  0,
+    "iframe_count":  0,
+    "financial_execution":  false,
+    "trade_execution":  false,
+    "real_orders_enabled":  false,
+    "live_enabled":  false,
+    "demo_orders_enabled":  false,
+    "order_send":  false,
+    "palette":  "BLACK_ABSOLUTE_PLUS_FOUR_STATUS_COLORS",
+    "latest_screenshots":  [
+                               "runtime/orion_cockpit_luxury_v11_overview_final.png",
+                               "runtime/orion_cockpit_luxury_v11_market_final.png",
+                               "runtime/orion_cockpit_luxury_v11_ipad_landscape_final3.png",
+                               "runtime/orion_cockpit_luxury_v11_ipad_portrait_final.png"
+                           ],
+    "handoff_doc":  "docs/panel_final_lapidacao/README_FINAL_CANDIDATE.md",
+    "file_count":  117,
+    "excluded":  [
+                     "logs/*",
+                     "__pycache__/*",
+                     "*.pyc",
+                     "runtime/*.zip",
+                     "MANIFESTO_SHA256_AR10_ORION_ECOSYSTEM.json"
+                 ],
+    "files":  [
+                  {
+                      "path":  ".gitignore",
+                      "sha256":  "C49357464F1C0F605411B921502CFD0246053EB62C97472D79633A636CC2C148",
+                      "bytes":  284
+                  },
+                  {
+                      "path":  "ABRIR_ORION_LOCAL.bat",
+                      "sha256":  "64861E216CB115EE85D0EA517F40174168D44859EF3543972B9B198CD4A61194",
+                      "bytes":  273
+                  },
+                  {
+                      "path":  "ABRIR_ORION_TUNEL_READONLY.ps1",
+                      "sha256":  "6E1AE0BEB1B70B5381FAF2E38C79F497ABCFBF45AB9DC67105FFB9C18B4F96F2",
+                      "bytes":  2472
+                  },
+                  {
+                      "path":  "config\\data_feeds_config.json",
+                      "sha256":  "2A3302600D7C44E930A09ACAE1035FAA563335422F9C8B2B07E6422D9F368C09",
+                      "bytes":  646
+                  },
+                  {
+                      "path":  "config\\encrypted_credentials.env.example",
+                      "sha256":  "C4133C0C21E2CB626D961719D025D212CF5A0E7DA9911AC7153ECE83A7E58F08",
+                      "bytes":  151
+                  },
+                  {
+                      "path":  "config\\settings.toml",
+                      "sha256":  "DD590E288F5A52C971BF6275ED6AAF7D920D720C2864954EDCF72FC646155C0D",
+                      "bytes":  345
+                  },
+                  {
+                      "path":  "data\\feature_store\\.gitkeep",
+                      "sha256":  "01BA4719C80B6FE911B091A7C05124B64EEECE964E09C058EF8F9805DACA546B",
+                      "bytes":  1
+                  },
+                  {
+                      "path":  "data\\macro_market_history\\.gitkeep",
+                      "sha256":  "01BA4719C80B6FE911B091A7C05124B64EEECE964E09C058EF8F9805DACA546B",
+                      "bytes":  1
+                  },
+                  {
+                      "path":  "data\\raw_ticks_cache\\.gitkeep",
+                      "sha256":  "01BA4719C80B6FE911B091A7C05124B64EEECE964E09C058EF8F9805DACA546B",
+                      "bytes":  1
+                  },
+                  {
+                      "path":  "docs\\orion_current\\AR10_ORION_V3_CORE_DATA.json",
+                      "sha256":  "30CD9C5C526A38CC5D845791CB757610F23D2A2E4207F7980DDC9BB27FFCC61A",
+                      "bytes":  6330
+                  },
+                  {
+                      "path":  "docs\\orion_current\\AR10_ORION_V3_GUARDRAILS.md",
+                      "sha256":  "99F4B6DCBF59D85169B2CC87E025900E0EEF9EB4622E6CE54E6691B7D358F6CF",
+                      "bytes":  1618
+                  },
+                  {
+                      "path":  "docs\\orion_current\\AR10_ORION_V3_IMPLEMENTATION_PLAN.md",
+                      "sha256":  "C798B5AF7BE0971105D252F3886511E2ED318E6FCB4E4AD92CA9797E217A2DE3",
+                      "bytes":  2688
+                  },
+                  {
+                      "path":  "docs\\orion_current\\AR10_ORION_V3_MASTER_SPEC.md",
+                      "sha256":  "E0498165E206BC279391C85CF374F0635947E10B4A4FDA409C5AC2C8FC671601",
+                      "bytes":  5092
+                  },
+                  {
+                      "path":  "docs\\orion_current\\MANIFESTO_SHA256_AR10_ORION_V3_CURRENT.json",
+                      "sha256":  "B7533CFD1F0A2343CEC4DDCB950B70ADD49ABC649AE1C880AC6CCCE7A8CE75A4",
+                      "bytes":  4099
+                  },
+                  {
+                      "path":  "docs\\orion_current\\README.md",
+                      "sha256":  "9C581C91A811A3250049ABC5AE9083D88DB30CABCF95D97E267AE71C9F1F42F1",
+                      "bytes":  1906
+                  },
+                  {
+                      "path":  "docs\\orion_current\\references\\AR10_ORION_V3_REFERENCE_01_NEUROLOGICAL_TREE_CORTISOL.jpg",
+                      "sha256":  "7A6F287DADA8CA732163B0C7E2A534B776B32B6F3D9E9A03903CA10CBE0783FD",
+                      "bytes":  260977
+                  },
+                  {
+                      "path":  "docs\\orion_current\\references\\AR10_ORION_V3_REFERENCE_02_NEUROLOGICAL_TREE_GATING.jpg",
+                      "sha256":  "975F01CF85A35672666A1DE8A8BBE429121040C0DC1DB6D169C8A2DDC7B2B0EA",
+                      "bytes":  214619
+                  },
+                  {
+                      "path":  "docs\\orion_current\\references\\AR10_ORION_V3_REFERENCE_03_QUADRANTS_BLUEPRINT.jpg",
+                      "sha256":  "26FB8E582169699A0255D70B20988ACC56172D9FDD4AE48C849C558F42F6B173",
+                      "bytes":  186407
+                  },
+                  {
+                      "path":  "docs\\panel_final_lapidacao\\README_FINAL_CANDIDATE.md",
+                      "sha256":  "AABB2428F57228573D083CA847BF1740626D1B2355F328003D2C7EE2835F54B9",
+                      "bytes":  3592
+                  },
+                  {
+                      "path":  "docs\\references\\AR10_ORION_V3_REFERENCE_01_NEUROLOGICAL_TREE_CORTISOL.jpg",
+                      "sha256":  "7A6F287DADA8CA732163B0C7E2A534B776B32B6F3D9E9A03903CA10CBE0783FD",
+                      "bytes":  260977
+                  },
+                  {
+                      "path":  "docs\\references\\AR10_ORION_V3_REFERENCE_02_NEUROLOGICAL_TREE_GATING.jpg",
+                      "sha256":  "975F01CF85A35672666A1DE8A8BBE429121040C0DC1DB6D169C8A2DDC7B2B0EA",
+                      "bytes":  214619
+                  },
+                  {
+                      "path":  "docs\\references\\AR10_ORION_V3_REFERENCE_03_QUADRANTS_BLUEPRINT.jpg",
+                      "sha256":  "26FB8E582169699A0255D70B20988ACC56172D9FDD4AE48C849C558F42F6B173",
+                      "bytes":  186407
+                  },
+                  {
+                      "path":  "docs\\references\\operator_feedback_20260612\\1-Foto-1.jpg",
+                      "sha256":  "9D988F4C1A3827C198181AE181FA4D8D097CD3A0EDA1F413503A92A21B5725E8",
+                      "bytes":  146781
+                  },
+                  {
+                      "path":  "docs\\references\\operator_feedback_20260612\\2-Foto-2.jpg",
+                      "sha256":  "FB28A5EFA866F3CE1F712A9A5135764C3A05D88EF369BE4FCB2F1A0AE9E87DC0",
+                      "bytes":  153182
+                  },
+                  {
+                      "path":  "docs\\references\\operator_feedback_20260612\\3-Foto-3.jpg",
+                      "sha256":  "00F92C371CF565663B03143025DEA538E83163E2B8E59851651512EA15E573F9",
+                      "bytes":  148912
+                  },
+                  {
+                      "path":  "docs\\references\\operator_feedback_20260612\\4-Foto-4.jpg",
+                      "sha256":  "B4F3D2BCDAB68BA0C5F32DB70E5AD36DC3500278FE1F354D91D3C93B6D79C576",
+                      "bytes":  139320
+                  },
+                  {
+                      "path":  "docs\\references\\operator_feedback_20260612\\5-Foto-5.jpg",
+                      "sha256":  "775C52A5A76DE610BBBE50BB5E99DE56A04D28EF0D654601386403CB8B354AAA",
+                      "bytes":  145916
+                  },
+                  {
+                      "path":  "docs\\references\\operator_feedback_20260612\\6-Foto-6.jpg",
+                      "sha256":  "7A6F287DADA8CA732163B0C7E2A534B776B32B6F3D9E9A03903CA10CBE0783FD",
+                      "bytes":  260977
+                  },
+                  {
+                      "path":  "docs\\references\\operator_feedback_20260612\\omega_nexus_layout_reference.png",
+                      "sha256":  "38FA447EBBDFB240EC281C7B898670A6B86161A6D7DB71CDBCB48231FA8268EF",
+                      "bytes":  2414468
+                  },
+                  {
+                      "path":  "docs\\reuse_analysis\\ORION_REUSE_DOSSIER_AR10_OMEGA.md",
+                      "sha256":  "AE0C988F14841281E054A1C92CECCB399291F1C9B86F80DC050ACBF84958C854",
+                      "bytes":  1130
+                  },
+                  {
+                      "path":  "docs\\reuse_analysis\\ORION_REUSE_MATRIX.json",
+                      "sha256":  "2BCE85C7DE34BBB97945C4DB2C319B9762FD433A38D6472E077F3A539EAC257F",
+                      "bytes":  2650
+                  },
+                  {
+                      "path":  "docs\\reuse_analysis\\ORION_SOURCE_INVENTORY.csv",
+                      "sha256":  "8900EBE01005CD70EB48FEAFC97C5BCF018A85CB9D5E4445B8FB1BFFEC14CA1A",
+                      "bytes":  1001
+                  },
+                  {
+                      "path":  "pyproject.toml",
+                      "sha256":  "D67FDE59E29240A52631EF0BDB7F7F9416DC1FB2C85DF2085836A4816CA054B2",
+                      "bytes":  244
+                  },
+                  {
+                      "path":  "README.md",
+                      "sha256":  "53465322185D7434F6575C9ABBFAB7E1D71B26CAE2C7D3BCCF21C0A7BC2AF935",
+                      "bytes":  985
+                  },
+                  {
+                      "path":  "requirements.txt",
+                      "sha256":  "87CAEE3C6DE475441D487E4A9F4EA13B2E19053404BB7841E0DBEE9659947D1B",
+                      "bytes":  129
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_chart_v4.png",
+                      "sha256":  "8684B5481F8A644B0FD43BC65E161971454171A08458521C255FBD381B7FD2E4",
+                      "bytes":  460328
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_dense_v5.png",
+                      "sha256":  "E17B19617F2F8267976FE1323D1B2D50D2728866473F593FDA3E567A969FC500",
+                      "bytes":  633101
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_final_tabs_v7_deep.png",
+                      "sha256":  "081CF1C5402BCB383782DEE8D46E4E3C950B7F64CAA00FD8D8B9420E0AECD7FE",
+                      "bytes":  328366
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_final_tabs_v7_ipad_landscape.png",
+                      "sha256":  "4FE4F979E9CA7DD8B2ED7963AE92CFDD89F9FB08677D09C8EEE8A97A0C2B85E7",
+                      "bytes":  383988
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_final_tabs_v7_ipad_portrait.png",
+                      "sha256":  "A6FF84B0EFE91CA98395B0D10B5ACFE08B7572868EDCF862369D2B5013E16A2E",
+                      "bytes":  272318
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_final_tabs_v7_market.png",
+                      "sha256":  "773BDE047AFDECC1BACD45F41CE2D49861AAB420D4FCAA271CB4F3091CDA2F72",
+                      "bytes":  447694
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_final_tabs_v7_market_ipad_landscape.png",
+                      "sha256":  "8059A8CCAF7CEC5F65892B488AEA7B0C44CC5DBB5E6032DD57A5BF0A304D68A9",
+                      "bytes":  388719
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_final_tabs_v7_memory.png",
+                      "sha256":  "9EA5EDE9B5CCB207BDFB17F04CBAE4FC81BE5150277901C5491DC7532141EA3D",
+                      "bytes":  362303
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_final_tabs_v7_micro.png",
+                      "sha256":  "4A13349920B4A6BDAC7F4C61160A0DF922A889A766DBE9602CF2CA4C1BF8B0B3",
+                      "bytes":  421124
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_final_tabs_v7_overview.png",
+                      "sha256":  "9220B84F7A026A36C8549BE25DE9A69B1BEB3D64907AEB943F3CF4D0BF34E151",
+                      "bytes":  375284
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_final_tabs_v7_risk.png",
+                      "sha256":  "1BA517C4E0F5C87E3B6D2BAD273101555BC03990D5905548BDCAC1C2C48E963D",
+                      "bytes":  346705
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_ipad_dense_v5.png",
+                      "sha256":  "234E5ED8595230D46A53F026663155B2F5133D71A5A523018F910ADA102EA1CD",
+                      "bytes":  466464
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_long_short_tunnel.png",
+                      "sha256":  "A057E321F09969B6098183E858B781048BBFE5E1D83B1DA481F5B0B9512FB2C0",
+                      "bytes":  135985
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_luxury_v11_ipad_landscape.png",
+                      "sha256":  "3670270C583F5032F5FEBD7CDDBE9DC381BBEB89A97136BF88B230D12C70E605",
+                      "bytes":  288146
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_luxury_v11_ipad_landscape_final.png",
+                      "sha256":  "70E76B1CF74A16ADB637D71386A1F0000C363FAC0E400A864552CF30BDECC80F",
+                      "bytes":  284817
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_luxury_v11_ipad_landscape_final2.png",
+                      "sha256":  "005603B3DE256FE24BF6631ED0DA47BA0A18C3CBEF36A86526F0569D2BEB3C5E",
+                      "bytes":  268865
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_luxury_v11_ipad_landscape_final3.png",
+                      "sha256":  "E581CB743A3667C24DD4F689C230604CC423FC33CFC9F100B3B21686A2C724E3",
+                      "bytes":  269448
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_luxury_v11_ipad_landscape_ready.png",
+                      "sha256":  "6FA707C301CFCB2C6A8118AC3157848F2C88D4CD3C86BA577AFE9CFC4DB40394",
+                      "bytes":  288146
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_luxury_v11_ipad_portrait.png",
+                      "sha256":  "AA3EFB2B52FF3BF3611C3C58A616CAA23C6F1AA2FBCA21EDF133318834BB2C1C",
+                      "bytes":  130951
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_luxury_v11_ipad_portrait_final.png",
+                      "sha256":  "3EB312F99B31FC60E582F01D13E3B87DD6622F0183BCF553BA0C677D506E8CC2",
+                      "bytes":  182035
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_luxury_v11_ipad_portrait_ready.png",
+                      "sha256":  "E675F71BA305E95184348CEDD52595BFB4E27EEFB754555AE480B742EB01FA65",
+                      "bytes":  182167
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_luxury_v11_market.png",
+                      "sha256":  "D69240859B29414E17DF83E58C34981A806A6E67961A6C838FF8771FE7EF3A2F",
+                      "bytes":  286252
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_luxury_v11_market_final.png",
+                      "sha256":  "32AFD354285A1BDC80E49C16E6E453F00D546E1B81C92DE3F6C556080A9A6EEA",
+                      "bytes":  172183
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_luxury_v11_overview.png",
+                      "sha256":  "E15964289F56F85D9384A393E4FB0FC7CE52433D0DF3BF56A023E7C96D202FF6",
+                      "bytes":  286353
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_luxury_v11_overview_final.png",
+                      "sha256":  "2CD6C685D359FB688448613FDF926AA1D9DDC0BFA0C670B68795556B84D9A8D1",
+                      "bytes":  287507
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_luxury_v11_overview_ready.png",
+                      "sha256":  "FBDA41AA6350278742922D8E84F34B5C5E8925DBF57E5258E639263ADBA6ADAF",
+                      "bytes":  287991
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_nexus_v3.png",
+                      "sha256":  "5DF7CE6D73FF72F23271AA58C547DBDDD1BAFF15CBEDE6396219754F87BC9A6E",
+                      "bytes":  401458
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_polish_v6_desktop.png",
+                      "sha256":  "A7B093D0CB590080553D87D6E353794AF205D87E9F405B3CF46137F76ECA22FE",
+                      "bytes":  598274
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_polish_v6_final_ipad.png",
+                      "sha256":  "D53F6D2E0FC0319A72FD76786BA162F2EE1593A8ADFEC34845A0B8E6366671B4",
+                      "bytes":  515349
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_polish_v6_ipad.png",
+                      "sha256":  "7D3694AB06940654A622637F1B67CFEDE038F4F49997F8B12FDDC2C4E2467EF1",
+                      "bytes":  455157
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_professional_v2.png",
+                      "sha256":  "CB6D5DDEF2C8A636D11310B7BE83131A01B96F640CE51819F01B35636B320FE2",
+                      "bytes":  249331
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_projector_v10_ipad_landscape.png",
+                      "sha256":  "393D592D132F17F696B083B4875563A88BAAF85ED891D669E7FE0CFA682E2F57",
+                      "bytes":  781107
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_projector_v10_ipad_portrait.png",
+                      "sha256":  "61F3BDB9860808008A228CD860D51A9E272DAF5E3BBBA151C2129A27CF64E595",
+                      "bytes":  560095
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_projector_v10_overview.png",
+                      "sha256":  "1A4F213099CB0C06800C2F78865FB76FBC5B7BBFF37BFFD20C85EA187EBCFBE2",
+                      "bytes":  793312
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_projector_v9_ipad_landscape.png",
+                      "sha256":  "172AA05930300678A06E2279F27053D2D5FFB6FC86678BE1DFA40A40AC89DC10",
+                      "bytes":  747157
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_projector_v9_ipad_portrait.png",
+                      "sha256":  "72AD4660FFC4BD9E2B872E54605D59FD87A39092E277A2704BEFF553CDC133A5",
+                      "bytes":  557475
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_projector_v9_overview.png",
+                      "sha256":  "A6298118E50D78E627F4BDACEF271AD2785CCB374DEB1AAAFCF3064C847AF486",
+                      "bytes":  832960
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_screenshot.png",
+                      "sha256":  "B26AA35B0E7FFBBADF0ECC709B01750A5A5B7835270779CE31CA4D30C75B2CF7",
+                      "bytes":  52765
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_tunnel_screenshot.png",
+                      "sha256":  "A6C33E1D19A323D306E292D1DCACB5FF1F40377EBA4AFF429CECE8FB1BFDB181",
+                      "bytes":  52768
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_vision_v8_ipad_landscape.png",
+                      "sha256":  "1F9FA93F6BF23354A81789A24317A2F7A02B643ACAF7D342181563F03A4E3CA9",
+                      "bytes":  785813
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_vision_v8_ipad_portrait.png",
+                      "sha256":  "D144A48E9417013FAF58113E63345447B281C58F2104445478032EC60999E7F5",
+                      "bytes":  651082
+                  },
+                  {
+                      "path":  "runtime\\orion_cockpit_vision_v8_overview.png",
+                      "sha256":  "783B30C51D0CF9ED0CDBCF361614133B4AF85A888B350549CE025C5910B4AC23",
+                      "bytes":  883453
+                  },
+                  {
+                      "path":  "runtime\\TUNNEL_URL.txt",
+                      "sha256":  "00FA172EFCDD3E2EF2E74CA364D8548FFAD29E4B682FBF55265FA6287A24FFE5",
+                      "bytes":  57
+                  },
+                  {
+                      "path":  "src\\__init__.py",
+                      "sha256":  "A4EF9ACA3591A9C3626CBDB2AF099A46D2F3B6DE3863E10111F17585FE2FF28B",
+                      "bytes":  37
+                  },
+                  {
+                      "path":  "src\\agent_skills\\__init__.py",
+                      "sha256":  "5F4AA463C73EAFA390BCFF3F40373D200EA1A6B6F3B3E73DEE82E655D898574E",
+                      "bytes":  50
+                  },
+                  {
+                      "path":  "src\\agent_skills\\skill_audio_nlp.py",
+                      "sha256":  "071D45B616B7E53A08C66C9CBC9D5198036EFDFC8053276CD95AD86AC2A9B78C",
+                      "bytes":  168
+                  },
+                  {
+                      "path":  "src\\agent_skills\\skill_order_flow.py",
+                      "sha256":  "81BCE300080D4E7D8C2DE2CA6260DF733E759A5F0E75CDCB37F50981D91C5716",
+                      "bytes":  174
+                  },
+                  {
+                      "path":  "src\\agent_skills\\skill_risk_mitigation.py",
+                      "sha256":  "AB1A9818DDAC024AC3E9317BADDB5D7564B368A8BED690A093A2CD7158B2D16F",
+                      "bytes":  268
+                  },
+                  {
+                      "path":  "src\\agent_skills\\skill_self_evolution.py",
+                      "sha256":  "4DCA550B4F4F9DBC2035A9CD12BA0296447A33B00C2BA3693DAB08BBFCFBE944",
+                      "bytes":  184
+                  },
+                  {
+                      "path":  "src\\brain\\__init__.py",
+                      "sha256":  "CF12699D032117879FF32B96F6623B21359EF5A9C204EA7B37C4C1342730AC77",
+                      "bytes":  52
+                  },
+                  {
+                      "path":  "src\\brain\\amygdala_stress.py",
+                      "sha256":  "30680573BD8C6638894ED054FBF29DAA7E1A6C86779761409F73A79CA92E6D6A",
+                      "bytes":  459
+                  },
+                  {
+                      "path":  "src\\brain\\cortex_rnn_backbone.py",
+                      "sha256":  "A54A676110AD4153A531F1C41DACA1938D887C223FA6F8324EAAAD76491BF88D",
+                      "bytes":  245
+                  },
+                  {
+                      "path":  "src\\brain\\dopamine_rl.py",
+                      "sha256":  "D7F20F9C690180341096AC291AC2E6180E8B9B7C87A5E732F06F5DB2A7ACF8E5",
+                      "bytes":  434
+                  },
+                  {
+                      "path":  "src\\brain\\hippocampus_vdb.py",
+                      "sha256":  "7AC4698D2412FB8FCDC6FE42BF70EEB1BBAB7066E2F66E296BD6F4F3E4395E1C",
+                      "bytes":  511
+                  },
+                  {
+                      "path":  "src\\brain\\synaptic_plasticity.py",
+                      "sha256":  "670C51527EBDEF31321FB3264951E5A3CD7BDD72A59BEBB82ABB92DB524F7970",
+                      "bytes":  434
+                  },
+                  {
+                      "path":  "src\\core\\__init__.py",
+                      "sha256":  "3BCC4E00C22886FBA6E561740830CE69DEB6BC2D23242524915C8AEF44E78AB3",
+                      "bytes":  36
+                  },
+                  {
+                      "path":  "src\\core\\shared_memory_bus.py",
+                      "sha256":  "65ACE3233C33BF8F799AA4FBFA54E1A4055A8CAC4A0B4A17237F1294873933FF",
+                      "bytes":  793
+                  },
+                  {
+                      "path":  "src\\core\\temporal_oscillator.py",
+                      "sha256":  "6EEBFF20ED85F940889707DC5F35DBC07BD29E56073D2127FA4DC81B3D48709D",
+                      "bytes":  716
+                  },
+                  {
+                      "path":  "src\\data_ingestion\\__init__.py",
+                      "sha256":  "9B0BA56C6516CF76C4B7D558F023D74730E4FACA3850CBE9BD0384EAC4D20FD8",
+                      "bytes":  38
+                  },
+                  {
+                      "path":  "src\\data_ingestion\\feed_binance_public.py",
+                      "sha256":  "B82788DB19C337F60553EE38F6F6795C9D05F5FDF94ABBCBA7C1EAAF152DB716",
+                      "bytes":  160
+                  },
+                  {
+                      "path":  "src\\data_ingestion\\feed_okx_public.py",
+                      "sha256":  "EFBF1CE19B34066152ACB7E65310BBC385A64E85D76274E16B3B7C74379062D4",
+                      "bytes":  156
+                  },
+                  {
+                      "path":  "src\\data_ingestion\\feed_onchain_data.py",
+                      "sha256":  "7109234EBF03931914C0E3150BF3D30150373B654E778FD4AC0C9DC4E3FB8F9A",
+                      "bytes":  159
+                  },
+                  {
+                      "path":  "src\\data_ingestion\\feed_sentiment_social.py",
+                      "sha256":  "F0D2B39C18A96187655E72BD61F875AB18C27C173BF9368A1E2568722FAB873D",
+                      "bytes":  162
+                  },
+                  {
+                      "path":  "src\\data_ingestion\\feed_tradingview_api.py",
+                      "sha256":  "32BB3505ACC8A83EA74B29C322F126B990973D029966E77B452CFBA5C7DDB5D9",
+                      "bytes":  157
+                  },
+                  {
+                      "path":  "src\\data_ingestion\\feed_yahoo_finance.py",
+                      "sha256":  "359434BE19FAD49B14B646C2B4A79D48F7E0D933981941761BDA1F44E9CF079D",
+                      "bytes":  159
+                  },
+                  {
+                      "path":  "src\\data_ingestion\\pipeline_orchestrator.py",
+                      "sha256":  "CE2ACC059E618D41DF3C86C792C41EBA7F7CAEA54381202151F199EA141D8621",
+                      "bytes":  687
+                  },
+                  {
+                      "path":  "src\\gateways\\__init__.py",
+                      "sha256":  "F53FF78E1A3F6809D69289DF23023ECD46BF3924575C2D532601328D5629772F",
+                      "bytes":  35
+                  },
+                  {
+                      "path":  "src\\gateways\\mexc_gateway.py",
+                      "sha256":  "F61D9D77DBC695FE32E6B230750EBB2081D529F623BADA34962BAD9D04F064C1",
+                      "bytes":  292
+                  },
+                  {
+                      "path":  "src\\gateways\\mt5_gateway.py",
+                      "sha256":  "B15F0802604539C4C8871797B1118034C0DB9EAE77AF01D5A9F48EB2E217C169",
+                      "bytes":  289
+                  },
+                  {
+                      "path":  "src\\market_analysis\\__init__.py",
+                      "sha256":  "53796A35726E9ADF249CB82A4252C52FDC1FAFB7B9D6EAE8D5155A8882AA1679",
+                      "bytes":  41
+                  },
+                  {
+                      "path":  "src\\market_analysis\\public_market_analyzer.py",
+                      "sha256":  "1343A7EA270143EF61DB10B4D48FADAB442BFC7F5F4B5576DB6A419727CB5E39",
+                      "bytes":  16507
+                  },
+                  {
+                      "path":  "src\\ui_cockpit\\__init__.py",
+                      "sha256":  "49FE6FB6ECB6ED7829888E8D9C6B05AF19B6465B3BC085CF320E4A95C657920B",
+                      "bytes":  42
+                  },
+                  {
+                      "path":  "src\\ui_cockpit\\assets\\glassmorphism_theme.css",
+                      "sha256":  "5779395C1E700685B98A83FB869EFBAC74741CC20F0378014970008C61F3AC50",
+                      "bytes":  29006
+                  },
+                  {
+                      "path":  "src\\ui_cockpit\\assets\\index.html",
+                      "sha256":  "1359491E642E4F786A4A0987F1DDE716E92DAB4213C945BF5E253462F2F3BCD4",
+                      "bytes":  26283
+                  },
+                  {
+                      "path":  "src\\ui_cockpit\\assets\\orion_cockpit.js",
+                      "sha256":  "68AC928DED81CC7047C020A61D50C3DC5F55876AC0B01C8EBBA34FF20DEE6589",
+                      "bytes":  50701
+                  },
+                  {
+                      "path":  "src\\ui_cockpit\\dashboard_render.py",
+                      "sha256":  "C5C96128A6233DD4EDD447B2EB97E2DEC6F8C4EA95A216862EE7E9DF1DE8DB6D",
+                      "bytes":  5123
+                  },
+                  {
+                      "path":  "tests\\test_brain_fusion.py",
+                      "sha256":  "40D5F6EB58E987892A5186CC0770EF1FB9871A17F0D57BB4E6E6644E7524D61B",
+                      "bytes":  327
+                  },
+                  {
+                      "path":  "tests\\test_data_feeds_latency.py",
+                      "sha256":  "529BFFFA1B092F63B3008E092FA5C244065A5B6F16E685819027C584F5BE8AFE",
+                      "bytes":  387
+                  },
+                  {
+                      "path":  "tests\\test_gateways_execution.py",
+                      "sha256":  "1A21511507EFA6DDCB3C9768F64D1586EF2FB813E3F8645A75F6F31EDEE50F94",
+                      "bytes":  269
+                  },
+                  {
+                      "path":  "tests\\test_guardrails.py",
+                      "sha256":  "A2A683E31B82B43F445A619C441C9DF9FB210C73ADCD99C7D021EAE22014FF8B",
+                      "bytes":  389
+                  },
+                  {
+                      "path":  "tests\\test_market_analysis.py",
+                      "sha256":  "F3848A3AD63146FF29C7B887D53578841E6969A02B523D851CB3DC8B4D2B2DB2",
+                      "bytes":  646
+                  },
+                  {
+                      "path":  "tests\\test_telemetry.py",
+                      "sha256":  "52523A45FCEBB41C4DAEF881A1CD91654158AEBC32B3368835C6ABE46E5D7540",
+                      "bytes":  398
+                  }
+              ]
+}

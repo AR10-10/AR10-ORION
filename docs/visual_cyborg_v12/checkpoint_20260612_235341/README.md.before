@@ -1,0 +1,67 @@
+# AR10 Orion Cockpit
+
+Fonte unica oficial do AR10 Orion.
+
+## Estado operacional
+
+- Modo: `READ_ONLY / SHADOW_ASSISTIDO`
+- Ordens reais: bloqueadas
+- Ordens demo: bloqueadas
+- Live trading: bloqueado
+- Gateways: telemetria e estado seguro
+- Servidor local: `http://127.0.0.1:8970`
+
+## Abrir no PC
+
+Use o atalho da Area de Trabalho:
+
+`AR10 ORION - INICIAR CASA`
+
+Ou rode pela raiz do projeto:
+
+```powershell
+.\INICIAR_AR10_ORION_CASA.bat
+```
+
+Esse launcher:
+
+1. Para qualquer processo antigo usando a porta `8970`.
+2. Inicia o servidor pela pasta GitHub.
+3. Abre o painel local.
+4. Inicia um Cloudflare Quick Tunnel.
+5. Salva a URL externa em `runtime/TUNNEL_URL.txt`.
+6. Atualiza o link `AR10 ORION - LINK IPAD.url` na Area de Trabalho.
+
+## Abrir no iPad ou outro computador
+
+Depois de iniciar o sistema, abra a URL salva em:
+
+`runtime/TUNNEL_URL.txt`
+
+Enquanto nao houver dominio fixo, a URL sera temporaria `https://*.trycloudflare.com`.
+Quando o dominio for comprado/configurado, o launcher pode ser trocado para Cloudflare Named Tunnel.
+
+## Parar
+
+Use o atalho:
+
+`AR10 ORION - PARAR`
+
+Ou rode:
+
+```powershell
+.\PARAR_AR10_ORION_CASA.bat
+```
+
+## Fonte unica
+
+O projeto GitHub e a casa oficial. Projetos antigos ficam apenas como fonte de mineracao controlada e quarentena, nunca como versoes vivas paralelas.
+
+## Guardrails
+
+- `real_orders_enabled=false`
+- `live_enabled=false`
+- `demo_orders_enabled=false`
+- `order_send=false`
+- Sem copia de secrets.
+- Sem copia bruta de bancos grandes.

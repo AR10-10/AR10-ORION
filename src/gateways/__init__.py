@@ -1,0 +1,2 @@
+"""Read-only gateway adapters."""
+

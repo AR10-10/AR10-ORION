@@ -1,0 +1,187 @@
+﻿{
+  "external_github": {
+    "root": "C:\\Users\\mv\\Documents\\GitHub\\AR10-ORION",
+    "file_count_filtered": 49,
+    "total_size_filtered": 142976,
+    "extensions": {
+      ".py": 34,
+      "<no_ext>": 4,
+      ".css": 2,
+      ".txt": 2,
+      ".bat": 1,
+      ".env": 1,
+      ".html": 1,
+      ".json": 1,
+      ".md": 1,
+      ".sh": 1,
+      ".toml": 1
+    },
+    "syntax_errors": [
+      {
+        "path": "src\\sensors\\pipeline_orchestrator.py",
+        "line": 13,
+        "msg": "invalid syntax"
+      },
+      {
+        "path": "src\\ui_cockpit\\dashboard_render.py",
+        "line": 19,
+        "msg": "invalid syntax"
+      }
+    ],
+    "text_hits": [
+      {
+        "path": "build_fase4.py",
+        "pattern": "fire_market_order"
+      },
+      {
+        "path": "build_fase4.py",
+        "pattern": "execute_order"
+      },
+      {
+        "path": "update_visual.py",
+        "pattern": "random."
+      },
+      {
+        "path": "update_visual.py",
+        "pattern": "positions ="
+      },
+      {
+        "path": "src\\motor_cortex\\mexc_gateway.py",
+        "pattern": "fire_market_order"
+      },
+      {
+        "path": "src\\motor_cortex\\mt5_gateway.py",
+        "pattern": "execute_order"
+      },
+      {
+        "path": "src\\ui_cockpit\\dashboard_render.py",
+        "pattern": "random."
+      },
+      {
+        "path": "src\\ui_cockpit\\dashboard_render.py",
+        "pattern": "positions ="
+      }
+    ]
+  },
+  "official_orion": {
+    "root": "C:\\Users\\mv\\Documents\\PROJETO_AR10_ORION\\ar10_orion_ecosystem",
+    "file_count_filtered": 77,
+    "total_size_filtered": 4945313,
+    "extensions": {
+      ".py": 36,
+      ".jpg": 12,
+      ".md": 7,
+      ".json": 5,
+      "<no_ext>": 4,
+      ".txt": 3,
+      ".toml": 2,
+      ".bat": 1,
+      ".css": 1,
+      ".csv": 1,
+      ".example": 1,
+      ".html": 1,
+      ".js": 1,
+      ".png": 1,
+      ".ps1": 1
+    },
+    "syntax_errors": [],
+    "text_hits": [
+      {
+        "path": "MANIFESTO_SHA256_AR10_ORION_ECOSYSTEM.json",
+        "pattern": "order_send"
+      },
+      {
+        "path": "docs\\orion_current\\AR10_ORION_V3_CORE_DATA.json",
+        "pattern": "order_send"
+      },
+      {
+        "path": "docs\\orion_current\\AR10_ORION_V3_CORE_DATA.json",
+        "pattern": "mt5.order_send"
+      },
+      {
+        "path": "docs\\orion_current\\AR10_ORION_V3_GUARDRAILS.md",
+        "pattern": "order_send"
+      },
+      {
+        "path": "docs\\orion_current\\AR10_ORION_V3_GUARDRAILS.md",
+        "pattern": "mt5.order_send"
+      },
+      {
+        "path": "docs\\orion_current\\AR10_ORION_V3_IMPLEMENTATION_PLAN.md",
+        "pattern": "order_send"
+      },
+      {
+        "path": "docs\\orion_current\\AR10_ORION_V3_IMPLEMENTATION_PLAN.md",
+        "pattern": "mt5.order_send"
+      },
+      {
+        "path": "docs\\orion_current\\AR10_ORION_V3_MASTER_SPEC.md",
+        "pattern": "order_send"
+      },
+      {
+        "path": "docs\\orion_current\\AR10_ORION_V3_MASTER_SPEC.md",
+        "pattern": "mt5.order_send"
+      },
+      {
+        "path": "docs\\orion_current\\MANIFESTO_SHA256_AR10_ORION_V3_CURRENT.json",
+        "pattern": "order_send"
+      },
+      {
+        "path": "docs\\orion_current\\README.md",
+        "pattern": "order_send"
+      },
+      {
+        "path": "docs\\orion_current\\README.md",
+        "pattern": "mt5.order_send"
+      },
+      {
+        "path": "docs\\panel_final_lapidacao\\README_FINAL_CANDIDATE.md",
+        "pattern": "order_send"
+      },
+      {
+        "path": "src\\ui_cockpit\\assets\\orion_cockpit.js",
+        "pattern": "order_send"
+      }
+    ]
+  },
+  "external_credentials": {
+    "exists": true,
+    "nonempty_count": 0,
+    "placeholder_count": 8,
+    "keys": [
+      {
+        "key": "MT5_ACCOUNT_ID",
+        "value_state": "placeholder_or_empty"
+      },
+      {
+        "key": "MT5_PASSWORD",
+        "value_state": "placeholder_or_empty"
+      },
+      {
+        "key": "MT5_SERVER",
+        "value_state": "placeholder_or_empty"
+      },
+      {
+        "key": "MEXC_API_KEY",
+        "value_state": "placeholder_or_empty"
+      },
+      {
+        "key": "MEXC_API_SECRET",
+        "value_state": "placeholder_or_empty"
+      },
+      {
+        "key": "CLOUD_DB_URL",
+        "value_state": "placeholder_or_empty"
+      },
+      {
+        "key": "CLOUD_DB_TOKEN",
+        "value_state": "placeholder_or_empty"
+      },
+      {
+        "key": "INGEST_TOKEN",
+        "value_state": "placeholder_or_empty"
+      }
+    ],
+    "sha256": "164FBBADCCB081ADB70A3105A06CCB96BD6B5318EC3EF0D13A5FC1A87F2532DE"
+  }
+}

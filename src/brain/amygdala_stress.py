@@ -1,18 +1,12 @@
-import logging
+from __future__ import annotations
 
-logger = logging.getLogger("AR10.Brain.Amygdala")
 
-class AmygdalaStressEngine:
-    """Sensor de Medo - Modula os níveis de Cortisol baseados no risco de mercado."""
-    def __init__(self, base_cortisol=0.1):
-        self.cortisol_level = base_cortisol
-
-    def process_stress_signals(self, drawdown_pct, volatility_spike):
-        # Elevação de cortisol linear em função do drawdown
-        self.cortisol_level += (drawdown_pct * 0.5) + (volatility_spike * 0.2)
-        self.cortisol_level = min(self.cortisol_level, 1.0) # Teto orgânico
-        
-        if self.cortisol_level > 0.7:
-            logger.warning(f"Amígdala ativada: Cortisol Elevado ({self.cortisol_level:.2f})")
-            
-        return self.cortisol_level
+def cortisol_state(drawdown: float = 0.0, feed_drift: float = 0.18) -> dict[str, float | str]:
+    cortisol = min(1.0, max(0.0, drawdown * 2.2 + feed_drift * 0.9))
+    return {
+        "module": "amygdala_stress",
+        "state": "blocked_safe" if cortisol >= 0.66 else "watch",
+        "cortisol": round(cortisol, 3),
+        "drawdown_input": round(drawdown, 3),
+        "feed_drift_input": round(feed_drift, 3),
+    }

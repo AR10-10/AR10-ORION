@@ -1,0 +1,74 @@
+{
+  "generated_from": ["AR10_PRO", "OMEGA_NEXUS_QUANT_DESK"],
+  "policy": {
+    "copy_secrets": false,
+    "copy_large_databases": false,
+    "copy_caches": false,
+    "mode": "READ_ONLY"
+  },
+  "items": [
+    {
+      "source_project": "AR10_PRO",
+      "source_area": "Guardian / guardrails",
+      "reuse_target": "Orion safety kernel",
+      "reuse_type": "policy",
+      "priority": "critical",
+      "status": "mapped",
+      "notes": "Preserve shadow assisted mode, read-only operation, fail-closed behavior and human gates."
+    },
+    {
+      "source_project": "AR10_PRO",
+      "source_area": "Painel Mestre real-data-only",
+      "reuse_target": "Orion cockpit",
+      "reuse_type": "ux_contract",
+      "priority": "high",
+      "status": "mapped",
+      "notes": "Use dense operator telemetry, status cards, visual guardrails and local evidence."
+    },
+    {
+      "source_project": "AR10_PRO",
+      "source_area": "Price Truth / market connectors",
+      "reuse_target": "Perception layer",
+      "reuse_type": "architecture",
+      "priority": "high",
+      "status": "mapped",
+      "notes": "Keep connector behavior read-only until a separate approval gate exists."
+    },
+    {
+      "source_project": "OMEGA_NEXUS_QUANT_DESK",
+      "source_area": "Realtime event bus",
+      "reuse_target": "Shared memory bus and sensory matrix",
+      "reuse_type": "module_pattern",
+      "priority": "high",
+      "status": "mapped",
+      "notes": "Reuse concepts: multiscale public feed quality, CVD, imbalance, entropy and burst detection."
+    },
+    {
+      "source_project": "OMEGA_NEXUS_QUANT_DESK",
+      "source_area": "Unified living brain runtime",
+      "reuse_target": "Brain orchestration",
+      "reuse_type": "runtime_pattern",
+      "priority": "high",
+      "status": "mapped",
+      "notes": "Reuse background shadow runtime, evidence logs, fail-soft restart and watchdog concepts."
+    },
+    {
+      "source_project": "OMEGA_NEXUS_QUANT_DESK",
+      "source_area": "Mathematical memory",
+      "reuse_target": "Hippocampus vector memory",
+      "reuse_type": "data_contract",
+      "priority": "medium",
+      "status": "mapped",
+      "notes": "Reuse append-only memory governance and snapshot discipline, without copying the large SQLite database."
+    },
+    {
+      "source_project": "OMEGA_NEXUS_QUANT_DESK",
+      "source_area": "Universal synchronicity cortex",
+      "reuse_target": "Entropy and resonance monitor",
+      "reuse_type": "brain_signal",
+      "priority": "medium",
+      "status": "mapped",
+      "notes": "Reuse entropy, resilience, alignment, drift and resonance candidate concepts."
+    }
+  ]
+}

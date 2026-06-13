@@ -1,0 +1,13 @@
+﻿{
+    "mode":  "READ_ONLY_SHADOW_ASSISTED",
+    "external_promoted":  false,
+    "rollback_needed":  false,
+    "external_root":  "C:\\Users\\mv\\Documents\\GitHub\\AR10-ORION",
+    "order_send":  false,
+    "secrets_copied":  false,
+    "financial_execution":  false,
+    "decision":  "KEEP_OFFICIAL_ORION_AS_SINGLE_CURRENT; USE_EXTERNAL_AS_AUDIT_SOURCE_ONLY",
+    "generated_at":  "2026-06-12T20:32:20.8916370-03:00",
+    "trade_execution":  false,
+    "official_root":  "C:\\Users\\mv\\Documents\\PROJETO_AR10_ORION\\ar10_orion_ecosystem"
+}

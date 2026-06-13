@@ -1,0 +1,10 @@
+[project]
+name = "ar10-orion-ecosystem"
+version = "0.3.0"
+description = "AR10 Orion V3 READ_ONLY cockpit and ecosystem skeleton"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

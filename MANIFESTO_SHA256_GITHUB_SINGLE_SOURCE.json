@@ -1,0 +1,604 @@
+{
+  "project": "AR10_ORION_CYBORG",
+  "mode": "READ_ONLY_SHADOW_ONLY",
+  "generated_at_local": "20260613_001424",
+  "root": "C:\\Users\\mv\\Documents\\GitHub\\AR10-ORION",
+  "file_count": 117,
+  "package": "C:\\Users\\mv\\Documents\\GitHub\\AR10-ORION\\runtime\\AR10_ORION_CYBORG_SINGLE_SOURCE_20260613_001424.zip",
+  "package_sha256": "11244A551A2EF10CBCAE0D190CCC2501E05E9246507BFA649B18DDC53B6692D5",
+  "guardrails": {
+    "real_orders_enabled": false,
+    "live_enabled": false,
+    "demo_orders_enabled": false,
+    "order_send": false,
+    "broker_actions": "blocked",
+    "fail_closed": true
+  },
+  "entries": [
+    {
+      "path": ".gitignore",
+      "bytes": 411,
+      "sha256": "8EEBCC156CE606F30F2A712592B45C4252189450D09ACBB1E837E00178D56F74"
+    },
+    {
+      "path": "ABRIR_ORION_LOCAL.bat",
+      "bytes": 136,
+      "sha256": "2C1EA7188EC616DF9406B5DEF13CC16D23A86E0E7F286540E52FFA19223D56FA"
+    },
+    {
+      "path": "ABRIR_ORION_TUNEL_READONLY.ps1",
+      "bytes": 148,
+      "sha256": "6605AF9C7CFF3E70E9054BE1A37392B253FC960B97B9AB6E69A5B623543D4EB6"
+    },
+    {
+      "path": "COLLECT_PROJECT.ps1",
+      "bytes": 866,
+      "sha256": "566C041390ADA09D72957D05591C4355A0C091A454B17B8BBFE0B25C03B48FC0"
+    },
+    {
+      "path": "config/data_feeds_config.json",
+      "bytes": 646,
+      "sha256": "2A3302600D7C44E930A09ACAE1035FAA563335422F9C8B2B07E6422D9F368C09"
+    },
+    {
+      "path": "config/encrypted_credentials.env.example",
+      "bytes": 151,
+      "sha256": "C4133C0C21E2CB626D961719D025D212CF5A0E7DA9911AC7153ECE83A7E58F08"
+    },
+    {
+      "path": "config/settings.toml",
+      "bytes": 345,
+      "sha256": "DD590E288F5A52C971BF6275ED6AAF7D920D720C2864954EDCF72FC646155C0D"
+    },
+    {
+      "path": "CRIAR_ATALHOS_DESKTOP.bat",
+      "bytes": 124,
+      "sha256": "CAA0813AEDEE391784138020CC2709DBFD812CF77D0291FE0233AF88603FA2B6"
+    },
+    {
+      "path": "CRIAR_ATALHOS_DESKTOP.ps1",
+      "bytes": 1617,
+      "sha256": "8BB179667B4F9BDC65242E5D9D6815B3F2AFDC913A3058866E085FA90F426E67"
+    },
+    {
+      "path": "data/feature_store/.gitkeep",
+      "bytes": 1,
+      "sha256": "01BA4719C80B6FE911B091A7C05124B64EEECE964E09C058EF8F9805DACA546B"
+    },
+    {
+      "path": "data/macro_market_history/.gitkeep",
+      "bytes": 1,
+      "sha256": "01BA4719C80B6FE911B091A7C05124B64EEECE964E09C058EF8F9805DACA546B"
+    },
+    {
+      "path": "data/raw_ticks_cache/.gitkeep",
+      "bytes": 1,
+      "sha256": "01BA4719C80B6FE911B091A7C05124B64EEECE964E09C058EF8F9805DACA546B"
+    },
+    {
+      "path": "docs/consolidation/AR10_ORION_ACCESS_AND_DESKTOP.md",
+      "bytes": 1730,
+      "sha256": "45FA29C620E0FA4B5386C016DFB401A6571F7F7A719D480C2188EBC5E56A1CCF"
+    },
+    {
+      "path": "docs/consolidation/AR10_ORION_SINGLE_SOURCE_README.md",
+      "bytes": 1326,
+      "sha256": "E02D99D52CDA1B357FCA4715D1025EF77E11F88556AC377766906088E338BFC8"
+    },
+    {
+      "path": "docs/consolidation/AR10_ORION_SINGLE_SOURCE_VALIDATION.md",
+      "bytes": 1052,
+      "sha256": "AF660F7340FD44BBFCAB75339570DB08A1305A1EC51CA7E05DA1E9AC65BC4293"
+    },
+    {
+      "path": "docs/orion_current/AR10_ORION_V3_CORE_DATA.json",
+      "bytes": 6330,
+      "sha256": "30CD9C5C526A38CC5D845791CB757610F23D2A2E4207F7980DDC9BB27FFCC61A"
+    },
+    {
+      "path": "docs/orion_current/AR10_ORION_V3_GUARDRAILS.md",
+      "bytes": 1618,
+      "sha256": "99F4B6DCBF59D85169B2CC87E025900E0EEF9EB4622E6CE54E6691B7D358F6CF"
+    },
+    {
+      "path": "docs/orion_current/AR10_ORION_V3_IMPLEMENTATION_PLAN.md",
+      "bytes": 2688,
+      "sha256": "C798B5AF7BE0971105D252F3886511E2ED318E6FCB4E4AD92CA9797E217A2DE3"
+    },
+    {
+      "path": "docs/orion_current/AR10_ORION_V3_MASTER_SPEC.md",
+      "bytes": 5092,
+      "sha256": "E0498165E206BC279391C85CF374F0635947E10B4A4FDA409C5AC2C8FC671601"
+    },
+    {
+      "path": "docs/orion_current/MANIFESTO_SHA256_AR10_ORION_V3_CURRENT.json",
+      "bytes": 4099,
+      "sha256": "B7533CFD1F0A2343CEC4DDCB950B70ADD49ABC649AE1C880AC6CCCE7A8CE75A4"
+    },
+    {
+      "path": "docs/orion_current/README.md",
+      "bytes": 1906,
+      "sha256": "9C581C91A811A3250049ABC5AE9083D88DB30CABCF95D97E267AE71C9F1F42F1"
+    },
+    {
+      "path": "docs/orion_current/references/AR10_ORION_V3_REFERENCE_01_NEUROLOGICAL_TREE_CORTISOL.jpg",
+      "bytes": 260977,
+      "sha256": "7A6F287DADA8CA732163B0C7E2A534B776B32B6F3D9E9A03903CA10CBE0783FD"
+    },
+    {
+      "path": "docs/orion_current/references/AR10_ORION_V3_REFERENCE_02_NEUROLOGICAL_TREE_GATING.jpg",
+      "bytes": 214619,
+      "sha256": "975F01CF85A35672666A1DE8A8BBE429121040C0DC1DB6D169C8A2DDC7B2B0EA"
+    },
+    {
+      "path": "docs/orion_current/references/AR10_ORION_V3_REFERENCE_03_QUADRANTS_BLUEPRINT.jpg",
+      "bytes": 186407,
+      "sha256": "26FB8E582169699A0255D70B20988ACC56172D9FDD4AE48C849C558F42F6B173"
+    },
+    {
+      "path": "docs/panel_final_lapidacao/README_FINAL_CANDIDATE.md",
+      "bytes": 3592,
+      "sha256": "AABB2428F57228573D083CA847BF1740626D1B2355F328003D2C7EE2835F54B9"
+    },
+    {
+      "path": "docs/references/AR10_ORION_V3_REFERENCE_01_NEUROLOGICAL_TREE_CORTISOL.jpg",
+      "bytes": 260977,
+      "sha256": "7A6F287DADA8CA732163B0C7E2A534B776B32B6F3D9E9A03903CA10CBE0783FD"
+    },
+    {
+      "path": "docs/references/AR10_ORION_V3_REFERENCE_02_NEUROLOGICAL_TREE_GATING.jpg",
+      "bytes": 214619,
+      "sha256": "975F01CF85A35672666A1DE8A8BBE429121040C0DC1DB6D169C8A2DDC7B2B0EA"
+    },
+    {
+      "path": "docs/references/AR10_ORION_V3_REFERENCE_03_QUADRANTS_BLUEPRINT.jpg",
+      "bytes": 186407,
+      "sha256": "26FB8E582169699A0255D70B20988ACC56172D9FDD4AE48C849C558F42F6B173"
+    },
+    {
+      "path": "docs/references/operator_feedback_20260612/1-Foto-1.jpg",
+      "bytes": 146781,
+      "sha256": "9D988F4C1A3827C198181AE181FA4D8D097CD3A0EDA1F413503A92A21B5725E8"
+    },
+    {
+      "path": "docs/references/operator_feedback_20260612/2-Foto-2.jpg",
+      "bytes": 153182,
+      "sha256": "FB28A5EFA866F3CE1F712A9A5135764C3A05D88EF369BE4FCB2F1A0AE9E87DC0"
+    },
+    {
+      "path": "docs/references/operator_feedback_20260612/3-Foto-3.jpg",
+      "bytes": 148912,
+      "sha256": "00F92C371CF565663B03143025DEA538E83163E2B8E59851651512EA15E573F9"
+    },
+    {
+      "path": "docs/references/operator_feedback_20260612/4-Foto-4.jpg",
+      "bytes": 139320,
+      "sha256": "B4F3D2BCDAB68BA0C5F32DB70E5AD36DC3500278FE1F354D91D3C93B6D79C576"
+    },
+    {
+      "path": "docs/references/operator_feedback_20260612/5-Foto-5.jpg",
+      "bytes": 145916,
+      "sha256": "775C52A5A76DE610BBBE50BB5E99DE56A04D28EF0D654601386403CB8B354AAA"
+    },
+    {
+      "path": "docs/references/operator_feedback_20260612/6-Foto-6.jpg",
+      "bytes": 260977,
+      "sha256": "7A6F287DADA8CA732163B0C7E2A534B776B32B6F3D9E9A03903CA10CBE0783FD"
+    },
+    {
+      "path": "docs/references/operator_feedback_20260612/omega_nexus_layout_reference.png",
+      "bytes": 2414468,
+      "sha256": "38FA447EBBDFB240EC281C7B898670A6B86161A6D7DB71CDBCB48231FA8268EF"
+    },
+    {
+      "path": "docs/reuse_analysis/ORION_REUSE_DOSSIER_AR10_OMEGA.md",
+      "bytes": 1130,
+      "sha256": "AE0C988F14841281E054A1C92CECCB399291F1C9B86F80DC050ACBF84958C854"
+    },
+    {
+      "path": "docs/reuse_analysis/ORION_REUSE_MATRIX.json",
+      "bytes": 2650,
+      "sha256": "2BCE85C7DE34BBB97945C4DB2C319B9762FD433A38D6472E077F3A539EAC257F"
+    },
+    {
+      "path": "docs/reuse_analysis/ORION_SOURCE_INVENTORY.csv",
+      "bytes": 1001,
+      "sha256": "8900EBE01005CD70EB48FEAFC97C5BCF018A85CB9D5E4445B8FB1BFFEC14CA1A"
+    },
+    {
+      "path": "docs/unification_audit/AR10_ORION_EXTERNAL_GITHUB_20260612_203220/00_DECISION.md",
+      "bytes": 1106,
+      "sha256": "DE453198E0D2778B0243D9D4AE3AEEEFF48E1567980A600535C935FFC76AC9F6"
+    },
+    {
+      "path": "docs/unification_audit/AR10_ORION_EXTERNAL_GITHUB_20260612_203220/01_EXTERNAL_TREE_FILTERED.txt",
+      "bytes": 1342,
+      "sha256": "B5F6CED143646835C4C5926B72B35767CB90EAEF1523FA285E462AF453CEC51B"
+    },
+    {
+      "path": "docs/unification_audit/AR10_ORION_EXTERNAL_GITHUB_20260612_203220/02_OFFICIAL_TREE_FILTERED.txt",
+      "bytes": 5354,
+      "sha256": "81CA1A96D899B7345E023C072F3427EAED7A8C28C549DA43F5EF49452FD186A4"
+    },
+    {
+      "path": "docs/unification_audit/AR10_ORION_EXTERNAL_GITHUB_20260612_203220/03_STATIC_AUDIT.json",
+      "bytes": 4770,
+      "sha256": "32D757E28CBD337326BC8D0B0CC8747E33D5E0E393C2AAF328F1C90F36ACC88C"
+    },
+    {
+      "path": "docs/unification_audit/AR10_ORION_EXTERNAL_GITHUB_20260612_203220/04_REUSE_MATRIX.md",
+      "bytes": 2502,
+      "sha256": "5EB86D0282ED83AA486096C741FBBFA9E275AA3A7BA0953726FD003B2792F392"
+    },
+    {
+      "path": "docs/unification_audit/AR10_ORION_EXTERNAL_GITHUB_20260612_203220/05_RISKS_AND_BLOCKERS.md",
+      "bytes": 1057,
+      "sha256": "83E7DCF7B95683E6A21D68D96DD6C37E20BE56A802CF49652C32E967397A42B0"
+    },
+    {
+      "path": "docs/unification_audit/AR10_ORION_EXTERNAL_GITHUB_20260612_203220/06_UNIFICATION_SEQUENCE.md",
+      "bytes": 1156,
+      "sha256": "4E5E3ED2A4186A3D128EE6FD7E65255D9C571A13A46C358F89F5BC321CD90B7E"
+    },
+    {
+      "path": "docs/unification_audit/AR10_ORION_EXTERNAL_GITHUB_20260612_203220/07_AUDIT_SUMMARY.json",
+      "bytes": 560,
+      "sha256": "39AB7E67D177CF09F90FE81B86E76B2707561CB64BDC27866E30465C569A13D6"
+    },
+    {
+      "path": "docs/unification_audit/AR10_ORION_EXTERNAL_GITHUB_20260612_203220/08_SHA256_MANIFEST.txt",
+      "bytes": 817,
+      "sha256": "02CFF75CE1FC6AAD106A78F160A00E10E571E41DA0E827E4423E4D2597562F3A"
+    },
+    {
+      "path": "docs/unification_audit/AR10_ORION_EXTERNAL_GITHUB_20260612_203220/09_VALIDATION_RESULTS.md",
+      "bytes": 1128,
+      "sha256": "470528B065684549D3DE681D6ADB7AC0ADFBB8B79E259DC85ED184240B71A25F"
+    },
+    {
+      "path": "docs/unification_audit/AR10_ORION_EXTERNAL_GITHUB_20260612_203220/10_PACKAGE_RESULT.txt",
+      "bytes": 198,
+      "sha256": "ACE0B39619EA762198877C7943113F2963590F6A7038755CA4836183C67B38DE"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/AR10_ORION_CYBORG_VISUAL_V12.md",
+      "bytes": 1493,
+      "sha256": "CF5879D1680E5D926F198931DC9741D2F7711BCCA65CAD9B6DA95B9BBE79D37E"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/checkpoint_20260612_235341/before_hashes.json",
+      "bytes": 925,
+      "sha256": "5BE7BA958286B5201EC19F386AC608E8D2BAF573697E938B95BC445DC6E8075C"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/checkpoint_20260612_235341/dashboard_render.py.before",
+      "bytes": 5123,
+      "sha256": "C5C96128A6233DD4EDD447B2EB97E2DEC6F8C4EA95A216862EE7E9DF1DE8DB6D"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/checkpoint_20260612_235341/glassmorphism_theme.css.before",
+      "bytes": 29006,
+      "sha256": "5779395C1E700685B98A83FB869EFBAC74741CC20F0378014970008C61F3AC50"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/checkpoint_20260612_235341/index.html.before",
+      "bytes": 26283,
+      "sha256": "1359491E642E4F786A4A0987F1DDE716E92DAB4213C945BF5E253462F2F3BCD4"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/checkpoint_20260612_235341/orion_cockpit.js.before",
+      "bytes": 50701,
+      "sha256": "68AC928DED81CC7047C020A61D50C3DC5F55876AC0B01C8EBBA34FF20DEE6589"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/checkpoint_20260612_235341/README.md.before",
+      "bytes": 1492,
+      "sha256": "7AF64847CA2BDCCC7D56A3E185230006816FA76C21864AFA73B6E8FB3EC004B2"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/screenshots/desktop_deep_cyborg_v12.png",
+      "bytes": 150100,
+      "sha256": "4240D2B8B75680FCDD2A229343C39112507CA154B8D4949F7DB002C0F430546F"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/screenshots/desktop_market_cyborg_v12.png",
+      "bytes": 236892,
+      "sha256": "89AD56C80C3EE2029DC0340930F48307E60F1A5EC23DEBDE72AC999D2714A566"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/screenshots/desktop_market_cyborg_v12_viewport.png",
+      "bytes": 484322,
+      "sha256": "86356D5D9ABF364C105F71496EF8DB96A20BA8A97320A6957E8E339C86B079B1"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/screenshots/desktop_micro_cyborg_v12.png",
+      "bytes": 173594,
+      "sha256": "73D3A755A962D8FBC2853A0D50D61630541D22B71DF4FBE71DC9F61DB246C677"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/screenshots/desktop_overview_cyborg_v12.png",
+      "bytes": 279223,
+      "sha256": "7C81125F471BEDE537811E4C2A9BDA4F914743E3EC67066CE841688C4380A870"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/screenshots/desktop_overview_cyborg_v12_viewport.png",
+      "bytes": 147182,
+      "sha256": "FCEB4A626862232B8FD42B5D1E8F8C2BDA0642E177263BA5034EA492F242D23D"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/screenshots/desktop_risk_cyborg_v12.png",
+      "bytes": 159076,
+      "sha256": "327203ABA314E50DB8245B5D5702B03D8F1E9ABC62982EB1E303EFC7CC910FD9"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/screenshots/ipad_landscape_market_cyborg_v12.png",
+      "bytes": 290593,
+      "sha256": "2629B60C897552E9A3A55F700E5AED3CD1107595DB352B5F981BE977EF99BF1E"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/screenshots/ipad_landscape_overview_cyborg_v12.png",
+      "bytes": 309090,
+      "sha256": "C6BC6D09F2C2C50FF77172DF29011F814BF3CA8EC67CB0EA2D35E4CCC148FCA8"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/screenshots/ipad_portrait_market_cyborg_v12.png",
+      "bytes": 266145,
+      "sha256": "0588052D23C5248B93FE7D2BA23B0A41D071C390CEBA5ECB9FF2C11FF29514B8"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/screenshots/ipad_portrait_market_cyborg_v12_viewport.png",
+      "bytes": 228360,
+      "sha256": "A252B44EB98D58E072B2C77BC55E47DDBEEC02582B6D0F3FB6EC00721A34AF41"
+    },
+    {
+      "path": "docs/visual_cyborg_v12/screenshots/ipad_portrait_overview_cyborg_v12.png",
+      "bytes": 293177,
+      "sha256": "8710DB2F86F941F71B9B8B680C3AD71E010BFDD476171EC990EA0DA86E1F4956"
+    },
+    {
+      "path": "INICIAR_AR10_ORION_CASA.bat",
+      "bytes": 126,
+      "sha256": "BE70C0412614EF20F44C8AB8A01AE36EFEAD73D7E8868782F47749D1A3F131FA"
+    },
+    {
+      "path": "INICIAR_AR10_ORION_CASA.ps1",
+      "bytes": 4899,
+      "sha256": "AA1560C40F7D6A65036C5E064DE092036748D2095EC8C31979D261D4F6C5FF83"
+    },
+    {
+      "path": "MANIFESTO_SHA256_AR10_ORION_ECOSYSTEM.json",
+      "bytes": 32443,
+      "sha256": "3835F481E8AFDCA9150A17CEE941ED93C404C63E4FFD3A30E6483036F7807741"
+    },
+    {
+      "path": "PARAR_AR10_ORION_CASA.bat",
+      "bytes": 124,
+      "sha256": "447ABFC9AC7CE6DB58CFD496B812B49E56C6299A68C33AD614F0EFF6FFEBDDCD"
+    },
+    {
+      "path": "PARAR_AR10_ORION_CASA.ps1",
+      "bytes": 1218,
+      "sha256": "C005D806E6614CCC638A0E421E167BFC18C39BE9A47CF748EB7D3BF2072251C8"
+    },
+    {
+      "path": "pyproject.toml",
+      "bytes": 244,
+      "sha256": "D67FDE59E29240A52631EF0BDB7F7F9416DC1FB2C85DF2085836A4816CA054B2"
+    },
+    {
+      "path": "READ_ONLY.txt",
+      "bytes": 294460,
+      "sha256": "6105586D0FA6BD47BB9E684ECD8CF0D9786276BF525D3D0116BEB83DA55455B8"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1544,
+      "sha256": "D8E3916EE72575F3589417E0CF0CC5E7C9FD308DCF9EC0EC7D3885AA1F6E452D"
+    },
+    {
+      "path": "requirements.txt",
+      "bytes": 129,
+      "sha256": "87CAEE3C6DE475441D487E4A9F4EA13B2E19053404BB7841E0DBEE9659947D1B"
+    },
+    {
+      "path": "src/__init__.py",
+      "bytes": 37,
+      "sha256": "A4EF9ACA3591A9C3626CBDB2AF099A46D2F3B6DE3863E10111F17585FE2FF28B"
+    },
+    {
+      "path": "src/agent_skills/__init__.py",
+      "bytes": 50,
+      "sha256": "5F4AA463C73EAFA390BCFF3F40373D200EA1A6B6F3B3E73DEE82E655D898574E"
+    },
+    {
+      "path": "src/agent_skills/skill_audio_nlp.py",
+      "bytes": 168,
+      "sha256": "071D45B616B7E53A08C66C9CBC9D5198036EFDFC8053276CD95AD86AC2A9B78C"
+    },
+    {
+      "path": "src/agent_skills/skill_order_flow.py",
+      "bytes": 174,
+      "sha256": "81BCE300080D4E7D8C2DE2CA6260DF733E759A5F0E75CDCB37F50981D91C5716"
+    },
+    {
+      "path": "src/agent_skills/skill_risk_mitigation.py",
+      "bytes": 268,
+      "sha256": "AB1A9818DDAC024AC3E9317BADDB5D7564B368A8BED690A093A2CD7158B2D16F"
+    },
+    {
+      "path": "src/agent_skills/skill_self_evolution.py",
+      "bytes": 184,
+      "sha256": "4DCA550B4F4F9DBC2035A9CD12BA0296447A33B00C2BA3693DAB08BBFCFBE944"
+    },
+    {
+      "path": "src/brain/__init__.py",
+      "bytes": 52,
+      "sha256": "CF12699D032117879FF32B96F6623B21359EF5A9C204EA7B37C4C1342730AC77"
+    },
+    {
+      "path": "src/brain/amygdala_stress.py",
+      "bytes": 459,
+      "sha256": "30680573BD8C6638894ED054FBF29DAA7E1A6C86779761409F73A79CA92E6D6A"
+    },
+    {
+      "path": "src/brain/cortex_rnn_backbone.py",
+      "bytes": 245,
+      "sha256": "A54A676110AD4153A531F1C41DACA1938D887C223FA6F8324EAAAD76491BF88D"
+    },
+    {
+      "path": "src/brain/dopamine_rl.py",
+      "bytes": 434,
+      "sha256": "D7F20F9C690180341096AC291AC2E6180E8B9B7C87A5E732F06F5DB2A7ACF8E5"
+    },
+    {
+      "path": "src/brain/hippocampus_vdb.py",
+      "bytes": 511,
+      "sha256": "7AC4698D2412FB8FCDC6FE42BF70EEB1BBAB7066E2F66E296BD6F4F3E4395E1C"
+    },
+    {
+      "path": "src/brain/synaptic_plasticity.py",
+      "bytes": 434,
+      "sha256": "670C51527EBDEF31321FB3264951E5A3CD7BDD72A59BEBB82ABB92DB524F7970"
+    },
+    {
+      "path": "src/core/__init__.py",
+      "bytes": 36,
+      "sha256": "3BCC4E00C22886FBA6E561740830CE69DEB6BC2D23242524915C8AEF44E78AB3"
+    },
+    {
+      "path": "src/core/shared_memory_bus.py",
+      "bytes": 793,
+      "sha256": "65ACE3233C33BF8F799AA4FBFA54E1A4055A8CAC4A0B4A17237F1294873933FF"
+    },
+    {
+      "path": "src/core/temporal_oscillator.py",
+      "bytes": 716,
+      "sha256": "6EEBFF20ED85F940889707DC5F35DBC07BD29E56073D2127FA4DC81B3D48709D"
+    },
+    {
+      "path": "src/data_ingestion/__init__.py",
+      "bytes": 38,
+      "sha256": "9B0BA56C6516CF76C4B7D558F023D74730E4FACA3850CBE9BD0384EAC4D20FD8"
+    },
+    {
+      "path": "src/data_ingestion/feed_binance_public.py",
+      "bytes": 160,
+      "sha256": "B82788DB19C337F60553EE38F6F6795C9D05F5FDF94ABBCBA7C1EAAF152DB716"
+    },
+    {
+      "path": "src/data_ingestion/feed_okx_public.py",
+      "bytes": 156,
+      "sha256": "EFBF1CE19B34066152ACB7E65310BBC385A64E85D76274E16B3B7C74379062D4"
+    },
+    {
+      "path": "src/data_ingestion/feed_onchain_data.py",
+      "bytes": 159,
+      "sha256": "7109234EBF03931914C0E3150BF3D30150373B654E778FD4AC0C9DC4E3FB8F9A"
+    },
+    {
+      "path": "src/data_ingestion/feed_sentiment_social.py",
+      "bytes": 162,
+      "sha256": "F0D2B39C18A96187655E72BD61F875AB18C27C173BF9368A1E2568722FAB873D"
+    },
+    {
+      "path": "src/data_ingestion/feed_tradingview_api.py",
+      "bytes": 157,
+      "sha256": "32BB3505ACC8A83EA74B29C322F126B990973D029966E77B452CFBA5C7DDB5D9"
+    },
+    {
+      "path": "src/data_ingestion/feed_yahoo_finance.py",
+      "bytes": 159,
+      "sha256": "359434BE19FAD49B14B646C2B4A79D48F7E0D933981941761BDA1F44E9CF079D"
+    },
+    {
+      "path": "src/data_ingestion/pipeline_orchestrator.py",
+      "bytes": 687,
+      "sha256": "CE2ACC059E618D41DF3C86C792C41EBA7F7CAEA54381202151F199EA141D8621"
+    },
+    {
+      "path": "src/gateways/__init__.py",
+      "bytes": 35,
+      "sha256": "F53FF78E1A3F6809D69289DF23023ECD46BF3924575C2D532601328D5629772F"
+    },
+    {
+      "path": "src/gateways/mexc_gateway.py",
+      "bytes": 292,
+      "sha256": "F61D9D77DBC695FE32E6B230750EBB2081D529F623BADA34962BAD9D04F064C1"
+    },
+    {
+      "path": "src/gateways/mt5_gateway.py",
+      "bytes": 289,
+      "sha256": "B15F0802604539C4C8871797B1118034C0DB9EAE77AF01D5A9F48EB2E217C169"
+    },
+    {
+      "path": "src/market_analysis/__init__.py",
+      "bytes": 41,
+      "sha256": "53796A35726E9ADF249CB82A4252C52FDC1FAFB7B9D6EAE8D5155A8882AA1679"
+    },
+    {
+      "path": "src/market_analysis/public_market_analyzer.py",
+      "bytes": 16507,
+      "sha256": "1343A7EA270143EF61DB10B4D48FADAB442BFC7F5F4B5576DB6A419727CB5E39"
+    },
+    {
+      "path": "src/ui_cockpit/__init__.py",
+      "bytes": 42,
+      "sha256": "49FE6FB6ECB6ED7829888E8D9C6B05AF19B6465B3BC085CF320E4A95C657920B"
+    },
+    {
+      "path": "src/ui_cockpit/assets/glassmorphism_theme.css",
+      "bytes": 36893,
+      "sha256": "99CA7E30F9EC91E16E84354422A094595637C9E30DE3E8DE0177B3B3D2B82826"
+    },
+    {
+      "path": "src/ui_cockpit/assets/index.html",
+      "bytes": 26616,
+      "sha256": "277EDB70B97068F3A5A5D43A10643B923514716EF68065A5E7FE41004041A078"
+    },
+    {
+      "path": "src/ui_cockpit/assets/orion_cockpit.js",
+      "bytes": 52665,
+      "sha256": "4056A6B344F6239CB27313D4EBDBC59EBE57C0BB2A550E3D42866A7DDEE50AFE"
+    },
+    {
+      "path": "src/ui_cockpit/dashboard_render.py",
+      "bytes": 5121,
+      "sha256": "4ED9C07774727494D8C022085D2234BC39411B5E57705FE6D4469256684469D3"
+    },
+    {
+      "path": "tests/test_brain_fusion.py",
+      "bytes": 327,
+      "sha256": "40D5F6EB58E987892A5186CC0770EF1FB9871A17F0D57BB4E6E6644E7524D61B"
+    },
+    {
+      "path": "tests/test_data_feeds_latency.py",
+      "bytes": 387,
+      "sha256": "529BFFFA1B092F63B3008E092FA5C244065A5B6F16E685819027C584F5BE8AFE"
+    },
+    {
+      "path": "tests/test_gateways_execution.py",
+      "bytes": 269,
+      "sha256": "1A21511507EFA6DDCB3C9768F64D1586EF2FB813E3F8645A75F6F31EDEE50F94"
+    },
+    {
+      "path": "tests/test_guardrails.py",
+      "bytes": 389,
+      "sha256": "A2A683E31B82B43F445A619C441C9DF9FB210C73ADCD99C7D021EAE22014FF8B"
+    },
+    {
+      "path": "tests/test_market_analysis.py",
+      "bytes": 646,
+      "sha256": "F3848A3AD63146FF29C7B887D53578841E6969A02B523D851CB3DC8B4D2B2DB2"
+    },
+    {
+      "path": "tests/test_telemetry.py",
+      "bytes": 398,
+      "sha256": "52523A45FCEBB41C4DAEF881A1CD91654158AEBC32B3368835C6ABE46E5D7540"
+    },
+    {
+      "path": "tools/cloudflared.exe",
+      "bytes": 54110064,
+      "sha256": "8B97B5AF442651E07C52CAA9C79C6F60032BC10B675C2B36DD11C7690D9942E3"
+    }
+  ]
+}

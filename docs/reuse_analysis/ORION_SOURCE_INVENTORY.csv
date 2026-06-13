@@ -1,0 +1,12 @@
+project,path_or_area,classification,reuse_decision
+AR10_PRO,system/main.py,backend principal,reference only
+AR10_PRO,system/core,guardrails price truth memory shadow,reuse patterns
+AR10_PRO,system/ui/panel,painel mestre real-data-only,reuse UX contract
+AR10_PRO,tools/launcher,launchers and cloudflared quick tunnel,reuse launcher pattern
+AR10_PRO,system/tools/launcher/cloudflared.exe,tunnel binary,reuse local executable
+OMEGA_NEXUS_QUANT_DESK,app/realtime_event_bus.py,event bus market telemetry,reuse architecture
+OMEGA_NEXUS_QUANT_DESK,app/unified_living_brain_runtime.py,shadow living brain runtime,reuse architecture
+OMEGA_NEXUS_QUANT_DESK,app/mathematical_memory.py,append-only mathematical memory,reuse governance
+OMEGA_NEXUS_QUANT_DESK,app/universal_synchronicity_core.py,entropy resonance cortex,reuse signal model
+OMEGA_NEXUS_QUANT_DESK,app/living_orchestrator.py,orchestration and watchdog,reuse runtime pattern
+OMEGA_NEXUS_QUANT_DESK,AppData data roots,large persisted state,do not copy

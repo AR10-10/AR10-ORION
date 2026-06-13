@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AR10 Orion Cockpit</title>
+    <link rel="stylesheet" href="/glassmorphism_theme.css?v=20260612-luxury-v11" />
+  </head>
+  <body>
+    <main class="orion-app shell shell-polish-v6">
+      <header class="orion-shell">
+        <section class="brand-zone">
+          <div class="brand-mark" aria-hidden="true"><span></span></div>
+          <div>
+            <p class="eyebrow">SHADOW INTELLIGENCE - REAL DATA ONLY - ZERO EXECUTION</p>
+            <h1>AR10 <b>ORION</b> COCKPIT</h1>
+          </div>
+        </section>
+
+        <nav class="top-tabs" aria-label="Abas oficiais">
+          <button class="app-tab active" type="button" data-tab="overview"><span>01</span>Cerebro Vivo</button>
+          <button class="app-tab" type="button" data-tab="market"><span>02</span>Mercado</button>
+          <button class="app-tab" type="button" data-tab="deep"><span>03</span>Analise Profunda</button>
+          <button class="app-tab" type="button" data-tab="micro"><span>04</span>Microestrutura</button>
+          <button class="app-tab" type="button" data-tab="risk"><span>05</span>Risco & Guardrails</button>
+          <button class="app-tab" type="button" data-tab="memory"><span>06</span>Memoria & Auditoria</button>
+        </nav>
+
+        <aside class="global-status">
+          <div class="online-dot"><i></i><strong>Sistema Online</strong></div>
+          <div class="status-row"><span>latencia</span><b id="globalLatency">AGUARDANDO</b></div>
+          <div class="status-row"><span>sincronia</span><b id="globalSync">100%</b></div>
+          <div class="status-row"><span>modo</span><b>READ_ONLY</b></div>
+          <span id="clock">sincronizando</span>
+        </aside>
+      </header>
+
+      <section class="tab-page active" id="tab-overview" data-tab-page="overview">
+        <section class="vision-field panel-card">
+          <aside class="vision-rail" aria-label="Niveis do organismo">
+            <div><b>4</b><span>Coroa Operacional</span></div>
+            <div><b>3</b><span>Comportamento Adaptativo</span></div>
+            <div><b>2</b><span>Core Cognitivo</span></div>
+            <div><b>1</b><span>Raizes Sensoriais</span></div>
+          </aside>
+
+          <article class="system-projector">
+            <div class="projector-title">
+              <p class="eyebrow">Projetor do Sistema</p>
+              <h2>Neuro-Architectural Blueprint</h2>
+              <span>AR10 Orion Organismo Vivo / READ_ONLY</span>
+            </div>
+
+            <div class="projector-grid" aria-label="Mapa projetado do organismo AR10 Orion">
+              <svg class="projector-wires" viewBox="0 0 980 470" aria-hidden="true">
+                <defs>
+                  <linearGradient id="wireCyan" x1="0" x2="1">
+                    <stop offset="0" stop-color="#00F2FF" stop-opacity="0.12" />
+                    <stop offset="0.5" stop-color="#00F2FF" stop-opacity="0.9" />
+                    <stop offset="1" stop-color="#00F2FF" stop-opacity="0.16" />
+                  </linearGradient>
+                  <linearGradient id="wireShort" x1="0" x2="1">
+                    <stop offset="0" stop-color="#FF3E52" stop-opacity="0.08" />
+                    <stop offset="0.58" stop-color="#FF3E52" stop-opacity="0.82" />
+                    <stop offset="1" stop-color="#FFB800" stop-opacity="0.45" />
+                  </linearGradient>
+                </defs>
+                <path class="projector-wire cyan" d="M72 395 C170 360 198 314 278 294 H515 C594 294 610 238 684 218" />
+                <path class="projector-wire cyan delay-1" d="M200 382 C294 334 326 260 424 238 H610" />
+                <path class="projector-wire short" d="M330 136 C454 142 474 190 560 206 C606 214 634 218 684 218" />
+                <path class="projector-wire amber" d="M188 64 H378 C480 64 512 112 596 136 H682" />
+                <path class="projector-wire trunk" d="M624 390 C626 330 626 274 640 226 C652 180 680 142 724 112" />
+              </svg>
+
+              <section class="projector-row row-4">
+                <div class="projector-node node-wide">
+                  <span>Coroa Operacional</span>
+                  <b id="visionExecutionState">ZERO EXECUTION</b>
+                  <small>Futuros / MT5 / MEXC / risk management</small>
+                </div>
+                <div class="projector-flow-tag gain">GAIN + DOPAMINA</div>
+                <div class="projector-flow-tag loss">LOSS + CORTISOL</div>
+              </section>
+
+              <section class="projector-row row-3">
+                <div class="projector-node">
+                  <span>Plasticidade Sinaptica</span>
+                  <b id="visionAdaptiveState">LoRA Shadow</b>
+                  <small>pesos adaptativos sem promocao automatica</small>
+                </div>
+                <div class="projector-node compact-node">
+                  <span>Micro-Adaptacao</span>
+                  <b>SHADOW ONLY</b>
+                  <small>scalping simulado / gate humano</small>
+                </div>
+              </section>
+
+              <section class="projector-row row-2">
+                <div class="projector-node">
+                  <span>Cortex Cerebral</span>
+                  <b id="visionCognitionState">WARMUP</b>
+                  <small>RNN / GRU / LSTM / KAN</small>
+                </div>
+                <div class="projector-node">
+                  <span>Hipocampo</span>
+                  <b>Memoria HNSW</b>
+                  <small>cenarios historicos e analogias</small>
+                </div>
+                <div class="projector-node short-node">
+                  <span>Olho de Sincronizacao</span>
+                  <b id="visionEntropyState">AGUARDANDO</b>
+                  <small>entropia / surpresa / resgate</small>
+                </div>
+                <div class="projector-node amber-node">
+                  <span>Amigdala</span>
+                  <b id="visionAmygdalaState">SEM DADO</b>
+                  <small>stress, drawdown e aversao</small>
+                </div>
+              </section>
+
+              <section class="projector-row row-1">
+                <div class="projector-node">
+                  <span>Order Flow & Book</span>
+                  <b id="visionRootState">AGUARDANDO</b>
+                  <small>ticks, candles e fluxo publico</small>
+                </div>
+                <div class="projector-node">
+                  <span>Audio Squawk & NLP</span>
+                  <b>WARMUP</b>
+                  <small>FED / noticias / sentimento</small>
+                </div>
+                <div class="projector-node">
+                  <span>Market Rhythm</span>
+                  <b>Timing Sense</b>
+                  <small>oscilador temporal</small>
+                </div>
+              </section>
+
+              <aside class="projector-brain">
+                <svg viewBox="0 0 360 360" aria-hidden="true">
+                  <path class="brain-main" d="M117 66 C174 20 280 47 311 109 C351 191 294 306 188 307 C83 308 36 211 66 132 C75 107 94 85 117 66Z" />
+                  <path class="brain-core" d="M129 116 C177 83 260 101 277 154 C295 211 248 263 184 258 C130 254 93 214 101 166 C104 145 114 128 129 116Z" />
+                  <path class="brain-ring" d="M146 206 C168 160 244 161 259 204 C272 242 222 271 178 251 C150 239 137 224 146 206Z" />
+                  <path class="brain-fold" d="M91 139 C126 118 155 124 179 148 C199 168 230 166 262 145" />
+                  <path class="brain-fold" d="M84 181 C122 160 151 172 176 197 C207 227 243 219 284 194" />
+                  <path class="brain-fold" d="M113 87 C141 95 154 111 160 137" />
+                  <path class="brain-fold" d="M206 71 C226 94 223 116 207 141" />
+                  <path class="brain-root" d="M188 301 C178 325 170 337 151 351 M209 299 C215 322 230 337 252 351" />
+                  <path class="brain-circuit" d="M264 88 H330 M284 130 H346 M292 178 H354 M270 242 H338 M226 288 H318" />
+                  <circle class="brain-dot cyan" cx="132" cy="119" r="7" />
+                  <circle class="brain-dot short" cx="177" cy="218" r="8" />
+                  <circle class="brain-dot amber" cx="219" cy="246" r="7" />
+                  <circle class="brain-dot cyan" cx="252" cy="146" r="6" />
+                </svg>
+                <div>
+                  <span>Telemetria Visual Ergonomica</span>
+                  <b id="visionProjectorPulse">WARMUP</b>
+                  <small>hidden state fusion</small>
+                </div>
+              </aside>
+            </div>
+          </article>
+
+          <aside class="vision-telemetry">
+            <div class="vision-mini primary"><span>Ativo</span><b id="visionMarketAsset">AGUARDANDO</b><small id="visionMarketBias">--</small></div>
+            <div class="vision-mini"><span>Hidden State</span><b id="visionBrainPulse">WARMUP</b><small>fusao cognitiva</small></div>
+            <div class="vision-mini"><span>Entropia</span><b id="visionEntropyValue">SEM DADO</b><small id="visionSurpriseLabel">surpresa</small></div>
+            <div class="vision-mini"><span>Dopamina</span><b id="visionDopamine">SEM DADO</b><small>reward shadow</small></div>
+            <div class="vision-mini amber"><span>Cortisol</span><b id="visionCortisol">SEM DADO</b><small>stress guard</small></div>
+            <div class="vision-mini"><span>Fontes</span><b id="visionSourceIntegrity">AGUARDANDO</b><small>integridade publica</small></div>
+          </aside>
+        </section>
+
+        <section class="overview-layout">
+          <article class="panel-card sensory-panel">
+            <div class="card-head">
+              <div><p class="eyebrow">Percepcao Sensorial</p><h2>Fluxo Multissensorial</h2></div>
+              <span class="help-dot">?</span>
+            </div>
+            <canvas id="flowCanvas" width="720" height="270"></canvas>
+            <p class="panel-note">Fluxo multissensorial em tempo real. A animacao fica isolada nesta area e nao participa do loop matematico.</p>
+            <div class="section-title"><span>Fontes de Dados</span><b id="feedActiveCount">AGUARDANDO</b></div>
+            <div id="feeds" class="feed-list"></div>
+          </article>
+
+          <article class="panel-card cognitive-panel">
+            <div class="card-head">
+              <div><p class="eyebrow">Central Cognitiva</p><h2>Entropia / Surpresa</h2></div>
+              <span class="help-dot">?</span>
+            </div>
+            <div class="hero-dial">
+              <span id="entropyValue">0,00</span>
+              <small id="entropyLabel">WARMUP</small>
+            </div>
+            <div id="brain" class="cognitive-list"></div>
+
+            <div class="section-title"><span>Temporal Sequence Learner</span><b>SHADOW ONLY</b></div>
+            <div class="learner-grid" id="temporalLearners">
+              <div><b>RNN Vanilla</b><span>WARMUP</span></div>
+              <div><b>GRU Challenger</b><span>WARMUP</span></div>
+              <div><b>LSTM Challenger</b><span>WARMUP</span></div>
+              <div><b>KAN Challenger</b><span>WARMUP</span></div>
+              <div><b>Champion Frozen</b><span>HUMAN GATE</span></div>
+            </div>
+
+            <div class="state-grid" id="cognitiveState">
+              <div><span>Foco</span><b>AGUARDANDO</b><i></i></div>
+              <div><span>Clareza</span><b>AGUARDANDO</b><i></i></div>
+              <div><span>Coerencia</span><b>AGUARDANDO</b><i></i></div>
+              <div><span>Resiliencia</span><b>AGUARDANDO</b><i></i></div>
+              <div><span>Adaptacao</span><b>AGUARDANDO</b><i></i></div>
+            </div>
+          </article>
+
+          <article class="panel-card insight-panel">
+            <div class="card-head">
+              <div><p class="eyebrow">Insights Cognitivos</p><h2>Resumo de Acao</h2></div>
+              <span class="help-dot">?</span>
+            </div>
+            <div class="insight-list" id="insightList"></div>
+            <div class="section-title"><span>Resumo Operacional</span><b id="overviewActionBadge">AGUARDANDO</b></div>
+            <div class="action-summary" id="actionSummary">
+              <div>AGUARDANDO sincronizacao inicial.</div>
+            </div>
+          </article>
+        </section>
+
+        <section class="bottom-ticker">
+          <div><span>Mercado Principal</span><b id="tickerSymbol">BTC/USDT</b></div>
+          <div><span>Preco Atual</span><b id="tickerPrice">AGUARDANDO</b></div>
+          <div><span>Direcao Shadow</span><b id="tickerBias">AGUARDANDO</b></div>
+          <div><span>Fonte</span><b id="tickerSource">AGUARDANDO</b></div>
+          <div><span>Heartbeat</span><b id="tickerHeartbeat">AGUARDANDO</b></div>
+          <div><span>Base de Dados</span><b>REAL_TIME</b></div>
+        </section>
+      </section>
+
+      <section class="tab-page" id="tab-market" data-tab-page="market">
+        <section class="market-topbar">
+          <label>Ativo
+            <select id="symbolSelect">
+              <option value="BTCUSDT">BTCUSDT</option>
+              <option value="ETHUSDT">ETHUSDT</option>
+              <option value="SOLUSDT">SOLUSDT</option>
+              <option value="BNBUSDT">BNBUSDT</option>
+              <option value="XRPUSDT">XRPUSDT</option>
+            </select>
+          </label>
+          <label>Timeframe
+            <select id="intervalSelect">
+              <option value="1m">1m</option>
+              <option value="3m">3m</option>
+              <option value="5m">5m</option>
+              <option value="15m" selected>15m</option>
+              <option value="30m">30m</option>
+              <option value="1h">1h</option>
+              <option value="4h">4h</option>
+            </select>
+          </label>
+          <label>Pressao
+            <select id="pressureSelect">
+              <option value="5">5 min</option>
+              <option value="15">15 min</option>
+              <option value="30" selected>30 min</option>
+              <option value="60">60 min</option>
+              <option value="120">120 min</option>
+            </select>
+          </label>
+          <div><span>Direcao SHADOW</span><b id="marketTopBias">AGUARDANDO</b></div>
+          <div><span>Confianca IA</span><b id="marketTopConfidence">AGUARDANDO</b></div>
+          <div><span>Alvo 1</span><b id="marketTopTarget1">AGUARDANDO</b></div>
+          <div><span>Alvo 2</span><b id="marketTopTarget2">SEM DADO</b></div>
+          <div><span>Invalidacao</span><b id="marketTopInvalidation">SEM TRADE</b></div>
+          <button id="exportCardBtn" class="action-btn" type="button">Gerar Print</button>
+        </section>
+
+        <section class="market-grid">
+          <aside class="scenario-stack">
+            <button class="scenario-card bias-card info-card" type="button" data-info-key="bias">
+              <span id="marketSymbol">BTCUSDT / 15m</span>
+              <strong id="marketBias">AGUARDANDO</strong>
+              <small id="marketNarrative">Sincronizando fonte publica.</small>
+            </button>
+            <button class="scenario-card info-card" type="button" data-info-key="price">
+              <span>Preco Real</span>
+              <strong id="marketPrice">--</strong>
+              <small id="marketSource">fonte: --</small>
+            </button>
+            <button class="scenario-card info-card" type="button" data-info-key="support">
+              <span>Suporte Forte</span><strong id="supportLevel">--</strong><small id="supportZone">--</small>
+            </button>
+            <button class="scenario-card info-card" type="button" data-info-key="resistance">
+              <span>Resistencia Forte</span><strong id="resistanceLevel">--</strong><small id="resistanceZone">--</small>
+            </button>
+          </aside>
+
+          <article class="chart-workbench">
+            <div class="card-head">
+              <div><p class="eyebrow">Grafico Institucional</p><h2 id="chartTitle">Candles Reais - SHADOW</h2></div>
+              <div class="chart-actions"><span id="partialCandleBadge">EM FORMACAO</span><button id="chartResetBtn" class="chart-btn" type="button">Resetar Zoom</button></div>
+            </div>
+            <div class="chart-shell" id="chartShell">
+              <canvas id="marketCanvas" width="1500" height="690"></canvas>
+              <div id="chartTooltip" class="chart-tooltip" hidden></div>
+            </div>
+            <div class="chart-meta-grid" id="chartOverlayMeta"></div>
+          </article>
+
+          <aside class="market-side">
+            <div class="panel-card compact">
+              <div class="section-title"><span>Confluencias Matematicas</span><b id="confluenceScore">AGUARDANDO</b></div>
+              <div id="confluenceList" class="check-list"></div>
+            </div>
+            <div class="panel-card compact">
+              <div class="section-title"><span>RNN / KAN Score</span><b id="rnnKanScore">WARMUP</b></div>
+              <div class="miniGauge"><span id="miniBrainConfidence">--</span><small>shadow score</small></div>
+              <div class="signal-pills">
+                <span id="miniCortexState">Cortex</span>
+                <span id="miniEntropyState">Entropia</span>
+                <span id="miniCortisolState">Cortisol</span>
+              </div>
+            </div>
+            <div class="panel-card compact">
+              <div class="section-title"><span>Tendencia / Momentum</span><b id="marketTrendBadge">AGUARDANDO</b></div>
+              <div id="marketStatsGrid" class="metric-stack"></div>
+            </div>
+          </aside>
+        </section>
+
+        <section class="market-bottom-grid">
+          <article class="panel-card">
+            <div class="section-title"><span>Resumo Executivo</span><b id="executiveBadge">SHADOW</b></div>
+            <div id="executiveSummary" class="bullet-list"></div>
+          </article>
+          <article class="panel-card">
+            <div class="section-title"><span>Checklist de Confirmacao</span><b id="checklistBadge">AGUARDANDO</b></div>
+            <div id="confirmationChecklist" class="check-grid"></div>
+          </article>
+          <article class="panel-card">
+            <div class="section-title"><span>Plano Operacional SHADOW</span><b>READ_ONLY</b></div>
+            <div id="operationalPlan" class="plan-list"></div>
+          </article>
+        </section>
+
+        <div class="hidden-compat">
+          <span id="entryZone">--</span><span id="accumulationZone">--</span><span id="targetStop">--</span><span id="structureLabel">--</span>
+          <span id="longPressure">--</span><span id="shortPressure">--</span><i id="longPressureBar"></i><i id="shortPressureBar"></i>
+          <span id="pivotSummary">--</span><span id="touchSummary">--</span><span id="sourceConsensus">--</span><span id="sourceDivergence">--</span>
+          <div id="signalRows"></div><div id="sourceLanes"></div>
+          <div id="detailPanel"></div>
+        </div>
+        <div id="exportPreview" class="export-preview" hidden><div><b>Print gerado</b><p>Segure a imagem para salvar no iPad.</p></div><img id="exportPreviewImg" alt="Card Long Short gerado" /></div>
+      </section>
+
+      <section class="tab-page" id="tab-deep" data-tab-page="deep">
+        <section class="deep-grid">
+          <article class="panel-card request-card">
+            <div class="card-head"><div><p class="eyebrow">Analise Profunda</p><h2>Pedido em Linguagem Natural</h2></div><span id="deepStateBadge">IDLE</span></div>
+            <textarea id="analysisPrompt" placeholder="Ex.: Analise BTCUSDT no 15m e monte um plano shadow com limites e invalidacao." spellcheck="false"></textarea>
+            <div class="button-row">
+              <button class="chart-btn" type="button" data-analysis-state="REQUEST RECEIVED">Receber Pedido</button>
+              <button class="chart-btn" type="button" data-analysis-state="COLLECTING PRIMARY">Coletar Primaria</button>
+              <button class="chart-btn" type="button" data-analysis-state="CALCULATING">Calcular</button>
+              <button class="chart-btn" type="button" data-analysis-state="FINAL WITH LIMITATIONS">Validar</button>
+            </div>
+            <p class="panel-note">Esta aba organiza o fluxo de analise. Sem conector privado, lacunas aparecem como SEM DADO ou INDISPONIVEL.</p>
+          </article>
+          <article class="panel-card"><div class="section-title"><span>Snapshot Preliminar</span><b id="deepSnapshotStatus">AGUARDANDO</b></div><div id="deepSnapshot" class="metric-stack"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Coleta Progressiva</span><b>READ_ONLY</b></div><div id="deepPipeline" class="timeline-list"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Motores Ativos</span><b>SHADOW</b></div><div id="deepEngines" class="check-list"></div></article>
+          <article class="panel-card wide"><div class="section-title"><span>Cenario Principal / Alternativo</span><b id="deepScenarioBadge">AGUARDANDO</b></div><div id="deepScenarios" class="scenario-duo"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Exportacao</span><b id="reportHash">REPORT BLOCKED</b></div><div id="exportFormats" class="export-grid"></div></article>
+        </section>
+      </section>
+
+      <section class="tab-page" id="tab-micro" data-tab-page="micro">
+        <section class="micro-grid">
+          <article class="panel-card ladder-panel">
+            <div class="card-head"><div><p class="eyebrow">Heatmap & Order Book Ladder</p><h2>Microestrutura</h2></div><span id="bookDataAge">SEM DADO L2</span></div>
+            <div id="orderBookLadder" class="ladder-book"></div>
+            <div class="micro-disclaimer">Heatmap nao e oraculo. Sem feed L2 autenticado, leituras profundas ficam INDISPONIVEIS.</div>
+          </article>
+          <article class="panel-card heatmap-panel"><div class="section-title"><span>Mapa de Liquidez</span><b id="liquidityMapStatus">WARMUP</b></div><div id="liquidityHeatmap" class="liquidity-heatmap"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Imbalances</span><b id="microPressureBadge">AGUARDANDO</b></div><div id="imbalanceGrid" class="metric-grid-4"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Tape / Prints Stream</span><b>INDISPONIVEL</b></div><div id="tapeStream" class="tape-list"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Eventos de Liquidez</span><b>SHADOW</b></div><div id="microEvents" class="check-list"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Latencia & Integridade</span><b id="microIntegrity">AGUARDANDO</b></div><div id="microLatency" class="metric-stack"></div></article>
+        </section>
+      </section>
+
+      <section class="tab-page" id="tab-risk" data-tab-page="risk">
+        <section class="risk-grid">
+          <article class="panel-card wide risk-hero">
+            <div class="card-head"><div><p class="eyebrow">Risco Shadow</p><h2>Guardrails & Execucao Bloqueada</h2></div><span class="danger-badge">ZERO EXECUTION</span></div>
+            <div class="guardrail-ribbon" id="guardrailRibbon"></div>
+          </article>
+          <article class="panel-card"><div class="section-title"><span>Status dos Motores</span><b>SHADOW</b></div><div id="gateways" class="guard-list"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Stop Logic & Guardrails</span><b>FAIL-CLOSED</b></div><div id="guardrails" class="guard-list"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Cenarios de Protecao</span><b>100%</b></div><div id="protectionScenarios" class="check-list"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Exposicao & Capital</span><b>0,00%</b></div><div class="risk-donut big" id="capitalExposure"><strong>0,00%</strong><small>exposicao</small></div></article>
+          <article class="panel-card"><div class="section-title"><span>Risk Blocks</span><b>BLOQUEADO</b></div><div id="riskBlocks" class="guard-list red"></div></article>
+          <article class="panel-card wide"><div class="section-title"><span>Linha do Tempo de Incidentes</span><b id="incidentCount">AGUARDANDO</b></div><div id="incidentTimeline" class="timeline-list"></div></article>
+        </section>
+      </section>
+
+      <section class="tab-page" id="tab-memory" data-tab-page="memory">
+        <section class="memory-grid">
+          <article class="panel-card"><div class="section-title"><span>Ledger de Memoria</span><b id="memoryHealth">AGUARDANDO</b></div><div id="memoryMatches" class="memory-ledger"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Linha do Tempo - Memoria Episodica</span><b>SYNC</b></div><div id="memoryTimeline" class="timeline-list"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Indice Semantico</span><b id="semanticIndexStatus">AGUARDANDO</b></div><div id="reuseMatrix" class="semantic-bars"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Preferencias Procedurais</span><b>READ_ONLY</b></div><div id="proceduralPrefs" class="check-list"></div></article>
+          <article class="panel-card"><div class="section-title"><span>Saude da Memoria</span><b id="memoryScore">AGUARDANDO</b></div><div class="radar-shell" id="memoryRadar"><span>SEM DADO</span></div></article>
+          <article class="panel-card wide"><div class="section-title"><span>QA, Auditoria, Snapshots & Rollback</span><b id="auditHashBadge">SHA256</b></div><div id="auditGrid" class="audit-grid"></div></article>
+        </section>
+      </section>
+
+      <footer class="orion-footer">
+        <span>AR10 ORION COCKPIT</span>
+        <span>SHADOW INTELLIGENCE</span>
+        <span>REAL DATA ONLY</span>
+        <span>ZERO EXECUTION</span>
+        <span id="buildLabel">BUILD luxury-v11</span>
+      </footer>
+    </main>
+    <script src="/orion_cockpit.js?v=20260612-luxury-v11"></script>
+  </body>
+</html>

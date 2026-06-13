@@ -1,5 +1,2 @@
-# Servidor + núcleo do organismo (instalação rápida)
-aiohttp>=3.9
-numpy>=1.26
-psutil>=5.9
-backoff>=2.2
+# Runtime intentionally uses Python standard library only.
+# Optional future modules: numpy, pandas, websockets, torch, hnswlib.

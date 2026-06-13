@@ -1,0 +1,73 @@
+﻿{
+    "project":  "AR10 Orion V3.0 Final",
+    "delivery":  "DOCUMENTACAO_CANONICA_E_PASTA_CENTRAL",
+    "generated_at":  "2026-06-12T03:54:04.3304714-03:00",
+    "root":  "C:\\Users\\mv\\Documents\\AR10_PRO",
+    "guardrails":  {
+                       "mode":  "SHADOW_ASSISTIDO",
+                       "read_only":  true,
+                       "real_orders_enabled":  false,
+                       "live_enabled":  false,
+                       "demo_orders_enabled":  false,
+                       "order_send":  "PROIBIDO",
+                       "mt5_order_send":  "PROIBIDO",
+                       "orders_sent":  false
+                   },
+    "files":  [
+                  {
+                      "path":  "system/docs/current/orion_v3_current/AR10_ORION_V3_CORE_DATA.json",
+                      "sha256":  "30cd9c5c526a38cc5d845791cb757610f23d2a2e4207f7980ddc9bb27ffcc61a",
+                      "bytes":  6330,
+                      "last_write_time":  "2026-06-12T03:53:43.3907016-03:00"
+                  },
+                  {
+                      "path":  "system/docs/current/orion_v3_current/AR10_ORION_V3_GUARDRAILS.md",
+                      "sha256":  "99f4b6dcbf59d85169b2cc87e025900e0eef9eb4622e6ce54e6691b7d358f6cf",
+                      "bytes":  1618,
+                      "last_write_time":  "2026-06-12T03:52:52.7622507-03:00"
+                  },
+                  {
+                      "path":  "system/docs/current/orion_v3_current/AR10_ORION_V3_IMPLEMENTATION_PLAN.md",
+                      "sha256":  "c798b5af7be0971105d252f3886511e2ed318e6fcb4e4ad92ca9797e217a2de3",
+                      "bytes":  2688,
+                      "last_write_time":  "2026-06-12T03:52:52.6867934-03:00"
+                  },
+                  {
+                      "path":  "system/docs/current/orion_v3_current/AR10_ORION_V3_MASTER_SPEC.md",
+                      "sha256":  "e0498165e206bc279391c85cf374f0635947e10b4a4fda409c5ac2c8fc671601",
+                      "bytes":  5092,
+                      "last_write_time":  "2026-06-12T03:52:52.5403254-03:00"
+                  },
+                  {
+                      "path":  "system/docs/current/orion_v3_current/README.md",
+                      "sha256":  "9c581c91a811a3250049abc5ae9083d88db30cabcf95d97e267ae71c9f1f42f1",
+                      "bytes":  1906,
+                      "last_write_time":  "2026-06-12T03:53:43.3151961-03:00"
+                  },
+                  {
+                      "path":  "system/docs/current/orion_v3_current/references/AR10_ORION_V3_REFERENCE_01_NEUROLOGICAL_TREE_CORTISOL.jpg",
+                      "sha256":  "7a6f287dada8ca732163b0c7e2a534b776b32b6f3d9e9a03903ca10cbe0783fd",
+                      "bytes":  260977,
+                      "last_write_time":  "2026-06-12T03:46:08.5818258-03:00"
+                  },
+                  {
+                      "path":  "system/docs/current/orion_v3_current/references/AR10_ORION_V3_REFERENCE_02_NEUROLOGICAL_TREE_GATING.jpg",
+                      "sha256":  "975f01cf85a35672666a1de8a8bbe429121040c0dc1db6d169c8a2ddc7b2b0ea",
+                      "bytes":  214619,
+                      "last_write_time":  "2026-06-12T03:46:08.5256324-03:00"
+                  },
+                  {
+                      "path":  "system/docs/current/orion_v3_current/references/AR10_ORION_V3_REFERENCE_03_QUADRANTS_BLUEPRINT.jpg",
+                      "sha256":  "26fb8e582169699a0255d70b20988acc56172d9fdd4ae48c849c558f42f6b173",
+                      "bytes":  186407,
+                      "last_write_time":  "2026-06-12T03:46:08.6064767-03:00"
+                  },
+                  {
+                      "path":  "system/docs/current/AR10_ORION_V3_CURRENT_POINTER.json",
+                      "sha256":  "d0f2895ebda199231635fb8d254b9a59391f632dfd4bf9716126fe0631cdefae",
+                      "bytes":  2523,
+                      "last_write_time":  "2026-06-12T03:53:43.2422781-03:00"
+                  }
+              ],
+    "file_count":  9
+}

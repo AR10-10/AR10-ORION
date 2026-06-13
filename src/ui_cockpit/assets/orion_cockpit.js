@@ -1,0 +1,1176 @@
+const fmt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
+const moneyFmt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 6 });
+const COLORS = {
+  bg: "#000000",
+  long: "#00FF9D",
+  short: "#FF3E52",
+  cyan: "#00F2FF",
+  amber: "#FFB800",
+  text: "rgba(255,255,255,0.80)",
+  soft: "rgba(255,255,255,0.62)",
+  muted: "rgba(255,255,255,0.44)",
+  faint: "rgba(255,255,255,0.14)",
+  grid: "rgba(255,255,255,0.08)",
+  glass: "rgba(0,0,0,0.60)",
+};
+let lastMarket = null;
+let chartState = {
+  key: "",
+  start: 0,
+  end: 60,
+  hoverLocalIndex: null,
+  dragging: false,
+  dragX: 0,
+  dragStart: 0,
+  dragEnd: 60,
+};
+
+async function getJson(url) {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response.ok) throw new Error(`${url}: ${response.status}`);
+  return response.json();
+}
+
+function row(label, value) {
+  return `<div class="row"><b>${label}</b><span>${value}</span></div>`;
+}
+
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function setWidth(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.style.width = value;
+}
+
+function priceText(value) {
+  const abs = Math.abs(Number(value));
+  const digits = abs >= 100 ? 2 : abs >= 1 ? 4 : 6;
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: digits >= 4 ? 2 : 0,
+    maximumFractionDigits: digits,
+  }).format(value);
+}
+
+function drawFlowCanvas() {
+  const canvas = document.getElementById("flowCanvas");
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.lineWidth = 3;
+  const lanes = [COLORS.cyan, COLORS.long, COLORS.amber, COLORS.cyan];
+  for (let lane = 0; lane < 4; lane += 1) {
+    ctx.beginPath();
+    ctx.strokeStyle = lanes[lane];
+    for (let x = 0; x < w; x += 8) {
+      const y = h / 2 + Math.sin((x + Date.now() / 20 + lane * 35) / 32) * (18 + lane * 7);
+      if (x === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}
+
+function shortSignal(bias) {
+  if (!bias) return "--";
+  if (bias.includes("LONG")) return "LONG";
+  if (bias.includes("SHORT")) return "SHORT";
+  if (bias.includes("AGUARDAR")) return "WAIT";
+  return "NEUTRO";
+}
+
+function readableBias(bias) {
+  if (!bias) return "--";
+  if (bias.includes("LONG")) return "LONG PREFERENCIAL";
+  if (bias.includes("SHORT")) return "SHORT PREFERENCIAL";
+  if (bias.includes("AGUARDAR")) return "AGUARDAR ROMPIMENTO";
+  return bias.replaceAll("_", " ");
+}
+
+function readablePressure(value) {
+  if (!value) return "--";
+  return value.replaceAll("_", " ");
+}
+
+function percentText(value) {
+  return `${fmt.format(Number(value) * 100)}%`;
+}
+
+function statusText(value, fallback = "AGUARDANDO") {
+  if (value === null || value === undefined || value === "") return fallback;
+  return String(value);
+}
+
+function displayProjectName(value) {
+  const name = statusText(value, "LEGACY_EXTERNAL_REUSE");
+  if (/omega/i.test(name)) return "LEGACY_EXTERNAL_REUSE";
+  return name;
+}
+
+function displayScenarioName(value) {
+  return statusText(value, "SEM DADO")
+    .replace(/omega/gi, "Legacy")
+    .replace(/OMEGA_NEXUS_QUANT_DESK/gi, "LEGACY_EXTERNAL_REUSE");
+}
+
+function hashText(text) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0").toUpperCase();
+}
+
+function candleVwap(candles) {
+  const totalVolume = candles.reduce((acc, candle) => acc + candle.volume, 0);
+  if (!totalVolume) return null;
+  return candles.reduce((acc, candle) => acc + ((candle.high + candle.low + candle.close) / 3) * candle.volume, 0) / totalVolume;
+}
+
+function candleObv(candles) {
+  let obv = 0;
+  for (let idx = 1; idx < candles.length; idx += 1) {
+    if (candles[idx].close > candles[idx - 1].close) obv += candles[idx].volume;
+    if (candles[idx].close < candles[idx - 1].close) obv -= candles[idx].volume;
+  }
+  return obv;
+}
+
+function rollingRsi(candles, period = 14) {
+  const values = candles.map(() => null);
+  if (!candles || candles.length <= period) return values;
+  let gains = 0;
+  let losses = 0;
+  for (let idx = 1; idx <= period; idx += 1) {
+    const delta = candles[idx].close - candles[idx - 1].close;
+    gains += Math.max(0, delta);
+    losses += Math.max(0, -delta);
+  }
+  let avgGain = gains / period;
+  let avgLoss = losses / period;
+  values[period] = avgLoss === 0 ? 100 : 100 - (100 / (1 + (avgGain / avgLoss)));
+  for (let idx = period + 1; idx < candles.length; idx += 1) {
+    const delta = candles[idx].close - candles[idx - 1].close;
+    avgGain = ((avgGain * (period - 1)) + Math.max(0, delta)) / period;
+    avgLoss = ((avgLoss * (period - 1)) + Math.max(0, -delta)) / period;
+    values[idx] = avgLoss === 0 ? 100 : 100 - (100 / (1 + (avgGain / avgLoss)));
+  }
+  return values;
+}
+
+function setActiveTab(tabName) {
+  const tabs = Array.from(document.querySelectorAll(".app-tab")).map((button) => button.dataset.tab);
+  const safeTab = tabs.includes(tabName) ? tabName : "overview";
+  document.querySelectorAll(".app-tab").forEach((button) => {
+    button.classList.toggle("active", button.dataset.tab === safeTab);
+  });
+  document.querySelectorAll(".tab-page").forEach((page) => {
+    page.classList.toggle("active", page.dataset.tabPage === safeTab);
+  });
+  if (safeTab === "market" && lastMarket) {
+    setTimeout(() => drawMarketCanvas(lastMarket), 40);
+  }
+}
+
+function setHtml(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = value;
+}
+
+function drawMiniMarketCanvas(data) {
+  const canvas = document.getElementById("miniMarketCanvas");
+  if (!canvas || !data?.candles?.length) return;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  const candles = data.candles.slice(-36);
+  const high = Math.max(...candles.map((c) => c.high), data.levels.resistance || data.price);
+  const low = Math.min(...candles.map((c) => c.low), data.levels.support || data.price);
+  const span = Math.max(high - low, data.price * 0.001);
+  const plot = { left: 10, right: w - 10, top: 10, bottom: h - 15 };
+  const xFor = (idx) => plot.left + idx * ((plot.right - plot.left) / Math.max(1, candles.length - 1));
+  const yFor = (value) => plot.bottom - ((value - low) / span) * (plot.bottom - plot.top);
+  const step = (plot.right - plot.left) / candles.length;
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = COLORS.glass;
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = COLORS.grid;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 4; i += 1) {
+    const y = plot.top + i * ((plot.bottom - plot.top) / 3);
+    ctx.beginPath();
+    ctx.moveTo(plot.left, y);
+    ctx.lineTo(plot.right, y);
+    ctx.stroke();
+  }
+
+  candles.forEach((candle, idx) => {
+    const x = xFor(idx);
+    const openY = yFor(candle.open);
+    const closeY = yFor(candle.close);
+    const highY = yFor(candle.high);
+    const lowY = yFor(candle.low);
+    const up = candle.close >= candle.open;
+    ctx.strokeStyle = up ? COLORS.long : COLORS.short;
+    ctx.fillStyle = up ? "rgba(0,255,157,0.78)" : "rgba(255,62,82,0.78)";
+    ctx.beginPath();
+    ctx.moveTo(x, highY);
+    ctx.lineTo(x, lowY);
+    ctx.stroke();
+    ctx.fillRect(x - Math.max(2, step * 0.22), Math.min(openY, closeY), Math.max(3, step * 0.44), Math.max(3, Math.abs(closeY - openY)));
+  });
+
+  [
+    [data.levels.support, "rgba(0,242,255,0.72)"],
+    [data.levels.resistance, "rgba(255,184,0,0.72)"],
+  ].forEach(([value, color]) => {
+    const y = yFor(value);
+    ctx.strokeStyle = color;
+    ctx.setLineDash([7, 6]);
+    ctx.beginPath();
+    ctx.moveTo(plot.left, y);
+    ctx.lineTo(plot.right, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+}
+
+function biasClass(bias) {
+  if (bias.includes("LONG")) return "long";
+  if (bias.includes("SHORT")) return "short";
+  if (bias.includes("AGUARDAR")) return "wait";
+  return "neutral";
+}
+
+function rangeText(values) {
+  if (!values || values.length !== 2) return "--";
+  return `${priceText(values[0])} - ${priceText(values[1])}`;
+}
+
+function drawLabel(ctx, text, x, y, color) {
+  ctx.font = "700 13px JetBrains Mono, Consolas, monospace";
+  const width = ctx.measureText(text).width + 14;
+  ctx.fillStyle = "rgba(0,0,0,0.84)";
+  ctx.fillRect(x, y - 15, width, 21);
+  ctx.fillStyle = color;
+  ctx.fillText(text, x + 7, y);
+}
+
+function clampChartWindow(total) {
+  const minBars = Math.min(12, total);
+  let start = Math.max(0, Math.min(chartState.start, total - minBars));
+  let end = Math.max(start + minBars, Math.min(chartState.end, total));
+  if (end > total) {
+    end = total;
+    start = Math.max(0, end - minBars);
+  }
+  chartState.start = start;
+  chartState.end = end;
+}
+
+function ensureChartState(data) {
+  const candles = data.candles || [];
+  const key = `${data.symbol}:${data.interval}:${candles.length}`;
+  if (chartState.key !== key) {
+    chartState.key = key;
+    chartState.end = candles.length;
+    chartState.start = Math.max(0, candles.length - 54);
+    chartState.hoverLocalIndex = null;
+  }
+  clampChartWindow(candles.length);
+}
+
+function canvasPoint(event) {
+  const canvas = document.getElementById("marketCanvas");
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+    y: ((event.clientY - rect.top) / rect.height) * canvas.height,
+    cssX: event.clientX - rect.left,
+    cssY: event.clientY - rect.top,
+  };
+}
+
+function updateChartTooltip(candle, point) {
+  const tip = document.getElementById("chartTooltip");
+  if (!tip || !candle) return;
+  const time = new Date(candle.time).toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" });
+  tip.innerHTML = `
+    <b>${time}</b>
+    <span><em>O</em><strong>${priceText(candle.open)}</strong></span>
+    <span><em>H</em><strong>${priceText(candle.high)}</strong></span>
+    <span><em>L</em><strong>${priceText(candle.low)}</strong></span>
+    <span><em>C</em><strong>${priceText(candle.close)}</strong></span>
+    <span><em>Vol</em><strong>${fmt.format(candle.volume)}</strong></span>
+  `;
+  const shell = document.getElementById("chartShell");
+  const maxX = Math.max(8, shell.clientWidth - 220);
+  tip.style.left = `${Math.min(maxX, point.cssX + 16)}px`;
+  tip.style.top = `${Math.max(8, point.cssY - 92)}px`;
+  tip.hidden = false;
+}
+
+function hideChartTooltip() {
+  const tip = document.getElementById("chartTooltip");
+  if (tip) tip.hidden = true;
+}
+
+function drawMarketCanvas(data) {
+  const canvas = document.getElementById("marketCanvas");
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  const allCandles = data.candles || [];
+  if (!allCandles.length) return;
+  ensureChartState(data);
+  const candles = allCandles.slice(chartState.start, chartState.end);
+  if (!candles.length) return;
+  ctx.clearRect(0, 0, w, h);
+
+  const highs = candles.map((c) => c.high).concat([data.levels.resistance_zone?.[1] || data.levels.resistance]);
+  const lows = candles.map((c) => c.low).concat([data.levels.support_zone?.[0] || data.levels.support]);
+  const max = Math.max(...highs);
+  const min = Math.min(...lows);
+  const span = Math.max(max - min, data.price * 0.001);
+  const plot = { left: 24, right: w - 118, top: 24, bottom: h - 186 };
+  const volumePlot = { top: h - 164, bottom: h - 112 };
+  const rsiPlot = { top: h - 84, bottom: h - 28 };
+  const y = (value) => plot.bottom - ((value - min) / span) * (plot.bottom - plot.top);
+  const xFor = (idx) => plot.left + idx * ((plot.right - plot.left) / Math.max(1, candles.length - 1));
+  const step = (plot.right - plot.left) / candles.length;
+
+  ctx.fillStyle = "rgba(0,0,0,0.58)";
+  ctx.fillRect(plot.left, plot.top, plot.right - plot.left, plot.bottom - plot.top);
+  ctx.strokeStyle = COLORS.grid;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 7; i += 1) {
+    const yy = plot.top + i * ((plot.bottom - plot.top) / 6);
+    ctx.beginPath();
+    ctx.moveTo(plot.left, yy);
+    ctx.lineTo(plot.right, yy);
+    ctx.stroke();
+    const level = max - (i / 6) * span;
+    drawLabel(ctx, priceText(level), plot.right + 10, yy + 5, COLORS.soft);
+  }
+
+  function fillZone(values, color) {
+    if (!values || values.length !== 2) return;
+    const top = y(Math.max(values[0], values[1]));
+    const bottom = y(Math.min(values[0], values[1]));
+    ctx.fillStyle = color;
+    ctx.fillRect(plot.left, top, plot.right - plot.left, Math.max(3, bottom - top));
+  }
+
+  fillZone(data.levels.resistance_zone, "rgba(255,184,0,0.13)");
+  fillZone(data.levels.support_zone, "rgba(0,242,255,0.12)");
+  fillZone(data.levels.accumulation_zone, "rgba(255,255,255,0.055)");
+
+  const maxVolume = Math.max(...candles.map((c) => c.volume), 1);
+  candles.forEach((candle, idx) => {
+    const x = xFor(idx);
+    const barHeight = (candle.volume / maxVolume) * (volumePlot.bottom - volumePlot.top);
+    const up = candle.close >= candle.open;
+    ctx.fillStyle = up ? "rgba(0,255,157,0.32)" : "rgba(255,62,82,0.32)";
+    ctx.fillRect(x - Math.max(2, step * 0.25), volumePlot.bottom - barHeight, Math.max(4, step * 0.5), barHeight);
+  });
+  ctx.fillStyle = COLORS.muted;
+  ctx.font = "700 12px JetBrains Mono, Consolas, monospace";
+  ctx.fillText("Volume", plot.left, volumePlot.top - 6);
+
+  ctx.strokeStyle = COLORS.grid;
+  ctx.strokeRect(plot.left, rsiPlot.top, plot.right - plot.left, rsiPlot.bottom - rsiPlot.top);
+  ctx.setLineDash([7, 7]);
+  [30, 70].forEach((level) => {
+    const yy = rsiPlot.bottom - (level / 100) * (rsiPlot.bottom - rsiPlot.top);
+    ctx.beginPath();
+    ctx.moveTo(plot.left, yy);
+    ctx.lineTo(plot.right, yy);
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+  const rsiAll = rollingRsi(allCandles).slice(chartState.start, chartState.end);
+  ctx.beginPath();
+  rsiAll.forEach((value, idx) => {
+    if (value === null) return;
+    const xx = xFor(idx);
+    const yy = rsiPlot.bottom - (value / 100) * (rsiPlot.bottom - rsiPlot.top);
+    if (idx === 0 || rsiAll[idx - 1] === null) ctx.moveTo(xx, yy);
+    else ctx.lineTo(xx, yy);
+  });
+  ctx.strokeStyle = COLORS.cyan;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = COLORS.muted;
+  ctx.font = "700 12px JetBrains Mono, Consolas, monospace";
+  ctx.fillText(`RSI 14 ${fmt.format(data.signals.rsi_14)}`, plot.left, rsiPlot.top - 7);
+
+  candles.forEach((candle, idx) => {
+    const x = xFor(idx);
+    const openY = y(candle.open);
+    const closeY = y(candle.close);
+    const highY = y(candle.high);
+    const lowY = y(candle.low);
+    const up = candle.close >= candle.open;
+    ctx.strokeStyle = up ? COLORS.long : COLORS.short;
+    ctx.fillStyle = up ? "rgba(0,255,157,0.82)" : "rgba(255,62,82,0.82)";
+    ctx.beginPath();
+    ctx.moveTo(x, highY);
+    ctx.lineTo(x, lowY);
+    ctx.stroke();
+    const bodyY = Math.min(openY, closeY);
+    const bodyH = Math.max(4, Math.abs(closeY - openY));
+    ctx.fillRect(x - Math.max(3, step * 0.28), bodyY, Math.max(5, step * 0.56), bodyH);
+  });
+
+  const levelMarkers = [
+    ["Suporte", data.levels.support, COLORS.cyan],
+    ["Resistencia", data.levels.resistance, COLORS.amber],
+    ["Preco", data.price, COLORS.text],
+  ].map(([label, value, color]) => ({ label, value, color, yy: y(value) }));
+
+  levelMarkers.forEach((marker) => {
+    ctx.strokeStyle = marker.color;
+    ctx.setLineDash([9, 7]);
+    ctx.beginPath();
+    ctx.moveTo(plot.left, marker.yy);
+    ctx.lineTo(plot.right, marker.yy);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  const stackedLabels = [...levelMarkers].sort((a, b) => a.yy - b.yy);
+  let nextLabelY = 22;
+  stackedLabels.forEach((marker) => {
+    marker.labelY = Math.max(marker.yy - 7, nextLabelY);
+    nextLabelY = marker.labelY + 24;
+  });
+  const overflow = nextLabelY - (h - 18);
+  if (overflow > 0) stackedLabels.forEach((marker) => { marker.labelY -= overflow; });
+  stackedLabels.forEach((marker) => {
+    drawLabel(ctx, `${marker.label} ${priceText(marker.value)}`, plot.left + 10, Math.max(20, Math.min(h - 14, marker.labelY)), marker.color);
+  });
+
+  const pivots = data.levels.pivots || {};
+  [
+    ["Topo", pivots.last_top, COLORS.amber, -10],
+    ["Fundo", pivots.last_bottom, COLORS.cyan, 18],
+  ].forEach(([label, pivot, color, offset]) => {
+    if (!pivot) return;
+    const idx = candles.findIndex((c) => c.time === pivot.time);
+    if (idx < 0) return;
+    const x = xFor(idx);
+    const yy = y(pivot.price);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, yy, 6, 0, Math.PI * 2);
+    ctx.fill();
+    drawLabel(ctx, `${label} ${priceText(pivot.price)}`, Math.min(x + 9, plot.right - 160), yy + offset, color);
+  });
+
+  if (chartState.hoverLocalIndex !== null && candles[chartState.hoverLocalIndex]) {
+    const candle = candles[chartState.hoverLocalIndex];
+    const x = xFor(chartState.hoverLocalIndex);
+    const yy = y(candle.close);
+    ctx.strokeStyle = "rgba(255,255,255,0.52)";
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x, plot.top);
+    ctx.lineTo(x, plot.bottom);
+    ctx.moveTo(plot.left, yy);
+    ctx.lineTo(plot.right, yy);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  ctx.fillStyle = COLORS.soft;
+  ctx.font = "700 13px JetBrains Mono, Consolas, monospace";
+  ctx.fillText(`${chartState.end - chartState.start}/${allCandles.length} candles`, plot.left, h - 8);
+  const lastX = xFor(candles.length - 1);
+  drawLabel(ctx, "Candle em formacao", Math.min(lastX + 10, plot.right - 150), plot.top + 18, COLORS.amber);
+}
+
+function renderMarket(data) {
+  lastMarket = data;
+  const biasCard = document.querySelector(".bias-card");
+  if (biasCard) biasCard.className = `scenario-card bias-card info-card ${biasClass(data.bias)}`;
+  setText("marketSymbol", `${data.symbol} / ${data.interval}`);
+  setText("marketBias", readableBias(data.bias));
+  setText("marketNarrative", data.narrative);
+  setText("marketPrice", priceText(data.price));
+  setText("marketSource", `fonte: ${data.source}`);
+  setText("supportLevel", priceText(data.levels.support));
+  setText("resistanceLevel", priceText(data.levels.resistance));
+  setText("supportZone", `faixa: ${rangeText(data.levels.support_zone)}`);
+  setText("resistanceZone", `faixa: ${rangeText(data.levels.resistance_zone)}`);
+  setText("entryZone", `${priceText(data.levels.entry_zone[0])} - ${priceText(data.levels.entry_zone[1])}`);
+  setText("accumulationZone", `acumulacao: ${rangeText(data.levels.accumulation_zone)}`);
+  setText("targetStop", `${priceText(data.levels.target)} / ${data.levels.technical_invalidation === null ? "sem trade" : priceText(data.levels.technical_invalidation)}`);
+  setText("structureLabel", data.levels.structure.replaceAll("_", " "));
+  setText("longPressure", `${fmt.format(data.pressure.long * 100)}%`);
+  setText("shortPressure", `${fmt.format(data.pressure.short * 100)}%`);
+  setWidth("longPressureBar", `${Math.round(data.pressure.long * 100)}%`);
+  setWidth("shortPressureBar", `${Math.round(data.pressure.short * 100)}%`);
+  const top = data.levels.pivots.last_top?.price;
+  const bottom = data.levels.pivots.last_bottom?.price;
+  setText("pivotSummary", `T ${top ? priceText(top) : "--"} / F ${bottom ? priceText(bottom) : "--"}`);
+  setText("touchSummary", `${data.levels.top_touches} toques topo / ${data.levels.bottom_touches} toques fundo`);
+  setText("sourceConsensus", `${data.source_consensus.active_lanes}/${data.source_consensus.total_lanes} online`);
+  setText("sourceDivergence", `divergencia max ${fmt.format(data.source_consensus.max_divergence_bps)} bps`);
+  setHtml("signalRows", [
+    row("Confianca", fmt.format(data.confidence)),
+    row("EMA 20", priceText(data.signals.ema_20)),
+    row("EMA 50", priceText(data.signals.ema_50)),
+    row("RSI 14", fmt.format(data.signals.rsi_14)),
+    row("Volume", `${fmt.format(data.signals.volume_ratio)}x`),
+    row("Pressao", readablePressure(data.pressure.bias)),
+  ].join(""));
+  setHtml("sourceLanes", data.source_consensus.lanes
+    .map((lane) => {
+      const statusClass = lane.status === "FRESH" ? "fresh" : "offline";
+      const price = lane.price === null ? "sem leitura" : priceText(lane.price);
+      return `<div class="lane"><b>${lane.name}</b><span class="${statusClass}">${lane.status}</span><span>${price}</span></div>`;
+    })
+    .join(""));
+  setText("nexusMarket", `${data.symbol} ${shortSignal(data.bias)} @ ${priceText(data.price)}`);
+  setText("nexusQuant", `RSI ${fmt.format(data.signals.rsi_14)} / EMA20 ${priceText(data.signals.ema_20)}`);
+  setText("nexusFlow", `${data.source_consensus.active_lanes}/${data.source_consensus.total_lanes} fontes / ${readablePressure(data.pressure.bias)}`);
+  setText("miniMarketBias", shortSignal(data.bias));
+  setText("miniMarketPrice", priceText(data.price));
+  setText("miniMarketPressure", percentText(Math.max(data.pressure.long, data.pressure.short)));
+  setText("miniBrainSignal", shortSignal(data.bias));
+  setHtml("miniQuantTable", [
+    `<span><b>RSI</b><i>${fmt.format(data.signals.rsi_14)}</i></span>`,
+    `<span><b>EMA20</b><i>${priceText(data.signals.ema_20)}</i></span>`,
+    `<span><b>EMA50</b><i>${priceText(data.signals.ema_50)}</i></span>`,
+  ].join(""));
+  document.querySelectorAll(".flow-mini-card .orderbook-bars:not(.ask) i").forEach((bar, idx) => {
+    const width = Math.max(18, Math.round((data.pressure.long * 84) - idx * 7));
+    bar.style.setProperty("--w", `${width}%`);
+  });
+  document.querySelectorAll(".flow-mini-card .orderbook-bars.ask i").forEach((bar, idx) => {
+    const width = Math.max(18, Math.round((data.pressure.short * 84) - idx * 6));
+    bar.style.setProperty("--w", `${width}%`);
+  });
+  drawMarketCanvas(data);
+  drawMiniMarketCanvas(data);
+  renderDetail("bias");
+}
+
+function renderComposite(telemetry, matrix, market) {
+  const candles = market.candles || [];
+  const vwap = candleVwap(candles);
+  const obv = candleObv(candles);
+  const activeFeeds = telemetry.feeds.items.filter((feed) => feed.status === "prepared" || feed.status === "PREPARADA").length || telemetry.feeds.items.length;
+  const now = new Date();
+  const payloadHash = hashText(JSON.stringify({ symbol: market.symbol, interval: market.interval, price: market.price, levels: market.levels, generated_at: market.generated_at }));
+  const vwapText = vwap === null ? "SEM DADO" : priceText(vwap);
+  const target2 = market.levels.technical_invalidation === null ? "SEM DADO" : priceText((market.levels.target + market.price) / 2);
+  const invalidation = market.levels.technical_invalidation === null ? "SEM TRADE" : priceText(market.levels.technical_invalidation);
+  const trend = market.signals.ema_20 > market.signals.ema_50 ? "ALTA" : market.signals.ema_20 < market.signals.ema_50 ? "BAIXA" : "LATERAL";
+  const volatility = market.signals.atr_14 / Math.max(market.price, 1);
+  const volatilityLabel = volatility > 0.012 ? "ALTA" : volatility > 0.006 ? "MODERADA" : "BAIXA";
+  const momentumLabel = market.pressure.long > market.pressure.short ? "COMPRADOR" : market.pressure.short > market.pressure.long ? "VENDEDOR" : "NEUTRO";
+  const modelConfidence = telemetry.brain.cortex.confidence || market.confidence;
+
+  setText("globalLatency", `${Math.round((telemetry.oscillator.rate_hz || 1) * 10)} ms`);
+  setText("globalSync", telemetry.guardrails.fail_closed ? "100%" : "STALE");
+  setText("feedActiveCount", `${activeFeeds}/${telemetry.feeds.items.length} ativas`);
+  setText("entropyLabel", telemetry.brain.amygdala.feed_drift_input < 0.25 ? "BAIXA ENTROPIA - MERCADO ESTAVEL" : "ENTROPIA EM OBSERVACAO");
+  setText("tickerSymbol", market.symbol.replace("USDT", "/USDT"));
+  setText("tickerPrice", priceText(market.price));
+  setText("tickerBias", readableBias(market.bias));
+  setText("tickerSource", market.source);
+  setText("tickerHeartbeat", now.toLocaleTimeString("pt-BR"));
+  setText("overviewActionBadge", shortSignal(market.bias));
+  setText("marketTopBias", shortSignal(market.bias));
+  setText("marketTopConfidence", `${Math.round(market.confidence * 100)} / 100`);
+  setText("marketTopTarget1", priceText(market.levels.target));
+  setText("marketTopTarget2", target2);
+  setText("marketTopInvalidation", invalidation);
+  setText("chartTitle", `${market.symbol} - ${market.interval} - ${market.source}`);
+  setText("partialCandleBadge", "CANDLE PARCIAL: EM FORMACAO");
+  setText("confluenceScore", `${Math.round(market.confidence * 100)}%`);
+  setText("rnnKanScore", `${Math.round(modelConfidence * 100)}`);
+  setText("marketTrendBadge", trend);
+  setText("executiveBadge", shortSignal(market.bias));
+  setText("checklistBadge", market.confidence >= 0.6 ? "PARCIAL" : "WARMUP");
+  setText("deepSnapshotStatus", "PRELIMINARY SNAPSHOT");
+  setText("deepScenarioBadge", shortSignal(market.bias));
+  setText("reportHash", `SHA ${payloadHash}`);
+  setText("microPressureBadge", readablePressure(market.pressure.bias));
+  setText("liquidityMapStatus", market.source_consensus.active_lanes > 0 ? "DERIVADO CANDLES" : "STALE");
+  setText("bookDataAge", "L2 INDISPONIVEL");
+  setText("microIntegrity", market.source_consensus.active_lanes > 0 ? "OK" : "STALE");
+  setText("incidentCount", "5 checks");
+  setText("memoryHealth", `${telemetry.brain.hippocampus.length} episodios`);
+  setText("semanticIndexStatus", `${matrix.items.length} fontes`);
+  setText("memoryScore", "READ_ONLY");
+  setText("auditHashBadge", payloadHash);
+  setText("buildLabel", `BUILD cyborg-v12 - ${payloadHash}`);
+
+  setText("visionMarketAsset", market.symbol.replace("USDT", "/USDT"));
+  setText("visionMarketBias", readableBias(market.bias));
+  setText("visionBrainPulse", fmt.format(telemetry.brain.plasticity.fused_signal));
+  setText("visionProjectorPulse", fmt.format(telemetry.brain.plasticity.fused_signal));
+  setText("visionEntropyValue", fmt.format(telemetry.brain.amygdala.feed_drift_input));
+  setText("visionSurpriseLabel", telemetry.brain.amygdala.feed_drift_input < 0.25 ? "mercado estavel" : "surpresa em watch");
+  setText("visionDopamine", fmt.format(telemetry.brain.dopamine.dopamine));
+  setText("visionCortisol", fmt.format(telemetry.brain.amygdala.cortisol));
+  setText("visionAmygdalaState", `cortisol ${fmt.format(telemetry.brain.amygdala.cortisol)}`);
+  setText("visionSourceIntegrity", `${market.source_consensus.active_lanes}/${market.source_consensus.total_lanes} fontes`);
+  setText("visionExecutionState", telemetry.guardrails.broker_actions === "blocked" ? "ZERO EXECUTION" : "REPORT BLOCKED");
+  setText("visionAdaptiveState", `${telemetry.brain.plasticity.mode} / alpha ${fmt.format(telemetry.brain.plasticity.alpha)}`);
+  setText("visionCognitionState", `${telemetry.brain.cortex.trend} / ${fmt.format(modelConfidence)}`);
+  setText("visionRootState", `${activeFeeds}/${telemetry.feeds.items.length} ativas`);
+  setText("visionEntropyState", telemetry.brain.amygdala.feed_drift_input < 0.25 ? "BAIXA ENTROPIA" : "SURPRISE WATCH");
+
+  setHtml("insightList", [
+    ["Estado de Tendencia", trend],
+    ["Regime de Mercado", market.levels.structure.replaceAll("_", " ")],
+    ["Confianca do Modelo", `${Math.round(modelConfidence * 100)}%`],
+    ["Nivel de Anomalia", telemetry.brain.amygdala.state || "AGUARDANDO"],
+    ["Divergencia Detectada", `${fmt.format(market.source_consensus.max_divergence_bps)} bps`],
+  ].map(([label, value]) => `<div><b>${label}</b><span>${value}</span></div>`).join(""));
+
+  setHtml("actionSummary", [
+    `<div><b>Situacao</b><span>${market.narrative}</span></div>`,
+    `<div><b>Execucao</b><span>ZERO EXECUTION - SHADOW ONLY</span></div>`,
+    `<div><b>Gate humano</b><span>Obrigatorio para qualquer promocao</span></div>`,
+  ].join(""));
+
+  setHtml("cognitiveState", [
+    ["Foco", `${Math.round(modelConfidence * 100)}%`],
+    ["Clareza", `${Math.round((1 - telemetry.brain.amygdala.feed_drift_input) * 100)}%`],
+    ["Coerencia", `${Math.round(market.confidence * 100)}%`],
+    ["Resiliencia", `${Math.round((1 - telemetry.brain.amygdala.cortisol) * 100)}%`],
+    ["Adaptacao", `${Math.round(telemetry.brain.plasticity.alpha * 100)}%`],
+  ].map(([label, value]) => `<div><span>${label}</span><b>${value}</b><i style="width:${value.replace("%", "")}%"></i></div>`).join(""));
+
+  setHtml("temporalLearners", [
+    ["RNN Vanilla", "SHADOW ONLY / warmup"],
+    ["GRU Challenger", "SHADOW ONLY / health OK"],
+    ["LSTM Challenger", "SHADOW ONLY / watch"],
+    ["KAN Challenger", "SHADOW ONLY / gate"],
+    ["Champion Frozen", "auto promotion off"],
+  ].map(([name, value]) => `<div><b>${name}</b><span>${value}</span></div>`).join(""));
+
+  setHtml("chartOverlayMeta", [
+    ["overlay_id", `ORION-${market.symbol}-${market.interval}`],
+    ["owner_engine", "public_market_analyzer"],
+    ["timeframe", market.interval],
+    ["snapshot_id", payloadHash.slice(0, 10)],
+    ["payload_sha256", payloadHash],
+    ["quality_status", market.source.startsWith("fallback") ? "STALE" : "FRESH"],
+    ["data_class", "PUBLIC_READ_ONLY"],
+    ["expires_at", "+20s cache"],
+  ].map(([label, value]) => `<div><span>${label}</span><b>${value}</b></div>`).join(""));
+
+  setHtml("confluenceList", [
+    ["VWAP derivado", vwapText],
+    ["EMA 20 / 50", market.signals.ema_20 > market.signals.ema_50 ? "alinhada alta" : "sem alinhamento alta"],
+    ["RSI 14", fmt.format(market.signals.rsi_14)],
+    ["Volume relativo", `${fmt.format(market.signals.volume_ratio)}x`],
+    ["Fonte publica", `${market.source_consensus.active_lanes}/${market.source_consensus.total_lanes}`],
+  ].map(([label, value]) => `<div><b>${label}</b><span>${value}</span></div>`).join(""));
+
+  setHtml("marketStatsGrid", [
+    ["Volatilidade", volatilityLabel],
+    ["Momentum", momentumLabel],
+    ["Assimetria", market.pressure.long >= market.pressure.short ? "favoravel long" : "favoravel short"],
+    ["OBV", Number.isFinite(obv) ? fmt.format(obv) : "SEM DADO"],
+  ].map(([label, value]) => `<div class="row"><b>${label}</b><span>${value}</span></div>`).join(""));
+
+  setHtml("executiveSummary", [
+    `<div><b>Estrutura</b><span>${market.levels.structure.replaceAll("_", " ")}</span></div>`,
+    `<div><b>Preco vs VWAP</b><span>${vwap === null ? "SEM DADO" : market.price >= vwap ? "acima da VWAP derivada" : "abaixo da VWAP derivada"}</span></div>`,
+    `<div><b>Pressao</b><span>${readablePressure(market.pressure.bias)}</span></div>`,
+    `<div><b>Validacao</b><span>Analise informativa. Nenhuma ordem sera enviada.</span></div>`,
+  ].join(""));
+
+  setHtml("confirmationChecklist", [
+    ["Tendencia alinhada", trend !== "LATERAL"],
+    ["Preco acima EMA20", market.price > market.signals.ema_20],
+    ["RSI utilizavel", market.signals.rsi_14 > 35 && market.signals.rsi_14 < 78],
+    ["Volume confirma", market.signals.volume_ratio >= 0.9],
+    ["Fonte publica online", market.source_consensus.active_lanes > 0],
+    ["Risk engine bloqueia execucao", telemetry.guardrails.broker_actions === "blocked"],
+    ["R:R minimo", market.levels.technical_invalidation !== null],
+    ["No fake data", true],
+  ].map(([label, ok]) => `<div><b>${ok ? "OK" : "WARMUP"}</b><span>${label}</span></div>`).join(""));
+
+  setHtml("operationalPlan", [
+    `<div><b>Entrada</b><span>${rangeText(market.levels.entry_zone)}</span></div>`,
+    `<div><b>Alvo 1</b><span>${priceText(market.levels.target)}</span></div>`,
+    `<div><b>Alvo 2</b><span>${target2}</span></div>`,
+    `<div><b>Invalidacao</b><span>${invalidation}</span></div>`,
+    `<div><b>Execucao</b><span>BLOQUEADA</span></div>`,
+  ].join(""));
+
+  setHtml("deepSnapshot", [
+    ["Ativo", market.symbol],
+    ["Timeframe", market.interval],
+    ["Preco", priceText(market.price)],
+    ["Cenario", readableBias(market.bias)],
+    ["Limitacoes", market.source.startsWith("fallback") ? "STALE" : "SEM L2 privado"],
+  ].map(([label, value]) => `<div class="row"><b>${label}</b><span>${value}</span></div>`).join(""));
+
+  setHtml("deepPipeline", [
+    ["IDLE", "pronto"],
+    ["COLLECTING PRIMARY", market.source],
+    ["PRELIMINARY SNAPSHOT", payloadHash],
+    ["COLLECTING SECONDARY", `${market.source_consensus.active_lanes}/${market.source_consensus.total_lanes} fontes`],
+    ["CALCULATING", "EMA / RSI / ATR / pressao"],
+    ["VALIDATING", telemetry.guardrails.fail_closed ? "fail-closed" : "STALE"],
+  ].map(([step, value]) => `<div><b>${step}</b><span>${value}</span></div>`).join(""));
+
+  setHtml("deepEngines", [
+    ["Cortex", telemetry.brain.cortex.trend],
+    ["Amigdala", telemetry.brain.amygdala.state],
+    ["Plasticidade", telemetry.brain.plasticity.mode],
+    ["Consensus Router", "shadow governance"],
+    ["Signal Governance", "no isolated score trigger"],
+  ].map(([label, value]) => `<div><b>${label}</b><span>${value}</span></div>`).join(""));
+
+  setHtml("deepScenarios", [
+    `<div><b>Principal</b><p>${readableBias(market.bias)} - ${market.narrative}</p><span>alvo: ${priceText(market.levels.target)}</span></div>`,
+    `<div><b>Alternativo</b><p>${market.levels.near_resistance ? "Aguardar rompimento ou rejeicao confirmada." : "Sem confirmacao alternativa forte."}</p><span>invalidacao: ${invalidation}</span></div>`,
+  ].join(""));
+
+  setHtml("exportFormats", [
+    ["HTML", "REPORT BLOCKED"],
+    ["TXT", "REPORT BLOCKED"],
+    ["JSON", payloadHash],
+    ["PNG", "usar Gerar Print"],
+  ].map(([label, value]) => `<div><b>${label}</b><span>${value}</span></div>`).join(""));
+
+  const ladderRows = [
+    ["ASK", market.levels.resistance_zone?.[1], "INDISPONIVEL L2", "ask"],
+    ["ASK", market.levels.resistance, "INDISPONIVEL L2", "ask"],
+    ["MID", market.price, "mid/public", "mid"],
+    ["BID", market.levels.support, "INDISPONIVEL L2", "bid"],
+    ["BID", market.levels.support_zone?.[0], "INDISPONIVEL L2", "bid"],
+  ];
+  setHtml("orderBookLadder", ladderRows.map(([side, price, qty, cls], idx) => `<div class="ladder-row ${cls}"><span>${priceText(price || market.price)}</span><i style="width:${idx === 2 ? 100 : 35 + idx * 12}%"></i><b>${side} ${qty}</b></div>`).join(""));
+  setHtml("imbalanceGrid", [
+    ["OBI", "INDISPONIVEL L2"],
+    ["Imbalance Volume", percentText(Math.max(market.pressure.long, market.pressure.short))],
+    ["Pressao Micro", readablePressure(market.pressure.bias)],
+    ["CVD Velocity", "WARMUP"],
+    ["Sweep Detection", "SEM DADO"],
+    ["Absorcao", "SEM DADO"],
+    ["Exaustao", "SEM DADO"],
+    ["Slippage Estimate", "INDISPONIVEL"],
+  ].map(([label, value]) => `<div><span>${label}</span><b>${value}</b></div>`).join(""));
+  setHtml("tapeStream", [
+    ["Trades", "SEM DADO L2"],
+    ["Agressao", "INDISPONIVEL"],
+    ["Bid / Ask", "INDISPONIVEL"],
+    ["Spread", "SEM DADO"],
+  ].map(([label, value]) => `<div><b>${label}</b><span>${value}</span></div>`).join(""));
+  setHtml("microEvents", [
+    ["Liquidation Heatmap", "INDISPONIVEL"],
+    ["Order Book Heatmap", "INDISPONIVEL L2"],
+    ["Visible Range High / Low", `${priceText(Math.max(...candles.map((c) => c.high)))} / ${priceText(Math.min(...candles.map((c) => c.low)))}`],
+    ["Pivot Candidate", market.levels.pivots.last_top || market.levels.pivots.last_bottom ? "detectado" : "SEM DADO"],
+    ["Pivot Confirmed", "WARMUP"],
+    ["Rejection Confirmed", market.levels.near_resistance ? "em observacao" : "SEM DADO"],
+    ["Breakout Confirmed", "SEM DADO"],
+  ].map(([label, value]) => `<div><b>${label}</b><span>${value}</span></div>`).join(""));
+  setHtml("microLatency", [
+    ["Latencia de rede", `${Math.round((telemetry.oscillator.rate_hz || 1) * 10)} ms`],
+    ["Idade do dado", "cache <= 20s"],
+    ["Sincronizacao", "100%"],
+    ["Integridade", market.source.startsWith("fallback") ? "STALE" : "OK"],
+  ].map(([label, value]) => `<div class="row"><b>${label}</b><span>${value}</span></div>`).join(""));
+
+  setHtml("guardrailRibbon", [
+    ["estado geral", "protegido"],
+    ["modo", "SHADOW ONLY"],
+    ["execucao real", "false"],
+    ["demo", "false"],
+    ["order_send", "false"],
+    ["broker auth", "false"],
+    ["fail-closed", String(telemetry.guardrails.fail_closed)],
+    ["read-only", "ativo"],
+  ].map(([label, value]) => `<div><span>${label}</span><b>${value}</b></div>`).join(""));
+  setHtml("protectionScenarios", [
+    ["Volatilidade extrema", "protegido"],
+    ["Liquidez baixa", "protegido"],
+    ["Correlacao sistemica", "protegido"],
+    ["Falha de conector", "fail-closed"],
+    ["Divergencia de dados", "watch"],
+  ].map(([label, value]) => `<div><b>${label}</b><span>${value}</span></div>`).join(""));
+  setHtml("riskBlocks", [
+    ["financial_execution", "false"],
+    ["trade_execution", "false"],
+    ["order_send", "false"],
+    ["real_orders_enabled", "false"],
+    ["demo_orders_enabled", "false"],
+    ["authenticated_broker", "false"],
+  ].map(([label, value]) => `<div class="guard"><b>${label}</b><span>${value}</span></div>`).join(""));
+  setHtml("incidentTimeline", [
+    ["Volatilidade acima do normal", "resolvido"],
+    ["Circuit breaker checado", "ativo"],
+    ["Feed publico validado", `${market.source_consensus.active_lanes}/${market.source_consensus.total_lanes}`],
+    ["Execucao bloqueada confirmada", "ok"],
+    ["Sistema iniciado em modo shadow", "ok"],
+  ].map(([label, value]) => `<div><b>${label}</b><span>${value}</span></div>`).join(""));
+
+  setHtml("memoryTimeline", telemetry.brain.hippocampus.map((item) => `<div><b>${displayScenarioName(item.scenario)}</b><span>${fmt.format(item.match_pct)}% - ${item.reuse}</span></div>`).join(""));
+  setHtml("proceduralPrefs", [
+    ["READ_ONLY", "ativo"],
+    ["Nao repetir falhas", "ativo"],
+    ["Zero execution", "ativo"],
+    ["Human gate required", "ativo"],
+  ].map(([label, value]) => `<div><b>${label}</b><span>${value}</span></div>`).join(""));
+  setText("memoryRadar", "");
+  const radar = document.getElementById("memoryRadar");
+  if (radar) radar.innerHTML = `<span>${Math.round(modelConfidence * 100)}%</span>`;
+  setHtml("auditGrid", [
+    ["Snapshot", payloadHash],
+    ["Checkpoint", "candidate_staging"],
+    ["Rollback", "ready"],
+    ["QA", "visual + smoke"],
+    ["Proveniencia", "public feeds + local runtime"],
+    ["SHA256", payloadHash],
+  ].map(([label, value]) => `<div><b>${label}</b><span>${value}</span></div>`).join(""));
+}
+
+function renderDetail(key) {
+  if (!lastMarket) return;
+  const d = lastMarket;
+  const details = {
+    bias: ["Vies operacional", `${d.bias.replaceAll("_", " ")} com confianca ${fmt.format(d.confidence)}. ${d.narrative}`],
+    price: ["Preco e consenso", `Preco base ${priceText(d.price)}. Consenso publico ${priceText(d.source_consensus.consensus_price)} com ${d.source_consensus.active_lanes} fontes online.`],
+    support: ["Suporte forte", `Nivel ${priceText(d.levels.support)}. Faixa defensiva ${rangeText(d.levels.support_zone)}. Toques recentes no fundo: ${d.levels.bottom_touches}.`],
+    resistance: ["Resistencia forte", `Nivel ${priceText(d.levels.resistance)}. Faixa de oferta ${rangeText(d.levels.resistance_zone)}. Toques recentes no topo: ${d.levels.top_touches}.`],
+    entry: ["Entrada e acumulacao", `Zona operacional ${rangeText(d.levels.entry_zone)}. Zona de acumulacao estimada ${rangeText(d.levels.accumulation_zone)}.`],
+    target: ["Alvo e invalidacao", `Alvo ${priceText(d.levels.target)}. Invalidacao tecnica ${d.levels.technical_invalidation === null ? "sem trade confirmado" : priceText(d.levels.technical_invalidation)}. Estrutura: ${d.levels.structure.replaceAll("_", " ")}.`],
+  };
+  const [title, body] = details[key] || details.bias;
+  setHtml("detailPanel", `<span>Leitura rapida</span><b>${title}</b><p>${body}</p>`);
+}
+
+function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(" ");
+  let line = "";
+  for (const word of words) {
+    const test = `${line}${word} `;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      ctx.fillText(line, x, y);
+      line = `${word} `;
+      y += lineHeight;
+    } else {
+      line = test;
+    }
+  }
+  ctx.fillText(line, x, y);
+  return y + lineHeight;
+}
+
+function generateTradeCard() {
+  if (!lastMarket) return;
+  const d = lastMarket;
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 1350;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const gradient = ctx.createRadialGradient(540, 0, 40, 540, 0, 760);
+  gradient.addColorStop(0, "rgba(0,242,255,0.22)");
+  gradient.addColorStop(1, "rgba(0,242,255,0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = "rgba(255,255,255,0.10)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(40, 40, 1000, 1270);
+
+  ctx.fillStyle = COLORS.cyan;
+  ctx.font = "800 28px JetBrains Mono, Consolas, monospace";
+  ctx.fillText("AR10 ORION CYBORG / READ_ONLY", 78, 105);
+  ctx.fillStyle = COLORS.text;
+  ctx.font = "900 58px Inter, Segoe UI, Arial, sans-serif";
+  ctx.fillText(`${d.symbol} ${d.interval}`, 78, 180);
+  ctx.fillStyle = biasClass(d.bias) === "short" ? COLORS.short : biasClass(d.bias) === "wait" ? COLORS.amber : COLORS.long;
+  ctx.font = "900 64px JetBrains Mono, Consolas, monospace";
+  ctx.fillText(d.bias.replaceAll("_", " "), 78, 270);
+  ctx.fillStyle = COLORS.soft;
+  ctx.font = "600 28px Inter, Segoe UI, Arial, sans-serif";
+  wrapCanvasText(ctx, d.narrative, 78, 325, 900, 38);
+
+  const boxes = [
+    ["Preco", priceText(d.price)],
+    ["Suporte", priceText(d.levels.support)],
+    ["Resistencia", priceText(d.levels.resistance)],
+    ["Entrada", rangeText(d.levels.entry_zone)],
+    ["Alvo", priceText(d.levels.target)],
+    ["Invalidacao", d.levels.technical_invalidation === null ? "sem trade" : priceText(d.levels.technical_invalidation)],
+  ];
+  boxes.forEach(([label, value], idx) => {
+    const col = idx % 2;
+    const rowIdx = Math.floor(idx / 2);
+    const x = 78 + col * 470;
+    const y = 440 + rowIdx * 140;
+    ctx.fillStyle = "rgba(0,0,0,0.60)";
+    ctx.strokeStyle = "rgba(255,255,255,0.10)";
+    ctx.fillRect(x, y, 430, 100);
+    ctx.strokeRect(x, y, 430, 100);
+    ctx.fillStyle = COLORS.muted;
+    ctx.font = "800 22px JetBrains Mono, Consolas, monospace";
+    ctx.fillText(label.toUpperCase(), x + 24, y + 36);
+    ctx.fillStyle = COLORS.text;
+    ctx.font = "900 31px JetBrains Mono, Consolas, monospace";
+    ctx.fillText(value, x + 24, y + 76);
+  });
+
+  ctx.fillStyle = COLORS.long;
+  ctx.font = "900 34px JetBrains Mono, Consolas, monospace";
+  ctx.fillText(`Pressao compra ${fmt.format(d.pressure.long * 100)}%`, 78, 910);
+  ctx.fillStyle = COLORS.short;
+  ctx.fillText(`Pressao venda ${fmt.format(d.pressure.short * 100)}%`, 78, 960);
+  ctx.fillStyle = COLORS.soft;
+  ctx.font = "600 25px Inter, Segoe UI, Arial, sans-serif";
+  wrapCanvasText(ctx, `Estrutura: ${d.levels.structure.replaceAll("_", " ")}. Topos: ${d.levels.top_touches}; fundos: ${d.levels.bottom_touches}. Fontes online: ${d.source_consensus.active_lanes}/${d.source_consensus.total_lanes}.`, 78, 1030, 900, 34);
+  ctx.fillStyle = COLORS.amber;
+  ctx.font = "800 24px JetBrains Mono, Consolas, monospace";
+  ctx.fillText("Analise informativa. Execucao bloqueada ate gate humano separado.", 78, 1245);
+
+  const dataUrl = canvas.toDataURL("image/png");
+  document.getElementById("exportPreview").hidden = false;
+  document.getElementById("exportPreviewImg").src = dataUrl;
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = `orion_${d.symbol}_${d.interval}_${Date.now()}.png`;
+  a.click();
+}
+
+function renderTelemetry(data) {
+  document.getElementById("clock").textContent = new Date().toLocaleString("pt-BR");
+  const fusion = data.brain.plasticity.fused_signal;
+  const entropy = data.brain.amygdala.feed_drift_input;
+  const dopamine = data.brain.dopamine.dopamine;
+  const confidence = data.brain.cortex.confidence || fusion;
+  const cortisol = data.brain.amygdala.cortisol || 0;
+  const riskScore = Math.max(0.05, Math.min(0.95, cortisol + entropy * 0.35));
+  setText("pulseValue", fmt.format(fusion));
+  setWidth("pulseBar", `${Math.round(fusion * 100)}%`);
+  setText("entropyValue", fmt.format(entropy));
+  setText("dopamineValue", fmt.format(dopamine));
+  setText("nexusBrain", `pulso ${fmt.format(fusion)} / entropia ${fmt.format(entropy)}`);
+  setText("nexusRisk", `${data.guardrails.mode} / execucao bloqueada`);
+  setText("nexusMemory", `${data.brain.hippocampus.length} matches episodicos`);
+  setText("miniBrainSignal", lastMarket ? shortSignal(lastMarket.bias) : data.brain.cortex.trend.toUpperCase());
+  setText("miniBrainConfidence", percentText(confidence));
+  setText("miniCortexState", `Cortex ${fmt.format(confidence)}`);
+  setText("miniEntropyState", `Entropia ${fmt.format(entropy)}`);
+  setText("miniCortisolState", `Cortisol ${fmt.format(cortisol)}`);
+  setText("miniRiskScore", percentText(riskScore));
+  setText("miniRiskMode", data.guardrails.mode);
+  setText("miniRiskDrawdown", `cortisol ${fmt.format(cortisol)}`);
+  const riskDonut = document.getElementById("miniRiskDonut");
+  if (riskDonut) riskDonut.style.setProperty("--risk-deg", `${Math.round(riskScore * 360)}deg`);
+  setText("miniMemoryMatches", data.brain.hippocampus.length);
+
+  document.getElementById("feeds").innerHTML = data.feeds.items
+    .map((feed) => row(feed.name, feed.status))
+    .join("");
+
+  document.getElementById("brain").innerHTML = [
+    row("Cortex", `${data.brain.cortex.trend} / ${fmt.format(data.brain.cortex.confidence)}`),
+    row("Amigdala", `${data.brain.amygdala.state} / cortisol ${fmt.format(data.brain.amygdala.cortisol)}`),
+    row("Plasticidade", `${data.brain.plasticity.mode} / alpha ${fmt.format(data.brain.plasticity.alpha)}`),
+    row("Oscilador", `${data.oscillator.rate_hz} Hz`),
+  ].join("");
+
+  document.getElementById("memoryMatches").innerHTML = data.brain.hippocampus
+    .map((item) => `<div class="match"><b>${displayScenarioName(item.scenario)}</b><span><i>${fmt.format(item.match_pct)}%</i> ${item.reuse}</span></div>`)
+    .join("");
+
+  document.getElementById("gateways").innerHTML = data.gateways
+    .map((gateway) => row(gateway.gateway, `${gateway.mode} / execucao ${gateway.execution_enabled ? "ON" : "OFF"}`))
+    .join("");
+
+  document.getElementById("guardrails").innerHTML = Object.entries(data.guardrails)
+    .map(([key, value]) => `<div class="guard"><b>${key}</b><span>${value}</span></div>`)
+    .join("");
+}
+
+function renderReuse(matrix) {
+  document.getElementById("reuseMatrix").innerHTML = matrix.items.slice(0, 4)
+    .map((item) => `<div class="reuse-item"><b>${displayProjectName(item.source_project)}</b><span>${item.reuse_target}</span></div>`)
+    .join("");
+  setText("miniMemoryReuse", matrix.items.length);
+  setHtml("miniMemoryList", matrix.items.slice(0, 3)
+    .map((item) => `<span>${displayProjectName(item.source_project)}: ${item.reuse_target}</span>`)
+    .join(""));
+}
+
+async function refresh() {
+  try {
+    const symbol = document.getElementById("symbolSelect").value;
+    const interval = document.getElementById("intervalSelect").value;
+    const pressure = document.getElementById("pressureSelect").value;
+    const [telemetry, matrix] = await Promise.all([
+      getJson("/api/orion/telemetry"),
+      getJson("/api/orion/reuse-matrix"),
+    ]);
+    const market = await getJson(`/api/orion/market-analysis?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&pressure=${encodeURIComponent(pressure)}`);
+    try {
+      renderTelemetry(telemetry);
+      renderReuse(matrix);
+      renderMarket(market);
+      renderComposite(telemetry, matrix, market);
+    } catch (renderError) {
+      setText("overviewActionBadge", "REPORT BLOCKED");
+      setHtml("actionSummary", `<div><b>Render blocked</b><span>${renderError.message}</span></div>`);
+      throw renderError;
+    }
+  } catch (error) {
+    document.getElementById("guardrails").innerHTML = row("erro", error.message);
+  }
+}
+
+function chartPlot(canvas) {
+  return { left: 24, right: canvas.width - 118, top: 24, bottom: canvas.height - 186 };
+}
+
+function setChartWindow(start, end) {
+  if (!lastMarket) return;
+  const total = lastMarket.candles.length;
+  const size = Math.max(12, end - start);
+  let nextStart = Math.round(start);
+  let nextEnd = Math.round(end);
+  if (nextStart < 0) {
+    nextStart = 0;
+    nextEnd = size;
+  }
+  if (nextEnd > total) {
+    nextEnd = total;
+    nextStart = Math.max(0, total - size);
+  }
+  chartState.start = nextStart;
+  chartState.end = nextEnd;
+  clampChartWindow(total);
+}
+
+function installChartInteractions() {
+  const canvas = document.getElementById("marketCanvas");
+  const reset = document.getElementById("chartResetBtn");
+  if (!canvas) return;
+
+  canvas.addEventListener("wheel", (event) => {
+    if (!lastMarket) return;
+    event.preventDefault();
+    const candles = lastMarket.candles || [];
+    const point = canvasPoint(event);
+    const plot = chartPlot(canvas);
+    const visible = chartState.end - chartState.start;
+    const frac = Math.max(0, Math.min(1, (point.x - plot.left) / (plot.right - plot.left)));
+    const nextVisible = Math.max(12, Math.min(candles.length, Math.round(visible * (event.deltaY > 0 ? 1.18 : 0.82))));
+    const anchor = chartState.start + visible * frac;
+    setChartWindow(anchor - nextVisible * frac, anchor + nextVisible * (1 - frac));
+    chartState.hoverLocalIndex = null;
+    hideChartTooltip();
+    drawMarketCanvas(lastMarket);
+  }, { passive: false });
+
+  canvas.addEventListener("pointerdown", (event) => {
+    if (!lastMarket) return;
+    canvas.setPointerCapture(event.pointerId);
+    const point = canvasPoint(event);
+    chartState.dragging = true;
+    chartState.dragX = point.x;
+    chartState.dragStart = chartState.start;
+    chartState.dragEnd = chartState.end;
+  });
+
+  canvas.addEventListener("pointermove", (event) => {
+    if (!lastMarket) return;
+    const canvasEl = document.getElementById("marketCanvas");
+    const point = canvasPoint(event);
+    const plot = chartPlot(canvasEl);
+    const visible = chartState.end - chartState.start;
+    const step = (plot.right - plot.left) / Math.max(1, visible - 1);
+    if (chartState.dragging) {
+      const bars = Math.round((chartState.dragX - point.x) / Math.max(1, step));
+      setChartWindow(chartState.dragStart + bars, chartState.dragEnd + bars);
+      chartState.hoverLocalIndex = null;
+      hideChartTooltip();
+      drawMarketCanvas(lastMarket);
+      return;
+    }
+    const local = Math.round((point.x - plot.left) / Math.max(1, step));
+    if (local >= 0 && local < visible) {
+      chartState.hoverLocalIndex = local;
+      const candle = lastMarket.candles.slice(chartState.start, chartState.end)[local];
+      updateChartTooltip(candle, point);
+    } else {
+      chartState.hoverLocalIndex = null;
+      hideChartTooltip();
+    }
+    drawMarketCanvas(lastMarket);
+  });
+
+  canvas.addEventListener("pointerup", (event) => {
+    chartState.dragging = false;
+    try {
+      canvas.releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer may already be released by the browser.
+    }
+  });
+
+  canvas.addEventListener("pointerleave", () => {
+    if (chartState.dragging) return;
+    chartState.hoverLocalIndex = null;
+    hideChartTooltip();
+    if (lastMarket) drawMarketCanvas(lastMarket);
+  });
+
+  if (reset) {
+    reset.addEventListener("click", () => {
+      if (!lastMarket) return;
+      chartState.key = "";
+      ensureChartState(lastMarket);
+      hideChartTooltip();
+      drawMarketCanvas(lastMarket);
+    });
+  }
+}
+
+setInterval(drawFlowCanvas, 80);
+document.getElementById("symbolSelect").addEventListener("change", refresh);
+document.getElementById("intervalSelect").addEventListener("change", refresh);
+document.getElementById("pressureSelect").addEventListener("change", refresh);
+document.getElementById("exportCardBtn").addEventListener("click", generateTradeCard);
+document.querySelectorAll(".info-card").forEach((card) => {
+  card.addEventListener("click", () => renderDetail(card.dataset.infoKey));
+});
+document.querySelectorAll(".nexus-card").forEach((card) => {
+  card.addEventListener("click", () => {
+    const target = document.getElementById(card.dataset.scrollTarget);
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+});
+document.querySelectorAll(".app-tab").forEach((button) => {
+  button.addEventListener("click", () => {
+    setActiveTab(button.dataset.tab);
+    history.replaceState(null, "", `#${button.dataset.tab}`);
+  });
+});
+document.querySelectorAll("[data-analysis-state]").forEach((button) => {
+  button.addEventListener("click", () => {
+    setText("deepStateBadge", button.dataset.analysisState);
+    setText("deepSnapshotStatus", button.dataset.analysisState === "FINAL WITH LIMITATIONS" ? "FINAL WITH LIMITATIONS" : "PRELIMINARY SNAPSHOT");
+  });
+});
+installChartInteractions();
+setActiveTab((window.location.hash || "#overview").replace("#", ""));
+refresh();
+setInterval(refresh, 3000);

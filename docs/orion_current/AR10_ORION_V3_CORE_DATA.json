@@ -1,0 +1,215 @@
+{
+  "project": {
+    "name": "AR10 Orion V3.0 Final",
+    "parent": "AR10 PRO / AR100",
+    "canonical_root": "system/docs/current/orion_v3_current",
+    "status": "CURRENT_DOCUMENTED_READ_ONLY",
+    "macroentrega_1": "Cockpit Orion READ_ONLY"
+  },
+  "guardrails": {
+    "mode": "SHADOW_ASSISTIDO",
+    "read_only": true,
+    "real_orders_enabled": false,
+    "live_enabled": false,
+    "demo_orders_enabled": false,
+    "demo_trading_enabled": false,
+    "order_send": "PROIBIDO",
+    "mt5_order_send": "PROIBIDO",
+    "orders_sent": false,
+    "zero_delete": true,
+    "safe_quarantine": true,
+    "fail_closed": true
+  },
+  "entrypoints_planned": {
+    "panel_preview": "/orion",
+    "panel_file": "system/ui/panel/orion.html",
+    "api_status": "/api/orion/status"
+  },
+  "layers": [
+    {
+      "level": 1,
+      "official_name": "Raizes Sensoriais",
+      "technical_name": "Entrada Sensorial",
+      "purpose": "Capturar e normalizar sinais READ_ONLY de mercado e noticias planejadas.",
+      "current_sources": [
+        "/api/market/history",
+        "/api/market/ticks",
+        "/api/price-truth",
+        "/api/source-health"
+      ],
+      "planned_sources": [
+        "Book L2 READ_ONLY",
+        "Audio Squawk READ_ONLY",
+        "FED News Streams READ_ONLY"
+      ],
+      "visual_quadrant": "Percepcao Sensorial",
+      "primary_color": "cyan"
+    },
+    {
+      "level": 2,
+      "official_name": "Tronco Encefalico",
+      "technical_name": "Barramento Core",
+      "purpose": "Distribuir sinais normalizados e ritmo temporal para os modulos cognitivos.",
+      "current_sources": [
+        "/api/status",
+        "/api/telemetry",
+        "/api/realtime/status"
+      ],
+      "planned_sources": [
+        "ZeroMQ READ_ONLY",
+        "Shared Memory READ_ONLY"
+      ],
+      "visual_quadrant": "Central Cognitiva",
+      "primary_color": "cyan"
+    },
+    {
+      "level": 3,
+      "official_name": "Cerebro Orion",
+      "technical_name": "Processamento Central e Fusao de Memoria",
+      "purpose": "Calcular tendencia, surpresa, memoria episodica, stress e adaptacao.",
+      "modules": [
+        {
+          "id": "cortex_cerebral",
+          "name": "Cortex Cerebral",
+          "function": "Leitura estavel da tendencia macro.",
+          "v1_mode": "derived_readonly",
+          "future_model": "xLSTM/Mamba"
+        },
+        {
+          "id": "sync_eye",
+          "name": "Olho de Sincronizacao",
+          "function": "Medir entropia e surpresa do fluxo micro.",
+          "v1_mode": "derived_readonly",
+          "future_model": "Gating Optic"
+        },
+        {
+          "id": "hippocampus",
+          "name": "Hipocampo",
+          "function": "Resgatar memorias episodicas e cenarios semelhantes.",
+          "v1_mode": "vector_memory_core_LEXICAL_SAFE",
+          "future_model": "HNSW in-memory"
+        },
+        {
+          "id": "amygdala",
+          "name": "Complexo da Amigdala",
+          "function": "Monitorar stress, drawdown e risco.",
+          "v1_mode": "guardrails_and_shadow_risk_readonly",
+          "future_model": "Stress Engine / Cortisol"
+        },
+        {
+          "id": "synaptic_plasticity",
+          "name": "Plasticidade Sinaptica",
+          "function": "Representar adaptacao controlada.",
+          "v1_mode": "planned_readonly",
+          "future_model": "LoRA dinamico controlado"
+        }
+      ],
+      "visual_quadrant": "Central Cognitiva e Memoria Episodica",
+      "primary_color": "cyan_magenta_amber"
+    },
+    {
+      "level": 4,
+      "official_name": "Coroa Operacional",
+      "technical_name": "Comportamento Eferente",
+      "purpose": "Exibir execucao bloqueada, gates e feedback de aprendizado.",
+      "current_sources": [
+        "/api/execution/policy/status",
+        "/api/execution/demo/readiness",
+        "/api/guardrails/status",
+        "/api/finance/status"
+      ],
+      "blocked_actions": [
+        "order_send",
+        "mt5.order_send",
+        "real_order",
+        "live_trade",
+        "demo_order_without_gate"
+      ],
+      "visual_quadrant": "Monitor de Execucao",
+      "primary_color": "amber_red"
+    }
+  ],
+  "quadrants": [
+    {
+      "id": "q1_sensory",
+      "name": "Percepcao Sensorial",
+      "subtitle": "O que as raizes estao lendo",
+      "widgets": [
+        "fluxo_de_ordens_readonly",
+        "ticks_e_candles",
+        "price_truth",
+        "source_health",
+        "audio_squawk_planejado"
+      ]
+    },
+    {
+      "id": "q2_cognitive",
+      "name": "Central Cognitiva",
+      "subtitle": "O que o cerebro esta calculando",
+      "widgets": [
+        "pulso_hidden_state_visual",
+        "medidor_entropia",
+        "oscilador_temporal",
+        "estado_cortex"
+      ]
+    },
+    {
+      "id": "q3_memory",
+      "name": "Memoria Episodica",
+      "subtitle": "O que o hipocampo esta resgatando",
+      "widgets": [
+        "vector_memory_status",
+        "matches_historicos",
+        "shadow_monitor",
+        "fusao_sinaptica_readonly"
+      ]
+    },
+    {
+      "id": "q4_execution",
+      "name": "Monitor de Execucao",
+      "subtitle": "O que a maquina pode operar",
+      "widgets": [
+        "execucao_bloqueada",
+        "policy_modes",
+        "cortisol_stress",
+        "dopamina_reward_readonly"
+      ]
+    }
+  ],
+  "status_values": {
+    "valid_data_states": [
+      "REAL_DATA_ONLY",
+      "READ_ONLY",
+      "SEM_DADO",
+      "SOURCE_UNAVAILABLE",
+      "STALE_DATA",
+      "PLANEJADO_READONLY",
+      "BLOQUEADO"
+    ],
+    "invalid_in_macroentrega_1": [
+      "ORDER_SENT",
+      "REAL_ENABLED",
+      "LIVE_ENABLED",
+      "DEMO_ENABLED_WITHOUT_GATE",
+      "PLACEHOLDER_AS_REAL_DATA"
+    ]
+  },
+  "source_references": [
+    {
+      "id": "reference_01",
+      "path": "system/docs/current/orion_v3_current/references/AR10_ORION_V3_REFERENCE_01_NEUROLOGICAL_TREE_CORTISOL.jpg",
+      "role": "conceptual_architecture"
+    },
+    {
+      "id": "reference_02",
+      "path": "system/docs/current/orion_v3_current/references/AR10_ORION_V3_REFERENCE_02_NEUROLOGICAL_TREE_GATING.jpg",
+      "role": "conceptual_architecture"
+    },
+    {
+      "id": "reference_03",
+      "path": "system/docs/current/orion_v3_current/references/AR10_ORION_V3_REFERENCE_03_QUADRANTS_BLUEPRINT.jpg",
+      "role": "cockpit_blueprint"
+    }
+  ],
+  "updated_at": "2026-06-12T03:50:00-03:00"
+}
