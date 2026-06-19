@@ -1,5 +1,5 @@
 {
-  "generated_for": "AR10_CYBORG_2_PANEL_DEPLOY_AND_REPOSITORY_ALIGNMENT_V1",
+  "generated_for": "AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1",
   "repo": "AR10-10/AR10-ORION",
   "branch": "claude/eloquent-cannon-qyt86y",
   "pull_request": "https://github.com/AR10-10/AR10-ORION/pull/3",
@@ -7,28 +7,32 @@
   "hash_algorithm": "sha256",
   "files": {
     "index.html": {
-      "sha256": "a4bbb3d840bfb8731a5a217d74df2d331b7443eb8cc48b15abbceacc03596e76",
-      "bytes": 10562
+      "sha256": "1abe539de077363003852e5b94d0e90b7aca4c53a537b5e13904874478aebd84",
+      "bytes": 13714
     },
     "manifest.webmanifest": {
       "sha256": "3be72f358fcba501f54ed12695006386b5aa86fe4ec959665b12bae281ab29a6",
       "bytes": 984
     },
     "service-worker.js": {
-      "sha256": "f81955d14422ea961d73686340042e561be44a1a53e212da9ae115513024c732",
-      "bytes": 2146
+      "sha256": "4cbc63b6eef3f875c68c6f3696f9cda235ac1bbafcd4ee0f8cb01369b2523410",
+      "bytes": 2167
     },
     "css/ipad-runtime.css": {
-      "sha256": "36878246df5a1416bbe9ea1accab87107af2fd562a6f969b52d3883a6fd76f44",
-      "bytes": 19464
+      "sha256": "d05de02df3fa9b6f4e913b0cd350b303c5458013efb956f64700941d83e9f31a",
+      "bytes": 24052
     },
     "js/app.js": {
-      "sha256": "7f605eb5d6f9bb752213c1425f08265d69fa1f468258205883e0cf4cc2395d6b",
-      "bytes": 15941
+      "sha256": "145d946686058295dc3c266d0ab701d78e65e60867f5923626e50ccaac05643d",
+      "bytes": 24338
     },
     "js/siriform.js": {
-      "sha256": "b7adeaa998359a90cc670079a69c30f0d4815d4c2105ded19952fb1d70b0e0dc",
-      "bytes": 2232
+      "sha256": "b2af37ef4953ee8f3e4de9737343057679742d43855984b2f4e0bbea0f7d0ceb",
+      "bytes": 4698
+    },
+    "js/voice.js": {
+      "sha256": "5a5b65866f1d24cf00199f8eb1e5e4dd8b94d8d0dfe2ba260f537e39e85dd3dc",
+      "bytes": 7678
     },
     "js/feature-detect.js": {
       "sha256": "54171ff018afe5e4546d968c8ea71bb0bacbb069e389c4d117df1e12a8d3f03e",
@@ -71,16 +75,16 @@
       "bytes": 58284
     },
     "AR10_CYBORG_LOCAL_PACK_V1.ar10pack": {
-      "sha256": "e0b925fc7734d009c1d7ba82bef4225aafa27470473d5b9e703d3fcef720dc0d",
-      "bytes": 85331
+      "sha256": "c1d3d534ece10da1fe143db13468527454faa0e924e7ed0073da11679ddd44b2",
+      "bytes": 87711
     },
     "pack/manifest.pack.json": {
       "sha256": "406c8e39e9483622540c1b0a10a78a1fa3a611b1cb335730c60c72caa14e6d86",
       "bytes": 1031
     },
     "pack/manifest.models.json": {
-      "sha256": "b3a3798085b1035112c9951556a8aa5b125c0fae6f9491d8003ee5b69b7af288",
-      "bytes": 1332
+      "sha256": "df82196b8e69f3b1ec3e3c5185275b8408690b99b34f654d5df95c68eb5250a8",
+      "bytes": 4011
     },
     "pack/runtime_config.json": {
       "sha256": "bbe7859d9253d701b13c43cf061dd9922e19227dc3152c2bf4fcc5e81a7e9761",

@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1 — Handoff Canônico</title>
+<style>
+  :root {
+    --long-green: #00FF9D;
+    --short-red: #FF3E52;
+    --sys-cyan: #00F2FF;
+    --alert-amber: #FFB800;
+    --bg-void: #000000;
+    --bg-card: #0a0d10;
+    --border-dim: #1c2228;
+    --text-dim: #8a96a3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg-void);
+    color: #e8edf2;
+    font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 20px 80px; }
+  header.hero {
+    text-align: center;
+    padding: 40px 16px 32px;
+    border-bottom: 1px solid var(--border-dim);
+    margin-bottom: 32px;
+  }
+  .kicker {
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 12px;
+    color: var(--sys-cyan);
+    font-family: ui-monospace, "SF Mono", monospace;
+  }
+  h1 { font-size: 26px; margin: 10px 0 6px; }
+  .tagline { color: var(--text-dim); font-size: 14px; max-width: 660px; margin: 0 auto; }
+  .pill-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+  .pill {
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-dim);
+    color: var(--text-dim);
+  }
+  .pill.ok { color: var(--long-green); border-color: rgba(0,255,157,0.35); }
+  .pill.blocked { color: var(--short-red); border-color: rgba(255,62,82,0.35); }
+  .pill.info { color: var(--sys-cyan); border-color: rgba(0,242,255,0.35); }
+  .pill.hold { color: var(--alert-amber); border-color: rgba(255,184,0,0.35); }
+  section.block { margin-bottom: 36px; }
+  section.block h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--sys-cyan);
+    font-family: ui-monospace, monospace;
+    border-bottom: 1px solid var(--border-dim);
+    padding-bottom: 10px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  section.block h2 .num {
+    background: var(--bg-card);
+    border: 1px solid var(--border-dim);
+    color: var(--text-dim);
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-size: 11px;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-dim);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table th, table td {
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border-dim);
+    vertical-align: top;
+  }
+  table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  code, .mono { font-family: ui-monospace, "SF Mono", monospace; font-size: 0.93em; }
+  code {
+    background: #11161b;
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--sys-cyan);
+  }
+  pre {
+    background: #090c0f;
+    border: 1px solid var(--border-dim);
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 12.5px;
+    color: #c9d4de;
+  }
+  a { color: var(--sys-cyan); text-decoration: none; border-bottom: 1px dotted rgba(0,242,255,0.4); }
+  ul, ol { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  .status-line {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border-dim);
+    padding: 8px 0;
+    font-size: 13.5px;
+    gap: 12px;
+  }
+  .status-line:last-child { border-bottom: none; }
+  .v-ok { color: var(--long-green); font-family: ui-monospace, monospace; }
+  .v-fail { color: var(--short-red); font-family: ui-monospace, monospace; }
+  .v-hold { color: var(--alert-amber); font-family: ui-monospace, monospace; }
+  .v-info { color: var(--sys-cyan); font-family: ui-monospace, monospace; }
+  .note {
+    border-left: 3px solid var(--alert-amber);
+    background: rgba(255,184,0,0.06);
+    padding: 10px 14px;
+    border-radius: 0 8px 8px 0;
+    font-size: 13.5px;
+    color: #e8d9b0;
+  }
+  .badge {
+    display: inline-block;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    padding: 4px 9px;
+    border-radius: 6px;
+    border: 1px solid var(--border-dim);
+    margin: 2px 3px 2px 0;
+  }
+  .badge.stub { color: var(--alert-amber); border-color: rgba(255,184,0,0.35); }
+  .badge.future { color: var(--sys-cyan); border-color: rgba(0,242,255,0.35); }
+  footer.legal {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 12px;
+    border-top: 1px solid var(--border-dim);
+    padding-top: 20px;
+    margin-top: 40px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="kicker">Nebula Core · Siriform Voice · Meta Llama (FUTURE) · Handoff Canônico</div>
+    <h1>AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1</h1>
+    <p class="tagline">
+      Documento único de entrega: runtime ONE-LINK do iPad, camada de voz
+      Siriform, rota futura Meta Llama/WebLLM e rota futura de companion
+      nativo Siri/Apple Intelligence — continuação direta de
+      <code>AR10_CYBORG_2_PANEL_DEPLOY_AND_REPOSITORY_ALIGNMENT_V1</code>,
+      mesmo branch, mesmo PR, sem reinício.
+    </p>
+    <div class="pill-row">
+      <span class="pill ok">READ_ONLY</span>
+      <span class="pill blocked">FAIL_CLOSED</span>
+      <span class="pill info">PASS TÉCNICO</span>
+      <span class="pill hold">HOLD OPERACIONAL</span>
+    </div>
+  </header>
+
+  <section class="block">
+    <h2><span class="num">1</span>Visão de produto</h2>
+    <div class="card">
+      <p>
+        <b>AR10 Cyborg 2.0 — iPad One-Tap Cloud Runtime</b> continua um
+        PWA standalone, local-first, aberto com um único toque direto no
+        Safari do iPad via HTTPS. Esta entrega adiciona três capacidades
+        novas sobre a base já existente: <b>(1)</b> um botão único
+        ("Preparar Cyborg neste iPad") que automatiza download, verificação,
+        instalação, replay e diagnóstico numa só ação; <b>(2)</b> uma
+        camada de voz real (Siriform Voice Layer) para os mesmos comandos
+        seguros já existentes; <b>(3)</b> documentação honesta da rota
+        futura para um modelo de linguagem da família Meta Llama.
+      </p>
+      <p>
+        Princípio inegociável, reafirmado nesta entrega com uma lei nova:
+        <b>nenhuma ação no painel — por toque, por voz, ou por uma futura
+        integração Siri/Apple Intelligence — executa ordem, abre posição,
+        conecta em corretora ou guarda segredo</b>.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">2</span>Painel esperado (o que foi construído)</h2>
+    <div class="card">
+      <p><b>Siriform Avatar</b> (<code>ipad_runtime/js/siriform.js</code>) — duas trilhas de estado independentes, nunca misturadas:</p>
+      <table>
+        <tr><th>Trilha</th><th>Estados</th></tr>
+        <tr><td class="mono">data-state (atividade)</td><td class="mono">idle, listening, thinking, analyzing, responding, installing, read_only, fail_closed</td></tr>
+        <tr><td class="mono">data-voice-state (voz)</td><td class="mono">voice_idle, voice_permission_required, voice_listening, voice_processing, voice_responding, voice_text_only, voice_unsupported, voice_blocked_by_policy</td></tr>
+      </table>
+      <p style="margin-top:14px;"><b>18 cards do painel</b> em <code>index.html</code>, tela única:</p>
+      <ol>
+        <li>Mode banner (READ_ONLY / FAIL_CLOSED, sempre visível)</li>
+        <li>Header premium (Nebula Core)</li>
+        <li>Siriform Avatar central + microfone + ações rápidas + badges</li>
+        <li><b>Siriform Voice</b> — status de reconhecimento/síntese/permissão <span class="badge future">NOVO</span></li>
+        <li>Safari Local Runtime status</li>
+        <li>Feature Detection (IndexedDB, OPFS, WebGPU, WebGL/Canvas)</li>
+        <li>WASM Quant Engine</li>
+        <li>Meta Llama/WebLLM <span class="badge future">FUTURE</span> + Transformers/ONNX <span class="badge future">FUTURE</span></li>
+        <li>Replay BTC/USDT + canvas + perfis Light/Balanced/Heavy</li>
+        <li>AnalysisFrame (estatística descritiva real)</li>
+        <li>DecisionFrame <span class="badge stub">STUB CONTROLLED</span></li>
+        <li>Vault/Evidence</li>
+        <li>Local Pack Manager (10 botões, incluindo o novo "Preparar Cyborg")</li>
+        <li>Logs do sistema</li>
+        <li>Guia "Adicionar à Tela de Início"</li>
+        <li>Rodapé legal permanente</li>
+      </ol>
+      <p><b>Local Pack Manager — 10 botões:</b> Verificar Safari ·
+      <b>Preparar Cyborg neste iPad</b> <span class="badge future">NOVO</span> ·
+      Baixar Pacote Local · Importar Pacote do Arquivos · Verificar SHA256 ·
+      Instalar no Safari Storage · Rodar Diagnóstico Offline · Rodar
+      Replay BTC/USDT · Limpar/Reinstalar · Adicionar à Tela de Início.</p>
+      <p><b>Ações rápidas</b> (sob o microfone): Diagnóstico · Replay
+      BTC/USDT · Análise · Relatório — mesmas ações disponíveis por voz.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">3</span>Mockup real recebido — como foi usado</h2>
+    <div class="card">
+      <p>
+        Diferente da entrega anterior, esta missão recebeu uma imagem real
+        de referência (screenshot do Safari no iPad, URL
+        <code>cyborg.ar10.io</code>): layout em duas colunas — barra
+        superior, coluna esquerda com cards de status/instalação, centro
+        com o Siriform Avatar + microfone + ações rápidas, coluna direita
+        com painéis de status, log e seletor de perfil na base.
+      </p>
+      <p>
+        A missão concedeu liberdade técnica total ("não é uma prisão
+        pixel-perfect"). Decisão tomada: implementar um <b>grid CSS
+        responsivo de 2/3 colunas</b> (<code>@media (min-width: 900px)</code>
+        e <code>@media (min-width: 1300px)</code>) usando atribuição
+        direta de <code>grid-column</code> por <code>id</code> existente —
+        sem duplicar ou reordenar nenhum elemento do DOM. Em telas
+        estreitas (iPad retrato, iPhone), tudo cai numa única coluna na
+        ordem natural do documento, com o Siriform sempre em primeiro
+        lugar — exatamente a experiência já validada antes desta entrega.
+      </p>
+      <p>
+        Alternativas descartadas e o motivo: <code>grid-row: 1 / -1</code>
+        (índices negativos de linha) tem histórico de incompatibilidade no
+        Safari/WebKit; sobrescrever <code>grid-row</code> com números
+        "mágicos" grandes poderia criar lacunas visuais indesejadas quando
+        as colunas têm alturas de conteúdo muito diferentes. A solução
+        adotada aceita um risco cosmético menor (lacunas de
+        auto-posicionamento em telas muito largas) em troca de zero risco
+        de compatibilidade e zero mudança na ordem de leitura/acessibilidade
+        do documento.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">4</span>ONE-LINK IPAD RUNTIME — Preparar Cyborg neste iPad</h2>
+    <div class="card">
+      <p>
+        Pipeline de um toque (<code>handlePrepareCyborg()</code> em
+        <code>js/app.js</code>), reaproveitando os mesmos primitivos
+        seguros já existentes — nenhuma rota de execução nova foi criada:
+      </p>
+      <ol>
+        <li>Baixa o pacote local, se ainda não estiver carregado nesta sessão.</li>
+        <li>Verifica SHA-256 de cada arquivo — <b>aborta imediatamente</b>
+        (retorno antecipado, estado <code>fail_closed</code>) se qualquer
+        hash não bater, antes de qualquer instalação.</li>
+        <li>Instala no Safari Storage (OPFS → fallback IndexedDB).</li>
+        <li>Reinicializa o motor WASM defensivamente.</li>
+        <li>Roda o Replay BTC/USDT (reaproveita <code>handleRunReplay()</code>).</li>
+        <li>Roda o Diagnóstico Offline (reaproveita <code>handleRunDiagnostics()</code>).</li>
+        <li>Reporta sucesso na legenda do Siriform e no log.</li>
+      </ol>
+      <p>Um catch-all cobre qualquer outra falha não prevista, sempre
+      caindo em <code>fail_closed</code> — nunca em um sucesso silencioso
+      ou otimista demais.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">5</span>Siriform Voice Layer (implementada agora)</h2>
+    <div class="card">
+      <p>
+        Web Speech API (<code>SpeechRecognition</code>) +
+        Web Speech Synthesis, <code>pt-BR</code>, janela de escuta única
+        (não contínua). Arquivo: <code>js/voice.js</code>, consumido por
+        <code>js/app.js</code>.
+      </p>
+      <p><b>8 comandos permitidos</b> (verificar safari, preparar cyborg,
+      rodar diagnóstico, rodar replay, mostrar status, explicar análise,
+      mostrar modo de segurança, como adicionar à tela de início) — cada
+      um despachado para <b>a mesma função</b> que o botão equivalente na
+      tela já usa (<code>dispatchVoiceCommand</code>), nunca uma rota
+      paralela de execução.</p>
+      <p><b>7 frases bloqueadas por política</b>, checadas com prioridade
+      máxima sobre qualquer comando permitido: <code>comprar · vender ·
+      abrir ordem · fechar ordem · operar real · usar chave · conectar
+      conta real</code>.</p>
+      <p>Resposta obrigatória, idêntica em texto e voz:</p>
+      <pre>"Execução real está bloqueada. O Cyborg está em READ_ONLY / FAIL_CLOSED."</pre>
+      <p>Detalhe completo (tabelas de comandos, estados de voz, nota de
+      privacidade) em
+      <code>docs/APPLE_INTELLIGENCE_AND_SIRI_ROUTE.md</code>.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">6</span>Native Companion Route — Siri/Apple Intelligence (FUTURE)</h2>
+    <div class="card">
+      <p>
+        Roadmap declarado, não implementado nesta versão. Um PWA não pode
+        registrar <code>AppIntent</code>s do sistema diretamente — isso
+        exigiria um app nativo Swift/SwiftUI companion, fora do escopo
+        deste runtime, com App Intents espelhando a mesma lista de
+        comandos permitidos/bloqueados da Siriform Voice Layer (a política
+        de segurança não muda ao trocar de transporte).
+      </p>
+      <div class="status-line"><span><code>st-siri-native</code></span><span class="v-info mono">FUTURE_NATIVE_COMPANION</span></div>
+      <div class="status-line"><span><code>st-apple-intel</code></span><span class="v-info mono">APP_INTENTS_FUTURE</span></div>
+      <p style="margin-top:10px;">Análise completa em
+      <code>docs/APPLE_INTELLIGENCE_AND_SIRI_ROUTE.md</code>.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">7</span>Meta Llama / WebLLM Route (FUTURE)</h2>
+    <div class="card">
+      <p>
+        Nome correto da família: <b>Meta Llama</b> (não "Llama" genérico).
+        Realismo por variante: <b>Llama 4 Scout</b> (candidato mais
+        realista para iPad/Safari, ainda exige quantização agressiva),
+        <b>Llama 4 Maverick</b> (referência de capacidade, tamanho
+        normalmente incompatível com on-device em iPad),
+        <b>Llama 4 Behemoth</b> (modelo professor da Meta, citado só como
+        referência de proveniência — nunca candidato a rodar no iPad).
+      </p>
+      <p>Engines candidatos, todos <code>FUTURE</code>: WebLLM/MLC-LLM
+      (700–4000&nbsp;MB), Transformers.js (20–300&nbsp;MB), ONNX Runtime
+      Web. Cadeia de fallback declarada termina em
+      <code>FALLBACK_TEXT_ONLY</code> — que é o que está ativo hoje: todo
+      o Siriform já responde com lógica determinística, sem nenhum
+      modelo.</p>
+      <p>Motivo de não embutir modelo nesta versão: tamanho incompatível
+      com um pacote base de download único e sem fricção, armazenamento
+      OPFS/IndexedDB do Safari com políticas de eviction variáveis,
+      WebGPU não universal em todas as versões suportadas, e exigência de
+      consentimento explícito para download de múltiplos GB — esse fluxo
+      ainda não existe.</p>
+      <p>Análise completa, tabela de status, e listas "PODE/NUNCA" em
+      <code>docs/META_LLAMA_WEB_NATIVE_ROUTE.md</code> e
+      <code>pack/manifest.models.json</code>.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">8</span>Arquitetura iPad/Safari</h2>
+    <div class="card">
+      <ul>
+        <li><b>PWA</b>: <code>manifest.webmanifest</code> + <code>service-worker.js</code>
+        cache-first/offline-first, same-origin — cache version
+        <code>cyborg-ipad-runtime-v3</code> nesta entrega (precache de
+        <code>js/voice.js</code> adicionado).</li>
+        <li><b>Voz</b>: <code>js/voice.js</code> — só interpreta
+        (<code>matchCommand</code>), nunca executa; despacho para os
+        mesmos handlers dos botões em <code>js/app.js</code>.</li>
+        <li><b>Layout responsivo</b>: grid CSS 2/3 colunas por
+        <code>grid-column</code> direto em ids existentes, sem reordenar
+        o DOM (ver seção 3).</li>
+        <li><b>CSP restritiva</b> inalterada: <code>script-src 'self'</code>,
+        <code>connect-src 'self'</code>, <code>object-src 'none'</code> —
+        a camada de voz não abre nenhuma exceção nova na CSP (nenhum
+        <code>fetch</code>/<code>XHR</code> em <code>voice.js</code>).</li>
+        <li><b>Motor de cálculo</b>: Rust → WASM em Web Worker, inalterado
+        nesta entrega.</li>
+        <li><b>Pacote local</b> <code>.ar10pack</code>: inalterado nesta
+        entrega (payload intacto, checksums confirmados).</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">9</span>Estado atual do repositório</h2>
+    <div class="card">
+      <div class="status-line"><span>Repositório</span><span class="v-info mono">AR10-10/AR10-ORION</span></div>
+      <div class="status-line"><span>Visibilidade</span><span class="mono">private</span></div>
+      <div class="status-line"><span>has_pages (reconfirmado nesta sessão)</span><span class="v-fail mono">false</span></div>
+      <div class="status-line"><span>Branch padrão</span><span class="mono">main</span></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">10</span>Branch / PR / Commit</h2>
+    <div class="card">
+      <div class="status-line"><span>Branch de trabalho</span><span class="v-info mono">claude/eloquent-cannon-qyt86y</span></div>
+      <div class="status-line"><span>Pull Request</span><span class="v-info mono"><a href="https://github.com/AR10-10/AR10-ORION/pull/3">#3</a> (draft, open, sem branch novo)</span></div>
+      <div class="status-line"><span>Commit base desta entrega</span><span class="mono">bbbc6223b334663b932d0e39ed0d422454a499eb</span></div>
+      <div class="status-line"><span>Commit final desta entrega</span><span class="v-hold mono">ver PR #3 / relatório final da sessão</span></div>
+    </div>
+    <div class="note">
+      Continuação direta do mesmo branch e do mesmo PR #3 — nenhum branch
+      novo foi criado, nenhuma reconstrução completa do runtime foi feita,
+      conforme exigido pela missão ("não reiniciar").
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">11</span>Pacote local <code>.ar10pack</code></h2>
+    <div class="card">
+      <div class="status-line"><span>Arquivo</span><span class="mono">AR10_CYBORG_LOCAL_PACK_V1.ar10pack</span></div>
+      <div class="status-line"><span>Alterado nesta entrega?</span><span class="v-ok">NÃO — payload intacto (app.js/CSS/service-worker são shell PWA, fora do pacote)</span></div>
+      <div class="status-line"><span>Verificação <code>sha256sum -c pack/checksums.sha256</code></span><span class="v-ok mono">OK</span></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">12</span>Deploy HTTPS</h2>
+    <div class="card">
+      <div class="status-line"><span>Rota primária</span><span class="mono">GitHub Pages via Actions (<code>.github/workflows/deploy-ipad-pwa.yml</code>)</span></div>
+      <div class="status-line"><span>URL esperada</span><span class="mono">https://ar10-10.github.io/ar10-orion/</span></div>
+      <div class="status-line"><span>Último check run (PR #3, job <code>deploy</code>)</span><span class="v-fail mono">completed / failure</span></div>
+    </div>
+    <p>Motivo do <code>HOLD</code> e ação manual de admin necessária — ver
+    seção 13. Nenhuma mudança nesta entrega altera esse bloqueio: é o
+    mesmo bloqueio de infraestrutura já diagnosticado, reconfirmado hoje
+    via API.</p>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">13</span>Motivo do HOLD e ação manual necessária</h2>
+    <div class="card">
+      <p>
+        A API REST <code>POST /repos/{owner}/{repo}/pages</code> (criar um
+        site do GitHub Pages pela primeira vez) exige permissão de
+        <b>administração</b> do repositório, que o <code>GITHUB_TOKEN</code>
+        automático de uma Action nunca tem — trava do próprio GitHub, não
+        do workflow. Reconfirmado nesta sessão: nenhuma ferramenta MCP do
+        GitHub disponível habilita Pages ou contorna essa exigência.
+      </p>
+      <ol>
+        <li>Abrir <a href="https://github.com/AR10-10/AR10-ORION/settings/pages">github.com/AR10-10/AR10-ORION/settings/pages</a> com conta admin.</li>
+        <li>Em <b>Build and deployment → Source</b>, selecionar <b>"GitHub Actions"</b>.</li>
+        <li>Salvar — cria o site do Pages uma única vez.</li>
+        <li>Reexecutar o workflow (push tocando <code>ipad_runtime/**</code>, ou Actions → Run workflow).</li>
+        <li>Confirmar que <code>https://ar10-10.github.io/ar10-orion/</code> responde 200.</li>
+      </ol>
+      <p>Detalhe completo em <code>docs/GITHUB_PAGES_FIX.md</code>.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">14</span>Regras de segurança (leis obrigatórias)</h2>
+    <div class="card">
+      <p><b>Permanentemente bloqueado, sem exceção, sem rota técnica no código:</b></p>
+      <p>
+        real trading · live trading · MT5 <code>order_send</code> · MEXC
+        private endpoint · API Secret · private keys · segredo em
+        <code>localStorage</code> · ordem por LLM ·
+        <b>ordem por voz</b> <span class="badge future">LEI NOVA</span> ·
+        ordem sem Risk Gate · CDN para núcleo sensível · <code>eval()</code> ·
+        PASS enganoso sem link HTTPS.
+      </p>
+      <p><b>Sempre visível na UI:</b></p>
+      <div class="pill-row" style="justify-content:flex-start;">
+        <span class="pill ok">READ_ONLY</span>
+        <span class="pill blocked">FAIL_CLOSED</span>
+        <span class="pill ok">Execution Lock: ACTIVE</span>
+        <span class="pill blocked">Private Keys: DISABLED</span>
+        <span class="pill blocked">Live Trading: BLOCKED</span>
+      </div>
+      <p style="margin-top:14px;">
+        "Ordem por voz" é bloqueada em três camadas independentes: (1)
+        lista de 7 frases bloqueadas checada antes de qualquer comando
+        permitido, (2) arquitetura de despacho que só permite os 8 ids
+        permitidos chegarem a <code>dispatchVoiceCommand</code>, e (3) os
+        próprios handlers de destino (idênticos aos dos botões) nunca
+        contêm lógica de execução de ordem — não existe, em nenhuma das
+        três camadas, um caminho de código que leve de voz a ordem.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">15</span>Critérios PASS / HOLD / FAIL</h2>
+    <div class="card">
+      <p><b>PASS Técnico</b></p>
+      <table>
+        <tr><th>Critério</th><th>Resultado</th></tr>
+        <tr><td>Painel consolidado (18 cards)</td><td class="v-ok">PASS</td></tr>
+        <tr><td>Mockup real incorporado como direção, não prisão pixel-perfect</td><td class="v-ok">PASS</td></tr>
+        <tr><td>ONE-LINK / "Preparar Cyborg" implementado com FAIL_CLOSED real</td><td class="v-ok">PASS</td></tr>
+        <tr><td>Siriform Voice Layer implementada (comandos + bloqueios + estados)</td><td class="v-ok">PASS</td></tr>
+        <tr><td>Native Companion Route documentada como FUTURE (honesto)</td><td class="v-ok">PASS</td></tr>
+        <tr><td>Meta Llama/WebLLM Route documentada como FUTURE (honesto)</td><td class="v-ok">PASS</td></tr>
+        <tr><td>HTML canônico criado (este documento, 15 seções)</td><td class="v-ok">PASS</td></tr>
+        <tr><td><code>.ar10pack</code> intacto/verificado</td><td class="v-ok">PASS</td></tr>
+        <tr><td>Regras de segurança intactas + lei nova ("ordem por voz")</td><td class="v-ok">PASS</td></tr>
+        <tr><td>Continuidade de branch/PR (sem reinício)</td><td class="v-ok">PASS</td></tr>
+        <tr><td><b>PASS TÉCNICO (geral)</b></td><td class="v-ok"><b>PASS</b></td></tr>
+      </table>
+      <p style="margin-top:18px;"><b>PASS Operacional</b></p>
+      <table>
+        <tr><th>Critério</th><th>Resultado</th></tr>
+        <tr><td>Link HTTPS real publicado</td><td class="v-fail">FALTA (depende de admin, seção 13)</td></tr>
+        <tr><td>Validação manual no Safari real do iPad</td><td class="v-fail">FALTA (sem iPad físico neste ambiente)</td></tr>
+        <tr><td>Teste de voz em microfone físico real</td><td class="v-fail">FALTA (sem hardware de áudio neste ambiente)</td></tr>
+        <tr><td colspan="2">+ 6 critérios adicionais dependentes do link HTTPS real (ver checklist completo em <code>evidence_outbox/checklist.md</code>)</td></tr>
+        <tr><td><b>PASS OPERACIONAL (geral)</b></td><td class="v-hold"><b>HOLD</b></td></tr>
+      </table>
+    </div>
+  </section>
+
+  <footer class="legal">
+    AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1 · Nebula
+    Core · Siriform Voice · Meta Llama (FUTURE) · Documento gerado como
+    parte do handoff técnico — não é divulgação pública, não substitui
+    revisão humana antes de qualquer promoção a produção.
+  </footer>
+
+</div>
+</body>
+</html>

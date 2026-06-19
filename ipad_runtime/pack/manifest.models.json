@@ -1,14 +1,38 @@
 {
-  "schema_version": 1,
-  "note": "Nenhum modelo de linguagem esta empacotado nesta V1. Os tres motores abaixo sao roadmap declarado (status FUTURE), nao instalacoes falsas. Motivo: tamanho de modelo incompatível com armazenamento confiavel em Safari/iPadOS sem um passo explicito de download/consentimento do usuario, que ainda nao foi implementado.",
+  "schema_version": 2,
+  "note": "Nenhum modelo de linguagem esta empacotado nesta versao. Os motores abaixo sao roadmap declarado (status FUTURE), nao instalacoes falsas. Motivo: tamanho de modelo incompativel com armazenamento confiavel em Safari/iPadOS sem um passo explicito de download/consentimento do usuario, que ainda nao foi implementado. 'Meta Llama' e o nome correto da familia de modelos (nao 'Llama' generico) — ver docs/META_LLAMA_WEB_NATIVE_ROUTE.md para a analise completa de viabilidade no iPad/Safari.",
   "models": [
     {
       "engine": "WebLLM/MLC-LLM",
-      "target_model": "Llama (familia Meta AI, quantizado)",
+      "target_family": "Meta Llama (familia Meta AI)",
+      "target_variants_considered": [
+        {
+          "name": "Llama 4 Scout",
+          "role": "candidato mais realista para iPad/Safari entre os modelos Llama 4 — ainda assim exige quantizacao agressiva e download incremental para caber em armazenamento de navegador",
+          "status": "FUTURE"
+        },
+        {
+          "name": "Llama 4 Maverick",
+          "role": "referencia de capacidade superior; tamanho normalmente incompativel com execucao on-device em iPad mesmo quantizado — citado para nao subestimar a familia, nao como meta de entrega nesta rota",
+          "status": "FUTURE"
+        },
+        {
+          "name": "Llama 4 Behemoth",
+          "role": "modelo professor (teacher) usado pela Meta para destilar os modelos menores da familia — citado apenas como referencia de proveniencia da familia, nunca como candidato a rodar no iPad",
+          "status": "REFERENCE_ONLY"
+        }
+      ],
       "status": "FUTURE",
-      "estimated_size_mb": "700-4000 (depende da quantizacao)",
+      "estimated_size_mb": "700-4000 (depende da variante e da quantizacao)",
       "delivery_plan": "download opcional sob demanda para OPFS, fora do .ar10pack base, com confirmacao explicita do usuario e verificacao SHA-256 por shard",
-      "blocking_reason": "tamanho incompativel com pacote base; requer fluxo de download incremental ainda nao implementado"
+      "blocking_reason": "tamanho incompativel com pacote base; requer fluxo de download incremental ainda nao implementado",
+      "acceleration": "WebGPU quando disponivel; fallback para WASM/CPU quando WebGPU estiver UNAVAILABLE ou LIMITED",
+      "processing_profiles": {
+        "light": "modelo mais compacto/mais quantizado disponivel, menor uso de memoria, resposta mais rapida e menos precisa",
+        "balanced": "equilibrio entre tamanho de modelo e qualidade de resposta",
+        "heavy": "modelo maior disponivel dentro do limite de armazenamento aceito pelo usuario, mais lento, resposta mais detalhada"
+      },
+      "fallback_chain": ["WebLLM/MLC-LLM (WebGPU)", "WebLLM/MLC-LLM (WASM/CPU)", "modelo menor da mesma familia", "FALLBACK_TEXT_ONLY (sem modelo, so respostas pre-definidas do Siriform)"]
     },
     {
       "engine": "Transformers.js",
@@ -24,5 +48,20 @@
       "estimated_size_mb": "varia por modelo",
       "delivery_plan": "mesmo fluxo de pacote adicional opcional"
     }
+  ],
+  "capabilities_if_installed": [
+    "explicar o conteudo do AnalysisFrame em linguagem natural (PT-BR)",
+    "resumir o resultado de um replay BTC/USDT",
+    "interpretar comandos de voz/texto em portugues e mapear para uma intencao segura (mesma lista de comandos permitidos do Siriform Voice)",
+    "responder no idioma do usuario sobre o que cada card do painel significa",
+    "gerar relatorios descritivos a partir de dados locais",
+    "explicar rotulos como 'Rota A Long / Rota B Short / Rota C Esperar' quando esses rotulos existirem em um AnalysisFrame, como leitura descritiva — nunca como ordem"
+  ],
+  "capabilities_never": [
+    "executar ordem de compra ou venda",
+    "abrir ou fechar posicao",
+    "usar API secret ou qualquer chave privada",
+    "operar conta real",
+    "contornar READ_ONLY ou FAIL_CLOSED sob qualquer comando, de voz ou de texto"
   ]
 }

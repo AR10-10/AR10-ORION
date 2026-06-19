@@ -123,13 +123,14 @@ header.hero p {
 
 section.card {
     background: linear-gradient(150deg, var(--metal-hi), var(--metal-lo));
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
     border: 1px solid var(--line-cyan);
-    border-radius: 14px;
+    border-top-color: rgba(0, 242, 255, 0.3);
+    border-radius: 16px;
     padding: 16px;
     margin-bottom: 16px;
-    box-shadow: inset 0 0 18px rgba(0, 242, 255, 0.04);
+    box-shadow: inset 0 0 18px rgba(0, 242, 255, 0.04), 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
 section.card h2 {
@@ -626,4 +627,151 @@ footer.legal {
 
 @media (max-width: 480px) {
     .analysis-frame-grid { grid-template-columns: 1fr; }
+}
+
+/* ------------------------------------------------------------
+   SIRIFORM VOICE — botao de microfone + dica + quick actions.
+   data-voice-state e a trilha independente do data-state do
+   avatar (ver js/siriform.js) — nunca as duas trilhas juntas.
+   ------------------------------------------------------------ */
+.mic-button {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    font-size: 1.6rem;
+    line-height: 1;
+    font-family: var(--font-display);
+    color: var(--sys-cyan);
+    background: rgba(0, 242, 255, 0.06);
+    border: 1px solid rgba(0, 242, 255, 0.35);
+    box-shadow: 0 0 16px rgba(0, 242, 255, 0.18);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: all 0.2s ease;
+}
+.mic-button:active { transform: scale(0.96); }
+.mic-button[data-voice-state="voice_listening"] {
+    color: var(--bg-void);
+    background: var(--sys-cyan);
+    box-shadow: 0 0 26px rgba(0, 242, 255, 0.55), 0 0 60px rgba(0, 242, 255, 0.25);
+    animation: micPulse 1.4s ease-in-out infinite;
+}
+.mic-button[data-voice-state="voice_processing"],
+.mic-button[data-voice-state="voice_responding"] {
+    color: var(--long-green);
+    border-color: rgba(0, 255, 157, 0.5);
+    box-shadow: 0 0 20px rgba(0, 255, 157, 0.3);
+}
+.mic-button[data-voice-state="voice_permission_required"] {
+    color: var(--alert-amber);
+    border-color: rgba(255, 184, 0, 0.5);
+    box-shadow: 0 0 20px rgba(255, 184, 0, 0.3);
+}
+.mic-button[data-voice-state="voice_blocked_by_policy"] {
+    color: var(--short-red);
+    border-color: rgba(255, 62, 82, 0.55);
+    box-shadow: 0 0 22px rgba(255, 62, 82, 0.35);
+}
+.mic-button[data-voice-state="voice_unsupported"],
+.mic-button[data-voice-state="voice_text_only"] {
+    color: var(--text-dim);
+    border-color: rgba(201, 212, 217, 0.25);
+    box-shadow: none;
+    opacity: 0.55;
+}
+@keyframes micPulse {
+    0%, 100% { box-shadow: 0 0 26px rgba(0, 242, 255, 0.55), 0 0 60px rgba(0, 242, 255, 0.25); }
+    50% { box-shadow: 0 0 34px rgba(0, 242, 255, 0.7), 0 0 80px rgba(0, 242, 255, 0.35); }
+}
+
+.voice-hint {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin: 2px auto 0;
+    max-width: 320px;
+}
+
+.quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 14px;
+}
+.qa-btn {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    letter-spacing: 0.5px;
+    color: var(--text-primary);
+    background: rgba(0, 242, 255, 0.05);
+    border: 1px solid var(--line-cyan);
+    border-radius: 20px;
+    padding: 8px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.qa-btn:active { transform: scale(0.97); background: rgba(0, 242, 255, 0.14); }
+.qa-btn .icon { opacity: 0.8; }
+
+/* ------------------------------------------------------------
+   LAYOUT RESPONSIVO — dashboard em 2/3 colunas a partir da
+   largura de um iPad. Abaixo do breakpoint, tudo fica em coluna
+   unica na ordem natural do documento (Siriform sempre primeiro,
+   exatamente como hoje) — nada de reordenar o DOM so para o CSS
+   de telas largas, para nao trocar a experiencia mobile/iPad
+   retrato pela experiencia desktop/iPad paisagem.
+   ------------------------------------------------------------ */
+@media (min-width: 900px) {
+    .runtime-shell { max-width: 1200px; }
+    .runtime-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+        gap: 0 18px;
+        align-items: start;
+    }
+    .mode-banner,
+    .nebula-header,
+    #console-section,
+    footer.legal {
+        grid-column: 1 / -1;
+    }
+    #siriform-section,
+    #runtime-actions {
+        grid-column: 1;
+    }
+    #voice-status-panel,
+    #status-panel,
+    #feature-detect-panel,
+    #quant-engine-panel,
+    #ai-models-panel,
+    #replay-section,
+    #analysis-frame-panel,
+    #decision-frame-panel,
+    #vault-evidence-panel {
+        grid-column: 2;
+    }
+}
+
+@media (min-width: 1300px) {
+    .runtime-shell { max-width: 1480px; }
+    .runtime-shell { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 1fr); }
+    #runtime-actions { grid-column: 1; }
+    #siriform-section,
+    #replay-section,
+    #analysis-frame-panel {
+        grid-column: 2;
+    }
+    #voice-status-panel,
+    #status-panel,
+    #feature-detect-panel,
+    #quant-engine-panel,
+    #ai-models-panel,
+    #decision-frame-panel,
+    #vault-evidence-panel {
+        grid-column: 3;
+    }
 }

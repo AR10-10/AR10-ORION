@@ -3,6 +3,15 @@
 Guia de uso final, para quem vai abrir o painel **no iPad de verdade**.
 Não exige Mac Mini, MacBook, terminal, Xcode ou ZIP.
 
+> **Caminho recomendado:** desde a entrega `..._FINAL_IPAD_ONE_LINK_...`,
+> existe um botão único — **"Preparar Cyborg neste iPad"** — que
+> automatiza os passos 3 a 6 abaixo numa só ação, com o mesmo
+> comportamento `FAIL_CLOSED` em caso de falha. Ver
+> `docs/FINAL_IPAD_ONE_LINK_GUIDE.md` para o fluxo de um toque (e a
+> opção de comando de voz equivalente). Este documento continua válido
+> como referência detalhada, botão por botão, do que cada etapa faz por
+> baixo do automatismo.
+
 ## Pré-requisito
 
 Uma URL HTTPS publicada (ver `docs/DEPLOY_GUIDE.md`). Sem essa URL, este

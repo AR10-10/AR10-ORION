@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="color-scheme" content="dark">
-<title>AR10 Cyborg 2.0 — Nebula Core (iPad Runtime)</title>
+<title>AR10 Cyborg 2.0 — iPad One-Tap Cloud Runtime</title>
 
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
 
@@ -34,9 +34,9 @@
   </div>
 
   <header class="nebula-header">
-    <div class="kicker">Nebula Core</div>
-    <h1>AR10 Cyborg 2.0 — iPad Runtime</h1>
-    <p class="tagline">Safari Local Runtime / Instalação Local — PWA HTTPS, local-first, sem Mac Mini, sem MacBook, sem ZIP.</p>
+    <div class="kicker">Nebula Core · Siriform Voice · Meta Llama (FUTURE)</div>
+    <h1>AR10 Cyborg 2.0 — iPad One-Tap Cloud Runtime</h1>
+    <p class="tagline">Um link HTTPS → Safari → auto-diagnóstico → Cyborg preparado. Local-first, sem Mac Mini, sem MacBook, sem ZIP, sem terminal.</p>
   </header>
 
   <section class="card siriform-card" id="siriform-section">
@@ -45,6 +45,17 @@
     </div>
     <span class="siriform-state-tag" id="siriform-state-tag">IDLE</span>
     <p class="siriform-caption" id="siriform-caption">Cyborg operando em READ_ONLY / FAIL_CLOSED.</p>
+
+    <button type="button" class="mic-button" id="mic-button" data-voice-state="voice_idle" aria-label="Falar com o Siriform (comando de voz)">◉</button>
+    <p class="voice-hint">Toque no microfone e diga, por exemplo: "Verificar Safari" ou "Mostrar status".</p>
+
+    <div class="quick-actions" id="quick-actions" role="group" aria-label="Ações rápidas">
+      <button type="button" class="qa-btn" id="qa-diagnostics"><span class="icon">▣</span> Diagnóstico</button>
+      <button type="button" class="qa-btn" id="qa-replay"><span class="icon">▶</span> Replay BTC/USDT</button>
+      <button type="button" class="qa-btn" id="qa-analysis"><span class="icon">∑</span> Análise</button>
+      <button type="button" class="qa-btn" id="qa-report"><span class="icon">▤</span> Relatório</button>
+    </div>
+
     <div class="law-badges">
       <span class="law-badge" id="badge-mode">IPAD DIRECT / LOCAL-FIRST</span>
       <span class="law-badge">READ_ONLY</span>
@@ -53,6 +64,19 @@
       <span class="law-badge is-blocked">Private Keys: DISABLED</span>
       <span class="law-badge is-blocked">Live Trading: BLOCKED</span>
     </div>
+  </section>
+
+  <section class="card" id="voice-status-panel">
+    <h2>Siriform Voice <span class="future-badge">Apple Intelligence: FUTURE</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Siriform Voice</span><span class="value v-pending" id="st-voice">…</span></div>
+      <div class="status-row"><span class="label">Speech Recognition</span><span class="value v-pending" id="st-speech-rec">…</span></div>
+      <div class="status-row"><span class="label">Speech Synthesis</span><span class="value v-pending" id="st-speech-syn">…</span></div>
+      <div class="status-row"><span class="label">Microphone Permission</span><span class="value v-pending" id="st-mic-perm">…</span></div>
+      <div class="status-row"><span class="label">Siri Native Integration</span><span class="value v-info" id="st-siri-native">FUTURE_NATIVE_COMPANION</span></div>
+      <div class="status-row"><span class="label">Apple Intelligence Route</span><span class="value v-info" id="st-apple-intel">APP_INTENTS_FUTURE</span></div>
+    </div>
+    <p class="engine-meta">Comandos permitidos, comandos bloqueados por política e a rota nativa futura (App Intents / Siri Shortcuts) em <code>docs/APPLE_INTELLIGENCE_AND_SIRI_ROUTE.md</code>.</p>
   </section>
 
   <section class="card runtime-status-panel" id="status-panel">
@@ -86,13 +110,17 @@
   </section>
 
   <section class="card" id="ai-models-panel">
-    <h2>WebLLM / Llama <span class="future-badge">FUTURE</span></h2>
+    <h2>Meta Llama / WebLLM <span class="future-badge">FUTURE</span></h2>
     <div class="status-grid">
+      <div class="status-row"><span class="label">Meta Llama Layer</span><span class="value v-pending" id="st-llama-layer">…</span></div>
+      <div class="status-row"><span class="label">Llama Profile</span><span class="value v-info" id="st-llama-profile">BALANCED</span></div>
+      <div class="status-row"><span class="label">Llama Runtime</span><span class="value v-pending" id="st-llama-runtime">…</span></div>
+      <div class="status-row"><span class="label">WebGPU Acceleration</span><span class="value v-pending" id="st-llama-webgpu">…</span></div>
       <div class="status-row"><span class="label">WebLLM/Llama</span><span class="value v-pending" id="st-webllm">…</span></div>
       <div class="status-row"><span class="label">Transformers</span><span class="value v-pending" id="st-transformers">…</span></div>
       <div class="status-row"><span class="label">ONNX</span><span class="value v-pending" id="st-onnx">…</span></div>
     </div>
-    <p class="engine-meta">Roadmap declarado em <code>pack/manifest.models.json</code> — nenhum modelo embutido nesta V1, nenhum "fake installed".</p>
+    <p class="engine-meta">Roadmap declarado em <code>pack/manifest.models.json</code> e <code>docs/META_LLAMA_WEB_NATIVE_ROUTE.md</code> — nenhum modelo embutido nesta versão, nenhum "fake installed". Meta Llama nunca executa ordens; só explica, resume e interpreta comandos em texto/voz dentro do READ_ONLY / FAIL_CLOSED.</p>
   </section>
 
   <section class="card replay-wrap" id="replay-section">
@@ -147,6 +175,7 @@
     <h2>Local Pack Manager</h2>
     <div class="btn-grid">
       <button class="rt-btn primary" id="btn-check-safari"><span class="icon">◎</span> Verificar Safari</button>
+      <button class="rt-btn primary" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar Cyborg neste iPad</button>
       <button class="rt-btn primary" id="btn-download-pack"><span class="icon">⇩</span> Baixar Pacote Local</button>
       <button class="rt-btn" id="btn-import-pack"><span class="icon">⇪</span> Importar Pacote do Arquivos</button>
       <button class="rt-btn" id="btn-verify-sha"><span class="icon">✓</span> Verificar SHA256</button>
@@ -165,8 +194,10 @@
   </section>
 
   <footer class="legal">
-    AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1 · Nebula Core · 100% local-first depois do primeiro carregamento HTTPS<br>
-    Sem MT5, sem MEXC private endpoint, sem API secret, sem ordem, sem live trading. READ_ONLY / FAIL_CLOSED sempre.
+    AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1 · Nebula Core · Siriform Voice · Meta Llama (FUTURE)<br>
+    100% local-first depois do primeiro carregamento HTTPS. Sem MT5, sem MEXC private endpoint, sem API secret,
+    sem ordem por LLM, sem ordem por voz, sem live trading.<br>
+    READ_ONLY / FAIL_CLOSED sempre · Versão 2.0.0
   </footer>
 </div>
 

@@ -6,12 +6,15 @@ import * as diagnostics from './diagnostics.js';
 import * as replayEngine from './replay-engine.js';
 import { QuantWorkerClient } from './worker-client.js';
 import * as siriform from './siriform.js';
+import * as voice from './voice.js';
 
 const els = {};
 ['st-pwa', 'st-sw', 'st-cache', 'st-idb', 'st-opfs', 'st-webcrypto', 'st-wasm', 'st-workers',
     'st-webgpu', 'st-webgl', 'st-webllm', 'st-transformers', 'st-onnx', 'st-replay', 'st-vault', 'st-mode',
+    'st-voice', 'st-speech-rec', 'st-speech-syn', 'st-mic-perm',
+    'st-llama-layer', 'st-llama-profile', 'st-llama-runtime', 'st-llama-webgpu',
     'console-log', 'replay-canvas', 'replay-meta', 'import-input', 'home-modal', 'standalone-state',
-    'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'engine-meta', 'analysis-frame-grid',
+    'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'mic-button', 'engine-meta', 'analysis-frame-grid',
     'vault-meta', 'vault-hashes', 'profile-hint',
 ].forEach((id) => { els[id] = document.getElementById(id); });
 
@@ -33,8 +36,9 @@ function log(msg, level = 'dim') {
 }
 
 function classFor(value) {
-    if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'READY') return 'v-ok';
-    if (value === 'FAIL' || value === 'UNSUPPORTED' || value === 'TOO_LARGE') return 'v-fail';
+    if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'READY' || value === 'AVAILABLE' || value === 'GRANTED') return 'v-ok';
+    if (value === 'FAIL' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED') return 'v-fail';
+    if (value === 'FUTURE' || value === 'LIGHT' || value === 'BALANCED' || value === 'HEAVY') return 'v-info';
     return 'v-limited';
 }
 
@@ -48,6 +52,7 @@ function setStatus(id, value) {
 
 let workerClient = null;
 let replayDatasetCache = null;
+let lastAnalysisMeta = null;
 
 async function refreshFeatureStatus() {
     const f = await feat.runAllFeatureDetections();
@@ -65,6 +70,28 @@ async function refreshFeatureStatus() {
     setStatus('st-transformers', f.transformers);
     setStatus('st-onnx', f.onnx);
     return f;
+}
+
+function refreshLlamaStatus(f) {
+    setStatus('st-llama-layer', 'FUTURE');
+    setStatus('st-llama-runtime', 'FUTURE');
+    setStatus('st-llama-webgpu', f.webgpu === 'OK' ? 'AVAILABLE' : 'UNAVAILABLE');
+}
+
+async function refreshVoiceStatus() {
+    const status = await voice.getVoiceStatus();
+    setStatus('st-voice', status.overall);
+    setStatus('st-speech-rec', status.recognition);
+    setStatus('st-speech-syn', status.synthesis);
+    setStatus('st-mic-perm', status.microphonePermission);
+    if (status.overall === 'TEXT_ONLY') {
+        siriform.setVoiceState('voice_text_only');
+    } else if (status.recognition === 'UNSUPPORTED') {
+        siriform.setVoiceState('voice_unsupported');
+    } else if (status.microphonePermission === 'DENIED') {
+        siriform.setVoiceState('voice_permission_required', 'Permissão de microfone negada. Toque para tentar novamente.');
+    }
+    return status;
 }
 
 function renderVaultEvidence(vault) {
@@ -147,7 +174,9 @@ async function handleCheckSafari() {
         log(`Quota de armazenamento: uso=${mb(estimate.usage)}MB / limite=${mb(estimate.quota)}MB`, 'info');
     }
     log(`Backend de storage ativo: ${(await storage.activeBackend()).toUpperCase()}`, 'info');
-    await refreshFeatureStatus();
+    const f = await refreshFeatureStatus();
+    refreshLlamaStatus(f);
+    await refreshVoiceStatus();
     log('Verificacao concluida.', 'ok');
     siriform.setSiriformState('responding', 'Runtime Safari detectado.');
 }
@@ -223,6 +252,7 @@ async function handleRunReplay() {
             canvas: els['replay-canvas'],
             onLog: (m, l) => log(m, l),
             onMeta: (meta) => {
+                lastAnalysisMeta = meta;
                 els['replay-meta'].innerHTML = `
                     <span>Candles: <b>${meta.count}</b></span>
                     <span>Ultimo: <b>${meta.last.toFixed(2)}</b></span>
@@ -263,6 +293,153 @@ function handleAddHome() {
     els['home-modal'].hidden = false;
 }
 
+async function handlePrepareCyborg() {
+    siriform.setSiriformState('installing', 'Preparando Cyborg neste iPad...');
+    log('=== PREPARAR CYBORG NESTE IPAD ===', 'info');
+    try {
+        if (!packManager.getLoadedPack()) {
+            log('Pacote local ainda nao esta em memoria — baixando do mesmo HTTPS origin...', 'info');
+            await packManager.downloadLocalPack((m, l) => log(m, l));
+        } else {
+            log('Pacote local ja em memoria — reutilizando.', 'dim');
+        }
+
+        siriform.setSiriformState('analyzing', 'Verificando SHA256...');
+        const { allOk } = await packManager.verifySha256((m, l) => log(m, l));
+        if (!allOk) {
+            siriform.setSiriformState('fail_closed');
+            log('FAIL_CLOSED: checksum invalido — preparacao abortada.', 'fail');
+            return;
+        }
+
+        siriform.setSiriformState('installing', 'Instalando no Safari Storage...');
+        await packManager.installToSafariStorage((m, l) => log(m, l));
+        await refreshVaultAndReplayStatus();
+
+        if (workerClient) {
+            try { await workerClient.initWasm(); } catch { /* ja reportado no boot; nao bloqueia preparacao */ }
+        }
+
+        await handleRunReplay();
+        await handleRunDiagnostics();
+
+        log('=== CYBORG PREPARADO NESTE IPAD: LOCAL-FIRST / READ_ONLY / FAIL_CLOSED ===', 'ok');
+        siriform.setSiriformState('responding', 'Replay BTC/USDT pronto para análise.');
+    } catch (err) {
+        log(`Preparacao bloqueada: ${err.message}`, 'fail');
+        siriform.setSiriformState('fail_closed');
+    }
+}
+
+function handleExplainAnalysis() {
+    if (!lastAnalysisMeta) {
+        log('Explicar analise: nenhum AnalysisFrame disponivel ainda.', 'warn');
+        siriform.setSiriformState('responding', 'Rode o Replay BTC/USDT primeiro para gerar o AnalysisFrame.');
+        return;
+    }
+    const m = lastAnalysisMeta;
+    const text = `AnalysisFrame: ${m.count} candles, último preço ${m.last.toFixed(2)}, SMA ${m.sma.toFixed(2)}, EMA ${m.ema.toFixed(2)}, desvio padrão ${m.stddev.toFixed(2)}, z-score ${m.zscore.toFixed(3)}. Leitura descritiva, não é recomendação de ordem.`;
+    log(`Explicar analise: ${text}`, 'info');
+    siriform.setSiriformState('responding', text);
+    voice.speak(text);
+}
+
+function handleShowReport() {
+    log('=== RELATORIO ===', 'info');
+    log('Modo: IPAD DIRECT / LOCAL-FIRST / READ_ONLY / FAIL_CLOSED.', 'dim');
+    log(lastAnalysisMeta
+        ? `Replay BTC/USDT: ${lastAnalysisMeta.count} candles, SMA ${lastAnalysisMeta.sma.toFixed(2)}, EMA ${lastAnalysisMeta.ema.toFixed(2)}, z-score ${lastAnalysisMeta.zscore.toFixed(3)}.`
+        : 'Replay BTC/USDT: ainda não executado nesta sessão.', 'dim');
+    siriform.setSiriformState('responding', 'Relatório gerado nos Logs do Sistema.');
+}
+
+function handleShowStatus() {
+    log('Status atual: IPAD DIRECT / LOCAL-FIRST / READ_ONLY / FAIL_CLOSED.', 'info');
+    siriform.setSiriformState('read_only', 'Cyborg operando em READ_ONLY / FAIL_CLOSED.');
+    voice.speak('Cyborg operando em READ_ONLY / FAIL_CLOSED.');
+}
+
+function handleShowSafetyMode() {
+    const text = 'Execução real está bloqueada. O Cyborg está em READ_ONLY / FAIL_CLOSED.';
+    log(text, 'info');
+    siriform.setSiriformState('fail_closed');
+    voice.speak(text);
+}
+
+async function dispatchVoiceCommand(id) {
+    switch (id) {
+        case 'check-safari': return handleCheckSafari();
+        case 'prepare-cyborg': return handlePrepareCyborg();
+        case 'run-diagnostics': return handleRunDiagnostics();
+        case 'run-replay': return handleRunReplay();
+        case 'show-status': return handleShowStatus();
+        case 'explain-analysis': return handleExplainAnalysis();
+        case 'show-safety-mode': return handleShowSafetyMode();
+        case 'show-add-home': return handleAddHome();
+        default: return undefined;
+    }
+}
+
+async function handleVoiceTranscript(transcript) {
+    siriform.setVoiceState('voice_processing');
+    log(`Voz reconhecida: "${transcript}"`, 'dim');
+    const result = voice.matchCommand(transcript);
+
+    if (result.type === 'blocked') {
+        log(`Comando de voz BLOQUEADO (frase: "${result.matchedPhrase}").`, 'fail');
+        siriform.setVoiceState('voice_blocked_by_policy');
+        siriform.setSiriformState('fail_closed');
+        voice.speak(result.response);
+        return;
+    }
+    if (result.type === 'allowed') {
+        log(`Comando de voz reconhecido: ${result.id} (frase: "${result.matchedPhrase}").`, 'ok');
+        siriform.setVoiceState('voice_responding');
+        await dispatchVoiceCommand(result.id);
+        return;
+    }
+    if (result.type === 'empty') {
+        siriform.setVoiceState('voice_idle');
+        return;
+    }
+    log(`Comando de voz nao reconhecido: "${transcript}".`, 'warn');
+    siriform.setVoiceState('voice_responding', 'Não entendi esse comando. Toque nos botões na tela.');
+}
+
+function handleVoiceError(err) {
+    if (err === 'unsupported') {
+        siriform.setVoiceState('voice_unsupported');
+        log('Reconhecimento de voz nao suportado neste navegador.', 'warn');
+        return;
+    }
+    if (err === 'not-allowed' || err === 'service-not-allowed') {
+        siriform.setVoiceState('voice_permission_required', 'Preciso da permissão do microfone para ouvir você.');
+        log('Permissao de microfone negada ou pendente.', 'warn');
+        return;
+    }
+    log(`Erro no reconhecimento de voz: ${err}`, 'warn');
+    siriform.setVoiceState('voice_idle');
+}
+
+function handleMicButton() {
+    if (voice.isListening()) {
+        voice.stopListening();
+        return;
+    }
+    const caps = voice.getVoiceCapabilities();
+    if (caps.recognition !== 'AVAILABLE') {
+        siriform.setVoiceState('voice_unsupported');
+        log('Reconhecimento de voz nao suportado neste navegador — use os botões na tela.', 'warn');
+        return;
+    }
+    siriform.setVoiceState('voice_listening');
+    voice.startListening({
+        onStart: () => log('Microfone: escutando um comando...', 'info'),
+        onResult: (transcript) => handleVoiceTranscript(transcript),
+        onError: (err) => handleVoiceError(err),
+    });
+}
+
 function wireProfileToggle() {
     const buttons = document.querySelectorAll('.profile-btn');
     buttons.forEach((btn) => {
@@ -270,6 +447,7 @@ function wireProfileToggle() {
             currentProfile = btn.dataset.profile;
             buttons.forEach((b) => b.classList.toggle('active', b === btn));
             els['profile-hint'].textContent = PROFILES[currentProfile].label;
+            setStatus('st-llama-profile', currentProfile.toUpperCase());
             log(`Perfil de processamento: ${currentProfile.toUpperCase()}.`, 'info');
         });
     });
@@ -277,6 +455,7 @@ function wireProfileToggle() {
 
 function wireButtons() {
     document.getElementById('btn-check-safari').addEventListener('click', handleCheckSafari);
+    document.getElementById('btn-prepare-cyborg').addEventListener('click', handlePrepareCyborg);
     document.getElementById('btn-download-pack').addEventListener('click', handleDownloadPack);
     document.getElementById('btn-import-pack').addEventListener('click', handleImportPack);
     document.getElementById('btn-verify-sha').addEventListener('click', handleVerifySha);
@@ -286,6 +465,11 @@ function wireButtons() {
     document.getElementById('btn-clear-reinstall').addEventListener('click', handleClearReinstall);
     document.getElementById('btn-add-home').addEventListener('click', handleAddHome);
     document.getElementById('btn-close-modal').addEventListener('click', () => { els['home-modal'].hidden = true; });
+    document.getElementById('qa-diagnostics').addEventListener('click', handleRunDiagnostics);
+    document.getElementById('qa-replay').addEventListener('click', handleRunReplay);
+    document.getElementById('qa-analysis').addEventListener('click', handleExplainAnalysis);
+    document.getElementById('qa-report').addEventListener('click', handleShowReport);
+    if (els['mic-button']) els['mic-button'].addEventListener('click', handleMicButton);
     wireProfileToggle();
 
     els['import-input'].addEventListener('change', async (ev) => {
@@ -308,9 +492,11 @@ async function boot() {
         avatar: els['siriform-avatar'],
         caption: els['siriform-caption'],
         tag: els['siriform-state-tag'],
+        mic: els['mic-button'],
     });
     siriform.setSiriformState('thinking', 'Inicializando runtime local...');
     log('AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1 — boot iniciado.', 'info');
+    setStatus('st-llama-profile', currentProfile.toUpperCase());
     wireButtons();
     await registerServiceWorker();
     const workerUrl = new URL('workers/quant-worker.js', window.location.href).href;
@@ -324,7 +510,9 @@ async function boot() {
         els['engine-meta'].textContent = `Falha ao inicializar o engine: ${err.message}`;
         log(`Worker/WASM falhou ao iniciar: ${err.message}`, 'fail');
     }
-    await refreshFeatureStatus();
+    const f = await refreshFeatureStatus();
+    refreshLlamaStatus(f);
+    await refreshVoiceStatus();
     const vault = await refreshVaultAndReplayStatus();
     log('Boot concluido. Modo: IPAD DIRECT / LOCAL-FIRST / READ_ONLY / FAIL_CLOSED.', 'ok');
     if (vault.status === 'READY') {

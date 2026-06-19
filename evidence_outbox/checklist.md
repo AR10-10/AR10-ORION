@@ -1,106 +1,145 @@
-# Checklist de Evidência — AR10_CYBORG_2_PANEL_DEPLOY_AND_REPOSITORY_ALIGNMENT_V1
+# Checklist de Evidência — AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1
 
-Marcado apenas o que foi de fato executado e verificado nesta sessão —
-nenhum item abaixo é "assumido como passando".
+Continuação direta de `AR10_CYBORG_2_PANEL_DEPLOY_AND_REPOSITORY_ALIGNMENT_V1`
+— mesmo branch (`claude/eloquent-cannon-qyt86y`), mesmo PR (#3), sem
+reinício. Marcado apenas o que foi de fato executado e verificado nesta
+sessão — nenhum item abaixo é "assumido como passando".
 
-## Painel / Nebula Core / Siriform Avatar
+## ONE-LINK / Preparar Cyborg neste iPad
 
-- [x] Painel consolidado em `index.html` com os 18 cards pedidos (header
-      premium, Siriform Avatar, status global, modo de runtime, Safari
-      Local Runtime, Local Pack Manager, Feature Detection, WASM Quant
-      Engine, WebGPU/WebGL/Canvas, WebLLM/Llama, Transformers/ONNX,
-      Replay BTC/USDT, AnalysisFrame, DecisionFrame, Vault/Evidence, guia
-      Add to Home Screen, logs amigáveis, perfis Light/Balanced/Heavy).
-- [x] Siriform Avatar (`js/siriform.js`) com os 8 estados obrigatórios:
-      `idle, listening, thinking, responding, installing, analyzing,
-      read_only, fail_closed`.
-- [x] Frases em português conectadas aos estados reais (ex.: "Runtime
-      Safari detectado.", "Pacote local ainda não instalado.", "Replay
-      BTC/USDT pronto para análise.", "Execução real bloqueada. Modo
-      seguro ativo.").
-- [x] `fail_closed` reservado para falhas reais de segurança (checksum
-      divergente em `handleVerifySha`/`handleInstallStorage`) — não é
-      decorativo.
-- [x] Badges permanentes visíveis: `READ_ONLY`, `FAIL_CLOSED`,
-      `Execution Lock: ACTIVE`, `Private Keys: DISABLED`,
-      `Live Trading: BLOCKED`.
-- [x] DecisionFrame rotulado `STUB CONTROLLED`, sem lógica de
-      decisão/ordem.
-- [x] WebLLM/Transformers/ONNX rotulados `FUTURE`, sem modelo embutido.
-- [x] Perfis de processamento (Light/Balanced/Heavy) alteram de fato o
-      `windowSize` usado no cálculo SMA/EMA via WASM (10/20/40) — não é
-      um toggle decorativo.
+- [x] Botão `btn-prepare-cyborg` adicionado ao Local Pack Manager (10
+      botões agora), ligado a `handlePrepareCyborg()`.
+- [x] Pipeline reaproveita primitivos existentes
+      (`downloadLocalPack`/`verifySha256`/`installToSafariStorage`/
+      `initWasm`/`handleRunReplay`/`handleRunDiagnostics`) — nenhuma rota
+      de execução nova foi criada.
+- [x] Abort `FAIL_CLOSED` real: `return` antecipado se `verifySha256`
+      reportar `allOk === false`, antes de qualquer instalação.
+- [x] Catch-all cobre falha não prevista, sempre cai em `fail_closed`.
 
-## Verificação técnica local (sem rede)
+## Siriform Voice Layer
 
-- [x] `node --check js/app.js` — sintaxe OK.
-- [x] `node --check js/siriform.js` — sintaxe OK.
-- [x] `node --check js/pack-manager.js` — sintaxe OK.
-- [x] Todos os 30 ids referenciados em `els{}` (app.js) existem em
-      `index.html` (script de verificação cruzada, 0 ausentes).
-- [x] Todos os ids de botão (`btn-*`) usados por `wireButtons()` existem
-      em `index.html`.
-- [x] `<section>` abre/fecha balanceado em `index.html` (11/11).
-- [x] Servido localmente via `python3 -m http.server`; `index.html`,
-      `css/ipad-runtime.css`, `js/app.js`, `js/siriform.js`,
-      `js/feature-detect.js`, `service-worker.js`, `manifest.webmanifest`
-      retornaram HTTP 200.
-- [x] `manifest.webmanifest` é JSON válido após a alteração de nome.
+- [x] `js/voice.js` criado: Web Speech API + Speech Synthesis, `pt-BR`,
+      janela de escuta única (`continuous=false`).
+- [x] 8 comandos permitidos, cada um despachado para o mesmo handler que
+      o botão equivalente já usa (`dispatchVoiceCommand` em `app.js`).
+- [x] 7 frases bloqueadas por política, checadas com prioridade sobre
+      qualquer comando permitido (`matchCommand` em `voice.js`).
+- [x] Resposta obrigatória verbatim — "Execução real está bloqueada. O
+      Cyborg está em READ_ONLY / FAIL_CLOSED." — confirmada idêntica em
+      `BLOCKED_RESPONSE` (`voice.js`) e `voice_blocked_by_policy`
+      (`siriform.js`).
+- [x] 8 estados de voz (`data-voice-state`) implementados como trilha
+      independente do `data-state` de atividade do mesmo avatar.
+- [x] Painel "Siriform Voice" (`st-voice`, `st-speech-rec`,
+      `st-speech-syn`, `st-mic-perm`) lido via sonda funcional real
+      (`voice.getVoiceStatus()`), nunca assumido como `OK`.
+- [x] Botão de microfone com 6 variantes visuais
+      (`[data-voice-state="..."]` no CSS), incluindo animação de pulso
+      para `voice_listening`.
+- [x] Ações rápidas (Diagnóstico/Replay/Análise/Relatório) ligadas aos
+      mesmos handlers usados pela voz e pelos botões do Local Pack
+      Manager.
+
+## Meta Llama / Native Companion (documentação honesta)
+
+- [x] `docs/META_LLAMA_WEB_NATIVE_ROUTE.md` criado — nome correto da
+      família, realismo Llama 4 Scout/Maverick/Behemoth, engines
+      candidatos, motivo de não embutir modelo, listas PODE/NUNCA
+      idênticas a `capabilities_if_installed`/`capabilities_never` de
+      `pack/manifest.models.json`.
+- [x] `docs/APPLE_INTELLIGENCE_AND_SIRI_ROUTE.md` criado — camada
+      implementada (Siriform Voice) vs. camada futura (Native Companion
+      Route / App Intents / Siri Shortcuts), sem promessa de prazo.
+- [x] Campos de status novos (`st-llama-layer`, `st-llama-profile`,
+      `st-llama-runtime`, `st-llama-webgpu`) todos `FUTURE`/sondados,
+      nenhum "fake installed".
+- [x] Seletor Light/Balanced/Heavy do Replay também atualiza
+      `st-llama-profile` — reaproveitamento, não toggle duplicado.
+
+## Layout responsivo (referência visual real recebida)
+
+- [x] Grid CSS 2 colunas (`@media (min-width: 900px)`) e 3 colunas
+      (`@media (min-width: 1300px)`) via `grid-column` direto em ids
+      existentes — sem reordenar o DOM.
+- [x] Abaixo de 900px, layout permanece coluna única na ordem natural do
+      documento (Siriform primeiro) — mesma experiência mobile/iPad
+      retrato já validada antes desta entrega.
+
+## Verificação técnica local (sem rede, sem browser real)
+
+- [x] `node --check js/app.js`, `service-worker.js`, `js/siriform.js`,
+      `js/voice.js` — sintaxe OK.
+- [x] CSS: chaves `{`/`}` balanceadas (136/136) em `css/ipad-runtime.css`.
+- [x] Todos os ids em `els{}` (app.js) existem em `index.html` — 0
+      ausentes (script de verificação cruzada).
+- [x] Todos os ids de `getElementById` direto em `app.js` existem em
+      `index.html` — 0 ausentes.
+- [x] Os 2 ids estáticos não cobertos por `els{}`
+      (`st-siri-native`/`st-apple-intel`) confirmados como
+      intencionalmente estáticos (roadmap fixo, não sondado em runtime).
+- [x] Todos os 22 arquivos do precache do Service Worker (
+      `CACHE_VERSION = 'cyborg-ipad-runtime-v3'`) existem em disco —
+      checado um a um.
+- [x] Seletores `data-voice-state`/`.mic-button`/`.quick-actions`/
+      `.qa-btn` do CSS confirmados contra os elementos reais de
+      `index.html`.
+- [x] `siriform.setVoiceState` confirmado escrevendo no mesmo atributo
+      (`data-voice-state`) e nos mesmos nomes de estado lidos pelo CSS.
+- [x] `<section>` abre/fecha balanceado em `index.html` (12/12).
+- [x] `manifest.webmanifest` válido como JSON após esta entrega.
+- [x] `AR10_CYBORG_LOCAL_PACK_V1.ar10pack` válido como JSON, estrutura
+      top-level intacta (`format`/`package`/`manifest`/`models_manifest`/
+      `runtime_config`/`checksums`/`files`).
 - [x] `sha256sum -c pack/checksums.sha256` confere (`wasm` e dataset
-      inalterados, payload do `.ar10pack` continua íntegro).
-- [x] Campos retornados por `feature-detect.js` (`webgpu`, `webgl`) batem
-      com os nomes lidos em `app.js`.
-- [x] Campos retornados por `replay-engine.js` (`onMeta`) batem com os
-      nomes lidos em `renderAnalysisFrame`/`app.js`.
-- [x] `pack-manager.reloadVaultState()` corrigido para devolver `reason`
-      também no caminho de falha (antes só gravava em storage, nunca
-      retornava — o card Vault/Evidence ficaria sempre sem motivo exibido).
-
-## Repositório / nome do projeto
-
-- [x] Busca por "Organização Escolar" ou qualquer nome incoerente em todo
-      o repositório (`.md/.json/.html/.yml/.yaml/.toml`) — **nenhuma
-      ocorrência encontrada**, nesta sessão e na anterior.
-- [x] Metadados reais do repositório via API (`search_repositories`):
-      `full_name=AR10-10/AR10-ORION`, owner `AR10-10` (conta de usuário,
-      não organização), `private=true`, `has_pages=false`.
-- [x] Nome do sub-produto iPad alinhado em `manifest.webmanifest` (`name`),
-      `index.html` (`<title>`), `ipad_runtime/README.md` (título) e
-      cross-link adicionado em `README.md` (raiz).
-- [x] Repositório `AR10-ORION` mantido como está (não renomeado) — decisão
-      registrada no HTML canônico: o repo é o organismo inteiro (Cockpit
-      Python + sub-produtos), renomeá-lo para um nome específico do iPad
-      seria tecnicamente incorreto e quebraria URLs de clone/PR existentes.
+      inalterados).
+- [x] Servido localmente via `python3 -m http.server`; `index.html`
+      retornou HTTP 200.
+- [x] HTML canônico (`docs/AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1.html`)
+      com tags balanceadas e exatamente 15 `<section class="block">`.
 
 ## Deploy / HTTPS
 
-- [x] Branch `claude/eloquent-cannon-qyt86y` sincronizada com `origin`.
-- [x] PR #3 confirmado aberto (draft) via API antes de escrever o
-      relatório final.
-- [x] Check run `deploy` do PR #3 reconfirmado **failure** nesta sessão,
-      com o log completo capturado (`Resource not accessible by
-      integration` ao tentar criar o site do Pages).
-- [x] `has_pages: false` reconfirmado via API nesta sessão (não é uma
-      suposição herdada da sessão anterior).
-- [x] Nenhuma ferramenta MCP do GitHub disponível nesta sessão habilita
-      Pages ou renomeia repositório — reconfirmado via `ToolSearch` antes
-      de declarar HOLD.
+- [x] Branch `claude/eloquent-cannon-qyt86y` confirmada sincronizada com
+      `origin` antes desta entrega.
+- [x] PR #3 reconfirmado aberto (draft) via API nesta sessão.
+- [x] Check run `deploy` do PR #3 reconfirmado **failure** nesta sessão
+      (rodou novamente hoje, mesmo resultado já diagnosticado em
+      `docs/GITHUB_PAGES_FIX.md`).
+- [x] Nenhuma ferramenta MCP do GitHub disponível habilita Pages —
+      reconfirmado.
 
 ## Documentação entregue
 
-- [x] `docs/AR10_CYBORG_2_PANEL_DEPLOY_AND_REPOSITORY_ALIGNMENT_V1.html`
-      (handoff canônico, 12 seções).
-- [x] `docs/DEPLOY_GUIDE.md`, `docs/IPAD_DIRECT_GUIDE.md`,
-      `docs/GITHUB_PAGES_FIX.md`, `docs/PROMOTION_CHECKLIST.md`.
-- [x] `evidence_outbox/manifest.sha256.json`,
-      `evidence_outbox/checklist.md` (este arquivo),
-      `evidence_outbox/main_files.md`.
+- [x] `docs/AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1.html`
+      (handoff canônico, 15 seções).
+- [x] `docs/FINAL_IPAD_ONE_LINK_GUIDE.md` (novo).
+- [x] `docs/APPLE_INTELLIGENCE_AND_SIRI_ROUTE.md` (novo).
+- [x] `docs/META_LLAMA_WEB_NATIVE_ROUTE.md` (novo).
+- [x] `docs/IPAD_DIRECT_GUIDE.md` atualizado (aponta para o fluxo de um
+      toque como caminho recomendado, mantém o passo a passo manual).
+- [x] `docs/GITHUB_PAGES_FIX.md` reconfirmado sem mudanças necessárias
+      (mesmo bloqueio de infraestrutura, nenhuma regressão).
+- [x] `evidence_outbox/manifest.sha256.json` regenerado (22 arquivos,
+      hashes reais recalculados nesta sessão, incluindo `js/voice.js`
+      novo).
+- [x] `evidence_outbox/checklist.md` (este arquivo).
+- [x] `evidence_outbox/main_files.md` atualizado.
 
 ## Não verificado nesta sessão (honestidade operacional)
 
-- [ ] Teste manual no Safari real de iPad físico (ambiente não tem
-      iPad/Safari real disponível — apenas `http.server` local e
-      `node --check`).
-- [ ] Link HTTPS público real (depende do toggle manual de
-      Settings → Pages → Source, fora do alcance de qualquer token/MCP
-      disponível nesta sessão).
+- [ ] Teste manual no Safari real de iPad físico — ambiente de execução
+      não tem iPad/Safari real disponível, nem ferramenta de
+      browser/screenshot (Chromium/Puppeteer ausentes neste container) —
+      reconfirmado por busca explícita antes de declarar esta limitação.
+- [ ] Teste de microfone físico real / permissão de microfone real —
+      mesmo motivo acima; `voice.js` foi verificado por leitura de código
+      e cross-check estático contra `index.html`/CSS, não por execução
+      em navegador real.
+- [ ] Link HTTPS público real — depende do toggle manual de
+      Settings → Pages → Source (seção 13 do HTML canônico), fora do
+      alcance de qualquer token/MCP disponível nesta sessão.
+- [ ] Validação de que o grid CSS responsivo renderiza sem lacunas
+      visuais inesperadas em viewport real de iPad — risco cosmético
+      assumido e documentado (seção 3 do HTML canônico), não testado
+      visualmente.

@@ -2,7 +2,7 @@
 // Cache-first, offline-first. Tudo precache é same-origin; nenhuma rota
 // de rede sensivel (MEXC/MT5/API secret) existe para interceptar.
 
-const CACHE_VERSION = 'cyborg-ipad-runtime-v2';
+const CACHE_VERSION = 'cyborg-ipad-runtime-v3';
 
 const PRECACHE_URLS = [
     './',
@@ -11,6 +11,7 @@ const PRECACHE_URLS = [
     './css/ipad-runtime.css',
     './js/app.js',
     './js/siriform.js',
+    './js/voice.js',
     './js/feature-detect.js',
     './js/crypto-utils.js',
     './js/storage.js',
