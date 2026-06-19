@@ -1,0 +1,335 @@
+/* ============================================================
+   AR10 CYBORG 2.0 — IPAD ONE-TAP RUNTIME
+   Mesma linguagem visual do Cockpit "Ciborgue": preto absoluto,
+   ciano estrutural, verde/vermelho reservados a estado de dado
+   (nunca a execucao real — este runtime nunca executa ordens).
+
+   Fontes: pilha de fontes de sistema (sem Google Fonts/CDN). Decisao
+   deliberada para zero dependencia externa — o runtime fica 100%
+   funcional offline mesmo na primeira instalacao em rede instavel.
+   ============================================================ */
+
+:root {
+    --font-display: ui-sans-serif, -apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+
+    --long-green: #00FF9D;
+    --short-red: #FF3E52;
+    --sys-cyan: #00F2FF;
+    --alert-amber: #FFB800;
+
+    --bg-void: #000000;
+    --metal-hi: rgba(18, 22, 26, 0.88);
+    --metal-lo: rgba(4, 6, 8, 0.96);
+    --line-cyan: rgba(0, 242, 255, 0.14);
+    --text-primary: #c9d4d9;
+    --text-dim: rgba(201, 212, 217, 0.5);
+
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-r: env(safe-area-inset-right, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+    --safe-l: env(safe-area-inset-left, 0px);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg-void);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    -webkit-text-size-adjust: 100%;
+    overscroll-behavior-y: none;
+}
+
+body {
+    background-image:
+        radial-gradient(ellipse 80% 50% at 50% 0%, rgba(0, 242, 255, 0.06), transparent 70%),
+        radial-gradient(ellipse 60% 40% at 50% 100%, rgba(0, 242, 255, 0.03), transparent 60%);
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 0;
+}
+
+a { color: var(--sys-cyan); }
+
+.runtime-shell {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: calc(var(--safe-t) + 12px) calc(var(--safe-r) + 14px) calc(var(--safe-b) + 24px) calc(var(--safe-l) + 14px);
+}
+
+/* Em modo standalone (instalado via Add to Home Screen) nao ha chrome do
+   Safari — empurra o conteudo um pouco mais para nao colar na status bar */
+@media (display-mode: standalone) {
+    .runtime-shell { padding-top: calc(var(--safe-t) + 22px); }
+}
+
+/* ------------------------------------------------------------
+   BANNER OBRIGATORIO: READ_ONLY / FAIL_CLOSED (sempre visivel)
+   ------------------------------------------------------------ */
+.mode-banner {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    margin: calc(var(--safe-t) * -1 - 12px) calc(var(--safe-r) * -1 - 14px) 14px calc(var(--safe-l) * -1 - 14px);
+    padding: calc(var(--safe-t) + 8px) calc(var(--safe-r) + 14px) 8px calc(var(--safe-l) + 14px);
+    background: rgba(0, 0, 0, 0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(255, 184, 0, 0.35);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    font-size: clamp(0.72rem, 2vw, 0.92rem);
+    letter-spacing: 1px;
+}
+.mode-banner .pill {
+    color: var(--alert-amber);
+    border: 1px solid rgba(255, 184, 0, 0.45);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-weight: bold;
+    text-shadow: 0 0 8px rgba(255, 184, 0, 0.5);
+    animation: pulseAmber 2.4s ease-in-out infinite;
+}
+.mode-banner .note { color: var(--text-dim); }
+@keyframes pulseAmber {
+    0%, 100% { opacity: 0.75; }
+    50% { opacity: 1; }
+}
+
+header.hero {
+    text-align: center;
+    padding: 18px 0 22px;
+}
+header.hero h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(1.3rem, 4vw, 2.1rem);
+    letter-spacing: 2px;
+    margin: 0 0 6px;
+    color: var(--sys-cyan);
+    text-shadow: 0 0 12px rgba(0, 242, 255, 0.4);
+    text-transform: uppercase;
+}
+header.hero p {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: clamp(0.8rem, 2vw, 0.95rem);
+}
+
+section.card {
+    background: linear-gradient(150deg, var(--metal-hi), var(--metal-lo));
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--line-cyan);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: inset 0 0 18px rgba(0, 242, 255, 0.04);
+}
+
+section.card h2 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(0.95rem, 2.4vw, 1.25rem);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--sys-cyan);
+    margin: 0 0 12px;
+    text-shadow: 0 0 8px rgba(0, 242, 255, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+section.card h2 .step {
+    font-size: 0.75em;
+    opacity: 0.5;
+}
+
+/* ------------------------------------------------------------
+   PAINEL DE STATUS
+   ------------------------------------------------------------ */
+.status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 8px 16px;
+}
+.status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid rgba(0, 242, 255, 0.08);
+    padding-bottom: 6px;
+    font-size: clamp(0.78rem, 1.8vw, 0.95rem);
+    gap: 10px;
+}
+.status-row .label { color: var(--text-dim); }
+.status-row .value { font-weight: bold; white-space: nowrap; }
+
+.v-ok { color: var(--long-green); text-shadow: 0 0 8px rgba(0,255,157,0.5); }
+.v-fail { color: var(--short-red); text-shadow: 0 0 8px rgba(255,62,82,0.5); }
+.v-limited { color: var(--alert-amber); text-shadow: 0 0 8px rgba(255,184,0,0.5); }
+.v-pending { color: var(--text-dim); }
+.v-info { color: var(--sys-cyan); }
+
+/* ------------------------------------------------------------
+   BOTOES DE ACAO — runtime local
+   ------------------------------------------------------------ */
+.btn-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+}
+button.rt-btn {
+    font-family: var(--font-mono);
+    font-size: clamp(0.8rem, 1.8vw, 0.95rem);
+    color: var(--text-primary);
+    background: rgba(0, 242, 255, 0.05);
+    border: 1px solid var(--line-cyan);
+    border-radius: 10px;
+    padding: 13px 14px;
+    min-height: 46px;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+button.rt-btn:active {
+    transform: scale(0.98);
+    background: rgba(0, 242, 255, 0.14);
+}
+button.rt-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+button.rt-btn.primary {
+    border-color: rgba(0, 242, 255, 0.5);
+    color: var(--sys-cyan);
+    box-shadow: 0 0 10px rgba(0, 242, 255, 0.12);
+}
+button.rt-btn.danger {
+    border-color: rgba(255, 62, 82, 0.4);
+    color: var(--short-red);
+}
+button.rt-btn.success {
+    border-color: rgba(0, 255, 157, 0.4);
+    color: var(--long-green);
+}
+button.rt-btn .icon { font-size: 1.05em; opacity: 0.85; }
+
+input[type=file].hidden-input { display: none; }
+
+/* ------------------------------------------------------------
+   CONSOLE / LOG DE DIAGNOSTICO
+   ------------------------------------------------------------ */
+.console {
+    background: #000;
+    border: 1px solid rgba(0, 242, 255, 0.18);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: clamp(0.68rem, 1.6vw, 0.82rem);
+    line-height: 1.5;
+    max-height: 260px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    -webkit-overflow-scrolling: touch;
+}
+.console .ln-ok { color: var(--long-green); }
+.console .ln-fail { color: var(--short-red); }
+.console .ln-warn { color: var(--alert-amber); }
+.console .ln-info { color: var(--sys-cyan); }
+.console .ln-dim { color: var(--text-dim); }
+
+/* ------------------------------------------------------------
+   REPLAY BTC/USDT — sparkline em canvas
+   ------------------------------------------------------------ */
+.replay-wrap canvas {
+    width: 100%;
+    height: 160px;
+    display: block;
+    background: #000;
+    border: 1px solid rgba(0, 242, 255, 0.12);
+    border-radius: 10px;
+    touch-action: none;
+}
+.replay-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: clamp(0.72rem, 1.6vw, 0.85rem);
+    color: var(--text-dim);
+    margin-top: 8px;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+}
+.replay-meta b { color: var(--sys-cyan); font-weight: normal; }
+
+/* ------------------------------------------------------------
+   MODAL — Adicionar a Tela de Inicio / instrucoes
+   ------------------------------------------------------------ */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: calc(var(--safe-t) + 16px) calc(var(--safe-r) + 16px) calc(var(--safe-b) + 16px) calc(var(--safe-l) + 16px);
+}
+.modal-overlay[hidden] { display: none; }
+.modal-box {
+    max-width: 420px;
+    width: 100%;
+    background: linear-gradient(150deg, var(--metal-hi), var(--metal-lo));
+    border: 1px solid rgba(0, 242, 255, 0.3);
+    border-radius: 16px;
+    padding: 20px;
+    max-height: 86vh;
+    overflow-y: auto;
+}
+.modal-box h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    color: var(--sys-cyan);
+    letter-spacing: 1px;
+    margin-top: 0;
+}
+.modal-box ol { padding-left: 20px; }
+.modal-box li { margin-bottom: 10px; font-size: 0.92rem; }
+.share-glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: 1.5px solid var(--sys-cyan);
+    border-radius: 5px;
+    margin: 0 2px;
+    font-size: 0.8em;
+    vertical-align: middle;
+}
+.modal-box .close-btn {
+    margin-top: 14px;
+    width: 100%;
+}
+
+footer.legal {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    padding: 10px 0 calc(var(--safe-b) + 18px);
+    line-height: 1.6;
+}
+
+@media (max-width: 480px) {
+    .status-grid, .btn-grid { grid-template-columns: 1fr; }
+}

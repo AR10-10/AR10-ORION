@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "note": "Nenhum modelo de linguagem esta empacotado nesta V1. Os tres motores abaixo sao roadmap declarado (status FUTURE), nao instalacoes falsas. Motivo: tamanho de modelo incompatível com armazenamento confiavel em Safari/iPadOS sem um passo explicito de download/consentimento do usuario, que ainda nao foi implementado.",
+  "models": [
+    {
+      "engine": "WebLLM/MLC-LLM",
+      "target_model": "Llama (familia Meta AI, quantizado)",
+      "status": "FUTURE",
+      "estimated_size_mb": "700-4000 (depende da quantizacao)",
+      "delivery_plan": "download opcional sob demanda para OPFS, fora do .ar10pack base, com confirmacao explicita do usuario e verificacao SHA-256 por shard",
+      "blocking_reason": "tamanho incompativel com pacote base; requer fluxo de download incremental ainda nao implementado"
+    },
+    {
+      "engine": "Transformers.js",
+      "target_model": "a definir (modelo compacto ONNX/WebGPU)",
+      "status": "FUTURE",
+      "estimated_size_mb": "20-300",
+      "delivery_plan": "mesmo fluxo de pacote adicional opcional do WebLLM"
+    },
+    {
+      "engine": "ONNX Runtime Web",
+      "target_model": "a definir",
+      "status": "FUTURE",
+      "estimated_size_mb": "varia por modelo",
+      "delivery_plan": "mesmo fluxo de pacote adicional opcional"
+    }
+  ]
+}
