@@ -8,19 +8,31 @@ Cobre exclusivamente o bloqueio de publicação HTTPS do sub-produto iPad
 
 | Item | Valor |
 |---|---|
-| Repositório | `AR10-10/AR10-ORION` (privado) |
-| `has_pages` (API) | `false` |
+| Repositório | `AR10-10/AR10-ORION` (**público** — alterado manualmente após a sessão anterior; era privado quando este documento foi escrito originalmente) |
+| `has_pages` (API) | `false` (reconfirmado **depois** da mudança de visibilidade) |
 | Workflow | `.github/workflows/deploy-ipad-pwa.yml` |
-| Último check run (`deploy`) no PR #3 | `completed` / **`failure`** |
+| Último check run (`deploy`) no PR #3 | `completed` / **`failure`** (reexecutado manualmente via `workflow_dispatch` depois do repositório virar público — mesma falha) |
 
 Log real do passo que falha (`actions/configure-pages@v5`, capturado nesta
-sessão via `get_job_logs`):
+sessão via `get_job_logs`, **depois** de o repositório já estar público):
 
 ```
 ##[warning]Get Pages site failed. Error: Not Found
 ##[error]Create Pages site failed. Error: Resource not accessible by integration
 ##[error]HttpError: Resource not accessible by integration
 ```
+
+### Visibilidade pública não resolveu — e por quê
+
+A hipótese de que o bloqueio fosse causado pela visibilidade `privado` do
+repositório foi testada diretamente: o repositório foi tornado `público`,
+o workflow foi reexecutado do zero (`run_workflow` via API, não apenas um
+re-run do job antigo), e o erro veio **byte-a-byte idêntico** ao já
+registrado acima. Isso confirma que a causa raiz nunca foi a visibilidade
+— é a permissão da chamada `POST /repos/{owner}/{repo}/pages` (criar o
+site do Pages pela primeira vez), que o `GITHUB_TOKEN` automático de uma
+Action não tem em nenhum dos dois casos (privado ou público). A correção
+abaixo continua sendo a única rota.
 
 ## Por que isso não é um bug no workflow
 
