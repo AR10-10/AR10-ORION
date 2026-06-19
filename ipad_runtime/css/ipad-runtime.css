@@ -333,3 +333,297 @@ footer.legal {
 @media (max-width: 480px) {
     .status-grid, .btn-grid { grid-template-columns: 1fr; }
 }
+
+/* ============================================================
+   NEBULA CORE — header premium, Siriform Avatar, badges de lei
+   e os cards adicionais do painel consolidado (V2 visual).
+   Mesma paleta/linguagem do bloco acima; nada aqui sobrescreve
+   classes usadas pelo app.js (status-row, rt-btn, v-ok/v-fail...),
+   apenas adiciona componentes novos.
+   ============================================================ */
+
+.nebula-header {
+    text-align: center;
+    padding: 22px 0 18px;
+}
+.nebula-header .kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: clamp(0.62rem, 1.6vw, 0.74rem);
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+}
+.nebula-header .kicker::before,
+.nebula-header .kicker::after {
+    content: '';
+    width: 22px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--sys-cyan));
+}
+.nebula-header .kicker::after { background: linear-gradient(90deg, var(--sys-cyan), transparent); }
+.nebula-header h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(1.4rem, 4.4vw, 2.3rem);
+    letter-spacing: 2px;
+    margin: 0 0 6px;
+    color: var(--sys-cyan);
+    text-shadow: 0 0 16px rgba(0, 242, 255, 0.45);
+    text-transform: uppercase;
+}
+.nebula-header p.tagline {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: clamp(0.8rem, 2vw, 0.95rem);
+}
+
+/* ------------------------------------------------------------
+   SIRIFORM AVATAR — orbe central animado, sem imagem/canvas,
+   so CSS (gradientes + blur). Estado muda cor/velocidade.
+   ------------------------------------------------------------ */
+.siriform-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 10px;
+    padding-top: 22px;
+    padding-bottom: 20px;
+}
+.siriform-stage {
+    position: relative;
+    width: 136px;
+    height: 136px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 6px;
+}
+.siriform-avatar {
+    position: relative;
+    width: 108px;
+    height: 108px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--sys-cyan), #6a5cff, var(--long-green), var(--sys-cyan));
+    filter: blur(0.2px);
+    box-shadow: 0 0 30px rgba(0, 242, 255, 0.35), 0 0 70px rgba(0, 242, 255, 0.12);
+    animation: siriformSpin 9s linear infinite, siriformBreathe 4.2s ease-in-out infinite;
+    transition: box-shadow 0.6s ease;
+}
+.siriform-avatar::before {
+    content: '';
+    position: absolute;
+    inset: 10px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.35), rgba(0,0,0,0.55) 70%);
+    mix-blend-mode: overlay;
+}
+.siriform-avatar::after {
+    content: '';
+    position: absolute;
+    inset: -14px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 242, 255, 0.18);
+    animation: siriformRing 6s linear infinite reverse;
+}
+@keyframes siriformSpin { to { transform: rotate(360deg); } }
+@keyframes siriformRing { to { transform: rotate(360deg); } }
+@keyframes siriformBreathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+/* Estados — cor/ritmo refletem o que o Cyborg esta "fazendo" */
+.siriform-avatar[data-state="idle"],
+.siriform-avatar[data-state="read_only"] {
+    animation-duration: 14s, 5s;
+}
+.siriform-avatar[data-state="listening"] {
+    box-shadow: 0 0 34px rgba(0, 242, 255, 0.55), 0 0 90px rgba(0, 242, 255, 0.2);
+    animation-duration: 4s, 1.6s;
+}
+.siriform-avatar[data-state="thinking"],
+.siriform-avatar[data-state="analyzing"] {
+    background: conic-gradient(from 0deg, var(--alert-amber), var(--sys-cyan), var(--alert-amber));
+    box-shadow: 0 0 34px rgba(255, 184, 0, 0.4), 0 0 90px rgba(255, 184, 0, 0.15);
+    animation-duration: 2.4s, 1.2s;
+}
+.siriform-avatar[data-state="responding"] {
+    background: conic-gradient(from 0deg, var(--long-green), var(--sys-cyan), var(--long-green));
+    box-shadow: 0 0 34px rgba(0, 255, 157, 0.45), 0 0 90px rgba(0, 255, 157, 0.16);
+    animation-duration: 5s, 2.2s;
+}
+.siriform-avatar[data-state="installing"] {
+    background: conic-gradient(from 0deg, #6a5cff, var(--sys-cyan), #6a5cff);
+    box-shadow: 0 0 34px rgba(106, 92, 255, 0.45), 0 0 90px rgba(106, 92, 255, 0.16);
+    animation-duration: 1.8s, 1s;
+}
+.siriform-avatar[data-state="fail_closed"] {
+    background: conic-gradient(from 0deg, var(--short-red), #4a0008, var(--short-red));
+    box-shadow: 0 0 34px rgba(255, 62, 82, 0.5), 0 0 90px rgba(255, 62, 82, 0.18);
+    animation-duration: 8s, 0.9s;
+}
+
+.siriform-caption {
+    min-height: 2.4em;
+    max-width: 480px;
+    margin: 4px auto 0;
+    font-family: var(--font-mono);
+    font-size: clamp(0.82rem, 2vw, 0.98rem);
+    color: var(--text-primary);
+    opacity: 0;
+    transform: translateY(3px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.siriform-caption.is-visible { opacity: 1; transform: translateY(0); }
+.siriform-state-tag {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+}
+
+/* ------------------------------------------------------------
+   BADGES DE LEI — sempre visiveis, nao dependem de JS para o
+   estado base (so o texto/cor pode reforcar via classe v-*).
+   ------------------------------------------------------------ */
+.law-badges {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+.law-badge {
+    font-family: var(--font-mono);
+    font-size: clamp(0.66rem, 1.6vw, 0.78rem);
+    letter-spacing: 0.5px;
+    border-radius: 20px;
+    padding: 4px 12px;
+    border: 1px solid rgba(255, 184, 0, 0.4);
+    color: var(--alert-amber);
+    white-space: nowrap;
+}
+.law-badge.is-blocked { border-color: rgba(255, 62, 82, 0.45); color: var(--short-red); }
+.law-badge.is-ok { border-color: rgba(0, 255, 157, 0.4); color: var(--long-green); }
+
+/* ------------------------------------------------------------
+   BADGES UTILITARIOS DE HONESTIDADE — STUB / FUTURE / DISABLED
+   ------------------------------------------------------------ */
+.stub-badge, .future-badge, .disabled-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 1.2px;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 2px 8px;
+    margin-left: 8px;
+    vertical-align: middle;
+    text-transform: uppercase;
+}
+.stub-badge { color: var(--alert-amber); border: 1px solid rgba(255, 184, 0, 0.5); background: rgba(255, 184, 0, 0.08); }
+.future-badge { color: var(--sys-cyan); border: 1px solid rgba(0, 242, 255, 0.5); background: rgba(0, 242, 255, 0.06); }
+.disabled-badge { color: var(--short-red); border: 1px solid rgba(255, 62, 82, 0.5); background: rgba(255, 62, 82, 0.07); }
+
+/* ------------------------------------------------------------
+   QUANT ENGINE WIDGET / ANALYSIS FRAME / DECISION FRAME / VAULT
+   ------------------------------------------------------------ */
+.quant-engine-widget .engine-meta,
+.vault-evidence-card .vault-meta {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    margin-top: 2px;
+}
+
+.analysis-frame-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px 14px;
+    margin-top: 4px;
+}
+.analysis-frame-grid .af-row {
+    border-bottom: 1px solid rgba(0, 242, 255, 0.08);
+    padding-bottom: 6px;
+}
+.analysis-frame-grid .af-label {
+    display: block;
+    font-size: 0.68rem;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+}
+.analysis-frame-grid .af-value {
+    display: block;
+    font-weight: bold;
+    color: var(--sys-cyan);
+    font-size: clamp(0.85rem, 2vw, 1rem);
+}
+.analysis-frame-empty { color: var(--text-dim); font-size: 0.85rem; }
+
+.decision-frame-panel {
+    border-color: rgba(255, 184, 0, 0.22);
+}
+.decision-frame-panel .df-body {
+    font-size: 0.86rem;
+    color: var(--text-dim);
+    line-height: 1.55;
+}
+.decision-frame-panel .df-body b { color: var(--alert-amber); }
+
+.vault-evidence-card .hash-chip {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    background: rgba(0, 242, 255, 0.05);
+    border: 1px solid rgba(0, 242, 255, 0.12);
+    border-radius: 6px;
+    padding: 2px 6px;
+    margin: 2px 4px 2px 0;
+}
+
+/* ------------------------------------------------------------
+   PROCESSING PROFILES — LIGHT / BALANCED / HEAVY
+   ------------------------------------------------------------ */
+.profile-toggle {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.profile-btn {
+    flex: 1;
+    min-width: 90px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    background: rgba(0, 242, 255, 0.04);
+    border: 1px solid var(--line-cyan);
+    border-radius: 8px;
+    padding: 8px 6px;
+    text-align: center;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+}
+.profile-btn.active {
+    color: var(--sys-cyan);
+    border-color: rgba(0, 242, 255, 0.55);
+    box-shadow: 0 0 10px rgba(0, 242, 255, 0.18);
+    background: rgba(0, 242, 255, 0.1);
+}
+.profile-hint {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-top: 6px;
+}
+
+@media (max-width: 480px) {
+    .analysis-frame-grid { grid-template-columns: 1fr; }
+}

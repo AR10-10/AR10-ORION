@@ -1,4 +1,8 @@
-# AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1
+# AR10 Cyborg 2.0 — iPad One-Tap Cloud Runtime
+
+*Codinome interno: `AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1` · sub-produto iPad/PWA
+dentro do monorepo `AR10-ORION` (ver `../README.md` para a visão geral do
+organismo AR10 ORION V5.0).*
 
 PWA iPad-first do AR10 Cyborg 2.0. Abre direto no Safari do iPad via HTTPS,
 sem depender de Mac Mini, MacBook, servidor local, terminal ou ZIP como
@@ -28,6 +32,7 @@ ipad_runtime/
 ├── css/ipad-runtime.css    tema "Ciborgue" + safe-area (env(safe-area-inset-*))
 ├── js/
 │   ├── app.js               orquestrador da tela e dos botoes
+│   ├── siriform.js          maquina de estados do Siriform Avatar (so visual/UI)
 │   ├── feature-detect.js    sondas funcionais (nao so "typeof") de cada API
 │   ├── crypto-utils.js      SHA-256 via Web Crypto, base64, checksum agregado
 │   ├── storage.js           OPFS com fallback automatico para IndexedDB
@@ -44,6 +49,39 @@ ipad_runtime/
 ├── tools/                   scripts de build (replay, icones, .ar10pack)
 └── AR10_CYBORG_LOCAL_PACK_V1.ar10pack   pacote final, gerado por tools/build_pack.py
 ```
+
+## Nebula Core / Siriform Avatar (painel premium)
+
+O painel principal (`index.html`) é organizado em volta de um **Siriform
+Avatar** — orbe central CSS-only (sem canvas, sem imagem, sem dependência
+externa) controlado por `js/siriform.js`. É puramente informativo: nenhum
+estado do avatar dispara rede, ordem ou execução, apenas reflete o que o
+runtime local está fazendo.
+
+Estados possíveis (`data-state` no `#siriform-avatar`):
+
+| Estado       | Quando aparece                                              |
+|--------------|--------------------------------------------------------------|
+| `idle`       | Em repouso, aguardando toque.                                 |
+| `listening`  | Toque recebido (abrir importação, abrir modal Home Screen).    |
+| `thinking`   | Operação local em andamento (boot, download, importação).     |
+| `analyzing`  | Verificação SHA256, diagnóstico offline, replay BTC/USDT.      |
+| `responding` | Resultado pronto, com legenda contextual.                      |
+| `installing` | Gravando o pacote local no Safari Storage (OPFS/IndexedDB).    |
+| `read_only`  | Estado de repouso "de lei" — sempre mostrado após 3.6s parado. |
+| `fail_closed`| Falha de segurança real (checksum divergente, instalação bloqueada). |
+
+Cards do painel (todos dentro da mesma página, sem rota nova):
+`siriform-card` → `runtime-status-panel` → `feature-detect-panel` →
+`quant-engine-widget` → `ai-models-panel` (WebLLM/Transformers/ONNX,
+`FUTURE`) → `replay-wrap` (com `profile-toggle` Light/Balanced/Heavy,
+genuinamente muda a janela SMA/EMA usada no WASM) → `analysis-frame-panel`
+(estatística descritiva real, "não é recomendação") →
+`decision-frame-panel` (**`STUB CONTROLLED`**, sem lógica de decisão, sem
+sinal de ordem — existe só para deixar explícita a fronteira até onde o
+runtime vai) → `vault-evidence-card` (reabre e re-verifica o SHA-256 a cada
+boot, mostra backend/arquivos/timestamp/hash por arquivo) →
+`local-pack-manager` (os 9 botões do Local Pack Manager).
 
 ## Decisões técnicas (liberdade técnica usada nesta entrega)
 

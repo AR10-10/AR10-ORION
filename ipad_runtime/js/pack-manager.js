@@ -117,7 +117,8 @@ export async function installToSafariStorage(onLog) {
  *  checksum gravado, o vault volta para LOCKED). */
 export async function reloadVaultState(onLog) {
     const meta = await storage.getMeta(VAULT_META_KEY);
-    if (!meta || meta.status !== 'READY') return { status: 'LOCKED' };
+    if (!meta) return { status: 'LOCKED' };
+    if (meta.status !== 'READY') return { status: 'LOCKED', reason: meta.reason };
 
     try {
         for (const relPath of Object.keys(meta.checksums || {})) {
@@ -131,8 +132,9 @@ export async function reloadVaultState(onLog) {
         return meta;
     } catch (err) {
         onLog?.(`VAULT: integridade falhou no boot (${err.message}) — bloqueando (LOCKED)`, 'fail');
-        await storage.setMeta(VAULT_META_KEY, { status: 'LOCKED', reason: String(err.message) });
-        return { status: 'LOCKED' };
+        const reason = String(err.message);
+        await storage.setMeta(VAULT_META_KEY, { status: 'LOCKED', reason });
+        return { status: 'LOCKED', reason };
     }
 }
 

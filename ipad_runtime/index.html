@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="color-scheme" content="dark">
-<title>AR10 Cyborg 2.0 — iPad Runtime</title>
+<title>AR10 Cyborg 2.0 — Nebula Core (iPad Runtime)</title>
 
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
 
-<meta name="description" content="AR10 Cyborg 2.0 — Safari Local Runtime para iPad. Execucao local-first, READ_ONLY, FAIL_CLOSED. Sem trading real.">
+<meta name="description" content="AR10 Cyborg 2.0 — Nebula Core. Safari Local Runtime para iPad. Execucao local-first, READ_ONLY, FAIL_CLOSED. Sem trading real.">
 <meta name="theme-color" content="#000000">
 
 <!-- PWA -->
@@ -33,13 +33,118 @@
     <span class="note">AR10 CYBORG 2.0 · sem execucao real · sem API secret · sem ordem · sem live trading</span>
   </div>
 
-  <header class="hero">
+  <header class="nebula-header">
+    <div class="kicker">Nebula Core</div>
     <h1>AR10 Cyborg 2.0 — iPad Runtime</h1>
-    <p>Safari Local Runtime / Instalação Local — PWA HTTPS, local-first, sem Mac Mini, sem MacBook, sem ZIP.</p>
+    <p class="tagline">Safari Local Runtime / Instalação Local — PWA HTTPS, local-first, sem Mac Mini, sem MacBook, sem ZIP.</p>
   </header>
 
-  <section class="card" id="runtime-actions">
-    <h2>Safari Local Runtime / Instalação Local</h2>
+  <section class="card siriform-card" id="siriform-section">
+    <div class="siriform-stage">
+      <div class="siriform-avatar" id="siriform-avatar" data-state="idle" role="img" aria-label="Siriform Avatar"></div>
+    </div>
+    <span class="siriform-state-tag" id="siriform-state-tag">IDLE</span>
+    <p class="siriform-caption" id="siriform-caption">Cyborg operando em READ_ONLY / FAIL_CLOSED.</p>
+    <div class="law-badges">
+      <span class="law-badge" id="badge-mode">IPAD DIRECT / LOCAL-FIRST</span>
+      <span class="law-badge">READ_ONLY</span>
+      <span class="law-badge">FAIL_CLOSED</span>
+      <span class="law-badge is-ok">Execution Lock: ACTIVE</span>
+      <span class="law-badge is-blocked">Private Keys: DISABLED</span>
+      <span class="law-badge is-blocked">Live Trading: BLOCKED</span>
+    </div>
+  </section>
+
+  <section class="card runtime-status-panel" id="status-panel">
+    <h2>Safari Local Runtime Status</h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">PWA HTTPS</span><span class="value v-pending" id="st-pwa">…</span></div>
+      <div class="status-row"><span class="label">Service Worker</span><span class="value v-pending" id="st-sw">…</span></div>
+      <div class="status-row"><span class="label">Cache API</span><span class="value v-pending" id="st-cache">…</span></div>
+      <div class="status-row"><span class="label">Web Crypto</span><span class="value v-pending" id="st-webcrypto">…</span></div>
+      <div class="status-row"><span class="label">Workers</span><span class="value v-pending" id="st-workers">…</span></div>
+      <div class="status-row"><span class="label">Mode</span><span class="value v-info" id="st-mode">IPAD DIRECT / LOCAL-FIRST / READ_ONLY / FAIL_CLOSED</span></div>
+    </div>
+  </section>
+
+  <section class="card" id="feature-detect-panel">
+    <h2>Feature Detection</h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">IndexedDB</span><span class="value v-pending" id="st-idb">…</span></div>
+      <div class="status-row"><span class="label">OPFS</span><span class="value v-pending" id="st-opfs">…</span></div>
+      <div class="status-row"><span class="label">WebGPU</span><span class="value v-pending" id="st-webgpu">…</span></div>
+      <div class="status-row"><span class="label">WebGL/Canvas</span><span class="value v-pending" id="st-webgl">…</span></div>
+    </div>
+  </section>
+
+  <section class="card quant-engine-widget" id="quant-engine-panel">
+    <h2>WASM Quant Engine</h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">WASM</span><span class="value v-pending" id="st-wasm">…</span></div>
+    </div>
+    <p class="engine-meta" id="engine-meta">Motor ainda não inicializado neste boot.</p>
+  </section>
+
+  <section class="card" id="ai-models-panel">
+    <h2>WebLLM / Llama <span class="future-badge">FUTURE</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">WebLLM/Llama</span><span class="value v-pending" id="st-webllm">…</span></div>
+      <div class="status-row"><span class="label">Transformers</span><span class="value v-pending" id="st-transformers">…</span></div>
+      <div class="status-row"><span class="label">ONNX</span><span class="value v-pending" id="st-onnx">…</span></div>
+    </div>
+    <p class="engine-meta">Roadmap declarado em <code>pack/manifest.models.json</code> — nenhum modelo embutido nesta V1, nenhum "fake installed".</p>
+  </section>
+
+  <section class="card replay-wrap" id="replay-section">
+    <h2>Replay BTC/USDT <span class="step">simulacao local — sem ordens</span></h2>
+    <canvas id="replay-canvas"></canvas>
+    <div class="replay-meta" id="replay-meta">
+      <span>Toque em "Rodar Replay BTC/USDT" para iniciar.</span>
+    </div>
+    <div class="status-row" style="margin-top:10px; border:none; flex-direction:column; align-items:stretch; gap:6px;">
+      <span class="label">Perfil de processamento</span>
+      <div class="profile-toggle" id="profile-toggle" role="group" aria-label="Perfil de processamento">
+        <button type="button" class="profile-btn" id="profile-light" data-profile="light">Light</button>
+        <button type="button" class="profile-btn active" id="profile-balanced" data-profile="balanced">Balanced</button>
+        <button type="button" class="profile-btn" id="profile-heavy" data-profile="heavy">Heavy</button>
+      </div>
+      <span class="profile-hint" id="profile-hint">Balanced: janela SMA/EMA=20, resolução total do replay.</span>
+    </div>
+  </section>
+
+  <section class="card" id="analysis-frame-panel">
+    <h2>AnalysisFrame <span class="step">leitura descritiva — não é recomendação</span></h2>
+    <div class="analysis-frame-grid" id="analysis-frame-grid">
+      <span class="analysis-frame-empty">Rode o Replay BTC/USDT para preencher o AnalysisFrame.</span>
+    </div>
+  </section>
+
+  <section class="card decision-frame-panel" id="decision-frame-panel">
+    <h2>DecisionFrame <span class="stub-badge">STUB CONTROLLED</span></h2>
+    <p class="df-body">
+      Este card é um placeholder transparente. <b>Nenhuma lógica de decisão,
+      sinal de ordem ou execução existe neste runtime.</b> Por lei interna do
+      AR10 Cyborg 2.0, qualquer decisão de execução exigiria um Risk Gate e
+      supervisão humana — nenhum dos dois está implementado ou habilitado
+      aqui, e nenhuma rota de rede para corretora existe no código (ver CSP).
+      Este card existe apenas para deixar explícita a fronteira entre
+      "ler estatística" (AnalysisFrame, real) e "decidir/executar"
+      (DecisionFrame, bloqueado por design).
+    </p>
+  </section>
+
+  <section class="card vault-evidence-card" id="vault-evidence-panel">
+    <h2>Vault / Evidence</h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Vault</span><span class="value v-pending" id="st-vault">…</span></div>
+      <div class="status-row"><span class="label">Replay BTC/USDT</span><span class="value v-pending" id="st-replay">…</span></div>
+    </div>
+    <p class="vault-meta" id="vault-meta">Sem pacote instalado nesta sessão ainda.</p>
+    <div id="vault-hashes"></div>
+  </section>
+
+  <section class="card local-pack-manager" id="runtime-actions">
+    <h2>Local Pack Manager</h2>
     <div class="btn-grid">
       <button class="rt-btn primary" id="btn-check-safari"><span class="icon">◎</span> Verificar Safari</button>
       <button class="rt-btn primary" id="btn-download-pack"><span class="icon">⇩</span> Baixar Pacote Local</button>
@@ -54,42 +159,13 @@
     <input type="file" id="import-input" class="hidden-input" accept=".ar10pack,application/json">
   </section>
 
-  <section class="card" id="status-panel">
-    <h2>Safari Local Runtime Status</h2>
-    <div class="status-grid">
-      <div class="status-row"><span class="label">PWA HTTPS</span><span class="value v-pending" id="st-pwa">…</span></div>
-      <div class="status-row"><span class="label">Service Worker</span><span class="value v-pending" id="st-sw">…</span></div>
-      <div class="status-row"><span class="label">Cache API</span><span class="value v-pending" id="st-cache">…</span></div>
-      <div class="status-row"><span class="label">IndexedDB</span><span class="value v-pending" id="st-idb">…</span></div>
-      <div class="status-row"><span class="label">OPFS</span><span class="value v-pending" id="st-opfs">…</span></div>
-      <div class="status-row"><span class="label">Web Crypto</span><span class="value v-pending" id="st-webcrypto">…</span></div>
-      <div class="status-row"><span class="label">WASM</span><span class="value v-pending" id="st-wasm">…</span></div>
-      <div class="status-row"><span class="label">Workers</span><span class="value v-pending" id="st-workers">…</span></div>
-      <div class="status-row"><span class="label">WebGPU</span><span class="value v-pending" id="st-webgpu">…</span></div>
-      <div class="status-row"><span class="label">WebLLM/Llama</span><span class="value v-pending" id="st-webllm">…</span></div>
-      <div class="status-row"><span class="label">Transformers</span><span class="value v-pending" id="st-transformers">…</span></div>
-      <div class="status-row"><span class="label">ONNX</span><span class="value v-pending" id="st-onnx">…</span></div>
-      <div class="status-row"><span class="label">Replay BTC/USDT</span><span class="value v-pending" id="st-replay">…</span></div>
-      <div class="status-row"><span class="label">Vault</span><span class="value v-pending" id="st-vault">…</span></div>
-      <div class="status-row"><span class="label">Mode</span><span class="value v-info" id="st-mode">IPAD DIRECT / LOCAL-FIRST / READ_ONLY / FAIL_CLOSED</span></div>
-    </div>
-  </section>
-
-  <section class="card replay-wrap" id="replay-section">
-    <h2>Replay BTC/USDT <span class="step">simulacao local — sem ordens</span></h2>
-    <canvas id="replay-canvas"></canvas>
-    <div class="replay-meta" id="replay-meta">
-      <span>Toque em "Rodar Replay BTC/USDT" para iniciar.</span>
-    </div>
-  </section>
-
   <section class="card" id="console-section">
-    <h2>Console / Log</h2>
+    <h2>Logs do Sistema</h2>
     <div class="console" id="console-log"></div>
   </section>
 
   <footer class="legal">
-    AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1 · 100% local-first depois do primeiro carregamento HTTPS<br>
+    AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1 · Nebula Core · 100% local-first depois do primeiro carregamento HTTPS<br>
     Sem MT5, sem MEXC private endpoint, sem API secret, sem ordem, sem live trading. READ_ONLY / FAIL_CLOSED sempre.
   </footer>
 </div>

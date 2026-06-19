@@ -1,0 +1,94 @@
+{
+  "generated_for": "AR10_CYBORG_2_PANEL_DEPLOY_AND_REPOSITORY_ALIGNMENT_V1",
+  "repo": "AR10-10/AR10-ORION",
+  "branch": "claude/eloquent-cannon-qyt86y",
+  "pull_request": "https://github.com/AR10-10/AR10-ORION/pull/3",
+  "base_dir": "ipad_runtime/",
+  "hash_algorithm": "sha256",
+  "files": {
+    "index.html": {
+      "sha256": "a4bbb3d840bfb8731a5a217d74df2d331b7443eb8cc48b15abbceacc03596e76",
+      "bytes": 10562
+    },
+    "manifest.webmanifest": {
+      "sha256": "3be72f358fcba501f54ed12695006386b5aa86fe4ec959665b12bae281ab29a6",
+      "bytes": 984
+    },
+    "service-worker.js": {
+      "sha256": "f81955d14422ea961d73686340042e561be44a1a53e212da9ae115513024c732",
+      "bytes": 2146
+    },
+    "css/ipad-runtime.css": {
+      "sha256": "36878246df5a1416bbe9ea1accab87107af2fd562a6f969b52d3883a6fd76f44",
+      "bytes": 19464
+    },
+    "js/app.js": {
+      "sha256": "7f605eb5d6f9bb752213c1425f08265d69fa1f468258205883e0cf4cc2395d6b",
+      "bytes": 15941
+    },
+    "js/siriform.js": {
+      "sha256": "b7adeaa998359a90cc670079a69c30f0d4815d4c2105ded19952fb1d70b0e0dc",
+      "bytes": 2232
+    },
+    "js/feature-detect.js": {
+      "sha256": "54171ff018afe5e4546d968c8ea71bb0bacbb069e389c4d117df1e12a8d3f03e",
+      "bytes": 5424
+    },
+    "js/crypto-utils.js": {
+      "sha256": "4933640cbc5e414c384527ca8c6187c16f7a6fb9b4074b51706a3cd694b70795",
+      "bytes": 1326
+    },
+    "js/storage.js": {
+      "sha256": "eb0426635bfbc9f253e2405768cf38026e43861f965565c507005db4ca8fe038",
+      "bytes": 6608
+    },
+    "js/worker-client.js": {
+      "sha256": "5da973a9303016914d7793c7eaa4b4faebda12702a42ba5193ca7255769a71ec",
+      "bytes": 1641
+    },
+    "js/pack-manager.js": {
+      "sha256": "73f10c09886809df9e127030dcacbd904a62c784d98c2a408bb01ff24b66637e",
+      "bytes": 7553
+    },
+    "js/replay-engine.js": {
+      "sha256": "fd5d4f3ad933dd4c70294e80712153852d68325debc40846c46ec4c64c441ee1",
+      "bytes": 3077
+    },
+    "js/diagnostics.js": {
+      "sha256": "503f39db09df4f470e8ebf3e8b31aebdbf80a28ecdb62fef42556922ba930a76",
+      "bytes": 2801
+    },
+    "workers/quant-worker.js": {
+      "sha256": "eb75ffb5717b66996600abfd4c7562ca161b3b254f3d7ddc1a585315169091bb",
+      "bytes": 4043
+    },
+    "wasm/cyborg_quant_core.wasm": {
+      "sha256": "4988fb2500ed24f48d05a377768ab8e96ed6821d23bf51275489ef3fb88e2235",
+      "bytes": 3667
+    },
+    "data/btcusdt_replay.json": {
+      "sha256": "d5caad3ebbd881cff7f928fdca66f67d7405221ed74345784b4eacca629f02ee",
+      "bytes": 58284
+    },
+    "AR10_CYBORG_LOCAL_PACK_V1.ar10pack": {
+      "sha256": "e0b925fc7734d009c1d7ba82bef4225aafa27470473d5b9e703d3fcef720dc0d",
+      "bytes": 85331
+    },
+    "pack/manifest.pack.json": {
+      "sha256": "406c8e39e9483622540c1b0a10a78a1fa3a611b1cb335730c60c72caa14e6d86",
+      "bytes": 1031
+    },
+    "pack/manifest.models.json": {
+      "sha256": "b3a3798085b1035112c9951556a8aa5b125c0fae6f9491d8003ee5b69b7af288",
+      "bytes": 1332
+    },
+    "pack/runtime_config.json": {
+      "sha256": "bbe7859d9253d701b13c43cf061dd9922e19227dc3152c2bf4fcc5e81a7e9761",
+      "bytes": 236
+    },
+    "pack/checksums.sha256": {
+      "sha256": "e570a5c62c8e3808a01fac35bb74533bf062ae1ec1993e209c6039e1ad784c20",
+      "bytes": 312
+    }
+  }
+}

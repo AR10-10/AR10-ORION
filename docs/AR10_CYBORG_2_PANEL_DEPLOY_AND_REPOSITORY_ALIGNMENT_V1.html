@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AR10_CYBORG_2_PANEL_DEPLOY_AND_REPOSITORY_ALIGNMENT_V1 — Handoff Canônico</title>
+<style>
+  :root {
+    --long-green: #00FF9D;
+    --short-red: #FF3E52;
+    --sys-cyan: #00F2FF;
+    --alert-amber: #FFB800;
+    --bg-void: #000000;
+    --bg-card: #0a0d10;
+    --border-dim: #1c2228;
+    --text-dim: #8a96a3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg-void);
+    color: #e8edf2;
+    font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 32px 20px 80px; }
+  header.hero {
+    text-align: center;
+    padding: 40px 16px 32px;
+    border-bottom: 1px solid var(--border-dim);
+    margin-bottom: 32px;
+  }
+  .kicker {
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 12px;
+    color: var(--sys-cyan);
+    font-family: ui-monospace, "SF Mono", monospace;
+  }
+  h1 { font-size: 28px; margin: 10px 0 6px; }
+  .tagline { color: var(--text-dim); font-size: 14px; max-width: 640px; margin: 0 auto; }
+  .pill-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+  .pill {
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-dim);
+    color: var(--text-dim);
+  }
+  .pill.ok { color: var(--long-green); border-color: rgba(0,255,157,0.35); }
+  .pill.blocked { color: var(--short-red); border-color: rgba(255,62,82,0.35); }
+  .pill.info { color: var(--sys-cyan); border-color: rgba(0,242,255,0.35); }
+  section.block { margin-bottom: 36px; }
+  section.block h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--sys-cyan);
+    font-family: ui-monospace, monospace;
+    border-bottom: 1px solid var(--border-dim);
+    padding-bottom: 10px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  section.block h2 .num {
+    background: var(--bg-card);
+    border: 1px solid var(--border-dim);
+    color: var(--text-dim);
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-size: 11px;
+  }
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-dim);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table th, table td {
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border-dim);
+    vertical-align: top;
+  }
+  table th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  code, .mono { font-family: ui-monospace, "SF Mono", monospace; font-size: 0.93em; }
+  code {
+    background: #11161b;
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--sys-cyan);
+  }
+  pre {
+    background: #090c0f;
+    border: 1px solid var(--border-dim);
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 12.5px;
+    color: #c9d4de;
+  }
+  a { color: var(--sys-cyan); text-decoration: none; border-bottom: 1px dotted rgba(0,242,255,0.4); }
+  ul, ol { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  .status-line {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border-dim);
+    padding: 8px 0;
+    font-size: 13.5px;
+  }
+  .status-line:last-child { border-bottom: none; }
+  .v-ok { color: var(--long-green); font-family: ui-monospace, monospace; }
+  .v-fail { color: var(--short-red); font-family: ui-monospace, monospace; }
+  .v-hold { color: var(--alert-amber); font-family: ui-monospace, monospace; }
+  .v-info { color: var(--sys-cyan); font-family: ui-monospace, monospace; }
+  .note {
+    border-left: 3px solid var(--alert-amber);
+    background: rgba(255,184,0,0.06);
+    padding: 10px 14px;
+    border-radius: 0 8px 8px 0;
+    font-size: 13.5px;
+    color: #e8d9b0;
+  }
+  .badge {
+    display: inline-block;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    padding: 4px 9px;
+    border-radius: 6px;
+    border: 1px solid var(--border-dim);
+    margin: 2px 3px 2px 0;
+  }
+  .badge.stub { color: var(--alert-amber); border-color: rgba(255,184,0,0.35); }
+  .badge.future { color: var(--sys-cyan); border-color: rgba(0,242,255,0.35); }
+  footer.legal {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 12px;
+    border-top: 1px solid var(--border-dim);
+    padding-top: 20px;
+    margin-top: 40px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="kicker">Nebula Core · Handoff Canônico</div>
+    <h1>AR10_CYBORG_2_PANEL_DEPLOY_AND_REPOSITORY_ALIGNMENT_V1</h1>
+    <p class="tagline">
+      Documento único de entrega: painel Nebula Core / Siriform Avatar,
+      alinhamento de nome de projeto/repositório e preparação de deploy
+      HTTPS do AR10 Cyborg 2.0 — iPad One-Tap Cloud Runtime.
+    </p>
+    <div class="pill-row">
+      <span class="pill ok">READ_ONLY</span>
+      <span class="pill blocked">FAIL_CLOSED</span>
+      <span class="pill info">PASS TÉCNICO</span>
+      <span class="pill" style="color:var(--alert-amber); border-color:rgba(255,184,0,0.35);">HOLD OPERACIONAL</span>
+    </div>
+  </header>
+
+  <section class="block">
+    <h2><span class="num">1</span>Visão de produto</h2>
+    <div class="card">
+      <p>
+        <b>AR10 Cyborg 2.0 — iPad One-Tap Cloud Runtime</b> é um PWA
+        standalone, local-first, pensado para abrir com um único toque
+        direto no Safari do iPad via HTTPS — sem Mac Mini, sem MacBook,
+        sem servidor próprio, sem terminal e sem ZIP como fluxo principal.
+      </p>
+      <p>
+        É um sub-produto do organismo maior <b>AR10 ORION V5.0</b> (Cockpit
+        Python completo, ver <code>README.md</code> da raiz do
+        repositório) — compartilha a identidade visual "Ciborgue", mas é
+        deliberadamente menor em escopo: uma vitrine read-only para
+        verificar capacidades do Safari, instalar um pacote local
+        verificável, rodar diagnóstico 100% offline e visualizar um replay
+        BTC/USDT sintético com estatística real calculada em WASM.
+      </p>
+      <p>
+        Princípio inegociável do produto: <b>nenhuma ação no painel
+        executa ordem, conecta em corretora ou guarda segredo</b> — o
+        valor entregue é transparência e verificação local, não
+        automação de trading.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">2</span>Painel esperado (o que foi construído)</h2>
+    <div class="card">
+      <p><b>Siriform Avatar</b> — orbe central CSS-only (<code>ipad_runtime/js/siriform.js</code>), 8 estados:</p>
+      <table>
+        <tr><th>Estado</th><th>Gatilho</th></tr>
+        <tr><td class="mono">idle</td><td>Repouso inicial / pacote ainda não instalado</td></tr>
+        <tr><td class="mono">listening</td><td>Toque recebido (importar arquivo, abrir modal)</td></tr>
+        <tr><td class="mono">thinking</td><td>Boot, download, importação, limpeza em andamento</td></tr>
+        <tr><td class="mono">analyzing</td><td>Verificação SHA256, diagnóstico, replay em execução</td></tr>
+        <tr><td class="mono">responding</td><td>Resultado pronto, legenda contextual exibida</td></tr>
+        <tr><td class="mono">installing</td><td>Gravação no Safari Storage (OPFS/IndexedDB)</td></tr>
+        <tr><td class="mono">read_only</td><td>Repouso "de lei" — sempre retorna após 3.6s parado</td></tr>
+        <tr><td class="mono">fail_closed</td><td>Falha real de segurança (checksum divergente, instalação bloqueada)</td></tr>
+      </table>
+      <p style="margin-top:14px;"><b>18 cards do painel</b> (todos em <code>index.html</code>, uma única tela):</p>
+      <ol>
+        <li>Header premium (Nebula Core)</li>
+        <li>Siriform Avatar central + legenda + badges permanentes</li>
+        <li>Status global de runtime</li>
+        <li>Modo (IPAD DIRECT / LOCAL-FIRST / READ_ONLY / FAIL_CLOSED)</li>
+        <li>Safari Local Runtime status (PWA HTTPS, Service Worker, Cache API, Web Crypto, Workers, Mode)</li>
+        <li>Feature Detection (IndexedDB, OPFS, WebGPU, <b>WebGL/Canvas</b>)</li>
+        <li>WASM Quant Engine</li>
+        <li>WebLLM/Llama <span class="badge future">FUTURE</span></li>
+        <li>Transformers/ONNX <span class="badge future">FUTURE</span></li>
+        <li>Replay BTC/USDT + canvas</li>
+        <li>Perfis de processamento Light/Balanced/Heavy</li>
+        <li>AnalysisFrame (estatística descritiva real)</li>
+        <li>DecisionFrame <span class="badge stub">STUB CONTROLLED</span></li>
+        <li>Vault/Evidence (re-verificação SHA-256 a cada boot)</li>
+        <li>Local Pack Manager (9 botões)</li>
+        <li>Logs do sistema</li>
+        <li>Guia "Adicionar à Tela de Início"</li>
+        <li>Rodapé legal permanente</li>
+      </ol>
+      <p><b>Local Pack Manager — 9 botões:</b> Verificar Safari · Baixar
+      Pacote Local · Importar Pacote do Arquivos · Verificar SHA256 ·
+      Instalar no Safari Storage · Rodar Diagnóstico Offline · Rodar
+      Replay BTC/USDT · Limpar/Reinstalar · Adicionar à Tela de Início.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">3</span>Como a referência visual foi usada</h2>
+    <div class="note">
+      <b>Transparência total:</b> nenhuma imagem foi efetivamente recebida
+      como anexo nesta sessão de execução — apesar da missão mencionar uma
+      imagem de referência, o conteúdo da mensagem continha apenas texto.
+      A "liberdade de redesenhar sem copiar pixel-a-pixel" concedida pela
+      missão foi usada para traduzir a <i>descrição textual</i> (nomes de
+      componentes, frases exatas do Siriform, lista de badges, lista de
+      botões, lista de campos de status) na estrutura visual entregue.
+    </div>
+    <div class="card">
+      <p>
+        Decisão de design: manter a paleta "Ciborgue" já existente no
+        Cockpit (<code>--long-green #00FF9D</code>,
+        <code>--short-red #FF3E52</code>, <code>--sys-cyan #00F2FF</code>,
+        <code>--alert-amber #FFB800</code>, fundo <code>#000000</code>) e
+        sobrepor a sub-marca "Nebula Core" — um orbe central
+        (<code>conic-gradient</code> + <code>radial-gradient</code> em
+        pseudo-elementos, sem canvas/imagem) como ponto focal, com cards
+        em grade abaixo. Se uma imagem real de referência for fornecida em
+        uma próxima sessão, a arquitetura CSS já é orientada a
+        <code>data-state</code> e variáveis — permite re-skin sem tocar a
+        lógica em <code>js/siriform.js</code> ou <code>js/app.js</code>.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">4</span>Arquitetura iPad/Safari</h2>
+    <div class="card">
+      <ul>
+        <li><b>PWA</b>: <code>manifest.webmanifest</code> (display
+        standalone) + <code>service-worker.js</code> cache-first,
+        offline-first, só same-origin.</li>
+        <li><b>Armazenamento local</b>: OPFS com fallback automático para
+        IndexedDB (<code>js/storage.js</code>) — sem depender de suporte
+        específico de uma versão de iPadOS.</li>
+        <li><b>Motor de cálculo</b>: Rust → WASM
+        (<code>wasm-src/cyborg_quant_core/</code>, <code>cdylib</code>,
+        <code>wasm32-unknown-unknown</code>), ~3.6&nbsp;KB, roda dentro de
+        um <b>Web Worker</b> (<code>workers/quant-worker.js</code>) —
+        nunca bloqueia a UI thread.</li>
+        <li><b>CSP restritiva</b> em <code>index.html</code>:
+        <code>script-src 'self'</code> (sem <code>unsafe-eval</code>),
+        <code>connect-src 'self'</code>, <code>object-src 'none'</code>,
+        <code>frame-ancestors 'none'</code> — bloqueio em nível de
+        navegador para qualquer rota de rede para fora da própria
+        origem.</li>
+        <li><b>Pacote local</b> <code>.ar10pack</code>: container JSON
+        UTF-8 (não ZIP), com manifestos + checksums SHA-256 + payload em
+        base64 — parsing nativo, zero dependência externa, zero
+        <code>eval()</code>.</li>
+        <li><b>Replay BTC/USDT</b>: dataset sintético
+        (<code>"kind": "SYNTHETIC_OFFLINE_SAMPLE"</code>,
+        <code>"live": false</code>), gerado por random-walk com seed fixa
+        — nenhuma chamada de rede/exchange.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">5</span>Estado atual do repositório</h2>
+    <div class="card">
+      <div class="status-line"><span>Repositório</span><span class="v-info mono">AR10-10/AR10-ORION</span></div>
+      <div class="status-line"><span>Visibilidade</span><span class="mono">private</span></div>
+      <div class="status-line"><span>Tipo do owner</span><span class="mono">User (conta de usuário, não organização)</span></div>
+      <div class="status-line"><span>"Organização Escolar" ou nome incoerente?</span><span class="v-ok">NÃO ENCONTRADO (busca exaustiva, 2 sessões)</span></div>
+      <div class="status-line"><span>has_pages (API, reconfirmado nesta sessão)</span><span class="v-fail mono">false</span></div>
+      <div class="status-line"><span>Branch padrão</span><span class="mono">main</span></div>
+    </div>
+    <div class="note">
+      A busca por "Organização Escolar" (ou qualquer outro nome
+      incoerente) foi repetida nesta sessão em todos os arquivos
+      <code>.md/.json/.html/.yml/.yaml/.toml</code> do repositório, além
+      de uma consulta direta à API do GitHub para os metadados reais do
+      repositório (nome, owner, tipo de conta). Nenhuma ocorrência foi
+      encontrada — o nome do repositório já é coerente
+      (<code>AR10-ORION</code>, organismo "AR10 ORION V5.0 — Digital
+      Android"). Por isso o campo <code>REPOSITORY / PROJECT NAME FIXED</code>
+      do relatório final não é um SIM/NÃO direto — ver seção 12.
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">6</span>Branch / PR / Commit</h2>
+    <div class="card">
+      <div class="status-line"><span>Branch de trabalho</span><span class="v-info mono">claude/eloquent-cannon-qyt86y</span></div>
+      <div class="status-line"><span>Pull Request</span><span class="v-info mono"><a href="https://github.com/AR10-10/AR10-ORION/pull/3">#3</a> (draft, open)</span></div>
+      <div class="status-line"><span>Commit base desta entrega</span><span class="mono">67b6c9986c8b3f0d419f37a3a3a4f5beba941774</span></div>
+      <div class="status-line"><span>Commit final desta entrega</span><span class="v-hold mono">ver PR #3 / relatório final da sessão</span></div>
+    </div>
+    <div class="note">
+      Este arquivo HTML faz parte do commit que consolida esta entrega —
+      por construção, nenhum arquivo pode conter de antemão o hash do
+      commit que o inclui (o hash é calculado a partir do conteúdo, e
+      colocar o hash dentro do conteúdo mudaria o próprio hash). O commit
+      exato fica registrado no histórico do PR #3 e no relatório de
+      encerramento desta sessão.
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">7</span>Pacote local <code>.ar10pack</code></h2>
+    <div class="card">
+      <div class="status-line"><span>Arquivo</span><span class="mono">AR10_CYBORG_LOCAL_PACK_V1.ar10pack</span></div>
+      <div class="status-line"><span>Formato</span><span class="mono">AR10PACK_JSON_V1 (JSON+base64, não ZIP)</span></div>
+      <div class="status-line"><span>Conteúdo</span><span class="mono">wasm/cyborg_quant_core.wasm + data/btcusdt_replay.json</span></div>
+      <div class="status-line"><span>Alterado nesta entrega?</span><span class="v-ok">NÃO — payload intacto</span></div>
+      <div class="status-line"><span>Verificação <code>sha256sum -c pack/checksums.sha256</code></span><span class="v-ok mono">OK (2/2 arquivos)</span></div>
+    </div>
+    <p style="font-size:13px;color:var(--text-dim);">Hashes completos de
+    todos os arquivos relevantes (não só os 2 do payload do pacote) em
+    <code>evidence_outbox/manifest.sha256.json</code>.</p>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">8</span>Deploy HTTPS</h2>
+    <div class="card">
+      <div class="status-line"><span>Rota primária</span><span class="mono">GitHub Pages via Actions (<code>.github/workflows/deploy-ipad-pwa.yml</code>)</span></div>
+      <div class="status-line"><span>URL esperada</span><span class="mono">https://ar10-10.github.io/ar10-orion/</span></div>
+      <div class="status-line"><span>Último check run (PR #3, job <code>deploy</code>)</span><span class="v-fail mono">completed / failure</span></div>
+    </div>
+    <pre>##[warning]Get Pages site failed. Error: Not Found
+##[error]Create Pages site failed. Error: Resource not accessible by integration
+##[error]HttpError: Resource not accessible by integration</pre>
+    <p>Log real, capturado nesta sessão via API do GitHub
+    (<code>get_job_logs</code>) — não é uma suposição herdada de uma
+    sessão anterior.</p>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">9</span>Motivo do HOLD</h2>
+    <div class="card">
+      <p>
+        A API REST <code>POST /repos/{owner}/{repo}/pages</code> (criar um
+        site do GitHub Pages <b>pela primeira vez</b>) exige permissão de
+        <b>administração</b> do repositório. O <code>GITHUB_TOKEN</code>
+        automático recebido por uma Action nunca tem essa permissão, <b>
+        mesmo com <code>pages: write</code> declarado</b> no workflow —
+        essa é uma trava do próprio GitHub, não uma falha de configuração
+        deste repositório ou do workflow.
+      </p>
+      <p>
+        Reconfirmado nesta sessão: nenhuma das ferramentas MCP do GitHub
+        disponíveis (lista completa pesquisada via <code>ToolSearch</code>
+        antes deste documento) expõe uma operação de habilitar Pages ou
+        renomear repositório. Depois que o site existir (criado uma única
+        vez por um humano com permissão de admin), todo deploy futuro via
+        Action funciona sem nenhum passo manual adicional.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">10</span>Ação manual necessária (GitHub Pages)</h2>
+    <div class="card">
+      <ol>
+        <li>Abrir <a href="https://github.com/AR10-10/AR10-ORION/settings/pages">github.com/AR10-10/AR10-ORION/settings/pages</a> com uma conta admin do repositório.</li>
+        <li>Em <b>Build and deployment → Source</b>, selecionar <b>"GitHub Actions"</b>.</li>
+        <li>Salvar.</li>
+        <li>Reexecutar o workflow (push novo tocando <code>ipad_runtime/**</code>, ou Actions → Run workflow).</li>
+        <li>Confirmar que <code>https://ar10-10.github.io/ar10-orion/</code> responde 200.</li>
+      </ol>
+      <p>Detalhe completo em <code>docs/GITHUB_PAGES_FIX.md</code>.</p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">11</span>Regras de segurança (leis obrigatórias)</h2>
+    <div class="card">
+      <p><b>Permanentemente bloqueado, sem exceção, sem rota técnica no código:</b></p>
+      <p>
+        real trading · live trading · MT5 <code>order_send</code> · MEXC
+        private endpoint · API Secret · private keys · segredo em
+        <code>localStorage</code> · ordem por LLM · ordem sem Risk Gate ·
+        CDN para núcleo sensível · <code>eval()</code> · PASS enganoso sem
+        link HTTPS.
+      </p>
+      <p><b>Sempre visível na UI:</b></p>
+      <div class="pill-row" style="justify-content:flex-start;">
+        <span class="pill ok">READ_ONLY</span>
+        <span class="pill blocked">FAIL_CLOSED</span>
+        <span class="pill ok">Execution Lock: ACTIVE</span>
+        <span class="pill blocked">Private Keys: DISABLED</span>
+        <span class="pill blocked">Live Trading: BLOCKED</span>
+      </div>
+      <p style="margin-top:14px;">
+        Aplicação técnica, não apenas rótulo visual: CSP sem
+        <code>unsafe-eval</code> e <code>connect-src 'self'</code>
+        (bloqueio em runtime de qualquer <code>fetch</code>/WebSocket para
+        fora da origem), <code>DecisionFrame</code> sem nenhuma lógica de
+        decisão implementada (<span class="badge stub">STUB CONTROLLED</span>),
+        Vault que re-verifica SHA-256 a cada boot em vez de confiar numa
+        flag salva.
+      </p>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2><span class="num">12</span>Critérios PASS / HOLD / FAIL</h2>
+    <div class="card">
+      <table>
+        <tr><th>Critério</th><th>Resultado</th></tr>
+        <tr><td>Painel consolidado</td><td class="v-ok">PASS</td></tr>
+        <tr><td>Direção visual incorporada (texto, sem imagem anexada)</td><td class="v-ok">PASS, com nota de transparência</td></tr>
+        <tr><td>Nome do projeto/repo corrigido ou limitação documentada</td><td class="v-ok">PASS — nenhuma correção necessária; alinhamento aplicado no sub-produto</td></tr>
+        <tr><td>HTML canônico criado</td><td class="v-ok">PASS — este documento</td></tr>
+        <tr><td><code>.ar10pack</code> existe/verificado</td><td class="v-ok">PASS</td></tr>
+        <tr><td>Estrutura organizada</td><td class="v-ok">PASS</td></tr>
+        <tr><td>Regras de segurança intactas</td><td class="v-ok">PASS</td></tr>
+        <tr><td><b>PASS TÉCNICO (geral)</b></td><td class="v-ok"><b>PASS</b></td></tr>
+        <tr><td>Link HTTPS real publicado</td><td class="v-fail">FALTA (depende de admin, seção 10)</td></tr>
+        <tr><td><b>PASS OPERACIONAL (geral)</b></td><td class="v-hold"><b>HOLD</b></td></tr>
+      </table>
+    </div>
+  </section>
+
+  <footer class="legal">
+    AR10_CYBORG_2_PANEL_DEPLOY_AND_REPOSITORY_ALIGNMENT_V1 · Nebula Core ·
+    Documento gerado como parte do handoff técnico — não é divulgação
+    pública, não substitui revisão humana antes de qualquer promoção a
+    produção.
+  </footer>
+
+</div>
+</body>
+</html>
