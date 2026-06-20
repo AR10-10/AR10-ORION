@@ -33,6 +33,15 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
 html, body {
     margin: 0;
     padding: 0;
@@ -57,48 +66,86 @@ a { color: var(--sys-cyan); }
 .runtime-shell {
     max-width: 980px;
     margin: 0 auto;
-    padding: calc(var(--safe-t) + 12px) calc(var(--safe-r) + 14px) calc(var(--safe-b) + 24px) calc(var(--safe-l) + 14px);
-}
-
-/* Em modo standalone (instalado via Add to Home Screen) nao ha chrome do
-   Safari — empurra o conteudo um pouco mais para nao colar na status bar */
-@media (display-mode: standalone) {
-    .runtime-shell { padding-top: calc(var(--safe-t) + 22px); }
+    padding: 12px calc(var(--safe-r) + 14px) calc(var(--safe-b) + 24px) calc(var(--safe-l) + 14px);
 }
 
 /* ------------------------------------------------------------
-   BANNER OBRIGATORIO: READ_ONLY / FAIL_CLOSED (sempre visivel)
+   TOPBAR — header compacto e fixo, fora de .runtime-shell para
+   nunca herdar margens/larguras que possam cortar conteudo
+   (causa raiz do clipping visto em iPad real). Usa apenas
+   padding com env(safe-area-inset-*), nunca margem negativa.
    ------------------------------------------------------------ */
-.mode-banner {
+.app-topbar {
     position: sticky;
     top: 0;
     z-index: 50;
-    margin: calc(var(--safe-t) * -1 - 12px) calc(var(--safe-r) * -1 - 14px) 14px calc(var(--safe-l) * -1 - 14px);
-    padding: calc(var(--safe-t) + 8px) calc(var(--safe-r) + 14px) 8px calc(var(--safe-l) + 14px);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    width: 100%;
+    max-width: 100%;
+    padding: calc(var(--safe-t) + 10px) calc(var(--safe-r) + 14px) 10px calc(var(--safe-l) + 14px);
     background: rgba(0, 0, 0, 0.92);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border-bottom: 1px solid rgba(255, 184, 0, 0.35);
+    border-bottom: 1px solid rgba(0, 242, 255, 0.18);
+}
+.tb-left, .tb-center, .tb-right {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 8px 14px;
-    font-size: clamp(0.72rem, 2vw, 0.92rem);
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    min-width: 0;
+}
+.tb-left { flex: 0 1 auto; }
+.tb-center { flex: 1 1 100px; justify-content: center; overflow: hidden; }
+.tb-right { flex: 0 1 auto; justify-content: flex-end; margin-left: auto; }
+.tb-brand {
+    font-family: var(--font-display);
+    font-weight: 700;
     letter-spacing: 1px;
+    font-size: clamp(0.84rem, 2.2vw, 1.02rem);
+    color: var(--sys-cyan);
+    text-shadow: 0 0 8px rgba(0, 242, 255, 0.35);
+    white-space: nowrap;
 }
-.mode-banner .pill {
-    color: var(--alert-amber);
-    border: 1px solid rgba(255, 184, 0, 0.45);
-    border-radius: 20px;
-    padding: 3px 10px;
+.tb-status {
+    font-size: clamp(0.64rem, 1.5vw, 0.76rem);
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.tb-chip {
+    font-size: 0.6rem;
+    letter-spacing: 1px;
     font-weight: bold;
-    text-shadow: 0 0 8px rgba(255, 184, 0, 0.5);
-    animation: pulseAmber 2.4s ease-in-out infinite;
+    border: 1px solid rgba(255, 184, 0, 0.45);
+    color: var(--alert-amber);
+    border-radius: 14px;
+    padding: 3px 8px;
+    white-space: nowrap;
+    text-shadow: 0 0 6px rgba(255, 184, 0, 0.4);
 }
-.mode-banner .note { color: var(--text-dim); }
-@keyframes pulseAmber {
-    0%, 100% { opacity: 0.75; }
-    50% { opacity: 1; }
+.tb-btn {
+    font-family: var(--font-mono);
+    font-size: clamp(0.66rem, 1.5vw, 0.78rem);
+    color: var(--text-primary);
+    background: rgba(0, 242, 255, 0.06);
+    border: 1px solid var(--line-cyan);
+    border-radius: 14px;
+    padding: 6px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+.tb-btn:active { transform: scale(0.96); background: rgba(0, 242, 255, 0.16); }
+.tb-btn[aria-expanded="true"] { color: var(--sys-cyan); border-color: rgba(0, 242, 255, 0.5); }
+
+@media (max-width: 600px) {
+    .tb-status { display: none; }
 }
 
 header.hero {
@@ -343,45 +390,6 @@ footer.legal {
    apenas adiciona componentes novos.
    ============================================================ */
 
-.nebula-header {
-    text-align: center;
-    padding: 22px 0 18px;
-}
-.nebula-header .kicker {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-family: var(--font-mono);
-    font-size: clamp(0.62rem, 1.6vw, 0.74rem);
-    letter-spacing: 3px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    margin-bottom: 8px;
-}
-.nebula-header .kicker::before,
-.nebula-header .kicker::after {
-    content: '';
-    width: 22px;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--sys-cyan));
-}
-.nebula-header .kicker::after { background: linear-gradient(90deg, var(--sys-cyan), transparent); }
-.nebula-header h1 {
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: clamp(1.4rem, 4.4vw, 2.3rem);
-    letter-spacing: 2px;
-    margin: 0 0 6px;
-    color: var(--sys-cyan);
-    text-shadow: 0 0 16px rgba(0, 242, 255, 0.45);
-    text-transform: uppercase;
-}
-.nebula-header p.tagline {
-    margin: 0;
-    color: var(--text-dim);
-    font-size: clamp(0.8rem, 2vw, 0.95rem);
-}
-
 /* ------------------------------------------------------------
    SIRIFORM AVATAR — orbe central animado, sem imagem/canvas,
    so CSS (gradientes + blur). Estado muda cor/velocidade.
@@ -437,36 +445,80 @@ footer.legal {
     50% { transform: scale(1.05); }
 }
 
-/* Estados — cor/ritmo refletem o que o Cyborg esta "fazendo" */
-.siriform-avatar[data-state="idle"],
-.siriform-avatar[data-state="read_only"] {
+/* Estados — cor/ritmo refletem o que o Cyborg esta "fazendo".
+   Vocabulario fixo (js/siriform.js): idle, listening, thinking,
+   updating, checking, repairing, success, warning, blocked. */
+.siriform-avatar[data-state="idle"] {
     animation-duration: 14s, 5s;
 }
 .siriform-avatar[data-state="listening"] {
     box-shadow: 0 0 34px rgba(0, 242, 255, 0.55), 0 0 90px rgba(0, 242, 255, 0.2);
     animation-duration: 4s, 1.6s;
 }
-.siriform-avatar[data-state="thinking"],
-.siriform-avatar[data-state="analyzing"] {
+.siriform-avatar[data-state="thinking"] {
     background: conic-gradient(from 0deg, var(--alert-amber), var(--sys-cyan), var(--alert-amber));
     box-shadow: 0 0 34px rgba(255, 184, 0, 0.4), 0 0 90px rgba(255, 184, 0, 0.15);
     animation-duration: 2.4s, 1.2s;
 }
-.siriform-avatar[data-state="responding"] {
-    background: conic-gradient(from 0deg, var(--long-green), var(--sys-cyan), var(--long-green));
-    box-shadow: 0 0 34px rgba(0, 255, 157, 0.45), 0 0 90px rgba(0, 255, 157, 0.16);
-    animation-duration: 5s, 2.2s;
+.siriform-avatar[data-state="checking"] {
+    background: conic-gradient(from 0deg, var(--sys-cyan), #6a5cff, var(--sys-cyan));
+    box-shadow: 0 0 34px rgba(0, 242, 255, 0.4), 0 0 90px rgba(0, 242, 255, 0.15);
+    animation-duration: 3.4s, 1.4s;
 }
-.siriform-avatar[data-state="installing"] {
+.siriform-avatar[data-state="updating"] {
     background: conic-gradient(from 0deg, #6a5cff, var(--sys-cyan), #6a5cff);
     box-shadow: 0 0 34px rgba(106, 92, 255, 0.45), 0 0 90px rgba(106, 92, 255, 0.16);
     animation-duration: 1.8s, 1s;
 }
-.siriform-avatar[data-state="fail_closed"] {
+.siriform-avatar[data-state="repairing"] {
+    background: conic-gradient(from 0deg, var(--alert-amber), #6a5cff, var(--alert-amber));
+    box-shadow: 0 0 34px rgba(255, 184, 0, 0.45), 0 0 90px rgba(255, 184, 0, 0.18);
+    animation-duration: 1.4s, 0.9s;
+}
+.siriform-avatar[data-state="success"] {
+    background: conic-gradient(from 0deg, var(--long-green), var(--sys-cyan), var(--long-green));
+    box-shadow: 0 0 34px rgba(0, 255, 157, 0.45), 0 0 90px rgba(0, 255, 157, 0.16);
+    animation-duration: 5s, 2.2s;
+}
+.siriform-avatar[data-state="warning"] {
+    background: conic-gradient(from 0deg, var(--alert-amber), var(--short-red), var(--alert-amber));
+    box-shadow: 0 0 34px rgba(255, 184, 0, 0.45), 0 0 90px rgba(255, 184, 0, 0.18);
+    animation-duration: 6s, 2.6s;
+}
+.siriform-avatar[data-state="blocked"] {
     background: conic-gradient(from 0deg, var(--short-red), #4a0008, var(--short-red));
     box-shadow: 0 0 34px rgba(255, 62, 82, 0.5), 0 0 90px rgba(255, 62, 82, 0.18);
     animation-duration: 8s, 0.9s;
 }
+
+/* ------------------------------------------------------------
+   HERO CTA — o unico botao de acao normal da tela inicial
+   (Fase 2/7): "Preparar / Atualizar Cyborg neste iPad".
+   ------------------------------------------------------------ */
+.hero-cta {
+    width: 100%;
+    max-width: 420px;
+    margin: 8px auto 0;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(0.9rem, 2.4vw, 1.05rem);
+    letter-spacing: 0.4px;
+    color: var(--bg-void);
+    background: linear-gradient(135deg, var(--sys-cyan), #6a5cff);
+    border: none;
+    border-radius: 14px;
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    box-shadow: 0 0 24px rgba(0, 242, 255, 0.35), 0 10px 26px rgba(0, 0, 0, 0.4);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.hero-cta:active { transform: scale(0.97); box-shadow: 0 0 16px rgba(0, 242, 255, 0.3); }
+.hero-cta:disabled { opacity: 0.4; cursor: not-allowed; }
+.hero-cta .icon { font-size: 1.1em; }
 
 .siriform-caption {
     min-height: 2.4em;
@@ -777,6 +829,12 @@ footer.legal {
     color: var(--text-primary);
     word-break: break-all;
 }
+.export-name-empty {
+    font-family: var(--font-display);
+    font-style: italic;
+    color: var(--text-dim);
+    word-break: normal;
+}
 .export-tag {
     font-size: 0.64rem;
     letter-spacing: 1px;
@@ -823,13 +881,21 @@ footer.legal {
    ------------------------------------------------------------ */
 .bento { width: 100%; }
 
+/* .advanced-section segue a mesma logica de colunas balanceadas do
+   .bento, mas e um irmao fora dele (Fase 7 — "Modo avancado" fica
+   oculto por padrao via atributo [hidden] e so aparece sob toque). */
+.advanced-section { width: 100%; }
+.advanced-section[hidden] { display: none; }
+
 @media (min-width: 900px) {
     .runtime-shell { max-width: 1280px; }
-    .bento {
+    .bento,
+    .advanced-section:not([hidden]) {
         column-count: 2;
         column-gap: 18px;
     }
-    .bento > section.card {
+    .bento > section.card,
+    .advanced-section > section.card {
         break-inside: avoid;
         -webkit-column-break-inside: avoid;
         page-break-inside: avoid;
@@ -840,5 +906,6 @@ footer.legal {
 
 @media (min-width: 1280px) {
     .runtime-shell { max-width: 1600px; }
-    .bento { column-count: 3; }
+    .bento,
+    .advanced-section:not([hidden]) { column-count: 3; }
 }

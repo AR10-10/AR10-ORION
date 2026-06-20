@@ -24,6 +24,7 @@ const els = {};
     'vl-idb', 'vl-opfs', 'vl-wasm', 'vl-replay', 'vl-updated', 'vl-cache-version',
     'vl-storage-used', 'vl-storage-quota', 'vl-safety', 'vl-repair',
     'dp-realmode', 'dp-analysis', 'export-list',
+    'topbar-status', 'advanced-section', 'btn-tb-advanced',
 ].forEach((id) => { els[id] = document.getElementById(id); });
 
 const PROFILES = {
@@ -219,25 +220,62 @@ function refreshDataPolicyPanel() {
     setStatus('dp-analysis', rm.status);
 }
 
-// Fase 4 — painel "Arquivos Exportados". Mostra o pacote local, relatório,
-// evidência e deckap, marcando cada um como BAIXÁVEL / SOB DEMANDA / INTERNO /
-// FUTURO. Exportações desta sessão aparecem no topo, com o nome único usado.
+// Fase 4 — painel "Arquivos Exportados". NUNCA mostra um nome generico/sem
+// timestamp como se fosse um arquivo ja exportado: so exibe nome de arquivo
+// quando ele e real, com timestamp, gerado nesta sessao (sessionExports). Os
+// artefatos ainda nao exportados aparecem como "Nenhum X exportado ainda.",
+// com a visibilidade correta (INTERNO / DISPONÍVEL PARA EXPORTAR / SOB
+// DEMANDA / FUTURO) — nunca um nome de arquivo fantasma.
+const EXPORT_EMPTY_LABEL = {
+    LOCAL_PACK: 'Nenhum backup do pacote local exportado ainda.',
+    FINAL_REPORT: 'Nenhum relatório exportado ainda.',
+    EVIDENCE_OUTBOX: 'Nenhuma evidência exportada ainda.',
+    PROJECT_DECKAP: 'Nenhum DECAP exportado ainda.',
+};
+
 function renderExportPanel() {
     if (!els['export-list']) return;
     const visLabel = {
-        downloadable: { txt: 'BAIXÁVEL', cls: 'v-ok' },
+        downloadable: { txt: 'DISPONÍVEL PARA EXPORTAR', cls: 'v-info' },
         on_demand: { txt: 'SOB DEMANDA', cls: 'v-info' },
         internal: { txt: 'INTERNO', cls: 'v-info' },
         future: { txt: 'FUTURO', cls: 'v-limited' },
     };
     els['export-list'].innerHTML = exporter.listForPanel().map((a) => {
+        if (a.filename) {
+            return `<div class="export-row">
+                <span class="export-name">${a.filename}</span>
+                <span class="export-tag v-ok">EXPORTADO</span>
+            </div>`;
+        }
         const v = visLabel[a.visibility] || visLabel.internal;
-        const name = a.filename || `AR10_CYBORG_${a.type}${a.version ? '_' + a.version : ''}.${a.ext}`;
+        const label = EXPORT_EMPTY_LABEL[a.type] || `Nenhum ${a.type} exportado ainda.`;
         return `<div class="export-row">
-            <span class="export-name">${name}</span>
+            <span class="export-name export-name-empty">${label}</span>
             <span class="export-tag ${v.cls}">${v.txt}</span>
         </div>`;
     }).join('');
+}
+
+// Fase 1/5 — status compacto e central no topbar: responde de cara "Cyborg
+// esta pronto? / precisa de atenção?" sem precisar abrir nenhum painel.
+function refreshTopbarStatus(vault) {
+    const el = els['topbar-status'];
+    if (!el) return;
+    el.classList.remove('v-ok', 'v-fail', 'v-limited', 'v-info');
+    if (vault.status === 'READY') {
+        el.textContent = vaultFreshness === 'DESATUALIZADO' ? 'Cyborg pronto · atualização disponível' : 'Cyborg pronto neste iPad';
+        el.classList.add(vaultFreshness === 'DESATUALIZADO' ? 'v-limited' : 'v-ok');
+    } else if (vault.reason === 'checksum_failed') {
+        el.textContent = 'Bloqueado por segurança';
+        el.classList.add('v-fail');
+    } else if (vault.reason) {
+        el.textContent = 'Instalação corrompida';
+        el.classList.add('v-fail');
+    } else {
+        el.textContent = 'Instalação local ainda não preparada';
+        el.classList.add('v-limited');
+    }
 }
 
 async function refreshVaultAndReplayStatus() {
@@ -245,6 +283,7 @@ async function refreshVaultAndReplayStatus() {
     setStatus('st-vault', vault.status === 'READY' ? 'READY' : 'LOCKED');
     setStatus('cr-pack', vault.status === 'READY' ? 'OK' : 'MISSING');
     renderVaultEvidence(vault);
+    refreshTopbarStatus(vault);
     try {
         await packManager.loadReplayDataset(() => {});
         setStatus('st-replay', 'INSTALLED');
@@ -286,7 +325,7 @@ async function registerServiceWorker() {
 }
 
 async function handleCheckSafari() {
-    siriform.setSiriformState('thinking', 'Verificando capacidades do Safari...');
+    siriform.setSiriformState('checking', 'Verificando capacidades do Safari...');
     log('=== VERIFICAR SAFARI ===', 'info');
     log(`User-Agent: ${navigator.userAgent}`, 'dim');
     log(`Plataforma: ${navigator.platform || 'n/d'} | maxTouchPoints=${navigator.maxTouchPoints}`, 'dim');
@@ -313,18 +352,19 @@ async function handleCheckSafari() {
     const voiceStatus = await refreshVoiceStatus();
     refreshCyborgReadiness(f, voiceStatus);
     log('Verificacao concluida.', 'ok');
-    siriform.setSiriformState('responding', 'Runtime Safari detectado.');
+    siriform.setSiriformState('success', 'Runtime Safari detectado.');
 }
 
 async function handleDownloadPack() {
-    siriform.setSiriformState('thinking', 'Baixando pacote local...');
+    siriform.setSiriformState('thinking', 'Baixando pacote local para backup...');
     try {
         await packManager.downloadLocalPack((m, l) => log(m, l));
         await refreshVaultAndReplayStatus();
-        siriform.setSiriformState('responding', 'Pacote local pronto. Verifique o SHA256 antes de instalar.');
+        renderExportPanel();
+        siriform.setSiriformState('success', 'Pacote local exportado para backup.');
     } catch (err) {
         log(`Erro ao baixar pacote: ${err.message}`, 'fail');
-        siriform.setSiriformState('responding', 'Não consegui baixar o pacote local agora.');
+        siriform.setSiriformState('warning', 'Não consegui baixar o pacote local agora.');
     }
 }
 
@@ -334,47 +374,47 @@ async function handleImportPack() {
 }
 
 async function handleVerifySha() {
-    siriform.setSiriformState('analyzing', 'Verificando SHA256 do pacote...');
+    siriform.setSiriformState('checking', 'Verificando SHA256 do pacote...');
     try {
         if (!packManager.getLoadedPack()) {
             log('Nenhum pacote em memoria — baixe ou importe primeiro.', 'warn');
-            siriform.setSiriformState('responding', 'Nenhum pacote em memória ainda.');
+            siriform.setSiriformState('warning', 'Nenhum pacote em memória ainda.');
             return;
         }
         const { allOk } = await packManager.verifySha256((m, l) => log(m, l));
-        siriform.setSiriformState('responding', allOk ? 'Checksum OK em todos os arquivos.' : 'Checksum divergente. Execução real bloqueada. Modo seguro ativo.');
+        siriform.setSiriformState(allOk ? 'success' : 'blocked', allOk ? 'Checksum OK em todos os arquivos.' : 'Checksum divergente. Execução real bloqueada. Modo seguro ativo.');
     } catch (err) {
         log(`Erro na verificacao: ${err.message}`, 'fail');
-        siriform.setSiriformState('fail_closed');
+        siriform.setSiriformState('blocked');
     }
 }
 
 async function handleInstallStorage() {
-    siriform.setSiriformState('installing');
+    siriform.setSiriformState('updating');
     try {
         if (!packManager.getLoadedPack()) {
             log('Nenhum pacote em memoria — baixe ou importe primeiro.', 'warn');
-            siriform.setSiriformState('responding', 'Nenhum pacote em memória ainda.');
+            siriform.setSiriformState('warning', 'Nenhum pacote em memória ainda.');
             return;
         }
         await packManager.installToSafariStorage((m, l) => log(m, l));
         await refreshVaultAndReplayStatus();
-        siriform.setSiriformState('responding', 'Pacote local instalado. Vault em READY.');
+        siriform.setSiriformState('success', 'Pacote local instalado. Vault em READY.');
     } catch (err) {
         log(`Instalacao bloqueada: ${err.message}`, 'fail');
         await refreshVaultAndReplayStatus();
-        siriform.setSiriformState('fail_closed');
+        siriform.setSiriformState('blocked');
     }
 }
 
 async function handleRunDiagnostics() {
-    siriform.setSiriformState('analyzing', 'Rodando diagnóstico offline...');
+    siriform.setSiriformState('checking', 'Rodando diagnóstico técnico offline...');
     await diagnostics.runOfflineDiagnostics({ workerClient, onLog: (m, l) => log(m, l) });
-    siriform.setSiriformState('responding', 'Diagnóstico offline concluído.');
+    siriform.setSiriformState('success', 'Diagnóstico offline concluído.');
 }
 
 async function handleRunReplay() {
-    siriform.setSiriformState('analyzing', 'Rodando replay BTC/USDT...');
+    siriform.setSiriformState('checking', 'Rodando replay técnico BTC/USDT...');
     try {
         if (!replayDatasetCache) {
             replayDatasetCache = await packManager.loadReplayDataset((m, l) => log(m, l));
@@ -402,11 +442,11 @@ async function handleRunReplay() {
         });
         setStatus('st-replay', 'INSTALLED');
         setStatus('cr-replay', 'OK');
-        siriform.setSiriformState('responding', 'Replay BTC/USDT pronto para análise.');
+        siriform.setSiriformState('success', 'Replay BTC/USDT pronto para análise.');
         void result;
     } catch (err) {
         log(`Erro no replay: ${err.message}`, 'fail');
-        siriform.setSiriformState('responding', 'Não consegui rodar o replay agora.');
+        siriform.setSiriformState('warning', 'Não consegui rodar o replay agora.');
     }
 }
 
@@ -414,32 +454,57 @@ async function handleClearReinstall() {
     const confirmMsg = 'Isso vai remover do Vault local deste iPad: o motor WASM, o dataset de replay, '
         + 'os manifestos/metadados e a versão instalada. O PWA em si (instalação na Tela de Início, '
         + 'Service Worker) NÃO é removido — apenas os dados locais. Depois disso você precisará tocar '
-        + 'em "Preparar tudo neste iPad" de novo. Continuar?';
+        + 'em "Preparar / Atualizar Cyborg neste iPad" de novo. Continuar?';
     if (!window.confirm(confirmMsg)) return;
     siriform.setSiriformState('thinking', 'Limpando Vault local...');
     await packManager.clearAndReinstall((m, l) => log(m, l));
     replayDatasetCache = null;
     vaultFreshness = null;
     await refreshVaultAndReplayStatus();
-    siriform.setSiriformState('responding', 'Vault limpo. Pacote local ainda não instalado.');
+    siriform.setSiriformState('warning', 'Vault limpo. Pacote local ainda não instalado.');
 }
 
+// Fase 3 — estado guiado, nunca um beco sem saída tecnico. Primeira visita:
+// aponta para o botao principal. Instalacao anterior corrompida: tenta
+// reparo automatico seguro primeiro; só then comunica sucesso/falha.
 async function handleCheckLocalInstall() {
-    siriform.setSiriformState('analyzing', 'Verificando instalação local...');
+    siriform.setSiriformState('checking', 'Verificando instalação local...');
     log('=== VERIFICAR INSTALAÇÃO LOCAL ===', 'info');
+    const before = await packManager.getInstalledVaultMeta();
     const vault = await refreshVaultAndReplayStatus();
+
     if (vault.status === 'READY') {
         log(`Instalação local OK — pacote ${vault.packageName || '?'} v${vault.packVersion || '?'} (backend=${String(vault.backend || '?').toUpperCase()}).`, 'ok');
-        siriform.setSiriformState('responding', 'Instalação local verificada: tudo OK.');
+        siriform.setSiriformState('success', 'Instalação local verificada: tudo OK.');
+        return;
+    }
+
+    if (!before || !before.checksums) {
+        log('Instalação local ainda não preparada — nenhuma instalação anterior encontrada neste iPad.', 'info');
+        siriform.setSiriformState('idle', 'Instalação local ainda não preparada. Toque em "Preparar / Atualizar Cyborg neste iPad".');
+        return;
+    }
+
+    log('Instalação local encontrada porém corrompida/bloqueada — tentando reparo automático seguro antes de qualquer mensagem final...', 'warn');
+    siriform.setSiriformState('repairing', 'Tentando reparo automático...');
+    const repair = await packManager.autoRepairVault((m, l) => log(m, l));
+    await refreshVaultAndReplayStatus();
+    if (repair.status === 'READY') {
+        vaultFreshness = 'ATUALIZADO';
+        log('=== INSTALAÇÃO REPARADA AUTOMATICAMENTE ===', 'ok');
+        siriform.setSiriformState('success', 'Instalação reparada.');
+    } else if (repair.reason === 'checksum_failed') {
+        log('FAIL_CLOSED: checksum inválido — reparo automático abortado, estado anterior preservado.', 'fail');
+        siriform.setSiriformState('blocked', 'Bloqueado por segurança. Toque em "Reparar instalação" no Modo avançado.');
     } else {
-        log(`Instalação local ausente ou bloqueada${vault.reason ? ` (${vault.reason})` : ''}.`, 'warn');
-        siriform.setSiriformState('responding', 'Nada instalado ainda, ou instalação bloqueada por segurança.');
+        log('Reparo automático não concluído.', 'warn');
+        siriform.setSiriformState('warning', 'Não consegui reparar automaticamente. Toque em "Reparar instalação" no Modo avançado.');
     }
 }
 
 async function handleUpdateLocalPack() {
-    siriform.setSiriformState('thinking', 'Verificando se há atualização do pacote local...');
-    log('=== ATUALIZAR PACOTE LOCAL ===', 'info');
+    siriform.setSiriformState('checking', 'Verificando se há atualização do pacote local...');
+    log('=== ATUALIZAR SISTEMA ===', 'info');
     try {
         const before = await packManager.getInstalledVaultMeta();
         const pack = await packManager.fetchLocalPack((m, l) => log(m, l));
@@ -450,32 +515,33 @@ async function handleUpdateLocalPack() {
             vaultFreshness = 'ATUALIZADO';
             log(`Pacote local já está na versão mais recente (v${installedVersion}). Nenhuma reinstalação necessária.`, 'ok');
             await refreshVaultAndReplayStatus();
-            siriform.setSiriformState('responding', 'Pacote local já está atualizado.');
+            siriform.setSiriformState('success', 'Pacote local já está atualizado.');
             return;
         }
 
         vaultFreshness = 'DESATUALIZADO';
         log(`Nova versão disponível: v${availableVersion}${installedVersion ? ` (instalada: v${installedVersion})` : ''}.`, 'info');
+        siriform.setSiriformState('updating', 'Atualizando pacote local...');
         const { allOk } = await packManager.verifySha256((m, l) => log(m, l));
         if (!allOk) {
             log('FAIL_CLOSED: checksum inválido na atualização — instalação anterior preservada (nada foi sobrescrito).', 'fail');
             await refreshVaultAndReplayStatus();
-            siriform.setSiriformState('fail_closed');
+            siriform.setSiriformState('blocked');
             return;
         }
         await packManager.installToSafariStorage((m, l) => log(m, l));
         vaultFreshness = 'ATUALIZADO';
         await refreshVaultAndReplayStatus();
         log(`=== PACOTE LOCAL ATUALIZADO PARA v${availableVersion} ===`, 'ok');
-        siriform.setSiriformState('responding', 'Pacote local atualizado com sucesso.');
+        siriform.setSiriformState('success', 'Pacote local atualizado com sucesso.');
     } catch (err) {
         log(`Erro ao atualizar pacote local: ${err.message}`, 'fail');
-        siriform.setSiriformState('responding', 'Não consegui verificar atualização agora.');
+        siriform.setSiriformState('warning', 'Não consegui verificar atualização agora.');
     }
 }
 
 async function handleRepairInstall() {
-    siriform.setSiriformState('installing', 'Reparando instalação local...');
+    siriform.setSiriformState('repairing', 'Reparando instalação local...');
     log('=== REPARAR INSTALAÇÃO ===', 'info');
     try {
         // Auto-reparo seguro: re-verifica → reindexa do armazenamento se os
@@ -490,18 +556,18 @@ async function handleRepairInstall() {
                 ? 'arquivos locais já estavam íntegros — índice restaurado sem reinstalar'
                 : (result.action === 'none' ? 'já estava íntegro' : 'reinstalação segura concluída');
             log(`=== INSTALAÇÃO REPARADA (${how}) ===`, 'ok');
-            siriform.setSiriformState('responding', 'Instalação local reparada com sucesso.');
+            siriform.setSiriformState('success', 'Instalação reparada.');
         } else if (result.reason === 'checksum_failed') {
             log('FAIL_CLOSED: checksum inválido — reparo abortado, estado anterior preservado.', 'fail');
-            siriform.setSiriformState('fail_closed');
+            siriform.setSiriformState('blocked');
         } else {
             log('Reparo automático não concluído. Em último caso, use "Limpar/Reinstalar".', 'warn');
-            siriform.setSiriformState('responding', 'Não consegui reparar automaticamente. Tente "Limpar/Reinstalar" como último recurso.');
+            siriform.setSiriformState('warning', 'Não consegui reparar automaticamente. Tente "Limpar/Reinstalar" como último recurso.');
         }
     } catch (err) {
         log(`Reparo bloqueado: ${err.message}`, 'fail');
         await refreshVaultAndReplayStatus();
-        siriform.setSiriformState('fail_closed');
+        siriform.setSiriformState('blocked');
     }
 }
 
@@ -540,7 +606,7 @@ async function handleExportReport() {
     const entry = exporter.downloadArtifact({ type: 'FINAL_REPORT', ext: 'md', blob, purpose: 'Relatório de sessão exportado pelo usuário.' });
     renderExportPanel();
     log(`Relatório exportado com nome único: ${entry.filename}.`, 'ok');
-    siriform.setSiriformState('responding', 'Relatório de sessão exportado para o app Arquivos.');
+    siriform.setSiriformState('success', 'Relatório de sessão exportado para o app Arquivos.');
 }
 
 async function handleExportEvidence() {
@@ -563,7 +629,7 @@ async function handleExportEvidence() {
     const entry = exporter.downloadArtifact({ type: 'EVIDENCE_OUTBOX', ext: 'json', blob, purpose: 'Snapshot de evidência da sessão exportado pelo usuário.' });
     renderExportPanel();
     log(`Evidência exportada com nome único: ${entry.filename}.`, 'ok');
-    siriform.setSiriformState('responding', 'Snapshot de evidência exportado para o app Arquivos.');
+    siriform.setSiriformState('success', 'Snapshot de evidência exportado para o app Arquivos.');
 }
 
 function handleAddHome() {
@@ -576,27 +642,56 @@ function handleAddHome() {
     els['home-modal'].hidden = false;
 }
 
+// Fase 2 — o UNICO botao principal do fluxo normal. Sozinho ele: verifica
+// Safari/PWA, verifica instalacao existente (reparo seguro antes de
+// reinstalar do zero), baixa/verifica/instala so se necessario, valida WASM
+// e dataset de replay, e termina com a frase exata "Cyborg pronto neste
+// iPad." — nunca um beco sem saida tecnico.
 async function handlePrepareCyborg() {
-    siriform.setSiriformState('installing', 'Preparando Cyborg neste iPad...');
-    log('=== PREPARAR CYBORG NESTE IPAD ===', 'info');
+    siriform.setSiriformState('updating', 'Preparando Cyborg neste iPad...');
+    log('=== PREPARAR / ATUALIZAR CYBORG NESTE IPAD ===', 'info');
     try {
-        if (!packManager.getLoadedPack()) {
-            log('Pacote local ainda nao esta em memoria — buscando do mesmo HTTPS origin (sem download visivel; instalacao e automatica)...', 'info');
-            await packManager.fetchLocalPack((m, l) => log(m, l));
-        } else {
-            log('Pacote local ja em memoria — reutilizando.', 'dim');
+        const before = await packManager.getInstalledVaultMeta();
+        let ready = false;
+
+        if (before?.status === 'READY' && before?.checksums) {
+            siriform.setSiriformState('checking', 'Verificando instalação existente...');
+            const repair = await packManager.autoRepairVault((m, l) => log(m, l));
+            if (repair.status === 'READY') {
+                vaultFreshness = 'ATUALIZADO';
+                ready = true;
+            } else if (repair.reason === 'checksum_failed') {
+                siriform.setSiriformState('blocked');
+                log('FAIL_CLOSED: checksum inválido — preparação abortada, estado anterior preservado.', 'fail');
+                await refreshVaultAndReplayStatus();
+                return;
+            } else {
+                log('Reparo automático não concluído — tentando reinstalação completa...', 'warn');
+            }
         }
 
-        siriform.setSiriformState('analyzing', 'Verificando SHA256...');
-        const { allOk } = await packManager.verifySha256((m, l) => log(m, l));
-        if (!allOk) {
-            siriform.setSiriformState('fail_closed');
-            log('FAIL_CLOSED: checksum invalido — preparacao abortada.', 'fail');
-            return;
+        if (!ready) {
+            if (!packManager.getLoadedPack()) {
+                log('Pacote local ainda nao esta em memoria — buscando do mesmo HTTPS origin (sem download visivel; instalacao e automatica)...', 'info');
+                await packManager.fetchLocalPack((m, l) => log(m, l));
+            } else {
+                log('Pacote local ja em memoria — reutilizando.', 'dim');
+            }
+
+            siriform.setSiriformState('checking', 'Verificando SHA256...');
+            const { allOk } = await packManager.verifySha256((m, l) => log(m, l));
+            if (!allOk) {
+                siriform.setSiriformState('blocked');
+                log('FAIL_CLOSED: checksum invalido — preparacao abortada.', 'fail');
+                await refreshVaultAndReplayStatus();
+                return;
+            }
+
+            siriform.setSiriformState('updating', 'Instalando no Safari Storage...');
+            await packManager.installToSafariStorage((m, l) => log(m, l));
+            vaultFreshness = 'ATUALIZADO';
         }
 
-        siriform.setSiriformState('installing', 'Instalando no Safari Storage...');
-        await packManager.installToSafariStorage((m, l) => log(m, l));
         await refreshVaultAndReplayStatus();
 
         if (workerClient) {
@@ -606,24 +701,25 @@ async function handlePrepareCyborg() {
         await handleRunReplay();
         await handleRunDiagnostics();
 
-        log('=== CYBORG PREPARADO NESTE IPAD: LOCAL-FIRST / READ_ONLY / FAIL_CLOSED ===', 'ok');
-        siriform.setSiriformState('responding', 'Replay BTC/USDT pronto para análise.');
+        log('=== CYBORG PRONTO NESTE IPAD: LOCAL-FIRST / READ_ONLY / FAIL_CLOSED ===', 'ok');
+        siriform.setSiriformState('success', 'Cyborg pronto neste iPad.');
     } catch (err) {
         log(`Preparacao bloqueada: ${err.message}`, 'fail');
-        siriform.setSiriformState('fail_closed');
+        siriform.setSiriformState('blocked');
+        await refreshVaultAndReplayStatus();
     }
 }
 
 function handleExplainAnalysis() {
     if (!lastAnalysisMeta) {
         log('Explicar analise: nenhum AnalysisFrame disponivel ainda.', 'warn');
-        siriform.setSiriformState('responding', 'Rode o Replay BTC/USDT primeiro para gerar o AnalysisFrame.');
+        siriform.setSiriformState('warning', 'Rode o Replay BTC/USDT primeiro para gerar o AnalysisFrame.');
         return;
     }
     const m = lastAnalysisMeta;
     const text = `AnalysisFrame: ${m.count} candles, último preço ${m.last.toFixed(2)}, SMA ${m.sma.toFixed(2)}, EMA ${m.ema.toFixed(2)}, desvio padrão ${m.stddev.toFixed(2)}, z-score ${m.zscore.toFixed(3)}. Leitura descritiva, não é recomendação de ordem.`;
     log(`Explicar analise: ${text}`, 'info');
-    siriform.setSiriformState('responding', text);
+    siriform.setSiriformState('success', text);
     voice.speak(text);
 }
 
@@ -633,20 +729,27 @@ function handleShowReport() {
     log(lastAnalysisMeta
         ? `Replay BTC/USDT: ${lastAnalysisMeta.count} candles, SMA ${lastAnalysisMeta.sma.toFixed(2)}, EMA ${lastAnalysisMeta.ema.toFixed(2)}, z-score ${lastAnalysisMeta.zscore.toFixed(3)}.`
         : 'Replay BTC/USDT: ainda não executado nesta sessão.', 'dim');
-    siriform.setSiriformState('responding', 'Relatório gerado nos Logs do Sistema.');
+    siriform.setSiriformState('success', 'Relatório gerado nos Logs do Sistema.');
 }
 
 function handleShowStatus() {
     log('Status atual: IPAD DIRECT / LOCAL-FIRST / READ_ONLY / FAIL_CLOSED.', 'info');
-    siriform.setSiriformState('read_only', 'Cyborg operando em READ_ONLY / FAIL_CLOSED.');
+    siriform.setSiriformState('idle', 'Cyborg operando em READ_ONLY / FAIL_CLOSED.');
     voice.speak('Cyborg operando em READ_ONLY / FAIL_CLOSED.');
 }
 
 function handleShowSafetyMode() {
     const text = 'Execução real está bloqueada. O Cyborg está em READ_ONLY / FAIL_CLOSED.';
     log(text, 'info');
-    siriform.setSiriformState('fail_closed');
+    siriform.setSiriformState('blocked');
     voice.speak(text);
+}
+
+// Fase 7 — "Analisar sistema" no topbar: combina verificacao de capacidades
+// do Safari com verificacao/repair guiado da instalacao local, um so toque.
+async function handleAnalyzeSystem() {
+    await handleCheckSafari();
+    await handleCheckLocalInstall();
 }
 
 async function dispatchVoiceCommand(id) {
@@ -671,7 +774,7 @@ async function handleVoiceTranscript(transcript) {
     if (result.type === 'blocked') {
         log(`Comando de voz BLOQUEADO (frase: "${result.matchedPhrase}").`, 'fail');
         siriform.setVoiceState('voice_blocked_by_policy');
-        siriform.setSiriformState('fail_closed');
+        siriform.setSiriformState('blocked');
         voice.speak(result.response);
         return;
     }
@@ -736,12 +839,26 @@ function wireProfileToggle() {
     });
 }
 
+// Fase 7 — "Modo avançado": tudo que não é o fluxo normal de um toque fica
+// escondido por padrão atrás deste alternador, fora do .bento principal.
+function wireAdvancedToggle() {
+    const btn = els['btn-tb-advanced'];
+    const section = els['advanced-section'];
+    if (!btn || !section) return;
+    btn.addEventListener('click', () => {
+        const show = section.hidden;
+        section.hidden = !show;
+        btn.textContent = show ? 'Ocultar modo avançado' : 'Modo avançado';
+        btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+        if (show) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+}
+
 function wireButtons() {
     document.getElementById('btn-check-safari').addEventListener('click', handleCheckSafari);
     document.getElementById('btn-prepare-cyborg').addEventListener('click', handlePrepareCyborg);
     document.getElementById('btn-check-install').addEventListener('click', handleCheckLocalInstall);
     document.getElementById('btn-download-pack').addEventListener('click', handleDownloadPack);
-    document.getElementById('btn-update-pack').addEventListener('click', handleUpdateLocalPack);
     document.getElementById('btn-import-pack').addEventListener('click', handleImportPack);
     document.getElementById('btn-verify-sha').addEventListener('click', handleVerifySha);
     document.getElementById('btn-install-storage').addEventListener('click', handleInstallStorage);
@@ -750,6 +867,9 @@ function wireButtons() {
     document.getElementById('btn-repair-install').addEventListener('click', handleRepairInstall);
     document.getElementById('btn-clear-reinstall').addEventListener('click', handleClearReinstall);
     document.getElementById('btn-add-home').addEventListener('click', handleAddHome);
+    document.getElementById('btn-tb-update').addEventListener('click', handleUpdateLocalPack);
+    document.getElementById('btn-tb-analyze').addEventListener('click', handleAnalyzeSystem);
+    wireAdvancedToggle();
     const btnReport = document.getElementById('btn-export-report');
     if (btnReport) btnReport.addEventListener('click', handleExportReport);
     const btnEvidence = document.getElementById('btn-export-evidence');
@@ -768,10 +888,10 @@ function wireButtons() {
         siriform.setSiriformState('thinking', 'Importando pacote do app Arquivos...');
         try {
             await packManager.importLocalPackFromFile(file, (m, l) => log(m, l));
-            siriform.setSiriformState('responding', 'Pacote importado. Verifique o SHA256 antes de instalar.');
+            siriform.setSiriformState('success', 'Pacote importado. Verifique o SHA256 antes de instalar.');
         } catch (err) {
             log(`Erro ao importar: ${err.message}`, 'fail');
-            siriform.setSiriformState('responding', 'Não consegui importar esse arquivo.');
+            siriform.setSiriformState('warning', 'Não consegui importar esse arquivo.');
         }
         ev.target.value = '';
     });
@@ -811,29 +931,31 @@ async function boot() {
     // Auto-reparo no boot: SÓ quando algo já foi instalado antes (existe meta
     // com checksums) e agora está quebrado — o caso "corrompido/ausente após
     // girar a tela ou reabrir". Numa primeira visita (nada instalado) não
-    // auto-instala nada; deixa o usuário tocar em "Preparar tudo neste iPad".
+    // auto-instala nada; deixa o usuário tocar em "Preparar / Atualizar Cyborg
+    // neste iPad".
     let bootMessaged = false;
     if (vault.status !== 'READY') {
         const prev = await packManager.getInstalledVaultMeta();
         if (prev && prev.checksums) {
             log('Vault não está íntegro e havia instalação anterior — tentando auto-reparo seguro...', 'warn');
+            siriform.setSiriformState('repairing', 'Recuperando Vault automaticamente...');
             const r = await packManager.autoRepairVault((m, l) => log(m, l));
             vault = await refreshVaultAndReplayStatus();
             bootMessaged = true;
             if (r.status === 'READY') {
                 vaultFreshness = 'ATUALIZADO';
-                siriform.setSiriformState('responding', 'Vault recuperado automaticamente. Tudo pronto neste iPad.');
+                siriform.setSiriformState('success', 'Vault recuperado automaticamente. Cyborg pronto neste iPad.');
             } else {
-                siriform.setSiriformState('responding', 'Não consegui recuperar o Vault sozinho. Toque em "Reparar instalação".');
+                siriform.setSiriformState('warning', 'Não consegui recuperar o Vault sozinho. Toque em "Reparar instalação" no Modo avançado.');
             }
         }
     }
 
     log('Boot concluido. Modo: IPAD DIRECT / LOCAL-FIRST / READ_ONLY / FAIL_CLOSED.', 'ok');
     if (vault.status === 'READY' && !bootMessaged) {
-        siriform.setSiriformState('responding', 'Pacote local pronto. Posso preparar seu ambiente local.');
+        siriform.setSiriformState('success', 'Cyborg pronto neste iPad.');
     } else if (vault.status !== 'READY' && !bootMessaged) {
-        siriform.setSiriformState('idle', 'Pacote local ainda não instalado.');
+        siriform.setSiriformState('idle', 'Instalação local ainda não preparada. Toque em "Preparar / Atualizar Cyborg neste iPad".');
     }
 }
 

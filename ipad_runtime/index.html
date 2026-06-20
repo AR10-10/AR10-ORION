@@ -25,19 +25,23 @@
 </head>
 <body>
 
-<div class="runtime-shell">
-
-  <div class="mode-banner" id="mode-banner">
-    <span class="pill">READ_ONLY</span>
-    <span class="pill">FAIL_CLOSED</span>
-    <span class="note">AR10 CYBORG 2.0 · sem execucao real · sem API secret · sem ordem · sem live trading</span>
+<header class="app-topbar" id="app-topbar">
+  <div class="tb-left">
+    <span class="tb-brand">AR10 Cyborg</span>
   </div>
+  <div class="tb-center">
+    <span class="tb-status" id="topbar-status">Verificando…</span>
+  </div>
+  <div class="tb-right">
+    <span class="tb-chip" id="tb-readonly">READ_ONLY</span>
+    <span class="tb-chip" id="tb-failclosed">FAIL_CLOSED</span>
+    <button type="button" class="tb-btn" id="btn-tb-update">Atualizar sistema</button>
+    <button type="button" class="tb-btn" id="btn-tb-analyze">Analisar sistema</button>
+    <button type="button" class="tb-btn" id="btn-tb-advanced" aria-expanded="false">Modo avançado</button>
+  </div>
+</header>
 
-  <header class="nebula-header">
-    <div class="kicker">Nebula Core · Siriform Voice · Meta Llama (FUTURE)</div>
-    <h1>AR10 Cyborg 2.0 — iPad One-Tap Cloud Runtime</h1>
-    <p class="tagline">Um link HTTPS → Safari → auto-diagnóstico → Cyborg preparado. Local-first, sem Mac Mini, sem MacBook, sem ZIP, sem terminal.</p>
-  </header>
+<div class="runtime-shell">
 
   <div class="bento">
 
@@ -47,6 +51,8 @@
     </div>
     <span class="siriform-state-tag" id="siriform-state-tag">IDLE</span>
     <p class="siriform-caption" id="siriform-caption">Cyborg operando em READ_ONLY / FAIL_CLOSED.</p>
+
+    <button type="button" class="hero-cta" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar / Atualizar Cyborg neste iPad</button>
 
     <button type="button" class="mic-button" id="mic-button" data-voice-state="voice_idle" aria-label="Falar com o Siriform (comando de voz)">◉</button>
     <p class="voice-hint">Toque no microfone e diga, por exemplo: "Verificar Safari" ou "Mostrar status".</p>
@@ -86,8 +92,12 @@
       <div class="status-row"><span class="label">Replay BTC/USDT</span><span class="value v-pending" id="cr-replay">…</span></div>
       <div class="status-row"><span class="label">READ_ONLY / FAIL_CLOSED</span><span class="value v-pending" id="cr-safety">…</span></div>
     </div>
-    <p class="engine-meta">Resumo unificado de tudo que este runtime já sondou nesta sessão — cada item mostra OK, LIMITED, MISSING, FUTURE ou UNSUPPORTED, nunca um "tudo certo" decorativo. Detalhe completo nos painéis abaixo.</p>
+    <p class="engine-meta">Resumo unificado de tudo que este runtime já sondou nesta sessão — cada item mostra OK, LIMITED, MISSING, FUTURE ou UNSUPPORTED, nunca um "tudo certo" decorativo. Detalhe completo no Modo avançado.</p>
   </section>
+
+  </div><!-- /.bento -->
+
+  <section class="advanced-section" id="advanced-section" hidden>
 
   <section class="card" id="voice-status-panel">
     <h2>Siriform Voice <span class="future-badge">Apple Intelligence: FUTURE</span></h2>
@@ -231,23 +241,21 @@
       <div class="status-row"><span class="label">READ_ONLY / FAIL_CLOSED</span><span class="value v-pending" id="vl-safety">…</span></div>
       <div class="status-row"><span class="label">Reparo/Reinstalação</span><span class="value v-pending" id="vl-repair">…</span></div>
     </div>
-    <p class="engine-meta">Tudo aqui é recalculado a partir do estado real do armazenamento local — nenhum valor é assumido ou decorativo. Use os botões em "Local Pack Manager" abaixo para preparar, verificar, atualizar, reparar ou limpar este Vault.</p>
+    <p class="engine-meta">Tudo aqui é recalculado a partir do estado real do armazenamento local — nenhum valor é assumido ou decorativo. No dia a dia, use o botão principal "Preparar / Atualizar Cyborg neste iPad" na tela inicial; os botões manuais em "Manutenção / Técnico" abaixo são só para casos avançados.</p>
   </section>
 
   <section class="card local-pack-manager" id="runtime-actions">
-    <h2>Local Pack Manager</h2>
-    <p class="onboarding-hint">Primeira vez aqui? Toque em <b>"Preparar tudo neste iPad"</b> — um único toque baixa, verifica, instala e roda o primeiro diagnóstico/replay nesta ordem. Os botões abaixo continuam disponíveis para repetir cada etapa manualmente.</p>
+    <h2>Manutenção / Técnico</h2>
+    <p class="onboarding-hint">Estas ações são manuais e avançadas. No dia a dia, use só o botão principal <b>"Preparar / Atualizar Cyborg neste iPad"</b> na tela inicial — ele já baixa, verifica, instala e repara sozinho.</p>
     <div class="btn-grid">
-      <button class="rt-btn primary" id="btn-check-safari"><span class="icon">◎</span> Verificar Safari</button>
-      <button class="rt-btn primary" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar tudo neste iPad</button>
+      <button class="rt-btn" id="btn-check-safari"><span class="icon">◎</span> Verificar Safari</button>
       <button class="rt-btn" id="btn-check-install"><span class="icon">◍</span> Verificar instalação local</button>
-      <button class="rt-btn primary" id="btn-download-pack"><span class="icon">⇩</span> Baixar Pacote Local</button>
-      <button class="rt-btn" id="btn-update-pack"><span class="icon">⇧</span> Atualizar pacote local</button>
-      <button class="rt-btn" id="btn-import-pack"><span class="icon">⇪</span> Importar Pacote do Arquivos</button>
-      <button class="rt-btn" id="btn-verify-sha"><span class="icon">✓</span> Verificar SHA256</button>
+      <button class="rt-btn" id="btn-download-pack"><span class="icon">⇩</span> Baixar pacote para backup</button>
+      <button class="rt-btn" id="btn-import-pack"><span class="icon">⇪</span> Importar pacote manual</button>
+      <button class="rt-btn" id="btn-verify-sha"><span class="icon">✓</span> Verificar SHA256 manual</button>
       <button class="rt-btn success" id="btn-install-storage"><span class="icon">⬢</span> Instalar no Safari Storage</button>
-      <button class="rt-btn" id="btn-run-diagnostics"><span class="icon">▣</span> Rodar Diagnóstico Offline</button>
-      <button class="rt-btn" id="btn-run-replay"><span class="icon">▶</span> Rodar Replay BTC/USDT</button>
+      <button class="rt-btn" id="btn-run-diagnostics"><span class="icon">▣</span> Rodar Diagnóstico Técnico Offline</button>
+      <button class="rt-btn" id="btn-run-replay"><span class="icon">▶</span> Rodar Replay Técnico Offline</button>
       <button class="rt-btn" id="btn-repair-install"><span class="icon">⚙</span> Reparar instalação</button>
       <button class="rt-btn danger" id="btn-clear-reinstall"><span class="icon">⟲</span> Limpar/Reinstalar</button>
       <button class="rt-btn primary" id="btn-add-home"><span class="icon">＋</span> Adicionar à Tela de Início</button>
@@ -266,7 +274,7 @@
     <p class="engine-meta">Nenhum arquivo exportado contém segredo, chave de API, credencial de corretora ou dado de conta real — só estado de diagnóstico local, estatística descritiva sintética e metadados de integridade.</p>
   </section>
 
-  </div><!-- /.bento -->
+  </section><!-- /.advanced-section -->
 
   <section class="card telemetry-card" id="console-section">
     <h2>Telemetria ao Vivo <span class="step">Caixa Preta do Cyborg — eventos reais</span></h2>
@@ -275,10 +283,7 @@
   </section>
 
   <footer class="legal">
-    AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1 · Nebula Core · Siriform Voice · Meta Llama (FUTURE)<br>
-    100% local-first depois do primeiro carregamento HTTPS. Sem MT5, sem MEXC private endpoint, sem API secret,
-    sem ordem por LLM, sem ordem por voz, sem live trading.<br>
-    READ_ONLY / FAIL_CLOSED sempre · Versão 2.0.0
+    AR10 Cyborg 2.0 · READ_ONLY / FAIL_CLOSED · Local-first · Sem live trading · v2.0.0
   </footer>
 </div>
 

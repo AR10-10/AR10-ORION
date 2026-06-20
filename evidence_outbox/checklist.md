@@ -1,170 +1,248 @@
-# Checklist de Evidência — AR10_CYBORG_2_IPAD_LANDSCAPE_VAULT_AUTOSAVE_EXPORT_AND_REAL_DATA_POLICY_FIX_V1
+# Checklist de Evidência — AR10_CYBORG_2_REAL_IPAD_HOLD_FIX_NATIVE_APP_SHELL_ONE_BUTTON_HEADER_VAULT_EXPORT_V1
 
 Continuação direta de
-`AR10_CYBORG_2_IPAD_LOCAL_VAULT_SAFE_AUTOMATION_POLISH_V1` — mesmo branch
-(`claude/eloquent-cannon-qyt86y`), mesmo PR (#3), sem reinício. Esta missão
-(Mission 6) cobre: paisagem do iPad (bento), auto-reparo do Vault,
-princípio de armazenamento automático, política de exportação com nome
-único, telemetria legível e política de dados reais. Não é fase de live
-trading; nenhuma capacidade de execução foi adicionada. Marcado apenas o
-que foi de fato executado e verificado nesta sessão.
+`AR10_CYBORG_2_IPAD_LANDSCAPE_VAULT_AUTOSAVE_EXPORT_AND_REAL_DATA_POLICY_FIX_V1`
+(Mission 6) — mesmo branch (`claude/eloquent-cannon-qyt86y`), mesmo PR (#3),
+sem reinício. Esta missão (Mission 7) responde a feedback real de
+screenshot em iPad físico que identificou 8 problemas concretos: header
+cortado, chips de segurança mal posicionados, sensação de "página web" em
+vez de app nativo, beco sem saída na instalação ausente, painel de
+exportação mostrando nomes genéricos como se já tivessem sido exportados,
+fluxo principal de um botão não óbvio, rodapé/legal grande demais, e
+áreas avançadas/técnicas dominando a primeira tela. Marcado apenas o que
+foi de fato editado e verificado nesta sessão.
 
-## Fase 1 — iPad paisagem (bento de colunas balanceadas)
+## Fase 1 — Header sem corte, com safe-area
 
-- [x] Cards do painel agrupados em um wrapper `.bento` em `index.html`
-      (entre o header e a Telemetria), sem reordenar o DOM.
-- [x] CSS de paisagem reescrito: a grade explícita 2/3-colunas (que deixava
-      uma coluna curta com "vazio preto" e a outra com pilha enorme) foi
-      substituída por **multicoluna balanceada** (`column-count: 2` a
-      partir de 900px, `3` a partir de 1280px), que equaliza a altura das
-      colunas e preenche a tela larga sem zonas mortas.
-- [x] `break-inside: avoid` (+ `-webkit-column-break-inside`) em todo
-      `.bento > section.card` — nenhum card é cortado entre colunas.
-- [x] Banner READ_ONLY/FAIL_CLOSED, header, Telemetria e rodapé ficam
-      **fora** do fluxo de colunas (largura total) — o banner sticky
-      continua funcionando exatamente como em retrato (não está dentro da
-      multicoluna).
-- [x] Retrato preservado: abaixo de 900px nada muda (coluna única, ordem
-      natural, Siriform/orb primeiro).
-- [x] Sem overflow horizontal: multicoluna quebra na vertical; `word-break`
-      em nomes de arquivo exportado; valores de status `nowrap` curtos.
-      Chaves CSS balanceadas (147/147).
+- [x] `header.app-topbar` (novo) é filho direto de `<body>`, **fora** de
+      `.runtime-shell` — nunca herda o `max-width`/padding do shell, então
+      não pode repetir o bug de corte visto no iPad real.
+- [x] Removida a técnica de "sangria" com margem negativa (`.mode-banner`,
+      `margin: calc(var(--safe-t) * -1 - 12px) ...`) que era a causa raiz
+      do corte — substituída por padding simples com
+      `env(safe-area-inset-*)` (`--safe-t/-r/-b/-l`), sem nenhuma margem
+      negativa em `.app-topbar`.
+- [x] Layout pedido: esquerda = "AR10 Cyborg" (`.tb-brand`), centro = status
+      compacto do runtime (`.tb-status`, `#topbar-status`), direita =
+      chips `READ_ONLY`/`FAIL_CLOSED` (`.tb-chip`) + botões "Atualizar
+      sistema"/"Analisar sistema"/"Modo avançado".
+- [x] `.app-topbar` usa `flex-wrap: wrap` em três níveis (topbar e cada um
+      dos três grupos `.tb-left/.tb-center/.tb-right`) — em telas estreitas
+      os itens quebram para a linha de baixo em vez de cortar ou
+      estourar a largura.
+- [x] `.tb-status` tem `overflow:hidden`+`text-overflow:ellipsis` e é
+      ocultado abaixo de 600px (o mesmo estado já aparece na legenda do
+      Siriform) — nunca força scroll horizontal.
+- [x] `.runtime-shell` perdeu o `padding-top` com safe-area (o topbar já
+      cobre isso) e o `@media (display-mode: standalone)` que empurrava
+      esse padding extra — removido por ficar redundante/morto.
 
-## Fase 2 — Auto-reparo do Vault
+## Fase 2 — Um botão principal, fluxo automático de 14 passos
 
-- [x] `pack-manager.rebuildIndexFromStorage()` (novo): valida os arquivos já
-      gravados (OPFS/IndexedDB) contra os checksums do meta salvo e restaura
-      `READY` sem reinstalar quando os bytes continuam íntegros — resolve o
-      caso "corrompido/ausente após girar a tela ou reabrir".
-- [x] `pack-manager.autoRepairVault()` (novo) na ordem pedida: (1)
-      re-verifica → (2) reindexa do armazenamento se os arquivos existem →
-      (3) re-checa SHA256 → (4) restaura `READY` se válido → (5) se
-      faltam/diferem, reinstala com segurança a partir do pacote do app
-      (mesma origem, já em cache do SW — funciona offline), sempre
-      `FAIL_CLOSED` se o checksum do pacote falhar → (6) Limpar/Reinstalar
-      continua sendo o último recurso **manual, com confirmação**.
-- [x] Auto-reparo nunca apaga dados como primeiro recurso (confirmado por
-      leitura: só `installToSafariStorage()`, que grava o novo validado
-      antes de remover obsoleto, e aborta sem tocar nada se checksum falhar).
-- [x] `handleRepairInstall()` reescrito para usar `autoRepairVault()` —
-      tenta a recuperação barata (reindex) antes de rebaixar; mensagens
-      claras de qual caminho recuperou.
-- [x] Boot dispara auto-reparo **automático** só quando havia instalação
-      anterior (existe meta com checksums) e o estado agora não é `READY` —
-      numa primeira visita não auto-instala nada.
-- [x] "Reparar instalação" permanece como ação primária clara quando o
-      auto-reparo não conclui.
+- [x] Botão único e visualmente dominante na tela inicial: `.hero-cta`
+      `#btn-prepare-cyborg`, texto verbatim **"Preparar / Atualizar Cyborg
+      neste iPad"**, dentro do `siriform-card` (não mais dentro da grade
+      técnica do Local Pack Manager).
+- [x] `handlePrepareCyborg()` (reescrito) verifica primeiro se já existe
+      instalação válida (`getInstalledVaultMeta()`); se sim, tenta
+      `autoRepairVault()` antes de qualquer download; só baixa/reinstala
+      quando não há instalação prévia ou o reparo falhou por motivo que
+      não seja checksum. `FAIL_CLOSED` (estado `blocked`) se o checksum
+      falhar — nunca sobrescreve nada.
+- [x] Sequência cobre verificação de SHA256, instalação no Safari
+      Storage/OPFS/IndexedDB/Cache, replay e diagnóstico automáticos
+      (`handleRunReplay()` + `handleRunDiagnostics()` chamados no final do
+      fluxo) e atualização de todos os painéis de status.
+- [x] Texto final exato ao concluir com sucesso: **"Cyborg pronto neste
+      iPad."** (`siriform.setSiriformState('success', 'Cyborg pronto neste
+      iPad.')`), também usado no boot quando o Vault já está `READY`.
+- [x] Duplicata removida: a grade técnica antiga tinha um segundo
+      `id="btn-prepare-cyborg"` (bug de id duplicado introduzido durante a
+      edição, corrigido antes do commit) — agora existe exatamente um.
 
-## Fase 3 — Armazenamento local automático
+## Fase 3 — Instalação ausente nunca é um beco sem saída
 
-- [x] Fluxos internos (preparar/atualizar/reparar/auto-reparo) passaram a
-      usar `pack-manager.fetchLocalPack()` (carrega em memória, **sem**
-      disparar download para o app Arquivos). Antes, cada um desses fluxos
-      chamava `downloadLocalPack()` e despejava o mesmo arquivo no app
-      Arquivos a cada toque — provável origem do prompt de "substituir"
-      relatado. Agora o armazenamento interno é 100% automático.
-- [x] Texto do princípio mantido no painel Vault Local e repetido no painel
-      Arquivos Exportados (o usuário não procura pasta raiz).
+- [x] `handleCheckLocalInstall()` (reescrito) distingue dois casos lendo
+      `getInstalledVaultMeta()` **antes** de decidir a mensagem:
+      (a) nunca instalado (`before` nulo/sem checksums) → mensagem guiada
+      "Instalação local ainda não preparada. Toque em 'Preparar / Atualizar
+      Cyborg neste iPad'." — nunca um texto técnico de erro;
+      (b) instalado porém corrompido → tenta `autoRepairVault()`
+      automaticamente **antes** de mostrar qualquer falha.
+- [x] Reparo automático com sucesso → "Instalação reparada."; reparo sem
+      sucesso → aponta para "Reparar instalação" no Modo avançado (nunca
+      sugere download manual).
+- [x] `FAIL_CLOSED` (checksum inválido durante o reparo automático) vira
+      estado `blocked` com mensagem "Bloqueado por segurança. Toque em
+      'Reparar instalação' no Modo avançado." — estado anterior preservado,
+      nada é sobrescrito.
+- [x] "Limpar/Reinstalar" continua existindo só no Modo avançado, como
+      último recurso manual com confirmação (`handleClearReinstall`,
+      inalterado nesta missão).
 
-## Fase 4 — Exportação com nome único + EXPORT_MANIFEST + painel
+## Fase 4 — Painel de exportação sem nomes falsos
 
-- [x] `js/export-manifest.js` (novo): `uniqueName(type,version,ext)` produz
-      `AR10_CYBORG_[TYPE]_[VERSION]_[YYYYMMDD_HHMMSS].[ext]`;
-      `downloadArtifact()` dispara o download nativo com esse nome e
-      registra o evento.
-- [x] "Baixar Pacote Local" agora usa nome único carimbado (antes era o
-      nome genérico fixo `AR10_CYBORG_LOCAL_PACK_V1.ar10pack` → colisão).
-- [x] Painel "Arquivos Exportados" (`#export-panel`): lista pacote local,
-      relatório, evidência e deckap com tag BAIXÁVEL/SOB DEMANDA/INTERNO/
-      FUTURO; exportações da sessão aparecem no topo com o nome real usado.
-- [x] Botões "Exportar Relatório (.md)" e "Exportar Evidência (.json)" geram
-      artefatos reais a partir do estado da sessão, com nome único.
-- [x] `evidence_outbox/EXPORT_MANIFEST.json` (novo): tipo, filename/padrão,
-      versão, generated_for, purpose, sha256 (quando disponível), caminho
-      interno e padrão de export visível.
-- [x] Nenhum export contém segredo/chave/credencial/dado de conta — o
-      relatório e a evidência só carregam feature-detect, estado do Vault,
-      estimativa de storage e a política de dados (confirmado por leitura).
+- [x] `renderExportPanel()` (reescrito) ramifica em `a.filename`: só mostra
+      um nome de arquivo real (`EXPORTADO`, classe `v-ok`) quando aquele
+      tipo já foi de fato exportado nesta sessão.
+- [x] Quando nada foi exportado ainda, mostra mensagem honesta por tipo
+      via `EXPORT_EMPTY_LABEL` — "Nenhum backup do pacote local exportado
+      ainda.", "Nenhum relatório exportado ainda.", "Nenhuma evidência
+      exportada ainda.", "Nenhum DECAP exportado ainda." (classe
+      `.export-name-empty`, estilo dim/itálico **adicionado nesta sessão**
+      em `ipad-runtime.css` — a classe já era usada por `app.js` desde a
+      Mission 6, mas não tinha regra CSS própria até agora) — nunca o nome
+      genérico do pacote interno
+      (`AR10_CYBORG_LOCAL_PACK_V1.ar10pack`) como se já tivesse sido
+      baixado.
+- [x] Rótulo de visibilidade ao lado de cada item ausente reflete a
+      origem real: `DISPONÍVEL PARA EXPORTAR` / `SOB DEMANDA` / `INTERNO` /
+      `FUTURO` (`visLabel` em `app.js`, inalterado — já existia desde a
+      Mission 6).
+- [x] `js/export-manifest.js` não precisou de nenhuma mudança: o padrão de
+      nome único carimbado `AR10_CYBORG_[TYPE]_[VERSION]_[YYYYMMDD_HHMMSS].
+      [ext]` (`uniqueName()`) e o registro de exportações reais
+      (`downloadArtifact()`) já estavam corretos — o bug estava só na
+      renderização em `app.js`, não na política de nomes.
 
-## Fase 5 — Telemetria (logs legíveis, não muro de terminal)
+## Fase 5 — Limpeza visual "tipo app"
 
-- [x] "Logs do Sistema" → **"Telemetria ao Vivo"** (sub-rótulo "Caixa Preta
-      do Cyborg — eventos reais").
-- [x] Linha de "último evento" sempre visível no topo do card
-      (`#telemetry-latest`), atualizada a cada `log()`; a caixa preta
-      completa continua rolável dentro do card (altura reduzida para 200px).
-- [x] Nenhum evento falso: `telemetry-latest` espelha exatamente a última
-      linha real de `log()`.
+- [x] Header gigante centralizado (`.nebula-header`, dead CSS depois da
+      edição) removido; topbar compacto assume a identidade visual.
+- [x] Rodapé reduzido de 4 linhas (incluindo o codinome de entrega da
+      Mission 5: `AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1`)
+      para uma única linha: "AR10 Cyborg 2.0 · READ_ONLY / FAIL_CLOSED ·
+      Local-first · Sem live trading · v2.0.0".
+- [x] Divulgação progressiva: 13 cards técnicos/avançados (voice-status,
+      runtime-status, feature-detect, quant-engine, ai-models, replay,
+      analysis-frame, data-policy, decision-frame, vault-evidence,
+      vault-local, local-pack-manager/manutenção, export-panel) movidos
+      para `<section class="advanced-section" id="advanced-section"
+      hidden>` — saem da primeira tela e só aparecem sob toque em "Modo
+      avançado".
+- [x] Tela principal (`.bento`, agora só com `siriform-card` +
+      `cyborg-readiness-panel`) responde de cara às 5 perguntas do
+      brief: pronto/seguro/Vault OK/precisa atualizar/qual botão apertar —
+      via Siriform + badges de lei + hero CTA + resumo unificado de
+      Readiness.
+- [x] Texto de onboarding do antigo "Local Pack Manager" (agora
+      "Manutenção / Técnico") atualizado para apontar de volta ao botão
+      principal em vez de repetir instruções de fluxo manual.
 
-## Fase 6 — Política de dados reais
+## Fase 6 — Siriform Command Center
 
-- [x] Replay e AnalysisFrame rotulados na UI com o texto verbatim "Teste
-      técnico offline — dados sintéticos, não usar para decisão de mercado."
-      (`.diagnostic-note`).
-- [x] Painel "Política de Dados de Mercado" (`#data-policy-panel`):
-      diagnóstico = sintético/offline; modo de dados reais e análise real =
-      `DADOS INSUFICIENTES` (honesto — nenhum conector ao vivo habilitado);
-      dados públicos read-only = PERMITIDO; dados privados / conta privada /
-      execução = BLOQUEADO / DISABLED_BY_POLICY.
-- [x] `js/data-policy.js` (runtime) + `configs/market-data-policy.json`
-      (declarativo) com conteúdo idêntico: PUBLIC_DATA_ALLOWED,
-      READ_ONLY_CONNECTORS_ALLOWED, lista de fontes públicas permitidas,
-      bloqueios e `status_when_unavailable: 'DADOS INSUFICIENTES'`.
-- [x] `realMarketAnalysisStatus()` retorna honestamente
-      `DADOS INSUFICIENTES` porque nenhum conector real está habilitado
-      (NO_FAKE_DATA — nenhum número de mercado inventado).
-- [x] `docs/REAL_DATA_POLICY.md` (novo) documenta os dois modos e o
-      permitido/bloqueado.
+- [x] Vocabulário de estado do avatar renomeado de
+      `idle/listening/thinking/responding/installing/analyzing/read_only/
+      fail_closed` (ad-hoc) para o vocabulário fixo exigido: `idle,
+      listening, thinking, updating, checking, repairing, success,
+      warning, blocked` (`js/siriform.js`, `STATES`/`DEFAULT_CAPTIONS`/
+      `TRANSIENT_STATES`) — ~30 chamadas em `app.js` migradas e
+      confirmadas por grep (zero ocorrência dos nomes antigos restante,
+      exceto a trilha de voz `voice_responding`, que é independente por
+      design e não muda).
+- [x] CSS `.siriform-avatar[data-state="..."]` reescrito com uma regra por
+      estado novo (cor/ritmo distintos para `checking`, `updating`,
+      `repairing`, `success`, `warning`, `blocked`) — nenhum estado do
+      vocabulário fica sem estilo.
+- [x] Orbe permanece central, calmo no `idle` (animação mais lenta) e
+      reage de forma visível porém não exagerada nos estados transitórios
+      (`TRANSIENT_STATES` volta a `idle` depois de ~3.6s; `blocked` fica
+      fixo até nova ação, igual ao comportamento antigo do `fail_closed`).
+- [x] `@media (prefers-reduced-motion: reduce)` (novo, no topo do CSS) zera
+      `animation-duration`/`transition-duration` globalmente — não existia
+      antes desta missão.
+- [x] Chips `READ_ONLY`/`FAIL_CLOSED` agora vivem no topbar (sempre
+      visíveis, compactos) além dos badges de lei já existentes dentro do
+      `siriform-card`.
+
+## Fase 7 — Hierarquia de botões
+
+- [x] Ações normais visíveis fora do Modo avançado: (1) "Preparar /
+      Atualizar Cyborg neste iPad" (hero CTA), (2) "Atualizar sistema"
+      (`#btn-tb-update`, topbar), (3) "Analisar sistema" (`#btn-tb-analyze`,
+      topbar, roda `handleCheckSafari()` + `handleCheckLocalInstall()`).
+- [x] Tudo o resto vive em `#advanced-section`, revelado por
+      `#btn-tb-advanced` ("Modo avançado" ⇄ "Ocultar modo avançado",
+      `aria-expanded` sincronizado): "Baixar pacote para backup",
+      "Importar pacote manual", "Verificar SHA256 manual", "Rodar
+      Diagnóstico Técnico Offline", "Rodar Replay Técnico Offline",
+      "Reparar instalação", "Limpar/Reinstalar" (mantido como botão
+      `danger`).
+- [x] Botão antigo "Atualizar pacote local" (`#btn-update-pack`) removido
+      do HTML — sua função já é coberta por "Atualizar sistema" no topbar
+      (`handleUpdateLocalPack`, mesma função, só re-wireada para o novo
+      botão).
+- [x] `wireAdvancedToggle()` (novo) liga o botão do topbar ao atributo
+      `hidden` da seção e faz scroll suave até ela ao abrir.
+
+## Fase 8 — Aceite final (auditoria estática)
+
+- [x] HTML balanceado: leitura de pilha de tags (`section/div/header/
+      footer/button/p/span/h2/h3`) termina com pilha vazia — sem tag
+      órfã. Zero `id` duplicado (auditado com `sort | uniq -c`).
+- [x] CSS balanceado: 157 `{` / 157 `}`, 328 `(` / 328 `)`.
+- [x] Cross-check de ids: 76 em `els{}` + 21 `getElementById` diretos = 97
+      ids únicos referenciados por `app.js` — **0 ausentes** em
+      `index.html`.
+- [x] `header.app-topbar` é o único header com `position: sticky` na
+      página (o antigo `.mode-banner` sticky foi removido, não duplicado).
+- [x] Nenhum `margin` negativo restante ligado a safe-area em todo o CSS
+      (a causa raiz do corte no iPad real foi eliminada, não mascarada).
+- [x] `.advanced-section` segue a mesma régua de colunas balanceadas do
+      `.bento` (`column-count: 2`/`3` nos mesmos breakpoints, `break-inside:
+      avoid` por card) — Modo avançado também não cria coluna vazia nem
+      corta card ao meio em paisagem.
+- [x] Rodapé com uma linha; nenhum header vazio gigante; um único botão de
+      ação primária fora do Modo avançado.
 
 ## Segurança (14 leis) — confirmação cruzada nesta sessão
 
-- [x] 14ª lei `LOCAL_FIRST` adicionada a `docs/READ_ONLY_MARKET_SAFETY.md`
-      (bloco verbatim + linha de tabela com aplicação real) e propagada:
-      contagem "13 leis" → "14 leis" em `READ_ONLY_MARKET_SAFETY.md`,
-      `PROMPT_CACHING_AND_AGENT_CONTEXT_STRATEGY.md` (+ bloco de leis),
-      `DATA_SOURCE_MATRIX.md`, `IPAD_PWA_VISUAL_POLISH_HANDOFF.md`. Grep
-      confirma zero "13 leis" restante em `docs/`.
+- [x] Execução permanece `DISABLED_BY_POLICY`; nenhuma rota de rede nova,
+      nenhum endpoint de corretora, nenhuma função de ordem foi tocada
+      nesta missão (mudanças são 100% de UI/estado local).
 - [x] `grep -rn "localStorage"` em `js/`, `index.html`, `service-worker.js`
-      — zero ocorrências (base real de `NO_SECRET_IN_LOCALSTORAGE`).
-- [x] `grep` por `order_send|placeOrder|sendOrder|api_secret|private_key`
-      nos arquivos novos/editados — zero ocorrências.
-- [x] `grep` por `fetch(|XMLHttpRequest|WebSocket(` nos dois módulos novos
-      (`export-manifest.js`, `data-policy.js`) — zero (são puros, sem rede).
-- [x] Execução permanece `DISABLED_BY_POLICY` (manifestos inalterados;
-      painel de política mostra explicitamente).
+      — zero ocorrências.
+- [x] `grep -rE "order_send|placeOrder|sendOrder|api_secret|private_key"` —
+      única ocorrência é a string de diagnóstico em `diagnostics.js`
+      confirmando a ausência dessa função (pré-existente, não tocada).
+- [x] `grep "fetch(|XMLHttpRequest|WebSocket("` em `app.js`/`siriform.js`/
+      `service-worker.js` — único `fetch(` é o cache-first do próprio
+      Service Worker, já guardado por `if (new URL(req.url).origin !==
+      self.location.origin) return;` (same-origin only, pré-existente).
+- [x] CSP em `index.html` inalterada nesta missão.
+- [x] READ_ONLY/FAIL_CLOSED permanecem visíveis: chips fixos no topbar +
+      badges de lei no `siriform-card` + estado `blocked` do avatar.
 
 ## Verificação técnica local (sem rede, sem browser real)
 
-- [x] `node --input-type=module --check` em todos os `.js` sob
-      `ipad_runtime/` — OK, incluindo `export-manifest.js`, `data-policy.js`,
-      `app.js`, `pack-manager.js`, `service-worker.js`.
-- [x] `json.load` em todos os JSON sob `ipad_runtime/` — válidos, incluindo
-      `configs/market-data-policy.json`.
-- [x] CSS chaves balanceadas (147/147); HTML balanceado (16 `<section>`,
-      92 `<div>` incluindo `.bento`, 24 `<button>`).
-- [x] Cross-check de ids: 73 ids em `els{}` + 20 `getElementById` diretos —
-      todos existem em `index.html` (0 ausentes), incluindo
-      `telemetry-latest`, `dp-realmode`, `dp-analysis`, `export-list`,
-      `btn-export-report`, `btn-export-evidence`.
-- [x] 24 entradas do precache do Service Worker existem em disco (inclui os
-      2 módulos novos); `CACHE_VERSION` `v5` → `v6`.
-- [x] Exatamente 5 classes de status (`v-ok`/`v-fail`/`v-limited`/
-      `v-pending`/`v-info`) — nenhuma 6ª classe.
-- [x] `tools/build_pack.py` re-executado: payload do `.ar10pack` byte-
-      idêntico (wasm/dataset/manifestos inalterados nesta missão) — o
-      `.ar10pack` e `pack/checksums.sha256` não aparecem no `git status`.
-- [x] `evidence_outbox/manifest.sha256.json` regenerado (24 entradas, +2
-      módulos novos); `EXPORT_MANIFEST.json` criado.
+- [x] `node --check` em todos os `.js` sob `ipad_runtime/` (14 arquivos,
+      incluindo `app.js`, `siriform.js`, `service-worker.js`,
+      `pack-manager.js`, `export-manifest.js`) — todos OK.
+- [x] `json.load` em todos os `.json`/`.webmanifest`/`.ar10pack` do
+      projeto — todos válidos.
+- [x] `CACHE_VERSION` do Service Worker `v6` → `v7` (conteúdo de
+      `index.html`/`css/ipad-runtime.css`/`js/app.js`/`js/siriform.js`
+      mudou; lista de `PRECACHE_URLS` não mudou — nenhum arquivo novo
+      foi introduzido nesta missão).
+- [x] `evidence_outbox/manifest.sha256.json` regenerado para os 5 arquivos
+      que mudaram (`index.html`, `css/ipad-runtime.css`, `js/app.js`,
+      `js/siriform.js`, `service-worker.js`); os demais hashes
+      permanecem idênticos (payload do `.ar10pack`/wasm/dataset
+      intocado).
+- [x] `EXPORT_MANIFEST.json`: campo `generated_for` atualizado para o
+      codinome desta missão; política de nome único em si não mudou.
 
 ## Não verificado nesta sessão (honestidade operacional)
 
-- [ ] Teste em Safari real de iPad físico (paisagem e retrato) — ambiente
-      sem iPad/Safari/screenshot. O bento de multicoluna foi validado por
-      leitura de CSS e balanceamento de regras, não por renderização real.
-- [ ] Comportamento real de `position: sticky` do banner com o layout em
-      multicoluna do `.bento` — o banner foi mantido FORA da multicoluna
-      justamente para evitar esse risco, mas não foi confirmado em
-      dispositivo real.
-- [ ] Prompt de "substituir" do Safari ao exportar — a correção (nomes
-      únicos + fluxos internos sem download) foi confirmada por leitura de
-      código, não por teste no app Arquivos real.
+- [ ] Teste em Safari real de iPad físico (a motivação original desta
+      missão foi um screenshot real) — ambiente sem iPad/Safari físico
+      disponível. Header sem corte, safe-area e ausência de overflow
+      horizontal foram validados por auditoria estática de CSS/HTML, não
+      por renderização real na tela que reportou o problema.
+- [ ] Comportamento real de `position: sticky` do novo `.app-topbar`
+      durante rotação de tela e em modo standalone (PWA instalado) —
+      validado por leitura de código (sem margem negativa, sem
+      `max-width` herdado), não por dispositivo real.
+- [ ] Toque real no botão "Modo avançado" com leitor de tela (VoiceOver) —
+      `aria-expanded` e `aria-label` foram mantidos/adicionados por
+      leitura de código, não testados com VoiceOver real.

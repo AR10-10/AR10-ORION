@@ -1,6 +1,6 @@
 {
-  "generated_for": "AR10_CYBORG_2_IPAD_LANDSCAPE_VAULT_AUTOSAVE_EXPORT_AND_REAL_DATA_POLICY_FIX_V1",
-  "continues_from": "AR10_CYBORG_2_IPAD_LOCAL_VAULT_SAFE_AUTOMATION_POLISH_V1",
+  "generated_for": "AR10_CYBORG_2_REAL_IPAD_HOLD_FIX_NATIVE_APP_SHELL_ONE_BUTTON_HEADER_VAULT_EXPORT_V1",
+  "continues_from": "AR10_CYBORG_2_IPAD_LANDSCAPE_VAULT_AUTOSAVE_EXPORT_AND_REAL_DATA_POLICY_FIX_V1",
   "repo": "AR10-10/AR10-ORION",
   "branch": "claude/eloquent-cannon-qyt86y",
   "pull_request": "https://github.com/AR10-10/AR10-ORION/pull/3",
@@ -8,28 +8,28 @@
   "hash_algorithm": "sha256",
   "files": {
     "index.html": {
-      "sha256": "e2ec20c5a3fc88ef3e3a5eb19aedf9d3780f52ed33d140dc5d6a5c204cf54ca2",
-      "bytes": 22851
+      "sha256": "232a4e0cd47fba3061a2f48fe5389f2a3bca290ce15fd3c7851b167b103be97d",
+      "bytes": 22730
     },
     "manifest.webmanifest": {
       "sha256": "3be72f358fcba501f54ed12695006386b5aa86fe4ec959665b12bae281ab29a6",
       "bytes": 984
     },
     "service-worker.js": {
-      "sha256": "7156bb6bb33c32ff0aff39eb7d89735d3129932997ef2d0627b5471e5956d46a",
+      "sha256": "19a48d31ba0b655d55b6957ef0381352b269b48cec6750f69d7bbb4538acf771",
       "bytes": 2225
     },
     "css/ipad-runtime.css": {
-      "sha256": "0d7af47b4e1fe0bfc4fabe171136e96799e4cb69d3e9b1550fd7f46f76e29f96",
-      "bytes": 26838
+      "sha256": "8b43d5fa491bda657b28f24e55c2bc54bba3194df9f4e02161485a6ed35b4210",
+      "bytes": 29431
     },
     "js/app.js": {
-      "sha256": "cbfa59a7e1134beeba674a22893a7ffa9394a708d1cca9a03963b087f73f8daf",
-      "bytes": 41805
+      "sha256": "9e8688fc39338a6369d4178d43310d4ca9956423c3dd4196dba82cc2719e95ee",
+      "bytes": 47727
     },
     "js/siriform.js": {
-      "sha256": "b2af37ef4953ee8f3e4de9737343057679742d43855984b2f4e0bbea0f7d0ceb",
-      "bytes": 4698
+      "sha256": "02111f023248b17f4a9648ac5e139f241127cf53b9a519820901fbd002989264",
+      "bytes": 4784
     },
     "js/voice.js": {
       "sha256": "4be294d21de517e2db4c5d60cb6a2f3cf8101e14a27bba198468c6d75b0e97f9",
