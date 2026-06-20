@@ -98,6 +98,7 @@ estavel do prompt:
 ```
 READ_ONLY
 FAIL_CLOSED
+LOCAL_FIRST
 NO_REAL_TRADING
 NO_ORDER_EXECUTION
 NO_API_SECRET
@@ -117,7 +118,7 @@ repositorio sob nomes equivalentes (ver `ipad_runtime/README.md` —
 `ipad_runtime/configs/asset-universe.default.json` campo
 `security_posture`; ver `docs/SIRIFORM_VOICE_AND_NATIVE_COMPANION_ROUTE.md`
 — frases bloqueadas por politica). `docs/READ_ONLY_MARKET_SAFETY.md` e o
-indice consolidado e citavel destas mesmas 13 leis, lei por lei, com a
+indice consolidado e citavel destas mesmas 14 leis, lei por lei, com a
 aplicacao real (arquivo e mecanismo) de cada uma — este bloco e o resumo
 "sempre identico" que um agente deve carregar no prefixo estavel; aquele
 documento e a referencia expandida para quando for preciso auditar onde,

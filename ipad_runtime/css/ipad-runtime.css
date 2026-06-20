@@ -739,64 +739,106 @@ footer.legal {
 .qa-btn .icon { opacity: 0.8; }
 
 /* ------------------------------------------------------------
-   LAYOUT RESPONSIVO — dashboard em 2/3 colunas a partir da
-   largura de um iPad. Abaixo do breakpoint, tudo fica em coluna
-   unica na ordem natural do documento (Siriform sempre primeiro,
-   exatamente como hoje) — nada de reordenar o DOM so para o CSS
-   de telas largas, para nao trocar a experiencia mobile/iPad
-   retrato pela experiencia desktop/iPad paisagem.
+   NOTA DE DIAGNOSTICO — replay/analise sao teste tecnico, nunca
+   decisao de mercado (Fase 6 — real data policy).
    ------------------------------------------------------------ */
+.diagnostic-note {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--alert-amber);
+    background: rgba(255, 184, 0, 0.06);
+    border: 1px solid rgba(255, 184, 0, 0.3);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 0 0 10px;
+}
+.diagnostic-note b { color: var(--alert-amber); }
+
+.data-policy-panel { border-color: rgba(255, 184, 0, 0.22); }
+.data-policy-panel h2 { color: var(--alert-amber); text-shadow: 0 0 8px rgba(255, 184, 0, 0.25); }
+
+/* ------------------------------------------------------------
+   ARQUIVOS EXPORTADOS — lista de artefatos com nome unico e
+   visibilidade (BAIXAVEL / SOB DEMANDA / INTERNO / FUTURO).
+   ------------------------------------------------------------ */
+.export-panel .btn-grid { margin-bottom: 12px; }
+.export-list { display: flex; flex-direction: column; gap: 6px; }
+.export-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid rgba(0, 242, 255, 0.08);
+    padding: 6px 0;
+}
+.export-name {
+    font-family: var(--font-mono);
+    font-size: clamp(0.7rem, 1.6vw, 0.82rem);
+    color: var(--text-primary);
+    word-break: break-all;
+}
+.export-tag {
+    font-size: 0.64rem;
+    letter-spacing: 1px;
+    font-weight: bold;
+    white-space: nowrap;
+    border: 1px solid currentColor;
+    border-radius: 6px;
+    padding: 2px 8px;
+    flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------
+   TELEMETRIA AO VIVO — ultimo evento sempre visivel + caixa preta
+   rolavel, sem virar um muro de terminal dominando a tela (Fase 5).
+   ------------------------------------------------------------ */
+.telemetry-latest {
+    font-family: var(--font-mono);
+    font-size: clamp(0.72rem, 1.7vw, 0.86rem);
+    line-height: 1.4;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    background: rgba(0, 242, 255, 0.05);
+    border: 1px solid rgba(0, 242, 255, 0.18);
+    word-break: break-word;
+}
+.telemetry-card .console { max-height: 200px; }
+
+/* ------------------------------------------------------------
+   LAYOUT RESPONSIVO — BENTO EM COLUNAS BALANCEADAS (iPad paisagem)
+
+   Abaixo de 900px (iPad retrato/iPhone) nada muda: os cards ficam
+   em coluna unica, na ordem natural do documento (Siriform/orb
+   sempre primeiro). O banner READ_ONLY/FAIL_CLOSED, o header, a
+   Telemetria e o rodape continuam fora do fluxo de colunas (largura
+   total), entao o banner sticky funciona exatamente como hoje.
+
+   A partir de 900px os cards do .bento fluem em multicolunas. Ao
+   contrario da grade explicita anterior (que deixava uma coluna
+   curta com muito "vazio preto" e a outra com uma pilha enorme), a
+   multicoluna BALANCEIA a altura automaticamente e preenche a tela
+   larga sem zonas mortas. Cada card e indivisivel entre colunas
+   (break-inside: avoid), entao nenhum card e cortado.
+   ------------------------------------------------------------ */
+.bento { width: 100%; }
+
 @media (min-width: 900px) {
-    .runtime-shell { max-width: 1200px; }
-    .runtime-shell {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
-        gap: 0 18px;
-        align-items: start;
+    .runtime-shell { max-width: 1280px; }
+    .bento {
+        column-count: 2;
+        column-gap: 18px;
     }
-    .mode-banner,
-    .nebula-header,
-    #console-section,
-    footer.legal {
-        grid-column: 1 / -1;
-    }
-    #siriform-section,
-    #runtime-actions {
-        grid-column: 1;
-    }
-    #cyborg-readiness-panel,
-    #voice-status-panel,
-    #status-panel,
-    #feature-detect-panel,
-    #quant-engine-panel,
-    #ai-models-panel,
-    #replay-section,
-    #analysis-frame-panel,
-    #decision-frame-panel,
-    #vault-evidence-panel,
-    #vault-local-panel {
-        grid-column: 2;
+    .bento > section.card {
+        break-inside: avoid;
+        -webkit-column-break-inside: avoid;
+        page-break-inside: avoid;
+        /* evita um card colado no topo da coluna seguinte sem respiro */
+        margin-top: 0;
     }
 }
 
-@media (min-width: 1300px) {
-    .runtime-shell { max-width: 1480px; }
-    .runtime-shell { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 1fr); }
-    #runtime-actions { grid-column: 1; }
-    #siriform-section,
-    #replay-section,
-    #analysis-frame-panel {
-        grid-column: 2;
-    }
-    #cyborg-readiness-panel,
-    #voice-status-panel,
-    #status-panel,
-    #feature-detect-panel,
-    #quant-engine-panel,
-    #ai-models-panel,
-    #decision-frame-panel,
-    #vault-evidence-panel,
-    #vault-local-panel {
-        grid-column: 3;
-    }
+@media (min-width: 1280px) {
+    .runtime-shell { max-width: 1600px; }
+    .bento { column-count: 3; }
 }

@@ -71,21 +71,32 @@ Estados possíveis (`data-state` no `#siriform-avatar`):
 | `read_only`  | Estado de repouso "de lei" — sempre mostrado após 3.6s parado. |
 | `fail_closed`| Falha de segurança real (checksum divergente, instalação bloqueada). |
 
-Cards do painel (todos dentro da mesma página, sem rota nova):
+Cards do painel (todos dentro da mesma página, sem rota nova). Em iPad
+paisagem (≥900px) os cards fluem num **bento de colunas balanceadas**
+(`.bento` em multicoluna) que preenche a tela larga sem zonas pretas
+vazias; o banner READ_ONLY/FAIL_CLOSED, o header, a Telemetria e o rodapé
+ficam fora do fluxo de colunas (largura total). Em retrato, coluna única na
+ordem natural:
 `siriform-card` → `cyborg-readiness-panel` (leitura "tudo pronto?" de 1
 linha) → `voice-status-panel` (estado do microfone/Siriform Voice Layer) →
 `runtime-status-panel` → `feature-detect-panel` →
 `quant-engine-widget` → `ai-models-panel` (WebLLM/Transformers/ONNX,
 `FUTURE`) → `replay-wrap` (com `profile-toggle` Light/Balanced/Heavy,
-genuinamente muda a janela SMA/EMA usada no WASM) → `analysis-frame-panel`
-(estatística descritiva real, "não é recomendação") →
-`decision-frame-panel` (**`STUB CONTROLLED`**, sem lógica de decisão, sem
-sinal de ordem — existe só para deixar explícita a fronteira até onde o
-runtime vai) → `vault-evidence-card` (reabre e re-verifica o SHA-256 a cada
-boot, mostra backend/arquivos/timestamp/hash por arquivo) →
-`vault-local-panel` (Vault Local do iPad — 16 campos de status, leitura
-honesta do que está instalado/validado neste iPad, sem decoração) →
-`local-pack-manager` (os 13 botões do Local Pack Manager).
+genuinamente muda a janela SMA/EMA usada no WASM; rotulado **Modo de
+Diagnóstico Técnico — dados sintéticos, não usar para decisão de mercado**)
+→ `analysis-frame-panel` (estatística descritiva sobre o dataset sintético,
+"não é recomendação") → `data-policy-panel` (Política de Dados de Mercado —
+sintético = diagnóstico; análise real exige fonte pública/somente-leitura
+ou mostra `DADOS INSUFICIENTES`) → `decision-frame-panel`
+(**`STUB CONTROLLED`**, sem lógica de decisão, sem sinal de ordem) →
+`vault-evidence-card` (reabre e re-verifica o SHA-256 a cada boot) →
+`vault-local-panel` (Vault Local do iPad — 16 campos de status; com
+auto-reparo seguro: reindexa do armazenamento ou reinstala, nunca apaga
+como primeiro recurso) → `local-pack-manager` (os 13 botões do Local Pack
+Manager) → `export-panel` (Arquivos Exportados — exportações com nome único
+carimbado, sem prompt de "substituir"). A antiga "Logs do Sistema" virou
+`telemetry-card` (**Telemetria ao Vivo** — último evento sempre visível +
+caixa preta rolável, eventos reais, nunca um muro de terminal).
 
 ## Decisões técnicas (liberdade técnica usada nesta entrega)
 

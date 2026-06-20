@@ -1,203 +1,170 @@
-# Checklist de Evidência — AR10_CYBORG_2_IPAD_LOCAL_VAULT_SAFE_AUTOMATION_POLISH_V1
+# Checklist de Evidência — AR10_CYBORG_2_IPAD_LANDSCAPE_VAULT_AUTOSAVE_EXPORT_AND_REAL_DATA_POLICY_FIX_V1
 
 Continuação direta de
-`AR10_CYBORG_2_VISUAL_POLISH_MULTI_ASSET_RESEARCH_AND_CONNECTOR_ARCHITECTURE_V1`
-— mesmo branch (`claude/eloquent-cannon-qyt86y`), mesmo PR (#3), sem
-reinício. Esta missão (Mission 5) é de **polimento de automação local
-segura** — painel "Vault Local do iPad", fluxo de salvamento/atualização
-automática do pacote local, e reconciliação dos botões do Local Pack
-Manager. Não é uma fase de live trading; nenhuma capacidade de execução
-foi adicionada. Marcado apenas o que foi de fato executado e verificado
-nesta sessão — nenhum item abaixo é "assumido como passando".
+`AR10_CYBORG_2_IPAD_LOCAL_VAULT_SAFE_AUTOMATION_POLISH_V1` — mesmo branch
+(`claude/eloquent-cannon-qyt86y`), mesmo PR (#3), sem reinício. Esta missão
+(Mission 6) cobre: paisagem do iPad (bento), auto-reparo do Vault,
+princípio de armazenamento automático, política de exportação com nome
+único, telemetria legível e política de dados reais. Não é fase de live
+trading; nenhuma capacidade de execução foi adicionada. Marcado apenas o
+que foi de fato executado e verificado nesta sessão.
 
-## Vault Local do iPad (painel novo)
+## Fase 1 — iPad paisagem (bento de colunas balanceadas)
 
-- [x] Seção `#vault-local-panel` adicionada em `index.html` entre
-      `vault-evidence-panel` e `local-pack-manager` — 16 campos de status
-      (`vl-pack`, `vl-pack-name`, `vl-pack-version`, `vl-sha256`,
-      `vl-sw-cache`, `vl-cache-api`, `vl-idb`, `vl-opfs`, `vl-wasm`,
-      `vl-replay`, `vl-updated`, `vl-cache-version`, `vl-storage-used`,
-      `vl-storage-quota`, `vl-safety`, `vl-repair`), todos populados por
-      `refreshVaultLocalPanel(vault)` (`js/app.js`) a partir de sondagens
-      reais (nenhum valor decorativo).
-- [x] Texto verbatim de onboarding incluído no painel: "O Cyborg salva
-      automaticamente os arquivos necessários no armazenamento seguro do
-      Safari/PWA. Você não precisa procurar uma pasta raiz. Esta área
-      mostra o que está instalado, validado e pronto para uso neste
-      iPad."
-- [x] `refreshVaultLocalPanel()` chamada a partir do único chokepoint
-      `refreshVaultAndReplayStatus()` (`js/app.js`) — cobre `boot`,
-      `handleDownloadPack`, `handleInstallStorage`, `handleClearReinstall`,
-      `handlePrepareCyborg` e os 3 novos handlers, sem precisar duplicar a
-      chamada em cada um.
-- [x] Armazenamento usado / cota disponível lidos via
-      `navigator.storage.estimate()` (`storageEstimate()` em
-      `js/storage.js`, função pré-existente, reaproveitada sem
-      duplicação).
-- [x] Rótulos PT-BR exatos usados nos campos de status —
-      `INSTALADO`/`OK`/`ATUALIZADO`/`DESATUALIZADO`/`AUSENTE`/`CORROMPIDO`/
-      `LIMITADO`/`REINSTALAÇÃO NECESSÁRIA`/`BLOQUEADO POR SEGURANÇA` —
-      mapeados para as 5 classes CSS já existentes via `classFor()`
-      estendido; **nenhuma sexta classe de status criada** (confirmado:
-      `v-ok`/`v-fail`/`v-info`/`v-pending`/`v-limited` continuam sendo as
-      únicas 5 classes usadas em `js/app.js` e `css/ipad-runtime.css`).
-- [x] `NO_FAKE_LOCAL_AI_CLAIMS` (lei nova, ver seção de segurança abaixo):
-      `vaultFreshness` começa `null` a cada carregamento de página e só
-      recebe `'ATUALIZADO'`/`'DESATUALIZADO'` depois de uma comparação de
-      versão de fato feita nesta sessão — nunca assumido por omissão.
+- [x] Cards do painel agrupados em um wrapper `.bento` em `index.html`
+      (entre o header e a Telemetria), sem reordenar o DOM.
+- [x] CSS de paisagem reescrito: a grade explícita 2/3-colunas (que deixava
+      uma coluna curta com "vazio preto" e a outra com pilha enorme) foi
+      substituída por **multicoluna balanceada** (`column-count: 2` a
+      partir de 900px, `3` a partir de 1280px), que equaliza a altura das
+      colunas e preenche a tela larga sem zonas mortas.
+- [x] `break-inside: avoid` (+ `-webkit-column-break-inside`) em todo
+      `.bento > section.card` — nenhum card é cortado entre colunas.
+- [x] Banner READ_ONLY/FAIL_CLOSED, header, Telemetria e rodapé ficam
+      **fora** do fluxo de colunas (largura total) — o banner sticky
+      continua funcionando exatamente como em retrato (não está dentro da
+      multicoluna).
+- [x] Retrato preservado: abaixo de 900px nada muda (coluna única, ordem
+      natural, Siriform/orb primeiro).
+- [x] Sem overflow horizontal: multicoluna quebra na vertical; `word-break`
+      em nomes de arquivo exportado; valores de status `nowrap` curtos.
+      Chaves CSS balanceadas (147/147).
 
-## Fluxo de salvamento/atualização automática local (8 passos)
+## Fase 2 — Auto-reparo do Vault
 
-- [x] `handleCheckLocalInstall()` — verifica estado instalado localmente
-      sem rede (consulta apenas o meta já salvo + recalcula SHA-256 dos
-      arquivos já gravados).
-- [x] `handleUpdateLocalPack()` — compara versão local vs. pacote
-      carregado; baixa/reinstala somente se houver diferença real de
-      versão; do contrário reporta `ATUALIZADO` sem reescrever nada.
-- [x] `handleRepairInstall()` — força reverificação + reinstalação
-      incondicional (usado quando o usuário suspeita de corrupção), sempre
-      `FAIL_CLOSED` se o checksum não bater.
-- [x] `installToSafariStorage()` (`js/pack-manager.js`) reescrita para
-      seguir a ordem seguro-primeiro: (1) verifica SHA-256 do pacote
-      carregado, (2) aborta com `FAIL_CLOSED` se inválido — **antes** de
-      tocar em qualquer arquivo já instalado, (3) grava os arquivos novos
-      já validados, (4) só then remove arquivos antigos que não existem
-      mais no pacote novo (`deleteFile()`, novo em `js/storage.js`,
-      reaproveitando `idbDelete` já existente), (5) atualiza o meta do
-      Vault com `installedAt` preservado e `updatedAt` novo.
-- [x] Nunca apaga o estado anterior antes de confirmar que o novo
-      conteúdo é válido — limpeza de cache antigo só ocorre depois da
-      gravação validada, nunca antes.
-- [x] `pack/manifest.pack.json` ganhou o campo `pack_version: "1.0.0"`
-      necessário para a comparação de versão local-vs-remoto sem
-      depender de heurística de timestamp.
+- [x] `pack-manager.rebuildIndexFromStorage()` (novo): valida os arquivos já
+      gravados (OPFS/IndexedDB) contra os checksums do meta salvo e restaura
+      `READY` sem reinstalar quando os bytes continuam íntegros — resolve o
+      caso "corrompido/ausente após girar a tela ou reabrir".
+- [x] `pack-manager.autoRepairVault()` (novo) na ordem pedida: (1)
+      re-verifica → (2) reindexa do armazenamento se os arquivos existem →
+      (3) re-checa SHA256 → (4) restaura `READY` se válido → (5) se
+      faltam/diferem, reinstala com segurança a partir do pacote do app
+      (mesma origem, já em cache do SW — funciona offline), sempre
+      `FAIL_CLOSED` se o checksum do pacote falhar → (6) Limpar/Reinstalar
+      continua sendo o último recurso **manual, com confirmação**.
+- [x] Auto-reparo nunca apaga dados como primeiro recurso (confirmado por
+      leitura: só `installToSafariStorage()`, que grava o novo validado
+      antes de remover obsoleto, e aborta sem tocar nada se checksum falhar).
+- [x] `handleRepairInstall()` reescrito para usar `autoRepairVault()` —
+      tenta a recuperação barata (reindex) antes de rebaixar; mensagens
+      claras de qual caminho recuperou.
+- [x] Boot dispara auto-reparo **automático** só quando havia instalação
+      anterior (existe meta com checksums) e o estado agora não é `READY` —
+      numa primeira visita não auto-instala nada.
+- [x] "Reparar instalação" permanece como ação primária clara quando o
+      auto-reparo não conclui.
 
-## Botões do Local Pack Manager (reconciliação 10 → 13)
+## Fase 3 — Armazenamento local automático
 
-- [x] 5 botões pedidos pela missão mapeados contra os botões existentes:
-      "Preparar tudo neste iPad" (`btn-prepare-cyborg`, já existia,
-      rótulo ajustado), "Verificar instalação local" (`btn-check-install`,
-      **novo**), "Atualizar pacote local" (`btn-update-pack`, **novo**),
-      "Reparar instalação" (`btn-repair-install`, **novo**),
-      "Limpar/Reinstalar" (`btn-clear-reinstall`, já existia, rótulo
-      inalterado).
-- [x] Nenhum handler existente quebrado — os 10 botões anteriores
-      continuam com o mesmo `id`/listener; os 3 novos foram adicionados em
-      `wireButtons()` sem remover nenhum `addEventListener` anterior.
-- [x] Contagem real confirmada nesta sessão via grep de
-      `id="btn-` em `index.html`: **13 botões** dentro de
-      `#runtime-actions` (`local-pack-manager`).
-- [x] "Limpar/Reinstalar" mantém estilo destrutivo (`class="rt-btn
-      danger"`) + diálogo de confirmação com explicação do que será
-      removido (`handleClearReinstall()`, mensagem detalhada, reseta
-      `vaultFreshness` para `null` após a ação).
+- [x] Fluxos internos (preparar/atualizar/reparar/auto-reparo) passaram a
+      usar `pack-manager.fetchLocalPack()` (carrega em memória, **sem**
+      disparar download para o app Arquivos). Antes, cada um desses fluxos
+      chamava `downloadLocalPack()` e despejava o mesmo arquivo no app
+      Arquivos a cada toque — provável origem do prompt de "substituir"
+      relatado. Agora o armazenamento interno é 100% automático.
+- [x] Texto do princípio mantido no painel Vault Local e repetido no painel
+      Arquivos Exportados (o usuário não procura pasta raiz).
 
-## Documentação atualizada nesta sessão
+## Fase 4 — Exportação com nome único + EXPORT_MANIFEST + painel
 
-- [x] `docs/READ_ONLY_MARKET_SAFETY.md` — 13ª lei `NO_FAKE_LOCAL_AI_CLAIMS`
-      adicionada (bloco verbatim + linha na tabela + nota explicativa
-      distinguindo de `NO_FAKE_DATA`); todas as 6 ocorrências de "12
-      leis" no arquivo corrigidas para "13 leis".
-- [x] `docs/PROMPT_CACHING_AND_AGENT_CONTEXT_STRATEGY.md` — Stable Block
-      02 atualizado com `NO_FAKE_LOCAL_AI_CLAIMS`; referência cruzada
-      "12 leis" → "13 leis" corrigida.
-- [x] `docs/DATA_SOURCE_MATRIX.md` — referência "12 leis" → "13 leis"
-      corrigida.
-- [x] `docs/IPAD_PWA_VISUAL_POLISH_HANDOFF.md` — referência "12 leis" →
-      "13 leis" corrigida.
-- [x] `ipad_runtime/README.md` — cadeia de cards corrigida para incluir
-      `cyborg-readiness-panel`, `voice-status-panel` (ambos já existentes
-      desde a Mission 4, nunca documentados nesta prosa) e
-      `vault-local-panel` (novo); contagem de botões corrigida de "9" para
-      "13" (refletindo o estado real atual, não o estado pré-Mission-4).
-- [x] Busca grep-wide confirmada: nenhuma outra ocorrência de "12 leis"
-      restante em `docs/` após estas 4 correções.
+- [x] `js/export-manifest.js` (novo): `uniqueName(type,version,ext)` produz
+      `AR10_CYBORG_[TYPE]_[VERSION]_[YYYYMMDD_HHMMSS].[ext]`;
+      `downloadArtifact()` dispara o download nativo com esse nome e
+      registra o evento.
+- [x] "Baixar Pacote Local" agora usa nome único carimbado (antes era o
+      nome genérico fixo `AR10_CYBORG_LOCAL_PACK_V1.ar10pack` → colisão).
+- [x] Painel "Arquivos Exportados" (`#export-panel`): lista pacote local,
+      relatório, evidência e deckap com tag BAIXÁVEL/SOB DEMANDA/INTERNO/
+      FUTURO; exportações da sessão aparecem no topo com o nome real usado.
+- [x] Botões "Exportar Relatório (.md)" e "Exportar Evidência (.json)" geram
+      artefatos reais a partir do estado da sessão, com nome único.
+- [x] `evidence_outbox/EXPORT_MANIFEST.json` (novo): tipo, filename/padrão,
+      versão, generated_for, purpose, sha256 (quando disponível), caminho
+      interno e padrão de export visível.
+- [x] Nenhum export contém segredo/chave/credencial/dado de conta — o
+      relatório e a evidência só carregam feature-detect, estado do Vault,
+      estimativa de storage e a política de dados (confirmado por leitura).
 
-## Verificação técnica local (sem rede, sem browser real) — refeita nesta sessão
+## Fase 5 — Telemetria (logs legíveis, não muro de terminal)
 
-- [x] `node --input-type=module --check` nos 39 arquivos `.js` sob
-      `ipad_runtime/` (runtime + workers + `src/research/**`) — sintaxe
-      OK, zero falhas, incluindo os 3 arquivos editados nesta missão
-      (`js/app.js`, `js/pack-manager.js`, `js/storage.js`) e
-      `service-worker.js`.
-- [x] `json.load` em todos os 9 arquivos JSON sob `ipad_runtime/`
-      (`configs/*.json`, `data/btcusdt_replay.json`, `pack/*.json`) —
-      todos válidos, incluindo `pack/manifest.pack.json` com o novo campo
-      `pack_version`.
-- [x] CSS: chaves `{`/`}` balanceadas (140/140) em
-      `css/ipad-runtime.css` após adicionar `#vault-local-panel` aos
-      breakpoints de 900px/1300px (sem nova classe CSS).
-- [x] HTML: `<section>` balanceado (14/14), `<div>` balanceado (80/80),
-      `<button>` balanceado (22/22) em `index.html` — verificado por
-      parser de tags próprio, não apenas contagem de substring.
-- [x] Cross-check programático: todos os 69 ids no array `els{}` de
-      `js/app.js` (incluindo os 16 novos `vl-*`) existem em
-      `index.html` (110 ids totais declarados) — 0 ausentes.
-- [x] Todos os 21 arquivos reais do precache do Service Worker (mais a
-      raiz `./`, servida pelo próprio diretório) existem em disco —
-      checado um a um nesta sessão.
-- [x] `CACHE_VERSION` incrementado `v4` → `v5` em `service-worker.js` —
-      necessário porque `index.html`/`css/ipad-runtime.css`/`js/app.js`/
-      `js/pack-manager.js`/`js/storage.js` mudaram de conteúdo nesta
-      entrega.
-- [x] `tools/build_pack.py` re-executado: `AR10_CYBORG_LOCAL_PACK_V1.ar10pack`
-      reempacotado (87730 bytes) para embutir o `manifest.pack.json`
-      atualizado (`pack_version` novo); `pack/checksums.sha256`
-      regenerado — hashes de `wasm/cyborg_quant_core.wasm` e
-      `data/btcusdt_replay.json` confirmados **inalterados** (nenhum dos
-      dois payloads binários mudou nesta missão; só o manifesto JSON
-      embutido mudou).
-- [x] `evidence_outbox/manifest.sha256.json` regenerado
-      programaticamente (22 entradas) — hashes recalculados para os 8
-      arquivos que mudaram de conteúdo (`index.html`,
-      `css/ipad-runtime.css`, `js/app.js`, `js/pack-manager.js`,
-      `js/storage.js`, `service-worker.js`, `pack/manifest.pack.json`,
-      `AR10_CYBORG_LOCAL_PACK_V1.ar10pack`).
+- [x] "Logs do Sistema" → **"Telemetria ao Vivo"** (sub-rótulo "Caixa Preta
+      do Cyborg — eventos reais").
+- [x] Linha de "último evento" sempre visível no topo do card
+      (`#telemetry-latest`), atualizada a cada `log()`; a caixa preta
+      completa continua rolável dentro do card (altura reduzida para 200px).
+- [x] Nenhum evento falso: `telemetry-latest` espelha exatamente a última
+      linha real de `log()`.
 
-## Segurança (13 leis) — confirmação cruzada nesta sessão
+## Fase 6 — Política de dados reais
 
-- [x] `execution_supported: false` ainda nas 14 entradas de
-      `connector-registry.default.json` — nenhum conector tocado nesta
-      missão.
-- [x] `grep -rn "localStorage"` em `js/` e `index.html` — zero
-      ocorrências, base real de `NO_SECRET_IN_LOCALSTORAGE` ainda válida
-      após os novos `vl-*`/`deleteFile()`/handlers (nenhum deles usa
-      `localStorage`; o Vault continua 100% OPFS/IndexedDB).
-- [x] `installToSafariStorage()` confirmado: limpeza de arquivo antigo
-      (`deleteFile`) só ocorre **depois** da verificação SHA-256 e da
-      gravação dos arquivos novos — nunca antes, preservando
-      `FAIL_CLOSED` (uma falha no meio do processo nunca deixa o Vault
-      sem o pacote anterior funcional).
-- [x] Nenhuma nova rota de rede, campo de chave/segredo, ou função de
-      ordem introduzida pelos 3 novos handlers ou pelo novo painel —
-      confirmado por leitura completa do diff antes do commit.
-- [x] 13ª lei `NO_FAKE_LOCAL_AI_CLAIMS` confirmada como já implementada
-      (não aspiracional) antes de ser documentada: `vaultFreshness`
-      realmente começa `null` no código, e os detectores `FUTURE`
-      (`feature-detect.js`) e `manifest.models.json` já usavam esse
-      literal antes desta sessão — o documento apenas nomeia o padrão já
-      existente.
+- [x] Replay e AnalysisFrame rotulados na UI com o texto verbatim "Teste
+      técnico offline — dados sintéticos, não usar para decisão de mercado."
+      (`.diagnostic-note`).
+- [x] Painel "Política de Dados de Mercado" (`#data-policy-panel`):
+      diagnóstico = sintético/offline; modo de dados reais e análise real =
+      `DADOS INSUFICIENTES` (honesto — nenhum conector ao vivo habilitado);
+      dados públicos read-only = PERMITIDO; dados privados / conta privada /
+      execução = BLOQUEADO / DISABLED_BY_POLICY.
+- [x] `js/data-policy.js` (runtime) + `configs/market-data-policy.json`
+      (declarativo) com conteúdo idêntico: PUBLIC_DATA_ALLOWED,
+      READ_ONLY_CONNECTORS_ALLOWED, lista de fontes públicas permitidas,
+      bloqueios e `status_when_unavailable: 'DADOS INSUFICIENTES'`.
+- [x] `realMarketAnalysisStatus()` retorna honestamente
+      `DADOS INSUFICIENTES` porque nenhum conector real está habilitado
+      (NO_FAKE_DATA — nenhum número de mercado inventado).
+- [x] `docs/REAL_DATA_POLICY.md` (novo) documenta os dois modos e o
+      permitido/bloqueado.
 
-## Deploy / HTTPS
+## Segurança (14 leis) — confirmação cruzada nesta sessão
 
-- [x] Branch `claude/eloquent-cannon-qyt86y` é a branch de trabalho ativa.
-- [x] PR #3 — ver resposta final para reconfirmação de status nesta
-      sessão.
-- [ ] Run do workflow `Deploy iPad Runtime (GitHub Pages)` disparada pelo
-      push desta sessão — ver `main_files.md` / resposta final para o
-      resultado.
-- [ ] Verificação de `https://ar10-10.github.io/AR10-ORION/` pós-push —
-      ver resposta final.
+- [x] 14ª lei `LOCAL_FIRST` adicionada a `docs/READ_ONLY_MARKET_SAFETY.md`
+      (bloco verbatim + linha de tabela com aplicação real) e propagada:
+      contagem "13 leis" → "14 leis" em `READ_ONLY_MARKET_SAFETY.md`,
+      `PROMPT_CACHING_AND_AGENT_CONTEXT_STRATEGY.md` (+ bloco de leis),
+      `DATA_SOURCE_MATRIX.md`, `IPAD_PWA_VISUAL_POLISH_HANDOFF.md`. Grep
+      confirma zero "13 leis" restante em `docs/`.
+- [x] `grep -rn "localStorage"` em `js/`, `index.html`, `service-worker.js`
+      — zero ocorrências (base real de `NO_SECRET_IN_LOCALSTORAGE`).
+- [x] `grep` por `order_send|placeOrder|sendOrder|api_secret|private_key`
+      nos arquivos novos/editados — zero ocorrências.
+- [x] `grep` por `fetch(|XMLHttpRequest|WebSocket(` nos dois módulos novos
+      (`export-manifest.js`, `data-policy.js`) — zero (são puros, sem rede).
+- [x] Execução permanece `DISABLED_BY_POLICY` (manifestos inalterados;
+      painel de política mostra explicitamente).
+
+## Verificação técnica local (sem rede, sem browser real)
+
+- [x] `node --input-type=module --check` em todos os `.js` sob
+      `ipad_runtime/` — OK, incluindo `export-manifest.js`, `data-policy.js`,
+      `app.js`, `pack-manager.js`, `service-worker.js`.
+- [x] `json.load` em todos os JSON sob `ipad_runtime/` — válidos, incluindo
+      `configs/market-data-policy.json`.
+- [x] CSS chaves balanceadas (147/147); HTML balanceado (16 `<section>`,
+      92 `<div>` incluindo `.bento`, 24 `<button>`).
+- [x] Cross-check de ids: 73 ids em `els{}` + 20 `getElementById` diretos —
+      todos existem em `index.html` (0 ausentes), incluindo
+      `telemetry-latest`, `dp-realmode`, `dp-analysis`, `export-list`,
+      `btn-export-report`, `btn-export-evidence`.
+- [x] 24 entradas do precache do Service Worker existem em disco (inclui os
+      2 módulos novos); `CACHE_VERSION` `v5` → `v6`.
+- [x] Exatamente 5 classes de status (`v-ok`/`v-fail`/`v-limited`/
+      `v-pending`/`v-info`) — nenhuma 6ª classe.
+- [x] `tools/build_pack.py` re-executado: payload do `.ar10pack` byte-
+      idêntico (wasm/dataset/manifestos inalterados nesta missão) — o
+      `.ar10pack` e `pack/checksums.sha256` não aparecem no `git status`.
+- [x] `evidence_outbox/manifest.sha256.json` regenerado (24 entradas, +2
+      módulos novos); `EXPORT_MANIFEST.json` criado.
 
 ## Não verificado nesta sessão (honestidade operacional)
 
-- [ ] Teste manual no Safari real de iPad físico — ambiente de execução
-      não tem iPad/Safari real disponível, nem ferramenta de
-      browser/screenshot. Em particular, o layout do novo painel
-      `#vault-local-panel` nos breakpoints 900px/1300px não foi validado
-      visualmente, apenas por leitura de CSS.
-- [ ] Teste de `navigator.storage.estimate()` com quota real de
-      dispositivo — comportamento depende do Safari real; código
-      confirmado correto por leitura, não por execução em browser.
-- [ ] `js/siriform.js`, `js/voice.js` inalterados nesta missão — fora do
-      escopo (Mission 5 não toca a camada de voz).
+- [ ] Teste em Safari real de iPad físico (paisagem e retrato) — ambiente
+      sem iPad/Safari/screenshot. O bento de multicoluna foi validado por
+      leitura de CSS e balanceamento de regras, não por renderização real.
+- [ ] Comportamento real de `position: sticky` do banner com o layout em
+      multicoluna do `.bento` — o banner foi mantido FORA da multicoluna
+      justamente para evitar esse risco, mas não foi confirmado em
+      dispositivo real.
+- [ ] Prompt de "substituir" do Safari ao exportar — a correção (nomes
+      únicos + fluxos internos sem download) foi confirmada por leitura de
+      código, não por teste no app Arquivos real.

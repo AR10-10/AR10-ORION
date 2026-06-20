@@ -22,16 +22,17 @@ documento existir, a política já estava correta — só não tinha um único
 ponto de verdade citável. Este documento consolida; não substitui, não
 afrouxa e não adiciona nenhuma regra nova ao que já estava em vigor.
 
-Nenhuma das 13 leis abaixo é nova ou aspiracional. Todas já estão
+Nenhuma das 14 leis abaixo é nova ou aspiracional. Todas já estão
 implementadas em código e/ou declaradas em configuração hoje — a coluna
 "Onde é aplicada" de cada lei aponta para o arquivo e mecanismo real que a
 torna verdade, não apenas uma intenção declarada.
 
-## As 13 leis (texto vinculante, verbatim)
+## As 14 leis (texto vinculante, verbatim)
 
 ```
 READ_ONLY
 FAIL_CLOSED
+LOCAL_FIRST
 NO_REAL_TRADING
 NO_ORDER_EXECUTION
 NO_API_SECRET
@@ -50,7 +51,8 @@ NO_FAKE_LOCAL_AI_CLAIMS
 | Lei | Significado | Onde é aplicada (real, não decorativa) |
 |---|---|---|
 | `READ_ONLY` | O runtime só lê e descreve dados; nunca grava estado em nenhuma conta externa. | `mode: "READ_ONLY"` em `ipad_runtime/pack/manifest.pack.json` e `ipad_runtime/configs/asset-universe.default.json` (`security_posture`); `global_invariants.mode` em `connector-registry.default.json`; nenhuma das 14 entradas do registro tem `execution_supported: true`. |
-| `FAIL_CLOSED` | Qualquer falha de verificação trava o sistema no estado mais seguro (bloqueado), nunca assume sucesso por omissão. | `fail_closed: true` nos mesmos dois manifestos; `pack-manager.reloadVaultState()` recalcula o SHA-256 a cada boot e força o `Vault` para `LOCKED` se algo não bater (ver `ipad_runtime/README.md`, "Vault FAIL_CLOSED real"). |
+| `FAIL_CLOSED` | Qualquer falha de verificação trava o sistema no estado mais seguro (bloqueado), nunca assume sucesso por omissão. | `fail_closed: true` nos mesmos dois manifestos; `pack-manager.reloadVaultState()` recalcula o SHA-256 a cada boot e força o `Vault` para `LOCKED` se algo não bater (ver `ipad_runtime/README.md`, "Vault FAIL_CLOSED real"). O auto-reparo (`pack-manager.autoRepairVault()`) nunca apaga dados como primeiro recurso: re-verifica, reindexa do armazenamento ou reinstala com segurança, e só aborta (preservando o estado anterior) se o checksum falhar. |
+| `LOCAL_FIRST` | Todo o runtime roda local no dispositivo depois do primeiro carregamento HTTPS; nenhum dado do usuário sai do iPad e o núcleo não depende de servidor. | `storage.js` é OPFS com fallback IndexedDB, com o comentário verbatim no topo "Local-first: nada aqui sai do dispositivo. Sem rede, sem secret."; a CSP `connect-src 'self'` (`index.html`) bloqueia qualquer chamada para fora da própria origem; o `service-worker.js` é cache-first/offline-first; o pacote local (`.ar10pack`) é instalado automaticamente no armazenamento seguro do Safari — sem Mac Mini, sem servidor, sem ZIP, sem terminal. Os fluxos internos (preparar/atualizar/reparar/auto-reparo) usam `fetchLocalPack()` em memória, sem expor pastas ao usuário. |
 | `NO_REAL_TRADING` | Nenhuma negociação real ocorre nesta versão, em nenhum fluxo. | `live_trading: "DISABLED"` em `manifest.pack.json`; o replay BTC/USDT se autodeclara `"kind": "SYNTHETIC_OFFLINE_SAMPLE"`, `"live": false`, `"exchange_connection": "NONE"` (gerado por `tools/generate_replay.py`). |
 | `NO_ORDER_EXECUTION` | Não existe função de envio de ordem em nenhuma camada (UI, voz, WASM, conector). | `order_send: "ABSENT"` em `manifest.pack.json`; o motor WASM (`wasm-src/cyborg_quant_core/`) exporta apenas `sma`/`ema`/`stddev`/`zscore_last`/`max_val`/`min_val` — nenhuma função de ordem existe no binário; `execution_supported: false` em todas as 14 entradas de `connector-registry.default.json`. |
 | `NO_API_SECRET` | Nenhuma chave de API real é embutida, armazenada ou solicitada por este runtime. | `api_secret: "ABSENT"` em `manifest.pack.json`; `no_api_secret_in_registry: true` em `global_invariants` do registro de conectores; nenhum conector com `requires_api_key: true` tem `enabled_now: true`. |
@@ -73,7 +75,7 @@ contra "tudo certo" decorativo.
 
 ## Mecanismos transversais de aplicação (cross-cutting)
 
-As 13 leis não dependem de uma única verificação central — são reforçadas
+As 14 leis não dependem de uma única verificação central — são reforçadas
 por **múltiplas camadas independentes**, de forma que a falha de uma
 camada isolada não quebra a garantia geral:
 
@@ -123,7 +125,7 @@ bloqueado, por design, sem exceção... Nenhuma dessas rotas existe neste
 código — não é apenas uma flag desligada"): para cada lei acima, a
 pergunta certa não é "o que aconteceria se alguém tentasse?", mas "existe
 algum caminho de código, mesmo um único, que levaria a essa ação?". Hoje a
-resposta é não, para as 13 leis, em todo o sub-produto `ipad_runtime/`.
+resposta é não, para as 14 leis, em todo o sub-produto `ipad_runtime/`.
 Qualquer trabalho futuro que adicione uma capacidade real nova (um
 conector `ACTIVE_READ_ONLY`, um modelo Llama de fato instalado, uma camada
 de estratégias real) deve preservar essa propriedade: a nova capacidade
@@ -151,7 +153,8 @@ repositório hoje implementa qualquer um deles:
 
 | Documento | Relação |
 |---|---|
-| `docs/PROMPT_CACHING_AND_AGENT_CONTEXT_STRATEGY.md` | Define estas mesmas 13 leis como "Stable Block 02 — Safety Laws" do contexto de qualquer agente de IA que trabalhe neste repositório; este documento é a versão expandida e citável de onde cada lei é aplicada de verdade. |
+| `docs/PROMPT_CACHING_AND_AGENT_CONTEXT_STRATEGY.md` | Define estas mesmas 14 leis como "Stable Block 02 — Safety Laws" do contexto de qualquer agente de IA que trabalhe neste repositório; este documento é a versão expandida e citável de onde cada lei é aplicada de verdade. |
+| `docs/REAL_DATA_POLICY.md` | Corolário operacional de `NO_FAKE_DATA`/`READ_ONLY` para dado de mercado: replay sintético é só diagnóstico; análise real exige fonte pública/somente-leitura ou mostra `DADOS INSUFICIENTES`. |
 | `docs/CONNECTOR_REGISTRY_DESIGN.md` | Define o contrato de schema cujo "Invariante de execução" implementa `NO_ORDER_EXECUTION`/`NO_MT5_ORDER_SEND`/`NO_MEXC_PRIVATE` para todo conector, presente e futuro. |
 | `docs/FUTURE_READY_ASSET_CLASS_REGISTRY.md` | Usa o mesmo bloco `security_posture` em `asset-universe.default.json`. |
 | `docs/SIRIFORM_VOICE_AND_NATIVE_COMPANION_ROUTE.md` | Implementa `NO_ORDER_BY_VOICE` via `BLOCKED_PHRASES`/`BLOCKED_RESPONSE`. |
@@ -168,4 +171,4 @@ declaração em Markdown. Ele é estritamente um **índice consolidado e
 citável** do que já está em vigor, espalhado por múltiplos arquivos de
 configuração e código — útil para qualquer revisão de segurança, qualquer
 nova missão, ou qualquer agente de IA que precise confirmar rapidamente
-que uma mudança proposta não viola nenhuma das 13 leis acima.
+que uma mudança proposta não viola nenhuma das 14 leis acima.

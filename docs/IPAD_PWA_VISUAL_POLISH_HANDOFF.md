@@ -209,7 +209,7 @@ posição no HTML.
 
 | Documento | Relação |
 |---|---|
-| `docs/READ_ONLY_MARKET_SAFETY.md` | O campo `cr-safety` deste painel é a representação visual de 1 linha das 13 leis consolidadas naquele documento. |
+| `docs/READ_ONLY_MARKET_SAFETY.md` | O campo `cr-safety` deste painel é a representação visual de 1 linha das 14 leis consolidadas naquele documento. |
 | `docs/SIRIFORM_VOICE_AND_NATIVE_COMPANION_ROUTE.md` | Detalha a Camada 1 (Siriform Voice Layer) cuja UI (botão de mic, trilha `data-voice-state`) este documento descreve visualmente. |
 | `docs/META_LLAMA_WEBLLM_ROUTE.md` | Detalha por que `cr-llama`/`st-llama-*` são `FUTURE` nesta versão. |
 | `docs/PROMPT_CACHING_AND_AGENT_CONTEXT_STRATEGY.md` | "Stable Block 04 — UI/UX Contract" descreve o mesmo vocabulário `v-ok`/`v-fail`/`v-info`/`v-pending` em forma resumida, citável por qualquer agente. |

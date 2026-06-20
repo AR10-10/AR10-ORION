@@ -7,13 +7,15 @@ import * as replayEngine from './replay-engine.js';
 import { QuantWorkerClient } from './worker-client.js';
 import * as siriform from './siriform.js';
 import * as voice from './voice.js';
+import * as exporter from './export-manifest.js';
+import * as dataPolicy from './data-policy.js';
 
 const els = {};
 ['st-pwa', 'st-sw', 'st-cache', 'st-idb', 'st-opfs', 'st-webcrypto', 'st-wasm', 'st-workers',
     'st-webgpu', 'st-webgl', 'st-webllm', 'st-transformers', 'st-onnx', 'st-replay', 'st-vault', 'st-mode',
     'st-voice', 'st-speech-rec', 'st-speech-syn', 'st-mic-perm',
     'st-llama-layer', 'st-llama-profile', 'st-llama-runtime', 'st-llama-webgpu',
-    'console-log', 'replay-canvas', 'replay-meta', 'import-input', 'home-modal', 'standalone-state',
+    'console-log', 'telemetry-latest', 'replay-canvas', 'replay-meta', 'import-input', 'home-modal', 'standalone-state',
     'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'mic-button', 'engine-meta', 'analysis-frame-grid',
     'vault-meta', 'vault-hashes', 'profile-hint',
     'cr-pwa', 'cr-sw', 'cr-cache', 'cr-idb', 'cr-opfs', 'cr-webcrypto', 'cr-wasm', 'cr-workers',
@@ -21,6 +23,7 @@ const els = {};
     'vl-pack', 'vl-pack-name', 'vl-pack-version', 'vl-sha256', 'vl-sw-cache', 'vl-cache-api',
     'vl-idb', 'vl-opfs', 'vl-wasm', 'vl-replay', 'vl-updated', 'vl-cache-version',
     'vl-storage-used', 'vl-storage-quota', 'vl-safety', 'vl-repair',
+    'dp-realmode', 'dp-analysis', 'export-list',
 ].forEach((id) => { els[id] = document.getElementById(id); });
 
 const PROFILES = {
@@ -37,6 +40,13 @@ function log(msg, level = 'dim') {
     line.textContent = `[${time}] ${msg}`;
     els['console-log'].appendChild(line);
     els['console-log'].scrollTop = els['console-log'].scrollHeight;
+    // Telemetria ao Vivo: o último evento real fica sempre visível no topo do
+    // card, sem precisar rolar a "caixa preta" inteira (Fase 5 — logs viram
+    // telemetria legível, nunca um muro de terminal dominando a primeira tela).
+    if (els['telemetry-latest']) {
+        els['telemetry-latest'].textContent = `[${time}] ${msg}`;
+        els['telemetry-latest'].className = `telemetry-latest ln-${level}`;
+    }
     return line;
 }
 
@@ -197,6 +207,37 @@ async function refreshVaultLocalPanel(vault) {
     const mb = (n) => (n / (1024 * 1024)).toFixed(1) + ' MB';
     setInfo('vl-storage-used', estimate ? mb(estimate.usage) : 'INDISPONÍVEL');
     setInfo('vl-storage-quota', estimate ? mb(estimate.quota) : 'INDISPONÍVEL');
+}
+
+// Fase 6 — política de dados de mercado. O replay sintético é só diagnóstico
+// técnico; análise de mercado REAL exige fonte pública/somente-leitura. Como
+// nenhum conector real está habilitado nesta versão, o estado honesto da
+// análise real é DADOS INSUFICIENTES (NO_FAKE_DATA), nunca um número inventado.
+function refreshDataPolicyPanel() {
+    const rm = dataPolicy.realMarketAnalysisStatus();
+    setStatus('dp-realmode', rm.status);   // 'DADOS INSUFICIENTES' → v-limited (else aberto)
+    setStatus('dp-analysis', rm.status);
+}
+
+// Fase 4 — painel "Arquivos Exportados". Mostra o pacote local, relatório,
+// evidência e deckap, marcando cada um como BAIXÁVEL / SOB DEMANDA / INTERNO /
+// FUTURO. Exportações desta sessão aparecem no topo, com o nome único usado.
+function renderExportPanel() {
+    if (!els['export-list']) return;
+    const visLabel = {
+        downloadable: { txt: 'BAIXÁVEL', cls: 'v-ok' },
+        on_demand: { txt: 'SOB DEMANDA', cls: 'v-info' },
+        internal: { txt: 'INTERNO', cls: 'v-info' },
+        future: { txt: 'FUTURO', cls: 'v-limited' },
+    };
+    els['export-list'].innerHTML = exporter.listForPanel().map((a) => {
+        const v = visLabel[a.visibility] || visLabel.internal;
+        const name = a.filename || `AR10_CYBORG_${a.type}${a.version ? '_' + a.version : ''}.${a.ext}`;
+        return `<div class="export-row">
+            <span class="export-name">${name}</span>
+            <span class="export-tag ${v.cls}">${v.txt}</span>
+        </div>`;
+    }).join('');
 }
 
 async function refreshVaultAndReplayStatus() {
@@ -401,7 +442,7 @@ async function handleUpdateLocalPack() {
     log('=== ATUALIZAR PACOTE LOCAL ===', 'info');
     try {
         const before = await packManager.getInstalledVaultMeta();
-        const pack = await packManager.downloadLocalPack((m, l) => log(m, l));
+        const pack = await packManager.fetchLocalPack((m, l) => log(m, l));
         const availableVersion = pack?.manifest?.pack_version || 'DESCONHECIDA';
         const installedVersion = before?.packVersion;
 
@@ -437,24 +478,92 @@ async function handleRepairInstall() {
     siriform.setSiriformState('installing', 'Reparando instalação local...');
     log('=== REPARAR INSTALAÇÃO ===', 'info');
     try {
-        await packManager.downloadLocalPack((m, l) => log(m, l));
-        const { allOk } = await packManager.verifySha256((m, l) => log(m, l));
-        if (!allOk) {
-            log('FAIL_CLOSED: checksum inválido — reparo abortado.', 'fail');
-            await refreshVaultAndReplayStatus();
-            siriform.setSiriformState('fail_closed');
-            return;
-        }
-        await packManager.installToSafariStorage((m, l) => log(m, l));
-        vaultFreshness = 'ATUALIZADO';
+        // Auto-reparo seguro: re-verifica → reindexa do armazenamento se os
+        // arquivos existem → re-checa SHA256 → restaura, ou reinstala com
+        // segurança a partir do pacote do app (FAIL_CLOSED se checksum falhar).
+        // Nunca apaga dados como primeiro recurso.
+        const result = await packManager.autoRepairVault((m, l) => log(m, l));
         await refreshVaultAndReplayStatus();
-        log('=== INSTALAÇÃO REPARADA ===', 'ok');
-        siriform.setSiriformState('responding', 'Instalação local reparada com sucesso.');
+        if (result.status === 'READY') {
+            vaultFreshness = 'ATUALIZADO';
+            const how = result.action === 'reindex'
+                ? 'arquivos locais já estavam íntegros — índice restaurado sem reinstalar'
+                : (result.action === 'none' ? 'já estava íntegro' : 'reinstalação segura concluída');
+            log(`=== INSTALAÇÃO REPARADA (${how}) ===`, 'ok');
+            siriform.setSiriformState('responding', 'Instalação local reparada com sucesso.');
+        } else if (result.reason === 'checksum_failed') {
+            log('FAIL_CLOSED: checksum inválido — reparo abortado, estado anterior preservado.', 'fail');
+            siriform.setSiriformState('fail_closed');
+        } else {
+            log('Reparo automático não concluído. Em último caso, use "Limpar/Reinstalar".', 'warn');
+            siriform.setSiriformState('responding', 'Não consegui reparar automaticamente. Tente "Limpar/Reinstalar" como último recurso.');
+        }
     } catch (err) {
         log(`Reparo bloqueado: ${err.message}`, 'fail');
         await refreshVaultAndReplayStatus();
         siriform.setSiriformState('fail_closed');
     }
+}
+
+async function handleExportReport() {
+    siriform.setSiriformState('thinking', 'Gerando relatório de sessão...');
+    log('=== EXPORTAR RELATÓRIO ===', 'info');
+    const vault = await packManager.getInstalledVaultMeta();
+    const now = new Date().toISOString();
+    const a = lastAnalysisMeta;
+    const lines = [
+        '# AR10 CYBORG 2.0 — Relatório de Sessão',
+        '',
+        `- Gerado em: ${now}`,
+        '- Modo: IPAD DIRECT / LOCAL-FIRST / READ_ONLY / FAIL_CLOSED',
+        '- Execução: DISABLED_BY_POLICY (sem ordem, sem live trading, sem API secret)',
+        '',
+        '## Vault Local',
+        `- Status: ${vault?.status || 'NÃO INSTALADO'}`,
+        `- Pacote: ${vault?.packageName || '—'} v${vault?.packVersion || '—'}`,
+        `- Backend: ${(vault?.backend || '—').toString().toUpperCase()}`,
+        `- Arquivos: ${vault?.fileCount ?? '—'}`,
+        '',
+        '## AnalysisFrame (DIAGNÓSTICO SINTÉTICO — NÃO É DECISÃO DE MERCADO)',
+        a
+            ? `- Candles: ${a.count} | Último: ${a.last.toFixed(2)} | SMA: ${a.sma.toFixed(2)} | EMA: ${a.ema.toFixed(2)} | STDDEV: ${a.stddev.toFixed(2)} | Z: ${a.zscore.toFixed(3)}`
+            : '- Replay ainda não executado nesta sessão.',
+        '',
+        '## Política de Dados',
+        '- Replay BTC/USDT: SYNTHETIC_OFFLINE_SAMPLE — teste técnico offline, não usar para decisão de mercado.',
+        `- Análise de mercado real: ${dataPolicy.realMarketAnalysisStatus().status} (nenhuma fonte pública/somente-leitura conectada nesta versão).`,
+        '',
+        '> Este relatório não contém segredo, chave de API, credencial de corretora ou dado de conta real.',
+        '',
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+    const entry = exporter.downloadArtifact({ type: 'FINAL_REPORT', ext: 'md', blob, purpose: 'Relatório de sessão exportado pelo usuário.' });
+    renderExportPanel();
+    log(`Relatório exportado com nome único: ${entry.filename}.`, 'ok');
+    siriform.setSiriformState('responding', 'Relatório de sessão exportado para o app Arquivos.');
+}
+
+async function handleExportEvidence() {
+    siriform.setSiriformState('thinking', 'Gerando pacote de evidência...');
+    log('=== EXPORTAR EVIDÊNCIA ===', 'info');
+    const vault = await packManager.getInstalledVaultMeta();
+    const f = await feat.runAllFeatureDetections();
+    const estimate = await storage.storageEstimate();
+    const evidence = {
+        generated_at: new Date().toISOString(),
+        mode: 'IPAD_DIRECT / LOCAL_FIRST / READ_ONLY / FAIL_CLOSED',
+        execution: 'DISABLED_BY_POLICY',
+        vault: vault ? { status: vault.status, packageName: vault.packageName, packVersion: vault.packVersion, backend: vault.backend, fileCount: vault.fileCount, checksums: vault.checksums } : null,
+        feature_detection: f,
+        storage_estimate: estimate ? { usage: estimate.usage, quota: estimate.quota } : null,
+        data_policy: dataPolicy.MARKET_DATA_POLICY,
+        no_secrets: true,
+    };
+    const blob = new Blob([JSON.stringify(evidence, null, 2)], { type: 'application/json' });
+    const entry = exporter.downloadArtifact({ type: 'EVIDENCE_OUTBOX', ext: 'json', blob, purpose: 'Snapshot de evidência da sessão exportado pelo usuário.' });
+    renderExportPanel();
+    log(`Evidência exportada com nome único: ${entry.filename}.`, 'ok');
+    siriform.setSiriformState('responding', 'Snapshot de evidência exportado para o app Arquivos.');
 }
 
 function handleAddHome() {
@@ -472,8 +581,8 @@ async function handlePrepareCyborg() {
     log('=== PREPARAR CYBORG NESTE IPAD ===', 'info');
     try {
         if (!packManager.getLoadedPack()) {
-            log('Pacote local ainda nao esta em memoria — baixando do mesmo HTTPS origin...', 'info');
-            await packManager.downloadLocalPack((m, l) => log(m, l));
+            log('Pacote local ainda nao esta em memoria — buscando do mesmo HTTPS origin (sem download visivel; instalacao e automatica)...', 'info');
+            await packManager.fetchLocalPack((m, l) => log(m, l));
         } else {
             log('Pacote local ja em memoria — reutilizando.', 'dim');
         }
@@ -641,6 +750,10 @@ function wireButtons() {
     document.getElementById('btn-repair-install').addEventListener('click', handleRepairInstall);
     document.getElementById('btn-clear-reinstall').addEventListener('click', handleClearReinstall);
     document.getElementById('btn-add-home').addEventListener('click', handleAddHome);
+    const btnReport = document.getElementById('btn-export-report');
+    if (btnReport) btnReport.addEventListener('click', handleExportReport);
+    const btnEvidence = document.getElementById('btn-export-evidence');
+    if (btnEvidence) btnEvidence.addEventListener('click', handleExportEvidence);
     document.getElementById('btn-close-modal').addEventListener('click', () => { els['home-modal'].hidden = true; });
     document.getElementById('qa-diagnostics').addEventListener('click', handleRunDiagnostics);
     document.getElementById('qa-replay').addEventListener('click', handleRunReplay);
@@ -690,12 +803,36 @@ async function boot() {
     const f = await refreshFeatureStatus();
     refreshLlamaStatus(f);
     const voiceStatus = await refreshVoiceStatus();
-    const vault = await refreshVaultAndReplayStatus();
+    let vault = await refreshVaultAndReplayStatus();
     refreshCyborgReadiness(f, voiceStatus);
+    refreshDataPolicyPanel();
+    renderExportPanel();
+
+    // Auto-reparo no boot: SÓ quando algo já foi instalado antes (existe meta
+    // com checksums) e agora está quebrado — o caso "corrompido/ausente após
+    // girar a tela ou reabrir". Numa primeira visita (nada instalado) não
+    // auto-instala nada; deixa o usuário tocar em "Preparar tudo neste iPad".
+    let bootMessaged = false;
+    if (vault.status !== 'READY') {
+        const prev = await packManager.getInstalledVaultMeta();
+        if (prev && prev.checksums) {
+            log('Vault não está íntegro e havia instalação anterior — tentando auto-reparo seguro...', 'warn');
+            const r = await packManager.autoRepairVault((m, l) => log(m, l));
+            vault = await refreshVaultAndReplayStatus();
+            bootMessaged = true;
+            if (r.status === 'READY') {
+                vaultFreshness = 'ATUALIZADO';
+                siriform.setSiriformState('responding', 'Vault recuperado automaticamente. Tudo pronto neste iPad.');
+            } else {
+                siriform.setSiriformState('responding', 'Não consegui recuperar o Vault sozinho. Toque em "Reparar instalação".');
+            }
+        }
+    }
+
     log('Boot concluido. Modo: IPAD DIRECT / LOCAL-FIRST / READ_ONLY / FAIL_CLOSED.', 'ok');
-    if (vault.status === 'READY') {
+    if (vault.status === 'READY' && !bootMessaged) {
         siriform.setSiriformState('responding', 'Pacote local pronto. Posso preparar seu ambiente local.');
-    } else {
+    } else if (vault.status !== 'READY' && !bootMessaged) {
         siriform.setSiriformState('idle', 'Pacote local ainda não instalado.');
     }
 }

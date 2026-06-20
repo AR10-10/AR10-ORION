@@ -39,6 +39,8 @@
     <p class="tagline">Um link HTTPS → Safari → auto-diagnóstico → Cyborg preparado. Local-first, sem Mac Mini, sem MacBook, sem ZIP, sem terminal.</p>
   </header>
 
+  <div class="bento">
+
   <section class="card siriform-card" id="siriform-section">
     <div class="siriform-stage">
       <div class="siriform-avatar" id="siriform-avatar" data-state="idle" role="img" aria-label="Siriform Avatar"></div>
@@ -146,6 +148,7 @@
 
   <section class="card replay-wrap" id="replay-section">
     <h2>Replay BTC/USDT <span class="step">simulacao local — sem ordens</span></h2>
+    <p class="diagnostic-note">⚠ Modo de Diagnóstico Técnico: dados sintéticos offline — prova o WASM, o worker, o storage e o engine de replay. <b>Não usar para decisão de mercado, sinal de trade ou recomendação.</b></p>
     <canvas id="replay-canvas"></canvas>
     <div class="replay-meta" id="replay-meta">
       <span>Toque em "Rodar Replay BTC/USDT" para iniciar.</span>
@@ -166,6 +169,21 @@
     <div class="analysis-frame-grid" id="analysis-frame-grid">
       <span class="analysis-frame-empty">Rode o Replay BTC/USDT para preencher o AnalysisFrame.</span>
     </div>
+    <p class="diagnostic-note">Estatística descritiva sobre o dataset sintético de diagnóstico. Para decisão de mercado real seria necessária fonte pública/somente-leitura com símbolo, timeframe, timestamp e frescor — enquanto não houver, o estado honesto é <b>DADOS INSUFICIENTES</b>.</p>
+  </section>
+
+  <section class="card data-policy-panel" id="data-policy-panel">
+    <h2>Política de Dados de Mercado</h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Replay (diagnóstico)</span><span class="value v-info" id="dp-diagnostic">SINTÉTICO / OFFLINE</span></div>
+      <div class="status-row"><span class="label">Modo de dados reais</span><span class="value v-pending" id="dp-realmode">…</span></div>
+      <div class="status-row"><span class="label">Análise de mercado real</span><span class="value v-pending" id="dp-analysis">…</span></div>
+      <div class="status-row"><span class="label">Dados públicos read-only</span><span class="value v-info" id="dp-public">PERMITIDO</span></div>
+      <div class="status-row"><span class="label">Dados financeiros privados</span><span class="value v-fail" id="dp-private">BLOQUEADO</span></div>
+      <div class="status-row"><span class="label">Acesso a conta privada</span><span class="value v-fail" id="dp-account">BLOQUEADO</span></div>
+      <div class="status-row"><span class="label">Execução real</span><span class="value v-fail" id="dp-exec">DISABLED_BY_POLICY</span></div>
+    </div>
+    <p class="engine-meta">Fontes públicas/somente-leitura permitidas (quando conectadas em fase futura): MEXC público, MEXC futuros público, Binance público, CoinGecko, CoinGlass, Yahoo/Google Finance (referência), CSV/JSON público, metadados públicos. Nunca endpoint privado, nunca chave de API, nunca execução. Detalhe em <code>docs/REAL_DATA_POLICY.md</code> e <code>configs/market-data-policy.json</code>.</p>
   </section>
 
   <section class="card decision-frame-panel" id="decision-frame-panel">
@@ -237,8 +255,22 @@
     <input type="file" id="import-input" class="hidden-input" accept=".ar10pack,application/json">
   </section>
 
-  <section class="card" id="console-section">
-    <h2>Logs do Sistema</h2>
+  <section class="card export-panel" id="export-panel">
+    <h2>Arquivos Exportados</h2>
+    <p class="onboarding-hint">Os arquivos internos do app são salvos automaticamente no armazenamento seguro do Safari/PWA — você não gerencia pastas. Quando você <b>exporta</b> algo para o app Arquivos, cada artefato recebe um nome único com data/hora (<code>AR10_CYBORG_TIPO_VERSAO_AAAAMMDD_HHMMSS.ext</code>), então o Safari nunca pede para "substituir" e dois artefatos diferentes nunca colidem.</p>
+    <div class="btn-grid">
+      <button class="rt-btn" id="btn-export-report"><span class="icon">▤</span> Exportar Relatório (.md)</button>
+      <button class="rt-btn" id="btn-export-evidence"><span class="icon">▦</span> Exportar Evidência (.json)</button>
+    </div>
+    <div class="export-list" id="export-list"></div>
+    <p class="engine-meta">Nenhum arquivo exportado contém segredo, chave de API, credencial de corretora ou dado de conta real — só estado de diagnóstico local, estatística descritiva sintética e metadados de integridade.</p>
+  </section>
+
+  </div><!-- /.bento -->
+
+  <section class="card telemetry-card" id="console-section">
+    <h2>Telemetria ao Vivo <span class="step">Caixa Preta do Cyborg — eventos reais</span></h2>
+    <div class="telemetry-latest ln-dim" id="telemetry-latest">Aguardando primeiro evento…</div>
     <div class="console" id="console-log"></div>
   </section>
 

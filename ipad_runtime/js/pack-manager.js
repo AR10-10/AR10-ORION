@@ -10,6 +10,7 @@
 
 import { sha256Hex, base64ToBytes, packageChecksum } from './crypto-utils.js';
 import * as storage from './storage.js';
+import { downloadArtifact } from './export-manifest.js';
 
 // Resolvidas explicitamente contra a URL do documento (nao do modulo):
 // fetch()/Worker() resolvem URLs relativas contra a pagina, nao contra o
@@ -24,26 +25,38 @@ let loadedPackJson = null;
 
 export function getLoadedPack() { return loadedPackJson; }
 
-export async function downloadLocalPack(onLog) {
+/** Busca o pacote do mesmo HTTPS origin para a MEMÓRIA, sem disparar nenhum
+ *  download para o app Arquivos. É o caminho usado por preparar/atualizar/
+ *  reparar/auto-reparo — fluxos internos automáticos que o usuário não deve
+ *  ver como "salvar arquivo" (princípio: armazenamento interno é automático,
+ *  o usuário não gerencia pastas). Offline-capable: o Service Worker já tem
+ *  o .ar10pack em cache, então funciona mesmo sem rede. */
+export async function fetchLocalPack(onLog) {
     onLog?.(`Buscando pacote local em ${PACK_URL} (mesma origem HTTPS, sem CDN externo)...`, 'info');
     const resp = await fetch(PACK_URL, { cache: 'no-cache' });
     if (!resp.ok) throw new Error(`HTTP ${resp.status} ao buscar o pacote`);
     const buf = await resp.arrayBuffer();
     loadedPack = buf;
     loadedPackJson = JSON.parse(new TextDecoder().decode(buf));
+    onLog?.(`Pacote recebido em memória: ${buf.byteLength} bytes (sem download — instalação é automática).`, 'ok');
+    return loadedPackJson;
+}
 
-    // Tambem oferece uma copia real para o app Arquivos (download nativo do Safari)
-    const blob = new Blob([buf], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'AR10_CYBORG_LOCAL_PACK_V1.ar10pack';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 4000);
-
-    onLog?.(`Pacote recebido: ${buf.byteLength} bytes. Oferecido para download no app Arquivos.`, 'ok');
+/** Caminho EXPLÍCITO do usuário ("Baixar Pacote Local"): além de carregar em
+ *  memória, oferece uma cópia para o app Arquivos com NOME ÚNICO carimbado
+ *  (AR10_CYBORG_LOCAL_PACK_V1_YYYYMMDD_HHMMSS.ar10pack) — nunca reusa o mesmo
+ *  nome genérico, então o Safari nunca pede "substituir". */
+export async function downloadLocalPack(onLog) {
+    await fetchLocalPack(onLog);
+    const blob = new Blob([loadedPack], { type: 'application/json' });
+    const entry = downloadArtifact({
+        type: 'LOCAL_PACK',
+        version: 'V1',
+        ext: 'ar10pack',
+        blob,
+        purpose: 'Pacote local exportado pelo usuário para o app Arquivos.',
+    });
+    onLog?.(`Cópia oferecida ao app Arquivos com nome único: ${entry.filename}.`, 'ok');
     return loadedPackJson;
 }
 
@@ -161,6 +174,81 @@ export async function reloadVaultState(onLog) {
         const reason = String(err.message);
         await storage.setMeta(VAULT_META_KEY, { status: 'LOCKED', reason });
         return { status: 'LOCKED', reason };
+    }
+}
+
+/** Tenta reconstruir o índice do Vault a partir dos arquivos JÁ gravados no
+ *  armazenamento local (OPFS/IndexedDB), validando-os contra os checksums do
+ *  meta salvo. Resolve o caso comum de "estado corrompido/perdido após girar
+ *  a tela ou reabrir" quando os bytes no disco continuam íntegros mas a flag
+ *  de estado ficou LOCKED por uma leitura transitória que falhou. Nunca apaga
+ *  nada; só re-confirma e restaura READY se tudo bater. */
+export async function rebuildIndexFromStorage(onLog) {
+    const meta = await storage.getMeta(VAULT_META_KEY);
+    if (!meta || !meta.checksums) {
+        onLog?.('Reindexação: nenhum índice/checksum salvo para reconstruir.', 'dim');
+        return { recovered: false, reason: 'no_index' };
+    }
+    const present = await storage.listFiles();
+    const presentSet = new Set(present);
+    for (const relPath of Object.keys(meta.checksums)) {
+        if (relPath === '_package') continue;
+        if (!presentSet.has(relPath)) {
+            onLog?.(`Reindexação: arquivo ausente no armazenamento (${relPath}).`, 'warn');
+            return { recovered: false, reason: 'missing_files' };
+        }
+        const bytes = await storage.readFile(relPath);
+        if (!bytes) return { recovered: false, reason: 'missing_files' };
+        const hash = await sha256Hex(bytes);
+        if (hash !== meta.checksums[relPath]) {
+            onLog?.(`Reindexação: checksum divergente (${relPath}) — não restaurando.`, 'warn');
+            return { recovered: false, reason: 'checksum_mismatch' };
+        }
+    }
+    await storage.setMeta(VAULT_META_KEY, { ...meta, status: 'READY', reason: undefined, repairedAt: Date.now() });
+    onLog?.('Reindexação: arquivos locais íntegros — Vault restaurado para READY sem reinstalar.', 'ok');
+    return { recovered: true, via: 'reindex' };
+}
+
+/** Auto-reparo seguro do Vault, na ordem: (1) re-verifica estado,
+ *  (2) reconstrói índice a partir do armazenamento se os arquivos existem,
+ *  (3) re-checa SHA-256, (4) restaura READY se válido, (5) se faltam/diferem
+ *  arquivos, reinstala com segurança a partir do pacote do app (mesma origem,
+ *  já em cache do Service Worker — funciona offline), sempre FAIL_CLOSED se o
+ *  checksum do pacote não bater. NUNCA apaga dados como primeiro recurso —
+ *  Limpar/Reinstalar continua sendo uma ação manual, com confirmação. */
+export async function autoRepairVault(onLog) {
+    onLog?.('=== AUTO-REPARO DO VAULT ===', 'info');
+
+    // (1) re-verifica o estado atual (re-hash dos arquivos já instalados)
+    const current = await reloadVaultState(onLog);
+    if (current.status === 'READY') {
+        onLog?.('Auto-reparo: Vault já está íntegro (READY). Nada a fazer.', 'ok');
+        return { status: 'READY', action: 'none' };
+    }
+
+    // (2)+(3)+(4) tenta restaurar a partir do que já está no disco, sem rede
+    const reindex = await rebuildIndexFromStorage(onLog);
+    if (reindex.recovered) {
+        return { status: 'READY', action: 'reindex' };
+    }
+
+    // (5) reinstalação segura a partir do pacote do app (sem download visível)
+    onLog?.('Auto-reparo: tentando reinstalação segura a partir do pacote do app...', 'info');
+    try {
+        await fetchLocalPack(onLog);
+        const { allOk } = await verifySha256(onLog);
+        if (!allOk) {
+            onLog?.('FAIL_CLOSED: checksum do pacote inválido — reinstalação abortada, estado anterior preservado.', 'fail');
+            return { status: 'LOCKED', action: 'reinstall_failed', reason: 'checksum_failed' };
+        }
+        await installToSafariStorage(onLog);
+        onLog?.('Auto-reparo: reinstalação segura concluída — Vault READY.', 'ok');
+        return { status: 'READY', action: 'reinstall' };
+    } catch (err) {
+        // (6) último recurso permanece MANUAL (Limpar/Reinstalar com confirmação)
+        onLog?.(`Auto-reparo não pôde concluir automaticamente (${err.message}). Use "Reparar instalação" ou, em último caso, "Limpar/Reinstalar".`, 'warn');
+        return { status: 'LOCKED', action: 'manual_required', reason: err.message };
     }
 }
 

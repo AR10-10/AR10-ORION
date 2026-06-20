@@ -1,6 +1,6 @@
 {
-  "generated_for": "AR10_CYBORG_2_IPAD_LOCAL_VAULT_SAFE_AUTOMATION_POLISH_V1",
-  "continues_from": "AR10_CYBORG_2_VISUAL_POLISH_MULTI_ASSET_RESEARCH_AND_CONNECTOR_ARCHITECTURE_V1",
+  "generated_for": "AR10_CYBORG_2_IPAD_LANDSCAPE_VAULT_AUTOSAVE_EXPORT_AND_REAL_DATA_POLICY_FIX_V1",
+  "continues_from": "AR10_CYBORG_2_IPAD_LOCAL_VAULT_SAFE_AUTOMATION_POLISH_V1",
   "repo": "AR10-10/AR10-ORION",
   "branch": "claude/eloquent-cannon-qyt86y",
   "pull_request": "https://github.com/AR10-10/AR10-ORION/pull/3",
@@ -8,24 +8,24 @@
   "hash_algorithm": "sha256",
   "files": {
     "index.html": {
-      "sha256": "31cf1d5c0f1e873ff238a943040260d3e3463ffa0c3038116b16a8cdc6404622",
-      "bytes": 19390
+      "sha256": "e2ec20c5a3fc88ef3e3a5eb19aedf9d3780f52ed33d140dc5d6a5c204cf54ca2",
+      "bytes": 22851
     },
     "manifest.webmanifest": {
       "sha256": "3be72f358fcba501f54ed12695006386b5aa86fe4ec959665b12bae281ab29a6",
       "bytes": 984
     },
     "service-worker.js": {
-      "sha256": "8d503d544179bfa944a71355a3db7b7bc7901f7fc4305d46fc4decc94346d124",
-      "bytes": 2167
+      "sha256": "7156bb6bb33c32ff0aff39eb7d89735d3129932997ef2d0627b5471e5956d46a",
+      "bytes": 2225
     },
     "css/ipad-runtime.css": {
-      "sha256": "c44e9cbe40fc4ba789566bbe07aea42734b2c9f514084da2b9a4c78a8d8b58ed",
-      "bytes": 24933
+      "sha256": "0d7af47b4e1fe0bfc4fabe171136e96799e4cb69d3e9b1550fd7f46f76e29f96",
+      "bytes": 26838
     },
     "js/app.js": {
-      "sha256": "8be8cfb42a325de0a4d8a071b342e11fc5f4d5db3742c1c2c8fa5bebeaba82e9",
-      "bytes": 33794
+      "sha256": "cbfa59a7e1134beeba674a22893a7ffa9394a708d1cca9a03963b087f73f8daf",
+      "bytes": 41805
     },
     "js/siriform.js": {
       "sha256": "b2af37ef4953ee8f3e4de9737343057679742d43855984b2f4e0bbea0f7d0ceb",
@@ -52,8 +52,8 @@
       "bytes": 1641
     },
     "js/pack-manager.js": {
-      "sha256": "da5febf06b166ad66ec09e8331084a49c267405d794b0de5e32f72b0071f374b",
-      "bytes": 8860
+      "sha256": "f28b326d2361d63c4ed0656bdde15396c731ecddbda869dd664f28a6074af814",
+      "bytes": 13876
     },
     "js/replay-engine.js": {
       "sha256": "fd5d4f3ad933dd4c70294e80712153852d68325debc40846c46ec4c64c441ee1",
@@ -62,6 +62,14 @@
     "js/diagnostics.js": {
       "sha256": "503f39db09df4f470e8ebf3e8b31aebdbf80a28ecdb62fef42556922ba930a76",
       "bytes": 2801
+    },
+    "js/export-manifest.js": {
+      "sha256": "c069177518794c3fa6c9879864465813449f31a52aa157f44f3f936ed1af0951",
+      "bytes": 3723
+    },
+    "js/data-policy.js": {
+      "sha256": "907ce25fd412f30d1dd83d3dadbafe6fc410e3e0f5a72cde67162e52535bdfec",
+      "bytes": 2481
     },
     "workers/quant-worker.js": {
       "sha256": "eb75ffb5717b66996600abfd4c7562ca161b3b254f3d7ddc1a585315169091bb",
