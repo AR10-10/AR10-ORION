@@ -108,6 +108,7 @@ NO_ORDER_BY_LLM
 NO_ORDER_BY_VOICE
 NO_SECRET_IN_LOCALSTORAGE
 NO_FAKE_DATA
+NO_FAKE_LOCAL_AI_CLAIMS
 ```
 
 Estas leis ja aparecem espalhadas pelo codigo e pela documentacao deste
@@ -116,7 +117,7 @@ repositorio sob nomes equivalentes (ver `ipad_runtime/README.md` —
 `ipad_runtime/configs/asset-universe.default.json` campo
 `security_posture`; ver `docs/SIRIFORM_VOICE_AND_NATIVE_COMPANION_ROUTE.md`
 — frases bloqueadas por politica). `docs/READ_ONLY_MARKET_SAFETY.md` e o
-indice consolidado e citavel destas mesmas 12 leis, lei por lei, com a
+indice consolidado e citavel destas mesmas 13 leis, lei por lei, com a
 aplicacao real (arquivo e mecanismo) de cada uma — este bloco e o resumo
 "sempre identico" que um agente deve carregar no prefixo estavel; aquele
 documento e a referencia expandida para quando for preciso auditar onde,

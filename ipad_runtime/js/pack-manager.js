@@ -90,8 +90,17 @@ export async function installToSafariStorage(onLog) {
         throw new Error('FAIL_CLOSED: checksum invalido, instalacao abortada');
     }
 
+    const previousMeta = await storage.getMeta(VAULT_META_KEY);
+    const previousFiles = await storage.listFiles();
+
     const { files, checksums, manifest, models_manifest: modelsManifest, runtime_config: runtimeConfig } = loadedPackJson;
+    const packVersion = manifest?.pack_version || 'DESCONHECIDA';
+    const packageName = loadedPackJson.package || 'AR10_CYBORG_LOCAL_PACK_V1';
     const backend = await storage.activeBackend();
+
+    const metaFiles = ['_meta/manifest.pack.json', '_meta/manifest.models.json', '_meta/runtime_config.json'];
+    const newRelPaths = new Set([...Object.keys(files), ...metaFiles]);
+
     for (const relPath of Object.keys(files)) {
         const bytes = base64ToBytes(files[relPath]);
         await storage.saveFile(relPath, bytes);
@@ -101,15 +110,32 @@ export async function installToSafariStorage(onLog) {
     await storage.saveFile('_meta/manifest.models.json', new TextEncoder().encode(JSON.stringify(modelsManifest || {})));
     await storage.saveFile('_meta/runtime_config.json', new TextEncoder().encode(JSON.stringify(runtimeConfig || {})));
 
+    // Limpeza segura: so remove arquivos antigos depois que os arquivos novos
+    // ja verificados (SHA-256 OK acima) estao gravados — nunca apaga o estado
+    // anterior antes de confirmar que o novo conteudo e valido.
+    const stale = previousFiles.filter((relPath) => !newRelPaths.has(relPath));
+    for (const relPath of stale) {
+        await storage.deleteFile(relPath);
+        onLog?.(`limpeza: removido arquivo obsoleto ${relPath}`, 'dim');
+    }
+
     await storage.setMeta(VAULT_META_KEY, {
         status: 'READY',
         backend,
         checksums,
-        installedAt: Date.now(),
+        packVersion,
+        packageName,
+        installedAt: previousMeta?.installedAt && previousMeta.status === 'READY' ? previousMeta.installedAt : Date.now(),
+        updatedAt: Date.now(),
+        previousPackVersion: previousMeta?.status === 'READY' ? previousMeta.packVersion : undefined,
         fileCount: Object.keys(files).length,
     });
-    onLog?.(`VAULT: READY (backend=${backend}, arquivos=${Object.keys(files).length})`, 'ok');
-    return { backend, fileCount: Object.keys(files).length };
+    onLog?.(`VAULT: READY (backend=${backend}, versao=${packVersion}, arquivos=${Object.keys(files).length})`, 'ok');
+    return { backend, fileCount: Object.keys(files).length, packVersion };
+}
+
+export async function getInstalledVaultMeta() {
+    return storage.getMeta(VAULT_META_KEY);
 }
 
 /** Reabre o estado do vault no boot, re-verificando os hashes (FAIL_CLOSED real,

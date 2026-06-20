@@ -18,6 +18,9 @@ const els = {};
     'vault-meta', 'vault-hashes', 'profile-hint',
     'cr-pwa', 'cr-sw', 'cr-cache', 'cr-idb', 'cr-opfs', 'cr-webcrypto', 'cr-wasm', 'cr-workers',
     'cr-webgpu', 'cr-voice', 'cr-llama', 'cr-pack', 'cr-replay', 'cr-safety',
+    'vl-pack', 'vl-pack-name', 'vl-pack-version', 'vl-sha256', 'vl-sw-cache', 'vl-cache-api',
+    'vl-idb', 'vl-opfs', 'vl-wasm', 'vl-replay', 'vl-updated', 'vl-cache-version',
+    'vl-storage-used', 'vl-storage-quota', 'vl-safety', 'vl-repair',
 ].forEach((id) => { els[id] = document.getElementById(id); });
 
 const PROFILES = {
@@ -38,10 +41,10 @@ function log(msg, level = 'dim') {
 }
 
 function classFor(value) {
-    if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'READY' || value === 'AVAILABLE' || value === 'GRANTED') return 'v-ok';
-    if (value === 'FAIL' || value === 'MISSING' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED') return 'v-fail';
+    if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'INSTALADO' || value === 'ATUALIZADO' || value === 'READY' || value === 'AVAILABLE' || value === 'GRANTED') return 'v-ok';
+    if (value === 'FAIL' || value === 'MISSING' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED' || value === 'AUSENTE' || value === 'CORROMPIDO' || value === 'REINSTALAÇÃO NECESSÁRIA' || value === 'BLOQUEADO POR SEGURANÇA') return 'v-fail';
     if (value === 'FUTURE' || value === 'LIGHT' || value === 'BALANCED' || value === 'HEAVY') return 'v-info';
-    return 'v-limited';
+    return 'v-limited'; // DESATUALIZADO/LIMITADO caem aqui de proposito — else aberto, sem 6a classe
 }
 
 function setStatus(id, value) {
@@ -52,9 +55,49 @@ function setStatus(id, value) {
     el.classList.add(classFor(value));
 }
 
+function setInfo(id, text) {
+    const el = els[id];
+    if (!el) return;
+    el.textContent = String(text);
+    el.classList.remove('v-ok', 'v-fail', 'v-limited', 'v-pending', 'v-info');
+    el.classList.add('v-info');
+}
+
+function okOrAusente(v) { return v === 'OK' ? 'OK' : 'AUSENTE'; }
+
+async function getActiveCacheInfo() {
+    if (!('caches' in window)) return { present: false, label: 'AUSENTE' };
+    try {
+        const keys = await caches.keys();
+        const match = keys.find((k) => k.startsWith('cyborg-ipad-runtime-'));
+        return match ? { present: true, label: match.replace('cyborg-ipad-runtime-', '') } : { present: false, label: 'AUSENTE' };
+    } catch {
+        return { present: false, label: 'AUSENTE' };
+    }
+}
+
+function packStatusLabel(vault, freshness) {
+    if (!vault || vault.status !== 'READY') {
+        if (vault && vault.reason === 'checksum_failed') return 'BLOQUEADO POR SEGURANÇA';
+        if (vault && vault.reason) return 'CORROMPIDO';
+        return 'AUSENTE';
+    }
+    if (freshness === 'DESATUALIZADO') return 'DESATUALIZADO';
+    if (freshness === 'ATUALIZADO') return 'ATUALIZADO';
+    return 'INSTALADO';
+}
+
+function repairLabel(vault) {
+    if (!vault || vault.status === undefined) return 'AUSENTE';
+    if (vault.status === 'READY') return 'OK';
+    if (vault.status === 'LOCKED' && vault.reason) return 'REINSTALAÇÃO NECESSÁRIA';
+    return 'AUSENTE';
+}
+
 let workerClient = null;
 let replayDatasetCache = null;
 let lastAnalysisMeta = null;
+let vaultFreshness = null; // null=nao verificado nesta sessao; so muda apos check real (NO_FAKE_LOCAL_AI_CLAIMS)
 
 async function refreshFeatureStatus() {
     const f = await feat.runAllFeatureDetections();
@@ -127,6 +170,35 @@ function renderVaultEvidence(vault) {
         .join('');
 }
 
+async function refreshVaultLocalPanel(vault) {
+    const f = await feat.runAllFeatureDetections();
+    setStatus('vl-pack', packStatusLabel(vault, vaultFreshness));
+    setInfo('vl-pack-name', vault?.packageName || '—');
+    setInfo('vl-pack-version', vault?.packVersion || '—');
+    setStatus('vl-sha256', vault?.status === 'READY' ? 'OK' : (vault?.reason ? 'CORROMPIDO' : 'AUSENTE'));
+
+    const cacheInfo = await getActiveCacheInfo();
+    setStatus('vl-sw-cache', cacheInfo.present ? 'OK' : 'AUSENTE');
+    setInfo('vl-cache-version', cacheInfo.present ? cacheInfo.label : '—');
+
+    setStatus('vl-cache-api', okOrAusente(f.cacheApi));
+    setStatus('vl-idb', okOrAusente(f.indexedDb));
+    setStatus('vl-opfs', f.opfs === 'OK' ? 'OK' : (f.opfs === 'LIMITED' ? 'LIMITADO' : 'AUSENTE'));
+
+    setStatus('vl-wasm', vault?.status === 'READY' ? 'OK' : 'AUSENTE');
+    setStatus('vl-replay', vault?.status === 'READY' ? 'OK' : 'AUSENTE');
+
+    setInfo('vl-updated', (vault?.updatedAt || vault?.installedAt) ? new Date(vault.updatedAt || vault.installedAt).toLocaleString('pt-BR') : '—');
+
+    setStatus('vl-safety', (vault && vault.reason === 'checksum_failed') ? 'BLOQUEADO POR SEGURANÇA' : 'OK');
+    setStatus('vl-repair', repairLabel(vault));
+
+    const estimate = await storage.storageEstimate();
+    const mb = (n) => (n / (1024 * 1024)).toFixed(1) + ' MB';
+    setInfo('vl-storage-used', estimate ? mb(estimate.usage) : 'INDISPONÍVEL');
+    setInfo('vl-storage-quota', estimate ? mb(estimate.quota) : 'INDISPONÍVEL');
+}
+
 async function refreshVaultAndReplayStatus() {
     const vault = await packManager.reloadVaultState((m, l) => log(m, l));
     setStatus('st-vault', vault.status === 'READY' ? 'READY' : 'LOCKED');
@@ -140,6 +212,7 @@ async function refreshVaultAndReplayStatus() {
         setStatus('st-replay', 'MISSING');
         setStatus('cr-replay', 'MISSING');
     }
+    await refreshVaultLocalPanel(vault);
     return vault;
 }
 
@@ -297,12 +370,91 @@ async function handleRunReplay() {
 }
 
 async function handleClearReinstall() {
-    if (!window.confirm('Limpar o pacote local instalado (Vault)? O PWA continua instalado; apenas os dados locais sao apagados.')) return;
+    const confirmMsg = 'Isso vai remover do Vault local deste iPad: o motor WASM, o dataset de replay, '
+        + 'os manifestos/metadados e a versão instalada. O PWA em si (instalação na Tela de Início, '
+        + 'Service Worker) NÃO é removido — apenas os dados locais. Depois disso você precisará tocar '
+        + 'em "Preparar tudo neste iPad" de novo. Continuar?';
+    if (!window.confirm(confirmMsg)) return;
     siriform.setSiriformState('thinking', 'Limpando Vault local...');
     await packManager.clearAndReinstall((m, l) => log(m, l));
     replayDatasetCache = null;
+    vaultFreshness = null;
     await refreshVaultAndReplayStatus();
     siriform.setSiriformState('responding', 'Vault limpo. Pacote local ainda não instalado.');
+}
+
+async function handleCheckLocalInstall() {
+    siriform.setSiriformState('analyzing', 'Verificando instalação local...');
+    log('=== VERIFICAR INSTALAÇÃO LOCAL ===', 'info');
+    const vault = await refreshVaultAndReplayStatus();
+    if (vault.status === 'READY') {
+        log(`Instalação local OK — pacote ${vault.packageName || '?'} v${vault.packVersion || '?'} (backend=${String(vault.backend || '?').toUpperCase()}).`, 'ok');
+        siriform.setSiriformState('responding', 'Instalação local verificada: tudo OK.');
+    } else {
+        log(`Instalação local ausente ou bloqueada${vault.reason ? ` (${vault.reason})` : ''}.`, 'warn');
+        siriform.setSiriformState('responding', 'Nada instalado ainda, ou instalação bloqueada por segurança.');
+    }
+}
+
+async function handleUpdateLocalPack() {
+    siriform.setSiriformState('thinking', 'Verificando se há atualização do pacote local...');
+    log('=== ATUALIZAR PACOTE LOCAL ===', 'info');
+    try {
+        const before = await packManager.getInstalledVaultMeta();
+        const pack = await packManager.downloadLocalPack((m, l) => log(m, l));
+        const availableVersion = pack?.manifest?.pack_version || 'DESCONHECIDA';
+        const installedVersion = before?.packVersion;
+
+        if (before?.status === 'READY' && installedVersion && installedVersion === availableVersion) {
+            vaultFreshness = 'ATUALIZADO';
+            log(`Pacote local já está na versão mais recente (v${installedVersion}). Nenhuma reinstalação necessária.`, 'ok');
+            await refreshVaultAndReplayStatus();
+            siriform.setSiriformState('responding', 'Pacote local já está atualizado.');
+            return;
+        }
+
+        vaultFreshness = 'DESATUALIZADO';
+        log(`Nova versão disponível: v${availableVersion}${installedVersion ? ` (instalada: v${installedVersion})` : ''}.`, 'info');
+        const { allOk } = await packManager.verifySha256((m, l) => log(m, l));
+        if (!allOk) {
+            log('FAIL_CLOSED: checksum inválido na atualização — instalação anterior preservada (nada foi sobrescrito).', 'fail');
+            await refreshVaultAndReplayStatus();
+            siriform.setSiriformState('fail_closed');
+            return;
+        }
+        await packManager.installToSafariStorage((m, l) => log(m, l));
+        vaultFreshness = 'ATUALIZADO';
+        await refreshVaultAndReplayStatus();
+        log(`=== PACOTE LOCAL ATUALIZADO PARA v${availableVersion} ===`, 'ok');
+        siriform.setSiriformState('responding', 'Pacote local atualizado com sucesso.');
+    } catch (err) {
+        log(`Erro ao atualizar pacote local: ${err.message}`, 'fail');
+        siriform.setSiriformState('responding', 'Não consegui verificar atualização agora.');
+    }
+}
+
+async function handleRepairInstall() {
+    siriform.setSiriformState('installing', 'Reparando instalação local...');
+    log('=== REPARAR INSTALAÇÃO ===', 'info');
+    try {
+        await packManager.downloadLocalPack((m, l) => log(m, l));
+        const { allOk } = await packManager.verifySha256((m, l) => log(m, l));
+        if (!allOk) {
+            log('FAIL_CLOSED: checksum inválido — reparo abortado.', 'fail');
+            await refreshVaultAndReplayStatus();
+            siriform.setSiriformState('fail_closed');
+            return;
+        }
+        await packManager.installToSafariStorage((m, l) => log(m, l));
+        vaultFreshness = 'ATUALIZADO';
+        await refreshVaultAndReplayStatus();
+        log('=== INSTALAÇÃO REPARADA ===', 'ok');
+        siriform.setSiriformState('responding', 'Instalação local reparada com sucesso.');
+    } catch (err) {
+        log(`Reparo bloqueado: ${err.message}`, 'fail');
+        await refreshVaultAndReplayStatus();
+        siriform.setSiriformState('fail_closed');
+    }
 }
 
 function handleAddHome() {
@@ -478,12 +630,15 @@ function wireProfileToggle() {
 function wireButtons() {
     document.getElementById('btn-check-safari').addEventListener('click', handleCheckSafari);
     document.getElementById('btn-prepare-cyborg').addEventListener('click', handlePrepareCyborg);
+    document.getElementById('btn-check-install').addEventListener('click', handleCheckLocalInstall);
     document.getElementById('btn-download-pack').addEventListener('click', handleDownloadPack);
+    document.getElementById('btn-update-pack').addEventListener('click', handleUpdateLocalPack);
     document.getElementById('btn-import-pack').addEventListener('click', handleImportPack);
     document.getElementById('btn-verify-sha').addEventListener('click', handleVerifySha);
     document.getElementById('btn-install-storage').addEventListener('click', handleInstallStorage);
     document.getElementById('btn-run-diagnostics').addEventListener('click', handleRunDiagnostics);
     document.getElementById('btn-run-replay').addEventListener('click', handleRunReplay);
+    document.getElementById('btn-repair-install').addEventListener('click', handleRepairInstall);
     document.getElementById('btn-clear-reinstall').addEventListener('click', handleClearReinstall);
     document.getElementById('btn-add-home').addEventListener('click', handleAddHome);
     document.getElementById('btn-close-modal').addEventListener('click', () => { els['home-modal'].hidden = true; });

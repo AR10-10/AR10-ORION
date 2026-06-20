@@ -192,18 +192,45 @@
     <div id="vault-hashes"></div>
   </section>
 
+  <section class="card vault-local-panel" id="vault-local-panel">
+    <h2>Vault Local do iPad</h2>
+    <p class="onboarding-hint">O Cyborg salva automaticamente os arquivos necessários no armazenamento seguro do Safari/PWA. Você não precisa procurar uma pasta raiz. Esta área mostra o que está instalado, validado e pronto para uso neste iPad.</p>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Local Pack</span><span class="value v-pending" id="vl-pack">…</span></div>
+      <div class="status-row"><span class="label">Nome do pacote instalado</span><span class="value v-pending" id="vl-pack-name">…</span></div>
+      <div class="status-row"><span class="label">Versão do pacote</span><span class="value v-pending" id="vl-pack-version">…</span></div>
+      <div class="status-row"><span class="label">Verificação SHA256</span><span class="value v-pending" id="vl-sha256">…</span></div>
+      <div class="status-row"><span class="label">Cache do Service Worker</span><span class="value v-pending" id="vl-sw-cache">…</span></div>
+      <div class="status-row"><span class="label">Cache API</span><span class="value v-pending" id="vl-cache-api">…</span></div>
+      <div class="status-row"><span class="label">IndexedDB</span><span class="value v-pending" id="vl-idb">…</span></div>
+      <div class="status-row"><span class="label">OPFS</span><span class="value v-pending" id="vl-opfs">…</span></div>
+      <div class="status-row"><span class="label">Arquivo WASM</span><span class="value v-pending" id="vl-wasm">…</span></div>
+      <div class="status-row"><span class="label">Dataset de Replay</span><span class="value v-pending" id="vl-replay">…</span></div>
+      <div class="status-row"><span class="label">Última atualização</span><span class="value v-pending" id="vl-updated">…</span></div>
+      <div class="status-row"><span class="label">Versão do cache</span><span class="value v-pending" id="vl-cache-version">…</span></div>
+      <div class="status-row"><span class="label">Armazenamento usado</span><span class="value v-pending" id="vl-storage-used">…</span></div>
+      <div class="status-row"><span class="label">Cota disponível</span><span class="value v-pending" id="vl-storage-quota">…</span></div>
+      <div class="status-row"><span class="label">READ_ONLY / FAIL_CLOSED</span><span class="value v-pending" id="vl-safety">…</span></div>
+      <div class="status-row"><span class="label">Reparo/Reinstalação</span><span class="value v-pending" id="vl-repair">…</span></div>
+    </div>
+    <p class="engine-meta">Tudo aqui é recalculado a partir do estado real do armazenamento local — nenhum valor é assumido ou decorativo. Use os botões em "Local Pack Manager" abaixo para preparar, verificar, atualizar, reparar ou limpar este Vault.</p>
+  </section>
+
   <section class="card local-pack-manager" id="runtime-actions">
     <h2>Local Pack Manager</h2>
-    <p class="onboarding-hint">Primeira vez aqui? Toque em <b>"Preparar Cyborg neste iPad"</b> — um único toque baixa, verifica, instala e roda o primeiro diagnóstico/replay nesta ordem. Os botões abaixo continuam disponíveis para repetir cada etapa manualmente.</p>
+    <p class="onboarding-hint">Primeira vez aqui? Toque em <b>"Preparar tudo neste iPad"</b> — um único toque baixa, verifica, instala e roda o primeiro diagnóstico/replay nesta ordem. Os botões abaixo continuam disponíveis para repetir cada etapa manualmente.</p>
     <div class="btn-grid">
       <button class="rt-btn primary" id="btn-check-safari"><span class="icon">◎</span> Verificar Safari</button>
-      <button class="rt-btn primary" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar Cyborg neste iPad</button>
+      <button class="rt-btn primary" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar tudo neste iPad</button>
+      <button class="rt-btn" id="btn-check-install"><span class="icon">◍</span> Verificar instalação local</button>
       <button class="rt-btn primary" id="btn-download-pack"><span class="icon">⇩</span> Baixar Pacote Local</button>
+      <button class="rt-btn" id="btn-update-pack"><span class="icon">⇧</span> Atualizar pacote local</button>
       <button class="rt-btn" id="btn-import-pack"><span class="icon">⇪</span> Importar Pacote do Arquivos</button>
       <button class="rt-btn" id="btn-verify-sha"><span class="icon">✓</span> Verificar SHA256</button>
       <button class="rt-btn success" id="btn-install-storage"><span class="icon">⬢</span> Instalar no Safari Storage</button>
       <button class="rt-btn" id="btn-run-diagnostics"><span class="icon">▣</span> Rodar Diagnóstico Offline</button>
       <button class="rt-btn" id="btn-run-replay"><span class="icon">▶</span> Rodar Replay BTC/USDT</button>
+      <button class="rt-btn" id="btn-repair-install"><span class="icon">⚙</span> Reparar instalação</button>
       <button class="rt-btn danger" id="btn-clear-reinstall"><span class="icon">⟲</span> Limpar/Reinstalar</button>
       <button class="rt-btn primary" id="btn-add-home"><span class="icon">＋</span> Adicionar à Tela de Início</button>
     </div>

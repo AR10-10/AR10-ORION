@@ -22,12 +22,12 @@ documento existir, a política já estava correta — só não tinha um único
 ponto de verdade citável. Este documento consolida; não substitui, não
 afrouxa e não adiciona nenhuma regra nova ao que já estava em vigor.
 
-Nenhuma das 12 leis abaixo é nova ou aspiracional. Todas já estão
+Nenhuma das 13 leis abaixo é nova ou aspiracional. Todas já estão
 implementadas em código e/ou declaradas em configuração hoje — a coluna
 "Onde é aplicada" de cada lei aponta para o arquivo e mecanismo real que a
 torna verdade, não apenas uma intenção declarada.
 
-## As 12 leis (texto vinculante, verbatim)
+## As 13 leis (texto vinculante, verbatim)
 
 ```
 READ_ONLY
@@ -42,6 +42,7 @@ NO_ORDER_BY_LLM
 NO_ORDER_BY_VOICE
 NO_SECRET_IN_LOCALSTORAGE
 NO_FAKE_DATA
+NO_FAKE_LOCAL_AI_CLAIMS
 ```
 
 ### Significado e aplicação real, lei por lei
@@ -60,10 +61,19 @@ NO_FAKE_DATA
 | `NO_ORDER_BY_VOICE` | Comandos de voz nunca desbloqueiam uma ação que o toque na tela já não faria. | `BLOCKED_PHRASES` em `ipad_runtime/js/voice.js` (inclui `'enviar ordem'`, `'comprar'`, `'vender'`, `'operar real'`, `'usar chave'`, `'conectar conta real'`, `'abrir ordem'`, `'fechar ordem'`), checadas **antes** de qualquer comando permitido; `dispatchVoiceCommand()` em `app.js` só chama os mesmos handlers que os botões na tela já chamam — nunca existe uma segunda superfície de execução exclusiva da voz. |
 | `NO_SECRET_IN_LOCALSTORAGE` | Nenhum segredo é gravado em `localStorage`. | Mais forte que a letra da lei: `localStorage` não é usado em **nenhum** arquivo de `ipad_runtime/` — `storage.js` usa OPFS com fallback IndexedDB, com o comentário verbatim no topo do arquivo: "Local-first: nada aqui sai do dispositivo. Sem rede, sem secret." Não há, portanto, nenhum caminho de código que poderia gravar um segredo lá. |
 | `NO_FAKE_DATA` | Nenhum número de preço, indicador, probabilidade ou capacidade é inventado. | Regra `DADOS INSUFICIENTES` em `docs/ANALYSIS_OUTPUT_CONTRACT.md`; `confidence_model.forbidden` em `strategy-playbook.default.json` proíbe heurística apresentada como probabilidade estatística; conectores não reais usam `current_status: "UNSUPPORTED_ON_IPAD"`/`"FUTURE"` (nunca `"PLANNED"` ou `"ACTIVE_READ_ONLY"` por conveniência) quando a honestidade exige; todo motor/camada ainda não implementado retorna `status: 'FUTURE'`, nunca um valor "fake installed". |
+| `NO_FAKE_LOCAL_AI_CLAIMS` | Nenhuma afirmação sobre o estado local (instalado/atualizado/IA pronta) é mostrada sem uma verificação real, nesta sessão. | `vaultFreshness` em `ipad_runtime/js/app.js` começa `null` a cada carregamento de página e só recebe `'ATUALIZADO'`/`'DESATUALIZADO'` depois de uma comparação de versão de fato feita nesta sessão (`handleUpdateLocalPack`/`handleRepairInstall`); o painel "Vault Local do iPad" mostra `INSTALADO` (neutro) até essa verificação ocorrer, nunca assume `ATUALIZADO` por omissão; `detectWebLlmStatus()`/`detectTransformersStatus()`/`detectOnnxStatus()` (`feature-detect.js`) retornam sempre o literal `'FUTURE'`; `manifest.models.json` declara `"status": "FUTURE"` em todo modelo — nenhum "IA local pronta" decorativo. |
+
+Nota: `NO_FAKE_LOCAL_AI_CLAIMS` é o corolário mais estrito de `NO_FAKE_DATA`
+específico para autorrelato de instalação/versão/prontidão de IA local —
+`NO_FAKE_DATA` já cobria dados de mercado/indicador e capacidades em geral;
+esta lei nomeia explicitamente a mesma exigência para o Vault Local e para
+qualquer camada de IA, depois que a Missão 5 introduziu rótulos de
+frescor (`ATUALIZADO`/`DESATUALIZADO`) que precisam de uma regra própria
+contra "tudo certo" decorativo.
 
 ## Mecanismos transversais de aplicação (cross-cutting)
 
-As 12 leis não dependem de uma única verificação central — são reforçadas
+As 13 leis não dependem de uma única verificação central — são reforçadas
 por **múltiplas camadas independentes**, de forma que a falha de uma
 camada isolada não quebra a garantia geral:
 
@@ -113,7 +123,7 @@ bloqueado, por design, sem exceção... Nenhuma dessas rotas existe neste
 código — não é apenas uma flag desligada"): para cada lei acima, a
 pergunta certa não é "o que aconteceria se alguém tentasse?", mas "existe
 algum caminho de código, mesmo um único, que levaria a essa ação?". Hoje a
-resposta é não, para as 12 leis, em todo o sub-produto `ipad_runtime/`.
+resposta é não, para as 13 leis, em todo o sub-produto `ipad_runtime/`.
 Qualquer trabalho futuro que adicione uma capacidade real nova (um
 conector `ACTIVE_READ_ONLY`, um modelo Llama de fato instalado, uma camada
 de estratégias real) deve preservar essa propriedade: a nova capacidade
@@ -141,7 +151,7 @@ repositório hoje implementa qualquer um deles:
 
 | Documento | Relação |
 |---|---|
-| `docs/PROMPT_CACHING_AND_AGENT_CONTEXT_STRATEGY.md` | Define estas mesmas 12 leis como "Stable Block 02 — Safety Laws" do contexto de qualquer agente de IA que trabalhe neste repositório; este documento é a versão expandida e citável de onde cada lei é aplicada de verdade. |
+| `docs/PROMPT_CACHING_AND_AGENT_CONTEXT_STRATEGY.md` | Define estas mesmas 13 leis como "Stable Block 02 — Safety Laws" do contexto de qualquer agente de IA que trabalhe neste repositório; este documento é a versão expandida e citável de onde cada lei é aplicada de verdade. |
 | `docs/CONNECTOR_REGISTRY_DESIGN.md` | Define o contrato de schema cujo "Invariante de execução" implementa `NO_ORDER_EXECUTION`/`NO_MT5_ORDER_SEND`/`NO_MEXC_PRIVATE` para todo conector, presente e futuro. |
 | `docs/FUTURE_READY_ASSET_CLASS_REGISTRY.md` | Usa o mesmo bloco `security_posture` em `asset-universe.default.json`. |
 | `docs/SIRIFORM_VOICE_AND_NATIVE_COMPANION_ROUTE.md` | Implementa `NO_ORDER_BY_VOICE` via `BLOCKED_PHRASES`/`BLOCKED_RESPONSE`. |
@@ -158,4 +168,4 @@ declaração em Markdown. Ele é estritamente um **índice consolidado e
 citável** do que já está em vigor, espalhado por múltiplos arquivos de
 configuração e código — útil para qualquer revisão de segurança, qualquer
 nova missão, ou qualquer agente de IA que precise confirmar rapidamente
-que uma mudança proposta não viola nenhuma das 12 leis acima.
+que uma mudança proposta não viola nenhuma das 13 leis acima.

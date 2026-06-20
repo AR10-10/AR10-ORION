@@ -1,6 +1,6 @@
 {
-  "generated_for": "AR10_CYBORG_2_VISUAL_POLISH_MULTI_ASSET_RESEARCH_AND_CONNECTOR_ARCHITECTURE_V1",
-  "continues_from": "AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1",
+  "generated_for": "AR10_CYBORG_2_IPAD_LOCAL_VAULT_SAFE_AUTOMATION_POLISH_V1",
+  "continues_from": "AR10_CYBORG_2_VISUAL_POLISH_MULTI_ASSET_RESEARCH_AND_CONNECTOR_ARCHITECTURE_V1",
   "repo": "AR10-10/AR10-ORION",
   "branch": "claude/eloquent-cannon-qyt86y",
   "pull_request": "https://github.com/AR10-10/AR10-ORION/pull/3",
@@ -8,24 +8,24 @@
   "hash_algorithm": "sha256",
   "files": {
     "index.html": {
-      "sha256": "4db195e896ead444feee096344c3798d0fa8162db6bff2fd0c47d7a430b093aa",
-      "bytes": 16190
+      "sha256": "31cf1d5c0f1e873ff238a943040260d3e3463ffa0c3038116b16a8cdc6404622",
+      "bytes": 19390
     },
     "manifest.webmanifest": {
       "sha256": "3be72f358fcba501f54ed12695006386b5aa86fe4ec959665b12bae281ab29a6",
       "bytes": 984
     },
     "service-worker.js": {
-      "sha256": "4d9b3a660223f9bf746c280e32ce596d94627ed1ca4809580e43610cdd71d389",
+      "sha256": "8d503d544179bfa944a71355a3db7b7bc7901f7fc4305d46fc4decc94346d124",
       "bytes": 2167
     },
     "css/ipad-runtime.css": {
-      "sha256": "d6510c1a1a089e7652344a009dafd6e283d361d0d70b158b831cb71e92dbdd79",
-      "bytes": 24885
+      "sha256": "c44e9cbe40fc4ba789566bbe07aea42734b2c9f514084da2b9a4c78a8d8b58ed",
+      "bytes": 24933
     },
     "js/app.js": {
-      "sha256": "711d4266e16592202476bc2035bce69973aa5affebfe921d16fea94b2b8aca7b",
-      "bytes": 25749
+      "sha256": "8be8cfb42a325de0a4d8a071b342e11fc5f4d5db3742c1c2c8fa5bebeaba82e9",
+      "bytes": 33794
     },
     "js/siriform.js": {
       "sha256": "b2af37ef4953ee8f3e4de9737343057679742d43855984b2f4e0bbea0f7d0ceb",
@@ -44,16 +44,16 @@
       "bytes": 1326
     },
     "js/storage.js": {
-      "sha256": "eb0426635bfbc9f253e2405768cf38026e43861f965565c507005db4ca8fe038",
-      "bytes": 6608
+      "sha256": "43284e7f79362da6c017a44dd684bdbbfa393bf144938d96b22a3e560ad6556b",
+      "bytes": 7303
     },
     "js/worker-client.js": {
       "sha256": "5da973a9303016914d7793c7eaa4b4faebda12702a42ba5193ca7255769a71ec",
       "bytes": 1641
     },
     "js/pack-manager.js": {
-      "sha256": "73f10c09886809df9e127030dcacbd904a62c784d98c2a408bb01ff24b66637e",
-      "bytes": 7553
+      "sha256": "da5febf06b166ad66ec09e8331084a49c267405d794b0de5e32f72b0071f374b",
+      "bytes": 8860
     },
     "js/replay-engine.js": {
       "sha256": "fd5d4f3ad933dd4c70294e80712153852d68325debc40846c46ec4c64c441ee1",
@@ -76,12 +76,12 @@
       "bytes": 58284
     },
     "AR10_CYBORG_LOCAL_PACK_V1.ar10pack": {
-      "sha256": "6b9f6ffa9a5470d109e04dc6fb029111716ae8f9582d9cb308228dbd05639724",
-      "bytes": 87707
+      "sha256": "41b2e567740458b48f106b7b7221949eee3b593d687af8a6ff9f03814204b37e",
+      "bytes": 87730
     },
     "pack/manifest.pack.json": {
-      "sha256": "406c8e39e9483622540c1b0a10a78a1fa3a611b1cb335730c60c72caa14e6d86",
-      "bytes": 1031
+      "sha256": "3b49e0b5474f0248f57d06ec51a68e1bf58cbe93d44e75cb842debcef0defac0",
+      "bytes": 1058
     },
     "pack/manifest.models.json": {
       "sha256": "0bcdb220c76ef05fa1884b27717634e82964717b5aa7b458499f2381065728a3",

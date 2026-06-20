@@ -141,6 +141,24 @@ export async function readFile(relPath) {
     return v ? new Uint8Array(v) : null;
 }
 
+/** Remove um unico arquivo (usado pela limpeza segura pos-atualizacao do
+ *  pack-manager: nunca apaga nada antes do novo conteudo validado existir). */
+export async function deleteFile(relPath) {
+    if (await opfsAvailable()) {
+        try {
+            const dir = await opfsDir(false);
+            const parts = relPath.split('/');
+            let cur = dir;
+            for (let i = 0; i < parts.length - 1; i++) {
+                cur = await cur.getDirectoryHandle(parts[i], { create: false });
+            }
+            await cur.removeEntry(parts[parts.length - 1]);
+        } catch { /* ja nao existia */ }
+        return;
+    }
+    await idbDelete(STORE, relPath).catch(() => {});
+}
+
 export async function listFiles() {
     if (await opfsAvailable()) {
         const dir = await opfsDir(true);

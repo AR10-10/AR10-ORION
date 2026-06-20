@@ -4,6 +4,7 @@
   "format_note": "Container JSON UTF-8 (nao ZIP, nao executavel). Ver README.md > 'Por que JSON e nao ZIP'.",
   "target_runtime": "SAFARI_IPAD",
   "schema_version": 1,
+  "pack_version": "1.0.0",
   "contents": [
     {
       "path": "wasm/cyborg_quant_core.wasm",

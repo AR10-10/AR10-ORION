@@ -773,7 +773,8 @@ footer.legal {
     #replay-section,
     #analysis-frame-panel,
     #decision-frame-panel,
-    #vault-evidence-panel {
+    #vault-evidence-panel,
+    #vault-local-panel {
         grid-column: 2;
     }
 }
@@ -794,7 +795,8 @@ footer.legal {
     #quant-engine-panel,
     #ai-models-panel,
     #decision-frame-panel,
-    #vault-evidence-panel {
+    #vault-evidence-panel,
+    #vault-local-panel {
         grid-column: 3;
     }
 }

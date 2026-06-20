@@ -72,7 +72,9 @@ Estados possíveis (`data-state` no `#siriform-avatar`):
 | `fail_closed`| Falha de segurança real (checksum divergente, instalação bloqueada). |
 
 Cards do painel (todos dentro da mesma página, sem rota nova):
-`siriform-card` → `runtime-status-panel` → `feature-detect-panel` →
+`siriform-card` → `cyborg-readiness-panel` (leitura "tudo pronto?" de 1
+linha) → `voice-status-panel` (estado do microfone/Siriform Voice Layer) →
+`runtime-status-panel` → `feature-detect-panel` →
 `quant-engine-widget` → `ai-models-panel` (WebLLM/Transformers/ONNX,
 `FUTURE`) → `replay-wrap` (com `profile-toggle` Light/Balanced/Heavy,
 genuinamente muda a janela SMA/EMA usada no WASM) → `analysis-frame-panel`
@@ -81,7 +83,9 @@ genuinamente muda a janela SMA/EMA usada no WASM) → `analysis-frame-panel`
 sinal de ordem — existe só para deixar explícita a fronteira até onde o
 runtime vai) → `vault-evidence-card` (reabre e re-verifica o SHA-256 a cada
 boot, mostra backend/arquivos/timestamp/hash por arquivo) →
-`local-pack-manager` (os 9 botões do Local Pack Manager).
+`vault-local-panel` (Vault Local do iPad — 16 campos de status, leitura
+honesta do que está instalado/validado neste iPad, sem decoração) →
+`local-pack-manager` (os 13 botões do Local Pack Manager).
 
 ## Decisões técnicas (liberdade técnica usada nesta entrega)
 

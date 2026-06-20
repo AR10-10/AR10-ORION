@@ -133,5 +133,5 @@ offline (`data/btcusdt_replay.json`).
 - `ipad_runtime/configs/connector-registry.default.json` — fonte de verdade desta matriz.
 - `ipad_runtime/configs/data-sources.readonly.json` — view derivada do registro, filtrada para o subconjunto read-only (sem metadado rico), com o contrato global `execution_supported: false` reafirmado para inspeção rápida.
 - `docs/CONNECTOR_REGISTRY_DESIGN.md` — contrato de schema, vocabulários e invariante de execução.
-- `docs/READ_ONLY_MARKET_SAFETY.md` — as 12 leis de segurança vinculantes que esta matriz e o registro de conectores implementam.
+- `docs/READ_ONLY_MARKET_SAFETY.md` — as 13 leis de segurança vinculantes que esta matriz e o registro de conectores implementam.
 - `ipad_runtime/src/research/connectors/` — stubs de módulo por conector.
