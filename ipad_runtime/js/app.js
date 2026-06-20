@@ -11,6 +11,13 @@ import * as exporter from './export-manifest.js';
 import * as dataPolicy from './data-policy.js';
 import * as evaluations from './evaluations.js';
 import * as metrics from './metrics.js';
+import * as realDataRegistry from './real-data/registry.js';
+import { buildRealAnalysisFrame } from './real-data/analysis-frame.js';
+import { DADOS_INSUFICIENTES, NAO_APLICAVEL, EVIDENCE_DATA_FIELDS } from './real-data/schema.js';
+import { buildResearchEngineFrame } from './research/research-engine.js';
+import * as persistentState from './memory/persistent-state.js';
+import * as evidenceLedger from './memory/evidence-ledger.js';
+import { rehydrateSession } from './memory/session-resume.js';
 
 const els = {};
 ['st-pwa', 'st-sw', 'st-cache', 'st-idb', 'st-opfs', 'st-webcrypto', 'st-wasm', 'st-workers',
@@ -26,6 +33,12 @@ const els = {};
     'vl-idb', 'vl-opfs', 'vl-wasm', 'vl-replay', 'vl-updated', 'vl-cache-version',
     'vl-storage-used', 'vl-storage-quota', 'vl-safety', 'vl-repair',
     'dp-realmode', 'dp-analysis', 'export-list',
+    'rdl-connector-grid', 'rdl-active-source', 'real-data-import-input',
+    'real-analysis-frame-grid', 'real-analysis-frame-session-note', 'real-analysis-frame-note',
+    're-evidence-grid', 're-missing-fields', 're-session-note', 're-evidence-hash',
+    'route-a-long-grid', 'route-b-short-grid', 'route-c-wait-grid', 'research-engine-session-note',
+    'rdl-explanation-text',
+    'sw-update-banner', 'sw-update-text',
     'topbar-status', 'advanced-section', 'btn-tb-advanced',
     'ev-command-routing', 'ev-security-posture', 'ev-data-policy', 'ev-fail-closed', 'ev-siriform-states', 'ev-summary',
     'mx-load-time', 'mx-prep-time', 'mx-cache', 'mx-storage', 'mx-siriform-events', 'mx-diag-fails', 'mx-eval-fails', 'mx-reduced-motion',
@@ -113,6 +126,19 @@ let workerClient = null;
 let replayDatasetCache = null;
 let lastAnalysisMeta = null;
 let vaultFreshness = null; // null=nao verificado nesta sessao; so muda apos check real (NO_FAKE_LOCAL_AI_CLAIMS)
+
+// Mission AR10_CYBORG_2_SAFE_REAL_DATA_LAYER_RUNTIME_PROBE_V1 — estado do
+// Real Data Layer. `sessionHasRealProbe` so vira true depois que UMA sonda
+// real desta sessao (rede ou import local) chega a ACTIVE_READ_ONLY; e o que
+// distingue "estou mostrando dado revalidado agora" de "estou mostrando
+// memoria de uma sessao anterior" (isShowingHistoricalData() abaixo) — nunca
+// dizemos que uma fonte esta ativa so porque ela ja esteve ativa um dia.
+let activeRealEvidence = null;
+let lastRealAnalysisFrame = null;
+let lastResearchEngineFrame = null;
+let sessionHasRealProbe = false;
+let rehydratedPreviousSession = false;
+let rehydratedActiveSourceId = null;
 
 async function refreshFeatureStatus() {
     const f = await feat.runAllFeatureDetections();
@@ -285,6 +311,7 @@ const EXPORT_EMPTY_LABEL = {
     LOCAL_PACK: 'Nenhum backup do pacote local exportado ainda.',
     FINAL_REPORT: 'Nenhum relatório exportado ainda.',
     EVIDENCE_OUTBOX: 'Nenhuma evidência exportada ainda.',
+    EVIDENCE_LEDGER: 'Nenhum Evidence Ledger exportado ainda.',
     PROJECT_DECKAP: 'Nenhum DECAP exportado ainda.',
 };
 
@@ -365,12 +392,440 @@ function renderAnalysisFrame(meta) {
     `;
 }
 
+// Mission AR10_CYBORG_2_SAFE_REAL_DATA_LAYER_RUNTIME_PROBE_V1 — render helpers
+// do Real Data Layer. `isShowingHistoricalData()` e o unico portao usado nos
+// quatro cards (Real Data Layer/AnalysisFrame real/Evidence/Research Engine)
+// para decidir se mostramos o aviso "isto e memoria, ainda nao revalidada
+// nesta sessao" — nunca apagamos o dado reidratado (o usuario nao volta a
+// zero ao reabrir), mas tambem nunca deixamos parecer dado fresco sem uma
+// sonda real ter rodado nesta sessao.
+function isShowingHistoricalData() {
+    return rehydratedPreviousSession && !sessionHasRealProbe;
+}
+
+function setHistoricalNote(id, present) {
+    const el = els[id];
+    if (!el) return;
+    el.hidden = !present;
+    if (present) {
+        el.textContent = 'Memória da sessão anterior — ainda não revalidado nesta sessão. Toque em "Testar fontes reais" para confirmar de novo.';
+    }
+}
+
+function refreshHistoricalNotes() {
+    const present = isShowingHistoricalData();
+    setHistoricalNote('real-analysis-frame-session-note', present);
+    setHistoricalNote('re-session-note', present);
+    setHistoricalNote('research-engine-session-note', present);
+}
+
+function classForConnectorState(state) {
+    if (state === 'ACTIVE_READ_ONLY') return 'v-ok';
+    if (state === 'PLANNED' || state === 'PROBING') return 'v-pending';
+    if (state === 'DEGRADED' || state === 'DADOS_INSUFICIENTES') return 'v-limited';
+    return 'v-fail'; // BLOCKED_BY_CORS / BLOCKED_BY_SCHEMA / BLOCKED_BY_POLICY
+}
+
+// Connector Probe grid: SEMPRE a verdade viva de registry.js (sessionState),
+// nunca tocada pela reidratacao — todo conector nasce PLANNED nesta sessao e
+// so muda de estado apos a propria sonda real responder.
+function renderConnectorGrid() {
+    const connectors = realDataRegistry.listConnectors();
+    els['rdl-connector-grid'].innerHTML = connectors.map((c) => `
+        <div class="status-row"><span class="label">${c.connector_name}</span><span class="value ${classForConnectorState(c.state)}">${c.state}</span></div>
+    `).join('');
+
+    const active = realDataRegistry.getActiveReadOnlySources();
+    if (active.length) {
+        els['rdl-active-source'].textContent = `Fonte ativa: ${active.map((a) => a.connector_name).join(', ')}.`;
+    } else if (isShowingHistoricalData() && rehydratedActiveSourceId) {
+        const meta = realDataRegistry.getConnectorMeta(rehydratedActiveSourceId);
+        els['rdl-active-source'].textContent = `Fonte ativa (sessão anterior, ainda não revalidada agora): ${meta ? meta.connector_name : rehydratedActiveSourceId}.`;
+    } else {
+        els['rdl-active-source'].textContent = 'Fonte ativa: nenhuma nesta sessão ainda.';
+    }
+}
+
+function formatEvidenceField(value) {
+    if (value === DADOS_INSUFICIENTES || value === NAO_APLICAVEL) return value;
+    if (Array.isArray(value)) return `${value.length} candles reais`;
+    if (value && typeof value === 'object') {
+        if ('last_price' in value) return `último preço real: ${value.last_price}`;
+        if ('last_candle_volume' in value) return `volume real (última vela): ${value.last_candle_volume}`;
+        return JSON.stringify(value);
+    }
+    return String(value);
+}
+
+function renderEvidence(evidence) {
+    if (!evidence) {
+        els['re-evidence-grid'].innerHTML = '<span class="analysis-frame-empty">Nenhuma evidência real ainda nesta sessão.</span>';
+        els['re-missing-fields'].textContent = 'Campos ausentes: —';
+        els['re-evidence-hash'].innerHTML = '';
+        return;
+    }
+    const qualityClass = evidence.data_quality === 'COMPLETA_PARA_CAPACIDADES_TENTADAS' ? 'v-ok'
+        : (evidence.data_quality === 'PARCIAL' ? 'v-limited' : 'v-fail');
+    const identityRows = `
+        <div class="status-row"><span class="label">Fonte</span><span class="value v-info">${evidence.source_name}</span></div>
+        <div class="status-row"><span class="label">Símbolo</span><span class="value v-info">${evidence.symbol}</span></div>
+        <div class="status-row"><span class="label">Timeframe</span><span class="value v-info">${evidence.timeframe}</span></div>
+        <div class="status-row"><span class="label">Qualidade do dado</span><span class="value ${qualityClass}">${evidence.data_quality}</span></div>
+    `;
+    const fieldRows = EVIDENCE_DATA_FIELDS.map((field) => {
+        const value = evidence[field];
+        const cls = value === DADOS_INSUFICIENTES ? 'v-limited' : (value === NAO_APLICAVEL ? 'v-pending' : 'v-ok');
+        return `<div class="status-row"><span class="label">${field}</span><span class="value ${cls}">${formatEvidenceField(value)}</span></div>`;
+    }).join('');
+    els['re-evidence-grid'].innerHTML = identityRows + fieldRows;
+    els['re-missing-fields'].textContent = (evidence.missing_fields && evidence.missing_fields.length)
+        ? `Campos ausentes: ${evidence.missing_fields.join(', ')}`
+        : 'Campos ausentes: nenhum nesta leitura.';
+    els['re-evidence-hash'].innerHTML = `<span class="hash-chip">raw_sample_hash: ${String(evidence.raw_sample_hash).slice(0, 20)}…</span><span class="hash-chip">timestamp: ${evidence.timestamp}</span><span class="hash-chip">fetched_at: ${evidence.fetched_at || '—'}</span>`;
+}
+
+function renderRealAnalysisFrame(frame) {
+    if (!frame) {
+        els['real-analysis-frame-grid'].innerHTML = '<span class="analysis-frame-empty">Sem fonte ACTIVE_READ_ONLY nesta sessão ainda. Teste uma fonte real primeiro.</span>';
+        return;
+    }
+    const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : v);
+    els['real-analysis-frame-grid'].innerHTML = `
+        <div class="af-row"><span class="af-label">Ativo</span><span class="af-value">${frame.asset}</span></div>
+        <div class="af-row"><span class="af-label">Fonte</span><span class="af-value">${frame.source}</span></div>
+        <div class="af-row"><span class="af-label">Candles</span><span class="af-value">${frame.candles_count}</span></div>
+        <div class="af-row"><span class="af-label">Último</span><span class="af-value">${fmt(frame.last_price)}</span></div>
+        <div class="af-row"><span class="af-label">SMA</span><span class="af-value">${fmt(frame.sma)}</span></div>
+        <div class="af-row"><span class="af-label">EMA</span><span class="af-value">${fmt(frame.ema)}</span></div>
+        <div class="af-row"><span class="af-label">Desvio padrão</span><span class="af-value">${fmt(frame.stddev)}</span></div>
+        <div class="af-row"><span class="af-label">Z-score</span><span class="af-value">${typeof frame.zscore === 'number' ? frame.zscore.toFixed(3) : frame.zscore}</span></div>
+        <div class="af-row"><span class="af-label">Suporte</span><span class="af-value">${fmt(frame.support)}</span></div>
+        <div class="af-row"><span class="af-label">Resistência</span><span class="af-value">${fmt(frame.resistance)}</span></div>
+        <div class="af-row"><span class="af-label">Volatilidade</span><span class="af-value">${frame.volatility_state}</span></div>
+        <div class="af-row"><span class="af-label">Volume</span><span class="af-value">${frame.volume_status}</span></div>
+        <div class="af-row"><span class="af-label">Status</span><span class="af-value">${frame.status}</span></div>
+    `;
+    if (els['real-analysis-frame-note']) {
+        els['real-analysis-frame-note'].textContent = frame.status === 'OK'
+            ? 'Leitura estatística sobre candles reais validados nesta sessão por sonda real. Ainda não é recomendação de ordem.'
+            : `DADOS INSUFICIENTES: ${frame.status_reason || 'sem candles reais suficientes'}.`;
+    }
+}
+
+function renderResearchEngineFrame(frame) {
+    const empty = '<span class="analysis-frame-empty">DADOS INSUFICIENTES.</span>';
+    if (!frame) {
+        els['route-a-long-grid'].innerHTML = empty;
+        els['route-b-short-grid'].innerHTML = empty;
+        els['route-c-wait-grid'].innerHTML = empty;
+        return;
+    }
+    const row = (label, value) => `<div class="status-row"><span class="label">${label}</span><span class="value ${(value === DADOS_INSUFICIENTES || value === NAO_APLICAVEL) ? 'v-limited' : 'v-info'}">${value}</span></div>`;
+    const a = frame.rota_a_long;
+    const b = frame.rota_b_short;
+    const c = frame.rota_c_wait;
+    els['route-a-long-grid'].innerHTML = row('Confiança', a.confidence) + row('Zona de entrada', a.entry_zone) + row('Invalidação', a.invalidation) + row('Alvo 1', a.target_1) + row('Alvo 2', a.target_2) + row('Confirmação exigida', a.required_confirmation);
+    els['route-b-short-grid'].innerHTML = row('Confiança', b.confidence) + row('Zona de entrada', b.entry_zone) + row('Invalidação', b.invalidation) + row('Alvo 1', b.target_1) + row('Alvo 2', b.target_2) + row('Confirmação exigida', b.required_confirmation);
+    els['route-c-wait-grid'].innerHTML = row('Motivo', c.reason) + row('Gatilho de reavaliação', c.trigger_to_reevaluate) + row('Dado ausente', c.data_missing) + row('Condição mais segura', c.safer_condition);
+}
+
+// Mission AR10_CYBORG_2_SAFE_REAL_DATA_LAYER_RUNTIME_PROBE_V1 — handlers do
+// Real Data Layer. Cada handler reusa so os modulos ja existentes
+// (real-data/registry.js, real-data/analysis-frame.js, research/research-
+// engine.js, memory/*) — nenhuma chamada nova de rede fora desses modulos,
+// nenhum order_send/newOrder/placeOrder, nenhum endpoint privado.
+async function persistProbeResult(result) {
+    await persistentState.recordProbeResult(result.connector_id, result);
+    if (result.evidence) {
+        await evidenceLedger.appendEvidence({ connector_id: result.connector_id, state: result.state, evidence: result.evidence });
+    }
+}
+
+async function handleTestRealSources() {
+    siriform.setSiriformState('checking', 'Sondando fontes reais públicas (sem chave, sem endpoint privado)...');
+    log('=== TESTAR FONTES REAIS ===', 'info');
+    try {
+        const results = await realDataRegistry.probeAllNetworkSources({
+            symbol: 'BTC',
+            onTransition: (id, state) => {
+                log(`Conector ${id}: ${state}`, state === 'ACTIVE_READ_ONLY' ? 'ok' : (state === 'PROBING' ? 'dim' : 'warn'));
+                renderConnectorGrid();
+            },
+        });
+        for (const r of results) await persistProbeResult(r);
+        renderConnectorGrid();
+
+        const active = results.find((r) => r.state === 'ACTIVE_READ_ONLY');
+        if (active) {
+            sessionHasRealProbe = true;
+            rehydratedActiveSourceId = null;
+            activeRealEvidence = active.evidence;
+            renderEvidence(activeRealEvidence);
+            refreshHistoricalNotes();
+            const meta = realDataRegistry.getConnectorMeta(active.connector_id);
+            log(`Fonte real ativa nesta sessão: ${meta ? meta.connector_name : active.connector_id}.`, 'ok');
+            siriform.setSiriformState('success', `Fonte real validada: ${meta ? meta.connector_name : active.connector_id}.`);
+        } else {
+            log('Nenhum conector real ficou ACTIVE_READ_ONLY nesta sondagem — DADOS_INSUFICIENTES.', 'warn');
+            siriform.setSiriformState('warning', 'Nenhuma fonte real pôde ser validada agora. DADOS_INSUFICIENTES.');
+        }
+    } catch (err) {
+        log(`Erro ao sondar fontes reais: ${err.message}`, 'fail');
+        siriform.setSiriformState('warning', 'Não consegui sondar as fontes reais agora.');
+    }
+}
+
+async function handleRefreshRealData() {
+    const active = realDataRegistry.getActiveReadOnlySources();
+    if (!active.length) {
+        log('Atualizar dados reais: nenhuma fonte ACTIVE_READ_ONLY nesta sessão ainda — sondando todas de novo.', 'info');
+        await handleTestRealSources();
+        return;
+    }
+    siriform.setSiriformState('checking', 'Atualizando dados da fonte real ativa...');
+    log('=== ATUALIZAR DADOS REAIS ===', 'info');
+    try {
+        for (const conn of active) {
+            const result = await realDataRegistry.probeNetworkConnector(conn.connector_id, {
+                symbol: activeRealEvidence?.symbol || 'BTC',
+                onTransition: () => renderConnectorGrid(),
+            });
+            await persistProbeResult(result);
+            if (result.state === 'ACTIVE_READ_ONLY') {
+                sessionHasRealProbe = true;
+                rehydratedActiveSourceId = null;
+                activeRealEvidence = result.evidence;
+            }
+        }
+        renderConnectorGrid();
+        renderEvidence(activeRealEvidence);
+        refreshHistoricalNotes();
+        log('Dados reais atualizados a partir da fonte ativa.', 'ok');
+        siriform.setSiriformState('success', 'Dados reais atualizados.');
+    } catch (err) {
+        log(`Erro ao atualizar dados reais: ${err.message}`, 'fail');
+        siriform.setSiriformState('warning', 'Não consegui atualizar os dados reais agora.');
+    }
+}
+
+function handleImportRealCsv() {
+    siriform.pulseListening();
+    els['real-data-import-input'].click();
+}
+
+async function handleGenerateRealAnalysis() {
+    if (!sessionHasRealProbe || !activeRealEvidence) {
+        log('Gerar AnalysisFrame real: nenhuma fonte validada por sonda real nesta sessão ainda.', 'warn');
+        siriform.setSiriformState('warning', 'Teste uma fonte real primeiro (a sonda precisa rodar nesta sessão).');
+        return;
+    }
+    siriform.setSiriformState('thinking', 'Calculando AnalysisFrame sobre candles reais...');
+    log('=== GERAR ANALYSISFRAME REAL ===', 'info');
+    try {
+        const profile = PROFILES[currentProfile];
+        const frame = await buildRealAnalysisFrame({ evidence: activeRealEvidence, workerClient, windowSize: profile.windowSize });
+        lastRealAnalysisFrame = frame;
+        renderRealAnalysisFrame(frame);
+        await persistentState.recordAnalysisFrame(frame);
+
+        const research = buildResearchEngineFrame({ frame, evidence: activeRealEvidence });
+        lastResearchEngineFrame = research;
+        renderResearchEngineFrame(research);
+        await persistentState.recordResearchFrame(research);
+
+        refreshHistoricalNotes();
+
+        if (frame.status === 'OK') {
+            log(`AnalysisFrame real OK — ${frame.candles_count} candles, último ${frame.last_price}, SMA ${frame.sma}, EMA ${frame.ema}.`, 'ok');
+            siriform.setSiriformState('success', 'AnalysisFrame real gerado a partir de candles reais validados.');
+        } else {
+            log(`AnalysisFrame real: DADOS_INSUFICIENTES (${frame.status_reason}).`, 'warn');
+            siriform.setSiriformState('warning', `DADOS INSUFICIENTES: ${frame.status_reason}.`);
+        }
+    } catch (err) {
+        log(`Erro ao gerar AnalysisFrame real: ${err.message}`, 'fail');
+        siriform.setSiriformState('warning', 'Não consegui gerar o AnalysisFrame real agora.');
+    }
+}
+
+function handleShowEvidence() {
+    if (!activeRealEvidence) {
+        log('Ver fonte/evidência: nenhuma evidência real nesta sessão ainda.', 'warn');
+        siriform.setSiriformState('warning', 'Teste uma fonte real primeiro para gerar evidência.');
+        return;
+    }
+    renderEvidence(activeRealEvidence);
+    const ev = activeRealEvidence;
+    log(`Evidência ativa: fonte=${ev.source_name} símbolo=${ev.symbol} timeframe=${ev.timeframe} qualidade=${ev.data_quality} hash=${String(ev.raw_sample_hash).slice(0, 20)}…`, 'info');
+    siriform.setSiriformState('success', `Evidência de ${ev.source_name}: qualidade ${ev.data_quality}.`);
+}
+
+function handleShowMissingFields() {
+    if (!activeRealEvidence) {
+        log('Ver campos ausentes: nenhuma evidência real nesta sessão ainda.', 'warn');
+        siriform.setSiriformState('warning', 'Teste uma fonte real primeiro.');
+        return;
+    }
+    const missing = activeRealEvidence.missing_fields || [];
+    const text = missing.length
+        ? `Campos ausentes nesta leitura: ${missing.join(', ')}. Eles aparecem como DADOS_INSUFICIENTES porque deveriam existir mas a sonda real não confirmou — nunca são inventados.`
+        : 'Nenhum campo crítico ausente nesta leitura. Campos estruturalmente impossíveis para este instrumento aparecem como NÃO_APLICÁVEL, não como erro.';
+    log(`Campos ausentes: ${text}`, 'info');
+    siriform.setSiriformState('success', text);
+    voice.speak(text);
+}
+
+function buildRealDataExplanation() {
+    const connectors = realDataRegistry.listConnectors();
+    const active = connectors.filter((c) => c.state === 'ACTIVE_READ_ONLY');
+    const blocked = connectors.filter((c) => c.state !== 'ACTIVE_READ_ONLY' && c.state !== 'PLANNED' && c.state !== 'PROBING');
+    const parts = [];
+
+    if (isShowingHistoricalData()) {
+        parts.push('Estou mostrando memória de uma sessão anterior, ainda não revalidada agora nesta sessão.');
+    }
+
+    if (active.length) {
+        parts.push(`Fonte usada: ${active.map((a) => a.connector_name).join(', ')} — validada por uma sonda real (fetch de verdade) nesta sessão, então o estado é ACTIVE_READ_ONLY.`);
+    } else if (activeRealEvidence) {
+        parts.push(`Última fonte conhecida: ${activeRealEvidence.source_name}, mas ela ainda não foi revalidada nesta sessão.`);
+    } else {
+        parts.push('Nenhuma fonte real foi validada ainda nesta sessão. Toque em "Testar fontes reais" primeiro.');
+    }
+
+    for (const b of blocked) {
+        const reason = b.probe_detail?.reason || b.state;
+        parts.push(`${b.connector_name} está em ${b.state} (motivo: ${reason}) — resultado real da última sonda, nunca um bloqueio decorativo.`);
+    }
+
+    if (activeRealEvidence) {
+        const missing = activeRealEvidence.missing_fields || [];
+        parts.push(missing.length
+            ? `Campos ausentes na última leitura: ${missing.join(', ')} — aparecem como DADOS_INSUFICIENTES, nunca inventados.`
+            : 'Nenhum campo crítico ficou ausente na última leitura desta fonte.');
+    }
+
+    if (lastRealAnalysisFrame && lastRealAnalysisFrame.status !== 'OK') {
+        parts.push(`O AnalysisFrame real está em DADOS_INSUFICIENTES porque ${lastRealAnalysisFrame.status_reason}.`);
+    }
+
+    parts.push('A Research Engine sempre mostra as três rotas — LONG, SHORT e WAIT/NO TRADE — porque nenhuma heurística de fonte única deveria decidir por apenas um lado; a ROTA C de esperar é sempre uma leitura legítima, nunca uma rota vazia.');
+    parts.push('A execução real continua bloqueada por política (DISABLED_BY_POLICY): nenhum botão ou comando de voz aqui envia, abre ou fecha ordem — READ_ONLY e FAIL_CLOSED permanecem intactos.');
+
+    return parts.join(' ');
+}
+
+function handleExplainRealData() {
+    const text = buildRealDataExplanation();
+    if (els['rdl-explanation-text']) els['rdl-explanation-text'].textContent = text;
+    log(`Explicar dados reais: ${text}`, 'info');
+    siriform.setSiriformState('success', 'Explicação dos dados reais gerada pelo Siriform.');
+    voice.speak(text);
+}
+
+// Session Resume: reaplica o ultimo estado real conhecido (IndexedDB) sem
+// jamais marcar um conector como ACTIVE_READ_ONLY so por causa de memoria —
+// isShowingHistoricalData() (definido acima) e que decide se os cards
+// mostram o aviso de "ainda nao revalidado nesta sessao".
+async function applyRehydratedSession(resume) {
+    rehydratedPreviousSession = resume.has_previous_session;
+    const { state } = resume;
+    rehydratedActiveSourceId = state.activeSource || null;
+
+    if (rehydratedActiveSourceId && state.evidenceByConnector && state.evidenceByConnector[rehydratedActiveSourceId]) {
+        activeRealEvidence = state.evidenceByConnector[rehydratedActiveSourceId];
+    }
+    lastRealAnalysisFrame = state.lastAnalysisFrame || lastRealAnalysisFrame;
+    lastResearchEngineFrame = state.lastResearchFrame || lastResearchEngineFrame;
+
+    renderConnectorGrid();
+    renderEvidence(activeRealEvidence);
+    renderRealAnalysisFrame(lastRealAnalysisFrame);
+    renderResearchEngineFrame(lastResearchEngineFrame);
+    refreshHistoricalNotes();
+    return resume;
+}
+
+async function handleRehydrateSession() {
+    siriform.setSiriformState('checking', 'Reidratando sessão a partir da memória local (IndexedDB)...');
+    log('=== REIDRATAR SESSÃO ===', 'info');
+    try {
+        const resume = await rehydrateSession();
+        await applyRehydratedSession(resume);
+        if (resume.has_previous_session) {
+            log(`Sessão anterior encontrada: ${resume.ledger.length} evidência(s) no Evidence Ledger.`, 'ok');
+            siriform.setSiriformState('success', 'Sessão reidratada a partir da memória local. Ainda não revalidada — toque em "Testar fontes reais" para confirmar de novo.');
+        } else {
+            log('Nenhuma sessão anterior encontrada nesta instalação.', 'info');
+            siriform.setSiriformState('idle', 'Nenhuma sessão anterior encontrada ainda.');
+        }
+    } catch (err) {
+        log(`Erro ao reidratar sessão: ${err.message}`, 'fail');
+        siriform.setSiriformState('warning', 'Não consegui reidratar a sessão agora.');
+    }
+}
+
+async function handleExportEvidenceLedger() {
+    siriform.setSiriformState('thinking', 'Exportando Evidence Ledger...');
+    log('=== EXPORTAR EVIDENCE LEDGER ===', 'info');
+    try {
+        const ledger = await evidenceLedger.getLedger();
+        const payload = {
+            generated_at: new Date().toISOString(),
+            mode: 'IPAD_DIRECT / LOCAL_FIRST / READ_ONLY / FAIL_CLOSED',
+            execution: 'DISABLED_BY_POLICY',
+            entries: ledger,
+            no_secrets: true,
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const entry = exporter.downloadArtifact({ type: 'EVIDENCE_LEDGER', ext: 'json', blob, purpose: 'Histórico de Evidence real (Real Data Layer) exportado pelo usuário.' });
+        renderExportPanel();
+        log(`Evidence Ledger exportado com nome único: ${entry.filename} (${ledger.length} entrada(s)).`, 'ok');
+        siriform.setSiriformState('success', 'Evidence Ledger exportado para o app Arquivos.');
+    } catch (err) {
+        log(`Erro ao exportar Evidence Ledger: ${err.message}`, 'fail');
+        siriform.setSiriformState('warning', 'Não consegui exportar o Evidence Ledger agora.');
+    }
+}
+
+// Boot silencioso: mostra na hora o ultimo estado real conhecido (Real Data
+// Layer) sem precisar o usuario tocar em "Reidratar sessao" manualmente —
+// mesma logica do handler, so sem o "thinking/checking" do toque manual.
+async function bootRehydrateSession() {
+    try {
+        const resume = await rehydrateSession();
+        await applyRehydratedSession(resume);
+        if (resume.has_previous_session) {
+            log(`Sessão anterior do Real Data Layer restaurada da memória local: ${resume.ledger.length} evidência(s) no ledger.`, 'info');
+        }
+    } catch (err) {
+        log(`Falha ao reidratar memória do Real Data Layer: ${err.message}`, 'warn');
+    }
+}
+
+// "Atualizacao disponivel": o service-worker.js chama skipWaiting() sem
+// condicao no install, entao a troca de controlador (controllerchange) so'
+// acontece quando uma versao nova ASSUME uma pagina que ja estava sendo
+// controlada por uma versao anterior — nunca no primeiro install (por isso
+// hadControllerAtRegister e' checado ANTES do reload, nunca depois).
+function showUpdateBanner() {
+    if (!els['sw-update-banner']) return;
+    els['sw-update-banner'].hidden = false;
+    log('Atualização do runtime disponível (nova versão já pré-armazenada pelo Service Worker).', 'info');
+    siriform.setSiriformState('updating', 'Atualização disponível — toque em "Atualizar agora" quando quiser aplicar.');
+}
+
 async function registerServiceWorker() {
     if (!('serviceWorker' in navigator)) {
         log('Service Worker indisponivel neste navegador.', 'warn');
         return;
     }
     try {
+        const hadControllerAtRegister = Boolean(navigator.serviceWorker.controller);
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (hadControllerAtRegister) showUpdateBanner();
+        });
+
         const swUrl = new URL('service-worker.js', window.location.href).href;
         const reg = await navigator.serviceWorker.register(swUrl, { scope: './' });
         log(`Service Worker registrado (scope=${reg.scope}).`, 'ok');
@@ -843,6 +1298,11 @@ async function dispatchVoiceCommand(id) {
         case 'explain-analysis': return handleExplainAnalysis();
         case 'show-safety-mode': return handleShowSafetyMode();
         case 'show-add-home': return handleAddHome();
+        case 'test-real-sources': return handleTestRealSources();
+        case 'refresh-real-data': return handleRefreshRealData();
+        case 'generate-real-analysis': return handleGenerateRealAnalysis();
+        case 'explain-real-data': return handleExplainRealData();
+        case 'rehydrate-session': return handleRehydrateSession();
         default: return undefined;
     }
 }
@@ -955,11 +1415,35 @@ function wireButtons() {
     document.getElementById('btn-add-home').addEventListener('click', handleAddHome);
     document.getElementById('btn-tb-update').addEventListener('click', handleUpdateLocalPack);
     document.getElementById('btn-tb-analyze').addEventListener('click', handleAnalyzeSystem);
+    const btnSwUpdateReload = document.getElementById('btn-sw-update-reload');
+    if (btnSwUpdateReload) btnSwUpdateReload.addEventListener('click', () => window.location.reload());
+    const btnSwUpdateDismiss = document.getElementById('btn-sw-update-dismiss');
+    if (btnSwUpdateDismiss) btnSwUpdateDismiss.addEventListener('click', () => { els['sw-update-banner'].hidden = true; });
     wireAdvancedToggle();
     const btnReport = document.getElementById('btn-export-report');
     if (btnReport) btnReport.addEventListener('click', handleExportReport);
     const btnEvidence = document.getElementById('btn-export-evidence');
     if (btnEvidence) btnEvidence.addEventListener('click', handleExportEvidence);
+
+    const btnTestRealSources = document.getElementById('btn-test-real-sources');
+    if (btnTestRealSources) btnTestRealSources.addEventListener('click', handleTestRealSources);
+    const btnRefreshRealData = document.getElementById('btn-refresh-real-data');
+    if (btnRefreshRealData) btnRefreshRealData.addEventListener('click', handleRefreshRealData);
+    const btnImportRealCsv = document.getElementById('btn-import-real-csv');
+    if (btnImportRealCsv) btnImportRealCsv.addEventListener('click', handleImportRealCsv);
+    const btnGenerateRealAnalysis = document.getElementById('btn-generate-real-analysis');
+    if (btnGenerateRealAnalysis) btnGenerateRealAnalysis.addEventListener('click', handleGenerateRealAnalysis);
+    const btnShowEvidence = document.getElementById('btn-show-evidence');
+    if (btnShowEvidence) btnShowEvidence.addEventListener('click', handleShowEvidence);
+    const btnShowMissingFields = document.getElementById('btn-show-missing-fields');
+    if (btnShowMissingFields) btnShowMissingFields.addEventListener('click', handleShowMissingFields);
+    const btnExplainRealData = document.getElementById('btn-explain-real-data');
+    if (btnExplainRealData) btnExplainRealData.addEventListener('click', handleExplainRealData);
+    const btnRehydrateSession = document.getElementById('btn-rehydrate-session');
+    if (btnRehydrateSession) btnRehydrateSession.addEventListener('click', handleRehydrateSession);
+    const btnExportEvidenceLedger = document.getElementById('btn-export-evidence-ledger');
+    if (btnExportEvidenceLedger) btnExportEvidenceLedger.addEventListener('click', handleExportEvidenceLedger);
+
     document.getElementById('btn-close-modal').addEventListener('click', () => { els['home-modal'].hidden = true; });
     document.getElementById('qa-diagnostics').addEventListener('click', handleRunDiagnostics);
     document.getElementById('qa-replay').addEventListener('click', handleRunReplay);
@@ -980,6 +1464,38 @@ function wireButtons() {
             siriform.setSiriformState('warning', 'Não consegui importar esse arquivo.');
         }
         ev.target.value = '';
+    });
+
+    els['real-data-import-input'].addEventListener('change', async (ev) => {
+        const file = ev.target.files && ev.target.files[0];
+        ev.target.value = '';
+        if (!file) return;
+        siriform.setSiriformState('checking', 'Lendo arquivo local (sem rede)...');
+        log(`=== IMPORTAR CSV/JSON LOCAL: ${file.name} ===`, 'info');
+        try {
+            const result = await realDataRegistry.probeLocalImport({
+                file,
+                symbol: 'IMPORTADO',
+                onTransition: () => renderConnectorGrid(),
+            });
+            await persistProbeResult(result);
+            renderConnectorGrid();
+            if (result.state === 'ACTIVE_READ_ONLY') {
+                sessionHasRealProbe = true;
+                rehydratedActiveSourceId = null;
+                activeRealEvidence = result.evidence;
+                renderEvidence(activeRealEvidence);
+                refreshHistoricalNotes();
+                log('Arquivo local importado e validado como evidência real.', 'ok');
+                siriform.setSiriformState('success', 'Arquivo local importado e validado.');
+            } else {
+                log(`Importação não passou da sonda: ${result.state}.`, 'warn');
+                siriform.setSiriformState('warning', `Importação bloqueada: ${result.state}.`);
+            }
+        } catch (err) {
+            log(`Erro ao importar arquivo local: ${err.message}`, 'fail');
+            siriform.setSiriformState('warning', 'Não consegui importar esse arquivo.');
+        }
     });
 }
 
@@ -1014,6 +1530,7 @@ async function boot() {
     refreshCyborgReadiness(f, voiceStatus);
     refreshDataPolicyPanel();
     renderExportPanel();
+    await bootRehydrateSession();
 
     // Auto-reparo no boot: SÓ quando algo já foi instalado antes (existe meta
     // com checksums) e agora está quebrado — o caso "corrompido/ausente após

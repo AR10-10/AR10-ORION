@@ -40,6 +40,11 @@ export const ALLOWED_COMMANDS = [
     { id: 'explain-analysis', phrases: ['explicar analise'] },
     { id: 'show-safety-mode', phrases: ['mostrar modo de seguranca'] },
     { id: 'show-add-home', phrases: ['como adicionar a tela de inicio'] },
+    { id: 'test-real-sources', phrases: ['testar fontes reais', 'testar fontes de dados reais', 'testar conectores reais'] },
+    { id: 'refresh-real-data', phrases: ['atualizar dados reais'] },
+    { id: 'generate-real-analysis', phrases: ['gerar analysisframe real', 'gerar analise real'] },
+    { id: 'explain-real-data', phrases: ['explicar dados reais', 'explicar dado real'] },
+    { id: 'rehydrate-session', phrases: ['reidratar sessao', 'restaurar sessao'] },
 ];
 
 function normalize(text) {

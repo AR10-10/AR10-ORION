@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "config_id": "AR10_CYBORG_2_REAL_DATA_SOURCES_DEFAULT_V1",
+  "mission": "AR10_CYBORG_2_SAFE_REAL_DATA_LAYER_RUNTIME_PROBE_V1",
+  "format_note": "Espelho declarativo e somente-documentacao dos conectores reais com codigo executavel em ipad_runtime/js/real-data/*.js (mesma convencao de market-data-policy.json <-> data-policy.js). Este arquivo NAO e importado nem fetch'ado pelo runtime — cada modulo .js carrega seu proprio meta hardcoded. Se este arquivo divergir do codigo, o codigo em js/real-data/registry.js e os modulos individuais sao a fonte de verdade, nunca este JSON. Nao duplica nem substitui ipad_runtime/configs/connector-registry.default.json (roteiro estatico mais amplo, incluindo conectores ainda sem codigo); lista aqui apenas os 4 conectores desta fase com sonda real implementada.",
+  "target_runtime": "SAFARI_IPAD",
+  "policy": "Every connector listed here starts PLANNED every session and only becomes ACTIVE_READ_ONLY if its real probe (real fetch or real local file read) succeeds in that session. No connector is ACTIVE_READ_ONLY by assumption, cache from a previous session, or default value.",
+  "policy_pt_br": "Todo conector listado aqui comeca PLANNED em toda sessao e so se torna ACTIVE_READ_ONLY se a sua sonda real (fetch real ou leitura real de arquivo local) tiver sucesso naquela sessao. Nenhum conector e ACTIVE_READ_ONLY por suposicao, cache de sessao anterior, ou valor padrao.",
+  "security_posture": {
+    "execution": "DISABLED",
+    "order_send": "ABSENT",
+    "api_secret": "ABSENT",
+    "mexc_private_endpoint": "ABSENT",
+    "mt5_bridge": "ABSENT",
+    "live_trading": "DISABLED",
+    "mode": "READ_ONLY",
+    "fail_closed": true
+  },
+  "connector_state_machine": {
+    "states": ["PLANNED", "PROBING", "ACTIVE_READ_ONLY", "DEGRADED", "BLOCKED_BY_CORS", "BLOCKED_BY_SCHEMA", "BLOCKED_BY_POLICY", "DADOS_INSUFICIENTES"],
+    "initial_state_every_session": "PLANNED",
+    "rule": "Nenhum conector pode comecar como ACTIVE_READ_ONLY por suposicao. So pode virar ACTIVE_READ_ONLY se a propria sonda real passar nesta sessao.",
+    "implementation": "ipad_runtime/js/real-data/registry.js"
+  },
+  "sources": [
+    {
+      "connector_id": "coingecko-market-data-adapter",
+      "connector_name": "CoinGecko Market Data (public OHLC)",
+      "endpoint_kind": "aggregator_market_chart_ohlc",
+      "instrument_type": "crypto_spot",
+      "transport": "network_fetch",
+      "network_host": "https://api.coingecko.com",
+      "requires_api_key": false,
+      "supports_private_endpoints": false,
+      "data_capabilities_real": ["candles", "ticker_derived_from_last_close"],
+      "data_capabilities_missing_by_design": ["volume", "order_book", "funding", "open_interest", "liquidations", "long_short_ratio"],
+      "implementation": "ipad_runtime/js/real-data/coingecko-public.js"
+    },
+    {
+      "connector_id": "binance-spot-public-adapter",
+      "connector_name": "Binance Spot Public Market Data (klines)",
+      "endpoint_kind": "exchange_public_klines",
+      "instrument_type": "crypto_spot",
+      "transport": "network_fetch",
+      "network_host": "https://api.binance.com",
+      "requires_api_key": false,
+      "supports_private_endpoints": false,
+      "data_capabilities_real": ["candles", "ticker_derived_from_last_close", "volume"],
+      "data_capabilities_missing_by_design": ["order_book", "funding", "open_interest", "liquidations", "long_short_ratio"],
+      "implementation": "ipad_runtime/js/real-data/binance-public.js"
+    },
+    {
+      "connector_id": "mexc-public-market-adapter",
+      "connector_name": "MEXC Spot Public Market Data (klines)",
+      "endpoint_kind": "exchange_public_klines",
+      "instrument_type": "crypto_spot",
+      "transport": "network_fetch",
+      "network_host": "https://api.mexc.com",
+      "requires_api_key": false,
+      "supports_private_endpoints": false,
+      "data_capabilities_real": ["candles", "ticker_derived_from_last_close", "volume"],
+      "data_capabilities_missing_by_design": ["order_book", "funding", "open_interest", "liquidations", "long_short_ratio"],
+      "implementation": "ipad_runtime/js/real-data/mexc-public.js",
+      "note": "Reaproveita o connector_id do roteiro estatico (connector-registry.default.json), mas current_status PLANNED daquele arquivo nao muda sozinho — quem reporta ACTIVE_READ_ONLY de verdade, por sessao, e este modulo via registry.js."
+    },
+    {
+      "connector_id": "custom-csv-import-route",
+      "connector_name": "Importacao Local CSV/JSON (sem rede)",
+      "endpoint_kind": "local_file_import",
+      "instrument_type": "imported_series",
+      "transport": "local_file_read",
+      "network_host": null,
+      "requires_api_key": false,
+      "supports_private_endpoints": false,
+      "data_capabilities_real": ["candles", "ticker_derived_from_last_close", "volume_if_present_in_file"],
+      "data_capabilities_missing_by_design": ["order_book", "funding", "open_interest", "liquidations", "long_short_ratio"],
+      "implementation": "ipad_runtime/js/real-data/csv-json-import.js",
+      "note": "Nunca usa fetch/XHR. So roda quando o usuario escolhe um arquivo explicitamente; nunca disparado por 'Testar fontes reais'."
+    }
+  ],
+  "csp_connect_src_hosts_required": [
+    "https://api.coingecko.com",
+    "https://api.binance.com",
+    "https://api.mexc.com"
+  ],
+  "roadmap_not_yet_implemented": {
+    "see": "ipad_runtime/configs/connector-registry.default.json",
+    "note": "mexc-futures-public-adapter, mexc-stock-futures-adapter, mexc-realstocks-adapter, binance-futures-public-adapter, coinglass-derivatives-data-adapter, yahoo-finance-adapter, google-finance-adapter, google-sheets-import-adapter, tradingview-compatible-route, mt5-bridge-adapter, native-companion-adapter permanecem PLANNED/FUTURE sem codigo de sonda nesta fase. Nao duplicados aqui para nao criar uma segunda fonte de verdade."
+  },
+  "see_also": [
+    "docs/AR10_CYBORG_2_REAL_DATA_LAYER_RUNTIME_PROBE_V1.md",
+    "docs/READ_ONLY_MARKET_SAFETY.md",
+    "ipad_runtime/configs/connector-registry.default.json",
+    "ipad_runtime/configs/market-data-policy.json"
+  ]
+}

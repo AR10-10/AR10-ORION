@@ -2,7 +2,7 @@
 // Cache-first, offline-first. Tudo precache é same-origin; nenhuma rota
 // de rede sensivel (MEXC/MT5/API secret) existe para interceptar.
 
-const CACHE_VERSION = 'cyborg-ipad-runtime-v8';
+const CACHE_VERSION = 'cyborg-ipad-runtime-v9';
 
 const PRECACHE_URLS = [
     './',
@@ -23,6 +23,18 @@ const PRECACHE_URLS = [
     './js/data-policy.js',
     './js/evaluations.js',
     './js/metrics.js',
+    './js/real-data/schema.js',
+    './js/real-data/probe.js',
+    './js/real-data/registry.js',
+    './js/real-data/coingecko-public.js',
+    './js/real-data/binance-public.js',
+    './js/real-data/mexc-public.js',
+    './js/real-data/csv-json-import.js',
+    './js/real-data/analysis-frame.js',
+    './js/research/research-engine.js',
+    './js/memory/persistent-state.js',
+    './js/memory/evidence-ledger.js',
+    './js/memory/session-resume.js',
     './workers/quant-worker.js',
     './wasm/cyborg_quant_core.wasm',
     './data/btcusdt_replay.json',
@@ -33,6 +45,11 @@ const PRECACHE_URLS = [
     './icons/apple-touch-icon-180.png',
 ];
 
+// skipWaiting() aqui e' incondicional (nunca espera o usuario fechar a
+// ultima aba) — por isso o app.js detecta atualizacao pelo evento
+// 'controllerchange' (quando clients.claim() troca quem controla a pagina
+// ja aberta), nao por reg.waiting, e so entao mostra "Atualizacao
+// disponivel" para o usuario decidir quando recarregar.
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_VERSION).then((cache) => cache.addAll(PRECACHE_URLS)).then(() => self.skipWaiting())

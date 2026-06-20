@@ -148,6 +148,38 @@ a { color: var(--sys-cyan); }
     .tb-status { display: none; }
 }
 
+/* ------------------------------------------------------------
+   ATUALIZACAO DISPONIVEL — banner sticky abaixo da topbar, so'
+   aparece quando um Service Worker NOVO ja assumiu o controle da
+   pagina aberta (controllerchange apos uma instalacao anterior),
+   nunca no primeiro install. Recarregar e' sempre escolha do
+   usuario (botao "Mais tarde" so esconde, nada e' forcado).
+   ------------------------------------------------------------ */
+.sw-update-banner {
+    position: sticky;
+    top: 0;
+    z-index: 49;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    width: 100%;
+    padding: 10px calc(var(--safe-r) + 14px) 10px calc(var(--safe-l) + 14px);
+    background: rgba(255, 184, 0, 0.1);
+    border-bottom: 1px solid rgba(255, 184, 0, 0.4);
+}
+.sw-update-banner[hidden] { display: none; }
+.sw-update-text {
+    flex: 1 1 200px;
+    font-size: clamp(0.74rem, 1.8vw, 0.86rem);
+    color: var(--alert-amber);
+}
+.sw-update-banner .rt-btn {
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    min-height: 36px;
+}
+
 header.hero {
     text-align: center;
     padding: 18px 0 22px;
@@ -717,6 +749,31 @@ footer.legal {
     padding: 2px 6px;
     margin: 2px 4px 2px 0;
 }
+
+/* ------------------------------------------------------------
+   REAL DATA LAYER — ROTA A/B/C (Research Engine)
+   Mesma linguagem visual do resto do runtime; so a borda lateral
+   muda de cor por rota, para diferenciar LONG/SHORT/WAIT sem
+   sugerir favoritismo (as tres ficam sempre visiveis, mesmo
+   tamanho, mesmo peso visual).
+   ------------------------------------------------------------ */
+.route-block {
+    border-left: 3px solid var(--line-cyan);
+    padding-left: 12px;
+    margin: 14px 0;
+}
+.route-block h3 {
+    margin: 0 0 8px;
+    font-size: 0.82rem;
+    letter-spacing: 1px;
+    color: var(--text-primary);
+}
+.route-block.route-long { border-left-color: rgba(0, 255, 157, 0.45); }
+.route-block.route-long h3 { color: var(--long-green); }
+.route-block.route-short { border-left-color: rgba(255, 62, 82, 0.45); }
+.route-block.route-short h3 { color: var(--short-red); }
+.route-block.route-wait { border-left-color: rgba(255, 184, 0, 0.45); }
+.route-block.route-wait h3 { color: var(--alert-amber); }
 
 /* ------------------------------------------------------------
    PROCESSING PROFILES — LIGHT / BALANCED / HEAVY

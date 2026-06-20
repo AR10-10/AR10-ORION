@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">
 <title>AR10 Cyborg 2.0 — iPad One-Tap Cloud Runtime</title>
 
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.coingecko.com https://api.binance.com https://api.mexc.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
 
 <meta name="description" content="AR10 Cyborg 2.0 — Nebula Core. Safari Local Runtime para iPad. Execucao local-first, READ_ONLY, FAIL_CLOSED. Sem trading real.">
 <meta name="theme-color" content="#000000">
@@ -40,6 +40,12 @@
     <button type="button" class="tb-btn" id="btn-tb-advanced" aria-expanded="false">Modo avançado</button>
   </div>
 </header>
+
+<div class="sw-update-banner" id="sw-update-banner" role="status" hidden>
+  <span class="sw-update-text" id="sw-update-text">Atualização disponível — nova versão do runtime já foi baixada e está pronta.</span>
+  <button type="button" class="rt-btn primary" id="btn-sw-update-reload">Atualizar agora</button>
+  <button type="button" class="rt-btn" id="btn-sw-update-dismiss">Mais tarde</button>
+</div>
 
 <div class="runtime-shell">
 
@@ -180,6 +186,76 @@
       <span class="analysis-frame-empty">Rode o Replay BTC/USDT para preencher o AnalysisFrame.</span>
     </div>
     <p class="diagnostic-note">Estatística descritiva sobre o dataset sintético de diagnóstico. Para decisão de mercado real seria necessária fonte pública/somente-leitura com símbolo, timeframe, timestamp e frescor — enquanto não houver, o estado honesto é <b>DADOS INSUFICIENTES</b>.</p>
+  </section>
+
+  <section class="card real-data-layer-panel" id="real-data-layer-panel">
+    <h2>Real Data Layer <span class="future-badge">conectores publicos, sem chave</span></h2>
+    <p class="onboarding-hint">Nenhum conector começa como <b>ACTIVE_READ_ONLY</b> por suposição. Todo conector nasce <b>PLANNED</b> nesta sessão e só muda de estado depois que a sonda real (fetch de verdade ou leitura de arquivo local de verdade) responder. O estado abaixo é sempre o último resultado real observado nesta sessão, nunca um valor decorativo.</p>
+    <div class="status-grid" id="rdl-connector-grid">
+        <span class="analysis-frame-empty">Toque em "Testar fontes reais" para sondar os conectores.</span>
+    </div>
+    <p class="engine-meta" id="rdl-active-source">Fonte ativa: nenhuma nesta sessão ainda.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-test-real-sources"><span class="icon">📡</span> Testar fontes reais</button>
+        <button class="rt-btn" id="btn-refresh-real-data"><span class="icon">⟲</span> Atualizar dados reais</button>
+        <button class="rt-btn" id="btn-import-real-csv"><span class="icon">⇪</span> Importar CSV/JSON local</button>
+    </div>
+    <input type="file" id="real-data-import-input" class="hidden-input" accept=".csv,.json,application/json,text/csv">
+  </section>
+
+  <section class="card" id="real-analysis-frame-panel">
+    <h2>Real AnalysisFrame <span class="step">leitura sobre candle real — não é recomendação</span></h2>
+    <div class="analysis-frame-grid" id="real-analysis-frame-grid">
+        <span class="analysis-frame-empty">Sem fonte ACTIVE_READ_ONLY nesta sessão ainda. Teste uma fonte real primeiro.</span>
+    </div>
+    <p class="diagnostic-note" id="real-analysis-frame-session-note" hidden></p>
+    <p class="diagnostic-note" id="real-analysis-frame-note">DADOS INSUFICIENTES enquanto nenhuma fonte real estiver ACTIVE_READ_ONLY com candles suficientes.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-generate-real-analysis"><span class="icon">∑</span> Gerar AnalysisFrame real</button>
+    </div>
+  </section>
+
+  <section class="card vault-evidence-card" id="real-evidence-panel">
+    <h2>Evidence <span class="step">objeto evidence-first — nunca inventado</span></h2>
+    <div class="status-grid" id="re-evidence-grid">
+        <span class="analysis-frame-empty">Nenhuma evidência real ainda nesta sessão.</span>
+    </div>
+    <p class="vault-meta" id="re-missing-fields">Campos ausentes: —</p>
+    <p class="diagnostic-note" id="re-session-note" hidden></p>
+    <div id="re-evidence-hash"></div>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-show-evidence"><span class="icon">▦</span> Ver fonte/evidência</button>
+        <button class="rt-btn" id="btn-show-missing-fields"><span class="icon">▣</span> Ver campos ausentes</button>
+    </div>
+  </section>
+
+  <section class="card research-engine-panel" id="research-engine-panel">
+    <h2>Research Engine <span class="stub-badge">ROTA A / B / C sempre presentes</span></h2>
+    <p class="onboarding-hint">As três rotas abaixo são sempre mostradas, nunca só a rota "favorita" do momento. Confiança é sempre <b>LOW/MEDIUM/HIGH</b> qualitativo — nunca uma probabilidade estatística. <b>Nenhuma rota aqui executa, envia ou simula ordem.</b></p>
+    <p class="diagnostic-note" id="research-engine-session-note" hidden></p>
+    <div class="route-block route-long" id="route-a-long">
+        <h3>ROTA A — LONG</h3>
+        <div class="status-grid" id="route-a-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+    <div class="route-block route-short" id="route-b-short">
+        <h3>ROTA B — SHORT</h3>
+        <div class="status-grid" id="route-b-short-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+    <div class="route-block route-wait" id="route-c-wait">
+        <h3>ROTA C — WAIT / NO TRADE</h3>
+        <div class="status-grid" id="route-c-wait-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+    <p class="diagnostic-note">Target 2 / Extended target e funding/OI/liquidação/long-short ficam DADOS_INSUFICIENTES ou NÃO_APLICÁVEL de propósito — nenhum motor de extensão técnica ou conector de derivativos está implementado nesta fase.</p>
+  </section>
+
+  <section class="card siriform-explanation-panel" id="siriform-explanation-panel">
+    <h2>Siriform — Explicação dos Dados Reais</h2>
+    <p class="df-body" id="rdl-explanation-text">Toque em "Explicar dados reais" para o Siriform descrever, em português, qual fonte foi usada, se foi validada, se houve bloqueio de CORS, quais campos são reais e quais estão ausentes.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-explain-real-data"><span class="icon">◈</span> Explicar dados reais</button>
+        <button class="rt-btn" id="btn-rehydrate-session"><span class="icon">↺</span> Reidratar sessão</button>
+        <button class="rt-btn" id="btn-export-evidence-ledger"><span class="icon">▤</span> Exportar Evidence Ledger</button>
+    </div>
   </section>
 
   <section class="card data-policy-panel" id="data-policy-panel">
