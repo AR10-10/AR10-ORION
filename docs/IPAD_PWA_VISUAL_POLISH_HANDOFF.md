@@ -49,34 +49,57 @@ quant-engine-widget         → motor WASM real (sma/ema/stddev/zscore)
 ai-models-panel             → Meta Llama/WebLLM/Transformers/ONNX (FUTURE)
 replay-wrap                 → Replay BTC/USDT + profile-toggle Light/Balanced/Heavy
 analysis-frame-panel        → estatística descritiva real ("não é recomendação")
+data-policy-panel           → Política de Dados de Mercado (DADOS INSUFICIENTES)
+evaluations-panel           → NOVO (Missão 8): equivalente local do framework Evaluations (WWDC26)
 decision-frame-panel        → STUB CONTROLLED (sem lógica de decisão)
 vault-evidence-card         → SHA-256 por arquivo, re-verificado a cada boot
-local-pack-manager          → os 10 botões de ação (ver seção dedicada)
+vault-local-panel           → Vault Local do iPad (o que está instalado/validado)
+metrics-panel                → NOVO (Missão 8): equivalente leve do Instruments (WWDC26)
+local-pack-manager          → os 11 botões de ação (ver seção dedicada)
 ```
+
+Os dois cards novos da Missão 8 (`evaluations-panel`, `metrics-panel`)
+seguem o mesmo princípio: dentro de `.advanced-section`, nenhuma rota
+nova, nenhum SPA router — apenas mais dois cards na mesma página de
+scroll único. Detalhe completo em
+`docs/WWDC26_APPLE_AI_NATIVE_SCOUTING_ROUTE.md`.
 
 Nenhum card foi removido. O único card novo desta fase é
 `cyborg-readiness-panel`, inserido logo após o Siriform — propositalmente o
 primeiro painel de status que o usuário vê, por ser o resumo mais
 condensado.
 
-## Siriform Avatar — vocabulário de estado (não inventar um quinto valor)
+## Siriform Avatar — vocabulário de estado (não inventar um décimo segundo valor)
 
 Duas trilhas independentes, mantidas separadas de propósito (mesmo um
-estado "instalando" pode coexistir com voz "ouvindo" sem se misturar) —
-ver comentário verbatim no topo de `js/siriform.js`:
+estado "atualizando" pode coexistir com voz "ouvindo" sem se misturar) —
+ver comentário verbatim no topo de `js/siriform.js`. Vocabulário corrente
+(11 estados, pós-Missão 8/WWDC26 scouting — substitui qualquer tabela
+anterior deste documento):
 
 ### Trilha de atividade (`data-state` em `#siriform-avatar`)
 
-| Estado | Legenda padrão |
-|---|---|
-| `idle` | "Cyborg em standby. Toque em qualquer botão para começar." |
-| `listening` | "Ouvindo o seu toque..." |
-| `thinking` | "Processando localmente, sem rede..." |
-| `responding` | "Pronto." |
-| `installing` | "Instalando pacote local no Safari Storage..." |
-| `analyzing` | "Analisando dados locais..." |
-| `read_only` | "Cyborg operando em READ_ONLY / FAIL_CLOSED." (estado de repouso "de lei", reassumido automaticamente 3.6s após qualquer estado transiente) |
-| `fail_closed` | "Execução real bloqueada. Modo seguro ativo." |
+| Estado | Legenda padrão | Origem |
+|---|---|---|
+| `idle` | "Cyborg em standby. Toque em 'Preparar / Atualizar Cyborg neste iPad' para começar." | estado de repouso "de lei", reassumido automaticamente 3.6s após qualquer estado transiente, exceto `blocked` |
+| `listening` | "Ouvindo o seu toque..." | Missão 7 |
+| `thinking` | "🧠 Processando localmente, sem rede..." | Missão 7 (emoji + shimmer na Missão 8) |
+| `updating` | "✨ Atualizando/instalando pacote local no Safari Storage..." | Missão 7 (emoji na Missão 8) |
+| `checking` | "Verificando dados locais..." | Missão 7 |
+| `diagnosing` | "📡 Executando diagnóstico offline completo..." | **novo na Missão 8** — RUNNING_DIAGNOSTIC (WWDC26) |
+| `repairing` | "🧩 Reparando instalação local..." | Missão 7 (emoji na Missão 8) |
+| `success` | "✅ Pronto." | Missão 7 (emoji na Missão 8) |
+| `warning` | "⚠️ Atenção: ação manual pode ser necessária." | Missão 7 (emoji na Missão 8) |
+| `blocked` | "🛡️ Execução real bloqueada. Modo seguro ativo." | Missão 7 (emoji na Missão 8) — único estado que **não** reverte para `idle` automaticamente (FAIL_CLOSED visualmente persistente) |
+| `protected` | "🔒 Protegido: somente leitura, execução real bloqueada por política." | **novo na Missão 8** — READ_ONLY_PROTECTED (WWDC26), confirmação ambiente ao final de um `runEvaluations()` 100% PASS |
+
+`blocked` e `protected` são estados-irmãos, não sinônimos: `blocked` é o
+aviso de que uma ação específica foi recusada **agora** (ex.: comando de
+voz pedindo execução real); `protected` é a confirmação ambiente de que
+as leis de segurança seguem intactas **após uma verificação** (ex.: fim
+de Evaluations sem nenhuma falha). Ver
+`docs/WWDC26_APPLE_AI_NATIVE_SCOUTING_ROUTE.md` para o mapeamento
+completo Evaluations/Instruments → `js/evaluations.js`/`js/metrics.js`.
 
 ### Trilha de voz (`data-voice-state` no botão de microfone)
 

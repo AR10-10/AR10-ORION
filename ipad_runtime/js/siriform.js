@@ -1,8 +1,10 @@
 // siriform.js — controlador do Siriform Avatar (orbe central CSS-only),
-// o "command center" emocional do app (Fase 6). Estados puramente
-// visuais/informativos: nenhum estado aqui dispara rede, ordem ou execucao.
-// Vocabulario de estado: IDLE, LISTENING, THINKING, UPDATING, CHECKING,
-// REPAIRING, SUCCESS, WARNING, BLOCKED (lowercase internamente).
+// o "command center" emocional do app (Fase 6, expandido na Fase 8 com o
+// roteiro de scouting WWDC26). Estados puramente visuais/informativos:
+// nenhum estado aqui dispara rede, ordem ou execucao.
+// Vocabulario de estado (11): IDLE, LISTENING, THINKING, UPDATING, CHECKING,
+// DIAGNOSING (= RUNNING_DIAGNOSTIC), REPAIRING, SUCCESS, WARNING, BLOCKED,
+// PROTECTED (= READ_ONLY_PROTECTED) — lowercase internamente.
 //
 // Existe uma segunda trilha de estado, independente, para a camada de voz
 // (voice_idle/voice_listening/...). As duas trilhas sao mantidas separadas
@@ -11,21 +13,33 @@
 // microfone/Siriform Voice esta fazendo" (botao de mic, atributo
 // data-voice-state). Misturar as duas em uma lista so de STATES geraria
 // combinacoes invalidas (ex.: "atualizando" + "ouvindo" ao mesmo tempo).
+//
+// "blocked" e "protected" sao estados-irmaos, nao sinonimos: "blocked"
+// e o aviso de que uma acao especifica foi recusada agora (ex.: comando de
+// voz pedindo execucao real); "protected" e a confirmacao ambiente de que
+// as leis de seguranca (READ_ONLY/FAIL_CLOSED/NO_ORDER_EXECUTION) seguem
+// intactas apos uma verificacao (ex.: ao final de runEvaluations()).
 
-const STATES = [
-    'idle', 'listening', 'thinking', 'updating', 'checking', 'repairing', 'success', 'warning', 'blocked',
+// Exportado para js/evaluations.js poder testar "todo estado declarado e
+// de fato alcancavel" sem manter uma segunda lista duplicada (risco de
+// drift se alguem adicionar um 12o estado e esquecer de atualizar o teste).
+export const STATES = [
+    'idle', 'listening', 'thinking', 'updating', 'checking', 'diagnosing',
+    'repairing', 'success', 'warning', 'blocked', 'protected',
 ];
 
 const DEFAULT_CAPTIONS = {
     idle: 'Cyborg em standby. Toque em "Preparar / Atualizar Cyborg neste iPad" para começar.',
     listening: 'Ouvindo o seu toque...',
-    thinking: 'Processando localmente, sem rede...',
-    updating: 'Atualizando/instalando pacote local no Safari Storage...',
+    thinking: '🧠 Processando localmente, sem rede...',
+    updating: '✨ Atualizando/instalando pacote local no Safari Storage...',
     checking: 'Verificando dados locais...',
-    repairing: 'Reparando instalação local...',
-    success: 'Pronto.',
-    warning: 'Atenção: ação manual pode ser necessária.',
-    blocked: 'Execução real bloqueada. Modo seguro ativo.',
+    diagnosing: '📡 Executando diagnóstico offline completo...',
+    repairing: '🧩 Reparando instalação local...',
+    success: '✅ Pronto.',
+    warning: '⚠️ Atenção: ação manual pode ser necessária.',
+    blocked: '🛡️ Execução real bloqueada. Modo seguro ativo.',
+    protected: '🔒 Protegido: somente leitura, execução real bloqueada por política.',
 };
 
 const VOICE_STATES = [
@@ -51,7 +65,7 @@ let micEl = null;
 let restTimer = null;
 let voiceRestTimer = null;
 
-const TRANSIENT_STATES = new Set(['listening', 'thinking', 'updating', 'checking', 'repairing', 'success', 'warning']);
+const TRANSIENT_STATES = new Set(['listening', 'thinking', 'updating', 'checking', 'diagnosing', 'repairing', 'success', 'warning', 'protected']);
 const REST_DELAY_MS = 3600;
 
 const VOICE_TRANSIENT_STATES = new Set(['voice_listening', 'voice_processing', 'voice_responding', 'voice_blocked_by_policy']);

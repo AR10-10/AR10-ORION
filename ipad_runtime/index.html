@@ -196,6 +196,19 @@
     <p class="engine-meta">Fontes públicas/somente-leitura permitidas (quando conectadas em fase futura): MEXC público, MEXC futuros público, Binance público, CoinGecko, CoinGlass, Yahoo/Google Finance (referência), CSV/JSON público, metadados públicos. Nunca endpoint privado, nunca chave de API, nunca execução. Detalhe em <code>docs/REAL_DATA_POLICY.md</code> e <code>configs/market-data-policy.json</code>.</p>
   </section>
 
+  <section class="card evaluations-panel" id="evaluations-panel">
+    <h2>Evaluations <span class="future-badge">equivalente local do framework Apple (WWDC26)</span></h2>
+    <p class="onboarding-hint">Não existe LLM embutido nesta versão — isto não é avaliação de modelo. É um auto-teste real do que este runtime já faz: roteamento de comando de voz/texto, postura de segurança (CSP, política de dados, Vault FAIL_CLOSED) e vocabulário de estado do Siriform. Cada linha abaixo chama código vivo do app nesta sessão.</p>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Roteamento de comando</span><span class="value v-pending" id="ev-command-routing">…</span></div>
+      <div class="status-row"><span class="label">Postura de segurança</span><span class="value v-pending" id="ev-security-posture">…</span></div>
+      <div class="status-row"><span class="label">Política DADOS INSUFICIENTES</span><span class="value v-pending" id="ev-data-policy">…</span></div>
+      <div class="status-row"><span class="label">Vault READ_ONLY / FAIL_CLOSED</span><span class="value v-pending" id="ev-fail-closed">…</span></div>
+      <div class="status-row"><span class="label">Estados do Siriform</span><span class="value v-pending" id="ev-siriform-states">…</span></div>
+    </div>
+    <p class="engine-meta" id="ev-summary">Ainda não executado nesta sessão. Toque em "Rodar Evaluations" em Manutenção/Técnico, ou diga "rodar evaluations".</p>
+  </section>
+
   <section class="card decision-frame-panel" id="decision-frame-panel">
     <h2>DecisionFrame <span class="stub-badge">STUB CONTROLLED</span></h2>
     <p class="df-body">
@@ -244,6 +257,22 @@
     <p class="engine-meta">Tudo aqui é recalculado a partir do estado real do armazenamento local — nenhum valor é assumido ou decorativo. No dia a dia, use o botão principal "Preparar / Atualizar Cyborg neste iPad" na tela inicial; os botões manuais em "Manutenção / Técnico" abaixo são só para casos avançados.</p>
   </section>
 
+  <section class="card metrics-panel" id="metrics-panel">
+    <h2>Métricas <span class="future-badge">equivalente leve do Instruments (WWDC26)</span></h2>
+    <p class="onboarding-hint">Não existe processo nativo para "perfilar" este runtime — então este painel lê, no próprio navegador, sinais que um profiler nativo mostraria. Tudo aqui é leitura de fatos já ocorridos nesta sessão; nada é estimado, e nada sai do dispositivo.</p>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Tempo de carregamento</span><span class="value v-pending" id="mx-load-time">…</span></div>
+      <div class="status-row"><span class="label">Última duração: Preparar Cyborg</span><span class="value v-pending" id="mx-prep-time">…</span></div>
+      <div class="status-row"><span class="label">Cache do Service Worker</span><span class="value v-pending" id="mx-cache">…</span></div>
+      <div class="status-row"><span class="label">Armazenamento (uso / cota)</span><span class="value v-pending" id="mx-storage">…</span></div>
+      <div class="status-row"><span class="label">Eventos do Siriform nesta sessão</span><span class="value v-pending" id="mx-siriform-events">…</span></div>
+      <div class="status-row"><span class="label">Falhas no último Diagnóstico</span><span class="value v-pending" id="mx-diag-fails">…</span></div>
+      <div class="status-row"><span class="label">Falhas no último Evaluations</span><span class="value v-pending" id="mx-eval-fails">…</span></div>
+      <div class="status-row"><span class="label">Reduced Motion (acessibilidade)</span><span class="value v-pending" id="mx-reduced-motion">…</span></div>
+    </div>
+    <p class="engine-meta">Atualizado sempre que o Modo avançado é aberto. Sem fetch, sem envio de telemetria a terceiros — só leitura local.</p>
+  </section>
+
   <section class="card local-pack-manager" id="runtime-actions">
     <h2>Manutenção / Técnico</h2>
     <p class="onboarding-hint">Estas ações são manuais e avançadas. No dia a dia, use só o botão principal <b>"Preparar / Atualizar Cyborg neste iPad"</b> na tela inicial — ele já baixa, verifica, instala e repara sozinho.</p>
@@ -256,6 +285,7 @@
       <button class="rt-btn success" id="btn-install-storage"><span class="icon">⬢</span> Instalar no Safari Storage</button>
       <button class="rt-btn" id="btn-run-diagnostics"><span class="icon">▣</span> Rodar Diagnóstico Técnico Offline</button>
       <button class="rt-btn" id="btn-run-replay"><span class="icon">▶</span> Rodar Replay Técnico Offline</button>
+      <button class="rt-btn" id="btn-run-evaluations"><span class="icon">📡</span> Rodar Evaluations (auto-teste local)</button>
       <button class="rt-btn" id="btn-repair-install"><span class="icon">⚙</span> Reparar instalação</button>
       <button class="rt-btn danger" id="btn-clear-reinstall"><span class="icon">⟲</span> Limpar/Reinstalar</button>
       <button class="rt-btn primary" id="btn-add-home"><span class="icon">＋</span> Adicionar à Tela de Início</button>

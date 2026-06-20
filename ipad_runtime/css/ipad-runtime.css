@@ -435,7 +435,7 @@ footer.legal {
     position: absolute;
     inset: -14px;
     border-radius: 50%;
-    border: 1px solid rgba(0, 242, 255, 0.18);
+    border: 1px solid var(--siriform-ring-color, rgba(0, 242, 255, 0.18));
     animation: siriformRing 6s linear infinite reverse;
 }
 @keyframes siriformSpin { to { transform: rotate(360deg); } }
@@ -444,14 +444,29 @@ footer.legal {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.05); }
 }
+/* siriformScanPulse — "shimmer"/sweep de opacidade, usado no realce
+   interno do thinking e no anel do diagnosing (radar sweep). */
+@keyframes siriformScanPulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+}
+/* siriformRipple — onda expansiva no anel externo, usada no success
+   (confirmacao) e, em versao lenta, no protected (brilho protegido). */
+@keyframes siriformRipple {
+    0% { transform: scale(0.9); opacity: 0.9; }
+    70% { transform: scale(1.4); opacity: 0; }
+    100% { transform: scale(1.4); opacity: 0; }
+}
 
 /* Estados — cor/ritmo refletem o que o Cyborg esta "fazendo".
-   Vocabulario fixo (js/siriform.js): idle, listening, thinking,
-   updating, checking, repairing, success, warning, blocked. */
+   Vocabulario fixo (js/siriform.js, 11 estados): idle, listening,
+   thinking, updating, checking, diagnosing, repairing, success,
+   warning, blocked, protected. */
 .siriform-avatar[data-state="idle"] {
     animation-duration: 14s, 5s;
 }
 .siriform-avatar[data-state="listening"] {
+    --siriform-ring-color: rgba(0, 242, 255, 0.5);
     box-shadow: 0 0 34px rgba(0, 242, 255, 0.55), 0 0 90px rgba(0, 242, 255, 0.2);
     animation-duration: 4s, 1.6s;
 }
@@ -460,15 +475,34 @@ footer.legal {
     box-shadow: 0 0 34px rgba(255, 184, 0, 0.4), 0 0 90px rgba(255, 184, 0, 0.15);
     animation-duration: 2.4s, 1.2s;
 }
+.siriform-avatar[data-state="thinking"]::before {
+    animation: siriformScanPulse 1.6s ease-in-out infinite;
+}
 .siriform-avatar[data-state="checking"] {
     background: conic-gradient(from 0deg, var(--sys-cyan), #6a5cff, var(--sys-cyan));
     box-shadow: 0 0 34px rgba(0, 242, 255, 0.4), 0 0 90px rgba(0, 242, 255, 0.15);
     animation-duration: 3.4s, 1.4s;
 }
+.siriform-avatar[data-state="diagnosing"] {
+    background: conic-gradient(from 0deg, var(--sys-cyan), #ffffff, var(--sys-cyan));
+    box-shadow: 0 0 34px rgba(0, 242, 255, 0.5), 0 0 90px rgba(0, 242, 255, 0.18);
+    animation-duration: 2.2s, 1.1s;
+}
+.siriform-avatar[data-state="diagnosing"]::after {
+    border-width: 2px;
+    border-color: var(--sys-cyan);
+    animation: siriformRing 2.4s linear infinite reverse, siriformScanPulse 1.1s ease-in-out infinite;
+}
 .siriform-avatar[data-state="updating"] {
     background: conic-gradient(from 0deg, #6a5cff, var(--sys-cyan), #6a5cff);
     box-shadow: 0 0 34px rgba(106, 92, 255, 0.45), 0 0 90px rgba(106, 92, 255, 0.16);
     animation-duration: 1.8s, 1s;
+}
+.siriform-avatar[data-state="updating"]::after {
+    border-width: 3px;
+    border-style: dashed;
+    border-color: #6a5cff;
+    animation: siriformRing 1.6s linear infinite reverse;
 }
 .siriform-avatar[data-state="repairing"] {
     background: conic-gradient(from 0deg, var(--alert-amber), #6a5cff, var(--alert-amber));
@@ -480,6 +514,11 @@ footer.legal {
     box-shadow: 0 0 34px rgba(0, 255, 157, 0.45), 0 0 90px rgba(0, 255, 157, 0.16);
     animation-duration: 5s, 2.2s;
 }
+.siriform-avatar[data-state="success"]::after {
+    border-width: 2px;
+    border-color: var(--long-green);
+    animation: siriformRipple 1.6s ease-out infinite;
+}
 .siriform-avatar[data-state="warning"] {
     background: conic-gradient(from 0deg, var(--alert-amber), var(--short-red), var(--alert-amber));
     box-shadow: 0 0 34px rgba(255, 184, 0, 0.45), 0 0 90px rgba(255, 184, 0, 0.18);
@@ -489,6 +528,23 @@ footer.legal {
     background: conic-gradient(from 0deg, var(--short-red), #4a0008, var(--short-red));
     box-shadow: 0 0 34px rgba(255, 62, 82, 0.5), 0 0 90px rgba(255, 62, 82, 0.18);
     animation-duration: 8s, 0.9s;
+}
+.siriform-avatar[data-state="blocked"]::after {
+    border-width: 2px;
+    border-color: var(--short-red);
+}
+/* protected (READ_ONLY_PROTECTED) — irmao calmo do blocked: confirma
+   que as leis de seguranca seguem intactas, sem soar alarme. Ritmo
+   lento, cor verde/ciano, "brilho protegido" constante no anel. */
+.siriform-avatar[data-state="protected"] {
+    background: conic-gradient(from 0deg, var(--long-green), var(--sys-cyan), var(--long-green));
+    box-shadow: 0 0 30px rgba(0, 255, 157, 0.4), 0 0 80px rgba(0, 242, 255, 0.18);
+    animation-duration: 16s, 6s;
+}
+.siriform-avatar[data-state="protected"]::after {
+    border-width: 2px;
+    border-color: var(--long-green);
+    animation: siriformRipple 3.2s ease-out infinite;
 }
 
 /* ------------------------------------------------------------

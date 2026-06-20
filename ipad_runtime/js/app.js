@@ -9,6 +9,8 @@ import * as siriform from './siriform.js';
 import * as voice from './voice.js';
 import * as exporter from './export-manifest.js';
 import * as dataPolicy from './data-policy.js';
+import * as evaluations from './evaluations.js';
+import * as metrics from './metrics.js';
 
 const els = {};
 ['st-pwa', 'st-sw', 'st-cache', 'st-idb', 'st-opfs', 'st-webcrypto', 'st-wasm', 'st-workers',
@@ -25,6 +27,8 @@ const els = {};
     'vl-storage-used', 'vl-storage-quota', 'vl-safety', 'vl-repair',
     'dp-realmode', 'dp-analysis', 'export-list',
     'topbar-status', 'advanced-section', 'btn-tb-advanced',
+    'ev-command-routing', 'ev-security-posture', 'ev-data-policy', 'ev-fail-closed', 'ev-siriform-states', 'ev-summary',
+    'mx-load-time', 'mx-prep-time', 'mx-cache', 'mx-storage', 'mx-siriform-events', 'mx-diag-fails', 'mx-eval-fails', 'mx-reduced-motion',
 ].forEach((id) => { els[id] = document.getElementById(id); });
 
 const PROFILES = {
@@ -220,6 +224,57 @@ function refreshDataPolicyPanel() {
     setStatus('dp-analysis', rm.status);
 }
 
+// Fase 8 — painel "Evaluations": resumo por grupo (PASS/total), nunca um
+// "tudo certo" decorativo. setStatus()/classFor() não cobrem o formato
+// "N/M PASS", então a classe v-ok/v-fail é decidida aqui mesmo, igual ao
+// padrão já usado em refreshTopbarStatus().
+function renderEvaluationsPanel(report) {
+    const byGroup = {};
+    for (const r of report.results) {
+        byGroup[r.group] = byGroup[r.group] || { pass: 0, total: 0 };
+        byGroup[r.group].total += 1;
+        if (r.pass) byGroup[r.group].pass += 1;
+    }
+    const setGroup = (id, key) => {
+        const el = els[id];
+        if (!el) return;
+        const g = byGroup[key];
+        el.textContent = g ? `${g.pass}/${g.total} PASS` : '—';
+        el.classList.remove('v-ok', 'v-fail', 'v-limited', 'v-pending', 'v-info');
+        el.classList.add(g && g.pass === g.total ? 'v-ok' : 'v-fail');
+    };
+    setGroup('ev-command-routing', 'command_routing');
+    setGroup('ev-security-posture', 'security_posture');
+    setGroup('ev-data-policy', 'dados_insuficientes');
+    setGroup('ev-fail-closed', 'read_only_fail_closed');
+    setGroup('ev-siriform-states', 'siriform_states');
+    if (els['ev-summary']) {
+        els['ev-summary'].textContent = `Última execução: ${report.pass}/${report.total} verificações PASS, ${report.fail} FAIL, em ${report.elapsedMs}ms. Detalhe linha a linha na Telemetria ao Vivo.`;
+    }
+}
+
+// Fase 8 — painel "Métricas": equivalente leve do Instruments (WWDC26).
+// Reusa getActiveCacheInfo()/storage.storageEstimate() (mesma fonte da
+// Vault Local) em vez de recalcular cache/armazenamento de um jeito
+// diferente — duas formas de medir a mesma coisa só criariam divergência.
+async function refreshMetricsPanel() {
+    const snap = metrics.getSnapshot();
+    setInfo('mx-load-time', snap.loadTimeMs != null ? `${snap.loadTimeMs} ms` : 'INDISPONÍVEL');
+    setInfo('mx-prep-time', snap.lastPrepDurationMs != null ? `${snap.lastPrepDurationMs} ms` : 'Ainda não executado nesta sessão.');
+
+    const cacheInfo = await getActiveCacheInfo();
+    setStatus('mx-cache', cacheInfo.present ? 'OK' : 'AUSENTE');
+
+    const estimate = await storage.storageEstimate();
+    const mb = (n) => (n / (1024 * 1024)).toFixed(1) + ' MB';
+    setInfo('mx-storage', estimate ? `${mb(estimate.usage)} / ${mb(estimate.quota)}` : 'INDISPONÍVEL');
+
+    setInfo('mx-siriform-events', String(snap.siriformEventCount));
+    setInfo('mx-diag-fails', snap.lastDiagnosticsFails != null ? String(snap.lastDiagnosticsFails) : 'Ainda não executado nesta sessão.');
+    setInfo('mx-eval-fails', snap.lastEvaluationsFails != null ? String(snap.lastEvaluationsFails) : 'Ainda não executado nesta sessão.');
+    setInfo('mx-reduced-motion', snap.reducedMotion ? 'ATIVADO' : 'DESATIVADO');
+}
+
 // Fase 4 — painel "Arquivos Exportados". NUNCA mostra um nome generico/sem
 // timestamp como se fosse um arquivo ja exportado: so exibe nome de arquivo
 // quando ele e real, com timestamp, gerado nesta sessao (sessionExports). Os
@@ -408,9 +463,31 @@ async function handleInstallStorage() {
 }
 
 async function handleRunDiagnostics() {
-    siriform.setSiriformState('checking', 'Rodando diagnóstico técnico offline...');
-    await diagnostics.runOfflineDiagnostics({ workerClient, onLog: (m, l) => log(m, l) });
+    siriform.setSiriformState('diagnosing', 'Rodando diagnóstico técnico offline...');
+    const lines = await diagnostics.runOfflineDiagnostics({ workerClient, onLog: (m, l) => log(m, l) });
+    metrics.recordDiagnosticsReport(lines);
     siriform.setSiriformState('success', 'Diagnóstico offline concluído.');
+}
+
+// Fase 8 — equivalente local do framework "Evaluations" da Apple (WWDC26):
+// auto-teste real de roteamento de comando, postura de seguranca e
+// vocabulario de estado do Siriform. Termina em "protected" quando tudo
+// passa (confirmacao ambiente de que READ_ONLY/FAIL_CLOSED seguem intactos)
+// ou em "warning" quando alguma verificacao falhar.
+async function handleRunEvaluations() {
+    siriform.setSiriformState('diagnosing', 'Rodando Evaluations (auto-teste de comportamento e segurança)...');
+    const report = await evaluations.runEvaluations({
+        packManager,
+        avatarEl: els['siriform-avatar'],
+        onLog: (m, l) => log(m, l),
+    });
+    metrics.recordEvaluationsReport(report);
+    renderEvaluationsPanel(report);
+    if (report.fail === 0) {
+        siriform.setSiriformState('protected', `Evaluations: ${report.pass}/${report.total} verificações OK. Leis de segurança intactas.`);
+    } else {
+        siriform.setSiriformState('warning', `Evaluations: ${report.fail} verificação(ões) falharam — ver Telemetria ao Vivo.`);
+    }
 }
 
 async function handleRunReplay() {
@@ -650,6 +727,7 @@ function handleAddHome() {
 async function handlePrepareCyborg() {
     siriform.setSiriformState('updating', 'Preparando Cyborg neste iPad...');
     log('=== PREPARAR / ATUALIZAR CYBORG NESTE IPAD ===', 'info');
+    const t0 = performance.now();
     try {
         const before = await packManager.getInstalledVaultMeta();
         let ready = false;
@@ -707,6 +785,8 @@ async function handlePrepareCyborg() {
         log(`Preparacao bloqueada: ${err.message}`, 'fail');
         siriform.setSiriformState('blocked');
         await refreshVaultAndReplayStatus();
+    } finally {
+        metrics.recordPrepDuration(performance.now() - t0);
     }
 }
 
@@ -758,6 +838,7 @@ async function dispatchVoiceCommand(id) {
         case 'prepare-cyborg': return handlePrepareCyborg();
         case 'run-diagnostics': return handleRunDiagnostics();
         case 'run-replay': return handleRunReplay();
+        case 'run-evaluations': return handleRunEvaluations();
         case 'show-status': return handleShowStatus();
         case 'explain-analysis': return handleExplainAnalysis();
         case 'show-safety-mode': return handleShowSafetyMode();
@@ -850,7 +931,10 @@ function wireAdvancedToggle() {
         section.hidden = !show;
         btn.textContent = show ? 'Ocultar modo avançado' : 'Modo avançado';
         btn.setAttribute('aria-expanded', show ? 'true' : 'false');
-        if (show) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (show) {
+            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            refreshMetricsPanel();
+        }
     });
 }
 
@@ -864,6 +948,8 @@ function wireButtons() {
     document.getElementById('btn-install-storage').addEventListener('click', handleInstallStorage);
     document.getElementById('btn-run-diagnostics').addEventListener('click', handleRunDiagnostics);
     document.getElementById('btn-run-replay').addEventListener('click', handleRunReplay);
+    const btnEvaluations = document.getElementById('btn-run-evaluations');
+    if (btnEvaluations) btnEvaluations.addEventListener('click', handleRunEvaluations);
     document.getElementById('btn-repair-install').addEventListener('click', handleRepairInstall);
     document.getElementById('btn-clear-reinstall').addEventListener('click', handleClearReinstall);
     document.getElementById('btn-add-home').addEventListener('click', handleAddHome);
@@ -904,6 +990,7 @@ async function boot() {
         tag: els['siriform-state-tag'],
         mic: els['mic-button'],
     });
+    metrics.initMetrics(els['siriform-avatar']);
     siriform.setSiriformState('thinking', 'Inicializando runtime local...');
     log('AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1 — boot iniciado.', 'info');
     setStatus('st-llama-profile', currentProfile.toUpperCase());

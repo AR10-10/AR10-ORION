@@ -35,6 +35,7 @@ export const ALLOWED_COMMANDS = [
     { id: 'prepare-cyborg', phrases: ['preparar cyborg neste ipad', 'preparar cyborg'] },
     { id: 'run-diagnostics', phrases: ['rodar diagnostico offline', 'rodar diagnostico'] },
     { id: 'run-replay', phrases: ['rodar replay btc usdt', 'rodar replay btc/usdt', 'rodar replay btc'] },
+    { id: 'run-evaluations', phrases: ['rodar evaluations', 'rodar auto teste local', 'rodar avaliacoes'] },
     { id: 'show-status', phrases: ['mostrar status'] },
     { id: 'explain-analysis', phrases: ['explicar analise'] },
     { id: 'show-safety-mode', phrases: ['mostrar modo de seguranca'] },
