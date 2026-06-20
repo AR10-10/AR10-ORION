@@ -16,6 +16,8 @@ const els = {};
     'console-log', 'replay-canvas', 'replay-meta', 'import-input', 'home-modal', 'standalone-state',
     'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'mic-button', 'engine-meta', 'analysis-frame-grid',
     'vault-meta', 'vault-hashes', 'profile-hint',
+    'cr-pwa', 'cr-sw', 'cr-cache', 'cr-idb', 'cr-opfs', 'cr-webcrypto', 'cr-wasm', 'cr-workers',
+    'cr-webgpu', 'cr-voice', 'cr-llama', 'cr-pack', 'cr-replay', 'cr-safety',
 ].forEach((id) => { els[id] = document.getElementById(id); });
 
 const PROFILES = {
@@ -37,7 +39,7 @@ function log(msg, level = 'dim') {
 
 function classFor(value) {
     if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'READY' || value === 'AVAILABLE' || value === 'GRANTED') return 'v-ok';
-    if (value === 'FAIL' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED') return 'v-fail';
+    if (value === 'FAIL' || value === 'MISSING' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED') return 'v-fail';
     if (value === 'FUTURE' || value === 'LIGHT' || value === 'BALANCED' || value === 'HEAVY') return 'v-info';
     return 'v-limited';
 }
@@ -94,6 +96,21 @@ async function refreshVoiceStatus() {
     return status;
 }
 
+function refreshCyborgReadiness(f, voiceStatus) {
+    setStatus('cr-pwa', f.pwaHttps === 'OK' ? 'OK' : 'MISSING');
+    setStatus('cr-sw', f.serviceWorker === 'OK' ? 'OK' : 'MISSING');
+    setStatus('cr-cache', f.cacheApi === 'OK' ? 'OK' : 'MISSING');
+    setStatus('cr-idb', f.indexedDb === 'OK' ? 'OK' : 'MISSING');
+    setStatus('cr-opfs', f.opfs === 'OK' ? 'OK' : (f.opfs === 'LIMITED' ? 'LIMITED' : 'MISSING'));
+    setStatus('cr-webcrypto', f.webCrypto === 'OK' ? 'OK' : 'MISSING');
+    setStatus('cr-wasm', f.wasm === 'OK' ? 'OK' : 'MISSING');
+    setStatus('cr-workers', f.workers === 'OK' ? 'OK' : 'MISSING');
+    setStatus('cr-webgpu', f.webgpu === 'OK' ? 'OK' : 'UNSUPPORTED');
+    setStatus('cr-voice', voiceStatus.overall === 'AVAILABLE' ? 'OK' : (voiceStatus.overall === 'LIMITED' ? 'LIMITED' : 'MISSING'));
+    setStatus('cr-llama', 'FUTURE');
+    setStatus('cr-safety', 'OK');
+}
+
 function renderVaultEvidence(vault) {
     if (vault.status !== 'READY') {
         els['vault-meta'].textContent = vault.reason
@@ -113,12 +130,15 @@ function renderVaultEvidence(vault) {
 async function refreshVaultAndReplayStatus() {
     const vault = await packManager.reloadVaultState((m, l) => log(m, l));
     setStatus('st-vault', vault.status === 'READY' ? 'READY' : 'LOCKED');
+    setStatus('cr-pack', vault.status === 'READY' ? 'OK' : 'MISSING');
     renderVaultEvidence(vault);
     try {
         await packManager.loadReplayDataset(() => {});
         setStatus('st-replay', 'INSTALLED');
+        setStatus('cr-replay', 'OK');
     } catch {
         setStatus('st-replay', 'MISSING');
+        setStatus('cr-replay', 'MISSING');
     }
     return vault;
 }
@@ -176,7 +196,8 @@ async function handleCheckSafari() {
     log(`Backend de storage ativo: ${(await storage.activeBackend()).toUpperCase()}`, 'info');
     const f = await refreshFeatureStatus();
     refreshLlamaStatus(f);
-    await refreshVoiceStatus();
+    const voiceStatus = await refreshVoiceStatus();
+    refreshCyborgReadiness(f, voiceStatus);
     log('Verificacao concluida.', 'ok');
     siriform.setSiriformState('responding', 'Runtime Safari detectado.');
 }
@@ -266,6 +287,7 @@ async function handleRunReplay() {
             },
         });
         setStatus('st-replay', 'INSTALLED');
+        setStatus('cr-replay', 'OK');
         siriform.setSiriformState('responding', 'Replay BTC/USDT pronto para análise.');
         void result;
     } catch (err) {
@@ -512,8 +534,9 @@ async function boot() {
     }
     const f = await refreshFeatureStatus();
     refreshLlamaStatus(f);
-    await refreshVoiceStatus();
+    const voiceStatus = await refreshVoiceStatus();
     const vault = await refreshVaultAndReplayStatus();
+    refreshCyborgReadiness(f, voiceStatus);
     log('Boot concluido. Modo: IPAD DIRECT / LOCAL-FIRST / READ_ONLY / FAIL_CLOSED.', 'ok');
     if (vault.status === 'READY') {
         siriform.setSiriformState('responding', 'Pacote local pronto. Posso preparar seu ambiente local.');

@@ -1,0 +1,135 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "AR10_CYBORG_ASSET_UNIVERSE_SCHEMA_V1",
+  "title": "AR10 Cyborg Asset Universe Config",
+  "description": "Schema de documentacao (nao validado em runtime por nenhum codigo do PWA hoje) para ipad_runtime/configs/asset-universe.default.json. Mantido simples de proposito: descreve a forma dos dados seed/referencia, nao impoe um motor de validacao. Ver docs/FUTURE_READY_ASSET_CLASS_REGISTRY.md para o desenho completo do registro de classes de ativos.",
+  "status": "FUTURE_READY_REFERENCE_ONLY",
+  "wired_into_live_app": false,
+  "type": "object",
+  "required": ["schema_version", "note", "ranking_criteria_supported", "security_posture", "groups"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "description": "Versao do schema deste arquivo de config, incrementada a cada mudanca de forma incompativel."
+    },
+    "config_id": {
+      "type": "string",
+      "description": "Identificador legivel do arquivo de configuracao."
+    },
+    "target_runtime": {
+      "type": "string",
+      "description": "Runtime alvo declarado, mesmo padrao usado em pack/manifest.pack.json (ex.: SAFARI_IPAD)."
+    },
+    "note": {
+      "type": "string",
+      "description": "Nota obrigatoria reforcando que as listas sao seed/referencia, nao exaustivas, nao permanentes, e que ranking dinamico real e FUTURE."
+    },
+    "status": {
+      "type": "string",
+      "description": "Status honesto do arquivo (ex.: FUTURE_READY_REFERENCE_ONLY). Nunca declarar como ACTIVE/LIVE enquanto nao houver codigo consumidor real."
+    },
+    "wired_into_live_app": {
+      "type": "boolean",
+      "description": "Deve ser false ate que algum modulo do PWA (js/app.js ou equivalente) efetivamente leia este arquivo."
+    },
+    "ranking_criteria_supported": {
+      "type": "array",
+      "description": "Lista fechada dos criterios de ranking dinamico que o schema esta preparado para suportar no futuro.",
+      "items": {
+        "type": "string",
+        "enum": [
+          "market_cap",
+          "volume",
+          "liquidity",
+          "open_interest",
+          "funding_rate",
+          "volatility",
+          "watchlist",
+          "user_defined_list"
+        ]
+      }
+    },
+    "ranking_criteria_active": {
+      "type": "array",
+      "description": "Subconjunto de ranking_criteria_supported atualmente em uso. Vazio enquanto o ranking dinamico nao for implementado.",
+      "items": { "type": "string" }
+    },
+    "security_posture": {
+      "type": "object",
+      "description": "Mesma forma exata usada em pack/manifest.pack.json > security_posture. Reutilizada aqui por consistencia, nao redefinida.",
+      "required": [
+        "execution",
+        "order_send",
+        "api_secret",
+        "mexc_private_endpoint",
+        "mt5_bridge",
+        "live_trading",
+        "mode",
+        "fail_closed"
+      ],
+      "properties": {
+        "execution": { "const": "DISABLED" },
+        "order_send": { "const": "ABSENT" },
+        "api_secret": { "const": "ABSENT" },
+        "mexc_private_endpoint": { "const": "ABSENT" },
+        "mt5_bridge": { "const": "ABSENT" },
+        "live_trading": { "const": "DISABLED" },
+        "mode": { "const": "READ_ONLY" },
+        "fail_closed": { "const": true }
+      }
+    },
+    "groups": {
+      "type": "array",
+      "description": "Grupos seed/referencia do universo de ativos.",
+      "items": {
+        "type": "object",
+        "required": ["group", "label", "asset_class", "note", "symbols"],
+        "properties": {
+          "group": {
+            "type": "string",
+            "description": "Identificador estavel do grupo (ex.: crypto_top_liquidity)."
+          },
+          "label": {
+            "type": "string",
+            "description": "Rotulo legivel em PT-BR para exibicao futura em UI."
+          },
+          "asset_class": {
+            "type": "string",
+            "enum": ["CRYPTO", "EQUITY"],
+            "description": "Classe de ativo predominante do grupo. Ver docs/FUTURE_READY_ASSET_CLASS_REGISTRY.md para a lista completa de instrument_type suportados a nivel de instrumento individual."
+          },
+          "note": {
+            "type": "string",
+            "description": "Nota especifica do grupo, incluindo distincoes relevantes (ex.: moeda minerada vs. empresa mineradora)."
+          },
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["symbol", "group", "asset_class", "status"],
+              "properties": {
+                "symbol": {
+                  "type": "string",
+                  "description": "Ticker/codigo do ativo (ex.: BTC, MARA)."
+                },
+                "group": {
+                  "type": "string",
+                  "description": "Deve corresponder ao campo group do objeto pai."
+                },
+                "asset_class": {
+                  "type": "string",
+                  "enum": ["CRYPTO", "EQUITY"],
+                  "description": "Classe de ativo deste simbolo especifico."
+                },
+                "status": {
+                  "type": "string",
+                  "description": "Status do registro deste simbolo (ex.: ACTIVE_REFERENCE). Nao indica ordem, posicao ou sinal de execucao."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -24,7 +24,7 @@ export const BLOCKED_RESPONSE = 'Execução real está bloqueada. O Cyborg está
 // (defesa em profundidade; nunca deixa uma frase mista escapar como comando
 // executavel).
 export const BLOCKED_PHRASES = [
-    'comprar', 'vender', 'abrir ordem', 'fechar ordem', 'operar real', 'usar chave', 'conectar conta real',
+    'comprar', 'vender', 'abrir ordem', 'fechar ordem', 'enviar ordem', 'operar real', 'usar chave', 'conectar conta real',
 ];
 
 // Comandos permitidos. Cada "id" e resolvido pelo app.js para o mesmo

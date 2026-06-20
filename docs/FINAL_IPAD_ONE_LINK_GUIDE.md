@@ -54,7 +54,7 @@ dizer "Preparar Cyborg" dispara exatamente `handlePrepareCyborg()`, a
 mesma função do toque no botão. Lista completa de frases permitidas,
 frases bloqueadas por política e o motivo arquitetural de por que "ordem
 por voz" nunca é possível aqui: ver
-`docs/APPLE_INTELLIGENCE_AND_SIRI_ROUTE.md`.
+`docs/SIRIFORM_VOICE_AND_NATIVE_COMPANION_ROUTE.md`.
 
 ## Ações rápidas (quick actions)
 
@@ -71,7 +71,7 @@ usada pelo motor WASM para SMA/EMA (10/20/40 candles) antes de rodar o
 replay, e também atualiza o campo `Llama Profile` no painel Meta
 Llama/WebLLM — mesma preferência de perfil, dois lugares onde ela já se
 aplica hoje (replay) ou vai se aplicar no futuro (Llama, quando
-implementado — ver `docs/META_LLAMA_WEB_NATIVE_ROUTE.md`).
+implementado — ver `docs/META_LLAMA_WEBLLM_ROUTE.md`).
 
 ## Passo a passo manual (fallback, botão por botão)
 

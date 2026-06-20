@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "note": "Nenhum modelo de linguagem esta empacotado nesta versao. Os motores abaixo sao roadmap declarado (status FUTURE), nao instalacoes falsas. Motivo: tamanho de modelo incompativel com armazenamento confiavel em Safari/iPadOS sem um passo explicito de download/consentimento do usuario, que ainda nao foi implementado. 'Meta Llama' e o nome correto da familia de modelos (nao 'Llama' generico) — ver docs/META_LLAMA_WEB_NATIVE_ROUTE.md para a analise completa de viabilidade no iPad/Safari.",
+  "note": "Nenhum modelo de linguagem esta empacotado nesta versao. Os motores abaixo sao roadmap declarado (status FUTURE), nao instalacoes falsas. Motivo: tamanho de modelo incompativel com armazenamento confiavel em Safari/iPadOS sem um passo explicito de download/consentimento do usuario, que ainda nao foi implementado. 'Meta Llama' e o nome correto da familia de modelos (nao 'Llama' generico) — ver docs/META_LLAMA_WEBLLM_ROUTE.md para a analise completa de viabilidade no iPad/Safari.",
   "models": [
     {
       "engine": "WebLLM/MLC-LLM",

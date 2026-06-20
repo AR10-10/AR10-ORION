@@ -1,4 +1,4 @@
-# Apple Intelligence and Siri Route — voz no AR10 Cyborg 2.0
+# Siriform Voice and Native Companion Route — voz no AR10 Cyborg 2.0
 
 Documento técnico de apoio a
 `AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1`. Cobre as
@@ -48,7 +48,7 @@ contiver qualquer uma destas, o resultado é sempre `blocked`, mesmo que a
 mesma frase também contenha um trecho permitido (defesa em profundidade):
 
 ```
-comprar · vender · abrir ordem · fechar ordem · operar real · usar chave · conectar conta real
+comprar · vender · abrir ordem · fechar ordem · enviar ordem · operar real · usar chave · conectar conta real
 ```
 
 **Resposta obrigatória, sempre a mesma, falada e escrita:**

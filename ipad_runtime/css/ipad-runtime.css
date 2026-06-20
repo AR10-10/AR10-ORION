@@ -532,6 +532,27 @@ footer.legal {
 .disabled-badge { color: var(--short-red); border: 1px solid rgba(255, 62, 82, 0.5); background: rgba(255, 62, 82, 0.07); }
 
 /* ------------------------------------------------------------
+   CYBORG READINESS — resumo unificado de tudo que o runtime ja
+   sondou (feature detection + voice + llama + pack + safety),
+   sempre o primeiro painel de status depois do Siriform.
+   ------------------------------------------------------------ */
+.cyborg-readiness-panel {
+    border-color: rgba(0, 255, 157, 0.22);
+    box-shadow: inset 0 0 18px rgba(0, 255, 157, 0.05), 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.cyborg-readiness-panel h2 {
+    color: var(--long-green);
+    text-shadow: 0 0 8px rgba(0, 255, 157, 0.3);
+}
+.onboarding-hint {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    margin: -4px 0 12px;
+    line-height: 1.5;
+}
+.onboarding-hint b { color: var(--sys-cyan); font-weight: bold; }
+
+/* ------------------------------------------------------------
    QUANT ENGINE WIDGET / ANALYSIS FRAME / DECISION FRAME / VAULT
    ------------------------------------------------------------ */
 .quant-engine-widget .engine-meta,
@@ -743,6 +764,7 @@ footer.legal {
     #runtime-actions {
         grid-column: 1;
     }
+    #cyborg-readiness-panel,
     #voice-status-panel,
     #status-panel,
     #feature-detect-panel,
@@ -765,6 +787,7 @@ footer.legal {
     #analysis-frame-panel {
         grid-column: 2;
     }
+    #cyborg-readiness-panel,
     #voice-status-panel,
     #status-panel,
     #feature-detect-panel,

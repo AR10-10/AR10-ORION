@@ -66,6 +66,27 @@
     </div>
   </section>
 
+  <section class="card cyborg-readiness-panel" id="cyborg-readiness-panel">
+    <h2>Cyborg Readiness</h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">PWA HTTPS</span><span class="value v-pending" id="cr-pwa">…</span></div>
+      <div class="status-row"><span class="label">Service Worker</span><span class="value v-pending" id="cr-sw">…</span></div>
+      <div class="status-row"><span class="label">Cache API</span><span class="value v-pending" id="cr-cache">…</span></div>
+      <div class="status-row"><span class="label">IndexedDB</span><span class="value v-pending" id="cr-idb">…</span></div>
+      <div class="status-row"><span class="label">OPFS</span><span class="value v-pending" id="cr-opfs">…</span></div>
+      <div class="status-row"><span class="label">Web Crypto</span><span class="value v-pending" id="cr-webcrypto">…</span></div>
+      <div class="status-row"><span class="label">WASM</span><span class="value v-pending" id="cr-wasm">…</span></div>
+      <div class="status-row"><span class="label">Workers</span><span class="value v-pending" id="cr-workers">…</span></div>
+      <div class="status-row"><span class="label">WebGPU</span><span class="value v-pending" id="cr-webgpu">…</span></div>
+      <div class="status-row"><span class="label">Siriform Voice</span><span class="value v-pending" id="cr-voice">…</span></div>
+      <div class="status-row"><span class="label">Meta Llama/WebLLM</span><span class="value v-pending" id="cr-llama">…</span></div>
+      <div class="status-row"><span class="label">Local Pack</span><span class="value v-pending" id="cr-pack">…</span></div>
+      <div class="status-row"><span class="label">Replay BTC/USDT</span><span class="value v-pending" id="cr-replay">…</span></div>
+      <div class="status-row"><span class="label">READ_ONLY / FAIL_CLOSED</span><span class="value v-pending" id="cr-safety">…</span></div>
+    </div>
+    <p class="engine-meta">Resumo unificado de tudo que este runtime já sondou nesta sessão — cada item mostra OK, LIMITED, MISSING, FUTURE ou UNSUPPORTED, nunca um "tudo certo" decorativo. Detalhe completo nos painéis abaixo.</p>
+  </section>
+
   <section class="card" id="voice-status-panel">
     <h2>Siriform Voice <span class="future-badge">Apple Intelligence: FUTURE</span></h2>
     <div class="status-grid">
@@ -76,7 +97,7 @@
       <div class="status-row"><span class="label">Siri Native Integration</span><span class="value v-info" id="st-siri-native">FUTURE_NATIVE_COMPANION</span></div>
       <div class="status-row"><span class="label">Apple Intelligence Route</span><span class="value v-info" id="st-apple-intel">APP_INTENTS_FUTURE</span></div>
     </div>
-    <p class="engine-meta">Comandos permitidos, comandos bloqueados por política e a rota nativa futura (App Intents / Siri Shortcuts) em <code>docs/APPLE_INTELLIGENCE_AND_SIRI_ROUTE.md</code>.</p>
+    <p class="engine-meta">Comandos permitidos, comandos bloqueados por política e a rota nativa futura (App Intents / Siri Shortcuts) em <code>docs/SIRIFORM_VOICE_AND_NATIVE_COMPANION_ROUTE.md</code>.</p>
   </section>
 
   <section class="card runtime-status-panel" id="status-panel">
@@ -120,7 +141,7 @@
       <div class="status-row"><span class="label">Transformers</span><span class="value v-pending" id="st-transformers">…</span></div>
       <div class="status-row"><span class="label">ONNX</span><span class="value v-pending" id="st-onnx">…</span></div>
     </div>
-    <p class="engine-meta">Roadmap declarado em <code>pack/manifest.models.json</code> e <code>docs/META_LLAMA_WEB_NATIVE_ROUTE.md</code> — nenhum modelo embutido nesta versão, nenhum "fake installed". Meta Llama nunca executa ordens; só explica, resume e interpreta comandos em texto/voz dentro do READ_ONLY / FAIL_CLOSED.</p>
+    <p class="engine-meta">Roadmap declarado em <code>pack/manifest.models.json</code> e <code>docs/META_LLAMA_WEBLLM_ROUTE.md</code> — nenhum modelo embutido nesta versão, nenhum "fake installed". Meta Llama nunca executa ordens; só explica, resume e interpreta comandos em texto/voz dentro do READ_ONLY / FAIL_CLOSED.</p>
   </section>
 
   <section class="card replay-wrap" id="replay-section">
@@ -173,6 +194,7 @@
 
   <section class="card local-pack-manager" id="runtime-actions">
     <h2>Local Pack Manager</h2>
+    <p class="onboarding-hint">Primeira vez aqui? Toque em <b>"Preparar Cyborg neste iPad"</b> — um único toque baixa, verifica, instala e roda o primeiro diagnóstico/replay nesta ordem. Os botões abaixo continuam disponíveis para repetir cada etapa manualmente.</p>
     <div class="btn-grid">
       <button class="rt-btn primary" id="btn-check-safari"><span class="icon">◎</span> Verificar Safari</button>
       <button class="rt-btn primary" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar Cyborg neste iPad</button>

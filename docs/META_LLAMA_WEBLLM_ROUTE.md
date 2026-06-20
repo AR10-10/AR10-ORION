@@ -1,4 +1,4 @@
-# Meta Llama Web-Native Route — viabilidade honesta no iPad/Safari
+# Meta Llama WebLLM Route — viabilidade honesta no iPad/Safari
 
 Documento técnico de apoio a
 `AR10_CYBORG_2_FINAL_IPAD_ONE_LINK_SIRIFORM_LLAMA_DEPLOY_V1`. Cobre a
@@ -110,7 +110,7 @@ UI** sendo refletida no roadmap de Llama, exatamente como documentado em
 - Resumir o resultado de um replay BTC/USDT.
 - Interpretar comandos de voz/texto em português e mapear para uma
   intenção seria — **a mesma lista de comandos permitidos** do Siriform
-  Voice (ver `docs/APPLE_INTELLIGENCE_AND_SIRI_ROUTE.md`), nunca uma
+  Voice (ver `docs/SIRIFORM_VOICE_AND_NATIVE_COMPANION_ROUTE.md`), nunca uma
   lista nova.
 - Responder no idioma do usuário sobre o que cada card do painel
   significa.
