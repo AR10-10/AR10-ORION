@@ -77,8 +77,14 @@ paisagem (≥900px) os cards fluem num **bento de colunas balanceadas**
 vazias; o banner READ_ONLY/FAIL_CLOSED, o header, a Telemetria e o rodapé
 ficam fora do fluxo de colunas (largura total). Em retrato, coluna única na
 ordem natural:
-`siriform-card` → `cyborg-readiness-panel` (leitura "tudo pronto?" de 1
-linha) → `commander-soldier-panel` (Commander = este iPad, sempre `ONLINE`;
+`siriform-card` → `cyborg-executive-panel` (**Resumo Executivo**, FOCO3 da
+fase de polimento visual — leitura "tudo pronto?" em 1 olhar: Estado do
+Cyborg, fonte real ativa ou `DADOS_INSUFICIENTES`, timestamp de freshness,
+Paper Trading, Risk Gate, Live Trading sempre `LIVE_LOCKED`, Vault/Evidence
+e último relatório, com os mesmos 4 botões de ação do topbar — Preparar/
+Atualizar, Analisar Sistema, Relatório, Modo Avançado — espelhados aqui) →
+`cyborg-readiness-panel` (checklist técnico detalhado de capacidades do
+Safari/iPadOS) → `commander-soldier-panel` (Commander = este iPad, sempre `ONLINE`;
 Soldier headless 24/7 ainda `NOT_DEPLOYED` — só existe como contrato de
 tipos em `soldier_runtime/`, nunca instalado nem executado) →
 `voice-status-panel` (estado do microfone/Siriform Voice Layer) →
@@ -106,7 +112,10 @@ Reports honestos sobre o que foi de fato restaurado) → `data-policy-panel`
 (Política de Dados de Mercado — sintético = diagnóstico; análise real exige
 fonte pública/somente-leitura ou mostra `DADOS INSUFICIENTES`) →
 `evaluations-panel` (equivalente local do framework Apple de Evaluations,
-WWDC26) → `decision-frame-panel` (**`STUB CONTROLLED`**, sem lógica de
+WWDC26) → `local-intelligence-panel` (**AR10 Local Intelligence Engine** —
+SetupScore/MemoryMatch/ReflectionReport calculados localmente, sem API
+paga, gravados no Evidence Ledger; nunca um sinal, nunca uma ordem) →
+`decision-frame-panel` (**`STUB CONTROLLED`**, sem lógica de
 decisão, sem sinal de ordem) → `risk-gate-panel` (Kill Switch +
 `NO_STOP_NO_TRADE` — bloqueia qualquer ordem, mesmo Paper, sem stop loss,
 com drawdown acima do limite ou fonte de dados abaixo da qualidade mínima)
@@ -226,6 +235,22 @@ quanto o orçamento de armazenamento realista do Safari/iPadOS sem um fluxo
 de consentimento explícito de download incremental (ainda não
 implementado). O painel mostra **FUTURE** de forma honesta, com o plano de
 entrega documentado no manifesto de modelos — não finge que está instalado.
+
+### AR10 Local Intelligence Engine (sem API paga)
+
+`js/calc/feature-extractor.js` + `js/intelligence/{scoring-engine,memory-store,
+scenario-matcher,reflection-engine,siriform-explainer,local-brain}.js`
+formam uma camada de inteligência 100% local: estatística sobre o
+CalculationFrame que já existe (`RealAnalysisFrame` real ou meta do replay
+sintético), comparação geométrica simples com leituras passadas, e
+explicação em português — tudo gravado como entradas marcadas
+(`kind: local_setup_score` / `local_reflection_report`) no mesmo Evidence
+Ledger que já existe, sem segunda fonte de memória. `liquidity_score` é
+sempre `null` (nenhum conector de profundidade/volume existe ainda) e todo
+resultado carrega `is_authoritative: false`, `is_recommendation: false`,
+`is_signal: false`, `requires_risk_gate: true` — nunca substitui o Risk
+Gate real (`js/trading/risk-gate.js`), que continua sendo o único portão
+de ordens (mesmo Paper).
 
 ## Verificação manual do pacote (sem abrir o Safari)
 

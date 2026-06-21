@@ -58,10 +58,37 @@ const VOICE_CAPTIONS = {
     voice_blocked_by_policy: 'Execução real está bloqueada. O Cyborg está em READ_ONLY / FAIL_CLOSED.',
 };
 
+// Rotulo curto + classe de cor (mesmo vocabulario v-ok/v-fail/v-limited/v-info
+// usado no resto do painel) para o badge de status fixo ao lado do microfone
+// (#mic-status-label) — FOCO2: feedback visual distinto para listening vs
+// processing vs respondido vs bloqueado, sem depender so da legenda longa.
+const VOICE_STATE_LABEL = {
+    voice_idle: 'PRONTO',
+    voice_permission_required: 'PERMISSÃO NECESSÁRIA',
+    voice_listening: 'OUVINDO',
+    voice_processing: 'PROCESSANDO',
+    voice_responding: 'RESPOSTA PRONTA',
+    voice_text_only: 'SÓ TEXTO',
+    voice_unsupported: 'INDISPONÍVEL',
+    voice_blocked_by_policy: 'BLOQUEADO POR POLÍTICA',
+};
+
+const VOICE_STATE_CLASS = {
+    voice_idle: 'v-info',
+    voice_permission_required: 'v-limited',
+    voice_listening: 'v-info',
+    voice_processing: 'v-info',
+    voice_responding: 'v-ok',
+    voice_text_only: 'v-limited',
+    voice_unsupported: 'v-fail',
+    voice_blocked_by_policy: 'v-fail',
+};
+
 let avatarEl = null;
 let captionEl = null;
 let tagEl = null;
 let micEl = null;
+let micStatusEl = null;
 let restTimer = null;
 let voiceRestTimer = null;
 
@@ -71,11 +98,12 @@ const REST_DELAY_MS = 3600;
 const VOICE_TRANSIENT_STATES = new Set(['voice_listening', 'voice_processing', 'voice_responding', 'voice_blocked_by_policy']);
 const VOICE_REST_DELAY_MS = 3200;
 
-export function initSiriform({ avatar, caption, tag, mic }) {
+export function initSiriform({ avatar, caption, tag, mic, micStatus }) {
     avatarEl = avatar;
     captionEl = caption;
     tagEl = tag;
     micEl = mic || null;
+    micStatusEl = micStatus || null;
     setSiriformState('idle');
     if (micEl) setVoiceState('voice_idle');
 }
@@ -110,6 +138,12 @@ export function setVoiceState(state, captionOverride) {
     if (!micEl) return;
     const normalized = VOICE_STATES.includes(state) ? state : 'voice_idle';
     micEl.setAttribute('data-voice-state', normalized);
+
+    if (micStatusEl) {
+        micStatusEl.textContent = VOICE_STATE_LABEL[normalized];
+        micStatusEl.classList.remove('v-ok', 'v-fail', 'v-limited', 'v-pending', 'v-info');
+        micStatusEl.classList.add(VOICE_STATE_CLASS[normalized]);
+    }
 
     const text = captionOverride || VOICE_CAPTIONS[normalized];
     if (captionEl && text) {

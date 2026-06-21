@@ -11,6 +11,7 @@
 import { setMeta, getMeta } from '../storage.js';
 import * as riskGate from './risk-gate.js';
 import { emit, SEVERITY } from '../core/event-bus.js';
+import * as evidenceLedger from '../memory/evidence-ledger.js';
 
 const LEDGER_KEY = 'ar10_paper_trading_ledger_v1';
 const MAX_TRADES = 100;
@@ -49,6 +50,7 @@ export async function openPaperPosition(order) {
     const decision = await riskGate.evaluateOrder(order, { currentDrawdownPct: computeDrawdownPct(ledger) });
 
     if (decision.decision !== 'ALLOW') {
+        await evidenceLedger.appendEvidence({ kind: 'paper_trade_blocked', order, decision, recorded_at: new Date().toISOString() });
         emit('paper_trade_blocked', { dataMode: 'PAPER', severity: SEVERITY.WARN, payload: { order, decision } });
         return { opened: false, decision, trade: null };
     }
@@ -71,6 +73,7 @@ export async function openPaperPosition(order) {
     ledger.unshift(trade);
     if (ledger.length > MAX_TRADES) ledger.length = MAX_TRADES;
     await setMeta(LEDGER_KEY, ledger);
+    await evidenceLedger.appendEvidence({ kind: 'paper_trade_opened', trade });
     emit('paper_trade_opened', { dataMode: 'PAPER', severity: SEVERITY.OK, payload: { trade } });
     return { opened: true, decision, trade };
 }
@@ -88,6 +91,7 @@ export async function closePaperPosition(tradeId, exitPrice) {
     trade.closed_at = new Date().toISOString();
 
     await setMeta(LEDGER_KEY, ledger);
+    await evidenceLedger.appendEvidence({ kind: 'paper_trade_closed', trade });
     emit('paper_trade_closed', { dataMode: 'PAPER', severity: SEVERITY.OK, payload: { trade } });
     return { closed: true, reason: null, trade };
 }

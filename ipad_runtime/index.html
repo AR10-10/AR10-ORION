@@ -53,15 +53,20 @@
 
   <section class="card siriform-card" id="siriform-section">
     <div class="siriform-stage">
-      <div class="siriform-avatar" id="siriform-avatar" data-state="idle" role="img" aria-label="Siriform Avatar"></div>
+      <div class="siriform-avatar" id="siriform-avatar" data-state="idle" role="img" aria-label="Siriform Avatar">
+        <div class="siriform-core"></div>
+      </div>
     </div>
     <span class="siriform-state-tag" id="siriform-state-tag">IDLE</span>
-    <p class="siriform-caption" id="siriform-caption">Cyborg operando em READ_ONLY / FAIL_CLOSED.</p>
+    <span class="macro-state-chip" id="macro-state-chip">PRONTO</span>
+    <p class="siriform-caption" id="siriform-caption" aria-live="polite">Cyborg operando em READ_ONLY / FAIL_CLOSED.</p>
 
     <button type="button" class="hero-cta" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar / Atualizar Cyborg neste iPad</button>
 
     <button type="button" class="mic-button" id="mic-button" data-voice-state="voice_idle" aria-label="Falar com o Siriform (comando de voz)">◉</button>
+    <span class="mic-status-label v-info" id="mic-status-label">PRONTO</span>
     <p class="voice-hint">Toque no microfone e diga, por exemplo: "Verificar Safari" ou "Mostrar status".</p>
+    <p class="voice-scope-note">O Siriform Voice só lê o estado deste runtime e toca os mesmos botões da tela — nunca envia ordem, nunca abre live trading e nunca sai de READ_ONLY/FAIL_CLOSED. Comando fora dessa lista aparece como "bloqueado por política", nunca falha silenciosa.</p>
 
     <div class="quick-actions" id="quick-actions" role="group" aria-label="Ações rápidas">
       <button type="button" class="qa-btn" id="qa-diagnostics"><span class="icon">▣</span> Diagnóstico</button>
@@ -77,6 +82,27 @@
       <span class="law-badge is-ok">Execution Lock: ACTIVE</span>
       <span class="law-badge is-blocked">Private Keys: DISABLED</span>
       <span class="law-badge is-blocked">Live Trading: BLOCKED</span>
+    </div>
+  </section>
+
+  <section class="card cyborg-executive-panel" id="cyborg-executive-panel">
+    <h2>Resumo Executivo</h2>
+    <p class="onboarding-hint">Leitura de 1 olhar: o Cyborg está pronto? a fonte de dado é real e fresca? está seguro para analisar? Memória de sessão anterior nunca aparece aqui como dado atual sem revalidação — sem fonte fresca nesta sessão, este card mostra <b>DADOS_INSUFICIENTES</b>.</p>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Estado do Cyborg</span><span class="value v-pending" id="ex-state">…</span></div>
+      <div class="status-row"><span class="label">Fonte real ativa</span><span class="value v-pending" id="ex-source">…</span></div>
+      <div class="status-row"><span class="label">Atualizado em</span><span class="value v-pending" id="ex-freshness">…</span></div>
+      <div class="status-row"><span class="label">Paper Trading</span><span class="value v-pending" id="ex-paper">…</span></div>
+      <div class="status-row"><span class="label">Risk Gate</span><span class="value v-pending" id="ex-risk">…</span></div>
+      <div class="status-row"><span class="label">Live Trading</span><span class="value v-fail" id="ex-live">LIVE_LOCKED</span></div>
+      <div class="status-row"><span class="label">Vault / Evidence</span><span class="value v-pending" id="ex-vault">…</span></div>
+      <div class="status-row"><span class="label">Último relatório</span><span class="value v-pending" id="ex-report">…</span></div>
+    </div>
+    <div class="executive-actions" role="group" aria-label="Ações principais">
+      <button type="button" class="rt-btn primary" id="ex-btn-prepare"><span class="icon">⚡</span> Preparar / Atualizar</button>
+      <button type="button" class="rt-btn" id="ex-btn-analyze"><span class="icon">▣</span> Analisar Sistema</button>
+      <button type="button" class="rt-btn" id="ex-btn-report"><span class="icon">▤</span> Relatório</button>
+      <button type="button" class="rt-btn" id="ex-btn-advanced"><span class="icon">≡</span> Modo Avançado</button>
     </div>
   </section>
 
@@ -205,6 +231,7 @@
         <span class="analysis-frame-empty">Toque em "Testar fontes reais" para sondar os conectores.</span>
     </div>
     <p class="engine-meta" id="rdl-active-source">Fonte ativa: nenhuma nesta sessão ainda.</p>
+    <p class="diagnostic-note" id="rdl-connector-session-note" hidden></p>
     <div class="btn-grid">
         <button class="rt-btn" id="btn-test-real-sources"><span class="icon">📡</span> Testar fontes reais</button>
         <button class="rt-btn" id="btn-refresh-real-data"><span class="icon">⟲</span> Atualizar dados reais</button>
@@ -319,17 +346,39 @@
     <p class="engine-meta" id="ev-summary">Ainda não executado nesta sessão. Toque em "Rodar Evaluations" em Manutenção/Técnico, ou diga "rodar evaluations".</p>
   </section>
 
+  <section class="card local-intelligence-panel" id="local-intelligence-panel" tabindex="0">
+    <h2>AR10 Local Intelligence Engine <span class="future-badge">sem API paga, 100% local</span></h2>
+    <p class="onboarding-hint">Matemática, memória e regras locais sobre dados que este runtime já mediu nesta sessão (CalculationFrame real ou replay sintético) — nunca um sinal, nunca uma ordem. SetupScore e Reflection Report ficam gravados no Evidence Ledger; Live Trading continua <code>LIVE_LOCKED</code> e qualquer ordem (mesmo Paper) continua passando pelo Risk Gate.</p>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Leitura (SetupScore)</span><span class="value v-pending" id="li-final-label">…</span></div>
+      <div class="status-row"><span class="label">Confiança descritiva</span><span class="value v-pending" id="li-confidence">…</span></div>
+      <div class="status-row"><span class="label">Qualidade de fonte</span><span class="value v-pending" id="li-source-quality">…</span></div>
+      <div class="status-row"><span class="label">Volatilidade</span><span class="value v-pending" id="li-volatility">…</span></div>
+      <div class="status-row"><span class="label">Tendência</span><span class="value v-pending" id="li-trend">…</span></div>
+      <div class="status-row"><span class="label">Risco descritivo</span><span class="value v-pending" id="li-risk">…</span></div>
+    </div>
+    <p class="engine-meta" id="li-explanation">Ainda não executado nesta sessão. Toque em "Rodar Local Intelligence".</p>
+    <p class="engine-meta" id="li-reflection-text">Nenhum Reflection Report gerado ainda nesta sessão.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-li-run"><span class="icon">🧠</span> Rodar Local Intelligence</button>
+        <button class="rt-btn" id="btn-li-reflect"><span class="icon">📝</span> Gerar Reflection Report</button>
+    </div>
+  </section>
+
   <section class="card decision-frame-panel" id="decision-frame-panel">
-    <h2>DecisionFrame <span class="stub-badge">STUB CONTROLLED</span></h2>
+    <h2>DecisionFrame <span class="stub-badge">🔒 STUB CONTROLLED</span></h2>
     <p class="df-body">
       Este card é um placeholder transparente. <b>Nenhuma lógica de decisão,
-      sinal de ordem ou execução existe neste runtime.</b> Por lei interna do
-      AR10 Cyborg 2.0, qualquer decisão de execução exigiria um Risk Gate e
-      supervisão humana — nenhum dos dois está implementado ou habilitado
-      aqui, e nenhuma rota de rede para corretora existe no código (ver CSP).
-      Este card existe apenas para deixar explícita a fronteira entre
-      "ler estatística" (AnalysisFrame, real) e "decidir/executar"
-      (DecisionFrame, bloqueado por design).
+      sinal de ordem ou execução existe neste runtime.</b> Sem chave de API,
+      sem segredo, sem endpoint privado de corretora e sem rota de rede para
+      nenhuma exchange existe no código (ver Content-Security-Policy). Por lei
+      interna do AR10 Cyborg 2.0, qualquer decisão de execução exigiria um
+      Risk Gate dedicado a execução real e supervisão humana explícita —
+      nenhum dos dois está implementado ou habilitado aqui; o Risk Gate que
+      existe hoje (ver card "Risk Gate") só governa Paper Trading simulado,
+      nunca ordem real. Este card existe apenas para deixar explícita a
+      fronteira entre "ler estatística" (AnalysisFrame, real) e
+      "decidir/executar" (DecisionFrame, bloqueado por design).
     </p>
   </section>
 

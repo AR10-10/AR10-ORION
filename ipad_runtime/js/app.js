@@ -30,6 +30,9 @@ import * as riskGate from './trading/risk-gate.js';
 import * as paperTrading from './trading/paper-trading.js';
 import { getLiveStatus } from './trading/live-status.js';
 import { getSourceHealthReport } from './real-data/source-health.js';
+import { runLocalIntelligenceCycle } from './intelligence/local-brain.js';
+import { buildAndRecordReflectionReport } from './intelligence/reflection-engine.js';
+import { explainReflectionReport } from './intelligence/siriform-explainer.js';
 
 const els = {};
 ['st-pwa', 'st-sw', 'st-cache', 'st-idb', 'st-opfs', 'st-webcrypto', 'st-wasm', 'st-workers',
@@ -37,15 +40,17 @@ const els = {};
     'st-voice', 'st-speech-rec', 'st-speech-syn', 'st-mic-perm',
     'st-llama-layer', 'st-llama-profile', 'st-llama-runtime', 'st-llama-webgpu',
     'console-log', 'telemetry-latest', 'replay-canvas', 'replay-meta', 'import-input', 'home-modal', 'standalone-state',
-    'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'mic-button', 'engine-meta', 'analysis-frame-grid',
+    'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'macro-state-chip', 'mic-button', 'mic-status-label', 'engine-meta', 'analysis-frame-grid',
     'vault-meta', 'vault-hashes', 'profile-hint',
+    'ex-state', 'ex-source', 'ex-freshness', 'ex-paper', 'ex-risk', 'ex-vault', 'ex-report',
+    'ex-btn-prepare', 'ex-btn-analyze', 'ex-btn-report', 'ex-btn-advanced',
     'cr-pwa', 'cr-sw', 'cr-cache', 'cr-idb', 'cr-opfs', 'cr-webcrypto', 'cr-wasm', 'cr-workers',
     'cr-webgpu', 'cr-voice', 'cr-llama', 'cr-pack', 'cr-replay', 'cr-safety',
     'vl-pack', 'vl-pack-name', 'vl-pack-version', 'vl-sha256', 'vl-sw-cache', 'vl-cache-api',
     'vl-idb', 'vl-opfs', 'vl-wasm', 'vl-replay', 'vl-updated', 'vl-cache-version',
     'vl-storage-used', 'vl-storage-quota', 'vl-safety', 'vl-repair',
     'dp-realmode', 'dp-analysis', 'export-list',
-    'rdl-connector-grid', 'rdl-active-source', 'real-data-import-input',
+    'rdl-connector-grid', 'rdl-active-source', 'rdl-connector-session-note', 'real-data-import-input',
     'real-analysis-frame-grid', 'real-analysis-frame-session-note', 'real-analysis-frame-note',
     're-evidence-grid', 're-missing-fields', 're-session-note', 're-evidence-hash',
     'route-a-long-grid', 'route-b-short-grid', 'route-c-wait-grid', 'research-engine-session-note',
@@ -62,6 +67,8 @@ const els = {};
     'ls-mode', 'ls-status', 'ls-reasons', 'ls-unlock-requires',
     'br-last-backup', 'btn-br-export', 'btn-br-import', 'br-import-input',
     'al-list', 'al-count', 'btn-al-refresh',
+    'li-final-label', 'li-confidence', 'li-source-quality', 'li-volatility', 'li-trend', 'li-risk',
+    'li-explanation', 'li-reflection-text', 'btn-li-run', 'btn-li-reflect',
     'status-modal', 'status-modal-title', 'status-modal-body', 'btn-status-modal-close',
 ].forEach((id) => { els[id] = document.getElementById(id); });
 
@@ -112,6 +119,37 @@ function setInfo(id, text) {
     el.classList.add('v-info');
 }
 
+function setStatusWithClass(id, text, cls) {
+    const el = els[id];
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove('v-ok', 'v-fail', 'v-limited', 'v-pending', 'v-info');
+    el.classList.add(cls);
+}
+
+// FOCO3 — vocabulario macro de 1 olho so (Resumo Executivo + chip do orbe).
+// Nao reusa classFor() de proposito: classFor() conhece os rotulos antigos
+// (READY/LIVE_LOCKED ja existiam la para outros campos) mas ANALYZING/
+// UPDATING/DEGRADED/FAIL_CLOSED precisam de um mapeamento proprio para nao
+// cair no v-limited generico por acidente.
+const MACRO_STATE_CLASS = {
+    IDLE: 'v-pending',
+    READY: 'v-ok',
+    ANALYZING: 'v-info',
+    UPDATING: 'v-info',
+    DEGRADED: 'v-limited',
+    DADOS_INSUFICIENTES: 'v-limited',
+    FAIL_CLOSED: 'v-fail',
+};
+
+function setMacroStatus(id, macro) {
+    const el = els[id];
+    if (!el) return;
+    el.textContent = macro;
+    el.classList.remove('v-ok', 'v-fail', 'v-limited', 'v-pending', 'v-info');
+    el.classList.add(MACRO_STATE_CLASS[macro] || 'v-info');
+}
+
 function okOrAusente(v) { return v === 'OK' ? 'OK' : 'AUSENTE'; }
 
 async function getActiveCacheInfo() {
@@ -147,6 +185,8 @@ let workerClient = null;
 let replayDatasetCache = null;
 let lastAnalysisMeta = null;
 let vaultFreshness = null; // null=nao verificado nesta sessao; so muda apos check real (NO_FAKE_LOCAL_AI_CLAIMS)
+let lastVaultStatusObj = null; // cache do retorno de refreshVaultAndReplayStatus(), para computeMacroState()/Executive Summary lerem sem reconsultar o pack-manager
+let lastRiskGateConfig = null; // cache do retorno de riskGate.getConfig()/engageKillSwitch()/disengageKillSwitch(), mesmo motivo
 
 // Mission AR10_CYBORG_2_SAFE_REAL_DATA_LAYER_RUNTIME_PROBE_V1 — estado do
 // Real Data Layer. `sessionHasRealProbe` so vira true depois que UMA sonda
@@ -163,6 +203,8 @@ let rehydratedActiveSourceId = null;
 let lastHydrationReport = null;
 let lastSourceHealthReport = null;
 let lastCommanderSoldierStatus = null;
+let lastLocalIntelligenceResult = null;
+let lastReflectionReport = null;
 
 async function refreshFeatureStatus() {
     const f = await feat.runAllFeatureDetections();
@@ -301,7 +343,7 @@ function renderEvaluationsPanel(report) {
     setGroup('ev-fail-closed', 'read_only_fail_closed');
     setGroup('ev-siriform-states', 'siriform_states');
     if (els['ev-summary']) {
-        els['ev-summary'].textContent = `Última execução: ${report.pass}/${report.total} verificações PASS, ${report.fail} FAIL, em ${report.elapsedMs}ms. Detalhe linha a linha na Telemetria ao Vivo.`;
+        els['ev-summary'].textContent = `Última execução: ${report.pass}/${report.total} verificações PASS, ${report.fail} FAIL, em ${report.elapsedMs}ms. Detalhe linha a linha na Telemetria ao Vivo e registrado no Activity Log (Memória Viva).`;
     }
 }
 
@@ -388,6 +430,7 @@ function refreshTopbarStatus(vault) {
 
 async function refreshVaultAndReplayStatus() {
     const vault = await packManager.reloadVaultState((m, l) => log(m, l));
+    lastVaultStatusObj = vault;
     setStatus('st-vault', vault.status === 'READY' ? 'READY' : 'LOCKED');
     setStatus('cr-pack', vault.status === 'READY' ? 'OK' : 'MISSING');
     renderVaultEvidence(vault);
@@ -443,34 +486,115 @@ function refreshHistoricalNotes() {
     setHistoricalNote('real-analysis-frame-session-note', present);
     setHistoricalNote('re-session-note', present);
     setHistoricalNote('research-engine-session-note', present);
+    setHistoricalNote('rdl-connector-session-note', present);
 }
 
 function classForConnectorState(state) {
     if (state === 'ACTIVE_READ_ONLY') return 'v-ok';
+    if (state === 'SESSION_PREVIOUS') return 'v-info'; // nunca v-ok: e memoria, nao revalidacao fresca
     if (state === 'PLANNED' || state === 'PROBING' || state === 'REQUIRES_API_KEY') return 'v-pending';
     if (state === 'DEGRADED' || state === 'DADOS_INSUFICIENTES' || state === 'UNSUPPORTED_ON_IPAD') return 'v-limited';
     if (state === 'FUTURE' || state === 'NAO_LISTADO_NO_ROTEIRO_ESTATICO') return 'v-info';
     return 'v-fail'; // BLOCKED_BY_CORS / BLOCKED_BY_SCHEMA / BLOCKED_BY_POLICY
 }
 
+// FOCO3 — Resumo Executivo (tela principal). Deriva 1 macro-estado a partir
+// de sinais que ja existem em outros modulos (orbe, Vault, Risk Gate, Real
+// Data Layer) — nunca inventa um numero novo. LIVE_LOCKED de proposito NAO
+// entra aqui: e estrutural/permanente (sem rota de execucao no codigo, nao
+// uma flag), por isso fica fixo no HTML (#ex-live), nunca calculado em JS.
+function computeMacroState() {
+    const activityState = els['siriform-avatar'] ? els['siriform-avatar'].getAttribute('data-state') : null;
+    if (activityState === 'blocked') return 'FAIL_CLOSED';
+    if (activityState === 'thinking' || activityState === 'checking' || activityState === 'diagnosing') return 'ANALYZING';
+    if (activityState === 'updating' || activityState === 'repairing') return 'UPDATING';
+
+    if (lastVaultStatusObj && lastVaultStatusObj.status !== 'READY') {
+        return lastVaultStatusObj.reason === 'checksum_failed' ? 'FAIL_CLOSED' : 'IDLE';
+    }
+    if (lastRiskGateConfig && lastRiskGateConfig.kill_switch_engaged) return 'FAIL_CLOSED';
+    if (!realDataRegistry.getActiveReadOnlySources().length) return 'DADOS_INSUFICIENTES';
+    if (vaultFreshness === 'DESATUALIZADO') return 'DEGRADED';
+    return 'READY';
+}
+
+// Le o estado real de Vault/Risk Gate/Real Data Layer/Paper Trading e pinta
+// o chip do orbe + o card "Resumo Executivo" — chamada pelo MutationObserver
+// de wireMacroStateObserver() (qualquer setSiriformState(...) ja dispara isto
+// de graca) e, como rede de seguranca extra, apos boot() e apos o kill
+// switch mudar (que nao necessariamente troca o data-state do orbe).
+async function refreshExecutiveSummary() {
+    const macro = computeMacroState();
+    setMacroStatus('macro-state-chip', macro);
+    setMacroStatus('ex-state', macro);
+
+    const active = realDataRegistry.getActiveReadOnlySources();
+    if (active.length) {
+        setStatusWithClass('ex-source', active.map((a) => a.connector_name).join(', '), classForConnectorState('ACTIVE_READ_ONLY'));
+        const latest = active.reduce((acc, a) => (a.last_probed_at && (!acc || a.last_probed_at > acc) ? a.last_probed_at : acc), null);
+        setInfo('ex-freshness', latest ? new Date(latest).toLocaleString('pt-BR') : 'agora');
+    } else if (isShowingHistoricalData() && rehydratedActiveSourceId) {
+        const meta = realDataRegistry.getConnectorMeta(rehydratedActiveSourceId);
+        setStatusWithClass('ex-source', `${meta ? meta.connector_name : rehydratedActiveSourceId} (sessão anterior)`, classForConnectorState('SESSION_PREVIOUS'));
+        setInfo('ex-freshness', 'Memória da sessão anterior — ainda não revalidada nesta sessão.');
+    } else {
+        setStatusWithClass('ex-source', DADOS_INSUFICIENTES, classForConnectorState('DADOS_INSUFICIENTES'));
+        setInfo('ex-freshness', 'Nenhuma fonte real validada nesta sessão ainda.');
+    }
+
+    if (lastRiskGateConfig) setStatus('ex-risk', lastRiskGateConfig.kill_switch_engaged ? 'BLOCK' : 'ALLOW');
+    setStatus('ex-vault', packStatusLabel(lastVaultStatusObj, vaultFreshness));
+    setInfo('ex-report', lastAnalysisMeta
+        ? `Replay BTC/USDT analisado · SMA ${lastAnalysisMeta.sma.toFixed(2)} · EMA ${lastAnalysisMeta.ema.toFixed(2)}`
+        : 'Nenhum relatório gerado nesta sessão ainda.');
+
+    try {
+        const summary = await paperTrading.getPaperSummary();
+        setInfo('ex-paper', `${summary.mode} · ${summary.open_positions} posição(ões) aberta(s)`);
+    } catch {
+        setInfo('ex-paper', 'n/d');
+    }
+}
+
+// MutationObserver no data-state do orbe: unica fonte de verdade das ~80
+// chamadas setSiriformState(...) espalhadas pelo arquivo. Em vez de tocar em
+// cada call site para manter o Resumo Executivo sincronizado, observamos so
+// a mudanca de atributo — custo zero em repouso, sem polling (FOCO9).
+function wireMacroStateObserver() {
+    const avatar = els['siriform-avatar'];
+    if (!avatar || typeof MutationObserver === 'undefined') return;
+    const observer = new MutationObserver(() => { refreshExecutiveSummary(); });
+    observer.observe(avatar, { attributes: true, attributeFilter: ['data-state'] });
+}
+
 // Connector Probe grid: SEMPRE a verdade viva de registry.js (sessionState),
 // nunca tocada pela reidratacao — todo conector nasce PLANNED nesta sessao e
-// so muda de estado apos a propria sonda real responder.
+// so muda de estado apos a propria sonda real responder. A unica excecao
+// visual e o proprio conector que a Memoria Viva lembra como ativo numa
+// sessao anterior: em vez de deixa-lo como "PLANNED" puro (identico a um
+// conector nunca testado), ele mostra o rotulo sintetico SESSION_PREVIOUS —
+// nunca ACTIVE_READ_ONLY, nunca verde — para que memoria de sessao anterior
+// jamais seja confundida com dado revalidado agora (FOCO5: Real Data Layer
+// mais claro).
 function renderConnectorGrid() {
     const connectors = realDataRegistry.listConnectors();
-    els['rdl-connector-grid'].innerHTML = connectors.map((c) => `
-        <div class="status-row"><span class="label">${c.connector_name}</span><span class="value ${classForConnectorState(c.state)}">${c.state}</span></div>
-    `).join('');
+    const showSessionPrevious = isShowingHistoricalData() && rehydratedActiveSourceId;
+    els['rdl-connector-grid'].innerHTML = connectors.map((c) => {
+        const isRememberedPrevious = showSessionPrevious && c.connector_id === rehydratedActiveSourceId && c.state === 'PLANNED';
+        const displayState = isRememberedPrevious ? 'SESSION_PREVIOUS' : c.state;
+        return `<div class="status-row"><span class="label">${c.connector_name}</span><span class="value ${classForConnectorState(displayState)}">${displayState}</span></div>`;
+    }).join('');
 
     const active = realDataRegistry.getActiveReadOnlySources();
     if (active.length) {
         els['rdl-active-source'].textContent = `Fonte ativa: ${active.map((a) => a.connector_name).join(', ')}.`;
-    } else if (isShowingHistoricalData() && rehydratedActiveSourceId) {
+    } else if (showSessionPrevious) {
         const meta = realDataRegistry.getConnectorMeta(rehydratedActiveSourceId);
         els['rdl-active-source'].textContent = `Fonte ativa (sessão anterior, ainda não revalidada agora): ${meta ? meta.connector_name : rehydratedActiveSourceId}.`;
     } else {
         els['rdl-active-source'].textContent = 'Fonte ativa: nenhuma nesta sessão ainda.';
     }
+    setHistoricalNote('rdl-connector-session-note', Boolean(showSessionPrevious));
 }
 
 function formatEvidenceField(value) {
@@ -676,6 +800,99 @@ async function handleGenerateRealAnalysis() {
     } catch (err) {
         log(`Erro ao gerar AnalysisFrame real: ${err.message}`, 'fail');
         siriform.setSiriformState('warning', 'Não consegui gerar o AnalysisFrame real agora.');
+    }
+}
+
+// AR10 Local Intelligence Engine — reusa o CalculationFrame que ja existe
+// (RealAnalysisFrame real, preferido, ou meta do replay sintetico so como
+// exercicio matematico) em vez de recalcular nada via WASM de novo. Math/
+// memoria/regras locais, sem API paga e sem rede nova; nunca um sinal.
+function buildCalculationFrameInput() {
+    if (lastRealAnalysisFrame && lastRealAnalysisFrame.status === 'OK') {
+        const f = lastRealAnalysisFrame;
+        return {
+            sma: f.sma, ema: f.ema, stddev: f.stddev, zscore: f.zscore,
+            last_price: f.last_price, support: f.support, resistance: f.resistance,
+            data_mode: 'REAL_READ_ONLY', symbol: f.asset, source_id: f.source,
+        };
+    }
+    if (lastAnalysisMeta) {
+        return {
+            sma: lastAnalysisMeta.sma, ema: lastAnalysisMeta.ema, stddev: lastAnalysisMeta.stddev, zscore: lastAnalysisMeta.zscore,
+            last_price: lastAnalysisMeta.last, support: lastAnalysisMeta.min, resistance: lastAnalysisMeta.max,
+            data_mode: 'SYNTHETIC_OFFLINE', symbol: 'BTCUSDT_REPLAY', source_id: 'synthetic_replay',
+        };
+    }
+    return null;
+}
+
+function classForSetupLabel(label) {
+    if (label === 'PAPER_ONLY') return 'v-ok';
+    if (label === 'BLOQUEADO') return 'v-fail';
+    if (label === 'OBSERVAR') return 'v-limited';
+    return 'v-pending'; // DADOS_INSUFICIENTES
+}
+
+function renderLocalIntelligenceCard(result) {
+    if (!result) {
+        setStatusWithClass('li-final-label', 'DADOS_INSUFICIENTES', 'v-pending');
+        return;
+    }
+    const score = result.score;
+    setStatusWithClass('li-final-label', score.final_label, classForSetupLabel(score.final_label));
+    setInfo('li-confidence', result.confidence_label);
+    setInfo('li-source-quality', `${score.source_quality}/100`);
+    setInfo('li-volatility', score.volatility_score ?? 'n/d');
+    setInfo('li-trend', score.trend_score ?? 'n/d');
+    setInfo('li-risk', score.risk_score ?? 'n/d');
+    els['li-explanation'].textContent = result.explanation_pt_br;
+}
+
+function renderReflectionReportCard(report) {
+    els['li-reflection-text'].textContent = report
+        ? explainReflectionReport(report)
+        : 'Nenhum Reflection Report gerado ainda nesta sessão.';
+}
+
+async function handleRunLocalIntelligence() {
+    siriform.setSiriformState('thinking', 'Rodando Local Intelligence Engine sobre dados já existentes nesta sessão...');
+    log('=== RODAR LOCAL INTELLIGENCE ===', 'info');
+    try {
+        const frame = buildCalculationFrameInput();
+        const active = realDataRegistry.getActiveReadOnlySources().length > 0;
+        const sourceHealthEntry = (lastSourceHealthReport && frame)
+            ? lastSourceHealthReport.sources.find((s) => s.connector_id === frame.source_id)
+            : null;
+        const result = await runLocalIntelligenceCycle({
+            frame,
+            active,
+            sourceHealthEntry,
+            riskGateConfig: lastRiskGateConfig,
+            symbol: frame ? frame.symbol : null,
+        });
+        lastLocalIntelligenceResult = result;
+        renderLocalIntelligenceCard(result);
+        log(`Local Intelligence: leitura ${result.score.final_label} (confiança ${result.confidence_label}).`, result.score.final_label === 'BLOQUEADO' ? 'fail' : 'ok');
+        siriform.setSiriformState('success', 'Local Intelligence Engine gerou uma leitura local. Não é sinal, não é ordem.');
+    } catch (err) {
+        log(`Erro ao rodar Local Intelligence: ${err.message}`, 'fail');
+        siriform.setSiriformState('warning', 'Não consegui rodar a Local Intelligence Engine agora.');
+    }
+}
+
+async function handleRunReflection() {
+    siriform.setSiriformState('thinking', 'Gerando Reflection Report local desta sessão...');
+    log('=== GERAR REFLECTION REPORT ===', 'info');
+    try {
+        const paperSummary = await paperTrading.getPaperSummary();
+        const report = await buildAndRecordReflectionReport({ riskGateConfig: lastRiskGateConfig, paperSummary });
+        lastReflectionReport = report;
+        renderReflectionReportCard(report);
+        log(`Reflection Report gerado: ${report.what_changed}`, 'ok');
+        siriform.setSiriformState('success', 'Reflection Report gerado e gravado no Evidence Ledger.');
+    } catch (err) {
+        log(`Erro ao gerar Reflection Report: ${err.message}`, 'fail');
+        siriform.setSiriformState('warning', 'Não consegui gerar o Reflection Report agora.');
     }
 }
 
@@ -971,6 +1188,12 @@ async function handleRunEvaluations() {
     });
     metrics.recordEvaluationsReport(report);
     renderEvaluationsPanel(report);
+    eventBus.emit('evaluations_report_completed', {
+        source: eventBus.SOURCE.SYSTEM,
+        severity: report.fail === 0 ? eventBus.SEVERITY.OK : eventBus.SEVERITY.WARN,
+        payload: { pass: report.pass, fail: report.fail, total: report.total, elapsed_ms: report.elapsedMs },
+    });
+    renderActivityLog();
     if (report.fail === 0) {
         siriform.setSiriformState('protected', `Evaluations: ${report.pass}/${report.total} verificações OK. Leis de segurança intactas.`);
     } else {
@@ -1581,6 +1804,7 @@ function setKillSwitchStatus(engaged) {
 
 async function renderRiskGateCard() {
     const cfg = await riskGate.getConfig();
+    lastRiskGateConfig = cfg;
     setKillSwitchStatus(cfg.kill_switch_engaged);
     setInfo('rg-max-drawdown', `${cfg.max_drawdown_pct}%`);
     setInfo('rg-max-position', `${cfg.max_position_size_quote} (quote)`);
@@ -1590,18 +1814,22 @@ async function renderRiskGateCard() {
 
 async function handleEngageKillSwitch() {
     const next = await riskGate.engageKillSwitch();
+    lastRiskGateConfig = next;
     setKillSwitchStatus(next.kill_switch_engaged);
     log('Kill switch ACIONADO — toda nova ordem (mesmo Paper) fica bloqueada até ser desativada manualmente.', 'warn');
     siriform.setSiriformState('warning', 'Kill switch acionado. Paper Trading bloqueado.');
     renderActivityLog();
+    refreshExecutiveSummary();
 }
 
 async function handleDisengageKillSwitch() {
     const next = await riskGate.disengageKillSwitch();
+    lastRiskGateConfig = next;
     setKillSwitchStatus(next.kill_switch_engaged);
     log('Kill switch DESACIONADO — novas ordens de Paper Trading voltam a ser avaliadas normalmente pelo Risk Gate.', 'ok');
     siriform.setSiriformState('success', 'Kill switch desacionado.');
     renderActivityLog();
+    refreshExecutiveSummary();
 }
 
 async function renderPaperTradingCard() {
@@ -1790,6 +2018,13 @@ function wireButtons() {
     document.getElementById('btn-add-home').addEventListener('click', handleAddHome);
     document.getElementById('btn-tb-update').addEventListener('click', handleUpdateLocalPack);
     document.getElementById('btn-tb-analyze').addEventListener('click', handleAnalyzeSystem);
+    // FOCO3 — os mesmos 4 botoes do topbar/quick-actions, espelhados no card
+    // Resumo Executivo para nao depender so do header sticky; reusam os
+    // mesmos handlers (nenhuma logica nova/duplicada).
+    if (els['ex-btn-prepare']) els['ex-btn-prepare'].addEventListener('click', handlePrepareCyborg);
+    if (els['ex-btn-analyze']) els['ex-btn-analyze'].addEventListener('click', handleAnalyzeSystem);
+    if (els['ex-btn-report']) els['ex-btn-report'].addEventListener('click', handleShowReport);
+    if (els['ex-btn-advanced']) els['ex-btn-advanced'].addEventListener('click', () => els['btn-tb-advanced'].click());
     const btnSwUpdateReload = document.getElementById('btn-sw-update-reload');
     if (btnSwUpdateReload) btnSwUpdateReload.addEventListener('click', () => window.location.reload());
     const btnSwUpdateDismiss = document.getElementById('btn-sw-update-dismiss');
@@ -1822,6 +2057,8 @@ function wireButtons() {
     if (els['btn-mv-snapshot']) els['btn-mv-snapshot'].addEventListener('click', handleManualSnapshot);
     if (els['btn-rg-engage']) els['btn-rg-engage'].addEventListener('click', handleEngageKillSwitch);
     if (els['btn-rg-disengage']) els['btn-rg-disengage'].addEventListener('click', handleDisengageKillSwitch);
+    if (els['btn-li-run']) els['btn-li-run'].addEventListener('click', handleRunLocalIntelligence);
+    if (els['btn-li-reflect']) els['btn-li-reflect'].addEventListener('click', handleRunReflection);
     if (els['btn-pt-open']) els['btn-pt-open'].addEventListener('click', handleOpenPaperPosition);
     if (els['btn-pt-clear']) els['btn-pt-clear'].addEventListener('click', handleClearPaperLedger);
     if (els['btn-br-export']) els['btn-br-export'].addEventListener('click', handleExportBackup);
@@ -1919,8 +2156,10 @@ async function boot() {
         caption: els['siriform-caption'],
         tag: els['siriform-state-tag'],
         mic: els['mic-button'],
+        micStatus: els['mic-status-label'],
     });
     metrics.initMetrics(els['siriform-avatar']);
+    wireMacroStateObserver();
     siriform.setSiriformState('thinking', 'Inicializando runtime local...');
     log('AR10 Cyborg 1.0 PRO (codinome interno AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1) — boot iniciado.', 'info');
     setStatus('st-llama-profile', currentProfile.toUpperCase());
@@ -1983,6 +2222,7 @@ async function boot() {
     } else if (vault.status !== 'READY' && !bootMessaged) {
         siriform.setSiriformState('idle', 'Instalação local ainda não preparada. Toque em "Preparar / Atualizar Cyborg neste iPad".');
     }
+    await refreshExecutiveSummary();
 }
 
 boot();
