@@ -2,7 +2,7 @@
 // Cache-first, offline-first. Tudo precache é same-origin; nenhuma rota
 // de rede sensivel (MEXC/MT5/API secret) existe para interceptar.
 
-const CACHE_VERSION = 'cyborg-ipad-runtime-v12';
+const CACHE_VERSION = 'cyborg-ipad-runtime-v13';
 
 // PRECACHE_URLS e' a fronteira same-origin do offline-first: precisa cobrir
 // exatamente o fecho transitivo de import() a partir de js/app.js (o unico
@@ -63,6 +63,7 @@ const PRECACHE_URLS = [
     './js/intelligence/reflection-engine.js',
     './js/intelligence/siriform-explainer.js',
     './js/intelligence/local-brain.js',
+    './js/intelligence/local-llm-adapter.js',
     './workers/quant-worker.js',
     './wasm/cyborg_quant_core.wasm',
     './data/btcusdt_replay.json',

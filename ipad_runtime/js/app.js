@@ -33,12 +33,13 @@ import { getSourceHealthReport } from './real-data/source-health.js';
 import { runLocalIntelligenceCycle } from './intelligence/local-brain.js';
 import { buildAndRecordReflectionReport } from './intelligence/reflection-engine.js';
 import { explainReflectionReport } from './intelligence/siriform-explainer.js';
+import { resolveActiveLlmTier } from './intelligence/local-llm-adapter.js';
 
 const els = {};
 ['st-pwa', 'st-sw', 'st-cache', 'st-idb', 'st-opfs', 'st-webcrypto', 'st-wasm', 'st-workers',
     'st-webgpu', 'st-webgl', 'st-webllm', 'st-transformers', 'st-onnx', 'st-replay', 'st-vault', 'st-mode',
     'st-voice', 'st-speech-rec', 'st-speech-syn', 'st-mic-perm',
-    'st-llama-layer', 'st-llama-profile', 'st-llama-runtime', 'st-llama-webgpu',
+    'st-llama-layer', 'st-llama-profile', 'st-llama-runtime', 'st-llama-webgpu', 'st-llm-adapter-tier',
     'console-log', 'telemetry-latest', 'replay-canvas', 'replay-meta', 'import-input', 'home-modal', 'standalone-state',
     'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'macro-state-chip', 'mic-button', 'mic-status-label', 'engine-meta', 'analysis-frame-grid',
     'vault-meta', 'vault-hashes', 'profile-hint',
@@ -228,6 +229,10 @@ function refreshLlamaStatus(f) {
     setStatus('st-llama-layer', 'FUTURE');
     setStatus('st-llama-runtime', 'FUTURE');
     setStatus('st-llama-webgpu', f.webgpu === 'OK' ? 'AVAILABLE' : 'UNAVAILABLE');
+    // modelInstalled e' sempre false nesta versao: nenhum fluxo de download
+    // de modelo existe ainda (ver pack/manifest.models.json > blocking_reason).
+    const llmTier = resolveActiveLlmTier(f, false);
+    setStatus('st-llm-adapter-tier', llmTier.active_tier);
 }
 
 async function refreshVoiceStatus() {

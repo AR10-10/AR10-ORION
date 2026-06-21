@@ -194,8 +194,9 @@
       <div class="status-row"><span class="label">WebLLM/Llama</span><span class="value v-pending" id="st-webllm">…</span></div>
       <div class="status-row"><span class="label">Transformers</span><span class="value v-pending" id="st-transformers">…</span></div>
       <div class="status-row"><span class="label">ONNX</span><span class="value v-pending" id="st-onnx">…</span></div>
+      <div class="status-row"><span class="label">Local LLM Adapter — Camada Ativa</span><span class="value v-pending" id="st-llm-adapter-tier">…</span></div>
     </div>
-    <p class="engine-meta">Roadmap declarado em <code>pack/manifest.models.json</code> e <code>docs/META_LLAMA_WEBLLM_ROUTE.md</code> — nenhum modelo embutido nesta versão, nenhum "fake installed". Meta Llama nunca executa ordens; só explica, resume e interpreta comandos em texto/voz dentro do READ_ONLY / FAIL_CLOSED.</p>
+    <p class="engine-meta">Roadmap declarado em <code>pack/manifest.models.json</code> e <code>docs/META_LLAMA_WEBLLM_ROUTE.md</code> — nenhum modelo embutido nesta versão, nenhum "fake installed". Meta Llama nunca executa ordens; só explica, resume e interpreta comandos em texto/voz dentro do READ_ONLY / FAIL_CLOSED. "Camada Ativa" é resolvida em tempo real por <code>js/intelligence/local-llm-adapter.js</code> a partir do fallback_chain declarado — hoje sempre <code>FALLBACK_TEXT_ONLY</code> porque nenhum fluxo de download de modelo existe ainda, então as respostas vêm das frases pré-definidas do Siriform.</p>
   </section>
 
   <section class="card replay-wrap" id="replay-section">
