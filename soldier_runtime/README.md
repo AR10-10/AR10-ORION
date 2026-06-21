@@ -51,15 +51,22 @@ Commander já entende" e "o que o Soldier inventou sozinho".
 
 ```
 soldier_runtime/
-├── README.md       este arquivo
-└── src/
-    ├── types.ts     contrato de tipos (Event/Command/StateSync/Status) — só tipos, zero lógica
-    └── index.ts      esqueleto de entrypoint — NOT_DEPLOYED, nunca importado, nunca executado
+├── README.md             este arquivo
+├── src/
+│   ├── types.ts          contrato de tipos (Event/Command/StateSync/Status) — só tipos, zero lógica
+│   └── index.ts           esqueleto de entrypoint — NOT_DEPLOYED, nunca importado, nunca executado
+├── windows/               host Windows do Local Soldier (NOT_DEPLOYED) — ver windows/README.md
+├── domain-tunnel/         Domain Tunnel Layer entre Commander e Soldier (NOT_ACTIVE) — ver domain-tunnel/README.md
+├── safari-edge-layer/     hints de contexto não-autoritativos via Safari (NOT_WIRED) — ver safari-edge-layer/README.md
+└── telegram-aux/          notificação outbound-only no Telegram (NOT_CONNECTED) — ver telegram-aux/README.md
 ```
 
-Nenhum dos dois arquivos `.ts` é compilado, testado ou executado neste
-repositório hoje. Não há `tsconfig.json` aqui de propósito — adicionar um
-seria sinalizar "isto faz parte do build", o que ainda não é verdade.
+Nenhum arquivo `.ts` de nenhuma destas subpastas é compilado, testado ou
+executado neste repositório hoje. Não há `tsconfig.json` em nenhuma delas
+de propósito — adicionar um seria sinalizar "isto faz parte do build", o
+que ainda não é verdade. Todas seguem a mesma garantia desta pasta: sem
+`package.json`, sem build, sem import por `ipad_runtime/`, sem presença em
+`.github/workflows/deploy-ipad-pwa.yml`.
 
 ## O que falta para isto deixar de ser scaffold (Tier 3 — não iniciado)
 
