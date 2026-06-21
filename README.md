@@ -1,4 +1,4 @@
-# AR10 Cyborg 2.0 — iPad One-Tap Cloud Runtime
+# AR10 Cyborg 1.0 PRO — iPad One-Tap Cloud Runtime
 
 Linha ativa de desenvolvimento do projeto AR10. PWA standalone, 100%
 local-first, pensado para abrir direto no Safari do iPad via HTTPS — sem
@@ -27,7 +27,7 @@ O repositório também contém o esqueleto original do **AR10 ORION V5.0**:
 um organismo agêntico com Cockpit UI "Ciborgue" servido por um host Python
 local + Túnel Reverso (importado na PR #1). Este código permanece no
 repositório como referência — **a evolução do projeto a partir de agora é
-exclusivamente o AR10 Cyborg 2.0 acima**, não este organismo.
+exclusivamente o AR10 Cyborg 1.0 PRO acima**, não este organismo.
 
 <details>
 <summary>Instruções do organismo Python V5.0 (legado — expandir se precisar rodar localmente)</summary>

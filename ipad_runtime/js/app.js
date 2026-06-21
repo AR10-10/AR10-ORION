@@ -69,9 +69,9 @@ function log(msg, level = 'dim') {
 }
 
 function classFor(value) {
-    if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'INSTALADO' || value === 'ATUALIZADO' || value === 'READY' || value === 'AVAILABLE' || value === 'GRANTED') return 'v-ok';
-    if (value === 'FAIL' || value === 'MISSING' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED' || value === 'AUSENTE' || value === 'CORROMPIDO' || value === 'REINSTALAÇÃO NECESSÁRIA' || value === 'BLOQUEADO POR SEGURANÇA') return 'v-fail';
-    if (value === 'FUTURE' || value === 'LIGHT' || value === 'BALANCED' || value === 'HEAVY') return 'v-info';
+    if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'INSTALADO' || value === 'ATUALIZADO' || value === 'READY' || value === 'AVAILABLE' || value === 'GRANTED' || value === 'DISPONÍVEL NESTA SESSÃO' || value === 'RECOVERED' || value === 'RECUPERADO' || value === 'ACTIVE_READ_ONLY') return 'v-ok';
+    if (value === 'FAIL' || value === 'MISSING' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED' || value === 'AUSENTE' || value === 'CORROMPIDO' || value === 'REINSTALAÇÃO NECESSÁRIA' || value === 'BLOQUEADO POR SEGURANÇA' || value === 'FAILED' || value === 'BLOCKED') return 'v-fail';
+    if (value === 'FUTURE' || value === 'LIGHT' || value === 'BALANCED' || value === 'HEAVY' || value === 'PARTIAL' || value === 'PARCIAL') return 'v-info';
     return 'v-limited'; // DESATUALIZADO/LIMITADO caem aqui de proposito — else aberto, sem 6a classe
 }
 
@@ -241,12 +241,14 @@ async function refreshVaultLocalPanel(vault) {
 }
 
 // Fase 6 — política de dados de mercado. O replay sintético é só diagnóstico
-// técnico; análise de mercado REAL exige fonte pública/somente-leitura. Como
-// nenhum conector real está habilitado nesta versão, o estado honesto da
-// análise real é DADOS INSUFICIENTES (NO_FAKE_DATA), nunca um número inventado.
+// técnico; análise de mercado REAL exige fonte pública/somente-leitura. O
+// estado é recalculado a partir do registry real (nunca hardcoded) — se uma
+// sonda real desta sessão chegou a ACTIVE_READ_ONLY, o painel mostra
+// DISPONÍVEL; senão o estado honesto é DADOS INSUFICIENTES (NO_FAKE_DATA).
 function refreshDataPolicyPanel() {
-    const rm = dataPolicy.realMarketAnalysisStatus();
-    setStatus('dp-realmode', rm.status);   // 'DADOS INSUFICIENTES' → v-limited (else aberto)
+    const active = realDataRegistry.getActiveReadOnlySources();
+    const rm = dataPolicy.realMarketAnalysisStatus(active);
+    setStatus('dp-realmode', rm.status);
     setStatus('dp-analysis', rm.status);
 }
 
@@ -554,6 +556,7 @@ async function handleTestRealSources() {
         });
         for (const r of results) await persistProbeResult(r);
         renderConnectorGrid();
+        refreshDataPolicyPanel();
 
         const active = results.find((r) => r.state === 'ACTIVE_READ_ONLY');
         if (active) {
@@ -598,6 +601,7 @@ async function handleRefreshRealData() {
             }
         }
         renderConnectorGrid();
+        refreshDataPolicyPanel();
         renderEvidence(activeRealEvidence);
         refreshHistoricalNotes();
         log('Dados reais atualizados a partir da fonte ativa.', 'ok');
@@ -1129,7 +1133,10 @@ async function handleExportReport() {
         '',
         '## Política de Dados',
         '- Replay BTC/USDT: SYNTHETIC_OFFLINE_SAMPLE — teste técnico offline, não usar para decisão de mercado.',
-        `- Análise de mercado real: ${dataPolicy.realMarketAnalysisStatus().status} (nenhuma fonte pública/somente-leitura conectada nesta versão).`,
+        (() => {
+            const rm = dataPolicy.realMarketAnalysisStatus(realDataRegistry.getActiveReadOnlySources());
+            return `- Análise de mercado real: ${rm.status} (${rm.reason})`;
+        })(),
         '',
         '> Este relatório não contém segredo, chave de API, credencial de corretora ou dado de conta real.',
         '',
@@ -1480,6 +1487,7 @@ function wireButtons() {
             });
             await persistProbeResult(result);
             renderConnectorGrid();
+            refreshDataPolicyPanel();
             if (result.state === 'ACTIVE_READ_ONLY') {
                 sessionHasRealProbe = true;
                 rehydratedActiveSourceId = null;
@@ -1508,7 +1516,7 @@ async function boot() {
     });
     metrics.initMetrics(els['siriform-avatar']);
     siriform.setSiriformState('thinking', 'Inicializando runtime local...');
-    log('AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1 — boot iniciado.', 'info');
+    log('AR10 Cyborg 1.0 PRO (codinome interno AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1) — boot iniciado.', 'info');
     setStatus('st-llama-profile', currentProfile.toUpperCase());
     wireButtons();
     await registerServiceWorker();

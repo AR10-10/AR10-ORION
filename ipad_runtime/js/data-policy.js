@@ -44,14 +44,25 @@ export const MARKET_DATA_POLICY = {
     execution: 'DISABLED_BY_POLICY',
 };
 
-/** Estado honesto da análise de mercado REAL nesta versão.
- *  Nenhum conector público/somente-leitura está habilitado neste build
- *  (todos são FUTURE/scaffolding em connector-registry.default.json), então
- *  a resposta verdadeira é DADOS INSUFICIENTES — nunca um número inventado. */
-export function realMarketAnalysisStatus() {
+/** Estado honesto da análise de mercado REAL nesta sessão.
+ *  `activeSources` deve vir de realDataRegistry.getActiveReadOnlySources() —
+ *  nunca assumido. Enquanto nenhuma sonda real desta sessão tiver chegado a
+ *  ACTIVE_READ_ONLY, a resposta verdadeira é DADOS INSUFICIENTES — nunca um
+ *  número inventado. A partir da mission SAFE_REAL_DATA_LAYER_RUNTIME_PROBE_V1
+ *  isso pode deixar de ser sempre verdade (4 conectores têm sonda real), então
+ *  este estado é sempre recalculado a partir do registry, nunca hardcoded. */
+export function realMarketAnalysisStatus(activeSources = []) {
+    if (activeSources.length > 0) {
+        const names = activeSources.map((s) => s.name || s.connector_id).join(', ');
+        return {
+            available: true,
+            status: 'DISPONÍVEL NESTA SESSÃO',
+            reason: `Fonte(s) pública(s)/somente-leitura validada(s) por sonda real nesta sessão: ${names}.`,
+        };
+    }
     return {
         available: false,
         status: 'DADOS INSUFICIENTES',
-        reason: 'Nenhuma fonte pública/somente-leitura conectada nesta versão (conectores são FUTURE).',
+        reason: 'Nenhuma fonte pública/somente-leitura validada por sonda real nesta sessão ainda — toque em "Testar fontes reais".',
     };
 }

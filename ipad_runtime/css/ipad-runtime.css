@@ -110,6 +110,18 @@ a { color: var(--sys-cyan); }
     text-shadow: 0 0 8px rgba(0, 242, 255, 0.35);
     white-space: nowrap;
 }
+.tb-version-badge {
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--bg-void);
+    background: var(--sys-cyan);
+    border-radius: 8px;
+    padding: 2px 6px;
+    white-space: nowrap;
+    vertical-align: middle;
+}
 .tb-status {
     font-size: clamp(0.64rem, 1.5vw, 0.76rem);
     color: var(--text-dim);

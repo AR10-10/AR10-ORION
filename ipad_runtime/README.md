@@ -1,10 +1,10 @@
-# AR10 Cyborg 2.0 — iPad One-Tap Cloud Runtime
+# AR10 Cyborg 1.0 PRO — iPad One-Tap Cloud Runtime
 
 *Codinome interno: `AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1` · sub-produto iPad/PWA
 dentro do monorepo `AR10-ORION` (ver `../README.md` para a visão geral do
 organismo AR10 ORION V5.0).*
 
-PWA iPad-first do AR10 Cyborg 2.0. Abre direto no Safari do iPad via HTTPS,
+PWA iPad-first do AR10 Cyborg 1.0 PRO. Abre direto no Safari do iPad via HTTPS,
 sem depender de Mac Mini, MacBook, servidor local, terminal ou ZIP como
 fluxo principal. **READ_ONLY / FAIL_CLOSED sempre. Sem execução real, sem
 API secret, sem ordem, sem live trading.**

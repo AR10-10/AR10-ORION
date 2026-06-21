@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "AR10 Cyborg 2.0 — iPad One-Tap Cloud Runtime",
-  "short_name": "Cyborg iPad",
-  "description": "Nebula Core / Siriform Avatar — Safari Local Runtime do AR10 Cyborg 2.0. Execucao local-first, READ_ONLY / FAIL_CLOSED, sem trading real.",
+  "name": "AR10 Cyborg 1.0 PRO — iPad One-Tap Cloud Runtime",
+  "short_name": "Cyborg PRO",
+  "description": "Nebula Core / Siriform Avatar — Safari Local Runtime do AR10 Cyborg 1.0 PRO. Execucao local-first, READ_ONLY / FAIL_CLOSED, sem trading real.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
