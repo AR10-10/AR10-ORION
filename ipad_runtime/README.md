@@ -87,6 +87,10 @@ Atualizar, Analisar Sistema, Relatório, Modo Avançado — espelhados aqui) →
 Safari/iPadOS) → `commander-soldier-panel` (Commander = este iPad, sempre `ONLINE`;
 Soldier headless 24/7 ainda `NOT_DEPLOYED` — só existe como contrato de
 tipos em `soldier_runtime/`, nunca instalado nem executado) →
+`safari-edge-layer-panel` (Safari Assisted Edge Layer — telemetria local
+real de sessão/render deste iPad/Safari: latência, frames perdidos, foco
+de tela, estado de conexão/armazenamento; nunca decide trade, nunca
+substitui o Soldier, `is_authoritative` sempre `FALSE`) →
 `voice-status-panel` (estado do microfone/Siriform Voice Layer) →
 `runtime-status-panel` → `feature-detect-panel` →
 `quant-engine-widget` → `ai-models-panel` (WebLLM/Transformers/ONNX,
@@ -123,6 +127,9 @@ com drawdown acima do limite ou fonte de dados abaixo da qualidade mínima)
 fonte ativa, roteado pelo Risk Gate, nunca envia ordem a uma exchange) →
 `live-status-panel` (explica por que Live Trading é `LIVE_LOCKED` por
 estrutura — sem rota de execução real no código, não uma flag) →
+`telegram-aux-panel` (Telegram AUX/Quarantine — política declarada desta
+fase: token `NOT_CONFIGURED`, webhook `DISABLED`, execução `FORBIDDEN`,
+sem rede/bot real; espelha `soldier_runtime/telegram-aux/types.ts`) →
 `vault-evidence-panel` (Vault/Evidence — reabre e re-verifica o SHA-256 a
 cada boot) → `vault-local-panel` (Vault Local do iPad — 16 campos de
 status; com auto-reparo seguro: reindexa do armazenamento ou reinstala,
