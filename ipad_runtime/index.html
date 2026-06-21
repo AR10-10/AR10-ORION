@@ -82,6 +82,8 @@
       <span class="law-badge is-ok">Execution Lock: ACTIVE</span>
       <span class="law-badge is-blocked">Private Keys: DISABLED</span>
       <span class="law-badge is-blocked">Live Trading: BLOCKED</span>
+      <span class="law-badge">Safari Edge: LOCAL_AUX</span>
+      <span class="law-badge">Telegram: PLANNED_AUX</span>
     </div>
   </section>
 
@@ -139,6 +141,26 @@
       <div class="status-row"><span class="label">Sync Bridge</span><span class="value v-pending" id="cs-sync-bridge-status">…</span></div>
     </div>
     <p class="onboarding-hint">Commander é este PWA/iPad — sempre ONLINE enquanto a aba estiver aberta. Soldier é um processo headless 24/7 fora do navegador, ainda não implantado nesta versão: existe só como contrato de tipos em <code>soldier_runtime/</code>, nunca instalado nem executado. Sync Bridge é o canal entre os dois — sem Soldier real, não há o que sincronizar.</p>
+  </section>
+
+  <section class="card safari-edge-layer-panel" id="safari-edge-layer-panel" tabindex="0">
+    <h2>Safari Assisted Edge Layer <span class="step">LOCAL_AUX — NÃO AUTORITATIVO</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Edge Status</span><span class="value v-pending" id="se-edge-status">…</span></div>
+      <div class="status-row"><span class="label">Device</span><span class="value v-pending" id="se-device">…</span></div>
+      <div class="status-row"><span class="label">Session ID</span><span class="value v-pending" id="se-session-id">…</span></div>
+      <div class="status-row"><span class="label">Last Sequence Seen</span><span class="value v-pending" id="se-last-sequence">…</span></div>
+      <div class="status-row"><span class="label">Render Latency</span><span class="value v-pending" id="se-render-latency">…</span></div>
+      <div class="status-row"><span class="label">Dropped Frames</span><span class="value v-pending" id="se-dropped-frames">…</span></div>
+      <div class="status-row"><span class="label">Visible Panels</span><span class="value v-pending" id="se-visible-panels">…</span></div>
+      <div class="status-row"><span class="label">Focused Symbol</span><span class="value v-pending" id="se-focused-symbol">…</span></div>
+      <div class="status-row"><span class="label">Focused Timeframe</span><span class="value v-pending" id="se-focused-timeframe">…</span></div>
+      <div class="status-row"><span class="label">Connection State</span><span class="value v-pending" id="se-connection-state">…</span></div>
+      <div class="status-row"><span class="label">Storage Mirror</span><span class="value v-pending" id="se-storage-mirror">…</span></div>
+      <div class="status-row"><span class="label">Is Authoritative</span><span class="value v-pending" id="se-is-authoritative">…</span></div>
+      <div class="status-row"><span class="label">Soldier Validation</span><span class="value v-pending" id="se-soldier-validation">…</span></div>
+    </div>
+    <p class="onboarding-hint">Safari Edge é uma camada visual/contextual deste iPad/Safari — latência de render, frames perdidos, foco de tela e estado de sessão locais. Nunca decide trade, nunca executa ordem, nunca substitui o Soldier: <code>is_authoritative</code> é sempre <b>FALSE</b>. Sem Soldier real implantado, toda leitura aqui fica como contexto local não validado (toque no card para o resumo completo).</p>
   </section>
 
   <section class="card" id="voice-status-panel">
@@ -426,6 +448,23 @@
     </div>
     <p class="diagnostic-note" id="ls-reasons">—</p>
     <p class="vault-meta" id="ls-unlock-requires">—</p>
+  </section>
+
+  <section class="card telegram-aux-panel" id="telegram-aux-panel" tabindex="0">
+    <h2>Telegram AUX / Quarantine <span class="future-badge">PLANNED_AUX</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Telegram Layer</span><span class="value v-pending" id="ta-telegram-layer">…</span></div>
+      <div class="status-row"><span class="label">Bot Token</span><span class="value v-pending" id="ta-bot-token">…</span></div>
+      <div class="status-row"><span class="label">Webhook</span><span class="value v-pending" id="ta-webhook">…</span></div>
+      <div class="status-row"><span class="label">Live Execution</span><span class="value v-pending" id="ta-live-execution">…</span></div>
+      <div class="status-row"><span class="label">Signal Quarantine</span><span class="value v-pending" id="ta-signal-quarantine">…</span></div>
+      <div class="status-row"><span class="label">Source Trust</span><span class="value v-pending" id="ta-source-trust">…</span></div>
+      <div class="status-row"><span class="label">Allowed Commands</span><span class="value v-pending" id="ta-allowed-commands">…</span></div>
+      <div class="status-row"><span class="label">Risk Gate</span><span class="value v-pending" id="ta-risk-gate">…</span></div>
+      <div class="status-row"><span class="label">Event Ledger</span><span class="value v-pending" id="ta-event-ledger">…</span></div>
+      <div class="status-row"><span class="label">Is Authoritative</span><span class="value v-pending" id="ta-is-authoritative">…</span></div>
+    </div>
+    <p class="onboarding-hint">Telegram nesta versão é só um canal auxiliar de notificação planejado — nunca executa ordem, nunca manda comando, nunca vira fonte de verdade. Qualquer sinal futuro entraria em quarentena, seria rejeitado automaticamente sem stop loss, e precisaria de validação do Soldier e do Risk Gate antes de qualquer uso. Sem token, sem webhook, sem rede nesta fase (toque no card para o resumo completo).</p>
   </section>
 
   <section class="card vault-evidence-card" id="vault-evidence-panel">

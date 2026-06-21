@@ -34,6 +34,8 @@ import { runLocalIntelligenceCycle } from './intelligence/local-brain.js';
 import { buildAndRecordReflectionReport } from './intelligence/reflection-engine.js';
 import { explainReflectionReport } from './intelligence/siriform-explainer.js';
 import { resolveActiveLlmTier } from './intelligence/local-llm-adapter.js';
+import { getSafariEdgeStatusReport } from './edge/safari-edge-status.js';
+import { getTelegramAuxStatusReport } from './aux/telegram-aux-status.js';
 
 const els = {};
 ['st-pwa', 'st-sw', 'st-cache', 'st-idb', 'st-opfs', 'st-webcrypto', 'st-wasm', 'st-workers',
@@ -71,6 +73,11 @@ const els = {};
     'li-final-label', 'li-confidence', 'li-source-quality', 'li-volatility', 'li-trend', 'li-risk',
     'li-explanation', 'li-reflection-text', 'btn-li-run', 'btn-li-reflect',
     'status-modal', 'status-modal-title', 'status-modal-body', 'btn-status-modal-close',
+    'se-edge-status', 'se-device', 'se-session-id', 'se-last-sequence', 'se-render-latency',
+    'se-dropped-frames', 'se-visible-panels', 'se-focused-symbol', 'se-focused-timeframe',
+    'se-connection-state', 'se-storage-mirror', 'se-is-authoritative', 'se-soldier-validation',
+    'ta-telegram-layer', 'ta-bot-token', 'ta-webhook', 'ta-live-execution', 'ta-signal-quarantine',
+    'ta-source-trust', 'ta-allowed-commands', 'ta-risk-gate', 'ta-event-ledger', 'ta-is-authoritative',
 ].forEach((id) => { els[id] = document.getElementById(id); });
 
 const PROFILES = {
@@ -98,9 +105,9 @@ function log(msg, level = 'dim') {
 }
 
 function classFor(value) {
-    if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'INSTALADO' || value === 'ATUALIZADO' || value === 'READY' || value === 'AVAILABLE' || value === 'GRANTED' || value === 'DISPONÍVEL NESTA SESSÃO' || value === 'RECOVERED' || value === 'RECUPERADO' || value === 'ACTIVE_READ_ONLY' || value === 'ONLINE' || value === 'ALLOW' || value === 'CLEAN_BOOT' || value === 'FULLY_RECOVERED') return 'v-ok';
-    if (value === 'FAIL' || value === 'MISSING' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED' || value === 'AUSENTE' || value === 'CORROMPIDO' || value === 'REINSTALAÇÃO NECESSÁRIA' || value === 'BLOQUEADO POR SEGURANÇA' || value === 'FAILED' || value === 'BLOCKED' || value === 'LIVE_LOCKED' || value === 'BLOCK') return 'v-fail';
-    if (value === 'FUTURE' || value === 'LIGHT' || value === 'BALANCED' || value === 'HEAVY' || value === 'PARTIAL' || value === 'PARCIAL' || value === 'PARTIAL_RECOVERY' || value === 'PARTIAL_WITH_FAILURES') return 'v-info';
+    if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'INSTALADO' || value === 'ATUALIZADO' || value === 'READY' || value === 'AVAILABLE' || value === 'GRANTED' || value === 'DISPONÍVEL NESTA SESSÃO' || value === 'RECOVERED' || value === 'RECUPERADO' || value === 'ACTIVE_READ_ONLY' || value === 'ONLINE' || value === 'ALLOW' || value === 'CLEAN_BOOT' || value === 'FULLY_RECOVERED' || value === 'ACTIVE') return 'v-ok';
+    if (value === 'FAIL' || value === 'MISSING' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED' || value === 'AUSENTE' || value === 'CORROMPIDO' || value === 'REINSTALAÇÃO NECESSÁRIA' || value === 'BLOQUEADO POR SEGURANÇA' || value === 'FAILED' || value === 'BLOCKED' || value === 'LIVE_LOCKED' || value === 'BLOCK' || value === 'OFFLINE' || value === 'FORBIDDEN') return 'v-fail';
+    if (value === 'FUTURE' || value === 'LIGHT' || value === 'BALANCED' || value === 'HEAVY' || value === 'PARTIAL' || value === 'PARCIAL' || value === 'PARTIAL_RECOVERY' || value === 'PARTIAL_WITH_FAILURES' || value === 'DEGRADED' || value === 'PLANNED') return 'v-info';
     return 'v-limited'; // DESATUALIZADO/LIMITADO/NOT_DEPLOYED/NOT_CONNECTED caem aqui de proposito — else aberto, sem 6a classe
 }
 
@@ -206,6 +213,8 @@ let lastSourceHealthReport = null;
 let lastCommanderSoldierStatus = null;
 let lastLocalIntelligenceResult = null;
 let lastReflectionReport = null;
+let lastSafariEdgeStatus = null;
+let lastTelegramAuxStatus = null;
 
 async function refreshFeatureStatus() {
     const f = await feat.runAllFeatureDetections();
@@ -1675,6 +1684,55 @@ function renderCommanderSoldierCard() {
     setStatus('cs-sync-bridge-status', status.sync_bridge.status);
 }
 
+// Safari Edge: telemetria local real (rAF/visibility/storage backend),
+// nunca autoritativa — reler periodicamente porque latencia/frames/foco
+// mudam enquanto a aba fica aberta (unico card desta tela com refresh por
+// intervalo; todos os outros so atualizam em boot/acao do usuario porque
+// representam estado que so muda por evento, nao por tempo).
+async function renderSafariEdgeCard() {
+    const commanderSoldier = lastCommanderSoldierStatus || getCommanderSoldierStatus();
+    const backend = await storage.activeBackend();
+    const status = getSafariEdgeStatusReport({
+        soldierStatus: commanderSoldier.soldier.status,
+        lastSequenceSeen: eventBus.getRecentEvents(1)[0]?.seq,
+        focusedSymbol: lastRealAnalysisFrame?.asset,
+        focusedTimeframe: lastRealAnalysisFrame?.timeframe,
+        storageBackend: backend,
+    });
+    lastSafariEdgeStatus = status;
+    setStatus('se-edge-status', status.edge_status);
+    setStatus('se-device', status.device);
+    setStatus('se-session-id', status.session_id);
+    setStatus('se-last-sequence', status.last_sequence_seen);
+    setStatus('se-render-latency', status.render_latency_ms);
+    setStatus('se-dropped-frames', status.dropped_frames);
+    setStatus('se-visible-panels', status.visible_panels);
+    setStatus('se-focused-symbol', status.focused_symbol);
+    setStatus('se-focused-timeframe', status.focused_timeframe);
+    setStatus('se-connection-state', status.connection_state);
+    setStatus('se-storage-mirror', status.storage_mirror);
+    setStatus('se-is-authoritative', status.is_authoritative ? 'TRUE' : 'FALSE');
+    setStatus('se-soldier-validation', status.soldier_validation);
+}
+
+// Telegram AUX/Quarantine: politica declarada desta fase (token/webhook
+// desligados, execucao proibida) — constante, nao telemetria, por isso so
+// renderiza uma vez no boot, igual a Live Status/Risk Gate.
+function renderTelegramAuxCard() {
+    const status = getTelegramAuxStatusReport();
+    lastTelegramAuxStatus = status;
+    setStatus('ta-telegram-layer', status.telegram_layer);
+    setStatus('ta-bot-token', status.bot_token);
+    setStatus('ta-webhook', status.webhook);
+    setStatus('ta-live-execution', status.live_execution);
+    setStatus('ta-signal-quarantine', status.signal_quarantine);
+    setStatus('ta-source-trust', status.source_trust);
+    setStatus('ta-allowed-commands', status.allowed_commands);
+    setStatus('ta-risk-gate', status.risk_gate);
+    setStatus('ta-event-ledger', status.event_ledger);
+    setStatus('ta-is-authoritative', status.is_authoritative ? 'TRUE' : 'FALSE');
+}
+
 function activityLogRowClass(severity) {
     if (severity === 'FAIL') return 'al-fail';
     if (severity === 'CRITICAL') return 'al-critical';
@@ -1976,6 +2034,14 @@ const CUSTOM_CARD_SUMMARY = {
         const ls = getLiveStatus();
         return { title: 'Live Trading', body: ls.siriform_summary };
     },
+    'safari-edge-layer-panel': () => ({
+        title: 'Safari Assisted Edge Layer',
+        body: lastSafariEdgeStatus ? lastSafariEdgeStatus.siriform_summary : 'Safari Edge ainda não foi lido nesta sessão.',
+    }),
+    'telegram-aux-panel': () => ({
+        title: 'Telegram AUX / Quarantine',
+        body: lastTelegramAuxStatus ? lastTelegramAuxStatus.siriform_summary : 'Telegram AUX ainda não foi lido nesta sessão.',
+    }),
 };
 
 function openStatusModal(title, body) {
@@ -2196,6 +2262,9 @@ async function boot() {
     await renderRiskGateCard();
     await renderPaperTradingCard();
     renderLiveStatusCard();
+    renderTelegramAuxCard();
+    await renderSafariEdgeCard();
+    setInterval(renderSafariEdgeCard, 2000);
     wireStatusCardModal();
 
     // Auto-reparo no boot: SÓ quando algo já foi instalado antes (existe meta

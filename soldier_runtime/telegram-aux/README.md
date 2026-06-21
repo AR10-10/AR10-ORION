@@ -4,8 +4,19 @@ Codinome interno: `AR10_CYBORG_TELEGRAM_AUX_SCAFFOLD_V1`.
 
 **Status: `NOT_CONNECTED`.** Mesmas garantias dos demais scaffolds desta
 pasta: sem `package.json`, sem build, sem import por `ipad_runtime/`, sem
-presença em `.github/workflows/deploy-ipad-pwa.yml`. Varredura confirmada:
-zero ocorrências de "telegram" em qualquer arquivo de `ipad_runtime/` hoje.
+presença em `.github/workflows/deploy-ipad-pwa.yml`. Nenhum bot, token,
+webhook ou transporte HTTP real para a API do Telegram existe hoje neste
+contrato (`TelegramAuxMessage`/`TelegramAuxConfig`).
+
+**Não confundir com:** `ipad_runtime/js/aux/telegram-aux-status.js` é um
+módulo real, diferente e já ativo no app (card "Telegram AUX / Quarantine"
+no Modo avançado) — ele só exibe a política declarada desta fase (token
+`NOT_CONFIGURED`, webhook `DISABLED`, execução `FORBIDDEN`); não abre rede,
+não lê token, não aceita comando, e a fila de quarentena que ele mostra
+está sempre vazia porque nenhum produtor de sinal existe ainda. Os dois são
+`is_authoritative: false`, mas são contratos distintos: este arquivo
+(`TelegramAuxMessage`/`TelegramAuxConfig`/bot real) continua `NOT_CONNECTED`
+— nenhum bot, token ou mensagem real existe ainda em nenhum dos dois.
 
 ## O que isto é (e o que isto nunca pode ser)
 

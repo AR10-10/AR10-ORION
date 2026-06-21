@@ -5,7 +5,16 @@ Codinome interno: `AR10_CYBORG_SAFARI_EDGE_LAYER_SCAFFOLD_V1`.
 **Status: `NOT_WIRED`.** Mesmas garantias dos demais scaffolds desta pasta:
 sem `package.json`, sem build, sem import por `ipad_runtime/`, sem presença
 em `.github/workflows/deploy-ipad-pwa.yml`. Nenhum hint, captura ou UI deste
-contrato existe hoje no app real.
+contrato (`EdgeHint` — contexto colado pelo usuário) existe hoje no app
+real.
+
+**Não confundir com:** `ipad_runtime/js/edge/safari-edge-status.js` é um
+módulo real, diferente e já ativo no app (card "Safari Assisted Edge
+Layer" no Modo avançado) — telemetria de sessão/render deste iPad/Safari
+(latência, frames, foco de tela), não captura de texto colado pelo usuário.
+Os dois são `is_authoritative: false` e nunca alimentam risk-gate/execução,
+mas são contratos distintos: este arquivo (`EdgeHint`) continua
+`NOT_WIRED` — nenhuma UI de captura de contexto existe ainda.
 
 ## O que isto é (e o que não é)
 
