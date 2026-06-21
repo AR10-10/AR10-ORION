@@ -18,6 +18,18 @@ import { buildResearchEngineFrame } from './research/research-engine.js';
 import * as persistentState from './memory/persistent-state.js';
 import * as evidenceLedger from './memory/evidence-ledger.js';
 import { rehydrateSession } from './memory/session-resume.js';
+import * as eventBus from './core/event-bus.js';
+import * as eventLog from './memory/event-log.js';
+import { getCommanderSoldierStatus } from './core/commander-soldier.js';
+import * as dataModeLabels from './core/data-mode-labels.js';
+import * as snapshotManager from './memory/snapshot-manager.js';
+import * as recoveryReport from './memory/recovery-report.js';
+import * as hydrationReport from './memory/hydration-report.js';
+import * as backupRestorePack from './memory/backup-restore-pack.js';
+import * as riskGate from './trading/risk-gate.js';
+import * as paperTrading from './trading/paper-trading.js';
+import { getLiveStatus } from './trading/live-status.js';
+import { getSourceHealthReport } from './real-data/source-health.js';
 
 const els = {};
 ['st-pwa', 'st-sw', 'st-cache', 'st-idb', 'st-opfs', 'st-webcrypto', 'st-wasm', 'st-workers',
@@ -42,6 +54,15 @@ const els = {};
     'topbar-status', 'advanced-section', 'btn-tb-advanced',
     'ev-command-routing', 'ev-security-posture', 'ev-data-policy', 'ev-fail-closed', 'ev-siriform-states', 'ev-summary',
     'mx-load-time', 'mx-prep-time', 'mx-cache', 'mx-storage', 'mx-siriform-events', 'mx-diag-fails', 'mx-eval-fails', 'mx-reduced-motion',
+    'cs-commander-status', 'cs-soldier-status', 'cs-sync-bridge-status',
+    'mv-event-log-count', 'mv-snapshot-status', 'mv-last-good-status', 'mv-recovery-status', 'mv-hydration-status', 'btn-mv-snapshot',
+    'sh-grid', 'sh-active-count', 'sh-total-count',
+    'rg-kill-switch', 'rg-max-drawdown', 'rg-max-position', 'rg-require-stop', 'rg-min-quality', 'btn-rg-engage', 'btn-rg-disengage',
+    'pt-mode', 'pt-open-positions', 'pt-closed-trades', 'pt-realized-pnl', 'pt-drawdown', 'pt-positions-grid', 'btn-pt-open', 'btn-pt-clear',
+    'ls-mode', 'ls-status', 'ls-reasons', 'ls-unlock-requires',
+    'br-last-backup', 'btn-br-export', 'btn-br-import', 'br-import-input',
+    'al-list', 'al-count', 'btn-al-refresh',
+    'status-modal', 'status-modal-title', 'status-modal-body', 'btn-status-modal-close',
 ].forEach((id) => { els[id] = document.getElementById(id); });
 
 const PROFILES = {
@@ -69,10 +90,10 @@ function log(msg, level = 'dim') {
 }
 
 function classFor(value) {
-    if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'INSTALADO' || value === 'ATUALIZADO' || value === 'READY' || value === 'AVAILABLE' || value === 'GRANTED' || value === 'DISPONÍVEL NESTA SESSÃO' || value === 'RECOVERED' || value === 'RECUPERADO' || value === 'ACTIVE_READ_ONLY') return 'v-ok';
-    if (value === 'FAIL' || value === 'MISSING' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED' || value === 'AUSENTE' || value === 'CORROMPIDO' || value === 'REINSTALAÇÃO NECESSÁRIA' || value === 'BLOQUEADO POR SEGURANÇA' || value === 'FAILED' || value === 'BLOCKED') return 'v-fail';
-    if (value === 'FUTURE' || value === 'LIGHT' || value === 'BALANCED' || value === 'HEAVY' || value === 'PARTIAL' || value === 'PARCIAL') return 'v-info';
-    return 'v-limited'; // DESATUALIZADO/LIMITADO caem aqui de proposito — else aberto, sem 6a classe
+    if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'INSTALADO' || value === 'ATUALIZADO' || value === 'READY' || value === 'AVAILABLE' || value === 'GRANTED' || value === 'DISPONÍVEL NESTA SESSÃO' || value === 'RECOVERED' || value === 'RECUPERADO' || value === 'ACTIVE_READ_ONLY' || value === 'ONLINE' || value === 'ALLOW' || value === 'CLEAN_BOOT' || value === 'FULLY_RECOVERED') return 'v-ok';
+    if (value === 'FAIL' || value === 'MISSING' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED' || value === 'AUSENTE' || value === 'CORROMPIDO' || value === 'REINSTALAÇÃO NECESSÁRIA' || value === 'BLOQUEADO POR SEGURANÇA' || value === 'FAILED' || value === 'BLOCKED' || value === 'LIVE_LOCKED' || value === 'BLOCK') return 'v-fail';
+    if (value === 'FUTURE' || value === 'LIGHT' || value === 'BALANCED' || value === 'HEAVY' || value === 'PARTIAL' || value === 'PARCIAL' || value === 'PARTIAL_RECOVERY' || value === 'PARTIAL_WITH_FAILURES') return 'v-info';
+    return 'v-limited'; // DESATUALIZADO/LIMITADO/NOT_DEPLOYED/NOT_CONNECTED caem aqui de proposito — else aberto, sem 6a classe
 }
 
 function setStatus(id, value) {
@@ -139,6 +160,9 @@ let lastResearchEngineFrame = null;
 let sessionHasRealProbe = false;
 let rehydratedPreviousSession = false;
 let rehydratedActiveSourceId = null;
+let lastHydrationReport = null;
+let lastSourceHealthReport = null;
+let lastCommanderSoldierStatus = null;
 
 async function refreshFeatureStatus() {
     const f = await feat.runAllFeatureDetections();
@@ -423,8 +447,9 @@ function refreshHistoricalNotes() {
 
 function classForConnectorState(state) {
     if (state === 'ACTIVE_READ_ONLY') return 'v-ok';
-    if (state === 'PLANNED' || state === 'PROBING') return 'v-pending';
-    if (state === 'DEGRADED' || state === 'DADOS_INSUFICIENTES') return 'v-limited';
+    if (state === 'PLANNED' || state === 'PROBING' || state === 'REQUIRES_API_KEY') return 'v-pending';
+    if (state === 'DEGRADED' || state === 'DADOS_INSUFICIENTES' || state === 'UNSUPPORTED_ON_IPAD') return 'v-limited';
+    if (state === 'FUTURE' || state === 'NAO_LISTADO_NO_ROTEIRO_ESTATICO') return 'v-info';
     return 'v-fail'; // BLOCKED_BY_CORS / BLOCKED_BY_SCHEMA / BLOCKED_BY_POLICY
 }
 
@@ -557,6 +582,7 @@ async function handleTestRealSources() {
         for (const r of results) await persistProbeResult(r);
         renderConnectorGrid();
         refreshDataPolicyPanel();
+        await renderSourceHealthCard();
 
         const active = results.find((r) => r.state === 'ACTIVE_READ_ONLY');
         if (active) {
@@ -602,6 +628,7 @@ async function handleRefreshRealData() {
         }
         renderConnectorGrid();
         refreshDataPolicyPanel();
+        await renderSourceHealthCard();
         renderEvidence(activeRealEvidence);
         refreshHistoricalNotes();
         log('Dados reais atualizados a partir da fonte ativa.', 'ok');
@@ -802,8 +829,10 @@ async function bootRehydrateSession() {
         if (resume.has_previous_session) {
             log(`Sessão anterior do Real Data Layer restaurada da memória local: ${resume.ledger.length} evidência(s) no ledger.`, 'info');
         }
+        return resume;
     } catch (err) {
         log(`Falha ao reidratar memória do Real Data Layer: ${err.message}`, 'warn');
+        return null;
     }
 }
 
@@ -1405,6 +1434,345 @@ function wireAdvancedToggle() {
     });
 }
 
+// Mission 2 — Commander/Soldier, Memória Viva, Source Health, Risk Gate,
+// Paper Trading, Live Status, Backup/Recovery. Cada render* le um modulo
+// backend real (sem nenhum numero inventado em app.js); cada handle* aciona
+// uma acao real (Risk Gate, Paper Trading, Snapshot Manager, Backup Pack).
+
+function renderCommanderSoldierCard() {
+    const status = getCommanderSoldierStatus();
+    lastCommanderSoldierStatus = status;
+    setStatus('cs-commander-status', status.commander.status);
+    setStatus('cs-soldier-status', status.soldier.status);
+    setStatus('cs-sync-bridge-status', status.sync_bridge.status);
+}
+
+function activityLogRowClass(severity) {
+    if (severity === 'FAIL') return 'al-fail';
+    if (severity === 'CRITICAL') return 'al-critical';
+    if (severity === 'WARN') return 'al-warn';
+    if (severity === 'OK') return 'al-ok';
+    return '';
+}
+
+async function renderActivityLog() {
+    const entries = await eventLog.getRecentPersisted(50);
+    setInfo('al-count', `${entries.length} evento(s) persistido(s) (até 50 mais recentes)`);
+    els['al-list'].innerHTML = entries.length
+        ? entries.map((e) => `
+            <div class="activity-log-row ${activityLogRowClass(e.severity)}">
+                <span class="al-time">${e.at.slice(11, 19)}</span>
+                <span class="al-type">${e.event_type}</span>
+                <span class="al-severity">${e.severity}</span>
+            </div>
+        `).join('')
+        : '<span class="analysis-frame-empty">Nenhum evento persistido ainda nesta instalação.</span>';
+}
+
+// Boot real da Memória Viva: confere a integridade do snapshot da sessao
+// anterior, tira um snapshot novo do estado de fato reidratado, promove a
+// Last Good State so quando a integridade bate, e persiste um RecoveryReport
+// que reflete o resultado real — nunca um status decorativo fixo.
+async function runMemoryAliveBootSequence(resume) {
+    const sections = [
+        { name: 'Real Data Layer (Evidence Ledger)', hasData: Boolean(resume && resume.ledger && resume.ledger.length > 0), hasError: !resume, count: resume ? resume.ledger.length : 0 },
+        { name: 'Fonte ativa anterior', hasData: Boolean(resume && resume.state && resume.state.activeSource), hasError: !resume },
+        { name: 'AnalysisFrame anterior', hasData: Boolean(resume && resume.state && resume.state.lastAnalysisFrame), hasError: !resume },
+    ];
+
+    const previousSnapshot = await snapshotManager.getCurrentSnapshot();
+    const previousIntact = previousSnapshot ? await snapshotManager.verifySnapshotIntegrity(previousSnapshot) : null;
+    sections.push({ name: 'Snapshot anterior (integridade)', hasData: previousIntact === true, hasError: previousIntact === false });
+
+    const recoveryHistory = await recoveryReport.getRecoveryHistory();
+    sections.push({ name: 'Histórico de Recovery Reports', hasData: recoveryHistory.length > 0, count: recoveryHistory.length });
+
+    const report = hydrationReport.buildHydrationReport(sections);
+    lastHydrationReport = report;
+
+    const newSnapshot = await snapshotManager.takeSnapshot(resume ? resume.state : {});
+
+    let status = 'CLEAN_BOOT';
+    let restoredFrom = 'NONE';
+    const restoredEventCount = resume ? resume.ledger.length : 0;
+    let missingEventCount = 0;
+    let actionsRequired = [];
+
+    if (!previousSnapshot) {
+        status = 'CLEAN_BOOT';
+    } else if (previousIntact) {
+        await snapshotManager.promoteToLastGood(newSnapshot);
+        status = resume && resume.has_previous_session ? 'RECOVERED' : 'CLEAN_BOOT';
+        restoredFrom = 'CURRENT_SNAPSHOT_VERIFIED';
+    } else {
+        const lastGood = await snapshotManager.getLastGoodState();
+        const lastGoodIntact = lastGood ? await snapshotManager.verifySnapshotIntegrity(lastGood) : false;
+        if (lastGoodIntact) {
+            status = 'PARTIAL_RECOVERY';
+            restoredFrom = 'LAST_GOOD_STATE';
+            missingEventCount = 1;
+            actionsRequired = ['Snapshot mais recente estava corrompido; estado restaurado a partir do último Last Good State íntegro.'];
+        } else {
+            status = 'FAILED';
+            missingEventCount = 1;
+            actionsRequired = ['Nem o snapshot atual nem o Last Good State passaram a verificação de integridade — revise a Memória Viva manualmente.'];
+        }
+    }
+
+    await recoveryReport.buildAndPersistRecoveryReport({
+        restoredFrom,
+        lastGoodStateHash: newSnapshot.hash,
+        restoredEventCount,
+        missingEventCount,
+        status,
+        actionsRequired,
+    });
+
+    eventBus.emit('memory_alive_boot_sequence_completed', {
+        source: eventBus.SOURCE.SYSTEM,
+        severity: status === 'FAILED' ? eventBus.SEVERITY.FAIL : (status === 'PARTIAL_RECOVERY' ? eventBus.SEVERITY.WARN : eventBus.SEVERITY.OK),
+        payload: { status, hydration_overall: report.overall_status },
+    });
+
+    await renderMemoryAliveCard();
+}
+
+async function renderMemoryAliveCard() {
+    const [persistedLog, currentSnapshot, lastGood, latestRecovery] = await Promise.all([
+        eventLog.getRecentPersisted(0),
+        snapshotManager.getCurrentSnapshot(),
+        snapshotManager.getLastGoodState(),
+        recoveryReport.getLatestRecoveryReport(),
+    ]);
+    setInfo('mv-event-log-count', `${persistedLog.length} evento(s) persistido(s)`);
+    setStatus('mv-snapshot-status', currentSnapshot ? 'OK' : 'AUSENTE');
+    setStatus('mv-last-good-status', lastGood ? 'OK' : 'AUSENTE');
+    setStatus('mv-recovery-status', latestRecovery ? latestRecovery.status : 'SEM_HISTORICO');
+    setStatus('mv-hydration-status', lastHydrationReport ? lastHydrationReport.overall_status : 'AUSENTE');
+    renderActivityLog();
+}
+
+async function handleManualSnapshot() {
+    siriform.setSiriformState('thinking', 'Tirando snapshot manual do estado atual...');
+    log('=== TIRAR SNAPSHOT AGORA ===', 'info');
+    const resume = await rehydrateSession();
+    const snapshot = await snapshotManager.takeSnapshot(resume.state);
+    const intact = await snapshotManager.verifySnapshotIntegrity(snapshot);
+    if (intact) await snapshotManager.promoteToLastGood(snapshot);
+    eventBus.emit('memory_manual_snapshot_taken', { severity: eventBus.SEVERITY.OK, payload: { hash: snapshot.hash, promoted: intact } });
+    log(`Snapshot manual tirado (hash ${snapshot.hash.slice(0, 12)}...)${intact ? ' e promovido a Last Good State.' : '.'}`, 'ok');
+    siriform.setSiriformState('success', 'Snapshot manual concluído.');
+    await renderMemoryAliveCard();
+}
+
+async function renderSourceHealthCard() {
+    const report = await getSourceHealthReport();
+    lastSourceHealthReport = report;
+    setInfo('sh-active-count', `Fontes ACTIVE_READ_ONLY nesta sessão: ${report.active_read_only_now}`);
+    setInfo('sh-total-count', `Total de fontes no roadmap: ${report.total_sources} (${report.with_real_probe_code} com sonda real implementada)`);
+    els['sh-grid'].innerHTML = report.sources.map((s) => `
+        <div class="status-row"><span class="label">${s.connector_name}</span><span class="value ${classForConnectorState(s.live_state || s.roadmap_status)}">${s.live_state || s.roadmap_status}</span></div>
+    `).join('');
+}
+
+function setKillSwitchStatus(engaged) {
+    setStatus('rg-kill-switch', engaged ? 'BLOCK' : 'ALLOW');
+}
+
+async function renderRiskGateCard() {
+    const cfg = await riskGate.getConfig();
+    setKillSwitchStatus(cfg.kill_switch_engaged);
+    setInfo('rg-max-drawdown', `${cfg.max_drawdown_pct}%`);
+    setInfo('rg-max-position', `${cfg.max_position_size_quote} (quote)`);
+    setStatus('rg-require-stop', cfg.require_stop_loss ? 'OK' : 'FAIL');
+    setInfo('rg-min-quality', cfg.min_source_data_quality);
+}
+
+async function handleEngageKillSwitch() {
+    const next = await riskGate.engageKillSwitch();
+    setKillSwitchStatus(next.kill_switch_engaged);
+    log('Kill switch ACIONADO — toda nova ordem (mesmo Paper) fica bloqueada até ser desativada manualmente.', 'warn');
+    siriform.setSiriformState('warning', 'Kill switch acionado. Paper Trading bloqueado.');
+    renderActivityLog();
+}
+
+async function handleDisengageKillSwitch() {
+    const next = await riskGate.disengageKillSwitch();
+    setKillSwitchStatus(next.kill_switch_engaged);
+    log('Kill switch DESACIONADO — novas ordens de Paper Trading voltam a ser avaliadas normalmente pelo Risk Gate.', 'ok');
+    siriform.setSiriformState('success', 'Kill switch desacionado.');
+    renderActivityLog();
+}
+
+async function renderPaperTradingCard() {
+    const [summary, openPositions, cfg] = await Promise.all([
+        paperTrading.getPaperSummary(),
+        paperTrading.getOpenPositions(),
+        riskGate.getConfig(),
+    ]);
+    setInfo('pt-mode', summary.mode);
+    setInfo('pt-open-positions', String(summary.open_positions));
+    setInfo('pt-closed-trades', String(summary.closed_trades));
+    setInfo('pt-realized-pnl', `${summary.realized_pnl_quote.toFixed(2)} (quote)`);
+    setStatus('pt-drawdown', summary.current_drawdown_pct >= cfg.max_drawdown_pct ? 'FAIL' : 'OK');
+    els['pt-positions-grid'].innerHTML = openPositions.length
+        ? openPositions.map((t) => `
+            <div class="status-row" data-trade-id="${t.trade_id}">
+                <span class="label">${t.side} · ${t.sizeQuote} @ ${t.entryPrice} · SL ${t.stopLoss}</span>
+                <span class="value v-info">${t.trade_id}</span>
+                <button class="rt-btn btn-pt-close" data-trade-id="${t.trade_id}" type="button">Fechar</button>
+            </div>
+        `).join('')
+        : '<span class="analysis-frame-empty">Nenhuma posição de papel aberta nesta sessão.</span>';
+    els['pt-positions-grid'].querySelectorAll('.btn-pt-close').forEach((btn) => {
+        btn.addEventListener('click', () => handleClosePaperPosition(btn.dataset.tradeId));
+    });
+}
+
+async function handleOpenPaperPosition() {
+    siriform.setSiriformState('thinking', 'Avaliando ordem de Paper Trading pelo Risk Gate...');
+    log('=== ABRIR POSIÇÃO DE PAPEL (LONG) ===', 'info');
+    const evidence = activeRealEvidence;
+    const price = evidence && evidence.ticker && typeof evidence.ticker.last_price === 'number' ? evidence.ticker.last_price : null;
+    if (!price) {
+        log('Não é possível abrir posição de papel: nenhuma fonte real ACTIVE_READ_ONLY nesta sessão tem preço (ticker.last_price) ainda.', 'warn');
+        siriform.setSiriformState('warning', 'Sem preço real disponível ainda — teste uma fonte real primeiro.');
+        return;
+    }
+    const cfg = await riskGate.getConfig();
+    const order = {
+        side: 'LONG',
+        sizeQuote: Math.min(50, cfg.max_position_size_quote),
+        stopLoss: price * 0.98,
+        entryPrice: price,
+        sourceConnectorId: evidence.source_id,
+        sourceDataQuality: evidence.data_quality,
+    };
+    const result = await paperTrading.openPaperPosition(order);
+    if (result.opened) {
+        log(`Posição de papel aberta: ${result.trade.trade_id} (${result.trade.side} ${result.trade.sizeQuote} @ ${result.trade.entryPrice}).`, 'ok');
+        siriform.setSiriformState('success', 'Posição de papel aberta.');
+    } else {
+        log(`Risk Gate bloqueou a ordem de papel: ${result.decision.reasons.join(' ')}`, 'warn');
+        siriform.setSiriformState('warning', 'Risk Gate bloqueou esta ordem de papel.');
+    }
+    await renderPaperTradingCard();
+    renderActivityLog();
+}
+
+async function handleClosePaperPosition(tradeId) {
+    const openPositions = await paperTrading.getOpenPositions();
+    const trade = openPositions.find((t) => t.trade_id === tradeId);
+    if (!trade) return;
+    const evidence = activeRealEvidence;
+    const price = evidence && evidence.ticker && typeof evidence.ticker.last_price === 'number' ? evidence.ticker.last_price : trade.entryPrice;
+    const result = await paperTrading.closePaperPosition(tradeId, price);
+    if (result.closed) {
+        log(`Posição de papel fechada: ${tradeId} · PnL realizado: ${result.trade.realizedPnlQuote.toFixed(2)} (quote).`, result.trade.realizedPnlQuote >= 0 ? 'ok' : 'warn');
+        siriform.setSiriformState(result.trade.realizedPnlQuote >= 0 ? 'success' : 'warning', `Posição fechada. PnL: ${result.trade.realizedPnlQuote.toFixed(2)}.`);
+    } else {
+        log(`Não foi possível fechar a posição ${tradeId}: ${result.reason}.`, 'warn');
+    }
+    await renderPaperTradingCard();
+    renderActivityLog();
+}
+
+async function handleClearPaperLedger() {
+    await paperTrading.clearPaperLedger();
+    log('Ledger de Paper Trading limpo manualmente.', 'info');
+    siriform.setSiriformState('idle', 'Ledger de Paper Trading limpo.');
+    await renderPaperTradingCard();
+}
+
+function renderLiveStatusCard() {
+    const status = getLiveStatus();
+    setInfo('ls-mode', status.mode);
+    setStatus('ls-status', status.status);
+    setInfo('ls-reasons', status.reasons.join(' '));
+    setInfo('ls-unlock-requires', status.unlock_requires.join(' '));
+}
+
+async function handleExportBackup() {
+    siriform.setSiriformState('thinking', 'Empacotando memória viva para exportação...');
+    log('=== EXPORTAR MEMÓRIA VIVA (BACKUP) ===', 'info');
+    try {
+        const pack = await backupRestorePack.buildBackupPack();
+        const blob = new Blob([JSON.stringify(pack, null, 2)], { type: 'application/json' });
+        const entry = exporter.downloadArtifact({ type: 'MEMORY_BACKUP', ext: 'json', blob, purpose: 'Backup completo da Memória Viva (Real Data Layer, Evidence Ledger, Event Log, Snapshots, Recovery History) — sem segredos.' });
+        renderExportPanel();
+        els['br-last-backup'].textContent = `Último backup: ${entry.filename} (gerado ${pack.generated_at.slice(11, 19)}).`;
+        log(`Memória viva exportada com nome único: ${entry.filename}.`, 'ok');
+        siriform.setSiriformState('success', 'Memória viva exportada para o app Arquivos.');
+    } catch (err) {
+        log(`Erro ao exportar memória viva: ${err.message}`, 'fail');
+        siriform.setSiriformState('warning', 'Não consegui exportar a memória viva agora.');
+    }
+    renderActivityLog();
+}
+
+function handleImportBackup() {
+    siriform.pulseListening();
+    els['br-import-input'].click();
+}
+
+function defaultCardSummary(cardEl) {
+    const title = cardEl.querySelector('h2')?.textContent?.trim() || 'Resumo';
+    const rows = Array.from(cardEl.querySelectorAll('.status-row')).map((row) => {
+        const label = row.querySelector('.label')?.textContent?.trim() || '';
+        const value = row.querySelector('.value')?.textContent?.trim() || '';
+        return `${label}: ${value}`;
+    });
+    const body = rows.length ? rows.join(' · ') : 'Sem dados estruturados neste card ainda.';
+    return { title, body };
+}
+
+const CUSTOM_CARD_SUMMARY = {
+    'commander-soldier-panel': () => ({
+        title: 'Commander / Soldier',
+        body: lastCommanderSoldierStatus ? lastCommanderSoldierStatus.siriform_summary : 'Status ainda não carregado nesta sessão.',
+    }),
+    'source-health-panel': () => ({
+        title: 'Source Health',
+        body: lastSourceHealthReport ? lastSourceHealthReport.siriform_summary : 'Source Health ainda não carregado nesta sessão.',
+    }),
+    'memory-alive-panel': () => ({
+        title: 'Memória Viva',
+        body: lastHydrationReport ? lastHydrationReport.siriform_summary : 'Hydration Report ainda não carregado nesta sessão.',
+    }),
+    'live-status-panel': () => {
+        const ls = getLiveStatus();
+        return { title: 'Live Trading', body: ls.siriform_summary };
+    },
+};
+
+function openStatusModal(title, body) {
+    els['status-modal-title'].textContent = title;
+    els['status-modal-body'].textContent = body;
+    els['status-modal'].hidden = false;
+}
+
+function closeStatusModal() {
+    els['status-modal'].hidden = true;
+}
+
+function wireStatusCardModal() {
+    document.querySelectorAll('section.card[tabindex]').forEach((card) => {
+        card.setAttribute('role', 'button');
+        card.addEventListener('click', (ev) => {
+            if (ev.target.closest('button, a, input, label')) return;
+            const custom = CUSTOM_CARD_SUMMARY[card.id];
+            const { title, body } = custom ? custom() : defaultCardSummary(card);
+            openStatusModal(title, body);
+        });
+        card.addEventListener('keydown', (ev) => {
+            if (ev.target !== card || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+            ev.preventDefault();
+            card.click();
+        });
+    });
+    if (els['btn-status-modal-close']) els['btn-status-modal-close'].addEventListener('click', closeStatusModal);
+}
+
 function wireButtons() {
     document.getElementById('btn-check-safari').addEventListener('click', handleCheckSafari);
     document.getElementById('btn-prepare-cyborg').addEventListener('click', handlePrepareCyborg);
@@ -1450,6 +1818,44 @@ function wireButtons() {
     if (btnRehydrateSession) btnRehydrateSession.addEventListener('click', handleRehydrateSession);
     const btnExportEvidenceLedger = document.getElementById('btn-export-evidence-ledger');
     if (btnExportEvidenceLedger) btnExportEvidenceLedger.addEventListener('click', handleExportEvidenceLedger);
+
+    if (els['btn-mv-snapshot']) els['btn-mv-snapshot'].addEventListener('click', handleManualSnapshot);
+    if (els['btn-rg-engage']) els['btn-rg-engage'].addEventListener('click', handleEngageKillSwitch);
+    if (els['btn-rg-disengage']) els['btn-rg-disengage'].addEventListener('click', handleDisengageKillSwitch);
+    if (els['btn-pt-open']) els['btn-pt-open'].addEventListener('click', handleOpenPaperPosition);
+    if (els['btn-pt-clear']) els['btn-pt-clear'].addEventListener('click', handleClearPaperLedger);
+    if (els['btn-br-export']) els['btn-br-export'].addEventListener('click', handleExportBackup);
+    if (els['btn-br-import']) els['btn-br-import'].addEventListener('click', handleImportBackup);
+    if (els['btn-al-refresh']) els['btn-al-refresh'].addEventListener('click', () => renderActivityLog());
+
+    if (els['br-import-input']) {
+        els['br-import-input'].addEventListener('change', async (ev) => {
+            const file = ev.target.files && ev.target.files[0];
+            ev.target.value = '';
+            if (!file) return;
+            siriform.setSiriformState('checking', 'Lendo backup da memória viva...');
+            log('=== RESTAURAR MEMÓRIA VIVA (BACKUP) ===', 'info');
+            try {
+                const pack = JSON.parse(await file.text());
+                const result = await backupRestorePack.restoreBackupPack(pack);
+                if (result.restored) {
+                    log('Memória viva restaurada a partir do backup.', 'ok');
+                    siriform.setSiriformState('success', 'Memória viva restaurada. Atualizando cards...');
+                    await renderMemoryAliveCard();
+                    await renderPaperTradingCard();
+                    const resume = await rehydrateSession();
+                    await applyRehydratedSession(resume);
+                } else {
+                    log(`Restauração bloqueada: ${result.reason}.`, 'warn');
+                    siriform.setSiriformState('warning', `Não restaurei o backup: ${result.reason}.`);
+                }
+            } catch (err) {
+                log(`Erro ao restaurar backup: ${err.message}`, 'fail');
+                siriform.setSiriformState('warning', 'Não consegui ler esse arquivo de backup.');
+            }
+            renderActivityLog();
+        });
+    }
 
     document.getElementById('btn-close-modal').addEventListener('click', () => { els['home-modal'].hidden = true; });
     document.getElementById('qa-diagnostics').addEventListener('click', handleRunDiagnostics);
@@ -1538,7 +1944,15 @@ async function boot() {
     refreshCyborgReadiness(f, voiceStatus);
     refreshDataPolicyPanel();
     renderExportPanel();
-    await bootRehydrateSession();
+    eventLog.wireToEventBus();
+    renderCommanderSoldierCard();
+    const resume = await bootRehydrateSession();
+    await runMemoryAliveBootSequence(resume);
+    await renderSourceHealthCard();
+    await renderRiskGateCard();
+    await renderPaperTradingCard();
+    renderLiveStatusCard();
+    wireStatusCardModal();
 
     // Auto-reparo no boot: SÓ quando algo já foi instalado antes (existe meta
     // com checksums) e agora está quebrado — o caso "corrompido/ausente após

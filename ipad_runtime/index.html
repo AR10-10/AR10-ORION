@@ -105,6 +105,16 @@
 
   <section class="advanced-section" id="advanced-section" hidden>
 
+  <section class="card commander-soldier-panel" id="commander-soldier-panel" tabindex="0">
+    <h2>Commander / Soldier <span class="future-badge">Soldier: NOT_DEPLOYED</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Commander (este iPad)</span><span class="value v-pending" id="cs-commander-status">…</span></div>
+      <div class="status-row"><span class="label">Soldier Headless 24/7</span><span class="value v-pending" id="cs-soldier-status">…</span></div>
+      <div class="status-row"><span class="label">Sync Bridge</span><span class="value v-pending" id="cs-sync-bridge-status">…</span></div>
+    </div>
+    <p class="onboarding-hint">Commander é este PWA/iPad — sempre ONLINE enquanto a aba estiver aberta. Soldier é um processo headless 24/7 fora do navegador, ainda não implantado nesta versão: existe só como contrato de tipos em <code>soldier_runtime/</code>, nunca instalado nem executado. Sync Bridge é o canal entre os dois — sem Soldier real, não há o que sincronizar.</p>
+  </section>
+
   <section class="card" id="voice-status-panel">
     <h2>Siriform Voice <span class="future-badge">Apple Intelligence: FUTURE</span></h2>
     <div class="status-grid">
@@ -203,6 +213,15 @@
     <input type="file" id="real-data-import-input" class="hidden-input" accept=".csv,.json,application/json,text/csv">
   </section>
 
+  <section class="card source-health-panel" id="source-health-panel" tabindex="0">
+    <h2>Source Health <span class="step">roadmap + estado real combinados</span></h2>
+    <p class="engine-meta" id="sh-active-count">Fontes ACTIVE_READ_ONLY nesta sessão: —</p>
+    <p class="vault-meta" id="sh-total-count">Total de fontes no roadmap: —</p>
+    <div class="status-grid" id="sh-grid">
+        <span class="analysis-frame-empty">Abra o Modo avançado ou teste fontes reais para popular o Source Health.</span>
+    </div>
+  </section>
+
   <section class="card" id="real-analysis-frame-panel">
     <h2>Real AnalysisFrame <span class="step">leitura sobre candle real — não é recomendação</span></h2>
     <div class="analysis-frame-grid" id="real-analysis-frame-grid">
@@ -258,6 +277,21 @@
     </div>
   </section>
 
+  <section class="card memory-alive-panel" id="memory-alive-panel" tabindex="0">
+    <h2>Memória Viva <span class="step">o sistema lembra por conta própria</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Event Log (memória persistida)</span><span class="value v-pending" id="mv-event-log-count">…</span></div>
+      <div class="status-row"><span class="label">Snapshot atual</span><span class="value v-pending" id="mv-snapshot-status">…</span></div>
+      <div class="status-row"><span class="label">Last Good State</span><span class="value v-pending" id="mv-last-good-status">…</span></div>
+      <div class="status-row"><span class="label">Recovery Report</span><span class="value v-pending" id="mv-recovery-status">…</span></div>
+      <div class="status-row"><span class="label">Hydration Report</span><span class="value v-pending" id="mv-hydration-status">…</span></div>
+    </div>
+    <p class="onboarding-hint">Você nunca precisa salvar manualmente o "estado" deste sistema. Todo evento real (sondagem de fonte, análise, decisão do Risk Gate) já é gravado automaticamente em IndexedDB; um snapshot é tirado a cada boot e promovido a "Last Good State" quando íntegro.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-mv-snapshot"><span class="icon">⛁</span> Tirar snapshot agora</button>
+    </div>
+  </section>
+
   <section class="card data-policy-panel" id="data-policy-panel">
     <h2>Política de Dados de Mercado</h2>
     <div class="status-grid">
@@ -297,6 +331,51 @@
       "ler estatística" (AnalysisFrame, real) e "decidir/executar"
       (DecisionFrame, bloqueado por design).
     </p>
+  </section>
+
+  <section class="card risk-gate-panel" id="risk-gate-panel" tabindex="0">
+    <h2>Risk Gate <span class="step">NO_STOP_NO_TRADE</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Kill Switch</span><span class="value v-pending" id="rg-kill-switch">…</span></div>
+      <div class="status-row"><span class="label">Drawdown máximo</span><span class="value v-pending" id="rg-max-drawdown">…</span></div>
+      <div class="status-row"><span class="label">Tamanho máximo de posição</span><span class="value v-pending" id="rg-max-position">…</span></div>
+      <div class="status-row"><span class="label">Exige Stop Loss</span><span class="value v-pending" id="rg-require-stop">…</span></div>
+      <div class="status-row"><span class="label">Qualidade mínima de fonte</span><span class="value v-pending" id="rg-min-quality">…</span></div>
+    </div>
+    <p class="onboarding-hint">O Risk Gate bloqueia qualquer ordem — mesmo em Paper Trading — sem stop loss, com drawdown acima do limite, com fonte de dados abaixo da qualidade mínima exigida, ou enquanto o Kill Switch estiver ativado. Nenhuma ordem real é enviada por este runtime — ver Live Status abaixo.</p>
+    <div class="btn-grid">
+        <button class="rt-btn danger" id="btn-rg-engage"><span class="icon">⛔</span> Acionar Kill Switch</button>
+        <button class="rt-btn success" id="btn-rg-disengage"><span class="icon">▶</span> Desacionar Kill Switch</button>
+    </div>
+  </section>
+
+  <section class="card paper-trading-panel" id="paper-trading-panel" tabindex="0">
+    <h2>Paper Trading <span class="future-badge">simulado — sem dinheiro real</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Modo</span><span class="value v-info" id="pt-mode">PAPER</span></div>
+      <div class="status-row"><span class="label">Posições abertas</span><span class="value v-pending" id="pt-open-positions">…</span></div>
+      <div class="status-row"><span class="label">Trades fechados</span><span class="value v-pending" id="pt-closed-trades">…</span></div>
+      <div class="status-row"><span class="label">PnL realizado</span><span class="value v-pending" id="pt-realized-pnl">…</span></div>
+      <div class="status-row"><span class="label">Drawdown atual</span><span class="value v-pending" id="pt-drawdown">…</span></div>
+    </div>
+    <div class="status-grid" id="pt-positions-grid">
+        <span class="analysis-frame-empty">Nenhuma posição de papel aberta nesta sessão.</span>
+    </div>
+    <p class="onboarding-hint">Paper Trading usa o último preço real (<code>evidence.ticker.last_price</code>) de uma fonte ACTIVE_READ_ONLY como preço de entrada — nunca um preço inventado. Tamanho e stop loss usam um padrão fixo conservador (até 50 quote, stop a 2% da entrada) e passam pelo Risk Gate antes de abrir.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-pt-open"><span class="icon">＋</span> Abrir posição de papel (LONG)</button>
+        <button class="rt-btn danger" id="btn-pt-clear"><span class="icon">⟲</span> Limpar ledger de papel</button>
+    </div>
+  </section>
+
+  <section class="card live-status-panel" id="live-status-panel" tabindex="0">
+    <h2>Live Status <span class="stub-badge">LIVE_LOCKED</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Modo</span><span class="value v-info" id="ls-mode">LIVE</span></div>
+      <div class="status-row"><span class="label">Status</span><span class="value v-fail" id="ls-status">LIVE_LOCKED</span></div>
+    </div>
+    <p class="diagnostic-note" id="ls-reasons">—</p>
+    <p class="vault-meta" id="ls-unlock-requires">—</p>
   </section>
 
   <section class="card vault-evidence-card" id="vault-evidence-panel">
@@ -380,12 +459,31 @@
     <p class="engine-meta">Nenhum arquivo exportado contém segredo, chave de API, credencial de corretora ou dado de conta real — só estado de diagnóstico local, estatística descritiva sintética e metadados de integridade.</p>
   </section>
 
+  <section class="card backup-recovery-panel" id="backup-recovery-panel" tabindex="0">
+    <h2>Backup / Recovery <span class="step">memória viva exportável</span></h2>
+    <p class="onboarding-hint">Gera um pacote único com Real Data Layer, Evidence Ledger, Event Log, snapshots e histórico de recovery — sem nenhum segredo, sem chave de API. Restaurar recalcula o hash e se recusa a aplicar (FAIL_CLOSED) se o pacote estiver corrompido ou adulterado.</p>
+    <p class="vault-meta" id="br-last-backup">Nenhum backup gerado nesta sessão ainda.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-br-export"><span class="icon">⇩</span> Exportar memória viva (.json)</button>
+        <button class="rt-btn" id="btn-br-import"><span class="icon">⇪</span> Restaurar memória viva</button>
+    </div>
+    <input type="file" id="br-import-input" class="hidden-input" accept=".json,application/json">
+  </section>
+
   </section><!-- /.advanced-section -->
 
   <section class="card telemetry-card" id="console-section">
     <h2>Telemetria ao Vivo <span class="step">Caixa Preta do Cyborg — eventos reais</span></h2>
     <div class="telemetry-latest ln-dim" id="telemetry-latest">Aguardando primeiro evento…</div>
     <div class="console" id="console-log"></div>
+    <div class="activity-log-block">
+      <div class="activity-log-head">
+        <span class="label">Activity Log persistido (memória viva)</span>
+        <span class="value v-pending" id="al-count">…</span>
+        <button class="rt-btn" id="btn-al-refresh"><span class="icon">⟲</span> Atualizar</button>
+      </div>
+      <div class="activity-log-list" id="al-list"></div>
+    </div>
   </section>
 
   <footer class="legal">
@@ -404,6 +502,14 @@
     </ol>
     <p id="standalone-state" class="status-row" style="border:none;"></p>
     <button class="rt-btn primary close-btn" id="btn-close-modal">Entendi</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="status-modal" hidden>
+  <div class="modal-box">
+    <h3 id="status-modal-title">Resumo</h3>
+    <p id="status-modal-body" class="df-body"></p>
+    <button class="rt-btn primary close-btn" id="btn-status-modal-close">Entendi</button>
   </div>
 </div>
 

@@ -91,3 +91,20 @@ export async function loadAll() {
 export async function clearRealDataMemory() {
     await Promise.all(Object.values(KEYS).map((k) => setMeta(k, null)));
 }
+
+/** Restaura todas as chaves deste modulo a partir de um objeto no mesmo
+ *  formato retornado por loadAll() — usado pelo Backup/Restore Pack
+ *  (memory/backup-restore-pack.js), que nunca conhece as strings de chave
+ *  individuais, so' este objeto agregado. */
+export async function restoreAll(state) {
+    if (!state || typeof state !== 'object') return;
+    await Promise.all([
+        setMeta(KEYS.connectorStates, state.connectorStates || {}),
+        setMeta(KEYS.evidenceByConnector, state.evidenceByConnector || {}),
+        setMeta(KEYS.activeSource, state.activeSource ?? null),
+        setMeta(KEYS.lastAnalysisFrame, state.lastAnalysisFrame ?? null),
+        setMeta(KEYS.lastResearchFrame, state.lastResearchFrame ?? null),
+        setMeta(KEYS.lastDadosInsuficientes, state.lastDadosInsuficientes ?? null),
+        setMeta(KEYS.lastConnectorTested, state.lastConnectorTested ?? null),
+    ]);
+}

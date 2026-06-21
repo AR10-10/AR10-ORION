@@ -53,7 +53,7 @@ export const MARKET_DATA_POLICY = {
  *  este estado é sempre recalculado a partir do registry, nunca hardcoded. */
 export function realMarketAnalysisStatus(activeSources = []) {
     if (activeSources.length > 0) {
-        const names = activeSources.map((s) => s.name || s.connector_id).join(', ');
+        const names = activeSources.map((s) => s.connector_name || s.connector_id).join(', ');
         return {
             available: true,
             status: 'DISPONÍVEL NESTA SESSÃO',

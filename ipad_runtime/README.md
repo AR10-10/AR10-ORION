@@ -78,25 +78,57 @@ vazias; o banner READ_ONLY/FAIL_CLOSED, o header, a Telemetria e o rodapé
 ficam fora do fluxo de colunas (largura total). Em retrato, coluna única na
 ordem natural:
 `siriform-card` → `cyborg-readiness-panel` (leitura "tudo pronto?" de 1
-linha) → `voice-status-panel` (estado do microfone/Siriform Voice Layer) →
+linha) → `commander-soldier-panel` (Commander = este iPad, sempre `ONLINE`;
+Soldier headless 24/7 ainda `NOT_DEPLOYED` — só existe como contrato de
+tipos em `soldier_runtime/`, nunca instalado nem executado) →
+`voice-status-panel` (estado do microfone/Siriform Voice Layer) →
 `runtime-status-panel` → `feature-detect-panel` →
 `quant-engine-widget` → `ai-models-panel` (WebLLM/Transformers/ONNX,
 `FUTURE`) → `replay-wrap` (com `profile-toggle` Light/Balanced/Heavy,
 genuinamente muda a janela SMA/EMA usada no WASM; rotulado **Modo de
 Diagnóstico Técnico — dados sintéticos, não usar para decisão de mercado**)
 → `analysis-frame-panel` (estatística descritiva sobre o dataset sintético,
-"não é recomendação") → `data-policy-panel` (Política de Dados de Mercado —
-sintético = diagnóstico; análise real exige fonte pública/somente-leitura
-ou mostra `DADOS INSUFICIENTES`) → `decision-frame-panel`
-(**`STUB CONTROLLED`**, sem lógica de decisão, sem sinal de ordem) →
-`vault-evidence-card` (reabre e re-verifica o SHA-256 a cada boot) →
-`vault-local-panel` (Vault Local do iPad — 16 campos de status; com
-auto-reparo seguro: reindexa do armazenamento ou reinstala, nunca apaga
-como primeiro recurso) → `local-pack-manager` (os 13 botões do Local Pack
+"não é recomendação") → `real-data-layer-panel` (conectores públicos reais
+sem chave de API — MEXC/CoinGecko/Binance Spot + import local de CSV/JSON;
+cada sonda é um Connector State Machine real, ver
+`docs/AR10_CYBORG_2_REAL_DATA_LAYER_RUNTIME_PROBE_V1.md`) →
+`source-health-panel` (funde o roteiro estático de conectores com o estado
+vivo desta sessão — nunca promove um conector a `ACTIVE_READ_ONLY` por
+conta própria) → `real-analysis-frame-panel` (leitura sobre candle real —
+"não é recomendação") → `real-evidence-panel` (Evidence Object —
+evidence-first, nunca inventado: ou dado real ou
+`DADOS_INSUFICIENTES`/`NAO_APLICAVEL`) → `research-engine-panel` (ROTA
+A/B/C sempre presentes, nunca um caminho silenciosamente vazio) →
+`siriform-explanation-panel` (explica em português o que os Dados Reais
+acima significam) → `memory-alive-panel` (Memória Viva — Event Log
+persistido, snapshot a cada boot, Last Good State e Recovery/Hydration
+Reports honestos sobre o que foi de fato restaurado) → `data-policy-panel`
+(Política de Dados de Mercado — sintético = diagnóstico; análise real exige
+fonte pública/somente-leitura ou mostra `DADOS INSUFICIENTES`) →
+`evaluations-panel` (equivalente local do framework Apple de Evaluations,
+WWDC26) → `decision-frame-panel` (**`STUB CONTROLLED`**, sem lógica de
+decisão, sem sinal de ordem) → `risk-gate-panel` (Kill Switch +
+`NO_STOP_NO_TRADE` — bloqueia qualquer ordem, mesmo Paper, sem stop loss,
+com drawdown acima do limite ou fonte de dados abaixo da qualidade mínima)
+→ `paper-trading-panel` (book de posições simuladas com preço real da
+fonte ativa, roteado pelo Risk Gate, nunca envia ordem a uma exchange) →
+`live-status-panel` (explica por que Live Trading é `LIVE_LOCKED` por
+estrutura — sem rota de execução real no código, não uma flag) →
+`vault-evidence-panel` (Vault/Evidence — reabre e re-verifica o SHA-256 a
+cada boot) → `vault-local-panel` (Vault Local do iPad — 16 campos de
+status; com auto-reparo seguro: reindexa do armazenamento ou reinstala,
+nunca apaga como primeiro recurso) → `metrics-panel` (equivalente leve do
+Instruments, WWDC26) → `local-pack-manager` (os 13 botões do Local Pack
 Manager) → `export-panel` (Arquivos Exportados — exportações com nome único
-carimbado, sem prompt de "substituir"). A antiga "Logs do Sistema" virou
-`telemetry-card` (**Telemetria ao Vivo** — último evento sempre visível +
-caixa preta rolável, eventos reais, nunca um muro de terminal).
+carimbado, sem prompt de "substituir") → `backup-recovery-panel` (exporta/
+restaura a Memória Viva inteira num único `.json` com hash verificado,
+`FAIL_CLOSED` se corrompido ou adulterado). A antiga "Logs do Sistema"
+virou `telemetry-card` (**Telemetria ao Vivo** — último evento sempre
+visível + caixa preta rolável, eventos reais, nunca um muro de terminal —
+com sub-bloco **Activity Log** listando o histórico persistido de
+`memory/event-log.js`). Todo card com `tabindex` é tocável: abre um resumo
+em português gerado a partir do estado real do próprio card
+(`wireStatusCardModal()` em `app.js`), nunca um texto estático.
 
 ## Decisões técnicas (liberdade técnica usada nesta entrega)
 

@@ -1034,3 +1034,99 @@ footer.legal {
     .bento,
     .advanced-section:not([hidden]) { column-count: 3; }
 }
+
+/* ============================================================
+   FASE 4 — MEMORIA VIVA / COMMANDER-SOLDIER / RISK GATE / PAPER
+   TRADING / LIVE STATUS / BACKUP-RECOVERY / SOURCE HEALTH / ACTIVITY
+   LOG / CARDS TAPAVEIS. Mesma paleta/linguagem dos blocos acima;
+   nada aqui sobrescreve classes usadas pelo app.js, so adiciona.
+   ============================================================ */
+
+/* Cards tapaveis — todo section.card com id recebe tabindex via
+   wireStatusCardModal() em app.js para abrir um resumo PT-BR. */
+section.card[tabindex] { cursor: pointer; }
+section.card[tabindex]:focus-visible {
+    outline: 2px solid var(--sys-cyan);
+    outline-offset: 2px;
+}
+
+.commander-soldier-panel { border-color: rgba(0, 242, 255, 0.22); }
+
+.memory-alive-panel { border-color: rgba(0, 255, 157, 0.22); }
+.memory-alive-panel h2 { color: var(--long-green); text-shadow: 0 0 8px rgba(0, 255, 157, 0.3); }
+
+.source-health-panel { border-color: rgba(0, 242, 255, 0.22); }
+
+.risk-gate-panel { border-color: rgba(255, 184, 0, 0.25); }
+.risk-gate-panel h2 { color: var(--alert-amber); text-shadow: 0 0 8px rgba(255, 184, 0, 0.25); }
+.live-status-panel { border-color: rgba(255, 62, 82, 0.25); }
+.live-status-panel h2 { color: var(--short-red); text-shadow: 0 0 8px rgba(255, 62, 82, 0.25); }
+
+.backup-recovery-panel { border-color: rgba(0, 255, 157, 0.22); }
+
+/* Data Mode Badges — REAL/PAPER/SIM/REPLAY/SYNTHETIC/PRIVATE/
+   CONTEXT_ONLY (ver js/core/data-mode-labels.js badgeClassFor()). */
+.dm-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.64rem;
+    letter-spacing: 1px;
+    font-weight: bold;
+    border-radius: 6px;
+    padding: 2px 8px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.dm-real { color: var(--long-green); border: 1px solid rgba(0, 255, 157, 0.5); background: rgba(0, 255, 157, 0.08); }
+.dm-paper { color: var(--sys-cyan); border: 1px solid rgba(0, 242, 255, 0.5); background: rgba(0, 242, 255, 0.06); }
+.dm-sim { color: var(--alert-amber); border: 1px solid rgba(255, 184, 0, 0.5); background: rgba(255, 184, 0, 0.08); }
+.dm-replay { color: var(--alert-amber); border: 1px solid rgba(255, 184, 0, 0.5); background: rgba(255, 184, 0, 0.08); }
+.dm-synthetic { color: var(--text-dim); border: 1px solid rgba(201, 212, 217, 0.35); background: rgba(201, 212, 217, 0.05); }
+.dm-private { color: var(--short-red); border: 1px solid rgba(255, 62, 82, 0.5); background: rgba(255, 62, 82, 0.07); }
+.dm-context { color: var(--text-dim); border: 1px solid rgba(201, 212, 217, 0.35); background: rgba(201, 212, 217, 0.05); }
+.dm-unknown { color: var(--text-dim); border: 1px solid rgba(201, 212, 217, 0.25); background: transparent; }
+
+/* Activity Log — sub-bloco dentro da Telemetria ao Vivo, lista o
+   historico persistido (memory/event-log.js), distinto do log de
+   UI efemero do .console acima dele. */
+.activity-log-block {
+    margin-top: 12px;
+    border-top: 1px solid rgba(0, 242, 255, 0.12);
+    padding-top: 10px;
+}
+.activity-log-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.activity-log-head .label { color: var(--text-dim); font-size: 0.78rem; }
+.activity-log-head button.rt-btn {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: 0.74rem;
+}
+.activity-log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    font-size: 0.74rem;
+}
+.activity-log-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px solid rgba(0, 242, 255, 0.06);
+    padding-bottom: 4px;
+    color: var(--text-dim);
+}
+.activity-log-row .al-type { color: var(--text-primary); }
+.activity-log-row.al-fail .al-type,
+.activity-log-row.al-critical .al-type { color: var(--short-red); }
+.activity-log-row.al-warn .al-type { color: var(--alert-amber); }
+.activity-log-row.al-ok .al-type { color: var(--long-green); }

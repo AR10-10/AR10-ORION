@@ -28,3 +28,8 @@ export async function getLedger() {
 export async function clearLedger() {
     await setMeta(LEDGER_KEY, []);
 }
+
+/** Usado só pelo Backup/Restore Pack (memory/backup-restore-pack.js). */
+export async function restoreLedger(ledger) {
+    await setMeta(LEDGER_KEY, Array.isArray(ledger) ? ledger.slice(0, MAX_ENTRIES) : []);
+}
