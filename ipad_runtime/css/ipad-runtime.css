@@ -298,6 +298,10 @@ button.rt-btn {
     align-items: center;
     gap: 8px;
 }
+button.rt-btn:hover:not(:disabled) {
+    border-color: var(--sys-cyan);
+    background: rgba(0, 242, 255, 0.1);
+}
 button.rt-btn:active {
     transform: scale(0.98);
     background: rgba(0, 242, 255, 0.14);
@@ -698,13 +702,14 @@ footer.legal {
     align-items: center;
     gap: 4px;
     font-family: var(--font-mono);
-    font-size: 0.66rem;
-    letter-spacing: 1px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
-    padding: 3px 10px;
+    padding: 4px 12px;
     border-radius: 999px;
-    border: 1px solid currentColor;
-    background: rgba(255, 255, 255, 0.04);
+    border: 1.5px solid currentColor;
+    background: rgba(255, 255, 255, 0.06);
 }
 
 /* ------------------------------------------------------------
