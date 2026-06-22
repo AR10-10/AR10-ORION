@@ -79,7 +79,7 @@ const els = {};
     'se-connection-state', 'se-storage-mirror', 'se-is-authoritative', 'se-soldier-validation',
     'ta-telegram-layer', 'ta-bot-token', 'ta-webhook', 'ta-live-execution', 'ta-signal-quarantine',
     'ta-source-trust', 'ta-allowed-commands', 'ta-risk-gate', 'ta-event-ledger', 'ta-is-authoritative',
-    'he-status', 'he-session', 'he-completed', 'he-pending', 'he-failed', 'he-bytes', 'he-checkpoint',
+    'he-ring', 'he-progress-pct', 'he-status', 'he-session', 'he-completed', 'he-pending', 'he-failed', 'he-bytes', 'he-checkpoint',
     'he-quota', 'he-resumable', 'he-offline-available', 'he-fail-closed', 'he-last-error',
     'btn-he-start', 'btn-he-pause', 'btn-he-verify', 'btn-he-repair', 'btn-he-export',
 ].forEach((id) => { els[id] = document.getElementById(id); });
@@ -1746,6 +1746,15 @@ async function renderHydrationEngineCard() {
     const status = await hydrationManager.getHydrationEngineStatusReport();
     lastHydrationEngineStatus = status;
     const mb = (n) => (n / (1024 * 1024)).toFixed(2) + ' MB';
+    // Anel/percentual sao só leitura visual derivada de completed_count/total_count
+    // ja presentes no relatorio — nenhum numero novo, so' um foco visual distinto
+    // do status-grid plano do resto do painel.
+    const pct = status.total_count > 0 ? Math.round((status.completed_count / status.total_count) * 100) : 0;
+    if (els['he-ring']) {
+        els['he-ring'].style.setProperty('--he-progress', String(pct));
+        els['he-ring'].setAttribute('data-engine-state', status.status);
+    }
+    if (els['he-progress-pct']) els['he-progress-pct'].textContent = `${pct}%`;
     setStatus('he-status', status.status);
     setInfo('he-session', status.session_id || 'Nenhuma sessão iniciada');
     setInfo('he-completed', `${status.completed_count} / ${status.total_count}`);
@@ -2149,7 +2158,7 @@ function wireStatusCardModal() {
     document.querySelectorAll('section.card[tabindex]').forEach((card) => {
         card.setAttribute('role', 'button');
         card.addEventListener('click', (ev) => {
-            if (ev.target.closest('button, a, input, label')) return;
+            if (ev.target.closest('button, a, input, label, summary')) return;
             const custom = CUSTOM_CARD_SUMMARY[card.id];
             const { title, body } = custom ? custom() : defaultCardSummary(card);
             openStatusModal(title, body);

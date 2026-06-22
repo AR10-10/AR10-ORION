@@ -1249,3 +1249,139 @@ section.card[tabindex]:focus-visible {
 .activity-log-row.al-critical .al-type { color: var(--short-red); }
 .activity-log-row.al-warn .al-type { color: var(--alert-amber); }
 .activity-log-row.al-ok .al-type { color: var(--long-green); }
+
+/* ------------------------------------------------------------
+   HYDRATION ENGINE — foco visual proprio (anel de progresso),
+   diferente do status-grid plano usado pelo resto do painel.
+   Os 8 campos menos criticos ficam num <details> nativo (sem JS
+   de toggle): declutter real, nao so cosmetico. Cor do anel/estado
+   reaproveita exatamente a paleta ja usada pelo Siriform Avatar
+   (cyan=ativo, verde=completo, amber=pausado, vermelho=falha) —
+   nenhuma 4a paleta nova introduzida so' para este card.
+   ------------------------------------------------------------ */
+.he-hero {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    margin: 4px 0 14px;
+}
+.he-ring {
+    --he-progress: 0;
+    flex: 0 0 auto;
+    width: 124px;
+    height: 124px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    position: relative;
+    background: conic-gradient(var(--sys-cyan) calc(var(--he-progress) * 1%), rgba(0, 242, 255, 0.08) 0);
+    box-shadow: 0 0 22px rgba(0, 242, 255, 0.25), inset 0 0 16px rgba(0, 0, 0, 0.55);
+    transition: background 0.5s ease, box-shadow 0.5s ease;
+}
+.he-ring::before {
+    content: '';
+    position: absolute;
+    inset: 9px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.07), rgba(0, 0, 0, 0.82) 72%);
+}
+.he-ring-core {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+.he-ring-pct {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.55rem;
+    color: var(--sys-cyan);
+    text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+}
+.he-ring-caption {
+    font-size: 0.6rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+}
+.he-hero-rows { flex: 1 1 220px; min-width: 0; }
+.he-hero-row { border-bottom: none; margin-bottom: 10px; }
+.he-hero-row .value { font-size: 1.05rem; }
+.he-hero-trio {
+    display: flex;
+    gap: 8px;
+}
+.he-hero-trio .status-row {
+    flex: 1;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 2px;
+    border: 1px solid rgba(0, 242, 255, 0.12);
+    border-bottom: 1px solid rgba(0, 242, 255, 0.12);
+    border-radius: 10px;
+    padding: 6px 4px;
+}
+.he-hero-trio .status-row .label {
+    order: 2;
+    font-size: 0.6rem;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.he-hero-trio .status-row .value { order: 1; font-size: 1.05rem; }
+
+.he-ring[data-engine-state="RUNNING"] { animation: heRingPulse 2.2s ease-in-out infinite; }
+@keyframes heRingPulse {
+    0%, 100% { box-shadow: 0 0 22px rgba(0, 242, 255, 0.25), inset 0 0 16px rgba(0, 0, 0, 0.55); }
+    50% { box-shadow: 0 0 32px rgba(0, 242, 255, 0.45), inset 0 0 16px rgba(0, 0, 0, 0.55); }
+}
+.he-ring[data-engine-state="COMPLETED"] {
+    background: conic-gradient(var(--long-green) calc(var(--he-progress) * 1%), rgba(0, 255, 157, 0.08) 0);
+    box-shadow: 0 0 22px rgba(0, 255, 157, 0.3), inset 0 0 16px rgba(0, 0, 0, 0.55);
+}
+.he-ring[data-engine-state="COMPLETED"] .he-ring-pct { color: var(--long-green); text-shadow: 0 0 10px rgba(0, 255, 157, 0.5); }
+.he-ring[data-engine-state="PAUSED"] {
+    background: conic-gradient(var(--alert-amber) calc(var(--he-progress) * 1%), rgba(255, 184, 0, 0.08) 0);
+    box-shadow: 0 0 22px rgba(255, 184, 0, 0.28), inset 0 0 16px rgba(0, 0, 0, 0.55);
+}
+.he-ring[data-engine-state="PAUSED"] .he-ring-pct { color: var(--alert-amber); text-shadow: 0 0 10px rgba(255, 184, 0, 0.5); }
+.he-ring[data-engine-state="FAILED"],
+.he-ring[data-engine-state="FAIL_CLOSED"] {
+    background: conic-gradient(var(--short-red) calc(var(--he-progress) * 1%), rgba(255, 62, 82, 0.08) 0);
+    box-shadow: 0 0 22px rgba(255, 62, 82, 0.32), inset 0 0 16px rgba(0, 0, 0, 0.55);
+}
+.he-ring[data-engine-state="FAILED"] .he-ring-pct,
+.he-ring[data-engine-state="FAIL_CLOSED"] .he-ring-pct { color: var(--short-red); text-shadow: 0 0 10px rgba(255, 62, 82, 0.5); }
+
+.he-details {
+    margin: 0 0 14px;
+    border: 1px solid rgba(0, 242, 255, 0.12);
+    border-radius: 10px;
+    padding: 0 12px;
+}
+.he-details summary {
+    cursor: pointer;
+    padding: 9px 0;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: var(--sys-cyan);
+    list-style: none;
+}
+.he-details summary::-webkit-details-marker { display: none; }
+.he-details summary::before {
+    content: '▸';
+    display: inline-block;
+    width: 1.1em;
+    transition: transform 0.2s ease;
+}
+.he-details[open] summary::before { transform: rotate(90deg); }
+.he-details-grid { padding: 2px 0 12px; }
+
+@media (max-width: 480px) {
+    .he-hero { flex-direction: column; }
+    .he-hero-trio { flex-direction: row; }
+}

@@ -504,20 +504,35 @@
   <section class="card hydration-engine-panel" id="hydration-engine-panel" tabindex="0">
     <h2>Hydration Engine <span class="step">armazenamento progressivo</span></h2>
     <p class="onboarding-hint">Em vez de baixar tudo de uma vez, o Cyborg hidrata o iPad em pacotes pequenos, validando cada um por SHA-256 antes de guardar — como beber água pouco a pouco. Se faltar espaço ou a conexão cair, retoma exatamente de onde parou.</p>
-    <div class="status-grid">
-      <div class="status-row"><span class="label">Status da hidratação</span><span class="value v-pending" id="he-status">…</span></div>
-      <div class="status-row"><span class="label">Sessão</span><span class="value v-pending" id="he-session">…</span></div>
-      <div class="status-row"><span class="label">Pacotes concluídos</span><span class="value v-pending" id="he-completed">…</span></div>
-      <div class="status-row"><span class="label">Pacotes pendentes</span><span class="value v-pending" id="he-pending">…</span></div>
-      <div class="status-row"><span class="label">Pacotes com falha</span><span class="value v-pending" id="he-failed">…</span></div>
-      <div class="status-row"><span class="label">Bytes hidratados</span><span class="value v-pending" id="he-bytes">…</span></div>
-      <div class="status-row"><span class="label">Último checkpoint</span><span class="value v-pending" id="he-checkpoint">…</span></div>
-      <div class="status-row"><span class="label">Cota de armazenamento</span><span class="value v-pending" id="he-quota">…</span></div>
-      <div class="status-row"><span class="label">Retomada disponível</span><span class="value v-pending" id="he-resumable">…</span></div>
-      <div class="status-row"><span class="label">Modo offline disponível</span><span class="value v-pending" id="he-offline-available">…</span></div>
-      <div class="status-row"><span class="label">FAIL_CLOSED</span><span class="value v-pending" id="he-fail-closed">…</span></div>
-      <div class="status-row"><span class="label">Último erro</span><span class="value v-pending" id="he-last-error">…</span></div>
+    <div class="he-hero">
+      <div class="he-ring" id="he-ring" data-engine-state="IDLE">
+        <div class="he-ring-core">
+          <span class="he-ring-pct" id="he-progress-pct">0%</span>
+          <span class="he-ring-caption">hidratado</span>
+        </div>
+      </div>
+      <div class="he-hero-rows">
+        <div class="status-row he-hero-row"><span class="label">Status da hidratação</span><span class="value v-pending" id="he-status">…</span></div>
+        <div class="he-hero-trio">
+          <div class="status-row"><span class="label">Concluídos</span><span class="value v-pending" id="he-completed">…</span></div>
+          <div class="status-row"><span class="label">Pendentes</span><span class="value v-pending" id="he-pending">…</span></div>
+          <div class="status-row"><span class="label">Falhas</span><span class="value v-pending" id="he-failed">…</span></div>
+        </div>
+      </div>
     </div>
+    <details class="he-details">
+      <summary>Detalhes técnicos</summary>
+      <div class="status-grid he-details-grid">
+        <div class="status-row"><span class="label">Sessão</span><span class="value v-pending" id="he-session">…</span></div>
+        <div class="status-row"><span class="label">Bytes hidratados</span><span class="value v-pending" id="he-bytes">…</span></div>
+        <div class="status-row"><span class="label">Último checkpoint</span><span class="value v-pending" id="he-checkpoint">…</span></div>
+        <div class="status-row"><span class="label">Cota de armazenamento</span><span class="value v-pending" id="he-quota">…</span></div>
+        <div class="status-row"><span class="label">Retomada disponível</span><span class="value v-pending" id="he-resumable">…</span></div>
+        <div class="status-row"><span class="label">Modo offline disponível</span><span class="value v-pending" id="he-offline-available">…</span></div>
+        <div class="status-row"><span class="label">FAIL_CLOSED</span><span class="value v-pending" id="he-fail-closed">…</span></div>
+        <div class="status-row"><span class="label">Último erro</span><span class="value v-pending" id="he-last-error">…</span></div>
+      </div>
+    </details>
     <p class="engine-meta">Prioridade 1-2 (app shell, WASM, replay) entra primeiro; prioridade 3-4 (memória/extras) só depois, e fica PARTIAL se faltar espaço — o app nunca quebra por isso.</p>
     <div class="btn-grid">
         <button class="rt-btn primary" id="btn-he-start"><span class="icon">⛁</span> Iniciar/Retomar hidratação</button>
