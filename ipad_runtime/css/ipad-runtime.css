@@ -839,6 +839,11 @@ footer.legal {
     font-weight: bold;
     color: var(--sys-cyan);
     font-size: clamp(0.85rem, 2vw, 1rem);
+    /* valores como source_id/timestamp podem ser strings longas sem espaco
+       (enum SNAKE_CASE) — sem isso elas vazam por cima da celula vizinha do
+       grid em vez de quebrar linha dentro da propria celula (bug visual real). */
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 /* af-row-headline — destaque do preço atual (BTC/USDT) acima das demais
    leituras estatísticas: mesma cor/sem conotação de alta/baixa (cyan, nao

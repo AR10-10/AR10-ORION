@@ -81,6 +81,7 @@ function repairLabel(vault) {
 let workerClient = null;
 let replayDatasetCache = null;
 let lastAnalysisMeta = null;
+let lastReplayDrawData = null; // {closes, rollingSma} do ultimo replay — permite redesenhar o sparkline quando #advanced-section sai de hidden (canvas com rect 0x0 no draw original nao produz nada visivel)
 let vaultFreshness = null; // null=nao verificado nesta sessao; so muda apos check real (NO_FAKE_LOCAL_AI_CLAIMS)
 let lastVaultStatusObj = null; // cache do retorno de refreshVaultAndReplayStatus(), para computeMacroState()/Executive Summary lerem sem reconsultar o pack-manager
 let lastRiskGateConfig = null; // cache do retorno de riskGate.getConfig()/engageKillSwitch()/disengageKillSwitch(), mesmo motivo
@@ -577,26 +578,30 @@ function renderRealAnalysisFrame(frame) {
         els['real-analysis-frame-grid'].innerHTML = '<span class="analysis-frame-empty">Sem fonte ACTIVE_READ_ONLY nesta sessão ainda. Teste uma fonte real primeiro.</span>';
         return;
     }
-    const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : v);
+    // Snapshots reidratados de sessao anterior podem ter sido salvos antes de
+    // um campo existir no schema atual — nunca deixa undefined/null vazar pro
+    // template (mesmo vocabulario DADOS_INSUFICIENTES do resto do app).
+    const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
+    const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : str(v));
     els['real-analysis-frame-grid'].innerHTML = `
         <div class="af-row"><span class="af-label">Modo</span><span class="af-value">${frame.status === 'OK' ? 'REAL_READ_ONLY' : DADOS_INSUFICIENTES}</span></div>
-        <div class="af-row"><span class="af-label">Ativo</span><span class="af-value">${frame.asset}</span></div>
-        <div class="af-row"><span class="af-label">Fonte</span><span class="af-value">${frame.source}</span></div>
-        <div class="af-row"><span class="af-label">Timestamp</span><span class="af-value">${frame.timestamp}</span></div>
-        <div class="af-row"><span class="af-label">Candles</span><span class="af-value">${frame.candles_count}</span></div>
+        <div class="af-row"><span class="af-label">Ativo</span><span class="af-value">${str(frame.asset)}</span></div>
+        <div class="af-row"><span class="af-label">Fonte</span><span class="af-value">${str(frame.source)}</span></div>
+        <div class="af-row"><span class="af-label">Timestamp</span><span class="af-value">${str(frame.timestamp)}</span></div>
+        <div class="af-row"><span class="af-label">Candles</span><span class="af-value">${str(frame.candles_count)}</span></div>
         <div class="af-row af-row-headline"><span class="af-label">Último</span><span class="af-value">${fmt(frame.last_price)}</span></div>
         <div class="af-row"><span class="af-label">SMA</span><span class="af-value">${fmt(frame.sma)}</span></div>
         <div class="af-row"><span class="af-label">EMA</span><span class="af-value">${fmt(frame.ema)}</span></div>
         <div class="af-row"><span class="af-label">Desvio padrão</span><span class="af-value">${fmt(frame.stddev)}</span></div>
-        <div class="af-row"><span class="af-label">Z-score</span><span class="af-value">${typeof frame.zscore === 'number' ? frame.zscore.toFixed(3) : frame.zscore}</span></div>
+        <div class="af-row"><span class="af-label">Z-score</span><span class="af-value">${typeof frame.zscore === 'number' ? frame.zscore.toFixed(3) : str(frame.zscore)}</span></div>
         <div class="af-row"><span class="af-label">Suporte</span><span class="af-value">${fmt(frame.support)}</span></div>
         <div class="af-row"><span class="af-label">Resistência</span><span class="af-value">${fmt(frame.resistance)}</span></div>
-        <div class="af-row"><span class="af-label">Volatilidade</span><span class="af-value">${frame.volatility_state}</span></div>
-        <div class="af-row"><span class="af-label">Direção (descritiva)</span><span class="af-value">${frame.trend_direction}</span></div>
-        <div class="af-row"><span class="af-label">Volume</span><span class="af-value">${frame.volume_status}</span></div>
-        <div class="af-row"><span class="af-label">Qualidade da fonte</span><span class="af-value">${frame.data_quality}</span></div>
+        <div class="af-row"><span class="af-label">Volatilidade</span><span class="af-value">${str(frame.volatility_state)}</span></div>
+        <div class="af-row"><span class="af-label">Direção (descritiva)</span><span class="af-value">${str(frame.trend_direction)}</span></div>
+        <div class="af-row"><span class="af-label">Volume</span><span class="af-value">${str(frame.volume_status)}</span></div>
+        <div class="af-row"><span class="af-label">Qualidade da fonte</span><span class="af-value">${str(frame.data_quality)}</span></div>
         <div class="af-row"><span class="af-label">Frescor do candle</span><span class="af-value">${formatFreshnessMs(frame.freshness)}</span></div>
-        <div class="af-row"><span class="af-label">Status</span><span class="af-value">${frame.status}</span></div>
+        <div class="af-row"><span class="af-label">Status</span><span class="af-value">${str(frame.status)}</span></div>
     `;
     if (els['real-analysis-frame-note']) {
         els['real-analysis-frame-note'].textContent = frame.status === 'OK'
@@ -1178,10 +1183,10 @@ async function handleRunReplay() {
                 renderAnalysisFrame(meta);
             },
         });
+        lastReplayDrawData = { closes: replayDatasetCache.candles.map((c) => c.c), rollingSma: result.rollingSma };
         setStatus('st-replay', 'INSTALLED');
         setStatus('cr-replay', 'OK');
         siriform.setSiriformState('success', 'Replay BTC/USDT pronto para análise.');
-        void result;
     } catch (err) {
         log(`Erro no replay: ${err.message}`, 'fail');
         siriform.setSiriformState('warning', 'Não consegui rodar o replay agora.');
@@ -1603,6 +1608,12 @@ function wireAdvancedToggle() {
         if (show) {
             section.scrollIntoView({ behavior: 'smooth', block: 'start' });
             refreshMetricsPanel();
+            // Secao estava hidden no draw original do replay -> canvas tinha
+            // rect 0x0 e nao desenhou nada visivel. Redesenha agora que o
+            // canvas tem layout real, sem rodar o replay de novo.
+            if (lastReplayDrawData && els['replay-canvas']) {
+                replayEngine.drawSparkline(els['replay-canvas'], lastReplayDrawData.closes, lastReplayDrawData.rollingSma);
+            }
         }
     });
 }
