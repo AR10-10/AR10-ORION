@@ -255,7 +255,7 @@
   </section>
 
   <section class="card real-data-layer-panel" id="real-data-layer-panel">
-    <h2>Real Data Layer <span class="future-badge">conectores publicos, sem chave</span></h2>
+    <h2>Real Data Layer <span class="future-badge">conectores publicos, sem chave</span> <span class="readonly-badge">READ_ONLY_SOURCE</span></h2>
     <p class="onboarding-hint">Nenhum conector começa como <b>ACTIVE_READ_ONLY</b> por suposição. Todo conector nasce <b>PLANNED</b> nesta sessão e só muda de estado depois que a sonda real (fetch de verdade ou leitura de arquivo local de verdade) responder. O estado abaixo é sempre o último resultado real observado nesta sessão, nunca um valor decorativo.</p>
     <div class="status-grid" id="rdl-connector-grid">
         <span class="analysis-frame-empty">Toque em "Testar fontes reais" para sondar os conectores.</span>
@@ -386,6 +386,7 @@
       <div class="status-row"><span class="label">Volatilidade</span><span class="value v-pending" id="li-volatility">…</span></div>
       <div class="status-row"><span class="label">Tendência</span><span class="value v-pending" id="li-trend">…</span></div>
       <div class="status-row"><span class="label">Risco descritivo</span><span class="value v-pending" id="li-risk">…</span></div>
+      <div class="status-row"><span class="label">Fonte de dados</span><span class="value v-pending" id="li-data-mode">…</span></div>
     </div>
     <p class="engine-meta" id="li-explanation">Ainda não executado nesta sessão. Toque em "Rodar Local Intelligence".</p>
     <p class="engine-meta" id="li-reflection-text">Nenhum Reflection Report gerado ainda nesta sessão.</p>
@@ -441,6 +442,7 @@
         <span class="analysis-frame-empty">Nenhuma posição de papel aberta nesta sessão.</span>
     </div>
     <p class="onboarding-hint">Paper Trading usa o último preço real (<code>evidence.ticker.last_price</code>) de uma fonte ACTIVE_READ_ONLY como preço de entrada — nunca um preço inventado. Tamanho e stop loss usam um padrão fixo conservador (até 50 quote, stop a 2% da entrada) e passam pelo Risk Gate antes de abrir.</p>
+    <p class="diagnostic-note" id="pt-block-note" hidden></p>
     <div class="btn-grid">
         <button class="rt-btn" id="btn-pt-open"><span class="icon">＋</span> Abrir posição de papel (LONG)</button>
         <button class="rt-btn danger" id="btn-pt-clear"><span class="icon">⟲</span> Limpar ledger de papel</button>

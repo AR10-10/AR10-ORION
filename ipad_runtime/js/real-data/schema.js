@@ -14,14 +14,24 @@ export const NAO_APLICAVEL = 'NAO_APLICAVEL';
 // Vocabulario fechado do Connector State Machine. Nenhum conector pode
 // comecar como ACTIVE_READ_ONLY por suposicao — so chega la se a propria
 // sonda real (probe.js) passar.
+// STALE nao e setado por nenhuma sonda: e um rotulo calculado em tempo de
+// exibicao (registry.js:isStale / app.js) quando um conector ja confirmado
+// ACTIVE_READ_ONLY nesta sessao passa muito tempo sem ser sondado de novo —
+// a verdade gravada em sessionState nunca expira sozinha, so o rotulo exibido
+// troca, para que dado real velho nunca pareca dado real "agora".
+// FAILED e o resultado de uma excecao nao tratada dentro da propria sonda
+// (bug/erro generico do conector), distinto dos BLOCKED_BY_* que sao
+// classificacoes deliberadas de uma resposta HTTP real observada.
 export const CONNECTOR_STATES = Object.freeze({
     PLANNED: 'PLANNED',
     PROBING: 'PROBING',
     ACTIVE_READ_ONLY: 'ACTIVE_READ_ONLY',
+    STALE: 'STALE',
     DEGRADED: 'DEGRADED',
     BLOCKED_BY_CORS: 'BLOCKED_BY_CORS',
     BLOCKED_BY_SCHEMA: 'BLOCKED_BY_SCHEMA',
     BLOCKED_BY_POLICY: 'BLOCKED_BY_POLICY',
+    FAILED: 'FAILED',
     DADOS_INSUFICIENTES: 'DADOS_INSUFICIENTES',
 });
 

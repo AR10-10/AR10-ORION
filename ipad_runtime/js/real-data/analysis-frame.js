@@ -26,6 +26,18 @@ function volatilityState(stddev, lastPrice) {
     return 'ALTA';
 }
 
+// Leitura puramente descritiva da posicao do ultimo preco real frente a sua
+// propria SMA do periodo — nunca um sinal, nunca uma instrucao de ordem.
+// Vocabulario fechado de proposito (nenhuma palavra de acao como "comprar"/
+// "vender"/"entrar"), ver js/voice.js BLOCKED_PHRASES para o mesmo cuidado
+// no canal de voz.
+function trendDirection(lastPrice, sma) {
+    if (!Number.isFinite(lastPrice) || !Number.isFinite(sma) || sma === 0) return DADOS_INSUFICIENTES;
+    const diffPct = (lastPrice - sma) / sma;
+    if (Math.abs(diffPct) < 0.001) return 'LATERAL_PROXIMO_DA_MEDIA';
+    return diffPct > 0 ? 'ACIMA_DA_MEDIA' : 'ABAIXO_DA_MEDIA';
+}
+
 function emptyFrame(evidence, reason) {
     return {
         asset: evidence.symbol,
@@ -44,6 +56,7 @@ function emptyFrame(evidence, reason) {
         support: DADOS_INSUFICIENTES,
         resistance: DADOS_INSUFICIENTES,
         volatility_state: DADOS_INSUFICIENTES,
+        trend_direction: DADOS_INSUFICIENTES,
         missing_fields: evidence.missing_fields || [],
         data_quality: evidence.data_quality || DADOS_INSUFICIENTES,
         read_only: true,
@@ -101,6 +114,7 @@ export async function buildRealAnalysisFrame({ evidence, workerClient, windowSiz
         support,
         resistance,
         volatility_state: volatilityState(result.stddev, lastPrice),
+        trend_direction: trendDirection(lastPrice, result.sma),
         missing_fields: evidence.missing_fields || [],
         data_quality: evidence.data_quality || DADOS_INSUFICIENTES,
         read_only: true,

@@ -17,7 +17,7 @@
     "fail_closed": true
   },
   "connector_state_machine": {
-    "states": ["PLANNED", "PROBING", "ACTIVE_READ_ONLY", "DEGRADED", "BLOCKED_BY_CORS", "BLOCKED_BY_SCHEMA", "BLOCKED_BY_POLICY", "DADOS_INSUFICIENTES"],
+    "states": ["PLANNED", "PROBING", "ACTIVE_READ_ONLY", "STALE", "DEGRADED", "BLOCKED_BY_CORS", "BLOCKED_BY_SCHEMA", "BLOCKED_BY_POLICY", "FAILED", "DADOS_INSUFICIENTES"],
     "initial_state_every_session": "PLANNED",
     "rule": "Nenhum conector pode comecar como ACTIVE_READ_ONLY por suposicao. So pode virar ACTIVE_READ_ONLY se a propria sonda real passar nesta sessao.",
     "implementation": "ipad_runtime/js/real-data/registry.js"

@@ -67,11 +67,11 @@ const els = {};
     'mv-event-log-count', 'mv-snapshot-status', 'mv-last-good-status', 'mv-recovery-status', 'mv-hydration-status', 'btn-mv-snapshot',
     'sh-grid', 'sh-active-count', 'sh-total-count',
     'rg-kill-switch', 'rg-max-drawdown', 'rg-max-position', 'rg-require-stop', 'rg-min-quality', 'btn-rg-engage', 'btn-rg-disengage',
-    'pt-mode', 'pt-open-positions', 'pt-closed-trades', 'pt-realized-pnl', 'pt-drawdown', 'pt-positions-grid', 'btn-pt-open', 'btn-pt-clear',
+    'pt-mode', 'pt-open-positions', 'pt-closed-trades', 'pt-realized-pnl', 'pt-drawdown', 'pt-positions-grid', 'pt-block-note', 'btn-pt-open', 'btn-pt-clear',
     'ls-mode', 'ls-status', 'ls-reasons', 'ls-unlock-requires',
     'br-last-backup', 'btn-br-export', 'btn-br-import', 'br-import-input',
     'al-list', 'al-count', 'btn-al-refresh',
-    'li-final-label', 'li-confidence', 'li-source-quality', 'li-volatility', 'li-trend', 'li-risk',
+    'li-final-label', 'li-confidence', 'li-source-quality', 'li-volatility', 'li-trend', 'li-risk', 'li-data-mode',
     'li-explanation', 'li-reflection-text', 'btn-li-run', 'btn-li-reflect',
     'status-modal', 'status-modal-title', 'status-modal-body', 'btn-status-modal-close',
     'se-edge-status', 'se-device', 'se-session-id', 'se-last-sequence', 'se-render-latency',
@@ -468,6 +468,7 @@ async function refreshVaultAndReplayStatus() {
 
 function renderAnalysisFrame(meta) {
     els['analysis-frame-grid'].innerHTML = `
+        <div class="af-row"><span class="af-label">Modo</span><span class="af-value">SYNTHETIC_OFFLINE</span></div>
         <div class="af-row"><span class="af-label">Candles</span><span class="af-value">${meta.count}</span></div>
         <div class="af-row"><span class="af-label">Último</span><span class="af-value">${meta.last.toFixed(2)}</span></div>
         <div class="af-row"><span class="af-label">SMA</span><span class="af-value">${meta.sma.toFixed(2)}</span></div>
@@ -510,11 +511,12 @@ function refreshHistoricalNotes() {
 
 function classForConnectorState(state) {
     if (state === 'ACTIVE_READ_ONLY') return 'v-ok';
+    if (state === 'STALE') return 'v-limited'; // dado real confirmado nesta sessao, porem velho demais para parecer "agora"
     if (state === 'SESSION_PREVIOUS') return 'v-info'; // nunca v-ok: e memoria, nao revalidacao fresca
     if (state === 'PLANNED' || state === 'PROBING' || state === 'REQUIRES_API_KEY') return 'v-pending';
     if (state === 'DEGRADED' || state === 'DADOS_INSUFICIENTES' || state === 'UNSUPPORTED_ON_IPAD') return 'v-limited';
     if (state === 'FUTURE' || state === 'NAO_LISTADO_NO_ROTEIRO_ESTATICO') return 'v-info';
-    return 'v-fail'; // BLOCKED_BY_CORS / BLOCKED_BY_SCHEMA / BLOCKED_BY_POLICY
+    return 'v-fail'; // FAILED / BLOCKED_BY_CORS / BLOCKED_BY_SCHEMA / BLOCKED_BY_POLICY
 }
 
 // FOCO3 — Resumo Executivo (tela principal). Deriva 1 macro-estado a partir
@@ -532,7 +534,9 @@ function computeMacroState() {
         return lastVaultStatusObj.reason === 'checksum_failed' ? 'FAIL_CLOSED' : 'IDLE';
     }
     if (lastRiskGateConfig && lastRiskGateConfig.kill_switch_engaged) return 'FAIL_CLOSED';
-    if (!realDataRegistry.getActiveReadOnlySources().length) return 'DADOS_INSUFICIENTES';
+    const activeSources = realDataRegistry.getActiveReadOnlySources();
+    if (!activeSources.length) return 'DADOS_INSUFICIENTES';
+    if (activeSources.every((a) => realDataRegistry.isStale(a))) return 'DEGRADED'; // real, mas velho demais nesta sessao
     if (vaultFreshness === 'DESATUALIZADO') return 'DEGRADED';
     return 'READY';
 }
@@ -552,10 +556,15 @@ async function refreshExecutiveSummary() {
     if (els['ex-state-row']) els['ex-state-row'].setAttribute('data-macro-state', macro);
 
     const active = realDataRegistry.getActiveReadOnlySources();
-    if (active.length) {
-        setStatusWithClass('ex-source', active.map((a) => a.connector_name).join(', '), classForConnectorState('ACTIVE_READ_ONLY'));
-        const latest = active.reduce((acc, a) => (a.last_probed_at && (!acc || a.last_probed_at > acc) ? a.last_probed_at : acc), null);
+    const freshActive = active.filter((a) => !realDataRegistry.isStale(a));
+    const staleActive = active.filter((a) => realDataRegistry.isStale(a));
+    if (freshActive.length) {
+        setStatusWithClass('ex-source', freshActive.map((a) => a.connector_name).join(', '), classForConnectorState('ACTIVE_READ_ONLY'));
+        const latest = freshActive.reduce((acc, a) => (a.last_probed_at && (!acc || a.last_probed_at > acc) ? a.last_probed_at : acc), null);
         setInfo('ex-freshness', latest ? new Date(latest).toLocaleString('pt-BR') : 'agora');
+    } else if (staleActive.length) {
+        setStatusWithClass('ex-source', `${staleActive.map((a) => a.connector_name).join(', ')} (STALE)`, classForConnectorState('STALE'));
+        setInfo('ex-freshness', 'Confirmado nesta sessão, porém desatualizado agora — toque em "Atualizar dados reais".');
     } else if (isShowingHistoricalData() && rehydratedActiveSourceId) {
         const meta = realDataRegistry.getConnectorMeta(rehydratedActiveSourceId);
         setStatusWithClass('ex-source', `${meta ? meta.connector_name : rehydratedActiveSourceId} (sessão anterior)`, classForConnectorState('SESSION_PREVIOUS'));
@@ -604,13 +613,18 @@ function renderConnectorGrid() {
     const showSessionPrevious = isShowingHistoricalData() && rehydratedActiveSourceId;
     els['rdl-connector-grid'].innerHTML = connectors.map((c) => {
         const isRememberedPrevious = showSessionPrevious && c.connector_id === rehydratedActiveSourceId && c.state === 'PLANNED';
-        const displayState = isRememberedPrevious ? 'SESSION_PREVIOUS' : c.state;
+        const isStaleNow = !isRememberedPrevious && realDataRegistry.isStale(c);
+        const displayState = isRememberedPrevious ? 'SESSION_PREVIOUS' : (isStaleNow ? 'STALE' : c.state);
         return `<div class="status-row"><span class="label">${c.connector_name}</span><span class="value ${classForConnectorState(displayState)}">${displayState}</span></div>`;
     }).join('');
 
     const active = realDataRegistry.getActiveReadOnlySources();
-    if (active.length) {
-        els['rdl-active-source'].textContent = `Fonte ativa: ${active.map((a) => a.connector_name).join(', ')}.`;
+    const freshActive = active.filter((a) => !realDataRegistry.isStale(a));
+    const staleActive = active.filter((a) => realDataRegistry.isStale(a));
+    if (freshActive.length) {
+        els['rdl-active-source'].textContent = `Fonte ativa: ${freshActive.map((a) => a.connector_name).join(', ')}.`;
+    } else if (staleActive.length) {
+        els['rdl-active-source'].textContent = `Fonte ativa porém STALE (sondada há mais de 5min nesta sessão): ${staleActive.map((a) => a.connector_name).join(', ')}. Toque em "Atualizar dados reais".`;
     } else if (showSessionPrevious) {
         const meta = realDataRegistry.getConnectorMeta(rehydratedActiveSourceId);
         els['rdl-active-source'].textContent = `Fonte ativa (sessão anterior, ainda não revalidada agora): ${meta ? meta.connector_name : rehydratedActiveSourceId}.`;
@@ -658,6 +672,17 @@ function renderEvidence(evidence) {
     els['re-evidence-hash'].innerHTML = `<span class="hash-chip">raw_sample_hash: ${String(evidence.raw_sample_hash).slice(0, 20)}…</span><span class="hash-chip">timestamp: ${evidence.timestamp}</span><span class="hash-chip">fetched_at: ${evidence.fetched_at || '—'}</span>`;
 }
 
+// Frescor em prosa curta a partir de freshness_ms (idade do candle no momento
+// da sonda, nao idade da sonda em si — ver registry.js:isStale para a outra
+// nocao de frescor, a da sondagem). Nunca inventa uma idade: DADOS_INSUFICIENTES
+// permanece DADOS_INSUFICIENTES.
+function formatFreshnessMs(ms) {
+    if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return DADOS_INSUFICIENTES;
+    if (ms < 60000) return `${Math.round(ms / 1000)}s atrás`;
+    if (ms < 3600000) return `${Math.round(ms / 60000)}min atrás`;
+    return `${Math.round(ms / 3600000)}h atrás`;
+}
+
 function renderRealAnalysisFrame(frame) {
     if (!frame) {
         els['real-analysis-frame-grid'].innerHTML = '<span class="analysis-frame-empty">Sem fonte ACTIVE_READ_ONLY nesta sessão ainda. Teste uma fonte real primeiro.</span>';
@@ -665,8 +690,10 @@ function renderRealAnalysisFrame(frame) {
     }
     const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : v);
     els['real-analysis-frame-grid'].innerHTML = `
+        <div class="af-row"><span class="af-label">Modo</span><span class="af-value">${frame.status === 'OK' ? 'REAL_READ_ONLY' : DADOS_INSUFICIENTES}</span></div>
         <div class="af-row"><span class="af-label">Ativo</span><span class="af-value">${frame.asset}</span></div>
         <div class="af-row"><span class="af-label">Fonte</span><span class="af-value">${frame.source}</span></div>
+        <div class="af-row"><span class="af-label">Timestamp</span><span class="af-value">${frame.timestamp}</span></div>
         <div class="af-row"><span class="af-label">Candles</span><span class="af-value">${frame.candles_count}</span></div>
         <div class="af-row"><span class="af-label">Último</span><span class="af-value">${fmt(frame.last_price)}</span></div>
         <div class="af-row"><span class="af-label">SMA</span><span class="af-value">${fmt(frame.sma)}</span></div>
@@ -676,7 +703,10 @@ function renderRealAnalysisFrame(frame) {
         <div class="af-row"><span class="af-label">Suporte</span><span class="af-value">${fmt(frame.support)}</span></div>
         <div class="af-row"><span class="af-label">Resistência</span><span class="af-value">${fmt(frame.resistance)}</span></div>
         <div class="af-row"><span class="af-label">Volatilidade</span><span class="af-value">${frame.volatility_state}</span></div>
+        <div class="af-row"><span class="af-label">Direção (descritiva)</span><span class="af-value">${frame.trend_direction}</span></div>
         <div class="af-row"><span class="af-label">Volume</span><span class="af-value">${frame.volume_status}</span></div>
+        <div class="af-row"><span class="af-label">Qualidade da fonte</span><span class="af-value">${frame.data_quality}</span></div>
+        <div class="af-row"><span class="af-label">Frescor do candle</span><span class="af-value">${formatFreshnessMs(frame.freshness)}</span></div>
         <div class="af-row"><span class="af-label">Status</span><span class="af-value">${frame.status}</span></div>
     `;
     if (els['real-analysis-frame-note']) {
@@ -856,9 +886,16 @@ function classForSetupLabel(label) {
     return 'v-pending'; // DADOS_INSUFICIENTES
 }
 
+function classForDataMode(mode) {
+    if (mode === 'REAL_READ_ONLY') return 'v-ok';
+    if (mode === 'SYNTHETIC_OFFLINE') return 'v-limited';
+    return 'v-pending'; // DADOS_INSUFICIENTES
+}
+
 function renderLocalIntelligenceCard(result) {
     if (!result) {
         setStatusWithClass('li-final-label', 'DADOS_INSUFICIENTES', 'v-pending');
+        setStatusWithClass('li-data-mode', DADOS_INSUFICIENTES, 'v-pending');
         return;
     }
     const score = result.score;
@@ -868,6 +905,7 @@ function renderLocalIntelligenceCard(result) {
     setInfo('li-volatility', score.volatility_score ?? 'n/d');
     setInfo('li-trend', score.trend_score ?? 'n/d');
     setInfo('li-risk', score.risk_score ?? 'n/d');
+    setStatusWithClass('li-data-mode', result.source_data_mode, classForDataMode(result.source_data_mode));
     els['li-explanation'].textContent = result.explanation_pt_br;
 }
 
@@ -2030,10 +2068,16 @@ async function handleOpenPaperPosition() {
     const evidence = activeRealEvidence;
     const price = evidence && evidence.ticker && typeof evidence.ticker.last_price === 'number' ? evidence.ticker.last_price : null;
     if (!price) {
-        log('Não é possível abrir posição de papel: nenhuma fonte real ACTIVE_READ_ONLY nesta sessão tem preço (ticker.last_price) ainda.', 'warn');
-        siriform.setSiriformState('warning', 'Sem preço real disponível ainda — teste uma fonte real primeiro.');
+        const blockedMsg = 'Paper bloqueado: preço real não validado nesta sessão.';
+        log(`${blockedMsg} (nenhuma fonte real ACTIVE_READ_ONLY nesta sessão tem preço/ticker.last_price ainda)`, 'warn');
+        siriform.setSiriformState('warning', blockedMsg);
+        if (els['pt-block-note']) {
+            els['pt-block-note'].hidden = false;
+            els['pt-block-note'].textContent = blockedMsg;
+        }
         return;
     }
+    if (els['pt-block-note']) els['pt-block-note'].hidden = true;
     const cfg = await riskGate.getConfig();
     const order = {
         side: 'LONG',

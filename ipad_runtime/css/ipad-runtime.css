@@ -732,7 +732,7 @@ footer.legal {
 /* ------------------------------------------------------------
    BADGES UTILITARIOS DE HONESTIDADE — STUB / FUTURE / DISABLED
    ------------------------------------------------------------ */
-.stub-badge, .future-badge, .disabled-badge {
+.stub-badge, .future-badge, .disabled-badge, .readonly-badge {
     display: inline-block;
     font-family: var(--font-mono);
     font-size: 0.66rem;
@@ -747,6 +747,11 @@ footer.legal {
 .stub-badge { color: var(--alert-amber); border: 1px solid rgba(255, 184, 0, 0.5); background: rgba(255, 184, 0, 0.08); }
 .future-badge { color: var(--sys-cyan); border: 1px solid rgba(0, 242, 255, 0.5); background: rgba(0, 242, 255, 0.06); }
 .disabled-badge { color: var(--short-red); border: 1px solid rgba(255, 62, 82, 0.5); background: rgba(255, 62, 82, 0.07); }
+/* READ_ONLY_SOURCE: confirmacao estrutural permanente de que este conector
+   nunca pode enviar ordem, mesmo ACTIVE_READ_ONLY — verde, igual ao
+   vocabulario "is-ok" do resto do painel, nunca confundido com o ciano de
+   "future" (que significa "ainda nao implementado"). */
+.readonly-badge { color: var(--long-green); border: 1px solid rgba(0, 255, 157, 0.4); background: rgba(0, 255, 157, 0.06); }
 
 /* ------------------------------------------------------------
    RESUMO EXECUTIVO — FOCO3: tela principal mais executiva. O

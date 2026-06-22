@@ -66,6 +66,20 @@ export function getActiveReadOnlySources() {
     return listConnectors().filter((c) => c.state === CONNECTOR_STATES.ACTIVE_READ_ONLY);
 }
 
+// Idade maxima (ms) que um resultado ACTIVE_READ_ONLY pode ter antes da UI
+// trocar o rotulo exibido para STALE. Isto NUNCA reescreve sessionState (a
+// sonda continua sendo a unica fonte de verdade armazenada) — e so um corte
+// de apresentacao para que dado real confirmado ha muito tempo nesta mesma
+// sessao nunca seja confundido com dado fresco "agora".
+const STALE_AFTER_MS = 5 * 60 * 1000;
+
+export function isStale(connectorOrEntry) {
+    if (!connectorOrEntry || connectorOrEntry.state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) return false;
+    if (!connectorOrEntry.last_probed_at) return false;
+    const age = Date.now() - new Date(connectorOrEntry.last_probed_at).getTime();
+    return Number.isFinite(age) && age > STALE_AFTER_MS;
+}
+
 async function runProbe(mod, opts, onTransition) {
     const id = mod.meta.connector_id;
     sessionState.set(id, { ...sessionState.get(id), state: CONNECTOR_STATES.PROBING });
@@ -76,7 +90,7 @@ async function runProbe(mod, opts, onTransition) {
         result = await mod.probe(opts);
     } catch (err) {
         result = {
-            state: CONNECTOR_STATES.BLOCKED_BY_POLICY,
+            state: CONNECTOR_STATES.FAILED,
             evidence: null,
             probe_detail: { reason: `excecao_nao_tratada_na_sonda:${err.message || err}` },
         };
