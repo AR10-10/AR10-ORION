@@ -15,6 +15,7 @@ import * as realDataRegistry from './real-data/registry.js';
 import { buildRealAnalysisFrame } from './real-data/analysis-frame.js';
 import { DADOS_INSUFICIENTES, NAO_APLICAVEL, EVIDENCE_DATA_FIELDS } from './real-data/schema.js';
 import { buildResearchEngineFrame } from './research/research-engine.js';
+import { buildTargetTracker, TARGET_STATUS } from './research/target-tracker.js';
 import * as persistentState from './memory/persistent-state.js';
 import * as evidenceLedger from './memory/evidence-ledger.js';
 import { rehydrateSession } from './memory/session-resume.js';
@@ -96,6 +97,7 @@ let lastRiskGateConfig = null; // cache do retorno de riskGate.getConfig()/engag
 let activeRealEvidence = null;
 let lastRealAnalysisFrame = null;
 let lastResearchEngineFrame = null;
+let lastTargetTracker = null;
 let sessionHasRealProbe = false;
 let rehydratedPreviousSession = false;
 let rehydratedActiveSourceId = null;
@@ -506,6 +508,8 @@ function collectLiveTickerState() {
         analysisFrame: lastRealAnalysisFrame,
         freshnessLabel: lastRealAnalysisFrame ? formatFreshnessMs(lastRealAnalysisFrame.freshness) : DADOS_INSUFICIENTES,
         researchFrame: lastResearchEngineFrame,
+        targetTracker: lastTargetTracker,
+        livePriceInfo: getLivePriceInfo(),
         vaultLabel: packStatusLabel(lastVaultStatusObj, vaultFreshness),
         hydrationStatus: lastHydrationEngineStatus ? lastHydrationEngineStatus.status : null,
         safariEdgeStatus: lastSafariEdgeStatus ? lastSafariEdgeStatus.edge_status : null,
@@ -721,6 +725,110 @@ function renderResearchEngineFrame(frame) {
         + row('Motivo da limitação', str(c.limitation_reason));
 }
 
+// Mission AR10_CYBORG_2_SAFE_REAL_DATA_LAYER_RUNTIME_PROBE_V1 — BTC Live
+// Panel / Target Tracker (research/target-tracker.js). getLivePriceInfo()
+// so' le o ticker da evidencia real ja ativa nesta sessao (nunca dispara
+// sonda nova); refreshTargetTracker() compara esse preco vivo contra o
+// snapshot fixado por handleGenerateRealAnalysis() — alvo/suporte/
+// resistencia nunca sao recalculados aqui, so' lidos do snapshot via
+// buildTargetTracker(). Chamado depois de qualquer evento que mude preco
+// vivo OU snapshot (testar fontes, atualizar dados, gerar analise, importar
+// CSV, reidratar sessao) e pelo auto-refresh silencioso mais abaixo.
+function getLivePriceInfo() {
+    if (!activeRealEvidence || !activeRealEvidence.ticker || typeof activeRealEvidence.ticker.last_price !== 'number') {
+        return { value: DADOS_INSUFICIENTES, mode: DADOS_INSUFICIENTES, source: DADOS_INSUFICIENTES };
+    }
+    const active = realDataRegistry.getActiveReadOnlySources();
+    const entry = active.find((a) => a.connector_id === activeRealEvidence.source_id);
+    const historical = isShowingHistoricalData();
+    let mode;
+    if (historical) mode = 'SESSION_PREVIOUS';
+    else if (entry && realDataRegistry.isStale(entry)) mode = 'STALE';
+    else if (entry) mode = 'REAL_READ_ONLY';
+    else mode = DADOS_INSUFICIENTES;
+    return { value: activeRealEvidence.ticker.last_price, mode, source: activeRealEvidence.source_name };
+}
+
+function formatSignedNumber(v, decimals = 2) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return DADOS_INSUFICIENTES;
+    return `${v > 0 ? '+' : ''}${v.toFixed(decimals)}`;
+}
+
+function formatSignedPct(v, decimals = 2) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return DADOS_INSUFICIENTES;
+    return `${v > 0 ? '+' : ''}${v.toFixed(decimals)}%`;
+}
+
+function classForTargetStatus(status) {
+    if (status === TARGET_STATUS.TARGET_TOUCHED) return 'v-ok';
+    if (status === TARGET_STATUS.INVALIDATED) return 'v-fail';
+    if (status === TARGET_STATUS.APPROACHING_TARGET || status === TARGET_STATUS.STALE_REANALYZE) return 'v-limited';
+    if (status === TARGET_STATUS.DADOS_INSUFICIENTES) return 'v-pending';
+    return 'v-info';
+}
+
+function renderTargetTrackerRoute(gridId, route) {
+    const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
+    const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : str(v));
+    const pct = (v) => (typeof v === 'number' ? `${v.toFixed(2)}%` : str(v));
+    els[gridId].innerHTML = `
+        <div class="status-row"><span class="label">Status</span><span class="value ${classForTargetStatus(route.status)}">${route.status}</span></div>
+        <div class="status-row"><span class="label">Alvo 1</span><span class="value v-info">${fmt(route.target_1)}</span></div>
+        <div class="status-row"><span class="label">Invalidação</span><span class="value v-info">${fmt(route.invalidation)}</span></div>
+        <div class="status-row"><span class="label">Distância até alvo</span><span class="value v-info">${pct(route.distance_to_target_pct)}</span></div>
+        <div class="status-row"><span class="label">Distância até invalidação</span><span class="value v-info">${pct(route.distance_to_invalidation_pct)}</span></div>
+    `;
+}
+
+/** Renderiza o BTC Live Panel inteiro: preco vivo (linha hero, cor por
+ *  data-live-mode — nunca por direcao long/short), snapshot da analise e as
+ *  duas rotas do Target Tracker. tracker vem sempre de buildTargetTracker()
+ *  (nunca null — emptyTracker() cobre o caso sem snapshot/sem preco). */
+function renderTargetTracker(tracker, livePriceInfo) {
+    const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
+    const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : str(v));
+    const mode = (livePriceInfo && livePriceInfo.mode) || DADOS_INSUFICIENTES;
+
+    if (els['bl-price-row']) els['bl-price-row'].dataset.liveMode = mode;
+    if (els['bl-current-price']) els['bl-current-price'].textContent = fmt(livePriceInfo ? livePriceInfo.value : DADOS_INSUFICIENTES);
+    if (els['bl-current-source']) els['bl-current-source'].textContent = str(livePriceInfo ? livePriceInfo.source : DADOS_INSUFICIENTES);
+    if (els['bl-current-freshness']) els['bl-current-freshness'].textContent = activeRealEvidence ? formatFreshnessMs(activeRealEvidence.freshness_ms) : DADOS_INSUFICIENTES;
+    if (els['bl-current-mode']) {
+        els['bl-current-mode'].textContent = mode;
+        els['bl-current-mode'].className = `value ${mode === 'REAL_READ_ONLY' ? 'v-ok' : (mode === 'DADOS_INSUFICIENTES' ? 'v-fail' : 'v-limited')}`;
+    }
+
+    if (els['bl-snapshot-price']) els['bl-snapshot-price'].textContent = fmt(tracker.snapshot_price);
+    if (els['bl-snapshot-time']) els['bl-snapshot-time'].textContent = str(tracker.snapshot_generated_at);
+    if (els['bl-snapshot-age']) els['bl-snapshot-age'].textContent = formatFreshnessMs(tracker.snapshot_age_ms);
+    if (els['bl-price-diff']) {
+        els['bl-price-diff'].textContent = tracker.price_diff === DADOS_INSUFICIENTES
+            ? DADOS_INSUFICIENTES
+            : `${formatSignedNumber(tracker.price_diff)} / ${formatSignedPct(tracker.price_diff_pct)}`;
+    }
+
+    renderTargetTrackerRoute('bl-route-long-grid', tracker.rota_a_long);
+    renderTargetTrackerRoute('bl-route-short-grid', tracker.rota_b_short);
+
+    if (els['bl-reanalyze-banner']) {
+        els['bl-reanalyze-banner'].hidden = !tracker.reanalyze_recommended;
+        if (tracker.reanalyze_recommended) {
+            els['bl-reanalyze-banner'].textContent = `Reavaliar análise recomendado: ${tracker.reanalyze_reasons.join(', ')}. Toque em "Gerar AnalysisFrame real" de novo.`;
+        }
+    }
+}
+
+function refreshTargetTracker() {
+    const livePriceInfo = getLivePriceInfo();
+    const tracker = buildTargetTracker({
+        snapshot: { frame: lastRealAnalysisFrame, research: lastResearchEngineFrame },
+        livePrice: livePriceInfo,
+    });
+    lastTargetTracker = tracker;
+    renderTargetTracker(tracker, livePriceInfo);
+    return tracker;
+}
+
 // Mission AR10_CYBORG_2_SAFE_REAL_DATA_LAYER_RUNTIME_PROBE_V1 — handlers do
 // Real Data Layer. Cada handler reusa so os modulos ja existentes
 // (real-data/registry.js, real-data/analysis-frame.js, research/research-
@@ -763,10 +871,43 @@ async function handleTestRealSources() {
             log('Nenhum conector real ficou ACTIVE_READ_ONLY nesta sondagem — DADOS_INSUFICIENTES.', 'warn');
             siriform.setSiriformState('warning', 'Nenhuma fonte real pôde ser validada agora. DADOS_INSUFICIENTES.');
         }
+        refreshTargetTracker();
     } catch (err) {
         log(`Erro ao sondar fontes reais: ${err.message}`, 'fail');
         siriform.setSiriformState('warning', 'Não consegui sondar as fontes reais agora.');
     }
+}
+
+// Nucleo compartilhado entre o botao "Atualizar dados reais" (silent=false,
+// log e voz do Siriform) e o auto-refresh silencioso do BTC Live Panel
+// (silent=true, mais abaixo) — reproba so' a(s) fonte(s) ja ACTIVE_READ_ONLY
+// nesta sessao, nunca sonda fontes novas (isso continua sendo so' o botao
+// explicito "Testar fontes reais"). Nunca toca lastRealAnalysisFrame/
+// lastResearchEngineFrame: o snapshot da analise so' muda em
+// handleGenerateRealAnalysis(). Retorna false sem efeito nenhum quando nao
+// ha fonte ativa para reprobar (o caller decide o que fazer nesse caso).
+async function refreshActiveConnectorsEvidence({ silent = false } = {}) {
+    const active = realDataRegistry.getActiveReadOnlySources();
+    if (!active.length) return false;
+    for (const conn of active) {
+        const result = await realDataRegistry.probeNetworkConnector(conn.connector_id, {
+            symbol: activeRealEvidence?.symbol || 'BTC',
+            onTransition: silent ? undefined : () => renderConnectorGrid(),
+        });
+        await persistProbeResult(result);
+        if (result.state === 'ACTIVE_READ_ONLY') {
+            sessionHasRealProbe = true;
+            rehydratedActiveSourceId = null;
+            activeRealEvidence = result.evidence;
+        }
+    }
+    renderConnectorGrid();
+    refreshDataPolicyPanel();
+    await renderSourceHealthCard();
+    renderEvidence(activeRealEvidence);
+    refreshHistoricalNotes();
+    refreshTargetTracker();
+    return true;
 }
 
 async function handleRefreshRealData() {
@@ -779,29 +920,38 @@ async function handleRefreshRealData() {
     siriform.setSiriformState('checking', 'Atualizando dados da fonte real ativa...');
     log('=== ATUALIZAR DADOS REAIS ===', 'info');
     try {
-        for (const conn of active) {
-            const result = await realDataRegistry.probeNetworkConnector(conn.connector_id, {
-                symbol: activeRealEvidence?.symbol || 'BTC',
-                onTransition: () => renderConnectorGrid(),
-            });
-            await persistProbeResult(result);
-            if (result.state === 'ACTIVE_READ_ONLY') {
-                sessionHasRealProbe = true;
-                rehydratedActiveSourceId = null;
-                activeRealEvidence = result.evidence;
-            }
-        }
-        renderConnectorGrid();
-        refreshDataPolicyPanel();
-        await renderSourceHealthCard();
-        renderEvidence(activeRealEvidence);
-        refreshHistoricalNotes();
+        await refreshActiveConnectorsEvidence({ silent: false });
         log('Dados reais atualizados a partir da fonte ativa.', 'ok');
         siriform.setSiriformState('success', 'Dados reais atualizados.');
     } catch (err) {
         log(`Erro ao atualizar dados reais: ${err.message}`, 'fail');
         siriform.setSiriformState('warning', 'Não consegui atualizar os dados reais agora.');
     }
+}
+
+// Auto-refresh do preco vivo do BTC Live Panel (spec: "Nao fazer loop
+// pesado. Nao sobrecarregar Safari. Nao ficar chamando API rapido demais.").
+// So' roda quando ha fonte ACTIVE_READ_ONLY nesta sessao e a aba esta
+// visivel; nunca sonda fontes novas, nunca toca siriform/log/voz — so'
+// reproba a mesma fonte ja validada e atualiza preco/Target Tracker. Uma
+// falha aqui e' silenciosa de proposito: o proximo getActiveReadOnlySources()/
+// isStale() ja refletira isso na UI (FAILED/STALE) sem alarmar o usuario por
+// uma falha de rede transitoria em segundo plano.
+const LIVE_PRICE_REFRESH_MS = 30 * 1000;
+let livePriceRefreshTimer = null;
+
+async function silentLivePriceTick() {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    try {
+        await refreshActiveConnectorsEvidence({ silent: true });
+    } catch {
+        // silencioso de proposito — ver comentario acima.
+    }
+}
+
+function startLivePriceAutoRefresh() {
+    if (livePriceRefreshTimer) return;
+    livePriceRefreshTimer = setInterval(silentLivePriceTick, LIVE_PRICE_REFRESH_MS);
 }
 
 function handleImportRealCsv() {
@@ -832,6 +982,7 @@ async function handleGenerateRealAnalysis() {
         await persistentState.recordResearchFrame(research);
 
         refreshHistoricalNotes();
+        refreshTargetTracker();
 
         if (frame.status === 'OK') {
             log(`AnalysisFrame real OK — ${frame.candles_count} candles, último ${frame.last_price}, SMA ${frame.sma}, EMA ${frame.ema}.`, 'ok');
@@ -1042,6 +1193,7 @@ async function applyRehydratedSession(resume) {
     renderRealAnalysisFrame(lastRealAnalysisFrame);
     renderResearchEngineFrame(lastResearchEngineFrame);
     refreshHistoricalNotes();
+    refreshTargetTracker();
     return resume;
 }
 
@@ -2259,6 +2411,7 @@ function wireButtons() {
     if (btnImportRealCsv) btnImportRealCsv.addEventListener('click', handleImportRealCsv);
     const btnGenerateRealAnalysis = document.getElementById('btn-generate-real-analysis');
     if (btnGenerateRealAnalysis) btnGenerateRealAnalysis.addEventListener('click', handleGenerateRealAnalysis);
+    if (els['bl-btn-refresh-now']) els['bl-btn-refresh-now'].addEventListener('click', handleRefreshRealData);
     const btnShowEvidence = document.getElementById('btn-show-evidence');
     if (btnShowEvidence) btnShowEvidence.addEventListener('click', handleShowEvidence);
     const btnShowMissingFields = document.getElementById('btn-show-missing-fields');
@@ -2365,6 +2518,7 @@ function wireButtons() {
                 log(`Importação não passou da sonda: ${result.state}.`, 'warn');
                 siriform.setSiriformState('warning', `Importação bloqueada: ${result.state}.`);
             }
+            refreshTargetTracker();
         } catch (err) {
             log(`Erro ao importar arquivo local: ${err.message}`, 'fail');
             siriform.setSiriformState('warning', 'Não consegui importar esse arquivo.');
@@ -2432,6 +2586,13 @@ async function boot() {
     // para o primeiro tick do letreiro nao mostrar DADOS_INSUFICIENTES so'
     // por ter rodado cedo demais no boot.
     liveTicker.startLiveTicker(collectLiveTickerState, els['live-ticker-track']);
+
+    // BTC Live Panel: preco vivo desta sessao reprobado a cada 30s (so'
+    // quando ha fonte ACTIVE_READ_ONLY e a aba esta visivel — ver
+    // silentLivePriceTick acima). Comeca depois do live ticker pelo mesmo
+    // motivo do comentario acima: nao reprobar antes do Real Data Layer ter
+    // lido o estado real desta sessao pelo menos uma vez.
+    startLivePriceAutoRefresh();
 
     // Auto-reparo no boot: SÓ quando algo já foi instalado antes (existe meta
     // com checksums) e agora está quebrado — o caso "corrompido/ausente após

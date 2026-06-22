@@ -1491,6 +1491,46 @@ section.card[tabindex]:focus-visible {
     border-left-color: var(--short-red);
 }
 
+/* ------------------------------------------------------------
+   BTC LIVE PANEL — preco atual vs snapshot da analise (Target
+   Tracker, app.js renderTargetTracker()). Mesmo padrao de borda/
+   fundo do .ex-state-row[data-macro-state] acima, so' que a cor
+   reflete frescor da fonte (data-live-mode), nunca direcao long/
+   short — preco vivo nao e' sinal. #bl-current-price reusa o
+   destaque cyan sem-conotacao de .af-row-headline (mesmo motivo:
+   dado importante em foco, nao recomendacao).
+   ------------------------------------------------------------ */
+.bl-price-row {
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-left: 3px solid var(--text-dim);
+    transition: background 0.4s ease, border-color 0.4s ease;
+}
+.bl-price-row[data-live-mode="REAL_READ_ONLY"] {
+    background: rgba(0, 242, 255, 0.06);
+    border-color: rgba(0, 242, 255, 0.3);
+    border-left-color: var(--sys-cyan);
+}
+.bl-price-row[data-live-mode="STALE"],
+.bl-price-row[data-live-mode="SESSION_PREVIOUS"] {
+    background: rgba(255, 184, 0, 0.06);
+    border-color: rgba(255, 184, 0, 0.3);
+    border-left-color: var(--alert-amber);
+}
+.bl-price-row[data-live-mode="DADOS_INSUFICIENTES"] {
+    background: rgba(255, 62, 82, 0.07);
+    border-color: rgba(255, 62, 82, 0.35);
+    border-left-color: var(--short-red);
+}
+#bl-current-price {
+    font-size: clamp(1.5rem, 5vw, 2.2rem);
+    letter-spacing: 0.5px;
+    text-shadow: 0 0 16px rgba(0, 242, 255, 0.5);
+}
+
 .ex-details {
     margin: 0 0 14px;
     border: 1px solid rgba(0, 242, 255, 0.12);

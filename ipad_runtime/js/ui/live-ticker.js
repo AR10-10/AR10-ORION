@@ -93,6 +93,39 @@ export function buildLiveTickerItems(state = {}) {
         items.push({ category: 'LONG/SHORT', severity: 'warn', text: `${DADOS_INSUFICIENTES} — Research Engine ainda não rodou nesta sessão.` });
     }
 
+    // 3b) Target Tracker — preco vivo (ultima sonda real desta sessao) vs
+    // snapshot fixado na ultima analise (state.targetTracker, calculado por
+    // app.js:refreshTargetTracker() via research/target-tracker.js). Nunca
+    // mostra as duas rotas ao mesmo tempo aqui (ja tem card proprio com o
+    // detalhe completo); so' a mais "avancada" das duas (tocada/invalidada
+    // primeiro, depois a mais proxima do alvo), pra frase ficar curta.
+    const tracker = state.targetTracker;
+    if (tracker && tracker.current_price !== DADOS_INSUFICIENTES) {
+        const current = tracker.current_price.toFixed(2);
+        const snapshot = typeof tracker.snapshot_price === 'number' ? tracker.snapshot_price.toFixed(2) : DADOS_INSUFICIENTES;
+        const diffPct = typeof tracker.price_diff_pct === 'number' ? `${tracker.price_diff_pct > 0 ? '+' : ''}${tracker.price_diff_pct.toFixed(2)}%` : DADOS_INSUFICIENTES;
+        if (tracker.reanalyze_recommended) {
+            items.push({
+                category: 'TARGET TRACKER',
+                severity: 'warn',
+                text: `Snapshot stale ou divergente (${diffPct} vs. preço usado na análise) · toque em "Gerar AnalysisFrame real" para reavaliar.`,
+            });
+        } else {
+            const priority = { TARGET_TOUCHED: 0, INVALIDATED: 0, APPROACHING_TARGET: 1, STALE_REANALYZE: 2, WAITING: 3, DADOS_INSUFICIENTES: 4 };
+            const route = [tracker.rota_a_long, tracker.rota_b_short]
+                .sort((a, b) => (priority[a.status] ?? 5) - (priority[b.status] ?? 5))[0];
+            const target = typeof route.target_1 === 'number' ? route.target_1.toFixed(2) : DADOS_INSUFICIENTES;
+            const dist = typeof route.distance_to_target_pct === 'number' ? `${route.distance_to_target_pct.toFixed(2)}%` : DADOS_INSUFICIENTES;
+            items.push({
+                category: 'TARGET TRACKER',
+                severity: (route.status === 'TARGET_TOUCHED' || route.status === 'INVALIDATED') ? 'warn' : 'info',
+                text: `BTC/USDT atual ${current} · análise feita em ${snapshot} (${diffPct}) · alvo ${target} · distância ${dist} · ${route.status}`,
+            });
+        }
+    } else {
+        items.push({ category: 'TARGET TRACKER', severity: 'warn', text: `${DADOS_INSUFICIENTES} — gere o AnalysisFrame real para iniciar o Target Tracker.` });
+    }
+
     // 4) Hydration / Vault / Safari Edge.
     const vaultOk = state.vaultLabel === 'INSTALADO' || state.vaultLabel === 'ATUALIZADO';
     items.push({

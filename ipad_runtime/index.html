@@ -124,6 +124,46 @@
     </div>
   </section>
 
+  <section class="card btc-live-panel" id="btc-live-panel">
+    <h2>BTC/USDT — Preço Atual <span class="step">leitura descritiva — não é recomendação</span></h2>
+    <p class="onboarding-hint">Preço atual é sempre a última sonda real desta sessão (mark-to-market read-only) — nunca um valor parado. Snapshot é o preço e os níveis fixados na última vez que "Gerar AnalysisFrame real" rodou. Os alvos abaixo vêm do snapshot, não do preço vivo: este card só compara dois números reais e mostra a distância entre eles.</p>
+
+    <div class="status-row bl-price-row" id="bl-price-row" data-live-mode="DADOS_INSUFICIENTES">
+      <span class="label">Preço atual</span><span class="value v-info" id="bl-current-price">…</span>
+    </div>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Fonte</span><span class="value v-pending" id="bl-current-source">…</span></div>
+      <div class="status-row"><span class="label">Atualizado</span><span class="value v-pending" id="bl-current-freshness">…</span></div>
+      <div class="status-row"><span class="label">Modo</span><span class="value v-pending" id="bl-current-mode">…</span></div>
+    </div>
+
+    <div class="data-sufficiency-block" id="bl-snapshot-block">
+      <p class="data-sufficiency-label">Snapshot da análise</p>
+      <div class="status-grid">
+        <div class="status-row"><span class="label">Preço usado</span><span class="value v-pending" id="bl-snapshot-price">…</span></div>
+        <div class="status-row"><span class="label">Gerado em</span><span class="value v-pending" id="bl-snapshot-time">…</span></div>
+        <div class="status-row"><span class="label">Idade do snapshot</span><span class="value v-pending" id="bl-snapshot-age">…</span></div>
+        <div class="status-row"><span class="label">Diferença vs. atual</span><span class="value v-pending" id="bl-price-diff">…</span></div>
+      </div>
+    </div>
+
+    <div class="route-block route-long" id="bl-route-long">
+      <h3>Target Tracker — Rota A (Long)</h3>
+      <div class="status-grid" id="bl-route-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+    <div class="route-block route-short" id="bl-route-short">
+      <h3>Target Tracker — Rota B (Short)</h3>
+      <div class="status-grid" id="bl-route-short-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+
+    <p class="diagnostic-note" id="bl-reanalyze-banner" hidden></p>
+
+    <div class="executive-actions" role="group" aria-label="Ações do BTC Live Panel">
+      <button type="button" class="rt-btn" id="bl-btn-refresh-now"><span class="icon">⟳</span> Atualizar preço agora</button>
+    </div>
+    <p class="diagnostic-note">Leitura descritiva — não é recomendação. Não é execução. Não é ordem. É acompanhamento visual de níveis.</p>
+  </section>
+
   <section class="card cyborg-readiness-panel" id="cyborg-readiness-panel">
     <h2>Cyborg Readiness</h2>
     <div class="status-grid">
