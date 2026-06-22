@@ -42,32 +42,53 @@ export function buildLiveTickerItems(state = {}) {
         items.push({ category: 'ALERTA', severity: 'critical', text: `${b.name}: ${b.state} — resultado real da última sonda.` });
     }
 
+    // research/sufficiency calculados uma vez e reusados nas secoes 2 e 3 —
+    // o mesmo Data Sufficiency Score de research-engine.js, nunca um segundo
+    // calculo paralelo so' para o ticker.
+    const research = state.researchFrame;
+    const sufficiency = research ? research.data_sufficiency : null;
+    const multiSourceItem = sufficiency ? (sufficiency.breakdown || []).find((x) => x.field === 'multi_source_confirmation') : null;
+    const noMultiSourceConfirmation = !!(multiSourceItem && multiSourceItem.status !== 'OK');
+
     // 2) Dado real atual (preco/fonte/frescor/z-score) — BTC/USDT.
     const frame = state.analysisFrame;
     if (frame && frame.status === 'OK') {
         const modo = state.historical ? 'SESSION_PREVIOUS' : 'REAL_READ_ONLY';
         const last = typeof frame.last_price === 'number' ? frame.last_price.toFixed(2) : DADOS_INSUFICIENTES;
         const z = typeof frame.zscore === 'number' ? frame.zscore.toFixed(2) : DADOS_INSUFICIENTES;
+        const confirmNote = noMultiSourceConfirmation ? ' · preço real, mas sem confirmação multi-fonte' : '';
         items.push({
             category: 'AR10 LIVE',
             severity: state.historical ? 'warn' : 'ok',
-            text: `${frame.asset || 'BTC/USDT'} · ${modo} · ${frame.source || DADOS_INSUFICIENTES} · ${last} · z=${z} · freshness ${state.freshnessLabel || DADOS_INSUFICIENTES}`,
+            text: `${frame.asset || 'BTC/USDT'} · ${modo} · ${frame.source || DADOS_INSUFICIENTES} · ${last} · z=${z} · freshness ${state.freshnessLabel || DADOS_INSUFICIENTES}${confirmNote}`,
         });
     } else {
         items.push({ category: 'AR10 LIVE', severity: 'warn', text: `BTC/USDT · ${DADOS_INSUFICIENTES} — gere o AnalysisFrame real após testar uma fonte real.` });
     }
 
     // 3) Long/Short Research — sempre as 3 rotas, nunca so' a "favorita".
-    const research = state.researchFrame;
+    // Severidade e' rebaixada para 'warn' (nunca 'ok') quando o Data
+    // Sufficiency Score for baixo ou faltarem campos — Long/Short nunca pode
+    // aparecer "forte" no ticker so' porque o vies heuristico apontou algo,
+    // se os dados reais por tras dele estiverem incompletos.
     if (research && research.rota_a_long && research.rota_b_short && research.rota_c_wait) {
         const a = research.rota_a_long;
         const b = research.rota_b_short;
         const c = research.rota_c_wait;
+        const scoreKnown = sufficiency && Number.isFinite(sufficiency.score);
+        const lowSufficiency = !scoreKnown || sufficiency.score < 70;
         items.push({
             category: 'LONG/SHORT',
-            severity: 'info',
-            text: `Rota A (LONG) conf=${a.confidence} · Rota B (SHORT) conf=${b.confidence} · Rota C (WAIT): ${c.data_missing || c.reason || DADOS_INSUFICIENTES}`,
+            severity: lowSufficiency ? 'warn' : 'info',
+            text: `Rota A (LONG) conf=${a.confidence} · Rota B (SHORT) conf=${b.confidence} · Rota C (WAIT): ${c.data_missing || c.reason || DADOS_INSUFICIENTES}${scoreKnown ? ` · ${sufficiency.label}` : ''}`,
         });
+        if (sufficiency && sufficiency.missing_fields && sufficiency.missing_fields.length) {
+            items.push({
+                category: 'LONG/SHORT',
+                severity: 'warn',
+                text: `Long/Short limitado: faltam ${sufficiency.missing_fields.join(', ')}.`,
+            });
+        }
     } else {
         items.push({ category: 'LONG/SHORT', severity: 'warn', text: `${DADOS_INSUFICIENTES} — Research Engine ainda não rodou nesta sessão.` });
     }

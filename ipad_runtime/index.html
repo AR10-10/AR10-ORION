@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">
 <title>AR10 Cyborg 1.0 PRO — iPad One-Tap Cloud Runtime</title>
 
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.coingecko.com https://api.binance.com https://api.mexc.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.mexc.com https://contract.mexc.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
 
 <meta name="description" content="AR10 Cyborg 1.0 PRO — Nebula Core. Safari Local Runtime para iPad. Execucao local-first, READ_ONLY, FAIL_CLOSED. Sem trading real.">
 <meta name="theme-color" content="#000000">
@@ -318,6 +318,11 @@
     <h2>Research Engine <span class="stub-badge">ROTA A / B / C sempre presentes</span></h2>
     <p class="onboarding-hint">As três rotas abaixo são sempre mostradas, nunca só a rota "favorita" do momento. Confiança é sempre <b>LOW/MEDIUM/HIGH</b> qualitativo — nunca uma probabilidade estatística. <b>Nenhuma rota aqui executa, envia ou simula ordem.</b></p>
     <p class="diagnostic-note" id="research-engine-session-note" hidden></p>
+    <div class="data-sufficiency-block" id="research-data-sufficiency-block">
+        <p class="data-sufficiency-label" id="research-data-sufficiency-label">Data Sufficiency: — / 100</p>
+        <p class="onboarding-hint">Dados usados nesta leitura — cada linha é <b>OK</b>, <b>DADOS_INSUFICIENTES</b> ou <b>NÃO_APLICÁVEL</b>; pontuação derivada só de campos reais desta sessão, nunca estimada.</p>
+        <div class="status-grid" id="research-data-matrix-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
     <div class="route-block route-long" id="route-a-long">
         <h3>ROTA A — LONG</h3>
         <div class="status-grid" id="route-a-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
@@ -330,7 +335,7 @@
         <h3>ROTA C — WAIT / NO TRADE</h3>
         <div class="status-grid" id="route-c-wait-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
     </div>
-    <p class="diagnostic-note">Target 2 / Extended target e funding/OI/liquidação/long-short ficam DADOS_INSUFICIENTES ou NÃO_APLICÁVEL de propósito — nenhum motor de extensão técnica ou conector de derivativos está implementado nesta fase.</p>
+    <p class="diagnostic-note">Target 2 / Extended target ficam DADOS_INSUFICIENTES de propósito — nenhum motor de extensão técnica está implementado nesta fase. Funding/OI/liquidação/long-short ratio dependem da fonte ativa: NÃO_APLICÁVEL para instrumento spot, DADOS_INSUFICIENTES quando a fonte é futures mas o campo ainda não foi confirmado por sonda real. Ver a matriz "Dados usados nesta leitura" acima para o detalhamento campo a campo e o Data Sufficiency Score.</p>
   </section>
 
   <section class="card siriform-explanation-panel" id="siriform-explanation-panel">

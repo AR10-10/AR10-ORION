@@ -17,11 +17,19 @@
 import { CONNECTOR_STATES } from './schema.js';
 import * as coingeckoPublic from './coingecko-public.js';
 import * as binancePublic from './binance-public.js';
+import * as binanceFuturesPublic from './binance-futures-public.js';
 import * as mexcPublic from './mexc-public.js';
+import * as mexcFuturesPublic from './mexc-futures-public.js';
 import * as csvJsonImport from './csv-json-import.js';
 
 // Conectores de rede (probados automaticamente em "Testar fontes reais").
-const NETWORK_CONNECTORS = Object.freeze([coingeckoPublic, binancePublic, mexcPublic]);
+// Ordem importa: getActiveReadOnlySources()/handleTestRealSources (app.js)
+// escolhem o primeiro ACTIVE_READ_ONLY nesta ordem como evidence ativa da
+// sessao (preco/candles do ticker principal). Os 2 conectores de futures
+// ficam deliberadamente DEPOIS dos 3 conectores spot — so' assumem o papel
+// de fonte ativa se TODOS os spot falharem nesta sessao, nunca preferidos
+// sobre um spot saudavel so' porque vieram depois na lista por acidente.
+const NETWORK_CONNECTORS = Object.freeze([coingeckoPublic, binancePublic, mexcPublic, binanceFuturesPublic, mexcFuturesPublic]);
 
 // Conector local (so probado quando o usuario escolhe um arquivo — nunca
 // disparado por "Testar fontes reais", porque nao ha rede nem arquivo

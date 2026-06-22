@@ -31,6 +31,7 @@ const ELEMENT_IDS = [
     'real-analysis-frame-grid', 'real-analysis-frame-session-note', 'real-analysis-frame-note',
     're-evidence-grid', 're-missing-fields', 're-session-note', 're-evidence-hash',
     'route-a-long-grid', 'route-b-short-grid', 'route-c-wait-grid', 'research-engine-session-note',
+    'research-data-sufficiency-label', 'research-data-matrix-grid',
     'rdl-explanation-text',
     'sw-update-banner', 'sw-update-text',
     'topbar-status', 'advanced-section', 'btn-tb-advanced',

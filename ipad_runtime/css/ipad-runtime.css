@@ -907,6 +907,24 @@ footer.legal {
 .route-block.route-wait { border-left-color: rgba(255, 184, 0, 0.45); }
 .route-block.route-wait h3 { color: var(--alert-amber); }
 
+/* data-sufficiency-block — Data Sufficiency Score + matriz "Dados usados
+   nesta leitura", neutro (cyan, sem cor de rota) porque vale para as 3
+   rotas igualmente: calculado uma unica vez por frame, nao por rota. */
+.data-sufficiency-block {
+    border: 1px solid rgba(0, 242, 255, 0.18);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 4px 0 16px;
+    background: rgba(0, 242, 255, 0.03);
+}
+.data-sufficiency-label {
+    font-family: var(--font-mono);
+    font-weight: bold;
+    color: var(--sys-cyan);
+    font-size: 0.92rem;
+    margin: 0 0 6px;
+}
+
 /* ------------------------------------------------------------
    PROCESSING PROFILES — LIGHT / BALANCED / HEAVY
    ------------------------------------------------------------ */

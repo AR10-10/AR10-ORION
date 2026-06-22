@@ -670,15 +670,55 @@ function renderResearchEngineFrame(frame) {
         els['route-a-long-grid'].innerHTML = empty;
         els['route-b-short-grid'].innerHTML = empty;
         els['route-c-wait-grid'].innerHTML = empty;
+        els['research-data-matrix-grid'].innerHTML = empty;
+        els['research-data-sufficiency-label'].textContent = 'Data Sufficiency: — / 100';
         return;
     }
+    // Snapshots reidratados de sessao anterior podem ter sido gravados antes
+    // de base_used/data_sufficiency_score/missing_fields/limitation_reason
+    // existirem neste contrato — mesmo cuidado de renderRealAnalysisFrame():
+    // nunca deixa undefined/null vazar pro template, cai em DADOS_INSUFICIENTES.
+    const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
+    const score = (v) => (Number.isFinite(v) ? `${v}/100` : DADOS_INSUFICIENTES);
+    const missing = (fields) => (fields === undefined ? DADOS_INSUFICIENTES : (fields.length ? fields.join(', ') : 'nenhum nesta leitura'));
     const row = (label, value) => `<div class="status-row"><span class="label">${label}</span><span class="value ${(value === DADOS_INSUFICIENTES || value === NAO_APLICAVEL) ? 'v-limited' : 'v-info'}">${value}</span></div>`;
+    // Matriz "Dados usados nesta leitura": status real por campo (OK/
+    // DADOS_INSUFICIENTES/NAO_APLICAVEL), nunca um terceiro estado inventado.
+    const matrixClass = (status) => {
+        if (status === 'OK') return 'v-ok';
+        if (status === NAO_APLICAVEL) return 'v-pending';
+        if (status === DADOS_INSUFICIENTES) return 'v-limited';
+        return 'v-info';
+    };
+
+    const sufficiency = frame.data_sufficiency;
+    if (sufficiency) {
+        els['research-data-sufficiency-label'].textContent = sufficiency.label;
+        els['research-data-matrix-grid'].innerHTML = (sufficiency.breakdown || []).map((item) =>
+            `<div class="status-row"><span class="label">${item.label}</span><span class="value ${matrixClass(item.status)}">${item.status} (${item.points_earned}/${item.points_possible})</span></div>`
+        ).join('') || empty;
+    } else {
+        els['research-data-sufficiency-label'].textContent = 'Data Sufficiency: — / 100';
+        els['research-data-matrix-grid'].innerHTML = empty;
+    }
+
     const a = frame.rota_a_long;
     const b = frame.rota_b_short;
     const c = frame.rota_c_wait;
-    els['route-a-long-grid'].innerHTML = row('Confiança', a.confidence) + row('Zona de entrada', a.entry_zone) + row('Invalidação', a.invalidation) + row('Alvo 1', a.target_1) + row('Alvo 2', a.target_2) + row('Confirmação exigida', a.required_confirmation);
-    els['route-b-short-grid'].innerHTML = row('Confiança', b.confidence) + row('Zona de entrada', b.entry_zone) + row('Invalidação', b.invalidation) + row('Alvo 1', b.target_1) + row('Alvo 2', b.target_2) + row('Confirmação exigida', b.required_confirmation);
-    els['route-c-wait-grid'].innerHTML = row('Motivo', c.reason) + row('Gatilho de reavaliação', c.trigger_to_reevaluate) + row('Dado ausente', c.data_missing) + row('Condição mais segura', c.safer_condition);
+    els['route-a-long-grid'].innerHTML = row('Confiança', a.confidence) + row('Base usada', str(a.base_used))
+        + row('Zona de interesse (cenário descritivo)', a.entry_zone) + row('Invalidação', a.invalidation)
+        + row('Alvo 1', a.target_1) + row('Alvo 2', a.target_2) + row('Confirmação exigida', a.required_confirmation)
+        + row('Data Sufficiency', score(a.data_sufficiency_score)) + row('Dado(s) ausente(s)', missing(a.missing_fields))
+        + row('Motivo da limitação', str(a.limitation_reason));
+    els['route-b-short-grid'].innerHTML = row('Confiança', b.confidence) + row('Base usada', str(b.base_used))
+        + row('Zona de interesse (cenário descritivo)', b.entry_zone) + row('Invalidação', b.invalidation)
+        + row('Alvo 1', b.target_1) + row('Alvo 2', b.target_2) + row('Confirmação exigida', b.required_confirmation)
+        + row('Data Sufficiency', score(b.data_sufficiency_score)) + row('Dado(s) ausente(s)', missing(b.missing_fields))
+        + row('Motivo da limitação', str(b.limitation_reason));
+    els['route-c-wait-grid'].innerHTML = row('Motivo', c.reason) + row('Base usada', str(c.base_used))
+        + row('Gatilho de reavaliação', c.trigger_to_reevaluate) + row('Dado ausente', c.data_missing)
+        + row('Condição mais segura', c.safer_condition) + row('Data Sufficiency', score(c.data_sufficiency_score))
+        + row('Motivo da limitação', str(c.limitation_reason));
 }
 
 // Mission AR10_CYBORG_2_SAFE_REAL_DATA_LAYER_RUNTIME_PROBE_V1 — handlers do
@@ -784,7 +824,9 @@ async function handleGenerateRealAnalysis() {
         renderRealAnalysisFrame(frame);
         await persistentState.recordAnalysisFrame(frame);
 
-        const research = buildResearchEngineFrame({ frame, evidence: activeRealEvidence });
+        const freshSourceCount = realDataRegistry.getActiveReadOnlySources().filter((a) => !realDataRegistry.isStale(a)).length;
+        const context = { historical: isShowingHistoricalData(), freshSourceCount };
+        const research = buildResearchEngineFrame({ frame, evidence: activeRealEvidence, context });
         lastResearchEngineFrame = research;
         renderResearchEngineFrame(research);
         await persistentState.recordResearchFrame(research);
