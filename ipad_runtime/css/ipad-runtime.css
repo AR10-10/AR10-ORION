@@ -518,8 +518,38 @@ footer.legal {
     color: var(--sys-cyan);
     opacity: 0.55;
     mix-blend-mode: screen;
-    animation: siriformCoreGlow 2.6s ease-in-out infinite;
+    animation: siriformCoreGlow 2s ease-in-out infinite;
     pointer-events: none;
+}
+/* siriform-orbit — aneis de "globo wireframe" ao redor do nucleo, pedido
+   no concept de referencia (orbe = foco visual central do hero). So
+   decorativo (aria-hidden), so transform (GPU-safe): perspective()+
+   rotateX() achata o circulo num anel elipsoidal "visto de lado", e o
+   rotate() final gira esse anel — mesma tecnica de 2 funcoes de
+   transform interpoladas por componente usada em siriformSpin/Ring,
+   sem precisar de SVG/canvas/imagem nova. */
+.siriform-orbit {
+    position: absolute;
+    inset: -14px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 242, 255, 0.2);
+    pointer-events: none;
+}
+.siriform-orbit-1 {
+    animation: siriformOrbit1 22s linear infinite;
+}
+.siriform-orbit-2 {
+    inset: 8px;
+    border-color: rgba(0, 255, 157, 0.16);
+    animation: siriformOrbit2 16s linear infinite reverse;
+}
+@keyframes siriformOrbit1 {
+    from { transform: perspective(320px) rotateX(68deg) rotate(0deg); }
+    to   { transform: perspective(320px) rotateX(68deg) rotate(360deg); }
+}
+@keyframes siriformOrbit2 {
+    from { transform: perspective(320px) rotateX(68deg) rotate(45deg); }
+    to   { transform: perspective(320px) rotateX(68deg) rotate(405deg); }
 }
 @keyframes siriformSpin { to { transform: rotate(360deg); } }
 @keyframes siriformRing { to { transform: rotate(360deg); } }
@@ -1194,37 +1224,61 @@ footer.legal {
 .telemetry-card .console { max-height: 200px; }
 
 /* ------------------------------------------------------------
+   HERO ROW — BTC Live (esquerda) / Siriform orb (centro) / Resumo
+   Executivo (direita). Irmao fora do .bento (mesmo motivo do
+   .live-ticker: nao depender do fluxo de colunas) para poder formar
+   uma faixa de hero de 3 colunas de verdade — multicoluna do .bento
+   nao da pra isso, e' so balanceamento de altura, nao posicionamento.
+
+   Abaixo de 1000px fica em coluna unica e o orbe sempre aparece
+   primeiro (order: -1) sem precisar mudar a ordem real do DOM —
+   BTC Live continua logo depois (preco vivo e' o 2o dado mais
+   importante), Resumo Executivo por ultimo. A partir de 1000px
+   (cobre o iPad em paisagem) vira grade de 3 colunas na ordem natural
+   do documento, com a coluna central (orbe) mais larga — o orbe deve
+   pesar mais visualmente que os paineis ao lado dele. */
+.hero-row {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.hero-row > section.card { margin-bottom: 0; }
+.hero-row > .siriform-card { order: -1; }
+
+@media (min-width: 1000px) {
+    .hero-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);
+        gap: 18px;
+    }
+    .hero-row > .siriform-card { order: 0; }
+}
+
+/* ------------------------------------------------------------
    LAYOUT RESPONSIVO — BENTO EM COLUNAS BALANCEADAS (iPad paisagem)
 
-   Abaixo de 900px (iPad retrato/iPhone) nada muda: os cards ficam
-   em coluna unica, na ordem natural do documento (Siriform/orb
-   sempre primeiro). O banner READ_ONLY/FAIL_CLOSED, o header, a
-   Telemetria e o rodape continuam fora do fluxo de colunas (largura
-   total), entao o banner sticky funciona exatamente como hoje.
-
-   A partir de 900px os cards do .bento fluem em multicolunas. Ao
-   contrario da grade explicita anterior (que deixava uma coluna
-   curta com muito "vazio preto" e a outra com uma pilha enorme), a
-   multicoluna BALANCEIA a altura automaticamente e preenche a tela
-   larga sem zonas mortas. Cada card e indivisivel entre colunas
-   (break-inside: avoid), entao nenhum card e cortado.
+   .bento agora so' contem o card de Cyborg Readiness (os outros 3
+   moveram para .hero-row acima) — centralizado, largura limitada,
+   sem multicoluna (nao faz sentido balancear altura entre colunas
+   com 1 card so'; o status-grid interno do proprio card ja se
+   reorganiza em mais colunas conforme o espaco, ver .status-grid).
    ------------------------------------------------------------ */
-.bento { width: 100%; }
+.bento { width: 100%; max-width: 1100px; margin: 0 auto; }
 
-/* .advanced-section segue a mesma logica de colunas balanceadas do
-   .bento, mas e um irmao fora dele (Fase 7 — "Modo avancado" fica
+/* .advanced-section segue a logica de colunas balanceadas que o
+   .bento usava antes — irmao fora dele (Fase 7 — "Modo avancado" fica
    oculto por padrao via atributo [hidden] e so aparece sob toque). */
 .advanced-section { width: 100%; }
 .advanced-section[hidden] { display: none; }
 
 @media (min-width: 900px) {
     .runtime-shell { max-width: 1280px; }
-    .bento,
     .advanced-section:not([hidden]) {
         column-count: 2;
         column-gap: 18px;
     }
-    .bento > section.card,
     .advanced-section > section.card {
         break-inside: avoid;
         -webkit-column-break-inside: avoid;
@@ -1236,7 +1290,6 @@ footer.legal {
 
 @media (min-width: 1280px) {
     .runtime-shell { max-width: 1600px; }
-    .bento,
     .advanced-section:not([hidden]) { column-count: 3; }
 }
 
