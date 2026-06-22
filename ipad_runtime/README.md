@@ -133,7 +133,13 @@ sem rede/bot real; espelha `soldier_runtime/telegram-aux/types.ts`) →
 `vault-evidence-panel` (Vault/Evidence — reabre e re-verifica o SHA-256 a
 cada boot) → `vault-local-panel` (Vault Local do iPad — 16 campos de
 status; com auto-reparo seguro: reindexa do armazenamento ou reinstala,
-nunca apaga como primeiro recurso) → `metrics-panel` (equivalente leve do
+nunca apaga como primeiro recurso) → `hydration-engine-panel`
+(**Hydration Engine** — armazenamento progressivo por prioridade 1-4; baixa
+em pacotes pequenos com pausa entre eles, nunca tudo de uma vez; valida
+SHA-256 antes de gravar — pacote com hash inválido não entra; retoma de
+checkpoint salvo no IndexedDB; monitora quota e reduz ritmo se faltar
+espaço, sem nunca quebrar o app; prioridade 3/4 fica `PARTIAL` quando há
+pouco espaço) → `metrics-panel` (equivalente leve do
 Instruments, WWDC26) → `local-pack-manager` (os 13 botões do Local Pack
 Manager) → `export-panel` (Arquivos Exportados — exportações com nome único
 carimbado, sem prompt de "substituir") → `backup-recovery-panel` (exporta/

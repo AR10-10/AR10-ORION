@@ -52,6 +52,7 @@ export function baseArtifacts() {
         { type: 'FINAL_REPORT', version: '', ext: 'md', visibility: 'on_demand', purpose: 'Relatório de sessão (estado do runtime, Vault e AnalysisFrame de diagnóstico). Gerado sob demanda.', internal_source: null },
         { type: 'EVIDENCE_OUTBOX', version: '', ext: 'json', visibility: 'internal', purpose: 'Manifesto SHA256 + checklist + inventário. Vive em evidence_outbox/ no repositório.', internal_source: 'evidence_outbox/manifest.sha256.json' },
         { type: 'EVIDENCE_LEDGER', version: '', ext: 'json', visibility: 'on_demand', purpose: 'Histórico de Evidence real (Real Data Layer) acumulado nesta sessão, persistido via IndexedDB. Gerado sob demanda.', internal_source: null },
+        { type: 'HYDRATION_ENGINE_REPORT', version: '', ext: 'json', visibility: 'on_demand', purpose: 'Relatório curto da Hydration Engine (status, progresso, quota, Local Availability Map). Gerado sob demanda.', internal_source: null },
         { type: 'PROJECT_DECKAP', version: 'V1', ext: 'html', visibility: 'future', purpose: 'Deck/apresentação do projeto. Reservado para entrega futura.', internal_source: null },
     ];
 }

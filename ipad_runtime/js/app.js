@@ -36,6 +36,7 @@ import { explainReflectionReport } from './intelligence/siriform-explainer.js';
 import { resolveActiveLlmTier } from './intelligence/local-llm-adapter.js';
 import { getSafariEdgeStatusReport } from './edge/safari-edge-status.js';
 import { getTelegramAuxStatusReport } from './aux/telegram-aux-status.js';
+import * as hydrationManager from './hydration/hydration-manager.js';
 
 const els = {};
 ['st-pwa', 'st-sw', 'st-cache', 'st-idb', 'st-opfs', 'st-webcrypto', 'st-wasm', 'st-workers',
@@ -78,6 +79,9 @@ const els = {};
     'se-connection-state', 'se-storage-mirror', 'se-is-authoritative', 'se-soldier-validation',
     'ta-telegram-layer', 'ta-bot-token', 'ta-webhook', 'ta-live-execution', 'ta-signal-quarantine',
     'ta-source-trust', 'ta-allowed-commands', 'ta-risk-gate', 'ta-event-ledger', 'ta-is-authoritative',
+    'he-status', 'he-session', 'he-completed', 'he-pending', 'he-failed', 'he-bytes', 'he-checkpoint',
+    'he-quota', 'he-resumable', 'he-offline-available', 'he-fail-closed', 'he-last-error',
+    'btn-he-start', 'btn-he-pause', 'btn-he-verify', 'btn-he-repair', 'btn-he-export',
 ].forEach((id) => { els[id] = document.getElementById(id); });
 
 const PROFILES = {
@@ -105,9 +109,9 @@ function log(msg, level = 'dim') {
 }
 
 function classFor(value) {
-    if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'INSTALADO' || value === 'ATUALIZADO' || value === 'READY' || value === 'AVAILABLE' || value === 'GRANTED' || value === 'DISPONÍVEL NESTA SESSÃO' || value === 'RECOVERED' || value === 'RECUPERADO' || value === 'ACTIVE_READ_ONLY' || value === 'ONLINE' || value === 'ALLOW' || value === 'CLEAN_BOOT' || value === 'FULLY_RECOVERED' || value === 'ACTIVE') return 'v-ok';
-    if (value === 'FAIL' || value === 'MISSING' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED' || value === 'AUSENTE' || value === 'CORROMPIDO' || value === 'REINSTALAÇÃO NECESSÁRIA' || value === 'BLOQUEADO POR SEGURANÇA' || value === 'FAILED' || value === 'BLOCKED' || value === 'LIVE_LOCKED' || value === 'BLOCK' || value === 'OFFLINE' || value === 'FORBIDDEN') return 'v-fail';
-    if (value === 'FUTURE' || value === 'LIGHT' || value === 'BALANCED' || value === 'HEAVY' || value === 'PARTIAL' || value === 'PARCIAL' || value === 'PARTIAL_RECOVERY' || value === 'PARTIAL_WITH_FAILURES' || value === 'DEGRADED' || value === 'PLANNED') return 'v-info';
+    if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'INSTALADO' || value === 'ATUALIZADO' || value === 'READY' || value === 'AVAILABLE' || value === 'GRANTED' || value === 'DISPONÍVEL NESTA SESSÃO' || value === 'RECOVERED' || value === 'RECUPERADO' || value === 'ACTIVE_READ_ONLY' || value === 'ONLINE' || value === 'ALLOW' || value === 'CLEAN_BOOT' || value === 'FULLY_RECOVERED' || value === 'ACTIVE' || value === 'COMPLETED') return 'v-ok';
+    if (value === 'FAIL' || value === 'MISSING' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED' || value === 'AUSENTE' || value === 'CORROMPIDO' || value === 'REINSTALAÇÃO NECESSÁRIA' || value === 'BLOQUEADO POR SEGURANÇA' || value === 'FAILED' || value === 'BLOCKED' || value === 'LIVE_LOCKED' || value === 'BLOCK' || value === 'OFFLINE' || value === 'FORBIDDEN' || value === 'FAIL_CLOSED' || value === 'CRITICAL') return 'v-fail';
+    if (value === 'FUTURE' || value === 'LIGHT' || value === 'BALANCED' || value === 'HEAVY' || value === 'PARTIAL' || value === 'PARCIAL' || value === 'PARTIAL_RECOVERY' || value === 'PARTIAL_WITH_FAILURES' || value === 'DEGRADED' || value === 'PLANNED' || value === 'RUNNING' || value === 'PAUSED') return 'v-info';
     return 'v-limited'; // DESATUALIZADO/LIMITADO/NOT_DEPLOYED/NOT_CONNECTED caem aqui de proposito — else aberto, sem 6a classe
 }
 
@@ -215,6 +219,7 @@ let lastLocalIntelligenceResult = null;
 let lastReflectionReport = null;
 let lastSafariEdgeStatus = null;
 let lastTelegramAuxStatus = null;
+let lastHydrationEngineStatus = null;
 
 async function refreshFeatureStatus() {
     const f = await feat.runAllFeatureDetections();
@@ -1733,6 +1738,92 @@ function renderTelegramAuxCard() {
     setStatus('ta-is-authoritative', status.is_authoritative ? 'TRUE' : 'FALSE');
 }
 
+// Hydration Engine: armazenamento progressivo no Safari/iPad (pacotes
+// pequenos, hash SHA-256, checkpoint retomável) — ver js/hydration/*.js.
+// Cada campo aqui reflete getHydrationEngineStatusReport() real; nenhum
+// número é inventado em app.js.
+async function renderHydrationEngineCard() {
+    const status = await hydrationManager.getHydrationEngineStatusReport();
+    lastHydrationEngineStatus = status;
+    const mb = (n) => (n / (1024 * 1024)).toFixed(2) + ' MB';
+    setStatus('he-status', status.status);
+    setInfo('he-session', status.session_id || 'Nenhuma sessão iniciada');
+    setInfo('he-completed', `${status.completed_count} / ${status.total_count}`);
+    setInfo('he-pending', String(status.pending_count));
+    setInfo('he-failed', String(status.failed_count));
+    setInfo('he-bytes', `${mb(status.bytes_downloaded)} / ${mb(status.bytes_total)}`);
+    setInfo('he-checkpoint', status.last_checkpoint_at ? new Date(status.last_checkpoint_at).toLocaleString('pt-BR') : 'Nunca');
+    setStatus('he-quota', status.quota.status);
+    setStatus('he-resumable', status.has_resumable_checkpoint ? 'OK' : 'AUSENTE');
+    setStatus('he-offline-available', status.local_availability_map.offline_mode_available ? 'OK' : 'PARTIAL');
+    setStatus('he-fail-closed', status.fail_closed ? 'FAIL_CLOSED' : 'OK');
+    setInfo('he-last-error', status.last_error || 'Nenhum');
+}
+
+async function handleStartOrResumeHydration() {
+    siriform.setSiriformState('thinking', 'Hidratando armazenamento local em pacotes pequenos...');
+    log('=== HYDRATION ENGINE: iniciar/retomar ===', 'info');
+    const result = await hydrationManager.startOrResumeHydration((m, l) => log(m, l));
+    await renderHydrationEngineCard();
+    if (result.status === hydrationManager.HYDRATION_STATUS.COMPLETED) {
+        siriform.setSiriformState('success', 'Hidratação concluída — Vault local pronto.');
+    } else if (result.status === hydrationManager.HYDRATION_STATUS.PAUSED) {
+        siriform.setSiriformState('idle', `Hidratação pausada (${result.pauseReason}). Toque novamente para retomar.`);
+    } else {
+        siriform.setSiriformState('warning', 'Hidratação não foi concluída — veja o console técnico.');
+    }
+    renderActivityLog();
+}
+
+function handlePauseHydration() {
+    hydrationManager.requestPause();
+    log('Pausa solicitada — Hydration Engine para de forma limpa entre pacotes (sem travar).', 'info');
+    siriform.setSiriformState('idle', 'Pausa solicitada. Vai parar antes do próximo pacote.');
+}
+
+async function handleVerifyHydrationIntegrity() {
+    siriform.setSiriformState('checking', 'Verificando integridade do Vault (Hydration Engine)...');
+    log('=== HYDRATION ENGINE: verificar integridade ===', 'info');
+    await hydrationManager.verifyHydrationIntegrity((m, l) => log(m, l));
+    await refreshVaultAndReplayStatus();
+    await renderHydrationEngineCard();
+    siriform.setSiriformState('success', 'Verificação de integridade concluída.');
+}
+
+async function handleRepairHydration() {
+    siriform.setSiriformState('repairing', 'Reparando hidratação/Vault local...');
+    log('=== HYDRATION ENGINE: reparar ===', 'info');
+    const result = await hydrationManager.repairHydration((m, l) => log(m, l));
+    await refreshVaultAndReplayStatus();
+    await renderHydrationEngineCard();
+    siriform.setSiriformState(
+        result.status === 'READY' ? 'success' : 'warning',
+        result.status === 'READY' ? 'Reparo concluído — Vault READY.' : 'Reparo não restaurou o Vault — veja o console técnico.'
+    );
+    renderActivityLog();
+}
+
+async function handleExportHydrationReport() {
+    siriform.setSiriformState('thinking', 'Gerando relatório curto da Hydration Engine...');
+    log('=== EXPORTAR RELATÓRIO: HYDRATION ENGINE ===', 'info');
+    const status = lastHydrationEngineStatus || await hydrationManager.getHydrationEngineStatusReport();
+    const report = {
+        generated_at: new Date().toISOString(),
+        engine: 'AR10 Cyborg Hydration Engine (armazenamento progressivo Safari/iPad)',
+        ...status,
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const entry = exporter.downloadArtifact({
+        type: 'HYDRATION_ENGINE_REPORT',
+        ext: 'json',
+        blob,
+        purpose: 'Relatório curto da Hydration Engine (status, progresso, quota, Local Availability Map) — sem segredos.',
+    });
+    log(`Relatório da Hydration Engine exportado: ${entry.filename}.`, 'ok');
+    siriform.setSiriformState('success', 'Relatório da Hydration Engine exportado.');
+    renderActivityLog();
+}
+
 function activityLogRowClass(severity) {
     if (severity === 'FAIL') return 'al-fail';
     if (severity === 'CRITICAL') return 'al-critical';
@@ -2136,6 +2227,12 @@ function wireButtons() {
     if (els['btn-br-import']) els['btn-br-import'].addEventListener('click', handleImportBackup);
     if (els['btn-al-refresh']) els['btn-al-refresh'].addEventListener('click', () => renderActivityLog());
 
+    if (els['btn-he-start']) els['btn-he-start'].addEventListener('click', handleStartOrResumeHydration);
+    if (els['btn-he-pause']) els['btn-he-pause'].addEventListener('click', handlePauseHydration);
+    if (els['btn-he-verify']) els['btn-he-verify'].addEventListener('click', handleVerifyHydrationIntegrity);
+    if (els['btn-he-repair']) els['btn-he-repair'].addEventListener('click', handleRepairHydration);
+    if (els['btn-he-export']) els['btn-he-export'].addEventListener('click', handleExportHydrationReport);
+
     if (els['br-import-input']) {
         els['br-import-input'].addEventListener('change', async (ev) => {
             const file = ev.target.files && ev.target.files[0];
@@ -2265,6 +2362,15 @@ async function boot() {
     renderTelegramAuxCard();
     await renderSafariEdgeCard();
     setInterval(renderSafariEdgeCard, 2000);
+
+    await renderHydrationEngineCard();
+    if (await hydrationManager.hasResumableCheckpoint()) {
+        log('Hydration Engine: checkpoint retomável encontrado — retomando automaticamente...', 'info');
+        await hydrationManager.startOrResumeHydration((m, l) => log(m, l));
+        await renderHydrationEngineCard();
+    }
+    hydrationManager.wireAutoResume((m, l) => log(m, l));
+
     wireStatusCardModal();
 
     // Auto-reparo no boot: SÓ quando algo já foi instalado antes (existe meta

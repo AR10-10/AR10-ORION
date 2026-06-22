@@ -2,17 +2,20 @@
 // Cache-first, offline-first. Tudo precache é same-origin; nenhuma rota
 // de rede sensivel (MEXC/MT5/API secret) existe para interceptar.
 
-const CACHE_VERSION = 'cyborg-ipad-runtime-v14';
+const CACHE_VERSION = 'cyborg-ipad-runtime-v15';
 
 // PRECACHE_URLS e' a fronteira same-origin do offline-first: precisa cobrir
 // exatamente o fecho transitivo de import() a partir de js/app.js (o unico
-// <script type="module"> de index.html). Lista revalidada em 2026-06-21 com
+// <script type="module"> de index.html). Lista revalidada em 2026-06-22 com
 // uma varredura automatica do grafo de imports — qualquer modulo novo em
 // js/**/*.js entra aqui na mesma leva em que e' importado por algum arquivo
 // ja precacheado, senao a 1a navegacao offline falha ao abrir esse caminho.
 // src/research/** (conectores/engines) deliberadamente FORA: nao e' importado
 // por nenhum arquivo deste fecho ainda (mesmo status de "contrato, nao
-// instalado" que soldier_runtime/ no monorepo).
+// instalado" que soldier_runtime/ no monorepo). js/hydration/storage-router.js
+// e' o mesmo caso: existe, passa node --check, mas hydration-manager.js nao o
+// importa (a escrita real do Vault e' single-writer via pack-manager.js, que
+// ja cobre leitura/escrita correta) — ver header do proprio storage-router.js.
 const PRECACHE_URLS = [
     './',
     './index.html',
@@ -55,6 +58,13 @@ const PRECACHE_URLS = [
     './js/memory/recovery-report.js',
     './js/memory/hydration-report.js',
     './js/memory/backup-restore-pack.js',
+    './js/hydration/manifest-reader.js',
+    './js/hydration/hash-validator.js',
+    './js/hydration/quota-monitor.js',
+    './js/hydration/hydration-checkpoint.js',
+    './js/hydration/local-availability-map.js',
+    './js/hydration/hydration-queue.js',
+    './js/hydration/hydration-manager.js',
     './js/trading/risk-gate.js',
     './js/trading/paper-trading.js',
     './js/trading/live-status.js',
