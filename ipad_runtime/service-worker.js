@@ -1,8 +1,8 @@
-// service-worker.js — AR10 Cyborg 2.0 iPad Runtime
+// service-worker.js — AR10 Cyborg 1.0 PRO iPad Runtime
 // Cache-first, offline-first. Tudo precache é same-origin; nenhuma rota
 // de rede sensivel (MEXC/MT5/API secret) existe para interceptar.
 
-const CACHE_VERSION = 'cyborg-ipad-runtime-v16';
+const CACHE_VERSION = 'cyborg-ipad-runtime-v17';
 
 // PRECACHE_URLS e' a fronteira same-origin do offline-first: precisa cobrir
 // exatamente o fecho transitivo de import() a partir de js/app.js (o unico
@@ -22,6 +22,8 @@ const PRECACHE_URLS = [
     './manifest.webmanifest',
     './css/ipad-runtime.css',
     './js/app.js',
+    './js/ui/dom-registry.js',
+    './js/ui/ui-helpers.js',
     './js/siriform.js',
     './js/voice.js',
     './js/feature-detect.js',

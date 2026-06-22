@@ -216,6 +216,11 @@ export async function getHydrationEngineStatusReport() {
     const failedIds = new Set(checkpoint?.failed_packages || []);
     const pendingCount = manifest.packages.filter((p) => !completedIds.has(p.package_id) && !failedIds.has(p.package_id)).length;
 
+    const currentPackageId = checkpoint?.current_package_id || null;
+    const currentPackage = currentPackageId
+        ? manifest.packages.find((p) => p.package_id === currentPackageId) || null
+        : null;
+
     return {
         status: checkpoint?.status || HYDRATION_STATUS.IDLE,
         session_id: checkpoint?.session_id || null,
@@ -223,6 +228,8 @@ export async function getHydrationEngineStatusReport() {
         failed_count: failedIds.size,
         pending_count: pendingCount,
         total_count: manifest.packages.length,
+        current_package_id: currentPackageId,
+        current_package_name: currentPackage?.name || null,
         bytes_downloaded: checkpoint?.bytes_downloaded || 0,
         bytes_total: manifest.total_size_bytes,
         last_checkpoint_at: checkpoint?.last_checkpoint_at || null,

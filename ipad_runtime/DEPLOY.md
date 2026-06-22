@@ -1,4 +1,4 @@
-# Deploy — AR10 Cyborg 2.0 iPad Runtime
+# Deploy — AR10 Cyborg 1.0 PRO iPad Runtime
 
 Este runtime é um conjunto de arquivos estáticos (HTML/CSS/JS/WASM/JSON).
 Qualquer host HTTPS estático serve. Abaixo, a rota principal (já automatizada

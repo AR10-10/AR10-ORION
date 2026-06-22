@@ -37,52 +37,8 @@ import { resolveActiveLlmTier } from './intelligence/local-llm-adapter.js';
 import { getSafariEdgeStatusReport } from './edge/safari-edge-status.js';
 import { getTelegramAuxStatusReport } from './aux/telegram-aux-status.js';
 import * as hydrationManager from './hydration/hydration-manager.js';
-
-const els = {};
-['st-pwa', 'st-sw', 'st-cache', 'st-idb', 'st-opfs', 'st-webcrypto', 'st-wasm', 'st-workers',
-    'st-webgpu', 'st-webgl', 'st-webllm', 'st-transformers', 'st-onnx', 'st-replay', 'st-vault', 'st-mode',
-    'st-voice', 'st-speech-rec', 'st-speech-syn', 'st-mic-perm',
-    'st-llama-layer', 'st-llama-profile', 'st-llama-runtime', 'st-llama-webgpu', 'st-llm-adapter-tier',
-    'console-log', 'telemetry-latest', 'replay-canvas', 'replay-meta', 'import-input', 'home-modal', 'standalone-state',
-    'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'macro-state-chip', 'mic-button', 'mic-status-label', 'engine-meta', 'analysis-frame-grid',
-    'vault-meta', 'vault-hashes', 'profile-hint',
-    'ex-state', 'ex-state-row', 'ex-source', 'ex-freshness', 'ex-paper', 'ex-risk', 'ex-vault', 'ex-report',
-    'ex-btn-prepare', 'ex-btn-analyze', 'ex-btn-report', 'ex-btn-advanced',
-    'cr-pwa', 'cr-sw', 'cr-cache', 'cr-idb', 'cr-opfs', 'cr-webcrypto', 'cr-wasm', 'cr-workers',
-    'cr-webgpu', 'cr-voice', 'cr-llama', 'cr-pack', 'cr-replay', 'cr-safety',
-    'vl-pack', 'vl-pack-name', 'vl-pack-version', 'vl-sha256', 'vl-sw-cache', 'vl-cache-api',
-    'vl-idb', 'vl-opfs', 'vl-wasm', 'vl-replay', 'vl-updated', 'vl-cache-version',
-    'vl-storage-used', 'vl-storage-quota', 'vl-safety', 'vl-repair',
-    'dp-realmode', 'dp-analysis', 'export-list',
-    'rdl-connector-grid', 'rdl-active-source', 'rdl-connector-session-note', 'real-data-import-input',
-    'real-analysis-frame-grid', 'real-analysis-frame-session-note', 'real-analysis-frame-note',
-    're-evidence-grid', 're-missing-fields', 're-session-note', 're-evidence-hash',
-    'route-a-long-grid', 'route-b-short-grid', 'route-c-wait-grid', 'research-engine-session-note',
-    'rdl-explanation-text',
-    'sw-update-banner', 'sw-update-text',
-    'topbar-status', 'advanced-section', 'btn-tb-advanced',
-    'ev-command-routing', 'ev-security-posture', 'ev-data-policy', 'ev-fail-closed', 'ev-siriform-states', 'ev-summary',
-    'mx-load-time', 'mx-prep-time', 'mx-cache', 'mx-storage', 'mx-siriform-events', 'mx-diag-fails', 'mx-eval-fails', 'mx-reduced-motion',
-    'cs-commander-status', 'cs-soldier-status', 'cs-sync-bridge-status',
-    'mv-event-log-count', 'mv-snapshot-status', 'mv-last-good-status', 'mv-recovery-status', 'mv-hydration-status', 'btn-mv-snapshot',
-    'sh-grid', 'sh-active-count', 'sh-total-count',
-    'rg-kill-switch', 'rg-max-drawdown', 'rg-max-position', 'rg-require-stop', 'rg-min-quality', 'btn-rg-engage', 'btn-rg-disengage',
-    'pt-mode', 'pt-open-positions', 'pt-closed-trades', 'pt-realized-pnl', 'pt-drawdown', 'pt-positions-grid', 'pt-block-note', 'btn-pt-open', 'btn-pt-clear',
-    'ls-mode', 'ls-status', 'ls-reasons', 'ls-unlock-requires',
-    'br-last-backup', 'btn-br-export', 'btn-br-import', 'br-import-input',
-    'al-list', 'al-count', 'btn-al-refresh',
-    'li-final-label', 'li-confidence', 'li-source-quality', 'li-volatility', 'li-trend', 'li-risk', 'li-data-mode',
-    'li-explanation', 'li-reflection-text', 'btn-li-run', 'btn-li-reflect',
-    'status-modal', 'status-modal-title', 'status-modal-body', 'btn-status-modal-close',
-    'se-edge-status', 'se-device', 'se-session-id', 'se-last-sequence', 'se-render-latency',
-    'se-dropped-frames', 'se-visible-panels', 'se-focused-symbol', 'se-focused-timeframe',
-    'se-connection-state', 'se-storage-mirror', 'se-is-authoritative', 'se-soldier-validation',
-    'ta-telegram-layer', 'ta-bot-token', 'ta-webhook', 'ta-live-execution', 'ta-signal-quarantine',
-    'ta-source-trust', 'ta-allowed-commands', 'ta-risk-gate', 'ta-event-ledger', 'ta-is-authoritative',
-    'he-ring', 'he-progress-pct', 'he-status', 'he-session', 'he-completed', 'he-pending', 'he-failed', 'he-bytes', 'he-checkpoint',
-    'he-quota', 'he-resumable', 'he-offline-available', 'he-fail-closed', 'he-last-error',
-    'btn-he-start', 'btn-he-pause', 'btn-he-verify', 'btn-he-repair', 'btn-he-export',
-].forEach((id) => { els[id] = document.getElementById(id); });
+import { els } from './ui/dom-registry.js';
+import { log, classFor, setStatus, setInfo, setStatusWithClass, MACRO_STATE_CLASS, setMacroStatus } from './ui/ui-helpers.js';
 
 const PROFILES = {
     light: { windowSize: 10, label: 'Light: janela SMA/EMA=10, leitura mais rápida e leve.' },
@@ -90,77 +46,6 @@ const PROFILES = {
     heavy: { windowSize: 40, label: 'Heavy: janela SMA/EMA=40, mais precisão, mais cálculo.' },
 };
 let currentProfile = 'balanced';
-
-function log(msg, level = 'dim') {
-    const time = new Date().toISOString().slice(11, 19);
-    const line = document.createElement('div');
-    line.className = `ln-${level}`;
-    line.textContent = `[${time}] ${msg}`;
-    els['console-log'].appendChild(line);
-    els['console-log'].scrollTop = els['console-log'].scrollHeight;
-    // Telemetria ao Vivo: o último evento real fica sempre visível no topo do
-    // card, sem precisar rolar a "caixa preta" inteira (Fase 5 — logs viram
-    // telemetria legível, nunca um muro de terminal dominando a primeira tela).
-    if (els['telemetry-latest']) {
-        els['telemetry-latest'].textContent = `[${time}] ${msg}`;
-        els['telemetry-latest'].className = `telemetry-latest ln-${level}`;
-    }
-    return line;
-}
-
-function classFor(value) {
-    if (value === 'OK' || value === true || value === 'INSTALLED' || value === 'INSTALADO' || value === 'ATUALIZADO' || value === 'READY' || value === 'AVAILABLE' || value === 'GRANTED' || value === 'DISPONÍVEL NESTA SESSÃO' || value === 'RECOVERED' || value === 'RECUPERADO' || value === 'ACTIVE_READ_ONLY' || value === 'ONLINE' || value === 'ALLOW' || value === 'CLEAN_BOOT' || value === 'FULLY_RECOVERED' || value === 'ACTIVE' || value === 'COMPLETED') return 'v-ok';
-    if (value === 'FAIL' || value === 'MISSING' || value === 'UNSUPPORTED' || value === 'TOO_LARGE' || value === 'DENIED' || value === 'AUSENTE' || value === 'CORROMPIDO' || value === 'REINSTALAÇÃO NECESSÁRIA' || value === 'BLOQUEADO POR SEGURANÇA' || value === 'FAILED' || value === 'BLOCKED' || value === 'LIVE_LOCKED' || value === 'BLOCK' || value === 'OFFLINE' || value === 'FORBIDDEN' || value === 'FAIL_CLOSED' || value === 'CRITICAL') return 'v-fail';
-    if (value === 'FUTURE' || value === 'LIGHT' || value === 'BALANCED' || value === 'HEAVY' || value === 'PARTIAL' || value === 'PARCIAL' || value === 'PARTIAL_RECOVERY' || value === 'PARTIAL_WITH_FAILURES' || value === 'DEGRADED' || value === 'PLANNED' || value === 'RUNNING' || value === 'PAUSED') return 'v-info';
-    return 'v-limited'; // DESATUALIZADO/LIMITADO/NOT_DEPLOYED/NOT_CONNECTED caem aqui de proposito — else aberto, sem 6a classe
-}
-
-function setStatus(id, value) {
-    const el = els[id];
-    if (!el) return;
-    el.textContent = String(value);
-    el.classList.remove('v-ok', 'v-fail', 'v-limited', 'v-pending', 'v-info');
-    el.classList.add(classFor(value));
-}
-
-function setInfo(id, text) {
-    const el = els[id];
-    if (!el) return;
-    el.textContent = String(text);
-    el.classList.remove('v-ok', 'v-fail', 'v-limited', 'v-pending', 'v-info');
-    el.classList.add('v-info');
-}
-
-function setStatusWithClass(id, text, cls) {
-    const el = els[id];
-    if (!el) return;
-    el.textContent = text;
-    el.classList.remove('v-ok', 'v-fail', 'v-limited', 'v-pending', 'v-info');
-    el.classList.add(cls);
-}
-
-// FOCO3 — vocabulario macro de 1 olho so (Resumo Executivo + chip do orbe).
-// Nao reusa classFor() de proposito: classFor() conhece os rotulos antigos
-// (READY/LIVE_LOCKED ja existiam la para outros campos) mas ANALYZING/
-// UPDATING/DEGRADED/FAIL_CLOSED precisam de um mapeamento proprio para nao
-// cair no v-limited generico por acidente.
-const MACRO_STATE_CLASS = {
-    IDLE: 'v-pending',
-    READY: 'v-ok',
-    ANALYZING: 'v-info',
-    UPDATING: 'v-info',
-    DEGRADED: 'v-limited',
-    DADOS_INSUFICIENTES: 'v-limited',
-    FAIL_CLOSED: 'v-fail',
-};
-
-function setMacroStatus(id, macro) {
-    const el = els[id];
-    if (!el) return;
-    el.textContent = macro;
-    el.classList.remove('v-ok', 'v-fail', 'v-limited', 'v-pending', 'v-info');
-    el.classList.add(MACRO_STATE_CLASS[macro] || 'v-info');
-}
 
 function okOrAusente(v) { return v === 'OK' ? 'OK' : 'AUSENTE'; }
 
@@ -470,7 +355,7 @@ function renderAnalysisFrame(meta) {
     els['analysis-frame-grid'].innerHTML = `
         <div class="af-row"><span class="af-label">Modo</span><span class="af-value">SYNTHETIC_OFFLINE</span></div>
         <div class="af-row"><span class="af-label">Candles</span><span class="af-value">${meta.count}</span></div>
-        <div class="af-row"><span class="af-label">Último</span><span class="af-value">${meta.last.toFixed(2)}</span></div>
+        <div class="af-row af-row-headline"><span class="af-label">Último</span><span class="af-value">${meta.last.toFixed(2)}</span></div>
         <div class="af-row"><span class="af-label">SMA</span><span class="af-value">${meta.sma.toFixed(2)}</span></div>
         <div class="af-row"><span class="af-label">EMA</span><span class="af-value">${meta.ema.toFixed(2)}</span></div>
         <div class="af-row"><span class="af-label">Desvio padrão</span><span class="af-value">${meta.stddev.toFixed(2)}</span></div>
@@ -615,7 +500,11 @@ function renderConnectorGrid() {
         const isRememberedPrevious = showSessionPrevious && c.connector_id === rehydratedActiveSourceId && c.state === 'PLANNED';
         const isStaleNow = !isRememberedPrevious && realDataRegistry.isStale(c);
         const displayState = isRememberedPrevious ? 'SESSION_PREVIOUS' : (isStaleNow ? 'STALE' : c.state);
-        return `<div class="status-row"><span class="label">${c.connector_name}</span><span class="value ${classForConnectorState(displayState)}">${displayState}</span></div>`;
+        const freshnessLabel = c.evidence ? formatFreshnessMs(c.evidence.freshness_ms) : DADOS_INSUFICIENTES;
+        return `<div class="status-row">
+            <span class="label">${c.connector_name}<br><span class="rdl-meta-sub">source_id: ${c.connector_id}</span></span>
+            <span class="value ${classForConnectorState(displayState)}">${displayState}<br><span class="rdl-meta-sub">freshness: ${freshnessLabel}</span></span>
+        </div>`;
     }).join('');
 
     const active = realDataRegistry.getActiveReadOnlySources();
@@ -695,7 +584,7 @@ function renderRealAnalysisFrame(frame) {
         <div class="af-row"><span class="af-label">Fonte</span><span class="af-value">${frame.source}</span></div>
         <div class="af-row"><span class="af-label">Timestamp</span><span class="af-value">${frame.timestamp}</span></div>
         <div class="af-row"><span class="af-label">Candles</span><span class="af-value">${frame.candles_count}</span></div>
-        <div class="af-row"><span class="af-label">Último</span><span class="af-value">${fmt(frame.last_price)}</span></div>
+        <div class="af-row af-row-headline"><span class="af-label">Último</span><span class="af-value">${fmt(frame.last_price)}</span></div>
         <div class="af-row"><span class="af-label">SMA</span><span class="af-value">${fmt(frame.sma)}</span></div>
         <div class="af-row"><span class="af-label">EMA</span><span class="af-value">${fmt(frame.ema)}</span></div>
         <div class="af-row"><span class="af-label">Desvio padrão</span><span class="af-value">${fmt(frame.stddev)}</span></div>
@@ -711,7 +600,7 @@ function renderRealAnalysisFrame(frame) {
     `;
     if (els['real-analysis-frame-note']) {
         els['real-analysis-frame-note'].textContent = frame.status === 'OK'
-            ? 'Leitura estatística sobre candles reais validados nesta sessão por sonda real. Ainda não é recomendação de ordem.'
+            ? 'Leitura descritiva — não é recomendação. Estatística sobre candles reais validados nesta sessão por sonda real.'
             : `DADOS INSUFICIENTES: ${frame.status_reason || 'sem candles reais suficientes'}.`;
     }
 }
@@ -1427,7 +1316,7 @@ async function handleExportReport() {
     const now = new Date().toISOString();
     const a = lastAnalysisMeta;
     const lines = [
-        '# AR10 CYBORG 2.0 — Relatório de Sessão',
+        '# AR10 CYBORG 1.0 PRO — Relatório de Sessão',
         '',
         `- Gerado em: ${now}`,
         '- Modo: IPAD DIRECT / LOCAL-FIRST / READ_ONLY / FAIL_CLOSED',
@@ -1798,6 +1687,7 @@ async function renderHydrationEngineCard() {
     }
     if (els['he-progress-pct']) els['he-progress-pct'].textContent = `${pct}%`;
     setStatus('he-status', status.status);
+    setInfo('he-current-package', status.current_package_name || (status.is_running ? 'Selecionando próximo pacote…' : 'Nenhum (ocioso)'));
     setInfo('he-session', status.session_id || 'Nenhuma sessão iniciada');
     setInfo('he-completed', `${status.completed_count} / ${status.total_count}`);
     setInfo('he-pending', String(status.pending_count));

@@ -1,5 +1,5 @@
 /* ============================================================
-   AR10 CYBORG 2.0 — IPAD ONE-TAP RUNTIME
+   AR10 CYBORG 1.0 PRO — IPAD ONE-TAP RUNTIME
    Mesma linguagem visual do Cockpit "Ciborgue": preto absoluto,
    ciano estrutural, verde/vermelho reservados a estado de dado
    (nunca a execucao real — este runtime nunca executa ordens).
@@ -265,6 +265,8 @@ section.card h2 .step {
    timestamp) devem quebrar linha dentro da propria celula do grid, nunca
    vazar por cima da celula vizinha (bug visual real, nao so estetico). */
 .status-row .value { font-weight: bold; text-align: right; }
+
+.rdl-meta-sub { display: inline-block; font-size: 0.74em; opacity: 0.6; font-weight: normal; }
 
 .v-ok { color: var(--long-green); text-shadow: 0 0 8px rgba(0,255,157,0.5); }
 .v-fail { color: var(--short-red); text-shadow: 0 0 8px rgba(255,62,82,0.5); }
@@ -832,6 +834,19 @@ footer.legal {
     font-weight: bold;
     color: var(--sys-cyan);
     font-size: clamp(0.85rem, 2vw, 1rem);
+}
+/* af-row-headline — destaque do preço atual (BTC/USDT) acima das demais
+   leituras estatísticas: mesma cor/sem conotação de alta/baixa (cyan, nao
+   verde/vermelho) para nao parecer sinal direcional, so' maior e com mais
+   glow — "dado importante em destaque" sem virar recomendacao. */
+.analysis-frame-grid .af-row-headline {
+    grid-column: 1 / -1;
+    border-bottom-color: rgba(0, 242, 255, 0.22);
+}
+.analysis-frame-grid .af-row-headline .af-value {
+    font-size: clamp(1.5rem, 5vw, 2.2rem);
+    letter-spacing: 0.5px;
+    text-shadow: 0 0 16px rgba(0, 242, 255, 0.5);
 }
 .analysis-frame-empty { color: var(--text-dim); font-size: 0.85rem; }
 
