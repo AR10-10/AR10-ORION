@@ -90,16 +90,23 @@
   <section class="card cyborg-executive-panel" id="cyborg-executive-panel">
     <h2>Resumo Executivo</h2>
     <p class="onboarding-hint">Leitura de 1 olhar: o Cyborg está pronto? a fonte de dado é real e fresca? está seguro para analisar? Memória de sessão anterior nunca aparece aqui como dado atual sem revalidação — sem fonte fresca nesta sessão, este card mostra <b>DADOS_INSUFICIENTES</b>.</p>
-    <div class="status-grid">
-      <div class="status-row"><span class="label">Estado do Cyborg</span><span class="value v-pending" id="ex-state">…</span></div>
-      <div class="status-row"><span class="label">Fonte real ativa</span><span class="value v-pending" id="ex-source">…</span></div>
-      <div class="status-row"><span class="label">Atualizado em</span><span class="value v-pending" id="ex-freshness">…</span></div>
-      <div class="status-row"><span class="label">Paper Trading</span><span class="value v-pending" id="ex-paper">…</span></div>
-      <div class="status-row"><span class="label">Risk Gate</span><span class="value v-pending" id="ex-risk">…</span></div>
-      <div class="status-row"><span class="label">Live Trading</span><span class="value v-fail" id="ex-live">LIVE_LOCKED</span></div>
-      <div class="status-row"><span class="label">Vault / Evidence</span><span class="value v-pending" id="ex-vault">…</span></div>
-      <div class="status-row"><span class="label">Último relatório</span><span class="value v-pending" id="ex-report">…</span></div>
+    <div class="ex-hero">
+      <div class="status-row ex-hero-row ex-state-row" id="ex-state-row" data-macro-state="IDLE">
+        <span class="label">Estado do Cyborg</span><span class="value v-pending" id="ex-state">…</span>
+      </div>
+      <div class="status-row ex-hero-row"><span class="label">Fonte real ativa</span><span class="value v-pending" id="ex-source">…</span></div>
+      <div class="status-row ex-hero-row"><span class="label">Atualizado em</span><span class="value v-pending" id="ex-freshness">…</span></div>
+      <div class="status-row ex-hero-row"><span class="label">Live Trading</span><span class="value v-fail" id="ex-live">LIVE_LOCKED</span></div>
     </div>
+    <details class="ex-details">
+      <summary>Detalhes técnicos</summary>
+      <div class="status-grid ex-details-grid">
+        <div class="status-row"><span class="label">Paper Trading</span><span class="value v-pending" id="ex-paper">…</span></div>
+        <div class="status-row"><span class="label">Risk Gate</span><span class="value v-pending" id="ex-risk">…</span></div>
+        <div class="status-row"><span class="label">Vault / Evidence</span><span class="value v-pending" id="ex-vault">…</span></div>
+        <div class="status-row"><span class="label">Último relatório</span><span class="value v-pending" id="ex-report">…</span></div>
+      </div>
+    </details>
     <div class="executive-actions" role="group" aria-label="Ações principais">
       <button type="button" class="rt-btn primary" id="ex-btn-prepare"><span class="icon">⚡</span> Preparar / Atualizar</button>
       <button type="button" class="rt-btn" id="ex-btn-analyze"><span class="icon">▣</span> Analisar Sistema</button>

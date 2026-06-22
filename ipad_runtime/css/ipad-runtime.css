@@ -261,7 +261,10 @@ section.card h2 .step {
     gap: 10px;
 }
 .status-row .label { color: var(--text-dim); }
-.status-row .value { font-weight: bold; white-space: nowrap; }
+/* sem white-space: nowrap de proposito — valores longos (frases de fonte/
+   timestamp) devem quebrar linha dentro da propria celula do grid, nunca
+   vazar por cima da celula vizinha (bug visual real, nao so estetico). */
+.status-row .value { font-weight: bold; text-align: right; }
 
 .v-ok { color: var(--long-green); text-shadow: 0 0 8px rgba(0,255,157,0.5); }
 .v-fail { color: var(--short-red); text-shadow: 0 0 8px rgba(255,62,82,0.5); }
@@ -1385,3 +1388,82 @@ section.card[tabindex]:focus-visible {
     .he-hero { flex-direction: column; }
     .he-hero-trio { flex-direction: row; }
 }
+
+/* ------------------------------------------------------------
+   RESUMO EXECUTIVO — mesmo foco visual do Hydration Engine
+   (hero + <details> nativo), aplicado ao card mais lido da tela
+   principal. "Estado do Cyborg" ganha destaque de cabecalho (cor/
+   glow via data-macro-state, reaproveitando computeMacroState() —
+   nenhum estado novo, so' o mesmo valor de setMacroStatus('ex-state', ...)
+   espelhado no wrapper). Fonte ativa / Atualizado em / Live Trading
+   ficam sempre visiveis (sinais de confianca "1 olhar" + o lock
+   permanente LIVE_LOCKED, nunca dentro do <details>). Paper/Risk/
+   Vault/Relatorio colapsam por terem card proprio em outro lugar
+   do painel — colapsar aqui no reduz a visibilidade real de nenhum
+   dos dois, so' a densidade deste card-resumo.
+   ------------------------------------------------------------ */
+.ex-hero {
+    display: flex;
+    flex-direction: column;
+    margin: 4px 0 14px;
+}
+.ex-hero-row { border-bottom: none; margin-bottom: 10px; }
+.ex-hero-row .value { font-size: 1.05rem; }
+.ex-state-row {
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-left: 3px solid var(--text-dim);
+    transition: background 0.4s ease, border-color 0.4s ease;
+}
+.ex-state-row .value { font-size: 1.3rem; letter-spacing: 0.5px; }
+.ex-state-row[data-macro-state="READY"] {
+    background: rgba(0, 255, 157, 0.06);
+    border-color: rgba(0, 255, 157, 0.3);
+    border-left-color: var(--long-green);
+}
+.ex-state-row[data-macro-state="ANALYZING"],
+.ex-state-row[data-macro-state="UPDATING"] {
+    background: rgba(0, 242, 255, 0.06);
+    border-color: rgba(0, 242, 255, 0.3);
+    border-left-color: var(--sys-cyan);
+    animation: heRingPulse 2.2s ease-in-out infinite;
+}
+.ex-state-row[data-macro-state="DEGRADED"],
+.ex-state-row[data-macro-state="DADOS_INSUFICIENTES"] {
+    background: rgba(255, 184, 0, 0.06);
+    border-color: rgba(255, 184, 0, 0.3);
+    border-left-color: var(--alert-amber);
+}
+.ex-state-row[data-macro-state="FAIL_CLOSED"] {
+    background: rgba(255, 62, 82, 0.07);
+    border-color: rgba(255, 62, 82, 0.35);
+    border-left-color: var(--short-red);
+}
+
+.ex-details {
+    margin: 0 0 14px;
+    border: 1px solid rgba(0, 242, 255, 0.12);
+    border-radius: 10px;
+    padding: 0 12px;
+}
+.ex-details summary {
+    cursor: pointer;
+    padding: 9px 0;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    color: var(--sys-cyan);
+    list-style: none;
+}
+.ex-details summary::-webkit-details-marker { display: none; }
+.ex-details summary::before {
+    content: '▸';
+    display: inline-block;
+    width: 1.1em;
+    transition: transform 0.2s ease;
+}
+.ex-details[open] summary::before { transform: rotate(90deg); }
+.ex-details-grid { padding: 2px 0 12px; }

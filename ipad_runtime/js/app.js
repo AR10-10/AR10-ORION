@@ -46,7 +46,7 @@ const els = {};
     'console-log', 'telemetry-latest', 'replay-canvas', 'replay-meta', 'import-input', 'home-modal', 'standalone-state',
     'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'macro-state-chip', 'mic-button', 'mic-status-label', 'engine-meta', 'analysis-frame-grid',
     'vault-meta', 'vault-hashes', 'profile-hint',
-    'ex-state', 'ex-source', 'ex-freshness', 'ex-paper', 'ex-risk', 'ex-vault', 'ex-report',
+    'ex-state', 'ex-state-row', 'ex-source', 'ex-freshness', 'ex-paper', 'ex-risk', 'ex-vault', 'ex-report',
     'ex-btn-prepare', 'ex-btn-analyze', 'ex-btn-report', 'ex-btn-advanced',
     'cr-pwa', 'cr-sw', 'cr-cache', 'cr-idb', 'cr-opfs', 'cr-webcrypto', 'cr-wasm', 'cr-workers',
     'cr-webgpu', 'cr-voice', 'cr-llama', 'cr-pack', 'cr-replay', 'cr-safety',
@@ -546,6 +546,10 @@ async function refreshExecutiveSummary() {
     const macro = computeMacroState();
     setMacroStatus('macro-state-chip', macro);
     setMacroStatus('ex-state', macro);
+    // Espelha o mesmo macro-estado no wrapper (data-macro-state) so' para o
+    // CSS escolher a cor/glow do destaque "hero" — nenhum estado novo, e o
+    // mesmo valor que setMacroStatus ja calculou acima.
+    if (els['ex-state-row']) els['ex-state-row'].setAttribute('data-macro-state', macro);
 
     const active = realDataRegistry.getActiveReadOnlySources();
     if (active.length) {
