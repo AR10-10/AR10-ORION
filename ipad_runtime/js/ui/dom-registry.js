@@ -15,6 +15,7 @@ const ELEMENT_IDS = [
     'st-webgpu', 'st-webgl', 'st-webllm', 'st-transformers', 'st-onnx', 'st-replay', 'st-vault', 'st-mode',
     'st-voice', 'st-speech-rec', 'st-speech-syn', 'st-mic-perm',
     'st-llama-layer', 'st-llama-profile', 'st-llama-runtime', 'st-llama-webgpu', 'st-llm-adapter-tier',
+    'cyborg-live-ticker', 'live-ticker-track',
     'console-log', 'telemetry-latest', 'replay-canvas', 'replay-meta', 'import-input', 'home-modal', 'standalone-state',
     'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'macro-state-chip', 'mic-button', 'mic-status-label', 'engine-meta', 'analysis-frame-grid',
     'vault-meta', 'vault-hashes', 'profile-hint',

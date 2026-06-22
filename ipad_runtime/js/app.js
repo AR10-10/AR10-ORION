@@ -39,6 +39,7 @@ import { getTelegramAuxStatusReport } from './aux/telegram-aux-status.js';
 import * as hydrationManager from './hydration/hydration-manager.js';
 import { els } from './ui/dom-registry.js';
 import { log, classFor, setStatus, setInfo, setStatusWithClass, MACRO_STATE_CLASS, setMacroStatus } from './ui/ui-helpers.js';
+import * as liveTicker from './ui/live-ticker.js';
 
 const PROFILES = {
     light: { windowSize: 10, label: 'Light: janela SMA/EMA=10, leitura mais rápida e leve.' },
@@ -472,6 +473,48 @@ async function refreshExecutiveSummary() {
     } catch {
         setInfo('ex-paper', 'n/d');
     }
+
+    refreshLiveTicker();
+}
+
+// Letreiro Vivo Central — coleta 1 snapshot dos mesmos sinais que
+// refreshExecutiveSummary() acima ja le (macro state, conectores reais,
+// AnalysisFrame real, Research Engine, Vault/Hydration/Safari Edge, Risk
+// Gate). Nenhuma regra de negocio nova: blockedConnectors reusa
+// classForConnectorState() (a mesma classificacao do Connector Probe grid)
+// para so' listar falha real (v-fail), nunca um estado pendente normal
+// (PLANNED/PROBING/STALE) como se fosse alerta critico.
+function collectLiveTickerState() {
+    const active = realDataRegistry.getActiveReadOnlySources();
+    const freshActive = active.filter((a) => !realDataRegistry.isStale(a));
+    const blockedConnectors = realDataRegistry.listConnectors()
+        .filter((c) => classForConnectorState(c.state) === 'v-fail')
+        .map((c) => ({ name: c.connector_name, state: c.state }));
+
+    let rehydratedSourceName = null;
+    if (isShowingHistoricalData() && rehydratedActiveSourceId) {
+        const meta = realDataRegistry.getConnectorMeta(rehydratedActiveSourceId);
+        rehydratedSourceName = meta ? meta.connector_name : rehydratedActiveSourceId;
+    }
+
+    return {
+        macro: computeMacroState(),
+        historical: isShowingHistoricalData(),
+        rehydratedSourceName,
+        freshSourceNames: freshActive.map((a) => a.connector_name),
+        blockedConnectors,
+        analysisFrame: lastRealAnalysisFrame,
+        freshnessLabel: lastRealAnalysisFrame ? formatFreshnessMs(lastRealAnalysisFrame.freshness) : DADOS_INSUFICIENTES,
+        researchFrame: lastResearchEngineFrame,
+        vaultLabel: packStatusLabel(lastVaultStatusObj, vaultFreshness),
+        hydrationStatus: lastHydrationEngineStatus ? lastHydrationEngineStatus.status : null,
+        safariEdgeStatus: lastSafariEdgeStatus ? lastSafariEdgeStatus.edge_status : null,
+        killSwitchEngaged: lastRiskGateConfig ? lastRiskGateConfig.kill_switch_engaged : null,
+    };
+}
+
+function refreshLiveTicker() {
+    liveTicker.updateLiveTickerFromRuntime(collectLiveTickerState(), els['live-ticker-track']);
 }
 
 // MutationObserver no data-state do orbe: unica fonte de verdade das ~80
@@ -583,8 +626,15 @@ function renderRealAnalysisFrame(frame) {
     // template (mesmo vocabulario DADOS_INSUFICIENTES do resto do app).
     const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
     const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : str(v));
+    // Mesmo portao de isShowingHistoricalData() usado pelo resto do Real Data
+    // Layer: um frame com status OK persistido de uma sessao anterior nunca
+    // pode se anunciar REAL_READ_ONLY de novo so' porque o campo `status` foi
+    // gravado como OK no passado — sem isso o "Modo" contradiz o aviso de
+    // memoria da sessao anterior mostrado a poucas linhas de distancia.
+    const historical = isShowingHistoricalData();
+    const modo = historical ? 'SESSION_PREVIOUS' : (frame.status === 'OK' ? 'REAL_READ_ONLY' : DADOS_INSUFICIENTES);
     els['real-analysis-frame-grid'].innerHTML = `
-        <div class="af-row"><span class="af-label">Modo</span><span class="af-value">${frame.status === 'OK' ? 'REAL_READ_ONLY' : DADOS_INSUFICIENTES}</span></div>
+        <div class="af-row"><span class="af-label">Modo</span><span class="af-value">${modo}</span></div>
         <div class="af-row"><span class="af-label">Ativo</span><span class="af-value">${str(frame.asset)}</span></div>
         <div class="af-row"><span class="af-label">Fonte</span><span class="af-value">${str(frame.source)}</span></div>
         <div class="af-row"><span class="af-label">Timestamp</span><span class="af-value">${str(frame.timestamp)}</span></div>
@@ -604,9 +654,13 @@ function renderRealAnalysisFrame(frame) {
         <div class="af-row"><span class="af-label">Status</span><span class="af-value">${str(frame.status)}</span></div>
     `;
     if (els['real-analysis-frame-note']) {
-        els['real-analysis-frame-note'].textContent = frame.status === 'OK'
-            ? 'Leitura descritiva — não é recomendação. Estatística sobre candles reais validados nesta sessão por sonda real.'
-            : `DADOS INSUFICIENTES: ${frame.status_reason || 'sem candles reais suficientes'}.`;
+        if (historical) {
+            els['real-analysis-frame-note'].textContent = 'Leitura descritiva — não é recomendação. Estatística calculada sobre candles de uma sessão anterior (memória local), ainda NÃO revalidada nesta sessão. Toque em "Testar fontes reais" para confirmar de novo antes de confiar nestes números.';
+        } else {
+            els['real-analysis-frame-note'].textContent = frame.status === 'OK'
+                ? 'Leitura descritiva — não é recomendação. Estatística sobre candles reais validados nesta sessão por sonda real.'
+                : `DADOS INSUFICIENTES: ${frame.status_reason || 'sem candles reais suficientes'}.`;
+        }
     }
 }
 
@@ -2330,6 +2384,12 @@ async function boot() {
     hydrationManager.wireAutoResume((m, l) => log(m, l));
 
     wireStatusCardModal();
+
+    // Letreiro Vivo Central — inicia depois que Vault/Risk Gate/Real Data
+    // Layer/Hydration/Safari Edge ja tem leitura real desta sessao acima,
+    // para o primeiro tick do letreiro nao mostrar DADOS_INSUFICIENTES so'
+    // por ter rodado cedo demais no boot.
+    liveTicker.startLiveTicker(collectLiveTickerState, els['live-ticker-track']);
 
     // Auto-reparo no boot: SÓ quando algo já foi instalado antes (existe meta
     // com checksums) e agora está quebrado — o caso "corrompido/ausente após

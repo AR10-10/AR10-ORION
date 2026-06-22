@@ -1496,4 +1496,108 @@ section.card[tabindex]:focus-visible {
     transition: transform 0.2s ease;
 }
 .ex-details[open] summary::before { transform: rotate(90deg); }
+
+/* ------------------------------------------------------------
+   LETREIRO VIVO CENTRAL ("Cyborg Live Ticker") — painel tipo
+   cockpit no topo, fora do .bento, para nao depender de scroll:
+   resume estado/dado real/Long-Short/Hydration/seguranca em uma
+   unica faixa. Mesma linguagem visual de section.card (glass,
+   ciano estrutural) — sem cor nova, sem componente decorativo.
+   Conteudo e' 100% gerado por js/ui/live-ticker.js a partir de
+   estado real ja existente (nunca inventa frase aqui no CSS).
+   ------------------------------------------------------------ */
+.live-ticker {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding: 8px 14px;
+    background: linear-gradient(150deg, var(--metal-hi), var(--metal-lo));
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--line-cyan);
+    border-top-color: rgba(0, 242, 255, 0.3);
+    border-radius: 14px;
+    box-shadow: inset 0 0 14px rgba(0, 242, 255, 0.05), 0 6px 20px rgba(0, 0, 0, 0.3);
+    /* nunca cobre/bloqueia nada abaixo: sempre em fluxo normal, nunca fixed/sticky. */
+    position: relative;
+    overflow: hidden;
+}
+.lt-rail-label {
+    flex: 0 0 auto;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.68rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--sys-cyan);
+    text-shadow: 0 0 8px rgba(0, 242, 255, 0.4);
+    padding-right: 10px;
+    border-right: 1px solid rgba(0, 242, 255, 0.18);
+    white-space: nowrap;
+}
+.live-ticker-viewport {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    /* mascara suave nas bordas — a faixa "esmaece" em vez de cortar o texto
+       em seco, parte do acabamento "glass" sem nenhum JS extra. */
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+    mask-image: linear-gradient(90deg, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+}
+.live-ticker-track {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    will-change: transform;
+}
+.live-ticker-track.lt-animate {
+    animation: lt-scroll 38s linear infinite;
+}
+/* pausa no hover/touch-hold: deixa o usuario ler um item sem perseguir o
+   texto — nao e' decorativo, e' acessibilidade de leitura mesmo respeitando
+   "nao deve bloquear clique" (continua sem pointer-events:none artificial,
+   so' a animacao para). */
+.live-ticker:hover .live-ticker-track.lt-animate,
+.live-ticker:focus-within .live-ticker-track.lt-animate {
+    animation-play-state: paused;
+}
+@keyframes lt-scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+}
+.lt-item {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 4px;
+    font-size: 0.78rem;
+    letter-spacing: 0.2px;
+}
+.lt-tag {
+    margin-right: 6px;
+    letter-spacing: 1px;
+}
+.lt-sep {
+    margin: 0 14px;
+    color: var(--text-dim);
+    opacity: 0.5;
+}
+/* prefers-reduced-motion: lista estatica, sem nenhum movimento — o conteudo
+   duplicado (truque do loop sem emenda) so' e' inserido em JS quando NAO
+   reduzido, entao aqui basta deixar o texto quebrar linha normalmente em
+   vez de ficar cortado fora do viewport. */
+@media (prefers-reduced-motion: reduce) {
+    .live-ticker-viewport { mask-image: none; -webkit-mask-image: none; overflow: visible; }
+    .live-ticker-track {
+        white-space: normal;
+        flex-wrap: wrap;
+        gap: 4px 0;
+        animation: none !important;
+    }
+    .lt-sep { margin: 0 10px; }
+}
+@media (max-width: 560px) {
+    .live-ticker { padding: 8px 10px; gap: 6px; }
+    .lt-rail-label { font-size: 0.6rem; padding-right: 6px; }
+}
 .ex-details-grid { padding: 2px 0 12px; }
