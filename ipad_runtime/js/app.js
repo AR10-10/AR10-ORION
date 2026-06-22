@@ -2475,6 +2475,12 @@ function wireButtons() {
     document.getElementById('qa-analysis').addEventListener('click', handleExplainAnalysis);
     document.getElementById('qa-report').addEventListener('click', handleShowReport);
     if (els['mic-button']) els['mic-button'].addEventListener('click', handleMicButton);
+    if (els['btn-voice-info']) {
+        els['btn-voice-info'].addEventListener('click', () => openStatusModal(
+            'Siriform Voice',
+            'Exemplos: "Verificar Safari", "Mostrar status", "Rodar diagnóstico". O Siriform Voice só lê o estado deste runtime e toca os mesmos botões da tela — nunca envia ordem, nunca abre live trading e nunca sai de READ_ONLY/FAIL_CLOSED. Comando fora dessa lista aparece como "bloqueado por política", nunca falha silenciosa.'
+        ));
+    }
     wireProfileToggle();
 
     els['import-input'].addEventListener('change', async (ev) => {

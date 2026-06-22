@@ -17,7 +17,7 @@ const ELEMENT_IDS = [
     'st-llama-layer', 'st-llama-profile', 'st-llama-runtime', 'st-llama-webgpu', 'st-llm-adapter-tier',
     'cyborg-live-ticker', 'live-ticker-track',
     'console-log', 'telemetry-latest', 'replay-canvas', 'replay-meta', 'import-input', 'home-modal', 'standalone-state',
-    'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'macro-state-chip', 'mic-button', 'mic-status-label', 'engine-meta', 'analysis-frame-grid',
+    'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'macro-state-chip', 'mic-button', 'mic-status-label', 'btn-voice-info', 'engine-meta', 'analysis-frame-grid',
     'vault-meta', 'vault-hashes', 'profile-hint',
     'ex-state', 'ex-state-row', 'ex-source', 'ex-freshness', 'ex-paper', 'ex-risk', 'ex-vault', 'ex-report',
     'ex-btn-prepare', 'ex-btn-analyze', 'ex-btn-report', 'ex-btn-advanced',

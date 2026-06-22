@@ -452,33 +452,46 @@ footer.legal {
     flex-direction: column;
     align-items: center;
     text-align: center;
-    gap: 10px;
-    padding-top: 22px;
+    gap: 12px;
+    padding-top: 28px;
     padding-bottom: 20px;
 }
 .siriform-stage {
     position: relative;
-    width: 136px;
-    height: 136px;
+    width: 172px;
+    height: 172px;
     display: grid;
     place-items: center;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+}
+/* halo ambiente — segundo plano desfocado, mesmo ritmo de respiracao do
+   orbe (siriformBreathe reaproveitado, nunca uma 2a animacao paralela),
+   so' para dar sensacao de profundidade atras do orbe principal. */
+.siriform-stage::before {
+    content: '';
+    position: absolute;
+    inset: -34px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0, 242, 255, 0.16), transparent 70%);
+    filter: blur(6px);
+    animation: siriformBreathe 4.2s ease-in-out infinite;
+    pointer-events: none;
 }
 .siriform-avatar {
     position: relative;
-    width: 108px;
-    height: 108px;
+    width: 140px;
+    height: 140px;
     border-radius: 50%;
     background: conic-gradient(from 0deg, var(--sys-cyan), #6a5cff, var(--long-green), var(--sys-cyan));
     filter: blur(0.2px);
-    box-shadow: 0 0 30px rgba(0, 242, 255, 0.35), 0 0 70px rgba(0, 242, 255, 0.12);
+    box-shadow: 0 0 36px rgba(0, 242, 255, 0.35), 0 0 84px rgba(0, 242, 255, 0.13);
     animation: siriformSpin 9s linear infinite, siriformBreathe 4.2s ease-in-out infinite;
     transition: box-shadow 0.6s ease;
 }
 .siriform-avatar::before {
     content: '';
     position: absolute;
-    inset: 10px;
+    inset: 13px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.35), rgba(0,0,0,0.55) 70%);
     mix-blend-mode: overlay;
@@ -486,7 +499,7 @@ footer.legal {
 .siriform-avatar::after {
     content: '';
     position: absolute;
-    inset: -14px;
+    inset: -16px;
     border-radius: 50%;
     border: 1px solid var(--siriform-ring-color, rgba(0, 242, 255, 0.18));
     animation: siriformRing 6s linear infinite reverse;
@@ -499,7 +512,7 @@ footer.legal {
    o estado dominante do avatar sem duplicar toda a paleta por estado. */
 .siriform-core {
     position: absolute;
-    inset: 30px;
+    inset: 38px;
     border-radius: 50%;
     background: radial-gradient(circle, rgba(255,255,255,0.85), currentColor 55%, transparent 76%);
     color: var(--sys-cyan);
@@ -646,27 +659,27 @@ footer.legal {
    (Fase 2/7): "Preparar / Atualizar Cyborg neste iPad".
    ------------------------------------------------------------ */
 .hero-cta {
-    width: 100%;
-    max-width: 420px;
-    margin: 8px auto 0;
+    width: auto;
+    max-width: 300px;
+    margin: 4px 0 0;
     font-family: var(--font-display);
-    font-weight: 700;
-    font-size: clamp(0.9rem, 2.4vw, 1.05rem);
-    letter-spacing: 0.4px;
+    font-weight: 600;
+    font-size: clamp(0.78rem, 1.8vw, 0.88rem);
+    letter-spacing: 0.3px;
     color: var(--bg-void);
     background: linear-gradient(135deg, var(--sys-cyan), #6a5cff);
     border: none;
-    border-radius: 14px;
-    padding: 16px 18px;
-    display: flex;
+    border-radius: 999px;
+    padding: 11px 22px;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
     cursor: pointer;
-    box-shadow: 0 0 24px rgba(0, 242, 255, 0.35), 0 10px 26px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 14px rgba(0, 242, 255, 0.28), 0 4px 14px rgba(0, 0, 0, 0.35);
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.hero-cta:active { transform: scale(0.97); box-shadow: 0 0 16px rgba(0, 242, 255, 0.3); }
+.hero-cta:active { transform: scale(0.97); box-shadow: 0 0 9px rgba(0, 242, 255, 0.3); }
 .hero-cta:disabled { opacity: 0.4; cursor: not-allowed; }
 .hero-cta .icon { font-size: 1.1em; }
 
@@ -721,7 +734,7 @@ footer.legal {
     flex-wrap: wrap;
     justify-content: center;
     gap: 8px;
-    margin-top: 10px;
+    margin-top: 16px;
 }
 .law-badge {
     font-family: var(--font-mono);
@@ -1045,18 +1058,40 @@ footer.legal {
 }
 
 .voice-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     font-size: 0.72rem;
     color: var(--text-dim);
-    margin: 2px auto 0;
+    margin: 4px 0 0;
     max-width: 320px;
 }
 
-.voice-scope-note {
-    font-size: 0.68rem;
+/* voice-info-btn — abre o status-modal (mesmo padrao de
+   wireStatusCardModal) com os exemplos de comando e o escopo completo do
+   Siriform Voice, texto que antes ficava sempre visivel no hero e
+   sobrecarregava a area do microfone. */
+.voice-info-btn {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid rgba(201, 212, 217, 0.35);
     color: var(--text-dim);
-    margin: 0 auto;
-    max-width: 360px;
-    line-height: 1.5;
+    background: transparent;
+    font-size: 0.7rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.voice-info-btn:active {
+    transform: scale(0.92);
+    background: rgba(0, 242, 255, 0.12);
+    color: var(--sys-cyan);
+    border-color: var(--line-cyan);
 }
 
 .quick-actions {
@@ -1569,7 +1604,7 @@ section.card[tabindex]:focus-visible {
     align-items: center;
     gap: 10px;
     margin-bottom: 14px;
-    padding: 8px 14px;
+    padding: 10px 16px;
     background: linear-gradient(150deg, var(--metal-hi), var(--metal-lo));
     backdrop-filter: blur(20px) saturate(140%);
     -webkit-backdrop-filter: blur(20px) saturate(140%);
@@ -1580,6 +1615,43 @@ section.card[tabindex]:focus-visible {
     /* nunca cobre/bloqueia nada abaixo: sempre em fluxo normal, nunca fixed/sticky. */
     position: relative;
     overflow: hidden;
+}
+/* glow pulse (atras do conteudo, ::before nasce antes dos filhos reais no
+   DOM) + sweep de luz (na frente, baixa opacidade + mix-blend overlay,
+   ::after nasce depois) — "broadcast strip" premium sem animar box-shadow
+   diretamente (custo de repaint maior); so' opacity/transform, GPU-friendly,
+   seguro para Safari/iPad. Ambas desligadas em prefers-reduced-motion. */
+.live-ticker::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    box-shadow: 0 0 22px rgba(0, 242, 255, 0.22), inset 0 0 18px rgba(0, 242, 255, 0.07);
+    opacity: 0.55;
+    pointer-events: none;
+    animation: ltGlowPulse 6s ease-in-out infinite;
+}
+.live-ticker::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -30%;
+    width: 30%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+    mix-blend-mode: overlay;
+    pointer-events: none;
+    animation: ltLightSweep 7s ease-in-out infinite;
+}
+@keyframes ltGlowPulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+}
+@keyframes ltLightSweep {
+    0%, 100% { transform: translateX(0%); opacity: 0; }
+    15% { opacity: 0.7; }
+    50% { transform: translateX(330%); opacity: 0.7; }
+    65% { opacity: 0; }
 }
 .lt-rail-label {
     flex: 0 0 auto;
@@ -1610,7 +1682,7 @@ section.card[tabindex]:focus-visible {
     will-change: transform;
 }
 .live-ticker-track.lt-animate {
-    animation: lt-scroll 38s linear infinite;
+    animation: lt-scroll 58s linear infinite;
 }
 /* pausa no hover/touch-hold: deixa o usuario ler um item sem perseguir o
    texto — nao e' decorativo, e' acessibilidade de leitura mesmo respeitando
@@ -1627,16 +1699,16 @@ section.card[tabindex]:focus-visible {
 .lt-item {
     display: inline-flex;
     align-items: center;
-    padding: 0 4px;
-    font-size: 0.78rem;
-    letter-spacing: 0.2px;
+    padding: 0 6px;
+    font-size: 0.82rem;
+    letter-spacing: 0.25px;
 }
 .lt-tag {
-    margin-right: 6px;
+    margin-right: 7px;
     letter-spacing: 1px;
 }
 .lt-sep {
-    margin: 0 14px;
+    margin: 0 18px;
     color: var(--text-dim);
     opacity: 0.5;
 }
@@ -1653,6 +1725,8 @@ section.card[tabindex]:focus-visible {
         animation: none !important;
     }
     .lt-sep { margin: 0 10px; }
+    .live-ticker::before { animation: none; opacity: 0.55; }
+    .live-ticker::after { animation: none; opacity: 0; }
 }
 @media (max-width: 560px) {
     .live-ticker { padding: 8px 10px; gap: 6px; }
