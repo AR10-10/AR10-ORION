@@ -59,6 +59,7 @@ const ELEMENT_IDS = [
     'he-ring', 'he-progress-pct', 'he-status', 'he-current-package', 'he-session', 'he-completed', 'he-pending', 'he-failed', 'he-bytes', 'he-checkpoint',
     'he-quota', 'he-resumable', 'he-offline-available', 'he-fail-closed', 'he-last-error',
     'btn-he-start', 'btn-he-pause', 'btn-he-verify', 'btn-he-repair', 'btn-he-export',
+    'tb-build-badge', 'ex-hydration', 'ex-local', 'li-final-label-hero', 'li-confidence-hero',
 ];
 
 ELEMENT_IDS.forEach((id) => { els[id] = document.getElementById(id); });

@@ -195,6 +195,7 @@ async function refreshVaultLocalPanel(vault) {
     const cacheInfo = await getActiveCacheInfo();
     setStatus('vl-sw-cache', cacheInfo.present ? 'OK' : 'AUSENTE');
     setInfo('vl-cache-version', cacheInfo.present ? cacheInfo.label : '—');
+    setInfo('tb-build-badge', cacheInfo.present ? cacheInfo.label : 'AUSENTE');
 
     setStatus('vl-cache-api', okOrAusente(f.cacheApi));
     setStatus('vl-idb', okOrAusente(f.indexedDb));
@@ -468,6 +469,8 @@ async function refreshExecutiveSummary() {
     setInfo('ex-report', lastAnalysisMeta
         ? `Replay BTC/USDT analisado · SMA ${lastAnalysisMeta.sma.toFixed(2)} · EMA ${lastAnalysisMeta.ema.toFixed(2)}`
         : 'Nenhum relatório gerado nesta sessão ainda.');
+    setStatus('ex-hydration', lastHydrationEngineStatus ? lastHydrationEngineStatus.status : DADOS_INSUFICIENTES);
+    setStatusWithClass('ex-local', feat.isStandalone() ? 'INSTALADO (STANDALONE)' : 'SAFARI (ABA)', feat.isStandalone() ? 'v-ok' : 'v-info');
 
     try {
         const summary = await paperTrading.getPaperSummary();
@@ -1037,6 +1040,8 @@ function renderLocalIntelligenceCard(result) {
     if (!result) {
         setStatusWithClass('li-final-label', 'DADOS_INSUFICIENTES', 'v-pending');
         setStatusWithClass('li-data-mode', DADOS_INSUFICIENTES, 'v-pending');
+        if (els['li-final-label-hero']) setStatusWithClass('li-final-label-hero', 'DADOS_INSUFICIENTES', 'v-pending');
+        if (els['li-confidence-hero']) setInfo('li-confidence-hero', '—');
         return;
     }
     const score = result.score;
@@ -1048,6 +1053,8 @@ function renderLocalIntelligenceCard(result) {
     setInfo('li-risk', score.risk_score ?? 'n/d');
     setStatusWithClass('li-data-mode', result.source_data_mode, classForDataMode(result.source_data_mode));
     els['li-explanation'].textContent = result.explanation_pt_br;
+    if (els['li-final-label-hero']) setStatusWithClass('li-final-label-hero', score.final_label, classForSetupLabel(score.final_label));
+    if (els['li-confidence-hero']) setInfo('li-confidence-hero', result.confidence_label);
 }
 
 function renderReflectionReportCard(report) {
