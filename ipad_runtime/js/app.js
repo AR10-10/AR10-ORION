@@ -774,12 +774,17 @@ function renderTargetTrackerRoute(gridId, route) {
     const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
     const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : str(v));
     const pct = (v) => (typeof v === 'number' ? `${v.toFixed(2)}%` : str(v));
+    const hasProgress = typeof route.progress_pct === 'number';
+    const progressWidth = hasProgress ? Math.max(0, Math.min(100, route.progress_pct)) : 0;
     els[gridId].innerHTML = `
         <div class="status-row"><span class="label">Status</span><span class="value ${classForTargetStatus(route.status)}">${route.status}</span></div>
         <div class="status-row"><span class="label">Alvo 1</span><span class="value v-info">${fmt(route.target_1)}</span></div>
+        <div class="status-row"><span class="label">Alvo 2</span><span class="value v-pending">${fmt(route.target_2)}</span></div>
         <div class="status-row"><span class="label">Invalidação</span><span class="value v-info">${fmt(route.invalidation)}</span></div>
         <div class="status-row"><span class="label">Distância até alvo</span><span class="value v-info">${pct(route.distance_to_target_pct)}</span></div>
         <div class="status-row"><span class="label">Distância até invalidação</span><span class="value v-info">${pct(route.distance_to_invalidation_pct)}</span></div>
+        <div class="progress-track" role="img" aria-label="Progresso até alvo: ${hasProgress ? `${progressWidth.toFixed(0)}%` : DADOS_INSUFICIENTES}"><div class="progress-fill" style="width:${progressWidth}%"></div></div>
+        <div class="status-row progress-label-row"><span class="label">Progresso até alvo</span><span class="value v-info">${hasProgress ? `${progressWidth.toFixed(0)}%` : DADOS_INSUFICIENTES}</span></div>
     `;
 }
 
@@ -809,9 +814,20 @@ function renderTargetTracker(tracker, livePriceInfo) {
             ? DADOS_INSUFICIENTES
             : `${formatSignedNumber(tracker.price_diff)} / ${formatSignedPct(tracker.price_diff_pct)}`;
     }
+    if (els['bl-price-delta-badge']) {
+        const badge = els['bl-price-delta-badge'];
+        if (typeof tracker.price_diff_pct !== 'number') {
+            badge.textContent = DADOS_INSUFICIENTES;
+            badge.className = 'price-delta-badge v-pending';
+        } else {
+            badge.textContent = `${formatSignedPct(tracker.price_diff_pct)} vs. snapshot`;
+            badge.className = `price-delta-badge ${tracker.price_diff_pct >= 0 ? 'v-ok' : 'v-fail'}`;
+        }
+    }
 
     renderTargetTrackerRoute('bl-route-long-grid', tracker.rota_a_long);
     renderTargetTrackerRoute('bl-route-short-grid', tracker.rota_b_short);
+    renderSupportsResistances(tracker);
 
     if (els['bl-reanalyze-banner']) {
         els['bl-reanalyze-banner'].hidden = !tracker.reanalyze_recommended;
@@ -819,6 +835,20 @@ function renderTargetTracker(tracker, livePriceInfo) {
             els['bl-reanalyze-banner'].textContent = `Reavaliar análise recomendado: ${tracker.reanalyze_reasons.join(', ')}. Toque em "Gerar AnalysisFrame real" de novo.`;
         }
     }
+}
+
+/** Suportes/Resistências — mesmos 2 niveis reais do Target Tracker (rota_a_
+ *  long.target_1 = resistencia, rota_a_long.invalidation = suporte) e o
+ *  mesmo preco atual, so' redesenhados como escada vertical. R2/S2 ficam
+ *  sempre DADOS_INSUFICIENTES: o Research Engine nao calcula um 2o nivel. */
+function renderSupportsResistances(tracker) {
+    const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
+    const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : str(v));
+    if (els['sr-resistance-2']) els['sr-resistance-2'].textContent = DADOS_INSUFICIENTES;
+    if (els['sr-resistance-1']) els['sr-resistance-1'].textContent = fmt(tracker.rota_a_long.target_1);
+    if (els['sr-current-price']) els['sr-current-price'].textContent = fmt(tracker.current_price);
+    if (els['sr-support-1']) els['sr-support-1'].textContent = fmt(tracker.rota_a_long.invalidation);
+    if (els['sr-support-2']) els['sr-support-2'].textContent = DADOS_INSUFICIENTES;
 }
 
 function refreshTargetTracker() {
@@ -1036,12 +1066,33 @@ function classForDataMode(mode) {
     return 'v-pending'; // DADOS_INSUFICIENTES
 }
 
+// CONFIDENCE_GAUGE_DEG — mapeia 1:1 os 4 valores reais de confidence_label
+// (local-brain.js confidenceLabel(), unico vocabulario que existe) para um
+// angulo fixo da agulha do dial semicircular (-90deg = extrema esquerda,
+// +90deg = extrema direita). So' uma visualizacao do mesmo rotulo textual ja
+// exibido em #li-confidence-hero — nenhum numero novo, nenhuma 5a categoria
+// "ALTA" inventada (este motor nunca produz isso).
+const CONFIDENCE_GAUGE_DEG = {
+    SEM_BASE: -90,
+    BLOQUEADA: -45,
+    BAIXA_PARA_MEDIA: 0,
+    DESCRITIVA_PAPER_ONLY: 60,
+};
+
+function applyConfidenceGauge(confidenceLabelValue) {
+    if (!els['li-gauge-needle']) return;
+    const deg = CONFIDENCE_GAUGE_DEG[confidenceLabelValue];
+    els['li-gauge-needle'].style.setProperty('--gauge-deg', `${typeof deg === 'number' ? deg : -90}deg`);
+    if (els['li-gauge-wrap']) els['li-gauge-wrap'].classList.toggle('is-pending', typeof deg !== 'number');
+}
+
 function renderLocalIntelligenceCard(result) {
     if (!result) {
         setStatusWithClass('li-final-label', 'DADOS_INSUFICIENTES', 'v-pending');
         setStatusWithClass('li-data-mode', DADOS_INSUFICIENTES, 'v-pending');
         if (els['li-final-label-hero']) setStatusWithClass('li-final-label-hero', 'DADOS_INSUFICIENTES', 'v-pending');
         if (els['li-confidence-hero']) setInfo('li-confidence-hero', '—');
+        applyConfidenceGauge(null);
         return;
     }
     const score = result.score;
@@ -1055,6 +1106,7 @@ function renderLocalIntelligenceCard(result) {
     els['li-explanation'].textContent = result.explanation_pt_br;
     if (els['li-final-label-hero']) setStatusWithClass('li-final-label-hero', score.final_label, classForSetupLabel(score.final_label));
     if (els['li-confidence-hero']) setInfo('li-confidence-hero', result.confidence_label);
+    applyConfidenceGauge(result.confidence_label);
 }
 
 function renderReflectionReportCard(report) {

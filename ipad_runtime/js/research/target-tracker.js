@@ -51,7 +51,7 @@ function pctGap(level, price) {
 /** @param {{price: number, target: number, invalidation: number, direction: 'LONG'|'SHORT'}} */
 function routeStatus({ price, target, invalidation, direction }) {
     if (!isFiniteNum(price) || !isFiniteNum(target) || !isFiniteNum(invalidation)) {
-        return { status: TARGET_STATUS.DADOS_INSUFICIENTES, distance_to_target_pct: DADOS_INSUFICIENTES, distance_to_invalidation_pct: DADOS_INSUFICIENTES };
+        return { status: TARGET_STATUS.DADOS_INSUFICIENTES, distance_to_target_pct: DADOS_INSUFICIENTES, distance_to_invalidation_pct: DADOS_INSUFICIENTES, progress_pct: DADOS_INSUFICIENTES };
     }
     const invalidated = direction === 'LONG' ? price < invalidation : price > invalidation;
     const touched = direction === 'LONG' ? price >= target : price <= target;
@@ -64,7 +64,19 @@ function routeStatus({ price, target, invalidation, direction }) {
     else if (isFiniteNum(distanceToTarget) && distanceToTarget <= APPROACH_PCT) status = TARGET_STATUS.APPROACHING_TARGET;
     else status = TARGET_STATUS.WAITING;
 
-    return { status, distance_to_target_pct: distanceToTarget, distance_to_invalidation_pct: distanceToInvalidation };
+    // progress_pct: posicao percentual do preco atual no trajeto entre
+    // invalidacao (0%) e alvo (100%) — pura visualizacao derivada das duas
+    // distancias reais acima (mesmos numeros de distance_to_*_pct), nunca um
+    // novo nivel/sinal: so' reexpressa a mesma comparacao como 1 barra.
+    let progressPct;
+    if (touched) progressPct = 100;
+    else if (invalidated) progressPct = 0;
+    else {
+        const totalRange = distanceToTarget + distanceToInvalidation;
+        progressPct = totalRange > 0 ? Math.max(0, Math.min(100, (distanceToInvalidation / totalRange) * 100)) : DADOS_INSUFICIENTES;
+    }
+
+    return { status, distance_to_target_pct: distanceToTarget, distance_to_invalidation_pct: distanceToInvalidation, progress_pct: progressPct };
 }
 
 function emptyRoute() {
@@ -75,6 +87,7 @@ function emptyRoute() {
         invalidation: DADOS_INSUFICIENTES,
         distance_to_target_pct: DADOS_INSUFICIENTES,
         distance_to_invalidation_pct: DADOS_INSUFICIENTES,
+        progress_pct: DADOS_INSUFICIENTES,
     };
 }
 

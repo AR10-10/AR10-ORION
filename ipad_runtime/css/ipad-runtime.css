@@ -557,6 +557,21 @@ footer.legal {
     border-color: rgba(0, 255, 157, 0.16);
     animation: siriformOrbit2 16s linear infinite reverse;
 }
+/* siriform-wireframe — malha geodesica (5 elipses sobrepostas) por cima do
+   orbe, pedido no concept de referencia ("globo wireframe" denso, nao so' os
+   2 aneis finos de .siriform-orbit). 100% decorativo (aria-hidden, sem
+   estado), so' rotaciona devagar reusando siriformSpin — nenhuma logica/dado
+   novo, so' textura visual do nucleo. */
+.siriform-wireframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    color: rgba(255, 255, 255, 0.4);
+    mix-blend-mode: screen;
+    animation: siriformSpin 30s linear infinite;
+    pointer-events: none;
+}
 @keyframes siriformOrbit1 {
     from { transform: perspective(320px) rotateX(68deg) rotate(0deg); }
     to   { transform: perspective(320px) rotateX(68deg) rotate(360deg); }
@@ -769,6 +784,34 @@ footer.legal {
     background: rgba(255, 255, 255, 0.06);
 }
 
+/* siriform-status-line — junta state-tag + macro-chip (os 2 valores reais
+   ja existentes) numa unica linha com separador "•", igual ao concept de
+   referencia. siriform-safe-tag e' o 3o segmento: texto estatico sempre
+   verdadeiro enquanto o app roda (mesmo padrao do #ex-security hardcoded
+   no HTML), nunca calculado — nao e' um estado novo do orbe. */
+.siriform-status-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+}
+.ss-dot { color: var(--text-dim); opacity: 0.5; }
+.siriform-safe-tag {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1.5px solid rgba(0, 255, 157, 0.4);
+    color: var(--long-green);
+    background: rgba(255, 255, 255, 0.06);
+}
+
 /* ------------------------------------------------------------
    BADGES DE LEI — sempre visiveis, nao dependem de JS para o
    estado base (so o texto/cor pode reforcar via classe v-*).
@@ -792,6 +835,15 @@ footer.legal {
 }
 .law-badge.is-blocked { border-color: rgba(255, 62, 82, 0.45); color: var(--short-red); }
 .law-badge.is-ok { border-color: rgba(0, 255, 157, 0.4); color: var(--long-green); }
+.law-tagline {
+    text-align: center;
+    margin: 10px 0 0;
+    font-family: var(--font-mono);
+    font-size: clamp(0.68rem, 1.6vw, 0.8rem);
+    letter-spacing: 0.4px;
+    color: var(--long-green);
+    opacity: 0.85;
+}
 
 /* ------------------------------------------------------------
    BADGES UTILITARIOS DE HONESTIDADE — STUB / FUTURE / DISABLED
@@ -981,6 +1033,98 @@ footer.legal {
     font-size: 0.92rem;
     margin: 0 0 6px;
 }
+
+/* progress-track/-fill — "Progresso até alvo" do Target Tracker: largura =
+   route.progress_pct, derivado em target-tracker.js so' das mesmas 2
+   distancias reais (alvo/invalidacao) ja mostradas em texto acima, nunca um
+   nivel novo. */
+.progress-track {
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+    margin: 10px 0 2px;
+}
+.progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--sys-cyan), var(--long-green));
+    transition: width 0.4s ease;
+}
+.progress-label-row { border-bottom: none; margin-top: 2px; }
+
+/* gauge-wrap — dial semicircular da Rota Recomendada: a agulha aponta para
+   1 das 4 posicoes fixas de CONFIDENCE_GAUGE_DEG (app.js), mapeadas 1:1 a
+   partir do confidence_label real (SEM_BASE/BLOQUEADA/BAIXA_PARA_MEDIA/
+   DESCRITIVA_PAPER_ONLY) — visualizacao do mesmo dado textual ja exibido
+   abaixo em #li-confidence-hero, nunca um numero novo. is-pending (antes da
+   1a leitura de Local Intelligence nesta sessao) so' reduz a opacidade. */
+.gauge-wrap {
+    position: relative;
+    width: 132px;
+    height: 70px;
+    margin: 4px auto 6px;
+    transition: opacity 0.3s ease;
+}
+.gauge-wrap.is-pending { opacity: 0.4; }
+.gauge-arc {
+    position: absolute;
+    inset: 0;
+    border-radius: 132px 132px 0 0;
+    background: conic-gradient(from 180deg at 50% 100%,
+        var(--short-red) 0deg, var(--alert-amber) 75deg, var(--long-green) 135deg, var(--long-green) 180deg);
+    -webkit-mask: radial-gradient(farthest-side at 50% 100%, transparent calc(100% - 13px), #000 calc(100% - 12px));
+    mask: radial-gradient(farthest-side at 50% 100%, transparent calc(100% - 13px), #000 calc(100% - 12px));
+}
+.gauge-needle {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 2px;
+    height: 56px;
+    background: var(--text-primary);
+    transform-origin: bottom center;
+    transform: rotate(var(--gauge-deg, -90deg));
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+    transition: transform 0.6s ease;
+}
+.gauge-needle::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-primary);
+    transform: translateX(-50%);
+}
+
+/* sr-ladder — "Suportes/Resistências": mesmos 2 niveis reais do Target
+   Tracker (rota_a_long.target_1/invalidation), redesenhados como escada
+   vertical com o preco atual no meio. R2/S2 ficam DADOS_INSUFICIENTES de
+   proposito (engine so' calcula 1 nivel por lado). */
+.sr-ladder {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+}
+.sr-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 7px 12px;
+    border-radius: 8px;
+    font-size: clamp(0.78rem, 1.8vw, 0.92rem);
+}
+.sr-row .label { color: var(--text-dim); }
+.sr-row .value { font-weight: bold; }
+.sr-row.sr-resistance { background: rgba(255, 62, 82, 0.06); border-left: 2px solid rgba(255, 62, 82, 0.35); }
+.sr-row.sr-support { background: rgba(0, 255, 157, 0.06); border-left: 2px solid rgba(0, 255, 157, 0.35); }
+.sr-row.sr-current { background: rgba(0, 242, 255, 0.1); border-left: 2px solid var(--sys-cyan); }
+.sr-row.sr-current .value { color: var(--sys-cyan); }
 
 /* ------------------------------------------------------------
    PROCESSING PROFILES — LIGHT / BALANCED / HEAVY
@@ -1305,10 +1449,11 @@ footer.legal {
 
 /* ------------------------------------------------------------
    ANALYTICS ROW — Target Tracker / Rota Recomendada / Matriz de
-   Dados, sempre depois da .action-strip, irmao de ambos pelo mesmo
-   motivo do .hero-row. Coluna unica abaixo de 1000px, grade de 3
-   colunas iguais a partir dai' na ordem natural do DOM — diferente
-   do .hero-row, nenhuma coluna aqui precisa vir "primeiro". */
+   Dados / Suportes-Resistencias, sempre depois da .action-strip,
+   irmao de ambos pelo mesmo motivo do .hero-row. Coluna unica abaixo
+   de 700px, grade 2x2 a partir dai', 1 linha de 4 colunas a partir de
+   1200px — diferente do .hero-row, nenhuma coluna aqui precisa vir
+   "primeiro" (ordem natural do DOM em qualquer largura). */
 .analytics-row {
     width: 100%;
     display: flex;
@@ -1318,11 +1463,17 @@ footer.legal {
 }
 .analytics-row > section.card { margin-bottom: 0; }
 
-@media (min-width: 1000px) {
+@media (min-width: 700px) {
     .analytics-row {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 18px;
+    }
+}
+
+@media (min-width: 1200px) {
+    .analytics-row {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
     }
 }
 
@@ -1616,6 +1767,7 @@ section.card[tabindex]:focus-visible {
 }
 .ex-hero-row { border-bottom: none; margin-bottom: 10px; }
 .ex-hero-row .value { font-size: 1.05rem; }
+.ex-icon { margin-right: 4px; opacity: 0.85; }
 .ex-state-row {
     padding: 10px 14px;
     margin-bottom: 12px;
@@ -1685,9 +1837,39 @@ section.card[tabindex]:focus-visible {
     border-left-color: var(--short-red);
 }
 #bl-current-price {
-    font-size: clamp(1.5rem, 5vw, 2.2rem);
+    font-size: clamp(2.1rem, 7vw, 3.4rem);
+    font-weight: 800;
     letter-spacing: 0.5px;
     text-shadow: 0 0 16px rgba(0, 242, 255, 0.5);
+}
+.coin-glyph { font-size: 1.1em; margin-right: 2px; }
+.bl-price-wrap {
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.price-delta-badge {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+}
+/* bl-meta-grid — Fonte/Atualizado/Modo do BTC Live Panel como pills, mesmo
+   padrao visual do .macro-state-chip (borda currentColor + fundo translucido)
+   reusando as classes v-ok/v-fail/v-limited/v-pending ja atribuidas em JS,
+   sem nenhuma logica nova. */
+.bl-meta-grid .value {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 11px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 0.76rem;
 }
 
 .ex-details {

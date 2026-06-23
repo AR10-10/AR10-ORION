@@ -27,9 +27,10 @@ const ELEMENT_IDS = [
     'vl-storage-used', 'vl-storage-quota', 'vl-safety', 'vl-repair',
     'dp-realmode', 'dp-analysis', 'export-list',
     'rdl-connector-grid', 'rdl-active-source', 'rdl-connector-session-note', 'real-data-import-input',
-    'bl-price-row', 'bl-current-price', 'bl-current-source', 'bl-current-freshness', 'bl-current-mode',
+    'bl-price-row', 'bl-current-price', 'bl-price-delta-badge', 'bl-current-source', 'bl-current-freshness', 'bl-current-mode',
     'bl-snapshot-price', 'bl-snapshot-time', 'bl-snapshot-age', 'bl-price-diff',
     'bl-route-long-grid', 'bl-route-short-grid', 'bl-reanalyze-banner', 'bl-btn-refresh-now',
+    'sr-resistance-2', 'sr-resistance-1', 'sr-current-price', 'sr-support-1', 'sr-support-2',
     'real-analysis-frame-grid', 'real-analysis-frame-session-note', 'real-analysis-frame-note',
     're-evidence-grid', 're-missing-fields', 're-session-note', 're-evidence-hash',
     'route-a-long-grid', 'route-b-short-grid', 'route-c-wait-grid', 'research-engine-session-note',
@@ -59,6 +60,7 @@ const ELEMENT_IDS = [
     'he-quota', 'he-resumable', 'he-offline-available', 'he-fail-closed', 'he-last-error',
     'btn-he-start', 'btn-he-pause', 'btn-he-verify', 'btn-he-repair', 'btn-he-export',
     'tb-build-badge', 'ex-hydration', 'ex-local', 'li-final-label-hero', 'li-confidence-hero',
+    'li-gauge-wrap', 'li-gauge-needle',
 ];
 
 ELEMENT_IDS.forEach((id) => { els[id] = document.getElementById(id); });

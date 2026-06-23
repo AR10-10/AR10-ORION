@@ -62,13 +62,14 @@
   <div class="hero-row" id="hero-row">
 
   <section class="card btc-live-panel" id="btc-live-panel">
-    <h2>BTC/USDT — Preço Atual <span class="step">leitura descritiva — não é recomendação</span></h2>
+    <h2><span class="coin-glyph" aria-hidden="true">🟠</span> BTC/USDT — Preço Atual <span class="step">leitura descritiva — não é recomendação</span></h2>
     <p class="onboarding-hint">Preço atual é sempre a última sonda real desta sessão (mark-to-market read-only) — nunca um valor parado. Snapshot é o preço e os níveis fixados na última vez que "Gerar AnalysisFrame real" rodou.</p>
 
     <div class="status-row bl-price-row" id="bl-price-row" data-live-mode="DADOS_INSUFICIENTES">
-      <span class="label">Preço atual</span><span class="value v-info" id="bl-current-price">…</span>
+      <span class="label">Preço atual</span>
+      <span class="bl-price-wrap"><span class="value v-info" id="bl-current-price">…</span><span class="price-delta-badge v-pending" id="bl-price-delta-badge" title="Diferença vs. snapshot da última análise — não é variação 24h">…</span></span>
     </div>
-    <div class="status-grid">
+    <div class="status-grid bl-meta-grid">
       <div class="status-row"><span class="label">Fonte</span><span class="value v-pending" id="bl-current-source">…</span></div>
       <div class="status-row"><span class="label">Atualizado</span><span class="value v-pending" id="bl-current-freshness">…</span></div>
       <div class="status-row"><span class="label">Modo</span><span class="value v-pending" id="bl-current-mode">…</span></div>
@@ -96,10 +97,24 @@
       <div class="siriform-avatar" id="siriform-avatar" data-state="idle" role="img" aria-label="Siriform Avatar">
         <div class="siriform-core"></div>
       </div>
+      <svg class="siriform-wireframe" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="0.6">
+          <ellipse cx="50" cy="50" rx="46" ry="46"/>
+          <ellipse cx="50" cy="50" rx="46" ry="17"/>
+          <ellipse cx="50" cy="50" rx="46" ry="17" transform="rotate(60 50 50)"/>
+          <ellipse cx="50" cy="50" rx="46" ry="17" transform="rotate(120 50 50)"/>
+          <ellipse cx="50" cy="50" rx="17" ry="46"/>
+        </g>
+      </svg>
     </div>
     <h2>Siriform Intelligence Core</h2>
-    <span class="siriform-state-tag" id="siriform-state-tag">IDLE</span>
-    <span class="macro-state-chip" id="macro-state-chip">PRONTO</span>
+    <div class="siriform-status-line">
+      <span class="siriform-state-tag" id="siriform-state-tag">IDLE</span>
+      <span class="ss-dot" aria-hidden="true">•</span>
+      <span class="macro-state-chip" id="macro-state-chip">PRONTO</span>
+      <span class="ss-dot" aria-hidden="true">•</span>
+      <span class="siriform-safe-tag">READ_ONLY</span>
+    </div>
     <p class="siriform-caption" id="siriform-caption" aria-live="polite">Cyborg operando em READ_ONLY / FAIL_CLOSED.</p>
   </section>
 
@@ -108,21 +123,21 @@
     <p class="onboarding-hint">Leitura de 1 olhar: o Cyborg está pronto? a fonte de dado é real e fresca? está seguro para analisar? Memória de sessão anterior nunca aparece aqui como dado atual sem revalidação — sem fonte fresca nesta sessão, este card mostra <b>DADOS_INSUFICIENTES</b>.</p>
     <div class="ex-hero">
       <div class="status-row ex-hero-row ex-state-row" id="ex-state-row" data-macro-state="IDLE">
-        <span class="label">Modo</span><span class="value v-pending" id="ex-state">…</span>
+        <span class="label"><span class="ex-icon" aria-hidden="true">🧭</span> Modo</span><span class="value v-pending" id="ex-state">…</span>
       </div>
-      <div class="status-row ex-hero-row"><span class="label">Fonte real ativa</span><span class="value v-pending" id="ex-source">…</span></div>
-      <div class="status-row ex-hero-row"><span class="label">Atualizado em</span><span class="value v-pending" id="ex-freshness">…</span></div>
-      <div class="status-row ex-hero-row"><span class="label">Execução</span><span class="value v-fail" id="ex-live">LIVE_LOCKED</span></div>
+      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">🔒</span> Execução</span><span class="value v-fail" id="ex-live">LIVE_LOCKED</span></div>
+      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">🛡️</span> Segurança</span><span class="value v-ok" id="ex-security">READ_ONLY / FAIL_CLOSED</span></div>
+      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">⚖️</span> Risco</span><span class="value v-pending" id="ex-risk">…</span></div>
+      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">🗄️</span> Cofre</span><span class="value v-pending" id="ex-vault">…</span></div>
+      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">💧</span> Hydration</span><span class="value v-pending" id="ex-hydration">…</span></div>
+      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">📍</span> Local</span><span class="value v-pending" id="ex-local">…</span></div>
     </div>
     <details class="ex-details">
       <summary>Detalhes técnicos</summary>
       <div class="status-grid ex-details-grid">
+        <div class="status-row"><span class="label">Fonte real ativa</span><span class="value v-pending" id="ex-source">…</span></div>
+        <div class="status-row"><span class="label">Atualizado em</span><span class="value v-pending" id="ex-freshness">…</span></div>
         <div class="status-row"><span class="label">Paper Trading</span><span class="value v-pending" id="ex-paper">…</span></div>
-        <div class="status-row"><span class="label">Risco</span><span class="value v-pending" id="ex-risk">…</span></div>
-        <div class="status-row"><span class="label">Cofre / Evidence</span><span class="value v-pending" id="ex-vault">…</span></div>
-        <div class="status-row"><span class="label">Segurança</span><span class="value v-ok" id="ex-security">READ_ONLY / FAIL_CLOSED</span></div>
-        <div class="status-row"><span class="label">Hydration</span><span class="value v-pending" id="ex-hydration">…</span></div>
-        <div class="status-row"><span class="label">Local (iPad)</span><span class="value v-pending" id="ex-local">…</span></div>
         <div class="status-row"><span class="label">Último relatório</span><span class="value v-pending" id="ex-report">…</span></div>
       </div>
     </details>
@@ -164,7 +179,7 @@
 
   <section class="card target-tracker-panel" id="target-tracker-panel">
     <h2>Target Tracker <span class="step">snapshot da análise — não é recomendação</span></h2>
-    <p class="onboarding-hint">Os alvos abaixo vêm do snapshot da análise (card BTC/USDT), não do preço vivo: compara dois números reais e mostra a distância entre eles.</p>
+    <p class="onboarding-hint">Os alvos abaixo vêm do snapshot da análise (card BTC/USDT), não do preço vivo: compara dois números reais e mostra a distância entre eles. Alvo 2 mostra DADOS_INSUFICIENTES: o Research Engine ainda calcula só 1 alvo por rota. A barra de progresso é só a mesma distância acima, redesenhada — nunca um novo nível.</p>
     <div class="route-block route-long" id="bl-route-long">
       <h3>Rota A (Long)</h3>
       <div class="status-grid" id="bl-route-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
@@ -179,6 +194,10 @@
 
   <section class="card rota-recomendada-panel" id="rota-recomendada-panel">
     <h2>Rota Recomendada <span class="step">Local Intelligence — descritiva</span></h2>
+    <div class="gauge-wrap is-pending" id="li-gauge-wrap" aria-hidden="true">
+      <div class="gauge-arc"></div>
+      <div class="gauge-needle" id="li-gauge-needle"></div>
+    </div>
     <div class="data-sufficiency-block rota-recomendada-block" id="rota-recomendada-block">
       <p class="data-sufficiency-label">Rota recomendada <span class="step">descritiva — não é recomendação</span></p>
       <div class="status-row"><span class="label">Rota</span><span class="value v-pending" id="li-final-label-hero">…</span></div>
@@ -192,6 +211,18 @@
     <div class="data-sufficiency-block" id="research-data-sufficiency-block">
         <p class="data-sufficiency-label" id="research-data-sufficiency-label">Data Sufficiency: — / 100</p>
         <div class="status-grid" id="research-data-matrix-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+  </section>
+
+  <section class="card supports-resistances-panel" id="supports-resistances-panel">
+    <h2>Suportes / Resistências <span class="step">snapshot da análise</span></h2>
+    <p class="onboarding-hint">Mesmos níveis do Target Tracker (snapshot do BTC/USDT) — leitura, nunca recalculados a partir do preço vivo. R2/S2 mostram DADOS_INSUFICIENTES: o Research Engine ainda calcula só 1 nível de cada lado.</p>
+    <div class="sr-ladder" id="sr-ladder">
+      <div class="sr-row sr-resistance"><span class="label">Resistência 2</span><span class="value v-pending" id="sr-resistance-2">…</span></div>
+      <div class="sr-row sr-resistance"><span class="label">Resistência 1</span><span class="value v-fail" id="sr-resistance-1">…</span></div>
+      <div class="sr-row sr-current"><span class="label">Preço atual</span><span class="value v-info" id="sr-current-price">…</span></div>
+      <div class="sr-row sr-support"><span class="label">Suporte 1</span><span class="value v-ok" id="sr-support-1">…</span></div>
+      <div class="sr-row sr-support"><span class="label">Suporte 2</span><span class="value v-pending" id="sr-support-2">…</span></div>
     </div>
   </section>
 
@@ -722,6 +753,7 @@
     <span class="law-badge">Safari Edge: LOCAL_AUX</span>
     <span class="law-badge">Telegram: PLANNED_AUX</span>
   </div>
+  <p class="law-tagline">🔒 SISTEMA 100% SEGURO · READ_ONLY · SEM EXECUÇÃO · SEM ORDENS · SEM CHAVES · SEM CORRETORAS</p>
 
   <footer class="legal">
     AR10 Cyborg 1.0 PRO · READ_ONLY / FAIL_CLOSED · Local-first · Sem live trading · v1.0.0-pro
