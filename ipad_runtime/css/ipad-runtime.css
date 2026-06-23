@@ -134,6 +134,18 @@ a { color: var(--sys-cyan); }
     white-space: nowrap;
     vertical-align: middle;
 }
+.tb-heartbeat {
+    font-family: var(--font-mono);
+    font-size: 0.56rem;
+    letter-spacing: 0.3px;
+    color: var(--long-green);
+    background: rgba(0, 255, 157, 0.06);
+    border: 1px solid rgba(0, 255, 157, 0.3);
+    border-radius: 8px;
+    padding: 2px 6px;
+    white-space: nowrap;
+    vertical-align: middle;
+}
 .tb-status {
     font-size: clamp(0.64rem, 1.5vw, 0.76rem);
     color: var(--text-dim);
@@ -172,6 +184,7 @@ a { color: var(--sys-cyan); }
 
 @media (max-width: 600px) {
     .tb-status { display: none; }
+    .tb-heartbeat { display: none; }
 }
 
 /* ------------------------------------------------------------

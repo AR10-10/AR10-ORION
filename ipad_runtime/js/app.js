@@ -987,6 +987,37 @@ function startLivePriceAutoRefresh() {
     livePriceRefreshTimer = setInterval(silentLivePriceTick, LIVE_PRICE_REFRESH_MS);
 }
 
+// Heartbeat visivel na topbar: "UI" e' o intervalo real medido entre dois
+// ticks deste setInterval (via performance.now(), nao um contador que so'
+// reseta sozinho) — fica perto de 1.0s enquanto a aba responde normal e
+// sobe de verdade se a thread principal travar/atrasar, virando sinal
+// honesto de liveness em vez de decoracao. "DADOS" e' a idade real do
+// activeRealEvidence.fetched_at (mesmo timestamp ISO que todo conector real
+// grava em real-data/*.js ao buscar), nao um numero novo — so' reexibido
+// como contador ao vivo em vez de rotulo estatico.
+let heartbeatTimer = null;
+let lastHeartbeatPerf = null;
+
+function tickHeartbeat() {
+    if (!els['tb-heartbeat']) return;
+    const now = performance.now();
+    const uiDeltaSec = lastHeartbeatPerf == null ? 0 : Math.max(0, (now - lastHeartbeatPerf) / 1000);
+    lastHeartbeatPerf = now;
+
+    let dataLabel = DADOS_INSUFICIENTES;
+    if (activeRealEvidence && activeRealEvidence.fetched_at) {
+        const fetchedMs = Date.parse(activeRealEvidence.fetched_at);
+        if (Number.isFinite(fetchedMs)) dataLabel = `${Math.max(0, Math.round((Date.now() - fetchedMs) / 1000))}s`;
+    }
+    els['tb-heartbeat'].textContent = `● UI ${uiDeltaSec.toFixed(1)}s · DADOS ${dataLabel}`;
+}
+
+function startHeartbeat() {
+    if (heartbeatTimer) return;
+    tickHeartbeat();
+    heartbeatTimer = setInterval(tickHeartbeat, 1000);
+}
+
 function handleImportRealCsv() {
     siriform.pulseListening();
     els['real-data-import-input'].click();
@@ -2651,6 +2682,7 @@ async function boot() {
     // motivo do comentario acima: nao reprobar antes do Real Data Layer ter
     // lido o estado real desta sessao pelo menos uma vez.
     startLivePriceAutoRefresh();
+    startHeartbeat();
 
     // Auto-reparo no boot: SÓ quando algo já foi instalado antes (existe meta
     // com checksums) e agora está quebrado — o caso "corrompido/ausente após

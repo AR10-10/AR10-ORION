@@ -53,13 +53,22 @@ export function buildLiveTickerItems(state = {}) {
     // 2) Dado real atual (preco/fonte/frescor/z-score) — BTC/USDT.
     const frame = state.analysisFrame;
     if (frame && frame.status === 'OK') {
-        const modo = state.historical ? 'SESSION_PREVIOUS' : 'REAL_READ_ONLY';
+        // modo reusa o mesmo livePriceInfo.mode do BTC Live Panel (getLivePriceInfo()
+        // em app.js, ja' incluido no snapshot por collectLiveTickerState()) em vez de
+        // recalcular historical/REAL_READ_ONLY aqui de novo — duas formas de derivar o
+        // mesmo estado por caminhos diferentes e' exatamente o tipo de divergencia que
+        // faria o ticker dizer REAL_READ_ONLY enquanto o card BTC ja diz STALE para o
+        // mesmo preco. Cai no calculo antigo so' se livePriceInfo nao resolveu nada.
+        const livePriceMode = state.livePriceInfo && state.livePriceInfo.mode;
+        const modo = (livePriceMode && livePriceMode !== DADOS_INSUFICIENTES)
+            ? livePriceMode
+            : (state.historical ? 'SESSION_PREVIOUS' : 'REAL_READ_ONLY');
         const last = typeof frame.last_price === 'number' ? frame.last_price.toFixed(2) : DADOS_INSUFICIENTES;
         const z = typeof frame.zscore === 'number' ? frame.zscore.toFixed(2) : DADOS_INSUFICIENTES;
         const confirmNote = noMultiSourceConfirmation ? ' · preço real, mas sem confirmação multi-fonte' : '';
         items.push({
             category: 'AR10 LIVE',
-            severity: state.historical ? 'warn' : 'ok',
+            severity: modo === 'REAL_READ_ONLY' ? 'ok' : 'warn',
             text: `${frame.asset || 'BTC/USDT'} · ${modo} · ${frame.source || DADOS_INSUFICIENTES} · ${last} · z=${z} · freshness ${state.freshnessLabel || DADOS_INSUFICIENTES}${confirmNote}`,
         });
     } else {
