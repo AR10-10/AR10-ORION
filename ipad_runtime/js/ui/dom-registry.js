@@ -42,7 +42,7 @@ const ELEMENT_IDS = [
     'mx-load-time', 'mx-prep-time', 'mx-cache', 'mx-storage', 'mx-siriform-events', 'mx-diag-fails', 'mx-eval-fails', 'mx-reduced-motion',
     'cs-commander-status', 'cs-soldier-status', 'cs-sync-bridge-status',
     'mv-event-log-count', 'mv-snapshot-status', 'mv-last-good-status', 'mv-recovery-status', 'mv-hydration-status', 'btn-mv-snapshot',
-    'sh-grid', 'sh-active-count', 'sh-total-count',
+    'sh-grid', 'sh-active-count', 'sh-total-count', 'dm-source-health-summary',
     'rg-kill-switch', 'rg-max-drawdown', 'rg-max-position', 'rg-require-stop', 'rg-min-quality', 'btn-rg-engage', 'btn-rg-disengage',
     'pt-mode', 'pt-open-positions', 'pt-closed-trades', 'pt-realized-pnl', 'pt-drawdown', 'pt-positions-grid', 'pt-block-note', 'btn-pt-open', 'btn-pt-clear',
     'ls-mode', 'ls-status', 'ls-reasons', 'ls-unlock-requires',

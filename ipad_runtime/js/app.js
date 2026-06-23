@@ -2237,6 +2237,7 @@ async function renderSourceHealthCard() {
     lastSourceHealthReport = report;
     setInfo('sh-active-count', `Fontes ACTIVE_READ_ONLY nesta sessão: ${report.active_read_only_now}`);
     setInfo('sh-total-count', `Total de fontes no roadmap: ${report.total_sources} (${report.with_real_probe_code} com sonda real implementada)`);
+    setInfo('dm-source-health-summary', `${report.active_read_only_now}/${report.total_sources} ACTIVE_READ_ONLY`);
     els['sh-grid'].innerHTML = report.sources.map((s) => `
         <div class="status-row"><span class="label">${s.connector_name}</span><span class="value ${classForConnectorState(s.live_state || s.roadmap_status)}">${s.live_state || s.roadmap_status}</span></div>
     `).join('');

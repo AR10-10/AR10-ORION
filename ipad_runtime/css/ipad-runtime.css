@@ -1421,10 +1421,27 @@ footer.legal {
 @media (min-width: 1000px) {
     .hero-row {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr);
-        gap: 18px;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr);
+        align-items: stretch;
+        gap: 22px;
     }
-    .hero-row > .siriform-card { order: 0; }
+    .hero-row > .siriform-card {
+        order: 0;
+        justify-content: center;
+        padding-top: 36px;
+        padding-bottom: 28px;
+    }
+    /* orbe e' o elemento visual dominante do cockpit (coluna central mais
+       larga acima) — cresce junto com a coluna em vez de ficar do mesmo
+       tamanho fixo usado na pilha de coluna unica abaixo de 1000px. */
+    .siriform-stage {
+        width: 224px;
+        height: 224px;
+    }
+    .siriform-avatar {
+        width: 184px;
+        height: 184px;
+    }
 }
 
 /* ------------------------------------------------------------
