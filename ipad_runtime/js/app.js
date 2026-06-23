@@ -2393,13 +2393,6 @@ function wireButtons() {
     document.getElementById('btn-add-home').addEventListener('click', handleAddHome);
     document.getElementById('btn-tb-update').addEventListener('click', handleUpdateLocalPack);
     document.getElementById('btn-tb-analyze').addEventListener('click', handleAnalyzeSystem);
-    // FOCO3 — os mesmos 4 botoes do topbar/quick-actions, espelhados no card
-    // Resumo Executivo para nao depender so do header sticky; reusam os
-    // mesmos handlers (nenhuma logica nova/duplicada).
-    if (els['ex-btn-prepare']) els['ex-btn-prepare'].addEventListener('click', handlePrepareCyborg);
-    if (els['ex-btn-analyze']) els['ex-btn-analyze'].addEventListener('click', handleAnalyzeSystem);
-    if (els['ex-btn-report']) els['ex-btn-report'].addEventListener('click', handleShowReport);
-    if (els['ex-btn-advanced']) els['ex-btn-advanced'].addEventListener('click', () => els['btn-tb-advanced'].click());
     const btnSwUpdateReload = document.getElementById('btn-sw-update-reload');
     if (btnSwUpdateReload) btnSwUpdateReload.addEventListener('click', () => window.location.reload());
     const btnSwUpdateDismiss = document.getElementById('btn-sw-update-dismiss');

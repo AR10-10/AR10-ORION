@@ -63,7 +63,7 @@
 
   <section class="card btc-live-panel" id="btc-live-panel">
     <h2>BTC/USDT — Preço Atual <span class="step">leitura descritiva — não é recomendação</span></h2>
-    <p class="onboarding-hint">Preço atual é sempre a última sonda real desta sessão (mark-to-market read-only) — nunca um valor parado. Snapshot é o preço e os níveis fixados na última vez que "Gerar AnalysisFrame real" rodou. Os alvos abaixo vêm do snapshot, não do preço vivo: este card só compara dois números reais e mostra a distância entre eles.</p>
+    <p class="onboarding-hint">Preço atual é sempre a última sonda real desta sessão (mark-to-market read-only) — nunca um valor parado. Snapshot é o preço e os níveis fixados na última vez que "Gerar AnalysisFrame real" rodou.</p>
 
     <div class="status-row bl-price-row" id="bl-price-row" data-live-mode="DADOS_INSUFICIENTES">
       <span class="label">Preço atual</span><span class="value v-info" id="bl-current-price">…</span>
@@ -84,26 +84,9 @@
       </div>
     </div>
 
-    <div class="data-sufficiency-block" id="bl-action-principal">
-      <p class="data-sufficiency-label">Ação principal</p>
-      <button type="button" class="hero-cta" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar / Atualizar Cyborg neste iPad</button>
-    </div>
-
-    <div class="route-block route-long" id="bl-route-long">
-      <h3>Target Tracker — Rota A (Long)</h3>
-      <div class="status-grid" id="bl-route-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
-    </div>
-    <div class="route-block route-short" id="bl-route-short">
-      <h3>Target Tracker — Rota B (Short)</h3>
-      <div class="status-grid" id="bl-route-short-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
-    </div>
-
-    <p class="diagnostic-note" id="bl-reanalyze-banner" hidden></p>
-
     <div class="executive-actions" role="group" aria-label="Ações do BTC Live Panel">
       <button type="button" class="rt-btn" id="bl-btn-refresh-now"><span class="icon">⟳</span> Atualizar preço agora</button>
     </div>
-    <p class="diagnostic-note">Leitura descritiva — não é recomendação. Não é execução. Não é ordem. É acompanhamento visual de níveis.</p>
   </section>
 
   <section class="card siriform-card" id="siriform-section">
@@ -118,17 +101,6 @@
     <span class="siriform-state-tag" id="siriform-state-tag">IDLE</span>
     <span class="macro-state-chip" id="macro-state-chip">PRONTO</span>
     <p class="siriform-caption" id="siriform-caption" aria-live="polite">Cyborg operando em READ_ONLY / FAIL_CLOSED.</p>
-
-    <p class="data-sufficiency-label">Microfone</p>
-    <button type="button" class="mic-button" id="mic-button" data-voice-state="voice_idle" aria-label="Falar com o Siriform (comando de voz)">◉</button>
-    <span class="mic-status-label v-info" id="mic-status-label">PRONTO</span>
-    <p class="voice-hint">Toque ou diga um comando seguro. <button type="button" class="voice-info-btn" id="btn-voice-info" aria-label="Saiba mais sobre o Siriform Voice">ⓘ</button></p>
-
-    <div class="data-sufficiency-block rota-recomendada-block" id="rota-recomendada-block">
-      <p class="data-sufficiency-label">Rota recomendada <span class="step">descritiva — não é recomendação</span></p>
-      <div class="status-row"><span class="label">Rota</span><span class="value v-pending" id="li-final-label-hero">…</span></div>
-      <div class="status-row"><span class="label">Confiança qualitativa</span><span class="value v-pending" id="li-confidence-hero">…</span></div>
-    </div>
   </section>
 
   <section class="card cyborg-executive-panel" id="cyborg-executive-panel">
@@ -154,23 +126,76 @@
         <div class="status-row"><span class="label">Último relatório</span><span class="value v-pending" id="ex-report">…</span></div>
       </div>
     </details>
-    <div class="executive-actions" role="group" aria-label="Ações principais">
-      <button type="button" class="rt-btn primary" id="ex-btn-prepare"><span class="icon">⚡</span> Preparar / Atualizar</button>
-      <button type="button" class="rt-btn" id="ex-btn-analyze"><span class="icon">▣</span> Analisar Sistema</button>
-      <button type="button" class="rt-btn" id="ex-btn-report"><span class="icon">▤</span> Relatório</button>
-      <button type="button" class="rt-btn" id="ex-btn-advanced"><span class="icon">≡</span> Modo Avançado</button>
-    </div>
-
-    <p class="data-sufficiency-label">Ações rápidas</p>
-    <div class="quick-actions" id="quick-actions" role="group" aria-label="Ações rápidas">
-      <button type="button" class="qa-btn" id="qa-diagnostics"><span class="icon">▣</span> Diagnóstico</button>
-      <button type="button" class="qa-btn" id="qa-replay"><span class="icon">▶</span> Replay BTC/USDT</button>
-      <button type="button" class="qa-btn" id="qa-analysis"><span class="icon">∑</span> Análise</button>
-      <button type="button" class="qa-btn" id="qa-report"><span class="icon">▤</span> Relatório</button>
-    </div>
   </section>
 
   </div><!-- /.hero-row -->
+
+  <!-- ACTION STRIP — faixa horizontal de controles entre o cockpit (hero-row)
+       e a analytics-row abaixo: CTA principal / microfone / acoes rapidas,
+       cada um na sua propria coluna, nunca misturado dentro de um card de
+       cockpit (BTC/Siriform/Estado do Sistema acima ficam so' leitura). -->
+  <section class="card action-strip" id="action-strip">
+    <div class="as-col as-primary">
+      <p class="data-sufficiency-label">Ação principal</p>
+      <button type="button" class="hero-cta" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar / Atualizar Cyborg neste iPad</button>
+    </div>
+    <div class="as-col as-mic">
+      <p class="data-sufficiency-label">Microfone</p>
+      <button type="button" class="mic-button" id="mic-button" data-voice-state="voice_idle" aria-label="Falar com o Siriform (comando de voz)">◉</button>
+      <span class="mic-status-label v-info" id="mic-status-label">PRONTO</span>
+      <p class="voice-hint">Toque ou diga um comando seguro. <button type="button" class="voice-info-btn" id="btn-voice-info" aria-label="Saiba mais sobre o Siriform Voice">ⓘ</button></p>
+    </div>
+    <div class="as-col as-quick">
+      <p class="data-sufficiency-label">Ações rápidas</p>
+      <div class="quick-actions" id="quick-actions" role="group" aria-label="Ações rápidas">
+        <button type="button" class="qa-btn" id="qa-diagnostics"><span class="icon">▣</span> Diagnóstico</button>
+        <button type="button" class="qa-btn" id="qa-replay"><span class="icon">▶</span> Replay BTC/USDT</button>
+        <button type="button" class="qa-btn" id="qa-analysis"><span class="icon">∑</span> Análise</button>
+        <button type="button" class="qa-btn" id="qa-report"><span class="icon">▤</span> Relatório</button>
+      </div>
+    </div>
+  </section><!-- /.action-strip -->
+
+  <!-- ANALYTICS ROW — Target Tracker / Rota Recomendada / Matriz de Dados,
+       sempre depois da acao, nunca dentro de um card de cockpit. Mesmo
+       padrao responsivo do hero-row (coluna unica < 1000px, grade de 3
+       colunas a partir de 1000px — ver .analytics-row no CSS). -->
+  <div class="analytics-row" id="analytics-row">
+
+  <section class="card target-tracker-panel" id="target-tracker-panel">
+    <h2>Target Tracker <span class="step">snapshot da análise — não é recomendação</span></h2>
+    <p class="onboarding-hint">Os alvos abaixo vêm do snapshot da análise (card BTC/USDT), não do preço vivo: compara dois números reais e mostra a distância entre eles.</p>
+    <div class="route-block route-long" id="bl-route-long">
+      <h3>Rota A (Long)</h3>
+      <div class="status-grid" id="bl-route-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+    <div class="route-block route-short" id="bl-route-short">
+      <h3>Rota B (Short)</h3>
+      <div class="status-grid" id="bl-route-short-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+    <p class="diagnostic-note" id="bl-reanalyze-banner" hidden></p>
+    <p class="diagnostic-note">Leitura descritiva — não é recomendação. Não é execução. Não é ordem. É acompanhamento visual de níveis.</p>
+  </section>
+
+  <section class="card rota-recomendada-panel" id="rota-recomendada-panel">
+    <h2>Rota Recomendada <span class="step">Local Intelligence — descritiva</span></h2>
+    <div class="data-sufficiency-block rota-recomendada-block" id="rota-recomendada-block">
+      <p class="data-sufficiency-label">Rota recomendada <span class="step">descritiva — não é recomendação</span></p>
+      <div class="status-row"><span class="label">Rota</span><span class="value v-pending" id="li-final-label-hero">…</span></div>
+      <div class="status-row"><span class="label">Confiança qualitativa</span><span class="value v-pending" id="li-confidence-hero">…</span></div>
+    </div>
+  </section>
+
+  <section class="card data-matrix-summary-panel" id="data-matrix-summary-panel">
+    <h2>Matriz de Dados <span class="step">Data Sufficiency</span></h2>
+    <p class="onboarding-hint">Dados usados nesta leitura — cada linha é <b>OK</b>, <b>DADOS_INSUFICIENTES</b> ou <b>NÃO_APLICÁVEL</b>; pontuação derivada só de campos reais desta sessão, nunca estimada. Mesmo dado do Research Engine (Modo avançado), exibido aqui na primeira tela.</p>
+    <div class="data-sufficiency-block" id="research-data-sufficiency-block">
+        <p class="data-sufficiency-label" id="research-data-sufficiency-label">Data Sufficiency: — / 100</p>
+        <div class="status-grid" id="research-data-matrix-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+  </section>
+
+  </div><!-- /.analytics-row -->
 
   <div class="bento">
 
@@ -193,15 +218,6 @@
       <div class="status-row"><span class="label">READ_ONLY / FAIL_CLOSED</span><span class="value v-pending" id="cr-safety">…</span></div>
     </div>
     <p class="engine-meta">Resumo unificado de tudo que este runtime já sondou nesta sessão — cada item mostra OK, LIMITED, MISSING, FUTURE ou UNSUPPORTED, nunca um "tudo certo" decorativo. Detalhe completo no Modo avançado.</p>
-  </section>
-
-  <section class="card data-matrix-summary-panel" id="data-matrix-summary-panel">
-    <h2>Matriz de Dados <span class="step">Data Sufficiency</span></h2>
-    <p class="onboarding-hint">Dados usados nesta leitura — cada linha é <b>OK</b>, <b>DADOS_INSUFICIENTES</b> ou <b>NÃO_APLICÁVEL</b>; pontuação derivada só de campos reais desta sessão, nunca estimada. Mesmo dado do Research Engine (Modo avançado), exibido aqui na primeira tela.</p>
-    <div class="data-sufficiency-block" id="research-data-sufficiency-block">
-        <p class="data-sufficiency-label" id="research-data-sufficiency-label">Data Sufficiency: — / 100</p>
-        <div class="status-grid" id="research-data-matrix-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
-    </div>
   </section>
 
   </div><!-- /.bento -->
@@ -377,7 +393,7 @@
     <h2>Research Engine <span class="stub-badge">ROTA A / B / C sempre presentes</span></h2>
     <p class="onboarding-hint">As três rotas abaixo são sempre mostradas, nunca só a rota "favorita" do momento. Confiança é sempre <b>LOW/MEDIUM/HIGH</b> qualitativo — nunca uma probabilidade estatística. <b>Nenhuma rota aqui executa, envia ou simula ordem.</b></p>
     <p class="diagnostic-note" id="research-engine-session-note" hidden></p>
-    <p class="onboarding-hint">Data Sufficiency e Matriz de Dados desta sessão aparecem na primeira tela, no card "Matriz de Dados" logo após o Cyborg Readiness — mesmo dado, sem duplicar lógica.</p>
+    <p class="onboarding-hint">Data Sufficiency e Matriz de Dados desta sessão aparecem na primeira tela, no card "Matriz de Dados" da Analytics Row (antes do Cyborg Readiness) — mesmo dado, sem duplicar lógica.</p>
     <div class="route-block route-long" id="route-a-long">
         <h3>ROTA A — LONG</h3>
         <div class="status-grid" id="route-a-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>

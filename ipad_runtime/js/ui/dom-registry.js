@@ -20,7 +20,6 @@ const ELEMENT_IDS = [
     'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'macro-state-chip', 'mic-button', 'mic-status-label', 'btn-voice-info', 'engine-meta', 'analysis-frame-grid',
     'vault-meta', 'vault-hashes', 'profile-hint',
     'ex-state', 'ex-state-row', 'ex-source', 'ex-freshness', 'ex-paper', 'ex-risk', 'ex-vault', 'ex-report',
-    'ex-btn-prepare', 'ex-btn-analyze', 'ex-btn-report', 'ex-btn-advanced',
     'cr-pwa', 'cr-sw', 'cr-cache', 'cr-idb', 'cr-opfs', 'cr-webcrypto', 'cr-wasm', 'cr-workers',
     'cr-webgpu', 'cr-voice', 'cr-llama', 'cr-pack', 'cr-replay', 'cr-safety',
     'vl-pack', 'vl-pack-name', 'vl-pack-version', 'vl-sha256', 'vl-sw-cache', 'vl-cache-api',
