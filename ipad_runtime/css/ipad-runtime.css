@@ -122,6 +122,18 @@ a { color: var(--sys-cyan); }
     white-space: nowrap;
     vertical-align: middle;
 }
+.tb-build-badge {
+    font-family: var(--font-mono);
+    font-size: 0.56rem;
+    letter-spacing: 0.5px;
+    color: var(--sys-cyan);
+    background: rgba(0, 242, 255, 0.06);
+    border: 1px solid var(--line-cyan);
+    border-radius: 8px;
+    padding: 2px 6px;
+    white-space: nowrap;
+    vertical-align: middle;
+}
 .tb-status {
     font-size: clamp(0.64rem, 1.5vw, 0.76rem);
     color: var(--text-dim);
@@ -141,6 +153,8 @@ a { color: var(--sys-cyan); }
     white-space: nowrap;
     text-shadow: 0 0 6px rgba(255, 184, 0, 0.4);
 }
+.tb-chip.is-ok { border-color: rgba(0, 255, 157, 0.45); color: var(--long-green); text-shadow: 0 0 6px rgba(0, 255, 157, 0.4); }
+.tb-chip.is-blocked { border-color: rgba(255, 62, 82, 0.45); color: var(--short-red); text-shadow: 0 0 6px rgba(255, 62, 82, 0.4); }
 .tb-btn {
     font-family: var(--font-mono);
     font-size: clamp(0.66rem, 1.5vw, 0.78rem);
@@ -455,6 +469,11 @@ footer.legal {
     gap: 12px;
     padding-top: 28px;
     padding-bottom: 20px;
+}
+.siriform-card .rota-recomendada-block {
+    align-self: stretch;
+    text-align: left;
+    width: 100%;
 }
 .siriform-stage {
     position: relative;

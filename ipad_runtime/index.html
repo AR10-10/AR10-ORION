@@ -27,14 +27,15 @@
 
 <header class="app-topbar" id="app-topbar">
   <div class="tb-left">
-    <span class="tb-brand">AR10 Cyborg</span><span class="tb-version-badge">1.0 PRO</span>
+    <span class="tb-brand">AR10 Cyborg</span><span class="tb-version-badge">1.0 PRO</span><span class="tb-build-badge" id="tb-build-badge" title="Build/cache do runtime instalado neste iPad">…</span>
   </div>
   <div class="tb-center">
     <span class="tb-status" id="topbar-status">Verificando…</span>
   </div>
   <div class="tb-right">
-    <span class="tb-chip" id="tb-readonly">READ_ONLY</span>
+    <span class="tb-chip is-ok" id="tb-readonly">READ_ONLY</span>
     <span class="tb-chip" id="tb-failclosed">FAIL_CLOSED</span>
+    <span class="tb-chip is-blocked" id="tb-livelocked">LIVE_LOCKED</span>
     <button type="button" class="tb-btn" id="btn-tb-update">Atualizar sistema</button>
     <button type="button" class="tb-btn" id="btn-tb-analyze">Analisar sistema</button>
     <button type="button" class="tb-btn" id="btn-tb-advanced" aria-expanded="false">Modo avançado</button>
@@ -83,6 +84,11 @@
       </div>
     </div>
 
+    <div class="data-sufficiency-block" id="bl-action-principal">
+      <p class="data-sufficiency-label">Ação principal</p>
+      <button type="button" class="hero-cta" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar / Atualizar Cyborg neste iPad</button>
+    </div>
+
     <div class="route-block route-long" id="bl-route-long">
       <h3>Target Tracker — Rota A (Long)</h3>
       <div class="status-grid" id="bl-route-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
@@ -108,52 +114,43 @@
         <div class="siriform-core"></div>
       </div>
     </div>
+    <h2>Siriform Intelligence Core</h2>
     <span class="siriform-state-tag" id="siriform-state-tag">IDLE</span>
     <span class="macro-state-chip" id="macro-state-chip">PRONTO</span>
     <p class="siriform-caption" id="siriform-caption" aria-live="polite">Cyborg operando em READ_ONLY / FAIL_CLOSED.</p>
 
-    <button type="button" class="hero-cta" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar / Atualizar Cyborg neste iPad</button>
-
+    <p class="data-sufficiency-label">Microfone</p>
     <button type="button" class="mic-button" id="mic-button" data-voice-state="voice_idle" aria-label="Falar com o Siriform (comando de voz)">◉</button>
     <span class="mic-status-label v-info" id="mic-status-label">PRONTO</span>
     <p class="voice-hint">Toque ou diga um comando seguro. <button type="button" class="voice-info-btn" id="btn-voice-info" aria-label="Saiba mais sobre o Siriform Voice">ⓘ</button></p>
 
-    <div class="quick-actions" id="quick-actions" role="group" aria-label="Ações rápidas">
-      <button type="button" class="qa-btn" id="qa-diagnostics"><span class="icon">▣</span> Diagnóstico</button>
-      <button type="button" class="qa-btn" id="qa-replay"><span class="icon">▶</span> Replay BTC/USDT</button>
-      <button type="button" class="qa-btn" id="qa-analysis"><span class="icon">∑</span> Análise</button>
-      <button type="button" class="qa-btn" id="qa-report"><span class="icon">▤</span> Relatório</button>
-    </div>
-
-    <div class="law-badges">
-      <span class="law-badge" id="badge-mode">IPAD DIRECT / LOCAL-FIRST</span>
-      <span class="law-badge">READ_ONLY</span>
-      <span class="law-badge">FAIL_CLOSED</span>
-      <span class="law-badge is-ok">Execution Lock: ACTIVE</span>
-      <span class="law-badge is-blocked">Private Keys: DISABLED</span>
-      <span class="law-badge is-blocked">Live Trading: BLOCKED</span>
-      <span class="law-badge">Safari Edge: LOCAL_AUX</span>
-      <span class="law-badge">Telegram: PLANNED_AUX</span>
+    <div class="data-sufficiency-block rota-recomendada-block" id="rota-recomendada-block">
+      <p class="data-sufficiency-label">Rota recomendada <span class="step">descritiva — não é recomendação</span></p>
+      <div class="status-row"><span class="label">Rota</span><span class="value v-pending" id="li-final-label-hero">…</span></div>
+      <div class="status-row"><span class="label">Confiança qualitativa</span><span class="value v-pending" id="li-confidence-hero">…</span></div>
     </div>
   </section>
 
   <section class="card cyborg-executive-panel" id="cyborg-executive-panel">
-    <h2>Resumo Executivo</h2>
+    <h2>Estado do Sistema <span class="step">resumo executivo</span></h2>
     <p class="onboarding-hint">Leitura de 1 olhar: o Cyborg está pronto? a fonte de dado é real e fresca? está seguro para analisar? Memória de sessão anterior nunca aparece aqui como dado atual sem revalidação — sem fonte fresca nesta sessão, este card mostra <b>DADOS_INSUFICIENTES</b>.</p>
     <div class="ex-hero">
       <div class="status-row ex-hero-row ex-state-row" id="ex-state-row" data-macro-state="IDLE">
-        <span class="label">Estado do Cyborg</span><span class="value v-pending" id="ex-state">…</span>
+        <span class="label">Modo</span><span class="value v-pending" id="ex-state">…</span>
       </div>
       <div class="status-row ex-hero-row"><span class="label">Fonte real ativa</span><span class="value v-pending" id="ex-source">…</span></div>
       <div class="status-row ex-hero-row"><span class="label">Atualizado em</span><span class="value v-pending" id="ex-freshness">…</span></div>
-      <div class="status-row ex-hero-row"><span class="label">Live Trading</span><span class="value v-fail" id="ex-live">LIVE_LOCKED</span></div>
+      <div class="status-row ex-hero-row"><span class="label">Execução</span><span class="value v-fail" id="ex-live">LIVE_LOCKED</span></div>
     </div>
     <details class="ex-details">
       <summary>Detalhes técnicos</summary>
       <div class="status-grid ex-details-grid">
         <div class="status-row"><span class="label">Paper Trading</span><span class="value v-pending" id="ex-paper">…</span></div>
-        <div class="status-row"><span class="label">Risk Gate</span><span class="value v-pending" id="ex-risk">…</span></div>
-        <div class="status-row"><span class="label">Vault / Evidence</span><span class="value v-pending" id="ex-vault">…</span></div>
+        <div class="status-row"><span class="label">Risco</span><span class="value v-pending" id="ex-risk">…</span></div>
+        <div class="status-row"><span class="label">Cofre / Evidence</span><span class="value v-pending" id="ex-vault">…</span></div>
+        <div class="status-row"><span class="label">Segurança</span><span class="value v-ok" id="ex-security">READ_ONLY / FAIL_CLOSED</span></div>
+        <div class="status-row"><span class="label">Hydration</span><span class="value v-pending" id="ex-hydration">…</span></div>
+        <div class="status-row"><span class="label">Local (iPad)</span><span class="value v-pending" id="ex-local">…</span></div>
         <div class="status-row"><span class="label">Último relatório</span><span class="value v-pending" id="ex-report">…</span></div>
       </div>
     </details>
@@ -162,6 +159,14 @@
       <button type="button" class="rt-btn" id="ex-btn-analyze"><span class="icon">▣</span> Analisar Sistema</button>
       <button type="button" class="rt-btn" id="ex-btn-report"><span class="icon">▤</span> Relatório</button>
       <button type="button" class="rt-btn" id="ex-btn-advanced"><span class="icon">≡</span> Modo Avançado</button>
+    </div>
+
+    <p class="data-sufficiency-label">Ações rápidas</p>
+    <div class="quick-actions" id="quick-actions" role="group" aria-label="Ações rápidas">
+      <button type="button" class="qa-btn" id="qa-diagnostics"><span class="icon">▣</span> Diagnóstico</button>
+      <button type="button" class="qa-btn" id="qa-replay"><span class="icon">▶</span> Replay BTC/USDT</button>
+      <button type="button" class="qa-btn" id="qa-analysis"><span class="icon">∑</span> Análise</button>
+      <button type="button" class="qa-btn" id="qa-report"><span class="icon">▤</span> Relatório</button>
     </div>
   </section>
 
@@ -188,6 +193,15 @@
       <div class="status-row"><span class="label">READ_ONLY / FAIL_CLOSED</span><span class="value v-pending" id="cr-safety">…</span></div>
     </div>
     <p class="engine-meta">Resumo unificado de tudo que este runtime já sondou nesta sessão — cada item mostra OK, LIMITED, MISSING, FUTURE ou UNSUPPORTED, nunca um "tudo certo" decorativo. Detalhe completo no Modo avançado.</p>
+  </section>
+
+  <section class="card data-matrix-summary-panel" id="data-matrix-summary-panel">
+    <h2>Matriz de Dados <span class="step">Data Sufficiency</span></h2>
+    <p class="onboarding-hint">Dados usados nesta leitura — cada linha é <b>OK</b>, <b>DADOS_INSUFICIENTES</b> ou <b>NÃO_APLICÁVEL</b>; pontuação derivada só de campos reais desta sessão, nunca estimada. Mesmo dado do Research Engine (Modo avançado), exibido aqui na primeira tela.</p>
+    <div class="data-sufficiency-block" id="research-data-sufficiency-block">
+        <p class="data-sufficiency-label" id="research-data-sufficiency-label">Data Sufficiency: — / 100</p>
+        <div class="status-grid" id="research-data-matrix-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
   </section>
 
   </div><!-- /.bento -->
@@ -363,11 +377,7 @@
     <h2>Research Engine <span class="stub-badge">ROTA A / B / C sempre presentes</span></h2>
     <p class="onboarding-hint">As três rotas abaixo são sempre mostradas, nunca só a rota "favorita" do momento. Confiança é sempre <b>LOW/MEDIUM/HIGH</b> qualitativo — nunca uma probabilidade estatística. <b>Nenhuma rota aqui executa, envia ou simula ordem.</b></p>
     <p class="diagnostic-note" id="research-engine-session-note" hidden></p>
-    <div class="data-sufficiency-block" id="research-data-sufficiency-block">
-        <p class="data-sufficiency-label" id="research-data-sufficiency-label">Data Sufficiency: — / 100</p>
-        <p class="onboarding-hint">Dados usados nesta leitura — cada linha é <b>OK</b>, <b>DADOS_INSUFICIENTES</b> ou <b>NÃO_APLICÁVEL</b>; pontuação derivada só de campos reais desta sessão, nunca estimada.</p>
-        <div class="status-grid" id="research-data-matrix-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
-    </div>
+    <p class="onboarding-hint">Data Sufficiency e Matriz de Dados desta sessão aparecem na primeira tela, no card "Matriz de Dados" logo após o Cyborg Readiness — mesmo dado, sem duplicar lógica.</p>
     <div class="route-block route-long" id="route-a-long">
         <h3>ROTA A — LONG</h3>
         <div class="status-grid" id="route-a-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
@@ -685,6 +695,17 @@
       <div class="activity-log-list" id="al-list"></div>
     </div>
   </section>
+
+  <div class="law-badges">
+    <span class="law-badge" id="badge-mode">IPAD DIRECT / LOCAL-FIRST</span>
+    <span class="law-badge">READ_ONLY</span>
+    <span class="law-badge">FAIL_CLOSED</span>
+    <span class="law-badge is-ok">Execution Lock: ACTIVE</span>
+    <span class="law-badge is-blocked">Private Keys: DISABLED</span>
+    <span class="law-badge is-blocked">Live Trading: BLOCKED</span>
+    <span class="law-badge">Safari Edge: LOCAL_AUX</span>
+    <span class="law-badge">Telegram: PLANNED_AUX</span>
+  </div>
 
   <footer class="legal">
     AR10 Cyborg 1.0 PRO · READ_ONLY / FAIL_CLOSED · Local-first · Sem live trading · v1.0.0-pro
