@@ -19,6 +19,12 @@
     --alert-amber: #FFB800;
     --info-blue: #338DF6;
 
+    /* Acentos "Institutional Cockpit" — puramente decorativos (bordas/glow de
+       zona), nunca usados para estado de dado. Estado real continua so'
+       verde/vermelho/ciano/amber acima (ver .v-ok/.v-fail/.v-limited/.v-info). */
+    --cockpit-orange: #FF8A3D;
+    --cockpit-purple: #B26BFF;
+
     --bg-void: #000000;
     --metal-hi: rgba(18, 22, 26, 0.88);
     --metal-lo: rgba(4, 6, 8, 0.96);
@@ -67,7 +73,11 @@ a { color: var(--sys-cyan); }
 .runtime-shell {
     max-width: 980px;
     margin: 0 auto;
-    padding: 12px calc(var(--safe-r) + 14px) calc(var(--safe-b) + 24px) calc(var(--safe-l) + 14px);
+    /* padding-bottom extra reserva espaco para o FAB de microfone flutuante
+       (.action-strip .as-mic, position: fixed mais abaixo) nunca cobrir o
+       ultimo conteudo real da pagina (law-badges/tagline ou o fim do
+       .advanced-section). */
+    padding: 12px calc(var(--safe-r) + 14px) calc(var(--safe-b) + 96px) calc(var(--safe-l) + 14px);
 }
 
 /* ------------------------------------------------------------
@@ -1186,6 +1196,33 @@ footer.legal {
    data-voice-state e a trilha independente do data-state do
    avatar (ver js/siriform.js) — nunca as duas trilhas juntas.
    ------------------------------------------------------------ */
+/* PRIMARY ACTION ZONE — toda a coluna .as-mic (titulo + botao + status +
+   dica) flutua como um dock de vidro unico, sempre acessivel em qualquer
+   scroll/breakpoint (Institutional Cockpit: "zero-click", nunca exigir
+   rolar a tela para falar com o Siriform). position: fixed no proprio
+   .as-mic (nao so' no botao) tira a coluna inteira do fluxo de uma vez —
+   flutuar so' o botao e deixar titulo/status/dica presos no
+   .action-strip causaria um vao orfao la' e, na grade de 2 colunas do
+   desktop (ver .action-strip abaixo), um conflito de auto-placement com
+   .as-primary/.as-quick. Padding-bottom extra em .runtime-shell garante
+   que o dock nunca cubra o ultimo conteudo real da pagina. */
+.action-strip .as-mic {
+    position: fixed;
+    left: 50%;
+    bottom: calc(var(--safe-b) + 14px);
+    transform: translateX(-50%);
+    z-index: 40;
+    width: auto;
+    max-width: min(90vw, 300px);
+    gap: 4px;
+    padding: 10px 18px 12px;
+    border-radius: 22px;
+    background: linear-gradient(150deg, var(--metal-hi), var(--metal-lo));
+    backdrop-filter: blur(22px) saturate(150%);
+    -webkit-backdrop-filter: blur(22px) saturate(150%);
+    border: 1px solid rgba(178, 107, 255, 0.28);
+    box-shadow: 0 0 24px rgba(178, 107, 255, 0.16), 0 10px 30px rgba(0, 0, 0, 0.5);
+}
 .mic-button {
     width: 64px;
     height: 64px;
@@ -1397,19 +1434,21 @@ footer.legal {
 .telemetry-card .console { max-height: 200px; }
 
 /* ------------------------------------------------------------
-   HERO ROW — BTC Live (esquerda) / Siriform orb (centro) / Resumo
-   Executivo (direita). Irmao fora do .bento (mesmo motivo do
-   .live-ticker: nao depender do fluxo de colunas) para poder formar
-   uma faixa de hero de 3 colunas de verdade — multicoluna do .bento
-   nao da pra isso, e' so balanceamento de altura, nao posicionamento.
+   HERO ROW — "Institutional Cockpit" Center Stage: BTC/USDT Market
+   Data (centro, dominante) / Siriform orb (companheiro) / Resumo
+   Executivo (sidebar de risco/status). Irmao fora do .bento (mesmo
+   motivo do .live-ticker: nao depender do fluxo de colunas) para poder
+   formar uma faixa de hero de 3 colunas de verdade — multicoluna do
+   .bento nao da pra isso, e' so balanceamento de altura, nao
+   posicionamento.
 
-   Abaixo de 1000px fica em coluna unica e o orbe sempre aparece
-   primeiro (order: -1) sem precisar mudar a ordem real do DOM —
-   BTC Live continua logo depois (preco vivo e' o 2o dado mais
-   importante), Resumo Executivo por ultimo. A partir de 1000px
-   (cobre o iPad em paisagem) vira grade de 3 colunas na ordem natural
-   do documento, com a coluna central (orbe) mais larga — o orbe deve
-   pesar mais visualmente que os paineis ao lado dele. */
+   Abaixo de 1000px fica em coluna unica na ordem natural do DOM: Market
+   Data primeiro (e' o dado que um cockpit institucional mostra de um so'
+   olhar), orbe Siriform depois (informativo, nunca decide nada), Resumo
+   Executivo por ultimo. A partir de 1000px (cobre o iPad em paisagem)
+   vira grade de 3 colunas com placement explicito via grid-column — a
+   coluna central (Market Data) e' a mais larga: e' ela que deve pesar
+   mais visualmente, nao o orbe. */
 .hero-row {
     width: 100%;
     display: flex;
@@ -1418,7 +1457,6 @@ footer.legal {
     margin-bottom: 16px;
 }
 .hero-row > section.card { margin-bottom: 0; }
-.hero-row > .siriform-card { order: -1; }
 
 @media (min-width: 1000px) {
     .hero-row {
@@ -1427,23 +1465,17 @@ footer.legal {
         align-items: stretch;
         gap: 22px;
     }
+    /* CENTER STAGE real (grid-column explicito, independente da ordem do
+       DOM acima) — Market Data na coluna central 1.6fr, orbe e Resumo
+       Executivo flanqueando em 1fr cada. */
+    .hero-row > .btc-live-panel { grid-column: 2; }
     .hero-row > .siriform-card {
-        order: 0;
+        grid-column: 1;
         justify-content: center;
         padding-top: 36px;
         padding-bottom: 28px;
     }
-    /* orbe e' o elemento visual dominante do cockpit (coluna central mais
-       larga acima) — cresce junto com a coluna em vez de ficar do mesmo
-       tamanho fixo usado na pilha de coluna unica abaixo de 1000px. */
-    .siriform-stage {
-        width: 224px;
-        height: 224px;
-    }
-    .siriform-avatar {
-        width: 184px;
-        height: 184px;
-    }
+    .hero-row > .cyborg-executive-panel { grid-column: 3; }
 }
 
 /* ------------------------------------------------------------
@@ -1473,10 +1505,15 @@ footer.legal {
 @media (min-width: 1000px) {
     .action-strip {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) minmax(0, 1.3fr);
+        /* so' 2 colunas reais aqui: .as-mic saiu do fluxo (position: fixed
+           no proprio .as-mic, ver secao SIRIFORM VOICE) — manter uma 3a
+           coluna 0.7fr deixaria um vao vazio permanente no meio da faixa. */
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
         align-items: center;
         gap: 18px;
     }
+    .action-strip .as-primary { grid-column: 1; }
+    .action-strip .as-quick { grid-column: 2; }
 }
 
 /* ------------------------------------------------------------
@@ -1507,6 +1544,40 @@ footer.legal {
     .analytics-row {
         grid-template-columns: repeat(4, minmax(0, 1fr));
     }
+}
+
+/* ------------------------------------------------------------
+   INSTITUTIONAL COCKPIT — acentos de zona (puramente decorativos,
+   nunca redefinem o estado real de um dado). Cada zona ganha so' uma
+   borda/glow proprios para ficar reconhecivel num pane unico, sem
+   tocar nas cores semanticas (.v-ok/.v-fail/.v-limited/.v-info/
+   sr-resistance/sr-support continuam verde/vermelho/ciano como sempre):
+
+   - Center Stage (Market Data, .btc-live-panel): halo ciano+purpura,
+     a moldura mais "premium" do pane — e' o dado que o olho deve
+     achar primeiro.
+   - Secondary Zone (Suportes/Resistencias + Rotas LONG/SHORT): aresta
+     superior em laranja — diferencia "leitura de nivel/sinal
+     descritivo" do resto da analytics-row sem novo componente.
+   - Sidebar (Resumo Executivo — risco/status): aresta superior em
+     purpura — combina com o halo do Center Stage, fecha a moldura do
+     cockpit nos dois lados do orbe.
+   ------------------------------------------------------------ */
+.hero-row > .btc-live-panel {
+    border-color: rgba(178, 107, 255, 0.22);
+    border-top-color: rgba(0, 242, 255, 0.45);
+    box-shadow:
+        inset 0 0 22px rgba(0, 242, 255, 0.05),
+        0 0 32px rgba(178, 107, 255, 0.08),
+        0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.hero-row > .cyborg-executive-panel {
+    border-top-color: rgba(178, 107, 255, 0.4);
+}
+.analytics-row > .supports-resistances-panel,
+.analytics-row > .target-tracker-panel,
+.analytics-row > .rota-recomendada-panel {
+    border-top-color: rgba(255, 138, 61, 0.45);
 }
 
 /* ------------------------------------------------------------
