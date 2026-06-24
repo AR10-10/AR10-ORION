@@ -21,6 +21,7 @@ import * as binanceFuturesPublic from './binance-futures-public.js';
 import * as mexcPublic from './mexc-public.js';
 import * as mexcFuturesPublic from './mexc-futures-public.js';
 import * as csvJsonImport from './csv-json-import.js';
+import * as mexcWsPublic from './mexc-ws-public.js';
 
 // Conectores de rede (probados automaticamente em "Testar fontes reais").
 // Ordem importa: getActiveReadOnlySources()/handleTestRealSources (app.js)
@@ -36,7 +37,19 @@ const NETWORK_CONNECTORS = Object.freeze([coingeckoPublic, binancePublic, mexcPu
 // implicito para sondar).
 const LOCAL_CONNECTORS = Object.freeze([csvJsonImport]);
 
-const ALL_CONNECTORS = Object.freeze([...NETWORK_CONNECTORS, ...LOCAL_CONNECTORS]);
+// Conectores de streaming (WebSocket publico, push persistente). Deliberada-
+// mente FORA de NETWORK_CONNECTORS: probeAllNetworkSources()/handleTestReal-
+// Sources (app.js) usam o primeiro ACTIVE_READ_ONLY da lista de rede como a
+// evidence que alimenta AnalysisFrame/ResearchEngineFrame, e estes esperam
+// candles reais — um conector de deals via WS so' produz ticker (preco do
+// ultimo negocio), nunca candles. Misturar aqui faria um conector sem
+// candles "vencer" e degradar o resto do app silenciosamente. Streaming
+// continua visivel em listConnectors() (grid/UI) e sondavel via
+// probeStreamingConnector(), so' nunca selecionado como fonte ativa de
+// analise.
+const STREAMING_CONNECTORS = Object.freeze([mexcWsPublic]);
+
+const ALL_CONNECTORS = Object.freeze([...NETWORK_CONNECTORS, ...LOCAL_CONNECTORS, ...STREAMING_CONNECTORS]);
 
 // Estado por sessao (RAM) — a persistencia entre sessoes e responsabilidade
 // de js/memory/persistent-state.js, que envelopa este modulo a partir do
@@ -154,6 +167,21 @@ export async function probeLocalImport({ file, symbol = 'IMPORTADO', onTransitio
     return runProbe(csvJsonImport, { file, symbol }, onTransition);
 }
 
+/** Sonda um conector de streaming (WebSocket publico) individualmente —
+ *  nunca em lote via probeAllNetworkSources, e nunca decide a fonte ativa de
+ *  AnalysisFrame/ResearchEngineFrame (ver nota em STREAMING_CONNECTORS
+ *  acima). So' o toque explicito do usuario num botao dedicado de streaming
+ *  dispara isto. */
+export async function probeStreamingConnector(connectorId, { symbol = 'BTC', timeoutMs = 8000, onTransition } = {}) {
+    const mod = STREAMING_CONNECTORS.find((m) => m.meta.connector_id === connectorId);
+    if (!mod) throw new Error(`conector_de_streaming_desconhecido:${connectorId}`);
+    return runProbe(mod, { symbol, timeoutMs }, onTransition);
+}
+
 export function networkConnectorIds() {
     return NETWORK_CONNECTORS.map((m) => m.meta.connector_id);
+}
+
+export function streamingConnectorIds() {
+    return STREAMING_CONNECTORS.map((m) => m.meta.connector_id);
 }

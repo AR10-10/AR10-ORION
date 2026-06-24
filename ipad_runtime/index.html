@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">
 <title>AR10 Cyborg 1.0 PRO — iPad One-Tap Cloud Runtime</title>
 
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.mexc.com https://contract.mexc.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.mexc.com https://contract.mexc.com wss://wbs-api.mexc.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
 
 <meta name="description" content="AR10 Cyborg 1.0 PRO — Nebula Core. Safari Local Runtime para iPad. Execucao local-first, READ_ONLY, FAIL_CLOSED. Sem trading real.">
 <meta name="theme-color" content="#000000">
@@ -400,6 +400,11 @@
         <button class="rt-btn" id="btn-import-real-csv"><span class="icon">⇪</span> Importar CSV/JSON local</button>
     </div>
     <input type="file" id="real-data-import-input" class="hidden-input" accept=".csv,.json,application/json,text/csv">
+    <p class="onboarding-hint">Streaming público (WebSocket, MEXC, sem chave): conector separado, somente leitura, mostra o preço do último negócio em tempo real. Nunca se torna a fonte ativa do AnalysisFrame/Research Engine — só os conectores com candles reais acima podem ser essa fonte.</p>
+    <p class="engine-meta" id="rdl-ws-ticker">Streaming WS: ainda não testado nesta sessão.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-test-ws-stream"><span class="icon">📶</span> Testar streaming WS público</button>
+    </div>
   </section>
 
   <section class="card source-health-panel" id="source-health-panel" tabindex="0">

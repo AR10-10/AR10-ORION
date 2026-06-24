@@ -1034,6 +1034,61 @@ async function handleRefreshRealData() {
     }
 }
 
+// Streaming público (WebSocket, MEXC, sem chave) — sonda individual, separada
+// de handleTestRealSources/probeAllNetworkSources de proposito (ver nota em
+// STREAMING_CONNECTORS, real-data/registry.js): este conector so' produz
+// ticker (preco do ultimo negocio), nunca candles, entao nunca deve se tornar
+// activeRealEvidence nem disparar handleGenerateRealAnalysis. So' atualiza seu
+// proprio readout (rdl-ws-ticker) e a linha dele no grid de conectores.
+function renderWsTicker(result) {
+    if (!els['rdl-ws-ticker']) return;
+    if (result.state === 'ACTIVE_READ_ONLY' && result.evidence) {
+        const t = result.evidence.ticker;
+        els['rdl-ws-ticker'].textContent = `Streaming WS (MEXC, deals): último preço real ${t.last_price} — ${result.evidence.timestamp}. Suplementar: não alimenta o AnalysisFrame.`;
+    } else {
+        const reason = result.probe_detail?.reason || result.state;
+        els['rdl-ws-ticker'].textContent = `Streaming WS (MEXC, deals): ${result.state} (${reason}).`;
+    }
+}
+
+async function handleTestWsStream() {
+    siriform.setSiriformState('checking', 'Conectando ao streaming WS público (MEXC, sem chave)...');
+    log('=== TESTAR STREAMING WS PÚBLICO (MEXC) ===', 'info');
+    try {
+        const result = await realDataRegistry.probeStreamingConnector('mexc-spot-public-ws-adapter', {
+            symbol: 'BTC',
+            onTransition: (id, state) => {
+                log(`Conector ${id}: ${state}`, state === 'ACTIVE_READ_ONLY' ? 'ok' : (state === 'PROBING' ? 'dim' : 'warn'));
+                renderConnectorGrid();
+            },
+        });
+        // NAO usa persistProbeResult aqui de proposito: persistentState.
+        // recordProbeResult trata qualquer ACTIVE_READ_ONLY como "a" fonte
+        // ativa persistida (real_data_active_source), sem distinguir
+        // streaming de rede — gravar isso sobrescreveria a memoria de uma
+        // boa fonte com candles por um conector que so' tem ticker. Continua
+        // indo so' para o ledger de auditoria (append-only, nunca decide
+        // fonte ativa) e para o sessionState em memoria de registry.js (que
+        // ja' atualiza o grid nesta aba). Um preco de um unico negocio
+        // tambem nao deveria sobreviver reload como se ainda fosse "agora".
+        if (result.evidence) {
+            await evidenceLedger.appendEvidence({ connector_id: result.connector_id, state: result.state, evidence: result.evidence });
+        }
+        renderConnectorGrid();
+        renderWsTicker(result);
+        if (result.state === 'ACTIVE_READ_ONLY' && result.evidence) {
+            log(`Streaming WS ativo: último preço real (negócio) = ${result.evidence.ticker.last_price}.`, 'ok');
+            siriform.setSiriformState('success', 'Streaming WS público validado — preço do último negócio ao vivo.');
+        } else {
+            log(`Streaming WS não ficou ACTIVE_READ_ONLY (${result.state}): ${result.probe_detail?.reason || 'sem detalhe'}.`, 'warn');
+            siriform.setSiriformState('warning', 'Streaming WS público não pôde ser validado agora.');
+        }
+    } catch (err) {
+        log(`Erro ao testar streaming WS: ${err.message}`, 'fail');
+        siriform.setSiriformState('warning', 'Não consegui testar o streaming WS agora.');
+    }
+}
+
 // Auto-refresh do preco vivo do BTC Live Panel (spec: "Nao fazer loop
 // pesado. Nao sobrecarregar Safari. Nao ficar chamando API rapido demais.").
 // So' roda quando ha fonte ACTIVE_READ_ONLY nesta sessao e a aba esta
@@ -2591,6 +2646,8 @@ function wireButtons() {
     if (btnRefreshRealData) btnRefreshRealData.addEventListener('click', handleRefreshRealData);
     const btnImportRealCsv = document.getElementById('btn-import-real-csv');
     if (btnImportRealCsv) btnImportRealCsv.addEventListener('click', handleImportRealCsv);
+    const btnTestWsStream = document.getElementById('btn-test-ws-stream');
+    if (btnTestWsStream) btnTestWsStream.addEventListener('click', handleTestWsStream);
     const btnGenerateRealAnalysis = document.getElementById('btn-generate-real-analysis');
     if (btnGenerateRealAnalysis) btnGenerateRealAnalysis.addEventListener('click', handleGenerateRealAnalysis);
     if (els['bl-btn-refresh-now']) els['bl-btn-refresh-now'].addEventListener('click', handleRefreshRealData);
