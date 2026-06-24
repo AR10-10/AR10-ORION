@@ -13,3 +13,6 @@ __pycache__/
 
 # Ambiente virtual local
 .venv/
+
+# Build cache do crate Rust -> WASM do iPad Runtime (binario final fica versionado em wasm/)
+ipad_runtime/wasm-src/cyborg_quant_core/target/

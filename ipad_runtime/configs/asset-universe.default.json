@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "config_id": "AR10_CYBORG_ASSET_UNIVERSE_DEFAULT_V1",
+  "target_runtime": "SAFARI_IPAD",
+  "note": "Listas SEED/REFERENCIA, nao hardcoded permanentes e nao exaustivas. Servem como ponto de partida legivel para o registro de classes de ativos (ver docs/FUTURE_READY_ASSET_CLASS_REGISTRY.md). Ranking dinamico real (market cap, volume, liquidez, OI, funding, volatilidade, watchlist, lista definida pelo usuario) e FUTURE — nenhum codigo do PWA le ou ordena este arquivo hoje. Este arquivo e dado de configuracao inerte, nao esta referenciado por index.html, js/app.js, manifest.pack.json nem manifest.webmanifest.",
+  "status": "FUTURE_READY_REFERENCE_ONLY",
+  "wired_into_live_app": false,
+  "ranking_criteria_supported": [
+    "market_cap",
+    "volume",
+    "liquidity",
+    "open_interest",
+    "funding_rate",
+    "volatility",
+    "watchlist",
+    "user_defined_list"
+  ],
+  "ranking_criteria_active": [],
+  "security_posture": {
+    "execution": "DISABLED",
+    "order_send": "ABSENT",
+    "api_secret": "ABSENT",
+    "mexc_private_endpoint": "ABSENT",
+    "mt5_bridge": "ABSENT",
+    "live_trading": "DISABLED",
+    "mode": "READ_ONLY",
+    "fail_closed": true
+  },
+  "groups": [
+    {
+      "group": "crypto_top_liquidity",
+      "label": "Cripto — Top Liquidez (referencia)",
+      "asset_class": "CRYPTO",
+      "note": "Lista seed de referencia, ordenada apenas por convencao de leitura (nao e ranking calculado). Sujeita a re-ranking dinamico futuro por qualquer criterio em ranking_criteria_supported.",
+      "symbols": [
+        { "symbol": "BTC", "group": "crypto_top_liquidity", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "ETH", "group": "crypto_top_liquidity", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "SOL", "group": "crypto_top_liquidity", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "BNB", "group": "crypto_top_liquidity", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "XRP", "group": "crypto_top_liquidity", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "DOGE", "group": "crypto_top_liquidity", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "ADA", "group": "crypto_top_liquidity", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "AVAX", "group": "crypto_top_liquidity", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "LINK", "group": "crypto_top_liquidity", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "SUI", "group": "crypto_top_liquidity", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" }
+      ]
+    },
+    {
+      "group": "crypto_additional",
+      "label": "Cripto — Adicional (referencia)",
+      "asset_class": "CRYPTO",
+      "note": "Lista seed de referencia complementar a crypto_top_liquidity. Nao e exaustiva e nao representa ranking calculado.",
+      "symbols": [
+        { "symbol": "TRX", "group": "crypto_additional", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "TON", "group": "crypto_additional", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "DOT", "group": "crypto_additional", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "NEAR", "group": "crypto_additional", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "APT", "group": "crypto_additional", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "ARB", "group": "crypto_additional", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "OP", "group": "crypto_additional", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "ONDO", "group": "crypto_additional", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "TAO", "group": "crypto_additional", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "RENDER", "group": "crypto_additional", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" }
+      ]
+    },
+    {
+      "group": "pow_mining_crypto",
+      "label": "Cripto — Proof-of-Work Mineravel (referencia)",
+      "asset_class": "CRYPTO",
+      "note": "Lista seed de referencia de criptoativos PoW mineraveis. Distinta de mining_ai_hpc_equities: aqui sao as MOEDAS, nao as empresas mineradoras. Nao e exaustiva.",
+      "symbols": [
+        { "symbol": "BTC", "group": "pow_mining_crypto", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "LTC", "group": "pow_mining_crypto", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "DOGE", "group": "pow_mining_crypto", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "BCH", "group": "pow_mining_crypto", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "ETC", "group": "pow_mining_crypto", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "KAS", "group": "pow_mining_crypto", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "XMR", "group": "pow_mining_crypto", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "DASH", "group": "pow_mining_crypto", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "ZEC", "group": "pow_mining_crypto", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "RVN", "group": "pow_mining_crypto", "asset_class": "CRYPTO", "status": "ACTIVE_REFERENCE" }
+      ]
+    },
+    {
+      "group": "mining_ai_hpc_equities",
+      "label": "Equities — Mineracao / IA / HPC (referencia)",
+      "asset_class": "EQUITY",
+      "note": "Lista seed de referencia de acoes (equities) de empresas de mineracao de cripto e/ou infraestrutura de IA/HPC. Distinta de pow_mining_crypto: aqui sao as EMPRESAS (acoes reais negociadas em bolsa), nao as moedas mineradas. Nao e exaustiva e nao constitui recomendacao.",
+      "symbols": [
+        { "symbol": "MARA", "group": "mining_ai_hpc_equities", "asset_class": "EQUITY", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "RIOT", "group": "mining_ai_hpc_equities", "asset_class": "EQUITY", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "CLSK", "group": "mining_ai_hpc_equities", "asset_class": "EQUITY", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "IREN", "group": "mining_ai_hpc_equities", "asset_class": "EQUITY", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "CIFR", "group": "mining_ai_hpc_equities", "asset_class": "EQUITY", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "HUT", "group": "mining_ai_hpc_equities", "asset_class": "EQUITY", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "BITF", "group": "mining_ai_hpc_equities", "asset_class": "EQUITY", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "HIVE", "group": "mining_ai_hpc_equities", "asset_class": "EQUITY", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "WULF", "group": "mining_ai_hpc_equities", "asset_class": "EQUITY", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "BTDR", "group": "mining_ai_hpc_equities", "asset_class": "EQUITY", "status": "ACTIVE_REFERENCE" },
+        { "symbol": "CORZ", "group": "mining_ai_hpc_equities", "asset_class": "EQUITY", "status": "ACTIVE_REFERENCE" }
+      ]
+    }
+  ]
+}

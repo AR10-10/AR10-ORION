@@ -1,0 +1,390 @@
+{
+  "schema_version": 1,
+  "config_id": "AR10_CYBORG_STRATEGY_PLAYBOOK_DEFAULT_V1",
+  "target_runtime": "SAFARI_IPAD",
+  "note": "Playbook de DESIGN de estrategia, nao motor de decisao. Descreve criterios qualitativos (long_criteria/short_criteria/wait_criteria) para um humano — ou um futuro research engine — avaliar o estado do mercado e produzir um raciocinio Long/Short/Wait. Nenhum codigo do PWA le, ordena ou executa este arquivo hoje. Documentacao pareada: ver docs/STRATEGY_PLAYBOOK.md (conteudo deve permanecer consistente entre os dois arquivos).",
+  "status": "FUTURE_READY_REFERENCE_ONLY",
+  "wired_into_live_app": false,
+  "binding_instruction": "Confidence must be heuristic unless a validated backtest exists. Do not present heuristic confidence as statistical probability.",
+  "confidence_model": {
+    "type": "HEURISTIC_QUALITATIVE_ONLY",
+    "scale": ["LOW", "MEDIUM", "HIGH"],
+    "definition": "Tag qualitativa derivada de quantos confidence_inputs de uma estrategia estao alinhados simultaneamente no momento da leitura (ex.: 1 de 4 alinhados = LOW, 3 de 4 alinhados = HIGH). Nao e frequencia historica, nao e taxa de acerto, nao e probabilidade estatistica.",
+    "forbidden": [
+      "percentual de probabilidade (ex.: '73% de chance')",
+      "win-rate inventado ou nao auditavel",
+      "qualquer numero que sugira validacao estatistica sem um backtest real documentado e versionado neste repositorio"
+    ],
+    "backtest_status_in_this_repo": "ABSENT — nenhum backtest validado existe neste repositorio nesta versao. Enquanto isso for verdade, todo confidence_inputs de toda estrategia abaixo permanece HEURISTIC_QUALITATIVE_ONLY."
+  },
+  "security_posture": {
+    "execution": "DISABLED",
+    "order_send": "ABSENT",
+    "api_secret": "ABSENT",
+    "mexc_private_endpoint": "ABSENT",
+    "mt5_bridge": "ABSENT",
+    "live_trading": "DISABLED",
+    "mode": "READ_ONLY",
+    "fail_closed": true
+  },
+  "output_contract": {
+    "possible_outputs": ["LONG", "SHORT", "WAIT"],
+    "note": "Toda estrategia abaixo produz sempre um raciocinio descritivo classificado em uma destas tres rotas (ver docs/ANALYSIS_OUTPUT_CONTRACT.md para o contrato completo de saida — ROTA A/B/C). Nunca uma ordem, nunca uma chamada de execucao."
+  },
+  "strategies": [
+    {
+      "strategy_id": "trend-continuation",
+      "label_ptbr": "Continuacao de Tendencia",
+      "summary": "Avalia se uma tendencia direcional ja estabelecida tem condicoes de continuar, usando alinhamento de medias moveis e estrutura de topos/fundos.",
+      "required_data": [
+        "candles OHLC (timeframe da analise)",
+        "SMA e/ou EMA de pelo menos duas janelas (ex.: curta e longa)",
+        "estrutura de topos e fundos (higher highs/higher lows ou lower highs/lower lows)",
+        "volume relativo recente (opcional, reforca confianca se presente)"
+      ],
+      "market_condition": "Mercado em tendencia clara (alta ou baixa), sem sinais de exaustao ou divergencia evidente no timeframe analisado.",
+      "long_criteria": [
+        "Preco acima da EMA/SMA de referencia, com a media curta acima da media longa",
+        "Sequencia de fundos ascendentes (higher lows) nos ultimos pivots",
+        "Pullback recente respeitou a media ou uma zona de suporte sem rompimento de fechamento"
+      ],
+      "short_criteria": [
+        "Preco abaixo da EMA/SMA de referencia, com a media curta abaixo da media longa",
+        "Sequencia de topos descendentes (lower highs) nos ultimos pivots",
+        "Pullback recente respeitou a media ou uma zona de resistencia sem rompimento de fechamento"
+      ],
+      "wait_criteria": [
+        "Medias curta e longa entrelacadas/cruzando repetidamente (sem inclinacao clara)",
+        "Estrutura de topos/fundos mista, sem sequencia direcional confirmada",
+        "Dados insuficientes de historico de candles para calcular as janelas configuradas"
+      ],
+      "invalidation": "Fechamento alem da media longa de referencia na direcao contraria a tendencia assumida, ou rompimento do ultimo pivot estrutural (ultimo fundo ascendente em LONG, ultimo topo descendente em SHORT).",
+      "risk_notes": "Estrategia de continuacao tende a entrar tarde em reversoes; nao ha gestao de posicao real neste runtime (READ_ONLY) — qualquer leitura aqui e insumo para decisao humana, nunca uma ordem.",
+      "confidence_inputs": [
+        "alinhamento das medias (curta vs. longa) na mesma direcao",
+        "numero de pivots consecutivos confirmando a estrutura (mais pivots alinhados = tag mais alta)",
+        "respeito ao pullback sem rompimento de fechamento",
+        "volume relativo crescente na direcao da tendencia, se o dado estiver disponivel"
+      ],
+      "limitations": "Heuristica baseada em medias moveis tem atraso inerente (lagging) e pode gerar leituras tardias em reversoes rapidas. Nao ha backtest validado neste repositorio para esta estrategia; qualquer tag de confianca (LOW/MEDIUM/HIGH) e qualitativa, nunca uma probabilidade estatistica."
+    },
+    {
+      "strategy_id": "range-rotation",
+      "label_ptbr": "Rotacao em Range",
+      "summary": "Avalia oportunidades de rotacao entre extremos de um range lateral bem definido, comprando perto do suporte e vendendo perto da resistencia do range.",
+      "required_data": [
+        "candles OHLC (timeframe da analise)",
+        "niveis de suporte e resistencia do range (maximas/minimas recentes)",
+        "largura do range (resistencia - suporte) para dimensionar zonas de entrada",
+        "indicador de momentum/oscilador (opcional, ex.: posicao relativa dentro do range)"
+      ],
+      "market_condition": "Mercado lateralizado, sem tendencia direcional clara, com pelo menos dois toques validos em cada extremo do range no historico recente.",
+      "long_criteria": [
+        "Preco proximo ao limite inferior do range (zona de suporte)",
+        "Pelo menos um toque anterior nesse mesmo nivel de suporte sem rompimento de fechamento",
+        "Range ainda nao mostrou rompimento confirmado (fechamento) de nenhum dos dois extremos"
+      ],
+      "short_criteria": [
+        "Preco proximo ao limite superior do range (zona de resistencia)",
+        "Pelo menos um toque anterior nesse mesmo nivel de resistencia sem rompimento de fechamento",
+        "Range ainda nao mostrou rompimento confirmado (fechamento) de nenhum dos dois extremos"
+      ],
+      "wait_criteria": [
+        "Preco no meio do range, distante de ambos os extremos",
+        "Range ainda nao tem toques suficientes para validar os limites (menos de dois toques por extremo)",
+        "Rompimento de fechamento recente em qualquer extremo (range pode estar deixando de existir — ver breakout-confirmation)"
+      ],
+      "invalidation": "Fechamento (nao apenas pavio/wick) alem de um dos limites do range, o que descaracteriza o range e sugere reavaliar como possivel breakout.",
+      "risk_notes": "Ranges podem se romper sem aviso; operar contra o limite de um range em formacao de breakout e o principal risco desta leitura. Nenhuma ordem e gerada por este runtime.",
+      "confidence_inputs": [
+        "numero de toques historicos validados em cada extremo do range (mais toques = tag mais alta)",
+        "simetria da reacao de preco nos dois extremos (reacoes parecidas nos dois lados reforcam a leitura)",
+        "ausencia de rompimento de fechamento recente em qualquer extremo",
+        "largura do range relativa a volatilidade recente (range muito estreito reduz confianca)"
+      ],
+      "limitations": "Definicao de 'limite do range' e sensivel a escolha de janela de lookback; nao ha criterio estatistico formal aqui, apenas leitura visual/heuristica de maximas e minimas. Sem backtest validado; confianca e sempre qualitativa."
+    },
+    {
+      "strategy_id": "breakout-confirmation",
+      "label_ptbr": "Confirmacao de Rompimento",
+      "summary": "Avalia se um rompimento de nivel relevante (suporte, resistencia ou range) tem confirmacao suficiente para ser tratado como movimento direcional, em vez de falso rompimento.",
+      "required_data": [
+        "candles OHLC (timeframe da analise)",
+        "nivel de referencia rompido (suporte/resistencia/limite de range)",
+        "volume relativo no candle de rompimento (fortemente recomendado, reduz falsos positivos)",
+        "candles subsequentes ao rompimento para checar retest"
+      ],
+      "market_condition": "Nivel de suporte/resistencia ou limite de range testado multiplas vezes recentemente, com pressao crescente em uma direcao.",
+      "long_criteria": [
+        "Fechamento (nao so pavio) acima do nivel de resistencia/range de referencia",
+        "Volume relativo no candle de rompimento acima da media recente, se o dado estiver disponivel",
+        "Retest do nivel rompido (quando ocorre) e respeitado como novo suporte, sem fechamento de volta abaixo dele"
+      ],
+      "short_criteria": [
+        "Fechamento (nao so pavio) abaixo do nivel de suporte/range de referencia",
+        "Volume relativo no candle de rompimento acima da media recente, se o dado estiver disponivel",
+        "Retest do nivel rompido (quando ocorre) e respeitado como nova resistencia, sem fechamento de volta acima dele"
+      ],
+      "wait_criteria": [
+        "Rompimento apenas por pavio, sem fechamento confirmado alem do nivel",
+        "Volume relativo no candle de rompimento indisponivel ou abaixo da media (sinal mais fraco)",
+        "Retest em andamento, ainda sem fechamento que confirme ou negue o nivel"
+      ],
+      "invalidation": "Fechamento de volta para o lado original do nivel rompido logo apos o rompimento (falso rompimento/'fakeout'), especialmente sem volume de confirmacao.",
+      "risk_notes": "Falsos rompimentos sao o erro mais comum desta familia de leitura; exigir fechamento (nao pavio) e, quando disponivel, volume acima da media reduz mas nao elimina o risco. Nenhuma ordem e gerada por este runtime.",
+      "confidence_inputs": [
+        "rompimento por fechamento (nao apenas pavio)",
+        "volume relativo acima da media no candle de rompimento, se disponivel",
+        "retest do nivel respeitado em vez de revertido",
+        "numero de testes anteriores do nivel antes do rompimento (mais testes previos = rompimento mais significativo)"
+      ],
+      "limitations": "Dado de volume pode nao estar disponivel para todos os instrumentos/fontes (ver EVIDENCE em docs/ANALYSIS_OUTPUT_CONTRACT.md); na ausencia de volume, a leitura usa apenas estrutura de preco e fica estruturalmente mais fraca. Sem backtest validado; confianca e sempre qualitativa."
+    },
+    {
+      "strategy_id": "liquidity-sweep-reversal",
+      "label_ptbr": "Reversao por Varredura de Liquidez",
+      "summary": "Avalia se um movimento rapido que rompe um extremo de liquidez evidente (stop-hunt classico) seguido de reversao imediata indica armadilha de liquidez, nao rompimento real.",
+      "required_data": [
+        "candles OHLC de timeframe mais curto (para ver o pavio de varredura com granularidade)",
+        "nivel de liquidez evidente (maxima/minima recente obvia, onde stops tendem a se acumular)",
+        "velocidade/tamanho do pavio de varredura em relacao aos candles recentes",
+        "dados de liquidacao (liquidation data), se disponiveis, como reforco de evidencia (ver FUTURES/DERIVATIVES DATA no contrato de saida)"
+      ],
+      "market_condition": "Nivel de liquidez obvio (maxima ou minima redonda, ou extremo de range muito testado) sendo varrido por um movimento rapido com reversao no mesmo candle ou no candle imediatamente seguinte.",
+      "long_criteria": [
+        "Pavio que varre uma minima de liquidez evidente, seguido de fechamento de volta acima dessa minima no mesmo candle ou no proximo",
+        "Movimento de varredura visivelmente mais rapido/abrupto que os candles anteriores",
+        "Dados de liquidacao (quando disponiveis) mostrando concentracao de liquidacoes short na regiao varrida, reforcando a leitura de stop-hunt"
+      ],
+      "short_criteria": [
+        "Pavio que varre uma maxima de liquidez evidente, seguido de fechamento de volta abaixo dessa maxima no mesmo candle ou no proximo",
+        "Movimento de varredura visivelmente mais rapido/abrupto que os candles anteriores",
+        "Dados de liquidacao (quando disponiveis) mostrando concentracao de liquidacoes long na regiao varrida, reforcando a leitura de stop-hunt"
+      ],
+      "wait_criteria": [
+        "Pavio de varredura sem reversao clara (fechamento permanece alem do nivel varrido)",
+        "Nivel varrido nao e suficientemente obvio/redondo para justificar a leitura de 'liquidez evidente'",
+        "Dados de liquidacao indisponiveis e nenhuma outra confirmacao presente"
+      ],
+      "invalidation": "Fechamento subsequente que rompe novamente o nivel varrido na direcao original da varredura, o que sugere que era rompimento real, nao armadilha de liquidez.",
+      "risk_notes": "Esta e uma leitura de reversao contra-movimento — risco mais alto que estrategias de continuacao; dados de liquidacao tornam a leitura mais robusta mas raramente sao 100% completos ou em tempo real. Nenhuma ordem e gerada por este runtime.",
+      "confidence_inputs": [
+        "clareza/redondez do nivel de liquidez varrido (niveis muito testados = tag mais alta)",
+        "velocidade do pavio de varredura comparada aos candles anteriores",
+        "fechamento de volta confirmado no mesmo candle ou no proximo",
+        "concentracao de liquidacoes na regiao varrida, quando o dado de liquidacao estiver disponivel"
+      ],
+      "limitations": "Distinguir 'varredura de liquidez' de 'rompimento real que ainda nao confirmou' e dificil em tempo real; esta estrategia tem taxa de leitura ambigua mais alta que as outras do playbook. Sem backtest validado; nenhuma probabilidade numerica deve ser atribuida a esta leitura."
+    },
+    {
+      "strategy_id": "funding-extreme-contrarian",
+      "label_ptbr": "Contrarian por Funding Extremo",
+      "summary": "Avalia se uma taxa de funding (funding rate) extrema e persistente sugere posicionamento excessivo em um lado do mercado de derivativos, favorecendo uma leitura contraria a essa multidao.",
+      "required_data": [
+        "funding rate atual e historico recente (FUTURES/DERIVATIVES DATA)",
+        "duracao da persistencia do funding extremo (quantos periodos consecutivos)",
+        "preco a vista (spot) ou de referencia para contexto de tendencia",
+        "open interest (OI), se disponivel, para avaliar se o posicionamento esta crescendo ou estavel"
+      ],
+      "market_condition": "Funding rate consistentemente extremo (muito positivo ou muito negativo) por varios periodos consecutivos, indicando desequilibrio de posicionamento entre longs e shorts no mercado perpetuo.",
+      "long_criteria": [
+        "Funding rate muito negativo e persistente por multiplos periodos (mercado pagando para manter short, sugerindo excesso de posicionamento short)",
+        "Preco nao confirma a tese bearish implicita do funding negativo (ex.: preco lateral ou levemente subindo enquanto funding fica mais negativo)",
+        "Open interest estavel ou crescente durante a persistencia do funding negativo, se o dado estiver disponivel"
+      ],
+      "short_criteria": [
+        "Funding rate muito positivo e persistente por multiplos periodos (mercado pagando para manter long, sugerindo excesso de posicionamento long)",
+        "Preco nao confirma a tese bullish implicita do funding positivo (ex.: preco lateral ou levemente caindo enquanto funding fica mais positivo)",
+        "Open interest estavel ou crescente durante a persistencia do funding positivo, se o dado estiver disponivel"
+      ],
+      "wait_criteria": [
+        "Funding rate dentro de faixa normal/historica, sem extremo persistente",
+        "Funding extremo mas ainda recente (poucos periodos), sem persistencia suficiente para configurar excesso de posicionamento",
+        "Dado de funding indisponivel ou desatualizado (ver Data quality em FUTURES/DERIVATIVES DATA)"
+      ],
+      "invalidation": "Funding extremo se normaliza rapidamente sem qualquer movimento de preco na direcao contraria esperada, o que sugere que o desequilibrio se resolveu sem gerar a reversao antecipada.",
+      "risk_notes": "Funding extremo pode persistir por longos periodos em tendencias fortes sem reverter ('o mercado pode ficar irracional mais tempo do que a leitura contraria aguenta esperar'); esta e uma leitura de timing dificil. Nenhuma ordem e gerada por este runtime.",
+      "confidence_inputs": [
+        "magnitude do funding rate em relacao a media historica recente",
+        "numero de periodos consecutivos de funding extremo (persistencia)",
+        "divergencia entre o funding extremo e o comportamento real do preco",
+        "open interest crescente durante o desequilibrio, se disponivel (sugere posicionamento ainda se acumulando, nao ja se desfazendo)"
+      ],
+      "limitations": "Funding rate varia por exchange e por instrumento; este playbook nao define uma unica fonte de funding como autoritativa (ver Data quality no contrato de saida). Sem backtest validado; nao ha numero historico de quanto tempo apos um funding extremo a reversao tende a ocorrer documentado neste repositorio."
+    },
+    {
+      "strategy_id": "oi-expansion-trend",
+      "label_ptbr": "Tendencia com Expansao de Open Interest",
+      "summary": "Avalia se um movimento direcional de preco acompanhado de expansao de open interest indica entrada de posicionamento novo (tendencia com 'combustivel' real), em vez de apenas fechamento de posicoes existentes.",
+      "required_data": [
+        "candles OHLC (timeframe da analise)",
+        "open interest (OI) atual e variacao recente (FUTURES/DERIVATIVES DATA)",
+        "volume do periodo, para contexto adicional",
+        "funding rate, como dado complementar (opcional)"
+      ],
+      "market_condition": "Movimento direcional de preco (alta ou baixa) ocorrendo simultaneamente com aumento consistente de open interest no mesmo periodo, sugerindo posicionamento novo entrando no mercado.",
+      "long_criteria": [
+        "Preco subindo enquanto open interest tambem sobe (posicionamento novo entrando comprado)",
+        "Volume do periodo compativel ou acima da media recente, reforcando a leitura de participacao real",
+        "Funding rate nao excessivamente negativo (o que indicaria os longs pagando caro para manter a posicao, sinal de fragilidade)"
+      ],
+      "short_criteria": [
+        "Preco caindo enquanto open interest tambem sobe (posicionamento novo entrando vendido)",
+        "Volume do periodo compativel ou acima da media recente, reforcando a leitura de participacao real",
+        "Funding rate nao excessivamente positivo (o que indicaria os shorts pagando caro para manter a posicao, sinal de fragilidade)"
+      ],
+      "wait_criteria": [
+        "Preco em movimento direcional mas open interest caindo (sugere fechamento de posicoes existentes, nao entrada nova — movimento pode ser mais fragil)",
+        "Open interest e preco sem correlacao clara no periodo analisado",
+        "Dado de open interest indisponivel ou desatualizado"
+      ],
+      "invalidation": "Reversao de preco acompanhada de queda abrupta de open interest, sugerindo que o posicionamento que sustentava o movimento esta sendo desfeito.",
+      "risk_notes": "OI crescente nao garante continuidade — apenas sugere que o movimento tem participacao nova, nao que essa participacao esta certa. Nenhuma ordem e gerada por este runtime.",
+      "confidence_inputs": [
+        "consistencia da correlacao preco-OI ao longo de varios periodos consecutivos (nao apenas um candle isolado)",
+        "magnitude da expansao de OI em relacao a media historica recente",
+        "volume do periodo confirmando a expansao de OI",
+        "funding rate ainda saudavel (nao extremo) durante a expansao"
+      ],
+      "limitations": "Open interest agregado por exchange pode nao representar o mercado inteiro (fragmentacao entre exchanges); este playbook nao consolida multiplas fontes de OI. Sem backtest validado; confianca permanece qualitativa."
+    },
+    {
+      "strategy_id": "volume-profile-mean-reversion",
+      "label_ptbr": "Reversao a Media por Perfil de Volume",
+      "summary": "Avalia se o preco se distanciou significativamente de uma zona de alto volume negociado (point of control / area de valor) o suficiente para favorecer uma leitura de retorno a essa zona.",
+      "required_data": [
+        "candles OHLC (timeframe da analise)",
+        "perfil de volume do periodo de referencia (zonas de maior volume negociado / point of control), quando disponivel",
+        "distancia atual do preco em relacao a zona de maior volume",
+        "volatilidade recente (ex.: desvio padrao) para calibrar o que conta como 'distancia significativa'"
+      ],
+      "market_condition": "Preco afastado de uma zona de alto volume negociado identificavel (point of control ou area de valor), sem um catalisador direcional claro sustentando o afastamento.",
+      "long_criteria": [
+        "Preco abaixo da zona de alto volume de referencia, a uma distancia maior que a variacao tipica recente (ex.: multiplos desvios padrao)",
+        "Nenhuma confirmacao de tendencia nova sustentando o afastamento (ver trend-continuation/breakout-confirmation para a leitura alternativa)",
+        "Candles recentes mostrando perda de momentum na direcao do afastamento (ex.: corpos menores, pavios de rejeicao)"
+      ],
+      "short_criteria": [
+        "Preco acima da zona de alto volume de referencia, a uma distancia maior que a variacao tipica recente (ex.: multiplos desvios padrao)",
+        "Nenhuma confirmacao de tendencia nova sustentando o afastamento (ver trend-continuation/breakout-confirmation para a leitura alternativa)",
+        "Candles recentes mostrando perda de momentum na direcao do afastamento (ex.: corpos menores, pavios de rejeicao)"
+      ],
+      "wait_criteria": [
+        "Preco proximo da zona de alto volume (pouco ou nenhum afastamento para reverter)",
+        "Perfil de volume indisponivel para o periodo de referencia",
+        "Afastamento presente mas acompanhado de confirmacao de tendencia nova (caso em que outra estrategia do playbook se aplica melhor)"
+      ],
+      "invalidation": "Preco continua se afastando da zona de alto volume com momentum crescente, sem sinal de rejeicao, o que sugere tendencia real em vez de extensao a ser revertida.",
+      "risk_notes": "Mercados em tendencia forte podem se afastar de zonas de volume historico por longos periodos sem reverter; esta leitura assume regime de mean-reversion, que nem sempre se aplica. Nenhuma ordem e gerada por este runtime.",
+      "confidence_inputs": [
+        "magnitude do afastamento em relacao a volatilidade recente (mais desvios padrao de distancia = tag mais alta, dentro de limites razoaveis)",
+        "presenca de sinais de perda de momentum nos candles mais recentes",
+        "clareza/qualidade do dado de perfil de volume disponivel",
+        "ausencia de confirmacao de tendencia nova sustentando o afastamento"
+      ],
+      "limitations": "Perfil de volume detalhado por preco pode nao estar disponivel em todas as fontes de dados deste runtime (ver Data quality no contrato de saida); quando ausente, a leitura degrada para uma aproximacao usando apenas distancia estatistica (desvio padrao/z-score) do AnalysisFrame real. Sem backtest validado; confianca e sempre qualitativa."
+    },
+    {
+      "strategy_id": "support-resistance-retest",
+      "label_ptbr": "Retest de Suporte/Resistencia",
+      "summary": "Avalia se o retorno do preco a um nivel de suporte ou resistencia ja validado anteriormente (retest) oferece uma leitura direcional com base no comportamento historico daquele nivel.",
+      "required_data": [
+        "candles OHLC (timeframe da analise)",
+        "nivel de suporte/resistencia previamente identificado e validado (pelo menos um toque anterior relevante)",
+        "comportamento do preco nas aproximacoes anteriores desse nivel",
+        "volume relativo na aproximacao atual ao nivel (opcional)"
+      ],
+      "market_condition": "Preco retornando a um nivel de suporte ou resistencia que ja reagiu de forma identificavel em pelo menos uma ocasiao anterior no historico recente.",
+      "long_criteria": [
+        "Preco se aproximando de um nivel de suporte que ja gerou reacao de alta anteriormente",
+        "Candles de aproximacao mostrando desaceleracao (corpos menores, pavios inferiores) perto do nivel",
+        "Nenhum fechamento abaixo do nivel durante a aproximacao atual"
+      ],
+      "short_criteria": [
+        "Preco se aproximando de um nivel de resistencia que ja gerou reacao de queda anteriormente",
+        "Candles de aproximacao mostrando desaceleracao (corpos menores, pavios superiores) perto do nivel",
+        "Nenhum fechamento acima do nivel durante a aproximacao atual"
+      ],
+      "wait_criteria": [
+        "Nivel ainda nao tem historico de reacao suficiente para ser considerado validado (apenas um toque, sem reacao clara)",
+        "Preco se aproxima do nivel com momentum forte e sem desaceleracao (maior chance de rompimento que de retest — ver breakout-confirmation)",
+        "Distancia atual do preco ao nivel ainda grande, retest nao iminente"
+      ],
+      "invalidation": "Fechamento que rompe o nivel testado, contrariando o comportamento historico esperado — nesse caso, reavaliar como possivel breakout-confirmation em vez de retest.",
+      "risk_notes": "Niveis que reagiram no passado nao tem garantia de reagir novamente; numero de toques anteriores e contexto de tendencia maior alteram a confiabilidade do nivel. Nenhuma ordem e gerada por este runtime.",
+      "confidence_inputs": [
+        "numero de reacoes historicas validas anteriores no mesmo nivel",
+        "consistencia do tipo de reacao (sempre na mesma direcao) nas ocasioes anteriores",
+        "presenca de desaceleracao de momentum na aproximacao atual",
+        "alinhamento do retest com a tendencia maior (retest a favor da tendencia tende a ser leitura mais robusta que contra a tendencia)"
+      ],
+      "limitations": "Identificacao de 'o mesmo nivel' depende de tolerancia de preco (niveis raramente repetem exatamente); este playbook nao define uma largura de zona fixa, fica a criterio da leitura no momento da analise. Sem backtest validado; confianca e sempre qualitativa."
+    },
+    {
+      "strategy_id": "multi-timeframe-confluence",
+      "label_ptbr": "Confluencia Multi-Timeframe",
+      "summary": "Avalia se a leitura direcional de um timeframe menor esta alinhada com a estrutura de um timeframe maior, usando essa confluencia como reforco (ou contraindicacao) da leitura.",
+      "required_data": [
+        "candles OHLC de pelo menos dois timeframes distintos (ex.: timeframe de entrada e timeframe de contexto maior)",
+        "estrutura de tendencia/range identificada em cada timeframe (ver trend-continuation/range-rotation para os criterios base)",
+        "niveis de suporte/resistencia relevantes em cada timeframe"
+      ],
+      "market_condition": "Setup direcional identificavel no timeframe menor (de entrada), com o timeframe maior (de contexto) disponivel para checagem de alinhamento ou conflito.",
+      "long_criteria": [
+        "Setup de leitura LONG identificado no timeframe de entrada (por qualquer outra estrategia deste playbook)",
+        "Timeframe de contexto maior tambem em estrutura de alta ou neutra (nao em tendencia de baixa clara)",
+        "Nivel de suporte do timeframe maior proximo o suficiente para servir de referencia de invalidacao adicional"
+      ],
+      "short_criteria": [
+        "Setup de leitura SHORT identificado no timeframe de entrada (por qualquer outra estrategia deste playbook)",
+        "Timeframe de contexto maior tambem em estrutura de baixa ou neutra (nao em tendencia de alta clara)",
+        "Nivel de resistencia do timeframe maior proximo o suficiente para servir de referencia de invalidacao adicional"
+      ],
+      "wait_criteria": [
+        "Setup do timeframe de entrada em conflito direto com a estrutura do timeframe maior (ex.: LONG no timeframe menor durante tendencia de baixa clara no maior)",
+        "Timeframe de contexto maior indisponivel ou com historico insuficiente para avaliacao",
+        "Nenhum setup de entrada identificado no timeframe menor para checar confluencia"
+      ],
+      "invalidation": "Mesma invalidacao da estrategia de entrada usada no timeframe menor, reforcada negativamente se o timeframe maior tambem virar contra a leitura.",
+      "risk_notes": "Esta estrategia e um filtro de reforco/contraindicacao sobre outra leitura, nao uma estrategia independente — sempre depende de um setup base de outra entrada deste playbook. Nenhuma ordem e gerada por este runtime.",
+      "confidence_inputs": [
+        "grau de alinhamento entre timeframe de entrada e timeframe de contexto (alinhamento total = tag mais alta, conflito parcial reduz a tag)",
+        "qualidade/confianca do setup base no timeframe de entrada (herda confidence_inputs da estrategia de origem)",
+        "proximidade de niveis relevantes do timeframe maior que reforcem a invalidacao",
+        "numero de timeframes adicionais (alem dos dois minimos) que tambem concordam, quando avaliados"
+      ],
+      "limitations": "Quanto mais timeframes exigidos para concordar, menor a frequencia de setups validos — ha uma troca explicita entre robustez e raridade do sinal. Sem backtest validado; nenhuma frequencia historica de concordancia multi-timeframe e afirmada neste repositorio."
+    },
+    {
+      "strategy_id": "high-volatility-no-trade",
+      "label_ptbr": "Alta Volatilidade — Sem Trade",
+      "summary": "Identifica condicoes de volatilidade anormalmente alta ou dados inconsistentes/insuficientes em que a leitura responsavel e WAIT por definicao, independente de qualquer outro criterio direcional parecer presente.",
+      "required_data": [
+        "candles OHLC recentes (para medir volatilidade via desvio padrao/z-score, ja disponivel no AnalysisFrame real)",
+        "comparacao da volatilidade atual com a volatilidade tipica recente do mesmo instrumento",
+        "data quality flags de qualquer outra fonte usada na analise (ver EVIDENCE no contrato de saida)"
+      ],
+      "market_condition": "Volatilidade recente (ex.: desvio padrao, amplitude de candle) significativamente acima do tipico para o instrumento/timeframe, ou qualidade de dados insuficiente para qualquer leitura direcional responsavel — tipicamente em torno de eventos de noticia, baixa liquidez extrema, ou falha de fonte de dados.",
+      "long_criteria": [
+        "Nao aplicavel por definicao — esta estrategia nunca produz leitura LONG. Sua existencia e justamente impedir leituras direcionais quando a condicao abaixo (wait_criteria) se aplica."
+      ],
+      "short_criteria": [
+        "Nao aplicavel por definicao — esta estrategia nunca produz leitura SHORT. Sua existencia e justamente impedir leituras direcionais quando a condicao abaixo (wait_criteria) se aplica."
+      ],
+      "wait_criteria": [
+        "Volatilidade recente (desvio padrao/amplitude) acima de um multiplo claro da volatilidade tipica recente do instrumento",
+        "Z-score do preco em relacao a media recente em territorio extremo, sugerindo movimento atipico ainda nao digerido pela estrutura",
+        "Qualquer dado obrigatorio para as outras estrategias deste playbook ausente, desatualizado ou marcado como baixa qualidade",
+        "Gap de preco anormal entre candles consecutivos sem explicacao de dados disponivel"
+      ],
+      "invalidation": "Nao aplicavel no sentido tradicional — a 'saida' desta leitura e a normalizacao da volatilidade e/ou o restabelecimento de dados completos e atuais, momento em que outra estrategia do playbook passa a ser avaliavel.",
+      "risk_notes": "Esta e a estrategia de protecao do playbook: existe para que ROTA C — WAIT/NO TRADE (ver docs/ANALYSIS_OUTPUT_CONTRACT.md) seja sempre uma saida legitima e honesta, nunca um afterthought. Forcar uma leitura LONG/SHORT em alta volatilidade ou dados ruins e o erro que esta estrategia existe para prevenir. Nenhuma ordem e gerada por este runtime em nenhum cenario.",
+      "confidence_inputs": [
+        "magnitude do desvio de volatilidade em relacao ao tipico (quanto maior o desvio, mais forte a justificativa para WAIT)",
+        "numero de campos de dados obrigatorios ausentes ou de baixa qualidade",
+        "presenca de gaps de preco anormais sem explicacao"
+      ],
+      "limitations": "Definir 'tipico' para volatilidade exige uma janela de referencia historica, que pode variar por instrumento e regime de mercado; este playbook nao fixa um numero universal. Esta e a unica estrategia do conjunto cujo proposito explicito e produzir WAIT, nunca LONG ou SHORT — isso e intencional, nao uma lacuna de design."
+    }
+  ]
+}

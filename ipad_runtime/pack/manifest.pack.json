@@ -1,0 +1,33 @@
+{
+  "package": "AR10_CYBORG_LOCAL_PACK_V1",
+  "format": "AR10PACK_JSON_V1",
+  "format_note": "Container JSON UTF-8 (nao ZIP, nao executavel). Ver README.md > 'Por que JSON e nao ZIP'.",
+  "target_runtime": "SAFARI_IPAD",
+  "schema_version": 1,
+  "pack_version": "1.0.0",
+  "contents": [
+    {
+      "path": "wasm/cyborg_quant_core.wasm",
+      "kind": "WASM_QUANT_ENGINE",
+      "role": "Indicadores read-only (SMA/EMA/STDDEV/Z-SCORE). Sem funcao de ordem ou execucao.",
+      "source": "Rust -> wasm32-unknown-unknown, ver wasm-src/cyborg_quant_core/"
+    },
+    {
+      "path": "data/btcusdt_replay.json",
+      "kind": "REPLAY_DATASET",
+      "role": "Dataset sintetico offline BTC/USDT para demonstracao do replay local.",
+      "live": false,
+      "exchange_connection": "NONE"
+    }
+  ],
+  "security_posture": {
+    "execution": "DISABLED",
+    "order_send": "ABSENT",
+    "api_secret": "ABSENT",
+    "mexc_private_endpoint": "ABSENT",
+    "mt5_bridge": "ABSENT",
+    "live_trading": "DISABLED",
+    "mode": "READ_ONLY",
+    "fail_closed": true
+  }
+}
