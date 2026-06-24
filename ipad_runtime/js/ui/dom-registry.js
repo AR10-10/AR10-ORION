@@ -27,7 +27,7 @@ const ELEMENT_IDS = [
     'vl-storage-used', 'vl-storage-quota', 'vl-safety', 'vl-repair',
     'dp-realmode', 'dp-analysis', 'export-list',
     'rdl-connector-grid', 'rdl-active-source', 'rdl-connector-session-note', 'real-data-import-input',
-    'bl-price-row', 'bl-current-price', 'bl-price-delta-badge', 'bl-current-source', 'bl-current-freshness', 'bl-current-mode',
+    'bl-price-row', 'bl-current-price', 'bl-price-delta-badge', 'bl-current-source', 'bl-current-freshness', 'bl-current-mode', 'bl-current-latency',
     'bl-snapshot-price', 'bl-snapshot-time', 'bl-snapshot-age', 'bl-price-diff',
     'bl-route-long-grid', 'bl-route-short-grid', 'bl-reanalyze-banner', 'bl-btn-refresh-now',
     'sr-resistance-2', 'sr-resistance-1', 'sr-current-price', 'sr-support-1', 'sr-support-2',

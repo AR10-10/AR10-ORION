@@ -17,6 +17,7 @@
     --short-red: #FF3E52;
     --sys-cyan: #00F2FF;
     --alert-amber: #FFB800;
+    --info-blue: #338DF6;
 
     --bg-void: #000000;
     --metal-hi: rgba(18, 22, 26, 0.88);
@@ -300,6 +301,7 @@ section.card h2 .step {
 .v-limited { color: var(--alert-amber); text-shadow: 0 0 8px rgba(255,184,0,0.5); }
 .v-pending { color: var(--text-dim); }
 .v-info { color: var(--sys-cyan); }
+.v-blue { color: var(--info-blue); text-shadow: 0 0 8px rgba(51,141,246,0.5); }
 
 /* ------------------------------------------------------------
    BOTOES DE ACAO — runtime local

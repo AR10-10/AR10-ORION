@@ -739,7 +739,7 @@ function renderResearchEngineFrame(frame) {
 // CSV, reidratar sessao) e pelo auto-refresh silencioso mais abaixo.
 function getLivePriceInfo() {
     if (!activeRealEvidence || !activeRealEvidence.ticker || typeof activeRealEvidence.ticker.last_price !== 'number') {
-        return { value: DADOS_INSUFICIENTES, mode: DADOS_INSUFICIENTES, source: DADOS_INSUFICIENTES };
+        return { value: DADOS_INSUFICIENTES, mode: DADOS_INSUFICIENTES, source: DADOS_INSUFICIENTES, latency_ms: DADOS_INSUFICIENTES };
     }
     const active = realDataRegistry.getActiveReadOnlySources();
     const entry = active.find((a) => a.connector_id === activeRealEvidence.source_id);
@@ -749,7 +749,14 @@ function getLivePriceInfo() {
     else if (entry && realDataRegistry.isStale(entry)) mode = 'STALE';
     else if (entry) mode = 'REAL_READ_ONLY';
     else mode = DADOS_INSUFICIENTES;
-    return { value: activeRealEvidence.ticker.last_price, mode, source: activeRealEvidence.source_name };
+    // latency_ms e' o elapsed_ms real medido pela sonda de rede (probe.js) e
+    // guardado em sessionState por registry.js — nunca estimado/decorativo;
+    // DADOS_INSUFICIENTES quando o preco vivo vem de memoria/historico, nao
+    // de uma sonda de rede desta sessao (historical, ou sem entry ativo).
+    const latencyMs = (!historical && entry && entry.probe_detail && typeof entry.probe_detail.elapsed_ms === 'number')
+        ? entry.probe_detail.elapsed_ms
+        : DADOS_INSUFICIENTES;
+    return { value: activeRealEvidence.ticker.last_price, mode, source: activeRealEvidence.source_name, latency_ms: latencyMs };
 }
 
 function formatSignedNumber(v, decimals = 2) {
@@ -804,6 +811,11 @@ function renderTargetTracker(tracker, livePriceInfo) {
     if (els['bl-current-mode']) {
         els['bl-current-mode'].textContent = mode;
         els['bl-current-mode'].className = `value ${mode === 'REAL_READ_ONLY' ? 'v-ok' : (mode === 'DADOS_INSUFICIENTES' ? 'v-fail' : 'v-limited')}`;
+    }
+    if (els['bl-current-latency']) {
+        const latencyMs = livePriceInfo ? livePriceInfo.latency_ms : DADOS_INSUFICIENTES;
+        els['bl-current-latency'].textContent = typeof latencyMs === 'number' ? `${latencyMs} ms` : DADOS_INSUFICIENTES;
+        els['bl-current-latency'].className = `value ${typeof latencyMs === 'number' ? 'v-blue' : 'v-pending'}`;
     }
 
     if (els['bl-snapshot-price']) els['bl-snapshot-price'].textContent = fmt(tracker.snapshot_price);

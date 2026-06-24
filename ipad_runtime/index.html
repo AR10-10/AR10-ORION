@@ -73,6 +73,7 @@
       <div class="status-row"><span class="label">Fonte</span><span class="value v-pending" id="bl-current-source">…</span></div>
       <div class="status-row"><span class="label">Atualizado</span><span class="value v-pending" id="bl-current-freshness">…</span></div>
       <div class="status-row"><span class="label">Modo</span><span class="value v-pending" id="bl-current-mode">…</span></div>
+      <div class="status-row"><span class="label">Latência</span><span class="value v-pending" id="bl-current-latency" title="Tempo de resposta real da última sonda de rede desta sessão">…</span></div>
     </div>
 
     <div class="data-sufficiency-block" id="bl-snapshot-block">
@@ -170,6 +171,21 @@
       </div>
     </div>
   </section><!-- /.action-strip -->
+
+  <!-- Selo de seguranca/runtime movido para logo apos a action-strip (era o
+       ultimo bloco do documento) para ficar visivel dentro da 1a tela, sem
+       precisar rolar — pura realocacao de posicao, nenhum id/estilo mudou. -->
+  <div class="law-badges">
+    <span class="law-badge" id="badge-mode">IPAD DIRECT / LOCAL-FIRST</span>
+    <span class="law-badge">READ_ONLY</span>
+    <span class="law-badge">FAIL_CLOSED</span>
+    <span class="law-badge is-ok">Execution Lock: ACTIVE</span>
+    <span class="law-badge is-blocked">Private Keys: DISABLED</span>
+    <span class="law-badge is-blocked">Live Trading: BLOCKED</span>
+    <span class="law-badge">Safari Edge: LOCAL_AUX</span>
+    <span class="law-badge">Telegram: PLANNED_AUX</span>
+  </div>
+  <p class="law-tagline">🔒 SISTEMA 100% SEGURO · READ_ONLY · SEM EXECUÇÃO · SEM ORDENS · SEM CHAVES · SEM CORRETORAS</p>
 
   <!-- ANALYTICS ROW — Target Tracker / Rota Recomendada / Matriz de Dados,
        sempre depois da acao, nunca dentro de um card de cockpit. Mesmo
@@ -743,18 +759,6 @@
       <div class="activity-log-list" id="al-list"></div>
     </div>
   </section>
-
-  <div class="law-badges">
-    <span class="law-badge" id="badge-mode">IPAD DIRECT / LOCAL-FIRST</span>
-    <span class="law-badge">READ_ONLY</span>
-    <span class="law-badge">FAIL_CLOSED</span>
-    <span class="law-badge is-ok">Execution Lock: ACTIVE</span>
-    <span class="law-badge is-blocked">Private Keys: DISABLED</span>
-    <span class="law-badge is-blocked">Live Trading: BLOCKED</span>
-    <span class="law-badge">Safari Edge: LOCAL_AUX</span>
-    <span class="law-badge">Telegram: PLANNED_AUX</span>
-  </div>
-  <p class="law-tagline">🔒 SISTEMA 100% SEGURO · READ_ONLY · SEM EXECUÇÃO · SEM ORDENS · SEM CHAVES · SEM CORRETORAS</p>
 
   <footer class="legal">
     AR10 Cyborg 1.0 PRO · READ_ONLY / FAIL_CLOSED · Local-first · Sem live trading · v1.0.0-pro
