@@ -7,9 +7,9 @@ neste repositório) e rotas alternativas manuais.
 ## Rota principal: GitHub Pages via GitHub Actions
 
 `.github/workflows/deploy-ipad-pwa.yml` publica a pasta `ipad_runtime/` como
-site do GitHub Pages a cada push em `main` ou `claude/eloquent-cannon-qyt86y`
-que toque `ipad_runtime/**` (ou via execução manual em Actions →
-"Deploy iPad Runtime (GitHub Pages)" → Run workflow).
+site do GitHub Pages a cada push em `main` que toque `ipad_runtime/**` (ou
+via execução manual em Actions → "Deploy iPad Runtime (GitHub Pages)" →
+Run workflow).
 
 URL resultante (padrão GitHub Pages para repositório de organização/usuário):
 

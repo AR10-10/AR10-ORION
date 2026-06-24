@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - claude/eloquent-cannon-qyt86y
     paths:
       - 'ipad_runtime/**'
       - '.github/workflows/deploy-ipad-pwa.yml'
