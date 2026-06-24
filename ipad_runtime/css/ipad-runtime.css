@@ -246,9 +246,9 @@ section.card {
     -webkit-backdrop-filter: blur(20px) saturate(140%);
     border: 1px solid var(--line-cyan);
     border-top-color: rgba(0, 242, 255, 0.3);
-    border-radius: 16px;
-    padding: 16px;
-    margin-bottom: 16px;
+    border-radius: 14px;
+    padding: 13px 14px;
+    margin-bottom: 12px;
     box-shadow: inset 0 0 18px rgba(0, 242, 255, 0.04), 0 10px 30px rgba(0, 0, 0, 0.35);
 }
 
@@ -259,7 +259,7 @@ section.card h2 {
     letter-spacing: 2px;
     text-transform: uppercase;
     color: var(--sys-cyan);
-    margin: 0 0 12px;
+    margin: 0 0 9px;
     text-shadow: 0 0 8px rgba(0, 242, 255, 0.3);
     display: flex;
     align-items: center;
@@ -276,15 +276,15 @@ section.card h2 .step {
    ------------------------------------------------------------ */
 .status-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 8px 16px;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 280px));
+    gap: 5px 14px;
 }
 .status-row {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     border-bottom: 1px solid rgba(0, 242, 255, 0.08);
-    padding-bottom: 6px;
+    padding-bottom: 4px;
     font-size: clamp(0.78rem, 1.8vw, 0.95rem);
     gap: 10px;
 }
@@ -893,6 +893,13 @@ footer.legal {
 .cyborg-executive-panel {
     border-color: rgba(0, 242, 255, 0.28);
     box-shadow: inset 0 0 18px rgba(0, 242, 255, 0.06), 0 10px 30px rgba(0, 0, 0, 0.35);
+    /* .hero-row estica este card para casar a altura do BTC Live/orbe
+       (align-items: stretch, intencional para o trio do cockpit) — sem
+       isso o excesso de altura vira espaco morto fixo no rodape do card;
+       com flex column + .ex-hero{flex:1} abaixo, o excesso e' absorvido
+       e centralizado nas linhas de status em vez de "sobrar" no fim. */
+    display: flex;
+    flex-direction: column;
 }
 .cyborg-executive-panel h2 {
     color: var(--sys-cyan);
@@ -943,8 +950,8 @@ footer.legal {
 
 .analysis-frame-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 8px 14px;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 220px));
+    gap: 6px 12px;
     margin-top: 4px;
 }
 .analysis-frame-grid .af-row {
@@ -1500,6 +1507,11 @@ footer.legal {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 18px;
+        /* start, nao stretch (default do grid): cada card fica do tamanho
+           do proprio conteudo — Rota Recomendada (curto) nao deve esticar
+           ate a altura do Target Tracker (longo) so' para "casar" a linha,
+           senao vira a mesma "wasted whitespace" que o status-grid tinha. */
+        align-items: start;
     }
 }
 
@@ -1795,6 +1807,8 @@ section.card[tabindex]:focus-visible {
 .ex-hero {
     display: flex;
     flex-direction: column;
+    flex: 1;
+    justify-content: center;
     margin: 4px 0 14px;
 }
 .ex-hero-row { border-bottom: none; margin-bottom: 10px; }

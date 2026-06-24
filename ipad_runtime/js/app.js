@@ -38,7 +38,7 @@ import { getSafariEdgeStatusReport } from './edge/safari-edge-status.js';
 import { getTelegramAuxStatusReport } from './aux/telegram-aux-status.js';
 import * as hydrationManager from './hydration/hydration-manager.js';
 import { els } from './ui/dom-registry.js';
-import { log, classFor, setStatus, setInfo, setStatusWithClass, MACRO_STATE_CLASS, setMacroStatus } from './ui/ui-helpers.js';
+import { log, setStatus, setInfo, setStatusWithClass, setMacroStatus } from './ui/ui-helpers.js';
 import * as liveTicker from './ui/live-ticker.js';
 
 const PROFILES = {
@@ -103,8 +103,6 @@ let rehydratedActiveSourceId = null;
 let lastHydrationReport = null;
 let lastSourceHealthReport = null;
 let lastCommanderSoldierStatus = null;
-let lastLocalIntelligenceResult = null;
-let lastReflectionReport = null;
 let lastSafariEdgeStatus = null;
 let lastTelegramAuxStatus = null;
 let lastHydrationEngineStatus = null;
@@ -1249,7 +1247,6 @@ async function computeAndRenderLocalIntelligence() {
         riskGateConfig: lastRiskGateConfig,
         symbol: frame ? frame.symbol : null,
     });
-    lastLocalIntelligenceResult = result;
     renderLocalIntelligenceCard(result);
     return result;
 }
@@ -1273,7 +1270,6 @@ async function handleRunReflection() {
     try {
         const paperSummary = await paperTrading.getPaperSummary();
         const report = await buildAndRecordReflectionReport({ riskGateConfig: lastRiskGateConfig, paperSummary });
-        lastReflectionReport = report;
         renderReflectionReportCard(report);
         log(`Reflection Report gerado: ${report.what_changed}`, 'ok');
         siriform.setSiriformState('success', 'Reflection Report gerado e gravado no Evidence Ledger.');
