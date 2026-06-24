@@ -276,15 +276,23 @@ section.card h2 .step {
    ------------------------------------------------------------ */
 .status-grid {
     display: grid;
+    /* max fixo em 280px (em vez de 1fr): testado e revertido um max flexivel
+       aqui — varios .value sao tokens UPPER_SNAKE_CASE sem espaco
+       (FUTURE_NATIVE_COMPANION, UNSUPPORTED_ON_IPAD, BLOCKED_BY_CORS...),
+       que nao tem onde quebrar linha; em coluna mais estreita eles vazam
+       em vez de quebrar. 280px e' o suficiente pro token mais longo + label
+       numa linha so, entao o auto-fit conta 1 coluna nos cards de ~480px do
+       .advanced-section (column-count:2) — largura real do conteudo, nao
+       espaco morto. */
     grid-template-columns: repeat(auto-fit, minmax(200px, 280px));
-    gap: 5px 14px;
+    gap: 4px 14px;
 }
 .status-row {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     border-bottom: 1px solid rgba(0, 242, 255, 0.08);
-    padding-bottom: 4px;
+    padding-bottom: 3px;
     font-size: clamp(0.78rem, 1.8vw, 0.95rem);
     gap: 10px;
 }
@@ -932,8 +940,8 @@ footer.legal {
 .onboarding-hint {
     font-size: 0.78rem;
     color: var(--text-dim);
-    margin: -4px 0 12px;
-    line-height: 1.5;
+    margin: -4px 0 9px;
+    line-height: 1.42;
 }
 .onboarding-hint b { color: var(--sys-cyan); font-weight: bold; }
 
@@ -1023,7 +1031,7 @@ footer.legal {
 .route-block {
     border-left: 3px solid var(--line-cyan);
     padding-left: 12px;
-    margin: 14px 0;
+    margin: 11px 0;
 }
 .route-block h3 {
     margin: 0 0 8px;
@@ -1066,7 +1074,7 @@ footer.legal {
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.08);
     overflow: hidden;
-    margin: 10px 0 2px;
+    margin: 8px 0 2px;
 }
 .progress-fill {
     height: 100%;
