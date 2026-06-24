@@ -920,6 +920,60 @@ async function handleTestRealSources() {
     }
 }
 
+// Auto-sonda de fontes reais no boot — READ_ONLY, sem chave, dentro da mesma
+// CSP connect-src dos conectores publicos. Categoria diferente de instalar o
+// pacote local (.ar10pack continua so' sob toque explicito em "Preparar"):
+// aqui e' so' LEITURA publica de mercado, para a 1a tela ja' abrir com
+// BTC/USDT real ao vivo em vez de DADOS_INSUFICIENTES ate o usuario achar um
+// botao. Reusa exatamente a maquina de sonda de handleTestRealSources (mesma
+// probeAllNetworkSources, mesma persistencia, mesmo auto-AnalysisFrame), so'
+// que NAO decide a mensagem final do Siriform — quem decide e' o boot(), para
+// a auto-sonda nunca apagar o aviso "toque em Preparar" numa primeira visita.
+// Nunca lanca e nunca abre rota de execucao: falha de rede vira o mesmo
+// DADOS_INSUFICIENTES honesto dos paineis, igual ao caminho manual.
+async function bootAutoProbeRealSources() {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        log('Auto-sonda de fontes reais (boot): dispositivo offline — mantendo último estado conhecido.', 'dim');
+        return false;
+    }
+    log('=== AUTO-SONDA DE FONTES REAIS (BOOT, READ_ONLY) ===', 'info');
+    try {
+        const results = await realDataRegistry.probeAllNetworkSources({
+            symbol: 'BTC',
+            onTransition: (id, state) => {
+                log(`Conector ${id}: ${state}`, state === 'ACTIVE_READ_ONLY' ? 'ok' : (state === 'PROBING' ? 'dim' : 'warn'));
+                renderConnectorGrid();
+            },
+        });
+        for (const r of results) await persistProbeResult(r);
+        renderConnectorGrid();
+        refreshDataPolicyPanel();
+        await renderSourceHealthCard();
+
+        const active = results.find((r) => r.state === 'ACTIVE_READ_ONLY');
+        if (!active) {
+            log('Auto-sonda (boot): nenhuma fonte real respondeu agora — DADOS_INSUFICIENTES (toque em "Atualizar preço agora" para tentar de novo).', 'warn');
+            return false;
+        }
+        sessionHasRealProbe = true;
+        rehydratedActiveSourceId = null;
+        activeRealEvidence = active.evidence;
+        renderEvidence(activeRealEvidence);
+        refreshHistoricalNotes();
+        const meta = realDataRegistry.getConnectorMeta(active.connector_id);
+        log(`Auto-sonda (boot): fonte real ativa nesta sessão — ${meta ? meta.connector_name : active.connector_id}.`, 'ok');
+        if (!lastRealAnalysisFrame || lastRealAnalysisFrame.status !== 'OK') {
+            await handleGenerateRealAnalysis();
+        } else {
+            refreshTargetTracker();
+        }
+        return true;
+    } catch (err) {
+        log(`Auto-sonda de fontes reais (boot) falhou, mantendo estado seguro: ${err.message}`, 'warn');
+        return false;
+    }
+}
+
 // Nucleo compartilhado entre o botao "Atualizar dados reais" (silent=false,
 // log e voz do Siriform) e o auto-refresh silencioso do BTC Live Panel
 // (silent=true, mais abaixo) — reproba so' a(s) fonte(s) ja ACTIVE_READ_ONLY
@@ -1057,6 +1111,16 @@ async function handleGenerateRealAnalysis() {
         refreshHistoricalNotes();
         refreshTargetTracker();
 
+        // Encadeia a leitura local (rotulo final + gauge de confianca do hero)
+        // na mesma passada — assim o hero nunca fica em DADOS_INSUFICIENTES com
+        // o resto da tela ja' preenchido. Falha aqui nunca derruba o
+        // AnalysisFrame que ja' foi calculado e renderizado acima.
+        try {
+            await computeAndRenderLocalIntelligence();
+        } catch (liErr) {
+            log(`Local Intelligence automático falhou (AnalysisFrame preservado): ${liErr.message}`, 'warn');
+        }
+
         if (frame.status === 'OK') {
             log(`AnalysisFrame real OK — ${frame.candles_count} candles, último ${frame.last_price}, SMA ${frame.sma}, EMA ${frame.ema}.`, 'ok');
             siriform.setSiriformState('success', 'AnalysisFrame real gerado a partir de candles reais validados.');
@@ -1155,24 +1219,35 @@ function renderReflectionReportCard(report) {
         : 'Nenhum Reflection Report gerado ainda nesta sessão.';
 }
 
+// Nucleo da Local Intelligence sem efeito no Siriform — reusado pelo botao
+// "Rodar análise local" (handleRunLocalIntelligence, com voz/avatar) e pelo
+// auto-encadeamento depois de gerar o AnalysisFrame real (silencioso), para o
+// rotulo final/gauge de confianca do hero saírem de DADOS_INSUFICIENTES junto
+// com o resto da leitura, sem o usuario caçar mais um botao. Math/memoria
+// locais, nunca um sinal nem uma ordem.
+async function computeAndRenderLocalIntelligence() {
+    const frame = buildCalculationFrameInput();
+    const active = realDataRegistry.getActiveReadOnlySources().length > 0;
+    const sourceHealthEntry = (lastSourceHealthReport && frame)
+        ? lastSourceHealthReport.sources.find((s) => s.connector_id === frame.source_id)
+        : null;
+    const result = await runLocalIntelligenceCycle({
+        frame,
+        active,
+        sourceHealthEntry,
+        riskGateConfig: lastRiskGateConfig,
+        symbol: frame ? frame.symbol : null,
+    });
+    lastLocalIntelligenceResult = result;
+    renderLocalIntelligenceCard(result);
+    return result;
+}
+
 async function handleRunLocalIntelligence() {
     siriform.setSiriformState('thinking', 'Rodando Local Intelligence Engine sobre dados já existentes nesta sessão...');
     log('=== RODAR LOCAL INTELLIGENCE ===', 'info');
     try {
-        const frame = buildCalculationFrameInput();
-        const active = realDataRegistry.getActiveReadOnlySources().length > 0;
-        const sourceHealthEntry = (lastSourceHealthReport && frame)
-            ? lastSourceHealthReport.sources.find((s) => s.connector_id === frame.source_id)
-            : null;
-        const result = await runLocalIntelligenceCycle({
-            frame,
-            active,
-            sourceHealthEntry,
-            riskGateConfig: lastRiskGateConfig,
-            symbol: frame ? frame.symbol : null,
-        });
-        lastLocalIntelligenceResult = result;
-        renderLocalIntelligenceCard(result);
+        const result = await computeAndRenderLocalIntelligence();
         log(`Local Intelligence: leitura ${result.score.final_label} (confiança ${result.confidence_label}).`, result.score.final_label === 'BLOQUEADO' ? 'fail' : 'ok');
         siriform.setSiriformState('success', 'Local Intelligence Engine gerou uma leitura local. Não é sinal, não é ordem.');
     } catch (err) {
@@ -2731,6 +2806,26 @@ async function boot() {
         siriform.setSiriformState('idle', 'Instalação local ainda não preparada. Toque em "Preparar / Atualizar Cyborg neste iPad".');
     }
     await refreshExecutiveSummary();
+
+    // Auto-sonda read-only das fontes reais — fora do caminho critico do boot
+    // (nao bloqueia a mensagem "Cyborg pronto" acima nem trava a UI por ate
+    // 8s esperando rede). Quando responde, preenche BTC/Target Tracker/S-R/
+    // Matriz/Long-Short com dado real desta sessao em vez de DADOS_INSUFICIENTES,
+    // e reafirma a mensagem final do avatar (a auto-sonda e o auto-AnalysisFrame
+    // tem mensagens transitorias proprias; esta reafirmacao garante que numa
+    // primeira visita o aviso "toque em Preparar" sempre vence no fim).
+    bootAutoProbeRealSources().then(async (liveDataFound) => {
+        if (!bootMessaged) {
+            if (vault.status === 'READY') {
+                siriform.setSiriformState('success', liveDataFound
+                    ? 'Cyborg pronto neste iPad — fonte real validada, dados ao vivo.'
+                    : 'Cyborg pronto neste iPad.');
+            } else {
+                siriform.setSiriformState('idle', 'Instalação local ainda não preparada. Toque em "Preparar / Atualizar Cyborg neste iPad".');
+            }
+        }
+        await refreshExecutiveSummary();
+    });
 }
 
 boot();
