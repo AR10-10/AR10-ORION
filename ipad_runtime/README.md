@@ -221,14 +221,22 @@ não há nenhum host de terceiros no Content-Security-Policy.
 
 ```
 default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
-img-src 'self' data:; connect-src 'self'; worker-src 'self';
-object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';
+img-src 'self' data:;
+connect-src 'self' https://api.coingecko.com https://api.binance.com
+            https://fapi.binance.com https://api.mexc.com https://contract.mexc.com;
+worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';
+frame-ancestors 'none';
 ```
 
-Isso não é só convenção de código — é o **browser bloqueando em runtime**
-qualquer tentativa futura de `fetch`/`WebSocket` para fora da própria
-origem (logo, sem rota técnica para MEXC private endpoint, MT5, ou qualquer
-"ordem por LLM" via rede), e bloqueia `eval()`/`new Function` por não haver
+O `connect-src` lista **exatamente** os 5 hosts públicos somente-leitura dos
+conectores reais (CoinGecko, Binance Spot/Futures, MEXC Spot/Futures — todos
+`GET` público, sem chave, sem endpoint privado); qualquer host fora dessa
+lista curta é bloqueado pelo browser em runtime. Cada host novo entra aqui
+como diff isolado e revisável (ver `src/research/QUARANTINE.md`), nunca como
+efeito colateral. Isso não é só convenção de código — é o **browser
+bloqueando em runtime** qualquer `fetch`/`WebSocket` para um MEXC private
+endpoint, MT5, ou qualquer "ordem por LLM" via rede (nenhum desses hosts
+está na lista), e bloqueia `eval()`/`new Function` por não haver
 `unsafe-eval` em `script-src`.
 
 ### Vault FAIL_CLOSED real (não é só uma flag salva)
