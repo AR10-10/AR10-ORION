@@ -14,7 +14,7 @@
 // configs/connector-registry.default.json — nao duplicado aqui, para nao
 // criar duas fontes de verdade que podem divergir.
 
-import { CONNECTOR_STATES } from './schema.js';
+import { CONNECTOR_STATES, validateEvidenceShape } from './schema.js';
 import * as coingeckoPublic from './coingecko-public.js';
 import * as binancePublic from './binance-public.js';
 import * as binanceFuturesPublic from './binance-futures-public.js';
@@ -102,6 +102,22 @@ async function runProbe(mod, opts, onTransition) {
             evidence: null,
             probe_detail: { reason: `excecao_nao_tratada_na_sonda:${err.message || err}` },
         };
+    }
+
+    // Segunda checagem independente, fail-closed: mesmo que o conector se
+    // declare ACTIVE_READ_ONLY, a evidencia precisa bater com o contrato de
+    // schema.js. Um conector com bug interno que monte evidencia malformada
+    // nunca deve chegar na UI/Ledger como dado real so' porque ele mesmo se
+    // auto-declarou bem-sucedido.
+    if (result.state === CONNECTOR_STATES.ACTIVE_READ_ONLY) {
+        const shapeCheck = validateEvidenceShape(result.evidence);
+        if (!shapeCheck.valid) {
+            result = {
+                state: CONNECTOR_STATES.BLOCKED_BY_SCHEMA,
+                evidence: null,
+                probe_detail: { reason: `evidencia_fora_do_contrato:${shapeCheck.errors.join(',')}` },
+            };
+        }
     }
 
     const entry = {

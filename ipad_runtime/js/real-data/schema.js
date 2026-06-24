@@ -85,7 +85,8 @@ const REQUIRED_KEYS = Object.freeze([
 ]);
 
 /** Validacao estrutural pura (formato), nao validacao de conteudo de mercado.
- *  Usada por probe.js apos parse e por evaluations.js no self-test. */
+ *  Usada por registry.js (runProbe, fail-closed apos cada sonda real) e por
+ *  evaluations.js no self-test. */
 export function validateEvidenceShape(obj) {
     const errors = [];
     if (!obj || typeof obj !== 'object') return { valid: false, errors: ['evidence_nao_e_objeto'] };

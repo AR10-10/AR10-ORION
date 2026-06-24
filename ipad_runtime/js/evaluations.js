@@ -11,6 +11,7 @@
 import * as voice from './voice.js';
 import * as siriform from './siriform.js';
 import { MARKET_DATA_POLICY, realMarketAnalysisStatus } from './data-policy.js';
+import { createEmptyEvidence, validateEvidenceShape } from './real-data/schema.js';
 
 function check(group, name, pass, detail) {
     return { group, name, pass: !!pass, detail: String(detail) };
@@ -99,6 +100,13 @@ function evalDataPolicy() {
     const status = realMarketAnalysisStatus();
     results.push(check(group, 'analise de mercado real reporta DADOS INSUFICIENTES', status.available === false && status.status === 'DADOS INSUFICIENTES', `status=${status.status}`));
     results.push(check(group, 'dataset de diagnostico marcado como nao-acionavel', MARKET_DATA_POLICY.diagnostic_mode.usable_for_market_decision === false, `usable_for_market_decision=${MARKET_DATA_POLICY.diagnostic_mode.usable_for_market_decision}`));
+
+    const emptyEvidence = createEmptyEvidence({ source_id: 'self_test', source_name: 'self_test', endpoint_kind: 'self_test', symbol: 'SELF_TEST', instrument_type: 'crypto_spot' });
+    const shapeOk = validateEvidenceShape(emptyEvidence);
+    results.push(check(group, 'Evidence Object vazio bate com o contrato de schema.js', shapeOk.valid, shapeOk.valid ? 'shape ok' : shapeOk.errors.join(',')));
+    const shapeRejectsEmpty = validateEvidenceShape({});
+    results.push(check(group, 'validador rejeita objeto malformado', shapeRejectsEmpty.valid === false, 'objeto {} deve falhar'));
+
     return results;
 }
 

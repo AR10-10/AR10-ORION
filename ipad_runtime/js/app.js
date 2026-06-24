@@ -22,7 +22,6 @@ import { rehydrateSession } from './memory/session-resume.js';
 import * as eventBus from './core/event-bus.js';
 import * as eventLog from './memory/event-log.js';
 import { getCommanderSoldierStatus } from './core/commander-soldier.js';
-import * as dataModeLabels from './core/data-mode-labels.js';
 import * as snapshotManager from './memory/snapshot-manager.js';
 import * as recoveryReport from './memory/recovery-report.js';
 import * as hydrationReport from './memory/hydration-report.js';
