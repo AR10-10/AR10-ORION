@@ -900,6 +900,15 @@ async function handleTestRealSources() {
             const meta = realDataRegistry.getConnectorMeta(active.connector_id);
             log(`Fonte real ativa nesta sessão: ${meta ? meta.connector_name : active.connector_id}.`, 'ok');
             siriform.setSiriformState('success', `Fonte real validada: ${meta ? meta.connector_name : active.connector_id}.`);
+            // Bootstrap automatico do 1o AnalysisFrame real desta sessao — sem isso
+            // o usuario precisa achar "Gerar AnalysisFrame real" no Modo avancado
+            // so' para sair de DADOS_INSUFICIENTES no Target Tracker/S-R/Matriz.
+            // So' dispara se ainda nao ha snapshot OK: depois da 1a vez, o
+            // snapshot fica fixo de proposito (Target Tracker compara live vs.
+            // snapshot) e so' muda de novo quando o usuario pedir reanalise.
+            if (!lastRealAnalysisFrame || lastRealAnalysisFrame.status !== 'OK') {
+                await handleGenerateRealAnalysis();
+            }
         } else {
             log('Nenhum conector real ficou ACTIVE_READ_ONLY nesta sondagem — DADOS_INSUFICIENTES.', 'warn');
             siriform.setSiriformState('warning', 'Nenhuma fonte real pôde ser validada agora. DADOS_INSUFICIENTES.');
@@ -2000,6 +2009,13 @@ async function renderSafariEdgeCard() {
     setStatus('se-soldier-validation', status.soldier_validation);
 }
 
+let safariEdgeTimer = null;
+
+function startSafariEdgeAutoRefresh() {
+    if (safariEdgeTimer) return;
+    safariEdgeTimer = setInterval(renderSafariEdgeCard, 2000);
+}
+
 // Telegram AUX/Quarantine: politica declarada desta fase (token/webhook
 // desligados, execucao proibida) — constante, nao telemetria, por isso so
 // renderiza uma vez no boot, igual a Live Status/Risk Gate.
@@ -2659,7 +2675,7 @@ async function boot() {
     renderLiveStatusCard();
     renderTelegramAuxCard();
     await renderSafariEdgeCard();
-    setInterval(renderSafariEdgeCard, 2000);
+    startSafariEdgeAutoRefresh();
 
     await renderHydrationEngineCard();
     if (await hydrationManager.hasResumableCheckpoint()) {
