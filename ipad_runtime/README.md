@@ -82,8 +82,9 @@ Engine etc. — mora no **Engine Room** (`.advanced-section`, "Modo
 Avançado"), oculto por padrão e alternado pelo botão `btn-tb-advanced` na
 topbar; em iPad paisagem (≥900px) o Engine Room flui em colunas
 balanceadas (`column-count`) que preenchem a tela larga sem zonas pretas
-vazias. O banner READ_ONLY/FAIL_CLOSED, o header, a Telemetria e o rodapé
-ficam fora de ambas as zonas (largura total). Ordem natural (coluna única,
+vazias. Só o banner READ_ONLY/FAIL_CLOSED, o header e o rodapé ficam fora
+de ambas as zonas (largura total) — a Telemetria ao Vivo mora dentro do
+Engine Room, como qualquer outro card técnico. Ordem natural (coluna única,
 retrato):
 `siriform-card` → `cyborg-executive-panel` (**Resumo Executivo**, FOCO3 da
 fase de polimento visual — leitura "tudo pronto?" em 1 olhar: Estado do
@@ -155,13 +156,16 @@ Instruments, WWDC26) → `local-pack-manager` (os 13 botões do Local Pack
 Manager) → `export-panel` (Arquivos Exportados — exportações com nome único
 carimbado, sem prompt de "substituir") → `backup-recovery-panel` (exporta/
 restaura a Memória Viva inteira num único `.json` com hash verificado,
-`FAIL_CLOSED` se corrompido ou adulterado). A antiga "Logs do Sistema"
-virou `telemetry-card` (**Telemetria ao Vivo** — último evento sempre
+`FAIL_CLOSED` se corrompido ou adulterado) → `console-section`/
+`telemetry-card` (**Telemetria ao Vivo**, antiga "Logs do Sistema",
+realocada para o Engine Room na ruthless pruning — último evento sempre
 visível + caixa preta rolável, eventos reais, nunca um muro de terminal —
 com sub-bloco **Activity Log** listando o histórico persistido de
-`memory/event-log.js`). Todo card com `tabindex` é tocável: abre um resumo
-em português gerado a partir do estado real do próprio card
-(`wireStatusCardModal()` em `app.js`), nunca um texto estático.
+`memory/event-log.js`; último card do Engine Room). Todo card com
+`tabindex` é tocável: abre um resumo em português gerado a partir do
+estado real do próprio card (`wireStatusCardModal()` em `app.js`), nunca
+um texto estático — `console-section` não tem `tabindex` (conteúdo já é
+log ao vivo, sem resumo estático a abrir).
 
 ## Decisões técnicas (liberdade técnica usada nesta entrega)
 
