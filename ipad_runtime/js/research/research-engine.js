@@ -12,9 +12,14 @@
 // tendencia. Confidence e SEMPRE LOW/MEDIUM/HIGH qualitativo — nunca uma
 // probabilidade estatistica, porque nao existe backtest neste repositorio
 // (mesma regra de configs/strategy-playbook.default.json#confidence_model).
-// Target 2 / Extended target ficam DADOS_INSUFICIENTES de proposito: nenhum
-// motor de extensao tecnica (ex. Fibonacci) esta implementado nesta fase —
-// melhor honesto do que inventado.
+// Target 2 vem do nivel 2 de suporte/resistencia (pivots/swing fractal) e
+// Extended target vem da extensao de Fibonacci (61.8%) sobre a ultima perna
+// confirmada — ambos calculados em src/research/engines/ (engines
+// graduados, ver QUARANTINE.md) e propagados via RealAnalysisFrame; quando o
+// motor nao confirma swings suficientes, o campo cai em DADOS_INSUFICIENTES,
+// nunca um nivel inventado. Retracement de Fibonacci continua sem motor
+// implementado nesta fase — honesto DADOS_INSUFICIENTES, calculo diferente
+// da extensao usada em target_2/extended_target.
 //
 // Data Sufficiency Score (data-sufficiency.js) e' calculado uma unica vez por
 // frame e propagado para as 3 rotas como base_used/data_sufficiency_score/
@@ -83,8 +88,8 @@ function buildRouteLong(frame, bias, volumeReal, ctx) {
         invalidation: `Fechamento abaixo do suporte real (~${fmt(frame.support)})`,
         stop_logic: `Abaixo da zona de suporte observada nesta amostra (~${fmt(frame.support)})`,
         target_1: `Resistencia real observada nesta amostra (~${fmt(frame.resistance)})`,
-        target_2: DADOS_INSUFICIENTES,
-        extended_target: DADOS_INSUFICIENTES,
+        target_2: Number.isFinite(frame.resistance_2) ? `Resistencia nivel 2 (pivot/swing real, ~${fmt(frame.resistance_2)})` : DADOS_INSUFICIENTES,
+        extended_target: Number.isFinite(frame.fib_extension_long_target) ? `Extensao de Fibonacci 61.8% sobre a ultima perna de alta confirmada (~${fmt(frame.fib_extension_long_target)})` : DADOS_INSUFICIENTES,
         required_confirmation: volumeReal
             ? `Rompimento e fechamento acima da resistencia (~${fmt(frame.resistance)}) com volume real confirmando`
             : 'Rompimento e fechamento acima da resistencia real — volume real indisponivel nesta fonte para confirmar',
@@ -120,8 +125,8 @@ function buildRouteShort(frame, bias, volumeReal, ctx) {
         invalidation: `Fechamento acima da resistencia real (~${fmt(frame.resistance)})`,
         stop_logic: `Acima da zona de resistencia observada nesta amostra (~${fmt(frame.resistance)})`,
         target_1: `Suporte real observado nesta amostra (~${fmt(frame.support)})`,
-        target_2: DADOS_INSUFICIENTES,
-        extended_target: DADOS_INSUFICIENTES,
+        target_2: Number.isFinite(frame.support_2) ? `Suporte nivel 2 (pivot/swing real, ~${fmt(frame.support_2)})` : DADOS_INSUFICIENTES,
+        extended_target: Number.isFinite(frame.fib_extension_short_target) ? `Extensao de Fibonacci 61.8% sobre a ultima perna de baixa confirmada (~${fmt(frame.fib_extension_short_target)})` : DADOS_INSUFICIENTES,
         required_confirmation: volumeReal
             ? `Rompimento e fechamento abaixo do suporte (~${fmt(frame.support)}) com volume real confirmando`
             : 'Rompimento e fechamento abaixo do suporte real — volume real indisponivel nesta fonte para confirmar',
@@ -205,13 +210,16 @@ export function buildResearchEngineFrame({ frame, evidence, context } = {}) {
         generated_at: new Date().toISOString(),
         status: frame.status,
         trend_bias_heuristico: bias,
+        market_structure: frame.market_structure,
         base_used: baseUsada,
         data_sufficiency: sufficiency,
         key_levels: {
             support: frame.support,
             resistance: frame.resistance,
+            support_2: frame.support_2,
+            resistance_2: frame.resistance_2,
             liquidity: evidence.order_book,
-            retracement: DADOS_INSUFICIENTES, // nenhum motor de retracao (ex. Fibonacci) implementado
+            retracement: DADOS_INSUFICIENTES, // nenhum motor de retracao (ex. Fibonacci) implementado — diferente da extensao usada em target_2/extended_target
             volatility: frame.volatility_state,
         },
         futures_derivatives_data: futuresDerivativesData,
@@ -228,7 +236,7 @@ export function buildResearchEngineFrame({ frame, evidence, context } = {}) {
         },
         limitations: [
             'Heuristica de tendencia usa apenas SMA/EMA reais de uma unica fonte nesta amostra; nao e backtested.',
-            'Target 2 e Extended target ficam DADOS_INSUFICIENTES nesta fase: nenhum motor de extensao tecnica esta implementado.',
+            'Target 2 vem do nivel 2 de suporte/resistencia e Extended target da extensao de Fibonacci (61.8%) sobre a ultima perna confirmada — ambos caem em DADOS_INSUFICIENTES quando a amostra nao confirma swings suficientes. Retracement de Fibonacci continua sem motor implementado nesta fase.',
             'Funding/open interest/liquidacao/long-short ratio ficam NAO_APLICAVEL (spot) ou DADOS_INSUFICIENTES (sem conector de derivativos ativo confirmado nesta sessao).',
             'Nenhuma rota aqui executa, envia ou simula ordem — leitura puramente descritiva.',
             'Data Sufficiency Score e deterministico (0-100) a partir de campos reais desta sessao — nunca probabilistico, nunca uma media de confianca.',

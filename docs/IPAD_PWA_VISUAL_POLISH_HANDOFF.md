@@ -46,7 +46,6 @@ voice-status-panel          → Siriform Voice (voz/microfone)
 runtime-status-panel        → PWA/Service Worker/Cache/IndexedDB/OPFS/WebCrypto
 feature-detect-panel        → sondas funcionais por API (WebGL, WASM, Workers...)
 quant-engine-widget         → motor WASM real (sma/ema/stddev/zscore)
-ai-models-panel             → Meta Llama/WebLLM/Transformers/ONNX (FUTURE)
 replay-wrap                 → Replay BTC/USDT + profile-toggle Light/Balanced/Heavy
 analysis-frame-panel        → estatística descritiva real ("não é recomendação")
 data-policy-panel           → Política de Dados de Mercado (DADOS INSUFICIENTES)

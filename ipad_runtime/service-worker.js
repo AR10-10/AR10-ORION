@@ -2,20 +2,23 @@
 // Cache-first, offline-first. Tudo precache é same-origin; nenhuma rota
 // de rede sensivel (MEXC/MT5/API secret) existe para interceptar.
 
-const CACHE_VERSION = 'cyborg-ipad-runtime-v30';
+const CACHE_VERSION = 'cyborg-ipad-runtime-v32';
 
 // PRECACHE_URLS e' a fronteira same-origin do offline-first: precisa cobrir
 // exatamente o fecho transitivo de import() a partir de js/app.js (o unico
-// <script type="module"> de index.html). Lista revalidada em 2026-06-22 com
+// <script type="module"> de index.html). Lista revalidada em 2026-06-25 com
 // uma varredura automatica do grafo de imports — qualquer modulo novo em
 // js/**/*.js entra aqui na mesma leva em que e' importado por algum arquivo
 // ja precacheado, senao a 1a navegacao offline falha ao abrir esse caminho.
-// src/research/** (conectores/engines) deliberadamente FORA: nao e' importado
-// por nenhum arquivo deste fecho ainda (mesmo status de "contrato, nao
-// instalado" que soldier_runtime/ no monorepo). js/hydration/storage-router.js
-// e' o mesmo caso: existe, passa node --check, mas hydration-manager.js nao o
-// importa (a escrita real do Vault e' single-writer via pack-manager.js, que
-// ja cobre leitura/escrita correta) — ver header do proprio storage-router.js.
+// src/research/** (conectores/engines) permanece FORA quase por completo:
+// nao e' importado por nenhum arquivo deste fecho, EXCETO os 2 engines
+// graduados em 2026-06-25 (src/research/engines/support-resistance-engine.js
+// e market-structure-engine.js, ver QUARANTINE.md secao "Engines graduados"),
+// agora importados por js/real-data/analysis-frame.js e por isso listados
+// abaixo. js/hydration/storage-router.js e' o mesmo caso do resto da arvore:
+// existe, passa node --check, mas hydration-manager.js nao o importa (a
+// escrita real do Vault e' single-writer via pack-manager.js, que ja cobre
+// leitura/escrita correta) — ver header do proprio storage-router.js.
 const PRECACHE_URLS = [
     './',
     './index.html',
@@ -25,6 +28,7 @@ const PRECACHE_URLS = [
     './js/ui/dom-registry.js',
     './js/ui/ui-helpers.js',
     './js/ui/live-ticker.js',
+    './js/ui/cockpit-viewport.js',
     './js/siriform.js',
     './js/voice.js',
     './js/feature-detect.js',
@@ -42,7 +46,6 @@ const PRECACHE_URLS = [
     './js/core/data-mode-labels.js',
     './js/core/commander-soldier.js',
     './js/edge/safari-edge-status.js',
-    './js/aux/telegram-aux-status.js',
     './js/real-data/schema.js',
     './js/real-data/probe.js',
     './js/real-data/registry.js',
@@ -54,9 +57,12 @@ const PRECACHE_URLS = [
     './js/real-data/csv-json-import.js',
     './js/real-data/analysis-frame.js',
     './js/real-data/source-health.js',
+    './src/research/engines/support-resistance-engine.js',
+    './src/research/engines/market-structure-engine.js',
     './js/research/research-engine.js',
     './js/research/data-sufficiency.js',
     './js/research/target-tracker.js',
+    './js/research/trade-setup-matrix.js',
     './js/memory/persistent-state.js',
     './js/memory/evidence-ledger.js',
     './js/memory/session-resume.js',
@@ -82,7 +88,6 @@ const PRECACHE_URLS = [
     './js/intelligence/reflection-engine.js',
     './js/intelligence/siriform-explainer.js',
     './js/intelligence/local-brain.js',
-    './js/intelligence/local-llm-adapter.js',
     './workers/quant-worker.js',
     './wasm/cyborg_quant_core.wasm',
     './data/btcusdt_replay.json',

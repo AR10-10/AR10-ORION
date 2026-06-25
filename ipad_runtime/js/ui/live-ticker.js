@@ -16,6 +16,22 @@ function severityClass(sev) {
     return 'v-info';
 }
 
+/** Distancia real ao nivel mais proximo entre suporte e resistencia — usa as
+ *  mesmas distance_to_target_pct/distance_to_invalidation_pct ja calculadas
+ *  em target-tracker.js (rota_a_long: target=resistencia, invalidation=
+ *  suporte); so' compara 2 numeros reais e rotula qual e' menor, mesmo nivel
+ *  de "decisao" que severityClass() acima. Nenhum calculo de distancia novo. */
+function proximityNote(tracker) {
+    const route = tracker && tracker.rota_a_long;
+    const distSupport = route && typeof route.distance_to_invalidation_pct === 'number' ? route.distance_to_invalidation_pct : null;
+    const distResistance = route && typeof route.distance_to_target_pct === 'number' ? route.distance_to_target_pct : null;
+    if (distSupport === null && distResistance === null) return null;
+    if (distResistance === null || (distSupport !== null && distSupport <= distResistance)) {
+        return `Aproximando-se do suporte (${distSupport.toFixed(2)}% de distância)`;
+    }
+    return `Aproximando-se da resistência (${distResistance.toFixed(2)}% de distância)`;
+}
+
 /**
  * @param {object} state - snapshot montado por collectLiveTickerState() (app.js).
  * @returns {Array<{category: string, text: string, severity: 'critical'|'warn'|'ok'|'info'}>}
@@ -49,6 +65,8 @@ export function buildLiveTickerItems(state = {}) {
     const sufficiency = research ? research.data_sufficiency : null;
     const multiSourceItem = sufficiency ? (sufficiency.breakdown || []).find((x) => x.field === 'multi_source_confirmation') : null;
     const noMultiSourceConfirmation = !!(multiSourceItem && multiSourceItem.status !== 'OK');
+    const scoreKnown = sufficiency && Number.isFinite(sufficiency.score);
+    const lowSufficiency = !scoreKnown || sufficiency.score < 70;
 
     // 2) Dado real atual (preco/fonte/frescor/z-score) — BTC/USDT.
     const frame = state.analysisFrame;
@@ -75,6 +93,35 @@ export function buildLiveTickerItems(state = {}) {
         items.push({ category: 'AR10 LIVE', severity: 'warn', text: `BTC/USDT · ${DADOS_INSUFICIENTES} — gere o AnalysisFrame real após testar uma fonte real.` });
     }
 
+    // 2b) Insight preditivo — sintese de 1 linha do mesmo SIGNAL que o Trade
+    // Setup Matrix do Hero View mostra (buildTradeSetupMatrix(), reusado tal
+    // qual via state.tradeSetupMatrix em app.js), combinado com a mesma
+    // estrutura de mercado (market_structure) e a mesma distancia real a
+    // suporte/resistencia que o Target Tracker ja calcula (proximityNote()
+    // acima). So' rotula/combina enums e numeros ja calculados — nenhuma 4a
+    // heuristica nova, nenhum sinal mais forte do que o card detalhado.
+    const matrix = state.tradeSetupMatrix;
+    if (matrix && matrix.signal !== DADOS_INSUFICIENTES) {
+        const trendLabel = {
+            ESTRUTURA_ALTA: 'Estrutura de alta',
+            ESTRUTURA_BAIXA: 'Estrutura de baixa',
+            ESTRUTURA_LATERAL: 'Estrutura lateral',
+        }[matrix.market_structure] || DADOS_INSUFICIENTES;
+        const actionLabel = {
+            LONG: 'Possível zona de entrada LONG — leitura descritiva, não é recomendação',
+            SHORT: 'Possível zona de entrada SHORT — leitura descritiva, não é recomendação',
+            WAIT: 'Aguardar confirmação — sem sinal de entrada',
+        }[matrix.signal];
+        const proximity = proximityNote(state.targetTracker);
+        items.push({
+            category: 'PREVISÃO',
+            severity: (lowSufficiency || trendLabel === DADOS_INSUFICIENTES) ? 'warn' : 'info',
+            text: `BTC/USDT: ${trendLabel}${proximity ? ` · ${proximity}` : ''} · Sugestão: ${actionLabel}`,
+        });
+    } else {
+        items.push({ category: 'PREVISÃO', severity: 'warn', text: `${DADOS_INSUFICIENTES} — Trade Setup Matrix ainda não resolveu um SIGNAL nesta sessão.` });
+    }
+
     // 3) Long/Short Research — sempre as 3 rotas, nunca so' a "favorita".
     // Severidade e' rebaixada para 'warn' (nunca 'ok') quando o Data
     // Sufficiency Score for baixo ou faltarem campos — Long/Short nunca pode
@@ -84,8 +131,6 @@ export function buildLiveTickerItems(state = {}) {
         const a = research.rota_a_long;
         const b = research.rota_b_short;
         const c = research.rota_c_wait;
-        const scoreKnown = sufficiency && Number.isFinite(sufficiency.score);
-        const lowSufficiency = !scoreKnown || sufficiency.score < 70;
         items.push({
             category: 'LONG/SHORT',
             severity: lowSufficiency ? 'warn' : 'info',

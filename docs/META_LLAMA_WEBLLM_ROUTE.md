@@ -7,9 +7,15 @@ análise de viabilidade de rodar um modelo de linguagem da família
 versão não embute nenhum modelo (`status: FUTURE` em todo o roadmap).
 
 Fonte de dados estruturada: `ipad_runtime/pack/manifest.models.json`
-(schema versionado, lido em runtime por `js/app.js` para preencher os
-campos de status — nenhum número abaixo é decorativo, todos vêm do mesmo
-manifesto que o código consulta).
+(schema versionado — nenhum número abaixo é decorativo, todos vêm do
+mesmo manifesto).
+
+> **Nota (2026-06-25)**: o antigo painel "Meta Llama / WebLLM" do Engine
+> Room foi removido na ruthless pruning — três campos de status sempre
+> `FUTURE`/sem função viva por trás não justificavam tela. Este documento
+> permanece como roadmap de viabilidade e fonte de verdade do
+> `manifest.models.json`; as seções abaixo que descreviam o painel agora
+> falam dele no passado/histórico, não como UI atual.
 
 ## Nome correto da família
 
@@ -79,14 +85,13 @@ com confirmação explícita do usuário e verificação **SHA-256 por shard**
 — mesma filosofia de integridade já usada pelo `.ar10pack` atual
 (`js/pack-manager.js`), apenas aplicada a um payload maior e opcional.
 
-## Perfis de processamento (já existem na UI, reaproveitados)
+## Perfis de processamento (já existem na UI, reaproveitáveis)
 
 O seletor **Light/Balanced/Heavy** do card de Replay já existe e altera
-de fato a janela SMA/EMA do motor WASM hoje. O mesmo seletor também
-atualiza o campo `st-llama-profile` no painel Meta Llama — não é um
-segundo toggle redundante, é a preferência de perfil que **já existe na
-UI** sendo refletida no roadmap de Llama, exatamente como documentado em
-`processing_profiles` do manifesto:
+de fato a janela SMA/EMA do motor WASM hoje. Quando um runtime real de
+Llama existir, o plano é que ele reaproveite essa mesma preferência de
+perfil — não criar um segundo toggle redundante — exatamente como
+documentado em `processing_profiles` do manifesto:
 
 | Perfil | Significado para Llama (quando implementado) |
 |---|---|
@@ -94,15 +99,26 @@ UI** sendo refletida no roadmap de Llama, exatamente como documentado em
 | `balanced` | Equilíbrio entre tamanho de modelo e qualidade de resposta |
 | `heavy` | Modelo maior disponível dentro do limite de armazenamento aceito pelo usuário, mais lento, resposta mais detalhada |
 
-## Campos de status no painel "Meta Llama / WebLLM"
+## Campos de status — removidos do runtime (histórico)
 
-| Campo | Valor atual | Significado |
+O painel "Meta Llama / WebLLM" existiu na UI por algumas fases e expunha
+os campos abaixo; todos foram removidos do `index.html`/`app.js` na
+ruthless pruning do Engine Room (nenhum tinha função viva — todos
+fixos em `FUTURE` ou redundantes com outro card). Tabela mantida apenas
+como referência histórica de nomenclatura, caso um painel real volte a
+existir quando houver runtime de fato:
+
+| Campo (removido) | Valor que tinha | Significado |
 |---|---|---|
 | `st-llama-layer` | `FUTURE` | Nenhuma camada de Llama ativa nesta versão |
-| `st-llama-profile` | `LIGHT`/`BALANCED`/`HEAVY` | Espelha o perfil de processamento escolhido no card de Replay |
+| `st-llama-profile` | `LIGHT`/`BALANCED`/`HEAVY` | Espelhava o perfil de processamento escolhido no card de Replay |
 | `st-llama-runtime` | `FUTURE` | Nenhum runtime de inferência (WebLLM/Transformers.js/ONNX) ativo |
-| `st-llama-webgpu` | `AVAILABLE`/`UNAVAILABLE` | Sondagem real de WebGPU neste Safari (mesma sonda do Feature Detection) |
+| `st-llama-webgpu` | `AVAILABLE`/`UNAVAILABLE` | Sondagem de WebGPU neste Safari |
 | `st-webllm`, `st-transformers`, `st-onnx` | `FUTURE` | Os três engines candidatos, todos roadmap |
+
+A sondagem de WebGPU/WebGL em si **continua viva** em outros cards que
+já existiam antes e não dependiam deste painel: `cyborg-readiness-panel`
+(`cr-webgpu`) e `feature-detect-panel` (`st-webgpu`/`st-webgl`).
 
 ## O que Meta Llama PODE fazer aqui, quando implementado
 

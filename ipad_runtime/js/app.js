@@ -16,6 +16,7 @@ import { buildRealAnalysisFrame } from './real-data/analysis-frame.js';
 import { DADOS_INSUFICIENTES, NAO_APLICAVEL, EVIDENCE_DATA_FIELDS } from './real-data/schema.js';
 import { buildResearchEngineFrame } from './research/research-engine.js';
 import { buildTargetTracker, TARGET_STATUS } from './research/target-tracker.js';
+import { buildTradeSetupMatrix } from './research/trade-setup-matrix.js';
 import * as persistentState from './memory/persistent-state.js';
 import * as evidenceLedger from './memory/evidence-ledger.js';
 import { rehydrateSession } from './memory/session-resume.js';
@@ -33,13 +34,12 @@ import { getSourceHealthReport } from './real-data/source-health.js';
 import { runLocalIntelligenceCycle } from './intelligence/local-brain.js';
 import { buildAndRecordReflectionReport } from './intelligence/reflection-engine.js';
 import { explainReflectionReport } from './intelligence/siriform-explainer.js';
-import { resolveActiveLlmTier } from './intelligence/local-llm-adapter.js';
 import { getSafariEdgeStatusReport } from './edge/safari-edge-status.js';
-import { getTelegramAuxStatusReport } from './aux/telegram-aux-status.js';
 import * as hydrationManager from './hydration/hydration-manager.js';
 import { els } from './ui/dom-registry.js';
 import { log, classFor, setStatus, setInfo, setStatusWithClass, MACRO_STATE_CLASS, setMacroStatus } from './ui/ui-helpers.js';
 import * as liveTicker from './ui/live-ticker.js';
+import * as cockpitViewport from './ui/cockpit-viewport.js';
 
 const PROFILES = {
     light: { windowSize: 10, label: 'Light: janela SMA/EMA=10, leitura mais rápida e leve.' },
@@ -106,7 +106,6 @@ let lastCommanderSoldierStatus = null;
 let lastLocalIntelligenceResult = null;
 let lastReflectionReport = null;
 let lastSafariEdgeStatus = null;
-let lastTelegramAuxStatus = null;
 let lastHydrationEngineStatus = null;
 
 async function refreshFeatureStatus() {
@@ -121,20 +120,7 @@ async function refreshFeatureStatus() {
     setStatus('st-workers', f.workers);
     setStatus('st-webgpu', f.webgpu === 'OK' ? 'OK' : 'UNAVAILABLE');
     setStatus('st-webgl', f.webgl === 'OK' ? 'OK' : 'FALLBACK');
-    setStatus('st-webllm', f.webllm);
-    setStatus('st-transformers', f.transformers);
-    setStatus('st-onnx', f.onnx);
     return f;
-}
-
-function refreshLlamaStatus(f) {
-    setStatus('st-llama-layer', 'FUTURE');
-    setStatus('st-llama-runtime', 'FUTURE');
-    setStatus('st-llama-webgpu', f.webgpu === 'OK' ? 'AVAILABLE' : 'UNAVAILABLE');
-    // modelInstalled e' sempre false nesta versao: nenhum fluxo de download
-    // de modelo existe ainda (ver pack/manifest.models.json > blocking_reason).
-    const llmTier = resolveActiveLlmTier(f, false);
-    setStatus('st-llm-adapter-tier', llmTier.active_tier);
 }
 
 async function refreshVoiceStatus() {
@@ -487,7 +473,10 @@ async function refreshExecutiveSummary() {
 // Gate). Nenhuma regra de negocio nova: blockedConnectors reusa
 // classForConnectorState() (a mesma classificacao do Connector Probe grid)
 // para so' listar falha real (v-fail), nunca um estado pendente normal
-// (PLANNED/PROBING/STALE) como se fosse alerta critico.
+// (PLANNED/PROBING/STALE) como se fosse alerta critico. tradeSetupMatrix
+// reusa buildTradeSetupMatrix() (mesma funcao pura que renderTradeSetupMatrix
+// chama no Hero View) sobre o mesmo lastResearchEngineFrame — o insight
+// preditivo do ticker nunca pode divergir do SIGNAL mostrado no card.
 function collectLiveTickerState() {
     const active = realDataRegistry.getActiveReadOnlySources();
     const freshActive = active.filter((a) => !realDataRegistry.isStale(a));
@@ -511,6 +500,7 @@ function collectLiveTickerState() {
         freshnessLabel: lastRealAnalysisFrame ? formatFreshnessMs(lastRealAnalysisFrame.freshness) : DADOS_INSUFICIENTES,
         researchFrame: lastResearchEngineFrame,
         targetTracker: lastTargetTracker,
+        tradeSetupMatrix: buildTradeSetupMatrix({ research: lastResearchEngineFrame }),
         livePriceInfo: getLivePriceInfo(),
         vaultLabel: packStatusLabel(lastVaultStatusObj, vaultFreshness),
         hydrationStatus: lastHydrationEngineStatus ? lastHydrationEngineStatus.status : null,
@@ -678,6 +668,7 @@ function renderResearchEngineFrame(frame) {
         els['route-c-wait-grid'].innerHTML = empty;
         els['research-data-matrix-grid'].innerHTML = empty;
         els['research-data-sufficiency-label'].textContent = 'Data Sufficiency: — / 100';
+        renderTradeSetupMatrix(buildTradeSetupMatrix({ research: null }));
         return;
     }
     // Snapshots reidratados de sessao anterior podem ter sido gravados antes
@@ -725,6 +716,38 @@ function renderResearchEngineFrame(frame) {
         + row('Gatilho de reavaliação', c.trigger_to_reevaluate) + row('Dado ausente', c.data_missing)
         + row('Condição mais segura', c.safer_condition) + row('Data Sufficiency', score(c.data_sufficiency_score))
         + row('Motivo da limitação', str(c.limitation_reason));
+
+    renderTradeSetupMatrix(buildTradeSetupMatrix({ research: frame }));
+}
+
+/** Trade Setup Matrix do Hero View — resume UMA das 3 rotas que
+ *  renderResearchEngineFrame() acima ja' desenhou por completo, nunca uma
+ *  4a leitura: ver header de research/trade-setup-matrix.js. SIGNAL vira
+ *  badge v-ok (LONG/alta), v-fail (SHORT/baixa) ou v-pending (WAIT/
+ *  DADOS_INSUFICIENTES) so' para cor, nunca para decidir o conteudo. */
+function renderTradeSetupMatrix(matrix) {
+    const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
+    const signalClass = matrix.signal === 'LONG' ? 'v-ok' : (matrix.signal === 'SHORT' ? 'v-fail' : 'v-pending');
+    if (els['tsm-signal-badge']) {
+        els['tsm-signal-badge'].textContent = matrix.signal === DADOS_INSUFICIENTES ? 'SIGNAL: DADOS INSUFICIENTES' : `SIGNAL: ${matrix.signal}`;
+        els['tsm-signal-badge'].className = `tsm-signal-badge ${signalClass}`;
+    }
+    if (els['tsm-confidence']) {
+        els['tsm-confidence'].textContent = matrix.confidence === DADOS_INSUFICIENTES ? DADOS_INSUFICIENTES : `Confiança: ${matrix.confidence}`;
+        els['tsm-confidence'].className = `value ${matrix.confidence === 'HIGH' ? 'v-ok' : (matrix.confidence === 'MEDIUM' ? 'v-limited' : 'v-pending')}`;
+    }
+    const setCell = (id, value) => {
+        if (!els[id]) return;
+        els[id].textContent = str(value);
+        els[id].className = `value ${value === DADOS_INSUFICIENTES || value === undefined || value === null ? 'v-pending' : 'v-info'}`;
+    };
+    setCell('tsm-entry-zone', matrix.entry_zone);
+    setCell('tsm-tp1', matrix.take_profit_1);
+    setCell('tsm-tp2', matrix.take_profit_2);
+    setCell('tsm-sl', matrix.stop_loss);
+    if (els['tsm-condition']) {
+        els['tsm-condition'].textContent = [str(matrix.condition), str(matrix.rationale)].filter((v) => v && v !== DADOS_INSUFICIENTES).join(' ') || DADOS_INSUFICIENTES;
+    }
 }
 
 // Mission AR10_CYBORG_2_SAFE_REAL_DATA_LAYER_RUNTIME_PROBE_V1 — BTC Live
@@ -785,7 +808,7 @@ function renderTargetTrackerRoute(gridId, route) {
     els[gridId].innerHTML = `
         <div class="status-row"><span class="label">Status</span><span class="value ${classForTargetStatus(route.status)}">${route.status}</span></div>
         <div class="status-row"><span class="label">Alvo 1</span><span class="value v-info">${fmt(route.target_1)}</span></div>
-        <div class="status-row"><span class="label">Alvo 2</span><span class="value v-pending">${fmt(route.target_2)}</span></div>
+        <div class="status-row"><span class="label">Alvo 2</span><span class="value ${typeof route.target_2 === 'number' ? 'v-info' : 'v-pending'}">${fmt(route.target_2)}</span></div>
         <div class="status-row"><span class="label">Invalidação</span><span class="value v-info">${fmt(route.invalidation)}</span></div>
         <div class="status-row"><span class="label">Distância até alvo</span><span class="value v-info">${pct(route.distance_to_target_pct)}</span></div>
         <div class="status-row"><span class="label">Distância até invalidação</span><span class="value v-info">${pct(route.distance_to_invalidation_pct)}</span></div>
@@ -848,18 +871,28 @@ function renderTargetTracker(tracker, livePriceInfo) {
     }
 }
 
-/** Suportes/Resistências — mesmos 2 niveis reais do Target Tracker (rota_a_
- *  long.target_1 = resistencia, rota_a_long.invalidation = suporte) e o
- *  mesmo preco atual, so' redesenhados como escada vertical. R2/S2 ficam
- *  sempre DADOS_INSUFICIENTES: o Research Engine nao calcula um 2o nivel. */
+/** Suportes/Resistências — mesmos niveis reais do Target Tracker (rota_a_
+ *  long.target_1 = resistencia 1, target_2 = resistencia 2; rota_a_long.
+ *  invalidation = suporte 1; rota_b_short.target_2 = suporte 2) e o mesmo
+ *  preco atual, so' redesenhados como escada vertical. R2/S2 vem dos
+ *  engines de pivot/swing graduados (ver QUARANTINE.md) propagados via
+ *  RealAnalysisFrame -> target-tracker.js; caem em DADOS_INSUFICIENTES
+ *  quando a amostra nao confirma swings suficientes — nunca um nivel
+ *  inventado aqui. */
 function renderSupportsResistances(tracker) {
     const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
     const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : str(v));
-    if (els['sr-resistance-2']) els['sr-resistance-2'].textContent = DADOS_INSUFICIENTES;
+    if (els['sr-resistance-2']) {
+        els['sr-resistance-2'].textContent = fmt(tracker.rota_a_long.target_2);
+        els['sr-resistance-2'].className = `value ${typeof tracker.rota_a_long.target_2 === 'number' ? 'v-info' : 'v-pending'}`;
+    }
     if (els['sr-resistance-1']) els['sr-resistance-1'].textContent = fmt(tracker.rota_a_long.target_1);
     if (els['sr-current-price']) els['sr-current-price'].textContent = fmt(tracker.current_price);
     if (els['sr-support-1']) els['sr-support-1'].textContent = fmt(tracker.rota_a_long.invalidation);
-    if (els['sr-support-2']) els['sr-support-2'].textContent = DADOS_INSUFICIENTES;
+    if (els['sr-support-2']) {
+        els['sr-support-2'].textContent = fmt(tracker.rota_b_short.target_2);
+        els['sr-support-2'].className = `value ${typeof tracker.rota_b_short.target_2 === 'number' ? 'v-info' : 'v-pending'}`;
+    }
 }
 
 function refreshTargetTracker() {
@@ -1449,6 +1482,7 @@ async function bootRehydrateSession() {
 function showUpdateBanner() {
     if (!els['sw-update-banner']) return;
     els['sw-update-banner'].hidden = false;
+    cockpitViewport.recalcCockpitTop();
     log('Atualização do runtime disponível (nova versão já pré-armazenada pelo Service Worker).', 'info');
     siriform.setSiriformState('updating', 'Atualização disponível — toque em "Atualizar agora" quando quiser aplicar.');
 }
@@ -1496,7 +1530,6 @@ async function handleCheckSafari() {
     }
     log(`Backend de storage ativo: ${(await storage.activeBackend()).toUpperCase()}`, 'info');
     const f = await refreshFeatureStatus();
-    refreshLlamaStatus(f);
     const voiceStatus = await refreshVoiceStatus();
     refreshCyborgReadiness(f, voiceStatus);
     log('Verificacao concluida.', 'ok');
@@ -2021,7 +2054,6 @@ function wireProfileToggle() {
             currentProfile = btn.dataset.profile;
             buttons.forEach((b) => b.classList.toggle('active', b === btn));
             els['profile-hint'].textContent = PROFILES[currentProfile].label;
-            setStatus('st-llama-profile', currentProfile.toUpperCase());
             log(`Perfil de processamento: ${currentProfile.toUpperCase()}.`, 'info');
         });
     });
@@ -2059,9 +2091,6 @@ function wireAdvancedToggle() {
 function renderCommanderSoldierCard() {
     const status = getCommanderSoldierStatus();
     lastCommanderSoldierStatus = status;
-    setStatus('cs-commander-status', status.commander.status);
-    setStatus('cs-soldier-status', status.soldier.status);
-    setStatus('cs-sync-bridge-status', status.sync_bridge.status);
 }
 
 // Safari Edge: telemetria local real (rAF/visibility/storage backend),
@@ -2100,24 +2129,6 @@ let safariEdgeTimer = null;
 function startSafariEdgeAutoRefresh() {
     if (safariEdgeTimer) return;
     safariEdgeTimer = setInterval(renderSafariEdgeCard, 2000);
-}
-
-// Telegram AUX/Quarantine: politica declarada desta fase (token/webhook
-// desligados, execucao proibida) — constante, nao telemetria, por isso so
-// renderiza uma vez no boot, igual a Live Status/Risk Gate.
-function renderTelegramAuxCard() {
-    const status = getTelegramAuxStatusReport();
-    lastTelegramAuxStatus = status;
-    setStatus('ta-telegram-layer', status.telegram_layer);
-    setStatus('ta-bot-token', status.bot_token);
-    setStatus('ta-webhook', status.webhook);
-    setStatus('ta-live-execution', status.live_execution);
-    setStatus('ta-signal-quarantine', status.signal_quarantine);
-    setStatus('ta-source-trust', status.source_trust);
-    setStatus('ta-allowed-commands', status.allowed_commands);
-    setStatus('ta-risk-gate', status.risk_gate);
-    setStatus('ta-event-ledger', status.event_ledger);
-    setStatus('ta-is-authoritative', status.is_authoritative ? 'TRUE' : 'FALSE');
 }
 
 // Hydration Engine: armazenamento progressivo no Safari/iPad (pacotes
@@ -2508,10 +2519,6 @@ function defaultCardSummary(cardEl) {
 }
 
 const CUSTOM_CARD_SUMMARY = {
-    'commander-soldier-panel': () => ({
-        title: 'Commander / Soldier',
-        body: lastCommanderSoldierStatus ? lastCommanderSoldierStatus.siriform_summary : 'Status ainda não carregado nesta sessão.',
-    }),
     'source-health-panel': () => ({
         title: 'Source Health',
         body: lastSourceHealthReport ? lastSourceHealthReport.siriform_summary : 'Source Health ainda não carregado nesta sessão.',
@@ -2527,10 +2534,6 @@ const CUSTOM_CARD_SUMMARY = {
     'safari-edge-layer-panel': () => ({
         title: 'Safari Assisted Edge Layer',
         body: lastSafariEdgeStatus ? lastSafariEdgeStatus.siriform_summary : 'Safari Edge ainda não foi lido nesta sessão.',
-    }),
-    'telegram-aux-panel': () => ({
-        title: 'Telegram AUX / Quarantine',
-        body: lastTelegramAuxStatus ? lastTelegramAuxStatus.siriform_summary : 'Telegram AUX ainda não foi lido nesta sessão.',
     }),
 };
 
@@ -2582,7 +2585,7 @@ function wireButtons() {
     const btnSwUpdateReload = document.getElementById('btn-sw-update-reload');
     if (btnSwUpdateReload) btnSwUpdateReload.addEventListener('click', () => window.location.reload());
     const btnSwUpdateDismiss = document.getElementById('btn-sw-update-dismiss');
-    if (btnSwUpdateDismiss) btnSwUpdateDismiss.addEventListener('click', () => { els['sw-update-banner'].hidden = true; });
+    if (btnSwUpdateDismiss) btnSwUpdateDismiss.addEventListener('click', () => { els['sw-update-banner'].hidden = true; cockpitViewport.recalcCockpitTop(); });
     wireAdvancedToggle();
     const btnReport = document.getElementById('btn-export-report');
     if (btnReport) btnReport.addEventListener('click', handleExportReport);
@@ -2719,6 +2722,7 @@ function wireButtons() {
 }
 
 async function boot() {
+    cockpitViewport.initCockpitViewport();
     siriform.initSiriform({
         avatar: els['siriform-avatar'],
         caption: els['siriform-caption'],
@@ -2730,7 +2734,6 @@ async function boot() {
     wireMacroStateObserver();
     siriform.setSiriformState('thinking', 'Inicializando runtime local...');
     log('AR10 Cyborg 1.0 PRO (codinome interno AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1) — boot iniciado.', 'info');
-    setStatus('st-llama-profile', currentProfile.toUpperCase());
     wireButtons();
     await registerServiceWorker();
     const workerUrl = new URL('workers/quant-worker.js', window.location.href).href;
@@ -2745,7 +2748,6 @@ async function boot() {
         log(`Worker/WASM falhou ao iniciar: ${err.message}`, 'fail');
     }
     const f = await refreshFeatureStatus();
-    refreshLlamaStatus(f);
     const voiceStatus = await refreshVoiceStatus();
     let vault = await refreshVaultAndReplayStatus();
     refreshCyborgReadiness(f, voiceStatus);
@@ -2759,7 +2761,6 @@ async function boot() {
     await renderRiskGateCard();
     await renderPaperTradingCard();
     renderLiveStatusCard();
-    renderTelegramAuxCard();
     await renderSafariEdgeCard();
     startSafariEdgeAutoRefresh();
 

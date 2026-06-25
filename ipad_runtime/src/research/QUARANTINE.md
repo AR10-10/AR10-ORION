@@ -2,19 +2,43 @@
 
 Codinome interno: `AR10_CYBORG_FUSION_RESEARCH_QUARANTINE_V1`.
 
-**Status desta árvore inteira: `FUTURE` / `PLANNED`, em quarentena.** Este
-arquivo é a declaração explícita de quarentena para tudo dentro de
-`ipad_runtime/src/research/` — conectores (`connectors/*/index.js`) e
-motores de fusão de sinal (`engines/*.js`), incluindo
-`engines/signal-fusion-engine.js` especificamente.
+**Status desta árvore: `FUTURE` / `PLANNED`, em quarentena — exceto os 2
+engines graduados em 2026-06-25, listados na seção "Engines graduados"
+abaixo.** Este arquivo é a declaração explícita de quarentena para tudo
+dentro de `ipad_runtime/src/research/` — conectores (`connectors/*/index.js`)
+e motores de fusão de sinal (`engines/*.js`), incluindo
+`engines/signal-fusion-engine.js` especificamente. Todos os demais
+conectores/engines (todos os `connectors/*`, e todos os `engines/*` exceto
+os 2 graduados) permanecem cobertos por todo o resto deste documento sem
+nenhuma alteração.
 
-## Fatos confirmados (não inferidos)
+## Engines graduados (exceção registrada, não retroativa às demais)
 
-- **Zero import real.** Nenhum arquivo em `ipad_runtime/js/**` importa
-  qualquer coisa de `src/research/`. O fecho transitivo de módulos a partir
-  de `js/app.js` (o único `<script type="module">` de `index.html`) não
-  toca esta árvore — confirmado por varredura de grafo de import ao corrigir
-  `service-worker.js` em 2026-06-21.
+- `engines/support-resistance-engine.js` e `engines/market-structure-engine.js`
+  saíram de `FUTURE` para `ACTIVE_READ_ONLY` em 2026-06-25 e agora são
+  importados por `js/real-data/analysis-frame.js` (que já tinha
+  `evidence.candles` reais em escopo). Implementam pivots/swing high-low
+  (método fractal) e extensão de Fibonacci sobre os mesmos candles reais já
+  buscados por `js/real-data/mexc-public.js` — zero `fetch()` novo, zero
+  endpoint novo, zero credencial, zero `order_send`/execução. Seguem os 4
+  passos da regra de quarentena abaixo: (1) `metadata.status` atualizado com
+  lógica real implementada, não só o status trocado; (2) ambos adicionados a
+  `PRECACHE_URLS` em `service-worker.js`; (3) nenhuma CSP nova — não fazem
+  rede; (4) nenhuma política de credencial nova — não usam credencial.
+  Continuam puras funções de cálculo (sem estado global, sem import de volta
+  para `js/**`), só que agora alcançáveis pelo fecho transitivo a partir de
+  `js/app.js`.
+
+## Fatos confirmados (não inferidos) — válidos para todo o resto da árvore
+
+- **Zero import real (exceto os 2 engines graduados acima).** Nenhum outro
+  arquivo em `ipad_runtime/js/**` importa qualquer coisa de
+  `src/research/`. O fecho transitivo de módulos a partir de `js/app.js` (o
+  único `<script type="module">` de `index.html`) não toca o restante desta
+  árvore — confirmado por varredura de grafo de import ao corrigir
+  `service-worker.js` em 2026-06-21; reconfirmado em 2026-06-25 ao graduar os
+  2 engines acima (varredura restrita a esses 2 arquivos, resto da árvore
+  inalterado).
 - **Zero rede real.** Nenhum arquivo desta árvore faz `fetch()`/XHR/
   WebSocket real. Onde a palavra "fetch" aparece, é só dentro de um
   comentário do tipo "Não faz fetch()/XHR" — confirmado lendo todos os 13

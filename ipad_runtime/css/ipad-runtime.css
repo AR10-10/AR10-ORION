@@ -944,6 +944,7 @@ footer.legal {
    QUANT ENGINE WIDGET / ANALYSIS FRAME / DECISION FRAME / VAULT
    ------------------------------------------------------------ */
 .quant-engine-widget .engine-meta,
+.tsm-matrix .engine-meta,
 .vault-evidence-card .vault-meta {
     font-family: var(--font-mono);
     font-size: 0.78rem;
@@ -1126,10 +1127,12 @@ footer.legal {
     transform: translateX(-50%);
 }
 
-/* sr-ladder — "Suportes/Resistências": mesmos 2 niveis reais do Target
-   Tracker (rota_a_long.target_1/invalidation), redesenhados como escada
-   vertical com o preco atual no meio. R2/S2 ficam DADOS_INSUFICIENTES de
-   proposito (engine so' calcula 1 nivel por lado). */
+/* sr-ladder — "Suportes/Resistências": 4 niveis reais do Target Tracker/
+   analysis-frame.js (R2/S2 vem dos engines de pivot/swing graduados em
+   2026-06-25, ver QUARANTINE.md "Engines graduados"), redesenhados como
+   escada vertical com o preco atual no meio. R2/S2 caem em
+   DADOS_INSUFICIENTES so' quando a amostra nao confirma swings suficientes
+   (MIN_CANDLES), nao mais por design fixo do engine. */
 .sr-ladder {
     display: flex;
     flex-direction: column;
@@ -1150,6 +1153,73 @@ footer.legal {
 .sr-row.sr-support { background: rgba(0, 255, 157, 0.06); border-left: 2px solid rgba(0, 255, 157, 0.35); }
 .sr-row.sr-current { background: rgba(0, 242, 255, 0.1); border-left: 2px solid var(--sys-cyan); }
 .sr-row.sr-current .value { color: var(--sys-cyan); }
+
+/* tsm-matrix — Trade Setup Matrix: resume rota_a_long/rota_b_short/
+   rota_c_wait (as 3 rotas SEMPRE calculadas em research-engine.js, ver
+   header de trade-setup-matrix.js) num badge SIGNAL + grid de 4 celulas
+   (Entry/TP1/TP2/SL). Cores via classes v-ok/v-fail/v-pending/v-info/
+   v-limited ja atribuidas em JS (renderTradeSetupMatrix em app.js) — sem
+   logica de cor nova aqui, mesma convencao de .price-delta-badge. */
+.tsm-matrix {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(0, 242, 255, 0.12);
+}
+.tsm-signal-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.tsm-signal-badge {
+    font-family: var(--font-mono);
+    font-size: clamp(0.95rem, 3vw, 1.25rem);
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    padding: 6px 18px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    background: rgba(255, 255, 255, 0.04);
+    white-space: nowrap;
+}
+.tsm-signal-row .value {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 11px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 0.78rem;
+    font-weight: bold;
+}
+.tsm-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+}
+.tsm-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(0, 242, 255, 0.04);
+    border: 1px solid rgba(0, 242, 255, 0.1);
+}
+.tsm-cell .label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.tsm-cell .value {
+    font-size: clamp(0.85rem, 2.2vw, 1.02rem);
+    font-weight: bold;
+}
 
 /* ------------------------------------------------------------
    PROCESSING PROFILES — LIGHT / BALANCED / HEAVY
@@ -1434,13 +1504,39 @@ footer.legal {
 .telemetry-card .console { max-height: 200px; }
 
 /* ------------------------------------------------------------
+   COCKPIT VIEWPORT — "Demote, don't delete": a 1a tela (100dvh) so'
+   mostra as 4 zonas do Institutional Cockpit (Market Data, Voice
+   Trigger, S/R Signals, Risk Metrics) + os controles da action-strip,
+   sem nenhum painel operacional/administrativo competindo por espaco.
+   --cockpit-top e' medido em runtime por js/ui/cockpit-viewport.js
+   (altura real de .app-topbar + .sw-update-banner, que pode virar 1 ou
+   2 linhas dependendo da largura/orientacao do iPad — nunca um chute
+   estatico fixo). Fallback de 96px so' cobre o instante antes do JS
+   medir pela 1a vez. overflow-y:auto e' rede de seguranca, nao o caso
+   comum: se o conteudo real (texto longo, Dynamic Type grande) nao
+   couber, abre rolagem so' dentro deste box — nunca corta dado real
+   silenciosamente, nunca rola a pagina inteira (.app-topbar continua
+   sticky/visivel, Voice Trigger nunca sai da tela). */
+.cockpit-viewport {
+    min-height: calc(100dvh - var(--cockpit-top, 96px));
+    max-height: calc(100dvh - var(--cockpit-top, 96px));
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    /* mesma reserva do .runtime-shell para o dock fixo do microfone
+       (.action-strip .as-mic) — sem isso, o ultimo conteudo real visivel
+       antes do limite de scroll deste box (fim do S/R Signals) ficaria
+       coberto pelo dock flutuante. */
+    padding-bottom: calc(var(--safe-b) + 96px);
+}
+
+/* ------------------------------------------------------------
    HERO ROW — "Institutional Cockpit" Center Stage: BTC/USDT Market
    Data (centro, dominante) / Siriform orb (companheiro) / Resumo
-   Executivo (sidebar de risco/status). Irmao fora do .bento (mesmo
-   motivo do .live-ticker: nao depender do fluxo de colunas) para poder
-   formar uma faixa de hero de 3 colunas de verdade — multicoluna do
-   .bento nao da pra isso, e' so balanceamento de altura, nao
-   posicionamento.
+   Executivo (sidebar de risco/status). Filho direto do
+   .cockpit-viewport (mesmo motivo do .live-ticker: nao depender do
+   fluxo de colunas) para poder formar uma faixa de hero de 3 colunas
+   de verdade.
 
    Abaixo de 1000px fica em coluna unica na ordem natural do DOM: Market
    Data primeiro (e' o dado que um cockpit institucional mostra de um so'
@@ -1479,11 +1575,12 @@ footer.legal {
 }
 
 /* ------------------------------------------------------------
-   ACTION STRIP — faixa horizontal entre o cockpit (.hero-row) e a
-   .analytics-row abaixo: CTA principal (esquerda) / microfone
-   (centro) / acoes rapidas (direita). Irmao de ambos pelo mesmo
-   motivo do .hero-row (precisa de 3 colunas reais, nao balanceamento
-   de altura do .bento). Abaixo de 1000px fica em coluna unica na
+   ACTION STRIP — faixa horizontal entre o cockpit (.hero-row) e o
+   S/R Signals (Suportes/Resistencias) abaixo, ultima zona do
+   .cockpit-viewport: CTA principal (esquerda) / microfone (centro) /
+   acoes rapidas (direita). Irmao de ambos pelo mesmo motivo do
+   .hero-row (precisa de 2 colunas reais, nao balanceamento de altura
+   do .advanced-section). Abaixo de 1000px fica em coluna unica na
    ordem natural do DOM (CTA, depois mic, depois acoes rapidas). */
 .action-strip {
     width: 100%;
@@ -1517,49 +1614,27 @@ footer.legal {
 }
 
 /* ------------------------------------------------------------
-   ANALYTICS ROW — Target Tracker / Rota Recomendada / Matriz de
-   Dados / Suportes-Resistencias, sempre depois da .action-strip,
-   irmao de ambos pelo mesmo motivo do .hero-row. Coluna unica abaixo
-   de 700px, grade 2x2 a partir dai', 1 linha de 4 colunas a partir de
-   1200px — diferente do .hero-row, nenhuma coluna aqui precisa vir
-   "primeiro" (ordem natural do DOM em qualquer largura). */
-.analytics-row {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    margin-bottom: 16px;
-}
-.analytics-row > section.card { margin-bottom: 0; }
-
-@media (min-width: 700px) {
-    .analytics-row {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 18px;
-    }
-}
-
-@media (min-width: 1200px) {
-    .analytics-row {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-}
-
-/* ------------------------------------------------------------
    INSTITUTIONAL COCKPIT — acentos de zona (puramente decorativos,
    nunca redefinem o estado real de um dado). Cada zona ganha so' uma
    borda/glow proprios para ficar reconhecivel num pane unico, sem
    tocar nas cores semanticas (.v-ok/.v-fail/.v-limited/.v-info/
-   sr-resistance/sr-support continuam verde/vermelho/ciano como sempre):
+   sr-resistance/sr-support continuam verde/vermelho/ciano como sempre).
+   As 4 zonas do Hero View ("Demote, don't delete"): Market Data, Voice
+   Trigger (centralizado, ver .as-mic/SIRIFORM VOICE), S/R Signals e
+   Risk Metrics — Target Tracker, Rota Recomendada, Matriz de Dados e
+   Cyborg Readiness moveram para o Engine Room (.advanced-section) por
+   nao serem uma das 4 zonas nomeadas; nenhum painel foi apagado, so'
+   realocado (exceto os 3 sem funcao critica viva: Commander/Soldier,
+   Meta Llama/WebLLM e Telegram AUX, removidos de verdade — ver
+   CHANGELOG/commit):
 
    - Center Stage (Market Data, .btc-live-panel): halo ciano+purpura,
      a moldura mais "premium" do pane — e' o dado que o olho deve
      achar primeiro.
-   - Secondary Zone (Suportes/Resistencias + Rotas LONG/SHORT): aresta
-     superior em laranja — diferencia "leitura de nivel/sinal
-     descritivo" do resto da analytics-row sem novo componente.
-   - Sidebar (Resumo Executivo — risco/status): aresta superior em
+   - S/R Signals (.supports-resistances-panel): aresta superior em
+     laranja — diferencia "leitura de nivel descritivo" do resto do
+     cockpit sem novo componente.
+   - Sidebar (Resumo Executivo — Risk Metrics): aresta superior em
      purpura — combina com o halo do Center Stage, fecha a moldura do
      cockpit nos dois lados do orbe.
    ------------------------------------------------------------ */
@@ -1574,27 +1649,17 @@ footer.legal {
 .hero-row > .cyborg-executive-panel {
     border-top-color: rgba(178, 107, 255, 0.4);
 }
-.analytics-row > .supports-resistances-panel,
-.analytics-row > .target-tracker-panel,
-.analytics-row > .rota-recomendada-panel {
+.cockpit-viewport > .supports-resistances-panel {
     border-top-color: rgba(255, 138, 61, 0.45);
 }
 
-/* ------------------------------------------------------------
-   LAYOUT RESPONSIVO — BENTO EM COLUNAS BALANCEADAS (iPad paisagem)
-
-   .bento agora so' contem o card de Cyborg Readiness (os outros
-   moveram para .hero-row / .action-strip / .analytics-row acima) —
-   centralizado, largura limitada, sem multicoluna (nao faz sentido
-   balancear altura entre colunas com 1 card so'; o status-grid
-   interno do proprio card ja se reorganiza em mais colunas conforme
-   o espaco, ver .status-grid).
-   ------------------------------------------------------------ */
-.bento { width: 100%; max-width: 1100px; margin: 0 auto; }
-
-/* .advanced-section segue a logica de colunas balanceadas que o
-   .bento usava antes — irmao fora dele (Fase 7 — "Modo avancado" fica
-   oculto por padrao via atributo [hidden] e so aparece sob toque). */
+/* .advanced-section ("Engine Room") usa colunas balanceadas (iPad
+   paisagem) — nenhum painel administrativo/diagnostico precisa de
+   posicionamento explicito como o .hero-row, so' balanceamento de
+   altura entre colunas. Oculto por padrao via atributo [hidden]
+   (Fase 7), alternado tanto pelo botao "Modo avancado" na topbar
+   quanto pelo divisor .engine-room-divider logo acima dele — os dois
+   sincronizados no mesmo estado, ver wireAdvancedToggle() em app.js. */
 .advanced-section { width: 100%; }
 .advanced-section[hidden] { display: none; }
 
@@ -1633,7 +1698,6 @@ section.card[tabindex]:focus-visible {
     outline-offset: 2px;
 }
 
-.commander-soldier-panel { border-color: rgba(0, 242, 255, 0.22); }
 
 .memory-alive-panel { border-color: rgba(0, 255, 157, 0.22); }
 .memory-alive-panel h2 { color: var(--long-green); text-shadow: 0 0 8px rgba(0, 255, 157, 0.3); }

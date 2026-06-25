@@ -50,6 +50,8 @@
 
 <div class="runtime-shell">
 
+  <div class="cockpit-viewport" id="cockpit-viewport">
+
   <div class="live-ticker" id="cyborg-live-ticker" role="status" aria-live="off" aria-label="Letreiro vivo do Cyborg — estado do sistema, dados reais, Long/Short, Hydration e segurança">
     <span class="lt-rail-label">CYBORG LIVE</span>
     <div class="live-ticker-viewport">
@@ -147,7 +149,7 @@
   </div><!-- /.hero-row -->
 
   <!-- ACTION STRIP — faixa horizontal de controles entre o cockpit (hero-row)
-       e a analytics-row abaixo: CTA principal / microfone / acoes rapidas,
+       e a zona S/R Signals abaixo: CTA principal / microfone / acoes rapidas,
        cada um na sua propria coluna, nunca misturado dentro de um card de
        cockpit (BTC/Siriform/Estado do Sistema acima ficam so' leitura). -->
   <section class="card action-strip" id="action-strip">
@@ -187,53 +189,29 @@
   </div>
   <p class="law-tagline">🔒 SISTEMA 100% SEGURO · READ_ONLY · SEM EXECUÇÃO · SEM ORDENS · SEM CHAVES · SEM CORRETORAS</p>
 
-  <!-- ANALYTICS ROW — Target Tracker / Rota Recomendada / Matriz de Dados,
-       sempre depois da acao, nunca dentro de um card de cockpit. Mesmo
-       padrao responsivo do hero-row (coluna unica < 1000px, grade de 3
-       colunas a partir de 1000px — ver .analytics-row no CSS). -->
-  <div class="analytics-row" id="analytics-row">
-
-  <section class="card target-tracker-panel" id="target-tracker-panel">
-    <h2>Target Tracker <span class="step">snapshot da análise — não é recomendação</span></h2>
-    <p class="onboarding-hint">Os alvos abaixo vêm do snapshot da análise (card BTC/USDT), não do preço vivo: compara dois números reais e mostra a distância entre eles. Alvo 2 mostra DADOS_INSUFICIENTES: o Research Engine ainda calcula só 1 alvo por rota. A barra de progresso é só a mesma distância acima, redesenhada — nunca um novo nível.</p>
-    <div class="route-block route-long" id="bl-route-long">
-      <h3>Rota A (Long)</h3>
-      <div class="status-grid" id="bl-route-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
-    </div>
-    <div class="route-block route-short" id="bl-route-short">
-      <h3>Rota B (Short)</h3>
-      <div class="status-grid" id="bl-route-short-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
-    </div>
-    <p class="diagnostic-note" id="bl-reanalyze-banner" hidden></p>
-    <p class="diagnostic-note">Leitura descritiva — não é recomendação. Não é execução. Não é ordem. É acompanhamento visual de níveis.</p>
-  </section>
-
-  <section class="card rota-recomendada-panel" id="rota-recomendada-panel">
-    <h2>Rota Recomendada <span class="step">Local Intelligence — descritiva</span></h2>
-    <div class="gauge-wrap is-pending" id="li-gauge-wrap" aria-hidden="true">
-      <div class="gauge-arc"></div>
-      <div class="gauge-needle" id="li-gauge-needle"></div>
-    </div>
-    <div class="data-sufficiency-block rota-recomendada-block" id="rota-recomendada-block">
-      <p class="data-sufficiency-label">Rota recomendada <span class="step">descritiva — não é recomendação</span></p>
-      <div class="status-row"><span class="label">Rota</span><span class="value v-pending" id="li-final-label-hero">…</span></div>
-      <div class="status-row"><span class="label">Confiança qualitativa</span><span class="value v-pending" id="li-confidence-hero">…</span></div>
-    </div>
-  </section>
-
-  <section class="card data-matrix-summary-panel" id="data-matrix-summary-panel">
-    <h2>Matriz de Dados <span class="step">Data Sufficiency</span></h2>
-    <p class="onboarding-hint">Dados usados nesta leitura — cada linha é <b>OK</b>, <b>DADOS_INSUFICIENTES</b> ou <b>NÃO_APLICÁVEL</b>; pontuação derivada só de campos reais desta sessão, nunca estimada. Mesmo dado do Research Engine (Modo avançado), exibido aqui na primeira tela.</p>
-    <div class="status-row" id="dm-source-health-row"><span class="label">Source Health</span><span class="value v-pending" id="dm-source-health-summary">…</span></div>
-    <div class="data-sufficiency-block" id="research-data-sufficiency-block">
-        <p class="data-sufficiency-label" id="research-data-sufficiency-label">Data Sufficiency: — / 100</p>
-        <div class="status-grid" id="research-data-matrix-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
-    </div>
-  </section>
+  <!-- S/R SIGNALS — 4a zona do Hero View (ver comentario "INSTITUTIONAL
+       COCKPIT" no CSS): Trade Setup Matrix + Suportes/Resistencias, ultima
+       zona dentro de .cockpit-viewport. Target Tracker / Rota Recomendada /
+       Matriz de Dados / Cyborg Readiness viraram paineis do Modo avancado
+       (.advanced-section) — sao detalhe tecnico, nao leitura de 1a tela. -->
 
   <section class="card supports-resistances-panel" id="supports-resistances-panel">
-    <h2>Suportes / Resistências <span class="step">snapshot da análise</span></h2>
-    <p class="onboarding-hint">Mesmos níveis do Target Tracker (snapshot do BTC/USDT) — leitura, nunca recalculados a partir do preço vivo. R2/S2 mostram DADOS_INSUFICIENTES: o Research Engine ainda calcula só 1 nível de cada lado.</p>
+    <h2>Trade Setup Matrix <span class="step">snapshot da análise</span></h2>
+    <p class="onboarding-hint">Leitura descritiva derivada das 3 rotas do Research Engine (LONG/SHORT/WAIT, sempre todas calculadas) — nunca recomendação, nunca execução, nunca ordem. Toque no card "Target Tracker" no Modo avançado para as 3 rotas completas lado a lado.</p>
+    <div class="tsm-matrix" id="tsm-matrix">
+      <div class="tsm-signal-row">
+        <span class="tsm-signal-badge v-pending" id="tsm-signal-badge">SIGNAL: …</span>
+        <span class="value v-pending" id="tsm-confidence">…</span>
+      </div>
+      <div class="tsm-grid">
+        <div class="tsm-cell"><span class="label">Entry Zone</span><span class="value v-pending" id="tsm-entry-zone">…</span></div>
+        <div class="tsm-cell"><span class="label">TP1</span><span class="value v-pending" id="tsm-tp1">…</span></div>
+        <div class="tsm-cell"><span class="label">TP2</span><span class="value v-pending" id="tsm-tp2">…</span></div>
+        <div class="tsm-cell"><span class="label">Stop Loss</span><span class="value v-pending" id="tsm-sl">…</span></div>
+      </div>
+      <p class="engine-meta" id="tsm-condition">…</p>
+    </div>
+    <p class="onboarding-hint">Suportes/Resistências (snapshot do BTC/USDT) — mesmos níveis do Target Tracker, nunca recalculados a partir do preço vivo. R2/S2 vêm dos engines de pivot/swing graduados (ver QUARANTINE.md); caem em DADOS_INSUFICIENTES quando a amostra não confirma swings suficientes.</p>
     <div class="sr-ladder" id="sr-ladder">
       <div class="sr-row sr-resistance"><span class="label">Resistência 2</span><span class="value v-pending" id="sr-resistance-2">…</span></div>
       <div class="sr-row sr-resistance"><span class="label">Resistência 1</span><span class="value v-fail" id="sr-resistance-1">…</span></div>
@@ -243,44 +221,9 @@
     </div>
   </section>
 
-  </div><!-- /.analytics-row -->
-
-  <div class="bento">
-
-  <section class="card cyborg-readiness-panel" id="cyborg-readiness-panel">
-    <h2>Cyborg Readiness</h2>
-    <div class="status-grid">
-      <div class="status-row"><span class="label">PWA HTTPS</span><span class="value v-pending" id="cr-pwa">…</span></div>
-      <div class="status-row"><span class="label">Service Worker</span><span class="value v-pending" id="cr-sw">…</span></div>
-      <div class="status-row"><span class="label">Cache API</span><span class="value v-pending" id="cr-cache">…</span></div>
-      <div class="status-row"><span class="label">IndexedDB</span><span class="value v-pending" id="cr-idb">…</span></div>
-      <div class="status-row"><span class="label">OPFS</span><span class="value v-pending" id="cr-opfs">…</span></div>
-      <div class="status-row"><span class="label">Web Crypto</span><span class="value v-pending" id="cr-webcrypto">…</span></div>
-      <div class="status-row"><span class="label">WASM</span><span class="value v-pending" id="cr-wasm">…</span></div>
-      <div class="status-row"><span class="label">Workers</span><span class="value v-pending" id="cr-workers">…</span></div>
-      <div class="status-row"><span class="label">WebGPU</span><span class="value v-pending" id="cr-webgpu">…</span></div>
-      <div class="status-row"><span class="label">Siriform Voice</span><span class="value v-pending" id="cr-voice">…</span></div>
-      <div class="status-row"><span class="label">Meta Llama/WebLLM</span><span class="value v-pending" id="cr-llama">…</span></div>
-      <div class="status-row"><span class="label">Local Pack</span><span class="value v-pending" id="cr-pack">…</span></div>
-      <div class="status-row"><span class="label">Replay BTC/USDT</span><span class="value v-pending" id="cr-replay">…</span></div>
-      <div class="status-row"><span class="label">READ_ONLY / FAIL_CLOSED</span><span class="value v-pending" id="cr-safety">…</span></div>
-    </div>
-    <p class="engine-meta">Resumo unificado de tudo que este runtime já sondou nesta sessão — cada item mostra OK, LIMITED, MISSING, FUTURE ou UNSUPPORTED, nunca um "tudo certo" decorativo. Detalhe completo no Modo avançado.</p>
-  </section>
-
-  </div><!-- /.bento -->
+  </div><!-- /.cockpit-viewport -->
 
   <section class="advanced-section" id="advanced-section" hidden>
-
-  <section class="card commander-soldier-panel" id="commander-soldier-panel" tabindex="0">
-    <h2>Commander / Soldier <span class="future-badge">Soldier: NOT_DEPLOYED</span></h2>
-    <div class="status-grid">
-      <div class="status-row"><span class="label">Commander (este iPad)</span><span class="value v-pending" id="cs-commander-status">…</span></div>
-      <div class="status-row"><span class="label">Soldier Headless 24/7</span><span class="value v-pending" id="cs-soldier-status">…</span></div>
-      <div class="status-row"><span class="label">Sync Bridge</span><span class="value v-pending" id="cs-sync-bridge-status">…</span></div>
-    </div>
-    <p class="onboarding-hint">Commander é este PWA/iPad — sempre ONLINE enquanto a aba estiver aberta. Soldier é um processo headless 24/7 fora do navegador, ainda não implantado nesta versão: existe só como contrato de tipos em <code>soldier_runtime/</code>, nunca instalado nem executado. Sync Bridge é o canal entre os dois — sem Soldier real, não há o que sincronizar.</p>
-  </section>
 
   <section class="card safari-edge-layer-panel" id="safari-edge-layer-panel" tabindex="0">
     <h2>Safari Assisted Edge Layer <span class="step">LOCAL_AUX — NÃO AUTORITATIVO</span></h2>
@@ -345,19 +288,25 @@
     <p class="engine-meta" id="engine-meta">Motor ainda não inicializado neste boot.</p>
   </section>
 
-  <section class="card" id="ai-models-panel">
-    <h2>Meta Llama / WebLLM <span class="future-badge">FUTURE</span></h2>
+  <section class="card cyborg-readiness-panel" id="cyborg-readiness-panel">
+    <h2>Cyborg Readiness</h2>
     <div class="status-grid">
-      <div class="status-row"><span class="label">Meta Llama Layer</span><span class="value v-pending" id="st-llama-layer">…</span></div>
-      <div class="status-row"><span class="label">Llama Profile</span><span class="value v-info" id="st-llama-profile">BALANCED</span></div>
-      <div class="status-row"><span class="label">Llama Runtime</span><span class="value v-pending" id="st-llama-runtime">…</span></div>
-      <div class="status-row"><span class="label">WebGPU Acceleration</span><span class="value v-pending" id="st-llama-webgpu">…</span></div>
-      <div class="status-row"><span class="label">WebLLM/Llama</span><span class="value v-pending" id="st-webllm">…</span></div>
-      <div class="status-row"><span class="label">Transformers</span><span class="value v-pending" id="st-transformers">…</span></div>
-      <div class="status-row"><span class="label">ONNX</span><span class="value v-pending" id="st-onnx">…</span></div>
-      <div class="status-row"><span class="label">Local LLM Adapter — Camada Ativa</span><span class="value v-pending" id="st-llm-adapter-tier">…</span></div>
+      <div class="status-row"><span class="label">PWA HTTPS</span><span class="value v-pending" id="cr-pwa">…</span></div>
+      <div class="status-row"><span class="label">Service Worker</span><span class="value v-pending" id="cr-sw">…</span></div>
+      <div class="status-row"><span class="label">Cache API</span><span class="value v-pending" id="cr-cache">…</span></div>
+      <div class="status-row"><span class="label">IndexedDB</span><span class="value v-pending" id="cr-idb">…</span></div>
+      <div class="status-row"><span class="label">OPFS</span><span class="value v-pending" id="cr-opfs">…</span></div>
+      <div class="status-row"><span class="label">Web Crypto</span><span class="value v-pending" id="cr-webcrypto">…</span></div>
+      <div class="status-row"><span class="label">WASM</span><span class="value v-pending" id="cr-wasm">…</span></div>
+      <div class="status-row"><span class="label">Workers</span><span class="value v-pending" id="cr-workers">…</span></div>
+      <div class="status-row"><span class="label">WebGPU</span><span class="value v-pending" id="cr-webgpu">…</span></div>
+      <div class="status-row"><span class="label">Siriform Voice</span><span class="value v-pending" id="cr-voice">…</span></div>
+      <div class="status-row"><span class="label">Meta Llama/WebLLM</span><span class="value v-pending" id="cr-llama">…</span></div>
+      <div class="status-row"><span class="label">Local Pack</span><span class="value v-pending" id="cr-pack">…</span></div>
+      <div class="status-row"><span class="label">Replay BTC/USDT</span><span class="value v-pending" id="cr-replay">…</span></div>
+      <div class="status-row"><span class="label">READ_ONLY / FAIL_CLOSED</span><span class="value v-pending" id="cr-safety">…</span></div>
     </div>
-    <p class="engine-meta">Roadmap declarado em <code>pack/manifest.models.json</code> e <code>docs/META_LLAMA_WEBLLM_ROUTE.md</code> — nenhum modelo embutido nesta versão, nenhum "fake installed". Meta Llama nunca executa ordens; só explica, resume e interpreta comandos em texto/voz dentro do READ_ONLY / FAIL_CLOSED. "Camada Ativa" é resolvida em tempo real por <code>js/intelligence/local-llm-adapter.js</code> a partir do fallback_chain declarado — hoje sempre <code>FALLBACK_TEXT_ONLY</code> porque nenhum fluxo de download de modelo existe ainda, então as respostas vêm das frases pré-definidas do Siriform.</p>
+    <p class="engine-meta">Resumo unificado de tudo que este runtime já sondou nesta sessão — cada item mostra OK, LIMITED, MISSING, FUTURE ou UNSUPPORTED, nunca um "tudo certo" decorativo.</p>
   </section>
 
   <section class="card replay-wrap" id="replay-section">
@@ -437,11 +386,49 @@
     </div>
   </section>
 
+  <section class="card target-tracker-panel" id="target-tracker-panel">
+    <h2>Target Tracker <span class="step">snapshot da análise — não é recomendação</span></h2>
+    <p class="onboarding-hint">Os alvos abaixo vêm do snapshot da análise (card BTC/USDT), não do preço vivo: compara dois números reais e mostra a distância entre eles. Alvo 2 mostra DADOS_INSUFICIENTES: o Research Engine ainda calcula só 1 alvo por rota. A barra de progresso é só a mesma distância acima, redesenhada — nunca um novo nível.</p>
+    <div class="route-block route-long" id="bl-route-long">
+      <h3>Rota A (Long)</h3>
+      <div class="status-grid" id="bl-route-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+    <div class="route-block route-short" id="bl-route-short">
+      <h3>Rota B (Short)</h3>
+      <div class="status-grid" id="bl-route-short-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+    <p class="diagnostic-note" id="bl-reanalyze-banner" hidden></p>
+    <p class="diagnostic-note">Leitura descritiva — não é recomendação. Não é execução. Não é ordem. É acompanhamento visual de níveis.</p>
+  </section>
+
+  <section class="card rota-recomendada-panel" id="rota-recomendada-panel">
+    <h2>Rota Recomendada <span class="step">Local Intelligence — descritiva</span></h2>
+    <div class="gauge-wrap is-pending" id="li-gauge-wrap" aria-hidden="true">
+      <div class="gauge-arc"></div>
+      <div class="gauge-needle" id="li-gauge-needle"></div>
+    </div>
+    <div class="data-sufficiency-block rota-recomendada-block" id="rota-recomendada-block">
+      <p class="data-sufficiency-label">Rota recomendada <span class="step">descritiva — não é recomendação</span></p>
+      <div class="status-row"><span class="label">Rota</span><span class="value v-pending" id="li-final-label-hero">…</span></div>
+      <div class="status-row"><span class="label">Confiança qualitativa</span><span class="value v-pending" id="li-confidence-hero">…</span></div>
+    </div>
+  </section>
+
+  <section class="card data-matrix-summary-panel" id="data-matrix-summary-panel">
+    <h2>Matriz de Dados <span class="step">Data Sufficiency</span></h2>
+    <p class="onboarding-hint">Dados usados nesta leitura — cada linha é <b>OK</b>, <b>DADOS_INSUFICIENTES</b> ou <b>NÃO_APLICÁVEL</b>; pontuação derivada só de campos reais desta sessão, nunca estimada. Mesmo dado do Research Engine, exibido aqui no Modo avançado, perto das 3 rotas.</p>
+    <div class="status-row" id="dm-source-health-row"><span class="label">Source Health</span><span class="value v-pending" id="dm-source-health-summary">…</span></div>
+    <div class="data-sufficiency-block" id="research-data-sufficiency-block">
+        <p class="data-sufficiency-label" id="research-data-sufficiency-label">Data Sufficiency: — / 100</p>
+        <div class="status-grid" id="research-data-matrix-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+  </section>
+
   <section class="card research-engine-panel" id="research-engine-panel">
     <h2>Research Engine <span class="stub-badge">ROTA A / B / C sempre presentes</span></h2>
     <p class="onboarding-hint">As três rotas abaixo são sempre mostradas, nunca só a rota "favorita" do momento. Confiança é sempre <b>LOW/MEDIUM/HIGH</b> qualitativo — nunca uma probabilidade estatística. <b>Nenhuma rota aqui executa, envia ou simula ordem.</b></p>
     <p class="diagnostic-note" id="research-engine-session-note" hidden></p>
-    <p class="onboarding-hint">Data Sufficiency e Matriz de Dados desta sessão aparecem na primeira tela, no card "Matriz de Dados" da Analytics Row (antes do Cyborg Readiness) — mesmo dado, sem duplicar lógica.</p>
+    <p class="onboarding-hint">Data Sufficiency e Matriz de Dados desta sessão aparecem no card "Matriz de Dados" logo acima, dentro do Modo avançado — mesmo dado, sem duplicar lógica.</p>
     <div class="route-block route-long" id="route-a-long">
         <h3>ROTA A — LONG</h3>
         <div class="status-grid" id="route-a-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
@@ -590,23 +577,6 @@
     </div>
     <p class="diagnostic-note" id="ls-reasons">—</p>
     <p class="vault-meta" id="ls-unlock-requires">—</p>
-  </section>
-
-  <section class="card telegram-aux-panel" id="telegram-aux-panel" tabindex="0">
-    <h2>Telegram AUX / Quarantine <span class="future-badge">PLANNED_AUX</span></h2>
-    <div class="status-grid">
-      <div class="status-row"><span class="label">Telegram Layer</span><span class="value v-pending" id="ta-telegram-layer">…</span></div>
-      <div class="status-row"><span class="label">Bot Token</span><span class="value v-pending" id="ta-bot-token">…</span></div>
-      <div class="status-row"><span class="label">Webhook</span><span class="value v-pending" id="ta-webhook">…</span></div>
-      <div class="status-row"><span class="label">Live Execution</span><span class="value v-pending" id="ta-live-execution">…</span></div>
-      <div class="status-row"><span class="label">Signal Quarantine</span><span class="value v-pending" id="ta-signal-quarantine">…</span></div>
-      <div class="status-row"><span class="label">Source Trust</span><span class="value v-pending" id="ta-source-trust">…</span></div>
-      <div class="status-row"><span class="label">Allowed Commands</span><span class="value v-pending" id="ta-allowed-commands">…</span></div>
-      <div class="status-row"><span class="label">Risk Gate</span><span class="value v-pending" id="ta-risk-gate">…</span></div>
-      <div class="status-row"><span class="label">Event Ledger</span><span class="value v-pending" id="ta-event-ledger">…</span></div>
-      <div class="status-row"><span class="label">Is Authoritative</span><span class="value v-pending" id="ta-is-authoritative">…</span></div>
-    </div>
-    <p class="onboarding-hint">Telegram nesta versão é só um canal auxiliar de notificação planejado — nunca executa ordem, nunca manda comando, nunca vira fonte de verdade. Qualquer sinal futuro entraria em quarentena, seria rejeitado automaticamente sem stop loss, e precisaria de validação do Soldier e do Risk Gate antes de qualquer uso. Sem token, sem webhook, sem rede nesta fase (toque no card para o resumo completo).</p>
   </section>
 
   <section class="card vault-evidence-card" id="vault-evidence-panel">
