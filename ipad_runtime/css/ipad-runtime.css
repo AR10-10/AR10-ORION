@@ -412,6 +412,55 @@ input[type=file].hidden-input { display: none; }
 .replay-meta b { color: var(--sys-cyan); font-weight: normal; }
 
 /* ------------------------------------------------------------
+   ORDER FLOW ENGINE — feed de sinais (OFI/Absorption/Exhaustion).
+   Mesmo padrao de borda-esquerda colorida por tipo do .ex-state-row/
+   .bl-price-row acima, via data-signal-type em vez de data-macro-state.
+   ------------------------------------------------------------ */
+.signal-list {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.signal-empty {
+    color: var(--text-dim);
+    font-size: clamp(0.72rem, 1.6vw, 0.85rem);
+    padding: 8px 4px;
+}
+.signal-item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-left: 3px solid var(--text-dim);
+    font-size: clamp(0.72rem, 1.6vw, 0.85rem);
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+}
+.signal-item[data-signal-type="OFI"] {
+    background: rgba(0, 242, 255, 0.06);
+    border-color: rgba(0, 242, 255, 0.3);
+    border-left-color: var(--sys-cyan);
+}
+.signal-item[data-signal-type="ABSORPTION"] {
+    background: rgba(255, 184, 0, 0.06);
+    border-color: rgba(255, 184, 0, 0.3);
+    border-left-color: var(--alert-amber);
+}
+.signal-item[data-signal-type="EXHAUSTION"] {
+    background: rgba(255, 62, 82, 0.07);
+    border-color: rgba(255, 62, 82, 0.35);
+    border-left-color: var(--short-red);
+}
+.signal-item .signal-conf { color: var(--text-dim); white-space: nowrap; }
+
+/* ------------------------------------------------------------
    MODAL — Adicionar a Tela de Inicio / instrucoes
    ------------------------------------------------------------ */
 .modal-overlay {

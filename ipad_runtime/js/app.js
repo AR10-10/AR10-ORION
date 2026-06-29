@@ -5,6 +5,7 @@ import * as packManager from './pack-manager.js';
 import * as diagnostics from './diagnostics.js';
 import * as replayEngine from './replay-engine.js';
 import { QuantWorkerClient } from './worker-client.js';
+import * as orderflowUI from './orderflow-engine-ui.js';
 import * as siriform from './siriform.js';
 import * as voice from './voice.js';
 import * as exporter from './export-manifest.js';
@@ -80,6 +81,7 @@ function repairLabel(vault) {
 }
 
 let workerClient = null;
+let orderflowClient = null;
 let replayDatasetCache = null;
 let lastAnalysisMeta = null;
 let lastReplayDrawData = null; // {closes, rollingSma} do ultimo replay — permite redesenhar o sparkline quando #advanced-section sai de hidden (canvas com rect 0x0 no draw original nao produz nada visivel)
@@ -1659,6 +1661,55 @@ async function handleRunReplay() {
     }
 }
 
+function signalDetail(s) {
+    if (s.type === 'OFI') return `imbalance=${s.metadata.imbalance.toFixed(3)}`;
+    if (s.type === 'ABSORPTION') return `vol=${s.metadata.totalVolume.toFixed(1)} Δpreço=${s.metadata.priceChange.toFixed(2)}`;
+    if (s.type === 'EXHAUSTION') return `zScore=${s.metadata.zScore.toFixed(2)} ${s.metadata.direction}`;
+    return '';
+}
+
+function renderOrderflowSignals(signals) {
+    const list = els['orderflow-signal-list'];
+    if (!list) return;
+    if (!signals || signals.length === 0) {
+        list.innerHTML = '<li class="signal-empty">Nenhum sinal orgânico nesta execução (replay derivado de candles agregados — ver nota acima). O auto-teste do motor já comprova os limiares de forma determinística (badge "Auto-teste do motor").</li>';
+        return;
+    }
+    list.innerHTML = signals.slice(-30).reverse().map((s) => `
+        <li class="signal-item" data-signal-type="${s.type}">
+            <span>${s.type} · preço ${s.price.toFixed(2)} · ${signalDetail(s)}</span>
+            <span class="signal-conf">${(s.confidence * 100).toFixed(0)}%</span>
+        </li>
+    `).join('');
+}
+
+async function handleRunOrderflow() {
+    if (!orderflowClient) {
+        log('Order Flow Engine ainda não inicializado.', 'fail');
+        return;
+    }
+    siriform.setSiriformState('checking', 'Rodando Order Flow replay sintético...');
+    try {
+        if (!replayDatasetCache) {
+            replayDatasetCache = await packManager.loadReplayDataset((m, l) => log(m, l));
+        }
+        const result = await orderflowUI.runReplayThroughOrderflow({ client: orderflowClient, dataset: replayDatasetCache });
+        els['orderflow-meta'].innerHTML = `
+            <span>Ticks sintetizados: <b>${result.ticksProcessed}</b></span>
+            <span>Ingeridos no ring buffer: <b>${result.ingested}</b></span>
+            <span>Sinais nesta execução: <b>${result.signals.length}</b></span>
+        `;
+        renderOrderflowSignals(result.signals);
+        log(`Order Flow replay: ${result.ticksProcessed} ticks sintetizados, ${result.signals.length} sinais.`, result.signals.length > 0 ? 'ok' : 'dim');
+        siriform.setSiriformState('success', result.signals.length > 0
+            ? `Order Flow: ${result.signals.length} sinal(is) detectado(s) no replay.`
+            : 'Order Flow replay concluído — 0 sinais orgânicos (esperado para este dataset; auto-teste do motor já comprova os limiares).');
+    } catch (err) {
+        log(`Erro no Order Flow replay: ${err.message}`, 'fail');
+        siriform.setSiriformState('warning', 'Não consegui rodar o Order Flow replay agora.');
+    }
+}
+
 async function handleClearReinstall() {
     const confirmMsg = 'Isso vai remover do Vault local deste iPad: o motor WASM, o dataset de replay, '
         + 'os manifestos/metadados e a versão instalada. O PWA em si (instalação na Tela de Início, '
@@ -2628,6 +2679,7 @@ function wireButtons() {
     if (els['btn-he-verify']) els['btn-he-verify'].addEventListener('click', handleVerifyHydrationIntegrity);
     if (els['btn-he-repair']) els['btn-he-repair'].addEventListener('click', handleRepairHydration);
     if (els['btn-he-export']) els['btn-he-export'].addEventListener('click', handleExportHydrationReport);
+    if (els['btn-run-orderflow']) els['btn-run-orderflow'].addEventListener('click', handleRunOrderflow);
 
     if (els['br-import-input']) {
         els['br-import-input'].addEventListener('change', async (ev) => {
@@ -2746,6 +2798,22 @@ async function boot() {
     } catch (err) {
         els['engine-meta'].textContent = `Falha ao inicializar o engine: ${err.message}`;
         log(`Worker/WASM falhou ao iniciar: ${err.message}`, 'fail');
+    }
+    if (els['orderflow-canvas']) {
+        try {
+            const orderflowWorkerUrl = new URL('workers/orderflow-worker.js', window.location.href).href;
+            const init = await orderflowUI.initOrderflowEngine({ workerUrl: orderflowWorkerUrl, canvas: els['orderflow-canvas'] });
+            orderflowClient = init.client;
+            setStatusWithClass('of-backend', String(init.backend).toUpperCase(), init.backend === 'webgpu' ? 'v-ok' : 'v-limited');
+            setStatusWithClass('of-sab', init.useSAB ? 'ATIVO (zero-copy)' : 'FALLBACK (structured clone)', init.useSAB ? 'v-ok' : 'v-limited');
+            setStatusWithClass('of-selftest', init.selfTest.pass ? 'PASS' : 'FAIL', init.selfTest.pass ? 'v-ok' : 'v-fail');
+            log(`Order Flow Engine pronto — backend=${init.backend}, useSAB=${init.useSAB}, auto-teste=${init.selfTest.pass ? 'PASS' : 'FAIL'}.`, init.selfTest.pass ? 'ok' : 'fail');
+        } catch (err) {
+            setStatusWithClass('of-backend', 'FALHA', 'v-fail');
+            setStatusWithClass('of-sab', 'FALHA', 'v-fail');
+            setStatusWithClass('of-selftest', 'FALHA', 'v-fail');
+            log(`Order Flow Engine falhou ao iniciar: ${err.message}`, 'fail');
+        }
     }
     const f = await refreshFeatureStatus();
     const voiceStatus = await refreshVoiceStatus();

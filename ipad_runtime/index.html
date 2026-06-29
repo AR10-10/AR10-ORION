@@ -327,6 +327,26 @@
     </div>
   </section>
 
+  <section class="card replay-wrap" id="orderflow-section">
+    <h2>Order Flow Engine <span class="step">replay sintetico — sem ordens</span></h2>
+    <p class="diagnostic-note">⚠ Modo de Diagnóstico Técnico: ticks derivados dos candles do replay acima (lado BUY/SELL inferido da direção do preço dentro de cada candle — não é fita de negociação real). Prova o worker dedicado, o ring buffer e o motor de sinais (OFI/Absorption/Exhaustion). <b>Não usar para decisão de mercado, sinal de trade ou recomendação.</b></p>
+    <canvas id="orderflow-canvas"></canvas>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Render backend</span><span class="value v-pending" id="of-backend">…</span></div>
+      <div class="status-row"><span class="label">SharedArrayBuffer (zero-copy)</span><span class="value v-pending" id="of-sab">…</span></div>
+      <div class="status-row"><span class="label">Auto-teste do motor (limiares sintéticos)</span><span class="value v-pending" id="of-selftest">…</span></div>
+    </div>
+    <div class="replay-meta" id="orderflow-meta">
+      <span>Toque em "Rodar Order Flow Replay" para alimentar o motor com os candles do replay.</span>
+    </div>
+    <ul class="signal-list" id="orderflow-signal-list">
+      <li class="signal-empty">Nenhum sinal nesta sessão ainda.</li>
+    </ul>
+    <div class="btn-grid">
+      <button class="rt-btn" id="btn-run-orderflow"><span class="icon">⚡</span> Rodar Order Flow Replay</button>
+    </div>
+  </section>
+
   <section class="card" id="analysis-frame-panel">
     <h2>AnalysisFrame <span class="step">leitura descritiva — não é recomendação</span></h2>
     <div class="analysis-frame-grid" id="analysis-frame-grid">

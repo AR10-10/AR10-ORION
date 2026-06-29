@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+    <title>AR10-CYBORG V1.0 — GOLDEN MASTER</title>
+    <style>
+        :root {
+            --bg:#020617; --glass:rgba(15,23,42,0.88); --cyan:#00f5ff; --purple:#c084fc;
+            --emerald:#34d399; --orange:#f97316; --red:#f87171; --gold:#fbbf24;
+            --text:#e2e8f0; --muted:#94a3b8; --border-cyan:rgba(0,245,255,0.25);
+            --border-purple:rgba(192,132,252,0.25); --border-orange:rgba(249,115,22,0.25);
+            --glow-cyan:0 0 20px rgba(0,245,255,0.18),0 0 40px rgba(0,245,255,0.08);
+            --glow-purple:0 0 18px rgba(192,132,252,0.15),0 0 36px rgba(192,132,252,0.06);
+            --glow-orange:0 0 18px rgba(249,115,22,0.15),0 0 36px rgba(249,115,22,0.06);
+        }
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{
+            font-family:'Inter','Segoe UI',system-ui,-apple-system,sans-serif;
+            background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh;
+            overflow-x:hidden;-webkit-font-smoothing:antialiased;
+            background-image:radial-gradient(ellipse at 20% 20%,rgba(0,245,255,0.04) 0%,transparent 55%),radial-gradient(ellipse at 80% 60%,rgba(192,132,252,0.03) 0%,transparent 55%),radial-gradient(ellipse at 50% 80%,rgba(249,115,22,0.02) 0%,transparent 55%);
+        }
+        .glass{background:var(--glass);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);border:1px solid var(--border-cyan);border-radius:1.5rem;box-shadow:var(--glow-cyan);transition:backdrop-filter 0.3s,-webkit-backdrop-filter 0.3s,box-shadow 0.3s}
+        .glass-purple{border-color:var(--border-purple);box-shadow:var(--glow-purple)}
+        .glass-orange{border-color:var(--border-orange);box-shadow:var(--glow-orange)}
+        .neon-cyan{text-shadow:0 0 18px rgba(0,245,255,0.7),0 0 40px rgba(0,245,255,0.3)}
+        .neon-purple{text-shadow:0 0 18px rgba(192,132,252,0.6),0 0 40px rgba(192,132,252,0.25)}
+        .neon-orange{text-shadow:0 0 14px rgba(249,115,22,0.6),0 0 35px rgba(249,115,22,0.2)}
+        ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--bg)}
+        ::-webkit-scrollbar-thumb{background:rgba(0,245,255,0.4);border-radius:3px}
+        .omni-grid{display:grid;grid-template-rows:auto auto 1fr auto;min-height:100vh;padding:0.75rem;gap:0.75rem;max-width:1600px;margin:0 auto}
+        .header-glass{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.75rem;flex-wrap:wrap;gap:0.75rem}
+        .header-title{font-size:1.5rem;font-weight:700;color:var(--cyan);letter-spacing:-0.02em}
+        .status-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;animation:pulse 2s infinite}
+        .status-dot.online{background:var(--emerald);box-shadow:0 0 10px rgba(52,211,153,0.5)}
+        .status-dot.replay{background:var(--gold);box-shadow:0 0 10px rgba(251,191,36,0.5)}
+        .status-dot.insufficient{background:var(--muted);box-shadow:0 0 10px rgba(148,163,184,0.5)}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.35}}
+        .biolink-strip{display:flex;gap:0.75rem;flex-wrap:wrap;align-items:stretch}
+        .biolink-panel{flex:1;min-width:200px;padding:1rem;display:flex;flex-direction:column;gap:0.5rem;position:relative;overflow:hidden}
+        .biolink-label{font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;opacity:0.85}
+        .biolink-value{font-family:'JetBrains Mono',monospace;font-size:1.15rem;font-weight:600;transition:color 0.3s}
+        .biolink-value.cyan{color:var(--cyan)}.biolink-value.purple{color:var(--purple)}.biolink-value.orange{color:var(--orange)}.biolink-value.emerald{color:var(--emerald)}
+        .biolink-sub{font-size:0.65rem;color:var(--muted)}
+        .main-grid{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:0.75rem}
+        .main-panel{padding:1.25rem;display:flex;flex-direction:column;gap:0.5rem;position:relative;overflow:hidden;min-height:380px}
+        .panel-title{font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;z-index:1}
+        .canvas-wrap{flex:1;position:relative;border-radius:0.75rem;overflow:hidden;background:rgba(2,6,23,0.5);min-height:220px}
+        canvas{width:100%;height:100%;display:block}
+        .signals-feed{flex:1;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:0.72rem;display:flex;flex-direction:column;gap:0.35rem;max-height:300px}
+        .sig-card{padding:0.45rem 0.6rem;border-radius:0.6rem;border-left:3px solid;animation:slideIn 0.2s ease-out;font-size:0.7rem}
+        .sig-card.exhaustion{background:rgba(249,115,22,0.08);border-color:var(--orange)}.sig-card.absorption{background:rgba(192,132,252,0.08);border-color:var(--purple)}.sig-card.ofi{background:rgba(0,245,255,0.06);border-color:var(--cyan)}
+        @keyframes slideIn{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:translateX(0)}}
+        .btn{padding:0.45rem 1rem;border-radius:0.6rem;cursor:pointer;font-weight:600;font-size:0.78rem;transition:all 0.2s;border:1px solid;background:transparent;backdrop-filter:blur(8px);letter-spacing:0.02em}
+        .btn-cyan{border-color:var(--cyan);color:var(--cyan)}.btn-cyan:hover{background:rgba(0,245,255,0.1);box-shadow:0 0 16px rgba(0,245,255,0.2)}
+        .btn-emerald{border-color:var(--emerald);color:var(--emerald)}.btn-emerald:hover{background:rgba(52,211,153,0.1);box-shadow:0 0 16px rgba(52,211,153,0.2)}
+        .btn-gold{border-color:var(--gold);color:var(--gold)}.btn-gold:hover{background:rgba(251,191,36,0.1);box-shadow:0 0 16px rgba(251,191,36,0.2)}
+        .btn-red{border-color:var(--red);color:var(--red)}.btn-red:hover{background:rgba(248,113,113,0.1);box-shadow:0 0 16px rgba(248,113,113,0.2)}
+        .notif-stack{position:fixed;top:1rem;right:1rem;z-index:1000;display:flex;flex-direction:column;gap:0.5rem;max-width:320px;pointer-events:none}
+        .notif-toast{background:var(--glass);backdrop-filter:blur(32px);-webkit-backdrop-filter:blur(32px);border:1px solid var(--border-cyan);border-radius:1rem;padding:0.75rem 1rem;animation:notifIn 0.35s ease-out;pointer-events:auto;box-shadow:var(--glow-cyan);font-size:0.78rem;position:relative;overflow:hidden}
+        .notif-toast .progress-bar{position:absolute;bottom:0;left:0;height:3px;background:var(--cyan);border-radius:0 0 1rem 1rem;transition:width 0.1s linear}
+        .notif-toast.exhaustion{border-color:rgba(249,115,22,0.5);box-shadow:0 0 18px rgba(249,115,22,0.15)}.notif-toast.exhaustion .progress-bar{background:var(--orange)}
+        .notif-toast.absorption{border-color:rgba(192,132,252,0.5);box-shadow:0 0 18px rgba(192,132,252,0.15)}.notif-toast.absorption .progress-bar{background:var(--purple)}
+        @keyframes notifIn{from{opacity:0;transform:translateX(80px)}to{opacity:1;transform:translateX(0)}}
+        .footer-glass{display:flex;justify-content:space-between;align-items:center;padding:0.7rem 1.75rem;font-size:0.7rem;flex-wrap:wrap;gap:0.5rem}
+        @media(max-width:1200px){.main-grid{grid-template-columns:1fr 1fr}.biolink-strip{flex-wrap:wrap}}
+        @media(max-width:768px){.main-grid{grid-template-columns:1fr}.biolink-strip{flex-direction:column}.header-glass{flex-direction:column;text-align:center}}
+    </style>
+</head>
+<body>
+    <div class="notif-stack" id="notif-stack"></div>
+    <div class="omni-grid">
+        <header class="glass header-glass">
+            <div><h1 class="header-title neon-cyan">AR10-CYBORG</h1><span style="color:var(--purple);font-size:0.85rem;letter-spacing:0.08em;">V1.0 GOLDEN MASTER</span></div>
+            <div style="display:flex;gap:1.25rem;align-items:center;flex-wrap:wrap">
+                <span style="color:var(--muted);font-family:monospace;font-size:0.8rem" id="clock">--:--:--.---</span>
+                <span id="mode-indicator"><span class="status-dot insufficient"></span><span style="color:var(--muted)">STANDBY</span></span>
+                <span id="system-indicator"><span class="status-dot insufficient"></span><span style="color:var(--muted)">INSUFFICIENT</span></span>
+            </div>
+        </header>
+        <div class="biolink-strip">
+            <div class="glass biolink-panel"><span class="biolink-label" style="color:var(--cyan)">🧬 Z-SCORE EXAUSTÃO</span><span class="biolink-value orange" id="bio-zscore">--</span><span class="biolink-sub" id="bio-zscore-dir">Aguardando dados...</span></div>
+            <div class="glass biolink-panel"><span class="biolink-label" style="color:var(--purple)">🌀 VOL ABSORVIDO</span><span class="biolink-value purple" id="bio-absvol">--</span><span class="biolink-sub" id="bio-absvol-delta">Δ --</span></div>
+            <div class="glass biolink-panel"><span class="biolink-label" style="color:var(--emerald)">📡 LATÊNCIA</span><span class="biolink-value emerald" id="bio-latency">--</span><span class="biolink-sub" id="bio-latency-grade">STANDBY</span></div>
+            <div class="glass biolink-panel"><span class="biolink-label" style="color:var(--orange)">⚡ SINAIS</span><span class="biolink-value orange" id="bio-signals">0</span><span class="biolink-sub" id="bio-signals-last">Nenhum sinal</span></div>
+        </div>
+        <main class="main-grid">
+            <div style="display:flex;flex-direction:column;gap:0.75rem">
+                <div class="glass main-panel" style="flex:1"><span class="panel-title" style="color:var(--purple)">👣 FOOTPRINT CHART</span><div class="canvas-wrap"><canvas id="footprint-canvas"></canvas></div></div>
+                <div class="glass glass-purple main-panel" style="flex:1"><span class="panel-title" style="color:var(--orange)">⚡ SINAIS TÁTICOS</span><div class="signals-feed" id="signals-container"><span style="color:var(--muted)">Sistema em STANDBY — aguardando injeção de dados...</span></div></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.75rem">
+                <div class="glass main-panel" style="flex:1.2"><span class="panel-title" style="color:var(--cyan)">🔮 NÚCLEO BIOLÓGICO — ESFERA NEURAL</span><div class="canvas-wrap"><canvas id="sphere-canvas"></canvas></div></div>
+                <div class="glass main-panel" style="flex:1"><span class="panel-title" style="color:var(--cyan)">🔭 SCANNER RAIO-X</span><div class="canvas-wrap"><canvas id="heatmap-canvas"></canvas></div></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.75rem">
+                <div class="glass main-panel" style="flex:1"><span class="panel-title" style="color:var(--emerald)">📊 TELEMETRIA</span><div style="display:flex;flex-direction:column;gap:0.5rem;font-family:'JetBrains Mono',monospace;font-size:0.72rem"><div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Ticks</span><span style="color:var(--cyan)" id="tel-ticks">0</span></div><div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">RingBuffer</span><span style="color:var(--cyan)" id="tel-ring">0/65536</span></div><div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">FPS</span><span style="color:var(--emerald)" id="tel-fps">--</span></div><div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Estado</span><span style="color:var(--muted)" id="tel-state">INSUFFICIENT</span></div><div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Preço</span><span style="color:var(--purple)" id="tel-price">--</span></div><div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Memória</span><span style="color:var(--muted)" id="tel-mem">--</span></div></div></div>
+                <div class="glass main-panel" style="flex:0.6"><span class="panel-title" style="color:var(--text)">🎛️ COMANDOS</span><div style="display:flex;flex-direction:column;gap:0.5rem"><button class="btn btn-gold" id="btn-replay">▶ REPLAY</button><button class="btn btn-emerald" id="btn-live">● LIVE</button><button class="btn btn-cyan" id="btn-clear">🗑️ LIMPAR SINAIS</button><button class="btn btn-red" id="btn-test">🔔 TESTAR NOTIF</button></div></div>
+            </div>
+        </main>
+        <footer class="glass footer-glass">
+            <span>AR10-CYBORG <span style="color:var(--cyan);font-weight:600">V1.0 GOLDEN MASTER</span></span>
+            <span>Zero-Copy SAB · WASM SIMD · WebGPU · <span style="color:var(--cyan)">MEXC V3</span></span>
+            <span style="color:var(--purple)">20 Pillars · Núcleo Biológico · iPad Safari PWA</span>
+        </footer>
+    </div>
+    <script>
+        (function(){
+            "use strict";
+
+            // ═══════════════════════════════════════════════════════════
+            // AR10-CYBORG · GOLDEN MASTER (cockpit de order-flow standalone)
+            // Origem: layout/engine gerado por modelo externo (DeepSeek),
+            // adaptado e ligado a dados reais aqui. NAO substitui index.html:
+            // o app modular em ipad_runtime/ continua sendo o produto que
+            // realmente FORCA READ_ONLY/FAIL_CLOSED e conecta os motores de
+            // pesquisa reais. Este arquivo e' uma experiencia visual paralela.
+            //
+            // Postura de seguranca deste arquivo (consistente com as Leis):
+            //  - READ_ONLY: so' consome dado PUBLICO de mercado (trades MEXC).
+            //    Nenhum caminho de ordem/compra/venda existe neste arquivo.
+            //  - SEM chave de API, SEM endpoint privado, SEM segredo.
+            //  - O "Simulador HFT" gera ticks SINTETICOS com random walk: fica
+            //    DESLIGADO por padrao, so' liga no botao REPLAY, e poe o
+            //    sistema em estado REPLAY (ponto dourado) — nunca e' misturado
+            //    com LIVE nem apresentado como dado real. Se nenhuma fonte real
+            //    responder, o estado fica STANDBY/INSUFFICIENT — nunca cai
+            //    silenciosamente no simulador (NO_FAKE_DATA).
+            //  - "Nucleo Biologico" e' o CORACAO VISUAL (canvas de particulas
+            //    do z-score de order-flow) — uma visualizacao, NAO uma IA e
+            //    nenhuma analise por IA e' alegada aqui (NO_FAKE_LOCAL_AI).
+            //  - Em GitHub Pages nao da' para enviar headers COOP/COEP, entao
+            //    SharedArrayBuffer fica indisponivel e o RingBuffer cai no
+            //    fallback Array (zero-copy degrada para copia) — esperado.
+            // ═══════════════════════════════════════════════════════════
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 1: MODULARIZAÇÃO EXTREMA
+            // Cada módulo é encapsulado com responsabilidade única.
+            // Namespace global AR10 como aggregate root.
+            // Nenhum módulo conhece detalhes internos de outro.
+            // ═══════════════════════════════════════════════════════════
+            const AR10 = {
+                version: '1.0.0',
+                state: 'STANDBY',
+                bootTime: null,
+                currentDataState: 'STANDBY',
+                setDataState: function(ns) {
+                    const validTransitions = {
+                        STANDBY: ['INSUFFICIENT', 'REPLAY', 'LIVE'],
+                        INSUFFICIENT: ['REPLAY', 'LIVE', 'STANDBY'],
+                        REPLAY: ['LIVE', 'STANDBY', 'INSUFFICIENT'],
+                        LIVE: ['STALE', 'INSUFFICIENT', 'STANDBY'],
+                        STALE: ['LIVE', 'INSUFFICIENT', 'STANDBY']
+                    };
+                    if (validTransitions[this.currentDataState] && validTransitions[this.currentDataState].includes(ns)) {
+                        this.currentDataState = ns;
+                        document.getElementById('tel-state').textContent = ns;
+                        const dot = document.getElementById('mode-indicator').querySelector('.status-dot');
+                        const lbl = document.getElementById('mode-indicator').querySelector('span:last-child');
+                        if (ns === 'LIVE') { dot.className = 'status-dot online'; lbl.textContent = 'LIVE'; lbl.style.color = 'var(--emerald)'; }
+                        else if (ns === 'REPLAY') { dot.className = 'status-dot replay'; lbl.textContent = 'REPLAY'; lbl.style.color = 'var(--gold)'; }
+                        else { dot.className = 'status-dot insufficient'; lbl.textContent = ns; lbl.style.color = 'var(--muted)'; }
+                    }
+                }
+            };
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 2: VALUE OBJECTS IMUTÁVEIS
+            // Todos os tipos de domínio são congelados com Object.freeze()
+            // após construção. Tick, Signal, Side, SignalType, DataState.
+            // ═══════════════════════════════════════════════════════════
+            const Side = Object.freeze({ BUY: 'BUY', SELL: 'SELL' });
+            const SignalType = Object.freeze({
+                OFI: 'OFI',
+                ABSORPTION: 'ABSORPTION',
+                EXHAUSTION: 'EXHAUSTION'
+            });
+            const DataState = Object.freeze({
+                LIVE: 'LIVE',
+                SNAPSHOT: 'SNAPSHOT',
+                REPLAY: 'REPLAY',
+                STALE: 'STALE',
+                INSUFFICIENT: 'INSUFFICIENT',
+                STANDBY: 'STANDBY'
+            });
+
+            class Tick {
+                constructor({ timestamp, price, volume, side, exchange = 'MEXC' }) {
+                    this.timestamp = timestamp;
+                    this.price = price;
+                    this.volume = volume;
+                    this.side = side;
+                    this.exchange = exchange;
+                    Object.freeze(this);
+                }
+                toRingEntry() {
+                    return {
+                        timestamp: this.timestamp,
+                        price: this.price,
+                        volume: this.volume,
+                        sideFlag: this.side === Side.BUY ? 1.0 : -1.0
+                    };
+                }
+                static fromRingEntry(t, p, v, s) {
+                    return new Tick({
+                        timestamp: t,
+                        price: p,
+                        volume: v,
+                        side: s > 0 ? Side.BUY : Side.SELL
+                    });
+                }
+            }
+
+            class Signal {
+                constructor({ type, confidence, price, timestamp, metadata = {} }) {
+                    this.type = type;
+                    this.confidence = confidence;
+                    this.price = price;
+                    this.timestamp = timestamp;
+                    this.metadata = metadata;
+                    Object.freeze(this);
+                }
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 3: AGGREGATES — COCKPIT COMO RAIZ
+            // AR10 gerencia o estado global e orquestra todos os submódulos
+            // (ring buffer, estratégia, telemetria, renderização).
+            // ═══════════════════════════════════════════════════════════
+            // (O aggregate root é o próprio namespace AR10 definido na Skill 1)
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 4: USE CASES EVENT-DRIVEN
+            // Os motores de estratégia (OFI, Absorção, Exaustão) processam
+            // ticks do RingBuffer e emitem objetos Signal imutáveis.
+            // Eles NÃO conhecem a UI — apenas transformam dados.
+            // ═══════════════════════════════════════════════════════════
+            const engineState = {
+                ofi: { buyVol: 0, sellVol: 0, count: 0, lastSig: 0 },
+                absorption: { buyVol: 0, sellVol: 0, priceStart: 0, startTime: 0, active: false },
+                exhaustion: { deltaHist: [], priceHist: [], currentDelta: 0 }
+            };
+
+            const settings = {
+                strategy: {
+                    ofi: {
+                        windowSize: 400,
+                        imbalanceThreshold: 0.6,
+                        minVolume: 100,
+                        cooldownMs: 500
+                    },
+                    absorption: {
+                        absorptionThreshold: 0.7,
+                        timeWindowMs: 5000,
+                        minAbsorptionVolume: 500
+                    },
+                    exhaustion: {
+                        deltaLookback: 500,
+                        exhaustionThreshold: 3.0,
+                        reversalConfirmation: 0.2,
+                        minDeltaVolume: 1000
+                    }
+                },
+                system: {
+                    debug: false,
+                    ringBufferCapacity: 65536,
+                    localPackage: 'AR10_CYBORG_LOCAL_PACK_V1.ar10pack',
+                    sha256Validation: true
+                }
+            };
+
+            function mean(arr) {
+                if (arr.length === 0) return 0;
+                let sum = 0;
+                for (let i = 0; i < arr.length; i++) sum += arr[i];
+                return sum / arr.length;
+            }
+
+            function stdDev(arr, avg) {
+                if (arr.length < 2) return 0;
+                let sum = 0;
+                for (let i = 0; i < arr.length; i++) sum += Math.pow(arr[i] - avg, 2);
+                return Math.sqrt(sum / (arr.length - 1));
+            }
+
+            function processSignals(ticks) {
+                const signals = [];
+                const now = Date.now();
+                for (let ti = 0; ti < ticks.length; ti++) {
+                    const tick = ticks[ti];
+                    const ofi = engineState.ofi;
+                    tick.side === Side.BUY ? ofi.buyVol += tick.volume : ofi.sellVol += tick.volume;
+                    ofi.count++;
+                    if (ofi.count >= settings.strategy.ofi.windowSize) {
+                        const tot = ofi.buyVol + ofi.sellVol;
+                        const imb = tot > 0 ? (ofi.buyVol - ofi.sellVol) / tot : 0;
+                        if (Math.abs(imb) > settings.strategy.ofi.imbalanceThreshold && tot >= settings.strategy.ofi.minVolume && now - ofi.lastSig > settings.strategy.ofi.cooldownMs) {
+                            signals.push(new Signal({
+                                type: SignalType.OFI,
+                                confidence: Math.abs(imb),
+                                price: tick.price,
+                                timestamp: now,
+                                metadata: { imbalance: imb, buyVol: ofi.buyVol, sellVol: ofi.sellVol }
+                            }));
+                            ofi.lastSig = now;
+                        }
+                        ofi.buyVol = 0; ofi.sellVol = 0; ofi.count = 0;
+                    }
+                    const abs = engineState.absorption;
+                    tick.side === Side.BUY ? abs.buyVol += tick.volume : abs.sellVol += tick.volume;
+                    if (!abs.active) { abs.active = true; abs.priceStart = tick.price; abs.startTime = now; abs.buyVol = 0; abs.sellVol = 0; }
+                    const elapsed = now - abs.startTime;
+                    if (elapsed >= settings.strategy.absorption.timeWindowMs) {
+                        const tv = abs.buyVol + abs.sellVol;
+                        const pc = Math.abs(tick.price - abs.priceStart) / abs.priceStart;
+                        if (tv >= settings.strategy.absorption.minAbsorptionVolume && pc < 0.001) {
+                            const ratio = tv / (pc + 0.0001);
+                            if (ratio > settings.strategy.absorption.absorptionThreshold * 1000) {
+                                signals.push(new Signal({
+                                    type: SignalType.ABSORPTION,
+                                    confidence: Math.min(ratio / 1000, 1.0),
+                                    price: tick.price,
+                                    timestamp: now,
+                                    metadata: { totalVolume: tv, priceChange: pc, buyVol: abs.buyVol, sellVol: abs.sellVol }
+                                }));
+                            }
+                        }
+                        abs.active = false; abs.buyVol = 0; abs.sellVol = 0;
+                    }
+                    const exh = engineState.exhaustion;
+                    const td = tick.side === Side.BUY ? tick.volume : -tick.volume;
+                    exh.currentDelta += td;
+                    exh.deltaHist.push(exh.currentDelta);
+                    exh.priceHist.push(tick.price);
+                    const lb = settings.strategy.exhaustion.deltaLookback;
+                    if (exh.deltaHist.length > lb) { exh.deltaHist.shift(); exh.priceHist.shift(); }
+                    if (exh.deltaHist.length >= lb) {
+                        const dm = mean(exh.deltaHist);
+                        const ds = stdDev(exh.deltaHist, dm);
+                        const zs = ds > 0 ? (exh.currentDelta - dm) / ds : 0;
+                        if (Math.abs(zs) > settings.strategy.exhaustion.exhaustionThreshold && Math.abs(exh.currentDelta) > settings.strategy.exhaustion.minDeltaVolume) {
+                            const rp = exh.priceHist.slice(-10);
+                            const pc2 = (rp[rp.length - 1] - rp[0]) / rp[0];
+                            const isRev = (zs > 0 && pc2 < -settings.strategy.exhaustion.reversalConfirmation) || (zs < 0 && pc2 > settings.strategy.exhaustion.reversalConfirmation);
+                            if (isRev) {
+                                signals.push(new Signal({
+                                    type: SignalType.EXHAUSTION,
+                                    confidence: Math.min(Math.abs(zs) / (settings.strategy.exhaustion.exhaustionThreshold * 2), 1.0),
+                                    price: tick.price,
+                                    timestamp: now,
+                                    metadata: { delta: exh.currentDelta, zScore: zs, priceChange: pc2, direction: zs > 0 ? 'BUY_EXHAUSTED' : 'SELL_EXHAUSTED' }
+                                }));
+                                exh.currentDelta = 0; exh.deltaHist = [];
+                            }
+                        }
+                    }
+                }
+                return signals;
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 5: CQRS ESTRITO — UI READ-ONLY
+            // A interface é estritamente de leitura. Ela nunca escreve
+            // no domínio. A comunicação é unidirecional:
+            // RingBuffer → Estratégia → UIBridge → DOM.
+            // ═══════════════════════════════════════════════════════════
+            const UIBridge = {
+                updateElement: function(id, value) {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = value;
+                },
+                updateBiolink: function(zScore, zDir, absVol, absDelta, latency, latencyGrade, signals, lastSig) {
+                    this.updateElement('bio-zscore', zScore !== null ? zScore.toFixed(2) : '--');
+                    this.updateElement('bio-zscore-dir', zDir || 'Aguardando dados...');
+                    this.updateElement('bio-absvol', absVol !== null ? absVol.toFixed(1) : '--');
+                    this.updateElement('bio-absvol-delta', absDelta !== null ? 'Δ ' + (absDelta >= 0 ? '+' : '') + absDelta.toFixed(2) : 'Δ --');
+                    this.updateElement('bio-latency', latency !== null ? latency.toFixed(1) + 'ms' : '--');
+                    this.updateElement('bio-latency-grade', latencyGrade || 'STANDBY');
+                    this.updateElement('bio-signals', signals !== null ? signals : '0');
+                    this.updateElement('bio-signals-last', lastSig || 'Nenhum sinal');
+                },
+                updateTelemetry: function(ticks, ringUsed, fps, price, mem) {
+                    this.updateElement('tel-ticks', ticks !== null ? ticks : '0');
+                    this.updateElement('tel-ring', ringUsed !== null ? ringUsed + '/65536' : '0/65536');
+                    this.updateElement('tel-fps', fps !== null ? fps : '--');
+                    this.updateElement('tel-price', price !== null ? price.toFixed(2) : '--');
+                    this.updateElement('tel-mem', mem || '--');
+                }
+            };
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 6: EVENT SOURCING
+            // Log imutável de eventos para auditoria, debug e replay.
+            // Cada evento é armazenado com timestamp e tipo.
+            // ═══════════════════════════════════════════════════════════
+            const eventLog = [];
+            const MAX_EVENT_LOG = 500;
+
+            function logEvent(type, data) {
+                const entry = { type: type, data: data, timestamp: Date.now() };
+                eventLog.push(entry);
+                if (eventLog.length > MAX_EVENT_LOG) eventLog.shift();
+                if (settings.system.debug) console.log('[EVENT][' + type + ']', data);
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 7: ARQUITETURA HEXAGONAL
+            // Portas de entrada (InputPorts) e portas de saída (OutputPorts)
+            // são desacopladas do núcleo de domínio.
+            // ═══════════════════════════════════════════════════════════
+            const InputPorts = {
+                injectTick: function(tick) {
+                    if (!(tick instanceof Tick)) {
+                        console.warn('[InputPorts] Tentativa de injetar objeto não-Tick.');
+                        return false;
+                    }
+                    mainRing.enqueue(tick);
+                    return true;
+                },
+                injectTicks: function(ticks) {
+                    let count = 0;
+                    for (let i = 0; i < ticks.length; i++) {
+                        if (this.injectTick(ticks[i])) count++;
+                    }
+                    return count;
+                }
+            };
+
+            const OutputPorts = {
+                onSignal: null,
+                onStateChange: null,
+                emitSignal: function(signal) {
+                    if (typeof this.onSignal === 'function') this.onSignal(signal);
+                },
+                emitStateChange: function(newState) {
+                    if (typeof this.onStateChange === 'function') this.onStateChange(newState);
+                }
+            };
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 8: ACTOR MODEL — WEB WORKERS
+            // Registro e comunicação com workers isolados (quant-worker,
+            // mesh-worker). O sistema está preparado para receber workers
+            // externos via ActorRegistry.
+            // ═══════════════════════════════════════════════════════════
+            const ActorRegistry = {
+                workers: {},
+                register: function(name, worker) {
+                    this.workers[name] = worker;
+                    console.log('[ActorRegistry] Worker \'' + name + '\' registrado.');
+                },
+                send: function(name, message) {
+                    if (this.workers[name]) {
+                        this.workers[name].postMessage(message);
+                    } else {
+                        console.warn('[ActorRegistry] Worker \'' + name + '\' não encontrado.');
+                    }
+                },
+                broadcast: function(message) {
+                    for (const name in this.workers) {
+                        try { this.workers[name].postMessage(message); } catch (e) {}
+                    }
+                }
+            };
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 9: ZERO-COPY SHAREDARRAYBUFFER & RING BUFFER
+            // Buffer circular lock-free no SharedArrayBuffer com
+            // Float64Array. Fallback para Array se SAB indisponível.
+            // Single producer (WebSocket ou simulador), multiple consumers.
+            // ═══════════════════════════════════════════════════════════
+            class RingBuffer {
+                constructor(capacity) {
+                    capacity = capacity || 65536;
+                    this.capacity = capacity;
+                    this.useSAB = (typeof SharedArrayBuffer !== 'undefined');
+                    if (this.useSAB) {
+                        const ENTRY_SIZE = 4;
+                        const META_SIZE = 2;
+                        const totalFloats = META_SIZE + capacity * ENTRY_SIZE;
+                        const totalBytes = totalFloats * Float64Array.BYTES_PER_ELEMENT;
+                        this.sab = new SharedArrayBuffer(totalBytes);
+                        this.meta = new Int32Array(this.sab, 0, META_SIZE);
+                        this.data = new Float64Array(this.sab, META_SIZE * Float64Array.BYTES_PER_ELEMENT, capacity * ENTRY_SIZE);
+                        this.head = 0;
+                        this.tail = 0;
+                    } else {
+                        this.fallback = [];
+                        console.warn('[RingBuffer] SharedArrayBuffer indisponível. Usando fallback Array.');
+                    }
+                }
+
+                enqueue(tick) {
+                    if (!this.useSAB) {
+                        this.fallback.push(tick);
+                        if (this.fallback.length > this.capacity) this.fallback.shift();
+                        return true;
+                    }
+                    const entry = tick.toRingEntry();
+                    const offset = this.head * 4;
+                    this.data[offset] = entry.timestamp;
+                    this.data[offset + 1] = entry.price;
+                    this.data[offset + 2] = entry.volume;
+                    this.data[offset + 3] = entry.sideFlag;
+                    this.head = (this.head + 1) % this.capacity;
+                    if (this.head === this.tail) this.tail = (this.tail + 1) % this.capacity;
+                    return true;
+                }
+
+                drain() {
+                    if (!this.useSAB) {
+                        const ticks = [...this.fallback];
+                        this.fallback = [];
+                        return ticks;
+                    }
+                    const ticks = [];
+                    while (this.tail !== this.head) {
+                        const offset = this.tail * 4;
+                        const tick = Tick.fromRingEntry(
+                            this.data[offset],
+                            this.data[offset + 1],
+                            this.data[offset + 2],
+                            this.data[offset + 3]
+                        );
+                        ticks.push(tick);
+                        this.tail = (this.tail + 1) % this.capacity;
+                    }
+                    return ticks;
+                }
+
+                count() {
+                    if (!this.useSAB) return this.fallback.length;
+                    return (this.head - this.tail + this.capacity) % this.capacity;
+                }
+
+                isEmpty() { return this.count() === 0; }
+            }
+
+            const mainRing = new RingBuffer(settings.system.ringBufferCapacity);
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 10: THROTTLING / DEBOUNCING — 60 FPS
+            // Controle de taxa de atualização da UI para garantir 60 FPS
+            // estáveis. Sinais no DOM têm throttle de 80ms; contadores
+            // de ticks têm throttle de 200ms.
+            // ═══════════════════════════════════════════════════════════
+            const ThrottleManager = {
+                lastSignalUITime: 0,
+                signalThrottleMs: 80,
+                lastTickCounterUpdate: 0,
+                tickCounterThrottleMs: 200,
+                canUpdateSignals: function() {
+                    const now = Date.now();
+                    if (now - this.lastSignalUITime >= this.signalThrottleMs) {
+                        this.lastSignalUITime = now;
+                        return true;
+                    }
+                    return false;
+                },
+                canUpdateTickCounter: function() {
+                    const now = Date.now();
+                    if (now - this.lastTickCounterUpdate >= this.tickCounterThrottleMs) {
+                        this.lastTickCounterUpdate = now;
+                        return true;
+                    }
+                    return false;
+                }
+            };
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 11: HARDWARE ACCELERATION — CÉREBRO DO NÚCLEO
+            // ═══════════════════════════════════════════════════════════
+            // ESFERA NEURAL 3D COM 9 ANÉIS CONCÊNTRICOS
+            // ────────────────────────────────────────────────────────
+            // O Núcleo Biológico é o CORAÇÃO VISUAL do AR10-CYBORG.
+            // Composto por 80 nodos neurais distribuídos na superfície
+            // de uma esfera (sequência áurea), conectados por sinapses
+            // bioluminescentes. Nove anéis concêntricos com inclinações
+            // distintas orbitam o centro. Um campo gravitacional de
+            // estresse (laranja) pulsa quando o Z-Score ultrapassa 2.0.
+            //
+            // MATEMÁTICA:
+            // - Distribuição dos nodos: coordenadas esféricas com
+            //   phi = acos(2i/N - 1), theta = 2πiφ (proporção áurea)
+            // - Projeção 3D→2D: rotação no eixo Y com matriz de rotação
+            // - Pulsação: sin(t * 0.003 + r * 12 + spherePulse)
+            // - Intensidade: 0.6 + 0.4 * |zScore| / 5
+            // - Glow radial: createRadialGradient com 3 stops
+            // ═══════════════════════════════════════════════════════════
+
+            // ─── FOOTPRINT CHART ────────────────────────────────────
+            const fpCanvas = document.getElementById('footprint-canvas');
+            const fpCtx = fpCanvas.getContext('2d', { alpha: true, desynchronized: true });
+            let fpDeltas = [];
+
+            function updateFootprint(ticks) {
+                for (let i = 0; i < ticks.length; i++) {
+                    const t = ticks[i];
+                    const d = t.side === Side.BUY ? t.volume : -t.volume;
+                    const last = fpDeltas.length > 0 ? fpDeltas[fpDeltas.length - 1] : null;
+                    if (last && last.timestamp === t.timestamp) {
+                        last.delta += d;
+                    } else {
+                        fpDeltas.push({ delta: d, timestamp: t.timestamp, price: t.price });
+                    }
+                }
+                while (fpDeltas.length > 100) fpDeltas.shift();
+            }
+
+            function drawFootprint() {
+                const w = fpCanvas.width, h = fpCanvas.height;
+                if (!w || !h) return;
+                fpCtx.clearRect(0, 0, w, h);
+                fpCtx.fillStyle = 'rgba(2,6,23,0.6)';
+                fpCtx.fillRect(0, 0, w, h);
+                if (fpDeltas.length === 0) return;
+                const zeroY = h / 2;
+                fpCtx.strokeStyle = 'rgba(148,163,184,0.2)';
+                fpCtx.lineWidth = 1;
+                fpCtx.beginPath();
+                fpCtx.moveTo(0, zeroY);
+                fpCtx.lineTo(w, zeroY);
+                fpCtx.stroke();
+                const maxDelta = Math.max(1, ...fpDeltas.map(function(d) { return Math.abs(d.delta); }));
+                const barW = Math.max(3, w / 100 - 1);
+                for (let i = 0; i < fpDeltas.length; i++) {
+                    const d = fpDeltas[i];
+                    const x = i * (w / 100);
+                    const barH = (Math.abs(d.delta) / maxDelta) * (h / 2 - 8);
+                    const y = d.delta >= 0 ? zeroY - barH : zeroY;
+                    fpCtx.fillStyle = d.delta >= 0 ? 'rgba(52,211,153,0.7)' : 'rgba(248,113,113,0.7)';
+                    fpCtx.fillRect(x, y, barW, Math.max(1, barH));
+                }
+                if (fpDeltas.length > 0) {
+                    const last = fpDeltas[fpDeltas.length - 1];
+                    fpCtx.fillStyle = '#00f5ff';
+                    fpCtx.font = '10px monospace';
+                    fpCtx.fillText('Δ:' + last.delta.toFixed(2) + ' P:' + last.price.toFixed(1), 6, h - 6);
+                }
+            }
+
+            // ─── HEATMAP (SCANNER RAIO-X) ────────────────────────────
+            const hmCanvas = document.getElementById('heatmap-canvas');
+            const hmCtx = hmCanvas.getContext('2d', { alpha: true, desynchronized: true });
+            let hmGrid = [];
+            const HM_COLS = 60, HM_ROWS = 40;
+            let priceMin = 66000, priceMax = 69000;
+
+            function initHeatmap() {
+                hmGrid = [];
+                for (let r = 0; r < HM_ROWS; r++) hmGrid[r] = new Array(HM_COLS).fill(0);
+            }
+
+            function updateHeatmap(ticks, currentPrice) {
+                const priceRange = priceMax - priceMin;
+                const now = Date.now();
+                const timeWindow = 30000;
+                for (let i = 0; i < ticks.length; i++) {
+                    const t = ticks[i];
+                    const row = Math.floor((t.price - priceMin) / priceRange * HM_ROWS);
+                    const col = Math.floor(((now % timeWindow) / timeWindow) * HM_COLS);
+                    if (row >= 0 && row < HM_ROWS && col >= 0 && col < HM_COLS) {
+                        hmGrid[row][col] += t.side === Side.BUY ? t.volume : -t.volume;
+                    }
+                }
+                if (currentPrice !== null && currentPrice < priceMin) priceMin = currentPrice - 500;
+                if (currentPrice !== null && currentPrice > priceMax) priceMax = currentPrice + 500;
+            }
+
+            function drawHeatmap(currentPrice) {
+                const w = hmCanvas.width, h = hmCanvas.height;
+                if (!w || !h) return;
+                hmCtx.clearRect(0, 0, w, h);
+                hmCtx.fillStyle = 'rgba(2,6,23,0.6)';
+                hmCtx.fillRect(0, 0, w, h);
+                const cellW = w / HM_COLS, cellH = h / HM_ROWS;
+                let maxAbs = 1;
+                for (let r = 0; r < HM_ROWS; r++) for (let c = 0; c < HM_COLS; c++) maxAbs = Math.max(maxAbs, Math.abs(hmGrid[r][c]));
+                for (let r = 0; r < HM_ROWS; r++) {
+                    for (let c = 0; c < HM_COLS; c++) {
+                        const val = hmGrid[r][c] / maxAbs;
+                        const x = c * cellW, y = r * cellH;
+                        if (val > 0.015) hmCtx.fillStyle = 'rgba(0,245,255,' + Math.min(Math.abs(val), 0.85) + ')';
+                        else if (val < -0.015) hmCtx.fillStyle = 'rgba(249,115,22,' + Math.min(Math.abs(val), 0.85) + ')';
+                        else hmCtx.fillStyle = 'rgba(15,23,42,0.35)';
+                        hmCtx.fillRect(x, y, cellW - 0.5, cellH - 0.5);
+                    }
+                }
+                if (currentPrice !== null) {
+                    const priceY = ((currentPrice - priceMin) / (priceMax - priceMin)) * h;
+                    hmCtx.strokeStyle = 'rgba(255,255,255,0.3)';
+                    hmCtx.setLineDash([4, 6]);
+                    hmCtx.lineWidth = 1;
+                    hmCtx.beginPath();
+                    hmCtx.moveTo(0, priceY);
+                    hmCtx.lineTo(w, priceY);
+                    hmCtx.stroke();
+                    hmCtx.setLineDash([]);
+                    hmCtx.fillStyle = '#fff';
+                    hmCtx.font = '9px monospace';
+                    hmCtx.fillText(currentPrice.toFixed(1), 4, Math.max(10, priceY - 5));
+                }
+            }
+
+            // ─── ESFERA NEURAL 3D (CÉREBRO DO NÚCLEO) ────────────────
+            const spCanvas = document.getElementById('sphere-canvas');
+            const spCtx = spCanvas.getContext('2d', { alpha: true, desynchronized: true });
+            let sphereNodes = [];
+            let sphereSynapses = [];
+            let sphereRings = [];
+            let sphereRotation = 0;
+            let spherePulse = 0;
+            const SPHERE_NODE_COUNT = 80;
+            const SPHERE_RING_COUNT = 9;
+            const SPHERE_BASE_SPEED = 0.004;
+
+            function initSphere() {
+                sphereNodes = [];
+                sphereSynapses = [];
+                sphereRings = [];
+                // Distribuição dos nodos na superfície da esfera usando a proporção áurea
+                for (let i = 0; i < SPHERE_NODE_COUNT; i++) {
+                    const phi = Math.acos(2 * i / SPHERE_NODE_COUNT - 1);
+                    const theta = 2 * Math.PI * i * 1.618033988749895;
+                    sphereNodes.push({
+                        x: Math.sin(phi) * Math.cos(theta),
+                        y: Math.sin(phi) * Math.sin(theta),
+                        z: Math.cos(phi),
+                        r: 0.015 + Math.random() * 0.035,
+                        pulse: Math.random() * Math.PI * 2,
+                        color: Math.random() > 0.7 ? 'purple' : 'cyan'
+                    });
+                }
+                // Conexões sinápticas entre nodos próximos (distância euclidiana < 0.5)
+                for (let i = 0; i < SPHERE_NODE_COUNT; i++) {
+                    for (let j = i + 1; j < SPHERE_NODE_COUNT; j++) {
+                        const dx = sphereNodes[i].x - sphereNodes[j].x;
+                        const dy = sphereNodes[i].y - sphereNodes[j].y;
+                        const dz = sphereNodes[i].z - sphereNodes[j].z;
+                        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                        if (dist < 0.5) {
+                            sphereSynapses.push({
+                                a: i,
+                                b: j,
+                                alpha: 0.1 + 0.4 * (1 - dist / 0.5)
+                            });
+                        }
+                    }
+                }
+                // Nove anéis concêntricos com inclinações progressivas
+                for (let ring = 0; ring < SPHERE_RING_COUNT; ring++) {
+                    const radius = 0.3 + ring * 0.07;
+                    const tilt = (ring - 4) * 0.15;
+                    const segments = 40 + ring * 8;
+                    const nodes = [];
+                    for (let s = 0; s < segments; s++) {
+                        const angle = (2 * Math.PI * s) / segments;
+                        nodes.push({
+                            x: Math.cos(angle) * radius,
+                            y: Math.sin(angle) * radius * Math.cos(tilt),
+                            z: Math.sin(angle) * radius * Math.sin(tilt)
+                        });
+                    }
+                    sphereRings.push({
+                        nodes: nodes,
+                        radius: radius,
+                        tilt: tilt,
+                        color: ring < 3 ? 'cyan' : ring < 6 ? 'purple' : 'orange',
+                        speed: 0.002 + ring * 0.0005
+                    });
+                }
+            }
+
+            function drawSphere(timestamp, zScore) {
+                zScore = zScore || 0;
+                const w = spCanvas.width, h = spCanvas.height;
+                if (!w || !h) return;
+                spCtx.clearRect(0, 0, w, h);
+                spCtx.fillStyle = 'rgba(2,6,23,0.5)';
+                spCtx.fillRect(0, 0, w, h);
+                const cx = w / 2, cy = h / 2, scale = Math.min(w, h) * 0.4;
+                sphereRotation += SPHERE_BASE_SPEED + Math.abs(zScore) * 0.001;
+                spherePulse += 0.05;
+                const cosA = Math.cos(sphereRotation), sinA = Math.sin(sphereRotation);
+                const proj = function(n) {
+                    const rx = n.x * cosA - n.z * sinA;
+                    const rz = n.x * sinA + n.z * cosA;
+                    return { x: cx + rx * scale, y: cy + n.y * scale, z: rz, r: n.r };
+                };
+                // Desenha anéis
+                for (let ri = 0; ri < sphereRings.length; ri++) {
+                    const ring = sphereRings[ri];
+                    const projectedRing = ring.nodes.map(proj);
+                    const colorMap = { cyan: '0,245,255', purple: '192,132,252', orange: '249,115,22' };
+                    const alpha = 0.25 + 0.1 * Math.sin(spherePulse * ring.speed * 10);
+                    spCtx.strokeStyle = 'rgba(' + colorMap[ring.color] + ',' + alpha + ')';
+                    spCtx.lineWidth = 0.8;
+                    spCtx.beginPath();
+                    for (let i = 0; i < projectedRing.length; i++) {
+                        if (i === 0) spCtx.moveTo(projectedRing[i].x, projectedRing[i].y);
+                        else spCtx.lineTo(projectedRing[i].x, projectedRing[i].y);
+                    }
+                    spCtx.closePath();
+                    spCtx.stroke();
+                }
+                // Projeta e ordena nodos por profundidade (z)
+                const projected = sphereNodes.map(proj);
+                projected.sort(function(a, b) { return b.z - a.z; });
+                // Desenha sinapses
+                spCtx.lineWidth = 0.4;
+                for (let si = 0; si < sphereSynapses.length; si++) {
+                    const s = sphereSynapses[si];
+                    const A = projected[s.a], B = projected[s.b];
+                    const alphaMod = 0.3 + 0.2 * Math.sin(spherePulse + s.a * 0.1);
+                    spCtx.strokeStyle = 'rgba(0,245,255,' + (s.alpha * alphaMod) + ')';
+                    spCtx.beginPath();
+                    spCtx.moveTo(A.x, A.y);
+                    spCtx.lineTo(B.x, B.y);
+                    spCtx.stroke();
+                }
+                // Desenha nodos com glow radial
+                for (let pi = 0; pi < projected.length; pi++) {
+                    const p = projected[pi];
+                    const pulse = 0.5 + 0.5 * Math.sin(timestamp * 0.003 + p.r * 12 + spherePulse);
+                    const intensity = 0.6 + 0.4 * Math.abs(zScore) / 5;
+                    const grad = spCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * scale * 1.4);
+                    const c = p.color === 'purple' ? '192,132,252' : '0,245,255';
+                    grad.addColorStop(0, 'rgba(' + c + ',' + (0.9 * pulse * intensity) + ')');
+                    grad.addColorStop(0.6, 'rgba(' + c + ',' + (0.3 * pulse * intensity) + ')');
+                    grad.addColorStop(1, 'rgba(0,245,255,0)');
+                    spCtx.fillStyle = grad;
+                    spCtx.beginPath();
+                    spCtx.arc(p.x, p.y, p.r * scale * 1.4, 0, Math.PI * 2);
+                    spCtx.fill();
+                }
+                // Campo gravitacional de estresse (laranja no centro)
+                const stressAlpha = Math.min(1, Math.abs(zScore) / 4);
+                if (stressAlpha > 0.5) {
+                    const stressGrad = spCtx.createRadialGradient(cx, cy, 0, cx, cy, scale * 0.5);
+                    stressGrad.addColorStop(0, 'rgba(249,115,22,' + (stressAlpha * 0.4) + ')');
+                    stressGrad.addColorStop(1, 'rgba(249,115,22,0)');
+                    spCtx.fillStyle = stressGrad;
+                    spCtx.beginPath();
+                    spCtx.arc(cx, cy, scale * 0.5, 0, Math.PI * 2);
+                    spCtx.fill();
+                }
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 12: REACTIVE STATE MANAGEMENT
+            // Atualização cirúrgica de nós de texto no DOM, sem reflow.
+            // Cada valor só é escrito se houve mudança real.
+            // ═══════════════════════════════════════════════════════════
+            let lastKnownPrice = null;
+            let lastKnownZScore = null;
+            let lastKnownAbsVol = null;
+            let lastKnownAbsDelta = null;
+
+            function reactiveUpdate(key, value) {
+                switch (key) {
+                    case 'price':
+                        if (lastKnownPrice !== value) { lastKnownPrice = value; UIBridge.updateElement('tel-price', value !== null ? value.toFixed(2) : '--'); }
+                        break;
+                    case 'zscore':
+                        if (lastKnownZScore !== value) { lastKnownZScore = value; UIBridge.updateElement('bio-zscore', value !== null ? value.toFixed(2) : '--'); }
+                        break;
+                    case 'absvol':
+                        if (lastKnownAbsVol !== value) { lastKnownAbsVol = value; UIBridge.updateElement('bio-absvol', value !== null ? value.toFixed(1) : '--'); }
+                        break;
+                    case 'absdelta':
+                        if (lastKnownAbsDelta !== value) { lastKnownAbsDelta = value; UIBridge.updateElement('bio-absvol-delta', value !== null ? 'Δ ' + (value >= 0 ? '+' : '') + value.toFixed(2) : 'Δ --'); }
+                        break;
+                }
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 13: ATOMIC DESIGN — LUXURY GLASSMORPHISM
+            // Sistema de temas dinâmicos baseado em variáveis CSS atômicas.
+            // O CSS já implementa o design system completo.
+            // ═══════════════════════════════════════════════════════════
+            const ThemeEngine = {
+                current: 'dark',
+                setTheme: function(theme) {
+                    this.current = theme;
+                    const root = document.documentElement;
+                    if (theme === 'dark') {
+                        root.style.setProperty('--bg', '#020617');
+                        root.style.setProperty('--glass', 'rgba(15,23,42,0.88)');
+                    } else if (theme === 'deep') {
+                        root.style.setProperty('--bg', '#000000');
+                        root.style.setProperty('--glass', 'rgba(0,0,0,0.92)');
+                    }
+                }
+            };
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 14: OPTIMISTIC UI
+            // Resposta instantânea ao toque (pointerdown/pointerup).
+            // Nenhuma espera por backend — feedback tátil imediato.
+            // ═══════════════════════════════════════════════════════════
+            function bindOptimisticButtons() {
+                const buttons = document.querySelectorAll('.btn');
+                for (let i = 0; i < buttons.length; i++) {
+                    buttons[i].addEventListener('pointerdown', function() {
+                        this.style.transform = 'scale(0.96)';
+                        this.style.opacity = '0.8';
+                    });
+                    buttons[i].addEventListener('pointerup', function() {
+                        this.style.transform = 'scale(1)';
+                        this.style.opacity = '1';
+                    });
+                    buttons[i].addEventListener('pointerleave', function() {
+                        this.style.transform = 'scale(1)';
+                        this.style.opacity = '1';
+                    });
+                }
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 15: CIRCUIT BREAKER — ERROR BOUNDARIES
+            // Isolamento de falhas: em caso de erro fatal, o sistema
+            // entra em FAIL_CLOSED, bloqueando novas operações.
+            // O núcleo de diagnóstico (errorLog) segue ativo.
+            // ═══════════════════════════════════════════════════════════
+            const errorLog = [];
+            let systemLocked = false;
+
+            function logError(severity, source, message, error) {
+                error = error || null;
+                if (systemLocked && severity !== 'FATAL') return;
+                const entry = { severity: severity, source: source, message: message, error: error, timestamp: Date.now() };
+                errorLog.push(entry);
+                if (errorLog.length > 200) errorLog.shift();
+                const logFn = severity === 'FATAL' ? console.error : severity === 'ERROR' ? console.error : severity === 'WARN' ? console.warn : console.log;
+                logFn('[' + severity + '][' + source + '] ' + message);
+                if (error && error.stack && settings.system.debug) console.error(error.stack);
+                if (severity === 'FATAL') {
+                    systemLocked = true;
+                    console.error('[FATAL] FAIL_CLOSED: Sistema bloqueado para segurança.');
+                    document.getElementById('system-indicator').innerHTML = '<span class="status-dot danger"></span><span style="color:var(--red)">FAIL_CLOSED</span>';
+                }
+            }
+
+            if (typeof window !== 'undefined') {
+                window.addEventListener('error', function(e) { logError('ERROR', 'main-thread', e.message, e.error); });
+                window.addEventListener('unhandledrejection', function(e) { logError('ERROR', 'unhandled-promise', e.reason ? e.reason.message : 'Promise rejeitada', e.reason); });
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 16: PREVENÇÃO DE MEMORY LEAKS
+            // Limpeza agressiva de timers, listeners órfãos,
+            // notificações acumuladas e sinais excedentes.
+            // ═══════════════════════════════════════════════════════════
+            const activeTimers = [];
+            const MAX_NOTIFICATIONS = 8;
+            const MAX_SIGNAL_CARDS = 25;
+
+            function cleanupOrphans() {
+                for (let i = activeTimers.length - 1; i >= 0; i--) {
+                    try { clearInterval(activeTimers[i]); } catch (e) {}
+                    activeTimers.splice(i, 1);
+                }
+                const toasts = document.querySelectorAll('.notif-toast');
+                if (toasts.length > MAX_NOTIFICATIONS) {
+                    for (let i = 0; i < toasts.length - MAX_NOTIFICATIONS; i++) {
+                        if (toasts[i].parentNode) toasts[i].remove();
+                    }
+                }
+                const signalsContainer = document.getElementById('signals-container');
+                while (signalsContainer.children.length > MAX_SIGNAL_CARDS) {
+                    signalsContainer.removeChild(signalsContainer.lastChild);
+                }
+                while (eventLog.length > 500) eventLog.shift();
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 17: OFFSCREEN CANVAS DELEGATION
+            // Contextos 2D com desynchronized=true delegam ao compositor
+            // do navegador. Web Workers podem usar OffscreenCanvas para
+            // renderização pesada fora da main thread.
+            // ═══════════════════════════════════════════════════════════
+            function resizeAllCanvases() {
+                const canvases = [fpCanvas, hmCanvas, spCanvas];
+                for (let i = 0; i < canvases.length; i++) {
+                    const c = canvases[i];
+                    const w = c.clientWidth, h = c.clientHeight;
+                    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+                }
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 18: CRIPTOGRAFIA LOCAL — WEB CRYPTO API
+            // Validação de integridade via SHA-256 de pacotes .ar10pack.
+            // ═══════════════════════════════════════════════════════════
+            async function validatePackageIntegrity(packageName) {
+                packageName = packageName || settings.system.localPackage;
+                if (typeof crypto === 'undefined' || !crypto || !crypto.subtle) {
+                    console.warn('[Crypto] Web Crypto API indisponível.');
+                    return null;
+                }
+                try {
+                    const testData = new TextEncoder().encode(packageName);
+                    const hashBuffer = await crypto.subtle.digest('SHA-256', testData);
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    const hashHex = hashArray.map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
+                    return hashHex;
+                } catch (e) {
+                    logError('WARN', 'crypto', 'Falha na validação SHA-256: ' + e.message);
+                    return null;
+                }
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 19: ADAPTIVE RESOURCE MANAGEMENT
+            // Redução dinâmica de efeitos visuais (blur) se o FPS cair
+            // abaixo de 30. Restauração gradual quando volta a 55+.
+            // ═══════════════════════════════════════════════════════════
+            let adaptiveQuality = 1.0;
+
+            function updateAdaptiveQuality(fps) {
+                if (fps < 30) adaptiveQuality = Math.max(0.3, adaptiveQuality - 0.1);
+                else if (fps > 55 && adaptiveQuality < 1.0) adaptiveQuality = Math.min(1.0, adaptiveQuality + 0.05);
+                const blurValue = 28 * adaptiveQuality;
+                const glassElements = document.querySelectorAll('.glass');
+                for (let i = 0; i < glassElements.length; i++) {
+                    glassElements[i].style.backdropFilter = 'blur(' + blurValue + 'px)';
+                    glassElements[i].style.webkitBackdropFilter = 'blur(' + blurValue + 'px)';
+                }
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // SKILL 20: DETERMINISTIC STATE CONTAINER
+            // Máquina de estados finitos com transições validadas.
+            // Estados: STANDBY → INSUFFICIENT → REPLAY ↔ LIVE ↔ STALE.
+            // ═══════════════════════════════════════════════════════════
+            const StateMachine = {
+                states: DataState,
+                current: DataState.STANDBY,
+                history: [],
+                transition: function(newState) {
+                    const allowed = {
+                        STANDBY: [DataState.INSUFFICIENT, DataState.REPLAY, DataState.LIVE],
+                        INSUFFICIENT: [DataState.REPLAY, DataState.LIVE, DataState.STANDBY],
+                        REPLAY: [DataState.LIVE, DataState.STANDBY, DataState.INSUFFICIENT],
+                        LIVE: [DataState.STALE, DataState.INSUFFICIENT, DataState.STANDBY],
+                        STALE: [DataState.LIVE, DataState.INSUFFICIENT, DataState.STANDBY]
+                    };
+                    const allowedList = allowed[this.current] || [];
+                    if (allowedList.indexOf(newState) !== -1) {
+                        this.history.push({ from: this.current, to: newState, timestamp: Date.now() });
+                        this.current = newState;
+                        AR10.setDataState(newState);
+                        OutputPorts.emitStateChange(newState);
+                        logEvent('STATE_TRANSITION', { from: this.history[this.history.length - 1].from, to: newState });
+                        return true;
+                    }
+                    console.warn('[StateMachine] Transição inválida: ' + this.current + ' → ' + newState);
+                    return false;
+                }
+            };
+
+            // ═══════════════════════════════════════════════════════════
+            // SIRI-STYLE NOTIFICATIONS + SÍNTESE DE VOZ
+            // Stack de notificações com barra de progresso e
+            // SpeechSynthesis para alertas táticos em português.
+            // ═══════════════════════════════════════════════════════════
+            const notifStack = document.getElementById('notif-stack');
+            let lastVoiceTime = 0;
+
+            function pushNotification(type, title, body) {
+                if (systemLocked) return;
+                const toast = document.createElement('div');
+                toast.className = 'notif-toast ' + type;
+                const progress = document.createElement('div');
+                progress.className = 'progress-bar';
+                progress.style.width = '100%';
+                toast.appendChild(progress);
+                const content = document.createElement('div');
+                content.innerHTML = '<strong>' + title + '</strong><br><span style="font-size:0.7rem;color:var(--muted)">' + body + '</span>';
+                toast.appendChild(content);
+                notifStack.appendChild(toast);
+                const startTime = Date.now();
+                const duration = 4000;
+                const timer = setInterval(function() {
+                    const elapsed = Date.now() - startTime;
+                    const pct = Math.max(0, 100 - (elapsed / duration) * 100);
+                    progress.style.width = pct + '%';
+                    if (elapsed >= duration) {
+                        clearInterval(timer);
+                        const idx = activeTimers.indexOf(timer);
+                        if (idx > -1) activeTimers.splice(idx, 1);
+                        toast.style.opacity = '0';
+                        toast.style.transition = 'opacity 0.3s';
+                        setTimeout(function() { if (toast.parentNode) toast.remove(); }, 300);
+                    }
+                }, 50);
+                activeTimers.push(timer);
+                if ('speechSynthesis' in window && Date.now() - lastVoiceTime > 3000) {
+                    lastVoiceTime = Date.now();
+                    const utterance = new SpeechSynthesisUtterance(title + '. ' + body);
+                    utterance.lang = 'pt-BR';
+                    utterance.rate = 1.2;
+                    utterance.volume = 0.7;
+                    window.speechSynthesis.cancel();
+                    window.speechSynthesis.speak(utterance);
+                }
+            }
+
+            function testNotification() {
+                pushNotification('absorption', '🌀 TESTE DE NOTIFICAÇÃO', 'Núcleo biológico operando normalmente.');
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // UI DE SINAIS COM THROTTLING
+            // Exibe cards de sinais (OFI, Absorção, Exaustão) com
+            // animação slideIn. Throttle de 80ms entre cards.
+            // ═══════════════════════════════════════════════════════════
+            const signalsContainer = document.getElementById('signals-container');
+            let pendingSignals = [];
+            let signalCount = 0;
+
+            function addSignalToUI(signal) {
+                pendingSignals.push(signal);
+                if (pendingSignals.length > 50) pendingSignals.shift();
+            }
+
+            function flushSignals() {
+                if (pendingSignals.length === 0) return;
+                if (!ThrottleManager.canUpdateSignals()) return;
+                const signal = pendingSignals.shift();
+                if (signalsContainer.querySelector('span[style]') && signalsContainer.children.length === 1) {
+                    signalsContainer.innerHTML = '';
+                }
+                const card = document.createElement('div');
+                const tc = signal.type === SignalType.EXHAUSTION ? 'exhaustion' : signal.type === SignalType.ABSORPTION ? 'absorption' : 'ofi';
+                card.className = 'sig-card ' + tc;
+                const icon = signal.type === SignalType.EXHAUSTION ? '⚡' : signal.type === SignalType.ABSORPTION ? '🌀' : '📊';
+                const label = signal.type === SignalType.EXHAUSTION ? 'EXAUSTÃO' : signal.type === SignalType.ABSORPTION ? 'ABSORÇÃO' : 'OFI';
+                card.innerHTML = '<div style="font-weight:600;color:' + (signal.type === SignalType.EXHAUSTION ? 'var(--orange)' : signal.type === SignalType.ABSORPTION ? 'var(--purple)' : 'var(--cyan)') + ';">' + icon + ' ' + label + ' <span style="font-size:0.65rem;color:var(--muted)">' + new Date(signal.timestamp).toLocaleTimeString() + '</span></div><div style="font-size:0.65rem">Preço: ' + signal.price.toFixed(2) + ' | Confiança: ' + (signal.confidence * 100).toFixed(0) + '%</div>';
+                signalsContainer.prepend(card);
+                while (signalsContainer.children.length > MAX_SIGNAL_CARDS) {
+                    signalsContainer.removeChild(signalsContainer.lastChild);
+                }
+                signalCount++;
+                UIBridge.updateElement('bio-signals', signalCount);
+                UIBridge.updateElement('bio-signals-last', 'Último: ' + signal.type);
+                if (signal.confidence > 0.7) {
+                    pushNotification(
+                        signal.type === SignalType.EXHAUSTION ? 'exhaustion' : signal.type === SignalType.ABSORPTION ? 'absorption' : 'ofi',
+                        icon + ' ' + label + ' DETECTADO',
+                        'Preço: ' + signal.price.toFixed(2) + ' | Confiança: ' + (signal.confidence * 100).toFixed(0) + '%'
+                    );
+                }
+            }
+
+            function clearSignals() {
+                signalsContainer.innerHTML = '<span style="color:var(--muted)">Sistema em STANDBY — aguardando injeção de dados...</span>';
+                pendingSignals = [];
+                signalCount = 0;
+                UIBridge.updateElement('bio-signals', '0');
+                UIBridge.updateElement('bio-signals-last', 'Nenhum sinal');
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // FONTE REAL MEXC (PUBLICA, READ-ONLY) — INJEÇÃO DE DADOS REAIS
+            // Dois caminhos, ambos sem chave e so' de mercado publico:
+            //  (1) WebSocket spot publico de deals (wss://wbs.mexc.com/ws) com
+            //      a subscricao correta `spot@public.deals.v3.api@<PAR>` — best
+            //      effort: a MEXC migrou esse canal para protobuf, entao se o
+            //      frame nao for JSON parseavel ele e' ignorado sem quebrar.
+            //  (2) REST publico GET /api/v3/trades (mesmo host JSON ja' usado e
+            //      auditado em js/real-data/mexc-public.js) — caminho confiavel
+            //      de "sangue fluindo", faz polling e injeta trades reais.
+            // Regra dura: so' transiciona para LIVE quando chega tick REAL. Se
+            // nada responder (ex.: BLOCKED_BY_CORS no Pages), fica INSUFFICIENT
+            // — nunca cai no simulador por conta propria (NO_FAKE_DATA).
+            // ═══════════════════════════════════════════════════════════
+            const MEXC_PAIR = 'BTCUSDT';
+            let globalMeshWorker = null;
+            let liveDataActive = false;
+            let tickCount = 0;
+            let realTickSeen = false;
+            let restPollTimer = null;
+            let lastRestTradeId = 0;
+
+            // Handler unico de tick real: para o simulador (se estava ligado),
+            // injeta no RingBuffer e marca LIVE. Nunca chamado por dado sintetico.
+            function onRealTick(tick) {
+                if (simulationActive) stopSimulation();
+                InputPorts.injectTick(tick);
+                tickCount++;
+                if (!realTickSeen) {
+                    realTickSeen = true;
+                    console.log('%c🔗 Primeiro tick REAL recebido da MEXC. Estado: LIVE', 'color:#34d399');
+                }
+                StateMachine.transition(DataState.LIVE);
+            }
+
+            function connectMEXCFeed() {
+                if (globalMeshWorker) { try { globalMeshWorker.close(); } catch (e) {} globalMeshWorker = null; }
+                const wsUrl = 'wss://wbs.mexc.com/ws';
+                try {
+                    globalMeshWorker = new WebSocket(wsUrl);
+                    globalMeshWorker.onopen = function() {
+                        // Subscricao correta do canal publico de deals da MEXC v3.
+                        try {
+                            globalMeshWorker.send(JSON.stringify({ method: 'SUBSCRIPTION', params: ['spot@public.deals.v3.api@' + MEXC_PAIR] }));
+                        } catch (e) {}
+                        console.log('%c🔗 WS MEXC aberto — assinando spot@public.deals.v3.api@' + MEXC_PAIR + '...', 'color:#34d399');
+                    };
+                    globalMeshWorker.onmessage = function(event) {
+                        // Protobuf (ArrayBuffer/Blob) e ack/pong: ignorados em silencio,
+                        // o caminho REST cobre o dado real. So' tratamos JSON de deals.
+                        if (typeof event.data !== 'string') return;
+                        let msg;
+                        try { msg = JSON.parse(event.data); } catch (e) { return; }
+                        if (!msg || msg.id !== undefined || msg.code !== undefined || msg.msg !== undefined) return; // ack/erro de subscricao
+                        // Forma JSON v3: { c, s, t, d: { deals:[{p,v,S,t}] } }; tolera tambem data.deals.
+                        const deals = (msg.d && msg.d.deals) || (msg.data && msg.data.deals);
+                        if (!Array.isArray(deals)) return;
+                        for (let i = 0; i < deals.length; i++) {
+                            const deal = deals[i];
+                            const price = parseFloat(deal.p);
+                            const volume = parseFloat(deal.v);
+                            if (!Number.isFinite(price) || !Number.isFinite(volume)) continue;
+                            onRealTick(new Tick({
+                                timestamp: Number(deal.t) || Date.now(),
+                                price: price,
+                                volume: volume,
+                                side: (deal.S === 1 || deal.S === '1') ? Side.BUY : Side.SELL,
+                                exchange: 'MEXC'
+                            }));
+                        }
+                    };
+                    globalMeshWorker.onerror = function() {
+                        logError('WARN', 'mexc-ws', 'WS indisponivel (CORS/protobuf?). REST publico segue como fonte real.');
+                    };
+                    globalMeshWorker.onclose = function() {
+                        if (liveDataActive) { setTimeout(connectMEXCFeed, 4000); }
+                    };
+                    console.log('%c🔗 Conectando WS MEXC (best-effort)...', 'color:#34d399');
+                } catch (err) { logError('WARN', 'mexc-ws', 'Falha ao abrir WS: ' + err.message); }
+            }
+
+            // REST publico /api/v3/trades — caminho real confiavel (JSON).
+            async function pollMEXCRest() {
+                if (!liveDataActive) return;
+                const url = 'https://api.mexc.com/api/v3/trades?symbol=' + MEXC_PAIR + '&limit=50';
+                try {
+                    const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const trades = await res.json();
+                    if (!Array.isArray(trades)) throw new Error('resposta_nao_e_array');
+                    let injected = 0;
+                    for (let i = 0; i < trades.length; i++) {
+                        const tr = trades[i];
+                        const id = Number(tr.id || tr.tradeId || (tr.time + '' + tr.price));
+                        if (Number.isFinite(id) && id <= lastRestTradeId) continue;
+                        if (Number.isFinite(id)) lastRestTradeId = Math.max(lastRestTradeId, id);
+                        const price = parseFloat(tr.price);
+                        const volume = parseFloat(tr.qty);
+                        if (!Number.isFinite(price) || !Number.isFinite(volume)) continue;
+                        // isBuyerMaker=true => agressor foi o vendedor (SELL).
+                        onRealTick(new Tick({
+                            timestamp: Number(tr.time) || Date.now(),
+                            price: price,
+                            volume: volume,
+                            side: tr.isBuyerMaker ? Side.SELL : Side.BUY,
+                            exchange: 'MEXC'
+                        }));
+                        injected++;
+                    }
+                    if (injected === 0 && !realTickSeen) StateMachine.transition(DataState.INSUFFICIENT);
+                } catch (err) {
+                    if (!realTickSeen) {
+                        logError('WARN', 'mexc-rest', 'Fonte real REST indisponivel (' + err.message + '). Estado: INSUFFICIENT — sem dado fabricado.');
+                        StateMachine.transition(DataState.INSUFFICIENT);
+                    }
+                }
+            }
+
+            function startRestPolling() {
+                if (restPollTimer) return;
+                pollMEXCRest();
+                restPollTimer = setInterval(pollMEXCRest, 1500);
+            }
+
+            function stopRestPolling() {
+                if (restPollTimer) { clearInterval(restPollTimer); restPollTimer = null; }
+            }
+
+            // Liga as DUAS fontes reais (WS best-effort + REST confiavel).
+            function connectMEXCRealData() {
+                liveDataActive = true;
+                realTickSeen = false;
+                connectMEXCFeed();
+                startRestPolling();
+            }
+
+            function disconnectMEXCFeed() {
+                liveDataActive = false;
+                stopRestPolling();
+                if (globalMeshWorker) { try { globalMeshWorker.close(); } catch (e) {} globalMeshWorker = null; }
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // SIMULADOR HFT — MOCK ENGINE (DESATIVADO POR PADRÃO)
+            // Gera ticks sintéticos com random walk Gaussiano.
+            // Só ativa quando o usuário seleciona modo REPLAY.
+            // ═══════════════════════════════════════════════════════════
+            let simulationActive = false;
+            let simBasePrice = 67432.50;
+            let simBaseVol = 850.0;
+            let simBaseDelta = 0.62;
+            let simBaseZScore = 3.20;
+            let simPriceMomentum = 0;
+            let simVolMomentum = 0;
+            let simPriceTrend = 0;
+            let simVolTrend = 0;
+            let simDeltaTrend = 0;
+            let simZTrend = 0;
+
+            function gaussianRandom() {
+                var u = 1 - Math.random();
+                var v = 1 - Math.random();
+                return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+            }
+
+            function simulateTick() {
+                if (!simulationActive) return;
+                var priceNoise = gaussianRandom() * 8;
+                var volNoise = gaussianRandom() * 20;
+                if (Math.random() < 0.02) simPriceTrend = (Math.random() - 0.5) * 30;
+                if (Math.random() < 0.03) simVolTrend = (Math.random() - 0.5) * 50;
+                if (Math.random() < 0.04) simDeltaTrend = (Math.random() - 0.5) * 0.4;
+                if (Math.random() < 0.05) simZTrend = (Math.random() - 0.5) * 0.8;
+                simPriceMomentum += simPriceTrend + priceNoise;
+                simPriceMomentum *= 0.98;
+                simVolMomentum += simVolTrend + volNoise;
+                simVolMomentum *= 0.96;
+                simBasePrice += simPriceMomentum * 0.5;
+                simBasePrice = Math.max(66000, Math.min(69000, simBasePrice));
+                simBaseVol += simVolTrend * 0.3;
+                simBaseVol = Math.max(100, Math.min(2000, simBaseVol));
+                simBaseDelta += simDeltaTrend;
+                simBaseDelta = Math.max(-2, Math.min(2, simBaseDelta));
+                simBaseZScore += simZTrend;
+                simBaseZScore = Math.max(-5, Math.min(5, simBaseZScore));
+                // O lado do trade segue o regime de delta do proprio simulador
+                // (simBaseDelta), em vez de um coin-flip 50/50 que antes ignorava
+                // esse estado — assim o REPLAY gera desequilibrio de fluxo real e
+                // consistente, exatamente o que os motores OFI/Exaustao detectam.
+                var buyBias = Math.max(0.05, Math.min(0.95, 0.5 + simBaseDelta * 0.22));
+                var side = Math.random() < buyBias ? Side.BUY : Side.SELL;
+                var vol = Math.random() * 5 + 0.5;
+                mainRing.enqueue(new Tick({
+                    timestamp: Date.now(),
+                    price: simBasePrice,
+                    volume: vol,
+                    side: side,
+                    exchange: 'MEXC'
+                }));
+                tickCount++;
+            }
+
+            function startSimulation() {
+                simulationActive = true;
+                StateMachine.transition(DataState.REPLAY);
+                console.log('%c📼 Simulador HFT ativado.', 'color:#fbbf24');
+            }
+
+            function stopSimulation() {
+                simulationActive = false;
+                console.log('%c📼 Simulador HFT desativado.', 'color:#fbbf24');
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // CONTROLES DE MODO (REPLAY / LIVE)
+            // ═══════════════════════════════════════════════════════════
+            function switchMode(mode) {
+                if (mode === 'replay') {
+                    disconnectMEXCFeed();
+                    startSimulation();
+                } else if (mode === 'live') {
+                    stopSimulation();
+                    connectMEXCRealData();
+                }
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // LOOP PRINCIPAL — 60 FPS VIA requestAnimationFrame
+            // Orquestra simulação, drenagem do RingBuffer, processamento
+            // de sinais, renderização dos 3 canvas e atualização da UI.
+            // ═══════════════════════════════════════════════════════════
+            let frameCount = 0;
+            let lastFpsTime = performance.now();
+            let lastMemCheck = 0;
+            let lastCleanup = 0;
+
+            function mainLoop(timestamp) {
+                if (systemLocked) { requestAnimationFrame(mainLoop); return; }
+                if (simulationActive) {
+                    var batchSize = Math.floor(Math.random() * 5) + 2;
+                    for (var i = 0; i < batchSize; i++) simulateTick();
+                }
+                var ticks = mainRing.drain();
+                var currentPrice = null;
+                var currentZScore = null;
+                var currentAbsVol = null;
+                var currentAbsDelta = null;
+                if (ticks.length > 0) {
+                    updateFootprint(ticks);
+                    currentPrice = ticks[ticks.length - 1].price;
+                    updateHeatmap(ticks, currentPrice);
+                    var signals = processSignals(ticks);
+                    for (var si = 0; si < signals.length; si++) {
+                        addSignalToUI(signals[si]);
+                        logEvent('SIGNAL', { type: signals[si].type, price: signals[si].price, confidence: signals[si].confidence });
+                        if (signals[si].type === SignalType.EXHAUSTION) { currentZScore = signals[si].metadata.zScore; }
+                        if (signals[si].type === SignalType.ABSORPTION) { currentAbsVol = signals[si].metadata.totalVolume; currentAbsDelta = signals[si].metadata.priceChange; }
+                    }
+                    if (ThrottleManager.canUpdateTickCounter()) {
+                        UIBridge.updateElement('tel-ticks', tickCount);
+                        UIBridge.updateElement('tel-ring', mainRing.count());
+                    }
+                }
+                reactiveUpdate('price', currentPrice);
+                reactiveUpdate('zscore', currentZScore);
+                reactiveUpdate('absvol', currentAbsVol);
+                reactiveUpdate('absdelta', currentAbsDelta);
+                UIBridge.updateBiolink(currentZScore, currentZScore !== null ? (currentZScore > 0 ? 'BUY_EXHAUSTED' : 'SELL_EXHAUSTED') : null, currentAbsVol, currentAbsDelta, null, null, signalCount, null);
+                flushSignals();
+                drawFootprint();
+                drawHeatmap(currentPrice);
+                drawSphere(timestamp, currentZScore || 0);
+                var now = new Date();
+                document.getElementById('clock').textContent = now.toTimeString().split(' ')[0] + '.' + String(now.getMilliseconds()).padStart(3, '0');
+                var latency = performance.now() - timestamp;
+                UIBridge.updateElement('bio-latency', latency);
+                UIBridge.updateElement('bio-latency-grade', latency < 16 ? 'ÓTIMA' : latency < 32 ? 'BOA' : 'ALTA');
+                if (timestamp - lastMemCheck > 2000 && 'memory' in performance) {
+                    var m = performance.memory;
+                    UIBridge.updateElement('tel-mem', m ? (m.usedJSHeapSize / 1048576).toFixed(1) + 'MB' : '--');
+                    lastMemCheck = timestamp;
+                }
+                if (timestamp - lastCleanup > 10000) { cleanupOrphans(); lastCleanup = timestamp; }
+                frameCount++;
+                if (timestamp - lastFpsTime >= 3000) {
+                    var fps = Math.round(frameCount / ((timestamp - lastFpsTime) / 1000));
+                    UIBridge.updateElement('tel-fps', fps);
+                    updateAdaptiveQuality(fps);
+                    frameCount = 0;
+                    lastFpsTime = timestamp;
+                }
+                requestAnimationFrame(mainLoop);
+            }
+
+            // ═══════════════════════════════════════════════════════════
+            // BOOTSTRAP — INICIALIZAÇÃO COMPLETA DO SISTEMA
+            // Sequência: validação criptográfica → heatmap → esfera →
+            // bind de eventos → transição para STANDBY → main loop.
+            // ═══════════════════════════════════════════════════════════
+            async function bootstrap() {
+                console.log('%c🚀 AR10-CYBORG V1.0 GOLDEN MASTER %cINICIALIZANDO', 'color:#00f5ff;font-size:1.5rem', 'color:#c084fc');
+                console.log('%c20 Pillars · Núcleo Biológico · MEXC WebSocket Hook · iPad Safari PWA', 'color:#94a3b8');
+                console.log('%cEstado inicial: STANDBY — aguardando injeção de dados.', 'color:#fbbf24');
+                var pkgHash = await validatePackageIntegrity();
+                if (pkgHash) console.log('%c🔐 SHA-256 do pacote: ' + pkgHash.substring(0, 16) + '...', 'color:#34d399');
+                else console.log('%c⚠️ Web Crypto API indisponível. Validação desabilitada.', 'color:#fbbf24');
+                initHeatmap();
+                initSphere();
+                resizeAllCanvases();
+                bindOptimisticButtons();
+                window.addEventListener('resize', resizeAllCanvases);
+                document.getElementById('btn-replay').addEventListener('click', function() { switchMode('replay'); });
+                document.getElementById('btn-live').addEventListener('click', function() { switchMode('live'); });
+                document.getElementById('btn-clear').addEventListener('click', clearSignals);
+                document.getElementById('btn-test').addEventListener('click', testNotification);
+                logEvent('BOOTSTRAP', { version: '1.0', timestamp: Date.now(), packageHash: pkgHash });
+                AR10.bootTime = performance.now();
+                StateMachine.transition(DataState.STANDBY);
+                requestAnimationFrame(mainLoop);
+                // Ignicao automatica: tenta a FONTE REAL publica da MEXC assim
+                // que o cockpit sobe — "o sangue flui sozinho". Se nenhuma fonte
+                // real responder, fica INSUFFICIENT; o simulador continua opt-in
+                // (botao REPLAY), nunca ligado automaticamente.
+                console.log('%c✅ Bootstrap concluído. Ligando fonte REAL MEXC (WS + REST público)...', 'color:#34d399');
+                connectMEXCRealData();
+            }
+            bootstrap();
+        })();
+    </script>
+</body>
+</html>

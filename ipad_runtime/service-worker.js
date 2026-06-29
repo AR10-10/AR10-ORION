@@ -1,12 +1,42 @@
 // service-worker.js — AR10 Cyborg 1.0 PRO iPad Runtime
 // Cache-first, offline-first. Tudo precache é same-origin; nenhuma rota
 // de rede sensivel (MEXC/MT5/API secret) existe para interceptar.
+//
+// COOP/COEP SELF-INJECTION: GitHub Pages (o alvo de deploy) nao deixa
+// configurar response headers customizados, mas SharedArrayBuffer real
+// (Skill 9: zero-copy ring buffer) exige `self.crossOriginIsolated ===
+// true`, que por sua vez exige que TODA navegacao top-level E todo script
+// de worker same-origin chegue com Cross-Origin-Opener-Policy: same-origin
+// + Cross-Origin-Embedder-Policy: require-corp. Como o servidor nao manda
+// esses headers, este worker reescreve toda resposta same-origin que ele
+// mesmo intercepta (cache ou rede) para adiciona-los — o padrao conhecido
+// como "coi-serviceworker". Seguro aqui porque: (1) o CSP de index.html so
+// permite fetch() cross-origin via connect-src para APIs publicas que ja
+// respondem com CORS valido — fetch em modo 'cors' com Access-Control-
+// Allow-Origin valido nunca e bloqueado por COEP require-corp, so recursos
+// carregados em modo no-cors (img/script/link cross-origin) precisariam de
+// Cross-Origin-Resource-Policy, e este app nao tem nenhum (img-src 'self'
+// data:, script-src 'self'); (2) sem crossOriginIsolated, ring-buffer.js
+// ja degrada sozinho para o fallback Array (typeof SharedArrayBuffer ===
+// 'undefined') — entao mesmo se este self-injection falhar em algum
+// Safari mais antigo, o app continua funcionando, so sem zero-copy real.
+const CACHE_VERSION = 'cyborg-ipad-runtime-v33';
 
-const CACHE_VERSION = 'cyborg-ipad-runtime-v32';
+function withCoiHeaders(response) {
+    if (!response) return response;
+    const headers = new Headers(response.headers);
+    headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+    headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+    return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+    });
+}
 
 // PRECACHE_URLS e' a fronteira same-origin do offline-first: precisa cobrir
 // exatamente o fecho transitivo de import() a partir de js/app.js (o unico
-// <script type="module"> de index.html). Lista revalidada em 2026-06-25 com
+// <script type="module"> de index.html). Lista revalidada em 2026-06-29 com
 // uma varredura automatica do grafo de imports — qualquer modulo novo em
 // js/**/*.js entra aqui na mesma leva em que e' importado por algum arquivo
 // ja precacheado, senao a 1a navegacao offline falha ao abrir esse caminho.
@@ -15,10 +45,13 @@ const CACHE_VERSION = 'cyborg-ipad-runtime-v32';
 // graduados em 2026-06-25 (src/research/engines/support-resistance-engine.js
 // e market-structure-engine.js, ver QUARANTINE.md secao "Engines graduados"),
 // agora importados por js/real-data/analysis-frame.js e por isso listados
-// abaixo. js/hydration/storage-router.js e' o mesmo caso do resto da arvore:
-// existe, passa node --check, mas hydration-manager.js nao o importa (a
-// escrita real do Vault e' single-writer via pack-manager.js, que ja cobre
-// leitura/escrita correta) — ver header do proprio storage-router.js.
+// abaixo. src/orderflow/** entrou em 2026-06-29 pelo mesmo motivo: o Order
+// Flow Engine (Skills 1/2/4/8/9) passou a ser importado por js/app.js via
+// js/orderflow-engine-ui.js. js/hydration/storage-router.js e' o mesmo caso
+// do resto da arvore: existe, passa node --check, mas hydration-manager.js
+// nao o importa (a escrita real do Vault e' single-writer via pack-
+// manager.js, que ja cobre leitura/escrita correta) — ver header do proprio
+// storage-router.js.
 const PRECACHE_URLS = [
     './',
     './index.html',
@@ -88,7 +121,15 @@ const PRECACHE_URLS = [
     './js/intelligence/reflection-engine.js',
     './js/intelligence/siriform-explainer.js',
     './js/intelligence/local-brain.js',
+    './js/orderflow-client.js',
+    './js/orderflow-engine-ui.js',
+    './src/orderflow/value-objects.js',
+    './src/orderflow/ring-buffer.js',
+    './src/orderflow/signal-engine.js',
+    './src/orderflow/bio-reactor-render.js',
+    './src/orderflow/candle-tick-synthesizer.js',
     './workers/quant-worker.js',
+    './workers/orderflow-worker.js',
     './wasm/cyborg_quant_core.wasm',
     './data/btcusdt_replay.json',
     './AR10_CYBORG_LOCAL_PACK_V1.ar10pack',
@@ -124,15 +165,15 @@ self.addEventListener('fetch', (event) => {
 
     event.respondWith(
         caches.match(req).then((cached) => {
-            if (cached) return cached;
+            if (cached) return withCoiHeaders(cached);
             return fetch(req).then((resp) => {
                 if (resp && resp.ok) {
                     const copy = resp.clone();
                     caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy));
                 }
-                return resp;
+                return withCoiHeaders(resp);
             }).catch(() => {
-                if (req.mode === 'navigate') return caches.match('./index.html');
+                if (req.mode === 'navigate') return caches.match('./index.html').then(withCoiHeaders);
                 return new Response('', { status: 504, statusText: 'offline' });
             });
         })

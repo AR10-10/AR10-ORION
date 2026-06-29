@@ -58,6 +58,7 @@ const ELEMENT_IDS = [
     'btn-he-start', 'btn-he-pause', 'btn-he-verify', 'btn-he-repair', 'btn-he-export',
     'tb-build-badge', 'tb-heartbeat', 'ex-hydration', 'ex-local', 'li-final-label-hero', 'li-confidence-hero',
     'li-gauge-wrap', 'li-gauge-needle',
+    'orderflow-canvas', 'orderflow-meta', 'of-backend', 'of-sab', 'of-selftest', 'orderflow-signal-list', 'btn-run-orderflow',
 ];
 
 ELEMENT_IDS.forEach((id) => { els[id] = document.getElementById(id); });

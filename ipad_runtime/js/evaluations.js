@@ -12,6 +12,8 @@ import * as voice from './voice.js';
 import * as siriform from './siriform.js';
 import { MARKET_DATA_POLICY, realMarketAnalysisStatus } from './data-policy.js';
 import { createEmptyEvidence, validateEvidenceShape } from './real-data/schema.js';
+import { Side, SignalType, Signal } from '../src/orderflow/value-objects.js';
+import { createEngineState, processSignals, defaultSettings } from '../src/orderflow/signal-engine.js';
 
 function check(group, name, pass, detail) {
     return { group, name, pass: !!pass, detail: String(detail) };
@@ -110,6 +112,65 @@ function evalDataPolicy() {
     return results;
 }
 
+function evalOrderflowEngine() {
+    const group = 'orderflow_engine';
+    const results = [];
+    const mkTick = (price, volume, side) => ({ price, volume, side, timestamp: Date.now() });
+
+    // OFI: janela toda comprada deve disparar imbalance ~+1.0; janela
+    // balanceada nao deve disparar (sem falso positivo).
+    {
+        const state = createEngineState();
+        const ticks = [];
+        for (let i = 0; i < defaultSettings.ofi.windowSize; i++) ticks.push(mkTick(67000 + i, 2, Side.BUY));
+        const ofi = processSignals(ticks, state).filter((s) => s.type === SignalType.OFI);
+        results.push(check(group, 'OFI dispara em janela 100% comprada', ofi.length >= 1 && Math.abs(ofi[0].metadata.imbalance - 1) < 1e-9, ofi.length ? `imbalance=${ofi[0].metadata.imbalance.toFixed(4)}` : 'nenhum sinal'));
+    }
+    {
+        const state = createEngineState();
+        const ticks = [];
+        for (let i = 0; i < defaultSettings.ofi.windowSize; i++) ticks.push(mkTick(67000, 2, i % 2 ? Side.BUY : Side.SELL));
+        const ofi = processSignals(ticks, state).filter((s) => s.type === SignalType.OFI);
+        results.push(check(group, 'OFI nao dispara em janela balanceada', ofi.length === 0, `${ofi.length} sinal(is)`));
+    }
+
+    // EXHAUSTION: baseline de baixa variancia (oscila 0/1) + um pico isolado
+    // de volume muito acima do desvio-padrao da baseline, com colapso de
+    // preco >20% nos ultimos 10 ticks do pico. Uma rampa monotonica pura
+    // NAO serve de caso de teste aqui: o z-score fica matematicamente
+    // limitado a raiz(3)~1.73 porque currentDelta e sempre o proprio
+    // elemento extremo da janela usada para calcular media/desvio — por
+    // isso o pico precisa ser curto e isolado dentro de uma janela estavel.
+    {
+        const state = createEngineState();
+        const ticks = [];
+        const lb = defaultSettings.exhaustion.deltaLookback;
+        for (let i = 0; i < lb + 50; i++) ticks.push(mkTick(67000, 1, i % 2 ? Side.BUY : Side.SELL));
+        for (let i = 0; i < 20; i++) {
+            const price = i < 10 ? 67000 : 67000 * (1 - 0.03 * (i - 9));
+            ticks.push(mkTick(price, 60, Side.BUY));
+        }
+        const exh = processSignals(ticks, state).filter((s) => s.type === SignalType.EXHAUSTION);
+        const detail = exh.length ? `zScore=${exh[0].metadata.zScore.toFixed(2)} delta=${exh[0].metadata.delta} direction=${exh[0].metadata.direction}` : 'nenhum sinal';
+        results.push(check(group, 'EXHAUSTION dispara em pico de delta + reversao de preco', exh.length >= 1 && Math.abs(exh[0].metadata.zScore) > defaultSettings.exhaustion.exhaustionThreshold && exh[0].metadata.direction === 'BUY_EXHAUSTED', detail));
+    }
+
+    // Value objects: Signal e Tick precisam ser imutaveis (Skill 2) — um
+    // sinal emitido pelo engine nunca pode ser adulterado depois.
+    {
+        const s = new Signal({ type: SignalType.OFI, confidence: 0.9, price: 1, timestamp: 1, metadata: {} });
+        results.push(check(group, 'Signal e um value object congelado', Object.isFrozen(s), `frozen=${Object.isFrozen(s)}`));
+    }
+    {
+        const a = createEngineState();
+        const b = createEngineState();
+        a.ofi.buyVol = 999;
+        results.push(check(group, 'createEngineState() nao compartilha estado entre instancias', b.ofi.buyVol === 0, `b.ofi.buyVol=${b.ofi.buyVol}`));
+    }
+
+    return results;
+}
+
 async function evalVaultFailClosed(packManager) {
     const group = 'read_only_fail_closed';
     const results = [];
@@ -151,7 +212,7 @@ export async function runEvaluations({ packManager, avatarEl, onLog } = {}) {
     const t0 = performance.now();
     log('=== EVALUATIONS (auto-teste local) — INICIO ===', 'info');
 
-    const groups = [evalCommandRouting(), evalSecurityPosture(), evalDataPolicy()];
+    const groups = [evalCommandRouting(), evalSecurityPosture(), evalDataPolicy(), evalOrderflowEngine()];
     if (packManager) groups.push(await evalVaultFailClosed(packManager));
     groups.push(evalSiriformStates(avatarEl));
 
