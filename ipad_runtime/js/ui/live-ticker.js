@@ -107,15 +107,21 @@ export function buildLiveTickerItems(state = {}) {
             ESTRUTURA_BAIXA: 'Estrutura de baixa',
             ESTRUTURA_LATERAL: 'Estrutura lateral',
         }[matrix.market_structure] || DADOS_INSUFICIENTES;
-        const actionLabel = {
-            LONG: 'Possível zona de entrada LONG — leitura descritiva, não é recomendação',
-            SHORT: 'Possível zona de entrada SHORT — leitura descritiva, não é recomendação',
-            WAIT: 'Aguardar confirmação — sem sinal de entrada',
-        }[matrix.signal];
+        // Snapshot desatualizado/invalidado (target-tracker.js ja' decidiu
+        // reanalyze_recommended) nunca pode mostrar sugestao de entrada vinda
+        // do mesmo snapshot que o proprio app ja marcou como nao confiavel.
+        const staleSnapshot = !!(state.targetTracker && state.targetTracker.reanalyze_recommended);
+        const actionLabel = staleSnapshot
+            ? 'Snapshot desatualizado — reavalie antes de considerar qualquer zona de entrada'
+            : {
+                LONG: 'Possível zona de entrada LONG — leitura descritiva, não é recomendação',
+                SHORT: 'Possível zona de entrada SHORT — leitura descritiva, não é recomendação',
+                WAIT: 'Aguardar confirmação — sem sinal de entrada',
+            }[matrix.signal];
         const proximity = proximityNote(state.targetTracker);
         items.push({
             category: 'PREVISÃO',
-            severity: (lowSufficiency || trendLabel === DADOS_INSUFICIENTES) ? 'warn' : 'info',
+            severity: (staleSnapshot || lowSufficiency || trendLabel === DADOS_INSUFICIENTES) ? 'warn' : 'info',
             text: `BTC/USDT: ${trendLabel}${proximity ? ` · ${proximity}` : ''} · Sugestão: ${actionLabel}`,
         });
     } else {

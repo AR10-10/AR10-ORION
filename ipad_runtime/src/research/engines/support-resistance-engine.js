@@ -69,13 +69,21 @@ export function analyze(input = {}) {
     const legRange = Math.abs(lastHigh.price - lastLow.price);
     const lastLegIsUp = lastHigh.index > lastLow.index;
 
+    // Nivel 1 = swing confirmado mais proximo do preco (hit primeiro); nivel 2
+    // = o proximo swing alem do nivel 1 (mais extremo), nunca um valor entre
+    // o preco e o nivel 1 — senao o TP2 cairia dentro do TP1 no Target Tracker.
+    const resistanceNear = highPrices.length > 1 ? highPrices[1] : highPrices[0];
+    const resistanceFar = highPrices.length > 1 ? highPrices[0] : 'DADOS_INSUFICIENTES';
+    const supportNear = lowPrices.length > 1 ? lowPrices[1] : lowPrices[0];
+    const supportFar = lowPrices.length > 1 ? lowPrices[0] : 'DADOS_INSUFICIENTES';
+
     return {
         status: 'OK',
         engine: metadata.engine,
-        resistance_1: highPrices[0],
-        resistance_2: highPrices.length > 1 ? highPrices[1] : 'DADOS_INSUFICIENTES',
-        support_1: lowPrices[0],
-        support_2: lowPrices.length > 1 ? lowPrices[1] : 'DADOS_INSUFICIENTES',
+        resistance_1: resistanceNear,
+        resistance_2: resistanceFar,
+        support_1: supportNear,
+        support_2: supportFar,
         // Extensao de Fibonacci (61.8%) projetada a partir da ultima perna
         // confirmada — so' preenche o lado cuja ultima perna real confirma a
         // direcao (subida confirma projecao de alta, queda confirma projecao

@@ -57,11 +57,16 @@ export function analyze(input = {}) {
     }
 
     const higherHigh = swingHighs[0].price > swingHighs[1].price;
+    const lowerHigh = swingHighs[0].price < swingHighs[1].price;
     const higherLow = swingLows[0].price > swingLows[1].price;
+    const lowerLow = swingLows[0].price < swingLows[1].price;
 
+    // Igualdade (double top/bottom) nao confirma alta nem baixa — exige os
+    // dois lados estritamente mais altos (alta) ou estritamente mais baixos
+    // (baixa); qualquer outra combinacao, incluindo empate, cai em lateral.
     let structure_label;
     if (higherHigh && higherLow) structure_label = 'ESTRUTURA_ALTA';
-    else if (!higherHigh && !higherLow) structure_label = 'ESTRUTURA_BAIXA';
+    else if (lowerHigh && lowerLow) structure_label = 'ESTRUTURA_BAIXA';
     else structure_label = 'ESTRUTURA_LATERAL';
 
     return {
