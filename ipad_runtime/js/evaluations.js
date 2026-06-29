@@ -14,6 +14,7 @@ import { MARKET_DATA_POLICY, realMarketAnalysisStatus } from './data-policy.js';
 import { createEmptyEvidence, validateEvidenceShape } from './real-data/schema.js';
 import { Side, SignalType, Signal } from '../src/orderflow/value-objects.js';
 import { createEngineState, processSignals, defaultSettings } from '../src/orderflow/signal-engine.js';
+import { validateTradesShape, tradesToTicks, filterNewTrades } from './real-data/mexc-trades-stream.js';
 
 function check(group, name, pass, detail) {
     return { group, name, pass: !!pass, detail: String(detail) };
@@ -171,6 +172,43 @@ function evalOrderflowEngine() {
     return results;
 }
 
+/** Auto-teste 100% offline das funcoes puras de mexc-trades-stream.js (Task
+ *  #37) — nao toca rede, roda em qualquer sessao independente de
+ *  conectividade real com api.mexc.com (ver "Honestidade de plataforma" no
+ *  cabecalho daquele arquivo: a sonda real so e validavel ao vivo, fora
+ *  deste sandbox). Cobre exatamente as 3 funcoes exportadas para isso:
+ *  validacao de shape fail-closed, mapeamento isBuyerMaker->Side e dedup
+ *  por lastTradeId entre ciclos de polling. */
+function evalMexcLiveConnector() {
+    const group = 'mexc_live_connector';
+    const results = [];
+
+    results.push(check(group, 'validateTradesShape aceita amostra bem formada', validateTradesShape([{ price: '67000.5', qty: '0.01', time: 1700000000000, isBuyerMaker: true, id: 1 }]).valid, 'amostra com price/qty/time/isBuyerMaker'));
+    results.push(check(group, 'validateTradesShape rejeita resposta nao-array (fail-closed)', validateTradesShape({}).valid === false, 'objeto {} deve falhar'));
+    results.push(check(group, 'validateTradesShape rejeita array vazio', validateTradesShape([]).valid === false, '[] deve falhar'));
+    results.push(check(group, 'validateTradesShape rejeita item sem campos esperados', validateTradesShape([{ foo: 1 }]).valid === false, 'item sem price/qty/time/isBuyerMaker deve falhar'));
+
+    {
+        const ticks = tradesToTicks([
+            { price: '100', qty: '1', time: 2, isBuyerMaker: true },
+            { price: '101', qty: '2', time: 1, isBuyerMaker: false },
+        ]);
+        results.push(check(group, 'tradesToTicks ordena por tempo ascendente de forma defensiva', ticks[0].timestamp === 1 && ticks[1].timestamp === 2, `timestamps=${ticks.map((t) => t.timestamp).join(',')}`));
+        results.push(check(group, 'tradesToTicks: isBuyerMaker=false => agressor comprador => Side.BUY', ticks[0].side === Side.BUY, `side=${ticks[0].side}`));
+        results.push(check(group, 'tradesToTicks: isBuyerMaker=true => agressor vendedor => Side.SELL', ticks[1].side === Side.SELL, `side=${ticks[1].side}`));
+    }
+
+    {
+        const rows = [{ id: 5 }, { id: 6 }, { id: 7 }];
+        const firstCycle = filterNewTrades(rows, null);
+        results.push(check(group, 'filterNewTrades admite a janela inteira no primeiro ciclo (lastTradeId=null)', firstCycle.length === 3, `${firstCycle.length} linha(s)`));
+        const nextCycle = filterNewTrades(rows, 6);
+        results.push(check(group, 'filterNewTrades (dedup) so admite ids estritamente maiores que lastTradeId', nextCycle.length === 1 && nextCycle[0].id === 7, `${nextCycle.length} linha(s) nova(s)`));
+    }
+
+    return results;
+}
+
 async function evalVaultFailClosed(packManager) {
     const group = 'read_only_fail_closed';
     const results = [];
@@ -212,7 +250,7 @@ export async function runEvaluations({ packManager, avatarEl, onLog } = {}) {
     const t0 = performance.now();
     log('=== EVALUATIONS (auto-teste local) — INICIO ===', 'info');
 
-    const groups = [evalCommandRouting(), evalSecurityPosture(), evalDataPolicy(), evalOrderflowEngine()];
+    const groups = [evalCommandRouting(), evalSecurityPosture(), evalDataPolicy(), evalOrderflowEngine(), evalMexcLiveConnector()];
     if (packManager) groups.push(await evalVaultFailClosed(packManager));
     groups.push(evalSiriformStates(avatarEl));
 

@@ -328,21 +328,23 @@
   </section>
 
   <section class="card replay-wrap" id="orderflow-section">
-    <h2>Order Flow Engine <span class="step">replay sintetico — sem ordens</span></h2>
-    <p class="diagnostic-note">⚠ Modo de Diagnóstico Técnico: ticks derivados dos candles do replay acima (lado BUY/SELL inferido da direção do preço dentro de cada candle — não é fita de negociação real). Prova o worker dedicado, o ring buffer e o motor de sinais (OFI/Absorption/Exhaustion). <b>Não usar para decisão de mercado, sinal de trade ou recomendação.</b></p>
+    <h2>Order Flow Engine <span class="step">MEXC live ou replay sintetico — sem ordens</span></h2>
+    <p class="diagnostic-note">⚠ Sem execução: este painel só lê e exibe microestrutura (OFI/Absorption/Exhaustion). <b>Não usar para decisão de mercado, sinal de trade ou recomendação.</b> "MEXC Live" ingere trades reais públicos (GET /api/v3/trades, sem chave); "Replay" deriva ticks sintéticos dos candles acima (lado BUY/SELL inferido da direção do preço — não é fita real) e serve como auto-teste independente de rede.</p>
     <canvas id="orderflow-canvas"></canvas>
     <div class="status-grid">
       <div class="status-row"><span class="label">Render backend</span><span class="value v-pending" id="of-backend">…</span></div>
       <div class="status-row"><span class="label">SharedArrayBuffer (zero-copy)</span><span class="value v-pending" id="of-sab">…</span></div>
       <div class="status-row"><span class="label">Auto-teste do motor (limiares sintéticos)</span><span class="value v-pending" id="of-selftest">…</span></div>
+      <div class="status-row"><span class="label">Fonte de dados</span><span class="value v-info" id="of-source">REPLAY SINTÉTICO</span></div>
     </div>
     <div class="replay-meta" id="orderflow-meta">
-      <span>Toque em "Rodar Order Flow Replay" para alimentar o motor com os candles do replay.</span>
+      <span>Toque em "Iniciar MEXC Live" para trades reais, ou "Rodar Order Flow Replay" para o auto-teste sintético.</span>
     </div>
     <ul class="signal-list" id="orderflow-signal-list">
       <li class="signal-empty">Nenhum sinal nesta sessão ainda.</li>
     </ul>
     <div class="btn-grid">
+      <button class="rt-btn" id="btn-toggle-orderflow-live"><span class="icon">📡</span> Iniciar MEXC Live</button>
       <button class="rt-btn" id="btn-run-orderflow"><span class="icon">⚡</span> Rodar Order Flow Replay</button>
     </div>
   </section>

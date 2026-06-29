@@ -82,6 +82,7 @@ function repairLabel(vault) {
 
 let workerClient = null;
 let orderflowClient = null;
+let liveOrderflowSignals = []; // acumulado da sessao MEXC live atual (zerado a cada Iniciar) — separado dos sinais do replay sintetico, nunca misturados (ver mutual exclusion em orderflow-engine-ui.js)
 let replayDatasetCache = null;
 let lastAnalysisMeta = null;
 let lastReplayDrawData = null; // {closes, rollingSma} do ultimo replay — permite redesenhar o sparkline quando #advanced-section sai de hidden (canvas com rect 0x0 no draw original nao produz nada visivel)
@@ -1710,6 +1711,62 @@ async function handleRunOrderflow() {
     }
 }
 
+/** onUpdate de cada ciclo do poller MEXC live (~4s, ver createLivePoller).
+ *  Roda mesmo sem trade novo ou com a sonda fora de ACTIVE_READ_ONLY — o
+ *  badge of-source sempre reflete o estado real desta sondagem, nunca um
+ *  ultimo sucesso congelado (ver header de mexc-trades-stream.js). */
+function renderLiveOrderflowUpdate(update) {
+    const sourceLabel = update.state === 'ACTIVE_READ_ONLY' ? 'MEXC LIVE' : `MEXC LIVE — ${update.state}`;
+    setStatusWithClass('of-source', sourceLabel, classForConnectorState(update.state));
+    if (update.signals.length > 0) {
+        liveOrderflowSignals.push(...update.signals);
+        renderOrderflowSignals(liveOrderflowSignals);
+    }
+    els['orderflow-meta'].innerHTML = `
+        <span>Fonte: <b>MEXC Spot (live, GET /api/v3/trades)</b></span>
+        <span>Trades novos neste ciclo: <b>${update.newTicks}</b></span>
+        <span>Ingeridos no ring buffer: <b>${update.ingested}</b></span>
+        <span>Sinais acumulados nesta sessão live: <b>${liveOrderflowSignals.length}</b></span>
+    `;
+    if (update.state === 'ACTIVE_READ_ONLY') {
+        log(`MEXC live: ciclo OK — ${update.newTicks} trade(s) novo(s), ${update.signals.length} sinal(is).`, update.newTicks > 0 ? 'ok' : 'dim');
+    } else {
+        log(`MEXC live: sonda retornou ${update.state} neste ciclo (0 ticks ingeridos).`, 'fail');
+    }
+}
+
+/** Liga/desliga o feed real MEXC. Mutuamente exclusivo com o replay
+ *  sintetico (orderflowUI.runReplayThroughOrderflow recusa rodar enquanto
+ *  isLiveFeedRunning() — aqui so' refletimos isso na UI desabilitando o
+ *  outro botao, a garantia de verdade vive na camada de orquestracao). */
+async function handleToggleOrderflowLive() {
+    if (!orderflowClient) {
+        log('Order Flow Engine ainda não inicializado.', 'fail');
+        return;
+    }
+    const btn = els['btn-toggle-orderflow-live'];
+    if (orderflowUI.isLiveFeedRunning()) {
+        orderflowUI.stopLiveOrderflowFeed();
+        if (btn) btn.innerHTML = '<span class="icon">📡</span> Iniciar MEXC Live';
+        if (els['btn-run-orderflow']) els['btn-run-orderflow'].disabled = false;
+        setStatusWithClass('of-source', 'REPLAY SINTÉTICO', 'v-info');
+        log('MEXC live feed parado pelo usuário.', 'info');
+        siriform.setSiriformState('idle', 'Feed MEXC live parado.');
+        return;
+    }
+    liveOrderflowSignals = [];
+    if (btn) btn.innerHTML = '<span class="icon">⏹</span> Parar MEXC Live';
+    if (els['btn-run-orderflow']) els['btn-run-orderflow'].disabled = true;
+    setStatusWithClass('of-source', 'CONECTANDO…', 'v-pending');
+    log('=== INICIANDO MEXC LIVE (Order Flow real) ===', 'info');
+    siriform.setSiriformState('checking', 'Conectando ao feed real MEXC (GET /api/v3/trades)...');
+    orderflowUI.startLiveOrderflowFeed({
+        client: orderflowClient,
+        symbol: 'BTC',
+        onUpdate: renderLiveOrderflowUpdate,
+    });
+}
+
 async function handleClearReinstall() {
     const confirmMsg = 'Isso vai remover do Vault local deste iPad: o motor WASM, o dataset de replay, '
         + 'os manifestos/metadados e a versão instalada. O PWA em si (instalação na Tela de Início, '
@@ -2680,6 +2737,7 @@ function wireButtons() {
     if (els['btn-he-repair']) els['btn-he-repair'].addEventListener('click', handleRepairHydration);
     if (els['btn-he-export']) els['btn-he-export'].addEventListener('click', handleExportHydrationReport);
     if (els['btn-run-orderflow']) els['btn-run-orderflow'].addEventListener('click', handleRunOrderflow);
+    if (els['btn-toggle-orderflow-live']) els['btn-toggle-orderflow-live'].addEventListener('click', handleToggleOrderflowLive);
 
     if (els['br-import-input']) {
         els['br-import-input'].addEventListener('change', async (ev) => {

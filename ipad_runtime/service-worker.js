@@ -20,7 +20,7 @@
 // ja degrada sozinho para o fallback Array (typeof SharedArrayBuffer ===
 // 'undefined') — entao mesmo se este self-injection falhar em algum
 // Safari mais antigo, o app continua funcionando, so sem zero-copy real.
-const CACHE_VERSION = 'cyborg-ipad-runtime-v33';
+const CACHE_VERSION = 'cyborg-ipad-runtime-v34';
 
 function withCoiHeaders(response) {
     if (!response) return response;
@@ -87,6 +87,7 @@ const PRECACHE_URLS = [
     './js/real-data/binance-futures-public.js',
     './js/real-data/mexc-public.js',
     './js/real-data/mexc-futures-public.js',
+    './js/real-data/mexc-trades-stream.js',
     './js/real-data/csv-json-import.js',
     './js/real-data/analysis-frame.js',
     './js/real-data/source-health.js',
