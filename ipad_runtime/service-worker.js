@@ -20,7 +20,7 @@
 // ja degrada sozinho para o fallback Array (typeof SharedArrayBuffer ===
 // 'undefined') — entao mesmo se este self-injection falhar em algum
 // Safari mais antigo, o app continua funcionando, so sem zero-copy real.
-const CACHE_VERSION = 'cyborg-ipad-runtime-v39';
+const CACHE_VERSION = 'cyborg-ipad-runtime-v40';
 
 function withCoiHeaders(response) {
     if (!response) return response;

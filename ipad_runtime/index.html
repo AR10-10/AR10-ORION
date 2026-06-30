@@ -203,26 +203,61 @@
 
       <!-- Quant Signals (bottom, fills remaining height) -->
       <div class="cpk-panel cpk-signals-panel" id="quant-signals-panel">
+
+        <!-- Header: dominant signal + confidence -->
         <div class="qs-header">
           <span class="qs-title">QUANT SIGNALS</span>
           <span class="tsm-signal-badge v-pending" id="tsm-signal-badge">SIGNAL: …</span>
+          <span class="value v-pending qs-confidence" id="tsm-confidence">…</span>
         </div>
-        <span class="value v-pending qs-confidence" id="tsm-confidence">…</span>
-        <div class="qs-entry-grid">
-          <div class="qs-cell"><span class="qs-key">ENTRY</span><span class="value v-pending" id="tsm-entry-zone">…</span></div>
-          <div class="qs-cell"><span class="qs-key">TP1</span><span class="value v-ok" id="tsm-tp1">…</span></div>
-          <div class="qs-cell"><span class="qs-key">TP2</span><span class="value v-ok" id="tsm-tp2">…</span></div>
-          <div class="qs-cell"><span class="qs-key">SL</span><span class="value v-fail" id="tsm-sl">…</span></div>
-        </div>
+
+        <!-- Dual LONG / SHORT execution matrices -->
+        <div class="qs-matrix-grid">
+
+          <!-- LONG matrix -->
+          <div class="qs-matrix qs-long-matrix" id="qs-long-matrix">
+            <div class="qs-matrix-hdr">
+              <span class="qs-matrix-label qs-long-label">▲ LONG</span>
+              <span class="qs-matrix-status v-pending" id="tsm-long-status">STANDBY</span>
+            </div>
+            <div class="qs-matrix-rows">
+              <div class="qs-matrix-row"><span class="qs-k">ENTRADA</span><span class="value v-pending qs-v" id="tsm-entry-zone">…</span></div>
+              <div class="qs-matrix-row"><span class="qs-k">ALVO 1</span><span class="value v-ok qs-v" id="tsm-tp1">…</span></div>
+              <div class="qs-matrix-row"><span class="qs-k">ALVO 2</span><span class="value v-ok qs-v" id="tsm-tp2">…</span></div>
+              <div class="qs-matrix-row"><span class="qs-k">ALVO 3</span><span class="value v-pending qs-v" id="tsm-tp3">…</span></div>
+              <div class="qs-matrix-row qs-sl-row"><span class="qs-k">STOP</span><span class="value v-fail qs-v" id="tsm-sl">…</span></div>
+            </div>
+          </div>
+
+          <!-- SHORT matrix -->
+          <div class="qs-matrix qs-short-matrix" id="qs-short-matrix">
+            <div class="qs-matrix-hdr">
+              <span class="qs-matrix-label qs-short-label">▼ SHORT</span>
+              <span class="qs-matrix-status v-pending" id="tsm-short-status">STANDBY</span>
+            </div>
+            <div class="qs-matrix-rows">
+              <div class="qs-matrix-row"><span class="qs-k">ENTRADA</span><span class="value v-pending qs-v" id="tsm-short-entry">…</span></div>
+              <div class="qs-matrix-row"><span class="qs-k">ALVO 1</span><span class="value v-fail qs-v" id="tsm-short-tp1">…</span></div>
+              <div class="qs-matrix-row"><span class="qs-k">ALVO 2</span><span class="value v-fail qs-v" id="tsm-short-tp2">…</span></div>
+              <div class="qs-matrix-row"><span class="qs-k">ALVO 3</span><span class="value v-pending qs-v" id="tsm-short-tp3">…</span></div>
+              <div class="qs-matrix-row qs-sl-row"><span class="qs-k">STOP</span><span class="value v-ok qs-v" id="tsm-short-sl">…</span></div>
+            </div>
+          </div>
+
+        </div><!-- /.qs-matrix-grid -->
+
+        <!-- S/R Ladder -->
         <div class="qs-divider"></div>
         <div class="sr-ladder" id="sr-ladder">
-          <div class="sr-row sr-resistance"><span class="label">R2</span><span class="value v-pending" id="sr-resistance-2">…</span></div>
-          <div class="sr-row sr-resistance"><span class="label">R1</span><span class="value v-fail" id="sr-resistance-1">…</span></div>
-          <div class="sr-row sr-current"><span class="label">SPOT</span><span class="value v-info" id="sr-current-price">…</span></div>
-          <div class="sr-row sr-support"><span class="label">S1</span><span class="value v-ok" id="sr-support-1">…</span></div>
-          <div class="sr-row sr-support"><span class="label">S2</span><span class="value v-pending" id="sr-support-2">…</span></div>
+          <div class="sr-row sr-resistance"><span class="sr-lbl">R2</span><span class="value v-pending sr-val" id="sr-resistance-2">…</span></div>
+          <div class="sr-row sr-resistance"><span class="sr-lbl">R1</span><span class="value v-fail sr-val" id="sr-resistance-1">…</span></div>
+          <div class="sr-row sr-current"><span class="sr-lbl">◈ SPOT</span><span class="value v-info sr-val" id="sr-current-price">…</span></div>
+          <div class="sr-row sr-support"><span class="sr-lbl">S1</span><span class="value v-ok sr-val" id="sr-support-1">…</span></div>
+          <div class="sr-row sr-support"><span class="sr-lbl">S2</span><span class="value v-pending sr-val" id="sr-support-2">…</span></div>
         </div>
-        <p class="engine-meta qs-condition" id="tsm-condition">…</p>
+
+        <p class="qs-condition" id="tsm-condition">…</p>
+
       </div>
 
     </div><!-- /.cpk-center -->

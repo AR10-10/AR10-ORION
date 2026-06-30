@@ -748,9 +748,21 @@ function renderTradeSetupMatrix(matrix) {
     setCell('tsm-entry-zone', matrix.entry_zone);
     setCell('tsm-tp1', matrix.take_profit_1);
     setCell('tsm-tp2', matrix.take_profit_2);
+    setCell('tsm-tp3', DADOS_INSUFICIENTES); // no 3rd target in current engine — structural placeholder
     setCell('tsm-sl', matrix.stop_loss);
     if (els['tsm-condition']) {
         els['tsm-condition'].textContent = [str(matrix.condition), str(matrix.rationale)].filter((v) => v && v !== DADOS_INSUFICIENTES).join(' ') || DADOS_INSUFICIENTES;
+    }
+    // LONG/SHORT status indicators
+    const isLong = matrix.signal === 'LONG';
+    const isShort = matrix.signal === 'SHORT';
+    if (els['tsm-long-status']) {
+        els['tsm-long-status'].textContent = isLong ? 'ACTIVE' : 'STANDBY';
+        els['tsm-long-status'].className = `qs-matrix-status ${isLong ? 'v-ok' : 'v-pending'}`;
+    }
+    if (els['tsm-short-status']) {
+        els['tsm-short-status'].textContent = isShort ? 'ACTIVE' : 'STANDBY';
+        els['tsm-short-status'].className = `qs-matrix-status ${isShort ? 'v-fail' : 'v-pending'}`;
     }
 }
 
@@ -897,6 +909,18 @@ function renderSupportsResistances(tracker) {
         els['sr-support-2'].textContent = fmt(tracker.rota_b_short.target_2);
         els['sr-support-2'].className = `value ${typeof tracker.rota_b_short.target_2 === 'number' ? 'v-info' : 'v-pending'}`;
     }
+    // SHORT matrix: wire rota_b_short fields into cockpit SHORT execution box
+    const setShort = (id, v) => {
+        if (!els[id]) return;
+        els[id].textContent = fmt(v);
+        els[id].className = `value qs-v ${typeof v === 'number' ? 'v-info' : 'v-pending'}`;
+    };
+    const sb = tracker.rota_b_short;
+    setShort('tsm-short-entry', sb.entry_zone);
+    setShort('tsm-short-tp1', sb.target_1);
+    setShort('tsm-short-tp2', sb.target_2);
+    if (els['tsm-short-tp3']) { els['tsm-short-tp3'].textContent = DADOS_INSUFICIENTES; els['tsm-short-tp3'].className = 'value qs-v v-pending'; }
+    setShort('tsm-short-sl', sb.invalidation);
 }
 
 function refreshTargetTracker() {

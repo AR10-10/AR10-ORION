@@ -1265,8 +1265,8 @@ footer.legal {
     border-radius: 8px;
     font-size: clamp(0.78rem, 1.8vw, 0.92rem);
 }
-.sr-row .label { color: var(--text-dim); }
-.sr-row .value { font-weight: bold; }
+.sr-row .label, .sr-row .sr-lbl { color: var(--text-dim); }
+.sr-row .value, .sr-row .sr-val { font-weight: bold; }
 .sr-row.sr-resistance { background: rgba(255, 62, 82, 0.06); border-left: 2px solid rgba(255, 62, 82, 0.35); }
 .sr-row.sr-support { background: rgba(0, 255, 157, 0.06); border-left: 2px solid rgba(0, 255, 157, 0.35); }
 .sr-row.sr-current { background: rgba(0, 242, 255, 0.1); border-left: 2px solid var(--sys-cyan); }
@@ -1765,11 +1765,11 @@ details#bl-snapshot-block > summary.snapshot-summary {
 }
 #bl-current-price {
     font-family: var(--font-display);
-    font-size: clamp(2.4rem, 7vw, 4rem);
+    font-size: clamp(1.6rem, 3.5vw, 2.4rem);
     font-weight: 800;
-    letter-spacing: -1.5px;
+    letter-spacing: -0.5px;
     color: var(--sys-cyan);
-    text-shadow: 0 0 30px rgba(0, 242, 255, 0.6), 0 0 80px rgba(0, 242, 255, 0.2);
+    text-shadow: 0 0 20px rgba(0, 242, 255, 0.6), 0 0 50px rgba(0, 242, 255, 0.18);
     display: block;
     line-height: 1;
     overflow: hidden;
@@ -1838,76 +1838,162 @@ details#bl-snapshot-block > summary.snapshot-summary {
         0 0 42px rgba(255, 138, 61, 0.1),
         0 10px 32px rgba(0, 0, 0, 0.42);
 }
+/* ============================================================
+   QUANT SIGNALS PANEL — micro-typography signal matrices
+   ============================================================ */
 .qs-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 6px;
     flex-wrap: wrap;
+    flex-shrink: 0;
 }
 .qs-title {
     font-family: var(--font-display);
-    font-size: 0.6rem;
+    font-size: 0.58rem;
     letter-spacing: 2px;
     text-transform: uppercase;
     color: var(--cockpit-orange);
     font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
-.quant-signals-panel .tsm-signal-badge {
-    font-size: clamp(0.7rem, 1.7vw, 0.88rem);
-    padding: 3px 9px;
+.tsm-signal-badge {
+    font-size: 0.62rem;
+    font-family: var(--font-mono);
+    letter-spacing: 0.8px;
+    padding: 2px 7px;
+    border-radius: 6px;
+    border: 1px solid currentColor;
+    font-weight: 700;
+    white-space: nowrap;
 }
 .qs-confidence {
-    display: block;
-    font-size: clamp(0.85rem, 2.2vw, 1.05rem);
-    font-weight: 700;
+    font-size: 0.62rem;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    margin-left: auto;
+    white-space: nowrap;
 }
-.qs-entry-grid {
+
+/* Dual LONG / SHORT execution matrix grid */
+.qs-matrix-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 5px;
+    gap: 8px;
+    flex-shrink: 0;
 }
-.qs-cell {
+.qs-matrix {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding: 5px 8px;
-    border-radius: 8px;
-    background: rgba(255, 138, 61, 0.04);
-    border: 1px solid rgba(255, 138, 61, 0.12);
+    gap: 0;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.06);
 }
-.qs-key {
-    font-size: 0.59rem;
-    letter-spacing: 1.5px;
-    color: var(--cockpit-orange);
+.qs-long-matrix {
+    border-color: rgba(0, 255, 157, 0.18);
+}
+.qs-short-matrix {
+    border-color: rgba(255, 62, 82, 0.18);
+}
+.qs-matrix-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    background: rgba(255, 255, 255, 0.03);
+    flex-shrink: 0;
+}
+.qs-long-matrix .qs-matrix-hdr { background: rgba(0, 255, 157, 0.06); }
+.qs-short-matrix .qs-matrix-hdr { background: rgba(255, 62, 82, 0.06); }
+.qs-matrix-label {
+    font-size: 0.62rem;
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: 1.2px;
     text-transform: uppercase;
+}
+.qs-long-label { color: var(--long-green); }
+.qs-short-label { color: var(--short-red); }
+.qs-matrix-status {
+    font-size: 0.55rem;
+    font-family: var(--font-mono);
+    letter-spacing: 1px;
+    font-weight: 700;
+}
+.qs-matrix-rows {
+    display: flex;
+    flex-direction: column;
+    padding: 4px 0;
+}
+.qs-matrix-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 3px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+.qs-matrix-row:last-child { border-bottom: none; }
+.qs-sl-row { background: rgba(255, 255, 255, 0.02); }
+.qs-long-matrix .qs-sl-row { background: rgba(255, 62, 82, 0.04); }
+.qs-short-matrix .qs-sl-row { background: rgba(0, 255, 157, 0.04); }
+.qs-k {
+    font-size: 0.53rem;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
     font-family: var(--font-display);
     font-weight: 700;
-    opacity: 0.85;
+    white-space: nowrap;
+    min-width: 3rem;
+    flex-shrink: 0;
 }
-.qs-cell .value {
-    font-size: clamp(0.76rem, 1.8vw, 0.92rem);
-    font-weight: bold;
+.qs-v {
+    font-size: 0.68rem;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    text-align: right;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
+
+/* S/R Ladder — compact precision vertical scale */
 .qs-divider {
     height: 1px;
     background: linear-gradient(90deg, transparent, rgba(255, 138, 61, 0.28), transparent);
+    flex-shrink: 0;
+    margin: 6px 0 4px;
 }
-/* S/R ladder inside quant-signals-panel — compact abbreviated labels */
-.quant-signals-panel .sr-row {
-    padding: 4px 8px;
-    font-size: clamp(0.67rem, 1.5vw, 0.78rem);
+.sr-lbl {
+    font-size: 0.56rem;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-family: var(--font-display);
+    font-weight: 700;
+    min-width: 2.4rem;
 }
-.quant-signals-panel .sr-row .label {
-    font-size: 0.63rem;
-    letter-spacing: 0.4px;
-    min-width: 2.5rem;
+.sr-val {
+    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    text-align: right;
+}
+.cpk-signals-panel .sr-row {
+    padding: 3px 4px;
+    gap: 6px;
 }
 .qs-condition {
-    font-size: 0.67rem;
-    margin: 0;
-    line-height: 1.35;
+    font-size: 0.62rem;
+    margin: 4px 0 0;
+    line-height: 1.4;
     color: var(--text-dim);
+    font-family: var(--font-mono);
+    flex-shrink: 0;
 }
 
 /* ============================================================
@@ -2300,10 +2386,10 @@ section.card[tabindex]:focus-visible {
     border-left-color: var(--short-red);
 }
 #bl-current-price {
-    font-size: clamp(2.1rem, 7vw, 3.4rem);
+    font-size: clamp(1.6rem, 3.5vw, 2.4rem);
     font-weight: 800;
-    letter-spacing: 0.5px;
-    text-shadow: 0 0 20px rgba(0, 242, 255, 0.65);
+    letter-spacing: -0.5px;
+    text-shadow: 0 0 16px rgba(0, 242, 255, 0.6);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2712,25 +2798,11 @@ section.card[tabindex]:focus-visible {
                 0 0 32px rgba(255, 138, 61, 0.07),
                 0 10px 28px rgba(0, 0, 0, 0.4);
 }
-/* Quant signals panel internal layout (mirrors previous hero-panel styles) */
-.cpk-signals-panel .qs-header {
+/* cpk-signals-panel is a flex column — make it so */
+.cpk-signals-panel {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
-    margin-bottom: 8px;
-    flex-shrink: 0;
-}
-.cpk-signals-panel .qs-entry-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 5px;
-    flex-shrink: 0;
-}
-.cpk-signals-panel .qs-divider {
-    margin: 8px 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255, 138, 61, 0.2), transparent);
-    flex-shrink: 0;
 }
 
 /* ---- RIGHT: Terminal panel (full height flex col) ---- */
