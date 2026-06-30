@@ -316,7 +316,7 @@
   <!-- SKILL 1/2/4/8/9 — Order Flow Engine (OFI, Absorption, Exhaustion, Bio-Reactor, Ring Buffer) -->
   <section class="card replay-wrap" id="orderflow-section">
     <h2>Order Flow Engine <span class="step">MEXC live ou replay sintético — sem ordens</span></h2>
-    <p class="diagnostic-note">⚠ Sem execução: este painel só lê e exibe microestrutura (OFI/Absorption/Exhaustion). <b>Não usar para decisão de mercado, sinal de trade ou recomendação.</b> "MEXC Live" ingere trades reais públicos (GET /api/v3/trades, sem chave); "Replay" deriva ticks sintéticos dos candles acima (lado BUY/SELL inferido da direção do preço — não é fita real) e serve como auto-teste independente de rede.</p>
+    <span class="ro-badge">[!] READ-ONLY · OFI/ABSORPTION/EXHAUSTION · SEM EXECUÇÃO</span>
     <canvas id="orderflow-canvas"></canvas>
     <div class="status-grid">
       <div class="status-row"><span class="label">Render backend</span><span class="value v-pending" id="of-backend">…</span></div>
@@ -325,7 +325,7 @@
       <div class="status-row"><span class="label">Fonte de dados</span><span class="value v-info" id="of-source">REPLAY SINTÉTICO</span></div>
     </div>
     <div class="replay-meta" id="orderflow-meta">
-      <span>Toque em "Iniciar MEXC Live" para trades reais, ou "Rodar Order Flow Replay" para o auto-teste sintético.</span>
+      <span>—</span>
     </div>
     <ul class="signal-list" id="orderflow-signal-list">
       <li class="signal-empty">Nenhum sinal nesta sessão ainda.</li>
@@ -339,7 +339,7 @@
   <!-- SKILL 3/6/7 — Real Data Layer (Connectors, Source Health) -->
   <section class="card real-data-layer-panel" id="real-data-layer-panel">
     <h2>Real Data Layer <span class="future-badge">conectores públicos, sem chave</span> <span class="readonly-badge">READ_ONLY_SOURCE</span></h2>
-    <p class="onboarding-hint">Nenhum conector começa como <b>ACTIVE_READ_ONLY</b> por suposição. Todo conector nasce <b>PLANNED</b> nesta sessão e só muda de estado depois que a sonda real (fetch de verdade ou leitura de arquivo local de verdade) responder. O estado abaixo é sempre o último resultado real observado nesta sessão, nunca um valor decorativo.</p>
+    <span class="ro-badge">[!] READ-ONLY · ACTIVE_READ_ONLY após sonda real</span>
     <div class="status-grid" id="rdl-connector-grid">
         <span class="analysis-frame-empty">Toque em "Testar fontes reais" para sondar os conectores.</span>
     </div>
@@ -369,7 +369,7 @@
         <span class="analysis-frame-empty">Sem fonte ACTIVE_READ_ONLY nesta sessão ainda. Teste uma fonte real primeiro.</span>
     </div>
     <p class="diagnostic-note" id="real-analysis-frame-session-note" hidden></p>
-    <p class="diagnostic-note" id="real-analysis-frame-note">DADOS INSUFICIENTES enquanto nenhuma fonte real estiver ACTIVE_READ_ONLY com candles suficientes.</p>
+    <p class="diagnostic-note" id="real-analysis-frame-note" hidden></p>
     <div class="btn-grid">
         <button class="rt-btn" id="btn-generate-real-analysis"><span class="icon">∑</span> Gerar AnalysisFrame real</button>
     </div>
@@ -393,9 +393,8 @@
   <!-- Research Engine — Routes A/B/C -->
   <section class="card research-engine-panel" id="research-engine-panel">
     <h2>Research Engine <span class="stub-badge">ROTA A / B / C sempre presentes</span></h2>
-    <p class="onboarding-hint">As três rotas abaixo são sempre mostradas, nunca só a rota "favorita" do momento. Confiança é sempre <b>LOW/MEDIUM/HIGH</b> qualitativo — nunca uma probabilidade estatística. <b>Nenhuma rota aqui executa, envia ou simula ordem.</b></p>
+    <span class="ro-badge">[!] READ-ONLY · ROTA A/B/C — SEM EXECUÇÃO · CONFIANÇA: LOW/MEDIUM/HIGH</span>
     <p class="diagnostic-note" id="research-engine-session-note" hidden></p>
-    <p class="onboarding-hint">Data Sufficiency e Matriz de Dados desta sessão aparecem no card "Matriz de Dados" abaixo, dentro do Engine — mesmo dado, sem duplicar lógica.</p>
     <div class="route-block route-long" id="route-a-long">
         <h3>ROTA A — LONG</h3>
         <div class="status-grid" id="route-a-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
@@ -408,13 +407,12 @@
         <h3>ROTA C — WAIT / NO TRADE</h3>
         <div class="status-grid" id="route-c-wait-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
     </div>
-    <p class="diagnostic-note">Target 2 / Extended target ficam DADOS_INSUFICIENTES de propósito — nenhum motor de extensão técnica está implementado nesta fase. Funding/OI/liquidação/long-short ratio dependem da fonte ativa: NÃO_APLICÁVEL para instrumento spot, DADOS_INSUFICIENTES quando a fonte é futures mas o campo ainda não foi confirmado por sonda real. Ver a matriz "Dados usados nesta leitura" abaixo para o detalhamento campo a campo e o Data Sufficiency Score.</p>
   </section>
 
   <!-- Local Intelligence Engine -->
   <section class="card local-intelligence-panel" id="local-intelligence-panel" tabindex="0">
     <h2>AR10 Local Intelligence Engine <span class="future-badge">sem API paga, 100% local</span></h2>
-    <p class="onboarding-hint">Matemática, memória e regras locais sobre dados que este runtime já mediu nesta sessão (CalculationFrame real ou replay sintético) — nunca um sinal, nunca uma ordem. SetupScore e Reflection Report ficam gravados no Evidence Ledger; Live Trading continua <code>LIVE_LOCKED</code> e qualquer ordem (mesmo Paper) continua passando pelo Risk Gate.</p>
+    <span class="ro-badge">[!] READ-ONLY · LIVE_LOCKED · SEM ORDEM · SEM SINAL</span>
     <div class="status-grid">
       <div class="status-row"><span class="label">Leitura (SetupScore)</span><span class="value v-pending" id="li-final-label">…</span></div>
       <div class="status-row"><span class="label">Confiança descritiva</span><span class="value v-pending" id="li-confidence">…</span></div>
@@ -435,7 +433,7 @@
   <!-- Target Tracker -->
   <section class="card target-tracker-panel" id="target-tracker-panel">
     <h2>Target Tracker <span class="step">snapshot da análise — não é recomendação</span></h2>
-    <p class="onboarding-hint">Os alvos abaixo vêm do snapshot da análise (card BTC/USDT), não do preço vivo: compara dois números reais e mostra a distância entre eles. Alvo 2 mostra DADOS_INSUFICIENTES: o Research Engine ainda calcula só 1 alvo por rota. A barra de progresso é só a mesma distância acima, redesenhada — nunca um novo nível.</p>
+    <span class="ro-badge">[!] READ-ONLY · SNAPSHOT · DISTÂNCIA ENTRE NÍVEIS · SEM EXECUÇÃO</span>
     <div class="route-block route-long" id="bl-route-long">
       <h3>Rota A (Long)</h3>
       <div class="status-grid" id="bl-route-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
@@ -445,7 +443,6 @@
       <div class="status-grid" id="bl-route-short-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
     </div>
     <p class="diagnostic-note" id="bl-reanalyze-banner" hidden></p>
-    <p class="diagnostic-note">Leitura descritiva — não é recomendação. Não é execução. Não é ordem. É acompanhamento visual de níveis.</p>
   </section>
 
   <!-- Rota Recomendada -->
@@ -465,7 +462,7 @@
   <!-- Matriz de Dados -->
   <section class="card data-matrix-summary-panel" id="data-matrix-summary-panel">
     <h2>Matriz de Dados <span class="step">Data Sufficiency</span></h2>
-    <p class="onboarding-hint">Dados usados nesta leitura — cada linha é <b>OK</b>, <b>DADOS_INSUFICIENTES</b> ou <b>NÃO_APLICÁVEL</b>; pontuação derivada só de campos reais desta sessão, nunca estimada. Mesmo dado do Research Engine, exibido aqui no Engine, perto das 3 rotas.</p>
+    <span class="ro-badge">[!] READ-ONLY · OK / DADOS_INSUFICIENTES / NÃO_APLICÁVEL</span>
     <div class="status-row" id="dm-source-health-row"><span class="label">Source Health</span><span class="value v-pending" id="dm-source-health-summary">…</span></div>
     <div class="data-sufficiency-block" id="research-data-sufficiency-block">
         <p class="data-sufficiency-label" id="research-data-sufficiency-label">Data Sufficiency: — / 100</p>
@@ -476,7 +473,7 @@
   <!-- Siriform Explanation -->
   <section class="card siriform-explanation-panel" id="siriform-explanation-panel">
     <h2>Siriform — Explicação dos Dados Reais</h2>
-    <p class="df-body" id="rdl-explanation-text">Toque em "Explicar dados reais" para o Siriform descrever, em português, qual fonte foi usada, se foi validada, se houve bloqueio de CORS, quais campos são reais e quais estão ausentes.</p>
+    <p class="df-body" id="rdl-explanation-text"></p>
     <div class="btn-grid">
         <button class="rt-btn" id="btn-explain-real-data"><span class="icon">◈</span> Explicar dados reais</button>
         <button class="rt-btn" id="btn-rehydrate-session"><span class="icon">↺</span> Reidratar sessão</button>
@@ -542,7 +539,7 @@
   <!-- Replay (diagnostic) -->
   <section class="card replay-wrap" id="replay-section">
     <h2>Replay BTC/USDT <span class="step">simulacao local — sem ordens</span></h2>
-    <p class="diagnostic-note">⚠ Modo de Diagnóstico Técnico: dados sintéticos offline — prova o WASM, o worker, o storage e o engine de replay. <b>Não usar para decisão de mercado, sinal de trade ou recomendação.</b></p>
+    <span class="ro-badge">[!] READ-ONLY · DIAGNÓSTICO SINTÉTICO · SEM ORDEM</span>
     <canvas id="replay-canvas"></canvas>
     <div class="replay-meta" id="replay-meta">
       <span>Toque em "Rodar Replay BTC/USDT" para iniciar.</span>
@@ -564,7 +561,7 @@
     <div class="analysis-frame-grid" id="analysis-frame-grid">
       <span class="analysis-frame-empty">Rode o Replay BTC/USDT para preencher o AnalysisFrame.</span>
     </div>
-    <p class="diagnostic-note">Estatística descritiva sobre o dataset sintético de diagnóstico. Para decisão de mercado real seria necessária fonte pública/somente-leitura com símbolo, timeframe, timestamp e frescor — enquanto não houver, o estado honesto é <b>DADOS INSUFICIENTES</b>.</p>
+    <span class="ro-badge">[!] READ-ONLY · SINTÉTICO · DADOS INSUFICIENTES para mercado real</span>
   </section>
 
   <!-- Memory Alive -->
@@ -577,7 +574,6 @@
       <div class="status-row"><span class="label">Recovery Report</span><span class="value v-pending" id="mv-recovery-status">…</span></div>
       <div class="status-row"><span class="label">Hydration Report</span><span class="value v-pending" id="mv-hydration-status">…</span></div>
     </div>
-    <p class="onboarding-hint">Você nunca precisa salvar manualmente o "estado" deste sistema. Todo evento real (sondagem de fonte, análise, decisão do Risk Gate) já é gravado automaticamente em IndexedDB; um snapshot é tirado a cada boot e promovido a "Last Good State" quando íntegro.</p>
     <div class="btn-grid">
         <button class="rt-btn" id="btn-mv-snapshot"><span class="icon">⛁</span> Tirar snapshot agora</button>
     </div>
@@ -586,7 +582,6 @@
   <!-- Hydration Engine -->
   <section class="card hydration-engine-panel" id="hydration-engine-panel" tabindex="0">
     <h2>Hydration Engine <span class="step">armazenamento progressivo</span></h2>
-    <p class="onboarding-hint">Em vez de baixar tudo de uma vez, o Cyborg hidrata o iPad em pacotes pequenos, validando cada um por SHA-256 antes de guardar — como beber água pouco a pouco. Se faltar espaço ou a conexão cair, retoma exatamente de onde parou.</p>
     <div class="he-hero">
       <div class="he-ring" id="he-ring" data-engine-state="IDLE">
         <div class="he-ring-core">
@@ -640,7 +635,6 @@
 
   <section class="card vault-local-panel" id="vault-local-panel">
     <h2>Vault Local do iPad</h2>
-    <p class="onboarding-hint">O Cyborg salva automaticamente os arquivos necessários no armazenamento seguro do Safari/PWA. Você não precisa procurar uma pasta raiz. Esta área mostra o que está instalado, validado e pronto para uso neste iPad.</p>
     <div class="status-grid">
       <div class="status-row"><span class="label">Local Pack</span><span class="value v-pending" id="vl-pack">…</span></div>
       <div class="status-row"><span class="label">Nome do pacote instalado</span><span class="value v-pending" id="vl-pack-name">…</span></div>
@@ -680,7 +674,7 @@
   <!-- Evaluations -->
   <section class="card evaluations-panel" id="evaluations-panel">
     <h2>Evaluations <span class="future-badge">equivalente local do framework Apple (WWDC26)</span></h2>
-    <p class="onboarding-hint">Não existe LLM embutido nesta versão — isto não é avaliação de modelo. É um auto-teste real do que este runtime já faz: roteamento de comando de voz/texto, postura de segurança (CSP, política de dados, Vault FAIL_CLOSED) e vocabulário de estado do Siriform. Cada linha abaixo chama código vivo do app nesta sessão.</p>
+    <span class="ro-badge">[!] AUTO-TESTE LOCAL · SEM LLM · SEM API · CÓDIGO VIVO</span>
     <div class="status-grid">
       <div class="status-row"><span class="label">Roteamento de comando</span><span class="value v-pending" id="ev-command-routing">…</span></div>
       <div class="status-row"><span class="label">Postura de segurança</span><span class="value v-pending" id="ev-security-posture">…</span></div>
@@ -694,7 +688,6 @@
   <!-- Metrics -->
   <section class="card metrics-panel" id="metrics-panel">
     <h2>Métricas <span class="future-badge">equivalente leve do Instruments (WWDC26)</span></h2>
-    <p class="onboarding-hint">Não existe processo nativo para "perfilar" este runtime — então este painel lê, no próprio navegador, sinais que um profiler nativo mostraria. Tudo aqui é leitura de fatos já ocorridos nesta sessão; nada é estimado, e nada sai do dispositivo.</p>
     <div class="status-grid">
       <div class="status-row"><span class="label">Tempo de carregamento</span><span class="value v-pending" id="mx-load-time">…</span></div>
       <div class="status-row"><span class="label">Última duração: Preparar Cyborg</span><span class="value v-pending" id="mx-prep-time">…</span></div>
@@ -718,7 +711,7 @@
       <div class="status-row"><span class="label">Exige Stop Loss</span><span class="value v-pending" id="rg-require-stop">…</span></div>
       <div class="status-row"><span class="label">Qualidade mínima de fonte</span><span class="value v-pending" id="rg-min-quality">…</span></div>
     </div>
-    <p class="onboarding-hint">O Risk Gate bloqueia qualquer ordem — mesmo em Paper Trading — sem stop loss, com drawdown acima do limite, com fonte de dados abaixo da qualidade mínima exigida, ou enquanto o Kill Switch estiver ativado. Nenhuma ordem real é enviada por este runtime — ver Live Status abaixo.</p>
+    <span class="ro-badge">[!] BLOQUEIO · SEM STOP = SEM TRADE · LIVE_LOCKED</span>
     <div class="btn-grid">
         <button class="rt-btn danger" id="btn-rg-engage"><span class="icon">⛔</span> Acionar Kill Switch</button>
         <button class="rt-btn success" id="btn-rg-disengage"><span class="icon">▶</span> Desacionar Kill Switch</button>
@@ -737,7 +730,7 @@
     <div class="status-grid" id="pt-positions-grid">
         <span class="analysis-frame-empty">Nenhuma posição de papel aberta nesta sessão.</span>
     </div>
-    <p class="onboarding-hint">Paper Trading usa o último preço real (<code>evidence.ticker.last_price</code>) de uma fonte ACTIVE_READ_ONLY como preço de entrada — nunca um preço inventado. Tamanho e stop loss usam um padrão fixo conservador (até 50 quote, stop a 2% da entrada) e passam pelo Risk Gate antes de abrir.</p>
+    <span class="ro-badge">[!] SIMULADO · PREÇO REAL · RISK GATE OBRIGATÓRIO · SEM EXECUÇÃO</span>
     <p class="diagnostic-note" id="pt-block-note" hidden></p>
     <div class="btn-grid">
         <button class="rt-btn" id="btn-pt-open"><span class="icon">＋</span> Abrir posição de papel (LONG)</button>
@@ -757,25 +750,12 @@
 
   <section class="card decision-frame-panel" id="decision-frame-panel">
     <h2>DecisionFrame <span class="stub-badge">🔒 STUB CONTROLLED</span></h2>
-    <p class="df-body">
-      Este card é um placeholder transparente. <b>Nenhuma lógica de decisão,
-      sinal de ordem ou execução existe neste runtime.</b> Sem chave de API,
-      sem segredo, sem endpoint privado de corretora e sem rota de rede para
-      nenhuma exchange existe no código (ver Content-Security-Policy). Por lei
-      interna do AR10 Cyborg 1.0 PRO, qualquer decisão de execução exigiria um
-      Risk Gate dedicado a execução real e supervisão humana explícita —
-      nenhum dos dois está implementado ou habilitado aqui; o Risk Gate que
-      existe hoje (ver card "Risk Gate") só governa Paper Trading simulado,
-      nunca ordem real. Este card existe apenas para deixar explícita a
-      fronteira entre "ler estatística" (AnalysisFrame, real) e
-      "decidir/executar" (DecisionFrame, bloqueado por design).
-    </p>
+    <span class="ro-badge">[!] BLOQUEADO POR DESIGN · SEM EXECUÇÃO · SEM CHAVE · SEM ORDEM</span>
   </section>
 
   <!-- Manutenção -->
   <section class="card local-pack-manager" id="runtime-actions">
     <h2>Manutenção / Técnico</h2>
-    <p class="onboarding-hint">Estas ações são manuais e avançadas. No dia a dia, use só o botão principal <b>"Preparar / Atualizar Cyborg neste iPad"</b> na tela inicial — ele já baixa, verifica, instala e repara sozinho.</p>
     <div class="btn-grid">
       <button class="rt-btn" id="btn-check-safari"><span class="icon">◎</span> Verificar Safari</button>
       <button class="rt-btn" id="btn-check-install"><span class="icon">◍</span> Verificar instalação local</button>
@@ -796,7 +776,6 @@
   <!-- Export + Backup -->
   <section class="card export-panel" id="export-panel">
     <h2>Arquivos Exportados</h2>
-    <p class="onboarding-hint">Os arquivos internos do app são salvos automaticamente no armazenamento seguro do Safari/PWA — você não gerencia pastas. Quando você <b>exporta</b> algo para o app Arquivos, cada artefato recebe um nome único com data/hora (<code>AR10_CYBORG_TIPO_VERSAO_AAAAMMDD_HHMMSS.ext</code>), então o Safari nunca pede para "substituir" e dois artefatos diferentes nunca colidem.</p>
     <div class="btn-grid">
       <button class="rt-btn" id="btn-export-report"><span class="icon">▤</span> Exportar Relatório (.md)</button>
       <button class="rt-btn" id="btn-export-evidence"><span class="icon">▦</span> Exportar Evidência (.json)</button>
@@ -807,7 +786,7 @@
 
   <section class="card backup-recovery-panel" id="backup-recovery-panel" tabindex="0">
     <h2>Backup / Recovery <span class="step">memória viva exportável</span></h2>
-    <p class="onboarding-hint">Gera um pacote único com Real Data Layer, Evidence Ledger, Event Log, snapshots e histórico de recovery — sem nenhum segredo, sem chave de API. Restaurar recalcula o hash e se recusa a aplicar (FAIL_CLOSED) se o pacote estiver corrompido ou adulterado.</p>
+    <span class="ro-badge">[!] SEM SEGREDO · SHA-256 VERIFICADO · FAIL_CLOSED NA RESTAURAÇÃO</span>
     <p class="vault-meta" id="br-last-backup">Nenhum backup gerado nesta sessão ainda.</p>
     <div class="btn-grid">
         <button class="rt-btn" id="btn-br-export"><span class="icon">⇩</span> Exportar memória viva (.json)</button>
@@ -860,7 +839,7 @@
       <div class="status-row"><span class="label">Is Authoritative</span><span class="value v-pending" id="se-is-authoritative">…</span></div>
       <div class="status-row"><span class="label">Soldier Validation</span><span class="value v-pending" id="se-soldier-validation">…</span></div>
     </div>
-    <p class="onboarding-hint">Safari Edge é uma camada visual/contextual deste iPad/Safari — latência de render, frames perdidos, foco de tela e estado de sessão locais. Nunca decide trade, nunca executa ordem, nunca substitui o Soldier: <code>is_authoritative</code> é sempre <b>FALSE</b>. Sem Soldier real implantado, toda leitura aqui fica como contexto local não validado (toque no card para o resumo completo).</p>
+    <span class="ro-badge">[!] LOCAL AUX · is_authoritative: FALSE · NÃO AUTORITATIVO</span>
   </section>
 
   </div><!-- /.sistema-section -->

@@ -2947,3 +2947,29 @@ section.card[tabindex]:focus-visible {
     .cpk-signals-panel,
     .cpk-terminal-panel { flex: 0 0 auto; min-height: auto; }
 }
+
+/* ============================================================
+   EXTREME TEXT PURGE — compact badges + data-row grid
+   ============================================================ */
+.ro-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    letter-spacing: 1px;
+    font-weight: 700;
+    color: var(--alert-amber, #FFB800);
+    border: 1px solid rgba(255, 184, 0, 0.35);
+    border-radius: 6px;
+    padding: 2px 8px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    margin-bottom: 6px;
+}
+.data-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 4px 0;
+    gap: 8px;
+}
