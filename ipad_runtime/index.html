@@ -66,13 +66,13 @@
   </nav>
 
   <!-- ============================================================
-       TAB 1 — COCKPIT (tela de entrada: leitura de 1 olhar)
+       TAB 1 — COCKPIT (V-PRIME: 3-column institutional terminal)
        ============================================================ -->
   <div class="tab-pane" id="tab-cockpit" role="tabpanel" aria-labelledby="btn-tab-cockpit">
-
   <div class="cockpit-viewport" id="cockpit-viewport">
 
-  <div class="live-ticker" id="cyborg-live-ticker" role="status" aria-live="off" aria-label="Letreiro vivo do Cyborg — estado do sistema, dados reais, Long/Short, Hydration e segurança">
+  <!-- Live Ticker (top strip) -->
+  <div class="live-ticker" id="cyborg-live-ticker" role="status" aria-live="off" aria-label="Letreiro vivo do Cyborg">
     <span class="lt-rail-label">CYBORG LIVE</span>
     <div class="live-ticker-viewport">
       <div class="live-ticker-track" id="live-ticker-track">
@@ -81,147 +81,193 @@
     </div>
   </div>
 
-  <div class="hero-row" id="hero-row">
+  <!-- V-PRIME 3-Column Grid (fills viewport height below ticker) -->
+  <div class="cpk-3col">
 
-  <!-- LEFT: Siriform Brain + Executive Status — fused Intelligence Core -->
-  <section class="card intelligence-core-panel">
-    <div class="ic-brain" id="siriform-section">
-      <div class="siriform-stage">
-        <div class="siriform-orbit siriform-orbit-1" aria-hidden="true"></div>
-        <div class="siriform-orbit siriform-orbit-2" aria-hidden="true"></div>
-        <div class="siriform-avatar" id="siriform-avatar" data-state="idle" role="img" aria-label="Siriform Avatar">
-          <div class="siriform-core"></div>
+    <!-- ================================================
+         LEFT (25%) — Intelligence Core + Controls
+         ================================================ -->
+    <div class="cpk-col cpk-left">
+    <div class="cpk-panel cpk-brain-panel">
+
+      <div class="brain-orb-wrap">
+        <div class="siriform-stage">
+          <div class="siriform-orbit siriform-orbit-1" aria-hidden="true"></div>
+          <div class="siriform-orbit siriform-orbit-2" aria-hidden="true"></div>
+          <div class="siriform-avatar" id="siriform-avatar" data-state="idle" role="img" aria-label="Siriform Avatar">
+            <div class="siriform-core"></div>
+          </div>
+          <svg class="siriform-wireframe" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+            <g fill="none" stroke="currentColor" stroke-width="0.6">
+              <ellipse cx="50" cy="50" rx="46" ry="46"/>
+              <ellipse cx="50" cy="50" rx="46" ry="17"/>
+              <ellipse cx="50" cy="50" rx="46" ry="17" transform="rotate(60 50 50)"/>
+              <ellipse cx="50" cy="50" rx="46" ry="17" transform="rotate(120 50 50)"/>
+              <ellipse cx="50" cy="50" rx="17" ry="46"/>
+            </g>
+          </svg>
         </div>
-        <svg class="siriform-wireframe" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-          <g fill="none" stroke="currentColor" stroke-width="0.6">
-            <ellipse cx="50" cy="50" rx="46" ry="46"/>
-            <ellipse cx="50" cy="50" rx="46" ry="17"/>
-            <ellipse cx="50" cy="50" rx="46" ry="17" transform="rotate(60 50 50)"/>
-            <ellipse cx="50" cy="50" rx="46" ry="17" transform="rotate(120 50 50)"/>
-            <ellipse cx="50" cy="50" rx="17" ry="46"/>
-          </g>
-        </svg>
-      </div>
-      <div class="siriform-status-line">
-        <span class="siriform-state-tag" id="siriform-state-tag">IDLE</span>
-        <span class="ss-dot" aria-hidden="true">•</span>
-        <span class="macro-state-chip" id="macro-state-chip">PRONTO</span>
-      </div>
-      <p class="siriform-caption" id="siriform-caption" aria-live="polite">Cyborg operando em READ_ONLY / FAIL_CLOSED.</p>
-    </div>
-    <div class="ic-divider" aria-hidden="true"></div>
-    <div class="ic-exec" id="cyborg-executive-panel">
-      <div class="ex-hero">
-        <div class="status-row ex-hero-row ex-state-row" id="ex-state-row" data-macro-state="IDLE">
-          <span class="label">🧭 Modo</span><span class="value v-pending" id="ex-state">…</span>
+        <div class="brain-state-line">
+          <span class="siriform-state-tag" id="siriform-state-tag">IDLE</span>
+          <span class="ss-dot" aria-hidden="true">•</span>
+          <span class="macro-state-chip" id="macro-state-chip">PRONTO</span>
         </div>
-        <div class="status-row ex-hero-row"><span class="label">🔒 Exec</span><span class="value v-fail" id="ex-live">LIVE_LOCKED</span></div>
-        <div class="status-row ex-hero-row"><span class="label">🛡️ Seg</span><span class="value v-ok" id="ex-security">READ_ONLY</span></div>
-        <div class="status-row ex-hero-row"><span class="label">⚖️ Risco</span><span class="value v-pending" id="ex-risk">…</span></div>
-        <div class="status-row ex-hero-row"><span class="label">🗄️ Cofre</span><span class="value v-pending" id="ex-vault">…</span></div>
-        <div class="status-row ex-hero-row"><span class="label">💧 Hydration</span><span class="value v-pending" id="ex-hydration">…</span></div>
-        <div class="status-row ex-hero-row"><span class="label">📍 Local</span><span class="value v-pending" id="ex-local">…</span></div>
+        <p class="siriform-caption" id="siriform-caption" aria-live="polite">READ_ONLY / FAIL_CLOSED</p>
       </div>
-      <details class="ex-details">
-        <summary>Detalhes técnicos</summary>
-        <div class="status-grid ex-details-grid">
-          <div class="status-row"><span class="label">Fonte real ativa</span><span class="value v-pending" id="ex-source">…</span></div>
-          <div class="status-row"><span class="label">Atualizado em</span><span class="value v-pending" id="ex-freshness">…</span></div>
-          <div class="status-row"><span class="label">Paper Trading</span><span class="value v-pending" id="ex-paper">…</span></div>
-          <div class="status-row"><span class="label">Último relatório</span><span class="value v-pending" id="ex-report">…</span></div>
+
+      <div class="brain-divider"></div>
+
+      <div class="brain-exec" id="cyborg-executive-panel">
+        <div class="exec-row ex-state-row" id="ex-state-row" data-macro-state="IDLE">
+          <span class="er-key">MODO</span><span class="value v-pending er-val" id="ex-state">…</span>
         </div>
-      </details>
-    </div>
-  </section>
-
-  <!-- RIGHT: BTC/USDT Price — dominant center stage -->
-  <section class="card btc-live-panel" id="btc-live-panel">
-    <div class="btc-pair-label">
-      <span class="coin-glyph" aria-hidden="true">🟠</span>
-      <span class="btc-pair-text">BTC / USDT</span>
-      <span class="btc-pair-tag">SPOT READ-ONLY</span>
-    </div>
-    <div class="bl-price-row btc-price-hero" id="bl-price-row" data-live-mode="DADOS_INSUFICIENTES">
-      <span class="bl-price-wrap">
-        <span class="value v-info" id="bl-current-price">…</span>
-        <span class="price-delta-badge v-pending" id="bl-price-delta-badge" title="Diferença vs. snapshot da última análise — não é variação 24h">…</span>
-      </span>
-    </div>
-    <div class="btc-meta-chips">
-      <div class="btc-meta-item"><span class="btc-meta-key">FONTE</span><span class="value v-pending" id="bl-current-source">…</span></div>
-      <div class="btc-meta-item"><span class="btc-meta-key">FRESHNESS</span><span class="value v-pending" id="bl-current-freshness">…</span></div>
-      <div class="btc-meta-item"><span class="btc-meta-key">MODO</span><span class="value v-pending" id="bl-current-mode">…</span></div>
-      <div class="btc-meta-item"><span class="btc-meta-key">LATÊNCIA</span><span class="value v-pending" id="bl-current-latency" title="Tempo de resposta real da última sonda de rede desta sessão">…</span></div>
-    </div>
-    <details id="bl-snapshot-block">
-      <summary class="snapshot-summary">Snapshot da análise</summary>
-      <div class="status-grid">
-        <div class="status-row"><span class="label">Preço usado</span><span class="value v-pending" id="bl-snapshot-price">…</span></div>
-        <div class="status-row"><span class="label">Gerado em</span><span class="value v-pending" id="bl-snapshot-time">…</span></div>
-        <div class="status-row"><span class="label">Idade do snapshot</span><span class="value v-pending" id="bl-snapshot-age">…</span></div>
-        <div class="status-row"><span class="label">Diferença vs. atual</span><span class="value v-pending" id="bl-price-diff">…</span></div>
+        <div class="exec-row">
+          <span class="er-key">EXEC</span><span class="value v-fail er-val" id="ex-live">LIVE_LOCKED</span>
+        </div>
+        <div class="exec-row">
+          <span class="er-key">SEG</span><span class="value v-ok er-val" id="ex-security">READ_ONLY</span>
+        </div>
+        <div class="exec-row">
+          <span class="er-key">RISCO</span><span class="value v-pending er-val" id="ex-risk">…</span>
+        </div>
+        <div class="exec-row">
+          <span class="er-key">COFRE</span><span class="value v-pending er-val" id="ex-vault">…</span>
+        </div>
+        <div class="exec-row">
+          <span class="er-key">HYDRAT</span><span class="value v-pending er-val" id="ex-hydration">…</span>
+        </div>
+        <div class="exec-row">
+          <span class="er-key">LOCAL</span><span class="value v-pending er-val" id="ex-local">…</span>
+        </div>
+        <span id="ex-source" hidden>…</span>
+        <span id="ex-freshness" hidden>…</span>
+        <span id="ex-paper" hidden>…</span>
+        <span id="ex-report" hidden>…</span>
       </div>
-    </details>
-    <div class="executive-actions" role="group" aria-label="Ações do BTC Live Panel">
-      <button type="button" class="rt-btn" id="bl-btn-refresh-now"><span class="icon">⟳</span> Atualizar preço agora</button>
-    </div>
-  </section>
 
-  <!-- CENTER-RIGHT: Quant Signals — Trade Setup Matrix + S/R Ladder -->
-  <section class="card quant-signals-panel" id="quant-signals-panel">
-    <div class="qs-header">
-      <span class="qs-title">QUANT SIGNALS</span>
-      <span class="tsm-signal-badge v-pending" id="tsm-signal-badge">SIGNAL: …</span>
-    </div>
-    <span class="value v-pending qs-confidence" id="tsm-confidence">…</span>
-    <div class="qs-entry-grid">
-      <div class="qs-cell"><span class="qs-key">ENTRY</span><span class="value v-pending" id="tsm-entry-zone">…</span></div>
-      <div class="qs-cell"><span class="qs-key">TP1</span><span class="value v-ok" id="tsm-tp1">…</span></div>
-      <div class="qs-cell"><span class="qs-key">TP2</span><span class="value v-ok" id="tsm-tp2">…</span></div>
-      <div class="qs-cell"><span class="qs-key">SL</span><span class="value v-fail" id="tsm-sl">…</span></div>
-    </div>
-    <div class="qs-divider"></div>
-    <div class="sr-ladder" id="sr-ladder">
-      <div class="sr-row sr-resistance"><span class="label">R2</span><span class="value v-pending" id="sr-resistance-2">…</span></div>
-      <div class="sr-row sr-resistance"><span class="label">R1</span><span class="value v-fail" id="sr-resistance-1">…</span></div>
-      <div class="sr-row sr-current"><span class="label">SPOT</span><span class="value v-info" id="sr-current-price">…</span></div>
-      <div class="sr-row sr-support"><span class="label">S1</span><span class="value v-ok" id="sr-support-1">…</span></div>
-      <div class="sr-row sr-support"><span class="label">S2</span><span class="value v-pending" id="sr-support-2">…</span></div>
-    </div>
-    <p class="engine-meta qs-condition" id="tsm-condition">…</p>
-  </section>
+      <div class="brain-divider"></div>
 
-  </div><!-- /.hero-row -->
-
-  <div class="cmd-bar" id="action-strip">
-    <div class="as-col as-primary">
-      <button type="button" class="hero-cta" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar Cyborg</button>
-    </div>
-    <div class="as-col as-mic">
-      <button type="button" class="mic-button" id="mic-button" data-voice-state="voice_idle" aria-label="Falar com o Siriform (comando de voz)">◉</button>
-      <span class="mic-status-label v-info" id="mic-status-label">PRONTO</span>
-      <button type="button" class="voice-info-btn" id="btn-voice-info" aria-label="Saiba mais sobre o Siriform Voice">ⓘ</button>
-    </div>
-    <div class="as-col as-quick">
-      <div class="quick-actions" id="quick-actions" role="group" aria-label="Ações rápidas">
-        <button type="button" class="qa-btn" id="qa-diagnostics">▣ Diag</button>
-        <button type="button" class="qa-btn" id="qa-replay">▶ Replay</button>
-        <button type="button" class="qa-btn" id="qa-analysis">∑ Análise</button>
-        <button type="button" class="qa-btn" id="qa-report">▤ Relatório</button>
+      <div class="brain-controls">
+        <button type="button" class="hero-cta cta-compact" id="btn-prepare-cyborg">⚡ Preparar Cyborg</button>
+        <div class="quick-actions" id="quick-actions" role="group" aria-label="Ações rápidas">
+          <button type="button" class="qa-btn" id="qa-diagnostics">▣ Diag</button>
+          <button type="button" class="qa-btn" id="qa-replay">▶ Replay</button>
+          <button type="button" class="qa-btn" id="qa-analysis">∑ Análise</button>
+          <button type="button" class="qa-btn" id="qa-report">▤ Relatório</button>
+        </div>
+        <div class="brain-mic-dock">
+          <button type="button" class="mic-button mic-inline-btn" id="mic-button" data-voice-state="voice_idle" aria-label="Falar com o Siriform">◉</button>
+          <span class="mic-status-label v-info" id="mic-status-label">PRONTO</span>
+          <button type="button" class="voice-info-btn" id="btn-voice-info" aria-label="Siriform Voice info">ⓘ</button>
+        </div>
       </div>
-    </div>
-  </div><!-- /.cmd-bar -->
 
-  <div class="law-badges">
-    <span class="law-badge" id="badge-mode">IPAD DIRECT / LOCAL-FIRST</span>
-    <span class="law-badge">READ_ONLY</span>
-    <span class="law-badge">FAIL_CLOSED</span>
-    <span class="law-badge is-ok">Execution Lock: ACTIVE</span>
-    <span class="law-badge is-blocked">Private Keys: DISABLED</span>
-    <span class="law-badge is-blocked">Live Trading: BLOCKED</span>
-    <span class="law-badge">Safari Edge: LOCAL_AUX</span>
-    <span class="law-badge">Telegram: PLANNED_AUX</span>
+    </div><!-- /.cpk-brain-panel -->
+    </div><!-- /.cpk-left -->
+
+    <!-- ================================================
+         CENTER (50%) — Market Data + Quant Signals
+         ================================================ -->
+    <div class="cpk-col cpk-center">
+
+      <!-- BTC Price (top) -->
+      <div class="cpk-panel cpk-price-panel">
+        <div class="btc-pair-label">
+          <span class="coin-glyph" aria-hidden="true">🟠</span>
+          <span class="btc-pair-text">BTC / USDT</span>
+          <span class="btc-pair-tag">SPOT READ-ONLY</span>
+        </div>
+        <div class="bl-price-row btc-price-hero" id="bl-price-row" data-live-mode="DADOS_INSUFICIENTES">
+          <span class="bl-price-wrap">
+            <span class="value v-info" id="bl-current-price">…</span>
+            <span class="price-delta-badge v-pending" id="bl-price-delta-badge">…</span>
+          </span>
+        </div>
+        <div class="btc-meta-chips">
+          <div class="btc-meta-item"><span class="btc-meta-key">FONTE</span><span class="value v-pending" id="bl-current-source">…</span></div>
+          <div class="btc-meta-item"><span class="btc-meta-key">FRESHNESS</span><span class="value v-pending" id="bl-current-freshness">…</span></div>
+          <div class="btc-meta-item"><span class="btc-meta-key">MODO</span><span class="value v-pending" id="bl-current-mode">…</span></div>
+          <div class="btc-meta-item"><span class="btc-meta-key">LATÊNCIA</span><span class="value v-pending" id="bl-current-latency">…</span></div>
+        </div>
+        <button type="button" class="rt-btn cpk-refresh-btn" id="bl-btn-refresh-now">⟳ Atualizar preço</button>
+        <details id="bl-snapshot-block">
+          <summary class="snapshot-summary">Snapshot</summary>
+          <div class="status-grid">
+            <div class="status-row"><span class="label">Preço usado</span><span class="value v-pending" id="bl-snapshot-price">…</span></div>
+            <div class="status-row"><span class="label">Gerado em</span><span class="value v-pending" id="bl-snapshot-time">…</span></div>
+            <div class="status-row"><span class="label">Idade</span><span class="value v-pending" id="bl-snapshot-age">…</span></div>
+            <div class="status-row"><span class="label">Δ atual</span><span class="value v-pending" id="bl-price-diff">…</span></div>
+          </div>
+        </details>
+      </div>
+
+      <!-- Quant Signals (bottom, fills remaining height) -->
+      <div class="cpk-panel cpk-signals-panel" id="quant-signals-panel">
+        <div class="qs-header">
+          <span class="qs-title">QUANT SIGNALS</span>
+          <span class="tsm-signal-badge v-pending" id="tsm-signal-badge">SIGNAL: …</span>
+        </div>
+        <span class="value v-pending qs-confidence" id="tsm-confidence">…</span>
+        <div class="qs-entry-grid">
+          <div class="qs-cell"><span class="qs-key">ENTRY</span><span class="value v-pending" id="tsm-entry-zone">…</span></div>
+          <div class="qs-cell"><span class="qs-key">TP1</span><span class="value v-ok" id="tsm-tp1">…</span></div>
+          <div class="qs-cell"><span class="qs-key">TP2</span><span class="value v-ok" id="tsm-tp2">…</span></div>
+          <div class="qs-cell"><span class="qs-key">SL</span><span class="value v-fail" id="tsm-sl">…</span></div>
+        </div>
+        <div class="qs-divider"></div>
+        <div class="sr-ladder" id="sr-ladder">
+          <div class="sr-row sr-resistance"><span class="label">R2</span><span class="value v-pending" id="sr-resistance-2">…</span></div>
+          <div class="sr-row sr-resistance"><span class="label">R1</span><span class="value v-fail" id="sr-resistance-1">…</span></div>
+          <div class="sr-row sr-current"><span class="label">SPOT</span><span class="value v-info" id="sr-current-price">…</span></div>
+          <div class="sr-row sr-support"><span class="label">S1</span><span class="value v-ok" id="sr-support-1">…</span></div>
+          <div class="sr-row sr-support"><span class="label">S2</span><span class="value v-pending" id="sr-support-2">…</span></div>
+        </div>
+        <p class="engine-meta qs-condition" id="tsm-condition">…</p>
+      </div>
+
+    </div><!-- /.cpk-center -->
+
+    <!-- ================================================
+         RIGHT (25%) — Terminal / Telemetry
+         ================================================ -->
+    <div class="cpk-col cpk-right">
+    <div class="cpk-panel cpk-terminal-panel">
+
+      <div class="term-hdr">
+        <span class="term-title-badge">TERMINAL</span>
+        <span class="term-mode-badge">READ_ONLY</span>
+      </div>
+
+      <div class="term-status-grid">
+        <div class="term-stat"><span class="ts-key">PWA</span><span class="value v-pending ts-val" id="cr-pwa">…</span></div>
+        <div class="term-stat"><span class="ts-key">SW</span><span class="value v-pending ts-val" id="cr-sw">…</span></div>
+        <div class="term-stat"><span class="ts-key">CACHE</span><span class="value v-pending ts-val" id="cr-cache">…</span></div>
+        <div class="term-stat"><span class="ts-key">IDB</span><span class="value v-pending ts-val" id="cr-idb">…</span></div>
+        <div class="term-stat"><span class="ts-key">WASM</span><span class="value v-pending ts-val" id="cr-wasm">…</span></div>
+        <div class="term-stat"><span class="ts-key">WORKERS</span><span class="value v-pending ts-val" id="cr-workers">…</span></div>
+      </div>
+
+      <div class="term-divider"></div>
+      <div class="telemetry-latest" id="telemetry-latest">Aguardando primeiro evento…</div>
+      <div class="console term-console" id="console-log"></div>
+
+    </div><!-- /.cpk-terminal-panel -->
+    </div><!-- /.cpk-right -->
+
+  </div><!-- /.cpk-3col -->
+
+  <!-- Footer: compact law badges -->
+  <div class="cpk-footer">
+    <div class="law-badges">
+      <span class="law-badge" id="badge-mode">IPAD DIRECT / LOCAL-FIRST</span>
+      <span class="law-badge">READ_ONLY</span>
+      <span class="law-badge">FAIL_CLOSED</span>
+      <span class="law-badge is-ok">Execution Lock: ACTIVE</span>
+      <span class="law-badge is-blocked">Private Keys: DISABLED</span>
+      <span class="law-badge is-blocked">Live Trading: BLOCKED</span>
+    </div>
   </div>
+
   </div><!-- /.cockpit-viewport -->
   </div><!-- /#tab-cockpit -->
 
@@ -446,14 +492,8 @@
   <section class="card cyborg-readiness-panel" id="cyborg-readiness-panel">
     <h2>Cyborg Readiness</h2>
     <div class="status-grid">
-      <div class="status-row"><span class="label">PWA HTTPS</span><span class="value v-pending" id="cr-pwa">…</span></div>
-      <div class="status-row"><span class="label">Service Worker</span><span class="value v-pending" id="cr-sw">…</span></div>
-      <div class="status-row"><span class="label">Cache API</span><span class="value v-pending" id="cr-cache">…</span></div>
-      <div class="status-row"><span class="label">IndexedDB</span><span class="value v-pending" id="cr-idb">…</span></div>
       <div class="status-row"><span class="label">OPFS</span><span class="value v-pending" id="cr-opfs">…</span></div>
       <div class="status-row"><span class="label">Web Crypto</span><span class="value v-pending" id="cr-webcrypto">…</span></div>
-      <div class="status-row"><span class="label">WASM</span><span class="value v-pending" id="cr-wasm">…</span></div>
-      <div class="status-row"><span class="label">Workers</span><span class="value v-pending" id="cr-workers">…</span></div>
       <div class="status-row"><span class="label">WebGPU</span><span class="value v-pending" id="cr-webgpu">…</span></div>
       <div class="status-row"><span class="label">Siriform Voice</span><span class="value v-pending" id="cr-voice">…</span></div>
       <div class="status-row"><span class="label">Meta Llama/WebLLM</span><span class="value v-pending" id="cr-llama">…</span></div>
@@ -744,8 +784,6 @@
   <!-- Console / Telemetry -->
   <section class="card telemetry-card" id="console-section">
     <h2>Telemetria ao Vivo <span class="step">Caixa Preta do Cyborg — eventos reais</span></h2>
-    <div class="telemetry-latest ln-dim" id="telemetry-latest">Aguardando primeiro evento…</div>
-    <div class="console" id="console-log"></div>
     <div class="activity-log-block">
       <div class="activity-log-head">
         <span class="label">Activity Log persistido (memória viva)</span>

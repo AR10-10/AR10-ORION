@@ -1384,33 +1384,8 @@ footer.legal {
    data-voice-state e a trilha independente do data-state do
    avatar (ver js/siriform.js) — nunca as duas trilhas juntas.
    ------------------------------------------------------------ */
-/* PRIMARY ACTION ZONE — toda a coluna .as-mic (titulo + botao + status +
-   dica) flutua como um dock de vidro unico, sempre acessivel em qualquer
-   scroll/breakpoint (Institutional Cockpit: "zero-click", nunca exigir
-   rolar a tela para falar com o Siriform). position: fixed no proprio
-   .as-mic (nao so' no botao) tira a coluna inteira do fluxo de uma vez —
-   flutuar so' o botao e deixar titulo/status/dica presos no
-   .action-strip causaria um vao orfao la' e, na grade de 2 colunas do
-   desktop (ver .action-strip abaixo), um conflito de auto-placement com
-   .as-primary/.as-quick. Padding-bottom extra em .runtime-shell garante
-   que o dock nunca cubra o ultimo conteudo real da pagina. */
-.cmd-bar .as-mic {
-    position: fixed;
-    left: 50%;
-    bottom: calc(var(--safe-b) + 14px);
-    transform: translateX(-50%);
-    z-index: 40;
-    width: auto;
-    max-width: min(90vw, 300px);
-    gap: 4px;
-    padding: 10px 18px 12px;
-    border-radius: 22px;
-    background: linear-gradient(150deg, var(--metal-hi), var(--metal-lo));
-    backdrop-filter: blur(22px) saturate(150%);
-    -webkit-backdrop-filter: blur(22px) saturate(150%);
-    border: 1px solid rgba(178, 107, 255, 0.28);
-    box-shadow: 0 0 24px rgba(178, 107, 255, 0.16), 0 10px 30px rgba(0, 0, 0, 0.5);
-}
+/* Mic is now inline in .brain-mic-dock inside the COCKPIT left column.
+   No fixed positioning needed. Styles below keep base .mic-button shared. */
 .mic-button {
     width: 64px;
     height: 64px;
@@ -1628,36 +1603,15 @@ footer.legal {
 .telemetry-card .console { max-height: 200px; }
 
 /* ------------------------------------------------------------
-   COCKPIT VIEWPORT — "Demote, don't delete": a 1a tela (100dvh) so'
-   mostra as 4 zonas do Institutional Cockpit (Market Data, Voice
-   Trigger, S/R Signals, Risk Metrics) + os controles da action-strip,
-   sem nenhum painel operacional/administrativo competindo por espaco.
-   --cockpit-top e' medido em runtime por js/ui/cockpit-viewport.js
-   (altura real de .app-topbar + .sw-update-banner, que pode virar 1 ou
-   2 linhas dependendo da largura/orientacao do iPad — nunca um chute
-   estatico fixo). Fallback de 96px so' cobre o instante antes do JS
-   medir pela 1a vez. overflow-y:auto e' rede de seguranca, nao o caso
-   comum: se o conteudo real (texto longo, Dynamic Type grande) nao
-   couber, abre rolagem so' dentro deste box — nunca corta dado real
-   silenciosamente, nunca rola a pagina inteira (.app-topbar continua
-   sticky/visivel, Voice Trigger nunca sai da tela). */
+   COCKPIT VIEWPORT — strict 100dvh flex column.
+   Fills exactly the space below the measured topbar/tabs (--cockpit-top).
+   No overflow on the viewport itself; each sub-column scrolls internally. */
 .cockpit-viewport {
-    min-height: calc(100dvh - var(--cockpit-top, 96px));
-    max-height: calc(100dvh - var(--cockpit-top, 96px));
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: calc(var(--safe-b) + 16px);
-}
-/* Compact card density inside COCKPIT — all panels must fit in one screen */
-.cockpit-viewport section.card {
-    padding: 12px 14px;
-    margin-bottom: 10px;
-    border-radius: 14px;
-}
-.cockpit-viewport section.card h2 {
-    margin-bottom: 8px;
-    font-size: clamp(0.75rem, 1.8vw, 0.88rem);
+    height: calc(100dvh - var(--cockpit-top, 96px));
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
 }
 /* Snapshot <details> toggle inside BTC panel */
 details#bl-snapshot-block {
@@ -1957,10 +1911,8 @@ details#bl-snapshot-block > summary.snapshot-summary {
 }
 
 /* ============================================================
-   CMD-BAR — flat command strip replacing card action-strip.
-   Horizontal flex: CTA (left) | quick actions (right).
-   .as-mic stays position: fixed (floating dock), so it takes
-   no space in this bar.
+   CMD-BAR — flat command strip (legacy, used in ENGINE/SISTEMA context).
+   .as-mic is now inline inside .brain-mic-dock in COCKPIT left column.
    ============================================================ */
 .cmd-bar {
     width: 100%;
@@ -2557,3 +2509,331 @@ section.card[tabindex]:focus-visible {
     .lt-rail-label { font-size: 0.6rem; padding-right: 6px; }
 }
 .ex-details-grid { padding: 2px 0 12px; }
+
+/* ============================================================
+   V-PRIME 3-COLUMN INSTITUTIONAL TERMINAL
+   cpk-3col fills the remaining height inside .cockpit-viewport
+   after the .live-ticker strip. Left (25%) | Center (50%) | Right (25%).
+   ============================================================ */
+.cpk-3col {
+    flex: 1 1 0;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+    gap: 8px;
+    overflow: hidden;
+    padding: 6px 8px 8px;
+}
+
+.cpk-col {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    gap: 8px;
+}
+
+/* Base glassmorphic panel */
+.cpk-panel {
+    background: rgba(10, 10, 18, 0.72);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-top: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 12px;
+    padding: 10px 12px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ---- LEFT: Intelligence Core (brain + executive + controls) ---- */
+.cpk-brain-panel {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-top-color: rgba(178, 107, 255, 0.55);
+    border-color: rgba(178, 107, 255, 0.2);
+    box-shadow: inset 0 1px 0 rgba(178, 107, 255, 0.14),
+                0 0 28px rgba(178, 107, 255, 0.07),
+                0 8px 24px rgba(0, 0, 0, 0.38);
+}
+.brain-orb-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+}
+.brain-state-line {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+/* Keep existing siriform-stage scaling but slightly smaller in left col */
+.cpk-brain-panel .siriform-stage {
+    width: 80px;
+    height: 80px;
+}
+.cpk-brain-panel .siriform-avatar {
+    width: 66px;
+    height: 66px;
+}
+.cpk-brain-panel .siriform-stage::before { inset: -14px; }
+.cpk-brain-panel .siriform-orbit { inset: -6px; }
+.cpk-brain-panel .siriform-orbit-2 { inset: 4px; }
+.cpk-brain-panel .siriform-caption {
+    font-size: 0.62rem;
+    min-height: 0;
+    max-width: 100%;
+    text-align: center;
+    margin: 0;
+    line-height: 1.3;
+}
+.brain-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(178, 107, 255, 0.28), transparent);
+    flex-shrink: 0;
+    margin: 0;
+}
+.brain-exec {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    flex-shrink: 0;
+}
+.exec-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.exec-row:last-child { border-bottom: none; }
+.er-key {
+    font-size: 0.56rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-family: var(--font-display);
+    font-weight: 700;
+    min-width: 3rem;
+    flex-shrink: 0;
+}
+.er-val {
+    font-size: clamp(0.6rem, 1.3vw, 0.72rem);
+    font-weight: bold;
+    text-align: right;
+    font-family: var(--font-mono);
+}
+.brain-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: auto;
+    flex-shrink: 0;
+}
+.cta-compact {
+    font-size: clamp(0.66rem, 1.5vw, 0.8rem);
+    padding: 7px 10px;
+    width: 100%;
+    min-height: 32px;
+}
+.quick-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+.qa-btn {
+    flex: 1 1 auto;
+    font-size: clamp(0.6rem, 1.3vw, 0.7rem);
+    padding: 5px 6px;
+    min-height: 28px;
+    white-space: nowrap;
+}
+.brain-mic-dock {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    justify-content: center;
+    padding: 5px 0 2px;
+    flex-shrink: 0;
+}
+/* Inline mic — smaller than the old floating dock */
+.mic-inline-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 1.2rem;
+}
+.mic-status-label {
+    font-size: 0.62rem;
+    font-family: var(--font-mono);
+    letter-spacing: 1px;
+}
+.voice-info-btn {
+    font-size: 0.72rem;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(0, 242, 255, 0.06);
+    border: 1px solid rgba(0, 242, 255, 0.2);
+    color: var(--sys-cyan);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+/* ---- CENTER: Price panel + Signals panel stacked ---- */
+.cpk-price-panel {
+    flex: 0 0 auto;
+    border-top-color: rgba(0, 242, 255, 0.55);
+    border-color: rgba(0, 242, 255, 0.2);
+    box-shadow: inset 0 1px 0 rgba(0, 242, 255, 0.2),
+                0 0 40px rgba(0, 242, 255, 0.07),
+                0 8px 28px rgba(0, 0, 0, 0.4);
+}
+.cpk-signals-panel {
+    flex: 1 1 0;
+    min-height: 0;
+    border-top-color: rgba(255, 138, 61, 0.55);
+    border-color: rgba(255, 138, 61, 0.2);
+    box-shadow: inset 0 1px 0 rgba(255, 138, 61, 0.14),
+                0 0 28px rgba(255, 138, 61, 0.06),
+                0 8px 24px rgba(0, 0, 0, 0.38);
+}
+/* Quant signals panel internal layout (mirrors previous hero-panel styles) */
+.cpk-signals-panel .qs-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+}
+.cpk-signals-panel .qs-entry-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    flex-shrink: 0;
+}
+.cpk-signals-panel .qs-divider {
+    margin: 8px 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 138, 61, 0.2), transparent);
+    flex-shrink: 0;
+}
+
+/* ---- RIGHT: Terminal panel (full height flex col) ---- */
+.cpk-terminal-panel {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-top-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06),
+                0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.term-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+.term-title-badge {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 2px;
+    font-weight: 700;
+    color: var(--sys-cyan);
+    text-transform: uppercase;
+}
+.term-mode-badge {
+    font-size: 0.58rem;
+    color: var(--long-green);
+    letter-spacing: 1px;
+    font-family: var(--font-mono);
+}
+.term-status-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.term-stat {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 3px 6px;
+    background: rgba(0, 242, 255, 0.03);
+    border: 1px solid rgba(0, 242, 255, 0.07);
+    border-radius: 6px;
+}
+.ts-key {
+    font-size: 0.52rem;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-family: var(--font-display);
+    font-weight: 700;
+}
+.ts-val {
+    font-size: 0.6rem;
+    font-weight: bold;
+    font-family: var(--font-mono);
+}
+.term-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0, 242, 255, 0.15), transparent);
+    flex-shrink: 0;
+}
+.telemetry-latest {
+    font-size: 0.62rem;
+    font-family: var(--font-mono);
+    color: var(--sys-cyan);
+    line-height: 1.4;
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+.term-console {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    font-size: 0.62rem;
+    line-height: 1.4;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ---- cpk-footer: law badges strip below the 3-col grid ---- */
+.cpk-footer {
+    flex: 0 0 auto;
+    padding: 3px 8px 4px;
+}
+.cpk-footer .law-badges {
+    margin-top: 0;
+    justify-content: flex-start;
+}
+
+/* ============================================================
+   RESPONSIVE: narrow viewports collapse to single column
+   ============================================================ */
+@media (max-width: 719px) {
+    .cpk-3col {
+        grid-template-columns: 1fr;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+    .cpk-col { height: auto; }
+    .cpk-brain-panel,
+    .cpk-signals-panel,
+    .cpk-terminal-panel { flex: 0 0 auto; min-height: auto; }
+}
