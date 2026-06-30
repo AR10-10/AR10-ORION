@@ -10,8 +10,8 @@
    ============================================================ */
 
 :root {
-    --font-display: ui-sans-serif, -apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
-    --font-mono: ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+    --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, ui-sans-serif, sans-serif;
+    --font-mono: "SF Mono", "Fira Code", ui-monospace, "Menlo", "Consolas", monospace;
 
     --long-green: #00FF9D;
     --short-red: #FF3E52;
@@ -2520,9 +2520,9 @@ section.card[tabindex]:focus-visible {
     min-height: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
-    gap: 8px;
+    gap: 16px;
     overflow: hidden;
-    padding: 6px 8px 8px;
+    padding: 16px;
 }
 
 .cpk-col {
@@ -2531,18 +2531,18 @@ section.card[tabindex]:focus-visible {
     height: 100%;
     min-height: 0;
     overflow: hidden;
-    gap: 8px;
+    gap: 12px;
 }
 
-/* Base glassmorphic panel */
+/* Base glassmorphic panel — luxury glass with Apple-native blur */
 .cpk-panel {
-    background: rgba(10, 10, 18, 0.72);
+    background: rgba(15, 15, 20, 0.65);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-top: 1px solid rgba(255, 255, 255, 0.10);
-    border-radius: 12px;
-    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    padding: 16px;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
@@ -2553,12 +2553,12 @@ section.card[tabindex]:focus-visible {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
     border-top-color: rgba(178, 107, 255, 0.55);
-    border-color: rgba(178, 107, 255, 0.2);
-    box-shadow: inset 0 1px 0 rgba(178, 107, 255, 0.14),
-                0 0 28px rgba(178, 107, 255, 0.07),
-                0 8px 24px rgba(0, 0, 0, 0.38);
+    border-color: rgba(178, 107, 255, 0.22);
+    box-shadow: inset 0 1px 0 rgba(178, 107, 255, 0.18),
+                0 0 36px rgba(178, 107, 255, 0.08),
+                0 10px 32px rgba(0, 0, 0, 0.42);
 }
 .brain-orb-wrap {
     display: flex;
@@ -2609,8 +2609,8 @@ section.card[tabindex]:focus-visible {
     align-items: center;
     justify-content: space-between;
     gap: 6px;
-    padding: 3px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 .exec-row:last-child { border-bottom: none; }
 .er-key {
@@ -2637,37 +2637,42 @@ section.card[tabindex]:focus-visible {
     flex-shrink: 0;
 }
 .cta-compact {
-    font-size: clamp(0.66rem, 1.5vw, 0.8rem);
-    padding: 7px 10px;
+    font-size: clamp(0.68rem, 1.5vw, 0.82rem);
+    padding: 10px 14px;
     width: 100%;
-    min-height: 32px;
+    min-height: 36px;
+    border-radius: 8px;
 }
 .quick-actions {
     display: flex;
     flex-direction: row;
-    gap: 4px;
+    gap: 6px;
     flex-wrap: wrap;
 }
 .qa-btn {
     flex: 1 1 auto;
-    font-size: clamp(0.6rem, 1.3vw, 0.7rem);
-    padding: 5px 6px;
-    min-height: 28px;
+    font-size: clamp(0.62rem, 1.3vw, 0.72rem);
+    padding: 7px 8px;
+    min-height: 32px;
     white-space: nowrap;
+    border-radius: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .brain-mic-dock {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
     justify-content: center;
-    padding: 5px 0 2px;
+    padding: 8px 0 4px;
     flex-shrink: 0;
 }
-/* Inline mic — smaller than the old floating dock */
+/* Inline mic — sized for reliable tap target on iPad */
 .mic-inline-btn {
-    width: 40px;
-    height: 40px;
-    font-size: 1.2rem;
+    width: 44px;
+    height: 44px;
+    font-size: 1.3rem;
+    border-radius: 50%;
 }
 .mic-status-label {
     font-size: 0.62rem;
@@ -2693,19 +2698,19 @@ section.card[tabindex]:focus-visible {
 .cpk-price-panel {
     flex: 0 0 auto;
     border-top-color: rgba(0, 242, 255, 0.55);
-    border-color: rgba(0, 242, 255, 0.2);
-    box-shadow: inset 0 1px 0 rgba(0, 242, 255, 0.2),
-                0 0 40px rgba(0, 242, 255, 0.07),
-                0 8px 28px rgba(0, 0, 0, 0.4);
+    border-color: rgba(0, 242, 255, 0.22);
+    box-shadow: inset 0 1px 0 rgba(0, 242, 255, 0.22),
+                0 0 48px rgba(0, 242, 255, 0.08),
+                0 10px 32px rgba(0, 0, 0, 0.42);
 }
 .cpk-signals-panel {
     flex: 1 1 0;
     min-height: 0;
     border-top-color: rgba(255, 138, 61, 0.55);
-    border-color: rgba(255, 138, 61, 0.2);
-    box-shadow: inset 0 1px 0 rgba(255, 138, 61, 0.14),
-                0 0 28px rgba(255, 138, 61, 0.06),
-                0 8px 24px rgba(0, 0, 0, 0.38);
+    border-color: rgba(255, 138, 61, 0.22);
+    box-shadow: inset 0 1px 0 rgba(255, 138, 61, 0.18),
+                0 0 32px rgba(255, 138, 61, 0.07),
+                0 10px 28px rgba(0, 0, 0, 0.4);
 }
 /* Quant signals panel internal layout (mirrors previous hero-panel styles) */
 .cpk-signals-panel .qs-header {
@@ -2734,11 +2739,11 @@ section.card[tabindex]:focus-visible {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    border-top-color: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.06);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06),
-                0 8px 24px rgba(0, 0, 0, 0.35);
+    gap: 10px;
+    border-top-color: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08),
+                0 10px 28px rgba(0, 0, 0, 0.38);
 }
 .term-hdr {
     display: flex;
@@ -2763,7 +2768,7 @@ section.card[tabindex]:focus-visible {
 .term-status-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 4px;
+    gap: 6px;
     flex-shrink: 0;
 }
 .term-stat {
@@ -2771,10 +2776,10 @@ section.card[tabindex]:focus-visible {
     align-items: center;
     justify-content: space-between;
     gap: 4px;
-    padding: 3px 6px;
-    background: rgba(0, 242, 255, 0.03);
-    border: 1px solid rgba(0, 242, 255, 0.07);
-    border-radius: 6px;
+    padding: 5px 8px;
+    background: rgba(0, 242, 255, 0.04);
+    border: 1px solid rgba(0, 242, 255, 0.09);
+    border-radius: 8px;
 }
 .ts-key {
     font-size: 0.52rem;
@@ -2823,6 +2828,37 @@ section.card[tabindex]:focus-visible {
     justify-content: flex-start;
 }
 
+/* Elite scrollbars — visible only in WebKit, 4px translucent thumb */
+.cpk-panel::-webkit-scrollbar,
+.term-console::-webkit-scrollbar {
+    width: 4px;
+}
+.cpk-panel::-webkit-scrollbar-track,
+.term-console::-webkit-scrollbar-track {
+    background: transparent;
+}
+.cpk-panel::-webkit-scrollbar-thumb,
+.term-console::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 4px;
+}
+.cpk-panel::-webkit-scrollbar-thumb:hover,
+.term-console::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.32);
+}
+
+/* Prevent text from breaking panel layout — clip with ellipsis */
+.term-title-badge,
+.term-mode-badge,
+.ts-key,
+.ts-val,
+.er-key,
+.er-val {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* ============================================================
    RESPONSIVE: narrow viewports collapse to single column
    ============================================================ */
@@ -2831,6 +2867,8 @@ section.card[tabindex]:focus-visible {
         grid-template-columns: 1fr;
         overflow-y: auto;
         overflow-x: hidden;
+        gap: 12px;
+        padding: 12px;
     }
     .cpk-col { height: auto; }
     .cpk-brain-panel,
