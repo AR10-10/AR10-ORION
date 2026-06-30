@@ -33,6 +33,7 @@
     <span class="tb-status" id="topbar-status">Verificando…</span>
   </div>
   <div class="tb-right">
+    <span class="tb-engine-online"><span class="pulse-dot"></span> ENGINE ONLINE</span>
     <span class="tb-chip is-ok" id="tb-readonly">READ_ONLY</span>
     <span class="tb-chip" id="tb-failclosed">FAIL_CLOSED</span>
     <span class="tb-chip is-blocked" id="tb-livelocked">LIVE_LOCKED</span>
@@ -206,55 +207,39 @@
 
         <!-- Header: dominant signal + confidence -->
         <div class="qs-header">
-          <span class="qs-title">QUANT SIGNALS</span>
+          <span class="qs-title">QUANT SIGNALS MATRIX</span>
           <span class="tsm-signal-badge v-pending" id="tsm-signal-badge">SIGNAL: …</span>
           <span class="value v-pending qs-confidence" id="tsm-confidence">…</span>
         </div>
 
-        <!-- Dual LONG / SHORT execution matrices -->
-        <div class="qs-matrix-grid">
-
-          <!-- LONG matrix -->
-          <div class="qs-matrix qs-long-matrix" id="qs-long-matrix">
-            <div class="qs-matrix-hdr">
-              <span class="qs-matrix-label qs-long-label">▲ LONG</span>
-              <span class="qs-matrix-status v-pending" id="tsm-long-status">STANDBY</span>
-            </div>
-            <div class="qs-matrix-rows">
-              <div class="qs-matrix-row"><span class="qs-k">ENTRADA</span><span class="value v-pending qs-v" id="tsm-entry-zone">…</span></div>
-              <div class="qs-matrix-row"><span class="qs-k">ALVO 1</span><span class="value v-ok qs-v" id="tsm-tp1">…</span></div>
-              <div class="qs-matrix-row"><span class="qs-k">ALVO 2</span><span class="value v-ok qs-v" id="tsm-tp2">…</span></div>
-              <div class="qs-matrix-row"><span class="qs-k">ALVO 3</span><span class="value v-pending qs-v" id="tsm-tp3">…</span></div>
-              <div class="qs-matrix-row qs-sl-row"><span class="qs-k">STOP</span><span class="value v-fail qs-v" id="tsm-sl">…</span></div>
-            </div>
+        <!-- Active-signal execution matrix — single column of glass-module
+             signal cards (golden-record V-PRIME). Reuses the tsm-* ids; the
+             cells are hydrated from the DOMINANT signal's real numeric route
+             in renderSupportsResistances(). sr-current-price kept (hidden) so
+             the S/R wiring stays intact for the hidden engine. -->
+        <div class="qs-cards" id="qs-cards">
+          <div class="qs-card qs-card-entry">
+            <span class="qs-card-k">ENTRY <span class="qs-tag">MERCADO</span></span>
+            <span class="value qs-card-v qs-awaiting" id="tsm-entry-zone">AGUARDANDO</span>
           </div>
-
-          <!-- SHORT matrix -->
-          <div class="qs-matrix qs-short-matrix" id="qs-short-matrix">
-            <div class="qs-matrix-hdr">
-              <span class="qs-matrix-label qs-short-label">▼ SHORT</span>
-              <span class="qs-matrix-status v-pending" id="tsm-short-status">STANDBY</span>
-            </div>
-            <div class="qs-matrix-rows">
-              <div class="qs-matrix-row"><span class="qs-k">ENTRADA</span><span class="value v-pending qs-v" id="tsm-short-entry">…</span></div>
-              <div class="qs-matrix-row"><span class="qs-k">ALVO 1</span><span class="value v-fail qs-v" id="tsm-short-tp1">…</span></div>
-              <div class="qs-matrix-row"><span class="qs-k">ALVO 2</span><span class="value v-fail qs-v" id="tsm-short-tp2">…</span></div>
-              <div class="qs-matrix-row"><span class="qs-k">ALVO 3</span><span class="value v-pending qs-v" id="tsm-short-tp3">…</span></div>
-              <div class="qs-matrix-row qs-sl-row"><span class="qs-k">STOP</span><span class="value v-ok qs-v" id="tsm-short-sl">…</span></div>
-            </div>
+          <div class="qs-card qs-card-target">
+            <span class="qs-card-k">ALVO 1 <span class="qs-tag">ALVO</span></span>
+            <span class="value qs-card-v qs-awaiting" id="tsm-tp1">AGUARDANDO</span>
           </div>
-
-        </div><!-- /.qs-matrix-grid -->
-
-        <!-- S/R Ladder -->
-        <div class="qs-divider"></div>
-        <div class="sr-ladder" id="sr-ladder">
-          <div class="sr-row sr-resistance"><span class="sr-lbl">R2</span><span class="value v-pending sr-val" id="sr-resistance-2">…</span></div>
-          <div class="sr-row sr-resistance"><span class="sr-lbl">R1</span><span class="value v-fail sr-val" id="sr-resistance-1">…</span></div>
-          <div class="sr-row sr-current"><span class="sr-lbl">◈ SPOT</span><span class="value v-info sr-val" id="sr-current-price">…</span></div>
-          <div class="sr-row sr-support"><span class="sr-lbl">S1</span><span class="value v-ok sr-val" id="sr-support-1">…</span></div>
-          <div class="sr-row sr-support"><span class="sr-lbl">S2</span><span class="value v-pending sr-val" id="sr-support-2">…</span></div>
+          <div class="qs-card qs-card-target">
+            <span class="qs-card-k">ALVO 2 <span class="qs-tag">EXTREMO</span></span>
+            <span class="value qs-card-v qs-awaiting" id="tsm-tp2">AGUARDANDO</span>
+          </div>
+          <div class="qs-card qs-card-target">
+            <span class="qs-card-k">ALVO 3 <span class="qs-tag">EXTREMO</span></span>
+            <span class="value qs-card-v qs-awaiting" id="tsm-tp3">AGUARDANDO</span>
+          </div>
+          <div class="qs-card qs-card-stop">
+            <span class="qs-card-k">STOP LOSS <span class="qs-tag">BREAKOUT</span></span>
+            <span class="value qs-card-v qs-awaiting" id="tsm-sl">AGUARDANDO</span>
+          </div>
         </div>
+        <span id="sr-current-price" hidden>…</span>
 
         <p class="qs-condition" id="tsm-condition">…</p>
 

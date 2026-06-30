@@ -740,16 +740,11 @@ function renderTradeSetupMatrix(matrix) {
         els['tsm-confidence'].textContent = matrix.confidence === DADOS_INSUFICIENTES ? DADOS_INSUFICIENTES : `Confiança: ${matrix.confidence}`;
         els['tsm-confidence'].className = `value ${matrix.confidence === 'HIGH' ? 'v-ok' : (matrix.confidence === 'MEDIUM' ? 'v-limited' : 'v-pending')}`;
     }
-    const setCell = (id, value) => {
-        if (!els[id]) return;
-        els[id].textContent = str(value);
-        els[id].className = `value ${value === DADOS_INSUFICIENTES || value === undefined || value === null ? 'v-pending' : 'v-info'}`;
-    };
-    setCell('tsm-entry-zone', matrix.entry_zone);
-    setCell('tsm-tp1', matrix.take_profit_1);
-    setCell('tsm-tp2', matrix.take_profit_2);
-    setCell('tsm-tp3', DADOS_INSUFICIENTES); // no 3rd target in current engine — structural placeholder
-    setCell('tsm-sl', matrix.stop_loss);
+    // Execution-matrix cells (Entry/TP/SL) are wired NUMERICALLY from the Target
+    // Tracker (real support/resistance levels) in renderSupportsResistances() —
+    // never from the descriptive strings of research-engine here, so the cockpit
+    // shows clean numbers, not sentences. This function owns only the qualitative
+    // signal badge / confidence / condition / LONG-SHORT status.
     if (els['tsm-condition']) {
         els['tsm-condition'].textContent = [str(matrix.condition), str(matrix.rationale)].filter((v) => v && v !== DADOS_INSUFICIENTES).join(' ') || DADOS_INSUFICIENTES;
     }
@@ -837,7 +832,7 @@ function renderTargetTrackerRoute(gridId, route) {
  *  data-live-mode — nunca por direcao long/short), snapshot da analise e as
  *  duas rotas do Target Tracker. tracker vem sempre de buildTargetTracker()
  *  (nunca null — emptyTracker() cobre o caso sem snapshot/sem preco). */
-function renderTargetTracker(tracker, livePriceInfo) {
+function renderTargetTracker(tracker, livePriceInfo, activeSignal) {
     const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
     const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : str(v));
     const mode = (livePriceInfo && livePriceInfo.mode) || DADOS_INSUFICIENTES;
@@ -877,7 +872,7 @@ function renderTargetTracker(tracker, livePriceInfo) {
 
     renderTargetTrackerRoute('bl-route-long-grid', tracker.rota_a_long);
     renderTargetTrackerRoute('bl-route-short-grid', tracker.rota_b_short);
-    renderSupportsResistances(tracker);
+    renderSupportsResistances(tracker, activeSignal);
 
     if (els['bl-reanalyze-banner']) {
         els['bl-reanalyze-banner'].hidden = !tracker.reanalyze_recommended;
@@ -895,32 +890,31 @@ function renderTargetTracker(tracker, livePriceInfo) {
  *  RealAnalysisFrame -> target-tracker.js; caem em DADOS_INSUFICIENTES
  *  quando a amostra nao confirma swings suficientes — nunca um nivel
  *  inventado aqui. */
-function renderSupportsResistances(tracker) {
-    const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
-    const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : str(v));
-    if (els['sr-resistance-2']) {
-        els['sr-resistance-2'].textContent = fmt(tracker.rota_a_long.target_2);
-        els['sr-resistance-2'].className = `value ${typeof tracker.rota_a_long.target_2 === 'number' ? 'v-info' : 'v-pending'}`;
-    }
-    if (els['sr-resistance-1']) els['sr-resistance-1'].textContent = fmt(tracker.rota_a_long.target_1);
-    if (els['sr-current-price']) els['sr-current-price'].textContent = fmt(tracker.current_price);
-    if (els['sr-support-1']) els['sr-support-1'].textContent = fmt(tracker.rota_a_long.invalidation);
-    if (els['sr-support-2']) {
-        els['sr-support-2'].textContent = fmt(tracker.rota_b_short.target_2);
-        els['sr-support-2'].className = `value ${typeof tracker.rota_b_short.target_2 === 'number' ? 'v-info' : 'v-pending'}`;
-    }
-    // SHORT matrix: wire rota_b_short fields into cockpit SHORT execution box
-    const setShort = (id, v) => {
+function renderSupportsResistances(tracker, activeSignal) {
+    const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+    if (els['sr-current-price']) els['sr-current-price'].textContent = isNum(tracker.current_price) ? tracker.current_price.toFixed(2) : DADOS_INSUFICIENTES;
+
+    // Active-signal execution matrix (cockpit center, golden-record cards) —
+    // hydrated from the DOMINANT signal's NUMERIC route (rota_a_long for LONG,
+    // rota_b_short for SHORT) so each card shows a clean real number. Entry =
+    // live spot (the honest entry reference); ALVO 1/2 = real target levels;
+    // STOP = real invalidation. When the signal is WAIT/insufficient there is no
+    // route, so every card shows the sleek muted "AGUARDANDO" state — the cockpit
+    // never fabricates a level.
+    const route = activeSignal === 'SHORT' ? tracker.rota_b_short
+        : activeSignal === 'LONG' ? tracker.rota_a_long
+        : null;
+    const setCard = (id, v) => {
         if (!els[id]) return;
-        els[id].textContent = fmt(v);
-        els[id].className = `value qs-v ${typeof v === 'number' ? 'v-info' : 'v-pending'}`;
+        const ok = isNum(v);
+        els[id].textContent = ok ? v.toFixed(2) : 'AGUARDANDO';
+        els[id].className = `value qs-card-v${ok ? '' : ' qs-awaiting'}`;
     };
-    const sb = tracker.rota_b_short;
-    setShort('tsm-short-entry', sb.entry_zone);
-    setShort('tsm-short-tp1', sb.target_1);
-    setShort('tsm-short-tp2', sb.target_2);
-    if (els['tsm-short-tp3']) { els['tsm-short-tp3'].textContent = DADOS_INSUFICIENTES; els['tsm-short-tp3'].className = 'value qs-v v-pending'; }
-    setShort('tsm-short-sl', sb.invalidation);
+    setCard('tsm-entry-zone', route ? tracker.current_price : DADOS_INSUFICIENTES);
+    setCard('tsm-tp1', route ? route.target_1 : DADOS_INSUFICIENTES);
+    setCard('tsm-tp2', route ? route.target_2 : DADOS_INSUFICIENTES);
+    setCard('tsm-tp3', DADOS_INSUFICIENTES);
+    setCard('tsm-sl', route ? route.invalidation : DADOS_INSUFICIENTES);
 }
 
 function refreshTargetTracker() {
@@ -930,7 +924,8 @@ function refreshTargetTracker() {
         livePrice: livePriceInfo,
     });
     lastTargetTracker = tracker;
-    renderTargetTracker(tracker, livePriceInfo);
+    const activeSignal = buildTradeSetupMatrix({ research: lastResearchEngineFrame }).signal;
+    renderTargetTracker(tracker, livePriceInfo, activeSignal);
     return tracker;
 }
 
