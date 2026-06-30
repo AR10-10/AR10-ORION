@@ -74,12 +74,73 @@ a { color: var(--sys-cyan); }
 .runtime-shell {
     max-width: 980px;
     margin: 0 auto;
-    /* padding-bottom extra reserva espaco para o FAB de microfone flutuante
-       (.action-strip .as-mic, position: fixed mais abaixo) nunca cobrir o
-       ultimo conteudo real da pagina (law-badges/tagline ou o fim do
-       .advanced-section). */
-    padding: 12px calc(var(--safe-r) + 14px) calc(var(--safe-b) + 96px) calc(var(--safe-l) + 14px);
+    padding: 0 calc(var(--safe-r) + 14px) calc(var(--safe-b) + 96px) calc(var(--safe-l) + 14px);
 }
+
+/* ============================================================
+   TAB NAVIGATION — 3-tab system: COCKPIT / ENGINE / SISTEMA
+   ============================================================ */
+.tab-nav {
+    display: flex;
+    gap: 6px;
+    padding: 10px 0 10px;
+    position: sticky;
+    top: 0;
+    z-index: 38;
+    background: rgba(0, 0, 0, 0.88);
+    backdrop-filter: blur(14px) saturate(130%);
+    -webkit-backdrop-filter: blur(14px) saturate(130%);
+    margin-bottom: 4px;
+}
+.tab-btn {
+    flex: 1;
+    font-family: var(--font-display);
+    font-size: clamp(0.7rem, 1.8vw, 0.85rem);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--text-dim);
+    background: rgba(0, 242, 255, 0.03);
+    border: 1px solid rgba(0, 242, 255, 0.1);
+    border-radius: 10px;
+    padding: 10px 6px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+}
+.tab-btn .tab-icon { font-size: 1.1em; }
+.tab-btn:hover:not(.active) {
+    color: var(--text-primary);
+    border-color: rgba(0, 242, 255, 0.22);
+    background: rgba(0, 242, 255, 0.05);
+}
+.tab-btn.active[data-tab="cockpit"] {
+    color: var(--sys-cyan);
+    border-color: rgba(0, 242, 255, 0.45);
+    background: rgba(0, 242, 255, 0.07);
+    box-shadow: inset 0 -2px 0 var(--sys-cyan), 0 0 14px rgba(0, 242, 255, 0.1);
+    text-shadow: 0 0 10px rgba(0, 242, 255, 0.55);
+}
+.tab-btn.active[data-tab="engine"] {
+    color: var(--cockpit-purple);
+    border-color: rgba(178, 107, 255, 0.45);
+    background: rgba(178, 107, 255, 0.07);
+    box-shadow: inset 0 -2px 0 var(--cockpit-purple), 0 0 14px rgba(178, 107, 255, 0.1);
+    text-shadow: 0 0 10px rgba(178, 107, 255, 0.55);
+}
+.tab-btn.active[data-tab="sistema"] {
+    color: var(--cockpit-orange);
+    border-color: rgba(255, 138, 61, 0.45);
+    background: rgba(255, 138, 61, 0.07);
+    box-shadow: inset 0 -2px 0 var(--cockpit-orange), 0 0 14px rgba(255, 138, 61, 0.1);
+    text-shadow: 0 0 10px rgba(255, 138, 61, 0.55);
+}
+.tab-pane { padding-top: 12px; }
+.tab-pane[hidden] { display: none; }
 
 /* ------------------------------------------------------------
    TOPBAR — header compacto e fixo, fora de .runtime-shell para
@@ -1711,34 +1772,32 @@ footer.legal {
     border-top-color: rgba(255, 138, 61, 0.45);
 }
 
-/* .advanced-section ("Engine Room") usa colunas balanceadas (iPad
-   paisagem) — nenhum painel administrativo/diagnostico precisa de
-   posicionamento explicito como o .hero-row, so' balanceamento de
-   altura entre colunas. Oculto por padrao via atributo [hidden]
-   (Fase 7), alternado tanto pelo botao "Modo avancado" na topbar
-   quanto pelo divisor .engine-room-divider logo acima dele — os dois
-   sincronizados no mesmo estado, ver wireAdvancedToggle() em app.js. */
-.advanced-section { width: 100%; }
-.advanced-section[hidden] { display: none; }
+/* .advanced-section (ENGINE tab) e .sistema-section (SISTEMA tab) usam
+   colunas balanceadas em iPad paisagem. Visibilidade controlada pelo
+   atributo [hidden] no .tab-pane pai (ver wireTabs() em app.js). */
+.advanced-section,
+.sistema-section { width: 100%; }
 
 @media (min-width: 900px) {
     .runtime-shell { max-width: 1280px; }
-    .advanced-section:not([hidden]) {
+    .advanced-section,
+    .sistema-section {
         column-count: 2;
         column-gap: 18px;
     }
-    .advanced-section > section.card {
+    .advanced-section > section.card,
+    .sistema-section > section.card {
         break-inside: avoid;
         -webkit-column-break-inside: avoid;
         page-break-inside: avoid;
-        /* evita um card colado no topo da coluna seguinte sem respiro */
         margin-top: 0;
     }
 }
 
 @media (min-width: 1280px) {
     .runtime-shell { max-width: 1600px; }
-    .advanced-section:not([hidden]) { column-count: 3; }
+    .advanced-section,
+    .sistema-section { column-count: 3; }
 }
 
 /* ============================================================

@@ -11,14 +11,11 @@ const FALLBACK_TOP_PX = 96;
 function measure() {
     const topbar = document.getElementById('app-topbar');
     const banner = document.getElementById('sw-update-banner');
-    const shell = document.querySelector('.runtime-shell');
+    const tabs = document.getElementById('app-tabs');
     let top = 0;
     if (topbar) top += topbar.getBoundingClientRect().height;
     if (banner && !banner.hidden) top += banner.getBoundingClientRect().height;
-    if (shell) {
-        const padTop = parseFloat(getComputedStyle(shell).paddingTop);
-        if (Number.isFinite(padTop)) top += padTop;
-    }
+    if (tabs) top += tabs.getBoundingClientRect().height;
     return top > 0 ? top : FALLBACK_TOP_PX;
 }
 
@@ -33,10 +30,12 @@ export function initCockpitViewport() {
     recalcCockpitTop();
     const topbar = document.getElementById('app-topbar');
     const banner = document.getElementById('sw-update-banner');
+    const tabs = document.getElementById('app-tabs');
     if (typeof ResizeObserver !== 'undefined') {
         observer = new ResizeObserver(() => recalcCockpitTop());
         if (topbar) observer.observe(topbar);
         if (banner) observer.observe(banner);
+        if (tabs) observer.observe(tabs);
     }
     window.addEventListener('resize', recalcCockpitTop);
     window.addEventListener('orientationchange', recalcCockpitTop);

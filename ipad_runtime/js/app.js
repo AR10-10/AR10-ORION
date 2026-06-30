@@ -106,6 +106,7 @@ let rehydratedActiveSourceId = null;
 let lastHydrationReport = null;
 let lastSourceHealthReport = null;
 let lastCommanderSoldierStatus = null;
+let switchTab = () => {}; // assigned in wireAdvancedToggle (tab system)
 let lastLocalIntelligenceResult = null;
 let lastReflectionReport = null;
 let lastSafariEdgeStatus = null;
@@ -2170,25 +2171,31 @@ function wireProfileToggle() {
 // Fase 7 — "Modo avançado": tudo que não é o fluxo normal de um toque fica
 // escondido por padrão atrás deste alternador, fora do .bento principal.
 function wireAdvancedToggle() {
-    const btn = els['btn-tb-advanced'];
-    const section = els['advanced-section'];
-    if (!btn || !section) return;
-    btn.addEventListener('click', () => {
-        const show = section.hidden;
-        section.hidden = !show;
-        btn.textContent = show ? 'Ocultar modo avançado' : 'Modo avançado';
-        btn.setAttribute('aria-expanded', show ? 'true' : 'false');
-        if (show) {
-            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+
+    switchTab = (tabName) => {
+        tabBtns.forEach((b) => {
+            const hit = b.dataset.tab === tabName;
+            b.classList.toggle('active', hit);
+            b.setAttribute('aria-selected', hit ? 'true' : 'false');
+        });
+        tabPanes.forEach((p) => { p.hidden = p.id !== `tab-${tabName}`; });
+        if (tabName !== 'cockpit') {
             refreshMetricsPanel();
-            // Secao estava hidden no draw original do replay -> canvas tinha
-            // rect 0x0 e nao desenhou nada visivel. Redesenha agora que o
-            // canvas tem layout real, sem rodar o replay de novo.
             if (lastReplayDrawData && els['replay-canvas']) {
                 replayEngine.drawSparkline(els['replay-canvas'], lastReplayDrawData.closes, lastReplayDrawData.rollingSma);
             }
         }
+        if (tabName === 'cockpit') cockpitViewport.recalcCockpitTop();
+    };
+
+    tabBtns.forEach((btn) => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
+
+    const btnAdv = els['btn-tb-advanced'];
+    if (btnAdv) btnAdv.addEventListener('click', () => switchTab('engine'));
 }
 
 // Mission 2 — Commander/Soldier, Memória Viva, Source Health, Risk Gate,
@@ -2769,9 +2776,9 @@ function wireButtons() {
     }
 
     document.getElementById('btn-close-modal').addEventListener('click', () => { els['home-modal'].hidden = true; });
-    document.getElementById('qa-diagnostics').addEventListener('click', handleRunDiagnostics);
-    document.getElementById('qa-replay').addEventListener('click', handleRunReplay);
-    document.getElementById('qa-analysis').addEventListener('click', handleExplainAnalysis);
+    document.getElementById('qa-diagnostics').addEventListener('click', () => { switchTab('sistema'); handleRunDiagnostics(); });
+    document.getElementById('qa-replay').addEventListener('click', () => { switchTab('sistema'); handleRunReplay(); });
+    document.getElementById('qa-analysis').addEventListener('click', () => { switchTab('engine'); handleExplainAnalysis(); });
     document.getElementById('qa-report').addEventListener('click', handleShowReport);
     if (els['mic-button']) els['mic-button'].addEventListener('click', handleMicButton);
     if (els['btn-voice-info']) {
