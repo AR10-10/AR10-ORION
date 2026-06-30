@@ -84,8 +84,7 @@
   <div class="hero-row" id="hero-row">
 
   <section class="card btc-live-panel" id="btc-live-panel">
-    <h2><span class="coin-glyph" aria-hidden="true">🟠</span> BTC/USDT — Preço Atual <span class="step">leitura descritiva — não é recomendação</span></h2>
-    <p class="onboarding-hint">Preço atual é sempre a última sonda real desta sessão (mark-to-market read-only) — nunca um valor parado. Snapshot é o preço e os níveis fixados na última vez que "Gerar AnalysisFrame real" rodou.</p>
+    <h2><span class="coin-glyph" aria-hidden="true">🟠</span> BTC/USDT — Preço Atual <span class="step">read-only</span></h2>
 
     <div class="status-row bl-price-row" id="bl-price-row" data-live-mode="DADOS_INSUFICIENTES">
       <span class="label">Preço atual</span>
@@ -98,15 +97,15 @@
       <div class="status-row"><span class="label">Latência</span><span class="value v-pending" id="bl-current-latency" title="Tempo de resposta real da última sonda de rede desta sessão">…</span></div>
     </div>
 
-    <div class="data-sufficiency-block" id="bl-snapshot-block">
-      <p class="data-sufficiency-label">Snapshot da análise</p>
+    <details id="bl-snapshot-block">
+      <summary class="snapshot-summary">Snapshot da análise</summary>
       <div class="status-grid">
         <div class="status-row"><span class="label">Preço usado</span><span class="value v-pending" id="bl-snapshot-price">…</span></div>
         <div class="status-row"><span class="label">Gerado em</span><span class="value v-pending" id="bl-snapshot-time">…</span></div>
         <div class="status-row"><span class="label">Idade do snapshot</span><span class="value v-pending" id="bl-snapshot-age">…</span></div>
         <div class="status-row"><span class="label">Diferença vs. atual</span><span class="value v-pending" id="bl-price-diff">…</span></div>
       </div>
-    </div>
+    </details>
 
     <div class="executive-actions" role="group" aria-label="Ações do BTC Live Panel">
       <button type="button" class="rt-btn" id="bl-btn-refresh-now"><span class="icon">⟳</span> Atualizar preço agora</button>
@@ -143,7 +142,6 @@
 
   <section class="card cyborg-executive-panel" id="cyborg-executive-panel">
     <h2>Estado do Sistema <span class="step">resumo executivo</span></h2>
-    <p class="onboarding-hint">Leitura de 1 olhar: o Cyborg está pronto? a fonte de dado é real e fresca? está seguro para analisar? Memória de sessão anterior nunca aparece aqui como dado atual sem revalidação — sem fonte fresca nesta sessão, este card mostra <b>DADOS_INSUFICIENTES</b>.</p>
     <div class="ex-hero">
       <div class="status-row ex-hero-row ex-state-row" id="ex-state-row" data-macro-state="IDLE">
         <span class="label"><span class="ex-icon" aria-hidden="true">🧭</span> Modo</span><span class="value v-pending" id="ex-state">…</span>
@@ -170,17 +168,14 @@
 
   <section class="card action-strip" id="action-strip">
     <div class="as-col as-primary">
-      <p class="data-sufficiency-label">Ação principal</p>
       <button type="button" class="hero-cta" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar / Atualizar Cyborg neste iPad</button>
     </div>
     <div class="as-col as-mic">
-      <p class="data-sufficiency-label">Microfone</p>
       <button type="button" class="mic-button" id="mic-button" data-voice-state="voice_idle" aria-label="Falar com o Siriform (comando de voz)">◉</button>
       <span class="mic-status-label v-info" id="mic-status-label">PRONTO</span>
-      <p class="voice-hint">Toque ou diga um comando seguro. <button type="button" class="voice-info-btn" id="btn-voice-info" aria-label="Saiba mais sobre o Siriform Voice">ⓘ</button></p>
+      <button type="button" class="voice-info-btn" id="btn-voice-info" aria-label="Saiba mais sobre o Siriform Voice">ⓘ</button>
     </div>
     <div class="as-col as-quick">
-      <p class="data-sufficiency-label">Ações rápidas</p>
       <div class="quick-actions" id="quick-actions" role="group" aria-label="Ações rápidas">
         <button type="button" class="qa-btn" id="qa-diagnostics"><span class="icon">▣</span> Diagnóstico</button>
         <button type="button" class="qa-btn" id="qa-replay"><span class="icon">▶</span> Replay BTC/USDT</button>
@@ -200,11 +195,19 @@
     <span class="law-badge">Safari Edge: LOCAL_AUX</span>
     <span class="law-badge">Telegram: PLANNED_AUX</span>
   </div>
-  <p class="law-tagline">🔒 SISTEMA 100% SEGURO · READ_ONLY · SEM EXECUÇÃO · SEM ORDENS · SEM CHAVES · SEM CORRETORAS</p>
+  </div><!-- /.cockpit-viewport -->
+  </div><!-- /#tab-cockpit -->
 
+  <!-- ============================================================
+       TAB 2 — ENGINE (análise + dados + Order Flow)
+       Skill sequence: Ingestion → Processing → Signaling
+       ============================================================ -->
+  <div class="tab-pane" id="tab-engine" role="tabpanel" aria-labelledby="btn-tab-engine" hidden>
+  <section class="advanced-section" id="advanced-section">
+
+  <!-- Trade Setup Matrix + S/R Ladder (moved from COCKPIT for zero-scroll) -->
   <section class="card supports-resistances-panel" id="supports-resistances-panel">
     <h2>Trade Setup Matrix <span class="step">snapshot da análise</span></h2>
-    <p class="onboarding-hint">Leitura descritiva derivada das 3 rotas do Research Engine (LONG/SHORT/WAIT, sempre todas calculadas) — nunca recomendação, nunca execução, nunca ordem. Toque no card "Target Tracker" no Engine para as 3 rotas completas lado a lado.</p>
     <div class="tsm-matrix" id="tsm-matrix">
       <div class="tsm-signal-row">
         <span class="tsm-signal-badge v-pending" id="tsm-signal-badge">SIGNAL: …</span>
@@ -218,7 +221,6 @@
       </div>
       <p class="engine-meta" id="tsm-condition">…</p>
     </div>
-    <p class="onboarding-hint">Suportes/Resistências (snapshot do BTC/USDT) — mesmos níveis do Target Tracker, nunca recalculados a partir do preço vivo. R2/S2 vêm dos engines de pivot/swing graduados (ver QUARANTINE.md); caem em DADOS_INSUFICIENTES quando a amostra não confirma swings suficientes.</p>
     <div class="sr-ladder" id="sr-ladder">
       <div class="sr-row sr-resistance"><span class="label">Resistência 2</span><span class="value v-pending" id="sr-resistance-2">…</span></div>
       <div class="sr-row sr-resistance"><span class="label">Resistência 1</span><span class="value v-fail" id="sr-resistance-1">…</span></div>
@@ -227,16 +229,6 @@
       <div class="sr-row sr-support"><span class="label">Suporte 2</span><span class="value v-pending" id="sr-support-2">…</span></div>
     </div>
   </section>
-
-  </div><!-- /.cockpit-viewport -->
-  </div><!-- /#tab-cockpit -->
-
-  <!-- ============================================================
-       TAB 2 — ENGINE (análise + dados + Order Flow)
-       Skill sequence: Ingestion → Processing → Signaling
-       ============================================================ -->
-  <div class="tab-pane" id="tab-engine" role="tabpanel" aria-labelledby="btn-tab-engine" hidden>
-  <section class="advanced-section" id="advanced-section">
 
   <!-- SKILL 1/2/4/8/9 — Order Flow Engine (OFI, Absorption, Exhaustion, Bio-Reactor, Ring Buffer) -->
   <section class="card replay-wrap" id="orderflow-section">

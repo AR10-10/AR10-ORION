@@ -1640,11 +1640,30 @@ footer.legal {
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
-    /* mesma reserva do .runtime-shell para o dock fixo do microfone
-       (.action-strip .as-mic) — sem isso, o ultimo conteudo real visivel
-       antes do limite de scroll deste box (fim do S/R Signals) ficaria
-       coberto pelo dock flutuante. */
-    padding-bottom: calc(var(--safe-b) + 96px);
+    padding-bottom: calc(var(--safe-b) + 16px);
+}
+/* Compact card density inside COCKPIT — all panels must fit in one screen */
+.cockpit-viewport section.card {
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    border-radius: 14px;
+}
+.cockpit-viewport section.card h2 {
+    margin-bottom: 8px;
+    font-size: clamp(0.75rem, 1.8vw, 0.88rem);
+}
+/* Snapshot <details> toggle inside BTC panel */
+details#bl-snapshot-block {
+    margin-top: 8px;
+}
+details#bl-snapshot-block > summary.snapshot-summary {
+    cursor: pointer;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    user-select: none;
+    margin-bottom: 6px;
 }
 
 /* ------------------------------------------------------------
@@ -1767,9 +1786,6 @@ footer.legal {
 }
 .hero-row > .cyborg-executive-panel {
     border-top-color: rgba(178, 107, 255, 0.4);
-}
-.cockpit-viewport > .supports-resistances-panel {
-    border-top-color: rgba(255, 138, 61, 0.45);
 }
 
 /* .advanced-section (ENGINE tab) e .sistema-section (SISTEMA tab) usam
