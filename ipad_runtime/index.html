@@ -148,6 +148,11 @@
 
       <div class="brain-divider"></div>
 
+      <div class="cpk-score-hero">
+        <span class="score-hero-label">INTEL SCORE</span>
+        <span class="value score-hero-value v-pending" id="cpk-score-value">—</span>
+      </div>
+
       <div class="brain-controls">
         <button type="button" class="hero-cta cta-compact" id="btn-prepare-cyborg">⚡ Preparar Cyborg</button>
         <div class="quick-actions" id="quick-actions" role="group" aria-label="Ações rápidas">
@@ -210,6 +215,13 @@
           <span class="qs-title">QUANT SIGNALS MATRIX</span>
           <span class="tsm-signal-badge v-pending" id="tsm-signal-badge">SIGNAL: …</span>
           <span class="value v-pending qs-confidence" id="tsm-confidence">…</span>
+        </div>
+
+        <!-- Direction band: dominant signal color strip (LONG ▲ / SHORT ▼ / waiting) -->
+        <div class="qs-direction-band" id="qs-direction-band" data-signal="">
+          <span class="qs-dir-arrow">—</span>
+          <span class="qs-dir-label">AGUARDANDO SINAL</span>
+          <span class="qs-dir-conf"></span>
         </div>
 
         <!-- Active-signal execution matrix — single column of glass-module

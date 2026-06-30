@@ -736,6 +736,15 @@ function renderTradeSetupMatrix(matrix) {
         els['tsm-signal-badge'].textContent = matrix.signal === DADOS_INSUFICIENTES ? 'SIGNAL: DADOS INSUFICIENTES' : `SIGNAL: ${matrix.signal}`;
         els['tsm-signal-badge'].className = `tsm-signal-badge ${signalClass}`;
     }
+    // Direction band — dominant signal color strip above signal cards
+    if (els['qs-direction-band']) {
+        const sig = (matrix.signal !== DADOS_INSUFICIENTES) ? matrix.signal : '';
+        els['qs-direction-band'].dataset.signal = (sig === 'LONG' || sig === 'SHORT') ? sig : 'WAIT';
+        const spans = els['qs-direction-band'].querySelectorAll('span');
+        if (spans[0]) spans[0].textContent = sig === 'LONG' ? '▲' : (sig === 'SHORT' ? '▼' : '—');
+        if (spans[1]) spans[1].textContent = sig === 'LONG' ? 'LONG ACTIVE' : (sig === 'SHORT' ? 'SHORT ACTIVE' : 'AGUARDANDO SINAL');
+        if (spans[2]) spans[2].textContent = (sig && matrix.confidence && matrix.confidence !== DADOS_INSUFICIENTES) ? `CONF: ${matrix.confidence}` : '';
+    }
     if (els['tsm-confidence']) {
         els['tsm-confidence'].textContent = matrix.confidence === DADOS_INSUFICIENTES ? DADOS_INSUFICIENTES : `Confiança: ${matrix.confidence}`;
         els['tsm-confidence'].className = `value ${matrix.confidence === 'HIGH' ? 'v-ok' : (matrix.confidence === 'MEDIUM' ? 'v-limited' : 'v-pending')}`;
@@ -1263,6 +1272,7 @@ function renderLocalIntelligenceCard(result) {
         setStatusWithClass('li-data-mode', DADOS_INSUFICIENTES, 'v-pending');
         if (els['li-final-label-hero']) setStatusWithClass('li-final-label-hero', 'DADOS_INSUFICIENTES', 'v-pending');
         if (els['li-confidence-hero']) setInfo('li-confidence-hero', '—');
+        if (els['cpk-score-value']) { els['cpk-score-value'].textContent = '—'; els['cpk-score-value'].className = 'value score-hero-value v-pending'; }
         applyConfidenceGauge(null);
         return;
     }
@@ -1277,6 +1287,10 @@ function renderLocalIntelligenceCard(result) {
     els['li-explanation'].textContent = result.explanation_pt_br;
     if (els['li-final-label-hero']) setStatusWithClass('li-final-label-hero', score.final_label, classForSetupLabel(score.final_label));
     if (els['li-confidence-hero']) setInfo('li-confidence-hero', result.confidence_label);
+    if (els['cpk-score-value']) {
+        els['cpk-score-value'].textContent = score.final_label || '—';
+        els['cpk-score-value'].className = `value score-hero-value ${classForSetupLabel(score.final_label)}`;
+    }
     applyConfidenceGauge(result.confidence_label);
 }
 

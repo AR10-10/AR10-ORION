@@ -61,6 +61,7 @@ const ELEMENT_IDS = [
     'tb-build-badge', 'tb-heartbeat', 'ex-hydration', 'ex-local', 'li-final-label-hero', 'li-confidence-hero',
     'li-gauge-wrap', 'li-gauge-needle',
     'orderflow-canvas', 'orderflow-meta', 'of-backend', 'of-sab', 'of-selftest', 'of-source', 'orderflow-signal-list', 'btn-run-orderflow', 'btn-toggle-orderflow-live',
+    'qs-direction-band', 'cpk-score-value',
 ];
 
 ELEMENT_IDS.forEach((id) => { els[id] = document.getElementById(id); });
