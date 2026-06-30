@@ -731,23 +731,31 @@ function renderResearchEngineFrame(frame) {
  *  DADOS_INSUFICIENTES) so' para cor, nunca para decidir o conteudo. */
 function renderTradeSetupMatrix(matrix) {
     const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
-    const signalClass = matrix.signal === 'LONG' ? 'v-ok' : (matrix.signal === 'SHORT' ? 'v-fail' : 'v-pending');
+    const sig = (matrix.signal !== DADOS_INSUFICIENTES) ? matrix.signal : '';
+    const isL = sig === 'LONG', isS = sig === 'SHORT';
+    const signalClass = isL ? 'v-ok' : (isS ? 'v-fail' : 'v-pending');
     if (els['tsm-signal-badge']) {
-        els['tsm-signal-badge'].textContent = matrix.signal === DADOS_INSUFICIENTES ? 'SIGNAL: DADOS INSUFICIENTES' : `SIGNAL: ${matrix.signal}`;
-        els['tsm-signal-badge'].className = `tsm-signal-badge ${signalClass}`;
+        els['tsm-signal-badge'].textContent = isL ? '▲ LONG' : isS ? '▼ SHORT' : '◆ AGUARDANDO';
+        els['tsm-signal-badge'].className = `siv tsm-signal-badge ${signalClass}`;
     }
+    // Dynamic label names — LONG entry→resistance, SHORT entry→support
+    if (els['tsm-lbl-entry']) els['tsm-lbl-entry'].textContent = isL ? 'LONG ENTRY ▲' : isS ? 'SHORT ENTRY ▼' : 'ENTRADA';
+    if (els['tsm-lbl-tp1']) els['tsm-lbl-tp1'].textContent = isL ? 'ALVO 1 · R1' : isS ? 'ALVO 1 · S1' : 'ALVO 1';
+    if (els['tsm-lbl-tp2']) els['tsm-lbl-tp2'].textContent = isL ? 'ALVO 2 · R2' : isS ? 'ALVO 2 · S2' : 'ALVO 2';
+    if (els['tsm-lbl-tp3']) els['tsm-lbl-tp3'].textContent = isL ? 'ALVO 3 · EXT' : isS ? 'ALVO 3 · EXT' : 'ALVO 3';
+    if (els['tsm-lbl-sl']) els['tsm-lbl-sl'].textContent = isL ? 'STOP LOSS ▼' : isS ? 'STOP LOSS ▲' : 'STOP LOSS';
+    if (els['tsm-lbl-conf']) els['tsm-lbl-conf'].textContent = isL ? 'CONFIANÇA LONG' : isS ? 'CONFIANÇA SHORT' : 'CONFIANÇA';
     // Direction band — dominant signal color strip above signal cards
     if (els['qs-direction-band']) {
-        const sig = (matrix.signal !== DADOS_INSUFICIENTES) ? matrix.signal : '';
-        els['qs-direction-band'].dataset.signal = (sig === 'LONG' || sig === 'SHORT') ? sig : 'WAIT';
+        els['qs-direction-band'].dataset.signal = (isL || isS) ? sig : 'WAIT';
         const spans = els['qs-direction-band'].querySelectorAll('span');
-        if (spans[0]) spans[0].textContent = sig === 'LONG' ? '▲' : (sig === 'SHORT' ? '▼' : '—');
-        if (spans[1]) spans[1].textContent = sig === 'LONG' ? 'LONG ACTIVE' : (sig === 'SHORT' ? 'SHORT ACTIVE' : 'AGUARDANDO SINAL');
+        if (spans[0]) spans[0].textContent = isL ? '▲' : (isS ? '▼' : '—');
+        if (spans[1]) spans[1].textContent = isL ? 'LONG ATIVO ▲' : (isS ? 'SHORT ATIVO ▼' : 'AGUARDANDO SINAL');
         if (spans[2]) spans[2].textContent = (sig && matrix.confidence && matrix.confidence !== DADOS_INSUFICIENTES) ? `CONF: ${matrix.confidence}` : '';
     }
     if (els['tsm-confidence']) {
-        els['tsm-confidence'].textContent = matrix.confidence === DADOS_INSUFICIENTES ? DADOS_INSUFICIENTES : `Confiança: ${matrix.confidence}`;
-        els['tsm-confidence'].className = `value ${matrix.confidence === 'HIGH' ? 'v-ok' : (matrix.confidence === 'MEDIUM' ? 'v-limited' : 'v-pending')}`;
+        els['tsm-confidence'].textContent = matrix.confidence === DADOS_INSUFICIENTES ? '—' : matrix.confidence;
+        els['tsm-confidence'].className = `tv value ${matrix.confidence === 'HIGH' ? 'v-ok' : (matrix.confidence === 'MEDIUM' ? 'v-limited' : 'v-pending')}`;
     }
     // Execution-matrix cells (Entry/TP/SL) are wired NUMERICALLY from the Target
     // Tracker (real support/resistance levels) in renderSupportsResistances() —
@@ -913,11 +921,13 @@ function renderSupportsResistances(tracker, activeSignal) {
     const route = activeSignal === 'SHORT' ? tracker.rota_b_short
         : activeSignal === 'LONG' ? tracker.rota_a_long
         : null;
+    // Propagate active signal to targets-grid for CSS color cascading
+    if (els['targets-grid']) els['targets-grid'].dataset.signal = activeSignal || '';
     const setCard = (id, v) => {
         if (!els[id]) return;
         const ok = isNum(v);
         els[id].textContent = ok ? v.toFixed(2) : 'AGUARDANDO';
-        els[id].className = `value qs-card-v${ok ? '' : ' qs-awaiting'}`;
+        els[id].className = `tv value qs-card-v${ok ? '' : ' qs-awaiting'}`;
     };
     setCard('tsm-entry-zone', route ? tracker.current_price : DADOS_INSUFICIENTES);
     setCard('tsm-tp1', route ? route.target_1 : DADOS_INSUFICIENTES);

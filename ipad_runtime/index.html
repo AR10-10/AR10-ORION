@@ -91,12 +91,28 @@ body{color:#a0f0ff;font-family:'JetBrains Mono','Fira Mono','Menlo',monospace;di
 .dir-band[data-signal="SHORT"]{background:rgba(255,62,82,.07);border-color:rgba(255,62,82,.25);color:#ff0055;text-shadow:0 0 10px rgba(255,62,82,.4)}
 .dir-band:not([data-signal="LONG"]):not([data-signal="SHORT"]){color:rgba(255,255,255,.28)}
 
-.targets-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:6px 8px;background:rgba(0,0,0,.15);border:1px solid rgba(0,240,255,.06);border-radius:4px;flex-shrink:0}
-.tgt-item .tk{font-size:.42rem;color:rgba(255,255,255,.28);text-transform:uppercase;letter-spacing:.5px}
-.tgt-item .tv{font-size:.72rem;font-weight:600}
+.targets-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:6px 8px;background:rgba(0,0,0,.15);border:1px solid rgba(0,240,255,.06);border-radius:4px;flex-shrink:0;transition:border-color .4s,background .4s}
+.targets-grid[data-signal="LONG"]{border-color:rgba(0,255,157,.18);background:rgba(0,255,157,.028)}
+.targets-grid[data-signal="SHORT"]{border-color:rgba(255,62,82,.18);background:rgba(255,62,82,.028)}
+.tgt-item{position:relative}
+.tgt-item .tk{font-size:.42rem;color:rgba(255,255,255,.28);text-transform:uppercase;letter-spacing:.5px;transition:color .3s}
+.targets-grid[data-signal="LONG"] .tgt-item:first-child .tk{color:#00ffaa;letter-spacing:.8px}
+.targets-grid[data-signal="SHORT"] .tgt-item:first-child .tk{color:#ff0055;letter-spacing:.8px}
+.tgt-item .tv{font-size:.72rem;font-weight:600;transition:color .3s,text-shadow .3s}
+/* Pre-render defaults (original entry/tp/sl classes survive until first setCard) */
 .tgt-item .tv.entry{color:#f0d06f;text-shadow:0 0 10px rgba(240,208,111,.35)}
 .tgt-item .tv.tp{color:#00ffaa;text-shadow:0 0 10px rgba(0,255,157,.35)}
 .tgt-item .tv.sl{color:#ff0055;text-shadow:0 0 10px rgba(255,0,85,.35)}
+/* Position-based signal cascade (robust after setCard strips type classes):
+   1=entry 2,3,4=targets 5=stop 6=confidence. Entry takes the direction color;
+   targets stay green (profit) and stop stays red (loss) — terminal convention. */
+.targets-grid[data-signal="LONG"] .tgt-item:first-child .tv:not(.qs-awaiting){color:#00ffaa;text-shadow:0 0 14px rgba(0,255,157,.55);font-size:.8rem}
+.targets-grid[data-signal="SHORT"] .tgt-item:first-child .tv:not(.qs-awaiting){color:#ff0055;text-shadow:0 0 14px rgba(255,0,85,.55);font-size:.8rem}
+.targets-grid[data-signal] .tgt-item:nth-child(2) .tv:not(.qs-awaiting),
+.targets-grid[data-signal] .tgt-item:nth-child(3) .tv:not(.qs-awaiting),
+.targets-grid[data-signal] .tgt-item:nth-child(4) .tv:not(.qs-awaiting){color:#00ffaa;text-shadow:0 0 8px rgba(0,255,157,.32)}
+.targets-grid[data-signal] .tgt-item:nth-child(5) .tv:not(.qs-awaiting){color:#ff4466;text-shadow:0 0 14px rgba(255,0,85,.5)}
+.tgt-item .tv.qs-awaiting{color:rgba(255,255,255,.15)!important;text-shadow:none!important;font-weight:400}
 
 .sig-row{display:flex;justify-content:space-around;padding:5px 6px;background:rgba(0,240,255,.02);border:1px solid rgba(0,240,255,.06);border-radius:4px;flex-shrink:0}
 .sig-item{text-align:center;min-width:0}
@@ -274,13 +290,13 @@ ul#orderflow-signal-list{list-style:none;padding:2px 4px;font-size:.48rem;max-he
       </div>
 
       <!-- Trade Setup Matrix targets (READ_ONLY analysis levels) -->
-      <div class="targets-grid">
-        <div class="tgt-item"><div class="tk">ENTRADA</div><div class="tv entry" id="tsm-entry-zone">AGUARDANDO</div></div>
-        <div class="tgt-item"><div class="tk">TP 1</div><div class="tv tp" id="tsm-tp1">AGUARDANDO</div></div>
-        <div class="tgt-item"><div class="tk">TP 2</div><div class="tv tp" id="tsm-tp2">AGUARDANDO</div></div>
-        <div class="tgt-item"><div class="tk">TP 3</div><div class="tv tp" id="tsm-tp3">AGUARDANDO</div></div>
-        <div class="tgt-item"><div class="tk">STOP</div><div class="tv sl" id="tsm-sl">AGUARDANDO</div></div>
-        <div class="tgt-item"><div class="tk">CONF</div><div class="tv" id="tsm-confidence" style="color:rgba(160,224,255,.8)">…</div></div>
+      <div class="targets-grid" id="targets-grid" data-signal="">
+        <div class="tgt-item"><div class="tk" id="tsm-lbl-entry">ENTRADA</div><div class="tv entry" id="tsm-entry-zone">AGUARDANDO</div></div>
+        <div class="tgt-item"><div class="tk" id="tsm-lbl-tp1">ALVO 1</div><div class="tv tp" id="tsm-tp1">AGUARDANDO</div></div>
+        <div class="tgt-item"><div class="tk" id="tsm-lbl-tp2">ALVO 2</div><div class="tv tp" id="tsm-tp2">AGUARDANDO</div></div>
+        <div class="tgt-item"><div class="tk" id="tsm-lbl-tp3">ALVO 3</div><div class="tv tp" id="tsm-tp3">AGUARDANDO</div></div>
+        <div class="tgt-item"><div class="tk" id="tsm-lbl-sl">STOP LOSS</div><div class="tv sl" id="tsm-sl">AGUARDANDO</div></div>
+        <div class="tgt-item"><div class="tk" id="tsm-lbl-conf">CONFIANÇA</div><div class="tv" id="tsm-confidence">—</div></div>
       </div>
 
       <!-- Signal summary -->

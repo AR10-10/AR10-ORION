@@ -62,6 +62,8 @@ const ELEMENT_IDS = [
     'li-gauge-wrap', 'li-gauge-needle',
     'orderflow-canvas', 'orderflow-meta', 'of-backend', 'of-sab', 'of-selftest', 'of-source', 'orderflow-signal-list', 'btn-run-orderflow', 'btn-toggle-orderflow-live',
     'qs-direction-band', 'cpk-score-value',
+    'tsm-lbl-entry', 'tsm-lbl-tp1', 'tsm-lbl-tp2', 'tsm-lbl-tp3', 'tsm-lbl-sl', 'tsm-lbl-conf',
+    'targets-grid',
 ];
 
 ELEMENT_IDS.forEach((id) => { els[id] = document.getElementById(id); });
