@@ -61,8 +61,9 @@ html, body {
 
 body {
     background-image:
-        radial-gradient(ellipse 80% 50% at 50% 0%, rgba(0, 242, 255, 0.06), transparent 70%),
-        radial-gradient(ellipse 60% 40% at 50% 100%, rgba(0, 242, 255, 0.03), transparent 60%);
+        radial-gradient(ellipse 90% 55% at 50% 0%,  rgba(0, 242, 255, 0.09),  transparent 68%),
+        radial-gradient(ellipse 55% 35% at 50% 44%, rgba(178, 107, 255, 0.06), transparent 58%),
+        radial-gradient(ellipse 65% 40% at 50% 100%, rgba(0, 242, 255, 0.05), transparent 60%);
     min-height: 100vh;
     min-height: 100dvh;
     padding: 0;
@@ -252,14 +253,18 @@ header.hero p {
 
 section.card {
     background: linear-gradient(150deg, var(--metal-hi), var(--metal-lo));
-    backdrop-filter: blur(20px) saturate(140%);
-    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    backdrop-filter: blur(26px) saturate(160%);
+    -webkit-backdrop-filter: blur(26px) saturate(160%);
     border: 1px solid var(--line-cyan);
-    border-top-color: rgba(0, 242, 255, 0.3);
+    border-top-color: rgba(0, 242, 255, 0.38);
     border-radius: 16px;
     padding: 16px;
     margin-bottom: 16px;
-    box-shadow: inset 0 0 18px rgba(0, 242, 255, 0.04), 0 10px 30px rgba(0, 0, 0, 0.35);
+    box-shadow:
+        inset 0 1px 0 rgba(0, 242, 255, 0.12),
+        inset 0 0 24px rgba(0, 242, 255, 0.05),
+        0 12px 36px rgba(0, 0, 0, 0.42),
+        0 2px 8px rgba(0, 0, 0, 0.28);
 }
 
 section.card h2 {
@@ -306,10 +311,10 @@ section.card h2 .step {
 
 .rdl-meta-sub { display: inline-block; font-size: 0.74em; opacity: 0.6; font-weight: normal; }
 
-.v-ok { color: var(--long-green); text-shadow: 0 0 8px rgba(0,255,157,0.5); }
-.v-fail { color: var(--short-red); text-shadow: 0 0 8px rgba(255,62,82,0.5); }
-.v-limited { color: var(--alert-amber); text-shadow: 0 0 8px rgba(255,184,0,0.5); }
-.v-pending { color: var(--text-dim); }
+.v-ok { color: var(--long-green); text-shadow: 0 0 10px rgba(0,255,157,0.7), 0 0 22px rgba(0,255,157,0.3); }
+.v-fail { color: var(--short-red); text-shadow: 0 0 10px rgba(255,62,82,0.7), 0 0 22px rgba(255,62,82,0.3); }
+.v-limited { color: var(--alert-amber); text-shadow: 0 0 10px rgba(255,184,0,0.7), 0 0 22px rgba(255,184,0,0.3); }
+.v-pending { color: var(--text-dim); text-shadow: 0 0 8px rgba(178,107,255,0.3); }
 .v-info { color: var(--sys-cyan); }
 .v-blue { color: var(--info-blue); text-shadow: 0 0 8px rgba(51,141,246,0.5); }
 
@@ -340,10 +345,12 @@ button.rt-btn {
 button.rt-btn:hover:not(:disabled) {
     border-color: var(--sys-cyan);
     background: rgba(0, 242, 255, 0.1);
+    box-shadow: inset 0 0 14px rgba(0, 242, 255, 0.08), 0 0 12px rgba(0, 242, 255, 0.1);
 }
 button.rt-btn:active {
-    transform: scale(0.98);
-    background: rgba(0, 242, 255, 0.14);
+    transform: scale(0.97);
+    background: rgba(0, 242, 255, 0.16);
+    box-shadow: inset 0 0 18px rgba(0, 242, 255, 0.14);
 }
 button.rt-btn:disabled {
     opacity: 0.35;
@@ -1688,12 +1695,14 @@ footer.legal {
      cockpit nos dois lados do orbe.
    ------------------------------------------------------------ */
 .hero-row > .btc-live-panel {
-    border-color: rgba(178, 107, 255, 0.22);
-    border-top-color: rgba(0, 242, 255, 0.45);
+    border-color: rgba(178, 107, 255, 0.28);
+    border-top-color: rgba(0, 242, 255, 0.55);
     box-shadow:
-        inset 0 0 22px rgba(0, 242, 255, 0.05),
-        0 0 32px rgba(178, 107, 255, 0.08),
-        0 10px 30px rgba(0, 0, 0, 0.35);
+        inset 0 1px 0 rgba(0, 242, 255, 0.18),
+        inset 0 0 32px rgba(0, 242, 255, 0.07),
+        0 0 48px rgba(178, 107, 255, 0.14),
+        0 0 80px rgba(0, 242, 255, 0.06),
+        0 12px 36px rgba(0, 0, 0, 0.45);
 }
 .hero-row > .cyborg-executive-panel {
     border-top-color: rgba(178, 107, 255, 0.4);
@@ -2056,7 +2065,11 @@ section.card[tabindex]:focus-visible {
     font-size: clamp(2.1rem, 7vw, 3.4rem);
     font-weight: 800;
     letter-spacing: 0.5px;
-    text-shadow: 0 0 16px rgba(0, 242, 255, 0.5);
+    text-shadow: 0 0 20px rgba(0, 242, 255, 0.65);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
 }
 .coin-glyph { font-size: 1.1em; margin-right: 2px; }
 .bl-price-wrap {
@@ -2064,6 +2077,9 @@ section.card[tabindex]:focus-visible {
     align-items: baseline;
     flex-wrap: wrap;
     gap: 10px;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
 }
 .price-delta-badge {
     font-family: var(--font-mono);
