@@ -963,16 +963,16 @@ footer.legal {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 8px;
-    margin-top: 16px;
+    gap: 5px;
+    margin-top: 8px;
 }
 .law-badge {
     font-family: var(--font-mono);
-    font-size: clamp(0.66rem, 1.6vw, 0.78rem);
-    letter-spacing: 0.5px;
+    font-size: clamp(0.6rem, 1.4vw, 0.7rem);
+    letter-spacing: 0.4px;
     border-radius: 20px;
-    padding: 4px 12px;
-    border: 1px solid rgba(255, 184, 0, 0.4);
+    padding: 3px 9px;
+    border: 1px solid rgba(255, 184, 0, 0.35);
     color: var(--alert-amber);
     white-space: nowrap;
 }
@@ -1394,7 +1394,7 @@ footer.legal {
    desktop (ver .action-strip abaixo), um conflito de auto-placement com
    .as-primary/.as-quick. Padding-bottom extra em .runtime-shell garante
    que o dock nunca cubra o ultimo conteudo real da pagina. */
-.action-strip .as-mic {
+.cmd-bar .as-mic {
     position: fixed;
     left: 50%;
     bottom: calc(var(--safe-b) + 14px);
@@ -1674,21 +1674,21 @@ details#bl-snapshot-block > summary.snapshot-summary {
 }
 
 /* ============================================================
-   HERO ROW — Professional Futures Terminal Fusion
-   2-panel layout: Intelligence Core (left) | BTC Dominance (right)
-   Works on all iPad orientations from 520px+.
+   HERO ROW — V-PRIME 3-Panel Institutional Terminal
+   Intelligence Core | BTC Dominance | Quant Signals
+   Works on iPad landscape/portrait from 720px+.
    ============================================================ */
 .hero-row {
     width: 100%;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr);
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr) minmax(0, 0.9fr);
     align-items: stretch;
-    gap: 14px;
-    margin-bottom: 14px;
+    gap: 12px;
+    margin-bottom: 12px;
 }
 .hero-row > section.card { margin-bottom: 0; }
 
-@media (max-width: 519px) {
+@media (max-width: 719px) {
     .hero-row {
         grid-template-columns: 1fr;
     }
@@ -1866,43 +1866,136 @@ details#bl-snapshot-block > summary.snapshot-summary {
 .btc-live-panel details#bl-snapshot-block { margin: 0; }
 .btc-live-panel .executive-actions { margin-top: 2px; }
 
-/* ------------------------------------------------------------
-   ACTION STRIP — faixa horizontal entre o cockpit (.hero-row) e o
-   S/R Signals (Suportes/Resistencias) abaixo, ultima zona do
-   .cockpit-viewport: CTA principal (esquerda) / microfone (centro) /
-   acoes rapidas (direita). Irmao de ambos pelo mesmo motivo do
-   .hero-row (precisa de 2 colunas reais, nao balanceamento de altura
-   do .advanced-section). Abaixo de 1000px fica em coluna unica na
-   ordem natural do DOM (CTA, depois mic, depois acoes rapidas). */
-.action-strip {
-    width: 100%;
+/* ============================================================
+   QUANT SIGNALS PANEL — Trade Setup Matrix + S/R Ladder
+   3rd column of the V-PRIME hero row. Orange accent = analysis
+   zone (never execution). Compact ladder reads top-to-bottom:
+   R2 → R1 → SPOT → S1 → S2.
+   ============================================================ */
+.quant-signals-panel {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 20px;
-    margin-bottom: 16px;
-}
-.action-strip .as-col {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
     gap: 8px;
+    border-top-color: rgba(255, 138, 61, 0.55);
+    border-color: rgba(255, 138, 61, 0.2);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 138, 61, 0.18),
+        inset 0 0 28px rgba(255, 138, 61, 0.06),
+        0 0 42px rgba(255, 138, 61, 0.1),
+        0 10px 32px rgba(0, 0, 0, 0.42);
+}
+.qs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.qs-title {
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--cockpit-orange);
+    font-weight: 700;
+}
+.quant-signals-panel .tsm-signal-badge {
+    font-size: clamp(0.7rem, 1.7vw, 0.88rem);
+    padding: 3px 9px;
+}
+.qs-confidence {
+    display: block;
+    font-size: clamp(0.85rem, 2.2vw, 1.05rem);
+    font-weight: 700;
+}
+.qs-entry-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+}
+.qs-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 5px 8px;
+    border-radius: 8px;
+    background: rgba(255, 138, 61, 0.04);
+    border: 1px solid rgba(255, 138, 61, 0.12);
+}
+.qs-key {
+    font-size: 0.59rem;
+    letter-spacing: 1.5px;
+    color: var(--cockpit-orange);
+    text-transform: uppercase;
+    font-family: var(--font-display);
+    font-weight: 700;
+    opacity: 0.85;
+}
+.qs-cell .value {
+    font-size: clamp(0.76rem, 1.8vw, 0.92rem);
+    font-weight: bold;
+}
+.qs-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 138, 61, 0.28), transparent);
+}
+/* S/R ladder inside quant-signals-panel — compact abbreviated labels */
+.quant-signals-panel .sr-row {
+    padding: 4px 8px;
+    font-size: clamp(0.67rem, 1.5vw, 0.78rem);
+}
+.quant-signals-panel .sr-row .label {
+    font-size: 0.63rem;
+    letter-spacing: 0.4px;
+    min-width: 2.5rem;
+}
+.qs-condition {
+    font-size: 0.67rem;
+    margin: 0;
+    line-height: 1.35;
+    color: var(--text-dim);
 }
 
-@media (min-width: 1000px) {
-    .action-strip {
-        display: grid;
-        /* so' 2 colunas reais aqui: .as-mic saiu do fluxo (position: fixed
-           no proprio .as-mic, ver secao SIRIFORM VOICE) — manter uma 3a
-           coluna 0.7fr deixaria um vao vazio permanente no meio da faixa. */
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
-        align-items: center;
-        gap: 18px;
-    }
-    .action-strip .as-primary { grid-column: 1; }
-    .action-strip .as-quick { grid-column: 2; }
+/* ============================================================
+   CMD-BAR — flat command strip replacing card action-strip.
+   Horizontal flex: CTA (left) | quick actions (right).
+   .as-mic stays position: fixed (floating dock), so it takes
+   no space in this bar.
+   ============================================================ */
+.cmd-bar {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 0 2px;
+}
+.cmd-bar .as-col {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+}
+.cmd-bar .as-primary { flex: 0 0 auto; }
+.cmd-bar .as-quick { flex: 1 1 auto; min-width: 0; justify-content: flex-end; }
+.cmd-bar .hero-cta {
+    white-space: nowrap;
+    font-size: clamp(0.7rem, 1.7vw, 0.85rem);
+    padding: 8px 14px;
+    min-height: 36px;
+}
+.cmd-bar .quick-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 5px;
+    flex-wrap: nowrap;
+}
+.cmd-bar .qa-btn {
+    font-size: clamp(0.64rem, 1.5vw, 0.74rem);
+    padding: 7px 10px;
+    min-height: 34px;
+    white-space: nowrap;
 }
 
 
