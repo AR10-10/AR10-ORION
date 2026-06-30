@@ -314,6 +314,13 @@
   <section class="card replay-wrap" id="orderflow-section">
     <h2>Order Flow Engine <span class="step">MEXC live ou replay sintético — sem ordens</span></h2>
     <span class="ro-badge">[!] READ-ONLY · OFI/ABSORPTION/EXHAUSTION · SEM EXECUÇÃO</span>
+    <div class="skill-row">
+      <span class="skill-badge">SKILL 1 — OFI</span>
+      <span class="skill-badge">SKILL 2 — VALUE OBJECTS</span>
+      <span class="skill-badge">SKILL 4 — ABSORPTION</span>
+      <span class="skill-badge">SKILL 8 — EXHAUSTION</span>
+      <span class="skill-badge">SKILL 9 — RING BUFFER</span>
+    </div>
     <canvas id="orderflow-canvas"></canvas>
     <div class="status-grid">
       <div class="status-row"><span class="label">Render backend</span><span class="value v-pending" id="of-backend">…</span></div>
@@ -337,6 +344,11 @@
   <section class="card real-data-layer-panel" id="real-data-layer-panel">
     <h2>Real Data Layer <span class="future-badge">conectores públicos, sem chave</span> <span class="readonly-badge">READ_ONLY_SOURCE</span></h2>
     <span class="ro-badge">[!] READ-ONLY · ACTIVE_READ_ONLY após sonda real</span>
+    <div class="skill-row">
+      <span class="skill-badge">SKILL 3 — CONECTORES PÚBLICOS</span>
+      <span class="skill-badge">SKILL 6 — COINGECKO</span>
+      <span class="skill-badge">SKILL 7 — CSV / JSON IMPORT</span>
+    </div>
     <div class="status-grid" id="rdl-connector-grid">
         <span class="analysis-frame-empty">Toque em "Testar fontes reais" para sondar os conectores.</span>
     </div>
@@ -362,6 +374,11 @@
   <!-- SKILL 5 — AnalysisFrame real -->
   <section class="card" id="real-analysis-frame-panel">
     <h2>Real AnalysisFrame <span class="step">leitura sobre candle real — não é recomendação</span></h2>
+    <div class="skill-row">
+      <span class="skill-badge">SKILL 5 — ANALYSISFRAME REAL</span>
+      <span class="skill-badge skill-badge-calc">SR ENGINE</span>
+      <span class="skill-badge skill-badge-calc">MKT STRUCTURE</span>
+    </div>
     <div class="analysis-frame-grid" id="real-analysis-frame-grid">
         <span class="analysis-frame-empty">Sem fonte ACTIVE_READ_ONLY nesta sessão ainda. Teste uma fonte real primeiro.</span>
     </div>
@@ -391,6 +408,11 @@
   <section class="card research-engine-panel" id="research-engine-panel">
     <h2>Research Engine <span class="stub-badge">ROTA A / B / C sempre presentes</span></h2>
     <span class="ro-badge">[!] READ-ONLY · ROTA A/B/C — SEM EXECUÇÃO · CONFIANÇA: LOW/MEDIUM/HIGH</span>
+    <div class="skill-row">
+      <span class="skill-badge skill-badge-calc">SR ENGINE — ATIVO</span>
+      <span class="skill-badge skill-badge-calc">MKT STRUCTURE — ATIVO</span>
+      <span class="skill-badge skill-badge-calc">ROTA A / B / C</span>
+    </div>
     <p class="diagnostic-note" id="research-engine-session-note" hidden></p>
     <div class="route-block route-long" id="route-a-long">
         <h3>ROTA A — LONG</h3>
@@ -410,6 +432,11 @@
   <section class="card local-intelligence-panel" id="local-intelligence-panel" tabindex="0">
     <h2>AR10 Local Intelligence Engine <span class="future-badge">sem API paga, 100% local</span></h2>
     <span class="ro-badge">[!] READ-ONLY · LIVE_LOCKED · SEM ORDEM · SEM SINAL</span>
+    <div class="skill-row">
+      <span class="skill-badge skill-badge-calc">SCORING ENGINE</span>
+      <span class="skill-badge skill-badge-calc">LOCAL BRAIN</span>
+      <span class="skill-badge skill-badge-calc">REFLECTION ENGINE</span>
+    </div>
     <div class="status-grid">
       <div class="status-row"><span class="label">Leitura (SetupScore)</span><span class="value v-pending" id="li-final-label">…</span></div>
       <div class="status-row"><span class="label">Confiança descritiva</span><span class="value v-pending" id="li-confidence">…</span></div>
