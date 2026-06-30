@@ -83,20 +83,76 @@
 
   <div class="hero-row" id="hero-row">
 
+  <!-- LEFT: Siriform Brain + Executive Status — fused Intelligence Core -->
+  <section class="card intelligence-core-panel">
+    <div class="ic-brain" id="siriform-section">
+      <div class="siriform-stage">
+        <div class="siriform-orbit siriform-orbit-1" aria-hidden="true"></div>
+        <div class="siriform-orbit siriform-orbit-2" aria-hidden="true"></div>
+        <div class="siriform-avatar" id="siriform-avatar" data-state="idle" role="img" aria-label="Siriform Avatar">
+          <div class="siriform-core"></div>
+        </div>
+        <svg class="siriform-wireframe" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+          <g fill="none" stroke="currentColor" stroke-width="0.6">
+            <ellipse cx="50" cy="50" rx="46" ry="46"/>
+            <ellipse cx="50" cy="50" rx="46" ry="17"/>
+            <ellipse cx="50" cy="50" rx="46" ry="17" transform="rotate(60 50 50)"/>
+            <ellipse cx="50" cy="50" rx="46" ry="17" transform="rotate(120 50 50)"/>
+            <ellipse cx="50" cy="50" rx="17" ry="46"/>
+          </g>
+        </svg>
+      </div>
+      <div class="siriform-status-line">
+        <span class="siriform-state-tag" id="siriform-state-tag">IDLE</span>
+        <span class="ss-dot" aria-hidden="true">•</span>
+        <span class="macro-state-chip" id="macro-state-chip">PRONTO</span>
+      </div>
+      <p class="siriform-caption" id="siriform-caption" aria-live="polite">Cyborg operando em READ_ONLY / FAIL_CLOSED.</p>
+    </div>
+    <div class="ic-divider" aria-hidden="true"></div>
+    <div class="ic-exec" id="cyborg-executive-panel">
+      <div class="ex-hero">
+        <div class="status-row ex-hero-row ex-state-row" id="ex-state-row" data-macro-state="IDLE">
+          <span class="label">🧭 Modo</span><span class="value v-pending" id="ex-state">…</span>
+        </div>
+        <div class="status-row ex-hero-row"><span class="label">🔒 Exec</span><span class="value v-fail" id="ex-live">LIVE_LOCKED</span></div>
+        <div class="status-row ex-hero-row"><span class="label">🛡️ Seg</span><span class="value v-ok" id="ex-security">READ_ONLY</span></div>
+        <div class="status-row ex-hero-row"><span class="label">⚖️ Risco</span><span class="value v-pending" id="ex-risk">…</span></div>
+        <div class="status-row ex-hero-row"><span class="label">🗄️ Cofre</span><span class="value v-pending" id="ex-vault">…</span></div>
+        <div class="status-row ex-hero-row"><span class="label">💧 Hydration</span><span class="value v-pending" id="ex-hydration">…</span></div>
+        <div class="status-row ex-hero-row"><span class="label">📍 Local</span><span class="value v-pending" id="ex-local">…</span></div>
+      </div>
+      <details class="ex-details">
+        <summary>Detalhes técnicos</summary>
+        <div class="status-grid ex-details-grid">
+          <div class="status-row"><span class="label">Fonte real ativa</span><span class="value v-pending" id="ex-source">…</span></div>
+          <div class="status-row"><span class="label">Atualizado em</span><span class="value v-pending" id="ex-freshness">…</span></div>
+          <div class="status-row"><span class="label">Paper Trading</span><span class="value v-pending" id="ex-paper">…</span></div>
+          <div class="status-row"><span class="label">Último relatório</span><span class="value v-pending" id="ex-report">…</span></div>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- RIGHT: BTC/USDT Price — dominant center stage -->
   <section class="card btc-live-panel" id="btc-live-panel">
-    <h2><span class="coin-glyph" aria-hidden="true">🟠</span> BTC/USDT — Preço Atual <span class="step">read-only</span></h2>
-
-    <div class="status-row bl-price-row" id="bl-price-row" data-live-mode="DADOS_INSUFICIENTES">
-      <span class="label">Preço atual</span>
-      <span class="bl-price-wrap"><span class="value v-info" id="bl-current-price">…</span><span class="price-delta-badge v-pending" id="bl-price-delta-badge" title="Diferença vs. snapshot da última análise — não é variação 24h">…</span></span>
+    <div class="btc-pair-label">
+      <span class="coin-glyph" aria-hidden="true">🟠</span>
+      <span class="btc-pair-text">BTC / USDT</span>
+      <span class="btc-pair-tag">SPOT READ-ONLY</span>
     </div>
-    <div class="status-grid bl-meta-grid">
-      <div class="status-row"><span class="label">Fonte</span><span class="value v-pending" id="bl-current-source">…</span></div>
-      <div class="status-row"><span class="label">Atualizado</span><span class="value v-pending" id="bl-current-freshness">…</span></div>
-      <div class="status-row"><span class="label">Modo</span><span class="value v-pending" id="bl-current-mode">…</span></div>
-      <div class="status-row"><span class="label">Latência</span><span class="value v-pending" id="bl-current-latency" title="Tempo de resposta real da última sonda de rede desta sessão">…</span></div>
+    <div class="bl-price-row btc-price-hero" id="bl-price-row" data-live-mode="DADOS_INSUFICIENTES">
+      <span class="bl-price-wrap">
+        <span class="value v-info" id="bl-current-price">…</span>
+        <span class="price-delta-badge v-pending" id="bl-price-delta-badge" title="Diferença vs. snapshot da última análise — não é variação 24h">…</span>
+      </span>
     </div>
-
+    <div class="btc-meta-chips">
+      <div class="btc-meta-item"><span class="btc-meta-key">FONTE</span><span class="value v-pending" id="bl-current-source">…</span></div>
+      <div class="btc-meta-item"><span class="btc-meta-key">FRESHNESS</span><span class="value v-pending" id="bl-current-freshness">…</span></div>
+      <div class="btc-meta-item"><span class="btc-meta-key">MODO</span><span class="value v-pending" id="bl-current-mode">…</span></div>
+      <div class="btc-meta-item"><span class="btc-meta-key">LATÊNCIA</span><span class="value v-pending" id="bl-current-latency" title="Tempo de resposta real da última sonda de rede desta sessão">…</span></div>
+    </div>
     <details id="bl-snapshot-block">
       <summary class="snapshot-summary">Snapshot da análise</summary>
       <div class="status-grid">
@@ -106,62 +162,9 @@
         <div class="status-row"><span class="label">Diferença vs. atual</span><span class="value v-pending" id="bl-price-diff">…</span></div>
       </div>
     </details>
-
     <div class="executive-actions" role="group" aria-label="Ações do BTC Live Panel">
       <button type="button" class="rt-btn" id="bl-btn-refresh-now"><span class="icon">⟳</span> Atualizar preço agora</button>
     </div>
-  </section>
-
-  <section class="card siriform-card" id="siriform-section">
-    <div class="siriform-stage">
-      <div class="siriform-orbit siriform-orbit-1" aria-hidden="true"></div>
-      <div class="siriform-orbit siriform-orbit-2" aria-hidden="true"></div>
-      <div class="siriform-avatar" id="siriform-avatar" data-state="idle" role="img" aria-label="Siriform Avatar">
-        <div class="siriform-core"></div>
-      </div>
-      <svg class="siriform-wireframe" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-        <g fill="none" stroke="currentColor" stroke-width="0.6">
-          <ellipse cx="50" cy="50" rx="46" ry="46"/>
-          <ellipse cx="50" cy="50" rx="46" ry="17"/>
-          <ellipse cx="50" cy="50" rx="46" ry="17" transform="rotate(60 50 50)"/>
-          <ellipse cx="50" cy="50" rx="46" ry="17" transform="rotate(120 50 50)"/>
-          <ellipse cx="50" cy="50" rx="17" ry="46"/>
-        </g>
-      </svg>
-    </div>
-    <h2>Siriform Intelligence Core</h2>
-    <div class="siriform-status-line">
-      <span class="siriform-state-tag" id="siriform-state-tag">IDLE</span>
-      <span class="ss-dot" aria-hidden="true">•</span>
-      <span class="macro-state-chip" id="macro-state-chip">PRONTO</span>
-      <span class="ss-dot" aria-hidden="true">•</span>
-      <span class="siriform-safe-tag">READ_ONLY</span>
-    </div>
-    <p class="siriform-caption" id="siriform-caption" aria-live="polite">Cyborg operando em READ_ONLY / FAIL_CLOSED.</p>
-  </section>
-
-  <section class="card cyborg-executive-panel" id="cyborg-executive-panel">
-    <h2>Estado do Sistema <span class="step">resumo executivo</span></h2>
-    <div class="ex-hero">
-      <div class="status-row ex-hero-row ex-state-row" id="ex-state-row" data-macro-state="IDLE">
-        <span class="label"><span class="ex-icon" aria-hidden="true">🧭</span> Modo</span><span class="value v-pending" id="ex-state">…</span>
-      </div>
-      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">🔒</span> Execução</span><span class="value v-fail" id="ex-live">LIVE_LOCKED</span></div>
-      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">🛡️</span> Segurança</span><span class="value v-ok" id="ex-security">READ_ONLY / FAIL_CLOSED</span></div>
-      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">⚖️</span> Risco</span><span class="value v-pending" id="ex-risk">…</span></div>
-      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">🗄️</span> Cofre</span><span class="value v-pending" id="ex-vault">…</span></div>
-      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">💧</span> Hydration</span><span class="value v-pending" id="ex-hydration">…</span></div>
-      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">📍</span> Local</span><span class="value v-pending" id="ex-local">…</span></div>
-    </div>
-    <details class="ex-details">
-      <summary>Detalhes técnicos</summary>
-      <div class="status-grid ex-details-grid">
-        <div class="status-row"><span class="label">Fonte real ativa</span><span class="value v-pending" id="ex-source">…</span></div>
-        <div class="status-row"><span class="label">Atualizado em</span><span class="value v-pending" id="ex-freshness">…</span></div>
-        <div class="status-row"><span class="label">Paper Trading</span><span class="value v-pending" id="ex-paper">…</span></div>
-        <div class="status-row"><span class="label">Último relatório</span><span class="value v-pending" id="ex-report">…</span></div>
-      </div>
-    </details>
   </section>
 
   </div><!-- /.hero-row -->

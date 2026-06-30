@@ -61,9 +61,10 @@ html, body {
 
 body {
     background-image:
-        radial-gradient(ellipse 90% 55% at 50% 0%,  rgba(0, 242, 255, 0.09),  transparent 68%),
-        radial-gradient(ellipse 55% 35% at 50% 44%, rgba(178, 107, 255, 0.06), transparent 58%),
-        radial-gradient(ellipse 65% 40% at 50% 100%, rgba(0, 242, 255, 0.05), transparent 60%);
+        radial-gradient(ellipse 100% 60% at 50% -5%,  rgba(0, 242, 255, 0.11),  transparent 65%),
+        radial-gradient(ellipse 60% 40% at 30% 50%, rgba(178, 107, 255, 0.07), transparent 55%),
+        radial-gradient(ellipse 60% 40% at 70% 50%, rgba(0, 242, 255, 0.05), transparent 55%),
+        radial-gradient(ellipse 70% 45% at 50% 105%, rgba(0, 242, 255, 0.06), transparent 62%);
     min-height: 100vh;
     min-height: 100dvh;
     padding: 0;
@@ -1522,30 +1523,36 @@ footer.legal {
 }
 
 .quick-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    width: 100%;
 }
 .qa-btn {
     font-family: var(--font-mono);
-    font-size: 0.76rem;
-    letter-spacing: 0.5px;
+    font-size: clamp(0.7rem, 1.6vw, 0.8rem);
+    letter-spacing: 0.3px;
     color: var(--text-primary);
-    background: rgba(0, 242, 255, 0.05);
-    border: 1px solid var(--line-cyan);
-    border-radius: 20px;
-    padding: 8px 14px;
-    min-height: 44px;
+    background: rgba(0, 242, 255, 0.04);
+    border: 1px solid rgba(0, 242, 255, 0.12);
+    border-radius: 10px;
+    padding: 9px 10px;
+    min-height: 40px;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.15s ease;
+    white-space: nowrap;
 }
-.qa-btn:active { transform: scale(0.97); background: rgba(0, 242, 255, 0.14); }
-.qa-btn .icon { opacity: 0.8; }
+.qa-btn:hover { background: rgba(0, 242, 255, 0.08); border-color: rgba(0, 242, 255, 0.28); }
+.qa-btn:active {
+    transform: scale(0.97);
+    background: rgba(0, 242, 255, 0.14);
+    border-color: var(--sys-cyan);
+    box-shadow: 0 0 8px rgba(0, 242, 255, 0.2);
+}
+.qa-btn .icon { opacity: 0.75; font-size: 0.95em; }
 
 /* ------------------------------------------------------------
    NOTA DE DIAGNOSTICO — replay/analise sao teste tecnico, nunca
@@ -1666,49 +1673,198 @@ details#bl-snapshot-block > summary.snapshot-summary {
     margin-bottom: 6px;
 }
 
-/* ------------------------------------------------------------
-   HERO ROW — "Institutional Cockpit" Center Stage: BTC/USDT Market
-   Data (centro, dominante) / Siriform orb (companheiro) / Resumo
-   Executivo (sidebar de risco/status). Filho direto do
-   .cockpit-viewport (mesmo motivo do .live-ticker: nao depender do
-   fluxo de colunas) para poder formar uma faixa de hero de 3 colunas
-   de verdade.
-
-   Abaixo de 1000px fica em coluna unica na ordem natural do DOM: Market
-   Data primeiro (e' o dado que um cockpit institucional mostra de um so'
-   olhar), orbe Siriform depois (informativo, nunca decide nada), Resumo
-   Executivo por ultimo. A partir de 1000px (cobre o iPad em paisagem)
-   vira grade de 3 colunas com placement explicito via grid-column — a
-   coluna central (Market Data) e' a mais larga: e' ela que deve pesar
-   mais visualmente, nao o orbe. */
+/* ============================================================
+   HERO ROW — Professional Futures Terminal Fusion
+   2-panel layout: Intelligence Core (left) | BTC Dominance (right)
+   Works on all iPad orientations from 520px+.
+   ============================================================ */
 .hero-row {
     width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    margin-bottom: 16px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr);
+    align-items: stretch;
+    gap: 14px;
+    margin-bottom: 14px;
 }
 .hero-row > section.card { margin-bottom: 0; }
 
-@media (min-width: 1000px) {
+@media (max-width: 519px) {
     .hero-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr);
-        align-items: stretch;
-        gap: 22px;
+        grid-template-columns: 1fr;
     }
-    /* CENTER STAGE real (grid-column explicito, independente da ordem do
-       DOM acima) — Market Data na coluna central 1.6fr, orbe e Resumo
-       Executivo flanqueando em 1fr cada. */
-    .hero-row > .btc-live-panel { grid-column: 2; }
-    .hero-row > .siriform-card {
-        grid-column: 1;
-        justify-content: center;
-        padding-top: 36px;
-        padding-bottom: 28px;
-    }
-    .hero-row > .cyborg-executive-panel { grid-column: 3; }
 }
+
+/* ============================================================
+   INTELLIGENCE CORE — Siriform Brain + Executive Status fused
+   ============================================================ */
+.intelligence-core-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 14px;
+    border-top-color: rgba(178, 107, 255, 0.55);
+    border-color: rgba(178, 107, 255, 0.2);
+    box-shadow:
+        inset 0 1px 0 rgba(178, 107, 255, 0.18),
+        inset 0 0 28px rgba(178, 107, 255, 0.06),
+        0 0 42px rgba(178, 107, 255, 0.1),
+        0 10px 32px rgba(0, 0, 0, 0.42);
+}
+.ic-brain {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding-bottom: 10px;
+}
+/* Compact Siriform orb inside Intelligence Core */
+.intelligence-core-panel .siriform-stage {
+    width: 90px;
+    height: 90px;
+    margin-bottom: 2px;
+}
+.intelligence-core-panel .siriform-avatar {
+    width: 74px;
+    height: 74px;
+}
+.intelligence-core-panel .siriform-stage::before { inset: -18px; }
+.intelligence-core-panel .siriform-orbit { inset: -8px; }
+.intelligence-core-panel .siriform-orbit-2 { inset: 5px; }
+.intelligence-core-panel .siriform-caption {
+    font-size: 0.7rem;
+    min-height: 0;
+    max-width: 100%;
+    text-align: center;
+    margin: 0;
+    line-height: 1.3;
+}
+.ic-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(178, 107, 255, 0.32), transparent);
+    margin: 0 0 10px;
+}
+.ic-exec { flex: 1; min-height: 0; }
+.ic-exec .ex-hero { display: flex; flex-direction: column; }
+.intelligence-core-panel .status-row {
+    font-size: clamp(0.67rem, 1.4vw, 0.79rem);
+    padding-bottom: 4px;
+    margin-bottom: 1px;
+    border-bottom-color: rgba(178, 107, 255, 0.1);
+}
+.intelligence-core-panel .ex-details {
+    margin: 8px 0 0;
+    border-color: rgba(178, 107, 255, 0.15);
+}
+.intelligence-core-panel .ex-details summary { font-size: 0.72rem; padding: 7px 0; }
+
+/* ============================================================
+   BTC LIVE PANEL — dominant price, futures-terminal style
+   ============================================================ */
+.btc-live-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-top-color: rgba(0, 242, 255, 0.62);
+    border-color: rgba(0, 242, 255, 0.2);
+    box-shadow:
+        inset 0 1px 0 rgba(0, 242, 255, 0.24),
+        inset 0 0 36px rgba(0, 242, 255, 0.07),
+        0 0 56px rgba(0, 242, 255, 0.08),
+        0 0 110px rgba(178, 107, 255, 0.05),
+        0 12px 40px rgba(0, 0, 0, 0.46);
+}
+.btc-pair-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-display);
+    font-size: clamp(0.68rem, 1.5vw, 0.8rem);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: -4px;
+}
+.btc-pair-text {
+    color: var(--sys-cyan);
+    font-weight: 700;
+    text-shadow: 0 0 8px rgba(0, 242, 255, 0.38);
+}
+.btc-pair-tag {
+    font-size: 0.6em;
+    opacity: 0.5;
+    margin-left: auto;
+    letter-spacing: 1px;
+}
+.btc-price-hero {
+    display: block;
+    border: none;
+    background: none;
+    padding: 0;
+    margin: 0;
+}
+.btc-price-hero .bl-price-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: unset;
+}
+#bl-current-price {
+    font-family: var(--font-display);
+    font-size: clamp(2.4rem, 7vw, 4rem);
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    color: var(--sys-cyan);
+    text-shadow: 0 0 30px rgba(0, 242, 255, 0.6), 0 0 80px rgba(0, 242, 255, 0.2);
+    display: block;
+    line-height: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+.price-delta-badge {
+    font-size: clamp(0.72rem, 1.8vw, 0.86rem);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 2px 10px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid currentColor;
+    display: inline-block;
+    width: fit-content;
+    white-space: nowrap;
+}
+.btc-meta-chips {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+.btc-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 9px;
+    border-radius: 8px;
+    background: rgba(0, 242, 255, 0.03);
+    border: 1px solid rgba(0, 242, 255, 0.09);
+}
+.btc-meta-key {
+    font-size: 0.57rem;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    font-family: var(--font-display);
+    font-weight: 700;
+}
+.btc-meta-item .value {
+    font-weight: bold;
+    font-size: clamp(0.68rem, 1.5vw, 0.8rem);
+    text-align: left;
+}
+/* Compact snapshot details inside BTC panel */
+.btc-live-panel details#bl-snapshot-block { margin: 0; }
+.btc-live-panel .executive-actions { margin-top: 2px; }
 
 /* ------------------------------------------------------------
    ACTION STRIP — faixa horizontal entre o cockpit (.hero-row) e o
@@ -1749,44 +1905,6 @@ details#bl-snapshot-block > summary.snapshot-summary {
     .action-strip .as-quick { grid-column: 2; }
 }
 
-/* ------------------------------------------------------------
-   INSTITUTIONAL COCKPIT — acentos de zona (puramente decorativos,
-   nunca redefinem o estado real de um dado). Cada zona ganha so' uma
-   borda/glow proprios para ficar reconhecivel num pane unico, sem
-   tocar nas cores semanticas (.v-ok/.v-fail/.v-limited/.v-info/
-   sr-resistance/sr-support continuam verde/vermelho/ciano como sempre).
-   As 4 zonas do Hero View ("Demote, don't delete"): Market Data, Voice
-   Trigger (centralizado, ver .as-mic/SIRIFORM VOICE), S/R Signals e
-   Risk Metrics — Target Tracker, Rota Recomendada, Matriz de Dados e
-   Cyborg Readiness moveram para o Engine Room (.advanced-section) por
-   nao serem uma das 4 zonas nomeadas; nenhum painel foi apagado, so'
-   realocado (exceto os 3 sem funcao critica viva: Commander/Soldier,
-   Meta Llama/WebLLM e Telegram AUX, removidos de verdade — ver
-   CHANGELOG/commit):
-
-   - Center Stage (Market Data, .btc-live-panel): halo ciano+purpura,
-     a moldura mais "premium" do pane — e' o dado que o olho deve
-     achar primeiro.
-   - S/R Signals (.supports-resistances-panel): aresta superior em
-     laranja — diferencia "leitura de nivel descritivo" do resto do
-     cockpit sem novo componente.
-   - Sidebar (Resumo Executivo — Risk Metrics): aresta superior em
-     purpura — combina com o halo do Center Stage, fecha a moldura do
-     cockpit nos dois lados do orbe.
-   ------------------------------------------------------------ */
-.hero-row > .btc-live-panel {
-    border-color: rgba(178, 107, 255, 0.28);
-    border-top-color: rgba(0, 242, 255, 0.55);
-    box-shadow:
-        inset 0 1px 0 rgba(0, 242, 255, 0.18),
-        inset 0 0 32px rgba(0, 242, 255, 0.07),
-        0 0 48px rgba(178, 107, 255, 0.14),
-        0 0 80px rgba(0, 242, 255, 0.06),
-        0 12px 36px rgba(0, 0, 0, 0.45);
-}
-.hero-row > .cyborg-executive-panel {
-    border-top-color: rgba(178, 107, 255, 0.4);
-}
 
 /* .advanced-section (ENGINE tab) e .sistema-section (SISTEMA tab) usam
    colunas balanceadas em iPad paisagem. Visibilidade controlada pelo
