@@ -161,27 +161,58 @@ export default function App() {
   const [liquidations, setLiquidations] = useState<LiquidationEvent[]>([]);
   const [liquidationState, setLiquidationState] = useState<"LIVE" | "ERROR" | "pending">("pending");
 
-  // Widget visibility / floating state.
-  const [widgets, setWidgets] = useState<{
-    [key: string]: { visible: boolean; floating: boolean };
-  }>({
-    chart: { visible: false, floating: false },
-    orderflow: { visible: false, floating: false },
-    heatmap: { visible: false, floating: false },
+  // Widget visibility / floating state. Defaults show the full real-data
+  // cockpit (chart/orderflow/heatmap/orderbook/scanner/exposure/events) —
+  // only Neural Core defaults off (opt-in, multi-GB local LLM download).
+  // Persisted to localStorage so a reload never silently drops the dashboard
+  // back to a near-empty screen.
+  const WIDGET_PREFS_KEY = "ramber_widget_prefs_v1";
+  const DEFAULT_WIDGETS: { [key: string]: { visible: boolean; floating: boolean } } = {
+    chart: { visible: true, floating: false },
+    orderflow: { visible: true, floating: false },
+    heatmap: { visible: true, floating: false },
     market_direction: { visible: true, floating: false },
     se_core: { visible: true, floating: false },
-    confluence: { visible: false, floating: false },
-    orderbook: { visible: false, floating: false },
-    scanner: { visible: false, floating: false },
-    exposure: { visible: false, floating: false },
-    events: { visible: false, floating: false },
+    orderbook: { visible: true, floating: false },
+    scanner: { visible: true, floating: false },
+    exposure: { visible: true, floating: false },
+    events: { visible: true, floating: false },
     neural_core: { visible: false, floating: false },
     processing: { visible: false, floating: false },
     stream: { visible: false, floating: false },
     tactical: { visible: false, floating: false },
     log: { visible: false, floating: false },
     playback: { visible: false, floating: false },
+  };
+  const [widgets, setWidgets] = useState<{
+    [key: string]: { visible: boolean; floating: boolean };
+  }>(() => {
+    try {
+      const saved = localStorage.getItem(WIDGET_PREFS_KEY);
+      if (!saved) return DEFAULT_WIDGETS;
+      const parsed = JSON.parse(saved);
+      // Merge per known key only — saved prefs from an older build must not
+      // resurrect widgets that no longer exist (ConfigPanel renders straight
+      // from these keys, so a stale entry would show a dead toggle).
+      const merged = { ...DEFAULT_WIDGETS };
+      for (const key of Object.keys(merged)) {
+        if (parsed && typeof parsed[key]?.visible === "boolean") {
+          merged[key] = { ...merged[key], ...parsed[key] };
+        }
+      }
+      return merged;
+    } catch {
+      return DEFAULT_WIDGETS;
+    }
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(WIDGET_PREFS_KEY, JSON.stringify(widgets));
+    } catch {
+      // Best-effort only — private browsing / quota errors never block the UI.
+    }
+  }, [widgets]);
 
   // Stable identity across renders (functional setState form needs no deps) —
   // required so the memoized context value below doesn't churn on every tick.
@@ -547,8 +578,8 @@ export default function App() {
   );
 
   // Stable reference — prevents every context consumer (TopBar, all Widgets,
-  // AssistantOrb, MarketDirectionWidget, ConfluenceWidget...) from re-rendering
-  // on renders that don't actually change any of these values.
+  // AssistantOrb, MarketDirectionWidget...) from re-rendering on renders
+  // that don't actually change any of these values.
   const contextValue = useMemo(
     () => ({
       widgets,
@@ -611,12 +642,19 @@ export default function App() {
           <div className="flex flex-col flex-1 p-2 gap-2 min-h-0 overflow-hidden relative">
             {activeTab === "DASHBOARD" ? (
               <>
-                <div className="flex-1 flex flex-col md:flex-row gap-2 min-h-0 overflow-y-auto md:overflow-x-auto md:overflow-y-hidden scrollbar-hide p-1">
+                {/* 3-column cockpit only at widths where the columns' minimums
+                    genuinely fit (sidebar 70 + paddings/gaps ≈ 110 + 300/360/330
+                    ≈ 1100). md: (768px) fired it on iPad PORTRAIT too, cutting
+                    the right column to a hidden sliver behind an inner
+                    horizontal scroll. 1120 splits the real iPad matrix exactly:
+                    every portrait (744/834/1024) stacks, every landscape
+                    (1133/1194/1366) gets 3 columns with nothing hidden. */}
+                <div className="flex-1 flex flex-col min-[1120px]:flex-row gap-2 min-h-0 overflow-y-auto min-[1120px]:overflow-x-auto min-[1120px]:overflow-y-hidden scrollbar-hide p-1">
                   {/* Left Column */}
                   {(widgets.chart.visible ||
                     widgets.orderflow.visible ||
                     widgets.heatmap.visible) && (
-                    <div className="flex-[0.85] flex flex-col gap-2 w-full md:w-auto md:min-w-[320px] min-h-[600px] md:min-h-0 md:h-full md:overflow-y-auto scrollbar-hide shrink-0 md:shrink pointer-events-none [&>*]:pointer-events-auto">
+                    <div className="flex-[0.85] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[300px] min-h-[600px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
                       <ChartWidget data={priceData} chartData={chartData} />
                       <OrderFlowWidget />
                       <HeatmapWidget book={orderBook} data={priceData} />
@@ -625,13 +663,11 @@ export default function App() {
 
                   {/* Middle Column */}
                   {(widgets.market_direction.visible ||
-                    widgets.se_core.visible ||
-                    widgets.confluence.visible) && (
-                    <div className="flex-[1.15] flex flex-col gap-2 w-full md:w-auto md:min-w-[380px] min-h-[600px] md:min-h-0 md:h-full md:overflow-y-auto scrollbar-hide relative z-0 shrink-0 md:shrink pointer-events-none [&>*]:pointer-events-auto">
+                    widgets.se_core.visible) && (
+                    <div className="flex-[1.15] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[360px] min-h-[600px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide relative z-0 shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.05)_0%,transparent_60%)] pointer-events-none mix-blend-screen"></div>
                       <MarketDirectionWidget />
                       <AssistantOrb inCenter={true} />
-                      <ConfluenceWidget />
                     </div>
                   )}
 
@@ -640,8 +676,11 @@ export default function App() {
                     widgets.scanner.visible ||
                     widgets.exposure.visible ||
                     widgets.neural_core.visible) && (
-                    <div className="flex-[0.95] flex flex-col gap-2 w-full md:w-auto md:min-w-[340px] min-h-[600px] md:min-h-0 md:h-full md:overflow-y-auto scrollbar-hide shrink-0 md:shrink pointer-events-none [&>*]:pointer-events-auto">
-                      <div className="flex flex-col sm:flex-row md:flex-col xl:flex-row gap-2 min-h-0 flex-[0.85]">
+                    <div className="flex-[0.95] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[330px] min-h-[600px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
+                      {/* Order book + scanner pair up side-by-side only while the
+                          column is full-width (stacked mode); inside a ~330px
+                          3-column column they'd be ~160px each — unreadable. */}
+                      <div className="flex flex-col sm:flex-row min-[1120px]:flex-col gap-2 min-h-0 flex-[0.85]">
                         <OrderBookWidget data={priceData} book={orderBook} />
                         <ScannerWidget data={scannerData} />
                       </div>
@@ -663,7 +702,7 @@ export default function App() {
                     className="opacity-50 animate-[spin_10s_linear_infinite]"
                   />
                   <span className="tracking-[0.3em] font-bold text-lg text-[#00f0ff] uppercase">
-                    {activeTab} MODULE
+                    MÓDULO {activeTab}
                   </span>
                   <span className="text-xs uppercase tracking-widest text-[#00ffaa]">
                     AGUARDANDO FONTE DE DADOS REAL...
@@ -683,12 +722,33 @@ export default function App() {
 }
 
 // --- CONFIGURATION PANEL ---
+// Official module names — exactly the titles each widget renders on the
+// dashboard, so SETTINGS and the cockpit never disagree about what a
+// module is called (no raw internal keys like "se_core" shown to the user).
+const WIDGET_LABELS: { [key: string]: string } = {
+  chart: "GRÁFICO BTC/USDT · BINANCE SPOT",
+  orderflow: "FLUXO DE ORDENS · LIVRO REAL",
+  heatmap: "MAPA DE LIQUIDEZ · PROFUNDIDADE REAL",
+  market_direction: "VETOR DE MERCADO",
+  se_core: "NÚCLEO DE INTELIGÊNCIA S.E.",
+  orderbook: "LIVRO DE OFERTAS",
+  scanner: "QUANT SCANNER · 24H REAL",
+  exposure: "EXPOSIÇÃO · READ-ONLY",
+  events: "TELEMETRIA DE EVENTOS",
+  neural_core: "NÚCLEO NEURAL · META LLAMA 3 (LOCAL)",
+  processing: "MÓDULOS DE PROCESSAMENTO",
+  stream: "STREAM DE INTELIGÊNCIA",
+  tactical: "LIQUIDAÇÕES INSTITUCIONAIS · REAL",
+  log: "LOG DE EXECUÇÃO",
+  playback: "PLAYBACK ENGINE",
+};
+
 function ConfigPanel() {
   const { widgets, toggleWidget } = useContext(WidgetContext);
   return (
     <div className="flex-1 overflow-auto p-4 flex flex-col gap-4 max-w-4xl mx-auto w-full">
       <div className="text-2xl font-black text-[#00f0ff] drop-shadow-[0_0_10px_#00f0ff] tracking-[0.2em] mb-4">
-        SYSTEM CONFIGURATION
+        CONFIGURAÇÃO DO SISTEMA
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {Object.entries(widgets).map(([id, state]: [string, any]) => (
@@ -697,24 +757,24 @@ function ConfigPanel() {
             className="cyber-panel p-4 flex flex-col gap-3 bg-[#010205]"
           >
             <span className="font-bold text-white tracking-widest uppercase">
-              {id} MODULE
+              {WIDGET_LABELS[id] ?? id}
             </span>
             <div className="flex justify-between items-center bg-[#010308] p-2 rounded border border-[#00f0ff20]">
-              <span className="text-xs text-[#8ab4f8]">VISIBILITY</span>
+              <span className="text-xs text-[#8ab4f8]">VISIBILIDADE</span>
               <button
                 onClick={() => toggleWidget(id, "visible")}
                 className={`text-xs px-3 py-1 font-bold rounded ${state.visible ? "bg-[#00ffaa20] text-[#00ffaa] border border-[#00ffaa50]" : "bg-[#ff005520] text-[#ff0055] border border-[#ff005550]"}`}
               >
-                {state.visible ? "ENABLED" : "DISABLED"}
+                {state.visible ? "VISÍVEL" : "OCULTO"}
               </button>
             </div>
             <div className="flex justify-between items-center bg-[#010308] p-2 rounded border border-[#00f0ff20]">
-              <span className="text-xs text-[#8ab4f8]">FLOAT MODE (RESIZABLE)</span>
+              <span className="text-xs text-[#8ab4f8]">MODO FLUTUANTE (REDIMENSIONÁVEL)</span>
               <button
                 onClick={() => toggleWidget(id, "floating")}
                 className={`text-xs px-3 py-1 font-bold rounded ${state.floating ? "bg-[#00f0ff20] text-[#00f0ff] border border-[#00f0ff50]" : "bg-transparent text-[#8ab4f8]/50 border border-[#8ab4f8]/30 hover:text-white"}`}
               >
-                {state.floating ? "ACTIVE" : "INACTIVE"}
+                {state.floating ? "ATIVO" : "INATIVO"}
               </button>
             </div>
           </div>
@@ -785,7 +845,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
 
   if (inCenter) {
     return (
-      <div className="flex-1 shrink-0 flex flex-col items-center justify-between relative min-h-[500px] md:min-h-0 overflow-y-auto overscroll-contain scrollbar-hide z-0 group py-4 bg-[#010308]/60 backdrop-blur-3xl border border-[#00f0ff]/20 rounded-2xl shadow-[inset_0_0_80px_rgba(0,240,255,0.05),0_8px_32px_rgba(0,0,0,0.6)] w-full max-w-4xl mx-auto">
+      <div className="flex-1 shrink-0 flex flex-col items-center justify-between relative min-h-[500px] min-[1120px]:min-h-0 overflow-y-auto overscroll-contain scrollbar-hide z-0 group py-4 bg-[#010308]/60 backdrop-blur-3xl border border-[#00f0ff]/20 rounded-2xl shadow-[inset_0_0_80px_rgba(0,240,255,0.05),0_8px_32px_rgba(0,0,0,0.6)] w-full max-w-4xl mx-auto">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(0,240,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(0,240,255,0.02)_1px,transparent_1px)] bg-[size:30px_30px]"></div>
 
         <div className="absolute top-3 left-0 right-0 flex justify-center opacity-50 text-[0.55rem] tracking-[0.4em] font-bold text-[#00f0ff] z-10">
@@ -2123,59 +2183,6 @@ function MarketDirectionWidget() {
           {num(sellPercent) ? Math.round(sellPercent) : DASH}
           <span className="text-xl">%</span> <ArrowDownRight size={24} strokeWidth={3} />
         </div>
-      </div>
-    </div>
-  );
-}
-
-// --- MIDDLE COLUMN: CONFLUENCE (no real multi-agent backend → honest AGUARDANDO) ---
-function ConfluenceWidget() {
-  const { widgets } = useContext(WidgetContext) || {};
-  if (widgets && !widgets.confluence.visible) return null;
-
-  const agents = [
-    { name: "TENDÊNCIA", role: "ESTRUTURA" },
-    { name: "LIQUIDEZ", role: "LIVRO" },
-    { name: "FLUXO", role: "DELTA" },
-    { name: "VOLUME", role: "24H" },
-    { name: "SENTIMENTO", role: "FUNDING" },
-  ];
-  return (
-    <div className="shrink-0 p-2 z-10 relative flex flex-col items-center w-full max-w-[500px] mx-auto bg-gradient-to-t from-[#00f0ff05] to-transparent border-t border-[#00f0ff20] rounded-t-[4px]">
-      <div className="flex items-center w-full justify-between mb-3 px-2">
-        <span className="text-[0.55rem] text-[#8ab4f8] tracking-[0.3em] uppercase font-bold">
-          CONSENSO MULTI-AGENTE
-        </span>
-        <span className="text-[0.45rem] text-[#8ab4f8]/60 tracking-widest uppercase border border-[#8ab4f8]/20 px-1 rounded">
-          backend não conectado
-        </span>
-      </div>
-
-      <div className="flex justify-between w-full px-1 mb-3">
-        {agents.map((a, i) => (
-          <div
-            key={i}
-            className="flex flex-col items-center border border-[#00f0ff10] bg-[#010308]/60 p-1.5 rounded flex-1 mx-[2px] min-w-0"
-          >
-            <span className="text-[0.4rem] text-[#8ab4f8]/60 tracking-[0.1em] mb-[2px] truncate w-full text-center">
-              {a.name}
-            </span>
-            <span className="text-[0.45rem] text-[#a0f0ff] tracking-wider mb-1 font-bold truncate w-full text-center">
-              {a.role}
-            </span>
-            <span className="text-[0.55rem] font-bold text-[#8ab4f8]/50 tracking-widest">
-              {AWAIT}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex items-center gap-3 w-full px-2 pb-1">
-        <span className="text-[0.5rem] text-[#8ab4f8]/80 tracking-[0.2em] font-bold">
-          SINCRONIA
-        </span>
-        <span className="text-base font-black text-[#8ab4f8]/50">{DASH}</span>
-        <div className="flex-1 h-1.5 bg-[#010308] rounded-full overflow-hidden border border-[#00f0ff20]"></div>
       </div>
     </div>
   );

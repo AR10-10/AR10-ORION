@@ -78,6 +78,16 @@ function getWorkerClient() {
 
 const isNum = (v: any): v is number => typeof v === 'number' && Number.isFinite(v);
 
+// Worker/script load failures reject with a DOM Event (no .message), which a
+// template string renders as the useless "[object Event]" — surfaced verbatim
+// in the UI's engine-status line. Name the event type instead.
+const describeError = (err: any): string => {
+  if (typeof Event !== 'undefined' && err instanceof Event) {
+    return `evento_${err.type || 'erro'}_no_carregamento_do_worker`;
+  }
+  return String(err?.message || err);
+};
+
 // One full real cycle: real Binance probe -> real WASM analysis frame ->
 // real research engine -> real trade-setup-matrix + target-tracker. This is
 // the same pipeline app.js's handleGenerateRealAnalysis() +
@@ -88,14 +98,14 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
   try {
     await wasmReady;
   } catch (err: any) {
-    return { ok: false, reason: `wasm_init_falhou: ${err?.message || err}` };
+    return { ok: false, reason: `wasm_init_falhou: ${describeError(err)}` };
   }
 
   let probeResult: any;
   try {
     probeResult = await probeBinance({ symbol, interval: '15m', limit: 100 });
   } catch (err: any) {
-    return { ok: false, reason: `probe_binance_lancou_excecao: ${err?.message || err}` };
+    return { ok: false, reason: `probe_binance_lancou_excecao: ${describeError(err)}` };
   }
   if (probeResult.state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) {
     return { ok: false, reason: `conector_binance_estado: ${probeResult.state}` };
@@ -152,7 +162,7 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
       rationale: typeof matrix.rationale === 'string' ? matrix.rationale : null,
     };
   } catch (err: any) {
-    return { ok: false, reason: `pipeline_de_pesquisa_falhou: ${err?.message || err}` };
+    return { ok: false, reason: `pipeline_de_pesquisa_falhou: ${describeError(err)}` };
   }
 }
 
@@ -227,7 +237,7 @@ export function startMexcOrderflowFeed(
         if (Array.isArray(signals) && signals.length) onSignals(signals);
         if (isNum(cvd)) onCvd(cvd);
       } catch (err: any) {
-        if (!stopped) onState('ERROR', `orderflow_worker_falhou: ${err?.message || err}`);
+        if (!stopped) onState('ERROR', `orderflow_worker_falhou: ${describeError(err)}`);
       }
     },
   });
