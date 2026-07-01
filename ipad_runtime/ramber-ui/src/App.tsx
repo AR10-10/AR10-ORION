@@ -43,6 +43,7 @@ import {
   Disc,
   X,
   ShieldCheck,
+  Power,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -120,6 +121,21 @@ export default function App() {
   const [wsLive, setWsLive] = useState(false);
   const [activeTab, setActiveTab] = useState("DASHBOARD");
 
+  // Bumping bootGeneration tears down and re-runs every real boot effect
+  // below (REST fetch + WS connect, engine cycle, order flow feed,
+  // liquidation feed) — a manual "force refresh everything" trigger, not
+  // a gate the initial load waits behind (all of those effects already
+  // run automatically on mount regardless of this value).
+  const [bootGeneration, setBootGeneration] = useState(0);
+  // True only after the FIRST attempt AND its retries all fail — never set
+  // by the recurring 60s interval calls, which keep their own existing
+  // fail-closed behavior (silently try again next tick).
+  const [bootRestFailed, setBootRestFailed] = useState(false);
+  const handleManualRestart = useCallback(() => {
+    setBootRestFailed(false);
+    setBootGeneration((g) => g + 1);
+  }, []);
+
   // Real engine cycle (WASM + research pipeline via engine-bridge.ts).
   // 'pending' until the first cycle resolves — the UI must never show a
   // signal/level before the real engine has actually produced one.
@@ -176,8 +192,10 @@ export default function App() {
     }));
   }, []);
 
-  // REST: real klines + real 24h scanner ticker (public, read-only).
-  const fetchSymbolData = async () => {
+  // REST: real klines + real 24h scanner ticker (public, read-only). Returns
+  // success/failure so the boot sequence below can retry a transient
+  // failure quickly instead of silently waiting for the next 60s tick.
+  const fetchSymbolData = async (): Promise<boolean> => {
     try {
       const res = await fetch(
         `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=50`,
@@ -213,13 +231,15 @@ export default function App() {
           }),
         );
       }
+      return true;
     } catch {
       // FAIL_CLOSED: leave last known real data; never substitute fabricated values.
+      return false;
     }
   };
 
   // REST: real Binance futures funding rate + open interest (public, read-only).
-  const fetchDerivatives = async () => {
+  const fetchDerivatives = async (): Promise<boolean> => {
     try {
       const [fundingRes, oiRes] = await Promise.all([
         fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT`),
@@ -236,21 +256,48 @@ export default function App() {
           ? Number(oi.openInterest)
           : null,
       });
+      return true;
     } catch {
       setDerivatives({ fundingRate: null, openInterest: null });
+      return false;
     }
   };
 
+  // Bounded retry for the ONE-SHOT boot calls above (2s/4s/8s backoff) — the
+  // recurring setInterval calls deliberately keep their existing
+  // fail-closed "wait for next tick" behavior; this is only for the
+  // first attempt, so a transient hiccup on page load doesn't leave the
+  // user staring at AGUARDANDO for up to 60s with no visible retry.
+  const retryBoot = async (
+    fn: () => Promise<boolean>,
+    isCancelled: () => boolean,
+    attempts = 3,
+  ): Promise<boolean> => {
+    for (let i = 0; i < attempts; i++) {
+      if (isCancelled()) return true; // unmounted/restarted mid-retry — not a failure
+      if (await fn()) return true;
+      if (i < attempts - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000 * Math.pow(2, i)));
+      }
+    }
+    return false;
+  };
+
   useEffect(() => {
-    fetchSymbolData();
-    fetchDerivatives();
+    let unmounted = false;
+    (async () => {
+      const [restOk, derivOk] = await Promise.all([
+        retryBoot(fetchSymbolData, () => unmounted),
+        retryBoot(fetchDerivatives, () => unmounted),
+      ]);
+      if (!unmounted) setBootRestFailed(!restOk && !derivOk);
+    })();
     const restInterval = setInterval(fetchSymbolData, 60000);
     const derivInterval = setInterval(fetchDerivatives, 60000);
 
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
     let reconnectDelayMs = 1000;
-    let unmounted = false;
 
     // depth10@100ms can fire up to 10x/s — coalesce into a trailing update
     // capped at ~5/s so the order-book-derived UI (heatmap, flow pressure,
@@ -355,26 +402,29 @@ export default function App() {
       if (orderBookFlushTimer) clearTimeout(orderBookFlushTimer);
       ws?.close();
     };
-  }, []);
+  }, [bootGeneration]);
 
   // Real engine cycle — WASM Quant Engine + research pipeline (engine-bridge.ts).
   // Runs on the same cadence as the REST refresh above; the WASM worker and
-  // candle window don't change meaningfully faster than that.
+  // candle window don't change meaningfully faster than that. The initial
+  // call gets the same bounded retry as the REST fetches above; the
+  // recurring 60s interval keeps calling the plain version.
   useEffect(() => {
     let cancelled = false;
-    const runCycle = async () => {
+    const runCycle = async (): Promise<boolean> => {
       const result = await runRealAnalysisCycle("BTC");
-      if (cancelled) return;
+      if (cancelled) return true;
       setRealCycle(result);
       setEngineStatus(result.ok ? "ok" : "error");
+      return result.ok;
     };
-    runCycle();
+    retryBoot(runCycle, () => cancelled);
     const engineInterval = setInterval(runCycle, 60000);
     return () => {
       cancelled = true;
       clearInterval(engineInterval);
     };
-  }, []);
+  }, [bootGeneration]);
 
   // Real MEXC trade poller -> real Order Flow Engine (engine-bridge.ts).
   // Signal list is capped to the most recent 20 — OFI/Absorption/Exhaustion
@@ -392,7 +442,7 @@ export default function App() {
       "BTC",
     );
     return stop;
-  }, []);
+  }, [bootGeneration]);
 
   // Real institutional liquidation feed (Binance USDT-M Futures, public,
   // no key — engine-bridge.ts's startRealLiquidationFeed). Exchange-wide,
@@ -406,7 +456,7 @@ export default function App() {
       (state) => setLiquidationState(state),
     );
     return stop;
-  }, []);
+  }, [bootGeneration]);
 
   // ───────────────────────────────────────────────────────────────────────────
   // Quantitative engine.
@@ -515,6 +565,8 @@ export default function App() {
       cvd,
       liquidations,
       liquidationState,
+      bootRestFailed,
+      handleManualRestart,
     }),
     [
       widgets,
@@ -531,6 +583,8 @@ export default function App() {
       cvd,
       liquidations,
       liquidationState,
+      bootRestFailed,
+      handleManualRestart,
     ],
   );
 
@@ -538,6 +592,20 @@ export default function App() {
     <WidgetContext.Provider value={contextValue}>
       <div className="flex flex-col h-[100dvh] bg-[#020610] text-[#a0f0ff] font-mono overflow-hidden selection:bg-[#00f0ff30]">
         <TopBar data={priceData} derivatives={derivatives} />
+        {bootRestFailed && (
+          <div className="shrink-0 bg-[#ff005515] border-b border-[#ff005550] px-4 py-2 flex items-center justify-between gap-3">
+            <span className="text-[0.55rem] sm:text-[0.6rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
+              Falha ao conectar aos feeds reais (Binance) após 3 tentativas — verifique a rede.
+            </span>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="shrink-0 px-3 py-1.5 rounded border border-[#ff0055] bg-[#ff005520] text-[#ff0055] font-black tracking-[0.15em] text-[0.55rem] uppercase active:bg-[#ff005535]"
+            >
+              REINICIAR SISTEMA
+            </button>
+          </div>
+        )}
         <div className="flex flex-1 min-h-0 overflow-hidden">
           <SideBar activeTab={activeTab} setActiveTab={setActiveTab} />
           <div className="flex flex-col flex-1 p-2 gap-2 min-h-0 overflow-hidden relative">
@@ -1159,7 +1227,7 @@ function TopBar({
   data?: PriceState | null;
   derivatives: DerivativesState;
 }) {
-  const { wsLive, bootAt } = useContext(WidgetContext) || {};
+  const { wsLive, bootAt, handleManualRestart } = useContext(WidgetContext) || {};
   const isPos = (data?.deltaPct ?? 0) >= 0;
   const [uptime, setUptime] = useState("");
 
@@ -1266,6 +1334,14 @@ function TopBar({
           className="hidden md:flex"
         />
         <TopStat label="SESSÃO" value={uptime || DASH} color="text-white" />
+        <button
+          type="button"
+          onClick={handleManualRestart}
+          title="Forçar reconexão de todos os feeds reais"
+          className="ml-1 w-8 h-8 rounded-full border border-[#00f0ff40] bg-[#00f0ff08] flex items-center justify-center text-[#00f0ff] hover:bg-[#00f0ff20] active:scale-95 transition-all shadow-[0_0_10px_rgba(0,240,255,0.15)] animate-pulse"
+        >
+          <Power size={14} />
+        </button>
       </div>
     </div>
   );
