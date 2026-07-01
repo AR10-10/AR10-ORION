@@ -17,6 +17,7 @@ import {
   type LiquidationEvent,
   computeSmcZones,
   type PriceZone,
+  type LiquidityZone,
 } from "./engine-bridge";
 import {
   LayoutDashboard,
@@ -1491,7 +1492,10 @@ function ChartWidget({ data, chartData }: any) {
   // against this exact candle array so zone indices line up with what's
   // actually drawn (see computeSmcZones's own comment in engine-bridge.ts).
   const smcZones = useMemo(
-    () => (chartData && chartData.length > 0 ? computeSmcZones(chartData) : { fairValueGaps: [], orderBlocks: [] }),
+    () =>
+      chartData && chartData.length > 0
+        ? computeSmcZones(chartData)
+        : { fairValueGaps: [], orderBlocks: [], liquidityZones: [] },
     [chartData],
   );
 
@@ -1579,7 +1583,7 @@ function CandleChart({
 }: {
   data: any[];
   last: number | null;
-  zones?: { fairValueGaps: PriceZone[]; orderBlocks: PriceZone[] };
+  zones?: { fairValueGaps: PriceZone[]; orderBlocks: PriceZone[]; liquidityZones?: LiquidityZone[] };
 }) {
   if (!data || data.length === 0) return null;
   const min = Math.min(...data.map((d) => d.low));
@@ -1588,13 +1592,26 @@ function CandleChart({
   const lastY = num(last) ? 100 - ((last - min) / range) * 100 : null;
   const priceToPct = (price: number) => 100 - ((price - min) / range) * 100;
 
-  // Only unmitigated zones — the ones still "live" for a trader to watch.
-  // Capped so a busy 100-candle window doesn't turn into a wall of boxes.
+  // Only unmitigated/unswept zones — the ones still "live" for a trader to
+  // watch. Capped so a busy 100-candle window doesn't turn into a wall of
+  // boxes/lines.
   const unmitigatedFvgs = (zones?.fairValueGaps ?? []).filter((z) => !z.mitigated).slice(0, 3);
   const unmitigatedBlocks = (zones?.orderBlocks ?? []).filter((z) => !z.mitigated).slice(0, 3);
+  const unsweptLiquidity = (zones?.liquidityZones ?? []).filter((z) => !z.swept).slice(0, 4);
 
   return (
     <div className="absolute inset-0 border-b border-[#00f0ff20]">
+      {unsweptLiquidity.map((z, i) => (
+        <div
+          key={`liq-${z.index}-${i}`}
+          className="absolute pointer-events-none border-t border-dashed border-[#f0d06f]/50 flex items-center"
+          style={{ top: `${priceToPct(z.price)}%`, left: `${(z.index / data.length) * 100}%`, right: 0 }}
+        >
+          <span className="text-[0.35rem] font-bold text-[#f0d06f]/70 bg-[#010308]/60 px-[3px] leading-none -translate-y-1/2">
+            {z.type === "EQUAL_HIGH" ? "EQH" : "EQL"} ×{z.touches}
+          </span>
+        </div>
+      ))}
       {unmitigatedFvgs.map((z, i) => (
         <div
           key={`fvg-${z.index}-${i}`}

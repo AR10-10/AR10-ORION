@@ -276,13 +276,26 @@ export function startRealLiquidationFeed(
 // each zone below is meaningless unless it lines up with the array the
 // caller is actually drawing.
 // ─────────────────────────────────────────────────────────────────────────────
+export interface LiquidityZone {
+  type: 'EQUAL_HIGH' | 'EQUAL_LOW';
+  price: number;
+  touches: number;
+  index: number;
+  swept: boolean;
+}
+
 export function computeSmcZones(candles: Array<{ open: number; high: number; low: number; close: number }>): {
   fairValueGaps: PriceZone[];
   orderBlocks: PriceZone[];
+  liquidityZones: LiquidityZone[];
 } {
   const result = analyzeFvgOrderBlocks({ ohlcv_series: candles });
-  if (result.status !== 'OK') return { fairValueGaps: [], orderBlocks: [] };
-  return { fairValueGaps: result.fair_value_gaps, orderBlocks: result.order_blocks };
+  if (result.status !== 'OK') return { fairValueGaps: [], orderBlocks: [], liquidityZones: [] };
+  return {
+    fairValueGaps: result.fair_value_gaps,
+    orderBlocks: result.order_blocks,
+    liquidityZones: result.liquidity_zones,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
