@@ -7,6 +7,7 @@ import React, {
   useContext,
 } from "react";
 import { Rnd } from "react-rnd";
+import { runRealAnalysisCycle, type RealCycleResult } from "./engine-bridge";
 import {
   LayoutDashboard,
   BarChart2,
@@ -33,11 +34,13 @@ export const WidgetContext = createContext<any>(null);
 // Constitution: READ_ONLY / FAIL_CLOSED. A null datum is NEVER promoted to a
 // fabricated number — it renders the muted "—" / "AGUARDANDO" placeholder. There
 // is no mock data, no synthetic trade levels, no inflated confidence, no fake
-// open position, no Math.random() anywhere in this file. Every number on screen
-// is either a real value from a public read-only market feed (Binance spot WS +
-// REST, Binance futures public premiumIndex/openInterest) or an explicit
-// placeholder. Forward-looking structural levels are derived transparently from
-// real candle swings — never from arbitrary percentage offsets.
+// open position, no Math.random() anywhere in this file. Signal/entry/target/
+// stop come from engine-bridge.ts, which calls the SAME real WASM engine and
+// research pipeline ipad_runtime/js/app.js uses (js/worker-client.js +
+// js/real-data/binance-public.js + js/real-data/analysis-frame.js +
+// js/research/research-engine.js/target-tracker.js/trade-setup-matrix.js) —
+// not a second implementation. Live price/orderbook still come from this
+// file's own direct Binance WS (same real public endpoint either way).
 // ─────────────────────────────────────────────────────────────────────────────
 const DASH = "—";
 const AWAIT = "AGUARDANDO";
@@ -97,6 +100,12 @@ export default function App() {
   const [bootAt] = useState(() => Date.now());
   const [wsLive, setWsLive] = useState(false);
   const [activeTab, setActiveTab] = useState("DASHBOARD");
+
+  // Real engine cycle (WASM + research pipeline via engine-bridge.ts).
+  // 'pending' until the first cycle resolves — the UI must never show a
+  // signal/level before the real engine has actually produced one.
+  const [realCycle, setRealCycle] = useState<RealCycleResult | null>(null);
+  const [engineStatus, setEngineStatus] = useState<"pending" | "ok" | "error">("pending");
 
   // Widget visibility / floating state.
   const [widgets, setWidgets] = useState<{
@@ -267,12 +276,32 @@ export default function App() {
     };
   }, []);
 
+  // Real engine cycle — WASM Quant Engine + research pipeline (engine-bridge.ts).
+  // Runs on the same cadence as the REST refresh above; the WASM worker and
+  // candle window don't change meaningfully faster than that.
+  useEffect(() => {
+    let cancelled = false;
+    const runCycle = async () => {
+      const result = await runRealAnalysisCycle("BTC");
+      if (cancelled) return;
+      setRealCycle(result);
+      setEngineStatus(result.ok ? "ok" : "error");
+    };
+    runCycle();
+    const engineInterval = setInterval(runCycle, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(engineInterval);
+    };
+  }, []);
+
   // ───────────────────────────────────────────────────────────────────────────
-  // Quantitative engine — 100% derived from REAL data, FAIL_CLOSED on absence.
-  //   • Flow pressure = real order-book imbalance (no inflated confidence/EMA).
-  //   • Structural levels = real swing high/low over the real 50-candle window
-  //     (transparent, the same idea as AR10 support-resistance-engine) — never
-  //     arbitrary price * 1.04 offsets.
+  // Quantitative engine.
+  //   • Flow pressure = real order-book imbalance (local, from the live WS book).
+  //   • Signal/entry/target/stop/confidence/support/resistance/market structure
+  //     come SOLELY from realCycle (engine-bridge.ts -> the real WASM engine +
+  //     research pipeline) — never a local heuristic, never computed twice.
+  //     Null (-> AGUARDANDO) until the real engine's first cycle succeeds.
   //   • No position, no PnL, no leverage, no win-rate. None of those have a real
   //     read-only source, so they do not exist here.
   // ───────────────────────────────────────────────────────────────────────────
@@ -293,28 +322,24 @@ export default function App() {
     const price = priceData?.price ?? null;
     const delta = priceData?.delta ?? null;
     const deltaPct = priceData?.deltaPct ?? null;
-    const direction: Direction = priceData?.direction ?? null;
+
+    const cycleOk = realCycle?.ok === true;
+    const direction: Direction =
+      cycleOk && (realCycle?.signal === "LONG" || realCycle?.signal === "SHORT")
+        ? realCycle.signal
+        : null;
     const isLong = direction === "LONG";
 
-    // Real structural swings from the real candle window.
-    const highs = chartData.map((c) => c.high);
-    const lows = chartData.map((c) => c.low);
-    const swingHigh = highs.length ? Math.max(...highs) : null;
-    const swingLow = lows.length ? Math.min(...lows) : null;
+    const entry = cycleOk ? (realCycle?.entry ?? null) : null;
+    const target = cycleOk ? (realCycle?.target1 ?? null) : null;
+    const target2 = cycleOk ? (realCycle?.target2 ?? null) : null;
+    const stop = cycleOk ? (realCycle?.stop ?? null) : null;
+    const confidence = cycleOk ? (realCycle?.confidence ?? null) : null;
+    const marketStructure = cycleOk ? (realCycle?.marketStructure ?? null) : null;
+    const support = cycleOk ? (realCycle?.support ?? null) : null;
+    const resistance = cycleOk ? (realCycle?.resistance ?? null) : null;
 
-    // Honest structure-based plan: entry = live spot; target/stop = real swings
-    // routed by the observed direction. Null (→ AGUARDANDO) until both the
-    // direction and the structural levels exist. No second fabricated target.
-    let entry: number | null = null;
-    let target: number | null = null;
-    let stop: number | null = null;
-    if (direction && price !== null && swingHigh !== null && swingLow !== null) {
-      entry = price;
-      target = isLong ? swingHigh : swingLow;
-      stop = isLong ? swingLow : swingHigh;
-    }
-
-    // Real % move from entry to the structural target (not a profit promise).
+    // Real % move from entry to the real target (not a profit promise).
     const moveToTargetPct =
       entry !== null && target !== null && entry !== 0
         ? Math.abs(((target - entry) / entry) * 100)
@@ -334,21 +359,24 @@ export default function App() {
       deltaPct,
       direction,
       isLong,
-      swingHigh,
-      swingLow,
       entry,
       target,
+      target2,
       stop,
+      confidence,
+      marketStructure,
+      support,
+      resistance,
       moveToTargetPct,
     };
-  }, [priceData, orderBook, chartData]);
+  }, [priceData, orderBook, realCycle]);
 
   // Stable reference — prevents every context consumer (TopBar, all Widgets,
   // AssistantOrb, MarketDirectionWidget, ConfluenceWidget...) from re-rendering
-  // on renders that don't actually change any of these five values.
+  // on renders that don't actually change any of these values.
   const contextValue = useMemo(
-    () => ({ widgets, toggleWidget, engine, wsLive, bootAt }),
-    [widgets, toggleWidget, engine, wsLive, bootAt],
+    () => ({ widgets, toggleWidget, engine, wsLive, bootAt, engineStatus, realCycle }),
+    [widgets, toggleWidget, engine, wsLive, bootAt, engineStatus, realCycle],
   );
 
   return (
@@ -476,7 +504,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
   const [hovered, setHovered] = useState(false);
   const [msgIdx, setMsgIdx] = useState(0);
   const [inputValue, setInputValue] = useState("");
-  const { widgets, engine } = useContext(WidgetContext) || {};
+  const { widgets, engine, engineStatus, realCycle } = useContext(WidgetContext) || {};
 
   if (widgets && inCenter && !widgets.siri_core?.visible) return null;
 
@@ -546,6 +574,30 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
               </div>
             </div>
 
+            {/* Real engine status — honest state of the WASM + research
+                pipeline cycle (engine-bridge.ts). Never implies a signal
+                exists before the real engine has actually produced one. */}
+            <div className="flex items-center gap-2 mt-2 z-10">
+              <div
+                className={`w-1.5 h-1.5 rounded-full ${engineStatus === "ok" ? "bg-[#00ffaa] animate-pulse" : engineStatus === "error" ? "bg-[#ff0055]" : "bg-[#f0d06f] animate-pulse"}`}
+              ></div>
+              <span
+                className={`text-[0.45rem] sm:text-[0.5rem] tracking-[0.2em] font-bold uppercase ${engineStatus === "ok" ? "text-[#00ffaa]" : engineStatus === "error" ? "text-[#ff0055]" : "text-[#f0d06f]"}`}
+              >
+                MOTOR WASM ·{" "}
+                {engineStatus === "ok"
+                  ? "CONECTADO"
+                  : engineStatus === "error"
+                    ? `FALHOU (${realCycle?.reason || DASH})`
+                    : "INICIALIZANDO..."}
+              </span>
+              {engine.confidence && (
+                <span className="text-[0.45rem] sm:text-[0.5rem] tracking-[0.2em] font-bold uppercase text-[#8ab4f8] border border-[#8ab4f8]/30 px-1.5 py-0.5 rounded">
+                  CONFIANÇA {engine.confidence}
+                </span>
+              )}
+            </div>
+
             <div className="flex flex-col mt-2 sm:mt-4 gap-4">
               {/* Structural levels — every value real or AGUARDANDO. */}
               <div className="grid grid-cols-2 gap-2 sm:gap-4">
@@ -556,23 +608,23 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                   tag="REF"
                 />
                 <LevelCard
-                  label={isShort ? "Alvo · Suporte" : "Alvo · Resistência"}
+                  label={isShort ? "Alvo 1 · Suporte" : "Alvo 1 · Resistência"}
                   value={target}
                   accent="#00ffaa"
-                  tag="SWING"
+                  tag="REAL"
                 />
                 <LevelCard
-                  label="Alvo 2"
-                  value={null}
+                  label="Alvo 2 · Extensão"
+                  value={engine.target2}
                   accent="#00ffaa"
-                  tag="AGUARDA"
-                  dim
+                  tag="REAL"
+                  dim={!num(engine.target2)}
                 />
                 <LevelCard
                   label={isShort ? "Stop · Resistência" : "Stop · Suporte"}
                   value={stop}
                   accent="#ff0055"
-                  tag="SWING"
+                  tag="REAL"
                 />
               </div>
 
@@ -606,7 +658,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
 
                 <div className="bg-[#010205] p-3 rounded-xl border border-[#8ab4f8] flex flex-col flex-1 relative overflow-hidden shadow-[inset_0_0_15px_rgba(138,180,248,0.1)]">
                   <span className="text-[0.55rem] text-[#8ab4f8] tracking-[0.2em] mb-3 font-bold uppercase flex items-center gap-2">
-                    <Activity size={12} /> NÍVEIS ESTRUTURAIS (SWING 50)
+                    <Activity size={12} /> NÍVEIS ESTRUTURAIS (MOTOR REAL)
                   </span>
                   <div className="flex flex-col gap-1.5">
                     <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00ffaa20]">
@@ -614,7 +666,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                         RESISTÊNCIA
                       </span>
                       <span className="text-[0.55rem] text-white font-mono">
-                        {fmt(engine?.swingHigh ?? null)}
+                        {fmt(engine?.resistance ?? null)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#ff005520]">
@@ -622,9 +674,19 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                         SUPORTE
                       </span>
                       <span className="text-[0.55rem] text-white font-mono">
-                        {fmt(engine?.swingLow ?? null)}
+                        {fmt(engine?.support ?? null)}
                       </span>
                     </div>
+                    {engine?.marketStructure && (
+                      <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff20]">
+                        <span className="text-[0.5rem] text-[#00f0ff]/80 font-bold tracking-widest">
+                          ESTRUTURA
+                        </span>
+                        <span className="text-[0.55rem] text-white font-mono">
+                          {engine.marketStructure}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
