@@ -20,6 +20,7 @@ import { buildTradeSetupMatrix } from '../../js/research/trade-setup-matrix.js';
 import { buildTargetTracker } from '../../js/research/target-tracker.js';
 import { startLiquidationStream } from '../../js/real-data/binance-liquidations-stream.js';
 import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg-order-block-engine.js';
+import { classify as classifyLorentzian } from '../../src/research/engines/lorentzian-classifier.js';
 
 export interface RealCandle {
   t: number;
@@ -54,6 +55,7 @@ export interface RealCycleResult {
   resistance?: number | null;
   condition?: string | null;
   rationale?: string | null;
+  lorentzian?: LorentzianResult;
 }
 
 let workerClientSingleton: any = null;
@@ -128,11 +130,16 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
 
     const route = signal === 'SHORT' ? tracker.rota_b_short : signal === 'LONG' ? tracker.rota_a_long : null;
 
+    // Independent confluence signal — a real k-NN classification over the
+    // same real candle window, never allowed to change `signal` above.
+    const lorentzian = computeLorentzianClassification(evidence.candles);
+
     return {
       ok: true,
       candles: evidence.candles,
       lastPrice: evidence.ticker.last_price,
       signal,
+      lorentzian,
       confidence: typeof matrix.confidence === 'string' ? matrix.confidence : null,
       marketStructure: typeof frame.market_structure === 'string' ? frame.market_structure : null,
       entry: route && isNum(tracker.current_price) ? tracker.current_price : null,
@@ -276,4 +283,32 @@ export function computeSmcZones(candles: Array<{ open: number; high: number; low
   const result = analyzeFvgOrderBlocks({ ohlcv_series: candles });
   if (result.status !== 'OK') return { fairValueGaps: [], orderBlocks: [] };
   return { fairValueGaps: result.fair_value_gaps, orderBlocks: result.order_blocks };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lorentzian k-NN classifier (lorentzian-classifier.js) — an INDEPENDENT
+// confluence signal, deliberately separate from RealCycleResult.signal.
+// It never gates or overrides the real WASM engine's own LONG/SHORT/WAIT
+// call; it's a second, differently-computed real opinion the UI must show
+// side by side, clearly labeled, not blended into the primary signal.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface LorentzianResult {
+  ok: boolean;
+  reason?: string;
+  classification?: 'LONG' | 'SHORT' | 'NEUTRAL';
+  confidence?: number;
+  sampleSize?: number;
+}
+
+export function computeLorentzianClassification(
+  candles: Array<{ open?: number; high?: number; low?: number; close?: number; o?: number; h?: number; l?: number; c?: number }>,
+): LorentzianResult {
+  const result = classifyLorentzian({ ohlcv_series: candles });
+  if (result.status !== 'OK') return { ok: false, reason: result.reason };
+  return {
+    ok: true,
+    classification: result.classification,
+    confidence: result.confidence,
+    sampleSize: result.sample_size,
+  };
 }

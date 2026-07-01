@@ -746,6 +746,26 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                   CONFIANÇA {engine.confidence}
                 </span>
               )}
+              {/* Sinal de confluência INDEPENDENTE (k-NN Lorentziano sobre
+                  features reais) — nunca substitui nem é substituído pelo
+                  VETOR do motor WASM acima; amostra pequena (~60-90 pontos,
+                  candles desta sessão) é reportada, nunca escondida. */}
+              {realCycle?.lorentzian?.ok && (
+                <span
+                  className={`text-[0.45rem] sm:text-[0.5rem] tracking-[0.2em] font-bold uppercase border px-1.5 py-0.5 rounded ${
+                    realCycle.lorentzian.classification === "LONG"
+                      ? "text-[#00ffaa] border-[#00ffaa30]"
+                      : realCycle.lorentzian.classification === "SHORT"
+                        ? "text-[#ff0055] border-[#ff005530]"
+                        : "text-[#8ab4f8] border-[#8ab4f8]/30"
+                  }`}
+                  title={`Amostra: ${realCycle.lorentzian.sampleSize} pontos históricos`}
+                >
+                  k-NN LORENTZ. {realCycle.lorentzian.classification} ·{" "}
+                  {Math.round((realCycle.lorentzian.confidence ?? 0) * 100)}% (n=
+                  {realCycle.lorentzian.sampleSize})
+                </span>
+              )}
             </div>
 
             <div className="flex flex-col mt-2 sm:mt-4 gap-4">
