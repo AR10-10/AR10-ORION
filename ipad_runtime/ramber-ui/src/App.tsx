@@ -129,7 +129,7 @@ export default function App() {
     orderflow: { visible: false, floating: false },
     heatmap: { visible: false, floating: false },
     market_direction: { visible: true, floating: false },
-    siri_core: { visible: true, floating: false },
+    se_core: { visible: true, floating: false },
     confluence: { visible: false, floating: false },
     orderbook: { visible: false, floating: false },
     scanner: { visible: false, floating: false },
@@ -219,74 +219,108 @@ export default function App() {
     const restInterval = setInterval(fetchSymbolData, 60000);
     const derivInterval = setInterval(fetchDerivatives, 60000);
 
-    // Real-time spot ticker + depth (public, read-only).
-    const ws = new WebSocket(
-      "wss://stream.binance.com:9443/stream?streams=btcusdt@ticker/btcusdt@depth10@100ms/ethusdt@ticker/solusdt@ticker",
-    );
-    ws.onopen = () => setWsLive(true);
-    ws.onclose = () => setWsLive(false);
-    ws.onerror = () => setWsLive(false);
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectDelayMs = 1000;
+    let unmounted = false;
 
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
-      if (msg.stream === "btcusdt@ticker") {
-        const d = msg.data;
-        const currentPrice = Number(d.c);
-        const open = Number(d.o);
-        const delta = currentPrice - open;
-        setPriceData({
-          price: currentPrice,
-          delta,
-          deltaPct: Number(d.P),
-          high: Number(d.h),
-          low: Number(d.l),
-          volume: Number(d.v),
-          direction: delta >= 0 ? "LONG" : "SHORT",
-        });
-      } else if (msg.stream === "btcusdt@depth10@100ms") {
-        const d = msg.data;
-        if (d.bids && d.asks) {
-          setOrderBook({
-            bids: d.bids
-              .slice(0, 8)
-              .map((b: string[]) => ({ price: Number(b[0]), size: Number(b[1]) })),
-            asks: d.asks
-              .slice(0, 8)
-              .map((a: string[]) => ({ price: Number(a[0]), size: Number(a[1]) }))
-              .reverse(),
-          });
-        }
-      } else if (
-        msg.stream === "ethusdt@ticker" ||
-        msg.stream === "solusdt@ticker"
-      ) {
-        setScannerData((prev) => {
-          const symbolMap: any = {
-            "ethusdt@ticker": "ETH/USDT",
-            "solusdt@ticker": "SOL/USDT",
-          };
-          const targetSym = symbolMap[msg.stream];
-          if (!targetSym) return prev;
-          return prev.map((item) => {
-            if (item.p === targetSym) {
-              const change = Number(msg.data.P);
-              return {
-                ...item,
-                s: change > 1 ? "LONG" : change < -1 ? "SHORT" : "NEUTRAL",
-                str: Math.min(Math.abs(change) * 20, 100),
-                chg: change,
-              };
-            }
-            return item;
-          });
-        });
-      }
+    // depth10@100ms can fire up to 10x/s — coalesce into a trailing update
+    // capped at ~5/s so the order-book-derived UI (heatmap, flow pressure,
+    // market direction) doesn't re-render faster than a mobile Safari
+    // browser can usefully paint.
+    const ORDER_BOOK_THROTTLE_MS = 200;
+    let pendingOrderBook: { bids: Level[]; asks: Level[] } | null = null;
+    let orderBookFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushOrderBook = () => {
+      orderBookFlushTimer = null;
+      if (pendingOrderBook) setOrderBook(pendingOrderBook);
     };
 
+    const connect = () => {
+      if (unmounted) return;
+      ws = new WebSocket(
+        "wss://stream.binance.com:9443/stream?streams=btcusdt@ticker/btcusdt@depth10@100ms/ethusdt@ticker/solusdt@ticker",
+      );
+      ws.onopen = () => {
+        setWsLive(true);
+        reconnectDelayMs = 1000;
+      };
+      ws.onclose = () => {
+        setWsLive(false);
+        if (unmounted) return;
+        reconnectTimer = setTimeout(connect, reconnectDelayMs);
+        reconnectDelayMs = Math.min(reconnectDelayMs * 2, 15000);
+      };
+      ws.onerror = () => ws?.close();
+
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.stream === "btcusdt@ticker") {
+          const d = msg.data;
+          const currentPrice = Number(d.c);
+          const open = Number(d.o);
+          const delta = currentPrice - open;
+          setPriceData({
+            price: currentPrice,
+            delta,
+            deltaPct: Number(d.P),
+            high: Number(d.h),
+            low: Number(d.l),
+            volume: Number(d.v),
+            direction: delta >= 0 ? "LONG" : "SHORT",
+          });
+        } else if (msg.stream === "btcusdt@depth10@100ms") {
+          const d = msg.data;
+          if (d.bids && d.asks) {
+            pendingOrderBook = {
+              bids: d.bids
+                .slice(0, 8)
+                .map((b: string[]) => ({ price: Number(b[0]), size: Number(b[1]) })),
+              asks: d.asks
+                .slice(0, 8)
+                .map((a: string[]) => ({ price: Number(a[0]), size: Number(a[1]) }))
+                .reverse(),
+            };
+            if (!orderBookFlushTimer) {
+              orderBookFlushTimer = setTimeout(flushOrderBook, ORDER_BOOK_THROTTLE_MS);
+            }
+          }
+        } else if (
+          msg.stream === "ethusdt@ticker" ||
+          msg.stream === "solusdt@ticker"
+        ) {
+          setScannerData((prev) => {
+            const symbolMap: any = {
+              "ethusdt@ticker": "ETH/USDT",
+              "solusdt@ticker": "SOL/USDT",
+            };
+            const targetSym = symbolMap[msg.stream];
+            if (!targetSym) return prev;
+            return prev.map((item) => {
+              if (item.p === targetSym) {
+                const change = Number(msg.data.P);
+                return {
+                  ...item,
+                  s: change > 1 ? "LONG" : change < -1 ? "SHORT" : "NEUTRAL",
+                  str: Math.min(Math.abs(change) * 20, 100),
+                  chg: change,
+                };
+              }
+              return item;
+            });
+          });
+        }
+      };
+    };
+    connect();
+
     return () => {
+      unmounted = true;
       clearInterval(restInterval);
       clearInterval(derivInterval);
-      ws.close();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (orderBookFlushTimer) clearTimeout(orderBookFlushTimer);
+      ws?.close();
     };
   }, []);
 
@@ -455,7 +489,7 @@ export default function App() {
 
                   {/* Middle Column */}
                   {(widgets.market_direction.visible ||
-                    widgets.siri_core.visible ||
+                    widgets.se_core.visible ||
                     widgets.confluence.visible) && (
                     <div className="flex-[1.15] flex flex-col gap-2 w-full md:w-auto md:min-w-[380px] min-h-[600px] md:min-h-0 md:h-full md:overflow-y-auto scrollbar-hide relative z-0 shrink-0 md:shrink pointer-events-none [&>*]:pointer-events-auto">
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.05)_0%,transparent_60%)] pointer-events-none mix-blend-screen"></div>
@@ -552,14 +586,14 @@ function ConfigPanel() {
   );
 }
 
-// --- ASSISTANT ORB / S.I.R.I. CORE (center hero) ---
+// --- ASSISTANT ORB / S.E. CORE (center hero) ---
 function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
   const [hovered, setHovered] = useState(false);
   const [msgIdx, setMsgIdx] = useState(0);
   const [inputValue, setInputValue] = useState("");
   const { widgets, engine, engineStatus, realCycle } = useContext(WidgetContext) || {};
 
-  if (widgets && inCenter && !widgets.siri_core?.visible) return null;
+  if (widgets && inCenter && !widgets.se_core?.visible) return null;
 
   const direction: Direction = engine?.direction ?? null;
   const isLong = direction === "LONG";
@@ -601,7 +635,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
         <div className="absolute inset-0 bg-[linear-gradient(rgba(0,240,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(0,240,255,0.02)_1px,transparent_1px)] bg-[size:30px_30px]"></div>
 
         <div className="absolute top-3 left-0 right-0 flex justify-center opacity-50 text-[0.55rem] tracking-[0.4em] font-bold text-[#00f0ff] z-10">
-          NÚCLEO DE INTELIGÊNCIA S.I.R.I.
+          NÚCLEO DE INTELIGÊNCIA S.E.
         </div>
 
         <div
@@ -747,7 +781,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
           </div>
         </div>
 
-        {/* S.I.R.I. central orb */}
+        {/* S.E. central orb */}
         <div className="flex-1 flex items-center justify-center relative w-full mt-4 pb-8 min-h-[300px]">
           <div className="absolute w-[360px] h-[360px] rounded-full border border-[#00f0ff1a] animate-[spin_30s_linear_infinite] pointer-events-none">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#00f0ff] rounded-full shadow-[0_0_15px_#00f0ff]"></div>
@@ -787,7 +821,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                   </div>
                   <div className="flex flex-col min-w-0 flex-1">
                     <span className="text-[0.5rem] sm:text-[0.55rem] text-[#8ab4f8] tracking-[0.2em] font-bold uppercase mb-[2px]">
-                      S.I.R.I. · NÚCLEO READ-ONLY
+                      S.E. · NÚCLEO READ-ONLY
                     </span>
                     <span className="text-[0.6rem] sm:text-[0.7rem] text-white font-bold tracking-[0.1em] truncate animate-fade-in drop-shadow-[0_0_6px_rgba(255,255,255,0.5)]">
                       {messages[msgIdx]}
@@ -871,7 +905,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
             </div>
             <div className="flex flex-col min-w-0 flex-1">
               <span className="text-[0.45rem] text-[#8ab4f8] tracking-widest font-bold uppercase">
-                S.I.R.I · READ-ONLY
+                S.E. · READ-ONLY
               </span>
               <span className="text-[0.55rem] text-white font-bold tracking-wider truncate animate-fade-in">
                 {messages[msgIdx]}
@@ -908,7 +942,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
   );
 }
 
-function LevelCard({
+const LevelCard = React.memo(function LevelCard({
   label,
   value,
   accent,
@@ -959,7 +993,7 @@ function LevelCard({
       </div>
     </div>
   );
-}
+});
 
 // --- TOP BAR ---
 function TopBar({
@@ -1052,7 +1086,7 @@ function TopBar({
 
       <div className="hidden xl:flex flex-col items-center justify-center px-4 cursor-default group absolute left-1/2 -translate-x-1/2">
         <div className="text-xl font-black tracking-[0.3em] text-[#00f0ff] drop-shadow-[0_0_12px_rgba(0,240,255,0.8)] leading-none transition-all group-hover:drop-shadow-[0_0_20px_rgba(0,240,255,1)]">
-          AR10-CYBORG
+          RAMBER
         </div>
         <div className="text-[0.4rem] text-[#00f0ff80] tracking-[0.4em] mt-1.5 whitespace-nowrap font-bold uppercase transition-colors group-hover:text-[#00f0ff]">
           TERMINAL READ-ONLY · DADOS REAIS
@@ -1080,7 +1114,7 @@ function TopBar({
     </div>
   );
 }
-function TopStat({
+const TopStat = React.memo(function TopStat({
   label,
   value,
   subValue,
@@ -1108,7 +1142,7 @@ function TopStat({
       </div>
     </div>
   );
-}
+});
 
 // --- SIDE BAR ---
 function SideBar({
@@ -1351,8 +1385,33 @@ function ChartWidget({ data, chartData }: any) {
   );
 }
 
+// Split so the expensive part (100 candles -> ~200 SVG nodes) only
+// re-renders when the candle window itself changes (~every 60s), not on
+// every live ticker tick (~1/s) that only moves the last-price marker.
 function CandleChart({ data, last }: { data: any[]; last: number | null }) {
   if (!data || data.length === 0) return null;
+  const min = Math.min(...data.map((d) => d.low));
+  const max = Math.max(...data.map((d) => d.high));
+  const range = max - min || 1;
+  const lastY = num(last) ? 100 - ((last - min) / range) * 100 : null;
+
+  return (
+    <div className="absolute inset-0 border-b border-[#00f0ff20]">
+      <CandlesSvg data={data} />
+      {lastY !== null && (
+        <div
+          className="absolute right-[-36px] text-[0.4rem] font-bold text-[#010308] bg-[#00ffaa] px-[4px] py-[2px] rounded shadow-[0_0_10px_#00ffaa] translate-y-[-50%] border border-[#00ffaa] flex items-center gap-1"
+          style={{ top: `${lastY}%` }}
+        >
+          <div className="w-1 h-1 bg-[#010308] rounded-full animate-ping opacity-70"></div>
+          {fmtInt(last)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CandlesSvg = React.memo(function CandlesSvg({ data }: { data: any[] }) {
   const min = Math.min(...data.map((d) => d.low));
   const max = Math.max(...data.map((d) => d.high));
   const range = max - min || 1;
@@ -1365,10 +1424,8 @@ function CandleChart({ data, last }: { data: any[]; last: number | null }) {
     })
     .join(" ");
 
-  const lastY = num(last) ? 100 - ((last - min) / range) * 100 : null;
-
   return (
-    <div className="absolute inset-0 border-b border-[#00f0ff20]">
+    <>
       {[0, 0.25, 0.5, 0.75, 1].map((pct) => (
         <div
           key={pct}
@@ -1443,19 +1500,9 @@ function CandleChart({ data, last }: { data: any[]; last: number | null }) {
         <span>{fmt((max + min * 3) / 4)}</span>
         <span className="translate-y-[8px]">{fmt(min)}</span>
       </div>
-
-      {lastY !== null && (
-        <div
-          className="absolute right-[-36px] text-[0.4rem] font-bold text-[#010308] bg-[#00ffaa] px-[4px] py-[2px] rounded shadow-[0_0_10px_#00ffaa] translate-y-[-50%] border border-[#00ffaa] flex items-center gap-1"
-          style={{ top: `${lastY}%` }}
-        >
-          <div className="w-1 h-1 bg-[#010308] rounded-full animate-ping opacity-70"></div>
-          {fmtInt(last)}
-        </div>
-      )}
-    </div>
+    </>
   );
-}
+});
 
 // --- ORDER FLOW WIDGET ---
 function OrderFlowWidget() {
@@ -1546,7 +1593,7 @@ function OrderFlowWidget() {
     </Widget>
   );
 }
-function FlowMetric({ label, value, color }: any) {
+const FlowMetric = React.memo(function FlowMetric({ label, value, color }: any) {
   return (
     <div className="flex flex-col items-center xl:items-start">
       <span className="text-[0.4rem] text-[#8ab4f8] uppercase tracking-[0.1em] mb-[2px]">
@@ -1555,7 +1602,7 @@ function FlowMetric({ label, value, color }: any) {
       <span className={`text-[0.6rem] font-bold ${color}`}>{value}</span>
     </div>
   );
-}
+});
 
 // --- HEATMAP WIDGET (deterministic mapping of REAL depth — no Math.random) ---
 function HeatmapWidget({ book, data }: any) {
@@ -1993,7 +2040,7 @@ function BottomPanels() {
     </div>
   );
 }
-function Gauge({ value, label, color }: { value: number | null; label: string; color: string }) {
+const Gauge = React.memo(function Gauge({ value, label, color }: { value: number | null; label: string; color: string }) {
   const has = num(value);
   return (
     <div className="flex flex-col items-center justify-center relative w-10 h-10">
@@ -2029,7 +2076,7 @@ function Gauge({ value, label, color }: { value: number | null; label: string; c
       </div>
     </div>
   );
-}
+});
 
 // --- FOOTER BAR ---
 // Owns its own clock tick locally so the 1s interval never re-renders the
@@ -2044,7 +2091,7 @@ function FooterBar() {
   return (
     <div className="h-[24px] border-t border-[#00f0ff20] flex items-center justify-between px-3 bg-[#010308] shrink-0 text-[0.45rem] tracking-[0.2em] text-[#8ab4f8]/60 font-bold uppercase">
       <div className="flex gap-3">
-        <span className="text-[#00f0ff] drop-shadow-[0_0_3px_#00f0ff]">AR10-CYBORG</span>
+        <span className="text-[#00f0ff] drop-shadow-[0_0_3px_#00f0ff]">RAMBER</span>
         <span className="hidden md:inline">|</span>
         <span className="hidden md:inline">TERMINAL READ-ONLY</span>
       </div>

@@ -29,7 +29,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # cyborgpro-ui/ is the source tree for the Cyborg PRO terminal (React/
+      # ramber-ui/ is the source tree for the RAMBER terminal (React/
       # Vite) — the ONLY app served at this repo's root. Its build output
       # (index.html + assets/) is copied into ipad_runtime/ root below and
       # becomes the deployed site; ipad_runtime/index.html itself is never
@@ -40,10 +40,10 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: ipad_runtime/cyborgpro-ui/package-lock.json
+          cache-dependency-path: ipad_runtime/ramber-ui/package-lock.json
 
-      - name: Build Cyborg PRO UI (React/Vite) and place at ipad_runtime root
-        working-directory: ipad_runtime/cyborgpro-ui
+      - name: Build RAMBER UI (React/Vite) and place at ipad_runtime root
+        working-directory: ipad_runtime/ramber-ui
         run: |
           npm ci --include=dev
           npm run build

@@ -4,7 +4,7 @@ import path from 'path';
 import { defineConfig } from 'vite';
 
 // base: './' — this app is served from a nested static path
-// (.../ipad_runtime/cyborgpro-ui/) inside the existing AR10 GitHub Pages
+// (.../ipad_runtime/ramber-ui/) inside the existing RAMBER GitHub Pages
 // site, not from a domain root, so all built asset URLs must resolve
 // relative to the HTML file rather than absolute from '/'.
 export default defineConfig({

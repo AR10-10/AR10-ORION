@@ -1,4 +1,4 @@
-// engine-bridge.ts — cyborgpro's connection to the REAL AR10 engine, not a
+// engine-bridge.ts — RAMBER's connection to the real engine, not a
 // second implementation of it. Imports the exact same modules js/app.js
 // uses: js/worker-client.js (WASM Quant Engine via Worker), the real Binance
 // connector (js/real-data/binance-public.js), and the pure-function research
@@ -52,7 +52,7 @@ let wasmReadyPromise: Promise<any> | null = null;
 function getWorkerClient() {
   if (!workerClientSingleton) {
     // This build's output IS ipad_runtime/index.html (deploy-ipad-pwa.yml
-    // copies cyborgpro-ui/dist/ into ipad_runtime/ root) — so
+    // copies RAMBER-ui/dist/ into ipad_runtime/ root) — so
     // workers/quant-worker.js is a direct sibling of the deployed page, same
     // relative relationship app.js used to use. The worker script resolves
     // its own wasm import relative to itself (import.meta.url inside
