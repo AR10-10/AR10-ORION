@@ -10,7 +10,9 @@
 // DOM nodes. No re-implementation, no second heuristic, no fabricated value:
 // every field below is either passthrough from these real modules or absent.
 import { QuantWorkerClient } from '../../js/worker-client.js';
+import { OrderflowWorkerClient } from '../../js/orderflow-client.js';
 import { probe as probeBinance } from '../../js/real-data/binance-public.js';
+import { createLivePoller } from '../../js/real-data/mexc-trades-stream.js';
 import { CONNECTOR_STATES } from '../../js/real-data/schema.js';
 import { buildRealAnalysisFrame } from '../../js/real-data/analysis-frame.js';
 import { buildResearchEngineFrame } from '../../js/research/research-engine.js';
@@ -128,5 +130,83 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
     resistance: isNum(frame.resistance) ? frame.resistance : null,
     condition: typeof matrix.condition === 'string' ? matrix.condition : null,
     rationale: typeof matrix.rationale === 'string' ? matrix.rationale : null,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Order Flow Engine (OFI/Absorption/Exhaustion) fed by REAL MEXC trades.
+//
+// MEXC has no WebSocket connector in this codebase — mexc-trades-stream.js
+// deliberately polls GET /api/v3/trades every few seconds instead (see that
+// file's own header: a persistent WS would escape the app's audited
+// fail-closed model of "one probe, one observed state, one CONNECTOR_STATES
+// classification"). This bridge reuses that exact real poller — not a
+// WebSocket, because the real thing this project built is not one.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface OrderflowSignal {
+  type: 'OFI' | 'ABSORPTION' | 'EXHAUSTION';
+  confidence: number;
+  price: number;
+  timestamp: number;
+  metadata: Record<string, any>;
+}
+
+export type OrderflowConnectorState = 'LIVE' | 'ERROR' | 'STOPPED';
+
+let orderflowWorkerSingleton: any = null;
+let orderflowInitPromise: Promise<any> | null = null;
+
+function getOrderflowWorkerClient() {
+  if (!orderflowWorkerSingleton) {
+    // Same reasoning as getWorkerClient() above — resolved from this page's
+    // deployed location, two levels up to ipad_runtime/workers/.
+    const workerUrl = new URL('../../workers/orderflow-worker.js', window.location.href).href;
+    orderflowWorkerSingleton = new OrderflowWorkerClient(workerUrl);
+    orderflowInitPromise = orderflowWorkerSingleton.init(65536);
+  }
+  return { orderflowClient: orderflowWorkerSingleton, initReady: orderflowInitPromise as Promise<any> };
+}
+
+// Starts the real MEXC trade poller -> real Order Flow Engine pipeline.
+// onSignals fires with newly produced real Signal[] (usually empty — OFI/
+// Absorption/Exhaustion are meant to be rare relative to raw ticks).
+// onState reports the real connector state on every poll cycle, including
+// failures — the UI must never keep showing "LIVE" after the feed dies.
+// Returns a stop() function; call it on unmount.
+export function startMexcOrderflowFeed(
+  onSignals: (signals: OrderflowSignal[]) => void,
+  onState: (state: OrderflowConnectorState, reason?: string) => void,
+  symbol = 'BTC',
+): () => void {
+  const { orderflowClient, initReady } = getOrderflowWorkerClient();
+  let stopped = false;
+
+  const poller = createLivePoller({
+    symbol,
+    intervalMs: 4000,
+    limit: 500,
+    onResult: async ({ state, ticks }: { state: string; ticks: any[] }) => {
+      if (stopped) return;
+      if (state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) {
+        onState('ERROR', state);
+        return;
+      }
+      onState('LIVE');
+      if (!ticks.length) return;
+      try {
+        await initReady;
+        const { signals } = await orderflowClient.ingestTicks(ticks);
+        if (!stopped && Array.isArray(signals) && signals.length) onSignals(signals);
+      } catch (err: any) {
+        if (!stopped) onState('ERROR', `orderflow_worker_falhou: ${err?.message || err}`);
+      }
+    },
+  });
+
+  poller.start();
+
+  return () => {
+    stopped = true;
+    poller.stop();
   };
 }

@@ -7,7 +7,13 @@ import React, {
   useContext,
 } from "react";
 import { Rnd } from "react-rnd";
-import { runRealAnalysisCycle, type RealCycleResult } from "./engine-bridge";
+import {
+  runRealAnalysisCycle,
+  type RealCycleResult,
+  startMexcOrderflowFeed,
+  type OrderflowSignal,
+  type OrderflowConnectorState,
+} from "./engine-bridge";
 import {
   LayoutDashboard,
   BarChart2,
@@ -106,6 +112,14 @@ export default function App() {
   // signal/level before the real engine has actually produced one.
   const [realCycle, setRealCycle] = useState<RealCycleResult | null>(null);
   const [engineStatus, setEngineStatus] = useState<"pending" | "ok" | "error">("pending");
+
+  // Real Order Flow Engine (OFI/Absorption/Exhaustion) fed by real MEXC trades
+  // (engine-bridge.ts's startMexcOrderflowFeed). "pending" until the first
+  // poll cycle reports a state, matching the FAIL_CLOSED rule used everywhere
+  // else in this file.
+  const [orderflowSignals, setOrderflowSignals] = useState<OrderflowSignal[]>([]);
+  const [orderflowState, setOrderflowState] = useState<OrderflowConnectorState | "pending">("pending");
+  const [orderflowReason, setOrderflowReason] = useState<string | null>(null);
 
   // Widget visibility / floating state.
   const [widgets, setWidgets] = useState<{
@@ -295,6 +309,23 @@ export default function App() {
     };
   }, []);
 
+  // Real MEXC trade poller -> real Order Flow Engine (engine-bridge.ts).
+  // Signal list is capped to the most recent 20 — OFI/Absorption/Exhaustion
+  // are meant to be rare, not a firehose.
+  useEffect(() => {
+    const stop = startMexcOrderflowFeed(
+      (newSignals) => {
+        setOrderflowSignals((prev) => [...newSignals, ...prev].slice(0, 20));
+      },
+      (state, reason) => {
+        setOrderflowState(state);
+        setOrderflowReason(reason ?? null);
+      },
+      "BTC",
+    );
+    return stop;
+  }, []);
+
   // ───────────────────────────────────────────────────────────────────────────
   // Quantitative engine.
   //   • Flow pressure = real order-book imbalance (local, from the live WS book).
@@ -375,8 +406,30 @@ export default function App() {
   // AssistantOrb, MarketDirectionWidget, ConfluenceWidget...) from re-rendering
   // on renders that don't actually change any of these values.
   const contextValue = useMemo(
-    () => ({ widgets, toggleWidget, engine, wsLive, bootAt, engineStatus, realCycle }),
-    [widgets, toggleWidget, engine, wsLive, bootAt, engineStatus, realCycle],
+    () => ({
+      widgets,
+      toggleWidget,
+      engine,
+      wsLive,
+      bootAt,
+      engineStatus,
+      realCycle,
+      orderflowSignals,
+      orderflowState,
+      orderflowReason,
+    }),
+    [
+      widgets,
+      toggleWidget,
+      engine,
+      wsLive,
+      bootAt,
+      engineStatus,
+      realCycle,
+      orderflowSignals,
+      orderflowState,
+      orderflowReason,
+    ],
   );
 
   return (
@@ -1406,14 +1459,22 @@ function CandleChart({ data, last }: { data: any[]; last: number | null }) {
 
 // --- ORDER FLOW WIDGET ---
 function OrderFlowWidget() {
-  const { engine } = useContext(WidgetContext) || {};
+  const { engine, orderflowState, orderflowReason, orderflowSignals } =
+    useContext(WidgetContext) || {};
   const buyPercent: number | null = engine?.buyPercent ?? null;
   const sellPercent: number | null = engine?.sellPercent ?? null;
   const delta: number | null = engine?.delta ?? null;
   const imbalance: number | null = engine?.imbalance ?? null;
 
+  const signals: OrderflowSignal[] = orderflowSignals ?? [];
+  const ofState: string = orderflowState ?? "pending";
+  const ofColor =
+    ofState === "LIVE" ? "text-[#00ffaa]" : ofState === "ERROR" ? "text-[#ff0055]" : "text-[#f0d06f]";
+  const signalColor = (t: string) =>
+    t === "EXHAUSTION" ? "text-[#ff0055]" : t === "ABSORPTION" ? "text-[#f0d06f]" : "text-[#00ffaa]";
+
   return (
-    <Widget id="orderflow" title="FLUXO DE ORDENS · LIVRO REAL" flex="flex-[0.7] min-h-[90px]">
+    <Widget id="orderflow" title="FLUXO DE ORDENS · LIVRO REAL" flex="flex-[0.85] min-h-[110px]">
       <div className="flex flex-col h-full justify-between gap-1 py-1">
         <div className="flex justify-between items-center px-1">
           <FlowMetric
@@ -1436,26 +1497,9 @@ function OrderFlowWidget() {
             value={num(imbalance) ? `${imbalance >= 0 ? "+" : ""}${(imbalance * 100).toFixed(1)}%` : DASH}
             color={num(imbalance) && imbalance >= 0 ? "text-[#00ffaa]" : "text-[#ff0055]"}
           />
-          <FlowMetric
-            label="ABSORÇÃO"
-            value={
-              !num(buyPercent) || !num(sellPercent)
-                ? DASH
-                : buyPercent > 60 || sellPercent > 60
-                  ? "FORTE"
-                  : "NORMAL"
-            }
-            color={
-              num(buyPercent) && buyPercent > 60
-                ? "text-[#00ffaa] drop-shadow-[0_0_5px_#00ffaa]"
-                : num(sellPercent) && sellPercent > 60
-                  ? "text-[#ff0055] drop-shadow-[0_0_5px_#ff0055]"
-                  : "text-[#8ab4f8]"
-            }
-          />
         </div>
 
-        <div className="w-full h-6 mt-2 flex relative bg-[#010308] border border-[#00f0ff15] rounded overflow-hidden shadow-[inset_0_0_10px_rgba(0,240,255,0.05)]">
+        <div className="w-full h-4 mt-1 flex relative bg-[#010308] border border-[#00f0ff15] rounded overflow-hidden shadow-[inset_0_0_10px_rgba(0,240,255,0.05)]">
           <div
             className="h-full bg-gradient-to-r from-[#00ffaa10] to-[#00ffaa60] border-r border-[#00ffaa] relative overflow-hidden transition-all duration-500"
             style={{ width: `${num(buyPercent) ? buyPercent : 50}%` }}
@@ -1468,6 +1512,35 @@ function OrderFlowWidget() {
           >
             <div className="absolute top-0 bottom-0 w-[50px] bg-gradient-to-l from-transparent via-[#ff0055] to-transparent opacity-30 translate-x-[500%] animate-[scan-horizontal_2s_linear_infinite_reverse]"></div>
           </div>
+        </div>
+
+        {/* Real Order Flow Engine (OFI/Absorption/Exhaustion) fed by real
+            MEXC trades — engine-bridge.ts's startMexcOrderflowFeed(). */}
+        <div className="flex items-center gap-1.5 px-1 mt-1">
+          <div
+            className={`w-1.5 h-1.5 rounded-full ${ofState === "LIVE" ? "bg-[#00ffaa] animate-pulse" : ofState === "ERROR" ? "bg-[#ff0055]" : "bg-[#f0d06f] animate-pulse"}`}
+          ></div>
+          <span className={`text-[0.4rem] tracking-[0.15em] font-bold uppercase ${ofColor}`}>
+            MEXC ORDERFLOW ·{" "}
+            {ofState === "LIVE" ? "LIVE" : ofState === "ERROR" ? `FALHOU (${orderflowReason || DASH})` : "AGUARDANDO"}
+          </span>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-1">
+          {signals.length === 0 ? (
+            <div className="text-[0.4rem] text-[#8ab4f8]/40 tracking-widest py-1">
+              {AWAIT} SINAL REAL…
+            </div>
+          ) : (
+            signals.slice(0, 4).map((s, i) => (
+              <div key={i} className="flex justify-between items-center text-[0.42rem] py-[1px]">
+                <span className={`font-bold tracking-wider ${signalColor(s.type)}`}>{s.type}</span>
+                <span className="text-[#a0f0ff]/80 font-mono">{fmt(s.price)}</span>
+                <span className="text-[#8ab4f8]/60 font-mono">
+                  {num(s.confidence) ? `${(s.confidence * 100).toFixed(0)}%` : DASH}
+                </span>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </Widget>
