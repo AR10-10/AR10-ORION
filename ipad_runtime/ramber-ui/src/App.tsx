@@ -1978,6 +1978,18 @@ function EventsWidget() {
 
 // --- BOTTOM PANELS ---
 function BottomPanels() {
+  const { widgets } = useContext(WidgetContext) || {};
+  const anyVisible =
+    widgets?.processing?.visible ||
+    widgets?.stream?.visible ||
+    widgets?.tactical?.visible ||
+    widgets?.log?.visible ||
+    widgets?.playback?.visible;
+  // Without this guard, the 95px bar and its edge-fade overlays below still
+  // render even when every widget inside returns null — an empty dark strip
+  // floating with nothing under it. No widgets here are visible by default.
+  if (!anyVisible) return null;
+
   return (
     <div className="relative shrink-0 w-full mb-1">
       <div className="absolute left-0 top-0 bottom-0 w-12 bg-gradient-to-r from-[#010205] to-transparent z-20 pointer-events-none"></div>
