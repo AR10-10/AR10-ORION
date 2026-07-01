@@ -785,7 +785,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
 
   if (inCenter) {
     return (
-      <div className="flex-1 shrink-0 flex flex-col items-center justify-between relative min-h-[500px] md:min-h-0 overflow-hidden z-0 group py-4 bg-[#010308]/60 backdrop-blur-3xl border border-[#00f0ff]/20 rounded-2xl shadow-[inset_0_0_80px_rgba(0,240,255,0.05),0_8px_32px_rgba(0,0,0,0.6)] w-full max-w-4xl mx-auto">
+      <div className="flex-1 shrink-0 flex flex-col items-center justify-between relative min-h-[500px] md:min-h-0 overflow-y-auto overscroll-contain scrollbar-hide z-0 group py-4 bg-[#010308]/60 backdrop-blur-3xl border border-[#00f0ff]/20 rounded-2xl shadow-[inset_0_0_80px_rgba(0,240,255,0.05),0_8px_32px_rgba(0,0,0,0.6)] w-full max-w-4xl mx-auto">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(0,240,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(0,240,255,0.02)_1px,transparent_1px)] bg-[size:30px_30px]"></div>
 
         <div className="absolute top-3 left-0 right-0 flex justify-center opacity-50 text-[0.55rem] tracking-[0.4em] font-bold text-[#00f0ff] z-10">
@@ -793,9 +793,9 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
         </div>
 
         <div
-          className={`mt-6 w-full px-4 sm:px-6 transition-all duration-700 ${hovered ? "opacity-20 blur-[2px]" : "opacity-100 blur-0"} z-10`}
+          className={`mt-6 [@media(max-height:1050px)]:mt-2 w-full px-4 sm:px-6 transition-all duration-700 ${hovered ? "opacity-20 blur-[2px]" : "opacity-100 blur-0"} z-10`}
         >
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 [@media(max-height:1050px)]:gap-2">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-[#00f0ff20] pb-2 gap-2 sm:gap-0">
               <div className="flex items-center gap-2 sm:gap-3">
                 <span
@@ -862,7 +862,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
               )}
             </div>
 
-            <div className="flex flex-col mt-2 sm:mt-4 gap-4">
+            <div className="flex flex-col mt-2 sm:mt-4 gap-4 [@media(max-height:1050px)]:mt-1 [@media(max-height:1050px)]:gap-2">
               {/* Structural levels — every value real or AGUARDANDO. */}
               <div className="grid grid-cols-2 gap-2 sm:gap-4">
                 <LevelCard
@@ -1006,11 +1006,11 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
         </div>
 
         {/* S.E. central orb */}
-        <div className="flex-1 flex items-center justify-center relative w-full mt-4 pb-8 min-h-[300px]">
-          <div className="absolute w-[360px] h-[360px] rounded-full border border-[#00f0ff1a] animate-[spin_30s_linear_infinite] pointer-events-none">
+        <div className="flex-1 flex items-center justify-center relative w-full mt-4 pb-8 min-h-[300px] [@media(max-height:1050px)]:min-h-[130px] [@media(max-height:1050px)]:pb-2 [@media(max-height:1050px)]:mt-1 overflow-hidden">
+          <div className="absolute w-[360px] h-[360px] [@media(max-height:1050px)]:w-[150px] [@media(max-height:1050px)]:h-[150px] rounded-full border border-[#00f0ff1a] animate-[spin_30s_linear_infinite] pointer-events-none">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#00f0ff] rounded-full shadow-[0_0_15px_#00f0ff]"></div>
           </div>
-          <div className="absolute w-[280px] h-[280px] rounded-full border border-[#00f0ff15] animate-[spin_20s_linear_infinite_reverse] pointer-events-none">
+          <div className="absolute w-[280px] h-[280px] [@media(max-height:1050px)]:w-[115px] [@media(max-height:1050px)]:h-[115px] rounded-full border border-[#00f0ff15] animate-[spin_20s_linear_infinite_reverse] pointer-events-none">
             <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-2 h-2 bg-[#00ffaa] rounded-full shadow-[0_0_10px_#00ffaa]"></div>
           </div>
 
@@ -1022,11 +1022,11 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
             }}
           >
             <div
-              className={`absolute w-64 h-64 rounded-full bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.25)_0%,transparent_70%)] blur-2xl transition-all duration-1000 ${hovered ? "opacity-100 scale-125 animate-[pulse_2s_ease-in-out_infinite]" : "opacity-50 scale-100 animate-[pulse_4s_ease-in-out_infinite]"}`}
+              className={`absolute w-64 h-64 [@media(max-height:1050px)]:w-28 [@media(max-height:1050px)]:h-28 rounded-full bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.25)_0%,transparent_70%)] blur-2xl transition-all duration-1000 ${hovered ? "opacity-100 scale-125 animate-[pulse_2s_ease-in-out_infinite]" : "opacity-50 scale-100 animate-[pulse_4s_ease-in-out_infinite]"}`}
             ></div>
 
             <div
-              className={`relative w-32 h-32 rounded-full border-[3px] border-[#00f0ff60] bg-[#010205] flex items-center justify-center shadow-[0_0_50px_rgba(0,240,255,0.4)] transition-all duration-500 overflow-hidden cursor-pointer ${hovered ? "w-[450px] h-[120px] max-w-[90vw] rounded-2xl border-[#00f0ff] shadow-[0_0_60px_#00f0ff] bg-[#00f0ff0a] backdrop-blur-2xl" : ""}`}
+              className={`relative w-32 h-32 [@media(max-height:1050px)]:w-16 [@media(max-height:1050px)]:h-16 rounded-full border-[3px] border-[#00f0ff60] bg-[#010205] flex items-center justify-center shadow-[0_0_50px_rgba(0,240,255,0.4)] transition-all duration-500 overflow-hidden cursor-pointer ${hovered ? "w-[450px] h-[120px] max-w-[90vw] rounded-2xl border-[#00f0ff] shadow-[0_0_60px_#00f0ff] bg-[#00f0ff0a] backdrop-blur-2xl" : ""}`}
             >
               <div
                 className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${hovered ? "opacity-0 pointer-events-none" : "opacity-100"}`}
@@ -1082,8 +1082,8 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
           </div>
         </div>
 
-        <div className="w-full px-4 sm:px-8 text-center z-10 mt-auto pb-4">
-          <div className="inline-block bg-[#010205] border border-[#00f0ff20] px-4 py-2 rounded-lg text-[0.5rem] sm:text-[0.55rem] text-[#8ab4f8]/80 leading-relaxed text-justify max-w-2xl shadow-[0_0_20px_rgba(0,0,0,0.5)]">
+        <div className="w-full px-4 sm:px-8 text-center z-10 mt-auto pb-4 [@media(max-height:1050px)]:pb-1 shrink-0">
+          <div className="inline-block bg-[#010205] border border-[#00f0ff20] px-4 py-2 [@media(max-height:1050px)]:py-1 [@media(max-height:1050px)]:px-2 rounded-lg text-[0.5rem] sm:text-[0.55rem] text-[#8ab4f8]/80 leading-relaxed text-justify max-w-2xl shadow-[0_0_20px_rgba(0,0,0,0.5)]">
             <strong className="text-[#00f0ff]">POLÍTICA DO ECOSSISTEMA:</strong>{" "}
             opera em{" "}
             <span className="text-[#00ffaa] font-bold">
