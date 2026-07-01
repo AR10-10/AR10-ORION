@@ -13,6 +13,8 @@ import {
   startMexcOrderflowFeed,
   type OrderflowSignal,
   type OrderflowConnectorState,
+  startRealLiquidationFeed,
+  type LiquidationEvent,
 } from "./engine-bridge";
 import {
   LayoutDashboard,
@@ -124,6 +126,13 @@ export default function App() {
   // volume since this tab opened (see signal-engine.js). Null until the
   // first real tick batch is ingested.
   const [cvd, setCvd] = useState<number | null>(null);
+
+  // Real institutional liquidation feed (Binance USDT-M Futures, public —
+  // engine-bridge.ts's startRealLiquidationFeed). Capped to the most
+  // recent 30 — a real feed of forced-liquidation events, not a polling
+  // snapshot, so it can only ever grow via real exchange events.
+  const [liquidations, setLiquidations] = useState<LiquidationEvent[]>([]);
+  const [liquidationState, setLiquidationState] = useState<"LIVE" | "ERROR" | "pending">("pending");
 
   // Widget visibility / floating state.
   const [widgets, setWidgets] = useState<{
@@ -373,6 +382,20 @@ export default function App() {
     return stop;
   }, []);
 
+  // Real institutional liquidation feed (Binance USDT-M Futures, public,
+  // no key — engine-bridge.ts's startRealLiquidationFeed). Exchange-wide,
+  // not BTC-only — large forced liquidations anywhere are the real signal
+  // this widget shows.
+  useEffect(() => {
+    const stop = startRealLiquidationFeed(
+      (event) => {
+        setLiquidations((prev) => [event, ...prev].slice(0, 30));
+      },
+      (state) => setLiquidationState(state),
+    );
+    return stop;
+  }, []);
+
   // ───────────────────────────────────────────────────────────────────────────
   // Quantitative engine.
   //   • Flow pressure = real order-book imbalance (local, from the live WS book).
@@ -465,6 +488,8 @@ export default function App() {
       orderflowState,
       orderflowReason,
       cvd,
+      liquidations,
+      liquidationState,
     }),
     [
       widgets,
@@ -478,6 +503,8 @@ export default function App() {
       orderflowState,
       orderflowReason,
       cvd,
+      liquidations,
+      liquidationState,
     ],
   );
 
@@ -2053,7 +2080,7 @@ function EventsWidget() {
 
 // --- BOTTOM PANELS ---
 function BottomPanels() {
-  const { widgets } = useContext(WidgetContext) || {};
+  const { widgets, liquidations, liquidationState } = useContext(WidgetContext) || {};
   const anyVisible =
     widgets?.processing?.visible ||
     widgets?.stream?.visible ||
@@ -2086,10 +2113,30 @@ function BottomPanels() {
           </div>
         </Widget>
 
-        <Widget id="tactical" title="SISTEMA DE ALERTA TÁTICO" className="min-w-[320px] snap-start" flex="flex-[1.8]" extraHeader={<Activity size={12} className="text-[#ff005560]" />}>
-          <div className="flex items-center justify-center h-full text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
-            {AWAIT} ALERTAS REAIS…
-          </div>
+        <Widget id="tactical" title="LIQUIDAÇÕES INSTITUCIONAIS · REAL" className="min-w-[320px] snap-start" flex="flex-[1.8]" extraHeader={<Activity size={12} className="text-[#ff005560]" />}>
+          {liquidations && liquidations.length > 0 ? (
+            <div className="flex flex-col justify-center h-full gap-1 px-1">
+              {liquidations.slice(0, 2).map((liq: LiquidationEvent, i: number) => {
+                const isLongLiq = liq.side === "LONG_LIQUIDATED";
+                const color = isLongLiq ? "text-[#ff0055]" : "text-[#00ffaa]";
+                return (
+                  <div key={`${liq.timestamp}-${i}`} className="flex justify-between items-center text-[0.45rem] gap-2">
+                    <span className={`font-bold tracking-wider whitespace-nowrap ${color}`}>
+                      {isLongLiq ? "LONG LIQUIDADA" : "SHORT LIQUIDADA"}
+                    </span>
+                    <span className="text-[#a0f0ff]/80 font-mono">{liq.symbol}</span>
+                    <span className="text-[#8ab4f8]/70 font-mono whitespace-nowrap">
+                      ${(liq.notionalUsd / 1000).toFixed(0)}k
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold text-center px-2">
+              {liquidationState === "ERROR" ? "FEED INDISPONÍVEL" : `${AWAIT} LIQUIDAÇÃO REAL…`}
+            </div>
+          )}
         </Widget>
 
         <Widget id="log" title="LOG DE EXECUÇÃO" className="min-w-[200px] snap-start" flex="flex-[1]">

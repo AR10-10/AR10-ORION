@@ -18,6 +18,7 @@ import { buildRealAnalysisFrame } from '../../js/real-data/analysis-frame.js';
 import { buildResearchEngineFrame } from '../../js/research/research-engine.js';
 import { buildTradeSetupMatrix } from '../../js/research/trade-setup-matrix.js';
 import { buildTargetTracker } from '../../js/research/target-tracker.js';
+import { startLiquidationStream } from '../../js/real-data/binance-liquidations-stream.js';
 
 export interface RealCandle {
   t: number;
@@ -221,4 +222,32 @@ export function startMexcOrderflowFeed(
     stopped = true;
     poller.stop();
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Real institutional liquidation feed (Binance USDT-M Futures, public,
+// no key — binance-liquidations-stream.js). Distinct data source from the
+// MEXC order-flow feed above: this is forced-liquidation events across
+// the whole exchange, filtered to real notional size, not per-symbol
+// trade ticks.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface LiquidationEvent {
+  symbol: string;
+  side: 'LONG_LIQUIDATED' | 'SHORT_LIQUIDATED';
+  price: number;
+  qty: number;
+  notionalUsd: number;
+  timestamp: number;
+}
+
+export function startRealLiquidationFeed(
+  onEvent: (event: LiquidationEvent) => void,
+  onState: (state: 'LIVE' | 'ERROR') => void,
+  minNotionalUsd = 50000,
+): () => void {
+  return startLiquidationStream({
+    onEvent: (e: LiquidationEvent) => onEvent(e),
+    onState: (state: string) => onState(state === CONNECTOR_STATES.ACTIVE_READ_ONLY ? 'LIVE' : 'ERROR'),
+    minNotionalUsd,
+  });
 }
