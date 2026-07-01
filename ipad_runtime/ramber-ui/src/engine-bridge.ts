@@ -90,45 +90,53 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
   }
   const evidence = probeResult.evidence;
 
-  const frame = await buildRealAnalysisFrame({ evidence, workerClient, windowSize: 20 });
-  if (frame.status !== 'OK') {
+  // research-engine.js's buildResearchEngineFrame() explicitly throws on a
+  // malformed {frame, evidence} pair — this function's contract (see
+  // RealCycleResult) is to always resolve, never reject, so every pure-
+  // function call in the pipeline below is covered by one try/catch.
+  try {
+    const frame = await buildRealAnalysisFrame({ evidence, workerClient, windowSize: 20 });
+    if (frame.status !== 'OK') {
+      return {
+        ok: false,
+        reason: frame.status_reason,
+        candles: evidence.candles,
+        lastPrice: isNum(evidence.ticker?.last_price) ? evidence.ticker.last_price : undefined,
+      };
+    }
+
+    const research = buildResearchEngineFrame({ frame, evidence, context: {} });
+    const matrix = buildTradeSetupMatrix({ research });
+
+    const signal: 'LONG' | 'SHORT' | 'WAIT' | null =
+      matrix.signal === 'LONG' || matrix.signal === 'SHORT' || matrix.signal === 'WAIT' ? matrix.signal : null;
+
+    const tracker = buildTargetTracker({
+      snapshot: { frame, research },
+      livePrice: { value: evidence.ticker.last_price, mode: 'REAL' },
+    });
+
+    const route = signal === 'SHORT' ? tracker.rota_b_short : signal === 'LONG' ? tracker.rota_a_long : null;
+
     return {
-      ok: false,
-      reason: frame.status_reason,
+      ok: true,
       candles: evidence.candles,
-      lastPrice: isNum(evidence.ticker?.last_price) ? evidence.ticker.last_price : undefined,
+      lastPrice: evidence.ticker.last_price,
+      signal,
+      confidence: typeof matrix.confidence === 'string' ? matrix.confidence : null,
+      marketStructure: typeof frame.market_structure === 'string' ? frame.market_structure : null,
+      entry: route && isNum(tracker.current_price) ? tracker.current_price : null,
+      target1: route && isNum(route.target_1) ? route.target_1 : null,
+      target2: route && isNum(route.target_2) ? route.target_2 : null,
+      stop: route && isNum(route.invalidation) ? route.invalidation : null,
+      support: isNum(frame.support) ? frame.support : null,
+      resistance: isNum(frame.resistance) ? frame.resistance : null,
+      condition: typeof matrix.condition === 'string' ? matrix.condition : null,
+      rationale: typeof matrix.rationale === 'string' ? matrix.rationale : null,
     };
+  } catch (err: any) {
+    return { ok: false, reason: `pipeline_de_pesquisa_falhou: ${err?.message || err}` };
   }
-
-  const research = buildResearchEngineFrame({ frame, evidence, context: {} });
-  const matrix = buildTradeSetupMatrix({ research });
-
-  const signal: 'LONG' | 'SHORT' | 'WAIT' | null =
-    matrix.signal === 'LONG' || matrix.signal === 'SHORT' || matrix.signal === 'WAIT' ? matrix.signal : null;
-
-  const tracker = buildTargetTracker({
-    snapshot: { frame, research },
-    livePrice: { value: evidence.ticker.last_price, mode: 'REAL' },
-  });
-
-  const route = signal === 'SHORT' ? tracker.rota_b_short : signal === 'LONG' ? tracker.rota_a_long : null;
-
-  return {
-    ok: true,
-    candles: evidence.candles,
-    lastPrice: evidence.ticker.last_price,
-    signal,
-    confidence: typeof matrix.confidence === 'string' ? matrix.confidence : null,
-    marketStructure: typeof frame.market_structure === 'string' ? frame.market_structure : null,
-    entry: route && isNum(tracker.current_price) ? tracker.current_price : null,
-    target1: route && isNum(route.target_1) ? route.target_1 : null,
-    target2: route && isNum(route.target_2) ? route.target_2 : null,
-    stop: route && isNum(route.invalidation) ? route.invalidation : null,
-    support: isNum(frame.support) ? frame.support : null,
-    resistance: isNum(frame.resistance) ? frame.resistance : null,
-    condition: typeof matrix.condition === 'string' ? matrix.condition : null,
-    rationale: typeof matrix.rationale === 'string' ? matrix.rationale : null,
-  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

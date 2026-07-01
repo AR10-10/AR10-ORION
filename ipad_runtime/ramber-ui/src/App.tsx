@@ -157,6 +157,7 @@ export default function App() {
       const res = await fetch(
         `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=50`,
       );
+      if (!res.ok) throw new Error(`klines HTTP ${res.status}`);
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
         setChartData(
@@ -172,6 +173,7 @@ export default function App() {
       const tickerRes = await fetch(
         `https://api.binance.com/api/v3/ticker/24hr?symbols=["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT"]`,
       );
+      if (!tickerRes.ok) throw new Error(`ticker HTTP ${tickerRes.status}`);
       const tickerData = await tickerRes.json();
       if (Array.isArray(tickerData)) {
         setScannerData(
@@ -198,6 +200,7 @@ export default function App() {
         fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT`),
         fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT`),
       ]);
+      if (!fundingRes.ok || !oiRes.ok) throw new Error(`derivatives HTTP ${fundingRes.status}/${oiRes.status}`);
       const funding = await fundingRes.json();
       const oi = await oiRes.json();
       setDerivatives({
@@ -254,7 +257,12 @@ export default function App() {
       ws.onerror = () => ws?.close();
 
       ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
+        let msg: any;
+        try {
+          msg = JSON.parse(event.data);
+        } catch {
+          return; // malformed frame — drop it, keep the connection alive
+        }
         if (msg.stream === "btcusdt@ticker") {
           const d = msg.data;
           const currentPrice = Number(d.c);
@@ -587,6 +595,13 @@ function ConfigPanel() {
 }
 
 // --- ASSISTANT ORB / S.E. CORE (center hero) ---
+const ASSISTANT_MESSAGES = [
+  "NÚCLEO EM MODO LEITURA (READ_ONLY).",
+  "SINCRONIZANDO FLUXO DE ORDENS REAL...",
+  "MAPEANDO ESTRUTURA DE PREÇO (SWINGS REAIS).",
+  "SEM EXECUÇÃO DE ORDEM — APENAS ANÁLISE.",
+];
+
 function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
   const [hovered, setHovered] = useState(false);
   const [msgIdx, setMsgIdx] = useState(0);
@@ -611,23 +626,16 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
       ? "text-[#ff0055]"
       : "text-[#8ab4f8]/60";
 
-  const messages = [
-    "NÚCLEO EM MODO LEITURA (READ_ONLY).",
-    "SINCRONIZANDO FLUXO DE ORDENS REAL...",
-    "MAPEANDO ESTRUTURA DE PREÇO (SWINGS REAIS).",
-    "SEM EXECUÇÃO DE ORDEM — APENAS ANÁLISE.",
-  ];
-
   useEffect(() => {
     if ((hovered || inCenter) && !inputValue) {
       const t = setInterval(() => {
-        setMsgIdx((prev) => (prev + 1) % messages.length);
+        setMsgIdx((prev) => (prev + 1) % ASSISTANT_MESSAGES.length);
       }, 3500);
       return () => clearInterval(t);
     } else {
       setMsgIdx(0);
     }
-  }, [hovered, inCenter, messages.length, inputValue]);
+  }, [hovered, inCenter, inputValue]);
 
   if (inCenter) {
     return (
@@ -824,7 +832,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                       S.E. · NÚCLEO READ-ONLY
                     </span>
                     <span className="text-[0.6rem] sm:text-[0.7rem] text-white font-bold tracking-[0.1em] truncate animate-fade-in drop-shadow-[0_0_6px_rgba(255,255,255,0.5)]">
-                      {messages[msgIdx]}
+                      {ASSISTANT_MESSAGES[msgIdx]}
                     </span>
                   </div>
                 </div>
@@ -908,7 +916,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                 S.E. · READ-ONLY
               </span>
               <span className="text-[0.55rem] text-white font-bold tracking-wider truncate animate-fade-in">
-                {messages[msgIdx]}
+                {ASSISTANT_MESSAGES[msgIdx]}
               </span>
             </div>
           </div>
@@ -1114,6 +1122,16 @@ function TopBar({
     </div>
   );
 }
+interface TopStatProps {
+  label: string;
+  value: string | number;
+  subValue?: string;
+  color: string;
+  subColor?: string;
+  active?: boolean;
+  className?: string;
+}
+
 const TopStat = React.memo(function TopStat({
   label,
   value,
@@ -1122,7 +1140,7 @@ const TopStat = React.memo(function TopStat({
   subColor,
   active,
   className = "",
-}: any) {
+}: TopStatProps) {
   return (
     <div
       className={`flex flex-col justify-center min-w-[85px] h-[36px] px-2.5 transition-colors ${active ? "border border-[#00f0ff30] rounded bg-[#00f0ff08] shadow-[inset_0_0_10px_rgba(0,240,255,0.05)]" : "hover:bg-white/5 rounded"} ${className}`}
@@ -1593,7 +1611,12 @@ function OrderFlowWidget() {
     </Widget>
   );
 }
-const FlowMetric = React.memo(function FlowMetric({ label, value, color }: any) {
+interface FlowMetricProps {
+  label: string;
+  value: string | number;
+  color: string;
+}
+const FlowMetric = React.memo(function FlowMetric({ label, value, color }: FlowMetricProps) {
   return (
     <div className="flex flex-col items-center xl:items-start">
       <span className="text-[0.4rem] text-[#8ab4f8] uppercase tracking-[0.1em] mb-[2px]">
