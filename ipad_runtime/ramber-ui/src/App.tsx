@@ -27,6 +27,14 @@ import {
 // boot, defeating the entire point of this being opt-in. `import type`
 // is erased at compile time (zero runtime/bundle cost either way).
 import type { MLCEngineInterface } from "@mlc-ai/web-llm";
+// IRON-VOICE layer (src/voice/) — decoupled: these modules never import
+// from App; the App pushes real-state snapshots INTO them. TTS/STT are the
+// browser's own speechSynthesis/webkitSpeechRecognition (feature-detected,
+// fail-closed), so this static import costs a few KB, no model, no network.
+import { voiceEngine } from "./voice/voice-engine";
+import { computeAlerts } from "./voice/voice-dispatcher";
+import type { TerminalSnapshot } from "./voice/voice-intents";
+import { VoiceControlWidget } from "./voice/VoiceControlWidget";
 import {
   LayoutDashboard,
   BarChart2,
@@ -177,6 +185,7 @@ export default function App() {
     scanner: { visible: true, floating: false },
     exposure: { visible: true, floating: false },
     events: { visible: true, floating: false },
+    voice: { visible: true, floating: false },
     neural_core: { visible: false, floating: false },
     processing: { visible: false, floating: false },
     stream: { visible: false, floating: false },
@@ -565,6 +574,51 @@ export default function App() {
     };
   }, [priceData, orderBook, realCycle]);
 
+  // IRON-VOICE: espelho somente-leitura do estado real para a camada de voz
+  // (src/voice/). Mesmos campos que a UI renderiza — nenhum valor novo é
+  // computado aqui, só repassado.
+  const voiceSnapshot = useMemo<TerminalSnapshot>(
+    () => ({
+      direction: engine.direction,
+      confidence: engine.confidence,
+      marketStructure: engine.marketStructure,
+      entry: engine.entry,
+      target: engine.target,
+      stop: engine.stop,
+      support: engine.support,
+      resistance: engine.resistance,
+      rationale: realCycle?.ok ? (realCycle.rationale ?? null) : null,
+      engineStatus,
+      engineReason: realCycle?.reason ?? null,
+      lorentzianOk: realCycle?.lorentzian?.ok === true,
+      lorentzianClassification: realCycle?.lorentzian?.classification ?? null,
+      lorentzianConfidence: realCycle?.lorentzian?.confidence ?? null,
+      lorentzianSampleSize: realCycle?.lorentzian?.sampleSize ?? null,
+      lastPrice: priceData?.price ?? null,
+      cvd,
+      recentOrderflowTypes: orderflowSignals.slice(0, 10).map((s) => s.type),
+      orderflowState,
+      recentLiquidationCount: liquidations.length,
+      liquidationState,
+      wsLive,
+    }),
+    [engine, realCycle, engineStatus, priceData, cvd, orderflowSignals, orderflowState, liquidations, liquidationState, wsLive],
+  );
+
+  // Alertas executivos falados: computeAlerts é pura e só reage a TRANSIÇÕES
+  // reais (prev vs next) — nunca repete o mesmo estado. Fila do voice-engine
+  // é assíncrona por natureza: nada aqui bloqueia render/WS/WebGPU.
+  const prevVoiceSnapshotRef = useRef<TerminalSnapshot | null>(null);
+  useEffect(() => {
+    const alerts = computeAlerts(prevVoiceSnapshotRef.current, voiceSnapshot);
+    alerts.forEach((a) => voiceEngine.speak(a.text, a.priority));
+    prevVoiceSnapshotRef.current = voiceSnapshot;
+  }, [voiceSnapshot]);
+
+  useEffect(() => {
+    voiceEngine.init();
+  }, []);
+
   // Real SMC zones (FVG/Order Blocks/Liquidity) — lifted here (rather than
   // computed locally inside ChartWidget) so the Neural Core widget's
   // tactical-context prompt uses the exact same real counts the chart
@@ -675,6 +729,8 @@ export default function App() {
                   {(widgets.orderbook.visible ||
                     widgets.scanner.visible ||
                     widgets.exposure.visible ||
+                    widgets.events.visible ||
+                    widgets.voice.visible ||
                     widgets.neural_core.visible) && (
                     <div className="flex-[0.95] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[330px] min-h-[600px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
                       {/* Order book + scanner pair up side-by-side only while the
@@ -686,6 +742,9 @@ export default function App() {
                       </div>
                       <ExposureWidget />
                       <EventsWidget />
+                      <Widget id="voice" title="VOICE INTELLIGENCE · IRON-VOICE" flex="shrink-0">
+                        <VoiceControlWidget snapshot={voiceSnapshot} onRefresh={handleManualRestart} />
+                      </Widget>
                       <NeuralCoreWidget />
                     </div>
                   )}
@@ -735,6 +794,7 @@ const WIDGET_LABELS: { [key: string]: string } = {
   scanner: "QUANT SCANNER · 24H REAL",
   exposure: "EXPOSIÇÃO · READ-ONLY",
   events: "TELEMETRIA DE EVENTOS",
+  voice: "VOICE INTELLIGENCE · IRON-VOICE",
   neural_core: "NÚCLEO NEURAL · META LLAMA 3 (LOCAL)",
   processing: "MÓDULOS DE PROCESSAMENTO",
   stream: "STREAM DE INTELIGÊNCIA",
