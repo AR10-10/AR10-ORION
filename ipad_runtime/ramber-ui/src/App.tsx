@@ -863,34 +863,47 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
             </div>
 
             <div className="flex flex-col mt-2 sm:mt-4 gap-4 [@media(max-height:1050px)]:mt-1 [@media(max-height:1050px)]:gap-2">
-              {/* Structural levels — every value real or AGUARDANDO. */}
-              <div className="grid grid-cols-2 gap-2 sm:gap-4">
-                <LevelCard
-                  label="Entrada (Spot)"
-                  value={entry}
-                  accent="#00f0ff"
-                  tag="REF"
-                />
-                <LevelCard
-                  label={isShort ? "Alvo 1 · Suporte" : "Alvo 1 · Resistência"}
-                  value={target}
-                  accent="#00ffaa"
-                  tag="REAL"
-                />
-                <LevelCard
-                  label="Alvo 2 · Extensão"
-                  value={engine.target2}
-                  accent="#00ffaa"
-                  tag="REAL"
-                  dim={!num(engine.target2)}
-                />
-                <LevelCard
-                  label={isShort ? "Stop · Resistência" : "Stop · Suporte"}
-                  value={stop}
-                  accent="#ff0055"
-                  tag="REAL"
-                />
-              </div>
+              {/* Structural levels — real distinct numbers once a direction
+                  exists. Below that, a SINGLE waiting message: showing four
+                  separate "AGUARDANDO" cards here (on top of the "VETOR
+                  AGUARDANDO" headline above) repeated the same fact five
+                  times on one screen for no informational gain. */}
+              {direction ? (
+                <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                  <LevelCard
+                    label="Entrada (Spot)"
+                    value={entry}
+                    accent="#00f0ff"
+                    tag="REF"
+                  />
+                  <LevelCard
+                    label={isShort ? "Alvo 1 · Suporte" : "Alvo 1 · Resistência"}
+                    value={target}
+                    accent="#00ffaa"
+                    tag="REAL"
+                  />
+                  <LevelCard
+                    label="Alvo 2 · Extensão"
+                    value={engine.target2}
+                    accent="#00ffaa"
+                    tag="REAL"
+                    dim={!num(engine.target2)}
+                  />
+                  <LevelCard
+                    label={isShort ? "Stop · Resistência" : "Stop · Suporte"}
+                    value={stop}
+                    accent="#ff0055"
+                    tag="REAL"
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-3 sm:p-4 rounded-lg border border-[#8ab4f8]/20 bg-[#8ab4f8]/5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#f0d06f] animate-pulse shrink-0"></div>
+                  <span className="text-[0.5rem] sm:text-[0.55rem] tracking-[0.15em] text-[#8ab4f8] font-bold uppercase">
+                    Motor real aguardando confirmação direcional para Entrada/Alvos/Stop — níveis estruturais brutos já disponíveis abaixo
+                  </span>
+                </div>
+              )}
 
               {/* Honest flow / move metrics — no PnL, no leverage, no win-rate. */}
               <div className="flex flex-col lg:flex-row gap-2 sm:gap-4">
