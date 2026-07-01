@@ -65,6 +65,12 @@ function runSelfTest() {
         const drained = rb.drain();
         check('RingBuffer round-trip dentro do worker', drained.length === 5 && drained[0].price === 100, `drained=${drained.length}`);
     }
+    {
+        const state = createEngineState();
+        const ticks = [mkTick(100, 5, Side.BUY), mkTick(100, 2, Side.SELL), mkTick(100, 3, Side.BUY)];
+        processSignals(ticks, state);
+        check('CVD acumula +compra/-venda sem resetar', state.cvd.value === 6, `cvd=${state.cvd.value}`);
+    }
 
     const pass = results.every((r) => r.pass);
     return { pass, results };
@@ -96,6 +102,7 @@ self.onmessage = (ev) => {
                 type: 'ingest_ticks_result',
                 ingested: drained.length,
                 signals: signals.map((s) => ({ type: s.type, confidence: s.confidence, price: s.price, timestamp: s.timestamp, metadata: s.metadata })),
+                cvd: engineState.cvd.value,
             });
             return;
         }

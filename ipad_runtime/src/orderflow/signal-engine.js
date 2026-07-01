@@ -50,6 +50,14 @@ export function createEngineState() {
         ofi: { buyVol: 0, sellVol: 0, count: 0, lastSig: 0 },
         absorption: { buyVol: 0, sellVol: 0, priceStart: 0, startTime: 0, active: false },
         exhaustion: { deltaHist: [], priceHist: [], currentDelta: 0 },
+        // CVD — Cumulative Volume Delta: soma corrida de +volume (compra) /
+        // -volume (venda) desde a criacao deste engine state, nunca
+        // resetada (diferente do delta rolante de exhaustion, que zera a
+        // cada sinal). E' o mesmo acumulador cru que qualquer CVD real usa;
+        // como este processo so ve os ticks desde que o app abriu, o valor
+        // e' honestamente "CVD da sessao", nao "CVD 24h" — nao ha historico
+        // de ticks anterior a sessao atual para fingir o contrario.
+        cvd: { value: 0 },
     };
 }
 
@@ -76,6 +84,9 @@ export function processSignals(ticks, state, settings = defaultSettings) {
 
     for (let ti = 0; ti < ticks.length; ti++) {
         const tick = ticks[ti];
+
+        // CVD — atualizado uma vez por tick, nunca resetado.
+        state.cvd.value += tick.side === Side.BUY ? tick.volume : -tick.volume;
 
         // OFI — Order Flow Imbalance sobre janela de N ticks.
         const ofi = state.ofi;

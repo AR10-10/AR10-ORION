@@ -120,6 +120,10 @@ export default function App() {
   const [orderflowSignals, setOrderflowSignals] = useState<OrderflowSignal[]>([]);
   const [orderflowState, setOrderflowState] = useState<OrderflowConnectorState | "pending">("pending");
   const [orderflowReason, setOrderflowReason] = useState<string | null>(null);
+  // Real Cumulative Volume Delta — running sum of signed real MEXC trade
+  // volume since this tab opened (see signal-engine.js). Null until the
+  // first real tick batch is ingested.
+  const [cvd, setCvd] = useState<number | null>(null);
 
   // Widget visibility / floating state.
   const [widgets, setWidgets] = useState<{
@@ -363,6 +367,7 @@ export default function App() {
         setOrderflowState(state);
         setOrderflowReason(reason ?? null);
       },
+      (value) => setCvd(value),
       "BTC",
     );
     return stop;
@@ -459,6 +464,7 @@ export default function App() {
       orderflowSignals,
       orderflowState,
       orderflowReason,
+      cvd,
     }),
     [
       widgets,
@@ -471,6 +477,7 @@ export default function App() {
       orderflowSignals,
       orderflowState,
       orderflowReason,
+      cvd,
     ],
   );
 
@@ -1563,12 +1570,13 @@ const CandlesSvg = React.memo(function CandlesSvg({ data }: { data: any[] }) {
 
 // --- ORDER FLOW WIDGET ---
 function OrderFlowWidget() {
-  const { engine, orderflowState, orderflowReason, orderflowSignals } =
+  const { engine, orderflowState, orderflowReason, orderflowSignals, cvd } =
     useContext(WidgetContext) || {};
   const buyPercent: number | null = engine?.buyPercent ?? null;
   const sellPercent: number | null = engine?.sellPercent ?? null;
   const delta: number | null = engine?.delta ?? null;
   const imbalance: number | null = engine?.imbalance ?? null;
+  const cvdValue: number | null = num(cvd) ? cvd : null;
 
   const signals: OrderflowSignal[] = orderflowSignals ?? [];
   const ofState: string = orderflowState ?? "pending";
@@ -1600,6 +1608,11 @@ function OrderFlowWidget() {
             label="DESEQ."
             value={num(imbalance) ? `${imbalance >= 0 ? "+" : ""}${(imbalance * 100).toFixed(1)}%` : DASH}
             color={num(imbalance) && imbalance >= 0 ? "text-[#00ffaa]" : "text-[#ff0055]"}
+          />
+          <FlowMetric
+            label="CVD SESSÃO"
+            value={cvdValue !== null ? `${cvdValue >= 0 ? "+" : ""}${cvdValue.toFixed(2)}` : DASH}
+            color={cvdValue !== null && cvdValue >= 0 ? "text-[#00ffaa]" : "text-[#ff0055]"}
           />
         </div>
 

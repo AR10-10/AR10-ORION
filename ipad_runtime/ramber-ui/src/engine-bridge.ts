@@ -178,10 +178,14 @@ function getOrderflowWorkerClient() {
 // Absorption/Exhaustion are meant to be rare relative to raw ticks).
 // onState reports the real connector state on every poll cycle, including
 // failures — the UI must never keep showing "LIVE" after the feed dies.
-// Returns a stop() function; call it on unmount.
+// onCvd reports the real Cumulative Volume Delta (running sum of signed
+// real trade volume since this engine instance was created — see
+// signal-engine.js's createEngineState) whenever new ticks were actually
+// ingested. Returns a stop() function; call it on unmount.
 export function startMexcOrderflowFeed(
   onSignals: (signals: OrderflowSignal[]) => void,
   onState: (state: OrderflowConnectorState, reason?: string) => void,
+  onCvd: (value: number) => void,
   symbol = 'BTC',
 ): () => void {
   const { orderflowClient, initReady } = getOrderflowWorkerClient();
@@ -201,8 +205,10 @@ export function startMexcOrderflowFeed(
       if (!ticks.length) return;
       try {
         await initReady;
-        const { signals } = await orderflowClient.ingestTicks(ticks);
-        if (!stopped && Array.isArray(signals) && signals.length) onSignals(signals);
+        const { signals, cvd } = await orderflowClient.ingestTicks(ticks);
+        if (stopped) return;
+        if (Array.isArray(signals) && signals.length) onSignals(signals);
+        if (isNum(cvd)) onCvd(cvd);
       } catch (err: any) {
         if (!stopped) onState('ERROR', `orderflow_worker_falhou: ${err?.message || err}`);
       }
