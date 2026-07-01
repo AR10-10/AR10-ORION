@@ -676,16 +676,19 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
               <div
                 className={`w-1.5 h-1.5 rounded-full ${engineStatus === "ok" ? "bg-[#00ffaa] animate-pulse" : engineStatus === "error" ? "bg-[#ff0055]" : "bg-[#f0d06f] animate-pulse"}`}
               ></div>
-              <span
-                className={`text-[0.45rem] sm:text-[0.5rem] tracking-[0.2em] font-bold uppercase ${engineStatus === "ok" ? "text-[#00ffaa]" : engineStatus === "error" ? "text-[#ff0055]" : "text-[#f0d06f]"}`}
-              >
-                MOTOR WASM ·{" "}
-                {engineStatus === "ok"
-                  ? "CONECTADO"
-                  : engineStatus === "error"
-                    ? `FALHOU (${realCycle?.reason || DASH})`
-                    : "INICIALIZANDO..."}
-              </span>
+              {engineStatus === "pending" ? (
+                <span className="flex items-center gap-1.5 text-[0.45rem] sm:text-[0.5rem] tracking-[0.2em] font-bold uppercase text-[#f0d06f]">
+                  MOTOR WASM ·
+                  <span className="skeleton-shimmer h-[0.6em] w-16 rounded-sm" />
+                </span>
+              ) : (
+                <span
+                  className={`text-[0.45rem] sm:text-[0.5rem] tracking-[0.2em] font-bold uppercase ${engineStatus === "ok" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+                >
+                  MOTOR WASM ·{" "}
+                  {engineStatus === "ok" ? "CONECTADO" : `FALHOU (${realCycle?.reason || DASH})`}
+                </span>
+              )}
               {engine.confidence && (
                 <span className="text-[0.45rem] sm:text-[0.5rem] tracking-[0.2em] font-bold uppercase text-[#8ab4f8] border border-[#8ab4f8]/30 px-1.5 py-0.5 rounded">
                   CONFIANÇA {engine.confidence}
@@ -1207,6 +1210,42 @@ function SideBar({
   );
 }
 
+// --- WIDGET ERROR BOUNDARY ---
+// A single widget's render can throw on a real but unanticipated data shape
+// (e.g. an exchange response schema change) — this must never take down the
+// rest of the cockpit. Error boundaries have no hook equivalent; a class
+// component is the only way React supports catching render errors.
+interface WidgetErrorBoundaryState {
+  hasError: boolean;
+}
+class WidgetErrorBoundary extends React.Component<
+  { title?: string; children: React.ReactNode },
+  WidgetErrorBoundaryState
+> {
+  constructor(props: { title?: string; children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError(): WidgetErrorBoundaryState {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center gap-1 text-center px-2">
+          <span className="text-[0.5rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
+            {this.props.title || "PAINEL"} · ERRO DE RENDERIZAÇÃO
+          </span>
+          <span className="text-[0.4rem] text-[#8ab4f8]/50">
+            Os demais painéis continuam ativos.
+          </span>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // --- WIDGET WRAPPER ---
 function Widget({ id, children, title, className = "", flex = "flex-1", extraHeader }: any) {
   const { widgets, toggleWidget } = useContext(WidgetContext) || {};
@@ -1286,7 +1325,7 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
           {title && renderHeader(true)}
           <div className="flex-1 min-h-0 relative p-2 overflow-hidden flex flex-col z-10">
             <div className="cyber-scanline z-0"></div>
-            {children}
+            <WidgetErrorBoundary title={title}>{children}</WidgetErrorBoundary>
           </div>
         </div>
       </Rnd>
@@ -1321,7 +1360,7 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
         onDoubleClick={(e) => e.stopPropagation()}
       >
         <div className="cyber-scanline z-0"></div>
-        {children}
+        <WidgetErrorBoundary title={title}>{children}</WidgetErrorBoundary>
       </div>
     </div>
   );
