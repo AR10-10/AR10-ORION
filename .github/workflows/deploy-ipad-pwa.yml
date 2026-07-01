@@ -29,6 +29,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # cyborgpro-ui/ is the only part of ipad_runtime/ that needs a build step
+      # (Vite/React) — everything else in ipad_runtime/ is precompiled static
+      # JS served as-is, unchanged by this job.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ipad_runtime/cyborgpro-ui/package-lock.json
+
+      - name: Build Cyborg PRO UI (React/Vite)
+        working-directory: ipad_runtime/cyborgpro-ui
+        run: |
+          npm ci --include=dev
+          npm run build
+          rm -rf node_modules
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:

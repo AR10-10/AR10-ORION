@@ -16,3 +16,8 @@ __pycache__/
 
 # Build cache do crate Rust -> WASM do iPad Runtime (binario final fica versionado em wasm/)
 ipad_runtime/wasm-src/cyborg_quant_core/target/
+
+# Cyborg PRO UI (React/Vite) — dependencias e build output sao gerados pelo
+# workflow de deploy (npm ci && npm run build); so' o codigo-fonte e' versionado.
+ipad_runtime/cyborgpro-ui/node_modules/
+ipad_runtime/cyborgpro-ui/dist/
