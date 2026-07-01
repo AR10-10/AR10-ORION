@@ -642,6 +642,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
   const [hovered, setHovered] = useState(false);
   const [msgIdx, setMsgIdx] = useState(0);
   const [inputValue, setInputValue] = useState("");
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
   const { widgets, engine, engineStatus, realCycle } = useContext(WidgetContext) || {};
 
   if (widgets && inCenter && !widgets.se_core?.visible) return null;
@@ -661,6 +662,21 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
     : isShort
       ? "text-[#ff0055]"
       : "text-[#8ab4f8]/60";
+
+  // Quick Action buttons are real UI gated by the real engine's confluence
+  // state — but this terminal has no exchange API key and no order-send
+  // path anywhere in the codebase (READ_ONLY/FAIL_CLOSED by design, not by
+  // an unfinished feature). Tapping never places an order; it always
+  // surfaces that fact instead of silently doing nothing or faking a
+  // success.
+  const handleAction = (label: string) => {
+    setActionFeedback(`${label} · EXECUÇÃO DESABILITADA (READ_ONLY)`);
+  };
+  useEffect(() => {
+    if (!actionFeedback) return;
+    const t = setTimeout(() => setActionFeedback(null), 3000);
+    return () => clearTimeout(t);
+  }, [actionFeedback]);
 
   useEffect(() => {
     if ((hovered || inCenter) && !inputValue) {
@@ -823,6 +839,53 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* Ação Rápida — real touch-friendly UI, gated by the real
+                  engine's confluence state, but this terminal has no
+                  exchange API key and no order-send path anywhere in the
+                  codebase: READ_ONLY/FAIL_CLOSED by permanent design.
+                  Tapping always surfaces that instead of placing an order
+                  or faking success. */}
+              <div className="flex flex-col gap-2 mt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[0.55rem] text-[#8ab4f8] tracking-[0.2em] font-bold uppercase flex items-center gap-2">
+                    <Target size={12} /> AÇÃO RÁPIDA
+                  </span>
+                  {actionFeedback && (
+                    <span className="text-[0.45rem] tracking-[0.15em] text-[#f0d06f] font-bold uppercase animate-fade-in">
+                      {actionFeedback}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    disabled={!isLong}
+                    onClick={() => handleAction("LONG")}
+                    className={`py-3 rounded-lg border font-black tracking-[0.15em] text-[0.6rem] uppercase flex items-center justify-center gap-1.5 transition-colors ${isLong ? "border-[#00ffaa60] bg-[#00ffaa15] text-[#00ffaa] active:bg-[#00ffaa25]" : "border-[#8ab4f8]/15 bg-transparent text-[#8ab4f8]/30 cursor-not-allowed"}`}
+                  >
+                    <ArrowUpRight size={14} /> LONG
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!isShort}
+                    onClick={() => handleAction("SHORT")}
+                    className={`py-3 rounded-lg border font-black tracking-[0.15em] text-[0.6rem] uppercase flex items-center justify-center gap-1.5 transition-colors ${isShort ? "border-[#ff005560] bg-[#ff005515] text-[#ff0055] active:bg-[#ff005525]" : "border-[#8ab4f8]/15 bg-transparent text-[#8ab4f8]/30 cursor-not-allowed"}`}
+                  >
+                    <ArrowDownRight size={14} /> SHORT
+                  </button>
+                  <button
+                    type="button"
+                    disabled
+                    className="py-3 rounded-lg border border-[#8ab4f8]/15 bg-transparent text-[#8ab4f8]/30 cursor-not-allowed font-black tracking-[0.15em] text-[0.6rem] uppercase flex items-center justify-center gap-1.5"
+                  >
+                    <X size={14} /> CLOSE
+                  </button>
+                </div>
+                <span className="text-[0.4rem] tracking-[0.15em] text-[#8ab4f8]/40 uppercase font-bold text-center">
+                  Sem posição ao vivo · execução desabilitada por projeto (READ_ONLY)
+                </span>
               </div>
             </div>
           </div>
