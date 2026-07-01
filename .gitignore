@@ -21,3 +21,9 @@ ipad_runtime/wasm-src/cyborg_quant_core/target/
 # workflow de deploy (npm ci && npm run build); so' o codigo-fonte e' versionado.
 ipad_runtime/cyborgpro-ui/node_modules/
 ipad_runtime/cyborgpro-ui/dist/
+
+# deploy-ipad-pwa.yml copia cyborgpro-ui/dist/ pra raiz de ipad_runtime/ a
+# cada deploy — index.html e assets/ daqui pra baixo sao build output, nunca
+# codigo-fonte versionado.
+ipad_runtime/index.html
+ipad_runtime/assets/

@@ -51,15 +51,13 @@ let wasmReadyPromise: Promise<any> | null = null;
 
 function getWorkerClient() {
   if (!workerClientSingleton) {
-    // Same relative relationship app.js uses (new URL('workers/quant-worker.js',
-    // window.location.href)) — just resolved from this page's own deployed
-    // location instead. cyborgpro-ui's built index.html is served from
-    // ipad_runtime/cyborgpro-ui/dist/, so two levels up reaches ipad_runtime/,
-    // where workers/quant-worker.js and wasm/cyborg_quant_core.wasm actually
-    // live. The worker script resolves its own wasm import relative to
-    // itself (import.meta.url inside quant-worker.js), so this is the only
-    // path that needs to be correct here.
-    const workerUrl = new URL('../../workers/quant-worker.js', window.location.href).href;
+    // This build's output IS ipad_runtime/index.html (deploy-ipad-pwa.yml
+    // copies cyborgpro-ui/dist/ into ipad_runtime/ root) — so
+    // workers/quant-worker.js is a direct sibling of the deployed page, same
+    // relative relationship app.js used to use. The worker script resolves
+    // its own wasm import relative to itself (import.meta.url inside
+    // quant-worker.js), so this is the only path that needs to be correct.
+    const workerUrl = new URL('workers/quant-worker.js', window.location.href).href;
     workerClientSingleton = new QuantWorkerClient(workerUrl);
     wasmReadyPromise = workerClientSingleton.initWasm();
   }
@@ -158,9 +156,9 @@ let orderflowInitPromise: Promise<any> | null = null;
 
 function getOrderflowWorkerClient() {
   if (!orderflowWorkerSingleton) {
-    // Same reasoning as getWorkerClient() above — resolved from this page's
-    // deployed location, two levels up to ipad_runtime/workers/.
-    const workerUrl = new URL('../../workers/orderflow-worker.js', window.location.href).href;
+    // Same reasoning as getWorkerClient() above — workers/ is a direct
+    // sibling of the deployed root index.html.
+    const workerUrl = new URL('workers/orderflow-worker.js', window.location.href).href;
     orderflowWorkerSingleton = new OrderflowWorkerClient(workerUrl);
     orderflowInitPromise = orderflowWorkerSingleton.init(65536);
   }

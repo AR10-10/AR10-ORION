@@ -29,9 +29,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # cyborgpro-ui/ is the only part of ipad_runtime/ that needs a build step
-      # (Vite/React) — everything else in ipad_runtime/ is precompiled static
-      # JS served as-is, unchanged by this job.
+      # cyborgpro-ui/ is the source tree for the Cyborg PRO terminal (React/
+      # Vite) — the ONLY app served at this repo's root. Its build output
+      # (index.html + assets/) is copied into ipad_runtime/ root below and
+      # becomes the deployed site; ipad_runtime/index.html itself is never
+      # committed (generated fresh on every deploy), same reasoning as
+      # node_modules/dist being gitignored — only source is versioned.
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -39,12 +42,13 @@ jobs:
           cache: 'npm'
           cache-dependency-path: ipad_runtime/cyborgpro-ui/package-lock.json
 
-      - name: Build Cyborg PRO UI (React/Vite)
+      - name: Build Cyborg PRO UI (React/Vite) and place at ipad_runtime root
         working-directory: ipad_runtime/cyborgpro-ui
         run: |
           npm ci --include=dev
           npm run build
-          rm -rf node_modules
+          cp -r dist/. ../
+          rm -rf node_modules dist
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
