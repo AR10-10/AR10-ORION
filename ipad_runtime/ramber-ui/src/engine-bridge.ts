@@ -19,6 +19,7 @@ import { buildResearchEngineFrame } from '../../js/research/research-engine.js';
 import { buildTradeSetupMatrix } from '../../js/research/trade-setup-matrix.js';
 import { buildTargetTracker } from '../../js/research/target-tracker.js';
 import { startLiquidationStream } from '../../js/real-data/binance-liquidations-stream.js';
+import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg-order-block-engine.js';
 
 export interface RealCandle {
   t: number;
@@ -27,6 +28,14 @@ export interface RealCandle {
   l: number;
   c: number;
   v: number;
+}
+
+export interface PriceZone {
+  type: 'BULLISH' | 'BEARISH';
+  index: number;
+  top: number;
+  bottom: number;
+  mitigated: boolean;
 }
 
 export interface RealCycleResult {
@@ -250,4 +259,21 @@ export function startRealLiquidationFeed(
     onState: (state: string) => onState(state === CONNECTOR_STATES.ACTIVE_READ_ONLY ? 'LIVE' : 'ERROR'),
     minNotionalUsd,
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Smart Money Concepts: Fair Value Gaps + Order Blocks
+// (fvg-order-block-engine.js). Deliberately computed against the exact
+// candle array the chart renders (not the separate 100-candle window
+// engine-bridge.ts's own analysis cycle probes) — the `index` field on
+// each zone below is meaningless unless it lines up with the array the
+// caller is actually drawing.
+// ─────────────────────────────────────────────────────────────────────────────
+export function computeSmcZones(candles: Array<{ open: number; high: number; low: number; close: number }>): {
+  fairValueGaps: PriceZone[];
+  orderBlocks: PriceZone[];
+} {
+  const result = analyzeFvgOrderBlocks({ ohlcv_series: candles });
+  if (result.status !== 'OK') return { fairValueGaps: [], orderBlocks: [] };
+  return { fairValueGaps: result.fair_value_gaps, orderBlocks: result.order_blocks };
 }

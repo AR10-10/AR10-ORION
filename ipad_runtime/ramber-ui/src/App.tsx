@@ -15,6 +15,8 @@ import {
   type OrderflowConnectorState,
   startRealLiquidationFeed,
   type LiquidationEvent,
+  computeSmcZones,
+  type PriceZone,
 } from "./engine-bridge";
 import {
   LayoutDashboard,
@@ -1402,6 +1404,14 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
 
 // --- CHART WIDGET ---
 function ChartWidget({ data, chartData }: any) {
+  // Real Fair Value Gaps / Order Blocks (Smart Money Concepts) — computed
+  // against this exact candle array so zone indices line up with what's
+  // actually drawn (see computeSmcZones's own comment in engine-bridge.ts).
+  const smcZones = useMemo(
+    () => (chartData && chartData.length > 0 ? computeSmcZones(chartData) : { fairValueGaps: [], orderBlocks: [] }),
+    [chartData],
+  );
+
   return (
     <Widget
       id="chart"
@@ -1465,7 +1475,7 @@ function ChartWidget({ data, chartData }: any) {
 
       <div className="flex-1 mt-[50px] mr-8 relative min-h-0">
         {chartData && chartData.length > 0 ? (
-          <CandleChart data={chartData} last={data?.price ?? null} />
+          <CandleChart data={chartData} last={data?.price ?? null} zones={smcZones} />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
             {AWAIT} CANDLES…
@@ -1479,15 +1489,55 @@ function ChartWidget({ data, chartData }: any) {
 // Split so the expensive part (100 candles -> ~200 SVG nodes) only
 // re-renders when the candle window itself changes (~every 60s), not on
 // every live ticker tick (~1/s) that only moves the last-price marker.
-function CandleChart({ data, last }: { data: any[]; last: number | null }) {
+function CandleChart({
+  data,
+  last,
+  zones,
+}: {
+  data: any[];
+  last: number | null;
+  zones?: { fairValueGaps: PriceZone[]; orderBlocks: PriceZone[] };
+}) {
   if (!data || data.length === 0) return null;
   const min = Math.min(...data.map((d) => d.low));
   const max = Math.max(...data.map((d) => d.high));
   const range = max - min || 1;
   const lastY = num(last) ? 100 - ((last - min) / range) * 100 : null;
+  const priceToPct = (price: number) => 100 - ((price - min) / range) * 100;
+
+  // Only unmitigated zones — the ones still "live" for a trader to watch.
+  // Capped so a busy 100-candle window doesn't turn into a wall of boxes.
+  const unmitigatedFvgs = (zones?.fairValueGaps ?? []).filter((z) => !z.mitigated).slice(0, 3);
+  const unmitigatedBlocks = (zones?.orderBlocks ?? []).filter((z) => !z.mitigated).slice(0, 3);
 
   return (
     <div className="absolute inset-0 border-b border-[#00f0ff20]">
+      {unmitigatedFvgs.map((z, i) => (
+        <div
+          key={`fvg-${z.index}-${i}`}
+          className={`absolute pointer-events-none ${z.type === "BULLISH" ? "bg-[#00ffaa]/[0.06] border-y border-[#00ffaa]/25" : "bg-[#ff0055]/[0.06] border-y border-[#ff0055]/25"}`}
+          style={{
+            top: `${priceToPct(z.top)}%`,
+            height: `${Math.max(priceToPct(z.bottom) - priceToPct(z.top), 0.6)}%`,
+            left: `${(z.index / data.length) * 100}%`,
+            right: 0,
+          }}
+        />
+      ))}
+      {unmitigatedBlocks.map((z, i) => (
+        <div
+          key={`ob-${z.index}-${i}`}
+          className={`absolute pointer-events-none border-dashed ${z.type === "BULLISH" ? "border-[#00ffaa]/40" : "border-[#ff0055]/40"}`}
+          style={{
+            top: `${priceToPct(z.top)}%`,
+            height: `${Math.max(priceToPct(z.bottom) - priceToPct(z.top), 0.6)}%`,
+            left: `${(z.index / data.length) * 100}%`,
+            right: 0,
+            borderTopWidth: 1,
+            borderBottomWidth: 1,
+          }}
+        />
+      ))}
       <CandlesSvg data={data} />
       {lastY !== null && (
         <div
