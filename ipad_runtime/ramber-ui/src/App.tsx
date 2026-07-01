@@ -3,6 +3,7 @@ import React, {
   useState,
   useMemo,
   useCallback,
+  useRef,
   createContext,
   useContext,
 } from "react";
@@ -19,6 +20,13 @@ import {
   type PriceZone,
   type LiquidityZone,
 } from "./engine-bridge";
+// llm-bridge.ts (and the @mlc-ai/web-llm package it imports) is loaded via
+// dynamic import() only inside NeuralCoreWidget's activation handler below
+// — never a static top-level import here. A static import would pull
+// WebLLM's runtime code into the SAME bundle every visitor downloads on
+// boot, defeating the entire point of this being opt-in. `import type`
+// is erased at compile time (zero runtime/bundle cost either way).
+import type { MLCEngineInterface } from "@mlc-ai/web-llm";
 import {
   LayoutDashboard,
   BarChart2,
@@ -151,6 +159,7 @@ export default function App() {
     scanner: { visible: false, floating: false },
     exposure: { visible: false, floating: false },
     events: { visible: false, floating: false },
+    neural_core: { visible: false, floating: false },
     processing: { visible: false, floating: false },
     stream: { visible: false, floating: false },
     tactical: { visible: false, floating: false },
@@ -475,6 +484,18 @@ export default function App() {
     };
   }, [priceData, orderBook, realCycle]);
 
+  // Real SMC zones (FVG/Order Blocks/Liquidity) — lifted here (rather than
+  // computed locally inside ChartWidget) so the Neural Core widget's
+  // tactical-context prompt uses the exact same real counts the chart
+  // itself renders, not a second independent computation.
+  const smcZones = useMemo(
+    () =>
+      chartData && chartData.length > 0
+        ? computeSmcZones(chartData)
+        : { fairValueGaps: [], orderBlocks: [], liquidityZones: [] },
+    [chartData],
+  );
+
   // Stable reference — prevents every context consumer (TopBar, all Widgets,
   // AssistantOrb, MarketDirectionWidget, ConfluenceWidget...) from re-rendering
   // on renders that don't actually change any of these values.
@@ -483,6 +504,7 @@ export default function App() {
       widgets,
       toggleWidget,
       engine,
+      smcZones,
       wsLive,
       bootAt,
       engineStatus,
@@ -498,6 +520,7 @@ export default function App() {
       widgets,
       toggleWidget,
       engine,
+      smcZones,
       wsLive,
       bootAt,
       engineStatus,
@@ -547,7 +570,8 @@ export default function App() {
                   {/* Right Column */}
                   {(widgets.orderbook.visible ||
                     widgets.scanner.visible ||
-                    widgets.exposure.visible) && (
+                    widgets.exposure.visible ||
+                    widgets.neural_core.visible) && (
                     <div className="flex-[0.95] flex flex-col gap-2 w-full md:w-auto md:min-w-[340px] min-h-[600px] md:min-h-0 md:h-full md:overflow-y-auto scrollbar-hide shrink-0 md:shrink pointer-events-none [&>*]:pointer-events-auto">
                       <div className="flex flex-col sm:flex-row md:flex-col xl:flex-row gap-2 min-h-0 flex-[0.85]">
                         <OrderBookWidget data={priceData} book={orderBook} />
@@ -555,6 +579,7 @@ export default function App() {
                       </div>
                       <ExposureWidget />
                       <EventsWidget />
+                      <NeuralCoreWidget />
                     </div>
                   )}
                 </div>
@@ -1488,16 +1513,11 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
 
 // --- CHART WIDGET ---
 function ChartWidget({ data, chartData }: any) {
-  // Real Fair Value Gaps / Order Blocks (Smart Money Concepts) — computed
-  // against this exact candle array so zone indices line up with what's
-  // actually drawn (see computeSmcZones's own comment in engine-bridge.ts).
-  const smcZones = useMemo(
-    () =>
-      chartData && chartData.length > 0
-        ? computeSmcZones(chartData)
-        : { fairValueGaps: [], orderBlocks: [], liquidityZones: [] },
-    [chartData],
-  );
+  // Real Fair Value Gaps / Order Blocks / Liquidity zones — computed once
+  // in App() (see contextValue) against this exact candle array, shared
+  // with the Neural Core widget's tactical-context prompt so both use the
+  // same real counts rather than two independent computations.
+  const { smcZones } = useContext(WidgetContext) || {};
 
   return (
     <Widget
@@ -2223,6 +2243,164 @@ function EventsWidget() {
     <Widget id="events" title="TELEMETRIA DE EVENTOS" flex="flex-[0.8] min-h-[110px]">
       <div className="flex-1 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
         {AWAIT} EVENTOS REAIS…
+      </div>
+    </Widget>
+  );
+}
+
+// --- NEURAL CORE (local Llama 3 via WebLLM/WebGPU) ---
+// Entirely opt-in and isolated: nothing in this widget runs until the user
+// explicitly taps ATIVAR. Before that, zero network requests, zero WebGPU
+// usage, zero effect on the rest of the app's instant boot. The model
+// itself and @mlc-ai/web-llm's runtime are loaded via a lazy import()
+// inside handleActivate — see the comment on the App.tsx import block
+// above for why a static import would have defeated this entirely.
+type NeuralCoreStatus = "idle" | "loading" | "ready" | "generating" | "error";
+
+function NeuralCoreWidget() {
+  const { engine, realCycle, smcZones, cvd, orderflowSignals } = useContext(WidgetContext) || {};
+  const [status, setStatus] = useState<NeuralCoreStatus>("idle");
+  const [loadProgress, setLoadProgress] = useState<{ progress: number; text: string } | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [reading, setReading] = useState<string>("");
+  const engineRef = useRef<MLCEngineInterface | null>(null);
+
+  // Trivial, import-free feature check — deciding whether to even OFFER
+  // the option must not itself trigger loading the WebLLM bundle.
+  const gpuSupported = typeof navigator !== "undefined" && "gpu" in (navigator as any);
+
+  const handleActivate = async () => {
+    if (!gpuSupported) {
+      setStatus("error");
+      setErrorMsg("WebGPU indisponível neste navegador — núcleo neural requer WebGPU.");
+      return;
+    }
+    setStatus("loading");
+    setErrorMsg(null);
+    try {
+      const { createLocalLlmEngine } = await import("./llm-bridge");
+      const result = await createLocalLlmEngine((report) => setLoadProgress(report));
+      if (!result.ok) {
+        setStatus("error");
+        setErrorMsg(result.reason);
+        return;
+      }
+      engineRef.current = result.engine;
+      setStatus("ready");
+    } catch (err: any) {
+      setStatus("error");
+      setErrorMsg(`falha_inesperada: ${err?.message || err}`);
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!engineRef.current) return;
+    setStatus("generating");
+    setReading("");
+    setErrorMsg(null);
+    try {
+      const { buildTacticalContext, streamTacticalReading } = await import("./llm-bridge");
+      const context = buildTacticalContext({
+        wasmSignal: engine?.direction ?? null,
+        wasmConfidence: engine?.confidence ?? null,
+        marketStructure: engine?.marketStructure ?? null,
+        support: engine?.support ?? null,
+        resistance: engine?.resistance ?? null,
+        lorentzianClassification: realCycle?.lorentzian?.ok ? realCycle.lorentzian.classification ?? null : null,
+        lorentzianConfidencePct: realCycle?.lorentzian?.ok
+          ? Math.round((realCycle.lorentzian.confidence ?? 0) * 100)
+          : null,
+        lorentzianSampleSize: realCycle?.lorentzian?.ok ? realCycle.lorentzian.sampleSize ?? null : null,
+        unmitigatedFvgCount: (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated).length,
+        unmitigatedOrderBlockCount: (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated).length,
+        unsweptLiquidityZoneCount: (smcZones?.liquidityZones ?? []).filter((z: LiquidityZone) => !z.swept).length,
+        cvd: cvd ?? null,
+        recentOrderflowSignalTypes: (orderflowSignals ?? []).slice(0, 5).map((s: OrderflowSignal) => s.type),
+      });
+      const result = await streamTacticalReading(engineRef.current, context, (textSoFar) => setReading(textSoFar));
+      if (!result.ok) {
+        setErrorMsg(result.reason);
+      }
+      setStatus("ready");
+    } catch (err: any) {
+      setStatus("ready");
+      setErrorMsg(`falha_inesperada: ${err?.message || err}`);
+    }
+  };
+
+  return (
+    <Widget id="neural_core" title="NÚCLEO NEURAL · META LLAMA 3 (LOCAL)" flex="flex-[1.1] min-h-[160px]">
+      <div className="flex flex-col h-full gap-2 p-1 text-[0.5rem]">
+        <span className="text-[0.4rem] text-[#8ab4f8]/50 leading-relaxed">
+          LLM local (WebGPU, {" "}navegador — nenhum dado sai deste dispositivo). Modelo grande
+          (~5GB) baixado só quando ativado. Experimental: requer suporte real a WebGPU no
+          navegador.
+        </span>
+
+        {status === "idle" && (
+          <button
+            type="button"
+            onClick={handleActivate}
+            disabled={!gpuSupported}
+            className={`mt-1 py-2 rounded-lg border font-black tracking-[0.15em] text-[0.55rem] uppercase transition-colors ${gpuSupported ? "border-[#00f0ff60] bg-[#00f0ff15] text-[#00f0ff] active:bg-[#00f0ff25]" : "border-[#8ab4f8]/15 text-[#8ab4f8]/30 cursor-not-allowed"}`}
+          >
+            {gpuSupported ? "ATIVAR NÚCLEO NEURAL" : "WEBGPU INDISPONÍVEL"}
+          </button>
+        )}
+
+        {status === "loading" && (
+          <div className="flex flex-col gap-1 mt-1">
+            <span className="text-[0.45rem] tracking-[0.15em] text-[#f0d06f] font-bold uppercase animate-pulse">
+              Injetando pesos da Meta…
+            </span>
+            <div className="w-full h-1.5 bg-[#010308] border border-[#f0d06f]/30 rounded overflow-hidden">
+              <div
+                className="h-full bg-[#f0d06f] transition-all duration-300"
+                style={{ width: `${Math.round((loadProgress?.progress ?? 0) * 100)}%` }}
+              />
+            </div>
+            <span className="text-[0.4rem] text-[#8ab4f8]/50 truncate">{loadProgress?.text ?? "…"}</span>
+          </div>
+        )}
+
+        {(status === "ready" || status === "generating") && (
+          <>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={status === "generating"}
+              className="mt-1 py-1.5 rounded-lg border border-[#00ffaa60] bg-[#00ffaa15] text-[#00ffaa] active:bg-[#00ffaa25] font-black tracking-[0.15em] text-[0.5rem] uppercase disabled:opacity-50"
+            >
+              {status === "generating" ? "GERANDO…" : "GERAR LEITURA TÁTICA"}
+            </button>
+            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide bg-[#010308] border border-[#00f0ff15] rounded p-2 text-[#a0f0ff] leading-relaxed">
+              {reading || (
+                <span className="text-[#8ab4f8]/40 uppercase tracking-[0.2em]">
+                  {AWAIT} LEITURA…
+                </span>
+              )}
+            </div>
+            <span className="text-[0.35rem] text-[#8ab4f8]/40 uppercase tracking-[0.15em]">
+              Llama-3-8B-Instruct-q4f32_1-MLC (local) · leitura analítica, não é ordem — decisão
+              sempre humana.
+            </span>
+          </>
+        )}
+
+        {status === "error" && (
+          <div className="flex flex-col gap-2 mt-1">
+            <span className="text-[0.45rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
+              {errorMsg || "FALHA DESCONHECIDA"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setStatus("idle")}
+              className="py-1.5 rounded-lg border border-[#8ab4f8]/30 text-[#8ab4f8] text-[0.5rem] font-bold uppercase tracking-[0.15em]"
+            >
+              TENTAR NOVAMENTE
+            </button>
+          </div>
+        )}
       </div>
     </Widget>
   );
