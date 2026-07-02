@@ -677,7 +677,10 @@ export default function App() {
 
   return (
     <WidgetContext.Provider value={contextValue}>
-      <div className="flex flex-col h-[100dvh] bg-[#020610] text-[#a0f0ff] font-mono overflow-hidden selection:bg-[#00f0ff30]">
+      {/* pb-safe: em PWA standalone no iPad (viewport-fit=cover) o home
+          indicator invadiria o rodapé sem este padding; em navegador comum
+          env(safe-area-inset-bottom) é 0 e nada muda. */}
+      <div className="flex flex-col h-[100dvh] pb-safe bg-[#020610] text-[#a0f0ff] font-mono overflow-hidden selection:bg-[#00f0ff30]">
         <TopBar data={priceData} derivatives={derivatives} />
         {bootRestFailed && (
           <div className="shrink-0 bg-[#ff005515] border-b border-[#ff005550] px-4 py-2 flex items-center justify-between gap-3">
