@@ -1291,71 +1291,10 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
     );
   }
 
-  // Floating FAB variant.
-  return (
-    <div
-      className={`fixed bottom-[40px] right-[40px] z-[9999] transition-all duration-700 ease-out flex items-center justify-center ${hovered ? "scale-110" : "scale-100"}`}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => {
-        if (!inputValue) setHovered(false);
-      }}
-    >
-      <div
-        className={`absolute w-32 h-32 rounded-full bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.4)_0%,transparent_70%)] blur-md transition-all duration-1000 ${hovered ? "opacity-100 scale-150 animate-[pulse_2s_ease-in-out_infinite]" : "opacity-40 scale-100 animate-[pulse_4s_ease-in-out_infinite]"}`}
-      ></div>
-      <div
-        className={`relative w-12 h-12 rounded-full border-2 border-[#00f0ff60] bg-[#010205] flex items-center justify-center shadow-[0_0_20px_#00f0ff] transition-all duration-500 overflow-hidden cursor-pointer ${hovered ? "w-[320px] h-[80px] rounded-xl border-[#00f0ff] shadow-[0_0_30px_#00f0ff] bg-[#00f0ff10] backdrop-blur-md" : ""}`}
-      >
-        <div
-          className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${hovered ? "opacity-0 pointer-events-none" : "opacity-100"}`}
-        >
-          <div className="w-8 h-8 rounded-full bg-[#00f0ff] opacity-20 animate-ping"></div>
-          <div className="absolute w-4 h-4 rounded-full bg-[#00f0ff] shadow-[0_0_10px_#fff]"></div>
-        </div>
-        <div
-          className={`absolute inset-0 flex flex-col justify-center px-4 transition-opacity duration-700 delay-100 ${hovered ? "opacity-100" : "opacity-0 pointer-events-none"}`}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-full bg-[#00f0ff] shadow-[0_0_15px_#00f0ff] animate-pulse shrink-0 flex items-center justify-center">
-              <div className="w-2 h-2 bg-white rounded-full"></div>
-            </div>
-            <div className="flex flex-col min-w-0 flex-1">
-              <span className="text-[0.45rem] text-[#8ab4f8] tracking-widest font-bold uppercase">
-                S.E. · READ-ONLY
-              </span>
-              <span className="text-[0.55rem] text-white font-bold tracking-wider truncate animate-fade-in">
-                {ASSISTANT_MESSAGES[msgIdx]}
-              </span>
-            </div>
-          </div>
-          <div className="flex gap-2 items-center mt-2 px-1">
-            <input
-              type="text"
-              placeholder="NOTA DE ANÁLISE (LOCAL)..."
-              className="flex-1 bg-transparent border-none outline-none text-[0.5rem] text-white font-bold tracking-widest placeholder-[#00f0ff50]"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  setInputValue("");
-                  setHovered(false);
-                }
-              }}
-            />
-            <div className="flex gap-[2px] items-end h-3 shrink-0">
-              {[40, 70, 30, 80, 55, 90, 45, 65].map((h, i) => (
-                <div
-                  key={i}
-                  className="w-1 bg-[#00f0ff] rounded-full animate-[sound-wave_1s_ease-in-out_infinite]"
-                  style={{ height: `${h}%`, animationDelay: `${i * 0.1}s` }}
-                ></div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  // Único ponto de montagem é o centro do cockpit (inCenter) — a antiga
+  // variante FAB flutuante nunca era montada e foi removida como código
+  // morto na consolidação RC1.
+  return null;
 }
 
 const LevelCard = React.memo(function LevelCard({
