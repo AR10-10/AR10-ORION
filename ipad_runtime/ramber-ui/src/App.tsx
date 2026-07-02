@@ -326,7 +326,10 @@ export default function App() {
       ]);
       if (!unmounted) setBootRestFailed(!restOk && !derivOk);
     })();
-    const restInterval = setInterval(fetchSymbolData, 60000);
+    // Klines a 30s: mantém o último candle do gráfico em sincronia com o
+    // ciclo do motor (mesma cadência). Derivativos (funding/OI) mudam devagar
+    // — 60s continua correto para eles.
+    const restInterval = setInterval(fetchSymbolData, 30000);
     const derivInterval = setInterval(fetchDerivatives, 60000);
 
     let ws: WebSocket | null = null;
@@ -439,10 +442,13 @@ export default function App() {
   }, [bootGeneration]);
 
   // Real engine cycle — WASM Quant Engine + research pipeline (engine-bridge.ts).
-  // Runs on the same cadence as the REST refresh above; the WASM worker and
-  // candle window don't change meaningfully faster than that. The initial
-  // call gets the same bounded retry as the REST fetches above; the
-  // recurring 60s interval keeps calling the plain version.
+  // 30s cadence: the 15m candle's close evolves continuously, and the target
+  // tracker prices its entry/move% off the ticker fetched AT cycle time — a
+  // 60s cycle left those numbers up to a minute behind the live WS price in
+  // the top bar. 30s halves that worst-case skew for ~4 extra REST weight/min
+  // (Binance budget is 1200/min); the k-NN + pipeline cost per cycle is
+  // milliseconds. The initial call gets the same bounded retry as the REST
+  // fetches above; the recurring interval keeps calling the plain version.
   useEffect(() => {
     let cancelled = false;
     const runCycle = async (): Promise<boolean> => {
@@ -453,7 +459,7 @@ export default function App() {
       return result.ok;
     };
     retryBoot(runCycle, () => cancelled);
-    const engineInterval = setInterval(runCycle, 60000);
+    const engineInterval = setInterval(runCycle, 30000);
     return () => {
       cancelled = true;
       clearInterval(engineInterval);
