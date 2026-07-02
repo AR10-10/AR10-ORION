@@ -1,315 +1,105 @@
-# AR10 Cyborg 1.0 PRO — iPad One-Tap Cloud Runtime
+# RAMBER · Terminal V-PRIME ELITE — iPad PWA (AR10-CYBORG)
 
-*Codinome interno: `AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1` · sub-produto iPad/PWA
-dentro do monorepo `AR10-ORION` (ver `../README.md` para a visão geral do
-organismo AR10 ORION V5.0).*
+*Sub-produto iPad/PWA do monorepo `AR10-ORION` (ver `../README.md`). Este
+diretório contém o terminal React em produção e o motor real que ele usa.*
 
-PWA iPad-first do AR10 Cyborg 1.0 PRO. Abre direto no Safari do iPad via HTTPS,
-sem depender de Mac Mini, MacBook, servidor local, terminal ou ZIP como
-fluxo principal. **READ_ONLY / FAIL_CLOSED sempre. Sem execução real, sem
-API secret, sem ordem, sem live trading.**
+**READ_ONLY / FAIL_CLOSED sempre. Sem execução real, sem API secret, sem
+ordem, sem live trading. Nenhum valor é simulado: todo número vem de feed
+público real ou aparece como AGUARDANDO.**
 
-## Como abrir no iPad
+## O que está no ar
 
-1. Abra a URL HTTPS publicada (ver `DEPLOY.md` ou o link entregue) no Safari.
-2. Toque em **Verificar Safari** para ver o relatório de capacidades.
-3. Toque em **Baixar Pacote Local** (ou **Importar Pacote do Arquivos** se já
-   tiver um `.ar10pack` salvo) e depois em **Verificar SHA256**.
-4. Toque em **Instalar no Safari Storage**. O *Vault* muda para `READY`.
-5. Toque em **Rodar Diagnóstico Offline** e **Rodar Replay BTC/USDT** para
-   validar tudo localmente.
-6. Toque em **Adicionar à Tela de Início** e siga as instruções do Safari
-   (Compartilhar → Adicionar à Tela de Início). A partir daí o app abre em
-   modo standalone e continua funcionando offline.
+O site publicado (GitHub Pages) é o terminal React que vive em
+[`ramber-ui/`](ramber-ui/). O workflow
+[`deploy-ipad-pwa.yml`](../.github/workflows/deploy-ipad-pwa.yml)
+builda `ramber-ui` (Vite) e copia `dist/` para a raiz de `ipad_runtime/`
+antes de publicar — ou seja, o `index.html` DEPLOYADO é o do terminal
+React, não o arquivo homônimo commitado nesta pasta (legado, ver abaixo).
 
-## Arquitetura
+## Arquitetura atual
 
 ```
 ipad_runtime/
-├── index.html              tela unica: Safari Local Runtime / Instalacao Local
-├── manifest.webmanifest    metadados PWA (icones, display standalone)
-├── service-worker.js       cache-first, offline-first, mesma origem apenas
-├── css/ipad-runtime.css    tema "Ciborgue" + safe-area (env(safe-area-inset-*))
-├── js/
-│   ├── app.js               orquestrador da tela e dos botoes
-│   ├── siriform.js          maquina de estados do Siriform Avatar (so visual/UI)
-│   ├── feature-detect.js    sondas funcionais (nao so "typeof") de cada API
-│   ├── crypto-utils.js      SHA-256 via Web Crypto, base64, checksum agregado
-│   ├── storage.js           OPFS com fallback automatico para IndexedDB
-│   ├── pack-manager.js       download/import/verify/install/clear do .ar10pack
-│   ├── replay-engine.js      replay BTC/USDT (canvas) usando o worker
-│   ├── diagnostics.js       diagnostico 100% offline
-│   └── worker-client.js     RPC promise<->postMessage com o Web Worker
-├── workers/quant-worker.js  carrega o WASM e roda os indicadores fora da UI thread
-├── wasm/cyborg_quant_core.wasm   motor real, compilado de Rust (ver wasm-src/)
-├── wasm-src/cyborg_quant_core/   fonte Rust do motor (cdylib, wasm32-unknown-unknown)
-├── data/btcusdt_replay.json      dataset SINTETICO offline (ver aviso abaixo)
-├── pack/                    fontes legiveis do pacote (manifests + checksums.sha256)
-├── icons/                   icones PWA/Apple touch gerados localmente (Pillow)
-├── tools/                   scripts de build (replay, icones, .ar10pack)
-└── AR10_CYBORG_LOCAL_PACK_V1.ar10pack   pacote final, gerado por tools/build_pack.py
+├── ramber-ui/                    ← terminal React em produção
+│   └── src/
+│       ├── App.tsx               cockpit (widgets, estado, boot real)
+│       ├── engine-bridge.ts      ponte para o motor real (sem reimplementação)
+│       ├── voice/                IRON-VOICE (fundida no Núcleo S.E.)
+│       │   ├── voice-engine.ts        TTS (speechSynthesis) + fila prioridade
+│       │   ├── voice-recognition.ts   STT push-to-talk (webkitSpeechRecognition)
+│       │   ├── voice-intents.ts       transcript→resposta (funções puras, só dados reais)
+│       │   ├── voice-dispatcher.ts    alertas falados em transições reais de estado
+│       │   └── VoiceControlWidget.tsx controles Glass dentro do núcleo
+│       ├── llm-bridge.ts / llm-worker.ts   Núcleo Neural opt-in (WebLLM/Llama 3, lazy)
+│       └── index.css             tema glassmorphism (Tailwind v4)
+├── js/                           módulos do motor real (importados pelo React)
+│   ├── worker-client.js              RPC com o Web Worker do WASM
+│   ├── orderflow-client.js           cliente do Order Flow Engine
+│   ├── real-data/                    conectores públicos reais (fail-closed)
+│   │   ├── binance-public.js             klines/ticker (probe)
+│   │   ├── binance-liquidations-stream.js liquidações futures (WS !forceOrder)
+│   │   ├── mexc-trades-stream.js         trades reais (polling REST, dedup puro)
+│   │   └── analysis-frame.js / schema.js  contratos e frames
+│   └── research/                     pipeline de pesquisa (funções puras)
+│       └── research-engine.js / trade-setup-matrix.js / target-tracker.js
+├── src/
+│   ├── research/engines/             motores graduados (ver QUARANTINE.md)
+│   │   ├── support-resistance-engine.js / market-structure-engine.js
+│   │   ├── fvg-order-block-engine.js     SMC: FVG/Order Blocks/liquidez
+│   │   └── lorentzian-classifier.js      k-NN Lorentziano + Fourier
+│   │                                     (multi-horizonte via `horizon`)
+│   └── orderflow/                    Order Flow Engine (OFI/Absorção/Exaustão)
+├── workers/quant-worker.js       carrega o WASM fora da UI thread
+├── wasm/cyborg_quant_core.wasm   motor real (Rust → wasm32)
+├── icons/ · manifest.webmanifest metadados PWA (usados pelo deploy)
+└── service-worker.js             shim de AUTODESTRUIÇÃO (ver nota legado)
 ```
 
-## Nebula Core / Siriform Avatar (painel premium)
+## Cockpit (o que o operador vê)
 
-O painel principal (`index.html`) é organizado em volta de um **Siriform
-Avatar** — orbe central CSS-only (sem canvas, sem imagem, sem dependência
-externa) controlado por `js/siriform.js`. É puramente informativo: nenhum
-estado do avatar dispara rede, ordem ou execução, apenas reflete o que o
-runtime local está fazendo.
+- **Vetor de mercado** (LONG/SHORT/AGUARDANDO) do motor WASM real +
+  pipeline de pesquisa; entrada/alvos/stop reais quando confirmado.
+- **Previsão multi-horizonte**: o mesmo k-NN re-rotulado para 4/8/16
+  velas de 15m, com confiança e amostra declaradas por horizonte —
+  leitura probabilística, nunca garantia.
+- **k-NN Lorentziano** como sinal de confluência independente (nunca
+  substitui o vetor do motor).
+- **Order flow real** (MEXC): OFI/Absorção/Exaustão + CVD da sessão.
+- **Liquidações institucionais** (Binance Futures, feed público real).
+- **SMC**: Fair Value Gaps, Order Blocks e zonas de liquidez no gráfico.
+- **VOZ DO NÚCLEO (IRON-VOICE)**, fundida no card do S.E.: alertas
+  executivos falados em transições reais + assistente por push-to-talk
+  ("qual a tendência / previsão / risco / consenso / diagnóstico…").
+  TTS/STT são as APIs nativas do Safari; sem suporte → INDISPONÍVEL.
+- **Núcleo Neural** (opt-in): Llama 3 local via WebLLM/WebGPU, chunks
+  lazy — zero custo até o usuário ativar.
 
-Estados possíveis (`data-state` no `#siriform-avatar`):
-
-| Estado       | Quando aparece                                              |
-|--------------|--------------------------------------------------------------|
-| `idle`       | Em repouso, aguardando toque.                                 |
-| `listening`  | Toque recebido (abrir importação, abrir modal Home Screen).    |
-| `thinking`   | Operação local em andamento (boot, download, importação).     |
-| `analyzing`  | Verificação SHA256, diagnóstico offline, replay BTC/USDT.      |
-| `responding` | Resultado pronto, com legenda contextual.                      |
-| `installing` | Gravando o pacote local no Safari Storage (OPFS/IndexedDB).    |
-| `read_only`  | Estado de repouso "de lei" — sempre mostrado após 3.6s parado. |
-| `fail_closed`| Falha de segurança real (checksum divergente, instalação bloqueada). |
-
-Cards do painel (todos dentro da mesma página, sem rota nova) dividem-se em
-duas zonas. O **Hero View** (`.cockpit-viewport`, ver
-`js/ui/cockpit-viewport.js`) cabe em exatamente `100dvh` sem scroll de
-página, com 4 zonas nomeadas e fixas — Market Data, Voice Trigger, S/R
-Signals e Risk Metrics ("Demote, don't delete": nada crítico para a
-leitura de 1ª tela vive fora dele). Todo o resto — diagnóstico técnico,
-conectores, Memória Viva, Risk Gate, Paper Trading, Vault, Hydration
-Engine etc. — mora no **Engine Room** (`.advanced-section`, "Modo
-Avançado"), oculto por padrão e alternado pelo botão `btn-tb-advanced` na
-topbar; em iPad paisagem (≥900px) o Engine Room flui em colunas
-balanceadas (`column-count`) que preenchem a tela larga sem zonas pretas
-vazias. Só o banner READ_ONLY/FAIL_CLOSED, o header e o rodapé ficam fora
-de ambas as zonas (largura total) — a Telemetria ao Vivo mora dentro do
-Engine Room, como qualquer outro card técnico. Ordem natural (coluna única,
-retrato):
-`siriform-card` → `cyborg-executive-panel` (**Resumo Executivo**, FOCO3 da
-fase de polimento visual — leitura "tudo pronto?" em 1 olhar: Estado do
-Cyborg, fonte real ativa ou `DADOS_INSUFICIENTES`, timestamp de freshness,
-Paper Trading, Risk Gate, Live Trading sempre `LIVE_LOCKED`, Vault/Evidence
-e último relatório, com os mesmos 4 botões de ação do topbar — Preparar/
-Atualizar, Analisar Sistema, Relatório, Modo Avançado — espelhados aqui) →
-`action-strip` (Voice Trigger — CTA principal, microfone Siriform Voice
-centralizado, ações rápidas) → `supports-resistances-panel` (S/R Signals —
-Trade Setup Matrix: SIGNAL LONG/SHORT/WAIT, ENTRY ZONE, TP1/TP2/SL via
-`support-resistance-engine.js`/`market-structure-engine.js`, mais Suportes/
-Resistências; última zona dentro do `.cockpit-viewport` — *fim do Hero
-View, daqui em diante Engine Room*) →
-`safari-edge-layer-panel` (Safari Assisted Edge Layer — telemetria local
-real de sessão/render deste iPad/Safari: latência, frames perdidos, foco
-de tela, estado de conexão/armazenamento; nunca decide trade, nunca
-substitui o Soldier, `is_authoritative` sempre `FALSE`) →
-`voice-status-panel` (estado do microfone/Siriform Voice Layer) →
-`runtime-status-panel` → `feature-detect-panel` →
-`quant-engine-widget` → `cyborg-readiness-panel` (checklist técnico
-detalhado de capacidades do Safari/iPadOS — Risk Metrics, relocado do
-Hero View) → `replay-wrap` (com `profile-toggle` Light/Balanced/Heavy,
-genuinamente muda a janela SMA/EMA usada no WASM; rotulado **Modo de
-Diagnóstico Técnico — dados sintéticos, não usar para decisão de mercado**)
-→ `analysis-frame-panel` (estatística descritiva sobre o dataset sintético,
-"não é recomendação") → `real-data-layer-panel` (conectores públicos reais
-sem chave de API — MEXC/CoinGecko/Binance Spot + import local de CSV/JSON;
-cada sonda é um Connector State Machine real, ver
-`docs/AR10_CYBORG_2_REAL_DATA_LAYER_RUNTIME_PROBE_V1.md`) →
-`source-health-panel` (funde o roteiro estático de conectores com o estado
-vivo desta sessão — nunca promove um conector a `ACTIVE_READ_ONLY` por
-conta própria) → `real-analysis-frame-panel` (leitura sobre candle real —
-"não é recomendação") → `real-evidence-panel` (Evidence Object —
-evidence-first, nunca inventado: ou dado real ou
-`DADOS_INSUFICIENTES`/`NAO_APLICAVEL`) → `target-tracker-panel` /
-`rota-recomendada-panel` / `data-matrix-summary-panel` (Risk Metrics,
-relocados do Hero View — roteiro/dados de detalhe técnico, não leitura de
-1ª tela) → `research-engine-panel` (ROTA
-A/B/C sempre presentes, nunca um caminho silenciosamente vazio) →
-`siriform-explanation-panel` (explica em português o que os Dados Reais
-acima significam) → `memory-alive-panel` (Memória Viva — Event Log
-persistido, snapshot a cada boot, Last Good State e Recovery/Hydration
-Reports honestos sobre o que foi de fato restaurado) → `data-policy-panel`
-(Política de Dados de Mercado — sintético = diagnóstico; análise real exige
-fonte pública/somente-leitura ou mostra `DADOS INSUFICIENTES`) →
-`evaluations-panel` (equivalente local do framework Apple de Evaluations,
-WWDC26) → `local-intelligence-panel` (**AR10 Local Intelligence Engine** —
-SetupScore/MemoryMatch/ReflectionReport calculados localmente, sem API
-paga, gravados no Evidence Ledger; nunca um sinal, nunca uma ordem) →
-`decision-frame-panel` (**`STUB CONTROLLED`**, sem lógica de
-decisão, sem sinal de ordem) → `risk-gate-panel` (Kill Switch +
-`NO_STOP_NO_TRADE` — bloqueia qualquer ordem, mesmo Paper, sem stop loss,
-com drawdown acima do limite ou fonte de dados abaixo da qualidade mínima)
-→ `paper-trading-panel` (book de posições simuladas com preço real da
-fonte ativa, roteado pelo Risk Gate, nunca envia ordem a uma exchange) →
-`live-status-panel` (explica por que Live Trading é `LIVE_LOCKED` por
-estrutura — sem rota de execução real no código, não uma flag) →
-`vault-evidence-panel` (Vault/Evidence — reabre e re-verifica o SHA-256 a
-cada boot) → `vault-local-panel` (Vault Local do iPad — 16 campos de
-status; com auto-reparo seguro: reindexa do armazenamento ou reinstala,
-nunca apaga como primeiro recurso) → `hydration-engine-panel`
-(**Hydration Engine** — armazenamento progressivo por prioridade 1-4; baixa
-em pacotes pequenos com pausa entre eles, nunca tudo de uma vez; valida
-SHA-256 antes de gravar — pacote com hash inválido não entra; retoma de
-checkpoint salvo no IndexedDB; monitora quota e reduz ritmo se faltar
-espaço, sem nunca quebrar o app; prioridade 3/4 fica `PARTIAL` quando há
-pouco espaço) → `metrics-panel` (equivalente leve do
-Instruments, WWDC26) → `local-pack-manager` (os 13 botões do Local Pack
-Manager) → `export-panel` (Arquivos Exportados — exportações com nome único
-carimbado, sem prompt de "substituir") → `backup-recovery-panel` (exporta/
-restaura a Memória Viva inteira num único `.json` com hash verificado,
-`FAIL_CLOSED` se corrompido ou adulterado) → `console-section`/
-`telemetry-card` (**Telemetria ao Vivo**, antiga "Logs do Sistema",
-realocada para o Engine Room na ruthless pruning — último evento sempre
-visível + caixa preta rolável, eventos reais, nunca um muro de terminal —
-com sub-bloco **Activity Log** listando o histórico persistido de
-`memory/event-log.js`; último card do Engine Room). Todo card com
-`tabindex` é tocável: abre um resumo em português gerado a partir do
-estado real do próprio card (`wireStatusCardModal()` em `app.js`), nunca
-um texto estático — `console-section` não tem `tabindex` (conteúdo já é
-log ao vivo, sem resumo estático a abrir).
-
-## Decisões técnicas (liberdade técnica usada nesta entrega)
-
-### Por que `.ar10pack` é JSON e não ZIP
-
-Um ZIP real exigiria um descompressor (DEFLATE) em JavaScript — ou uma lib de
-terceiros (violaria "sem CDN para núcleo sensível") ou um inflate escrito à
-mão sob pressão de tempo (superfície de bug maior que o benefício). O
-`.ar10pack` é um **container JSON UTF-8** com:
-
-```json
-{
-  "format": "AR10PACK_JSON_V1",
-  "manifest": { ... manifest.pack.json ... },
-  "models_manifest": { ... manifest.models.json ... },
-  "runtime_config": { ... },
-  "checksums": { "<path>": "<sha256 hex>", "_package": "<sha256 agregado>" },
-  "files": { "<path>": "<base64>", ... }
-}
-```
-
-Vantagens: parsing nativo (`JSON.parse`), zero dependência externa, zero
-`eval()`, auditável a olho nu, e ainda assim verificável por linha de
-comando com `sha256sum -c pack/checksums.sha256` (ver abaixo). Não é um
-executável Windows — é um pacote de instalação local inerte para o
-Local Pack Manager do PWA.
-
-### Por que Rust → WASM (e não C/AssemblyScript)
-
-`wasm-src/cyborg_quant_core/` é um crate Rust real (`cdylib`,
-`wasm32-unknown-unknown`, `panic=abort`, `opt-level=z`, `lto=true`),
-compilado neste ambiente (`rustup target add wasm32-unknown-unknown`) e
-testado via Node antes de entrar no pacote. Resultado: **3.6&nbsp;KB**.
-Exporta só estatística descritiva (`sma`, `ema`, `stddev`, `zscore_last`,
-`max_val`, `min_val`) sobre um buffer compartilhado — nenhuma função de
-ordem, sinal de execução ou rede existe no binário. Para recompilar:
+## Desenvolvimento local
 
 ```bash
-cd wasm-src/cyborg_quant_core
-cargo build --release --target wasm32-unknown-unknown
-cp target/wasm32-unknown-unknown/release/cyborg_quant_core.wasm ../../wasm/
-cd ../.. && python3 tools/build_pack.py   # re-empacota com o novo binario
+cd ipad_runtime/ramber-ui
+npm install --include=dev   # NODE_ENV=production omite devDeps sem a flag
+npm run dev                 # serve com fs.allow para importar ../js e ../src
+npm run build               # dist/ (o deploy copia para ../)
 ```
 
-### Por que o Replay BTC/USDT é sintético
+O preview local (`vite preview`) serve só `dist/` — o worker WASM
+(`workers/quant-worker.js`) é sibling do deploy real, então o status
+"MOTOR WASM · FALHOU" em preview local é esperado; no site publicado ele
+conecta.
 
-`tools/generate_replay.py` gera um random-walk determinístico (seed fixa),
-sem chamar nenhuma API/exchange. O JSON resultante se autodeclara
-`"kind": "SYNTHETIC_OFFLINE_SAMPLE"`, `"live": false`,
-`"exchange_connection": "NONE"`. Isso elimina qualquer dependência de rede
-para a demo funcionar 100% offline e remove qualquer ambiguidade sobre
-"dado real de mercado" dentro de uma entrega que precisa ser auditável como
-READ_ONLY/FAIL_CLOSED. Trocar por um CSV/JSON histórico real é só substituir
-o arquivo e rodar `tools/build_pack.py` de novo — a UI não muda.
+## Nota sobre a árvore legada
 
-### Por que sem Google Fonts / sem qualquer CDN
-
-O CSS original do Cockpit ("Ciborgue") importava Orbitron/Share Tech Mono do
-Google Fonts. Aqui isso foi trocado por pilhas de fontes de sistema
-(`ui-sans-serif`/`ui-monospace` com fallback Apple). Resultado: zero
-requisição de rede além do próprio HTTPS do app — o runtime fica
-genuinamente local-first mesmo na primeira instalação em rede instável, e
-não há nenhum host de terceiros no Content-Security-Policy.
-
-### Content-Security-Policy como aplicação técnica das leis obrigatórias
-
-`index.html` define:
-
-```
-default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
-img-src 'self' data:;
-connect-src 'self' https://api.coingecko.com https://api.binance.com
-            https://fapi.binance.com https://api.mexc.com https://contract.mexc.com;
-worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';
-frame-ancestors 'none';
-```
-
-O `connect-src` lista **exatamente** os 5 hosts públicos somente-leitura dos
-conectores reais (CoinGecko, Binance Spot/Futures, MEXC Spot/Futures — todos
-`GET` público, sem chave, sem endpoint privado); qualquer host fora dessa
-lista curta é bloqueado pelo browser em runtime. Cada host novo entra aqui
-como diff isolado e revisável (ver `src/research/QUARANTINE.md`), nunca como
-efeito colateral. Isso não é só convenção de código — é o **browser
-bloqueando em runtime** qualquer `fetch`/`WebSocket` para um MEXC private
-endpoint, MT5, ou qualquer "ordem por LLM" via rede (nenhum desses hosts
-está na lista), e bloqueia `eval()`/`new Function` por não haver
-`unsafe-eval` em `script-src`.
-
-### Vault FAIL_CLOSED real (não é só uma flag salva)
-
-`pack-manager.reloadVaultState()` reabre o app e **recalcula o SHA-256**
-dos arquivos já instalados, comparando com os checksums gravados. Se algo
-não bater, o Vault volta para `LOCKED` e a UI mostra a falha — em vez de
-confiar ciegamente numa flag `installed=true` salva da sessão anterior.
-
-### WebLLM / Transformers.js / ONNX Runtime Web — por que o painel saiu
-
-Nenhum modelo de linguagem está embutido nesta V1 (ver
-`pack/manifest.models.json`). Empacotar um modelo Llama quantizado
-(centenas de MB a poucos GB) dentro do `.ar10pack` base — ou buscá-lo de um
-CDN de modelos em runtime — violaria tanto "sem CDN para núcleo sensível"
-quanto o orçamento de armazenamento realista do Safari/iPadOS sem um fluxo
-de consentimento explícito de download incremental (ainda não
-implementado). Sem nenhuma função viva por trás — três campos sempre
-`FUTURE`, nunca outra coisa —, o antigo `ai-models-panel` foi removido de
-verdade na ruthless pruning do Engine Room, em vez de continuar ocupando
-tela como placeholder; WebGPU (`cyborg-readiness-panel`) e WebGL
-(`feature-detect-panel`) continuam detectados e exibidos normalmente — só
-os 3 campos especulativos de modelo e o painel que os agrupava saíram. O
-plano de entrega de um modelo real continua documentado no manifesto de
-modelos, para o dia em que existir função viva o bastante para merecer
-painel de novo.
-
-### AR10 Local Intelligence Engine (sem API paga)
-
-`js/calc/feature-extractor.js` + `js/intelligence/{scoring-engine,memory-store,
-scenario-matcher,reflection-engine,siriform-explainer,local-brain}.js`
-formam uma camada de inteligência 100% local: estatística sobre o
-CalculationFrame que já existe (`RealAnalysisFrame` real ou meta do replay
-sintético), comparação geométrica simples com leituras passadas, e
-explicação em português — tudo gravado como entradas marcadas
-(`kind: local_setup_score` / `local_reflection_report`) no mesmo Evidence
-Ledger que já existe, sem segunda fonte de memória. `liquidity_score` é
-sempre `null` (nenhum conector de profundidade/volume existe ainda) e todo
-resultado carrega `is_authoritative: false`, `is_recommendation: false`,
-`is_signal: false`, `requires_risk_gate: true` — nunca substitui o Risk
-Gate real (`js/trading/risk-gate.js`), que continua sendo o único portão
-de ordens (mesmo Paper).
-
-## Verificação manual do pacote (sem abrir o Safari)
-
-```bash
-cd ipad_runtime
-sha256sum -c pack/checksums.sha256
-python3 -c "import json; d=json.load(open('AR10_CYBORG_LOCAL_PACK_V1.ar10pack')); print(d['checksums'])"
-```
-
-## Rodar localmente antes de publicar
-
-```bash
-cd ipad_runtime
-python3 -m http.server 8080      # ou: npx http-server -p 8080
-# abrir http://localhost:8080/ num navegador (Safari real testa melhor; ver DEPLOY.md)
-```
+`index.html`, `css/ipad-runtime.css` e os módulos de UI do app vanilla
+anterior (`js/app.js`, `js/ui/*`, `js/siriform.js`, `js/voice.js`,
+`js/feature-detect.js`, `js/edge/*`, `js/orderflow-engine-ui.js`,
+`js/diagnostics.js`, `js/evaluations.js`) são a interface **anterior** ao
+terminal React. Nada disso é importado pelo build atual; a remoção
+aguarda confirmação explícita do proprietário do repo.
+`service-worker.js` é a exceção deliberada: foi reescrito como shim de
+autodestruição que limpa caches antigos de aparelhos que ainda tenham o
+service worker cache-first da era vanilla — deve permanecer até essa
+população de dispositivos se renovar.
 
 ## O que continua bloqueado (por design, sem exceção)
 
@@ -317,3 +107,6 @@ MT5, `order_send`, bridge local, MEXC private endpoint, API secret, live
 trading, execução real, ordem por LLM, ordem sem Risk Gate, segredo em
 `localStorage`. Nenhuma dessas rotas existe neste código — não é apenas
 uma flag desligada.
+
+Documentação histórica (rotas, decisões e handoffs) em [`../docs/`](../docs/).
+Notas de release do arco RC: [`../docs/RELEASE_NOTES_RC2.md`](../docs/RELEASE_NOTES_RC2.md).

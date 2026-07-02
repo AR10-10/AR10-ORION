@@ -1613,8 +1613,11 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
   const isFloating = widgetState && widgetState.floating;
 
   const renderHeader = (isFloatMode = false) => (
+    // flex-wrap: em Slide Over/Split View estreito (≤375px) o grupo de
+    // controles (extraHeader + minimizar/fechar) quebra para a linha de
+    // baixo em vez de estourar a borda direita do painel.
     <div
-      className="cyber-header cursor-pointer select-none flex items-center justify-between"
+      className="cyber-header cursor-pointer select-none flex flex-wrap items-center justify-between gap-y-1"
       onDoubleClick={(e) => {
         if (!isFloatMode) {
           e.stopPropagation();
@@ -1622,9 +1625,9 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
         }
       }}
     >
-      <span className="font-bold tracking-[0.2em]">{title}</span>
-      <div className="flex gap-2 items-center">
-        {extraHeader && <div>{extraHeader}</div>}
+      <span className="font-bold tracking-[0.2em] min-w-0">{title}</span>
+      <div className="flex gap-2 items-center max-w-full flex-wrap">
+        {extraHeader && <div className="min-w-0">{extraHeader}</div>}
         <div className="flex gap-1">
           {!maximized && !isFloatMode && (
             <div
@@ -2207,8 +2210,11 @@ function MarketDirectionWidget() {
       ? "bg-[#ff0055] shadow-[0_0_8px_#ff0055]"
       : "bg-[#8ab4f8]/50";
 
+  // flex-wrap + h-auto: em Split View/Slide Over (≤~500px) os três blocos
+  // empilham em vez de estourar a borda direita — a altura fixa de 85px
+  // só vale quando cabem lado a lado (min-[500px]:h-[85px]).
   return (
-    <div className="flex justify-between items-center shrink-0 z-10 relative pt-4 px-4 xl:px-8 w-full max-w-[600px] mx-auto h-[85px] border-b-2 border-[#00f0ff10] pb-4 mb-4 bg-gradient-to-b from-[#00f0ff08] to-transparent rounded-t-lg">
+    <div className="flex flex-wrap justify-between items-center shrink-0 z-10 relative pt-4 px-4 xl:px-8 w-full max-w-[600px] mx-auto h-auto min-[500px]:h-[85px] gap-y-2 border-b-2 border-[#00f0ff10] pb-4 mb-4 bg-gradient-to-b from-[#00f0ff08] to-transparent rounded-t-lg">
       <div className="flex flex-col items-center p-3 bg-gradient-to-br from-[#00ffaa10] to-transparent border border-[#00ffaa30] rounded-lg shadow-[inset_0_0_20px_rgba(0,255,170,0.05)] transition-all flex-1 mx-2">
         <span className="text-[0.6rem] text-[#00ffaa] tracking-[0.25em] mb-[2px] font-bold">
           PRESSÃO BID
