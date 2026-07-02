@@ -47,7 +47,6 @@ import {
   ArrowDownRight,
   Target,
   Wifi,
-  Play,
   Disc,
   X,
   ShieldCheck,
@@ -186,11 +185,7 @@ export default function App() {
     exposure: { visible: true, floating: false },
     events: { visible: true, floating: false },
     neural_core: { visible: false, floating: false },
-    processing: { visible: false, floating: false },
-    stream: { visible: false, floating: false },
     tactical: { visible: false, floating: false },
-    log: { visible: false, floating: false },
-    playback: { visible: false, floating: false },
   };
   const [widgets, setWidgets] = useState<{
     [key: string]: { visible: boolean; floating: boolean };
@@ -796,11 +791,7 @@ const WIDGET_LABELS: { [key: string]: string } = {
   exposure: "EXPOSIÇÃO · READ-ONLY",
   events: "TELEMETRIA DE EVENTOS",
   neural_core: "NÚCLEO NEURAL · META LLAMA 3 (LOCAL)",
-  processing: "MÓDULOS DE PROCESSAMENTO",
-  stream: "STREAM DE INTELIGÊNCIA",
   tactical: "LIQUIDAÇÕES INSTITUCIONAIS · REAL",
-  log: "LOG DE EXECUÇÃO",
-  playback: "PLAYBACK ENGINE",
 };
 
 function ConfigPanel() {
@@ -2570,18 +2561,16 @@ function NeuralCoreWidget() {
 }
 
 // --- BOTTOM PANELS ---
+// EFIP prune: this strip once held five panels; four were permanently-empty
+// boxes (gauges hardwired to null, a "stream" with no possible source, an
+// execution log for an app that will never execute, a playback relic from
+// the pre-React runtime). Only the real liquidation feed earned its place.
 function BottomPanels() {
   const { widgets, liquidations, liquidationState } = useContext(WidgetContext) || {};
-  const anyVisible =
-    widgets?.processing?.visible ||
-    widgets?.stream?.visible ||
-    widgets?.tactical?.visible ||
-    widgets?.log?.visible ||
-    widgets?.playback?.visible;
   // Without this guard, the 95px bar and its edge-fade overlays below still
-  // render even when every widget inside returns null — an empty dark strip
-  // floating with nothing under it. No widgets here are visible by default.
-  if (!anyVisible) return null;
+  // render even when the widget inside returns null — an empty dark strip
+  // floating with nothing under it. Not visible by default.
+  if (!widgets?.tactical?.visible) return null;
 
   return (
     <div className="relative shrink-0 w-full mb-1">
@@ -2589,21 +2578,6 @@ function BottomPanels() {
       <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#010205] to-transparent z-20 pointer-events-none"></div>
 
       <div className="h-[95px] flex gap-2 w-full pb-1 overflow-x-auto overflow-y-hidden scrollbar-hide snap-x pt-1 px-4">
-        <Widget id="processing" title="MÓDULOS DE PROCESSAMENTO" className="min-w-[280px] snap-start" flex="flex-[1.2]">
-          <div className="flex justify-around items-center px-1 h-full pb-1">
-            <Gauge value={null} label="CPU" color="#00f0ff" />
-            <Gauge value={null} label="GPU" color="#00f0ff" />
-            <Gauge value={null} label="RAM" color="#00ffaa" />
-            <Gauge value={null} label="WORK" color="#00ffaa" />
-          </div>
-        </Widget>
-
-        <Widget id="stream" title="STREAM DE INTELIGÊNCIA" className="min-w-[320px] snap-start" flex="flex-[1.8]" extraHeader={<Wifi size={12} className="text-[#00f0ff60]" />}>
-          <div className="flex items-center justify-center h-full text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
-            {AWAIT} FONTE DE INTELIGÊNCIA…
-          </div>
-        </Widget>
-
         <Widget id="tactical" title="LIQUIDAÇÕES INSTITUCIONAIS · REAL" className="min-w-[320px] snap-start" flex="flex-[1.8]" extraHeader={<Activity size={12} className="text-[#ff005560]" />}>
           {liquidations && liquidations.length > 0 ? (
             <div className="flex flex-col justify-center h-full gap-1 px-1">
@@ -2630,78 +2604,10 @@ function BottomPanels() {
           )}
         </Widget>
 
-        <Widget id="log" title="LOG DE EXECUÇÃO" className="min-w-[200px] snap-start" flex="flex-[1]">
-          <div className="flex items-center justify-center h-full text-[0.5rem] tracking-[0.2em] text-[#8ab4f8]/40 font-bold text-center px-2">
-            SEM EXECUÇÃO (READ-ONLY)
-          </div>
-        </Widget>
-
-        <Widget id="playback" title="PLAYBACK ENGINE" className="min-w-[280px] snap-start" flex="flex-[1.2]" extraHeader={<Play size={12} className="text-[#00f0ff60]" />}>
-          <div className="px-3 flex flex-col justify-center h-full gap-2.5">
-            <div className="flex justify-between items-center text-[0.5rem]">
-              <div className="flex flex-col">
-                <span className="text-[#8ab4f8]/70 uppercase tracking-widest mb-[2px]">STATUS</span>
-                <span className="text-[#8ab4f8]/50 font-bold">{AWAIT}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[#8ab4f8]/70 uppercase tracking-widest mb-[2px]">CLOCK</span>
-                <span className="text-[#8ab4f8]/50 font-bold">{DASH}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[#8ab4f8]/70 uppercase tracking-widest mb-[2px]">SOURCE</span>
-                <span className="text-[#8ab4f8]/50 font-bold">{DASH}</span>
-              </div>
-              <div className="w-7 h-7 rounded-full border border-[#00f0ff30] bg-[#00f0ff08] flex items-center justify-center opacity-50">
-                <Play size={12} className="text-[#00f0ff] ml-[1px]" />
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-[2px] bg-[#8ab4f8]/20 relative"></div>
-              <span className="text-[0.45rem] text-[#8ab4f8]/70 shrink-0 font-bold">00:00 / 00:00</span>
-            </div>
-          </div>
-        </Widget>
       </div>
     </div>
   );
 }
-const Gauge = React.memo(function Gauge({ value, label, color }: { value: number | null; label: string; color: string }) {
-  const has = num(value);
-  return (
-    <div className="flex flex-col items-center justify-center relative w-10 h-10">
-      <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-        <path
-          className="text-[#8ab4f8]/10"
-          strokeWidth="3"
-          stroke="currentColor"
-          fill="none"
-          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-        />
-        {has && (
-          <path
-            stroke={color}
-            strokeWidth="3"
-            strokeDasharray={`${value}, 100`}
-            fill="none"
-            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-            style={{ filter: `drop-shadow(0 0 3px ${color})` }}
-          />
-        )}
-      </svg>
-      <div className="absolute flex flex-col items-center justify-center">
-        <span
-          className="text-[0.5rem] font-bold"
-          style={{ color: has ? color : "rgba(138,180,248,0.5)", textShadow: has ? `0 0 5px ${color}` : "none" }}
-        >
-          {has ? `${value}%` : DASH}
-        </span>
-        <span className="text-[0.3rem] text-[#8ab4f8]/70 tracking-widest mt-[1px] font-bold">
-          {label}
-        </span>
-      </div>
-    </div>
-  );
-});
 
 // --- FOOTER BAR ---
 // Owns its own clock tick locally so the 1s interval never re-renders the
