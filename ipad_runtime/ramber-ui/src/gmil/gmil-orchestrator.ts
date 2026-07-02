@@ -1,0 +1,144 @@
+// gmil-orchestrator.ts — GMIL LEI 02 pipeline montado de verdade:
+// Providers → (circuit-breaker + quality-engine) → Global Event Bus →
+// consensus-engine. Cada provedor sonda no seu próprio intervalo,
+// respeitando seu próprio circuito — a falha de um nunca atrasa nem
+// derruba os outros (LEI 06).
+import { gmilBus } from './event-bus';
+import {
+  createCircuitBreaker,
+  beforeAttempt,
+  afterSuccess,
+  afterFailure,
+  type CircuitBreakerState,
+} from './circuit-breaker';
+import { computeQuality } from './quality-engine';
+import { computeConsensus, type ConsensusResult } from './consensus-engine';
+import { fetchCoinGeckoGlobal } from './providers/coingecko-provider';
+import { fetchFearGreedIndex } from './providers/fear-greed-provider';
+import type { GmilProviderDef, ProviderFetchResult } from './types';
+
+// Fontes concretamente viáveis para uma PWA estática sem backend (ver
+// README.md deste diretório para a avaliação completa das ~15 fontes
+// pedidas no protocolo V10.1 e por que as demais foram adiadas).
+const PROVIDERS: GmilProviderDef[] = [
+  {
+    id: 'coingecko_global',
+    label: 'CoinGecko · Market Cap Global',
+    category: 'BLOCKCHAIN',
+    intervalMs: 90_000,
+    fetch: fetchCoinGeckoGlobal,
+  },
+  {
+    id: 'fear_greed_index',
+    label: 'Alternative.me · Fear & Greed',
+    category: 'SENTIMENT',
+    intervalMs: 90_000,
+    fetch: fetchFearGreedIndex,
+  },
+];
+
+export interface ProviderRuntimeSnapshot {
+  id: string;
+  label: string;
+  category: string;
+  circuitState: CircuitBreakerState['state'];
+  lastReading: ProviderFetchResult | null;
+  lastSuccessAt: number | null;
+  lastLatencyMs: number | null;
+  weight: number;
+}
+
+export interface GmilSnapshot {
+  providers: ProviderRuntimeSnapshot[];
+  consensus: ConsensusResult;
+}
+
+class GmilOrchestrator {
+  private circuits = new Map<string, CircuitBreakerState>();
+  private lastReadings = new Map<string, ProviderFetchResult>();
+  private lastSuccessAt = new Map<string, number>();
+  private lastLatencyMs = new Map<string, number | null>();
+  private timers: ReturnType<typeof setInterval>[] = [];
+  private started = false;
+
+  start(): void {
+    if (this.started) return;
+    this.started = true;
+    for (const provider of PROVIDERS) {
+      this.circuits.set(provider.id, createCircuitBreaker());
+      const run = () => {
+        this.runOnce(provider).catch(() => {
+          // runOnce já é fail-closed internamente (provider.fetch() nunca
+          // rejeita); este catch existe só para nunca deixar uma promise
+          // rejeitada escapar do timer e virar um unhandledrejection.
+        });
+      };
+      run();
+      this.timers.push(setInterval(run, provider.intervalMs));
+    }
+  }
+
+  stop(): void {
+    this.timers.forEach(clearInterval);
+    this.timers = [];
+    this.started = false;
+  }
+
+  private async runOnce(provider: GmilProviderDef): Promise<void> {
+    const now = Date.now();
+    const cb = this.circuits.get(provider.id) ?? createCircuitBreaker();
+    const { allowed, state } = beforeAttempt(cb, now);
+    this.circuits.set(provider.id, state);
+    if (!allowed) return;
+
+    const startedAt = Date.now();
+    const result = await provider.fetch();
+    this.lastLatencyMs.set(provider.id, Date.now() - startedAt);
+    this.lastReadings.set(provider.id, result);
+
+    const prevState = this.circuits.get(provider.id)!.state;
+    this.circuits.set(
+      provider.id,
+      result.ok ? afterSuccess(this.circuits.get(provider.id)!) : afterFailure(this.circuits.get(provider.id)!, now),
+    );
+    if (result.ok) this.lastSuccessAt.set(provider.id, result.fetchedAt);
+
+    const nextState = this.circuits.get(provider.id)!.state;
+    if (nextState !== prevState) {
+      gmilBus.emit('PROVIDER_HEALTH_CHANGED', { providerId: provider.id, from: prevState, to: nextState });
+    }
+
+    gmilBus.emit('PROVIDER_READING', { providerId: provider.id, result });
+    gmilBus.emit('CONSENSUS_UPDATED', this.getSnapshot().consensus);
+  }
+
+  getSnapshot(): GmilSnapshot {
+    const providers: ProviderRuntimeSnapshot[] = PROVIDERS.map((p) => {
+      const circuit = this.circuits.get(p.id) ?? createCircuitBreaker();
+      const successAt = this.lastSuccessAt.get(p.id) ?? null;
+      const quality = computeQuality({
+        latencyMs: this.lastLatencyMs.get(p.id) ?? null,
+        consecutiveFailures: circuit.consecutiveFailures,
+        ageMs: successAt === null ? null : Date.now() - successAt,
+        circuitState: circuit.state,
+      });
+      return {
+        id: p.id,
+        label: p.label,
+        category: p.category,
+        circuitState: circuit.state,
+        lastReading: this.lastReadings.get(p.id) ?? null,
+        lastSuccessAt: successAt,
+        lastLatencyMs: this.lastLatencyMs.get(p.id) ?? null,
+        weight: quality.weight,
+      };
+    });
+    const consensus = computeConsensus(
+      providers.map((p) => ({ providerId: p.id, lean: p.lastReading?.lean ?? null, weight: p.weight })),
+    );
+    return { providers, consensus };
+  }
+}
+
+// Singleton — mesmo padrão do getWorkerClient() em engine-bridge.ts.
+export const gmilOrchestrator = new GmilOrchestrator();

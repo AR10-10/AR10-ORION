@@ -35,6 +35,14 @@ import { voiceEngine } from "./voice/voice-engine";
 import { computeAlerts } from "./voice/voice-dispatcher";
 import type { TerminalSnapshot } from "./voice/voice-intents";
 import { VoiceControlWidget } from "./voice/VoiceControlWidget";
+// GMIL (Global Market Intelligence Layer, src/gmil/) — Providers →
+// Normalizers → Event Bus → Consensus Engine, decoupled from the Core
+// Engine on purpose: no module in engine-bridge.ts imports anything from
+// gmil/, and nothing here ever writes into `engine`/`realCycle`. GMIL is
+// read here purely as consultive context (LEI 01).
+import { useGmilSnapshot } from "./gmil/use-gmil-snapshot";
+import { gmilBus } from "./gmil/event-bus";
+import { describeProviderHealthChange } from "./gmil/gmil-voice-alerts";
 import {
   LayoutDashboard,
   BarChart2,
@@ -51,6 +59,7 @@ import {
   X,
   ShieldCheck,
   Power,
+  Globe,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -183,6 +192,7 @@ export default function App() {
     orderbook: { visible: true, floating: false },
     scanner: { visible: true, floating: false },
     exposure: { visible: true, floating: false },
+    gmil_context: { visible: true, floating: false },
     events: { visible: true, floating: false },
     neural_core: { visible: false, floating: false },
     tactical: { visible: false, floating: false },
@@ -736,6 +746,7 @@ export default function App() {
                     widgets.scanner.visible ||
                     widgets.exposure.visible ||
                     widgets.events.visible ||
+                    widgets.gmil_context.visible ||
                     widgets.neural_core.visible) && (
                     <div className="flex-[0.95] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[330px] min-h-[600px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
                       {/* Order book + scanner pair up side-by-side only while the
@@ -746,6 +757,7 @@ export default function App() {
                         <ScannerWidget data={scannerData} />
                       </div>
                       <ExposureWidget />
+                      <GmilContextWidget />
                       <EventsWidget />
                       <NeuralCoreWidget />
                     </div>
@@ -795,6 +807,7 @@ const WIDGET_LABELS: { [key: string]: string } = {
   orderbook: "LIVRO DE OFERTAS",
   scanner: "QUANT SCANNER · 24H REAL",
   exposure: "EXPOSIÇÃO · READ-ONLY",
+  gmil_context: "CONTEXTO GLOBAL · GMIL",
   events: "TELEMETRIA DE EVENTOS",
   neural_core: "NÚCLEO NEURAL · META LLAMA 3 (LOCAL)",
   tactical: "LIQUIDAÇÕES INSTITUCIONAIS · REAL",
@@ -2397,12 +2410,147 @@ function ExposureWidget() {
   );
 }
 
-// --- RIGHT COLUMN: EVENTS (no real event feed → honest empty state) ---
+// --- RIGHT COLUMN: EVENTS — fed by the real GMIL event bus (LEI 02: "todo
+// módulo distribui eventos"). Previously a permanently-empty placeholder;
+// GMIL's provider readings/health transitions are exactly the kind of real,
+// timestamped telemetry this panel always meant to show.
+interface GmilLogEntry {
+  id: string;
+  timestamp: number;
+  text: string;
+  tone: "ok" | "warn" | "error";
+}
+
+const fmtClock = (ts: number) =>
+  new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
 function EventsWidget() {
+  const [log, setLog] = useState<GmilLogEntry[]>([]);
+
+  useEffect(() => {
+    const pushEntry = (entry: GmilLogEntry) => {
+      setLog((prev) => [entry, ...prev].slice(0, 8));
+    };
+    const offReading = gmilBus.on<{ providerId: string; result: { ok: boolean; reason?: string } }>(
+      "PROVIDER_READING",
+      (event) => {
+        const { providerId, result } = event.payload;
+        pushEntry({
+          id: `r-${event.timestamp}-${providerId}`,
+          timestamp: event.timestamp,
+          text: result.ok ? `${providerId} · leitura real recebida` : `${providerId} · falhou (${result.reason ?? "erro"})`,
+          tone: result.ok ? "ok" : "warn",
+        });
+      },
+    );
+    const offHealth = gmilBus.on<{ providerId: string; from: string; to: string }>(
+      "PROVIDER_HEALTH_CHANGED",
+      (event) => {
+        const { providerId, from, to } = event.payload;
+        pushEntry({
+          id: `h-${event.timestamp}-${providerId}`,
+          timestamp: event.timestamp,
+          text: `${providerId} · circuito ${from} → ${to}`,
+          tone: to === "OPEN" ? "error" : "ok",
+        });
+        const spoken = describeProviderHealthChange(providerId, from as any, to as any);
+        if (spoken) voiceEngine.speak(spoken, "ALERT");
+      },
+    );
+    return () => {
+      offReading();
+      offHealth();
+    };
+  }, []);
+
   return (
     <Widget id="events" title="TELEMETRIA DE EVENTOS" flex="flex-[0.8] min-h-[110px]">
-      <div className="flex-1 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
-        {AWAIT} EVENTOS REAIS…
+      {log.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
+          {AWAIT} EVENTOS REAIS…
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1 h-full overflow-y-auto scrollbar-hide px-1 py-1">
+          {log.map((entry) => (
+            <div key={entry.id} className="flex items-center gap-2 text-[0.45rem] font-mono">
+              <span className="text-[#8ab4f8]/50 shrink-0">{fmtClock(entry.timestamp)}</span>
+              <span
+                className={`shrink-0 w-1 h-1 rounded-full ${
+                  entry.tone === "ok" ? "bg-[#00ffaa]" : entry.tone === "warn" ? "bg-[#f0d06f]" : "bg-[#ff0055]"
+                }`}
+              ></span>
+              <span className="text-[#a0f0ff]/80 truncate">{entry.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Widget>
+  );
+}
+
+// --- RIGHT COLUMN: GMIL · CONTEXTO GLOBAL ---
+// LEI 04: um único GLOBAL CONSENSUS SCORE, sempre rotulado como contexto
+// consultivo — nunca lido por engine-bridge.ts, nunca um "sinal". LEI 05:
+// cada provedor mostra seu peso de qualidade em tempo real; um provedor
+// degradado perde peso automaticamente e o consenso reflete isso sozinho.
+function GmilContextWidget() {
+  const { providers, consensus } = useGmilSnapshot();
+
+  const scoreLabel =
+    consensus.score === null
+      ? AWAIT
+      : `${consensus.score >= 0 ? "+" : ""}${(consensus.score * 100).toFixed(0)}`;
+  const scoreColor =
+    consensus.score === null
+      ? "text-[#8ab4f8]/50"
+      : consensus.score > 0.1
+        ? "text-[#00ffaa]"
+        : consensus.score < -0.1
+          ? "text-[#ff0055]"
+          : "text-[#8ab4f8]";
+
+  return (
+    <Widget
+      id="gmil_context"
+      title="CONTEXTO GLOBAL · GMIL"
+      flex="flex-[0.9] min-h-[140px]"
+      extraHeader={<Globe size={12} className="text-[#00f0ff60]" />}
+    >
+      <div className="flex flex-col h-full gap-1.5 px-1 py-1">
+        <div className="flex justify-between items-center bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20]">
+          <span className="text-[0.5rem] text-[#8ab4f8]/80 font-bold tracking-widest">
+            CONSENSO GLOBAL · CONSULTIVO
+          </span>
+          <span className={`text-[0.6rem] font-mono font-black ${scoreColor}`}>
+            {scoreLabel}
+            {consensus.score !== null && <span className="text-[0.4rem] text-[#8ab4f8]/50"> (n={consensus.sampleSize})</span>}
+          </span>
+        </div>
+        {providers.map((p) => {
+          const value = p.lastReading?.ok ? p.lastReading.fields : null;
+          const summary =
+            p.id === "coingecko_global" && value
+              ? `Dominância BTC ${typeof value.btcDominancePct === "number" ? value.btcDominancePct.toFixed(1) : DASH}%`
+              : p.id === "fear_greed_index" && value
+                ? `${value.classification ?? DASH} (${value.value ?? DASH})`
+                : p.circuitState === "OPEN"
+                  ? "circuito aberto"
+                  : AWAIT;
+          const dotColor =
+            p.circuitState === "OPEN" ? "bg-[#ff0055]" : p.weight > 0.6 ? "bg-[#00ffaa]" : "bg-[#f0d06f]";
+          return (
+            <div
+              key={p.id}
+              className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+            >
+              <span className="flex items-center gap-1.5 text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide truncate">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`}></span>
+                {p.label}
+              </span>
+              <span className="text-[0.45rem] text-white font-mono shrink-0 ml-1">{summary}</span>
+            </div>
+          );
+        })}
       </div>
     </Widget>
   );
