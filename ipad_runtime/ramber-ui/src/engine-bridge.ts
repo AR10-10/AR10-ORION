@@ -56,6 +56,7 @@ export interface RealCycleResult {
   condition?: string | null;
   rationale?: string | null;
   lorentzian?: LorentzianResult;
+  forecast?: HorizonForecast[];
 }
 
 let workerClientSingleton: any = null;
@@ -143,6 +144,8 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
     // Independent confluence signal — a real k-NN classification over the
     // same real candle window, never allowed to change `signal` above.
     const lorentzian = computeLorentzianClassification(evidence.candles);
+    // Previsão multi-horizonte (4/8/16 velas) sobre os MESMOS candles reais.
+    const forecast = computeMultiHorizonForecast(evidence.candles);
 
     return {
       ok: true,
@@ -150,6 +153,7 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
       lastPrice: evidence.ticker.last_price,
       signal,
       lorentzian,
+      forecast,
       confidence: typeof matrix.confidence === 'string' ? matrix.confidence : null,
       marketStructure: typeof frame.market_structure === 'string' ? frame.market_structure : null,
       entry: route && isNum(tracker.current_price) ? tracker.current_price : null,
@@ -334,4 +338,38 @@ export function computeLorentzianClassification(
     confidence: result.confidence,
     sampleSize: result.sample_size,
   };
+}
+
+// Previsão multi-horizonte: o MESMO k-NN Lorentziano re-rotulado para cada
+// horizonte (4/8/16 velas de 15m ≈ 1h/2h/4h à frente). Não é extrapolação de
+// curva nem promessa — é a mesma classificação estatística real, repetida com
+// rótulos de treino mais distantes. Horizontes maiores têm MENOS amostra
+// (candles do fim da série ficam sem rótulo resolvido) e isso é reportado por
+// horizonte, nunca escondido. Um horizonte sem dados suficientes vem ok:false
+// individualmente em vez de derrubar os demais.
+export const FORECAST_HORIZONS = [4, 8, 16] as const;
+
+export interface HorizonForecast {
+  horizonBars: number;
+  ok: boolean;
+  reason?: string;
+  classification?: 'LONG' | 'SHORT' | 'NEUTRAL';
+  confidence?: number;
+  sampleSize?: number;
+}
+
+export function computeMultiHorizonForecast(
+  candles: Array<{ open?: number; high?: number; low?: number; close?: number; o?: number; h?: number; l?: number; c?: number }>,
+): HorizonForecast[] {
+  return FORECAST_HORIZONS.map((horizon) => {
+    const result = classifyLorentzian({ ohlcv_series: candles, horizon });
+    if (result.status !== 'OK') return { horizonBars: horizon, ok: false, reason: result.reason };
+    return {
+      horizonBars: horizon,
+      ok: true,
+      classification: result.classification,
+      confidence: result.confidence,
+      sampleSize: result.sample_size,
+    };
+  });
 }

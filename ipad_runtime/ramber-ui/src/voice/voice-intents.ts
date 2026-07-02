@@ -33,6 +33,14 @@ export interface TerminalSnapshot {
   recentLiquidationCount: number;
   liquidationState: string;
   wsLive: boolean;
+  // Previsão multi-horizonte real (k-NN re-rotulado por horizonte).
+  forecast: Array<{
+    horizonBars: number;
+    ok: boolean;
+    classification?: string;
+    confidence?: number; // 0..1
+    sampleSize?: number;
+  }>;
 }
 
 export type VoiceIntent =
@@ -45,6 +53,7 @@ export type VoiceIntent =
   | 'CONSENSUS'
   | 'DIAGNOSTICS'
   | 'PRICE'
+  | 'PREDICTION'
   | 'UNKNOWN';
 
 const AWAITING = 'aguardando dados reais';
@@ -52,6 +61,7 @@ const AWAITING = 'aguardando dados reais';
 // Ordem importa: padrões mais específicos primeiro. Tudo minúsculo e sem
 // acento para casar com qualquer variação do reconhecedor.
 const INTENT_PATTERNS: Array<[VoiceIntent, RegExp]> = [
+  ['PREDICTION', /previs[aã]o|prever|proje[cç][aã]o|horizonte|futuro/],
   ['ABSORPTION', /absor[cç][aã]o|institucional/],
   ['CONSENSUS', /consenso|validar|diverg/],
   ['DIAGNOSTICS', /diagn[oó]stico|auditoria|status do sistema|sa[uú]de/],
@@ -128,11 +138,21 @@ export function buildResponse(intent: VoiceIntent, s: TerminalSnapshot): string 
       ];
       return `Diagnóstico: ${parts.join(', ')}. Modo somente leitura, sem ordens, sem chaves.`;
     }
+    case 'PREDICTION': {
+      const valid = s.forecast.filter((f) => f.ok && f.classification);
+      if (!valid.length) return `Previsão multi-horizonte ${AWAITING} — amostra real insuficiente nos horizontes.`;
+      const parts = valid.map((f) => {
+        const pct = f.confidence !== undefined ? `${Math.round(f.confidence * 100)} por cento` : 'confiança indefinida';
+        return `${f.horizonBars} velas: ${f.classification} com ${pct}`;
+      });
+      const smallest = Math.min(...valid.map((f) => f.sampleSize ?? 0));
+      return `Previsão estatística real por horizonte: ${parts.join('; ')}. Amostra mínima ${smallest} pontos — leitura probabilística, não garantia.`;
+    }
     case 'PRICE':
       return s.lastPrice !== null ? `BTC a ${fmt(s.lastPrice)} dólares.` : `Preço ${AWAITING}.`;
     case 'REFRESH':
       return 'Reinicializando ciclos de leitura real.';
     case 'UNKNOWN':
-      return 'Comando não reconhecido. Pergunte por tendência, confiança, risco, absorção, consenso, preço ou diagnóstico.';
+      return 'Comando não reconhecido. Pergunte por tendência, previsão, confiança, risco, absorção, consenso, preço ou diagnóstico.';
   }
 }

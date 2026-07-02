@@ -185,7 +185,6 @@ export default function App() {
     scanner: { visible: true, floating: false },
     exposure: { visible: true, floating: false },
     events: { visible: true, floating: false },
-    voice: { visible: true, floating: false },
     neural_core: { visible: false, floating: false },
     processing: { visible: false, floating: false },
     stream: { visible: false, floating: false },
@@ -601,6 +600,7 @@ export default function App() {
       recentLiquidationCount: liquidations.length,
       liquidationState,
       wsLive,
+      forecast: realCycle?.ok && realCycle.forecast ? realCycle.forecast : [],
     }),
     [engine, realCycle, engineStatus, priceData, cvd, orderflowSignals, orderflowState, liquidations, liquidationState, wsLive],
   );
@@ -652,6 +652,7 @@ export default function App() {
       liquidationState,
       bootRestFailed,
       handleManualRestart,
+      voiceSnapshot,
     }),
     [
       widgets,
@@ -670,6 +671,7 @@ export default function App() {
       liquidationState,
       bootRestFailed,
       handleManualRestart,
+      voiceSnapshot,
     ],
   );
 
@@ -730,7 +732,6 @@ export default function App() {
                     widgets.scanner.visible ||
                     widgets.exposure.visible ||
                     widgets.events.visible ||
-                    widgets.voice.visible ||
                     widgets.neural_core.visible) && (
                     <div className="flex-[0.95] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[330px] min-h-[600px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
                       {/* Order book + scanner pair up side-by-side only while the
@@ -742,9 +743,6 @@ export default function App() {
                       </div>
                       <ExposureWidget />
                       <EventsWidget />
-                      <Widget id="voice" title="VOICE INTELLIGENCE · IRON-VOICE" flex="shrink-0">
-                        <VoiceControlWidget snapshot={voiceSnapshot} onRefresh={handleManualRestart} />
-                      </Widget>
                       <NeuralCoreWidget />
                     </div>
                   )}
@@ -794,7 +792,6 @@ const WIDGET_LABELS: { [key: string]: string } = {
   scanner: "QUANT SCANNER · 24H REAL",
   exposure: "EXPOSIÇÃO · READ-ONLY",
   events: "TELEMETRIA DE EVENTOS",
-  voice: "VOICE INTELLIGENCE · IRON-VOICE",
   neural_core: "NÚCLEO NEURAL · META LLAMA 3 (LOCAL)",
   processing: "MÓDULOS DE PROCESSAMENTO",
   stream: "STREAM DE INTELIGÊNCIA",
@@ -857,7 +854,8 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
   const [msgIdx, setMsgIdx] = useState(0);
   const [inputValue, setInputValue] = useState("");
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
-  const { widgets, engine, engineStatus, realCycle } = useContext(WidgetContext) || {};
+  const { widgets, engine, engineStatus, realCycle, voiceSnapshot, handleManualRestart } =
+    useContext(WidgetContext) || {};
 
   if (widgets && inCenter && !widgets.se_core?.visible) return null;
 
@@ -1025,6 +1023,56 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                 </div>
               )}
 
+              {/* Previsão multi-horizonte REAL: o mesmo k-NN Lorentziano
+                  re-rotulado para 4/8/16 velas (15m ≈ 1h/2h/4h). Leitura
+                  probabilística com amostra declarada por horizonte — um
+                  horizonte sem amostra vira chip apagado, nunca um número
+                  inventado. Nunca gera ordem: READ_ONLY. */}
+              {realCycle?.forecast && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[0.5rem] text-[#8ab4f8] tracking-[0.25em] font-bold uppercase flex items-center gap-2">
+                    <Activity size={11} /> PREVISÃO MULTI-HORIZONTE (k-NN REAL)
+                  </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {realCycle.forecast.map((f: any) => (
+                      <div
+                        key={f.horizonBars}
+                        className={`flex flex-col items-center gap-0.5 rounded-lg border px-2 py-1.5 ${
+                          !f.ok
+                            ? "border-[#8ab4f8]/10 opacity-40"
+                            : f.classification === "LONG"
+                              ? "border-[#00ffaa30] bg-[#00ffaa08]"
+                              : f.classification === "SHORT"
+                                ? "border-[#ff005530] bg-[#ff005508]"
+                                : "border-[#8ab4f8]/20 bg-[#8ab4f8]/5"
+                        }`}
+                        title={f.ok ? `Amostra real: ${f.sampleSize} pontos` : f.reason}
+                      >
+                        <span className="text-[0.4rem] tracking-[0.2em] text-[#8ab4f8]/70 font-bold uppercase">
+                          {f.horizonBars} VELAS · {f.horizonBars / 4}H
+                        </span>
+                        <span
+                          className={`text-[0.6rem] font-black tracking-[0.1em] ${
+                            !f.ok
+                              ? "text-[#8ab4f8]/40"
+                              : f.classification === "LONG"
+                                ? "text-[#00ffaa]"
+                                : f.classification === "SHORT"
+                                  ? "text-[#ff0055]"
+                                  : "text-[#8ab4f8]"
+                          }`}
+                        >
+                          {f.ok ? f.classification : AWAIT}
+                        </span>
+                        <span className="text-[0.4rem] text-[#8ab4f8]/60 font-mono">
+                          {f.ok ? `${Math.round((f.confidence ?? 0) * 100)}% · n=${f.sampleSize}` : "—"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Honest flow / move metrics — no PnL, no leverage, no win-rate. */}
               <div className="flex flex-col lg:flex-row gap-2 sm:gap-4">
                 <div className="bg-gradient-to-br from-[#00f0ff10] to-[#00ffaa10] border border-[#00f0ff30] p-4 rounded-xl flex flex-col relative overflow-hidden flex-[1.2] justify-center items-center text-center transition-colors duration-500 shadow-[inset_0_0_30px_rgba(0,240,255,0.05)]">
@@ -1134,6 +1182,17 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                   Sem posição ao vivo · execução desabilitada por projeto (READ_ONLY)
                 </span>
               </div>
+
+              {/* IRON-VOICE fundido no núcleo — a voz É parte do S.E., não um
+                  painel separado: mesmos dados, mesmo card, mesmo organismo. */}
+              {voiceSnapshot && (
+                <div className="flex flex-col gap-2 border-t border-[#00f0ff15] pt-3">
+                  <span className="text-[0.55rem] text-[#8ab4f8] tracking-[0.2em] font-bold uppercase flex items-center gap-2">
+                    <Wifi size={12} /> VOZ DO NÚCLEO · IRON-VOICE
+                  </span>
+                  <VoiceControlWidget snapshot={voiceSnapshot} onRefresh={handleManualRestart} />
+                </div>
+              )}
             </div>
           </div>
         </div>

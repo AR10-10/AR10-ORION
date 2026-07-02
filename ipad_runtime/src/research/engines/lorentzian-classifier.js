@@ -207,16 +207,24 @@ const ROC_PERIOD = 9;
 const ATR_PERIOD = 14;
 const SMOOTH_WINDOW = 32;
 const FOURIER_KEEP_COMPONENTS = 6;
-const LABEL_HORIZON = 4;
+const DEFAULT_LABEL_HORIZON = 4;
 const DEFAULT_K = 8;
 
 /**
- * @param {{ ohlcv_series: Array<{t?:number,o?:number,h?:number,l?:number,c?:number,open?:number,high?:number,low?:number,close?:number}>, k?: number }} input
+ * @param {{ ohlcv_series: Array<{t?:number,o?:number,h?:number,l?:number,c?:number,open?:number,high?:number,low?:number,close?:number}>, k?: number, horizon?: number }} input
+ *   `horizon` (velas à frente usadas no rótulo do treino) permite previsão
+ *   multi-horizonte real: o MESMO pipeline, re-rotulado para 4/8/16 velas —
+ *   não é extrapolação, é k-NN re-treinado por horizonte. Horizontes maiores
+ *   consomem mais candles do fim da série (menos amostra), e isso aparece
+ *   honestamente em sample_size/DADOS_INSUFICIENTES.
  * @returns {object} status 'OK' com classificação real, ou 'DADOS_INSUFICIENTES'.
  */
 export function classify(input = {}) {
     const candles = Array.isArray(input.ohlcv_series) ? input.ohlcv_series : [];
     const k = Number.isFinite(input.k) ? input.k : DEFAULT_K;
+    const LABEL_HORIZON = Number.isFinite(input.horizon) && input.horizon >= 1
+        ? Math.floor(input.horizon)
+        : DEFAULT_LABEL_HORIZON;
     const warmup = SMOOTH_WINDOW - 1 + Math.max(RSI_PERIOD, ROC_PERIOD, ATR_PERIOD) + 1;
     const minNeeded = warmup + LABEL_HORIZON + k + 1;
 
