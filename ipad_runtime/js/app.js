@@ -5,6 +5,7 @@ import * as packManager from './pack-manager.js';
 import * as diagnostics from './diagnostics.js';
 import * as replayEngine from './replay-engine.js';
 import { QuantWorkerClient } from './worker-client.js';
+import * as orderflowUI from './orderflow-engine-ui.js';
 import * as siriform from './siriform.js';
 import * as voice from './voice.js';
 import * as exporter from './export-manifest.js';
@@ -16,6 +17,7 @@ import { buildRealAnalysisFrame } from './real-data/analysis-frame.js';
 import { DADOS_INSUFICIENTES, NAO_APLICAVEL, EVIDENCE_DATA_FIELDS } from './real-data/schema.js';
 import { buildResearchEngineFrame } from './research/research-engine.js';
 import { buildTargetTracker, TARGET_STATUS } from './research/target-tracker.js';
+import { buildTradeSetupMatrix } from './research/trade-setup-matrix.js';
 import * as persistentState from './memory/persistent-state.js';
 import * as evidenceLedger from './memory/evidence-ledger.js';
 import { rehydrateSession } from './memory/session-resume.js';
@@ -33,13 +35,12 @@ import { getSourceHealthReport } from './real-data/source-health.js';
 import { runLocalIntelligenceCycle } from './intelligence/local-brain.js';
 import { buildAndRecordReflectionReport } from './intelligence/reflection-engine.js';
 import { explainReflectionReport } from './intelligence/siriform-explainer.js';
-import { resolveActiveLlmTier } from './intelligence/local-llm-adapter.js';
 import { getSafariEdgeStatusReport } from './edge/safari-edge-status.js';
-import { getTelegramAuxStatusReport } from './aux/telegram-aux-status.js';
 import * as hydrationManager from './hydration/hydration-manager.js';
 import { els } from './ui/dom-registry.js';
 import { log, classFor, setStatus, setInfo, setStatusWithClass, MACRO_STATE_CLASS, setMacroStatus } from './ui/ui-helpers.js';
 import * as liveTicker from './ui/live-ticker.js';
+import * as cockpitViewport from './ui/cockpit-viewport.js';
 
 const PROFILES = {
     light: { windowSize: 10, label: 'Light: janela SMA/EMA=10, leitura mais rápida e leve.' },
@@ -80,6 +81,8 @@ function repairLabel(vault) {
 }
 
 let workerClient = null;
+let orderflowClient = null;
+let liveOrderflowSignals = []; // acumulado da sessao MEXC live atual (zerado a cada Iniciar) — separado dos sinais do replay sintetico, nunca misturados (ver mutual exclusion em orderflow-engine-ui.js)
 let replayDatasetCache = null;
 let lastAnalysisMeta = null;
 let lastReplayDrawData = null; // {closes, rollingSma} do ultimo replay — permite redesenhar o sparkline quando #advanced-section sai de hidden (canvas com rect 0x0 no draw original nao produz nada visivel)
@@ -103,10 +106,10 @@ let rehydratedActiveSourceId = null;
 let lastHydrationReport = null;
 let lastSourceHealthReport = null;
 let lastCommanderSoldierStatus = null;
+let switchTab = () => {}; // assigned in wireAdvancedToggle (tab system)
 let lastLocalIntelligenceResult = null;
 let lastReflectionReport = null;
 let lastSafariEdgeStatus = null;
-let lastTelegramAuxStatus = null;
 let lastHydrationEngineStatus = null;
 
 async function refreshFeatureStatus() {
@@ -121,20 +124,7 @@ async function refreshFeatureStatus() {
     setStatus('st-workers', f.workers);
     setStatus('st-webgpu', f.webgpu === 'OK' ? 'OK' : 'UNAVAILABLE');
     setStatus('st-webgl', f.webgl === 'OK' ? 'OK' : 'FALLBACK');
-    setStatus('st-webllm', f.webllm);
-    setStatus('st-transformers', f.transformers);
-    setStatus('st-onnx', f.onnx);
     return f;
-}
-
-function refreshLlamaStatus(f) {
-    setStatus('st-llama-layer', 'FUTURE');
-    setStatus('st-llama-runtime', 'FUTURE');
-    setStatus('st-llama-webgpu', f.webgpu === 'OK' ? 'AVAILABLE' : 'UNAVAILABLE');
-    // modelInstalled e' sempre false nesta versao: nenhum fluxo de download
-    // de modelo existe ainda (ver pack/manifest.models.json > blocking_reason).
-    const llmTier = resolveActiveLlmTier(f, false);
-    setStatus('st-llm-adapter-tier', llmTier.active_tier);
 }
 
 async function refreshVoiceStatus() {
@@ -487,7 +477,10 @@ async function refreshExecutiveSummary() {
 // Gate). Nenhuma regra de negocio nova: blockedConnectors reusa
 // classForConnectorState() (a mesma classificacao do Connector Probe grid)
 // para so' listar falha real (v-fail), nunca um estado pendente normal
-// (PLANNED/PROBING/STALE) como se fosse alerta critico.
+// (PLANNED/PROBING/STALE) como se fosse alerta critico. tradeSetupMatrix
+// reusa buildTradeSetupMatrix() (mesma funcao pura que renderTradeSetupMatrix
+// chama no Hero View) sobre o mesmo lastResearchEngineFrame — o insight
+// preditivo do ticker nunca pode divergir do SIGNAL mostrado no card.
 function collectLiveTickerState() {
     const active = realDataRegistry.getActiveReadOnlySources();
     const freshActive = active.filter((a) => !realDataRegistry.isStale(a));
@@ -511,6 +504,7 @@ function collectLiveTickerState() {
         freshnessLabel: lastRealAnalysisFrame ? formatFreshnessMs(lastRealAnalysisFrame.freshness) : DADOS_INSUFICIENTES,
         researchFrame: lastResearchEngineFrame,
         targetTracker: lastTargetTracker,
+        tradeSetupMatrix: buildTradeSetupMatrix({ research: lastResearchEngineFrame }),
         livePriceInfo: getLivePriceInfo(),
         vaultLabel: packStatusLabel(lastVaultStatusObj, vaultFreshness),
         hydrationStatus: lastHydrationEngineStatus ? lastHydrationEngineStatus.status : null,
@@ -678,6 +672,7 @@ function renderResearchEngineFrame(frame) {
         els['route-c-wait-grid'].innerHTML = empty;
         els['research-data-matrix-grid'].innerHTML = empty;
         els['research-data-sufficiency-label'].textContent = 'Data Sufficiency: — / 100';
+        renderTradeSetupMatrix(buildTradeSetupMatrix({ research: null }));
         return;
     }
     // Snapshots reidratados de sessao anterior podem ter sido gravados antes
@@ -725,6 +720,62 @@ function renderResearchEngineFrame(frame) {
         + row('Gatilho de reavaliação', c.trigger_to_reevaluate) + row('Dado ausente', c.data_missing)
         + row('Condição mais segura', c.safer_condition) + row('Data Sufficiency', score(c.data_sufficiency_score))
         + row('Motivo da limitação', str(c.limitation_reason));
+
+    renderTradeSetupMatrix(buildTradeSetupMatrix({ research: frame }));
+}
+
+/** Trade Setup Matrix do Hero View — resume UMA das 3 rotas que
+ *  renderResearchEngineFrame() acima ja' desenhou por completo, nunca uma
+ *  4a leitura: ver header de research/trade-setup-matrix.js. SIGNAL vira
+ *  badge v-ok (LONG/alta), v-fail (SHORT/baixa) ou v-pending (WAIT/
+ *  DADOS_INSUFICIENTES) so' para cor, nunca para decidir o conteudo. */
+function renderTradeSetupMatrix(matrix) {
+    const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
+    const sig = (matrix.signal !== DADOS_INSUFICIENTES) ? matrix.signal : '';
+    const isL = sig === 'LONG', isS = sig === 'SHORT';
+    const signalClass = isL ? 'v-ok' : (isS ? 'v-fail' : 'v-pending');
+    if (els['tsm-signal-badge']) {
+        els['tsm-signal-badge'].textContent = isL ? '▲ LONG' : isS ? '▼ SHORT' : '◆ AGUARDANDO';
+        els['tsm-signal-badge'].className = `siv tsm-signal-badge ${signalClass}`;
+    }
+    // Dynamic label names — LONG entry→resistance, SHORT entry→support
+    if (els['tsm-lbl-entry']) els['tsm-lbl-entry'].textContent = isL ? 'LONG ENTRY ▲' : isS ? 'SHORT ENTRY ▼' : 'ENTRADA';
+    if (els['tsm-lbl-tp1']) els['tsm-lbl-tp1'].textContent = isL ? 'ALVO 1 · R1' : isS ? 'ALVO 1 · S1' : 'ALVO 1';
+    if (els['tsm-lbl-tp2']) els['tsm-lbl-tp2'].textContent = isL ? 'ALVO 2 · R2' : isS ? 'ALVO 2 · S2' : 'ALVO 2';
+    if (els['tsm-lbl-tp3']) els['tsm-lbl-tp3'].textContent = isL ? 'ALVO 3 · EXT' : isS ? 'ALVO 3 · EXT' : 'ALVO 3';
+    if (els['tsm-lbl-sl']) els['tsm-lbl-sl'].textContent = isL ? 'STOP LOSS ▼' : isS ? 'STOP LOSS ▲' : 'STOP LOSS';
+    if (els['tsm-lbl-conf']) els['tsm-lbl-conf'].textContent = isL ? 'CONFIANÇA LONG' : isS ? 'CONFIANÇA SHORT' : 'CONFIANÇA';
+    // Direction band — dominant signal color strip above signal cards
+    if (els['qs-direction-band']) {
+        els['qs-direction-band'].dataset.signal = (isL || isS) ? sig : 'WAIT';
+        const spans = els['qs-direction-band'].querySelectorAll('span');
+        if (spans[0]) spans[0].textContent = isL ? '▲' : (isS ? '▼' : '—');
+        if (spans[1]) spans[1].textContent = isL ? 'LONG ATIVO ▲' : (isS ? 'SHORT ATIVO ▼' : 'AGUARDANDO SINAL');
+        if (spans[2]) spans[2].textContent = (sig && matrix.confidence && matrix.confidence !== DADOS_INSUFICIENTES) ? `CONF: ${matrix.confidence}` : '';
+    }
+    if (els['tsm-confidence']) {
+        els['tsm-confidence'].textContent = matrix.confidence === DADOS_INSUFICIENTES ? '—' : matrix.confidence;
+        els['tsm-confidence'].className = `tv value ${matrix.confidence === 'HIGH' ? 'v-ok' : (matrix.confidence === 'MEDIUM' ? 'v-limited' : 'v-pending')}`;
+    }
+    // Execution-matrix cells (Entry/TP/SL) are wired NUMERICALLY from the Target
+    // Tracker (real support/resistance levels) in renderSupportsResistances() —
+    // never from the descriptive strings of research-engine here, so the cockpit
+    // shows clean numbers, not sentences. This function owns only the qualitative
+    // signal badge / confidence / condition / LONG-SHORT status.
+    if (els['tsm-condition']) {
+        els['tsm-condition'].textContent = [str(matrix.condition), str(matrix.rationale)].filter((v) => v && v !== DADOS_INSUFICIENTES).join(' ') || DADOS_INSUFICIENTES;
+    }
+    // LONG/SHORT status indicators
+    const isLong = matrix.signal === 'LONG';
+    const isShort = matrix.signal === 'SHORT';
+    if (els['tsm-long-status']) {
+        els['tsm-long-status'].textContent = isLong ? 'ACTIVE' : 'STANDBY';
+        els['tsm-long-status'].className = `qs-matrix-status ${isLong ? 'v-ok' : 'v-pending'}`;
+    }
+    if (els['tsm-short-status']) {
+        els['tsm-short-status'].textContent = isShort ? 'ACTIVE' : 'STANDBY';
+        els['tsm-short-status'].className = `qs-matrix-status ${isShort ? 'v-fail' : 'v-pending'}`;
+    }
 }
 
 // Mission AR10_CYBORG_2_SAFE_REAL_DATA_LAYER_RUNTIME_PROBE_V1 — BTC Live
@@ -785,7 +836,7 @@ function renderTargetTrackerRoute(gridId, route) {
     els[gridId].innerHTML = `
         <div class="status-row"><span class="label">Status</span><span class="value ${classForTargetStatus(route.status)}">${route.status}</span></div>
         <div class="status-row"><span class="label">Alvo 1</span><span class="value v-info">${fmt(route.target_1)}</span></div>
-        <div class="status-row"><span class="label">Alvo 2</span><span class="value v-pending">${fmt(route.target_2)}</span></div>
+        <div class="status-row"><span class="label">Alvo 2</span><span class="value ${typeof route.target_2 === 'number' ? 'v-info' : 'v-pending'}">${fmt(route.target_2)}</span></div>
         <div class="status-row"><span class="label">Invalidação</span><span class="value v-info">${fmt(route.invalidation)}</span></div>
         <div class="status-row"><span class="label">Distância até alvo</span><span class="value v-info">${pct(route.distance_to_target_pct)}</span></div>
         <div class="status-row"><span class="label">Distância até invalidação</span><span class="value v-info">${pct(route.distance_to_invalidation_pct)}</span></div>
@@ -798,7 +849,7 @@ function renderTargetTrackerRoute(gridId, route) {
  *  data-live-mode — nunca por direcao long/short), snapshot da analise e as
  *  duas rotas do Target Tracker. tracker vem sempre de buildTargetTracker()
  *  (nunca null — emptyTracker() cobre o caso sem snapshot/sem preco). */
-function renderTargetTracker(tracker, livePriceInfo) {
+function renderTargetTracker(tracker, livePriceInfo, activeSignal) {
     const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
     const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : str(v));
     const mode = (livePriceInfo && livePriceInfo.mode) || DADOS_INSUFICIENTES;
@@ -838,7 +889,7 @@ function renderTargetTracker(tracker, livePriceInfo) {
 
     renderTargetTrackerRoute('bl-route-long-grid', tracker.rota_a_long);
     renderTargetTrackerRoute('bl-route-short-grid', tracker.rota_b_short);
-    renderSupportsResistances(tracker);
+    renderSupportsResistances(tracker, activeSignal);
 
     if (els['bl-reanalyze-banner']) {
         els['bl-reanalyze-banner'].hidden = !tracker.reanalyze_recommended;
@@ -848,18 +899,41 @@ function renderTargetTracker(tracker, livePriceInfo) {
     }
 }
 
-/** Suportes/Resistências — mesmos 2 niveis reais do Target Tracker (rota_a_
- *  long.target_1 = resistencia, rota_a_long.invalidation = suporte) e o
- *  mesmo preco atual, so' redesenhados como escada vertical. R2/S2 ficam
- *  sempre DADOS_INSUFICIENTES: o Research Engine nao calcula um 2o nivel. */
-function renderSupportsResistances(tracker) {
-    const str = (v) => (v === undefined || v === null ? DADOS_INSUFICIENTES : v);
-    const fmt = (v) => (typeof v === 'number' ? v.toFixed(2) : str(v));
-    if (els['sr-resistance-2']) els['sr-resistance-2'].textContent = DADOS_INSUFICIENTES;
-    if (els['sr-resistance-1']) els['sr-resistance-1'].textContent = fmt(tracker.rota_a_long.target_1);
-    if (els['sr-current-price']) els['sr-current-price'].textContent = fmt(tracker.current_price);
-    if (els['sr-support-1']) els['sr-support-1'].textContent = fmt(tracker.rota_a_long.invalidation);
-    if (els['sr-support-2']) els['sr-support-2'].textContent = DADOS_INSUFICIENTES;
+/** Suportes/Resistências — mesmos niveis reais do Target Tracker (rota_a_
+ *  long.target_1 = resistencia 1, target_2 = resistencia 2; rota_a_long.
+ *  invalidation = suporte 1; rota_b_short.target_2 = suporte 2) e o mesmo
+ *  preco atual, so' redesenhados como escada vertical. R2/S2 vem dos
+ *  engines de pivot/swing graduados (ver QUARANTINE.md) propagados via
+ *  RealAnalysisFrame -> target-tracker.js; caem em DADOS_INSUFICIENTES
+ *  quando a amostra nao confirma swings suficientes — nunca um nivel
+ *  inventado aqui. */
+function renderSupportsResistances(tracker, activeSignal) {
+    const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+    if (els['sr-current-price']) els['sr-current-price'].textContent = isNum(tracker.current_price) ? tracker.current_price.toFixed(2) : DADOS_INSUFICIENTES;
+
+    // Active-signal execution matrix (cockpit center, golden-record cards) —
+    // hydrated from the DOMINANT signal's NUMERIC route (rota_a_long for LONG,
+    // rota_b_short for SHORT) so each card shows a clean real number. Entry =
+    // live spot (the honest entry reference); ALVO 1/2 = real target levels;
+    // STOP = real invalidation. When the signal is WAIT/insufficient there is no
+    // route, so every card shows the sleek muted "AGUARDANDO" state — the cockpit
+    // never fabricates a level.
+    const route = activeSignal === 'SHORT' ? tracker.rota_b_short
+        : activeSignal === 'LONG' ? tracker.rota_a_long
+        : null;
+    // Propagate active signal to targets-grid for CSS color cascading
+    if (els['targets-grid']) els['targets-grid'].dataset.signal = activeSignal || '';
+    const setCard = (id, v) => {
+        if (!els[id]) return;
+        const ok = isNum(v);
+        els[id].textContent = ok ? v.toFixed(2) : 'AGUARDANDO';
+        els[id].className = `tv value qs-card-v${ok ? '' : ' qs-awaiting'}`;
+    };
+    setCard('tsm-entry-zone', route ? tracker.current_price : DADOS_INSUFICIENTES);
+    setCard('tsm-tp1', route ? route.target_1 : DADOS_INSUFICIENTES);
+    setCard('tsm-tp2', route ? route.target_2 : DADOS_INSUFICIENTES);
+    setCard('tsm-tp3', DADOS_INSUFICIENTES);
+    setCard('tsm-sl', route ? route.invalidation : DADOS_INSUFICIENTES);
 }
 
 function refreshTargetTracker() {
@@ -869,7 +943,8 @@ function refreshTargetTracker() {
         livePrice: livePriceInfo,
     });
     lastTargetTracker = tracker;
-    renderTargetTracker(tracker, livePriceInfo);
+    const activeSignal = buildTradeSetupMatrix({ research: lastResearchEngineFrame }).signal;
+    renderTargetTracker(tracker, livePriceInfo, activeSignal);
     return tracker;
 }
 
@@ -1207,6 +1282,7 @@ function renderLocalIntelligenceCard(result) {
         setStatusWithClass('li-data-mode', DADOS_INSUFICIENTES, 'v-pending');
         if (els['li-final-label-hero']) setStatusWithClass('li-final-label-hero', 'DADOS_INSUFICIENTES', 'v-pending');
         if (els['li-confidence-hero']) setInfo('li-confidence-hero', '—');
+        if (els['cpk-score-value']) { els['cpk-score-value'].textContent = '—'; els['cpk-score-value'].className = 'value score-hero-value v-pending'; }
         applyConfidenceGauge(null);
         return;
     }
@@ -1221,6 +1297,10 @@ function renderLocalIntelligenceCard(result) {
     els['li-explanation'].textContent = result.explanation_pt_br;
     if (els['li-final-label-hero']) setStatusWithClass('li-final-label-hero', score.final_label, classForSetupLabel(score.final_label));
     if (els['li-confidence-hero']) setInfo('li-confidence-hero', result.confidence_label);
+    if (els['cpk-score-value']) {
+        els['cpk-score-value'].textContent = score.final_label || '—';
+        els['cpk-score-value'].className = `value score-hero-value ${classForSetupLabel(score.final_label)}`;
+    }
     applyConfidenceGauge(result.confidence_label);
 }
 
@@ -1449,6 +1529,7 @@ async function bootRehydrateSession() {
 function showUpdateBanner() {
     if (!els['sw-update-banner']) return;
     els['sw-update-banner'].hidden = false;
+    cockpitViewport.recalcCockpitTop();
     log('Atualização do runtime disponível (nova versão já pré-armazenada pelo Service Worker).', 'info');
     siriform.setSiriformState('updating', 'Atualização disponível — toque em "Atualizar agora" quando quiser aplicar.');
 }
@@ -1496,7 +1577,6 @@ async function handleCheckSafari() {
     }
     log(`Backend de storage ativo: ${(await storage.activeBackend()).toUpperCase()}`, 'info');
     const f = await refreshFeatureStatus();
-    refreshLlamaStatus(f);
     const voiceStatus = await refreshVoiceStatus();
     refreshCyborgReadiness(f, voiceStatus);
     log('Verificacao concluida.', 'ok');
@@ -1624,6 +1704,111 @@ async function handleRunReplay() {
         log(`Erro no replay: ${err.message}`, 'fail');
         siriform.setSiriformState('warning', 'Não consegui rodar o replay agora.');
     }
+}
+
+function signalDetail(s) {
+    if (s.type === 'OFI') return `imbalance=${s.metadata.imbalance.toFixed(3)}`;
+    if (s.type === 'ABSORPTION') return `vol=${s.metadata.totalVolume.toFixed(1)} Δpreço=${s.metadata.priceChange.toFixed(2)}`;
+    if (s.type === 'EXHAUSTION') return `zScore=${s.metadata.zScore.toFixed(2)} ${s.metadata.direction}`;
+    return '';
+}
+
+function renderOrderflowSignals(signals) {
+    const list = els['orderflow-signal-list'];
+    if (!list) return;
+    if (!signals || signals.length === 0) {
+        list.innerHTML = '<li class="signal-empty">Nenhum sinal orgânico nesta execução (replay derivado de candles agregados — ver nota acima). O auto-teste do motor já comprova os limiares de forma determinística (badge "Auto-teste do motor").</li>';
+        return;
+    }
+    list.innerHTML = signals.slice(-30).reverse().map((s) => `
+        <li class="signal-item" data-signal-type="${s.type}">
+            <span>${s.type} · preço ${s.price.toFixed(2)} · ${signalDetail(s)}</span>
+            <span class="signal-conf">${(s.confidence * 100).toFixed(0)}%</span>
+        </li>
+    `).join('');
+}
+
+async function handleRunOrderflow() {
+    if (!orderflowClient) {
+        log('Order Flow Engine ainda não inicializado.', 'fail');
+        return;
+    }
+    siriform.setSiriformState('checking', 'Rodando Order Flow replay sintético...');
+    try {
+        if (!replayDatasetCache) {
+            replayDatasetCache = await packManager.loadReplayDataset((m, l) => log(m, l));
+        }
+        const result = await orderflowUI.runReplayThroughOrderflow({ client: orderflowClient, dataset: replayDatasetCache });
+        els['orderflow-meta'].innerHTML = `
+            <span>Ticks sintetizados: <b>${result.ticksProcessed}</b></span>
+            <span>Ingeridos no ring buffer: <b>${result.ingested}</b></span>
+            <span>Sinais nesta execução: <b>${result.signals.length}</b></span>
+        `;
+        renderOrderflowSignals(result.signals);
+        log(`Order Flow replay: ${result.ticksProcessed} ticks sintetizados, ${result.signals.length} sinais.`, result.signals.length > 0 ? 'ok' : 'dim');
+        siriform.setSiriformState('success', result.signals.length > 0
+            ? `Order Flow: ${result.signals.length} sinal(is) detectado(s) no replay.`
+            : 'Order Flow replay concluído — 0 sinais orgânicos (esperado para este dataset; auto-teste do motor já comprova os limiares).');
+    } catch (err) {
+        log(`Erro no Order Flow replay: ${err.message}`, 'fail');
+        siriform.setSiriformState('warning', 'Não consegui rodar o Order Flow replay agora.');
+    }
+}
+
+/** onUpdate de cada ciclo do poller MEXC live (~4s, ver createLivePoller).
+ *  Roda mesmo sem trade novo ou com a sonda fora de ACTIVE_READ_ONLY — o
+ *  badge of-source sempre reflete o estado real desta sondagem, nunca um
+ *  ultimo sucesso congelado (ver header de mexc-trades-stream.js). */
+function renderLiveOrderflowUpdate(update) {
+    const sourceLabel = update.state === 'ACTIVE_READ_ONLY' ? 'MEXC LIVE' : `MEXC LIVE — ${update.state}`;
+    setStatusWithClass('of-source', sourceLabel, classForConnectorState(update.state));
+    if (update.signals.length > 0) {
+        liveOrderflowSignals.push(...update.signals);
+        renderOrderflowSignals(liveOrderflowSignals);
+    }
+    els['orderflow-meta'].innerHTML = `
+        <span>Fonte: <b>MEXC Spot (live, GET /api/v3/trades)</b></span>
+        <span>Trades novos neste ciclo: <b>${update.newTicks}</b></span>
+        <span>Ingeridos no ring buffer: <b>${update.ingested}</b></span>
+        <span>Sinais acumulados nesta sessão live: <b>${liveOrderflowSignals.length}</b></span>
+    `;
+    if (update.state === 'ACTIVE_READ_ONLY') {
+        log(`MEXC live: ciclo OK — ${update.newTicks} trade(s) novo(s), ${update.signals.length} sinal(is).`, update.newTicks > 0 ? 'ok' : 'dim');
+    } else {
+        log(`MEXC live: sonda retornou ${update.state} neste ciclo (0 ticks ingeridos).`, 'fail');
+    }
+}
+
+/** Liga/desliga o feed real MEXC. Mutuamente exclusivo com o replay
+ *  sintetico (orderflowUI.runReplayThroughOrderflow recusa rodar enquanto
+ *  isLiveFeedRunning() — aqui so' refletimos isso na UI desabilitando o
+ *  outro botao, a garantia de verdade vive na camada de orquestracao). */
+async function handleToggleOrderflowLive() {
+    if (!orderflowClient) {
+        log('Order Flow Engine ainda não inicializado.', 'fail');
+        return;
+    }
+    const btn = els['btn-toggle-orderflow-live'];
+    if (orderflowUI.isLiveFeedRunning()) {
+        orderflowUI.stopLiveOrderflowFeed();
+        if (btn) btn.innerHTML = '<span class="icon">📡</span> Iniciar MEXC Live';
+        if (els['btn-run-orderflow']) els['btn-run-orderflow'].disabled = false;
+        setStatusWithClass('of-source', 'REPLAY SINTÉTICO', 'v-info');
+        log('MEXC live feed parado pelo usuário.', 'info');
+        siriform.setSiriformState('idle', 'Feed MEXC live parado.');
+        return;
+    }
+    liveOrderflowSignals = [];
+    if (btn) btn.innerHTML = '<span class="icon">⏹</span> Parar MEXC Live';
+    if (els['btn-run-orderflow']) els['btn-run-orderflow'].disabled = true;
+    setStatusWithClass('of-source', 'CONECTANDO…', 'v-pending');
+    log('=== INICIANDO MEXC LIVE (Order Flow real) ===', 'info');
+    siriform.setSiriformState('checking', 'Conectando ao feed real MEXC (GET /api/v3/trades)...');
+    orderflowUI.startLiveOrderflowFeed({
+        client: orderflowClient,
+        symbol: 'BTC',
+        onUpdate: renderLiveOrderflowUpdate,
+    });
 }
 
 async function handleClearReinstall() {
@@ -2021,7 +2206,6 @@ function wireProfileToggle() {
             currentProfile = btn.dataset.profile;
             buttons.forEach((b) => b.classList.toggle('active', b === btn));
             els['profile-hint'].textContent = PROFILES[currentProfile].label;
-            setStatus('st-llama-profile', currentProfile.toUpperCase());
             log(`Perfil de processamento: ${currentProfile.toUpperCase()}.`, 'info');
         });
     });
@@ -2030,25 +2214,31 @@ function wireProfileToggle() {
 // Fase 7 — "Modo avançado": tudo que não é o fluxo normal de um toque fica
 // escondido por padrão atrás deste alternador, fora do .bento principal.
 function wireAdvancedToggle() {
-    const btn = els['btn-tb-advanced'];
-    const section = els['advanced-section'];
-    if (!btn || !section) return;
-    btn.addEventListener('click', () => {
-        const show = section.hidden;
-        section.hidden = !show;
-        btn.textContent = show ? 'Ocultar modo avançado' : 'Modo avançado';
-        btn.setAttribute('aria-expanded', show ? 'true' : 'false');
-        if (show) {
-            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+
+    switchTab = (tabName) => {
+        tabBtns.forEach((b) => {
+            const hit = b.dataset.tab === tabName;
+            b.classList.toggle('active', hit);
+            b.setAttribute('aria-selected', hit ? 'true' : 'false');
+        });
+        tabPanes.forEach((p) => { p.hidden = p.id !== `tab-${tabName}`; });
+        if (tabName !== 'cockpit') {
             refreshMetricsPanel();
-            // Secao estava hidden no draw original do replay -> canvas tinha
-            // rect 0x0 e nao desenhou nada visivel. Redesenha agora que o
-            // canvas tem layout real, sem rodar o replay de novo.
             if (lastReplayDrawData && els['replay-canvas']) {
                 replayEngine.drawSparkline(els['replay-canvas'], lastReplayDrawData.closes, lastReplayDrawData.rollingSma);
             }
         }
+        if (tabName === 'cockpit') cockpitViewport.recalcCockpitTop();
+    };
+
+    tabBtns.forEach((btn) => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
+
+    const btnAdv = els['btn-tb-advanced'];
+    if (btnAdv) btnAdv.addEventListener('click', () => switchTab('engine'));
 }
 
 // Mission 2 — Commander/Soldier, Memória Viva, Source Health, Risk Gate,
@@ -2059,9 +2249,6 @@ function wireAdvancedToggle() {
 function renderCommanderSoldierCard() {
     const status = getCommanderSoldierStatus();
     lastCommanderSoldierStatus = status;
-    setStatus('cs-commander-status', status.commander.status);
-    setStatus('cs-soldier-status', status.soldier.status);
-    setStatus('cs-sync-bridge-status', status.sync_bridge.status);
 }
 
 // Safari Edge: telemetria local real (rAF/visibility/storage backend),
@@ -2100,24 +2287,6 @@ let safariEdgeTimer = null;
 function startSafariEdgeAutoRefresh() {
     if (safariEdgeTimer) return;
     safariEdgeTimer = setInterval(renderSafariEdgeCard, 2000);
-}
-
-// Telegram AUX/Quarantine: politica declarada desta fase (token/webhook
-// desligados, execucao proibida) — constante, nao telemetria, por isso so
-// renderiza uma vez no boot, igual a Live Status/Risk Gate.
-function renderTelegramAuxCard() {
-    const status = getTelegramAuxStatusReport();
-    lastTelegramAuxStatus = status;
-    setStatus('ta-telegram-layer', status.telegram_layer);
-    setStatus('ta-bot-token', status.bot_token);
-    setStatus('ta-webhook', status.webhook);
-    setStatus('ta-live-execution', status.live_execution);
-    setStatus('ta-signal-quarantine', status.signal_quarantine);
-    setStatus('ta-source-trust', status.source_trust);
-    setStatus('ta-allowed-commands', status.allowed_commands);
-    setStatus('ta-risk-gate', status.risk_gate);
-    setStatus('ta-event-ledger', status.event_ledger);
-    setStatus('ta-is-authoritative', status.is_authoritative ? 'TRUE' : 'FALSE');
 }
 
 // Hydration Engine: armazenamento progressivo no Safari/iPad (pacotes
@@ -2508,10 +2677,6 @@ function defaultCardSummary(cardEl) {
 }
 
 const CUSTOM_CARD_SUMMARY = {
-    'commander-soldier-panel': () => ({
-        title: 'Commander / Soldier',
-        body: lastCommanderSoldierStatus ? lastCommanderSoldierStatus.siriform_summary : 'Status ainda não carregado nesta sessão.',
-    }),
     'source-health-panel': () => ({
         title: 'Source Health',
         body: lastSourceHealthReport ? lastSourceHealthReport.siriform_summary : 'Source Health ainda não carregado nesta sessão.',
@@ -2527,10 +2692,6 @@ const CUSTOM_CARD_SUMMARY = {
     'safari-edge-layer-panel': () => ({
         title: 'Safari Assisted Edge Layer',
         body: lastSafariEdgeStatus ? lastSafariEdgeStatus.siriform_summary : 'Safari Edge ainda não foi lido nesta sessão.',
-    }),
-    'telegram-aux-panel': () => ({
-        title: 'Telegram AUX / Quarantine',
-        body: lastTelegramAuxStatus ? lastTelegramAuxStatus.siriform_summary : 'Telegram AUX ainda não foi lido nesta sessão.',
     }),
 };
 
@@ -2582,7 +2743,7 @@ function wireButtons() {
     const btnSwUpdateReload = document.getElementById('btn-sw-update-reload');
     if (btnSwUpdateReload) btnSwUpdateReload.addEventListener('click', () => window.location.reload());
     const btnSwUpdateDismiss = document.getElementById('btn-sw-update-dismiss');
-    if (btnSwUpdateDismiss) btnSwUpdateDismiss.addEventListener('click', () => { els['sw-update-banner'].hidden = true; });
+    if (btnSwUpdateDismiss) btnSwUpdateDismiss.addEventListener('click', () => { els['sw-update-banner'].hidden = true; cockpitViewport.recalcCockpitTop(); });
     wireAdvancedToggle();
     const btnReport = document.getElementById('btn-export-report');
     if (btnReport) btnReport.addEventListener('click', handleExportReport);
@@ -2625,6 +2786,8 @@ function wireButtons() {
     if (els['btn-he-verify']) els['btn-he-verify'].addEventListener('click', handleVerifyHydrationIntegrity);
     if (els['btn-he-repair']) els['btn-he-repair'].addEventListener('click', handleRepairHydration);
     if (els['btn-he-export']) els['btn-he-export'].addEventListener('click', handleExportHydrationReport);
+    if (els['btn-run-orderflow']) els['btn-run-orderflow'].addEventListener('click', handleRunOrderflow);
+    if (els['btn-toggle-orderflow-live']) els['btn-toggle-orderflow-live'].addEventListener('click', handleToggleOrderflowLive);
 
     if (els['br-import-input']) {
         els['br-import-input'].addEventListener('change', async (ev) => {
@@ -2656,9 +2819,9 @@ function wireButtons() {
     }
 
     document.getElementById('btn-close-modal').addEventListener('click', () => { els['home-modal'].hidden = true; });
-    document.getElementById('qa-diagnostics').addEventListener('click', handleRunDiagnostics);
-    document.getElementById('qa-replay').addEventListener('click', handleRunReplay);
-    document.getElementById('qa-analysis').addEventListener('click', handleExplainAnalysis);
+    document.getElementById('qa-diagnostics').addEventListener('click', () => { switchTab('sistema'); handleRunDiagnostics(); });
+    document.getElementById('qa-replay').addEventListener('click', () => { switchTab('sistema'); handleRunReplay(); });
+    document.getElementById('qa-analysis').addEventListener('click', () => { switchTab('engine'); handleExplainAnalysis(); });
     document.getElementById('qa-report').addEventListener('click', handleShowReport);
     if (els['mic-button']) els['mic-button'].addEventListener('click', handleMicButton);
     if (els['btn-voice-info']) {
@@ -2719,6 +2882,7 @@ function wireButtons() {
 }
 
 async function boot() {
+    cockpitViewport.initCockpitViewport();
     siriform.initSiriform({
         avatar: els['siriform-avatar'],
         caption: els['siriform-caption'],
@@ -2730,7 +2894,6 @@ async function boot() {
     wireMacroStateObserver();
     siriform.setSiriformState('thinking', 'Inicializando runtime local...');
     log('AR10 Cyborg 1.0 PRO (codinome interno AR10_CYBORG_2_IPAD_ONE_TAP_CLOUD_RUNTIME_V1) — boot iniciado.', 'info');
-    setStatus('st-llama-profile', currentProfile.toUpperCase());
     wireButtons();
     await registerServiceWorker();
     const workerUrl = new URL('workers/quant-worker.js', window.location.href).href;
@@ -2744,8 +2907,23 @@ async function boot() {
         els['engine-meta'].textContent = `Falha ao inicializar o engine: ${err.message}`;
         log(`Worker/WASM falhou ao iniciar: ${err.message}`, 'fail');
     }
+    if (els['orderflow-canvas']) {
+        try {
+            const orderflowWorkerUrl = new URL('workers/orderflow-worker.js', window.location.href).href;
+            const init = await orderflowUI.initOrderflowEngine({ workerUrl: orderflowWorkerUrl, canvas: els['orderflow-canvas'] });
+            orderflowClient = init.client;
+            setStatusWithClass('of-backend', String(init.backend).toUpperCase(), init.backend === 'webgpu' ? 'v-ok' : 'v-limited');
+            setStatusWithClass('of-sab', init.useSAB ? 'ATIVO (zero-copy)' : 'FALLBACK (structured clone)', init.useSAB ? 'v-ok' : 'v-limited');
+            setStatusWithClass('of-selftest', init.selfTest.pass ? 'PASS' : 'FAIL', init.selfTest.pass ? 'v-ok' : 'v-fail');
+            log(`Order Flow Engine pronto — backend=${init.backend}, useSAB=${init.useSAB}, auto-teste=${init.selfTest.pass ? 'PASS' : 'FAIL'}.`, init.selfTest.pass ? 'ok' : 'fail');
+        } catch (err) {
+            setStatusWithClass('of-backend', 'FALHA', 'v-fail');
+            setStatusWithClass('of-sab', 'FALHA', 'v-fail');
+            setStatusWithClass('of-selftest', 'FALHA', 'v-fail');
+            log(`Order Flow Engine falhou ao iniciar: ${err.message}`, 'fail');
+        }
+    }
     const f = await refreshFeatureStatus();
-    refreshLlamaStatus(f);
     const voiceStatus = await refreshVoiceStatus();
     let vault = await refreshVaultAndReplayStatus();
     refreshCyborgReadiness(f, voiceStatus);
@@ -2759,7 +2937,6 @@ async function boot() {
     await renderRiskGateCard();
     await renderPaperTradingCard();
     renderLiveStatusCard();
-    renderTelegramAuxCard();
     await renderSafariEdgeCard();
     startSafariEdgeAutoRefresh();
 

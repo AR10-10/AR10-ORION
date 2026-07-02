@@ -2,69 +2,55 @@
 
 Codinome interno: `AR10_CYBORG_FUSION_RESEARCH_QUARANTINE_V1`.
 
-**Status desta árvore inteira: `FUTURE` / `PLANNED`, em quarentena.** Este
-arquivo é a declaração explícita de quarentena para tudo dentro de
-`ipad_runtime/src/research/` — conectores (`connectors/*/index.js`) e
-motores de fusão de sinal (`engines/*.js`), incluindo
-`engines/signal-fusion-engine.js` especificamente.
+**Status desta árvore: apenas os 2 engines graduados abaixo são ACTIVE_READ_ONLY.
+Todo o restante foi excluído em 2026-06-30 (purge de código morto).**
 
-## Fatos confirmados (não inferidos)
+## Estado atual do diretório
 
-- **Zero import real.** Nenhum arquivo em `ipad_runtime/js/**` importa
-  qualquer coisa de `src/research/`. O fecho transitivo de módulos a partir
-  de `js/app.js` (o único `<script type="module">` de `index.html`) não
-  toca esta árvore — confirmado por varredura de grafo de import ao corrigir
-  `service-worker.js` em 2026-06-21.
-- **Zero rede real.** Nenhum arquivo desta árvore faz `fetch()`/XHR/
-  WebSocket real. Onde a palavra "fetch" aparece, é só dentro de um
-  comentário do tipo "Não faz fetch()/XHR" — confirmado lendo todos os 13
-  `connectors/*/index.js` e os 12 `engines/*.js`.
-  Conferir: `grep -rn "fetch(" ipad_runtime/src/research` sempre cai dentro
-  de comentário, nunca dentro de código executável.
-- **Zero chave/credencial.** Todo `meta.requires_api_key` é `false`; todo
-  `meta.supports_private_endpoints` é `false`.
-- **Zero execução.** Todo `execution_supported`/`order_send_supported`
-  presente é `false`. `pack/manifest.pack.json` →
-  `security_posture.mt5_bridge` já declara `"ABSENT"`, consistente com o
-  stub de `connectors/mt5/index.js`.
-- **Todo `current_status` é `'FUTURE'` ou `'PLANNED'`.** Nenhum conector ou
-  motor se declara pronto.
+```
+src/research/
+├── QUARANTINE.md                   ← este arquivo
+└── engines/
+    ├── support-resistance-engine.js   ACTIVE_READ_ONLY (graduado 2026-06-25)
+    └── market-structure-engine.js     ACTIVE_READ_ONLY (graduado 2026-06-25)
+```
 
-## A única ressalva real: bytes estáticos vs. execução
+**Removidos em 2026-06-30 (purge):**
+- `connectors/` — diretório inteiro (13 stubs binance, coingecko, coinglass, custom,
+  google-finance, mexc, mexc-realstocks, mexc-stock-futures, mt5, native-companion,
+  registry, tradingview, yahoo-finance). Nenhum tinha import real; todos declaravam
+  `current_status: 'FUTURE'` e nunca foram importados por `js/**`.
+- `engines/momentum-engine.js`, `volatility-regime-engine.js`, `funding-oi-engine.js`,
+  `futures-flow-engine.js`, `liquidity-engine.js`, `retracement-engine.js`,
+  `trend-engine.js`, `risk-engine.js`, `volume-profile-engine.js`,
+  `scenario-builder.js`, `signal-fusion-engine.js`, `index.js` — 12 stubs inativos,
+  todos `status: 'FUTURE'`, zero import real.
 
-`.github/workflows/deploy-ipad-pwa.yml` publica o diretório `ipad_runtime/`
-inteiro como artefato do GitHub Pages. Isso significa que os arquivos desta
-árvore **são servidos como bytes estáticos** na URL pública (alcançáveis
-por quem souber/adivinhar o caminho direto), mesmo nunca sendo importados,
-executados ou linkados pela página real. Isto é diferente de "rodar" —
-nenhum destes arquivos é avaliado, importado ou referenciado pelo HTML/JS
-que o usuário real carrega — mas é diferente o suficiente de "não existe no
-deploy" para registrar aqui com precisão, sem eufemismo.
+## Engines graduados (ACTIVE_READ_ONLY)
+
+- **`engines/support-resistance-engine.js`** — pivots/swing high-low (método fractal)
+  + extensão de Fibonacci sobre candles reais de `js/real-data/mexc-public.js`.
+  Importado por `js/real-data/analysis-frame.js`. Zero `fetch()` novo, zero
+  credencial, zero `order_send`.
+- **`engines/market-structure-engine.js`** — detecção de HH/HL/LH/LL (swing structure)
+  sobre os mesmos candles reais. Importado por `js/real-data/analysis-frame.js`.
+  Zero `fetch()` novo, zero credencial, zero `order_send`.
+
+Ambos adicionados a `PRECACHE_URLS` em `service-worker.js` na graduação (v-25 →
+v-26, 2026-06-25). Ambos são funções puras de cálculo, sem estado global, sem
+import reverso de volta para `js/**`.
 
 ## Regra de quarentena daqui para frente
 
 Nenhum arquivo de `src/research/**` pode ser importado por `js/**` sem,
 no mesmo commit:
 
-1. Atualizar `current_status` daquele conector/motor de `'FUTURE'`/
-   `'PLANNED'` para um valor real e implementar a lógica de verdade (não só
-   trocar o status com o stub por baixo).
-2. Adicionar o(s) arquivo(s) a `PRECACHE_URLS` em
-   `ipad_runtime/service-worker.js` — um import novo sem precache quebra a
-   1ª navegação offline (mesma classe de risco corrigida nesta sessão para
-   `js/trading/*`, `js/core/*`, `js/real-data/source-health.js`,
-   `js/memory/*`).
-3. Se o conector exigir rede real, adicionar o domínio à CSP `connect-src`
-   de `ipad_runtime/index.html` como diff isolado e revisável — nunca
-   efeito colateral de outra mudança (mesma disciplina de
-   `soldier_runtime/domain-tunnel/README.md`).
-4. Se o conector exigir credencial, resolver isso via política equivalente
-   a `WindowsLocalSecretPolicy`/`TelegramAuxSecretPolicy`
-   (`soldier_runtime/windows/types.ts`,
-   `soldier_runtime/telegram-aux/types.ts`) — nunca no frontend, nunca no
-   repositório, nunca no storage do PWA.
-
-Referências de design já existentes (não duplicadas aqui):
-`docs/CONNECTOR_REGISTRY_DESIGN.md`,
-`docs/SIRIFORM_VOICE_AND_NATIVE_COMPANION_ROUTE.md`,
-`configs/connector-registry.default.json`.
+1. Implementar lógica real (não só trocar o status com stub por baixo) e atualizar
+   `current_status` de `'FUTURE'`/`'PLANNED'` para um valor real.
+2. Adicionar o(s) arquivo(s) a `PRECACHE_URLS` em `ipad_runtime/service-worker.js` —
+   import novo sem precache quebra a 1ª navegação offline.
+3. Se o módulo exigir rede real, adicionar o domínio à CSP `connect-src` de
+   `ipad_runtime/index.html` como diff isolado e revisável.
+4. Se o módulo exigir credencial, resolver via política equivalente a
+   `WindowsLocalSecretPolicy`/`TelegramAuxSecretPolicy` — nunca no frontend,
+   nunca no repositório, nunca no storage do PWA.

@@ -12,9 +12,8 @@ export const els = {};
 
 const ELEMENT_IDS = [
     'st-pwa', 'st-sw', 'st-cache', 'st-idb', 'st-opfs', 'st-webcrypto', 'st-wasm', 'st-workers',
-    'st-webgpu', 'st-webgl', 'st-webllm', 'st-transformers', 'st-onnx', 'st-replay', 'st-vault', 'st-mode',
+    'st-webgpu', 'st-webgl', 'st-replay', 'st-vault', 'st-mode',
     'st-voice', 'st-speech-rec', 'st-speech-syn', 'st-mic-perm',
-    'st-llama-layer', 'st-llama-profile', 'st-llama-runtime', 'st-llama-webgpu', 'st-llm-adapter-tier',
     'cyborg-live-ticker', 'live-ticker-track',
     'console-log', 'telemetry-latest', 'replay-canvas', 'replay-meta', 'import-input', 'home-modal', 'standalone-state',
     'siriform-avatar', 'siriform-caption', 'siriform-state-tag', 'macro-state-chip', 'mic-button', 'mic-status-label', 'btn-voice-info', 'engine-meta', 'analysis-frame-grid',
@@ -31,6 +30,9 @@ const ELEMENT_IDS = [
     'bl-snapshot-price', 'bl-snapshot-time', 'bl-snapshot-age', 'bl-price-diff',
     'bl-route-long-grid', 'bl-route-short-grid', 'bl-reanalyze-banner', 'bl-btn-refresh-now',
     'sr-resistance-2', 'sr-resistance-1', 'sr-current-price', 'sr-support-1', 'sr-support-2',
+    'tsm-signal-badge', 'tsm-confidence', 'tsm-entry-zone', 'tsm-tp1', 'tsm-tp2', 'tsm-tp3', 'tsm-sl', 'tsm-condition',
+    'tsm-long-status', 'tsm-short-status',
+    'tsm-short-entry', 'tsm-short-tp1', 'tsm-short-tp2', 'tsm-short-tp3', 'tsm-short-sl',
     'real-analysis-frame-grid', 'real-analysis-frame-session-note', 'real-analysis-frame-note',
     're-evidence-grid', 're-missing-fields', 're-session-note', 're-evidence-hash',
     'route-a-long-grid', 'route-b-short-grid', 'route-c-wait-grid', 'research-engine-session-note',
@@ -40,7 +42,6 @@ const ELEMENT_IDS = [
     'topbar-status', 'advanced-section', 'btn-tb-advanced',
     'ev-command-routing', 'ev-security-posture', 'ev-data-policy', 'ev-fail-closed', 'ev-siriform-states', 'ev-summary',
     'mx-load-time', 'mx-prep-time', 'mx-cache', 'mx-storage', 'mx-siriform-events', 'mx-diag-fails', 'mx-eval-fails', 'mx-reduced-motion',
-    'cs-commander-status', 'cs-soldier-status', 'cs-sync-bridge-status',
     'mv-event-log-count', 'mv-snapshot-status', 'mv-last-good-status', 'mv-recovery-status', 'mv-hydration-status', 'btn-mv-snapshot',
     'sh-grid', 'sh-active-count', 'sh-total-count', 'dm-source-health-summary',
     'rg-kill-switch', 'rg-max-drawdown', 'rg-max-position', 'rg-require-stop', 'rg-min-quality', 'btn-rg-engage', 'btn-rg-disengage',
@@ -54,13 +55,15 @@ const ELEMENT_IDS = [
     'se-edge-status', 'se-device', 'se-session-id', 'se-last-sequence', 'se-render-latency',
     'se-dropped-frames', 'se-visible-panels', 'se-focused-symbol', 'se-focused-timeframe',
     'se-connection-state', 'se-storage-mirror', 'se-is-authoritative', 'se-soldier-validation',
-    'ta-telegram-layer', 'ta-bot-token', 'ta-webhook', 'ta-live-execution', 'ta-signal-quarantine',
-    'ta-source-trust', 'ta-allowed-commands', 'ta-risk-gate', 'ta-event-ledger', 'ta-is-authoritative',
     'he-ring', 'he-progress-pct', 'he-status', 'he-current-package', 'he-session', 'he-completed', 'he-pending', 'he-failed', 'he-bytes', 'he-checkpoint',
     'he-quota', 'he-resumable', 'he-offline-available', 'he-fail-closed', 'he-last-error',
     'btn-he-start', 'btn-he-pause', 'btn-he-verify', 'btn-he-repair', 'btn-he-export',
     'tb-build-badge', 'tb-heartbeat', 'ex-hydration', 'ex-local', 'li-final-label-hero', 'li-confidence-hero',
     'li-gauge-wrap', 'li-gauge-needle',
+    'orderflow-canvas', 'orderflow-meta', 'of-backend', 'of-sab', 'of-selftest', 'of-source', 'orderflow-signal-list', 'btn-run-orderflow', 'btn-toggle-orderflow-live',
+    'qs-direction-band', 'cpk-score-value',
+    'tsm-lbl-entry', 'tsm-lbl-tp1', 'tsm-lbl-tp2', 'tsm-lbl-tp3', 'tsm-lbl-sl', 'tsm-lbl-conf',
+    'targets-grid',
 ];
 
 ELEMENT_IDS.forEach((id) => { els[id] = document.getElementById(id); });

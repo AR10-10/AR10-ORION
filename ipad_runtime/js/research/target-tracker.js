@@ -159,13 +159,13 @@ export function buildTargetTracker({ snapshot, livePrice } = {}) {
         rota_a_long: {
             ...applyStaleDowngrade(longRoute),
             target_1: resistance,
-            target_2: DADOS_INSUFICIENTES,
+            target_2: isFiniteNum(frame.resistance_2) ? frame.resistance_2 : DADOS_INSUFICIENTES,
             invalidation: support,
         },
         rota_b_short: {
             ...applyStaleDowngrade(shortRoute),
             target_1: support,
-            target_2: DADOS_INSUFICIENTES,
+            target_2: isFiniteNum(frame.support_2) ? frame.support_2 : DADOS_INSUFICIENTES,
             invalidation: resistance,
         },
         reanalyze_recommended: reanalyzeReasons.length > 0,

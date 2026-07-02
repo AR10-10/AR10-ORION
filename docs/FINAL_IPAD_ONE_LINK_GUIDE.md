@@ -68,10 +68,12 @@ análise, no log do sistema).
 
 No card do Replay, o seletor **Light/Balanced/Heavy** muda a janela
 usada pelo motor WASM para SMA/EMA (10/20/40 candles) antes de rodar o
-replay, e também atualiza o campo `Llama Profile` no painel Meta
-Llama/WebLLM — mesma preferência de perfil, dois lugares onde ela já se
-aplica hoje (replay) ou vai se aplicar no futuro (Llama, quando
-implementado — ver `docs/META_LLAMA_WEBLLM_ROUTE.md`).
+replay — única aplicação real hoje. O antigo painel Meta Llama/WebLLM
+que espelhava essa preferência num campo próprio foi removido na
+ruthless pruning do Engine Room (nenhum runtime de Llama existe para
+consumi-la); o plano de reaproveitar este mesmo seletor quando um
+runtime real existir continua documentado em
+`docs/META_LLAMA_WEBLLM_ROUTE.md`.
 
 ## Passo a passo manual (fallback, botão por botão)
 

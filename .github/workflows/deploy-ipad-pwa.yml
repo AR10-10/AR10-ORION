@@ -29,6 +29,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ramber-ui/ is the source tree for the RAMBER terminal (React/
+      # Vite) — the ONLY app served at this repo's root. Its build output
+      # (index.html + assets/) is copied into ipad_runtime/ root below and
+      # becomes the deployed site; ipad_runtime/index.html itself is never
+      # committed (generated fresh on every deploy), same reasoning as
+      # node_modules/dist being gitignored — only source is versioned.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ipad_runtime/ramber-ui/package-lock.json
+
+      - name: Build RAMBER UI (React/Vite) and place at ipad_runtime root
+        working-directory: ipad_runtime/ramber-ui
+        run: |
+          npm ci --include=dev
+          npm run build
+          cp -r dist/. ../
+          rm -rf node_modules dist
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:

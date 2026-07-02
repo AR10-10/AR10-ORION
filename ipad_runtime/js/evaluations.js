@@ -12,6 +12,9 @@ import * as voice from './voice.js';
 import * as siriform from './siriform.js';
 import { MARKET_DATA_POLICY, realMarketAnalysisStatus } from './data-policy.js';
 import { createEmptyEvidence, validateEvidenceShape } from './real-data/schema.js';
+import { Side, SignalType, Signal } from '../src/orderflow/value-objects.js';
+import { createEngineState, processSignals, defaultSettings } from '../src/orderflow/signal-engine.js';
+import { validateTradesShape, tradesToTicks, filterNewTrades } from './real-data/mexc-trades-stream.js';
 
 function check(group, name, pass, detail) {
     return { group, name, pass: !!pass, detail: String(detail) };
@@ -110,6 +113,102 @@ function evalDataPolicy() {
     return results;
 }
 
+function evalOrderflowEngine() {
+    const group = 'orderflow_engine';
+    const results = [];
+    const mkTick = (price, volume, side) => ({ price, volume, side, timestamp: Date.now() });
+
+    // OFI: janela toda comprada deve disparar imbalance ~+1.0; janela
+    // balanceada nao deve disparar (sem falso positivo).
+    {
+        const state = createEngineState();
+        const ticks = [];
+        for (let i = 0; i < defaultSettings.ofi.windowSize; i++) ticks.push(mkTick(67000 + i, 2, Side.BUY));
+        const ofi = processSignals(ticks, state).filter((s) => s.type === SignalType.OFI);
+        results.push(check(group, 'OFI dispara em janela 100% comprada', ofi.length >= 1 && Math.abs(ofi[0].metadata.imbalance - 1) < 1e-9, ofi.length ? `imbalance=${ofi[0].metadata.imbalance.toFixed(4)}` : 'nenhum sinal'));
+    }
+    {
+        const state = createEngineState();
+        const ticks = [];
+        for (let i = 0; i < defaultSettings.ofi.windowSize; i++) ticks.push(mkTick(67000, 2, i % 2 ? Side.BUY : Side.SELL));
+        const ofi = processSignals(ticks, state).filter((s) => s.type === SignalType.OFI);
+        results.push(check(group, 'OFI nao dispara em janela balanceada', ofi.length === 0, `${ofi.length} sinal(is)`));
+    }
+
+    // EXHAUSTION: baseline de baixa variancia (oscila 0/1) + um pico isolado
+    // de volume muito acima do desvio-padrao da baseline, com colapso de
+    // preco >20% nos ultimos 10 ticks do pico. Uma rampa monotonica pura
+    // NAO serve de caso de teste aqui: o z-score fica matematicamente
+    // limitado a raiz(3)~1.73 porque currentDelta e sempre o proprio
+    // elemento extremo da janela usada para calcular media/desvio — por
+    // isso o pico precisa ser curto e isolado dentro de uma janela estavel.
+    {
+        const state = createEngineState();
+        const ticks = [];
+        const lb = defaultSettings.exhaustion.deltaLookback;
+        for (let i = 0; i < lb + 50; i++) ticks.push(mkTick(67000, 1, i % 2 ? Side.BUY : Side.SELL));
+        for (let i = 0; i < 20; i++) {
+            const price = i < 10 ? 67000 : 67000 * (1 - 0.03 * (i - 9));
+            ticks.push(mkTick(price, 60, Side.BUY));
+        }
+        const exh = processSignals(ticks, state).filter((s) => s.type === SignalType.EXHAUSTION);
+        const detail = exh.length ? `zScore=${exh[0].metadata.zScore.toFixed(2)} delta=${exh[0].metadata.delta} direction=${exh[0].metadata.direction}` : 'nenhum sinal';
+        results.push(check(group, 'EXHAUSTION dispara em pico de delta + reversao de preco', exh.length >= 1 && Math.abs(exh[0].metadata.zScore) > defaultSettings.exhaustion.exhaustionThreshold && exh[0].metadata.direction === 'BUY_EXHAUSTED', detail));
+    }
+
+    // Value objects: Signal e Tick precisam ser imutaveis (Skill 2) — um
+    // sinal emitido pelo engine nunca pode ser adulterado depois.
+    {
+        const s = new Signal({ type: SignalType.OFI, confidence: 0.9, price: 1, timestamp: 1, metadata: {} });
+        results.push(check(group, 'Signal e um value object congelado', Object.isFrozen(s), `frozen=${Object.isFrozen(s)}`));
+    }
+    {
+        const a = createEngineState();
+        const b = createEngineState();
+        a.ofi.buyVol = 999;
+        results.push(check(group, 'createEngineState() nao compartilha estado entre instancias', b.ofi.buyVol === 0, `b.ofi.buyVol=${b.ofi.buyVol}`));
+    }
+
+    return results;
+}
+
+/** Auto-teste 100% offline das funcoes puras de mexc-trades-stream.js (Task
+ *  #37) — nao toca rede, roda em qualquer sessao independente de
+ *  conectividade real com api.mexc.com (ver "Honestidade de plataforma" no
+ *  cabecalho daquele arquivo: a sonda real so e validavel ao vivo, fora
+ *  deste sandbox). Cobre exatamente as 3 funcoes exportadas para isso:
+ *  validacao de shape fail-closed, mapeamento isBuyerMaker->Side e dedup
+ *  por lastTradeId entre ciclos de polling. */
+function evalMexcLiveConnector() {
+    const group = 'mexc_live_connector';
+    const results = [];
+
+    results.push(check(group, 'validateTradesShape aceita amostra bem formada', validateTradesShape([{ price: '67000.5', qty: '0.01', time: 1700000000000, isBuyerMaker: true, id: 1 }]).valid, 'amostra com price/qty/time/isBuyerMaker'));
+    results.push(check(group, 'validateTradesShape rejeita resposta nao-array (fail-closed)', validateTradesShape({}).valid === false, 'objeto {} deve falhar'));
+    results.push(check(group, 'validateTradesShape rejeita array vazio', validateTradesShape([]).valid === false, '[] deve falhar'));
+    results.push(check(group, 'validateTradesShape rejeita item sem campos esperados', validateTradesShape([{ foo: 1 }]).valid === false, 'item sem price/qty/time/isBuyerMaker deve falhar'));
+
+    {
+        const ticks = tradesToTicks([
+            { price: '100', qty: '1', time: 2, isBuyerMaker: true },
+            { price: '101', qty: '2', time: 1, isBuyerMaker: false },
+        ]);
+        results.push(check(group, 'tradesToTicks ordena por tempo ascendente de forma defensiva', ticks[0].timestamp === 1 && ticks[1].timestamp === 2, `timestamps=${ticks.map((t) => t.timestamp).join(',')}`));
+        results.push(check(group, 'tradesToTicks: isBuyerMaker=false => agressor comprador => Side.BUY', ticks[0].side === Side.BUY, `side=${ticks[0].side}`));
+        results.push(check(group, 'tradesToTicks: isBuyerMaker=true => agressor vendedor => Side.SELL', ticks[1].side === Side.SELL, `side=${ticks[1].side}`));
+    }
+
+    {
+        const rows = [{ id: 5 }, { id: 6 }, { id: 7 }];
+        const firstCycle = filterNewTrades(rows, null);
+        results.push(check(group, 'filterNewTrades admite a janela inteira no primeiro ciclo (lastTradeId=null)', firstCycle.length === 3, `${firstCycle.length} linha(s)`));
+        const nextCycle = filterNewTrades(rows, 6);
+        results.push(check(group, 'filterNewTrades (dedup) so admite ids estritamente maiores que lastTradeId', nextCycle.length === 1 && nextCycle[0].id === 7, `${nextCycle.length} linha(s) nova(s)`));
+    }
+
+    return results;
+}
+
 async function evalVaultFailClosed(packManager) {
     const group = 'read_only_fail_closed';
     const results = [];
@@ -151,7 +250,7 @@ export async function runEvaluations({ packManager, avatarEl, onLog } = {}) {
     const t0 = performance.now();
     log('=== EVALUATIONS (auto-teste local) — INICIO ===', 'info');
 
-    const groups = [evalCommandRouting(), evalSecurityPosture(), evalDataPolicy()];
+    const groups = [evalCommandRouting(), evalSecurityPosture(), evalDataPolicy(), evalOrderflowEngine(), evalMexcLiveConnector()];
     if (packManager) groups.push(await evalVaultFailClosed(packManager));
     groups.push(evalSiriformStates(avatarEl));
 

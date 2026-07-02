@@ -3,10 +3,15 @@
 // Evidence (js/real-data/schema.js), reusando o mesmo motor WASM/worker do
 // replay sintetico (js/worker-client.js) — o calculo e identico, so a fonte
 // dos closes muda (candle real validado por sonda, nunca dataset sintetico).
-// Suporte/resistencia vem de max(high)/min(low) reais dos candles recebidos,
-// nunca de um nivel inventado ou extrapolado por modelo nao implementado.
+// Suporte/resistencia (nivel 1) vem de max(high)/min(low) reais dos candles
+// recebidos. Suporte/resistencia nivel 2 e os alvos de extensao de Fibonacci
+// vem dos motores graduados em src/research/engines/ (ver QUARANTINE.md
+// secao "Engines graduados") — mesmos candles reais, nunca um nivel
+// inventado ou extrapolado por modelo nao implementado.
 
 import { DADOS_INSUFICIENTES, NAO_APLICAVEL } from './schema.js';
+import { analyze as analyzeSupportResistance } from '../../src/research/engines/support-resistance-engine.js';
+import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
 
 // Minimo de candles reais para que SMA/EMA/STDDEV/Z-score tenham algum
 // significado — abaixo disso o estado honesto e DADOS_INSUFICIENTES, nunca
@@ -55,6 +60,11 @@ function emptyFrame(evidence, reason) {
         volume_status: DADOS_INSUFICIENTES,
         support: DADOS_INSUFICIENTES,
         resistance: DADOS_INSUFICIENTES,
+        support_2: DADOS_INSUFICIENTES,
+        resistance_2: DADOS_INSUFICIENTES,
+        fib_extension_long_target: DADOS_INSUFICIENTES,
+        fib_extension_short_target: DADOS_INSUFICIENTES,
+        market_structure: DADOS_INSUFICIENTES,
         volatility_state: DADOS_INSUFICIENTES,
         trend_direction: DADOS_INSUFICIENTES,
         missing_fields: evidence.missing_fields || [],
@@ -93,6 +103,14 @@ export async function buildRealAnalysisFrame({ evidence, workerClient, windowSiz
     const support = Math.min(...candles.map((c) => c.l));
     const resistance = Math.max(...candles.map((c) => c.h));
 
+    const srResult = analyzeSupportResistance({ ohlcv_series: candles, timeframe: evidence.timeframe, volume_profile: null });
+    const structureResult = analyzeMarketStructure({ ohlcv_series: candles, timeframe: evidence.timeframe });
+    const support2 = srResult.status === 'OK' ? srResult.support_2 : DADOS_INSUFICIENTES;
+    const resistance2 = srResult.status === 'OK' ? srResult.resistance_2 : DADOS_INSUFICIENTES;
+    const fibLongTarget = srResult.status === 'OK' ? srResult.fib_extension_long_target : DADOS_INSUFICIENTES;
+    const fibShortTarget = srResult.status === 'OK' ? srResult.fib_extension_short_target : DADOS_INSUFICIENTES;
+    const marketStructure = structureResult.status === 'OK' ? structureResult.structure_label : DADOS_INSUFICIENTES;
+
     const volumeStatus = (evidence.volume === DADOS_INSUFICIENTES || evidence.volume === NAO_APLICAVEL)
         ? evidence.volume
         : 'REAL';
@@ -113,6 +131,11 @@ export async function buildRealAnalysisFrame({ evidence, workerClient, windowSiz
         volume_status: volumeStatus,
         support,
         resistance,
+        support_2: support2,
+        resistance_2: resistance2,
+        fib_extension_long_target: fibLongTarget,
+        fib_extension_short_target: fibShortTarget,
+        market_structure: marketStructure,
         volatility_state: volatilityState(result.stddev, lastPrice),
         trend_direction: trendDirection(lastPrice, result.sma),
         missing_fields: evidence.missing_fields || [],

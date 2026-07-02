@@ -71,30 +71,42 @@ Estados possíveis (`data-state` no `#siriform-avatar`):
 | `read_only`  | Estado de repouso "de lei" — sempre mostrado após 3.6s parado. |
 | `fail_closed`| Falha de segurança real (checksum divergente, instalação bloqueada). |
 
-Cards do painel (todos dentro da mesma página, sem rota nova). Em iPad
-paisagem (≥900px) os cards fluem num **bento de colunas balanceadas**
-(`.bento` em multicoluna) que preenche a tela larga sem zonas pretas
-vazias; o banner READ_ONLY/FAIL_CLOSED, o header, a Telemetria e o rodapé
-ficam fora do fluxo de colunas (largura total). Em retrato, coluna única na
-ordem natural:
+Cards do painel (todos dentro da mesma página, sem rota nova) dividem-se em
+duas zonas. O **Hero View** (`.cockpit-viewport`, ver
+`js/ui/cockpit-viewport.js`) cabe em exatamente `100dvh` sem scroll de
+página, com 4 zonas nomeadas e fixas — Market Data, Voice Trigger, S/R
+Signals e Risk Metrics ("Demote, don't delete": nada crítico para a
+leitura de 1ª tela vive fora dele). Todo o resto — diagnóstico técnico,
+conectores, Memória Viva, Risk Gate, Paper Trading, Vault, Hydration
+Engine etc. — mora no **Engine Room** (`.advanced-section`, "Modo
+Avançado"), oculto por padrão e alternado pelo botão `btn-tb-advanced` na
+topbar; em iPad paisagem (≥900px) o Engine Room flui em colunas
+balanceadas (`column-count`) que preenchem a tela larga sem zonas pretas
+vazias. Só o banner READ_ONLY/FAIL_CLOSED, o header e o rodapé ficam fora
+de ambas as zonas (largura total) — a Telemetria ao Vivo mora dentro do
+Engine Room, como qualquer outro card técnico. Ordem natural (coluna única,
+retrato):
 `siriform-card` → `cyborg-executive-panel` (**Resumo Executivo**, FOCO3 da
 fase de polimento visual — leitura "tudo pronto?" em 1 olhar: Estado do
 Cyborg, fonte real ativa ou `DADOS_INSUFICIENTES`, timestamp de freshness,
 Paper Trading, Risk Gate, Live Trading sempre `LIVE_LOCKED`, Vault/Evidence
 e último relatório, com os mesmos 4 botões de ação do topbar — Preparar/
 Atualizar, Analisar Sistema, Relatório, Modo Avançado — espelhados aqui) →
-`cyborg-readiness-panel` (checklist técnico detalhado de capacidades do
-Safari/iPadOS) → `commander-soldier-panel` (Commander = este iPad, sempre `ONLINE`;
-Soldier headless 24/7 ainda `NOT_DEPLOYED` — só existe como contrato de
-tipos em `soldier_runtime/`, nunca instalado nem executado) →
+`action-strip` (Voice Trigger — CTA principal, microfone Siriform Voice
+centralizado, ações rápidas) → `supports-resistances-panel` (S/R Signals —
+Trade Setup Matrix: SIGNAL LONG/SHORT/WAIT, ENTRY ZONE, TP1/TP2/SL via
+`support-resistance-engine.js`/`market-structure-engine.js`, mais Suportes/
+Resistências; última zona dentro do `.cockpit-viewport` — *fim do Hero
+View, daqui em diante Engine Room*) →
 `safari-edge-layer-panel` (Safari Assisted Edge Layer — telemetria local
 real de sessão/render deste iPad/Safari: latência, frames perdidos, foco
 de tela, estado de conexão/armazenamento; nunca decide trade, nunca
 substitui o Soldier, `is_authoritative` sempre `FALSE`) →
 `voice-status-panel` (estado do microfone/Siriform Voice Layer) →
 `runtime-status-panel` → `feature-detect-panel` →
-`quant-engine-widget` → `ai-models-panel` (WebLLM/Transformers/ONNX,
-`FUTURE`) → `replay-wrap` (com `profile-toggle` Light/Balanced/Heavy,
+`quant-engine-widget` → `cyborg-readiness-panel` (checklist técnico
+detalhado de capacidades do Safari/iPadOS — Risk Metrics, relocado do
+Hero View) → `replay-wrap` (com `profile-toggle` Light/Balanced/Heavy,
 genuinamente muda a janela SMA/EMA usada no WASM; rotulado **Modo de
 Diagnóstico Técnico — dados sintéticos, não usar para decisão de mercado**)
 → `analysis-frame-panel` (estatística descritiva sobre o dataset sintético,
@@ -107,7 +119,10 @@ vivo desta sessão — nunca promove um conector a `ACTIVE_READ_ONLY` por
 conta própria) → `real-analysis-frame-panel` (leitura sobre candle real —
 "não é recomendação") → `real-evidence-panel` (Evidence Object —
 evidence-first, nunca inventado: ou dado real ou
-`DADOS_INSUFICIENTES`/`NAO_APLICAVEL`) → `research-engine-panel` (ROTA
+`DADOS_INSUFICIENTES`/`NAO_APLICAVEL`) → `target-tracker-panel` /
+`rota-recomendada-panel` / `data-matrix-summary-panel` (Risk Metrics,
+relocados do Hero View — roteiro/dados de detalhe técnico, não leitura de
+1ª tela) → `research-engine-panel` (ROTA
 A/B/C sempre presentes, nunca um caminho silenciosamente vazio) →
 `siriform-explanation-panel` (explica em português o que os Dados Reais
 acima significam) → `memory-alive-panel` (Memória Viva — Event Log
@@ -127,9 +142,6 @@ com drawdown acima do limite ou fonte de dados abaixo da qualidade mínima)
 fonte ativa, roteado pelo Risk Gate, nunca envia ordem a uma exchange) →
 `live-status-panel` (explica por que Live Trading é `LIVE_LOCKED` por
 estrutura — sem rota de execução real no código, não uma flag) →
-`telegram-aux-panel` (Telegram AUX/Quarantine — política declarada desta
-fase: token `NOT_CONFIGURED`, webhook `DISABLED`, execução `FORBIDDEN`,
-sem rede/bot real; espelha `soldier_runtime/telegram-aux/types.ts`) →
 `vault-evidence-panel` (Vault/Evidence — reabre e re-verifica o SHA-256 a
 cada boot) → `vault-local-panel` (Vault Local do iPad — 16 campos de
 status; com auto-reparo seguro: reindexa do armazenamento ou reinstala,
@@ -144,13 +156,16 @@ Instruments, WWDC26) → `local-pack-manager` (os 13 botões do Local Pack
 Manager) → `export-panel` (Arquivos Exportados — exportações com nome único
 carimbado, sem prompt de "substituir") → `backup-recovery-panel` (exporta/
 restaura a Memória Viva inteira num único `.json` com hash verificado,
-`FAIL_CLOSED` se corrompido ou adulterado). A antiga "Logs do Sistema"
-virou `telemetry-card` (**Telemetria ao Vivo** — último evento sempre
+`FAIL_CLOSED` se corrompido ou adulterado) → `console-section`/
+`telemetry-card` (**Telemetria ao Vivo**, antiga "Logs do Sistema",
+realocada para o Engine Room na ruthless pruning — último evento sempre
 visível + caixa preta rolável, eventos reais, nunca um muro de terminal —
 com sub-bloco **Activity Log** listando o histórico persistido de
-`memory/event-log.js`). Todo card com `tabindex` é tocável: abre um resumo
-em português gerado a partir do estado real do próprio card
-(`wireStatusCardModal()` em `app.js`), nunca um texto estático.
+`memory/event-log.js`; último card do Engine Room). Todo card com
+`tabindex` é tocável: abre um resumo em português gerado a partir do
+estado real do próprio card (`wireStatusCardModal()` em `app.js`), nunca
+um texto estático — `console-section` não tem `tabindex` (conteúdo já é
+log ao vivo, sem resumo estático a abrir).
 
 ## Decisões técnicas (liberdade técnica usada nesta entrega)
 
@@ -246,7 +261,7 @@ dos arquivos já instalados, comparando com os checksums gravados. Se algo
 não bater, o Vault volta para `LOCKED` e a UI mostra a falha — em vez de
 confiar ciegamente numa flag `installed=true` salva da sessão anterior.
 
-### WebLLM / Transformers.js / ONNX Runtime Web — por que `FUTURE` e não "fake installed"
+### WebLLM / Transformers.js / ONNX Runtime Web — por que o painel saiu
 
 Nenhum modelo de linguagem está embutido nesta V1 (ver
 `pack/manifest.models.json`). Empacotar um modelo Llama quantizado
@@ -254,8 +269,15 @@ Nenhum modelo de linguagem está embutido nesta V1 (ver
 CDN de modelos em runtime — violaria tanto "sem CDN para núcleo sensível"
 quanto o orçamento de armazenamento realista do Safari/iPadOS sem um fluxo
 de consentimento explícito de download incremental (ainda não
-implementado). O painel mostra **FUTURE** de forma honesta, com o plano de
-entrega documentado no manifesto de modelos — não finge que está instalado.
+implementado). Sem nenhuma função viva por trás — três campos sempre
+`FUTURE`, nunca outra coisa —, o antigo `ai-models-panel` foi removido de
+verdade na ruthless pruning do Engine Room, em vez de continuar ocupando
+tela como placeholder; WebGPU (`cyborg-readiness-panel`) e WebGL
+(`feature-detect-panel`) continuam detectados e exibidos normalmente — só
+os 3 campos especulativos de modelo e o painel que os agrupava saíram. O
+plano de entrega de um modelo real continua documentado no manifesto de
+modelos, para o dia em que existir função viva o bastante para merecer
+painel de novo.
 
 ### AR10 Local Intelligence Engine (sem API paga)
 

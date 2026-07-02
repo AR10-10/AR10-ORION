@@ -170,7 +170,7 @@ mudam:
   `ipad_runtime/README.md`, secao "Como abrir no iPad").
 - **Convencoes do painel de status**: cards sequenciais dentro da mesma
   pagina (`siriform-card` → `runtime-status-panel` →
-  `feature-detect-panel` → `quant-engine-widget` → `ai-models-panel` →
+  `feature-detect-panel` → `quant-engine-widget` →
   `replay-wrap` → `analysis-frame-panel` → `decision-frame-panel` →
   `vault-evidence-card` → `local-pack-manager`), sem rotas novas, sem SPA
   router.
