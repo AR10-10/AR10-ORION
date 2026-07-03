@@ -593,6 +593,11 @@ export default function App() {
     const target = cycleOk ? (realCycle?.target1 ?? null) : null;
     const target2 = cycleOk ? (realCycle?.target2 ?? null) : null;
     const stop = cycleOk ? (realCycle?.stop ?? null) : null;
+    // V11.5 Fase 6: razão real distância-ao-alvo/distância-à-invalidação
+    // (target-tracker.js) e força por confluência de swings do Alvo 2
+    // (support-resistance-engine.js) — repassados, nunca recomputados aqui.
+    const riskRewardRatio = cycleOk ? (realCycle?.riskRewardRatio ?? null) : null;
+    const target2Strength = cycleOk ? (realCycle?.target2Strength ?? null) : null;
     const confidence = cycleOk ? (realCycle?.confidence ?? null) : null;
     const marketStructure = cycleOk ? (realCycle?.marketStructure ?? null) : null;
     // Clean label for marketStructure's raw internal string, computed once
@@ -662,6 +667,8 @@ export default function App() {
       target,
       target2,
       stop,
+      riskRewardRatio,
+      target2Strength,
       confidence,
       marketStructure,
       marketStructureLabel,
@@ -1070,6 +1077,8 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
   const stop: number | null = engine?.stop ?? null;
   const flowPressure: number | null = engine?.flowPressure ?? null;
   const moveToTargetPct: number | null = engine?.moveToTargetPct ?? null;
+  const riskRewardRatio: number | null = engine?.riskRewardRatio ?? null;
+  const target2Strength: { label: "FORTE" | "FRACA"; touches: number } | null = engine?.target2Strength ?? null;
 
   const dirLabel = isLong ? "LONG" : isShort ? "SHORT" : AWAIT;
   const dirColor = isLong
@@ -1207,7 +1216,12 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                     label="Alvo 2 · Extensão"
                     value={engine.target2}
                     accent="#00ffaa"
-                    tag="REAL"
+                    // V11.5 Fase 6: quando o motor confirma força por
+                    // confluência real de swings, o badge mostra isso em vez
+                    // do genérico "REAL" — mesmo espaço visual, mais
+                    // informação (nunca uma probabilidade, ver
+                    // support-resistance-engine.js).
+                    tag={target2Strength?.label ?? "REAL"}
                     dim={!num(engine.target2)}
                   />
                   <LevelCard
@@ -1295,6 +1309,14 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                       <span className="text-[#00f0ff] border-[#00f0ff50] bg-[#00f0ff10] text-[0.6rem] font-bold border px-2 py-0.5 rounded">
                         PRESSÃO {num(flowPressure) ? `${flowPressure.toFixed(1)}%` : DASH}
                       </span>
+                      {/* V11.5 Fase 6: razão real distância-ao-alvo/distância-
+                          à-invalidação (target-tracker.js) — nunca uma
+                          probabilidade de acerto, ver comentário na fonte. */}
+                      {num(riskRewardRatio) && (
+                        <span className="text-[#f0d06f] border border-[#f0d06f]/40 bg-[#f0d06f]/10 text-[0.55rem] font-bold px-2 py-0.5 rounded">
+                          R:R {riskRewardRatio.toFixed(2)}
+                        </span>
+                      )}
                       <span className="text-[#8ab4f8] border border-[#8ab4f8]/30 bg-[#8ab4f8]/5 text-[0.55rem] font-bold px-2 py-0.5 rounded">
                         SEM ALAVANCAGEM
                       </span>

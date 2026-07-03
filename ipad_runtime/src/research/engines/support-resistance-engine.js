@@ -15,18 +15,35 @@
 
 export const metadata = {
     engine: 'support-resistance-engine',
-    description: 'Niveis de suporte/resistência (2 por lado) e extensão de Fibonacci a partir de pivots/swing high-low sobre candles reais.',
-    concepts: ['Pivots', 'Swing High/Low', 'Fibonacci retracement/extension', 'Volume Profile'],
+    description: 'Niveis de suporte/resistência (2 por lado, com classificação de força por confluência real de swings) e extensão de Fibonacci a partir de pivots/swing high-low sobre candles reais.',
+    concepts: ['Pivots', 'Swing High/Low', 'Fibonacci retracement/extension', 'Volume Profile', 'Confluência de nível (força)'],
     required_data: ['ohlcv_series', 'timeframe', 'volume_profile'],
     status: 'ACTIVE_READ_ONLY',
     limitations: [
         'Volume Profile (HVN/LVN) nao tem conector real conectado nesta arvore: niveis vem so de pivots/swing/Fibonacci sobre preco, nunca de volume.',
         'Sem swing high/low confirmados o suficiente na amostra, cai em DADOS_INSUFICIENTES — nunca extrapola um nivel.',
+        'V11.5 Fase 6: FORTE/FRACA e uma contagem REAL de quantos swings independentes (fractais confirmados) caem dentro da mesma banda de tolerancia de um nivel — nunca uma probabilidade estatistica. Este motor nao estima "chance de o alvo ser atingido": nao ha backtest neste repositorio para sustentar essa afirmacao honestamente (mesmo principio ja documentado em research-engine.js sobre confidence qualitativo vs. probabilidade).',
     ],
 };
 
 const MIN_CANDLES = 15;
 const FRACTAL_K = 2;
+// Banda de tolerância para contar um swing como "tocando" o mesmo nível —
+// 0.15% do próprio preço do nível, não um valor absoluto (funciona igual em
+// BTC ~60k e em ativos de preço baixo como XRP).
+const STRENGTH_TOLERANCE_FRAC = 0.0015;
+const STRONG_TOUCH_THRESHOLD = 2;
+
+/** Conta quantos swings reais (fractais confirmados, incluindo o próprio
+ * nível) caem dentro de +-tolerancia% do preço do nível — uma medida real de
+ * confluência (quantas vezes o preço reverteu perto desta mesma zona nesta
+ * amostra), não uma projeção. >=2 toques independentes = FORTE; 1 = FRACA. */
+function computeLevelStrength(levelPrice, swingPoints) {
+    if (!Number.isFinite(levelPrice) || swingPoints.length === 0) return null;
+    const band = Math.abs(levelPrice) * STRENGTH_TOLERANCE_FRAC;
+    const touches = swingPoints.filter((s) => Math.abs(s.price - levelPrice) <= band).length;
+    return { label: touches >= STRONG_TOUCH_THRESHOLD ? 'FORTE' : 'FRACA', touches };
+}
 
 function findSwings(candles, k, isHigh) {
     const out = [];
@@ -77,6 +94,14 @@ export function analyze(input = {}) {
     const supportNear = lowPrices.length > 1 ? lowPrices[1] : lowPrices[0];
     const supportFar = lowPrices.length > 1 ? lowPrices[0] : 'DADOS_INSUFICIENTES';
 
+    // Força por confluência real (V11.5 Fase 6): cada nível é testado contra
+    // TODOS os swings do próprio lado (não o deduplicado) — quantos fractais
+    // independentes reverteram perto desta mesma zona nesta amostra.
+    const resistance1Strength = computeLevelStrength(resistanceNear, swingHighs);
+    const resistance2Strength = Number.isFinite(resistanceFar) ? computeLevelStrength(resistanceFar, swingHighs) : null;
+    const support1Strength = computeLevelStrength(supportNear, swingLows);
+    const support2Strength = Number.isFinite(supportFar) ? computeLevelStrength(supportFar, swingLows) : null;
+
     return {
         status: 'OK',
         engine: metadata.engine,
@@ -84,6 +109,10 @@ export function analyze(input = {}) {
         resistance_2: resistanceFar,
         support_1: supportNear,
         support_2: supportFar,
+        resistance_1_strength: resistance1Strength,
+        resistance_2_strength: resistance2Strength,
+        support_1_strength: support1Strength,
+        support_2_strength: support2Strength,
         // Extensao de Fibonacci (61.8%) projetada a partir da ultima perna
         // confirmada — so' preenche o lado cuja ultima perna real confirma a
         // direcao (subida confirma projecao de alta, queda confirma projecao

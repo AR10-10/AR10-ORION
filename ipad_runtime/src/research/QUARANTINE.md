@@ -31,7 +31,13 @@ src/research/
 - **`engines/support-resistance-engine.js`** — pivots/swing high-low (método fractal)
   + extensão de Fibonacci sobre candles reais de `js/real-data/mexc-public.js`.
   Importado por `js/real-data/analysis-frame.js`. Zero `fetch()` novo, zero
-  credencial, zero `order_send`.
+  credencial, zero `order_send`. (V11.5 Fase 6, 2026-07-03) Cada nível também
+  ganha uma classificação FORTE/FRACA por confluência real de swings
+  (`resistance_1_strength`/`resistance_2_strength`/`support_1_strength`/
+  `support_2_strength`) — contagem determinística, nunca uma probabilidade
+  estatística (sem backtest neste repositório para sustentar isso). O
+  Risk:Reward real (`risk_reward_ratio`, razão de distâncias já reais) foi
+  adicionado em `js/research/target-tracker.js`, não aqui.
 - **`engines/market-structure-engine.js`** — detecção de HH/HL/LH/LL (swing structure)
   sobre os mesmos candles reais. Importado por `js/real-data/analysis-frame.js`.
   Zero `fetch()` novo, zero credencial, zero `order_send`.

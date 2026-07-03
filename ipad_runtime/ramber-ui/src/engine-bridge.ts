@@ -57,6 +57,14 @@ export interface RealCycleResult {
   rationale?: string | null;
   lorentzian?: LorentzianResult;
   forecast?: HorizonForecast[];
+  // V11.5 Fase 6 (motor cognitivo): riskRewardRatio é uma razão determinística
+  // real (distância % até o alvo ÷ distância % até a invalidação, ambas já
+  // calculadas em target-tracker.js) — NUNCA uma probabilidade estatística de
+  // acerto, este repositório não tem backtest para sustentar essa afirmação.
+  // target2Strength é uma contagem real de confluência de swings (ver
+  // support-resistance-engine.js), não uma projeção.
+  riskRewardRatio?: number | null;
+  target2Strength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
 }
 
 let workerClientSingleton: any = null;
@@ -164,6 +172,8 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
       resistance: isNum(frame.resistance) ? frame.resistance : null,
       condition: typeof matrix.condition === 'string' ? matrix.condition : null,
       rationale: typeof matrix.rationale === 'string' ? matrix.rationale : null,
+      riskRewardRatio: route && isNum(route.risk_reward_ratio) ? route.risk_reward_ratio : null,
+      target2Strength: route && route.target_2_strength ? route.target_2_strength : null,
     };
   } catch (err: any) {
     return { ok: false, reason: `pipeline_de_pesquisa_falhou: ${describeError(err)}` };

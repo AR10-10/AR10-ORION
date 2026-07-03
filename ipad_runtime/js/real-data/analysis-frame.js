@@ -62,6 +62,8 @@ function emptyFrame(evidence, reason) {
         resistance: DADOS_INSUFICIENTES,
         support_2: DADOS_INSUFICIENTES,
         resistance_2: DADOS_INSUFICIENTES,
+        support_2_strength: null,
+        resistance_2_strength: null,
         fib_extension_long_target: DADOS_INSUFICIENTES,
         fib_extension_short_target: DADOS_INSUFICIENTES,
         market_structure: DADOS_INSUFICIENTES,
@@ -107,6 +109,11 @@ export async function buildRealAnalysisFrame({ evidence, workerClient, windowSiz
     const structureResult = analyzeMarketStructure({ ohlcv_series: candles, timeframe: evidence.timeframe });
     const support2 = srResult.status === 'OK' ? srResult.support_2 : DADOS_INSUFICIENTES;
     const resistance2 = srResult.status === 'OK' ? srResult.resistance_2 : DADOS_INSUFICIENTES;
+    // V11.5 Fase 6: força por confluência real (ver support-resistance-engine.js)
+    // propagada junto do próprio nível 2 que ela descreve — nunca recomputada
+    // aqui, nunca uma probabilidade.
+    const support2Strength = srResult.status === 'OK' ? (srResult.support_2_strength ?? null) : null;
+    const resistance2Strength = srResult.status === 'OK' ? (srResult.resistance_2_strength ?? null) : null;
     const fibLongTarget = srResult.status === 'OK' ? srResult.fib_extension_long_target : DADOS_INSUFICIENTES;
     const fibShortTarget = srResult.status === 'OK' ? srResult.fib_extension_short_target : DADOS_INSUFICIENTES;
     const marketStructure = structureResult.status === 'OK' ? structureResult.structure_label : DADOS_INSUFICIENTES;
@@ -133,6 +140,8 @@ export async function buildRealAnalysisFrame({ evidence, workerClient, windowSiz
         resistance,
         support_2: support2,
         resistance_2: resistance2,
+        support_2_strength: support2Strength,
+        resistance_2_strength: resistance2Strength,
         fib_extension_long_target: fibLongTarget,
         fib_extension_short_target: fibShortTarget,
         market_structure: marketStructure,
