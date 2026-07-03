@@ -2379,7 +2379,11 @@ function EssentialStrip() {
       }`}
     >
       <Chip label="Direção" value={dirLabel} valueClass={`px-1.5 rounded border ${dirColor}`} />
-      <Chip label="Confiança" value={confidence ?? AWAIT} valueClass="text-white" />
+      <Chip
+        label="Confiança"
+        value={confidence ?? AWAIT}
+        valueClass="px-1.5 rounded border border-[#8ab4f8]/40 bg-[#8ab4f8]/10 text-[#8ab4f8]"
+      />
       <Chip label="Liquidez" value={liquidezLabel} valueClass={liquidezColor} />
       <Chip label="Risco" value={riskLabel} valueClass={riskColor} />
       <Chip label="Preço" value={priceLabel} valueClass="text-white" />
