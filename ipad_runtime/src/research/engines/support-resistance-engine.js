@@ -12,6 +12,12 @@
 // conector de volume profile real esta conectado a este motor ainda —
 // melhor declarar DADOS_INSUFICIENTES do que fabricar uma confirmacao de
 // volume que nao existe.
+//
+// findSwings/FRACTAL_K vivem em fractal-swings.js (remediacao da Auditoria
+// Mestra 360°, secao 7): o mesmo algoritmo estava triplicado neste arquivo,
+// em market-structure-engine.js e em fvg-order-block-engine.js.
+
+import { FRACTAL_K, findSwings } from './fractal-swings.js';
 
 export const metadata = {
     engine: 'support-resistance-engine',
@@ -27,7 +33,6 @@ export const metadata = {
 };
 
 const MIN_CANDLES = 15;
-const FRACTAL_K = 2;
 // Banda de tolerância para contar um swing como "tocando" o mesmo nível —
 // 0.15% do próprio preço do nível, não um valor absoluto (funciona igual em
 // BTC ~60k e em ativos de preço baixo como XRP).
@@ -43,22 +48,6 @@ function computeLevelStrength(levelPrice, swingPoints) {
     const band = Math.abs(levelPrice) * STRENGTH_TOLERANCE_FRAC;
     const touches = swingPoints.filter((s) => Math.abs(s.price - levelPrice) <= band).length;
     return { label: touches >= STRONG_TOUCH_THRESHOLD ? 'FORTE' : 'FRACA', touches };
-}
-
-function findSwings(candles, k, isHigh) {
-    const out = [];
-    for (let i = k; i < candles.length - k; i++) {
-        const v = isHigh ? candles[i].h : candles[i].l;
-        if (!Number.isFinite(v)) continue;
-        let confirmed = true;
-        for (let j = i - k; j <= i + k; j++) {
-            if (j === i) continue;
-            const cmp = isHigh ? candles[j].h : candles[j].l;
-            if (!Number.isFinite(cmp) || (isHigh ? cmp >= v : cmp <= v)) { confirmed = false; break; }
-        }
-        if (confirmed) out.push({ index: i, price: v });
-    }
-    return out;
 }
 
 /**

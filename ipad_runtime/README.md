@@ -57,8 +57,10 @@ ipad_runtime/
 
 ## Cockpit (o que o operador vê)
 
-- **Vetor de mercado** (LONG/SHORT/AGUARDANDO) do motor WASM real +
-  pipeline de pesquisa; entrada/alvos/stop reais quando confirmado.
+- **Vetor de mercado** (LONG/SHORT/AGUARDANDO) da heurística de tendência
+  real (SMA/EMA, `research-engine.js`) + pipeline de pesquisa — não é
+  calculado pelo WASM, que só computa SMA/EMA/stddev/zscore
+  (Auditoria Mestra 360°, secao 3); entrada/alvos/stop reais quando confirmado.
 - **Previsão multi-horizonte**: o mesmo k-NN re-rotulado para 4/8/16
   velas de 15m, com confiança e amostra declaradas por horizonte —
   leitura probabilística, nunca garantia.
@@ -85,8 +87,8 @@ npm run build               # dist/ (o deploy copia para ../)
 
 O preview local (`vite preview`) serve só `dist/` — o worker WASM
 (`workers/quant-worker.js`) é sibling do deploy real, então o status
-"MOTOR WASM · FALHOU" em preview local é esperado; no site publicado ele
-conecta.
+"CICLO DE ANÁLISE · FALHOU" em preview local é esperado; no site publicado
+ele conecta.
 
 ## Nota sobre a árvore legada
 

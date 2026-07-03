@@ -36,7 +36,7 @@ export const metadata = {
     status: 'ACTIVE_READ_ONLY',
     limitations: [
         'k-NN construído em tempo real sobre a janela de candles disponível nesta sessão (tipicamente ~100) — não é um modelo pré-treinado, e o conjunto de treino rotulado utilizável é pequeno (~60-80 pontos após warmup/horizonte). sample_size sempre reportado, nunca escondido.',
-        'É um sinal de confluência independente — não substitui nem sobrepõe o sinal LONG/SHORT/WAIT do motor WASM real (engine-bridge.ts).',
+        'É um sinal de confluência independente — não substitui nem sobrepõe o sinal LONG/SHORT/WAIT da heurística de tendência real (engine-bridge.ts) — esse sinal vem de SMA/EMA em JS puro, não do WASM (Auditoria Mestra 360°, secao 3).',
         'Sem candles suficientes para o warmup dos indicadores + horizonte de rótulo + k vizinhos, cai em DADOS_INSUFICIENTES.',
     ],
 };

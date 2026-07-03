@@ -2,13 +2,17 @@
 //
 // FUNÇÕES PURAS, testáveis em node sem navegador. A resposta é construída
 // EXCLUSIVAMENTE a partir do TerminalSnapshot — um espelho somente-leitura
-// dos campos reais que o App já computa (motor WASM, k-NN Lorentziano,
-// order flow MEXC, liquidações Binance). Campo ausente vira "aguardando";
-// nunca um número inventado. Nenhum intent dispara ordem: este terminal é
-// READ_ONLY/FAIL_CLOSED por projeto e o vocabulário aqui reflete isso.
+// dos campos reais que o App já computa (heurística de tendência do Core
+// Engine, k-NN Lorentziano, order flow MEXC, liquidações Binance). Campo
+// ausente vira "aguardando"; nunca um número inventado. Nenhum intent
+// dispara ordem: este terminal é READ_ONLY/FAIL_CLOSED por projeto e o
+// vocabulário aqui reflete isso.
 
 export interface TerminalSnapshot {
-  // Motor WASM real (trade-setup-matrix / target-tracker)
+  // Heurística de tendência real do Core Engine (trade-setup-matrix /
+  // target-tracker) — NÃO é calculada pelo WASM (Auditoria Mestra 360°,
+  // secao 3): o WASM so' computa SMA/EMA/stddev/zscore; o sinal
+  // LONG/SHORT/WAIT vem da comparacao heuristica em research-engine.js.
   direction: 'LONG' | 'SHORT' | null;
   confidence: string | null;
   marketStructure: string | null;

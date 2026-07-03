@@ -30,19 +30,19 @@ const SMALL_SAMPLE_THRESHOLD = 20;
 export function buildSyntheticReading(input: TacticalContextInput): string {
   const lines: string[] = [];
 
-  if (input.wasmSignal && input.lorentzianClassification) {
-    const converge = input.wasmSignal === input.lorentzianClassification;
+  if (input.heuristicSignal && input.lorentzianClassification) {
+    const converge = input.heuristicSignal === input.lorentzianClassification;
     lines.push(
       converge
-        ? `Motor WASM e classificador k-NN convergem em ${input.wasmSignal}.`
-        : `Divergência entre sinais: motor WASM aponta ${input.wasmSignal}, k-NN aponta ${input.lorentzianClassification}.`,
+        ? `Heurística de Tendência e classificador k-NN convergem em ${input.heuristicSignal}.`
+        : `Divergência entre sinais: Heurística de Tendência aponta ${input.heuristicSignal}, k-NN aponta ${input.lorentzianClassification}.`,
     );
-  } else if (input.wasmSignal) {
+  } else if (input.heuristicSignal) {
     lines.push(
-      `Motor WASM: ${input.wasmSignal}${input.wasmConfidence ? ` (confiança ${input.wasmConfidence})` : ''}. Classificador k-NN sem leitura no momento.`,
+      `Heurística de Tendência: ${input.heuristicSignal}${input.heuristicConfidence ? ` (confiança ${input.heuristicConfidence})` : ''}. Classificador k-NN sem leitura no momento.`,
     );
   } else if (input.lorentzianClassification) {
-    lines.push(`Classificador k-NN: ${input.lorentzianClassification}. Motor WASM sem leitura no momento.`);
+    lines.push(`Classificador k-NN: ${input.lorentzianClassification}. Heurística de Tendência sem leitura no momento.`);
   } else {
     lines.push('Nenhum classificador direcional com leitura disponível no momento.');
   }

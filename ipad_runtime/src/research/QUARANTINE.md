@@ -2,8 +2,17 @@
 
 Codinome interno: `AR10_CYBORG_FUSION_RESEARCH_QUARANTINE_V1`.
 
-**Status desta árvore: apenas os 2 engines graduados abaixo são ACTIVE_READ_ONLY.
-Todo o restante foi excluído em 2026-06-30 (purge de código morto).**
+**Status desta árvore: apenas os 4 engines graduados + 1 utilitário
+compartilhado abaixo são ACTIVE_READ_ONLY. Todo o restante foi excluído em
+2026-06-30 (purge de código morto).**
+
+**Correção (Auditoria Mestra 360°, secao 4 / remediação item 2, 2026-07-03):
+`fvg-order-block-engine.js` e `lorentzian-classifier.js` já estavam
+graduados e importados por `ramber-ui/src/engine-bridge.ts` desde
+2026-07-01 (`metadata.status: 'ACTIVE_READ_ONLY'` em ambos), mas nunca
+haviam sido acrescentados a este documento — este é um puro gap de
+documentação, não um problema de código: nenhum dos dois faz `fetch()`
+novo, usa credencial ou chama `order_send`.**
 
 ## Estado atual do diretório
 
@@ -12,7 +21,11 @@ src/research/
 ├── QUARANTINE.md                   ← este arquivo
 └── engines/
     ├── support-resistance-engine.js   ACTIVE_READ_ONLY (graduado 2026-06-25)
-    └── market-structure-engine.js     ACTIVE_READ_ONLY (graduado 2026-06-25)
+    ├── market-structure-engine.js     ACTIVE_READ_ONLY (graduado 2026-06-25)
+    ├── fvg-order-block-engine.js      ACTIVE_READ_ONLY (graduado 2026-07-01)
+    ├── lorentzian-classifier.js       ACTIVE_READ_ONLY (graduado 2026-07-01)
+    └── fractal-swings.js              utilitário compartilhado (extraído 2026-07-03,
+                                        não é um engine — ver secao "Utilitários" abaixo)
 ```
 
 **Removidos em 2026-06-30 (purge):**
@@ -45,6 +58,38 @@ src/research/
 Ambos adicionados a `PRECACHE_URLS` em `service-worker.js` na graduação (v-25 →
 v-26, 2026-06-25). Ambos são funções puras de cálculo, sem estado global, sem
 import reverso de volta para `js/**`.
+
+- **`engines/fvg-order-block-engine.js`** (graduado 2026-07-01) — Fair Value
+  Gaps, Order Blocks e zonas de liquidez (Equal Highs/Equal Lows) — Smart
+  Money Concepts — detectados por padrão geométrico determinístico sobre os
+  mesmos candles reais do gráfico. Importado por
+  `ramber-ui/src/engine-bridge.ts`. Zero `fetch()` novo, zero credencial,
+  zero `order_send`. Sem candles suficientes, retorna `DADOS_INSUFICIENTES`
+  — nunca inventa uma zona.
+- **`engines/lorentzian-classifier.js`** (graduado 2026-07-01) — classificador
+  k-NN Lorentziano, um sinal de confluência INDEPENDENTE do Core Engine
+  (nunca gate/sobrescreve o LONG/SHORT/WAIT primário). Importado por
+  `ramber-ui/src/engine-bridge.ts`. Reporta sempre `sampleSize` junto da
+  classificação — amostra pequena nunca vira confiança inflada.
+
+Nota sobre `PRECACHE_URLS`: em 2026-07-03 (Auditoria Mestra 360°, secao 2) o
+`service-worker.js` atual foi confirmado como um shim de autodestruição (zero
+`PRECACHE_URLS`, `activate` limpa todos os caches e força
+`unregister()`) — a app React de produção não depende de cache-first
+precache algum hoje. A regra de quarentena abaixo permanece escrita para
+`js/**` (a árvore vanilla, que ainda usa esse mecanismo); os dois engines
+acima foram importados por `ramber-ui/src/engine-bridge.ts` (TypeScript/React),
+não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
+
+## Utilitários compartilhados (não são engines, não têm `metadata.status`)
+
+- **`engines/fractal-swings.js`** (extraído 2026-07-03, remediação item 5 da
+  Auditoria Mestra 360°) — `FRACTAL_K`/`findSwings()`, o algoritmo de detecção
+  de swing high/low por confirmação fractal (K=2 candles de cada lado) que
+  antes estava triplicado, quase idêntico, em `support-resistance-engine.js`,
+  `market-structure-engine.js` e `fvg-order-block-engine.js` — cada um com sua
+  própria constante `FRACTAL_K` redeclarada. Sem lógica própria de sinal, só a
+  primitiva geométrica compartilhada; os três engines acima o importam.
 
 ## Regra de quarentena daqui para frente
 

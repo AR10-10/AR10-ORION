@@ -388,9 +388,12 @@ export function computeSmcZones(candles: Array<{ open: number; high: number; low
 // ─────────────────────────────────────────────────────────────────────────────
 // Lorentzian k-NN classifier (lorentzian-classifier.js) — an INDEPENDENT
 // confluence signal, deliberately separate from RealCycleResult.signal.
-// It never gates or overrides the real WASM engine's own LONG/SHORT/WAIT
-// call; it's a second, differently-computed real opinion the UI must show
-// side by side, clearly labeled, not blended into the primary signal.
+// It never gates or overrides the Core Engine pipeline's own LONG/SHORT/WAIT
+// call (research-engine.js's SMA/EMA trend-bias heuristic via trade-setup-
+// matrix.js — not WASM; WASM itself only computes SMA/EMA/stddev/zscore,
+// see the audit note in App.tsx's tacticalInput); it's a second, differently
+// -computed real opinion the UI must show side by side, clearly labeled,
+// not blended into the primary signal.
 // ─────────────────────────────────────────────────────────────────────────────
 export interface LorentzianResult {
   ok: boolean;

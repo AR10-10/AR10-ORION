@@ -580,8 +580,11 @@ export default function App() {
   // Quantitative engine.
   //   • Flow pressure = real order-book imbalance (local, from the live WS book).
   //   • Signal/entry/target/stop/confidence/support/resistance/market structure
-  //     come SOLELY from realCycle (engine-bridge.ts -> the real WASM engine +
-  //     research pipeline) — never a local heuristic, never computed twice.
+  //     come SOLELY from realCycle (engine-bridge.ts -> the real engine +
+  //     research pipeline) — never a SECOND local heuristic computed here.
+  //     (Auditoria Mestra 360°, sec. 3: the signal itself is a real SMA/EMA
+  //     trend-bias heuristic in research-engine.js, not WASM output — WASM
+  //     only computes SMA/EMA/stddev/zscore upstream in analysis-frame.js.)
   //     Null (-> AGUARDANDO) until the real engine's first cycle succeeds.
   //   • No position, no PnL, no leverage, no win-rate. None of those have a real
   //     read-only source, so they do not exist here.
@@ -1185,23 +1188,30 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
               </div>
             </div>
 
-            {/* Real engine status — honest state of the WASM + research
-                pipeline cycle (engine-bridge.ts). Never implies a signal
-                exists before the real engine has actually produced one. */}
+            {/* Real engine status — honest state of the real-data + WASM +
+                research pipeline cycle (engine-bridge.ts). Never implies a
+                signal exists before the real engine has actually produced
+                one.
+                Auditoria Mestra 360° (secao 3): rotulo mudou de "MOTOR WASM"
+                para "CICLO DE ANÁLISE" — este indicador reporta o estado do
+                CICLO INTEIRO (sonda Binance + init WASM + pipeline de
+                pesquisa), nao so' do WASM; o WASM em si so' calcula SMA/EMA/
+                stddev/zscore dentro desse ciclo, nunca o sinal LONG/SHORT
+                mostrado (ver tacticalInput acima). */}
             <div className="flex items-center gap-2 mt-2 z-10">
               <div
                 className={`w-1.5 h-1.5 rounded-full ${engineStatus === "ok" ? "bg-[#00ffaa] animate-pulse" : engineStatus === "error" ? "bg-[#ff0055]" : "bg-[#f0d06f] animate-pulse"}`}
               ></div>
               {engineStatus === "pending" ? (
                 <span className="flex items-center gap-1.5 text-[0.45rem] sm:text-[0.5rem] tracking-[0.2em] font-bold uppercase text-[#f0d06f]">
-                  MOTOR WASM ·
+                  CICLO DE ANÁLISE ·
                   <span className="skeleton-shimmer h-[0.6em] w-16 rounded-sm" />
                 </span>
               ) : (
                 <span
                   className={`text-[0.45rem] sm:text-[0.5rem] tracking-[0.2em] font-bold uppercase ${engineStatus === "ok" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
                 >
-                  MOTOR WASM ·{" "}
+                  CICLO DE ANÁLISE ·{" "}
                   {engineStatus === "ok" ? "CONECTADO" : `FALHOU (${realCycle?.reason || DASH})`}
                 </span>
               )}
@@ -1212,7 +1222,8 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
               )}
               {/* Sinal de confluência INDEPENDENTE (k-NN Lorentziano sobre
                   features reais) — nunca substitui nem é substituído pelo
-                  VETOR do motor WASM acima; amostra pequena (~60-90 pontos,
+                  VETOR da Heurística de Tendência acima (SMA/EMA real, não
+                  WASM — ver tacticalInput); amostra pequena (~60-90 pontos,
                   candles desta sessão) é reportada, nunca escondida. */}
               {realCycle?.lorentzian?.ok && (
                 <span
@@ -3292,6 +3303,11 @@ function NeuralCoreWidget() {
   // foi de verdade, nunca assume o nível pedido original.
   const [activeModelId, setActiveModelId] = useState<string | null>(null);
   const engineRef = useRef<MLCEngineInterface | null>(null);
+  // Auditoria Mestra 360° (secao 6): referencia crua do Worker por tras do
+  // engine — engine.unload() libera o modelo/pesos mas nao encerra a thread
+  // do Worker (nao documentado como fazendo isso), entao ela precisa ser
+  // finalizada separadamente ao desmontar o widget.
+  const workerRef = useRef<Worker | null>(null);
 
   // Trivial, import-free feature check — deciding whether to even OFFER
   // the option must not itself trigger loading the WebLLM bundle.
@@ -3300,10 +3316,18 @@ function NeuralCoreWidget() {
   // Built once, shared by the LLM path (handleGenerate) and the synthetic
   // fallback below — both read the exact same real fields, so the two
   // readings can never disagree about what the underlying data actually is.
+  //
+  // Auditoria Mestra 360° (secao 3): renomeado de wasmSignal/wasmConfidence
+  // para heuristicSignal/heuristicConfidence — engine.direction/confidence
+  // vem da heuristica de tendencia SMA/EMA em research-engine.js (via
+  // trade-setup-matrix.js), NAO do WASM. O WASM (cyborg_quant_core.wasm)
+  // so' calcula SMA/EMA/stddev/zscore em analysis-frame.js; nunca produz
+  // LONG/SHORT/WAIT diretamente. O rotulo antigo implicava uma origem
+  // errada, mesmo sendo funcionalmente inofensivo.
   const tacticalInput = useMemo<TacticalContextInput>(
     () => ({
-      wasmSignal: engine?.direction ?? null,
-      wasmConfidence: engine?.confidence ?? null,
+      heuristicSignal: engine?.direction ?? null,
+      heuristicConfidence: engine?.confidence ?? null,
       marketStructure: engine?.marketStructure ?? null,
       support: engine?.support ?? null,
       resistance: engine?.resistance ?? null,
@@ -3326,6 +3350,20 @@ function NeuralCoreWidget() {
   // the (optional, ~5GB) LLM has ever been activated.
   const syntheticReading = useMemo(() => buildSyntheticReading(tacticalInput), [tacticalInput]);
 
+  // Encerra o par engine+worker atual, se houver. Chamado ao desmontar o
+  // widget (efeito abaixo) — o unload() é best-effort porque o que garante
+  // liberar a thread é o terminate() do Worker, não a promessa do engine.
+  const teardownEngine = () => {
+    engineRef.current?.unload().catch(() => {});
+    workerRef.current?.terminate();
+    engineRef.current = null;
+    workerRef.current = null;
+  };
+
+  useEffect(() => {
+    return () => teardownEngine();
+  }, []);
+
   const handleActivate = async () => {
     if (!gpuSupported) {
       setStatus("error");
@@ -3343,6 +3381,7 @@ function NeuralCoreWidget() {
         return;
       }
       engineRef.current = result.engine;
+      workerRef.current = result.worker;
       setActiveModelId(result.modelId);
       setStatus("ready");
     } catch (err: any) {

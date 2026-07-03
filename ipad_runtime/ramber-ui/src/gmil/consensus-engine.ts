@@ -3,11 +3,11 @@
 // GLOBAL_CONSENSUS_SCORE, ponderado por qualidade (quality-engine.ts).
 //
 // LEI 01 é absoluta aqui: este score é SOMENTE contexto consultivo. Ele
-// nunca é lido por engine-bridge.ts, nunca influencia o motor WASM, o
-// classificador k-NN Lorentziano ou o Signal Engine — não há nenhum import
-// nessa direção em todo o código. sample_size é sempre reportado (mesmo
-// princípio do classificador Lorentziano: amostra pequena não vira
-// confiança inflada).
+// nunca é lido por engine-bridge.ts, nunca influencia o Core Engine (a
+// heurística de tendência que decide LONG/SHORT/WAIT), o classificador
+// k-NN Lorentziano ou o Signal Engine — não há nenhum import nessa direção
+// em todo o código. sample_size é sempre reportado (mesmo princípio do
+// classificador Lorentziano: amostra pequena não vira confiança inflada).
 
 export interface ConsensusInput {
   providerId: string;

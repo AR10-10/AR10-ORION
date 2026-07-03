@@ -2,7 +2,7 @@
   "id": "./",
   "name": "RAMBER — iPad One-Tap Cloud Runtime",
   "short_name": "RAMBER",
-  "description": "S.E. Neural Link — Safari Local Runtime do RAMBER. Execucao local-first, READ_ONLY / FAIL_CLOSED, sem trading real.",
+  "description": "S.E. Neural Link — Terminal RAMBER. Instalavel na tela de inicio (icone, janela standalone sem chrome do navegador); requer conexao a cada carregamento, sem cache offline (nenhum service worker ativo neste app). READ_ONLY / FAIL_CLOSED, sem trading real.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

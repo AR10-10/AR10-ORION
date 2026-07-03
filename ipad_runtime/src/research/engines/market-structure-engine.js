@@ -8,6 +8,11 @@
 // observado nos dados de entrada — nunca uma ordem ou recomendacao. Pura
 // funcao de calculo: zero fetch, zero rede, zero estado global.
 
+// findSwings/FRACTAL_K vivem em fractal-swings.js (remediacao da Auditoria
+// Mestra 360°, secao 7): o mesmo algoritmo estava triplicado neste arquivo,
+// em support-resistance-engine.js e em fvg-order-block-engine.js.
+import { FRACTAL_K, findSwings } from './fractal-swings.js';
+
 export const metadata = {
     engine: 'market-structure-engine',
     description: 'Rótulo descritivo de estrutura de mercado (HH/HL/LH/LL) a partir de swing high/low confirmados sobre candles reais.',
@@ -21,23 +26,6 @@ export const metadata = {
 };
 
 const MIN_CANDLES = 15;
-const FRACTAL_K = 2;
-
-function findSwings(candles, k, isHigh) {
-    const out = [];
-    for (let i = k; i < candles.length - k; i++) {
-        const v = isHigh ? candles[i].h : candles[i].l;
-        if (!Number.isFinite(v)) continue;
-        let confirmed = true;
-        for (let j = i - k; j <= i + k; j++) {
-            if (j === i) continue;
-            const cmp = isHigh ? candles[j].h : candles[j].l;
-            if (!Number.isFinite(cmp) || (isHigh ? cmp >= v : cmp <= v)) { confirmed = false; break; }
-        }
-        if (confirmed) out.push({ index: i, price: v });
-    }
-    return out;
-}
 
 /**
  * @param {{ ohlcv_series: Array<{t:number,o:number,h:number,l:number,c:number,v:number}>, timeframe?: string }} input
