@@ -158,6 +158,14 @@ export default function App() {
     bids: [],
     asks: [],
   });
+  // V11.1 LEI 22 (Temporal Synchronization): timestamp real de quando cada
+  // fonte foi vista pela última vez, para telemetria honesta de idade — não
+  // um clock único forçado sobre tudo (WS tica a cada ~1s, o ciclo do motor
+  // a cada 30s; cada fonte tem sua própria cadência real e não faz sentido
+  // fingir que todas compartilham um relógio, só reportar a idade de cada
+  // uma com honestidade).
+  const [priceUpdatedAt, setPriceUpdatedAt] = useState<number | null>(null);
+  const [orderBookUpdatedAt, setOrderBookUpdatedAt] = useState<number | null>(null);
   const [scannerData, setScannerData] = useState<any[]>([]);
   const [bootAt] = useState(() => Date.now());
   const [wsLive, setWsLive] = useState(false);
@@ -385,6 +393,8 @@ export default function App() {
     setCvd(0);
     setRealCycle(null);
     setEngineStatus("pending");
+    setPriceUpdatedAt(null);
+    setOrderBookUpdatedAt(null);
   }, [selectedAsset]);
 
   useEffect(() => {
@@ -415,7 +425,10 @@ export default function App() {
     let orderBookFlushTimer: ReturnType<typeof setTimeout> | null = null;
     const flushOrderBook = () => {
       orderBookFlushTimer = null;
-      if (pendingOrderBook) setOrderBook(pendingOrderBook);
+      if (pendingOrderBook) {
+        setOrderBook(pendingOrderBook);
+        setOrderBookUpdatedAt(Date.now());
+      }
     };
 
     // Only the selected asset gets the millisecond-fresh WS ticker+depth
@@ -468,6 +481,7 @@ export default function App() {
             volume: Number(d.v),
             direction: delta >= 0 ? "LONG" : "SHORT",
           });
+          setPriceUpdatedAt(Date.now());
         } else if (msg.stream === depthStream) {
           const d = msg.data;
           if (d.bids && d.asks) {
@@ -823,6 +837,8 @@ export default function App() {
       scannerData,
       gmilProviders,
       institutionalConsensus,
+      priceUpdatedAt,
+      orderBookUpdatedAt,
     }),
     [
       widgets,
@@ -847,6 +863,8 @@ export default function App() {
       scannerData,
       gmilProviders,
       institutionalConsensus,
+      priceUpdatedAt,
+      orderBookUpdatedAt,
     ],
   );
 
@@ -3157,8 +3175,18 @@ function AssetHeatmapWidget() {
 // linha aqui de propósito — já é a faixa "DADOS n/4" sempre visível da
 // EssentialStrip; repetir o mesmo cálculo aqui seria a exata duplicação que
 // a LEI 25 (Self Audit) pede para eliminar, não para criar.
+// Idade legível de um timestamp real — mesmo formato já usado em
+// GmilContextWidget para a idade de cada provedor, reaproveitado aqui em vez
+// de reinventar uma segunda formatação para o mesmo tipo de dado (LEI 25).
+function ageLabelOf(updatedAt: number | null): string {
+  if (updatedAt === null) return AWAIT;
+  const ageSec = Math.round((Date.now() - updatedAt) / 1000);
+  return ageSec < 60 ? `${ageSec}s` : `${Math.round(ageSec / 60)}min`;
+}
+
 function DecisionValidationWidget() {
-  const { engine, institutionalConsensus, gmilProviders } = useContext(WidgetContext) || {};
+  const { engine, institutionalConsensus, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt } =
+    useContext(WidgetContext) || {};
 
   const checks: { label: string; available: boolean | null }[] = [
     { label: "Liquidez (Livro de Ofertas)", available: !!engine?.hasBook },
@@ -3178,8 +3206,18 @@ function DecisionValidationWidget() {
   const availableCount = checks.filter((c) => c.available === true).length;
   const applicableCount = checks.filter((c) => c.available !== null).length;
 
+  // V11.1 LEI 22 (Temporal Synchronization): idade real de cada fonte, não
+  // um clock único fingido — cada uma tem sua própria cadência (WS ~1s,
+  // livro ~1s throttled, ciclo do motor 15m a cada 30s). Telemetria honesta,
+  // nunca um valor inventado quando a fonte ainda não respondeu.
+  const syncRows: { label: string; ageLabel: string }[] = [
+    { label: "Preço (WS)", ageLabel: ageLabelOf(priceUpdatedAt) },
+    { label: "Livro de Ofertas", ageLabel: ageLabelOf(orderBookUpdatedAt) },
+    { label: "Ciclo do Motor (15M)", ageLabel: ageLabelOf(lastUpdateAt) },
+  ];
+
   return (
-    <Widget id="decision_validation" title="VALIDAÇÃO MULTI-CAMADA" flex="flex-[1.1] min-h-[210px]">
+    <Widget id="decision_validation" title="VALIDAÇÃO MULTI-CAMADA" flex="flex-[1.3] min-h-[280px]">
       <div className="flex flex-col gap-1 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
         <div className="flex justify-between items-center bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0">
           <span className="text-[0.45rem] text-[#8ab4f8]/80 font-bold tracking-widest">
@@ -3206,6 +3244,20 @@ function DecisionValidationWidget() {
             >
               {c.available === null ? "NÃO_APLICÁVEL" : c.available ? "✓ REAL" : AWAIT}
             </span>
+          </div>
+        ))}
+
+        <div className="h-px bg-[#8ab4f8]/10 shrink-0 my-0.5" />
+        <span className="text-[0.4rem] text-[#8ab4f8]/50 font-bold tracking-widest shrink-0 px-0.5">
+          SINCRONIZAÇÃO · IDADE DAS FONTES
+        </span>
+        {syncRows.map((r) => (
+          <div
+            key={r.label}
+            className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+          >
+            <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">{r.label}</span>
+            <span className="text-[0.5rem] font-mono font-black text-[#8ab4f8]">{r.ageLabel}</span>
           </div>
         ))}
       </div>
