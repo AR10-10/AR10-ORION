@@ -111,31 +111,48 @@ const describeError = (err: any): string => {
 // (App.tsx), mas a estrutura de 1H não muda de forma significativa nesse
 // intervalo — rebuscar a cada ciclo seria uma chamada de rede redundante sem
 // nenhum ganho real de informação (Meta Máxima: mínimo consumo de recursos).
-// Qualquer falha aqui (rede, conector) fica isolada: nunca propaga para o
-// ciclo principal de 15m, que continua funcionando normalmente sem isso.
+//
+// V11.5 §9 (Performance/mínima latência): NÃO-BLOQUEANTE por design. A
+// primeira versão desta função era `await`ada inline no ciclo principal —
+// o que significava que, a cada ~5 minutos (cache expirado), o ciclo de
+// 15m (o caminho crítico: LONG/SHORT/confiança) ficava mais lento esperando
+// uma sonda de rede extra para um dado puramente contextual/secundário.
+// Corrigido: retorna IMEDIATAMENTE o que já está em cache (ou null se ainda
+// não há nada para este ativo) e dispara a busca real em segundo plano
+// quando o cache expira — o próximo ciclo (até 30s depois) já vê o
+// resultado atualizado. Uma leitura de contexto atrasada em 1 ciclo é um
+// custo aceitável; atrasar o sinal principal não seria.
 const HTF_INTERVAL = '1h';
 const HTF_REFRESH_MS = 5 * 60_000;
 let htfCache: { symbol: string; structureLabel: string | null; fetchedAt: number } | null = null;
+let htfFetchInFlight = false;
 
-async function getHtfMarketStructure(symbol: string): Promise<string | null> {
-  const now = Date.now();
-  if (htfCache && htfCache.symbol === symbol && now - htfCache.fetchedAt < HTF_REFRESH_MS) {
-    return htfCache.structureLabel;
-  }
-  try {
-    const htfProbe = await probeBinance({ symbol, interval: HTF_INTERVAL, limit: 60 });
-    if (htfProbe.state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) {
-      htfCache = { symbol, structureLabel: null, fetchedAt: now };
-      return null;
+function refreshHtfMarketStructureInBackground(symbol: string): void {
+  if (htfFetchInFlight) return;
+  htfFetchInFlight = true;
+  (async () => {
+    try {
+      const htfProbe = await probeBinance({ symbol, interval: HTF_INTERVAL, limit: 60 });
+      if (htfProbe.state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) {
+        htfCache = { symbol, structureLabel: null, fetchedAt: Date.now() };
+        return;
+      }
+      const structureResult = analyzeMarketStructure({ ohlcv_series: htfProbe.evidence.candles, timeframe: HTF_INTERVAL });
+      const label = structureResult.status === 'OK' ? structureResult.structure_label : null;
+      htfCache = { symbol, structureLabel: label, fetchedAt: Date.now() };
+    } catch {
+      htfCache = { symbol, structureLabel: null, fetchedAt: Date.now() };
+    } finally {
+      htfFetchInFlight = false;
     }
-    const structureResult = analyzeMarketStructure({ ohlcv_series: htfProbe.evidence.candles, timeframe: HTF_INTERVAL });
-    const label = structureResult.status === 'OK' ? structureResult.structure_label : null;
-    htfCache = { symbol, structureLabel: label, fetchedAt: now };
-    return label;
-  } catch {
-    htfCache = { symbol, structureLabel: null, fetchedAt: now };
-    return null;
-  }
+  })();
+}
+
+function getHtfMarketStructure(symbol: string): string | null {
+  const now = Date.now();
+  const cacheValid = !!htfCache && htfCache.symbol === symbol && now - htfCache.fetchedAt < HTF_REFRESH_MS;
+  if (!cacheValid) refreshHtfMarketStructureInBackground(symbol);
+  return htfCache && htfCache.symbol === symbol ? htfCache.structureLabel : null;
 }
 
 // One full real cycle: real Binance probe -> real WASM analysis frame ->
@@ -195,9 +212,9 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
     const lorentzian = computeLorentzianClassification(evidence.candles);
     // Previsão multi-horizonte (4/8/16 velas) sobre os MESMOS candles reais.
     const forecast = computeMultiHorizonForecast(evidence.candles);
-    // getHtfMarketStructure() já é internamente fail-closed (nunca rejeita);
-    // uma falha na sonda de 1H vira null aqui, nunca afeta o ok:true abaixo.
-    const htfMarketStructure = await getHtfMarketStructure(symbol);
+    // getHtfMarketStructure() é síncrona e não-bloqueante (ver comentário na
+    // definição): nunca adiciona latência ao ciclo principal de 15m.
+    const htfMarketStructure = getHtfMarketStructure(symbol);
 
     return {
       ok: true,
