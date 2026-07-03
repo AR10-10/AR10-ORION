@@ -3109,9 +3109,20 @@ type NeuralCoreStatus = "idle" | "loading" | "ready" | "generating" | "error";
 function NeuralCoreWidget() {
   const { engine, realCycle, smcZones, cvd, orderflowSignals } = useContext(WidgetContext) || {};
   const [status, setStatus] = useState<NeuralCoreStatus>("idle");
-  const [loadProgress, setLoadProgress] = useState<{ progress: number; text: string } | null>(null);
+  const [loadProgress, setLoadProgress] = useState<{
+    progress: number;
+    text: string;
+    modelId: string;
+    tier: number;
+    tierCount: number;
+  } | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [reading, setReading] = useState<string>("");
+  // V11.5 Fase 7: qual dos 3 níveis reais (8B/3B/1B) efetivamente carregou —
+  // a orquestração em llm-bridge.ts pode ter caído para um nível mais leve
+  // se o primeiro falhou (ex.: teto de memória do iPad), e a UI mostra qual
+  // foi de verdade, nunca assume o nível pedido original.
+  const [activeModelId, setActiveModelId] = useState<string | null>(null);
   const engineRef = useRef<MLCEngineInterface | null>(null);
 
   // Trivial, import-free feature check — deciding whether to even OFFER
@@ -3164,6 +3175,7 @@ function NeuralCoreWidget() {
         return;
       }
       engineRef.current = result.engine;
+      setActiveModelId(result.modelId);
       setStatus("ready");
     } catch (err: any) {
       setStatus("error");
@@ -3229,6 +3241,7 @@ function NeuralCoreWidget() {
           <div className="flex flex-col gap-1 mt-1">
             <span className="text-[0.45rem] tracking-[0.15em] text-[#f0d06f] font-bold uppercase animate-pulse">
               Injetando pesos da Meta…
+              {loadProgress && ` (nível ${loadProgress.tier}/${loadProgress.tierCount})`}
             </span>
             <div className="w-full h-1.5 bg-[#010308] border border-[#f0d06f]/30 rounded overflow-hidden">
               <div
@@ -3236,7 +3249,17 @@ function NeuralCoreWidget() {
                 style={{ width: `${Math.round((loadProgress?.progress ?? 0) * 100)}%` }}
               />
             </div>
-            <span className="text-[0.45rem] text-[#8ab4f8]/50 truncate">{loadProgress?.text ?? "…"}</span>
+            <span className="text-[0.45rem] text-[#8ab4f8]/50 truncate">
+              {loadProgress?.modelId ?? "…"} {loadProgress?.text ? `· ${loadProgress.text}` : ""}
+            </span>
+            {/* V11.5 Fase 7: se o nível 1 (8B) já falhou nesta ativação e a
+                orquestração está tentando um nível mais leve, isso fica
+                visível aqui — nunca um retry silencioso do mesmo modelo. */}
+            {loadProgress && loadProgress.tier > 1 && (
+              <span className="text-[0.42rem] text-[#f0d06f]/70 uppercase tracking-[0.1em]">
+                Nível anterior indisponível neste dispositivo — tentando modelo mais leve.
+              </span>
+            )}
           </div>
         )}
 
@@ -3258,8 +3281,8 @@ function NeuralCoreWidget() {
               )}
             </div>
             <span className="text-[0.42rem] text-[#8ab4f8]/40 uppercase tracking-[0.15em]">
-              Llama-3-8B-Instruct-q4f32_1-MLC (local) · leitura analítica, não é ordem — decisão
-              sempre humana.
+              {activeModelId ?? "Llama (local)"} · leitura analítica, não é ordem — decisão sempre
+              humana.
             </span>
           </>
         )}

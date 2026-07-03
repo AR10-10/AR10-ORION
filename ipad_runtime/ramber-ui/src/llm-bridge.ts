@@ -38,10 +38,21 @@ import {
   type InitProgressReport,
 } from '@mlc-ai/web-llm';
 
-// Exactly the model requested — kept as a single named constant so it's
-// trivially swappable for a lighter one (e.g. Llama-3.2-3B-Instruct-*,
-// also in WebLLM's prebuilt catalog) without touching call sites.
-export const LLM_MODEL_ID = 'Llama-3-8B-Instruct-q4f32_1-MLC';
+// V11.5 Fase 7 (AI Orchestration): 3 níveis reais da família Llama, do
+// maior/melhor para o menor/mais leve — todos confirmados existentes no
+// catálogo prebuilt da versão instalada (verificado diretamente contra
+// node_modules/@mlc-ai/web-llm@0.2.84/lib/index.js, o mesmo método já usado
+// por synthetic-reading.ts para descartar Llama 4). O disclaimer no topo
+// deste arquivo já documentava o risco real de um modelo de 8B exceder o
+// teto de memória por aba do iOS; antes disso, a ÚNICA opção quando isso
+// acontecia era "tentar de novo" o mesmo modelo que acabou de provar não
+// caber. Agora a orquestração cai automaticamente para o próximo nível mais
+// leve — nunca fabrica sucesso, nunca trava esperando o modelo errado.
+export const LLM_MODEL_TIERS = [
+  'Llama-3-8B-Instruct-q4f32_1-MLC',
+  'Llama-3.2-3B-Instruct-q4f32_1-MLC',
+  'Llama-3.2-1B-Instruct-q4f32_1-MLC',
+] as const;
 
 export function isWebGpuSupported(): boolean {
   return typeof navigator !== 'undefined' && 'gpu' in navigator;
@@ -50,11 +61,15 @@ export function isWebGpuSupported(): boolean {
 export interface LlmLoadProgress {
   progress: number; // 0..1
   text: string;
+  modelId: string;
+  tier: number; // 1-based, posição em LLM_MODEL_TIERS
+  tierCount: number;
 }
 
 export interface LlmEngineResult {
   ok: boolean;
   engine: MLCEngineInterface | null;
+  modelId: string | null;
   reason: string | null;
 }
 
@@ -70,19 +85,31 @@ export async function createLocalLlmEngine(
   onProgress: (report: LlmLoadProgress) => void,
 ): Promise<LlmEngineResult> {
   if (!isWebGpuSupported()) {
-    return { ok: false, engine: null, reason: 'webgpu_indisponivel_neste_navegador' };
+    return { ok: false, engine: null, modelId: null, reason: 'webgpu_indisponivel_neste_navegador' };
   }
-  try {
-    const worker = new Worker(new URL('./llm-worker.ts', import.meta.url), { type: 'module' });
-    const engine = await CreateWebWorkerMLCEngine(worker, LLM_MODEL_ID, {
-      initProgressCallback: (report: InitProgressReport) => {
-        onProgress({ progress: report.progress, text: report.text });
-      },
-    });
-    return { ok: true, engine, reason: null };
-  } catch (err: any) {
-    return { ok: false, engine: null, reason: `carregamento_do_modelo_falhou: ${err?.message || err}` };
+  const failures: string[] = [];
+  for (let i = 0; i < LLM_MODEL_TIERS.length; i++) {
+    const modelId = LLM_MODEL_TIERS[i];
+    try {
+      const worker = new Worker(new URL('./llm-worker.ts', import.meta.url), { type: 'module' });
+      const engine = await CreateWebWorkerMLCEngine(worker, modelId, {
+        initProgressCallback: (report: InitProgressReport) => {
+          onProgress({ progress: report.progress, text: report.text, modelId, tier: i + 1, tierCount: LLM_MODEL_TIERS.length });
+        },
+      });
+      return { ok: true, engine, modelId, reason: null };
+    } catch (err: any) {
+      failures.push(`${modelId}: ${err?.message || err}`);
+      // Continua para o próximo nível, mais leve — uma falha (ex.: OOM,
+      // rede) neste nível não impede o próximo de funcionar.
+    }
   }
+  return {
+    ok: false,
+    engine: null,
+    modelId: null,
+    reason: `todos_os_${LLM_MODEL_TIERS.length}_niveis_falharam: ${failures.join(' | ')}`,
+  };
 }
 
 const SYSTEM_PROMPT = `Você é o "S.E." (Sistema Estratégico), o núcleo analítico do terminal RAMBER — um assistente de ANÁLISE de mercado, estritamente somente leitura (READ_ONLY). Você não tem e nunca terá acesso a execução de ordens, saldo ou conta real; nenhuma chave de API existe neste sistema.
