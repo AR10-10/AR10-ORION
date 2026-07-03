@@ -27,6 +27,11 @@ import {
 // boot, defeating the entire point of this being opt-in. `import type`
 // is erased at compile time (zero runtime/bundle cost either way).
 import type { MLCEngineInterface } from "@mlc-ai/web-llm";
+// synthetic-reading.ts is a tiny pure rule-based module (no @mlc-ai/web-llm
+// dependency) — safe to import statically so a real tactical reading is
+// available even before the optional LLM is ever activated.
+import { buildSyntheticReading } from "./synthetic-reading";
+import type { TacticalContextInput } from "./llm-bridge";
 // IRON-VOICE layer (src/voice/) — decoupled: these modules never import
 // from App; the App pushes real-state snapshots INTO them. TTS/STT are the
 // browser's own speechSynthesis/webkitSpeechRecognition (feature-detected,
@@ -200,7 +205,7 @@ export default function App() {
     exposure: { visible: true, floating: false },
     gmil_context: { visible: true, floating: false },
     events: { visible: true, floating: false },
-    neural_core: { visible: false, floating: false },
+    neural_core: { visible: true, floating: false },
     tactical: { visible: false, floating: false },
   };
   const [widgets, setWidgets] = useState<{
@@ -879,7 +884,7 @@ const WIDGET_LABELS: { [key: string]: string } = {
   exposure: "EXPOSIÇÃO · READ-ONLY",
   gmil_context: "CONTEXTO GLOBAL · GMIL",
   events: "TELEMETRIA DE EVENTOS",
-  neural_core: "NÚCLEO NEURAL · META LLAMA 3 (LOCAL)",
+  neural_core: "NÚCLEO NEURAL · LLAMA 3 (LOCAL) + SÍNTESE",
   tactical: "LIQUIDAÇÕES INSTITUCIONAIS · REAL",
 };
 
@@ -1131,7 +1136,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                         }`}
                         title={f.ok ? `Amostra real: ${f.sampleSize} pontos` : f.reason}
                       >
-                        <span className="text-[0.4rem] tracking-[0.2em] text-[#8ab4f8]/70 font-bold uppercase">
+                        <span className="text-[0.45rem] tracking-[0.2em] text-[#8ab4f8]/70 font-bold uppercase">
                           {f.horizonBars} VELAS · {f.horizonBars / 4}H
                         </span>
                         <span
@@ -1147,7 +1152,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                         >
                           {f.ok ? f.classification : AWAIT}
                         </span>
-                        <span className="text-[0.4rem] text-[#8ab4f8]/60 font-mono">
+                        <span className="text-[0.45rem] text-[#8ab4f8]/60 font-mono">
                           {f.ok ? `${Math.round((f.confidence ?? 0) * 100)}% · n=${f.sampleSize}` : "—"}
                         </span>
                       </div>
@@ -1261,7 +1266,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                     <X size={14} /> CLOSE
                   </button>
                 </div>
-                <span className="text-[0.4rem] tracking-[0.15em] text-[#8ab4f8]/40 uppercase font-bold text-center">
+                <span className="text-[0.45rem] tracking-[0.15em] text-[#8ab4f8]/40 uppercase font-bold text-center">
                   Sem posição ao vivo · execução desabilitada por projeto (READ_ONLY)
                 </span>
               </div>
@@ -1536,7 +1541,7 @@ function TopBar({
         <div className="text-xl font-black tracking-[0.3em] text-[#00f0ff] drop-shadow-[0_0_12px_rgba(0,240,255,0.8)] leading-none transition-all group-hover:drop-shadow-[0_0_20px_rgba(0,240,255,1)]">
           RAMBER
         </div>
-        <div className="text-[0.4rem] text-[#00f0ff80] tracking-[0.4em] mt-1.5 whitespace-nowrap font-bold uppercase transition-colors group-hover:text-[#00f0ff]">
+        <div className="text-[0.45rem] text-[#00f0ff80] tracking-[0.4em] mt-1.5 whitespace-nowrap font-bold uppercase transition-colors group-hover:text-[#00f0ff]">
           TERMINAL READ-ONLY · DADOS REAIS
         </div>
       </div>
@@ -1593,7 +1598,7 @@ const TopStat = React.memo(function TopStat({
     <div
       className={`flex flex-col justify-center min-w-[85px] h-[36px] px-2.5 transition-colors ${active ? "border border-[#00f0ff30] rounded bg-[#00f0ff08] shadow-[inset_0_0_10px_rgba(0,240,255,0.05)]" : "hover:bg-white/5 rounded"} ${className}`}
     >
-      <span className="text-[0.4rem] text-[#8ab4f8] tracking-[0.15em] mb-[2px] text-center font-bold">
+      <span className="text-[0.45rem] text-[#8ab4f8] tracking-[0.15em] mb-[2px] text-center font-bold">
         {label}
       </span>
       <div className="flex items-center justify-center gap-1.5 leading-none">
@@ -1645,7 +1650,7 @@ function SideBar({
               <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#00f0ff] shadow-[0_0_8px_#00f0ff]"></div>
             )}
             <item.icon size={16} className="relative z-10" />
-            <span className="text-[0.35rem] md:text-[0.4rem] tracking-[0.1em] text-center font-bold mt-1">
+            <span className="text-[0.42rem] md:text-[0.45rem] tracking-[0.1em] text-center font-bold mt-1">
               {item.label}
             </span>
           </div>
@@ -1681,7 +1686,7 @@ class WidgetErrorBoundary extends React.Component<
           <span className="text-[0.5rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
             {this.props.title || "PAINEL"} · ERRO DE RENDERIZAÇÃO
           </span>
-          <span className="text-[0.4rem] text-[#8ab4f8]/50">
+          <span className="text-[0.45rem] text-[#8ab4f8]/50">
             Os demais painéis continuam ativos.
           </span>
         </div>
@@ -1799,7 +1804,26 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
       className={
         maximized
           ? `fixed inset-2 md:inset-8 z-50 cyber-panel flex flex-col shadow-[0_0_50px_rgba(0,240,255,0.2)] bg-[#010308]/95 backdrop-blur-xl`
-          : `cyber-panel ${flex} ${className} min-h-0 transition-all`
+          : // min-h-0 is scoped to the landscape 3-column breakpoint on purpose:
+            // that layout gives each column a real h-full + overflow-y-auto
+            // container, and min-h-0 is what lets flex-grow actually
+            // distribute that fixed height among a column's widgets. Below
+            // 1120px the columns stack with no bounded parent height (by
+            // design — the whole page scrolls instead), so forcing min-h-0
+            // there collapsed every widget toward its header (confirmed:
+            // chart panel measured 113px/9% of viewport in iPad Air
+            // portrait). The content wrapper just below is `overflow-hidden`
+            // though, which per spec disables flexbox's automatic
+            // content-based minimum size entirely (not just "sets it to
+            // 0" — the browser doesn't crawl into overflow:hidden content
+            // at all), so plain min-height:auto alone doesn't recover a
+            // usable size here the way it did for the three column divs.
+            // A real, explicit floor is required; 180px is a sane default
+            // for compact list/ticker widgets, callers needing more (the
+            // chart) pass a larger min-h-[Npx] via their own `flex` prop,
+            // which wins over this default (same mechanism already proven
+            // by NeuralCoreWidget's min-h-[160px]).
+            `cyber-panel ${flex} ${className} min-h-[180px] min-[1120px]:min-h-0 transition-all`
       }
     >
       {title && renderHeader(false)}
@@ -1825,7 +1849,7 @@ function ChartWidget({ data, chartData }: any) {
   return (
     <Widget
       id="chart"
-      flex="flex-[1.8]"
+      flex="flex-[1.8] min-h-[320px]"
       extraHeader={
         <div className="flex gap-1 text-[0.45rem]">
           {["1M", "5M", "15M", "1H", "4H", "1D"].map((tf) => (
@@ -1930,7 +1954,7 @@ function CandleChart({
           className="absolute pointer-events-none border-t border-dashed border-[#f0d06f]/50 flex items-center"
           style={{ top: `${priceToPct(z.price)}%`, left: `${(z.index / data.length) * 100}%`, right: 0 }}
         >
-          <span className="text-[0.35rem] font-bold text-[#f0d06f]/70 bg-[#010308]/60 px-[3px] leading-none -translate-y-1/2">
+          <span className="text-[0.42rem] font-bold text-[#f0d06f]/70 bg-[#010308]/60 px-[3px] leading-none -translate-y-1/2">
             {z.type === "EQUAL_HIGH" ? "EQH" : "EQL"} ×{z.touches}
           </span>
         </div>
@@ -1964,7 +1988,7 @@ function CandleChart({
       <CandlesSvg data={data} />
       {lastY !== null && (
         <div
-          className="absolute right-[-36px] text-[0.4rem] font-bold text-[#010308] bg-[#00ffaa] px-[4px] py-[2px] rounded shadow-[0_0_10px_#00ffaa] translate-y-[-50%] border border-[#00ffaa] flex items-center gap-1"
+          className="absolute right-[-36px] text-[0.45rem] font-bold text-[#010308] bg-[#00ffaa] px-[4px] py-[2px] rounded shadow-[0_0_10px_#00ffaa] translate-y-[-50%] border border-[#00ffaa] flex items-center gap-1"
           style={{ top: `${lastY}%` }}
         >
           <div className="w-1 h-1 bg-[#010308] rounded-full animate-ping opacity-70"></div>
@@ -2137,14 +2161,14 @@ function OrderFlowWidget() {
           <div
             className={`w-1.5 h-1.5 rounded-full ${ofState === "LIVE" ? "bg-[#00ffaa] animate-pulse" : ofState === "ERROR" ? "bg-[#ff0055]" : "bg-[#f0d06f] animate-pulse"}`}
           ></div>
-          <span className={`text-[0.4rem] tracking-[0.15em] font-bold uppercase ${ofColor}`}>
+          <span className={`text-[0.45rem] tracking-[0.15em] font-bold uppercase ${ofColor}`}>
             MEXC ORDERFLOW ·{" "}
             {ofState === "LIVE" ? "LIVE" : ofState === "ERROR" ? `FALHOU (${orderflowReason || DASH})` : "AGUARDANDO"}
           </span>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide px-1">
           {signals.length === 0 ? (
-            <div className="text-[0.4rem] text-[#8ab4f8]/40 tracking-widest py-1">
+            <div className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest py-1">
               {AWAIT} SINAL REAL…
             </div>
           ) : (
@@ -2171,7 +2195,7 @@ interface FlowMetricProps {
 const FlowMetric = React.memo(function FlowMetric({ label, value, color }: FlowMetricProps) {
   return (
     <div className="flex flex-col items-center xl:items-start">
-      <span className="text-[0.4rem] text-[#8ab4f8] uppercase tracking-[0.1em] mb-[2px]">
+      <span className="text-[0.45rem] text-[#8ab4f8] uppercase tracking-[0.1em] mb-[2px]">
         {label}
       </span>
       <span className={`text-[0.6rem] font-bold ${color}`}>{value}</span>
@@ -2337,7 +2361,7 @@ function EssentialStrip() {
 
   const Chip = ({ label, value, valueClass }: { label: string; value: string; valueClass: string }) => (
     <div className="flex flex-col items-start gap-0.5 px-2.5 py-1.5 min-w-0">
-      <span className="text-[0.4rem] tracking-[0.2em] text-[#8ab4f8]/60 font-bold uppercase whitespace-nowrap">
+      <span className="text-[0.45rem] tracking-[0.2em] text-[#8ab4f8]/60 font-bold uppercase whitespace-nowrap">
         {label}
       </span>
       <span className={`text-[0.62rem] font-black font-mono tracking-tight whitespace-nowrap ${valueClass}`}>
@@ -2698,7 +2722,7 @@ function GmilContextWidget() {
           </span>
           <span className={`text-[0.6rem] font-mono font-black ${scoreColor}`}>
             {scoreLabel}
-            {consensus.score !== null && <span className="text-[0.4rem] text-[#8ab4f8]/50"> (n={consensus.sampleSize})</span>}
+            {consensus.score !== null && <span className="text-[0.45rem] text-[#8ab4f8]/50"> (n={consensus.sampleSize})</span>}
           </span>
         </div>
         {providers.map((p) => {
@@ -2752,6 +2776,35 @@ function NeuralCoreWidget() {
   // the option must not itself trigger loading the WebLLM bundle.
   const gpuSupported = typeof navigator !== "undefined" && "gpu" in (navigator as any);
 
+  // Built once, shared by the LLM path (handleGenerate) and the synthetic
+  // fallback below — both read the exact same real fields, so the two
+  // readings can never disagree about what the underlying data actually is.
+  const tacticalInput = useMemo<TacticalContextInput>(
+    () => ({
+      wasmSignal: engine?.direction ?? null,
+      wasmConfidence: engine?.confidence ?? null,
+      marketStructure: engine?.marketStructure ?? null,
+      support: engine?.support ?? null,
+      resistance: engine?.resistance ?? null,
+      lorentzianClassification: realCycle?.lorentzian?.ok ? realCycle.lorentzian.classification ?? null : null,
+      lorentzianConfidencePct: realCycle?.lorentzian?.ok
+        ? Math.round((realCycle.lorentzian.confidence ?? 0) * 100)
+        : null,
+      lorentzianSampleSize: realCycle?.lorentzian?.ok ? realCycle.lorentzian.sampleSize ?? null : null,
+      unmitigatedFvgCount: (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated).length,
+      unmitigatedOrderBlockCount: (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated).length,
+      unsweptLiquidityZoneCount: (smcZones?.liquidityZones ?? []).filter((z: LiquidityZone) => !z.swept).length,
+      cvd: cvd ?? null,
+      recentOrderflowSignalTypes: (orderflowSignals ?? []).slice(0, 5).map((s: OrderflowSignal) => s.type),
+    }),
+    [engine, realCycle, smcZones, cvd, orderflowSignals],
+  );
+
+  // Always on, zero cost, zero download — a rule-based reading of the same
+  // real signals, available the instant data exists regardless of whether
+  // the (optional, ~5GB) LLM has ever been activated.
+  const syntheticReading = useMemo(() => buildSyntheticReading(tacticalInput), [tacticalInput]);
+
   const handleActivate = async () => {
     if (!gpuSupported) {
       setStatus("error");
@@ -2783,23 +2836,7 @@ function NeuralCoreWidget() {
     setErrorMsg(null);
     try {
       const { buildTacticalContext, streamTacticalReading } = await import("./llm-bridge");
-      const context = buildTacticalContext({
-        wasmSignal: engine?.direction ?? null,
-        wasmConfidence: engine?.confidence ?? null,
-        marketStructure: engine?.marketStructure ?? null,
-        support: engine?.support ?? null,
-        resistance: engine?.resistance ?? null,
-        lorentzianClassification: realCycle?.lorentzian?.ok ? realCycle.lorentzian.classification ?? null : null,
-        lorentzianConfidencePct: realCycle?.lorentzian?.ok
-          ? Math.round((realCycle.lorentzian.confidence ?? 0) * 100)
-          : null,
-        lorentzianSampleSize: realCycle?.lorentzian?.ok ? realCycle.lorentzian.sampleSize ?? null : null,
-        unmitigatedFvgCount: (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated).length,
-        unmitigatedOrderBlockCount: (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated).length,
-        unsweptLiquidityZoneCount: (smcZones?.liquidityZones ?? []).filter((z: LiquidityZone) => !z.swept).length,
-        cvd: cvd ?? null,
-        recentOrderflowSignalTypes: (orderflowSignals ?? []).slice(0, 5).map((s: OrderflowSignal) => s.type),
-      });
+      const context = buildTacticalContext(tacticalInput);
       const result = await streamTacticalReading(engineRef.current, context, (textSoFar) => setReading(textSoFar));
       if (!result.ok) {
         setErrorMsg(result.reason);
@@ -2812,12 +2849,27 @@ function NeuralCoreWidget() {
   };
 
   return (
-    <Widget id="neural_core" title="NÚCLEO NEURAL · META LLAMA 3 (LOCAL)" flex="flex-[1.1] min-h-[160px]">
+    <Widget id="neural_core" title="NÚCLEO NEURAL · LLAMA 3 (LOCAL) + SÍNTESE" flex="flex-[1.1] min-h-[160px]">
       <div className="flex flex-col h-full gap-2 p-1 text-[0.5rem]">
-        <span className="text-[0.4rem] text-[#8ab4f8]/50 leading-relaxed">
-          LLM local (WebGPU, {" "}navegador — nenhum dado sai deste dispositivo). Modelo grande
-          (~5GB) baixado só quando ativado. Experimental: requer suporte real a WebGPU no
-          navegador.
+        <span className="text-[0.45rem] text-[#8ab4f8]/50 leading-relaxed">
+          Leitura sintética abaixo é cálculo determinístico, sempre ativa, sem download. LLM
+          local opcional (WebGPU, {" "}navegador — nenhum dado sai deste dispositivo) adiciona
+          síntese em linguagem natural; modelo grande (~5GB) baixado só quando ativado.
+        </span>
+
+        <div className="flex flex-col gap-1 shrink-0">
+          <span className="text-[0.45rem] font-bold tracking-[0.15em] text-[#8ab4f8] uppercase">
+            Leitura Sintética · cálculo, sem IA
+          </span>
+          <div className="bg-[#010308] border border-[#8ab4f8]/15 rounded p-2 text-[#a0f0ff] leading-relaxed">
+            {syntheticReading}
+          </div>
+        </div>
+
+        <div className="h-px bg-[#8ab4f8]/10 shrink-0" />
+
+        <span className="text-[0.45rem] font-bold tracking-[0.15em] text-[#00f0ff]/70 uppercase shrink-0">
+          Leitura por IA generativa (opcional)
         </span>
 
         {status === "idle" && (
@@ -2842,7 +2894,7 @@ function NeuralCoreWidget() {
                 style={{ width: `${Math.round((loadProgress?.progress ?? 0) * 100)}%` }}
               />
             </div>
-            <span className="text-[0.4rem] text-[#8ab4f8]/50 truncate">{loadProgress?.text ?? "…"}</span>
+            <span className="text-[0.45rem] text-[#8ab4f8]/50 truncate">{loadProgress?.text ?? "…"}</span>
           </div>
         )}
 
@@ -2859,11 +2911,11 @@ function NeuralCoreWidget() {
             <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide bg-[#010308] border border-[#00f0ff15] rounded p-2 text-[#a0f0ff] leading-relaxed">
               {reading || (
                 <span className="text-[#8ab4f8]/40 uppercase tracking-[0.2em]">
-                  {AWAIT} LEITURA…
+                  {status === "generating" ? "GERANDO…" : `${AWAIT} — TOQUE EM GERAR LEITURA TÁTICA`}
                 </span>
               )}
             </div>
-            <span className="text-[0.35rem] text-[#8ab4f8]/40 uppercase tracking-[0.15em]">
+            <span className="text-[0.42rem] text-[#8ab4f8]/40 uppercase tracking-[0.15em]">
               Llama-3-8B-Instruct-q4f32_1-MLC (local) · leitura analítica, não é ordem — decisão
               sempre humana.
             </span>
@@ -2874,6 +2926,10 @@ function NeuralCoreWidget() {
           <div className="flex flex-col gap-2 mt-1">
             <span className="text-[0.45rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
               {errorMsg || "FALHA DESCONHECIDA"}
+            </span>
+            <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-relaxed">
+              A leitura sintética acima continua funcionando normalmente — só a síntese por IA
+              generativa não carregou neste navegador.
             </span>
             <button
               type="button"
