@@ -73,14 +73,26 @@ body::after {
   scrollbar-width: none;
 }
 
-/* Layout Panels — Luxury Glassmorphism */
+/* Layout Panels — Luxury Glassmorphism
+   V10.4 Visual Energy Balance: the pre-existing :hover state was
+   noticeably brighter (border 0.3, stronger glow) than the resting
+   state (0.15) — but this is a touch-only iPad PWA with no persistent
+   mouse hover, so that brighter look essentially never appeared for the
+   real target device, and every panel sat at its dim resting state
+   permanently while the header (styled without :hover gating at all)
+   read as the only "alive" surface. Fixed at the source: brought a
+   controlled amount of that same vividness into the resting state so
+   every panel using this one shared class picks it up identically,
+   rather than tuning each widget individually. :hover keeps a modest
+   further step up for the rare case a mouse/trackpad IS attached. */
 .cyber-panel {
   background: rgba(2, 5, 12, 0.6);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(0, 240, 255, 0.15);
+  border: 1px solid rgba(0, 240, 255, 0.22);
   box-shadow:
-    inset 0 0 20px rgba(0, 240, 255, 0.05),
+    inset 0 0 24px rgba(0, 240, 255, 0.07),
+    0 0 18px rgba(0, 240, 255, 0.05),
     0 8px 32px rgba(0, 0, 0, 0.6);
   border-radius: 12px;
   position: relative;
@@ -91,9 +103,10 @@ body::after {
 }
 
 .cyber-panel:hover {
-  border-color: rgba(0, 240, 255, 0.3);
+  border-color: rgba(0, 240, 255, 0.35);
   box-shadow:
-    inset 0 0 30px rgba(0, 240, 255, 0.1),
+    inset 0 0 30px rgba(0, 240, 255, 0.12),
+    0 0 26px rgba(0, 240, 255, 0.1),
     0 8px 32px rgba(0, 240, 255, 0.1);
 }
 
@@ -110,6 +123,20 @@ body::after {
     rgba(0, 240, 255, 0.4),
     transparent
   );
+  /* Slow, subtle "breathing" highlight — the only genuinely new motion
+     this pass adds, and it's on a 1px line, not a whole panel glow, to
+     stay well short of "chamativo" (flashy). */
+  animation: panel-breathe 5s ease-in-out infinite;
+}
+
+@keyframes panel-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .cyber-header {
@@ -218,7 +245,8 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   .cyber-scanline,
   .animate-fade-in,
-  .skeleton-shimmer {
+  .skeleton-shimmer,
+  .cyber-panel::before {
     animation: none;
   }
 }

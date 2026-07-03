@@ -2536,12 +2536,32 @@ function EssentialStrip() {
   const gmilLabel =
     consensus.score === null ? AWAIT : `${consensus.score >= 0 ? "+" : ""}${(consensus.score * 100).toFixed(0)}`;
 
-  const Chip = ({ label, value, valueClass }: { label: string; value: string; valueClass: string }) => (
+  // V10.4 §2 "Glow Inteligente": glow apenas onde há informação relevante
+  // que deve "respirar" — Direção, Confiança, Liquidez, Preço, Contexto
+  // Global, Sistema. Risco/Dados/Última Att. ficam de propósito sem glow
+  // (não são o foco perceptual da faixa). drop-shadow com currentColor
+  // acompanha automaticamente a cor condicional de cada valor sem precisar
+  // hardcodar um glow por branch de cor.
+  const Chip = ({
+    label,
+    value,
+    valueClass,
+    glow = false,
+  }: {
+    label: string;
+    value: string;
+    valueClass: string;
+    glow?: boolean;
+  }) => (
     <div className="flex flex-col items-start gap-0.5 px-2.5 py-1.5 min-w-0">
       <span className="text-[0.45rem] tracking-[0.2em] text-[#8ab4f8]/60 font-bold uppercase whitespace-nowrap">
         {label}
       </span>
-      <span className={`text-[0.62rem] font-black font-mono tracking-tight whitespace-nowrap ${valueClass}`}>
+      <span
+        className={`text-[0.62rem] font-black font-mono tracking-tight whitespace-nowrap ${valueClass} ${
+          glow ? "drop-shadow-[0_0_5px_currentColor]" : ""
+        }`}
+      >
         {value}
       </span>
     </div>
@@ -2555,17 +2575,18 @@ function EssentialStrip() {
           : "border-[#00f0ff20] shadow-none"
       }`}
     >
-      <Chip label="Direção" value={dirLabel} valueClass={`px-1.5 rounded border ${dirColor}`} />
+      <Chip label="Direção" value={dirLabel} valueClass={`px-1.5 rounded border ${dirColor}`} glow />
       <Chip
         label="Confiança"
         value={confidence ?? AWAIT}
         valueClass="px-1.5 rounded border border-[#8ab4f8]/40 bg-[#8ab4f8]/10 text-[#8ab4f8]"
+        glow
       />
-      <Chip label="Liquidez" value={liquidezLabel} valueClass={liquidezColor} />
+      <Chip label="Liquidez" value={liquidezLabel} valueClass={liquidezColor} glow />
       <Chip label="Risco" value={riskLabel} valueClass={riskColor} />
-      <Chip label="Preço" value={priceLabel} valueClass="text-white" />
-      <Chip label="Contexto Global" value={gmilLabel} valueClass="text-[#8ab4f8]" />
-      <Chip label="Sistema" value={systemLabel} valueClass={systemColor} />
+      <Chip label="Preço" value={priceLabel} valueClass="text-white" glow />
+      <Chip label="Contexto Global" value={gmilLabel} valueClass="text-[#8ab4f8]" glow />
+      <Chip label="Sistema" value={systemLabel} valueClass={systemColor} glow />
       <Chip label="Dados" value={`${feedsUp}/4`} valueClass={dataColor} />
       <Chip label="Última Att." value={updateLabel} valueClass="text-[#8ab4f8]/80" />
     </div>
