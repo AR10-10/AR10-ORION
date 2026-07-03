@@ -48,6 +48,7 @@ import { VoiceControlWidget } from "./voice/VoiceControlWidget";
 import { useGmilSnapshot } from "./gmil/use-gmil-snapshot";
 import { gmilBus } from "./gmil/event-bus";
 import { describeProviderHealthChange } from "./gmil/gmil-voice-alerts";
+import { computeConsensus, type ConsensusInput } from "./gmil/consensus-engine";
 import {
   LayoutDashboard,
   BarChart2,
@@ -628,6 +629,21 @@ export default function App() {
           100
         : null;
 
+    // Real, already-computed Order Flow Imbalance from the actual Signal
+    // Engine (src/orderflow/signal-engine.js), reused for the institutional
+    // consensus index (V11.5 Fase 5) — not recomputed, not a second source.
+    // An OFI reading is an EVENT (fires only when the imbalance crosses a
+    // real threshold), not a continuous stream, so a stale/missing signal
+    // means "no data" (null), never a fabricated neutral 0.
+    const FLOW_SIGNAL_MAX_AGE_MS = 5 * 60_000;
+    const latestOfi = orderflowSignals.find((s) => s.type === "OFI") ?? null;
+    const flowImbalance =
+      latestOfi &&
+      Date.now() - latestOfi.timestamp <= FLOW_SIGNAL_MAX_AGE_MS &&
+      typeof latestOfi.metadata?.imbalance === "number"
+        ? Math.max(-1, Math.min(1, latestOfi.metadata.imbalance))
+        : null;
+
     return {
       buyVolume,
       sellVolume,
@@ -653,8 +669,33 @@ export default function App() {
       resistance,
       moveToTargetPct,
       volatilityPct,
+      flowImbalance,
     };
-  }, [priceData, orderBook, realCycle, chartData]);
+  }, [priceData, orderBook, realCycle, chartData, orderflowSignals]);
+
+  // V11.5 Fase 5 — Consensus Engine: um ÚNICO hook subscrito ao GMIL aqui em
+  // App() (antes cada consumidor — EssentialStrip, GmilContextWidget —
+  // chamava useGmilSnapshot() por conta própria, 2 assinaturas redundantes
+  // ao mesmo singleton). O índice institucional combina os 3 provedores
+  // externos do GMIL com 2 dimensões locais REAIS já computadas acima —
+  // liquidez (engine.imbalance, do livro de ofertas ao vivo) e fluxo
+  // (engine.flowImbalance, do Signal Engine real) — reutilizando a MESMA
+  // função pura computeConsensus (LEI 04), não uma segunda matemática de
+  // consenso. Continua 100% consultivo: nenhum destes valores é lido por
+  // engine-bridge.ts nem altera realCycle/engine.direction/confidence.
+  const { providers: gmilProviders } = useGmilSnapshot();
+  const institutionalConsensus = useMemo(() => {
+    const localInputs: ConsensusInput[] = [
+      { providerId: "liquidez_livro_ofertas", lean: engine.imbalance, weight: engine.hasBook ? 1 : 0 },
+      { providerId: "fluxo_ofi", lean: engine.flowImbalance, weight: engine.flowImbalance !== null ? 1 : 0 },
+    ];
+    const providerInputs: ConsensusInput[] = gmilProviders.map((p) => ({
+      providerId: p.id,
+      lean: p.lastReading?.ok ? (p.lastReading.lean ?? null) : null,
+      weight: p.weight,
+    }));
+    return computeConsensus([...providerInputs, ...localInputs]);
+  }, [gmilProviders, engine.imbalance, engine.hasBook, engine.flowImbalance]);
 
   // IRON-VOICE: espelho somente-leitura do estado real para a camada de voz
   // (src/voice/). Mesmos campos que a UI renderiza — nenhum valor novo é
@@ -755,6 +796,8 @@ export default function App() {
       selectedAsset,
       setSelectedAsset,
       scannerData,
+      gmilProviders,
+      institutionalConsensus,
     }),
     [
       widgets,
@@ -777,6 +820,8 @@ export default function App() {
       criticalPulse,
       selectedAsset,
       scannerData,
+      gmilProviders,
+      institutionalConsensus,
     ],
   );
 
@@ -2434,9 +2479,13 @@ function HeatmapWidget({ book, data }: any) {
 // computes (engine/voiceSnapshot/lastUpdateAt/GMIL); this component invents
 // no new number, it only elevates existing ones to constant visibility.
 function EssentialStrip() {
-  const { engine, engineStatus, voiceSnapshot, lastUpdateAt } =
+  const { engine, engineStatus, voiceSnapshot, lastUpdateAt, institutionalConsensus } =
     useContext(WidgetContext) || {};
-  const { consensus } = useGmilSnapshot();
+  // V11.5 Fase 5: lê o índice já combinado (3 provedores GMIL + liquidez +
+  // fluxo) computado uma única vez em App() — não assina o GMIL de novo
+  // aqui (era uma 2ª assinatura redundante ao mesmo singleton antes desta
+  // fase).
+  const consensus = institutionalConsensus ?? { score: null, sampleSize: 0, contributingProviders: [] };
 
   const direction: Direction = engine?.direction ?? null;
   const dirLabel = direction ?? "AGUARDANDO";
@@ -2837,8 +2886,13 @@ function EventsWidget() {
 // consultivo — nunca lido por engine-bridge.ts, nunca um "sinal". LEI 05:
 // cada provedor mostra seu peso de qualidade em tempo real; um provedor
 // degradado perde peso automaticamente e o consenso reflete isso sozinho.
+// V11.5 Fase 5: `consensus` vem de App() já ampliado (3 provedores externos
+// + liquidez + fluxo reais) — mesma fonte que a faixa essencial usa, então
+// os dois nunca podem mostrar números diferentes sob o mesmo rótulo.
 function GmilContextWidget() {
-  const { providers, consensus } = useGmilSnapshot();
+  const { gmilProviders, institutionalConsensus } = useContext(WidgetContext) || {};
+  const consensus = institutionalConsensus ?? { score: null, sampleSize: 0, contributingProviders: [] };
+  const providers = gmilProviders ?? [];
 
   const scoreLabel =
     consensus.score === null
