@@ -695,8 +695,11 @@ export default function App() {
   // DCI Focus Layer (item 8): a MESMA lista de alertas dirige o pulso visual
   // — nenhuma segunda detecção de transição é criada. Um alerta de prioridade
   // CRITICAL/ALERT (vetor confirmado/invalidado, motor caiu, liquidação nova,
-  // divergência, absorção) acende `criticalPulse` por ~2.5s; o resto da tela
-  // perde destaque temporariamente enquanto a faixa essencial brilha.
+  // divergência, absorção) acende `criticalPulse` por ~2.5s: a barra de
+  // comando ganha um anel de brilho e a coluna de decisão um halo. O antigo
+  // opacity-40 no resto da tela foi removido — em screenshot real do iPad a
+  // tela inteira parecia "apagada" com só a barra viva (feedback direto do
+  // operador); destaque agora é só aditivo, nunca subtrativo.
   const [criticalPulse, setCriticalPulse] = useState(false);
   const prevVoiceSnapshotRef = useRef<TerminalSnapshot | null>(null);
   useEffect(() => {
@@ -781,10 +784,12 @@ export default function App() {
 
   return (
     <WidgetContext.Provider value={contextValue}>
-      {/* pb-safe: em PWA standalone no iPad (viewport-fit=cover) o home
-          indicator invadiria o rodapé sem este padding; em navegador comum
-          env(safe-area-inset-bottom) é 0 e nada muda. */}
-      <div className="flex flex-col h-[100dvh] pb-safe bg-[#020610] text-[#a0f0ff] font-mono overflow-hidden selection:bg-[#00f0ff30]">
+      {/* pt-safe/pb-safe: em PWA standalone no iPad (viewport-fit=cover) a
+          status bar translúcida pinta por cima do topo e o home indicator
+          invadiria o rodapé — confirmado em screenshot real do dispositivo
+          (barra de comando cortada em pé e deitado). Em navegador comum
+          env() é 0 e nada muda. */}
+      <div className="flex flex-col h-[100dvh] pt-safe pb-safe bg-[#020610] text-[#a0f0ff] font-mono overflow-hidden selection:bg-[#00f0ff30]">
         <TopBar data={priceData} derivatives={derivatives} />
         {bootRestFailed && (
           <div className="shrink-0 bg-[#ff005515] border-b border-[#ff005550] px-4 py-2 flex items-center justify-between gap-3">
@@ -805,11 +810,10 @@ export default function App() {
           <div className="flex flex-col flex-1 p-2 gap-2 min-h-0 overflow-hidden relative">
             {activeTab === "DASHBOARD" ? (
               <>
-                {/* DCI Essential Strip (item 1): pinned above the scrollable
-                    columns, never inside them — the 8 decision-critical
-                    fields are the first and only thing visible before any
-                    scroll, on every viewport. */}
-                <EssentialStrip />
+                {/* DCI Essential Strip (item 1) agora vive DENTRO da barra de
+                    comando unificada (TopBar) — uma barra só com toda a
+                    informação de decisão, visível em todas as abas, zero
+                    repetição de preço/símbolo/feed pelo resto da tela. */}
 
                 {/* 3-column cockpit only at widths where the columns' minimums
                     genuinely fit (sidebar 70 + paddings/gaps ≈ 110 + 300/360/330
@@ -819,7 +823,7 @@ export default function App() {
                     every portrait (744/834/1024) stacks, every landscape
                     (1133/1194/1366) gets 3 columns with nothing hidden. */}
                 <div
-                  className={`flex-1 flex flex-col min-[1120px]:flex-row gap-2 min-h-0 overflow-y-auto min-[1120px]:overflow-x-auto min-[1120px]:overflow-y-hidden scrollbar-hide p-1 transition-opacity duration-500 ${criticalPulse ? "opacity-40" : "opacity-100"}`}
+                  className="flex-1 flex flex-col min-[1120px]:flex-row gap-2 min-h-0 overflow-y-auto min-[1120px]:overflow-x-auto min-[1120px]:overflow-y-hidden scrollbar-hide p-1"
                 >
                   {/* Left Column */}
                   {(widgets.chart.visible ||
@@ -1517,7 +1521,7 @@ function TopBar({
   data?: PriceState | null;
   derivatives: DerivativesState;
 }) {
-  const { wsLive, bootAt, handleManualRestart, selectedAsset, setSelectedAsset } =
+  const { bootAt, handleManualRestart, selectedAsset, setSelectedAsset, criticalPulse } =
     useContext(WidgetContext) || {};
   const isPos = (data?.deltaPct ?? 0) >= 0;
   const [uptime, setUptime] = useState("");
@@ -1542,138 +1546,131 @@ function TopBar({
   const oi = derivatives.openInterest;
 
   return (
-    // 3-zone toolbar grid (left/center/right), not flex+absolute-center: the
-    // RAMBER wordmark used to be `absolute left-1/2`, floating on top of
-    // whatever the stats row's real width happened to be. That reserves NO
-    // space, so at exactly the width where the (xl:-only) 24H HIGH/LOW +
-    // FUNDING/OPEN INTEREST stats reached the bar's horizontal center (iPad
-    // Pro 12.9 landscape, 1366px — confirmed via getBoundingClientRect, a
-    // real ~95%/17% overlap, not a false positive), the logo painted directly
-    // over real FUNDING/OPEN INTEREST numbers. A grid's center 1fr column is
-    // an actually-reserved track — the two dynamic-width side zones can never
-    // encroach into it, so this class of overlap is structurally impossible.
-    <div className="h-[52px] border-b border-[#00f0ff20] grid grid-cols-[auto_1fr_auto] items-center px-3 lg:px-6 bg-[#010308]/95 shrink-0 z-20 backdrop-blur-xl shadow-[0_2px_15px_rgba(0,0,0,0.5)]">
-      <div className="flex gap-3 md:gap-5 h-full items-center">
-        <div className="flex items-center gap-3 pr-3 md:pr-4 border-r border-[#00f0ff20] h-[70%]">
-          <div
-            className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-              selectedAsset === "BTC"
-                ? "bg-[#f7931a] shadow-[0_0_10px_rgba(247,147,26,0.4)]"
-                : "bg-[#00f0ff20] border border-[#00f0ff40] shadow-[0_0_10px_rgba(0,240,255,0.2)]"
-            }`}
-          >
-            <span className="text-white font-bold text-sm">
-              {selectedAsset === "BTC" ? "₿" : selectedAsset?.[0]}
-            </span>
-          </div>
-          <div className="flex flex-col min-w-0">
+    // Barra de comando unificada (protocolo "Refinamento Visual Absoluto"
+    // §1/§2): o antigo cabeçalho isolado + a faixa essencial viraram UMA
+    // barra de alta densidade em duas linhas dentro do mesmo contêiner.
+    // Cada dado aparece exatamente uma vez em toda a tela: o preço vive só
+    // aqui (o chip Preço da faixa e o overlay gigante do gráfico foram
+    // removidos), variação 24h só aqui, HIGH/VOL só aqui, READ-ONLY e a
+    // marca RAMBER só no rodapé, e FEED sumiu porque "DADOS n/4" da faixa
+    // já conta o mesmo WebSocket. O pulso crítico (DCI) acende o anel da
+    // barra inteira — sem apagar o resto da tela.
+    <div
+      className={`shrink-0 z-20 bg-[#010308]/95 backdrop-blur-xl border-b transition-[border-color,box-shadow] duration-500 ${
+        criticalPulse
+          ? "border-[#00f0ff] shadow-[0_0_24px_rgba(0,240,255,0.35)]"
+          : "border-[#00f0ff25] shadow-[0_2px_15px_rgba(0,0,0,0.5)]"
+      }`}
+    >
+      <div className="h-[46px] flex items-center justify-between gap-2 px-3 lg:px-5">
+        <div className="flex gap-2 md:gap-3 h-full items-center min-w-0">
+          <div className="flex items-center gap-2 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%]">
+            <div
+              className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                selectedAsset === "BTC"
+                  ? "bg-[#f7931a] shadow-[0_0_10px_rgba(247,147,26,0.4)]"
+                  : "bg-[#00f0ff20] border border-[#00f0ff40] shadow-[0_0_10px_rgba(0,240,255,0.2)]"
+              }`}
+            >
+              <span className="text-white font-bold text-xs">
+                {selectedAsset === "BTC" ? "₿" : selectedAsset?.[0]}
+              </span>
+            </div>
             <div className="text-[#a0f0ff] font-black text-sm flex items-center gap-1.5 whitespace-nowrap">
               {selectedAsset}/USDT{" "}
               <span className="text-[0.5rem] bg-[#00f0ff20] text-[#00f0ff] px-1 py-0.5 rounded uppercase tracking-wider">
                 Spot
               </span>
             </div>
-            <div
-              className={`text-sm font-bold font-mono ${isPos ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+          </div>
+
+          {/* Institutional asset selector (V11 §5) — 5 fixed assets, not a
+              scrollable exchange-length list, per the protocol's explicit
+              "manter foco operacional" instruction. Switching re-points every
+              real feed at the new symbol (see the selectedAsset-scoped
+              effects in App()). */}
+          <div className="flex items-center gap-1 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%]">
+            {ASSETS.map((a) => (
+              <button
+                key={a}
+                type="button"
+                onClick={() => setSelectedAsset?.(a)}
+                className={`px-1.5 md:px-2 py-1 rounded text-[0.5rem] md:text-[0.55rem] font-bold tracking-wider transition-colors ${
+                  selectedAsset === a
+                    ? "bg-[#00f0ff20] text-[#00f0ff] border border-[#00f0ff40]"
+                    : "text-[#8ab4f8]/50 hover:text-[#8ab4f8] border border-transparent"
+                }`}
+              >
+                {a}
+              </button>
+            ))}
+          </div>
+
+          {/* O preço — única ocorrência em toda a interface. */}
+          <div className="flex items-baseline gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap">
+            <span
+              className={`text-base md:text-lg font-black font-mono tracking-tight drop-shadow-[0_0_6px_currentColor] ${
+                isPos ? "text-[#00ffaa]" : "text-[#ff0055]"
+              }`}
             >
               {fmt(data?.price ?? null)}
-            </div>
+            </span>
+            <span
+              className={`text-[0.55rem] font-bold ${isPos ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+            >
+              {fmtSignedPct(data?.deltaPct ?? null)}
+            </span>
+          </div>
+
+          <div className="hidden md:flex gap-1 lg:gap-2 h-full items-center">
+            <TopStat
+              label="24H HIGH"
+              value={fmt(data?.high ?? null)}
+              color="text-[#a0f0ff]"
+              className="hidden xl:flex"
+            />
+            <TopStat
+              label="24H LOW"
+              value={fmt(data?.low ?? null)}
+              color="text-[#a0f0ff]"
+              className="hidden xl:flex"
+            />
+            <TopStat
+              label={`24H VOL (${selectedAsset})`}
+              value={fmtInt(data?.volume ?? null)}
+              color="text-[#a0f0ff]"
+              className="hidden lg:flex"
+            />
+            <TopStat
+              label="FUNDING / 8H"
+              value={num(funding) ? `${(funding * 100).toFixed(4)}%` : DASH}
+              color="text-[#f7931a]"
+            />
+            <TopStat
+              label="OPEN INTEREST"
+              value={num(oi) ? `${fmtInt(oi)} ${selectedAsset}` : DASH}
+              color="text-[#a0f0ff]"
+            />
           </div>
         </div>
 
-        {/* Institutional asset selector (V11 §5) — 5 fixed assets, not a
-            scrollable exchange-length list, per the protocol's explicit
-            "manter foco operacional" instruction. Switching re-points every
-            real feed at the new symbol (see the selectedAsset-scoped
-            effects in App()). */}
-        <div className="flex items-center gap-1 pr-3 md:pr-4 border-r border-[#00f0ff20] h-[70%]">
-          {ASSETS.map((a) => (
-            <button
-              key={a}
-              type="button"
-              onClick={() => setSelectedAsset?.(a)}
-              className={`px-1.5 md:px-2 py-1 rounded text-[0.5rem] md:text-[0.55rem] font-bold tracking-wider transition-colors ${
-                selectedAsset === a
-                  ? "bg-[#00f0ff20] text-[#00f0ff] border border-[#00f0ff40]"
-                  : "text-[#8ab4f8]/50 hover:text-[#8ab4f8] border border-transparent"
-              }`}
-            >
-              {a}
-            </button>
-          ))}
-        </div>
-
-        <div className="hidden lg:flex gap-4 h-full items-center">
-          <TopStat
-            label="24H CHANGE"
-            value={fmtSignedPct(data?.deltaPct ?? null)}
-            color={isPos ? "text-[#00ffaa]" : "text-[#ff0055]"}
-          />
-          <TopStat
-            label="24H HIGH"
-            value={fmt(data?.high ?? null)}
-            color="text-[#a0f0ff]"
-            className="hidden xl:flex"
-          />
-          <TopStat
-            label="24H LOW"
-            value={fmt(data?.low ?? null)}
-            color="text-[#a0f0ff]"
-            className="hidden xl:flex"
-          />
-          <TopStat
-            label="24H VOL (BTC)"
-            value={fmtInt(data?.volume ?? null)}
-            color="text-[#a0f0ff]"
-          />
-          <TopStat
-            label="FUNDING / 8H"
-            value={num(funding) ? `${(funding * 100).toFixed(4)}%` : DASH}
-            color="text-[#f7931a]"
-          />
-          <TopStat
-            label="OPEN INTEREST"
-            value={num(oi) ? `${fmtInt(oi)} BTC` : DASH}
-            color="text-[#a0f0ff]"
-          />
+        <div className="flex gap-1 md:gap-2 h-full items-center justify-end shrink-0">
+          <TopStat label="SESSÃO" value={uptime || DASH} color="text-white" />
+          <button
+            type="button"
+            onClick={handleManualRestart}
+            title="Forçar reconexão de todos os feeds reais"
+            className="ml-1 w-8 h-8 rounded-full border border-[#00f0ff40] bg-[#00f0ff08] flex items-center justify-center text-[#00f0ff] hover:bg-[#00f0ff20] active:scale-95 transition-all shadow-[0_0_10px_rgba(0,240,255,0.15)] animate-pulse"
+          >
+            <Power size={14} />
+          </button>
         </div>
       </div>
 
-      <div className="hidden xl:flex flex-col items-center justify-center px-4 cursor-default group min-w-0">
-        <div className="text-xl font-black tracking-[0.3em] text-[#00f0ff] drop-shadow-[0_0_12px_rgba(0,240,255,0.8)] leading-none transition-all group-hover:drop-shadow-[0_0_20px_rgba(0,240,255,1)]">
-          RAMBER
-        </div>
-        <div className="text-[0.45rem] text-[#00f0ff80] tracking-[0.4em] mt-1.5 whitespace-nowrap font-bold uppercase transition-colors group-hover:text-[#00f0ff]">
-          TERMINAL READ-ONLY · DADOS REAIS
-        </div>
-      </div>
-
-      <div className="flex gap-2 md:gap-4 h-full items-center justify-end">
-        <TopStat
-          label="MODO"
-          value="READ-ONLY"
-          color="text-[#00ffaa]"
-          active
-          className="hidden md:flex"
-        />
-        <TopStat
-          label="FEED"
-          value={wsLive ? "LIVE" : AWAIT}
-          subValue={wsLive ? "WS" : ""}
-          color={wsLive ? "text-[#00ffaa]" : "text-[#8ab4f8]"}
-          subColor="text-[#00ffaa]"
-          className="hidden md:flex"
-        />
-        <TopStat label="SESSÃO" value={uptime || DASH} color="text-white" />
-        <button
-          type="button"
-          onClick={handleManualRestart}
-          title="Forçar reconexão de todos os feeds reais"
-          className="ml-1 w-8 h-8 rounded-full border border-[#00f0ff40] bg-[#00f0ff08] flex items-center justify-center text-[#00f0ff] hover:bg-[#00f0ff20] active:scale-95 transition-all shadow-[0_0_10px_rgba(0,240,255,0.15)] animate-pulse"
-        >
-          <Power size={14} />
-        </button>
-      </div>
+      {/* Linha 2 — faixa de decisão (DCI item 1), agora parte da mesma
+          barra: os campos decisão-críticos continuam visíveis antes de
+          qualquer scroll, em todas as abas e orientações. */}
+      <EssentialStrip />
     </div>
   );
 }
@@ -1996,7 +1993,7 @@ function ChartWidget({ data, chartData }: any) {
   return (
     <Widget
       id="chart"
-      title="GRÁFICO"
+      title={`GRÁFICO · ${selectedAsset ?? ""}/USDT`}
       flex="flex-[1.8] min-h-[320px]"
       extraHeader={
         <div className="flex items-center gap-1 text-[0.45rem]">
@@ -2040,51 +2037,14 @@ function ChartWidget({ data, chartData }: any) {
         </div>
       }
     >
-      <div className="absolute top-2 left-2 right-2 flex justify-between items-start z-10 pointer-events-none group">
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-full bg-[#f3ba2f] flex items-center justify-center text-black font-bold text-[9px] shadow-[0_0_8px_#f3ba2f]">
-            {selectedAsset === "BTC" ? "₿" : selectedAsset?.[0]}
-          </div>
-          <span className="text-white font-bold tracking-[0.15em] text-xs drop-shadow-[0_0_5px_#fff]">
-            {selectedAsset}/USDT
-          </span>
-          <span className="text-[0.45rem] text-[#8ab4f8] tracking-widest border border-[#8ab4f8]/30 px-1 rounded bg-[#010308]/50">
-            BINANCE SPOT
-          </span>
-        </div>
-        <div className="flex gap-3 text-[0.45rem] text-right pointer-events-auto bg-[#010308]/80 p-1 rounded border border-[#00f0ff20] backdrop-blur-sm opacity-50 group-hover:opacity-100 transition-opacity">
-          <div className="flex flex-col">
-            <span className="text-slate-500 mb-[2px]">HIGH</span>
-            <span className="text-white font-bold">{fmt(data?.high ?? null)}</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-slate-500 mb-[2px]">VOL</span>
-            <span className="text-white font-bold">{fmtInt(data?.volume ?? null)}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="absolute top-8 left-2 flex items-end gap-2 z-10 pointer-events-none">
-        <span className="text-2xl font-black text-[#00ffaa] tracking-tighter drop-shadow-[0_0_8px_rgba(0,255,170,0.4)]">
-          {fmt(data?.price ?? null)}
-        </span>
-        {data && num(data.deltaPct) && (
-          <div className="flex flex-col justify-center pb-[2px]">
-            <span
-              className={`text-[0.55rem] font-bold leading-tight tracking-wider ${data.deltaPct >= 0 ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
-            >
-              {fmtSignedPct(data.deltaPct)}
-            </span>
-            <span
-              className={`text-[0.55rem] font-bold leading-tight tracking-wider ${data.deltaPct >= 0 ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
-            >
-              {num(data.delta) ? `${data.delta >= 0 ? "+" : ""}${data.delta.toFixed(2)}` : DASH}
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="flex-1 mt-[50px] mr-8 relative min-h-0">
+      {/* Zero repetição (protocolo §2): o antigo overlay com símbolo/preço
+          gigante/variação/HIGH/VOL duplicava — em dobro ou triplo — dados que
+          agora têm ocorrência única na barra de comando unificada. Removido
+          por inteiro; o espaço vertical recuperado (~50px) vai para as velas
+          (prioridade do gráfico, V11 §7). O título do Widget carrega o
+          símbolo, necessário quando o gráfico está maximizado cobrindo a
+          barra; a tag de último preço no eixo é parte intrínseca do gráfico. */}
+      <div className="flex-1 mt-1 mr-8 relative min-h-0">
         {zoomedData && zoomedData.length > 0 ? (
           <CandleChart data={zoomedData} last={data?.price ?? null} zones={zoomedZones} />
         ) : (
@@ -2485,7 +2445,7 @@ function HeatmapWidget({ book, data }: any) {
 // computes (engine/voiceSnapshot/lastUpdateAt/GMIL); this component invents
 // no new number, it only elevates existing ones to constant visibility.
 function EssentialStrip() {
-  const { engine, engineStatus, voiceSnapshot, lastUpdateAt, criticalPulse } =
+  const { engine, engineStatus, voiceSnapshot, lastUpdateAt } =
     useContext(WidgetContext) || {};
   const { consensus } = useGmilSnapshot();
 
@@ -2527,8 +2487,6 @@ function EssentialStrip() {
   ].filter(Boolean).length;
   const dataColor = feedsUp === 4 ? "text-[#00ffaa]" : feedsUp >= 2 ? "text-[#f0d06f]" : "text-[#ff0055]";
 
-  const priceLabel = num(engine?.price) ? `$${fmt(engine.price)}` : AWAIT;
-
   const updateLabel = lastUpdateAt
     ? new Date(lastUpdateAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
     : AWAIT;
@@ -2567,14 +2525,11 @@ function EssentialStrip() {
     </div>
   );
 
+  // Linha 2 da barra de comando unificada — sem contêiner/borda próprios
+  // (o anel do pulso crítico vive no contêiner da barra, no TopBar). O chip
+  // "Preço" saiu: o preço agora tem UMA ocorrência, na linha 1 da barra.
   return (
-    <div
-      className={`shrink-0 flex flex-wrap items-stretch divide-x divide-[#8ab4f8]/10 rounded-xl border bg-[#010308]/80 backdrop-blur-md mb-2 transition-[border-color,box-shadow] duration-500 ${
-        criticalPulse
-          ? "border-[#00f0ff] shadow-[0_0_24px_rgba(0,240,255,0.35)]"
-          : "border-[#00f0ff20] shadow-none"
-      }`}
-    >
+    <div className="flex flex-wrap items-stretch divide-x divide-[#8ab4f8]/10 border-t border-[#00f0ff15]">
       <Chip label="Direção" value={dirLabel} valueClass={`px-1.5 rounded border ${dirColor}`} glow />
       <Chip
         label="Confiança"
@@ -2584,7 +2539,6 @@ function EssentialStrip() {
       />
       <Chip label="Liquidez" value={liquidezLabel} valueClass={liquidezColor} glow />
       <Chip label="Risco" value={riskLabel} valueClass={riskColor} />
-      <Chip label="Preço" value={priceLabel} valueClass="text-white" glow />
       <Chip label="Contexto Global" value={gmilLabel} valueClass="text-[#8ab4f8]" glow />
       <Chip label="Sistema" value={systemLabel} valueClass={systemColor} glow />
       <Chip label="Dados" value={`${feedsUp}/4`} valueClass={dataColor} />
@@ -3323,27 +3277,30 @@ function FooterBar() {
     return () => clearInterval(t);
   }, []);
 
+  // Base da tela no mesmo padrão luminoso do topo (protocolo §3): borda,
+  // texto e indicadores subiram de intensidade + um glow sutil para cima,
+  // espelhando a sombra que a barra de comando projeta para baixo.
   return (
-    <div className="h-[24px] border-t border-[#00f0ff20] flex items-center justify-between px-3 bg-[#010308] shrink-0 text-[0.45rem] tracking-[0.2em] text-[#8ab4f8]/60 font-bold uppercase">
+    <div className="h-[24px] border-t border-[#00f0ff35] shadow-[0_-2px_14px_rgba(0,240,255,0.08)] flex items-center justify-between px-3 bg-[#010308] shrink-0 text-[0.45rem] tracking-[0.2em] text-[#8ab4f8]/80 font-bold uppercase">
       <div className="flex gap-3">
-        <span className="text-[#00f0ff] drop-shadow-[0_0_3px_#00f0ff]">RAMBER</span>
+        <span className="text-[#00f0ff] drop-shadow-[0_0_5px_#00f0ff]">RAMBER</span>
         <span className="hidden md:inline">|</span>
         <span className="hidden md:inline">TERMINAL READ-ONLY</span>
       </div>
 
-      <div className="flex gap-2 hidden lg:flex items-center text-[#8ab4f8]/40">
+      <div className="flex gap-2 hidden lg:flex items-center text-[#8ab4f8]/60">
         <span>DADOS REAIS</span>{" "}
-        <div className="w-1 h-1 rounded-full bg-[#00f0ff]/40"></div>
+        <div className="w-1 h-1 rounded-full bg-[#00f0ff]/70 shadow-[0_0_4px_rgba(0,240,255,0.6)]"></div>
         <span>FAIL-CLOSED</span>{" "}
-        <div className="w-1 h-1 rounded-full bg-[#00f0ff]/40"></div>
+        <div className="w-1 h-1 rounded-full bg-[#00f0ff]/70 shadow-[0_0_4px_rgba(0,240,255,0.6)]"></div>
         <span>SEM ORDENS</span>{" "}
-        <div className="w-1 h-1 rounded-full bg-[#00f0ff]/40"></div>
+        <div className="w-1 h-1 rounded-full bg-[#00f0ff]/70 shadow-[0_0_4px_rgba(0,240,255,0.6)]"></div>
         <span>SEM CHAVES</span>
       </div>
 
       <div className="flex gap-3 items-center">
-        <span>{time.toLocaleTimeString("en-US", { hour12: false })}</span>
-        <div className="flex gap-1.5 ml-1 text-[#00f0ff]/60">
+        <span className="text-[#a0f0ff]/90">{time.toLocaleTimeString("en-US", { hour12: false })}</span>
+        <div className="flex gap-1.5 ml-1 text-[#00f0ff]/80">
           <Disc size={10} />
           <Wifi size={10} />
           <Activity size={10} />
