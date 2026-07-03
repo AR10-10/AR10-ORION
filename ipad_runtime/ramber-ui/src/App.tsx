@@ -738,7 +738,6 @@ export default function App() {
       toggleWidget,
       engine,
       smcZones,
-      wsLive,
       bootAt,
       engineStatus,
       realCycle,
@@ -762,7 +761,6 @@ export default function App() {
       toggleWidget,
       engine,
       smcZones,
-      wsLive,
       bootAt,
       engineStatus,
       realCycle,
@@ -1677,26 +1675,22 @@ function TopBar({
 interface TopStatProps {
   label: string;
   value: string | number;
-  subValue?: string;
   color: string;
-  subColor?: string;
-  active?: boolean;
   className?: string;
 }
 
+// V11.5 §13 auto-otimização: subValue/subColor/active existiam só para os
+// chips MODO e FEED, removidos na consolidação da barra única (DADOS n/4 na
+// faixa essencial já cobre o mesmo sinal de WebSocket). Nenhum caller restante
+// os usa — confirmado via grep antes de remover, não suposição.
 const TopStat = React.memo(function TopStat({
   label,
   value,
-  subValue,
   color,
-  subColor,
-  active,
   className = "",
 }: TopStatProps) {
   return (
-    <div
-      className={`flex flex-col justify-center min-w-[85px] h-[36px] px-2.5 transition-colors ${active ? "border border-[#00f0ff30] rounded bg-[#00f0ff08] shadow-[inset_0_0_10px_rgba(0,240,255,0.05)]" : "hover:bg-white/5 rounded"} ${className}`}
-    >
+    <div className={`flex flex-col justify-center min-w-[85px] h-[36px] px-2.5 rounded transition-colors hover:bg-white/5 ${className}`}>
       <span className="text-[0.45rem] text-[#8ab4f8] tracking-[0.15em] mb-[2px] text-center font-bold">
         {label}
       </span>
@@ -1704,11 +1698,6 @@ const TopStat = React.memo(function TopStat({
         <span className={`text-[0.65rem] font-bold tracking-widest ${color}`}>
           {value}
         </span>
-        {subValue && (
-          <span className={`text-[0.5rem] font-bold ${subColor || color}`}>
-            {subValue}
-          </span>
-        )}
       </div>
     </div>
   );
