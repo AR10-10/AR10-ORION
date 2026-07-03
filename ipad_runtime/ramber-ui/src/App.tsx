@@ -65,6 +65,10 @@ import {
   ShieldCheck,
   Power,
   Globe,
+  Maximize2,
+  Minimize2,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -1005,7 +1009,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-[#00f0ff20] pb-2 gap-2 sm:gap-0">
               <div className="flex items-center gap-2 sm:gap-3">
                 <span
-                  className={`text-base sm:text-lg tracking-[0.2em] font-black ${dirColor}`}
+                  className={`tracking-[0.2em] font-black whitespace-nowrap ${direction ? "text-base sm:text-lg" : "text-[0.6rem] sm:text-xs"} ${dirColor}`}
                 >
                   VETOR {dirLabel}
                 </span>
@@ -1136,8 +1140,11 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                         }`}
                         title={f.ok ? `Amostra real: ${f.sampleSize} pontos` : f.reason}
                       >
-                        <span className="text-[0.45rem] tracking-[0.2em] text-[#8ab4f8]/70 font-bold uppercase">
-                          {f.horizonBars} VELAS · {f.horizonBars / 4}H
+                        <span className="text-[0.5rem] tracking-[0.15em] text-[#8ab4f8] font-black uppercase">
+                          {f.horizonBars / 4}H
+                        </span>
+                        <span className="text-[0.4rem] tracking-[0.15em] text-[#8ab4f8]/50 uppercase">
+                          {f.horizonBars} velas (15m)
                         </span>
                         <span
                           className={`text-[0.6rem] font-black tracking-[0.1em] ${
@@ -1731,19 +1738,25 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
                 e.stopPropagation();
                 setMinimized(true);
               }}
+              title="Minimizar"
             >
               _
             </div>
           )}
-          {maximized && !isFloatMode && (
+          {/* Visible expand/restore toggle — previously the ONLY way to
+              maximize a panel was an undocumented double-click on the
+              header, with zero visual affordance. This makes the exact
+              same existing `maximized` mechanism discoverable. */}
+          {!isFloatMode && (
             <div
-              className="text-[#00f0ff] hover:text-white px-2 py-0.5 rounded bg-[#00f0ff10] border border-[#00f0ff30]"
+              className={`px-1 py-0.5 rounded cursor-pointer ${maximized ? "text-[#00f0ff] bg-[#00f0ff10] border border-[#00f0ff30]" : "text-[#8ab4f8]/50 hover:text-[#00f0ff]"}`}
               onClick={(e) => {
                 e.stopPropagation();
-                setMaximized(false);
+                setMaximized(!maximized);
               }}
+              title={maximized ? "Restaurar" : "Tela cheia"}
             >
-              ✕
+              {maximized ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
             </div>
           )}
           {widgetState && (
@@ -1803,7 +1816,16 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
     <div
       className={
         maximized
-          ? `fixed inset-2 md:inset-8 z-50 cyber-panel flex flex-col shadow-[0_0_50px_rgba(0,240,255,0.2)] bg-[#010308]/95 backdrop-blur-xl`
+          ? // `!` (important) is required on position/inset/z-index here:
+            // .cyber-panel's own `position: relative` rule (index.css) is
+            // textually AFTER Tailwind's generated utilities in the compiled
+            // stylesheet (it follows @import "tailwindcss" in the same
+            // file), so a plain `fixed` utility loses the cascade to it —
+            // confirmed via getComputedStyle: without `!`, this panel
+            // computed position:relative and stayed pinned at its normal
+            // in-flow size instead of covering the viewport. This is why
+            // "maximize" silently never worked at all, hidden or not.
+            `!fixed !inset-2 md:!inset-8 !z-50 cyber-panel flex flex-col shadow-[0_0_50px_rgba(0,240,255,0.2)] bg-[#010308]/95 backdrop-blur-xl`
           : // min-h-0 is scoped to the landscape 3-column breakpoint on purpose:
             // that layout gives each column a real h-full + overflow-y-auto
             // container, and min-h-0 is what lets flex-grow actually
@@ -1839,19 +1861,50 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
 }
 
 // --- CHART WIDGET ---
+// Zoom windows over the SAME real 15m candles already fetched (no new
+// fetch, no fabricated data) — fewer candles visible = each one gets more
+// horizontal room, same principle as any real charting tool's zoom.
+const CHART_ZOOM_STEPS = [12, 20, 30, 50];
+
 function ChartWidget({ data, chartData }: any) {
   // Real Fair Value Gaps / Order Blocks / Liquidity zones — computed once
   // in App() (see contextValue) against this exact candle array, shared
   // with the Neural Core widget's tactical-context prompt so both use the
   // same real counts rather than two independent computations.
   const { smcZones } = useContext(WidgetContext) || {};
+  const [zoomStep, setZoomStep] = useState(CHART_ZOOM_STEPS.length - 1);
+  const visibleCount = CHART_ZOOM_STEPS[zoomStep];
+  const zoomedData = chartData && chartData.length > 0 ? chartData.slice(-visibleCount) : chartData;
+  const canZoomIn = zoomStep > 0;
+  const canZoomOut = zoomStep < CHART_ZOOM_STEPS.length - 1;
+
+  // smcZones' indices are relative to the FULL chartData array (computed
+  // once in App()). Zooming shows only the last `visibleCount` candles, so
+  // every zone's index needs the same offset subtracted or it would point
+  // at the wrong candle (or land off-screen entirely). Zones that belong to
+  // a candle scrolled out of the zoomed window are dropped, not clamped —
+  // showing them at the edge would misrepresent where they actually are.
+  const zoomOffset = chartData && chartData.length > 0 ? Math.max(chartData.length - visibleCount, 0) : 0;
+  const zoomedZones = useMemo(() => {
+    if (!smcZones) return smcZones;
+    const remap = <T extends { index: number }>(arr: T[]): T[] =>
+      arr.filter((z) => z.index - zoomOffset >= 0).map((z) => ({ ...z, index: z.index - zoomOffset }));
+    return {
+      fairValueGaps: remap(smcZones.fairValueGaps ?? []),
+      orderBlocks: remap(smcZones.orderBlocks ?? []),
+      liquidityZones: remap(smcZones.liquidityZones ?? []),
+    };
+  }, [smcZones, zoomOffset]);
+
+  const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
 
   return (
     <Widget
       id="chart"
+      title="GRÁFICO"
       flex="flex-[1.8] min-h-[320px]"
       extraHeader={
-        <div className="flex gap-1 text-[0.45rem]">
+        <div className="flex items-center gap-1 text-[0.45rem]">
           {["1M", "5M", "15M", "1H", "4H", "1D"].map((tf) => (
             <span
               key={tf}
@@ -1860,6 +1913,35 @@ function ChartWidget({ data, chartData }: any) {
               {tf}
             </span>
           ))}
+          <div className="flex items-center gap-0.5 ml-1 pl-1.5 border-l border-[#8ab4f8]/20">
+            <button
+              type="button"
+              onClick={(e) => {
+                stopBubble(e);
+                setZoomStep((z) => Math.min(z + 1, CHART_ZOOM_STEPS.length - 1));
+              }}
+              onDoubleClick={stopBubble}
+              disabled={!canZoomOut}
+              title="Diminuir zoom"
+              className="p-0.5 rounded text-[#8ab4f8]/60 hover:text-[#00f0ff] disabled:opacity-25 disabled:cursor-not-allowed"
+            >
+              <ZoomOut size={11} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                stopBubble(e);
+                setZoomStep((z) => Math.max(z - 1, 0));
+              }}
+              onDoubleClick={stopBubble}
+              disabled={!canZoomIn}
+              title="Aumentar zoom"
+              className="p-0.5 rounded text-[#8ab4f8]/60 hover:text-[#00f0ff] disabled:opacity-25 disabled:cursor-not-allowed"
+            >
+              <ZoomIn size={11} />
+            </button>
+            <span className="text-[#8ab4f8]/40 tabular-nums">{visibleCount}</span>
+          </div>
         </div>
       }
     >
@@ -1908,8 +1990,8 @@ function ChartWidget({ data, chartData }: any) {
       </div>
 
       <div className="flex-1 mt-[50px] mr-8 relative min-h-0">
-        {chartData && chartData.length > 0 ? (
-          <CandleChart data={chartData} last={data?.price ?? null} zones={smcZones} />
+        {zoomedData && zoomedData.length > 0 ? (
+          <CandleChart data={zoomedData} last={data?.price ?? null} zones={zoomedZones} />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
             {AWAIT} CANDLES…
