@@ -93,6 +93,13 @@ const AWAIT = "AGUARDANDO";
 
 const num = (v: any): v is number => typeof v === "number" && Number.isFinite(v);
 
+// Verified directly against market-structure-engine.js: ESTRUTURA_ALTA/
+// ESTRUTURA_BAIXA/ESTRUTURA_LATERAL are the only 3 raw values it ever
+// returns. Shared by the primary (15m) and higher-timeframe (1H) structure
+// reads (V11.5 §2 multi-timeframe context) so both use one mapping.
+const cleanStructureLabel = (raw: string | null | undefined): "ALTA" | "BAIXA" | "LATERAL" | null =>
+  raw === "ESTRUTURA_ALTA" ? "ALTA" : raw === "ESTRUTURA_BAIXA" ? "BAIXA" : raw === "ESTRUTURA_LATERAL" ? "LATERAL" : null;
+
 // Institutional asset selector (V11 §5) — deliberately 5, not a scrollable
 // exchange-length list, to keep the terminal's operational focus. Switching
 // re-points every real feed (klines, derivatives, WS ticker/depth, order
@@ -606,14 +613,21 @@ export default function App() {
     // directly against src/research/engines/market-structure-engine.js —
     // ESTRUTURA_ALTA/ESTRUTURA_BAIXA/ESTRUTURA_LATERAL are the only 3 it
     // ever returns.
-    const marketStructureLabel =
-      marketStructure === "ESTRUTURA_ALTA"
-        ? "ALTA"
-        : marketStructure === "ESTRUTURA_BAIXA"
-          ? "BAIXA"
-          : marketStructure === "ESTRUTURA_LATERAL"
-            ? "LATERAL"
-            : null;
+    const marketStructureLabel = cleanStructureLabel(marketStructure);
+
+    // V11.5 §2 (contexto multitemporal): estrutura real do timeframe maior
+    // (1H), mesma engine graduada, cacheada em engine-bridge.ts. Confluência
+    // é só uma comparação honesta dos dois rótulos reais — nunca um sinal
+    // novo, nunca escrita de volta no Core Engine.
+    const htfMarketStructureLabel = cycleOk ? cleanStructureLabel(realCycle?.htfMarketStructure) : null;
+    const htfTimeframe = cycleOk ? (realCycle?.htfTimeframe ?? null) : null;
+    const timeframeConfluence: "CONFLUENTE" | "DIVERGENTE" | null =
+      marketStructureLabel && htfMarketStructureLabel && marketStructureLabel !== "LATERAL" && htfMarketStructureLabel !== "LATERAL"
+        ? marketStructureLabel === htfMarketStructureLabel
+          ? "CONFLUENTE"
+          : "DIVERGENTE"
+        : null;
+
     const support = cycleOk ? (realCycle?.support ?? null) : null;
     const resistance = cycleOk ? (realCycle?.resistance ?? null) : null;
 
@@ -677,6 +691,9 @@ export default function App() {
       moveToTargetPct,
       volatilityPct,
       flowImbalance,
+      htfMarketStructureLabel,
+      htfTimeframe,
+      timeframeConfluence,
     };
   }, [priceData, orderBook, realCycle, chartData, orderflowSignals]);
 
@@ -3035,6 +3052,19 @@ function MarketRegimeWidget() {
   const volLabel = volPct === null ? AWAIT : `${volPct.toFixed(2)}%`;
   const volColor = volPct === null ? "text-[#8ab4f8]" : volPct > 1.5 ? "text-[#ff0055]" : volPct > 0.6 ? "text-[#f0d06f]" : "text-[#00ffaa]";
 
+  // V11.5 §2 (contexto multitemporal): compara a estrutura de 15m (acima)
+  // com a de 1H, real, cacheada em engine-bridge.ts — não uma duplicata da
+  // linha TENDÊNCIA, é uma pergunta diferente ("os dois prazos concordam?").
+  const htfLabel = engine?.htfMarketStructureLabel ?? AWAIT;
+  const confluenceLabel =
+    engine?.timeframeConfluence ?? (engine?.htfMarketStructureLabel ? "LATERAL/MISTO" : AWAIT);
+  const confluenceColor =
+    engine?.timeframeConfluence === "CONFLUENTE"
+      ? "text-[#00ffaa]"
+      : engine?.timeframeConfluence === "DIVERGENTE"
+        ? "text-[#f0d06f]"
+        : "text-[#8ab4f8]";
+
   const Row = ({ label, value, valueClass }: { label: string; value: string; valueClass: string }) => (
     <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
       <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">{label}</span>
@@ -3052,7 +3082,9 @@ function MarketRegimeWidget() {
           rows with no way to reach them). ScannerWidget already uses this
           exact pattern for the same reason. */}
       <div className="flex flex-col gap-1.5 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
-        <Row label="TENDÊNCIA (ESTRUTURA)" value={trendLabel} valueClass={trendColor} />
+        <Row label="TENDÊNCIA (ESTRUTURA 15M)" value={trendLabel} valueClass={trendColor} />
+        <Row label={`ESTRUTURA ${engine?.htfTimeframe?.toUpperCase() ?? "1H"}`} value={htfLabel} valueClass="text-[#8ab4f8]" />
+        <Row label="CONFLUÊNCIA MULTI-TF" value={confluenceLabel} valueClass={confluenceColor} />
         <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
         <Row label="VOLATILIDADE" value={volLabel} valueClass={volColor} />
       </div>

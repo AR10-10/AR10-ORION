@@ -21,6 +21,7 @@ import { buildTargetTracker } from '../../js/research/target-tracker.js';
 import { startLiquidationStream } from '../../js/real-data/binance-liquidations-stream.js';
 import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg-order-block-engine.js';
 import { classify as classifyLorentzian } from '../../src/research/engines/lorentzian-classifier.js';
+import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
 
 export interface RealCandle {
   t: number;
@@ -65,6 +66,12 @@ export interface RealCycleResult {
   // support-resistance-engine.js), não uma projeção.
   riskRewardRatio?: number | null;
   target2Strength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
+  // V11.5 §2 (Evolução Matemática — "melhorar contexto multitemporal"):
+  // estrutura real de um timeframe MAIOR (1H), para o operador ver se o
+  // sinal de 15m está confluente ou divergente com a tendência de prazo
+  // mais longo. Nunca lido pelo Core Engine — puramente contexto exibido.
+  htfMarketStructure?: string | null;
+  htfTimeframe?: string | null;
 }
 
 let workerClientSingleton: any = null;
@@ -96,6 +103,40 @@ const describeError = (err: any): string => {
   }
   return String(err?.message || err);
 };
+
+// V11.5 §2 "Evolução Matemática" (melhorar contexto multitemporal): estrutura
+// real de um timeframe MAIOR (1H) via o MESMO market-structure-engine.js já
+// graduado — só chamado com uma janela de candles diferente, não uma segunda
+// heurística. Cacheado por HTF_REFRESH_MS: o ciclo principal roda a cada 30s
+// (App.tsx), mas a estrutura de 1H não muda de forma significativa nesse
+// intervalo — rebuscar a cada ciclo seria uma chamada de rede redundante sem
+// nenhum ganho real de informação (Meta Máxima: mínimo consumo de recursos).
+// Qualquer falha aqui (rede, conector) fica isolada: nunca propaga para o
+// ciclo principal de 15m, que continua funcionando normalmente sem isso.
+const HTF_INTERVAL = '1h';
+const HTF_REFRESH_MS = 5 * 60_000;
+let htfCache: { symbol: string; structureLabel: string | null; fetchedAt: number } | null = null;
+
+async function getHtfMarketStructure(symbol: string): Promise<string | null> {
+  const now = Date.now();
+  if (htfCache && htfCache.symbol === symbol && now - htfCache.fetchedAt < HTF_REFRESH_MS) {
+    return htfCache.structureLabel;
+  }
+  try {
+    const htfProbe = await probeBinance({ symbol, interval: HTF_INTERVAL, limit: 60 });
+    if (htfProbe.state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) {
+      htfCache = { symbol, structureLabel: null, fetchedAt: now };
+      return null;
+    }
+    const structureResult = analyzeMarketStructure({ ohlcv_series: htfProbe.evidence.candles, timeframe: HTF_INTERVAL });
+    const label = structureResult.status === 'OK' ? structureResult.structure_label : null;
+    htfCache = { symbol, structureLabel: label, fetchedAt: now };
+    return label;
+  } catch {
+    htfCache = { symbol, structureLabel: null, fetchedAt: now };
+    return null;
+  }
+}
 
 // One full real cycle: real Binance probe -> real WASM analysis frame ->
 // real research engine -> real trade-setup-matrix + target-tracker. This is
@@ -154,6 +195,9 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
     const lorentzian = computeLorentzianClassification(evidence.candles);
     // Previsão multi-horizonte (4/8/16 velas) sobre os MESMOS candles reais.
     const forecast = computeMultiHorizonForecast(evidence.candles);
+    // getHtfMarketStructure() já é internamente fail-closed (nunca rejeita);
+    // uma falha na sonda de 1H vira null aqui, nunca afeta o ok:true abaixo.
+    const htfMarketStructure = await getHtfMarketStructure(symbol);
 
     return {
       ok: true,
@@ -174,6 +218,8 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
       rationale: typeof matrix.rationale === 'string' ? matrix.rationale : null,
       riskRewardRatio: route && isNum(route.risk_reward_ratio) ? route.risk_reward_ratio : null,
       target2Strength: route && route.target_2_strength ? route.target_2_strength : null,
+      htfMarketStructure,
+      htfTimeframe: HTF_INTERVAL,
     };
   } catch (err: any) {
     return { ok: false, reason: `pipeline_de_pesquisa_falhou: ${describeError(err)}` };
