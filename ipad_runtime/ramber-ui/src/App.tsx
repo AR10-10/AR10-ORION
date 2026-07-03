@@ -237,6 +237,7 @@ export default function App() {
     tactical: { visible: false, floating: false },
     market_regime: { visible: true, floating: false },
     asset_heatmap: { visible: true, floating: false },
+    decision_validation: { visible: true, floating: false },
   };
   const [widgets, setWidgets] = useState<{
     [key: string]: { visible: boolean; floating: boolean };
@@ -942,7 +943,8 @@ export default function App() {
                     widgets.gmil_context.visible ||
                     widgets.neural_core.visible ||
                     widgets.market_regime.visible ||
-                    widgets.asset_heatmap.visible) && (
+                    widgets.asset_heatmap.visible ||
+                    widgets.decision_validation.visible) && (
                     <div className="flex-[0.95] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[330px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
                       <OrderBookWidget data={priceData} book={orderBook} />
                       <GmilContextWidget />
@@ -952,7 +954,8 @@ export default function App() {
                         widgets.events.visible ||
                         widgets.neural_core.visible ||
                         widgets.market_regime.visible ||
-                        widgets.asset_heatmap.visible) && (
+                        widgets.asset_heatmap.visible ||
+                        widgets.decision_validation.visible) && (
                         <button
                           type="button"
                           onClick={() => setAdvancedOpen((v) => !v)}
@@ -965,6 +968,7 @@ export default function App() {
                       {advancedOpen && (
                         <>
                           <MarketRegimeWidget />
+                          <DecisionValidationWidget />
                           <AssetHeatmapWidget />
                           <ScannerWidget data={scannerData} />
                           <ExposureWidget />
@@ -1025,6 +1029,7 @@ const WIDGET_LABELS: { [key: string]: string } = {
   tactical: "LIQUIDAÇÕES INSTITUCIONAIS · REAL",
   market_regime: "REGIME DE MERCADO",
   asset_heatmap: "HEATMAP · ATIVOS",
+  decision_validation: "VALIDAÇÃO MULTI-CAMADA",
 };
 
 function ConfigPanel() {
@@ -3124,6 +3129,85 @@ function AssetHeatmapWidget() {
             </div>
           );
         })}
+      </div>
+    </Widget>
+  );
+}
+
+// --- DECISION VALIDATION (V11.1 LEI 24) ---
+// IMPORTANTE: isto é um painel de CONFLUÊNCIA/TRANSPARÊNCIA, não um portão.
+// A LEI 24 pede para "validar" liquidez/volatilidade/consenso/fluxo/
+// estrutura/multi-timeframe/etc. "antes do Core Engine emitir LONG/SHORT" —
+// mas implementar isso literalmente (suprimir ou adiar o sinal se alguma
+// checagem falhar) violaria a restrição permanente e repetida em TODO
+// protocolo desta sessão, incluindo a própria LEI 27 deste protocolo:
+// "O Core Engine permanece absolutamente preservado" e "nenhuma fonte pode
+// alterar a decisão do Core Engine". A leitura que reconcilia as duas coisas
+// sem contradição: este painel mostra, para o sinal que o Core Engine JÁ
+// emitiu, quais das dimensões reais estão disponíveis agora — puro contexto
+// exibido, nunca um gatilho. O operador vê a confluência; a decisão em si
+// nunca é atrasada, escondida ou alterada por esta camada.
+//
+// Cada linha reflete DISPONIBILIDADE de um dado real já computado em outro
+// lugar desta sessão (engine useMemo / institutionalConsensus / GMIL) — zero
+// fetch novo, zero cálculo duplicado. "Consenso entre corretoras" é
+// honestamente NÃO_APLICAVEL: este terminal só tem uma fonte real de preço
+// (Binance); fabricar um consenso multi-exchange que não existe violaria o
+// princípio de dado real deste projeto. "Integridade dos dados" não vira uma
+// linha aqui de propósito — já é a faixa "DADOS n/4" sempre visível da
+// EssentialStrip; repetir o mesmo cálculo aqui seria a exata duplicação que
+// a LEI 25 (Self Audit) pede para eliminar, não para criar.
+function DecisionValidationWidget() {
+  const { engine, institutionalConsensus, gmilProviders } = useContext(WidgetContext) || {};
+
+  const checks: { label: string; available: boolean | null }[] = [
+    { label: "Liquidez (Livro de Ofertas)", available: !!engine?.hasBook },
+    { label: "Volatilidade", available: num(engine?.volatilityPct) },
+    { label: "Contexto Global (Consenso)", available: num(institutionalConsensus?.score) },
+    { label: "Consenso Entre Corretoras", available: null }, // null = NÃO_APLICAVEL, nunca fabricado
+    { label: "Fluxo Institucional (OFI)", available: num(engine?.flowImbalance) },
+    { label: "Força do Alvo Estrutural", available: !!engine?.target2Strength },
+    { label: "Estrutura de Mercado", available: !!engine?.marketStructureLabel },
+    { label: "Multi-Timeframe (15M/1H)", available: !!engine?.timeframeConfluence },
+    {
+      label: "Qualidade das Fontes (GMIL)",
+      available: Array.isArray(gmilProviders) && gmilProviders.some((p: any) => p.weight > 0),
+    },
+    { label: "Confidence Score (Core Engine)", available: !!engine?.confidence },
+  ];
+  const availableCount = checks.filter((c) => c.available === true).length;
+  const applicableCount = checks.filter((c) => c.available !== null).length;
+
+  return (
+    <Widget id="decision_validation" title="VALIDAÇÃO MULTI-CAMADA" flex="flex-[1.1] min-h-[210px]">
+      <div className="flex flex-col gap-1 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
+        <div className="flex justify-between items-center bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0">
+          <span className="text-[0.45rem] text-[#8ab4f8]/80 font-bold tracking-widest">
+            CONFLUÊNCIA · CONTEXTO DO SINAL ATUAL
+          </span>
+          <span className="text-[0.55rem] font-mono font-black text-[#00f0ff]">
+            {availableCount}/{applicableCount}
+          </span>
+        </div>
+        {checks.map((c) => (
+          <div
+            key={c.label}
+            className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+          >
+            <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">{c.label}</span>
+            <span
+              className={`text-[0.5rem] font-mono font-black ${
+                c.available === null
+                  ? "text-[#8ab4f8]/40"
+                  : c.available
+                    ? "text-[#00ffaa]"
+                    : "text-[#f0d06f]"
+              }`}
+            >
+              {c.available === null ? "NÃO_APLICÁVEL" : c.available ? "✓ REAL" : AWAIT}
+            </span>
+          </div>
+        ))}
       </div>
     </Widget>
   );
