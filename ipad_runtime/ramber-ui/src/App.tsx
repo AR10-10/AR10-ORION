@@ -594,6 +594,20 @@ export default function App() {
     const stop = cycleOk ? (realCycle?.stop ?? null) : null;
     const confidence = cycleOk ? (realCycle?.confidence ?? null) : null;
     const marketStructure = cycleOk ? (realCycle?.marketStructure ?? null) : null;
+    // Clean label for marketStructure's raw internal string, computed once
+    // here instead of re-derived by every consumer (AssistantOrb's
+    // ESTRUTURA row, MarketRegimeWidget's TENDÊNCIA row). Values verified
+    // directly against src/research/engines/market-structure-engine.js —
+    // ESTRUTURA_ALTA/ESTRUTURA_BAIXA/ESTRUTURA_LATERAL are the only 3 it
+    // ever returns.
+    const marketStructureLabel =
+      marketStructure === "ESTRUTURA_ALTA"
+        ? "ALTA"
+        : marketStructure === "ESTRUTURA_BAIXA"
+          ? "BAIXA"
+          : marketStructure === "ESTRUTURA_LATERAL"
+            ? "LATERAL"
+            : null;
     const support = cycleOk ? (realCycle?.support ?? null) : null;
     const resistance = cycleOk ? (realCycle?.resistance ?? null) : null;
 
@@ -634,6 +648,7 @@ export default function App() {
       stop,
       confidence,
       marketStructure,
+      marketStructureLabel,
       support,
       resistance,
       moveToTargetPct,
@@ -1266,13 +1281,13 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                         {fmt(engine?.support ?? null)}
                       </span>
                     </div>
-                    {engine?.marketStructure && (
+                    {engine?.marketStructureLabel && (
                       <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff20]">
                         <span className="text-[0.5rem] text-[#00f0ff]/80 font-bold tracking-widest">
                           ESTRUTURA
                         </span>
                         <span className="text-[0.55rem] text-white font-mono">
-                          {engine.marketStructure}
+                          {engine.marketStructureLabel}
                         </span>
                       </div>
                     )}
@@ -2881,7 +2896,13 @@ function GmilContextWidget() {
       flex="flex-[0.9] min-h-[190px]"
       extraHeader={<Globe size={12} className="text-[#00f0ff60]" />}
     >
-      <div className="flex flex-col h-full gap-1.5 px-1 py-1">
+      {/* overflow-y-auto: this panel now shares its column with 2 more
+          widgets than when it was built (Market Regime + Asset Heatmap),
+          and flex-grow can shrink it below its 2-providers' natural
+          content height in landscape mode — without this, a crowded
+          column would silently clip provider rows with no way to reach
+          them (confirmed on MarketRegimeWidget in this same audit pass). */}
+      <div className="flex flex-col gap-1.5 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
         <div className="flex justify-between items-center bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20]">
           <span className="text-[0.5rem] text-[#8ab4f8]/80 font-bold tracking-widest">
             CONSENSO GLOBAL · CONSULTIVO
@@ -2937,62 +2958,38 @@ function GmilContextWidget() {
 }
 
 // --- MARKET REGIME (V11 §13) ---
-// Every field here is a passthrough or trivial derivation of state already
-// computed elsewhere (engine useMemo, GMIL consensus, voice snapshot) —
-// nothing new is fetched or invented. marketStructure's exact values
-// (ESTRUTURA_ALTA/ESTRUTURA_BAIXA/ESTRUTURA_LATERAL) are verified directly
-// against src/research/engines/market-structure-engine.js rather than
-// guessed, so the color-coding below can never silently mismatch reality.
+// Every field is a passthrough or trivial derivation of state already
+// computed in the `engine` useMemo — nothing new is fetched or invented.
+//
+// Self-audit finding (this charter's "mínima redundância de informações",
+// already stated once before in V11 §9): this widget originally had 6
+// rows, but Liquidez/Risco/Macro were EXACT duplicates of EssentialStrip's
+// always-visible chips — same source field, same formula, same rounding —
+// with Macro additionally repeated a THIRD time in GmilContextWidget's own
+// "CONSENSO GLOBAL" row a few pixels away in the same column. Pruned to
+// the 3 fields with no existing representation anywhere else: Tendência
+// (engine.marketStructureLabel — the SAME clean label AssistantOrb's
+// ESTRUTURA row now also uses, computed once in the engine useMemo, not
+// re-derived here), Momentum (CVD's direction as a label — CVD's raw
+// number is shown in OrderFlowWidget, but not this label), Volatilidade
+// (genuinely new).
 function MarketRegimeWidget() {
-  const { engine, cvd, voiceSnapshot } = useContext(WidgetContext) || {};
-  const { consensus } = useGmilSnapshot();
+  const { engine, cvd } = useContext(WidgetContext) || {};
 
-  const structure: string | null = engine?.marketStructure ?? null;
-  const trendLabel =
-    structure === "ESTRUTURA_ALTA"
-      ? "ALTA"
-      : structure === "ESTRUTURA_BAIXA"
-        ? "BAIXA"
-        : structure === "ESTRUTURA_LATERAL"
-          ? "LATERAL"
-          : AWAIT;
+  const trendLabel = engine?.marketStructureLabel ?? AWAIT;
   const trendColor =
-    structure === "ESTRUTURA_ALTA"
+    engine?.marketStructureLabel === "ALTA"
       ? "text-[#00ffaa]"
-      : structure === "ESTRUTURA_BAIXA"
+      : engine?.marketStructureLabel === "BAIXA"
         ? "text-[#ff0055]"
         : "text-[#8ab4f8]";
 
   const momentumLabel = !num(cvd) || cvd === 0 ? AWAIT : cvd > 0 ? "COMPRADOR" : "VENDEDOR";
   const momentumColor = !num(cvd) || cvd === 0 ? "text-[#8ab4f8]" : cvd > 0 ? "text-[#00ffaa]" : "text-[#ff0055]";
 
-  const liqPct = num(engine?.buyPercent) ? Math.round(engine.buyPercent) : null;
-  const liqLabel = liqPct === null ? AWAIT : `${liqPct}% BID`;
-  const liqColor = liqPct === null ? "text-[#8ab4f8]" : liqPct >= 50 ? "text-[#00ffaa]" : "text-[#ff0055]";
-
   const volPct = num(engine?.volatilityPct) ? engine.volatilityPct : null;
   const volLabel = volPct === null ? AWAIT : `${volPct.toFixed(2)}%`;
   const volColor = volPct === null ? "text-[#8ab4f8]" : volPct > 1.5 ? "text-[#ff0055]" : volPct > 0.6 ? "text-[#f0d06f]" : "text-[#00ffaa]";
-
-  const direction: Direction = engine?.direction ?? null;
-  const stopDistPct =
-    direction && num(engine?.stop) && num(engine?.price) && engine.price !== 0
-      ? Math.abs(((engine.price - engine.stop) / engine.price) * 100)
-      : null;
-  const liqCount = voiceSnapshot?.recentLiquidationCount ?? 0;
-  const riskLabel = stopDistPct !== null ? `STOP ${stopDistPct.toFixed(2)}%` : liqCount > 0 ? `${liqCount} LIQ.` : AWAIT;
-  const riskColor = stopDistPct !== null ? "text-[#f0d06f]" : liqCount > 0 ? "text-[#ff0055]" : "text-[#8ab4f8]";
-
-  const macroLabel =
-    consensus.score === null ? AWAIT : `${consensus.score >= 0 ? "+" : ""}${(consensus.score * 100).toFixed(0)}`;
-  const macroColor =
-    consensus.score === null
-      ? "text-[#8ab4f8]"
-      : consensus.score > 0.1
-        ? "text-[#00ffaa]"
-        : consensus.score < -0.1
-          ? "text-[#ff0055]"
-          : "text-[#8ab4f8]";
 
   const Row = ({ label, value, valueClass }: { label: string; value: string; valueClass: string }) => (
     <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
@@ -3003,13 +3000,17 @@ function MarketRegimeWidget() {
 
   return (
     <Widget id="market_regime" title="REGIME DE MERCADO" flex="flex-[0.9] min-h-[190px]">
-      <div className="flex flex-col h-full gap-1.5 px-1 py-1">
-        <Row label="TENDÊNCIA" value={trendLabel} valueClass={trendColor} />
+      {/* overflow-y-auto here is a hard requirement, not decoration: in
+          landscape mode min-[1120px]:min-h-0 lets flex-grow shrink this
+          panel below its natural content height when the column gets
+          crowded (confirmed via measurement: shrank to 74px with 6+
+          sibling widgets competing for the same column, clipping 2 of 3
+          rows with no way to reach them). ScannerWidget already uses this
+          exact pattern for the same reason. */}
+      <div className="flex flex-col gap-1.5 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
+        <Row label="TENDÊNCIA (ESTRUTURA)" value={trendLabel} valueClass={trendColor} />
         <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
-        <Row label="LIQUIDEZ" value={liqLabel} valueClass={liqColor} />
         <Row label="VOLATILIDADE" value={volLabel} valueClass={volColor} />
-        <Row label="RISCO" value={riskLabel} valueClass={riskColor} />
-        <Row label="MACRO (GMIL)" value={macroLabel} valueClass={macroColor} />
       </div>
     </Widget>
   );
@@ -3026,7 +3027,7 @@ function AssetHeatmapWidget() {
 
   return (
     <Widget id="asset_heatmap" title="HEATMAP · ATIVOS" flex="flex-[0.7] min-h-[150px]">
-      <div className="grid grid-cols-5 gap-1 h-full items-stretch px-1 py-1">
+      <div className="grid grid-cols-5 gap-1 h-full min-h-0 items-stretch px-1 py-1 overflow-y-auto scrollbar-hide">
         {ASSETS.map((a) => {
           const row = rows.find((r) => r.p === `${a}/USDT`);
           const dir: string | null = row?.s ?? null;
