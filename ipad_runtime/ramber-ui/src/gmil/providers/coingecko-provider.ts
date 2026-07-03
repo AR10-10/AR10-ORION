@@ -4,8 +4,14 @@
 // serve CORS aberto para uso client-side (é por isso que existe: é o
 // endpoint que dashboards de navegador em geral usam).
 //
-// Campos reais consumidos: dominância de BTC no market cap total e a
-// variação percentual do market cap total nas últimas 24h.
+// Campos reais consumidos: dominância de BTC e ETH no market cap total,
+// volume 24h agregado de todo o mercado cripto, e a variação percentual do
+// market cap total nas últimas 24h.
+//
+// V11.5 Fase 4: ethDominancePct/totalVolumeUsd24h são campos que já vinham
+// na MESMA resposta `/global` e eram descartados — nenhuma chamada de rede
+// nova, nenhum risco novo de CORS/disponibilidade. ETH dominance ganha
+// relevância real desde que o seletor de ativos passou a incluir ETH.
 //
 // lean: usa `market_cap_change_percentage_24h_usd` diretamente — uma
 // variação de ±5% no cap global em 24h satura o lean em ±1. É uma leitura
@@ -26,7 +32,10 @@ export async function fetchCoinGeckoGlobal(): Promise<ProviderFetchResult> {
     const data = json?.data;
     const btcDominancePct =
       typeof data?.market_cap_percentage?.btc === 'number' ? data.market_cap_percentage.btc : null;
+    const ethDominancePct =
+      typeof data?.market_cap_percentage?.eth === 'number' ? data.market_cap_percentage.eth : null;
     const totalMarketCapUsd = typeof data?.total_market_cap?.usd === 'number' ? data.total_market_cap.usd : null;
+    const totalVolumeUsd24h = typeof data?.total_volume?.usd === 'number' ? data.total_volume.usd : null;
     const changePct24h =
       typeof data?.market_cap_change_percentage_24h_usd === 'number' ? data.market_cap_change_percentage_24h_usd : null;
 
@@ -36,7 +45,7 @@ export async function fetchCoinGeckoGlobal(): Promise<ProviderFetchResult> {
       ok: totalMarketCapUsd !== null,
       reason: totalMarketCapUsd === null ? 'campo_total_market_cap_ausente' : undefined,
       fetchedAt,
-      fields: { btcDominancePct, totalMarketCapUsd, changePct24h },
+      fields: { btcDominancePct, ethDominancePct, totalMarketCapUsd, totalVolumeUsd24h, changePct24h },
       lean,
     };
   } catch (err: any) {

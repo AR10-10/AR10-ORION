@@ -2,7 +2,10 @@
 // providers/*.ts para os conectores reais e README.md deste diretório para
 // a lista de fontes avaliadas e por que cada uma foi aceita ou adiada.
 
-export type ProviderCategory = 'BLOCKCHAIN' | 'SENTIMENT';
+// ATTENTION (V11.5 Fase 4): sinal de atenção de mercado (o que está sendo
+// mais buscado agora), categoria distinta de SENTIMENT — "o que o mercado
+// está olhando" não é o mesmo dado que "como o mercado se sente".
+export type ProviderCategory = 'BLOCKCHAIN' | 'SENTIMENT' | 'ATTENTION';
 
 export interface ProviderFetchResult {
   ok: boolean;

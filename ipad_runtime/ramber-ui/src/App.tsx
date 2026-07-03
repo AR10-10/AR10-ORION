@@ -2880,12 +2880,16 @@ function GmilContextWidget() {
           const value = p.lastReading?.ok ? p.lastReading.fields : null;
           const summary =
             p.id === "coingecko_global" && value
-              ? `Dominância BTC ${typeof value.btcDominancePct === "number" ? value.btcDominancePct.toFixed(1) : DASH}%`
+              ? `BTC ${typeof value.btcDominancePct === "number" ? value.btcDominancePct.toFixed(1) : DASH}% · ETH ${typeof value.ethDominancePct === "number" ? value.ethDominancePct.toFixed(1) : DASH}%`
               : p.id === "fear_greed_index" && value
                 ? `${value.classification ?? DASH} (${value.value ?? DASH})`
-                : p.circuitState === "OPEN"
-                  ? "circuito aberto"
-                  : AWAIT;
+                : p.id === "trending_coins" && value
+                  ? typeof value.topSymbols === "string" && value.topSymbols
+                    ? value.topSymbols
+                    : DASH
+                  : p.circuitState === "OPEN"
+                    ? "circuito aberto"
+                    : AWAIT;
           const dotColor =
             p.circuitState === "OPEN" ? "bg-[#ff0055]" : p.weight > 0.6 ? "bg-[#00ffaa]" : "bg-[#f0d06f]";
           // Data Quality (V11 §12): disponibilidade/latência/peso/última

@@ -29,16 +29,17 @@ providers/*.ts  →  circuit-breaker.ts + quality-engine.ts  →  event-bus.ts  
   provedor (LEI 08), função pura separada do `voice-dispatcher.ts` do
   Core Engine para não misturar os dois domínios num único tipo.
 
-## Provedores ativos (2)
+## Provedores ativos (3)
 
 | Provedor | Categoria | Endpoint real | Por quê |
 |---|---|---|---|
-| `coingecko_global` | BLOCKCHAIN | `api.coingecko.com/api/v3/global` | Público, sem chave, CORS aberto. Dominância BTC + variação do market cap global 24h — contexto que nenhum feed existente (Binance/MEXC, ambos BTC/USDT-only) fornece. |
+| `coingecko_global` | BLOCKCHAIN | `api.coingecko.com/api/v3/global` | Público, sem chave, CORS aberto. Dominância BTC+ETH, volume 24h agregado do mercado cripto e variação do market cap global 24h — contexto que nenhum feed existente (Binance/MEXC, ambos por-ativo) fornece. |
 | `fear_greed_index` | SENTIMENT | `api.alternative.me/fng/` | Público, sem chave, CORS aberto. Índice de sentimento cripto mais referenciado que não exige autenticação. |
+| `trending_coins` | ATTENTION | `api.coingecko.com/api/v3/search/trending` | (V11.5 Fase 4) Mesmo host já integrado por `coingecko_global`, endpoint diferente. Top símbolos mais buscados nas últimas 24h — sinal real de atenção de mercado, categoria distinta de sentimento. `lean` é sempre `null`: "o que está sendo mais buscado" não tem direção alta/baixa inerente, e inventar uma violaria o princípio de dado real deste módulo — por isso nunca entra no `GLOBAL_CONSENSUS_SCORE`, só aparece como contexto exibido. |
 
 ## Fontes avaliadas e adiadas (com motivo real, não silenciosamente ignoradas)
 
-O protocolo V10.1 pediu ~15 fontes em 5 categorias. Só as 2 acima passam no
+O protocolo V10.1 pediu ~15 fontes em 5 categorias. Só as 3 acima passam no
 critério "funciona de verdade num PWA estático sem backend e sem segredo
 embutido". As demais:
 

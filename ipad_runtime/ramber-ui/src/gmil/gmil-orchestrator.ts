@@ -15,6 +15,7 @@ import { computeQuality } from './quality-engine';
 import { computeConsensus, type ConsensusResult } from './consensus-engine';
 import { fetchCoinGeckoGlobal } from './providers/coingecko-provider';
 import { fetchFearGreedIndex } from './providers/fear-greed-provider';
+import { fetchTrendingCoins } from './providers/trending-provider';
 import type { GmilProviderDef, ProviderFetchResult } from './types';
 
 // Fontes concretamente viáveis para uma PWA estática sem backend (ver
@@ -34,6 +35,16 @@ const PROVIDERS: GmilProviderDef[] = [
     category: 'SENTIMENT',
     intervalMs: 90_000,
     fetch: fetchFearGreedIndex,
+  },
+  {
+    id: 'trending_coins',
+    label: 'CoinGecko · Trending (24h)',
+    category: 'ATTENTION',
+    // Intervalo mais longo: trending muda devagar (é um agregado de 24h) e
+    // é o 3º provedor batendo no mesmo host de coingecko_global — espaçar
+    // reduz a chance de qualquer rate-limit público conjunto dos dois.
+    intervalMs: 180_000,
+    fetch: fetchTrendingCoins,
   },
 ];
 
