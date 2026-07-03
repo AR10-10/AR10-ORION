@@ -136,6 +136,12 @@ export default function App() {
   const [bootAt] = useState(() => Date.now());
   const [wsLive, setWsLive] = useState(false);
   const [activeTab, setActiveTab] = useState("DASHBOARD");
+  // DCI progressive disclosure (item 2): secondary panels (Scanner, Exposure,
+  // Events, Neural Core) stay collapsed by default so the first screen shows
+  // only decision-critical info. This is independent from each widget's own
+  // visible/floating toggle in SETTINGS — a widget can be "enabled" there and
+  // still start collapsed here.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Bumping bootGeneration tears down and re-runs every real boot effect
   // below (REST fetch + WS connect, engine cycle, order flow feed,
@@ -459,6 +465,11 @@ export default function App() {
   // (Binance budget is 1200/min); the k-NN + pipeline cost per cycle is
   // milliseconds. The initial call gets the same bounded retry as the REST
   // fetches above; the recurring interval keeps calling the plain version.
+  // Real timestamp of the last successful engine cycle — the "ÚLTIMA
+  // ATUALIZAÇÃO" field DCI's Essential Strip requires. Only stamped on a
+  // real ok:true resolution, never on a failed/retried attempt.
+  const [lastUpdateAt, setLastUpdateAt] = useState<number | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     const runCycle = async (): Promise<boolean> => {
@@ -466,6 +477,7 @@ export default function App() {
       if (cancelled) return true;
       setRealCycle(result);
       setEngineStatus(result.ok ? "ok" : "error");
+      if (result.ok) setLastUpdateAt(Date.now());
       return result.ok;
     };
     retryBoot(runCycle, () => cancelled);
@@ -619,11 +631,23 @@ export default function App() {
   // Alertas executivos falados: computeAlerts é pura e só reage a TRANSIÇÕES
   // reais (prev vs next) — nunca repete o mesmo estado. Fila do voice-engine
   // é assíncrona por natureza: nada aqui bloqueia render/WS/WebGPU.
+  //
+  // DCI Focus Layer (item 8): a MESMA lista de alertas dirige o pulso visual
+  // — nenhuma segunda detecção de transição é criada. Um alerta de prioridade
+  // CRITICAL/ALERT (vetor confirmado/invalidado, motor caiu, liquidação nova,
+  // divergência, absorção) acende `criticalPulse` por ~2.5s; o resto da tela
+  // perde destaque temporariamente enquanto a faixa essencial brilha.
+  const [criticalPulse, setCriticalPulse] = useState(false);
   const prevVoiceSnapshotRef = useRef<TerminalSnapshot | null>(null);
   useEffect(() => {
     const alerts = computeAlerts(prevVoiceSnapshotRef.current, voiceSnapshot);
     alerts.forEach((a) => voiceEngine.speak(a.text, a.priority));
     prevVoiceSnapshotRef.current = voiceSnapshot;
+    if (alerts.some((a) => a.priority === "CRITICAL" || a.priority === "ALERT")) {
+      setCriticalPulse(true);
+      const t = setTimeout(() => setCriticalPulse(false), 2500);
+      return () => clearTimeout(t);
+    }
   }, [voiceSnapshot]);
 
   useEffect(() => {
@@ -664,6 +688,8 @@ export default function App() {
       bootRestFailed,
       handleManualRestart,
       voiceSnapshot,
+      lastUpdateAt,
+      criticalPulse,
     }),
     [
       widgets,
@@ -683,6 +709,8 @@ export default function App() {
       bootRestFailed,
       handleManualRestart,
       voiceSnapshot,
+      lastUpdateAt,
+      criticalPulse,
     ],
   );
 
@@ -712,6 +740,12 @@ export default function App() {
           <div className="flex flex-col flex-1 p-2 gap-2 min-h-0 overflow-hidden relative">
             {activeTab === "DASHBOARD" ? (
               <>
+                {/* DCI Essential Strip (item 1): pinned above the scrollable
+                    columns, never inside them — the 8 decision-critical
+                    fields are the first and only thing visible before any
+                    scroll, on every viewport. */}
+                <EssentialStrip />
+
                 {/* 3-column cockpit only at widths where the columns' minimums
                     genuinely fit (sidebar 70 + paddings/gaps ≈ 110 + 300/360/330
                     ≈ 1100). md: (768px) fired it on iPad PORTRAIT too, cutting
@@ -719,47 +753,83 @@ export default function App() {
                     horizontal scroll. 1120 splits the real iPad matrix exactly:
                     every portrait (744/834/1024) stacks, every landscape
                     (1133/1194/1366) gets 3 columns with nothing hidden. */}
-                <div className="flex-1 flex flex-col min-[1120px]:flex-row gap-2 min-h-0 overflow-y-auto min-[1120px]:overflow-x-auto min-[1120px]:overflow-y-hidden scrollbar-hide p-1">
+                <div
+                  className={`flex-1 flex flex-col min-[1120px]:flex-row gap-2 min-h-0 overflow-y-auto min-[1120px]:overflow-x-auto min-[1120px]:overflow-y-hidden scrollbar-hide p-1 transition-opacity duration-500 ${criticalPulse ? "opacity-40" : "opacity-100"}`}
+                >
                   {/* Left Column */}
                   {(widgets.chart.visible ||
                     widgets.orderflow.visible ||
                     widgets.heatmap.visible) && (
-                    <div className="flex-[0.85] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[300px] min-h-[600px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
+                    <div className="flex-[0.85] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[300px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
                       <ChartWidget data={priceData} chartData={chartData} />
                       <OrderFlowWidget />
                       <HeatmapWidget book={orderBook} data={priceData} />
                     </div>
                   )}
 
-                  {/* Middle Column */}
+                  {/* Middle Column — the decision core (LONG/SHORT, confidence,
+                      entry/target/stop, voice) never dims during a focus pulse;
+                      it gets a highlight ring instead (see AssistantOrb/
+                      MarketDirectionWidget wrapper below).
+                      No explicit min-h-[Npx] here on purpose: with flex-basis:0
+                      (the flex-[1.15] shorthand), setting a fixed min-height
+                      would override the browser's automatic content-based
+                      minimum size and let this column's real content (which
+                      keeps growing as features are added) silently clip past
+                      the box into the next section below in stacked/portrait
+                      mode — confirmed via getBoundingClientRect: MarketDirection
+                      + AssistantOrb's own min-height already summed to more
+                      than a stale 600px floor allowed, so text overlapped the
+                      right column's OrderBookWidget. Omitting min-height lets
+                      it default to `auto`, which flexbox defines specifically
+                      to never shrink a flex item below its content's needs. */}
                   {(widgets.market_direction.visible ||
                     widgets.se_core.visible) && (
-                    <div className="flex-[1.15] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[360px] min-h-[600px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide relative z-0 shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
+                    <div
+                      className={`flex-[1.15] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[360px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide relative z-0 shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto transition-[filter] duration-500 ${criticalPulse ? "drop-shadow-[0_0_18px_rgba(0,240,255,0.5)]" : ""}`}
+                    >
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.05)_0%,transparent_60%)] pointer-events-none mix-blend-screen"></div>
                       <MarketDirectionWidget />
                       <AssistantOrb inCenter={true} />
                     </div>
                   )}
 
-                  {/* Right Column */}
+                  {/* Right Column — Liquidez (livro de ofertas) e Contexto
+                      Global (GMIL) são essenciais (DCI item 3/hierarquia 5) e
+                      ficam sempre visíveis; Scanner/Exposição/Eventos/Núcleo
+                      Neural são detalhe progressivo (DCI item 2), recolhidos
+                      por padrão. */}
                   {(widgets.orderbook.visible ||
                     widgets.scanner.visible ||
                     widgets.exposure.visible ||
                     widgets.events.visible ||
                     widgets.gmil_context.visible ||
                     widgets.neural_core.visible) && (
-                    <div className="flex-[0.95] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[330px] min-h-[600px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
-                      {/* Order book + scanner pair up side-by-side only while the
-                          column is full-width (stacked mode); inside a ~330px
-                          3-column column they'd be ~160px each — unreadable. */}
-                      <div className="flex flex-col sm:flex-row min-[1120px]:flex-col gap-2 min-h-0 flex-[0.85]">
-                        <OrderBookWidget data={priceData} book={orderBook} />
-                        <ScannerWidget data={scannerData} />
-                      </div>
-                      <ExposureWidget />
+                    <div className="flex-[0.95] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[330px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
+                      <OrderBookWidget data={priceData} book={orderBook} />
                       <GmilContextWidget />
-                      <EventsWidget />
-                      <NeuralCoreWidget />
+
+                      {(widgets.scanner.visible ||
+                        widgets.exposure.visible ||
+                        widgets.events.visible ||
+                        widgets.neural_core.visible) && (
+                        <button
+                          type="button"
+                          onClick={() => setAdvancedOpen((v) => !v)}
+                          className="shrink-0 flex items-center justify-between px-3 py-2 rounded-lg border border-[#8ab4f8]/20 bg-[#8ab4f8]/5 text-[0.5rem] tracking-[0.2em] font-bold uppercase text-[#8ab4f8] active:bg-[#8ab4f8]/10"
+                        >
+                          <span>Detalhes Avançados</span>
+                          <span className="text-[#00f0ff]">{advancedOpen ? "▲ OCULTAR" : "▼ EXPANDIR"}</span>
+                        </button>
+                      )}
+                      {advancedOpen && (
+                        <>
+                          <ScannerWidget data={scannerData} />
+                          <ExposureWidget />
+                          <EventsWidget />
+                          <NeuralCoreWidget />
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1395,7 +1465,17 @@ function TopBar({
   const oi = derivatives.openInterest;
 
   return (
-    <div className="h-[52px] border-b border-[#00f0ff20] flex items-center justify-between px-3 lg:px-6 bg-[#010308]/95 shrink-0 z-20 backdrop-blur-xl shadow-[0_2px_15px_rgba(0,0,0,0.5)]">
+    // 3-zone toolbar grid (left/center/right), not flex+absolute-center: the
+    // RAMBER wordmark used to be `absolute left-1/2`, floating on top of
+    // whatever the stats row's real width happened to be. That reserves NO
+    // space, so at exactly the width where the (xl:-only) 24H HIGH/LOW +
+    // FUNDING/OPEN INTEREST stats reached the bar's horizontal center (iPad
+    // Pro 12.9 landscape, 1366px — confirmed via getBoundingClientRect, a
+    // real ~95%/17% overlap, not a false positive), the logo painted directly
+    // over real FUNDING/OPEN INTEREST numbers. A grid's center 1fr column is
+    // an actually-reserved track — the two dynamic-width side zones can never
+    // encroach into it, so this class of overlap is structurally impossible.
+    <div className="h-[52px] border-b border-[#00f0ff20] grid grid-cols-[auto_1fr_auto] items-center px-3 lg:px-6 bg-[#010308]/95 shrink-0 z-20 backdrop-blur-xl shadow-[0_2px_15px_rgba(0,0,0,0.5)]">
       <div className="flex gap-4 md:gap-6 h-full items-center">
         <div className="flex items-center gap-3 pr-4 border-r border-[#00f0ff20] h-[70%]">
           <div className="w-8 h-8 rounded-full bg-[#f7931a] flex items-center justify-center shadow-[0_0_10px_rgba(247,147,26,0.4)]">
@@ -1452,7 +1532,7 @@ function TopBar({
         </div>
       </div>
 
-      <div className="hidden xl:flex flex-col items-center justify-center px-4 cursor-default group absolute left-1/2 -translate-x-1/2">
+      <div className="hidden xl:flex flex-col items-center justify-center px-4 cursor-default group min-w-0">
         <div className="text-xl font-black tracking-[0.3em] text-[#00f0ff] drop-shadow-[0_0_12px_rgba(0,240,255,0.8)] leading-none transition-all group-hover:drop-shadow-[0_0_20px_rgba(0,240,255,1)]">
           RAMBER
         </div>
@@ -2197,6 +2277,96 @@ function HeatmapWidget({ book, data }: any) {
   );
 }
 
+// --- DCI ESSENTIAL STRIP (item 1) ---
+// The "read in under 2 seconds" layer: Direção, Confiança, Liquidez, Risco,
+// Estado do sistema, Saúde dos dados, Preço, Última atualização — nothing
+// else. Every field is a passthrough from state the rest of the app already
+// computes (engine/voiceSnapshot/lastUpdateAt/GMIL); this component invents
+// no new number, it only elevates existing ones to constant visibility.
+function EssentialStrip() {
+  const { engine, engineStatus, voiceSnapshot, lastUpdateAt, criticalPulse } =
+    useContext(WidgetContext) || {};
+  const { consensus } = useGmilSnapshot();
+
+  const direction: Direction = engine?.direction ?? null;
+  const dirLabel = direction ?? "AGUARDANDO";
+  const dirColor =
+    direction === "LONG"
+      ? "text-[#00ffaa] border-[#00ffaa50] bg-[#00ffaa10]"
+      : direction === "SHORT"
+        ? "text-[#ff0055] border-[#ff005550] bg-[#ff005510]"
+        : "text-[#8ab4f8] border-[#8ab4f8]/30 bg-[#8ab4f8]/5";
+
+  const confidence: string | null = engine?.confidence ?? null;
+
+  const liquidezPct = num(engine?.buyPercent) ? Math.round(engine.buyPercent) : null;
+  const liquidezLabel = liquidezPct === null ? AWAIT : `BID ${liquidezPct}%`;
+  const liquidezColor = liquidezPct === null ? "text-[#8ab4f8]" : liquidezPct >= 50 ? "text-[#00ffaa]" : "text-[#ff0055]";
+
+  // Risco: distância real preço->stop quando há setup confirmado; senão
+  // conta de liquidações institucionais recentes como sinal de risco bruto.
+  const stopDistPct =
+    direction && num(engine?.stop) && num(engine?.price) && engine.price !== 0
+      ? Math.abs(((engine.price - engine.stop) / engine.price) * 100)
+      : null;
+  const liqCount = voiceSnapshot?.recentLiquidationCount ?? 0;
+  const riskLabel = stopDistPct !== null ? `STOP ${stopDistPct.toFixed(2)}%` : liqCount > 0 ? `${liqCount} LIQ.` : AWAIT;
+  const riskColor = stopDistPct !== null ? "text-[#f0d06f]" : liqCount > 0 ? "text-[#ff0055]" : "text-[#8ab4f8]";
+
+  const systemLabel = engineStatus === "ok" ? "OK" : engineStatus === "pending" ? "INICIANDO" : "FALHA";
+  const systemColor =
+    engineStatus === "ok" ? "text-[#00ffaa]" : engineStatus === "pending" ? "text-[#f0d06f]" : "text-[#ff0055]";
+
+  // Saúde dos dados: conta real de feeds independentes ativos agora mesmo.
+  const feedsUp = [
+    voiceSnapshot?.wsLive,
+    voiceSnapshot?.orderflowState === "LIVE",
+    voiceSnapshot?.liquidationState === "LIVE",
+    engineStatus === "ok",
+  ].filter(Boolean).length;
+  const dataColor = feedsUp === 4 ? "text-[#00ffaa]" : feedsUp >= 2 ? "text-[#f0d06f]" : "text-[#ff0055]";
+
+  const priceLabel = num(engine?.price) ? `$${fmt(engine.price)}` : AWAIT;
+
+  const updateLabel = lastUpdateAt
+    ? new Date(lastUpdateAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : AWAIT;
+
+  const gmilLabel =
+    consensus.score === null ? AWAIT : `${consensus.score >= 0 ? "+" : ""}${(consensus.score * 100).toFixed(0)}`;
+
+  const Chip = ({ label, value, valueClass }: { label: string; value: string; valueClass: string }) => (
+    <div className="flex flex-col items-start gap-0.5 px-2.5 py-1.5 min-w-0">
+      <span className="text-[0.4rem] tracking-[0.2em] text-[#8ab4f8]/60 font-bold uppercase whitespace-nowrap">
+        {label}
+      </span>
+      <span className={`text-[0.62rem] font-black font-mono tracking-tight whitespace-nowrap ${valueClass}`}>
+        {value}
+      </span>
+    </div>
+  );
+
+  return (
+    <div
+      className={`shrink-0 flex flex-wrap items-stretch divide-x divide-[#8ab4f8]/10 rounded-xl border bg-[#010308]/80 backdrop-blur-md mb-2 transition-[border-color,box-shadow] duration-500 ${
+        criticalPulse
+          ? "border-[#00f0ff] shadow-[0_0_24px_rgba(0,240,255,0.35)]"
+          : "border-[#00f0ff20] shadow-none"
+      }`}
+    >
+      <Chip label="Direção" value={dirLabel} valueClass={`px-1.5 rounded border ${dirColor}`} />
+      <Chip label="Confiança" value={confidence ?? AWAIT} valueClass="text-white" />
+      <Chip label="Liquidez" value={liquidezLabel} valueClass={liquidezColor} />
+      <Chip label="Risco" value={riskLabel} valueClass={riskColor} />
+      <Chip label="Preço" value={priceLabel} valueClass="text-white" />
+      <Chip label="Contexto Global" value={gmilLabel} valueClass="text-[#8ab4f8]" />
+      <Chip label="Sistema" value={systemLabel} valueClass={systemColor} />
+      <Chip label="Dados" value={`${feedsUp}/4`} valueClass={dataColor} />
+      <Chip label="Última Att." value={updateLabel} valueClass="text-[#8ab4f8]/80" />
+    </div>
+  );
+}
+
 // --- MIDDLE COLUMN: DIRECTION ---
 function MarketDirectionWidget() {
   const { widgets, engine } = useContext(WidgetContext) || {};
@@ -2222,9 +2392,14 @@ function MarketDirectionWidget() {
 
   // flex-wrap + h-auto: em Split View/Slide Over (≤~500px) os três blocos
   // empilham em vez de estourar a borda direita — a altura fixa de 85px
-  // só vale quando cabem lado a lado (min-[500px]:h-[85px]).
+  // usa min-h (não h fixo): um h-[85px] fixo era MENOR que o conteúdo real
+  // dos 3 cards (padding + ícone + rótulo + valor), então o texto vazava
+  // para baixo da caixa sem esse vazamento contar para a altura medida pelo
+  // flexbox — o próximo widget (AssistantOrb) começava cedo demais e
+  // sobrepunha "PRESSÃO ASK"/"PRESSÃO BID" com "NÚCLEO DE INTELIGÊNCIA S.E."
+  // (confirmado via getBoundingClientRect, não suposição visual).
   return (
-    <div className="flex flex-wrap justify-between items-center shrink-0 z-10 relative pt-4 px-4 xl:px-8 w-full max-w-[600px] mx-auto h-auto min-[500px]:h-[85px] gap-y-2 border-b-2 border-[#00f0ff10] pb-4 mb-4 bg-gradient-to-b from-[#00f0ff08] to-transparent rounded-t-lg">
+    <div className="flex flex-wrap justify-between items-center shrink-0 z-10 relative pt-4 px-4 xl:px-8 w-full max-w-[600px] mx-auto min-h-[85px] gap-y-2 border-b-2 border-[#00f0ff10] pb-4 mb-4 bg-gradient-to-b from-[#00f0ff08] to-transparent rounded-t-lg">
       <div className="flex flex-col items-center p-3 bg-gradient-to-br from-[#00ffaa10] to-transparent border border-[#00ffaa30] rounded-lg shadow-[inset_0_0_20px_rgba(0,255,170,0.05)] transition-all flex-1 mx-2">
         <span className="text-[0.6rem] text-[#00ffaa] tracking-[0.25em] mb-[2px] font-bold">
           PRESSÃO BID
