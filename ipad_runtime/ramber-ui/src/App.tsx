@@ -92,6 +92,15 @@ const AWAIT = "AGUARDANDO";
 
 const num = (v: any): v is number => typeof v === "number" && Number.isFinite(v);
 
+// Institutional asset selector (V11 §5) — deliberately 5, not a scrollable
+// exchange-length list, to keep the terminal's operational focus. Switching
+// re-points every real feed (klines, derivatives, WS ticker/depth, order
+// flow, engine cycle) at the new symbol; engine-bridge.ts's
+// runRealAnalysisCycle/startMexcOrderflowFeed already accept a symbol
+// parameter, so this reuses that instead of a second code path.
+const ASSETS = ["BTC", "ETH", "SOL", "BNB", "XRP"] as const;
+type AssetSymbol = (typeof ASSETS)[number];
+
 const fmt = (v: number | null | undefined, d = 2) =>
   num(v)
     ? v.toLocaleString("en-US", {
@@ -152,6 +161,13 @@ export default function App() {
   // still start collapsed here.
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
+  // The currently analyzed asset. Included in the SAME effect dependency
+  // arrays as bootGeneration below — switching it tears down and re-opens
+  // the market-data WS/REST, engine cycle, and order-flow feed exactly like
+  // a manual "REINICIAR SISTEMA" does, just scoped to the new symbol
+  // instead of the same one.
+  const [selectedAsset, setSelectedAsset] = useState<AssetSymbol>("BTC");
+
   // Bumping bootGeneration tears down and re-runs every real boot effect
   // below (REST fetch + WS connect, engine cycle, order flow feed,
   // liquidation feed) — a manual "force refresh everything" trigger, not
@@ -211,6 +227,8 @@ export default function App() {
     events: { visible: true, floating: false },
     neural_core: { visible: true, floating: false },
     tactical: { visible: false, floating: false },
+    market_regime: { visible: true, floating: false },
+    asset_heatmap: { visible: true, floating: false },
   };
   const [widgets, setWidgets] = useState<{
     [key: string]: { visible: boolean; floating: boolean };
@@ -257,7 +275,7 @@ export default function App() {
   const fetchSymbolData = async (): Promise<boolean> => {
     try {
       const res = await fetch(
-        `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=15m&limit=50`,
+        `https://api.binance.com/api/v3/klines?symbol=${selectedAsset}USDT&interval=15m&limit=50`,
       );
       if (!res.ok) throw new Error(`klines HTTP ${res.status}`);
       const data = await res.json();
@@ -301,8 +319,8 @@ export default function App() {
   const fetchDerivatives = async (): Promise<boolean> => {
     try {
       const [fundingRes, oiRes] = await Promise.all([
-        fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT`),
-        fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT`),
+        fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${selectedAsset}USDT`),
+        fetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${selectedAsset}USDT`),
       ]);
       if (!fundingRes.ok || !oiRes.ok) throw new Error(`derivatives HTTP ${fundingRes.status}/${oiRes.status}`);
       const funding = await fundingRes.json();
@@ -342,6 +360,24 @@ export default function App() {
     return false;
   };
 
+  // Switching the selected asset must clear every display value scoped to
+  // the PREVIOUS asset before the new one's feeds connect — otherwise the
+  // old asset's price/candles/order book/signal/confidence would sit on
+  // screen for a moment mislabeled as the new asset's. Deliberately its own
+  // effect, scoped only to [selectedAsset] (not bootGeneration) — a manual
+  // "REINICIAR SISTEMA" on the SAME asset should keep showing last-known-
+  // good data while it reconnects, per existing fail-closed behavior; only
+  // an actual asset change should blank the screen back to AGUARDANDO.
+  useEffect(() => {
+    setPriceData(null);
+    setChartData([]);
+    setOrderBook({ bids: [], asks: [] });
+    setOrderflowSignals([]);
+    setCvd(0);
+    setRealCycle(null);
+    setEngineStatus("pending");
+  }, [selectedAsset]);
+
   useEffect(() => {
     let unmounted = false;
     (async () => {
@@ -373,10 +409,22 @@ export default function App() {
       if (pendingOrderBook) setOrderBook(pendingOrderBook);
     };
 
+    // Only the selected asset gets the millisecond-fresh WS ticker+depth
+    // feed — that's the one thing that actually needs sub-second latency
+    // (live price, order book). The other 4 assets' scanner summaries come
+    // from the 30s REST ticker refresh above, which is plenty fresh for an
+    // overview strip and avoids hardcoding a fixed subset of "the other
+    // assets" into the WS multiplex (the previous version only special-
+    // cased ETH/SOL, silently leaving BNB/XRP scanner rows WS-stale between
+    // REST ticks even though they were displayed as if live).
+    const wsSymbol = selectedAsset.toLowerCase();
+    const tickerStream = `${wsSymbol}usdt@ticker`;
+    const depthStream = `${wsSymbol}usdt@depth10@100ms`;
+
     const connect = () => {
       if (unmounted) return;
       ws = new WebSocket(
-        "wss://stream.binance.com:9443/stream?streams=btcusdt@ticker/btcusdt@depth10@100ms/ethusdt@ticker/solusdt@ticker",
+        `wss://stream.binance.com:9443/stream?streams=${tickerStream}/${depthStream}`,
       );
       ws.onopen = () => {
         setWsLive(true);
@@ -397,7 +445,7 @@ export default function App() {
         } catch {
           return; // malformed frame — drop it, keep the connection alive
         }
-        if (msg.stream === "btcusdt@ticker") {
+        if (msg.stream === tickerStream) {
           const d = msg.data;
           const currentPrice = Number(d.c);
           const open = Number(d.o);
@@ -411,7 +459,7 @@ export default function App() {
             volume: Number(d.v),
             direction: delta >= 0 ? "LONG" : "SHORT",
           });
-        } else if (msg.stream === "btcusdt@depth10@100ms") {
+        } else if (msg.stream === depthStream) {
           const d = msg.data;
           if (d.bids && d.asks) {
             pendingOrderBook = {
@@ -427,30 +475,6 @@ export default function App() {
               orderBookFlushTimer = setTimeout(flushOrderBook, ORDER_BOOK_THROTTLE_MS);
             }
           }
-        } else if (
-          msg.stream === "ethusdt@ticker" ||
-          msg.stream === "solusdt@ticker"
-        ) {
-          setScannerData((prev) => {
-            const symbolMap: any = {
-              "ethusdt@ticker": "ETH/USDT",
-              "solusdt@ticker": "SOL/USDT",
-            };
-            const targetSym = symbolMap[msg.stream];
-            if (!targetSym) return prev;
-            return prev.map((item) => {
-              if (item.p === targetSym) {
-                const change = Number(msg.data.P);
-                return {
-                  ...item,
-                  s: change > 1 ? "LONG" : change < -1 ? "SHORT" : "NEUTRAL",
-                  str: Math.min(Math.abs(change) * 20, 100),
-                  chg: change,
-                };
-              }
-              return item;
-            });
-          });
         }
       };
     };
@@ -464,7 +488,7 @@ export default function App() {
       if (orderBookFlushTimer) clearTimeout(orderBookFlushTimer);
       ws?.close();
     };
-  }, [bootGeneration]);
+  }, [bootGeneration, selectedAsset]);
 
   // Real engine cycle — WASM Quant Engine + research pipeline (engine-bridge.ts).
   // 30s cadence: the 15m candle's close evolves continuously, and the target
@@ -482,7 +506,7 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     const runCycle = async (): Promise<boolean> => {
-      const result = await runRealAnalysisCycle("BTC");
+      const result = await runRealAnalysisCycle(selectedAsset);
       if (cancelled) return true;
       setRealCycle(result);
       setEngineStatus(result.ok ? "ok" : "error");
@@ -495,7 +519,7 @@ export default function App() {
       cancelled = true;
       clearInterval(engineInterval);
     };
-  }, [bootGeneration]);
+  }, [bootGeneration, selectedAsset]);
 
   // Real MEXC trade poller -> real Order Flow Engine (engine-bridge.ts).
   // Signal list is capped to the most recent 20 — OFI/Absorption/Exhaustion
@@ -510,10 +534,10 @@ export default function App() {
         setOrderflowReason(reason ?? null);
       },
       (value) => setCvd(value),
-      "BTC",
+      selectedAsset,
     );
     return stop;
-  }, [bootGeneration]);
+  }, [bootGeneration, selectedAsset]);
 
   // Real institutional liquidation feed (Binance USDT-M Futures, public,
   // no key — engine-bridge.ts's startRealLiquidationFeed). Exchange-wide,
@@ -579,6 +603,17 @@ export default function App() {
         ? Math.abs(((target - entry) / entry) * 100)
         : null;
 
+    // Real, honest volatility proxy (Market Regime panel, V11 §13): mean
+    // (high-low)/close across the fetched candle window, as a percentage —
+    // the same idea as ATR%, computed from the exact same real klines the
+    // chart draws, not a separate/invented source.
+    const volatilityPct =
+      chartData && chartData.length > 0
+        ? (chartData.reduce((sum: number, c: any) => sum + (c.close > 0 ? (c.high - c.low) / c.close : 0), 0) /
+            chartData.length) *
+          100
+        : null;
+
     return {
       buyVolume,
       sellVolume,
@@ -602,8 +637,9 @@ export default function App() {
       support,
       resistance,
       moveToTargetPct,
+      volatilityPct,
     };
-  }, [priceData, orderBook, realCycle]);
+  }, [priceData, orderBook, realCycle, chartData]);
 
   // IRON-VOICE: espelho somente-leitura do estado real para a camada de voz
   // (src/voice/). Mesmos campos que a UI renderiza — nenhum valor novo é
@@ -699,6 +735,9 @@ export default function App() {
       voiceSnapshot,
       lastUpdateAt,
       criticalPulse,
+      selectedAsset,
+      setSelectedAsset,
+      scannerData,
     }),
     [
       widgets,
@@ -720,6 +759,8 @@ export default function App() {
       voiceSnapshot,
       lastUpdateAt,
       criticalPulse,
+      selectedAsset,
+      scannerData,
     ],
   );
 
@@ -813,7 +854,9 @@ export default function App() {
                     widgets.exposure.visible ||
                     widgets.events.visible ||
                     widgets.gmil_context.visible ||
-                    widgets.neural_core.visible) && (
+                    widgets.neural_core.visible ||
+                    widgets.market_regime.visible ||
+                    widgets.asset_heatmap.visible) && (
                     <div className="flex-[0.95] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[330px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
                       <OrderBookWidget data={priceData} book={orderBook} />
                       <GmilContextWidget />
@@ -821,7 +864,9 @@ export default function App() {
                       {(widgets.scanner.visible ||
                         widgets.exposure.visible ||
                         widgets.events.visible ||
-                        widgets.neural_core.visible) && (
+                        widgets.neural_core.visible ||
+                        widgets.market_regime.visible ||
+                        widgets.asset_heatmap.visible) && (
                         <button
                           type="button"
                           onClick={() => setAdvancedOpen((v) => !v)}
@@ -833,6 +878,8 @@ export default function App() {
                       )}
                       {advancedOpen && (
                         <>
+                          <MarketRegimeWidget />
+                          <AssetHeatmapWidget />
                           <ScannerWidget data={scannerData} />
                           <ExposureWidget />
                           <EventsWidget />
@@ -878,7 +925,7 @@ export default function App() {
 // dashboard, so SETTINGS and the cockpit never disagree about what a
 // module is called (no raw internal keys like "se_core" shown to the user).
 const WIDGET_LABELS: { [key: string]: string } = {
-  chart: "GRÁFICO BTC/USDT · BINANCE SPOT",
+  chart: "GRÁFICO · BINANCE SPOT",
   orderflow: "FLUXO DE ORDENS · LIVRO REAL",
   heatmap: "MAPA DE LIQUIDEZ · PROFUNDIDADE REAL",
   market_direction: "VETOR DE MERCADO",
@@ -890,6 +937,8 @@ const WIDGET_LABELS: { [key: string]: string } = {
   events: "TELEMETRIA DE EVENTOS",
   neural_core: "NÚCLEO NEURAL · LLAMA 3 (LOCAL) + SÍNTESE",
   tactical: "LIQUIDAÇÕES INSTITUCIONAIS · REAL",
+  market_regime: "REGIME DE MERCADO",
+  asset_heatmap: "HEATMAP · ATIVOS",
 };
 
 function ConfigPanel() {
@@ -1453,7 +1502,8 @@ function TopBar({
   data?: PriceState | null;
   derivatives: DerivativesState;
 }) {
-  const { wsLive, bootAt, handleManualRestart } = useContext(WidgetContext) || {};
+  const { wsLive, bootAt, handleManualRestart, selectedAsset, setSelectedAsset } =
+    useContext(WidgetContext) || {};
   const isPos = (data?.deltaPct ?? 0) >= 0;
   const [uptime, setUptime] = useState("");
 
@@ -1488,14 +1538,22 @@ function TopBar({
     // an actually-reserved track — the two dynamic-width side zones can never
     // encroach into it, so this class of overlap is structurally impossible.
     <div className="h-[52px] border-b border-[#00f0ff20] grid grid-cols-[auto_1fr_auto] items-center px-3 lg:px-6 bg-[#010308]/95 shrink-0 z-20 backdrop-blur-xl shadow-[0_2px_15px_rgba(0,0,0,0.5)]">
-      <div className="flex gap-4 md:gap-6 h-full items-center">
-        <div className="flex items-center gap-3 pr-4 border-r border-[#00f0ff20] h-[70%]">
-          <div className="w-8 h-8 rounded-full bg-[#f7931a] flex items-center justify-center shadow-[0_0_10px_rgba(247,147,26,0.4)]">
-            <span className="text-white font-bold text-sm">₿</span>
+      <div className="flex gap-3 md:gap-5 h-full items-center">
+        <div className="flex items-center gap-3 pr-3 md:pr-4 border-r border-[#00f0ff20] h-[70%]">
+          <div
+            className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+              selectedAsset === "BTC"
+                ? "bg-[#f7931a] shadow-[0_0_10px_rgba(247,147,26,0.4)]"
+                : "bg-[#00f0ff20] border border-[#00f0ff40] shadow-[0_0_10px_rgba(0,240,255,0.2)]"
+            }`}
+          >
+            <span className="text-white font-bold text-sm">
+              {selectedAsset === "BTC" ? "₿" : selectedAsset?.[0]}
+            </span>
           </div>
-          <div className="flex flex-col">
-            <div className="text-[#a0f0ff] font-black text-sm flex items-center gap-1.5">
-              BTC/USDT{" "}
+          <div className="flex flex-col min-w-0">
+            <div className="text-[#a0f0ff] font-black text-sm flex items-center gap-1.5 whitespace-nowrap">
+              {selectedAsset}/USDT{" "}
               <span className="text-[0.5rem] bg-[#00f0ff20] text-[#00f0ff] px-1 py-0.5 rounded uppercase tracking-wider">
                 Spot
               </span>
@@ -1506,6 +1564,28 @@ function TopBar({
               {fmt(data?.price ?? null)}
             </div>
           </div>
+        </div>
+
+        {/* Institutional asset selector (V11 §5) — 5 fixed assets, not a
+            scrollable exchange-length list, per the protocol's explicit
+            "manter foco operacional" instruction. Switching re-points every
+            real feed at the new symbol (see the selectedAsset-scoped
+            effects in App()). */}
+        <div className="flex items-center gap-1 pr-3 md:pr-4 border-r border-[#00f0ff20] h-[70%]">
+          {ASSETS.map((a) => (
+            <button
+              key={a}
+              type="button"
+              onClick={() => setSelectedAsset?.(a)}
+              className={`px-1.5 md:px-2 py-1 rounded text-[0.5rem] md:text-[0.55rem] font-bold tracking-wider transition-colors ${
+                selectedAsset === a
+                  ? "bg-[#00f0ff20] text-[#00f0ff] border border-[#00f0ff40]"
+                  : "text-[#8ab4f8]/50 hover:text-[#8ab4f8] border border-transparent"
+              }`}
+            >
+              {a}
+            </button>
+          ))}
         </div>
 
         <div className="hidden lg:flex gap-4 h-full items-center">
@@ -1871,7 +1951,7 @@ function ChartWidget({ data, chartData }: any) {
   // in App() (see contextValue) against this exact candle array, shared
   // with the Neural Core widget's tactical-context prompt so both use the
   // same real counts rather than two independent computations.
-  const { smcZones } = useContext(WidgetContext) || {};
+  const { smcZones, selectedAsset } = useContext(WidgetContext) || {};
   const [zoomStep, setZoomStep] = useState(CHART_ZOOM_STEPS.length - 1);
   const visibleCount = CHART_ZOOM_STEPS[zoomStep];
   const zoomedData = chartData && chartData.length > 0 ? chartData.slice(-visibleCount) : chartData;
@@ -1948,10 +2028,10 @@ function ChartWidget({ data, chartData }: any) {
       <div className="absolute top-2 left-2 right-2 flex justify-between items-start z-10 pointer-events-none group">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded-full bg-[#f3ba2f] flex items-center justify-center text-black font-bold text-[9px] shadow-[0_0_8px_#f3ba2f]">
-            ₿
+            {selectedAsset === "BTC" ? "₿" : selectedAsset?.[0]}
           </div>
           <span className="text-white font-bold tracking-[0.15em] text-xs drop-shadow-[0_0_5px_#fff]">
-            BTC/USDT
+            {selectedAsset}/USDT
           </span>
           <span className="text-[0.45rem] text-[#8ab4f8] tracking-widest border border-[#8ab4f8]/30 px-1 rounded bg-[#010308]/50">
             BINANCE SPOT
@@ -2798,7 +2878,7 @@ function GmilContextWidget() {
     <Widget
       id="gmil_context"
       title="CONTEXTO GLOBAL · GMIL"
-      flex="flex-[0.9] min-h-[140px]"
+      flex="flex-[0.9] min-h-[190px]"
       extraHeader={<Globe size={12} className="text-[#00f0ff60]" />}
     >
       <div className="flex flex-col h-full gap-1.5 px-1 py-1">
@@ -2823,16 +2903,147 @@ function GmilContextWidget() {
                   : AWAIT;
           const dotColor =
             p.circuitState === "OPEN" ? "bg-[#ff0055]" : p.weight > 0.6 ? "bg-[#00ffaa]" : "bg-[#f0d06f]";
+          // Data Quality (V11 §12): disponibilidade/latência/peso/última
+          // atualização por provedor — reaproveita os mesmos campos que a
+          // linha acima já busca (circuitState/lastLatencyMs/weight/
+          // lastSuccessAt já existem em ProviderRuntimeSnapshot), então isto
+          // é uma segunda LINHA da mesma lista existente, não um painel
+          // duplicado listando os mesmos 2 provedores de novo.
+          const ageSec = p.lastSuccessAt ? Math.round((Date.now() - p.lastSuccessAt) / 1000) : null;
+          const ageLabel = ageSec === null ? AWAIT : ageSec < 60 ? `${ageSec}s` : `${Math.round(ageSec / 60)}min`;
+          const latencyLabel = num(p.lastLatencyMs) ? `${Math.round(p.lastLatencyMs)}ms` : AWAIT;
           return (
             <div
               key={p.id}
-              className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+              className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
             >
-              <span className="flex items-center gap-1.5 text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide truncate">
-                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`}></span>
-                {p.label}
-              </span>
-              <span className="text-[0.45rem] text-white font-mono shrink-0 ml-1">{summary}</span>
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-1.5 text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide truncate">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`}></span>
+                  {p.label}
+                </span>
+                <span className="text-[0.45rem] text-white font-mono shrink-0 ml-1">{summary}</span>
+              </div>
+              <div className="flex justify-between items-center text-[0.4rem] text-[#8ab4f8]/40 font-mono pl-3">
+                <span>{p.circuitState} · {latencyLabel} · att. há {ageLabel}</span>
+                <span>peso {Math.round(p.weight * 100)}%</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Widget>
+  );
+}
+
+// --- MARKET REGIME (V11 §13) ---
+// Every field here is a passthrough or trivial derivation of state already
+// computed elsewhere (engine useMemo, GMIL consensus, voice snapshot) —
+// nothing new is fetched or invented. marketStructure's exact values
+// (ESTRUTURA_ALTA/ESTRUTURA_BAIXA/ESTRUTURA_LATERAL) are verified directly
+// against src/research/engines/market-structure-engine.js rather than
+// guessed, so the color-coding below can never silently mismatch reality.
+function MarketRegimeWidget() {
+  const { engine, cvd, voiceSnapshot } = useContext(WidgetContext) || {};
+  const { consensus } = useGmilSnapshot();
+
+  const structure: string | null = engine?.marketStructure ?? null;
+  const trendLabel =
+    structure === "ESTRUTURA_ALTA"
+      ? "ALTA"
+      : structure === "ESTRUTURA_BAIXA"
+        ? "BAIXA"
+        : structure === "ESTRUTURA_LATERAL"
+          ? "LATERAL"
+          : AWAIT;
+  const trendColor =
+    structure === "ESTRUTURA_ALTA"
+      ? "text-[#00ffaa]"
+      : structure === "ESTRUTURA_BAIXA"
+        ? "text-[#ff0055]"
+        : "text-[#8ab4f8]";
+
+  const momentumLabel = !num(cvd) || cvd === 0 ? AWAIT : cvd > 0 ? "COMPRADOR" : "VENDEDOR";
+  const momentumColor = !num(cvd) || cvd === 0 ? "text-[#8ab4f8]" : cvd > 0 ? "text-[#00ffaa]" : "text-[#ff0055]";
+
+  const liqPct = num(engine?.buyPercent) ? Math.round(engine.buyPercent) : null;
+  const liqLabel = liqPct === null ? AWAIT : `${liqPct}% BID`;
+  const liqColor = liqPct === null ? "text-[#8ab4f8]" : liqPct >= 50 ? "text-[#00ffaa]" : "text-[#ff0055]";
+
+  const volPct = num(engine?.volatilityPct) ? engine.volatilityPct : null;
+  const volLabel = volPct === null ? AWAIT : `${volPct.toFixed(2)}%`;
+  const volColor = volPct === null ? "text-[#8ab4f8]" : volPct > 1.5 ? "text-[#ff0055]" : volPct > 0.6 ? "text-[#f0d06f]" : "text-[#00ffaa]";
+
+  const direction: Direction = engine?.direction ?? null;
+  const stopDistPct =
+    direction && num(engine?.stop) && num(engine?.price) && engine.price !== 0
+      ? Math.abs(((engine.price - engine.stop) / engine.price) * 100)
+      : null;
+  const liqCount = voiceSnapshot?.recentLiquidationCount ?? 0;
+  const riskLabel = stopDistPct !== null ? `STOP ${stopDistPct.toFixed(2)}%` : liqCount > 0 ? `${liqCount} LIQ.` : AWAIT;
+  const riskColor = stopDistPct !== null ? "text-[#f0d06f]" : liqCount > 0 ? "text-[#ff0055]" : "text-[#8ab4f8]";
+
+  const macroLabel =
+    consensus.score === null ? AWAIT : `${consensus.score >= 0 ? "+" : ""}${(consensus.score * 100).toFixed(0)}`;
+  const macroColor =
+    consensus.score === null
+      ? "text-[#8ab4f8]"
+      : consensus.score > 0.1
+        ? "text-[#00ffaa]"
+        : consensus.score < -0.1
+          ? "text-[#ff0055]"
+          : "text-[#8ab4f8]";
+
+  const Row = ({ label, value, valueClass }: { label: string; value: string; valueClass: string }) => (
+    <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
+      <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">{label}</span>
+      <span className={`text-[0.5rem] font-mono font-black ${valueClass}`}>{value}</span>
+    </div>
+  );
+
+  return (
+    <Widget id="market_regime" title="REGIME DE MERCADO" flex="flex-[0.9] min-h-[190px]">
+      <div className="flex flex-col h-full gap-1.5 px-1 py-1">
+        <Row label="TENDÊNCIA" value={trendLabel} valueClass={trendColor} />
+        <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
+        <Row label="LIQUIDEZ" value={liqLabel} valueClass={liqColor} />
+        <Row label="VOLATILIDADE" value={volLabel} valueClass={volColor} />
+        <Row label="RISCO" value={riskLabel} valueClass={riskColor} />
+        <Row label="MACRO (GMIL)" value={macroLabel} valueClass={macroColor} />
+      </div>
+    </Widget>
+  );
+}
+
+// --- ASSET HEATMAP (V11 §14) ---
+// Reuses scannerData as-is — the SAME 24h-ticker REST call every viewer of
+// the Quant Scanner already relies on, fetched once every 30s in App(). No
+// new API call, no new provider, no second source of truth for the same 5
+// symbols.
+function AssetHeatmapWidget() {
+  const { scannerData } = useContext(WidgetContext) || {};
+  const rows: any[] = Array.isArray(scannerData) ? scannerData : [];
+
+  return (
+    <Widget id="asset_heatmap" title="HEATMAP · ATIVOS" flex="flex-[0.7] min-h-[150px]">
+      <div className="grid grid-cols-5 gap-1 h-full items-stretch px-1 py-1">
+        {ASSETS.map((a) => {
+          const row = rows.find((r) => r.p === `${a}/USDT`);
+          const dir: string | null = row?.s ?? null;
+          const chg: number | null = num(row?.chg) ? row.chg : null;
+          const bg =
+            dir === "LONG"
+              ? "bg-[#00ffaa15] border-[#00ffaa40] text-[#00ffaa]"
+              : dir === "SHORT"
+                ? "bg-[#ff005515] border-[#ff005540] text-[#ff0055]"
+                : "bg-[#8ab4f810] border-[#8ab4f830] text-[#8ab4f8]";
+          return (
+            <div
+              key={a}
+              className={`flex flex-col items-center justify-center gap-0.5 rounded border ${bg}`}
+            >
+              <span className="text-[0.45rem] font-black tracking-wider">{a}</span>
+              <span className="text-[0.4rem] font-mono">{chg !== null ? fmtSignedPct(chg) : AWAIT}</span>
             </div>
           );
         })}
