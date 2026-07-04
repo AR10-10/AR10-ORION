@@ -92,16 +92,16 @@ ele conecta.
 
 ## Nota sobre a árvore legada
 
-`index.html`, `css/ipad-runtime.css` e os módulos de UI do app vanilla
-anterior (`js/app.js`, `js/ui/*`, `js/siriform.js`, `js/voice.js`,
-`js/feature-detect.js`, `js/edge/*`, `js/orderflow-engine-ui.js`,
-`js/diagnostics.js`, `js/evaluations.js`) são a interface **anterior** ao
-terminal React. Nada disso é importado pelo build atual; a remoção
-aguarda confirmação explícita do proprietário do repo.
-`service-worker.js` é a exceção deliberada: foi reescrito como shim de
+A interface vanilla **anterior** ao terminal React (`index.html`,
+`css/ipad-runtime.css`, `js/app.js`, `js/ui/*`, `js/siriform.js`,
+`js/voice.js`, `js/feature-detect.js`, `js/edge/*`,
+`js/orderflow-engine-ui.js`, `js/diagnostics.js`, `js/evaluations.js` — 14
+arquivos) foi removida com confirmação explícita e literal do proprietário
+do repo. Nenhum deles era importado pelo build atual (verificado antes da
+remoção). `service-worker.js` permanece de propósito: é o shim de
 autodestruição que limpa caches antigos de aparelhos que ainda tenham o
-service worker cache-first da era vanilla — deve permanecer até essa
-população de dispositivos se renovar.
+service worker cache-first da era vanilla — deve continuar existindo até
+essa população de dispositivos se renovar.
 
 ## O que continua bloqueado (por design, sem exceção)
 
