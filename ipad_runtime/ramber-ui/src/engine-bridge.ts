@@ -23,15 +23,6 @@ import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg
 import { classify as classifyLorentzian } from '../../src/research/engines/lorentzian-classifier.js';
 import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
 
-export interface RealCandle {
-  t: number;
-  o: number;
-  h: number;
-  l: number;
-  c: number;
-  v: number;
-}
-
 export interface PriceZone {
   type: 'BULLISH' | 'BEARISH';
   index: number;
@@ -43,7 +34,6 @@ export interface PriceZone {
 export interface RealCycleResult {
   ok: boolean;
   reason?: string;
-  candles?: RealCandle[];
   lastPrice?: number;
   signal?: 'LONG' | 'SHORT' | 'WAIT' | null;
   confidence?: string | null;
@@ -62,9 +52,13 @@ export interface RealCycleResult {
   // real (distância % até o alvo ÷ distância % até a invalidação, ambas já
   // calculadas em target-tracker.js) — NUNCA uma probabilidade estatística de
   // acerto, este repositório não tem backtest para sustentar essa afirmação.
-  // target2Strength é uma contagem real de confluência de swings (ver
-  // support-resistance-engine.js), não uma projeção.
+  // target1Strength/target2Strength são uma contagem real de confluência de
+  // swings (ver support-resistance-engine.js), não uma projeção. Protocolo
+  // Mestre (Sincronização Global): target1Strength existe desde que o próprio
+  // Alvo 1 passou a vir do swing fractal mais próximo (ver analysis-frame.js)
+  // em vez do mínimo/máximo bruto da janela — antes só o Alvo 2 tinha força.
   riskRewardRatio?: number | null;
+  target1Strength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
   target2Strength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
   // V11.5 §2 (Evolução Matemática — "melhorar contexto multitemporal"):
   // estrutura real de um timeframe MAIOR (1H), para o operador ver se o
@@ -72,6 +66,12 @@ export interface RealCycleResult {
   // mais longo. Nunca lido pelo Core Engine — puramente contexto exibido.
   htfMarketStructure?: string | null;
   htfTimeframe?: string | null;
+  // Protocolo Mestre (Sincronização Global, achado de auditoria): idade real
+  // do cache HTF — antes fetchedAt existia internamente mas nunca saía deste
+  // arquivo, então a UI não tinha como saber se a estrutura de 1H mostrada
+  // era de agora ou de ~5min atrás (HTF_REFRESH_MS). Mesmo princípio de
+  // telemetria honesta já usado para preço/livro/ciclo (LEI 22).
+  htfUpdatedAt?: number | null;
 }
 
 let workerClientSingleton: any = null;
@@ -148,11 +148,14 @@ function refreshHtfMarketStructureInBackground(symbol: string): void {
   })();
 }
 
-function getHtfMarketStructure(symbol: string): string | null {
+function getHtfMarketStructure(symbol: string): { label: string | null; updatedAt: number | null } {
   const now = Date.now();
   const cacheValid = !!htfCache && htfCache.symbol === symbol && now - htfCache.fetchedAt < HTF_REFRESH_MS;
   if (!cacheValid) refreshHtfMarketStructureInBackground(symbol);
-  return htfCache && htfCache.symbol === symbol ? htfCache.structureLabel : null;
+  if (htfCache && htfCache.symbol === symbol) {
+    return { label: htfCache.structureLabel, updatedAt: htfCache.fetchedAt };
+  }
+  return { label: null, updatedAt: null };
 }
 
 // One full real cycle: real Binance probe -> real WASM analysis frame ->
@@ -189,7 +192,6 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
       return {
         ok: false,
         reason: frame.status_reason,
-        candles: evidence.candles,
         lastPrice: isNum(evidence.ticker?.last_price) ? evidence.ticker.last_price : undefined,
       };
     }
@@ -214,11 +216,10 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
     const forecast = computeMultiHorizonForecast(evidence.candles);
     // getHtfMarketStructure() é síncrona e não-bloqueante (ver comentário na
     // definição): nunca adiciona latência ao ciclo principal de 15m.
-    const htfMarketStructure = getHtfMarketStructure(symbol);
+    const htf = getHtfMarketStructure(symbol);
 
     return {
       ok: true,
-      candles: evidence.candles,
       lastPrice: evidence.ticker.last_price,
       signal,
       lorentzian,
@@ -234,9 +235,11 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
       condition: typeof matrix.condition === 'string' ? matrix.condition : null,
       rationale: typeof matrix.rationale === 'string' ? matrix.rationale : null,
       riskRewardRatio: route && isNum(route.risk_reward_ratio) ? route.risk_reward_ratio : null,
+      target1Strength: route && route.target_1_strength ? route.target_1_strength : null,
       target2Strength: route && route.target_2_strength ? route.target_2_strength : null,
-      htfMarketStructure,
+      htfMarketStructure: htf.label,
       htfTimeframe: HTF_INTERVAL,
+      htfUpdatedAt: htf.updatedAt,
     };
   } catch (err: any) {
     return { ok: false, reason: `pipeline_de_pesquisa_falhou: ${describeError(err)}` };

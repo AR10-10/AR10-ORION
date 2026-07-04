@@ -13,6 +13,16 @@
 // 100/100, porque funding/OI/liquidacoes/long-short ficam NAO_APLICAVEL para
 // crypto_spot (ver STRUCTURAL_NAO_APLICAVEL_BY_INSTRUMENT em schema.js) — o
 // teto baixo e a propria mensagem honesta de "faltam derivativos", nao um bug.
+//
+// Protocolo Mestre (esclarecimento de auditoria): este score NAO e' o portao
+// que impede o WASM/engines de rodar sobre dados insuficientes — cada um
+// tem seu proprio minimo independente (analysis-frame.js exige >=10 candles,
+// support-resistance-engine.js >=15, lorentzian-classifier.js seu proprio
+// warmup+horizonte+k). Este arquivo roda DEPOIS disso, dentro de
+// research-engine.js, e so' rebaixa (nunca promove) o rotulo de confianca
+// via capConfidenceBySufficiency — um nome mais preciso seria "Confidence
+// Cap Score", mas mantido como esta' para nao quebrar o contrato existente
+// (ANALYSIS_OUTPUT_CONTRACT.md) sem necessidade.
 
 import { DADOS_INSUFICIENTES, NAO_APLICAVEL } from '../real-data/schema.js';
 

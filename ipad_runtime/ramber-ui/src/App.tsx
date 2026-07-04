@@ -100,6 +100,14 @@ const num = (v: any): v is number => typeof v === "number" && Number.isFinite(v)
 const cleanStructureLabel = (raw: string | null | undefined): "ALTA" | "BAIXA" | "LATERAL" | null =>
   raw === "ESTRUTURA_ALTA" ? "ALTA" : raw === "ESTRUTURA_BAIXA" ? "BAIXA" : raw === "ESTRUTURA_LATERAL" ? "LATERAL" : null;
 
+// Confiança do k-NN Lorentziano (0..1 real) como percentual inteiro — chamada
+// tanto pelo badge inline do AssistantOrb quanto pelo tacticalInput do
+// NeuralCoreWidget, que antes recomputavam a mesma conta a partir do mesmo
+// realCycle.lorentzian.confidence (achado da auditoria de Sincronização
+// Global). null quando não há leitura Lorentziana válida nesta sessão.
+const lorentzianConfidencePct = (lorentzian: { ok: boolean; confidence?: number | null } | null | undefined): number | null =>
+  lorentzian?.ok ? Math.round((lorentzian.confidence ?? 0) * 100) : null;
+
 // Institutional asset selector (V11 §5) — deliberately 5, not a scrollable
 // exchange-length list, to keep the terminal's operational focus. Switching
 // re-points every real feed (klines, derivatives, WS ticker/depth, order
@@ -622,6 +630,10 @@ export default function App() {
     // (target-tracker.js) e força por confluência de swings do Alvo 2
     // (support-resistance-engine.js) — repassados, nunca recomputados aqui.
     const riskRewardRatio = cycleOk ? (realCycle?.riskRewardRatio ?? null) : null;
+    // Protocolo Mestre (Sincronização Global): target1Strength existe desde
+    // que o Alvo 1 passou a vir do swing fractal mais próximo (ver
+    // analysis-frame.js) — antes só o Alvo 2 tinha essa força reportada.
+    const target1Strength = cycleOk ? (realCycle?.target1Strength ?? null) : null;
     const target2Strength = cycleOk ? (realCycle?.target2Strength ?? null) : null;
     const confidence = cycleOk ? (realCycle?.confidence ?? null) : null;
     const marketStructure = cycleOk ? (realCycle?.marketStructure ?? null) : null;
@@ -639,6 +651,12 @@ export default function App() {
     // novo, nunca escrita de volta no Core Engine.
     const htfMarketStructureLabel = cycleOk ? cleanStructureLabel(realCycle?.htfMarketStructure) : null;
     const htfTimeframe = cycleOk ? (realCycle?.htfTimeframe ?? null) : null;
+    // Protocolo Mestre (achado de auditoria): idade real do cache HTF —
+    // fetchedAt já existia em engine-bridge.ts mas nunca saía dele, então a
+    // UI não tinha como saber se a estrutura de 1H era de agora ou de
+    // ~5min atrás (HTF_REFRESH_MS). Mesma telemetria honesta de preço/
+    // livro/ciclo (LEI 22), agora completa para a 4ª fonte real.
+    const htfUpdatedAt = cycleOk ? (realCycle?.htfUpdatedAt ?? null) : null;
     const timeframeConfluence: "CONFLUENTE" | "DIVERGENTE" | null =
       marketStructureLabel && htfMarketStructureLabel && marketStructureLabel !== "LATERAL" && htfMarketStructureLabel !== "LATERAL"
         ? marketStructureLabel === htfMarketStructureLabel
@@ -700,6 +718,7 @@ export default function App() {
       target2,
       stop,
       riskRewardRatio,
+      target1Strength,
       target2Strength,
       confidence,
       marketStructure,
@@ -711,6 +730,7 @@ export default function App() {
       flowImbalance,
       htfMarketStructureLabel,
       htfTimeframe,
+      htfUpdatedAt,
       timeframeConfluence,
     };
   }, [priceData, orderBook, realCycle, chartData, orderflowSignals]);
@@ -1121,6 +1141,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
   const flowPressure: number | null = engine?.flowPressure ?? null;
   const moveToTargetPct: number | null = engine?.moveToTargetPct ?? null;
   const riskRewardRatio: number | null = engine?.riskRewardRatio ?? null;
+  const target1Strength: { label: "FORTE" | "FRACA"; touches: number } | null = engine?.target1Strength ?? null;
   const target2Strength: { label: "FORTE" | "FRACA"; touches: number } | null = engine?.target2Strength ?? null;
 
   const dirLabel = isLong ? "LONG" : isShort ? "SHORT" : AWAIT;
@@ -1237,7 +1258,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                   title={`Amostra: ${realCycle.lorentzian.sampleSize} pontos históricos`}
                 >
                   k-NN LORENTZ. {realCycle.lorentzian.classification} ·{" "}
-                  {Math.round((realCycle.lorentzian.confidence ?? 0) * 100)}% (n=
+                  {lorentzianConfidencePct(realCycle.lorentzian)}% (n=
                   {realCycle.lorentzian.sampleSize})
                 </span>
               )}
@@ -1261,7 +1282,12 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                     label={isShort ? "Alvo 1 · Suporte" : "Alvo 1 · Resistência"}
                     value={target}
                     accent="#00ffaa"
-                    tag="REAL"
+                    // Protocolo Mestre (Sincronização Global): Alvo 1 agora vem
+                    // do swing fractal mais próximo (não mais o mínimo/máximo
+                    // bruto da janela — ver analysis-frame.js), então também
+                    // ganha o mesmo badge de força por confluência real que o
+                    // Alvo 2 já tinha (V11.5 Fase 6).
+                    tag={target1Strength?.label ?? "REAL"}
                   />
                   <LevelCard
                     label="Alvo 2 · Extensão"
@@ -2602,8 +2628,7 @@ function EssentialStrip() {
     ? new Date(lastUpdateAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
     : AWAIT;
 
-  const gmilLabel =
-    consensus.score === null ? AWAIT : `${consensus.score >= 0 ? "+" : ""}${(consensus.score * 100).toFixed(0)}`;
+  const gmilLabel = formatConsensusScore(consensus.score);
 
   // V10.4 §2 "Glow Inteligente": glow apenas onde há informação relevante
   // que deve "respirar" — Direção, Confiança, Liquidez, Preço, Contexto
@@ -2967,10 +2992,7 @@ function GmilContextWidget() {
   const consensus = institutionalConsensus ?? { score: null, sampleSize: 0, contributingProviders: [] };
   const providers = gmilProviders ?? [];
 
-  const scoreLabel =
-    consensus.score === null
-      ? AWAIT
-      : `${consensus.score >= 0 ? "+" : ""}${(consensus.score * 100).toFixed(0)}`;
+  const scoreLabel = formatConsensusScore(consensus.score);
   const scoreColor =
     consensus.score === null
       ? "text-[#8ab4f8]/50"
@@ -3025,8 +3047,7 @@ function GmilContextWidget() {
           // lastSuccessAt já existem em ProviderRuntimeSnapshot), então isto
           // é uma segunda LINHA da mesma lista existente, não um painel
           // duplicado listando os mesmos 2 provedores de novo.
-          const ageSec = p.lastSuccessAt ? Math.round((Date.now() - p.lastSuccessAt) / 1000) : null;
-          const ageLabel = ageSec === null ? AWAIT : ageSec < 60 ? `${ageSec}s` : `${Math.round(ageSec / 60)}min`;
+          const ageLabel = ageLabelOf(p.lastSuccessAt ?? null);
           const latencyLabel = num(p.lastLatencyMs) ? `${Math.round(p.lastLatencyMs)}ms` : AWAIT;
           return (
             <div
@@ -3186,13 +3207,24 @@ function AssetHeatmapWidget() {
 // linha aqui de propósito — já é a faixa "DADOS n/4" sempre visível da
 // EssentialStrip; repetir o mesmo cálculo aqui seria a exata duplicação que
 // a LEI 25 (Self Audit) pede para eliminar, não para criar.
-// Idade legível de um timestamp real — mesmo formato já usado em
-// GmilContextWidget para a idade de cada provedor, reaproveitado aqui em vez
-// de reinventar uma segunda formatação para o mesmo tipo de dado (LEI 25).
+// Idade legível de um timestamp real — chamada por GmilContextWidget (idade
+// de cada provedor) e aqui (idade de preço/livro/ciclo/HTF/GMIL), em vez de
+// cada widget reimplementar a mesma conta (achado da auditoria de
+// Sincronização Global: antes disso, GmilContextWidget tinha sua própria
+// cópia inline idêntica em vez de chamar esta função, apesar do comentário
+// já dizer que reaproveitava — LEI 25).
 function ageLabelOf(updatedAt: number | null): string {
   if (updatedAt === null) return AWAIT;
   const ageSec = Math.round((Date.now() - updatedAt) / 1000);
   return ageSec < 60 ? `${ageSec}s` : `${Math.round(ageSec / 60)}min`;
+}
+
+// Rótulo do Consensus Score (-1..1 -> string com sinal, ex.: "+42"/"-17") —
+// chamado por EssentialStrip e GmilContextWidget, que antes calculavam o
+// mesmo formato duas vezes a partir do mesmo institutionalConsensus.score
+// (mesmo achado de duplicação da auditoria de Sincronização Global).
+function formatConsensusScore(score: number | null): string {
+  return score === null ? AWAIT : `${score >= 0 ? "+" : ""}${(score * 100).toFixed(0)}`;
 }
 
 function DecisionValidationWidget() {
@@ -3221,10 +3253,26 @@ function DecisionValidationWidget() {
   // um clock único fingido — cada uma tem sua própria cadência (WS ~1s,
   // livro ~1s throttled, ciclo do motor 15m a cada 30s). Telemetria honesta,
   // nunca um valor inventado quando a fonte ainda não respondeu.
+  // Protocolo Mestre (achado de auditoria de sincronização): HTF e GMIL/
+  // Consenso eram as 2 fontes reais SEM telemetria de idade aqui — o
+  // "Ciclo do Motor" cobria o sinal de 15m, mas a estrutura de 1H (cache
+  // próprio, HTF_REFRESH_MS=5min) e o consenso GMIL (3 provedores, cadência
+  // 90-180s cada) podiam estar mais velhos do que o operador percebia.
+  // GMIL usa o provedor CONTRIBUINTE mais velho (weight>0), não uma média —
+  // o consenso só é tão fresco quanto sua fonte mais atrasada.
+  const contributingGmil = (gmilProviders ?? []).filter(
+    (p: any) => p.weight > 0 && num(p.lastSuccessAt),
+  );
+  const gmilOldestSuccessAt = contributingGmil.length
+    ? Math.min(...contributingGmil.map((p: any) => p.lastSuccessAt))
+    : null;
+
   const syncRows: { label: string; ageLabel: string }[] = [
     { label: "Preço (WS)", ageLabel: ageLabelOf(priceUpdatedAt) },
     { label: "Livro de Ofertas", ageLabel: ageLabelOf(orderBookUpdatedAt) },
     { label: "Ciclo do Motor (15M)", ageLabel: ageLabelOf(lastUpdateAt) },
+    { label: `Estrutura ${engine?.htfTimeframe?.toUpperCase() ?? "1H"}`, ageLabel: ageLabelOf(engine?.htfUpdatedAt ?? null) },
+    { label: "Contexto Global (GMIL)", ageLabel: ageLabelOf(gmilOldestSuccessAt) },
   ];
 
   return (
@@ -3332,9 +3380,7 @@ function NeuralCoreWidget() {
       support: engine?.support ?? null,
       resistance: engine?.resistance ?? null,
       lorentzianClassification: realCycle?.lorentzian?.ok ? realCycle.lorentzian.classification ?? null : null,
-      lorentzianConfidencePct: realCycle?.lorentzian?.ok
-        ? Math.round((realCycle.lorentzian.confidence ?? 0) * 100)
-        : null,
+      lorentzianConfidencePct: lorentzianConfidencePct(realCycle?.lorentzian),
       lorentzianSampleSize: realCycle?.lorentzian?.ok ? realCycle.lorentzian.sampleSize ?? null : null,
       unmitigatedFvgCount: (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated).length,
       unmitigatedOrderBlockCount: (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated).length,

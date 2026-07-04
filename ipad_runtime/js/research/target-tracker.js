@@ -92,6 +92,7 @@ function emptyRoute() {
     return {
         status: TARGET_STATUS.DADOS_INSUFICIENTES,
         target_1: DADOS_INSUFICIENTES,
+        target_1_strength: null,
         target_2: DADOS_INSUFICIENTES,
         target_2_strength: null,
         invalidation: DADOS_INSUFICIENTES,
@@ -170,6 +171,7 @@ export function buildTargetTracker({ snapshot, livePrice } = {}) {
         rota_a_long: {
             ...applyStaleDowngrade(longRoute),
             target_1: resistance,
+            target_1_strength: frame.resistance_1_strength ?? null,
             target_2: isFiniteNum(frame.resistance_2) ? frame.resistance_2 : DADOS_INSUFICIENTES,
             target_2_strength: frame.resistance_2_strength ?? null,
             invalidation: support,
@@ -177,6 +179,7 @@ export function buildTargetTracker({ snapshot, livePrice } = {}) {
         rota_b_short: {
             ...applyStaleDowngrade(shortRoute),
             target_1: support,
+            target_1_strength: frame.support_1_strength ?? null,
             target_2: isFiniteNum(frame.support_2) ? frame.support_2 : DADOS_INSUFICIENTES,
             target_2_strength: frame.support_2_strength ?? null,
             invalidation: resistance,

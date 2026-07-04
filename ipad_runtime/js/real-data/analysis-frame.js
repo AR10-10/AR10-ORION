@@ -3,11 +3,23 @@
 // Evidence (js/real-data/schema.js), reusando o mesmo motor WASM/worker do
 // replay sintetico (js/worker-client.js) — o calculo e identico, so a fonte
 // dos closes muda (candle real validado por sonda, nunca dataset sintetico).
-// Suporte/resistencia (nivel 1) vem de max(high)/min(low) reais dos candles
-// recebidos. Suporte/resistencia nivel 2 e os alvos de extensao de Fibonacci
-// vem dos motores graduados em src/research/engines/ (ver QUARANTINE.md
+// Suporte/resistencia (nivel 1) vem do swing fractal confirmado mais proximo
+// do preco (support-resistance-engine.js) — a mesma amostra de candles reais,
+// so' que via deteccao de pivot em vez do minimo/maximo bruto da janela
+// inteira. Fallback honesto para max(high)/min(low) reais so' quando o motor
+// fractal nao tiver swing confirmado suficiente nesta amostra (nunca reduz a
+// disponibilidade que existia antes). Suporte/resistencia nivel 2 e os alvos
+// de extensao de Fibonacci vem do mesmo motor graduado (ver QUARANTINE.md
 // secao "Engines graduados") — mesmos candles reais, nunca um nivel
 // inventado ou extrapolado por modelo nao implementado.
+//
+// Protocolo Mestre (Auditoria de Sincronizacao Global): antes desta mudanca,
+// support-resistance-engine.js ja computava resistance_1/support_1 (o swing
+// mais proximo) a cada ciclo, mas o valor era descartado — so' resistance_2/
+// support_2 (o alvo 2, mais distante) chegava ate aqui. O nivel 1 e' o que
+// vira Alvo 1 e Invalidacao/Stop em target-tracker.js — os dois numeros mais
+// centrais do Trade Setup — e por isso os que mais se beneficiam de um swing
+// real em vez de um pavio isolado da janela inteira definir o nivel.
 
 import { DADOS_INSUFICIENTES, NAO_APLICAVEL } from './schema.js';
 import { analyze as analyzeSupportResistance } from '../../src/research/engines/support-resistance-engine.js';
@@ -60,6 +72,8 @@ function emptyFrame(evidence, reason) {
         volume_status: DADOS_INSUFICIENTES,
         support: DADOS_INSUFICIENTES,
         resistance: DADOS_INSUFICIENTES,
+        support_1_strength: null,
+        resistance_1_strength: null,
         support_2: DADOS_INSUFICIENTES,
         resistance_2: DADOS_INSUFICIENTES,
         support_2_strength: null,
@@ -102,20 +116,28 @@ export async function buildRealAnalysisFrame({ evidence, workerClient, windowSiz
     }
 
     const lastPrice = closes[closes.length - 1];
-    const support = Math.min(...candles.map((c) => c.l));
-    const resistance = Math.max(...candles.map((c) => c.h));
+    const windowLow = Math.min(...candles.map((c) => c.l));
+    const windowHigh = Math.max(...candles.map((c) => c.h));
 
     const srResult = analyzeSupportResistance({ ohlcv_series: candles, timeframe: evidence.timeframe, volume_profile: null });
     const structureResult = analyzeMarketStructure({ ohlcv_series: candles, timeframe: evidence.timeframe });
-    const support2 = srResult.status === 'OK' ? srResult.support_2 : DADOS_INSUFICIENTES;
-    const resistance2 = srResult.status === 'OK' ? srResult.resistance_2 : DADOS_INSUFICIENTES;
+    // Nivel 1 real (swing fractal mais proximo) substitui o minimo/maximo
+    // bruto da janela quando disponivel; fallback preserva a disponibilidade
+    // de antes desta mudanca (nunca vira DADOS_INSUFICIENTES por causa dela).
+    const srHasLevels = srResult.status === 'OK';
+    const support = srHasLevels ? srResult.support_1 : windowLow;
+    const resistance = srHasLevels ? srResult.resistance_1 : windowHigh;
+    const support1Strength = srHasLevels ? (srResult.support_1_strength ?? null) : null;
+    const resistance1Strength = srHasLevels ? (srResult.resistance_1_strength ?? null) : null;
+    const support2 = srHasLevels ? srResult.support_2 : DADOS_INSUFICIENTES;
+    const resistance2 = srHasLevels ? srResult.resistance_2 : DADOS_INSUFICIENTES;
     // V11.5 Fase 6: força por confluência real (ver support-resistance-engine.js)
     // propagada junto do próprio nível 2 que ela descreve — nunca recomputada
     // aqui, nunca uma probabilidade.
-    const support2Strength = srResult.status === 'OK' ? (srResult.support_2_strength ?? null) : null;
-    const resistance2Strength = srResult.status === 'OK' ? (srResult.resistance_2_strength ?? null) : null;
-    const fibLongTarget = srResult.status === 'OK' ? srResult.fib_extension_long_target : DADOS_INSUFICIENTES;
-    const fibShortTarget = srResult.status === 'OK' ? srResult.fib_extension_short_target : DADOS_INSUFICIENTES;
+    const support2Strength = srHasLevels ? (srResult.support_2_strength ?? null) : null;
+    const resistance2Strength = srHasLevels ? (srResult.resistance_2_strength ?? null) : null;
+    const fibLongTarget = srHasLevels ? srResult.fib_extension_long_target : DADOS_INSUFICIENTES;
+    const fibShortTarget = srHasLevels ? srResult.fib_extension_short_target : DADOS_INSUFICIENTES;
     const marketStructure = structureResult.status === 'OK' ? structureResult.structure_label : DADOS_INSUFICIENTES;
 
     const volumeStatus = (evidence.volume === DADOS_INSUFICIENTES || evidence.volume === NAO_APLICAVEL)
@@ -138,6 +160,8 @@ export async function buildRealAnalysisFrame({ evidence, workerClient, windowSiz
         volume_status: volumeStatus,
         support,
         resistance,
+        support_1_strength: support1Strength,
+        resistance_1_strength: resistance1Strength,
         support_2: support2,
         resistance_2: resistance2,
         support_2_strength: support2Strength,

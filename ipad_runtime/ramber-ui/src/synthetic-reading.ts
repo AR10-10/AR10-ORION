@@ -21,6 +21,14 @@
 // model can't load."
 import type { TacticalContextInput } from './llm-bridge';
 
+// Deliberadamente NÃO importado de llm-bridge.ts, apesar de ser o mesmo
+// valor: llm-bridge.ts só é importado dinamicamente (import() lazy dentro de
+// NeuralCoreWidget) para manter seu bundle (~5.9MB, WebLLM) fora do chunk
+// principal até o usuário ativar o Núcleo Neural. Um import estático daqui
+// — mesmo só de uma constante — força o bundler a fundir os dois chunks
+// (confirmado: chunk principal saltou de ~397KB para ~6.3MB ao tentar isso).
+// Duas constantes idênticas em 2 arquivos custam menos que quebrar o
+// carregamento lazy para todo usuário que nunca liga a IA local.
 const DASH = 'AGUARDANDO';
 const SMALL_SAMPLE_THRESHOLD = 20;
 
