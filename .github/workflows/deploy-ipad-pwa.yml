@@ -42,6 +42,18 @@ jobs:
           cache: 'npm'
           cache-dependency-path: ipad_runtime/ramber-ui/package-lock.json
 
+      # Caminho 3 (Robustez — o freio estrutural mais citado nas auditorias
+      # desta sessão): suite de testes permanente e versionada
+      # (ramber-ui/tests/), agora um portão real — se um teste quebra, o
+      # job para aqui e nem build nem deploy rodam. vitest.config.ts é
+      # totalmente separado de vite.config.ts: esta etapa nunca toca o
+      # pipeline de build de produção.
+      - name: Run test suite (Vitest)
+        working-directory: ipad_runtime/ramber-ui
+        run: |
+          npm ci --include=dev
+          npm run test
+
       - name: Build RAMBER UI (React/Vite) and place at ipad_runtime root
         working-directory: ipad_runtime/ramber-ui
         run: |
