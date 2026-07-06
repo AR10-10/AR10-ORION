@@ -1,17 +1,26 @@
 // engine-bridge.ts — RAMBER's connection to the real engine, not a
 // second implementation of it. Imports the exact same modules js/app.js
-// uses: js/worker-client.js (WASM Quant Engine via Worker), the real Binance
-// connector (js/real-data/binance-public.js), and the pure-function research
-// pipeline (js/real-data/analysis-frame.js -> js/research/research-engine.js
-// -> trade-setup-matrix.js / target-tracker.js). Same worker script, same
-// wasm/cyborg_quant_core.wasm binary, same graduated support-resistance /
-// market-structure engines (see ipad_runtime/src/research/QUARANTINE.md) —
-// this file only calls them from React state instead of writing to `els[id]`
-// DOM nodes. No re-implementation, no second heuristic, no fabricated value:
-// every field below is either passthrough from these real modules or absent.
+// uses: js/worker-client.js (WASM Quant Engine via Worker) and the
+// pure-function research pipeline (js/real-data/analysis-frame.js ->
+// js/research/research-engine.js -> trade-setup-matrix.js /
+// target-tracker.js). Same worker script, same wasm/cyborg_quant_core.wasm
+// binary, same graduated support-resistance / market-structure engines (see
+// ipad_runtime/src/research/QUARANTINE.md) — this file only calls them from
+// React state instead of writing to `els[id]` DOM nodes. No
+// re-implementation, no second heuristic, no fabricated value: every field
+// below is either passthrough from these real modules or absent.
+//
+// Fase B (V15 Cap. 2, Market Data Bus): este arquivo NÃO chama mais
+// js/real-data/binance-public.js diretamente. Todo candle (ciclo 15m, HTF
+// 1h) vem de getMarketDataBus().requestSnapshot() — o Bus é quem chama o
+// conector real (src/market-data-bus/binance-candle-connector.js), dedupe
+// entre chamadores concorrentes (este arquivo e App.tsx's getChartCandles)
+// e nunca dispara duas sondas de rede redundantes para a mesma
+// symbol:timeframe.
 import { QuantWorkerClient } from '../../js/worker-client.js';
 import { OrderflowWorkerClient } from '../../js/orderflow-client.js';
-import { probe as probeBinance } from '../../js/real-data/binance-public.js';
+import { getMarketDataBus } from '../../src/market-data-bus/index.js';
+import { collectBinanceKlines } from '../../src/market-data-bus/binance-candle-connector.js';
 import { createLivePoller } from '../../js/real-data/mexc-trades-stream.js';
 import { CONNECTOR_STATES } from '../../js/real-data/schema.js';
 import { buildRealAnalysisFrame } from '../../js/real-data/analysis-frame.js';
@@ -132,12 +141,17 @@ function refreshHtfMarketStructureInBackground(symbol: string): void {
   htfFetchInFlight = true;
   (async () => {
     try {
-      const htfProbe = await probeBinance({ symbol, interval: HTF_INTERVAL, limit: 60 });
-      if (htfProbe.state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) {
+      // Fase B: chave 'symbol:1h' própria no Bus, separada da chave
+      // 'symbol:15m' do ciclo principal abaixo — não competem nem se
+      // sobrescrevem, cada timeframe mantém seu próprio snapshot cacheado.
+      const htfSnapshot = await getMarketDataBus().requestSnapshot({
+        symbol, timeframe: HTF_INTERVAL, limit: 60, collect: collectBinanceKlines, maxAgeMs: HTF_REFRESH_MS,
+      });
+      if (!htfSnapshot.ok) {
         htfCache = { symbol, structureLabel: null, fetchedAt: Date.now() };
         return;
       }
-      const structureResult = analyzeMarketStructure({ ohlcv_series: htfProbe.evidence.candles, timeframe: HTF_INTERVAL });
+      const structureResult = analyzeMarketStructure({ ohlcv_series: htfSnapshot.candles, timeframe: HTF_INTERVAL });
       const label = structureResult.status === 'OK' ? structureResult.structure_label : null;
       htfCache = { symbol, structureLabel: label, fetchedAt: Date.now() };
     } catch {
@@ -171,16 +185,40 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
     return { ok: false, reason: `wasm_init_falhou: ${describeError(err)}` };
   }
 
-  let probeResult: any;
+  // Fase B (Market Data Bus): pede o snapshot canônico de BTC:15m em vez de
+  // sondar Binance diretamente. Se App.tsx (getChartCandles) já pediu essa
+  // mesma chave há menos de 25s, este cycle reaproveita o mesmo snapshot —
+  // zero segunda sonda de rede para o mesmo candle.
+  let snapshot: any;
   try {
-    probeResult = await probeBinance({ symbol, interval: '15m', limit: 100 });
+    snapshot = await getMarketDataBus().requestSnapshot({
+      symbol, timeframe: '15m', limit: 100, collect: collectBinanceKlines, maxAgeMs: 25_000,
+    });
   } catch (err: any) {
-    return { ok: false, reason: `probe_binance_lancou_excecao: ${describeError(err)}` };
+    return { ok: false, reason: `market_data_bus_lancou_excecao: ${describeError(err)}` };
   }
-  if (probeResult.state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) {
-    return { ok: false, reason: `conector_binance_estado: ${probeResult.state}` };
+  if (!snapshot.ok) {
+    return { ok: false, reason: `market_data_bus_estado: ${snapshot.errors?.[0] || 'sem_candles_validos'}` };
   }
-  const evidence = probeResult.evidence;
+
+  // Evidence Object mínimo reconstruído a partir do snapshot do Bus — só os
+  // campos que buildRealAnalysisFrame() de fato lê (ver analysis-frame.js).
+  // O Bus já normalizou/validou os candles; isto não é uma segunda fonte,
+  // é o mesmo dado real do snapshot na forma que analysis-frame.js espera.
+  const lastCandle = snapshot.candles[snapshot.candles.length - 1];
+  const evidence: any = {
+    symbol,
+    instrument_type: 'crypto_spot',
+    timeframe: snapshot.timeframe,
+    source_id: 'market-data-bus',
+    timestamp: new Date(snapshot.asOf).toISOString(),
+    freshness_ms: snapshot.ageMs,
+    candles: snapshot.candles,
+    ticker: { last_price: lastCandle.c, derived_from: 'ULTIMO_CLOSE_DO_KLINE_VIA_MARKET_DATA_BUS' },
+    volume: { last_candle_volume: lastCandle.v, unit: 'base_asset' },
+    missing_fields: [],
+    data_quality: 'COMPLETA_PARA_CAPACIDADES_TENTADAS',
+  };
 
   // research-engine.js's buildResearchEngineFrame() explicitly throws on a
   // malformed {frame, evidence} pair — this function's contract (see
@@ -244,6 +282,25 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
   } catch (err: any) {
     return { ok: false, reason: `pipeline_de_pesquisa_falhou: ${describeError(err)}` };
   }
+}
+
+// Fase B (Market Data Bus): candles do gráfico da UI (App.tsx's chartData)
+// vêm da MESMA chave symbol:15m que o ciclo de análise acima usa — não é
+// mais um segundo fetch() direto a api.binance.com/klines feito de dentro
+// de App.tsx. Achado real da Fase A: antes desta mudança, App.tsx e este
+// arquivo sondavam klines de forma independente e simultânea a cada ~30s,
+// mesmo símbolo, mesmo timeframe, dois resultados que podiam nem bater.
+export async function getChartCandles(
+  symbol = 'BTC',
+  limit = 50,
+): Promise<Array<{ open: number; high: number; low: number; close: number }> | null> {
+  const snapshot = await getMarketDataBus().requestSnapshot({
+    symbol, timeframe: '15m', limit, collect: collectBinanceKlines, maxAgeMs: 25_000,
+  });
+  if (!snapshot.ok) return null;
+  return snapshot.candles.map((c: { o: number; h: number; l: number; c: number }) => ({
+    open: c.o, high: c.h, low: c.l, close: c.c,
+  }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

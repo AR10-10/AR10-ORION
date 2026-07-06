@@ -19,6 +19,7 @@ import {
   computeSmcZones,
   type PriceZone,
   type LiquidityZone,
+  getChartCandles,
 } from "./engine-bridge";
 // llm-bridge.ts (and the @mlc-ai/web-llm package it imports) is loaded via
 // dynamic import() only inside NeuralCoreWidget's activation handler below
@@ -294,26 +295,23 @@ export default function App() {
     }));
   }, []);
 
-  // REST: real klines + real 24h scanner ticker (public, read-only). Returns
-  // success/failure so the boot sequence below can retry a transient
-  // failure quickly instead of silently waiting for the next 60s tick.
+  // Klines: candles do gráfico agora vêm do Market Data Bus (Fase B —
+  // getChartCandles em engine-bridge.ts), a MESMA chave symbol:15m que o
+  // ciclo de análise (runCycle, abaixo) já pede. Nenhum fetch() direto a
+  // api.binance.com/klines é feito por este componente desde a Fase B —
+  // antes disso havia dois fetches independentes do mesmo candle real a
+  // cada ~30s (achado da Fase A).
+  //
+  // 24h scanner ticker: ainda um fetch() direto — fora do escopo desta
+  // primeira fase do Market Data Bus (não é candle; ver relatório da Fase
+  // B). Retorna success/failure so the boot sequence below can retry a
+  // transient failure quickly instead of silently waiting for the next 60s
+  // tick.
   const fetchSymbolData = async (): Promise<boolean> => {
     try {
-      const res = await fetch(
-        `https://api.binance.com/api/v3/klines?symbol=${selectedAsset}USDT&interval=15m&limit=50`,
-      );
-      if (!res.ok) throw new Error(`klines HTTP ${res.status}`);
-      const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) {
-        setChartData(
-          data.map((d: any) => ({
-            open: Number(d[1]),
-            high: Number(d[2]),
-            low: Number(d[3]),
-            close: Number(d[4]),
-          })),
-        );
-      }
+      const candles = await getChartCandles(selectedAsset, 50);
+      if (!candles) throw new Error('market_data_bus_sem_candles_validos');
+      setChartData(candles);
 
       const tickerRes = await fetch(
         `https://api.binance.com/api/v3/ticker/24hr?symbols=["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT"]`,
