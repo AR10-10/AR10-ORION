@@ -751,7 +751,9 @@ export default function App() {
   // função pura computeConsensus (LEI 04), não uma segunda matemática de
   // consenso. Continua 100% consultivo: nenhum destes valores é lido por
   // engine-bridge.ts nem altera realCycle/engine.direction/confidence.
-  const { providers: gmilProviders } = useGmilSnapshot();
+  // Fase E: além dos provedores, o snapshot agora traz os 4 vieses da
+  // Constituição (context-aggregator.ts) — passthrough puro para a UI.
+  const { providers: gmilProviders, biases: gmilBiases } = useGmilSnapshot();
   const institutionalConsensus = useMemo(() => {
     const localInputs: ConsensusInput[] = [
       { providerId: "liquidez_livro_ofertas", lean: engine.imbalance, weight: engine.hasBook ? 1 : 0 },
@@ -865,6 +867,7 @@ export default function App() {
       setSelectedAsset,
       scannerData,
       gmilProviders,
+      gmilBiases,
       institutionalConsensus,
       priceUpdatedAt,
       orderBookUpdatedAt,
@@ -891,6 +894,7 @@ export default function App() {
       selectedAsset,
       scannerData,
       gmilProviders,
+      gmilBiases,
       institutionalConsensus,
       priceUpdatedAt,
       orderBookUpdatedAt,
@@ -2994,9 +2998,26 @@ function EventsWidget() {
 // + liquidez + fluxo reais) — mesma fonte que a faixa essencial usa, então
 // os dois nunca podem mostrar números diferentes sob o mesmo rótulo.
 function GmilContextWidget() {
-  const { gmilProviders, institutionalConsensus } = useContext(WidgetContext) || {};
+  const { gmilProviders, gmilBiases, institutionalConsensus } = useContext(WidgetContext) || {};
   const consensus = institutionalConsensus ?? { score: null, sampleSize: 0, contributingProviders: [] };
   const providers = gmilProviders ?? [];
+
+  // Fase E (V15 Cap. 6): os 3 vieses por categoria do context-aggregator.
+  // Categoria sem provedor ativo (MACRO hoje) => score null => AGUARDANDO —
+  // o gancho é visível e honesto, nunca um neutro fabricado.
+  const biasCells: Array<{ label: string; score: number | null }> = [
+    { label: "INST", score: gmilBiases?.institutionalBias?.score ?? null },
+    { label: "MACRO", score: gmilBiases?.macroBias?.score ?? null },
+    { label: "LIQ", score: gmilBiases?.liquidityBias?.score ?? null },
+  ];
+  const biasColor = (score: number | null) =>
+    score === null
+      ? "text-[#8ab4f8]/50"
+      : score > 0.1
+        ? "text-[#00ffaa]"
+        : score < -0.1
+          ? "text-[#ff0055]"
+          : "text-[#8ab4f8]";
 
   const scoreLabel = formatConsensusScore(consensus.score);
   const scoreColor =
@@ -3031,6 +3052,19 @@ function GmilContextWidget() {
             {consensus.score !== null && <span className="text-[0.45rem] text-[#8ab4f8]/50"> (n={consensus.sampleSize})</span>}
           </span>
         </div>
+        {/* Fase E: vieses por categoria (V15 Cap. 6) — INST (derivativos/
+            on-chain), MACRO (sem fonte keyless ainda: AGUARDANDO honesto),
+            LIQ (agregados de mercado). */}
+        <div className="grid grid-cols-3 gap-1">
+          {biasCells.map((b) => (
+            <div key={b.label} className="flex flex-col items-center bg-[#010308] px-1 py-1 rounded border border-[#8ab4f8]/10">
+              <span className="text-[0.4rem] text-[#8ab4f8]/60 font-bold tracking-widest">VIÉS {b.label}</span>
+              <span className={`text-[0.55rem] font-mono font-black ${biasColor(b.score)}`}>
+                {formatConsensusScore(b.score)}
+              </span>
+            </div>
+          ))}
+        </div>
         {providers.map((p) => {
           const value = p.lastReading?.ok ? p.lastReading.fields : null;
           const summary =
@@ -3042,9 +3076,11 @@ function GmilContextWidget() {
                   ? typeof value.topSymbols === "string" && value.topSymbols
                     ? value.topSymbols
                     : DASH
-                  : p.circuitState === "OPEN"
-                    ? "circuito aberto"
-                    : AWAIT;
+                  : p.id === "derivatives_positioning" && value
+                    ? `fund ${typeof value.fundingRate === "number" ? (value.fundingRate * 100).toFixed(4) : DASH}% · basis ${typeof value.basisPct === "number" ? value.basisPct.toFixed(3) : DASH}%`
+                    : p.circuitState === "OPEN"
+                      ? "circuito aberto"
+                      : AWAIT;
           const dotColor =
             p.circuitState === "OPEN" ? "bg-[#ff0055]" : p.weight > 0.6 ? "bg-[#00ffaa]" : "bg-[#f0d06f]";
           // Data Quality (V11 §12): disponibilidade/latência/peso/última

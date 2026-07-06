@@ -5,7 +5,29 @@
 // ATTENTION (V11.5 Fase 4): sinal de atenção de mercado (o que está sendo
 // mais buscado agora), categoria distinta de SENTIMENT — "o que o mercado
 // está olhando" não é o mesmo dado que "como o mercado se sente".
-export type ProviderCategory = 'BLOCKCHAIN' | 'SENTIMENT' | 'ATTENTION';
+//
+// Fase E (V15 Cap. 3/6, GMIL Expandido) — taxonomia completa da
+// Constituição, mesmo para categorias ainda sem provedor ativo:
+//   DERIVATIVES — feed combinado Spot×Perpetual (funding, basis, OI).
+//                 1 provedor real ativo (derivatives-provider.ts).
+//   ONCHAIN     — fluxos institucionais on-chain (Whale Alert, reservas,
+//                 grandes movimentações). SEM provedor ativo: toda fonte
+//                 prescrita exige chave de API (proibido permanentemente
+//                 neste projeto — ver README.md "Fontes avaliadas"). O
+//                 gancho existe: um provedor futuro é 1 arquivo + 1 linha
+//                 de registro, e o viés desta categoria já viaja como
+//                 null honesto no agregador.
+//   MACRO       — DXY, Treasuries, calendário econômico. SEM provedor
+//                 ativo: nenhuma fonte keyless/CORS-aberta verificada
+//                 (mesma avaliação documentada no README). Mesmo gancho
+//                 honesto: viés null até existir fonte real.
+export type ProviderCategory =
+  | 'BLOCKCHAIN'
+  | 'SENTIMENT'
+  | 'ATTENTION'
+  | 'DERIVATIVES'
+  | 'ONCHAIN'
+  | 'MACRO';
 
 export interface ProviderFetchResult {
   ok: boolean;

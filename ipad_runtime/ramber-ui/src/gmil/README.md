@@ -29,13 +29,27 @@ providers/*.ts  →  circuit-breaker.ts + quality-engine.ts  →  event-bus.ts  
   provedor (LEI 08), função pura separada do `voice-dispatcher.ts` do
   Core Engine para não misturar os dois domínios num único tipo.
 
-## Provedores ativos (3)
+## Provedores ativos (4)
 
 | Provedor | Categoria | Endpoint real | Por quê |
 |---|---|---|---|
 | `coingecko_global` | BLOCKCHAIN | `api.coingecko.com/api/v3/global` | Público, sem chave, CORS aberto. Dominância BTC+ETH, volume 24h agregado do mercado cripto e variação do market cap global 24h — contexto que nenhum feed existente (Binance/MEXC, ambos por-ativo) fornece. |
 | `fear_greed_index` | SENTIMENT | `api.alternative.me/fng/` | Público, sem chave, CORS aberto. Índice de sentimento cripto mais referenciado que não exige autenticação. |
 | `trending_coins` | ATTENTION | `api.coingecko.com/api/v3/search/trending` | (V11.5 Fase 4) Mesmo host já integrado por `coingecko_global`, endpoint diferente. Top símbolos mais buscados nas últimas 24h — sinal real de atenção de mercado, categoria distinta de sentimento. `lean` é sempre `null`: "o que está sendo mais buscado" não tem direção alta/baixa inerente, e inventar uma violaria o princípio de dado real deste módulo — por isso nunca entra no `GLOBAL_CONSENSUS_SCORE`, só aparece como contexto exibido. |
+| `derivatives_positioning` | DERIVATIVES | `fapi.binance.com/fapi/v1/premiumIndex` | (V15 Fase E) Público, sem chave — mesmo host que o painel de derivativos do App já usa. Funding rate + basis (mark×index) numa única resposta atômica: o feed combinado Spot×Perpetual do Cap. 7. `lean` = posicionamento por funding (±0.05%/8h clampado), nunca recomendação. |
+
+## Fase E — agregação por categoria (V15 Cap. 6)
+
+`context-aggregator.ts` produz as 4 saídas oficiais da Constituição sobre as
+MESMAS linhas de provedor do snapshot, com a MESMA `computeConsensus`
+(LEI 04 — só particionamento por categoria, nunca uma segunda matemática):
+`contextScore` (todas), `institutionalBias` (DERIVATIVES+ONCHAIN),
+`macroBias` (MACRO), `liquidityBias` (BLOCKCHAIN). Categorias sem provedor
+ativo (ONCHAIN, MACRO — toda fonte prescrita exige chave de API ou não tem
+CORS keyless verificado, ver tabela abaixo) produzem score `null` honesto:
+o gancho existe e é visível na UI como AGUARDANDO; um provedor futuro é
+1 arquivo em `providers/` + 1 linha de registro no orquestrador, e o viés
+da categoria passa a existir sozinho.
 
 ## Fontes avaliadas e adiadas (com motivo real, não silenciosamente ignoradas)
 
@@ -77,8 +91,8 @@ embutido". As demais:
 
 ## Testes
 
-Funções puras (`circuit-breaker.ts`, `quality-engine.ts`,
-`consensus-engine.ts`, `gmil-voice-alerts.ts`) têm cobertura node em
-`gmil-tests/test-gmil.mjs` (não versionado — mesmo padrão de teste
-ad-hoc usado pelo classificador Lorentziano e pela camada de voz nesta
-sessão de desenvolvimento).
+Suíte permanente e versionada (Vitest, gate real de CI desde o Caminho 3):
+`ramber-ui/tests/gmil-consensus.test.ts` (consensus-engine) e
+`ramber-ui/tests/gmil-expansion.test.ts` (Fase E: context-aggregator,
+derivatives-provider puro). A cobertura ad-hoc node antiga
+(`gmil-tests/test-gmil.mjs`, não versionada) foi superada por esta suíte.

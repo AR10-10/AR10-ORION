@@ -13,9 +13,11 @@ import {
 } from './circuit-breaker';
 import { computeQuality } from './quality-engine';
 import { computeConsensus, type ConsensusResult } from './consensus-engine';
+import { aggregateContextBiases, type ContextBiases } from './context-aggregator';
 import { fetchCoinGeckoGlobal } from './providers/coingecko-provider';
 import { fetchFearGreedIndex } from './providers/fear-greed-provider';
 import { fetchTrendingCoins } from './providers/trending-provider';
+import { fetchDerivativesPositioning } from './providers/derivatives-provider';
 import type { GmilProviderDef, ProviderFetchResult } from './types';
 
 // Fontes concretamente viáveis para uma PWA estática sem backend (ver
@@ -46,6 +48,17 @@ const PROVIDERS: GmilProviderDef[] = [
     intervalMs: 180_000,
     fetch: fetchTrendingCoins,
   },
+  {
+    // Fase E (V15 Cap. 3/7): feed combinado Spot×Perpetual real — funding
+    // + basis (mark vs index) numa única resposta atômica de endpoint
+    // público sem chave. 120s: funding muda a cada 8h, basis flutua devagar
+    // — sondar mais rápido só gastaria rede sem informação nova.
+    id: 'derivatives_positioning',
+    label: 'Binance Futures · Funding/Basis BTC',
+    category: 'DERIVATIVES',
+    intervalMs: 120_000,
+    fetch: fetchDerivativesPositioning,
+  },
 ];
 
 export interface ProviderRuntimeSnapshot {
@@ -62,6 +75,12 @@ export interface ProviderRuntimeSnapshot {
 export interface GmilSnapshot {
   providers: ProviderRuntimeSnapshot[];
   consensus: ConsensusResult;
+  // Fase E (V15 Cap. 6): as 4 saídas oficiais do GMIL, particionadas por
+  // categoria pelo context-aggregator — MESMA matemática computeConsensus
+  // (LEI 04), só particionamento diferente. Categorias sem provedor ativo
+  // (MACRO, ONCHAIN) produzem score null honesto, nunca um neutro
+  // fabricado.
+  biases: ContextBiases;
 }
 
 class GmilOrchestrator {
@@ -144,10 +163,17 @@ class GmilOrchestrator {
         weight: quality.weight,
       };
     });
-    const consensus = computeConsensus(
-      providers.map((p) => ({ providerId: p.id, lean: p.lastReading?.lean ?? null, weight: p.weight })),
-    );
-    return { providers, consensus };
+    const consensusInputs = providers.map((p, i) => ({
+      providerId: p.id,
+      lean: p.lastReading?.lean ?? null,
+      weight: p.weight,
+      category: PROVIDERS[i].category,
+    }));
+    const consensus = computeConsensus(consensusInputs);
+    // Fase E: os 4 vieses da Constituição sobre as MESMAS linhas — nenhuma
+    // segunda coleta, nenhum segundo peso, nenhuma segunda matemática.
+    const biases = aggregateContextBiases(consensusInputs);
+    return { providers, consensus, biases };
   }
 }
 
