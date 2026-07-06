@@ -25,6 +25,7 @@ import { CandleRingBuffer } from './candle-ring-buffer.js';
 import { normalizeCandles } from './normalizer.js';
 import { validateCandleSeries } from './integrity-validator.js';
 import { computeAsOf, computeAgeMs, isStale } from './time-synchronizer.js';
+import { QualityMonitor } from './quality-monitor.js';
 
 const DEFAULT_MAX_AGE_MS = 25_000;
 const DEFAULT_CAPACITY = 200;
@@ -38,6 +39,10 @@ function sliceSnapshot(snapshot, limit) {
 export class MarketDataBus {
     constructor() {
         this._entries = new Map();
+        // Fase C (Data Quality Layer): toda tentativa real de coleta é
+        // medida aqui — o monitor não tem timer próprio, a cadência de
+        // medição é a cadência real do Bus.
+        this._quality = new QualityMonitor();
     }
 
     _keyOf(symbol, timeframe) {
@@ -59,8 +64,29 @@ export class MarketDataBus {
         return entry;
     }
 
-    _failedSnapshot(symbol, timeframe, errors) {
-        return Object.freeze({ symbol, timeframe, candles: Object.freeze([]), asOf: null, fetchedAt: Date.now(), ageMs: Infinity, ok: false, errors });
+    _failedSnapshot(symbol, timeframe, errors, quality = null) {
+        return Object.freeze({ symbol, timeframe, candles: Object.freeze([]), asOf: null, fetchedAt: Date.now(), ageMs: Infinity, ok: false, errors, quality });
+    }
+
+    /** Resultado de uma tentativa que NÃO produziu série nova válida.
+     *  Fail-closed igual à Fase B (último snapshot bom > nada; nada
+     *  fabricado), mas o campo quality é sempre o ATUAL — o operador vê a
+     *  fonte degradando mesmo enquanto os candles exibidos continuam sendo
+     *  os últimos reais conhecidos. */
+    _degradedResult(entry, symbol, timeframe, errors) {
+        const quality = this._quality.reportFor(this._keyOf(symbol, timeframe));
+        if (entry.snapshot) {
+            entry.snapshot = Object.freeze({ ...entry.snapshot, quality });
+            return entry.snapshot;
+        }
+        return this._failedSnapshot(symbol, timeframe, errors, quality);
+    }
+
+    /** Relatório de qualidade atual da fonte desta chave (Fase C) — score,
+     *  peso estatístico derivado, classificação e as 4 dimensões. Não
+     *  dispara coleta nenhuma. */
+    getQualityReport(symbol, timeframe) {
+        return this._quality.reportFor(this._keyOf(symbol, timeframe));
     }
 
     /** Distribuição por push: cada callback recebe todo snapshot novo real
@@ -96,13 +122,21 @@ export class MarketDataBus {
         if (entry.inFlight) return entry.inFlight.then((snap) => sliceSnapshot(snap, limit));
 
         entry.inFlight = (async () => {
+            // Fase C: latência real desta coleta, medida em volta do await
+            // do collect() — a única rede que existe neste caminho.
+            const startedAt = Date.now();
             try {
                 const raw = await collect({ symbol, timeframe, limit: entry.maxLimit });
                 const candles = normalizeCandles(raw);
                 const verdict = validateCandleSeries(candles);
                 if (!verdict.valid) {
-                    return entry.snapshot ?? this._failedSnapshot(symbol, timeframe, verdict.errors);
+                    // Série corrompida = falha de qualidade da fonte, igual
+                    // a uma exceção de rede (pediu-se dado real, não veio
+                    // dado utilizável).
+                    this._quality.recordFailure(key);
+                    return this._degradedResult(entry, symbol, timeframe, verdict.errors);
                 }
+                this._quality.recordSuccess(key, Date.now() - startedAt, candles, timeframe);
 
                 entry.buffer.setAll(candles);
                 const stored = Object.freeze(entry.buffer.toArray());
@@ -115,6 +149,9 @@ export class MarketDataBus {
                     fetchedAt: now,
                     ageMs: computeAgeMs(asOf, now),
                     ok: true,
+                    // Distribuição (Fase C): todo snapshot publicado carrega
+                    // o relatório de qualidade da fonte que o produziu.
+                    quality: this._quality.reportFor(key),
                 });
                 entry.snapshot = snapshot;
                 entry.subscribers.forEach((cb) => {
@@ -122,7 +159,8 @@ export class MarketDataBus {
                 });
                 return snapshot;
             } catch (err) {
-                return entry.snapshot ?? this._failedSnapshot(symbol, timeframe, [`coleta_lancou_excecao:${err?.message || err}`]);
+                this._quality.recordFailure(key);
+                return this._degradedResult(entry, symbol, timeframe, [`coleta_lancou_excecao:${err?.message || err}`]);
             } finally {
                 entry.inFlight = null;
             }

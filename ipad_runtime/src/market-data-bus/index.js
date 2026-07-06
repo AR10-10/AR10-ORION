@@ -8,3 +8,23 @@ export { normalizeCandles } from './normalizer.js';
 export { validateCandleSeries } from './integrity-validator.js';
 export { computeAsOf, computeAgeMs, isStale } from './time-synchronizer.js';
 export { CandleRingBuffer } from './candle-ring-buffer.js';
+export { QualityMonitor } from './quality-monitor.js';
+export {
+    QUALITY_CLASSIFICATION,
+    QUALITY_WINDOW,
+    LATENCY_GOOD_MS,
+    LATENCY_BAD_MS,
+    CONSISTENCY_TOLERANCE,
+    MIN_SAMPLES_FOR_STABILITY,
+    QUARANTINE_THRESHOLD,
+    FAILURE_STREAK_QUARANTINE,
+    EMA_ALPHA,
+    timeframeToSeconds,
+    scoreLatency,
+    scoreAvailability,
+    computeConsistency,
+    scoreStability,
+    classifyScore,
+    tailFailureStreak,
+    composeQualityReport,
+} from './quality-engine.js';
