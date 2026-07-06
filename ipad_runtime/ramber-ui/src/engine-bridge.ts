@@ -94,6 +94,11 @@ export interface RealCycleResult {
     bandwidthPercentile: number | null;
     changedAt: number;
   } | null;
+  // Fase F: passthrough do relatório de qualidade da fonte (Data Quality
+  // Layer da Fase C, já presente em todo snapshot do Bus) — o Ensemble usa
+  // o peso como amortecedor de força (forca_ajustada). Puro repasse, nada
+  // recomputado.
+  dataQuality?: { weight: number | null; score: number | null; classification: string } | null;
 }
 
 // Fase D: histórico real de transições de regime por símbolo (V15 Cap. 5,
@@ -315,6 +320,13 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
       htfTimeframe: HTF_INTERVAL,
       htfUpdatedAt: htf.updatedAt,
       marketRegime,
+      dataQuality: snapshot.quality
+        ? {
+            weight: snapshot.quality.weight ?? null,
+            score: snapshot.quality.score ?? null,
+            classification: snapshot.quality.classification,
+          }
+        : null,
     };
   } catch (err: any) {
     return { ok: false, reason: `pipeline_de_pesquisa_falhou: ${describeError(err)}` };

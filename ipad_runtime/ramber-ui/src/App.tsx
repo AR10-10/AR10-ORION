@@ -21,6 +21,16 @@ import {
   type LiquidityZone,
   getChartCandles,
 } from "./engine-bridge";
+// Fase F (V15): Comitê de Validação — linear opinion pool puro
+// (src/consensus/). Importado pela CAMADA DE EXIBIÇÃO, não por
+// engine-bridge.ts — o comitê consome contexto GMIL, e a LEI 04 proíbe
+// GMIL de cruzar para o lado do Core Engine.
+import {
+  buildEnsembleConsensus,
+  opinionFromLabel,
+  opinionFromLean,
+  opinionFromVote,
+} from "../../src/consensus/index.js";
 // llm-bridge.ts (and the @mlc-ai/web-llm package it imports) is loaded via
 // dynamic import() only inside NeuralCoreWidget's activation handler below
 // — never a static top-level import here. A static import would pull
@@ -767,6 +777,44 @@ export default function App() {
     return computeConsensus([...providerInputs, ...localInputs]);
   }, [gmilProviders, engine.imbalance, engine.hasBook, engine.flowImbalance]);
 
+  // Fase F (V15): Comitê de Validação — Ensemble Probabilístico (linear
+  // opinion pool, src/consensus/). Composto AQUI na camada de exibição,
+  // como o institutionalConsensus acima (V11.5 Fase 5), porque é o único
+  // lugar onde as leituras locais (ciclo real, CVD) e o contexto GMIL
+  // coexistem sem violar a LEI 04 — engine-bridge.ts continua sem nenhum
+  // import de gmil/. Consumidor oficial da matriz de pesos da Fase D
+  // (regime vigente) e do peso de qualidade da Fase C (amortecedor de
+  // força). 100% consultivo: nada aqui é lido de volta pelo Core Engine
+  // nem altera engine.direction/confidence.
+  const ensembleConsensus = useMemo(() => {
+    const lorentzian = realCycle?.lorentzian;
+    const members = [
+      {
+        id: "lorentzian_knn",
+        familia: "momentum",
+        opiniao: lorentzian?.ok
+          ? opinionFromVote(lorentzian.classification ?? null, lorentzian.confidence ?? NaN)
+          : null,
+      },
+      { id: "estrutura_15m", familia: "momentum", opiniao: opinionFromLabel(engine.marketStructureLabel) },
+      { id: "estrutura_1h", familia: "momentum", opiniao: opinionFromLabel(engine.htfMarketStructureLabel) },
+      {
+        id: "cvd_fluxo",
+        familia: "fluxo_ordens",
+        opiniao: num(cvd) && cvd !== 0 ? opinionFromLabel(cvd > 0 ? "ALTA" : "BAIXA") : null,
+      },
+      // GMIL: membro externo sem família local — o peso interno dele já
+      // vem quality-ponderado na origem (consensus-engine do GMIL); o
+      // regime local não modula leitura de contexto global.
+      { id: "gmil_contexto", familia: null, opiniao: opinionFromLean(gmilBiases?.contextScore?.score ?? null) },
+    ];
+    return buildEnsembleConsensus({
+      members,
+      regime: engine.marketRegime?.regime ?? null,
+      dataQualityWeight: realCycle?.dataQuality?.weight ?? null,
+    });
+  }, [realCycle, engine.marketStructureLabel, engine.htfMarketStructureLabel, engine.marketRegime, cvd, gmilBiases]);
+
   // IRON-VOICE: espelho somente-leitura do estado real para a camada de voz
   // (src/voice/). Mesmos campos que a UI renderiza — nenhum valor novo é
   // computado aqui, só repassado.
@@ -869,6 +917,7 @@ export default function App() {
       gmilProviders,
       gmilBiases,
       institutionalConsensus,
+      ensembleConsensus,
       priceUpdatedAt,
       orderBookUpdatedAt,
     }),
@@ -896,6 +945,7 @@ export default function App() {
       gmilProviders,
       gmilBiases,
       institutionalConsensus,
+      ensembleConsensus,
       priceUpdatedAt,
       orderBookUpdatedAt,
     ],
@@ -3298,8 +3348,25 @@ function formatConsensusScore(score: number | null): string {
 }
 
 function DecisionValidationWidget() {
-  const { engine, institutionalConsensus, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt } =
+  const { engine, institutionalConsensus, ensembleConsensus, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt } =
     useContext(WidgetContext) || {};
+
+  // Fase F: Comitê de Validação (linear opinion pool, src/consensus/).
+  // Direção + força do comitê das lógicas SECUNDÁRIAS — rótulo deixa
+  // explícito que é o comitê, nunca o sinal do Core Engine.
+  const ensembleOk = ensembleConsensus?.status === "OK";
+  const ensembleLabel = ensembleOk
+    ? `${ensembleConsensus.direcao} · força ${(ensembleConsensus.forca * 100).toFixed(0)}%${
+        num(ensembleConsensus.forca_ajustada) ? ` (aj. ${(ensembleConsensus.forca_ajustada * 100).toFixed(0)}%)` : ""
+      }`
+    : AWAIT;
+  const ensembleColor = !ensembleOk
+    ? "text-[#8ab4f8]/50"
+    : ensembleConsensus.direcao === "ALTA"
+      ? "text-[#00ffaa]"
+      : ensembleConsensus.direcao === "BAIXA"
+        ? "text-[#ff0055]"
+        : "text-[#8ab4f8]";
 
   const checks: { label: string; available: boolean | null }[] = [
     { label: "Liquidez (Livro de Ofertas)", available: !!engine?.hasBook },
@@ -3355,6 +3422,17 @@ function DecisionValidationWidget() {
           <span className="text-[0.55rem] font-mono font-black text-[#00f0ff]">
             {availableCount}/{applicableCount}
           </span>
+        </div>
+        {/* Fase F: leitura agregada do comitê (n = membros com leitura real
+            nesta janela). Consultivo — nunca o sinal do Core Engine. */}
+        <div className="flex justify-between items-center bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0">
+          <span className="text-[0.45rem] text-[#8ab4f8]/80 font-bold tracking-widest">
+            COMITÊ (ENSEMBLE) · CONSULTIVO
+            {ensembleOk && (
+              <span className="text-[#8ab4f8]/40"> n={ensembleConsensus.membros.length}</span>
+            )}
+          </span>
+          <span className={`text-[0.55rem] font-mono font-black ${ensembleColor}`}>{ensembleLabel}</span>
         </div>
         {checks.map((c) => (
           <div
