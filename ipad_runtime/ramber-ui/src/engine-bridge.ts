@@ -134,6 +134,9 @@ export interface RealCycleResult {
     direction: 'ALTA' | 'BAIXA' | null;
     adx: number;
     bandwidthPercentile: number | null;
+    // Fase H: ATR% real da evidência do regime — insumo do Risk Engine
+    // (unidade de risco = max(dist. do stop, ATR%)). Puro passthrough.
+    atrPercent: number | null;
     changedAt: number;
   } | null;
   // Fase F: passthrough do relatório de qualidade da fonte (Data Quality
@@ -341,6 +344,7 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
         direction: regimeResult.direction,
         adx: regimeResult.evidence.adx,
         bandwidthPercentile: regimeResult.evidence.bandwidth_percentile,
+        atrPercent: regimeResult.evidence.atr_percent ?? null,
         changedAt: startedAt,
       };
     }

@@ -31,6 +31,11 @@ import {
   opinionFromLean,
   opinionFromVote,
 } from "../../src/consensus/index.js";
+// Fase H (V15): Risk Engine — dimensionamento Risk/ATR com capping de
+// Kelly fracionado (src/risk/). Consumidor terminal composto na camada de
+// exibição (como o Comitê da Fase F): recebe números já computados pelos
+// domínios reais, nunca toca o sinal do Core Engine.
+import { buildRiskSuggestion } from "../../src/risk/index.js";
 // llm-bridge.ts (and the @mlc-ai/web-llm package it imports) is loaded via
 // dynamic import() only inside NeuralCoreWidget's activation handler below
 // — never a static top-level import here. A static import would pull
@@ -815,6 +820,25 @@ export default function App() {
     });
   }, [realCycle, engine.marketStructureLabel, engine.htfMarketStructureLabel, engine.marketRegime, cvd, gmilBiases]);
 
+  // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
+  // NUNCA valor monetário (o sistema não conhece o capital do operador).
+  // Fail-closed por construção: qualquer insumo ausente/não-finito, comitê
+  // dividido ou contrário ao sinal => 0%. A UI exibe o selo obrigatório ao
+  // lado dos números. Consultivo: nada aqui é lido de volta pelo Core.
+  const riskSuggestion = useMemo(
+    () =>
+      buildRiskSuggestion({
+        signal: engine.direction === "LONG" || engine.direction === "SHORT" ? engine.direction : null,
+        entry: engine.entry,
+        stop: engine.stop,
+        atrPercent: engine.marketRegime?.atrPercent ?? null,
+        riskRewardRatio: engine.riskRewardRatio,
+        ensembleDirection: ensembleConsensus?.status === "OK" ? ensembleConsensus.direcao : null,
+        ensembleForca: ensembleConsensus?.status === "OK" ? ensembleConsensus.forca : null,
+      }),
+    [engine.direction, engine.entry, engine.stop, engine.marketRegime, engine.riskRewardRatio, ensembleConsensus],
+  );
+
   // IRON-VOICE: espelho somente-leitura do estado real para a camada de voz
   // (src/voice/). Mesmos campos que a UI renderiza — nenhum valor novo é
   // computado aqui, só repassado.
@@ -918,6 +942,7 @@ export default function App() {
       gmilBiases,
       institutionalConsensus,
       ensembleConsensus,
+      riskSuggestion,
       priceUpdatedAt,
       orderBookUpdatedAt,
     }),
@@ -946,6 +971,7 @@ export default function App() {
       gmilBiases,
       institutionalConsensus,
       ensembleConsensus,
+      riskSuggestion,
       priceUpdatedAt,
       orderBookUpdatedAt,
     ],
@@ -3348,8 +3374,17 @@ function formatConsensusScore(score: number | null): string {
 }
 
 function DecisionValidationWidget() {
-  const { engine, institutionalConsensus, ensembleConsensus, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt } =
+  const { engine, institutionalConsensus, ensembleConsensus, riskSuggestion, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt } =
     useContext(WidgetContext) || {};
+
+  // Fase H: sugestão de dimensionamento (% equity / % risco). Fail-closed:
+  // SEM_SUGESTAO exibe 0% com o motivo real. O selo é PERMANENTE e
+  // incondicional (diretriz 3 da ordem de ignição).
+  const riskOk = riskSuggestion?.status === "OK";
+  const riskLabel = riskOk
+    ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% eq · risco ${riskSuggestion.effective_risk_pct.toFixed(2)}%`
+    : "0% · sem sugestão";
+  const riskColor = riskOk ? "text-[#00f0ff]" : "text-[#8ab4f8]/50";
 
   // Fase F: Comitê de Validação (linear opinion pool, src/consensus/).
   // Direção + força do comitê das lógicas SECUNDÁRIAS — rótulo deixa
@@ -3433,6 +3468,18 @@ function DecisionValidationWidget() {
             )}
           </span>
           <span className={`text-[0.55rem] font-mono font-black ${ensembleColor}`}>{ensembleLabel}</span>
+        </div>
+        {/* Fase H: Risk Engine — % do equity e % de risco (nunca valor
+            monetário). O selo abaixo é OBRIGATÓRIO e permanente (ordem de
+            ignição da Fase H, diretriz 3) — presente mesmo em 0%. */}
+        <div className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0">
+          <div className="flex justify-between items-center">
+            <span className="text-[0.45rem] text-[#8ab4f8]/80 font-bold tracking-widest">TAMANHO SUGERIDO (RISK ENGINE)</span>
+            <span className={`text-[0.55rem] font-mono font-black ${riskColor}`}>{riskLabel}</span>
+          </div>
+          <span className="text-[0.4rem] text-[#f0d06f]/80 font-bold tracking-widest">
+            SUGESTÃO ALGORÍTMICA · NÃO É CONSELHO FINANCEIRO
+          </span>
         </div>
         {checks.map((c) => (
           <div
