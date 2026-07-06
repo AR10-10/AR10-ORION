@@ -31,6 +31,7 @@ import { startLiquidationStream } from '../../js/real-data/binance-liquidations-
 import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg-order-block-engine.js';
 import { classify as classifyLorentzian } from '../../src/research/engines/lorentzian-classifier.js';
 import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
+import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/index.js';
 
 export interface PriceZone {
   type: 'BULLISH' | 'BEARISH';
@@ -81,7 +82,24 @@ export interface RealCycleResult {
   // era de agora ou de ~5min atrás (HTF_REFRESH_MS). Mesmo princípio de
   // telemetria honesta já usado para preço/livro/ciclo (LEI 22).
   htfUpdatedAt?: number | null;
+  // Fase D (V15, Market Regime Engine): classificação contínua de regime
+  // sobre os MESMOS candles do Bus que o ciclo já usa — zero rede extra.
+  // Contexto exibido, nunca um gate sobre `signal` (mesma regra do
+  // Lorentziano/HTF). changedAt = quando o regime VIGENTE começou (do
+  // RegimeHistory real), para a UI mostrar idade sem inventá-la.
+  marketRegime?: {
+    regime: string;
+    direction: 'ALTA' | 'BAIXA' | null;
+    adx: number;
+    bandwidthPercentile: number | null;
+    changedAt: number;
+  } | null;
 }
+
+// Fase D: histórico real de transições de regime por símbolo (V15 Cap. 5,
+// "mudanças de regime serão registradas"). Vive no módulo, não no React —
+// sobrevive a re-render, morre com a página (sem persistência por design).
+const regimeHistory = new RegimeHistory();
 
 let workerClientSingleton: any = null;
 let wasmReadyPromise: Promise<any> | null = null;
@@ -256,6 +274,24 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
     // definição): nunca adiciona latência ao ciclo principal de 15m.
     const htf = getHtfMarketStructure(symbol);
 
+    // Fase D: regime classificado sobre os MESMOS 100 candles do Bus deste
+    // ciclo — função pura, zero rede extra. Transições reais registradas
+    // no RegimeHistory (V15 Cap. 5).
+    const regimeResult = classifyMarketRegime({ ohlcv_series: snapshot.candles, timeframe: snapshot.timeframe });
+    let marketRegime: RealCycleResult['marketRegime'] = null;
+    if (regimeResult.status === 'OK') {
+      const { startedAt } = regimeHistory.record(
+        symbol, regimeResult.regime, regimeResult.direction, evidence.ticker.last_price,
+      );
+      marketRegime = {
+        regime: regimeResult.regime,
+        direction: regimeResult.direction,
+        adx: regimeResult.evidence.adx,
+        bandwidthPercentile: regimeResult.evidence.bandwidth_percentile,
+        changedAt: startedAt,
+      };
+    }
+
     return {
       ok: true,
       lastPrice: evidence.ticker.last_price,
@@ -278,6 +314,7 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
       htfMarketStructure: htf.label,
       htfTimeframe: HTF_INTERVAL,
       htfUpdatedAt: htf.updatedAt,
+      marketRegime,
     };
   } catch (err: any) {
     return { ok: false, reason: `pipeline_de_pesquisa_falhou: ${describeError(err)}` };

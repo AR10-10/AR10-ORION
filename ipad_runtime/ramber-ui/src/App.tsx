@@ -734,6 +734,10 @@ export default function App() {
       htfTimeframe,
       htfUpdatedAt,
       timeframeConfluence,
+      // Fase D (Market Regime Engine): classificação oficial de regime,
+      // computada em engine-bridge.ts sobre os mesmos candles do Bus do
+      // ciclo — puro passthrough aqui, nunca recomputado na UI.
+      marketRegime: cycleOk ? (realCycle?.marketRegime ?? null) : null,
     };
   }, [priceData, orderBook, realCycle, chartData, orderflowSignals]);
 
@@ -3091,8 +3095,35 @@ function GmilContextWidget() {
 // re-derived here), Momentum (CVD's direction as a label — CVD's raw
 // number is shown in OrderFlowWidget, but not this label), Volatilidade
 // (genuinely new).
+// Fase D: rótulos de exibição do vocabulário fechado do Market Regime
+// Engine (src/market-regime/regime-engine.js REGIMES) — só tradução visual,
+// a classificação em si nunca é recomputada aqui.
+const REGIME_DISPLAY: Record<string, { label: string; color: string }> = {
+  TENDENCIA_FORTE: { label: "TEND. FORTE", color: "text-[#00ffaa]" },
+  TENDENCIA_MODERADA: { label: "TEND. MODERADA", color: "text-[#8ab4f8]" },
+  CONSOLIDACAO: { label: "CONSOLIDAÇÃO", color: "text-[#8ab4f8]" },
+  COMPRESSAO: { label: "COMPRESSÃO", color: "text-[#f0d06f]" },
+  BREAKOUT: { label: "BREAKOUT", color: "text-[#f0d06f]" },
+};
+
 function MarketRegimeWidget() {
   const { engine, cvd } = useContext(WidgetContext) || {};
+
+  // Fase D: linha oficial do Market Regime Engine (ADX/DI + percentil de
+  // banda, ver src/market-regime/). Direção colore o rótulo composto;
+  // regimes sem direção (consolidação/compressão) usam a cor do tipo.
+  const regime = engine?.marketRegime ?? null;
+  const regimeDisplay = regime ? REGIME_DISPLAY[regime.regime] : null;
+  const regimeLabel = regimeDisplay
+    ? `${regimeDisplay.label}${regime.direction ? ` · ${regime.direction}` : ""}`
+    : AWAIT;
+  const regimeColor = !regimeDisplay
+    ? "text-[#8ab4f8]"
+    : regime.direction === "ALTA"
+      ? "text-[#00ffaa]"
+      : regime.direction === "BAIXA"
+        ? "text-[#ff0055]"
+        : regimeDisplay.color;
 
   const trendLabel = engine?.marketStructureLabel ?? AWAIT;
   const trendColor =
@@ -3139,6 +3170,7 @@ function MarketRegimeWidget() {
           rows with no way to reach them). ScannerWidget already uses this
           exact pattern for the same reason. */}
       <div className="flex flex-col gap-1.5 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
+        <Row label="REGIME (MOTOR OFICIAL)" value={regimeLabel} valueClass={regimeColor} />
         <Row label="TENDÊNCIA (ESTRUTURA 15M)" value={trendLabel} valueClass={trendColor} />
         <Row label={`ESTRUTURA ${engine?.htfTimeframe?.toUpperCase() ?? "1H"}`} value={htfLabel} valueClass="text-[#8ab4f8]" />
         <Row label="CONFLUÊNCIA MULTI-TF" value={confluenceLabel} valueClass={confluenceColor} />
