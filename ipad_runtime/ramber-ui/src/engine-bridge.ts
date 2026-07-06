@@ -33,6 +33,48 @@ import { classify as classifyLorentzian } from '../../src/research/engines/loren
 import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
 import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/index.js';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Fase G (V15, diretriz 4): envelope de tipos do santuário. A saída
+// direcional primária é um TIPO FECHADO — o compilador passa a ser parte da
+// trava de governança: nenhum valor fora de LONG/SHORT/WAIT atravessa esta
+// fronteira, e a lógica consultiva (Ensemble/GMIL) não tem como escrever
+// aqui (ver tests/core-engine-boundary.test.ts, que congela isso em CI).
+// ─────────────────────────────────────────────────────────────────────────────
+export type CoreSignal = 'LONG' | 'SHORT' | 'WAIT';
+
+// Forma canônica que o Market Data Bus distribui (Fase B/C) — tipada aqui na
+// fronteira TS; os módulos .js do Bus continuam JS puro por design.
+interface BusCandle { t: number; o: number; h: number; l: number; c: number; v: number }
+interface BusQualityReport { weight: number | null; score: number | null; classification: string }
+interface BusSnapshot {
+  symbol: string;
+  timeframe: string;
+  candles: BusCandle[];
+  asOf: number | null;
+  fetchedAt: number;
+  ageMs: number;
+  ok: boolean;
+  errors?: string[];
+  quality?: BusQualityReport | null;
+}
+
+// Evidence mínima que buildRealAnalysisFrame() consome — reconstruída a
+// partir do snapshot do Bus (Fase B), agora com forma explícita em vez de
+// `any` (nenhum campo novo, só o contrato que já existia tornado visível).
+interface CoreEvidence {
+  symbol: string;
+  instrument_type: 'crypto_spot';
+  timeframe: string;
+  source_id: string;
+  timestamp: string;
+  freshness_ms: number;
+  candles: BusCandle[];
+  ticker: { last_price: number; derived_from: string };
+  volume: { last_candle_volume: number; unit: string };
+  missing_fields: string[];
+  data_quality: string;
+}
+
 export interface PriceZone {
   type: 'BULLISH' | 'BEARISH';
   index: number;
@@ -45,7 +87,7 @@ export interface RealCycleResult {
   ok: boolean;
   reason?: string;
   lastPrice?: number;
-  signal?: 'LONG' | 'SHORT' | 'WAIT' | null;
+  signal?: CoreSignal | null;
   confidence?: string | null;
   marketStructure?: string | null;
   entry?: number | null;
@@ -167,7 +209,7 @@ function refreshHtfMarketStructureInBackground(symbol: string): void {
       // Fase B: chave 'symbol:1h' própria no Bus, separada da chave
       // 'symbol:15m' do ciclo principal abaixo — não competem nem se
       // sobrescrevem, cada timeframe mantém seu próprio snapshot cacheado.
-      const htfSnapshot = await getMarketDataBus().requestSnapshot({
+      const htfSnapshot: BusSnapshot = await getMarketDataBus().requestSnapshot({
         symbol, timeframe: HTF_INTERVAL, limit: 60, collect: collectBinanceKlines, maxAgeMs: HTF_REFRESH_MS,
       });
       if (!htfSnapshot.ok) {
@@ -212,7 +254,7 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
   // sondar Binance diretamente. Se App.tsx (getChartCandles) já pediu essa
   // mesma chave há menos de 25s, este cycle reaproveita o mesmo snapshot —
   // zero segunda sonda de rede para o mesmo candle.
-  let snapshot: any;
+  let snapshot: BusSnapshot;
   try {
     snapshot = await getMarketDataBus().requestSnapshot({
       symbol, timeframe: '15m', limit: 100, collect: collectBinanceKlines, maxAgeMs: 25_000,
@@ -228,13 +270,16 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
   // campos que buildRealAnalysisFrame() de fato lê (ver analysis-frame.js).
   // O Bus já normalizou/validou os candles; isto não é uma segunda fonte,
   // é o mesmo dado real do snapshot na forma que analysis-frame.js espera.
+  // Fase G: tipado (CoreEvidence) — snapshot.ok garante candles não-vazios e
+  // asOf real em runtime; o fallback fetchedAt existe só para o compilador,
+  // com o mesmo valor de relógio da própria coleta.
   const lastCandle = snapshot.candles[snapshot.candles.length - 1];
-  const evidence: any = {
+  const evidence: CoreEvidence = {
     symbol,
     instrument_type: 'crypto_spot',
     timeframe: snapshot.timeframe,
     source_id: 'market-data-bus',
-    timestamp: new Date(snapshot.asOf).toISOString(),
+    timestamp: new Date(snapshot.asOf ?? snapshot.fetchedAt).toISOString(),
     freshness_ms: snapshot.ageMs,
     candles: snapshot.candles,
     ticker: { last_price: lastCandle.c, derived_from: 'ULTIMO_CLOSE_DO_KLINE_VIA_MARKET_DATA_BUS' },
@@ -260,7 +305,10 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
     const research = buildResearchEngineFrame({ frame, evidence, context: {} });
     const matrix = buildTradeSetupMatrix({ research });
 
-    const signal: 'LONG' | 'SHORT' | 'WAIT' | null =
+    // Fase G: estreitamento em runtime PARA o tipo fechado — qualquer valor
+    // fora do vocabulário (ex.: DADOS_INSUFICIENTES da matrix) vira null
+    // explícito, nunca vaza um string arbitrário pela fronteira tipada.
+    const signal: CoreSignal | null =
       matrix.signal === 'LONG' || matrix.signal === 'SHORT' || matrix.signal === 'WAIT' ? matrix.signal : null;
 
     const tracker = buildTargetTracker({

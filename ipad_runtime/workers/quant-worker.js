@@ -4,7 +4,11 @@
 // FRONTEIRA RIGIDA: este worker nao tem acesso de rede util (sem fetch para
 // fora da origem por CSP), nao envia ordens, nao fala com corretora alguma.
 // Ele so calcula estatistica descritiva sobre numeros que o app principal
-// fornece (replay local ou dados importados do pacote).
+// fornece — desde a Fase B (V15), exclusivamente closes de candles reais
+// normalizados/validados e distribuidos pelo Market Data Bus
+// (src/market-data-bus/); a mencao antiga a "replay local/dados do pacote"
+// descrevia caminhos da arvore vanilla ja removida (Fase G, purge de
+// residuo de mock data — correcao de comentario, zero mudanca de codigo).
 
 let exportsRef = null;
 let memoryRef = null;
