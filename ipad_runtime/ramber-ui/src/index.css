@@ -93,14 +93,22 @@ body::after {
    every panel using this one shared class picks it up identically,
    rather than tuning each widget individually. :hover keeps a modest
    further step up for the rare case a mouse/trackpad IS attached. */
+/* Fase J (diretriz 3, "Luxury Glassmorphism"): realce uniforme na BASE —
+   os painéis inferiores/telemetria herdavam um aspecto apagado por
+   estarem longe do glow radial central do Hero. Um ajuste único nesta
+   classe compartilhada = todos os widgets consistentes (vidro com leve
+   gradiente, saturação atrás do blur, borda +21% presente, highlight de
+   1px no topo e halo interno/externo reforçado), zero cirurgia por
+   painel. :hover mantém um degrau extra para trackpad/mouse. */
 .cyber-panel {
-  background: rgba(2, 5, 12, 0.6);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(0, 240, 255, 0.28);
+  background: linear-gradient(180deg, rgba(4, 9, 20, 0.72), rgba(2, 5, 12, 0.62));
+  backdrop-filter: blur(24px) saturate(1.15);
+  -webkit-backdrop-filter: blur(24px) saturate(1.15);
+  border: 1px solid rgba(0, 240, 255, 0.34);
   box-shadow:
-    inset 0 0 24px rgba(0, 240, 255, 0.09),
-    0 0 20px rgba(0, 240, 255, 0.07),
+    inset 0 0 30px rgba(0, 240, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 26px rgba(0, 240, 255, 0.1),
     0 8px 32px rgba(0, 0, 0, 0.6);
   border-radius: 12px;
   position: relative;
@@ -111,10 +119,11 @@ body::after {
 }
 
 .cyber-panel:hover {
-  border-color: rgba(0, 240, 255, 0.35);
+  border-color: rgba(0, 240, 255, 0.42);
   box-shadow:
-    inset 0 0 30px rgba(0, 240, 255, 0.12),
-    0 0 26px rgba(0, 240, 255, 0.1),
+    inset 0 0 34px rgba(0, 240, 255, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 0 32px rgba(0, 240, 255, 0.13),
     0 8px 32px rgba(0, 240, 255, 0.1);
 }
 

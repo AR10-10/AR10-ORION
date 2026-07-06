@@ -36,6 +36,11 @@ import {
 // exibição (como o Comitê da Fase F): recebe números já computados pelos
 // domínios reais, nunca toca o sinal do Core Engine.
 import { buildRiskSuggestion } from "../../src/risk/index.js";
+// Fase J (Cap. 17): classificadores puros de saúde do sistema — a UI só
+// exibe; medições vêm de APIs reais (rAF, cronômetro do ciclo) e o que a
+// plataforma não expõe (memória no Safari, CPU/GPU em qualquer navegador)
+// é declarado, nunca fabricado.
+import { classifyFps, classifyCycleLatency, memoryUsedMB, wasmVariantLabel } from "../../src/telemetry/index.js";
 // llm-bridge.ts (and the @mlc-ai/web-llm package it imports) is loaded via
 // dynamic import() only inside NeuralCoreWidget's activation handler below
 // — never a static top-level import here. A static import would pull
@@ -272,6 +277,7 @@ export default function App() {
     neural_core: { visible: true, floating: false },
     tactical: { visible: false, floating: false },
     market_regime: { visible: true, floating: false },
+    system_health: { visible: true, floating: false },
     asset_heatmap: { visible: true, floating: false },
     decision_validation: { visible: true, floating: false },
   };
@@ -550,15 +556,23 @@ export default function App() {
   // ATUALIZAÇÃO" field DCI's Essential Strip requires. Only stamped on a
   // real ok:true resolution, never on a failed/retried attempt.
   const [lastUpdateAt, setLastUpdateAt] = useState<number | null>(null);
+  // Fase J (Cap. 17): latência REAL do último ciclo do motor — cronometrada
+  // em volta do await, nunca estimada. Só de ciclos ok (falha de rede não é
+  // "latência do motor", é falha — e já aparece como engineStatus error).
+  const [cycleLatencyMs, setCycleLatencyMs] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const runCycle = async (): Promise<boolean> => {
+      const startedAt = Date.now();
       const result = await runRealAnalysisCycle(selectedAsset);
       if (cancelled) return true;
       setRealCycle(result);
       setEngineStatus(result.ok ? "ok" : "error");
-      if (result.ok) setLastUpdateAt(Date.now());
+      if (result.ok) {
+        setLastUpdateAt(Date.now());
+        setCycleLatencyMs(Date.now() - startedAt);
+      }
       return result.ok;
     };
     retryBoot(runCycle, () => cancelled);
@@ -568,6 +582,33 @@ export default function App() {
       clearInterval(engineInterval);
     };
   }, [bootGeneration, selectedAsset]);
+
+  // Fase J (Cap. 17): FPS REAL da UI via requestAnimationFrame — contagem
+  // de frames por janela de 1s. É a medição verdadeira do que o Safari
+  // está pintando, não uma constante otimista. O loop é 1 rAF vivo por
+  // sessão (custo desprezível) e respeita unmount.
+  const [fps, setFps] = useState<number | null>(null);
+  useEffect(() => {
+    let frames = 0;
+    let windowStart = performance.now();
+    let rafId = 0;
+    let alive = true;
+    const tick = (now: number) => {
+      if (!alive) return;
+      frames += 1;
+      if (now - windowStart >= 1000) {
+        setFps(Math.round((frames * 1000) / (now - windowStart)));
+        frames = 0;
+        windowStart = now;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => {
+      alive = false;
+      cancelAnimationFrame(rafId);
+    };
+  }, []);
 
   // Real MEXC trade poller -> real Order Flow Engine (engine-bridge.ts).
   // Signal list is capped to the most recent 20 — OFI/Absorption/Exhaustion
@@ -943,6 +984,8 @@ export default function App() {
       institutionalConsensus,
       ensembleConsensus,
       riskSuggestion,
+      cycleLatencyMs,
+      fps,
       priceUpdatedAt,
       orderBookUpdatedAt,
     }),
@@ -972,6 +1015,8 @@ export default function App() {
       institutionalConsensus,
       ensembleConsensus,
       riskSuggestion,
+      cycleLatencyMs,
+      fps,
       priceUpdatedAt,
       orderBookUpdatedAt,
     ],
@@ -1096,6 +1141,7 @@ export default function App() {
                         <>
                           <MarketRegimeWidget />
                           <DecisionValidationWidget />
+                          <TelemetryHealthWidget />
                           <AssetHeatmapWidget />
                           <ScannerWidget data={scannerData} />
                           <ExposureWidget />
@@ -1157,6 +1203,7 @@ const WIDGET_LABELS: { [key: string]: string } = {
   market_regime: "REGIME DE MERCADO",
   asset_heatmap: "HEATMAP · ATIVOS",
   decision_validation: "VALIDAÇÃO MULTI-CAMADA",
+  system_health: "SAÚDE DO SISTEMA",
 };
 
 function ConfigPanel() {
@@ -3074,8 +3121,11 @@ function EventsWidget() {
 // + liquidez + fluxo reais) — mesma fonte que a faixa essencial usa, então
 // os dois nunca podem mostrar números diferentes sob o mesmo rótulo.
 function GmilContextWidget() {
-  const { gmilProviders, gmilBiases, institutionalConsensus } = useContext(WidgetContext) || {};
-  const consensus = institutionalConsensus ?? { score: null, sampleSize: 0, contributingProviders: [] };
+  // Fase J (diretriz 2, ZERO REPETIÇÃO): o número do consenso global mora
+  // EXCLUSIVAMENTE na barra operacional (EssentialStrip) — o cabeçalho
+  // duplicado que este painel exibia foi removido; aqui ficam só os
+  // conteúdos únicos deste painel (vieses por categoria + provedores).
+  const { gmilProviders, gmilBiases } = useContext(WidgetContext) || {};
   const providers = gmilProviders ?? [];
 
   // Fase E (V15 Cap. 6): os 3 vieses por categoria do context-aggregator.
@@ -3095,15 +3145,6 @@ function GmilContextWidget() {
           ? "text-[#ff0055]"
           : "text-[#8ab4f8]";
 
-  const scoreLabel = formatConsensusScore(consensus.score);
-  const scoreColor =
-    consensus.score === null
-      ? "text-[#8ab4f8]/50"
-      : consensus.score > 0.1
-        ? "text-[#00ffaa]"
-        : consensus.score < -0.1
-          ? "text-[#ff0055]"
-          : "text-[#8ab4f8]";
 
   return (
     <Widget
@@ -3119,15 +3160,10 @@ function GmilContextWidget() {
           column would silently clip provider rows with no way to reach
           them (confirmed on MarketRegimeWidget in this same audit pass). */}
       <div className="flex flex-col gap-1.5 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
-        <div className="flex justify-between items-center bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20]">
-          <span className="text-[0.5rem] text-[#8ab4f8]/80 font-bold tracking-widest">
-            CONSENSO GLOBAL · CONSULTIVO
-          </span>
-          <span className={`text-[0.6rem] font-mono font-black ${scoreColor}`}>
-            {scoreLabel}
-            {consensus.score !== null && <span className="text-[0.45rem] text-[#8ab4f8]/50"> (n={consensus.sampleSize})</span>}
-          </span>
-        </div>
+        {/* Fase J: o cabeçalho "CONSENSO GLOBAL" que morava aqui foi
+            removido — o número já vive na barra operacional (EssentialStrip),
+            e a regra de Zero Repetição da Fase J proíbe o mesmo indicador em
+            dois painéis. */}
         {/* Fase E: vieses por categoria (V15 Cap. 6) — INST (derivativos/
             on-chain), MACRO (sem fonte keyless ainda: AGUARDANDO honesto),
             LIQ (agregados de mercado). */}
@@ -3226,8 +3262,11 @@ function MarketRegimeWidget() {
   // regimes sem direção (consolidação/compressão) usam a cor do tipo.
   const regime = engine?.marketRegime ?? null;
   const regimeDisplay = regime ? REGIME_DISPLAY[regime.regime] : null;
+  // Fase J (diretriz 4): idade REAL do regime vigente — changedAt vem do
+  // RegimeHistory (quando a transição de verdade aconteceu), não do último
+  // ciclo. Mora AQUI, na linha oficial do regime (zero repetição).
   const regimeLabel = regimeDisplay
-    ? `${regimeDisplay.label}${regime.direction ? ` · ${regime.direction}` : ""}`
+    ? `${regimeDisplay.label}${regime.direction ? ` · ${regime.direction}` : ""}${num(regime.changedAt) ? ` · há ${ageLabelOf(regime.changedAt)}` : ""}`
     : AWAIT;
   const regimeColor = !regimeDisplay
     ? "text-[#8ab4f8]"
@@ -3288,6 +3327,67 @@ function MarketRegimeWidget() {
         <Row label="CONFLUÊNCIA MULTI-TF" value={confluenceLabel} valueClass={confluenceColor} />
         <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
         <Row label="VOLATILIDADE" value={volLabel} valueClass={volColor} />
+      </div>
+    </Widget>
+  );
+}
+
+// --- SAÚDE DO SISTEMA (Fase J / V15 Cap. 17) ---
+// Telemetria de sistema com medições REAIS: qualidade da fonte do Bus
+// (Fase C), variante WASM carregada (Fase I), latência cronometrada do
+// ciclo, FPS via rAF e memória JS SÓ onde a plataforma expõe API
+// (Chromium; Safari => SEM_API declarado, nunca um número fabricado).
+// ZERO REPETIÇÃO: nenhum destes indicadores aparece em outro painel —
+// regime/vieses/comitê/risco moram nos painéis das suas fases.
+function TelemetryHealthWidget() {
+  const { engine, realCycle, cycleLatencyMs, fps } = useContext(WidgetContext) || {};
+
+  const quality = realCycle?.dataQuality ?? null;
+  const qualityLabel = quality
+    ? `${quality.classification}${num(quality.weight) ? ` · peso ${(quality.weight * 100).toFixed(0)}%` : ""}`
+    : AWAIT;
+  const qualityColor =
+    quality?.classification === "EXCELENTE" || quality?.classification === "SAUDAVEL"
+      ? "text-[#00ffaa]"
+      : quality?.classification === "DEGRADADA"
+        ? "text-[#f0d06f]"
+        : quality?.classification === "QUARENTENA"
+          ? "text-[#ff0055]"
+          : "text-[#8ab4f8]/50";
+
+  const variant = wasmVariantLabel(realCycle?.wasmVariant ?? null);
+  const fpsClass = classifyFps(fps);
+  const fpsColor = fpsClass === "FLUIDO" ? "text-[#00ffaa]" : fpsClass === "ACEITAVEL" ? "text-[#f0d06f]" : fpsClass === "CRITICO" ? "text-[#ff0055]" : "text-[#8ab4f8]/50";
+  const cycleClass = classifyCycleLatency(cycleLatencyMs);
+  const cycleColor = cycleClass === "RAPIDO" ? "text-[#00ffaa]" : cycleClass === "OK" ? "text-[#f0d06f]" : cycleClass === "LENTO" ? "text-[#ff0055]" : "text-[#8ab4f8]/50";
+  const memMB = typeof performance !== "undefined" ? memoryUsedMB(performance as any) : null;
+
+  const Row = ({ label, value, valueClass }: { label: string; value: string; valueClass: string }) => (
+    <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
+      <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">{label}</span>
+      <span className={`text-[0.5rem] font-mono font-black ${valueClass}`}>{value}</span>
+    </div>
+  );
+
+  return (
+    <Widget id="system_health" title="SAÚDE DO SISTEMA" flex="flex-[0.8] min-h-[170px]">
+      <div className="flex flex-col gap-1.5 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
+        <Row label="QUALIDADE DA FONTE (BUS)" value={qualityLabel} valueClass={qualityColor} />
+        <Row label="MOTOR WASM" value={variant ?? AWAIT} valueClass={variant === "SIMD128" ? "text-[#00ffaa]" : "text-[#8ab4f8]"} />
+        <Row
+          label="LATÊNCIA DO CICLO (15M)"
+          value={num(cycleLatencyMs) ? `${cycleLatencyMs}ms${cycleClass ? ` · ${cycleClass}` : ""}` : AWAIT}
+          valueClass={cycleColor}
+        />
+        <Row label="FPS (UI REAL)" value={num(fps) ? `${fps}${fpsClass ? ` · ${fpsClass}` : ""}` : AWAIT} valueClass={fpsColor} />
+        <Row
+          label="MEMÓRIA JS"
+          value={memMB !== null ? `${memMB.toFixed(0)} MB` : "SEM_API (Safari não expõe)"}
+          valueClass={memMB !== null ? "text-[#8ab4f8]" : "text-[#8ab4f8]/40"}
+        />
+        {/* engine é lido só para o gate de visibilidade herdado do Widget —
+            nenhuma leitura de mercado é exibida aqui (zero repetição). */}
+        {engine ? null : null}
       </div>
     </Widget>
   );

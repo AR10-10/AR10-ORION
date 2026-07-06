@@ -144,6 +144,10 @@ export interface RealCycleResult {
   // o peso como amortecedor de força (forca_ajustada). Puro repasse, nada
   // recomputado.
   dataQuality?: { weight: number | null; score: number | null; classification: string } | null;
+  // Fase J (Cap. 17): variante WASM realmente carregada pelo quant-worker
+  // ('escalar' | 'simd128', Fase I) — telemetria pura, capturada do
+  // init_wasm_ok real, nunca deduzida.
+  wasmVariant?: string | null;
 }
 
 // Fase D: histórico real de transições de regime por símbolo (V15 Cap. 5,
@@ -247,8 +251,12 @@ function getHtfMarketStructure(symbol: string): { label: string | null; updatedA
 // called directly here instead of triggered by a button/DOM event.
 export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleResult> {
   const { workerClient, wasmReady } = getWorkerClient();
+  let wasmVariant: string | null = null;
   try {
-    await wasmReady;
+    // init_wasm_ok real carrega `variant` desde a Fase I — capturado aqui
+    // como telemetria (Fase J), nunca deduzido.
+    const init: any = await wasmReady;
+    wasmVariant = typeof init?.variant === 'string' ? init.variant : null;
   } catch (err: any) {
     return { ok: false, reason: `wasm_init_falhou: ${describeError(err)}` };
   }
@@ -379,6 +387,7 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
             classification: snapshot.quality.classification,
           }
         : null,
+      wasmVariant,
     };
   } catch (err: any) {
     return { ok: false, reason: `pipeline_de_pesquisa_falhou: ${describeError(err)}` };
