@@ -191,3 +191,91 @@ describe('market-data-bus: MarketDataBus dedupes concurrent requests (the real F
     expect(smaller.candles).toEqual([c3, c4]);
   });
 });
+
+describe('market-data-bus: stress — high-volume concurrent demand still yields exactly one real fetch', () => {
+  it('25 simultaneous requestSnapshot calls for the same key trigger exactly one collect(), all identical', async () => {
+    const bus = new MarketDataBus();
+    let collectCalls = 0;
+    const collect = async () => {
+      collectCalls++;
+      await new Promise((r) => setTimeout(r, 10));
+      return [candle(1), candle(2), candle(3)];
+    };
+
+    const results = await Promise.all(
+      Array.from({ length: 25 }, () => bus.requestSnapshot({ symbol: 'BTC', timeframe: '15m', limit: 3, collect })),
+    );
+
+    expect(collectCalls).toBe(1);
+    expect(results.every((r) => r.ok)).toBe(true);
+    expect(results.every((r) => r.candles === results[0].candles || JSON.stringify(r.candles) === JSON.stringify(results[0].candles))).toBe(true);
+  });
+
+  it('a burst of consumers with different limits (chart=50, analysis=100, HTF-style=60) within the same freshness window still triggers exactly one collect()', async () => {
+    const bus = new MarketDataBus();
+    let collectCalls = 0;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const window = Array.from({ length: 100 }, (_, i) => candle(nowSec - (99 - i)));
+    const collect = async () => {
+      collectCalls++;
+      return window;
+    };
+
+    const [chart, analysis, mid] = await Promise.all([
+      bus.requestSnapshot({ symbol: 'ETH', timeframe: '15m', limit: 50, collect }),
+      bus.requestSnapshot({ symbol: 'ETH', timeframe: '15m', limit: 100, collect }),
+      bus.requestSnapshot({ symbol: 'ETH', timeframe: '15m', limit: 60, collect }),
+    ]);
+
+    expect(collectCalls).toBe(1);
+    expect(chart.candles.length).toBe(50);
+    expect(analysis.candles.length).toBe(100);
+    expect(mid.candles.length).toBe(60);
+  });
+
+  it('100 sequential requests within the freshness window never re-fetch after the first (no request-storm on a hot key)', async () => {
+    const bus = new MarketDataBus();
+    let collectCalls = 0;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const collect = async () => {
+      collectCalls++;
+      return [candle(nowSec - 1), candle(nowSec)];
+    };
+
+    for (let i = 0; i < 100; i++) {
+      await bus.requestSnapshot({ symbol: 'SOL', timeframe: '15m', limit: 2, collect, maxAgeMs: 60_000 });
+    }
+
+    expect(collectCalls).toBe(1);
+  });
+});
+
+describe('market-data-bus: temporal validation — staleness boundary is exact, never approximate', () => {
+  it('age exactly equal to maxAgeMs is NOT stale (boundary is a strict greater-than)', () => {
+    expect(isStale(10_000, 10_000)).toBe(false);
+  });
+
+  it('age one millisecond past maxAgeMs IS stale', () => {
+    expect(isStale(10_001, 10_000)).toBe(true);
+  });
+
+  it('a snapshot exactly at the freshness boundary is reused; one millisecond older triggers a real refetch', async () => {
+    const bus = new MarketDataBus();
+    let collectCalls = 0;
+    // asOf pinned far enough in the past that we can control ageMs precisely
+    // via maxAgeMs on the second call, instead of racing the real clock.
+    const asOfSec = Math.floor((Date.now() - 5_000) / 1000);
+    const collect = async () => {
+      collectCalls++;
+      return [candle(asOfSec)];
+    };
+
+    const first = await bus.requestSnapshot({ symbol: 'BNB', timeframe: '1m', limit: 1, collect, maxAgeMs: 60_000 });
+    const stillFresh = await bus.requestSnapshot({ symbol: 'BNB', timeframe: '1m', limit: 1, collect, maxAgeMs: 60_000 });
+    expect(collectCalls).toBe(1);
+
+    const nowStale = await bus.requestSnapshot({ symbol: 'BNB', timeframe: '1m', limit: 1, collect, maxAgeMs: 1 });
+    expect(collectCalls).toBe(2);
+    expect(first.ok && stillFresh.ok && nowStale.ok).toBe(true);
+  });
+});

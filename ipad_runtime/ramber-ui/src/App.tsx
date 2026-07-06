@@ -84,10 +84,14 @@ export const WidgetContext = createContext<any>(null);
 // open position, no Math.random() anywhere in this file. Signal/entry/target/
 // stop come from engine-bridge.ts, which calls the SAME real WASM engine and
 // research pipeline ipad_runtime/js/app.js uses (js/worker-client.js +
-// js/real-data/binance-public.js + js/real-data/analysis-frame.js +
-// js/research/research-engine.js/target-tracker.js/trade-setup-matrix.js) —
-// not a second implementation. Live price/orderbook still come from this
-// file's own direct Binance WS (same real public endpoint either way).
+// js/real-data/analysis-frame.js + js/research/research-engine.js/
+// target-tracker.js/trade-setup-matrix.js) — not a second implementation.
+// Fase B (Market Data Bus): candles reach both this file (getChartCandles)
+// and engine-bridge.ts through src/market-data-bus/ — neither calls
+// js/real-data/binance-public.js directly anymore; only the Bus's own
+// connector (binance-candle-connector.js) does. Live price/orderbook still
+// come from this file's own direct Binance WS (same real public endpoint
+// either way) — deliberately out of Fase B's first pass, see engine-bridge.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 const DASH = "—";
 const AWAIT = "AGUARDANDO";
