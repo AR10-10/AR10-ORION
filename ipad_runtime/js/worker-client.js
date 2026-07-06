@@ -19,7 +19,7 @@ export class QuantWorkerClient {
         };
     }
 
-    call(type, payload = {}, timeoutMs = 8000) {
+    call(type, payload = {}, timeoutMs = 8000, transfer = []) {
         const id = ++this.seq;
         return new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
@@ -30,14 +30,19 @@ export class QuantWorkerClient {
                 resolve: (v) => { clearTimeout(timer); resolve(v); },
                 reject: (e) => { clearTimeout(timer); reject(e); },
             });
-            this.worker.postMessage({ id, type, ...payload });
+            this.worker.postMessage({ id, type, ...payload }, transfer);
         });
     }
 
     ping() { return this.call('ping'); }
     initWasm() { return this.call('init_wasm'); }
     computeSeries(closes, window = 20) {
-        return this.call('compute_series', { closes, window }, 15000);
+        // Fase I (Zero-Copy, diretriz 3): closes viajam como Float64Array
+        // TRANSFERIDO — o quant-worker ja escrevia num Float64Array de
+        // qualquer forma (writeBuffer), entao a main thread deixa de clonar
+        // um array de numeros por ciclo (30s) e nao deixa lixo para o GC.
+        const packed = closes instanceof Float64Array ? closes : Float64Array.from(closes);
+        return this.call('compute_series', { closes: packed, window }, 15000, [packed.buffer]);
     }
     selfTest() { return this.call('self_test'); }
     terminate() { this.worker.terminate(); }

@@ -12,27 +12,64 @@
 
 let exportsRef = null;
 let memoryRef = null;
+let loadedVariant = null;
 
+// Fase I (V15 Cap. 16.2, diretriz 4): sonda canonica de suporte a SIMD —
+// um modulo wasm minimo contendo uma instrucao v128 (i8x16.splat).
+// WebAssembly.validate responde true so quando o runtime aceita SIMD; em
+// Safari antigo responde false e o worker nem tenta o binario SIMD.
+const SIMD_PROBE = new Uint8Array([
+    0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3,
+    2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 26, 11,
+]);
+
+function simdSupported() {
+    try {
+        return typeof WebAssembly.validate === 'function' && WebAssembly.validate(SIMD_PROBE);
+    } catch {
+        return false;
+    }
+}
+
+async function instantiate(url) {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`fetch wasm HTTP ${resp.status}`);
+    try {
+        const { instance } = await WebAssembly.instantiateStreaming(resp.clone(), {});
+        return instance.exports;
+    } catch {
+        const bytes = await resp.arrayBuffer();
+        const { instance } = await WebAssembly.instantiate(bytes, {});
+        return instance.exports;
+    }
+}
+
+// Fallback SILENCIOSO (diretriz 4 da Fase I): tenta o binario SIMD apenas
+// quando a sonda aprova; QUALQUER falha nele (404, rede, validacao) cai
+// para o escalar sem erro visivel — o escalar e o mesmo caminho de sempre,
+// validado pela rede numerica da Fase G. Nenhuma degradacao de
+// estabilidade: o pior caso e identico ao comportamento pre-Fase I.
 async function loadWasm() {
     if (exportsRef) return exportsRef;
-    const wasmUrl = new URL('../wasm/cyborg_quant_core.wasm', import.meta.url);
-    let bytes;
-    try {
-        const resp = await fetch(wasmUrl);
-        if (!resp.ok) throw new Error(`fetch wasm HTTP ${resp.status}`);
+    const candidates = simdSupported()
+        ? [
+            { url: new URL('../wasm/cyborg_quant_core_simd.wasm', import.meta.url), variant: 'simd128' },
+            { url: new URL('../wasm/cyborg_quant_core.wasm', import.meta.url), variant: 'escalar' },
+        ]
+        : [{ url: new URL('../wasm/cyborg_quant_core.wasm', import.meta.url), variant: 'escalar' }];
+
+    let lastErr = null;
+    for (const candidate of candidates) {
         try {
-            const { instance } = await WebAssembly.instantiateStreaming(resp.clone(), {});
-            exportsRef = instance.exports;
-        } catch {
-            bytes = await resp.arrayBuffer();
-            const { instance } = await WebAssembly.instantiate(bytes, {});
-            exportsRef = instance.exports;
+            exportsRef = await instantiate(candidate.url);
+            loadedVariant = candidate.variant;
+            memoryRef = exportsRef.memory;
+            return exportsRef;
+        } catch (err) {
+            lastErr = err;
         }
-    } catch (err) {
-        throw new Error(`wasm load failed: ${err.message || err}`);
     }
-    memoryRef = exportsRef.memory;
-    return exportsRef;
+    throw new Error(`wasm load failed: ${(lastErr && lastErr.message) || lastErr}`);
 }
 
 function writeBuffer(closes) {
@@ -60,6 +97,9 @@ self.onmessage = async (ev) => {
                 exportNames: Object.keys(e),
                 version: e.engine_version(),
                 capacity: e.buffer_capacity(),
+                // Fase I: telemetria honesta de qual variante realmente
+                // carregou (1000=escalar, 1001=simd128) — so informativo.
+                variant: loadedVariant,
             });
             return;
         }
