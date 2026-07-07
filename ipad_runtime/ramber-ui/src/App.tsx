@@ -88,9 +88,7 @@ import {
   LayoutDashboard,
   BarChart2,
   Activity,
-  Cpu,
   Scan,
-  Briefcase,
   Settings,
   ArrowUpRight,
   ArrowDownRight,
@@ -109,6 +107,9 @@ import {
   Pin,
   PanelLeft,
   PanelRight,
+  Zap,
+  Newspaper,
+  Bell,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -1613,6 +1614,13 @@ function SiriformCoreCard() {
   const lorentzianLabel = lorentzian
     ? `${lorentzian.classification} · ${lorentzianConfidencePct(lorentzian)}%`
     : AWAIT;
+  // Fusão visual (imagem de referência): anel de sincronização — nunca um
+  // número inventado. 100% só quando o ciclo real do próprio engineStatus
+  // (a MESMA variável que já orienta statusLabel acima) está "ok"; 0%
+  // quando falhou; "pending" fica com o anel indeterminado (animate-spin),
+  // nunca uma % fabricada enquanto o primeiro ciclo real ainda não voltou.
+  const syncPct = engineStatus === "ok" ? 100 : engineStatus === "error" ? 0 : null;
+  const syncColor = syncPct === 100 ? "#00ffaa" : syncPct === 0 ? "#ff0055" : "#f0d06f";
 
   return (
     <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
@@ -1627,6 +1635,26 @@ function SiriformCoreCard() {
         >
           {collapsed ? "EXPANDIR" : "RECOLHER"}
         </button>
+      </div>
+      <div className="flex items-center justify-center py-1">
+        <div
+          className={`relative w-16 h-16 rounded-full flex items-center justify-center shrink-0 ${syncPct === null ? "animate-spin [animation-duration:2.5s]" : ""}`}
+          style={{
+            background:
+              syncPct === null
+                ? `conic-gradient(${syncColor} 0% 25%, rgba(138,180,248,0.12) 25% 100%)`
+                : `conic-gradient(${syncColor} ${syncPct}%, rgba(138,180,248,0.12) ${syncPct}% 100%)`,
+          }}
+        >
+          <div className="absolute inset-[3px] rounded-full bg-[#010308] flex flex-col items-center justify-center">
+            <span
+              className={`text-[0.6rem] font-black ${syncPct === null ? "animate-spin [animation-duration:2.5s] [animation-direction:reverse]" : ""}`}
+              style={{ color: syncColor }}
+            >
+              {syncPct === null ? "···" : `${syncPct}%`}
+            </span>
+          </div>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         <MiniStat label="Ciclo de Análise" value={statusLabel} color={statusColor} />
@@ -2470,14 +2498,25 @@ function SideBar({
   setActiveTab: (t: string) => void;
 }) {
   const { setWorkspaceManagerOpen } = useContext(WidgetContext) || {};
-  const items = [
-    { icon: LayoutDashboard, label: "DASHBOARD" },
-    { icon: BarChart2, label: "MARKET" },
-    { icon: Activity, label: "ANALYTICS" },
-    { icon: Cpu, label: "AI CORE" },
-    { icon: Scan, label: "SCANNER" },
-    { icon: Briefcase, label: "PORTFOLIO" },
-    { icon: Settings, label: "SETTINGS" },
+  // Fusão visual (imagem de referência AR10 CYBORG v15.1 GOD TIER):
+  // id é o valor real de roteamento (só "DASHBOARD" e "SETTINGS" têm
+  // comportamento próprio, ver o ternário logo abaixo de "DASHBOARD" ?
+  // ... : "SETTINGS" ? ... : AGUARDANDO); label é só o texto exibido —
+  // desacoplar os dois deixa os nomes do menu iguais aos da imagem sem
+  // tocar em nenhuma lógica de roteamento real. As 7 abas que não são
+  // COCKPIT/CONFIGURAÇÕES continuam o mesmo placeholder honesto
+  // "AGUARDANDO FONTE DE DADOS REAL" que já usavam — nenhuma delas fica
+  // com uma alegação de dado real que este terminal não tem.
+  const items: { icon: any; id: string; label: string }[] = [
+    { icon: LayoutDashboard, id: "DASHBOARD", label: "COCKPIT" },
+    { icon: BarChart2, id: "MERCADOS", label: "MERCADOS" },
+    { icon: Activity, id: "ANÁLISES", label: "ANÁLISES" },
+    { icon: ShieldCheck, id: "RISCOS", label: "RISCOS" },
+    { icon: Zap, id: "EXECUÇÃO", label: "EXECUÇÃO" },
+    { icon: Scan, id: "SCANNER", label: "SCANNER" },
+    { icon: Newspaper, id: "NOTÍCIAS", label: "NOTÍCIAS" },
+    { icon: Bell, id: "ALERTAS", label: "ALERTAS" },
+    { icon: Settings, id: "SETTINGS", label: "CONFIGURAÇÕES" },
   ];
   return (
     <div className="w-[60px] md:w-[70px] border-r border-[#00f0ff20] bg-[#010308]/95 flex flex-col items-center py-3 gap-5 shrink-0 z-10 overflow-y-auto scrollbar-hide backdrop-blur-md">
@@ -2486,11 +2525,11 @@ function SideBar({
         <div className="absolute inset-0 border border-[#00f0ff] rounded-full animate-ping opacity-30"></div>
       </div>
       {items.map((item) => {
-        const isActive = activeTab === item.label;
+        const isActive = activeTab === item.id;
         return (
           <div
-            key={item.label}
-            onClick={() => setActiveTab(item.label)}
+            key={item.id}
+            onClick={() => setActiveTab(item.id)}
             className={`flex flex-col items-center gap-1 w-full cursor-pointer transition-colors relative py-1.5 ${isActive ? "text-[#00f0ff] bg-gradient-to-r from-[#00f0ff1a] to-transparent" : "text-[#8ab4f8]/50 hover:text-[#8ab4f8]"}`}
           >
             {isActive && (
@@ -3477,6 +3516,7 @@ function MarketBiasDecisionCard() {
   const direction: Direction = engine?.direction ?? null;
   const isLong = direction === "LONG";
   const isShort = direction === "SHORT";
+  const dirLabelColor = isLong ? "text-[#00ffaa]" : isShort ? "text-[#ff0055]" : "text-[#8ab4f8]/60";
   const entry: number | null = engine?.entry ?? null;
   const target: number | null = engine?.target ?? null;
   const target2: number | null = engine?.target2 ?? null;
@@ -3524,76 +3564,99 @@ function MarketBiasDecisionCard() {
           ? "text-[#ff0055] border-[#ff0055]/40 bg-[#ff0055]/10"
           : "text-[#00ffaa] border-[#00ffaa]/40 bg-[#00ffaa]/10";
 
+  // Fusão visual (imagem de referência): a imagem mostra "DIREÇÃO" e
+  // "GESTÃO DE POSIÇÃO" como 2 cards empilhados, não 1 — dividido aqui
+  // por puro reagrupamento visual, os MESMOS campos reais de antes,
+  // nenhum dado novo. Omite deliberadamente o slider de alavancagem e o
+  // slider de quantidade em BTC + o botão verde de execução assistida da
+  // imagem: este terminal é READ_ONLY por decisão permanente (sem chave
+  // de API, sem caminho de envio de ordem em lugar nenhum do código) e já tinha,
+  // antes desta sessão, substituído um antigo widget de "posição ao
+  // vivo" fabricada por um aviso honesto — reintroduzir uma UI de
+  // quantidade/alavancagem repetiria exatamente o padrão já rejeitado.
   return (
-    <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
-      <div className="flex items-center justify-between">
+    <>
+      <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
+        <div className="flex items-center justify-between">
+          <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">DIREÇÃO</span>
+          <span
+            className={`text-[0.45rem] font-black tracking-[0.15em] uppercase px-2 py-0.5 rounded border ${decisionClass}`}
+            title="Rótulo analítico — nunca aciona ordens (READ_ONLY)"
+          >
+            {decisionStatus}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-3 gap-1.5">
+          <div className={`text-center py-1.5 rounded border text-[0.5rem] font-black tracking-widest ${isLong ? "border-[#00ffaa60] bg-[#00ffaa15] text-[#00ffaa]" : "border-[#8ab4f8]/15 text-[#8ab4f8]/30"}`}>
+            LONG
+          </div>
+          <div className={`text-center py-1.5 rounded border text-[0.5rem] font-black tracking-widest ${!direction ? "border-[#8ab4f8]/40 bg-[#8ab4f8]/10 text-[#8ab4f8]" : "border-[#8ab4f8]/15 text-[#8ab4f8]/30"}`}>
+            NEUTRO
+          </div>
+          <div className={`text-center py-1.5 rounded border text-[0.5rem] font-black tracking-widest ${isShort ? "border-[#ff005560] bg-[#ff005515] text-[#ff0055]" : "border-[#8ab4f8]/15 text-[#8ab4f8]/30"}`}>
+            SHORT
+          </div>
+        </div>
+
+        <span className="text-[0.45rem] text-[#8ab4f8]/60 tracking-[0.15em] font-bold uppercase">
+          Sinal Institucional
+        </span>
+        <span className={`text-[0.75rem] font-black tracking-wide -mt-1 ${dirLabelColor}`}>
+          {direction ?? AWAIT}
+        </span>
+
+        <MiniStat label="Convicção (Core Engine)" value={confidenceLabel} color="text-[#8ab4f8]" />
+      </div>
+
+      <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
         <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">
-          DIREÇÃO · GESTÃO DE POSIÇÃO
+          GESTÃO DE POSIÇÃO
         </span>
-        <span
-          className={`text-[0.45rem] font-black tracking-[0.15em] uppercase px-2 py-0.5 rounded border ${decisionClass}`}
-          title="Rótulo analítico — nunca aciona ordens (READ_ONLY)"
-        >
-          {decisionStatus}
-        </span>
-      </div>
 
-      <div className="grid grid-cols-3 gap-1.5">
-        <div className={`text-center py-1.5 rounded border text-[0.5rem] font-black tracking-widest ${isLong ? "border-[#00ffaa60] bg-[#00ffaa15] text-[#00ffaa]" : "border-[#8ab4f8]/15 text-[#8ab4f8]/30"}`}>
-          LONG
-        </div>
-        <div className={`text-center py-1.5 rounded border text-[0.5rem] font-black tracking-widest ${!direction ? "border-[#8ab4f8]/40 bg-[#8ab4f8]/10 text-[#8ab4f8]" : "border-[#8ab4f8]/15 text-[#8ab4f8]/30"}`}>
-          NEUTRO
-        </div>
-        <div className={`text-center py-1.5 rounded border text-[0.5rem] font-black tracking-widest ${isShort ? "border-[#ff005560] bg-[#ff005515] text-[#ff0055]" : "border-[#8ab4f8]/15 text-[#8ab4f8]/30"}`}>
-          SHORT
-        </div>
-      </div>
-
-      <MiniStat label="Convicção (Core Engine)" value={confidenceLabel} color="text-[#8ab4f8]" />
-
-      {direction ? (
-        <div className="grid grid-cols-2 gap-1.5">
-          <LevelCard label="Entrada" value={entry} accent="#00f0ff" tag="REF" />
-          <LevelCard label="Invalidação" value={stop} accent="#ff0055" tag="REAL" />
-          <LevelCard
-            label="Alvo 1"
-            value={target}
-            accent="#00ffaa"
-            tag={target1Strength?.label ?? "REAL"}
-          />
-          <LevelCard
-            label="Alvo 2"
-            value={target2}
-            accent="#00ffaa"
-            tag={target2Strength?.label ?? "REAL"}
-            dim={!num(target2)}
-          />
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 p-2.5 rounded-lg border border-[#8ab4f8]/20 bg-[#8ab4f8]/5">
-          <div className="w-1.5 h-1.5 rounded-full bg-[#f0d06f] animate-pulse shrink-0"></div>
-          <span className="text-[0.45rem] tracking-[0.1em] text-[#8ab4f8] font-bold uppercase leading-relaxed">
-            Motor real aguardando confirmação direcional — zonas de entrada/alvos/stop aparecem aqui assim que houver sinal.
-          </span>
-        </div>
-      )}
-
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {num(riskRewardRatio) && (
-          <span className="text-[#f0d06f] border border-[#f0d06f]/40 bg-[#f0d06f]/10 text-[0.5rem] font-bold px-2 py-0.5 rounded">
-            R:R {riskRewardRatio.toFixed(2)}
-          </span>
+        {direction ? (
+          <div className="grid grid-cols-2 gap-1.5">
+            <LevelCard label="Entrada" value={entry} accent="#00f0ff" tag="REF" />
+            <LevelCard label="Invalidação" value={stop} accent="#ff0055" tag="REAL" />
+            <LevelCard
+              label="Alvo 1"
+              value={target}
+              accent="#00ffaa"
+              tag={target1Strength?.label ?? "REAL"}
+            />
+            <LevelCard
+              label="Alvo 2"
+              value={target2}
+              accent="#00ffaa"
+              tag={target2Strength?.label ?? "REAL"}
+              dim={!num(target2)}
+            />
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 p-2.5 rounded-lg border border-[#8ab4f8]/20 bg-[#8ab4f8]/5">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#f0d06f] animate-pulse shrink-0"></div>
+            <span className="text-[0.45rem] tracking-[0.1em] text-[#8ab4f8] font-bold uppercase leading-relaxed">
+              Motor real aguardando confirmação direcional — zonas de entrada/alvos/stop aparecem aqui assim que houver sinal.
+            </span>
+          </div>
         )}
-        <span className={`text-[0.5rem] font-bold px-2 py-0.5 rounded border ${riskOk ? "text-[#00f0ff] border-[#00f0ff]/40 bg-[#00f0ff]/10" : "text-[#8ab4f8]/50 border-[#8ab4f8]/20"}`}>
-          TAMANHO SUGERIDO · {riskLabel}
+
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {num(riskRewardRatio) && (
+            <span className="text-[#f0d06f] border border-[#f0d06f]/40 bg-[#f0d06f]/10 text-[0.5rem] font-bold px-2 py-0.5 rounded">
+              R:R {riskRewardRatio.toFixed(2)}
+            </span>
+          )}
+          <span className={`text-[0.5rem] font-bold px-2 py-0.5 rounded border ${riskOk ? "text-[#00f0ff] border-[#00f0ff]/40 bg-[#00f0ff]/10" : "text-[#8ab4f8]/50 border-[#8ab4f8]/20"}`}>
+            TAMANHO SUGERIDO · {riskLabel}
+          </span>
+        </div>
+
+        <span className="text-[0.4rem] text-[#f0d06f]/80 font-bold tracking-widest">
+          SUGESTÃO ALGORÍTMICA · NÃO É CONSELHO FINANCEIRO · SEM EXECUÇÃO REAL (READ_ONLY)
         </span>
       </div>
-
-      <span className="text-[0.4rem] text-[#f0d06f]/80 font-bold tracking-widest">
-        SUGESTÃO ALGORÍTMICA · NÃO É CONSELHO FINANCEIRO · SEM EXECUÇÃO REAL (READ_ONLY)
-      </span>
-    </div>
+    </>
   );
 }
 

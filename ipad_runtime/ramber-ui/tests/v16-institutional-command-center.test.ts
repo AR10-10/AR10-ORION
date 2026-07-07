@@ -187,3 +187,46 @@ describe('V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas): e
     expect(mainMatch![1]).not.toContain('order:');
   });
 });
+
+describe('Fusão visual (imagem de referência AR10 CYBORG v15.1 GOD TIER): SideBar renomeada, ganho circular do Siriform, DIREÇÃO/GESTÃO DE POSIÇÃO em cards separados', () => {
+  it('SideBar desacopla id (roteamento real) de label (texto exibido) — só DASHBOARD/SETTINGS continuam com comportamento próprio', () => {
+    const app = read('../src/App.tsx');
+    const itemsMatch = app.match(/const items: \{ icon: any; id: string; label: string \}\[\] = \[([\s\S]*?)\n {2}\];/);
+    expect(itemsMatch, 'items do SideBar não encontrado').not.toBeNull();
+    const body = itemsMatch![1];
+    expect(body).toContain('id: "DASHBOARD", label: "COCKPIT"');
+    expect(body).toContain('id: "SETTINGS", label: "CONFIGURAÇÕES"');
+    // o roteamento real (App(), ternário do activeTab) continua comparando
+    // contra as strings originais — a troca de label nunca pode quebrá-lo.
+    expect(app).toContain('activeTab === "DASHBOARD" ?');
+    expect(app).toContain('activeTab === "SETTINGS" ?');
+    expect(app).toContain('onClick={() => setActiveTab(item.id)}');
+  });
+
+  it('SiriformCoreCard: anel de sincronização é derivado de engineStatus (a MESMA variável do statusLabel ao lado) — nunca uma % fabricada', () => {
+    const app = read('../src/App.tsx');
+    const fnMatch = app.match(/function SiriformCoreCard\(\) \{([\s\S]*?)\n\}\n/);
+    expect(fnMatch, 'SiriformCoreCard não encontrada').not.toBeNull();
+    const body = fnMatch![1];
+    expect(body).toContain('const syncPct = engineStatus === "ok" ? 100 : engineStatus === "error" ? 0 : null;');
+    expect(body).toContain('conic-gradient');
+    // "pending" nunca vira uma porcentagem inventada — só o anel indeterminado.
+    expect(body).not.toMatch(/syncPct = engineStatus === "pending" \? \d/);
+  });
+
+  it('MarketBiasDecisionCard renderiza DIREÇÃO e GESTÃO DE POSIÇÃO como 2 cyber-panels distintos (imagem de referência), mesmos campos reais de antes', () => {
+    const app = read('../src/App.tsx');
+    const fnMatch = app.match(/function MarketBiasDecisionCard\(\) \{([\s\S]*?)\n\}\n/);
+    expect(fnMatch, 'MarketBiasDecisionCard não encontrada').not.toBeNull();
+    const body = fnMatch![1];
+    const panelCount = (body.match(/className="cyber-panel shrink-0 flex flex-col gap-2 p-3"/g) ?? []).length;
+    expect(panelCount).toBe(2);
+    expect(body).toContain('>DIREÇÃO<');
+    expect(body).toContain('GESTÃO DE POSIÇÃO');
+    // a alavancagem sugerida e o slider de quantidade/botão "TRADE
+    // ASSISTIDO" da imagem de referência continuam FORA — READ_ONLY
+    // permanente, sem caminho de execução em lugar nenhum do código.
+    expect(app).not.toMatch(/alavancagem sugerida/i);
+    expect(app).not.toContain('TRADE ASSISTIDO');
+  });
+});
