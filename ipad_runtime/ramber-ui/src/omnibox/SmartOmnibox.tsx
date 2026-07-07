@@ -101,7 +101,15 @@ export function SmartOmnibox({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 w-[300px] max-h-[70vh] overflow-y-auto scrollbar-hide cyber-panel bg-[#010308]/98 z-50 p-2">
+        // BUGFIX (Diretriz 3): `.cyber-panel` (index.css) define
+        // `overflow: hidden` — como essa regra vem DEPOIS das utilidades
+        // do Tailwind no CSS compilado, ela vencia a cascata sobre
+        // `overflow-y-auto` (mesma especificidade, mesma propriedade), e
+        // a lista comprida de resultados não rolava nem com o dedo nem
+        // com o mouse. Mesmo padrão de bug já documentado no wrapper
+        // Widget() (`!fixed !inset-2` no modo maximizado) — correção
+        // idêntica aqui: `!overflow-y-auto` força a vitória na cascata.
+        <div className="absolute top-full left-0 mt-1.5 w-[300px] max-h-[70vh] !overflow-y-auto scrollbar-hide cyber-panel bg-[#010308]/98 z-50 p-2">
           <input
             autoFocus
             value={query}

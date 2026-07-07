@@ -1109,7 +1109,7 @@ export default function App() {
                   {(widgets.chart.visible ||
                     widgets.market_direction.visible ||
                     widgets.se_core.visible) && (
-                    <div className="terminal-main min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2 pointer-events-none [&>*]:pointer-events-auto">
+                    <div className="terminal-main min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2">
                       {widgets.chart.visible &&
                         (marketMode === "TRADFI" ? (
                           <TradFiEmptyState
@@ -1119,8 +1119,22 @@ export default function App() {
                           <ChartWidget data={priceData} chartData={chartData} />
                         ))}
                       {(widgets.market_direction.visible || widgets.se_core.visible) && (
+                        // BUGFIX (Diretriz 3): este wrapper era `shrink-0` (sem
+                        // flex-grow) — mas o AssistantOrb aninhado dentro dele
+                        // tem seu próprio `flex-1` (herdado de quando era o
+                        // único item da antiga coluna do meio, onde fazia
+                        // sentido crescer sozinho). Um filho `flex-1` dentro
+                        // de um pai `shrink-0`/altura `auto` cria distribuição
+                        // de altura mal-definida — o Gráfico (`flex-[1.8]` no
+                        // .terminal-main) perdia a disputa e colapsava quase a
+                        // zero (reportado como "painel principal quebrado").
+                        // Corrigido dando a este wrapper um flex-grow REAL
+                        // (`flex-[0.7]`) + `min-h-0`, para competir de forma
+                        // bem definida com o Gráfico dentro do .terminal-main
+                        // — a mesma mecânica que já funcionava nas 3 colunas
+                        // antigas, só que explícita aqui também.
                         <div
-                          className={`shrink-0 flex flex-col gap-2 relative z-0 transition-[filter] duration-500 ${criticalPulse ? "drop-shadow-[0_0_18px_rgba(0,240,255,0.5)]" : ""}`}
+                          className={`flex-[0.7] min-h-0 min-[1120px]:min-h-0 flex flex-col gap-2 relative z-0 transition-[filter] duration-500 ${criticalPulse ? "drop-shadow-[0_0_18px_rgba(0,240,255,0.5)]" : ""}`}
                         >
                           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.05)_0%,transparent_60%)] pointer-events-none mix-blend-screen"></div>
                           {marketMode === "TRADFI" ? (
@@ -1150,7 +1164,7 @@ export default function App() {
                     widgets.events.visible ||
                     widgets.neural_core.visible ||
                     widgets.asset_heatmap.visible) && (
-                    <div className="terminal-aside min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2 pointer-events-none [&>*]:pointer-events-auto">
+                    <div className="terminal-aside min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2">
                       <GmilContextWidget />
                       {(widgets.market_regime.visible || widgets.decision_validation.visible) &&
                         (marketMode === "TRADFI" ? (
@@ -1201,7 +1215,7 @@ export default function App() {
                     widgets.orderbook.visible ||
                     widgets.orderflow.visible ||
                     widgets.heatmap.visible) && (
-                    <div className="terminal-strip shrink-0 flex gap-2 overflow-x-auto scrollbar-hide h-[200px] min-[1120px]:h-[168px] pointer-events-none [&>*]:pointer-events-auto">
+                    <div className="terminal-strip shrink-0 flex gap-2 overflow-x-auto scrollbar-hide h-[200px] min-[1120px]:h-[168px]">
                       {widgets.system_health.visible && (
                         <div className="min-w-[240px] flex-1 flex flex-col">
                           <TelemetryHealthWidget />
@@ -1891,7 +1905,19 @@ function TopBar({
     setMarketMode,
     selectedTradFiAsset,
     setSelectedTradFiAsset,
+    realCycle,
   } = useContext(WidgetContext) || {};
+  // Overhaul Cross-Market (Diretriz 2): o rótulo do mercado é passthrough
+  // REAL de realCycle.instrumentType (mesmo padrão de wasmVariant) — nunca
+  // uma string fixa. Antes de qualquer ciclo bem-sucedido (ou se o fetch
+  // de futuros falhar), fica AGUARDANDO honesto em vez de afirmar
+  // "Futures/Perp" sem ter recebido dado real nenhum.
+  const cryptoMarketLabel =
+    realCycle?.instrumentType === "crypto_futures"
+      ? "Futures/Perp"
+      : realCycle?.instrumentType === "crypto_spot"
+        ? "Spot"
+        : AWAIT;
   const isPos = (data?.deltaPct ?? 0) >= 0;
   const [uptime, setUptime] = useState("");
 
@@ -1958,7 +1984,7 @@ function TopBar({
                   marketMode === "TRADFI" ? "bg-[#b026ff20] text-[#b026ff]" : "bg-[#00f0ff20] text-[#00f0ff]"
                 }`}
               >
-                {marketMode === "TRADFI" ? "Macro" : "Spot"}
+                {marketMode === "TRADFI" ? "Macro" : cryptoMarketLabel}
               </span>
             </div>
           </div>

@@ -13,14 +13,22 @@
 // Fase B (V15 Cap. 2, Market Data Bus): este arquivo NÃO chama mais
 // js/real-data/binance-public.js diretamente. Todo candle (ciclo 15m, HTF
 // 1h) vem de getMarketDataBus().requestSnapshot() — o Bus é quem chama o
-// conector real (src/market-data-bus/binance-candle-connector.js), dedupe
+// conector real (src/market-data-bus/binance-*-candle-connector.js), dedupe
 // entre chamadores concorrentes (este arquivo e App.tsx's getChartCandles)
 // e nunca dispara duas sondas de rede redundantes para a mesma
 // symbol:timeframe.
+//
+// Overhaul Cross-Market (Diretriz 2): Gráfico e Risk Engine consomem
+// EXCLUSIVAMENTE o mercado USDT-M Futures/Perpétuo — não mais Spot. Toda
+// chamada ao Bus abaixo usa collectBinanceFuturesKlines e uma chave
+// `${symbol}-PERP` própria (nunca colide em cache com um eventual
+// snapshot spot do mesmo símbolo). GMIL e o Order Flow (MEXC) continuam
+// no mercado que já usavam antes — esta troca é escopada só aos dois
+// consumidores citados na diretriz.
 import { QuantWorkerClient } from '../../js/worker-client.js';
 import { OrderflowWorkerClient } from '../../js/orderflow-client.js';
 import { getMarketDataBus } from '../../src/market-data-bus/index.js';
-import { collectBinanceKlines } from '../../src/market-data-bus/binance-candle-connector.js';
+import { collectBinanceFuturesKlines } from '../../src/market-data-bus/binance-futures-candle-connector.js';
 import { createLivePoller } from '../../js/real-data/mexc-trades-stream.js';
 import { CONNECTOR_STATES } from '../../js/real-data/schema.js';
 import { buildRealAnalysisFrame } from '../../js/real-data/analysis-frame.js';
@@ -63,7 +71,12 @@ interface BusSnapshot {
 // `any` (nenhum campo novo, só o contrato que já existia tornado visível).
 interface CoreEvidence {
   symbol: string;
-  instrument_type: 'crypto_spot';
+  // Overhaul Cross-Market: sempre 'crypto_futures' agora — o Bus só é
+  // chamado com o conector de futuros neste arquivo (ver import acima).
+  // O tipo permanece uma união fechada (nunca um terceiro valor
+  // inventado); 'crypto_spot' fica no vocabulário para o dia em que um
+  // consumidor real voltar a pedir Spot explicitamente.
+  instrument_type: 'crypto_spot' | 'crypto_futures';
   timeframe: string;
   source_id: string;
   timestamp: string;
@@ -148,6 +161,13 @@ export interface RealCycleResult {
   // ('escalar' | 'simd128', Fase I) — telemetria pura, capturada do
   // init_wasm_ok real, nunca deduzida.
   wasmVariant?: string | null;
+  // Overhaul Cross-Market (Diretriz 2): passthrough honesto de qual
+  // mercado realmente alimentou este ciclo — 'crypto_futures' quando o
+  // Bus devolveu candles reais de futuros, null enquanto nenhum ciclo
+  // bem-sucedido ainda rodou. A UI deriva o rótulo "FUTURES/PERP" DESTE
+  // campo, nunca de uma string fixa — se o fetch falhar, o rótulo vira
+  // AGUARDANDO honesto em vez de afirmar um mercado que não respondeu.
+  instrumentType?: 'crypto_spot' | 'crypto_futures' | null;
 }
 
 // Fase D: histórico real de transições de regime por símbolo (V15 Cap. 5,
@@ -216,8 +236,10 @@ function refreshHtfMarketStructureInBackground(symbol: string): void {
       // Fase B: chave 'symbol:1h' própria no Bus, separada da chave
       // 'symbol:15m' do ciclo principal abaixo — não competem nem se
       // sobrescrevem, cada timeframe mantém seu próprio snapshot cacheado.
+      // Overhaul: sufixo -PERP (futuros, Diretriz 2) para nunca colidir
+      // com um eventual snapshot spot do mesmo símbolo/timeframe.
       const htfSnapshot: BusSnapshot = await getMarketDataBus().requestSnapshot({
-        symbol, timeframe: HTF_INTERVAL, limit: 60, collect: collectBinanceKlines, maxAgeMs: HTF_REFRESH_MS,
+        symbol: `${symbol}-PERP`, timeframe: HTF_INTERVAL, limit: 60, collect: collectBinanceFuturesKlines, maxAgeMs: HTF_REFRESH_MS,
       });
       if (!htfSnapshot.ok) {
         htfCache = { symbol, structureLabel: null, fetchedAt: Date.now() };
@@ -261,14 +283,15 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
     return { ok: false, reason: `wasm_init_falhou: ${describeError(err)}` };
   }
 
-  // Fase B (Market Data Bus): pede o snapshot canônico de BTC:15m em vez de
-  // sondar Binance diretamente. Se App.tsx (getChartCandles) já pediu essa
-  // mesma chave há menos de 25s, este cycle reaproveita o mesmo snapshot —
-  // zero segunda sonda de rede para o mesmo candle.
+  // Fase B (Market Data Bus): pede o snapshot canônico de BTC-PERP:15m em
+  // vez de sondar Binance diretamente. Se App.tsx (getChartCandles) já
+  // pediu essa mesma chave há menos de 25s, este cycle reaproveita o
+  // mesmo snapshot — zero segunda sonda de rede para o mesmo candle.
+  // Overhaul (Diretriz 2): futuros/perpétuo, não mais spot — ver header.
   let snapshot: BusSnapshot;
   try {
     snapshot = await getMarketDataBus().requestSnapshot({
-      symbol, timeframe: '15m', limit: 100, collect: collectBinanceKlines, maxAgeMs: 25_000,
+      symbol: `${symbol}-PERP`, timeframe: '15m', limit: 100, collect: collectBinanceFuturesKlines, maxAgeMs: 25_000,
     });
   } catch (err: any) {
     return { ok: false, reason: `market_data_bus_lancou_excecao: ${describeError(err)}` };
@@ -287,7 +310,10 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
   const lastCandle = snapshot.candles[snapshot.candles.length - 1];
   const evidence: CoreEvidence = {
     symbol,
-    instrument_type: 'crypto_spot',
+    // Overhaul Cross-Market (Diretriz 2): o Bus acima só foi chamado com
+    // o conector de futuros — este valor reflete a coleta real, nunca um
+    // rótulo independente do que de fato aconteceu.
+    instrument_type: 'crypto_futures',
     timeframe: snapshot.timeframe,
     source_id: 'market-data-bus',
     timestamp: new Date(snapshot.asOf ?? snapshot.fetchedAt).toISOString(),
@@ -387,6 +413,7 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
             classification: snapshot.quality.classification,
           }
         : null,
+      instrumentType: evidence.instrument_type,
       wasmVariant,
     };
   } catch (err: any) {
@@ -395,17 +422,18 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
 }
 
 // Fase B (Market Data Bus): candles do gráfico da UI (App.tsx's chartData)
-// vêm da MESMA chave symbol:15m que o ciclo de análise acima usa — não é
-// mais um segundo fetch() direto a api.binance.com/klines feito de dentro
-// de App.tsx. Achado real da Fase A: antes desta mudança, App.tsx e este
-// arquivo sondavam klines de forma independente e simultânea a cada ~30s,
-// mesmo símbolo, mesmo timeframe, dois resultados que podiam nem bater.
+// vêm da MESMA chave symbol-PERP:15m que o ciclo de análise acima usa —
+// não é mais um segundo fetch() direto a api.binance.com/klines feito de
+// dentro de App.tsx. Achado real da Fase A: antes desta mudança, App.tsx e
+// este arquivo sondavam klines de forma independente e simultânea a cada
+// ~30s, mesmo símbolo, mesmo timeframe, dois resultados que podiam nem
+// bater. Overhaul (Diretriz 2): futuros/perpétuo, não mais spot.
 export async function getChartCandles(
   symbol = 'BTC',
   limit = 50,
 ): Promise<Array<{ open: number; high: number; low: number; close: number }> | null> {
   const snapshot = await getMarketDataBus().requestSnapshot({
-    symbol, timeframe: '15m', limit, collect: collectBinanceKlines, maxAgeMs: 25_000,
+    symbol: `${symbol}-PERP`, timeframe: '15m', limit, collect: collectBinanceFuturesKlines, maxAgeMs: 25_000,
   });
   if (!snapshot.ok) return null;
   return snapshot.candles.map((c: { o: number; h: number; l: number; c: number }) => ({

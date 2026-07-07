@@ -4,6 +4,11 @@
 // fique num só lugar.
 export { MarketDataBus, getMarketDataBus } from './bus.js';
 export { collectBinanceKlines } from './binance-candle-connector.js';
+// Overhaul Cross-Market (Diretriz 2): segundo conector de candles —
+// USDT-M Futures/Perpétuo — sibling do spot acima, mesmo contrato de
+// `collect`, injetado sob uma chave de Bus própria (symbol-PERP) para
+// nunca colidir em cache com um eventual snapshot spot do mesmo símbolo.
+export { collectBinanceFuturesKlines } from './binance-futures-candle-connector.js';
 export { normalizeCandles } from './normalizer.js';
 export { validateCandleSeries } from './integrity-validator.js';
 export { computeAsOf, computeAgeMs, isStale } from './time-synchronizer.js';
