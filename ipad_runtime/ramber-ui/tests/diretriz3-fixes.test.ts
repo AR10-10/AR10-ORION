@@ -15,27 +15,33 @@ import { dirname, resolve } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 
-describe('bug 1: colapso do Gráfico — o wrapper do Vetor de Mercado/S.E. precisa de flex-grow real', () => {
-  it('o wrapper que envolve MarketDirectionWidget+AssistantOrb NÃO é mais "shrink-0" sozinho (sem crescimento) dentro de .terminal-main', () => {
+describe('V16 Institutional Command Center: o Gráfico é o único ocupante de .terminal-main (nunca mais divide a área "main" com o Vetor de Mercado/S.E.)', () => {
+  // A causa raiz do bug 1 original (colapso do Gráfico) era um wrapper
+  // MarketDirectionWidget+AssistantOrb competindo por altura DENTRO da
+  // mesma .terminal-main que o Gráfico — corrigido na Diretriz 3 dando
+  // flex-grow real ao wrapper. O V16 remove a causa inteira em vez de só
+  // mitigá-la: MarketDirectionWidget virou parte fixa da coluna
+  // .terminal-left (Market Intelligence) e AssistantOrb virou detalhe
+  // expandido sob demanda na .terminal-strip — nenhum dos dois compete
+  // mais pela altura do Gráfico. Este teste trava essa separação
+  // estrutural para que a classe de bug não seja reintroduzida.
+  it('.terminal-main contém ChartWidget/TradFiEmptyState mas NUNCA MarketDirectionWidget nem AssistantOrb', () => {
     const app = read('../src/App.tsx');
-    // A causa raiz: um filho com flex-1 (AssistantOrb) dentro de um pai
-    // shrink-0/altura-auto cria distribuição de altura mal-definida,
-    // fazendo o Gráfico (flex-[1.8] no .terminal-main) colapsar. A
-    // correção dá ao wrapper um flex-grow explícito.
-    const wrapperMatch = app.match(
-      /className=\{`([^`]*)\s+flex flex-col gap-2 relative z-0 transition-\[filter\][^`]*`\}\s*\n\s*>\s*\n\s*<div className="absolute inset-0[^"]*mix-blend-screen">/,
-    );
-    expect(wrapperMatch, 'wrapper do Vetor de Mercado/S.E. não encontrado com a estrutura esperada').not.toBeNull();
-    const classesBeforeFlex = wrapperMatch![1];
-    expect(classesBeforeFlex).not.toMatch(/^\s*shrink-0\s*$/);
-    expect(classesBeforeFlex).toMatch(/flex-\[[\d.]+\]/); // algum flex-grow numérico real
+    const mainMatch = app.match(/<div className="terminal-main[^"]*">([\s\S]*?)\n {20}<\/div>\n\n {20}\{\/\* RIGHT/);
+    expect(mainMatch, '.terminal-main não encontrado com a estrutura esperada').not.toBeNull();
+    const mainBody = mainMatch![1];
+    expect(mainBody).toContain('ChartWidget');
+    expect(mainBody).not.toContain('MarketDirectionWidget');
+    expect(mainBody).not.toContain('<AssistantOrb');
   });
 
-  it('esse wrapper tem min-h-0 (necessário para o flex-grow realmente distribuir a altura do .terminal-main)', () => {
+  it('.terminal-left (Market Intelligence) contém MarketDirectionWidget + MarketBiasDecisionCard, sempre visíveis (sem gear)', () => {
     const app = read('../src/App.tsx');
-    const wrapperMatch = app.match(/className=\{`(flex-\[[\d.]+\][^`]*)\s+flex flex-col gap-2 relative z-0/);
-    expect(wrapperMatch).not.toBeNull();
-    expect(wrapperMatch![1]).toContain('min-h-0');
+    const leftMatch = app.match(/<div className="terminal-left[^"]*">([\s\S]*?)\n {20}<\/div>\n\n {20}\{\/\* MAIN/);
+    expect(leftMatch, '.terminal-left não encontrado com a estrutura esperada').not.toBeNull();
+    const leftBody = leftMatch![1];
+    expect(leftBody).toContain('<MarketDirectionWidget');
+    expect(leftBody).toContain('<MarketBiasDecisionCard');
   });
 });
 
@@ -73,9 +79,9 @@ describe('estabilização (Prioridade 4, UX Profissional): pinch-zoom nativo pre
 });
 
 describe('bug 3: scroll em paisagem — pointer-events-none removido dos containers do grid', () => {
-  it('nenhum dos 3 containers nomeados (.terminal-main/.terminal-aside/.terminal-strip) declara pointer-events-none', () => {
+  it('nenhum dos 4 containers nomeados (.terminal-main/.terminal-left/.terminal-right/.terminal-strip) declara pointer-events-none', () => {
     const app = read('../src/App.tsx');
-    for (const cls of ['terminal-main', 'terminal-aside', 'terminal-strip']) {
+    for (const cls of ['terminal-main', 'terminal-left', 'terminal-right', 'terminal-strip']) {
       const regex = new RegExp(`className="${cls}[^"]*"`, 'g');
       const matches = app.match(regex) ?? [];
       expect(matches.length, `nenhuma ocorrência de className="${cls}..." encontrada`).toBeGreaterThan(0);

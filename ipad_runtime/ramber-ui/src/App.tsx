@@ -105,6 +105,8 @@ import {
   Minimize2,
   ZoomIn,
   ZoomOut,
+  LayoutGrid,
+  Pin,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -228,12 +230,9 @@ export default function App() {
   const [bootAt] = useState(() => Date.now());
   const [wsLive, setWsLive] = useState(false);
   const [activeTab, setActiveTab] = useState("DASHBOARD");
-  // DCI progressive disclosure (item 2): secondary panels (Scanner, Exposure,
-  // Events, Neural Core) stay collapsed by default so the first screen shows
-  // only decision-critical info. This is independent from each widget's own
-  // visible/floating toggle in SETTINGS — a widget can be "enabled" there and
-  // still start collapsed here.
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  // V16 Workspace Manager panel (Pinned/Docked/Collapsed/Hidden/Floating
+  // per secondary module) — opened from the SideBar's footer button.
+  const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState(false);
 
   // The currently analyzed asset. Included in the SAME effect dependency
   // arrays as bootGeneration below — switching it tears down and re-opens
@@ -293,32 +292,50 @@ export default function App() {
   const [liquidations, setLiquidations] = useState<LiquidationEvent[]>([]);
   const [liquidationState, setLiquidationState] = useState<"LIVE" | "ERROR" | "pending">("pending");
 
-  // Widget visibility / floating state. Defaults show the full real-data
-  // cockpit (chart/orderflow/heatmap/orderbook/scanner/exposure/events) —
-  // only Neural Core defaults off (opt-in, multi-GB local LLM download).
-  // Persisted to localStorage so a reload never silently drops the dashboard
-  // back to a near-empty screen.
-  const WIDGET_PREFS_KEY = "ramber_widget_prefs_v1";
-  const DEFAULT_WIDGETS: { [key: string]: { visible: boolean; floating: boolean } } = {
-    chart: { visible: true, floating: false },
-    orderflow: { visible: true, floating: false },
-    heatmap: { visible: true, floating: false },
-    market_direction: { visible: true, floating: false },
-    se_core: { visible: true, floating: false },
-    orderbook: { visible: true, floating: false },
-    scanner: { visible: true, floating: false },
-    exposure: { visible: true, floating: false },
-    gmil_context: { visible: true, floating: false },
-    events: { visible: true, floating: false },
-    neural_core: { visible: true, floating: false },
-    tactical: { visible: false, floating: false },
-    market_regime: { visible: true, floating: false },
-    system_health: { visible: true, floating: false },
-    asset_heatmap: { visible: true, floating: false },
-    decision_validation: { visible: true, floating: false },
+  // Widget Workspace Manager state (V16): 5 conceptual states — Pinned,
+  // Docked, Collapsed, Hidden, Floating — built from 4 orthogonal booleans
+  // rather than a single enum, so the existing generic toggleWidget(id, prop)
+  // mechanism (and every existing widgets[id].visible/.floating read site)
+  // keeps working unmodified:
+  //   hidden    = !visible
+  //   floating  = visible && floating
+  //   collapsed = visible && !floating && collapsed
+  //   pinned    = visible && !floating && !collapsed && pinned
+  //   docked    = visible && !floating && !collapsed && !pinned
+  // V16 Institutional Command Center defaults: Chart (center), Market
+  // Direction + Siriform Core summary (left), GMIL/Market Regime/Decision
+  // Validation (Consensus+Risk+Data Quality)/System Health (right) are
+  // ALWAYS docked — never gear-gated, per the operator's explicit reference
+  // layout. Everything else (order book/flow/liquidity heatmap/scanner/
+  // exposure/events/neural core/asset heatmap/tactical liquidations) is a
+  // secondary tool: defaults to hidden, reachable on demand via the
+  // Workspace Manager panel. Persisted to localStorage so a reload never
+  // silently drops the dashboard back to a near-empty screen.
+  const WIDGET_PREFS_KEY = "ramber_widget_prefs_v2";
+  const DEFAULT_WIDGETS: { [key: string]: { visible: boolean; floating: boolean; collapsed: boolean; pinned: boolean } } = {
+    chart: { visible: true, floating: false, collapsed: false, pinned: true },
+    orderflow: { visible: false, floating: false, collapsed: false, pinned: false },
+    heatmap: { visible: false, floating: false, collapsed: false, pinned: false },
+    market_direction: { visible: true, floating: false, collapsed: false, pinned: false },
+    // Collapsed by default — the compact SiriformCoreCard (right column)
+    // always shows the real summary; expanding reveals the full,
+    // unmodified AssistantOrb detail (forecast/voice/quick actions) below
+    // the 3-column row, never removed, just progressively disclosed.
+    se_core: { visible: true, floating: false, collapsed: true, pinned: false },
+    orderbook: { visible: false, floating: false, collapsed: false, pinned: false },
+    scanner: { visible: false, floating: false, collapsed: false, pinned: false },
+    exposure: { visible: false, floating: false, collapsed: false, pinned: false },
+    gmil_context: { visible: true, floating: false, collapsed: false, pinned: false },
+    events: { visible: false, floating: false, collapsed: false, pinned: false },
+    neural_core: { visible: false, floating: false, collapsed: false, pinned: false },
+    tactical: { visible: false, floating: false, collapsed: false, pinned: false },
+    market_regime: { visible: true, floating: false, collapsed: false, pinned: false },
+    system_health: { visible: true, floating: false, collapsed: false, pinned: false },
+    asset_heatmap: { visible: false, floating: false, collapsed: false, pinned: false },
+    decision_validation: { visible: true, floating: false, collapsed: false, pinned: false },
   };
   const [widgets, setWidgets] = useState<{
-    [key: string]: { visible: boolean; floating: boolean };
+    [key: string]: { visible: boolean; floating: boolean; collapsed: boolean; pinned: boolean };
   }>(() => {
     try {
       const saved = localStorage.getItem(WIDGET_PREFS_KEY);
@@ -349,12 +366,36 @@ export default function App() {
 
   // Stable identity across renders (functional setState form needs no deps) —
   // required so the memoized context value below doesn't churn on every tick.
-  const toggleWidget = useCallback((id: string, prop: "visible" | "floating") => {
+  const toggleWidget = useCallback((id: string, prop: "visible" | "floating" | "collapsed" | "pinned") => {
     setWidgets((prev) => ({
       ...prev,
       [id]: { ...prev[id], [prop]: !prev[id][prop] },
     }));
   }, []);
+
+  // V16 Workspace Manager: jumps a module directly to one of the 5 named
+  // states in one shot — the generic single-boolean toggleWidget above
+  // can't express "go straight to Floating from Hidden" (that needs BOTH
+  // visible AND floating flipped together), so the panel needs its own
+  // explicit setter instead of composing multiple toggleWidget calls.
+  const setWidgetWorkspaceState = useCallback(
+    (id: string, state: "hidden" | "docked" | "collapsed" | "pinned" | "floating") => {
+      setWidgets((prev) => {
+        const flags =
+          state === "hidden"
+            ? { visible: false, floating: false, collapsed: false, pinned: false }
+            : state === "docked"
+              ? { visible: true, floating: false, collapsed: false, pinned: false }
+              : state === "collapsed"
+                ? { visible: true, floating: false, collapsed: true, pinned: false }
+                : state === "pinned"
+                  ? { visible: true, floating: false, collapsed: false, pinned: true }
+                  : { visible: true, floating: true, collapsed: false, pinned: false };
+        return { ...prev, [id]: { ...prev[id], ...flags } };
+      });
+    },
+    [],
+  );
 
   // Klines: candles do gráfico agora vêm do Market Data Bus (Fase B —
   // getChartCandles em engine-bridge.ts), a MESMA chave symbol:15m que o
@@ -771,6 +812,27 @@ export default function App() {
 
     const support = cycleOk ? (realCycle?.support ?? null) : null;
     const resistance = cycleOk ? (realCycle?.resistance ?? null) : null;
+    // V16 §3: força real por confluência de swings (mesmo computeLevelStrength
+    // de target1Strength/target2Strength) — passthrough puro de realCycle.
+    const supportStrength = cycleOk ? (realCycle?.supportStrength ?? null) : null;
+    const resistanceStrength = cycleOk ? (realCycle?.resistanceStrength ?? null) : null;
+
+    // V16 §3 (Chart Engine institucional — "Rejected"/"Breakouts" por nível):
+    // nenhum motor existente conta rompimentos reais de um nível, então isto
+    // é um cálculo NOVO — mas puramente honesto: conta closes REAIS da MESMA
+    // janela de candles (chartData) que o support-resistance-engine já
+    // analisou, além (rompeu) ou aquém (não rompeu) do nível. "Rejeitados" =
+    // toques reais (supportStrength/resistanceStrength.touches) menos
+    // rompimentos reais — nunca um número inventado, nunca uma probabilidade.
+    const countBreakouts = (level: number | null, kind: "support" | "resistance"): number =>
+      num(level) && chartData && chartData.length > 0
+        ? chartData.reduce(
+            (n: number, c: any) => n + ((kind === "resistance" ? c.close > level : c.close < level) ? 1 : 0),
+            0,
+          )
+        : 0;
+    const resistanceBreakouts = resistanceStrength ? countBreakouts(resistance, "resistance") : 0;
+    const supportBreakouts = supportStrength ? countBreakouts(support, "support") : 0;
 
     // Real % move from entry to the real target (not a profit promise).
     const moveToTargetPct =
@@ -830,6 +892,10 @@ export default function App() {
       marketStructureLabel,
       support,
       resistance,
+      supportStrength,
+      resistanceStrength,
+      supportBreakouts,
+      resistanceBreakouts,
       moveToTargetPct,
       volatilityPct,
       flowImbalance,
@@ -1014,6 +1080,9 @@ export default function App() {
     () => ({
       widgets,
       toggleWidget,
+      setWidgetWorkspaceState,
+      workspaceManagerOpen,
+      setWorkspaceManagerOpen,
       engine,
       smcZones,
       bootAt,
@@ -1050,6 +1119,8 @@ export default function App() {
     [
       widgets,
       toggleWidget,
+      setWidgetWorkspaceState,
+      workspaceManagerOpen,
       engine,
       smcZones,
       bootAt,
@@ -1115,25 +1186,41 @@ export default function App() {
                     informação de decisão, visível em todas as abas, zero
                     repetição de preço/símbolo/feed pelo resto da tela. */}
 
-                {/* Overhaul Cross-Market (Missão 1): grid nomeado substitui as
-                    3 colunas flex. O Gráfico domina a área "main" (maior
-                    fatia, centro/topo); GMIL/Regime/Comitê+Risco formam a
-                    pilha de decisão SEMPRE visível na área "aside"
-                    (sidebar); Telemetria/Order Book/Order Flow/Liquidez
-                    formam a "strip" inferior condensada, rolável na
-                    horizontal. .terminal-grid (index.css) define as áreas
-                    nomeadas + o mesmo breakpoint 1120px já usado no resto
-                    do cockpit — abaixo dele mantém o scroll contido
-                    (scrollbar-hide) que o cockpit já usava; a partir dele
-                    vira zero-scroll geral de verdade. */}
+                {/* V16 Institutional Command Center: 3 colunas SEMPRE
+                    visíveis — esquerda "Market Intelligence" (Vetor de
+                    Mercado + Bias/Confiança/Zonas/Gestão de Risco), centro
+                    "Institutional Chart Engine" (o Gráfico, núcleo do
+                    sistema, maior área da tela) e direita "Core
+                    Intelligence" (Siriform Core/GMIL/Regime/Consenso+Risk
+                    Engine+Data Quality/Saúde do Sistema). Nenhuma delas
+                    fica atrás de um gear/toggle — só os módulos
+                    VERDADEIRAMENTE secundários (Order Book/Order Flow/
+                    Heatmap de liquidez/Scanner/Exposição/Eventos/Núcleo
+                    Neural/Heatmap de ativos) vivem no Workspace Manager
+                    (Pinned/Docked/Collapsed/Hidden/Floating — ver
+                    WorkspaceManagerPanel), acessível pelo botão no rodapé
+                    da SideBar. .terminal-row (index.css, flexbox aninhado)
+                    garante zero espaço morto em qualquer combinação de
+                    colunas presentes/ausentes, no mesmo breakpoint 1120px
+                    já usado no resto do cockpit. */}
                 <div className="terminal-grid flex-1 min-h-0 overflow-y-auto min-[1120px]:overflow-hidden scrollbar-hide p-1">
-                  {/* MAIN — o Gráfico é o coração da operação (Missão 1,
-                      diretriz 2); o card de decisão do S.E. + Vetor de
-                      Mercado fica logo abaixo, na mesma área, sem disputar
-                      espaço com nenhuma outra coluna. */}
-                  {(widgets.chart.visible ||
-                    widgets.market_direction.visible ||
-                    widgets.se_core.visible) && (
+                  <div className="terminal-row min-h-0">
+                    {/* LEFT — Market Intelligence: Vetor de Mercado (livro
+                        real) + Bias/Convicção/Zonas/Gestão de Risco. */}
+                    <div className="terminal-left min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2 min-[1120px]:pr-1">
+                      {marketMode === "TRADFI" ? (
+                        <TradFiEmptyState compact assetLabel="MARKET INTELLIGENCE" />
+                      ) : (
+                        <>
+                          <MarketDirectionWidget />
+                          <MarketBiasDecisionCard />
+                        </>
+                      )}
+                    </div>
+
+                    {/* MAIN — o Gráfico é o coração da operação, o
+                        Institutional Chart Engine domina a maior área
+                        visual da interface. */}
                     <div className="terminal-main min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2">
                       {widgets.chart.visible &&
                         (marketMode === "TRADFI" ? (
@@ -1143,134 +1230,97 @@ export default function App() {
                         ) : (
                           <ChartWidget data={priceData} chartData={chartData} />
                         ))}
-                      {(widgets.market_direction.visible || widgets.se_core.visible) && (
-                        // BUGFIX (Diretriz 3): este wrapper era `shrink-0` (sem
-                        // flex-grow) — mas o AssistantOrb aninhado dentro dele
-                        // tem seu próprio `flex-1` (herdado de quando era o
-                        // único item da antiga coluna do meio, onde fazia
-                        // sentido crescer sozinho). Um filho `flex-1` dentro
-                        // de um pai `shrink-0`/altura `auto` cria distribuição
-                        // de altura mal-definida — o Gráfico (`flex-[1.8]` no
-                        // .terminal-main) perdia a disputa e colapsava quase a
-                        // zero (reportado como "painel principal quebrado").
-                        // Corrigido dando a este wrapper um flex-grow REAL
-                        // (`flex-[0.7]`) + `min-h-0`, para competir de forma
-                        // bem definida com o Gráfico dentro do .terminal-main
-                        // — a mesma mecânica que já funcionava nas 3 colunas
-                        // antigas, só que explícita aqui também.
-                        <div
-                          className={`flex-[0.7] min-h-0 min-[1120px]:min-h-0 flex flex-col gap-2 relative z-0 transition-[filter] duration-500 ${criticalPulse ? "drop-shadow-[0_0_18px_rgba(0,240,255,0.5)]" : ""}`}
-                        >
-                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.05)_0%,transparent_60%)] pointer-events-none mix-blend-screen"></div>
-                          {marketMode === "TRADFI" ? (
-                            <TradFiEmptyState compact assetLabel="VETOR DE MERCADO E S.E." />
-                          ) : (
+                    </div>
+
+                    {/* RIGHT — Core Intelligence: Siriform Core (resumo
+                        compacto, detalhe completo sob demanda na strip
+                        abaixo) + GMIL + Regime + Comitê de Consenso/Risk
+                        Engine/Data Quality (DecisionValidationWidget já
+                        cobre os 3) + Saúde do Sistema. */}
+                    <div className="terminal-right min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2">
+                      {marketMode === "TRADFI" ? (
+                        <TradFiEmptyState compact assetLabel="SIRIFORM CORE · REGIME · COMITÊ DE DECISÃO" />
+                      ) : (
+                        <>
+                          {widgets.se_core.visible && <SiriformCoreCard />}
+                          {(widgets.market_regime.visible || widgets.decision_validation.visible) && (
                             <>
-                              <MarketDirectionWidget />
-                              <AssistantOrb inCenter={true} />
+                              <MarketRegimeWidget />
+                              <DecisionValidationWidget />
                             </>
                           )}
-                        </div>
+                        </>
                       )}
+                      <GmilContextWidget />
+                      <TelemetryHealthWidget />
                     </div>
-                  )}
+                  </div>
 
-                  {/* ASIDE — pilha de inteligência de decisão SEMPRE visível
-                      (Missão 1, diretriz 3): GMIL, Regime e Comitê/Risk
-                      Engine já não ficam atrás do toggle "Módulos
-                      Adicionais", que agora só recolhe ferramentas
-                      secundárias (Scanner/Exposição/Eventos/Núcleo Neural/
-                      Heatmap de 5 ativos). */}
-                  {(widgets.gmil_context.visible ||
-                    widgets.market_regime.visible ||
-                    widgets.decision_validation.visible ||
+                  {/* STRIP — conteúdo sob demanda (Progressive Disclosure,
+                      Workspace Manager §2): detalhe completo do Siriform
+                      Core quando expandido (mesmo AssistantOrb rico de
+                      sempre, intocado) e qualquer módulo secundário que o
+                      operador tenha ancorado (Docked/Pinned/Collapsed) via
+                      Workspace Manager. Fica com altura zero — sem espaço
+                      morto — quando nada está expandido/ancorado. */}
+                  {(!widgets.se_core.collapsed ||
+                    widgets.orderbook.visible ||
+                    widgets.orderflow.visible ||
+                    widgets.heatmap.visible ||
                     widgets.scanner.visible ||
                     widgets.exposure.visible ||
                     widgets.events.visible ||
                     widgets.neural_core.visible ||
                     widgets.asset_heatmap.visible) && (
-                    <div className="terminal-aside min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2">
-                      <GmilContextWidget />
-                      {(widgets.market_regime.visible || widgets.decision_validation.visible) &&
+                    <div className="terminal-strip shrink-0 flex flex-col gap-2 max-h-[46vh] min-[1120px]:max-h-[38vh] overflow-y-auto scrollbar-hide">
+                      {!widgets.se_core.collapsed &&
                         (marketMode === "TRADFI" ? (
-                          <TradFiEmptyState compact assetLabel="REGIME E COMITÊ DE DECISÃO" />
+                          <TradFiEmptyState compact assetLabel="SIRIFORM CORE · DETALHE COMPLETO" />
                         ) : (
-                          <>
-                            <MarketRegimeWidget />
-                            <DecisionValidationWidget />
-                          </>
+                          <AssistantOrb inCenter={true} />
                         ))}
-
+                      {(widgets.orderbook.visible || widgets.orderflow.visible || widgets.heatmap.visible) && (
+                        <div className="flex gap-2 overflow-x-auto scrollbar-hide h-[200px] min-[1120px]:h-[168px] shrink-0">
+                          {widgets.orderbook.visible && (
+                            <div className="min-w-[260px] flex-1 flex flex-col">
+                              {marketMode === "TRADFI" ? (
+                                <TradFiEmptyState compact assetLabel="LIVRO DE OFERTAS" />
+                              ) : (
+                                <OrderBookWidget data={priceData} book={orderBook} />
+                              )}
+                            </div>
+                          )}
+                          {widgets.orderflow.visible && (
+                            <div className="min-w-[240px] flex-1 flex flex-col">
+                              {marketMode === "TRADFI" ? (
+                                <TradFiEmptyState compact assetLabel="ORDER FLOW" />
+                              ) : (
+                                <OrderFlowWidget />
+                              )}
+                            </div>
+                          )}
+                          {widgets.heatmap.visible && (
+                            <div className="min-w-[240px] flex-1 flex flex-col">
+                              {marketMode === "TRADFI" ? (
+                                <TradFiEmptyState compact assetLabel="MAPA DE LIQUIDEZ" />
+                              ) : (
+                                <HeatmapWidget book={orderBook} data={priceData} />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {(widgets.scanner.visible ||
                         widgets.exposure.visible ||
                         widgets.events.visible ||
                         widgets.neural_core.visible ||
                         widgets.asset_heatmap.visible) && (
-                        <button
-                          type="button"
-                          onClick={() => setAdvancedOpen((v) => !v)}
-                          className="shrink-0 flex items-center justify-between px-3 py-2 rounded-lg border border-[#8ab4f8]/20 bg-[#8ab4f8]/5 text-[0.5rem] tracking-[0.2em] font-bold uppercase text-[#8ab4f8] active:bg-[#8ab4f8]/10"
-                        >
-                          <span>Módulos Adicionais</span>
-                          <span className="text-[#00f0ff]">{advancedOpen ? "▲ OCULTAR" : "▼ EXPANDIR"}</span>
-                        </button>
-                      )}
-                      {advancedOpen && (
-                        <>
-                          <AssetHeatmapWidget />
-                          <ScannerWidget data={scannerData} />
-                          <ExposureWidget />
-                          <EventsWidget />
-                          <NeuralCoreWidget />
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {/* STRIP — painel inferior condensado (Missão 1, diretriz
-                      3): Telemetria é saúde do SISTEMA (não do ativo
-                      selecionado), continua sempre real mesmo em modo
-                      TRADFI. Order Book/Order Flow/Liquidez descrevem o
-                      livro real do ativo CRIPTO selecionado, então entram
-                      no Empty State fail-closed (Missão 2, diretriz 4)
-                      quando um ativo TradFi está ativo. Rola na horizontal
-                      quando os 4 cards não cabem lado a lado — nunca força
-                      scroll geral da página. */}
-                  {(widgets.system_health.visible ||
-                    widgets.orderbook.visible ||
-                    widgets.orderflow.visible ||
-                    widgets.heatmap.visible) && (
-                    <div className="terminal-strip shrink-0 flex gap-2 overflow-x-auto scrollbar-hide h-[200px] min-[1120px]:h-[168px]">
-                      {widgets.system_health.visible && (
-                        <div className="min-w-[240px] flex-1 flex flex-col">
-                          <TelemetryHealthWidget />
-                        </div>
-                      )}
-                      {widgets.orderbook.visible && (
-                        <div className="min-w-[260px] flex-1 flex flex-col">
-                          {marketMode === "TRADFI" ? (
-                            <TradFiEmptyState compact assetLabel="LIVRO DE OFERTAS" />
-                          ) : (
-                            <OrderBookWidget data={priceData} book={orderBook} />
-                          )}
-                        </div>
-                      )}
-                      {widgets.orderflow.visible && (
-                        <div className="min-w-[240px] flex-1 flex flex-col">
-                          {marketMode === "TRADFI" ? (
-                            <TradFiEmptyState compact assetLabel="ORDER FLOW" />
-                          ) : (
-                            <OrderFlowWidget />
-                          )}
-                        </div>
-                      )}
-                      {widgets.heatmap.visible && (
-                        <div className="min-w-[240px] flex-1 flex flex-col">
-                          {marketMode === "TRADFI" ? (
-                            <TradFiEmptyState compact assetLabel="MAPA DE LIQUIDEZ" />
-                          ) : (
-                            <HeatmapWidget book={orderBook} data={priceData} />
-                          )}
+                        <div className="flex flex-col gap-2">
+                          {widgets.asset_heatmap.visible && <AssetHeatmapWidget />}
+                          {widgets.scanner.visible && <ScannerWidget data={scannerData} />}
+                          {widgets.exposure.visible && <ExposureWidget />}
+                          {widgets.events.visible && <EventsWidget />}
+                          {widgets.neural_core.visible && <NeuralCoreWidget />}
                         </div>
                       )}
                     </div>
@@ -1302,6 +1352,7 @@ export default function App() {
           </div>
         </div>
         <FooterBar />
+        <WorkspaceManagerPanel />
       </div>
     </WidgetContext.Provider>
   );
@@ -1371,7 +1422,150 @@ function ConfigPanel() {
   );
 }
 
-// --- ASSISTANT ORB / S.E. CORE (center hero) ---
+// --- V16 WORKSPACE MANAGER (§2) — the single entry point (SideBar footer
+// button) for the Pinned/Docked/Collapsed/Hidden/Floating states of every
+// TRULY secondary module. Chart and the always-docked left/right V16
+// columns (Market Direction/Decision, Siriform Core summary, GMIL, Market
+// Regime, Decision Validation, System Health) are deliberately absent from
+// this list — they're part of the fixed default view per the operator's
+// spec, not optional tools. Reuses setWidgetWorkspaceState (App(), one
+// setState per state jump) so picking "Floating" from "Hidden" flips both
+// the visible AND floating flags atomically, never a stale in-between.
+const WORKSPACE_MANAGER_MODULES: { id: string; label: string }[] = [
+  { id: "orderbook", label: "LIVRO DE OFERTAS" },
+  { id: "orderflow", label: "FLUXO DE ORDENS" },
+  { id: "heatmap", label: "MAPA DE LIQUIDEZ" },
+  { id: "scanner", label: "QUANT SCANNER · 24H" },
+  { id: "exposure", label: "EXPOSIÇÃO" },
+  { id: "events", label: "TELEMETRIA DE EVENTOS" },
+  { id: "neural_core", label: "NÚCLEO NEURAL · LLAMA 3" },
+  { id: "asset_heatmap", label: "HEATMAP · ATIVOS" },
+  { id: "tactical", label: "LIQUIDAÇÕES INSTITUCIONAIS" },
+];
+const WORKSPACE_STATES = ["hidden", "docked", "collapsed", "pinned", "floating"] as const;
+type WorkspaceState = (typeof WORKSPACE_STATES)[number];
+
+function widgetWorkspaceState(st: { visible: boolean; floating: boolean; collapsed: boolean; pinned: boolean } | undefined): WorkspaceState {
+  if (!st || !st.visible) return "hidden";
+  if (st.floating) return "floating";
+  if (st.collapsed) return "collapsed";
+  if (st.pinned) return "pinned";
+  return "docked";
+}
+
+function WorkspaceManagerPanel() {
+  const { widgets, workspaceManagerOpen, setWorkspaceManagerOpen, setWidgetWorkspaceState } =
+    useContext(WidgetContext) || {};
+  if (!workspaceManagerOpen) return null;
+
+  return (
+    <div
+      className="!fixed !inset-0 !z-[999] bg-[#010308]/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={() => setWorkspaceManagerOpen?.(false)}
+    >
+      <div
+        className="cyber-panel w-full max-w-2xl max-h-[80vh] flex flex-col bg-[#010308]/98"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="cyber-header flex items-center justify-between">
+          <span className="font-bold tracking-[0.2em]">WORKSPACE MANAGER</span>
+          <div
+            className="text-[#8ab4f8]/50 hover:text-[#00f0ff] px-1 py-0.5 rounded cursor-pointer"
+            onClick={() => setWorkspaceManagerOpen?.(false)}
+          >
+            <X size={14} />
+          </div>
+        </div>
+        <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+          <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
+            Módulos secundários — Progressive Disclosure: escondidos por padrão, disponíveis sob demanda
+          </span>
+          {WORKSPACE_MANAGER_MODULES.map(({ id, label }) => {
+            const current = widgetWorkspaceState(widgets?.[id]);
+            return (
+              <div
+                key={id}
+                className="flex flex-wrap items-center justify-between gap-2 bg-[#010205] border border-[#00f0ff15] rounded-lg px-3 py-2"
+              >
+                <span className="text-[0.55rem] font-bold tracking-widest text-white">{label}</span>
+                <div className="flex gap-1 flex-wrap">
+                  {WORKSPACE_STATES.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setWidgetWorkspaceState?.(id, s)}
+                      className={`flex items-center gap-0.5 text-[0.4rem] px-1.5 py-1 rounded border font-bold uppercase tracking-wider ${
+                        current === s
+                          ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                          : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
+                      }`}
+                    >
+                      {s === "pinned" && <Pin size={9} />}
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- RIGHT COLUMN: SIRIFORM CORE (V16 §1/§3) — compact real-status summary
+// docked in the right column by default (se_core.collapsed: true). Never a
+// second computation: engineStatus/direction/confidence/lorentzian all come
+// straight from the SAME `engine`/`realCycle` the full AssistantOrb detail
+// reads. "Expandir" flips the exact same `se_core.collapsed` flag the
+// Workspace Manager panel controls — the full, unmodified AssistantOrb
+// (forecast/voice/quick actions, nothing removed) renders below the
+// 3-column row when expanded (see the DASHBOARD strip in App()).
+function SiriformCoreCard() {
+  const { engine, engineStatus, realCycle, widgets, toggleWidget } = useContext(WidgetContext) || {};
+  const direction: Direction = engine?.direction ?? null;
+  const collapsed = widgets?.se_core?.collapsed ?? true;
+  const statusLabel = engineStatus === "pending" ? AWAIT : engineStatus === "ok" ? "SINCRONIZADO" : "FALHOU";
+  const statusColor =
+    engineStatus === "pending" ? "text-[#f0d06f]" : engineStatus === "ok" ? "text-[#00ffaa]" : "text-[#ff0055]";
+  const dirColor =
+    direction === "LONG" ? "text-[#00ffaa]" : direction === "SHORT" ? "text-[#ff0055]" : "text-[#8ab4f8]/60";
+  const lorentzian = realCycle?.lorentzian?.ok ? realCycle.lorentzian : null;
+  const lorentzianLabel = lorentzian
+    ? `${lorentzian.classification} · ${lorentzianConfidencePct(lorentzian)}%`
+    : AWAIT;
+
+  return (
+    <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
+      <div className="flex items-center justify-between">
+        <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">
+          SIRIFORM INTELLIGENCE CORE
+        </span>
+        <button
+          type="button"
+          onClick={() => toggleWidget?.("se_core", "collapsed")}
+          className="text-[0.4rem] tracking-[0.1em] font-bold uppercase text-[#8ab4f8] hover:text-[#00f0ff] px-1.5 py-0.5 rounded border border-[#8ab4f8]/20 shrink-0"
+        >
+          {collapsed ? "EXPANDIR" : "RECOLHER"}
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        <MiniStat label="Ciclo de Análise" value={statusLabel} color={statusColor} />
+        <MiniStat label="Sinal" value={direction ?? AWAIT} color={dirColor} />
+        <MiniStat label="k-NN Lorentz." value={lorentzianLabel} color="text-[#8ab4f8]" />
+        <MiniStat
+          label="Estrutura (15m)"
+          value={engine?.marketStructureLabel ?? AWAIT}
+          color="text-[#8ab4f8]"
+        />
+      </div>
+    </div>
+  );
+}
+
+// --- ASSISTANT ORB / S.E. CORE (center hero, detalhe completo — expandido
+// sob demanda a partir do SiriformCoreCard acima) ---
 const ASSISTANT_MESSAGES = [
   "NÚCLEO EM MODO LEITURA (READ_ONLY).",
   "SINCRONIZANDO FLUXO DE ORDENS REAL...",
@@ -2197,6 +2391,7 @@ function SideBar({
   activeTab: string;
   setActiveTab: (t: string) => void;
 }) {
+  const { setWorkspaceManagerOpen } = useContext(WidgetContext) || {};
   const items = [
     { icon: LayoutDashboard, label: "DASHBOARD" },
     { icon: BarChart2, label: "MARKET" },
@@ -2230,6 +2425,23 @@ function SideBar({
           </div>
         );
       })}
+      {/* V16 Workspace Manager entry point — a single, discoverable way in
+          to the Pinned/Docked/Collapsed/Hidden/Floating controls for every
+          secondary module, instead of a gear icon per module. Pinned to
+          the bottom (mt-auto) like the reference layout's footer link. */}
+      <button
+        type="button"
+        onClick={() => setWorkspaceManagerOpen?.((v: boolean) => !v)}
+        title="Workspace Manager"
+        className="mt-auto flex flex-col items-center gap-1 w-full cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] py-1.5 shrink-0"
+      >
+        <LayoutGrid size={16} className="relative z-10" />
+        <span className="text-[0.4rem] md:text-[0.42rem] tracking-[0.08em] text-center font-bold mt-1 leading-tight">
+          WORKSPACE
+          <br />
+          MANAGER
+        </span>
+      </button>
     </div>
   );
 }
@@ -2274,10 +2486,24 @@ class WidgetErrorBoundary extends React.Component<
 function Widget({ id, children, title, className = "", flex = "flex-1", extraHeader }: any) {
   const { widgets, toggleWidget } = useContext(WidgetContext) || {};
   const [maximized, setMaximized] = useState(false);
-  const [minimized, setMinimized] = useState(false);
+  // Collapse is a persisted Workspace Manager state (V16) for any widget
+  // with an id — a reload or a toggle from the Workspace Manager panel must
+  // agree with the header's own "_" control. Widgets with no id (e.g. the
+  // always-on left/right V16 cards) fall back to local-only state, same as
+  // before this change.
+  const [localMinimized, setLocalMinimized] = useState(false);
 
   const widgetState = id && widgets ? widgets[id] : null;
   if (widgetState && !widgetState.visible) return null;
+
+  const minimized = widgetState ? widgetState.collapsed : localMinimized;
+  const setMinimized = (next: boolean) => {
+    if (widgetState) {
+      if (next !== widgetState.collapsed) toggleWidget(id, "collapsed");
+    } else {
+      setLocalMinimized(next);
+    }
+  };
 
   const isFloating = widgetState && widgetState.floating;
 
@@ -2438,7 +2664,7 @@ function ChartWidget({ data, chartData }: any) {
   // in App() (see contextValue) against this exact candle array, shared
   // with the Neural Core widget's tactical-context prompt so both use the
   // same real counts rather than two independent computations.
-  const { smcZones, selectedAsset } = useContext(WidgetContext) || {};
+  const { smcZones, selectedAsset, engine } = useContext(WidgetContext) || {};
   const [zoomStep, setZoomStep] = useState(CHART_ZOOM_STEPS.length - 1);
   const visibleCount = CHART_ZOOM_STEPS[zoomStep];
   const zoomedData = chartData && chartData.length > 0 ? chartData.slice(-visibleCount) : chartData;
@@ -2521,7 +2747,17 @@ function ChartWidget({ data, chartData }: any) {
           barra; a tag de último preço no eixo é parte intrínseca do gráfico. */}
       <div className="flex-1 mt-1 mr-8 relative min-h-0">
         {zoomedData && zoomedData.length > 0 ? (
-          <CandleChart data={zoomedData} last={data?.price ?? null} zones={zoomedZones} />
+          <CandleChart
+            data={zoomedData}
+            last={data?.price ?? null}
+            zones={zoomedZones}
+            support={engine?.support ?? null}
+            resistance={engine?.resistance ?? null}
+            supportStrength={engine?.supportStrength ?? null}
+            resistanceStrength={engine?.resistanceStrength ?? null}
+            supportBreakouts={engine?.supportBreakouts ?? 0}
+            resistanceBreakouts={engine?.resistanceBreakouts ?? 0}
+          />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
             {AWAIT} CANDLES…
@@ -2539,10 +2775,22 @@ function CandleChart({
   data,
   last,
   zones,
+  support,
+  resistance,
+  supportStrength,
+  resistanceStrength,
+  supportBreakouts,
+  resistanceBreakouts,
 }: {
   data: any[];
   last: number | null;
   zones?: { fairValueGaps: PriceZone[]; orderBlocks: PriceZone[]; liquidityZones?: LiquidityZone[] };
+  support?: number | null;
+  resistance?: number | null;
+  supportStrength?: { label: "FORTE" | "FRACA"; touches: number } | null;
+  resistanceStrength?: { label: "FORTE" | "FRACA"; touches: number } | null;
+  supportBreakouts?: number;
+  resistanceBreakouts?: number;
 }) {
   if (!data || data.length === 0) return null;
   const min = Math.min(...data.map((d) => d.low));
@@ -2560,6 +2808,39 @@ function CandleChart({
 
   return (
     <div className="absolute inset-0 border-b border-[#00f0ff20]">
+      {/* V16 §3 (Chart Engine institucional): R1/S1 — o nível de suporte/
+          resistência mais próximo já usado pelo Risk Engine/S.E. (mesmo
+          engine.support/resistance exibido em outros cards), com força e
+          contagem REAIS de toques/rompimentos (ver countBreakouts em
+          App()) — nunca um número inventado. Uma linha por nível (não o
+          par completo S1/S2/R1/R2) para não poluir o gráfico; o detalhe
+          completo fica no card compacto (MarketBiasDecisionCard). */}
+      {num(resistance) && (
+        <div
+          className="absolute pointer-events-none border-t border-dashed border-[#ff0055]/60 flex items-center justify-end"
+          style={{ top: `${priceToPct(resistance)}%`, left: 0, right: 0 }}
+        >
+          <span className="text-[0.42rem] font-bold text-[#ff0055] bg-[#010308]/70 px-[3px] leading-none -translate-y-1/2">
+            R1 {fmtInt(resistance)}
+            {resistanceStrength
+              ? ` · ${resistanceStrength.label} · ${resistanceStrength.touches}× retest · ${resistanceBreakouts ?? 0}× romp.`
+              : ""}
+          </span>
+        </div>
+      )}
+      {num(support) && (
+        <div
+          className="absolute pointer-events-none border-t border-dashed border-[#00ffaa]/60 flex items-center justify-end"
+          style={{ top: `${priceToPct(support)}%`, left: 0, right: 0 }}
+        >
+          <span className="text-[0.42rem] font-bold text-[#00ffaa] bg-[#010308]/70 px-[3px] leading-none -translate-y-1/2">
+            S1 {fmtInt(support)}
+            {supportStrength
+              ? ` · ${supportStrength.label} · ${supportStrength.touches}× retest · ${supportBreakouts ?? 0}× romp.`
+              : ""}
+          </span>
+        </div>
+      )}
       {unsweptLiquidity.map((z, i) => (
         <div
           key={`liq-${z.index}-${i}`}
@@ -3094,6 +3375,146 @@ function MarketDirectionWidget() {
           <span className="text-xl">%</span> <ArrowDownRight size={24} strokeWidth={3} />
         </div>
       </div>
+    </div>
+  );
+}
+
+// --- LEFT COLUMN: MARKET BIAS / DECISION (V16 §4, Long/Short Decision
+// Module evolution) — a compact institutional view (bias/convicção/
+// entrada/invalidação/alvos/R:R/tamanho sugerido/status da decisão)
+// instead of a bare LONG/SHORT button. Every number here is a real
+// passthrough from `engine`/`riskSuggestion` (already computed elsewhere
+// in this file, see contextValue) — nothing is recomputed or invented.
+function MiniStat({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className="flex flex-col bg-[#010308] px-2 py-1.5 rounded border border-[#8ab4f8]/10 min-w-0">
+      <span className="text-[0.4rem] text-[#8ab4f8]/60 font-bold tracking-widest uppercase truncate">{label}</span>
+      <span className={`text-[0.55rem] font-mono font-black truncate ${color}`}>{value}</span>
+    </div>
+  );
+}
+
+function MarketBiasDecisionCard() {
+  const { engine, riskSuggestion, ensembleConsensus } = useContext(WidgetContext) || {};
+  const direction: Direction = engine?.direction ?? null;
+  const isLong = direction === "LONG";
+  const isShort = direction === "SHORT";
+  const entry: number | null = engine?.entry ?? null;
+  const target: number | null = engine?.target ?? null;
+  const target2: number | null = engine?.target2 ?? null;
+  const stop: number | null = engine?.stop ?? null;
+  const riskRewardRatio: number | null = engine?.riskRewardRatio ?? null;
+  const target1Strength: { label: "FORTE" | "FRACA"; touches: number } | null = engine?.target1Strength ?? null;
+  const target2Strength: { label: "FORTE" | "FRACA"; touches: number } | null = engine?.target2Strength ?? null;
+  // engine.confidence is the Core Engine's own real categorical read
+  // (ALTA/MÉDIA/BAIXA, see engine-bridge.ts's RealCycleResult.confidence:
+  // string|null) — never a fabricated percentage. AGUARDANDO honestly
+  // before the first cycle succeeds.
+  const confidenceLabel = engine?.confidence ?? AWAIT;
+
+  const riskOk = riskSuggestion?.status === "OK";
+  const riskLabel = riskOk
+    ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% eq · risco ${riskSuggestion.effective_risk_pct.toFixed(2)}%`
+    : "0% · sem sugestão";
+
+  // V16 §4: Decision Status (WAIT/CONFIRM/EXECUTE) — an honest confluence
+  // read across two ALREADY-real, independent signals (never a new score
+  // invented for this card): the Core Engine's own direction+Risk Engine
+  // sizing, and the secondary Ensemble Committee's direction (GMIL +
+  // local logics, src/consensus/). EXECUTE only when both agree AND the
+  // Risk Engine actually produced a non-zero suggestion; CONFIRM when the
+  // Core Engine has a signal but the committee hasn't confirmed it yet;
+  // WAIT otherwise. Purely an analytical label — same LEI 24 rule as
+  // DecisionValidationWidget: display only, never gates or auto-fires
+  // anything (this terminal has no order-send path at all, READ_ONLY).
+  const ensembleOk = ensembleConsensus?.status === "OK";
+  const ensembleAgrees =
+    ensembleOk &&
+    ((isLong && ensembleConsensus.direcao === "ALTA") || (isShort && ensembleConsensus.direcao === "BAIXA"));
+  const decisionStatus: "WAIT" | "CONFIRM" | "EXECUTE" =
+    !direction || !riskOk || riskSuggestion.suggested_position_pct <= 0
+      ? "WAIT"
+      : ensembleAgrees
+        ? "EXECUTE"
+        : "CONFIRM";
+  const decisionClass =
+    decisionStatus === "WAIT"
+      ? "text-[#f0d06f] border-[#f0d06f]/40 bg-[#f0d06f]/10"
+      : decisionStatus === "CONFIRM"
+        ? "text-[#00f0ff] border-[#00f0ff]/40 bg-[#00f0ff]/10"
+        : isShort
+          ? "text-[#ff0055] border-[#ff0055]/40 bg-[#ff0055]/10"
+          : "text-[#00ffaa] border-[#00ffaa]/40 bg-[#00ffaa]/10";
+
+  return (
+    <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
+      <div className="flex items-center justify-between">
+        <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">
+          DIREÇÃO · GESTÃO DE POSIÇÃO
+        </span>
+        <span
+          className={`text-[0.45rem] font-black tracking-[0.15em] uppercase px-2 py-0.5 rounded border ${decisionClass}`}
+          title="Rótulo analítico — nunca aciona ordens (READ_ONLY)"
+        >
+          {decisionStatus}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-1.5">
+        <div className={`text-center py-1.5 rounded border text-[0.5rem] font-black tracking-widest ${isLong ? "border-[#00ffaa60] bg-[#00ffaa15] text-[#00ffaa]" : "border-[#8ab4f8]/15 text-[#8ab4f8]/30"}`}>
+          LONG
+        </div>
+        <div className={`text-center py-1.5 rounded border text-[0.5rem] font-black tracking-widest ${!direction ? "border-[#8ab4f8]/40 bg-[#8ab4f8]/10 text-[#8ab4f8]" : "border-[#8ab4f8]/15 text-[#8ab4f8]/30"}`}>
+          NEUTRO
+        </div>
+        <div className={`text-center py-1.5 rounded border text-[0.5rem] font-black tracking-widest ${isShort ? "border-[#ff005560] bg-[#ff005515] text-[#ff0055]" : "border-[#8ab4f8]/15 text-[#8ab4f8]/30"}`}>
+          SHORT
+        </div>
+      </div>
+
+      <MiniStat label="Convicção (Core Engine)" value={confidenceLabel} color="text-[#8ab4f8]" />
+
+      {direction ? (
+        <div className="grid grid-cols-2 gap-1.5">
+          <LevelCard label="Entrada" value={entry} accent="#00f0ff" tag="REF" />
+          <LevelCard label="Invalidação" value={stop} accent="#ff0055" tag="REAL" />
+          <LevelCard
+            label="Alvo 1"
+            value={target}
+            accent="#00ffaa"
+            tag={target1Strength?.label ?? "REAL"}
+          />
+          <LevelCard
+            label="Alvo 2"
+            value={target2}
+            accent="#00ffaa"
+            tag={target2Strength?.label ?? "REAL"}
+            dim={!num(target2)}
+          />
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 p-2.5 rounded-lg border border-[#8ab4f8]/20 bg-[#8ab4f8]/5">
+          <div className="w-1.5 h-1.5 rounded-full bg-[#f0d06f] animate-pulse shrink-0"></div>
+          <span className="text-[0.45rem] tracking-[0.1em] text-[#8ab4f8] font-bold uppercase leading-relaxed">
+            Motor real aguardando confirmação direcional — zonas de entrada/alvos/stop aparecem aqui assim que houver sinal.
+          </span>
+        </div>
+      )}
+
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {num(riskRewardRatio) && (
+          <span className="text-[#f0d06f] border border-[#f0d06f]/40 bg-[#f0d06f]/10 text-[0.5rem] font-bold px-2 py-0.5 rounded">
+            R:R {riskRewardRatio.toFixed(2)}
+          </span>
+        )}
+        <span className={`text-[0.5rem] font-bold px-2 py-0.5 rounded border ${riskOk ? "text-[#00f0ff] border-[#00f0ff]/40 bg-[#00f0ff]/10" : "text-[#8ab4f8]/50 border-[#8ab4f8]/20"}`}>
+          TAMANHO SUGERIDO · {riskLabel}
+        </span>
+      </div>
+
+      <span className="text-[0.4rem] text-[#f0d06f]/80 font-bold tracking-widest">
+        SUGESTÃO ALGORÍTMICA · NÃO É CONSELHO FINANCEIRO · SEM EXECUÇÃO REAL (READ_ONLY)
+      </span>
     </div>
   );
 }

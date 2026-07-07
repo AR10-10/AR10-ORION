@@ -121,6 +121,15 @@ export interface RealCycleResult {
   stop?: number | null;
   support?: number | null;
   resistance?: number | null;
+  // V16 §3 (Chart Engine institucional): support-resistance-engine.js já
+  // calculava support_1_strength/resistance_1_strength (contagem real de
+  // toques de swing dentro de ±0.15% do nível — mesma função
+  // computeLevelStrength() usada por target1Strength) a cada ciclo, mas
+  // analysis-frame.js só repassava os PREÇOS (support/resistance acima),
+  // descartando a força antes de chegar aqui. Achado da auditoria V16:
+  // passthrough puro, nenhum cálculo novo.
+  supportStrength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
+  resistanceStrength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
   condition?: string | null;
   rationale?: string | null;
   lorentzian?: LorentzianResult;
@@ -422,6 +431,8 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
       stop: route && isNum(route.invalidation) ? route.invalidation : null,
       support: isNum(frame.support) ? frame.support : null,
       resistance: isNum(frame.resistance) ? frame.resistance : null,
+      supportStrength: frame.support_1_strength ?? null,
+      resistanceStrength: frame.resistance_1_strength ?? null,
       condition: typeof matrix.condition === 'string' ? matrix.condition : null,
       rationale: typeof matrix.rationale === 'string' ? matrix.rationale : null,
       riskRewardRatio: route && isNum(route.risk_reward_ratio) ? route.risk_reward_ratio : null,

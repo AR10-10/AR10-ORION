@@ -279,44 +279,89 @@ body::after {
   }
 }
 
-/* Overhaul Cross-Market — grid macro do cockpit (Missão 1, diretrizes
-   1-3): substitui as 3 colunas flex por áreas NOMEADAS. "main" (o
-   Gráfico + card de decisão do S.E., a maior fatia — diretriz 2, o
-   Gráfico domina centro/topo), "aside" (GMIL/Regime/Comitê+Risk Engine,
-   SEMPRE visíveis — diretriz 3) e "strip" (Telemetria/Order Book/Order
-   Flow/Liquidez, condensados). Mesmo breakpoint 1120px já usado no
-   resto do cockpit (ver App.tsx): abaixo disso empilha em uma coluna só
-   com scroll contido (scrollbar-hide, igual ao cockpit já fazia); a
-   partir dele vira zero-scroll geral de verdade — cada área rola só
-   internamente. Grid-template-areas é a ferramenta certa aqui (reflow
-   responsivo de regiões nomeadas); todo o resto do layout desta base
-   continua Tailwind inline, de propósito. */
+/* V16 Institutional Command Center — 3-column cockpit (left "Market
+   Intelligence" / center "Institutional Chart Engine" / right "Core
+   Intelligence": Siriform/GMIL/Risk/Consensus/Data Quality/System
+   Health), plus a full-width "strip" below for on-demand docked content
+   (expanded Siriform Core detail, Workspace Manager modules the operator
+   docks). This REPLACES the previous 2-column CSS Grid named-areas
+   design (main/aside/strip) with nested flexbox on purpose: named grid
+   areas reserve their track's space even when NO element claims that
+   area (confirmed via getBoundingClientRect — an absent .terminal-right
+   still left a blank 340px gap), which is exactly the "dead zone" the
+   V16 Workspace Manager must never produce when a column's modules are
+   all hidden. Flex items that simply aren't rendered contribute zero
+   space at every breakpoint, so this needs no combinatorial class
+   matrix for "has left / has right / has strip" — it's correct by
+   construction for any combination. Same 1120px breakpoint already used
+   across the rest of the cockpit (see App.tsx): below it everything
+   stacks in one column with contained scroll (scrollbar-hide, as
+   before); at/above it becomes true zero-scroll, each region scrolling
+   only internally. `order` keeps the chart first on the stacked mobile/
+   iPad-portrait layout (chart priority) while still being the visual
+   center column once the 3-way row kicks in.
+
+   `flex:1`/`min-height:0` on .terminal-row/.terminal-main are scoped to
+   the >=1120px row layout ONLY — same rule already established for
+   Widget()'s own min-h-[180px]/min-[1120px]:min-h-0 (see App.tsx): a
+   real regression was caught here via Playwright on iPad portrait
+   (834x1194) BEFORE this comment existed — with those rules unscoped,
+   .terminal-main's flex-basis:0% carries ~zero weight in the flex-SHRINK
+   distribution (shrink is weighted by flex-basis) next to .terminal-left/
+   .terminal-right's large content-driven flex-basis, so nearly the
+   entire vertical deficit landed on the chart — it measured a literal
+   0px height, invisible, while the two content-heavy side columns
+   consumed the whole viewport. Below 1120px the 3 regions must instead
+   size to their own natural content height (like the old pre-V16 stack
+   did) and let .terminal-grid's own overflow-y-auto carry the scroll —
+   there is no bounded 2D area to distribute below that breakpoint by
+   design (see the original grid-template-areas comment history). */
 .terminal-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: auto auto auto;
-  grid-template-areas:
-    "main"
-    "aside"
-    "strip";
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+}
+.terminal-row {
+  display: flex;
+  flex-direction: column;
   gap: 0.5rem;
 }
-.terminal-main {
-  grid-area: main;
+.terminal-left {
+  order: 2;
 }
-.terminal-aside {
-  grid-area: aside;
+.terminal-main {
+  order: 1;
+}
+.terminal-right {
+  order: 3;
 }
 .terminal-strip {
-  grid-area: strip;
+  flex-shrink: 0;
 }
 @media (min-width: 1120px) {
-  .terminal-grid {
-    grid-template-columns: minmax(0, 1fr) 340px;
-    grid-template-rows: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "main  aside"
-      "strip strip";
+  .terminal-row {
+    flex-direction: row;
+    flex: 1;
+    min-height: 0;
+  }
+  .terminal-left {
+    order: 1;
+    width: 300px;
+    flex-shrink: 0;
+    min-height: 0;
+  }
+  .terminal-main {
+    order: 2;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+  }
+  .terminal-right {
+    order: 3;
+    width: 340px;
+    flex-shrink: 0;
+    min-height: 0;
   }
 }
 
