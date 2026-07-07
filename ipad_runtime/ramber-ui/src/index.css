@@ -100,16 +100,22 @@ body::after {
    gradiente, saturação atrás do blur, borda +21% presente, highlight de
    1px no topo e halo interno/externo reforçado), zero cirurgia por
    painel. :hover mantém um degrau extra para trackpad/mouse. */
+/* Overhaul Cross-Market (Missão 1, diretriz 4) — elevação para Midnight
+   Blue/Black: gradiente mais diagonal e mais escuro no pé, borda mais
+   FINA/translúcida (0.34→0.20 de opacidade — lê como fio delicado, não
+   contorno sólido) e blur mais intenso (24px→30px). Continua sendo UMA
+   classe compartilhada: todo widget que já usa .cyber-panel herda a
+   elevação de graça, sem cirurgia por painel. */
 .cyber-panel {
-  background: linear-gradient(180deg, rgba(4, 9, 20, 0.72), rgba(2, 5, 12, 0.62));
-  backdrop-filter: blur(24px) saturate(1.15);
-  -webkit-backdrop-filter: blur(24px) saturate(1.15);
-  border: 1px solid rgba(0, 240, 255, 0.34);
+  background: linear-gradient(165deg, rgba(6, 10, 28, 0.8), rgba(1, 3, 9, 0.7));
+  backdrop-filter: blur(30px) saturate(1.25);
+  -webkit-backdrop-filter: blur(30px) saturate(1.25);
+  border: 1px solid rgba(0, 240, 255, 0.2);
   box-shadow:
-    inset 0 0 30px rgba(0, 240, 255, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 0 26px rgba(0, 240, 255, 0.1),
-    0 8px 32px rgba(0, 0, 0, 0.6);
+    inset 0 0 34px rgba(0, 240, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 30px rgba(0, 240, 255, 0.08),
+    0 10px 40px rgba(0, 0, 0, 0.7);
   border-radius: 12px;
   position: relative;
   overflow: hidden;
@@ -119,12 +125,26 @@ body::after {
 }
 
 .cyber-panel:hover {
-  border-color: rgba(0, 240, 255, 0.42);
+  border-color: rgba(0, 240, 255, 0.34);
   box-shadow:
-    inset 0 0 34px rgba(0, 240, 255, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 0 32px rgba(0, 240, 255, 0.13),
-    0 8px 32px rgba(0, 240, 255, 0.1);
+    inset 0 0 38px rgba(0, 240, 255, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 36px rgba(0, 240, 255, 0.11),
+    0 10px 40px rgba(0, 240, 255, 0.09);
+}
+
+/* Acentos neon reservados a DADOS VITAIS (Missão 1, diretriz 4) — cyan
+   continua o padrão neutro/informativo em toda a UI; laranja marca o
+   Risk Engine (risco/atenção), púrpura marca a leitura do Comitê/GMIL
+   (opinião agregada, para diferenciar de preço/estrutura cru). Uso
+   deliberadamente esparso: só nos números que estes dois motores emitem. */
+.accent-risk {
+  color: #ff8a3d;
+  text-shadow: 0 0 6px rgba(255, 106, 0, 0.45);
+}
+.accent-consensus {
+  color: #c86bff;
+  text-shadow: 0 0 6px rgba(176, 38, 255, 0.45);
 }
 
 .cyber-panel::before {
@@ -259,11 +279,72 @@ body::after {
   }
 }
 
+/* Overhaul Cross-Market — grid macro do cockpit (Missão 1, diretrizes
+   1-3): substitui as 3 colunas flex por áreas NOMEADAS. "main" (o
+   Gráfico + card de decisão do S.E., a maior fatia — diretriz 2, o
+   Gráfico domina centro/topo), "aside" (GMIL/Regime/Comitê+Risk Engine,
+   SEMPRE visíveis — diretriz 3) e "strip" (Telemetria/Order Book/Order
+   Flow/Liquidez, condensados). Mesmo breakpoint 1120px já usado no
+   resto do cockpit (ver App.tsx): abaixo disso empilha em uma coluna só
+   com scroll contido (scrollbar-hide, igual ao cockpit já fazia); a
+   partir dele vira zero-scroll geral de verdade — cada área rola só
+   internamente. Grid-template-areas é a ferramenta certa aqui (reflow
+   responsivo de regiões nomeadas); todo o resto do layout desta base
+   continua Tailwind inline, de propósito. */
+.terminal-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    "main"
+    "aside"
+    "strip";
+  gap: 0.5rem;
+}
+.terminal-main {
+  grid-area: main;
+}
+.terminal-aside {
+  grid-area: aside;
+}
+.terminal-strip {
+  grid-area: strip;
+}
+@media (min-width: 1120px) {
+  .terminal-grid {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "main  aside"
+      "strip strip";
+  }
+}
+
+/* Pulso do Empty State fail-closed (Missão 2, diretriz 4) — brilho lento
+   e discreto no ícone do TradFiEmptyState; nunca "chamativo" (mesmo
+   princípio do panel-breathe acima), só o bastante para ler como "vivo,
+   aguardando conexão real", não como erro. */
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.35;
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+  50% {
+    opacity: 0.9;
+    filter: drop-shadow(0 0 8px currentColor);
+  }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cyber-scanline,
   .animate-fade-in,
   .skeleton-shimmer,
-  .cyber-panel::before {
+  .cyber-panel::before,
+  .animate-pulse-glow {
     animation: none;
   }
 }

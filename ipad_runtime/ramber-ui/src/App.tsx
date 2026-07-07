@@ -71,6 +71,13 @@ import { useGmilSnapshot } from "./gmil/use-gmil-snapshot";
 import { gmilBus } from "./gmil/event-bus";
 import { describeProviderHealthChange } from "./gmil/gmil-voice-alerts";
 import { computeConsensus, type ConsensusInput } from "./gmil/consensus-engine";
+// Overhaul Cross-Market (Missão 2): Smart Omnibox — busca categorizada
+// multi-mercado (cripto/meme reais via Binance + taxonomia TradFi
+// hardcoded para conexão futura) e o Empty State fail-closed que ela
+// exige quando um ativo TradFi é escolhido (diretriz 4).
+import { SmartOmnibox } from "./omnibox/SmartOmnibox";
+import { TradFiEmptyState } from "./omnibox/TradFiEmptyState";
+import { type TradFiAsset } from "./omnibox/tradfi-assets";
 import {
   LayoutDashboard,
   BarChart2,
@@ -134,14 +141,17 @@ const cleanStructureLabel = (raw: string | null | undefined): "ALTA" | "BAIXA" |
 const lorentzianConfidencePct = (lorentzian: { ok: boolean; confidence?: number | null } | null | undefined): number | null =>
   lorentzian?.ok ? Math.round((lorentzian.confidence ?? 0) * 100) : null;
 
-// Institutional asset selector (V11 §5) — deliberately 5, not a scrollable
-// exchange-length list, to keep the terminal's operational focus. Switching
-// re-points every real feed (klines, derivatives, WS ticker/depth, order
-// flow, engine cycle) at the new symbol; engine-bridge.ts's
-// runRealAnalysisCycle/startMexcOrderflowFeed already accept a symbol
-// parameter, so this reuses that instead of a second code path.
+// Institutional quick-list (V11 §5) — os 5 favoritos de atalho na barra;
+// deixaram de ser o universo INTEIRO de escolha com o Smart Omnibox
+// (Overhaul Cross-Market, Missão 2), que lista qualquer ticker USDT real
+// da Binance (cripto/meme) e a taxonomia TradFi hardcoded. Trocar de
+// ativo continua re-apontando cada feed real (klines, derivativos, WS
+// ticker/depth, order flow, ciclo do motor) para o novo símbolo;
+// engine-bridge.ts's runRealAnalysisCycle/startMexcOrderflowFeed já
+// aceitam qualquer símbolo (string), então isto reusa o mesmo caminho —
+// nunca um segundo código.
 const ASSETS = ["BTC", "ETH", "SOL", "BNB", "XRP"] as const;
-type AssetSymbol = (typeof ASSETS)[number];
+type AssetSymbol = string;
 
 const fmt = (v: number | null | undefined, d = 2) =>
   num(v)
@@ -217,6 +227,17 @@ export default function App() {
   // a manual "REINICIAR SISTEMA" does, just scoped to the new symbol
   // instead of the same one.
   const [selectedAsset, setSelectedAsset] = useState<AssetSymbol>("BTC");
+
+  // Overhaul Cross-Market (Missão 2): o Smart Omnibox também lista a
+  // taxonomia TradFi (índices/ações/commodities/forex) para conexão
+  // FUTURA — hoje NENHUMA API macro existe neste sistema. Escolher um
+  // ativo TradFi NUNCA muda `selectedAsset` (o motor real continua
+  // rodando sobre a última cripto real, intocado) — só liga o modo
+  // TRADFI, que faz os painéis específicos de ativo mostrarem o Empty
+  // State fail-closed em vez de tentar (e falhar) puxar dado da Binance
+  // para um símbolo que não é dela (diretriz 4, Modo Fail-Closed).
+  const [marketMode, setMarketMode] = useState<"CRYPTO" | "TRADFI">("CRYPTO");
+  const [selectedTradFiAsset, setSelectedTradFiAsset] = useState<TradFiAsset | null>(null);
 
   // Bumping bootGeneration tears down and re-runs every real boot effect
   // below (REST fetch + WS connect, engine cycle, order flow feed,
@@ -986,6 +1007,10 @@ export default function App() {
       criticalPulse,
       selectedAsset,
       setSelectedAsset,
+      marketMode,
+      setMarketMode,
+      selectedTradFiAsset,
+      setSelectedTradFiAsset,
       scannerData,
       gmilProviders,
       gmilBiases,
@@ -1017,6 +1042,8 @@ export default function App() {
       lastUpdateAt,
       criticalPulse,
       selectedAsset,
+      marketMode,
+      selectedTradFiAsset,
       scannerData,
       gmilProviders,
       gmilBiases,
@@ -1063,99 +1090,149 @@ export default function App() {
                     informação de decisão, visível em todas as abas, zero
                     repetição de preço/símbolo/feed pelo resto da tela. */}
 
-                {/* 3-column cockpit only at widths where the columns' minimums
-                    genuinely fit (sidebar 70 + paddings/gaps ≈ 110 + 300/360/330
-                    ≈ 1100). md: (768px) fired it on iPad PORTRAIT too, cutting
-                    the right column to a hidden sliver behind an inner
-                    horizontal scroll. 1120 splits the real iPad matrix exactly:
-                    every portrait (744/834/1024) stacks, every landscape
-                    (1133/1194/1366) gets 3 columns with nothing hidden. */}
-                <div
-                  className="flex-1 flex flex-col min-[1120px]:flex-row gap-2 min-h-0 overflow-y-auto min-[1120px]:overflow-x-auto min-[1120px]:overflow-y-hidden scrollbar-hide p-1"
-                >
-                  {/* Left Column */}
+                {/* Overhaul Cross-Market (Missão 1): grid nomeado substitui as
+                    3 colunas flex. O Gráfico domina a área "main" (maior
+                    fatia, centro/topo); GMIL/Regime/Comitê+Risco formam a
+                    pilha de decisão SEMPRE visível na área "aside"
+                    (sidebar); Telemetria/Order Book/Order Flow/Liquidez
+                    formam a "strip" inferior condensada, rolável na
+                    horizontal. .terminal-grid (index.css) define as áreas
+                    nomeadas + o mesmo breakpoint 1120px já usado no resto
+                    do cockpit — abaixo dele mantém o scroll contido
+                    (scrollbar-hide) que o cockpit já usava; a partir dele
+                    vira zero-scroll geral de verdade. */}
+                <div className="terminal-grid flex-1 min-h-0 overflow-y-auto min-[1120px]:overflow-hidden scrollbar-hide p-1">
+                  {/* MAIN — o Gráfico é o coração da operação (Missão 1,
+                      diretriz 2); o card de decisão do S.E. + Vetor de
+                      Mercado fica logo abaixo, na mesma área, sem disputar
+                      espaço com nenhuma outra coluna. */}
                   {(widgets.chart.visible ||
-                    widgets.orderflow.visible ||
-                    widgets.heatmap.visible) && (
-                    <div className="flex-[0.85] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[300px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
-                      <ChartWidget data={priceData} chartData={chartData} />
-                      <OrderFlowWidget />
-                      <HeatmapWidget book={orderBook} data={priceData} />
-                    </div>
-                  )}
-
-                  {/* Middle Column — the decision core (LONG/SHORT, confidence,
-                      entry/target/stop, voice) never dims during a focus pulse;
-                      it gets a highlight ring instead (see AssistantOrb/
-                      MarketDirectionWidget wrapper below).
-                      No explicit min-h-[Npx] here on purpose: with flex-basis:0
-                      (the flex-[1.15] shorthand), setting a fixed min-height
-                      would override the browser's automatic content-based
-                      minimum size and let this column's real content (which
-                      keeps growing as features are added) silently clip past
-                      the box into the next section below in stacked/portrait
-                      mode — confirmed via getBoundingClientRect: MarketDirection
-                      + AssistantOrb's own min-height already summed to more
-                      than a stale 600px floor allowed, so text overlapped the
-                      right column's OrderBookWidget. Omitting min-height lets
-                      it default to `auto`, which flexbox defines specifically
-                      to never shrink a flex item below its content's needs. */}
-                  {(widgets.market_direction.visible ||
+                    widgets.market_direction.visible ||
                     widgets.se_core.visible) && (
-                    <div
-                      className={`flex-[1.15] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[360px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide relative z-0 shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto transition-[filter] duration-500 ${criticalPulse ? "drop-shadow-[0_0_18px_rgba(0,240,255,0.5)]" : ""}`}
-                    >
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.05)_0%,transparent_60%)] pointer-events-none mix-blend-screen"></div>
-                      <MarketDirectionWidget />
-                      <AssistantOrb inCenter={true} />
+                    <div className="terminal-main min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2 pointer-events-none [&>*]:pointer-events-auto">
+                      {widgets.chart.visible &&
+                        (marketMode === "TRADFI" ? (
+                          <TradFiEmptyState
+                            assetLabel={`${selectedTradFiAsset?.symbol ?? ""} · ${selectedTradFiAsset?.name ?? ""}`}
+                          />
+                        ) : (
+                          <ChartWidget data={priceData} chartData={chartData} />
+                        ))}
+                      {(widgets.market_direction.visible || widgets.se_core.visible) && (
+                        <div
+                          className={`shrink-0 flex flex-col gap-2 relative z-0 transition-[filter] duration-500 ${criticalPulse ? "drop-shadow-[0_0_18px_rgba(0,240,255,0.5)]" : ""}`}
+                        >
+                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.05)_0%,transparent_60%)] pointer-events-none mix-blend-screen"></div>
+                          {marketMode === "TRADFI" ? (
+                            <TradFiEmptyState compact assetLabel="VETOR DE MERCADO E S.E." />
+                          ) : (
+                            <>
+                              <MarketDirectionWidget />
+                              <AssistantOrb inCenter={true} />
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Right Column — Liquidez (livro de ofertas) e Contexto
-                      Global (GMIL) são essenciais (DCI item 3/hierarquia 5) e
-                      ficam sempre visíveis; Scanner/Exposição/Eventos/Núcleo
-                      Neural são detalhe progressivo (DCI item 2), recolhidos
-                      por padrão. */}
-                  {(widgets.orderbook.visible ||
+                  {/* ASIDE — pilha de inteligência de decisão SEMPRE visível
+                      (Missão 1, diretriz 3): GMIL, Regime e Comitê/Risk
+                      Engine já não ficam atrás do toggle "Módulos
+                      Adicionais", que agora só recolhe ferramentas
+                      secundárias (Scanner/Exposição/Eventos/Núcleo Neural/
+                      Heatmap de 5 ativos). */}
+                  {(widgets.gmil_context.visible ||
+                    widgets.market_regime.visible ||
+                    widgets.decision_validation.visible ||
                     widgets.scanner.visible ||
                     widgets.exposure.visible ||
                     widgets.events.visible ||
-                    widgets.gmil_context.visible ||
                     widgets.neural_core.visible ||
-                    widgets.market_regime.visible ||
-                    widgets.asset_heatmap.visible ||
-                    widgets.decision_validation.visible) && (
-                    <div className="flex-[0.95] flex flex-col gap-2 w-full min-[1120px]:w-auto min-[1120px]:min-w-[330px] min-[1120px]:min-h-0 min-[1120px]:h-full min-[1120px]:overflow-y-auto scrollbar-hide shrink-0 min-[1120px]:shrink pointer-events-none [&>*]:pointer-events-auto">
-                      <OrderBookWidget data={priceData} book={orderBook} />
+                    widgets.asset_heatmap.visible) && (
+                    <div className="terminal-aside min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2 pointer-events-none [&>*]:pointer-events-auto">
                       <GmilContextWidget />
+                      {(widgets.market_regime.visible || widgets.decision_validation.visible) &&
+                        (marketMode === "TRADFI" ? (
+                          <TradFiEmptyState compact assetLabel="REGIME E COMITÊ DE DECISÃO" />
+                        ) : (
+                          <>
+                            <MarketRegimeWidget />
+                            <DecisionValidationWidget />
+                          </>
+                        ))}
 
                       {(widgets.scanner.visible ||
                         widgets.exposure.visible ||
                         widgets.events.visible ||
                         widgets.neural_core.visible ||
-                        widgets.market_regime.visible ||
-                        widgets.asset_heatmap.visible ||
-                        widgets.decision_validation.visible) && (
+                        widgets.asset_heatmap.visible) && (
                         <button
                           type="button"
                           onClick={() => setAdvancedOpen((v) => !v)}
                           className="shrink-0 flex items-center justify-between px-3 py-2 rounded-lg border border-[#8ab4f8]/20 bg-[#8ab4f8]/5 text-[0.5rem] tracking-[0.2em] font-bold uppercase text-[#8ab4f8] active:bg-[#8ab4f8]/10"
                         >
-                          <span>Detalhes Avançados</span>
+                          <span>Módulos Adicionais</span>
                           <span className="text-[#00f0ff]">{advancedOpen ? "▲ OCULTAR" : "▼ EXPANDIR"}</span>
                         </button>
                       )}
                       {advancedOpen && (
                         <>
-                          <MarketRegimeWidget />
-                          <DecisionValidationWidget />
-                          <TelemetryHealthWidget />
                           <AssetHeatmapWidget />
                           <ScannerWidget data={scannerData} />
                           <ExposureWidget />
                           <EventsWidget />
                           <NeuralCoreWidget />
                         </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* STRIP — painel inferior condensado (Missão 1, diretriz
+                      3): Telemetria é saúde do SISTEMA (não do ativo
+                      selecionado), continua sempre real mesmo em modo
+                      TRADFI. Order Book/Order Flow/Liquidez descrevem o
+                      livro real do ativo CRIPTO selecionado, então entram
+                      no Empty State fail-closed (Missão 2, diretriz 4)
+                      quando um ativo TradFi está ativo. Rola na horizontal
+                      quando os 4 cards não cabem lado a lado — nunca força
+                      scroll geral da página. */}
+                  {(widgets.system_health.visible ||
+                    widgets.orderbook.visible ||
+                    widgets.orderflow.visible ||
+                    widgets.heatmap.visible) && (
+                    <div className="terminal-strip shrink-0 flex gap-2 overflow-x-auto scrollbar-hide h-[200px] min-[1120px]:h-[168px] pointer-events-none [&>*]:pointer-events-auto">
+                      {widgets.system_health.visible && (
+                        <div className="min-w-[240px] flex-1 flex flex-col">
+                          <TelemetryHealthWidget />
+                        </div>
+                      )}
+                      {widgets.orderbook.visible && (
+                        <div className="min-w-[260px] flex-1 flex flex-col">
+                          {marketMode === "TRADFI" ? (
+                            <TradFiEmptyState compact assetLabel="LIVRO DE OFERTAS" />
+                          ) : (
+                            <OrderBookWidget data={priceData} book={orderBook} />
+                          )}
+                        </div>
+                      )}
+                      {widgets.orderflow.visible && (
+                        <div className="min-w-[240px] flex-1 flex flex-col">
+                          {marketMode === "TRADFI" ? (
+                            <TradFiEmptyState compact assetLabel="ORDER FLOW" />
+                          ) : (
+                            <OrderFlowWidget />
+                          )}
+                        </div>
+                      )}
+                      {widgets.heatmap.visible && (
+                        <div className="min-w-[240px] flex-1 flex flex-col">
+                          {marketMode === "TRADFI" ? (
+                            <TradFiEmptyState compact assetLabel="MAPA DE LIQUIDEZ" />
+                          ) : (
+                            <HeatmapWidget book={orderBook} data={priceData} />
+                          )}
+                        </div>
                       )}
                     </div>
                   )}
@@ -1320,7 +1397,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
 
   if (inCenter) {
     return (
-      <div className="flex-1 shrink-0 flex flex-col items-center justify-between relative min-h-[500px] min-[1120px]:min-h-0 overflow-y-auto overscroll-contain scrollbar-hide z-0 group py-4 bg-[#010308]/60 backdrop-blur-3xl border border-[#00f0ff]/20 rounded-2xl shadow-[inset_0_0_80px_rgba(0,240,255,0.05),0_8px_32px_rgba(0,0,0,0.6)] w-full max-w-4xl mx-auto">
+      <div className="flex-1 shrink-0 flex flex-col items-center justify-between relative min-h-[500px] min-[1120px]:min-h-0 overflow-y-auto overscroll-contain scrollbar-hide z-0 group py-4 bg-[#010308]/72 backdrop-blur-3xl border border-[#00f0ff]/15 rounded-2xl shadow-[inset_0_0_90px_rgba(0,240,255,0.06),0_10px_40px_rgba(0,0,0,0.7)] w-full max-w-4xl mx-auto">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(0,240,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(0,240,255,0.02)_1px,transparent_1px)] bg-[size:30px_30px]"></div>
 
         <div className="absolute top-3 left-0 right-0 flex justify-center opacity-50 text-[0.55rem] tracking-[0.4em] font-bold text-[#00f0ff] z-10">
@@ -1804,8 +1881,17 @@ function TopBar({
   data?: PriceState | null;
   derivatives: DerivativesState;
 }) {
-  const { bootAt, handleManualRestart, selectedAsset, setSelectedAsset, criticalPulse } =
-    useContext(WidgetContext) || {};
+  const {
+    bootAt,
+    handleManualRestart,
+    selectedAsset,
+    setSelectedAsset,
+    criticalPulse,
+    marketMode,
+    setMarketMode,
+    selectedTradFiAsset,
+    setSelectedTradFiAsset,
+  } = useContext(WidgetContext) || {};
   const isPos = (data?.deltaPct ?? 0) >= 0;
   const [uptime, setUptime] = useState("");
 
@@ -1850,91 +1936,132 @@ function TopBar({
           <div className="flex items-center gap-2 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%]">
             <div
               className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-                selectedAsset === "BTC"
-                  ? "bg-[#f7931a] shadow-[0_0_10px_rgba(247,147,26,0.4)]"
-                  : "bg-[#00f0ff20] border border-[#00f0ff40] shadow-[0_0_10px_rgba(0,240,255,0.2)]"
+                marketMode === "TRADFI"
+                  ? "bg-[#b026ff20] border border-[#b026ff40] shadow-[0_0_10px_rgba(176,38,255,0.25)]"
+                  : selectedAsset === "BTC"
+                    ? "bg-[#f7931a] shadow-[0_0_10px_rgba(247,147,26,0.4)]"
+                    : "bg-[#00f0ff20] border border-[#00f0ff40] shadow-[0_0_10px_rgba(0,240,255,0.2)]"
               }`}
             >
               <span className="text-white font-bold text-xs">
-                {selectedAsset === "BTC" ? "₿" : selectedAsset?.[0]}
+                {marketMode === "TRADFI"
+                  ? (selectedTradFiAsset?.symbol?.[0] ?? "?")
+                  : selectedAsset === "BTC"
+                    ? "₿"
+                    : selectedAsset?.[0]}
               </span>
             </div>
             <div className="text-[#a0f0ff] font-black text-sm flex items-center gap-1.5 whitespace-nowrap">
-              {selectedAsset}/USDT{" "}
-              <span className="text-[0.5rem] bg-[#00f0ff20] text-[#00f0ff] px-1 py-0.5 rounded uppercase tracking-wider">
-                Spot
+              {marketMode === "TRADFI" ? selectedTradFiAsset?.symbol : `${selectedAsset}/USDT`}{" "}
+              <span
+                className={`text-[0.5rem] px-1 py-0.5 rounded uppercase tracking-wider ${
+                  marketMode === "TRADFI" ? "bg-[#b026ff20] text-[#b026ff]" : "bg-[#00f0ff20] text-[#00f0ff]"
+                }`}
+              >
+                {marketMode === "TRADFI" ? "Macro" : "Spot"}
               </span>
             </div>
           </div>
 
-          {/* Institutional asset selector (V11 §5) — 5 fixed assets, not a
-              scrollable exchange-length list, per the protocol's explicit
-              "manter foco operacional" instruction. Switching re-points every
-              real feed at the new symbol (see the selectedAsset-scoped
-              effects in App()). */}
-          <div className="flex items-center gap-1 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%]">
-            {ASSETS.map((a) => (
-              <button
-                key={a}
-                type="button"
-                onClick={() => setSelectedAsset?.(a)}
-                className={`px-1.5 md:px-2 py-1 rounded text-[0.5rem] md:text-[0.55rem] font-bold tracking-wider transition-colors ${
-                  selectedAsset === a
-                    ? "bg-[#00f0ff20] text-[#00f0ff] border border-[#00f0ff40]"
-                    : "text-[#8ab4f8]/50 hover:text-[#8ab4f8] border border-transparent"
+          {/* Smart Omnibox (Overhaul Missão 2) — substitui os 5 botões fixos
+              como forma PRIMÁRIA de trocar de ativo: busca categorizada
+              multi-mercado (cripto/meme real via Binance + taxonomia
+              TradFi para conexão futura). Os 5 favoritos ficam como atalho
+              de um toque ao lado, em telas largas o bastante. */}
+          <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%]">
+            <div className="hidden lg:flex items-center gap-1">
+              {ASSETS.map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  onClick={() => {
+                    setMarketMode?.("CRYPTO");
+                    setSelectedTradFiAsset?.(null);
+                    setSelectedAsset?.(a);
+                  }}
+                  className={`px-1.5 py-1 rounded text-[0.5rem] font-bold tracking-wider transition-colors ${
+                    marketMode === "CRYPTO" && selectedAsset === a
+                      ? "bg-[#00f0ff20] text-[#00f0ff] border border-[#00f0ff40]"
+                      : "text-[#8ab4f8]/50 hover:text-[#8ab4f8] border border-transparent"
+                  }`}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+            <SmartOmnibox
+              selectedLabel={marketMode === "TRADFI" ? (selectedTradFiAsset?.symbol ?? "Buscar ativo") : "Buscar ativo"}
+              onSelectCrypto={(baseAsset: string) => {
+                setMarketMode?.("CRYPTO");
+                setSelectedTradFiAsset?.(null);
+                setSelectedAsset?.(baseAsset);
+              }}
+              onSelectTradFi={(asset: TradFiAsset) => {
+                setMarketMode?.("TRADFI");
+                setSelectedTradFiAsset?.(asset);
+              }}
+            />
+          </div>
+
+          {/* O preço — única ocorrência em toda a interface. Em modo
+              TRADFI não existe fonte real ligada (fail-closed, Missão 2
+              diretriz 4): mostra o rótulo honesto em vez de um preço de
+              cripto sem nenhuma relação com o ativo selecionado. */}
+          {marketMode === "TRADFI" ? (
+            <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap">
+              <span className="text-[0.55rem] font-bold text-[#8ab4f8]/50 uppercase tracking-wider">
+                {AWAIT} · Macro API
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-baseline gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap">
+              <span
+                className={`text-base md:text-lg font-black font-mono tracking-tight drop-shadow-[0_0_6px_currentColor] ${
+                  isPos ? "text-[#00ffaa]" : "text-[#ff0055]"
                 }`}
               >
-                {a}
-              </button>
-            ))}
-          </div>
+                {fmt(data?.price ?? null)}
+              </span>
+              <span
+                className={`text-[0.55rem] font-bold ${isPos ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+              >
+                {fmtSignedPct(data?.deltaPct ?? null)}
+              </span>
+            </div>
+          )}
 
-          {/* O preço — única ocorrência em toda a interface. */}
-          <div className="flex items-baseline gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap">
-            <span
-              className={`text-base md:text-lg font-black font-mono tracking-tight drop-shadow-[0_0_6px_currentColor] ${
-                isPos ? "text-[#00ffaa]" : "text-[#ff0055]"
-              }`}
-            >
-              {fmt(data?.price ?? null)}
-            </span>
-            <span
-              className={`text-[0.55rem] font-bold ${isPos ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
-            >
-              {fmtSignedPct(data?.deltaPct ?? null)}
-            </span>
-          </div>
-
-          <div className="hidden md:flex gap-1 lg:gap-2 h-full items-center">
-            <TopStat
-              label="24H HIGH"
-              value={fmt(data?.high ?? null)}
-              color="text-[#a0f0ff]"
-              className="hidden xl:flex"
-            />
-            <TopStat
-              label="24H LOW"
-              value={fmt(data?.low ?? null)}
-              color="text-[#a0f0ff]"
-              className="hidden xl:flex"
-            />
-            <TopStat
-              label={`24H VOL (${selectedAsset})`}
-              value={fmtInt(data?.volume ?? null)}
-              color="text-[#a0f0ff]"
-              className="hidden lg:flex"
-            />
-            <TopStat
-              label="FUNDING / 8H"
-              value={num(funding) ? `${(funding * 100).toFixed(4)}%` : DASH}
-              color="text-[#f7931a]"
-            />
-            <TopStat
-              label="OPEN INTEREST"
-              value={num(oi) ? `${fmtInt(oi)} ${selectedAsset}` : DASH}
-              color="text-[#a0f0ff]"
-            />
-          </div>
+          {marketMode === "CRYPTO" && (
+            <div className="hidden md:flex gap-1 lg:gap-2 h-full items-center">
+              <TopStat
+                label="24H HIGH"
+                value={fmt(data?.high ?? null)}
+                color="text-[#a0f0ff]"
+                className="hidden xl:flex"
+              />
+              <TopStat
+                label="24H LOW"
+                value={fmt(data?.low ?? null)}
+                color="text-[#a0f0ff]"
+                className="hidden xl:flex"
+              />
+              <TopStat
+                label={`24H VOL (${selectedAsset})`}
+                value={fmtInt(data?.volume ?? null)}
+                color="text-[#a0f0ff]"
+                className="hidden lg:flex"
+              />
+              <TopStat
+                label="FUNDING / 8H"
+                value={num(funding) ? `${(funding * 100).toFixed(4)}%` : DASH}
+                color="text-[#f7931a]"
+              />
+              <TopStat
+                label="OPEN INTEREST"
+                value={num(oi) ? `${fmtInt(oi)} ${selectedAsset}` : DASH}
+                color="text-[#a0f0ff]"
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex gap-1 md:gap-2 h-full items-center justify-end shrink-0">
@@ -3574,7 +3701,7 @@ function DecisionValidationWidget() {
         {/* Fase F: leitura agregada do comitê (n = membros com leitura real
             nesta janela). Consultivo — nunca o sinal do Core Engine. */}
         <div className="flex justify-between items-center bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0">
-          <span className="text-[0.45rem] text-[#8ab4f8]/80 font-bold tracking-widest">
+          <span className="text-[0.45rem] accent-consensus font-bold tracking-widest">
             COMITÊ (ENSEMBLE) · CONSULTIVO
             {ensembleOk && (
               <span className="text-[#8ab4f8]/40"> n={ensembleConsensus.membros.length}</span>
@@ -3587,7 +3714,7 @@ function DecisionValidationWidget() {
             ignição da Fase H, diretriz 3) — presente mesmo em 0%. */}
         <div className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0">
           <div className="flex justify-between items-center">
-            <span className="text-[0.45rem] text-[#8ab4f8]/80 font-bold tracking-widest">TAMANHO SUGERIDO (RISK ENGINE)</span>
+            <span className="text-[0.45rem] accent-risk font-bold tracking-widest">TAMANHO SUGERIDO (RISK ENGINE)</span>
             <span className={`text-[0.55rem] font-mono font-black ${riskColor}`}>{riskLabel}</span>
           </div>
           <span className="text-[0.4rem] text-[#f0d06f]/80 font-bold tracking-widest">
