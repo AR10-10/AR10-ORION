@@ -1323,20 +1323,30 @@ export default function App() {
                           <X size={12} />
                         </div>
                       </div>
+                      {/* Fusão visual: sequência reorganizada para bater com
+                          a ordem da imagem de referência — Siriform → GMIL
+                          → Regime/Consenso/Risk Engine → Saúde do Sistema
+                          (antes GMIL vinha por último). GmilContextWidget
+                          continua FORA de qualquer ternário de marketMode —
+                          é contexto macro global, sempre real
+                          independente do ativo selecionado (mesmo
+                          comportamento de sempre, só a posição mudou). */}
                       {marketMode === "TRADFI" ? (
-                        <TradFiEmptyState compact assetLabel="SIRIFORM CORE · REGIME · COMITÊ DE DECISÃO" />
+                        <TradFiEmptyState compact assetLabel="SIRIFORM CORE" />
                       ) : (
-                        <>
-                          {widgets.se_core.visible && <SiriformCoreCard />}
-                          {(widgets.market_regime.visible || widgets.decision_validation.visible) && (
-                            <>
-                              <MarketRegimeWidget />
-                              <DecisionValidationWidget />
-                            </>
-                          )}
-                        </>
+                        widgets.se_core.visible && <SiriformCoreCard />
                       )}
                       <GmilContextWidget />
+                      {marketMode === "TRADFI" ? (
+                        <TradFiEmptyState compact assetLabel="REGIME · COMITÊ DE DECISÃO" />
+                      ) : (
+                        (widgets.market_regime.visible || widgets.decision_validation.visible) && (
+                          <>
+                            <MarketRegimeWidget />
+                            <DecisionValidationWidget />
+                          </>
+                        )
+                      )}
                       <TelemetryHealthWidget />
                     </div>
                   </div>
