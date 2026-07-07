@@ -2,7 +2,7 @@
   "id": "./",
   "name": "RAMBER — iPad One-Tap Cloud Runtime",
   "short_name": "RAMBER",
-  "description": "S.E. Neural Link — Terminal RAMBER. Instalavel na tela de inicio (icone, janela standalone sem chrome do navegador); requer conexao a cada carregamento, sem cache offline (nenhum service worker ativo neste app). READ_ONLY / FAIL_CLOSED, sem trading real.",
+  "description": "S.E. Neural Link — Terminal RAMBER (AR10 CYBORG v15.0.0-GODTIER). Instalavel na tela de inicio (icone, janela standalone sem chrome do navegador); abre offline apos a primeira visita (service worker com precache do shell + stale-while-revalidate). Dados de mercado exigem conexao — nunca sao cacheados nem fabricados. READ_ONLY / FAIL_CLOSED, sem trading real.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

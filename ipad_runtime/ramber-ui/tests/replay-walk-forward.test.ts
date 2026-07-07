@@ -188,22 +188,25 @@ describe('walk-forward: acoplamento matriz de regime (D) → comitê (F) → Kel
       expect(w).not.toBeNull(); // janela 120 >= mínimo => sempre um regime real
       const forcaEsperada = ((w as number) + 0.5) / ((w as number) + 1);
       expect(f.ensemble.forca).toBeCloseTo(forcaEsperada, 10);
-      // e a fração de Kelly reage à faixa de força: ½ para >= 0.6, ¼ abaixo
-      expect(f.risk.kelly_fraction_tier).toBe(f.ensemble.forca >= 0.6 ? 0.5 : 0.25);
     }
   });
 
-  it('em COMPRESSAO (momentum pesa 0.2 => força 0.5833 < 0.6) o teto cai para ¼-Kelly: sugestão 6.25%', async () => {
-    const run = await runWalkForward({ ...sessionOpts(), memberFactory: twoMembers, riskPlanFactory: planLong });
-    const compressao = (run.frames as any[]).filter((f) => f.regime.regime === 'COMPRESSAO');
-    expect(compressao.length).toBeGreaterThan(10);
-    for (const f of compressao) expect(f.risk.suggested_position_pct).toBeCloseTo(6.25, 10);
-  });
-
-  it('forca_ajustada = força × peso de qualidade do Bus (amortecedor da Fase C aplicado sobre qualidade REAL medida no replay)', async () => {
+  it('diretriz 1 da Fase L, viva na cadeia: o Risk Engine consome a forca_ajustada (= força × peso de qualidade REAL do Bus), e a fração de Kelly reage a ELA', async () => {
+    // Nota de determinismo: o PESO em replay depende da dimensão
+    // "stability" (CV de latências sub-ms — timing de plataforma), então
+    // nenhuma asserção aqui fixa um peso específico; o que se trava é a
+    // CADEIA — identidade do amortecedor, fiação ajustada->Risk e o
+    // multiplicador de Kelly respondendo à força AJUSTADA, seja qual for
+    // o peso real medido. O caso extremo determinístico (quarentena peso
+    // 0 => sugestão 0%) é provado no teste de corrupção abaixo.
     const run = await runWalkForward({ ...sessionOpts(), memberFactory: twoMembers, riskPlanFactory: planLong });
     for (const f of run.frames as any[]) {
+      // amortecedor da Fase C: identidade exata força_ajustada = força × peso
       expect(f.ensemble.forca_ajustada).toBeCloseTo(f.ensemble.forca * f.quality.weight, 10);
+      // fiação da Fase L: o que ENTRA no Risk Engine é a ajustada, nunca a bruta
+      expect(f.risk.inputs.ensemble_forca).toBeCloseTo(f.ensemble.forca_ajustada, 10);
+      // e o multiplicador FIXO de Kelly responde à faixa da força AJUSTADA
+      expect(f.risk.kelly_fraction_tier).toBe(f.ensemble.forca_ajustada >= 0.6 ? 0.5 : 0.25);
     }
   });
 });
@@ -253,13 +256,20 @@ describe('walk-forward: fonte corrompida no meio do replay — fail-closed e rec
     }
     // Quarentena da Fase C: a partir da 5ª falha consecutiva o peso zera.
     expect(byIndex.get(310).quality.weight).toBe(0);
-    // ... e o amortecedor da Fase F reflete isso: forca_ajustada = 0.
+    // ... o amortecedor da Fase F reflete isso (forca_ajustada = 0) e — a
+    // diretriz 1 da Fase L — a quarentena ZERA a sugestão do Risk Engine:
+    // a qualidade da rede impacta o lote final, fail-closed completo.
     expect(byIndex.get(310).ensemble.forca_ajustada).toBe(0);
+    expect(byIndex.get(310).risk.status).toBe('SEM_SUGESTAO');
+    expect(byIndex.get(310).risk.reason).toBe('comite_sem_forca_direcional_suficiente');
+    expect(byIndex.get(310).risk.suggested_position_pct).toBe(0);
 
     // Recuperação: end 421 já não cobre o candle 300 — coleta volta a
-    // validar, o relógio avança e o peso volta a ser positivo em 1 sucesso.
+    // validar, o relógio avança, o peso volta a ser positivo em 1 sucesso
+    // e a sugestão volta a existir no MESMO passo.
     expect(byIndex.get(421).t).toBe(tOf(420));
     expect(byIndex.get(421).quality.weight).toBeGreaterThan(0);
+    expect(byIndex.get(421).risk.status).toBe('OK');
     // ... e o replay segue até o fim da fixture com o relógio normal.
     expect(byIndex.get(640).t).toBe(tOf(639));
   });

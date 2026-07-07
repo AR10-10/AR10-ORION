@@ -14,7 +14,8 @@
 //   2. classifyMarketRegime(candles do snapshot) → regime + ATR% + evidência
 //   3. RegimeHistory.record(..., at = asOf)      → transições determinísticas
 //   4. buildEnsembleConsensus(membros, regime, peso de qualidade do Bus)
-//   5. buildRiskSuggestion(plano + ATR% do regime + direção/força do comitê)
+//   5. buildRiskSuggestion(plano + ATR% do regime + direção do comitê +
+//      forca_ajustada — a força já amortecida pela qualidade, Fase L dir. 1)
 //
 // ESTÍMULO INJETADO, NUNCA FABRICADO: o motor NÃO inventa opiniões de
 // comitê nem rotas de trade — memberFactory e riskPlanFactory são
@@ -101,6 +102,10 @@ export function createReplaySession({
         });
 
         const plan = riskPlanFactory ? riskPlanFactory(ctx) : null;
+        // Fase L (diretriz 1): espelho da fiação de produção corrigida —
+        // o Kelly consome a força AJUSTADA pela qualidade (forca_ajustada
+        // = forca × peso do Bus), nunca a bruta. Fonte em quarentena
+        // (peso 0) => força 0 => sugestão 0%, também no replay.
         const risk = buildRiskSuggestion({
             signal: plan?.signal ?? null,
             entry: plan?.entry ?? null,
@@ -108,7 +113,7 @@ export function createReplaySession({
             atrPercent: regime.evidence?.atr_percent ?? null,
             riskRewardRatio: plan?.riskRewardRatio ?? null,
             ensembleDirection: ensemble?.status === 'OK' ? ensemble.direcao : null,
-            ensembleForca: ensemble?.status === 'OK' ? ensemble.forca : null,
+            ensembleForca: ensemble?.status === 'OK' ? ensemble.forca_ajustada : null,
             ...(Number.isFinite(plan?.riskPerTradePct) ? { riskPerTradePct: plan.riskPerTradePct } : {}),
         });
 

@@ -41,6 +41,7 @@ import { buildRiskSuggestion } from "../../src/risk/index.js";
 // plataforma não expõe (memória no Safari, CPU/GPU em qualquer navegador)
 // é declarado, nunca fabricado.
 import { classifyFps, classifyCycleLatency, memoryUsedMB, wasmVariantLabel } from "../../src/telemetry/index.js";
+import { APP_SEAL } from "./version";
 // llm-bridge.ts (and the @mlc-ai/web-llm package it imports) is loaded via
 // dynamic import() only inside NeuralCoreWidget's activation handler below
 // — never a static top-level import here. A static import would pull
@@ -866,6 +867,13 @@ export default function App() {
   // Fail-closed por construção: qualquer insumo ausente/não-finito, comitê
   // dividido ou contrário ao sinal => 0%. A UI exibe o selo obrigatório ao
   // lado dos números. Consultivo: nada aqui é lido de volta pelo Core.
+  //
+  // Fase L (diretriz 1 — correção de governança do achado da Fase K): o
+  // Kelly fracionado consome a força AJUSTADA pela qualidade da fonte
+  // (forca_ajustada = forca × peso do Bus da Fase C), nunca mais a força
+  // bruta. Consequência deliberada: fonte em quarentena (peso 0) ou nunca
+  // medida (peso null) => força 0/null => sugestão 0% — a qualidade da
+  // rede agora impacta o lote final, fail-closed de ponta a ponta.
   const riskSuggestion = useMemo(
     () =>
       buildRiskSuggestion({
@@ -875,7 +883,7 @@ export default function App() {
         atrPercent: engine.marketRegime?.atrPercent ?? null,
         riskRewardRatio: engine.riskRewardRatio,
         ensembleDirection: ensembleConsensus?.status === "OK" ? ensembleConsensus.direcao : null,
-        ensembleForca: ensembleConsensus?.status === "OK" ? ensembleConsensus.forca : null,
+        ensembleForca: ensembleConsensus?.status === "OK" ? ensembleConsensus.forca_ajustada : null,
       }),
     [engine.direction, engine.entry, engine.stop, engine.marketRegime, engine.riskRewardRatio, ensembleConsensus],
   );
@@ -3385,6 +3393,11 @@ function TelemetryHealthWidget() {
           value={memMB !== null ? `${memMB.toFixed(0)} MB` : "SEM_API (Safari não expõe)"}
           valueClass={memMB !== null ? "text-[#8ab4f8]" : "text-[#8ab4f8]/40"}
         />
+        {/* Fase L (diretriz 3): selo de versão — confirmação FÍSICA de qual
+            build está servido (inclusive do precache offline do service
+            worker, cujo nome de cache deriva desta mesma constante).
+            Aparece UMA vez em toda a UI (zero repetição). */}
+        <Row label="BUILD" value={APP_SEAL} valueClass="text-[#00f0ff]" />
         {/* engine é lido só para o gate de visibilidade herdado do Widget —
             nenhuma leitura de mercado é exibida aqui (zero repetição). */}
         {engine ? null : null}
