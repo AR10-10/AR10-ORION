@@ -1835,7 +1835,7 @@ function TopBar({
     // Cada dado aparece exatamente uma vez em toda a tela: o preço vive só
     // aqui (o chip Preço da faixa e o overlay gigante do gráfico foram
     // removidos), variação 24h só aqui, HIGH/VOL só aqui, READ-ONLY e a
-    // marca RAMBER só no rodapé, e FEED sumiu porque "DADOS n/4" da faixa
+    // marca AR10 CYBORG só no rodapé, e FEED sumiu porque "DADOS n/4" da faixa
     // já conta o mesmo WebSocket. O pulso crítico (DCI) acende o anel da
     // barra inteira — sem apagar o resto da tela.
     <div
@@ -3936,7 +3936,7 @@ function FooterBar() {
   return (
     <div className="h-[24px] border-t border-[#00f0ff35] shadow-[0_-2px_14px_rgba(0,240,255,0.08)] flex items-center justify-between px-3 bg-[#010308] shrink-0 text-[0.45rem] tracking-[0.2em] text-[#8ab4f8]/80 font-bold uppercase">
       <div className="flex gap-3">
-        <span className="text-[#00f0ff] drop-shadow-[0_0_5px_#00f0ff]">RAMBER</span>
+        <span className="text-[#00f0ff] drop-shadow-[0_0_5px_#00f0ff]">AR10 CYBORG</span>
         <span className="hidden md:inline">|</span>
         <span className="hidden md:inline">TERMINAL READ-ONLY</span>
       </div>

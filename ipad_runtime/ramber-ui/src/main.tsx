@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { AccessGate } from './access-gate';
 import './index.css';
 
 // Fase L (diretriz 2 — Homologação Offline): service worker REAL com
@@ -26,6 +27,8 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <AccessGate>
+      <App />
+    </AccessGate>
   </StrictMode>,
 );

@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "RAMBER — iPad One-Tap Cloud Runtime",
-  "short_name": "RAMBER",
-  "description": "S.E. Neural Link — Terminal RAMBER (AR10 CYBORG v15.0.0-GODTIER). Instalavel na tela de inicio (icone, janela standalone sem chrome do navegador); abre offline apos a primeira visita (service worker com precache do shell + stale-while-revalidate). Dados de mercado exigem conexao — nunca sao cacheados nem fabricados. READ_ONLY / FAIL_CLOSED, sem trading real.",
+  "name": "AR10 CYBORG — Terminal Quantitativo",
+  "short_name": "AR10 CYBORG",
+  "description": "AR10 CYBORG v15.0.0-GODTIER — Terminal Quantitativo (núcleo analítico S.E.). Instalavel na tela de inicio (icone, janela standalone sem chrome do navegador); abre offline apos a primeira visita (service worker com precache do shell + stale-while-revalidate). Dados de mercado exigem conexao — nunca sao cacheados nem fabricados. READ_ONLY / FAIL_CLOSED, sem trading real.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

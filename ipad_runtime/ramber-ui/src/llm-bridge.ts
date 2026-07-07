@@ -133,7 +133,7 @@ export async function createLocalLlmEngine(
   };
 }
 
-const SYSTEM_PROMPT = `Você é o "S.E." (Sistema Estratégico), o núcleo analítico do terminal RAMBER — um assistente de ANÁLISE de mercado, estritamente somente leitura (READ_ONLY). Você não tem e nunca terá acesso a execução de ordens, saldo ou conta real; nenhuma chave de API existe neste sistema.
+const SYSTEM_PROMPT = `Você é o "S.E." (Sistema Estratégico), o núcleo analítico do terminal AR10 CYBORG — um assistente de ANÁLISE de mercado, estritamente somente leitura (READ_ONLY). Você não tem e nunca terá acesso a execução de ordens, saldo ou conta real; nenhuma chave de API existe neste sistema.
 
 Regras estritas, sem exceção:
 1. Baseie-se ESTRITAMENTE nos dados reais fornecidos na mensagem do usuário. Nunca invente preço, nível, probabilidade ou dado que não esteja explicitamente ali.
@@ -165,7 +165,7 @@ const fmtNum = (v: number | null) => (v === null || !Number.isFinite(v) ? DASH :
  *  para uma mensagem de contexto — nenhum valor é inventado aqui; campos
  *  ausentes viram AGUARDANDO, nunca um número fabricado. */
 export function buildTacticalContext(input: TacticalContextInput): string {
-  return `DADOS REAIS ATUAIS DO TERMINAL RAMBER:
+  return `DADOS REAIS ATUAIS DO TERMINAL AR10 CYBORG:
 - Heurística de Tendência (Core Engine, estrutura de mercado real): sinal=${input.heuristicSignal ?? DASH}, confiança=${input.heuristicConfidence ?? DASH}, estrutura=${input.marketStructure ?? DASH}, suporte=${fmtNum(input.support)}, resistência=${fmtNum(input.resistance)}
 - Classificador k-NN Lorentziano (sinal INDEPENDENTE, não é a Heurística de Tendência): classificação=${input.lorentzianClassification ?? DASH}, confiança=${input.lorentzianConfidencePct ?? DASH}%, amostra=${input.lorentzianSampleSize ?? DASH} pontos históricos
 - SMC (Smart Money Concepts): ${input.unmitigatedOrderBlockCount} Order Block(s) não mitigado(s), ${input.unmitigatedFvgCount} Fair Value Gap(s) não mitigado(s), ${input.unsweptLiquidityZoneCount} zona(s) de liquidez (Equal High/Low) não varrida(s)
