@@ -167,12 +167,20 @@ describe('V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas): e
     expect(css).toContain('.drawer-open');
   });
 
-  it('dois botões discretos (PanelLeft/PanelRight) nas bordas abrem/fecham cada gaveta; o backdrop fecha ambas ao clicar fora', () => {
+  it('dois botões discretos (PanelLeft/PanelRight) nas bordas ABREM cada gaveta e desaparecem enquanto ela está aberta; o backdrop e o X do cabeçalho fecham', () => {
     const app = read('../src/App.tsx');
     expect(app).toContain('<PanelLeft size={14} />');
     expect(app).toContain('<PanelRight size={14} />');
-    expect(app).toContain('onClick={() => setLeftDrawerOpen((v) => !v)}');
-    expect(app).toContain('onClick={() => setRightDrawerOpen((v) => !v)}');
+    // Achado real do Operador: com a alça sempre visível E fixa no centro
+    // vertical de .terminal-row (não da gaveta), abrir uma gaveta curta
+    // (agora abraçando a altura do conteúdo) deixava a alça flutuando
+    // sozinha fora dela. A alça some enquanto a própria gaveta está
+    // aberta — abrir é só {!leftDrawerOpen && <button onClick={() =>
+    // setLeftDrawerOpen(true)}>...
+    expect(app).toContain('{!leftDrawerOpen && (');
+    expect(app).toContain('onClick={() => setLeftDrawerOpen(true)}');
+    expect(app).toContain('{!rightDrawerOpen && (');
+    expect(app).toContain('onClick={() => setRightDrawerOpen(true)}');
     expect(app).toContain('terminal-drawer-backdrop');
   });
 

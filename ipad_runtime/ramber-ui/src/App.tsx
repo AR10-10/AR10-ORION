@@ -1243,32 +1243,38 @@ export default function App() {
                       }}
                     />
 
-                    {/* Alça discreta — Market Intelligence (gaveta esquerda). */}
-                    <button
-                      type="button"
-                      onClick={() => setLeftDrawerOpen((v) => !v)}
-                      title="Market Intelligence"
-                      className={`absolute left-0 top-1/2 -translate-y-1/2 z-50 w-8 h-14 rounded-r-lg border border-l-0 flex items-center justify-center transition-colors ${
-                        leftDrawerOpen
-                          ? "bg-[#00f0ff20] border-[#00f0ff60] text-[#00f0ff]"
-                          : "bg-[#010308]/80 border-[#00f0ff20] text-[#8ab4f8]/60 hover:text-[#00f0ff] hover:border-[#00f0ff40]"
-                      }`}
-                    >
-                      <PanelLeft size={14} />
-                    </button>
+                    {/* Alça discreta — Market Intelligence (gaveta esquerda).
+                        Achado real do Operador (captura de tela de
+                        dispositivo real): com a gaveta aberta e agora
+                        abraçando a altura do conteúdo (não mais esticada
+                        até o rodapé), esta alça — fixa no centro vertical
+                        de .terminal-row — podia acabar sobrando ABAIXO da
+                        gaveta encolhida, flutuando sozinha sobre o
+                        gráfico. A própria gaveta já tem seu X no
+                        cabeçalho + fecha ao clicar fora, então a alça só
+                        precisa existir para ABRIR — soma-se quando já
+                        está aberta. */}
+                    {!leftDrawerOpen && (
+                      <button
+                        type="button"
+                        onClick={() => setLeftDrawerOpen(true)}
+                        title="Market Intelligence"
+                        className="absolute left-0 top-1/2 -translate-y-1/2 z-50 w-8 h-14 rounded-r-lg border border-l-0 flex items-center justify-center transition-colors bg-[#010308]/80 border-[#00f0ff20] text-[#8ab4f8]/60 hover:text-[#00f0ff] hover:border-[#00f0ff40]"
+                      >
+                        <PanelLeft size={14} />
+                      </button>
+                    )}
                     {/* Alça discreta — Core Intelligence (gaveta direita). */}
-                    <button
-                      type="button"
-                      onClick={() => setRightDrawerOpen((v) => !v)}
-                      title="Core Intelligence"
-                      className={`absolute right-0 top-1/2 -translate-y-1/2 z-50 w-8 h-14 rounded-l-lg border border-r-0 flex items-center justify-center transition-colors ${
-                        rightDrawerOpen
-                          ? "bg-[#00f0ff20] border-[#00f0ff60] text-[#00f0ff]"
-                          : "bg-[#010308]/80 border-[#00f0ff20] text-[#8ab4f8]/60 hover:text-[#00f0ff] hover:border-[#00f0ff40]"
-                      }`}
-                    >
-                      <PanelRight size={14} />
-                    </button>
+                    {!rightDrawerOpen && (
+                      <button
+                        type="button"
+                        onClick={() => setRightDrawerOpen(true)}
+                        title="Core Intelligence"
+                        className="absolute right-0 top-1/2 -translate-y-1/2 z-50 w-8 h-14 rounded-l-lg border border-r-0 flex items-center justify-center transition-colors bg-[#010308]/80 border-[#00f0ff20] text-[#8ab4f8]/60 hover:text-[#00f0ff] hover:border-[#00f0ff40]"
+                      >
+                        <PanelRight size={14} />
+                      </button>
+                    )}
 
                     {/* LEFT (gaveta) — Market Intelligence: Vetor de
                         Mercado (livro real) + Bias/Convicção/Zonas/Gestão
@@ -3446,50 +3452,50 @@ function MarketDirectionWidget() {
       ? "bg-[#ff0055] shadow-[0_0_8px_#ff0055]"
       : "bg-[#8ab4f8]/50";
 
-  // flex-wrap + h-auto: em Split View/Slide Over (≤~500px) os três blocos
-  // empilham em vez de estourar a borda direita — a altura fixa de 85px
-  // usa min-h (não h fixo): um h-[85px] fixo era MENOR que o conteúdo real
-  // dos 3 cards (padding + ícone + rótulo + valor), então o texto vazava
-  // para baixo da caixa sem esse vazamento contar para a altura medida pelo
-  // flexbox — o próximo widget (AssistantOrb) começava cedo demais e
-  // sobrepunha "PRESSÃO ASK"/"PRESSÃO BID" com "NÚCLEO DE INTELIGÊNCIA S.E."
-  // (confirmado via getBoundingClientRect, não suposição visual).
+  // Fusão visual — achado real do Operador (captura de tela de
+  // dispositivo real, gaveta Market Intelligence aberta): este card foi
+  // desenhado originalmente para dividir uma coluna larga de 3 colunas
+  // (max-w-[600px], números text-3xl, ícones de 24px) — dentro da gaveta
+  // estreita (~320px) isso ficava desproporcional/pouco profissional.
+  // Compactado para uma faixa única e densa (mesmos 3 dados reais, só
+  // menores) — cabe inteira sem quebrar linha mesmo na largura mínima da
+  // gaveta.
   return (
-    <div className="flex flex-wrap justify-between items-center shrink-0 z-10 relative pt-4 px-4 xl:px-8 w-full max-w-[600px] mx-auto min-h-[85px] gap-y-2 border-b-2 border-[#00f0ff10] pb-4 mb-4 bg-gradient-to-b from-[#00f0ff08] to-transparent rounded-t-lg">
-      <div className="flex flex-col items-center p-3 bg-gradient-to-br from-[#00ffaa10] to-transparent border border-[#00ffaa30] rounded-lg shadow-[inset_0_0_20px_rgba(0,255,170,0.05)] transition-all flex-1 mx-2">
-        <span className="text-[0.6rem] text-[#00ffaa] tracking-[0.25em] mb-[2px] font-bold">
-          PRESSÃO BID
+    <div className="cyber-panel shrink-0 flex items-center justify-between gap-1.5 px-2.5 py-2">
+      <div className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
+        <span className="text-[0.4rem] text-[#00ffaa]/80 tracking-[0.15em] font-bold uppercase">
+          Pressão Bid
         </span>
-        <div className="flex items-center gap-2 text-3xl font-black text-[#00ffaa] drop-shadow-[0_0_12px_rgba(0,255,170,0.6)]">
-          <ArrowUpRight size={24} strokeWidth={3} />{" "}
+        <div className="flex items-center gap-1 text-sm font-black text-[#00ffaa]">
+          <ArrowUpRight size={12} strokeWidth={3} />
           {num(buyPercent) ? Math.round(buyPercent) : DASH}
-          <span className="text-xl">%</span>
+          <span className="text-[0.6rem]">%</span>
         </div>
       </div>
 
-      <div className="flex flex-col items-center px-4 py-2 text-center flex-[1.2] relative">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.1)_0%,transparent_70%)] pointer-events-none"></div>
-        <span className="text-[0.55rem] text-[#8ab4f8] tracking-[0.3em] uppercase mb-[4px] font-bold z-10">
-          VETOR DE MERCADO
+      <div className="flex flex-col items-center gap-0.5 px-1 shrink-0">
+        <span className="text-[0.35rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase font-bold whitespace-nowrap">
+          Vetor
         </span>
-        <span className={`text-lg font-black tracking-[0.15em] mb-[2px] z-10 uppercase transition-colors ${vectorColor}`}>
+        <span className={`text-[0.6rem] font-black tracking-wide uppercase whitespace-nowrap ${vectorColor}`}>
           {vectorLabel}
         </span>
-        <div className="flex items-center gap-1.5 mt-1 z-10 bg-[#020610] px-2 py-0.5 rounded-full border border-[#00f0ff30]">
-          <div className={`w-2 h-2 rounded-full animate-pulse ${glowColor}`}></div>
-          <span className="text-[0.5rem] uppercase tracking-widest font-bold text-[#8ab4f8]">
-            LIVRO REAL
+        <div className="flex items-center gap-1">
+          <div className={`w-1 h-1 rounded-full animate-pulse ${glowColor}`}></div>
+          <span className="text-[0.32rem] uppercase tracking-widest font-bold text-[#8ab4f8]/60">
+            Livro Real
           </span>
         </div>
       </div>
 
-      <div className="flex flex-col items-center p-3 bg-gradient-to-br from-[#ff005510] to-transparent border border-[#ff005530] rounded-lg shadow-[inset_0_0_20px_rgba(255,0,85,0.05)] transition-all flex-1 mx-2">
-        <span className="text-[0.6rem] text-[#ff0055] tracking-[0.25em] mb-[2px] font-bold">
-          PRESSÃO ASK
+      <div className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
+        <span className="text-[0.4rem] text-[#ff0055]/80 tracking-[0.15em] font-bold uppercase">
+          Pressão Ask
         </span>
-        <div className="flex items-center gap-2 text-3xl font-bold text-[#ff0055] drop-shadow-[0_0_12px_rgba(255,0,85,0.6)]">
+        <div className="flex items-center gap-1 text-sm font-bold text-[#ff0055]">
           {num(sellPercent) ? Math.round(sellPercent) : DASH}
-          <span className="text-xl">%</span> <ArrowDownRight size={24} strokeWidth={3} />
+          <span className="text-[0.6rem]">%</span>
+          <ArrowDownRight size={12} strokeWidth={3} />
         </div>
       </div>
     </div>

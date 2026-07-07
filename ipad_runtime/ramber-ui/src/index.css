@@ -316,11 +316,19 @@ body::after {
   flex-shrink: 0;
 }
 
+/* Achado real do Operador (captura de tela de dispositivo real): com
+   top:0 + bottom:0 fixos, a gaveta sempre esticava até a altura inteira
+   de .terminal-row mesmo quando o conteúdo real (2-3 cards compactos)
+   não chegava nem à metade — sobrava uma faixa vazia grande no rodapé,
+   nada profissional. max-height (não bottom:0 fixo) faz a gaveta abraçar
+   a altura real do conteúdo — encolhe quando o conteúdo é curto (gaveta
+   esquerda), e ainda rola internamente sem vazar quando o conteúdo é
+   maior que o espaço disponível (gaveta direita, ~5-6 cards). */
 .terminal-left,
 .terminal-right {
   position: absolute;
   top: 0;
-  bottom: 0;
+  max-height: 100%;
   width: min(320px, 90vw);
   z-index: 40;
   overflow-y: auto;
@@ -334,11 +342,13 @@ body::after {
 .terminal-left {
   left: 0;
   border-right: 1px solid rgba(0, 240, 255, 0.15);
+  border-bottom-right-radius: 0.75rem;
   transform: translateX(-110%);
 }
 .terminal-right {
   right: 0;
   border-left: 1px solid rgba(0, 240, 255, 0.15);
+  border-bottom-left-radius: 0.75rem;
   transform: translateX(110%);
 }
 .terminal-left.drawer-open,
