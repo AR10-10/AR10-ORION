@@ -6,6 +6,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   extractUsdtSymbols,
+  extractPerpUsdtSymbols,
   partitionCryptoSymbols,
   fetchBinanceUsdtSymbols,
   KNOWN_MEME_BASES,
@@ -16,10 +17,44 @@ import {
   TRADFI_CATEGORY_LABELS,
 } from '../src/omnibox/tradfi-assets';
 
-describe('binance-symbols: extractUsdtSymbols — só pares spot/USDT realmente negociáveis agora', () => {
+describe('binance-symbols: extractPerpUsdtSymbols — só contratos perpétuos/USDT realmente negociáveis agora (fonte PREFERIDA)', () => {
+  it('aceita um contrato TRADING/USDT/PERPETUAL', () => {
+    const raw = { symbols: [{ symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', status: 'TRADING', contractType: 'PERPETUAL' }] };
+    expect(extractPerpUsdtSymbols(raw)).toEqual([{ symbol: 'BTCUSDT', baseAsset: 'BTC', market: 'perp' }]);
+  });
+
+  it('rejeita status != TRADING (contrato pausado/deslistado)', () => {
+    const raw = { symbols: [{ symbol: 'XUSDT', baseAsset: 'X', quoteAsset: 'USDT', status: 'BREAK', contractType: 'PERPETUAL' }] };
+    expect(extractPerpUsdtSymbols(raw)).toEqual([]);
+  });
+
+  it('rejeita quoteAsset != USDT (ex.: contrato liquidado em BUSD/coin-margined)', () => {
+    const raw = { symbols: [{ symbol: 'BTCUSD_PERP', baseAsset: 'BTC', quoteAsset: 'USD', status: 'TRADING', contractType: 'PERPETUAL' }] };
+    expect(extractPerpUsdtSymbols(raw)).toEqual([]);
+  });
+
+  it('rejeita contractType != PERPETUAL (ex.: contrato futuro com vencimento, CURRENT_QUARTER)', () => {
+    const raw = { symbols: [{ symbol: 'BTCUSDT_240329', baseAsset: 'BTC', quoteAsset: 'USDT', status: 'TRADING', contractType: 'CURRENT_QUARTER' }] };
+    expect(extractPerpUsdtSymbols(raw)).toEqual([]);
+  });
+
+  it('linhas malformadas (symbol/baseAsset não-string) são descartadas silenciosamente, nunca fabricadas', () => {
+    const raw = { symbols: [{ symbol: 123, baseAsset: 'X', quoteAsset: 'USDT', status: 'TRADING', contractType: 'PERPETUAL' }, null, undefined] };
+    expect(extractPerpUsdtSymbols(raw)).toEqual([]);
+  });
+
+  it('payload sem array symbols (ou null/undefined) => [] honesto, nunca lança exceção', () => {
+    expect(extractPerpUsdtSymbols(null)).toEqual([]);
+    expect(extractPerpUsdtSymbols(undefined)).toEqual([]);
+    expect(extractPerpUsdtSymbols({})).toEqual([]);
+    expect(extractPerpUsdtSymbols({ symbols: 'não é array' })).toEqual([]);
+  });
+});
+
+describe('binance-symbols: extractUsdtSymbols — só pares spot/USDT realmente negociáveis agora (fallback)', () => {
   it('aceita um par TRADING/USDT/spot-permitido', () => {
     const raw = { symbols: [{ symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', status: 'TRADING', isSpotTradingAllowed: true }] };
-    expect(extractUsdtSymbols(raw)).toEqual([{ symbol: 'BTCUSDT', baseAsset: 'BTC' }]);
+    expect(extractUsdtSymbols(raw)).toEqual([{ symbol: 'BTCUSDT', baseAsset: 'BTC', market: 'spot' }]);
   });
 
   it('rejeita status != TRADING (par pausado/deslistado)', () => {
@@ -39,7 +74,7 @@ describe('binance-symbols: extractUsdtSymbols — só pares spot/USDT realmente 
 
   it('campo ausente (undefined) não é o mesmo que false — a API real às vezes omite o campo para pares spot normais', () => {
     const raw = { symbols: [{ symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', status: 'TRADING' }] };
-    expect(extractUsdtSymbols(raw)).toEqual([{ symbol: 'BTCUSDT', baseAsset: 'BTC' }]);
+    expect(extractUsdtSymbols(raw)).toEqual([{ symbol: 'BTCUSDT', baseAsset: 'BTC', market: 'spot' }]);
   });
 
   it('linhas malformadas (symbol/baseAsset não-string) são descartadas silenciosamente, nunca fabricadas', () => {
@@ -57,11 +92,11 @@ describe('binance-symbols: extractUsdtSymbols — só pares spot/USDT realmente 
 
 describe('binance-symbols: partitionCryptoSymbols — meme coins são um FILTRO sobre a lista real, nunca uma lista inventada', () => {
   it('separa bases conhecidas de meme coin do resto', () => {
-    const all = [
-      { symbol: 'BTCUSDT', baseAsset: 'BTC' },
-      { symbol: 'DOGEUSDT', baseAsset: 'DOGE' },
-      { symbol: 'PEPEUSDT', baseAsset: 'PEPE' },
-      { symbol: 'ETHUSDT', baseAsset: 'ETH' },
+    const all: import('../src/omnibox/binance-symbols').BinanceUsdtSymbol[] = [
+      { symbol: 'BTCUSDT', baseAsset: 'BTC', market: 'perp' },
+      { symbol: 'DOGEUSDT', baseAsset: 'DOGE', market: 'perp' },
+      { symbol: 'PEPEUSDT', baseAsset: 'PEPE', market: 'perp' },
+      { symbol: 'ETHUSDT', baseAsset: 'ETH', market: 'perp' },
     ];
     const { crypto, meme } = partitionCryptoSymbols(all);
     expect(crypto.map((s) => s.baseAsset).sort()).toEqual(['BTC', 'ETH']);
@@ -69,7 +104,7 @@ describe('binance-symbols: partitionCryptoSymbols — meme coins são um FILTRO 
   });
 
   it('uma base da curadoria de meme que a Binance não lista agora simplesmente não aparece em nenhuma das duas listas', () => {
-    const all = [{ symbol: 'BTCUSDT', baseAsset: 'BTC' }]; // SHIB não está presente
+    const all = [{ symbol: 'BTCUSDT', baseAsset: 'BTC', market: 'perp' as const }]; // SHIB não está presente
     const { crypto, meme } = partitionCryptoSymbols(all);
     expect(meme).toEqual([]);
     expect(crypto).toHaveLength(1);
@@ -82,25 +117,57 @@ describe('binance-symbols: partitionCryptoSymbols — meme coins são um FILTRO 
   });
 });
 
-describe('binance-symbols: fetchBinanceUsdtSymbols — fail-closed real', () => {
+describe('binance-symbols: fetchBinanceUsdtSymbols — Futuros PREFERIDO, Spot como fallback automático (fail-closed real)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('erro de rede (fetch lança) => [] honesto, nunca uma exceção não tratada', async () => {
+  it('Futuros responde com símbolos reais => usa Futuros direto, nunca chama Spot', async () => {
+    const perpPayload = { symbols: [{ symbol: 'SOLUSDT', baseAsset: 'SOL', quoteAsset: 'USDT', status: 'TRADING', contractType: 'PERPETUAL' }] };
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toContain('fapi.binance.com'); // só o endpoint de Futuros deveria ser chamado
+      return { ok: true, json: async () => perpPayload };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await fetchBinanceUsdtSymbols()).toEqual([{ symbol: 'SOLUSDT', baseAsset: 'SOL', market: 'perp' }]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('Futuros devolve lista vazia (payload sem nenhum contrato perpétuo real) => cai para Spot automaticamente', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('fapi.binance.com')) {
+        return { ok: true, json: async () => ({ symbols: [] }) }; // Futuros respondeu, mas sem nada aproveitável
+      }
+      return {
+        ok: true,
+        json: async () => ({ symbols: [{ symbol: 'SOLUSDT', baseAsset: 'SOL', quoteAsset: 'USDT', status: 'TRADING' }] }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await fetchBinanceUsdtSymbols()).toEqual([{ symbol: 'SOLUSDT', baseAsset: 'SOL', market: 'spot' }]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('Futuros lança exceção de rede => cai para Spot automaticamente (mesma lógica de requestCandleSnapshotWithFallback em engine-bridge.ts)', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes('fapi.binance.com')) throw new Error('rede_indisponivel');
+      return {
+        ok: true,
+        json: async () => ({ symbols: [{ symbol: 'ADAUSDT', baseAsset: 'ADA', quoteAsset: 'USDT', status: 'TRADING' }] }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await fetchBinanceUsdtSymbols()).toEqual([{ symbol: 'ADAUSDT', baseAsset: 'ADA', market: 'spot' }]);
+  });
+
+  it('AMBAS as fontes falham (rede indisponível) => [] honesto, nunca uma exceção não tratada', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
     expect(await fetchBinanceUsdtSymbols()).toEqual([]);
   });
 
-  it('resposta HTTP não-ok (ex.: 451/500) => [] honesto', async () => {
+  it('AMBAS as fontes respondem HTTP não-ok (ex.: 451/500) => [] honesto', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
     expect(await fetchBinanceUsdtSymbols()).toEqual([]);
-  });
-
-  it('resposta ok real é extraída pela mesma função pura extractUsdtSymbols', async () => {
-    const payload = { symbols: [{ symbol: 'SOLUSDT', baseAsset: 'SOL', quoteAsset: 'USDT', status: 'TRADING' }] };
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => payload }));
-    expect(await fetchBinanceUsdtSymbols()).toEqual([{ symbol: 'SOLUSDT', baseAsset: 'SOL' }]);
   });
 });
 

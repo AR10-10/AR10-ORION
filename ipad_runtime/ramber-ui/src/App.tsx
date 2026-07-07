@@ -78,6 +78,12 @@ import { computeConsensus, type ConsensusInput } from "./gmil/consensus-engine";
 import { SmartOmnibox } from "./omnibox/SmartOmnibox";
 import { TradFiEmptyState } from "./omnibox/TradFiEmptyState";
 import { type TradFiAsset } from "./omnibox/tradfi-assets";
+// Master Panel handoff (Multi-Source Market Data Fusion, escopo reduzido a
+// UMA fonte adicional real por decisão do Operador): Bybit USDT-M Perpétuo
+// como segundo dado real e independente, comparado só contra o markPrice
+// que a Binance já devolve em fetchDerivatives abaixo — nunca uma segunda
+// fonte do Core Engine/Risk Engine (essa trava é da Fase G/Diretriz 2).
+import { fetchBybitPerpTicker, compareCrossExchange, type CrossExchangeCheck } from "./cross-exchange/bybit-futures";
 import {
   LayoutDashboard,
   BarChart2,
@@ -191,6 +197,14 @@ interface Level {
 
 export default function App() {
   const [priceData, setPriceData] = useState<PriceState | null>(null);
+  // Master Panel handoff: cross-check real Binance-vs-Bybit — puramente
+  // informativo (nunca gate o Core Engine), atualizado na mesma cadência de
+  // fetchDerivatives abaixo. INDISPONIVEL até o primeiro ciclo real.
+  const [crossExchangeCheck, setCrossExchangeCheck] = useState<CrossExchangeCheck>({
+    ok: false,
+    priceDeltaPct: null,
+    consensus: "INDISPONIVEL",
+  });
   const [derivatives, setDerivatives] = useState<DerivativesState>({
     fundingRate: null,
     openInterest: null,
@@ -387,6 +401,8 @@ export default function App() {
 
   // REST: real Binance futures funding rate + open interest (public, read-only).
   const fetchDerivatives = async (): Promise<boolean> => {
+    let binanceOk = false;
+    let binanceMarkPrice: number | null = null;
     try {
       const [fundingRes, oiRes] = await Promise.all([
         fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${selectedAsset}USDT`),
@@ -395,6 +411,7 @@ export default function App() {
       if (!fundingRes.ok || !oiRes.ok) throw new Error(`derivatives HTTP ${fundingRes.status}/${oiRes.status}`);
       const funding = await fundingRes.json();
       const oi = await oiRes.json();
+      binanceMarkPrice = num(Number(funding?.markPrice)) ? Number(funding.markPrice) : null;
       setDerivatives({
         fundingRate: num(Number(funding?.lastFundingRate))
           ? Number(funding.lastFundingRate)
@@ -403,11 +420,19 @@ export default function App() {
           ? Number(oi.openInterest)
           : null,
       });
-      return true;
+      binanceOk = true;
     } catch {
       setDerivatives({ fundingRate: null, openInterest: null });
-      return false;
     }
+
+    // Master Panel handoff: cross-check Bybit — independente do try/catch
+    // acima por design. fetchBybitPerpTicker() já é fail-closed internamente
+    // (nunca lança), então uma falha aqui nunca reverte nem atrasa o
+    // resultado real da Binance já processado logo acima.
+    const bybit = await fetchBybitPerpTicker(selectedAsset);
+    setCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, bybit));
+
+    return binanceOk;
   };
 
   // Bounded retry for the ONE-SHOT boot calls above (2s/4s/8s backoff) — the
@@ -1065,7 +1090,7 @@ export default function App() {
           (barra de comando cortada em pé e deitado). Em navegador comum
           env() é 0 e nada muda. */}
       <div className="flex flex-col h-[100dvh] pt-safe pb-safe bg-[#020610] text-[#a0f0ff] font-mono overflow-hidden selection:bg-[#00f0ff30]">
-        <TopBar data={priceData} derivatives={derivatives} />
+        <TopBar data={priceData} derivatives={derivatives} crossExchangeCheck={crossExchangeCheck} />
         {bootRestFailed && (
           <div className="shrink-0 bg-[#ff005515] border-b border-[#ff005550] px-4 py-2 flex items-center justify-between gap-3">
             <span className="text-[0.55rem] sm:text-[0.6rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
@@ -1891,9 +1916,11 @@ const LevelCard = React.memo(function LevelCard({
 function TopBar({
   data,
   derivatives,
+  crossExchangeCheck,
 }: {
   data?: PriceState | null;
   derivatives: DerivativesState;
+  crossExchangeCheck: CrossExchangeCheck;
 }) {
   const {
     bootAt,
@@ -2085,6 +2112,27 @@ function TopBar({
                 label="OPEN INTEREST"
                 value={num(oi) ? `${fmtInt(oi)} ${selectedAsset}` : DASH}
                 color="text-[#a0f0ff]"
+              />
+              {/* Master Panel handoff (Multi-Source Market Data Fusion,
+                  escopo reduzido a 1 fonte adicional): cross-check real
+                  Binance-vs-Bybit — puramente informativo, nunca um sinal.
+                  INDISPONIVEL honesto (nunca "0.000%" fabricado) antes do
+                  primeiro ciclo real ou se o Bybit não responder. */}
+              <TopStat
+                label="BYBIT Δ"
+                value={
+                  crossExchangeCheck.consensus === "INDISPONIVEL" || crossExchangeCheck.priceDeltaPct === null
+                    ? DASH
+                    : `${crossExchangeCheck.priceDeltaPct.toFixed(3)}%`
+                }
+                color={
+                  crossExchangeCheck.consensus === "ALINHADO"
+                    ? "text-[#00ffaa]"
+                    : crossExchangeCheck.consensus === "DIVERGENTE"
+                      ? "text-[#ff0055]"
+                      : "text-[#a0f0ff]"
+                }
+                className="hidden xl:flex"
               />
             </div>
           )}

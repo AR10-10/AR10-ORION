@@ -118,7 +118,12 @@ export function SmartOmnibox({
             className="w-full bg-[#020610] border border-[#00f0ff20] rounded px-2 py-1.5 text-[0.6rem] text-[#a0f0ff] mb-2 focus:outline-none focus:border-[#00f0ff60]"
           />
 
-          <OmniboxSection title="Cripto · Binance Spot (Tempo Real)">
+          {/* Master Panel handoff: fonte agora é Futures USDT-M Perpétuo
+              primeiro (Diretriz 2), Spot só como fallback automático (ver
+              binance-symbols.ts) — o título não afirma mais "Spot" fixo, e
+              cada item usa s.market real (nunca um rótulo independente da
+              fonte que de fato respondeu). */}
+          <OmniboxSection title="Cripto · Binance (Tempo Real)">
             {cryptoSymbols === null ? (
               <OmniboxNote text="AGUARDANDO..." />
             ) : loadFailed ? (
@@ -127,7 +132,12 @@ export function SmartOmnibox({
               <OmniboxNote text="Nenhum resultado" />
             ) : (
               filteredCrypto.map((s) => (
-                <OmniboxItem key={s.symbol} label={s.baseAsset} sub="USDT · Spot" onClick={() => selectCrypto(s.baseAsset)} />
+                <OmniboxItem
+                  key={s.symbol}
+                  label={s.baseAsset}
+                  sub={s.market === "perp" ? "USDT-M · Perp" : "USDT · Spot"}
+                  onClick={() => selectCrypto(s.baseAsset)}
+                />
               ))
             )}
           </OmniboxSection>
@@ -141,7 +151,12 @@ export function SmartOmnibox({
               <OmniboxNote text="Nenhum resultado" />
             ) : (
               filteredMeme.map((s) => (
-                <OmniboxItem key={s.symbol} label={s.baseAsset} sub="USDT · Spot" onClick={() => selectCrypto(s.baseAsset)} />
+                <OmniboxItem
+                  key={s.symbol}
+                  label={s.baseAsset}
+                  sub={s.market === "perp" ? "USDT-M · Perp" : "USDT · Spot"}
+                  onClick={() => selectCrypto(s.baseAsset)}
+                />
               ))
             )}
           </OmniboxSection>
