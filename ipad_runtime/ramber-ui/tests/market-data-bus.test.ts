@@ -250,6 +250,91 @@ describe('market-data-bus: stress — high-volume concurrent demand still yields
   });
 });
 
+describe('market-data-bus: pipeline telemetry (Estabilização Prioridade 2) — Recebido/Normalizado/Validado/Sincronizado/Distribuído observáveis em runtime', () => {
+  it('returns null for a key that was never requested (no fabricated telemetry)', () => {
+    const bus = new MarketDataBus();
+    expect(bus.getPipelineTelemetry('GHOST', '15m')).toBeNull();
+  });
+
+  it('a successful collect() marks all 5 stages ok, with no failedStage and recovered false', async () => {
+    const bus = new MarketDataBus();
+    const collect = async () => [candle(1), candle(2), candle(3)];
+    await bus.requestSnapshot({ symbol: 'BTC', timeframe: '15m', limit: 3, collect });
+
+    const telemetry = bus.getPipelineTelemetry('BTC', '15m');
+    expect(telemetry).not.toBeNull();
+    for (const stage of ['recebido', 'normalizado', 'validado', 'sincronizado', 'distribuido'] as const) {
+      expect(telemetry!.stages[stage]?.ok, `etapa ${stage} deveria estar ok`).toBe(true);
+      expect(telemetry!.stages[stage]?.at).toBeGreaterThan(0);
+    }
+    expect(telemetry!.failedStage).toBeNull();
+    expect(telemetry!.recovered).toBe(false);
+  });
+
+  it('a structurally invalid series stops at "validado" with the real component/reason, later stages stay null', async () => {
+    const bus = new MarketDataBus();
+    const badCollect = async () => [{ t: 1, o: 100, h: 90, l: 95, c: 92, v: 1 }]; // high < low
+    await bus.requestSnapshot({ symbol: 'XRP', timeframe: '15m', limit: 1, collect: badCollect });
+
+    const telemetry = bus.getPipelineTelemetry('XRP', '15m');
+    expect(telemetry!.stages.recebido?.ok).toBe(true);
+    expect(telemetry!.stages.normalizado?.ok).toBe(true);
+    expect(telemetry!.stages.validado?.ok).toBe(false);
+    expect(telemetry!.stages.sincronizado).toBeNull();
+    expect(telemetry!.stages.distribuido).toBeNull();
+    expect(telemetry!.failedStage).toBe('validado');
+    expect(telemetry!.failedComponent).toBe('integrity-validator.js');
+    expect(telemetry!.failedReason).toContain('high_menor_que_low');
+    // sem snapshot anterior nenhum para recuperar — recovered honesto: false
+    expect(telemetry!.recovered).toBe(false);
+  });
+
+  it('collect() throwing is attributed to "recebido", with the real exception message as reason', async () => {
+    const bus = new MarketDataBus();
+    const alwaysFails = async () => {
+      throw new Error('sem_rede');
+    };
+    await bus.requestSnapshot({ symbol: 'BNB', timeframe: '15m', limit: 2, collect: alwaysFails });
+
+    const telemetry = bus.getPipelineTelemetry('BNB', '15m');
+    expect(telemetry!.failedStage).toBe('recebido');
+    expect(telemetry!.failedComponent).toBe('collect (conector injetado pelo chamador)');
+    expect(telemetry!.failedReason).toContain('sem_rede');
+    expect(telemetry!.recovered).toBe(false);
+  });
+
+  it('a later failure recovers via the last known-good snapshot — recovered:true even though failedStage records the real failure', async () => {
+    const bus = new MarketDataBus();
+    let attempt = 0;
+    const flakyCollect = async () => {
+      attempt++;
+      if (attempt === 1) return [candle(1), candle(2)];
+      throw new Error('rede_indisponivel');
+    };
+
+    await bus.requestSnapshot({ symbol: 'SOL', timeframe: '15m', limit: 2, collect: flakyCollect, maxAgeMs: 0 });
+    const second = await bus.requestSnapshot({ symbol: 'SOL', timeframe: '15m', limit: 2, collect: flakyCollect, maxAgeMs: 0 });
+
+    expect(second.ok).toBe(true); // fail-closed já existente (Fase B): último snapshot bom
+    const telemetry = bus.getPipelineTelemetry('SOL', '15m');
+    expect(telemetry!.failedStage).toBe('recebido');
+    expect(telemetry!.failedReason).toContain('rede_indisponivel');
+    expect(telemetry!.recovered).toBe(true); // Prioridade 3: recuperação automática observável
+  });
+
+  it('reports ok:false with recovered:false when collect() fails and there is no prior snapshot to fall back to', async () => {
+    const bus = new MarketDataBus();
+    const alwaysFails = async () => {
+      throw new Error('primeira_tentativa_sem_rede');
+    };
+    const result = await bus.requestSnapshot({ symbol: 'ADA', timeframe: '15m', limit: 2, collect: alwaysFails });
+
+    expect(result.ok).toBe(false);
+    const telemetry = bus.getPipelineTelemetry('ADA', '15m');
+    expect(telemetry!.recovered).toBe(false); // honesto: não havia nada bom pra recuperar
+  });
+});
+
 describe('market-data-bus: temporal validation — staleness boundary is exact, never approximate', () => {
   it('age exactly equal to maxAgeMs is NOT stale (boundary is a strict greater-than)', () => {
     expect(isStale(10_000, 10_000)).toBe(false);

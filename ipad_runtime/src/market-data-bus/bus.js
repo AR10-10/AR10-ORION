@@ -26,6 +26,7 @@ import { normalizeCandles } from './normalizer.js';
 import { validateCandleSeries } from './integrity-validator.js';
 import { computeAsOf, computeAgeMs, isStale } from './time-synchronizer.js';
 import { QualityMonitor } from './quality-monitor.js';
+import { PipelineTelemetry } from './pipeline-telemetry.js';
 
 const DEFAULT_MAX_AGE_MS = 25_000;
 const DEFAULT_CAPACITY = 200;
@@ -43,6 +44,11 @@ export class MarketDataBus {
         // medida aqui — o monitor não tem timer próprio, a cadência de
         // medição é a cadência real do Bus.
         this._quality = new QualityMonitor();
+        // Estabilização (Prioridade 2): telemetria real por etapa do
+        // pipeline (ver pipeline-telemetry.js) — mesma cadência do Bus,
+        // mesma regra de "nunca fabricar": só registra o que de fato
+        // aconteceu numa tentativa real de coleta.
+        this._telemetry = new PipelineTelemetry();
     }
 
     _keyOf(symbol, timeframe) {
@@ -89,6 +95,15 @@ export class MarketDataBus {
         return this._quality.reportFor(this._keyOf(symbol, timeframe));
     }
 
+    /** Telemetria real por etapa (Recebido/Normalizado/Validado/
+     *  Sincronizado/Distribuído) da tentativa de coleta mais recente para
+     *  symbol:timeframe — Estabilização Prioridade 2. null se esta chave
+     *  nunca disparou uma coleta real (sempre serviu de cache, ou nunca foi
+     *  pedida). Não dispara coleta nenhuma. */
+    getPipelineTelemetry(symbol, timeframe) {
+        return this._telemetry.reportFor(this._keyOf(symbol, timeframe));
+    }
+
     /** Distribuição por push: cada callback recebe todo snapshot novo real
      *  publicado para esta symbol:timeframe (nunca um snapshot com falha —
      *  ver requestSnapshot). Retorna a função de cancelamento. */
@@ -125,29 +140,55 @@ export class MarketDataBus {
             // Fase C: latência real desta coleta, medida em volta do await
             // do collect() — a única rede que existe neste caminho.
             const startedAt = Date.now();
+            // Estabilização (Prioridade 2): abre uma tentativa real de
+            // telemetria por etapa — stageInProgress rastreia qual das 5
+            // etapas (ver pipeline-telemetry.js) está rodando agora, para
+            // que uma exceção inesperada em QUALQUER uma delas (não só a
+            // coleta) seja atribuída à etapa certa no catch abaixo.
+            this._telemetry.begin(key);
+            let stageInProgress = 'recebido';
             try {
                 const raw = await collect({ symbol, timeframe, limit: entry.maxLimit });
+                this._telemetry.mark(key, 'recebido', true);
+
+                stageInProgress = 'normalizado';
                 const candles = normalizeCandles(raw);
+                this._telemetry.mark(key, 'normalizado', true);
+
+                stageInProgress = 'validado';
                 const verdict = validateCandleSeries(candles);
                 if (!verdict.valid) {
                     // Série corrompida = falha de qualidade da fonte, igual
                     // a uma exceção de rede (pediu-se dado real, não veio
                     // dado utilizável).
+                    this._telemetry.mark(key, 'validado', false, {
+                        component: 'integrity-validator.js',
+                        reason: verdict.errors?.[0] || 'serie_invalida',
+                    });
                     this._quality.recordFailure(key);
-                    return this._degradedResult(entry, symbol, timeframe, verdict.errors);
+                    const degraded = this._degradedResult(entry, symbol, timeframe, verdict.errors);
+                    if (degraded.ok) this._telemetry.markRecovered(key);
+                    return degraded;
                 }
+                this._telemetry.mark(key, 'validado', true);
                 this._quality.recordSuccess(key, Date.now() - startedAt, candles, timeframe);
 
                 entry.buffer.setAll(candles);
                 const stored = Object.freeze(entry.buffer.toArray());
                 const asOf = computeAsOf(stored);
+
+                stageInProgress = 'sincronizado';
+                const ageMs = computeAgeMs(asOf, now);
+                this._telemetry.mark(key, 'sincronizado', true);
+
+                stageInProgress = 'distribuido';
                 const snapshot = Object.freeze({
                     symbol,
                     timeframe,
                     candles: stored,
                     asOf,
                     fetchedAt: now,
-                    ageMs: computeAgeMs(asOf, now),
+                    ageMs,
                     ok: true,
                     // Distribuição (Fase C): todo snapshot publicado carrega
                     // o relatório de qualidade da fonte que o produziu.
@@ -157,10 +198,18 @@ export class MarketDataBus {
                 entry.subscribers.forEach((cb) => {
                     try { cb(snapshot); } catch { /* um assinante ruim nunca derruba os demais */ }
                 });
+                this._telemetry.mark(key, 'distribuido', true);
                 return snapshot;
             } catch (err) {
                 this._quality.recordFailure(key);
-                return this._degradedResult(entry, symbol, timeframe, [`coleta_lancou_excecao:${err?.message || err}`]);
+                const reason = `${stageInProgress}_lancou_excecao:${err?.message || err}`;
+                this._telemetry.mark(key, stageInProgress, false, {
+                    component: stageInProgress === 'recebido' ? 'collect (conector injetado pelo chamador)' : `bus.js:${stageInProgress}`,
+                    reason,
+                });
+                const degraded = this._degradedResult(entry, symbol, timeframe, [reason]);
+                if (degraded.ok) this._telemetry.markRecovered(key);
+                return degraded;
             } finally {
                 entry.inFlight = null;
             }

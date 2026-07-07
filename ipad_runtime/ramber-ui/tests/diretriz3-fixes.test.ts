@@ -55,6 +55,23 @@ describe('bug 2: scroll do Smart Omnibox — cascata CSS corrigida', () => {
   });
 });
 
+describe('estabilização (Prioridade 4, UX Profissional): pinch-zoom nativo preservado', () => {
+  it('index.html permite zoom real (nunca user-scalable=no nem maximum-scale=1.0) — um app nativo real não desativa o zoom do sistema', () => {
+    const html = read('../index.html');
+    // Isola o atributo content= da própria tag <meta name="viewport">, não
+    // o arquivo inteiro — um comentário explicando o bug antigo (que cita o
+    // valor errado como contexto histórico) não pode derrubar este teste.
+    const viewportMatch = html.match(/<meta name="viewport" content="([^"]*)"/);
+    expect(viewportMatch, 'meta viewport não encontrada').not.toBeNull();
+    const viewportContent = viewportMatch![1];
+    expect(viewportContent).not.toContain('user-scalable=no');
+    expect(viewportContent).not.toMatch(/maximum-scale=1(\.0)?(,|$)/);
+    // initial-scale continua 1.0: o boot é sempre em 100%, nunca com zoom
+    // residual — só o TETO de zoom (maximum-scale) foi liberado.
+    expect(viewportContent).toContain('initial-scale=1.0');
+  });
+});
+
 describe('bug 3: scroll em paisagem — pointer-events-none removido dos containers do grid', () => {
   it('nenhum dos 3 containers nomeados (.terminal-main/.terminal-aside/.terminal-strip) declara pointer-events-none', () => {
     const app = read('../src/App.tsx');
@@ -69,33 +86,51 @@ describe('bug 3: scroll em paisagem — pointer-events-none removido dos contain
   });
 });
 
-describe('diretriz 2: roteamento Spot→Futuros real — Gráfico e Risk Engine exclusivamente em /fapi/v1/', () => {
-  it('engine-bridge.ts importa collectBinanceFuturesKlines e NUNCA collectBinanceKlines (spot)', () => {
+describe('diretriz 2 + estabilização: roteamento Futuros→Spot real — Gráfico e Risk Engine preferem /fapi/v1/, com fallback honesto para Spot', () => {
+  it('engine-bridge.ts importa collectBinanceFuturesKlines (preferido) E collectBinanceKlines (fallback real — nunca um placeholder inventado)', () => {
     const bridge = read('../src/engine-bridge.ts');
+    // Estabilização (Prioridade 1+3): futuros nunca pode ser a ÚNICA fonte —
+    // se o conector de futuros (nunca reverificado ao vivo, ver seu próprio
+    // header) falhar, o terminal precisa de uma segunda fonte real (spot)
+    // em vez de travar em AGUARDANDO CANDLES para sempre.
     expect(bridge).toContain("import { collectBinanceFuturesKlines } from '../../src/market-data-bus/binance-futures-candle-connector.js'");
-    expect(bridge).not.toContain('collectBinanceKlines');
-    expect(bridge).not.toContain('binance-candle-connector.js');
+    expect(bridge).toContain("import { collectBinanceKlines } from '../../src/market-data-bus/binance-candle-connector.js'");
   });
 
-  it('as 3 chamadas ao Bus (HTF, ciclo principal, getChartCandles) usam collect: collectBinanceFuturesKlines', () => {
+  it('requestCandleSnapshotWithFallback tenta futuros primeiro (chave symbol-PERP) e só cai para spot (chave symbol pura) se futuros não vier ok', () => {
     const bridge = read('../src/engine-bridge.ts');
-    const occurrences = bridge.match(/collect: collectBinanceFuturesKlines/g) ?? [];
-    expect(occurrences).toHaveLength(3);
+    const futuresIdx = bridge.indexOf(
+      'symbol: `${symbol}-PERP`, timeframe, limit, collect: collectBinanceFuturesKlines, maxAgeMs,',
+    );
+    const spotIdx = bridge.indexOf('symbol, timeframe, limit, collect: collectBinanceKlines, maxAgeMs,');
+    expect(futuresIdx, 'perna de futuros do helper não encontrada').toBeGreaterThan(-1);
+    expect(spotIdx, 'perna de spot do helper não encontrada').toBeGreaterThan(-1);
+    expect(futuresIdx, 'futuros precisa ser tentado ANTES de spot no código-fonte').toBeLessThan(spotIdx);
+    expect(bridge).toContain(
+      "if (futuresSnapshot.ok) return { snapshot: futuresSnapshot, instrumentType: 'crypto_futures' };",
+    );
   });
 
-  it('a chave do Bus usa sufixo -PERP (nunca colide em cache com um eventual snapshot spot do mesmo símbolo)', () => {
+  it('as 3 chamadas reais ao Bus (HTF, ciclo principal, getChartCandles) passam pelo helper de fallback — nenhum call site volta a chamar requestSnapshot() direto com um único conector', () => {
     const bridge = read('../src/engine-bridge.ts');
-    const occurrences = bridge.match(/symbol: `\$\{symbol\}-PERP`/g) ?? [];
-    expect(occurrences).toHaveLength(3);
+    const helperCallSites = bridge.match(/await requestCandleSnapshotWithFallback\(\{/g) ?? [];
+    expect(helperCallSites).toHaveLength(3);
+    // requestSnapshot() só pode aparecer DENTRO do próprio helper (as 2
+    // pernas: futuros + spot) — se esse número mudar, algum call site
+    // voltou a ignorar o fallback e chamar o Bus direto com um só conector.
+    const directBusCalls = bridge.match(/getMarketDataBus\(\)\.requestSnapshot\(\{/g) ?? [];
+    expect(directBusCalls).toHaveLength(2);
   });
 
-  it('CoreEvidence.instrument_type é sempre \'crypto_futures\' na construção real (união de tipos permanece fechada)', () => {
+  it('CoreEvidence.instrument_type na construção real é sempre a fonte que respondeu de fato (cycleInstrumentType) — nunca mais um literal fixo', () => {
     const bridge = read('../src/engine-bridge.ts');
+    // o tipo permanece uma união fechada (nunca um terceiro valor inventado)
     expect(bridge).toContain("instrument_type: 'crypto_spot' | 'crypto_futures';");
-    expect(bridge).toContain("instrument_type: 'crypto_futures',");
-    // só uma atribuição de valor (não a definição de tipo) — sem duplicata
-    const valueAssignments = bridge.match(/^\s*instrument_type: 'crypto_futures',\s*$/gm) ?? [];
-    expect(valueAssignments).toHaveLength(1);
+    // o valor de fato atribuído é o passthrough do resultado do fallback,
+    // nunca mais um literal hardcoded que mentiria se o spot respondesse
+    expect(bridge).toContain('instrument_type: cycleInstrumentType,');
+    expect(bridge).not.toMatch(/instrument_type: 'crypto_futures',/);
+    expect(bridge).not.toMatch(/instrument_type: 'crypto_spot',/);
   });
 
   it('RealCycleResult expõe instrumentType como passthrough honesto (nunca uma string fixa na UI)', () => {
