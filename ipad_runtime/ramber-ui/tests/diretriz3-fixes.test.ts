@@ -20,14 +20,15 @@ describe('V16 Institutional Command Center: o Gráfico é o único ocupante de .
   // MarketDirectionWidget+AssistantOrb competindo por altura DENTRO da
   // mesma .terminal-main que o Gráfico — corrigido na Diretriz 3 dando
   // flex-grow real ao wrapper. O V16 remove a causa inteira em vez de só
-  // mitigá-la: MarketDirectionWidget virou parte fixa da coluna
-  // .terminal-left (Market Intelligence) e AssistantOrb virou detalhe
-  // expandido sob demanda na .terminal-strip — nenhum dos dois compete
-  // mais pela altura do Gráfico. Este teste trava essa separação
-  // estrutural para que a classe de bug não seja reintroduzida.
+  // mitigá-la: MarketDirectionWidget virou parte da GAVETA .terminal-left
+  // (Market Intelligence, fechada por padrão) e AssistantOrb virou
+  // detalhe expandido sob demanda na .terminal-strip — nenhum dos dois
+  // compete mais pela altura OU largura do Gráfico. Este teste trava
+  // essa separação estrutural para que a classe de bug não seja
+  // reintroduzida.
   it('.terminal-main contém ChartWidget/TradFiEmptyState mas NUNCA MarketDirectionWidget nem AssistantOrb', () => {
     const app = read('../src/App.tsx');
-    const mainMatch = app.match(/<div className="terminal-main[^"]*">([\s\S]*?)\n {20}<\/div>\n\n {20}\{\/\* RIGHT/);
+    const mainMatch = app.match(/<div className="terminal-main[^"]*">([\s\S]*?)\n {20}<\/div>\n\n {20}\{\/\* Backdrop/);
     expect(mainMatch, '.terminal-main não encontrado com a estrutura esperada').not.toBeNull();
     const mainBody = mainMatch![1];
     expect(mainBody).toContain('ChartWidget');
@@ -35,13 +36,30 @@ describe('V16 Institutional Command Center: o Gráfico é o único ocupante de .
     expect(mainBody).not.toContain('<AssistantOrb');
   });
 
-  it('.terminal-left (Market Intelligence) contém MarketDirectionWidget + MarketBiasDecisionCard, sempre visíveis (sem gear)', () => {
+  it('.terminal-left (Market Intelligence) contém MarketDirectionWidget + MarketBiasDecisionCard, mas é uma GAVETA fechada por padrão (V16.1)', () => {
     const app = read('../src/App.tsx');
-    const leftMatch = app.match(/<div className="terminal-left[^"]*">([\s\S]*?)\n {20}<\/div>\n\n {20}\{\/\* MAIN/);
+    // V16.1 correção crítica: o Operador rejeitou as 3 colunas sempre
+    // visíveis (esmagavam o Gráfico) — esquerda/direita viraram
+    // overlays fechados por padrão, className agora é um template
+    // literal com o estado leftDrawerOpen/rightDrawerOpen.
+    expect(app).toContain('const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);');
+    expect(app).toContain('const [rightDrawerOpen, setRightDrawerOpen] = useState(false);');
+    const leftMatch = app.match(/className=\{`terminal-left flex flex-col gap-2[^`]*`\}\s*\n\s*>([\s\S]*?)\n {20}<\/div>\n\n {20}\{\/\* RIGHT/);
     expect(leftMatch, '.terminal-left não encontrado com a estrutura esperada').not.toBeNull();
     const leftBody = leftMatch![1];
     expect(leftBody).toContain('<MarketDirectionWidget');
     expect(leftBody).toContain('<MarketBiasDecisionCard');
+  });
+
+  it('as gavetas usam position:absolute (index.css) — nunca dividem espaço de flexbox com o Gráfico, mesmo abertas', () => {
+    const css = read('../src/index.css');
+    const rulesMatch = css.match(/\.terminal-left,\s*\n\.terminal-right \{([\s\S]*?)\n\}/);
+    expect(rulesMatch, 'regra .terminal-left/.terminal-right não encontrada').not.toBeNull();
+    expect(rulesMatch![1]).toContain('position: absolute');
+    // .terminal-row só tem UM filho de verdade no fluxo (.terminal-main)
+    // — confirmado por não haver mais "order"/"width" fixo em
+    // .terminal-left/.terminal-right fora da regra absolute acima.
+    expect(css).not.toMatch(/\.terminal-left\s*\{\s*\n\s*order:/);
   });
 });
 
@@ -81,10 +99,23 @@ describe('estabilização (Prioridade 4, UX Profissional): pinch-zoom nativo pre
 describe('bug 3: scroll em paisagem — pointer-events-none removido dos containers do grid', () => {
   it('nenhum dos 4 containers nomeados (.terminal-main/.terminal-left/.terminal-right/.terminal-strip) declara pointer-events-none', () => {
     const app = read('../src/App.tsx');
-    for (const cls of ['terminal-main', 'terminal-left', 'terminal-right', 'terminal-strip']) {
+    // .terminal-main/.terminal-strip usam className="..." (string
+    // simples); .terminal-left/.terminal-right (V16.1, gavetas) usam
+    // className={`...`} (template literal, por causa do estado
+    // leftDrawerOpen/rightDrawerOpen) — os dois formatos precisam de
+    // regex próprios, mas a garantia é a mesma para os 4.
+    for (const cls of ['terminal-main', 'terminal-strip']) {
       const regex = new RegExp(`className="${cls}[^"]*"`, 'g');
       const matches = app.match(regex) ?? [];
       expect(matches.length, `nenhuma ocorrência de className="${cls}..." encontrada`).toBeGreaterThan(0);
+      for (const m of matches) {
+        expect(m, `${cls} não pode ter pointer-events-none (bloqueia gesto de toque)`).not.toContain('pointer-events-none');
+      }
+    }
+    for (const cls of ['terminal-left', 'terminal-right']) {
+      const regex = new RegExp('className=\\{`' + cls + '[^`]*`\\}', 'g');
+      const matches = app.match(regex) ?? [];
+      expect(matches.length, `nenhuma ocorrência de className={\`${cls}...\`} encontrada`).toBeGreaterThan(0);
       for (const m of matches) {
         expect(m, `${cls} não pode ter pointer-events-none (bloqueia gesto de toque)`).not.toContain('pointer-events-none');
       }

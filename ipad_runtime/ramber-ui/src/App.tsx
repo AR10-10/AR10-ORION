@@ -107,6 +107,8 @@ import {
   ZoomOut,
   LayoutGrid,
   Pin,
+  PanelLeft,
+  PanelRight,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -233,6 +235,11 @@ export default function App() {
   // V16 Workspace Manager panel (Pinned/Docked/Collapsed/Hidden/Floating
   // per secondary module) — opened from the SideBar's footer button.
   const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState(false);
+  // V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas):
+  // Market Intelligence (esquerda) / Core Intelligence (direita) são
+  // gavetas fechadas por padrão — o Gráfico reina sozinho no boot.
+  const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
+  const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
 
   // The currently analyzed asset. Included in the SAME effect dependency
   // arrays as bootGeneration below — switching it tears down and re-opens
@@ -1186,41 +1193,33 @@ export default function App() {
                     informação de decisão, visível em todas as abas, zero
                     repetição de preço/símbolo/feed pelo resto da tela. */}
 
-                {/* V16 Institutional Command Center: 3 colunas SEMPRE
-                    visíveis — esquerda "Market Intelligence" (Vetor de
-                    Mercado + Bias/Confiança/Zonas/Gestão de Risco), centro
-                    "Institutional Chart Engine" (o Gráfico, núcleo do
-                    sistema, maior área da tela) e direita "Core
-                    Intelligence" (Siriform Core/GMIL/Regime/Consenso+Risk
-                    Engine+Data Quality/Saúde do Sistema). Nenhuma delas
-                    fica atrás de um gear/toggle — só os módulos
-                    VERDADEIRAMENTE secundários (Order Book/Order Flow/
-                    Heatmap de liquidez/Scanner/Exposição/Eventos/Núcleo
-                    Neural/Heatmap de ativos) vivem no Workspace Manager
-                    (Pinned/Docked/Collapsed/Hidden/Floating — ver
-                    WorkspaceManagerPanel), acessível pelo botão no rodapé
-                    da SideBar. .terminal-row (index.css, flexbox aninhado)
-                    garante zero espaço morto em qualquer combinação de
-                    colunas presentes/ausentes, no mesmo breakpoint 1120px
-                    já usado no resto do cockpit. */}
+                {/* V16.1 correção crítica (Protocolo TradingView e Gavetas
+                    Ocultas): o Operador rejeitou a V16 original — 3
+                    colunas sempre visíveis espremiam o Gráfico. Esquerda
+                    "Market Intelligence" e direita "Core Intelligence"
+                    agora são GAVETAS fechadas por padrão
+                    (leftDrawerOpen/rightDrawerOpen, false no boot),
+                    sobrepostas (.terminal-left/.terminal-right,
+                    position:absolute em index.css) ao Gráfico — nunca
+                    dividem espaço de flexbox com ele, então o
+                    Institutional Chart Engine ocupa ~100% da largura por
+                    padrão, em qualquer viewport. Dois botões discretos
+                    nas bordas (PanelLeft/PanelRight) abrem/fecham cada
+                    gaveta; clicar no backdrop translúcido também fecha —
+                    devolvendo o espaço total ao gráfico imediatamente
+                    (position:absolute é excluído do algoritmo de flex do
+                    pai, então fechar a gaveta nunca precisa de reflow).
+                    Só os módulos VERDADEIRAMENTE secundários (Order Book/
+                    Order Flow/Heatmap de liquidez/Scanner/Exposição/
+                    Eventos/Núcleo Neural/Heatmap de ativos) vivem, à
+                    parte, no Workspace Manager (Pinned/Docked/Collapsed/
+                    Hidden/Floating — ver WorkspaceManagerPanel). */}
                 <div className="terminal-grid flex-1 min-h-0 overflow-y-auto min-[1120px]:overflow-hidden scrollbar-hide p-1">
                   <div className="terminal-row min-h-0">
-                    {/* LEFT — Market Intelligence: Vetor de Mercado (livro
-                        real) + Bias/Convicção/Zonas/Gestão de Risco. */}
-                    <div className="terminal-left min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2 min-[1120px]:pr-1">
-                      {marketMode === "TRADFI" ? (
-                        <TradFiEmptyState compact assetLabel="MARKET INTELLIGENCE" />
-                      ) : (
-                        <>
-                          <MarketDirectionWidget />
-                          <MarketBiasDecisionCard />
-                        </>
-                      )}
-                    </div>
-
-                    {/* MAIN — o Gráfico é o coração da operação, o
-                        Institutional Chart Engine domina a maior área
-                        visual da interface. */}
+                    {/* MAIN — o Gráfico é o coração da operação; sozinho em
+                        .terminal-main, sem colunas fixas disputando
+                        espaço, o Institutional Chart Engine domina quase
+                        100% da área visual por padrão. */}
                     <div className="terminal-main min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2">
                       {widgets.chart.visible &&
                         (marketMode === "TRADFI" ? (
@@ -1232,12 +1231,91 @@ export default function App() {
                         ))}
                     </div>
 
-                    {/* RIGHT — Core Intelligence: Siriform Core (resumo
-                        compacto, detalhe completo sob demanda na strip
-                        abaixo) + GMIL + Regime + Comitê de Consenso/Risk
-                        Engine/Data Quality (DecisionValidationWidget já
-                        cobre os 3) + Saúde do Sistema. */}
-                    <div className="terminal-right min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2">
+                    {/* Backdrop — clicar fora de qualquer gaveta aberta a
+                        fecha; um único elemento cobre a área do cockpit
+                        (nunca a TopBar/FooterBar) para as duas gavetas. */}
+                    <div
+                      className={`terminal-drawer-backdrop ${leftDrawerOpen || rightDrawerOpen ? "drawer-open" : ""}`}
+                      onClick={() => {
+                        setLeftDrawerOpen(false);
+                        setRightDrawerOpen(false);
+                      }}
+                    />
+
+                    {/* Alça discreta — Market Intelligence (gaveta esquerda). */}
+                    <button
+                      type="button"
+                      onClick={() => setLeftDrawerOpen((v) => !v)}
+                      title="Market Intelligence"
+                      className={`absolute left-0 top-1/2 -translate-y-1/2 z-50 w-8 h-14 rounded-r-lg border border-l-0 flex items-center justify-center transition-colors ${
+                        leftDrawerOpen
+                          ? "bg-[#00f0ff20] border-[#00f0ff60] text-[#00f0ff]"
+                          : "bg-[#010308]/80 border-[#00f0ff20] text-[#8ab4f8]/60 hover:text-[#00f0ff] hover:border-[#00f0ff40]"
+                      }`}
+                    >
+                      <PanelLeft size={14} />
+                    </button>
+                    {/* Alça discreta — Core Intelligence (gaveta direita). */}
+                    <button
+                      type="button"
+                      onClick={() => setRightDrawerOpen((v) => !v)}
+                      title="Core Intelligence"
+                      className={`absolute right-0 top-1/2 -translate-y-1/2 z-50 w-8 h-14 rounded-l-lg border border-r-0 flex items-center justify-center transition-colors ${
+                        rightDrawerOpen
+                          ? "bg-[#00f0ff20] border-[#00f0ff60] text-[#00f0ff]"
+                          : "bg-[#010308]/80 border-[#00f0ff20] text-[#8ab4f8]/60 hover:text-[#00f0ff] hover:border-[#00f0ff40]"
+                      }`}
+                    >
+                      <PanelRight size={14} />
+                    </button>
+
+                    {/* LEFT (gaveta) — Market Intelligence: Vetor de
+                        Mercado (livro real) + Bias/Convicção/Zonas/Gestão
+                        de Risco. */}
+                    <div
+                      className={`terminal-left flex flex-col gap-2 ${leftDrawerOpen ? "drawer-open" : ""}`}
+                    >
+                      <div className="flex items-center justify-between shrink-0 pb-1 border-b border-[#00f0ff15]">
+                        <span className="text-[0.5rem] font-bold tracking-[0.2em] uppercase text-[#00f0ff]">
+                          Market Intelligence
+                        </span>
+                        <div
+                          className="text-[#8ab4f8]/50 hover:text-[#ff0055] px-1 py-0.5 rounded cursor-pointer"
+                          onClick={() => setLeftDrawerOpen(false)}
+                        >
+                          <X size={12} />
+                        </div>
+                      </div>
+                      {marketMode === "TRADFI" ? (
+                        <TradFiEmptyState compact assetLabel="MARKET INTELLIGENCE" />
+                      ) : (
+                        <>
+                          <MarketDirectionWidget />
+                          <MarketBiasDecisionCard />
+                        </>
+                      )}
+                    </div>
+
+                    {/* RIGHT (gaveta) — Core Intelligence: Siriform Core
+                        (resumo compacto, detalhe completo sob demanda na
+                        strip abaixo) + GMIL + Regime + Comitê de
+                        Consenso/Risk Engine/Data Quality
+                        (DecisionValidationWidget já cobre os 3) + Saúde
+                        do Sistema. */}
+                    <div
+                      className={`terminal-right flex flex-col gap-2 ${rightDrawerOpen ? "drawer-open" : ""}`}
+                    >
+                      <div className="flex items-center justify-between shrink-0 pb-1 border-b border-[#00f0ff15]">
+                        <span className="text-[0.5rem] font-bold tracking-[0.2em] uppercase text-[#00f0ff]">
+                          Core Intelligence
+                        </span>
+                        <div
+                          className="text-[#8ab4f8]/50 hover:text-[#ff0055] px-1 py-0.5 rounded cursor-pointer"
+                          onClick={() => setRightDrawerOpen(false)}
+                        >
+                          <X size={12} />
+                        </div>
+                      </div>
                       {marketMode === "TRADFI" ? (
                         <TradFiEmptyState compact assetLabel="SIRIFORM CORE · REGIME · COMITÊ DE DECISÃO" />
                       ) : (

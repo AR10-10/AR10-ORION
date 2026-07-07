@@ -132,16 +132,58 @@ describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (pass
   });
 });
 
-describe('V16 §1: layout 3 colunas — terminal-row/terminal-left/terminal-main/terminal-right colapsam sem espaço morto (flexbox, não grid-template-areas)', () => {
-  it('index.css não usa mais grid-template-areas para o cockpit (named areas reservam espaço mesmo sem elemento) — flexbox aninhado no lugar', () => {
+describe('V16 §1: layout — .terminal-grid/.terminal-row usam flexbox (não grid-template-areas); nunca reservam espaço morto', () => {
+  it('index.css não usa mais grid-template-areas para o cockpit (named areas reservam espaço mesmo sem elemento)', () => {
     const css = read('../src/index.css');
     // A propriedade CSS real (com dois-pontos) não pode existir — mas o
     // comentário que documenta POR QUE ela foi removida (contexto
     // histórico) tem permissão de citar o nome da propriedade.
     expect(css).not.toMatch(/grid-template-areas:/);
     expect(css).toContain('.terminal-row {');
-    expect(css).toContain('.terminal-left {');
-    expect(css).toContain('.terminal-right {');
     expect(css).toContain('display: flex');
+  });
+});
+
+describe('V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas): esquerda/direita são OVERLAYS fechados por padrão, o Gráfico nunca divide espaço com elas', () => {
+  // O Operador rejeitou a V16 original — as 3 colunas sempre visíveis
+  // esmagavam o Gráfico. Esta suíte trava a correção: leftDrawerOpen/
+  // rightDrawerOpen começam false (Gráfico ~100% no boot) e
+  // .terminal-left/.terminal-right usam position:absolute (excluídas do
+  // algoritmo de flex do pai — nunca voltam a disputar largura com
+  // .terminal-main, mesmo abertas).
+  it('leftDrawerOpen/rightDrawerOpen começam false — nenhuma gaveta aberta no boot', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);');
+    expect(app).toContain('const [rightDrawerOpen, setRightDrawerOpen] = useState(false);');
+  });
+
+  it('.terminal-left/.terminal-right usam position:absolute (nunca dividem flexbox com .terminal-main) e começam deslocadas para fora da tela (transform translateX)', () => {
+    const css = read('../src/index.css');
+    const sharedMatch = css.match(/\.terminal-left,\s*\n\.terminal-right \{([\s\S]*?)\n\}/);
+    expect(sharedMatch, 'regra combinada .terminal-left/.terminal-right não encontrada').not.toBeNull();
+    expect(sharedMatch![1]).toContain('position: absolute');
+    expect(css).toMatch(/\.terminal-left \{[\s\S]*?transform: translateX\(-110%\);/);
+    expect(css).toMatch(/\.terminal-right \{[\s\S]*?transform: translateX\(110%\);/);
+    expect(css).toContain('.drawer-open');
+  });
+
+  it('dois botões discretos (PanelLeft/PanelRight) nas bordas abrem/fecham cada gaveta; o backdrop fecha ambas ao clicar fora', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('<PanelLeft size={14} />');
+    expect(app).toContain('<PanelRight size={14} />');
+    expect(app).toContain('onClick={() => setLeftDrawerOpen((v) => !v)}');
+    expect(app).toContain('onClick={() => setRightDrawerOpen((v) => !v)}');
+    expect(app).toContain('terminal-drawer-backdrop');
+  });
+
+  it('.terminal-main é o único filho real de .terminal-row no fluxo — flex:1, sem "order" nem largura fixa disputando espaço', () => {
+    const css = read('../src/index.css');
+    const rowMatch = css.match(/\.terminal-row \{([\s\S]*?)\n\}/);
+    expect(rowMatch, '.terminal-row não encontrado').not.toBeNull();
+    expect(rowMatch![1]).not.toContain('order:');
+    const mainMatch = css.match(/\.terminal-main \{([\s\S]*?)\n\}/);
+    expect(mainMatch, '.terminal-main não encontrado').not.toBeNull();
+    expect(mainMatch![1]).toContain('flex: 1');
+    expect(mainMatch![1]).not.toContain('order:');
   });
 });
