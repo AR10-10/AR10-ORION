@@ -86,51 +86,42 @@ describe('bug 3: scroll em paisagem — pointer-events-none removido dos contain
   });
 });
 
-describe('diretriz 2 + estabilização: roteamento Futuros→Spot real — Gráfico e Risk Engine preferem /fapi/v1/, com fallback honesto para Spot', () => {
-  it('engine-bridge.ts importa collectBinanceFuturesKlines (preferido) E collectBinanceKlines (fallback real — nunca um placeholder inventado)', () => {
+describe('diretriz 2 + V15.1 GOD TIER: roteamento Futuros exclusivo — Gráfico e Risk Engine SÓ consomem /fapi/v1/, zero fallback para Spot', () => {
+  it('engine-bridge.ts importa collectBinanceFuturesKlines e NUNCA collectBinanceKlines (spot) — instrução explícita: "extinguindo qualquer roteamento de gráficos para mercado Spot"', () => {
     const bridge = read('../src/engine-bridge.ts');
-    // Estabilização (Prioridade 1+3): futuros nunca pode ser a ÚNICA fonte —
-    // se o conector de futuros (nunca reverificado ao vivo, ver seu próprio
-    // header) falhar, o terminal precisa de uma segunda fonte real (spot)
-    // em vez de travar em AGUARDANDO CANDLES para sempre.
     expect(bridge).toContain("import { collectBinanceFuturesKlines } from '../../src/market-data-bus/binance-futures-candle-connector.js'");
-    expect(bridge).toContain("import { collectBinanceKlines } from '../../src/market-data-bus/binance-candle-connector.js'");
+    expect(bridge).not.toContain('collectBinanceKlines');
+    expect(bridge).not.toContain('binance-candle-connector.js');
   });
 
-  it('requestCandleSnapshotWithFallback tenta futuros primeiro (chave symbol-PERP) e só cai para spot (chave symbol pura) se futuros não vier ok', () => {
+  it('requestFuturesCandleSnapshot não tem nenhuma perna de spot — só a chave symbol-PERP via collectBinanceFuturesKlines', () => {
     const bridge = read('../src/engine-bridge.ts');
-    const futuresIdx = bridge.indexOf(
-      'symbol: `${symbol}-PERP`, timeframe, limit, collect: collectBinanceFuturesKlines, maxAgeMs,',
-    );
-    const spotIdx = bridge.indexOf('symbol, timeframe, limit, collect: collectBinanceKlines, maxAgeMs,');
-    expect(futuresIdx, 'perna de futuros do helper não encontrada').toBeGreaterThan(-1);
-    expect(spotIdx, 'perna de spot do helper não encontrada').toBeGreaterThan(-1);
-    expect(futuresIdx, 'futuros precisa ser tentado ANTES de spot no código-fonte').toBeLessThan(spotIdx);
-    expect(bridge).toContain(
-      "if (futuresSnapshot.ok) return { snapshot: futuresSnapshot, instrumentType: 'crypto_futures' };",
-    );
+    expect(bridge).toContain('async function requestFuturesCandleSnapshot(');
+    const helperMatch = bridge.match(/async function requestFuturesCandleSnapshot\([\s\S]*?\n\}\n/);
+    expect(helperMatch, 'requestFuturesCandleSnapshot não encontrada').not.toBeNull();
+    const helper = helperMatch![0];
+    expect(helper).toContain('symbol: `${symbol}-PERP`');
+    expect(helper).toContain('collect: collectBinanceFuturesKlines');
+    expect(helper).not.toContain('collectBinanceKlines');
   });
 
-  it('as 3 chamadas reais ao Bus (HTF, ciclo principal, getChartCandles) passam pelo helper de fallback — nenhum call site volta a chamar requestSnapshot() direto com um único conector', () => {
+  it('as 3 chamadas reais ao Bus (HTF, ciclo principal, getChartCandles) passam por requestFuturesCandleSnapshot — nenhuma chama requestSnapshot() direto', () => {
     const bridge = read('../src/engine-bridge.ts');
-    const helperCallSites = bridge.match(/await requestCandleSnapshotWithFallback\(\{/g) ?? [];
+    const helperCallSites = bridge.match(/await requestFuturesCandleSnapshot\(\{/g) ?? [];
     expect(helperCallSites).toHaveLength(3);
-    // requestSnapshot() só pode aparecer DENTRO do próprio helper (as 2
-    // pernas: futuros + spot) — se esse número mudar, algum call site
-    // voltou a ignorar o fallback e chamar o Bus direto com um só conector.
+    // requestSnapshot() só pode aparecer DENTRO do próprio helper (1 única
+    // perna, futuros) — se esse número mudar, algum call site voltou a
+    // ignorar o helper e chamar o Bus direto, ou uma perna de spot voltou.
     const directBusCalls = bridge.match(/getMarketDataBus\(\)\.requestSnapshot\(\{/g) ?? [];
-    expect(directBusCalls).toHaveLength(2);
+    expect(directBusCalls).toHaveLength(1);
   });
 
-  it('CoreEvidence.instrument_type na construção real é sempre a fonte que respondeu de fato (cycleInstrumentType) — nunca mais um literal fixo', () => {
+  it('CoreEvidence.instrument_type na construção real é sempre \'crypto_futures\' (união de tipos permanece fechada, sem fallback pra decidir dinamicamente)', () => {
     const bridge = read('../src/engine-bridge.ts');
-    // o tipo permanece uma união fechada (nunca um terceiro valor inventado)
     expect(bridge).toContain("instrument_type: 'crypto_spot' | 'crypto_futures';");
-    // o valor de fato atribuído é o passthrough do resultado do fallback,
-    // nunca mais um literal hardcoded que mentiria se o spot respondesse
-    expect(bridge).toContain('instrument_type: cycleInstrumentType,');
-    expect(bridge).not.toMatch(/instrument_type: 'crypto_futures',/);
-    expect(bridge).not.toMatch(/instrument_type: 'crypto_spot',/);
+    expect(bridge).toContain("instrument_type: 'crypto_futures',");
+    const valueAssignments = bridge.match(/^\s*instrument_type: 'crypto_futures',\s*$/gm) ?? [];
+    expect(valueAssignments).toHaveLength(1);
   });
 
   it('RealCycleResult expõe instrumentType como passthrough honesto (nunca uma string fixa na UI)', () => {

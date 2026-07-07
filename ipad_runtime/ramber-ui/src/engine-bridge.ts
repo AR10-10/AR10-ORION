@@ -18,27 +18,29 @@
 // e nunca dispara duas sondas de rede redundantes para a mesma
 // symbol:timeframe.
 //
-// Overhaul Cross-Market (Diretriz 2): Gráfico e Risk Engine PREFEREM o
-// mercado USDT-M Futures/Perpétuo — não mais Spot como padrão. GMIL e o
+// Overhaul Cross-Market (Diretriz 2) + V15.1 GOD TIER (Especificação
+// Arquitetural Definitiva): Gráfico e Risk Engine consomem
+// EXCLUSIVAMENTE o mercado USDT-M Futures/Perpétuo — instrução explícita
+// e repetida do Operador ("extinguindo qualquer roteamento de gráficos
+// para mercado Spot"), nenhum fallback para Spot neste caminho. GMIL e o
 // Order Flow (MEXC) continuam no mercado que já usavam antes — esta troca
 // é escopada só aos dois consumidores citados na diretriz.
 //
-// Estabilização (Prioridade 1+3, "Fail Closed Inteligente"): Futuros é
-// PREFERIDO, nunca ÚNICO — requestCandleSnapshotWithFallback() abaixo cai
-// para Spot automaticamente se o snapshot de futuros não vier OK (rede,
-// endpoint, o que for). binance-futures-public.js foi construído em fase
-// anterior e nunca foi reverificado ao vivo (ver seu próprio header); sem
-// este fallback, uma falha real do lado de futuros travaria o terminal
-// inteiro em AGUARDANDO para sempre — o oposto do que um terminal
-// institucional deve fazer. O rótulo devolvido reflete SEMPRE a fonte que
-// realmente respondeu (evidence.instrument_type/RealCycleResult.
-// instrumentType), nunca a preferida — a UI nunca afirma um mercado que
-// não veio de uma coleta real bem-sucedida.
+// Histórico (revertido nesta versão): a Estabilização anterior tinha um
+// fallback Futuros->Spot aqui ("Fail Closed Inteligente"), construído
+// porque um bug real (sufixo -PERP vazando pro parâmetro de símbolo da
+// API, ver binance-futures-candle-connector.js) fazia toda chamada real
+// de futuros falhar, sempre — o fallback mascarava o sintoma sem corrigir
+// a causa. Com a causa raiz corrigida, Futuros volta a ser confiável, e o
+// Operador foi explícito: nenhum roteamento de gráfico para Spot, nunca.
+// O fail-closed correto para uma falha residual de futuros é o mecanismo
+// JÁ EXISTENTE do Bus (Fase B: último snapshot BOM DA PRÓPRIA FONTE,
+// nunca uma substituição por outro mercado) — "Modo de Aguardo Elegante"
+// honesto em vez de um dado real de uma fonte diferente da declarada.
 import { QuantWorkerClient } from '../../js/worker-client.js';
 import { OrderflowWorkerClient } from '../../js/orderflow-client.js';
 import { getMarketDataBus } from '../../src/market-data-bus/index.js';
 import { collectBinanceFuturesKlines } from '../../src/market-data-bus/binance-futures-candle-connector.js';
-import { collectBinanceKlines } from '../../src/market-data-bus/binance-candle-connector.js';
 import { createLivePoller } from '../../js/real-data/mexc-trades-stream.js';
 import { CONNECTOR_STATES } from '../../js/real-data/schema.js';
 import { buildRealAnalysisFrame } from '../../js/real-data/analysis-frame.js';
@@ -215,34 +217,17 @@ const describeError = (err: any): string => {
   return String(err?.message || err);
 };
 
-// Estabilização (Prioridade 1+3): fonte de candles com fallback real.
-// Futuros primeiro (chave `${symbol}-PERP`, preferida pela Diretriz 2); se
-// não vier ok, tenta Spot (chave `symbol` pura, o mesmo conector estável
-// desde a Fase B) antes de aceitar uma falha. As duas chaves são
-// DISTINTAS no Bus — nunca colidem em cache uma com a outra, e cada uma
-// mantém seu próprio fail-closed (último snapshot bom daquela fonte
-// específica). Só quando NENHUMA das duas responde com dado novo válido é
-// que a chamada devolve o resultado de futuros (que ainda pode ser um
-// último-bom antigo daquela fonte, ou ok:false honesto se nunca houve
-// nenhum sucesso) — o Bus já cobre esse caso, este helper só adiciona a
-// segunda fonte real à cadeia de tentativas.
-async function requestCandleSnapshotWithFallback({
+// V15.1 GOD TIER: candle de Futuros, exclusivamente — nenhum fallback
+// para Spot (ver header do arquivo). O fail-closed real para uma falha
+// de futuros é o mecanismo já existente do Bus (Fase B: devolve o último
+// snapshot BOM DA MESMA CHAVE symbol-PERP se a coleta nova falhar; só
+// ok:false honesto se NUNCA houve um sucesso anterior para essa chave).
+async function requestFuturesCandleSnapshot({
   symbol, timeframe, limit, maxAgeMs,
-}: { symbol: string; timeframe: string; limit: number; maxAgeMs: number }): Promise<{
-  snapshot: BusSnapshot;
-  instrumentType: 'crypto_futures' | 'crypto_spot';
-}> {
-  const futuresSnapshot: BusSnapshot = await getMarketDataBus().requestSnapshot({
+}: { symbol: string; timeframe: string; limit: number; maxAgeMs: number }): Promise<BusSnapshot> {
+  return getMarketDataBus().requestSnapshot({
     symbol: `${symbol}-PERP`, timeframe, limit, collect: collectBinanceFuturesKlines, maxAgeMs,
   });
-  if (futuresSnapshot.ok) return { snapshot: futuresSnapshot, instrumentType: 'crypto_futures' };
-
-  const spotSnapshot: BusSnapshot = await getMarketDataBus().requestSnapshot({
-    symbol, timeframe, limit, collect: collectBinanceKlines, maxAgeMs,
-  });
-  if (spotSnapshot.ok) return { snapshot: spotSnapshot, instrumentType: 'crypto_spot' };
-
-  return { snapshot: futuresSnapshot, instrumentType: 'crypto_futures' };
 }
 
 // V11.5 §2 "Evolução Matemática" (melhorar contexto multitemporal): estrutura
@@ -276,10 +261,8 @@ function refreshHtfMarketStructureInBackground(symbol: string): void {
       // Fase B: chave 'symbol:1h' própria no Bus, separada da chave
       // 'symbol:15m' do ciclo principal abaixo — não competem nem se
       // sobrescrevem, cada timeframe mantém seu próprio snapshot cacheado.
-      // Estabilização: mesmo fallback Futuros→Spot do ciclo principal (ver
-      // requestCandleSnapshotWithFallback) — o contexto HTF não pode travar
-      // em null para sempre só porque o lado de futuros falhou.
-      const { snapshot: htfSnapshot } = await requestCandleSnapshotWithFallback({
+      // V15.1 GOD TIER: Futuros exclusivo, sem fallback (ver header).
+      const htfSnapshot = await requestFuturesCandleSnapshot({
         symbol, timeframe: HTF_INTERVAL, limit: 60, maxAgeMs: HTF_REFRESH_MS,
       });
       if (!htfSnapshot.ok) {
@@ -328,18 +311,12 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
   // vez de sondar Binance diretamente. Se App.tsx (getChartCandles) já
   // pediu essa mesma chave há menos de 25s, este cycle reaproveita o
   // mesmo snapshot — zero segunda sonda de rede para o mesmo candle.
-  // Overhaul (Diretriz 2): futuros/perpétuo é a fonte PREFERIDA — ver header.
-  // Estabilização (Prioridade 1+3): requestCandleSnapshotWithFallback cai
-  // para Spot automaticamente se futuros não responder; cycleInstrumentType
-  // carrega a fonte que REALMENTE respondeu, nunca a preferida.
+  // V15.1 GOD TIER: futuros/perpétuo é a fonte EXCLUSIVA — ver header.
   let snapshot: BusSnapshot;
-  let cycleInstrumentType: 'crypto_futures' | 'crypto_spot' = 'crypto_futures';
   try {
-    const result = await requestCandleSnapshotWithFallback({
+    snapshot = await requestFuturesCandleSnapshot({
       symbol, timeframe: '15m', limit: 100, maxAgeMs: 25_000,
     });
-    snapshot = result.snapshot;
-    cycleInstrumentType = result.instrumentType;
   } catch (err: any) {
     return { ok: false, reason: `market_data_bus_lancou_excecao: ${describeError(err)}` };
   }
@@ -357,11 +334,11 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
   const lastCandle = snapshot.candles[snapshot.candles.length - 1];
   const evidence: CoreEvidence = {
     symbol,
-    // Overhaul Cross-Market (Diretriz 2) + Estabilização (Prioridade 3):
-    // reflete a fonte que REALMENTE respondeu (cycleInstrumentType, vindo
-    // de requestCandleSnapshotWithFallback), nunca um rótulo independente
-    // do que de fato aconteceu na coleta acima.
-    instrument_type: cycleInstrumentType,
+    // V15.1 GOD TIER: o snapshot acima só pode ter vindo de Futuros
+    // (requestFuturesCandleSnapshot não tem fallback) — este valor é
+    // sempre exato por construção, nunca um rótulo independente do que
+    // de fato aconteceu na coleta.
+    instrument_type: 'crypto_futures',
     timeframe: snapshot.timeframe,
     source_id: 'market-data-bus',
     timestamp: new Date(snapshot.asOf ?? snapshot.fetchedAt).toISOString(),
@@ -475,15 +452,13 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
 // dentro de App.tsx. Achado real da Fase A: antes desta mudança, App.tsx e
 // este arquivo sondavam klines de forma independente e simultânea a cada
 // ~30s, mesmo símbolo, mesmo timeframe, dois resultados que podiam nem
-// bater. Overhaul (Diretriz 2): futuros/perpétuo é a fonte PREFERIDA.
-// Estabilização (Prioridade 1): mesmo fallback Futuros→Spot do ciclo de
-// análise — o gráfico não pode ficar preso em AGUARDANDO CANDLES só porque
-// o lado de futuros falhou enquanto o Spot (mesmo símbolo) respondia bem.
+// bater. V15.1 GOD TIER: futuros/perpétuo é a fonte EXCLUSIVA — nenhum
+// fallback para Spot (ver header do arquivo).
 export async function getChartCandles(
   symbol = 'BTC',
   limit = 50,
 ): Promise<Array<{ open: number; high: number; low: number; close: number }> | null> {
-  const { snapshot } = await requestCandleSnapshotWithFallback({
+  const snapshot = await requestFuturesCandleSnapshot({
     symbol, timeframe: '15m', limit, maxAgeMs: 25_000,
   });
   if (!snapshot.ok) return null;
