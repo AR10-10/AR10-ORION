@@ -32,19 +32,26 @@ describe('binance-futures-candle-connector: o sufixo -PERP (chave de cache do Bu
   it('symbol="BTC-PERP" (exatamente como o Bus de fato envia) chega a probe() como "BTC" puro', async () => {
     mockedProbe.mockResolvedValue({ state: CONNECTOR_STATES.ACTIVE_READ_ONLY, evidence: { candles: fakeCandles() } });
     await collectBinanceFuturesKlines({ symbol: 'BTC-PERP', timeframe: '15m', limit: 100 });
-    expect(mockedProbe).toHaveBeenCalledWith({ symbol: 'BTC', interval: '15m', limit: 100 });
+    expect(mockedProbe).toHaveBeenCalledWith({ symbol: 'BTC', interval: '15m', limit: 100, includeDerivatives: false });
   });
 
   it('ETH-PERP/SOL-PERP também têm o sufixo removido — não é um caso especial só de BTC', async () => {
     mockedProbe.mockResolvedValue({ state: CONNECTOR_STATES.ACTIVE_READ_ONLY, evidence: { candles: fakeCandles() } });
     await collectBinanceFuturesKlines({ symbol: 'ETH-PERP', timeframe: '1h', limit: 60 });
-    expect(mockedProbe).toHaveBeenCalledWith({ symbol: 'ETH', interval: '1h', limit: 60 });
+    expect(mockedProbe).toHaveBeenCalledWith({ symbol: 'ETH', interval: '1h', limit: 60, includeDerivatives: false });
   });
 
   it('um símbolo sem o sufixo -PERP passa intocado (nunca corta caracteres de mais)', async () => {
     mockedProbe.mockResolvedValue({ state: CONNECTOR_STATES.ACTIVE_READ_ONLY, evidence: { candles: fakeCandles() } });
     await collectBinanceFuturesKlines({ symbol: 'ETH', timeframe: '1h', limit: 60 });
-    expect(mockedProbe).toHaveBeenCalledWith({ symbol: 'ETH', interval: '1h', limit: 60 });
+    expect(mockedProbe).toHaveBeenCalledWith({ symbol: 'ETH', interval: '1h', limit: 60, includeDerivatives: false });
+  });
+
+  it('sempre pede includeDerivatives:false — este conector só lê evidence.candles, as 4 sondas extras seriam descartadas', async () => {
+    mockedProbe.mockResolvedValue({ state: CONNECTOR_STATES.ACTIVE_READ_ONLY, evidence: { candles: fakeCandles() } });
+    await collectBinanceFuturesKlines({ symbol: 'BTC-PERP', timeframe: '15m', limit: 100 });
+    const call = mockedProbe.mock.calls[0][0];
+    expect(call.includeDerivatives).toBe(false);
   });
 
   it('devolve os candles reais da evidência quando o estado é ACTIVE_READ_ONLY', async () => {
