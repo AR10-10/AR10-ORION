@@ -2,17 +2,28 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- Estabilização (Prioridade 4, UX Profissional): pinch-zoom nativo
+         preservado — maximum-scale=1.0 + user-scalable=no bloqueavam
+         totalmente o gesto de pinça no iPad, contradizendo a exigência
+         explícita de "zoom/viewport/contexto preservados" (um app nativo
+         real nunca desativa o zoom do sistema). initial-scale continua
+         1.0 (boot sempre em 100%, nunca zoom residual de sessão anterior);
+         viewport-fit=cover inalterado (necessário para pt-safe/pb-safe). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="RAMBER" />
+    <meta name="apple-mobile-web-app-title" content="AR10 CYBORG" />
     <meta name="theme-color" content="#05080f" />
-    <meta name="description" content="RAMBER · Terminal V-PRIME ELITE · READ_ONLY · FAIL_CLOSED · Sem trading real." />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.binance.com https://fapi.binance.com wss://stream.binance.com:9443 wss://fstream.binance.com https://api.mexc.com https://*.huggingface.co https://*.hf.co https://raw.githubusercontent.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">
+    <meta name="description" content="AR10 CYBORG · Terminal Quantitativo · READ_ONLY · FAIL_CLOSED · Sem trading real." />
+    <!-- Master Panel handoff (Multi-Source Market Data Fusion, escopo
+         reduzido): api.bybit.com adicionado — segunda fonte real de
+         cross-check de preço/funding/OI (src/cross-exchange/bybit-futures.ts),
+         nunca uma fonte primária do Core Engine/Risk Engine. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.binance.com https://fapi.binance.com wss://stream.binance.com:9443 wss://fstream.binance.com https://api.mexc.com https://api.bybit.com https://api.coingecko.com https://api.alternative.me https://*.huggingface.co https://*.hf.co https://raw.githubusercontent.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">
     <link rel="apple-touch-icon" href="../icons/apple-touch-icon-180.png" />
     <link rel="icon" href="../icons/icon-192.png" />
     <link rel="manifest" href="manifest.webmanifest" />
-    <title>RAMBER · Terminal</title>
+    <title>AR10 CYBORG · Terminal Quantitativo</title>
   </head>
   <body class="bg-slate-950 text-cyan-400 font-mono">
     <div id="root"></div>

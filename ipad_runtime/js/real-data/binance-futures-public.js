@@ -78,8 +78,18 @@ function validateLongShortShape(json) {
     return { valid: true };
 }
 
-/** @param {{symbol?: string, interval?: string, limit?: number, timeoutMs?: number}} opts */
-export async function probe({ symbol = 'BTC', interval = '1h', limit = 100, timeoutMs = 8000 } = {}) {
+/** @param {{symbol?: string, interval?: string, limit?: number, timeoutMs?: number, includeDerivatives?: boolean}} opts
+ *  includeDerivatives (default true, preserva o comportamento original para
+ *  qualquer chamador que precise do Evidence Object completo): quando
+ *  false, pula as 4 sondas de depth/funding/open_interest/long_short —
+ *  achado real da auditoria autônoma (Master Panel handoff): o único
+ *  chamador de produção deste probe() é collectBinanceFuturesKlines()
+ *  (src/market-data-bus/binance-futures-candle-connector.js), que só lê
+ *  evidence.candles — as 4 sondas extras eram buscadas via Promise.all e
+ *  DESCARTADAS por inteiro a cada ciclo real (~a cada 25s), atrasando o
+ *  caminho crítico do gráfico/Risk Engine por 4 round-trips de rede sem
+ *  nenhum uso real do resultado. */
+export async function probe({ symbol = 'BTC', interval = '1h', limit = 100, timeoutMs = 8000, includeDerivatives = true } = {}) {
     const pair = SYMBOL_TO_PAIR[symbol] || `${symbol}USDT`;
     const evidence = createEmptyEvidence({
         source_id: meta.connector_id,
@@ -110,6 +120,20 @@ export async function probe({ symbol = 'BTC', interval = '1h', limit = 100, time
     evidence.ticker = { last_price: last.c, derived_from: 'ULTIMO_CLOSE_DO_KLINE', pair };
     evidence.volume = { last_candle_volume: last.v, unit: 'base_asset' };
     evidence.raw_sample_hash = await hashRawSample(klinesProbe.raw_text);
+
+    if (!includeDerivatives) {
+        // Mesmas 5 chamadas a markFieldMissing/liquidations do caminho
+        // completo abaixo — o Evidence Object continua honesto sobre o que
+        // não foi buscado (DADOS_INSUFICIENTES, nunca inventado), só sem
+        // pagar o custo de rede de sondas cujo resultado seria descartado.
+        markFieldMissing(evidence, 'order_book');
+        markFieldMissing(evidence, 'funding');
+        markFieldMissing(evidence, 'open_interest');
+        markFieldMissing(evidence, 'long_short_ratio');
+        markFieldMissing(evidence, 'liquidations');
+        evidence.data_quality = computeDataQuality(evidence);
+        return { state: CONNECTOR_STATES.ACTIVE_READ_ONLY, evidence, probe_detail: { klines: klinesProbe } };
+    }
 
     const [depthProbe, fundingProbe, oiProbe, lsProbe] = await Promise.all([
         probeJsonEndpoint({ url: `${FUTURES_BASE}/fapi/v1/depth?symbol=${encodeURIComponent(pair)}&limit=5`, timeoutMs, validate: validateDepthShape }),

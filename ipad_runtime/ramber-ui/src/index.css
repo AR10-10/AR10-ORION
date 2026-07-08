@@ -50,6 +50,14 @@ body::after {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+/* Em PWA standalone (viewport-fit=cover) a status bar do iPadOS é translúcida
+   e pinta POR CIMA do app — sem este padding o topo da barra de comando fica
+   escondido atrás dela (confirmado em screenshot real do dispositivo, tanto
+   em pé quanto deitado). Em navegador comum env() é 0 e nada muda. */
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
@@ -73,15 +81,41 @@ body::after {
   scrollbar-width: none;
 }
 
-/* Layout Panels — Luxury Glassmorphism */
+/* Layout Panels — Luxury Glassmorphism
+   V10.4 Visual Energy Balance: the pre-existing :hover state was
+   noticeably brighter (border 0.3, stronger glow) than the resting
+   state (0.15) — but this is a touch-only iPad PWA with no persistent
+   mouse hover, so that brighter look essentially never appeared for the
+   real target device, and every panel sat at its dim resting state
+   permanently while the header (styled without :hover gating at all)
+   read as the only "alive" surface. Fixed at the source: brought a
+   controlled amount of that same vividness into the resting state so
+   every panel using this one shared class picks it up identically,
+   rather than tuning each widget individually. :hover keeps a modest
+   further step up for the rare case a mouse/trackpad IS attached. */
+/* Fase J (diretriz 3, "Luxury Glassmorphism"): realce uniforme na BASE —
+   os painéis inferiores/telemetria herdavam um aspecto apagado por
+   estarem longe do glow radial central do Hero. Um ajuste único nesta
+   classe compartilhada = todos os widgets consistentes (vidro com leve
+   gradiente, saturação atrás do blur, borda +21% presente, highlight de
+   1px no topo e halo interno/externo reforçado), zero cirurgia por
+   painel. :hover mantém um degrau extra para trackpad/mouse. */
+/* Overhaul Cross-Market (Missão 1, diretriz 4) — elevação para Midnight
+   Blue/Black: gradiente mais diagonal e mais escuro no pé, borda mais
+   FINA/translúcida (0.34→0.20 de opacidade — lê como fio delicado, não
+   contorno sólido) e blur mais intenso (24px→30px). Continua sendo UMA
+   classe compartilhada: todo widget que já usa .cyber-panel herda a
+   elevação de graça, sem cirurgia por painel. */
 .cyber-panel {
-  background: rgba(2, 5, 12, 0.6);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(0, 240, 255, 0.15);
+  background: linear-gradient(165deg, rgba(6, 10, 28, 0.8), rgba(1, 3, 9, 0.7));
+  backdrop-filter: blur(30px) saturate(1.25);
+  -webkit-backdrop-filter: blur(30px) saturate(1.25);
+  border: 1px solid rgba(0, 240, 255, 0.2);
   box-shadow:
-    inset 0 0 20px rgba(0, 240, 255, 0.05),
-    0 8px 32px rgba(0, 0, 0, 0.6);
+    inset 0 0 34px rgba(0, 240, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 30px rgba(0, 240, 255, 0.08),
+    0 10px 40px rgba(0, 0, 0, 0.7);
   border-radius: 12px;
   position: relative;
   overflow: hidden;
@@ -91,10 +125,26 @@ body::after {
 }
 
 .cyber-panel:hover {
-  border-color: rgba(0, 240, 255, 0.3);
+  border-color: rgba(0, 240, 255, 0.34);
   box-shadow:
-    inset 0 0 30px rgba(0, 240, 255, 0.1),
-    0 8px 32px rgba(0, 240, 255, 0.1);
+    inset 0 0 38px rgba(0, 240, 255, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 36px rgba(0, 240, 255, 0.11),
+    0 10px 40px rgba(0, 240, 255, 0.09);
+}
+
+/* Acentos neon reservados a DADOS VITAIS (Missão 1, diretriz 4) — cyan
+   continua o padrão neutro/informativo em toda a UI; laranja marca o
+   Risk Engine (risco/atenção), púrpura marca a leitura do Comitê/GMIL
+   (opinião agregada, para diferenciar de preço/estrutura cru). Uso
+   deliberadamente esparso: só nos números que estes dois motores emitem. */
+.accent-risk {
+  color: #ff8a3d;
+  text-shadow: 0 0 6px rgba(255, 106, 0, 0.45);
+}
+.accent-consensus {
+  color: #c86bff;
+  text-shadow: 0 0 6px rgba(176, 38, 255, 0.45);
 }
 
 .cyber-panel::before {
@@ -110,6 +160,20 @@ body::after {
     rgba(0, 240, 255, 0.4),
     transparent
   );
+  /* Slow, subtle "breathing" highlight — the only genuinely new motion
+     this pass adds, and it's on a 1px line, not a whole panel glow, to
+     stay well short of "chamativo" (flashy). */
+  animation: panel-breathe 5s ease-in-out infinite;
+}
+
+@keyframes panel-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .cyber-header {
@@ -215,10 +279,124 @@ body::after {
   }
 }
 
+/* V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas): o
+   Operador rejeitou a V16 original — as 3 colunas SEMPRE visíveis
+   espremiam o Gráfico e poluíam a tela, o oposto do "TradingView-style
+   workspace" pedido. Esquerda ("Market Intelligence") e direita ("Core
+   Intelligence": Siriform/GMIL/Regime/Validação/Saúde) agora são GAVETAS
+   (drawers) fechadas por padrão, sobrepostas (position:absolute) ao
+   Gráfico — nunca dividindo espaço de flexbox com ele. Isso também
+   elimina de vez a classe de bug já capturada uma vez nesta mesma área
+   (V16 original: .terminal-main's flex-basis:0% perdendo quase todo o
+   espaço para .terminal-left/.terminal-right em viewports estreitos) —
+   um item position:absolute é excluído do algoritmo de flex do pai por
+   definição, então .terminal-main agora é o ÚNICO filho real de
+   .terminal-row em qualquer largura, sem disputa de altura possível.
+   .terminal-row precisa de position:relative como contexto de
+   posicionamento das gavetas. */
+.terminal-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+}
+.terminal-row {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.terminal-main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.terminal-strip {
+  flex-shrink: 0;
+}
+
+/* Achado real do Operador (captura de tela de dispositivo real): com
+   top:0 + bottom:0 fixos, a gaveta sempre esticava até a altura inteira
+   de .terminal-row mesmo quando o conteúdo real (2-3 cards compactos)
+   não chegava nem à metade — sobrava uma faixa vazia grande no rodapé,
+   nada profissional. max-height (não bottom:0 fixo) faz a gaveta abraçar
+   a altura real do conteúdo — encolhe quando o conteúdo é curto (gaveta
+   esquerda), e ainda rola internamente sem vazar quando o conteúdo é
+   maior que o espaço disponível (gaveta direita, ~5-6 cards). */
+.terminal-left,
+.terminal-right {
+  position: absolute;
+  top: 0;
+  max-height: 100%;
+  width: min(320px, 90vw);
+  z-index: 40;
+  overflow-y: auto;
+  padding: 0.5rem;
+  background: rgba(1, 3, 8, 0.97);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 0 60px rgba(0, 0, 0, 0.6);
+  transition: transform 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.terminal-left {
+  left: 0;
+  border-right: 1px solid rgba(0, 240, 255, 0.15);
+  border-bottom-right-radius: 0.75rem;
+  transform: translateX(-110%);
+}
+.terminal-right {
+  right: 0;
+  border-left: 1px solid rgba(0, 240, 255, 0.15);
+  border-bottom-left-radius: 0.75rem;
+  transform: translateX(110%);
+}
+.terminal-left.drawer-open,
+.terminal-right.drawer-open {
+  transform: translateX(0);
+}
+/* Clique fora fecha a gaveta — o mesmo padrão de "overlay modal" já usado
+   pelo WorkspaceManagerPanel, só que restrito à área do cockpit (não a
+   tela inteira) para nunca cobrir a TopBar/FooterBar. */
+.terminal-drawer-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  background: rgba(1, 3, 8, 0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 280ms ease;
+}
+.terminal-drawer-backdrop.drawer-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Pulso do Empty State fail-closed (Missão 2, diretriz 4) — brilho lento
+   e discreto no ícone do TradFiEmptyState; nunca "chamativo" (mesmo
+   princípio do panel-breathe acima), só o bastante para ler como "vivo,
+   aguardando conexão real", não como erro. */
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 0.35;
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+  50% {
+    opacity: 0.9;
+    filter: drop-shadow(0 0 8px currentColor);
+  }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cyber-scanline,
   .animate-fade-in,
-  .skeleton-shimmer {
+  .skeleton-shimmer,
+  .cyber-panel::before,
+  .animate-pulse-glow {
     animation: none;
   }
 }

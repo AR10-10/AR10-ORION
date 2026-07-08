@@ -30,6 +30,11 @@
 // `swept` = true quando um candle POSTERIOR real ja' rompeu o nivel
 // (o proprio evento de "stop hunt" acontecendo, nao uma previsao dele).
 
+// findSwings/FRACTAL_K vivem em fractal-swings.js (remediacao da Auditoria
+// Mestra 360°, secao 7): o mesmo algoritmo estava triplicado neste arquivo,
+// em support-resistance-engine.js e em market-structure-engine.js.
+import { FRACTAL_K, findSwings } from './fractal-swings.js';
+
 export const metadata = {
     engine: 'fvg-order-block-engine',
     description: 'Fair Value Gaps, Order Blocks e zonas de liquidez (Equal Highs/Lows) — Smart Money Concepts — detectados por padrao geometrico determinístico sobre candles reais.',
@@ -44,7 +49,6 @@ export const metadata = {
 };
 
 const MIN_CANDLES = 5;
-const FRACTAL_K = 2;
 const EQUAL_TOLERANCE_PCT = 0.0015;
 
 /** Fair Value Gaps: uma por trinca de candles consecutivos. `mitigated`
@@ -122,27 +126,6 @@ function findOrderBlocks(candles) {
     });
 }
 
-/** Swing high/low fractal (K candles de cada lado), mesmo metodo de
- *  support-resistance-engine.js. */
-function findSwings(candles, isHigh) {
-    const out = [];
-    for (let i = FRACTAL_K; i < candles.length - FRACTAL_K; i++) {
-        const v = isHigh ? (candles[i].h ?? candles[i].high) : (candles[i].l ?? candles[i].low);
-        if (!Number.isFinite(v)) continue;
-        let confirmed = true;
-        for (let j = i - FRACTAL_K; j <= i + FRACTAL_K; j++) {
-            if (j === i) continue;
-            const cmp = isHigh ? (candles[j].h ?? candles[j].high) : (candles[j].l ?? candles[j].low);
-            if (!Number.isFinite(cmp) || (isHigh ? cmp >= v : cmp <= v)) {
-                confirmed = false;
-                break;
-            }
-        }
-        if (confirmed) out.push({ index: i, price: v });
-    }
-    return out;
-}
-
 /** Agrupa swings cujo preco fica dentro de EQUAL_TOLERANCE_PCT do PRIMEIRO
  *  swing do grupo (ancora fixa, nunca media rodante — evita encadear
  *  swings afastados um a um). Grupos com < 2 membros nao viram zona: uma
@@ -192,8 +175,8 @@ function clusterEqualLevels(swings, type, candles) {
  *  a descoberto/take-profits de compradores se acumulam) e Equal Lows
  *  (abaixo = onde stops de compradores se acumulam). */
 function findLiquidityZones(candles) {
-    const equalHighs = clusterEqualLevels(findSwings(candles, true), 'EQUAL_HIGH', candles);
-    const equalLows = clusterEqualLevels(findSwings(candles, false), 'EQUAL_LOW', candles);
+    const equalHighs = clusterEqualLevels(findSwings(candles, FRACTAL_K, true), 'EQUAL_HIGH', candles);
+    const equalLows = clusterEqualLevels(findSwings(candles, FRACTAL_K, false), 'EQUAL_LOW', candles);
     return [...equalHighs, ...equalLows].sort((a, b) => b.index - a.index);
 }
 

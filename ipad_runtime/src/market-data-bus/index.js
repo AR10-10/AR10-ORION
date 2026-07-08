@@ -1,0 +1,35 @@
+// index.js — ponto de entrada único do Market Data Bus (Fase B / V15
+// Cap. 2). engine-bridge.ts e App.tsx importam só daqui, nunca de bus.js/
+// normalizer.js/etc. diretamente, para que o contrato externo do módulo
+// fique num só lugar.
+export { MarketDataBus, getMarketDataBus } from './bus.js';
+export { collectBinanceKlines } from './binance-candle-connector.js';
+// Overhaul Cross-Market (Diretriz 2): segundo conector de candles —
+// USDT-M Futures/Perpétuo — sibling do spot acima, mesmo contrato de
+// `collect`, injetado sob uma chave de Bus própria (symbol-PERP) para
+// nunca colidir em cache com um eventual snapshot spot do mesmo símbolo.
+export { collectBinanceFuturesKlines } from './binance-futures-candle-connector.js';
+export { normalizeCandles } from './normalizer.js';
+export { validateCandleSeries } from './integrity-validator.js';
+export { computeAsOf, computeAgeMs, isStale } from './time-synchronizer.js';
+export { CandleRingBuffer } from './candle-ring-buffer.js';
+export { QualityMonitor } from './quality-monitor.js';
+export {
+    QUALITY_CLASSIFICATION,
+    QUALITY_WINDOW,
+    LATENCY_GOOD_MS,
+    LATENCY_BAD_MS,
+    CONSISTENCY_TOLERANCE,
+    MIN_SAMPLES_FOR_STABILITY,
+    QUARANTINE_THRESHOLD,
+    FAILURE_STREAK_QUARANTINE,
+    EMA_ALPHA,
+    timeframeToSeconds,
+    scoreLatency,
+    scoreAvailability,
+    computeConsistency,
+    scoreStability,
+    classifyScore,
+    tailFailureStreak,
+    composeQualityReport,
+} from './quality-engine.js';

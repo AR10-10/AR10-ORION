@@ -14,6 +14,10 @@
 import { Tick, Side } from '../src/orderflow/value-objects.js';
 import { RingBuffer } from '../src/orderflow/ring-buffer.js';
 import { createEngineState, processSignals, defaultSettings } from '../src/orderflow/signal-engine.js';
+// Fase I (Zero-Copy): o lote de ticks agora chega como Float64Array
+// transferido (ver js/orderflow-tick-codec.js) — os objetos Tick sao
+// materializados AQUI, fora da main thread.
+import { unpackTicks } from '../js/orderflow-tick-codec.js';
 
 let ring = null;
 let engineState = null;
@@ -93,8 +97,15 @@ self.onmessage = (ev) => {
 
         if (type === 'ingest_ticks') {
             ensureInitialized();
-            const { ticks: rawTicks } = ev.data;
-            for (const raw of rawTicks || []) ring.enqueue(toTick(raw));
+            const { packed, ticks: rawTicks } = ev.data;
+            if (packed) {
+                // Caminho Fase I: buffer transferido, zero copia na fronteira.
+                for (const tick of unpackTicks(packed)) ring.enqueue(tick);
+            } else {
+                // Compatibilidade com o protocolo antigo (array de objetos) —
+                // mesmo comportamento de sempre, nenhum chamador removido.
+                for (const raw of rawTicks || []) ring.enqueue(toTick(raw));
+            }
             const drained = ring.drain();
             const signals = processSignals(drained, engineState, settings);
             self.postMessage({

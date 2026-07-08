@@ -1,17 +1,46 @@
 // engine-bridge.ts — RAMBER's connection to the real engine, not a
 // second implementation of it. Imports the exact same modules js/app.js
-// uses: js/worker-client.js (WASM Quant Engine via Worker), the real Binance
-// connector (js/real-data/binance-public.js), and the pure-function research
-// pipeline (js/real-data/analysis-frame.js -> js/research/research-engine.js
-// -> trade-setup-matrix.js / target-tracker.js). Same worker script, same
-// wasm/cyborg_quant_core.wasm binary, same graduated support-resistance /
-// market-structure engines (see ipad_runtime/src/research/QUARANTINE.md) —
-// this file only calls them from React state instead of writing to `els[id]`
-// DOM nodes. No re-implementation, no second heuristic, no fabricated value:
-// every field below is either passthrough from these real modules or absent.
+// uses: js/worker-client.js (WASM Quant Engine via Worker) and the
+// pure-function research pipeline (js/real-data/analysis-frame.js ->
+// js/research/research-engine.js -> trade-setup-matrix.js /
+// target-tracker.js). Same worker script, same wasm/cyborg_quant_core.wasm
+// binary, same graduated support-resistance / market-structure engines (see
+// ipad_runtime/src/research/QUARANTINE.md) — this file only calls them from
+// React state instead of writing to `els[id]` DOM nodes. No
+// re-implementation, no second heuristic, no fabricated value: every field
+// below is either passthrough from these real modules or absent.
+//
+// Fase B (V15 Cap. 2, Market Data Bus): este arquivo NÃO chama mais
+// js/real-data/binance-public.js diretamente. Todo candle (ciclo 15m, HTF
+// 1h) vem de getMarketDataBus().requestSnapshot() — o Bus é quem chama o
+// conector real (src/market-data-bus/binance-*-candle-connector.js), dedupe
+// entre chamadores concorrentes (este arquivo e App.tsx's getChartCandles)
+// e nunca dispara duas sondas de rede redundantes para a mesma
+// symbol:timeframe.
+//
+// Overhaul Cross-Market (Diretriz 2) + V15.1 GOD TIER (Especificação
+// Arquitetural Definitiva): Gráfico e Risk Engine consomem
+// EXCLUSIVAMENTE o mercado USDT-M Futures/Perpétuo — instrução explícita
+// e repetida do Operador ("extinguindo qualquer roteamento de gráficos
+// para mercado Spot"), nenhum fallback para Spot neste caminho. GMIL e o
+// Order Flow (MEXC) continuam no mercado que já usavam antes — esta troca
+// é escopada só aos dois consumidores citados na diretriz.
+//
+// Histórico (revertido nesta versão): a Estabilização anterior tinha um
+// fallback Futuros->Spot aqui ("Fail Closed Inteligente"), construído
+// porque um bug real (sufixo -PERP vazando pro parâmetro de símbolo da
+// API, ver binance-futures-candle-connector.js) fazia toda chamada real
+// de futuros falhar, sempre — o fallback mascarava o sintoma sem corrigir
+// a causa. Com a causa raiz corrigida, Futuros volta a ser confiável, e o
+// Operador foi explícito: nenhum roteamento de gráfico para Spot, nunca.
+// O fail-closed correto para uma falha residual de futuros é o mecanismo
+// JÁ EXISTENTE do Bus (Fase B: último snapshot BOM DA PRÓPRIA FONTE,
+// nunca uma substituição por outro mercado) — "Modo de Aguardo Elegante"
+// honesto em vez de um dado real de uma fonte diferente da declarada.
 import { QuantWorkerClient } from '../../js/worker-client.js';
 import { OrderflowWorkerClient } from '../../js/orderflow-client.js';
-import { probe as probeBinance } from '../../js/real-data/binance-public.js';
+import { getMarketDataBus } from '../../src/market-data-bus/index.js';
+import { collectBinanceFuturesKlines } from '../../src/market-data-bus/binance-futures-candle-connector.js';
 import { createLivePoller } from '../../js/real-data/mexc-trades-stream.js';
 import { CONNECTOR_STATES } from '../../js/real-data/schema.js';
 import { buildRealAnalysisFrame } from '../../js/real-data/analysis-frame.js';
@@ -21,14 +50,54 @@ import { buildTargetTracker } from '../../js/research/target-tracker.js';
 import { startLiquidationStream } from '../../js/real-data/binance-liquidations-stream.js';
 import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg-order-block-engine.js';
 import { classify as classifyLorentzian } from '../../src/research/engines/lorentzian-classifier.js';
+import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
+import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/index.js';
 
-export interface RealCandle {
-  t: number;
-  o: number;
-  h: number;
-  l: number;
-  c: number;
-  v: number;
+// ─────────────────────────────────────────────────────────────────────────────
+// Fase G (V15, diretriz 4): envelope de tipos do santuário. A saída
+// direcional primária é um TIPO FECHADO — o compilador passa a ser parte da
+// trava de governança: nenhum valor fora de LONG/SHORT/WAIT atravessa esta
+// fronteira, e a lógica consultiva (Ensemble/GMIL) não tem como escrever
+// aqui (ver tests/core-engine-boundary.test.ts, que congela isso em CI).
+// ─────────────────────────────────────────────────────────────────────────────
+export type CoreSignal = 'LONG' | 'SHORT' | 'WAIT';
+
+// Forma canônica que o Market Data Bus distribui (Fase B/C) — tipada aqui na
+// fronteira TS; os módulos .js do Bus continuam JS puro por design.
+interface BusCandle { t: number; o: number; h: number; l: number; c: number; v: number }
+interface BusQualityReport { weight: number | null; score: number | null; classification: string }
+interface BusSnapshot {
+  symbol: string;
+  timeframe: string;
+  candles: BusCandle[];
+  asOf: number | null;
+  fetchedAt: number;
+  ageMs: number;
+  ok: boolean;
+  errors?: string[];
+  quality?: BusQualityReport | null;
+}
+
+// Evidence mínima que buildRealAnalysisFrame() consome — reconstruída a
+// partir do snapshot do Bus (Fase B), agora com forma explícita em vez de
+// `any` (nenhum campo novo, só o contrato que já existia tornado visível).
+interface CoreEvidence {
+  symbol: string;
+  // Overhaul Cross-Market: sempre 'crypto_futures' agora — o Bus só é
+  // chamado com o conector de futuros neste arquivo (ver import acima).
+  // O tipo permanece uma união fechada (nunca um terceiro valor
+  // inventado); 'crypto_spot' fica no vocabulário para o dia em que um
+  // consumidor real voltar a pedir Spot explicitamente.
+  instrument_type: 'crypto_spot' | 'crypto_futures';
+  timeframe: string;
+  source_id: string;
+  timestamp: string;
+  freshness_ms: number;
+  candles: BusCandle[];
+  ticker: { last_price: number; derived_from: string };
+  volume: { last_candle_volume: number; unit: string };
+  missing_fields: string[];
+  data_quality: string;
 }
 
 export interface PriceZone {
@@ -42,9 +111,8 @@ export interface PriceZone {
 export interface RealCycleResult {
   ok: boolean;
   reason?: string;
-  candles?: RealCandle[];
   lastPrice?: number;
-  signal?: 'LONG' | 'SHORT' | 'WAIT' | null;
+  signal?: CoreSignal | null;
   confidence?: string | null;
   marketStructure?: string | null;
   entry?: number | null;
@@ -53,10 +121,80 @@ export interface RealCycleResult {
   stop?: number | null;
   support?: number | null;
   resistance?: number | null;
+  // V16 §3 (Chart Engine institucional): support-resistance-engine.js já
+  // calculava support_1_strength/resistance_1_strength (contagem real de
+  // toques de swing dentro de ±0.15% do nível — mesma função
+  // computeLevelStrength() usada por target1Strength) a cada ciclo, mas
+  // analysis-frame.js só repassava os PREÇOS (support/resistance acima),
+  // descartando a força antes de chegar aqui. Achado da auditoria V16:
+  // passthrough puro, nenhum cálculo novo.
+  supportStrength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
+  resistanceStrength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
   condition?: string | null;
   rationale?: string | null;
   lorentzian?: LorentzianResult;
+  forecast?: HorizonForecast[];
+  // V11.5 Fase 6 (motor cognitivo): riskRewardRatio é uma razão determinística
+  // real (distância % até o alvo ÷ distância % até a invalidação, ambas já
+  // calculadas em target-tracker.js) — NUNCA uma probabilidade estatística de
+  // acerto, este repositório não tem backtest para sustentar essa afirmação.
+  // target1Strength/target2Strength são uma contagem real de confluência de
+  // swings (ver support-resistance-engine.js), não uma projeção. Protocolo
+  // Mestre (Sincronização Global): target1Strength existe desde que o próprio
+  // Alvo 1 passou a vir do swing fractal mais próximo (ver analysis-frame.js)
+  // em vez do mínimo/máximo bruto da janela — antes só o Alvo 2 tinha força.
+  riskRewardRatio?: number | null;
+  target1Strength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
+  target2Strength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
+  // V11.5 §2 (Evolução Matemática — "melhorar contexto multitemporal"):
+  // estrutura real de um timeframe MAIOR (1H), para o operador ver se o
+  // sinal de 15m está confluente ou divergente com a tendência de prazo
+  // mais longo. Nunca lido pelo Core Engine — puramente contexto exibido.
+  htfMarketStructure?: string | null;
+  htfTimeframe?: string | null;
+  // Protocolo Mestre (Sincronização Global, achado de auditoria): idade real
+  // do cache HTF — antes fetchedAt existia internamente mas nunca saía deste
+  // arquivo, então a UI não tinha como saber se a estrutura de 1H mostrada
+  // era de agora ou de ~5min atrás (HTF_REFRESH_MS). Mesmo princípio de
+  // telemetria honesta já usado para preço/livro/ciclo (LEI 22).
+  htfUpdatedAt?: number | null;
+  // Fase D (V15, Market Regime Engine): classificação contínua de regime
+  // sobre os MESMOS candles do Bus que o ciclo já usa — zero rede extra.
+  // Contexto exibido, nunca um gate sobre `signal` (mesma regra do
+  // Lorentziano/HTF). changedAt = quando o regime VIGENTE começou (do
+  // RegimeHistory real), para a UI mostrar idade sem inventá-la.
+  marketRegime?: {
+    regime: string;
+    direction: 'ALTA' | 'BAIXA' | null;
+    adx: number;
+    bandwidthPercentile: number | null;
+    // Fase H: ATR% real da evidência do regime — insumo do Risk Engine
+    // (unidade de risco = max(dist. do stop, ATR%)). Puro passthrough.
+    atrPercent: number | null;
+    changedAt: number;
+  } | null;
+  // Fase F: passthrough do relatório de qualidade da fonte (Data Quality
+  // Layer da Fase C, já presente em todo snapshot do Bus) — o Ensemble usa
+  // o peso como amortecedor de força (forca_ajustada). Puro repasse, nada
+  // recomputado.
+  dataQuality?: { weight: number | null; score: number | null; classification: string } | null;
+  // Fase J (Cap. 17): variante WASM realmente carregada pelo quant-worker
+  // ('escalar' | 'simd128', Fase I) — telemetria pura, capturada do
+  // init_wasm_ok real, nunca deduzida.
+  wasmVariant?: string | null;
+  // Overhaul Cross-Market (Diretriz 2): passthrough honesto de qual
+  // mercado realmente alimentou este ciclo — 'crypto_futures' quando o
+  // Bus devolveu candles reais de futuros, null enquanto nenhum ciclo
+  // bem-sucedido ainda rodou. A UI deriva o rótulo "FUTURES/PERP" DESTE
+  // campo, nunca de uma string fixa — se o fetch falhar, o rótulo vira
+  // AGUARDANDO honesto em vez de afirmar um mercado que não respondeu.
+  instrumentType?: 'crypto_spot' | 'crypto_futures' | null;
 }
+
+// Fase D: histórico real de transições de regime por símbolo (V15 Cap. 5,
+// "mudanças de regime serão registradas"). Vive no módulo, não no React —
+// sobrevive a re-render, morre com a página (sem persistência por design).
+const regimeHistory = new RegimeHistory();
 
 let workerClientSingleton: any = null;
 let wasmReadyPromise: Promise<any> | null = null;
@@ -88,6 +226,79 @@ const describeError = (err: any): string => {
   return String(err?.message || err);
 };
 
+// V15.1 GOD TIER: candle de Futuros, exclusivamente — nenhum fallback
+// para Spot (ver header do arquivo). O fail-closed real para uma falha
+// de futuros é o mecanismo já existente do Bus (Fase B: devolve o último
+// snapshot BOM DA MESMA CHAVE symbol-PERP se a coleta nova falhar; só
+// ok:false honesto se NUNCA houve um sucesso anterior para essa chave).
+async function requestFuturesCandleSnapshot({
+  symbol, timeframe, limit, maxAgeMs,
+}: { symbol: string; timeframe: string; limit: number; maxAgeMs: number }): Promise<BusSnapshot> {
+  return getMarketDataBus().requestSnapshot({
+    symbol: `${symbol}-PERP`, timeframe, limit, collect: collectBinanceFuturesKlines, maxAgeMs,
+  });
+}
+
+// V11.5 §2 "Evolução Matemática" (melhorar contexto multitemporal): estrutura
+// real de um timeframe MAIOR (1H) via o MESMO market-structure-engine.js já
+// graduado — só chamado com uma janela de candles diferente, não uma segunda
+// heurística. Cacheado por HTF_REFRESH_MS: o ciclo principal roda a cada 30s
+// (App.tsx), mas a estrutura de 1H não muda de forma significativa nesse
+// intervalo — rebuscar a cada ciclo seria uma chamada de rede redundante sem
+// nenhum ganho real de informação (Meta Máxima: mínimo consumo de recursos).
+//
+// V11.5 §9 (Performance/mínima latência): NÃO-BLOQUEANTE por design. A
+// primeira versão desta função era `await`ada inline no ciclo principal —
+// o que significava que, a cada ~5 minutos (cache expirado), o ciclo de
+// 15m (o caminho crítico: LONG/SHORT/confiança) ficava mais lento esperando
+// uma sonda de rede extra para um dado puramente contextual/secundário.
+// Corrigido: retorna IMEDIATAMENTE o que já está em cache (ou null se ainda
+// não há nada para este ativo) e dispara a busca real em segundo plano
+// quando o cache expira — o próximo ciclo (até 30s depois) já vê o
+// resultado atualizado. Uma leitura de contexto atrasada em 1 ciclo é um
+// custo aceitável; atrasar o sinal principal não seria.
+const HTF_INTERVAL = '1h';
+const HTF_REFRESH_MS = 5 * 60_000;
+let htfCache: { symbol: string; structureLabel: string | null; fetchedAt: number } | null = null;
+let htfFetchInFlight = false;
+
+function refreshHtfMarketStructureInBackground(symbol: string): void {
+  if (htfFetchInFlight) return;
+  htfFetchInFlight = true;
+  (async () => {
+    try {
+      // Fase B: chave 'symbol:1h' própria no Bus, separada da chave
+      // 'symbol:15m' do ciclo principal abaixo — não competem nem se
+      // sobrescrevem, cada timeframe mantém seu próprio snapshot cacheado.
+      // V15.1 GOD TIER: Futuros exclusivo, sem fallback (ver header).
+      const htfSnapshot = await requestFuturesCandleSnapshot({
+        symbol, timeframe: HTF_INTERVAL, limit: 60, maxAgeMs: HTF_REFRESH_MS,
+      });
+      if (!htfSnapshot.ok) {
+        htfCache = { symbol, structureLabel: null, fetchedAt: Date.now() };
+        return;
+      }
+      const structureResult = analyzeMarketStructure({ ohlcv_series: htfSnapshot.candles, timeframe: HTF_INTERVAL });
+      const label = structureResult.status === 'OK' ? structureResult.structure_label : null;
+      htfCache = { symbol, structureLabel: label, fetchedAt: Date.now() };
+    } catch {
+      htfCache = { symbol, structureLabel: null, fetchedAt: Date.now() };
+    } finally {
+      htfFetchInFlight = false;
+    }
+  })();
+}
+
+function getHtfMarketStructure(symbol: string): { label: string | null; updatedAt: number | null } {
+  const now = Date.now();
+  const cacheValid = !!htfCache && htfCache.symbol === symbol && now - htfCache.fetchedAt < HTF_REFRESH_MS;
+  if (!cacheValid) refreshHtfMarketStructureInBackground(symbol);
+  if (htfCache && htfCache.symbol === symbol) {
+    return { label: htfCache.structureLabel, updatedAt: htfCache.fetchedAt };
+  }
+  return { label: null, updatedAt: null };
+}
+
 // One full real cycle: real Binance probe -> real WASM analysis frame ->
 // real research engine -> real trade-setup-matrix + target-tracker. This is
 // the same pipeline app.js's handleGenerateRealAnalysis() +
@@ -95,22 +306,58 @@ const describeError = (err: any): string => {
 // called directly here instead of triggered by a button/DOM event.
 export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleResult> {
   const { workerClient, wasmReady } = getWorkerClient();
+  let wasmVariant: string | null = null;
   try {
-    await wasmReady;
+    // init_wasm_ok real carrega `variant` desde a Fase I — capturado aqui
+    // como telemetria (Fase J), nunca deduzido.
+    const init: any = await wasmReady;
+    wasmVariant = typeof init?.variant === 'string' ? init.variant : null;
   } catch (err: any) {
     return { ok: false, reason: `wasm_init_falhou: ${describeError(err)}` };
   }
 
-  let probeResult: any;
+  // Fase B (Market Data Bus): pede o snapshot canônico de BTC-PERP:15m em
+  // vez de sondar Binance diretamente. Se App.tsx (getChartCandles) já
+  // pediu essa mesma chave há menos de 25s, este cycle reaproveita o
+  // mesmo snapshot — zero segunda sonda de rede para o mesmo candle.
+  // V15.1 GOD TIER: futuros/perpétuo é a fonte EXCLUSIVA — ver header.
+  let snapshot: BusSnapshot;
   try {
-    probeResult = await probeBinance({ symbol, interval: '15m', limit: 100 });
+    snapshot = await requestFuturesCandleSnapshot({
+      symbol, timeframe: '15m', limit: 100, maxAgeMs: 25_000,
+    });
   } catch (err: any) {
-    return { ok: false, reason: `probe_binance_lancou_excecao: ${describeError(err)}` };
+    return { ok: false, reason: `market_data_bus_lancou_excecao: ${describeError(err)}` };
   }
-  if (probeResult.state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) {
-    return { ok: false, reason: `conector_binance_estado: ${probeResult.state}` };
+  if (!snapshot.ok) {
+    return { ok: false, reason: `market_data_bus_estado: ${snapshot.errors?.[0] || 'sem_candles_validos'}` };
   }
-  const evidence = probeResult.evidence;
+
+  // Evidence Object mínimo reconstruído a partir do snapshot do Bus — só os
+  // campos que buildRealAnalysisFrame() de fato lê (ver analysis-frame.js).
+  // O Bus já normalizou/validou os candles; isto não é uma segunda fonte,
+  // é o mesmo dado real do snapshot na forma que analysis-frame.js espera.
+  // Fase G: tipado (CoreEvidence) — snapshot.ok garante candles não-vazios e
+  // asOf real em runtime; o fallback fetchedAt existe só para o compilador,
+  // com o mesmo valor de relógio da própria coleta.
+  const lastCandle = snapshot.candles[snapshot.candles.length - 1];
+  const evidence: CoreEvidence = {
+    symbol,
+    // V15.1 GOD TIER: o snapshot acima só pode ter vindo de Futuros
+    // (requestFuturesCandleSnapshot não tem fallback) — este valor é
+    // sempre exato por construção, nunca um rótulo independente do que
+    // de fato aconteceu na coleta.
+    instrument_type: 'crypto_futures',
+    timeframe: snapshot.timeframe,
+    source_id: 'market-data-bus',
+    timestamp: new Date(snapshot.asOf ?? snapshot.fetchedAt).toISOString(),
+    freshness_ms: snapshot.ageMs,
+    candles: snapshot.candles,
+    ticker: { last_price: lastCandle.c, derived_from: 'ULTIMO_CLOSE_DO_KLINE_VIA_MARKET_DATA_BUS' },
+    volume: { last_candle_volume: lastCandle.v, unit: 'base_asset' },
+    missing_fields: [],
+    data_quality: 'COMPLETA_PARA_CAPACIDADES_TENTADAS',
+  };
 
   // research-engine.js's buildResearchEngineFrame() explicitly throws on a
   // malformed {frame, evidence} pair — this function's contract (see
@@ -122,7 +369,6 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
       return {
         ok: false,
         reason: frame.status_reason,
-        candles: evidence.candles,
         lastPrice: isNum(evidence.ticker?.last_price) ? evidence.ticker.last_price : undefined,
       };
     }
@@ -130,7 +376,10 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
     const research = buildResearchEngineFrame({ frame, evidence, context: {} });
     const matrix = buildTradeSetupMatrix({ research });
 
-    const signal: 'LONG' | 'SHORT' | 'WAIT' | null =
+    // Fase G: estreitamento em runtime PARA o tipo fechado — qualquer valor
+    // fora do vocabulário (ex.: DADOS_INSUFICIENTES da matrix) vira null
+    // explícito, nunca vaza um string arbitrário pela fronteira tipada.
+    const signal: CoreSignal | null =
       matrix.signal === 'LONG' || matrix.signal === 'SHORT' || matrix.signal === 'WAIT' ? matrix.signal : null;
 
     const tracker = buildTargetTracker({
@@ -143,13 +392,37 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
     // Independent confluence signal — a real k-NN classification over the
     // same real candle window, never allowed to change `signal` above.
     const lorentzian = computeLorentzianClassification(evidence.candles);
+    // Previsão multi-horizonte (4/8/16 velas) sobre os MESMOS candles reais.
+    const forecast = computeMultiHorizonForecast(evidence.candles);
+    // getHtfMarketStructure() é síncrona e não-bloqueante (ver comentário na
+    // definição): nunca adiciona latência ao ciclo principal de 15m.
+    const htf = getHtfMarketStructure(symbol);
+
+    // Fase D: regime classificado sobre os MESMOS 100 candles do Bus deste
+    // ciclo — função pura, zero rede extra. Transições reais registradas
+    // no RegimeHistory (V15 Cap. 5).
+    const regimeResult = classifyMarketRegime({ ohlcv_series: snapshot.candles, timeframe: snapshot.timeframe });
+    let marketRegime: RealCycleResult['marketRegime'] = null;
+    if (regimeResult.status === 'OK') {
+      const { startedAt } = regimeHistory.record(
+        symbol, regimeResult.regime, regimeResult.direction, evidence.ticker.last_price,
+      );
+      marketRegime = {
+        regime: regimeResult.regime,
+        direction: regimeResult.direction,
+        adx: regimeResult.evidence.adx,
+        bandwidthPercentile: regimeResult.evidence.bandwidth_percentile,
+        atrPercent: regimeResult.evidence.atr_percent ?? null,
+        changedAt: startedAt,
+      };
+    }
 
     return {
       ok: true,
-      candles: evidence.candles,
       lastPrice: evidence.ticker.last_price,
       signal,
       lorentzian,
+      forecast,
       confidence: typeof matrix.confidence === 'string' ? matrix.confidence : null,
       marketStructure: typeof frame.market_structure === 'string' ? frame.market_structure : null,
       entry: route && isNum(tracker.current_price) ? tracker.current_price : null,
@@ -158,12 +431,51 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
       stop: route && isNum(route.invalidation) ? route.invalidation : null,
       support: isNum(frame.support) ? frame.support : null,
       resistance: isNum(frame.resistance) ? frame.resistance : null,
+      supportStrength: frame.support_1_strength ?? null,
+      resistanceStrength: frame.resistance_1_strength ?? null,
       condition: typeof matrix.condition === 'string' ? matrix.condition : null,
       rationale: typeof matrix.rationale === 'string' ? matrix.rationale : null,
+      riskRewardRatio: route && isNum(route.risk_reward_ratio) ? route.risk_reward_ratio : null,
+      target1Strength: route && route.target_1_strength ? route.target_1_strength : null,
+      target2Strength: route && route.target_2_strength ? route.target_2_strength : null,
+      htfMarketStructure: htf.label,
+      htfTimeframe: HTF_INTERVAL,
+      htfUpdatedAt: htf.updatedAt,
+      marketRegime,
+      dataQuality: snapshot.quality
+        ? {
+            weight: snapshot.quality.weight ?? null,
+            score: snapshot.quality.score ?? null,
+            classification: snapshot.quality.classification,
+          }
+        : null,
+      instrumentType: evidence.instrument_type,
+      wasmVariant,
     };
   } catch (err: any) {
     return { ok: false, reason: `pipeline_de_pesquisa_falhou: ${describeError(err)}` };
   }
+}
+
+// Fase B (Market Data Bus): candles do gráfico da UI (App.tsx's chartData)
+// vêm da MESMA chave symbol-PERP:15m que o ciclo de análise acima usa —
+// não é mais um segundo fetch() direto a api.binance.com/klines feito de
+// dentro de App.tsx. Achado real da Fase A: antes desta mudança, App.tsx e
+// este arquivo sondavam klines de forma independente e simultânea a cada
+// ~30s, mesmo símbolo, mesmo timeframe, dois resultados que podiam nem
+// bater. V15.1 GOD TIER: futuros/perpétuo é a fonte EXCLUSIVA — nenhum
+// fallback para Spot (ver header do arquivo).
+export async function getChartCandles(
+  symbol = 'BTC',
+  limit = 50,
+): Promise<Array<{ open: number; high: number; low: number; close: number }> | null> {
+  const snapshot = await requestFuturesCandleSnapshot({
+    symbol, timeframe: '15m', limit, maxAgeMs: 25_000,
+  });
+  if (!snapshot.ok) return null;
+  return snapshot.candles.map((c: { o: number; h: number; l: number; c: number }) => ({
+    open: c.o, high: c.h, low: c.l, close: c.c,
+  }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -311,9 +623,12 @@ export function computeSmcZones(candles: Array<{ open: number; high: number; low
 // ─────────────────────────────────────────────────────────────────────────────
 // Lorentzian k-NN classifier (lorentzian-classifier.js) — an INDEPENDENT
 // confluence signal, deliberately separate from RealCycleResult.signal.
-// It never gates or overrides the real WASM engine's own LONG/SHORT/WAIT
-// call; it's a second, differently-computed real opinion the UI must show
-// side by side, clearly labeled, not blended into the primary signal.
+// It never gates or overrides the Core Engine pipeline's own LONG/SHORT/WAIT
+// call (research-engine.js's SMA/EMA trend-bias heuristic via trade-setup-
+// matrix.js — not WASM; WASM itself only computes SMA/EMA/stddev/zscore,
+// see the audit note in App.tsx's tacticalInput); it's a second, differently
+// -computed real opinion the UI must show side by side, clearly labeled,
+// not blended into the primary signal.
 // ─────────────────────────────────────────────────────────────────────────────
 export interface LorentzianResult {
   ok: boolean;
@@ -334,4 +649,38 @@ export function computeLorentzianClassification(
     confidence: result.confidence,
     sampleSize: result.sample_size,
   };
+}
+
+// Previsão multi-horizonte: o MESMO k-NN Lorentziano re-rotulado para cada
+// horizonte (4/8/16 velas de 15m ≈ 1h/2h/4h à frente). Não é extrapolação de
+// curva nem promessa — é a mesma classificação estatística real, repetida com
+// rótulos de treino mais distantes. Horizontes maiores têm MENOS amostra
+// (candles do fim da série ficam sem rótulo resolvido) e isso é reportado por
+// horizonte, nunca escondido. Um horizonte sem dados suficientes vem ok:false
+// individualmente em vez de derrubar os demais.
+export const FORECAST_HORIZONS = [4, 8, 16] as const;
+
+export interface HorizonForecast {
+  horizonBars: number;
+  ok: boolean;
+  reason?: string;
+  classification?: 'LONG' | 'SHORT' | 'NEUTRAL';
+  confidence?: number;
+  sampleSize?: number;
+}
+
+export function computeMultiHorizonForecast(
+  candles: Array<{ open?: number; high?: number; low?: number; close?: number; o?: number; h?: number; l?: number; c?: number }>,
+): HorizonForecast[] {
+  return FORECAST_HORIZONS.map((horizon) => {
+    const result = classifyLorentzian({ ohlcv_series: candles, horizon });
+    if (result.status !== 'OK') return { horizonBars: horizon, ok: false, reason: result.reason };
+    return {
+      horizonBars: horizon,
+      ok: true,
+      classification: result.classification,
+      confidence: result.confidence,
+      sampleSize: result.sample_size,
+    };
+  });
 }

@@ -51,12 +51,21 @@ function pctGap(level, price) {
 /** @param {{price: number, target: number, invalidation: number, direction: 'LONG'|'SHORT'}} */
 function routeStatus({ price, target, invalidation, direction }) {
     if (!isFiniteNum(price) || !isFiniteNum(target) || !isFiniteNum(invalidation)) {
-        return { status: TARGET_STATUS.DADOS_INSUFICIENTES, distance_to_target_pct: DADOS_INSUFICIENTES, distance_to_invalidation_pct: DADOS_INSUFICIENTES, progress_pct: DADOS_INSUFICIENTES };
+        return { status: TARGET_STATUS.DADOS_INSUFICIENTES, distance_to_target_pct: DADOS_INSUFICIENTES, distance_to_invalidation_pct: DADOS_INSUFICIENTES, progress_pct: DADOS_INSUFICIENTES, risk_reward_ratio: DADOS_INSUFICIENTES };
     }
     const invalidated = direction === 'LONG' ? price < invalidation : price > invalidation;
     const touched = direction === 'LONG' ? price >= target : price <= target;
     const distanceToTarget = pctGap(target, price);
     const distanceToInvalidation = pctGap(invalidation, price);
+    // Risk:Reward real (V11.5 Fase 6): razão determinística entre a distância
+    // percentual até o alvo e até a invalidação — NUNCA uma probabilidade
+    // estatística de acerto (este repositório não tem backtest para sustentar
+    // essa afirmação honestamente). É a mesma matemática de R:R usada em
+    // gestão de risco institucional: 2.0 significa "o alvo está 2x mais longe
+    // que a invalidação", nada além disso.
+    const riskRewardRatio = (isFiniteNum(distanceToTarget) && isFiniteNum(distanceToInvalidation) && distanceToInvalidation > 0)
+        ? distanceToTarget / distanceToInvalidation
+        : DADOS_INSUFICIENTES;
 
     let status;
     if (invalidated) status = TARGET_STATUS.INVALIDATED;
@@ -76,18 +85,21 @@ function routeStatus({ price, target, invalidation, direction }) {
         progressPct = totalRange > 0 ? Math.max(0, Math.min(100, (distanceToInvalidation / totalRange) * 100)) : DADOS_INSUFICIENTES;
     }
 
-    return { status, distance_to_target_pct: distanceToTarget, distance_to_invalidation_pct: distanceToInvalidation, progress_pct: progressPct };
+    return { status, distance_to_target_pct: distanceToTarget, distance_to_invalidation_pct: distanceToInvalidation, progress_pct: progressPct, risk_reward_ratio: riskRewardRatio };
 }
 
 function emptyRoute() {
     return {
         status: TARGET_STATUS.DADOS_INSUFICIENTES,
         target_1: DADOS_INSUFICIENTES,
+        target_1_strength: null,
         target_2: DADOS_INSUFICIENTES,
+        target_2_strength: null,
         invalidation: DADOS_INSUFICIENTES,
         distance_to_target_pct: DADOS_INSUFICIENTES,
         distance_to_invalidation_pct: DADOS_INSUFICIENTES,
         progress_pct: DADOS_INSUFICIENTES,
+        risk_reward_ratio: DADOS_INSUFICIENTES,
     };
 }
 
@@ -159,13 +171,17 @@ export function buildTargetTracker({ snapshot, livePrice } = {}) {
         rota_a_long: {
             ...applyStaleDowngrade(longRoute),
             target_1: resistance,
+            target_1_strength: frame.resistance_1_strength ?? null,
             target_2: isFiniteNum(frame.resistance_2) ? frame.resistance_2 : DADOS_INSUFICIENTES,
+            target_2_strength: frame.resistance_2_strength ?? null,
             invalidation: support,
         },
         rota_b_short: {
             ...applyStaleDowngrade(shortRoute),
             target_1: support,
+            target_1_strength: frame.support_1_strength ?? null,
             target_2: isFiniteNum(frame.support_2) ? frame.support_2 : DADOS_INSUFICIENTES,
+            target_2_strength: frame.support_2_strength ?? null,
             invalidation: resistance,
         },
         reanalyze_recommended: reanalyzeReasons.length > 0,

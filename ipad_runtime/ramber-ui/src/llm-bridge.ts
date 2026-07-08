@@ -27,21 +27,39 @@
 //
 // The model never gets to invent market data: buildTacticalContext()
 // below serializes ONLY real fields already computed by engine-bridge.ts
-// (WASM engine signal, Lorentzian classification, SMC zones, order flow)
-// into the prompt, and the system prompt explicitly forbids inventing
-// price levels and forbids any language implying an order was or should
-// be sent — this app has no execution path, and the model must never
-// imply otherwise.
+// (Core Engine trend-bias heuristic signal, Lorentzian classification, SMC
+// zones, order flow) into the prompt, and the system prompt explicitly
+// forbids inventing price levels and forbids any language implying an
+// order was or should be sent — this app has no execution path, and the
+// model must never imply otherwise.
+//
+// Auditoria Mestra 360° (secao 3): o campo abaixo chamava-se wasmSignal,
+// mas o LONG/SHORT/WAIT exibido NAO vem do WASM — vem de uma heuristica
+// SMA/EMA em JS puro (research-engine.js:trendBias -> trade-setup-
+// matrix.js). O WASM (cyborg_quant_core.wasm) so' calcula SMA/EMA/stddev/
+// zscore em analysis-frame.js, nunca o proprio sinal direcional. Renomeado
+// para heuristicSignal/heuristicConfidence para refletir a origem real.
 import {
   CreateWebWorkerMLCEngine,
   type MLCEngineInterface,
   type InitProgressReport,
 } from '@mlc-ai/web-llm';
 
-// Exactly the model requested — kept as a single named constant so it's
-// trivially swappable for a lighter one (e.g. Llama-3.2-3B-Instruct-*,
-// also in WebLLM's prebuilt catalog) without touching call sites.
-export const LLM_MODEL_ID = 'Llama-3-8B-Instruct-q4f32_1-MLC';
+// V11.5 Fase 7 (AI Orchestration): 3 níveis reais da família Llama, do
+// maior/melhor para o menor/mais leve — todos confirmados existentes no
+// catálogo prebuilt da versão instalada (verificado diretamente contra
+// node_modules/@mlc-ai/web-llm@0.2.84/lib/index.js, o mesmo método já usado
+// por synthetic-reading.ts para descartar Llama 4). O disclaimer no topo
+// deste arquivo já documentava o risco real de um modelo de 8B exceder o
+// teto de memória por aba do iOS; antes disso, a ÚNICA opção quando isso
+// acontecia era "tentar de novo" o mesmo modelo que acabou de provar não
+// caber. Agora a orquestração cai automaticamente para o próximo nível mais
+// leve — nunca fabrica sucesso, nunca trava esperando o modelo errado.
+export const LLM_MODEL_TIERS = [
+  'Llama-3-8B-Instruct-q4f32_1-MLC',
+  'Llama-3.2-3B-Instruct-q4f32_1-MLC',
+  'Llama-3.2-1B-Instruct-q4f32_1-MLC',
+] as const;
 
 export function isWebGpuSupported(): boolean {
   return typeof navigator !== 'undefined' && 'gpu' in navigator;
@@ -50,11 +68,22 @@ export function isWebGpuSupported(): boolean {
 export interface LlmLoadProgress {
   progress: number; // 0..1
   text: string;
+  modelId: string;
+  tier: number; // 1-based, posição em LLM_MODEL_TIERS
+  tierCount: number;
 }
 
 export interface LlmEngineResult {
   ok: boolean;
   engine: MLCEngineInterface | null;
+  // Auditoria Mestra 360° (secao 6, "vazamento de memória em IA local"): o
+  // Worker cru precisa ser exposto para quem chama poder terminate() nele
+  // (unload() do MLCEngineInterface libera o modelo/pesos, mas não é
+  // documentado como encerrando a própria thread do Worker) — sem isso,
+  // reativações repetidas do Núcleo Neural acumulavam workers nunca
+  // finalizados.
+  worker: Worker | null;
+  modelId: string | null;
   reason: string | null;
 }
 
@@ -70,22 +99,41 @@ export async function createLocalLlmEngine(
   onProgress: (report: LlmLoadProgress) => void,
 ): Promise<LlmEngineResult> {
   if (!isWebGpuSupported()) {
-    return { ok: false, engine: null, reason: 'webgpu_indisponivel_neste_navegador' };
+    return { ok: false, engine: null, worker: null, modelId: null, reason: 'webgpu_indisponivel_neste_navegador' };
   }
-  try {
-    const worker = new Worker(new URL('./llm-worker.ts', import.meta.url), { type: 'module' });
-    const engine = await CreateWebWorkerMLCEngine(worker, LLM_MODEL_ID, {
-      initProgressCallback: (report: InitProgressReport) => {
-        onProgress({ progress: report.progress, text: report.text });
-      },
-    });
-    return { ok: true, engine, reason: null };
-  } catch (err: any) {
-    return { ok: false, engine: null, reason: `carregamento_do_modelo_falhou: ${err?.message || err}` };
+  const failures: string[] = [];
+  for (let i = 0; i < LLM_MODEL_TIERS.length; i++) {
+    const modelId = LLM_MODEL_TIERS[i];
+    // Auditoria Mestra 360° (secao 6): declarado fora do try para o catch
+    // conseguir terminate() o worker desta tentativa se ela falhar — antes,
+    // um worker criado para um nível que falhasse nunca era finalizado, e a
+    // orquestração seguia para o próximo nível deixando-o para trás vivo.
+    let worker: Worker | undefined;
+    try {
+      worker = new Worker(new URL('./llm-worker.ts', import.meta.url), { type: 'module' });
+      const engine = await CreateWebWorkerMLCEngine(worker, modelId, {
+        initProgressCallback: (report: InitProgressReport) => {
+          onProgress({ progress: report.progress, text: report.text, modelId, tier: i + 1, tierCount: LLM_MODEL_TIERS.length });
+        },
+      });
+      return { ok: true, engine, worker, modelId, reason: null };
+    } catch (err: any) {
+      worker?.terminate();
+      failures.push(`${modelId}: ${err?.message || err}`);
+      // Continua para o próximo nível, mais leve — uma falha (ex.: OOM,
+      // rede) neste nível não impede o próximo de funcionar.
+    }
   }
+  return {
+    ok: false,
+    engine: null,
+    worker: null,
+    modelId: null,
+    reason: `todos_os_${LLM_MODEL_TIERS.length}_niveis_falharam: ${failures.join(' | ')}`,
+  };
 }
 
-const SYSTEM_PROMPT = `Você é o "S.E." (Sistema Estratégico), o núcleo analítico do terminal RAMBER — um assistente de ANÁLISE de mercado, estritamente somente leitura (READ_ONLY). Você não tem e nunca terá acesso a execução de ordens, saldo ou conta real; nenhuma chave de API existe neste sistema.
+const SYSTEM_PROMPT = `Você é o "S.E." (Sistema Estratégico), o núcleo analítico do terminal AR10 CYBORG — um assistente de ANÁLISE de mercado, estritamente somente leitura (READ_ONLY). Você não tem e nunca terá acesso a execução de ordens, saldo ou conta real; nenhuma chave de API existe neste sistema.
 
 Regras estritas, sem exceção:
 1. Baseie-se ESTRITAMENTE nos dados reais fornecidos na mensagem do usuário. Nunca invente preço, nível, probabilidade ou dado que não esteja explicitamente ali.
@@ -95,8 +143,8 @@ Regras estritas, sem exceção:
 5. Responda em português, em no máximo 4 frases curtas, tom técnico e direto.`;
 
 export interface TacticalContextInput {
-  wasmSignal: string | null;
-  wasmConfidence: string | null;
+  heuristicSignal: string | null;
+  heuristicConfidence: string | null;
   marketStructure: string | null;
   support: number | null;
   resistance: number | null;
@@ -117,13 +165,13 @@ const fmtNum = (v: number | null) => (v === null || !Number.isFinite(v) ? DASH :
  *  para uma mensagem de contexto — nenhum valor é inventado aqui; campos
  *  ausentes viram AGUARDANDO, nunca um número fabricado. */
 export function buildTacticalContext(input: TacticalContextInput): string {
-  return `DADOS REAIS ATUAIS DO TERMINAL RAMBER:
-- Motor WASM (estrutura de mercado real): sinal=${input.wasmSignal ?? DASH}, confiança=${input.wasmConfidence ?? DASH}, estrutura=${input.marketStructure ?? DASH}, suporte=${fmtNum(input.support)}, resistência=${fmtNum(input.resistance)}
-- Classificador k-NN Lorentziano (sinal INDEPENDENTE, não é o motor WASM): classificação=${input.lorentzianClassification ?? DASH}, confiança=${input.lorentzianConfidencePct ?? DASH}%, amostra=${input.lorentzianSampleSize ?? DASH} pontos históricos
+  return `DADOS REAIS ATUAIS DO TERMINAL AR10 CYBORG:
+- Heurística de Tendência (Core Engine, estrutura de mercado real): sinal=${input.heuristicSignal ?? DASH}, confiança=${input.heuristicConfidence ?? DASH}, estrutura=${input.marketStructure ?? DASH}, suporte=${fmtNum(input.support)}, resistência=${fmtNum(input.resistance)}
+- Classificador k-NN Lorentziano (sinal INDEPENDENTE, não é a Heurística de Tendência): classificação=${input.lorentzianClassification ?? DASH}, confiança=${input.lorentzianConfidencePct ?? DASH}%, amostra=${input.lorentzianSampleSize ?? DASH} pontos históricos
 - SMC (Smart Money Concepts): ${input.unmitigatedOrderBlockCount} Order Block(s) não mitigado(s), ${input.unmitigatedFvgCount} Fair Value Gap(s) não mitigado(s), ${input.unsweptLiquidityZoneCount} zona(s) de liquidez (Equal High/Low) não varrida(s)
 - Order Flow real (MEXC): CVD da sessão=${fmtNum(input.cvd)}, sinais recentes=${input.recentOrderflowSignalTypes.length ? input.recentOrderflowSignalTypes.join(', ') : 'nenhum'}
 
-Gere uma leitura tática curta (máximo 4 frases) sintetizando estes sinais reais. Se o motor WASM e o classificador k-NN divergirem, mencione isso explicitamente.`;
+Gere uma leitura tática curta (máximo 4 frases) sintetizando estes sinais reais. Se a Heurística de Tendência e o classificador k-NN divergirem, mencione isso explicitamente.`;
 }
 
 export interface StreamResult {

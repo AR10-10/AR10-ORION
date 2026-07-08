@@ -65,8 +65,13 @@ class VoiceEngine {
       voices[0];
   }
 
+  private initialized = false;
+
+  /** Idempotente: React StrictMode monta efeitos duas vezes em dev — sem o
+   *  guard, cada init() empilharia mais um listener de voiceschanged. */
   init(): void {
-    if (!this.isSupported()) return;
+    if (!this.isSupported() || this.initialized) return;
+    this.initialized = true;
     this.pickVoice();
     window.speechSynthesis.addEventListener?.('voiceschanged', () => {
       this.pickVoice();

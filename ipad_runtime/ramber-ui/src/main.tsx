@@ -1,28 +1,34 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { AccessGate } from './access-gate';
 import './index.css';
 
-// This app has no service worker of its own — but a previously-visited
-// version of this origin might still have one installed (the old vanilla
-// PWA's cache-first service-worker.js), which would keep serving its own
-// stale cached HTML/assets forever with no way to self-update: nothing on
-// this page ever calls navigator.serviceWorker.register(), so the browser
-// has no trigger to re-check that old SW for changes. Unregistering any
-// registration + clearing Cache Storage on every load is a safe no-op when
-// there's nothing to clean up, and guarantees this page is never stuck
-// behind a stale cache from before.
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then((regs) => {
-    regs.forEach((reg) => reg.unregister());
+// Fase L (diretriz 2 — Homologação Offline): service worker REAL com
+// precache do shell do build + stale-while-revalidate (sw.js, gerado pelo
+// build a partir da lista real de assets — ver ramber-ui/sw/build-sw.mjs).
+// O app abre instantâneo no iPad mesmo em Modo Avião após a primeira
+// visita online.
+//
+// Isto SUBSTITUI o antigo shim de autodestruição que vivia aqui (que
+// desregistrava qualquer SW e apagava o Cache Storage a cada load, para
+// nunca ficar preso atrás do SW cache-first do PWA vanilla legado). A
+// garantia dele NÃO se perdeu — ela mudou de lugar: registrar sw.js no
+// mesmo escopo substitui a registration legada, e o activate do novo SW
+// apaga TODO cache que não é o da versão atual (inclusive os caches
+// legados). Registro só em produção: no dev server não existe sw.js e um
+// SW em dev só serviria build velho contra o HMR.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {
+    // Fail-open deliberado: sem SW (ex.: navegação privada) o app segue
+    // 100% funcional online — offline é melhoria progressiva, nunca gate.
   });
-}
-if ('caches' in window) {
-  caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
 }
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <AccessGate>
+      <App />
+    </AccessGate>
   </StrictMode>,
 );
