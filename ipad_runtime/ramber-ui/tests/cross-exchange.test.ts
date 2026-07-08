@@ -1,8 +1,10 @@
 // cross-exchange.test.ts — Master Panel handoff (Multi-Source Market Data
-// Fusion, escopo reduzido): trava as partes PURAS do cross-check Bybit
-// (src/cross-exchange/bybit-futures.ts) — extração do payload real da
-// Bybit v5 e a comparação de preço contra a Binance. Mesmo espírito do
-// resto da suíte: testa-se a lógica de dados, nunca a rede real.
+// Fusion): trava as partes PURAS de todos os cross-checks de exchange —
+// Bybit (src/cross-exchange/bybit-futures.ts) e OKX
+// (src/cross-exchange/okx-futures.ts) — extração dos payloads reais de
+// cada API e a comparação de preço genérica contra a Binance
+// (src/cross-exchange/shared.ts). Mesmo espírito do resto da suíte:
+// testa-se a lógica de dados, nunca a rede real.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   extractBybitPerpTicker,
@@ -10,6 +12,7 @@ import {
   compareCrossExchange,
   DIVERGENCE_THRESHOLD_PCT,
 } from '../src/cross-exchange/bybit-futures';
+import { extractOkxPerpTicker, fetchOkxPerpTicker } from '../src/cross-exchange/okx-futures';
 
 describe('bybit-futures: extractBybitPerpTicker — payload real de /v5/market/tickers (category=linear)', () => {
   it('extrai markPrice/fundingRate/openInterest de um payload bem formado', () => {
@@ -91,6 +94,69 @@ describe('bybit-futures: compareCrossExchange — puramente informativo, nunca d
   });
 
   it('Bybit indisponível (ok:false) => INDISPONIVEL — nunca bloqueia nem afeta o dado real da Binance', () => {
+    const result = compareCrossExchange(65000, { ok: false, price: null, fundingRate: null, openInterest: null });
+    expect(result).toEqual({ ok: false, priceDeltaPct: null, consensus: 'INDISPONIVEL' });
+  });
+});
+
+describe('okx-futures: extractOkxPerpTicker — payload real de /api/v5/public/mark-price (instType=SWAP)', () => {
+  it('extrai markPx de um payload bem formado', () => {
+    const raw = { code: '0', msg: '', data: [{ instType: 'SWAP', instId: 'BTC-USDT-SWAP', markPx: '65012.3', ts: '1700000000000' }] };
+    expect(extractOkxPerpTicker(raw)).toEqual({ ok: true, price: 65012.3, fundingRate: null, openInterest: null });
+  });
+
+  it('fundingRate/openInterest sempre null — a OKX não é consultada para eles (nenhum consumidor os lê)', () => {
+    const raw = { data: [{ markPx: '150.25' }] };
+    expect(extractOkxPerpTicker(raw)).toEqual({ ok: true, price: 150.25, fundingRate: null, openInterest: null });
+  });
+
+  it('markPx ausente/não-numérico => ok:false honesto', () => {
+    const raw = { data: [{ instId: 'BTC-USDT-SWAP' }] };
+    expect(extractOkxPerpTicker(raw)).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+  });
+
+  it('data vazio ou ausente => ok:false, nunca lança exceção', () => {
+    expect(extractOkxPerpTicker({ data: [] })).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+    expect(extractOkxPerpTicker({})).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+    expect(extractOkxPerpTicker(null)).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+    expect(extractOkxPerpTicker(undefined)).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+  });
+});
+
+describe('okx-futures: fetchOkxPerpTicker — fail-closed real, nunca bloqueia o caminho da Binance ou da Bybit', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('erro de rede (fetch lança) => ok:false honesto, nunca uma exceção não tratada', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+    expect(await fetchOkxPerpTicker('BTC')).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+  });
+
+  it('resposta HTTP não-ok (ex.: 451/500) => ok:false honesto', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
+    expect(await fetchOkxPerpTicker('BTC')).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+  });
+
+  it('resposta ok real é extraída pela mesma função pura extractOkxPerpTicker, e a URL usa o instId esperado', async () => {
+    const payload = { data: [{ instId: 'SOL-USDT-SWAP', markPx: '150.25' }] };
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toContain('SOL-USDT-SWAP');
+      expect(url).toContain('www.okx.com');
+      return { ok: true, json: async () => payload };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await fetchOkxPerpTicker('SOL')).toEqual({ ok: true, price: 150.25, fundingRate: null, openInterest: null });
+  });
+});
+
+describe('okx-futures + shared: compareCrossExchange também funciona com um ticker da OKX (mesma lógica genérica da Bybit)', () => {
+  it('OKX alinhada com a Binance => ALINHADO', () => {
+    const result = compareCrossExchange(65000, { ok: true, price: 65010, fundingRate: null, openInterest: null });
+    expect(result.consensus).toBe('ALINHADO');
+  });
+
+  it('OKX indisponível (ok:false) => INDISPONIVEL — nunca bloqueia nem afeta Binance ou Bybit', () => {
     const result = compareCrossExchange(65000, { ok: false, price: null, fundingRate: null, openInterest: null });
     expect(result).toEqual({ ok: false, priceDeltaPct: null, consensus: 'INDISPONIVEL' });
   });

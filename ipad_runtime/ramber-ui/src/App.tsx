@@ -84,6 +84,10 @@ import { type TradFiAsset } from "./omnibox/tradfi-assets";
 // que a Binance já devolve em fetchDerivatives abaixo — nunca uma segunda
 // fonte do Core Engine/Risk Engine (essa trava é da Fase G/Diretriz 2).
 import { fetchBybitPerpTicker, compareCrossExchange, type CrossExchangeCheck } from "./cross-exchange/bybit-futures";
+// Terceira fonte real (pedido do Operador: "puxa dados públicos de
+// qualquer outra corretora"): OKX Perpétuo, mesmo papel e mesma trava
+// fail-closed da Bybit acima — ver header de okx-futures.ts.
+import { fetchOkxPerpTicker } from "./cross-exchange/okx-futures";
 import {
   LayoutDashboard,
   BarChart2,
@@ -206,6 +210,12 @@ export default function App() {
   // informativo (nunca gate o Core Engine), atualizado na mesma cadência de
   // fetchDerivatives abaixo. INDISPONIVEL até o primeiro ciclo real.
   const [crossExchangeCheck, setCrossExchangeCheck] = useState<CrossExchangeCheck>({
+    ok: false,
+    priceDeltaPct: null,
+    consensus: "INDISPONIVEL",
+  });
+  // Mesmo papel do crossExchangeCheck acima, para a OKX (terceira fonte).
+  const [okxCrossExchangeCheck, setOkxCrossExchangeCheck] = useState<CrossExchangeCheck>({
     ok: false,
     priceDeltaPct: null,
     consensus: "INDISPONIVEL",
@@ -474,12 +484,18 @@ export default function App() {
       setDerivatives({ fundingRate: null, openInterest: null });
     }
 
-    // Master Panel handoff: cross-check Bybit — independente do try/catch
-    // acima por design. fetchBybitPerpTicker() já é fail-closed internamente
-    // (nunca lança), então uma falha aqui nunca reverte nem atrasa o
-    // resultado real da Binance já processado logo acima.
-    const bybit = await fetchBybitPerpTicker(selectedAsset);
+    // Master Panel handoff: cross-check Bybit + OKX — independente do
+    // try/catch acima por design, buscados em paralelo (Zero Latência: uma
+    // fonte lenta não atrasa a outra). fetchBybitPerpTicker()/
+    // fetchOkxPerpTicker() já são fail-closed internamente (nunca lançam),
+    // então uma falha em qualquer uma nunca reverte nem atrasa o resultado
+    // real da Binance já processado logo acima.
+    const [bybit, okx] = await Promise.all([
+      fetchBybitPerpTicker(selectedAsset),
+      fetchOkxPerpTicker(selectedAsset),
+    ]);
     setCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, bybit));
+    setOkxCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, okx));
 
     return binanceOk;
   };
@@ -1169,7 +1185,12 @@ export default function App() {
           (barra de comando cortada em pé e deitado). Em navegador comum
           env() é 0 e nada muda. */}
       <div className="flex flex-col h-[100dvh] pt-safe pb-safe bg-[#020610] text-[#a0f0ff] font-mono overflow-hidden selection:bg-[#00f0ff30]">
-        <TopBar data={priceData} derivatives={derivatives} crossExchangeCheck={crossExchangeCheck} />
+        <TopBar
+          data={priceData}
+          derivatives={derivatives}
+          crossExchangeCheck={crossExchangeCheck}
+          okxCrossExchangeCheck={okxCrossExchangeCheck}
+        />
         {bootRestFailed && (
           <div className="shrink-0 bg-[#ff005515] border-b border-[#ff005550] px-4 py-2 flex items-center justify-between gap-3">
             <span className="text-[0.55rem] sm:text-[0.6rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
@@ -2233,10 +2254,12 @@ function TopBar({
   data,
   derivatives,
   crossExchangeCheck,
+  okxCrossExchangeCheck,
 }: {
   data?: PriceState | null;
   derivatives: DerivativesState;
   crossExchangeCheck: CrossExchangeCheck;
+  okxCrossExchangeCheck: CrossExchangeCheck;
 }) {
   const {
     bootAt,
@@ -2445,6 +2468,24 @@ function TopBar({
                   crossExchangeCheck.consensus === "ALINHADO"
                     ? "text-[#00ffaa]"
                     : crossExchangeCheck.consensus === "DIVERGENTE"
+                      ? "text-[#ff0055]"
+                      : "text-[#a0f0ff]"
+                }
+                className="hidden xl:flex"
+              />
+              {/* Terceira fonte real (OKX) — mesmo papel puramente
+                  informativo da BYBIT Δ acima. */}
+              <TopStat
+                label="OKX Δ"
+                value={
+                  okxCrossExchangeCheck.consensus === "INDISPONIVEL" || okxCrossExchangeCheck.priceDeltaPct === null
+                    ? DASH
+                    : `${okxCrossExchangeCheck.priceDeltaPct.toFixed(3)}%`
+                }
+                color={
+                  okxCrossExchangeCheck.consensus === "ALINHADO"
+                    ? "text-[#00ffaa]"
+                    : okxCrossExchangeCheck.consensus === "DIVERGENTE"
                       ? "text-[#ff0055]"
                       : "text-[#a0f0ff]"
                 }
