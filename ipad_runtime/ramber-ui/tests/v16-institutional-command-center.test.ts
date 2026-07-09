@@ -167,53 +167,21 @@ describe('V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas): e
     expect(css).toContain('.drawer-open');
   });
 
-  it('Fase M.1: as réguas de navegação (SideBar/RightRail) abrem cada gaveta via toggleLeftDrawer/toggleRightDrawer; o backdrop e o X do cabeçalho fecham', () => {
+  it('dois botões discretos (PanelLeft/PanelRight) nas bordas ABREM cada gaveta e desaparecem enquanto ela está aberta; o backdrop e o X do cabeçalho fecham', () => {
     const app = read('../src/App.tsx');
-    // As alças soltas na borda do gráfico saíram — cada régua (SideBar à
-    // esquerda, RightRail à direita) tem seu próprio NavRailButton
-    // dedicado (PanelLeft/PanelRight) que abre a gaveta correspondente,
-    // um único mecanismo de acesso em vez de dois.
-    expect(app).toContain('icon={PanelLeft}');
-    expect(app).toContain('label="Market Intelligence"');
-    expect(app).toContain('icon={PanelRight}');
-    expect(app).toContain('label="Core Intelligence"');
-    expect(app).toContain('onClick={() => toggleLeftDrawer?.()}');
-    expect(app).toContain('onClick={() => toggleRightDrawer?.()}');
+    expect(app).toContain('<PanelLeft size={14} />');
+    expect(app).toContain('<PanelRight size={14} />');
+    // Achado real do Operador: com a alça sempre visível E fixa no centro
+    // vertical de .terminal-row (não da gaveta), abrir uma gaveta curta
+    // (agora abraçando a altura do conteúdo) deixava a alça flutuando
+    // sozinha fora dela. A alça some enquanto a própria gaveta está
+    // aberta — abrir é só {!leftDrawerOpen && <button onClick={() =>
+    // setLeftDrawerOpen(true)}>...
+    expect(app).toContain('{!leftDrawerOpen && (');
+    expect(app).toContain('onClick={() => setLeftDrawerOpen(true)}');
+    expect(app).toContain('{!rightDrawerOpen && (');
+    expect(app).toContain('onClick={() => setRightDrawerOpen(true)}');
     expect(app).toContain('terminal-drawer-backdrop');
-  });
-
-  it('Fase M.1: "somente um Drawer aberto por vez" — abrir uma gaveta fecha a outra; re-clicar no ícone fecha (toggle)', () => {
-    const app = read('../src/App.tsx');
-    const toggleLeftMatch = app.match(/const toggleLeftDrawer = useCallback\(\(\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
-    expect(toggleLeftMatch, 'toggleLeftDrawer não encontrado').not.toBeNull();
-    expect(toggleLeftMatch![1]).toContain('setRightDrawerOpen(false);');
-    expect(toggleLeftMatch![1]).toContain('setLeftDrawerOpen((v) => !v);');
-    const toggleRightMatch = app.match(/const toggleRightDrawer = useCallback\(\(\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
-    expect(toggleRightMatch, 'toggleRightDrawer não encontrado').not.toBeNull();
-    expect(toggleRightMatch![1]).toContain('setLeftDrawerOpen(false);');
-    expect(toggleRightMatch![1]).toContain('setRightDrawerOpen((v) => !v);');
-  });
-
-  it('Fase M.1: ESC fecha qualquer gaveta aberta (Desktop)', () => {
-    const app = read('../src/App.tsx');
-    expect(app).toContain('if (e.key !== "Escape") return;');
-    expect(app).toContain('document.addEventListener("keydown", onKeyDown);');
-    expect(app).toContain('document.removeEventListener("keydown", onKeyDown);');
-  });
-
-  it('Fase M.1: réguas de navegação são finas (48-56px), sempre visíveis, sem texto (só ícone + tooltip via title)', () => {
-    const app = read('../src/App.tsx');
-    expect(app).toContain('function NavRailButton({');
-    expect(app).toContain('function RightRail() {');
-    // 48px (w-12) base / 56px (w-14) em telas maiores — dentro da faixa
-    // pedida (48-56px) nos dois breakpoints.
-    expect(app).toContain('w-12 md:w-14 border-r border-[#00f0ff20]');
-    expect(app).toContain('w-12 md:w-14 border-l border-[#00f0ff20]');
-    // NavRailButton usa title (tooltip), nunca um <span> de texto visível.
-    const navBtnMatch = app.match(/function NavRailButton\(\{([\s\S]*?)\n\}\n/);
-    expect(navBtnMatch, 'NavRailButton não encontrado').not.toBeNull();
-    expect(navBtnMatch![1]).toContain('title={label}');
-    expect(navBtnMatch![1]).not.toContain('<span');
   });
 
   it('.terminal-main é o único filho real de .terminal-row no fluxo — flex:1, sem "order" nem largura fixa disputando espaço', () => {
