@@ -84,6 +84,10 @@ import { type TradFiAsset } from "./omnibox/tradfi-assets";
 // que a Binance já devolve em fetchDerivatives abaixo — nunca uma segunda
 // fonte do Core Engine/Risk Engine (essa trava é da Fase G/Diretriz 2).
 import { fetchBybitPerpTicker, compareCrossExchange, type CrossExchangeCheck } from "./cross-exchange/bybit-futures";
+// Terceira fonte real (pedido do Operador: "puxa dados públicos de
+// qualquer outra corretora"): OKX Perpétuo, mesmo papel e mesma trava
+// fail-closed da Bybit acima — ver header de okx-futures.ts.
+import { fetchOkxPerpTicker } from "./cross-exchange/okx-futures";
 import {
   LayoutDashboard,
   BarChart2,
@@ -210,6 +214,12 @@ export default function App() {
     priceDeltaPct: null,
     consensus: "INDISPONIVEL",
   });
+  // Mesmo papel do crossExchangeCheck acima, para a OKX (terceira fonte).
+  const [okxCrossExchangeCheck, setOkxCrossExchangeCheck] = useState<CrossExchangeCheck>({
+    ok: false,
+    priceDeltaPct: null,
+    consensus: "INDISPONIVEL",
+  });
   const [derivatives, setDerivatives] = useState<DerivativesState>({
     fundingRate: null,
     openInterest: null,
@@ -241,6 +251,31 @@ export default function App() {
   // gavetas fechadas por padrão — o Gráfico reina sozinho no boot.
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  // Fase M.1 (Navigation Rail + Overlay Drawers): "Nunca permitir múltiplos
+  // Drawers abertos simultaneamente. Somente um módulo poderá permanecer
+  // aberto" — abrir uma gaveta fecha a outra; re-clicar no mesmo ícone da
+  // régua fecha (toggle), como pedido em "Fechamento automático quando:
+  // clicar novamente no ícone".
+  const toggleLeftDrawer = useCallback(() => {
+    setRightDrawerOpen(false);
+    setLeftDrawerOpen((v) => !v);
+  }, []);
+  const toggleRightDrawer = useCallback(() => {
+    setLeftDrawerOpen(false);
+    setRightDrawerOpen((v) => !v);
+  }, []);
+  // "Fechamento automático quando:... pressionar ESC (Desktop)". Estado
+  // funcional (v ? false : v) em vez de useCallback-com-dependência: o
+  // listener nunca precisa ser re-registrado quando uma gaveta abre/fecha.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setLeftDrawerOpen((v) => (v ? false : v));
+      setRightDrawerOpen((v) => (v ? false : v));
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // The currently analyzed asset. Included in the SAME effect dependency
   // arrays as bootGeneration below — switching it tears down and re-opens
@@ -474,12 +509,18 @@ export default function App() {
       setDerivatives({ fundingRate: null, openInterest: null });
     }
 
-    // Master Panel handoff: cross-check Bybit — independente do try/catch
-    // acima por design. fetchBybitPerpTicker() já é fail-closed internamente
-    // (nunca lança), então uma falha aqui nunca reverte nem atrasa o
-    // resultado real da Binance já processado logo acima.
-    const bybit = await fetchBybitPerpTicker(selectedAsset);
+    // Master Panel handoff: cross-check Bybit + OKX — independente do
+    // try/catch acima por design, buscados em paralelo (Zero Latência: uma
+    // fonte lenta não atrasa a outra). fetchBybitPerpTicker()/
+    // fetchOkxPerpTicker() já são fail-closed internamente (nunca lançam),
+    // então uma falha em qualquer uma nunca reverte nem atrasa o resultado
+    // real da Binance já processado logo acima.
+    const [bybit, okx] = await Promise.all([
+      fetchBybitPerpTicker(selectedAsset),
+      fetchOkxPerpTicker(selectedAsset),
+    ]);
     setCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, bybit));
+    setOkxCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, okx));
 
     return binanceOk;
   };
@@ -1091,6 +1132,10 @@ export default function App() {
       setWidgetWorkspaceState,
       workspaceManagerOpen,
       setWorkspaceManagerOpen,
+      leftDrawerOpen,
+      toggleLeftDrawer,
+      rightDrawerOpen,
+      toggleRightDrawer,
       engine,
       smcZones,
       bootAt,
@@ -1129,6 +1174,10 @@ export default function App() {
       toggleWidget,
       setWidgetWorkspaceState,
       workspaceManagerOpen,
+      leftDrawerOpen,
+      toggleLeftDrawer,
+      rightDrawerOpen,
+      toggleRightDrawer,
       engine,
       smcZones,
       bootAt,
@@ -1169,7 +1218,12 @@ export default function App() {
           (barra de comando cortada em pé e deitado). Em navegador comum
           env() é 0 e nada muda. */}
       <div className="flex flex-col h-[100dvh] pt-safe pb-safe bg-[#020610] text-[#a0f0ff] font-mono overflow-hidden selection:bg-[#00f0ff30]">
-        <TopBar data={priceData} derivatives={derivatives} crossExchangeCheck={crossExchangeCheck} />
+        <TopBar
+          data={priceData}
+          derivatives={derivatives}
+          crossExchangeCheck={crossExchangeCheck}
+          okxCrossExchangeCheck={okxCrossExchangeCheck}
+        />
         {bootRestFailed && (
           <div className="shrink-0 bg-[#ff005515] border-b border-[#ff005550] px-4 py-2 flex items-center justify-between gap-3">
             <span className="text-[0.55rem] sm:text-[0.6rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
@@ -1243,38 +1297,14 @@ export default function App() {
                       }}
                     />
 
-                    {/* Alça discreta — Market Intelligence (gaveta esquerda).
-                        Achado real do Operador (captura de tela de
-                        dispositivo real): com a gaveta aberta e agora
-                        abraçando a altura do conteúdo (não mais esticada
-                        até o rodapé), esta alça — fixa no centro vertical
-                        de .terminal-row — podia acabar sobrando ABAIXO da
-                        gaveta encolhida, flutuando sozinha sobre o
-                        gráfico. A própria gaveta já tem seu X no
-                        cabeçalho + fecha ao clicar fora, então a alça só
-                        precisa existir para ABRIR — soma-se quando já
-                        está aberta. */}
-                    {!leftDrawerOpen && (
-                      <button
-                        type="button"
-                        onClick={() => setLeftDrawerOpen(true)}
-                        title="Market Intelligence"
-                        className="absolute left-0 top-1/2 -translate-y-1/2 z-50 w-8 h-14 rounded-r-lg border border-l-0 flex items-center justify-center transition-colors bg-[#010308]/80 border-[#00f0ff20] text-[#8ab4f8]/60 hover:text-[#00f0ff] hover:border-[#00f0ff40]"
-                      >
-                        <PanelLeft size={14} />
-                      </button>
-                    )}
-                    {/* Alça discreta — Core Intelligence (gaveta direita). */}
-                    {!rightDrawerOpen && (
-                      <button
-                        type="button"
-                        onClick={() => setRightDrawerOpen(true)}
-                        title="Core Intelligence"
-                        className="absolute right-0 top-1/2 -translate-y-1/2 z-50 w-8 h-14 rounded-l-lg border border-r-0 flex items-center justify-center transition-colors bg-[#010308]/80 border-[#00f0ff20] text-[#8ab4f8]/60 hover:text-[#00f0ff] hover:border-[#00f0ff40]"
-                      >
-                        <PanelRight size={14} />
-                      </button>
-                    )}
+                    {/* Fase M.1 (Navigation Rail + Overlay Drawers): as
+                        antigas alças soltas na borda do gráfico saíram —
+                        cada régua de navegação (SideBar à esquerda,
+                        RightRail à direita) já tem seu próprio ícone
+                        dedicado (PanelLeft/PanelRight) que abre a gaveta
+                        correspondente, um único mecanismo de acesso em
+                        vez de dois. A própria gaveta mantém seu X no
+                        cabeçalho + fecha ao clicar fora/ESC. */}
 
                     {/* LEFT (gaveta) — Market Intelligence: Vetor de
                         Mercado (livro real) + Bias/Convicção/Zonas/Gestão
@@ -1445,6 +1475,7 @@ export default function App() {
               </div>
             )}
           </div>
+          <RightRail />
         </div>
         <FooterBar />
         <WorkspaceManagerPanel />
@@ -2233,10 +2264,12 @@ function TopBar({
   data,
   derivatives,
   crossExchangeCheck,
+  okxCrossExchangeCheck,
 }: {
   data?: PriceState | null;
   derivatives: DerivativesState;
   crossExchangeCheck: CrossExchangeCheck;
+  okxCrossExchangeCheck: CrossExchangeCheck;
 }) {
   const {
     bootAt,
@@ -2450,6 +2483,24 @@ function TopBar({
                 }
                 className="hidden xl:flex"
               />
+              {/* Terceira fonte real (OKX) — mesmo papel puramente
+                  informativo da BYBIT Δ acima. */}
+              <TopStat
+                label="OKX Δ"
+                value={
+                  okxCrossExchangeCheck.consensus === "INDISPONIVEL" || okxCrossExchangeCheck.priceDeltaPct === null
+                    ? DASH
+                    : `${okxCrossExchangeCheck.priceDeltaPct.toFixed(3)}%`
+                }
+                color={
+                  okxCrossExchangeCheck.consensus === "ALINHADO"
+                    ? "text-[#00ffaa]"
+                    : okxCrossExchangeCheck.consensus === "DIVERGENTE"
+                      ? "text-[#ff0055]"
+                      : "text-[#a0f0ff]"
+                }
+                className="hidden xl:flex"
+              />
             </div>
           )}
         </div>
@@ -2505,7 +2556,43 @@ const TopStat = React.memo(function TopStat({
   );
 });
 
-// --- SIDE BAR ---
+// --- NAV RAIL BUTTON (Fase M.1: Navigation Rail + Overlay Drawers) ---
+// Botão-ícone compartilhado pelas duas réguas verticais (SideBar à
+// esquerda, RightRail à direita) — mesmo toque/estado ativo, só o lado
+// do indicador espelha (edge = borda mais próxima da tela). "Sem
+// textos" por diretriz: o rótulo vira tooltip via title, nunca um
+// <span> visível — Zero Repetição de estilo entre as duas réguas.
+function NavRailButton({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+  edge = "left",
+}: {
+  icon: any;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  edge?: "left" | "right";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      className={`flex items-center justify-center w-full py-2.5 shrink-0 cursor-pointer transition-colors relative ${active ? "text-[#00f0ff] bg-gradient-to-r from-[#00f0ff1a] to-transparent" : "text-[#8ab4f8]/50 hover:text-[#8ab4f8]"}`}
+    >
+      {active && (
+        <div
+          className={`absolute top-0 bottom-0 w-[2px] bg-[#00f0ff] shadow-[0_0_8px_#00f0ff] ${edge === "right" ? "right-0" : "left-0"}`}
+        ></div>
+      )}
+      <Icon size={17} className="relative z-10" />
+    </button>
+  );
+}
+
+// --- SIDE BAR (Fase M.1: LEFT Navigation Rail) ---
 function SideBar({
   activeTab,
   setActiveTab,
@@ -2513,7 +2600,7 @@ function SideBar({
   activeTab: string;
   setActiveTab: (t: string) => void;
 }) {
-  const { setWorkspaceManagerOpen } = useContext(WidgetContext) || {};
+  const { setWorkspaceManagerOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
   // Fusão visual (imagem de referência AR10 CYBORG v15.1 GOD TIER):
   // id é o valor real de roteamento (só "DASHBOARD" e "SETTINGS" têm
   // comportamento próprio, ver o ternário logo abaixo de "DASHBOARD" ?
@@ -2522,7 +2609,9 @@ function SideBar({
   // tocar em nenhuma lógica de roteamento real. As 7 abas que não são
   // COCKPIT/CONFIGURAÇÕES continuam o mesmo placeholder honesto
   // "AGUARDANDO FONTE DE DADOS REAL" que já usavam — nenhuma delas fica
-  // com uma alegação de dado real que este terminal não tem.
+  // com uma alegação de dado real que este terminal não tem. Fase M.1:
+  // label agora só vira tooltip (NavRailButton), nunca texto visível —
+  // "sem textos" na régua, por diretriz.
   const items: { icon: any; id: string; label: string }[] = [
     { icon: LayoutDashboard, id: "DASHBOARD", label: "COCKPIT" },
     { icon: BarChart2, id: "MERCADOS", label: "MERCADOS" },
@@ -2535,29 +2624,32 @@ function SideBar({
     { icon: Settings, id: "SETTINGS", label: "CONFIGURAÇÕES" },
   ];
   return (
-    <div className="w-[60px] md:w-[70px] border-r border-[#00f0ff20] bg-[#010308]/95 flex flex-col items-center py-3 gap-5 shrink-0 z-10 overflow-y-auto scrollbar-hide backdrop-blur-md">
-      <div className="relative mb-1">
+    <div className="w-12 md:w-14 border-r border-[#00f0ff20] bg-[#010308]/95 flex flex-col items-center py-3 gap-1 shrink-0 z-10 overflow-y-auto scrollbar-hide backdrop-blur-md">
+      <div className="relative mb-2">
         <Target className="text-[#00f0ff] opacity-90" size={20} strokeWidth={1.5} />
         <div className="absolute inset-0 border border-[#00f0ff] rounded-full animate-ping opacity-30"></div>
       </div>
-      {items.map((item) => {
-        const isActive = activeTab === item.id;
-        return (
-          <div
-            key={item.id}
-            onClick={() => setActiveTab(item.id)}
-            className={`flex flex-col items-center gap-1 w-full cursor-pointer transition-colors relative py-1.5 ${isActive ? "text-[#00f0ff] bg-gradient-to-r from-[#00f0ff1a] to-transparent" : "text-[#8ab4f8]/50 hover:text-[#8ab4f8]"}`}
-          >
-            {isActive && (
-              <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-[#00f0ff] shadow-[0_0_8px_#00f0ff]"></div>
-            )}
-            <item.icon size={16} className="relative z-10" />
-            <span className="text-[0.42rem] md:text-[0.45rem] tracking-[0.1em] text-center font-bold mt-1">
-              {item.label}
-            </span>
-          </div>
-        );
-      })}
+      {items.map((item) => (
+        <NavRailButton
+          key={item.id}
+          icon={item.icon}
+          label={item.label}
+          active={activeTab === item.id}
+          onClick={() => setActiveTab(item.id)}
+        />
+      ))}
+      {/* Fase M.1: Market Intelligence entra na régua esquerda — mesmo
+          lado da gaveta .terminal-left que ela abre (o ícone e a gaveta
+          deslizam do mesmo lado da tela). Substitui a alça solta que
+          existia na borda do gráfico: um único mecanismo de acesso. */}
+      <div className="w-full border-t border-[#00f0ff15] mt-1 pt-1">
+        <NavRailButton
+          icon={PanelLeft}
+          label="Market Intelligence"
+          active={!!leftDrawerOpen}
+          onClick={() => toggleLeftDrawer?.()}
+        />
+      </div>
       {/* V16 Workspace Manager entry point — a single, discoverable way in
           to the Pinned/Docked/Collapsed/Hidden/Floating controls for every
           secondary module, instead of a gear icon per module. Pinned to
@@ -2566,15 +2658,34 @@ function SideBar({
         type="button"
         onClick={() => setWorkspaceManagerOpen?.((v: boolean) => !v)}
         title="Workspace Manager"
-        className="mt-auto flex flex-col items-center gap-1 w-full cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] py-1.5 shrink-0"
+        className="mt-auto flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
       >
-        <LayoutGrid size={16} className="relative z-10" />
-        <span className="text-[0.4rem] md:text-[0.42rem] tracking-[0.08em] text-center font-bold mt-1 leading-tight">
-          WORKSPACE
-          <br />
-          MANAGER
-        </span>
+        <LayoutGrid size={17} className="relative z-10" />
       </button>
+    </div>
+  );
+}
+
+// --- RIGHT RAIL (Fase M.1: Navigation Rail + Overlay Drawers) ---
+// Espelho da SideBar à direita — mesma régua fina, um ícone real (Core
+// Intelligence: Siriform/GMIL/Regime/Validação/Saúde, o mesmo conteúdo
+// que já existia atrás da alça antiga). Deliberadamente não preenchida
+// com ícones extra só para "parecer completa": cada módulo sugerido na
+// diretriz (GMIL/Consensus/Risk/Telemetria) já vive DENTRO desta única
+// gaveta real — fragmentar em várias gavetas vazias violaria zero
+// fabricação (nenhum dado novo apareceria do nada) sem ganhar nada em
+// troca, já que só uma gaveta pode ficar aberta por vez de qualquer forma.
+function RightRail() {
+  const { rightDrawerOpen, toggleRightDrawer } = useContext(WidgetContext) || {};
+  return (
+    <div className="w-12 md:w-14 border-l border-[#00f0ff20] bg-[#010308]/95 flex flex-col items-center py-3 gap-1 shrink-0 z-10 overflow-y-auto scrollbar-hide backdrop-blur-md">
+      <NavRailButton
+        icon={PanelRight}
+        label="Core Intelligence"
+        active={!!rightDrawerOpen}
+        onClick={() => toggleRightDrawer?.()}
+        edge="right"
+      />
     </div>
   );
 }

@@ -23,16 +23,18 @@
 // binance-futures-public.js). Se o schema real vier diferente do esperado,
 // extractBybitPerpTicker devolve ok:false honesto (nunca um valor
 // inventado), nunca lança exceção.
+//
+// Tipos e a comparação markPrice-vs-markPrice em si vivem em shared.ts
+// desde que a OKX (okx-futures.ts) virou o segundo consumidor real da
+// mesma lógica — reexportados aqui para não quebrar quem já importa
+// daqui (App.tsx, testes).
+import { type PerpTicker, compareCrossExchange, type CrossExchangeCheck, DIVERGENCE_THRESHOLD_PCT } from "./shared";
+
 const isFiniteNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
 const BYBIT_TICKERS_URL = "https://api.bybit.com/v5/market/tickers?category=linear&symbol=";
 
-export interface BybitPerpTicker {
-  ok: boolean;
-  price: number | null;
-  fundingRate: number | null;
-  openInterest: number | null;
-}
+export type BybitPerpTicker = PerpTicker;
 
 /** Extrai os 3 campos reais do payload bruto de GET /v5/market/tickers
  *  (Bybit, category=linear). Função pura — testável sem rede. `price` vem
@@ -75,32 +77,4 @@ export async function fetchBybitPerpTicker(symbol: string): Promise<BybitPerpTic
   }
 }
 
-export type CrossExchangeConsensus = "ALINHADO" | "DIVERGENTE" | "INDISPONIVEL";
-
-export interface CrossExchangeCheck {
-  ok: boolean;
-  priceDeltaPct: number | null;
-  consensus: CrossExchangeConsensus;
-}
-
-// Limiar de divergência: preços de derivativos entre exchanges líquidas
-// tipicamente ficam dentro de poucos bps um do outro; 0.5% é uma folga
-// generosa que só dispara DIVERGENTE numa discrepância real (ex.: uma das
-// fontes com dado atrasado/quebrado), não ruído normal de order book.
-export const DIVERGENCE_THRESHOLD_PCT = 0.5;
-
-/** Compara o preço real da Binance Futures (App.tsx's derivatives/priceData)
- *  contra o preço real do Bybit — função pura, testável sem rede. Nunca
- *  decide sinal/direção: é só um alerta de consistência entre fontes,
- *  puramente informativo (mesmo princípio consultivo do GMIL). */
-export function compareCrossExchange(binancePrice: number | null, bybit: BybitPerpTicker): CrossExchangeCheck {
-  if (!isFiniteNum(binancePrice) || !bybit.ok || !isFiniteNum(bybit.price)) {
-    return { ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" };
-  }
-  const deltaPct = (Math.abs(bybit.price - binancePrice) / binancePrice) * 100;
-  return {
-    ok: true,
-    priceDeltaPct: deltaPct,
-    consensus: deltaPct <= DIVERGENCE_THRESHOLD_PCT ? "ALINHADO" : "DIVERGENTE",
-  };
-}
+export { compareCrossExchange, DIVERGENCE_THRESHOLD_PCT, type CrossExchangeCheck };
