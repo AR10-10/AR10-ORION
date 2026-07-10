@@ -166,6 +166,13 @@ describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (pass
     expect(chart).not.toMatch(/lineWidth: [2-9]/);
   });
 
+  it('"fio de seda" cobre também a price line AUTOMÁTICA da série (último preço) — achado real via harness: a lib usa LineStyle.Dashed por padrão quando priceLineStyle não é explicitado, e nenhum grep por "Dashed" pega uma OMISSÃO', () => {
+    const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
+    const seriesMatch = chart.match(/chart\.addSeries\(CandlestickSeries, \{([\s\S]*?)\n    \}\)/);
+    expect(seriesMatch, 'chart.addSeries(CandlestickSeries, {...}) não encontrado').not.toBeNull();
+    expect(seriesMatch![1]).toContain('priceLineStyle: LineStyle.Solid');
+  });
+
   it('ChartWidget passa engine.support/resistance/strength/breakouts REAIS para EnhancedChart_110_Percent — mesma fonte de sempre, nunca recomputado', () => {
     const app = read('../src/App.tsx');
     const fnMatch = app.match(/function ChartWidget\(\{ chartData \}: any\) \{([\s\S]*?)\n\}\n/);

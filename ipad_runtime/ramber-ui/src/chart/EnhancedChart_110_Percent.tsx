@@ -18,7 +18,7 @@
 // preço real top/bottom de cada zona ainda não mitigada/varrida, o
 // mesmo filtro (!mitigated / !swept) e o mesmo cap de contagem que o
 // componente antigo já usava.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -30,6 +30,7 @@ import {
   type IPriceLine,
   type UTCTimestamp,
 } from "lightweight-charts";
+import { LiquidityZonesPlugin, type FillableZone } from "./LiquidityZonesPlugin";
 
 export interface EnhancedChartCandle {
   time: number; // Unix segundos real (Bus/Binance) — nunca sintetizado
@@ -39,10 +40,15 @@ export interface EnhancedChartCandle {
   close: number;
 }
 
+// V-MAX Fase 0.7: ganha `index` (posição real no array de candles onde a
+// zona se formou) — necessário para o LiquidityZonesPlugin desenhar a
+// borda esquerda real da área colorida; PriceZone (engine-bridge.ts) já
+// carrega esse campo, então nenhum dado novo precisa ser calculado.
 export interface EnhancedChartZone {
   type: "BULLISH" | "BEARISH";
   top: number;
   bottom: number;
+  index: number;
 }
 
 export interface EnhancedChartLiquidity {
@@ -95,6 +101,11 @@ export function EnhancedChart_110_Percent({
   const supportLineRef = useRef<IPriceLine | null>(null);
   const resistanceLineRef = useRef<IPriceLine | null>(null);
   const zoneLinesRef = useRef<IPriceLine[]>([]);
+  // Espelha chartRef/seriesRef em state só para o LiquidityZonesPlugin
+  // montar assim que o chart existe de verdade — refs sozinhas não
+  // disparam re-render, então o plugin ficaria esperando por uma
+  // atualização de `data` não relacionada para "descobrir" o chart pronto.
+  const [chartReady, setChartReady] = useState<{ chart: IChartApi; series: ISeriesApi<"Candlestick"> } | null>(null);
 
   // Cria o chart UMA vez por montagem — nunca recriado por troca de
   // timeframe/dado (isso destruiria o estado de pan/zoom do operador a
@@ -145,9 +156,16 @@ export function EnhancedChart_110_Percent({
       wickDownColor: "#ff0055",
       priceLineVisible: true,
       lastValueVisible: true,
+      // Achado real via verificação com harness Playwright (V-MAX Fase
+      // 0.7): sem este campo, a lib desenha essa linha automática de
+      // último preço tracejada por padrão — quebra silenciosa da Regra de
+      // Ouro 2 (Fio de Seda) que nenhum grep no código-fonte pegaria,
+      // porque a causa é uma OMISSÃO, não um valor errado escrito aqui.
+      priceLineStyle: LineStyle.Solid,
     });
     chartRef.current = chart;
     seriesRef.current = series;
+    setChartReady({ chart, series });
     return () => {
       chart.remove();
       chartRef.current = null;
@@ -155,6 +173,7 @@ export function EnhancedChart_110_Percent({
       supportLineRef.current = null;
       resistanceLineRef.current = null;
       zoneLinesRef.current = [];
+      setChartReady(null);
     };
   }, []);
 
@@ -222,35 +241,17 @@ export function EnhancedChart_110_Percent({
     }
   }, [resistance, resistanceStrength, resistanceBreakouts]);
 
-  // Zonas SMC reais (FVG/Order Blocks bullish|bearish, Equal High/Low de
-  // liquidez) — mesmo dado real de computeSmcZones (engine-bridge.ts) que
-  // o gráfico antigo já filtrava (só zonas ainda !mitigated/!swept) e
-  // limitava em contagem; aqui como price lines, então nunca "ficam
-  // presas" durante pan/zoom (são recalculadas pela própria lib a cada
-  // frame, não posicionadas em pixel fixo por este componente).
+  // Liquidez (Equal High/Low) continua como price line: LiquidityZone
+  // (engine-bridge.ts) só carrega um preço único, nunca um top/bottom —
+  // não existe uma "área" real para preencher, então uma linha continua
+  // sendo a representação honesta (mesmo dado, mesmo filtro !swept de
+  // sempre, aplicado rio acima em App.tsx/ChartWidget).
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
     zoneLinesRef.current.forEach((line) => series.removePriceLine(line));
     zoneLinesRef.current = [];
 
-    // "Fio de seda": sólidas e finas também aqui — a distinção de que são
-    // contexto (não o nível primário S1/R1) vem da opacidade mais baixa e
-    // da ausência de rótulo no eixo, nunca de um traço pontilhado.
-    (fairValueGaps ?? []).forEach((z) => {
-      const color = z.type === "BULLISH" ? "rgba(0, 255, 170, 0.30)" : "rgba(255, 0, 85, 0.30)";
-      zoneLinesRef.current.push(
-        series.createPriceLine({ price: z.top, color, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: false, title: "FVG" }),
-        series.createPriceLine({ price: z.bottom, color, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: false, title: "FVG" }),
-      );
-    });
-    (orderBlocks ?? []).forEach((z) => {
-      const color = z.type === "BULLISH" ? "rgba(0, 255, 170, 0.40)" : "rgba(255, 0, 85, 0.40)";
-      zoneLinesRef.current.push(
-        series.createPriceLine({ price: z.top, color, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: false, title: "OB" }),
-        series.createPriceLine({ price: z.bottom, color, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: false, title: "OB" }),
-      );
-    });
     (liquidityZones ?? []).forEach((z) => {
       zoneLinesRef.current.push(
         series.createPriceLine({
@@ -263,7 +264,24 @@ export function EnhancedChart_110_Percent({
         }),
       );
     });
-  }, [fairValueGaps, orderBlocks, liquidityZones]);
+  }, [liquidityZones]);
 
-  return <div ref={containerRef} className="absolute inset-0" />;
+  return (
+    <div className="absolute inset-0">
+      <div ref={containerRef} className="absolute inset-0" />
+      {/* V-MAX Fase 0.7: FVG/Order Blocks (bullish|bearish) — mesmo dado real
+         de computeSmcZones, já filtrado (!mitigated) e limitado em contagem
+         rio acima (App.tsx/ChartWidget), agora como área colorida real
+         (Blueprint §3.1 LiquidityZonesPlugin) em vez de duas price lines —
+         restaura a cor que o gráfico SVG anterior tinha, sem tirar nenhuma
+         cor do gráfico (pedido explícito do Operador). */}
+      <LiquidityZonesPlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+        data={data}
+        fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}
+        orderBlocks={(orderBlocks ?? []) as FillableZone[]}
+      />
+    </div>
+  );
 }
