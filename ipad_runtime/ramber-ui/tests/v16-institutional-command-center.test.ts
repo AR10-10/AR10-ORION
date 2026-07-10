@@ -146,13 +146,34 @@ describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (pass
     const fnMatch = app.match(/function NucleoVoiceOrb\(\) \{([\s\S]*?)\n\}\n/);
     expect(fnMatch, 'NucleoVoiceOrb não encontrada').not.toBeNull();
     const body = fnMatch![1];
-    // Cor derivada exclusivamente do engineStatus real — mapeamento V18 §1.2.
-    expect(body).toContain('engineStatus === "ok" ? "#00ffaa" : engineStatus === "error" ? "#ff0055" : "#f0d06f"');
     // Voz: mesmo gesto real do VoiceControlWidget, nunca um botão decorativo.
     expect(body).toContain('voiceEngine.setEnabled(next)');
     expect(body).not.toMatch(/Math\.random/);
     // Montado na TopBar (o "cantinho" ao lado do Power) — sempre visível.
     expect(app).toContain('<NucleoVoiceOrb />');
+  });
+
+  it('V-MAX Fase 0.9 (Blueprint §3.4 "100% reativo" / §5.1 "Offline: Orb STALE/âmbar"): o orb nunca mostra SINCRONIZADO se offline real ou dado real desatualizado, mesmo com o último ciclo ok', () => {
+    const app = read('../src/App.tsx');
+    const fnMatch = app.match(/function NucleoVoiceOrb\(\) \{([\s\S]*?)\n\}\n/);
+    expect(fnMatch, 'NucleoVoiceOrb não encontrada').not.toBeNull();
+    const body = fnMatch![1];
+    // Sinais reais desta fase (Fase 0.4/0.8) — nunca um segundo cálculo de
+    // offline/freshness dentro do próprio componente.
+    expect(body).toContain('useOfflineSnapshot()');
+    expect(body).toContain('useDataFreshSnapshot()');
+    // offline é o sinal MAIS autoritativo — checado antes de engineStatus.
+    const offlineIdx = body.indexOf('if (offline)');
+    const errorIdx = body.indexOf('engineStatus === "error"');
+    expect(offlineIdx).toBeGreaterThan(-1);
+    expect(errorIdx).toBeGreaterThan(-1);
+    expect(offlineIdx).toBeLessThan(errorIdx);
+    // "pending" (nunca teve ciclo ainda) nunca é confundido com
+    // "desatualizado" (já teve ciclo ok, mas os dados pararam de chegar).
+    expect(body).toContain('engineStatus === "ok" && !isDataFresh');
+    expect(body).toContain('"DESATUALIZADO"');
+    expect(body).toContain('"OFFLINE"');
+    expect(body).not.toMatch(/Math\.random/);
   });
 
   it('"fio de seda" (pedido explícito do Operador): TODAS as price lines são sólidas e finas — nunca pontilhadas/tracejadas', () => {

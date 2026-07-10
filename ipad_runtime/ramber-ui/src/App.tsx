@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, useOfflineSnapshot, useDataFreshSnapshot } from "./store/unified-snapshot-store";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -2425,10 +2425,33 @@ function NucleoVoiceOrb() {
   const [voiceStatus, setVoiceStatus] = useState(() => voiceEngine.getStatus());
   useEffect(() => voiceEngine.onStatus(setVoiceStatus), []);
 
-  const coreColor =
-    engineStatus === "ok" ? "#00ffaa" : engineStatus === "error" ? "#ff0055" : "#f0d06f";
-  const coreLabel =
-    engineStatus === "ok" ? "SINCRONIZADO" : engineStatus === "error" ? "FALHOU" : AWAIT;
+  // V-MAX Fase 0.9 (Blueprint §3.4 "NucleoVoiceOrb 100% reativo" / §5.1
+  // "Offline: offline=true, Orb STALE/âmbar"): honestidade além do
+  // engineStatus isolado. offline (navigator.onLine real, Fase 0.4) e
+  // isDataFresh (Health Monitor real, Fase 0.8) agora existem — o orb
+  // nunca mostra "SINCRONIZADO" (teal) se a conexão caiu ou se os dados
+  // que alimentam o ciclo pararam de chegar, mesmo que o ÚLTIMO ciclo
+  // completado tenha sido "ok". "pending" (aguardando o primeiro ciclo,
+  // boot) é distinto de "desatualizado" (já teve ciclo ok, mas os dados
+  // reais pararam de chegar depois) — checado nessa ordem para nunca
+  // confundir os dois.
+  const offline = useOfflineSnapshot();
+  const isDataFresh = useDataFreshSnapshot();
+  const stale = engineStatus === "ok" && !isDataFresh;
+
+  let coreColor: string;
+  let coreLabel: string;
+  if (offline) {
+    coreColor = "#f0d06f"; coreLabel = "OFFLINE";
+  } else if (engineStatus === "error") {
+    coreColor = "#ff0055"; coreLabel = "FALHOU";
+  } else if (engineStatus === "pending") {
+    coreColor = "#f0d06f"; coreLabel = AWAIT;
+  } else if (stale) {
+    coreColor = "#f0d06f"; coreLabel = "DESATUALIZADO";
+  } else {
+    coreColor = "#00ffaa"; coreLabel = "SINCRONIZADO";
+  }
   const ttsSupported = voiceStatus.supported;
 
   // Mesmo gesto real do VoiceControlWidget: ligar a voz É a interação de
