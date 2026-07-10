@@ -199,6 +199,20 @@ const regimeHistory = new RegimeHistory();
 let workerClientSingleton: any = null;
 let wasmReadyPromise: Promise<any> | null = null;
 
+// V-MAX Fase 0.8 (Health Monitor): estado real do único worker desta árvore
+// (QuantWorkerClient) — nunca deduzido de fora, atualizado no MESMO
+// wasmReadyPromise que runRealAnalysisCycle já espera (um segundo
+// .then/.catch anexado à mesma promise real, não uma segunda inicialização
+// nem um caminho paralelo). "ready" é o único estado que conta como
+// worker vivo para o Health Monitor — "pending"/"error"/"idle" nunca são
+// contados como um worker confirmado ativo (Fail-Closed).
+type QuantWorkerState = 'idle' | 'pending' | 'ready' | 'error';
+let quantWorkerState: QuantWorkerState = 'idle';
+
+export function getQuantWorkerState(): QuantWorkerState {
+  return quantWorkerState;
+}
+
 function getWorkerClient() {
   if (!workerClientSingleton) {
     // This build's output IS ipad_runtime/index.html (deploy-ipad-pwa.yml
@@ -209,7 +223,12 @@ function getWorkerClient() {
     // quant-worker.js), so this is the only path that needs to be correct.
     const workerUrl = new URL('workers/quant-worker.js', window.location.href).href;
     workerClientSingleton = new QuantWorkerClient(workerUrl);
+    quantWorkerState = 'pending';
     wasmReadyPromise = workerClientSingleton.initWasm();
+    wasmReadyPromise.then(
+      () => { quantWorkerState = 'ready'; },
+      () => { quantWorkerState = 'error'; },
+    );
   }
   return { workerClient: workerClientSingleton, wasmReady: wasmReadyPromise as Promise<any> };
 }

@@ -16,6 +16,11 @@ import { useUnifiedSnapshotStore } from "./store/unified-snapshot-store";
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
 import type { Timeframe } from "./nexus/types";
+// V-MAX Fase 0.8: Health Monitor real, ligado direto (ver comentário no
+// efeito de boot mais abaixo sobre por que este, diferente do
+// CrossExchangeService da Fase 0.5, não fica dormente).
+import { getNexusCore } from "./nexus/nexus-core";
+import { getHealthMonitor } from "./nexus/health-monitor";
 // V18 Sprint 1 (Tarefa B): "Destravar o Gráfico Institucional" — substitui
 // o SVG feito à mão por lightweight-charts (pan/zoom/crosshair nativos).
 import { EnhancedChart_110_Percent } from "./chart/EnhancedChart_110_Percent";
@@ -1203,6 +1208,24 @@ export default function App() {
       cycleLatencyMs,
     });
   }, [engineStatus, engine, lastUpdateAt, cycleLatencyMs]);
+  // V-MAX Fase 0.8: Health Monitor real — puramente aditivo (só mede e
+  // escreve na store, nunca troca nem atrasa nenhum caminho de dado real
+  // já existente), então liga direto aqui, diferente do CrossExchangeService
+  // (Fase 0.5, deliberadamente ainda dormente — ver relatório da Fase 0).
+  // start()/stop() do HealthMonitor já são idempotentes por conta própria,
+  // então isto sobrevive ao mount→unmount→remount do React StrictMode em
+  // dev sem depender do array de hooks do NexusCore (getNexusCore() aqui
+  // só fornece o Event Bus tipado compartilhado, mesmo singleton de
+  // sempre).
+  useEffect(() => {
+    const core = getNexusCore();
+    core.start();
+    const monitor = getHealthMonitor(core.bus);
+    monitor.start();
+    return () => {
+      monitor.stop();
+    };
+  }, []);
   // V-MAX Fase 0.4: mesmo princípio de espelhamento acima, para as novas
   // fatias do UnifiedGlobalSnapshot (Blueprint §2.3) — nenhuma delas dispara
   // rede nova, todas espelham dado que os efeitos de WS/REST já reais logo

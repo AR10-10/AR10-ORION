@@ -105,17 +105,22 @@ interface UnifiedSnapshotState {
   // V-MAX Fase 0.4 — extensão aditiva rumo ao UnifiedGlobalSnapshot do
   // Blueprint (§2.3). `symbol` acima JÁ é o `activeSymbol` do Blueprint —
   // não duplicado sob um segundo nome. `consensus`/`marketRegime`/
-  // `scenario`/`cpi`/`trapProbability`/`isDataFresh` do Blueprint ficam de
-  // fora nesta fase de propósito: cada um pertence a um motor real que
-  // ainda não existe nesta árvore (Quant Worker, Núcleo Biológico, Scenario
-  // Engine, Health Monitor) — declarar o campo sem o motor por trás seria a
-  // mesma dívida de "zero mocks" só que ao nível de estado global.
+  // `scenario`/`cpi`/`trapProbability` do Blueprint ficam de fora nesta
+  // fase de propósito: cada um pertence a um motor real que ainda não
+  // existe nesta árvore (Quant Worker, Núcleo Biológico, Scenario Engine)
+  // — declarar o campo sem o motor por trás seria a mesma dívida de "zero
+  // mocks" só que ao nível de estado global.
   activeTimeframe: Timeframe;
   candles: Partial<Record<string, Partial<Record<Timeframe, Candle[]>>>>;
   orderBooks: Partial<Record<Exchange, L2Snapshot | null>>;
   connections: Partial<Record<Exchange, ExchangeConnectionState>>;
   health: HealthSnapshot;
   offline: boolean;
+  // V-MAX Fase 0.8 (Health Monitor) — chega aqui, não na 0.4: "freshness"
+  // é explicitamente responsabilidade do Health Monitor no Blueprint
+  // (§7.2), calculado a partir de price.updatedAt/orderBook.updatedAt
+  // reais que já existem desde a 0.4, nunca um segundo relógio próprio.
+  isDataFresh: boolean;
 }
 
 interface UnifiedSnapshotActions {
@@ -130,6 +135,7 @@ interface UnifiedSnapshotActions {
   setConnectionState: (exchange: Exchange, state: ExchangeConnectionState) => void;
   setHealth: (health: HealthSnapshot) => void;
   setOffline: (offline: boolean) => void;
+  setDataFresh: (fresh: boolean) => void;
 }
 
 export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnapshotActions>()(
@@ -145,6 +151,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     connections: {},
     health: EMPTY_HEALTH,
     offline: typeof navigator === "undefined" ? false : !navigator.onLine,
+    isDataFresh: false,
 
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
     setPrice: (price) => set((s) => { s.price = { ...price, updatedAt: Date.now() }; }),
@@ -161,6 +168,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setConnectionState: (exchange, state) => set((s) => { s.connections[exchange] = state; }),
     setHealth: (health) => set((s) => { s.health = health; }),
     setOffline: (offline) => set((s) => { s.offline = offline; }),
+    setDataFresh: (fresh) => set((s) => { s.isDataFresh = fresh; }),
   })),
 );
 
@@ -197,3 +205,4 @@ export const useConnectionsSnapshot = (): Partial<Record<Exchange, ExchangeConne
   useUnifiedSnapshotStore((s) => s.connections);
 export const useHealthSnapshot = (): HealthSnapshot => useUnifiedSnapshotStore((s) => s.health);
 export const useOfflineSnapshot = (): boolean => useUnifiedSnapshotStore((s) => s.offline);
+export const useDataFreshSnapshot = (): boolean => useUnifiedSnapshotStore((s) => s.isDataFresh);
