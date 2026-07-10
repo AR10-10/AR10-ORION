@@ -12,6 +12,10 @@ import { Rnd } from "react-rnd";
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
 import { useUnifiedSnapshotStore } from "./store/unified-snapshot-store";
+// V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
+// solta (pré-existente) — este cast é o único ponto de costura com o tipo
+// estrito do Nexus, não uma reescrita do tipo legado.
+import type { Timeframe } from "./nexus/types";
 // V18 Sprint 1 (Tarefa B): "Destravar o Gráfico Institucional" — substitui
 // o SVG feito à mão por lightweight-charts (pan/zoom/crosshair nativos).
 import { EnhancedChart_110_Percent } from "./chart/EnhancedChart_110_Percent";
@@ -1199,6 +1203,37 @@ export default function App() {
       cycleLatencyMs,
     });
   }, [engineStatus, engine, lastUpdateAt, cycleLatencyMs]);
+  // V-MAX Fase 0.4: mesmo princípio de espelhamento acima, para as novas
+  // fatias do UnifiedGlobalSnapshot (Blueprint §2.3) — nenhuma delas dispara
+  // rede nova, todas espelham dado que os efeitos de WS/REST já reais logo
+  // acima (linha ~600) coletam.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setActiveTimeframe(chartTimeframe as Timeframe);
+  }, [chartTimeframe]);
+  useEffect(() => {
+    if (chartData && chartData.length > 0) {
+      useUnifiedSnapshotStore.getState().setCandles(selectedAsset, chartTimeframe as Timeframe, chartData);
+    }
+  }, [chartData, selectedAsset, chartTimeframe]);
+  useEffect(() => {
+    // orderBookUpdatedAt (não orderBook.updatedAt, que só existe DEPOIS de
+    // passar pela store) é o sinal real de "já chegou um livro de verdade"
+    // — antes do primeiro update real, fica honestamente null (nunca um
+    // L2Snapshot fabricado com bids/asks vazios fingindo ser um livro real).
+    useUnifiedSnapshotStore.getState().setExchangeOrderBook(
+      "BINANCE",
+      orderBookUpdatedAt ? { bids: orderBook.bids, asks: orderBook.asks, updatedAt: orderBookUpdatedAt } : null,
+    );
+  }, [orderBook, orderBookUpdatedAt]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setConnectionState("BINANCE", wsLive ? "LIVE" : "OFFLINE");
+  }, [wsLive]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setConnectionState("BYBIT", crossExchangeCheck.ok ? "LIVE" : "DEGRADED");
+  }, [crossExchangeCheck]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setConnectionState("OKX", okxCrossExchangeCheck.ok ? "LIVE" : "DEGRADED");
+  }, [okxCrossExchangeCheck]);
 
   // Stable reference — prevents every context consumer (TopBar, all Widgets,
   // AssistantOrb, MarketDirectionWidget...) from re-rendering on renders
