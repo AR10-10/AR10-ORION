@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@mlc-ai/web-llm": "^0.2.84",
+    "fake-indexeddb": "^6.2.5",
+    "idb": "^8.0.3",
     "immer": "^11.1.11",
     "lightweight-charts": "^5.2.0",
     "lucide-react": "^0.546.0",
