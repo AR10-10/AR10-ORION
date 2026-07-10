@@ -8,6 +8,13 @@ import React, {
   useContext,
 } from "react";
 import { Rnd } from "react-rnd";
+// V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
+// para por que é uma store ADITIVA (App.tsx continua a única fonte real de
+// coleta; um efeito abaixo só espelha o dado já real para dentro dela).
+import { useUnifiedSnapshotStore } from "./store/unified-snapshot-store";
+// V18 Sprint 1 (Tarefa B): "Destravar o Gráfico Institucional" — substitui
+// o SVG feito à mão por lightweight-charts (pan/zoom/crosshair nativos).
+import { EnhancedChart_110_Percent } from "./chart/EnhancedChart_110_Percent";
 import {
   runRealAnalysisCycle,
   type RealCycleResult,
@@ -105,8 +112,6 @@ import {
   Globe,
   Maximize2,
   Minimize2,
-  ZoomIn,
-  ZoomOut,
   LayoutGrid,
   Pin,
   PanelLeft,
@@ -225,7 +230,7 @@ export default function App() {
     openInterest: null,
   });
   const [chartData, setChartData] = useState<
-    { open: number; high: number; low: number; close: number }[]
+    { time: number; open: number; high: number; low: number; close: number }[]
   >([]);
   // Auditoria de estabilização (P1 — "apenas 15m responde corretamente"):
   // causa raiz real era dupla — getChartCandles() tinha '15m' fixo em
@@ -1155,6 +1160,34 @@ export default function App() {
     [chartData],
   );
 
+  // V18 Sprint 1 (Tarefa A): espelha o dado real já coletado por App.tsx
+  // para dentro da UnifiedGlobalSnapshot store (Zustand+Immer) — nenhuma
+  // rede nova disparada aqui, só sincronização. Cada efeito só escreve
+  // quando a fatia real correspondente muda, então um consumidor via
+  // seletor atômico (usePriceSnapshot, useCoreSnapshot, ...) só
+  // re-renderiza quando aquela fatia específica de fato mudou.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setSymbol(selectedAsset);
+  }, [selectedAsset]);
+  useEffect(() => {
+    if (priceData) useUnifiedSnapshotStore.getState().setPrice(priceData);
+  }, [priceData]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setOrderBook(orderBook);
+  }, [orderBook]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setDerivatives(derivatives);
+  }, [derivatives]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setCore({
+      engineStatus,
+      direction: engine?.direction ?? null,
+      confidence: engine?.confidence ?? null,
+      lastUpdateAt,
+      cycleLatencyMs,
+    });
+  }, [engineStatus, engine, lastUpdateAt, cycleLatencyMs]);
+
   // Stable reference — prevents every context consumer (TopBar, all Widgets,
   // AssistantOrb, MarketDirectionWidget...) from re-rendering on renders
   // that don't actually change any of these values.
@@ -1318,7 +1351,7 @@ export default function App() {
                             assetLabel={`${selectedTradFiAsset?.symbol ?? ""} · ${selectedTradFiAsset?.name ?? ""}`}
                           />
                         ) : (
-                          <ChartWidget data={priceData} chartData={chartData} />
+                          <ChartWidget chartData={chartData} />
                         ))}
                     </div>
 
@@ -2941,11 +2974,6 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
 }
 
 // --- CHART WIDGET ---
-// Zoom windows over the SAME real candles already fetched (no new fetch, no
-// fabricated data) — fewer candles visible = each one gets more horizontal
-// room, same principle as any real charting tool's zoom.
-const CHART_ZOOM_STEPS = [12, 20, 30, 50];
-
 // Auditoria de estabilização (P1): os 14 timeframes pedidos mapeiam 1:1
 // para intervalos REAIS aceitos pela API pública de klines de Futuros da
 // Binance (o mesmo endpoint que collectBinanceFuturesKlines já usa) —
@@ -2971,37 +2999,21 @@ const CHART_TIMEFRAMES: { value: string; label: string }[] = [
   { value: "1M", label: "1M" },
 ];
 
-function ChartWidget({ data, chartData }: any) {
+function ChartWidget({ chartData }: any) {
   // Real Fair Value Gaps / Order Blocks / Liquidity zones — computed once
   // in App() (see contextValue) against this exact candle array, shared
   // with the Neural Core widget's tactical-context prompt so both use the
-  // same real counts rather than two independent computations.
+  // same real counts rather than two independent computations. V18 Sprint
+  // 1 (Tarefa B): EnhancedChart_110_Percent (lightweight-charts) lê o
+  // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
+  // navegam o histórico completo já carregado, então o remapeamento de
+  // índice que o zoom "fatiado" antigo exigia deixou de existir.
   const { smcZones, selectedAsset, engine, chartTimeframe, setChartTimeframe } = useContext(WidgetContext) || {};
-  const [zoomStep, setZoomStep] = useState(CHART_ZOOM_STEPS.length - 1);
-  const visibleCount = CHART_ZOOM_STEPS[zoomStep];
-  const zoomedData = chartData && chartData.length > 0 ? chartData.slice(-visibleCount) : chartData;
-  const canZoomIn = zoomStep > 0;
-  const canZoomOut = zoomStep < CHART_ZOOM_STEPS.length - 1;
-
-  // smcZones' indices are relative to the FULL chartData array (computed
-  // once in App()). Zooming shows only the last `visibleCount` candles, so
-  // every zone's index needs the same offset subtracted or it would point
-  // at the wrong candle (or land off-screen entirely). Zones that belong to
-  // a candle scrolled out of the zoomed window are dropped, not clamped —
-  // showing them at the edge would misrepresent where they actually are.
-  const zoomOffset = chartData && chartData.length > 0 ? Math.max(chartData.length - visibleCount, 0) : 0;
-  const zoomedZones = useMemo(() => {
-    if (!smcZones) return smcZones;
-    const remap = <T extends { index: number }>(arr: T[]): T[] =>
-      arr.filter((z) => z.index - zoomOffset >= 0).map((z) => ({ ...z, index: z.index - zoomOffset }));
-    return {
-      fairValueGaps: remap(smcZones.fairValueGaps ?? []),
-      orderBlocks: remap(smcZones.orderBlocks ?? []),
-      liquidityZones: remap(smcZones.liquidityZones ?? []),
-    };
-  }, [smcZones, zoomOffset]);
-
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
+
+  const unmitigatedFvgs = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
+  const unmitigatedBlocks = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
+  const unsweptLiquidity = (smcZones?.liquidityZones ?? []).filter((z: LiquidityZone) => !z.swept).slice(0, 4);
 
   return (
     <Widget
@@ -3021,7 +3033,7 @@ function ChartWidget({ data, chartData }: any) {
               estreitas; é rolagem esperada de um seletor real (mesmo
               padrão de qualquer terminal profissional), não uma barra de
               rolagem indesejada de layout quebrado. */}
-          <div className="flex items-center gap-0.5 max-w-[120px] sm:max-w-[220px] overflow-x-auto scrollbar-hide shrink-0">
+          <div className="flex items-center gap-0.5 max-w-[160px] sm:max-w-[260px] overflow-x-auto scrollbar-hide shrink-0">
             {CHART_TIMEFRAMES.map((tf) => (
               <button
                 key={tf.value}
@@ -3038,35 +3050,6 @@ function ChartWidget({ data, chartData }: any) {
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-0.5 ml-1 pl-1.5 border-l border-[#8ab4f8]/20">
-            <button
-              type="button"
-              onClick={(e) => {
-                stopBubble(e);
-                setZoomStep((z) => Math.min(z + 1, CHART_ZOOM_STEPS.length - 1));
-              }}
-              onDoubleClick={stopBubble}
-              disabled={!canZoomOut}
-              title="Diminuir zoom"
-              className="p-0.5 rounded text-[#8ab4f8]/60 hover:text-[#00f0ff] disabled:opacity-25 disabled:cursor-not-allowed"
-            >
-              <ZoomOut size={11} />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                stopBubble(e);
-                setZoomStep((z) => Math.max(z - 1, 0));
-              }}
-              onDoubleClick={stopBubble}
-              disabled={!canZoomIn}
-              title="Aumentar zoom"
-              className="p-0.5 rounded text-[#8ab4f8]/60 hover:text-[#00f0ff] disabled:opacity-25 disabled:cursor-not-allowed"
-            >
-              <ZoomIn size={11} />
-            </button>
-            <span className="text-[#8ab4f8]/40 tabular-nums">{visibleCount}</span>
-          </div>
         </div>
       }
     >
@@ -3076,19 +3059,21 @@ function ChartWidget({ data, chartData }: any) {
           por inteiro; o espaço vertical recuperado (~50px) vai para as velas
           (prioridade do gráfico, V11 §7). O título do Widget carrega o
           símbolo, necessário quando o gráfico está maximizado cobrindo a
-          barra; a tag de último preço no eixo é parte intrínseca do gráfico. */}
-      <div className="flex-1 mt-1 mr-8 relative min-h-0">
-        {zoomedData && zoomedData.length > 0 ? (
-          <CandleChart
-            data={zoomedData}
-            last={data?.price ?? null}
-            zones={zoomedZones}
+          barra; a tag de último preço no eixo é parte intrínseca do gráfico
+          (lightweight-charts desenha o próprio last-price label). */}
+      <div className="flex-1 mt-1 relative min-h-0">
+        {chartData && chartData.length > 0 ? (
+          <EnhancedChart_110_Percent
+            data={chartData}
             support={engine?.support ?? null}
             resistance={engine?.resistance ?? null}
             supportStrength={engine?.supportStrength ?? null}
             resistanceStrength={engine?.resistanceStrength ?? null}
             supportBreakouts={engine?.supportBreakouts ?? 0}
             resistanceBreakouts={engine?.resistanceBreakouts ?? 0}
+            fairValueGaps={unmitigatedFvgs}
+            orderBlocks={unmitigatedBlocks}
+            liquidityZones={unsweptLiquidity}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
@@ -3099,223 +3084,6 @@ function ChartWidget({ data, chartData }: any) {
     </Widget>
   );
 }
-
-// Split so the expensive part (100 candles -> ~200 SVG nodes) only
-// re-renders when the candle window itself changes (~every 60s), not on
-// every live ticker tick (~1/s) that only moves the last-price marker.
-function CandleChart({
-  data,
-  last,
-  zones,
-  support,
-  resistance,
-  supportStrength,
-  resistanceStrength,
-  supportBreakouts,
-  resistanceBreakouts,
-}: {
-  data: any[];
-  last: number | null;
-  zones?: { fairValueGaps: PriceZone[]; orderBlocks: PriceZone[]; liquidityZones?: LiquidityZone[] };
-  support?: number | null;
-  resistance?: number | null;
-  supportStrength?: { label: "FORTE" | "FRACA"; touches: number } | null;
-  resistanceStrength?: { label: "FORTE" | "FRACA"; touches: number } | null;
-  supportBreakouts?: number;
-  resistanceBreakouts?: number;
-}) {
-  if (!data || data.length === 0) return null;
-  const min = Math.min(...data.map((d) => d.low));
-  const max = Math.max(...data.map((d) => d.high));
-  const range = max - min || 1;
-  const lastY = num(last) ? 100 - ((last - min) / range) * 100 : null;
-  const priceToPct = (price: number) => 100 - ((price - min) / range) * 100;
-
-  // Only unmitigated/unswept zones — the ones still "live" for a trader to
-  // watch. Capped so a busy 100-candle window doesn't turn into a wall of
-  // boxes/lines.
-  const unmitigatedFvgs = (zones?.fairValueGaps ?? []).filter((z) => !z.mitigated).slice(0, 3);
-  const unmitigatedBlocks = (zones?.orderBlocks ?? []).filter((z) => !z.mitigated).slice(0, 3);
-  const unsweptLiquidity = (zones?.liquidityZones ?? []).filter((z) => !z.swept).slice(0, 4);
-
-  return (
-    <div className="absolute inset-0 border-b border-[#00f0ff20]">
-      {/* V16 §3 (Chart Engine institucional): R1/S1 — o nível de suporte/
-          resistência mais próximo já usado pelo Risk Engine/S.E. (mesmo
-          engine.support/resistance exibido em outros cards), com força e
-          contagem REAIS de toques/rompimentos (ver countBreakouts em
-          App()) — nunca um número inventado. Uma linha por nível (não o
-          par completo S1/S2/R1/R2) para não poluir o gráfico; o detalhe
-          completo fica no card compacto (MarketBiasDecisionCard). */}
-      {num(resistance) && (
-        <div
-          className="absolute pointer-events-none border-t border-dashed border-[#ff0055]/60 flex items-center justify-end"
-          style={{ top: `${priceToPct(resistance)}%`, left: 0, right: 0 }}
-        >
-          <span className="text-[0.42rem] font-bold text-[#ff0055] bg-[#010308]/70 px-[3px] leading-none -translate-y-1/2">
-            R1 {fmtInt(resistance)}
-            {resistanceStrength
-              ? ` · ${resistanceStrength.label} · ${resistanceStrength.touches}× retest · ${resistanceBreakouts ?? 0}× romp.`
-              : ""}
-          </span>
-        </div>
-      )}
-      {num(support) && (
-        <div
-          className="absolute pointer-events-none border-t border-dashed border-[#00ffaa]/60 flex items-center justify-end"
-          style={{ top: `${priceToPct(support)}%`, left: 0, right: 0 }}
-        >
-          <span className="text-[0.42rem] font-bold text-[#00ffaa] bg-[#010308]/70 px-[3px] leading-none -translate-y-1/2">
-            S1 {fmtInt(support)}
-            {supportStrength
-              ? ` · ${supportStrength.label} · ${supportStrength.touches}× retest · ${supportBreakouts ?? 0}× romp.`
-              : ""}
-          </span>
-        </div>
-      )}
-      {unsweptLiquidity.map((z, i) => (
-        <div
-          key={`liq-${z.index}-${i}`}
-          className="absolute pointer-events-none border-t border-dashed border-[#f0d06f]/50 flex items-center"
-          style={{ top: `${priceToPct(z.price)}%`, left: `${(z.index / data.length) * 100}%`, right: 0 }}
-        >
-          <span className="text-[0.42rem] font-bold text-[#f0d06f]/70 bg-[#010308]/60 px-[3px] leading-none -translate-y-1/2">
-            {z.type === "EQUAL_HIGH" ? "EQH" : "EQL"} ×{z.touches}
-          </span>
-        </div>
-      ))}
-      {unmitigatedFvgs.map((z, i) => (
-        <div
-          key={`fvg-${z.index}-${i}`}
-          className={`absolute pointer-events-none ${z.type === "BULLISH" ? "bg-[#00ffaa]/[0.06] border-y border-[#00ffaa]/25" : "bg-[#ff0055]/[0.06] border-y border-[#ff0055]/25"}`}
-          style={{
-            top: `${priceToPct(z.top)}%`,
-            height: `${Math.max(priceToPct(z.bottom) - priceToPct(z.top), 0.6)}%`,
-            left: `${(z.index / data.length) * 100}%`,
-            right: 0,
-          }}
-        />
-      ))}
-      {unmitigatedBlocks.map((z, i) => (
-        <div
-          key={`ob-${z.index}-${i}`}
-          className={`absolute pointer-events-none border-dashed ${z.type === "BULLISH" ? "border-[#00ffaa]/40" : "border-[#ff0055]/40"}`}
-          style={{
-            top: `${priceToPct(z.top)}%`,
-            height: `${Math.max(priceToPct(z.bottom) - priceToPct(z.top), 0.6)}%`,
-            left: `${(z.index / data.length) * 100}%`,
-            right: 0,
-            borderTopWidth: 1,
-            borderBottomWidth: 1,
-          }}
-        />
-      ))}
-      <CandlesSvg data={data} />
-      {lastY !== null && (
-        <div
-          className="absolute right-[-36px] text-[0.45rem] font-bold text-[#010308] bg-[#00ffaa] px-[4px] py-[2px] rounded shadow-[0_0_10px_#00ffaa] translate-y-[-50%] border border-[#00ffaa] flex items-center gap-1"
-          style={{ top: `${lastY}%` }}
-        >
-          <div className="w-1 h-1 bg-[#010308] rounded-full animate-ping opacity-70"></div>
-          {fmtInt(last)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const CandlesSvg = React.memo(function CandlesSvg({ data }: { data: any[] }) {
-  const min = Math.min(...data.map((d) => d.low));
-  const max = Math.max(...data.map((d) => d.high));
-  const range = max - min || 1;
-
-  const polyPoints = data
-    .map((d, i) => {
-      const xPos = ((i + 0.5) / data.length) * 100;
-      const yPos = 100 - ((d.close - min) / range) * 100;
-      return `${xPos},${yPos}`;
-    })
-    .join(" ");
-
-  return (
-    <>
-      {[0, 0.25, 0.5, 0.75, 1].map((pct) => (
-        <div
-          key={pct}
-          className="absolute left-0 right-0 border-t border-white/5 pointer-events-none"
-          style={{ top: `${pct * 100}%` }}
-        ></div>
-      ))}
-      <svg
-        width="100%"
-        height="100%"
-        preserveAspectRatio="none"
-        className="overflow-visible absolute inset-0 z-0 opacity-20"
-      >
-        <defs>
-          <linearGradient id="glowGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#00f0ff" stopOpacity="0.8" />
-            <stop offset="100%" stopColor="#00f0ff" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <polygon points={`0,100 ${polyPoints} 100,100`} fill="url(#glowGrad)" />
-      </svg>
-
-      <svg
-        width="100%"
-        height="100%"
-        preserveAspectRatio="none"
-        className="overflow-visible absolute inset-0 z-10"
-      >
-        <defs>
-          <filter id="glow-up">
-            <feGaussianBlur stdDeviation="2" result="coloredBlur" />
-            <feMerge>
-              <feMergeNode in="coloredBlur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="glow-down">
-            <feGaussianBlur stdDeviation="2" result="coloredBlur" />
-            <feMerge>
-              <feMergeNode in="coloredBlur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        {data.map((d, i) => {
-          const yHigh = 100 - ((d.high - min) / range) * 100 + "%";
-          const yLow = 100 - ((d.low - min) / range) * 100 + "%";
-          const yOpen = 100 - ((d.open - min) / range) * 100 + "%";
-          const yClose = 100 - ((d.close - min) / range) * 100 + "%";
-          const isUp = d.close >= d.open;
-          const color = isUp ? "#00ffaa" : "#ff0055";
-          const filter = isUp ? "url(#glow-up)" : "url(#glow-down)";
-          const boxTop = isUp ? yClose : yOpen;
-          const rawHeight = Math.abs(((d.close - d.open) / range) * 100);
-          const boxHeight = Math.max(0.5, rawHeight) + "%";
-          const xPos = `${((i + 0.5) / data.length) * 100}%`;
-          const xRect = `${((i + 0.1) / data.length) * 100}%`;
-          const wRect = `${(0.8 / data.length) * 100}%`;
-          return (
-            <g key={i}>
-              <line x1={xPos} y1={yHigh} x2={xPos} y2={yLow} stroke={color} strokeWidth="1" opacity={0.5} />
-              <rect x={xRect} y={boxTop} width={wRect} height={boxHeight} fill={color} filter={filter} />
-            </g>
-          );
-        })}
-      </svg>
-
-      <div className="absolute -right-9 top-0 bottom-0 flex flex-col justify-between text-[0.45rem] text-[#8ab4f8]/70 text-right w-8 translate-y-[-4px]">
-        <span>{fmt(max)}</span>
-        <span>{fmt((max * 3 + min) / 4)}</span>
-        <span>{fmt((max + min) / 2)}</span>
-        <span>{fmt((max + min * 3) / 4)}</span>
-        <span className="translate-y-[8px]">{fmt(min)}</span>
-      </div>
-    </>
-  );
-});
 
 // --- ORDER FLOW WIDGET ---
 function OrderFlowWidget() {

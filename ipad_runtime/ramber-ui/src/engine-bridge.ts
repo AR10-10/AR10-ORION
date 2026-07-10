@@ -472,17 +472,24 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
 // hardcode ficava aqui, no único call site real (App.tsx). Default '15m'
 // preserva o comportamento anterior para qualquer chamador que não passe o
 // parâmetro.
+// V18 Sprint 1 (Tarefa B): `time` (timestamp real do candle, em segundos —
+// o mesmo `t` que já vem da Binance e já era usado internamente pelo Bus/
+// time-synchronizer) volta a fazer parte do retorno. Antes desta mudança
+// era descartado aqui — o gráfico antigo (SVG feito à mão) plotava os
+// candles com espaçamento igual, ignorando gaps reais de tempo. Um chart
+// de eixo temporal de verdade (lightweight-charts) PRECISA desse dado real
+// por candle; nunca foi inventado, só não saía deste retorno.
 export async function getChartCandles(
   symbol = 'BTC',
   limit = 50,
   timeframe = '15m',
-): Promise<Array<{ open: number; high: number; low: number; close: number }> | null> {
+): Promise<Array<{ time: number; open: number; high: number; low: number; close: number }> | null> {
   const snapshot = await requestFuturesCandleSnapshot({
     symbol, timeframe, limit, maxAgeMs: 25_000,
   });
   if (!snapshot.ok) return null;
-  return snapshot.candles.map((c: { o: number; h: number; l: number; c: number }) => ({
-    open: c.o, high: c.h, low: c.l, close: c.c,
+  return snapshot.candles.map((c: { t: number; o: number; h: number; l: number; c: number }) => ({
+    time: c.t, open: c.o, high: c.h, low: c.l, close: c.c,
   }));
 }
 

@@ -118,17 +118,39 @@ describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (pass
     expect(app).not.toMatch(/countBreakouts[\s\S]{0,200}Math\.random/);
   });
 
-  it('CandleChart recebe support/resistance/strength/breakouts e desenha R1/S1 com a MESMA convenção visual das zonas de liquidez (linha tracejada + badge)', () => {
-    const app = read('../src/App.tsx');
-    const sigMatch = app.match(/function CandleChart\(\{([\s\S]*?)\n\}\) \{/);
-    expect(sigMatch, 'assinatura de CandleChart não encontrada').not.toBeNull();
-    expect(sigMatch![1]).toContain('resistanceStrength?:');
-    expect(sigMatch![1]).toContain('supportBreakouts?:');
+  // V18 Sprint 1 (Tarefa B): CandleChart (SVG feito à mão) foi substituído
+  // por EnhancedChart_110_Percent (lightweight-charts) — mesmo dado real
+  // de força/toques/rompimentos, agora desenhado como price line nativa
+  // (createPriceLine) em vez de um <span> posicionado em pixel.
+  it('EnhancedChart_110_Percent recebe support/resistance/strength/breakouts e monta o título da price line com a MESMA informação real que o gráfico antigo mostrava', () => {
+    const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
+    const propsMatch = chart.match(/interface EnhancedChartProps \{([\s\S]*?)\n\}/);
+    expect(propsMatch, 'EnhancedChartProps não encontrado').not.toBeNull();
+    expect(propsMatch![1]).toContain('supportStrength?:');
+    expect(propsMatch![1]).toContain('resistanceStrength?:');
+    expect(propsMatch![1]).toContain('supportBreakouts?:');
+    expect(propsMatch![1]).toContain('resistanceBreakouts?:');
 
-    const bodyMatch = app.match(/function CandleChart\(\{[\s\S]*?\n\}\) \{([\s\S]*?)\nconst CandlesSvg/);
-    expect(bodyMatch, 'corpo de CandleChart não encontrado').not.toBeNull();
-    expect(bodyMatch![1]).toContain('R1 {fmtInt(resistance)}');
-    expect(bodyMatch![1]).toContain('S1 {fmtInt(support)}');
+    const titleFnMatch = chart.match(/function levelTitle\([\s\S]*?\n\}/);
+    expect(titleFnMatch, 'levelTitle não encontrada').not.toBeNull();
+    expect(titleFnMatch![0]).toContain('strength.label');
+    expect(titleFnMatch![0]).toContain('strength.touches');
+
+    expect(chart).toContain('createPriceLine');
+    expect(chart).toContain('levelTitle("S1", supportStrength, supportBreakouts)');
+    expect(chart).toContain('levelTitle("R1", resistanceStrength, resistanceBreakouts)');
+  });
+
+  it('ChartWidget passa engine.support/resistance/strength/breakouts REAIS para EnhancedChart_110_Percent — mesma fonte de sempre, nunca recomputado', () => {
+    const app = read('../src/App.tsx');
+    const fnMatch = app.match(/function ChartWidget\(\{ chartData \}: any\) \{([\s\S]*?)\n\}\n/);
+    expect(fnMatch, 'ChartWidget não encontrada').not.toBeNull();
+    const body = fnMatch![1];
+    expect(body).toContain('<EnhancedChart_110_Percent');
+    expect(body).toContain('support={engine?.support ?? null}');
+    expect(body).toContain('resistance={engine?.resistance ?? null}');
+    expect(body).toContain('supportStrength={engine?.supportStrength ?? null}');
+    expect(body).toContain('resistanceStrength={engine?.resistanceStrength ?? null}');
   });
 });
 
