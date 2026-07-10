@@ -126,6 +126,11 @@ interface UnifiedSnapshotState {
   // (§7.2), calculado a partir de price.updatedAt/orderBook.updatedAt
   // reais que já existem desde a 0.4, nunca um segundo relógio próprio.
   isDataFresh: boolean;
+  // V-MAX Fase 1.2 (achado real, dedup): App.tsx já mede FPS real via
+  // requestAnimationFrame desde antes da Fase 0 ("FPS (UI REAL)") — o
+  // Health Monitor espelha esse valor real em vez de medir de novo (mesmo
+  // padrão de core.cycleLatencyMs/offline, nunca uma segunda amostragem).
+  uiFps: number | null;
   // V-MAX Fase 1.1 — pré-requisito real do OrderFlowHeatmapPlugin: uma
   // SÉRIE de snapshots L2 (não só o mais recente, que `orderBooks` acima
   // já cobre) — sem isto, um heatmap não tem "tempo" nenhum para desenhar.
@@ -145,6 +150,7 @@ interface UnifiedSnapshotActions {
   setHealth: (health: HealthSnapshot) => void;
   setOffline: (offline: boolean) => void;
   setDataFresh: (fresh: boolean) => void;
+  setUiFps: (fps: number | null) => void;
   sampleL2History: (exchange: Exchange, entry: L2HistoryEntry) => void;
 }
 
@@ -162,6 +168,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     health: EMPTY_HEALTH,
     offline: typeof navigator === "undefined" ? false : !navigator.onLine,
     isDataFresh: false,
+    uiFps: null,
     l2History: {},
 
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
@@ -180,6 +187,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setHealth: (health) => set((s) => { s.health = health; }),
     setOffline: (offline) => set((s) => { s.offline = offline; }),
     setDataFresh: (fresh) => set((s) => { s.isDataFresh = fresh; }),
+    setUiFps: (fps) => set((s) => { s.uiFps = fps; }),
     sampleL2History: (exchange, entry) => set((s) => {
       const ring = (s.l2History[exchange] ?? []) as L2HistoryEntry[];
       s.l2History[exchange] = maybeSampleL2History(ring, entry);
@@ -224,3 +232,4 @@ export const useDataFreshSnapshot = (): boolean => useUnifiedSnapshotStore((s) =
 // V-MAX Fase 1.1 — histórico L2 por exchange, para o OrderFlowHeatmapPlugin.
 export const useL2History = (exchange: Exchange): L2HistoryEntry[] =>
   useUnifiedSnapshotStore((s) => s.l2History[exchange] ?? EMPTY_L2_HISTORY);
+export const useUiFpsSnapshot = (): number | null => useUnifiedSnapshotStore((s) => s.uiFps);

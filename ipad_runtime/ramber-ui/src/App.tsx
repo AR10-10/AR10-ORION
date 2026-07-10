@@ -1269,6 +1269,14 @@ export default function App() {
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setConnectionState("OKX", okxCrossExchangeCheck.ok ? "LIVE" : "DEGRADED");
   }, [okxCrossExchangeCheck]);
+  // V-MAX Fase 1.2 (achado real durante a auditoria para o
+  // OrderFlowHeatmapPlugin): `fps` acima (Fase J, "FPS REAL da UI") é a
+  // ÚNICA medição real de frame rate desta árvore — o Health Monitor
+  // (Fase 0.8) foi corrigido para espelhar isto em vez de amostrar de
+  // novo por conta própria (zero repetição).
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setUiFps(fps);
+  }, [fps]);
 
   // Stable reference — prevents every context consumer (TopBar, all Widgets,
   // AssistantOrb, MarketDirectionWidget...) from re-rendering on renders

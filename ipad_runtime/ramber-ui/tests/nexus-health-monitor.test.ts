@@ -1,9 +1,14 @@
-// nexus-health-monitor.test.ts — V-MAX Fase 0.8: trava o Health Monitor
-// real. requestAnimationFrame/performance.memory não existem no ambiente
-// de teste (vitest environment: 'node', sem browser real) — stubados aqui
-// de forma controlável para testar a LÓGICA de amostragem/limiar, nunca
-// para fabricar um FPS/memória de produto (o componente real só entra em
-// produção via App.tsx, num browser real).
+// nexus-health-monitor.test.ts — V-MAX Fase 0.8 (revisado na Fase 1.2):
+// trava o Health Monitor real. performance.memory não existe no ambiente
+// de teste (vitest environment: 'node', sem browser real) — stubado aqui
+// de forma controlável para testar a LÓGICA de leitura/limiar, nunca para
+// fabricar memória de produto.
+//
+// fps NÃO tem mais amostragem própria aqui (achado real da Fase 1.2:
+// App.tsx já mede FPS via requestAnimationFrame desde antes da Fase 0 —
+// "FPS (UI REAL)" — o Health Monitor tinha uma segunda amostragem
+// paralela, uma duplicação real removida). Agora fps só espelha
+// store.uiFps, mesmo padrão de cycleLatencyMs/isOnline — testado como tal.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { TypedEventBus } from '../src/nexus/event-bus';
 import { useUnifiedSnapshotStore } from '../src/store/unified-snapshot-store';
@@ -27,67 +32,38 @@ const STORE_RESET = {
   health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0, isOnline: true, lastUpdatedAt: 0 },
   offline: false,
   isDataFresh: false,
+  uiFps: null,
+  l2History: {},
 };
 
 describe('HealthMonitor: cada campo é medido de verdade ou fica null/0 honesto — nunca um valor de exemplo', () => {
-  let rafCallbacks: Array<(t: number) => void>;
-  let rafClock: number;
   let monitor: HealthMonitor;
 
   beforeEach(() => {
     vi.useFakeTimers();
     useUnifiedSnapshotStore.setState(STORE_RESET);
     __resetHealthMonitorSingletonForTests();
-    rafCallbacks = [];
-    rafClock = 0;
-    vi.stubGlobal('requestAnimationFrame', (cb: (t: number) => void) => {
-      rafCallbacks.push(cb);
-      return rafCallbacks.length;
-    });
-    vi.stubGlobal('cancelAnimationFrame', () => {});
     vi.mocked(getQuantWorkerState).mockReturnValue('idle');
   });
 
   afterEach(() => {
     monitor?.stop();
-    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
-  function fireFrame(deltaMs: number) {
-    rafClock += deltaMs;
-    const due = rafCallbacks.splice(0, rafCallbacks.length);
-    due.forEach((cb) => cb(rafClock));
-  }
+  it('fps espelha store.uiFps real (mesma medição de App.tsx, "FPS REAL da UI") — nunca uma segunda amostragem própria', () => {
+    useUnifiedSnapshotStore.getState().setUiFps(58);
+    const bus = new TypedEventBus();
+    monitor = new HealthMonitor(bus);
+    monitor.start();
+    expect(useUnifiedSnapshotStore.getState().health.fps).toBe(58);
+  });
 
-  it('fps começa null (amostra curta demais) — nunca um chute antes de frames reais suficientes', () => {
+  it('fps fica null honesto quando App.tsx ainda não mediu nenhum frame real', () => {
     const bus = new TypedEventBus();
     monitor = new HealthMonitor(bus);
     monitor.start();
     expect(useUnifiedSnapshotStore.getState().health.fps).toBeNull();
-  });
-
-  it('fps real emerge da média de deltas reais entre frames (~60fps de frames de 16.67ms)', () => {
-    const bus = new TypedEventBus();
-    monitor = new HealthMonitor(bus);
-    monitor.start();
-    for (let i = 0; i < 10; i++) fireFrame(16.67);
-    vi.advanceTimersByTime(2_000);
-    const fps = useUnifiedSnapshotStore.getState().health.fps;
-    expect(fps).not.toBeNull();
-    expect(fps).toBeGreaterThanOrEqual(58);
-    expect(fps).toBeLessThanOrEqual(62);
-  });
-
-  it('frames mais lentos (30fps real) produzem um fps real proporcionalmente menor, nunca fixo em 60', () => {
-    const bus = new TypedEventBus();
-    monitor = new HealthMonitor(bus);
-    monitor.start();
-    for (let i = 0; i < 10; i++) fireFrame(33.33);
-    vi.advanceTimersByTime(2_000);
-    const fps = useUnifiedSnapshotStore.getState().health.fps;
-    expect(fps).toBeGreaterThanOrEqual(28);
-    expect(fps).toBeLessThanOrEqual(32);
   });
 
   it('memoryMb fica null quando performance.memory não existe (ambiente sem essa API) — nunca estimado', () => {
@@ -153,7 +129,7 @@ describe('HealthMonitor: cada campo é medido de verdade ou fica null/0 honesto 
     expect(received.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('stop() encerra o loop de rAF e o intervalo — nenhum snapshot novo depois', () => {
+  it('stop() encerra o intervalo — nenhum snapshot novo depois', () => {
     const bus = new TypedEventBus();
     monitor = new HealthMonitor(bus);
     monitor.start();
@@ -179,13 +155,10 @@ describe('HealthMonitor: isDataFresh (Blueprint §7.2) — freshness real a part
     vi.useFakeTimers();
     useUnifiedSnapshotStore.setState(STORE_RESET);
     __resetHealthMonitorSingletonForTests();
-    vi.stubGlobal('requestAnimationFrame', () => 1);
-    vi.stubGlobal('cancelAnimationFrame', () => {});
     vi.mocked(getQuantWorkerState).mockReturnValue('idle');
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 

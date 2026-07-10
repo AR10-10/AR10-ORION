@@ -18,6 +18,7 @@ const RESET = {
   health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0, isOnline: true, lastUpdatedAt: 0 },
   offline: false,
   isDataFresh: false,
+  uiFps: null,
   l2History: {},
 };
 
@@ -192,6 +193,12 @@ describe('unified-snapshot-store (V-MAX Fase 0.4): health/offline honestos, nunc
     const s = useUnifiedSnapshotStore.getState();
     expect(s.activeTimeframe).toBe('1h');
     expect(s.candles.BTC?.['15m']).toHaveLength(1);
+  });
+
+  it('setUiFps espelha o FPS real já medido por App.tsx (Fase J) — nunca uma segunda amostragem própria da store', () => {
+    expect(useUnifiedSnapshotStore.getState().uiFps).toBeNull();
+    useUnifiedSnapshotStore.getState().setUiFps(58);
+    expect(useUnifiedSnapshotStore.getState().uiFps).toBe(58);
   });
 });
 

@@ -4,8 +4,15 @@
 //
 // Cada campo é medido de verdade ou fica honestamente null/0 — nunca um
 // valor de exemplo:
-//   fps            — amostragem real via requestAnimationFrame (janela
-//                    deslizante de 60 frames), nunca um número fixo.
+//   fps            — Fase 1.2 (achado real durante a auditoria de dados
+//                    para o OrderFlowHeatmapPlugin): App.tsx JÁ tinha um
+//                    contador de FPS real via requestAnimationFrame desde
+//                    antes da Fase 0 ("FPS (UI REAL)", já exibido na UI) —
+//                    este módulo tinha sua PRÓPRIA amostragem paralela,
+//                    uma duplicação real que a Regra de Ouro 9/"zero
+//                    repetição" não deveria ter deixado passar. Corrigido:
+//                    espelha store.uiFps (mesmo padrão já usado para
+//                    cycleLatencyMs/isOnline abaixo), nunca mede de novo.
 //   memoryMb       — performance.memory.usedJSHeapSize quando o browser
 //                    expõe (Chrome/Safari); null nos que não expõem
 //                    (Firefox) — nunca estimado.
@@ -32,7 +39,6 @@ import type { HealthSnapshot } from "./types";
 
 const FRESHNESS_THRESHOLD_MS = 60_000;
 const SNAPSHOT_INTERVAL_MS = 2_000;
-const FPS_SAMPLE_WINDOW = 60;
 
 function readMemoryMb(): number | null {
   const mem = (performance as any).memory;
@@ -42,10 +48,7 @@ function readMemoryMb(): number | null {
 
 export class HealthMonitor {
   private readonly bus: TypedEventBus;
-  private rafId: number | null = null;
   private intervalId: ReturnType<typeof setInterval> | null = null;
-  private frameTimes: number[] = [];
-  private lastFrameAt: number | null = null;
   private running = false;
 
   constructor(bus: TypedEventBus) {
@@ -55,45 +58,22 @@ export class HealthMonitor {
   start(): void {
     if (this.running) return;
     this.running = true;
-    this.lastFrameAt = null;
-    this.frameTimes = [];
-    const sampleFrame = (t: number) => {
-      if (this.lastFrameAt !== null) {
-        this.frameTimes.push(t - this.lastFrameAt);
-        if (this.frameTimes.length > FPS_SAMPLE_WINDOW) this.frameTimes.shift();
-      }
-      this.lastFrameAt = t;
-      if (this.running) this.rafId = requestAnimationFrame(sampleFrame);
-    };
-    this.rafId = requestAnimationFrame(sampleFrame);
-
     this.emitSnapshot(); // primeira leitura real imediata, sem esperar o primeiro intervalo.
     this.intervalId = setInterval(() => this.emitSnapshot(), SNAPSHOT_INTERVAL_MS);
   }
 
   stop(): void {
     this.running = false;
-    if (this.rafId !== null) {
-      cancelAnimationFrame(this.rafId);
-      this.rafId = null;
-    }
     if (this.intervalId !== null) {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
   }
 
-  private currentFps(): number | null {
-    if (this.frameTimes.length < 5) return null; // amostra curta demais — melhor null honesto que um número instável.
-    const avgMs = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
-    if (avgMs <= 0) return null;
-    return Math.round(1000 / avgMs);
-  }
-
   private emitSnapshot(): void {
     const store = useUnifiedSnapshotStore.getState();
     const snapshot: HealthSnapshot = {
-      fps: this.currentFps(),
+      fps: store.uiFps,
       cycleLatencyMs: store.core.cycleLatencyMs,
       memoryMb: readMemoryMb(),
       workersAlive: getQuantWorkerState() === "ready" ? 1 : 0,
