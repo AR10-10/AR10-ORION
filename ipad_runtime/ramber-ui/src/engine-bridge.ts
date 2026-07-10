@@ -465,12 +465,20 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
 // ~30s, mesmo símbolo, mesmo timeframe, dois resultados que podiam nem
 // bater. V15.1 GOD TIER: futuros/perpétuo é a fonte EXCLUSIVA — nenhum
 // fallback para Spot (ver header do arquivo).
+// Auditoria de estabilização (P1): timeframe agora é um parâmetro real, não
+// mais fixo em '15m' — collectBinanceFuturesKlines já repassava `timeframe`
+// sem alteração até a URL real de klines da Binance (ver
+// binance-futures-candle-connector.js/binance-futures-public.js); o único
+// hardcode ficava aqui, no único call site real (App.tsx). Default '15m'
+// preserva o comportamento anterior para qualquer chamador que não passe o
+// parâmetro.
 export async function getChartCandles(
   symbol = 'BTC',
   limit = 50,
+  timeframe = '15m',
 ): Promise<Array<{ open: number; high: number; low: number; close: number }> | null> {
   const snapshot = await requestFuturesCandleSnapshot({
-    symbol, timeframe: '15m', limit, maxAgeMs: 25_000,
+    symbol, timeframe, limit, maxAgeMs: 25_000,
   });
   if (!snapshot.ok) return null;
   return snapshot.candles.map((c: { o: number; h: number; l: number; c: number }) => ({

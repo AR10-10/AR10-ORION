@@ -161,6 +161,46 @@ describe('market-data-bus: MarketDataBus dedupes concurrent requests (the real F
     expect(second.candles).toEqual(first.candles);
   });
 
+  // Auditoria de estabilização (P8): subscribe()/getSnapshot() não têm
+  // nenhum chamador real hoje (App.tsx/engine-bridge.ts sempre pedem
+  // requestSnapshot() diretamente) — mas o próprio mecanismo de
+  // recuperação automática que a auditoria pediu para confirmar
+  // (_degradedResult, bus.js) esquecia de notificar entry.subscribers
+  // no fallback para o último snapshot bom, ao contrário do caminho de
+  // sucesso logo acima (que sempre notifica). Trava a correção: sem ela,
+  // um futuro assinante real perderia silenciosamente a atualização de
+  // quality durante uma falha de rede recuperada.
+  it('subscribe() also receives the refreshed snapshot when collect() fails but falls back to the last known-good one', async () => {
+    const bus = new MarketDataBus();
+    let attempt = 0;
+    const flakyCollect = async () => {
+      attempt++;
+      if (attempt === 1) return [candle(1), candle(2)];
+      throw new Error('rede_indisponivel');
+    };
+    const received: any[] = [];
+    bus.subscribe('DOGE', '15m', (snap) => received.push(snap));
+
+    await bus.requestSnapshot({ symbol: 'DOGE', timeframe: '15m', limit: 2, collect: flakyCollect, maxAgeMs: 0 });
+    await bus.requestSnapshot({ symbol: 'DOGE', timeframe: '15m', limit: 2, collect: flakyCollect, maxAgeMs: 0 });
+
+    expect(received).toHaveLength(2);
+    expect(received.every((s) => s.ok)).toBe(true); // subscribe()'s contract: never a failed snapshot
+  });
+
+  it('subscribe() is never called with a failed snapshot when there is no prior good one to fall back to', async () => {
+    const bus = new MarketDataBus();
+    const alwaysFails = async () => {
+      throw new Error('sem_rede');
+    };
+    const received: any[] = [];
+    bus.subscribe('SHIB', '15m', (snap) => received.push(snap));
+
+    await bus.requestSnapshot({ symbol: 'SHIB', timeframe: '15m', limit: 2, collect: alwaysFails });
+
+    expect(received).toHaveLength(0);
+  });
+
   it('reports ok:false (never a fabricated snapshot) when collect() fails with no prior snapshot', async () => {
     const bus = new MarketDataBus();
     const alwaysFails = async () => {

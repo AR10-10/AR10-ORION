@@ -227,6 +227,21 @@ export default function App() {
   const [chartData, setChartData] = useState<
     { open: number; high: number; low: number; close: number }[]
   >([]);
+  // Auditoria de estabilização (P1 — "apenas 15m responde corretamente"):
+  // causa raiz real era dupla — getChartCandles() tinha '15m' fixo em
+  // engine-bridge.ts (corrigido acima) e o seletor de timeframe no
+  // ChartWidget era puramente decorativo (<span>, sem onClick, "15M"
+  // sempre marcado ativo por um literal fixo). chartTimeframeRef existe
+  // porque fetchSymbolData roda dentro de um efeito cujas deps são só
+  // [bootGeneration, selectedAsset] (WS/boot — nunca deve reiniciar só
+  // porque o timeframe mudou); o ref deixa o tick periódico de 30s sempre
+  // ler o timeframe ATUAL sem precisar recriar esse efeito nem
+  // reconectar o WebSocket.
+  const [chartTimeframe, setChartTimeframe] = useState("15m");
+  const chartTimeframeRef = useRef(chartTimeframe);
+  useEffect(() => {
+    chartTimeframeRef.current = chartTimeframe;
+  }, [chartTimeframe]);
   const [orderBook, setOrderBook] = useState<{ bids: Level[]; asks: Level[] }>({
     bids: [],
     asks: [],
@@ -454,7 +469,7 @@ export default function App() {
   // tick.
   const fetchSymbolData = async (): Promise<boolean> => {
     try {
-      const candles = await getChartCandles(selectedAsset, 50);
+      const candles = await getChartCandles(selectedAsset, 50, chartTimeframeRef.current);
       if (!candles) throw new Error('market_data_bus_sem_candles_validos');
       setChartData(candles);
 
@@ -680,6 +695,24 @@ export default function App() {
       ws?.close();
     };
   }, [bootGeneration, selectedAsset]);
+
+  // Auditoria de estabilização (P1): trocar de timeframe atualiza os
+  // candles do gráfico IMEDIATAMENTE — efeito próprio e deliberadamente
+  // desacoplado do grande efeito de boot/WS acima (que só depende de
+  // bootGeneration/selectedAsset). Só chartData muda aqui: sem resetar
+  // preço/order book/scanner, sem reconectar o WebSocket, sem
+  // reinicializar o gráfico ("Sem reload. Sem reinicializar o gráfico",
+  // diretriz P1). Se a busca real falhar, o chartData anterior permanece
+  // visível (fail-closed honesto — nunca um blank/reset no meio da troca).
+  useEffect(() => {
+    let cancelled = false;
+    getChartCandles(selectedAsset, 50, chartTimeframe).then((candles) => {
+      if (!cancelled && candles) setChartData(candles);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [chartTimeframe, selectedAsset]);
 
   // Real engine cycle — WASM Quant Engine + research pipeline (engine-bridge.ts).
   // 30s cadence: the 15m candle's close evolves continuously, and the target
@@ -1136,6 +1169,8 @@ export default function App() {
       toggleLeftDrawer,
       rightDrawerOpen,
       toggleRightDrawer,
+      chartTimeframe,
+      setChartTimeframe,
       engine,
       smcZones,
       bootAt,
@@ -1178,6 +1213,7 @@ export default function App() {
       toggleLeftDrawer,
       rightDrawerOpen,
       toggleRightDrawer,
+      chartTimeframe,
       engine,
       smcZones,
       bootAt,
@@ -1489,7 +1525,14 @@ export default function App() {
 // dashboard, so SETTINGS and the cockpit never disagree about what a
 // module is called (no raw internal keys like "se_core" shown to the user).
 const WIDGET_LABELS: { [key: string]: string } = {
-  chart: "GRÁFICO · BINANCE SPOT",
+  // Auditoria de estabilização (P8): rótulo estava desatualizado desde a
+  // V15.1 GOD TIER, que tornou o gráfico exclusivamente Futuros/Perpétuo
+  // (engine-bridge.ts, sem fallback para Spot) — "SPOT" aqui contradizia
+  // a própria fonte real usada (collectBinanceFuturesKlines). O título
+  // exibido no próprio Widget do gráfico já deriva corretamente de
+  // realCycle.instrumentType; só este rótulo do painel de Configuração
+  // (nome "oficial" do módulo) estava com o texto antigo.
+  chart: "GRÁFICO · BINANCE FUTUROS",
   orderflow: "FLUXO DE ORDENS · LIVRO REAL",
   heatmap: "MAPA DE LIQUIDEZ · PROFUNDIDADE REAL",
   market_direction: "VETOR DE MERCADO",
@@ -2898,17 +2941,42 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
 }
 
 // --- CHART WIDGET ---
-// Zoom windows over the SAME real 15m candles already fetched (no new
-// fetch, no fabricated data) — fewer candles visible = each one gets more
-// horizontal room, same principle as any real charting tool's zoom.
+// Zoom windows over the SAME real candles already fetched (no new fetch, no
+// fabricated data) — fewer candles visible = each one gets more horizontal
+// room, same principle as any real charting tool's zoom.
 const CHART_ZOOM_STEPS = [12, 20, 30, 50];
+
+// Auditoria de estabilização (P1): os 14 timeframes pedidos mapeiam 1:1
+// para intervalos REAIS aceitos pela API pública de klines de Futuros da
+// Binance (o mesmo endpoint que collectBinanceFuturesKlines já usa) —
+// nenhum valor inventado. `value` é o que chega à URL real (convenção da
+// própria Binance: "m" minúsculo = minuto, "M" maiúsculo = mês); `label`
+// segue a notação como pedida na diretriz, para nunca confundir "1m" com
+// "1M" — ambiguidade real que o seletor antigo (decorativo, sempre "1M"
+// de exibição para "1 minuto") tinha.
+const CHART_TIMEFRAMES: { value: string; label: string }[] = [
+  { value: "1m", label: "1m" },
+  { value: "3m", label: "3m" },
+  { value: "5m", label: "5m" },
+  { value: "15m", label: "15m" },
+  { value: "30m", label: "30m" },
+  { value: "1h", label: "1H" },
+  { value: "2h", label: "2H" },
+  { value: "4h", label: "4H" },
+  { value: "6h", label: "6H" },
+  { value: "8h", label: "8H" },
+  { value: "12h", label: "12H" },
+  { value: "1d", label: "1D" },
+  { value: "1w", label: "1W" },
+  { value: "1M", label: "1M" },
+];
 
 function ChartWidget({ data, chartData }: any) {
   // Real Fair Value Gaps / Order Blocks / Liquidity zones — computed once
   // in App() (see contextValue) against this exact candle array, shared
   // with the Neural Core widget's tactical-context prompt so both use the
   // same real counts rather than two independent computations.
-  const { smcZones, selectedAsset, engine } = useContext(WidgetContext) || {};
+  const { smcZones, selectedAsset, engine, chartTimeframe, setChartTimeframe } = useContext(WidgetContext) || {};
   const [zoomStep, setZoomStep] = useState(CHART_ZOOM_STEPS.length - 1);
   const visibleCount = CHART_ZOOM_STEPS[zoomStep];
   const zoomedData = chartData && chartData.length > 0 ? chartData.slice(-visibleCount) : chartData;
@@ -2942,14 +3010,34 @@ function ChartWidget({ data, chartData }: any) {
       flex="flex-[1.8] min-h-[320px]"
       extraHeader={
         <div className="flex items-center gap-1 text-[0.45rem]">
-          {["1M", "5M", "15M", "1H", "4H", "1D"].map((tf) => (
-            <span
-              key={tf}
-              className={`px-1 rounded ${tf === "15M" ? "bg-[#00f0ff20] text-[#00f0ff] font-bold border border-[#00f0ff40]" : "text-[#8ab4f8]/60"}`}
-            >
-              {tf}
-            </span>
-          ))}
+          {/* Auditoria de estabilização (P1): antes disto, esta linha era
+              só <span> sem onClick — nunca respondia a toque nenhum, e
+              "15M" ficava marcado ativo por um literal fixo
+              (tf === "15M") independente do que o gráfico realmente
+              mostrava. Agora é o chartTimeframe real (App(), contexto),
+              a mesma variável que fetchSymbolData/o efeito de troca de
+              timeframe usam — nunca dessincroniza da UI. overflow-x-auto
+              porque 14 opções reais não cabem numa linha só em telas
+              estreitas; é rolagem esperada de um seletor real (mesmo
+              padrão de qualquer terminal profissional), não uma barra de
+              rolagem indesejada de layout quebrado. */}
+          <div className="flex items-center gap-0.5 max-w-[120px] sm:max-w-[220px] overflow-x-auto scrollbar-hide shrink-0">
+            {CHART_TIMEFRAMES.map((tf) => (
+              <button
+                key={tf.value}
+                type="button"
+                onClick={(e) => {
+                  stopBubble(e);
+                  setChartTimeframe?.(tf.value);
+                }}
+                onDoubleClick={stopBubble}
+                title={`Timeframe ${tf.label}`}
+                className={`shrink-0 px-1 py-0.5 rounded transition-colors ${chartTimeframe === tf.value ? "bg-[#00f0ff20] text-[#00f0ff] font-bold border border-[#00f0ff40]" : "text-[#8ab4f8]/60 hover:text-[#8ab4f8]"}`}
+              >
+                {tf.label}
+              </button>
+            ))}
+          </div>
           <div className="flex items-center gap-0.5 ml-1 pl-1.5 border-l border-[#8ab4f8]/20">
             <button
               type="button"

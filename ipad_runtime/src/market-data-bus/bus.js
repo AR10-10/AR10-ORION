@@ -78,11 +78,25 @@ export class MarketDataBus {
      *  Fail-closed igual à Fase B (último snapshot bom > nada; nada
      *  fabricado), mas o campo quality é sempre o ATUAL — o operador vê a
      *  fonte degradando mesmo enquanto os candles exibidos continuam sendo
-     *  os últimos reais conhecidos. */
+     *  os últimos reais conhecidos.
+     *
+     *  Auditoria de estabilização (P8): faltava notificar entry.subscribers
+     *  aqui — o caminho de sucesso (requestSnapshot, mais abaixo) sempre
+     *  notificava, mas este (o próprio mecanismo de "recuperação
+     *  automática" que a auditoria pediu para confirmar) não. Só no ramo
+     *  entry.snapshot (quality atualizada de um snapshot ok:true real e já
+     *  publicado antes) — nunca no ramo _failedSnapshot logo abaixo, que é
+     *  ok:false; o contrato de subscribe() é explícito: assinantes nunca
+     *  recebem um snapshot com falha. Sem callers reais hoje (achado da
+     *  auditoria), mas um assinante futuro não pode herdar um bug de
+     *  notificação perdida. */
     _degradedResult(entry, symbol, timeframe, errors) {
         const quality = this._quality.reportFor(this._keyOf(symbol, timeframe));
         if (entry.snapshot) {
             entry.snapshot = Object.freeze({ ...entry.snapshot, quality });
+            entry.subscribers.forEach((cb) => {
+                try { cb(entry.snapshot); } catch { /* um assinante ruim nunca derruba os demais */ }
+            });
             return entry.snapshot;
         }
         return this._failedSnapshot(symbol, timeframe, errors, quality);
