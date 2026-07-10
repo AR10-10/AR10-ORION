@@ -119,6 +119,8 @@ import {
   Zap,
   Newspaper,
   Bell,
+  Mic,
+  MicOff,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -172,6 +174,16 @@ const lorentzianConfidencePct = (lorentzian: { ok: boolean; confidence?: number 
 // nunca um segundo código.
 const ASSETS = ["BTC", "ETH", "SOL", "BNB", "XRP"] as const;
 type AssetSymbol = string;
+
+// V18.1 (pedido do Operador: "o gráfico tá com poucas velas... a gente
+// olhar o passado também"): 200 velas reais por busca — 4x a janela
+// anterior (50), casando com a capacidade padrão do ring buffer do
+// Market Data Bus (DEFAULT_CAPACITY = 200, candle-ring-buffer.js), então
+// nenhum candle real é descartado no caminho. O limite da própria
+// Binance é 1500/request; subir além de 200 exigiria também subir a
+// capacidade do buffer da chave compartilhada com o ciclo de análise —
+// mudança de Bus, não deste consumidor.
+const CHART_CANDLE_LIMIT = 200;
 
 const fmt = (v: number | null | undefined, d = 2) =>
   num(v)
@@ -474,7 +486,7 @@ export default function App() {
   // tick.
   const fetchSymbolData = async (): Promise<boolean> => {
     try {
-      const candles = await getChartCandles(selectedAsset, 50, chartTimeframeRef.current);
+      const candles = await getChartCandles(selectedAsset, CHART_CANDLE_LIMIT, chartTimeframeRef.current);
       if (!candles) throw new Error('market_data_bus_sem_candles_validos');
       setChartData(candles);
 
@@ -711,7 +723,7 @@ export default function App() {
   // visível (fail-closed honesto — nunca um blank/reset no meio da troca).
   useEffect(() => {
     let cancelled = false;
-    getChartCandles(selectedAsset, 50, chartTimeframe).then((candles) => {
+    getChartCandles(selectedAsset, CHART_CANDLE_LIMIT, chartTimeframe).then((candles) => {
       if (!cancelled && candles) setChartData(candles);
     });
     return () => {
@@ -2335,6 +2347,75 @@ const LevelCard = React.memo(function LevelCard({
   );
 });
 
+// --- NÚCLEO + VOZ (V18.1, fusão aprovada pelo Operador) ---
+// O núcleo vivia escondido: o AssistantOrb rico ("bolinha circulando" +
+// IRON-VOICE) só renderiza quando o card Siriform está expandido (se_core
+// começa collapsed). Esta é a fusão pedida — um orb compacto SEMPRE
+// visível na barra de comando, ao lado do botão de energia ("lá onde tem
+// o botãozinho de ligar no cantinho"), fundindo as duas coisas reais que
+// já existem: o estado do núcleo (engineStatus — a MESMA variável do
+// SiriformCoreCard/AssistantOrb, mapeamento V18 §1.2: verde-azulado=ok,
+// âmbar=aguardando, vermelho suave=falha) e o controle de voz
+// (voiceEngine, o MESMO gesto real de ligar/desligar do
+// VoiceControlWidget — que continua intacto no painel expandido: a fusão
+// não remove nada, "perder nada"). O push-to-talk continua exclusivo do
+// VoiceControlWidget de propósito: dois pontos de captura simultâneos
+// duplicariam o handler de resultado do reconhecimento (fala respondida
+// duas vezes) — um risco real, não uma economia.
+function NucleoVoiceOrb() {
+  const { engineStatus } = useContext(WidgetContext) || {};
+  const [voiceStatus, setVoiceStatus] = useState(() => voiceEngine.getStatus());
+  useEffect(() => voiceEngine.onStatus(setVoiceStatus), []);
+
+  const coreColor =
+    engineStatus === "ok" ? "#00ffaa" : engineStatus === "error" ? "#ff0055" : "#f0d06f";
+  const coreLabel =
+    engineStatus === "ok" ? "SINCRONIZADO" : engineStatus === "error" ? "FALHOU" : AWAIT;
+  const ttsSupported = voiceStatus.supported;
+
+  // Mesmo gesto real do VoiceControlWidget: ligar a voz É a interação de
+  // usuário que o iOS exige para liberar áudio; a confirmação falada é o
+  // teste audível real.
+  const handleToggleVoice = () => {
+    if (!ttsSupported) return;
+    const next = !voiceStatus.enabled;
+    voiceEngine.setEnabled(next);
+    if (next) voiceEngine.speak("Voz operacional. Modo somente leitura.", "INFO");
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleToggleVoice}
+      title={`Núcleo S.E. · ${coreLabel} · Voz ${!ttsSupported ? "INDISPONÍVEL" : voiceStatus.enabled ? "ATIVA" : "DESLIGADA"} (toque para alternar)`}
+      className="relative ml-1 w-8 h-8 rounded-full border flex items-center justify-center transition-all active:scale-95 shrink-0"
+      style={{
+        borderColor: `${coreColor}55`,
+        background: `${coreColor}0d`,
+        boxShadow: `0 0 10px ${coreColor}2e`,
+      }}
+    >
+      {/* A "bolinha circulando" — mesma linguagem visual dos anéis
+          orbitais do orb grande; gira rápido enquanto o ciclo real ainda
+          não sincronizou (pending), lento em regime normal. Movimento é
+          estilo, não dado: a INFORMAÇÃO honesta é a cor (engineStatus). */}
+      <div
+        className={`absolute inset-0 rounded-full pointer-events-none ${engineStatus === "pending" ? "animate-[spin_1.4s_linear_infinite]" : "animate-[spin_7s_linear_infinite]"}`}
+      >
+        <div
+          className="absolute -top-[2px] left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full"
+          style={{ background: coreColor, boxShadow: `0 0 6px ${coreColor}` }}
+        ></div>
+      </div>
+      {ttsSupported && voiceStatus.enabled ? (
+        <Mic size={13} className={voiceStatus.speaking ? "animate-pulse" : ""} style={{ color: coreColor }} />
+      ) : (
+        <MicOff size={13} className="text-[#8ab4f8]/50" />
+      )}
+    </button>
+  );
+}
+
 // --- TOP BAR ---
 function TopBar({
   data,
@@ -2583,6 +2664,9 @@ function TopBar({
 
         <div className="flex gap-1 md:gap-2 h-full items-center justify-end shrink-0">
           <TopStat label="SESSÃO" value={uptime || DASH} color="text-white" />
+          {/* V18.1: núcleo + voz sempre visíveis no cantinho, ao lado do
+              botão de energia — ver header de NucleoVoiceOrb. */}
+          <NucleoVoiceOrb />
           <button
             type="button"
             onClick={handleManualRestart}

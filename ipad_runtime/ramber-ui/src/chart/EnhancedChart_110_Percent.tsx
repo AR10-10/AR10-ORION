@@ -180,6 +180,12 @@ export function EnhancedChart_110_Percent({
   // S1/R1 reais — o MESMO engine.support/resistance que os outros widgets
   // já exibem, aqui como price lines nativas (createPriceLine), nunca uma
   // linha desenhada à mão em cima do canvas.
+  //
+  // "Fio de seda" (pedido explícito do Operador): TODAS as linhas de
+  // marcação deste gráfico são SÓLIDAS e finas (lineWidth 1, o mínimo da
+  // lib) — nunca pontilhadas/tracejadas. A hierarquia visual entre S1/R1
+  // (nível primário) e as zonas SMC (contexto) vem da OPACIDADE da cor,
+  // não do estilo do traço: S1/R1 mais presentes, zonas mais translúcidas.
   useEffect(() => {
     if (!seriesRef.current) return;
     if (supportLineRef.current) {
@@ -189,9 +195,9 @@ export function EnhancedChart_110_Percent({
     if (Number.isFinite(support)) {
       supportLineRef.current = seriesRef.current.createPriceLine({
         price: support as number,
-        color: "#00ffaa",
+        color: "rgba(0, 255, 170, 0.65)",
         lineWidth: 1,
-        lineStyle: LineStyle.Dashed,
+        lineStyle: LineStyle.Solid,
         axisLabelVisible: true,
         title: levelTitle("S1", supportStrength, supportBreakouts),
       });
@@ -207,9 +213,9 @@ export function EnhancedChart_110_Percent({
     if (Number.isFinite(resistance)) {
       resistanceLineRef.current = seriesRef.current.createPriceLine({
         price: resistance as number,
-        color: "#ff0055",
+        color: "rgba(255, 0, 85, 0.65)",
         lineWidth: 1,
-        lineStyle: LineStyle.Dashed,
+        lineStyle: LineStyle.Solid,
         axisLabelVisible: true,
         title: levelTitle("R1", resistanceStrength, resistanceBreakouts),
       });
@@ -228,27 +234,30 @@ export function EnhancedChart_110_Percent({
     zoneLinesRef.current.forEach((line) => series.removePriceLine(line));
     zoneLinesRef.current = [];
 
+    // "Fio de seda": sólidas e finas também aqui — a distinção de que são
+    // contexto (não o nível primário S1/R1) vem da opacidade mais baixa e
+    // da ausência de rótulo no eixo, nunca de um traço pontilhado.
     (fairValueGaps ?? []).forEach((z) => {
-      const color = z.type === "BULLISH" ? "#00ffaa" : "#ff0055";
+      const color = z.type === "BULLISH" ? "rgba(0, 255, 170, 0.30)" : "rgba(255, 0, 85, 0.30)";
       zoneLinesRef.current.push(
-        series.createPriceLine({ price: z.top, color, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: "FVG" }),
-        series.createPriceLine({ price: z.bottom, color, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: "FVG" }),
+        series.createPriceLine({ price: z.top, color, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: false, title: "FVG" }),
+        series.createPriceLine({ price: z.bottom, color, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: false, title: "FVG" }),
       );
     });
     (orderBlocks ?? []).forEach((z) => {
-      const color = z.type === "BULLISH" ? "#00ffaa" : "#ff0055";
+      const color = z.type === "BULLISH" ? "rgba(0, 255, 170, 0.40)" : "rgba(255, 0, 85, 0.40)";
       zoneLinesRef.current.push(
-        series.createPriceLine({ price: z.top, color, lineWidth: 1, lineStyle: LineStyle.LargeDashed, axisLabelVisible: false, title: "OB" }),
-        series.createPriceLine({ price: z.bottom, color, lineWidth: 1, lineStyle: LineStyle.LargeDashed, axisLabelVisible: false, title: "OB" }),
+        series.createPriceLine({ price: z.top, color, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: false, title: "OB" }),
+        series.createPriceLine({ price: z.bottom, color, lineWidth: 1, lineStyle: LineStyle.Solid, axisLabelVisible: false, title: "OB" }),
       );
     });
     (liquidityZones ?? []).forEach((z) => {
       zoneLinesRef.current.push(
         series.createPriceLine({
           price: z.price,
-          color: "#c86bff",
+          color: "rgba(200, 107, 255, 0.45)",
           lineWidth: 1,
-          lineStyle: LineStyle.Dotted,
+          lineStyle: LineStyle.Solid,
           axisLabelVisible: false,
           title: `${z.type === "EQUAL_HIGH" ? "EQH" : "EQL"} x${z.touches}`,
         }),

@@ -141,6 +141,31 @@ describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (pass
     expect(chart).toContain('levelTitle("R1", resistanceStrength, resistanceBreakouts)');
   });
 
+  it('V18.1 NucleoVoiceOrb: fusão núcleo+voz na barra de comando deriva a cor do MESMO engineStatus real (nunca um score fabricado) e usa o gesto real de voz do voiceEngine', () => {
+    const app = read('../src/App.tsx');
+    const fnMatch = app.match(/function NucleoVoiceOrb\(\) \{([\s\S]*?)\n\}\n/);
+    expect(fnMatch, 'NucleoVoiceOrb não encontrada').not.toBeNull();
+    const body = fnMatch![1];
+    // Cor derivada exclusivamente do engineStatus real — mapeamento V18 §1.2.
+    expect(body).toContain('engineStatus === "ok" ? "#00ffaa" : engineStatus === "error" ? "#ff0055" : "#f0d06f"');
+    // Voz: mesmo gesto real do VoiceControlWidget, nunca um botão decorativo.
+    expect(body).toContain('voiceEngine.setEnabled(next)');
+    expect(body).not.toMatch(/Math\.random/);
+    // Montado na TopBar (o "cantinho" ao lado do Power) — sempre visível.
+    expect(app).toContain('<NucleoVoiceOrb />');
+  });
+
+  it('"fio de seda" (pedido explícito do Operador): TODAS as price lines são sólidas e finas — nunca pontilhadas/tracejadas', () => {
+    const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
+    expect(chart).toContain('LineStyle.Solid');
+    expect(chart).not.toContain('LineStyle.Dotted');
+    expect(chart).not.toContain('LineStyle.Dashed');
+    expect(chart).not.toContain('LineStyle.LargeDashed');
+    expect(chart).not.toContain('LineStyle.SparseDotted');
+    // lineWidth 1 = o traço mais fino que a lib desenha.
+    expect(chart).not.toMatch(/lineWidth: [2-9]/);
+  });
+
   it('ChartWidget passa engine.support/resistance/strength/breakouts REAIS para EnhancedChart_110_Percent — mesma fonte de sempre, nunca recomputado', () => {
     const app = read('../src/App.tsx');
     const fnMatch = app.match(/function ChartWidget\(\{ chartData \}: any\) \{([\s\S]*?)\n\}\n/);
