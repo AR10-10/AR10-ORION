@@ -17,6 +17,8 @@ const RESET = {
   connections: {},
   health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0, isOnline: true, lastUpdatedAt: 0 },
   offline: false,
+  isDataFresh: false,
+  l2History: {},
 };
 
 describe('unified-snapshot-store: boots fail-closed (nada fabricado antes do primeiro dado real)', () => {
@@ -190,5 +192,51 @@ describe('unified-snapshot-store (V-MAX Fase 0.4): health/offline honestos, nunc
     const s = useUnifiedSnapshotStore.getState();
     expect(s.activeTimeframe).toBe('1h');
     expect(s.candles.BTC?.['15m']).toHaveLength(1);
+  });
+});
+
+// V-MAX Fase 1.1 — pré-requisito real do OrderFlowHeatmapPlugin: uma
+// série de snapshots L2 por exchange, não só o mais recente.
+describe('unified-snapshot-store (V-MAX Fase 1.1): l2History retém amostras reais por exchange, nunca fabrica uma entrada', () => {
+  beforeEach(() => {
+    useUnifiedSnapshotStore.setState(RESET);
+  });
+
+  const l2 = (t: number) => ({ time: t, bids: [{ price: 100, size: 1 }], asks: [{ price: 101, size: 1 }] });
+
+  it('l2History começa vazio — nenhuma exchange tem histórico fabricado antes do primeiro L2 real', () => {
+    expect(useUnifiedSnapshotStore.getState().l2History).toEqual({});
+  });
+
+  it('sampleL2History grava a primeira amostra real sob a exchange certa', () => {
+    useUnifiedSnapshotStore.getState().sampleL2History('BINANCE', l2(1000));
+    expect(useUnifiedSnapshotStore.getState().l2History.BINANCE).toEqual([l2(1000)]);
+  });
+
+  it('duas exchanges nunca colidem — histórico independente por exchange', () => {
+    useUnifiedSnapshotStore.getState().sampleL2History('BINANCE', l2(1000));
+    useUnifiedSnapshotStore.getState().sampleL2History('BYBIT', l2(999));
+    const s = useUnifiedSnapshotStore.getState();
+    expect(s.l2History.BINANCE).toEqual([l2(1000)]);
+    expect(s.l2History.BYBIT).toEqual([l2(999)]);
+  });
+
+  it('uma segunda amostra real chegando cedo demais é descartada (mesma cadência da função pura maybeSampleL2History)', () => {
+    useUnifiedSnapshotStore.getState().sampleL2History('BINANCE', l2(1000));
+    useUnifiedSnapshotStore.getState().sampleL2History('BINANCE', l2(1500)); // 500ms depois, cedo demais
+    expect(useUnifiedSnapshotStore.getState().l2History.BINANCE).toHaveLength(1);
+  });
+
+  it('exchange nunca amostrada fica honestamente ausente do mapa (undefined), nunca um array vazio fabricado no estado real', () => {
+    useUnifiedSnapshotStore.getState().sampleL2History('BINANCE', l2(1000));
+    expect(useUnifiedSnapshotStore.getState().l2History.BYBIT).toBeUndefined();
+  });
+
+  it('respeita o teto real de capacidade (L2_HISTORY_CAPACITY) — nunca acumula sem limite', () => {
+    const store = useUnifiedSnapshotStore.getState();
+    for (let i = 0; i < 190; i++) {
+      store.sampleL2History('BINANCE', l2(i * 2000));
+    }
+    expect(useUnifiedSnapshotStore.getState().l2History.BINANCE).toHaveLength(180);
   });
 });

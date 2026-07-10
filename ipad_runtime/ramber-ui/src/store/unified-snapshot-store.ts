@@ -38,6 +38,7 @@ import type {
   L2Snapshot,
   Timeframe,
 } from "../nexus/types";
+import { maybeSampleL2History, type L2HistoryEntry } from "../nexus/l2-history";
 
 export interface PriceSnapshot {
   price: number | null;
@@ -95,6 +96,10 @@ const EMPTY_HEALTH: HealthSnapshot = {
   isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
   lastUpdatedAt: 0,
 };
+// Referência estável (nunca um `[]` novo por chamada) — sem isto, todo
+// consumidor de useL2History re-renderizaria a cada render por causa da
+// comparação por referência do Zustand, mesmo sem nenhum L2 real novo.
+const EMPTY_L2_HISTORY: L2HistoryEntry[] = [];
 
 interface UnifiedSnapshotState {
   symbol: string;
@@ -121,6 +126,10 @@ interface UnifiedSnapshotState {
   // (§7.2), calculado a partir de price.updatedAt/orderBook.updatedAt
   // reais que já existem desde a 0.4, nunca um segundo relógio próprio.
   isDataFresh: boolean;
+  // V-MAX Fase 1.1 — pré-requisito real do OrderFlowHeatmapPlugin: uma
+  // SÉRIE de snapshots L2 (não só o mais recente, que `orderBooks` acima
+  // já cobre) — sem isto, um heatmap não tem "tempo" nenhum para desenhar.
+  l2History: Partial<Record<Exchange, L2HistoryEntry[]>>;
 }
 
 interface UnifiedSnapshotActions {
@@ -136,6 +145,7 @@ interface UnifiedSnapshotActions {
   setHealth: (health: HealthSnapshot) => void;
   setOffline: (offline: boolean) => void;
   setDataFresh: (fresh: boolean) => void;
+  sampleL2History: (exchange: Exchange, entry: L2HistoryEntry) => void;
 }
 
 export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnapshotActions>()(
@@ -152,6 +162,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     health: EMPTY_HEALTH,
     offline: typeof navigator === "undefined" ? false : !navigator.onLine,
     isDataFresh: false,
+    l2History: {},
 
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
     setPrice: (price) => set((s) => { s.price = { ...price, updatedAt: Date.now() }; }),
@@ -169,6 +180,10 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setHealth: (health) => set((s) => { s.health = health; }),
     setOffline: (offline) => set((s) => { s.offline = offline; }),
     setDataFresh: (fresh) => set((s) => { s.isDataFresh = fresh; }),
+    sampleL2History: (exchange, entry) => set((s) => {
+      const ring = (s.l2History[exchange] ?? []) as L2HistoryEntry[];
+      s.l2History[exchange] = maybeSampleL2History(ring, entry);
+    }),
   })),
 );
 
@@ -206,3 +221,6 @@ export const useConnectionsSnapshot = (): Partial<Record<Exchange, ExchangeConne
 export const useHealthSnapshot = (): HealthSnapshot => useUnifiedSnapshotStore((s) => s.health);
 export const useOfflineSnapshot = (): boolean => useUnifiedSnapshotStore((s) => s.offline);
 export const useDataFreshSnapshot = (): boolean => useUnifiedSnapshotStore((s) => s.isDataFresh);
+// V-MAX Fase 1.1 — histórico L2 por exchange, para o OrderFlowHeatmapPlugin.
+export const useL2History = (exchange: Exchange): L2HistoryEntry[] =>
+  useUnifiedSnapshotStore((s) => s.l2History[exchange] ?? EMPTY_L2_HISTORY);

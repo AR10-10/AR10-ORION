@@ -1247,6 +1247,18 @@ export default function App() {
       "BINANCE",
       orderBookUpdatedAt ? { bids: orderBook.bids, asks: orderBook.asks, updatedAt: orderBookUpdatedAt } : null,
     );
+    // V-MAX Fase 1.1: MESMO evento real acima também vira uma amostra no
+    // histórico L2 (pré-requisito do OrderFlowHeatmapPlugin) — nunca uma
+    // segunda assinatura de WS, só um segundo consumidor do mesmo dado
+    // real já throttled a 200ms. sampleL2History decide sozinho (função
+    // pura em l2-history.ts) se já passou tempo suficiente para reter.
+    if (orderBookUpdatedAt) {
+      useUnifiedSnapshotStore.getState().sampleL2History("BINANCE", {
+        time: orderBookUpdatedAt,
+        bids: orderBook.bids,
+        asks: orderBook.asks,
+      });
+    }
   }, [orderBook, orderBookUpdatedAt]);
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setConnectionState("BINANCE", wsLive ? "LIVE" : "OFFLINE");
