@@ -60,6 +60,11 @@ export interface CouncilDecision {
   // NÃO é probabilidade de acerto (mesma honestidade da Fase F). null
   // quando o conselho absteve.
   agreement: number | null;
+  // Distribuição REAL do pool (Fase F) — massa de OPINIÃO do comitê em
+  // cada direção, NUNCA probabilidade de mercado. Campo aditivo (contrato
+  // continua v1: adição não quebra consumidor); o Motor de Cenários da
+  // Fase 2 pesa os caminhos com isto em vez de recomputar o pool.
+  opinionMass: { long: number; short: number; neutral: number } | null;
   quorum: number; // votos não-ABSTAIN entre os agentes direcionais
   riskGated: boolean; // true = RiskAgent absteve por dado degradado e travou o conselho
   votes: CouncilVote[]; // sempre os 6, na ordem fixa — o debate completo
@@ -298,6 +303,7 @@ export function aggregateCouncil(votes: CouncilVote[], computedAt: number): Coun
       contractVersion: COUNCIL_CONTRACT_VERSION,
       stance: "ABSTAIN",
       agreement: null,
+      opinionMass: null,
       quorum,
       riskGated,
       votes,
@@ -318,6 +324,7 @@ export function aggregateCouncil(votes: CouncilVote[], computedAt: number): Coun
       contractVersion: COUNCIL_CONTRACT_VERSION,
       stance: "ABSTAIN",
       agreement: null,
+      opinionMass: null,
       quorum,
       riskGated: false,
       votes,
@@ -329,6 +336,11 @@ export function aggregateCouncil(votes: CouncilVote[], computedAt: number): Coun
     contractVersion: COUNCIL_CONTRACT_VERSION,
     stance: POOL_DIRECTION_TO_STANCE[pool.direcao as string] ?? "NEUTRAL",
     agreement: pool.forca as number,
+    opinionMass: {
+      long: (pool.opiniao as any).alta as number,
+      short: (pool.opiniao as any).baixa as number,
+      neutral: (pool.opiniao as any).neutro as number,
+    },
     quorum,
     riskGated: false,
     votes,

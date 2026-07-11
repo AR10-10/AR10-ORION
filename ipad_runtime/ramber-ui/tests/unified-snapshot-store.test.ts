@@ -26,6 +26,8 @@ const RESET = {
   council: null,
   affectiveMemory: { contractVersion: 1 as const, reward: 0, pain: 0, lastEventAt: null, eventCount: 0 },
   cpi: null,
+  scenario: null,
+  trapSignals: [],
 };
 
 describe('unified-snapshot-store: boots fail-closed (nada fabricado antes do primeiro dado real)', () => {

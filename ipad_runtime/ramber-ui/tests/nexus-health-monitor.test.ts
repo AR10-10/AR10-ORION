@@ -40,6 +40,8 @@ const STORE_RESET = {
   council: null,
   affectiveMemory: { contractVersion: 1 as const, reward: 0, pain: 0, lastEventAt: null, eventCount: 0 },
   cpi: null,
+  scenario: null,
+  trapSignals: [],
 };
 
 describe('HealthMonitor: cada campo é medido de verdade ou fica null/0 honesto — nunca um valor de exemplo', () => {

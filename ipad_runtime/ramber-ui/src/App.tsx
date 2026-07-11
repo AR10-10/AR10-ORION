@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot } from "./store/unified-snapshot-store";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -47,6 +47,10 @@ import { filterSessionCandles, bucketMidPrice } from "./nexus/volume-profile";
 // V-MAX Fase 1 item 4: Conselho Multi-Agente (6 agentes puros + Meta-Agent
 // que delega a agregação ao linear opinion pool real da Fase F).
 import { buildCouncilDecision } from "./nexus/council";
+// V-MAX Fase 2: cenários Path A/B (níveis reais + massa de opinião real do
+// conselho) e armadilhas por corroboração de eventos reais.
+import { buildScenarioProjection, type ScenarioLevel } from "./nexus/scenario-engine";
+import { detectInstitutionalTraps } from "./nexus/trap-detection";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
 import {
@@ -1324,21 +1328,59 @@ export default function App() {
   const councilOffline = useOfflineSnapshot();
   const councilDataFresh = useDataFreshSnapshot();
   useEffect(() => {
-    useUnifiedSnapshotStore.getState().setCouncil(
-      buildCouncilDecision({
-        price: typeof priceData?.price === "number" ? priceData.price : null,
+    const price = typeof priceData?.price === "number" ? priceData.price : null;
+    const decision = buildCouncilDecision({
+      price,
+      liquidityZones: smcZones.liquidityZones,
+      structure15: engine?.marketStructureLabel ?? null,
+      structure1h: engine?.htfMarketStructureLabel ?? null,
+      cvd,
+      orderflowSignals,
+      offline: councilOffline,
+      isDataFresh: councilDataFresh,
+      engineStatus,
+      fibonacci: fibonacciMatrix,
+    });
+    useUnifiedSnapshotStore.getState().setCouncil(decision);
+
+    // V-MAX Fase 2 (Motor de Cenários): MESMOS níveis reais que os motores
+    // já mapearam — nenhum alvo projetado/inventado; pesos = massa de
+    // opinião real do conselho recém-computado (nunca probabilidade).
+    const levels: ScenarioLevel[] = [];
+    if (typeof engine?.support === "number" && Number.isFinite(engine.support)) {
+      levels.push({ price: engine.support, sourceKind: "SR_SUPPORT_1" });
+    }
+    if (typeof engine?.resistance === "number" && Number.isFinite(engine.resistance)) {
+      levels.push({ price: engine.resistance, sourceKind: "SR_RESISTANCE_1" });
+    }
+    smcZones.liquidityZones.filter((z) => !z.swept).forEach((z) => {
+      levels.push({ price: z.price, sourceKind: z.type === "EQUAL_HIGH" ? "EQH" : "EQL" });
+    });
+    (fibonacciMatrix?.levels ?? []).filter((l) => l.score > 0).forEach((l) => {
+      levels.push({ price: l.price, sourceKind: `FIB_${(l.ratio * 100).toFixed(1)}` });
+    });
+    const vpForScenario = volumeProfileSnapshot?.fixedRange;
+    if (vpForScenario) {
+      levels.push({ price: vpForScenario.pocPrice, sourceKind: "VP_POC" });
+      vpForScenario.hvnIndices.forEach((i) => {
+        levels.push({ price: bucketMidPrice(i, vpForScenario.rangeMin, vpForScenario.rangeMax, vpForScenario.bucketCount), sourceKind: "VP_HVN" });
+      });
+    }
+    useUnifiedSnapshotStore.getState().setScenario(buildScenarioProjection(price, levels, decision));
+  }, [priceData, smcZones, engine, cvd, orderflowSignals, councilOffline, councilDataFresh, engineStatus, fibonacciMatrix, volumeProfileSnapshot]);
+
+  // V-MAX Fase 2 (armadilhas institucionais): corroboração de eventos
+  // REAIS — sweeps consumados (flag swept do motor SMC) + sinais reais de
+  // ABSORPTION/EXHAUSTION na janela. Lista vazia = estado honesto comum.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setTrapSignals(
+      detectInstitutionalTraps({
         liquidityZones: smcZones.liquidityZones,
-        structure15: engine?.marketStructureLabel ?? null,
-        structure1h: engine?.htfMarketStructureLabel ?? null,
-        cvd,
         orderflowSignals,
-        offline: councilOffline,
-        isDataFresh: councilDataFresh,
-        engineStatus,
-        fibonacci: fibonacciMatrix,
+        now: Date.now(),
       }),
     );
-  }, [priceData, smcZones, engine, cvd, orderflowSignals, councilOffline, councilDataFresh, engineStatus, fibonacciMatrix]);
+  }, [smcZones, orderflowSignals]);
 
   // V-MAX Fase 1 item 5: eventos afetivos REAIS — só TRANSIÇÕES
   // verdadeiras de estado operacional viram evento (refs guardam o estado
@@ -4523,6 +4565,15 @@ const COUNCIL_AGENT_LABEL: Record<string, string> = {
 function CouncilWidget() {
   const council = useCouncilSnapshot();
   const cpi = useCpiSnapshot();
+  // V-MAX Fase 2: cenários Path A/B e armadilhas reais — mesma store.
+  const scenario = useScenarioSnapshot();
+  const traps = useTrapSignalsSnapshot();
+
+  const pathLabel = (p: { direction: string; target: { price: number; sourceKind: string } | null; opinionWeight: number | null }) => {
+    const target = p.target ? `${p.target.price.toFixed(0)} (${p.target.sourceKind})` : "sem nível real";
+    const weight = p.opinionWeight !== null ? ` · opinião ${Math.round(p.opinionWeight * 100)}%` : "";
+    return `${p.direction} → ${target}${weight}`;
+  };
 
   const stance = council?.stance ?? null;
   const stanceLabel = stance ?? AWAIT;
@@ -4570,6 +4621,41 @@ function CouncilWidget() {
         {!council && (
           <div className="flex items-center justify-center text-[0.5rem] tracking-[0.25em] text-[#8ab4f8]/40 font-bold py-3">
             {AWAIT}
+          </div>
+        )}
+        {/* V-MAX Fase 2 — Path A/B: alvos são níveis REAIS dos motores;
+            "opinião" é massa do comitê (Fase F), rotulada como tal — o
+            title inteiro do bloco repete a natureza do número para nunca
+            ser lido como probabilidade de mercado. */}
+        {scenario && (
+          <div
+            className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1 rounded border border-[#00f0ff15]"
+            title="Pesos = massa de opinião do Conselho (comitê) — NUNCA probabilidade de mercado. Alvos = próximos níveis reais mapeados pelos motores."
+          >
+            <div className="flex justify-between items-center">
+              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CENÁRIO A</span>
+              <span className={`text-[0.48rem] font-mono font-black ${scenario.pathA.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
+                {pathLabel(scenario.pathA)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CENÁRIO B</span>
+              <span className={`text-[0.48rem] font-mono font-black ${scenario.pathB.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
+                {pathLabel(scenario.pathB)}
+              </span>
+            </div>
+          </div>
+        )}
+        {/* V-MAX Fase 2 — armadilhas por corroboração de eventos reais;
+            nenhuma linha quando não há evento (honesto, não vazio-triste). */}
+        {traps.length > 0 && (
+          <div className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1 rounded border border-[#ff005530]">
+            {traps.map((t) => (
+              <div key={t.kind} className="flex justify-between items-center" title={t.evidence.join(" · ")}>
+                <span className="text-[0.45rem] text-[#ff0055]/80 font-bold tracking-wide">ARMADILHA · {t.kind.replace(/_/g, " ")}</span>
+                <span className="text-[0.5rem] font-mono font-black text-[#ff0055]">{Math.round(t.confidence * 100)}%</span>
+              </div>
+            ))}
           </div>
         )}
         <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">

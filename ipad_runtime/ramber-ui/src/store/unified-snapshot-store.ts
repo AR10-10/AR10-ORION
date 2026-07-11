@@ -43,6 +43,8 @@ import { pushOrderflowHistory, type OrderflowHistoryEntry } from "../nexus/order
 import type { VolumeProfileSnapshot } from "../nexus/volume-profile";
 import type { FibonacciConfluenceMatrix } from "../nexus/fibonacci-confluence";
 import type { CouncilDecision } from "../nexus/council";
+import type { ScenarioProjection } from "../nexus/scenario-engine";
+import type { TrapSignal } from "../nexus/trap-detection";
 import {
   ingestAffectiveEvent,
   computeCpi,
@@ -177,6 +179,14 @@ interface UnifiedSnapshotState {
   // não do símbolo).
   affectiveMemory: AffectiveMemoryState;
   cpi: number | null;
+  // V-MAX Fase 2 — Motor de Cenários (Path A/B): alvos = níveis reais,
+  // pesos = massa de opinião real do conselho (nunca probabilidade de
+  // mercado — ver nexus/scenario-engine.ts). null sem preço real.
+  scenario: ScenarioProjection | null;
+  // V-MAX Fase 2 — armadilhas institucionais detectadas por corroboração
+  // de eventos REAIS (sweeps consumados + sinais reais de order flow).
+  // Lista vazia é o estado honesto comum, não erro.
+  trapSignals: TrapSignal[];
 }
 
 interface UnifiedSnapshotActions {
@@ -212,6 +222,8 @@ interface UnifiedSnapshotActions {
   setVolumeProfile: (profile: VolumeProfileSnapshot | null) => void;
   setFibonacciConfluence: (matrix: FibonacciConfluenceMatrix | null) => void;
   setCouncil: (decision: CouncilDecision | null) => void;
+  setScenario: (projection: ScenarioProjection | null) => void;
+  setTrapSignals: (traps: TrapSignal[]) => void;
   // Ingestão de um evento afetivo REAL (transição operacional verdadeira,
   // nunca chamado por render) — decai a memória até agora e recomputa o
   // CPI no mesmo write (decaimento lazy: entre eventos a razão é
@@ -241,6 +253,8 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     council: null,
     affectiveMemory: EMPTY_AFFECTIVE_STATE,
     cpi: null,
+    scenario: null,
+    trapSignals: [],
 
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
     setPrice: (price) => set((s) => { s.price = { ...price, updatedAt: Date.now() }; }),
@@ -271,6 +285,8 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setVolumeProfile: (profile) => set((s) => { s.volumeProfile = profile; }),
     setFibonacciConfluence: (matrix) => set((s) => { s.fibonacciConfluence = matrix; }),
     setCouncil: (decision) => set((s) => { s.council = decision; }),
+    setScenario: (projection) => set((s) => { s.scenario = projection; }),
+    setTrapSignals: (traps) => set((s) => { s.trapSignals = traps; }),
     recordAffectiveEvent: (source) => set((s) => {
       const next = ingestAffectiveEvent(s.affectiveMemory as AffectiveMemoryState, source, Date.now());
       s.affectiveMemory = next;
@@ -333,3 +349,9 @@ export const useCouncilSnapshot = (): CouncilDecision | null =>
 export const useCpiSnapshot = (): number | null => useUnifiedSnapshotStore((s) => s.cpi);
 export const useAffectiveMemorySnapshot = (): AffectiveMemoryState =>
   useUnifiedSnapshotStore((s) => s.affectiveMemory);
+// V-MAX Fase 2 — cenários Path A/B e armadilhas institucionais reais.
+const EMPTY_TRAPS: TrapSignal[] = [];
+export const useScenarioSnapshot = (): ScenarioProjection | null =>
+  useUnifiedSnapshotStore((s) => s.scenario);
+export const useTrapSignalsSnapshot = (): TrapSignal[] =>
+  useUnifiedSnapshotStore((s) => s.trapSignals ?? EMPTY_TRAPS);
