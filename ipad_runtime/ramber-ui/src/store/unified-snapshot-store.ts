@@ -41,6 +41,7 @@ import type {
 import { maybeSampleL2History, type L2HistoryEntry } from "../nexus/l2-history";
 import { pushOrderflowHistory, type OrderflowHistoryEntry } from "../nexus/orderflow-history";
 import type { VolumeProfileSnapshot } from "../nexus/volume-profile";
+import type { FibonacciConfluenceMatrix } from "../nexus/fibonacci-confluence";
 
 export interface PriceSnapshot {
   price: number | null;
@@ -151,6 +152,11 @@ interface UnifiedSnapshotState {
   // primeiro cálculo real do ativo corrente; consumidores futuros (matriz
   // de confluência Fibonacci da Fase 1.4, plugin visual) leem daqui.
   volumeProfile: VolumeProfileSnapshot | null;
+  // V-MAX Fase 1.4 — Matriz de Confluência Fibonacci (agente transversal):
+  // retração real da última perna confirmada cruzada contra S/R, zonas SMC
+  // e POC/HVN do Volume Profile. null = sem perna confirmada/sem candles
+  // (fail-closed) — score 0 nos níveis é resultado honesto, não erro.
+  fibonacciConfluence: FibonacciConfluenceMatrix | null;
 }
 
 interface UnifiedSnapshotActions {
@@ -184,6 +190,7 @@ interface UnifiedSnapshotActions {
   resetOrderflowHistory: () => void;
   // null explícito = "ainda não computado/ativo trocado", nunca um perfil velho.
   setVolumeProfile: (profile: VolumeProfileSnapshot | null) => void;
+  setFibonacciConfluence: (matrix: FibonacciConfluenceMatrix | null) => void;
 }
 
 export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnapshotActions>()(
@@ -204,6 +211,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     l2History: {},
     orderflowHistory: [],
     volumeProfile: null,
+    fibonacciConfluence: null,
 
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
     setPrice: (price) => set((s) => { s.price = { ...price, updatedAt: Date.now() }; }),
@@ -232,6 +240,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     resetL2History: () => set((s) => { s.l2History = {}; }),
     resetOrderflowHistory: () => set((s) => { s.orderflowHistory = []; }),
     setVolumeProfile: (profile) => set((s) => { s.volumeProfile = profile; }),
+    setFibonacciConfluence: (matrix) => set((s) => { s.fibonacciConfluence = matrix; }),
   })),
 );
 
@@ -279,3 +288,6 @@ export const useOrderflowHistory = (): OrderflowHistoryEntry[] =>
 // V-MAX Fase 1.3 — Volume Profile real (fixedRange + session), null até computar.
 export const useVolumeProfileSnapshot = (): VolumeProfileSnapshot | null =>
   useUnifiedSnapshotStore((s) => s.volumeProfile);
+// V-MAX Fase 1.4 — Matriz de Confluência Fibonacci, null sem perna confirmada.
+export const useFibonacciConfluenceSnapshot = (): FibonacciConfluenceMatrix | null =>
+  useUnifiedSnapshotStore((s) => s.fibonacciConfluence);

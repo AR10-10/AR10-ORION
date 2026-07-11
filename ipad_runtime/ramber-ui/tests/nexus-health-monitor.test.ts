@@ -36,6 +36,7 @@ const STORE_RESET = {
   l2History: {},
   orderflowHistory: [],
   volumeProfile: null,
+  fibonacciConfluence: null,
 };
 
 describe('HealthMonitor: cada campo é medido de verdade ou fica null/0 honesto — nunca um valor de exemplo', () => {

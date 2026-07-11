@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, useOfflineSnapshot, useDataFreshSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot } from "./store/unified-snapshot-store";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -38,10 +38,12 @@ import {
   type LiquidityZone,
   getChartCandles,
   computeRealVolumeProfile,
+  computeRealFibonacciConfluence,
+  type ConfluenceSource,
 } from "./engine-bridge";
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
 // pura — a matemática pesada roda no WASM do quant-worker).
-import { filterSessionCandles } from "./nexus/volume-profile";
+import { filterSessionCandles, bucketMidPrice } from "./nexus/volume-profile";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
 import {
@@ -1263,6 +1265,49 @@ export default function App() {
     })();
     return () => { stale = true; };
   }, [chartData]);
+
+  // V-MAX Fase 1.4: Matriz de Confluência Fibonacci (agente transversal) —
+  // cruza a retração real da última perna confirmada (mesma perna da
+  // extensão 61.8% do motor de S/R, mesmo findSwings compartilhado) contra
+  // TODAS as fontes reais de nível que os outros motores já produzem nesta
+  // árvore: S1/R1 reais, zonas SMC vivas (FVG/OB não-mitigadas como FAIXA
+  // real, EQH/EQL não-varridas) e POC/HVN do Volume Profile (Fase 1.3).
+  // Zero rede nova, zero segunda matemática — só leitura transversal.
+  // Camada de análise/exibição: nunca alimenta o Core Engine (LEI 24).
+  const volumeProfileSnapshot = useVolumeProfileSnapshot();
+  useEffect(() => {
+    if (!chartData || chartData.length === 0) {
+      useUnifiedSnapshotStore.getState().setFibonacciConfluence(null);
+      return;
+    }
+    const sources: ConfluenceSource[] = [];
+    const point = (kind: string, price: number | null | undefined) => {
+      if (typeof price === "number" && Number.isFinite(price)) {
+        sources.push({ kind, priceLow: price, priceHigh: price });
+      }
+    };
+    point("SR_SUPPORT_1", engine?.support);
+    point("SR_RESISTANCE_1", engine?.resistance);
+    smcZones.fairValueGaps.filter((z) => !z.mitigated).forEach((z) => {
+      sources.push({ kind: `FVG_${z.type}`, priceLow: z.bottom, priceHigh: z.top });
+    });
+    smcZones.orderBlocks.filter((z) => !z.mitigated).forEach((z) => {
+      sources.push({ kind: `OB_${z.type}`, priceLow: z.bottom, priceHigh: z.top });
+    });
+    smcZones.liquidityZones.filter((z) => !z.swept).forEach((z) => {
+      point(z.type === "EQUAL_HIGH" ? "EQH" : "EQL", z.price);
+    });
+    const vp = volumeProfileSnapshot?.fixedRange;
+    if (vp) {
+      point("VP_POC", vp.pocPrice);
+      vp.hvnIndices.forEach((i) => {
+        point("VP_HVN", bucketMidPrice(i, vp.rangeMin, vp.rangeMax, vp.bucketCount));
+      });
+    }
+    useUnifiedSnapshotStore.getState().setFibonacciConfluence(
+      computeRealFibonacciConfluence(chartData, sources),
+    );
+  }, [chartData, smcZones, engine, volumeProfileSnapshot]);
 
   // V18 Sprint 1 (Tarefa A): espelha o dado real já coletado por App.tsx
   // para dentro da UnifiedGlobalSnapshot store (Zustand+Immer) — nenhuma

@@ -22,6 +22,7 @@ const RESET = {
   l2History: {},
   orderflowHistory: [],
   volumeProfile: null,
+  fibonacciConfluence: null,
 };
 
 describe('unified-snapshot-store: boots fail-closed (nada fabricado antes do primeiro dado real)', () => {

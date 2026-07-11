@@ -55,6 +55,12 @@ import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/ind
 // V-MAX Fase 1.3: derivação pura (HVN/LVN/preço-por-bucket) do Volume
 // Profile computado pelo WASM no quant-worker — ver bloco no fim do arquivo.
 import { detectHvnLvn, bucketMidPrice, type VolumeProfileResult } from './nexus/volume-profile';
+// V-MAX Fase 1.4: mesma detecção fractal de swings compartilhada pelos 3
+// motores graduados (fractal-swings.js, extração da Auditoria Mestra) —
+// a perna da retração Fibonacci é a MESMA perna real da extensão 61.8% do
+// motor de S/R, nunca uma segunda definição de swing.
+import { findSwings, FRACTAL_K } from '../../src/research/engines/fractal-swings.js';
+import { buildFibonacciConfluence, type ConfluenceSource, type FibonacciConfluenceMatrix } from './nexus/fibonacci-confluence';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fase G (V15, diretriz 4): envelope de tipos do santuário. A saída
@@ -530,6 +536,33 @@ export async function getChartCandles(
 // O(buckets) pura em nexus/volume-profile.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 export type { VolumeProfileResult, VolumeProfileSnapshot } from './nexus/volume-profile';
+export type { ConfluenceSource, FibonacciConfluenceMatrix, FibConfluenceLevel } from './nexus/fibonacci-confluence';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V-MAX Fase 1.4 — Matriz de Confluência Fibonacci (agente transversal).
+//
+// A perna é derivada EXATAMENTE como no support-resistance-engine.js
+// (último swing high/low fractal via o MESMO findSwings compartilhado,
+// direção = qual confirmou por último) — a retração aqui e a extensão
+// 61.8% já em produção falam da MESMA perna real. Cálculo O(n·k) trivial
+// (mesma classe do computeSmcZones que já roda em useMemo), não precisa
+// de worker. Camada de análise/exibição — nunca alimenta o Core Engine.
+// ─────────────────────────────────────────────────────────────────────────────
+export function computeRealFibonacciConfluence(
+  candles: Array<{ high: number; low: number }>,
+  sources: ConfluenceSource[],
+): FibonacciConfluenceMatrix | null {
+  if (!Array.isArray(candles) || candles.length === 0) return null;
+  const swingHighs = findSwings(candles, FRACTAL_K, true);
+  const swingLows = findSwings(candles, FRACTAL_K, false);
+  if (swingHighs.length < 1 || swingLows.length < 1) return null;
+  const lastHigh = swingHighs[swingHighs.length - 1];
+  const lastLow = swingLows[swingLows.length - 1];
+  const legIsUp = lastHigh.index > lastLow.index;
+  // lastLow acima de lastHigh (tendência forte cruzada) não é uma perna
+  // retracionável — buildFibonacciConfluence devolve null (FAIL_CLOSED).
+  return buildFibonacciConfluence(lastLow.price, lastHigh.price, legIsUp, sources);
+}
 
 // ~um bucket por ~8px de altura típica de chart (janela de legibilidade,
 // mesma natureza do CELL_HEIGHT do heatmap) — o VALOR de cada bucket
