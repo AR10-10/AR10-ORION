@@ -119,7 +119,23 @@ Verificação pós-itens-4-5: suíte **650/650** (42 arquivos; +41 testes — ag
 
 ---
 
-## 8. O que fica deliberadamente para as próximas fases
+## 8. Adendo 2 — Superfície Visual da Fase 1 + Fase 2 (Supremacia), sob a diretriz de Execução Contínua
+
+Entregues em `d06d606`, `d658dce`, `965029d` (commits com detalhe integral; resumo auditável abaixo).
+
+**Superfície visual da Fase 1** (`d06d606`): VolumeProfilePlugin (barras reais ancoradas à direita + POC fio de seda, verificado por pixel em harness Playwright — 36k px reais de barras, zero vazamento sobre as velas), níveis da Matriz Fibonacci como price lines nativas com score real no título, Council HUD (decisão/quórum/gate + 6 votos com rationale + CPI). Varredura responsiva real em 4 viewports (iPad portrait/landscape, 1080p, 39" 3840×1600): zero scroll horizontal, zero erros de código; o heatmap já estava vivo no gráfico desde a Fase 1.2.
+
+**Fase 2 — Motor de Cenários Path A/B** (`d658dce`): alvos = o PRÓXIMO nível real de cada lado do preço (S1/R1, EQH/EQL intactos, FIB confluentes, POC/HVN do WASM); pesos = massa de opinião real do pool da Fase F, exposta aditivamente no contrato do conselho e rotulada permanentemente `COUNCIL_OPINION_MASS_NOT_MARKET_PROBABILITY` — a honestidade da Fase F elevada a cenário. FAIL_CLOSED em todas as pontas.
+
+**Fase 2 — Detecção de armadilhas institucionais** (`d658dce`): só corroboração de eventos consumados — STOP_HUNT_TOPO/FUNDO (sweep real de EQH/EQL, confiança em escada determinística (1+corroborações)/3 com ABSORPTION/EXHAUSTION reais na janela de 60s) e ABSORCAO_ANOMALA (2+ ABSORPTION reais; evento único nunca alarma). Sem evento ⇒ lista vazia honesta.
+
+**Fase 2 — TrustScoreEngine no WASM** (`965029d`): `lib.rs::trust_score` — confiança na FONTE (nunca no mercado): regularidade 1/(1+CV) sobre os intervalos reais de chegada de preço (reusando os kernels sum/sum_sq_dev existentes — zero repetição em Rust) + convergência 1/(1+média|bps|/10) sobre divergências reais Binance×Bybit/OKX; componente não medido sai NaN honesto. 11/11 cargo, paridade escalar×SIMD a 10 casas, cadeia worker→client→bridge→store→HUD completa.
+
+Verificação final acumulada: suíte **683/683**, cargo **11/11**, tsc limpo, build OK, boot real com Conselho+CPI+TrustScore vivos e zero erros de código.
+
+---
+
+## 9. O que fica deliberadamente para as próximas fases
 
 - **Superfície visual do Conselho e do CPI além do orb**: a decisão completa (debate com rationale/evidence por agente) está na store (`useCouncilSnapshot`); um painel dedicado é aditivo e pode reusar os padrões de widget existentes.
 - **Linha de CVD com eixo próprio no chart**: consumidor natural da série `orderflowHistory` já real; UI a definir.
