@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
+  LineSeries,
   ColorType,
   CrosshairMode,
   LineStyle,
@@ -30,6 +31,9 @@ import {
   type IPriceLine,
   type UTCTimestamp,
 } from "lightweight-charts";
+// V-MAX Fase 1 (superfície visual, fechamento do §3.1): linha de CVD real
+// — a série do orderflowHistory (Fase 1.2) com eixo Y próprio nativo.
+import { useOrderflowHistory } from "../store/unified-snapshot-store";
 import { LiquidityZonesPlugin, type FillableZone } from "./LiquidityZonesPlugin";
 import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
 // V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
@@ -117,6 +121,7 @@ export function EnhancedChart_110_Percent({
   const resistanceLineRef = useRef<IPriceLine | null>(null);
   const zoneLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
+  const cvdSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Espelha chartRef/seriesRef em state só para o LiquidityZonesPlugin
   // montar assim que o chart existe de verdade — refs sozinhas não
   // disparam re-render, então o plugin ficaria esperando por uma
@@ -179,6 +184,24 @@ export function EnhancedChart_110_Percent({
       // porque a causa é uma OMISSÃO, não um valor errado escrito aqui.
       priceLineStyle: LineStyle.Solid,
     });
+    // V-MAX Fase 1 (fechamento do §3.1): linha de CVD como série NATIVA em
+    // escala de preço PRÓPRIA ('cvd', overlay) — CVD é volume assinado, não
+    // preço; partilhar a escala das velas o achataria em ruído. Banda
+    // inferior (20%) via scaleMargins. Fio de seda: lineWidth 1, sólida.
+    // Cor neutra da família de texto (#8ab4f8) — o SINAL do CVD já é
+    // exibido com cor semântica no Order Flow widget; aqui a informação é
+    // a FORMA da série (fluxo acumulado), não um veredito colorido.
+    const cvdSeries = chart.addSeries(LineSeries, {
+      priceScaleId: "cvd",
+      color: "rgba(138, 180, 248, 0.85)",
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    chart.priceScale("cvd").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+    cvdSeriesRef.current = cvdSeries;
     chartRef.current = chart;
     seriesRef.current = series;
     setChartReady({ chart, series });
@@ -190,6 +213,7 @@ export function EnhancedChart_110_Percent({
       resistanceLineRef.current = null;
       zoneLinesRef.current = [];
       fibLinesRef.current = [];
+      cvdSeriesRef.current = null;
       setChartReady(null);
     };
   }, []);
@@ -282,6 +306,26 @@ export function EnhancedChart_110_Percent({
       );
     });
   }, [liquidityZones]);
+
+  // V-MAX Fase 1 (fechamento do §3.1): alimenta a série de CVD com o
+  // histórico REAL da store (mesmo orderflowHistory do heatmap — um dado,
+  // dois consumidores, zero segunda coleta). time real em ms → segundos da
+  // lib com dedupe manter-o-último por segundo (a cadência real do poller é
+  // ~4s, então colisões são raras; o guarda existe porque a lib exige tempos
+  // estritamente ascendentes). Histórico vazio => série vazia honesta.
+  const orderflowHistory = useOrderflowHistory();
+  useEffect(() => {
+    if (!cvdSeriesRef.current) return;
+    const bySecond = new Map<number, number>();
+    for (const entry of orderflowHistory) {
+      bySecond.set(Math.floor(entry.time / 1000), entry.cvd);
+    }
+    cvdSeriesRef.current.setData(
+      [...bySecond.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([t, cvd]) => ({ time: t as UTCTimestamp, value: cvd })),
+    );
+  }, [orderflowHistory]);
 
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // Fibonacci como price lines nativas — "fio de seda" (1px sólida, nunca

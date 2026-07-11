@@ -13,12 +13,11 @@
 // são globais por design (Fase 1.1/1.2), então um componente que os
 // consome assina a fatia direto, sem prop-drilling por 3 camadas.
 //
-// Nota de escopo honesta: o Blueprint agrupa CVD sob o item 2 (WASM Quant
-// Core), não aqui — a linha de CVD fica para a Fase 1.3, junto do resto do
-// Quant Core, quando ganha um eixo Y próprio nativo da lib (uma série
-// real, não um traço em canvas). Este plugin cobre só "Densidade": livro +
-// trades grandes, os dois já com um motor real (l2-history/orderflow-
-// history) prontos nesta sessão.
+// Nota de escopo (fechada na superfície visual da Fase 1): a linha de CVD
+// vive no EnhancedChart_110_Percent como série NATIVA da lib em escala de
+// preço própria ('cvd', banda inferior) — uma série real com eixo real,
+// não um traço em canvas — alimentada pelo MESMO orderflowHistory real
+// deste plugin. Este plugin cobre só "Densidade": livro + trades grandes.
 //
 // Geometria SEMPRE via priceToCoordinate/timeToCoordinate reais da própria
 // lib (nunca pixel fixo) — mesma garantia Fail-Closed do LiquidityZonesPlugin:

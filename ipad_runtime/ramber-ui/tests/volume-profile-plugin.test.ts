@@ -79,3 +79,31 @@ describe('EnhancedChart: níveis Fibonacci reais como price lines fio de seda', 
     expect(chart()).toContain('fibLinesRef.current = [];');
   });
 });
+
+describe('EnhancedChart: linha de CVD real (fechamento do §3.1) — série nativa em escala própria', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('série LineSeries em priceScaleId "cvd" (nunca a escala das velas — CVD é volume assinado, não preço)', () => {
+    const s = chart();
+    expect(s).toContain('chart.addSeries(LineSeries, {');
+    expect(s).toContain('priceScaleId: "cvd"');
+    expect(s).toContain('chart.priceScale("cvd")');
+  });
+
+  it('fio de seda: lineWidth 1 e LineStyle.Solid na série de CVD', () => {
+    const s = chart();
+    const cvdBlock = s.slice(s.indexOf('chart.addSeries(LineSeries'), s.indexOf('cvdSeriesRef.current = cvdSeries'));
+    expect(cvdBlock).toContain('lineWidth: 1');
+    expect(cvdBlock).toContain('lineStyle: LineStyle.Solid');
+  });
+
+  it('alimentada pelo orderflowHistory REAL da store (useOrderflowHistory) — zero segunda coleta', () => {
+    const s = chart();
+    expect(s).toContain('useOrderflowHistory()');
+    expect(s).toMatch(/Math\.floor\(entry\.time \/ 1000\)/); // ms reais → segundos da lib
+  });
+
+  it('ref da série zerada na desmontagem junto das demais', () => {
+    expect(chart()).toContain('cvdSeriesRef.current = null;');
+  });
+});
