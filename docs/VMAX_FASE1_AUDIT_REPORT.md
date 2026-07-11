@@ -11,7 +11,9 @@
 
 ## 1. Sumário executivo
 
-Os três itens da diretriz foram entregues e estão vivos no organismo:
+> **Adendo (mesma data):** a segunda diretriz do Operador ("PROTOCOLO DE EXPANSÃO") autorizou os itens 4–5 da Fase 1, entregues em seguida — ver Seção 7. Com eles, **a Fase 1 do Blueprint está completa (itens 1–5)**. Números finais: suíte 650/650, cargo 7/7, tsc limpo, build OK.
+
+Os três itens da diretriz original foram entregues e estão vivos no organismo:
 
 1. **OrderFlowHeatmapPlugin** (OffscreenCanvas + fallback) — densidade L2 real + bolhas de trades grandes reais, desenhado atrás das velas, com o trabalho de pixel movido para um Worker dedicado quando o browser confirma suporte por handshake real (nunca por suposição), e fallback main-thread idêntico caso contrário.
 2. **WASM Quant Core estendido** — `volume_profile` real em Rust (Fixed Range + Session pela mesma função, POC determinístico, HVN/LVN por percentil real), compilado nos dois binários (escalar + SIMD), integrado do worker até a store. CVD e Footprint tratados com as decisões de honestidade documentadas na Seção 4.
@@ -97,9 +99,30 @@ Nota sobre FPS/60fps: o caminho de desenho novo é dirty-flag + rAF (nunca loop 
 
 ---
 
-## 7. O que fica deliberadamente para as próximas fases
+## 7. Adendo — itens 4–5 entregues sob a segunda diretriz ("PROTOCOLO DE EXPANSÃO")
 
-- **Conselho Multi-Agente e CPI + feedback biológico** (itens 4–5 da Fase 1 no Blueprint): fora da diretriz atual do Operador (itens 1–3); não iniciados.
+A diretriz seguinte do Operador autorizou os itens 4–5, completando a Fase 1. Entregues em `287c211`:
+
+**Item 4 — Conselho Multi-Agente** (`nexus/council.ts`, contrato versionado v1):
+- Seis agentes puros — Liquidity, Structure, Orderflow, Risk, Manipulation, Fibonacci — cada um votando LONG/SHORT/NEUTRAL a partir exclusivamente do dado real do seu domínio, com **ABSTAIN honesto** quando o dado não existe (nenhum voto jamais fabricado). Cada voto carrega `rationale` + `evidence` citando os números reais — o "debate" auditável.
+- **Meta-Agent com zero repetição auditada**: a agregação **delega ao linear opinion pool real da Fase F** (`ensemble-engine.js`, Stone/DeGroot, em produção e testado desde a V15) — construir um segundo algoritmo de comitê seria exatamente a duplicação que a Regra de Ouro 9 proíbe. O que o módulo adiciona é o que não existia: abstenção, quórum, gate de risco e contrato versionado.
+- **Gate de risco fail-closed**: o RiskAgent não vota direção (papel de risk officer real — avaliar viabilidade). Offline/stale/motor-em-erro ⇒ ABSTAIN do risco ⇒ o conselho inteiro trava em ABSTAIN. Verificado no boot real: sandbox sem rede ⇒ conselho ABSTAIN com o debate completo visível.
+- **Cruzamento transversal via WASM, com WASM leve**: o FibonacciAgent vota a partir da Matriz da Fase 1.4, cujas fontes já incluem POC/HVN computados pelo `volume_profile` em Rust — o cruzamento pedido acontece nos DADOS. Votação O(6) não foi empurrada para o binário (a própria diretriz exige "WASM leve"; lógica trivial em Rust seria bytes sem ganho — decisão documentada no header do módulo).
+
+**Item 5 — CPI + Memória Afetiva** (`nexus/affective-memory.ts`, contrato v1):
+- Reward/Pain com **decaimento exponencial real** (meia-vida 10 min, parâmetro documentado), aplicado **na ingestão** (lazy): sob decaimento igual, a razão reward/(reward+pain) é matematicamente invariante entre eventos — nenhum tick periódico é necessário, zero trabalho ocioso na main thread ("Main Thread absolutamente inviolada", cumprida por matemática, não por otimização).
+- **Honestidade de escopo**: o sistema é READ_ONLY por projeto — não existe PnL real para medir. Os eventos afetivos reais desta árvore são operacionais/cognitivos (ciclo do motor ok/erro, WS up/down, staleness, erro do poller de order flow), então o **CPI v1 mede performance cognitiva** (quão bem o organismo percebe o mercado), nunca performance de trading fabricada. Eventos só são ingeridos em TRANSIÇÕES reais de estado (refs de estado anterior em App.tsx) — um render sem mudança nunca gera evento.
+- **CPI = reward/(reward+pain)**, `null` honesto antes de qualquer evento real. Alimentado ao NucleoVoiceOrb via a store (`useCpiSnapshot`), exibido no title do orb; deliberadamente **não** altera a cor — a cor é o estado operacional instantâneo (hierarquia fail-closed da Fase 0.9), o CPI é memória, e deixá-lo pintar o orb mascararia degradação atual.
+- **Prova viva no sandbox**: com a rede bloqueada, o boot real produziu `FALHOU · CPI 17%` no orb — 17% = 0.25 de reward real (o único handshake de WS que abriu) sobre 1.45 de massa total (motor falhou 2 ciclos reais × 0.6) — a memória registrando fielmente que o organismo percebe mal neste ambiente. Zero erros de código no console.
+
+Verificação pós-itens-4-5: suíte **650/650** (42 arquivos; +41 testes — agentes/gate/quórum/pool, meia-vida exata, exponencial-não-linear, recência, honestidade do CPI), `tsc` limpo, build de produção OK, boot real fail-closed.
+
+---
+
+## 8. O que fica deliberadamente para as próximas fases
+
+- **Superfície visual do Conselho e do CPI além do orb**: a decisão completa (debate com rationale/evidence por agente) está na store (`useCouncilSnapshot`); um painel dedicado é aditivo e pode reusar os padrões de widget existentes.
 - **Linha de CVD com eixo próprio no chart**: consumidor natural da série `orderflowHistory` já real; UI a definir.
 - **Superfície visual do Volume Profile e da Matriz Fibonacci**: os dados estão na store com seletores prontos (`useVolumeProfileSnapshot`, `useFibonacciConfluenceSnapshot`); o desenho no chart é aditivo e pode reusar o padrão de plugin já provado duas vezes.
 - **`volume_profile: null` do support-resistance-engine**: o motor de S/R aceita volume profile como insumo desde a origem (sempre recebeu `null`); ligar o perfil real a ele é uma extensão natural, mas toca um motor graduado — decisão de governança para o Operador.
+- **Eventos afetivos de execução real (PnL)**: a fundação recebe novos `AffectiveEventSource` sem mudança de contrato quando (e se) execução real for autorizada — hoje permanece travada por projeto.
