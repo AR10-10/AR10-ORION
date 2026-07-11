@@ -17,9 +17,14 @@ vi.mock('../src/cross-exchange/bybit-futures', () => ({
 vi.mock('../src/cross-exchange/okx-futures', () => ({
   fetchOkxPerpTicker: vi.fn(),
 }));
+vi.mock('../src/cross-exchange/mexc-spot', () => ({
+  fetchMexcPerpTicker: vi.fn(),
+  fetchMexcDepth: vi.fn(),
+}));
 
 import { fetchBybitPerpTicker } from '../src/cross-exchange/bybit-futures';
 import { fetchOkxPerpTicker } from '../src/cross-exchange/okx-futures';
+import { fetchMexcPerpTicker, fetchMexcDepth } from '../src/cross-exchange/mexc-spot';
 
 const candle = (t: number, o = 100, h = 105, l = 95, c = 102): Candle => ({ time: t, open: o, high: h, low: l, close: c });
 
@@ -94,6 +99,8 @@ describe('CrossExchangeService: Binance real (kline+L2 via WS supervisionado)', 
     bus = new TypedEventBus();
     vi.mocked(fetchBybitPerpTicker).mockResolvedValue({ ok: false, price: null, fundingRate: null, openInterest: null });
     vi.mocked(fetchOkxPerpTicker).mockResolvedValue({ ok: false, price: null, fundingRate: null, openInterest: null });
+    vi.mocked(fetchMexcPerpTicker).mockResolvedValue({ ok: false, price: null, fundingRate: null, openInterest: null });
+    vi.mocked(fetchMexcDepth).mockResolvedValue({ ok: false, bids: [], asks: [] });
   });
 
   afterEach(async () => {
@@ -223,6 +230,8 @@ describe('CrossExchangeService: Bybit/OKX real (REST poll → connections honest
     bus = new TypedEventBus();
     vi.mocked(fetchBybitPerpTicker).mockResolvedValue({ ok: false, price: null, fundingRate: null, openInterest: null });
     vi.mocked(fetchOkxPerpTicker).mockResolvedValue({ ok: false, price: null, fundingRate: null, openInterest: null });
+    vi.mocked(fetchMexcPerpTicker).mockResolvedValue({ ok: false, price: null, fundingRate: null, openInterest: null });
+    vi.mocked(fetchMexcDepth).mockResolvedValue({ ok: false, bids: [], asks: [] });
   });
 
   afterEach(async () => {
@@ -278,5 +287,104 @@ describe('CrossExchangeService: Bybit/OKX real (REST poll → connections honest
     await vi.advanceTimersByTimeAsync(1000);
     const bybitStates = received.filter((e) => e.exchange === 'BYBIT').map((e) => e.state);
     expect(bybitStates).toEqual(['LIVE', 'DEGRADED']);
+  });
+});
+
+describe('CrossExchangeService: MEXC real (REST poll de preço, mesmo padrão de Bybit/OKX + profundidade L2 real)', () => {
+  let bus: TypedEventBus;
+  let service: CrossExchangeService;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    useUnifiedSnapshotStore.setState(STORE_RESET);
+    bus = new TypedEventBus();
+    vi.mocked(fetchBybitPerpTicker).mockResolvedValue({ ok: false, price: null, fundingRate: null, openInterest: null });
+    vi.mocked(fetchOkxPerpTicker).mockResolvedValue({ ok: false, price: null, fundingRate: null, openInterest: null });
+    vi.mocked(fetchMexcPerpTicker).mockResolvedValue({ ok: false, price: null, fundingRate: null, openInterest: null });
+    vi.mocked(fetchMexcDepth).mockResolvedValue({ ok: false, bids: [], asks: [] });
+  });
+
+  afterEach(async () => {
+    service?.stop();
+    await vi.runOnlyPendingTimersAsync().catch(() => {});
+    vi.useRealTimers();
+  });
+
+  function makeService(restPollMs = 60_000) {
+    service = new CrossExchangeService({
+      symbol: 'BTC',
+      timeframe: '15m',
+      bus,
+      wsFactory: () => new FakeSocket(),
+      restPollMs,
+    });
+    return service;
+  }
+
+  it('poll de preço bem-sucedido grava connections.MEXC=LIVE (mesma trava honesta de Bybit/OKX)', async () => {
+    vi.mocked(fetchMexcPerpTicker).mockResolvedValue({ ok: true, price: 65000, fundingRate: null, openInterest: null });
+    makeService().start();
+    await vi.runOnlyPendingTimersAsync();
+    expect(useUnifiedSnapshotStore.getState().connections.MEXC).toBe('LIVE');
+  });
+
+  it('poll de preço falho grava connections.MEXC=DEGRADED honesto', async () => {
+    makeService().start();
+    await vi.runOnlyPendingTimersAsync();
+    expect(useUnifiedSnapshotStore.getState().connections.MEXC).toBe('DEGRADED');
+  });
+
+  it('profundidade real bem-sucedida grava orderBooks.MEXC (bids/asks reais, timestamp real) e publica DATA.ORDERBOOK_UPDATED', async () => {
+    const received: any[] = [];
+    bus.on('DATA.ORDERBOOK_UPDATED', (p) => received.push(p));
+    vi.mocked(fetchMexcDepth).mockResolvedValue({
+      ok: true,
+      bids: [{ price: 100, size: 1 }, { price: 99, size: 2 }],
+      asks: [{ price: 101, size: 1 }, { price: 102, size: 2 }],
+    });
+    makeService().start();
+    await vi.runOnlyPendingTimersAsync();
+    const book = useUnifiedSnapshotStore.getState().orderBooks.MEXC;
+    expect(book?.bids).toEqual([{ price: 100, size: 1 }, { price: 99, size: 2 }]);
+    expect(book?.asks).toEqual([{ price: 101, size: 1 }, { price: 102, size: 2 }]);
+    expect(book?.updatedAt).toEqual(expect.any(Number));
+    // Depth via REST nunca dedupla por conteúdo (mesma honestidade do
+    // handleDepth da Binance via WS: profundidade real muda a cada poll,
+    // nunca faz sentido "esconder" uma leitura nova) — runOnlyPendingTimersAsync
+    // dispara tanto a chamada direta de start() quanto o 1º tick real do
+    // interval recém-criado, então >=1 é a garantia real (mesma
+    // propriedade, só invisível nos testes de ticker por causa do dedup
+    // de estado ok/DEGRADED que pollRestExchange já faz).
+    expect(received.filter((e) => e.exchange === 'MEXC').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('profundidade falha (ok:false) nunca escreve orderBooks.MEXC nem emite DATA.ORDERBOOK_UPDATED — fail-closed, sem nível inventado', async () => {
+    const received: any[] = [];
+    bus.on('DATA.ORDERBOOK_UPDATED', (p) => received.push(p));
+    makeService().start();
+    await vi.runOnlyPendingTimersAsync();
+    expect(useUnifiedSnapshotStore.getState().orderBooks.MEXC).toBeUndefined();
+    expect(received.filter((e) => e.exchange === 'MEXC')).toEqual([]);
+  });
+
+  it('ticker e depth são buscas independentes: ticker falho nunca impede a depth real de ser gravada', async () => {
+    vi.mocked(fetchMexcPerpTicker).mockResolvedValue({ ok: false, price: null, fundingRate: null, openInterest: null });
+    vi.mocked(fetchMexcDepth).mockResolvedValue({ ok: true, bids: [{ price: 1, size: 1 }], asks: [{ price: 2, size: 1 }] });
+    makeService().start();
+    await vi.runOnlyPendingTimersAsync();
+    expect(useUnifiedSnapshotStore.getState().connections.MEXC).toBe('DEGRADED');
+    expect(useUnifiedSnapshotStore.getState().orderBooks.MEXC?.bids).toEqual([{ price: 1, size: 1 }]);
+  });
+
+  it('polls repetidos com o MESMO resultado de preço nunca reemitem DATA.CONNECTION_CHANGED para MEXC (zero ruído)', async () => {
+    const received: any[] = [];
+    bus.on('DATA.CONNECTION_CHANGED', (p) => received.push(p));
+    vi.mocked(fetchMexcPerpTicker).mockResolvedValue({ ok: true, price: 1, fundingRate: null, openInterest: null });
+    makeService(1000).start();
+    await vi.runOnlyPendingTimersAsync();
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(1000);
+    const mexcEvents = received.filter((e) => e.exchange === 'MEXC');
+    expect(mexcEvents).toHaveLength(1);
   });
 });
