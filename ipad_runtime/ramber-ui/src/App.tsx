@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot } from "./store/unified-snapshot-store";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -21,6 +21,11 @@ import type { Timeframe } from "./nexus/types";
 // CrossExchangeService da Fase 0.5, não fica dormente).
 import { getNexusCore } from "./nexus/nexus-core";
 import { getHealthMonitor } from "./nexus/health-monitor";
+// Ordem "Próxima Evolução do Organismo": o orquestrador traduz cada escrita
+// de fatia de saída de motor no UnifiedGlobalSnapshot em um evento tipado no
+// bus do Nexus Core — a publicação dos motores é a própria escrita na store,
+// nunca um emit() manual espalhado pelos efeitos.
+import { getOrganismOrchestrator } from "./nexus/organism-orchestrator";
 // V18 Sprint 1 (Tarefa B): "Destravar o Gráfico Institucional" — substitui
 // o SVG feito à mão por lightweight-charts (pan/zoom/crosshair nativos).
 import { EnhancedChart_110_Percent } from "./chart/EnhancedChart_110_Percent";
@@ -1343,10 +1348,27 @@ export default function App() {
       fibonacci: fibonacciMatrix,
     });
     useUnifiedSnapshotStore.getState().setCouncil(decision);
+  }, [priceData, smcZones, engine, cvd, orderflowSignals, councilOffline, councilDataFresh, engineStatus, fibonacciMatrix]);
 
-    // V-MAX Fase 2 (Motor de Cenários): MESMOS níveis reais que os motores
-    // já mapearam — nenhum alvo projetado/inventado; pesos = massa de
-    // opinião real do conselho recém-computado (nunca probabilidade).
+  // V-MAX Fase 2 (Motor de Cenários) — reescrito pela Ordem "Próxima
+  // Evolução do Organismo": zero comunicação direta motor→motor. Antes, o
+  // conselho entregava a variável `decision` em mãos ao Motor de Cenários no
+  // MESMO efeito; agora o conselho só ESCREVE `council` no
+  // UnifiedGlobalSnapshot, e este efeito é acordado pela própria fatia
+  // (useCouncilSnapshot) e relê a decisão da store — toda interação passa
+  // pela camada central. O mesmo write dispara BRAIN.COUNCIL.UPDATED no bus
+  // (via OrganismOrchestrator) para qualquer futuro assinante, sem que o
+  // conselho saiba que ele existe. Custo honesto: um commit de re-render a
+  // mais entre decisão e projeção (<1 frame) — o preço da mediação.
+  //
+  // Níveis: os MESMOS níveis reais que os motores já mapearam — nenhum alvo
+  // projetado/inventado; pesos = massa de opinião real do conselho lido da
+  // store (nunca probabilidade). Preço/fib/VP também lidos das fatias reais
+  // da store (mediação completa); smcZones/engine (S/R) são insumos
+  // pré-store do coletor único (App) — ver docs/ORGANISM_DATA_FLOW.md.
+  const councilFromSnapshot = useCouncilSnapshot();
+  const priceFromSnapshot = usePriceSnapshot();
+  useEffect(() => {
     const levels: ScenarioLevel[] = [];
     if (typeof engine?.support === "number" && Number.isFinite(engine.support)) {
       levels.push({ price: engine.support, sourceKind: "SR_SUPPORT_1" });
@@ -1367,8 +1389,10 @@ export default function App() {
         levels.push({ price: bucketMidPrice(i, vpForScenario.rangeMin, vpForScenario.rangeMax, vpForScenario.bucketCount), sourceKind: "VP_HVN" });
       });
     }
-    useUnifiedSnapshotStore.getState().setScenario(buildScenarioProjection(price, levels, decision));
-  }, [priceData, smcZones, engine, cvd, orderflowSignals, councilOffline, councilDataFresh, engineStatus, fibonacciMatrix, volumeProfileSnapshot]);
+    useUnifiedSnapshotStore.getState().setScenario(
+      buildScenarioProjection(priceFromSnapshot.price, levels, councilFromSnapshot),
+    );
+  }, [councilFromSnapshot, priceFromSnapshot, smcZones, engine, fibonacciMatrix, volumeProfileSnapshot]);
 
   // V-MAX Fase 2 (armadilhas institucionais): corroboração de eventos
   // REAIS — sweeps consumados (flag swept do motor SMC) + sinais reais de
@@ -1508,10 +1532,17 @@ export default function App() {
   useEffect(() => {
     const core = getNexusCore();
     core.start();
+    // Ordem "Próxima Evolução do Organismo": o orquestrador liga ANTES do
+    // Health Monitor — assim a primeira escrita real de qualquer motor já
+    // encontra o tradutor escrita→evento vivo. start()/stop() idempotentes,
+    // mesmo padrão StrictMode-safe do monitor.
+    const orchestrator = getOrganismOrchestrator(core.bus);
+    orchestrator.start();
     const monitor = getHealthMonitor(core.bus);
     monitor.start();
     return () => {
       monitor.stop();
+      orchestrator.stop();
     };
   }, []);
   // V-MAX Fase 0.4: mesmo princípio de espelhamento acima, para as novas

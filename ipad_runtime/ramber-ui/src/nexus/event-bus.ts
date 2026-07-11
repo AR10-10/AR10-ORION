@@ -6,11 +6,34 @@
 // assinante com bug nunca derruba os demais nem o publicador (mesmo
 // princípio já usado em bus.js/market-data-bus para subscribers).
 import type { Exchange, ExchangeConnectionState, HealthSnapshot, Timeframe } from "./types";
+// Payloads dos eventos de saída de motor = os MESMOS contratos versionados
+// que as fatias correspondentes do UnifiedGlobalSnapshot — um evento carrega
+// a referência exata escrita na store, nunca uma segunda forma do mesmo dado.
+// Todos `import type` puros: apagados na compilação, zero custo em runtime.
+import type { VolumeProfileSnapshot } from "./volume-profile";
+import type { FibonacciConfluenceMatrix } from "./fibonacci-confluence";
+import type { CouncilDecision } from "./council";
+import type { ScenarioProjection } from "./scenario-engine";
+import type { TrapSignal } from "./trap-detection";
+import type { AffectiveMemoryState } from "./affective-memory";
+import type { TrustScoreSnapshot } from "../engine-bridge";
 
 // Diretamente do Blueprint V-MAX §1.3 — os únicos eventos reais que este
 // sistema publica. Nenhum evento é adicionado especulativamente; cada um
 // só existe quando o publicador correspondente (CrossExchangeService,
 // Health Monitor, UI) realmente o emite nesta Fase 0.
+//
+// Ordem "Próxima Evolução do Organismo": a família de eventos de SAÍDA DE
+// MOTOR (QUANT.*, BRAIN.*, ORGANISM.*) tem exatamente UM publicador real —
+// o OrganismOrchestrator (organism-orchestrator.ts), que traduz cada
+// escrita de fatia de saída no UnifiedGlobalSnapshot em um evento tipado.
+// Motores nunca chamam emit() diretamente e nunca se falam entre si:
+// escrevem na store (fusão) → o orquestrador notifica o organismo via bus.
+// O mesmo orquestrador é o publicador real de UI.SYMBOL_CHANGED /
+// UI.TIMEFRAME_CHANGED / OFFLINE.CHANGED (declarados na Fase 0, até então
+// sem emissor vivo). DATA.* seguem do CrossExchangeService e
+// HEALTH.CHANGED do Health Monitor — um único publicador por evento,
+// nunca dois emissores para o mesmo tipo.
 export type NexusEvent =
   | { type: "DATA.CANDLES_UPDATED"; payload: { symbol: string; tf: Timeframe; exchange: Exchange } }
   | { type: "DATA.ORDERBOOK_UPDATED"; payload: { exchange: Exchange } }
@@ -18,7 +41,23 @@ export type NexusEvent =
   | { type: "HEALTH.CHANGED"; payload: HealthSnapshot }
   | { type: "UI.TIMEFRAME_CHANGED"; payload: { tf: Timeframe } }
   | { type: "UI.SYMBOL_CHANGED"; payload: { symbol: string } }
-  | { type: "OFFLINE.CHANGED"; payload: { offline: boolean } };
+  | { type: "OFFLINE.CHANGED"; payload: { offline: boolean } }
+  // §3 MOTORES QUANT — null explícito é transição REAL (fail-closed na
+  // troca de ativo: assinantes precisam saber que o dado se foi, nunca
+  // continuar exibindo um resultado velho de outro ativo).
+  | { type: "QUANT.VOLUME_PROFILE.UPDATED"; payload: { profile: VolumeProfileSnapshot | null } }
+  | { type: "QUANT.FIBONACCI.UPDATED"; payload: { matrix: FibonacciConfluenceMatrix | null } }
+  // §4 CÉREBRO
+  | { type: "BRAIN.COUNCIL.UPDATED"; payload: { decision: CouncilDecision | null } }
+  | { type: "BRAIN.SCENARIO.UPDATED"; payload: { projection: ScenarioProjection | null } }
+  | { type: "BRAIN.TRAPS.UPDATED"; payload: { traps: TrapSignal[] } }
+  // §5 ORGANISMO
+  | { type: "ORGANISM.TRUST.UPDATED"; payload: { score: TrustScoreSnapshot | null } }
+  // Uma ingestão afetiva real = um evento (a fatia affectiveMemory é
+  // substituída por referência a cada ingestão); cpi pode repetir o mesmo
+  // valor entre eventos (ex.: 1.0 → 1.0 com dois rewards) — o evento
+  // continua sendo emitido porque a MEMÓRIA mudou de verdade.
+  | { type: "ORGANISM.AFFECT.UPDATED"; payload: { cpi: number | null; memory: AffectiveMemoryState } };
 
 export type NexusEventType = NexusEvent["type"];
 type PayloadOf<T extends NexusEventType> = Extract<NexusEvent, { type: T }>["payload"];

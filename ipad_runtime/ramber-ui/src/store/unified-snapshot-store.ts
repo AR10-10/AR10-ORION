@@ -131,7 +131,11 @@ const EMPTY_TRAPS: TrapSignal[] = [];
 // Estado — na ordem canônica dos domínios (§1 → §5)
 // ─────────────────────────────────────────────────────────────────────────
 
-interface UnifiedSnapshotState {
+// Exportada (aditivo, Ordem "Próxima Evolução do Organismo") para o
+// gateway de leitura getSnapshotForEngine() em nexus/organism-orchestrator.ts
+// tipar a visão que os motores recebem — só o ESTADO, nunca as ações:
+// motor lê o organismo, jamais escreve nele por fora da própria fatia.
+export interface UnifiedSnapshotState {
   // §1 MERCADO — `symbol` É o `activeSymbol` do Blueprint (nunca duplicado
   // sob um segundo nome). Cada campo espelha dado que App.tsx coleta de
   // verdade (Binance/Bybit/OKX/MEXC reais) — nada nasce aqui.
