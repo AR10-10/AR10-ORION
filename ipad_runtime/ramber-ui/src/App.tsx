@@ -8,19 +8,58 @@ import React, {
   useContext,
 } from "react";
 import { Rnd } from "react-rnd";
+// V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
+// para por que é uma store ADITIVA (App.tsx continua a única fonte real de
+// coleta; um efeito abaixo só espelha o dado já real para dentro dela).
+import { useUnifiedSnapshotStore, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot } from "./store/unified-snapshot-store";
+// V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
+// solta (pré-existente) — este cast é o único ponto de costura com o tipo
+// estrito do Nexus, não uma reescrita do tipo legado.
+import type { Timeframe } from "./nexus/types";
+// V-MAX Fase 0.8: Health Monitor real, ligado direto (ver comentário no
+// efeito de boot mais abaixo sobre por que este, diferente do
+// CrossExchangeService da Fase 0.5, não fica dormente).
+import { getNexusCore } from "./nexus/nexus-core";
+import { getHealthMonitor } from "./nexus/health-monitor";
+// V18 Sprint 1 (Tarefa B): "Destravar o Gráfico Institucional" — substitui
+// o SVG feito à mão por lightweight-charts (pan/zoom/crosshair nativos).
+import { EnhancedChart_110_Percent } from "./chart/EnhancedChart_110_Percent";
 import {
   runRealAnalysisCycle,
   type RealCycleResult,
   startMexcOrderflowFeed,
   type OrderflowSignal,
   type OrderflowConnectorState,
+  type OrderflowTick,
   startRealLiquidationFeed,
   type LiquidationEvent,
   computeSmcZones,
   type PriceZone,
   type LiquidityZone,
   getChartCandles,
+  computeRealVolumeProfile,
+  computeRealFibonacciConfluence,
+  computeRealTrustScore,
+  type ConfluenceSource,
 } from "./engine-bridge";
+// V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
+// pura — a matemática pesada roda no WASM do quant-worker).
+import { filterSessionCandles, bucketMidPrice } from "./nexus/volume-profile";
+// V-MAX Fase 1 item 4: Conselho Multi-Agente (6 agentes puros + Meta-Agent
+// que delega a agregação ao linear opinion pool real da Fase F).
+import { buildCouncilDecision } from "./nexus/council";
+// V-MAX Fase 2: cenários Path A/B (níveis reais + massa de opinião real do
+// conselho) e armadilhas por corroboração de eventos reais.
+import { buildScenarioProjection, type ScenarioLevel } from "./nexus/scenario-engine";
+import { detectInstitutionalTraps } from "./nexus/trap-detection";
+// V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
+// header do arquivo) — nunca um limiar fixo inventado aqui na UI.
+import {
+  ingestTradesForLargeDetection,
+  EMPTY_THRESHOLD_STATE,
+  type OrderflowThresholdState,
+  type OrderflowTrade,
+} from "./nexus/orderflow-history";
 // Fase F (V15): Comitê de Validação — linear opinion pool puro
 // (src/consensus/). Importado pela CAMADA DE EXIBIÇÃO, não por
 // engine-bridge.ts — o comitê consome contexto GMIL, e a LEI 04 proíbe
@@ -105,8 +144,6 @@ import {
   Globe,
   Maximize2,
   Minimize2,
-  ZoomIn,
-  ZoomOut,
   LayoutGrid,
   Pin,
   PanelLeft,
@@ -114,6 +151,8 @@ import {
   Zap,
   Newspaper,
   Bell,
+  Mic,
+  MicOff,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -167,6 +206,16 @@ const lorentzianConfidencePct = (lorentzian: { ok: boolean; confidence?: number 
 // nunca um segundo código.
 const ASSETS = ["BTC", "ETH", "SOL", "BNB", "XRP"] as const;
 type AssetSymbol = string;
+
+// V18.1 (pedido do Operador: "o gráfico tá com poucas velas... a gente
+// olhar o passado também"): 200 velas reais por busca — 4x a janela
+// anterior (50), casando com a capacidade padrão do ring buffer do
+// Market Data Bus (DEFAULT_CAPACITY = 200, candle-ring-buffer.js), então
+// nenhum candle real é descartado no caminho. O limite da própria
+// Binance é 1500/request; subir além de 200 exigiria também subir a
+// capacidade do buffer da chave compartilhada com o ciclo de análise —
+// mudança de Bus, não deste consumidor.
+const CHART_CANDLE_LIMIT = 200;
 
 const fmt = (v: number | null | undefined, d = 2) =>
   num(v)
@@ -224,9 +273,28 @@ export default function App() {
     fundingRate: null,
     openInterest: null,
   });
+  // V-MAX Fase 1.3: `volume` real por candle (o `v` que o Bus sempre
+  // carregou, agora repassado por getChartCandles) — insumo do Volume
+  // Profile. Todas as fontes reais de chartData vêm de getChartCandles,
+  // então o campo é sempre real, nunca opcional-fabricado.
   const [chartData, setChartData] = useState<
-    { open: number; high: number; low: number; close: number }[]
+    { time: number; open: number; high: number; low: number; close: number; volume: number }[]
   >([]);
+  // Auditoria de estabilização (P1 — "apenas 15m responde corretamente"):
+  // causa raiz real era dupla — getChartCandles() tinha '15m' fixo em
+  // engine-bridge.ts (corrigido acima) e o seletor de timeframe no
+  // ChartWidget era puramente decorativo (<span>, sem onClick, "15M"
+  // sempre marcado ativo por um literal fixo). chartTimeframeRef existe
+  // porque fetchSymbolData roda dentro de um efeito cujas deps são só
+  // [bootGeneration, selectedAsset] (WS/boot — nunca deve reiniciar só
+  // porque o timeframe mudou); o ref deixa o tick periódico de 30s sempre
+  // ler o timeframe ATUAL sem precisar recriar esse efeito nem
+  // reconectar o WebSocket.
+  const [chartTimeframe, setChartTimeframe] = useState("15m");
+  const chartTimeframeRef = useRef(chartTimeframe);
+  useEffect(() => {
+    chartTimeframeRef.current = chartTimeframe;
+  }, [chartTimeframe]);
   const [orderBook, setOrderBook] = useState<{ bids: Level[]; asks: Level[] }>({
     bids: [],
     asks: [],
@@ -327,6 +395,18 @@ export default function App() {
   // volume since this tab opened (see signal-engine.js). Null until the
   // first real tick batch is ingested.
   const [cvd, setCvd] = useState<number | null>(null);
+  // V-MAX Fase 1.2: estado real da amostra de volumes (percentil de "trade
+  // grande") e o lote de trades grandes do ciclo de poll EM CURSO — refs,
+  // não state, porque nada aqui precisa re-renderizar por conta própria;
+  // o consumidor real (OrderFlowHeatmapPlugin) lê da store via
+  // useOrderflowHistory, não daqui. onTrades sempre dispara antes de onCvd
+  // dentro do MESMO ciclo (garantia real de engine-bridge.ts's
+  // startMexcOrderflowFeed), por isso pendingLargeTradesRef está sempre
+  // atualizado quando onCvd o consome logo abaixo.
+  const orderflowThresholdStateRef = useRef<OrderflowThresholdState>(EMPTY_THRESHOLD_STATE);
+  const pendingLargeTradesRef = useRef<OrderflowTrade[]>([]);
+  // V-MAX Fase 1.3: cadência do Volume Profile (ver efeito junto a smcZones).
+  const volumeProfileLastComputeRef = useRef(0);
 
   // Real institutional liquidation feed (Binance USDT-M Futures, public —
   // engine-bridge.ts's startRealLiquidationFeed). Capped to the most
@@ -376,6 +456,8 @@ export default function App() {
     system_health: { visible: true, floating: false, collapsed: false, pinned: false },
     asset_heatmap: { visible: false, floating: false, collapsed: false, pinned: false },
     decision_validation: { visible: true, floating: false, collapsed: false, pinned: false },
+    // V-MAX Fase 1 (superfície visual): HUD do Conselho Multi-Agente + CPI.
+    council: { visible: true, floating: false, collapsed: false, pinned: false },
   };
   const [widgets, setWidgets] = useState<{
     [key: string]: { visible: boolean; floating: boolean; collapsed: boolean; pinned: boolean };
@@ -454,7 +536,7 @@ export default function App() {
   // tick.
   const fetchSymbolData = async (): Promise<boolean> => {
     try {
-      const candles = await getChartCandles(selectedAsset, 50);
+      const candles = await getChartCandles(selectedAsset, CHART_CANDLE_LIMIT, chartTimeframeRef.current);
       if (!candles) throw new Error('market_data_bus_sem_candles_validos');
       setChartData(candles);
 
@@ -563,6 +645,16 @@ export default function App() {
     setEngineStatus("pending");
     setPriceUpdatedAt(null);
     setOrderBookUpdatedAt(null);
+    // V-MAX Fase 1.1/1.2: l2History/orderflowHistory na store são séries
+    // acumuladas ao longo do tempo (não um valor pontual como os acima) do
+    // ativo ANTERIOR — sem isto, o OrderFlowHeatmapPlugin mostraria amostras
+    // do ativo antigo sobrepostas ao gráfico do novo por vários minutos.
+    useUnifiedSnapshotStore.getState().resetL2History();
+    useUnifiedSnapshotStore.getState().resetOrderflowHistory();
+    useUnifiedSnapshotStore.getState().setVolumeProfile(null);
+    volumeProfileLastComputeRef.current = 0;
+    orderflowThresholdStateRef.current = EMPTY_THRESHOLD_STATE;
+    pendingLargeTradesRef.current = [];
   }, [selectedAsset]);
 
   useEffect(() => {
@@ -681,6 +773,24 @@ export default function App() {
     };
   }, [bootGeneration, selectedAsset]);
 
+  // Auditoria de estabilização (P1): trocar de timeframe atualiza os
+  // candles do gráfico IMEDIATAMENTE — efeito próprio e deliberadamente
+  // desacoplado do grande efeito de boot/WS acima (que só depende de
+  // bootGeneration/selectedAsset). Só chartData muda aqui: sem resetar
+  // preço/order book/scanner, sem reconectar o WebSocket, sem
+  // reinicializar o gráfico ("Sem reload. Sem reinicializar o gráfico",
+  // diretriz P1). Se a busca real falhar, o chartData anterior permanece
+  // visível (fail-closed honesto — nunca um blank/reset no meio da troca).
+  useEffect(() => {
+    let cancelled = false;
+    getChartCandles(selectedAsset, CHART_CANDLE_LIMIT, chartTimeframe).then((candles) => {
+      if (!cancelled && candles) setChartData(candles);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [chartTimeframe, selectedAsset]);
+
   // Real engine cycle — WASM Quant Engine + research pipeline (engine-bridge.ts).
   // 30s cadence: the 15m candle's close evolves continuously, and the target
   // tracker prices its entry/move% off the ticker fetched AT cycle time — a
@@ -759,8 +869,28 @@ export default function App() {
         setOrderflowState(state);
         setOrderflowReason(reason ?? null);
       },
-      (value) => setCvd(value),
+      (value) => {
+        setCvd(value);
+        // V-MAX Fase 1.2: onCvd sempre dispara DEPOIS de onTrades dentro do
+        // MESMO ciclo de poll (garantia real de engine-bridge.ts) — os
+        // trades grandes já calculados abaixo pertencem exatamente a este
+        // valor de cvd, nunca um ciclo anterior/posterior.
+        useUnifiedSnapshotStore.getState().recordOrderflowHistory({
+          time: Date.now(),
+          cvd: value,
+          largeTrades: pendingLargeTradesRef.current,
+        });
+        pendingLargeTradesRef.current = [];
+      },
       selectedAsset,
+      (ticks: OrderflowTick[]) => {
+        const trades: OrderflowTrade[] = ticks.map((t) => ({
+          time: t.timestamp, price: t.price, volume: t.volume, side: t.side,
+        }));
+        const { large, nextState } = ingestTradesForLargeDetection(orderflowThresholdStateRef.current, trades);
+        orderflowThresholdStateRef.current = nextState;
+        pendingLargeTradesRef.current = large;
+      },
     );
     return stop;
   }, [bootGeneration, selectedAsset]);
@@ -1122,6 +1252,320 @@ export default function App() {
     [chartData],
   );
 
+  // V-MAX Fase 1.3: Volume Profile real (WASM no quant-worker) sobre os
+  // MESMOS candles reais que o chart exibe — zero rede nova. Cadência
+  // limitada a 1 cálculo por 5s (o candle vivo muda a cada tick de WS;
+  // recomputar o perfil inteiro por tick seria spam de postMessage sem
+  // ganho visual — mesma natureza da cadência de amostragem do l2-history).
+  // Fail-Closed: qualquer falha => setVolumeProfile(null), nunca perfil velho
+  // de outro ativo (o efeito de troca de ativo também zera).
+  useEffect(() => {
+    if (!chartData || chartData.length === 0) return;
+    const now = Date.now();
+    if (now - volumeProfileLastComputeRef.current < 5_000) return;
+    volumeProfileLastComputeRef.current = now;
+    let stale = false;
+    (async () => {
+      const [fixedRange, session] = await Promise.all([
+        computeRealVolumeProfile(chartData),
+        computeRealVolumeProfile(filterSessionCandles(chartData)),
+      ]);
+      if (stale) return;
+      useUnifiedSnapshotStore.getState().setVolumeProfile({ fixedRange, session });
+    })();
+    return () => { stale = true; };
+  }, [chartData]);
+
+  // V-MAX Fase 1.4: Matriz de Confluência Fibonacci (agente transversal) —
+  // cruza a retração real da última perna confirmada (mesma perna da
+  // extensão 61.8% do motor de S/R, mesmo findSwings compartilhado) contra
+  // TODAS as fontes reais de nível que os outros motores já produzem nesta
+  // árvore: S1/R1 reais, zonas SMC vivas (FVG/OB não-mitigadas como FAIXA
+  // real, EQH/EQL não-varridas) e POC/HVN do Volume Profile (Fase 1.3).
+  // Zero rede nova, zero segunda matemática — só leitura transversal.
+  // Camada de análise/exibição: nunca alimenta o Core Engine (LEI 24).
+  const volumeProfileSnapshot = useVolumeProfileSnapshot();
+  useEffect(() => {
+    if (!chartData || chartData.length === 0) {
+      useUnifiedSnapshotStore.getState().setFibonacciConfluence(null);
+      return;
+    }
+    const sources: ConfluenceSource[] = [];
+    const point = (kind: string, price: number | null | undefined) => {
+      if (typeof price === "number" && Number.isFinite(price)) {
+        sources.push({ kind, priceLow: price, priceHigh: price });
+      }
+    };
+    point("SR_SUPPORT_1", engine?.support);
+    point("SR_RESISTANCE_1", engine?.resistance);
+    smcZones.fairValueGaps.filter((z) => !z.mitigated).forEach((z) => {
+      sources.push({ kind: `FVG_${z.type}`, priceLow: z.bottom, priceHigh: z.top });
+    });
+    smcZones.orderBlocks.filter((z) => !z.mitigated).forEach((z) => {
+      sources.push({ kind: `OB_${z.type}`, priceLow: z.bottom, priceHigh: z.top });
+    });
+    smcZones.liquidityZones.filter((z) => !z.swept).forEach((z) => {
+      point(z.type === "EQUAL_HIGH" ? "EQH" : "EQL", z.price);
+    });
+    const vp = volumeProfileSnapshot?.fixedRange;
+    if (vp) {
+      point("VP_POC", vp.pocPrice);
+      vp.hvnIndices.forEach((i) => {
+        point("VP_HVN", bucketMidPrice(i, vp.rangeMin, vp.rangeMax, vp.bucketCount));
+      });
+    }
+    useUnifiedSnapshotStore.getState().setFibonacciConfluence(
+      computeRealFibonacciConfluence(chartData, sources),
+    );
+  }, [chartData, smcZones, engine, volumeProfileSnapshot]);
+
+  // V-MAX Fase 1 item 4: Conselho Multi-Agente. Cada insumo abaixo é dado
+  // REAL já coletado por este componente ou pela store — o conselho é um
+  // consumidor transversal puro, nunca uma segunda fonte de dados. O
+  // FibonacciAgent lê a matriz da Fase 1.4 (que já carrega POC/HVN do WASM
+  // Quant Core — o cruzamento transversal da diretriz). Camada de análise:
+  // jamais alimenta o Core Engine (LEI 24).
+  const fibonacciMatrix = useFibonacciConfluenceSnapshot();
+  const councilOffline = useOfflineSnapshot();
+  const councilDataFresh = useDataFreshSnapshot();
+  useEffect(() => {
+    const price = typeof priceData?.price === "number" ? priceData.price : null;
+    const decision = buildCouncilDecision({
+      price,
+      liquidityZones: smcZones.liquidityZones,
+      structure15: engine?.marketStructureLabel ?? null,
+      structure1h: engine?.htfMarketStructureLabel ?? null,
+      cvd,
+      orderflowSignals,
+      offline: councilOffline,
+      isDataFresh: councilDataFresh,
+      engineStatus,
+      fibonacci: fibonacciMatrix,
+    });
+    useUnifiedSnapshotStore.getState().setCouncil(decision);
+
+    // V-MAX Fase 2 (Motor de Cenários): MESMOS níveis reais que os motores
+    // já mapearam — nenhum alvo projetado/inventado; pesos = massa de
+    // opinião real do conselho recém-computado (nunca probabilidade).
+    const levels: ScenarioLevel[] = [];
+    if (typeof engine?.support === "number" && Number.isFinite(engine.support)) {
+      levels.push({ price: engine.support, sourceKind: "SR_SUPPORT_1" });
+    }
+    if (typeof engine?.resistance === "number" && Number.isFinite(engine.resistance)) {
+      levels.push({ price: engine.resistance, sourceKind: "SR_RESISTANCE_1" });
+    }
+    smcZones.liquidityZones.filter((z) => !z.swept).forEach((z) => {
+      levels.push({ price: z.price, sourceKind: z.type === "EQUAL_HIGH" ? "EQH" : "EQL" });
+    });
+    (fibonacciMatrix?.levels ?? []).filter((l) => l.score > 0).forEach((l) => {
+      levels.push({ price: l.price, sourceKind: `FIB_${(l.ratio * 100).toFixed(1)}` });
+    });
+    const vpForScenario = volumeProfileSnapshot?.fixedRange;
+    if (vpForScenario) {
+      levels.push({ price: vpForScenario.pocPrice, sourceKind: "VP_POC" });
+      vpForScenario.hvnIndices.forEach((i) => {
+        levels.push({ price: bucketMidPrice(i, vpForScenario.rangeMin, vpForScenario.rangeMax, vpForScenario.bucketCount), sourceKind: "VP_HVN" });
+      });
+    }
+    useUnifiedSnapshotStore.getState().setScenario(buildScenarioProjection(price, levels, decision));
+  }, [priceData, smcZones, engine, cvd, orderflowSignals, councilOffline, councilDataFresh, engineStatus, fibonacciMatrix, volumeProfileSnapshot]);
+
+  // V-MAX Fase 2 (armadilhas institucionais): corroboração de eventos
+  // REAIS — sweeps consumados (flag swept do motor SMC) + sinais reais de
+  // ABSORPTION/EXHAUSTION na janela. Lista vazia = estado honesto comum.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setTrapSignals(
+      detectInstitutionalTraps({
+        liquidityZones: smcZones.liquidityZones,
+        orderflowSignals,
+        now: Date.now(),
+      }),
+    );
+  }, [smcZones, orderflowSignals]);
+
+  // V-MAX Fase 1 item 5: eventos afetivos REAIS — só TRANSIÇÕES
+  // verdadeiras de estado operacional viram evento (refs guardam o estado
+  // anterior; um render sem mudança nunca ingere nada). A memória decai
+  // na própria ingestão (lazy, ver nexus/affective-memory.ts) — zero
+  // trabalho periódico na main thread.
+  const prevEngineStatusRef = useRef(engineStatus);
+  useEffect(() => {
+    const prev = prevEngineStatusRef.current;
+    prevEngineStatusRef.current = engineStatus;
+    if (prev !== "error" && engineStatus === "error") {
+      useUnifiedSnapshotStore.getState().recordAffectiveEvent("ENGINE_CYCLE_ERROR");
+    }
+  }, [engineStatus]);
+  const prevLastUpdateRef = useRef(lastUpdateAt);
+  useEffect(() => {
+    const prev = prevLastUpdateRef.current;
+    prevLastUpdateRef.current = lastUpdateAt;
+    // lastUpdateAt só muda quando um ciclo real completa — cada ciclo ok é
+    // um reward real (o organismo percebeu o mercado com sucesso).
+    if (lastUpdateAt !== null && lastUpdateAt !== prev && engineStatus === "ok") {
+      useUnifiedSnapshotStore.getState().recordAffectiveEvent("ENGINE_CYCLE_OK");
+    }
+  }, [lastUpdateAt, engineStatus]);
+  const prevWsLiveRef = useRef(wsLive);
+  useEffect(() => {
+    const prev = prevWsLiveRef.current;
+    prevWsLiveRef.current = wsLive;
+    if (prev === wsLive) return;
+    useUnifiedSnapshotStore.getState().recordAffectiveEvent(wsLive ? "FEED_WS_UP" : "FEED_WS_DOWN");
+  }, [wsLive]);
+  const prevDataFreshRef = useRef(councilDataFresh);
+  useEffect(() => {
+    const prev = prevDataFreshRef.current;
+    prevDataFreshRef.current = councilDataFresh;
+    if (prev === councilDataFresh) return;
+    useUnifiedSnapshotStore.getState().recordAffectiveEvent(councilDataFresh ? "DATA_FRESH_AGAIN" : "DATA_STALE");
+  }, [councilDataFresh]);
+  const prevOrderflowStateRef = useRef(orderflowState);
+  useEffect(() => {
+    const prev = prevOrderflowStateRef.current;
+    prevOrderflowStateRef.current = orderflowState;
+    if (prev !== "ERROR" && orderflowState === "ERROR") {
+      useUnifiedSnapshotStore.getState().recordAffectiveEvent("ORDERFLOW_FEED_ERROR");
+    }
+  }, [orderflowState]);
+
+  // V-MAX Fase 2 (TrustScoreEngine): amostras 100% reais —
+  //   gaps  = intervalos reais entre chegadas de preço (priceUpdatedAt é o
+  //           carimbo real de cada atualização; o ring guarda os últimos 60
+  //           deltas, ~zero custo);
+  //   bps   = divergências reais Binance×Bybit/OKX quando os cross-checks
+  //           estão ok (|Δ%|×100).
+  // Cômputo no WASM do quant-worker (Main Thread sagrada), cadência de 5s
+  // (mesma janela de legibilidade do Volume Profile), FAIL_CLOSED null.
+  const priceGapsRef = useRef<number[]>([]);
+  const prevPriceUpdatedAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevPriceUpdatedAtRef.current;
+    prevPriceUpdatedAtRef.current = priceUpdatedAt ?? null;
+    if (typeof priceUpdatedAt === "number" && typeof prev === "number" && priceUpdatedAt > prev) {
+      const ring = priceGapsRef.current;
+      ring.push(priceUpdatedAt - prev);
+      if (ring.length > 60) ring.splice(0, ring.length - 60);
+    }
+  }, [priceUpdatedAt]);
+  const trustLastComputeRef = useRef(0);
+  useEffect(() => {
+    const now = Date.now();
+    if (now - trustLastComputeRef.current < 5_000) return;
+    if (priceGapsRef.current.length < 2) return;
+    trustLastComputeRef.current = now;
+    const divergences: number[] = [];
+    if (crossExchangeCheck.ok && typeof crossExchangeCheck.priceDeltaPct === "number") {
+      divergences.push(Math.abs(crossExchangeCheck.priceDeltaPct) * 100);
+    }
+    if (okxCrossExchangeCheck.ok && typeof okxCrossExchangeCheck.priceDeltaPct === "number") {
+      divergences.push(Math.abs(okxCrossExchangeCheck.priceDeltaPct) * 100);
+    }
+    let stale = false;
+    (async () => {
+      const score = await computeRealTrustScore([...priceGapsRef.current], divergences);
+      if (!stale) useUnifiedSnapshotStore.getState().setTrustScore(score);
+    })();
+    return () => { stale = true; };
+  }, [priceUpdatedAt, crossExchangeCheck, okxCrossExchangeCheck]);
+
+  // V18 Sprint 1 (Tarefa A): espelha o dado real já coletado por App.tsx
+  // para dentro da UnifiedGlobalSnapshot store (Zustand+Immer) — nenhuma
+  // rede nova disparada aqui, só sincronização. Cada efeito só escreve
+  // quando a fatia real correspondente muda, então um consumidor via
+  // seletor atômico (usePriceSnapshot, useCoreSnapshot, ...) só
+  // re-renderiza quando aquela fatia específica de fato mudou.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setSymbol(selectedAsset);
+  }, [selectedAsset]);
+  useEffect(() => {
+    if (priceData) useUnifiedSnapshotStore.getState().setPrice(priceData);
+  }, [priceData]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setOrderBook(orderBook);
+  }, [orderBook]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setDerivatives(derivatives);
+  }, [derivatives]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setCore({
+      engineStatus,
+      direction: engine?.direction ?? null,
+      confidence: engine?.confidence ?? null,
+      lastUpdateAt,
+      cycleLatencyMs,
+    });
+  }, [engineStatus, engine, lastUpdateAt, cycleLatencyMs]);
+  // V-MAX Fase 0.8: Health Monitor real — puramente aditivo (só mede e
+  // escreve na store, nunca troca nem atrasa nenhum caminho de dado real
+  // já existente), então liga direto aqui, diferente do CrossExchangeService
+  // (Fase 0.5, deliberadamente ainda dormente — ver relatório da Fase 0).
+  // start()/stop() do HealthMonitor já são idempotentes por conta própria,
+  // então isto sobrevive ao mount→unmount→remount do React StrictMode em
+  // dev sem depender do array de hooks do NexusCore (getNexusCore() aqui
+  // só fornece o Event Bus tipado compartilhado, mesmo singleton de
+  // sempre).
+  useEffect(() => {
+    const core = getNexusCore();
+    core.start();
+    const monitor = getHealthMonitor(core.bus);
+    monitor.start();
+    return () => {
+      monitor.stop();
+    };
+  }, []);
+  // V-MAX Fase 0.4: mesmo princípio de espelhamento acima, para as novas
+  // fatias do UnifiedGlobalSnapshot (Blueprint §2.3) — nenhuma delas dispara
+  // rede nova, todas espelham dado que os efeitos de WS/REST já reais logo
+  // acima (linha ~600) coletam.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setActiveTimeframe(chartTimeframe as Timeframe);
+  }, [chartTimeframe]);
+  useEffect(() => {
+    if (chartData && chartData.length > 0) {
+      useUnifiedSnapshotStore.getState().setCandles(selectedAsset, chartTimeframe as Timeframe, chartData);
+    }
+  }, [chartData, selectedAsset, chartTimeframe]);
+  useEffect(() => {
+    // orderBookUpdatedAt (não orderBook.updatedAt, que só existe DEPOIS de
+    // passar pela store) é o sinal real de "já chegou um livro de verdade"
+    // — antes do primeiro update real, fica honestamente null (nunca um
+    // L2Snapshot fabricado com bids/asks vazios fingindo ser um livro real).
+    useUnifiedSnapshotStore.getState().setExchangeOrderBook(
+      "BINANCE",
+      orderBookUpdatedAt ? { bids: orderBook.bids, asks: orderBook.asks, updatedAt: orderBookUpdatedAt } : null,
+    );
+    // V-MAX Fase 1.1: MESMO evento real acima também vira uma amostra no
+    // histórico L2 (pré-requisito do OrderFlowHeatmapPlugin) — nunca uma
+    // segunda assinatura de WS, só um segundo consumidor do mesmo dado
+    // real já throttled a 200ms. sampleL2History decide sozinho (função
+    // pura em l2-history.ts) se já passou tempo suficiente para reter.
+    if (orderBookUpdatedAt) {
+      useUnifiedSnapshotStore.getState().sampleL2History("BINANCE", {
+        time: orderBookUpdatedAt,
+        bids: orderBook.bids,
+        asks: orderBook.asks,
+      });
+    }
+  }, [orderBook, orderBookUpdatedAt]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setConnectionState("BINANCE", wsLive ? "LIVE" : "OFFLINE");
+  }, [wsLive]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setConnectionState("BYBIT", crossExchangeCheck.ok ? "LIVE" : "DEGRADED");
+  }, [crossExchangeCheck]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setConnectionState("OKX", okxCrossExchangeCheck.ok ? "LIVE" : "DEGRADED");
+  }, [okxCrossExchangeCheck]);
+  // V-MAX Fase 1.2 (achado real durante a auditoria para o
+  // OrderFlowHeatmapPlugin): `fps` acima (Fase J, "FPS REAL da UI") é a
+  // ÚNICA medição real de frame rate desta árvore — o Health Monitor
+  // (Fase 0.8) foi corrigido para espelhar isto em vez de amostrar de
+  // novo por conta própria (zero repetição).
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setUiFps(fps);
+  }, [fps]);
+
   // Stable reference — prevents every context consumer (TopBar, all Widgets,
   // AssistantOrb, MarketDirectionWidget...) from re-rendering on renders
   // that don't actually change any of these values.
@@ -1136,6 +1580,8 @@ export default function App() {
       toggleLeftDrawer,
       rightDrawerOpen,
       toggleRightDrawer,
+      chartTimeframe,
+      setChartTimeframe,
       engine,
       smcZones,
       bootAt,
@@ -1178,6 +1624,7 @@ export default function App() {
       toggleLeftDrawer,
       rightDrawerOpen,
       toggleRightDrawer,
+      chartTimeframe,
       engine,
       smcZones,
       bootAt,
@@ -1282,7 +1729,7 @@ export default function App() {
                             assetLabel={`${selectedTradFiAsset?.symbol ?? ""} · ${selectedTradFiAsset?.name ?? ""}`}
                           />
                         ) : (
-                          <ChartWidget data={priceData} chartData={chartData} />
+                          <ChartWidget chartData={chartData} />
                         ))}
                     </div>
 
@@ -1377,6 +1824,12 @@ export default function App() {
                           </>
                         )
                       )}
+                      {/* V-MAX Fase 1 (superfície visual): HUD do Conselho
+                          Multi-Agente + CPI — dados reais da store (item 4/5),
+                          logo abaixo do comitê de validação (mesma família de
+                          leitura consultiva, LEI 24). Só em modo cripto: os
+                          agentes leem feeds cripto reais. */}
+                      {marketMode !== "TRADFI" && widgets.council?.visible && <CouncilWidget />}
                       <TelemetryHealthWidget />
                     </div>
                   </div>
@@ -1489,7 +1942,14 @@ export default function App() {
 // dashboard, so SETTINGS and the cockpit never disagree about what a
 // module is called (no raw internal keys like "se_core" shown to the user).
 const WIDGET_LABELS: { [key: string]: string } = {
-  chart: "GRÁFICO · BINANCE SPOT",
+  // Auditoria de estabilização (P8): rótulo estava desatualizado desde a
+  // V15.1 GOD TIER, que tornou o gráfico exclusivamente Futuros/Perpétuo
+  // (engine-bridge.ts, sem fallback para Spot) — "SPOT" aqui contradizia
+  // a própria fonte real usada (collectBinanceFuturesKlines). O título
+  // exibido no próprio Widget do gráfico já deriva corretamente de
+  // realCycle.instrumentType; só este rótulo do painel de Configuração
+  // (nome "oficial" do módulo) estava com o texto antigo.
+  chart: "GRÁFICO · BINANCE FUTUROS",
   orderflow: "FLUXO DE ORDENS · LIVRO REAL",
   heatmap: "MAPA DE LIQUIDEZ · PROFUNDIDADE REAL",
   market_direction: "VETOR DE MERCADO",
@@ -1505,6 +1965,7 @@ const WIDGET_LABELS: { [key: string]: string } = {
   asset_heatmap: "HEATMAP · ATIVOS",
   decision_validation: "VALIDAÇÃO MULTI-CAMADA",
   system_health: "SAÚDE DO SISTEMA",
+  council: "CONSELHO MULTI-AGENTE",
 };
 
 function ConfigPanel() {
@@ -2259,6 +2720,106 @@ const LevelCard = React.memo(function LevelCard({
   );
 });
 
+// --- NÚCLEO + VOZ (V18.1, fusão aprovada pelo Operador) ---
+// O núcleo vivia escondido: o AssistantOrb rico ("bolinha circulando" +
+// IRON-VOICE) só renderiza quando o card Siriform está expandido (se_core
+// começa collapsed). Esta é a fusão pedida — um orb compacto SEMPRE
+// visível na barra de comando, ao lado do botão de energia ("lá onde tem
+// o botãozinho de ligar no cantinho"), fundindo as duas coisas reais que
+// já existem: o estado do núcleo (engineStatus — a MESMA variável do
+// SiriformCoreCard/AssistantOrb, mapeamento V18 §1.2: verde-azulado=ok,
+// âmbar=aguardando, vermelho suave=falha) e o controle de voz
+// (voiceEngine, o MESMO gesto real de ligar/desligar do
+// VoiceControlWidget — que continua intacto no painel expandido: a fusão
+// não remove nada, "perder nada"). O push-to-talk continua exclusivo do
+// VoiceControlWidget de propósito: dois pontos de captura simultâneos
+// duplicariam o handler de resultado do reconhecimento (fala respondida
+// duas vezes) — um risco real, não uma economia.
+function NucleoVoiceOrb() {
+  const { engineStatus } = useContext(WidgetContext) || {};
+  const [voiceStatus, setVoiceStatus] = useState(() => voiceEngine.getStatus());
+  useEffect(() => voiceEngine.onStatus(setVoiceStatus), []);
+
+  // V-MAX Fase 0.9 (Blueprint §3.4 "NucleoVoiceOrb 100% reativo" / §5.1
+  // "Offline: offline=true, Orb STALE/âmbar"): honestidade além do
+  // engineStatus isolado. offline (navigator.onLine real, Fase 0.4) e
+  // isDataFresh (Health Monitor real, Fase 0.8) agora existem — o orb
+  // nunca mostra "SINCRONIZADO" (teal) se a conexão caiu ou se os dados
+  // que alimentam o ciclo pararam de chegar, mesmo que o ÚLTIMO ciclo
+  // completado tenha sido "ok". "pending" (aguardando o primeiro ciclo,
+  // boot) é distinto de "desatualizado" (já teve ciclo ok, mas os dados
+  // reais pararam de chegar depois) — checado nessa ordem para nunca
+  // confundir os dois.
+  const offline = useOfflineSnapshot();
+  const isDataFresh = useDataFreshSnapshot();
+  const stale = engineStatus === "ok" && !isDataFresh;
+  // V-MAX Fase 1 item 5: CPI real (memória afetiva Reward/Pain com
+  // decaimento, nexus/affective-memory.ts) alimentado ao orb via a store —
+  // exibido no title. Deliberadamente NÃO altera a cor: a cor é o estado
+  // operacional INSTANTÂNEO (offline/erro/pending/stale, hierarquia
+  // fail-closed da Fase 0.9); o CPI é MEMÓRIA da sessão — deixá-lo pintar
+  // o orb de verde mascararia um estado degradado atual (proibido).
+  const cpi = useCpiSnapshot();
+  const cpiLabel = cpi === null ? "—" : `${Math.round(cpi * 100)}%`;
+
+  let coreColor: string;
+  let coreLabel: string;
+  if (offline) {
+    coreColor = "#f0d06f"; coreLabel = "OFFLINE";
+  } else if (engineStatus === "error") {
+    coreColor = "#ff0055"; coreLabel = "FALHOU";
+  } else if (engineStatus === "pending") {
+    coreColor = "#f0d06f"; coreLabel = AWAIT;
+  } else if (stale) {
+    coreColor = "#f0d06f"; coreLabel = "DESATUALIZADO";
+  } else {
+    coreColor = "#00ffaa"; coreLabel = "SINCRONIZADO";
+  }
+  const ttsSupported = voiceStatus.supported;
+
+  // Mesmo gesto real do VoiceControlWidget: ligar a voz É a interação de
+  // usuário que o iOS exige para liberar áudio; a confirmação falada é o
+  // teste audível real.
+  const handleToggleVoice = () => {
+    if (!ttsSupported) return;
+    const next = !voiceStatus.enabled;
+    voiceEngine.setEnabled(next);
+    if (next) voiceEngine.speak("Voz operacional. Modo somente leitura.", "INFO");
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleToggleVoice}
+      title={`Núcleo S.E. · ${coreLabel} · CPI ${cpiLabel} · Voz ${!ttsSupported ? "INDISPONÍVEL" : voiceStatus.enabled ? "ATIVA" : "DESLIGADA"} (toque para alternar)`}
+      className="relative ml-1 w-8 h-8 rounded-full border flex items-center justify-center transition-all active:scale-95 shrink-0"
+      style={{
+        borderColor: `${coreColor}55`,
+        background: `${coreColor}0d`,
+        boxShadow: `0 0 10px ${coreColor}2e`,
+      }}
+    >
+      {/* A "bolinha circulando" — mesma linguagem visual dos anéis
+          orbitais do orb grande; gira rápido enquanto o ciclo real ainda
+          não sincronizou (pending), lento em regime normal. Movimento é
+          estilo, não dado: a INFORMAÇÃO honesta é a cor (engineStatus). */}
+      <div
+        className={`absolute inset-0 rounded-full pointer-events-none ${engineStatus === "pending" ? "animate-[spin_1.4s_linear_infinite]" : "animate-[spin_7s_linear_infinite]"}`}
+      >
+        <div
+          className="absolute -top-[2px] left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full"
+          style={{ background: coreColor, boxShadow: `0 0 6px ${coreColor}` }}
+        ></div>
+      </div>
+      {ttsSupported && voiceStatus.enabled ? (
+        <Mic size={13} className={voiceStatus.speaking ? "animate-pulse" : ""} style={{ color: coreColor }} />
+      ) : (
+        <MicOff size={13} className="text-[#8ab4f8]/50" />
+      )}
+    </button>
+  );
+}
+
 // --- TOP BAR ---
 function TopBar({
   data,
@@ -2507,6 +3068,9 @@ function TopBar({
 
         <div className="flex gap-1 md:gap-2 h-full items-center justify-end shrink-0">
           <TopStat label="SESSÃO" value={uptime || DASH} color="text-white" />
+          {/* V18.1: núcleo + voz sempre visíveis no cantinho, ao lado do
+              botão de energia — ver header de NucleoVoiceOrb. */}
+          <NucleoVoiceOrb />
           <button
             type="button"
             onClick={handleManualRestart}
@@ -2898,42 +3462,53 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
 }
 
 // --- CHART WIDGET ---
-// Zoom windows over the SAME real 15m candles already fetched (no new
-// fetch, no fabricated data) — fewer candles visible = each one gets more
-// horizontal room, same principle as any real charting tool's zoom.
-const CHART_ZOOM_STEPS = [12, 20, 30, 50];
+// Auditoria de estabilização (P1): os 14 timeframes pedidos mapeiam 1:1
+// para intervalos REAIS aceitos pela API pública de klines de Futuros da
+// Binance (o mesmo endpoint que collectBinanceFuturesKlines já usa) —
+// nenhum valor inventado. `value` é o que chega à URL real (convenção da
+// própria Binance: "m" minúsculo = minuto, "M" maiúsculo = mês); `label`
+// segue a notação como pedida na diretriz, para nunca confundir "1m" com
+// "1M" — ambiguidade real que o seletor antigo (decorativo, sempre "1M"
+// de exibição para "1 minuto") tinha.
+const CHART_TIMEFRAMES: { value: string; label: string }[] = [
+  { value: "1m", label: "1m" },
+  { value: "3m", label: "3m" },
+  { value: "5m", label: "5m" },
+  { value: "15m", label: "15m" },
+  { value: "30m", label: "30m" },
+  { value: "1h", label: "1H" },
+  { value: "2h", label: "2H" },
+  { value: "4h", label: "4H" },
+  { value: "6h", label: "6H" },
+  { value: "8h", label: "8H" },
+  { value: "12h", label: "12H" },
+  { value: "1d", label: "1D" },
+  { value: "1w", label: "1W" },
+  { value: "1M", label: "1M" },
+];
 
-function ChartWidget({ data, chartData }: any) {
+function ChartWidget({ chartData }: any) {
   // Real Fair Value Gaps / Order Blocks / Liquidity zones — computed once
   // in App() (see contextValue) against this exact candle array, shared
   // with the Neural Core widget's tactical-context prompt so both use the
-  // same real counts rather than two independent computations.
-  const { smcZones, selectedAsset, engine } = useContext(WidgetContext) || {};
-  const [zoomStep, setZoomStep] = useState(CHART_ZOOM_STEPS.length - 1);
-  const visibleCount = CHART_ZOOM_STEPS[zoomStep];
-  const zoomedData = chartData && chartData.length > 0 ? chartData.slice(-visibleCount) : chartData;
-  const canZoomIn = zoomStep > 0;
-  const canZoomOut = zoomStep < CHART_ZOOM_STEPS.length - 1;
-
-  // smcZones' indices are relative to the FULL chartData array (computed
-  // once in App()). Zooming shows only the last `visibleCount` candles, so
-  // every zone's index needs the same offset subtracted or it would point
-  // at the wrong candle (or land off-screen entirely). Zones that belong to
-  // a candle scrolled out of the zoomed window are dropped, not clamped —
-  // showing them at the edge would misrepresent where they actually are.
-  const zoomOffset = chartData && chartData.length > 0 ? Math.max(chartData.length - visibleCount, 0) : 0;
-  const zoomedZones = useMemo(() => {
-    if (!smcZones) return smcZones;
-    const remap = <T extends { index: number }>(arr: T[]): T[] =>
-      arr.filter((z) => z.index - zoomOffset >= 0).map((z) => ({ ...z, index: z.index - zoomOffset }));
-    return {
-      fairValueGaps: remap(smcZones.fairValueGaps ?? []),
-      orderBlocks: remap(smcZones.orderBlocks ?? []),
-      liquidityZones: remap(smcZones.liquidityZones ?? []),
-    };
-  }, [smcZones, zoomOffset]);
-
+  // same real counts rather than two independent computations. V18 Sprint
+  // 1 (Tarefa B): EnhancedChart_110_Percent (lightweight-charts) lê o
+  // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
+  // navegam o histórico completo já carregado, então o remapeamento de
+  // índice que o zoom "fatiado" antigo exigia deixou de existir.
+  const { smcZones, selectedAsset, engine, chartTimeframe, setChartTimeframe } = useContext(WidgetContext) || {};
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
+
+  const unmitigatedFvgs = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
+  const unmitigatedBlocks = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
+  const unsweptLiquidity = (smcZones?.liquidityZones ?? []).filter((z: LiquidityZone) => !z.swept).slice(0, 4);
+  // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
+  // (Fase 1.4) — mesma store que os agentes leem, só mapeada para o formato
+  // do chart (price/ratio/score reais, nada recalculado aqui).
+  const fibonacciMatrix = useFibonacciConfluenceSnapshot();
+  const fibonacciLevels = fibonacciMatrix
+    ? fibonacciMatrix.levels.map((l) => ({ ratio: l.ratio, price: l.price, score: l.score }))
+    : null;
 
   return (
     <Widget
@@ -2942,42 +3517,33 @@ function ChartWidget({ data, chartData }: any) {
       flex="flex-[1.8] min-h-[320px]"
       extraHeader={
         <div className="flex items-center gap-1 text-[0.45rem]">
-          {["1M", "5M", "15M", "1H", "4H", "1D"].map((tf) => (
-            <span
-              key={tf}
-              className={`px-1 rounded ${tf === "15M" ? "bg-[#00f0ff20] text-[#00f0ff] font-bold border border-[#00f0ff40]" : "text-[#8ab4f8]/60"}`}
-            >
-              {tf}
-            </span>
-          ))}
-          <div className="flex items-center gap-0.5 ml-1 pl-1.5 border-l border-[#8ab4f8]/20">
-            <button
-              type="button"
-              onClick={(e) => {
-                stopBubble(e);
-                setZoomStep((z) => Math.min(z + 1, CHART_ZOOM_STEPS.length - 1));
-              }}
-              onDoubleClick={stopBubble}
-              disabled={!canZoomOut}
-              title="Diminuir zoom"
-              className="p-0.5 rounded text-[#8ab4f8]/60 hover:text-[#00f0ff] disabled:opacity-25 disabled:cursor-not-allowed"
-            >
-              <ZoomOut size={11} />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                stopBubble(e);
-                setZoomStep((z) => Math.max(z - 1, 0));
-              }}
-              onDoubleClick={stopBubble}
-              disabled={!canZoomIn}
-              title="Aumentar zoom"
-              className="p-0.5 rounded text-[#8ab4f8]/60 hover:text-[#00f0ff] disabled:opacity-25 disabled:cursor-not-allowed"
-            >
-              <ZoomIn size={11} />
-            </button>
-            <span className="text-[#8ab4f8]/40 tabular-nums">{visibleCount}</span>
+          {/* Auditoria de estabilização (P1): antes disto, esta linha era
+              só <span> sem onClick — nunca respondia a toque nenhum, e
+              "15M" ficava marcado ativo por um literal fixo
+              (tf === "15M") independente do que o gráfico realmente
+              mostrava. Agora é o chartTimeframe real (App(), contexto),
+              a mesma variável que fetchSymbolData/o efeito de troca de
+              timeframe usam — nunca dessincroniza da UI. overflow-x-auto
+              porque 14 opções reais não cabem numa linha só em telas
+              estreitas; é rolagem esperada de um seletor real (mesmo
+              padrão de qualquer terminal profissional), não uma barra de
+              rolagem indesejada de layout quebrado. */}
+          <div className="flex items-center gap-0.5 max-w-[160px] sm:max-w-[260px] overflow-x-auto scrollbar-hide shrink-0">
+            {CHART_TIMEFRAMES.map((tf) => (
+              <button
+                key={tf.value}
+                type="button"
+                onClick={(e) => {
+                  stopBubble(e);
+                  setChartTimeframe?.(tf.value);
+                }}
+                onDoubleClick={stopBubble}
+                title={`Timeframe ${tf.label}`}
+                className={`shrink-0 px-1 py-0.5 rounded transition-colors ${chartTimeframe === tf.value ? "bg-[#00f0ff20] text-[#00f0ff] font-bold border border-[#00f0ff40]" : "text-[#8ab4f8]/60 hover:text-[#8ab4f8]"}`}
+              >
+                {tf.label}
+              </button>
+            ))}
           </div>
         </div>
       }
@@ -2988,19 +3554,22 @@ function ChartWidget({ data, chartData }: any) {
           por inteiro; o espaço vertical recuperado (~50px) vai para as velas
           (prioridade do gráfico, V11 §7). O título do Widget carrega o
           símbolo, necessário quando o gráfico está maximizado cobrindo a
-          barra; a tag de último preço no eixo é parte intrínseca do gráfico. */}
-      <div className="flex-1 mt-1 mr-8 relative min-h-0">
-        {zoomedData && zoomedData.length > 0 ? (
-          <CandleChart
-            data={zoomedData}
-            last={data?.price ?? null}
-            zones={zoomedZones}
+          barra; a tag de último preço no eixo é parte intrínseca do gráfico
+          (lightweight-charts desenha o próprio last-price label). */}
+      <div className="flex-1 mt-1 relative min-h-0">
+        {chartData && chartData.length > 0 ? (
+          <EnhancedChart_110_Percent
+            data={chartData}
             support={engine?.support ?? null}
             resistance={engine?.resistance ?? null}
             supportStrength={engine?.supportStrength ?? null}
             resistanceStrength={engine?.resistanceStrength ?? null}
             supportBreakouts={engine?.supportBreakouts ?? 0}
             resistanceBreakouts={engine?.resistanceBreakouts ?? 0}
+            fairValueGaps={unmitigatedFvgs}
+            orderBlocks={unmitigatedBlocks}
+            liquidityZones={unsweptLiquidity}
+            fibonacciLevels={fibonacciLevels}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
@@ -3011,223 +3580,6 @@ function ChartWidget({ data, chartData }: any) {
     </Widget>
   );
 }
-
-// Split so the expensive part (100 candles -> ~200 SVG nodes) only
-// re-renders when the candle window itself changes (~every 60s), not on
-// every live ticker tick (~1/s) that only moves the last-price marker.
-function CandleChart({
-  data,
-  last,
-  zones,
-  support,
-  resistance,
-  supportStrength,
-  resistanceStrength,
-  supportBreakouts,
-  resistanceBreakouts,
-}: {
-  data: any[];
-  last: number | null;
-  zones?: { fairValueGaps: PriceZone[]; orderBlocks: PriceZone[]; liquidityZones?: LiquidityZone[] };
-  support?: number | null;
-  resistance?: number | null;
-  supportStrength?: { label: "FORTE" | "FRACA"; touches: number } | null;
-  resistanceStrength?: { label: "FORTE" | "FRACA"; touches: number } | null;
-  supportBreakouts?: number;
-  resistanceBreakouts?: number;
-}) {
-  if (!data || data.length === 0) return null;
-  const min = Math.min(...data.map((d) => d.low));
-  const max = Math.max(...data.map((d) => d.high));
-  const range = max - min || 1;
-  const lastY = num(last) ? 100 - ((last - min) / range) * 100 : null;
-  const priceToPct = (price: number) => 100 - ((price - min) / range) * 100;
-
-  // Only unmitigated/unswept zones — the ones still "live" for a trader to
-  // watch. Capped so a busy 100-candle window doesn't turn into a wall of
-  // boxes/lines.
-  const unmitigatedFvgs = (zones?.fairValueGaps ?? []).filter((z) => !z.mitigated).slice(0, 3);
-  const unmitigatedBlocks = (zones?.orderBlocks ?? []).filter((z) => !z.mitigated).slice(0, 3);
-  const unsweptLiquidity = (zones?.liquidityZones ?? []).filter((z) => !z.swept).slice(0, 4);
-
-  return (
-    <div className="absolute inset-0 border-b border-[#00f0ff20]">
-      {/* V16 §3 (Chart Engine institucional): R1/S1 — o nível de suporte/
-          resistência mais próximo já usado pelo Risk Engine/S.E. (mesmo
-          engine.support/resistance exibido em outros cards), com força e
-          contagem REAIS de toques/rompimentos (ver countBreakouts em
-          App()) — nunca um número inventado. Uma linha por nível (não o
-          par completo S1/S2/R1/R2) para não poluir o gráfico; o detalhe
-          completo fica no card compacto (MarketBiasDecisionCard). */}
-      {num(resistance) && (
-        <div
-          className="absolute pointer-events-none border-t border-dashed border-[#ff0055]/60 flex items-center justify-end"
-          style={{ top: `${priceToPct(resistance)}%`, left: 0, right: 0 }}
-        >
-          <span className="text-[0.42rem] font-bold text-[#ff0055] bg-[#010308]/70 px-[3px] leading-none -translate-y-1/2">
-            R1 {fmtInt(resistance)}
-            {resistanceStrength
-              ? ` · ${resistanceStrength.label} · ${resistanceStrength.touches}× retest · ${resistanceBreakouts ?? 0}× romp.`
-              : ""}
-          </span>
-        </div>
-      )}
-      {num(support) && (
-        <div
-          className="absolute pointer-events-none border-t border-dashed border-[#00ffaa]/60 flex items-center justify-end"
-          style={{ top: `${priceToPct(support)}%`, left: 0, right: 0 }}
-        >
-          <span className="text-[0.42rem] font-bold text-[#00ffaa] bg-[#010308]/70 px-[3px] leading-none -translate-y-1/2">
-            S1 {fmtInt(support)}
-            {supportStrength
-              ? ` · ${supportStrength.label} · ${supportStrength.touches}× retest · ${supportBreakouts ?? 0}× romp.`
-              : ""}
-          </span>
-        </div>
-      )}
-      {unsweptLiquidity.map((z, i) => (
-        <div
-          key={`liq-${z.index}-${i}`}
-          className="absolute pointer-events-none border-t border-dashed border-[#f0d06f]/50 flex items-center"
-          style={{ top: `${priceToPct(z.price)}%`, left: `${(z.index / data.length) * 100}%`, right: 0 }}
-        >
-          <span className="text-[0.42rem] font-bold text-[#f0d06f]/70 bg-[#010308]/60 px-[3px] leading-none -translate-y-1/2">
-            {z.type === "EQUAL_HIGH" ? "EQH" : "EQL"} ×{z.touches}
-          </span>
-        </div>
-      ))}
-      {unmitigatedFvgs.map((z, i) => (
-        <div
-          key={`fvg-${z.index}-${i}`}
-          className={`absolute pointer-events-none ${z.type === "BULLISH" ? "bg-[#00ffaa]/[0.06] border-y border-[#00ffaa]/25" : "bg-[#ff0055]/[0.06] border-y border-[#ff0055]/25"}`}
-          style={{
-            top: `${priceToPct(z.top)}%`,
-            height: `${Math.max(priceToPct(z.bottom) - priceToPct(z.top), 0.6)}%`,
-            left: `${(z.index / data.length) * 100}%`,
-            right: 0,
-          }}
-        />
-      ))}
-      {unmitigatedBlocks.map((z, i) => (
-        <div
-          key={`ob-${z.index}-${i}`}
-          className={`absolute pointer-events-none border-dashed ${z.type === "BULLISH" ? "border-[#00ffaa]/40" : "border-[#ff0055]/40"}`}
-          style={{
-            top: `${priceToPct(z.top)}%`,
-            height: `${Math.max(priceToPct(z.bottom) - priceToPct(z.top), 0.6)}%`,
-            left: `${(z.index / data.length) * 100}%`,
-            right: 0,
-            borderTopWidth: 1,
-            borderBottomWidth: 1,
-          }}
-        />
-      ))}
-      <CandlesSvg data={data} />
-      {lastY !== null && (
-        <div
-          className="absolute right-[-36px] text-[0.45rem] font-bold text-[#010308] bg-[#00ffaa] px-[4px] py-[2px] rounded shadow-[0_0_10px_#00ffaa] translate-y-[-50%] border border-[#00ffaa] flex items-center gap-1"
-          style={{ top: `${lastY}%` }}
-        >
-          <div className="w-1 h-1 bg-[#010308] rounded-full animate-ping opacity-70"></div>
-          {fmtInt(last)}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const CandlesSvg = React.memo(function CandlesSvg({ data }: { data: any[] }) {
-  const min = Math.min(...data.map((d) => d.low));
-  const max = Math.max(...data.map((d) => d.high));
-  const range = max - min || 1;
-
-  const polyPoints = data
-    .map((d, i) => {
-      const xPos = ((i + 0.5) / data.length) * 100;
-      const yPos = 100 - ((d.close - min) / range) * 100;
-      return `${xPos},${yPos}`;
-    })
-    .join(" ");
-
-  return (
-    <>
-      {[0, 0.25, 0.5, 0.75, 1].map((pct) => (
-        <div
-          key={pct}
-          className="absolute left-0 right-0 border-t border-white/5 pointer-events-none"
-          style={{ top: `${pct * 100}%` }}
-        ></div>
-      ))}
-      <svg
-        width="100%"
-        height="100%"
-        preserveAspectRatio="none"
-        className="overflow-visible absolute inset-0 z-0 opacity-20"
-      >
-        <defs>
-          <linearGradient id="glowGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#00f0ff" stopOpacity="0.8" />
-            <stop offset="100%" stopColor="#00f0ff" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <polygon points={`0,100 ${polyPoints} 100,100`} fill="url(#glowGrad)" />
-      </svg>
-
-      <svg
-        width="100%"
-        height="100%"
-        preserveAspectRatio="none"
-        className="overflow-visible absolute inset-0 z-10"
-      >
-        <defs>
-          <filter id="glow-up">
-            <feGaussianBlur stdDeviation="2" result="coloredBlur" />
-            <feMerge>
-              <feMergeNode in="coloredBlur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="glow-down">
-            <feGaussianBlur stdDeviation="2" result="coloredBlur" />
-            <feMerge>
-              <feMergeNode in="coloredBlur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        {data.map((d, i) => {
-          const yHigh = 100 - ((d.high - min) / range) * 100 + "%";
-          const yLow = 100 - ((d.low - min) / range) * 100 + "%";
-          const yOpen = 100 - ((d.open - min) / range) * 100 + "%";
-          const yClose = 100 - ((d.close - min) / range) * 100 + "%";
-          const isUp = d.close >= d.open;
-          const color = isUp ? "#00ffaa" : "#ff0055";
-          const filter = isUp ? "url(#glow-up)" : "url(#glow-down)";
-          const boxTop = isUp ? yClose : yOpen;
-          const rawHeight = Math.abs(((d.close - d.open) / range) * 100);
-          const boxHeight = Math.max(0.5, rawHeight) + "%";
-          const xPos = `${((i + 0.5) / data.length) * 100}%`;
-          const xRect = `${((i + 0.1) / data.length) * 100}%`;
-          const wRect = `${(0.8 / data.length) * 100}%`;
-          return (
-            <g key={i}>
-              <line x1={xPos} y1={yHigh} x2={xPos} y2={yLow} stroke={color} strokeWidth="1" opacity={0.5} />
-              <rect x={xRect} y={boxTop} width={wRect} height={boxHeight} fill={color} filter={filter} />
-            </g>
-          );
-        })}
-      </svg>
-
-      <div className="absolute -right-9 top-0 bottom-0 flex flex-col justify-between text-[0.45rem] text-[#8ab4f8]/70 text-right w-8 translate-y-[-4px]">
-        <span>{fmt(max)}</span>
-        <span>{fmt((max * 3 + min) / 4)}</span>
-        <span>{fmt((max + min) / 2)}</span>
-        <span>{fmt((max + min * 3) / 4)}</span>
-        <span className="translate-y-[8px]">{fmt(min)}</span>
-      </div>
-    </>
-  );
-});
 
 // --- ORDER FLOW WIDGET ---
 function OrderFlowWidget() {
@@ -4225,6 +4577,146 @@ function MarketRegimeWidget() {
         <Row label="CONFLUÊNCIA MULTI-TF" value={confluenceLabel} valueClass={confluenceColor} />
         <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
         <Row label="VOLATILIDADE" value={volLabel} valueClass={volColor} />
+      </div>
+    </Widget>
+  );
+}
+
+// --- CONSELHO MULTI-AGENTE (V-MAX Fase 1 item 4 — superfície visual) ---
+// HUD do debate real: 6 votos (postura/confiança/racional) + decisão do
+// Meta-Agent + CPI da memória afetiva. Tudo lido da store
+// (useCouncilSnapshot/useCpiSnapshot) — os MESMOS objetos que os efeitos
+// de App() gravam; este componente só exibe, nunca recomputa (LEI 24:
+// camada de exibição, jamais toca o Core Engine).
+const COUNCIL_STANCE_COLOR: Record<string, string> = {
+  LONG: "text-[#00ffaa]",
+  SHORT: "text-[#ff0055]",
+  NEUTRAL: "text-[#8ab4f8]",
+  ABSTAIN: "text-[#f0d06f]",
+};
+const COUNCIL_AGENT_LABEL: Record<string, string> = {
+  LIQUIDITY: "LIQUIDEZ",
+  STRUCTURE: "ESTRUTURA",
+  ORDERFLOW: "ORDER FLOW",
+  RISK: "RISCO",
+  MANIPULATION: "MANIPULAÇÃO",
+  FIBONACCI: "FIBONACCI",
+};
+
+function CouncilWidget() {
+  const council = useCouncilSnapshot();
+  const cpi = useCpiSnapshot();
+  // V-MAX Fase 2: cenários Path A/B e armadilhas reais — mesma store.
+  const scenario = useScenarioSnapshot();
+  const traps = useTrapSignalsSnapshot();
+  const trustScore = useTrustScoreSnapshot();
+
+  const pathLabel = (p: { direction: string; target: { price: number; sourceKind: string } | null; opinionWeight: number | null }) => {
+    const target = p.target ? `${p.target.price.toFixed(0)} (${p.target.sourceKind})` : "sem nível real";
+    const weight = p.opinionWeight !== null ? ` · opinião ${Math.round(p.opinionWeight * 100)}%` : "";
+    return `${p.direction} → ${target}${weight}`;
+  };
+
+  const stance = council?.stance ?? null;
+  const stanceLabel = stance ?? AWAIT;
+  const stanceColor = stance ? COUNCIL_STANCE_COLOR[stance] : "text-[#8ab4f8]";
+  // agreement é massa de opinião do comitê (Fase F) — NUNCA probabilidade
+  // de mercado; o rótulo "coesão" diz o que o número realmente é.
+  const agreementLabel = council?.agreement !== null && council?.agreement !== undefined
+    ? `${Math.round(council.agreement * 100)}%`
+    : "—";
+  const cpiLabel = cpi === null ? AWAIT : `${Math.round(cpi * 100)}%`;
+  const cpiColor = cpi === null ? "text-[#8ab4f8]" : cpi >= 0.7 ? "text-[#00ffaa]" : cpi >= 0.4 ? "text-[#f0d06f]" : "text-[#ff0055]";
+
+  return (
+    <Widget id="council" title="CONSELHO MULTI-AGENTE" flex="flex-[1] min-h-[210px]">
+      <div className="flex flex-col gap-1 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
+        <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff20]">
+          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">
+            DECISÃO{council?.riskGated ? " · TRAVADO (RISCO)" : ""}
+          </span>
+          <span className={`text-[0.55rem] font-mono font-black ${stanceColor}`}>
+            {stanceLabel}
+            {council && council.quorum > 0 ? (
+              <span className="text-[#8ab4f8]/60 font-normal"> · coesão {agreementLabel} · quórum {council.quorum}/5</span>
+            ) : null}
+          </span>
+        </div>
+        {(council?.votes ?? []).map((v) => (
+          <div
+            key={v.agent}
+            className="flex flex-col bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+            title={v.evidence.length > 0 ? v.evidence.join(" · ") : v.rationale}
+          >
+            <div className="flex justify-between items-center">
+              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">
+                {COUNCIL_AGENT_LABEL[v.agent] ?? v.agent}
+              </span>
+              <span className={`text-[0.5rem] font-mono font-black ${COUNCIL_STANCE_COLOR[v.stance]}`}>
+                {v.stance}
+                {v.confidence !== null ? <span className="text-[#8ab4f8]/60 font-normal"> {Math.round(v.confidence * 100)}%</span> : null}
+              </span>
+            </div>
+            <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-tight truncate">{v.rationale}</span>
+          </div>
+        ))}
+        {!council && (
+          <div className="flex items-center justify-center text-[0.5rem] tracking-[0.25em] text-[#8ab4f8]/40 font-bold py-3">
+            {AWAIT}
+          </div>
+        )}
+        {/* V-MAX Fase 2 — Path A/B: alvos são níveis REAIS dos motores;
+            "opinião" é massa do comitê (Fase F), rotulada como tal — o
+            title inteiro do bloco repete a natureza do número para nunca
+            ser lido como probabilidade de mercado. */}
+        {scenario && (
+          <div
+            className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1 rounded border border-[#00f0ff15]"
+            title="Pesos = massa de opinião do Conselho (comitê) — NUNCA probabilidade de mercado. Alvos = próximos níveis reais mapeados pelos motores."
+          >
+            <div className="flex justify-between items-center">
+              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CENÁRIO A</span>
+              <span className={`text-[0.48rem] font-mono font-black ${scenario.pathA.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
+                {pathLabel(scenario.pathA)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CENÁRIO B</span>
+              <span className={`text-[0.48rem] font-mono font-black ${scenario.pathB.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
+                {pathLabel(scenario.pathB)}
+              </span>
+            </div>
+          </div>
+        )}
+        {/* V-MAX Fase 2 — armadilhas por corroboração de eventos reais;
+            nenhuma linha quando não há evento (honesto, não vazio-triste). */}
+        {traps.length > 0 && (
+          <div className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1 rounded border border-[#ff005530]">
+            {traps.map((t) => (
+              <div key={t.kind} className="flex justify-between items-center" title={t.evidence.join(" · ")}>
+                <span className="text-[0.45rem] text-[#ff0055]/80 font-bold tracking-wide">ARMADILHA · {t.kind.replace(/_/g, " ")}</span>
+                <span className="text-[0.5rem] font-mono font-black text-[#ff0055]">{Math.round(t.confidence * 100)}%</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
+          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CPI · MEMÓRIA AFETIVA</span>
+          <span className={`text-[0.5rem] font-mono font-black ${cpiColor}`}>{cpiLabel}</span>
+        </div>
+        {/* V-MAX Fase 2 — TrustScore da FONTE (WASM): cadência real +
+            convergência cross-exchange; componentes reais no tooltip. */}
+        <div
+          className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+          title={trustScore
+            ? `Cadência ${Math.round(trustScore.cadenceRegularity * 100)}% (${trustScore.gapCount} gaps reais)${trustScore.crossExchangeConvergence !== null ? ` · Convergência ${Math.round(trustScore.crossExchangeConvergence * 100)}% (${trustScore.divergenceCount} exchanges)` : " · convergência não medida"}`
+            : "Aguardando amostras reais de cadência"}
+        >
+          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">TRUST SCORE · FONTE</span>
+          <span className={`text-[0.5rem] font-mono font-black ${trustScore === null ? "text-[#8ab4f8]" : trustScore.score >= 0.7 ? "text-[#00ffaa]" : trustScore.score >= 0.4 ? "text-[#f0d06f]" : "text-[#ff0055]"}`}>
+            {trustScore === null ? AWAIT : `${Math.round(trustScore.score * 100)}%`}
+          </span>
+        </div>
       </div>
     </Widget>
   );

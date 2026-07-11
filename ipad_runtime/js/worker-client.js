@@ -44,6 +44,20 @@ export class QuantWorkerClient {
         const packed = closes instanceof Float64Array ? closes : Float64Array.from(closes);
         return this.call('compute_series', { closes: packed, window }, 15000, [packed.buffer]);
     }
+    // V-MAX Fase 1.3: Volume Profile real no WASM do worker. Mesmo padrao
+    // zero-copy do computeSeries — os tres arrays viajam TRANSFERIDOS.
+    computeVolumeProfile(highs, lows, volumes, buckets) {
+        const h = highs instanceof Float64Array ? highs : Float64Array.from(highs);
+        const l = lows instanceof Float64Array ? lows : Float64Array.from(lows);
+        const v = volumes instanceof Float64Array ? volumes : Float64Array.from(volumes);
+        return this.call('compute_volume_profile', { highs: h, lows: l, volumes: v, buckets }, 15000, [h.buffer, l.buffer, v.buffer]);
+    }
+    // V-MAX Fase 2: TrustScore real no WASM (mesmo zero-copy transferido).
+    computeTrustScore(gaps, divergences = []) {
+        const g = gaps instanceof Float64Array ? gaps : Float64Array.from(gaps);
+        const d = divergences instanceof Float64Array ? divergences : Float64Array.from(divergences);
+        return this.call('compute_trust_score', { gaps: g, divergences: d }, 15000, [g.buffer, d.buffer]);
+    }
     selfTest() { return this.call('self_test'); }
     terminate() { this.worker.terminate(); }
 }

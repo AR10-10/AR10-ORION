@@ -1,0 +1,391 @@
+// EnhancedChart_110_Percent.tsx — V18 Sprint 1, Tarefa B: "Destravar o
+// Gráfico Institucional". Substitui o SVG feito à mão (que só desenhava as
+// últimas N velas com espaçamento igual, sem pan, sem zoom real, sem eixo
+// temporal de verdade) por lightweight-charts — pan (handleScroll) e zoom
+// (handleScale) nativos da própria lib, nunca reimplementados à mão aqui.
+//
+// Escopo desta Tarefa B (diretriz explícita: "não tente reescrever o
+// sistema inteiro de uma vez"): candles reais com pan/zoom/crosshair
+// nativos + S1/R1 e zonas SMC reais como price lines nativas
+// (createPriceLine) — sempre sincronizadas com pan/zoom porque são
+// primitivas da própria lib, nunca posicionadas manualmente em pixels.
+// Isto preserva a garantia já estabelecida nesta sessão ("os overlays do
+// gráfico — SMC, S/R, FVG — devem continuar existindo e processando dados
+// reais"), só muda COMO são desenhados. Fica como próximo passo (não
+// fabricado às pressas aqui): um retângulo real por zona (via Plugin API
+// de primitives da lightweight-charts) mostrando também ONDE no tempo a
+// zona se formou — por ora, price lines de largura total mostram o
+// preço real top/bottom de cada zona ainda não mitigada/varrida, o
+// mesmo filtro (!mitigated / !swept) e o mesmo cap de contagem que o
+// componente antigo já usava.
+import { useEffect, useRef, useState } from "react";
+import {
+  createChart,
+  CandlestickSeries,
+  LineSeries,
+  ColorType,
+  CrosshairMode,
+  LineStyle,
+  type IChartApi,
+  type ISeriesApi,
+  type IPriceLine,
+  type UTCTimestamp,
+} from "lightweight-charts";
+// V-MAX Fase 1 (superfície visual, fechamento do §3.1): linha de CVD real
+// — a série do orderflowHistory (Fase 1.2) com eixo Y próprio nativo.
+import { useOrderflowHistory } from "../store/unified-snapshot-store";
+import { LiquidityZonesPlugin, type FillableZone } from "./LiquidityZonesPlugin";
+import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
+// V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
+// barras à direita — dado direto da store (Fase 1.3), ver header do plugin.
+import { VolumeProfilePlugin } from "./VolumeProfilePlugin";
+
+export interface EnhancedChartCandle {
+  time: number; // Unix segundos real (Bus/Binance) — nunca sintetizado
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+// V-MAX Fase 0.7: ganha `index` (posição real no array de candles onde a
+// zona se formou) — necessário para o LiquidityZonesPlugin desenhar a
+// borda esquerda real da área colorida; PriceZone (engine-bridge.ts) já
+// carrega esse campo, então nenhum dado novo precisa ser calculado.
+export interface EnhancedChartZone {
+  type: "BULLISH" | "BEARISH";
+  top: number;
+  bottom: number;
+  index: number;
+}
+
+export interface EnhancedChartLiquidity {
+  type: "EQUAL_HIGH" | "EQUAL_LOW";
+  price: number;
+  touches: number;
+}
+
+export interface LevelStrength {
+  label: "FORTE" | "FRACA";
+  touches: number;
+}
+
+// V-MAX Fase 1 (superfície visual): nível de retração real da Matriz de
+// Confluência (Fase 1.4) — price+ratio+score reais, passados pelo
+// ChartWidget a partir da store (mesmo padrão das zonas SMC).
+export interface EnhancedChartFibLevel {
+  ratio: number;
+  price: number;
+  score: number;
+}
+
+interface EnhancedChartProps {
+  data: EnhancedChartCandle[];
+  support?: number | null;
+  resistance?: number | null;
+  supportStrength?: LevelStrength | null;
+  resistanceStrength?: LevelStrength | null;
+  supportBreakouts?: number;
+  resistanceBreakouts?: number;
+  fairValueGaps?: EnhancedChartZone[];
+  orderBlocks?: EnhancedChartZone[];
+  liquidityZones?: EnhancedChartLiquidity[];
+  fibonacciLevels?: EnhancedChartFibLevel[] | null;
+}
+
+// Mesmo formato de texto que o gráfico antigo já usava para S1/R1 — só a
+// primitiva que desenha muda (createPriceLine em vez de <span> em pixel
+// fixo), a informação real (força/retest/rompimentos) continua idêntica.
+function levelTitle(base: string, strength: LevelStrength | null | undefined, breakouts: number | undefined): string {
+  if (!strength) return base;
+  return `${base} ${strength.label} ${strength.touches}x/${breakouts ?? 0}x`;
+}
+
+export function EnhancedChart_110_Percent({
+  data,
+  support,
+  resistance,
+  supportStrength,
+  resistanceStrength,
+  supportBreakouts,
+  resistanceBreakouts,
+  fairValueGaps,
+  orderBlocks,
+  liquidityZones,
+  fibonacciLevels,
+}: EnhancedChartProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const supportLineRef = useRef<IPriceLine | null>(null);
+  const resistanceLineRef = useRef<IPriceLine | null>(null);
+  const zoneLinesRef = useRef<IPriceLine[]>([]);
+  const fibLinesRef = useRef<IPriceLine[]>([]);
+  const cvdSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Espelha chartRef/seriesRef em state só para o LiquidityZonesPlugin
+  // montar assim que o chart existe de verdade — refs sozinhas não
+  // disparam re-render, então o plugin ficaria esperando por uma
+  // atualização de `data` não relacionada para "descobrir" o chart pronto.
+  const [chartReady, setChartReady] = useState<{ chart: IChartApi; series: ISeriesApi<"Candlestick"> } | null>(null);
+
+  // Cria o chart UMA vez por montagem — nunca recriado por troca de
+  // timeframe/dado (isso destruiria o estado de pan/zoom do operador a
+  // cada atualização, exatamente o "reload"/"reinicializar o gráfico" que
+  // a diretriz proíbe). autoSize:true usa o ResizeObserver interno da
+  // própria lib — sem media query manual, sem listener de resize próprio.
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const chart = createChart(containerRef.current, {
+      layout: {
+        background: { type: ColorType.Solid, color: "transparent" },
+        textColor: "#8ab4f8",
+        fontFamily: "ui-monospace, monospace",
+        fontSize: 10,
+      },
+      grid: {
+        vertLines: { color: "rgba(0, 240, 255, 0.06)" },
+        horzLines: { color: "rgba(0, 240, 255, 0.06)" },
+      },
+      crosshair: { mode: CrosshairMode.Normal },
+      rightPriceScale: { borderColor: "rgba(138, 180, 248, 0.15)" },
+      timeScale: {
+        borderColor: "rgba(138, 180, 248, 0.15)",
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      // Diretriz explícita do Sprint 1: pan/zoom real e nativo — nunca
+      // hand-rolled. handleScroll cobre arrastar (mouse + touch);
+      // handleScale cobre roda do mouse + pinça (iPad).
+      handleScroll: {
+        mouseWheel: true,
+        pressedMouseMove: true,
+        horzTouchDrag: true,
+        vertTouchDrag: false,
+      },
+      handleScale: {
+        mouseWheel: true,
+        pinch: true,
+        axisPressedMouseMove: true,
+      },
+      autoSize: true,
+    });
+    const series = chart.addSeries(CandlestickSeries, {
+      upColor: "#00ffaa",
+      downColor: "#ff0055",
+      borderVisible: false,
+      wickUpColor: "#00ffaa",
+      wickDownColor: "#ff0055",
+      priceLineVisible: true,
+      lastValueVisible: true,
+      // Achado real via verificação com harness Playwright (V-MAX Fase
+      // 0.7): sem este campo, a lib desenha essa linha automática de
+      // último preço tracejada por padrão — quebra silenciosa da Regra de
+      // Ouro 2 (Fio de Seda) que nenhum grep no código-fonte pegaria,
+      // porque a causa é uma OMISSÃO, não um valor errado escrito aqui.
+      priceLineStyle: LineStyle.Solid,
+    });
+    // V-MAX Fase 1 (fechamento do §3.1): linha de CVD como série NATIVA em
+    // escala de preço PRÓPRIA ('cvd', overlay) — CVD é volume assinado, não
+    // preço; partilhar a escala das velas o achataria em ruído. Banda
+    // inferior (20%) via scaleMargins. Fio de seda: lineWidth 1, sólida.
+    // Cor neutra da família de texto (#8ab4f8) — o SINAL do CVD já é
+    // exibido com cor semântica no Order Flow widget; aqui a informação é
+    // a FORMA da série (fluxo acumulado), não um veredito colorido.
+    const cvdSeries = chart.addSeries(LineSeries, {
+      priceScaleId: "cvd",
+      color: "rgba(138, 180, 248, 0.85)",
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+    chart.priceScale("cvd").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+    cvdSeriesRef.current = cvdSeries;
+    chartRef.current = chart;
+    seriesRef.current = series;
+    setChartReady({ chart, series });
+    return () => {
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+      supportLineRef.current = null;
+      resistanceLineRef.current = null;
+      zoneLinesRef.current = [];
+      fibLinesRef.current = [];
+      cvdSeriesRef.current = null;
+      setChartReady(null);
+    };
+  }, []);
+
+  // Atualiza a série EXISTENTE com o candle real — nunca recria o chart.
+  // Isto é o que satisfaz "transição suave entre timeframes (sem
+  // recarregar tudo)": trocar chartTimeframe em App.tsx só troca o
+  // conteúdo de `data`, este efeito só chama setData() na mesma série, e o
+  // pan/zoom/crosshair do operador nunca são resetados por isso.
+  useEffect(() => {
+    if (!seriesRef.current || !data || data.length === 0) return;
+    const formatted = data
+      .filter((c) => Number.isFinite(c.time) && Number.isFinite(c.open) && Number.isFinite(c.high) && Number.isFinite(c.low) && Number.isFinite(c.close))
+      .map((c) => ({
+        time: c.time as UTCTimestamp,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+      }));
+    seriesRef.current.setData(formatted);
+  }, [data]);
+
+  // S1/R1 reais — o MESMO engine.support/resistance que os outros widgets
+  // já exibem, aqui como price lines nativas (createPriceLine), nunca uma
+  // linha desenhada à mão em cima do canvas.
+  //
+  // "Fio de seda" (pedido explícito do Operador): TODAS as linhas de
+  // marcação deste gráfico são SÓLIDAS e finas (lineWidth 1, o mínimo da
+  // lib) — nunca pontilhadas/tracejadas. A hierarquia visual entre S1/R1
+  // (nível primário) e as zonas SMC (contexto) vem da OPACIDADE da cor,
+  // não do estilo do traço: S1/R1 mais presentes, zonas mais translúcidas.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    if (supportLineRef.current) {
+      seriesRef.current.removePriceLine(supportLineRef.current);
+      supportLineRef.current = null;
+    }
+    if (Number.isFinite(support)) {
+      supportLineRef.current = seriesRef.current.createPriceLine({
+        price: support as number,
+        color: "rgba(0, 255, 170, 0.65)",
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title: levelTitle("S1", supportStrength, supportBreakouts),
+      });
+    }
+  }, [support, supportStrength, supportBreakouts]);
+
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    if (resistanceLineRef.current) {
+      seriesRef.current.removePriceLine(resistanceLineRef.current);
+      resistanceLineRef.current = null;
+    }
+    if (Number.isFinite(resistance)) {
+      resistanceLineRef.current = seriesRef.current.createPriceLine({
+        price: resistance as number,
+        color: "rgba(255, 0, 85, 0.65)",
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title: levelTitle("R1", resistanceStrength, resistanceBreakouts),
+      });
+    }
+  }, [resistance, resistanceStrength, resistanceBreakouts]);
+
+  // Liquidez (Equal High/Low) continua como price line: LiquidityZone
+  // (engine-bridge.ts) só carrega um preço único, nunca um top/bottom —
+  // não existe uma "área" real para preencher, então uma linha continua
+  // sendo a representação honesta (mesmo dado, mesmo filtro !swept de
+  // sempre, aplicado rio acima em App.tsx/ChartWidget).
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    zoneLinesRef.current.forEach((line) => series.removePriceLine(line));
+    zoneLinesRef.current = [];
+
+    (liquidityZones ?? []).forEach((z) => {
+      zoneLinesRef.current.push(
+        series.createPriceLine({
+          price: z.price,
+          color: "rgba(200, 107, 255, 0.45)",
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: false,
+          title: `${z.type === "EQUAL_HIGH" ? "EQH" : "EQL"} x${z.touches}`,
+        }),
+      );
+    });
+  }, [liquidityZones]);
+
+  // V-MAX Fase 1 (fechamento do §3.1): alimenta a série de CVD com o
+  // histórico REAL da store (mesmo orderflowHistory do heatmap — um dado,
+  // dois consumidores, zero segunda coleta). time real em ms → segundos da
+  // lib com dedupe manter-o-último por segundo (a cadência real do poller é
+  // ~4s, então colisões são raras; o guarda existe porque a lib exige tempos
+  // estritamente ascendentes). Histórico vazio => série vazia honesta.
+  const orderflowHistory = useOrderflowHistory();
+  useEffect(() => {
+    if (!cvdSeriesRef.current) return;
+    const bySecond = new Map<number, number>();
+    for (const entry of orderflowHistory) {
+      bySecond.set(Math.floor(entry.time / 1000), entry.cvd);
+    }
+    cvdSeriesRef.current.setData(
+      [...bySecond.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([t, cvd]) => ({ time: t as UTCTimestamp, value: cvd })),
+    );
+  }, [orderflowHistory]);
+
+  // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
+  // Fibonacci como price lines nativas — "fio de seda" (1px sólida, nunca
+  // pontilhada); a hierarquia entre níveis vem da OPACIDADE pela confluência
+  // real (score ≥ 1 fonte => mais presente), nunca do estilo do traço.
+  // Título carrega ratio + score reais ("FIB 61.8% ×2").
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    fibLinesRef.current.forEach((line) => series.removePriceLine(line));
+    fibLinesRef.current = [];
+
+    (fibonacciLevels ?? []).forEach((level) => {
+      if (!Number.isFinite(level.price)) return;
+      fibLinesRef.current.push(
+        series.createPriceLine({
+          price: level.price,
+          color: level.score > 0 ? "rgba(0, 240, 255, 0.55)" : "rgba(0, 240, 255, 0.20)",
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: false,
+          title: `FIB ${(level.ratio * 100).toFixed(1)}%${level.score > 0 ? ` ×${level.score}` : ""}`,
+        }),
+      );
+    });
+  }, [fibonacciLevels]);
+
+  return (
+    <div className="absolute inset-0">
+      {/* V-MAX Fase 1.2: densidade L2 + bolhas de trades grandes, ANTES do
+         container do chart de propósito — layout.background do chart é
+         transparent (acima), então este heatmap fica REALMENTE atrás das
+         velas (não só semi-transparente por cima), o visual institucional
+         padrão (Bookmap-style) sem precisar de nenhuma API de camadas da
+         lib. */}
+      <OrderFlowHeatmapPlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+      />
+      <div ref={containerRef} className="absolute inset-0" />
+      {/* V-MAX Fase 0.7: FVG/Order Blocks (bullish|bearish) — mesmo dado real
+         de computeSmcZones, já filtrado (!mitigated) e limitado em contagem
+         rio acima (App.tsx/ChartWidget), agora como área colorida real
+         (Blueprint §3.1 LiquidityZonesPlugin) em vez de duas price lines —
+         restaura a cor que o gráfico SVG anterior tinha, sem tirar nenhuma
+         cor do gráfico (pedido explícito do Operador). */}
+      <LiquidityZonesPlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+        data={data}
+        fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}
+        orderBlocks={(orderBlocks ?? []) as FillableZone[]}
+      />
+      {/* V-MAX Fase 1 (superfície visual): Volume Profile real (Fase 1.3)
+         como barras à direita + linha do POC — overlay por cima do chart
+         (pointer-events-none), dado direto da store. */}
+      <VolumeProfilePlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+      />
+    </div>
+  );
+}

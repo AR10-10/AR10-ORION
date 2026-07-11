@@ -28,6 +28,8 @@ type QuantExports = {
   zscore_last: (len: number) => number;
   max_val: (len: number) => number;
   min_val: (len: number) => number;
+  volume_profile: (candleCount: number, bucketCount: number) => number;
+  trust_score: (gapCount: number, divergenceCount: number) => number;
   engine_version: () => number;
 };
 
@@ -69,7 +71,7 @@ describe('wasm-quant-core: identidade e fronteira do binário real de produção
     // linker, não API) — filtrados; o que sobra é a superfície funcional.
     const exported = Object.keys(wasm).filter((k) => !k.startsWith('__')).sort();
     expect(exported).toEqual(
-      ['buffer_capacity', 'buffer_ptr', 'ema', 'engine_version', 'max_val', 'memory', 'min_val', 'sma', 'stddev', 'zscore_last'].sort(),
+      ['buffer_capacity', 'buffer_ptr', 'ema', 'engine_version', 'max_val', 'memory', 'min_val', 'sma', 'stddev', 'trust_score', 'volume_profile', 'zscore_last'].sort(),
     );
   });
 
@@ -170,5 +172,135 @@ describe('wasm-quant-core: MAX/MIN sobre os primeiros `len`', () => {
   it('FAIL_CLOSED: len 0 => NaN', () => {
     expect(Number.isNaN(wasm.max_val(0))).toBe(true);
     expect(Number.isNaN(wasm.min_val(0))).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V-MAX Fase 1.3: volume_profile — histograma OHLCV (aproximação
+// DECLARADA: volume do candle distribuído uniformemente por [low,high],
+// ver lib.rs). Layout do buffer: entrada [highs|lows|volumes], saída
+// [histograma|range_min|range_max], retorno = índice do bucket POC.
+// ─────────────────────────────────────────────────────────────────────────
+describe('wasm-quant-core: VOLUME_PROFILE — histograma real + POC, FAIL_CLOSED em dado corrompido', () => {
+  function writeCandles(highs: number[], lows: number[], vols: number[]): number {
+    const n = highs.length;
+    const view = new Float64Array(wasm.memory.buffer, wasm.buffer_ptr(), wasm.buffer_capacity());
+    for (let i = 0; i < n; i++) view[i] = highs[i];
+    for (let i = 0; i < n; i++) view[n + i] = lows[i];
+    for (let i = 0; i < n; i++) view[2 * n + i] = vols[i];
+    return n;
+  }
+  function readProfile(buckets: number): { hist: number[]; rangeMin: number; rangeMax: number } {
+    const out = new Float64Array(wasm.memory.buffer, wasm.buffer_ptr(), buckets + 2);
+    return { hist: Array.from(out.subarray(0, buckets)), rangeMin: out[buckets], rangeMax: out[buckets + 1] };
+  }
+
+  it('POC é o bucket de maior volume real; range é o [min(low), max(high)] real', () => {
+    // Metade de baixo com 10 de volume, metade de cima com 30.
+    const n = writeCandles([105, 110], [100, 105], [10, 30]);
+    const poc = wasm.volume_profile(n, 2);
+    expect(poc).toBe(1);
+    const { hist, rangeMin, rangeMax } = readProfile(2);
+    expect(hist[0]).toBeCloseTo(10, 10);
+    expect(hist[1]).toBeCloseTo(30, 10);
+    expect(rangeMin).toBe(100);
+    expect(rangeMax).toBe(110);
+  });
+
+  it('conserva o volume total (nenhum volume inventado nem perdido nas bordas)', () => {
+    const highs = [103, 107.5, 110, 104.2];
+    const lows = [100, 102, 106, 101.1];
+    const vols = [12.5, 7.25, 19, 3.75];
+    const n = writeCandles(highs, lows, vols);
+    expect(Number.isNaN(wasm.volume_profile(n, 24))).toBe(false);
+    const { hist } = readProfile(24);
+    const total = hist.reduce((a, b) => a + b, 0);
+    expect(total).toBeCloseTo(vols.reduce((a, b) => a + b, 0), 9);
+  });
+
+  it('referência independente: 1 candle cobrindo a faixa toda distribui uniforme', () => {
+    const n = writeCandles([110], [100], [40]);
+    const poc = wasm.volume_profile(n, 4);
+    expect(poc).toBe(0); // empate perfeito => índice mais baixo, determinístico
+    const { hist } = readProfile(4);
+    hist.forEach((b) => expect(b).toBeCloseTo(10, 10));
+  });
+
+  it('caso degenerado real (todos os candles no mesmo preço): todo o volume no bucket 0', () => {
+    const n = writeCandles([100, 100], [100, 100], [5, 7]);
+    expect(wasm.volume_profile(n, 8)).toBe(0);
+    const { hist, rangeMin, rangeMax } = readProfile(8);
+    expect(hist[0]).toBe(12);
+    expect(rangeMin).toBe(100);
+    expect(rangeMax).toBe(100);
+  });
+
+  it('FAIL_CLOSED: candles 0, buckets 0, buckets > 512 => NaN', () => {
+    expect(Number.isNaN(wasm.volume_profile(0, 10))).toBe(true);
+    const n = writeCandles([110], [100], [1]);
+    expect(Number.isNaN(wasm.volume_profile(n, 0))).toBe(true);
+    expect(Number.isNaN(wasm.volume_profile(n, 513))).toBe(true);
+  });
+
+  it('FAIL_CLOSED: dado corrompido (NaN, volume negativo, high < low) => NaN, nunca um perfil-chute', () => {
+    let n = writeCandles([Number.NaN], [100], [1]);
+    expect(Number.isNaN(wasm.volume_profile(n, 4))).toBe(true);
+    n = writeCandles([110], [100], [-1]);
+    expect(Number.isNaN(wasm.volume_profile(n, 4))).toBe(true);
+    n = writeCandles([100], [110], [1]); // high < low: candle impossível
+    expect(Number.isNaN(wasm.volume_profile(n, 4))).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V-MAX Fase 2: trust_score — regularidade real de cadência (1/(1+CV)) +
+// convergência cross-exchange (1/(1+média|bps|/10)). Layout em lib.rs.
+// ─────────────────────────────────────────────────────────────────────────
+describe('wasm-quant-core: TRUST_SCORE — confiança na fonte, FAIL_CLOSED em amostra inválida', () => {
+  function writeTrust(gaps: number[], divs: number[]): void {
+    const view = new Float64Array(wasm.memory.buffer, wasm.buffer_ptr(), wasm.buffer_capacity());
+    gaps.forEach((g, i) => { view[i] = g; });
+    divs.forEach((d, i) => { view[gaps.length + i] = d; });
+  }
+
+  it('cadência perfeitamente regular sem divergência => score 1, convergência NaN honesta no buffer', () => {
+    writeTrust([200, 200, 200, 200], []);
+    const score = wasm.trust_score(4, 0);
+    expect(score).toBeCloseTo(1, 12);
+    const out = new Float64Array(wasm.memory.buffer, wasm.buffer_ptr(), 2);
+    expect(out[0]).toBeCloseTo(1, 12); // regularidade
+    expect(Number.isNaN(out[1])).toBe(true); // convergência não medida
+  });
+
+  it('bate com a referência independente (CV + escala de 10 bps)', () => {
+    const gaps = [180, 220, 200, 240, 160];
+    const divs = [5, -15];
+    writeTrust(gaps, divs);
+    const score = wasm.trust_score(gaps.length, divs.length);
+    const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    const sd = Math.sqrt(gaps.reduce((acc, g) => acc + (g - mean) ** 2, 0) / (gaps.length - 1));
+    const refReg = 1 / (1 + sd / mean);
+    const refConv = 1 / (1 + (divs.reduce((a, d) => a + Math.abs(d), 0) / divs.length) / 10);
+    expect(score).toBeCloseTo((refReg + refConv) / 2, 10);
+  });
+
+  it('cadência errática degrada o score de verdade', () => {
+    writeTrust([200, 200, 200, 200], []);
+    const uniform = wasm.trust_score(4, 0);
+    writeTrust([50, 900, 20, 1400], []);
+    const erratic = wasm.trust_score(4, 0);
+    expect(erratic).toBeLessThan(uniform);
+  });
+
+  it('FAIL_CLOSED: <2 gaps, gap negativo/NaN, média zero, divergência não-finita => NaN', () => {
+    writeTrust([200], []);
+    expect(Number.isNaN(wasm.trust_score(1, 0))).toBe(true);
+    writeTrust([200, -5], []);
+    expect(Number.isNaN(wasm.trust_score(2, 0))).toBe(true);
+    writeTrust([0, 0], []);
+    expect(Number.isNaN(wasm.trust_score(2, 0))).toBe(true);
+    writeTrust([200, 200], [Number.POSITIVE_INFINITY]);
+    expect(Number.isNaN(wasm.trust_score(2, 1))).toBe(true);
+    expect(Number.isNaN(wasm.trust_score(0, 0))).toBe(true);
   });
 });

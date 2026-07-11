@@ -34,6 +34,8 @@ type QuantExports = {
   zscore_last: (len: number) => number;
   max_val: (len: number) => number;
   min_val: (len: number) => number;
+  volume_profile: (candleCount: number, bucketCount: number) => number;
+  trust_score: (gapCount: number, divergenceCount: number) => number;
   engine_version: () => number;
 };
 
@@ -124,6 +126,52 @@ describe('simd-parity: o binário SIMD honra os mesmos FAIL_CLOSED documentados'
   });
 });
 
+describe('simd-parity: volume_profile é escalar nos DOIS builds (como a EMA) — igualdade EXATA exigida', () => {
+  // Candles determinísticos derivados das mesmas séries da suite:
+  // high/low/volume reais e variados, tamanho ímpar E par cobertos.
+  function candlesFrom(series: number[]): { highs: number[]; lows: number[]; vols: number[] } {
+    const highs = series.map((v, i) => v + 5 + (i % 3));
+    const lows = series.map((v, i) => v - 5 - (i % 2));
+    const vols = series.map((_, i) => 10 + (i % 7) * 3.5);
+    return { highs, lows, vols };
+  }
+  function writeCandles(w: QuantExports, c: { highs: number[]; lows: number[]; vols: number[] }): number {
+    const n = c.highs.length;
+    const view = new Float64Array(w.memory.buffer, w.buffer_ptr(), w.buffer_capacity());
+    for (let i = 0; i < n; i++) view[i] = c.highs[i];
+    for (let i = 0; i < n; i++) view[n + i] = c.lows[i];
+    for (let i = 0; i < n; i++) view[2 * n + i] = c.vols[i];
+    return n;
+  }
+  function readProfile(w: QuantExports, buckets: number): number[] {
+    return Array.from(new Float64Array(w.memory.buffer, w.buffer_ptr(), buckets + 2));
+  }
+
+  for (const [label, data] of [['par(64)', EVEN], ['impar(63)', ODD]] as Array<[string, number[]]>) {
+    it(`histograma+range+POC bit-a-bit idênticos entre os binários na série ${label}`, () => {
+      const c = candlesFrom(data);
+      const nS = writeCandles(scalar, c);
+      const nV = writeCandles(simd, c);
+      const pocS = scalar.volume_profile(nS, 48);
+      const pocV = simd.volume_profile(nV, 48);
+      expect(pocV).toBe(pocS);
+      const outS = readProfile(scalar, 48);
+      const outV = readProfile(simd, 48);
+      outV.forEach((v, i) => expect(v).toBe(outS[i]));
+    });
+  }
+
+  it('FAIL_CLOSED idêntico nos dois: NaN para candles 0 / buckets 0 / buckets > 512', () => {
+    for (const w of [scalar, simd]) {
+      expect(Number.isNaN(w.volume_profile(0, 10))).toBe(true);
+      const c = candlesFrom(FLAT);
+      const n = writeCandles(w, c);
+      expect(Number.isNaN(w.volume_profile(n, 0))).toBe(true);
+      expect(Number.isNaN(w.volume_profile(n, 513))).toBe(true);
+    }
+  });
+});
+
 describe('simd-parity: o binário SIMD passa nas MESMAS referências independentes da Fase G', () => {
   const refSma = (v: number[], w: number) => v.slice(v.length - w).reduce((a, b) => a + b, 0) / w;
   const refMean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
@@ -137,5 +185,34 @@ describe('simd-parity: o binário SIMD passa nas MESMAS referências independent
     expect(simd.sma(len, 15)).toBeCloseTo(refSma(ODD, 15), 10);
     expect(simd.stddev(len)).toBeCloseTo(refStddev(ODD), 10);
     expect(simd.zscore_last(len)).toBeCloseTo((ODD[ODD.length - 1] - refMean(ODD)) / refStddev(ODD), 10);
+  });
+});
+
+describe('simd-parity: trust_score usa os kernels de redução (soma/desvio) — concordância a 10 casas', () => {
+  function writeTrust(w: QuantExports, gaps: number[], divs: number[]): void {
+    const view = new Float64Array(w.memory.buffer, w.buffer_ptr(), w.buffer_capacity());
+    gaps.forEach((g, i) => { view[i] = g; });
+    divs.forEach((d, i) => { view[gaps.length + i] = d; });
+  }
+
+  it('mesmo score e mesmos componentes nos dois binários (série ímpar exercita a cauda SIMD)', () => {
+    const gaps = Array.from({ length: 63 }, (_, i) => 150 + 40 * Math.sin(i / 4) + (i % 5) * 7);
+    const divs = [4, -12, 8];
+    writeTrust(scalar, gaps, divs);
+    const s = scalar.trust_score(gaps.length, divs.length);
+    const outS = Array.from(new Float64Array(scalar.memory.buffer, scalar.buffer_ptr(), 2));
+    writeTrust(simd, gaps, divs);
+    const v = simd.trust_score(gaps.length, divs.length);
+    const outV = Array.from(new Float64Array(simd.memory.buffer, simd.buffer_ptr(), 2));
+    expect(v).toBeCloseTo(s, 10);
+    expect(outV[0]).toBeCloseTo(outS[0], 10);
+    expect(outV[1]).toBeCloseTo(outS[1], 10);
+  });
+
+  it('FAIL_CLOSED idêntico nos dois binários', () => {
+    for (const w of [scalar, simd]) {
+      writeTrust(w, [200], []);
+      expect(Number.isNaN(w.trust_score(1, 0))).toBe(true);
+    }
   });
 });

@@ -243,6 +243,263 @@ pub extern "C" fn min_val(len: usize) -> f64 {
     min_slice(read_slice(len))
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Volume Profile — V-MAX Fase 1.3 (Blueprint Fase 1 item 2).
+//
+// PRECISAO HONESTA (auditoria Fase 1.3, zero repeticao verificada antes de
+// escrever isto — nenhuma outra implementacao de Volume Profile existe no
+// repo): candles OHLCV carregam UM volume agregado por candle, sem
+// distribuicao intra-candle real. O unico tick stream real do codebase e
+// MEXC Spot — mercado DIFERENTE dos candles Futures que o chart exibe,
+// entao um perfil tick-level para o chart nao e construivel hoje sem
+// fabricar granularidade. Este perfil usa a aproximacao padrao para OHLCV:
+// o volume de cada candle e distribuido UNIFORMEMENTE pela faixa
+// [low, high] dele, proporcional a sobreposicao com cada bucket — uma
+// aproximacao DECLARADA, nunca apresentada como tick-level.
+//
+// Fixed Range vs Session: mesma matematica — a diferenca e so QUAIS
+// candles o caller escreve no buffer (janela toda vs desde a abertura da
+// sessao). Uma segunda funcao seria duplicacao, nao feature.
+//
+// Escalar nos DOIS builds (mesma justificativa da EMA): o laco de
+// distribuicao e um scatter com faixas dependentes de dados, nao uma
+// reducao lane-a-lane — vetorizar mudaria o algoritmo, nao so a ordem.
+// Consequencia verificavel: a suite de paridade exige igualdade EXATA
+// (bit-a-bit) entre os dois binarios nesta funcao, criterio mais forte que
+// o das reducoes SIMD.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Teto de buckets: array local na stack (4KB) + mais buckets do que
+/// pixels verticais de qualquer tela real nao acrescenta informacao.
+const VP_MAX_BUCKETS: usize = 512;
+
+/// Nucleo puro do Volume Profile — testavel nativamente (cargo test) sem
+/// tocar o BUFFER estatico. Devolve None em qualquer dado corrompido
+/// (FAIL_CLOSED): NaN/inf, volume negativo, high < low.
+fn compute_volume_profile(
+    highs: &[f64],
+    lows: &[f64],
+    volumes: &[f64],
+    hist: &mut [f64],
+) -> Option<(usize, f64, f64)> {
+    let n = highs.len();
+    let buckets = hist.len();
+    if n == 0 || buckets == 0 || lows.len() != n || volumes.len() != n {
+        return None;
+    }
+    let mut range_min = f64::MAX;
+    let mut range_max = f64::MIN;
+    for i in 0..n {
+        let (h, l, v) = (highs[i], lows[i], volumes[i]);
+        if !h.is_finite() || !l.is_finite() || !v.is_finite() || v < 0.0 || h < l {
+            return None;
+        }
+        if l < range_min {
+            range_min = l;
+        }
+        if h > range_max {
+            range_max = h;
+        }
+    }
+    for b in hist.iter_mut() {
+        *b = 0.0;
+    }
+    let width = range_max - range_min;
+    if width == 0.0 {
+        // Caso degenerado REAL: todos os candles no mesmo preco exato —
+        // todo o volume pertence de verdade a esse unico preco.
+        let mut total = 0.0;
+        for &v in volumes {
+            total += v;
+        }
+        hist[0] = total;
+        return Some((0, range_min, range_max));
+    }
+    let bucket_width = width / buckets as f64;
+    for i in 0..n {
+        let (h, l, v) = (highs[i], lows[i], volumes[i]);
+        if v == 0.0 {
+            continue;
+        }
+        if h == l {
+            // Candle de preco unico: todo o volume no bucket que o contem.
+            let mut b = ((l - range_min) / bucket_width) as usize;
+            if b >= buckets {
+                b = buckets - 1;
+            }
+            hist[b] += v;
+            continue;
+        }
+        let candle_width = h - l;
+        let mut first = ((l - range_min) / bucket_width) as usize;
+        if first >= buckets {
+            first = buckets - 1;
+        }
+        let mut last = ((h - range_min) / bucket_width) as usize;
+        if last >= buckets {
+            last = buckets - 1;
+        }
+        for b in first..=last {
+            let b_lo = range_min + b as f64 * bucket_width;
+            // Ultimo bucket fecha EXATAMENTE em range_max (nao em
+            // range_min + buckets*bucket_width, que em ponto flutuante
+            // pode ficar um ulp abaixo e vazar volume da borda superior).
+            let b_hi = if b + 1 == buckets { range_max } else { range_min + (b + 1) as f64 * bucket_width };
+            let lo = if l > b_lo { l } else { b_lo };
+            let hi = if h < b_hi { h } else { b_hi };
+            let overlap = hi - lo;
+            if overlap > 0.0 {
+                hist[b] += v * (overlap / candle_width);
+            }
+        }
+    }
+    // POC: primeiro bucket com o maior volume — empate resolve para o
+    // indice mais baixo, deterministico nos dois builds.
+    let mut poc = 0usize;
+    let mut best = hist[0];
+    for (b, &val) in hist.iter().enumerate().skip(1) {
+        if val > best {
+            best = val;
+            poc = b;
+        }
+    }
+    Some((poc, range_min, range_max))
+}
+
+/// Volume Profile sobre candles OHLCV reais no BUFFER compartilhado.
+///
+/// Layout de ENTRADA (escrito pelo caller antes da chamada):
+///   [0..n)    highs
+///   [n..2n)   lows
+///   [2n..3n)  volumes
+/// Layout de SAIDA (escrito por esta funcao, sobrescrevendo a entrada —
+/// mesmo canal unico de buffer de toda a API deste modulo):
+///   [0..buckets)  histograma (volume por bucket, preco ascendente)
+///   [buckets]     range_min real (menor low)
+///   [buckets+1]   range_max real (maior high)
+/// Retorna o indice do bucket POC (Point of Control) como f64, ou NaN em
+/// qualquer entrada invalida (FAIL_CLOSED, nunca um chute).
+#[no_mangle]
+pub extern "C" fn volume_profile(candle_count: usize, bucket_count: usize) -> f64 {
+    if candle_count == 0
+        || bucket_count == 0
+        || bucket_count > VP_MAX_BUCKETS
+        || candle_count.saturating_mul(3) > CAPACITY
+    {
+        return f64::NAN;
+    }
+    let full = read_slice(candle_count * 3);
+    let highs = &full[0..candle_count];
+    let lows = &full[candle_count..candle_count * 2];
+    let volumes = &full[candle_count * 2..candle_count * 3];
+    let mut hist = [0.0f64; VP_MAX_BUCKETS];
+    match compute_volume_profile(highs, lows, volumes, &mut hist[..bucket_count]) {
+        None => f64::NAN,
+        Some((poc, range_min, range_max)) => {
+            // Escrita de saida so DEPOIS de todo o consumo da entrada
+            // (hist e local; a regiao dos highs so e sobrescrita aqui).
+            unsafe {
+                let base = core::ptr::addr_of_mut!(BUFFER) as *mut f64;
+                for (b, &val) in hist[..bucket_count].iter().enumerate() {
+                    *base.add(b) = val;
+                }
+                *base.add(bucket_count) = range_min;
+                *base.add(bucket_count + 1) = range_max;
+            }
+            poc as f64
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// TrustScoreEngine — V-MAX Fase 2 (Supremacia).
+//
+// Confiança na FONTE DE DADOS (nunca no mercado): score composto de
+// medições reais, complementar ao isDataFresh do Health Monitor (que já
+// cobre staleness binária — zero repetição):
+//   regularidade  = 1/(1+CV) onde CV = stddev_amostral(gaps)/média(gaps)
+//                   sobre os INTERVALOS REAIS de chegada de preço (ms) —
+//                   cadência estável (CV→0) => 1; cadência errática => →0.
+//                   Reusa os MESMOS kernels sum_slice/sum_sq_dev (escalar/
+//                   SIMD) das demais reduções — zero repetição em Rust.
+//   convergência  = 1/(1+média(|bps|)/10) sobre as divergências REAIS de
+//                   preço entre exchanges (Binance vs Bybit/OKX, quando
+//                   LIVE). 10 bps = escala de materialidade documentada
+//                   (na média, 10 bps de divergência => componente 0.5) —
+//                   parâmetro de julgamento, nunca medição.
+//   score         = média dos componentes DISPONÍVEIS: sem divergência
+//                   medida (m=0), score = regularidade sozinha e o
+//                   componente sai NaN honesto (não medido ≠ perfeito).
+//
+// Layout do BUFFER na entrada: [gaps_ms (n) | divergencias_bps (m)].
+// Na saída: [0]=regularidade, [1]=convergência (NaN se m=0).
+// Retorno: score 0..1, ou NaN FAIL_CLOSED (n<2, gap negativo/não-finito,
+// média de gaps 0, divergência não-finita, n+m>capacidade).
+// ─────────────────────────────────────────────────────────────────────────
+
+const TRUST_DIVERGENCE_SCALE_BPS: f64 = 10.0;
+
+/// Núcleo puro — testável nativamente sem tocar o BUFFER estático.
+fn compute_trust_score(gaps: &[f64], divergences_bps: &[f64]) -> Option<(f64, f64, f64)> {
+    if gaps.len() < 2 {
+        return None;
+    }
+    for &g in gaps {
+        if !g.is_finite() || g < 0.0 {
+            return None;
+        }
+    }
+    for &d in divergences_bps {
+        if !d.is_finite() {
+            return None;
+        }
+    }
+    let n = gaps.len() as f64;
+    let mean = sum_slice(gaps) / n;
+    if !(mean > 0.0) {
+        return None; // cadência real não tem média 0 sobre 2+ amostras — relógio quebrado => fail closed
+    }
+    let var = sum_sq_dev(gaps, mean) / (n - 1.0);
+    let cv = var.sqrt() / mean;
+    let regularity = 1.0 / (1.0 + cv);
+
+    if divergences_bps.is_empty() {
+        return Some((regularity, regularity, f64::NAN));
+    }
+    let m = divergences_bps.len() as f64;
+    let mut abs_sum = 0.0;
+    for &d in divergences_bps {
+        abs_sum += if d < 0.0 { -d } else { d };
+    }
+    let mean_abs_bps = abs_sum / m;
+    let convergence = 1.0 / (1.0 + mean_abs_bps / TRUST_DIVERGENCE_SCALE_BPS);
+    Some(((regularity + convergence) / 2.0, regularity, convergence))
+}
+
+/// TrustScore sobre amostras reais no BUFFER: [gaps_ms (n) | bps (m)].
+/// Escreve [0]=regularidade, [1]=convergência; retorna o score (ou NaN).
+#[no_mangle]
+pub extern "C" fn trust_score(gap_count: usize, divergence_count: usize) -> f64 {
+    let total = gap_count.saturating_add(divergence_count);
+    if gap_count == 0 || total > CAPACITY {
+        return f64::NAN;
+    }
+    let full = read_slice(total);
+    let gaps = &full[0..gap_count];
+    let divergences = &full[gap_count..total];
+    match compute_trust_score(gaps, divergences) {
+        None => f64::NAN,
+        Some((score, regularity, convergence)) => {
+            unsafe {
+                let base = core::ptr::addr_of_mut!(BUFFER) as *mut f64;
+                *base = regularity;
+                *base.add(1) = convergence;
+            }
+            score
+        }
+    }
+}
+
 /// Build identifier exposed for diagnostics. 1000 = escalar; 1001 = SIMD —
 /// a suite de paridade e o worker usam isto para saber qual variante
 /// realmente carregou.
@@ -256,4 +513,152 @@ pub extern "C" fn engine_version() -> u32 {
 #[no_mangle]
 pub extern "C" fn engine_version() -> u32 {
     1_001
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Testes nativos (cargo test, alvo host, caminho escalar) — exercitam o
+// NUCLEO puro sem tocar o BUFFER estatico (paralelismo de testes seguro).
+// A validacao do binario wasm real continua nas suites TS (Fase G +
+// paridade), que instanciam os .wasm compilados de verdade.
+// ─────────────────────────────────────────────────────────────────────────
+#[cfg(test)]
+mod tests {
+    use super::compute_volume_profile;
+
+    #[test]
+    fn perfil_simples_distribui_proporcional_a_sobreposicao() {
+        // 1 candle cobrindo exatamente a faixa toda: volume uniforme.
+        let highs = [110.0];
+        let lows = [100.0];
+        let vols = [40.0];
+        let mut hist = [0.0; 4];
+        let (poc, min, max) = compute_volume_profile(&highs, &lows, &vols, &mut hist).unwrap();
+        assert_eq!(min, 100.0);
+        assert_eq!(max, 110.0);
+        for b in hist {
+            assert!((b - 10.0).abs() < 1e-9);
+        }
+        assert_eq!(poc, 0); // empate perfeito => indice mais baixo, deterministico
+    }
+
+    #[test]
+    fn poc_e_o_bucket_de_maior_volume_real() {
+        // Dois candles: um cobre a metade de baixo, outro (mais volume) a de cima.
+        let highs = [105.0, 110.0];
+        let lows = [100.0, 105.0];
+        let vols = [10.0, 30.0];
+        let mut hist = [0.0; 2];
+        let (poc, _, _) = compute_volume_profile(&highs, &lows, &vols, &mut hist).unwrap();
+        assert!((hist[0] - 10.0).abs() < 1e-9);
+        assert!((hist[1] - 30.0).abs() < 1e-9);
+        assert_eq!(poc, 1);
+    }
+
+    #[test]
+    fn volume_total_e_conservado() {
+        let highs = [103.0, 107.5, 110.0, 104.2];
+        let lows = [100.0, 102.0, 106.0, 101.1];
+        let vols = [12.5, 7.25, 19.0, 3.75];
+        let mut hist = [0.0; 24];
+        compute_volume_profile(&highs, &lows, &vols, &mut hist).unwrap();
+        let total: f64 = hist.iter().sum();
+        let expected: f64 = vols.iter().sum();
+        assert!((total - expected).abs() < 1e-9);
+    }
+
+    #[test]
+    fn candle_de_preco_unico_vai_inteiro_para_um_bucket() {
+        let highs = [100.0, 105.0];
+        let lows = [100.0, 95.0];
+        let vols = [50.0, 10.0];
+        let mut hist = [0.0; 10];
+        compute_volume_profile(&highs, &lows, &vols, &mut hist).unwrap();
+        // O doji em 100.0 esta na metade da faixa [95,105] => bucket 5.
+        assert!(hist[5] >= 50.0);
+        let total: f64 = hist.iter().sum();
+        assert!((total - 60.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn faixa_degenerada_todos_no_mesmo_preco() {
+        let highs = [100.0, 100.0];
+        let lows = [100.0, 100.0];
+        let vols = [5.0, 7.0];
+        let mut hist = [0.0; 8];
+        let (poc, min, max) = compute_volume_profile(&highs, &lows, &vols, &mut hist).unwrap();
+        assert_eq!(poc, 0);
+        assert_eq!(min, 100.0);
+        assert_eq!(max, 100.0);
+        assert_eq!(hist[0], 12.0);
+    }
+
+    #[test]
+    fn fail_closed_em_dado_corrompido() {
+        let mut hist = [0.0; 4];
+        // NaN no high
+        assert!(compute_volume_profile(&[f64::NAN], &[1.0], &[1.0], &mut hist).is_none());
+        // volume negativo
+        assert!(compute_volume_profile(&[2.0], &[1.0], &[-1.0], &mut hist).is_none());
+        // high < low (candle impossivel)
+        assert!(compute_volume_profile(&[1.0], &[2.0], &[1.0], &mut hist).is_none());
+        // vazio
+        assert!(compute_volume_profile(&[], &[], &[], &mut hist).is_none());
+        // tamanhos desalinhados
+        assert!(compute_volume_profile(&[2.0, 3.0], &[1.0], &[1.0], &mut hist).is_none());
+    }
+
+    #[test]
+    fn trust_score_cadencia_perfeita_e_1() {
+        // gaps idênticos => CV 0 => regularidade 1; sem divergência medida
+        // => score = regularidade, convergência NaN honesta.
+        let (score, reg, conv) = super::compute_trust_score(&[200.0, 200.0, 200.0, 200.0], &[]).unwrap();
+        assert!((score - 1.0).abs() < 1e-12);
+        assert!((reg - 1.0).abs() < 1e-12);
+        assert!(conv.is_nan());
+    }
+
+    #[test]
+    fn trust_score_cadencia_erratica_degrada() {
+        let (uniform, _, _) = super::compute_trust_score(&[200.0, 200.0, 200.0, 200.0], &[]).unwrap();
+        let (erratic, _, _) = super::compute_trust_score(&[50.0, 800.0, 20.0, 1500.0], &[]).unwrap();
+        assert!(erratic < uniform);
+        assert!(erratic > 0.0 && erratic < 1.0);
+    }
+
+    #[test]
+    fn trust_score_convergencia_na_escala_documentada() {
+        // média |bps| = 10 => convergência exatamente 0.5 (escala documentada).
+        let (_, _, conv) = super::compute_trust_score(&[200.0, 200.0], &[10.0, -10.0]).unwrap();
+        assert!((conv - 0.5).abs() < 1e-12);
+        // divergência zero real => convergência 1.
+        let (_, _, conv0) = super::compute_trust_score(&[200.0, 200.0], &[0.0]).unwrap();
+        assert!((conv0 - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn trust_score_fail_closed() {
+        // menos de 2 gaps
+        assert!(super::compute_trust_score(&[200.0], &[]).is_none());
+        // gap negativo (relógio andou para trás)
+        assert!(super::compute_trust_score(&[200.0, -5.0], &[]).is_none());
+        // gap não-finito
+        assert!(super::compute_trust_score(&[200.0, f64::NAN], &[]).is_none());
+        // média zero (todos os gaps 0)
+        assert!(super::compute_trust_score(&[0.0, 0.0], &[]).is_none());
+        // divergência não-finita
+        assert!(super::compute_trust_score(&[200.0, 200.0], &[f64::INFINITY]).is_none());
+    }
+
+    #[test]
+    fn borda_superior_nao_vaza_volume() {
+        // Candle cujo high e exatamente range_max: o ultimo bucket fecha
+        // em range_max, nada se perde por um ulp de ponto flutuante.
+        let highs = [110.0, 110.0];
+        let lows = [90.0, 108.0];
+        let vols = [20.0, 6.0];
+        let mut hist = [0.0; 7]; // 7 buckets: largura nao-exata em binario
+        compute_volume_profile(&highs, &lows, &vols, &mut hist).unwrap();
+        let total: f64 = hist.iter().sum();
+        assert!((total - 26.0).abs() < 1e-9);
+    }
 }

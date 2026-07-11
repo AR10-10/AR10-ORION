@@ -52,6 +52,15 @@ import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg
 import { classify as classifyLorentzian } from '../../src/research/engines/lorentzian-classifier.js';
 import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
 import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/index.js';
+// V-MAX Fase 1.3: derivação pura (HVN/LVN/preço-por-bucket) do Volume
+// Profile computado pelo WASM no quant-worker — ver bloco no fim do arquivo.
+import { detectHvnLvn, bucketMidPrice, type VolumeProfileResult } from './nexus/volume-profile';
+// V-MAX Fase 1.4: mesma detecção fractal de swings compartilhada pelos 3
+// motores graduados (fractal-swings.js, extração da Auditoria Mestra) —
+// a perna da retração Fibonacci é a MESMA perna real da extensão 61.8% do
+// motor de S/R, nunca uma segunda definição de swing.
+import { findSwings, FRACTAL_K } from '../../src/research/engines/fractal-swings.js';
+import { buildFibonacciConfluence, type ConfluenceSource, type FibonacciConfluenceMatrix } from './nexus/fibonacci-confluence';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fase G (V15, diretriz 4): envelope de tipos do santuário. A saída
@@ -199,6 +208,20 @@ const regimeHistory = new RegimeHistory();
 let workerClientSingleton: any = null;
 let wasmReadyPromise: Promise<any> | null = null;
 
+// V-MAX Fase 0.8 (Health Monitor): estado real do único worker desta árvore
+// (QuantWorkerClient) — nunca deduzido de fora, atualizado no MESMO
+// wasmReadyPromise que runRealAnalysisCycle já espera (um segundo
+// .then/.catch anexado à mesma promise real, não uma segunda inicialização
+// nem um caminho paralelo). "ready" é o único estado que conta como
+// worker vivo para o Health Monitor — "pending"/"error"/"idle" nunca são
+// contados como um worker confirmado ativo (Fail-Closed).
+type QuantWorkerState = 'idle' | 'pending' | 'ready' | 'error';
+let quantWorkerState: QuantWorkerState = 'idle';
+
+export function getQuantWorkerState(): QuantWorkerState {
+  return quantWorkerState;
+}
+
 function getWorkerClient() {
   if (!workerClientSingleton) {
     // This build's output IS ipad_runtime/index.html (deploy-ipad-pwa.yml
@@ -209,7 +232,12 @@ function getWorkerClient() {
     // quant-worker.js), so this is the only path that needs to be correct.
     const workerUrl = new URL('workers/quant-worker.js', window.location.href).href;
     workerClientSingleton = new QuantWorkerClient(workerUrl);
+    quantWorkerState = 'pending';
     wasmReadyPromise = workerClientSingleton.initWasm();
+    wasmReadyPromise.then(
+      () => { quantWorkerState = 'ready'; },
+      () => { quantWorkerState = 'error'; },
+    );
   }
   return { workerClient: workerClientSingleton, wasmReady: wasmReadyPromise as Promise<any> };
 }
@@ -465,17 +493,159 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
 // ~30s, mesmo símbolo, mesmo timeframe, dois resultados que podiam nem
 // bater. V15.1 GOD TIER: futuros/perpétuo é a fonte EXCLUSIVA — nenhum
 // fallback para Spot (ver header do arquivo).
+// Auditoria de estabilização (P1): timeframe agora é um parâmetro real, não
+// mais fixo em '15m' — collectBinanceFuturesKlines já repassava `timeframe`
+// sem alteração até a URL real de klines da Binance (ver
+// binance-futures-candle-connector.js/binance-futures-public.js); o único
+// hardcode ficava aqui, no único call site real (App.tsx). Default '15m'
+// preserva o comportamento anterior para qualquer chamador que não passe o
+// parâmetro.
+// V18 Sprint 1 (Tarefa B): `time` (timestamp real do candle, em segundos —
+// o mesmo `t` que já vem da Binance e já era usado internamente pelo Bus/
+// time-synchronizer) volta a fazer parte do retorno. Antes desta mudança
+// era descartado aqui — o gráfico antigo (SVG feito à mão) plotava os
+// candles com espaçamento igual, ignorando gaps reais de tempo. Um chart
+// de eixo temporal de verdade (lightweight-charts) PRECISA desse dado real
+// por candle; nunca foi inventado, só não saía deste retorno.
+// V-MAX Fase 1.3: `volume` (o `v` real que o Bus SEMPRE carregou por
+// candle — mesma história do `time` acima: nunca inventado, só não saía
+// deste retorno) agora passa adiante — o Volume Profile precisa dele.
+// Aditivo/backward-compatible: campo extra não quebra nenhum consumidor.
 export async function getChartCandles(
   symbol = 'BTC',
   limit = 50,
-): Promise<Array<{ open: number; high: number; low: number; close: number }> | null> {
+  timeframe = '15m',
+): Promise<Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }> | null> {
   const snapshot = await requestFuturesCandleSnapshot({
-    symbol, timeframe: '15m', limit, maxAgeMs: 25_000,
+    symbol, timeframe, limit, maxAgeMs: 25_000,
   });
   if (!snapshot.ok) return null;
-  return snapshot.candles.map((c: { o: number; h: number; l: number; c: number }) => ({
-    open: c.o, high: c.h, low: c.l, close: c.c,
+  return snapshot.candles.map((c: { t: number; o: number; h: number; l: number; c: number; v: number }) => ({
+    time: c.t, open: c.o, high: c.h, low: c.l, close: c.c, volume: c.v,
   }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V-MAX Fase 1.3 — Volume Profile real via WASM Quant Core no quant-worker.
+//
+// Auditoria de zero-repetição feita ANTES de construir: nenhuma outra
+// implementação de Volume Profile existe no repo (o `volume_profile: null`
+// que analysis-frame.js passa ao support-resistance-engine documenta
+// exatamente essa ausência). O histograma pesado (candles × buckets) roda
+// no WASM DENTRO do worker (Main Thread sagrada); HVN/LVN são derivação
+// O(buckets) pura em nexus/volume-profile.ts.
+// ─────────────────────────────────────────────────────────────────────────────
+export type { VolumeProfileResult, VolumeProfileSnapshot } from './nexus/volume-profile';
+export type { ConfluenceSource, FibonacciConfluenceMatrix, FibConfluenceLevel } from './nexus/fibonacci-confluence';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V-MAX Fase 1.4 — Matriz de Confluência Fibonacci (agente transversal).
+//
+// A perna é derivada EXATAMENTE como no support-resistance-engine.js
+// (último swing high/low fractal via o MESMO findSwings compartilhado,
+// direção = qual confirmou por último) — a retração aqui e a extensão
+// 61.8% já em produção falam da MESMA perna real. Cálculo O(n·k) trivial
+// (mesma classe do computeSmcZones que já roda em useMemo), não precisa
+// de worker. Camada de análise/exibição — nunca alimenta o Core Engine.
+// ─────────────────────────────────────────────────────────────────────────────
+export function computeRealFibonacciConfluence(
+  candles: Array<{ high: number; low: number }>,
+  sources: ConfluenceSource[],
+): FibonacciConfluenceMatrix | null {
+  if (!Array.isArray(candles) || candles.length === 0) return null;
+  const swingHighs = findSwings(candles, FRACTAL_K, true);
+  const swingLows = findSwings(candles, FRACTAL_K, false);
+  if (swingHighs.length < 1 || swingLows.length < 1) return null;
+  const lastHigh = swingHighs[swingHighs.length - 1];
+  const lastLow = swingLows[swingLows.length - 1];
+  const legIsUp = lastHigh.index > lastLow.index;
+  // lastLow acima de lastHigh (tendência forte cruzada) não é uma perna
+  // retracionável — buildFibonacciConfluence devolve null (FAIL_CLOSED).
+  return buildFibonacciConfluence(lastLow.price, lastHigh.price, legIsUp, sources);
+}
+
+// ~um bucket por ~8px de altura típica de chart (janela de legibilidade,
+// mesma natureza do CELL_HEIGHT do heatmap) — o VALOR de cada bucket
+// continua 100% real; só a resolução de exibição é uma escolha documentada.
+const VP_BUCKET_COUNT = 96;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V-MAX Fase 2 — TrustScoreEngine (WASM, lib.rs::trust_score): confiança na
+// FONTE de dados a partir de medições reais — regularidade da cadência real
+// de chegada de preço + convergência real entre exchanges. Complementar ao
+// isDataFresh (staleness binária) — zero repetição.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface TrustScoreSnapshot {
+  score: number; // 0..1 — composto real (média dos componentes MEDIDOS)
+  cadenceRegularity: number; // 1/(1+CV) real dos gaps de chegada
+  crossExchangeConvergence: number | null; // null honesto sem divergência medida
+  gapCount: number;
+  divergenceCount: number;
+  computedAt: number;
+  engineVersion: number;
+}
+
+/** TrustScore real. gaps = intervalos reais (ms) entre chegadas de preço;
+ *  divergencesBps = |Δ%|×100 reais vs outras exchanges quando LIVE.
+ *  null em qualquer falha (FAIL_CLOSED, nunca um score-chute). */
+export async function computeRealTrustScore(
+  gaps: number[],
+  divergencesBps: number[] = [],
+): Promise<TrustScoreSnapshot | null> {
+  if (!Array.isArray(gaps) || gaps.length < 2) return null;
+  try {
+    const { workerClient, wasmReady } = getWorkerClient();
+    await wasmReady;
+    const res: any = await workerClient.computeTrustScore(gaps, divergencesBps);
+    const r = res?.result;
+    if (!r || !isNum(r.score)) return null;
+    return {
+      score: r.score,
+      cadenceRegularity: r.cadenceRegularity,
+      crossExchangeConvergence: r.crossExchangeConvergence,
+      gapCount: r.gapCount,
+      divergenceCount: r.divergenceCount,
+      computedAt: Date.now(),
+      engineVersion: r.engineVersion,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Volume Profile real sobre candles OHLCV reais. null em qualquer falha
+ *  (worker/WASM/dado corrompido) — FAIL_CLOSED, nunca um perfil inventado. */
+export async function computeRealVolumeProfile(
+  candles: Array<{ high: number; low: number; volume: number }>,
+  buckets: number = VP_BUCKET_COUNT,
+): Promise<VolumeProfileResult | null> {
+  if (!Array.isArray(candles) || candles.length === 0) return null;
+  try {
+    const { workerClient, wasmReady } = getWorkerClient();
+    await wasmReady;
+    const highs = candles.map((c) => c.high);
+    const lows = candles.map((c) => c.low);
+    const volumes = candles.map((c) => c.volume);
+    const res: any = await workerClient.computeVolumeProfile(highs, lows, volumes, buckets);
+    const r = res?.result;
+    if (!r || !Array.isArray(r.histogram) || !isNum(r.pocIndex)) return null;
+    const { hvn, lvn } = detectHvnLvn(r.histogram);
+    return {
+      histogram: r.histogram,
+      rangeMin: r.rangeMin,
+      rangeMax: r.rangeMax,
+      bucketCount: buckets,
+      pocIndex: r.pocIndex,
+      pocPrice: bucketMidPrice(r.pocIndex, r.rangeMin, r.rangeMax, buckets),
+      hvnIndices: hvn,
+      lvnIndices: lvn,
+      candleCount: r.candleCount,
+      computedAt: Date.now(),
+      engineVersion: r.engineVersion,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -497,6 +667,17 @@ export interface OrderflowSignal {
 }
 
 export type OrderflowConnectorState = 'LIVE' | 'ERROR' | 'STOPPED';
+
+// V-MAX Fase 1.2 (OrderFlowHeatmapPlugin — "bubbles"): forma real de um
+// trade individual, exatamente como mexc-trades-stream.js's tradesToTicks
+// já produz (price/volume/side/timestamp reais) — nunca um campo novo
+// inventado, só exposto um nível acima.
+export interface OrderflowTick {
+  timestamp: number;
+  price: number;
+  volume: number;
+  side: 'BUY' | 'SELL';
+}
 
 let orderflowWorkerSingleton: any = null;
 let orderflowInitPromise: Promise<any> | null = null;
@@ -520,12 +701,19 @@ function getOrderflowWorkerClient() {
 // onCvd reports the real Cumulative Volume Delta (running sum of signed
 // real trade volume since this engine instance was created — see
 // signal-engine.js's createEngineState) whenever new ticks were actually
-// ingested. Returns a stop() function; call it on unmount.
+// ingested. onTrades (V-MAX Fase 1.2, opcional/backward-compatible) reporta
+// os MESMOS ticks reais desta rodada de poll ANTES de serem empacotados
+// para o worker — mexc-trades-stream.js já busca esses trades reais a cada
+// ~4s para o cálculo de CVD/sinais; isto só expõe o mesmo dado real um
+// nível acima, para o OrderFlowHeatmapPlugin desenhar bolhas reais de
+// trades grandes, sem nenhuma sonda de rede nova. Returns a stop()
+// function; call it on unmount.
 export function startMexcOrderflowFeed(
   onSignals: (signals: OrderflowSignal[]) => void,
   onState: (state: OrderflowConnectorState, reason?: string) => void,
   onCvd: (value: number) => void,
   symbol = 'BTC',
+  onTrades?: (ticks: OrderflowTick[]) => void,
 ): () => void {
   const { orderflowClient, initReady } = getOrderflowWorkerClient();
   let stopped = false;
@@ -534,7 +722,7 @@ export function startMexcOrderflowFeed(
     symbol,
     intervalMs: 4000,
     limit: 500,
-    onResult: async ({ state, ticks }: { state: string; ticks: any[] }) => {
+    onResult: async ({ state, ticks }: { state: string; ticks: OrderflowTick[] }) => {
       if (stopped) return;
       if (state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) {
         onState('ERROR', state);
@@ -542,6 +730,7 @@ export function startMexcOrderflowFeed(
       }
       onState('LIVE');
       if (!ticks.length) return;
+      onTrades?.(ticks);
       try {
         await initReady;
         const { signals, cvd } = await orderflowClient.ingestTicks(ticks);
