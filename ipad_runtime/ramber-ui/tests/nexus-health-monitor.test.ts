@@ -34,6 +34,8 @@ const STORE_RESET = {
   isDataFresh: false,
   uiFps: null,
   l2History: {},
+  orderflowHistory: [],
+  volumeProfile: null,
 };
 
 describe('HealthMonitor: cada campo é medido de verdade ou fica null/0 honesto — nunca um valor de exemplo', () => {

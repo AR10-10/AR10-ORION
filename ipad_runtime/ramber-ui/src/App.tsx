@@ -37,7 +37,11 @@ import {
   type PriceZone,
   type LiquidityZone,
   getChartCandles,
+  computeRealVolumeProfile,
 } from "./engine-bridge";
+// V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
+// pura — a matemática pesada roda no WASM do quant-worker).
+import { filterSessionCandles } from "./nexus/volume-profile";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
 import {
@@ -259,8 +263,12 @@ export default function App() {
     fundingRate: null,
     openInterest: null,
   });
+  // V-MAX Fase 1.3: `volume` real por candle (o `v` que o Bus sempre
+  // carregou, agora repassado por getChartCandles) — insumo do Volume
+  // Profile. Todas as fontes reais de chartData vêm de getChartCandles,
+  // então o campo é sempre real, nunca opcional-fabricado.
   const [chartData, setChartData] = useState<
-    { time: number; open: number; high: number; low: number; close: number }[]
+    { time: number; open: number; high: number; low: number; close: number; volume: number }[]
   >([]);
   // Auditoria de estabilização (P1 — "apenas 15m responde corretamente"):
   // causa raiz real era dupla — getChartCandles() tinha '15m' fixo em
@@ -387,6 +395,8 @@ export default function App() {
   // atualizado quando onCvd o consome logo abaixo.
   const orderflowThresholdStateRef = useRef<OrderflowThresholdState>(EMPTY_THRESHOLD_STATE);
   const pendingLargeTradesRef = useRef<OrderflowTrade[]>([]);
+  // V-MAX Fase 1.3: cadência do Volume Profile (ver efeito junto a smcZones).
+  const volumeProfileLastComputeRef = useRef(0);
 
   // Real institutional liquidation feed (Binance USDT-M Futures, public —
   // engine-bridge.ts's startRealLiquidationFeed). Capped to the most
@@ -629,6 +639,8 @@ export default function App() {
     // do ativo antigo sobrepostas ao gráfico do novo por vários minutos.
     useUnifiedSnapshotStore.getState().resetL2History();
     useUnifiedSnapshotStore.getState().resetOrderflowHistory();
+    useUnifiedSnapshotStore.getState().setVolumeProfile(null);
+    volumeProfileLastComputeRef.current = 0;
     orderflowThresholdStateRef.current = EMPTY_THRESHOLD_STATE;
     pendingLargeTradesRef.current = [];
   }, [selectedAsset]);
@@ -1227,6 +1239,30 @@ export default function App() {
         : { fairValueGaps: [], orderBlocks: [], liquidityZones: [] },
     [chartData],
   );
+
+  // V-MAX Fase 1.3: Volume Profile real (WASM no quant-worker) sobre os
+  // MESMOS candles reais que o chart exibe — zero rede nova. Cadência
+  // limitada a 1 cálculo por 5s (o candle vivo muda a cada tick de WS;
+  // recomputar o perfil inteiro por tick seria spam de postMessage sem
+  // ganho visual — mesma natureza da cadência de amostragem do l2-history).
+  // Fail-Closed: qualquer falha => setVolumeProfile(null), nunca perfil velho
+  // de outro ativo (o efeito de troca de ativo também zera).
+  useEffect(() => {
+    if (!chartData || chartData.length === 0) return;
+    const now = Date.now();
+    if (now - volumeProfileLastComputeRef.current < 5_000) return;
+    volumeProfileLastComputeRef.current = now;
+    let stale = false;
+    (async () => {
+      const [fixedRange, session] = await Promise.all([
+        computeRealVolumeProfile(chartData),
+        computeRealVolumeProfile(filterSessionCandles(chartData)),
+      ]);
+      if (stale) return;
+      useUnifiedSnapshotStore.getState().setVolumeProfile({ fixedRange, session });
+    })();
+    return () => { stale = true; };
+  }, [chartData]);
 
   // V18 Sprint 1 (Tarefa A): espelha o dado real já coletado por App.tsx
   // para dentro da UnifiedGlobalSnapshot store (Zustand+Immer) — nenhuma

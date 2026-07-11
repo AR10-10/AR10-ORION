@@ -121,6 +121,44 @@ self.onmessage = async (ev) => {
             return;
         }
 
+        // V-MAX Fase 1.3: Volume Profile real (histograma + POC) sobre
+        // candles OHLCV reais fornecidos pelo caller — computo pesado
+        // (candles × buckets) roda no WASM DESTE worker, nunca na main
+        // thread. Layout do buffer documentado em lib.rs::volume_profile.
+        // NaN do WASM => result null (FAIL_CLOSED repassado, nunca um
+        // histograma inventado).
+        if (type === 'compute_volume_profile') {
+            const e = await loadWasm();
+            const { highs, lows, volumes, buckets } = ev.data;
+            const n = Math.min(highs.length, lows.length, volumes.length);
+            const cap = e.buffer_capacity();
+            if (n === 0 || !Number.isInteger(buckets) || buckets <= 0 || n * 3 > cap) {
+                self.postMessage({ id, type: 'volume_profile_result', result: null });
+                return;
+            }
+            const ptr = e.buffer_ptr();
+            const view = new Float64Array(memoryRef.buffer, ptr, cap);
+            for (let i = 0; i < n; i++) view[i] = highs[i];
+            for (let i = 0; i < n; i++) view[n + i] = lows[i];
+            for (let i = 0; i < n; i++) view[2 * n + i] = volumes[i];
+            const poc = e.volume_profile(n, buckets);
+            if (Number.isNaN(poc)) {
+                self.postMessage({ id, type: 'volume_profile_result', result: null });
+                return;
+            }
+            const out = new Float64Array(memoryRef.buffer, ptr, buckets + 2);
+            const result = {
+                pocIndex: poc,
+                histogram: Array.from(out.subarray(0, buckets)),
+                rangeMin: out[buckets],
+                rangeMax: out[buckets + 1],
+                candleCount: n,
+                engineVersion: e.engine_version(),
+            };
+            self.postMessage({ id, type: 'volume_profile_result', result });
+            return;
+        }
+
         if (type === 'compute_series') {
             const e = await loadWasm();
             const { closes, window } = ev.data;

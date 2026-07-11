@@ -40,6 +40,7 @@ import type {
 } from "../nexus/types";
 import { maybeSampleL2History, type L2HistoryEntry } from "../nexus/l2-history";
 import { pushOrderflowHistory, type OrderflowHistoryEntry } from "../nexus/orderflow-history";
+import type { VolumeProfileSnapshot } from "../nexus/volume-profile";
 
 export interface PriceSnapshot {
   price: number | null;
@@ -145,6 +146,11 @@ interface UnifiedSnapshotState {
   // App.tsx antes desta fase), não particionado por exchange — o Order Flow
   // real hoje só existe para o feed MEXC.
   orderflowHistory: OrderflowHistoryEntry[];
+  // V-MAX Fase 1.3 — Volume Profile real (WASM Quant Core no quant-worker,
+  // aproximação OHLCV declarada — ver nexus/volume-profile.ts). null até o
+  // primeiro cálculo real do ativo corrente; consumidores futuros (matriz
+  // de confluência Fibonacci da Fase 1.4, plugin visual) leem daqui.
+  volumeProfile: VolumeProfileSnapshot | null;
 }
 
 interface UnifiedSnapshotActions {
@@ -176,6 +182,8 @@ interface UnifiedSnapshotActions {
   // ficariam visíveis por até ~6-8min sob o novo ativo.
   resetL2History: () => void;
   resetOrderflowHistory: () => void;
+  // null explícito = "ainda não computado/ativo trocado", nunca um perfil velho.
+  setVolumeProfile: (profile: VolumeProfileSnapshot | null) => void;
 }
 
 export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnapshotActions>()(
@@ -195,6 +203,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     uiFps: null,
     l2History: {},
     orderflowHistory: [],
+    volumeProfile: null,
 
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
     setPrice: (price) => set((s) => { s.price = { ...price, updatedAt: Date.now() }; }),
@@ -222,6 +231,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     }),
     resetL2History: () => set((s) => { s.l2History = {}; }),
     resetOrderflowHistory: () => set((s) => { s.orderflowHistory = []; }),
+    setVolumeProfile: (profile) => set((s) => { s.volumeProfile = profile; }),
   })),
 );
 
@@ -266,3 +276,6 @@ export const useUiFpsSnapshot = (): number | null => useUnifiedSnapshotStore((s)
 // V-MAX Fase 1.2 — histórico CVD + trades grandes, para o OrderFlowHeatmapPlugin.
 export const useOrderflowHistory = (): OrderflowHistoryEntry[] =>
   useUnifiedSnapshotStore((s) => s.orderflowHistory ?? EMPTY_ORDERFLOW_HISTORY);
+// V-MAX Fase 1.3 — Volume Profile real (fixedRange + session), null até computar.
+export const useVolumeProfileSnapshot = (): VolumeProfileSnapshot | null =>
+  useUnifiedSnapshotStore((s) => s.volumeProfile);

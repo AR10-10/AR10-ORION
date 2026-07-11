@@ -34,6 +34,7 @@ type QuantExports = {
   zscore_last: (len: number) => number;
   max_val: (len: number) => number;
   min_val: (len: number) => number;
+  volume_profile: (candleCount: number, bucketCount: number) => number;
   engine_version: () => number;
 };
 
@@ -121,6 +122,52 @@ describe('simd-parity: o binário SIMD honra os mesmos FAIL_CLOSED documentados'
     const len = write(simd, FLAT);
     expect(simd.stddev(len)).toBe(0);
     expect(simd.zscore_last(len)).toBe(0);
+  });
+});
+
+describe('simd-parity: volume_profile é escalar nos DOIS builds (como a EMA) — igualdade EXATA exigida', () => {
+  // Candles determinísticos derivados das mesmas séries da suite:
+  // high/low/volume reais e variados, tamanho ímpar E par cobertos.
+  function candlesFrom(series: number[]): { highs: number[]; lows: number[]; vols: number[] } {
+    const highs = series.map((v, i) => v + 5 + (i % 3));
+    const lows = series.map((v, i) => v - 5 - (i % 2));
+    const vols = series.map((_, i) => 10 + (i % 7) * 3.5);
+    return { highs, lows, vols };
+  }
+  function writeCandles(w: QuantExports, c: { highs: number[]; lows: number[]; vols: number[] }): number {
+    const n = c.highs.length;
+    const view = new Float64Array(w.memory.buffer, w.buffer_ptr(), w.buffer_capacity());
+    for (let i = 0; i < n; i++) view[i] = c.highs[i];
+    for (let i = 0; i < n; i++) view[n + i] = c.lows[i];
+    for (let i = 0; i < n; i++) view[2 * n + i] = c.vols[i];
+    return n;
+  }
+  function readProfile(w: QuantExports, buckets: number): number[] {
+    return Array.from(new Float64Array(w.memory.buffer, w.buffer_ptr(), buckets + 2));
+  }
+
+  for (const [label, data] of [['par(64)', EVEN], ['impar(63)', ODD]] as Array<[string, number[]]>) {
+    it(`histograma+range+POC bit-a-bit idênticos entre os binários na série ${label}`, () => {
+      const c = candlesFrom(data);
+      const nS = writeCandles(scalar, c);
+      const nV = writeCandles(simd, c);
+      const pocS = scalar.volume_profile(nS, 48);
+      const pocV = simd.volume_profile(nV, 48);
+      expect(pocV).toBe(pocS);
+      const outS = readProfile(scalar, 48);
+      const outV = readProfile(simd, 48);
+      outV.forEach((v, i) => expect(v).toBe(outS[i]));
+    });
+  }
+
+  it('FAIL_CLOSED idêntico nos dois: NaN para candles 0 / buckets 0 / buckets > 512', () => {
+    for (const w of [scalar, simd]) {
+      expect(Number.isNaN(w.volume_profile(0, 10))).toBe(true);
+      const c = candlesFrom(FLAT);
+      const n = writeCandles(w, c);
+      expect(Number.isNaN(w.volume_profile(n, 0))).toBe(true);
+      expect(Number.isNaN(w.volume_profile(n, 513))).toBe(true);
+    }
   });
 });
 

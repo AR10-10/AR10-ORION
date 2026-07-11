@@ -52,6 +52,9 @@ import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg
 import { classify as classifyLorentzian } from '../../src/research/engines/lorentzian-classifier.js';
 import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
 import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/index.js';
+// V-MAX Fase 1.3: derivação pura (HVN/LVN/preço-por-bucket) do Volume
+// Profile computado pelo WASM no quant-worker — ver bloco no fim do arquivo.
+import { detectHvnLvn, bucketMidPrice, type VolumeProfileResult } from './nexus/volume-profile';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fase G (V15, diretriz 4): envelope de tipos do santuário. A saída
@@ -498,18 +501,74 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
 // candles com espaçamento igual, ignorando gaps reais de tempo. Um chart
 // de eixo temporal de verdade (lightweight-charts) PRECISA desse dado real
 // por candle; nunca foi inventado, só não saía deste retorno.
+// V-MAX Fase 1.3: `volume` (o `v` real que o Bus SEMPRE carregou por
+// candle — mesma história do `time` acima: nunca inventado, só não saía
+// deste retorno) agora passa adiante — o Volume Profile precisa dele.
+// Aditivo/backward-compatible: campo extra não quebra nenhum consumidor.
 export async function getChartCandles(
   symbol = 'BTC',
   limit = 50,
   timeframe = '15m',
-): Promise<Array<{ time: number; open: number; high: number; low: number; close: number }> | null> {
+): Promise<Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }> | null> {
   const snapshot = await requestFuturesCandleSnapshot({
     symbol, timeframe, limit, maxAgeMs: 25_000,
   });
   if (!snapshot.ok) return null;
-  return snapshot.candles.map((c: { t: number; o: number; h: number; l: number; c: number }) => ({
-    time: c.t, open: c.o, high: c.h, low: c.l, close: c.c,
+  return snapshot.candles.map((c: { t: number; o: number; h: number; l: number; c: number; v: number }) => ({
+    time: c.t, open: c.o, high: c.h, low: c.l, close: c.c, volume: c.v,
   }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V-MAX Fase 1.3 — Volume Profile real via WASM Quant Core no quant-worker.
+//
+// Auditoria de zero-repetição feita ANTES de construir: nenhuma outra
+// implementação de Volume Profile existe no repo (o `volume_profile: null`
+// que analysis-frame.js passa ao support-resistance-engine documenta
+// exatamente essa ausência). O histograma pesado (candles × buckets) roda
+// no WASM DENTRO do worker (Main Thread sagrada); HVN/LVN são derivação
+// O(buckets) pura em nexus/volume-profile.ts.
+// ─────────────────────────────────────────────────────────────────────────────
+export type { VolumeProfileResult, VolumeProfileSnapshot } from './nexus/volume-profile';
+
+// ~um bucket por ~8px de altura típica de chart (janela de legibilidade,
+// mesma natureza do CELL_HEIGHT do heatmap) — o VALOR de cada bucket
+// continua 100% real; só a resolução de exibição é uma escolha documentada.
+const VP_BUCKET_COUNT = 96;
+
+/** Volume Profile real sobre candles OHLCV reais. null em qualquer falha
+ *  (worker/WASM/dado corrompido) — FAIL_CLOSED, nunca um perfil inventado. */
+export async function computeRealVolumeProfile(
+  candles: Array<{ high: number; low: number; volume: number }>,
+  buckets: number = VP_BUCKET_COUNT,
+): Promise<VolumeProfileResult | null> {
+  if (!Array.isArray(candles) || candles.length === 0) return null;
+  try {
+    const { workerClient, wasmReady } = getWorkerClient();
+    await wasmReady;
+    const highs = candles.map((c) => c.high);
+    const lows = candles.map((c) => c.low);
+    const volumes = candles.map((c) => c.volume);
+    const res: any = await workerClient.computeVolumeProfile(highs, lows, volumes, buckets);
+    const r = res?.result;
+    if (!r || !Array.isArray(r.histogram) || !isNum(r.pocIndex)) return null;
+    const { hvn, lvn } = detectHvnLvn(r.histogram);
+    return {
+      histogram: r.histogram,
+      rangeMin: r.rangeMin,
+      rangeMax: r.rangeMax,
+      bucketCount: buckets,
+      pocIndex: r.pocIndex,
+      pocPrice: bucketMidPrice(r.pocIndex, r.rangeMin, r.rangeMax, buckets),
+      hvnIndices: hvn,
+      lvnIndices: lvn,
+      candleCount: r.candleCount,
+      computedAt: Date.now(),
+      engineVersion: r.engineVersion,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
