@@ -310,9 +310,11 @@ describe('Fusão visual (imagem de referência AR10 CYBORG v15.1 GOD TIER): Side
     expect(itemsMatch, 'items do SideBar não encontrado').not.toBeNull();
     const body = itemsMatch![1];
     expect(body).toContain('id: "DASHBOARD", label: "COCKPIT"');
-    expect(body).toContain('id: "SETTINGS", label: "CONFIGURAÇÕES"');
-    // o roteamento real (App(), ternário do activeTab) continua comparando
-    // contra as strings originais — a troca de label nunca pode quebrá-lo.
+    // Ordem de migração de idioma: ids/labels da navegação migraram para
+    // inglês (SETTINGS/MARKETS/ANALYSIS/...) — as views secundárias agora
+    // roteiam dado real via SecondaryModuleView, então os ids são
+    // roteamento vivo, não mais só rótulo.
+    expect(body).toContain('id: "SETTINGS", label: "SETTINGS"');
     expect(app).toContain('activeTab === "DASHBOARD" ?');
     expect(app).toContain('activeTab === "SETTINGS" ?');
     expect(app).toContain('onClick={() => setActiveTab(item.id)}');

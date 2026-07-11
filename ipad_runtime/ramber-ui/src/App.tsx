@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot } from "./store/unified-snapshot-store";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -1940,23 +1940,7 @@ export default function App() {
             ) : activeTab === "SETTINGS" ? (
               <ConfigPanel />
             ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4 text-[#8ab4f8]/50 p-8 cyber-panel bg-[#010308]/50">
-                  <Settings
-                    size={48}
-                    className="opacity-50 animate-[spin_10s_linear_infinite]"
-                  />
-                  <span className="tracking-[0.3em] font-bold text-lg text-[#00f0ff] uppercase">
-                    MÓDULO {activeTab}
-                  </span>
-                  <span className="text-xs uppercase tracking-widest text-[#00ffaa]">
-                    AGUARDANDO FONTE DE DADOS REAL...
-                  </span>
-                  <div className="w-48 h-1 bg-[#010308] mt-4 overflow-hidden rounded">
-                    <div className="w-1/2 h-full bg-[#00f0ff] shadow-[0_0_8px_#00f0ff] animate-pulse"></div>
-                  </div>
-                </div>
-              </div>
+              <SecondaryModuleView tab={activeTab} />
             )}
           </div>
           <RightRail />
@@ -3196,27 +3180,22 @@ function SideBar({
   setActiveTab: (t: string) => void;
 }) {
   const { setWorkspaceManagerOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
-  // Fusão visual (imagem de referência AR10 CYBORG v15.1 GOD TIER):
-  // id é o valor real de roteamento (só "DASHBOARD" e "SETTINGS" têm
-  // comportamento próprio, ver o ternário logo abaixo de "DASHBOARD" ?
-  // ... : "SETTINGS" ? ... : AGUARDANDO); label é só o texto exibido —
-  // desacoplar os dois deixa os nomes do menu iguais aos da imagem sem
-  // tocar em nenhuma lógica de roteamento real. As 7 abas que não são
-  // COCKPIT/CONFIGURAÇÕES continuam o mesmo placeholder honesto
-  // "AGUARDANDO FONTE DE DADOS REAL" que já usavam — nenhuma delas fica
-  // com uma alegação de dado real que este terminal não tem. Fase M.1:
-  // label agora só vira tooltip (NavRailButton), nunca texto visível —
-  // "sem textos" na régua, por diretriz.
+  // Language migration order: nav ids/labels moved to English (standard
+  // professional trading terminology). Every id now routes to a DEDICATED
+  // view fed by real data (SecondaryModuleView) — the old shared generic
+  // waiting placeholder no longer exists. DASHBOARD/SETTINGS keep their
+  // own behavior (activeTab ternary in App()); labels render only as
+  // tooltips (NavRailButton), never visible text on the rail (Fase M.1).
   const items: { icon: any; id: string; label: string }[] = [
     { icon: LayoutDashboard, id: "DASHBOARD", label: "COCKPIT" },
-    { icon: BarChart2, id: "MERCADOS", label: "MERCADOS" },
-    { icon: Activity, id: "ANÁLISES", label: "ANÁLISES" },
-    { icon: ShieldCheck, id: "RISCOS", label: "RISCOS" },
-    { icon: Zap, id: "EXECUÇÃO", label: "EXECUÇÃO" },
+    { icon: BarChart2, id: "MARKETS", label: "MARKETS" },
+    { icon: Activity, id: "ANALYSIS", label: "ANALYSIS" },
+    { icon: ShieldCheck, id: "RISK", label: "RISK" },
+    { icon: Zap, id: "EXECUTION", label: "EXECUTION" },
     { icon: Scan, id: "SCANNER", label: "SCANNER" },
-    { icon: Newspaper, id: "NOTÍCIAS", label: "NOTÍCIAS" },
-    { icon: Bell, id: "ALERTAS", label: "ALERTAS" },
-    { icon: Settings, id: "SETTINGS", label: "CONFIGURAÇÕES" },
+    { icon: Newspaper, id: "NEWS", label: "NEWS" },
+    { icon: Bell, id: "ALERTS", label: "ALERTS" },
+    { icon: Settings, id: "SETTINGS", label: "SETTINGS" },
   ];
   return (
     <div className="w-12 md:w-14 border-r border-[#00f0ff20] bg-[#010308]/95 flex flex-col items-center py-3 gap-1 shrink-0 z-10 overflow-y-auto scrollbar-hide backdrop-blur-md">
@@ -3517,6 +3496,242 @@ const CHART_TIMEFRAMES: { value: string; label: string }[] = [
   { value: "1w", label: "1W" },
   { value: "1M", label: "1M" },
 ];
+
+// --- SECONDARY MODULE VIEWS (Multi-Source Order, deliverable 3 + language
+// migration start) --------------------------------------------------------
+// Every top-nav module now routes REAL data the terminal already collects
+// (WidgetContext + UnifiedGlobalSnapshot atomic selectors) instead of the
+// old shared "waiting for real data source" placeholder. Zero new network
+// calls and zero recomputation here — pure routing of existing real state.
+// Panels with no real source behind them say exactly that (fail-closed):
+// NEWS has no real feed connected, and EXECUTION is permanently read-only
+// by design. All labels in English (professional trading terminology), per
+// the language-migration order.
+
+function ModulePanel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="cyber-panel bg-[#010308]/60 rounded p-2 flex flex-col gap-1 min-w-0">
+      <span className="text-[0.5rem] tracking-[0.25em] font-black text-[#00f0ff] uppercase">{title}</span>
+      {children}
+    </div>
+  );
+}
+
+function ModuleStat({ label, value, tone }: { label: string; value: string; tone?: "long" | "short" | "neutral" }) {
+  const color = tone === "long" ? "text-[#00ffaa]" : tone === "short" ? "text-[#ff0055]" : "text-[#8ab4f8]";
+  return (
+    <div className="flex justify-between items-center gap-2">
+      <span className="text-[0.45rem] text-[#8ab4f8]/60 font-bold tracking-wide uppercase">{label}</span>
+      <span className={`text-[0.5rem] font-mono font-black ${color}`}>{value}</span>
+    </div>
+  );
+}
+
+const MODULE_EMPTY = "AWAITING REAL DATA"; // honest fail-closed value, never a fabricated number
+
+function SecondaryModuleView({ tab }: { tab: string }) {
+  const ctx = useContext(WidgetContext) || {};
+  const { scannerData, riskSuggestion, orderflowSignals, liquidations, liquidationState, engine, selectedAsset, gmilProviders } = ctx as any;
+  const connections = useConnectionsSnapshot();
+  const derivatives = useDerivativesSnapshot();
+  const council = useCouncilSnapshot();
+  const scenario = useScenarioSnapshot();
+  const traps = useTrapSignalsSnapshot();
+  const trustScore = useTrustScoreSnapshot();
+  const cpi = useCpiSnapshot();
+  const fibMatrix = useFibonacciConfluenceSnapshot();
+  const volumeProfile = useVolumeProfileSnapshot();
+  const price = usePriceSnapshot();
+
+  const pct = (v: number | null | undefined, digits = 0) =>
+    typeof v === "number" && Number.isFinite(v) ? `${(v * 100).toFixed(digits)}%` : MODULE_EMPTY;
+  const num = (v: number | null | undefined, digits = 2) =>
+    typeof v === "number" && Number.isFinite(v) ? v.toFixed(digits) : MODULE_EMPTY;
+  const time = (t: number) => new Date(t).toLocaleTimeString("en-US", { hour12: false });
+
+  const scannerTable = (
+    <ModulePanel title={`24H Market Overview · Binance (real)`}>
+      {Array.isArray(scannerData) && scannerData.length > 0 ? (
+        scannerData.map((row: any) => (
+          <div key={row.p} className="flex justify-between items-center gap-2">
+            <span className="text-[0.48rem] font-mono text-[#8ab4f8]">{row.p}</span>
+            <span className={`text-[0.48rem] font-mono font-black ${row.s === "LONG" ? "text-[#00ffaa]" : row.s === "SHORT" ? "text-[#ff0055]" : "text-[#8ab4f8]/70"}`}>
+              {row.s} · {typeof row.chg === "number" ? `${row.chg >= 0 ? "+" : ""}${row.chg.toFixed(2)}%` : MODULE_EMPTY} · strength {Math.round(row.str)}
+            </span>
+          </div>
+        ))
+      ) : (
+        <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">{MODULE_EMPTY}</span>
+      )}
+    </ModulePanel>
+  );
+
+  let body: React.ReactNode;
+  if (tab === "MARKETS") {
+    const EXCHANGES: Array<"BINANCE" | "BYBIT" | "OKX" | "MEXC"> = ["BINANCE", "BYBIT", "OKX", "MEXC"];
+    body = (
+      <>
+        <ModulePanel title="Data Sources · Connection State (real)">
+          {EXCHANGES.map((ex) => {
+            const state = connections[ex] ?? "IDLE";
+            return <ModuleStat key={ex} label={ex} value={state} tone={state === "LIVE" ? "long" : state === "DEGRADED" || state === "OFFLINE" ? "short" : "neutral"} />;
+          })}
+          <span className="text-[0.42rem] text-[#8ab4f8]/40 leading-tight">
+            IDLE = source connected on demand; the primary Binance Futures WebSocket feed drives the cockpit and is shown on the top bar.
+          </span>
+        </ModulePanel>
+        <ModulePanel title={`Derivatives · ${selectedAsset ?? ""}/USDT Perpetual (real)`}>
+          <ModuleStat label="Last Price" value={num(price.price)} tone={price.direction === "LONG" ? "long" : price.direction === "SHORT" ? "short" : "neutral"} />
+          <ModuleStat label="Funding Rate" value={typeof derivatives.fundingRate === "number" ? `${(derivatives.fundingRate * 100).toFixed(4)}%` : MODULE_EMPTY} />
+          <ModuleStat label="Open Interest" value={num(derivatives.openInterest, 0)} />
+        </ModulePanel>
+        {scannerTable}
+      </>
+    );
+  } else if (tab === "ANALYSIS") {
+    const fibLevels = (fibMatrix?.levels ?? []).filter((l: any) => l.score > 0).slice(0, 4);
+    const vp = volumeProfile?.fixedRange;
+    body = (
+      <>
+        <ModulePanel title="Multi-Agent Council (real votes)">
+          <ModuleStat label="Stance" value={council ? council.stance : MODULE_EMPTY} tone={council?.stance === "LONG" ? "long" : council?.stance === "SHORT" ? "short" : "neutral"} />
+          <ModuleStat label="Agreement" value={council?.agreement !== null && council ? pct(council.agreement) : MODULE_EMPTY} />
+          <ModuleStat label="Quorum" value={council ? `${council.quorum}/5` : MODULE_EMPTY} />
+          <ModuleStat label="Risk Gate" value={council ? (council.riskGated ? "LOCKED (fail-closed)" : "CLEAR") : MODULE_EMPTY} tone={council?.riskGated ? "short" : "long"} />
+        </ModulePanel>
+        <ModulePanel title="Scenario Paths · council opinion mass, never market probability">
+          <ModuleStat label="Path A" value={scenario ? `${scenario.pathA.direction} → ${scenario.pathA.target ? `${scenario.pathA.target.price.toFixed(0)} (${scenario.pathA.target.sourceKind})` : "no real level"}${scenario.pathA.opinionWeight !== null ? ` · ${pct(scenario.pathA.opinionWeight)}` : ""}` : MODULE_EMPTY} tone={scenario?.pathA.direction === "LONG" ? "long" : "short"} />
+          <ModuleStat label="Path B" value={scenario ? `${scenario.pathB.direction} → ${scenario.pathB.target ? `${scenario.pathB.target.price.toFixed(0)} (${scenario.pathB.target.sourceKind})` : "no real level"}${scenario.pathB.opinionWeight !== null ? ` · ${pct(scenario.pathB.opinionWeight)}` : ""}` : MODULE_EMPTY} tone={scenario?.pathB.direction === "LONG" ? "long" : "short"} />
+        </ModulePanel>
+        <ModulePanel title="Market Structure (real engine labels)">
+          <ModuleStat label="15m Structure" value={engine?.marketStructureLabel ?? MODULE_EMPTY} />
+          <ModuleStat label="1H Structure" value={engine?.htfMarketStructureLabel ?? MODULE_EMPTY} />
+          <ModuleStat label="Support S1" value={num(engine?.support)} tone="long" />
+          <ModuleStat label="Resistance R1" value={num(engine?.resistance)} tone="short" />
+        </ModulePanel>
+        <ModulePanel title="Fibonacci Confluence (real retracement × real levels)">
+          {fibLevels.length > 0 ? (
+            fibLevels.map((l: any) => (
+              <ModuleStat key={l.ratio} label={`${(l.ratio * 100).toFixed(1)}% @ ${l.price.toFixed(0)}`} value={`${l.score} confluent source${l.score === 1 ? "" : "s"}`} />
+            ))
+          ) : (
+            <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">NO CONFLUENT LEVEL IN THIS WINDOW (honest result)</span>
+          )}
+        </ModulePanel>
+        <ModulePanel title="Volume Profile (WASM, real)">
+          <ModuleStat label="Point of Control" value={vp ? vp.pocPrice.toFixed(0) : MODULE_EMPTY} />
+          <ModuleStat label="High-Volume Nodes" value={vp ? String(vp.hvnIndices.length) : MODULE_EMPTY} />
+          <ModuleStat label="Low-Volume Nodes" value={vp ? String(vp.lvnIndices.length) : MODULE_EMPTY} />
+        </ModulePanel>
+      </>
+    );
+  } else if (tab === "RISK") {
+    body = (
+      <>
+        <ModulePanel title="Position Sizing · Risk Engine (real, advisory only)">
+          <ModuleStat label="Suggested Position" value={riskSuggestion ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% equity` : MODULE_EMPTY} />
+          <ModuleStat label="Effective Risk" value={riskSuggestion ? `${riskSuggestion.effective_risk_pct.toFixed(2)}%` : MODULE_EMPTY} />
+          <span className="text-[0.42rem] text-[#8ab4f8]/40 leading-tight">
+            Advisory only — order execution is permanently disabled in this terminal (read-only by design).
+          </span>
+        </ModulePanel>
+        <ModulePanel title="Data Trust Score (WASM, real cadence + cross-exchange convergence)">
+          <ModuleStat label="Composite Score" value={trustScore ? pct(trustScore.score) : MODULE_EMPTY} tone={trustScore && trustScore.score >= 0.7 ? "long" : trustScore ? "short" : "neutral"} />
+          <ModuleStat label="Cadence Regularity" value={trustScore ? pct(trustScore.cadenceRegularity) : MODULE_EMPTY} />
+          <ModuleStat label="Cross-Exchange Convergence" value={trustScore?.crossExchangeConvergence !== null && trustScore ? pct(trustScore.crossExchangeConvergence) : "NOT MEASURED (honest)"} />
+        </ModulePanel>
+        <ModulePanel title="Perception Index (CPI · reward/pain memory, real transitions)">
+          <ModuleStat label="CPI" value={cpi !== null ? pct(cpi) : MODULE_EMPTY} tone={cpi !== null && cpi >= 0.5 ? "long" : cpi !== null ? "short" : "neutral"} />
+        </ModulePanel>
+        <ModulePanel title="Institutional Traps (real corroborated events)">
+          {traps.length > 0 ? (
+            traps.map((t: any, i: number) => (
+              <ModuleStat key={`${t.kind}-${i}`} label={`${t.kind} · ${time(t.at)}`} value={pct(t.confidence)} tone="short" />
+            ))
+          ) : (
+            <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">NO TRAP DETECTED IN THIS WINDOW (honest result)</span>
+          )}
+        </ModulePanel>
+      </>
+    );
+  } else if (tab === "SCANNER") {
+    body = scannerTable;
+  } else if (tab === "ALERTS") {
+    body = (
+      <>
+        <ModulePanel title="Order Flow Signals (real MEXC trades)">
+          {Array.isArray(orderflowSignals) && orderflowSignals.length > 0 ? (
+            orderflowSignals.slice(0, 8).map((s: any, i: number) => (
+              <ModuleStat key={`${s.type}-${s.timestamp}-${i}`} label={`${s.type} @ ${num(s.price)}`} value={`${pct(s.confidence)} · ${time(s.timestamp)}`} />
+            ))
+          ) : (
+            <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">NO ACTIVE SIGNAL (honest result)</span>
+          )}
+        </ModulePanel>
+        <ModulePanel title={`Forced Liquidations · Binance Futures (real feed${liquidationState === "LIVE" ? ", LIVE" : liquidationState === "ERROR" ? ", ERROR" : ""})`}>
+          {Array.isArray(liquidations) && liquidations.length > 0 ? (
+            liquidations.slice(0, 8).map((l: any, i: number) => (
+              <ModuleStat key={`${l.timestamp}-${i}`} label={`${l.side === "LONG_LIQUIDATED" ? "LONG LIQ" : "SHORT LIQ"} @ ${num(l.price)}`} value={`$${Math.round(l.notionalUsd).toLocaleString("en-US")} · ${time(l.timestamp)}`} tone={l.side === "LONG_LIQUIDATED" ? "short" : "long"} />
+            ))
+          ) : (
+            <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">NO LIQUIDATION RECEIVED YET (real feed, event-driven)</span>
+          )}
+        </ModulePanel>
+        <ModulePanel title="Trap Alerts (real corroborated events)">
+          {traps.length > 0 ? (
+            traps.map((t: any, i: number) => (
+              <ModuleStat key={`${t.kind}-${i}`} label={`${t.kind} · ${time(t.at)}`} value={pct(t.confidence)} tone="short" />
+            ))
+          ) : (
+            <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">NO TRAP DETECTED IN THIS WINDOW (honest result)</span>
+          )}
+        </ModulePanel>
+      </>
+    );
+  } else if (tab === "NEWS") {
+    body = (
+      <>
+        <ModulePanel title="News Feed">
+          <span className="text-[0.48rem] text-[#8ab4f8]/60 leading-relaxed">
+            NO REAL NEWS FEED CONNECTED. This terminal never fabricates headlines — this panel stays
+            empty (fail-closed) until a real news source is integrated.
+          </span>
+        </ModulePanel>
+        <ModulePanel title="Market Context Providers · GMIL (real)">
+          {Array.isArray(gmilProviders) && gmilProviders.length > 0 ? (
+            gmilProviders.map((p: any) => (
+              <ModuleStat key={p.id} label={p.id} value={`${p.circuitState ?? MODULE_EMPTY} · weight ${pct(p.weight)}`} tone={p.circuitState === "OPEN" ? "short" : p.weight > 0.6 ? "long" : "neutral"} />
+            ))
+          ) : (
+            <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">{MODULE_EMPTY}</span>
+          )}
+        </ModulePanel>
+      </>
+    );
+  } else {
+    // EXECUTION — permanently empty by design, not "waiting".
+    body = (
+      <ModulePanel title="Order Execution">
+        <span className="text-[0.48rem] text-[#8ab4f8]/60 leading-relaxed">
+          ORDER EXECUTION IS PERMANENTLY DISABLED. This terminal is read-only by design (fail-closed):
+          no exchange API keys, no order-routing code paths exist in this codebase. Long/Short readings,
+          Entry/Target/Stop levels and position sizing shown anywhere in this terminal are analytical
+          output only — never live orders.
+        </span>
+      </ModulePanel>
+    );
+  }
+
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide p-2">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="tracking-[0.3em] font-black text-sm text-[#00f0ff] uppercase">{tab}</span>
+        <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest uppercase">real data only · fail-closed</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">{body}</div>
+    </div>
+  );
+}
 
 function ChartWidget({ chartData }: any) {
   // Real Fair Value Gaps / Order Blocks / Liquidity zones — computed once
