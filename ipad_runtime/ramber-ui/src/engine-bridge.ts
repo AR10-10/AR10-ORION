@@ -532,6 +532,17 @@ export interface OrderflowSignal {
 
 export type OrderflowConnectorState = 'LIVE' | 'ERROR' | 'STOPPED';
 
+// V-MAX Fase 1.2 (OrderFlowHeatmapPlugin — "bubbles"): forma real de um
+// trade individual, exatamente como mexc-trades-stream.js's tradesToTicks
+// já produz (price/volume/side/timestamp reais) — nunca um campo novo
+// inventado, só exposto um nível acima.
+export interface OrderflowTick {
+  timestamp: number;
+  price: number;
+  volume: number;
+  side: 'BUY' | 'SELL';
+}
+
 let orderflowWorkerSingleton: any = null;
 let orderflowInitPromise: Promise<any> | null = null;
 
@@ -554,12 +565,19 @@ function getOrderflowWorkerClient() {
 // onCvd reports the real Cumulative Volume Delta (running sum of signed
 // real trade volume since this engine instance was created — see
 // signal-engine.js's createEngineState) whenever new ticks were actually
-// ingested. Returns a stop() function; call it on unmount.
+// ingested. onTrades (V-MAX Fase 1.2, opcional/backward-compatible) reporta
+// os MESMOS ticks reais desta rodada de poll ANTES de serem empacotados
+// para o worker — mexc-trades-stream.js já busca esses trades reais a cada
+// ~4s para o cálculo de CVD/sinais; isto só expõe o mesmo dado real um
+// nível acima, para o OrderFlowHeatmapPlugin desenhar bolhas reais de
+// trades grandes, sem nenhuma sonda de rede nova. Returns a stop()
+// function; call it on unmount.
 export function startMexcOrderflowFeed(
   onSignals: (signals: OrderflowSignal[]) => void,
   onState: (state: OrderflowConnectorState, reason?: string) => void,
   onCvd: (value: number) => void,
   symbol = 'BTC',
+  onTrades?: (ticks: OrderflowTick[]) => void,
 ): () => void {
   const { orderflowClient, initReady } = getOrderflowWorkerClient();
   let stopped = false;
@@ -568,7 +586,7 @@ export function startMexcOrderflowFeed(
     symbol,
     intervalMs: 4000,
     limit: 500,
-    onResult: async ({ state, ticks }: { state: string; ticks: any[] }) => {
+    onResult: async ({ state, ticks }: { state: string; ticks: OrderflowTick[] }) => {
       if (stopped) return;
       if (state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) {
         onState('ERROR', state);
@@ -576,6 +594,7 @@ export function startMexcOrderflowFeed(
       }
       onState('LIVE');
       if (!ticks.length) return;
+      onTrades?.(ticks);
       try {
         await initReady;
         const { signals, cvd } = await orderflowClient.ingestTicks(ticks);

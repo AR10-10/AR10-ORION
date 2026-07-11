@@ -20,6 +20,7 @@ const RESET = {
   isDataFresh: false,
   uiFps: null,
   l2History: {},
+  orderflowHistory: [],
 };
 
 describe('unified-snapshot-store: boots fail-closed (nada fabricado antes do primeiro dado real)', () => {

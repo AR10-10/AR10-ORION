@@ -39,6 +39,7 @@ import type {
   Timeframe,
 } from "../nexus/types";
 import { maybeSampleL2History, type L2HistoryEntry } from "../nexus/l2-history";
+import { pushOrderflowHistory, type OrderflowHistoryEntry } from "../nexus/orderflow-history";
 
 export interface PriceSnapshot {
   price: number | null;
@@ -100,6 +101,8 @@ const EMPTY_HEALTH: HealthSnapshot = {
 // consumidor de useL2History re-renderizaria a cada render por causa da
 // comparação por referência do Zustand, mesmo sem nenhum L2 real novo.
 const EMPTY_L2_HISTORY: L2HistoryEntry[] = [];
+// Mesmo motivo, para useOrderflowHistory (Fase 1.2).
+const EMPTY_ORDERFLOW_HISTORY: OrderflowHistoryEntry[] = [];
 
 interface UnifiedSnapshotState {
   symbol: string;
@@ -135,6 +138,13 @@ interface UnifiedSnapshotState {
   // SÉRIE de snapshots L2 (não só o mais recente, que `orderBooks` acima
   // já cobre) — sem isto, um heatmap não tem "tempo" nenhum para desenhar.
   l2History: Partial<Record<Exchange, L2HistoryEntry[]>>;
+  // V-MAX Fase 1.2 — histórico real de CVD + trades grandes (nexus/
+  // orderflow-history.ts), a segunda metade do dado que o
+  // OrderFlowHeatmapPlugin precisa (a primeira é l2History acima). Um único
+  // símbolo ativo por vez (mesmo escopo que o CVD escalar já tinha em
+  // App.tsx antes desta fase), não particionado por exchange — o Order Flow
+  // real hoje só existe para o feed MEXC.
+  orderflowHistory: OrderflowHistoryEntry[];
 }
 
 interface UnifiedSnapshotActions {
@@ -152,6 +162,11 @@ interface UnifiedSnapshotActions {
   setDataFresh: (fresh: boolean) => void;
   setUiFps: (fps: number | null) => void;
   sampleL2History: (exchange: Exchange, entry: L2HistoryEntry) => void;
+  // Nome deliberadamente diferente da função pura importada
+  // (pushOrderflowHistory, de nexus/orderflow-history.ts) que esta action
+  // chama por baixo — evita um shadowing confuso entre a função pura e a
+  // action da store, mesmo padrão semântico de sampleL2History acima.
+  recordOrderflowHistory: (entry: OrderflowHistoryEntry) => void;
 }
 
 export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnapshotActions>()(
@@ -170,6 +185,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     isDataFresh: false,
     uiFps: null,
     l2History: {},
+    orderflowHistory: [],
 
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
     setPrice: (price) => set((s) => { s.price = { ...price, updatedAt: Date.now() }; }),
@@ -191,6 +207,9 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     sampleL2History: (exchange, entry) => set((s) => {
       const ring = (s.l2History[exchange] ?? []) as L2HistoryEntry[];
       s.l2History[exchange] = maybeSampleL2History(ring, entry);
+    }),
+    recordOrderflowHistory: (entry) => set((s) => {
+      s.orderflowHistory = pushOrderflowHistory(s.orderflowHistory as OrderflowHistoryEntry[], entry);
     }),
   })),
 );
@@ -233,3 +252,6 @@ export const useDataFreshSnapshot = (): boolean => useUnifiedSnapshotStore((s) =
 export const useL2History = (exchange: Exchange): L2HistoryEntry[] =>
   useUnifiedSnapshotStore((s) => s.l2History[exchange] ?? EMPTY_L2_HISTORY);
 export const useUiFpsSnapshot = (): number | null => useUnifiedSnapshotStore((s) => s.uiFps);
+// V-MAX Fase 1.2 — histórico CVD + trades grandes, para o OrderFlowHeatmapPlugin.
+export const useOrderflowHistory = (): OrderflowHistoryEntry[] =>
+  useUnifiedSnapshotStore((s) => s.orderflowHistory ?? EMPTY_ORDERFLOW_HISTORY);
