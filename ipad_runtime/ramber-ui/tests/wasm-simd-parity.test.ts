@@ -35,6 +35,7 @@ type QuantExports = {
   max_val: (len: number) => number;
   min_val: (len: number) => number;
   volume_profile: (candleCount: number, bucketCount: number) => number;
+  trust_score: (gapCount: number, divergenceCount: number) => number;
   engine_version: () => number;
 };
 
@@ -184,5 +185,34 @@ describe('simd-parity: o binário SIMD passa nas MESMAS referências independent
     expect(simd.sma(len, 15)).toBeCloseTo(refSma(ODD, 15), 10);
     expect(simd.stddev(len)).toBeCloseTo(refStddev(ODD), 10);
     expect(simd.zscore_last(len)).toBeCloseTo((ODD[ODD.length - 1] - refMean(ODD)) / refStddev(ODD), 10);
+  });
+});
+
+describe('simd-parity: trust_score usa os kernels de redução (soma/desvio) — concordância a 10 casas', () => {
+  function writeTrust(w: QuantExports, gaps: number[], divs: number[]): void {
+    const view = new Float64Array(w.memory.buffer, w.buffer_ptr(), w.buffer_capacity());
+    gaps.forEach((g, i) => { view[i] = g; });
+    divs.forEach((d, i) => { view[gaps.length + i] = d; });
+  }
+
+  it('mesmo score e mesmos componentes nos dois binários (série ímpar exercita a cauda SIMD)', () => {
+    const gaps = Array.from({ length: 63 }, (_, i) => 150 + 40 * Math.sin(i / 4) + (i % 5) * 7);
+    const divs = [4, -12, 8];
+    writeTrust(scalar, gaps, divs);
+    const s = scalar.trust_score(gaps.length, divs.length);
+    const outS = Array.from(new Float64Array(scalar.memory.buffer, scalar.buffer_ptr(), 2));
+    writeTrust(simd, gaps, divs);
+    const v = simd.trust_score(gaps.length, divs.length);
+    const outV = Array.from(new Float64Array(simd.memory.buffer, simd.buffer_ptr(), 2));
+    expect(v).toBeCloseTo(s, 10);
+    expect(outV[0]).toBeCloseTo(outS[0], 10);
+    expect(outV[1]).toBeCloseTo(outS[1], 10);
+  });
+
+  it('FAIL_CLOSED idêntico nos dois binários', () => {
+    for (const w of [scalar, simd]) {
+      writeTrust(w, [200], []);
+      expect(Number.isNaN(w.trust_score(1, 0))).toBe(true);
+    }
   });
 });

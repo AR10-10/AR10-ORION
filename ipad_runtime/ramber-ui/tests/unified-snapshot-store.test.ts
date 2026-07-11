@@ -28,6 +28,7 @@ const RESET = {
   cpi: null,
   scenario: null,
   trapSignals: [],
+  trustScore: null,
 };
 
 describe('unified-snapshot-store: boots fail-closed (nada fabricado antes do primeiro dado real)', () => {

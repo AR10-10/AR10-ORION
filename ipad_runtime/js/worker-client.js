@@ -52,6 +52,12 @@ export class QuantWorkerClient {
         const v = volumes instanceof Float64Array ? volumes : Float64Array.from(volumes);
         return this.call('compute_volume_profile', { highs: h, lows: l, volumes: v, buckets }, 15000, [h.buffer, l.buffer, v.buffer]);
     }
+    // V-MAX Fase 2: TrustScore real no WASM (mesmo zero-copy transferido).
+    computeTrustScore(gaps, divergences = []) {
+        const g = gaps instanceof Float64Array ? gaps : Float64Array.from(gaps);
+        const d = divergences instanceof Float64Array ? divergences : Float64Array.from(divergences);
+        return this.call('compute_trust_score', { gaps: g, divergences: d }, 15000, [g.buffer, d.buffer]);
+    }
     selfTest() { return this.call('self_test'); }
     terminate() { this.worker.terminate(); }
 }

@@ -159,6 +159,41 @@ self.onmessage = async (ev) => {
             return;
         }
 
+        // V-MAX Fase 2: TrustScore real (regularidade de cadência +
+        // convergência cross-exchange) no WASM. Layout em lib.rs::trust_score.
+        // NaN => result null (FAIL_CLOSED repassado, nunca um score-chute).
+        if (type === 'compute_trust_score') {
+            const e = await loadWasm();
+            const { gaps, divergences } = ev.data;
+            const n = gaps.length;
+            const m = divergences.length;
+            const cap = e.buffer_capacity();
+            if (n === 0 || n + m > cap) {
+                self.postMessage({ id, type: 'trust_score_result', result: null });
+                return;
+            }
+            const ptr = e.buffer_ptr();
+            const view = new Float64Array(memoryRef.buffer, ptr, cap);
+            for (let i = 0; i < n; i++) view[i] = gaps[i];
+            for (let i = 0; i < m; i++) view[n + i] = divergences[i];
+            const score = e.trust_score(n, m);
+            if (Number.isNaN(score)) {
+                self.postMessage({ id, type: 'trust_score_result', result: null });
+                return;
+            }
+            const out = new Float64Array(memoryRef.buffer, ptr, 2);
+            const result = {
+                score,
+                cadenceRegularity: out[0],
+                crossExchangeConvergence: Number.isNaN(out[1]) ? null : out[1],
+                gapCount: n,
+                divergenceCount: m,
+                engineVersion: e.engine_version(),
+            };
+            self.postMessage({ id, type: 'trust_score_result', result });
+            return;
+        }
+
         if (type === 'compute_series') {
             const e = await loadWasm();
             const { closes, window } = ev.data;

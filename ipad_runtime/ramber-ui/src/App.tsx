@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot } from "./store/unified-snapshot-store";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -39,6 +39,7 @@ import {
   getChartCandles,
   computeRealVolumeProfile,
   computeRealFibonacciConfluence,
+  computeRealTrustScore,
   type ConfluenceSource,
 } from "./engine-bridge";
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
@@ -1427,6 +1428,46 @@ export default function App() {
       useUnifiedSnapshotStore.getState().recordAffectiveEvent("ORDERFLOW_FEED_ERROR");
     }
   }, [orderflowState]);
+
+  // V-MAX Fase 2 (TrustScoreEngine): amostras 100% reais —
+  //   gaps  = intervalos reais entre chegadas de preço (priceUpdatedAt é o
+  //           carimbo real de cada atualização; o ring guarda os últimos 60
+  //           deltas, ~zero custo);
+  //   bps   = divergências reais Binance×Bybit/OKX quando os cross-checks
+  //           estão ok (|Δ%|×100).
+  // Cômputo no WASM do quant-worker (Main Thread sagrada), cadência de 5s
+  // (mesma janela de legibilidade do Volume Profile), FAIL_CLOSED null.
+  const priceGapsRef = useRef<number[]>([]);
+  const prevPriceUpdatedAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevPriceUpdatedAtRef.current;
+    prevPriceUpdatedAtRef.current = priceUpdatedAt ?? null;
+    if (typeof priceUpdatedAt === "number" && typeof prev === "number" && priceUpdatedAt > prev) {
+      const ring = priceGapsRef.current;
+      ring.push(priceUpdatedAt - prev);
+      if (ring.length > 60) ring.splice(0, ring.length - 60);
+    }
+  }, [priceUpdatedAt]);
+  const trustLastComputeRef = useRef(0);
+  useEffect(() => {
+    const now = Date.now();
+    if (now - trustLastComputeRef.current < 5_000) return;
+    if (priceGapsRef.current.length < 2) return;
+    trustLastComputeRef.current = now;
+    const divergences: number[] = [];
+    if (crossExchangeCheck.ok && typeof crossExchangeCheck.priceDeltaPct === "number") {
+      divergences.push(Math.abs(crossExchangeCheck.priceDeltaPct) * 100);
+    }
+    if (okxCrossExchangeCheck.ok && typeof okxCrossExchangeCheck.priceDeltaPct === "number") {
+      divergences.push(Math.abs(okxCrossExchangeCheck.priceDeltaPct) * 100);
+    }
+    let stale = false;
+    (async () => {
+      const score = await computeRealTrustScore([...priceGapsRef.current], divergences);
+      if (!stale) useUnifiedSnapshotStore.getState().setTrustScore(score);
+    })();
+    return () => { stale = true; };
+  }, [priceUpdatedAt, crossExchangeCheck, okxCrossExchangeCheck]);
 
   // V18 Sprint 1 (Tarefa A): espelha o dado real já coletado por App.tsx
   // para dentro da UnifiedGlobalSnapshot store (Zustand+Immer) — nenhuma
@@ -4568,6 +4609,7 @@ function CouncilWidget() {
   // V-MAX Fase 2: cenários Path A/B e armadilhas reais — mesma store.
   const scenario = useScenarioSnapshot();
   const traps = useTrapSignalsSnapshot();
+  const trustScore = useTrustScoreSnapshot();
 
   const pathLabel = (p: { direction: string; target: { price: number; sourceKind: string } | null; opinionWeight: number | null }) => {
     const target = p.target ? `${p.target.price.toFixed(0)} (${p.target.sourceKind})` : "sem nível real";
@@ -4661,6 +4703,19 @@ function CouncilWidget() {
         <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
           <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CPI · MEMÓRIA AFETIVA</span>
           <span className={`text-[0.5rem] font-mono font-black ${cpiColor}`}>{cpiLabel}</span>
+        </div>
+        {/* V-MAX Fase 2 — TrustScore da FONTE (WASM): cadência real +
+            convergência cross-exchange; componentes reais no tooltip. */}
+        <div
+          className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+          title={trustScore
+            ? `Cadência ${Math.round(trustScore.cadenceRegularity * 100)}% (${trustScore.gapCount} gaps reais)${trustScore.crossExchangeConvergence !== null ? ` · Convergência ${Math.round(trustScore.crossExchangeConvergence * 100)}% (${trustScore.divergenceCount} exchanges)` : " · convergência não medida"}`
+            : "Aguardando amostras reais de cadência"}
+        >
+          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">TRUST SCORE · FONTE</span>
+          <span className={`text-[0.5rem] font-mono font-black ${trustScore === null ? "text-[#8ab4f8]" : trustScore.score >= 0.7 ? "text-[#00ffaa]" : trustScore.score >= 0.4 ? "text-[#f0d06f]" : "text-[#ff0055]"}`}>
+            {trustScore === null ? AWAIT : `${Math.round(trustScore.score * 100)}%`}
+          </span>
         </div>
       </div>
     </Widget>

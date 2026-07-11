@@ -29,6 +29,7 @@ type QuantExports = {
   max_val: (len: number) => number;
   min_val: (len: number) => number;
   volume_profile: (candleCount: number, bucketCount: number) => number;
+  trust_score: (gapCount: number, divergenceCount: number) => number;
   engine_version: () => number;
 };
 
@@ -70,7 +71,7 @@ describe('wasm-quant-core: identidade e fronteira do binário real de produção
     // linker, não API) — filtrados; o que sobra é a superfície funcional.
     const exported = Object.keys(wasm).filter((k) => !k.startsWith('__')).sort();
     expect(exported).toEqual(
-      ['buffer_capacity', 'buffer_ptr', 'ema', 'engine_version', 'max_val', 'memory', 'min_val', 'sma', 'stddev', 'volume_profile', 'zscore_last'].sort(),
+      ['buffer_capacity', 'buffer_ptr', 'ema', 'engine_version', 'max_val', 'memory', 'min_val', 'sma', 'stddev', 'trust_score', 'volume_profile', 'zscore_last'].sort(),
     );
   });
 
@@ -248,5 +249,58 @@ describe('wasm-quant-core: VOLUME_PROFILE — histograma real + POC, FAIL_CLOSED
     expect(Number.isNaN(wasm.volume_profile(n, 4))).toBe(true);
     n = writeCandles([100], [110], [1]); // high < low: candle impossível
     expect(Number.isNaN(wasm.volume_profile(n, 4))).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// V-MAX Fase 2: trust_score — regularidade real de cadência (1/(1+CV)) +
+// convergência cross-exchange (1/(1+média|bps|/10)). Layout em lib.rs.
+// ─────────────────────────────────────────────────────────────────────────
+describe('wasm-quant-core: TRUST_SCORE — confiança na fonte, FAIL_CLOSED em amostra inválida', () => {
+  function writeTrust(gaps: number[], divs: number[]): void {
+    const view = new Float64Array(wasm.memory.buffer, wasm.buffer_ptr(), wasm.buffer_capacity());
+    gaps.forEach((g, i) => { view[i] = g; });
+    divs.forEach((d, i) => { view[gaps.length + i] = d; });
+  }
+
+  it('cadência perfeitamente regular sem divergência => score 1, convergência NaN honesta no buffer', () => {
+    writeTrust([200, 200, 200, 200], []);
+    const score = wasm.trust_score(4, 0);
+    expect(score).toBeCloseTo(1, 12);
+    const out = new Float64Array(wasm.memory.buffer, wasm.buffer_ptr(), 2);
+    expect(out[0]).toBeCloseTo(1, 12); // regularidade
+    expect(Number.isNaN(out[1])).toBe(true); // convergência não medida
+  });
+
+  it('bate com a referência independente (CV + escala de 10 bps)', () => {
+    const gaps = [180, 220, 200, 240, 160];
+    const divs = [5, -15];
+    writeTrust(gaps, divs);
+    const score = wasm.trust_score(gaps.length, divs.length);
+    const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    const sd = Math.sqrt(gaps.reduce((acc, g) => acc + (g - mean) ** 2, 0) / (gaps.length - 1));
+    const refReg = 1 / (1 + sd / mean);
+    const refConv = 1 / (1 + (divs.reduce((a, d) => a + Math.abs(d), 0) / divs.length) / 10);
+    expect(score).toBeCloseTo((refReg + refConv) / 2, 10);
+  });
+
+  it('cadência errática degrada o score de verdade', () => {
+    writeTrust([200, 200, 200, 200], []);
+    const uniform = wasm.trust_score(4, 0);
+    writeTrust([50, 900, 20, 1400], []);
+    const erratic = wasm.trust_score(4, 0);
+    expect(erratic).toBeLessThan(uniform);
+  });
+
+  it('FAIL_CLOSED: <2 gaps, gap negativo/NaN, média zero, divergência não-finita => NaN', () => {
+    writeTrust([200], []);
+    expect(Number.isNaN(wasm.trust_score(1, 0))).toBe(true);
+    writeTrust([200, -5], []);
+    expect(Number.isNaN(wasm.trust_score(2, 0))).toBe(true);
+    writeTrust([0, 0], []);
+    expect(Number.isNaN(wasm.trust_score(2, 0))).toBe(true);
+    writeTrust([200, 200], [Number.POSITIVE_INFINITY]);
+    expect(Number.isNaN(wasm.trust_score(2, 1))).toBe(true);
+    expect(Number.isNaN(wasm.trust_score(0, 0))).toBe(true);
   });
 });

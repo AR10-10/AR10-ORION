@@ -411,6 +411,95 @@ pub extern "C" fn volume_profile(candle_count: usize, bucket_count: usize) -> f6
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// TrustScoreEngine — V-MAX Fase 2 (Supremacia).
+//
+// Confiança na FONTE DE DADOS (nunca no mercado): score composto de
+// medições reais, complementar ao isDataFresh do Health Monitor (que já
+// cobre staleness binária — zero repetição):
+//   regularidade  = 1/(1+CV) onde CV = stddev_amostral(gaps)/média(gaps)
+//                   sobre os INTERVALOS REAIS de chegada de preço (ms) —
+//                   cadência estável (CV→0) => 1; cadência errática => →0.
+//                   Reusa os MESMOS kernels sum_slice/sum_sq_dev (escalar/
+//                   SIMD) das demais reduções — zero repetição em Rust.
+//   convergência  = 1/(1+média(|bps|)/10) sobre as divergências REAIS de
+//                   preço entre exchanges (Binance vs Bybit/OKX, quando
+//                   LIVE). 10 bps = escala de materialidade documentada
+//                   (na média, 10 bps de divergência => componente 0.5) —
+//                   parâmetro de julgamento, nunca medição.
+//   score         = média dos componentes DISPONÍVEIS: sem divergência
+//                   medida (m=0), score = regularidade sozinha e o
+//                   componente sai NaN honesto (não medido ≠ perfeito).
+//
+// Layout do BUFFER na entrada: [gaps_ms (n) | divergencias_bps (m)].
+// Na saída: [0]=regularidade, [1]=convergência (NaN se m=0).
+// Retorno: score 0..1, ou NaN FAIL_CLOSED (n<2, gap negativo/não-finito,
+// média de gaps 0, divergência não-finita, n+m>capacidade).
+// ─────────────────────────────────────────────────────────────────────────
+
+const TRUST_DIVERGENCE_SCALE_BPS: f64 = 10.0;
+
+/// Núcleo puro — testável nativamente sem tocar o BUFFER estático.
+fn compute_trust_score(gaps: &[f64], divergences_bps: &[f64]) -> Option<(f64, f64, f64)> {
+    if gaps.len() < 2 {
+        return None;
+    }
+    for &g in gaps {
+        if !g.is_finite() || g < 0.0 {
+            return None;
+        }
+    }
+    for &d in divergences_bps {
+        if !d.is_finite() {
+            return None;
+        }
+    }
+    let n = gaps.len() as f64;
+    let mean = sum_slice(gaps) / n;
+    if !(mean > 0.0) {
+        return None; // cadência real não tem média 0 sobre 2+ amostras — relógio quebrado => fail closed
+    }
+    let var = sum_sq_dev(gaps, mean) / (n - 1.0);
+    let cv = var.sqrt() / mean;
+    let regularity = 1.0 / (1.0 + cv);
+
+    if divergences_bps.is_empty() {
+        return Some((regularity, regularity, f64::NAN));
+    }
+    let m = divergences_bps.len() as f64;
+    let mut abs_sum = 0.0;
+    for &d in divergences_bps {
+        abs_sum += if d < 0.0 { -d } else { d };
+    }
+    let mean_abs_bps = abs_sum / m;
+    let convergence = 1.0 / (1.0 + mean_abs_bps / TRUST_DIVERGENCE_SCALE_BPS);
+    Some(((regularity + convergence) / 2.0, regularity, convergence))
+}
+
+/// TrustScore sobre amostras reais no BUFFER: [gaps_ms (n) | bps (m)].
+/// Escreve [0]=regularidade, [1]=convergência; retorna o score (ou NaN).
+#[no_mangle]
+pub extern "C" fn trust_score(gap_count: usize, divergence_count: usize) -> f64 {
+    let total = gap_count.saturating_add(divergence_count);
+    if gap_count == 0 || total > CAPACITY {
+        return f64::NAN;
+    }
+    let full = read_slice(total);
+    let gaps = &full[0..gap_count];
+    let divergences = &full[gap_count..total];
+    match compute_trust_score(gaps, divergences) {
+        None => f64::NAN,
+        Some((score, regularity, convergence)) => {
+            unsafe {
+                let base = core::ptr::addr_of_mut!(BUFFER) as *mut f64;
+                *base = regularity;
+                *base.add(1) = convergence;
+            }
+            score
+        }
+    }
+}
+
 /// Build identifier exposed for diagnostics. 1000 = escalar; 1001 = SIMD —
 /// a suite de paridade e o worker usam isto para saber qual variante
 /// realmente carregou.
@@ -516,6 +605,48 @@ mod tests {
         assert!(compute_volume_profile(&[], &[], &[], &mut hist).is_none());
         // tamanhos desalinhados
         assert!(compute_volume_profile(&[2.0, 3.0], &[1.0], &[1.0], &mut hist).is_none());
+    }
+
+    #[test]
+    fn trust_score_cadencia_perfeita_e_1() {
+        // gaps idênticos => CV 0 => regularidade 1; sem divergência medida
+        // => score = regularidade, convergência NaN honesta.
+        let (score, reg, conv) = super::compute_trust_score(&[200.0, 200.0, 200.0, 200.0], &[]).unwrap();
+        assert!((score - 1.0).abs() < 1e-12);
+        assert!((reg - 1.0).abs() < 1e-12);
+        assert!(conv.is_nan());
+    }
+
+    #[test]
+    fn trust_score_cadencia_erratica_degrada() {
+        let (uniform, _, _) = super::compute_trust_score(&[200.0, 200.0, 200.0, 200.0], &[]).unwrap();
+        let (erratic, _, _) = super::compute_trust_score(&[50.0, 800.0, 20.0, 1500.0], &[]).unwrap();
+        assert!(erratic < uniform);
+        assert!(erratic > 0.0 && erratic < 1.0);
+    }
+
+    #[test]
+    fn trust_score_convergencia_na_escala_documentada() {
+        // média |bps| = 10 => convergência exatamente 0.5 (escala documentada).
+        let (_, _, conv) = super::compute_trust_score(&[200.0, 200.0], &[10.0, -10.0]).unwrap();
+        assert!((conv - 0.5).abs() < 1e-12);
+        // divergência zero real => convergência 1.
+        let (_, _, conv0) = super::compute_trust_score(&[200.0, 200.0], &[0.0]).unwrap();
+        assert!((conv0 - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn trust_score_fail_closed() {
+        // menos de 2 gaps
+        assert!(super::compute_trust_score(&[200.0], &[]).is_none());
+        // gap negativo (relógio andou para trás)
+        assert!(super::compute_trust_score(&[200.0, -5.0], &[]).is_none());
+        // gap não-finito
+        assert!(super::compute_trust_score(&[200.0, f64::NAN], &[]).is_none());
+        // média zero (todos os gaps 0)
+        assert!(super::compute_trust_score(&[0.0, 0.0], &[]).is_none());
+        // divergência não-finita
+        assert!(super::compute_trust_score(&[200.0, 200.0], &[f64::INFINITY]).is_none());
     }
 
     #[test]

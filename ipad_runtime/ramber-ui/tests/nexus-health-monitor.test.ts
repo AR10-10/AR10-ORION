@@ -42,6 +42,7 @@ const STORE_RESET = {
   cpi: null,
   scenario: null,
   trapSignals: [],
+  trustScore: null,
 };
 
 describe('HealthMonitor: cada campo é medido de verdade ou fica null/0 honesto — nunca um valor de exemplo', () => {

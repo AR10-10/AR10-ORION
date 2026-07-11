@@ -44,6 +44,9 @@ import type { VolumeProfileSnapshot } from "../nexus/volume-profile";
 import type { FibonacciConfluenceMatrix } from "../nexus/fibonacci-confluence";
 import type { CouncilDecision } from "../nexus/council";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
+// import type puro — apagado na compilação, nunca puxa o engine-bridge
+// (e seus módulos js pesados) para dentro do bundle da store em runtime.
+import type { TrustScoreSnapshot } from "../engine-bridge";
 import type { TrapSignal } from "../nexus/trap-detection";
 import {
   ingestAffectiveEvent,
@@ -187,6 +190,9 @@ interface UnifiedSnapshotState {
   // de eventos REAIS (sweeps consumados + sinais reais de order flow).
   // Lista vazia é o estado honesto comum, não erro.
   trapSignals: TrapSignal[];
+  // V-MAX Fase 2 — TrustScore da FONTE de dados (WASM): cadência real +
+  // convergência cross-exchange real. null até a primeira medição.
+  trustScore: TrustScoreSnapshot | null;
 }
 
 interface UnifiedSnapshotActions {
@@ -224,6 +230,7 @@ interface UnifiedSnapshotActions {
   setCouncil: (decision: CouncilDecision | null) => void;
   setScenario: (projection: ScenarioProjection | null) => void;
   setTrapSignals: (traps: TrapSignal[]) => void;
+  setTrustScore: (score: TrustScoreSnapshot | null) => void;
   // Ingestão de um evento afetivo REAL (transição operacional verdadeira,
   // nunca chamado por render) — decai a memória até agora e recomputa o
   // CPI no mesmo write (decaimento lazy: entre eventos a razão é
@@ -255,6 +262,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     cpi: null,
     scenario: null,
     trapSignals: [],
+    trustScore: null,
 
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
     setPrice: (price) => set((s) => { s.price = { ...price, updatedAt: Date.now() }; }),
@@ -287,6 +295,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setCouncil: (decision) => set((s) => { s.council = decision; }),
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
     setTrapSignals: (traps) => set((s) => { s.trapSignals = traps; }),
+    setTrustScore: (score) => set((s) => { s.trustScore = score; }),
     recordAffectiveEvent: (source) => set((s) => {
       const next = ingestAffectiveEvent(s.affectiveMemory as AffectiveMemoryState, source, Date.now());
       s.affectiveMemory = next;
@@ -355,3 +364,5 @@ export const useScenarioSnapshot = (): ScenarioProjection | null =>
   useUnifiedSnapshotStore((s) => s.scenario);
 export const useTrapSignalsSnapshot = (): TrapSignal[] =>
   useUnifiedSnapshotStore((s) => s.trapSignals ?? EMPTY_TRAPS);
+export const useTrustScoreSnapshot = (): TrustScoreSnapshot | null =>
+  useUnifiedSnapshotStore((s) => s.trustScore);

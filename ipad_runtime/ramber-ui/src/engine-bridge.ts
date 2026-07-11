@@ -569,6 +569,50 @@ export function computeRealFibonacciConfluence(
 // continua 100% real; só a resolução de exibição é uma escolha documentada.
 const VP_BUCKET_COUNT = 96;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// V-MAX Fase 2 — TrustScoreEngine (WASM, lib.rs::trust_score): confiança na
+// FONTE de dados a partir de medições reais — regularidade da cadência real
+// de chegada de preço + convergência real entre exchanges. Complementar ao
+// isDataFresh (staleness binária) — zero repetição.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface TrustScoreSnapshot {
+  score: number; // 0..1 — composto real (média dos componentes MEDIDOS)
+  cadenceRegularity: number; // 1/(1+CV) real dos gaps de chegada
+  crossExchangeConvergence: number | null; // null honesto sem divergência medida
+  gapCount: number;
+  divergenceCount: number;
+  computedAt: number;
+  engineVersion: number;
+}
+
+/** TrustScore real. gaps = intervalos reais (ms) entre chegadas de preço;
+ *  divergencesBps = |Δ%|×100 reais vs outras exchanges quando LIVE.
+ *  null em qualquer falha (FAIL_CLOSED, nunca um score-chute). */
+export async function computeRealTrustScore(
+  gaps: number[],
+  divergencesBps: number[] = [],
+): Promise<TrustScoreSnapshot | null> {
+  if (!Array.isArray(gaps) || gaps.length < 2) return null;
+  try {
+    const { workerClient, wasmReady } = getWorkerClient();
+    await wasmReady;
+    const res: any = await workerClient.computeTrustScore(gaps, divergencesBps);
+    const r = res?.result;
+    if (!r || !isNum(r.score)) return null;
+    return {
+      score: r.score,
+      cadenceRegularity: r.cadenceRegularity,
+      crossExchangeConvergence: r.crossExchangeConvergence,
+      gapCount: r.gapCount,
+      divergenceCount: r.divergenceCount,
+      computedAt: Date.now(),
+      engineVersion: r.engineVersion,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Volume Profile real sobre candles OHLCV reais. null em qualquer falha
  *  (worker/WASM/dado corrompido) — FAIL_CLOSED, nunca um perfil inventado. */
 export async function computeRealVolumeProfile(
