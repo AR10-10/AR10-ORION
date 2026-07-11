@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot } from "./store/unified-snapshot-store";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -44,6 +44,9 @@ import {
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
 // pura — a matemática pesada roda no WASM do quant-worker).
 import { filterSessionCandles, bucketMidPrice } from "./nexus/volume-profile";
+// V-MAX Fase 1 item 4: Conselho Multi-Agente (6 agentes puros + Meta-Agent
+// que delega a agregação ao linear opinion pool real da Fase F).
+import { buildCouncilDecision } from "./nexus/council";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
 import {
@@ -1308,6 +1311,78 @@ export default function App() {
       computeRealFibonacciConfluence(chartData, sources),
     );
   }, [chartData, smcZones, engine, volumeProfileSnapshot]);
+
+  // V-MAX Fase 1 item 4: Conselho Multi-Agente. Cada insumo abaixo é dado
+  // REAL já coletado por este componente ou pela store — o conselho é um
+  // consumidor transversal puro, nunca uma segunda fonte de dados. O
+  // FibonacciAgent lê a matriz da Fase 1.4 (que já carrega POC/HVN do WASM
+  // Quant Core — o cruzamento transversal da diretriz). Camada de análise:
+  // jamais alimenta o Core Engine (LEI 24).
+  const fibonacciMatrix = useFibonacciConfluenceSnapshot();
+  const councilOffline = useOfflineSnapshot();
+  const councilDataFresh = useDataFreshSnapshot();
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setCouncil(
+      buildCouncilDecision({
+        price: typeof priceData?.price === "number" ? priceData.price : null,
+        liquidityZones: smcZones.liquidityZones,
+        structure15: engine?.marketStructureLabel ?? null,
+        structure1h: engine?.htfMarketStructureLabel ?? null,
+        cvd,
+        orderflowSignals,
+        offline: councilOffline,
+        isDataFresh: councilDataFresh,
+        engineStatus,
+        fibonacci: fibonacciMatrix,
+      }),
+    );
+  }, [priceData, smcZones, engine, cvd, orderflowSignals, councilOffline, councilDataFresh, engineStatus, fibonacciMatrix]);
+
+  // V-MAX Fase 1 item 5: eventos afetivos REAIS — só TRANSIÇÕES
+  // verdadeiras de estado operacional viram evento (refs guardam o estado
+  // anterior; um render sem mudança nunca ingere nada). A memória decai
+  // na própria ingestão (lazy, ver nexus/affective-memory.ts) — zero
+  // trabalho periódico na main thread.
+  const prevEngineStatusRef = useRef(engineStatus);
+  useEffect(() => {
+    const prev = prevEngineStatusRef.current;
+    prevEngineStatusRef.current = engineStatus;
+    if (prev !== "error" && engineStatus === "error") {
+      useUnifiedSnapshotStore.getState().recordAffectiveEvent("ENGINE_CYCLE_ERROR");
+    }
+  }, [engineStatus]);
+  const prevLastUpdateRef = useRef(lastUpdateAt);
+  useEffect(() => {
+    const prev = prevLastUpdateRef.current;
+    prevLastUpdateRef.current = lastUpdateAt;
+    // lastUpdateAt só muda quando um ciclo real completa — cada ciclo ok é
+    // um reward real (o organismo percebeu o mercado com sucesso).
+    if (lastUpdateAt !== null && lastUpdateAt !== prev && engineStatus === "ok") {
+      useUnifiedSnapshotStore.getState().recordAffectiveEvent("ENGINE_CYCLE_OK");
+    }
+  }, [lastUpdateAt, engineStatus]);
+  const prevWsLiveRef = useRef(wsLive);
+  useEffect(() => {
+    const prev = prevWsLiveRef.current;
+    prevWsLiveRef.current = wsLive;
+    if (prev === wsLive) return;
+    useUnifiedSnapshotStore.getState().recordAffectiveEvent(wsLive ? "FEED_WS_UP" : "FEED_WS_DOWN");
+  }, [wsLive]);
+  const prevDataFreshRef = useRef(councilDataFresh);
+  useEffect(() => {
+    const prev = prevDataFreshRef.current;
+    prevDataFreshRef.current = councilDataFresh;
+    if (prev === councilDataFresh) return;
+    useUnifiedSnapshotStore.getState().recordAffectiveEvent(councilDataFresh ? "DATA_FRESH_AGAIN" : "DATA_STALE");
+  }, [councilDataFresh]);
+  const prevOrderflowStateRef = useRef(orderflowState);
+  useEffect(() => {
+    const prev = prevOrderflowStateRef.current;
+    prevOrderflowStateRef.current = orderflowState;
+    if (prev !== "ERROR" && orderflowState === "ERROR") {
+      useUnifiedSnapshotStore.getState().recordAffectiveEvent("ORDERFLOW_FEED_ERROR");
+    }
+  }, [orderflowState]);
 
   // V18 Sprint 1 (Tarefa A): espelha o dado real já coletado por App.tsx
   // para dentro da UnifiedGlobalSnapshot store (Zustand+Immer) — nenhuma
@@ -2586,6 +2661,14 @@ function NucleoVoiceOrb() {
   const offline = useOfflineSnapshot();
   const isDataFresh = useDataFreshSnapshot();
   const stale = engineStatus === "ok" && !isDataFresh;
+  // V-MAX Fase 1 item 5: CPI real (memória afetiva Reward/Pain com
+  // decaimento, nexus/affective-memory.ts) alimentado ao orb via a store —
+  // exibido no title. Deliberadamente NÃO altera a cor: a cor é o estado
+  // operacional INSTANTÂNEO (offline/erro/pending/stale, hierarquia
+  // fail-closed da Fase 0.9); o CPI é MEMÓRIA da sessão — deixá-lo pintar
+  // o orb de verde mascararia um estado degradado atual (proibido).
+  const cpi = useCpiSnapshot();
+  const cpiLabel = cpi === null ? "—" : `${Math.round(cpi * 100)}%`;
 
   let coreColor: string;
   let coreLabel: string;
@@ -2616,7 +2699,7 @@ function NucleoVoiceOrb() {
     <button
       type="button"
       onClick={handleToggleVoice}
-      title={`Núcleo S.E. · ${coreLabel} · Voz ${!ttsSupported ? "INDISPONÍVEL" : voiceStatus.enabled ? "ATIVA" : "DESLIGADA"} (toque para alternar)`}
+      title={`Núcleo S.E. · ${coreLabel} · CPI ${cpiLabel} · Voz ${!ttsSupported ? "INDISPONÍVEL" : voiceStatus.enabled ? "ATIVA" : "DESLIGADA"} (toque para alternar)`}
       className="relative ml-1 w-8 h-8 rounded-full border flex items-center justify-center transition-all active:scale-95 shrink-0"
       style={{
         borderColor: `${coreColor}55`,

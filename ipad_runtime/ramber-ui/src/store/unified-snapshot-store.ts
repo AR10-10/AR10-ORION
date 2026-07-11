@@ -42,6 +42,14 @@ import { maybeSampleL2History, type L2HistoryEntry } from "../nexus/l2-history";
 import { pushOrderflowHistory, type OrderflowHistoryEntry } from "../nexus/orderflow-history";
 import type { VolumeProfileSnapshot } from "../nexus/volume-profile";
 import type { FibonacciConfluenceMatrix } from "../nexus/fibonacci-confluence";
+import type { CouncilDecision } from "../nexus/council";
+import {
+  ingestAffectiveEvent,
+  computeCpi,
+  EMPTY_AFFECTIVE_STATE,
+  type AffectiveMemoryState,
+  type AffectiveEventSource,
+} from "../nexus/affective-memory";
 
 export interface PriceSnapshot {
   price: number | null;
@@ -157,6 +165,18 @@ interface UnifiedSnapshotState {
   // e POC/HVN do Volume Profile. null = sem perna confirmada/sem candles
   // (fail-closed) — score 0 nos níveis é resultado honesto, não erro.
   fibonacciConfluence: FibonacciConfluenceMatrix | null;
+  // V-MAX Fase 1 item 4 — Conselho Multi-Agente (nexus/council.ts,
+  // contrato versionado): 6 votos reais + decisão do Meta-Agent. null até
+  // o primeiro cômputo; stance ABSTAIN quando o RiskAgent trava o conselho
+  // (fail-closed) ou sem quórum real.
+  council: CouncilDecision | null;
+  // V-MAX Fase 1 item 5 — Memória Afetiva (Reward/Pain com decaimento
+  // exponencial, nexus/affective-memory.ts) + CPI derivado. Escopo de
+  // SESSÃO do organismo, não por ativo — trocar de ativo não apaga a
+  // memória operacional (as falhas/acertos de percepção são do sistema,
+  // não do símbolo).
+  affectiveMemory: AffectiveMemoryState;
+  cpi: number | null;
 }
 
 interface UnifiedSnapshotActions {
@@ -191,6 +211,12 @@ interface UnifiedSnapshotActions {
   // null explícito = "ainda não computado/ativo trocado", nunca um perfil velho.
   setVolumeProfile: (profile: VolumeProfileSnapshot | null) => void;
   setFibonacciConfluence: (matrix: FibonacciConfluenceMatrix | null) => void;
+  setCouncil: (decision: CouncilDecision | null) => void;
+  // Ingestão de um evento afetivo REAL (transição operacional verdadeira,
+  // nunca chamado por render) — decai a memória até agora e recomputa o
+  // CPI no mesmo write (decaimento lazy: entre eventos a razão é
+  // invariante, ver nexus/affective-memory.ts).
+  recordAffectiveEvent: (source: AffectiveEventSource) => void;
 }
 
 export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnapshotActions>()(
@@ -212,6 +238,9 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     orderflowHistory: [],
     volumeProfile: null,
     fibonacciConfluence: null,
+    council: null,
+    affectiveMemory: EMPTY_AFFECTIVE_STATE,
+    cpi: null,
 
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
     setPrice: (price) => set((s) => { s.price = { ...price, updatedAt: Date.now() }; }),
@@ -241,6 +270,12 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     resetOrderflowHistory: () => set((s) => { s.orderflowHistory = []; }),
     setVolumeProfile: (profile) => set((s) => { s.volumeProfile = profile; }),
     setFibonacciConfluence: (matrix) => set((s) => { s.fibonacciConfluence = matrix; }),
+    setCouncil: (decision) => set((s) => { s.council = decision; }),
+    recordAffectiveEvent: (source) => set((s) => {
+      const next = ingestAffectiveEvent(s.affectiveMemory as AffectiveMemoryState, source, Date.now());
+      s.affectiveMemory = next;
+      s.cpi = computeCpi(next);
+    }),
   })),
 );
 
@@ -291,3 +326,10 @@ export const useVolumeProfileSnapshot = (): VolumeProfileSnapshot | null =>
 // V-MAX Fase 1.4 — Matriz de Confluência Fibonacci, null sem perna confirmada.
 export const useFibonacciConfluenceSnapshot = (): FibonacciConfluenceMatrix | null =>
   useUnifiedSnapshotStore((s) => s.fibonacciConfluence);
+// V-MAX Fase 1 item 4 — decisão do Conselho Multi-Agente (debate completo).
+export const useCouncilSnapshot = (): CouncilDecision | null =>
+  useUnifiedSnapshotStore((s) => s.council);
+// V-MAX Fase 1 item 5 — CPI real (0..1) do organismo, null antes de evento real.
+export const useCpiSnapshot = (): number | null => useUnifiedSnapshotStore((s) => s.cpi);
+export const useAffectiveMemorySnapshot = (): AffectiveMemoryState =>
+  useUnifiedSnapshotStore((s) => s.affectiveMemory);

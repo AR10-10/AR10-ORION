@@ -23,6 +23,9 @@ const RESET = {
   orderflowHistory: [],
   volumeProfile: null,
   fibonacciConfluence: null,
+  council: null,
+  affectiveMemory: { contractVersion: 1 as const, reward: 0, pain: 0, lastEventAt: null, eventCount: 0 },
+  cpi: null,
 };
 
 describe('unified-snapshot-store: boots fail-closed (nada fabricado antes do primeiro dado real)', () => {
