@@ -3529,6 +3529,12 @@ function ChartWidget({ chartData }: any) {
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
   const { smcZones, selectedAsset, engine, chartTimeframe, setChartTimeframe } = useContext(WidgetContext) || {};
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
+  // Correção de latência: o MESMO preço real que já alimenta a barra
+  // superior (usePriceSnapshot — escrito na store a cada tick do WS,
+  // zero segunda coleta) — o gráfico funde este preço na vela em formação
+  // via series.update() dentro de EnhancedChart_110_Percent, isolado do
+  // recomputo de chartData/SMC/Fibonacci.
+  const livePrice = usePriceSnapshot();
 
   const unmitigatedFvgs = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
   const unmitigatedBlocks = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
@@ -3601,6 +3607,8 @@ function ChartWidget({ chartData }: any) {
             orderBlocks={unmitigatedBlocks}
             liquidityZones={unsweptLiquidity}
             fibonacciLevels={fibonacciLevels}
+            livePrice={livePrice.price}
+            activeTimeframe={chartTimeframe as Timeframe}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">

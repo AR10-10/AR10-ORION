@@ -39,6 +39,12 @@ import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
 // V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
 // barras à direita — dado direto da store (Fase 1.3), ver header do plugin.
 import { VolumeProfilePlugin } from "./VolumeProfilePlugin";
+// Correção de latência (Ordem "Sincronização em Tempo Real"): funde o
+// último preço real do ticker WS na vela em formação via series.update() —
+// nunca via `data`/setData (isso recomputaria SMC/Fibonacci/VP a cada
+// tick). Ver header do módulo para o porquê da separação.
+import { patchLastCandleWithLiveTick } from "../nexus/live-candle-sync";
+import type { Timeframe } from "../nexus/types";
 
 export interface EnhancedChartCandle {
   time: number; // Unix segundos real (Bus/Binance) — nunca sintetizado
@@ -91,6 +97,13 @@ interface EnhancedChartProps {
   orderBlocks?: EnhancedChartZone[];
   liquidityZones?: EnhancedChartLiquidity[];
   fibonacciLevels?: EnhancedChartFibLevel[] | null;
+  // Correção de latência: o último preço REAL do ticker WS (mesma fonte da
+  // barra superior, já na store desde o primeiro tick) e o timeframe ativo
+  // — só para o patch cirúrgico da vela em formação abaixo. Opcionais: sem
+  // eles o gráfico funciona exatamente como antes (fail-closed, nunca
+  // quebra um chamador que ainda não os passa).
+  livePrice?: number | null;
+  activeTimeframe?: Timeframe;
 }
 
 // Mesmo formato de texto que o gráfico antigo já usava para S1/R1 — só a
@@ -113,6 +126,8 @@ export function EnhancedChart_110_Percent({
   orderBlocks,
   liquidityZones,
   fibonacciLevels,
+  livePrice,
+  activeTimeframe,
 }: EnhancedChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -236,6 +251,22 @@ export function EnhancedChart_110_Percent({
       }));
     seriesRef.current.setData(formatted);
   }, [data]);
+
+  // Correção de latência (barra superior ↔ gráfico): patch cirúrgico da
+  // vela em formação a cada tick real do ticker WS, via series.update() —
+  // API nativa da lib pra atualização incremental de UMA barra, nunca um
+  // segundo setData(). Deliberadamente ISOLADO do efeito acima: não lê nem
+  // escreve `data` como referência de re-render, só o último elemento já
+  // renderizado — SMC/Fibonacci/Volume Profile (que dependem de `data` lá
+  // em cima, em App.tsx) nunca recomputam por causa de um tick de preço,
+  // só quando uma vela REAL nova/fechada chega do REST/kline.
+  useEffect(() => {
+    if (!seriesRef.current || !data || data.length === 0) return;
+    if (typeof livePrice !== "number" || !activeTimeframe) return;
+    const patched = patchLastCandleWithLiveTick(data[data.length - 1], activeTimeframe, livePrice);
+    if (!patched) return;
+    seriesRef.current.update({ time: patched.time as UTCTimestamp, open: patched.open, high: patched.high, low: patched.low, close: patched.close });
+  }, [livePrice, activeTimeframe, data]);
 
   // S1/R1 reais — o MESMO engine.support/resistance que os outros widgets
   // já exibem, aqui como price lines nativas (createPriceLine), nunca uma

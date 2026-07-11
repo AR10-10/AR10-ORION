@@ -107,3 +107,33 @@ describe('EnhancedChart: linha de CVD real (fechamento do §3.1) — série nati
     expect(chart()).toContain('cvdSeriesRef.current = null;');
   });
 });
+
+describe('EnhancedChart: correção de latência (patch da vela em formação) isolada do recomputo de data', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('usa a função pura patchLastCandleWithLiveTick (fail-closed), nunca uma segunda regra de fusão inline', () => {
+    const s = chart();
+    expect(s).toContain('import { patchLastCandleWithLiveTick } from "../nexus/live-candle-sync"');
+    expect(s).toContain('patchLastCandleWithLiveTick(data[data.length - 1], activeTimeframe, livePrice)');
+  });
+
+  it('aplica o patch via series.update() — nunca via setData() (setData recomputaria o zoom/pan e é custoso a cada tick)', () => {
+    const s = chart();
+    const liveBlock = s.slice(s.indexOf('patchLastCandleWithLiveTick('), s.indexOf('}, [livePrice, activeTimeframe, data]);'));
+    expect(liveBlock).toContain('seriesRef.current.update(');
+    expect(liveBlock).not.toContain('.setData(');
+  });
+
+  it('o efeito de live-tick é um useEffect PRÓPRIO, nunca reaproveita as deps do efeito de setData(formatted)', () => {
+    const s = chart();
+    expect(s).toContain('}, [livePrice, activeTimeframe, data]);');
+    // o efeito original (setData) continua existindo, com suas próprias deps intactas — não foi fundido no novo.
+    expect(s).toContain('seriesRef.current.setData(formatted);\n  }, [data]);');
+  });
+
+  it('livePrice/activeTimeframe são props opcionais — um chamador que ainda não os passa nunca quebra', () => {
+    const s = chart();
+    expect(s).toContain('livePrice?: number | null;');
+    expect(s).toContain('activeTimeframe?: Timeframe;');
+  });
+});
