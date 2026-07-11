@@ -31,6 +31,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 import { LiquidityZonesPlugin, type FillableZone } from "./LiquidityZonesPlugin";
+import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
 
 export interface EnhancedChartCandle {
   time: number; // Unix segundos real (Bus/Binance) — nunca sintetizado
@@ -268,6 +269,16 @@ export function EnhancedChart_110_Percent({
 
   return (
     <div className="absolute inset-0">
+      {/* V-MAX Fase 1.2: densidade L2 + bolhas de trades grandes, ANTES do
+         container do chart de propósito — layout.background do chart é
+         transparent (acima), então este heatmap fica REALMENTE atrás das
+         velas (não só semi-transparente por cima), o visual institucional
+         padrão (Bookmap-style) sem precisar de nenhuma API de camadas da
+         lib. */}
+      <OrderFlowHeatmapPlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+      />
       <div ref={containerRef} className="absolute inset-0" />
       {/* V-MAX Fase 0.7: FVG/Order Blocks (bullish|bearish) — mesmo dado real
          de computeSmcZones, já filtrado (!mitigated) e limitado em contagem
