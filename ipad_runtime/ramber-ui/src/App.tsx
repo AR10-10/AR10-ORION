@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot } from "./store/unified-snapshot-store";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -451,6 +451,8 @@ export default function App() {
     system_health: { visible: true, floating: false, collapsed: false, pinned: false },
     asset_heatmap: { visible: false, floating: false, collapsed: false, pinned: false },
     decision_validation: { visible: true, floating: false, collapsed: false, pinned: false },
+    // V-MAX Fase 1 (superfície visual): HUD do Conselho Multi-Agente + CPI.
+    council: { visible: true, floating: false, collapsed: false, pinned: false },
   };
   const [widgets, setWidgets] = useState<{
     [key: string]: { visible: boolean; floating: boolean; collapsed: boolean; pinned: boolean };
@@ -1739,6 +1741,12 @@ export default function App() {
                           </>
                         )
                       )}
+                      {/* V-MAX Fase 1 (superfície visual): HUD do Conselho
+                          Multi-Agente + CPI — dados reais da store (item 4/5),
+                          logo abaixo do comitê de validação (mesma família de
+                          leitura consultiva, LEI 24). Só em modo cripto: os
+                          agentes leem feeds cripto reais. */}
+                      {marketMode !== "TRADFI" && widgets.council?.visible && <CouncilWidget />}
                       <TelemetryHealthWidget />
                     </div>
                   </div>
@@ -1874,6 +1882,7 @@ const WIDGET_LABELS: { [key: string]: string } = {
   asset_heatmap: "HEATMAP · ATIVOS",
   decision_validation: "VALIDAÇÃO MULTI-CAMADA",
   system_health: "SAÚDE DO SISTEMA",
+  council: "CONSELHO MULTI-AGENTE",
 };
 
 function ConfigPanel() {
@@ -3410,6 +3419,13 @@ function ChartWidget({ chartData }: any) {
   const unmitigatedFvgs = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
   const unmitigatedBlocks = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
   const unsweptLiquidity = (smcZones?.liquidityZones ?? []).filter((z: LiquidityZone) => !z.swept).slice(0, 4);
+  // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
+  // (Fase 1.4) — mesma store que os agentes leem, só mapeada para o formato
+  // do chart (price/ratio/score reais, nada recalculado aqui).
+  const fibonacciMatrix = useFibonacciConfluenceSnapshot();
+  const fibonacciLevels = fibonacciMatrix
+    ? fibonacciMatrix.levels.map((l) => ({ ratio: l.ratio, price: l.price, score: l.score }))
+    : null;
 
   return (
     <Widget
@@ -3470,6 +3486,7 @@ function ChartWidget({ chartData }: any) {
             fairValueGaps={unmitigatedFvgs}
             orderBlocks={unmitigatedBlocks}
             liquidityZones={unsweptLiquidity}
+            fibonacciLevels={fibonacciLevels}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
@@ -4477,6 +4494,88 @@ function MarketRegimeWidget() {
         <Row label="CONFLUÊNCIA MULTI-TF" value={confluenceLabel} valueClass={confluenceColor} />
         <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
         <Row label="VOLATILIDADE" value={volLabel} valueClass={volColor} />
+      </div>
+    </Widget>
+  );
+}
+
+// --- CONSELHO MULTI-AGENTE (V-MAX Fase 1 item 4 — superfície visual) ---
+// HUD do debate real: 6 votos (postura/confiança/racional) + decisão do
+// Meta-Agent + CPI da memória afetiva. Tudo lido da store
+// (useCouncilSnapshot/useCpiSnapshot) — os MESMOS objetos que os efeitos
+// de App() gravam; este componente só exibe, nunca recomputa (LEI 24:
+// camada de exibição, jamais toca o Core Engine).
+const COUNCIL_STANCE_COLOR: Record<string, string> = {
+  LONG: "text-[#00ffaa]",
+  SHORT: "text-[#ff0055]",
+  NEUTRAL: "text-[#8ab4f8]",
+  ABSTAIN: "text-[#f0d06f]",
+};
+const COUNCIL_AGENT_LABEL: Record<string, string> = {
+  LIQUIDITY: "LIQUIDEZ",
+  STRUCTURE: "ESTRUTURA",
+  ORDERFLOW: "ORDER FLOW",
+  RISK: "RISCO",
+  MANIPULATION: "MANIPULAÇÃO",
+  FIBONACCI: "FIBONACCI",
+};
+
+function CouncilWidget() {
+  const council = useCouncilSnapshot();
+  const cpi = useCpiSnapshot();
+
+  const stance = council?.stance ?? null;
+  const stanceLabel = stance ?? AWAIT;
+  const stanceColor = stance ? COUNCIL_STANCE_COLOR[stance] : "text-[#8ab4f8]";
+  // agreement é massa de opinião do comitê (Fase F) — NUNCA probabilidade
+  // de mercado; o rótulo "coesão" diz o que o número realmente é.
+  const agreementLabel = council?.agreement !== null && council?.agreement !== undefined
+    ? `${Math.round(council.agreement * 100)}%`
+    : "—";
+  const cpiLabel = cpi === null ? AWAIT : `${Math.round(cpi * 100)}%`;
+  const cpiColor = cpi === null ? "text-[#8ab4f8]" : cpi >= 0.7 ? "text-[#00ffaa]" : cpi >= 0.4 ? "text-[#f0d06f]" : "text-[#ff0055]";
+
+  return (
+    <Widget id="council" title="CONSELHO MULTI-AGENTE" flex="flex-[1] min-h-[210px]">
+      <div className="flex flex-col gap-1 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
+        <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff20]">
+          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">
+            DECISÃO{council?.riskGated ? " · TRAVADO (RISCO)" : ""}
+          </span>
+          <span className={`text-[0.55rem] font-mono font-black ${stanceColor}`}>
+            {stanceLabel}
+            {council && council.quorum > 0 ? (
+              <span className="text-[#8ab4f8]/60 font-normal"> · coesão {agreementLabel} · quórum {council.quorum}/5</span>
+            ) : null}
+          </span>
+        </div>
+        {(council?.votes ?? []).map((v) => (
+          <div
+            key={v.agent}
+            className="flex flex-col bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+            title={v.evidence.length > 0 ? v.evidence.join(" · ") : v.rationale}
+          >
+            <div className="flex justify-between items-center">
+              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">
+                {COUNCIL_AGENT_LABEL[v.agent] ?? v.agent}
+              </span>
+              <span className={`text-[0.5rem] font-mono font-black ${COUNCIL_STANCE_COLOR[v.stance]}`}>
+                {v.stance}
+                {v.confidence !== null ? <span className="text-[#8ab4f8]/60 font-normal"> {Math.round(v.confidence * 100)}%</span> : null}
+              </span>
+            </div>
+            <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-tight truncate">{v.rationale}</span>
+          </div>
+        ))}
+        {!council && (
+          <div className="flex items-center justify-center text-[0.5rem] tracking-[0.25em] text-[#8ab4f8]/40 font-bold py-3">
+            {AWAIT}
+          </div>
+        )}
+        <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
+          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CPI · MEMÓRIA AFETIVA</span>
+          <span className={`text-[0.5rem] font-mono font-black ${cpiColor}`}>{cpiLabel}</span>
+        </div>
       </div>
     </Widget>
   );

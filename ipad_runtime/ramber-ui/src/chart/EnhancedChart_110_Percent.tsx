@@ -32,6 +32,9 @@ import {
 } from "lightweight-charts";
 import { LiquidityZonesPlugin, type FillableZone } from "./LiquidityZonesPlugin";
 import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
+// V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
+// barras à direita — dado direto da store (Fase 1.3), ver header do plugin.
+import { VolumeProfilePlugin } from "./VolumeProfilePlugin";
 
 export interface EnhancedChartCandle {
   time: number; // Unix segundos real (Bus/Binance) — nunca sintetizado
@@ -63,6 +66,15 @@ export interface LevelStrength {
   touches: number;
 }
 
+// V-MAX Fase 1 (superfície visual): nível de retração real da Matriz de
+// Confluência (Fase 1.4) — price+ratio+score reais, passados pelo
+// ChartWidget a partir da store (mesmo padrão das zonas SMC).
+export interface EnhancedChartFibLevel {
+  ratio: number;
+  price: number;
+  score: number;
+}
+
 interface EnhancedChartProps {
   data: EnhancedChartCandle[];
   support?: number | null;
@@ -74,6 +86,7 @@ interface EnhancedChartProps {
   fairValueGaps?: EnhancedChartZone[];
   orderBlocks?: EnhancedChartZone[];
   liquidityZones?: EnhancedChartLiquidity[];
+  fibonacciLevels?: EnhancedChartFibLevel[] | null;
 }
 
 // Mesmo formato de texto que o gráfico antigo já usava para S1/R1 — só a
@@ -95,6 +108,7 @@ export function EnhancedChart_110_Percent({
   fairValueGaps,
   orderBlocks,
   liquidityZones,
+  fibonacciLevels,
 }: EnhancedChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -102,6 +116,7 @@ export function EnhancedChart_110_Percent({
   const supportLineRef = useRef<IPriceLine | null>(null);
   const resistanceLineRef = useRef<IPriceLine | null>(null);
   const zoneLinesRef = useRef<IPriceLine[]>([]);
+  const fibLinesRef = useRef<IPriceLine[]>([]);
   // Espelha chartRef/seriesRef em state só para o LiquidityZonesPlugin
   // montar assim que o chart existe de verdade — refs sozinhas não
   // disparam re-render, então o plugin ficaria esperando por uma
@@ -174,6 +189,7 @@ export function EnhancedChart_110_Percent({
       supportLineRef.current = null;
       resistanceLineRef.current = null;
       zoneLinesRef.current = [];
+      fibLinesRef.current = [];
       setChartReady(null);
     };
   }, []);
@@ -267,6 +283,32 @@ export function EnhancedChart_110_Percent({
     });
   }, [liquidityZones]);
 
+  // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
+  // Fibonacci como price lines nativas — "fio de seda" (1px sólida, nunca
+  // pontilhada); a hierarquia entre níveis vem da OPACIDADE pela confluência
+  // real (score ≥ 1 fonte => mais presente), nunca do estilo do traço.
+  // Título carrega ratio + score reais ("FIB 61.8% ×2").
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    fibLinesRef.current.forEach((line) => series.removePriceLine(line));
+    fibLinesRef.current = [];
+
+    (fibonacciLevels ?? []).forEach((level) => {
+      if (!Number.isFinite(level.price)) return;
+      fibLinesRef.current.push(
+        series.createPriceLine({
+          price: level.price,
+          color: level.score > 0 ? "rgba(0, 240, 255, 0.55)" : "rgba(0, 240, 255, 0.20)",
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: false,
+          title: `FIB ${(level.ratio * 100).toFixed(1)}%${level.score > 0 ? ` ×${level.score}` : ""}`,
+        }),
+      );
+    });
+  }, [fibonacciLevels]);
+
   return (
     <div className="absolute inset-0">
       {/* V-MAX Fase 1.2: densidade L2 + bolhas de trades grandes, ANTES do
@@ -292,6 +334,13 @@ export function EnhancedChart_110_Percent({
         data={data}
         fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}
         orderBlocks={(orderBlocks ?? []) as FillableZone[]}
+      />
+      {/* V-MAX Fase 1 (superfície visual): Volume Profile real (Fase 1.3)
+         como barras à direita + linha do POC — overlay por cima do chart
+         (pointer-events-none), dado direto da store. */}
+      <VolumeProfilePlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
       />
     </div>
   );
