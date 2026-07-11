@@ -167,6 +167,15 @@ interface UnifiedSnapshotActions {
   // chama por baixo — evita um shadowing confuso entre a função pura e a
   // action da store, mesmo padrão semântico de sampleL2History acima.
   recordOrderflowHistory: (entry: OrderflowHistoryEntry) => void;
+  // l2History/orderflowHistory são escopados ao ativo selecionado (mesmo
+  // que l2History não particione por símbolo — hoje só "BINANCE" é
+  // populado, sempre para o WS único do ativo ativo, mesmo desenho que
+  // orderBooks/Fase 0.4 já usa). Trocar de ativo precisa limpar os dois,
+  // mesmo padrão do efeito real em App.tsx que já zera price/chartData/
+  // orderBook/orderflowSignals/cvd — sem isto, amostras do ativo ANTERIOR
+  // ficariam visíveis por até ~6-8min sob o novo ativo.
+  resetL2History: () => void;
+  resetOrderflowHistory: () => void;
 }
 
 export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnapshotActions>()(
@@ -211,6 +220,8 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     recordOrderflowHistory: (entry) => set((s) => {
       s.orderflowHistory = pushOrderflowHistory(s.orderflowHistory as OrderflowHistoryEntry[], entry);
     }),
+    resetL2History: () => set((s) => { s.l2History = {}; }),
+    resetOrderflowHistory: () => set((s) => { s.orderflowHistory = []; }),
   })),
 );
 

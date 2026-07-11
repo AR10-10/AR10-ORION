@@ -30,6 +30,7 @@ import {
   startMexcOrderflowFeed,
   type OrderflowSignal,
   type OrderflowConnectorState,
+  type OrderflowTick,
   startRealLiquidationFeed,
   type LiquidationEvent,
   computeSmcZones,
@@ -37,6 +38,14 @@ import {
   type LiquidityZone,
   getChartCandles,
 } from "./engine-bridge";
+// V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
+// header do arquivo) — nunca um limiar fixo inventado aqui na UI.
+import {
+  ingestTradesForLargeDetection,
+  EMPTY_THRESHOLD_STATE,
+  type OrderflowThresholdState,
+  type OrderflowTrade,
+} from "./nexus/orderflow-history";
 // Fase F (V15): Comitê de Validação — linear opinion pool puro
 // (src/consensus/). Importado pela CAMADA DE EXIBIÇÃO, não por
 // engine-bridge.ts — o comitê consome contexto GMIL, e a LEI 04 proíbe
@@ -368,6 +377,16 @@ export default function App() {
   // volume since this tab opened (see signal-engine.js). Null until the
   // first real tick batch is ingested.
   const [cvd, setCvd] = useState<number | null>(null);
+  // V-MAX Fase 1.2: estado real da amostra de volumes (percentil de "trade
+  // grande") e o lote de trades grandes do ciclo de poll EM CURSO — refs,
+  // não state, porque nada aqui precisa re-renderizar por conta própria;
+  // o consumidor real (OrderFlowHeatmapPlugin) lê da store via
+  // useOrderflowHistory, não daqui. onTrades sempre dispara antes de onCvd
+  // dentro do MESMO ciclo (garantia real de engine-bridge.ts's
+  // startMexcOrderflowFeed), por isso pendingLargeTradesRef está sempre
+  // atualizado quando onCvd o consome logo abaixo.
+  const orderflowThresholdStateRef = useRef<OrderflowThresholdState>(EMPTY_THRESHOLD_STATE);
+  const pendingLargeTradesRef = useRef<OrderflowTrade[]>([]);
 
   // Real institutional liquidation feed (Binance USDT-M Futures, public —
   // engine-bridge.ts's startRealLiquidationFeed). Capped to the most
@@ -604,6 +623,14 @@ export default function App() {
     setEngineStatus("pending");
     setPriceUpdatedAt(null);
     setOrderBookUpdatedAt(null);
+    // V-MAX Fase 1.1/1.2: l2History/orderflowHistory na store são séries
+    // acumuladas ao longo do tempo (não um valor pontual como os acima) do
+    // ativo ANTERIOR — sem isto, o OrderFlowHeatmapPlugin mostraria amostras
+    // do ativo antigo sobrepostas ao gráfico do novo por vários minutos.
+    useUnifiedSnapshotStore.getState().resetL2History();
+    useUnifiedSnapshotStore.getState().resetOrderflowHistory();
+    orderflowThresholdStateRef.current = EMPTY_THRESHOLD_STATE;
+    pendingLargeTradesRef.current = [];
   }, [selectedAsset]);
 
   useEffect(() => {
@@ -818,8 +845,28 @@ export default function App() {
         setOrderflowState(state);
         setOrderflowReason(reason ?? null);
       },
-      (value) => setCvd(value),
+      (value) => {
+        setCvd(value);
+        // V-MAX Fase 1.2: onCvd sempre dispara DEPOIS de onTrades dentro do
+        // MESMO ciclo de poll (garantia real de engine-bridge.ts) — os
+        // trades grandes já calculados abaixo pertencem exatamente a este
+        // valor de cvd, nunca um ciclo anterior/posterior.
+        useUnifiedSnapshotStore.getState().recordOrderflowHistory({
+          time: Date.now(),
+          cvd: value,
+          largeTrades: pendingLargeTradesRef.current,
+        });
+        pendingLargeTradesRef.current = [];
+      },
       selectedAsset,
+      (ticks: OrderflowTick[]) => {
+        const trades: OrderflowTrade[] = ticks.map((t) => ({
+          time: t.timestamp, price: t.price, volume: t.volume, side: t.side,
+        }));
+        const { large, nextState } = ingestTradesForLargeDetection(orderflowThresholdStateRef.current, trades);
+        orderflowThresholdStateRef.current = nextState;
+        pendingLargeTradesRef.current = large;
+      },
     );
     return stop;
   }, [bootGeneration, selectedAsset]);
