@@ -1767,6 +1767,8 @@ export default function App() {
       fps,
       priceUpdatedAt,
       orderBookUpdatedAt,
+      crossExchangeCheck,
+      okxCrossExchangeCheck,
     }),
     [
       widgets,
@@ -1807,6 +1809,8 @@ export default function App() {
       fps,
       priceUpdatedAt,
       orderBookUpdatedAt,
+      crossExchangeCheck,
+      okxCrossExchangeCheck,
     ],
   );
 
@@ -1818,12 +1822,7 @@ export default function App() {
           (barra de comando cortada em pé e deitado). Em navegador comum
           env() é 0 e nada muda. */}
       <div className="flex flex-col h-[100dvh] pt-safe pb-safe bg-[#020610] text-[#a0f0ff] font-mono overflow-hidden selection:bg-[#00f0ff30]">
-        <TopBar
-          data={priceData}
-          derivatives={derivatives}
-          crossExchangeCheck={crossExchangeCheck}
-          okxCrossExchangeCheck={okxCrossExchangeCheck}
-        />
+        <TopBar data={priceData} />
         {bootRestFailed && (
           <div className="shrink-0 bg-[#ff005515] border-b border-[#ff005550] px-4 py-2 flex items-center justify-between gap-3">
             <span className="text-[0.55rem] sm:text-[0.6rem] tracking-[0.15em] text-[#ff0055] font-bold uppercase">
@@ -2924,18 +2923,29 @@ function NucleoVoiceOrb() {
     if (next) voiceEngine.speak("Voz operacional. Modo somente leitura.", "INFO");
   };
 
+  // Redesenho radical (modelo do Operador): o botão vira uma esfera
+  // brilhante prominente no canto — mesma cor 100% real (coreColor,
+  // derivada de offline/engineStatus/stale acima, ZERO mudança de lógica)
+  // agora expressa como um orbe com profundidade (radial-gradient +
+  // camadas de glow) em vez de um círculo plano de 32px.
   return (
     <button
       type="button"
       onClick={handleToggleVoice}
       title={`Núcleo S.E. · ${coreLabel} · CPI ${cpiLabel} · Voz ${!ttsSupported ? "INDISPONÍVEL" : voiceStatus.enabled ? "ATIVA" : "DESLIGADA"} (toque para alternar)`}
-      className="relative ml-1 w-8 h-8 rounded-full border flex items-center justify-center transition-all active:scale-95 shrink-0"
+      className="relative ml-1.5 w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95 shrink-0"
       style={{
-        borderColor: `${coreColor}55`,
-        background: `${coreColor}0d`,
-        boxShadow: `0 0 10px ${coreColor}2e`,
+        border: `1px solid ${coreColor}66`,
+        background: `radial-gradient(circle at 32% 28%, ${coreColor}4d, ${coreColor}12 55%, #010308 100%)`,
+        boxShadow: `0 0 18px ${coreColor}55, 0 0 4px ${coreColor}99, inset 0 0 10px ${coreColor}30`,
       }}
     >
+      {/* Halo externo suave — puro estilo (blur via box-shadow, barato no
+          compositor), a MESMA coreColor real, nunca uma segunda fonte. */}
+      <div
+        className="absolute -inset-1.5 rounded-full pointer-events-none opacity-60"
+        style={{ boxShadow: `0 0 14px 2px ${coreColor}40` }}
+      ></div>
       {/* A "bolinha circulando" — mesma linguagem visual dos anéis
           orbitais do orb grande; gira rápido enquanto o ciclo real ainda
           não sincronizou (pending), lento em regime normal. Movimento é
@@ -2944,14 +2954,14 @@ function NucleoVoiceOrb() {
         className={`absolute inset-0 rounded-full pointer-events-none ${engineStatus === "pending" ? "animate-[spin_1.4s_linear_infinite]" : "animate-[spin_7s_linear_infinite]"}`}
       >
         <div
-          className="absolute -top-[2px] left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full"
-          style={{ background: coreColor, boxShadow: `0 0 6px ${coreColor}` }}
+          className="absolute -top-[2px] left-1/2 -translate-x-1/2 w-2 h-2 rounded-full"
+          style={{ background: coreColor, boxShadow: `0 0 7px ${coreColor}` }}
         ></div>
       </div>
       {ttsSupported && voiceStatus.enabled ? (
-        <Mic size={13} className={voiceStatus.speaking ? "animate-pulse" : ""} style={{ color: coreColor }} />
+        <Mic size={15} className={voiceStatus.speaking ? "animate-pulse" : ""} style={{ color: coreColor }} />
       ) : (
-        <MicOff size={13} className="text-[#8ab4f8]/50" />
+        <MicOff size={15} className="text-[#8ab4f8]/50" />
       )}
     </button>
   );
@@ -2972,30 +2982,65 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   const targetHit = p !== null && (long ? p >= plan.target.price : p <= plan.target.price);
   const stopHit = p !== null && !targetHit && (long ? p <= plan.stop.price : p >= plan.stop.price);
   const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
+  const entryLabel = plan.entry.low === plan.entry.high ? f(plan.entry.low) : `${f(plan.entry.low)}–${f(plan.entry.high)}`;
+  // Redesenho radical (modelo do Operador): "E/S/T" mono cramped viram
+  // rótulos limpos em inglês (Entry Zone/Target/Stop), mesma linguagem
+  // visual do TopStat (label pequeno acima, valor tabular abaixo) — só a
+  // apresentação muda, a detecção real de targetHit/stopHit é idêntica.
+  // Classes sempre passadas como strings literais completas (nunca
+  // concatenadas com uma variável) — o scanner estático do Tailwind JIT
+  // só gera CSS para tokens que aparecem por extenso no código-fonte.
+  const Field = ({
+    label,
+    value,
+    labelClass,
+    valueClass,
+    hitClass,
+    hit,
+  }: {
+    label: string;
+    value: string;
+    labelClass: string;
+    valueClass: string;
+    hitClass?: string;
+    hit?: boolean;
+  }) => (
+    <div className="flex flex-col justify-center leading-none px-1.5">
+      <span className={`text-[0.4rem] tracking-[0.15em] font-bold uppercase whitespace-nowrap ${labelClass}`}>{label}</span>
+      <span className={`text-[0.62rem] font-bold font-mono tabular-nums whitespace-nowrap ${hit && hitClass ? hitClass : valueClass}`}>
+        {value}
+      </span>
+    </div>
+  );
   return (
     <div
-      className={`hidden sm:flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap transition-colors duration-500 ${
+      className={`hidden sm:flex items-stretch pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap transition-colors duration-500 ${
         targetHit ? "drop-shadow-[0_0_8px_rgba(0,255,170,0.35)]" : stopHit ? "drop-shadow-[0_0_8px_rgba(255,0,85,0.35)]" : ""
       }`}
       title="Trade Plan - real structure only (advisory, read-only terminal). Entry/Stop/Target are real levels mapped by the engines."
     >
-      <span className={`text-[0.55rem] font-black tracking-wider px-1.5 py-0.5 rounded border ${long ? "text-[#00ffaa] border-[#00ffaa40] bg-[#00ffaa10]" : "text-[#ff0055] border-[#ff005540] bg-[#ff005510]"}`}>
-        {plan.direction}
-      </span>
-      <span className="text-[0.55rem] font-mono text-[#f0d06f]">
-        E {plan.entry.low === plan.entry.high ? f(plan.entry.low) : `${f(plan.entry.low)}-${f(plan.entry.high)}`}
-      </span>
-      <span className={`text-[0.55rem] font-mono ${stopHit ? "text-[#ff0055] font-black" : "text-[#ff0055]/80"}`}>
-        S {f(plan.stop.price)}
-      </span>
-      <span className={`text-[0.55rem] font-mono ${targetHit ? "text-[#00ffaa] font-black" : "text-[#00ffaa]/80"}`}>
-        T {f(plan.target.price)}
-      </span>
+      <Field label="Entry Zone" value={entryLabel} labelClass="text-[#f0d06f]/70" valueClass="text-[#f0d06f]/90" />
+      <Field
+        label="Target"
+        value={f(plan.target.price)}
+        labelClass="text-[#00ffaa]/70"
+        valueClass="text-[#00ffaa]/90"
+        hitClass="text-[#00ffaa] drop-shadow-[0_0_5px_currentColor]"
+        hit={targetHit}
+      />
+      <Field
+        label="Stop"
+        value={f(plan.stop.price)}
+        labelClass="text-[#ff0055]/70"
+        valueClass="text-[#ff0055]/90"
+        hitClass="text-[#ff0055] drop-shadow-[0_0_5px_currentColor]"
+        hit={stopHit}
+      />
       {plan.riskRewardRatio !== null && (
-        <span className="text-[0.5rem] font-mono text-[#8ab4f8]/70">1:{plan.riskRewardRatio.toFixed(2)}</span>
+        <Field label="R : R" value={`1:${plan.riskRewardRatio.toFixed(2)}`} labelClass="text-[#8ab4f8]/60" valueClass="text-[#8ab4f8]/80" />
       )}
-      {targetHit && <span className="text-[0.48rem] font-black tracking-widest text-[#00ffaa]">TARGET REACHED</span>}
-      {stopHit && <span className="text-[0.48rem] font-black tracking-widest text-[#ff0055]">STOP BREACHED</span>}
+      {targetHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#00ffaa] pl-1">TARGET REACHED</span>}
+      {stopHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#ff0055] pl-1">STOP BREACHED</span>}
     </div>
   );
 }
@@ -3007,35 +3052,39 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
 // Council's advisory overlay, LEI 24: never gates the Core Engine) — the
 // visual weight itself communicates which is primary and which is
 // supporting detail, without extra copy.
+// Redesenho radical (modelo do Operador): o pill pequeno vira um bloco
+// hero de duas linhas — direção grande (rivaliza o preço em tamanho) com
+// "Confidence" por extenso embaixo, dentro da altura fixa de 46px da
+// barra (Zero Scroll permanece intacto: cresce a hierarquia visual, nunca
+// a barra). Continua sendo a ÚNICA leitura do Core Engine em toda a tela.
 function CoreSignalBadge({ direction, confidence }: { direction: "LONG" | "SHORT" | null; confidence: string | null }) {
-  const tone =
-    direction === "LONG"
-      ? "bg-[#00ffaa] text-[#010308] shadow-[0_0_14px_rgba(0,255,170,0.5)]"
-      : direction === "SHORT"
-        ? "bg-[#ff0055] text-[#010308] shadow-[0_0_14px_rgba(255,0,85,0.5)]"
-        : "bg-[#8ab4f8]/10 text-[#8ab4f8]/60 border border-[#8ab4f8]/25";
+  const isLong = direction === "LONG";
+  const isShort = direction === "SHORT";
+  const textTone = isLong
+    ? "text-[#00ffaa] drop-shadow-[0_0_10px_rgba(0,255,170,0.65)]"
+    : isShort
+      ? "text-[#ff0055] drop-shadow-[0_0_10px_rgba(255,0,85,0.65)]"
+      : "text-[#8ab4f8]/50";
+  const boxTone = isLong
+    ? "bg-[#00ffaa0f] border-[#00ffaa40]"
+    : isShort
+      ? "bg-[#ff00550f] border-[#ff005540]"
+      : "bg-[#8ab4f808] border-[#8ab4f825]";
   return (
-    <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap" title="Core Engine — primary directional read (mathematical S/R + structure classifier)">
-      <span className={`text-[0.6rem] font-black tracking-wider px-2 py-0.5 rounded-full ${tone}`}>
-        {direction ?? AWAIT}
+    <div
+      className={`flex flex-col items-center justify-center leading-none h-[38px] px-3 md:px-4 rounded-lg border mr-2 md:mr-3 shrink-0 ${boxTone}`}
+      title="Core Engine — primary directional read (mathematical S/R + structure classifier)"
+    >
+      <span className={`text-sm md:text-base font-black tracking-wider ${textTone}`}>{direction ?? AWAIT}</span>
+      <span className="text-[0.4rem] md:text-[0.45rem] font-bold text-[#8ab4f8]/60 tracking-[0.18em] uppercase mt-[1px] whitespace-nowrap">
+        {confidence ? `Confidence · ${confidence}` : AWAIT}
       </span>
-      {confidence && <span className="text-[0.5rem] font-bold text-[#8ab4f8]/70 tabular-nums">{confidence}</span>}
     </div>
   );
 }
 
 // --- TOP BAR ---
-function TopBar({
-  data,
-  derivatives,
-  crossExchangeCheck,
-  okxCrossExchangeCheck,
-}: {
-  data?: PriceState | null;
-  derivatives: DerivativesState;
-  crossExchangeCheck: CrossExchangeCheck;
-  okxCrossExchangeCheck: CrossExchangeCheck;
-}) {
+function TopBar({ data }: { data?: PriceState | null }) {
   const {
     bootAt,
     handleManualRestart,
@@ -3061,37 +3110,20 @@ function TopBar({
         ? "Spot"
         : AWAIT;
   const isPos = (data?.deltaPct ?? 0) >= 0;
-  const [uptime, setUptime] = useState("");
-
-  useEffect(() => {
-    const t = setInterval(() => {
-      if (!bootAt) return;
-      const s = Math.floor((Date.now() - bootAt) / 1000);
-      const h = Math.floor(s / 3600);
-      const m = Math.floor((s % 3600) / 60);
-      const sec = s % 60;
-      setUptime(
-        `${h.toString().padStart(2, "0")}:${m
-          .toString()
-          .padStart(2, "0")}:${sec.toString().padStart(2, "0")}`,
-      );
-    }, 1000);
-    return () => clearInterval(t);
-  }, [bootAt]);
-
-  const funding = derivatives.fundingRate;
-  const oi = derivatives.openInterest;
 
   return (
-    // Barra de comando unificada (protocolo "Refinamento Visual Absoluto"
-    // §1/§2): o antigo cabeçalho isolado + a faixa essencial viraram UMA
-    // barra de alta densidade em duas linhas dentro do mesmo contêiner.
-    // Cada dado aparece exatamente uma vez em toda a tela: o preço vive só
-    // aqui (o chip Preço da faixa e o overlay gigante do gráfico foram
-    // removidos), variação 24h só aqui, HIGH/VOL só aqui, READ-ONLY e a
-    // marca AR10 CYBORG só no rodapé, e FEED sumiu porque "DADOS n/4" da faixa
-    // já conta o mesmo WebSocket. O pulso crítico (DCI) acende o anel da
-    // barra inteira — sem apagar o resto da tela.
+    // Barra de comando — redesenho radical (modelo do Operador, imagem de
+    // referência interpretada como direção, não como template literal):
+    // UMA única linha densa, hierarquia clara de leitura em vez de "tudo do
+    // mesmo tamanho". Ativo → preço (única ocorrência na tela) → o sinal do
+    // Core Engine em escala hero (CoreSignalBadge — "o UM número que
+    // importa", pesquisa de dashboards fintech) → Trade Plan em rótulos
+    // limpos em inglês → núcleo/voz como orbe brilhante no canto. HIGH/LOW/
+    // VOL, funding, open interest, os deltas cross-exchange e a faixa de
+    // decisão inteira (Liquidez/Risco/Contexto Global/Sistema/Dados/Última
+    // Att.) saíram da barra sempre-visível — nada foi apagado, tudo real
+    // continua acessível nas abas MERCADOS e ANÁLISES (SecondaryModuleView).
+    // O pulso crítico (DCI) acende o anel da barra inteira.
     <div
       className={`shrink-0 z-20 bg-[#010308]/95 backdrop-blur-xl border-b transition-[border-color,box-shadow] duration-500 ${
         criticalPulse
@@ -3201,84 +3233,16 @@ function TopBar({
           {marketMode === "CRYPTO" && <CoreSignalBadge direction={engine?.direction ?? null} confidence={engine?.confidence ?? null} />}
 
           {marketMode === "CRYPTO" && <TradePlanTopStrip livePrice={data?.price ?? null} />}
-
-          {marketMode === "CRYPTO" && (
-            <div className="hidden md:flex gap-1 lg:gap-2 h-full items-center">
-              <TopStat
-                label="24H HIGH"
-                value={fmt(data?.high ?? null)}
-                color="text-[#a0f0ff]"
-                className="hidden xl:flex"
-              />
-              <TopStat
-                label="24H LOW"
-                value={fmt(data?.low ?? null)}
-                color="text-[#a0f0ff]"
-                className="hidden xl:flex"
-              />
-              <TopStat
-                label={`24H VOL (${selectedAsset})`}
-                value={fmtInt(data?.volume ?? null)}
-                color="text-[#a0f0ff]"
-                className="hidden lg:flex"
-              />
-              <TopStat
-                label="FUNDING / 8H"
-                value={num(funding) ? `${(funding * 100).toFixed(4)}%` : DASH}
-                color="text-[#f7931a]"
-              />
-              <TopStat
-                label="OPEN INTEREST"
-                value={num(oi) ? `${fmtInt(oi)} ${selectedAsset}` : DASH}
-                color="text-[#a0f0ff]"
-              />
-              {/* Master Panel handoff (Multi-Source Market Data Fusion,
-                  escopo reduzido a 1 fonte adicional): cross-check real
-                  Binance-vs-Bybit — puramente informativo, nunca um sinal.
-                  INDISPONIVEL honesto (nunca "0.000%" fabricado) antes do
-                  primeiro ciclo real ou se o Bybit não responder. */}
-              <TopStat
-                label="BYBIT Δ"
-                value={
-                  crossExchangeCheck.consensus === "INDISPONIVEL" || crossExchangeCheck.priceDeltaPct === null
-                    ? DASH
-                    : `${crossExchangeCheck.priceDeltaPct.toFixed(3)}%`
-                }
-                color={
-                  crossExchangeCheck.consensus === "ALINHADO"
-                    ? "text-[#00ffaa]"
-                    : crossExchangeCheck.consensus === "DIVERGENTE"
-                      ? "text-[#ff0055]"
-                      : "text-[#a0f0ff]"
-                }
-                className="hidden xl:flex"
-              />
-              {/* Terceira fonte real (OKX) — mesmo papel puramente
-                  informativo da BYBIT Δ acima. */}
-              <TopStat
-                label="OKX Δ"
-                value={
-                  okxCrossExchangeCheck.consensus === "INDISPONIVEL" || okxCrossExchangeCheck.priceDeltaPct === null
-                    ? DASH
-                    : `${okxCrossExchangeCheck.priceDeltaPct.toFixed(3)}%`
-                }
-                color={
-                  okxCrossExchangeCheck.consensus === "ALINHADO"
-                    ? "text-[#00ffaa]"
-                    : okxCrossExchangeCheck.consensus === "DIVERGENTE"
-                      ? "text-[#ff0055]"
-                      : "text-[#a0f0ff]"
-                }
-                className="hidden xl:flex"
-              />
-            </div>
-          )}
         </div>
 
         <div className="flex gap-1 md:gap-2 h-full items-center justify-end shrink-0">
-          <TopStat label="SESSÃO" value={uptime || DASH} color="text-white" />
           {/* V18.1: núcleo + voz sempre visíveis no cantinho, ao lado do
-              botão de energia — ver header de NucleoVoiceOrb. */}
+              botão de energia — ver header de NucleoVoiceOrb. Redesenho
+              radical (modelo do Operador): HIGH/LOW/VOL, funding, open
+              interest, deltas cross-exchange e SESSÃO saíram da barra
+              sempre-visível — nada foi apagado, os valores reais continuam
+              na aba MERCADOS (ver SecondaryModuleView), só a sessão de
+              uptime foi julgada chrome de baixo valor e não relocada. */}
           <NucleoVoiceOrb />
           <button
             type="button"
@@ -3290,11 +3254,6 @@ function TopBar({
           </button>
         </div>
       </div>
-
-      {/* Linha 2 — faixa de decisão (DCI item 1), agora parte da mesma
-          barra: os campos decisão-críticos continuam visíveis antes de
-          qualquer scroll, em todas as abas e orientações. */}
-      <EssentialStrip />
     </div>
   );
 }
@@ -3725,7 +3684,22 @@ const MODULE_EMPTY = "AWAITING REAL DATA"; // honest fail-closed value, never a 
 
 function SecondaryModuleView({ tab }: { tab: string }) {
   const ctx = useContext(WidgetContext) || {};
-  const { scannerData, riskSuggestion, orderflowSignals, liquidations, liquidationState, engine, selectedAsset, gmilProviders } = ctx as any;
+  const {
+    scannerData,
+    riskSuggestion,
+    orderflowSignals,
+    liquidations,
+    liquidationState,
+    engine,
+    engineStatus,
+    selectedAsset,
+    gmilProviders,
+    voiceSnapshot,
+    lastUpdateAt,
+    institutionalConsensus,
+    crossExchangeCheck,
+    okxCrossExchangeCheck,
+  } = ctx as any;
   const connections = useConnectionsSnapshot();
   const derivatives = useDerivativesSnapshot();
   const council = useCouncilSnapshot();
@@ -3778,8 +3752,37 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         </ModulePanel>
         <ModulePanel title={`Derivatives · ${selectedAsset ?? ""}/USDT Perpetual (real)`}>
           <ModuleStat label="Last Price" value={num(price.price)} tone={price.direction === "LONG" ? "long" : price.direction === "SHORT" ? "short" : "neutral"} />
+          <ModuleStat label="24H High" value={num(price.high)} />
+          <ModuleStat label="24H Low" value={num(price.low)} />
+          <ModuleStat label="24H Volume" value={typeof price.volume === "number" ? Math.round(price.volume).toLocaleString("en-US") : MODULE_EMPTY} />
           <ModuleStat label="Funding Rate" value={typeof derivatives.fundingRate === "number" ? `${(derivatives.fundingRate * 100).toFixed(4)}%` : MODULE_EMPTY} />
           <ModuleStat label="Open Interest" value={num(derivatives.openInterest, 0)} />
+        </ModulePanel>
+        {/* Master Panel handoff (Multi-Source Market Data Fusion): cross-
+            check real Binance-vs-Bybit/OKX — puramente informativo, nunca
+            um sinal. AWAITING REAL DATA honesto antes do primeiro ciclo
+            real ou se a fonte não responder (mesmo padrão MODULE_EMPTY do
+            resto desta view). Relocado da barra sempre-visível — mesmo
+            cálculo real, zero recomputo. */}
+        <ModulePanel title="Cross-Exchange Consensus (real, advisory only)">
+          <ModuleStat
+            label="Bybit Δ"
+            value={
+              crossExchangeCheck?.consensus === "INDISPONIVEL" || crossExchangeCheck?.priceDeltaPct == null
+                ? MODULE_EMPTY
+                : `${crossExchangeCheck.priceDeltaPct.toFixed(3)}%`
+            }
+            tone={crossExchangeCheck?.consensus === "ALINHADO" ? "long" : crossExchangeCheck?.consensus === "DIVERGENTE" ? "short" : "neutral"}
+          />
+          <ModuleStat
+            label="OKX Δ"
+            value={
+              okxCrossExchangeCheck?.consensus === "INDISPONIVEL" || okxCrossExchangeCheck?.priceDeltaPct == null
+                ? MODULE_EMPTY
+                : `${okxCrossExchangeCheck.priceDeltaPct.toFixed(3)}%`
+            }
+            tone={okxCrossExchangeCheck?.consensus === "ALINHADO" ? "long" : okxCrossExchangeCheck?.consensus === "DIVERGENTE" ? "short" : "neutral"}
+          />
         </ModulePanel>
         {scannerTable}
       </>
@@ -3787,6 +3790,24 @@ function SecondaryModuleView({ tab }: { tab: string }) {
   } else if (tab === "ANALYSIS") {
     const fibLevels = (fibMatrix?.levels ?? []).filter((l: any) => l.score > 0).slice(0, 4);
     const vp = volumeProfile?.fixedRange;
+    // Decision Context — relocated from the always-visible bar (same real
+    // computations, English labels). `num` here is the LOCAL string
+    // formatter defined above (shadows the module-level boolean guard), so
+    // finiteness is checked directly instead of relying on it as a boolean.
+    const buyPercent = engine?.buyPercent;
+    const hasLiquidity = typeof buyPercent === "number" && Number.isFinite(buyPercent);
+    const direction: Direction = engine?.direction ?? null;
+    const hasEnginePrice = typeof engine?.price === "number" && Number.isFinite(engine.price) && engine.price !== 0;
+    const hasStop = typeof engine?.stop === "number" && Number.isFinite(engine.stop);
+    const stopDistPct = direction && hasStop && hasEnginePrice ? Math.abs(((engine.price - engine.stop) / engine.price) * 100) : null;
+    const liqCount = voiceSnapshot?.recentLiquidationCount ?? 0;
+    const feedsUp = [
+      voiceSnapshot?.wsLive,
+      voiceSnapshot?.orderflowState === "LIVE",
+      voiceSnapshot?.liquidationState === "LIVE",
+      engineStatus === "ok",
+    ].filter(Boolean).length;
+    const gmilConsensus = institutionalConsensus ?? { score: null, sampleSize: 0, contributingProviders: [] };
     body = (
       <>
         <ModulePanel title="Trade Plan · real structure only (advisory, read-only)">
@@ -3803,6 +3824,26 @@ function SecondaryModuleView({ tab }: { tab: string }) {
               NO COHERENT PLAN — requires a directional Council stance, a clear risk gate and real structure on both sides (fail-closed)
             </span>
           )}
+        </ModulePanel>
+        <ModulePanel title="Decision Context · Liquidity, Risk & System (real)">
+          <ModuleStat
+            label="Order Book Liquidity"
+            value={hasLiquidity ? `BID ${Math.round(buyPercent!)}%` : MODULE_EMPTY}
+            tone={hasLiquidity ? (buyPercent! >= 50 ? "long" : "short") : "neutral"}
+          />
+          <ModuleStat
+            label="Risk"
+            value={stopDistPct !== null ? `STOP ${stopDistPct.toFixed(2)}%` : liqCount > 0 ? `${liqCount} LIQUIDATIONS` : MODULE_EMPTY}
+            tone={liqCount > 0 && stopDistPct === null ? "short" : "neutral"}
+          />
+          <ModuleStat label="Global Context (GMIL)" value={formatConsensusScore(gmilConsensus.score)} />
+          <ModuleStat
+            label="System"
+            value={engineStatus === "ok" ? "OK" : engineStatus === "pending" ? "STARTING" : "FAILED"}
+            tone={engineStatus === "ok" ? "long" : engineStatus === "pending" ? "neutral" : "short"}
+          />
+          <ModuleStat label="Data Feeds" value={`${feedsUp}/4`} tone={feedsUp === 4 ? "long" : feedsUp >= 2 ? "neutral" : "short"} />
+          <ModuleStat label="Last Update" value={lastUpdateAt ? time(lastUpdateAt) : MODULE_EMPTY} />
         </ModulePanel>
         <ModulePanel title="Multi-Agent Council (real votes)">
           <ModuleStat label="Stance" value={council ? council.stance : MODULE_EMPTY} tone={council?.stance === "LONG" ? "long" : council?.stance === "SHORT" ? "short" : "neutral"} />
@@ -4266,107 +4307,6 @@ function HeatmapWidget({ book, data }: any) {
         </div>
       </div>
     </Widget>
-  );
-}
-
-// --- DCI ESSENTIAL STRIP (item 1) ---
-// The "read in under 2 seconds" layer: Liquidez, Risco, Contexto Global,
-// Sistema, Dados, Última atualização. Direção + Confiança moved up to
-// CoreSignalBadge in row 1 (research-driven header refinement: the
-// primary signal belongs next to price, not buried as 1-of-8 chips) —
-// removed here to honor the app's own law that every datum appears
-// exactly once on screen. Every remaining field is a passthrough from
-// state the rest of the app already computes (engine/voiceSnapshot/
-// lastUpdateAt/GMIL); this component invents no new number.
-function EssentialStrip() {
-  const { engine, engineStatus, voiceSnapshot, lastUpdateAt, institutionalConsensus } =
-    useContext(WidgetContext) || {};
-  // V11.5 Fase 5: lê o índice já combinado (3 provedores GMIL + liquidez +
-  // fluxo) computado uma única vez em App() — não assina o GMIL de novo
-  // aqui (era uma 2ª assinatura redundante ao mesmo singleton antes desta
-  // fase).
-  const consensus = institutionalConsensus ?? { score: null, sampleSize: 0, contributingProviders: [] };
-
-  // Direção/Confiança já saem em CoreSignalBadge (linha 1) — só `direction`
-  // real ainda é usado aqui, para o cálculo honesto de distância ao stop.
-  const direction: Direction = engine?.direction ?? null;
-
-  const liquidezPct = num(engine?.buyPercent) ? Math.round(engine.buyPercent) : null;
-  const liquidezLabel = liquidezPct === null ? AWAIT : `BID ${liquidezPct}%`;
-  const liquidezColor = liquidezPct === null ? "text-[#8ab4f8]" : liquidezPct >= 50 ? "text-[#00ffaa]" : "text-[#ff0055]";
-
-  // Risco: distância real preço->stop quando há setup confirmado; senão
-  // conta de liquidações institucionais recentes como sinal de risco bruto.
-  const stopDistPct =
-    direction && num(engine?.stop) && num(engine?.price) && engine.price !== 0
-      ? Math.abs(((engine.price - engine.stop) / engine.price) * 100)
-      : null;
-  const liqCount = voiceSnapshot?.recentLiquidationCount ?? 0;
-  const riskLabel = stopDistPct !== null ? `STOP ${stopDistPct.toFixed(2)}%` : liqCount > 0 ? `${liqCount} LIQ.` : AWAIT;
-  const riskColor = stopDistPct !== null ? "text-[#f0d06f]" : liqCount > 0 ? "text-[#ff0055]" : "text-[#8ab4f8]";
-
-  const systemLabel = engineStatus === "ok" ? "OK" : engineStatus === "pending" ? "INICIANDO" : "FALHA";
-  const systemColor =
-    engineStatus === "ok" ? "text-[#00ffaa]" : engineStatus === "pending" ? "text-[#f0d06f]" : "text-[#ff0055]";
-
-  // Saúde dos dados: conta real de feeds independentes ativos agora mesmo.
-  const feedsUp = [
-    voiceSnapshot?.wsLive,
-    voiceSnapshot?.orderflowState === "LIVE",
-    voiceSnapshot?.liquidationState === "LIVE",
-    engineStatus === "ok",
-  ].filter(Boolean).length;
-  const dataColor = feedsUp === 4 ? "text-[#00ffaa]" : feedsUp >= 2 ? "text-[#f0d06f]" : "text-[#ff0055]";
-
-  const updateLabel = lastUpdateAt
-    ? new Date(lastUpdateAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-    : AWAIT;
-
-  const gmilLabel = formatConsensusScore(consensus.score);
-
-  // V10.4 §2 "Glow Inteligente", refinado pela pesquisa desta evolução
-  // (Bookmap/TradingView: dashboards sobrecarregados com sinais visuais
-  // concorrentes atrapalham a leitura rápida): agora que Direção/Confiança
-  // — o sinal decisório real — vive sozinho em CoreSignalBadge (linha 1),
-  // NENHUM chip desta linha 2 glow — todos são contexto de apoio, nunca
-  // o foco perceptual. Um único elemento glow em toda a barra, não cinco.
-  const Chip = ({
-    label,
-    value,
-    valueClass,
-    glow = false,
-  }: {
-    label: string;
-    value: string;
-    valueClass: string;
-    glow?: boolean;
-  }) => (
-    <div className="flex flex-col items-start gap-0.5 px-2.5 py-1.5 min-w-0">
-      <span className="text-[0.45rem] tracking-[0.2em] text-[#8ab4f8]/60 font-bold uppercase whitespace-nowrap">
-        {label}
-      </span>
-      <span
-        className={`text-[0.62rem] font-black font-mono tracking-tight tabular-nums whitespace-nowrap ${valueClass} ${
-          glow ? "drop-shadow-[0_0_5px_currentColor]" : ""
-        }`}
-      >
-        {value}
-      </span>
-    </div>
-  );
-
-  // Linha 2 da barra de comando unificada — sem contêiner/borda próprios
-  // (o anel do pulso crítico vive no contêiner da barra, no TopBar). O chip
-  // "Preço" saiu: o preço agora tem UMA ocorrência, na linha 1 da barra.
-  return (
-    <div className="flex flex-wrap items-stretch divide-x divide-[#8ab4f8]/10 border-t border-[#00f0ff15]">
-      <Chip label="Liquidez" value={liquidezLabel} valueClass={liquidezColor} />
-      <Chip label="Risco" value={riskLabel} valueClass={riskColor} />
-      <Chip label="Contexto Global" value={gmilLabel} valueClass="text-[#8ab4f8]" />
-      <Chip label="Sistema" value={systemLabel} valueClass={systemColor} />
-      <Chip label="Dados" value={`${feedsUp}/4`} valueClass={dataColor} />
-      <Chip label="Última Att." value={updateLabel} valueClass="text-[#8ab4f8]/80" />
-    </div>
   );
 }
 
@@ -4840,9 +4780,10 @@ function EventsWidget() {
 // os dois nunca podem mostrar números diferentes sob o mesmo rótulo.
 function GmilContextWidget() {
   // Fase J (diretriz 2, ZERO REPETIÇÃO): o número do consenso global mora
-  // EXCLUSIVAMENTE na barra operacional (EssentialStrip) — o cabeçalho
-  // duplicado que este painel exibia foi removido; aqui ficam só os
-  // conteúdos únicos deste painel (vieses por categoria + provedores).
+  // EXCLUSIVAMENTE no painel "Decision Context" da aba ANALYSIS (relocado
+  // da antiga barra operacional no redesenho radical do comando) — o
+  // cabeçalho duplicado que este painel exibia foi removido; aqui ficam só
+  // os conteúdos únicos deste painel (vieses por categoria + provedores).
   const { gmilProviders, gmilBiases } = useContext(WidgetContext) || {};
   const providers = gmilProviders ?? [];
 
@@ -4879,9 +4820,9 @@ function GmilContextWidget() {
           them (confirmed on MarketRegimeWidget in this same audit pass). */}
       <div className="flex flex-col gap-1.5 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
         {/* Fase J: o cabeçalho "CONSENSO GLOBAL" que morava aqui foi
-            removido — o número já vive na barra operacional (EssentialStrip),
-            e a regra de Zero Repetição da Fase J proíbe o mesmo indicador em
-            dois painéis. */}
+            removido — o número já vive no painel Decision Context (aba
+            ANALYSIS), e a regra de Zero Repetição da Fase J proíbe o mesmo
+            indicador em dois painéis. */}
         {/* Fase E: vieses por categoria (V15 Cap. 6) — INST (derivativos/
             on-chain), MACRO (sem fonte keyless ainda: AGUARDANDO honesto),
             LIQ (agregados de mercado). */}
@@ -5313,9 +5254,10 @@ function AssetHeatmapWidget() {
 // honestamente NÃO_APLICAVEL: este terminal só tem uma fonte real de preço
 // (Binance); fabricar um consenso multi-exchange que não existe violaria o
 // princípio de dado real deste projeto. "Integridade dos dados" não vira uma
-// linha aqui de propósito — já é a faixa "DADOS n/4" sempre visível da
-// EssentialStrip; repetir o mesmo cálculo aqui seria a exata duplicação que
-// a LEI 25 (Self Audit) pede para eliminar, não para criar.
+// linha aqui de propósito — já é o campo "Data Feeds n/4" do painel Decision
+// Context (aba ANALYSIS, relocado da antiga barra operacional); repetir o
+// mesmo cálculo aqui seria a exata duplicação que a LEI 25 (Self Audit) pede
+// para eliminar, não para criar.
 // Idade legível de um timestamp real — chamada por GmilContextWidget (idade
 // de cada provedor) e aqui (idade de preço/livro/ciclo/HTF/GMIL), em vez de
 // cada widget reimplementar a mesma conta (achado da auditoria de
@@ -5329,9 +5271,10 @@ function ageLabelOf(updatedAt: number | null): string {
 }
 
 // Rótulo do Consensus Score (-1..1 -> string com sinal, ex.: "+42"/"-17") —
-// chamado por EssentialStrip e GmilContextWidget, que antes calculavam o
-// mesmo formato duas vezes a partir do mesmo institutionalConsensus.score
-// (mesmo achado de duplicação da auditoria de Sincronização Global).
+// chamado pelo painel Decision Context (aba ANALYSIS) e por GmilContextWidget,
+// que antes calculavam o mesmo formato duas vezes a partir do mesmo
+// institutionalConsensus.score (mesmo achado de duplicação da auditoria de
+// Sincronização Global).
 function formatConsensusScore(score: number | null): string {
   return score === null ? AWAIT : `${score >= 0 ? "+" : ""}${(score * 100).toFixed(0)}`;
 }
