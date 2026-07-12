@@ -43,3 +43,13 @@ describe('Layout/Navigation audit finding: Workspace Manager modal always render
     expect(app).not.toMatch(/zIndex: (1001|1002|1003|\d{5,})/);
   });
 });
+
+describe('UX audit finding: static vh can overflow the true visible area outside the installed PWA (address bar visible)', () => {
+  it('WorkspaceManagerPanel dialog and the terminal strip use dvh, matching the root — never a bare vh', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('cyber-panel w-full max-w-2xl max-h-[80dvh] flex flex-col bg-[#010308]/98');
+    expect(app).toContain('terminal-strip shrink-0 flex flex-col gap-2 max-h-[46dvh] min-[1120px]:max-h-[38dvh] overflow-y-auto scrollbar-hide');
+    // Nenhum vh solto (que não seja parte de "dvh") deve sobrar no arquivo.
+    expect(app).not.toMatch(/\[[0-9]+vh\]/);
+  });
+});

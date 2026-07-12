@@ -2115,7 +2115,7 @@ export default function App() {
                     widgets.events.visible ||
                     widgets.neural_core.visible ||
                     widgets.asset_heatmap.visible) && (
-                    <div className="terminal-strip shrink-0 flex flex-col gap-2 max-h-[46vh] min-[1120px]:max-h-[38vh] overflow-y-auto scrollbar-hide">
+                    <div className="terminal-strip shrink-0 flex flex-col gap-2 max-h-[46dvh] min-[1120px]:max-h-[38dvh] overflow-y-auto scrollbar-hide">
                       {!widgets.se_core.collapsed &&
                         (marketMode === "TRADFI" ? (
                           <TradFiEmptyState compact assetLabel="SIRIFORM CORE · DETALHE COMPLETO" />
@@ -2308,7 +2308,7 @@ function WorkspaceManagerPanel() {
       onClick={() => setWorkspaceManagerOpen?.(false)}
     >
       <div
-        className="cyber-panel w-full max-w-2xl max-h-[80vh] flex flex-col bg-[#010308]/98"
+        className="cyber-panel w-full max-w-2xl max-h-[80dvh] flex flex-col bg-[#010308]/98"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="cyber-header flex items-center justify-between">
