@@ -534,6 +534,44 @@ export async function getChartCandles(
   }));
 }
 
+// Auditoria de arquitetura (revisão completa): paginação histórica real do
+// gráfico — achado: CHART_CANDLE_LIMIT era uma janela fixa de 200 candles,
+// sem NENHUM caminho para carregar mais história ao arrastar para trás
+// (borda dura, achado da auditoria de Chart Engine). Deliberadamente NUNCA
+// passa pelo Market Data Bus/requestFuturesCandleSnapshot acima: o Bus é um
+// cache de "snapshot MAIS RECENTE" por symbol:timeframe, compartilhado por
+// todo o app real (este mesmo getChartCandles, o ciclo de análise, o
+// contexto HTF) — escrever uma página antiga naquele mesmo buffer
+// corromperia o snapshot canônico que os outros consumidores dependem
+// sempre estar atualizado. Esta função chama o conector real diretamente
+// (mesmo collectBinanceFuturesKlines, já importado acima), uma busca
+// avulsa — nunca cacheada, nunca publicada a assinante nenhum. Fail-closed
+// puro: qualquer falha real vira null, nunca uma página fabricada.
+export async function getOlderChartCandles(
+  symbol: string,
+  beforeTime: number,
+  limit: number,
+  timeframe: string,
+): Promise<Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }> | null> {
+  try {
+    // beforeTime é o `time` (epoch SEGUNDOS) do candle mais antigo já
+    // carregado no gráfico; endTime da Binance é epoch MILISSEGUNDOS e
+    // inclusivo (open time <= endTime) — subtrai 1s antes de converter
+    // para nunca reincluir esse mesmo candle numa borda inclusiva
+    // (garantido menor que a duração de qualquer timeframe real, mesmo o
+    // de 1m).
+    const raw = await collectBinanceFuturesKlines({
+      symbol: `${symbol}-PERP`, timeframe, limit, endTime: (beforeTime - 1) * 1000,
+    });
+    if (!Array.isArray(raw) || raw.length === 0) return null;
+    return raw.map((c: { t: number; o: number; h: number; l: number; c: number; v: number }) => ({
+      time: c.t, open: c.o, high: c.h, low: c.l, close: c.c, volume: c.v,
+    }));
+  } catch {
+    return null;
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // V-MAX Fase 1.3 — Volume Profile real via WASM Quant Core no quant-worker.
 //

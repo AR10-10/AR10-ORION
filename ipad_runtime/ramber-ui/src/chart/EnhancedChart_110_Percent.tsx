@@ -30,6 +30,7 @@ import {
   type ISeriesApi,
   type IPriceLine,
   type UTCTimestamp,
+  type LogicalRange,
 } from "lightweight-charts";
 // V-MAX Fase 1 (superfície visual, fechamento do §3.1): linha de CVD real
 // — a série do orderflowHistory (Fase 1.2) com eixo Y próprio nativo.
@@ -123,6 +124,38 @@ interface EnhancedChartProps {
   // silk-thread price lines with English labels. Optional and fail-closed:
   // null/absent draws nothing.
   tradePlan?: TradePlan | null;
+  // Auditoria de arquitetura (revisão completa) — paginação histórica
+  // real: chamado quando o usuário arrasta perto da borda esquerda dos
+  // candles já carregados (ver efeito de subscribeVisibleLogicalRangeChange
+  // abaixo). Optional/fail-closed: sem esta prop, o gráfico continua
+  // exatamente como antes — janela fixa, sem paginação. App.tsx decide
+  // como buscar/mesclar a página nova; este componente só detecta a
+  // intenção real do usuário.
+  onRequestOlderCandles?: () => void;
+}
+
+// Auditoria de arquitetura (revisão completa) — paginação histórica real:
+// detecta se `next` é EXATAMENTE `prev` com N candles novos prependados na
+// frente (mesmo sufixo, mesma ordem, comparado por `time` — App.tsx sempre
+// cria arrays novos, nunca a mesma referência). É o ÚNICO caso em que o
+// gráfico precisa deslocar a faixa visível manualmente (ver efeito de
+// `data` abaixo) para não "pular" para trás quando o usuário está parado
+// perto da borda esquerda logo após uma página antiga chegar. Retorna 0
+// para qualquer outro tipo de atualização real (troca de timeframe,
+// refresh periódico do topo, primeira carga) — nesses casos o
+// comportamento padrão de setData() já preserva pan/zoom corretamente
+// (comentário original do efeito abaixo), nenhum deslocamento é
+// necessário ou seguro.
+export function detectPrependCount(
+  prev: EnhancedChartCandle[] | null | undefined,
+  next: EnhancedChartCandle[] | null | undefined,
+): number {
+  if (!prev || !next || prev.length === 0 || next.length <= prev.length) return 0;
+  const count = next.length - prev.length;
+  for (let i = 0; i < prev.length; i++) {
+    if (next[count + i]?.time !== prev[i]?.time) return 0;
+  }
+  return count;
 }
 
 // Mesmo formato de texto que o gráfico antigo já usava para S1/R1 — só a
@@ -148,6 +181,7 @@ export function EnhancedChart_110_Percent({
   livePrice,
   activeTimeframe,
   tradePlan,
+  onRequestOlderCandles,
 }: EnhancedChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -290,6 +324,16 @@ export function EnhancedChart_110_Percent({
   // recarregar tudo)": trocar chartTimeframe em App.tsx só troca o
   // conteúdo de `data`, este efeito só chama setData() na mesma série, e o
   // pan/zoom/crosshair do operador nunca são resetados por isso.
+  //
+  // Auditoria de arquitetura (revisão completa) — paginação histórica
+  // real: a EXCEÇÃO a essa regra é um prepend real (detectPrependCount >
+  // 0, ver função acima). Nesse caso específico, TODO índice de barra já
+  // visível desloca (candles novos entraram na frente), então a faixa
+  // visível REAL (mesma faixa em índice de tempo) teria mudado sob os pés
+  // do usuário — captura a faixa antes, aplica o mesmo deslocamento
+  // depois. Para qualquer outro tipo de atualização, prependedCount é 0 e
+  // este bloco não faz nada — comportamento idêntico ao de sempre.
+  const prevChartDataRef = useRef<EnhancedChartCandle[]>([]);
   useEffect(() => {
     if (!seriesRef.current || !data || data.length === 0) return;
     const formatted = data
@@ -301,7 +345,16 @@ export function EnhancedChart_110_Percent({
         low: c.low,
         close: c.close,
       }));
+    const prependedCount = detectPrependCount(prevChartDataRef.current, data);
+    const savedRange = prependedCount > 0 ? chartRef.current?.timeScale().getVisibleLogicalRange() ?? null : null;
     seriesRef.current.setData(formatted);
+    if (prependedCount > 0 && savedRange && chartRef.current) {
+      chartRef.current.timeScale().setVisibleLogicalRange({
+        from: savedRange.from + prependedCount,
+        to: savedRange.to + prependedCount,
+      });
+    }
+    prevChartDataRef.current = data;
   }, [data]);
 
   // Correção de latência (barra superior ↔ gráfico): patch cirúrgico da
@@ -319,6 +372,43 @@ export function EnhancedChart_110_Percent({
     if (!patched) return;
     seriesRef.current.update({ time: patched.time as UTCTimestamp, open: patched.open, high: patched.high, low: patched.low, close: patched.close });
   }, [livePrice, activeTimeframe, data]);
+
+  // Auditoria de arquitetura (revisão completa) — paginação histórica
+  // real: achado da auditoria de Chart Engine — não existia NENHUM
+  // caminho para carregar mais história ao arrastar para trás (borda dura
+  // assim que os candles carregados terminavam). Dispara
+  // onRequestOlderCandles quando a borda ESQUERDA da faixa visível chega
+  // perto do candle mais antigo já carregado — App.tsx decide como
+  // buscar/mesclar/limitar a página nova (fetch real, dedupe, teto de
+  // memória); este componente só detecta a intenção real do usuário (ele
+  // parou de arrastar perto da borda), nunca decide o que fazer com isso.
+  // EDGE_BARS é medido em barras (índice lógico), não em pixels — a mesma
+  // margem funciona igual em qualquer nível de zoom. `requested` é
+  // reamarrado (não um ref de módulo) a cada nova assinatura: uma vez
+  // disparado, só dispara de novo depois que a faixa se afasta da borda —
+  // o que acontece sozinho após um prepend bem-sucedido (a faixa é
+  // deslocada pelo efeito de `data` acima), ou quando o usuário rola para
+  // longe manualmente. Uma falha real (sem mais história, ou erro
+  // transitório de rede) nunca entra num loop de novas tentativas.
+  useEffect(() => {
+    if (!chartReady || !onRequestOlderCandles) return;
+    const EDGE_BARS = 20;
+    let requested = false;
+    const handler = (range: LogicalRange | null) => {
+      if (!range || !data || data.length === 0) return;
+      if (range.from > EDGE_BARS) {
+        requested = false;
+        return;
+      }
+      if (requested) return;
+      requested = true;
+      onRequestOlderCandles();
+    };
+    chartReady.chart.timeScale().subscribeVisibleLogicalRangeChange(handler);
+    return () => {
+      chartReady.chart.timeScale().unsubscribeVisibleLogicalRangeChange(handler);
+    };
+  }, [chartReady, onRequestOlderCandles, data]);
 
   // S1/R1 reais — o MESMO engine.support/resistance que os outros widgets
   // já exibem, aqui como price lines nativas (createPriceLine), nunca uma

@@ -51,6 +51,7 @@ import {
   type PriceZone,
   type LiquidityZone,
   getChartCandles,
+  getOlderChartCandles,
   computeRealVolumeProfile,
   computeRealFibonacciConfluence,
   computeRealTrustScore,
@@ -236,6 +237,37 @@ type AssetSymbol = string;
 // capacidade do buffer da chave compartilhada com o ciclo de análise —
 // mudança de Bus, não deste consumidor.
 const CHART_CANDLE_LIMIT = 200;
+
+// Auditoria de arquitetura (revisão completa) — paginação histórica real:
+// getOlderChartCandles (engine-bridge.ts) busca DIRETO do conector, nunca
+// pelo Bus (ver comentário daquela função) — então este teto é só desta
+// tela, não da chave compartilhada symbol:timeframe acima. Página do mesmo
+// tamanho da carga inicial (consistência); teto 10x maior que a janela
+// inicial preserva o mesmo espírito de "RAM previsível no iPad" do
+// CandleRingBuffer, só que numa magnitude que já entrega história real
+// útil (arrastar bem para trás) sem crescer sem limite.
+const CHART_HISTORY_PAGE_SIZE = 200;
+const MAX_CHART_HISTORY = 2000;
+
+export type ChartCandle = { time: number; open: number; high: number; low: number; close: number; volume: number };
+
+// Funde o refresh periódico (`fresh`, sempre "os CHART_CANDLE_LIMIT mais
+// recentes") de volta no array que pode já ter sido estendido para trás
+// por paginação — nunca um replace cego, que apagaria história real que o
+// usuário já carregou arrastando. Tudo em `existing` estritamente MAIS
+// ANTIGO que o primeiro candle de `fresh` é preservado; a partir dali,
+// `fresh` é autoritativo (pega qualquer correção real da vela em
+// formação). Sem paginação nenhuma ainda, existing.length <= fresh.length
+// e isto se comporta identico a um replace — zero mudança de
+// comportamento no caso comum.
+export function mergeFreshTail(existing: ChartCandle[], fresh: ChartCandle[]): ChartCandle[] {
+  if (existing.length === 0 || fresh.length === 0) return fresh;
+  const freshOldestTime = fresh[0].time;
+  const olderPart = existing.filter((c) => c.time < freshOldestTime);
+  if (olderPart.length === 0) return fresh;
+  const merged = olderPart.concat(fresh);
+  return merged.length > MAX_CHART_HISTORY ? merged.slice(merged.length - MAX_CHART_HISTORY) : merged;
+}
 
 const fmt = (v: number | null | undefined, d = 2) =>
   num(v)
@@ -558,7 +590,9 @@ export default function App() {
     try {
       const candles = await getChartCandles(selectedAsset, CHART_CANDLE_LIMIT, chartTimeframeRef.current);
       if (!candles) throw new Error('market_data_bus_sem_candles_validos');
-      setChartData(candles);
+      // Auditoria de arquitetura: merge, nunca um replace cego — preserva
+      // história real que a paginação (arrastar para trás) já carregou.
+      setChartData((prev) => mergeFreshTail(prev, candles));
       // Local-First: persist the real series (fire-and-forget — a storage
       // failure never blocks or delays the live path).
       void saveCandles(selectedAsset, chartTimeframeRef.current as Timeframe, candles).catch(() => {});
@@ -813,6 +847,58 @@ export default function App() {
       cancelled = true;
     };
   }, [chartTimeframe, selectedAsset]);
+
+  // Auditoria de arquitetura (revisão completa) — paginação histórica
+  // real: "busca em andamento" e "sem mais história" são escopados a uma
+  // combinação symbol:timeframe específica (getOlderChartCandles busca
+  // exatamente essa chave) — trocar qualquer um dos dois precisa
+  // reabilitar os dois refs, senão o operador ficaria travado achando que
+  // não há mais história só por ter esgotado num timeframe diferente.
+  const isFetchingOlderCandlesRef = useRef(false);
+  const noMoreOlderCandlesRef = useRef(false);
+  useEffect(() => {
+    noMoreOlderCandlesRef.current = false;
+  }, [chartTimeframe, selectedAsset]);
+
+  // Chamado pelo gráfico quando o usuário arrasta perto da borda esquerda
+  // dos candles já carregados (ver onRequestOlderCandles em
+  // EnhancedChart_110_Percent). Busca real, avulsa, direto do conector —
+  // nunca pelo Bus (ver getOlderChartCandles). Dedupe por `time` contra o
+  // que já está carregado é a rede de segurança final: a própria busca já
+  // pede endTime = candle mais antigo carregado menos 1s, então overlap
+  // real seria só um achado de borda, nunca o caso comum.
+  const handleRequestOlderCandles = useCallback(async () => {
+    if (isFetchingOlderCandlesRef.current || noMoreOlderCandlesRef.current) return;
+    if (chartData.length === 0) return;
+    isFetchingOlderCandlesRef.current = true;
+    try {
+      const oldestTime = chartData[0].time;
+      const older = await getOlderChartCandles(selectedAsset, oldestTime, CHART_HISTORY_PAGE_SIZE, chartTimeframe);
+      if (!older || older.length === 0) {
+        noMoreOlderCandlesRef.current = true;
+        return;
+      }
+      setChartData((prev) => {
+        if (prev.length === 0) return prev;
+        const existingTimes = new Set(prev.map((c) => c.time));
+        const deduped = older.filter((c) => !existingTimes.has(c.time));
+        if (deduped.length === 0) {
+          noMoreOlderCandlesRef.current = true;
+          return prev;
+        }
+        const merged = deduped.concat(prev);
+        // Corta do lado mais ANTIGO quando estoura o teto — o mais recente
+        // nunca é descartado, mesmo lado que mergeFreshTail já protege.
+        return merged.length > MAX_CHART_HISTORY ? merged.slice(merged.length - MAX_CHART_HISTORY) : merged;
+      });
+    } catch {
+      // Fail-closed: uma falha transitória só significa "tenta de novo na
+      // próxima vez que o usuário arrastar perto da borda" — nunca uma
+      // página fabricada.
+    } finally {
+      isFetchingOlderCandlesRef.current = false;
+    }
+  }, [selectedAsset, chartTimeframe, chartData]);
 
   // Real engine cycle — WASM Quant Engine + research pipeline (engine-bridge.ts).
   // 30s cadence: the 15m candle's close evolves continuously, and the target
@@ -1908,7 +1994,7 @@ export default function App() {
                             assetLabel={`${selectedTradFiAsset?.symbol ?? ""} · ${selectedTradFiAsset?.name ?? ""}`}
                           />
                         ) : (
-                          <ChartWidget chartData={chartData} />
+                          <ChartWidget chartData={chartData} onRequestOlderCandles={handleRequestOlderCandles} />
                         ))}
                     </div>
 
@@ -4110,7 +4196,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
   );
 }
 
-function ChartWidget({ chartData }: any) {
+function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // Real Fair Value Gaps / Order Blocks / Liquidity zones — computed once
   // in App() (see contextValue) against this exact candle array, shared
   // with the Neural Core widget's tactical-context prompt so both use the
@@ -4205,6 +4291,7 @@ function ChartWidget({ chartData }: any) {
             livePrice={livePrice.price}
             activeTimeframe={chartTimeframe as Timeframe}
             tradePlan={chartTradePlan}
+            onRequestOlderCandles={onRequestOlderCandles}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
