@@ -46,6 +46,7 @@ import type { FibonacciConfluenceMatrix } from "../nexus/fibonacci-confluence";
 import type { CouncilDecision } from "../nexus/council";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
+import type { TradePlan } from "../nexus/trade-plan";
 import {
   ingestAffectiveEvent,
   computeCpi,
@@ -178,6 +179,10 @@ export interface UnifiedSnapshotState {
   // Fase 2 — armadilhas por corroboração de eventos REAIS consumados.
   // Lista vazia é o estado honesto comum, não erro.
   trapSignals: TrapSignal[];
+  // Signal Precision order (phase 4) — actionable plan from REAL structure
+  // (entry zone / stop / target / R:R). null = honest "no coherent plan"
+  // (no directional stance, risk gate locked, or missing real structure).
+  tradePlan: TradePlan | null;
 
   // §5 ORGANISMO
   // Estado REAL do motor de análise (engineStatus/direção/confiança do
@@ -241,6 +246,7 @@ interface UnifiedSnapshotActions {
   setCouncil: (decision: CouncilDecision | null) => void;
   setScenario: (projection: ScenarioProjection | null) => void;
   setTrapSignals: (traps: TrapSignal[]) => void;
+  setTradePlan: (plan: TradePlan | null) => void;
 
   // §5 ORGANISMO
   setCore: (core: CoreSnapshot) => void;
@@ -277,6 +283,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     council: null,
     scenario: null,
     trapSignals: [],
+    tradePlan: null,
     // §5 ORGANISMO
     core: EMPTY_CORE,
     health: EMPTY_HEALTH,
@@ -317,6 +324,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setCouncil: (decision) => set((s) => { s.council = decision; }),
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
     setTrapSignals: (traps) => set((s) => { s.trapSignals = traps; }),
+    setTradePlan: (plan) => set((s) => { s.tradePlan = plan; }),
     // §5 ORGANISMO
     setCore: (core) => set((s) => { s.core = core; }),
     setHealth: (health) => set((s) => { s.health = health; }),
@@ -382,6 +390,8 @@ export const useScenarioSnapshot = (): ScenarioProjection | null =>
   useUnifiedSnapshotStore((s) => s.scenario);
 export const useTrapSignalsSnapshot = (): TrapSignal[] =>
   useUnifiedSnapshotStore((s) => s.trapSignals ?? EMPTY_TRAPS);
+export const useTradePlanSnapshot = (): TradePlan | null =>
+  useUnifiedSnapshotStore((s) => s.tradePlan);
 
 // §5 ORGANISMO
 export const useCoreSnapshot = (): CoreSnapshot => useUnifiedSnapshotStore((s) => s.core);

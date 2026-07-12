@@ -28,6 +28,7 @@ import { useUnifiedSnapshotStore } from '../src/store/unified-snapshot-store';
 import { buildCouncilDecision } from '../src/nexus/council';
 import { buildScenarioProjection, type ScenarioLevel } from '../src/nexus/scenario-engine';
 import { detectInstitutionalTraps } from '../src/nexus/trap-detection';
+import { buildTradePlan } from '../src/nexus/trade-plan';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
@@ -65,6 +66,7 @@ beforeEach(() => {
   s.setCouncil(null);
   s.setScenario(null);
   s.setTrapSignals([]);
+  s.setTradePlan(null);
   s.setSymbol('BTC');
   s.setActiveTimeframe('15m');
   s.setOffline(false);
@@ -159,6 +161,27 @@ describe('OrganismOrchestrator: escrita na store É a publicação — um write 
     useUnifiedSnapshotStore.getState().setTrapSignals(traps);
     expect(received).toHaveLength(1);
     expect(received[0]).toBe(traps);
+  });
+
+  it('setTradePlan (real engine output) publishes BRAIN.TRADE_PLAN.UPDATED with the same reference', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('BRAIN.TRADE_PLAN.UPDATED', (p) => received.push(p.plan));
+    const plan = buildTradePlan({
+      stance: 'LONG',
+      riskGated: false,
+      price: 50_000,
+      zones: [{ low: 49_200, high: 49_500, kind: 'OB_BULLISH' }],
+      levels: [
+        { price: 48_800, kind: 'SR_SUPPORT_1' },
+        { price: 51_000, kind: 'SR_RESISTANCE_1' },
+      ],
+    });
+    expect(plan).not.toBeNull(); // sanity: the real engine produced a plan
+    useUnifiedSnapshotStore.getState().setTradePlan(plan);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(plan);
   });
 
   it('null explícito (fail-closed na troca de ativo) é transição REAL e publicada — assinante sabe que o dado se foi', () => {

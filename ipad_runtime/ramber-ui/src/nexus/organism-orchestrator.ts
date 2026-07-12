@@ -115,6 +115,9 @@ export class OrganismOrchestrator {
       if (state.trapSignals !== prev.trapSignals) {
         this.bus.emit({ type: "BRAIN.TRAPS.UPDATED", payload: { traps: state.trapSignals } });
       }
+      if (state.tradePlan !== prev.tradePlan) {
+        this.bus.emit({ type: "BRAIN.TRADE_PLAN.UPDATED", payload: { plan: state.tradePlan } });
+      }
       // §5 ORGANISMO — HEALTH.CHANGED continua do Health Monitor (publicador
       // único histórico da Fase 0.8) e DATA.* do CrossExchangeService: um
       // evento nunca ganha um segundo emissor.

@@ -15,6 +15,7 @@ import type { FibonacciConfluenceMatrix } from "./fibonacci-confluence";
 import type { CouncilDecision } from "./council";
 import type { ScenarioProjection } from "./scenario-engine";
 import type { TrapSignal } from "./trap-detection";
+import type { TradePlan } from "./trade-plan";
 import type { AffectiveMemoryState } from "./affective-memory";
 import type { TrustScoreSnapshot } from "../engine-bridge";
 
@@ -51,6 +52,7 @@ export type NexusEvent =
   | { type: "BRAIN.COUNCIL.UPDATED"; payload: { decision: CouncilDecision | null } }
   | { type: "BRAIN.SCENARIO.UPDATED"; payload: { projection: ScenarioProjection | null } }
   | { type: "BRAIN.TRAPS.UPDATED"; payload: { traps: TrapSignal[] } }
+  | { type: "BRAIN.TRADE_PLAN.UPDATED"; payload: { plan: TradePlan | null } }
   // §5 ORGANISMO
   | { type: "ORGANISM.TRUST.UPDATED"; payload: { score: TrustScoreSnapshot | null } }
   // Uma ingestão afetiva real = um evento (a fatia affectiveMemory é

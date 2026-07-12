@@ -28,6 +28,7 @@ const RESET = {
   cpi: null,
   scenario: null,
   trapSignals: [],
+  tradePlan: null,
   trustScore: null,
 };
 

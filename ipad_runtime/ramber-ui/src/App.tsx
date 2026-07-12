@@ -11,7 +11,9 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot } from "./store/unified-snapshot-store";
+// Signal Precision order (phase 4): actionable plan from real structure.
+import { buildTradePlan, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -181,7 +183,7 @@ export const WidgetContext = createContext<any>(null);
 // either way) — deliberately out of Fase B's first pass, see engine-bridge.ts.
 // ─────────────────────────────────────────────────────────────────────────────
 const DASH = "—";
-const AWAIT = "AGUARDANDO";
+const AWAIT = "AWAITING";
 
 const num = (v: any): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -353,7 +355,7 @@ export default function App() {
   // The currently analyzed asset. Included in the SAME effect dependency
   // arrays as bootGeneration below — switching it tears down and re-opens
   // the market-data WS/REST, engine cycle, and order-flow feed exactly like
-  // a manual "REINICIAR SISTEMA" does, just scoped to the new symbol
+  // a manual "RESTART SYSTEM" does, just scoped to the new symbol
   // instead of the same one.
   const [selectedAsset, setSelectedAsset] = useState<AssetSymbol>("BTC");
 
@@ -637,7 +639,7 @@ export default function App() {
   // old asset's price/candles/order book/signal/confidence would sit on
   // screen for a moment mislabeled as the new asset's. Deliberately its own
   // effect, scoped only to [selectedAsset] (not bootGeneration) — a manual
-  // "REINICIAR SISTEMA" on the SAME asset should keep showing last-known-
+  // "RESTART SYSTEM" on the SAME asset should keep showing last-known-
   // good data while it reconnects, per existing fail-closed behavior; only
   // an actual asset change should blank the screen back to AGUARDANDO.
   useEffect(() => {
@@ -1394,6 +1396,52 @@ export default function App() {
     );
   }, [councilFromSnapshot, priceFromSnapshot, smcZones, engine, fibonacciMatrix, volumeProfileSnapshot]);
 
+  // Signal Precision order (phase 4): actionable Trade Plan — when the
+  // Council reads LONG/SHORT, derive entry zone / stop / target from REAL
+  // structure only (unmitigated Order Blocks + FVGs, S1/R1, liquidity
+  // pools as targets, Fibonacci confluence, Volume Profile POC/HVN).
+  // Store-mediated like the scenario effect above: council read from the
+  // snapshot slice, plan written to its own slice, published on the bus by
+  // the orchestrator (BRAIN.TRADE_PLAN.UPDATED). Advisory only — this
+  // terminal never routes orders (permanent read-only design).
+  useEffect(() => {
+    const zones: TradePlanStructureZone[] = [];
+    smcZones.orderBlocks.filter((z) => !z.mitigated).forEach((z) => {
+      zones.push({ low: z.bottom, high: z.top, kind: `OB_${z.type}` });
+    });
+    smcZones.fairValueGaps.filter((z) => !z.mitigated).forEach((z) => {
+      zones.push({ low: z.bottom, high: z.top, kind: `FVG_${z.type}` });
+    });
+    const planLevels: TradePlanLevelInput[] = [];
+    const level = (kind: string, price: number | null | undefined) => {
+      if (typeof price === "number" && Number.isFinite(price)) planLevels.push({ price, kind });
+    };
+    level("SR_SUPPORT_1", engine?.support);
+    level("SR_RESISTANCE_1", engine?.resistance);
+    smcZones.liquidityZones.filter((z) => !z.swept).forEach((z) => {
+      level(z.type === "EQUAL_HIGH" ? "EQH" : "EQL", z.price);
+    });
+    (fibonacciMatrix?.levels ?? []).filter((l) => l.score > 0).forEach((l) => {
+      level(`FIB_${(l.ratio * 100).toFixed(1)}`, l.price);
+    });
+    const vpForPlan = volumeProfileSnapshot?.fixedRange;
+    if (vpForPlan) {
+      level("VP_POC", vpForPlan.pocPrice);
+      vpForPlan.hvnIndices.forEach((i) => {
+        level("VP_HVN", bucketMidPrice(i, vpForPlan.rangeMin, vpForPlan.rangeMax, vpForPlan.bucketCount));
+      });
+    }
+    useUnifiedSnapshotStore.getState().setTradePlan(
+      buildTradePlan({
+        stance: councilFromSnapshot?.stance ?? null,
+        riskGated: councilFromSnapshot?.riskGated ?? true,
+        price: priceFromSnapshot.price,
+        zones,
+        levels: planLevels,
+      }),
+    );
+  }, [councilFromSnapshot, priceFromSnapshot, smcZones, engine, fibonacciMatrix, volumeProfileSnapshot]);
+
   // V-MAX Fase 2 (armadilhas institucionais): corroboração de eventos
   // REAIS — sweeps consumados (flag swept do motor SMC) + sinais reais de
   // ABSORPTION/EXHAUSTION na janela. Lista vazia = estado honesto comum.
@@ -1712,7 +1760,7 @@ export default function App() {
               onClick={() => window.location.reload()}
               className="shrink-0 px-3 py-1.5 rounded border border-[#ff0055] bg-[#ff005520] text-[#ff0055] font-black tracking-[0.15em] text-[0.55rem] uppercase active:bg-[#ff005535]"
             >
-              REINICIAR SISTEMA
+              RESTART SYSTEM
             </button>
           </div>
         )}
@@ -1893,7 +1941,7 @@ export default function App() {
                           {widgets.orderbook.visible && (
                             <div className="min-w-[260px] flex-1 flex flex-col">
                               {marketMode === "TRADFI" ? (
-                                <TradFiEmptyState compact assetLabel="LIVRO DE OFERTAS" />
+                                <TradFiEmptyState compact assetLabel="ORDER BOOK" />
                               ) : (
                                 <OrderBookWidget data={priceData} book={orderBook} />
                               )}
@@ -1911,7 +1959,7 @@ export default function App() {
                           {widgets.heatmap.visible && (
                             <div className="min-w-[240px] flex-1 flex flex-col">
                               {marketMode === "TRADFI" ? (
-                                <TradFiEmptyState compact assetLabel="MAPA DE LIQUIDEZ" />
+                                <TradFiEmptyState compact assetLabel="LIQUIDITY MAP" />
                               ) : (
                                 <HeatmapWidget book={orderBook} data={priceData} />
                               )}
@@ -1964,23 +2012,23 @@ const WIDGET_LABELS: { [key: string]: string } = {
   // exibido no próprio Widget do gráfico já deriva corretamente de
   // realCycle.instrumentType; só este rótulo do painel de Configuração
   // (nome "oficial" do módulo) estava com o texto antigo.
-  chart: "GRÁFICO · BINANCE FUTUROS",
-  orderflow: "FLUXO DE ORDENS · LIVRO REAL",
-  heatmap: "MAPA DE LIQUIDEZ · PROFUNDIDADE REAL",
+  chart: "CHART · BINANCE FUTURES",
+  orderflow: "ORDER FLOW · REAL BOOK",
+  heatmap: "LIQUIDITY MAP · REAL DEPTH",
   market_direction: "VETOR DE MERCADO",
   se_core: "NÚCLEO DE INTELIGÊNCIA S.E.",
-  orderbook: "LIVRO DE OFERTAS",
-  scanner: "QUANT SCANNER · 24H REAL",
-  exposure: "EXPOSIÇÃO · READ-ONLY",
-  gmil_context: "CONTEXTO GLOBAL · GMIL",
-  events: "TELEMETRIA DE EVENTOS",
+  orderbook: "ORDER BOOK",
+  scanner: "QUANT SCANNER · REAL 24H",
+  exposure: "EXPOSURE · READ-ONLY",
+  gmil_context: "GLOBAL CONTEXT · GMIL",
+  events: "EVENT TELEMETRY",
   neural_core: "NÚCLEO NEURAL · LLAMA 3 (LOCAL) + SÍNTESE",
-  tactical: "LIQUIDAÇÕES INSTITUCIONAIS · REAL",
-  market_regime: "REGIME DE MERCADO",
-  asset_heatmap: "HEATMAP · ATIVOS",
+  tactical: "INSTITUTIONAL LIQUIDATIONS · REAL",
+  market_regime: "MARKET REGIME",
+  asset_heatmap: "HEATMAP · ASSETS",
   decision_validation: "VALIDAÇÃO MULTI-CAMADA",
-  system_health: "SAÚDE DO SISTEMA",
-  council: "CONSELHO MULTI-AGENTE",
+  system_health: "SYSTEM HEALTH",
+  council: "MULTI-AGENT COUNCIL",
 };
 
 function ConfigPanel() {
@@ -2034,14 +2082,14 @@ function ConfigPanel() {
 // setState per state jump) so picking "Floating" from "Hidden" flips both
 // the visible AND floating flags atomically, never a stale in-between.
 const WORKSPACE_MANAGER_MODULES: { id: string; label: string }[] = [
-  { id: "orderbook", label: "LIVRO DE OFERTAS" },
+  { id: "orderbook", label: "ORDER BOOK" },
   { id: "orderflow", label: "FLUXO DE ORDENS" },
-  { id: "heatmap", label: "MAPA DE LIQUIDEZ" },
+  { id: "heatmap", label: "LIQUIDITY MAP" },
   { id: "scanner", label: "QUANT SCANNER · 24H" },
   { id: "exposure", label: "EXPOSIÇÃO" },
-  { id: "events", label: "TELEMETRIA DE EVENTOS" },
+  { id: "events", label: "EVENT TELEMETRY" },
   { id: "neural_core", label: "NÚCLEO NEURAL · LLAMA 3" },
-  { id: "asset_heatmap", label: "HEATMAP · ATIVOS" },
+  { id: "asset_heatmap", label: "HEATMAP · ASSETS" },
   { id: "tactical", label: "LIQUIDAÇÕES INSTITUCIONAIS" },
 ];
 const WORKSPACE_STATES = ["hidden", "docked", "collapsed", "pinned", "floating"] as const;
@@ -2128,7 +2176,7 @@ function SiriformCoreCard() {
   const { engine, engineStatus, realCycle, widgets, toggleWidget } = useContext(WidgetContext) || {};
   const direction: Direction = engine?.direction ?? null;
   const collapsed = widgets?.se_core?.collapsed ?? true;
-  const statusLabel = engineStatus === "pending" ? AWAIT : engineStatus === "ok" ? "SINCRONIZADO" : "FALHOU";
+  const statusLabel = engineStatus === "pending" ? AWAIT : engineStatus === "ok" ? "SYNCED" : "FAILED";
   const statusColor =
     engineStatus === "pending" ? "text-[#f0d06f]" : engineStatus === "ok" ? "text-[#00ffaa]" : "text-[#ff0055]";
   const dirColor =
@@ -2180,7 +2228,7 @@ function SiriformCoreCard() {
         </div>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
-        <MiniStat label="Ciclo de Análise" value={statusLabel} color={statusColor} />
+        <MiniStat label="Analysis Cycle" value={statusLabel} color={statusColor} />
         <MiniStat label="Sinal" value={direction ?? AWAIT} color={dirColor} />
         <MiniStat label="k-NN Lorentz." value={lorentzianLabel} color="text-[#8ab4f8]" />
         <MiniStat
@@ -2293,8 +2341,8 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                 research pipeline cycle (engine-bridge.ts). Never implies a
                 signal exists before the real engine has actually produced
                 one.
-                Auditoria Mestra 360° (secao 3): rotulo mudou de "MOTOR WASM"
-                para "CICLO DE ANÁLISE" — este indicador reporta o estado do
+                Auditoria Mestra 360° (secao 3): rotulo mudou de "WASM ENGINE"
+                para "ANALYSIS CYCLE" — este indicador reporta o estado do
                 CICLO INTEIRO (sonda Binance + init WASM + pipeline de
                 pesquisa), nao so' do WASM; o WASM em si so' calcula SMA/EMA/
                 stddev/zscore dentro desse ciclo, nunca o sinal LONG/SHORT
@@ -2359,7 +2407,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                     tag="REF"
                   />
                   <LevelCard
-                    label={isShort ? "Alvo 1 · Suporte" : "Alvo 1 · Resistência"}
+                    label={isShort ? "Target 1 · Support" : "Target 1 · Resistance"}
                     value={target}
                     accent="#00ffaa"
                     // Protocolo Mestre (Sincronização Global): Alvo 1 agora vem
@@ -2370,7 +2418,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                     tag={target1Strength?.label ?? "REAL"}
                   />
                   <LevelCard
-                    label="Alvo 2 · Extensão"
+                    label="Target 2 · Extension"
                     value={engine.target2}
                     accent="#00ffaa"
                     // V11.5 Fase 6: quando o motor confirma força por
@@ -2759,7 +2807,7 @@ function NucleoVoiceOrb() {
   // "Offline: offline=true, Orb STALE/âmbar"): honestidade além do
   // engineStatus isolado. offline (navigator.onLine real, Fase 0.4) e
   // isDataFresh (Health Monitor real, Fase 0.8) agora existem — o orb
-  // nunca mostra "SINCRONIZADO" (teal) se a conexão caiu ou se os dados
+  // nunca mostra "SYNCED" (teal) se a conexão caiu ou se os dados
   // que alimentam o ciclo pararam de chegar, mesmo que o ÚLTIMO ciclo
   // completado tenha sido "ok". "pending" (aguardando o primeiro ciclo,
   // boot) é distinto de "desatualizado" (já teve ciclo ok, mas os dados
@@ -2782,13 +2830,13 @@ function NucleoVoiceOrb() {
   if (offline) {
     coreColor = "#f0d06f"; coreLabel = "OFFLINE";
   } else if (engineStatus === "error") {
-    coreColor = "#ff0055"; coreLabel = "FALHOU";
+    coreColor = "#ff0055"; coreLabel = "FAILED";
   } else if (engineStatus === "pending") {
     coreColor = "#f0d06f"; coreLabel = AWAIT;
   } else if (stale) {
     coreColor = "#f0d06f"; coreLabel = "DESATUALIZADO";
   } else {
-    coreColor = "#00ffaa"; coreLabel = "SINCRONIZADO";
+    coreColor = "#00ffaa"; coreLabel = "SYNCED";
   }
   const ttsSupported = voiceStatus.supported;
 
@@ -3089,7 +3137,7 @@ function TopBar({
           <button
             type="button"
             onClick={handleManualRestart}
-            title="Forçar reconexão de todos os feeds reais"
+            title="Force reconnection of all real feeds"
             className="ml-1 w-8 h-8 rounded-full border border-[#00f0ff40] bg-[#00f0ff08] flex items-center justify-center text-[#00f0ff] hover:bg-[#00f0ff20] active:scale-95 transition-all shadow-[0_0_10px_rgba(0,240,255,0.15)] animate-pulse"
           >
             <Power size={14} />
@@ -3542,6 +3590,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
   const fibMatrix = useFibonacciConfluenceSnapshot();
   const volumeProfile = useVolumeProfileSnapshot();
   const price = usePriceSnapshot();
+  const tradePlan = useTradePlanSnapshot();
 
   const pct = (v: number | null | undefined, digits = 0) =>
     typeof v === "number" && Number.isFinite(v) ? `${(v * 100).toFixed(digits)}%` : MODULE_EMPTY;
@@ -3593,6 +3642,21 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     const vp = volumeProfile?.fixedRange;
     body = (
       <>
+        <ModulePanel title="Trade Plan · real structure only (advisory, read-only)">
+          {tradePlan ? (
+            <>
+              <ModuleStat label="Direction" value={tradePlan.direction} tone={tradePlan.direction === "LONG" ? "long" : "short"} />
+              <ModuleStat label="Entry Zone" value={`${tradePlan.entry.low.toFixed(0)}–${tradePlan.entry.high.toFixed(0)} (${tradePlan.entry.basis})`} />
+              <ModuleStat label="Stop" value={`${tradePlan.stop.price.toFixed(0)} (${tradePlan.stop.basis})`} tone="short" />
+              <ModuleStat label="Target" value={`${tradePlan.target.price.toFixed(0)} (${tradePlan.target.basis})`} tone="long" />
+              <ModuleStat label="Risk : Reward" value={tradePlan.riskRewardRatio !== null ? `1 : ${tradePlan.riskRewardRatio.toFixed(2)}` : "DEGENERATE (honest)"} />
+            </>
+          ) : (
+            <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">
+              NO COHERENT PLAN — requires a directional Council stance, a clear risk gate and real structure on both sides (fail-closed)
+            </span>
+          )}
+        </ModulePanel>
         <ModulePanel title="Multi-Agent Council (real votes)">
           <ModuleStat label="Stance" value={council ? council.stance : MODULE_EMPTY} tone={council?.stance === "LONG" ? "long" : council?.stance === "SHORT" ? "short" : "neutral"} />
           <ModuleStat label="Agreement" value={council?.agreement !== null && council ? pct(council.agreement) : MODULE_EMPTY} />
@@ -3853,7 +3917,7 @@ function OrderFlowWidget() {
     t === "EXHAUSTION" ? "text-[#ff0055]" : t === "ABSORPTION" ? "text-[#f0d06f]" : "text-[#00ffaa]";
 
   return (
-    <Widget id="orderflow" title="FLUXO DE ORDENS · LIVRO REAL" flex="flex-[0.85] min-h-[110px]">
+    <Widget id="orderflow" title="ORDER FLOW · REAL BOOK" flex="flex-[0.85] min-h-[110px]">
       <div className="flex flex-col h-full justify-between gap-1 py-1">
         <div className="flex justify-between items-center px-1">
           <FlowMetric
@@ -3877,7 +3941,7 @@ function OrderFlowWidget() {
             color={num(imbalance) && imbalance >= 0 ? "text-[#00ffaa]" : "text-[#ff0055]"}
           />
           <FlowMetric
-            label="CVD SESSÃO"
+            label="SESSION CVD"
             value={cvdValue !== null ? `${cvdValue >= 0 ? "+" : ""}${cvdValue.toFixed(2)}` : DASH}
             color={cvdValue !== null && cvdValue >= 0 ? "text-[#00ffaa]" : "text-[#ff0055]"}
           />
@@ -3959,7 +4023,7 @@ function HeatmapWidget({ book, data }: any) {
   return (
     <Widget
       id="heatmap"
-      title="MAPA DE LIQUIDEZ · PROFUNDIDADE REAL"
+      title="LIQUIDITY MAP · REAL DEPTH"
       flex="flex-1 min-h-[160px]"
       extraHeader={
         <div className="flex gap-1 text-[0.45rem]">
@@ -4139,9 +4203,9 @@ function EssentialStrip() {
   // "Preço" saiu: o preço agora tem UMA ocorrência, na linha 1 da barra.
   return (
     <div className="flex flex-wrap items-stretch divide-x divide-[#8ab4f8]/10 border-t border-[#00f0ff15]">
-      <Chip label="Direção" value={dirLabel} valueClass={`px-1.5 rounded border ${dirColor}`} glow />
+      <Chip label="Direction" value={dirLabel} valueClass={`px-1.5 rounded border ${dirColor}`} glow />
       <Chip
-        label="Confiança"
+        label="Confidence"
         value={confidence ?? AWAIT}
         valueClass="px-1.5 rounded border border-[#8ab4f8]/40 bg-[#8ab4f8]/10 text-[#8ab4f8]"
         glow
@@ -4167,7 +4231,7 @@ function MarketDirectionWidget() {
   const isLong = direction === "LONG";
   const isShort = direction === "SHORT";
 
-  const vectorLabel = isLong ? "Domínio Long" : isShort ? "Domínio Short" : AWAIT;
+  const vectorLabel = isLong ? "Long Dominance" : isShort ? "Short Dominance" : AWAIT;
   const vectorColor = isLong
     ? "text-[#00ffaa] drop-shadow-[0_0_10px_rgba(0,255,170,0.8)]"
     : isShort
@@ -4265,7 +4329,7 @@ function MarketBiasDecisionCard() {
 
   const riskOk = riskSuggestion?.status === "OK";
   const riskLabel = riskOk
-    ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% eq · risco ${riskSuggestion.effective_risk_pct.toFixed(2)}%`
+    ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% eq · risk ${riskSuggestion.effective_risk_pct.toFixed(2)}%`
     : "0% · sem sugestão";
 
   // V16 §4: Decision Status (WAIT/CONFIRM/EXECUTE) — an honest confluence
@@ -4298,7 +4362,7 @@ function MarketBiasDecisionCard() {
           : "text-[#00ffaa] border-[#00ffaa]/40 bg-[#00ffaa]/10";
 
   // Fusão visual (imagem de referência): a imagem mostra "DIREÇÃO" e
-  // "GESTÃO DE POSIÇÃO" como 2 cards empilhados, não 1 — dividido aqui
+  // "POSITION MANAGEMENT" como 2 cards empilhados, não 1 — dividido aqui
   // por puro reagrupamento visual, os MESMOS campos reais de antes,
   // nenhum dado novo. Omite deliberadamente o slider de alavancagem e o
   // slider de quantidade em BTC + o botão verde de execução assistida da
@@ -4311,7 +4375,7 @@ function MarketBiasDecisionCard() {
     <>
       <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
         <div className="flex items-center justify-between">
-          <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">DIREÇÃO</span>
+          <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">DIRECTION</span>
           <span
             className={`text-[0.45rem] font-black tracking-[0.15em] uppercase px-2 py-0.5 rounded border ${decisionClass}`}
             title="Rótulo analítico — nunca aciona ordens (READ_ONLY)"
@@ -4339,12 +4403,12 @@ function MarketBiasDecisionCard() {
           {direction ?? AWAIT}
         </span>
 
-        <MiniStat label="Convicção (Core Engine)" value={confidenceLabel} color="text-[#8ab4f8]" />
+        <MiniStat label="Conviction (Core Engine)" value={confidenceLabel} color="text-[#8ab4f8]" />
       </div>
 
       <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
         <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">
-          GESTÃO DE POSIÇÃO
+          POSITION MANAGEMENT
         </span>
 
         {direction ? (
@@ -4386,7 +4450,7 @@ function MarketBiasDecisionCard() {
         </div>
 
         <span className="text-[0.4rem] text-[#f0d06f]/80 font-bold tracking-widest">
-          SUGESTÃO ALGORÍTMICA · NÃO É CONSELHO FINANCEIRO · SEM EXECUÇÃO REAL (READ_ONLY)
+          ALGORITHMIC SUGGESTION · NOT FINANCIAL ADVICE · NO LIVE EXECUTION (READ_ONLY)
         </span>
       </div>
     </>
@@ -4404,7 +4468,7 @@ function OrderBookWidget({ data, book }: any) {
   let accumBid = 0;
 
   return (
-    <Widget id="orderbook" title="LIVRO DE OFERTAS" flex="flex-1">
+    <Widget id="orderbook" title="ORDER BOOK" flex="flex-1">
       <div className="flex flex-col h-full text-[0.5rem] justify-between pb-1 min-h-0">
         <div className="flex justify-between text-[#8ab4f8] mb-1 px-1 pb-1 tracking-widest uppercase border-b border-[#00f0ff1a] shrink-0 font-bold">
           <span className="w-1/3">PREÇO (USDT)</span>
@@ -4470,7 +4534,7 @@ function OrderBookWidget({ data, book }: any) {
 function ScannerWidget({ data }: { data: any[] }) {
   const pairs = data && data.length > 0 ? data.slice(0, 5) : [];
   return (
-    <Widget id="scanner" title="QUANT SCANNER · 24H REAL" flex="flex-1">
+    <Widget id="scanner" title="QUANT SCANNER · REAL 24H" flex="flex-1">
       <div className="flex flex-col h-full text-[0.5rem]">
         <div className="flex justify-between text-[#8ab4f8] mb-1.5 px-1 pb-1 tracking-widest uppercase border-b border-[#00f0ff1a] font-bold shrink-0">
           <span className="w-[30%]">PAR</span>
@@ -4517,7 +4581,7 @@ function ScannerWidget({ data }: { data: any[] }) {
 // --- RIGHT COLUMN: EXPOSURE (READ-ONLY — replaces the fake live position) ---
 function ExposureWidget() {
   return (
-    <Widget id="exposure" title="EXPOSIÇÃO · READ-ONLY" flex="flex-[0.7] min-h-[120px]">
+    <Widget id="exposure" title="EXPOSURE · READ-ONLY" flex="flex-[0.7] min-h-[120px]">
       <div className="flex flex-col h-full items-center justify-center gap-3 p-3 text-center">
         <div className="w-10 h-10 rounded-full border border-[#00ffaa40] bg-[#00ffaa08] flex items-center justify-center shadow-[0_0_15px_rgba(0,255,170,0.15)]">
           <ShieldCheck size={20} className="text-[#00ffaa]" />
@@ -4592,7 +4656,7 @@ function EventsWidget() {
   }, []);
 
   return (
-    <Widget id="events" title="TELEMETRIA DE EVENTOS" flex="flex-[0.8] min-h-[110px]">
+    <Widget id="events" title="EVENT TELEMETRY" flex="flex-[0.8] min-h-[110px]">
       {log.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
           {AWAIT} EVENTOS REAIS…
@@ -4653,7 +4717,7 @@ function GmilContextWidget() {
   return (
     <Widget
       id="gmil_context"
-      title="CONTEXTO GLOBAL · GMIL"
+      title="GLOBAL CONTEXT · GMIL"
       flex="flex-[0.9] min-h-[190px]"
       extraHeader={<Globe size={12} className="text-[#00f0ff60]" />}
     >
@@ -4816,7 +4880,7 @@ function MarketRegimeWidget() {
   );
 
   return (
-    <Widget id="market_regime" title="REGIME DE MERCADO" flex="flex-[0.9] min-h-[190px]">
+    <Widget id="market_regime" title="MARKET REGIME" flex="flex-[0.9] min-h-[190px]">
       {/* overflow-y-auto here is a hard requirement, not decoration: in
           landscape mode min-[1120px]:min-h-0 lets flex-grow shrink this
           panel below its natural content height when the column gets
@@ -4828,7 +4892,7 @@ function MarketRegimeWidget() {
         <Row label="REGIME (MOTOR OFICIAL)" value={regimeLabel} valueClass={regimeColor} />
         <Row label="TENDÊNCIA (ESTRUTURA 15M)" value={trendLabel} valueClass={trendColor} />
         <Row label={`ESTRUTURA ${engine?.htfTimeframe?.toUpperCase() ?? "1H"}`} value={htfLabel} valueClass="text-[#8ab4f8]" />
-        <Row label="CONFLUÊNCIA MULTI-TF" value={confluenceLabel} valueClass={confluenceColor} />
+        <Row label="MULTI-TF CONFLUENCE" value={confluenceLabel} valueClass={confluenceColor} />
         <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
         <Row label="VOLATILIDADE" value={volLabel} valueClass={volColor} />
       </div>
@@ -4866,8 +4930,8 @@ function CouncilWidget() {
   const trustScore = useTrustScoreSnapshot();
 
   const pathLabel = (p: { direction: string; target: { price: number; sourceKind: string } | null; opinionWeight: number | null }) => {
-    const target = p.target ? `${p.target.price.toFixed(0)} (${p.target.sourceKind})` : "sem nível real";
-    const weight = p.opinionWeight !== null ? ` · opinião ${Math.round(p.opinionWeight * 100)}%` : "";
+    const target = p.target ? `${p.target.price.toFixed(0)} (${p.target.sourceKind})` : "no real level";
+    const weight = p.opinionWeight !== null ? ` · opinion ${Math.round(p.opinionWeight * 100)}%` : "";
     return `${p.direction} → ${target}${weight}`;
   };
 
@@ -4883,7 +4947,7 @@ function CouncilWidget() {
   const cpiColor = cpi === null ? "text-[#8ab4f8]" : cpi >= 0.7 ? "text-[#00ffaa]" : cpi >= 0.4 ? "text-[#f0d06f]" : "text-[#ff0055]";
 
   return (
-    <Widget id="council" title="CONSELHO MULTI-AGENTE" flex="flex-[1] min-h-[210px]">
+    <Widget id="council" title="MULTI-AGENT COUNCIL" flex="flex-[1] min-h-[210px]">
       <div className="flex flex-col gap-1 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
         <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff20]">
           <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">
@@ -4926,16 +4990,16 @@ function CouncilWidget() {
         {scenario && (
           <div
             className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1 rounded border border-[#00f0ff15]"
-            title="Pesos = massa de opinião do Conselho (comitê) — NUNCA probabilidade de mercado. Alvos = próximos níveis reais mapeados pelos motores."
+            title="Weights = Council opinion mass (committee) — NEVER market probability. Targets = next real levels mapped by the engines."
           >
             <div className="flex justify-between items-center">
-              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CENÁRIO A</span>
+              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">SCENARIO A</span>
               <span className={`text-[0.48rem] font-mono font-black ${scenario.pathA.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
                 {pathLabel(scenario.pathA)}
               </span>
             </div>
             <div className="flex justify-between items-center">
-              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CENÁRIO B</span>
+              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">SCENARIO B</span>
               <span className={`text-[0.48rem] font-mono font-black ${scenario.pathB.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
                 {pathLabel(scenario.pathB)}
               </span>
@@ -4948,7 +5012,7 @@ function CouncilWidget() {
           <div className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1 rounded border border-[#ff005530]">
             {traps.map((t) => (
               <div key={t.kind} className="flex justify-between items-center" title={t.evidence.join(" · ")}>
-                <span className="text-[0.45rem] text-[#ff0055]/80 font-bold tracking-wide">ARMADILHA · {t.kind.replace(/_/g, " ")}</span>
+                <span className="text-[0.45rem] text-[#ff0055]/80 font-bold tracking-wide">TRAP · {t.kind.replace(/_/g, " ")}</span>
                 <span className="text-[0.5rem] font-mono font-black text-[#ff0055]">{Math.round(t.confidence * 100)}%</span>
               </div>
             ))}
@@ -4964,7 +5028,7 @@ function CouncilWidget() {
           className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
           title={trustScore
             ? `Cadência ${Math.round(trustScore.cadenceRegularity * 100)}% (${trustScore.gapCount} gaps reais)${trustScore.crossExchangeConvergence !== null ? ` · Convergência ${Math.round(trustScore.crossExchangeConvergence * 100)}% (${trustScore.divergenceCount} exchanges)` : " · convergência não medida"}`
-            : "Aguardando amostras reais de cadência"}
+            : "Awaiting real cadence samples"}
         >
           <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">TRUST SCORE · FONTE</span>
           <span className={`text-[0.5rem] font-mono font-black ${trustScore === null ? "text-[#8ab4f8]" : trustScore.score >= 0.7 ? "text-[#00ffaa]" : trustScore.score >= 0.4 ? "text-[#f0d06f]" : "text-[#ff0055]"}`}>
@@ -4976,7 +5040,7 @@ function CouncilWidget() {
   );
 }
 
-// --- SAÚDE DO SISTEMA (Fase J / V15 Cap. 17) ---
+// --- SYSTEM HEALTH (Fase J / V15 Cap. 17) ---
 // Telemetria de sistema com medições REAIS: qualidade da fonte do Bus
 // (Fase C), variante WASM carregada (Fase I), latência cronometrada do
 // ciclo, FPS via rAF e memória JS SÓ onde a plataforma expõe API
@@ -5014,10 +5078,10 @@ function TelemetryHealthWidget() {
   );
 
   return (
-    <Widget id="system_health" title="SAÚDE DO SISTEMA" flex="flex-[0.8] min-h-[170px]">
+    <Widget id="system_health" title="SYSTEM HEALTH" flex="flex-[0.8] min-h-[170px]">
       <div className="flex flex-col gap-1.5 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
         <Row label="QUALIDADE DA FONTE (BUS)" value={qualityLabel} valueClass={qualityColor} />
-        <Row label="MOTOR WASM" value={variant ?? AWAIT} valueClass={variant === "SIMD128" ? "text-[#00ffaa]" : "text-[#8ab4f8]"} />
+        <Row label="WASM ENGINE" value={variant ?? AWAIT} valueClass={variant === "SIMD128" ? "text-[#00ffaa]" : "text-[#8ab4f8]"} />
         <Row
           label="LATÊNCIA DO CICLO (15M)"
           value={num(cycleLatencyMs) ? `${cycleLatencyMs}ms${cycleClass ? ` · ${cycleClass}` : ""}` : AWAIT}
@@ -5052,7 +5116,7 @@ function AssetHeatmapWidget() {
   const rows: any[] = Array.isArray(scannerData) ? scannerData : [];
 
   return (
-    <Widget id="asset_heatmap" title="HEATMAP · ATIVOS" flex="flex-[0.7] min-h-[150px]">
+    <Widget id="asset_heatmap" title="HEATMAP · ASSETS" flex="flex-[0.7] min-h-[150px]">
       <div className="grid grid-cols-5 gap-1 h-full min-h-0 items-stretch px-1 py-1 overflow-y-auto scrollbar-hide">
         {ASSETS.map((a) => {
           const row = rows.find((r) => r.p === `${a}/USDT`);
@@ -5131,7 +5195,7 @@ function DecisionValidationWidget() {
   // incondicional (diretriz 3 da ordem de ignição).
   const riskOk = riskSuggestion?.status === "OK";
   const riskLabel = riskOk
-    ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% eq · risco ${riskSuggestion.effective_risk_pct.toFixed(2)}%`
+    ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% eq · risk ${riskSuggestion.effective_risk_pct.toFixed(2)}%`
     : "0% · sem sugestão";
   const riskColor = riskOk ? "text-[#00f0ff]" : "text-[#8ab4f8]/50";
 
@@ -5158,7 +5222,7 @@ function DecisionValidationWidget() {
     { label: "Contexto Global (Consenso)", available: num(institutionalConsensus?.score) },
     { label: "Consenso Entre Corretoras", available: null }, // null = NÃO_APLICAVEL, nunca fabricado
     { label: "Fluxo Institucional (OFI)", available: num(engine?.flowImbalance) },
-    { label: "Força do Alvo Estrutural", available: !!engine?.target2Strength },
+    { label: "Structural Target Strength", available: !!engine?.target2Strength },
     { label: "Estrutura de Mercado", available: !!engine?.marketStructureLabel },
     { label: "Multi-Timeframe (15M/1H)", available: !!engine?.timeframeConfluence },
     {
@@ -5430,7 +5494,7 @@ function NeuralCoreWidget() {
             disabled={!gpuSupported}
             className={`mt-1 py-2 rounded-lg border font-black tracking-[0.15em] text-[0.55rem] uppercase transition-colors ${gpuSupported ? "border-[#00f0ff60] bg-[#00f0ff15] text-[#00f0ff] active:bg-[#00f0ff25]" : "border-[#8ab4f8]/15 text-[#8ab4f8]/30 cursor-not-allowed"}`}
           >
-            {gpuSupported ? "ATIVAR NÚCLEO NEURAL" : "WEBGPU INDISPONÍVEL"}
+            {gpuSupported ? "ACTIVATE NEURAL CORE" : "WEBGPU INDISPONÍVEL"}
           </button>
         )}
 
@@ -5468,12 +5532,12 @@ function NeuralCoreWidget() {
               disabled={status === "generating"}
               className="mt-1 py-1.5 rounded-lg border border-[#00ffaa60] bg-[#00ffaa15] text-[#00ffaa] active:bg-[#00ffaa25] font-black tracking-[0.15em] text-[0.5rem] uppercase disabled:opacity-50"
             >
-              {status === "generating" ? "GERANDO…" : "GERAR LEITURA TÁTICA"}
+              {status === "generating" ? "GERANDO…" : "GENERATE TACTICAL READ"}
             </button>
             <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide bg-[#010308] border border-[#00f0ff15] rounded p-2 text-[#a0f0ff] leading-relaxed">
               {reading || (
                 <span className="text-[#8ab4f8]/40 uppercase tracking-[0.2em]">
-                  {status === "generating" ? "GERANDO…" : `${AWAIT} — TOQUE EM GERAR LEITURA TÁTICA`}
+                  {status === "generating" ? "GERANDO…" : `${AWAIT} — TOQUE EM GENERATE TACTICAL READ`}
                 </span>
               )}
             </div>
@@ -5525,7 +5589,7 @@ function BottomPanels() {
       <div className="absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-[#010205] to-transparent z-20 pointer-events-none"></div>
 
       <div className="h-[95px] flex gap-2 w-full pb-1 overflow-x-auto overflow-y-hidden scrollbar-hide snap-x pt-1 px-4">
-        <Widget id="tactical" title="LIQUIDAÇÕES INSTITUCIONAIS · REAL" className="min-w-[320px] snap-start" flex="flex-[1.8]" extraHeader={<Activity size={12} className="text-[#ff005560]" />}>
+        <Widget id="tactical" title="INSTITUTIONAL LIQUIDATIONS · REAL" className="min-w-[320px] snap-start" flex="flex-[1.8]" extraHeader={<Activity size={12} className="text-[#ff005560]" />}>
           {liquidations && liquidations.length > 0 ? (
             <div className="flex flex-col justify-center h-full gap-1 px-1">
               {liquidations.slice(0, 2).map((liq: LiquidationEvent, i: number) => {
@@ -5546,7 +5610,7 @@ function BottomPanels() {
             </div>
           ) : (
             <div className="flex items-center justify-center h-full text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold text-center px-2">
-              {liquidationState === "ERROR" ? "FEED INDISPONÍVEL" : `${AWAIT} LIQUIDAÇÃO REAL…`}
+              {liquidationState === "ERROR" ? "FEED UNAVAILABLE" : `${AWAIT} LIQUIDAÇÃO REAL…`}
             </div>
           )}
         </Widget>

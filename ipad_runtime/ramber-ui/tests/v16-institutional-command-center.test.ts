@@ -98,7 +98,7 @@ describe('V16 §4 Decision Status (WAIT/CONFIRM/EXECUTE): confluência honesta, 
     const fnMatch = app.match(/function MarketBiasDecisionCard\(\) \{([\s\S]*?)\n\}\n/);
     const body = fnMatch![1];
     expect(body).toContain('Rótulo analítico — nunca aciona ordens (READ_ONLY)');
-    expect(body).toContain('SUGESTÃO ALGORÍTMICA · NÃO É CONSELHO FINANCEIRO');
+    expect(body).toContain('ALGORITHMIC SUGGESTION · NOT FINANCIAL ADVICE');
   });
 });
 
@@ -303,7 +303,7 @@ describe('V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas): e
   });
 });
 
-describe('Fusão visual (imagem de referência AR10 CYBORG v15.1 GOD TIER): SideBar renomeada, ganho circular do Siriform, DIREÇÃO/GESTÃO DE POSIÇÃO em cards separados', () => {
+describe('Fusão visual (imagem de referência AR10 CYBORG v15.1 GOD TIER): SideBar renomeada, ganho circular do Siriform, DIREÇÃO/POSITION MANAGEMENT em cards separados', () => {
   it('SideBar desacopla id (roteamento real) de label (texto exibido) — só DASHBOARD/SETTINGS continuam com comportamento próprio', () => {
     const app = read('../src/App.tsx');
     const itemsMatch = app.match(/const items: \{ icon: any; id: string; label: string \}\[\] = \[([\s\S]*?)\n {2}\];/);
@@ -331,15 +331,15 @@ describe('Fusão visual (imagem de referência AR10 CYBORG v15.1 GOD TIER): Side
     expect(body).not.toMatch(/syncPct = engineStatus === "pending" \? \d/);
   });
 
-  it('MarketBiasDecisionCard renderiza DIREÇÃO e GESTÃO DE POSIÇÃO como 2 cyber-panels distintos (imagem de referência), mesmos campos reais de antes', () => {
+  it('MarketBiasDecisionCard renderiza DIREÇÃO e POSITION MANAGEMENT como 2 cyber-panels distintos (imagem de referência), mesmos campos reais de antes', () => {
     const app = read('../src/App.tsx');
     const fnMatch = app.match(/function MarketBiasDecisionCard\(\) \{([\s\S]*?)\n\}\n/);
     expect(fnMatch, 'MarketBiasDecisionCard não encontrada').not.toBeNull();
     const body = fnMatch![1];
     const panelCount = (body.match(/className="cyber-panel shrink-0 flex flex-col gap-2 p-3"/g) ?? []).length;
     expect(panelCount).toBe(2);
-    expect(body).toContain('>DIREÇÃO<');
-    expect(body).toContain('GESTÃO DE POSIÇÃO');
+    expect(body).toContain('>DIRECTION<');
+    expect(body).toContain('POSITION MANAGEMENT');
     // a alavancagem sugerida e o slider de quantidade/botão "TRADE
     // ASSISTIDO" da imagem de referência continuam FORA — READ_ONLY
     // permanente, sem caminho de execução em lugar nenhum do código.
