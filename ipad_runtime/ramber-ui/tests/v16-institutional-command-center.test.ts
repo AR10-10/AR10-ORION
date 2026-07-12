@@ -111,6 +111,28 @@ describe('V16 §4 Decision Status (WAIT/CONFIRM/EXECUTE): confluência honesta, 
 });
 
 describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (passthrough) e rompimentos REAIS (contagem nova, honesta)', () => {
+  it('Auditoria de arquitetura: runRealAnalysisCycle aceita timeframe real como parâmetro — achado: ficava fixo em 15m internamente mesmo com o chamador podendo escolher outro', () => {
+    const bridge = read('../src/engine-bridge.ts');
+    expect(bridge).toContain("export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): Promise<RealCycleResult> {");
+    // O único hardcode ficava na própria requisição do snapshot — o resto
+    // da função já era passthrough real de snapshot.timeframe.
+    expect(bridge).not.toContain("timeframe: '15m', limit: 100, maxAgeMs: 25_000,");
+    expect(bridge).toContain('symbol, timeframe, limit: 100, maxAgeMs: 25_000,');
+  });
+
+  it('App.tsx: o ciclo real recebe chartTimeframe (nunca um literal) e o efeito depende dele — trocar o timeframe do gráfico dispara um novo ciclo na hora', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('await runRealAnalysisCycle(selectedAsset, chartTimeframe)');
+    expect(app).toContain('}, [bootGeneration, selectedAsset, chartTimeframe]);');
+  });
+
+  it('S1/R1 na MarketRegimeWidget/SystemHealth/DecisionValidation mostram o timeframe REAL selecionado — nunca mais um "15M" fixo que mentiria sobre qual ciclo alimentou o dado', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('label={`TENDÊNCIA (ESTRUTURA ${chartTimeframe?.toUpperCase() ?? "15M"})`}');
+    expect(app).toContain('label={`LATÊNCIA DO CICLO (${chartTimeframe?.toUpperCase() ?? "15M"})`}');
+    expect(app).toContain('label: `Ciclo do Motor (${chartTimeframe?.toUpperCase() ?? "15M"})`');
+  });
+
   it('RealCycleResult.supportStrength/resistanceStrength são passthrough puro de frame.support_1_strength/resistance_1_strength — nunca recomputados', () => {
     const bridge = read('../src/engine-bridge.ts');
     expect(bridge).toContain("supportStrength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;");

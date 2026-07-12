@@ -332,7 +332,16 @@ function getHtfMarketStructure(symbol: string): { label: string | null; updatedA
 // the same pipeline app.js's handleGenerateRealAnalysis() +
 // refreshTargetTracker() run — same connector, same WASM, same engines,
 // called directly here instead of triggered by a button/DOM event.
-export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleResult> {
+// Auditoria de arquitetura (revisão completa): `timeframe` era fixo em
+// '15m' aqui embaixo mesmo com o parâmetro existindo no chamador — S1/R1 e
+// parte do Trade Plan ficavam presos a essa análise de 15m
+// independentemente do timeframe selecionado no gráfico. O resto da função
+// já era 100% passthrough real (evidence.timeframe/regimeResult vêm de
+// snapshot.timeframe, nunca do literal) — o único hardcode ficava na
+// própria requisição do snapshot. Default '15m' preserva o comportamento
+// anterior para qualquer chamador que não passe o parâmetro (mesmo padrão
+// já usado por getChartCandles nesta auditoria P1).
+export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): Promise<RealCycleResult> {
   const { workerClient, wasmReady } = getWorkerClient();
   let wasmVariant: string | null = null;
   try {
@@ -352,7 +361,7 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
   let snapshot: BusSnapshot;
   try {
     snapshot = await requestFuturesCandleSnapshot({
-      symbol, timeframe: '15m', limit: 100, maxAgeMs: 25_000,
+      symbol, timeframe, limit: 100, maxAgeMs: 25_000,
     });
   } catch (err: any) {
     return { ok: false, reason: `market_data_bus_lancou_excecao: ${describeError(err)}` };

@@ -831,11 +831,18 @@ export default function App() {
   // "latência do motor", é falha — e já aparece como engineStatus error).
   const [cycleLatencyMs, setCycleLatencyMs] = useState<number | null>(null);
 
+  // Auditoria de arquitetura (revisão completa): antes desta mudança,
+  // runRealAnalysisCycle rodava sempre em 15m internamente, então S1/R1 (e
+  // parte do Trade Plan, que os usa como fonte) nunca refletiam o timeframe
+  // de fato selecionado no gráfico. chartTimeframe agora entra tanto na
+  // chamada quanto nas deps — trocar o timeframe do gráfico dispara um novo
+  // ciclo real na hora, em vez de esperar até 30s por um ciclo que ainda
+  // ia sair em 15m.
   useEffect(() => {
     let cancelled = false;
     const runCycle = async (): Promise<boolean> => {
       const startedAt = Date.now();
-      const result = await runRealAnalysisCycle(selectedAsset);
+      const result = await runRealAnalysisCycle(selectedAsset, chartTimeframe);
       if (cancelled) return true;
       setRealCycle(result);
       setEngineStatus(result.ok ? "ok" : "error");
@@ -851,7 +858,7 @@ export default function App() {
       cancelled = true;
       clearInterval(engineInterval);
     };
-  }, [bootGeneration, selectedAsset]);
+  }, [bootGeneration, selectedAsset, chartTimeframe]);
 
   // Fase J (Cap. 17): FPS REAL da UI via requestAnimationFrame — contagem
   // de frames por janela de 1s. É a medição verdadeira do que o Safari
@@ -5022,7 +5029,7 @@ const REGIME_DISPLAY: Record<string, { label: string; color: string }> = {
 };
 
 function MarketRegimeWidget() {
-  const { engine, cvd, currentRsi } = useContext(WidgetContext) || {};
+  const { engine, cvd, currentRsi, chartTimeframe } = useContext(WidgetContext) || {};
 
   // Fase D: linha oficial do Market Regime Engine (ADX/DI + percentil de
   // banda, ver src/market-regime/). Direção colore o rótulo composto;
@@ -5071,9 +5078,10 @@ function MarketRegimeWidget() {
   const volLabel = volPct === null ? AWAIT : `${volPct.toFixed(2)}%`;
   const volColor = volPct === null ? "text-[#8ab4f8]" : volPct > 1.5 ? "text-[#ff0055]" : volPct > 0.6 ? "text-[#f0d06f]" : "text-[#00ffaa]";
 
-  // V11.5 §2 (contexto multitemporal): compara a estrutura de 15m (acima)
-  // com a de 1H, real, cacheada em engine-bridge.ts — não uma duplicata da
-  // linha TENDÊNCIA, é uma pergunta diferente ("os dois prazos concordam?").
+  // V11.5 §2 (contexto multitemporal): compara a estrutura do timeframe
+  // selecionado (acima) com a de 1H, real, cacheada em engine-bridge.ts —
+  // não uma duplicata da linha TENDÊNCIA, é uma pergunta diferente ("os
+  // dois prazos concordam?").
   const htfLabel = engine?.htfMarketStructureLabel ?? AWAIT;
   const confluenceLabel =
     engine?.timeframeConfluence ?? (engine?.htfMarketStructureLabel ? "LATERAL/MISTO" : AWAIT);
@@ -5102,7 +5110,7 @@ function MarketRegimeWidget() {
           exact pattern for the same reason. */}
       <div className="flex flex-col gap-1.5 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
         <Row label="REGIME (MOTOR OFICIAL)" value={regimeLabel} valueClass={regimeColor} />
-        <Row label="TENDÊNCIA (ESTRUTURA 15M)" value={trendLabel} valueClass={trendColor} />
+        <Row label={`TENDÊNCIA (ESTRUTURA ${chartTimeframe?.toUpperCase() ?? "15M"})`} value={trendLabel} valueClass={trendColor} />
         <Row label={`ESTRUTURA ${engine?.htfTimeframe?.toUpperCase() ?? "1H"}`} value={htfLabel} valueClass="text-[#8ab4f8]" />
         <Row label="MULTI-TF CONFLUENCE" value={confluenceLabel} valueClass={confluenceColor} />
         <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
@@ -5262,7 +5270,7 @@ function CouncilWidget() {
 // ZERO REPETIÇÃO: nenhum destes indicadores aparece em outro painel —
 // regime/vieses/comitê/risco moram nos painéis das suas fases.
 function TelemetryHealthWidget() {
-  const { engine, realCycle, cycleLatencyMs, fps } = useContext(WidgetContext) || {};
+  const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe } = useContext(WidgetContext) || {};
 
   const quality = realCycle?.dataQuality ?? null;
   const qualityLabel = quality
@@ -5297,7 +5305,7 @@ function TelemetryHealthWidget() {
         <Row label="QUALIDADE DA FONTE (BUS)" value={qualityLabel} valueClass={qualityColor} />
         <Row label="WASM ENGINE" value={variant ?? AWAIT} valueClass={variant === "SIMD128" ? "text-[#00ffaa]" : "text-[#8ab4f8]"} />
         <Row
-          label="LATÊNCIA DO CICLO (15M)"
+          label={`LATÊNCIA DO CICLO (${chartTimeframe?.toUpperCase() ?? "15M"})`}
           value={num(cycleLatencyMs) ? `${cycleLatencyMs}ms${cycleClass ? ` · ${cycleClass}` : ""}` : AWAIT}
           valueClass={cycleColor}
         />
@@ -5403,7 +5411,7 @@ function formatConsensusScore(score: number | null): string {
 }
 
 function DecisionValidationWidget() {
-  const { engine, institutionalConsensus, ensembleConsensus, riskSuggestion, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt } =
+  const { engine, institutionalConsensus, ensembleConsensus, riskSuggestion, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt, chartTimeframe } =
     useContext(WidgetContext) || {};
 
   // Fase H: sugestão de dimensionamento (% equity / % risco). Fail-closed:
@@ -5440,7 +5448,7 @@ function DecisionValidationWidget() {
     { label: "Fluxo Institucional (OFI)", available: num(engine?.flowImbalance) },
     { label: "Structural Target Strength", available: !!engine?.target2Strength },
     { label: "Estrutura de Mercado", available: !!engine?.marketStructureLabel },
-    { label: "Multi-Timeframe (15M/1H)", available: !!engine?.timeframeConfluence },
+    { label: `Multi-Timeframe (${chartTimeframe?.toUpperCase() ?? "15M"}/${engine?.htfTimeframe?.toUpperCase() ?? "1H"})`, available: !!engine?.timeframeConfluence },
     {
       label: "Qualidade das Fontes (GMIL)",
       available: Array.isArray(gmilProviders) && gmilProviders.some((p: any) => p.weight > 0),
@@ -5471,7 +5479,7 @@ function DecisionValidationWidget() {
   const syncRows: { label: string; ageLabel: string }[] = [
     { label: "Preço (WS)", ageLabel: ageLabelOf(priceUpdatedAt) },
     { label: "Livro de Ofertas", ageLabel: ageLabelOf(orderBookUpdatedAt) },
-    { label: "Ciclo do Motor (15M)", ageLabel: ageLabelOf(lastUpdateAt) },
+    { label: `Ciclo do Motor (${chartTimeframe?.toUpperCase() ?? "15M"})`, ageLabel: ageLabelOf(lastUpdateAt) },
     { label: `Estrutura ${engine?.htfTimeframe?.toUpperCase() ?? "1H"}`, ageLabel: ageLabelOf(engine?.htfUpdatedAt ?? null) },
     { label: "Contexto Global (GMIL)", ageLabel: ageLabelOf(gmilOldestSuccessAt) },
   ];
