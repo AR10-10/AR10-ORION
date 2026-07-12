@@ -39,6 +39,9 @@ import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
 // V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
 // barras à direita — dado direto da store (Fase 1.3), ver header do plugin.
 import { VolumeProfilePlugin } from "./VolumeProfilePlugin";
+// Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
+// the chart-side companion to the price lines below.
+import { TradePlanZonePlugin } from "./TradePlanZonePlugin";
 // Correção de latência (Ordem "Sincronização em Tempo Real"): funde o
 // último preço real do ticker WS na vela em formação via series.update() —
 // nunca via `data`/setData (isso recomputaria SMC/Fibonacci/VP a cada
@@ -144,6 +147,13 @@ export function EnhancedChart_110_Percent({
   const zoneLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
   const tradePlanLinesRef = useRef<IPriceLine[]>([]);
+  // Named refs to the stop/target lines specifically (a subset of
+  // tradePlanLinesRef above) — lets the hit-boost effect below update
+  // color/title in place via applyOptions() instead of tearing down and
+  // recreating all trade-plan lines on every live-price tick (which would
+  // churn the chart at WebSocket cadence for what is only a color change).
+  const stopLineRef = useRef<IPriceLine | null>(null);
+  const targetLineRef = useRef<IPriceLine | null>(null);
   const cvdSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Espelha chartRef/seriesRef em state só para o LiquidityZonesPlugin
   // montar assim que o chart existe de verdade — refs sozinhas não
@@ -404,20 +414,22 @@ export function EnhancedChart_110_Percent({
     const series = seriesRef.current;
     tradePlanLinesRef.current.forEach((line) => series.removePriceLine(line));
     tradePlanLinesRef.current = [];
+    stopLineRef.current = null;
+    targetLineRef.current = null;
     if (!tradePlan) return;
 
     const mk = (price: number, color: string, title: string) => {
-      if (!Number.isFinite(price)) return;
-      tradePlanLinesRef.current.push(
-        series.createPriceLine({
-          price,
-          color,
-          lineWidth: 1,
-          lineStyle: LineStyle.Solid,
-          axisLabelVisible: true,
-          title,
-        }),
-      );
+      if (!Number.isFinite(price)) return null;
+      const line = series.createPriceLine({
+        price,
+        color,
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title,
+      });
+      tradePlanLinesRef.current.push(line);
+      return line;
     };
     const entryColor = "rgba(240, 208, 111, 0.75)"; // amber — the acceptance zone
     if (tradePlan.entry.low === tradePlan.entry.high) {
@@ -426,13 +438,40 @@ export function EnhancedChart_110_Percent({
       mk(tradePlan.entry.high, entryColor, `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`);
       mk(tradePlan.entry.low, "rgba(240, 208, 111, 0.45)", "ENTRY ZONE LOW");
     }
-    mk(tradePlan.stop.price, "rgba(255, 0, 85, 0.75)", `STOP · ${tradePlan.stop.basis}`);
-    mk(
-      tradePlan.target.price,
-      "rgba(0, 255, 170, 0.75)",
-      `TARGET · ${tradePlan.target.basis}${tradePlan.riskRewardRatio !== null ? ` · 1:${tradePlan.riskRewardRatio.toFixed(2)}` : ""}`,
-    );
+    const stopTitle = `STOP · ${tradePlan.stop.basis}`;
+    stopLineRef.current = mk(tradePlan.stop.price, "rgba(255, 0, 85, 0.75)", stopTitle);
+    const targetTitle = `TARGET · ${tradePlan.target.basis}${tradePlan.riskRewardRatio !== null ? ` · 1:${tradePlan.riskRewardRatio.toFixed(2)}` : ""}`;
+    targetLineRef.current = mk(tradePlan.target.price, "rgba(0, 255, 170, 0.75)", targetTitle);
   }, [tradePlan]);
+
+  // Ordem Final Autonomia Evolução §1: "alertas visuais sutis quando o
+  // preço romper estrutura relevante" — the chart-side counterpart to the
+  // command bar's TARGET REACHED/STOP BREACHED tone shift
+  // (TradePlanTopStrip in App.tsx), same first-touch-style comparison.
+  // Deliberately a SEPARATE, lightweight effect: applyOptions() nudges
+  // color/title on the two lines already created above in place — it
+  // never removes/recreates the trade-plan lines on every WebSocket tick
+  // the way the [tradePlan] effect above does on a real plan change.
+  // Regra de Ouro 2 ("fio de seda"): hierarchy stays color/opacity-only —
+  // lineWidth and lineStyle are never touched here.
+  useEffect(() => {
+    if (!tradePlan) return;
+    const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
+    if (p === null) return;
+    const long = tradePlan.direction === "LONG";
+    const targetHit = long ? p >= tradePlan.target.price : p <= tradePlan.target.price;
+    const stopHit = !targetHit && (long ? p <= tradePlan.stop.price : p >= tradePlan.stop.price);
+    const stopTitle = `STOP · ${tradePlan.stop.basis}`;
+    stopLineRef.current?.applyOptions({
+      color: stopHit ? "rgba(255, 0, 85, 1)" : "rgba(255, 0, 85, 0.75)",
+      title: stopHit ? `${stopTitle} · BREACHED` : stopTitle,
+    });
+    const targetTitle = `TARGET · ${tradePlan.target.basis}${tradePlan.riskRewardRatio !== null ? ` · 1:${tradePlan.riskRewardRatio.toFixed(2)}` : ""}`;
+    targetLineRef.current?.applyOptions({
+      color: targetHit ? "rgba(0, 255, 170, 1)" : "rgba(0, 255, 170, 0.75)",
+      title: targetHit ? `${targetTitle} · REACHED` : targetTitle,
+    });
+  }, [tradePlan, livePrice]);
 
   return (
     <div className="absolute inset-0">
@@ -466,6 +505,16 @@ export function EnhancedChart_110_Percent({
       <VolumeProfilePlugin
         chart={chartReady?.chart ?? null}
         series={chartReady?.series ?? null}
+      />
+      {/* Ordem Final Autonomia Evolução §1 ("caixas semi-transparentes"):
+         the Trade Plan's entry zone, mounted last so it stays the topmost
+         overlay — it is the most actionable, currently-live information
+         on the chart, above the more diagnostic FVG/OB zones. */}
+      <TradePlanZonePlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+        entryLow={tradePlan?.entry.low ?? null}
+        entryHigh={tradePlan?.entry.high ?? null}
       />
     </div>
   );
