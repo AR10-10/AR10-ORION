@@ -3000,6 +3000,30 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   );
 }
 
+// Core Engine signal — the ONE number that matters (research: fintech
+// dashboards should "lead with the single figure the user checks", not
+// bury it among secondary chips). Solid-filled pill = engine of record,
+// deliberately distinct from TradePlanTopStrip's outlined pill (the
+// Council's advisory overlay, LEI 24: never gates the Core Engine) — the
+// visual weight itself communicates which is primary and which is
+// supporting detail, without extra copy.
+function CoreSignalBadge({ direction, confidence }: { direction: "LONG" | "SHORT" | null; confidence: string | null }) {
+  const tone =
+    direction === "LONG"
+      ? "bg-[#00ffaa] text-[#010308] shadow-[0_0_14px_rgba(0,255,170,0.5)]"
+      : direction === "SHORT"
+        ? "bg-[#ff0055] text-[#010308] shadow-[0_0_14px_rgba(255,0,85,0.5)]"
+        : "bg-[#8ab4f8]/10 text-[#8ab4f8]/60 border border-[#8ab4f8]/25";
+  return (
+    <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap" title="Core Engine — primary directional read (mathematical S/R + structure classifier)">
+      <span className={`text-[0.6rem] font-black tracking-wider px-2 py-0.5 rounded-full ${tone}`}>
+        {direction ?? AWAIT}
+      </span>
+      {confidence && <span className="text-[0.5rem] font-bold text-[#8ab4f8]/70 tabular-nums">{confidence}</span>}
+    </div>
+  );
+}
+
 // --- TOP BAR ---
 function TopBar({
   data,
@@ -3023,6 +3047,7 @@ function TopBar({
     selectedTradFiAsset,
     setSelectedTradFiAsset,
     realCycle,
+    engine,
   } = useContext(WidgetContext) || {};
   // Overhaul Cross-Market (Diretriz 2): o rótulo do mercado é passthrough
   // REAL de realCycle.instrumentType (mesmo padrão de wasmVariant) — nunca
@@ -3166,12 +3191,14 @@ function TopBar({
                 {fmt(data?.price ?? null)}
               </span>
               <span
-                className={`text-[0.55rem] font-bold ${isPos ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+                className={`text-[0.55rem] font-bold tabular-nums ${isPos ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
               >
                 {fmtSignedPct(data?.deltaPct ?? null)}
               </span>
             </div>
           )}
+
+          {marketMode === "CRYPTO" && <CoreSignalBadge direction={engine?.direction ?? null} confidence={engine?.confidence ?? null} />}
 
           {marketMode === "CRYPTO" && <TradePlanTopStrip livePrice={data?.price ?? null} />}
 
@@ -3294,7 +3321,7 @@ const TopStat = React.memo(function TopStat({
         {label}
       </span>
       <div className="flex items-center justify-center gap-1.5 leading-none">
-        <span className={`text-[0.65rem] font-bold tracking-widest ${color}`}>
+        <span className={`text-[0.65rem] font-bold tracking-widest tabular-nums ${color}`}>
           {value}
         </span>
       </div>
@@ -4243,11 +4270,14 @@ function HeatmapWidget({ book, data }: any) {
 }
 
 // --- DCI ESSENTIAL STRIP (item 1) ---
-// The "read in under 2 seconds" layer: Direção, Confiança, Liquidez, Risco,
-// Estado do sistema, Saúde dos dados, Preço, Última atualização — nothing
-// else. Every field is a passthrough from state the rest of the app already
-// computes (engine/voiceSnapshot/lastUpdateAt/GMIL); this component invents
-// no new number, it only elevates existing ones to constant visibility.
+// The "read in under 2 seconds" layer: Liquidez, Risco, Contexto Global,
+// Sistema, Dados, Última atualização. Direção + Confiança moved up to
+// CoreSignalBadge in row 1 (research-driven header refinement: the
+// primary signal belongs next to price, not buried as 1-of-8 chips) —
+// removed here to honor the app's own law that every datum appears
+// exactly once on screen. Every remaining field is a passthrough from
+// state the rest of the app already computes (engine/voiceSnapshot/
+// lastUpdateAt/GMIL); this component invents no new number.
 function EssentialStrip() {
   const { engine, engineStatus, voiceSnapshot, lastUpdateAt, institutionalConsensus } =
     useContext(WidgetContext) || {};
@@ -4257,16 +4287,9 @@ function EssentialStrip() {
   // fase).
   const consensus = institutionalConsensus ?? { score: null, sampleSize: 0, contributingProviders: [] };
 
+  // Direção/Confiança já saem em CoreSignalBadge (linha 1) — só `direction`
+  // real ainda é usado aqui, para o cálculo honesto de distância ao stop.
   const direction: Direction = engine?.direction ?? null;
-  const dirLabel = direction ?? "AGUARDANDO";
-  const dirColor =
-    direction === "LONG"
-      ? "text-[#00ffaa] border-[#00ffaa50] bg-[#00ffaa10]"
-      : direction === "SHORT"
-        ? "text-[#ff0055] border-[#ff005550] bg-[#ff005510]"
-        : "text-[#8ab4f8] border-[#8ab4f8]/30 bg-[#8ab4f8]/5";
-
-  const confidence: string | null = engine?.confidence ?? null;
 
   const liquidezPct = num(engine?.buyPercent) ? Math.round(engine.buyPercent) : null;
   const liquidezLabel = liquidezPct === null ? AWAIT : `BID ${liquidezPct}%`;
@@ -4301,12 +4324,12 @@ function EssentialStrip() {
 
   const gmilLabel = formatConsensusScore(consensus.score);
 
-  // V10.4 §2 "Glow Inteligente": glow apenas onde há informação relevante
-  // que deve "respirar" — Direção, Confiança, Liquidez, Preço, Contexto
-  // Global, Sistema. Risco/Dados/Última Att. ficam de propósito sem glow
-  // (não são o foco perceptual da faixa). drop-shadow com currentColor
-  // acompanha automaticamente a cor condicional de cada valor sem precisar
-  // hardcodar um glow por branch de cor.
+  // V10.4 §2 "Glow Inteligente", refinado pela pesquisa desta evolução
+  // (Bookmap/TradingView: dashboards sobrecarregados com sinais visuais
+  // concorrentes atrapalham a leitura rápida): agora que Direção/Confiança
+  // — o sinal decisório real — vive sozinho em CoreSignalBadge (linha 1),
+  // NENHUM chip desta linha 2 glow — todos são contexto de apoio, nunca
+  // o foco perceptual. Um único elemento glow em toda a barra, não cinco.
   const Chip = ({
     label,
     value,
@@ -4323,7 +4346,7 @@ function EssentialStrip() {
         {label}
       </span>
       <span
-        className={`text-[0.62rem] font-black font-mono tracking-tight whitespace-nowrap ${valueClass} ${
+        className={`text-[0.62rem] font-black font-mono tracking-tight tabular-nums whitespace-nowrap ${valueClass} ${
           glow ? "drop-shadow-[0_0_5px_currentColor]" : ""
         }`}
       >
@@ -4337,17 +4360,10 @@ function EssentialStrip() {
   // "Preço" saiu: o preço agora tem UMA ocorrência, na linha 1 da barra.
   return (
     <div className="flex flex-wrap items-stretch divide-x divide-[#8ab4f8]/10 border-t border-[#00f0ff15]">
-      <Chip label="Direction" value={dirLabel} valueClass={`px-1.5 rounded border ${dirColor}`} glow />
-      <Chip
-        label="Confidence"
-        value={confidence ?? AWAIT}
-        valueClass="px-1.5 rounded border border-[#8ab4f8]/40 bg-[#8ab4f8]/10 text-[#8ab4f8]"
-        glow
-      />
-      <Chip label="Liquidez" value={liquidezLabel} valueClass={liquidezColor} glow />
+      <Chip label="Liquidez" value={liquidezLabel} valueClass={liquidezColor} />
       <Chip label="Risco" value={riskLabel} valueClass={riskColor} />
-      <Chip label="Contexto Global" value={gmilLabel} valueClass="text-[#8ab4f8]" glow />
-      <Chip label="Sistema" value={systemLabel} valueClass={systemColor} glow />
+      <Chip label="Contexto Global" value={gmilLabel} valueClass="text-[#8ab4f8]" />
+      <Chip label="Sistema" value={systemLabel} valueClass={systemColor} />
       <Chip label="Dados" value={`${feedsUp}/4`} valueClass={dataColor} />
       <Chip label="Última Att." value={updateLabel} valueClass="text-[#8ab4f8]/80" />
     </div>
