@@ -2974,6 +2974,40 @@ function NucleoVoiceOrb() {
 // when the live price crosses the plan's stop or target, the strip's tone
 // shifts (red STOP BREACHED / green TARGET REACHED) - pure display
 // derivation from real values already on screen, no new engine.
+// Shared label-over-value chip for the command bar's trade-context strips
+// (TradePlanTopStrip, StructureLevelsStrip below) — lifted to module scope
+// once a second consumer needed the exact same visual language, rather
+// than duplicating the JSX a second time. Classes are always passed as
+// complete literal strings (never concatenated with a variable) — the
+// Tailwind JIT scanner only generates CSS for tokens that appear by
+// extenso in the source.
+function BarField({
+  label,
+  value,
+  labelClass,
+  valueClass,
+  hitClass,
+  hit,
+  title,
+}: {
+  label: string;
+  value: string;
+  labelClass: string;
+  valueClass: string;
+  hitClass?: string;
+  hit?: boolean;
+  title?: string;
+}) {
+  return (
+    <div className="flex flex-col justify-center leading-none px-1.5" title={title}>
+      <span className={`text-[0.4rem] tracking-[0.15em] font-bold uppercase whitespace-nowrap ${labelClass}`}>{label}</span>
+      <span className={`text-[0.62rem] font-bold font-mono tabular-nums whitespace-nowrap ${hit && hitClass ? hitClass : valueClass}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
 function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   const plan = useTradePlanSnapshot();
   if (!plan) return null;
@@ -2987,40 +3021,20 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   // rótulos limpos em inglês (Entry Zone/Target/Stop), mesma linguagem
   // visual do TopStat (label pequeno acima, valor tabular abaixo) — só a
   // apresentação muda, a detecção real de targetHit/stopHit é idêntica.
-  // Classes sempre passadas como strings literais completas (nunca
-  // concatenadas com uma variável) — o scanner estático do Tailwind JIT
-  // só gera CSS para tokens que aparecem por extenso no código-fonte.
-  const Field = ({
-    label,
-    value,
-    labelClass,
-    valueClass,
-    hitClass,
-    hit,
-  }: {
-    label: string;
-    value: string;
-    labelClass: string;
-    valueClass: string;
-    hitClass?: string;
-    hit?: boolean;
-  }) => (
-    <div className="flex flex-col justify-center leading-none px-1.5">
-      <span className={`text-[0.4rem] tracking-[0.15em] font-bold uppercase whitespace-nowrap ${labelClass}`}>{label}</span>
-      <span className={`text-[0.62rem] font-bold font-mono tabular-nums whitespace-nowrap ${hit && hitClass ? hitClass : valueClass}`}>
-        {value}
-      </span>
-    </div>
-  );
+  // Geometria real medida (Playwright + CSS compilado): Entry/Target/Stop/
+  // R:R + Support/Resistance juntos NÃO cabem numa única linha 1 em iPad
+  // portrait (768-834px) sem voltar a abreviações cramped — por isso este
+  // grupo agora mora na linha 2 da barra (flex-wrap, ver TopBar), nunca
+  // escondido: iPad portrait é um viewport-alvo real desta sessão.
   return (
     <div
-      className={`hidden sm:flex items-stretch pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap transition-colors duration-500 ${
+      className={`flex items-stretch pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap transition-colors duration-500 ${
         targetHit ? "drop-shadow-[0_0_8px_rgba(0,255,170,0.35)]" : stopHit ? "drop-shadow-[0_0_8px_rgba(255,0,85,0.35)]" : ""
       }`}
       title="Trade Plan - real structure only (advisory, read-only terminal). Entry/Stop/Target are real levels mapped by the engines."
     >
-      <Field label="Entry Zone" value={entryLabel} labelClass="text-[#f0d06f]/70" valueClass="text-[#f0d06f]/90" />
-      <Field
+      <BarField label="Entry Zone" value={entryLabel} labelClass="text-[#f0d06f]/70" valueClass="text-[#f0d06f]/90" />
+      <BarField
         label="Target"
         value={f(plan.target.price)}
         labelClass="text-[#00ffaa]/70"
@@ -3028,7 +3042,7 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
         hitClass="text-[#00ffaa] drop-shadow-[0_0_5px_currentColor]"
         hit={targetHit}
       />
-      <Field
+      <BarField
         label="Stop"
         value={f(plan.stop.price)}
         labelClass="text-[#ff0055]/70"
@@ -3037,10 +3051,58 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
         hit={stopHit}
       />
       {plan.riskRewardRatio !== null && (
-        <Field label="R : R" value={`1:${plan.riskRewardRatio.toFixed(2)}`} labelClass="text-[#8ab4f8]/60" valueClass="text-[#8ab4f8]/80" />
+        <BarField label="R : R" value={`1:${plan.riskRewardRatio.toFixed(2)}`} labelClass="text-[#8ab4f8]/60" valueClass="text-[#8ab4f8]/80" />
       )}
       {targetHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#00ffaa] pl-1">TARGET REACHED</span>}
       {stopHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#ff0055] pl-1">STOP BREACHED</span>}
+    </div>
+  );
+}
+
+// Support/Resistance in the always-visible bar (Operador feedback: seeing
+// S1/R1 shouldn't require opening the ANALYSIS drawer). Deliberately a
+// SEPARATE component from TradePlanTopStrip, not folded into it: S1/R1
+// are Core Engine structural facts (real support-resistance-engine swing/
+// pivot math, available whenever the engine has run) — independent of
+// whether a coherent multi-agent Trade Plan currently exists (that needs
+// council alignment + a clear risk gate on top). Same real fields already
+// computed once in the `engine` useMemo and already fed to the chart's
+// price lines (support/resistance/supportStrength/resistanceStrength/
+// supportBreakouts/resistanceBreakouts) — zero new computation. Per Zero
+// Repetição, the ANALYSIS "Market Structure" panel's own S1/R1 rows were
+// removed in the same change (see SecondaryModuleView) — this bar is now
+// their one and only home.
+function StructureLevelsStrip() {
+  const { engine } = useContext(WidgetContext) || {};
+  const support: number | null = engine?.support ?? null;
+  const resistance: number | null = engine?.resistance ?? null;
+  if (support === null && resistance === null) return null;
+  const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
+  const strengthNote = (strength: { label: string; touches: number } | null | undefined, breakouts: number | undefined) =>
+    strength ? ` · ${strength.label} ${strength.touches}x/${breakouts ?? 0}x` : "";
+  return (
+    <div
+      className="flex items-stretch whitespace-nowrap"
+      title="Core Engine structure (real support-resistance-engine swing/pivot levels) — independent of the advisory Trade Plan above."
+    >
+      {support !== null && (
+        <BarField
+          label="Support"
+          value={f(support)}
+          labelClass="text-[#00ffaa]/70"
+          valueClass="text-[#00ffaa]/90"
+          title={`Support (S1)${strengthNote(engine?.supportStrength, engine?.supportBreakouts)}`}
+        />
+      )}
+      {resistance !== null && (
+        <BarField
+          label="Resistance"
+          value={f(resistance)}
+          labelClass="text-[#ff0055]/70"
+          valueClass="text-[#ff0055]/90"
+          title={`Resistance (R1)${strengthNote(engine?.resistanceStrength, engine?.resistanceBreakouts)}`}
+        />
+      )}
     </div>
   );
 }
@@ -3231,8 +3293,6 @@ function TopBar({ data }: { data?: PriceState | null }) {
           )}
 
           {marketMode === "CRYPTO" && <CoreSignalBadge direction={engine?.direction ?? null} confidence={engine?.confidence ?? null} />}
-
-          {marketMode === "CRYPTO" && <TradePlanTopStrip livePrice={data?.price ?? null} />}
         </div>
 
         <div className="flex gap-1 md:gap-2 h-full items-center justify-end shrink-0">
@@ -3254,6 +3314,22 @@ function TopBar({ data }: { data?: PriceState | null }) {
           </button>
         </div>
       </div>
+
+      {/* Linha 2 — só quando há algo real para mostrar (Trade Plan e/ou S1/
+          R1 do Core Engine); ambos os componentes já retornam null sem
+          dado, então esta linha simplesmente desaparece (altura zero) até
+          o primeiro ciclo real. Motivo de existir separada da linha 1
+          (medido via Playwright, não suposto): Entry/Target/Stop/R:R +
+          Support/Resistance juntos não cabem numa única linha em iPad
+          portrait (768-834px) sem voltar a abreviações cramped — flex-wrap
+          aqui deixa o conjunto quebrar de forma legível em vez de escondido
+          atrás de uma aba ou cortado. */}
+      {marketMode === "CRYPTO" && (
+        <div className="flex flex-wrap items-center gap-y-1 px-3 lg:px-5 pb-1.5">
+          <TradePlanTopStrip livePrice={data?.price ?? null} />
+          <StructureLevelsStrip />
+        </div>
+      )}
     </div>
   );
 }
@@ -3855,11 +3931,15 @@ function SecondaryModuleView({ tab }: { tab: string }) {
           <ModuleStat label="Path A" value={scenario ? `${scenario.pathA.direction} → ${scenario.pathA.target ? `${scenario.pathA.target.price.toFixed(0)} (${scenario.pathA.target.sourceKind})` : "no real level"}${scenario.pathA.opinionWeight !== null ? ` · ${pct(scenario.pathA.opinionWeight)}` : ""}` : MODULE_EMPTY} tone={scenario?.pathA.direction === "LONG" ? "long" : "short"} />
           <ModuleStat label="Path B" value={scenario ? `${scenario.pathB.direction} → ${scenario.pathB.target ? `${scenario.pathB.target.price.toFixed(0)} (${scenario.pathB.target.sourceKind})` : "no real level"}${scenario.pathB.opinionWeight !== null ? ` · ${pct(scenario.pathB.opinionWeight)}` : ""}` : MODULE_EMPTY} tone={scenario?.pathB.direction === "LONG" ? "long" : "short"} />
         </ModulePanel>
+        {/* Support S1/Resistance R1 used to live here too — moved out per
+            Zero Repetição once the always-visible bar's StructureLevelsStrip
+            became their one and only home (Operador feedback: seeing S1/R1
+            shouldn't require opening this tab). 15m/1H structure labels are
+            a different datum (trend classification, not a price level) and
+            stay here — they have no other home on screen. */}
         <ModulePanel title="Market Structure (real engine labels)">
           <ModuleStat label="15m Structure" value={engine?.marketStructureLabel ?? MODULE_EMPTY} />
           <ModuleStat label="1H Structure" value={engine?.htfMarketStructureLabel ?? MODULE_EMPTY} />
-          <ModuleStat label="Support S1" value={num(engine?.support)} tone="long" />
-          <ModuleStat label="Resistance R1" value={num(engine?.resistance)} tone="short" />
         </ModulePanel>
         <ModulePanel title="Fibonacci Confluence (real retracement × real levels)">
           {fibLevels.length > 0 ? (

@@ -121,3 +121,36 @@ describe('EnhancedChart_110_Percent: stop/target hit-boost (Ordem Final Autonomi
     expect(block).toMatch(/if \(p === null\) return;/);
   });
 });
+
+describe('EnhancedChart_110_Percent: VWAP wiring (research-driven precision order)', () => {
+  it('imports the real pure engine — never a second inline computation of the same math', () => {
+    expect(chart()).toContain('import { computeSessionVwapSeries } from "../nexus/vwap";');
+  });
+
+  it('the VWAP series shares the MAIN price scale (no priceScaleId override) — unlike CVD, it IS a real price', () => {
+    const s = chart();
+    const block = s.slice(s.indexOf('const vwapSeries = chart.addSeries'), s.indexOf('vwapSeriesRef.current = vwapSeries;'));
+    expect(block).not.toContain('priceScaleId');
+  });
+
+  it('is Fio de Seda compliant: lineWidth 1, LineStyle.Solid', () => {
+    const s = chart();
+    const block = s.slice(s.indexOf('const vwapSeries = chart.addSeries'), s.indexOf('vwapSeriesRef.current = vwapSeries;'));
+    expect(block).toContain('lineWidth: 1');
+    expect(block).toContain('lineStyle: LineStyle.Solid');
+  });
+
+  it('is fed straight from the real `data` prop (the same candles driving the whole chart) — zero new fetch', () => {
+    const s = chart();
+    const start = s.indexOf('if (!vwapSeriesRef.current) return;');
+    const block = s.slice(start, s.indexOf('}, [data]);', start));
+    expect(block).toContain('computeSessionVwapSeries(data)');
+    expect(block).toContain('vwapSeriesRef.current.setData(');
+  });
+
+  it('the ref is cleared on unmount, same discipline as every other series ref', () => {
+    const s = chart();
+    const teardown = s.slice(s.indexOf('return () => {\n      chart.remove();'), s.indexOf('setChartReady(null);'));
+    expect(teardown).toContain('vwapSeriesRef.current = null;');
+  });
+});

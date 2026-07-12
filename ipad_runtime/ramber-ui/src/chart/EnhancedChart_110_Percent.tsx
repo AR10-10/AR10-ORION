@@ -50,6 +50,10 @@ import { patchLastCandleWithLiveTick } from "../nexus/live-candle-sync";
 import type { Timeframe } from "../nexus/types";
 // Signal Precision order: actionable plan drawn as silk-thread price lines.
 import type { TradePlan } from "../nexus/trade-plan";
+// Research-driven precision order: VWAP, the institutional-standard
+// intraday reference level this system was missing entirely (confirmed
+// via a full-codebase grep before writing nexus/vwap.ts).
+import { computeSessionVwapSeries } from "../nexus/vwap";
 
 export interface EnhancedChartCandle {
   time: number; // Unix segundos real (Bus/Binance) — nunca sintetizado
@@ -57,6 +61,12 @@ export interface EnhancedChartCandle {
   high: number;
   low: number;
   close: number;
+  // V-MAX Fase 1.3: já sempre real em App.tsx's chartData (nunca opcional
+  // -fabricado) — declarado aqui como opcional só para não quebrar algum
+  // outro chamador de teste que ainda monta um EnhancedChartCandle à mão
+  // sem volume; o cálculo real de VWAP abaixo trata ausência como 0 velas
+  // válidas (fail-closed), nunca uma média fabricada.
+  volume?: number;
 }
 
 // V-MAX Fase 0.7: ganha `index` (posição real no array de candles onde a
@@ -155,6 +165,11 @@ export function EnhancedChart_110_Percent({
   const stopLineRef = useRef<IPriceLine | null>(null);
   const targetLineRef = useRef<IPriceLine | null>(null);
   const cvdSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Research-driven precision order: VWAP as a native line series on the
+  // SAME price scale as the candles (unlike cvdSeriesRef, which needs its
+  // own scale because CVD is signed volume, not price) — it overlays
+  // directly at the correct real price level.
+  const vwapSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Espelha chartRef/seriesRef em state só para o LiquidityZonesPlugin
   // montar assim que o chart existe de verdade — refs sozinhas não
   // disparam re-render, então o plugin ficaria esperando por uma
@@ -235,6 +250,23 @@ export function EnhancedChart_110_Percent({
     });
     chart.priceScale("cvd").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
     cvdSeriesRef.current = cvdSeries;
+    // Research-driven precision order: VWAP on the MAIN price scale (no
+    // priceScaleId override — it shares the candles' own axis, unlike
+    // CVD, since it IS a real price). Neutral off-white, low opacity: a
+    // pure reference level, deliberately not competing with the
+    // directional/semantic palette (green=bullish, red=bearish, amber=
+    // entry) used everywhere else on this chart. Fio de seda: lineWidth
+    // 1, solid.
+    const vwapSeries = chart.addSeries(LineSeries, {
+      color: "rgba(255, 255, 255, 0.45)",
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: false,
+      title: "VWAP",
+    });
+    vwapSeriesRef.current = vwapSeries;
     chartRef.current = chart;
     seriesRef.current = series;
     setChartReady({ chart, series });
@@ -248,6 +280,7 @@ export function EnhancedChart_110_Percent({
       fibLinesRef.current = [];
       tradePlanLinesRef.current = [];
       cvdSeriesRef.current = null;
+      vwapSeriesRef.current = null;
       setChartReady(null);
     };
   }, []);
@@ -376,6 +409,19 @@ export function EnhancedChart_110_Percent({
         .map(([t, cvd]) => ({ time: t as UTCTimestamp, value: cvd })),
     );
   }, [orderflowHistory]);
+
+  // Research-driven precision order: VWAP, computed straight from the
+  // same real candle array driving the whole chart (chartData already
+  // carries real per-candle volume, V-MAX Fase 1.3) — zero new fetch,
+  // zero second data source. UTC-day-anchored (see nexus/vwap.ts header
+  // for why); an empty result (no candle in the current UTC day, or a
+  // day with zero real volume) sets an empty series — never a fabricated
+  // flat line.
+  useEffect(() => {
+    if (!vwapSeriesRef.current) return;
+    const series = computeSessionVwapSeries(data);
+    vwapSeriesRef.current.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+  }, [data]);
 
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // Fibonacci como price lines nativas — "fio de seda" (1px sólida, nunca
