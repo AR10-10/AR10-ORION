@@ -87,6 +87,7 @@ própria fatia (referência idêntica à escrita na store).
 | `BRAIN.COUNCIL.UPDATED` | `{ decision: CouncilDecision \| null }` | Organism Orchestrator |
 | `BRAIN.SCENARIO.UPDATED` | `{ projection: ScenarioProjection \| null }` | Organism Orchestrator |
 | `BRAIN.TRAPS.UPDATED` | `{ traps: TrapSignal[] }` | Organism Orchestrator |
+| `BRAIN.TRADE_PLAN.UPDATED` | `{ plan: TradePlan \| null }` (entry zone / stop / target from real structure) | Organism Orchestrator |
 | `ORGANISM.TRUST.UPDATED` | `{ score: TrustScoreSnapshot \| null }` | Organism Orchestrator |
 | `ORGANISM.AFFECT.UPDATED` | `{ cpi, memory }` (uma ingestão real = um evento) | Organism Orchestrator |
 

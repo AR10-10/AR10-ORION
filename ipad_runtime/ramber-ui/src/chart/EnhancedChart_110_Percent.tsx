@@ -45,6 +45,8 @@ import { VolumeProfilePlugin } from "./VolumeProfilePlugin";
 // tick). Ver header do módulo para o porquê da separação.
 import { patchLastCandleWithLiveTick } from "../nexus/live-candle-sync";
 import type { Timeframe } from "../nexus/types";
+// Signal Precision order: actionable plan drawn as silk-thread price lines.
+import type { TradePlan } from "../nexus/trade-plan";
 
 export interface EnhancedChartCandle {
   time: number; // Unix segundos real (Bus/Binance) — nunca sintetizado
@@ -104,6 +106,10 @@ interface EnhancedChartProps {
   // quebra um chamador que ainda não os passa).
   livePrice?: number | null;
   activeTimeframe?: Timeframe;
+  // Trade Plan (real structure only): entry zone / stop / target drawn as
+  // silk-thread price lines with English labels. Optional and fail-closed:
+  // null/absent draws nothing.
+  tradePlan?: TradePlan | null;
 }
 
 // Mesmo formato de texto que o gráfico antigo já usava para S1/R1 — só a
@@ -128,6 +134,7 @@ export function EnhancedChart_110_Percent({
   fibonacciLevels,
   livePrice,
   activeTimeframe,
+  tradePlan,
 }: EnhancedChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -136,6 +143,7 @@ export function EnhancedChart_110_Percent({
   const resistanceLineRef = useRef<IPriceLine | null>(null);
   const zoneLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
+  const tradePlanLinesRef = useRef<IPriceLine[]>([]);
   const cvdSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Espelha chartRef/seriesRef em state só para o LiquidityZonesPlugin
   // montar assim que o chart existe de verdade — refs sozinhas não
@@ -228,6 +236,7 @@ export function EnhancedChart_110_Percent({
       resistanceLineRef.current = null;
       zoneLinesRef.current = [];
       fibLinesRef.current = [];
+      tradePlanLinesRef.current = [];
       cvdSeriesRef.current = null;
       setChartReady(null);
     };
@@ -383,6 +392,47 @@ export function EnhancedChart_110_Percent({
       );
     });
   }, [fibonacciLevels]);
+
+  // Signal Precision order: the Trade Plan drawn on the chart — subtle,
+  // silk-thread annotations (1px solid, never dashed; hierarchy only via
+  // color/opacity). Entry zone = two lines bounding the real structure
+  // (one line when the zone is a zero-width level); Stop and Target with
+  // their real structure basis and the R:R in the label. English labels
+  // (professional trading terminology). Fail-closed: no plan, no lines.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    tradePlanLinesRef.current.forEach((line) => series.removePriceLine(line));
+    tradePlanLinesRef.current = [];
+    if (!tradePlan) return;
+
+    const mk = (price: number, color: string, title: string) => {
+      if (!Number.isFinite(price)) return;
+      tradePlanLinesRef.current.push(
+        series.createPriceLine({
+          price,
+          color,
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title,
+        }),
+      );
+    };
+    const entryColor = "rgba(240, 208, 111, 0.75)"; // amber — the acceptance zone
+    if (tradePlan.entry.low === tradePlan.entry.high) {
+      mk(tradePlan.entry.low, entryColor, `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`);
+    } else {
+      mk(tradePlan.entry.high, entryColor, `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`);
+      mk(tradePlan.entry.low, "rgba(240, 208, 111, 0.45)", "ENTRY ZONE LOW");
+    }
+    mk(tradePlan.stop.price, "rgba(255, 0, 85, 0.75)", `STOP · ${tradePlan.stop.basis}`);
+    mk(
+      tradePlan.target.price,
+      "rgba(0, 255, 170, 0.75)",
+      `TARGET · ${tradePlan.target.basis}${tradePlan.riskRewardRatio !== null ? ` · 1:${tradePlan.riskRewardRatio.toFixed(2)}` : ""}`,
+    );
+  }, [tradePlan]);
 
   return (
     <div className="absolute inset-0">

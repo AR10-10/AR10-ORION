@@ -137,3 +137,34 @@ describe('EnhancedChart: correção de latência (patch da vela em formação) i
     expect(s).toContain('activeTimeframe?: Timeframe;');
   });
 });
+
+describe('EnhancedChart: Trade Plan drawn as silk-thread price lines (Signal Precision order)', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('entry/stop/target lines are lineWidth 1 + LineStyle.Solid (silk thread), created from the real tradePlan slice', () => {
+    const s = chart();
+    const block = s.slice(s.indexOf('tradePlanLinesRef.current.forEach'), s.indexOf('}, [tradePlan]);'));
+    expect(block).toContain('lineWidth: 1');
+    expect(block).toContain('lineStyle: LineStyle.Solid');
+    expect(block).not.toMatch(/LineStyle\.(Dashed|Dotted|LargeDashed|SparseDotted)/);
+  });
+
+  it('English labels carry the real structure basis and the R:R (ENTRY/STOP/TARGET)', () => {
+    const s = chart();
+    expect(s).toContain('`ENTRY ${tradePlan.direction}');
+    expect(s).toContain('`STOP · ${tradePlan.stop.basis}`');
+    expect(s).toContain('`TARGET · ${tradePlan.target.basis}');
+  });
+
+  it('fail-closed: no plan draws nothing, and lines are cleared on every change and on unmount', () => {
+    const s = chart();
+    expect(s).toContain('if (!tradePlan) return;');
+    expect(s).toContain('tradePlanLinesRef.current = [];');
+  });
+
+  it('ChartWidget feeds the chart from the same store slice (useTradePlanSnapshot) — zero recomputation', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('const chartTradePlan = useTradePlanSnapshot();');
+    expect(app).toContain('tradePlan={chartTradePlan}');
+  });
+});

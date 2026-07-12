@@ -28,6 +28,10 @@ import { getHealthMonitor } from "./nexus/health-monitor";
 // bus do Nexus Core — a publicação dos motores é a própria escrita na store,
 // nunca um emit() manual espalhado pelos efeitos.
 import { getOrganismOrchestrator } from "./nexus/organism-orchestrator";
+// Local-First (closes the persistence gap flagged in the audit): candles
+// persisted to IndexedDB on every real REST arrival; on boot the chart
+// paints instantly from the last REAL session before the network answers.
+import { saveCandles, loadCandles } from "./nexus/persistence";
 // V18 Sprint 1 (Tarefa B): "Destravar o Gráfico Institucional" — substitui
 // o SVG feito à mão por lightweight-charts (pan/zoom/crosshair nativos).
 import { EnhancedChart_110_Percent } from "./chart/EnhancedChart_110_Percent";
@@ -546,6 +550,9 @@ export default function App() {
       const candles = await getChartCandles(selectedAsset, CHART_CANDLE_LIMIT, chartTimeframeRef.current);
       if (!candles) throw new Error('market_data_bus_sem_candles_validos');
       setChartData(candles);
+      // Local-First: persist the real series (fire-and-forget — a storage
+      // failure never blocks or delays the live path).
+      void saveCandles(selectedAsset, chartTimeframeRef.current as Timeframe, candles).catch(() => {});
 
       const tickerRes = await fetch(
         `https://api.binance.com/api/v3/ticker/24hr?symbols=["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT"]`,
@@ -1577,6 +1584,23 @@ export default function App() {
   // dev sem depender do array de hooks do NexusCore (getNexusCore() aqui
   // só fornece o Event Bus tipado compartilhado, mesmo singleton de
   // sempre).
+  // Local-First instant paint: while the first REST answer is in flight,
+  // show the last REAL candles persisted for this symbol/timeframe (a
+  // previous session's genuine data — the freshness telemetry already
+  // reports age honestly). The functional setState guard means a faster
+  // network answer always wins; rows without a real volume field (older
+  // format) are discarded, never defaulted (fail-closed, zero mocks).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const persisted = await loadCandles(selectedAsset, chartTimeframeRef.current as Timeframe).catch(() => null);
+      if (cancelled || !persisted || persisted.length === 0) return;
+      if (!persisted.every((c: any) => Number.isFinite(c.volume))) return;
+      setChartData((prev) => (prev.length > 0 ? prev : (persisted as typeof prev)));
+    })();
+    return () => { cancelled = true; };
+  }, [bootGeneration, selectedAsset]);
+
   useEffect(() => {
     const core = getNexusCore();
     core.start();
@@ -3814,6 +3838,9 @@ function ChartWidget({ chartData }: any) {
   // via series.update() dentro de EnhancedChart_110_Percent, isolado do
   // recomputo de chartData/SMC/Fibonacci.
   const livePrice = usePriceSnapshot();
+  // Signal Precision order: the same real Trade Plan slice the ANALYSIS
+  // view shows, now drawn on the chart as silk-thread price lines.
+  const chartTradePlan = useTradePlanSnapshot();
 
   const unmitigatedFvgs = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
   const unmitigatedBlocks = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
@@ -3888,6 +3915,7 @@ function ChartWidget({ chartData }: any) {
             fibonacciLevels={fibonacciLevels}
             livePrice={livePrice.price}
             activeTimeframe={chartTimeframe as Timeframe}
+            tradePlan={chartTradePlan}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
