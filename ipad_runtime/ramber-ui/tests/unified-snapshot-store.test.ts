@@ -29,6 +29,7 @@ const RESET = {
   scenario: null,
   trapSignals: [],
   tradePlan: null,
+  trackRecord: { contractVersion: 1 as const, active: null, history: [], targetHits: 0, stopHits: 0, replaced: 0 },
   trustScore: null,
 };
 

@@ -48,6 +48,12 @@ import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
 import type { TradePlan } from "../nexus/trade-plan";
 import {
+  trackPlanTransition,
+  trackPriceTick,
+  EMPTY_TRACK_RECORD,
+  type TrackRecordState,
+} from "../nexus/signal-track-record";
+import {
   ingestAffectiveEvent,
   computeCpi,
   EMPTY_AFFECTIVE_STATE,
@@ -207,6 +213,10 @@ export interface UnifiedSnapshotState {
   // são do sistema, não do símbolo).
   affectiveMemory: AffectiveMemoryState;
   cpi: number | null;
+  // Autonomy order — honest signal accuracy: every Trade Plan tracked
+  // against the real price (first touch: target vs stop; conservative on
+  // gaps). Session state hydrated from IndexedDB (Local-First).
+  trackRecord: TrackRecordState;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -260,6 +270,9 @@ interface UnifiedSnapshotActions {
   // CPI no mesmo write (decaimento lazy: entre eventos a razão é
   // invariante, ver nexus/affective-memory.ts).
   recordAffectiveEvent: (source: AffectiveEventSource) => void;
+  trackPlanTransition: (plan: TradePlan | null) => void;
+  trackPriceTick: (price: number) => void;
+  hydrateTrackRecord: (state: TrackRecordState) => void;
 }
 
 export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnapshotActions>()(
@@ -293,6 +306,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     trustScore: null,
     affectiveMemory: EMPTY_AFFECTIVE_STATE,
     cpi: null,
+    trackRecord: EMPTY_TRACK_RECORD,
 
     // §1 MERCADO
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
@@ -337,6 +351,17 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
       s.affectiveMemory = next;
       s.cpi = computeCpi(next);
     }),
+    // The pure functions return the ORIGINAL reference when nothing changed
+    // (same advisory reading, no touch) — immer then sees an identical
+    // assignment and produces NO transition: zero spurious notifications on
+    // the per-tick path (Main Thread sacred).
+    trackPlanTransition: (plan) => set((s) => {
+      s.trackRecord = trackPlanTransition(s.trackRecord as TrackRecordState, plan, Date.now());
+    }),
+    trackPriceTick: (price) => set((s) => {
+      s.trackRecord = trackPriceTick(s.trackRecord as TrackRecordState, price, Date.now());
+    }),
+    hydrateTrackRecord: (state) => set((s) => { s.trackRecord = state; }),
   })),
 );
 
@@ -404,3 +429,5 @@ export const useTrustScoreSnapshot = (): TrustScoreSnapshot | null =>
 export const useCpiSnapshot = (): number | null => useUnifiedSnapshotStore((s) => s.cpi);
 export const useAffectiveMemorySnapshot = (): AffectiveMemoryState =>
   useUnifiedSnapshotStore((s) => s.affectiveMemory);
+export const useTrackRecordSnapshot = (): TrackRecordState =>
+  useUnifiedSnapshotStore((s) => s.trackRecord);

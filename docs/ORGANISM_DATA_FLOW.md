@@ -90,6 +90,7 @@ própria fatia (referência idêntica à escrita na store).
 | `BRAIN.TRADE_PLAN.UPDATED` | `{ plan: TradePlan \| null }` (entry zone / stop / target from real structure) | Organism Orchestrator |
 | `ORGANISM.TRUST.UPDATED` | `{ score: TrustScoreSnapshot \| null }` | Organism Orchestrator |
 | `ORGANISM.AFFECT.UPDATED` | `{ cpi, memory }` (uma ingestão real = um evento) | Organism Orchestrator |
+| `ORGANISM.TRACK_RECORD.UPDATED` | `{ record: TrackRecordState }` (honest first-touch signal accuracy, persisted) | Organism Orchestrator |
 
 O bus é **notificação**, o snapshot é **estado**: não há replay. Todo
 consumidor novo faz a leitura inicial pelo snapshot e então assina o bus —

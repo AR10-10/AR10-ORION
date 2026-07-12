@@ -131,6 +131,9 @@ export class OrganismOrchestrator {
       if (state.affectiveMemory !== prev.affectiveMemory) {
         this.bus.emit({ type: "ORGANISM.AFFECT.UPDATED", payload: { cpi: state.cpi, memory: state.affectiveMemory } });
       }
+      if (state.trackRecord !== prev.trackRecord) {
+        this.bus.emit({ type: "ORGANISM.TRACK_RECORD.UPDATED", payload: { record: state.trackRecord } });
+      }
     });
   }
 

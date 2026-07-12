@@ -11,9 +11,12 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot } from "./store/unified-snapshot-store";
 // Signal Precision order (phase 4): actionable plan from real structure.
 import { buildTradePlan, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
+// Autonomy order: honest signal accuracy — plans tracked against the real
+// price, persisted across sessions, felt by the affective memory.
+import { rehydrateTrackRecord, hitRate } from "./nexus/signal-track-record";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -31,7 +34,7 @@ import { getOrganismOrchestrator } from "./nexus/organism-orchestrator";
 // Local-First (closes the persistence gap flagged in the audit): candles
 // persisted to IndexedDB on every real REST arrival; on boot the chart
 // paints instantly from the last REAL session before the network answers.
-import { saveCandles, loadCandles } from "./nexus/persistence";
+import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord } from "./nexus/persistence";
 // V18 Sprint 1 (Tarefa B): "Destravar o Gráfico Institucional" — substitui
 // o SVG feito à mão por lightweight-charts (pan/zoom/crosshair nativos).
 import { EnhancedChart_110_Percent } from "./chart/EnhancedChart_110_Percent";
@@ -1448,6 +1451,53 @@ export default function App() {
       }),
     );
   }, [councilFromSnapshot, priceFromSnapshot, smcZones, engine, fibonacciMatrix, volumeProfileSnapshot]);
+
+  // Autonomy order — honest signal accuracy. Store-mediated chain:
+  // (1) the tradePlan slice feeds the tracker (same-value re-derivations
+  //     are no-ops inside the pure engine — zero spurious transitions);
+  // (2) every real price tick evaluates the open plan (first touch:
+  //     target vs stop; conservative on gaps);
+  // (3) a real resolution becomes a PERCEPTION event in the affective
+  //     memory (the CPI now feels whether the reading was right) and the
+  //     record is persisted (Local-First — accuracy accumulates across
+  //     sessions);
+  // (4) boot hydrates the persisted record fail-closed (an OPEN plan from
+  //     a dead session is counted superseded, never resolved in absentia).
+  const trackedPlan = useTradePlanSnapshot();
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().trackPlanTransition(trackedPlan);
+  }, [trackedPlan]);
+  useEffect(() => {
+    if (typeof priceFromSnapshot.price === "number") {
+      useUnifiedSnapshotStore.getState().trackPriceTick(priceFromSnapshot.price);
+    }
+  }, [priceFromSnapshot]);
+  const trackRecordSlice = useTrackRecordSnapshot();
+  const prevTrackRecordRef = useRef(trackRecordSlice);
+  useEffect(() => {
+    const prev = prevTrackRecordRef.current;
+    prevTrackRecordRef.current = trackRecordSlice;
+    if (prev === trackRecordSlice) return;
+    const last = trackRecordSlice.history[trackRecordSlice.history.length - 1];
+    const prevLen = prev.history.length;
+    if (trackRecordSlice.history.length > prevLen && last) {
+      if (last.status === "TARGET_HIT") {
+        useUnifiedSnapshotStore.getState().recordAffectiveEvent("PLAN_TARGET_HIT");
+      } else if (last.status === "STOP_HIT") {
+        useUnifiedSnapshotStore.getState().recordAffectiveEvent("PLAN_STOP_HIT");
+      }
+    }
+    void saveTrackRecord(trackRecordSlice).catch(() => {});
+  }, [trackRecordSlice]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const raw = await loadTrackRecord().catch(() => null);
+      if (cancelled || raw === null) return;
+      useUnifiedSnapshotStore.getState().hydrateTrackRecord(rehydrateTrackRecord(raw));
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // V-MAX Fase 2 (armadilhas institucionais): corroboração de eventos
   // REAIS — sweeps consumados (flag swept do motor SMC) + sinais reais de
@@ -3660,6 +3710,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
   const volumeProfile = useVolumeProfileSnapshot();
   const price = usePriceSnapshot();
   const tradePlan = useTradePlanSnapshot();
+  const trackRecord = useTrackRecordSnapshot();
 
   const pct = (v: number | null | undefined, digits = 0) =>
     typeof v === "number" && Number.isFinite(v) ? `${(v * 100).toFixed(digits)}%` : MODULE_EMPTY;
@@ -3775,6 +3826,16 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         </ModulePanel>
         <ModulePanel title="Perception Index (CPI · reward/pain memory, real transitions)">
           <ModuleStat label="CPI" value={cpi !== null ? pct(cpi) : MODULE_EMPTY} tone={cpi !== null && cpi >= 0.5 ? "long" : cpi !== null ? "short" : "neutral"} />
+        </ModulePanel>
+        <ModulePanel title="Signal Track Record (real first-touch outcomes, persisted)">
+          <ModuleStat label="Open Plan" value={trackRecord.active ? `${trackRecord.active.plan.direction} since ${new Date(trackRecord.active.openedAt).toLocaleTimeString("en-US", { hour12: false })}` : "NONE"} />
+          <ModuleStat label="Target Hits" value={String(trackRecord.targetHits)} tone="long" />
+          <ModuleStat label="Stop Hits" value={String(trackRecord.stopHits)} tone="short" />
+          <ModuleStat label="Hit Rate" value={hitRate(trackRecord) !== null ? pct(hitRate(trackRecord)) : "NO RESOLVED PLAN YET (honest)"} tone={hitRate(trackRecord) !== null && hitRate(trackRecord)! >= 0.5 ? "long" : hitRate(trackRecord) !== null ? "short" : "neutral"} />
+          <ModuleStat label="Superseded" value={String(trackRecord.replaced)} />
+          <span className="text-[0.42rem] text-[#8ab4f8]/40 leading-tight">
+            First-touch evaluation, conservative on gaps (stop wins). Superseded plans never count as wins or losses.
+          </span>
         </ModulePanel>
         <ModulePanel title="Institutional Traps (real corroborated events)">
           {traps.length > 0 ? (

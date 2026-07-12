@@ -17,6 +17,7 @@ import type { ScenarioProjection } from "./scenario-engine";
 import type { TrapSignal } from "./trap-detection";
 import type { TradePlan } from "./trade-plan";
 import type { AffectiveMemoryState } from "./affective-memory";
+import type { TrackRecordState } from "./signal-track-record";
 import type { TrustScoreSnapshot } from "../engine-bridge";
 
 // Diretamente do Blueprint V-MAX §1.3 — os únicos eventos reais que este
@@ -59,7 +60,10 @@ export type NexusEvent =
   // substituída por referência a cada ingestão); cpi pode repetir o mesmo
   // valor entre eventos (ex.: 1.0 → 1.0 com dois rewards) — o evento
   // continua sendo emitido porque a MEMÓRIA mudou de verdade.
-  | { type: "ORGANISM.AFFECT.UPDATED"; payload: { cpi: number | null; memory: AffectiveMemoryState } };
+  | { type: "ORGANISM.AFFECT.UPDATED"; payload: { cpi: number | null; memory: AffectiveMemoryState } }
+  // Honest signal accuracy: a plan opened, resolved (target/stop) or was
+  // superseded — one real transition, one event.
+  | { type: "ORGANISM.TRACK_RECORD.UPDATED"; payload: { record: TrackRecordState } };
 
 export type NexusEventType = NexusEvent["type"];
 type PayloadOf<T extends NexusEventType> = Extract<NexusEvent, { type: T }>["payload"];
