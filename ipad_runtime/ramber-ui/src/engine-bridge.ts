@@ -61,6 +61,18 @@ import { detectHvnLvn, bucketMidPrice, type VolumeProfileResult } from './nexus/
 // motor de S/R, nunca uma segunda definição de swing.
 import { findSwings, FRACTAL_K } from '../../src/research/engines/fractal-swings.js';
 import { buildFibonacciConfluence, type ConfluenceSource, type FibonacciConfluenceMatrix } from './nexus/fibonacci-confluence';
+// Fase Ω Priority 1 (Adaptive Multi-Timeframe Intelligence): motor puro
+// já reaproveita analyzeMarketStructure/classifyMarketRegime/S-R/RSI por
+// import próprio (ver header de multi-timeframe-engine.ts) — este arquivo
+// só importa a função de orquestração e os tipos, nunca uma segunda cópia
+// dos motores.
+import {
+  analyzeTimeframe,
+  MULTI_TIMEFRAME_LIST,
+  type MultiTimeframeId,
+  type MultiTimeframeMatrix,
+  type TimeframeContext,
+} from './nexus/multi-timeframe-engine';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fase G (V15, diretriz 4): envelope de tipos do santuário. A saída
@@ -570,6 +582,43 @@ export async function getOlderChartCandles(
   } catch {
     return null;
   }
+}
+
+// Fase Ω Priority 1 — Adaptive Multi-Timeframe Intelligence: busca os 6
+// prazos reais (1m/5m/15m/1h/4h/1d) em paralelo, cada um via o MESMO Bus/
+// conector que o ciclo principal já usa (requestFuturesCandleSnapshot —
+// zero segunda fonte de dado, zero segunda sonda de rede fora do que o Bus
+// já dedupe entre chamadores concorrentes). Cadência PRÓPRIA e mais lenta
+// que o ciclo principal (App.tsx chama isto a cada ~60s, não a cada ~30s):
+// isto é confluência/contexto entre prazos, nunca o caminho crítico do
+// sinal principal — mesma filosofia não-bloqueante já usada pelo contexto
+// HTF acima (refreshHtfMarketStructureInBackground). LEI 24: apenas
+// contexto/confluência entre prazos, nunca um segundo motor de decisão.
+const MTF_CANDLE_LIMIT = 100;
+const MTF_MAX_AGE_MS = 50_000;
+
+export async function buildMultiTimeframeContext(symbol = 'BTC'): Promise<MultiTimeframeMatrix | null> {
+  const entries = await Promise.all(
+    MULTI_TIMEFRAME_LIST.map(async (tf): Promise<[MultiTimeframeId, TimeframeContext]> => {
+      try {
+        const snapshot = await requestFuturesCandleSnapshot({
+          symbol, timeframe: tf, limit: MTF_CANDLE_LIMIT, maxAgeMs: MTF_MAX_AGE_MS,
+        });
+        return [tf, analyzeTimeframe(tf, snapshot.ok ? snapshot.candles : [])];
+      } catch {
+        // Bus lançou (rede/exceção real) — mesmo caminho honesto de "sem
+        // candles reais para este prazo agora" que uma resposta ok:false.
+        return [tf, analyzeTimeframe(tf, [])];
+      }
+    }),
+  );
+  // Todos os 6 prazos sem NENHUMA leitura real (ex.: rede totalmente fora)
+  // devolve null honesto em vez de uma matriz de 6 linhas vazias — mesma
+  // semântica de "ainda sem leitura" que os outros motores da store já
+  // usam (volumeProfile, trustScore, etc. também começam null).
+  const anyOk = entries.some(([, ctx]) => ctx.status === 'OK');
+  if (!anyOk) return null;
+  return Object.fromEntries(entries) as MultiTimeframeMatrix;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

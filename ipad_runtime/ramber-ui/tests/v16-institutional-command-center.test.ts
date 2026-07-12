@@ -65,13 +65,15 @@ describe('V16 Workspace Manager: widgets ganham collapsed+pinned (5 estados) sem
     expect(app).toContain('const WORKSPACE_STATES = ["hidden", "docked", "collapsed", "pinned", "floating"] as const;');
   });
 
-  it('WorkspaceManagerPanel lista exatamente os 9 módulos secundários — nunca o Gráfico nem as colunas sempre-visíveis', () => {
+  it('WorkspaceManagerPanel lista exatamente os 10 módulos secundários — nunca o Gráfico nem as colunas sempre-visíveis', () => {
     const app = read('../src/App.tsx');
     const listMatch = app.match(/const WORKSPACE_MANAGER_MODULES: \{ id: string; label: string \}\[\] = \[([\s\S]*?)\n\];/);
     expect(listMatch, 'WORKSPACE_MANAGER_MODULES não encontrado').not.toBeNull();
     const ids = [...listMatch![1].matchAll(/\{ id: "(\w+)"/g)].map((m) => m[1]);
     expect(ids.sort()).toEqual(
-      ['orderbook', 'orderflow', 'heatmap', 'scanner', 'exposure', 'events', 'neural_core', 'asset_heatmap', 'tactical'].sort(),
+      // Fase Ω Priority 1: multi_timeframe entrou como 10º módulo secundário
+      // opt-in (mesma disciplina de densidade/zero-scroll dos outros 9).
+      ['orderbook', 'orderflow', 'heatmap', 'scanner', 'exposure', 'events', 'neural_core', 'asset_heatmap', 'tactical', 'multi_timeframe'].sort(),
     );
     for (const permanent of ['chart', 'market_direction', 'se_core', 'gmil_context', 'market_regime', 'decision_validation', 'system_health']) {
       expect(ids).not.toContain(permanent);

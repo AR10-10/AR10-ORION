@@ -47,6 +47,7 @@ import type { CouncilDecision } from "../nexus/council";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
 import type { TradePlan } from "../nexus/trade-plan";
+import type { MultiTimeframeMatrix } from "../nexus/multi-timeframe-engine";
 import {
   trackPlanTransition,
   trackPriceTick,
@@ -189,6 +190,11 @@ export interface UnifiedSnapshotState {
   // (entry zone / stop / target / R:R). null = honest "no coherent plan"
   // (no directional stance, risk gate locked, or missing real structure).
   tradePlan: TradePlan | null;
+  // Fase Ω Priority 1 — Adaptive Multi-Timeframe Intelligence: contexto real
+  // independente por prazo (1m/5m/15m/1h/4h/1d), reaproveitando os mesmos
+  // motores puros do ciclo principal (LEI 24: confluência/contexto, nunca um
+  // segundo motor de decisão). null até o primeiro ciclo real.
+  multiTimeframeContext: MultiTimeframeMatrix | null;
 
   // §5 ORGANISMO
   // Estado REAL do motor de análise (engineStatus/direção/confiança do
@@ -257,6 +263,7 @@ interface UnifiedSnapshotActions {
   setScenario: (projection: ScenarioProjection | null) => void;
   setTrapSignals: (traps: TrapSignal[]) => void;
   setTradePlan: (plan: TradePlan | null) => void;
+  setMultiTimeframeContext: (matrix: MultiTimeframeMatrix | null) => void;
 
   // §5 ORGANISMO
   setCore: (core: CoreSnapshot) => void;
@@ -297,6 +304,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     scenario: null,
     trapSignals: [],
     tradePlan: null,
+    multiTimeframeContext: null,
     // §5 ORGANISMO
     core: EMPTY_CORE,
     health: EMPTY_HEALTH,
@@ -339,6 +347,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
     setTrapSignals: (traps) => set((s) => { s.trapSignals = traps; }),
     setTradePlan: (plan) => set((s) => { s.tradePlan = plan; }),
+    setMultiTimeframeContext: (matrix) => set((s) => { s.multiTimeframeContext = matrix; }),
     // §5 ORGANISMO
     setCore: (core) => set((s) => { s.core = core; }),
     setHealth: (health) => set((s) => { s.health = health; }),
@@ -417,6 +426,8 @@ export const useTrapSignalsSnapshot = (): TrapSignal[] =>
   useUnifiedSnapshotStore((s) => s.trapSignals ?? EMPTY_TRAPS);
 export const useTradePlanSnapshot = (): TradePlan | null =>
   useUnifiedSnapshotStore((s) => s.tradePlan);
+export const useMultiTimeframeSnapshot = (): MultiTimeframeMatrix | null =>
+  useUnifiedSnapshotStore((s) => s.multiTimeframeContext);
 
 // §5 ORGANISMO
 export const useCoreSnapshot = (): CoreSnapshot => useUnifiedSnapshotStore((s) => s.core);

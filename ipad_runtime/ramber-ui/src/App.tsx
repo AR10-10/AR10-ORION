@@ -11,7 +11,10 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot } from "./store/unified-snapshot-store";
+// Fase Ω Priority 1: tipos + lista canônica dos 6 prazos — mesma fonte que
+// engine-bridge.ts usa para orquestrar, nunca uma segunda lista duplicada.
+import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } from "./nexus/multi-timeframe-engine";
 // Signal Precision order (phase 4): actionable plan from real structure.
 import { buildTradePlan, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
 // Autonomy order: honest signal accuracy — plans tracked against the real
@@ -56,6 +59,7 @@ import {
   computeRealFibonacciConfluence,
   computeRealTrustScore,
   type ConfluenceSource,
+  buildMultiTimeframeContext,
 } from "./engine-bridge";
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
 // pura — a matemática pesada roda no WASM do quant-worker).
@@ -510,6 +514,11 @@ export default function App() {
     decision_validation: { visible: true, floating: false, collapsed: false, pinned: false },
     // V-MAX Fase 1 (superfície visual): HUD do Conselho Multi-Agente + CPI.
     council: { visible: true, floating: false, collapsed: false, pinned: false },
+    // Fase Ω Priority 1: matriz de contexto real por prazo (1m-1D). Ferramenta
+    // secundária como scanner/exposure/etc — oculta por padrão, sob demanda
+    // via Workspace Manager (mesma disciplina de densidade/zero-scroll já
+    // aplicada aos outros painéis analíticos desta lista).
+    multi_timeframe: { visible: false, floating: false, collapsed: false, pinned: false },
   };
   const [widgets, setWidgets] = useState<{
     [key: string]: { visible: boolean; floating: boolean; collapsed: boolean; pinned: boolean };
@@ -945,6 +954,35 @@ export default function App() {
       clearInterval(engineInterval);
     };
   }, [bootGeneration, selectedAsset, chartTimeframe]);
+
+  // Fase Ω Priority 1 (Adaptive Multi-Timeframe Intelligence): contexto real
+  // independente por prazo (1m/5m/15m/1h/4h/1d) — cadência PRÓPRIA de 60s,
+  // mais lenta que o ciclo principal (30s) porque isto é confluência/
+  // contexto entre prazos, nunca o caminho crítico do sinal principal (LEI
+  // 24: nunca um segundo motor de decisão). Deliberadamente NÃO depende de
+  // chartTimeframe: os 6 prazos são computados juntos, sempre, independente
+  // de qual está selecionado no gráfico — trocar o prazo exibido não deveria
+  // disparar um novo ciclo caro dos outros 5 que não mudaram. Sempre escreve
+  // o resultado (mesmo null): mesmo padrão do ciclo principal acima
+  // (setRealCycle sempre escreve); na prática o próprio Bus já serve o
+  // último candle BOM por chave em vez de ok:false num hiccup transitório
+  // (ver header do arquivo), então null só aparece de fato num boot a frio
+  // sem rede nenhuma.
+  useEffect(() => {
+    let cancelled = false;
+    const runMultiTimeframeCycle = async (): Promise<boolean> => {
+      const matrix = await buildMultiTimeframeContext(selectedAsset);
+      if (cancelled) return true;
+      useUnifiedSnapshotStore.getState().setMultiTimeframeContext(matrix);
+      return matrix !== null;
+    };
+    retryBoot(runMultiTimeframeCycle, () => cancelled);
+    const mtfInterval = setInterval(runMultiTimeframeCycle, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(mtfInterval);
+    };
+  }, [bootGeneration, selectedAsset]);
 
   // Fase J (Cap. 17): FPS REAL da UI via requestAnimationFrame — contagem
   // de frames por janela de 1s. É a medição verdadeira do que o Safari
@@ -2114,7 +2152,8 @@ export default function App() {
                     widgets.exposure.visible ||
                     widgets.events.visible ||
                     widgets.neural_core.visible ||
-                    widgets.asset_heatmap.visible) && (
+                    widgets.asset_heatmap.visible ||
+                    widgets.multi_timeframe.visible) && (
                     <div className="terminal-strip shrink-0 flex flex-col gap-2 max-h-[46dvh] min-[1120px]:max-h-[38dvh] overflow-y-auto scrollbar-hide">
                       {!widgets.se_core.collapsed &&
                         (marketMode === "TRADFI" ? (
@@ -2157,9 +2196,11 @@ export default function App() {
                         widgets.exposure.visible ||
                         widgets.events.visible ||
                         widgets.neural_core.visible ||
-                        widgets.asset_heatmap.visible) && (
+                        widgets.asset_heatmap.visible ||
+                        widgets.multi_timeframe.visible) && (
                         <div className="flex flex-col gap-2">
                           {widgets.asset_heatmap.visible && <AssetHeatmapWidget />}
+                          {widgets.multi_timeframe.visible && <MultiTimeframeMatrixWidget />}
                           {widgets.scanner.visible && <ScannerWidget data={scannerData} />}
                           {widgets.exposure.visible && <ExposureWidget />}
                           {widgets.events.visible && <EventsWidget />}
@@ -2215,6 +2256,7 @@ const WIDGET_LABELS: { [key: string]: string } = {
   decision_validation: "VALIDAÇÃO MULTI-CAMADA",
   system_health: "SYSTEM HEALTH",
   council: "MULTI-AGENT COUNCIL",
+  multi_timeframe: "MULTI-TIMEFRAME MATRIX",
 };
 
 function ConfigPanel() {
@@ -2277,6 +2319,7 @@ const WORKSPACE_MANAGER_MODULES: { id: string; label: string }[] = [
   { id: "neural_core", label: "NÚCLEO NEURAL · LLAMA 3" },
   { id: "asset_heatmap", label: "HEATMAP · ASSETS" },
   { id: "tactical", label: "LIQUIDAÇÕES INSTITUCIONAIS" },
+  { id: "multi_timeframe", label: "MULTI-TIMEFRAME MATRIX" },
 ];
 // Única fonte de verdade para "este widget pode ser fechado": os painéis
 // ALWAYS-docked (chart/gmil_context/market_regime/system_health/
@@ -5344,6 +5387,105 @@ function CouncilWidget() {
             {trustScore === null ? AWAIT : `${Math.round(trustScore.score * 100)}%`}
           </span>
         </div>
+      </div>
+    </Widget>
+  );
+}
+
+// --- MULTI-TIMEFRAME MATRIX (Fase Ω Priority 1) ---
+// Contexto real independente por prazo (1m/5m/15m/1h/4h/1d) — display only,
+// LEI 24: confluência/contexto entre prazos, nunca um segundo motor de
+// decisão (o único LONG/SHORT/WAIT real continua sendo o Core Engine, para
+// o timeframe selecionado no gráfico). "Confidence" é massa de opinião real
+// do MESMO linear opinion pool do Conselho (ver multi-timeframe-engine.ts)
+// — NUNCA uma probabilidade calibrada, mesmo rótulo honesto usado em toda
+// parte deste app (agreement do Conselho, CPI, TrustScore).
+const MTF_ROW_LABEL: Record<MultiTimeframeId, string> = {
+  "1m": "1M", "5m": "5M", "15m": "15M", "1h": "1H", "4h": "4H", "1d": "1D",
+};
+const MTF_STANCE_COLOR: Record<string, string> = {
+  LONG: "text-[#00ffaa]",
+  SHORT: "text-[#ff0055]",
+  NEUTRAL: "text-[#8ab4f8]",
+};
+
+function MultiTimeframeMatrixWidget() {
+  const matrix = useMultiTimeframeSnapshot();
+
+  const rows = MULTI_TIMEFRAME_LIST.map((tf) => ({ tf, ctx: matrix?.[tf] ?? null }));
+  // Confluência real = contagem honesta de quantos dos prazos COM leitura
+  // real concordam — nunca uma média ponderada por "probabilidade", só uma
+  // soma de rótulos reais (mesmo espírito do quórum do Conselho).
+  const readRows = rows
+    .map((r) => r.ctx)
+    .filter((c): c is TimeframeContext => !!c && c.status === "OK" && c.confidenceStance !== null);
+  const longCount = readRows.filter((c) => c.confidenceStance === "LONG").length;
+  const shortCount = readRows.filter((c) => c.confidenceStance === "SHORT").length;
+  const neutralCount = readRows.length - longCount - shortCount;
+  const confluenceLabel =
+    readRows.length === 0
+      ? AWAIT
+      : longCount === readRows.length
+      ? `${readRows.length}/${readRows.length} LONG`
+      : shortCount === readRows.length
+      ? `${readRows.length}/${readRows.length} SHORT`
+      : `MISTO · ${longCount}L/${shortCount}S/${neutralCount}N`;
+  const confluenceColor =
+    readRows.length === 0
+      ? "text-[#8ab4f8]"
+      : longCount === readRows.length
+      ? "text-[#00ffaa]"
+      : shortCount === readRows.length
+      ? "text-[#ff0055]"
+      : "text-[#f0d06f]";
+
+  return (
+    <Widget id="multi_timeframe" title="MULTI-TIMEFRAME MATRIX" flex="flex-1">
+      <div className="flex flex-col gap-1 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
+        <div
+          className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff20]"
+          title="Contagem real de quantos dos 6 prazos (com leitura real) concordam — NUNCA uma probabilidade calibrada (este repositório não tem backtest para sustentar essa afirmação honestamente)."
+        >
+          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CONFLUÊNCIA · 6 PRAZOS</span>
+          <span className={`text-[0.55rem] font-mono font-black ${confluenceColor}`}>{confluenceLabel}</span>
+        </div>
+        {rows.map(({ tf, ctx }) => {
+          const insufficient = !ctx || ctx.status !== "OK";
+          const stance = ctx?.confidenceStance ?? null;
+          const stanceColor = stance ? MTF_STANCE_COLOR[stance] : "text-[#8ab4f8]";
+          const structureShort = ctx?.structureLabel ? ctx.structureLabel.replace("ESTRUTURA_", "") : null;
+          const tooltip = insufficient
+            ? `${MTF_ROW_LABEL[tf]}: ${ctx?.reason ?? "sem_dados_reais"}`
+            : [
+                ctx.regime ? `Regime ${ctx.regime}` : null,
+                ctx.rsi !== null ? `RSI ${ctx.rsi.toFixed(1)}` : null,
+                ctx.support1 !== null ? `S1 ${ctx.support1.toFixed(0)}` : null,
+                ctx.resistance1 !== null ? `R1 ${ctx.resistance1.toFixed(0)}` : null,
+                ctx.atrPercent !== null ? `ATR ${ctx.atrPercent.toFixed(2)}%` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "sem métrica adicional real nesta janela";
+          return (
+            <div
+              key={tf}
+              className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+              title={tooltip}
+            >
+              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide w-7 shrink-0">
+                {MTF_ROW_LABEL[tf]}
+              </span>
+              <span className="text-[0.42rem] text-[#8ab4f8]/50 flex-1 text-center truncate px-1">
+                {insufficient ? AWAIT : structureShort ?? "—"}
+              </span>
+              <span className={`text-[0.5rem] font-mono font-black shrink-0 ${stanceColor}`}>
+                {insufficient ? "—" : stance ?? "—"}
+                {!insufficient && ctx?.confidence !== null && ctx?.confidence !== undefined ? (
+                  <span className="text-[#8ab4f8]/60 font-normal"> {Math.round(ctx.confidence * 100)}%</span>
+                ) : null}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </Widget>
   );
