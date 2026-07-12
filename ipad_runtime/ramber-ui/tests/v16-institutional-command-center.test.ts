@@ -77,6 +77,14 @@ describe('V16 Workspace Manager: widgets ganham collapsed+pinned (5 estados) sem
       expect(ids).not.toContain(permanent);
     }
   });
+
+  it('Widget(): o botão de fechar (X) só existe para os 9 módulos secundários — achado real de auditoria: chart/gmil_context/market_regime/system_health/decision_validation/council podiam ser fechados pelo próprio X sem NENHUM caminho de volta pelo Workspace Manager', () => {
+    const app = read('../src/App.tsx');
+    // Mesma fonte de verdade da lista do Workspace Manager — nunca uma
+    // segunda lista que poderia dessincronizar dela.
+    expect(app).toContain('const WORKSPACE_MANAGER_MODULE_IDS = new Set(WORKSPACE_MANAGER_MODULES.map((m) => m.id));');
+    expect(app).toContain('{widgetState && WORKSPACE_MANAGER_MODULE_IDS.has(id) && (');
+  });
 });
 
 describe('V16 §4 Decision Status (WAIT/CONFIRM/EXECUTE): confluência honesta, nunca um score novo inventado', () => {

@@ -2185,6 +2185,14 @@ const WORKSPACE_MANAGER_MODULES: { id: string; label: string }[] = [
   { id: "asset_heatmap", label: "HEATMAP · ASSETS" },
   { id: "tactical", label: "LIQUIDAÇÕES INSTITUCIONAIS" },
 ];
+// Única fonte de verdade para "este widget pode ser fechado": os painéis
+// ALWAYS-docked (chart/gmil_context/market_regime/system_health/
+// decision_validation/council, comentário da linha ~448) não têm entrada
+// aqui de propósito — nunca eram pra ter botão de fechar, e como não há
+// caminho de volta pelo Workspace Manager, fechar um deles era permanente
+// (só localStorage manual recuperava). Widget() usa este mesmo Set para
+// decidir se mostra o "X", então a lista nunca pode dessincronizar dela.
+const WORKSPACE_MANAGER_MODULE_IDS = new Set(WORKSPACE_MANAGER_MODULES.map((m) => m.id));
 const WORKSPACE_STATES = ["hidden", "docked", "collapsed", "pinned", "floating"] as const;
 type WorkspaceState = (typeof WORKSPACE_STATES)[number];
 
@@ -2203,7 +2211,7 @@ function WorkspaceManagerPanel() {
 
   return (
     <div
-      className="!fixed !inset-0 !z-[999] bg-[#010308]/80 backdrop-blur-sm flex items-center justify-center p-4"
+      className="!fixed !inset-0 !z-[1001] bg-[#010308]/80 backdrop-blur-sm flex items-center justify-center p-4"
       onClick={() => setWorkspaceManagerOpen?.(false)}
     >
       <div
@@ -3619,7 +3627,7 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
               {maximized ? <Minimize2 size={11} /> : <Maximize2 size={11} />}
             </div>
           )}
-          {widgetState && (
+          {widgetState && WORKSPACE_MANAGER_MODULE_IDS.has(id) && (
             <div
               className="text-[#ff0055]/50 hover:text-[#ff0055] px-1 py-0.5 rounded cursor-pointer"
               onClick={(e) => {
@@ -4251,13 +4259,13 @@ function OrderFlowWidget() {
 
         <div className="w-full h-4 mt-1 flex relative bg-[#010308] border border-[#00f0ff15] rounded overflow-hidden shadow-[inset_0_0_10px_rgba(0,240,255,0.05)]">
           <div
-            className="h-full bg-gradient-to-r from-[#00ffaa10] to-[#00ffaa60] border-r border-[#00ffaa] relative overflow-hidden transition-all duration-500"
+            className="h-full bg-gradient-to-r from-[#00ffaa10] to-[#00ffaa60] border-r border-[#00ffaa] relative overflow-hidden transition-[background-color,opacity] duration-500"
             style={{ width: `${num(buyPercent) ? buyPercent : 50}%` }}
           >
             <div className="absolute top-0 bottom-0 w-[50px] bg-gradient-to-r from-transparent via-[#00ffaa] to-transparent opacity-30 -translate-x-full animate-[scan-horizontal_2s_linear_infinite]"></div>
           </div>
           <div
-            className="h-full bg-gradient-to-l from-[#ff005510] to-[#ff005560] border-l border-[#ff0055] relative overflow-hidden transition-all duration-500"
+            className="h-full bg-gradient-to-l from-[#ff005510] to-[#ff005560] border-l border-[#ff0055] relative overflow-hidden transition-[background-color,opacity] duration-500"
             style={{ width: `${num(sellPercent) ? sellPercent : 50}%` }}
           >
             <div className="absolute top-0 bottom-0 w-[50px] bg-gradient-to-l from-transparent via-[#ff0055] to-transparent opacity-30 translate-x-[500%] animate-[scan-horizontal_2s_linear_infinite_reverse]"></div>
@@ -4356,7 +4364,7 @@ function HeatmapWidget({ book, data }: any) {
               return (
                 <div
                   key={`a${idx}`}
-                  className="absolute right-0 mix-blend-screen transition-all duration-500"
+                  className="absolute right-0 mix-blend-screen transition-[background-color,opacity] duration-500"
                   style={{
                     top: `${Math.max(2, 46 - idx * 5.5)}%`,
                     height: "4%",
@@ -4379,7 +4387,7 @@ function HeatmapWidget({ book, data }: any) {
               return (
                 <div
                   key={`b${idx}`}
-                  className="absolute right-0 mix-blend-screen transition-all duration-500"
+                  className="absolute right-0 mix-blend-screen transition-[background-color,opacity] duration-500"
                   style={{
                     top: `${Math.min(94, 52 + idx * 5.5)}%`,
                     height: "4%",
