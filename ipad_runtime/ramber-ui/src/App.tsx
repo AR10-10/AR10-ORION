@@ -59,9 +59,15 @@ import {
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
 // pura — a matemática pesada roda no WASM do quant-worker).
 import { filterSessionCandles, bucketMidPrice } from "./nexus/volume-profile";
-// V-MAX Fase 1 item 4: Conselho Multi-Agente (6 agentes puros + Meta-Agent
+// V-MAX Fase 1 item 4: Conselho Multi-Agente (7 agentes puros + Meta-Agent
 // que delega a agregação ao linear opinion pool real da Fase F).
 import { buildCouncilDecision } from "./nexus/council";
+// MomentumAgent order ("chegando à perfeição"): RSI de Wilder, o mesmo
+// exato computeRSI já real/exportado como feature interna do
+// classificador k-NN — reaproveitado aqui integral (zero segunda
+// matemática de RSI). Mesmo padrão de import relativo já usado por
+// engine-bridge.ts para este mesmo arquivo legado.
+import { computeRSI } from "../../src/research/engines/lorentzian-classifier.js";
 // V-MAX Fase 2: cenários Path A/B (níveis reais + massa de opinião real do
 // conselho) e armadilhas por corroboração de eventos reais.
 import { buildScenarioProjection, type ScenarioLevel } from "./nexus/scenario-engine";
@@ -1345,6 +1351,17 @@ export default function App() {
   const fibonacciMatrix = useFibonacciConfluenceSnapshot();
   const councilOffline = useOfflineSnapshot();
   const councilDataFresh = useDataFreshSnapshot();
+  // MomentumAgent order: RSI de Wilder real (computeRSI, mesma função já
+  // usada como feature do classificador k-NN) sobre os closes reais já
+  // carregados para o gráfico — computado uma vez aqui, nunca recalculado
+  // pelo agente. NaN (período mínimo ainda não atingido) vira null
+  // honesto; o agente trata isso como ABSTAIN, nunca um zero fabricado.
+  const currentRsi = useMemo(() => {
+    if (chartData.length === 0) return null;
+    const series = computeRSI(chartData.map((c: { close: number }) => c.close), 14);
+    const last = series[series.length - 1];
+    return Number.isFinite(last) ? (last as number) : null;
+  }, [chartData]);
   useEffect(() => {
     const price = typeof priceData?.price === "number" ? priceData.price : null;
     const decision = buildCouncilDecision({
@@ -1358,9 +1375,10 @@ export default function App() {
       isDataFresh: councilDataFresh,
       engineStatus,
       fibonacci: fibonacciMatrix,
+      rsi: currentRsi,
     });
     useUnifiedSnapshotStore.getState().setCouncil(decision);
-  }, [priceData, smcZones, engine, cvd, orderflowSignals, councilOffline, councilDataFresh, engineStatus, fibonacciMatrix]);
+  }, [priceData, smcZones, engine, cvd, orderflowSignals, councilOffline, councilDataFresh, engineStatus, fibonacciMatrix, currentRsi]);
 
   // V-MAX Fase 2 (Motor de Cenários) — reescrito pela Ordem "Próxima
   // Evolução do Organismo": zero comunicação direta motor→motor. Antes, o
@@ -1769,6 +1787,7 @@ export default function App() {
       orderBookUpdatedAt,
       crossExchangeCheck,
       okxCrossExchangeCheck,
+      currentRsi,
     }),
     [
       widgets,
@@ -1811,6 +1830,7 @@ export default function App() {
       orderBookUpdatedAt,
       crossExchangeCheck,
       okxCrossExchangeCheck,
+      currentRsi,
     ],
   );
 
@@ -3924,7 +3944,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         <ModulePanel title="Multi-Agent Council (real votes)">
           <ModuleStat label="Stance" value={council ? council.stance : MODULE_EMPTY} tone={council?.stance === "LONG" ? "long" : council?.stance === "SHORT" ? "short" : "neutral"} />
           <ModuleStat label="Agreement" value={council?.agreement !== null && council ? pct(council.agreement) : MODULE_EMPTY} />
-          <ModuleStat label="Quorum" value={council ? `${council.quorum}/5` : MODULE_EMPTY} />
+          <ModuleStat label="Quorum" value={council ? `${council.quorum}/6` : MODULE_EMPTY} />
           <ModuleStat label="Risk Gate" value={council ? (council.riskGated ? "LOCKED (fail-closed)" : "CLEAR") : MODULE_EMPTY} tone={council?.riskGated ? "short" : "long"} />
         </ModulePanel>
         <ModulePanel title="Scenario Paths · council opinion mass, never market probability">
@@ -4994,7 +5014,7 @@ const REGIME_DISPLAY: Record<string, { label: string; color: string }> = {
 };
 
 function MarketRegimeWidget() {
-  const { engine, cvd } = useContext(WidgetContext) || {};
+  const { engine, cvd, currentRsi } = useContext(WidgetContext) || {};
 
   // Fase D: linha oficial do Market Regime Engine (ADX/DI + percentil de
   // banda, ver src/market-regime/). Direção colore o rótulo composto;
@@ -5025,6 +5045,19 @@ function MarketRegimeWidget() {
 
   const momentumLabel = !num(cvd) || cvd === 0 ? AWAIT : cvd > 0 ? "COMPRADOR" : "VENDEDOR";
   const momentumColor = !num(cvd) || cvd === 0 ? "text-[#8ab4f8]" : cvd > 0 ? "text-[#00ffaa]" : "text-[#ff0055]";
+
+  // MomentumAgent order: mesmo RSI de Wilder real já votado pelo Conselho
+  // (currentRsi, computado uma vez em App() — zero segunda matemática).
+  // Mesma leitura clássica de exaustão do agente: ≥70 sobrecomprado,
+  // ≤30 sobrevendido, cores espelham a semântica de stance do voto.
+  const rsiLabel = num(currentRsi) ? currentRsi.toFixed(1) : AWAIT;
+  const rsiColor = !num(currentRsi)
+    ? "text-[#8ab4f8]"
+    : currentRsi >= 70
+      ? "text-[#ff0055]"
+      : currentRsi <= 30
+        ? "text-[#00ffaa]"
+        : "text-[#8ab4f8]";
 
   const volPct = num(engine?.volatilityPct) ? engine.volatilityPct : null;
   const volLabel = volPct === null ? AWAIT : `${volPct.toFixed(2)}%`;
@@ -5065,6 +5098,7 @@ function MarketRegimeWidget() {
         <Row label={`ESTRUTURA ${engine?.htfTimeframe?.toUpperCase() ?? "1H"}`} value={htfLabel} valueClass="text-[#8ab4f8]" />
         <Row label="MULTI-TF CONFLUENCE" value={confluenceLabel} valueClass={confluenceColor} />
         <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
+        <Row label="RSI (14)" value={rsiLabel} valueClass={rsiColor} />
         <Row label="VOLATILIDADE" value={volLabel} valueClass={volColor} />
       </div>
     </Widget>
@@ -5072,7 +5106,7 @@ function MarketRegimeWidget() {
 }
 
 // --- CONSELHO MULTI-AGENTE (V-MAX Fase 1 item 4 — superfície visual) ---
-// HUD do debate real: 6 votos (postura/confiança/racional) + decisão do
+// HUD do debate real: 7 votos (postura/confiança/racional) + decisão do
 // Meta-Agent + CPI da memória afetiva. Tudo lido da store
 // (useCouncilSnapshot/useCpiSnapshot) — os MESMOS objetos que os efeitos
 // de App() gravam; este componente só exibe, nunca recomputa (LEI 24:
@@ -5090,6 +5124,7 @@ const COUNCIL_AGENT_LABEL: Record<string, string> = {
   RISK: "RISCO",
   MANIPULATION: "MANIPULAÇÃO",
   FIBONACCI: "FIBONACCI",
+  MOMENTUM: "MOMENTUM (RSI)",
 };
 
 function CouncilWidget() {
@@ -5127,7 +5162,7 @@ function CouncilWidget() {
           <span className={`text-[0.55rem] font-mono font-black ${stanceColor}`}>
             {stanceLabel}
             {council && council.quorum > 0 ? (
-              <span className="text-[#8ab4f8]/60 font-normal"> · coesão {agreementLabel} · quórum {council.quorum}/5</span>
+              <span className="text-[#8ab4f8]/60 font-normal"> · coesão {agreementLabel} · quórum {council.quorum}/6</span>
             ) : null}
           </span>
         </div>

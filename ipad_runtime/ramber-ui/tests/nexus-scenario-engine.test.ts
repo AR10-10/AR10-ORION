@@ -6,7 +6,7 @@ import { buildScenarioProjection, type ScenarioLevel } from '../src/nexus/scenar
 import type { CouncilDecision } from '../src/nexus/council';
 
 const council = (over: Partial<CouncilDecision> = {}): CouncilDecision => ({
-  contractVersion: 1,
+  contractVersion: 2,
   stance: 'LONG',
   agreement: 0.4,
   opinionMass: { long: 0.6, short: 0.2, neutral: 0.2 },

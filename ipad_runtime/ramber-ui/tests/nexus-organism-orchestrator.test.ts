@@ -48,6 +48,7 @@ const realCouncilDecision = () =>
     isDataFresh: false,
     engineStatus: 'pending',
     fibonacci: null,
+    rsi: null,
   });
 
 const SCENARIO_LEVELS: ScenarioLevel[] = [

@@ -1,17 +1,28 @@
 // council.ts — V-MAX Fase 1 item 4: Conselho Multi-Agente.
 //
-// Seis agentes nomeados (Liquidity, Structure, Orderflow, Risk,
-// Manipulation, Fibonacci), cada um uma FUNÇÃO PURA que vota LONG/SHORT/
-// NEUTRAL a partir do dado real do seu domínio — ou ABSTAIN honesto quando
-// o dado real não existe ainda (Fail-Closed: nenhum agente jamais fabrica
-// um voto). Cada voto carrega rationale + evidence: o "debate" auditável
-// que o Blueprint pede, citando os números reais que sustentam a postura.
+// Sete agentes nomeados (Liquidity, Structure, Orderflow, Risk,
+// Manipulation, Fibonacci, Momentum), cada um uma FUNÇÃO PURA que vota
+// LONG/SHORT/NEUTRAL a partir do dado real do seu domínio — ou ABSTAIN
+// honesto quando o dado real não existe ainda (Fail-Closed: nenhum agente
+// jamais fabrica um voto). Cada voto carrega rationale + evidence: o
+// "debate" auditável que o Blueprint pede, citando os números reais que
+// sustentam a postura.
+//
+// MomentumAgent (pesquisa profissional, ordem "chegando à perfeição"):
+// RSI de Wilder é o oscilador de momentum mais universalmente esperado em
+// qualquer terminal profissional — estava ausente do caminho de sinal
+// real deste sistema. Achado real de auditoria antes de escrever uma
+// linha nova: computeRSI já existe, exportado e testado, em
+// lorentzian-classifier.js — usado até hoje só como FEATURE interna do
+// classificador k-NN, nunca como voz própria. Reaproveitado aqui integral
+// (zero segunda matemática de RSI), sob o MESMO contrato pure-function-
+// vota-ou-abstém dos outros seis agentes.
 //
 // META-AGENT (zero repetição, auditado antes de construir): a AGREGAÇÃO
 // não reimplementa matemática de comitê — delega ao linear opinion pool
 // REAL já em produção e testado desde a Fase F (src/consensus/
 // ensemble-engine.js, Stone 1961/DeGroot 1974). O que este módulo
-// acrescenta é o que NÃO existia: os seis agentes de domínio com
+// acrescenta é o que NÃO existia: os sete agentes de domínio com
 // abstenção, o quórum, o gate de risco fail-closed e o contrato
 // versionado. O Comitê da Fase F (opiniões GMIL/estrutura/regime) continua
 // intocado — mesmo algoritmo, conselho diferente, membros diferentes.
@@ -20,7 +31,7 @@
 // Matriz de Confluência da Fase 1.4, cujas fontes já incluem POC/HVN
 // computados pelo WASM Quant Core (volume_profile) — o cruzamento
 // transversal pedido pela diretriz acontece nos DADOS (a matriz), sem
-// empurrar lógica de votação O(6) para dentro do binário Rust: a diretriz
+// empurrar lógica de votação O(7) para dentro do binário Rust: a diretriz
 // exige "WASM leve", e votação trivial em Rust seria peso sem ganho.
 //
 // HIERARQUIA INVIOLÁVEL (LEI 24, mesma regra do Comitê da Fase F): o
@@ -31,7 +42,10 @@ import type { FibonacciConfluenceMatrix } from "./fibonacci-confluence";
 
 // Contrato versionado (diretriz: "tipagem estrita, contratos versionados").
 // Qualquer mudança de forma incrementa a versão — consumidores checam.
-export const COUNCIL_CONTRACT_VERSION = 1 as const;
+// v2: adição do MomentumAgent (7º agente) — mudança de forma real
+// (CouncilInputs ganha `rsi`, votes ganha o agente MOMENTUM), não uma
+// correção cosmética.
+export const COUNCIL_CONTRACT_VERSION = 2 as const;
 
 export type CouncilAgentId =
   | "LIQUIDITY"
@@ -39,7 +53,8 @@ export type CouncilAgentId =
   | "ORDERFLOW"
   | "RISK"
   | "MANIPULATION"
-  | "FIBONACCI";
+  | "FIBONACCI"
+  | "MOMENTUM";
 
 export type CouncilStance = "LONG" | "SHORT" | "NEUTRAL" | "ABSTAIN";
 
@@ -67,7 +82,7 @@ export interface CouncilDecision {
   opinionMass: { long: number; short: number; neutral: number } | null;
   quorum: number; // votos não-ABSTAIN entre os agentes direcionais
   riskGated: boolean; // true = RiskAgent absteve por dado degradado e travou o conselho
-  votes: CouncilVote[]; // sempre os 6, na ordem fixa — o debate completo
+  votes: CouncilVote[]; // sempre os 7, na ordem fixa — o debate completo
   computedAt: number;
 }
 
@@ -97,6 +112,10 @@ export interface CouncilInputs {
   isDataFresh: boolean;
   engineStatus: "pending" | "ok" | "error";
   fibonacci: FibonacciConfluenceMatrix | null;
+  // RSI de Wilder real (14 períodos), mesmo cálculo de lorentzian-
+  // classifier.js — null enquanto não há histórico suficiente (fail-closed
+  // do próprio computeRSI, nunca um chute de aquecimento).
+  rsi: number | null;
 }
 
 const abstain = (agent: CouncilAgentId, rationale: string): CouncilVote => ({
@@ -278,6 +297,53 @@ export function fibonacciAgentVote(matrix: FibonacciConfluenceMatrix | null): Co
   };
 }
 
+// Limiares clássicos de Wilder — não uma medição, o próprio desenho do
+// RSI (0-100, 30/70 como zonas de exaustão). Confiança escala linearmente
+// da fronteira até o extremo (100 ou 0), mesma honestidade de
+// imbalanceConfidence: nunca uma probabilidade fabricada, só a distância
+// real do valor até a fronteira.
+const RSI_OVERBOUGHT = 70;
+const RSI_OVERSOLD = 30;
+
+/** MomentumAgent — RSI de Wilder real (computeRSI, mesma função já usada
+ *  como feature do classificador k-NN — zero segunda matemática) sobre os
+ *  closes reais da janela. Sobrecomprado (≥70): momentum esticado para
+ *  cima, reversão baixista mais provável — leitura clássica de exaustão,
+ *  não uma previsão. Sobrevendido (≤30): espelhado. Zona neutra (30-70)
+ *  não tem leitura de momentum extremo — NEUTRAL honesto, nunca um voto
+ *  forçado. RSI ainda sem histórico suficiente (o próprio computeRSI
+ *  devolve NaN nesse caso) => ABSTAIN. */
+export function momentumAgentVote(rsi: number | null): CouncilVote {
+  if (rsi === null || !Number.isFinite(rsi)) {
+    return abstain("MOMENTUM", "RSI real ainda sem histórico suficiente (computeRSI aguardando período mínimo)");
+  }
+  if (rsi >= RSI_OVERBOUGHT) {
+    return {
+      agent: "MOMENTUM",
+      stance: "SHORT",
+      confidence: Math.min(1, (rsi - RSI_OVERBOUGHT) / (100 - RSI_OVERBOUGHT)),
+      rationale: `RSI real ${rsi.toFixed(1)} em sobrecompra (≥${RSI_OVERBOUGHT}) — momentum esticado para cima, exaustão compradora`,
+      evidence: [`RSI ${rsi.toFixed(1)}`],
+    };
+  }
+  if (rsi <= RSI_OVERSOLD) {
+    return {
+      agent: "MOMENTUM",
+      stance: "LONG",
+      confidence: Math.min(1, (RSI_OVERSOLD - rsi) / RSI_OVERSOLD),
+      rationale: `RSI real ${rsi.toFixed(1)} em sobrevenda (≤${RSI_OVERSOLD}) — momentum esticado para baixo, exaustão vendedora`,
+      evidence: [`RSI ${rsi.toFixed(1)}`],
+    };
+  }
+  return {
+    agent: "MOMENTUM",
+    stance: "NEUTRAL",
+    confidence: 0,
+    rationale: `RSI real ${rsi.toFixed(1)} em zona neutra (${RSI_OVERSOLD}-${RSI_OVERBOUGHT}) — sem leitura de momentum extremo`,
+    evidence: [`RSI ${rsi.toFixed(1)}`],
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Meta-Agent
 // ─────────────────────────────────────────────────────────────────────────
@@ -348,7 +414,7 @@ export function aggregateCouncil(votes: CouncilVote[], computedAt: number): Coun
   };
 }
 
-/** Conveniência: os 6 agentes + Meta-Agent numa chamada, ordem fixa. */
+/** Conveniência: os 7 agentes + Meta-Agent numa chamada, ordem fixa. */
 export function buildCouncilDecision(inputs: CouncilInputs, computedAt: number = Date.now()): CouncilDecision {
   const votes: CouncilVote[] = [
     liquidityAgentVote(inputs.liquidityZones, inputs.price),
@@ -357,6 +423,7 @@ export function buildCouncilDecision(inputs: CouncilInputs, computedAt: number =
     riskAgentVote({ offline: inputs.offline, isDataFresh: inputs.isDataFresh, engineStatus: inputs.engineStatus }),
     manipulationAgentVote(inputs.liquidityZones),
     fibonacciAgentVote(inputs.fibonacci),
+    momentumAgentVote(inputs.rsi),
   ];
   return aggregateCouncil(votes, computedAt);
 }
