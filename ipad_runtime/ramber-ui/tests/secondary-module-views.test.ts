@@ -53,3 +53,22 @@ describe('Secondary module views: real data routing, English labels, fail-closed
     expect(app()).toContain('const MODULE_EMPTY = "AWAITING REAL DATA"');
   });
 });
+
+describe('Command bar: Trade Plan strip (critical numbers in the header, fail-closed)', () => {
+  it('renders signal + entry + stop + target from the real store slice, nothing when no plan', () => {
+    const s = app();
+    expect(s).toContain('function TradePlanTopStrip(');
+    const strip = s.slice(s.indexOf('function TradePlanTopStrip('), s.indexOf('// --- TOP BAR ---'));
+    expect(strip).toContain('useTradePlanSnapshot()');
+    expect(strip).toContain('if (!plan) return null;');
+    expect(strip).not.toMatch(/fetch\(/);
+    expect(strip).not.toMatch(/Math\.random/);
+  });
+
+  it('structure-break alert is pure display derivation from the live price vs real plan levels', () => {
+    const s = app();
+    expect(s).toContain('TARGET REACHED');
+    expect(s).toContain('STOP BREACHED');
+    expect(s).toContain('<TradePlanTopStrip livePrice={data?.price ?? null} />');
+  });
+});

@@ -2907,6 +2907,49 @@ function NucleoVoiceOrb() {
   );
 }
 
+// Trade Plan strip (Autonomy order, priority 1): the critical numbers -
+// signal, entry, stop, target - live in the command bar, delicate and
+// tabular. Fail-closed: no coherent plan renders nothing (the bar stays
+// clean instead of showing a placeholder). Subtle structure-break alert:
+// when the live price crosses the plan's stop or target, the strip's tone
+// shifts (red STOP BREACHED / green TARGET REACHED) - pure display
+// derivation from real values already on screen, no new engine.
+function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
+  const plan = useTradePlanSnapshot();
+  if (!plan) return null;
+  const long = plan.direction === "LONG";
+  const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
+  const targetHit = p !== null && (long ? p >= plan.target.price : p <= plan.target.price);
+  const stopHit = p !== null && !targetHit && (long ? p <= plan.stop.price : p >= plan.stop.price);
+  const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
+  return (
+    <div
+      className={`hidden sm:flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap transition-colors duration-500 ${
+        targetHit ? "drop-shadow-[0_0_8px_rgba(0,255,170,0.35)]" : stopHit ? "drop-shadow-[0_0_8px_rgba(255,0,85,0.35)]" : ""
+      }`}
+      title="Trade Plan - real structure only (advisory, read-only terminal). Entry/Stop/Target are real levels mapped by the engines."
+    >
+      <span className={`text-[0.55rem] font-black tracking-wider px-1.5 py-0.5 rounded border ${long ? "text-[#00ffaa] border-[#00ffaa40] bg-[#00ffaa10]" : "text-[#ff0055] border-[#ff005540] bg-[#ff005510]"}`}>
+        {plan.direction}
+      </span>
+      <span className="text-[0.55rem] font-mono text-[#f0d06f]">
+        E {plan.entry.low === plan.entry.high ? f(plan.entry.low) : `${f(plan.entry.low)}-${f(plan.entry.high)}`}
+      </span>
+      <span className={`text-[0.55rem] font-mono ${stopHit ? "text-[#ff0055] font-black" : "text-[#ff0055]/80"}`}>
+        S {f(plan.stop.price)}
+      </span>
+      <span className={`text-[0.55rem] font-mono ${targetHit ? "text-[#00ffaa] font-black" : "text-[#00ffaa]/80"}`}>
+        T {f(plan.target.price)}
+      </span>
+      {plan.riskRewardRatio !== null && (
+        <span className="text-[0.5rem] font-mono text-[#8ab4f8]/70">1:{plan.riskRewardRatio.toFixed(2)}</span>
+      )}
+      {targetHit && <span className="text-[0.48rem] font-black tracking-widest text-[#00ffaa]">TARGET REACHED</span>}
+      {stopHit && <span className="text-[0.48rem] font-black tracking-widest text-[#ff0055]">STOP BREACHED</span>}
+    </div>
+  );
+}
+
 // --- TOP BAR ---
 function TopBar({
   data,
@@ -3079,6 +3122,8 @@ function TopBar({
               </span>
             </div>
           )}
+
+          {marketMode === "CRYPTO" && <TradePlanTopStrip livePrice={data?.price ?? null} />}
 
           {marketMode === "CRYPTO" && (
             <div className="hidden md:flex gap-1 lg:gap-2 h-full items-center">
