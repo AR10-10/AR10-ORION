@@ -97,6 +97,12 @@ import { buildConvictionReading } from "./nexus/confluence-engine";
 // Neural Market Aura (especificação do Operador, ver o cabeçalho de
 // nexus/aura-lifecycle.ts para o racional completo de escopo/honestidade).
 import { computeAuraReading, TIMEFRAME_MS } from "./nexus/aura-lifecycle";
+// Diretriz V-MAX de Refinamento Institucional (itens 5/6): Score Geral
+// 0-100 (contrato de apresentação sobre a confluência real — zero segunda
+// matemática de consenso) + Assistente Operacional (frases curtas, sempre
+// tradução de leitura real, LEI 24 — ver cabeçalhos dos dois módulos).
+import { computeInstitutionalScore } from "./nexus/institutional-score";
+import { buildAssistantMessages } from "./nexus/operation-assistant";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
 import {
@@ -1707,6 +1713,35 @@ export default function App() {
     inEntryZoneLatchRef.current = inEntryZoneNow;
   }, [inEntryZoneNow]);
 
+  // Diretriz V-MAX (itens 5/6): Score Geral + Assistente — computados UMA
+  // vez aqui (mesmo padrão de convictionReading, que ambos reaproveitam),
+  // compartilhados via contextValue. Declarados DEPOIS de convictionReading/
+  // councilFromSnapshot/inEntryZoneNow (mesmo cuidado de TDZ já aplicado a
+  // voiceSnapshot/bosChoch).
+  const institutionalScore = useMemo(
+    () =>
+      computeInstitutionalScore({
+        engineStatus,
+        coreDirection: engine?.direction ?? null,
+        conviction: convictionReading,
+        riskGated: councilFromSnapshot?.riskGated ?? false,
+      }),
+    [engineStatus, engine?.direction, convictionReading, councilFromSnapshot],
+  );
+  const assistantMessages = useMemo(
+    () =>
+      buildAssistantMessages({
+        engineStatus,
+        coreDirection: engine?.direction ?? null,
+        structureLabel: engine?.marketStructureLabel ?? null,
+        conviction: convictionReading,
+        scoreReading: institutionalScore,
+        council: councilFromSnapshot ?? null,
+        inEntryZone: inEntryZoneNow,
+      }),
+    [engineStatus, engine?.direction, engine?.marketStructureLabel, convictionReading, institutionalScore, councilFromSnapshot, inEntryZoneNow],
+  );
+
   const auraVoiceInputs = {
     tradePlanOpenKey: trackRecordSlice.active ? `${trackRecordSlice.active.plan.direction}:${trackRecordSlice.active.openedAt}` : null,
     tradePlanDirection: trackRecordSlice.active?.plan.direction ?? null,
@@ -2065,6 +2100,8 @@ export default function App() {
       institutionalConsensus,
       ensembleConsensus,
       convictionReading,
+      institutionalScore,
+      assistantMessages,
       riskSuggestion,
       cycleLatencyMs,
       fps,
@@ -2112,6 +2149,8 @@ export default function App() {
       institutionalConsensus,
       ensembleConsensus,
       convictionReading,
+      institutionalScore,
+      assistantMessages,
       riskSuggestion,
       cycleLatencyMs,
       fps,
@@ -3576,6 +3615,8 @@ function TopBar({ data }: { data?: PriceState | null }) {
     setSelectedTradFiAsset,
     realCycle,
     engine,
+    institutionalScore,
+    assistantMessages,
   } = useContext(WidgetContext) || {};
   // Overhaul Cross-Market (Diretriz 2): o rótulo do mercado é passthrough
   // REAL de realCycle.instrumentType (mesmo padrão de wasmVariant) — nunca
@@ -3668,8 +3709,12 @@ function TopBar({ data }: { data?: PriceState | null }) {
                 </button>
               ))}
             </div>
+            {/* Diretriz V-MAX item 7 ("Header Profissional"): o gatilho vira
+                "SÍMBOLO ▼" com o ativo REAL selecionado — não mais um campo
+                de busca genérico ocupando espaço; a busca continua inteira
+                dentro do dropdown do próprio Omnibox. */}
             <SmartOmnibox
-              selectedLabel={marketMode === "TRADFI" ? (selectedTradFiAsset?.symbol ?? "Buscar ativo") : "Buscar ativo"}
+              selectedLabel={marketMode === "TRADFI" ? (selectedTradFiAsset?.symbol ?? "Buscar ativo") : `${selectedAsset}USDT`}
               onSelectCrypto={(baseAsset: string) => {
                 setMarketMode?.("CRYPTO");
                 setSelectedTradFiAsset?.(null);
@@ -3710,6 +3755,61 @@ function TopBar({ data }: { data?: PriceState | null }) {
           )}
 
           {marketMode === "CRYPTO" && <CoreSignalBadge direction={engine?.direction ?? null} confidence={engine?.confidence ?? null} />}
+
+          {/* Diretriz V-MAX item 5/7: Score Geral 0-100 no header — massa
+              real de confluência entre subsistemas (institutional-score.ts),
+              NUNCA probabilidade (Regra de Ouro 2, tooltip diz isso). null
+              honesto (—) em WAIT: pontuar o nada seria fabricação. */}
+          {marketMode === "CRYPTO" && (
+            <div
+              className="hidden md:flex flex-col items-center justify-center pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
+              title={
+                institutionalScore?.score !== null && institutionalScore?.score !== undefined
+                  ? `Score real de confluência entre subsistemas (0-100) — nunca probabilidade de acerto. ${institutionalScore.opportunity ? "Acima do nível mínimo de oportunidade." : "Abaixo do nível mínimo, ou risco travado."}`
+                  : "Sem oportunidade direcional a pontuar agora (Core Engine em WAIT ou dados insuficientes)."
+              }
+            >
+              <span className="text-[0.42rem] tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">Score</span>
+              <span
+                className={`text-[0.7rem] font-black font-mono tabular-nums ${
+                  institutionalScore?.score === null || institutionalScore?.score === undefined
+                    ? "text-[#8ab4f8]/40"
+                    : institutionalScore.opportunity
+                      ? "text-[#00ffaa] drop-shadow-[0_0_5px_currentColor]"
+                      : institutionalScore.score < 40
+                        ? "text-[#ff0055]"
+                        : "text-[#f0d06f]"
+                }`}
+              >
+                {institutionalScore?.score ?? DASH}
+              </span>
+            </div>
+          )}
+
+          {/* Diretriz V-MAX item 6: Assistente Operacional — a frase curta
+              mais prioritária, sempre tradução de leitura real (LEI 24,
+              ver operation-assistant.ts). O tooltip carrega a base real
+              verificável ("nunca recomendação sem justificativa"). */}
+          {marketMode === "CRYPTO" && assistantMessages && assistantMessages.length > 0 && (
+            <div
+              className="hidden lg:flex items-center pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
+              title={assistantMessages.map((m: { text: string; basis: string }) => `${m.text} — ${m.basis}`).join("\n")}
+            >
+              <span
+                className={`text-[0.55rem] font-bold tracking-wider uppercase ${
+                  assistantMessages[0].tone === "POSITIVE"
+                    ? "text-[#00ffaa]"
+                    : assistantMessages[0].tone === "RISK"
+                      ? "text-[#ff0055]"
+                      : assistantMessages[0].tone === "CAUTION"
+                        ? "text-[#f0d06f]"
+                        : "text-[#8ab4f8]/80"
+                }`}
+              >
+                {assistantMessages[0].text}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-1 md:gap-2 h-full items-center justify-end shrink-0">

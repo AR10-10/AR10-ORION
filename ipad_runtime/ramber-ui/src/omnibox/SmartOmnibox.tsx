@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Search } from "lucide-react";
 import { fetchBinanceUsdtSymbols, partitionCryptoSymbols, type BinanceUsdtSymbol } from "./binance-symbols";
 import { TRADFI_ASSETS, TRADFI_CATEGORY_LABELS, TRADFI_CATEGORY_ORDER, type TradFiAsset } from "./tradfi-assets";
 
@@ -91,13 +90,17 @@ export function SmartOmnibox({
 
   return (
     <div ref={boxRef} className="relative">
+      {/* Diretriz V-MAX item 7: gatilho "SÍMBOLO ▼" — o ícone de busca sai
+          do header (a busca real continua no input dentro do dropdown
+          abaixo); o chevron comunica "toque para trocar", padrão de
+          qualquer plataforma profissional. */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className="flex items-center gap-1.5 px-2 py-1.5 rounded border border-[#00f0ff30] bg-[#00f0ff08] text-[#a0f0ff] text-[0.55rem] md:text-[0.6rem] font-bold tracking-wider hover:bg-[#00f0ff15] transition-colors whitespace-nowrap"
       >
-        <Search size={11} className="text-[#00f0ff]/70 shrink-0" />
         <span className="max-w-[110px] truncate">{selectedLabel}</span>
+        <span className="text-[0.5rem] text-[#00f0ff]/70 shrink-0">▼</span>
       </button>
 
       {open && (
