@@ -64,6 +64,12 @@ import type { TradePlan } from "../nexus/trade-plan";
 // intraday reference level this system was missing entirely (confirmed
 // via a full-codebase grep before writing nexus/vwap.ts).
 import { computeSessionVwapSeries } from "../nexus/vwap";
+// Diretriz Camada de Decisão Profissional, item 1 ("linha de EMA real
+// marcada automaticamente no gráfico") — ver cabeçalho de nexus/ema.ts
+// para a auditoria completa (WASM já calcula EMA, mas só o valor escalar
+// final; uma série com um ponto por candle é uma implementação nova
+// legítima, mesma fórmula/semente do motor WASM).
+import { computeEmaSeries, DEFAULT_EMA_PERIOD } from "../nexus/ema";
 // Ordem "Ciborgue Vivo" §1: BOS/CHOCH real (bos-choch-engine.js via
 // engine-bridge.ts's computeBosChoch) — mesmo tipo que StructureBreakMarkersPlugin usa.
 import type { StructureBreak } from "../engine-bridge";
@@ -130,6 +136,7 @@ export const CHART_LAYER_IDS = [
   "volume_profile",
   "trade_plan_zone",
   "neural_market_aura",
+  "ema",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -140,6 +147,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   volume_profile: true,
   trade_plan_zone: true,
   neural_market_aura: true,
+  ema: true,
 };
 
 interface EnhancedChartProps {
@@ -177,6 +185,11 @@ interface EnhancedChartProps {
   // every layer stays visible (DEFAULT_CHART_LAYER_VISIBILITY), the exact
   // behavior this component already had before the toggle existed.
   layerVisibility?: ChartLayerVisibility;
+  // Diretriz Camada de Decisão Profissional, item 1: período real da EMA
+  // exibida, controlado pelo painel Camadas do Gráfico. Optional/fail-
+  // closed: ausente => DEFAULT_EMA_PERIOD (21), o mesmo comportamento de
+  // sempre para qualquer chamador que ainda não passa esta prop.
+  emaPeriod?: number;
   // Auditoria de arquitetura (revisão completa) — paginação histórica
   // real: chamado quando o usuário arrasta perto da borda esquerda dos
   // candles já carregados (ver efeito de subscribeVisibleLogicalRangeChange
@@ -237,6 +250,7 @@ export function EnhancedChart_110_Percent({
   tradePlan,
   aura,
   layerVisibility,
+  emaPeriod,
   onRequestOlderCandles,
 }: EnhancedChartProps) {
   const visibility = layerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
@@ -261,6 +275,11 @@ export function EnhancedChart_110_Percent({
   // own scale because CVD is signed volume, not price) — it overlays
   // directly at the correct real price level.
   const vwapSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Diretriz Camada de Decisão Profissional, item 1: EMA na MESMA escala
+  // de preço das velas (é um preço médio real, como VWAP) — cor própria,
+  // nunca reaproveitando a paleta semântica (verde/vermelho=direção,
+  // âmbar=zona de entrada, roxo=liquidez EQH/EQL).
+  const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Espelha chartRef/seriesRef em state só para o LiquidityZonesPlugin
   // montar assim que o chart existe de verdade — refs sozinhas não
   // disparam re-render, então o plugin ficaria esperando por uma
@@ -358,6 +377,20 @@ export function EnhancedChart_110_Percent({
       title: "VWAP",
     });
     vwapSeriesRef.current = vwapSeries;
+    // Diretriz Camada de Decisão Profissional, item 1: EMA como série
+    // nativa na escala principal — azul distinto, nunca competindo com a
+    // paleta direcional/semântica já em uso (ver comentário no ref
+    // acima). Fio de seda: lineWidth 1, sólida.
+    const emaSeries = chart.addSeries(LineSeries, {
+      color: "rgba(66, 165, 245, 0.85)",
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: false,
+      title: "EMA",
+    });
+    emaSeriesRef.current = emaSeries;
     chartRef.current = chart;
     seriesRef.current = series;
     setChartReady({ chart, series });
@@ -372,6 +405,7 @@ export function EnhancedChart_110_Percent({
       tradePlanLinesRef.current = [];
       cvdSeriesRef.current = null;
       vwapSeriesRef.current = null;
+      emaSeriesRef.current = null;
       setChartReady(null);
     };
   }, []);
@@ -569,6 +603,30 @@ export function EnhancedChart_110_Percent({
     const series = computeSessionVwapSeries(data);
     vwapSeriesRef.current.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
   }, [data]);
+
+  // Diretriz Camada de Decisão Profissional, item 1: EMA recomputada do
+  // MESMO array real de candles (zero segunda fonte de dado), sempre que
+  // o histórico ou o período selecionado no painel Camadas do Gráfico
+  // mudar. Título carrega o período real ("EMA 21") — nunca um rótulo
+  // genérico que dessincronizaria do que está de fato desenhado.
+  const activeEmaPeriod = emaPeriod ?? DEFAULT_EMA_PERIOD;
+  useEffect(() => {
+    if (!emaSeriesRef.current) return;
+    const series = computeEmaSeries(
+      data.map((c) => ({ time: c.time, close: c.close })),
+      activeEmaPeriod,
+    );
+    emaSeriesRef.current.applyOptions({ title: `EMA ${activeEmaPeriod}` });
+    emaSeriesRef.current.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+  }, [data, activeEmaPeriod]);
+
+  // Camadas do Gráfico (Finding M): esconder a camada "ema" nunca altera
+  // o dado real já computado acima — só a exibição, via applyOptions
+  // nativo da própria lib (mais barato que recriar a série).
+  useEffect(() => {
+    if (!emaSeriesRef.current) return;
+    emaSeriesRef.current.applyOptions({ visible: visibility.ema });
+  }, [visibility.ema]);
 
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // Fibonacci como price lines nativas — "fio de seda" (1px sólida, nunca

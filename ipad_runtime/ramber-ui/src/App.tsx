@@ -49,6 +49,10 @@ import {
   type ChartLayerId,
   type ChartLayerVisibility,
 } from "./chart/EnhancedChart_110_Percent";
+// Diretriz Camada de Decisão Profissional, item 1: períodos reais expostos
+// no painel Camadas do Gráfico — mesma lista canônica que o motor usa,
+// nunca reinventada aqui.
+import { EMA_PERIODS, DEFAULT_EMA_PERIOD, type EmaPeriod } from "./nexus/ema";
 import {
   runRealAnalysisCycle,
   type RealCycleResult,
@@ -420,6 +424,11 @@ export default function App() {
   const toggleChartLayer = useCallback((id: ChartLayerId) => {
     setChartLayerVisibility((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
+  // Diretriz Camada de Decisão Profissional, item 1: período real da EMA,
+  // controlado no mesmo painel Camadas do Gráfico — um único período
+  // ativo por vez (não uma pilha de linhas), mesmo padrão de "um controle
+  // por camada" já usado ali.
+  const [emaPeriod, setEmaPeriod] = useState<EmaPeriod>(DEFAULT_EMA_PERIOD);
   // V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas):
   // Market Intelligence (esquerda) / Core Intelligence (direita) são
   // gavetas fechadas por padrão — o Gráfico reina sozinho no boot.
@@ -2065,6 +2074,8 @@ export default function App() {
       setChartLayersOpen,
       chartLayerVisibility,
       toggleChartLayer,
+      emaPeriod,
+      setEmaPeriod,
       leftDrawerOpen,
       toggleLeftDrawer,
       rightDrawerOpen,
@@ -2118,6 +2129,7 @@ export default function App() {
       workspaceManagerOpen,
       chartLayersOpen,
       chartLayerVisibility,
+      emaPeriod,
       leftDrawerOpen,
       toggleLeftDrawer,
       rightDrawerOpen,
@@ -2612,10 +2624,11 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "volume_profile", label: "VOLUME PROFILE" },
   { id: "trade_plan_zone", label: "TRADE PLAN ZONE" },
   { id: "neural_market_aura", label: "NEURAL MARKET AURA" },
+  { id: "ema", label: "EMA" },
 ];
 
 function ChartLayersPanel() {
-  const { chartLayersOpen, setChartLayersOpen, chartLayerVisibility, toggleChartLayer } =
+  const { chartLayersOpen, setChartLayersOpen, chartLayerVisibility, toggleChartLayer, emaPeriod, setEmaPeriod } =
     useContext(WidgetContext) || {};
   if (!chartLayersOpen) return null;
   const visibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
@@ -2647,20 +2660,43 @@ function ChartLayersPanel() {
             return (
               <div
                 key={id}
-                className="flex items-center justify-between gap-2 bg-[#010205] border border-[#00f0ff15] rounded-lg px-3 py-2"
+                className="flex flex-col gap-1.5 bg-[#010205] border border-[#00f0ff15] rounded-lg px-3 py-2"
               >
-                <span className="text-[0.55rem] font-bold tracking-widest text-white">{label}</span>
-                <button
-                  type="button"
-                  onClick={() => toggleChartLayer?.(id)}
-                  className={`text-[0.4rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
-                    on
-                      ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                      : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
-                  }`}
-                >
-                  {on ? "visível" : "oculta"}
-                </button>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[0.55rem] font-bold tracking-widest text-white">{label}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleChartLayer?.(id)}
+                    className={`text-[0.4rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
+                      on
+                        ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                        : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
+                    }`}
+                  >
+                    {on ? "visível" : "oculta"}
+                  </button>
+                </div>
+                {/* Diretriz Camada de Decisão Profissional, item 1: período
+                    real da EMA — um único controle, os 4 períodos padrão da
+                    indústria (nexus/ema.ts), nunca uma lista arbitrária. */}
+                {id === "ema" && (
+                  <div className="flex items-center gap-1">
+                    {EMA_PERIODS.map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setEmaPeriod?.(p)}
+                        className={`flex-1 text-[0.4rem] py-1 rounded border font-bold tracking-wider ${
+                          emaPeriod === p
+                            ? "border-[#42a5f5] bg-[#42a5f515] text-[#42a5f5]"
+                            : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -4684,7 +4720,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility } = useContext(WidgetContext) || {};
+  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod } = useContext(WidgetContext) || {};
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
   // Correção de latência: o MESMO preço real que já alimenta a barra
   // superior (usePriceSnapshot — escrito na store a cada tick do WS,
@@ -4789,6 +4825,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             tradePlan={chartTradePlan}
             aura={auraReading}
             layerVisibility={chartLayerVisibility}
+            emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}
           />
         ) : (
