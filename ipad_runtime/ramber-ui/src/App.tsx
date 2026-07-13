@@ -11,7 +11,10 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot } from "./store/unified-snapshot-store";
+// Ordem "Ciborgue Vivo" §3: síntese real de autodiagnóstico — mesmos
+// sinais do Health Monitor/Data Quality Layer, nunca uma segunda medição.
+import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/self-diagnostics";
 // Fase Ω Priority 1: tipos + lista canônica dos 6 prazos — mesma fonte que
 // engine-bridge.ts usa para orquestrar, nunca uma segunda lista duplicada.
 import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } from "./nexus/multi-timeframe-engine";
@@ -60,6 +63,8 @@ import {
   computeRealTrustScore,
   type ConfluenceSource,
   buildMultiTimeframeContext,
+  computeBosChoch,
+  type StructureBreak,
 } from "./engine-bridge";
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
 // pura — a matemática pesada roda no WASM do quant-worker).
@@ -1336,6 +1341,18 @@ export default function App() {
   // IRON-VOICE: espelho somente-leitura do estado real para a camada de voz
   // (src/voice/). Mesmos campos que a UI renderiza — nenhum valor novo é
   // computado aqui, só repassado.
+  // Ordem "Ciborgue Vivo" §1/§2: BOS/CHOCH sobre o MESMO array de candles
+  // do gráfico que smcZones (abaixo) também usa (mesmo motivo: `index` só
+  // faz sentido alinhado ao array que o caller desenha). Reaproveita
+  // fractal-swings.js + o structure_label de market-structure-engine.js
+  // por baixo — zero segunda detecção de swing/estrutura. Declarado ANTES
+  // de voiceSnapshot (abaixo) porque alimenta o alerta real de rompimento
+  // de estrutura ali dentro.
+  const bosChoch = useMemo(
+    () => (chartData && chartData.length > 0 ? computeBosChoch(chartData) : { break: null, structureLabel: null }),
+    [chartData],
+  );
+
   const voiceSnapshot = useMemo<TerminalSnapshot>(
     () => ({
       direction: engine.direction,
@@ -1361,8 +1378,11 @@ export default function App() {
       liquidationState,
       wsLive,
       forecast: realCycle?.ok && realCycle.forecast ? realCycle.forecast : [],
+      structureBreakKey: bosChoch.break ? `${bosChoch.break.type}:${bosChoch.break.index}` : null,
+      structureBreakType: bosChoch.break?.type ?? null,
+      structureBreakDirection: bosChoch.break?.direction ?? null,
     }),
-    [engine, realCycle, engineStatus, priceData, cvd, orderflowSignals, orderflowState, liquidations, liquidationState, wsLive],
+    [engine, realCycle, engineStatus, priceData, cvd, orderflowSignals, orderflowState, liquidations, liquidationState, wsLive, bosChoch],
   );
 
   // Alertas executivos falados: computeAlerts é pura e só reage a TRANSIÇÕES
@@ -1382,6 +1402,24 @@ export default function App() {
   useEffect(() => {
     const alerts = computeAlerts(prevVoiceSnapshotRef.current, voiceSnapshot);
     alerts.forEach((a) => voiceEngine.speak(a.text, a.priority));
+    // Ordem "Ciborgue Vivo" §3: mesma detecção de transição já usada pelos
+    // alertas acima (prev.structureBreakKey !== next.structureBreakKey =
+    // rompimento REAL novo, não o mesmo evento ainda vivo na tela). Só
+    // alimenta a memória afetiva quando o Core Engine tem uma posição
+    // direcional ativa (LONG/SHORT) — sem posição, o rompimento é
+    // informação neutra de mercado, não experiência do organismo (ver
+    // header de affective-memory.ts).
+    const prevSnapshot = prevVoiceSnapshotRef.current;
+    if (
+      voiceSnapshot.structureBreakKey &&
+      voiceSnapshot.structureBreakKey !== prevSnapshot?.structureBreakKey &&
+      voiceSnapshot.direction
+    ) {
+      const confirms = voiceSnapshot.structureBreakDirection === (voiceSnapshot.direction === "LONG" ? "ALTA" : "BAIXA");
+      useUnifiedSnapshotStore.getState().recordAffectiveEvent(
+        confirms ? "STRUCTURE_BREAK_CONFIRMS_SIGNAL" : "STRUCTURE_BREAK_CONTRADICTS_SIGNAL",
+      );
+    }
     prevVoiceSnapshotRef.current = voiceSnapshot;
     if (alerts.some((a) => a.priority === "CRITICAL" || a.priority === "ALERT")) {
       setCriticalPulse(true);
@@ -1886,6 +1924,7 @@ export default function App() {
       setChartTimeframe,
       engine,
       smcZones,
+      bosChoch,
       bootAt,
       engineStatus,
       realCycle,
@@ -1932,6 +1971,7 @@ export default function App() {
       chartTimeframe,
       engine,
       smcZones,
+      bosChoch,
       bootAt,
       engineStatus,
       realCycle,
@@ -3460,6 +3500,12 @@ function TopBar({ data }: { data?: PriceState | null }) {
         </div>
 
         <div className="flex gap-1 md:gap-2 h-full items-center justify-end shrink-0">
+          {/* Ordem "Ciborgue Vivo" §2: indicador compacto de risco/saúde
+              sempre visível, sem abrir aba nenhuma — pedido explícito do
+              Operador. Só reaparece aqui o que o redesenho radical abaixo
+              tinha deliberadamente removido da hero line (não desfaz essa
+              decisão: cabe num badge minúsculo, não em números crus). */}
+          {marketMode === "CRYPTO" && <SystemStatusBadge />}
           {/* V18.1: núcleo + voz sempre visíveis no cantinho, ao lado do
               botão de energia — ver header de NucleoVoiceOrb. Redesenho
               radical (modelo do Operador): HIGH/LOW/VOL, funding, open
@@ -3494,6 +3540,66 @@ function TopBar({ data }: { data?: PriceState | null }) {
           <StructureLevelsStrip />
         </div>
       )}
+    </div>
+  );
+}
+
+// Ordem "Ciborgue Vivo" §2 ("métricas de risco atuais... status do sistema
+// / saúde do núcleo... sem abrir abas"): indicador compacto, sempre
+// visível. Reaproveita as MESMAS classificações reais já usadas por
+// TelemetryHealthWidget (classifyFps/classifyCycleLatency,
+// dataQuality.classification) e o MESMO riskSuggestion do Risk Engine
+// (Fase H) já usado por DecisionValidationWidget — zero segunda
+// classificação, zero número novo. Detalhe completo só no tooltip
+// (title=), nunca números crus competindo com a hero line — a mesma
+// disciplina de densidade do redesenho radical (comentário acima) segue
+// valendo, isto é aditivo (~24px), não uma reversão dele.
+//
+// "Drawdown/exposição" reais não existem sem execução real (FAIL_CLOSED
+// permanente — ver ExposureWidget: nenhuma posição ao vivo é sequer
+// possível neste sistema). O substituto honesto é o risco SUGERIDO real
+// do Risk Engine para o Trade Plan atual — nunca um número de posição
+// fabricado para preencher o espaço.
+function SystemStatusBadge() {
+  const { realCycle, fps, cycleLatencyMs, riskSuggestion } = useContext(WidgetContext) || {};
+  const offline = useOfflineSnapshot();
+  const isDataFresh = useDataFreshSnapshot();
+
+  const quality = realCycle?.dataQuality?.classification ?? null;
+  const fpsClass = classifyFps(fps);
+  const cycleClass = classifyCycleLatency(cycleLatencyMs);
+  const hasAnyReading = quality !== null || fpsClass !== null || cycleClass !== null;
+
+  const critical = offline || (hasAnyReading && !isDataFresh) || quality === "QUARENTENA" || fpsClass === "CRITICO" || cycleClass === "LENTO";
+  const warn = !critical && (quality === "DEGRADADA" || fpsClass === "ACEITAVEL");
+
+  const colorClass = !hasAnyReading
+    ? "text-[#8ab4f8]/40 bg-[#8ab4f8]/10 border-[#8ab4f8]/30"
+    : critical
+      ? "text-[#ff0055] bg-[#ff005515] border-[#ff005550]"
+      : warn
+        ? "text-[#f0d06f] bg-[#f0d06f15] border-[#f0d06f50]"
+        : "text-[#00ffaa] bg-[#00ffaa15] border-[#00ffaa50]";
+
+  const riskLabel = riskSuggestion?.status === "OK" ? `${riskSuggestion.effective_risk_pct.toFixed(1)}%` : null;
+
+  const tooltip = [
+    `Sistema: ${offline ? "OFFLINE" : isDataFresh ? "dados frescos" : "dados obsoletos"}`,
+    `Qualidade da fonte: ${quality ?? AWAIT}`,
+    `FPS: ${fpsClass ?? AWAIT}`,
+    `Latência do ciclo: ${cycleClass ?? AWAIT}`,
+    riskSuggestion?.status === "OK"
+      ? `Risco sugerido (Risk Engine): ${riskSuggestion.effective_risk_pct.toFixed(2)}% · posição ${riskSuggestion.suggested_position_pct.toFixed(1)}% equity`
+      : "Risco sugerido: sem Trade Plan real ativo agora",
+  ].join(" · ");
+
+  return (
+    <div
+      title={tooltip}
+      className={`hidden sm:flex items-center gap-1 h-7 px-2 rounded-full border text-[0.5rem] font-bold tracking-wider whitespace-nowrap shrink-0 ${colorClass}`}
+    >
+      <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
+      {riskLabel ? <span className="font-mono">{riskLabel}</span> : null}
     </div>
   );
 }
@@ -4248,7 +4354,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, selectedAsset, engine, chartTimeframe, setChartTimeframe } = useContext(WidgetContext) || {};
+  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe } = useContext(WidgetContext) || {};
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
   // Correção de latência: o MESMO preço real que já alimenta a barra
   // superior (usePriceSnapshot — escrito na store a cada tick do WS,
@@ -4330,6 +4436,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             fairValueGaps={unmitigatedFvgs}
             orderBlocks={unmitigatedBlocks}
             liquidityZones={unsweptLiquidity}
+            structureBreak={bosChoch?.break ?? null}
             fibonacciLevels={fibonacciLevels}
             livePrice={livePrice.price}
             activeTimeframe={chartTimeframe as Timeframe}
@@ -5499,7 +5606,16 @@ function MultiTimeframeMatrixWidget() {
 // ZERO REPETIÇÃO: nenhum destes indicadores aparece em outro painel —
 // regime/vieses/comitê/risco moram nos painéis das suas fases.
 function TelemetryHealthWidget() {
-  const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe } = useContext(WidgetContext) || {};
+  const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus } = useContext(WidgetContext) || {};
+  // Ordem "Ciborgue Vivo" §3: mesmos sinais reais já lidos abaixo para as
+  // Rows existentes, mais os que só o relatório precisa (offline/frescor/
+  // conexões por exchange) — zero segunda medição, só uma segunda síntese
+  // sob demanda (nunca recomputada a cada render, só ao clicar).
+  const offline = useOfflineSnapshot();
+  const isDataFresh = useDataFreshSnapshot();
+  const health = useHealthSnapshot();
+  const connections = useConnectionsSnapshot();
+  const [diagnosticReport, setDiagnosticReport] = useState<ReturnType<typeof buildDiagnosticReport> | null>(null);
 
   const quality = realCycle?.dataQuality ?? null;
   const qualityLabel = quality
@@ -5549,6 +5665,64 @@ function TelemetryHealthWidget() {
             worker, cujo nome de cache deriva desta mesma constante).
             Aparece UMA vez em toda a UI (zero repetição). */}
         <Row label="BUILD" value={APP_SEAL} valueClass="text-[#00f0ff]" />
+        {/* Ordem "Ciborgue Vivo" §3 ("gerar relatórios claros para nós"):
+            síntese sob demanda dos MESMOS sinais reais já mostrados acima
+            (mais offline/frescor/conexões por exchange) — nunca uma
+            segunda medição, só um relatório legível quando o Operador
+            pede. Autocorreção real já existe nas camadas de dado
+            (reconexão de WS, fail-closed do Bus) — este botão só torna o
+            estado real visível, não substitui nem duplica aquilo. */}
+        <button
+          type="button"
+          onClick={() =>
+            setDiagnosticReport(
+              buildDiagnosticReport({
+                offline,
+                isDataFresh,
+                health,
+                engineStatus: engineStatus ?? "pending",
+                engineReason: realCycle?.reason ?? null,
+                dataQualityClassification: quality?.classification ?? null,
+                connections,
+              }),
+            )
+          }
+          className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff30] hover:bg-[#00f0ff10] transition-colors text-left"
+        >
+          <span className="text-[0.45rem] text-[#00f0ff] font-bold tracking-wide">GERAR RELATÓRIO DE AUTODIAGNÓSTICO</span>
+          <span className="text-[0.5rem] font-mono font-black text-[#00f0ff]">▶</span>
+        </button>
+        {diagnosticReport && (
+          <div
+            className={`flex flex-col gap-1 px-2 py-1.5 rounded border ${
+              diagnosticReport.overallSeverity === "CRITICAL"
+                ? "border-[#ff005550] bg-[#ff005508]"
+                : diagnosticReport.overallSeverity === "WARN"
+                  ? "border-[#f0d06f50] bg-[#f0d06f08]"
+                  : "border-[#00ffaa50] bg-[#00ffaa08]"
+            }`}
+          >
+            <div className="flex justify-between items-center">
+              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">
+                SEVERIDADE GERAL
+              </span>
+              <span
+                className={`text-[0.5rem] font-mono font-black ${
+                  diagnosticReport.overallSeverity === "CRITICAL"
+                    ? "text-[#ff0055]"
+                    : diagnosticReport.overallSeverity === "WARN"
+                      ? "text-[#f0d06f]"
+                      : "text-[#00ffaa]"
+                }`}
+              >
+                {diagnosticReport.overallSeverity}
+              </span>
+            </div>
+            <pre className="text-[0.42rem] text-[#8ab4f8]/80 leading-relaxed whitespace-pre-wrap font-mono max-h-[160px] overflow-y-auto scrollbar-hide">
+              {formatDiagnosticReportMarkdown(diagnosticReport)}
+            </pre>
+          </div>
+        )}
         {/* engine é lido só para o gate de visibilidade herdado do Widget —
             nenhuma leitura de mercado é exibida aqui (zero repetição). */}
         {engine ? null : null}

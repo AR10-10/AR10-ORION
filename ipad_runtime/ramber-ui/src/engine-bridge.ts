@@ -51,6 +51,10 @@ import { startLiquidationStream } from '../../js/real-data/binance-liquidations-
 import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg-order-block-engine.js';
 import { classify as classifyLorentzian } from '../../src/research/engines/lorentzian-classifier.js';
 import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
+// Ordem "Ciborgue Vivo": BOS/CHOCH — reaproveita fractal-swings.js e o
+// structure_label de market-structure-engine.js por baixo (ver header do
+// próprio arquivo); este import só traz a varredura de rompimento real.
+import { analyze as analyzeBosChoch } from '../../src/research/engines/bos-choch-engine.js';
 import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/index.js';
 // V-MAX Fase 1.3: derivação pura (HVN/LVN/preço-por-bucket) do Volume
 // Profile computado pelo WASM no quant-worker — ver bloco no fim do arquivo.
@@ -903,6 +907,32 @@ export function computeSmcZones(candles: Array<{ open: number; high: number; low
     orderBlocks: result.order_blocks,
     liquidityZones: result.liquidity_zones,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ordem "Ciborgue Vivo": BOS/CHOCH (bos-choch-engine.js) — reaproveita o
+// MESMO fractal-swings.js e o MESMO structure_label de
+// market-structure-engine.js já usados acima; a única lógica nova é a
+// varredura de rompimento real por fechamento. Computado contra o MESMO
+// array de candles do gráfico que computeSmcZones acima já recebe (mesmo
+// motivo: o `index` só faz sentido alinhado ao array que o caller desenha).
+// Display only (LEI 24): alimenta anotação temporária + alerta, nunca uma
+// segunda decisão de trading.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface StructureBreak {
+  type: 'BOS' | 'CHOCH';
+  direction: 'ALTA' | 'BAIXA';
+  level: number;
+  index: number;
+  time: number;
+}
+
+export function computeBosChoch(
+  candles: Array<{ open: number; high: number; low: number; close: number }>,
+): { break: StructureBreak | null; structureLabel: string | null } {
+  const result = analyzeBosChoch({ ohlcv_series: candles });
+  if (result.status !== 'OK') return { break: null, structureLabel: null };
+  return { break: result.break, structureLabel: result.structure_label };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

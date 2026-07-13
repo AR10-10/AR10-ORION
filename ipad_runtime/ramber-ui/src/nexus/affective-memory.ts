@@ -41,7 +41,17 @@ export type AffectiveEventSource =
   // Perception events (Autonomy order): real first-touch outcomes of the
   // organism's own Trade Plans — additive union extension.
   | "PLAN_TARGET_HIT"
-  | "PLAN_STOP_HIT";
+  | "PLAN_STOP_HIT"
+  // Ordem "Ciborgue Vivo" §3: real BOS/CHOCH break (bos-choch-engine.js)
+  // arriving WHILE the Core Engine holds an active LONG/SHORT stance —
+  // deliberately NOT fired for a break with no active stance (WAIT): a
+  // structure break the organism has no directional position on is
+  // neutral market information, not organism experience. Weighted lower
+  // than PLAN_TARGET_HIT/STOP_HIT (a completed real outcome) — a break
+  // is new real evidence for/against the current read, not a resolved
+  // result.
+  | "STRUCTURE_BREAK_CONFIRMS_SIGNAL"
+  | "STRUCTURE_BREAK_CONTRADICTS_SIGNAL";
 
 export type AffectiveKind = "REWARD" | "PAIN";
 
@@ -57,6 +67,8 @@ export const AFFECTIVE_EVENT_WEIGHTS: Record<AffectiveEventSource, { kind: Affec
   // events keep their original, lighter weights).
   PLAN_TARGET_HIT: { kind: "REWARD", weight: 0.8 },
   PLAN_STOP_HIT: { kind: "PAIN", weight: 0.8 },
+  STRUCTURE_BREAK_CONFIRMS_SIGNAL: { kind: "REWARD", weight: 0.3 },
+  STRUCTURE_BREAK_CONTRADICTS_SIGNAL: { kind: "PAIN", weight: 0.4 },
   ENGINE_CYCLE_OK: { kind: "REWARD", weight: 0.1 },
   ENGINE_CYCLE_ERROR: { kind: "PAIN", weight: 0.6 },
   FEED_WS_UP: { kind: "REWARD", weight: 0.25 },

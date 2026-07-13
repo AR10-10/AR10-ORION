@@ -45,6 +45,15 @@ export interface TerminalSnapshot {
     confidence?: number; // 0..1
     sampleSize?: number;
   }>;
+  // Ordem "Ciborgue Vivo" §2 (BOS/CHOCH): chave estável do rompimento de
+  // estrutura mais recente ("TYPE:index", ex. "CHOCH:64") — comparar esta
+  // string entre prev/next é o suficiente para saber se é um rompimento
+  // NOVO (dispara alerta) ou o mesmo evento ainda vivo na tela (não
+  // repete o alerta a cada ciclo, mesma regra anti-ruído do resto deste
+  // arquivo). null = nenhum rompimento real na amostra agora.
+  structureBreakKey: string | null;
+  structureBreakType: 'BOS' | 'CHOCH' | null;
+  structureBreakDirection: 'ALTA' | 'BAIXA' | null;
 }
 
 export type VoiceIntent =

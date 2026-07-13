@@ -35,6 +35,7 @@
 // punhado de fillRect/strokeRect, não um cálculo pesado.
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
+import { ageAlpha, type DecayConfig } from "./annotation-decay";
 
 export interface FillableZone {
   type: "BULLISH" | "BEARISH";
@@ -60,6 +61,16 @@ function paletteFor(kind: "FVG" | "OB", type: "BULLISH" | "BEARISH"): ZonePalett
   if (kind === "FVG") return type === "BULLISH" ? FVG_BULLISH : FVG_BEARISH;
   return type === "BULLISH" ? OB_BULLISH : OB_BEARISH;
 }
+
+// Ordem "Ciborgue Vivo" (§1, "pensa e depois esquece para não acumular
+// peso"): decaimento real por idade em candles (ver annotation-decay.ts —
+// mesma função compartilhada com StructureBreakMarkersPlugin, zero
+// duplicação). Uma zona jovem desenha na opacidade total de sempre; a
+// partir de 30 candles esmaece linearmente até 15%; depois de 100 candles
+// some do desenho — "esquecida" apenas da TELA, nunca do dado real:
+// smcZones (App.tsx) continua com o registro completo para qualquer outro
+// consumidor (ex. Trade Plan), isto só decide o que este canvas pinta.
+const ZONE_DECAY: DecayConfig = { fadeStartCandles: 30, expireCandles: 100, minAlpha: 0.15 };
 
 interface LiquidityZonesPluginProps {
   chart: IChartApi | null;
@@ -107,9 +118,14 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       const timeScale = chart.timeScale();
       const { fairValueGaps: fvgs, orderBlocks: obs, data: candles } = zonesRef.current;
 
-      const drawZone = (zone: FillableZone, palette: ZonePalette) => {
+      const currentIndex = candles.length - 1;
+
+      const drawZone = (zone: FillableZone, palette: ZonePalette, label: string) => {
         const point = candles[zone.index];
         if (!point) return; // índice fora da janela real de candles — nunca desenha um palpite.
+        const age = currentIndex - zone.index;
+        const alpha = ageAlpha(age, ZONE_DECAY);
+        if (alpha <= 0) return; // "esquecida" — só da tela, ver comentário de ageAlpha acima.
         const x1 = timeScale.timeToCoordinate(point.time as unknown as Time);
         const y1 = series.priceToCoordinate(zone.top);
         const y2 = series.priceToCoordinate(zone.bottom);
@@ -119,16 +135,27 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
         const rectHeight = Math.max(1, Math.abs(y2 - y1));
         const rectWidth = cssWidth - rectX;
         if (rectWidth <= 0) return;
+        ctx.globalAlpha = alpha;
         ctx.fillStyle = palette.fill;
         ctx.fillRect(rectX, rectY, rectWidth, rectHeight);
         // Fio de Seda: 1px sólida real (Canvas 2D nunca usa setLineDash aqui).
         ctx.lineWidth = 1;
         ctx.strokeStyle = palette.border;
         ctx.strokeRect(rectX + 0.5, rectY + 0.5, Math.max(0, rectWidth - 1), Math.max(0, rectHeight - 1));
+        // Label elegante (Ordem "Ciborgue Vivo" §1): identifica o tipo direto
+        // no gráfico, sem abrir painel nenhum — mesma opacidade decrescente
+        // da própria zona, nunca compete visualmente com uma zona já velha.
+        if (rectWidth > 24 && rectHeight > 10) {
+          ctx.font = "9px -apple-system, sans-serif";
+          ctx.fillStyle = palette.border;
+          ctx.textBaseline = "top";
+          ctx.fillText(label, rectX + 3, rectY + 2);
+        }
+        ctx.globalAlpha = 1;
       };
 
-      fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type)));
-      obs.forEach((z) => drawZone(z, paletteFor("OB", z.type)));
+      fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type), "FVG"));
+      obs.forEach((z) => drawZone(z, paletteFor("OB", z.type), "OB"));
     };
 
     const markDirty = () => {

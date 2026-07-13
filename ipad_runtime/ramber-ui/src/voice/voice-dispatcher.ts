@@ -76,5 +76,22 @@ export function computeAlerts(
     alerts.push({ text: 'Motor de análise operacional.', priority: 'INFO' });
   }
 
+  // 6. Ordem "Ciborgue Vivo" §2: rompimento REAL de estrutura (BOS/CHOCH,
+  // bos-choch-engine.js) — a chave (tipo+índice) muda só quando um
+  // rompimento NOVO acontece; o mesmo evento ainda vivo na tela (mesma
+  // chave) nunca repete o alerta. CHOCH é o evento mais significativo
+  // (primeiro sinal real de possível reversão); BOS é confirmatório
+  // (continuação já esperada), mesma graduação de severidade do resto
+  // deste arquivo (CRITICAL/ALERT para o inesperado, INFO para a
+  // confirmação).
+  if (next.structureBreakKey && next.structureBreakKey !== prev.structureBreakKey) {
+    const dir = next.structureBreakDirection === 'ALTA' ? 'de alta' : 'de baixa';
+    if (next.structureBreakType === 'CHOCH') {
+      alerts.push({ text: `Mudança de caráter ${dir}. Estrutura pode estar revertendo.`, priority: 'ALERT' });
+    } else {
+      alerts.push({ text: `Rompimento de estrutura ${dir} confirma continuação.`, priority: 'INFO' });
+    }
+  }
+
   return alerts;
 }

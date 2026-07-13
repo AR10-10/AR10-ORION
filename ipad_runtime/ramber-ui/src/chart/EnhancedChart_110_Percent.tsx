@@ -36,6 +36,9 @@ import {
 // — a série do orderflowHistory (Fase 1.2) com eixo Y próprio nativo.
 import { useOrderflowHistory } from "../store/unified-snapshot-store";
 import { LiquidityZonesPlugin, type FillableZone } from "./LiquidityZonesPlugin";
+// Ordem "Ciborgue Vivo" §1: anotação temporária de BOS/CHOCH — mesma
+// arquitetura de overlay do LiquidityZonesPlugin acima, dado real diferente.
+import { StructureBreakMarkersPlugin } from "./StructureBreakMarkersPlugin";
 import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
 // V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
 // barras à direita — dado direto da store (Fase 1.3), ver header do plugin.
@@ -55,6 +58,9 @@ import type { TradePlan } from "../nexus/trade-plan";
 // intraday reference level this system was missing entirely (confirmed
 // via a full-codebase grep before writing nexus/vwap.ts).
 import { computeSessionVwapSeries } from "../nexus/vwap";
+// Ordem "Ciborgue Vivo" §1: BOS/CHOCH real (bos-choch-engine.js via
+// engine-bridge.ts's computeBosChoch) — mesmo tipo que StructureBreakMarkersPlugin usa.
+import type { StructureBreak } from "../engine-bridge";
 
 export interface EnhancedChartCandle {
   time: number; // Unix segundos real (Bus/Binance) — nunca sintetizado
@@ -112,6 +118,9 @@ interface EnhancedChartProps {
   fairValueGaps?: EnhancedChartZone[];
   orderBlocks?: EnhancedChartZone[];
   liquidityZones?: EnhancedChartLiquidity[];
+  // Ordem "Ciborgue Vivo" §1: rompimento de estrutura real mais recente
+  // (BOS/CHOCH). null = nenhum rompimento na amostra, honesto — nunca desenha um palpite.
+  structureBreak?: StructureBreak | null;
   fibonacciLevels?: EnhancedChartFibLevel[] | null;
   // Correção de latência: o último preço REAL do ticker WS (mesma fonte da
   // barra superior, já na store desde o primeiro tick) e o timeframe ativo
@@ -177,6 +186,7 @@ export function EnhancedChart_110_Percent({
   fairValueGaps,
   orderBlocks,
   liquidityZones,
+  structureBreak,
   fibonacciLevels,
   livePrice,
   activeTimeframe,
@@ -634,6 +644,15 @@ export function EnhancedChart_110_Percent({
         data={data}
         fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}
         orderBlocks={(orderBlocks ?? []) as FillableZone[]}
+      />
+      {/* Ordem "Ciborgue Vivo" §1: BOS/CHOCH real, mesma anotação temporária
+         que "pensa e esquece" — mesmo array `data` que LiquidityZonesPlugin
+         acima já usa, então o índice do rompimento fica alinhado. */}
+      <StructureBreakMarkersPlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+        data={data}
+        structureBreak={structureBreak ?? null}
       />
       {/* V-MAX Fase 1 (superfície visual): Volume Profile real (Fase 1.3)
          como barras à direita + linha do POC — overlay por cima do chart
