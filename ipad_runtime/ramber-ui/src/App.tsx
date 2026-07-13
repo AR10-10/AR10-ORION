@@ -82,6 +82,13 @@ import { computeRSI } from "../../src/research/engines/lorentzian-classifier.js"
 // conselho) e armadilhas por corroboração de eventos reais.
 import { buildScenarioProjection, type ScenarioLevel } from "./nexus/scenario-engine";
 import { detectInstitutionalTraps } from "./nexus/trap-detection";
+// Phase Ω Priority 2 ("Probability Engine" no pedido original do Operador —
+// entregue honestamente como Confluence/Conviction Engine, ver o cabeçalho
+// de confluence-engine.ts para o racional completo). Reaplica o MESMO pool
+// linear real (Fase F) um nível acima, sobre os 3 subsistemas de opinião já
+// reais e independentes (Ensemble/Council/Multi-Timeframe) — nunca uma
+// probabilidade calibrada, nunca um segundo motor de decisão (LEI 24).
+import { buildConvictionReading } from "./nexus/confluence-engine";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
 import {
@@ -5816,6 +5823,12 @@ function formatConsensusScore(score: number | null): string {
 function DecisionValidationWidget() {
   const { engine, institutionalConsensus, ensembleConsensus, riskSuggestion, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt, chartTimeframe } =
     useContext(WidgetContext) || {};
+  // Os 3 subsistemas legíveis pelo Motor de Confluência já vivem na store
+  // (mesmo padrão de useMultiTimeframeSnapshot já usado por
+  // MultiTimeframeMatrixWidget) — zero fetch novo, zero cálculo duplicado.
+  const councilForConviction = useCouncilSnapshot();
+  const multiTimeframeForConviction = useMultiTimeframeSnapshot();
+  const trustScoreForConviction = useTrustScoreSnapshot();
 
   // Fase H: sugestão de dimensionamento (% equity / % risco). Fail-closed:
   // SEM_SUGESTAO exibe 0% com o motivo real. O selo é PERMANENTE e
@@ -5825,6 +5838,36 @@ function DecisionValidationWidget() {
     ? `${riskSuggestion.suggested_position_pct.toFixed(1)}% eq · risk ${riskSuggestion.effective_risk_pct.toFixed(2)}%`
     : "0% · sem sugestão";
   const riskColor = riskOk ? "text-[#00f0ff]" : "text-[#8ab4f8]/50";
+
+  // Phase Ω Priority 2: Motor de Confluência Cruzada — quantos dos 3
+  // subsistemas independentes (Ensemble/Council/Multi-Timeframe) concordam
+  // com a direção real que o Core Engine JÁ emitiu. Read-only por
+  // construção (LEI 24): nunca lido de volta por engine.direction.
+  const convictionReading = useMemo(
+    () =>
+      buildConvictionReading({
+        coreDirection: engine?.direction ?? null,
+        ensembleConsensus: ensembleConsensus?.status === "OK" ? { status: ensembleConsensus.status, direcao: ensembleConsensus.direcao, forca: ensembleConsensus.forca } : null,
+        council: councilForConviction ?? null,
+        multiTimeframe: multiTimeframeForConviction ?? null,
+        trustScore: trustScoreForConviction?.score ?? null,
+      }),
+    [engine?.direction, ensembleConsensus, councilForConviction, multiTimeframeForConviction, trustScoreForConviction],
+  );
+  const convictionColor =
+    convictionReading.status !== "OK"
+      ? "text-[#8ab4f8]/50"
+      : convictionReading.verdict === "CONFIRMS"
+        ? "text-[#00ffaa]"
+        : convictionReading.verdict === "CONTRADICTS"
+          ? "text-[#ff0055]"
+          : "text-[#f0d06f]";
+  const convictionLabel =
+    convictionReading.status !== "OK"
+      ? (convictionReading.reason === "core_engine_sem_direcao_ativa_no_momento_(WAIT)" ? "SEM DIREÇÃO ATIVA (WAIT)" : AWAIT)
+      : `${convictionReading.verdict} · ${convictionReading.agreeingCount}/${convictionReading.totalReadable} · força ${(convictionReading.conviction! * 100).toFixed(0)}%${
+          num(convictionReading.convictionAdjusted) ? ` (aj. ${(convictionReading.convictionAdjusted! * 100).toFixed(0)}%)` : ""
+        }`;
 
   // Fase F: Comitê de Validação (linear opinion pool, src/consensus/).
   // Direção + força do comitê das lógicas SECUNDÁRIAS — rótulo deixa
@@ -5908,6 +5951,20 @@ function DecisionValidationWidget() {
             )}
           </span>
           <span className={`text-[0.55rem] font-mono font-black ${ensembleColor}`}>{ensembleLabel}</span>
+        </div>
+        {/* Phase Ω Priority 2: Motor de Confluência Cruzada — quantos dos 3
+            subsistemas independentes (Ensemble/Council/Multi-Timeframe)
+            concordam com a direção que o Core Engine JÁ emitiu. Nunca uma
+            probabilidade calibrada (mesma honestidade do Comitê acima) —
+            "força" é massa real de opinião ALINHADA, não chance de acerto. */}
+        <div
+          className="flex justify-between items-center bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0"
+          title="Motor de Confluência Cruzada: concordância real entre Ensemble, Comitê e Matriz Multi-Timeframe com a direção já emitida pelo Core Engine. Nunca probabilidade de acerto de mercado."
+        >
+          <span className="text-[0.45rem] text-[#c07dff] font-bold tracking-widest">
+            CONFLUÊNCIA CRUZADA · 3 SUBSISTEMAS
+          </span>
+          <span className={`text-[0.55rem] font-mono font-black ${convictionColor}`}>{convictionLabel}</span>
         </div>
         {/* Fase H: Risk Engine — % do equity e % de risco (nunca valor
             monetário). O selo abaixo é OBRIGATÓRIO e permanente (ordem de
