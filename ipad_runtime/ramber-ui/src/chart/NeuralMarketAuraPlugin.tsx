@@ -43,14 +43,23 @@ const LONG_RGB = "0, 255, 170";
 const SHORT_RGB = "255, 0, 85";
 const NEUTRAL_RGB = "138, 180, 248"; // mesmo azul-acinzentado usado para "neutro/informativo" em toda a UI
 
-function phaseRgb(phase: AuraReading["phase"], direction: "LONG" | "SHORT"): string {
-  // Enquanto o plano está aberto (BIRTH/ESTABLISHED), a cor comunica
-  // DIREÇÃO. Uma vez resolvido, comunica RESULTADO real — um SHORT que
+// Correção real de auditoria (FASE Ω Priority 3, Finding I): a versão
+// anterior coloria BIRTH/ESTABLISHED por DIREÇÃO do plano — colidia com a
+// convenção JÁ ESTABELECIDA de "uma cor por papel" em todo o app
+// (TradePlanZonePlugin.tsx: "one color per role across the whole chart,
+// never a second palette for the same concept" — alvo SEMPRE verde, stop
+// SEMPRE vermelho, independente de LONG/SHORT; ver EnhancedChart_110_
+// Percent.tsx's targetLineRef/stopLineRef). Um SHORT real produzia corredor
+// VERMELHO terminando numa linha de alvo nativa VERDE no MESMO gráfico —
+// dois vocabulários de cor discordando sobre o mesmo nível de preço.
+function phaseRgb(phase: AuraReading["phase"]): string {
+  // Enquanto o plano está aberto (BIRTH/ESTABLISHED) ou foi substituído
+  // (REPLACED), a cor é NEUTRA — nenhum resultado real ainda existe para
+  // reportar. Só ao resolver a cor comunica RESULTADO real — um SHORT que
   // bate o alvo é um sucesso real (verde), não "vermelho porque é short".
   if (phase === "TARGET_HIT") return LONG_RGB;
   if (phase === "STOP_HIT") return SHORT_RGB;
-  if (phase === "REPLACED") return NEUTRAL_RGB;
-  return direction === "LONG" ? LONG_RGB : SHORT_RGB;
+  return NEUTRAL_RGB;
 }
 
 // Largura do corredor em pixels, do preço atual (borda direita) para trás:
@@ -108,18 +117,22 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
       const yTarget = series.priceToCoordinate(plan.target.price);
       if (yEntry === null || yTarget === null) return; // fora da faixa de preço visível agora — Fail-Closed, nunca extrapola.
 
-      const rgb = phaseRgb(phase, plan.direction);
+      const rgb = phaseRgb(phase);
       const top = Math.min(yEntry, yTarget);
       const bottom = Math.max(yEntry, yTarget);
       const bandHeight = Math.max(1, bottom - top);
       const bandWidth = Math.min(cssWidth, corridorWidthPx(corridorWidthFactor));
       const bandX = cssWidth - bandWidth; // ancorado na borda direita (preço atual), o corredor se estende para trás no tempo.
 
-      // Preenchimento em gradiente vertical (entrada -> alvo) — a
-      // convicção fala pela LARGURA/opacidade deste retângulo, nunca por
-      // uma linha de marcação. Market Pulse (ATR% real normalizado)
-      // modula a intensidade de base: mercado quieto = quase transparente,
-      // volátil = mais vívido — mesma leitura da especificação.
+      // Preenchimento em gradiente vertical (entrada -> alvo) — dois sinais
+      // reais e DISTINTOS falam aqui, nunca por uma linha de marcação:
+      // convicção real (Confluence Engine) fala pela LARGURA do corredor
+      // (corridorWidthPx, calculada acima em bandWidth); Market Pulse (ATR%
+      // real normalizado) fala pela OPACIDADE de base abaixo — mercado
+      // quieto = quase transparente, volátil = mais vívido. Correção real
+      // de auditoria (FASE Ω Priority 3, Finding L): o comentário anterior
+      // atribuía largura E opacidade à "convicção" — baseAlpha abaixo nunca
+      // lê corridorWidthFactor, só pulseIntensity/fadeAlpha.
       const pulse = pulseIntensity ?? 0.3; // sem ATR real ainda: leitura moderada, nunca a mais intensa
       const baseAlpha = (0.06 + 0.22 * pulse) * fadeAlpha;
       const gradient = ctx.createLinearGradient(0, top, 0, bottom);
@@ -171,6 +184,31 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
         ctx.beginPath();
         ctx.arc(markerX, markerY, 4, 0, Math.PI * 2);
         ctx.stroke();
+      }
+
+      // Marcador de STOP_HIT — mesmo desenho do marcador "HIT" acima, só
+      // na coordenada real do stop. Achado real de auditoria (FASE Ω
+      // Priority 3, Finding J): antes, quando o stop real era atingido,
+      // targetProximity fica null nessa fase (aura-lifecycle.ts nunca
+      // atribui um valor para STOP_HIT/REPLACED) — nenhum marcador
+      // aparecia, só o corredor mudando de cor por um instante já em
+      // dissolução. yStop vem do MESMO plan.stop.price real que
+      // EnhancedChart_110_Percent.tsx já desenha como linha de preço
+      // nativa — nenhuma geometria nova é inventada aqui.
+      if (phase === "STOP_HIT") {
+        const yStop = series.priceToCoordinate(plan.stop.price);
+        if (yStop !== null) {
+          ctx.globalAlpha = fadeAlpha;
+          ctx.lineWidth = 1;
+          ctx.fillStyle = `rgba(${rgb}, 0.85)`;
+          ctx.beginPath();
+          ctx.arc(markerX, yStop, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = `rgba(${rgb}, 1)`;
+          ctx.beginPath();
+          ctx.arc(markerX, yStop, 8, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
       ctx.globalAlpha = 1;
     };

@@ -49,6 +49,22 @@ describe('chart/NeuralMarketAuraPlugin.tsx: mesma arquitetura de overlay das irm
     expect(body).toContain('if (phase === "TARGET_HIT") return LONG_RGB;');
     expect(body).toContain('if (phase === "STOP_HIT") return SHORT_RGB;');
   });
+
+  it('BIRTH/ESTABLISHED/REPLACED (sem resultado real ainda) usa cor NEUTRA, nunca por direção do plano — corrige a colisão com alvo/stop nativos (achado real de auditoria, FASE Ω Priority 3, Finding I)', () => {
+    const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
+    expect(plugin).toContain('function phaseRgb(phase: AuraReading["phase"]): string {');
+    const fnMatch = plugin.match(/function phaseRgb\([\s\S]*?\n\}/);
+    const body = fnMatch![0];
+    expect(body).not.toContain('direction');
+    expect(body).toContain('return NEUTRAL_RGB;');
+    expect(plugin).toContain('const rgb = phaseRgb(phase);');
+  });
+
+  it('STOP_HIT ganha marcador real na coordenada real do stop (achado real de auditoria, FASE Ω Priority 3, Finding J) — antes nenhum marcador aparecia nessa fase', () => {
+    const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
+    expect(plugin).toContain('if (phase === "STOP_HIT") {');
+    expect(plugin).toContain('const yStop = series.priceToCoordinate(plan.stop.price);');
+  });
 });
 
 describe('EnhancedChart_110_Percent.tsx: aura montada ANTES da caixa de entrada (TradePlanZonePlugin), nunca redesenha a mesma caixa', () => {
@@ -124,6 +140,30 @@ describe('App.tsx: voiceSnapshot relocado após trackRecordSlice/convictionReadi
     expect(voiceSnapshotIdx).toBeGreaterThan(-1);
     expect(trackRecordIdx).toBeLessThan(voiceSnapshotIdx);
     expect(convictionIdx).toBeLessThan(voiceSnapshotIdx);
+  });
+});
+
+describe('App.tsx: inEntryZone com histerese real, nunca a borda nua (achado real de auditoria, FASE Ω Priority 3, Finding K)', () => {
+  it('margem é proporcional ao range REAL da zona (nunca um delta de preço fixo), só se aplica quando já dentro (wasIn)', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('const ENTRY_ZONE_HYSTERESIS_FACTOR = 0.25;');
+    expect(app).toContain('const wasIn = inEntryZoneLatchRef.current;');
+    expect(app).toContain('const margin = (rawEntryHigh - rawEntryLow) * ENTRY_ZONE_HYSTERESIS_FACTOR;');
+    expect(app).toContain('const low = wasIn ? rawEntryLow - margin : rawEntryLow;');
+    expect(app).toContain('const high = wasIn ? rawEntryHigh + margin : rawEntryHigh;');
+  });
+
+  it('inEntryZoneLatchRef é escrito só DEPOIS do useMemo (useEffect separado) — nunca mutado durante o próprio render', () => {
+    const app = read('../src/App.tsx');
+    const refDeclIdx = app.indexOf('const inEntryZoneLatchRef = useRef(false);');
+    const memoIdx = app.indexOf('const inEntryZoneNow = useMemo(');
+    const writeBackIdx = app.indexOf('inEntryZoneLatchRef.current = inEntryZoneNow;');
+    expect(refDeclIdx).toBeGreaterThan(-1);
+    expect(memoIdx).toBeGreaterThan(-1);
+    expect(writeBackIdx).toBeGreaterThan(-1);
+    expect(refDeclIdx).toBeLessThan(memoIdx);
+    expect(memoIdx).toBeLessThan(writeBackIdx);
+    expect(app).toContain('inEntryZone: inEntryZoneNow,');
   });
 });
 

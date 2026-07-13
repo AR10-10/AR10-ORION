@@ -113,6 +113,35 @@ export interface EnhancedChartFibLevel {
   score: number;
 }
 
+// Camadas do Gráfico (Finding M, FASE Ω Priority 3 — painel novo aditivo,
+// mesmo padrão do Workspace Manager em App.tsx, mas para os overlays do
+// CANVAS do gráfico em vez dos widgets do layout). Lista canônica única:
+// App.tsx importa este tipo/array para desenhar o painel de toggles, nunca
+// redefine os ids à parte. Esconder uma camada DESMONTA o plugin (JSX
+// condicional abaixo) em vez de só passar chart=null — um plugin de canvas
+// dirty-flag só redesenha quando algo real muda; passar chart=null congela
+// o último frame real já pintado (nunca mais limpo), não o esconde. Todas
+// as 6 ligadas por padrão — o painel nunca esconde nada sem uma ação
+// explícita do Operador.
+export const CHART_LAYER_IDS = [
+  "liquidity_zones",
+  "structure_breaks",
+  "order_flow_heatmap",
+  "volume_profile",
+  "trade_plan_zone",
+  "neural_market_aura",
+] as const;
+export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
+export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
+export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
+  liquidity_zones: true,
+  structure_breaks: true,
+  order_flow_heatmap: true,
+  volume_profile: true,
+  trade_plan_zone: true,
+  neural_market_aura: true,
+};
+
 interface EnhancedChartProps {
   data: EnhancedChartCandle[];
   support?: number | null;
@@ -143,6 +172,11 @@ interface EnhancedChartProps {
   // Signal Track Record + Confluence Engine reading above — never a second
   // trading signal (LEI 24). null/DADOS_INSUFICIENTES draws nothing.
   aura?: AuraReading | null;
+  // Camadas do Gráfico (Finding M): per-plugin visibility toggle from the
+  // new settings panel. Optional and fail-closed: absent/undefined means
+  // every layer stays visible (DEFAULT_CHART_LAYER_VISIBILITY), the exact
+  // behavior this component already had before the toggle existed.
+  layerVisibility?: ChartLayerVisibility;
   // Auditoria de arquitetura (revisão completa) — paginação histórica
   // real: chamado quando o usuário arrasta perto da borda esquerda dos
   // candles já carregados (ver efeito de subscribeVisibleLogicalRangeChange
@@ -202,8 +236,10 @@ export function EnhancedChart_110_Percent({
   activeTimeframe,
   tradePlan,
   aura,
+  layerVisibility,
   onRequestOlderCandles,
 }: EnhancedChartProps) {
+  const visibility = layerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -638,10 +674,12 @@ export function EnhancedChart_110_Percent({
          velas (não só semi-transparente por cima), o visual institucional
          padrão (Bookmap-style) sem precisar de nenhuma API de camadas da
          lib. */}
-      <OrderFlowHeatmapPlugin
-        chart={chartReady?.chart ?? null}
-        series={chartReady?.series ?? null}
-      />
+      {visibility.order_flow_heatmap && (
+        <OrderFlowHeatmapPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+        />
+      )}
       <div ref={containerRef} className="absolute inset-0" />
       {/* V-MAX Fase 0.7: FVG/Order Blocks (bullish|bearish) — mesmo dado real
          de computeSmcZones, já filtrado (!mitigated) e limitado em contagem
@@ -649,47 +687,57 @@ export function EnhancedChart_110_Percent({
          (Blueprint §3.1 LiquidityZonesPlugin) em vez de duas price lines —
          restaura a cor que o gráfico SVG anterior tinha, sem tirar nenhuma
          cor do gráfico (pedido explícito do Operador). */}
-      <LiquidityZonesPlugin
-        chart={chartReady?.chart ?? null}
-        series={chartReady?.series ?? null}
-        data={data}
-        fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}
-        orderBlocks={(orderBlocks ?? []) as FillableZone[]}
-      />
+      {visibility.liquidity_zones && (
+        <LiquidityZonesPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}
+          orderBlocks={(orderBlocks ?? []) as FillableZone[]}
+        />
+      )}
       {/* Ordem "Ciborgue Vivo" §1: BOS/CHOCH real, mesma anotação temporária
          que "pensa e esquece" — mesmo array `data` que LiquidityZonesPlugin
          acima já usa, então o índice do rompimento fica alinhado. */}
-      <StructureBreakMarkersPlugin
-        chart={chartReady?.chart ?? null}
-        series={chartReady?.series ?? null}
-        data={data}
-        structureBreak={structureBreak ?? null}
-      />
+      {visibility.structure_breaks && (
+        <StructureBreakMarkersPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          structureBreak={structureBreak ?? null}
+        />
+      )}
       {/* V-MAX Fase 1 (superfície visual): Volume Profile real (Fase 1.3)
          como barras à direita + linha do POC — overlay por cima do chart
          (pointer-events-none), dado direto da store. */}
-      <VolumeProfilePlugin
-        chart={chartReady?.chart ?? null}
-        series={chartReady?.series ?? null}
-      />
+      {visibility.volume_profile && (
+        <VolumeProfilePlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+        />
+      )}
       {/* Neural Market Aura: the conviction corridor, mounted BEFORE the
          crisp entry-zone box below so the soft gradient stays visually
          underneath it, not competing with it. */}
-      <NeuralMarketAuraPlugin
-        chart={chartReady?.chart ?? null}
-        series={chartReady?.series ?? null}
-        aura={aura ?? null}
-      />
+      {visibility.neural_market_aura && (
+        <NeuralMarketAuraPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          aura={aura ?? null}
+        />
+      )}
       {/* Ordem Final Autonomia Evolução §1 ("caixas semi-transparentes"):
          the Trade Plan's entry zone, mounted last so it stays the topmost
          overlay — it is the most actionable, currently-live information
          on the chart, above the more diagnostic FVG/OB zones. */}
-      <TradePlanZonePlugin
-        chart={chartReady?.chart ?? null}
-        series={chartReady?.series ?? null}
-        entryLow={tradePlan?.entry.low ?? null}
-        entryHigh={tradePlan?.entry.high ?? null}
-      />
+      {visibility.trade_plan_zone && (
+        <TradePlanZonePlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          entryLow={tradePlan?.entry.low ?? null}
+          entryHigh={tradePlan?.entry.high ?? null}
+        />
+      )}
     </div>
   );
 }

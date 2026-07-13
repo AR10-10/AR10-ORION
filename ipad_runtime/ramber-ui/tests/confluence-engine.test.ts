@@ -183,6 +183,46 @@ describe('buildConvictionReading: TrustScore amortece, nunca vota direção', ()
   });
 });
 
+describe('buildConvictionReading: membro ENSEMBLE prefere forca_ajustada do próprio pool quando disponível (achado real de auditoria, FASE Ω Priority 3)', () => {
+  it('forca_ajustada real e diferente de forca => strength do membro ENSEMBLE usa a ajustada, não a bruta', () => {
+    const r = buildConvictionReading({
+      coreDirection: 'LONG',
+      ensembleConsensus: { status: 'OK', direcao: 'ALTA', forca: 0.8, forca_ajustada: 0.3 },
+      council: null,
+      multiTimeframe: null,
+      trustScore: null,
+    });
+    const ensembleMember = r.members.find((m) => m.id === 'ENSEMBLE')!;
+    expect(ensembleMember.strength).toBeCloseTo(0.3, 10);
+    expect(ensembleMember.detail).toContain('ajustada por qualidade de dados');
+  });
+
+  it('forca_ajustada null (Data Quality Weight não medido nesta janela) => cai honestamente para forca bruta, nunca 0 fabricado', () => {
+    const r = buildConvictionReading({
+      coreDirection: 'LONG',
+      ensembleConsensus: { status: 'OK', direcao: 'ALTA', forca: 0.8, forca_ajustada: null },
+      council: null,
+      multiTimeframe: null,
+      trustScore: null,
+    });
+    const ensembleMember = r.members.find((m) => m.id === 'ENSEMBLE')!;
+    expect(ensembleMember.strength).toBeCloseTo(0.8, 10);
+    expect(ensembleMember.detail).not.toContain('ajustada por qualidade de dados');
+  });
+
+  it('forca_ajustada ausente do objeto (formato antigo, ex.: ensembleOk() de outros testes) => mesmo fallback honesto para forca bruta', () => {
+    const r = buildConvictionReading({
+      coreDirection: 'LONG',
+      ensembleConsensus: ensembleOk('ALTA', 0.8),
+      council: null,
+      multiTimeframe: null,
+      trustScore: null,
+    });
+    const ensembleMember = r.members.find((m) => m.id === 'ENSEMBLE')!;
+    expect(ensembleMember.strength).toBeCloseTo(0.8, 10);
+  });
+});
+
 describe('buildConvictionReading: Multi-Timeframe entra como UM voto real (fração dos prazos), nunca 6 votos', () => {
   it('4 de 6 prazos concordam com LONG => membro MULTI_TIMEFRAME strength=4/6, agreesWithCore=true', () => {
     const r = buildConvictionReading({

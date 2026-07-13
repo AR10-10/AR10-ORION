@@ -40,6 +40,18 @@
 // esta leitura NUNCA altera engine.direction — ela responde só "quantos dos
 // próprios subsistemas independentes concordam com o que o Core Engine JÁ
 // decidiu?", puro contexto exibido, nunca um segundo motor de decisão.
+//
+// AVISO PERMANENTE (Regra de Ouro 2, CLAUDE.md — "'Confiança'/'força' nunca
+// é 'probabilidade'"): conviction/convictionAdjusted abaixo são SEMPRE
+// massa de opinião 0..1 de um pool linear (Stone 1961/DeGroot 1974) — nunca
+// uma probabilidade calibrada de acerto de mercado, porque este repositório
+// não tem histórico de backtest real que sustente essa afirmação
+// honestamente. Qualquer copy de UI que renderize este número como "72% de
+// chance de subir" está errado por construção; a forma honesta é "72% de
+// confluência/convicção entre os subsistemas". A mesma regra vale em
+// cascata para strength/agreesWithCore de cada ConfluenceMemberReading e
+// para forca/forca_ajustada do pool subjacente (ensemble-engine.js) — nada
+// nesta cadeia vira probabilidade só por trocar de nome.
 import { buildEnsembleConsensus, opinionFromVote } from '../../../src/consensus/index.js';
 import type { CouncilDecision } from './council';
 import type { MultiTimeframeMatrix } from './multi-timeframe-engine';
@@ -101,9 +113,15 @@ function insufficient(
 }
 
 /** Massa real de opinião do Ensemble Consensus (Fase F) sobre a direção
- *  ativa real do Core Engine. */
+ *  ativa real do Core Engine. Prefere forca_ajustada (amortecida pelo Data
+ *  Quality Layer real, Fase C) quando disponível — achado real de
+ *  auditoria (FASE Ω Priority 3): o pool já calcula essa força ajustada
+ *  (ensemble-engine.js), mas este membro lia só a força bruta `forca`,
+ *  descartando um amortecedor de qualidade já real. `?? forca` é honesto:
+ *  sem Data Quality Weight disponível nesta janela, forca_ajustada vem
+ *  null do próprio pool, e a força bruta continua sendo a leitura certa. */
 function readEnsembleMember(
-  ensembleConsensus: { status: string; direcao: string; forca: number } | null,
+  ensembleConsensus: { status: string; direcao: string; forca: number; forca_ajustada?: number | null } | null,
   coreDirection: CoreActiveDirection,
 ): ConfluenceMemberReading {
   if (!ensembleConsensus || ensembleConsensus.status !== 'OK') {
@@ -113,11 +131,12 @@ function readEnsembleMember(
   if (dir === null) {
     return { id: 'ENSEMBLE', agreesWithCore: null, strength: null, detail: 'Ensemble Consensus real, mas dividido (NEUTRO) — sem direção para comparar' };
   }
+  const strength = ensembleConsensus.forca_ajustada ?? ensembleConsensus.forca;
   return {
     id: 'ENSEMBLE',
     agreesWithCore: dir === coreDirection,
-    strength: ensembleConsensus.forca,
-    detail: `Ensemble real: ${ensembleConsensus.direcao} · força ${(ensembleConsensus.forca * 100).toFixed(0)}%`,
+    strength,
+    detail: `Ensemble real: ${ensembleConsensus.direcao} · força ${(strength * 100).toFixed(0)}%${ensembleConsensus.forca_ajustada !== null && ensembleConsensus.forca_ajustada !== undefined ? ' (ajustada por qualidade de dados)' : ''}`,
   };
 }
 
@@ -168,7 +187,7 @@ function readMultiTimeframeMember(
  *  real para comparar. */
 export function buildConvictionReading(input: {
   coreDirection: 'LONG' | 'SHORT' | 'WAIT' | null;
-  ensembleConsensus: { status: string; direcao: string; forca: number } | null;
+  ensembleConsensus: { status: string; direcao: string; forca: number; forca_ajustada?: number | null } | null;
   council: CouncilDecision | null;
   multiTimeframe: MultiTimeframeMatrix | null;
   trustScore: number | null;

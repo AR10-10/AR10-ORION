@@ -106,6 +106,13 @@ export interface CouncilInputs {
   liquidityZones: CouncilLiquidityZone[];
   structure15: string | null; // ALTA | BAIXA | LATERAL | null (rótulo real do motor)
   structure1h: string | null;
+  // CVD real da sessão — MAS a fonte de trade-a-trade por trás dele
+  // (js/real-data/mexc-trades-stream.js, GET /api/v3/trades) é MEXC SPOT,
+  // não o instrumento USDT-M Futures/Perpétuo da Binance que o resto do
+  // Conselho (preço, estrutura, liquidação) usa como referência. Um
+  // desequilíbrio real entre spot e perp (funding, base) pode fazer este
+  // voto discordar do preço real sem que nenhum dos dois esteja "errado" —
+  // achado real de auditoria (FASE Ω Priority 3), não uma limitação nova.
   cvd: number | null;
   orderflowSignals: CouncilOrderflowSignal[];
   offline: boolean;
@@ -189,7 +196,11 @@ export function structureAgentVote(structure15: string | null, structure1h: stri
 /** OrderflowAgent — CVD real da sessão dá a direção; sinais OFI reais
  *  (metadata.imbalance assinado) corroboram: confiança = fração dos OFI
  *  recentes cujo desequilíbrio concorda com o sinal do CVD. Sem OFI na
- *  janela, confiança 0 honesta (direção nua sem corroboração). */
+ *  janela, confiança 0 honesta (direção nua sem corroboração).
+ *  Fonte real do CVD é MEXC SPOT (ver CouncilInputs.cvd) — este agente é o
+ *  único do Conselho cujo dado de origem não é o instrumento USDT-M
+ *  Futures/Perpétuo da Binance; a divergência spot/perp é uma causa real
+ *  possível para este voto discordar do LiquidityAgent/StructureAgent. */
 export function orderflowAgentVote(cvd: number | null, signals: CouncilOrderflowSignal[]): CouncilVote {
   if (cvd === null || !Number.isFinite(cvd)) {
     return abstain("ORDERFLOW", "CVD real ainda não disponível (nenhum lote de trades ingerido)");

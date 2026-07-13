@@ -43,7 +43,12 @@ import { getOrganismOrchestrator } from "./nexus/organism-orchestrator";
 import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord } from "./nexus/persistence";
 // V18 Sprint 1 (Tarefa B): "Destravar o Gráfico Institucional" — substitui
 // o SVG feito à mão por lightweight-charts (pan/zoom/crosshair nativos).
-import { EnhancedChart_110_Percent } from "./chart/EnhancedChart_110_Percent";
+import {
+  EnhancedChart_110_Percent,
+  DEFAULT_CHART_LAYER_VISIBILITY,
+  type ChartLayerId,
+  type ChartLayerVisibility,
+} from "./chart/EnhancedChart_110_Percent";
 import {
   runRealAnalysisCycle,
   type RealCycleResult,
@@ -193,6 +198,7 @@ import {
   Bell,
   Mic,
   MicOff,
+  Layers,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -267,6 +273,18 @@ const CHART_CANDLE_LIMIT = 200;
 // útil (arrastar bem para trás) sem crescer sem limite.
 const CHART_HISTORY_PAGE_SIZE = 200;
 const MAX_CHART_HISTORY = 2000;
+
+// Histerese real da zona de entrada do Trade Plan (achado real de
+// auditoria, FASE Ω Priority 3, Finding K): sem isso, o preço oscilando
+// bem na borda de [entry.low, entry.high] dispara "Preço real na região
+// ideal de entrada" (voice-dispatcher.ts, regra 7) a cada transição
+// false->true — uma borda "respirando" por poucos segundos gera vários
+// alertas de voz repetidos para o MESMO toque real. Margem = fração do
+// próprio range real da zona (auto-escalada ao ativo/preço — nunca um
+// delta de preço fixo, que faria sentido para BTC e nenhum sentido para um
+// ativo de US$ 0,001); só se aplica quando JÁ dentro (soltar exige sair
+// além da margem) — a primeira entrada real continua exata, sem atraso.
+const ENTRY_ZONE_HYSTERESIS_FACTOR = 0.25;
 
 export type ChartCandle = { time: number; open: number; high: number; low: number; close: number; volume: number };
 
@@ -385,6 +403,17 @@ export default function App() {
   // V16 Workspace Manager panel (Pinned/Docked/Collapsed/Hidden/Floating
   // per secondary module) — opened from the SideBar's footer button.
   const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState(false);
+  // Camadas do Gráfico (Finding M, FASE Ω Priority 3) — mesmo padrão do
+  // Workspace Manager acima, mas para os 6 overlays do CANVAS do gráfico
+  // (LiquidityZones/StructureBreaks/OrderFlowHeatmap/VolumeProfile/
+  // TradePlanZone/NeuralMarketAura). Painel novo e aditivo: todas as
+  // camadas continuam ligadas por padrão (DEFAULT_CHART_LAYER_VISIBILITY),
+  // nada muda no comportamento existente até o Operador desligar algo.
+  const [chartLayersOpen, setChartLayersOpen] = useState(false);
+  const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(DEFAULT_CHART_LAYER_VISIBILITY);
+  const toggleChartLayer = useCallback((id: ChartLayerId) => {
+    setChartLayerVisibility((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
   // V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas):
   // Market Intelligence (esquerda) / Core Intelligence (direita) são
   // gavetas fechadas por padrão — o Gráfico reina sozinho no boot.
@@ -1303,7 +1332,14 @@ export default function App() {
           ? opinionFromVote(lorentzian.classification ?? null, lorentzian.confidence ?? NaN)
           : null,
       },
-      { id: "estrutura_15m", familia: "momentum", opiniao: opinionFromLabel(engine.marketStructureLabel) },
+      // id timeframe-aware (achado real de auditoria, FASE Ω Priority 3):
+      // engine.marketStructureLabel roda contra o chartTimeframe REAL
+      // selecionado (runRealAnalysisCycle(selectedAsset, chartTimeframe)),
+      // não contra 15m fixo — o id "estrutura_15m" antigo era honesto só
+      // enquanto o padrão do gráfico era 15m. estrutura_1h continua fixo
+      // de propósito: HTF_INTERVAL em engine-bridge.ts é '1h' hardcoded,
+      // independente do chartTimeframe (o "H" de Higher-TimeFrame real).
+      { id: `estrutura_${chartTimeframe}`, familia: "momentum", opiniao: opinionFromLabel(engine.marketStructureLabel) },
       { id: "estrutura_1h", familia: "momentum", opiniao: opinionFromLabel(engine.htfMarketStructureLabel) },
       {
         id: "cvd_fluxo",
@@ -1320,7 +1356,7 @@ export default function App() {
       regime: engine.marketRegime?.regime ?? null,
       dataQualityWeight: realCycle?.dataQuality?.weight ?? null,
     });
-  }, [realCycle, engine.marketStructureLabel, engine.htfMarketStructureLabel, engine.marketRegime, cvd, gmilBiases]);
+  }, [realCycle, engine.marketStructureLabel, engine.htfMarketStructureLabel, engine.marketRegime, cvd, gmilBiases, chartTimeframe]);
 
   // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
   // NUNCA valor monetário (o sistema não conhece o capital do operador).
@@ -1517,7 +1553,7 @@ export default function App() {
     () =>
       buildConvictionReading({
         coreDirection: engine?.direction ?? null,
-        ensembleConsensus: ensembleConsensus?.status === "OK" ? { status: ensembleConsensus.status, direcao: ensembleConsensus.direcao, forca: ensembleConsensus.forca } : null,
+        ensembleConsensus: ensembleConsensus?.status === "OK" ? { status: ensembleConsensus.status, direcao: ensembleConsensus.direcao, forca: ensembleConsensus.forca, forca_ajustada: ensembleConsensus.forca_ajustada ?? null } : null,
         council: councilFromSnapshot ?? null,
         multiTimeframe: multiTimeframeForConviction ?? null,
         trustScore: trustScoreForConviction?.score ?? null,
@@ -1648,17 +1684,35 @@ export default function App() {
   // já rastreadas acima (trackRecordSlice) e a MESMA convictionReading
   // compartilhada via contextValue — zero segunda fonte de verdade.
   const lastResolvedPlan = trackRecordSlice.history[trackRecordSlice.history.length - 1] ?? null;
+
+  // inEntryZone com histerese real (ENTRY_ZONE_HYSTERESIS_FACTOR, topo do
+  // arquivo) — lê o valor travado do commit ANTERIOR (inEntryZoneLatchRef),
+  // nunca mutado durante o próprio render (evita o desvio clássico de
+  // acumular estado dentro de um useMemo sob StrictMode/render descartado);
+  // a escrita real acontece só depois, no useEffect logo abaixo.
+  const inEntryZoneLatchRef = useRef(false);
+  const rawEntryLow = trackRecordSlice.active?.plan.entry.low ?? null;
+  const rawEntryHigh = trackRecordSlice.active?.plan.entry.high ?? null;
+  const livePriceForZone =
+    typeof priceFromSnapshot.price === 'number' && Number.isFinite(priceFromSnapshot.price) ? priceFromSnapshot.price : null;
+  const inEntryZoneNow = useMemo(() => {
+    if (trackRecordSlice.active === null || rawEntryLow === null || rawEntryHigh === null || livePriceForZone === null) return false;
+    const wasIn = inEntryZoneLatchRef.current;
+    const margin = (rawEntryHigh - rawEntryLow) * ENTRY_ZONE_HYSTERESIS_FACTOR;
+    const low = wasIn ? rawEntryLow - margin : rawEntryLow;
+    const high = wasIn ? rawEntryHigh + margin : rawEntryHigh;
+    return livePriceForZone >= low && livePriceForZone <= high;
+  }, [trackRecordSlice.active, rawEntryLow, rawEntryHigh, livePriceForZone]);
+  useEffect(() => {
+    inEntryZoneLatchRef.current = inEntryZoneNow;
+  }, [inEntryZoneNow]);
+
   const auraVoiceInputs = {
     tradePlanOpenKey: trackRecordSlice.active ? `${trackRecordSlice.active.plan.direction}:${trackRecordSlice.active.openedAt}` : null,
     tradePlanDirection: trackRecordSlice.active?.plan.direction ?? null,
     tradePlanResolutionKey: lastResolvedPlan ? `${lastResolvedPlan.status}:${lastResolvedPlan.resolvedAt}` : null,
     tradePlanResolutionStatus: lastResolvedPlan && lastResolvedPlan.status !== 'OPEN' ? lastResolvedPlan.status : null,
-    inEntryZone:
-      trackRecordSlice.active !== null &&
-      typeof priceFromSnapshot.price === 'number' &&
-      Number.isFinite(priceFromSnapshot.price) &&
-      priceFromSnapshot.price >= trackRecordSlice.active.plan.entry.low &&
-      priceFromSnapshot.price <= trackRecordSlice.active.plan.entry.high,
+    inEntryZone: inEntryZoneNow,
     convictionVerdict: convictionReading.status === 'OK' ? convictionReading.verdict : null,
   };
 
@@ -1972,6 +2026,10 @@ export default function App() {
       setWidgetWorkspaceState,
       workspaceManagerOpen,
       setWorkspaceManagerOpen,
+      chartLayersOpen,
+      setChartLayersOpen,
+      chartLayerVisibility,
+      toggleChartLayer,
       leftDrawerOpen,
       toggleLeftDrawer,
       rightDrawerOpen,
@@ -2021,6 +2079,8 @@ export default function App() {
       toggleWidget,
       setWidgetWorkspaceState,
       workspaceManagerOpen,
+      chartLayersOpen,
+      chartLayerVisibility,
       leftDrawerOpen,
       toggleLeftDrawer,
       rightDrawerOpen,
@@ -2320,6 +2380,7 @@ export default function App() {
         </div>
         <FooterBar />
         <WorkspaceManagerPanel />
+        <ChartLayersPanel />
       </div>
     </WidgetContext.Provider>
   );
@@ -2490,6 +2551,77 @@ function WorkspaceManagerPanel() {
                     </button>
                   ))}
                 </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- CAMADAS DO GRÁFICO (Finding M, FASE Ω Priority 3) — painel novo e
+// aditivo, mesmo padrão exato do Workspace Manager acima (mesmo overlay
+// modal, mesma lista de linhas com um controle por item), só que para os 6
+// overlays do CANVAS do gráfico em vez dos widgets do layout. Toggle
+// simples ligado/desligado (não 5 estados como o Workspace Manager — uma
+// camada de canvas só faz sentido visível ou invisível, não "flutuante").
+const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
+  { id: "liquidity_zones", label: "FVG / ORDER BLOCKS" },
+  { id: "structure_breaks", label: "BOS / CHOCH" },
+  { id: "order_flow_heatmap", label: "LIQUIDITY HEATMAP" },
+  { id: "volume_profile", label: "VOLUME PROFILE" },
+  { id: "trade_plan_zone", label: "TRADE PLAN ZONE" },
+  { id: "neural_market_aura", label: "NEURAL MARKET AURA" },
+];
+
+function ChartLayersPanel() {
+  const { chartLayersOpen, setChartLayersOpen, chartLayerVisibility, toggleChartLayer } =
+    useContext(WidgetContext) || {};
+  if (!chartLayersOpen) return null;
+  const visibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
+
+  return (
+    <div
+      className="!fixed !inset-0 !z-[1001] bg-[#010308]/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={() => setChartLayersOpen?.(false)}
+    >
+      <div
+        className="cyber-panel w-full max-w-md max-h-[80dvh] flex flex-col bg-[#010308]/98"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="cyber-header flex items-center justify-between">
+          <span className="font-bold tracking-[0.2em]">CAMADAS DO GRÁFICO</span>
+          <div
+            className="text-[#8ab4f8]/50 hover:text-[#00f0ff] px-1 py-0.5 rounded cursor-pointer"
+            onClick={() => setChartLayersOpen?.(false)}
+          >
+            <X size={14} />
+          </div>
+        </div>
+        <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+          <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
+            Overlays reais do canvas — esconder uma camada nunca altera o dado, só a exibição
+          </span>
+          {CHART_LAYER_PANEL_MODULES.map(({ id, label }) => {
+            const on = visibility[id];
+            return (
+              <div
+                key={id}
+                className="flex items-center justify-between gap-2 bg-[#010205] border border-[#00f0ff15] rounded-lg px-3 py-2"
+              >
+                <span className="text-[0.55rem] font-bold tracking-widest text-white">{label}</span>
+                <button
+                  type="button"
+                  onClick={() => toggleChartLayer?.(id)}
+                  className={`text-[0.4rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
+                    on
+                      ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                      : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
+                  }`}
+                >
+                  {on ? "visível" : "oculta"}
+                </button>
               </div>
             );
           })}
@@ -3272,12 +3404,27 @@ function BarField({
 
 function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   const plan = useTradePlanSnapshot();
+  const { convictionReading } = useContext(WidgetContext) || {};
   if (!plan) return null;
   const long = plan.direction === "LONG";
   const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
   const targetHit = p !== null && (long ? p >= plan.target.price : p <= plan.target.price);
   const stopHit = p !== null && !targetHit && (long ? p <= plan.stop.price : p >= plan.stop.price);
   const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
+  // Bandeira de divergência real (achado real de auditoria, FASE Ω Priority
+  // 3): o Confluence Engine (Phase Ω Priority 2) já calcula, todo ciclo, se
+  // os 3 subsistemas independentes concordam com a direção ATIVA do Core
+  // Engine — reaproveitado aqui, nunca recomputado (LEI 24: puro display,
+  // nunca altera plan/engine.direction). Só compara quando a leitura é
+  // sobre a MESMA direção do plano aberto: se o Core Engine já mudou de
+  // direção desde a abertura do plano, coreDirection !== plan.direction e
+  // a comparação seria enganosa — nesse caso, honestamente, nenhuma
+  // bandeira (o plano em si já está desatualizado, outro problema).
+  const convictionForThisPlan =
+    convictionReading && convictionReading.status === "OK" && convictionReading.coreDirection === plan.direction
+      ? convictionReading
+      : null;
+  const diverging = convictionForThisPlan !== null && convictionForThisPlan.verdict !== "CONFIRMS";
   const entryLabel = plan.entry.low === plan.entry.high ? f(plan.entry.low) : `${f(plan.entry.low)}–${f(plan.entry.high)}`;
   // Redesenho radical (modelo do Operador): "E/S/T" mono cramped viram
   // rótulos limpos em inglês (Entry Zone/Target/Stop), mesma linguagem
@@ -3317,6 +3464,14 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
       )}
       {targetHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#00ffaa] pl-1">TARGET REACHED</span>}
       {stopHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#ff0055] pl-1">STOP BREACHED</span>}
+      {!targetHit && !stopHit && diverging && (
+        <span
+          className="self-center text-[0.48rem] font-black tracking-widest text-[#f0d06f] pl-1"
+          title={`Confluência real (Confluence Engine): ${convictionForThisPlan!.agreeingCount}/${convictionForThisPlan!.totalReadable} subsistemas concordam com ${plan.direction} agora — verdict ${convictionForThisPlan!.verdict}. Nunca altera o plano (LEI 24), só contexto.`}
+        >
+          CONVICTION {convictionForThisPlan!.verdict}
+        </span>
+      )}
     </div>
   );
 }
@@ -3736,7 +3891,7 @@ function SideBar({
   activeTab: string;
   setActiveTab: (t: string) => void;
 }) {
-  const { setWorkspaceManagerOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
+  const { setWorkspaceManagerOpen, setChartLayersOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
   // Language migration order: nav ids/labels moved to English (standard
   // professional trading terminology). Every id now routes to a DEDICATED
   // view fed by real data (SecondaryModuleView) — the old shared generic
@@ -3792,6 +3947,17 @@ function SideBar({
         className="mt-auto flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
       >
         <LayoutGrid size={17} className="relative z-10" />
+      </button>
+      {/* Camadas do Gráfico (Finding M) — segundo entry point no mesmo
+          rodapé, mesmo padrão do Workspace Manager acima (toggle de
+          visibilidade em vez de estado de widget). */}
+      <button
+        type="button"
+        onClick={() => setChartLayersOpen?.((v: boolean) => !v)}
+        title="Camadas do Gráfico"
+        className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+      >
+        <Layers size={17} className="relative z-10" />
       </button>
     </div>
   );
@@ -4103,6 +4269,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     institutionalConsensus,
     crossExchangeCheck,
     okxCrossExchangeCheck,
+    chartTimeframe,
   } = ctx as any;
   const connections = useConnectionsSnapshot();
   const derivatives = useDerivativesSnapshot();
@@ -4262,11 +4429,16 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         {/* Support S1/Resistance R1 used to live here too — moved out per
             Zero Repetição once the always-visible bar's StructureLevelsStrip
             became their one and only home (Operador feedback: seeing S1/R1
-            shouldn't require opening this tab). 15m/1H structure labels are
-            a different datum (trend classification, not a price level) and
-            stay here — they have no other home on screen. */}
+            shouldn't require opening this tab). Chart-timeframe/1H structure
+            labels are a different datum (trend classification, not a price
+            level) and stay here — they have no other home on screen.
+            Label reads the real active chartTimeframe (achado real de
+            auditoria, FASE Ω Priority 3): o rótulo dizia "15m Structure"
+            fixo mesmo quando engine.marketStructureLabel já respondia a
+            qualquer timeframe selecionado no gráfico — 1H continua fixo de
+            propósito (HTF_INTERVAL hardcoded em engine-bridge.ts). */}
         <ModulePanel title="Market Structure (real engine labels)">
-          <ModuleStat label="15m Structure" value={engine?.marketStructureLabel ?? MODULE_EMPTY} />
+          <ModuleStat label={`${chartTimeframe ?? "15m"} Structure`} value={engine?.marketStructureLabel ?? MODULE_EMPTY} />
           <ModuleStat label="1H Structure" value={engine?.htfMarketStructureLabel ?? MODULE_EMPTY} />
         </ModulePanel>
         <ModulePanel title="Fibonacci Confluence (real retracement × real levels)">
@@ -4412,7 +4584,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading } = useContext(WidgetContext) || {};
+  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility } = useContext(WidgetContext) || {};
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
   // Correção de latência: o MESMO preço real que já alimenta a barra
   // superior (usePriceSnapshot — escrito na store a cada tick do WS,
@@ -4516,6 +4688,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             activeTimeframe={chartTimeframe as Timeframe}
             tradePlan={chartTradePlan}
             aura={auraReading}
+            layerVisibility={chartLayerVisibility}
             onRequestOlderCandles={onRequestOlderCandles}
           />
         ) : (

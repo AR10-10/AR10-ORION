@@ -16,6 +16,7 @@
 // [low,high] — ver lib.rs) porque tick stream real para o mercado Futures
 // do chart não existe neste codebase; o único tick stream real é MEXC
 // Spot, outro mercado. Nunca é apresentado como perfil tick-level.
+import { realPercentile } from "./percentile";
 
 export interface VolumeProfileResult {
   histogram: number[]; // volume real por bucket, preço ascendente
@@ -43,13 +44,6 @@ export interface VolumeProfileSnapshot {
 // globalmente relevante na distribuição observada.
 const HVN_PERCENTILE = 0.75;
 const LVN_PERCENTILE = 0.25;
-
-/** Percentil real (valor da própria amostra, nunca interpolado) — mesma
- *  convenção de computeLargeTradeThreshold (orderflow-history.ts). */
-function realPercentile(sorted: number[], p: number): number {
-  const idx = Math.min(Math.floor(sorted.length * p), sorted.length - 1);
-  return sorted[idx];
-}
 
 /** HVN = máximo local do histograma com volume ≥ percentil 75 real dos
  *  buckets não-vazios; LVN = mínimo local com volume ≤ percentil 25 real

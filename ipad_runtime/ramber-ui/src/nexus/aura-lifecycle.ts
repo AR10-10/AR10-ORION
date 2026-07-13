@@ -53,6 +53,20 @@
 //     Council/Multi-Timeframe, que já reduz `conviction` (Confluence
 //     Engine), que já afina o corredor — propriedade emergente da cadeia
 //     de dependência real já existente, não uma segunda lógica.
+//  7. Achado real de auditoria (FASE Ω Priority 3, complemento honesto ao
+//     item 6): essa cadeia emergente é real, mas não é instantânea nem
+//     sem diluição. O BOS/CHOCH só chega até aqui via Council/Multi-
+//     Timeframe, e a Matriz Multi-Timeframe só recomputa no seu próprio
+//     ciclo real (efeito periódico de 60s em App.tsx) — nunca no mesmo
+//     render em que o rompimento aparece no StructureBreakMarkersPlugin.
+//     E quando chega, um único CHOCH é UM voto entre vários agentes do
+//     Conselho e UM prazo entre vários da Matriz: a queda de `conviction`
+//     é real, mas amortecida pelo pool linear (Stone/DeGroot), nunca uma
+//     queda 1:1 com o evento. Honestamente: o corredor da Aura pode levar
+//     segundos a ~60s para refletir qualquer afinamento depois de um
+//     CHOCH real na tela — a Aura espelha a CONVICÇÃO em tempo real, que
+//     por sua vez reage ao BOS/CHOCH com atraso e diluição reais, não o
+//     BOS/CHOCH diretamente.
 //
 // HIERARQUIA INVIOLÁVEL (LEI 24): esta leitura nunca altera
 // TradePlan/TrackRecordState/engine.direction — puro espelho visual.

@@ -33,11 +33,22 @@
 //                     é a leitura mais perigosa no candle de escape.
 import { REGIMES } from './regime-engine.js';
 
-// Famílias nomeadas pelos módulos REAIS desta base que cada uma descreve —
-// não categorias abstratas: momentum (k-NN Lorentziano, leituras de CVD),
-// reversao_media (z-score do WASM Quant Core), rompimento (FVG/order
-// blocks, rompimento de S/R), filtros_estatisticos (data-sufficiency,
-// caps de confiança), fluxo_ordens (OFI/Absorption/Exhaustion).
+// Famílias nomeadas pelos módulos REAIS desta base que cada uma DEVE
+// descrever — não categorias abstratas. Correção real de auditoria (FASE Ω
+// Priority 3): a versão anterior deste comentário citava um módulo real
+// para as 5 famílias como se todas já tivessem consumidor — checado contra
+// os construtores reais de membro de ensemble (App.tsx, único lugar que
+// atribui `familia` a um membro real; council.ts e confluence-engine.ts
+// passam sempre `familia: null` de propósito), o uso real hoje é bem menor:
+//   momentum       — k-NN Lorentziano + rótulos de estrutura real 15m/1H
+//                    (estrutura NÃO estava citada antes).
+//   fluxo_ordens   — CVD real da sessão. NÃO é OFI/Absorption/Exhaustion
+//                    (esses sinais alimentam o OrderflowAgent do Conselho,
+//                    que não usa família/matriz de regime — peso 1 fixo).
+//   reversao_media, rompimento, filtros_estatisticos — API consultiva REAL
+//                    e testada (contrato de honestidade, item 1 acima), mas
+//                    SEM nenhum membro real de ensemble marcado com essas
+//                    famílias ainda: linhas prontas, adoção pendente.
 export const MODULE_FAMILIES = Object.freeze([
     'momentum',
     'reversao_media',
