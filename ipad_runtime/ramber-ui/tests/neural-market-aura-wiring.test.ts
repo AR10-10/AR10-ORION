@@ -114,6 +114,12 @@ describe('"Ciclone de Convicção" (pedido do Operador): Worker dedicado, nunca 
     const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
     expect(plugin).toContain('worker?.terminate();');
   });
+
+  it('respeita prefers-reduced-motion real do sistema — nunca tenta o Ciclone quando o Operador pediu menos movimento (auto-auditoria Ω-INFINITY: "aumentar compreensão, nunca só efeito estético")', () => {
+    const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
+    expect(plugin).toContain('window.matchMedia("(prefers-reduced-motion: reduce)").matches');
+    expect(plugin).toContain('if (supportsOffscreenWorker() && !prefersReducedMotion()) {');
+  });
 });
 
 describe('workers/conviction-cyclone-worker.ts: laço de animação inteiramente dentro do Worker (achado real: Main Thread sagrada exigia isolamento)', () => {

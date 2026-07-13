@@ -272,3 +272,276 @@ Contínua) descrevem, com mais detalhe, exatamente os mesmos mecanismos já
 documentados nos dois protocolos anteriores e já traduzidos em
 `CLAUDE.md` (item 3 da Disciplina de trabalho; `nexus/self-diagnostics.ts`)
 — sem mudança de fundo, só de redação.
+
+---
+
+## Atualização recebida (texto novo do Operador, preservado na íntegra
+## abaixo — nunca substitui o texto acima, Memória Evolutiva nunca perde
+## conhecimento validado)
+
+O texto abaixo chegou como uma nova mensagem do Operador, mesmo título
+("AR10 CYBORG — PROTOCOLO Ω-INFINITY"), mas estrutura e conteúdo reais
+diferentes do texto numerado (§1-§10) acima — não é um reenvio idêntico.
+Duas diferenças reais que valem registro:
+
+1. **Seção "LIBERAÇÃO DA EVOLUÇÃO" torna explícito, com uma frase própria,
+   o que os documentos anteriores só implicavam**: "Essa liberação
+   refere-se exclusivamente à evolução da arquitetura e da inteligência do
+   sistema. As regras permanentes de segurança e operação permanecem
+   preservadas." — a mesma garantia que já rege este projeto (READ_ONLY/
+   FAIL_CLOSED incondicional, CLAUDE.md), agora escrita pelo próprio
+   Operador dentro do protocolo de evolução, não só na tradução técnica.
+2. **Seção "EVOLUÇÃO DA EXPERIÊNCIA VISUAL" nomeia, pela primeira vez
+   dentro de um destes três protocolos, componentes REAIS já construídos
+   nesta sessão** ("Neural Market Aura", "Silk Flow", "Corredor
+   Inteligente") como alvos permanentes de evolução — e fixa um critério
+   real e verificável: "Toda melhoria visual deverá aumentar a compreensão
+   do operador. Nunca apenas adicionar efeitos estéticos." Isto não existia
+   nos protocolos anteriores (escritos antes da Neural Market Aura
+   existir) — é a primeira vez que um destes documentos referencia
+   trabalho técnico concreto já entregue, e a frase final é um teste real
+   e honesto contra o qual medir qualquer evolução visual futura (Ciclone
+   de Convicção incluído — ver auditoria própria depois deste commit).
+
+O restante (Ciclo de Vida, Laboratório de Evolução, Memória Evolutiva,
+Princípios, Objetivo Final) cobre o mesmo terreno já traduzido em
+`CLAUDE.md` — sem mudança de fundo adicional além das duas acima.
+
+```
+AR10 CYBORG — PROTOCOLO Ω-INFINITY
+
+LIBERAÇÃO DA EVOLUÇÃO CONTÍNUA DO ORGANISMO
+
+Versão: Ω-INFINITY
+Estado: Permanente
+Escopo: Evolução Arquitetural Global
+
+⸻
+
+MISSÃO
+
+A partir desta etapa, o AR10 CYBORG deixa de operar apenas como um software modular e passa a atuar como um organismo digital em evolução contínua.
+
+Seu objetivo permanente é observar, aprender, pesquisar, validar, evoluir, registrar conhecimento e reiniciar o ciclo indefinidamente.
+
+Não existe versão final.
+
+Cada melhoria representa um novo ponto de partida.
+
+⸻
+
+LIBERAÇÃO DA EVOLUÇÃO
+
+Remover todas as limitações arquiteturais que impeçam o sistema de:
+
+* identificar gargalos;
+* propor melhorias;
+* reorganizar componentes;
+* simplificar código;
+* criar novos módulos experimentais;
+* reaproveitar componentes existentes;
+* ampliar sua capacidade analítica;
+* aumentar desempenho;
+* aumentar estabilidade;
+* melhorar a comunicação visual;
+* melhorar a comunicação por voz;
+* aumentar a precisão das análises.
+
+Essa liberação refere-se exclusivamente à evolução da arquitetura e da inteligência do sistema.
+
+As regras permanentes de segurança e operação permanecem preservadas.
+
+⸻
+
+ORGANISMO VIVO
+
+O sistema deverá comportar-se como um organismo digital.
+
+Ciclo permanente:
+
+Observar
+
+↓
+
+Analisar
+
+↓
+
+Pesquisar
+
+↓
+
+Aprender
+
+↓
+
+Planejar
+
+↓
+
+Construir
+
+↓
+
+Validar
+
+↓
+
+Registrar
+
+↓
+
+Recomeçar
+
+Ao concluir um ciclo, iniciar automaticamente uma nova auditoria arquitetural para identificar novas oportunidades de evolução.
+
+⸻
+
+PESQUISA CONTÍNUA
+
+Sempre que identificar necessidade técnica, pesquisar fontes reconhecidas.
+
+Exemplos:
+
+* documentação oficial;
+* artigos científicos;
+* padrões internacionais;
+* RFCs;
+* bibliotecas modernas;
+* frameworks;
+* algoritmos quantitativos;
+* motores matemáticos;
+* inteligência artificial;
+* visualização financeira;
+* UX institucional;
+* otimização de performance;
+* arquitetura de software.
+
+Toda pesquisa deverá servir para compreender princípios e aperfeiçoar o AR10.
+
+Nunca apenas copiar soluções.
+
+⸻
+
+MEMÓRIA EVOLUTIVA
+
+Todo conhecimento adquirido deverá ser incorporado ao conhecimento permanente do projeto.
+
+Registrar:
+
+* descoberta;
+* motivação;
+* solução;
+* impacto esperado;
+* impacto observado;
+* testes realizados;
+* riscos;
+* referências utilizadas;
+* data;
+* versão.
+
+O sistema nunca deverá perder conhecimento validado.
+
+⸻
+
+LABORATÓRIO DE EVOLUÇÃO
+
+Toda nova ideia deverá nascer isoladamente.
+
+Fluxo obrigatório:
+
+Pesquisa
+
+↓
+
+Protótipo
+
+↓
+
+Validação
+
+↓
+
+Testes
+
+↓
+
+Comparação
+
+↓
+
+Integração
+
+↓
+
+Monitoramento
+
+Somente soluções aprovadas poderão integrar o núcleo principal.
+
+⸻
+
+AUDITORIA CONTÍNUA
+
+Ao finalizar qualquer melhoria, executar nova auditoria completa.
+
+Avaliar continuamente:
+
+* motores matemáticos;
+* sincronização;
+* fluxo de dados;
+* desempenho;
+* consumo de recursos;
+* renderização;
+* experiência visual;
+* experiência operacional;
+* arquitetura;
+* cobertura de testes;
+* duplicações;
+* dependências;
+* oportunidades de simplificação.
+
+Toda oportunidade encontrada deverá ser registrada no backlog evolutivo.
+
+⸻
+
+EVOLUÇÃO DA EXPERIÊNCIA VISUAL
+
+O gráfico deverá tornar-se cada vez mais intuitivo.
+
+O sistema poderá evoluir continuamente:
+
+* Neural Market Aura;
+* Silk Flow;
+* Corredor Inteligente;
+* comunicação visual;
+* comunicação por voz;
+* indicadores contextuais;
+* ciclo de vida das operações;
+* representação dinâmica da análise.
+
+Toda melhoria visual deverá aumentar a compreensão do operador.
+
+Nunca apenas adicionar efeitos estéticos.
+
+⸻
+
+PRINCÍPIOS
+
+Toda evolução deverá:
+
+* aumentar precisão;
+* aumentar estabilidade;
+* reduzir complexidade;
+* preservar compatibilidade;
+* melhorar manutenção;
+* respeitar a LEI 24;
+* utilizar exclusivamente dados reais produzidos pelos motores do sistema.
+
+⸻
+
+OBJETIVO FINAL
+
+Construir um organismo digital que evolua continuamente, mantendo memória técnica, capacidade de pesquisa, arquitetura organizada e uma interface cada vez mais clara e natural para o operador.
+
+O AR10 CYBORG deverá aprender com cada ciclo de desenvolvimento, registrar esse aprendizado e utilizá-lo para orientar as próximas evoluções, tornando-se progressivamente mais inteligente, eficiente, resiliente e preparado para o futuro.
+```

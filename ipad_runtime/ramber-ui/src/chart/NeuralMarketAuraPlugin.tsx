@@ -120,6 +120,21 @@ function supportsOffscreenWorker(): boolean {
   );
 }
 
+// Auto-auditoria real (Ω-INFINITY, atualização "Evolução da Experiência
+// Visual": "aumentar a compreensão do operador, nunca só efeito
+// estético") — achado real feito nesta mesma sessão, logo depois de
+// entregar o Ciclone: movimento contínuo genuíno pode ser desconfortável
+// ou distrativo pra um Operador sensível a movimento, o que reduziria
+// compreensão em vez de aumentar. `prefers-reduced-motion` é o sinal real
+// do próprio sistema operacional/navegador pra isso — respeitado aqui
+// nunca tentando o caminho do Worker quando ativo (o corredor estático,
+// já sem nenhuma animação perpétua, é a leitura correta nesse caso).
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    : false;
+}
+
 export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAuraPluginProps) {
   const cycloneCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const staticCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -367,7 +382,7 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
     resizeObserver.observe(staticCanvas);
 
     const decideRenderer = async () => {
-      if (supportsOffscreenWorker()) {
+      if (supportsOffscreenWorker() && !prefersReducedMotion()) {
         try {
           const candidateWorker = new Worker(new URL("../workers/conviction-cyclone-worker.ts", import.meta.url), { type: "module" });
           const offscreen = (cycloneCanvas as unknown as { transferControlToOffscreen: () => OffscreenCanvas }).transferControlToOffscreen();

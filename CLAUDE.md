@@ -103,7 +103,13 @@ explicitamente para mudar essa hierarquia.
   (`LiquidityZonesPlugin`, `StructureBreakMarkersPlugin`, etc.) — todos
   seguem a mesma arquitetura (canvas próprio, dirty-flag + rAF,
   ResizeObserver, fio de seda). Uma nova anotação visual é uma nova
-  instância desse padrão, não uma nova arquitetura.
+  instância desse padrão, não uma nova arquitetura. Teste real antes de
+  considerar uma evolução visual pronta (Ω-INFINITY, atualização
+  "Evolução da Experiência Visual"): ela precisa aumentar a compreensão
+  real do Operador sobre o dado — nunca ser só um efeito estético. Se uma
+  camada anima continuamente (primeiro caso real: `conviction-cyclone-
+  worker.ts`), o laço de animação vive isolado num Worker dedicado, nunca
+  enxertado no main thread — ver Regra de Ouro 6.
 - `ipad_runtime/ramber-ui/tests/` — `vitest`. Convenção mista
   deliberada: lógica pura de fronteira (parsing, merge, decaimento,
   motores novos) ganha teste de **execução real**; fiação entre módulos
@@ -188,4 +194,9 @@ acima (o ciclo de 9 passos do Ω-INFINITY §4 é o mesmo mecanismo, mais
 detalhado). "Motor de Autocrítica" = as auditorias de arquitetura já
 feitas neste projeto (ver PR); uma versão futura via IA Orchestration
 (Llama) é uma feature real possível, não construída sem pedido explícito
-do Operador.
+do Operador. Uma atualização real do Ω-INFINITY (mesmo arquivo em
+`docs/`, seção "Atualização recebida") nomeou pela primeira vez
+componentes já construídos (Neural Market Aura/Silk Flow/Corredor
+Inteligente) como alvos permanentes de evolução, com um teste explícito —
+"aumentar a compreensão do operador, nunca só efeito estético" — já
+incorporado na seção Arquitetura acima.
