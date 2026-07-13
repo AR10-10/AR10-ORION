@@ -89,6 +89,9 @@ import { detectInstitutionalTraps } from "./nexus/trap-detection";
 // reais e independentes (Ensemble/Council/Multi-Timeframe) — nunca uma
 // probabilidade calibrada, nunca um segundo motor de decisão (LEI 24).
 import { buildConvictionReading } from "./nexus/confluence-engine";
+// Neural Market Aura (especificação do Operador, ver o cabeçalho de
+// nexus/aura-lifecycle.ts para o racional completo de escopo/honestidade).
+import { computeAuraReading, TIMEFRAME_MS } from "./nexus/aura-lifecycle";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
 import {
@@ -1360,84 +1363,12 @@ export default function App() {
     [chartData],
   );
 
-  const voiceSnapshot = useMemo<TerminalSnapshot>(
-    () => ({
-      direction: engine.direction,
-      confidence: engine.confidence,
-      marketStructure: engine.marketStructure,
-      entry: engine.entry,
-      target: engine.target,
-      stop: engine.stop,
-      support: engine.support,
-      resistance: engine.resistance,
-      rationale: realCycle?.ok ? (realCycle.rationale ?? null) : null,
-      engineStatus,
-      engineReason: realCycle?.reason ?? null,
-      lorentzianOk: realCycle?.lorentzian?.ok === true,
-      lorentzianClassification: realCycle?.lorentzian?.classification ?? null,
-      lorentzianConfidence: realCycle?.lorentzian?.confidence ?? null,
-      lorentzianSampleSize: realCycle?.lorentzian?.sampleSize ?? null,
-      lastPrice: priceData?.price ?? null,
-      cvd,
-      recentOrderflowTypes: orderflowSignals.slice(0, 10).map((s) => s.type),
-      orderflowState,
-      recentLiquidationCount: liquidations.length,
-      liquidationState,
-      wsLive,
-      forecast: realCycle?.ok && realCycle.forecast ? realCycle.forecast : [],
-      structureBreakKey: bosChoch.break ? `${bosChoch.break.type}:${bosChoch.break.index}` : null,
-      structureBreakType: bosChoch.break?.type ?? null,
-      structureBreakDirection: bosChoch.break?.direction ?? null,
-    }),
-    [engine, realCycle, engineStatus, priceData, cvd, orderflowSignals, orderflowState, liquidations, liquidationState, wsLive, bosChoch],
-  );
-
-  // Alertas executivos falados: computeAlerts é pura e só reage a TRANSIÇÕES
-  // reais (prev vs next) — nunca repete o mesmo estado. Fila do voice-engine
-  // é assíncrona por natureza: nada aqui bloqueia render/WS/WebGPU.
-  //
-  // DCI Focus Layer (item 8): a MESMA lista de alertas dirige o pulso visual
-  // — nenhuma segunda detecção de transição é criada. Um alerta de prioridade
-  // CRITICAL/ALERT (vetor confirmado/invalidado, motor caiu, liquidação nova,
-  // divergência, absorção) acende `criticalPulse` por ~2.5s: a barra de
-  // comando ganha um anel de brilho e a coluna de decisão um halo. O antigo
-  // opacity-40 no resto da tela foi removido — em screenshot real do iPad a
-  // tela inteira parecia "apagada" com só a barra viva (feedback direto do
-  // operador); destaque agora é só aditivo, nunca subtrativo.
-  const [criticalPulse, setCriticalPulse] = useState(false);
-  const prevVoiceSnapshotRef = useRef<TerminalSnapshot | null>(null);
-  useEffect(() => {
-    const alerts = computeAlerts(prevVoiceSnapshotRef.current, voiceSnapshot);
-    alerts.forEach((a) => voiceEngine.speak(a.text, a.priority));
-    // Ordem "Ciborgue Vivo" §3: mesma detecção de transição já usada pelos
-    // alertas acima (prev.structureBreakKey !== next.structureBreakKey =
-    // rompimento REAL novo, não o mesmo evento ainda vivo na tela). Só
-    // alimenta a memória afetiva quando o Core Engine tem uma posição
-    // direcional ativa (LONG/SHORT) — sem posição, o rompimento é
-    // informação neutra de mercado, não experiência do organismo (ver
-    // header de affective-memory.ts).
-    const prevSnapshot = prevVoiceSnapshotRef.current;
-    if (
-      voiceSnapshot.structureBreakKey &&
-      voiceSnapshot.structureBreakKey !== prevSnapshot?.structureBreakKey &&
-      voiceSnapshot.direction
-    ) {
-      const confirms = voiceSnapshot.structureBreakDirection === (voiceSnapshot.direction === "LONG" ? "ALTA" : "BAIXA");
-      useUnifiedSnapshotStore.getState().recordAffectiveEvent(
-        confirms ? "STRUCTURE_BREAK_CONFIRMS_SIGNAL" : "STRUCTURE_BREAK_CONTRADICTS_SIGNAL",
-      );
-    }
-    prevVoiceSnapshotRef.current = voiceSnapshot;
-    if (alerts.some((a) => a.priority === "CRITICAL" || a.priority === "ALERT")) {
-      setCriticalPulse(true);
-      const t = setTimeout(() => setCriticalPulse(false), 2500);
-      return () => clearTimeout(t);
-    }
-  }, [voiceSnapshot]);
-
-  useEffect(() => {
-    voiceEngine.init();
-  }, []);
+  // voiceSnapshot/criticalPulse/voiceEngine.init() moved below trackRecordSlice
+  // (Signal Track Record) and convictionReading — Neural Market Aura's voice
+  // events need tradePlanStatus/inEntryZone/convictionVerdict, and those only
+  // exist once those two slices are declared (mesmo risco de Temporal Dead
+  // Zone já resolvido antes para bosChoch: nunca referenciar um const antes
+  // da própria declaração léxica).
 
   // Real SMC zones (FVG/Order Blocks/Liquidity) — lifted here (rather than
   // computed locally inside ChartWidget) so the Neural Core widget's
@@ -1574,6 +1505,26 @@ export default function App() {
   // pré-store do coletor único (App) — ver docs/ORGANISM_DATA_FLOW.md.
   const councilFromSnapshot = useCouncilSnapshot();
   const priceFromSnapshot = usePriceSnapshot();
+
+  // Phase Ω Priority 2 (Confluence/Conviction Engine): levantado para cá
+  // (antes vivia só dentro de DecisionValidationWidget) porque a Neural
+  // Market Aura (ChartWidget) agora precisa da MESMA leitura real —
+  // calculada uma vez aqui, compartilhada via contextValue, nunca
+  // recomputada duas vezes a partir dos mesmos insumos reais.
+  const multiTimeframeForConviction = useMultiTimeframeSnapshot();
+  const trustScoreForConviction = useTrustScoreSnapshot();
+  const convictionReading = useMemo(
+    () =>
+      buildConvictionReading({
+        coreDirection: engine?.direction ?? null,
+        ensembleConsensus: ensembleConsensus?.status === "OK" ? { status: ensembleConsensus.status, direcao: ensembleConsensus.direcao, forca: ensembleConsensus.forca } : null,
+        council: councilFromSnapshot ?? null,
+        multiTimeframe: multiTimeframeForConviction ?? null,
+        trustScore: trustScoreForConviction?.score ?? null,
+      }),
+    [engine?.direction, ensembleConsensus, councilFromSnapshot, multiTimeframeForConviction, trustScoreForConviction],
+  );
+
   useEffect(() => {
     const levels: ScenarioLevel[] = [];
     if (typeof engine?.support === "number" && Number.isFinite(engine.support)) {
@@ -1691,6 +1642,104 @@ export default function App() {
       useUnifiedSnapshotStore.getState().hydrateTrackRecord(rehydrateTrackRecord(raw));
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  // Neural Market Aura ("Comunicação por Voz"): as MESMAS 4 leituras reais
+  // já rastreadas acima (trackRecordSlice) e a MESMA convictionReading
+  // compartilhada via contextValue — zero segunda fonte de verdade.
+  const lastResolvedPlan = trackRecordSlice.history[trackRecordSlice.history.length - 1] ?? null;
+  const auraVoiceInputs = {
+    tradePlanOpenKey: trackRecordSlice.active ? `${trackRecordSlice.active.plan.direction}:${trackRecordSlice.active.openedAt}` : null,
+    tradePlanDirection: trackRecordSlice.active?.plan.direction ?? null,
+    tradePlanResolutionKey: lastResolvedPlan ? `${lastResolvedPlan.status}:${lastResolvedPlan.resolvedAt}` : null,
+    tradePlanResolutionStatus: lastResolvedPlan && lastResolvedPlan.status !== 'OPEN' ? lastResolvedPlan.status : null,
+    inEntryZone:
+      trackRecordSlice.active !== null &&
+      typeof priceFromSnapshot.price === 'number' &&
+      Number.isFinite(priceFromSnapshot.price) &&
+      priceFromSnapshot.price >= trackRecordSlice.active.plan.entry.low &&
+      priceFromSnapshot.price <= trackRecordSlice.active.plan.entry.high,
+    convictionVerdict: convictionReading.status === 'OK' ? convictionReading.verdict : null,
+  };
+
+  const voiceSnapshot = useMemo<TerminalSnapshot>(
+    () => ({
+      direction: engine.direction,
+      confidence: engine.confidence,
+      marketStructure: engine.marketStructure,
+      entry: engine.entry,
+      target: engine.target,
+      stop: engine.stop,
+      support: engine.support,
+      resistance: engine.resistance,
+      rationale: realCycle?.ok ? (realCycle.rationale ?? null) : null,
+      engineStatus,
+      engineReason: realCycle?.reason ?? null,
+      lorentzianOk: realCycle?.lorentzian?.ok === true,
+      lorentzianClassification: realCycle?.lorentzian?.classification ?? null,
+      lorentzianConfidence: realCycle?.lorentzian?.confidence ?? null,
+      lorentzianSampleSize: realCycle?.lorentzian?.sampleSize ?? null,
+      lastPrice: priceData?.price ?? null,
+      cvd,
+      recentOrderflowTypes: orderflowSignals.slice(0, 10).map((s) => s.type),
+      orderflowState,
+      recentLiquidationCount: liquidations.length,
+      liquidationState,
+      wsLive,
+      forecast: realCycle?.ok && realCycle.forecast ? realCycle.forecast : [],
+      structureBreakKey: bosChoch.break ? `${bosChoch.break.type}:${bosChoch.break.index}` : null,
+      structureBreakType: bosChoch.break?.type ?? null,
+      structureBreakDirection: bosChoch.break?.direction ?? null,
+      ...auraVoiceInputs,
+    }),
+    [engine, realCycle, engineStatus, priceData, cvd, orderflowSignals, orderflowState, liquidations, liquidationState, wsLive, bosChoch, auraVoiceInputs],
+  );
+
+  // Alertas executivos falados: computeAlerts é pura e só reage a TRANSIÇÕES
+  // reais (prev vs next) — nunca repete o mesmo estado. Fila do voice-engine
+  // é assíncrona por natureza: nada aqui bloqueia render/WS/WebGPU.
+  //
+  // DCI Focus Layer (item 8): a MESMA lista de alertas dirige o pulso visual
+  // — nenhuma segunda detecção de transição é criada. Um alerta de prioridade
+  // CRITICAL/ALERT (vetor confirmado/invalidado, motor caiu, liquidação nova,
+  // divergência, absorção) acende `criticalPulse` por ~2.5s: a barra de
+  // comando ganha um anel de brilho e a coluna de decisão um halo. O antigo
+  // opacity-40 no resto da tela foi removido — em screenshot real do iPad a
+  // tela inteira parecia "apagada" com só a barra viva (feedback direto do
+  // operador); destaque agora é só aditivo, nunca subtrativo.
+  const [criticalPulse, setCriticalPulse] = useState(false);
+  const prevVoiceSnapshotRef = useRef<TerminalSnapshot | null>(null);
+  useEffect(() => {
+    const alerts = computeAlerts(prevVoiceSnapshotRef.current, voiceSnapshot);
+    alerts.forEach((a) => voiceEngine.speak(a.text, a.priority));
+    // Ordem "Ciborgue Vivo" §3: mesma detecção de transição já usada pelos
+    // alertas acima (prev.structureBreakKey !== next.structureBreakKey =
+    // rompimento REAL novo, não o mesmo evento ainda vivo na tela). Só
+    // alimenta a memória afetiva quando o Core Engine tem uma posição
+    // direcional ativa (LONG/SHORT) — sem posição, o rompimento é
+    // informação neutra de mercado, não experiência do organismo (ver
+    // header de affective-memory.ts).
+    const prevSnapshot = prevVoiceSnapshotRef.current;
+    if (
+      voiceSnapshot.structureBreakKey &&
+      voiceSnapshot.structureBreakKey !== prevSnapshot?.structureBreakKey &&
+      voiceSnapshot.direction
+    ) {
+      const confirms = voiceSnapshot.structureBreakDirection === (voiceSnapshot.direction === "LONG" ? "ALTA" : "BAIXA");
+      useUnifiedSnapshotStore.getState().recordAffectiveEvent(
+        confirms ? "STRUCTURE_BREAK_CONFIRMS_SIGNAL" : "STRUCTURE_BREAK_CONTRADICTS_SIGNAL",
+      );
+    }
+    prevVoiceSnapshotRef.current = voiceSnapshot;
+    if (alerts.some((a) => a.priority === "CRITICAL" || a.priority === "ALERT")) {
+      setCriticalPulse(true);
+      const t = setTimeout(() => setCriticalPulse(false), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [voiceSnapshot]);
+
+  useEffect(() => {
+    voiceEngine.init();
   }, []);
 
   // V-MAX Fase 2 (armadilhas institucionais): corroboração de eventos
@@ -1957,6 +2006,7 @@ export default function App() {
       gmilBiases,
       institutionalConsensus,
       ensembleConsensus,
+      convictionReading,
       riskSuggestion,
       cycleLatencyMs,
       fps,
@@ -2001,6 +2051,7 @@ export default function App() {
       gmilBiases,
       institutionalConsensus,
       ensembleConsensus,
+      convictionReading,
       riskSuggestion,
       cycleLatencyMs,
       fps,
@@ -4361,7 +4412,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe } = useContext(WidgetContext) || {};
+  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading } = useContext(WidgetContext) || {};
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
   // Correção de latência: o MESMO preço real que já alimenta a barra
   // superior (usePriceSnapshot — escrito na store a cada tick do WS,
@@ -4372,6 +4423,22 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // Signal Precision order: the same real Trade Plan slice the ANALYSIS
   // view shows, now drawn on the chart as silk-thread price lines.
   const chartTradePlan = useTradePlanSnapshot();
+  // Neural Market Aura: mesmo TrackRecordState real que o Signal Track
+  // Record já mantém (useTrackRecordSnapshot, mesmo hook usado pelo efeito
+  // de rastreamento em App()) — zero segunda fonte de verdade sobre o
+  // ciclo de vida do plano.
+  const auraTrackRecord = useTrackRecordSnapshot();
+  const auraReading = useMemo(
+    () =>
+      computeAuraReading({
+        trackRecord: auraTrackRecord,
+        livePrice: livePrice.price,
+        conviction: convictionReading?.status === "OK" ? (convictionReading.convictionAdjusted ?? convictionReading.conviction) : null,
+        atrPercent: engine?.marketRegime?.atrPercent ?? null,
+        timeframeMs: TIMEFRAME_MS[chartTimeframe as string] ?? TIMEFRAME_MS["15m"],
+      }),
+    [auraTrackRecord, livePrice, convictionReading, engine?.marketRegime, chartTimeframe],
+  );
 
   const unmitigatedFvgs = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
   const unmitigatedBlocks = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
@@ -4448,6 +4515,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             livePrice={livePrice.price}
             activeTimeframe={chartTimeframe as Timeframe}
             tradePlan={chartTradePlan}
+            aura={auraReading}
             onRequestOlderCandles={onRequestOlderCandles}
           />
         ) : (
@@ -5821,14 +5889,8 @@ function formatConsensusScore(score: number | null): string {
 }
 
 function DecisionValidationWidget() {
-  const { engine, institutionalConsensus, ensembleConsensus, riskSuggestion, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt, chartTimeframe } =
+  const { engine, institutionalConsensus, ensembleConsensus, convictionReading: convictionReadingFromContext, riskSuggestion, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt, chartTimeframe } =
     useContext(WidgetContext) || {};
-  // Os 3 subsistemas legíveis pelo Motor de Confluência já vivem na store
-  // (mesmo padrão de useMultiTimeframeSnapshot já usado por
-  // MultiTimeframeMatrixWidget) — zero fetch novo, zero cálculo duplicado.
-  const councilForConviction = useCouncilSnapshot();
-  const multiTimeframeForConviction = useMultiTimeframeSnapshot();
-  const trustScoreForConviction = useTrustScoreSnapshot();
 
   // Fase H: sugestão de dimensionamento (% equity / % risco). Fail-closed:
   // SEM_SUGESTAO exibe 0% com o motivo real. O selo é PERMANENTE e
@@ -5843,17 +5905,12 @@ function DecisionValidationWidget() {
   // subsistemas independentes (Ensemble/Council/Multi-Timeframe) concordam
   // com a direção real que o Core Engine JÁ emitiu. Read-only por
   // construção (LEI 24): nunca lido de volta por engine.direction.
-  const convictionReading = useMemo(
-    () =>
-      buildConvictionReading({
-        coreDirection: engine?.direction ?? null,
-        ensembleConsensus: ensembleConsensus?.status === "OK" ? { status: ensembleConsensus.status, direcao: ensembleConsensus.direcao, forca: ensembleConsensus.forca } : null,
-        council: councilForConviction ?? null,
-        multiTimeframe: multiTimeframeForConviction ?? null,
-        trustScore: trustScoreForConviction?.score ?? null,
-      }),
-    [engine?.direction, ensembleConsensus, councilForConviction, multiTimeframeForConviction, trustScoreForConviction],
-  );
+  // Levantada para App() (ver contextValue) porque a Neural Market Aura
+  // (ChartWidget) agora consome a MESMA leitura real — zero segundo
+  // cálculo a partir dos mesmos insumos.
+  const convictionReading = convictionReadingFromContext ?? buildConvictionReading({
+    coreDirection: null, ensembleConsensus: null, council: null, multiTimeframe: null, trustScore: null,
+  });
   const convictionColor =
     convictionReading.status !== "OK"
       ? "text-[#8ab4f8]/50"

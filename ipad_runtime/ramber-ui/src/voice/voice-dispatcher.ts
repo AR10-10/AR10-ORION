@@ -93,5 +93,37 @@ export function computeAlerts(
     }
   }
 
+  // 7. Neural Market Aura ("Comunicação por Voz"): ciclo de vida REAL do
+  // Trade Plan (nexus/trade-plan.ts + signal-track-record.ts) — mesma
+  // regra anti-ruído de chave-muda-uma-vez-por-evento do item 6 acima.
+  if (next.tradePlanOpenKey && next.tradePlanOpenKey !== prev.tradePlanOpenKey) {
+    alerts.push({
+      text: `Entrada ${next.tradePlanDirection === 'LONG' ? 'de compra' : 'de venda'} identificada pelo Trade Plan real.`,
+      priority: 'INFO',
+    });
+  }
+  if (!prev.inEntryZone && next.inEntryZone) {
+    alerts.push({ text: 'Preço real na região ideal de entrada do plano ativo.', priority: 'INFO' });
+  }
+  if (next.tradePlanResolutionKey && next.tradePlanResolutionKey !== prev.tradePlanResolutionKey) {
+    if (next.tradePlanResolutionStatus === 'TARGET_HIT') {
+      alerts.push({ text: 'Alvo real do Trade Plan alcançado.', priority: 'ALERT' });
+    } else if (next.tradePlanResolutionStatus === 'STOP_HIT') {
+      alerts.push({ text: 'Stop real atingido. Estrutura do plano perdida.', priority: 'ALERT' });
+    } else if (next.tradePlanResolutionStatus === 'REPLACED') {
+      alerts.push({ text: 'Plano substituído por uma leitura de estrutura mais recente.', priority: 'INFO' });
+    }
+  }
+  // Convicção real caindo (Confluence Engine) — só entre duas leituras
+  // reais (nunca a partir de null/sem-leitura, que não é "reduzida", é
+  // "indisponível"). CONFIRMS > MIXED > CONTRADICTS.
+  const verdictRank: Record<'CONFIRMS' | 'MIXED' | 'CONTRADICTS', number> = { CONFIRMS: 2, MIXED: 1, CONTRADICTS: 0 };
+  if (
+    prev.convictionVerdict && next.convictionVerdict &&
+    verdictRank[next.convictionVerdict] < verdictRank[prev.convictionVerdict]
+  ) {
+    alerts.push({ text: 'Convicção real reduzida entre os subsistemas de confluência.', priority: 'ALERT' });
+  }
+
   return alerts;
 }

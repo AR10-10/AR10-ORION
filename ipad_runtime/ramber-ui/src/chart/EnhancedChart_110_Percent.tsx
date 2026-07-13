@@ -46,6 +46,12 @@ import { VolumeProfilePlugin } from "./VolumeProfilePlugin";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
 import { TradePlanZonePlugin } from "./TradePlanZonePlugin";
+// Neural Market Aura (especificação do Operador): corredor de convicção
+// real entre entrada e alvo — ver o cabeçalho de NeuralMarketAuraPlugin.tsx
+// para a divisão de responsabilidade com TradePlanZonePlugin (zero
+// duplicação: aquele desenha a caixa da zona, este desenha o corredor).
+import { NeuralMarketAuraPlugin } from "./NeuralMarketAuraPlugin";
+import type { AuraReading } from "../nexus/aura-lifecycle";
 // Correção de latência (Ordem "Sincronização em Tempo Real"): funde o
 // último preço real do ticker WS na vela em formação via series.update() —
 // nunca via `data`/setData (isso recomputaria SMC/Fibonacci/VP a cada
@@ -133,6 +139,10 @@ interface EnhancedChartProps {
   // silk-thread price lines with English labels. Optional and fail-closed:
   // null/absent draws nothing.
   tradePlan?: TradePlan | null;
+  // Neural Market Aura: visual translation of the SAME real Trade Plan +
+  // Signal Track Record + Confluence Engine reading above — never a second
+  // trading signal (LEI 24). null/DADOS_INSUFICIENTES draws nothing.
+  aura?: AuraReading | null;
   // Auditoria de arquitetura (revisão completa) — paginação histórica
   // real: chamado quando o usuário arrasta perto da borda esquerda dos
   // candles já carregados (ver efeito de subscribeVisibleLogicalRangeChange
@@ -191,6 +201,7 @@ export function EnhancedChart_110_Percent({
   livePrice,
   activeTimeframe,
   tradePlan,
+  aura,
   onRequestOlderCandles,
 }: EnhancedChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -660,6 +671,14 @@ export function EnhancedChart_110_Percent({
       <VolumeProfilePlugin
         chart={chartReady?.chart ?? null}
         series={chartReady?.series ?? null}
+      />
+      {/* Neural Market Aura: the conviction corridor, mounted BEFORE the
+         crisp entry-zone box below so the soft gradient stays visually
+         underneath it, not competing with it. */}
+      <NeuralMarketAuraPlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+        aura={aura ?? null}
       />
       {/* Ordem Final Autonomia Evolução §1 ("caixas semi-transparentes"):
          the Trade Plan's entry zone, mounted last so it stays the topmost

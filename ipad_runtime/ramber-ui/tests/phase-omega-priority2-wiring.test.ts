@@ -12,30 +12,32 @@ import { dirname, resolve } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 
-describe('App.tsx: DecisionValidationWidget consome os 3 subsistemas reais já na store (zero fetch novo)', () => {
+describe('App.tsx: convictionReading calculado UMA VEZ em App() e compartilhado via contextValue (zero segundo cálculo)', () => {
   it('importa buildConvictionReading de nexus/confluence-engine', () => {
     const app = read('../src/App.tsx');
     expect(app).toContain('import { buildConvictionReading } from "./nexus/confluence-engine";');
   });
 
-  it('usa useCouncilSnapshot/useMultiTimeframeSnapshot/useTrustScoreSnapshot — os MESMOS hooks já usados pelos widgets irmãos', () => {
+  it('App() usa useMultiTimeframeSnapshot/useTrustScoreSnapshot + o councilFromSnapshot já existente — os MESMOS hooks já usados pelos widgets irmãos', () => {
     const app = read('../src/App.tsx');
-    const fnMatch = app.match(/function DecisionValidationWidget\(\) \{([\s\S]*?)\n\}\n/);
-    expect(fnMatch, 'DecisionValidationWidget não encontrada').not.toBeNull();
-    const body = fnMatch![1];
-    expect(body).toContain('const councilForConviction = useCouncilSnapshot();');
-    expect(body).toContain('const multiTimeframeForConviction = useMultiTimeframeSnapshot();');
-    expect(body).toContain('const trustScoreForConviction = useTrustScoreSnapshot();');
+    expect(app).toContain('const multiTimeframeForConviction = useMultiTimeframeSnapshot();');
+    expect(app).toContain('const trustScoreForConviction = useTrustScoreSnapshot();');
   });
 
   it('convictionReading vem de buildConvictionReading com coreDirection = engine.direction real (nunca um valor fabricado)', () => {
     const app = read('../src/App.tsx');
-    const fnMatch = app.match(/function DecisionValidationWidget\(\) \{([\s\S]*?)\n\}\n/);
-    const body = fnMatch![1];
-    expect(body).toContain('coreDirection: engine?.direction ?? null,');
-    expect(body).toContain('council: councilForConviction ?? null,');
-    expect(body).toContain('multiTimeframe: multiTimeframeForConviction ?? null,');
-    expect(body).toContain('trustScore: trustScoreForConviction?.score ?? null,');
+    expect(app).toContain('coreDirection: engine?.direction ?? null,');
+    expect(app).toContain('council: councilFromSnapshot ?? null,');
+    expect(app).toContain('multiTimeframe: multiTimeframeForConviction ?? null,');
+    expect(app).toContain('trustScore: trustScoreForConviction?.score ?? null,');
+  });
+
+  it('convictionReading entra em contextValue (WidgetContext) — DecisionValidationWidget e ChartWidget leem o MESMO valor, nunca recalculam', () => {
+    const app = read('../src/App.tsx');
+    // A mesma chave aparece no objeto de valor E no array de deps do useMemo.
+    const occurrences = app.match(/\bensembleConsensus,\n\s*convictionReading,/g) ?? [];
+    expect(occurrences.length).toBe(2);
+    expect(app).toContain('convictionReading: convictionReadingFromContext, riskSuggestion, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt, chartTimeframe }');
   });
 
   it('LEI 24: nenhuma escrita de volta em engine.direction/engine.confidence a partir da leitura de convicção', () => {

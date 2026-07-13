@@ -54,6 +54,21 @@ export interface TerminalSnapshot {
   structureBreakKey: string | null;
   structureBreakType: 'BOS' | 'CHOCH' | null;
   structureBreakDirection: 'ALTA' | 'BAIXA' | null;
+  // Neural Market Aura ("Comunicação por Voz"): eventos reais do ciclo de
+  // vida do Trade Plan (nexus/trade-plan.ts + signal-track-record.ts —
+  // NÃO a heurística direction/entry/target/stop acima, que é um sinal
+  // diferente). Mesma convenção "xKey muda = evento novo" de
+  // structureBreakKey — nunca repete o mesmo evento ainda vivo na tela.
+  tradePlanOpenKey: string | null; // muda quando um plano real novo abre
+  tradePlanDirection: 'LONG' | 'SHORT' | null;
+  tradePlanResolutionKey: string | null; // muda quando o plano ativo resolve/é substituído
+  tradePlanResolutionStatus: 'TARGET_HIT' | 'STOP_HIT' | 'REPLACED' | null;
+  // Preço real dentro da zona de entrada do plano ATIVO agora — false
+  // honesto sem plano ativo ou preço fora da zona, nunca um palpite.
+  inEntryZone: boolean;
+  // Motor de Confluência Cruzada (Phase Ω Priority 2) — null enquanto sem
+  // leitura real (WAIT ou subsistemas insuficientes).
+  convictionVerdict: 'CONFIRMS' | 'CONTRADICTS' | 'MIXED' | null;
 }
 
 export type VoiceIntent =
