@@ -67,6 +67,80 @@ describe('chart/NeuralMarketAuraPlugin.tsx: mesma arquitetura de overlay das irm
   });
 });
 
+describe('"Ciclone de Convicção" (pedido do Operador): Worker dedicado, nunca uma animação perpétua enxertada no main thread', () => {
+  it('duas <canvas> reais (ciclone animado + corredor estático de fallback), nenhuma outra arquitetura de canvas', () => {
+    const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
+    expect(plugin).toContain('const cycloneCanvasRef = useRef<HTMLCanvasElement | null>(null);');
+    expect(plugin).toContain('const staticCanvasRef = useRef<HTMLCanvasElement | null>(null);');
+  });
+
+  it('handshake real igual ao já provado por OrderFlowHeatmapPlugin — transferControlToOffscreen + postMessage("ready") antes de confiar no Worker', () => {
+    const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
+    expect(plugin).toContain('new Worker(new URL("../workers/conviction-cyclone-worker.ts", import.meta.url), { type: "module" });');
+    expect(plugin).toContain('transferControlToOffscreen: () => OffscreenCanvas');
+    expect(plugin).toContain('candidateWorker.postMessage({ type: "init", canvas: offscreen }, [offscreen]);');
+    expect(plugin).toContain("if (ev.data?.type === \"ready\") {");
+  });
+
+  it('corredor ESTÁTICO sempre desenha primeiro em draw() — garantia real de fallback nunca mostra frame desatualizado ao trocar de canvas', () => {
+    const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
+    const drawFn = plugin.match(/const draw = \(\) => \{([\s\S]*?)\n    \};/);
+    expect(drawFn, 'draw() não encontrada').not.toBeNull();
+    const body = drawFn![1];
+    expect(body.indexOf('drawStatic();')).toBeGreaterThan(-1);
+    expect(body.indexOf('drawStatic();')).toBeLessThan(body.indexOf('buildCycloneReal()'));
+  });
+
+  it('Ciclone só existe durante a PERSEGUIÇÃO real (BIRTH/ESTABLISHED) — nunca durante resolução/dissolução (TARGET_HIT/STOP_HIT/REPLACED)', () => {
+    const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
+    expect(plugin).toContain('if (reading.phase !== "BIRTH" && reading.phase !== "ESTABLISHED") return null;');
+  });
+
+  it('visibilidade das duas <canvas> é 100% imperativa (applyVisibility), nunca via useState/JSX — evita corrida entre dois donos do mesmo style.display', () => {
+    const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
+    expect(plugin).not.toContain('useState');
+    expect(plugin).toContain('const applyVisibility = (showCyclone: boolean) => {');
+    expect(plugin).toContain('applyVisibility(real !== null);');
+  });
+
+  it('largura do corredor do Ciclone reaproveita a MESMA corridorWidthPx do corredor estático — nunca duas larguras diferentes pro mesmo dado real', () => {
+    const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
+    const fnMatch = plugin.match(/const buildCycloneReal = \(\): CycloneRealParams \| null => \{([\s\S]*?)\n    \};/);
+    expect(fnMatch, 'buildCycloneReal não encontrada').not.toBeNull();
+    expect(fnMatch![1]).toContain('corridorWidthPx(corridorWidthFactor)');
+  });
+
+  it('Worker é terminado no cleanup real do efeito — nunca vaza um Worker rodando fora do ciclo de vida do plugin', () => {
+    const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
+    expect(plugin).toContain('worker?.terminate();');
+  });
+});
+
+describe('workers/conviction-cyclone-worker.ts: laço de animação inteiramente dentro do Worker (achado real: Main Thread sagrada exigia isolamento)', () => {
+  it('reaproveita computeCycloneFrame/drawCycloneFrame puros — zero segunda implementação de desenho', () => {
+    const worker = read('../src/workers/conviction-cyclone-worker.ts');
+    expect(worker).toContain('import {\n  computeCycloneFrame,\n  drawCycloneFrame,');
+  });
+
+  it('possui laço próprio (setInterval) que só roda com dado real — nunca posta frame sem "update" real recebido antes', () => {
+    const worker = read('../src/workers/conviction-cyclone-worker.ts');
+    expect(worker).toContain('intervalId = setInterval(() => {');
+    expect(worker).toContain('if (!ctx || !lastReal) return;');
+  });
+
+  it('real=null (sem plano/status/fadeAlpha real) para o laço e limpa o canvas — nunca desenha um ciclone fabricado sem operação real por trás', () => {
+    const worker = read('../src/workers/conviction-cyclone-worker.ts');
+    expect(worker).toContain('if (lastReal === null) {');
+    expect(worker).toContain('stopTicking();');
+    expect(worker).toContain('ctx.clearRect(0, 0, canvas.width, canvas.height);');
+  });
+
+  it('handshake honesto: reporta ready:false quando getContext("2d") falha, nunca supõe suporte real', () => {
+    const worker = read('../src/workers/conviction-cyclone-worker.ts');
+    expect(worker).toContain('post({ type: "ready", ok: !!ctx });');
+  });
+});
+
 describe('EnhancedChart_110_Percent.tsx: aura montada ANTES da caixa de entrada (TradePlanZonePlugin), nunca redesenha a mesma caixa', () => {
   it('importa NeuralMarketAuraPlugin + AuraReading, prop aura opcional e fail-closed', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');

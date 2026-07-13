@@ -26,9 +26,37 @@
 // variável — a convicção fala pelo PREENCHIMENTO/gradiente, nunca pela
 // linha. As linhas de preço reais (entry/stop/target) nunca são tocadas
 // aqui.
+//
+// "Ciclone de Convicção" (pedido direto do Operador — "não um túnel... um
+// ciclone, levando até o alvo"; total liberdade de evolução visual, mas
+// "previsão mais precisa" nunca vira um número fabricado — Regra de Ouro
+// 2 continua absoluta): enquanto o plano está sendo PERSEGUIDO (BIRTH/
+// ESTABLISHED), o corredor estático evolui para um fluxo contínuo de
+// partículas espiralando e afunilando em direção ao alvo real — mesmo
+// dado real (conviction/turbulence/proximidade), só uma forma visual mais
+// viva. Isto é a PRIMEIRA animação verdadeiramente contínua desta base —
+// tratada com o cuidado que Main Thread sagrada exige (CLAUDE.md: "mover
+// pra Worker exige iniciativa própria e isolada"):
+//   - O laço de animação roda inteiramente DENTRO de um Worker dedicado
+//     (conviction-cyclone-worker.ts), mesmo handshake real já provado por
+//     OrderFlowHeatmapPlugin (transferControlToOffscreen + postMessage
+//     'ready'/ok — nunca supõe suporte).
+//   - Quando esse handshake falha (achado já documentado nesta base, Fase
+//     0.7: OffscreenCanvas 2D em Worker no Safari/iPad — a PLATAFORMA-ALVO
+//     real deste terminal — não é confiável hoje), o main thread NUNCA
+//     tenta rodar a mesma animação sozinho: cai pro corredor ESTÁTICO já
+//     comprovado (dirty-flag, zero rAF perpétuo), a mesma garantia de
+//     Regra de Ouro 7 (60 FPS iPad Safari) que este app já mantinha antes
+//     do Ciclone existir.
+//   - Fora da perseguição (TARGET_HIT/STOP_HIT/REPLACED — resolvido ou
+//     dissolvendo), o Ciclone nunca aparece, mesmo com Worker disponível:
+//     movimento contínuo comunica "ainda em curso"; uma vez resolvido, o
+//     corredor estático (já existente, já testado) é a leitura honesta —
+//     "chegou"/"parou" não deveria continuar girando.
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { AuraReading } from "../nexus/aura-lifecycle";
+import type { CycloneRealParams, CycloneWorkerOutMessage } from "../nexus/conviction-cyclone-draw";
 
 interface NeuralMarketAuraPluginProps {
   chart: IChartApi | null;
@@ -65,7 +93,9 @@ function phaseRgb(phase: AuraReading["phase"]): string {
 // Largura do corredor em pixels, do preço atual (borda direita) para trás:
 // interpola entre um mínimo concentrado (convicção 1) e um máximo difuso
 // (convicção 0 ou desconhecida). Parâmetros documentados — mesma natureza
-// dos outros limiares visuais já escolhidos neste arquivo/sessão.
+// dos outros limiares visuais já escolhidos neste arquivo/sessão. Reaproveitada
+// tanto pelo corredor estático quanto pela geometria real mandada pro
+// Ciclone — os dois nunca podem ter uma largura diferente pro mesmo dado.
 const CORRIDOR_MIN_PX = 60;
 const CORRIDOR_MAX_PX = 220;
 function corridorWidthPx(widthFactor: number | null): number {
@@ -73,10 +103,38 @@ function corridorWidthPx(widthFactor: number | null): number {
   return CORRIDOR_MAX_PX - f * (CORRIDOR_MAX_PX - CORRIDOR_MIN_PX);
 }
 
+// Colapso real do funil quando o preço real já está na banda de
+// "aproximando" (ATR-escalada, aura-lifecycle.ts) — parâmetro visual
+// documentado (mesma natureza de CORRIDOR_MIN_PX acima), não uma medição:
+// o funil não desaparece, só se concentra mais perto do alvo real.
+const APPROACH_COLLAPSE = 0.55;
+
+const CYCLONE_HANDOFF_TIMEOUT_MS = 800;
+type RendererMode = "pending" | "worker" | "main";
+
+function supportsOffscreenWorker(): boolean {
+  return (
+    typeof Worker !== "undefined" &&
+    typeof HTMLCanvasElement !== "undefined" &&
+    typeof (HTMLCanvasElement.prototype as unknown as { transferControlToOffscreen?: unknown }).transferControlToOffscreen === "function"
+  );
+}
+
 export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAuraPluginProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const cycloneCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const staticCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef({ aura });
   const markDirtyRef = useRef<(() => void) | null>(null);
+  // modeRef é lido pelo laço de desenho (draw()/decideRenderer) — de
+  // propósito NUNCA promovido a estado React reativo: qual canvas fica
+  // visível é decidido a cada draw() real (phase muda com frequência real
+  // bem maior que o handshake worker/main, que só acontece uma vez). Se
+  // `mode` disparasse um re-render, ele reescreveria `style.display` via
+  // JSX bem depois de applyVisibility() já ter decidido o valor certo pro
+  // frame atual — uma corrida real entre dois donos da mesma propriedade.
+  // Visibilidade das duas <canvas> é 100% imperativa (applyVisibility,
+  // dentro do efeito) desde o primeiro render — nunca pelo JSX.
+  const modeRef = useRef<RendererMode>("pending");
 
   stateRef.current = { aura };
 
@@ -85,22 +143,34 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
   }, [aura]);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!chart || !series || !canvas) return;
+    const cycloneCanvas = cycloneCanvasRef.current;
+    const staticCanvas = staticCanvasRef.current;
+    if (!chart || !series || !cycloneCanvas || !staticCanvas) return;
 
+    let cancelled = false;
+    let worker: Worker | null = null;
     let rafScheduled = false;
-    const draw = () => {
-      const ctx = canvas.getContext("2d");
+    let lastCyclonePxSize = { w: 0, h: 0 };
+
+    // Corredor ESTÁTICO — código idêntico ao v1 já testado/verificado
+    // (Fase Ω Priority 3), agora extraído pra função própria porque serve
+    // DOIS papéis: (a) todo o desenho quando o Worker do Ciclone está
+    // indisponível/pendente, (b) o desenho de resolução (TARGET_HIT/
+    // STOP_HIT/REPLACED) mesmo quando o Worker está disponível — motion
+    // contínuo só faz sentido enquanto o plano ainda está sendo
+    // perseguido.
+    const drawStatic = () => {
+      const ctx = staticCanvas.getContext("2d");
       if (!ctx) return;
-      const cssWidth = canvas.clientWidth;
-      const cssHeight = canvas.clientHeight;
+      const cssWidth = staticCanvas.clientWidth;
+      const cssHeight = staticCanvas.clientHeight;
       if (cssWidth === 0 || cssHeight === 0) return;
       const dpr = window.devicePixelRatio || 1;
       const pxWidth = Math.round(cssWidth * dpr);
       const pxHeight = Math.round(cssHeight * dpr);
-      if (canvas.width !== pxWidth || canvas.height !== pxHeight) {
-        canvas.width = pxWidth;
-        canvas.height = pxHeight;
+      if (staticCanvas.width !== pxWidth || staticCanvas.height !== pxHeight) {
+        staticCanvas.width = pxWidth;
+        staticCanvas.height = pxHeight;
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
@@ -213,6 +283,72 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
       ctx.globalAlpha = 1;
     };
 
+    // Geometria/parâmetros REAIS do Ciclone — mesma leitura de
+    // corridorWidthFactor/pulseIntensity/fadeAlpha do corredor estático
+    // acima, nunca uma segunda fonte. `real: null` honesto quando não há
+    // perseguição real em curso (fora de BIRTH/ESTABLISHED) — o worker
+    // para de ticar e limpa sozinho (ver conviction-cyclone-worker.ts).
+    const buildCycloneReal = (): CycloneRealParams | null => {
+      const { aura: reading } = stateRef.current;
+      if (!reading || reading.status !== "OK" || !reading.plan || reading.fadeAlpha <= 0) return null;
+      if (reading.phase !== "BIRTH" && reading.phase !== "ESTABLISHED") return null; // resolvido/dissolvendo => corredor estático, nunca o ciclone
+
+      const cssWidth = cycloneCanvas.clientWidth;
+      const cssHeight = cycloneCanvas.clientHeight;
+      if (cssWidth === 0 || cssHeight === 0) return null;
+      const { plan, corridorWidthFactor, pulseIntensity, fadeAlpha, targetProximity } = reading;
+      const entryMid = (plan.entry.low + plan.entry.high) / 2;
+      const yEntry = series.priceToCoordinate(entryMid);
+      const yTarget = series.priceToCoordinate(plan.target.price);
+      if (yEntry === null || yTarget === null) return null; // fora da faixa visível agora — Fail-Closed, nunca extrapola.
+
+      const top = Math.min(yEntry, yTarget);
+      const bottom = Math.max(yEntry, yTarget);
+      const bandWidth = Math.min(cssWidth, corridorWidthPx(corridorWidthFactor));
+      const bandX = cssWidth - bandWidth;
+      const collapse = targetProximity === "APPROACHING" ? APPROACH_COLLAPSE : 0;
+
+      return {
+        bandX,
+        cssWidth,
+        cssHeight,
+        dpr: window.devicePixelRatio || 1,
+        top,
+        bottom,
+        edgeY: yTarget,
+        color: phaseRgb(reading.phase),
+        conviction: corridorWidthFactor ?? 0,
+        turbulence: pulseIntensity ?? 0.3,
+        fadeAlpha,
+        collapse,
+      };
+    };
+
+    const applyVisibility = (showCyclone: boolean) => {
+      cycloneCanvas.style.display = showCyclone ? "block" : "none";
+      staticCanvas.style.display = showCyclone ? "none" : "block";
+    };
+
+    const draw = () => {
+      // O corredor estático SEMPRE desenha (dirty-flag, barato) —
+      // continua a garantia real de fallback mesmo quando escondido atrás
+      // do Ciclone, então trocar de canvas nunca arrisca mostrar um frame
+      // desatualizado.
+      drawStatic();
+
+      const real = modeRef.current === "worker" ? buildCycloneReal() : null;
+      applyVisibility(real !== null);
+      if (modeRef.current !== "worker" || !worker) return;
+
+      const pxWidth = Math.round(cycloneCanvas.clientWidth * (window.devicePixelRatio || 1));
+      const pxHeight = Math.round(cycloneCanvas.clientHeight * (window.devicePixelRatio || 1));
+      if (pxWidth !== lastCyclonePxSize.w || pxHeight !== lastCyclonePxSize.h) {
+        lastCyclonePxSize = { w: pxWidth, h: pxHeight };
+        worker.postMessage({ type: "resize", pxWidth, pxHeight });
+      }
+      worker.postMessage({ type: "update", real });
+    };
+
     const markDirty = () => {
       if (rafScheduled) return;
       rafScheduled = true;
@@ -227,22 +363,76 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange);
 
     const resizeObserver = new ResizeObserver(() => markDirty());
-    resizeObserver.observe(canvas);
+    resizeObserver.observe(cycloneCanvas);
+    resizeObserver.observe(staticCanvas);
 
-    markDirty(); // primeiro desenho real assim que o chart/série existem.
+    const decideRenderer = async () => {
+      if (supportsOffscreenWorker()) {
+        try {
+          const candidateWorker = new Worker(new URL("../workers/conviction-cyclone-worker.ts", import.meta.url), { type: "module" });
+          const offscreen = (cycloneCanvas as unknown as { transferControlToOffscreen: () => OffscreenCanvas }).transferControlToOffscreen();
+          const ok = await new Promise<boolean>((resolve) => {
+            const timer = setTimeout(() => resolve(false), CYCLONE_HANDOFF_TIMEOUT_MS);
+            candidateWorker.onmessage = (ev: MessageEvent<CycloneWorkerOutMessage>) => {
+              if (ev.data?.type === "ready") {
+                clearTimeout(timer);
+                resolve(!!ev.data.ok);
+              }
+            };
+            candidateWorker.onerror = () => {
+              clearTimeout(timer);
+              resolve(false);
+            };
+            candidateWorker.postMessage({ type: "init", canvas: offscreen }, [offscreen]);
+          });
+          if (cancelled) {
+            candidateWorker.terminate();
+            return;
+          }
+          if (ok) {
+            worker = candidateWorker;
+            modeRef.current = "worker";
+            markDirty();
+            return;
+          }
+          candidateWorker.terminate();
+        } catch {
+          // Falha real ao tentar o caminho OffscreenCanvas (Worker
+          // indisponível, construção lançou, etc.) — cai pro corredor
+          // estático abaixo, nunca fica sem Aura por causa disto.
+        }
+      }
+      if (!cancelled) {
+        modeRef.current = "main";
+        applyVisibility(false);
+        markDirty();
+      }
+    };
+    void decideRenderer();
+
+    markDirty(); // primeiro desenho real (corredor estático) assim que chart/série existem, mesmo antes do handshake resolver.
 
     return () => {
+      cancelled = true;
       markDirtyRef.current = null;
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange);
       resizeObserver.disconnect();
+      worker?.terminate();
     };
   }, [chart, series]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
-    />
+    <>
+      <canvas
+        ref={cycloneCanvasRef}
+        className="absolute inset-0 pointer-events-none"
+        style={{ width: "100%", height: "100%", display: "none" }}
+      />
+      <canvas
+        ref={staticCanvasRef}
+        className="absolute inset-0 pointer-events-none"
+        style={{ width: "100%", height: "100%", display: "none" }}
+      />
+    </>
   );
 }
