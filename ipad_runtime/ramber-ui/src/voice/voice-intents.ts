@@ -62,7 +62,14 @@ export interface TerminalSnapshot {
   tradePlanOpenKey: string | null; // muda quando um plano real novo abre
   tradePlanDirection: 'LONG' | 'SHORT' | null;
   tradePlanResolutionKey: string | null; // muda quando o plano ativo resolve/é substituído
-  tradePlanResolutionStatus: 'TARGET_HIT' | 'STOP_HIT' | 'REPLACED' | null;
+  tradePlanResolutionStatus: 'TARGET_HIT' | 'PARTIAL_HIT' | 'STOP_HIT' | 'REPLACED' | null;
+  // v2 (Diretriz Complementar — Nexus Predictive Engine, §2/§4): muda cada
+  // vez que um alvo real ADICIONAL é provado enquanto o plano continua
+  // ABERTO (nunca dispara na abertura do plano — tradePlanTargetsHit
+  // começa em 0 nesse instante, e a leitura do gate fica a cargo do
+  // consumidor). Um evento distinto da resolução final acima.
+  tradePlanTargetProgressKey: string | null;
+  tradePlanTargetsHit: number;
   // Preço real dentro da zona de entrada do plano ATIVO agora — false
   // honesto sem plano ativo ou preço fora da zona, nunca um palpite.
   inEntryZone: boolean;

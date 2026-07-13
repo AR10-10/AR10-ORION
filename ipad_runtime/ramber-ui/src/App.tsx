@@ -1756,6 +1756,15 @@ export default function App() {
     tradePlanDirection: trackRecordSlice.active?.plan.direction ?? null,
     tradePlanResolutionKey: lastResolvedPlan ? `${lastResolvedPlan.status}:${lastResolvedPlan.resolvedAt}` : null,
     tradePlanResolutionStatus: lastResolvedPlan && lastResolvedPlan.status !== 'OPEN' ? lastResolvedPlan.status : null,
+    // v2 (Diretriz Complementar §2/§4): progresso real de alvo enquanto o
+    // plano continua ABERTO — chave muda a cada alvo real adicional
+    // provado, nunca na abertura do plano (targetsHit começa em 0 nesse
+    // instante, então a chave é idêntica à anterior e o consumidor não
+    // dispara nada).
+    tradePlanTargetProgressKey: trackRecordSlice.active
+      ? `${trackRecordSlice.active.plan.direction}:${trackRecordSlice.active.openedAt}:${trackRecordSlice.active.targetsHit}`
+      : null,
+    tradePlanTargetsHit: trackRecordSlice.active?.targetsHit ?? 0,
     inEntryZone: inEntryZoneNow,
     convictionVerdict: convictionReading.status === 'OK' ? convictionReading.verdict : null,
   };
@@ -3479,12 +3488,26 @@ function BarField({
 
 function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   const plan = useTradePlanSnapshot();
+  // v2 (Diretriz Complementar §2/§4): a barra compacta mostra o PRÓXIMO
+  // alvo real ainda não provado (autoritativo — mesmo ratchet real que
+  // signal-track-record.ts mantém, nunca um "hit" re-derivado só da
+  // livePrice instantânea, que voltaria a "false" se o preço recuar depois
+  // de já ter tocado o nível). "Sem excesso de informações" (Diretriz §7):
+  // 1 número aqui, o painel Trade Plan (ModulePanel) mostra a escada
+  // inteira.
+  const trackRecord = useTrackRecordSnapshot();
   const { convictionReading } = useContext(WidgetContext) || {};
   if (!plan) return null;
+  const targetsHit = trackRecord.active?.targetsHit ?? 0;
+  const activeTargetIndex = Math.min(targetsHit, plan.targets.length - 1);
+  const activeTarget = plan.targets[activeTargetIndex];
+  const breakEvenActive = targetsHit > 0;
+  const entryMid = (plan.entry.low + plan.entry.high) / 2;
+  const effectiveStopPrice = breakEvenActive ? entryMid : plan.stop.price;
   const long = plan.direction === "LONG";
   const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
-  const targetHit = p !== null && (long ? p >= plan.target.price : p <= plan.target.price);
-  const stopHit = p !== null && !targetHit && (long ? p <= plan.stop.price : p >= plan.stop.price);
+  const targetHit = activeTargetIndex < targetsHit; // true once the ladder already proved this rung (authoritative, never re-derived)
+  const stopHit = p !== null && !targetHit && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
   const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
   // Bandeira de divergência real (achado real de auditoria, FASE Ω Priority
   // 3): o Confluence Engine (Phase Ω Priority 2) já calcula, todo ciclo, se
@@ -3519,23 +3542,23 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
     >
       <BarField label="Entry Zone" value={entryLabel} labelClass="text-[#f0d06f]/70" valueClass="text-[#f0d06f]/90" />
       <BarField
-        label="Target"
-        value={f(plan.target.price)}
+        label={plan.targets.length > 1 ? `Target ${activeTargetIndex + 1}/${plan.targets.length}` : "Target"}
+        value={f(activeTarget.price)}
         labelClass="text-[#00ffaa]/70"
         valueClass="text-[#00ffaa]/90"
         hitClass="text-[#00ffaa] drop-shadow-[0_0_5px_currentColor]"
         hit={targetHit}
       />
       <BarField
-        label="Stop"
-        value={f(plan.stop.price)}
+        label={breakEvenActive ? "Stop (B/E)" : "Stop"}
+        value={f(effectiveStopPrice)}
         labelClass="text-[#ff0055]/70"
         valueClass="text-[#ff0055]/90"
         hitClass="text-[#ff0055] drop-shadow-[0_0_5px_currentColor]"
         hit={stopHit}
       />
-      {plan.riskRewardRatio !== null && (
-        <BarField label="R : R" value={`1:${plan.riskRewardRatio.toFixed(2)}`} labelClass="text-[#8ab4f8]/60" valueClass="text-[#8ab4f8]/80" />
+      {plan.riskRewardRatios[activeTargetIndex] !== null && (
+        <BarField label="R : R" value={`1:${plan.riskRewardRatios[activeTargetIndex]!.toFixed(2)}`} labelClass="text-[#8ab4f8]/60" valueClass="text-[#8ab4f8]/80" />
       )}
       {targetHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#00ffaa] pl-1">TARGET REACHED</span>}
       {stopHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#ff0055] pl-1">STOP BREACHED</span>}
@@ -4523,8 +4546,16 @@ function SecondaryModuleView({ tab }: { tab: string }) {
               <ModuleStat label="Direction" value={tradePlan.direction} tone={tradePlan.direction === "LONG" ? "long" : "short"} />
               <ModuleStat label="Entry Zone" value={`${tradePlan.entry.low.toFixed(0)}–${tradePlan.entry.high.toFixed(0)} (${tradePlan.entry.basis})`} />
               <ModuleStat label="Stop" value={`${tradePlan.stop.price.toFixed(0)} (${tradePlan.stop.basis})`} tone="short" />
-              <ModuleStat label="Target" value={`${tradePlan.target.price.toFixed(0)} (${tradePlan.target.basis})`} tone="long" />
-              <ModuleStat label="Risk : Reward" value={tradePlan.riskRewardRatio !== null ? `1 : ${tradePlan.riskRewardRatio.toFixed(2)}` : "DEGENERATE (honest)"} />
+              {/* v2 (Diretriz Complementar §2): a escada real inteira — 1 a
+                  MAX_TARGETS alvos, nunca truncada a um só. */}
+              {tradePlan.targets.map((target, i) => (
+                <ModuleStat
+                  key={i}
+                  label={tradePlan.targets.length > 1 ? `Target ${i + 1}` : "Target"}
+                  value={`${target.price.toFixed(0)} (${target.basis})${tradePlan.riskRewardRatios[i] !== null ? ` · 1:${tradePlan.riskRewardRatios[i]!.toFixed(2)}` : ""}`}
+                  tone="long"
+                />
+              ))}
             </>
           ) : (
             <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">
@@ -4824,6 +4855,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             activeTimeframe={chartTimeframe as Timeframe}
             tradePlan={chartTradePlan}
             aura={auraReading}
+            targetsHit={auraTrackRecord.active?.targetsHit ?? 0}
             layerVisibility={chartLayerVisibility}
             emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}

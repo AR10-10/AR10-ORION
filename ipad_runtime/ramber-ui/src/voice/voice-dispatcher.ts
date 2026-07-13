@@ -105,9 +105,21 @@ export function computeAlerts(
   if (!prev.inEntryZone && next.inEntryZone) {
     alerts.push({ text: 'Preço real na região ideal de entrada do plano ativo.', priority: 'INFO' });
   }
+  // v2 (Diretriz Complementar §2/§4): progresso real de alvo ENQUANTO o
+  // plano continua aberto — evento distinto da resolução final abaixo,
+  // dispara uma vez por alvo real adicional provado ("Alvo 1 alcançado",
+  // "Alvo 2 alcançado"...), nunca na abertura do plano (targetsHit=0 aí).
+  if (next.tradePlanTargetProgressKey && next.tradePlanTargetProgressKey !== prev.tradePlanTargetProgressKey && next.tradePlanTargetsHit > 0) {
+    alerts.push({
+      text: `Alvo ${next.tradePlanTargetsHit} do Trade Plan alcançado. Stop movido para break-even.`,
+      priority: 'ALERT',
+    });
+  }
   if (next.tradePlanResolutionKey && next.tradePlanResolutionKey !== prev.tradePlanResolutionKey) {
     if (next.tradePlanResolutionStatus === 'TARGET_HIT') {
       alerts.push({ text: 'Alvo real do Trade Plan alcançado.', priority: 'ALERT' });
+    } else if (next.tradePlanResolutionStatus === 'PARTIAL_HIT') {
+      alerts.push({ text: 'Plano encerrado em break-even após alcançar pelo menos um alvo real.', priority: 'INFO' });
     } else if (next.tradePlanResolutionStatus === 'STOP_HIT') {
       alerts.push({ text: 'Stop real atingido. Estrutura do plano perdida.', priority: 'ALERT' });
     } else if (next.tradePlanResolutionStatus === 'REPLACED') {

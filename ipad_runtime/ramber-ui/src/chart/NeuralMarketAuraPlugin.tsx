@@ -85,7 +85,9 @@ function phaseRgb(phase: AuraReading["phase"]): string {
   // (REPLACED), a cor é NEUTRA — nenhum resultado real ainda existe para
   // reportar. Só ao resolver a cor comunica RESULTADO real — um SHORT que
   // bate o alvo é um sucesso real (verde), não "vermelho porque é short".
-  if (phase === "TARGET_HIT") return LONG_RGB;
+  // PARTIAL_HIT (v2): >=1 alvo real já foi provado antes do break-even —
+  // um resultado real validado, mesma cor de sucesso do TARGET_HIT.
+  if (phase === "TARGET_HIT" || phase === "PARTIAL_HIT") return LONG_RGB;
   if (phase === "STOP_HIT") return SHORT_RGB;
   return NEUTRAL_RGB;
 }
@@ -196,10 +198,13 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
       // StructureBreakMarkersPlugin.
       if (!reading || reading.status !== "OK" || !reading.plan || reading.fadeAlpha <= 0) return;
 
-      const { plan, phase, targetProximity, corridorWidthFactor, pulseIntensity, fadeAlpha } = reading;
+      const { plan, phase, targetIndex, targetProximity, corridorWidthFactor, pulseIntensity, fadeAlpha } = reading;
       const entryMid = (plan.entry.low + plan.entry.high) / 2;
       const yEntry = series.priceToCoordinate(entryMid);
-      const yTarget = series.priceToCoordinate(plan.target.price);
+      // v2: o corredor aponta para o alvo real ATIVO (reading.targetIndex),
+      // nunca fixo no primeiro — o mesmo alvo que a escada de progressão
+      // real do Track Record está perseguindo agora.
+      const yTarget = series.priceToCoordinate(plan.targets[targetIndex ?? 0].price);
       if (yEntry === null || yTarget === null) return; // fora da faixa de preço visível agora — Fail-Closed, nunca extrapola.
 
       const rgb = phaseRgb(phase);
@@ -311,10 +316,10 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
       const cssWidth = cycloneCanvas.clientWidth;
       const cssHeight = cycloneCanvas.clientHeight;
       if (cssWidth === 0 || cssHeight === 0) return null;
-      const { plan, corridorWidthFactor, pulseIntensity, fadeAlpha, targetProximity } = reading;
+      const { plan, targetIndex, corridorWidthFactor, pulseIntensity, fadeAlpha, targetProximity } = reading;
       const entryMid = (plan.entry.low + plan.entry.high) / 2;
       const yEntry = series.priceToCoordinate(entryMid);
-      const yTarget = series.priceToCoordinate(plan.target.price);
+      const yTarget = series.priceToCoordinate(plan.targets[targetIndex ?? 0].price);
       if (yEntry === null || yTarget === null) return null; // fora da faixa visível agora — Fail-Closed, nunca extrapola.
 
       const top = Math.min(yEntry, yTarget);

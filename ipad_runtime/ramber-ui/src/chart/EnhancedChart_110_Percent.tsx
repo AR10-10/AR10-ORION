@@ -180,6 +180,12 @@ interface EnhancedChartProps {
   // Signal Track Record + Confluence Engine reading above — never a second
   // trading signal (LEI 24). null/DADOS_INSUFICIENTES draws nothing.
   aura?: AuraReading | null;
+  // v2 (Diretriz Complementar §2/§4): how many of tradePlan.targets the
+  // AUTHORITATIVE track record (signal-track-record.ts) has actually
+  // proven so far — drives the per-target "REACHED" boost and the
+  // break-even stop redraw below. Optional/fail-closed: absent => 0, the
+  // same as "no real progress yet" (never a fabricated hit).
+  targetsHit?: number;
   // Camadas do Gráfico (Finding M): per-plugin visibility toggle from the
   // new settings panel. Optional and fail-closed: absent/undefined means
   // every layer stays visible (DEFAULT_CHART_LAYER_VISIBILITY), the exact
@@ -249,6 +255,7 @@ export function EnhancedChart_110_Percent({
   activeTimeframe,
   tradePlan,
   aura,
+  targetsHit,
   layerVisibility,
   emaPeriod,
   onRequestOlderCandles,
@@ -268,7 +275,9 @@ export function EnhancedChart_110_Percent({
   // recreating all trade-plan lines on every live-price tick (which would
   // churn the chart at WebSocket cadence for what is only a color change).
   const stopLineRef = useRef<IPriceLine | null>(null);
-  const targetLineRef = useRef<IPriceLine | null>(null);
+  // v2 (Diretriz Complementar §2): até MAX_TARGETS linhas reais, uma por
+  // plan.targets[i] — nunca uma única linha fixa como no contrato v1.
+  const targetLinesArrayRef = useRef<IPriceLine[]>([]);
   const cvdSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Research-driven precision order: VWAP as a native line series on the
   // SAME price scale as the candles (unlike cvdSeriesRef, which needs its
@@ -666,7 +675,7 @@ export function EnhancedChart_110_Percent({
     tradePlanLinesRef.current.forEach((line) => series.removePriceLine(line));
     tradePlanLinesRef.current = [];
     stopLineRef.current = null;
-    targetLineRef.current = null;
+    targetLinesArrayRef.current = [];
     if (!tradePlan) return;
 
     const mk = (price: number, color: string, title: string) => {
@@ -691,38 +700,67 @@ export function EnhancedChart_110_Percent({
     }
     const stopTitle = `STOP · ${tradePlan.stop.basis}`;
     stopLineRef.current = mk(tradePlan.stop.price, "rgba(255, 0, 85, 0.75)", stopTitle);
-    const targetTitle = `TARGET · ${tradePlan.target.basis}${tradePlan.riskRewardRatio !== null ? ` · 1:${tradePlan.riskRewardRatio.toFixed(2)}` : ""}`;
-    targetLineRef.current = mk(tradePlan.target.price, "rgba(0, 255, 170, 0.75)", targetTitle);
+    // v2 (Diretriz Complementar §2): uma linha por alvo real (1 a
+    // MAX_TARGETS), numeradas "TARGET 1/2/3" — nunca uma linha única fixa.
+    const multi = tradePlan.targets.length > 1;
+    tradePlan.targets.forEach((target, i) => {
+      const rr = tradePlan.riskRewardRatios[i];
+      const label = multi ? `TARGET ${i + 1}` : "TARGET";
+      const title = `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}`;
+      const line = mk(target.price, "rgba(0, 255, 170, 0.75)", title);
+      if (line) targetLinesArrayRef.current.push(line);
+    });
   }, [tradePlan]);
 
-  // Ordem Final Autonomia Evolução §1: "alertas visuais sutis quando o
-  // preço romper estrutura relevante" — the chart-side counterpart to the
-  // command bar's TARGET REACHED/STOP BREACHED tone shift
-  // (TradePlanTopStrip in App.tsx), same first-touch-style comparison.
-  // Deliberately a SEPARATE, lightweight effect: applyOptions() nudges
-  // color/title on the two lines already created above in place — it
-  // never removes/recreates the trade-plan lines on every WebSocket tick
-  // the way the [tradePlan] effect above does on a real plan change.
-  // Regra de Ouro 2 ("fio de seda"): hierarchy stays color/opacity-only —
-  // lineWidth and lineStyle are never touched here.
+  // Ordem Final Autonomia Evolução §1 + Diretriz Complementar §2/§4:
+  // "alertas visuais sutis quando o preço romper estrutura relevante" — the
+  // chart-side counterpart to the command bar's TARGET REACHED/STOP
+  // BREACHED tone shift (TradePlanTopStrip in App.tsx). Deliberately a
+  // SEPARATE, lightweight effect: applyOptions() nudges color/title on the
+  // lines already created above in place — it never removes/recreates the
+  // trade-plan lines on every WebSocket tick the way the [tradePlan]
+  // effect above does on a real plan change. Regra de Ouro 2 ("fio de
+  // seda"): hierarchy stays color/opacity-only — lineWidth and lineStyle
+  // are never touched here.
+  //
+  // v2: "REACHED" is driven by the AUTHORITATIVE targetsHit prop (the real
+  // ratchet from signal-track-record.ts), never re-derived from the
+  // instantaneous livePrice alone — a target once proven stays marked
+  // REACHED even if price later pulls back below it (re-deriving from
+  // livePrice would flip the marker back off, which is dishonest: the
+  // level WAS touched). The stop line itself moves to break-even (real
+  // entry price) the instant targetsHit > 0 — the same mechanical
+  // convention the track record applies internally — "quando o cenário
+  // muda, o desenho muda" (Diretriz Complementar §5).
   useEffect(() => {
     if (!tradePlan) return;
+    const hits = targetsHit ?? 0;
+    const entryMid = (tradePlan.entry.low + tradePlan.entry.high) / 2;
+    const breakEvenActive = hits > 0;
+    const effectiveStopPrice = breakEvenActive ? entryMid : tradePlan.stop.price;
     const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
-    if (p === null) return;
     const long = tradePlan.direction === "LONG";
-    const targetHit = long ? p >= tradePlan.target.price : p <= tradePlan.target.price;
-    const stopHit = !targetHit && (long ? p <= tradePlan.stop.price : p >= tradePlan.stop.price);
-    const stopTitle = `STOP · ${tradePlan.stop.basis}`;
+    const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
+    const stopTitle = breakEvenActive ? `STOP · BREAK-EVEN (real)` : `STOP · ${tradePlan.stop.basis}`;
     stopLineRef.current?.applyOptions({
-      color: stopHit ? "rgba(255, 0, 85, 1)" : "rgba(255, 0, 85, 0.75)",
-      title: stopHit ? `${stopTitle} · BREACHED` : stopTitle,
+      price: effectiveStopPrice,
+      color: stopHitNow ? "rgba(255, 0, 85, 1)" : "rgba(255, 0, 85, 0.75)",
+      title: stopHitNow ? `${stopTitle} · BREACHED` : stopTitle,
     });
-    const targetTitle = `TARGET · ${tradePlan.target.basis}${tradePlan.riskRewardRatio !== null ? ` · 1:${tradePlan.riskRewardRatio.toFixed(2)}` : ""}`;
-    targetLineRef.current?.applyOptions({
-      color: targetHit ? "rgba(0, 255, 170, 1)" : "rgba(0, 255, 170, 0.75)",
-      title: targetHit ? `${targetTitle} · REACHED` : targetTitle,
+    const multi = tradePlan.targets.length > 1;
+    tradePlan.targets.forEach((target, i) => {
+      const line = targetLinesArrayRef.current[i];
+      if (!line) return;
+      const reached = i < hits;
+      const rr = tradePlan.riskRewardRatios[i];
+      const label = multi ? `TARGET ${i + 1}` : "TARGET";
+      const title = `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}`;
+      line.applyOptions({
+        color: reached ? "rgba(0, 255, 170, 1)" : "rgba(0, 255, 170, 0.75)",
+        title: reached ? `${title} · REACHED` : title,
+      });
     });
-  }, [tradePlan, livePrice]);
+  }, [tradePlan, livePrice, targetsHit]);
 
   return (
     <div className="absolute inset-0">

@@ -74,7 +74,11 @@ import type { TradePlan } from "./trade-plan";
 import type { TrackedPlan, TrackRecordState } from "./signal-track-record";
 import { ageAlpha, type DecayConfig } from "../chart/annotation-decay";
 
-export type AuraPhase = "BIRTH" | "ESTABLISHED" | "TARGET_HIT" | "STOP_HIT" | "REPLACED";
+// v2 (Diretriz Complementar — Nexus Predictive Engine, §2/§4): PARTIAL_HIT
+// mirrors signal-track-record.ts's TrackedPlanStatus — >=1 real target was
+// proven before the plan closed at break-even, a validated read distinct
+// from both a full TARGET_HIT and a clean STOP_HIT.
+export type AuraPhase = "BIRTH" | "ESTABLISHED" | "TARGET_HIT" | "PARTIAL_HIT" | "STOP_HIT" | "REPLACED";
 export type TargetProximity = "WAITING" | "APPROACHING" | "HIT";
 
 // Duração real (ms) de uma barra por timeframe — os 14 valores reais já
@@ -97,6 +101,11 @@ export interface AuraReading {
   // nunca recomputa uma segunda geometria.
   plan: TradePlan | null;
   phase: AuraPhase | null;
+  // v2: which real target (plan.targets[targetIndex]) the corridor's tip
+  // geometrically points to right now — the NEXT unproven target while
+  // OPEN, or the LAST one actually reached once resolved. null only when
+  // there is no plan at all (DADOS_INSUFICIENTES).
+  targetIndex: number | null;
   targetProximity: TargetProximity | null;
   // Massa de opinião real do Confluence Engine (0..1) — largura/força do
   // corredor, NUNCA probabilidade de acerto (mesma honestidade de sempre).
@@ -115,6 +124,7 @@ function insufficient(reason: string, computedAt: number): AuraReading {
     reason,
     plan: null,
     phase: null,
+    targetIndex: null,
     targetProximity: null,
     corridorWidthFactor: null,
     pulseIntensity: null,
@@ -182,6 +192,7 @@ function selectTrackedPlan(trackRecord: TrackRecordState): TrackedPlan | null {
 function phaseFromStatus(tracked: TrackedPlan, ageBars: number): AuraPhase {
   if (tracked.status === "OPEN") return ageBars < BIRTH_BARS ? "BIRTH" : "ESTABLISHED";
   if (tracked.status === "TARGET_HIT") return "TARGET_HIT";
+  if (tracked.status === "PARTIAL_HIT") return "PARTIAL_HIT";
   if (tracked.status === "STOP_HIT") return "STOP_HIT";
   return "REPLACED";
 }
@@ -213,19 +224,28 @@ export function computeAuraReading(input: AuraLifecycleInput): AuraReading {
   // operação real em curso — diferente de "nada para mostrar". A rampa de
   // nascimento é honesta em desenhar quase nada por um instante; a
   // dissolução completa é honesta em parar de desenhar de vez.
-  const isDissolvePhase = phase === "TARGET_HIT" || phase === "STOP_HIT" || phase === "REPLACED";
+  const isDissolvePhase = phase === "TARGET_HIT" || phase === "PARTIAL_HIT" || phase === "STOP_HIT" || phase === "REPLACED";
   if (isDissolvePhase && fadeAlpha <= 0) {
     return insufficient("aura_dissolvida_apos_resolucao_real", computedAt);
   }
 
   const plan = tracked.plan;
+  // v2: enquanto ABERTO, o corredor aponta para o PRÓXIMO alvo real ainda
+  // não provado (tracked.targetsHit); resolvido (TARGET_HIT/PARTIAL_HIT),
+  // aponta para o ÚLTIMO alvo real de fato alcançado — nunca um índice
+  // fabricado fora do array real de alvos.
+  const targetIndex = phase === "TARGET_HIT" || phase === "PARTIAL_HIT"
+    ? Math.max(0, tracked.targetsHit - 1)
+    : Math.min(tracked.targetsHit, plan.targets.length - 1);
+  const activeTarget = plan.targets[targetIndex];
+
   let targetProximity: TargetProximity | null = null;
-  if (phase === "TARGET_HIT") {
+  if (phase === "TARGET_HIT" || phase === "PARTIAL_HIT") {
     targetProximity = "HIT";
   } else if ((phase === "BIRTH" || phase === "ESTABLISHED") && Number.isFinite(input.livePrice) && Number.isFinite(input.atrPercent)) {
     const price = input.livePrice as number;
     const atr = input.atrPercent as number;
-    const distancePercent = (Math.abs(price - plan.target.price) / plan.target.price) * 100;
+    const distancePercent = (Math.abs(price - activeTarget.price) / activeTarget.price) * 100;
     targetProximity = distancePercent <= atr * APPROACH_ATR_MULTIPLE ? "APPROACHING" : "WAITING";
   } else if (phase === "BIRTH" || phase === "ESTABLISHED") {
     // Sem ATR real ainda medido: não há banda honesta para "aproximando" —
@@ -243,6 +263,7 @@ export function computeAuraReading(input: AuraLifecycleInput): AuraReading {
     reason: null,
     plan,
     phase,
+    targetIndex,
     targetProximity,
     corridorWidthFactor,
     pulseIntensity,

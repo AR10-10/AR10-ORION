@@ -157,11 +157,11 @@ describe('EnhancedChart: Trade Plan drawn as silk-thread price lines (Signal Pre
     expect(block).not.toMatch(/LineStyle\.(Dashed|Dotted|LargeDashed|SparseDotted)/);
   });
 
-  it('English labels carry the real structure basis and the R:R (ENTRY/STOP/TARGET)', () => {
+  it('English labels carry the real structure basis and the R:R (ENTRY/STOP/TARGET, v2: one line per real target)', () => {
     const s = chart();
     expect(s).toContain('`ENTRY ${tradePlan.direction}');
     expect(s).toContain('`STOP · ${tradePlan.stop.basis}`');
-    expect(s).toContain('`TARGET · ${tradePlan.target.basis}');
+    expect(s).toContain('${label} · ${target.basis}');
   });
 
   it('fail-closed: no plan draws nothing, and lines are cleared on every change and on unmount', () => {

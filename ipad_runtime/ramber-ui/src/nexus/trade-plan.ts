@@ -1,7 +1,7 @@
 // trade-plan.ts — Signal Precision order (phase 4): when the Multi-Agent
 // Council reads LONG or SHORT, derive an actionable plan from REAL market
-// structure only — entry zone, protective stop and target, with the
-// resulting risk/reward ratio. Advisory output for a read-only terminal:
+// structure only — entry zone, protective stop and target(s), with the
+// resulting risk/reward ratio(s). Advisory output for a read-only terminal:
 // it never routes an order anywhere.
 //
 // Honesty rules (all fail-closed, locked by tests):
@@ -16,9 +16,17 @@
 //     targets (price is drawn to resting liquidity).
 //   - Stop = the next real level beyond the entry (structure invalidation).
 //     No real level beyond the entry → no coherent invalidation → no plan.
-//   - Target = the nearest opposing real level. None mapped → no plan.
+//   - Targets = up to 3 real opposing levels, nearest first (v2, Diretriz
+//     Complementar — Nexus Predictive Engine, §2). None mapped → no plan.
+//     1 or 2 real levels → a shorter, still honest, `targets` array — never
+//     a fabricated 2nd/3rd target when structure doesn't offer one.
 //   - Pure function of its inputs: same inputs, same plan, zero I/O.
-export const TRADE_PLAN_CONTRACT_VERSION = 1 as const;
+export const TRADE_PLAN_CONTRACT_VERSION = 2 as const;
+
+// Diretriz Complementar §2 asks for "Alvo 1/2/3" — three is the real ceiling
+// this repo's structural engines can honestly support without inventing
+// projected levels beyond what's actually mapped.
+export const MAX_TARGETS = 3;
 
 export interface TradePlanZone {
   low: number;
@@ -36,10 +44,15 @@ export interface TradePlan {
   direction: "LONG" | "SHORT";
   entry: TradePlanZone;
   stop: TradePlanLevel;
-  target: TradePlanLevel;
-  // (target − entry midpoint) / (entry midpoint − stop), mirrored for SHORT.
-  // null when the geometry degenerates (zero-risk entry) — never Infinity.
-  riskRewardRatio: number | null;
+  // v2: up to MAX_TARGETS real opposing levels, nearest-to-price first —
+  // targets[0] is the former single `target`. Length is always >= 1 (a
+  // plan requires at least one real target to exist at all) and never
+  // exceeds the count of real distinct opposing levels actually mapped.
+  targets: TradePlanLevel[];
+  // riskRewardRatios[i] mirrors targets[i]: (target − entry midpoint) /
+  // (entry midpoint − stop), mirrored for SHORT. null when the geometry
+  // degenerates (zero-risk entry) — never Infinity.
+  riskRewardRatios: (number | null)[];
   computedAt: number;
 }
 
@@ -112,26 +125,38 @@ export function buildTradePlan(inputs: TradePlanInputs, computedAt: number = Dat
   );
   const stop: TradePlanLevel = { price: stopAnchor.price, basis: stopAnchor.kind };
 
-  // Target: nearest opposing real level (resting liquidity included).
-  const targets = inputs.levels.filter((l) => fin(l.price) && targetKinds.test(l.kind) && (long ? l.price > price : l.price < price));
-  if (targets.length === 0) return null;
-  const targetAnchor = targets.reduce((best, l) =>
-    (long ? l.price < best.price : l.price > best.price) ? l : best,
+  // Targets (v2): every real opposing level (resting liquidity included),
+  // nearest-to-price first, deduped by exact price (two sources mapping the
+  // SAME real level don't count as two targets), capped at MAX_TARGETS —
+  // never a projected 2nd/3rd level invented beyond what structure offers.
+  const targetCandidates = inputs.levels.filter(
+    (l) => fin(l.price) && targetKinds.test(l.kind) && (long ? l.price > price : l.price < price),
   );
-  const target: TradePlanLevel = { price: targetAnchor.price, basis: targetAnchor.kind };
+  if (targetCandidates.length === 0) return null;
+  const sortedTargets = [...targetCandidates].sort((a, b) => (long ? a.price - b.price : b.price - a.price));
+  const targets: TradePlanLevel[] = [];
+  const seenPrices = new Set<number>();
+  for (const t of sortedTargets) {
+    if (seenPrices.has(t.price)) continue;
+    seenPrices.add(t.price);
+    targets.push({ price: t.price, basis: t.kind });
+    if (targets.length === MAX_TARGETS) break;
+  }
 
   const entryMid = (entry.low + entry.high) / 2;
   const risk = long ? entryMid - stop.price : stop.price - entryMid;
-  const reward = long ? target.price - entryMid : entryMid - target.price;
-  const riskRewardRatio = risk > 0 && reward > 0 ? reward / risk : null;
+  const riskRewardRatios = targets.map((t) => {
+    const reward = long ? t.price - entryMid : entryMid - t.price;
+    return risk > 0 && reward > 0 ? reward / risk : null;
+  });
 
   return {
     contractVersion: TRADE_PLAN_CONTRACT_VERSION,
     direction: stance,
     entry,
     stop,
-    target,
-    riskRewardRatio,
+    targets,
+    riskRewardRatios,
     computedAt,
   };
 }

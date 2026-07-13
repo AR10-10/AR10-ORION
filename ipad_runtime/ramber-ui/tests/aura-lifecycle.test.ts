@@ -14,12 +14,12 @@ const BAR_MS = 15 * 60_000; // 15m timeframe, mesma convenção do resto da suí
 
 function plan(overrides: Partial<TradePlan> = {}): TradePlan {
   return {
-    contractVersion: 1,
+    contractVersion: 2,
     direction: 'LONG',
     entry: { low: 98, high: 100, basis: 'OB_BULLISH' },
     stop: { price: 95, basis: 'SR_SUPPORT_1' },
-    target: { price: 110, basis: 'SR_RESISTANCE_1' },
-    riskRewardRatio: 2,
+    targets: [{ price: 110, basis: 'SR_RESISTANCE_1' }],
+    riskRewardRatios: [2],
     computedAt: T0,
     ...overrides,
   };
@@ -32,6 +32,8 @@ function tracked(overrides: Partial<TrackedPlan> = {}): TrackedPlan {
     status: 'OPEN',
     resolvedAt: null,
     resolvedPrice: null,
+    targetsHit: 0,
+    breakEvenSuggested: false,
     ...overrides,
   };
 }
@@ -181,6 +183,46 @@ describe('computeAuraReading: dissolução real após resolução (reaproveita a
       livePrice: 100, conviction: 0.5, atrPercent: 1, timeframeMs: BAR_MS, now: T0 + 1 * BAR_MS,
     });
     expect(r.phase).toBe('REPLACED');
+  });
+});
+
+describe('computeAuraReading v2 (Diretriz Complementar §2/§4): escada de alvos real', () => {
+  const twoTargets = plan({ targets: [{ price: 110, basis: 'SR_RESISTANCE_1' }, { price: 120, basis: 'EQH' }], riskRewardRatios: [2, 3] });
+
+  it('OPEN com targetsHit=0 aponta o corredor para o alvo 1 (targetIndex 0)', () => {
+    const r = computeAuraReading({
+      trackRecord: stateWithActive(tracked({ plan: twoTargets, targetsHit: 0 })),
+      livePrice: 100, conviction: 0.5, atrPercent: 1, timeframeMs: BAR_MS, now: T0 + 5 * BAR_MS,
+    });
+    expect(r.targetIndex).toBe(0);
+  });
+
+  it('OPEN com targetsHit=1 (break-even ativo) aponta o corredor para o PRÓXIMO alvo real (targetIndex 1)', () => {
+    const r = computeAuraReading({
+      trackRecord: stateWithActive(tracked({ plan: twoTargets, targetsHit: 1, breakEvenSuggested: true })),
+      livePrice: 111, conviction: 0.5, atrPercent: 1, timeframeMs: BAR_MS, now: T0 + 5 * BAR_MS,
+    });
+    expect(r.targetIndex).toBe(1);
+    expect(r.targetProximity).not.toBe('HIT'); // ainda ABERTO, nunca HIT antes de resolver
+  });
+
+  it('PARTIAL_HIT é uma fase real distinta de TARGET_HIT/STOP_HIT, targetIndex aponta pro ÚLTIMO alvo real alcançado', () => {
+    const r = computeAuraReading({
+      trackRecord: stateWithHistory(tracked({ plan: twoTargets, status: 'PARTIAL_HIT', targetsHit: 1, resolvedAt: T0, resolvedPrice: 105 })),
+      livePrice: 105, conviction: 0.5, atrPercent: 1, timeframeMs: BAR_MS, now: T0 + 1 * BAR_MS,
+    });
+    expect(r.phase).toBe('PARTIAL_HIT');
+    expect(r.targetIndex).toBe(0); // targetsHit=1 -> índice do alvo 1 (0-based)
+    expect(r.targetProximity).toBe('HIT');
+    expect(r.status).toBe('OK');
+  });
+
+  it('TARGET_HIT com escada de 2 alvos completa: targetIndex aponta pro alvo 2 (o último real)', () => {
+    const r = computeAuraReading({
+      trackRecord: stateWithHistory(tracked({ plan: twoTargets, status: 'TARGET_HIT', targetsHit: 2, resolvedAt: T0, resolvedPrice: 120 })),
+      livePrice: 120, conviction: 0.5, atrPercent: 1, timeframeMs: BAR_MS, now: T0 + 1 * BAR_MS,
+    });
+    expect(r.targetIndex).toBe(1);
   });
 });
 

@@ -41,12 +41,14 @@ describe('chart/NeuralMarketAuraPlugin.tsx: mesma arquitetura de overlay das irm
     expect(plugin).toContain('const bandWidth = Math.min(cssWidth, corridorWidthPx(corridorWidthFactor));');
   });
 
-  it('resolução (TARGET_HIT/STOP_HIT) usa cor de RESULTADO real, não de direção — um SHORT que bate o alvo é sucesso (verde), não "vermelho porque é short"', () => {
+  it('resolução (TARGET_HIT/PARTIAL_HIT/STOP_HIT) usa cor de RESULTADO real, não de direção — um SHORT que bate o alvo é sucesso (verde), não "vermelho porque é short"', () => {
     const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
     const fnMatch = plugin.match(/function phaseRgb\([\s\S]*?\n\}/);
     expect(fnMatch, 'phaseRgb não encontrada').not.toBeNull();
     const body = fnMatch![0];
-    expect(body).toContain('if (phase === "TARGET_HIT") return LONG_RGB;');
+    // v2: PARTIAL_HIT (>=1 alvo real provado antes do break-even) é um
+    // resultado validado real — mesma cor de sucesso do TARGET_HIT.
+    expect(body).toContain('if (phase === "TARGET_HIT" || phase === "PARTIAL_HIT") return LONG_RGB;');
     expect(body).toContain('if (phase === "STOP_HIT") return SHORT_RGB;');
   });
 
@@ -191,7 +193,7 @@ describe('voice-intents.ts + voice-dispatcher.ts: eventos reais do ciclo de vida
   it('TerminalSnapshot ganha os campos reais (aditivo)', () => {
     const intents = read('../src/voice/voice-intents.ts');
     expect(intents).toContain('tradePlanOpenKey: string | null;');
-    expect(intents).toContain("tradePlanResolutionStatus: 'TARGET_HIT' | 'STOP_HIT' | 'REPLACED' | null;");
+    expect(intents).toContain("tradePlanResolutionStatus: 'TARGET_HIT' | 'PARTIAL_HIT' | 'STOP_HIT' | 'REPLACED' | null;");
     expect(intents).toContain('inEntryZone: boolean;');
     expect(intents).toContain("convictionVerdict: 'CONFIRMS' | 'CONTRADICTS' | 'MIXED' | null;");
   });
