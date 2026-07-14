@@ -1829,8 +1829,9 @@ export default function App() {
         scoreReading: institutionalScore,
         council: councilFromSnapshot ?? null,
         inEntryZone: inEntryZoneNow,
+        orderflowTrend,
       }),
-    [engineStatus, engine?.direction, engine?.marketStructureLabel, convictionReading, institutionalScore, councilFromSnapshot, inEntryZoneNow],
+    [engineStatus, engine?.direction, engine?.marketStructureLabel, convictionReading, institutionalScore, councilFromSnapshot, inEntryZoneNow, orderflowTrend],
   );
 
   const auraVoiceInputs = {

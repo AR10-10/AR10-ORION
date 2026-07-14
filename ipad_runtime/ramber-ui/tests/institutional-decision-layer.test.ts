@@ -9,6 +9,7 @@ import { computeInstitutionalScore, DEFAULT_MIN_OPPORTUNITY_SCORE } from '../src
 import { buildAssistantMessages, ASSISTANT_MAX_MESSAGES } from '../src/nexus/operation-assistant';
 import type { ConvictionReading } from '../src/nexus/confluence-engine';
 import type { CouncilDecision, CouncilVote } from '../src/nexus/council';
+import type { OrderflowTrend, OrderflowTrendReading } from '../src/nexus/orderflow-history';
 
 function conviction(over: Partial<ConvictionReading> = {}): ConvictionReading {
   return {
@@ -42,6 +43,12 @@ function council(over: Partial<CouncilDecision> = {}, votes: CouncilVote[] = [])
     computedAt: 1,
     ...over,
   };
+}
+
+function trend(t: OrderflowTrend | null): OrderflowTrendReading {
+  return t === null
+    ? { status: 'DADOS_INSUFICIENTES', reason: 'fixture', trend: null, recentSlope: null, priorSlope: null, computedAt: 1 }
+    : { status: 'OK', reason: null, trend: t, recentSlope: 1, priorSlope: 0.5, computedAt: 1 };
 }
 
 describe('computeInstitutionalScore: contrato de apresentação sobre a confluência real — zero segunda matemática', () => {
@@ -95,33 +102,33 @@ describe('buildAssistantMessages: tradução determinística de leituras reais �
   const okScore = computeInstitutionalScore({ engineStatus: 'ok', coreDirection: 'LONG', conviction: conviction({ conviction: 0.72 }), riskGated: false, now: 1 });
 
   it('Core LONG + CONFIRMS => "Compra favorecida" com basis citando os subsistemas reais', () => {
-    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: conviction(), scoreReading: okScore, council: council(), inEntryZone: false });
+    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: conviction(), scoreReading: okScore, council: council(), inEntryZone: false, orderflowTrend: null });
     expect(msgs[0].text).toBe('Compra favorecida');
     expect(msgs[0].tone).toBe('POSITIVE');
     expect(msgs[0].basis).toContain('3/3');
   });
 
   it('Core SHORT + CONTRADICTS => "Venda perde força" (cautela real, nunca opinião própria)', () => {
-    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'SHORT', structureLabel: 'BAIXA', conviction: conviction({ coreDirection: 'SHORT', verdict: 'CONTRADICTS' }), scoreReading: null, council: null, inEntryZone: false });
+    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'SHORT', structureLabel: 'BAIXA', conviction: conviction({ coreDirection: 'SHORT', verdict: 'CONTRADICTS' }), scoreReading: null, council: null, inEntryZone: false, orderflowTrend: null });
     expect(msgs[0].text).toBe('Venda perde força');
     expect(msgs[0].tone).toBe('CAUTION');
   });
 
   it('WAIT + estrutura LATERAL => "Mercado lateral"; WAIT sem lateral => "Aguarde confirmação" — sempre espelho do Core', () => {
-    const lateral = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'WAIT', structureLabel: 'LATERAL', conviction: null, scoreReading: null, council: null, inEntryZone: false });
+    const lateral = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'WAIT', structureLabel: 'LATERAL', conviction: null, scoreReading: null, council: null, inEntryZone: false, orderflowTrend: null });
     expect(lateral[0].text).toBe('Mercado lateral');
-    const wait = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'WAIT', structureLabel: 'ALTA', conviction: null, scoreReading: null, council: null, inEntryZone: false });
+    const wait = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'WAIT', structureLabel: 'ALTA', conviction: null, scoreReading: null, council: null, inEntryZone: false, orderflowTrend: null });
     expect(wait[0].text).toBe('Aguarde confirmação');
   });
 
   it('risco travado vem PRIMEIRO ("Risco elevado") — a verdade mais urgente', () => {
-    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: conviction(), scoreReading: okScore, council: council({ riskGated: true }), inEntryZone: false });
+    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: conviction(), scoreReading: okScore, council: council({ riskGated: true }), inEntryZone: false, orderflowTrend: null });
     expect(msgs[0].text).toBe('Risco elevado');
     expect(msgs[0].tone).toBe('RISK');
   });
 
   it('frases de score usam "confluência", nunca "probabilidade" (Regra de Ouro 2 — desvio documentado dos exemplos da diretriz)', () => {
-    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: conviction(), scoreReading: okScore, council: null, inEntryZone: false });
+    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: conviction(), scoreReading: okScore, council: null, inEntryZone: false, orderflowTrend: null });
     const scoreMsg = msgs.find((m) => m.text === 'Alta confluência');
     expect(scoreMsg).toBeDefined();
     for (const m of msgs) {
@@ -131,29 +138,55 @@ describe('buildAssistantMessages: tradução determinística de leituras reais �
 
   it('"Liquidez acima/abaixo" e "Fluxo comprador/vendedor" vêm dos votos REAIS do Conselho, nunca recalculados', () => {
     const c = council({}, [vote('LIQUIDITY', 'LONG'), vote('ORDERFLOW', 'SHORT')]);
-    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'WAIT', structureLabel: 'ALTA', conviction: null, scoreReading: null, council: c, inEntryZone: false });
+    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'WAIT', structureLabel: 'ALTA', conviction: null, scoreReading: null, council: c, inEntryZone: false, orderflowTrend: null });
     expect(msgs.map((m) => m.text)).toContain('Liquidez acima');
     expect(msgs.map((m) => m.text)).toContain('Fluxo vendedor');
   });
 
+  it('§9/§18: "Fluxo comprador" ganha "fortalecendo"/"perdendo força" da tendência REAL — honra o exemplo literal da diretriz sem 2ª medida', () => {
+    const cLong = council({}, [vote('ORDERFLOW', 'LONG')]);
+    const strengthening = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'WAIT', structureLabel: 'ALTA', conviction: null, scoreReading: null, council: cLong, inEntryZone: false, orderflowTrend: trend('FORTALECENDO') });
+    expect(strengthening.map((m) => m.text)).toContain('Fluxo comprador fortalecendo');
+
+    const weakening = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'WAIT', structureLabel: 'ALTA', conviction: null, scoreReading: null, council: cLong, inEntryZone: false, orderflowTrend: trend('ENFRAQUECENDO') });
+    expect(weakening.map((m) => m.text)).toContain('Fluxo comprador perdendo força');
+  });
+
+  it('§9/§18: para "Fluxo vendedor" o rótulo se INVERTE — ENFRAQUECENDO (da pressão compradora) = venda fortalecendo', () => {
+    const cShort = council({}, [vote('ORDERFLOW', 'SHORT')]);
+    const strengthening = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'WAIT', structureLabel: 'ALTA', conviction: null, scoreReading: null, council: cShort, inEntryZone: false, orderflowTrend: trend('ENFRAQUECENDO') });
+    expect(strengthening.map((m) => m.text)).toContain('Fluxo vendedor fortalecendo');
+
+    const weakening = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'WAIT', structureLabel: 'ALTA', conviction: null, scoreReading: null, council: cShort, inEntryZone: false, orderflowTrend: trend('FORTALECENDO') });
+    expect(weakening.map((m) => m.text)).toContain('Fluxo vendedor perdendo força');
+  });
+
+  it('FAIL_CLOSED: ESTAVEL ou tendência indisponível => sem qualificador — nunca "fortalecendo" forçado', () => {
+    const cLong = council({}, [vote('ORDERFLOW', 'LONG')]);
+    const stable = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'WAIT', structureLabel: 'ALTA', conviction: null, scoreReading: null, council: cLong, inEntryZone: false, orderflowTrend: trend('ESTAVEL') });
+    expect(stable.map((m) => m.text)).toContain('Fluxo comprador');
+    const insufficient = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'WAIT', structureLabel: 'ALTA', conviction: null, scoreReading: null, council: cLong, inEntryZone: false, orderflowTrend: trend(null) });
+    expect(insufficient.map((m) => m.text)).toContain('Fluxo comprador');
+  });
+
   it('teto real de 3 mensagens mesmo com muitas verdades simultâneas — "nunca utilizar textos longos"', () => {
     const c = council({ riskGated: true }, [vote('LIQUIDITY', 'LONG'), vote('ORDERFLOW', 'LONG')]);
-    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: conviction(), scoreReading: okScore, council: c, inEntryZone: true });
+    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: conviction(), scoreReading: okScore, council: c, inEntryZone: true, orderflowTrend: null });
     expect(msgs.length).toBeLessThanOrEqual(ASSISTANT_MAX_MESSAGES);
   });
 
   it('motor pending/error => uma única mensagem de saúde, nenhuma frase operacional fabricada', () => {
-    const pending = buildAssistantMessages({ engineStatus: 'pending', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: conviction(), scoreReading: okScore, council: council(), inEntryZone: true });
+    const pending = buildAssistantMessages({ engineStatus: 'pending', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: conviction(), scoreReading: okScore, council: council(), inEntryZone: true, orderflowTrend: null });
     expect(pending).toHaveLength(1);
     expect(pending[0].text).toBe('Aguardando dados reais');
-    const error = buildAssistantMessages({ engineStatus: 'error', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: null, scoreReading: null, council: null, inEntryZone: false });
+    const error = buildAssistantMessages({ engineStatus: 'error', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: null, scoreReading: null, council: null, inEntryZone: false, orderflowTrend: null });
     expect(error).toHaveLength(1);
     expect(error[0].tone).toBe('RISK');
   });
 
   it('toda mensagem carrega basis real não-vazia — "nunca gerar recomendações sem justificativa"', () => {
     const c = council({}, [vote('LIQUIDITY', 'SHORT'), vote('ORDERFLOW', 'LONG')]);
-    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: conviction({ verdict: 'MIXED' }), scoreReading: okScore, council: c, inEntryZone: true });
+    const msgs = buildAssistantMessages({ engineStatus: 'ok', coreDirection: 'LONG', structureLabel: 'ALTA', conviction: conviction({ verdict: 'MIXED' }), scoreReading: okScore, council: c, inEntryZone: true, orderflowTrend: null });
     for (const m of msgs) expect(m.basis.length).toBeGreaterThan(10);
   });
 });

@@ -35,6 +35,13 @@ describe('App.tsx: Score + Assistente computados UMA vez (padrão convictionRead
     expect(m![1]).toContain('inEntryZone: inEntryZoneNow,');
   });
 
+  it('§9/§18: assistantMessages também recebe o orderflowTrend real (mesma leitura do widget de regime) — zero 2ª medida de fluxo', () => {
+    const app = read('../src/App.tsx');
+    const m = app.match(/const assistantMessages = useMemo\(([\s\S]*?)\);/);
+    expect(m, 'assistantMessages não encontrado').not.toBeNull();
+    expect(m![1]).toContain('orderflowTrend,');
+  });
+
   it('TDZ real: institutionalScore/assistantMessages declarados DEPOIS de convictionReading/inEntryZoneNow e ANTES de contextValue', () => {
     const app = read('../src/App.tsx');
     const convictionIdx = app.indexOf('const convictionReading = useMemo(');
