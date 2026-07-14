@@ -60,6 +60,8 @@ import { patchLastCandleWithLiveTick } from "../nexus/live-candle-sync";
 import type { Timeframe } from "../nexus/types";
 // Signal Precision order: actionable plan drawn as silk-thread price lines.
 import type { TradePlan } from "../nexus/trade-plan";
+import { effectiveStopForTargetsHit } from "../nexus/trade-plan";
+import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
 // Research-driven precision order: VWAP, the institutional-standard
 // intraday reference level this system was missing entirely (confirmed
 // via a full-codebase grep before writing nexus/vwap.ts).
@@ -186,6 +188,12 @@ interface EnhancedChartProps {
   // break-even stop redraw below. Optional/fail-closed: absent => 0, the
   // same as "no real progress yet" (never a fabricated hit).
   targetsHit?: number;
+  // Diretriz Complementar §17 ("Projeção Visual Inteligente"): a MESMA
+  // Zona de Confiança Institucional já real (§16, institutional-score.ts)
+  // — a zona de entrada abaixo lê mais ou menos nítida conforme esta
+  // confluência real. Optional/fail-closed: absent/null => peso neutro
+  // default (ver TradePlanZonePlugin).
+  confidenceZone?: InstitutionalConfidenceZone | null;
   // Camadas do Gráfico (Finding M): per-plugin visibility toggle from the
   // new settings panel. Optional and fail-closed: absent/undefined means
   // every layer stays visible (DEFAULT_CHART_LAYER_VISIBILITY), the exact
@@ -256,6 +264,7 @@ export function EnhancedChart_110_Percent({
   tradePlan,
   aura,
   targetsHit,
+  confidenceZone,
   layerVisibility,
   emaPeriod,
   onRequestOlderCandles,
@@ -728,20 +737,26 @@ export function EnhancedChart_110_Percent({
   // instantaneous livePrice alone — a target once proven stays marked
   // REACHED even if price later pulls back below it (re-deriving from
   // livePrice would flip the marker back off, which is dishonest: the
-  // level WAS touched). The stop line itself moves to break-even (real
-  // entry price) the instant targetsHit > 0 — the same mechanical
-  // convention the track record applies internally — "quando o cenário
-  // muda, o desenho muda" (Diretriz Complementar §5).
+  // level WAS touched). The stop line itself ratchets forward the instant
+  // targetsHit > 0 — break-even after the 1st real target, then the
+  // PREVIOUS target's price after each subsequent one (§18 "trailing stop
+  // além do break-even") — via effectiveStopForTargetsHit(), the SAME
+  // single real source the track record uses internally, never a second
+  // formula here. "Quando o cenário muda, o desenho muda" (Diretriz
+  // Complementar §5).
   useEffect(() => {
     if (!tradePlan) return;
     const hits = targetsHit ?? 0;
-    const entryMid = (tradePlan.entry.low + tradePlan.entry.high) / 2;
-    const breakEvenActive = hits > 0;
-    const effectiveStopPrice = breakEvenActive ? entryMid : tradePlan.stop.price;
+    const stopRatchetActive = hits > 0;
+    const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);
     const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
     const long = tradePlan.direction === "LONG";
     const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
-    const stopTitle = breakEvenActive ? `STOP · BREAK-EVEN (real)` : `STOP · ${tradePlan.stop.basis}`;
+    const stopTitle = hits >= 2
+      ? `STOP · TRILHADO (alvo ${hits - 1})`
+      : stopRatchetActive
+        ? `STOP · BREAK-EVEN (real)`
+        : `STOP · ${tradePlan.stop.basis}`;
     stopLineRef.current?.applyOptions({
       price: effectiveStopPrice,
       color: stopHitNow ? "rgba(255, 0, 85, 1)" : "rgba(255, 0, 85, 0.75)",
@@ -832,6 +847,7 @@ export function EnhancedChart_110_Percent({
           series={chartReady?.series ?? null}
           entryLow={tradePlan?.entry.low ?? null}
           entryHigh={tradePlan?.entry.high ?? null}
+          confidenceZone={confidenceZone ?? null}
         />
       )}
     </div>

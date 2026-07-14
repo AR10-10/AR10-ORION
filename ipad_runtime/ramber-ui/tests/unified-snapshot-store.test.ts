@@ -258,3 +258,37 @@ describe('unified-snapshot-store (V-MAX Fase 1.1): l2History retém amostras rea
     expect(useUnifiedSnapshotStore.getState().l2History.BINANCE).toHaveLength(180);
   });
 });
+
+describe('unified-snapshot-store (Diretriz Complementar §18/§4): institutionalScoreHistory retém só amostras REAIS, nunca fabrica uma entrada', () => {
+  beforeEach(() => {
+    useUnifiedSnapshotStore.setState(RESET);
+    useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();
+  });
+
+  it('começa vazio — nenhum score fabricado antes do primeiro ciclo real', () => {
+    expect(useUnifiedSnapshotStore.getState().institutionalScoreHistory).toEqual([]);
+  });
+
+  it('recordInstitutionalScore grava a amostra real com timestamp real', () => {
+    useUnifiedSnapshotStore.getState().recordInstitutionalScore(72);
+    const history = useUnifiedSnapshotStore.getState().institutionalScoreHistory;
+    expect(history).toHaveLength(1);
+    expect(history[0].score).toBe(72);
+    expect(typeof history[0].at).toBe('number');
+  });
+
+  it('amostras reais sucessivas se acumulam em ordem, respeitando o teto real (CONVICTION_HISTORY_CAPACITY)', () => {
+    const store = useUnifiedSnapshotStore.getState();
+    for (let i = 0; i < 65; i++) store.recordInstitutionalScore(i);
+    const history = useUnifiedSnapshotStore.getState().institutionalScoreHistory;
+    expect(history).toHaveLength(60);
+    expect(history[0].score).toBe(5); // as 5 mais antigas caíram do ring
+    expect(history[59].score).toBe(64);
+  });
+
+  it('resetInstitutionalScoreHistory limpa a série — mesma disciplina de troca de ativo que orderflowHistory/l2History já têm', () => {
+    useUnifiedSnapshotStore.getState().recordInstitutionalScore(80);
+    useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();
+    expect(useUnifiedSnapshotStore.getState().institutionalScoreHistory).toEqual([]);
+  });
+});

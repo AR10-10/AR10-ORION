@@ -13,7 +13,7 @@ const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 describe('App.tsx: confidenceZone computado UMA vez sobre o mesmo institutionalScore, compartilhado via contextValue', () => {
   it('importa a função pura real do módulo já real (institutional-score.ts), nunca uma segunda fórmula', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('import { computeInstitutionalScore, institutionalConfidenceZone } from "./nexus/institutional-score";');
+    expect(app).toContain('import { computeInstitutionalScore, institutionalConfidenceZone, computeConvictionTrend } from "./nexus/institutional-score";');
   });
 
   it('confidenceZone deriva de institutionalScore.score — zero segunda fonte', () => {
@@ -45,7 +45,7 @@ describe('App.tsx: confidenceZone computado UMA vez sobre o mesmo institutionalS
 describe('Header: Score badge exibe a banda real §16 — cor e rótulo 1:1 com confidenceZone, nunca um segundo cálculo', () => {
   it('destrutura confidenceZone do WidgetContext ao lado de institutionalScore', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('institutionalScore,\n    confidenceZone,\n    assistantMessages,');
+    expect(app).toContain('institutionalScore,\n    confidenceZone,\n    convictionTrend,\n    assistantMessages,');
   });
 
   it('a cor do número vem de confidenceZone.colorClass — nunca um limiar redundante hardcoded', () => {

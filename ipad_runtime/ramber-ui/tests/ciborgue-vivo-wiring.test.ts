@@ -56,7 +56,7 @@ describe('App.tsx: bosChoch computado antes de voiceSnapshot (dependência real 
 describe('App.tsx → EnhancedChart_110_Percent: structureBreak passa ponta a ponta até o plugin', () => {
   it('ChartWidget lê bosChoch do contexto e repassa structureBreak={bosChoch?.break ?? null}', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod } = useContext(WidgetContext) || {};');
+    expect(app).toContain('const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod, confidenceZone } = useContext(WidgetContext) || {};');
     expect(app).toContain('structureBreak={bosChoch?.break ?? null}');
   });
 

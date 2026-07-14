@@ -37,6 +37,43 @@ describe('TradePlanZonePlugin: "Fio de Seda" (Regra de Ouro 2) — border never 
   });
 });
 
+describe('TradePlanZonePlugin: §17 confidence-scaled opacity — the SAME real §16 Confidence Zone, never a fabricated probability', () => {
+  it('imports the real InstitutionalConfidenceZone type — zero second banding', () => {
+    expect(plugin()).toContain('import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";');
+  });
+
+  it('all 5 real tiers are mapped, each strictly decreasing toward a legible floor — never fully invisible', () => {
+    const s = plugin();
+    const m = s.match(/const OPACITY_BY_TIER: Record<InstitutionalConfidenceZone\["tier"\], number> = \{([\s\S]*?)\};/);
+    expect(m, 'OPACITY_BY_TIER não encontrado').not.toBeNull();
+    const body = m![1];
+    expect(body).toContain('MUITO_FORTE: 1,');
+    expect(body).toContain('FORTE: 0.85,');
+    expect(body).toContain('MODERADA: 0.7,');
+    expect(body).toContain('FRACA: 0.55,');
+    expect(body).toContain('INVALIDA: 0.4,');
+  });
+
+  it('null zone (WAIT/DADOS_INSUFICIENTES) uses a neutral documented default — never zero, never the ceiling', () => {
+    const s = plugin();
+    expect(s).toContain('const DEFAULT_OPACITY_MULTIPLIER = 0.7;');
+    expect(s).toContain('return zone ? OPACITY_BY_TIER[zone.tier] : DEFAULT_OPACITY_MULTIPLIER;');
+  });
+
+  it('the draw loop multiplies the SAME base ZONE_FILL/ZONE_BORDER alpha — never a second color/palette', () => {
+    const s = plugin();
+    expect(s).toContain('ctx.fillStyle = withAlpha(ZONE_FILL, alphaOf(ZONE_FILL) * multiplier);');
+    expect(s).toContain('ctx.strokeStyle = withAlpha(ZONE_BORDER, alphaOf(ZONE_BORDER) * multiplier);');
+  });
+
+  it('confidenceZone is threaded through the same ref pattern as entryLow/entryHigh — always latest, never re-triggers the setup effect', () => {
+    const s = plugin();
+    expect(s).toContain('const rangeRef = useRef({ entryLow, entryHigh, confidenceZone });');
+    expect(s).toContain('rangeRef.current = { entryLow, entryHigh, confidenceZone };');
+    expect(s).toContain('}, [entryLow, entryHigh, confidenceZone]);');
+  });
+});
+
 describe('TradePlanZonePlugin: real geometry, fail-closed, never a fabricated pixel', () => {
   it('resolves price to pixel via series.priceToCoordinate — never a fixed/guessed coordinate', () => {
     expect(plugin()).toContain('series.priceToCoordinate(');
@@ -85,6 +122,24 @@ describe('EnhancedChart_110_Percent: mounts TradePlanZonePlugin as the topmost o
     expect(s).toContain('entryLow={tradePlan?.entry.low ?? null}');
     expect(s).toContain('entryHigh={tradePlan?.entry.high ?? null}');
   });
+
+  it('§17: threads the real confidenceZone prop through to the plugin, fail-closed to null when absent', () => {
+    const s = chart();
+    expect(s).toContain('import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";');
+    expect(s).toContain('confidenceZone={confidenceZone ?? null}');
+  });
+});
+
+describe('App.tsx: threads the real confidenceZone (§16) from context into ChartWidget → EnhancedChart_110_Percent', () => {
+  it('ChartWidget destructures confidenceZone from the shared WidgetContext', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('convictionReading, chartLayerVisibility, emaPeriod, confidenceZone } = useContext(WidgetContext) || {};');
+  });
+
+  it('passes it straight through to EnhancedChart_110_Percent — zero recomputation', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('confidenceZone={confidenceZone ?? null}');
+  });
 });
 
 describe('EnhancedChart_110_Percent: stop/target hit-boost v2 (Ordem Final Autonomia Evolução §1 + Diretriz Complementar §2/§4)', () => {
@@ -122,12 +177,19 @@ describe('EnhancedChart_110_Percent: stop/target hit-boost v2 (Ordem Final Auton
     expect(block).toContain('const reached = i < hits;');
   });
 
-  it('v2: the stop line itself moves to break-even (real entry price) once targetsHit > 0 — "quando o cenário muda, o desenho muda"', () => {
+  it('v2: the stop line itself ratchets forward once targetsHit > 0 — "quando o cenário muda, o desenho muda"', () => {
     const s = chart();
     const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit]);'));
-    expect(block).toContain('const breakEvenActive = hits > 0;');
-    expect(block).toContain('const effectiveStopPrice = breakEvenActive ? entryMid : tradePlan.stop.price;');
+    expect(block).toContain('const stopRatchetActive = hits > 0;');
+    expect(block).toContain('const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);');
     expect(block).toContain('price: effectiveStopPrice,');
+  });
+
+  it('§18 trailing stop além do break-even: the ratchet formula is imported from the SAME single real source signal-track-record.ts uses — never a second local formula', () => {
+    const s = chart();
+    expect(s).toContain('import { effectiveStopForTargetsHit } from "../nexus/trade-plan";');
+    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit]);'));
+    expect(block).not.toContain('const entryMid =');
   });
 
   it('a non-finite or absent live price never resolves a STOP BREACHED (fail-closed) — target REACHED still updates from the authoritative ratchet regardless', () => {

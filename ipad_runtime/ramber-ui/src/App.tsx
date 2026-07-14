@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory } from "./store/unified-snapshot-store";
 // Ordem "Ciborgue Vivo" §3: síntese real de autodiagnóstico — mesmos
 // sinais do Health Monitor/Data Quality Layer, nunca uma segunda medição.
 import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/self-diagnostics";
@@ -19,7 +19,7 @@ import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/s
 // engine-bridge.ts usa para orquestrar, nunca uma segunda lista duplicada.
 import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } from "./nexus/multi-timeframe-engine";
 // Signal Precision order (phase 4): actionable plan from real structure.
-import { buildTradePlan, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
+import { buildTradePlan, effectiveStopForTargetsHit, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
 // Autonomy order: honest signal accuracy — plans tracked against the real
 // price, persisted across sessions, felt by the affective memory.
 import { rehydrateTrackRecord, hitRate } from "./nexus/signal-track-record";
@@ -111,7 +111,11 @@ import { computeTargetEtas, formatEtaDuration } from "./nexus/eta-engine";
 // 0-100 (contrato de apresentação sobre a confluência real — zero segunda
 // matemática de consenso) + Assistente Operacional (frases curtas, sempre
 // tradução de leitura real, LEI 24 — ver cabeçalhos dos dois módulos).
-import { computeInstitutionalScore, institutionalConfidenceZone } from "./nexus/institutional-score";
+import { computeInstitutionalScore, institutionalConfidenceZone, computeConvictionTrend } from "./nexus/institutional-score";
+// Diretriz Complementar §18 ("tendência de força do fluxo"): motor puro
+// real que reduz a MESMA série de CVD já retida (orderflow-history.ts,
+// já consumida pelo heatmap) numa tendência — zero segunda fonte.
+import { computeOrderflowTrend } from "./nexus/orderflow-history";
 import { buildAssistantMessages } from "./nexus/operation-assistant";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
@@ -782,6 +786,9 @@ export default function App() {
     // do ativo antigo sobrepostas ao gráfico do novo por vários minutos.
     useUnifiedSnapshotStore.getState().resetL2History();
     useUnifiedSnapshotStore.getState().resetOrderflowHistory();
+    // Diretriz Complementar §18/§4: mesma disciplina — a série do Score
+    // Geral do ativo ANTERIOR não pode vazar para a tendência do novo.
+    useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();
     useUnifiedSnapshotStore.getState().setVolumeProfile(null);
     volumeProfileLastComputeRef.current = 0;
     orderflowThresholdStateRef.current = EMPTY_THRESHOLD_STATE;
@@ -1675,6 +1682,13 @@ export default function App() {
     }
   }, [priceFromSnapshot]);
   const trackRecordSlice = useTrackRecordSnapshot();
+  // Diretriz Complementar §18: mesma série real de CVD já retida na store
+  // (o heatmap já consome este exato hook) — zero fetch novo, zero segunda
+  // série.
+  const orderflowHistoryForTrend = useOrderflowHistory();
+  // Diretriz Complementar §18/§4 ("Conviction Engine"): mesma série real do
+  // Score Geral já retida na store — zero segunda fonte.
+  const institutionalScoreHistory = useInstitutionalScoreHistory();
   const prevTrackRecordRef = useRef(trackRecordSlice);
   useEffect(() => {
     const prev = prevTrackRecordRef.current;
@@ -1762,10 +1776,25 @@ export default function App() {
       }),
     [engineStatus, engine?.direction, convictionReading, councilFromSnapshot],
   );
+  // Diretriz Complementar §18/§4 ("Conviction Engine"): registra na store a
+  // amostra REAL do Score Geral a cada ciclo em que ele existe (WAIT/
+  // DADOS_INSUFICIENTES nunca — pontuar o nada seria fabricação). Efeito,
+  // não useMemo: é uma escrita real na store, não uma derivação pura.
+  useEffect(() => {
+    if (institutionalScore.score !== null) {
+      useUnifiedSnapshotStore.getState().recordInstitutionalScore(institutionalScore.score);
+    }
+  }, [institutionalScore]);
   // Diretriz Complementar §16 ("Zona de Confiança Institucional"): banda
   // pura de apresentação sobre o mesmo institutionalScore acima — zero
   // segunda fonte, zero matemática nova (ver institutional-score.ts).
   const confidenceZone = useMemo(() => institutionalConfidenceZone(institutionalScore.score), [institutionalScore]);
+  // Diretriz Complementar §18: tendência real de força do fluxo — mesma
+  // série de CVD já retida, reduzida a FORTALECENDO/ENFRAQUECENDO/ESTAVEL.
+  const orderflowTrend = useMemo(() => computeOrderflowTrend(orderflowHistoryForTrend), [orderflowHistoryForTrend]);
+  // Diretriz Complementar §18/§4 ("Conviction Engine"): tendência real do
+  // Score Geral (média recente vs. anterior da MESMA série acima).
+  const convictionTrend = useMemo(() => computeConvictionTrend(institutionalScoreHistory), [institutionalScoreHistory]);
   const assistantMessages = useMemo(
     () =>
       buildAssistantMessages({
@@ -2151,6 +2180,8 @@ export default function App() {
       convictionReading,
       institutionalScore,
       confidenceZone,
+      orderflowTrend,
+      convictionTrend,
       assistantMessages,
       etaReading,
       riskSuggestion,
@@ -2203,6 +2234,8 @@ export default function App() {
       convictionReading,
       institutionalScore,
       confidenceZone,
+      orderflowTrend,
+      convictionTrend,
       assistantMessages,
       etaReading,
       riskSuggestion,
@@ -3535,8 +3568,7 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   const activeTargetIndex = Math.min(targetsHit, plan.targets.length - 1);
   const activeTarget = plan.targets[activeTargetIndex];
   const breakEvenActive = targetsHit > 0;
-  const entryMid = (plan.entry.low + plan.entry.high) / 2;
-  const effectiveStopPrice = breakEvenActive ? entryMid : plan.stop.price;
+  const effectiveStopPrice = effectiveStopForTargetsHit(plan, targetsHit);
   const long = plan.direction === "LONG";
   const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
   const targetHit = activeTargetIndex < targetsHit; // true once the ladder already proved this rung (authoritative, never re-derived)
@@ -3588,7 +3620,7 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
         hit={targetHit}
       />
       <BarField
-        label={breakEvenActive ? "Stop (B/E)" : "Stop"}
+        label={targetsHit >= 2 ? `Stop (Alvo ${targetsHit - 1})` : breakEvenActive ? "Stop (B/E)" : "Stop"}
         value={f(effectiveStopPrice)}
         labelClass="text-[#ff0055]/70"
         valueClass="text-[#ff0055]/90"
@@ -3726,6 +3758,7 @@ function TopBar({ data }: { data?: PriceState | null }) {
     engine,
     institutionalScore,
     confidenceZone,
+    convictionTrend,
     assistantMessages,
   } = useContext(WidgetContext) || {};
   // Overhaul Cross-Market (Diretriz 2): o rótulo do mercado é passthrough
@@ -3878,18 +3911,40 @@ function TopBar({ data }: { data?: PriceState | null }) {
               className="hidden md:flex flex-col items-center justify-center pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
               title={
                 institutionalScore?.score !== null && institutionalScore?.score !== undefined
-                  ? `Score real de confluência entre subsistemas (0-100) — nunca probabilidade de acerto. Zona: ${confidenceZone?.label ?? DASH}. ${institutionalScore.opportunity ? "Acima do nível mínimo de oportunidade." : "Abaixo do nível mínimo, ou risco travado."}`
+                  ? `Score real de confluência entre subsistemas (0-100) — nunca probabilidade de acerto. Zona: ${confidenceZone?.label ?? DASH}. ${institutionalScore.opportunity ? "Acima do nível mínimo de oportunidade." : "Abaixo do nível mínimo, ou risco travado."} ${
+                      convictionTrend?.status === "OK" && convictionTrend.trend
+                        ? `Tendência: ${convictionTrend.trend} (média recente ${convictionTrend.recentAverage!.toFixed(1)} vs. anterior ${convictionTrend.priorAverage!.toFixed(1)}).`
+                        : "Diretriz Complementar §4 (Conviction Engine): histórico real ainda insuficiente para uma tendência honesta."
+                    }`
                   : "Sem oportunidade direcional a pontuar agora (Core Engine em WAIT ou dados insuficientes)."
               }
             >
               <span className="text-[0.42rem] tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">Score</span>
-              <span
-                className={`text-[0.7rem] font-black font-mono tabular-nums ${
-                  confidenceZone === null ? "text-[#8ab4f8]/40" : `${confidenceZone.colorClass} drop-shadow-[0_0_5px_currentColor]`
-                }`}
-              >
-                {institutionalScore?.score ?? DASH}
-              </span>
+              <div className="flex items-center gap-0.5">
+                <span
+                  className={`text-[0.7rem] font-black font-mono tabular-nums ${
+                    confidenceZone === null ? "text-[#8ab4f8]/40" : `${confidenceZone.colorClass} drop-shadow-[0_0_5px_currentColor]`
+                  }`}
+                >
+                  {institutionalScore?.score ?? DASH}
+                </span>
+                {/* Diretriz Complementar §4 ("Conviction Engine"): ▲/▬/▼ real
+                    sobre a MESMA série do Score acima — nunca substitui o
+                    Score, só informa se a confluência está subindo/caindo. */}
+                {convictionTrend?.status === "OK" && convictionTrend.trend && (
+                  <span
+                    className={`text-[0.55rem] font-black leading-none ${
+                      convictionTrend.trend === "FORTALECENDO"
+                        ? "text-[#00ffaa]"
+                        : convictionTrend.trend === "ENFRAQUECENDO"
+                          ? "text-[#ff0055]"
+                          : "text-[#8ab4f8]/60"
+                    }`}
+                  >
+                    {convictionTrend.trend === "FORTALECENDO" ? "▲" : convictionTrend.trend === "ENFRAQUECENDO" ? "▼" : "▬"}
+                  </span>
+                )}
+              </div>
               {confidenceZone && (
                 <span className={`text-[0.38rem] font-bold uppercase tracking-wider ${confidenceZone.colorClass}`}>
                   {confidenceZone.emoji} {confidenceZone.label}
@@ -4807,7 +4862,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod } = useContext(WidgetContext) || {};
+  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod, confidenceZone } = useContext(WidgetContext) || {};
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
   // Correção de latência: o MESMO preço real que já alimenta a barra
   // superior (usePriceSnapshot — escrito na store a cada tick do WS,
@@ -4912,6 +4967,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             tradePlan={chartTradePlan}
             aura={auraReading}
             targetsHit={auraTrackRecord.active?.targetsHit ?? 0}
+            confidenceZone={confidenceZone ?? null}
             layerVisibility={chartLayerVisibility}
             emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}
@@ -5739,7 +5795,7 @@ const REGIME_DISPLAY: Record<string, { label: string; color: string }> = {
 };
 
 function MarketRegimeWidget() {
-  const { engine, cvd, currentRsi, chartTimeframe } = useContext(WidgetContext) || {};
+  const { engine, cvd, currentRsi, chartTimeframe, orderflowTrend } = useContext(WidgetContext) || {};
 
   // Fase D: linha oficial do Market Regime Engine (ADX/DI + percentil de
   // banda, ver src/market-regime/). Direção colore o rótulo composto;
@@ -5770,6 +5826,28 @@ function MarketRegimeWidget() {
 
   const momentumLabel = !num(cvd) || cvd === 0 ? AWAIT : cvd > 0 ? "COMPRADOR" : "VENDEDOR";
   const momentumColor = !num(cvd) || cvd === 0 ? "text-[#8ab4f8]" : cvd > 0 ? "text-[#00ffaa]" : "text-[#ff0055]";
+
+  // Diretriz Complementar §18 ("tendência de força do fluxo"): a
+  // INCLINAÇÃO real do CVD (metade recente vs. anterior da janela retida),
+  // não a leitura instantânea acima — uma pergunta diferente ("a pressão
+  // está ganhando ou perdendo força?"). null honesto (AWAIT) com histórico
+  // curto demais, nunca uma tendência fabricada.
+  const flowTrendLabel =
+    orderflowTrend?.status === "OK" && orderflowTrend.trend
+      ? orderflowTrend.trend === "FORTALECENDO"
+        ? "FORTALECENDO"
+        : orderflowTrend.trend === "ENFRAQUECENDO"
+          ? "ENFRAQUECENDO"
+          : "ESTÁVEL"
+      : AWAIT;
+  const flowTrendColor =
+    orderflowTrend?.status !== "OK" || !orderflowTrend.trend
+      ? "text-[#8ab4f8]"
+      : orderflowTrend.trend === "FORTALECENDO"
+        ? "text-[#00ffaa]"
+        : orderflowTrend.trend === "ENFRAQUECENDO"
+          ? "text-[#ff0055]"
+          : "text-[#8ab4f8]";
 
   // MomentumAgent order: mesmo RSI de Wilder real já votado pelo Conselho
   // (currentRsi, computado uma vez em App() — zero segunda matemática).
@@ -5824,6 +5902,7 @@ function MarketRegimeWidget() {
         <Row label={`ESTRUTURA ${engine?.htfTimeframe?.toUpperCase() ?? "1H"}`} value={htfLabel} valueClass="text-[#8ab4f8]" />
         <Row label="MULTI-TF CONFLUENCE" value={confluenceLabel} valueClass={confluenceColor} />
         <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
+        <Row label="TENDÊNCIA DO FLUXO" value={flowTrendLabel} valueClass={flowTrendColor} />
         <Row label="RSI (14)" value={rsiLabel} valueClass={rsiColor} />
         <Row label="VOLATILIDADE" value={volLabel} valueClass={volColor} />
       </div>

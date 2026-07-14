@@ -41,6 +41,7 @@ import type {
 } from "../nexus/types";
 import { maybeSampleL2History, type L2HistoryEntry } from "../nexus/l2-history";
 import { pushOrderflowHistory, type OrderflowHistoryEntry } from "../nexus/orderflow-history";
+import { pushConvictionHistory, type ConvictionScoreSample } from "../nexus/institutional-score";
 import type { VolumeProfileSnapshot } from "../nexus/volume-profile";
 import type { FibonacciConfluenceMatrix } from "../nexus/fibonacci-confluence";
 import type { CouncilDecision } from "../nexus/council";
@@ -134,6 +135,7 @@ const EMPTY_HEALTH: HealthSnapshot = {
 const EMPTY_L2_HISTORY: L2HistoryEntry[] = [];
 const EMPTY_ORDERFLOW_HISTORY: OrderflowHistoryEntry[] = [];
 const EMPTY_TRAPS: TrapSignal[] = [];
+const EMPTY_CONVICTION_HISTORY: ConvictionScoreSample[] = [];
 
 // ─────────────────────────────────────────────────────────────────────────
 // Estado — na ordem canônica dos domínios (§1 → §5)
@@ -195,6 +197,12 @@ export interface UnifiedSnapshotState {
   // motores puros do ciclo principal (LEI 24: confluência/contexto, nunca um
   // segundo motor de decisão). null até o primeiro ciclo real.
   multiTimeframeContext: MultiTimeframeMatrix | null;
+  // Diretriz Complementar §18/§4 ("tendência de convicção" / "Conviction
+  // Engine"): série real do Score Geral (institutional-score.ts) ao longo
+  // do tempo — só amostras REAIS entram (WAIT/DADOS_INSUFICIENTES nunca,
+  // pontuar o nada seria fabricação). Escopada ao ativo ativo, mesmo
+  // padrão de orderflowHistory.
+  institutionalScoreHistory: ConvictionScoreSample[];
 
   // §5 ORGANISMO
   // Estado REAL do motor de análise (engineStatus/direção/confiança do
@@ -264,6 +272,10 @@ interface UnifiedSnapshotActions {
   setTrapSignals: (traps: TrapSignal[]) => void;
   setTradePlan: (plan: TradePlan | null) => void;
   setMultiTimeframeContext: (matrix: MultiTimeframeMatrix | null) => void;
+  // Diretriz Complementar §18/§4: registra uma amostra REAL do Score Geral
+  // (nunca chamado com null/WAIT — o efeito que chama já filtra isso).
+  recordInstitutionalScore: (score: number) => void;
+  resetInstitutionalScoreHistory: () => void;
 
   // §5 ORGANISMO
   setCore: (core: CoreSnapshot) => void;
@@ -305,6 +317,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     trapSignals: [],
     tradePlan: null,
     multiTimeframeContext: null,
+    institutionalScoreHistory: [],
     // §5 ORGANISMO
     core: EMPTY_CORE,
     health: EMPTY_HEALTH,
@@ -348,6 +361,10 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setTrapSignals: (traps) => set((s) => { s.trapSignals = traps; }),
     setTradePlan: (plan) => set((s) => { s.tradePlan = plan; }),
     setMultiTimeframeContext: (matrix) => set((s) => { s.multiTimeframeContext = matrix; }),
+    recordInstitutionalScore: (score) => set((s) => {
+      s.institutionalScoreHistory = pushConvictionHistory(s.institutionalScoreHistory as ConvictionScoreSample[], { score, at: Date.now() });
+    }),
+    resetInstitutionalScoreHistory: () => set((s) => { s.institutionalScoreHistory = []; }),
     // §5 ORGANISMO
     setCore: (core) => set((s) => { s.core = core; }),
     setHealth: (health) => set((s) => { s.health = health; }),
@@ -428,6 +445,8 @@ export const useTradePlanSnapshot = (): TradePlan | null =>
   useUnifiedSnapshotStore((s) => s.tradePlan);
 export const useMultiTimeframeSnapshot = (): MultiTimeframeMatrix | null =>
   useUnifiedSnapshotStore((s) => s.multiTimeframeContext);
+export const useInstitutionalScoreHistory = (): ConvictionScoreSample[] =>
+  useUnifiedSnapshotStore((s) => s.institutionalScoreHistory ?? EMPTY_CONVICTION_HISTORY);
 
 // §5 ORGANISMO
 export const useCoreSnapshot = (): CoreSnapshot => useUnifiedSnapshotStore((s) => s.core);

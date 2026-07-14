@@ -212,14 +212,41 @@ describe('trackPriceTick v2: progressive multi-target ladder + break-even sugges
     expect(plan.targets).toHaveLength(3);
     let s = trackPlanTransition(EMPTY_TRACK_RECORD, plan, 1_000);
     s = trackPriceTick(s, 51_000, 2_000); // target 1
-    s = trackPriceTick(s, 52_200, 3_000); // target 2
+    s = trackPriceTick(s, 52_200, 3_000); // target 2 — stop now TRAILS to target 1 (51_000), not just break-even
     expect(s.active?.targetsHit).toBe(2);
     expect(s.active?.status).toBe('OPEN'); // target 3 still real and unproven
     const entryMid = (49_200 + 49_500) / 2;
-    s = trackPriceTick(s, entryMid, 4_000); // returns to break-even before target 3
+    s = trackPriceTick(s, entryMid, 4_000); // well below the ratcheted stop (51_000) — resolves before target 3
     expect(s.active).toBeNull();
     expect(s.partialHits).toBe(1);
     expect(s.history[0]).toMatchObject({ status: 'PARTIAL_HIT', targetsHit: 2 });
+  });
+
+  it('§18 trailing stop além do break-even: a pullback that survives at flat break-even now stops the plan out once the stop has TRAILED past it — the target-1 gain is locked in, never given all back', () => {
+    const plan = buildTradePlan({
+      stance: 'LONG',
+      riskGated: false,
+      price: 50_000,
+      zones: [{ low: 49_200, high: 49_500, kind: 'OB_BULLISH' }],
+      levels: [
+        { price: 48_800, kind: 'SR_SUPPORT_1' },
+        { price: 51_000, kind: 'SR_RESISTANCE_1' },
+        { price: 52_200, kind: 'EQH' },
+        { price: 53_000, kind: 'FIB_161.8' },
+      ],
+    })!;
+    let s = trackPlanTransition(EMPTY_TRACK_RECORD, plan, 1_000);
+    s = trackPriceTick(s, 51_000, 2_000); // target 1 hit — stop -> break-even (~49_350)
+    // A dip to 50_000 is above break-even: the plan survives, untouched.
+    expect(trackPriceTick(s, 50_000, 2_500)).toBe(s);
+    s = trackPriceTick(s, 52_200, 3_000); // target 2 hit — stop -> target 1 (51_000)
+    expect(s.active?.targetsHit).toBe(2);
+    // The SAME 50_000 dip that was harmless a moment ago now breaches the
+    // ratcheted stop — the record must reflect the real, higher floor.
+    const resolved = trackPriceTick(s, 50_000, 3_500);
+    expect(resolved.active).toBeNull();
+    expect(resolved.partialHits).toBe(1);
+    expect(resolved.history[0]).toMatchObject({ status: 'PARTIAL_HIT', targetsHit: 2, resolvedPrice: 50_000 });
   });
 });
 

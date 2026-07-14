@@ -78,3 +78,59 @@ export function pushOrderflowHistory(
   const next = ring.length === 0 ? [entry] : [...ring, entry];
   return next.length > capacity ? next.slice(next.length - capacity) : next;
 }
+
+// Diretriz Complementar §18 ("tendência de força do fluxo"): não existia,
+// em todo o codebase, nenhuma redução real da série de CVD já retida
+// (acima) numa TENDÊNCIA — só leituras instantâneas/percentis (achado real
+// de auditoria). Isto NÃO é uma segunda medida de CVD: consome a mesma
+// série já real que o heatmap consome, e não fabrica nenhum ponto novo.
+export type OrderflowTrend = "FORTALECENDO" | "ENFRAQUECENDO" | "ESTAVEL";
+
+export interface OrderflowTrendReading {
+  status: "OK" | "DADOS_INSUFICIENTES";
+  reason: string | null;
+  trend: OrderflowTrend | null;
+  // CVD líquido por ciclo de poll em cada metade real da janela — a base
+  // verificável exposta para a UI, nunca recalculada por ela.
+  recentSlope: number | null;
+  priorSlope: number | null;
+  computedAt: number;
+}
+
+// Precisa de janela real dos dois lados (nunca uma tendência de 2 pontos) —
+// parâmetro documentado, não uma medição.
+const MIN_ENTRIES_FOR_TREND = 10;
+// Zona-morta real (Regra de Ouro 1): a diferença entre as duas metades
+// precisa superar uma fração real da amplitude de CVD OBSERVADA nesta
+// própria janela para virar "mudança de tendência" — nunca um limiar de
+// CVD absoluto inventado (o CVD não tem uma escala universal entre
+// símbolos/timeframes). Mesma natureza dos limiares 70/30 do RSI.
+const TREND_DEADBAND_FRACTION = 0.05;
+
+function insufficientTrend(reason: string, computedAt: number): OrderflowTrendReading {
+  return { status: "DADOS_INSUFICIENTES", reason, trend: null, recentSlope: null, priorSlope: null, computedAt };
+}
+
+/** Tendência real de força do fluxo: compara a inclinação líquida do CVD
+ *  (Δcvd médio por ciclo de poll) entre a metade mais RECENTE e a metade
+ *  ANTERIOR da janela retida. FORTALECENDO = a pressão compradora líquida
+ *  está acelerando (ou a vendedora está perdendo força); ENFRAQUECENDO = o
+ *  oposto; ESTAVEL = a diferença não supera a zona-morta real. Nunca uma
+ *  "probabilidade" (Regra de Ouro 2) — é uma leitura de inclinação real de
+ *  uma série já real. */
+export function computeOrderflowTrend(history: OrderflowHistoryEntry[], now: number = Date.now()): OrderflowTrendReading {
+  if (!Array.isArray(history) || history.length < MIN_ENTRIES_FOR_TREND) {
+    return insufficientTrend("historico_real_insuficiente_para_tendencia", now);
+  }
+  const mid = Math.floor(history.length / 2);
+  const priorSlope = (history[mid - 1].cvd - history[0].cvd) / mid;
+  const recentSlope = (history[history.length - 1].cvd - history[mid].cvd) / (history.length - 1 - mid);
+  const delta = recentSlope - priorSlope;
+
+  const cvdValues = history.map((h) => h.cvd);
+  const totalRange = Math.max(...cvdValues) - Math.min(...cvdValues);
+  const deadband = totalRange * TREND_DEADBAND_FRACTION;
+
+  const trend: OrderflowTrend = Math.abs(delta) <= deadband ? "ESTAVEL" : delta > 0 ? "FORTALECENDO" : "ENFRAQUECENDO";
+  return { status: "OK", reason: null, trend, recentSlope, priorSlope, computedAt: now };
+}
