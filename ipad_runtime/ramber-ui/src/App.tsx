@@ -116,6 +116,9 @@ import { computeInstitutionalScore, institutionalConfidenceZone, computeConvicti
 // real que reduz a MESMA série de CVD já retida (orderflow-history.ts,
 // já consumida pelo heatmap) numa tendência — zero segunda fonte.
 import { computeOrderflowTrend } from "./nexus/orderflow-history";
+// Diretriz Complementar §7 ("Inteligência Temporal"): vocabulário real de
+// contexto por timeframe — nunca uma medição, ver cabeçalho do módulo.
+import { timeframeProfile } from "./nexus/timeframe-profile";
 import { buildAssistantMessages } from "./nexus/operation-assistant";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
@@ -4652,6 +4655,15 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         <ModulePanel title="Trade Plan · real structure only (advisory, read-only)">
           {tradePlan ? (
             <>
+              {/* Diretriz Complementar §7 ("Inteligência Temporal"): rótulo
+                  real de contexto do timeframe ativo — nunca uma medição,
+                  ver nexus/timeframe-profile.ts. */}
+              {timeframeProfile(chartTimeframe as string) && (
+                <ModuleStat
+                  label="Perfil do Timeframe"
+                  value={`${timeframeProfile(chartTimeframe as string)!.style} · ETA típico: ${timeframeProfile(chartTimeframe as string)!.etaHorizon}`}
+                />
+              )}
               <ModuleStat label="Direction" value={tradePlan.direction} tone={tradePlan.direction === "LONG" ? "long" : "short"} />
               <ModuleStat label="Entry Zone" value={`${tradePlan.entry.low.toFixed(0)}–${tradePlan.entry.high.toFixed(0)} (${tradePlan.entry.basis})`} />
               <ModuleStat label="Stop" value={`${tradePlan.stop.price.toFixed(0)} (${tradePlan.stop.basis})`} tone="short" />
@@ -4929,7 +4941,11 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
                   setChartTimeframe?.(tf.value);
                 }}
                 onDoubleClick={stopBubble}
-                title={`Timeframe ${tf.label}`}
+                title={
+                  timeframeProfile(tf.value)
+                    ? `Timeframe ${tf.label} · ${timeframeProfile(tf.value)!.style} · ETA típico: ${timeframeProfile(tf.value)!.etaHorizon}`
+                    : `Timeframe ${tf.label}`
+                }
                 className={`shrink-0 px-1 py-0.5 rounded transition-colors ${chartTimeframe === tf.value ? "bg-[#00f0ff20] text-[#00f0ff] font-bold border border-[#00f0ff40]" : "text-[#8ab4f8]/60 hover:text-[#8ab4f8]"}`}
               >
                 {tf.label}
