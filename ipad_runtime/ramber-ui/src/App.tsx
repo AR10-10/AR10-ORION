@@ -101,6 +101,12 @@ import { buildConvictionReading } from "./nexus/confluence-engine";
 // Neural Market Aura (especificação do Operador, ver o cabeçalho de
 // nexus/aura-lifecycle.ts para o racional completo de escopo/honestidade).
 import { computeAuraReading, TIMEFRAME_MS } from "./nexus/aura-lifecycle";
+// Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
+// alvo — ATR real × Efficiency Ratio de Kaufman sobre os closes reais do
+// gráfico; estimativa recomputada a cada ciclo, nunca uma garantia (ver
+// cabeçalho de nexus/eta-engine.ts para a metodologia e os desvios
+// documentados).
+import { computeTargetEtas, formatEtaDuration } from "./nexus/eta-engine";
 // Diretriz V-MAX de Refinamento Institucional (itens 5/6): Score Geral
 // 0-100 (contrato de apresentação sobre a confluência real — zero segunda
 // matemática de consenso) + Assistente Operacional (frases curtas, sempre
@@ -1722,6 +1728,25 @@ export default function App() {
     inEntryZoneLatchRef.current = inEntryZoneNow;
   }, [inEntryZoneNow]);
 
+  // Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
+  // alvo do plano RASTREADO (mesmo trackRecordSlice autoritativo do resto
+  // desta cadeia) — closes reais do gráfico + ATR real do Market Regime +
+  // preço real + duração real da barra. Recomputada continuamente conforme
+  // novas velas/ticks chegam (deps abaixo), exatamente o "nunca são fixas"
+  // da diretriz. Mesmo padrão do currentRsi (useMemo sobre chartData).
+  const etaReading = useMemo(
+    () =>
+      computeTargetEtas({
+        plan: trackRecordSlice.active?.plan ?? null,
+        targetsHit: trackRecordSlice.active?.targetsHit ?? 0,
+        livePrice: livePriceForZone,
+        atrPercent: engine?.marketRegime?.atrPercent ?? null,
+        closes: chartData.map((c: { close: number }) => c.close),
+        timeframeMs: TIMEFRAME_MS[chartTimeframe as string] ?? TIMEFRAME_MS["15m"],
+      }),
+    [trackRecordSlice.active, livePriceForZone, engine?.marketRegime, chartData, chartTimeframe],
+  );
+
   // Diretriz V-MAX (itens 5/6): Score Geral + Assistente — computados UMA
   // vez aqui (mesmo padrão de convictionReading, que ambos reaproveitam),
   // compartilhados via contextValue. Declarados DEPOIS de convictionReading/
@@ -2122,6 +2147,7 @@ export default function App() {
       convictionReading,
       institutionalScore,
       assistantMessages,
+      etaReading,
       riskSuggestion,
       cycleLatencyMs,
       fps,
@@ -2172,6 +2198,7 @@ export default function App() {
       convictionReading,
       institutionalScore,
       assistantMessages,
+      etaReading,
       riskSuggestion,
       cycleLatencyMs,
       fps,
@@ -3496,7 +3523,7 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   // 1 número aqui, o painel Trade Plan (ModulePanel) mostra a escada
   // inteira.
   const trackRecord = useTrackRecordSnapshot();
-  const { convictionReading } = useContext(WidgetContext) || {};
+  const { convictionReading, etaReading } = useContext(WidgetContext) || {};
   if (!plan) return null;
   const targetsHit = trackRecord.active?.targetsHit ?? 0;
   const activeTargetIndex = Math.min(targetsHit, plan.targets.length - 1);
@@ -3509,6 +3536,11 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   const targetHit = activeTargetIndex < targetsHit; // true once the ladder already proved this rung (authoritative, never re-derived)
   const stopHit = p !== null && !targetHit && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
   const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
+  // Diretriz Complementar §3/§7: ETA dinâmica real do alvo ATIVO — mesma
+  // leitura única computada em App() (contexto), nunca recalculada aqui.
+  // null honesto (sem progresso direcional/ATR/horizonte) => campo ausente.
+  const activeEta = etaReading?.status === "OK" ? (etaReading.etas[activeTargetIndex] ?? null) : null;
+  const etaLabel = activeEta && !targetHit ? formatEtaDuration(activeEta.ms) : null;
   // Bandeira de divergência real (achado real de auditoria, FASE Ω Priority
   // 3): o Confluence Engine (Phase Ω Priority 2) já calcula, todo ciclo, se
   // os 3 subsistemas independentes concordam com a direção ATIVA do Core
@@ -3559,6 +3591,18 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
       />
       {plan.riskRewardRatios[activeTargetIndex] !== null && (
         <BarField label="R : R" value={`1:${plan.riskRewardRatios[activeTargetIndex]!.toFixed(2)}`} labelClass="text-[#8ab4f8]/60" valueClass="text-[#8ab4f8]/80" />
+      )}
+      {/* Diretriz Complementar §3/§7: "Tempo estimado até Alvo 1" no
+          cabeçalho — estimativa dinâmica real (nunca garantia, §8); o
+          tooltip carrega a base verificável (distância/ATR/ER reais). */}
+      {etaLabel && (
+        <BarField
+          label="ETA"
+          value={etaLabel}
+          labelClass="text-[#8ab4f8]/60"
+          valueClass="text-[#8ab4f8]/80"
+          title={`${activeEta!.basis}. Recalculada continuamente — nunca afirma que o mercado "vai" atingir o alvo (§8).`}
+        />
       )}
       {targetHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#00ffaa] pl-1">TARGET REACHED</span>}
       {stopHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#ff0055] pl-1">STOP BREACHED</span>}
@@ -4429,6 +4473,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     crossExchangeCheck,
     okxCrossExchangeCheck,
     chartTimeframe,
+    etaReading,
   } = ctx as any;
   const connections = useConnectionsSnapshot();
   const derivatives = useDerivativesSnapshot();
@@ -4547,12 +4592,14 @@ function SecondaryModuleView({ tab }: { tab: string }) {
               <ModuleStat label="Entry Zone" value={`${tradePlan.entry.low.toFixed(0)}–${tradePlan.entry.high.toFixed(0)} (${tradePlan.entry.basis})`} />
               <ModuleStat label="Stop" value={`${tradePlan.stop.price.toFixed(0)} (${tradePlan.stop.basis})`} tone="short" />
               {/* v2 (Diretriz Complementar §2): a escada real inteira — 1 a
-                  MAX_TARGETS alvos, nunca truncada a um só. */}
+                  MAX_TARGETS alvos, nunca truncada a um só. §3: cada alvo
+                  restante carrega a ETA dinâmica real quando estimável
+                  (nunca um número fabricado sem progresso direcional). */}
               {tradePlan.targets.map((target, i) => (
                 <ModuleStat
                   key={i}
                   label={tradePlan.targets.length > 1 ? `Target ${i + 1}` : "Target"}
-                  value={`${target.price.toFixed(0)} (${target.basis})${tradePlan.riskRewardRatios[i] !== null ? ` · 1:${tradePlan.riskRewardRatios[i]!.toFixed(2)}` : ""}`}
+                  value={`${target.price.toFixed(0)} (${target.basis})${tradePlan.riskRewardRatios[i] !== null ? ` · 1:${tradePlan.riskRewardRatios[i]!.toFixed(2)}` : ""}${etaReading?.status === "OK" && etaReading.etas[i] ? ` · ${formatEtaDuration(etaReading.etas[i].ms) ?? ""}` : ""}`}
                   tone="long"
                 />
               ))}
