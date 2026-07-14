@@ -1,9 +1,14 @@
 // omnibox.test.ts — Overhaul Cross-Market (Missão 2): trava as partes
 // PURAS do Smart Omnibox — extração/curadoria dos tickers reais da
 // Binance e a taxonomia TradFi hardcoded. A busca em si (SmartOmnibox.tsx)
-// é UI e não é testada aqui, no mesmo espírito do resto da suíte (testa-se
-// a lógica de dados, não a renderização React).
+// é UI e não é testada aqui via execução, no mesmo espírito do resto da
+// suíte (testa-se a lógica de dados, não a renderização React) — exceto
+// pelo describe de padrão-de-código no fim do arquivo, que trava por
+// regex uma regressão de cascata CSS já vista uma vez (ver comentário lá).
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import {
   extractUsdtSymbols,
   extractPerpUsdtSymbols,
@@ -204,5 +209,38 @@ describe('tradfi-assets: a taxonomia hardcoded da diretriz 3 — exata, congelad
       expect(Object.isFrozen(a)).toBe(true);
     }
     expect(Object.isFrozen(TRADFI_ASSETS)).toBe(true);
+  });
+});
+
+describe('SmartOmnibox.tsx: dropdown precisa vencer a cascata CSS de `.cyber-panel` (regressão real já vista 2x)', () => {
+  // Bug real, reproduzido com Playwright (iPad portrait/paisagem): `.cyber-panel`
+  // (index.css) define TANTO `overflow: hidden` QUANTO `position: relative`.
+  // Como essa classe custom é emitida DEPOIS das utilidades do Tailwind no CSS
+  // compilado, ela vence a cascata sobre QUALQUER utilidade Tailwind de mesma
+  // especificidade que tente a mesma propriedade — já aconteceu uma vez com
+  // `overflow-y-auto` (lista não rolava) e uma segunda vez, de forma bem mais
+  // grave, com `absolute` (o dropdown ficava PRESO em fluxo normal, inflava o
+  // wrapper `.relative` para a altura do próprio conteúdo, e esse wrapper vive
+  // dentro de um contêiner flex de altura FIXA — `h-[70%]` do header, 46px de
+  // altura total — com `items-center`; o resultado medido foi o botão de
+  // gatilho renderizando a ~350px ACIMA do viewport, efetivamente cortado/
+  // invisível). Ambas as correções usam o mesmo escape hatch: `!` força
+  // `!important`, que vence independente da ordem de emissão no CSS.
+  const src = () => readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../src/omnibox/SmartOmnibox.tsx'), 'utf8');
+
+  it('dropdown usa !absolute (nunca só `absolute`) para vencer o position:relative de .cyber-panel', () => {
+    const s = src();
+    const idx = s.indexOf('cyber-panel bg-[#010308]/98');
+    expect(idx, 'div do dropdown não encontrada').toBeGreaterThan(-1);
+    const classLine = s.slice(Math.max(0, idx - 200), idx);
+    expect(classLine).toContain('!absolute');
+    expect(classLine).not.toMatch(/(?<!!)\babsolute\b/); // "absolute" sem "!" na frente não pode voltar
+  });
+
+  it('dropdown mantém !overflow-y-auto (regressão original, já corrigida — não pode voltar a quebrar junto)', () => {
+    const s = src();
+    const idx = s.indexOf('cyber-panel bg-[#010308]/98');
+    const classLine = s.slice(Math.max(0, idx - 200), idx);
+    expect(classLine).toContain('!overflow-y-auto');
   });
 });

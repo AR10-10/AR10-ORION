@@ -55,14 +55,46 @@ describe('Secondary module views: real data routing, English labels, fail-closed
 });
 
 describe('Command bar: Trade Plan strip (critical numbers in the header, fail-closed)', () => {
-  it('renders signal + entry + stop + target from the real store slice, nothing when no plan', () => {
+  it('renders signal + entry + stop + target from the real store slice', () => {
     const s = app();
     expect(s).toContain('function TradePlanTopStrip(');
     const strip = s.slice(s.indexOf('function TradePlanTopStrip('), s.indexOf('// --- TOP BAR ---'));
     expect(strip).toContain('useTradePlanSnapshot()');
-    expect(strip).toContain('if (!plan) return null;');
     expect(strip).not.toMatch(/fetch\(/);
     expect(strip).not.toMatch(/Math\.random/);
+  });
+
+  // Achado real de sessão (relato do Operador: "Entry/Target não aparece"):
+  // o plano é travado pela leitura do CONSELHO (trade-plan.ts), não pela
+  // direção própria do Core Engine — as duas podem divergir de forma real
+  // e honesta. Antes, `!plan` renderizava `null` silencioso: o Operador não
+  // tinha como distinguir bug de estado esperado. Agora renderiza um motivo
+  // real (Conselho travado/neutro/sem estrutura), nunca fabricado, e NUNCA
+  // muda qual sinal trava o plano (LEI 24 seria violada por essa troca).
+  it('sem plano real: nunca um return null silencioso — sempre um motivo honesto derivado do Conselho/Núcleo reais', () => {
+    const s = app();
+    const strip = s.slice(s.indexOf('function TradePlanTopStrip('), s.indexOf('// --- TOP BAR ---'));
+    expect(strip).toContain('const council = useCouncilSnapshot();');
+    expect(strip).not.toContain('if (!plan) return null;');
+    expect(strip).toMatch(/if \(!plan\) \{/);
+    // as 4 causas reais e mutuamente exclusivas do null, nunca uma 5ª inventada
+    expect(strip).toContain('if (!council) {');
+    expect(strip).toContain('} else if (council.riskGated) {');
+    expect(strip).toContain('} else if (council.stance === "NEUTRAL" || council.stance === "ABSTAIN") {');
+    expect(strip).toContain('} else {');
+    // a divergência Núcleo vs. Conselho (achado real) fica explícita quando existe
+    expect(strip).toContain('const coreDir = engine?.direction ?? null;');
+    expect(strip).toContain('reason = coreDir ? `Núcleo ${coreDir}, Conselho neutro` : "Conselho neutro";');
+    expect(strip).not.toMatch(/fetch\(/);
+    expect(strip).not.toMatch(/Math\.random/);
+  });
+
+  it('LEI 24: o fallback honesto nunca escreve em engine/council/plan — só lê e exibe (mesma disciplina display-only)', () => {
+    const s = app();
+    const strip = s.slice(s.indexOf('function TradePlanTopStrip('), s.indexOf('// --- TOP BAR ---'));
+    const fallbackIdx = strip.indexOf('if (!plan) {');
+    const fallbackBlock = strip.slice(fallbackIdx, strip.indexOf('\n  }', fallbackIdx));
+    expect(fallbackBlock).not.toMatch(/setTradePlan|setCouncil|setEngine/);
   });
 
   it('structure-break alert is pure display derivation from the live price vs real plan levels', () => {

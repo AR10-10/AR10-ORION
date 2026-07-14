@@ -3616,8 +3616,46 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   // 1 número aqui, o painel Trade Plan (ModulePanel) mostra a escada
   // inteira.
   const trackRecord = useTrackRecordSnapshot();
-  const { convictionReading, etaReading } = useContext(WidgetContext) || {};
-  if (!plan) return null;
+  const { convictionReading, etaReading, engine } = useContext(WidgetContext) || {};
+  const council = useCouncilSnapshot();
+  if (!plan) {
+    // Achado real desta sessão (relato do Operador: "Entry/Target não
+    // aparece"): trade-plan.ts trava o plano pela leitura do CONSELHO
+    // (stance/riskGated — "No plan without a directional stance"), NUNCA
+    // pela direção própria do Core Engine (o badge herói acima usa
+    // engine?.direction). As duas leituras podem divergir de forma real
+    // e honesta — o Núcleo pode indicar LONG/SHORT enquanto o Conselho
+    // (mais conservador: soma 7 agentes, trava por risco degradado) ainda
+    // não confirma. Esta barra antes desaparecia por completo (return
+    // null silencioso) nesse estado — o Operador não tinha como distinguir
+    // "bug" de "nenhum plano acionável agora". Correção: NUNCA trocar qual
+    // sinal trava o Trade Plan (território de LEI 24 — decisão do
+    // Operador, não uma correção de bug) — só tornar o null honesto e
+    // visível, com o motivo real.
+    const coreDir = engine?.direction ?? null;
+    let reason: string;
+    let tooltip: string;
+    if (!council) {
+      reason = "Aguardando Conselho";
+      tooltip = "O Conselho Multi-Agente ainda não computou nenhuma leitura nesta sessão — sem base real para um plano ainda.";
+    } else if (council.riskGated) {
+      reason = "Conselho travado (risco)";
+      tooltip = "O RiskAgent absteve por dado degradado e travou o Conselho (fail-closed) — nenhum plano acionável enquanto durar.";
+    } else if (council.stance === "NEUTRAL" || council.stance === "ABSTAIN") {
+      reason = coreDir ? `Núcleo ${coreDir}, Conselho neutro` : "Conselho neutro";
+      tooltip = coreDir
+        ? `O Core Engine (LEI 24, única decisão real de LONG/SHORT/WAIT) lê ${coreDir}, mas o Conselho Multi-Agente — mais conservador, soma várias fontes independentes — está neutro ou sem quórum direcional. O Trade Plan usa a base do Conselho, não a do Núcleo diretamente; por isso Entry/Stop/Target não aparecem agora mesmo com o Núcleo direcional. Nunca um plano fabricado sem essa base.`
+        : "O Conselho Multi-Agente está neutro ou sem quórum direcional — sem base real para Entry/Stop/Target agora.";
+    } else {
+      reason = `Conselho ${council.stance}, sem estrutura`;
+      tooltip = `O Conselho lê ${council.stance}, mas nenhuma estrutura real mapeada (Order Blocks, FVGs, S/R, Fibonacci, Volume Profile) forma uma entrada/invalidação/alvo coerentes agora — nunca um plano fabricado sem base real.`;
+    }
+    return (
+      <div className="flex items-stretch pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap" title={tooltip}>
+        <BarField label="Trade Plan" value={reason} labelClass="text-[#8ab4f8]/50" valueClass="text-[#8ab4f8]/70" />
+      </div>
+    );
+  }
   const targetsHit = trackRecord.active?.targetsHit ?? 0;
   const activeTargetIndex = Math.min(targetsHit, plan.targets.length - 1);
   const activeTarget = plan.targets[activeTargetIndex];
@@ -3850,7 +3888,20 @@ function TopBar({ data }: { data?: PriceState | null }) {
     >
       <div className="h-[46px] flex items-center justify-between gap-2 px-3 lg:px-5">
         <div className="flex gap-2 md:gap-3 h-full items-center min-w-0">
-          <div className="flex items-center gap-2 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%]">
+          {/* Diretriz V-MAX §11 + pedido direto do Operador ("não precisa
+              ficar no meio"): identidade do ativo e o controle real de
+              troca de ativo agora são UM único cluster no INÍCIO da barra,
+              não dois segmentos separados (ícone+nome estático de um
+              lado, seletor sanduichado do outro). O texto estático
+              "BTC/USDT" saiu — era informação duplicada, o gatilho do
+              Omnibox já mostra o mesmo símbolo real selecionado
+              (`${selectedAsset}USDT`), então mantê-lo seria repetir o
+              óbvio às custas de espaço horizontal (pedido explícito:
+              "deixa só o necessário"). A tag de mercado (Futures/Spot/
+              Macro) continua 100% real (mesma expressão de sempre,
+              cryptoMarketLabel), só que agora ao lado do gatilho em vez
+              de dentro do nome estático removido. */}
+          <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%]">
             <div
               className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
                 marketMode === "TRADFI"
@@ -3868,24 +3919,6 @@ function TopBar({ data }: { data?: PriceState | null }) {
                     : selectedAsset?.[0]}
               </span>
             </div>
-            <div className="text-[#a0f0ff] font-black text-sm flex items-center gap-1.5 whitespace-nowrap">
-              {marketMode === "TRADFI" ? selectedTradFiAsset?.symbol : `${selectedAsset}/USDT`}{" "}
-              <span
-                className={`text-[0.5rem] px-1 py-0.5 rounded uppercase tracking-wider ${
-                  marketMode === "TRADFI" ? "bg-[#b026ff20] text-[#b026ff]" : "bg-[#00f0ff20] text-[#00f0ff]"
-                }`}
-              >
-                {marketMode === "TRADFI" ? "Macro" : cryptoMarketLabel}
-              </span>
-            </div>
-          </div>
-
-          {/* Smart Omnibox (Overhaul Missão 2) — substitui os 5 botões fixos
-              como forma PRIMÁRIA de trocar de ativo: busca categorizada
-              multi-mercado (cripto/meme real via Binance + taxonomia
-              TradFi para conexão futura). Os 5 favoritos ficam como atalho
-              de um toque ao lado, em telas largas o bastante. */}
-          <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%]">
             <div className="hidden lg:flex items-center gap-1">
               {ASSETS.map((a) => (
                 <button
@@ -3922,6 +3955,13 @@ function TopBar({ data }: { data?: PriceState | null }) {
                 setSelectedTradFiAsset?.(asset);
               }}
             />
+            <span
+              className={`text-[0.5rem] px-1 py-0.5 rounded uppercase tracking-wider whitespace-nowrap shrink-0 ${
+                marketMode === "TRADFI" ? "bg-[#b026ff20] text-[#b026ff]" : "bg-[#00f0ff20] text-[#00f0ff]"
+              }`}
+            >
+              {marketMode === "TRADFI" ? "Macro" : cryptoMarketLabel}
+            </span>
           </div>
 
           {/* O preço — única ocorrência em toda a interface. Em modo
@@ -4059,15 +4099,17 @@ function TopBar({ data }: { data?: PriceState | null }) {
         </div>
       </div>
 
-      {/* Linha 2 — só quando há algo real para mostrar (Trade Plan e/ou S1/
-          R1 do Core Engine); ambos os componentes já retornam null sem
-          dado, então esta linha simplesmente desaparece (altura zero) até
-          o primeiro ciclo real. Motivo de existir separada da linha 1
-          (medido via Playwright, não suposto): Entry/Target/Stop/R:R +
-          Support/Resistance juntos não cabem numa única linha em iPad
-          portrait (768-834px) sem voltar a abreviações cramped — flex-wrap
-          aqui deixa o conjunto quebrar de forma legível em vez de escondido
-          atrás de uma aba ou cortado. */}
+      {/* Linha 2 — Trade Plan (Entry/Target/Stop/R:R real, OU — desde o
+          achado real "Entry/Target não aparece" — um motivo honesto do
+          Conselho/Núcleo quando ainda não há plano acionável; nunca mais
+          um return null silencioso) e S1/R1 do Core Engine
+          (StructureLevelsStrip, esse sim ainda retorna null sem dado, altura
+          zero até o primeiro ciclo real). Motivo de existir separada da
+          linha 1 (medido via Playwright, não suposto): Entry/Target/Stop/
+          R:R + Support/Resistance juntos não cabem numa única linha em
+          iPad portrait (768-834px) sem voltar a abreviações cramped —
+          flex-wrap aqui deixa o conjunto quebrar de forma legível em vez de
+          escondido atrás de uma aba ou cortado. */}
       {marketMode === "CRYPTO" && (
         <div className="flex flex-wrap items-center gap-y-1 px-3 lg:px-5 pb-1.5">
           <TradePlanTopStrip livePrice={data?.price ?? null} />
