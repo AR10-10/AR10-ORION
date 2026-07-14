@@ -63,6 +63,7 @@ import type { TradePlan } from "../nexus/trade-plan";
 import { effectiveStopForTargetsHit } from "../nexus/trade-plan";
 import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
+import type { PremiumDiscountReading } from "../nexus/premium-discount";
 // Research-driven precision order: VWAP, the institutional-standard
 // intraday reference level this system was missing entirely (confirmed
 // via a full-codebase grep before writing nexus/vwap.ts).
@@ -223,6 +224,9 @@ interface EnhancedChartProps {
   // risco que bloqueou este item por várias sessões. Optional/fail-closed:
   // null/absent desenha nada, igual a tradePlan/aura acima.
   scenario?: ScenarioProjection | null;
+  // Refinamento Final §7: dealing range Premium/EQ/Discount real
+  // (premium-discount.ts) — 3 linhas fio-de-seda discretas. Fail-closed.
+  premiumDiscount?: PremiumDiscountReading | null;
 }
 
 // Auditoria de arquitetura (revisão completa) — paginação histórica real:
@@ -277,6 +281,7 @@ export function EnhancedChart_110_Percent({
   targetsHit,
   confidenceZone,
   scenario,
+  premiumDiscount,
   layerVisibility,
   emaPeriod,
   onRequestOlderCandles,
@@ -291,6 +296,7 @@ export function EnhancedChart_110_Percent({
   const fibLinesRef = useRef<IPriceLine[]>([]);
   const tradePlanLinesRef = useRef<IPriceLine[]>([]);
   const scenarioLinesRef = useRef<IPriceLine[]>([]);
+  const premiumDiscountLinesRef = useRef<IPriceLine[]>([]);
   // Named refs to the stop/target lines specifically (a subset of
   // tradePlanLinesRef above) — lets the hit-boost effect below update
   // color/title in place via applyOptions() instead of tearing down and
@@ -435,6 +441,7 @@ export function EnhancedChart_110_Percent({
       fibLinesRef.current = [];
       tradePlanLinesRef.current = [];
       scenarioLinesRef.current = [];
+      premiumDiscountLinesRef.current = [];
       cvdSeriesRef.current = null;
       vwapSeriesRef.current = null;
       emaSeriesRef.current = null;
@@ -737,6 +744,36 @@ export function EnhancedChart_110_Percent({
       );
     });
   }, [scenario]);
+
+  // Refinamento Final §7 (Premium/Discount zones): as 3 fronteiras REAIS do
+  // dealing range atual (último swing high confirmado, equilíbrio 50%,
+  // último swing low confirmado — premium-discount.ts, mesmo findSwings
+  // compartilhado dos motores). Fio de seda (1px sólida), MAIS discretas que
+  // Scenario e Trade Plan (contexto de zona, não alvo): opacidade fixa
+  // baixa, sem rótulo de eixo. Fail-closed: sem leitura real, zero linhas.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    premiumDiscountLinesRef.current.forEach((line) => series.removePriceLine(line));
+    premiumDiscountLinesRef.current = [];
+    if (!premiumDiscount) return;
+    const mkPd = (price: number, color: string, title: string) => {
+      if (!Number.isFinite(price)) return;
+      premiumDiscountLinesRef.current.push(
+        series.createPriceLine({
+          price,
+          color,
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: false,
+          title,
+        }),
+      );
+    };
+    mkPd(premiumDiscount.rangeHigh.price, "rgba(255, 0, 85, 0.30)", "Premium · topo do range");
+    mkPd(premiumDiscount.equilibrium, "rgba(138, 180, 248, 0.30)", "Equilibrium · 50%");
+    mkPd(premiumDiscount.rangeLow.price, "rgba(0, 255, 170, 0.30)", "Discount · fundo do range");
+  }, [premiumDiscount]);
 
   // Signal Precision order: the Trade Plan drawn on the chart — subtle,
   // silk-thread annotations (1px solid, never dashed; hierarchy only via

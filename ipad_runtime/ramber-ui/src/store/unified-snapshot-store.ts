@@ -46,6 +46,8 @@ import type { VolumeProfileSnapshot } from "../nexus/volume-profile";
 import type { FibonacciConfluenceMatrix } from "../nexus/fibonacci-confluence";
 import type { CouncilDecision } from "../nexus/council";
 import type { ConsensusRadarReading } from "../nexus/consensus-radar";
+import type { PremiumDiscountReading } from "../nexus/premium-discount";
+import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
 import type { TradePlan } from "../nexus/trade-plan";
@@ -137,6 +139,7 @@ const EMPTY_L2_HISTORY: L2HistoryEntry[] = [];
 const EMPTY_ORDERFLOW_HISTORY: OrderflowHistoryEntry[] = [];
 const EMPTY_TRAPS: TrapSignal[] = [];
 const EMPTY_CONVICTION_HISTORY: ConvictionScoreSample[] = [];
+const EMPTY_HARMONIC_HITS: HarmonicPatternHit[] = [];
 
 // ─────────────────────────────────────────────────────────────────────────
 // Estado — na ordem canônica dos domínios (§1 → §5)
@@ -178,6 +181,14 @@ export interface UnifiedSnapshotState {
   // e POC/HVN. null = sem perna confirmada (fail-closed); score 0 nos
   // níveis é resultado honesto, não erro.
   fibonacciConfluence: FibonacciConfluenceMatrix | null;
+  // Refinamento Final §7 — Premium/Equilibrium/Discount do dealing range
+  // atual (últimos swings fractais confirmados — mesmo findSwings
+  // compartilhado). null = sem dois swings opostos confirmados.
+  premiumDiscount: PremiumDiscountReading | null;
+  // Refinamento Final §8 — padrões harmônicos XABCD detectados (fit >=
+  // MIN_FIT_SCORE, D recente). Lista vazia é o estado honesto comum;
+  // fitScore é aderência de razão, NUNCA probabilidade (Regra de Ouro 2).
+  harmonicPatterns: HarmonicPatternHit[];
 
   // §4 CÉREBRO (camada de análise — LEI 24: jamais alimenta o Core Engine)
   // Item 4 — Conselho Multi-Agente (contrato versionado): 6 votos reais +
@@ -271,6 +282,8 @@ interface UnifiedSnapshotActions {
   // trocado", nunca um resultado velho de outro ativo.
   setVolumeProfile: (profile: VolumeProfileSnapshot | null) => void;
   setFibonacciConfluence: (matrix: FibonacciConfluenceMatrix | null) => void;
+  setPremiumDiscount: (reading: PremiumDiscountReading | null) => void;
+  setHarmonicPatterns: (hits: HarmonicPatternHit[]) => void;
 
   // §4 CÉREBRO
   setCouncil: (decision: CouncilDecision | null) => void;
@@ -318,6 +331,8 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     // §3 MOTORES QUANT
     volumeProfile: null,
     fibonacciConfluence: null,
+    premiumDiscount: null,
+    harmonicPatterns: [],
     // §4 CÉREBRO
     council: null,
     scenario: null,
@@ -363,6 +378,8 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     // §3 MOTORES QUANT
     setVolumeProfile: (profile) => set((s) => { s.volumeProfile = profile; }),
     setFibonacciConfluence: (matrix) => set((s) => { s.fibonacciConfluence = matrix; }),
+    setPremiumDiscount: (reading) => set((s) => { s.premiumDiscount = reading; }),
+    setHarmonicPatterns: (hits) => set((s) => { s.harmonicPatterns = hits; }),
     // §4 CÉREBRO
     setCouncil: (decision) => set((s) => { s.council = decision; }),
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
@@ -442,6 +459,10 @@ export const useVolumeProfileSnapshot = (): VolumeProfileSnapshot | null =>
   useUnifiedSnapshotStore((s) => s.volumeProfile);
 export const useFibonacciConfluenceSnapshot = (): FibonacciConfluenceMatrix | null =>
   useUnifiedSnapshotStore((s) => s.fibonacciConfluence);
+export const usePremiumDiscountSnapshot = (): PremiumDiscountReading | null =>
+  useUnifiedSnapshotStore((s) => s.premiumDiscount);
+export const useHarmonicPatternsSnapshot = (): HarmonicPatternHit[] =>
+  useUnifiedSnapshotStore((s) => s.harmonicPatterns ?? EMPTY_HARMONIC_HITS);
 
 // §4 CÉREBRO
 export const useCouncilSnapshot = (): CouncilDecision | null =>

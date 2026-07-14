@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot } from "./store/unified-snapshot-store";
 // Ordem "Ciborgue Vivo" §3: síntese real de autodiagnóstico — mesmos
 // sinais do Health Monitor/Data Quality Layer, nunca uma segunda medição.
 import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/self-diagnostics";
@@ -120,6 +120,9 @@ import { computeOrderflowTrend } from "./nexus/orderflow-history";
 // contexto por timeframe — nunca uma medição, ver cabeçalho do módulo.
 import { timeframeProfile } from "./nexus/timeframe-profile";
 import { buildAssistantMessages } from "./nexus/operation-assistant";
+import { computePremiumDiscount } from "./nexus/premium-discount";
+import { detectHarmonicPatterns, MIN_FIT_SCORE } from "./nexus/harmonic-patterns";
+import { marketSessionFromUtc } from "./nexus/market-session";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
 import {
@@ -1522,6 +1525,39 @@ export default function App() {
   // por nada. Estreitado aos 2 campos reais lidos acima (mesmo padrão já
   // usado por ensembleConsensus/consensusRadar/auraReading neste arquivo).
   }, [chartData, smcZones, engine?.support, engine?.resistance, volumeProfileSnapshot]);
+
+  // Refinamento Final §7 (Premium/Discount) + §8 (harmônicos): os dois
+  // motores novos leem a MESMA série real do gráfico (chartData) e escrevem
+  // cada um a sua fatia — mesma disciplina store-mediated dos efeitos
+  // acima. O preço de referência do P/D é o último CLOSE real da série
+  // (cadência de 30s), deliberadamente NÃO o tick de 1s do WebSocket:
+  // recomputar zona/swings a cada tick escreveria na store 60x/min por um
+  // dado que só muda de verdade quando um candle fecha ou um swing novo
+  // confirma (Main Thread sagrada). Camada de análise (LEI 24): nunca
+  // alimenta o Core Engine.
+  useEffect(() => {
+    const st = useUnifiedSnapshotStore.getState();
+    if (!chartData || chartData.length === 0) {
+      st.setPremiumDiscount(null);
+      st.setHarmonicPatterns([]);
+      return;
+    }
+    const lastClose = chartData[chartData.length - 1]?.close ?? null;
+    st.setPremiumDiscount(computePremiumDiscount({ candles: chartData, price: lastClose }));
+    st.setHarmonicPatterns(detectHarmonicPatterns({ candles: chartData }));
+  }, [chartData]);
+
+  // Refinamento Final §10 (Inteligência Temporal, "sem reaproveitar
+  // cálculos antigos"): a série do Score Geral que alimenta a tendência de
+  // convicção é escopada ao PAR ativo+timeframe — trocar só o timeframe já
+  // muda o regime da leitura (S/R, estrutura e classificação temporal são
+  // timeframe-aware), então misturar amostras de 15m com 1H na mesma média
+  // móvel produziria uma "tendência" de nada real. O reset por troca de
+  // ATIVO já existia (efeito [selectedAsset] acima); este cobre o eixo que
+  // faltava. Idempotente quando os dois disparam juntos.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();
+  }, [chartTimeframe]);
 
   // V-MAX Fase 1 item 4: Conselho Multi-Agente. Cada insumo abaixo é dado
   // REAL já coletado por este componente ou pela store — o conselho é um
@@ -3618,6 +3654,11 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   const trackRecord = useTrackRecordSnapshot();
   const { convictionReading, etaReading, engine } = useContext(WidgetContext) || {};
   const council = useCouncilSnapshot();
+  // Refinamento Final §7 ("integradas ao Trade Plan"): leitura real de
+  // Premium/Discount da store — display-only, qualifica a QUALIDADE da
+  // zona de entrada do plano (comprar em Discount / vender em Premium é a
+  // convenção SMC), nunca bloqueia nem altera o plano (LEI 24).
+  const premiumDiscount = usePremiumDiscountSnapshot();
   if (!plan) {
     // Achado real desta sessão (relato do Operador: "Entry/Target não
     // aparece"): trade-plan.ts trava o plano pela leitura do CONSELHO
@@ -3734,6 +3775,26 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
           title={`${activeEta!.basis}. Recalculada continuamente — nunca afirma que o mercado "vai" atingir o alvo (§8).`}
         />
       )}
+      {/* Refinamento Final §7: em qual terço do dealing range real a ENTRADA
+          do plano está — Discount favorece LONG, Premium favorece SHORT
+          (convenção SMC). Contexto display-only: o plano em si nunca é
+          alterado/bloqueado por esta leitura (LEI 24). */}
+      {premiumDiscount && (() => {
+        const entryMid = (plan.entry.low + plan.entry.high) / 2;
+        const span = premiumDiscount.rangeHigh.price - premiumDiscount.rangeLow.price;
+        const entryPct = ((entryMid - premiumDiscount.rangeLow.price) * 100) / span;
+        const entryZone = entryPct > 55 ? "PREMIUM" : entryPct < 45 ? "DISCOUNT" : "EQ";
+        const favored = (long && entryZone === "DISCOUNT") || (!long && entryZone === "PREMIUM");
+        return (
+          <BarField
+            label="Zona"
+            value={`${entryZone}${favored ? " ✓" : ""}`}
+            labelClass="text-[#b026ff]/60"
+            valueClass={favored ? "text-[#00ffaa]/90" : entryZone === "EQ" ? "text-[#8ab4f8]/70" : "text-[#f0d06f]/90"}
+            title={`Premium/Discount do dealing range real (últimos swings fractais confirmados: ${f(premiumDiscount.rangeLow.price)}–${f(premiumDiscount.rangeHigh.price)}, equilíbrio ${f(premiumDiscount.equilibrium)}). Entrada do plano em ${entryPct.toFixed(0)}% do range — ${favored ? `${entryZone} favorece ${plan.direction} (convenção SMC)` : entryZone === "EQ" ? "região de equilíbrio, sem vantagem de zona" : `${entryZone} NÃO é a zona classicamente favorável para ${plan.direction}`}. Contexto display-only (LEI 24).`}
+          />
+        );
+      })()}
       {targetHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#00ffaa] pl-1">TARGET REACHED</span>}
       {stopHit && <span className="self-center text-[0.48rem] font-black tracking-widest text-[#ff0055] pl-1">STOP BREACHED</span>}
       {!targetHit && !stopHit && diverging && (
@@ -3852,7 +3913,16 @@ function TopBar({ data }: { data?: PriceState | null }) {
     confidenceZone,
     convictionTrend,
     assistantMessages,
+    chartTimeframe,
+    cycleLatencyMs,
+    voiceSnapshot,
   } = useContext(WidgetContext) || {};
+  // Refinamento Final §1 ("Sessão Atual"): derivação pura do relógio UTC
+  // real (market-session.ts). Computada no render — a TopBar re-renderiza
+  // ao menos 1x/s pelo tick de preço, então o rótulo nunca fica >1s
+  // desatualizado sem precisar de um timer próprio.
+  const marketSession = marketSessionFromUtc(new Date());
+  const wsLiveNow: boolean = voiceSnapshot?.wsLive === true;
   // Overhaul Cross-Market (Diretriz 2): o rótulo do mercado é passthrough
   // REAL de realCycle.instrumentType (mesmo padrão de wasmVariant) — nunca
   // uma string fixa. Antes de qualquer ciclo bem-sucedido (ou se o fetch
@@ -3962,6 +4032,18 @@ function TopBar({ data }: { data?: PriceState | null }) {
             >
               {marketMode === "TRADFI" ? "Macro" : cryptoMarketLabel}
             </span>
+            {/* Refinamento Final §1 ("Timeframe" no header): chip DISPLAY-ONLY
+                do timeframe realmente selecionado — a troca continua no
+                seletor interativo do painel do gráfico (um único controle,
+                zero duplicação de controle; aqui é leitura rápida <5s). */}
+            {marketMode === "CRYPTO" && chartTimeframe && (
+              <span
+                title="Timeframe ativo do gráfico e de toda a análise timeframe-aware (S/R, estrutura, classificação temporal). Troque no seletor do próprio gráfico."
+                className="text-[0.5rem] px-1 py-0.5 rounded uppercase tracking-wider whitespace-nowrap shrink-0 bg-[#8ab4f815] text-[#8ab4f8] border border-[#8ab4f825] font-bold"
+              >
+                {chartTimeframe}
+              </span>
+            )}
           </div>
 
           {/* O preço — única ocorrência em toda a interface. Em modo
@@ -4074,6 +4156,40 @@ function TopBar({ data }: { data?: PriceState | null }) {
         </div>
 
         <div className="flex gap-1 md:gap-2 h-full items-center justify-end shrink-0">
+          {/* Refinamento Final §1: cluster de estado operacional — Status
+              LIVE (wsLive REAL do WebSocket de preço, mesma leitura que o
+              voiceSnapshot já carrega — zero segunda fonte), Latência do
+              ciclo real do motor (cycleLatencyMs, o mesmo número do painel
+              de telemetria) e Sessão de mercado atual (market-session.ts,
+              relógio UTC real; o tooltip divulga a aproximação DST).
+              hidden md: em telas menores que iPad portrait o tooltip do
+              SystemStatusBadge continua carregando a latência — nada some,
+              só compacta. */}
+          {marketMode === "CRYPTO" && (
+            <div className="hidden md:flex items-center gap-2 h-7 px-2 rounded-full border border-[#8ab4f825] bg-[#8ab4f808] whitespace-nowrap shrink-0">
+              <span
+                title={wsLiveNow ? "Feed WebSocket de preço/livro conectado (tempo real)" : "Feed WebSocket desconectado — reconexão automática em andamento"}
+                className={`flex items-center gap-1 text-[0.5rem] font-bold tracking-wider ${wsLiveNow ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full bg-current ${wsLiveNow ? "animate-pulse" : ""}`} />
+                {wsLiveNow ? "LIVE" : "OFF"}
+              </span>
+              <span
+                title="Latência real do último ciclo do Core Engine (mesma métrica do painel de telemetria)."
+                className="text-[0.5rem] font-mono tabular-nums text-[#8ab4f8]/70"
+              >
+                {typeof cycleLatencyMs === "number" && Number.isFinite(cycleLatencyMs) ? `${Math.round(cycleLatencyMs)}ms` : DASH}
+              </span>
+              {marketSession && (
+                <span
+                  title={`Sessão global de mercado agora (relógio UTC real): ${marketSession.windowUtc}. Cripto negocia 24/7 — a sessão é contexto de liquidez, não um horário de abertura.`}
+                  className="text-[0.5rem] font-bold uppercase tracking-wider text-[#8ab4f8]/70"
+                >
+                  {marketSession.label}
+                </span>
+              )}
+            </div>
+          )}
           {/* Ordem "Ciborgue Vivo" §2: indicador compacto de risco/saúde
               sempre visível, sem abrir aba nenhuma — pedido explícito do
               Operador. Só reaparece aqui o que o redesenho radical abaixo
@@ -4616,6 +4732,9 @@ function SecondaryModuleView({ tab }: { tab: string }) {
   const price = usePriceSnapshot();
   const tradePlan = useTradePlanSnapshot();
   const trackRecord = useTrackRecordSnapshot();
+  // Refinamento Final §7/§8 — mesmas fatias reais desenhadas no gráfico.
+  const harmonicHits = useHarmonicPatternsSnapshot();
+  const premiumDiscountView = usePremiumDiscountSnapshot();
 
   const pct = (v: number | null | undefined, digits = 0) =>
     typeof v === "number" && Number.isFinite(v) ? `${(v * 100).toFixed(digits)}%` : MODULE_EMPTY;
@@ -4800,6 +4919,42 @@ function SecondaryModuleView({ tab }: { tab: string }) {
             ))
           ) : (
             <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">NO CONFLUENT LEVEL IN THIS WINDOW (honest result)</span>
+          )}
+        </ModulePanel>
+        {/* Refinamento Final §8: padrões harmônicos XABCD reais detectados
+            sobre os swings fractais compartilhados (harmonic-patterns.ts).
+            "fit" é ADERÊNCIA DE RAZÃO às tabelas de Fibonacci do padrão —
+            nunca probabilidade de acerto (Regra de Ouro 2; o título diz
+            isso). Lista vazia é o estado honesto comum: padrões harmônicos
+            completos e frescos são raros por construção. */}
+        <ModulePanel title="Harmonic Patterns · ratio fit, never probability">
+          {harmonicHits.length > 0 ? (
+            harmonicHits.map((h, i) => (
+              <ModuleStat
+                key={i}
+                label={`${h.pattern} ${h.direction}`}
+                value={`D @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}
+                tone={h.direction === "BULLISH" ? "long" : "short"}
+              />
+            ))
+          ) : (
+            <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">
+              NO FRESH XABCD PATTERN ≥ {(MIN_FIT_SCORE * 100).toFixed(0)}% RATIO FIT (honest result)
+            </span>
+          )}
+        </ModulePanel>
+        {/* Refinamento Final §7: o dealing range real Premium/EQ/Discount —
+            o mesmo desenhado no gráfico e usado como contexto do Trade Plan. */}
+        <ModulePanel title="Premium / Discount (real dealing range)">
+          {premiumDiscountView ? (
+            <>
+              <ModuleStat label="Zone (last close)" value={premiumDiscountView.zone} tone={premiumDiscountView.zone === "DISCOUNT" ? "long" : premiumDiscountView.zone === "PREMIUM" ? "short" : "neutral"} />
+              <ModuleStat label="Range" value={`${premiumDiscountView.rangeLow.price.toFixed(0)} – ${premiumDiscountView.rangeHigh.price.toFixed(0)}`} />
+              <ModuleStat label="Equilibrium (50%)" value={premiumDiscountView.equilibrium.toFixed(0)} />
+              <ModuleStat label="Price position" value={`${premiumDiscountView.pricePositionPct.toFixed(0)}% of range`} />
+            </>
+          ) : (
+            <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">NO CONFIRMED DEALING RANGE YET (needs one swing high + one swing low, fail-closed)</span>
           )}
         </ModulePanel>
         <ModulePanel title="Volume Profile (WASM, real)">
@@ -4993,6 +5148,9 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // 2 price lines reais Path A/B no gráfico (ver comentário da prop
   // `scenario` em EnhancedChart_110_Percent.tsx). Zero segunda fonte.
   const chartScenario = useScenarioSnapshot();
+  // Refinamento Final §7: dealing range Premium/EQ/Discount real para as 3
+  // linhas de contexto do gráfico (mesma fatia lida pelo Trade Plan strip).
+  const chartPremiumDiscount = usePremiumDiscountSnapshot();
 
   return (
     <Widget
@@ -5066,6 +5224,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             targetsHit={auraTrackRecord.active?.targetsHit ?? 0}
             confidenceZone={confidenceZone ?? null}
             scenario={chartScenario ?? null}
+            premiumDiscount={chartPremiumDiscount ?? null}
             layerVisibility={chartLayerVisibility}
             emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}
