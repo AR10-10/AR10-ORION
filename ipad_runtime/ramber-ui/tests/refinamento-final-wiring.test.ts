@@ -248,3 +248,26 @@ describe('Nexus Decision Layer: leitura única fundida, computada 1x e exposta n
     expect(layer).toContain('operationSource: "CORE_ENGINE"');
   });
 });
+
+// ─── Nexus Decision Layer V2 — estado operacional + justificativa (§3/§4) ───
+describe('Nexus V2: estado no badge herói e justificativa estruturada no tooltip — zero elemento novo', () => {
+  it('App alimenta os insumos V2 reais: inEntryZone com histerese, última resolução real (nunca REPLACED), votos/membros/heat/zona', () => {
+    const a = app();
+    const m = a.match(/const nexusDecision = useMemo\(([\s\S]*?)\);/);
+    expect(m).not.toBeNull();
+    expect(m![1]).toContain('inEntryZone: inEntryZoneNow ?? null');
+    expect(m![1]).toContain('if (h.status !== "REPLACED") return h.resolvedAt;');
+    expect(m![1]).toContain('councilFromSnapshot?.votes?.map');
+    expect(m![1]).toContain('convictionReading?.members?.map');
+    expect(m![1]).toContain('heatTier: heatReading?.status === "OK" ? heatReading.tier : null');
+    expect(m![1]).toContain('premiumDiscountZone: pdForDecision?.zone ?? null');
+  });
+
+  it('badge herói: estado no subtítulo existente e tooltip com Estado + Favoráveis/Contrários', () => {
+    const a = app();
+    expect(a).toContain('{decision?.operationalState ? ` · ${decision.operationalState}` : ""}');
+    expect(a).toContain('· Estado: ${decision.operationalState}');
+    expect(a).toContain('`Favoráveis: ${decision.reasonsFor.join(" · ")}`');
+    expect(a).toContain('`Contrários: ${decision.reasonsAgainst.join(" · ")}`');
+  });
+});

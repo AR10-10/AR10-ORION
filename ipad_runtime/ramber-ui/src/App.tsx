@@ -1985,6 +1985,9 @@ export default function App() {
   // bloqueia. Toda a matemática continua nos motores — este objeto é a
   // resposta consolidada que a UI (e futuras camadas: voz, replay) leem
   // de UMA vez em vez de recompor de 5 fatias.
+  // V2: zona P/D real para a justificativa estruturada (mesma fatia que o
+  // gráfico e o strip já leem).
+  const pdForDecision = usePremiumDiscountSnapshot();
   const nexusDecision = useMemo(
     () =>
       buildNexusDecision({
@@ -2002,8 +2005,33 @@ export default function App() {
           assistantMessages && assistantMessages.length > 0
             ? { text: assistantMessages[0].text, basis: assistantMessages[0].basis }
             : null,
+        // ── V2 (§3/§4) ──
+        inEntryZone: inEntryZoneNow ?? null,
+        // ENCERRADO olha a última resolução REAL (alvo/stop) — REPLACED é
+        // troca de plano, não encerramento de leitura.
+        lastResolvedAt: (() => {
+          for (let i = trackRecordSlice.history.length - 1; i >= 0; i--) {
+            const h = trackRecordSlice.history[i];
+            if (h.status !== "REPLACED") return h.resolvedAt;
+          }
+          return null;
+        })(),
+        councilVotes:
+          councilFromSnapshot?.votes?.map((v: { agent: string; stance: string; rationale: string }) => ({
+            agent: v.agent,
+            stance: v.stance,
+            rationale: v.rationale,
+          })) ?? null,
+        convictionMembers:
+          convictionReading?.members?.map((m: { id: string; agreesWithCore: boolean | null; detail: string }) => ({
+            id: m.id,
+            agreesWithCore: m.agreesWithCore,
+            detail: m.detail,
+          })) ?? null,
+        heatTier: heatReading?.status === "OK" ? heatReading.tier : null,
+        premiumDiscountZone: pdForDecision?.zone ?? null,
       }),
-    [engine?.direction, engine?.confidence, trackedPlan, trackRecordSlice, etaReading, institutionalScore, confidenceZone, convictionTrend, councilFromSnapshot, assistantMessages],
+    [engine?.direction, engine?.confidence, trackedPlan, trackRecordSlice, etaReading, institutionalScore, confidenceZone, convictionTrend, councilFromSnapshot, assistantMessages, inEntryZoneNow, convictionReading, heatReading, pdForDecision],
   );
 
   // Achado real de auditoria (sincronização/performance): este objeto era
@@ -4011,7 +4039,7 @@ function CoreSignalBadge({
   const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
   const fusedTitle = decision
     ? [
-        `NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24)`,
+        `NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24) · Estado: ${decision.operationalState}`,
         `Confiança: ${decision.confidenceLabel ?? DASH} · Score ${decision.score ?? DASH}${decision.scoreZone ? ` (${decision.scoreZone})` : ""}${decision.scoreTrend ? ` · ${decision.scoreTrend}` : ""} — confluência real, nunca probabilidade`,
         decision.plan
           ? `Entrada: ${f(decision.plan.entryLow)}–${f(decision.plan.entryHigh)} (${decision.plan.entryBasis}) · Stop: ${f(decision.plan.stopPrice)} (${decision.plan.stopBasis})`
@@ -4023,6 +4051,8 @@ function CoreSignalBadge({
             )
           : []),
         decision.reason ? `Motivo: ${decision.reason} (${decision.reasonBasis ?? "base real"})` : null,
+        decision.reasonsFor.length > 0 ? `Favoráveis: ${decision.reasonsFor.join(" · ")}` : null,
+        decision.reasonsAgainst.length > 0 ? `Contrários: ${decision.reasonsAgainst.join(" · ")}` : null,
       ]
         .filter(Boolean)
         .join("\n")
@@ -4044,7 +4074,10 @@ function CoreSignalBadge({
     >
       <span className={`text-sm md:text-base font-black tracking-wider ${textTone}`}>{direction ?? AWAIT}</span>
       <span className="text-[0.4rem] md:text-[0.45rem] font-bold text-[#8ab4f8]/60 tracking-[0.18em] uppercase mt-[1px] whitespace-nowrap">
+        {/* V2 §3: o estado operacional único no subtítulo do MESMO badge —
+            header alimentado pelo contrato sem um elemento novo. */}
         {confidence ? `Confidence · ${confidence}` : AWAIT}
+        {decision?.operationalState ? ` · ${decision.operationalState}` : ""}
       </span>
     </div>
   );

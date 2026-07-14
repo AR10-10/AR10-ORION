@@ -25,7 +25,38 @@
 import type { TradePlan } from "./trade-plan";
 import type { EtaReading } from "./eta-engine";
 
-export const NEXUS_DECISION_CONTRACT_VERSION = 1 as const;
+export const NEXUS_DECISION_CONTRACT_VERSION = 2 as const;
+
+// V2 §3 — Estado operacional padronizado, derivado SÓ de leituras reais
+// (prioridades documentadas em deriveOperationalState):
+//   OBSERVANDO   Núcleo em WAIT, sem plano — só observação.
+//   PREPARANDO   Núcleo direcional, mas o Conselho ainda não sustenta um
+//                plano (gap real presente) — cenário em preparação.
+//   CONFIRMANDO  Plano real existe; preço FORA da zona de entrada e nenhum
+//                alvo provado — aguardando o mercado confirmar/chegar.
+//   EXECUTAVEL   Plano real existe e o preço está DENTRO da zona de entrada
+//                agora (mesma leitura inEntryZone com histerese do App).
+//   GERENCIANDO  >=1 alvo real provado (ratchet ativo — stop em B/E+).
+//   ENCERRADO    Sem plano ativo e a ÚLTIMA resolução real (alvo/stop)
+//                aconteceu dentro da janela recente — pós-operação.
+// "EXECUTÁVEL" aqui é rótulo de ESTADO DE LEITURA (preço na zona do plano
+// consultivo) — este terminal continua permanentemente read-only, nunca
+// executa nada (FAIL_CLOSED do projeto inteiro).
+export type NexusOperationalState =
+  | "OBSERVANDO"
+  | "PREPARANDO"
+  | "CONFIRMANDO"
+  | "EXECUTAVEL"
+  | "GERENCIANDO"
+  | "ENCERRADO";
+
+// Janela documentada do estado ENCERRADO (parâmetro declarado, mesma
+// natureza dos limiares 70/30 do RSI — não uma medição).
+export const NEXUS_CLOSED_WINDOW_MS = 5 * 60_000;
+
+// V2 §4 — teto documentado de cada lista de justificativa (leitura <5s;
+// o debate completo dos 7 agentes continua no widget do Conselho).
+export const NEXUS_MAX_REASONS = 4;
 
 export type NexusOperation = "LONG" | "SHORT" | "AGUARDAR";
 
@@ -49,6 +80,14 @@ export interface NexusDecisionTarget {
 export interface NexusDecision {
   contractVersion: typeof NEXUS_DECISION_CONTRACT_VERSION;
   operation: NexusOperation;
+  // V2 §3: estado operacional único — alimenta header/assistente/tooltip.
+  operationalState: NexusOperationalState;
+  // V2 §4: justificativa estruturada — SÓ leituras reais já computadas
+  // (rationale literal dos votos do Conselho, subsistemas do Conviction,
+  // Heat extremo, zona Premium/Discount). Cap NEXUS_MAX_REASONS por lista;
+  // listas vazias são o estado honesto comum.
+  reasonsFor: string[];
+  reasonsAgainst: string[];
   operationSource: "CORE_ENGINE"; // constante deliberada: prova no contrato quem decide
   confidenceLabel: string | null; // rótulo categórico real do Core Engine (ALTA/MÉDIA/BAIXA)
   score: number | null; // Score de confluência 0-100 (nunca probabilidade)
@@ -80,6 +119,74 @@ export interface NexusDecisionInputs {
   councilStance: "LONG" | "SHORT" | "NEUTRAL" | "ABSTAIN" | null; // null = sem leitura ainda
   councilRiskGated: boolean | null;
   assistantMessage: { text: string; basis: string } | null;
+  // ── V2 ──
+  // Preço dentro da zona de entrada AGORA (mesma leitura com histerese
+  // já computada no App — nunca re-derivada aqui).
+  inEntryZone: boolean | null;
+  // Última resolução real do track record (alvo/stop), para ENCERRADO.
+  lastResolvedAt: number | null;
+  // Votos reais do Conselho (subset: agente/stance/rationale literais).
+  councilVotes: Array<{ agent: string; stance: string; rationale: string }> | null;
+  // Subsistemas do Conviction Engine (agree/disagree reais).
+  convictionMembers: Array<{ id: string; agreesWithCore: boolean | null; detail: string }> | null;
+  // Tier real do Heat Score (EXTREMO => "volatilidade/atividade elevada").
+  heatTier: string | null;
+  // Zona Premium/Discount real do último fechamento.
+  premiumDiscountZone: "PREMIUM" | "EQUILIBRIUM" | "DISCOUNT" | null;
+}
+
+function deriveOperationalState(
+  operation: NexusOperation,
+  hasPlan: boolean,
+  targetsHit: number,
+  inEntryZone: boolean | null,
+  lastResolvedAt: number | null,
+  now: number,
+): NexusOperationalState {
+  if (hasPlan) {
+    if (targetsHit >= 1) return "GERENCIANDO";
+    if (inEntryZone === true) return "EXECUTAVEL";
+    return "CONFIRMANDO";
+  }
+  if (lastResolvedAt !== null && now - lastResolvedAt <= NEXUS_CLOSED_WINDOW_MS && now >= lastResolvedAt) {
+    return "ENCERRADO";
+  }
+  return operation === "AGUARDAR" ? "OBSERVANDO" : "PREPARANDO";
+}
+
+// §4: monta as duas listas a partir de leituras reais nomeadas. Cada item
+// carrega a FONTE entre parênteses — verificável, nunca uma frase solta.
+function buildReasons(
+  operation: NexusOperation,
+  inputs: NexusDecisionInputs,
+): { reasonsFor: string[]; reasonsAgainst: string[] } {
+  const reasonsFor: string[] = [];
+  const reasonsAgainst: string[] = [];
+  if (operation !== "AGUARDAR") {
+    for (const v of inputs.councilVotes ?? []) {
+      if (v.stance !== "LONG" && v.stance !== "SHORT") continue; // NEUTRAL/ABSTAIN não é a favor nem contra
+      (v.stance === operation ? reasonsFor : reasonsAgainst).push(`${v.rationale} (Conselho·${v.agent})`);
+    }
+    for (const m of inputs.convictionMembers ?? []) {
+      if (m.agreesWithCore === null) continue; // sem leitura real => nem a favor nem contra
+      (m.agreesWithCore ? reasonsFor : reasonsAgainst).push(`${m.detail} (Conviction·${m.id})`);
+    }
+    if (inputs.premiumDiscountZone === "DISCOUNT" || inputs.premiumDiscountZone === "PREMIUM") {
+      const favors = (operation === "LONG") === (inputs.premiumDiscountZone === "DISCOUNT");
+      (favors ? reasonsFor : reasonsAgainst).push(
+        `Preço em ${inputs.premiumDiscountZone} do range (Premium/Discount)`,
+      );
+    }
+  }
+  // Atividade extrema é fator CONTRÁRIO independente de direção (§4 da
+  // diretriz: "volatilidade elevada") — leitura real do Heat Score.
+  if (inputs.heatTier === "EXTREMO") {
+    reasonsAgainst.push("Atividade/volatilidade extrema agora (Heat Score)");
+  }
+  return {
+    reasonsFor: reasonsFor.slice(0, NEXUS_MAX_REASONS),
+    reasonsAgainst: reasonsAgainst.slice(0, NEXUS_MAX_REASONS),
+  };
 }
 
 export function buildNexusDecision(inputs: NexusDecisionInputs, computedAt: number = Date.now()): NexusDecision {
@@ -122,9 +229,20 @@ export function buildNexusDecision(inputs: NexusDecisionInputs, computedAt: numb
             : "NO_STRUCTURE";
   }
 
+  const { reasonsFor, reasonsAgainst } = buildReasons(operation, inputs);
   return {
     contractVersion: NEXUS_DECISION_CONTRACT_VERSION,
     operation,
+    operationalState: deriveOperationalState(
+      operation,
+      plan !== null,
+      Math.max(0, Math.min(inputs.targetsHit, inputs.plan?.targets.length ?? 0)),
+      inputs.inEntryZone,
+      inputs.lastResolvedAt,
+      computedAt,
+    ),
+    reasonsFor,
+    reasonsAgainst,
     operationSource: "CORE_ENGINE",
     confidenceLabel: inputs.coreConfidence ?? null,
     score: typeof inputs.score === "number" && Number.isFinite(inputs.score) ? inputs.score : null,
