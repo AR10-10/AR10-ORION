@@ -27,3 +27,4 @@ ipad_runtime/ramber-ui/dist/
 # codigo-fonte versionado.
 ipad_runtime/index.html
 ipad_runtime/assets/
+node_modules/

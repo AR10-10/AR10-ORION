@@ -313,8 +313,8 @@ export function fibonacciAgentVote(matrix: FibonacciConfluenceMatrix | null): Co
 // da fronteira até o extremo (100 ou 0), mesma honestidade de
 // imbalanceConfidence: nunca uma probabilidade fabricada, só a distância
 // real do valor até a fronteira.
-const RSI_OVERBOUGHT = 70;
-const RSI_OVERSOLD = 30;
+export const RSI_OVERBOUGHT = 70;
+export const RSI_OVERSOLD = 30;
 
 /** MomentumAgent — RSI de Wilder real (computeRSI, mesma função já usada
  *  como feature do classificador k-NN — zero segunda matemática) sobre os

@@ -112,7 +112,19 @@ export function SmartOmnibox({
         // com o mouse. Mesmo padrão de bug já documentado no wrapper
         // Widget() (`!fixed !inset-2` no modo maximizado) — correção
         // idêntica aqui: `!overflow-y-auto` força a vitória na cascata.
-        <div className="absolute top-full left-0 mt-1.5 w-[300px] max-h-[70vh] !overflow-y-auto scrollbar-hide cyber-panel bg-[#010308]/98 z-50 p-2">
+        //
+        // BUGFIX (relatado pelo Operador — "corta na parte de cima ao
+        // abrir o ativo"): a MESMA classe `.cyber-panel` também define
+        // `position: relative`, vencendo pelo mesmo motivo de cascata
+        // sobre o `absolute` do Tailwind. Com o dropdown preso em fluxo
+        // normal (em vez de posicionado fora do fluxo), ele empurra a
+        // altura do wrapper pai para ~750px; esse wrapper vive dentro de
+        // um contêiner flex com altura fixa (`h-[70%]`) e
+        // `items-center`, que centraliza verticalmente a caixa
+        // gigante — resultado real medido: o botão de gatilho renderiza
+        // a ~350px ACIMA do viewport (invisível/cortado). Correção
+        // idêntica ao bug de overflow: `!absolute` força a vitória.
+        <div className="!absolute top-full left-0 mt-1.5 w-[300px] max-h-[70vh] !overflow-y-auto scrollbar-hide cyber-panel bg-[#010308]/98 z-50 p-2">
           <input
             autoFocus
             value={query}

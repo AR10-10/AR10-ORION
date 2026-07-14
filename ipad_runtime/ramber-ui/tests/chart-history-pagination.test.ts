@@ -126,6 +126,27 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     expect(tfEffectMatch![1]).not.toContain('mergeFreshTail');
   });
 
+  // Relato real do Operador (voz): "esse gráfico também tem que buscar os
+  // dado... de qualquer ativo... direto da raiz". Achado desta sessão: o
+  // gráfico JÁ busca `selectedAsset` (a string real, seja ela um dos 5
+  // favoritos OU qualquer símbolo achado via SmartOmnibox) — não existe
+  // lista fixa em lugar nenhum deste efeito. As duas travas abaixo garantem
+  // que isso não regride silenciosamente para uma lista hardcoded.
+  it('efeito de candles do gráfico busca IMEDIATAMENTE em QUALQUER troca de selectedAsset — zero lista fixa de favoritos', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('getChartCandles(selectedAsset, CHART_CANDLE_LIMIT, chartTimeframe).then((candles) => {\n      if (!cancelled && candles) setChartData(candles);\n    });\n    return () => {\n      cancelled = true;\n    };\n  }, [chartTimeframe, selectedAsset]);');
+  });
+
+  it('troca de ativo limpa todo estado do ativo ANTERIOR num efeito próprio escopado só a [selectedAsset] — nunca deixa dado velho mislabeled', () => {
+    const app = read('../src/App.tsx');
+    const idx = app.indexOf('setPriceData(null);');
+    expect(idx, 'efeito de reset ao trocar de ativo não encontrado').toBeGreaterThan(-1);
+    const block = app.slice(Math.max(0, idx - 30), idx + 1500);
+    expect(block).toContain('setChartData([]);');
+    expect(block).toContain('setOrderBook({ bids: [], asks: [] });');
+    expect(block).toMatch(/\}, \[selectedAsset\]\);/);
+  });
+
   it('ChartWidget repassa onRequestOlderCandles até EnhancedChart_110_Percent — mesma prop, ponta a ponta', () => {
     const app = read('../src/App.tsx');
     expect(app).toContain('<ChartWidget chartData={chartData} onRequestOlderCandles={handleRequestOlderCandles} />');

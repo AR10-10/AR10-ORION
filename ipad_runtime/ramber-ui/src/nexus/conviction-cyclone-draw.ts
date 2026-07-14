@@ -87,6 +87,14 @@ const MAX_PARTICLES = 40;
 const ROTATION_SPEED = 0.0022; // rad/ms na convicção máxima — parâmetro visual documentado, não medição
 const FUNNEL_POWER = 1.6; // >1 concentra o afunilamento perto do alvo (visual de "sucção" real do ciclone)
 const NOISE_FREQ = 0.006;
+// Achado real de auditoria: estes 2 viviam como literais soltos dentro de
+// computeCycloneFrame, quebrando a própria convenção do arquivo (todo
+// parâmetro visual ao lado tem nome — ver os 5 acima). Progresso real
+// 0..1/ms ao longo do eixo entrada→alvo: BASE é o fluxo mínimo mesmo com
+// convicção zero (partículas nunca congelam), CONVICTION_SCALE é o quanto
+// a convicção real acelera esse fluxo — zero mudança de valor/comportamento.
+const SPEED_ALONG_AXIS_BASE = 0.00012;
+const SPEED_ALONG_AXIS_CONVICTION_SCALE = 0.00028;
 
 function particleCount(conviction: number): number {
   const c = Math.max(0, Math.min(1, conviction));
@@ -112,7 +120,7 @@ export function computeCycloneFrame(real: CycloneRealParams, tMs: number): Cyclo
     // Progresso real 0..1 do lado da entrada até o lado do alvo, ciclando
     // continuamente — a partícula "renasce" na entrada assim que cruza o
     // alvo (fluxo contínuo, não uma única viagem que para).
-    const speedAlongAxis = 0.00012 + conviction * 0.00028;
+    const speedAlongAxis = SPEED_ALONG_AXIS_BASE + conviction * SPEED_ALONG_AXIS_CONVICTION_SCALE;
     let progress = (seed / (Math.PI * 2) + tMs * speedAlongAxis) % 1;
     if (progress < 0) progress += 1;
     // Colapso real (proximidade do alvo): comprime o progresso alcançável

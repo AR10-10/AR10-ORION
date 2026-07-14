@@ -18,12 +18,19 @@
 // complements already render (createPriceLine is full-width by nature).
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
+import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
 
 interface TradePlanZonePluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   entryLow: number | null;
   entryHigh: number | null;
+  // Diretriz Complementar §17 ("Projeção Visual Inteligente"): a MESMA
+  // Zona de Confiança Institucional já real (§16, institutional-score.ts)
+  // — nunca uma segunda fonte, nunca uma "probabilidade" codificada em
+  // opacidade (Regra de Ouro 2). null quando não há score real a bandar
+  // (WAIT/DADOS_INSUFICIENTES) — usa o peso neutro default.
+  confidenceZone: InstitutionalConfidenceZone | null;
 }
 
 // Same exact amber already used for the entry price lines in
@@ -32,18 +39,47 @@ interface TradePlanZonePluginProps {
 const ZONE_FILL = "rgba(240, 208, 111, 0.10)";
 const ZONE_BORDER = "rgba(240, 208, 111, 0.45)";
 
-export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh }: TradePlanZonePluginProps) {
+// §17: peso visual real por tier — a confluência mais forte lê mais
+// nítida, a mais fraca nunca desaparece (piso legível: mesmo a leitura
+// "Inválida" ainda é um nível real do plano, nunca deve ficar invisível).
+// Parâmetros documentados (mesma natureza dos limiares 70/30 do RSI), não
+// uma medição.
+const OPACITY_BY_TIER: Record<InstitutionalConfidenceZone["tier"], number> = {
+  MUITO_FORTE: 1,
+  FORTE: 0.85,
+  MODERADA: 0.7,
+  FRACA: 0.55,
+  INVALIDA: 0.4,
+};
+// Sem zona real ainda (Core Engine em WAIT/dados insuficientes) — peso
+// neutro, nem o teto nem o piso.
+const DEFAULT_OPACITY_MULTIPLIER = 0.7;
+
+function opacityMultiplierFor(zone: InstitutionalConfidenceZone | null): number {
+  return zone ? OPACITY_BY_TIER[zone.tier] : DEFAULT_OPACITY_MULTIPLIER;
+}
+
+function alphaOf(rgba: string): number {
+  const m = rgba.match(/,\s*([0-9.]+)\)$/);
+  return m ? Number(m[1]) : 1;
+}
+
+function withAlpha(rgba: string, alpha: number): string {
+  return rgba.replace(/,\s*[0-9.]+\)$/, `, ${alpha.toFixed(3)})`);
+}
+
+export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh, confidenceZone }: TradePlanZonePluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const rangeRef = useRef({ entryLow, entryHigh });
+  const rangeRef = useRef({ entryLow, entryHigh, confidenceZone });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
-  // Always the latest range for the draw loop to read — never re-triggers
-  // the setup effect below (same technique as LiquidityZonesPlugin).
-  rangeRef.current = { entryLow, entryHigh };
+  // Always the latest range/zone for the draw loop to read — never
+  // re-triggers the setup effect below (same technique as LiquidityZonesPlugin).
+  rangeRef.current = { entryLow, entryHigh, confidenceZone };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [entryLow, entryHigh]);
+  }, [entryLow, entryHigh, confidenceZone]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -66,7 +102,7 @@ export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh }: Trad
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      const { entryLow: low, entryHigh: high } = rangeRef.current;
+      const { entryLow: low, entryHigh: high, confidenceZone: zone } = rangeRef.current;
       // No plan, or a zero-width zone (single acceptance price): the
       // existing price line already covers it — a box here would
       // fabricate a width the real plan doesn't have.
@@ -78,11 +114,14 @@ export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh }: Trad
       const rectY = Math.min(y1, y2);
       const rectHeight = Math.max(1, Math.abs(y2 - y1));
 
-      ctx.fillStyle = ZONE_FILL;
+      // §17: mesma hierarquia fill<border de sempre, só reescalada pela
+      // confluência real — nunca um segundo esquema de cor.
+      const multiplier = opacityMultiplierFor(zone);
+      ctx.fillStyle = withAlpha(ZONE_FILL, alphaOf(ZONE_FILL) * multiplier);
       ctx.fillRect(0, rectY, cssWidth, rectHeight);
       // Fio de Seda: 1px solid real border (Canvas 2D, never setLineDash).
       ctx.lineWidth = 1;
-      ctx.strokeStyle = ZONE_BORDER;
+      ctx.strokeStyle = withAlpha(ZONE_BORDER, alphaOf(ZONE_BORDER) * multiplier);
       ctx.strokeRect(0.5, rectY + 0.5, Math.max(0, cssWidth - 1), Math.max(0, rectHeight - 1));
     };
 

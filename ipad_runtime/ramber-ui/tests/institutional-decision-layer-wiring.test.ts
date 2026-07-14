@@ -14,7 +14,7 @@ const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 describe('App.tsx: Score + Assistente computados UMA vez (padrão convictionReading), compartilhados via contextValue', () => {
   it('importa os dois módulos puros reais', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('import { computeInstitutionalScore } from "./nexus/institutional-score";');
+    expect(app).toContain('import { computeInstitutionalScore, institutionalConfidenceZone, computeConvictionTrend } from "./nexus/institutional-score";');
     expect(app).toContain('import { buildAssistantMessages } from "./nexus/operation-assistant";');
   });
 
@@ -33,6 +33,13 @@ describe('App.tsx: Score + Assistente computados UMA vez (padrão convictionRead
     expect(m![1]).toContain('scoreReading: institutionalScore,');
     expect(m![1]).toContain('council: councilFromSnapshot ?? null,');
     expect(m![1]).toContain('inEntryZone: inEntryZoneNow,');
+  });
+
+  it('§9/§18: assistantMessages também recebe o orderflowTrend real (mesma leitura do widget de regime) — zero 2ª medida de fluxo', () => {
+    const app = read('../src/App.tsx');
+    const m = app.match(/const assistantMessages = useMemo\(([\s\S]*?)\);/);
+    expect(m, 'assistantMessages não encontrado').not.toBeNull();
+    expect(m![1]).toContain('orderflowTrend,');
   });
 
   it('TDZ real: institutionalScore/assistantMessages declarados DEPOIS de convictionReading/inEntryZoneNow e ANTES de contextValue', () => {

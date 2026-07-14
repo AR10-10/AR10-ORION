@@ -224,7 +224,7 @@ describe('buildConvictionReading: membro ENSEMBLE prefere forca_ajustada do pró
 });
 
 describe('buildConvictionReading: Multi-Timeframe entra como UM voto real (fração dos prazos), nunca 6 votos', () => {
-  it('4 de 6 prazos concordam com LONG => membro MULTI_TIMEFRAME strength=4/6, agreesWithCore=true', () => {
+  it('7 de 9 prazos concordam com LONG => membro MULTI_TIMEFRAME strength=7/9, agreesWithCore=true (lista §7 ampliada)', () => {
     const r = buildConvictionReading({
       coreDirection: 'LONG',
       ensembleConsensus: null,
@@ -234,20 +234,20 @@ describe('buildConvictionReading: Multi-Timeframe entra como UM voto real (fraç
     });
     const mtfMember = r.members.find((m) => m.id === 'MULTI_TIMEFRAME')!;
     expect(mtfMember.agreesWithCore).toBe(true);
-    expect(mtfMember.strength).toBeCloseTo(4 / 6, 10);
+    expect(mtfMember.strength).toBeCloseTo(7 / 9, 10);
   });
 
-  it('exatamente metade (3 de 6) => agreesWithCore false (empate não é maioria real)', () => {
+  it('minoria logo abaixo da maioria (4 de 9) => agreesWithCore false (só maioria ESTRITA concorda)', () => {
     const r = buildConvictionReading({
       coreDirection: 'LONG',
       ensembleConsensus: null,
       council: null,
-      multiTimeframe: matrix('LONG', { '1h': 'SHORT', '4h': 'SHORT', '1d': 'SHORT' }),
+      multiTimeframe: matrix('LONG', { '30m': 'SHORT', '1h': 'SHORT', '4h': 'SHORT', '1d': 'SHORT', '1w': 'SHORT' }),
       trustScore: null,
     });
     const mtfMember = r.members.find((m) => m.id === 'MULTI_TIMEFRAME')!;
     expect(mtfMember.agreesWithCore).toBe(false);
-    expect(mtfMember.strength).toBeCloseTo(0.5, 10);
+    expect(mtfMember.strength).toBeCloseTo(4 / 9, 10);
   });
 
   it('nenhum prazo com leitura real => membro MULTI_TIMEFRAME null honesto, resto do pool continua', () => {

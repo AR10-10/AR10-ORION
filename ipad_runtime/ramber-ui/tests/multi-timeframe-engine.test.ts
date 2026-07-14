@@ -41,9 +41,9 @@ function zigzagTrend(n: number, direction: 1 | -1): MultiTimeframeCandle[] {
   });
 }
 
-describe('MULTI_TIMEFRAME_LIST: contrato dos 6 prazos', () => {
-  it('exatamente 1m/5m/15m/1h/4h/1d, nesta ordem (App.tsx e engine-bridge.ts dependem desta ordem para a linha da matriz)', () => {
-    expect(MULTI_TIMEFRAME_LIST).toEqual(['1m', '5m', '15m', '1h', '4h', '1d']);
+describe('MULTI_TIMEFRAME_LIST: contrato dos 9 prazos (Diretriz Mestra §7: +3m/30m/1w)', () => {
+  it('exatamente 1m/3m/5m/15m/30m/1h/4h/1d/1w, nesta ordem (App.tsx e engine-bridge.ts dependem desta ordem para a linha da matriz)', () => {
+    expect(MULTI_TIMEFRAME_LIST).toEqual(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d', '1w']);
   });
 });
 

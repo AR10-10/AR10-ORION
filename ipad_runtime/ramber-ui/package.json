@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@mlc-ai/web-llm": "^0.2.84",
-    "fake-indexeddb": "^6.2.5",
     "idb": "^8.0.3",
     "immer": "^11.1.11",
     "lightweight-charts": "^5.2.0",
@@ -24,6 +23,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.14",
+    "fake-indexeddb": "^6.2.5",
     "@types/node": "^22.14.0",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.1",

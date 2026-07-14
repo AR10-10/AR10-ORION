@@ -160,3 +160,20 @@ export function buildTradePlan(inputs: TradePlanInputs, computedAt: number = Dat
     computedAt,
   };
 }
+
+// Diretriz Complementar §18 ("trailing stop além do break-even"): achado
+// real de auditoria — signal-track-record.ts e o efeito de hit-boost do
+// gráfico (EnhancedChart_110_Percent.tsx) calculavam esta MESMA conta
+// (stop original / break-even) de forma duplicada e independente. Extraída
+// aqui como fonte única, e estendida: enquanto nenhum alvo real foi
+// provado, o stop é o original; a partir do 1º alvo provado, break-even
+// (entrada); a partir do 2º, o stop "trilha" para o alvo anterior — a
+// mesma convenção mecânica real de mesa de travar o lucro já validado a
+// cada novo alvo, nunca uma ordem real (READ_ONLY: isto é o que o
+// terminal SUGERE exibir, nunca o que ele executa).
+export function effectiveStopForTargetsHit(plan: TradePlan, targetsHit: number): number {
+  if (targetsHit <= 0) return plan.stop.price;
+  const entryMid = (plan.entry.low + plan.entry.high) / 2;
+  if (targetsHit === 1) return entryMid;
+  return plan.targets[targetsHit - 2].price;
+}

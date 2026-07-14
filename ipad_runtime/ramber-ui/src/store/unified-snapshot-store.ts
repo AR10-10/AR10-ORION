@@ -41,9 +41,13 @@ import type {
 } from "../nexus/types";
 import { maybeSampleL2History, type L2HistoryEntry } from "../nexus/l2-history";
 import { pushOrderflowHistory, type OrderflowHistoryEntry } from "../nexus/orderflow-history";
+import { pushConvictionHistory, type ConvictionScoreSample } from "../nexus/institutional-score";
 import type { VolumeProfileSnapshot } from "../nexus/volume-profile";
 import type { FibonacciConfluenceMatrix } from "../nexus/fibonacci-confluence";
 import type { CouncilDecision } from "../nexus/council";
+import type { ConsensusRadarReading } from "../nexus/consensus-radar";
+import type { PremiumDiscountReading } from "../nexus/premium-discount";
+import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
 import type { TradePlan } from "../nexus/trade-plan";
@@ -134,6 +138,8 @@ const EMPTY_HEALTH: HealthSnapshot = {
 const EMPTY_L2_HISTORY: L2HistoryEntry[] = [];
 const EMPTY_ORDERFLOW_HISTORY: OrderflowHistoryEntry[] = [];
 const EMPTY_TRAPS: TrapSignal[] = [];
+const EMPTY_CONVICTION_HISTORY: ConvictionScoreSample[] = [];
+const EMPTY_HARMONIC_HITS: HarmonicPatternHit[] = [];
 
 // ─────────────────────────────────────────────────────────────────────────
 // Estado — na ordem canônica dos domínios (§1 → §5)
@@ -175,6 +181,14 @@ export interface UnifiedSnapshotState {
   // e POC/HVN. null = sem perna confirmada (fail-closed); score 0 nos
   // níveis é resultado honesto, não erro.
   fibonacciConfluence: FibonacciConfluenceMatrix | null;
+  // Refinamento Final §7 — Premium/Equilibrium/Discount do dealing range
+  // atual (últimos swings fractais confirmados — mesmo findSwings
+  // compartilhado). null = sem dois swings opostos confirmados.
+  premiumDiscount: PremiumDiscountReading | null;
+  // Refinamento Final §8 — padrões harmônicos XABCD detectados (fit >=
+  // MIN_FIT_SCORE, D recente). Lista vazia é o estado honesto comum;
+  // fitScore é aderência de razão, NUNCA probabilidade (Regra de Ouro 2).
+  harmonicPatterns: HarmonicPatternHit[];
 
   // §4 CÉREBRO (camada de análise — LEI 24: jamais alimenta o Core Engine)
   // Item 4 — Conselho Multi-Agente (contrato versionado): 6 votos reais +
@@ -186,6 +200,11 @@ export interface UnifiedSnapshotState {
   // Fase 2 — armadilhas por corroboração de eventos REAIS consumados.
   // Lista vazia é o estado honesto comum, não erro.
   trapSignals: TrapSignal[];
+  // Diretriz Complementar §8 ("Radar de Consenso"): reempacote de 6
+  // magnitudes 0..1 reais já votadas/computadas alhures (ver
+  // consensus-radar.ts) — zero segunda matemática de consenso. null =
+  // ainda sem primeiro ciclo real do Conselho.
+  consensusRadar: ConsensusRadarReading | null;
   // Signal Precision order (phase 4) — actionable plan from REAL structure
   // (entry zone / stop / target / R:R). null = honest "no coherent plan"
   // (no directional stance, risk gate locked, or missing real structure).
@@ -195,6 +214,12 @@ export interface UnifiedSnapshotState {
   // motores puros do ciclo principal (LEI 24: confluência/contexto, nunca um
   // segundo motor de decisão). null até o primeiro ciclo real.
   multiTimeframeContext: MultiTimeframeMatrix | null;
+  // Diretriz Complementar §18/§4 ("tendência de convicção" / "Conviction
+  // Engine"): série real do Score Geral (institutional-score.ts) ao longo
+  // do tempo — só amostras REAIS entram (WAIT/DADOS_INSUFICIENTES nunca,
+  // pontuar o nada seria fabricação). Escopada ao ativo ativo, mesmo
+  // padrão de orderflowHistory.
+  institutionalScoreHistory: ConvictionScoreSample[];
 
   // §5 ORGANISMO
   // Estado REAL do motor de análise (engineStatus/direção/confiança do
@@ -257,13 +282,20 @@ interface UnifiedSnapshotActions {
   // trocado", nunca um resultado velho de outro ativo.
   setVolumeProfile: (profile: VolumeProfileSnapshot | null) => void;
   setFibonacciConfluence: (matrix: FibonacciConfluenceMatrix | null) => void;
+  setPremiumDiscount: (reading: PremiumDiscountReading | null) => void;
+  setHarmonicPatterns: (hits: HarmonicPatternHit[]) => void;
 
   // §4 CÉREBRO
   setCouncil: (decision: CouncilDecision | null) => void;
   setScenario: (projection: ScenarioProjection | null) => void;
   setTrapSignals: (traps: TrapSignal[]) => void;
+  setConsensusRadar: (reading: ConsensusRadarReading | null) => void;
   setTradePlan: (plan: TradePlan | null) => void;
   setMultiTimeframeContext: (matrix: MultiTimeframeMatrix | null) => void;
+  // Diretriz Complementar §18/§4: registra uma amostra REAL do Score Geral
+  // (nunca chamado com null/WAIT — o efeito que chama já filtra isso).
+  recordInstitutionalScore: (score: number) => void;
+  resetInstitutionalScoreHistory: () => void;
 
   // §5 ORGANISMO
   setCore: (core: CoreSnapshot) => void;
@@ -299,12 +331,16 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     // §3 MOTORES QUANT
     volumeProfile: null,
     fibonacciConfluence: null,
+    premiumDiscount: null,
+    harmonicPatterns: [],
     // §4 CÉREBRO
     council: null,
     scenario: null,
     trapSignals: [],
+    consensusRadar: null,
     tradePlan: null,
     multiTimeframeContext: null,
+    institutionalScoreHistory: [],
     // §5 ORGANISMO
     core: EMPTY_CORE,
     health: EMPTY_HEALTH,
@@ -342,12 +378,19 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     // §3 MOTORES QUANT
     setVolumeProfile: (profile) => set((s) => { s.volumeProfile = profile; }),
     setFibonacciConfluence: (matrix) => set((s) => { s.fibonacciConfluence = matrix; }),
+    setPremiumDiscount: (reading) => set((s) => { s.premiumDiscount = reading; }),
+    setHarmonicPatterns: (hits) => set((s) => { s.harmonicPatterns = hits; }),
     // §4 CÉREBRO
     setCouncil: (decision) => set((s) => { s.council = decision; }),
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
     setTrapSignals: (traps) => set((s) => { s.trapSignals = traps; }),
+    setConsensusRadar: (reading) => set((s) => { s.consensusRadar = reading; }),
     setTradePlan: (plan) => set((s) => { s.tradePlan = plan; }),
     setMultiTimeframeContext: (matrix) => set((s) => { s.multiTimeframeContext = matrix; }),
+    recordInstitutionalScore: (score) => set((s) => {
+      s.institutionalScoreHistory = pushConvictionHistory(s.institutionalScoreHistory as ConvictionScoreSample[], { score, at: Date.now() });
+    }),
+    resetInstitutionalScoreHistory: () => set((s) => { s.institutionalScoreHistory = []; }),
     // §5 ORGANISMO
     setCore: (core) => set((s) => { s.core = core; }),
     setHealth: (health) => set((s) => { s.health = health; }),
@@ -416,6 +459,10 @@ export const useVolumeProfileSnapshot = (): VolumeProfileSnapshot | null =>
   useUnifiedSnapshotStore((s) => s.volumeProfile);
 export const useFibonacciConfluenceSnapshot = (): FibonacciConfluenceMatrix | null =>
   useUnifiedSnapshotStore((s) => s.fibonacciConfluence);
+export const usePremiumDiscountSnapshot = (): PremiumDiscountReading | null =>
+  useUnifiedSnapshotStore((s) => s.premiumDiscount);
+export const useHarmonicPatternsSnapshot = (): HarmonicPatternHit[] =>
+  useUnifiedSnapshotStore((s) => s.harmonicPatterns ?? EMPTY_HARMONIC_HITS);
 
 // §4 CÉREBRO
 export const useCouncilSnapshot = (): CouncilDecision | null =>
@@ -424,10 +471,14 @@ export const useScenarioSnapshot = (): ScenarioProjection | null =>
   useUnifiedSnapshotStore((s) => s.scenario);
 export const useTrapSignalsSnapshot = (): TrapSignal[] =>
   useUnifiedSnapshotStore((s) => s.trapSignals ?? EMPTY_TRAPS);
+export const useConsensusRadarSnapshot = (): ConsensusRadarReading | null =>
+  useUnifiedSnapshotStore((s) => s.consensusRadar);
 export const useTradePlanSnapshot = (): TradePlan | null =>
   useUnifiedSnapshotStore((s) => s.tradePlan);
 export const useMultiTimeframeSnapshot = (): MultiTimeframeMatrix | null =>
   useUnifiedSnapshotStore((s) => s.multiTimeframeContext);
+export const useInstitutionalScoreHistory = (): ConvictionScoreSample[] =>
+  useUnifiedSnapshotStore((s) => s.institutionalScoreHistory ?? EMPTY_CONVICTION_HISTORY);
 
 // §5 ORGANISMO
 export const useCoreSnapshot = (): CoreSnapshot => useUnifiedSnapshotStore((s) => s.core);

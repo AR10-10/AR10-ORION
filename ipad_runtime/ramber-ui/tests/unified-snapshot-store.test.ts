@@ -28,6 +28,7 @@ const RESET = {
   cpi: null,
   scenario: null,
   trapSignals: [],
+  consensusRadar: null,
   tradePlan: null,
   trackRecord: { contractVersion: 2 as const, active: null, history: [], targetHits: 0, partialHits: 0, stopHits: 0, replaced: 0 },
   trustScore: null,
@@ -256,5 +257,64 @@ describe('unified-snapshot-store (V-MAX Fase 1.1): l2History retém amostras rea
       store.sampleL2History('BINANCE', l2(i * 2000));
     }
     expect(useUnifiedSnapshotStore.getState().l2History.BINANCE).toHaveLength(180);
+  });
+});
+
+describe('unified-snapshot-store (Diretriz Complementar §18/§4): institutionalScoreHistory retém só amostras REAIS, nunca fabrica uma entrada', () => {
+  beforeEach(() => {
+    useUnifiedSnapshotStore.setState(RESET);
+    useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();
+  });
+
+  it('começa vazio — nenhum score fabricado antes do primeiro ciclo real', () => {
+    expect(useUnifiedSnapshotStore.getState().institutionalScoreHistory).toEqual([]);
+  });
+
+  it('recordInstitutionalScore grava a amostra real com timestamp real', () => {
+    useUnifiedSnapshotStore.getState().recordInstitutionalScore(72);
+    const history = useUnifiedSnapshotStore.getState().institutionalScoreHistory;
+    expect(history).toHaveLength(1);
+    expect(history[0].score).toBe(72);
+    expect(typeof history[0].at).toBe('number');
+  });
+
+  it('amostras reais sucessivas se acumulam em ordem, respeitando o teto real (CONVICTION_HISTORY_CAPACITY)', () => {
+    const store = useUnifiedSnapshotStore.getState();
+    for (let i = 0; i < 65; i++) store.recordInstitutionalScore(i);
+    const history = useUnifiedSnapshotStore.getState().institutionalScoreHistory;
+    expect(history).toHaveLength(60);
+    expect(history[0].score).toBe(5); // as 5 mais antigas caíram do ring
+    expect(history[59].score).toBe(64);
+  });
+
+  it('resetInstitutionalScoreHistory limpa a série — mesma disciplina de troca de ativo que orderflowHistory/l2History já têm', () => {
+    useUnifiedSnapshotStore.getState().recordInstitutionalScore(80);
+    useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();
+    expect(useUnifiedSnapshotStore.getState().institutionalScoreHistory).toEqual([]);
+  });
+});
+
+describe('unified-snapshot-store (Diretriz Complementar §8): consensusRadar honesto — null até o primeiro ciclo real do Conselho', () => {
+  beforeEach(() => {
+    useUnifiedSnapshotStore.setState(RESET);
+  });
+
+  it('começa null — nenhuma leitura fabricada antes do primeiro ciclo real', () => {
+    expect(useUnifiedSnapshotStore.getState().consensusRadar).toBeNull();
+  });
+
+  it('setConsensusRadar grava exatamente a leitura real recebida', () => {
+    const reading = {
+      spokes: [{ category: 'ESTRUTURA' as const, value: 0.5 }],
+      computedAt: 123,
+    };
+    useUnifiedSnapshotStore.getState().setConsensusRadar(reading);
+    expect(useUnifiedSnapshotStore.getState().consensusRadar).toEqual(reading);
+  });
+
+  it('setConsensusRadar(null) devolve ao estado honesto de ausência (ex.: troca de ativo)', () => {
+    useUnifiedSnapshotStore.getState().setConsensusRadar({ spokes: [], computedAt: 1 });
+    useUnifiedSnapshotStore.getState().setConsensusRadar(null);
+    expect(useUnifiedSnapshotStore.getState().consensusRadar).toBeNull();
   });
 });

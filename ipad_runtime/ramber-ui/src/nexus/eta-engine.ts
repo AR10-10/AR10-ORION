@@ -54,7 +54,16 @@ export const MAX_ETA_BARS = 500;
 export interface TargetEta {
   targetIndex: number;
   bars: number; // barras estimadas até o alvo, à taxa real atual
-  ms: number; // bars × duração real da barra
+  ms: number; // bars × duração real da barra (o tempo PROVÁVEL do modelo)
+  // Diretriz Mestra §6 ("Tempo mínimo"): piso do PRÓPRIO modelo — barras
+  // com ER=1 (mercado perfeitamente direcional: cada barra avança o ATR
+  // inteiro na direção do alvo). É um limite matemático real do modelo,
+  // não um segundo modelo. barsMin <= bars sempre (|ER| <= 1).
+  // "Tempo máximo" NÃO existe honestamente neste modelo (ER→0 ⇒ ∞): a
+  // faixa exibida é [mínimo, provável] — desvio documentado, nunca um
+  // teto fabricado (mesma disciplina do cabeçalho sobre liquidez/momentum).
+  barsMin: number;
+  msMin: number;
   basis: string; // origem real verificável da estimativa
 }
 
@@ -132,20 +141,35 @@ export function computeTargetEtas(inputs: TargetEtaInputs): EtaReading {
     if (distance <= 0) {
       // Preço já no/além do alvo neste tick (o ratchet do track record pode
       // ainda não ter registrado) — 0 barras é a leitura real, não um chute.
-      return { targetIndex: i, bars: 0, ms: 0, basis: "preço real já no alvo neste tick" };
+      return { targetIndex: i, bars: 0, ms: 0, barsMin: 0, msMin: 0, basis: "preço real já no alvo neste tick" };
     }
     const speedPerBar = atrAbsolute * directionalEfficiency;
     const bars = distance / speedPerBar;
     if (!Number.isFinite(bars) || bars > MAX_ETA_BARS) return null; // além do horizonte honesto
+    const barsMin = distance / atrAbsolute; // piso do modelo: ER = 1 (ver TargetEta)
     return {
       targetIndex: i,
       bars,
       ms: bars * timeframeMs,
-      basis: `distância real ${distance.toFixed(2)} / (ATR ${atrAbsolute.toFixed(2)} × ER ${directionalEfficiency.toFixed(2)}) — estimativa dinâmica, nunca garantia`,
+      barsMin,
+      msMin: barsMin * timeframeMs,
+      basis: `distância real ${distance.toFixed(2)} / (ATR ${atrAbsolute.toFixed(2)} × ER ${directionalEfficiency.toFixed(2)}) — estimativa dinâmica, nunca garantia; mínimo = mesmo modelo com ER=1`,
     };
   });
 
   return { status: "OK", reason: directionalEfficiency <= 0 ? "sem_progresso_direcional_real_na_janela" : null, etas, directionalEfficiency, atrAbsolute, computedAt };
+}
+
+/** Diretriz Mestra §6 ("TP1 → 12–20 min"): faixa [mínimo, provável] do
+ *  MESMO modelo (ver TargetEta.barsMin). Colapsa para o formato simples
+ *  quando os dois arredondam igual. null se o provável não é formatável. */
+export function formatEtaRange(msMin: number | null, msLikely: number | null): string | null {
+  const likely = formatEtaDuration(msLikely);
+  if (likely === null) return null;
+  const min = formatEtaDuration(msMin);
+  if (min === null || min === likely) return likely;
+  // "≈ 12m"/"≈ 20m" => "≈ 12–20m" (um único ≈, leitura de faixa)
+  return `${min}–${likely.replace("≈ ", "")}`;
 }
 
 /** "≈ 35m" / "≈ 1h40" / "≈ 2d 4h" — o formato dos próprios exemplos da

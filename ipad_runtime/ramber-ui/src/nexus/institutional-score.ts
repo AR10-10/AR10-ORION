@@ -109,3 +109,112 @@ export function computeInstitutionalScore(input: InstitutionalScoreInput): Insti
     computedAt,
   };
 }
+
+// Diretriz Complementar §16 ("Zona de Confiança Institucional"): banda de
+// APRESENTAÇÃO honesta sobre o mesmo score real acima — zero matemática
+// nova, zero segunda fonte. Os 5 cortes/rótulos vêm literais da diretriz
+// (parâmetros documentados, mesma natureza dos limiares 70/30 do RSI).
+// "Inválida" (< 50) não é um erro: é a leitura honesta de que a massa de
+// confluência real não sustenta uma leitura confiável agora.
+export type InstitutionalConfidenceTier = "MUITO_FORTE" | "FORTE" | "MODERADA" | "FRACA" | "INVALIDA";
+
+export interface InstitutionalConfidenceZone {
+  tier: InstitutionalConfidenceTier;
+  label: string;
+  emoji: string;
+  colorClass: string;
+}
+
+const CONFIDENCE_TIERS: readonly { min: number; tier: InstitutionalConfidenceTier; label: string; emoji: string; colorClass: string }[] = [
+  { min: 90, tier: "MUITO_FORTE", label: "Muito Forte", emoji: "🟢", colorClass: "text-[#00ffaa]" },
+  { min: 80, tier: "FORTE", label: "Forte", emoji: "🟢", colorClass: "text-[#00ffaa]" },
+  { min: 65, tier: "MODERADA", label: "Moderada", emoji: "🟡", colorClass: "text-[#f0d06f]" },
+  { min: 50, tier: "FRACA", label: "Fraca", emoji: "🟠", colorClass: "text-[#ff9f40]" },
+  { min: -Infinity, tier: "INVALIDA", label: "Inválida", emoji: "🔴", colorClass: "text-[#ff0055]" },
+];
+
+/** Banda o score real 0-100 em uma das 5 zonas da diretriz §16. null
+ *  honesto (sem oportunidade a bandar) quando o score em si é null — nunca
+ *  uma banda fabricada para um WAIT. */
+export function institutionalConfidenceZone(score: number | null): InstitutionalConfidenceZone | null {
+  if (score === null || !Number.isFinite(score)) return null;
+  const clamped = Math.max(0, Math.min(100, score));
+  const match = CONFIDENCE_TIERS.find((t) => clamped >= t.min)!;
+  return { tier: match.tier, label: match.label, emoji: match.emoji, colorClass: match.colorClass };
+}
+
+// Diretriz Complementar §18 ("tendência de convicção"): não existia, em
+// todo o codebase, nenhuma SÉRIE real do Score Geral — só a leitura
+// instantânea acima. Um consumidor real (store) alimenta esta janela toda
+// vez que um score REAL é computado (WAIT/DADOS_INSUFICIENTES nunca
+// entram — pontuar o nada seria fabricação, mesma regra de sempre).
+export interface ConvictionScoreSample {
+  score: number;
+  at: number;
+}
+
+// Mesmo teto de ordem de grandeza dos outros rings reais desta base
+// (l2History/orderflowHistory) — parâmetro documentado, não uma medição.
+export const CONVICTION_HISTORY_CAPACITY = 60;
+
+/** Ring real do Score Geral ao longo do tempo — mesmo padrão de teto de
+ *  orderflow-history.ts, nunca acumula sem limite. */
+export function pushConvictionHistory(
+  ring: ConvictionScoreSample[],
+  sample: ConvictionScoreSample,
+  capacity: number = CONVICTION_HISTORY_CAPACITY,
+): ConvictionScoreSample[] {
+  const next = ring.length === 0 ? [sample] : [...ring, sample];
+  return next.length > capacity ? next.slice(next.length - capacity) : next;
+}
+
+export type ConvictionTrend = "FORTALECENDO" | "ENFRAQUECENDO" | "ESTAVEL";
+
+export interface ConvictionTrendReading {
+  status: "OK" | "DADOS_INSUFICIENTES";
+  reason: string | null;
+  trend: ConvictionTrend | null;
+  // Média real do Score Geral em cada metade da janela — a base
+  // verificável exposta para a UI, nunca recalculada por ela.
+  recentAverage: number | null;
+  priorAverage: number | null;
+  computedAt: number;
+}
+
+// Precisa de janela real dos dois lados — parâmetro documentado, mesma
+// natureza do MIN_ENTRIES_FOR_TREND de orderflow-history.ts.
+const MIN_SAMPLES_FOR_CONVICTION_TREND = 10;
+// Zona-morta real em PONTOS de score (0-100), não uma fração relativa: o
+// score já vive numa escala fixa e conhecida (ao contrário do CVD), então
+// um limiar absoluto aqui é honesto — mesma natureza dos limiares 70/30 do
+// RSI, não uma medição.
+const CONVICTION_TREND_DEADBAND_POINTS = 3;
+
+function insufficientConvictionTrend(reason: string, computedAt: number): ConvictionTrendReading {
+  return { status: "DADOS_INSUFICIENTES", reason, trend: null, recentAverage: null, priorAverage: null, computedAt };
+}
+
+/** Tendência real de convicção: compara a MÉDIA do Score Geral entre a
+ *  metade mais RECENTE e a metade ANTERIOR da janela retida (nunca uma
+ *  inclinação de série cumulativa como o CVD — o score já é uma leitura
+ *  direta a cada ciclo, então a média por metade é a comparação honesta).
+ *  FORTALECENDO = a confluência real está subindo; ENFRAQUECENDO = o
+ *  oposto; ESTAVEL = a diferença não supera a zona-morta real. Nunca uma
+ *  "probabilidade" (Regra de Ouro 2) — é a tendência real do mesmo score
+ *  de confluência já honesto. */
+export function computeConvictionTrend(history: ConvictionScoreSample[], now: number = Date.now()): ConvictionTrendReading {
+  const real = Array.isArray(history) ? history.filter((h) => Number.isFinite(h.score)) : [];
+  if (real.length < MIN_SAMPLES_FOR_CONVICTION_TREND) {
+    return insufficientConvictionTrend("historico_real_insuficiente_para_tendencia", now);
+  }
+  const mid = Math.floor(real.length / 2);
+  const priorSlice = real.slice(0, mid);
+  const recentSlice = real.slice(mid);
+  const priorAverage = priorSlice.reduce((sum, h) => sum + h.score, 0) / priorSlice.length;
+  const recentAverage = recentSlice.reduce((sum, h) => sum + h.score, 0) / recentSlice.length;
+  const delta = recentAverage - priorAverage;
+
+  const trend: ConvictionTrend =
+    Math.abs(delta) <= CONVICTION_TREND_DEADBAND_POINTS ? "ESTAVEL" : delta > 0 ? "FORTALECENDO" : "ENFRAQUECENDO";
+  return { status: "OK", reason: null, trend, recentAverage, priorAverage, computedAt: now };
+}

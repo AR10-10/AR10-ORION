@@ -67,7 +67,8 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
   it('chartLayerVisibility/chartLayersOpen declarados com DEFAULT_CHART_LAYER_VISIBILITY, toggleChartLayer é um updater funcional real', () => {
     const app = read('../src/App.tsx');
     expect(app).toContain('const [chartLayersOpen, setChartLayersOpen] = useState(false);');
-    expect(app).toContain('const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(DEFAULT_CHART_LAYER_VISIBILITY);');
+    // Auditoria Final §6: hidrata da sessão persistida (defaults ON quando ausente)
+    expect(app).toContain('const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);');
     expect(app).toContain('setChartLayerVisibility((prev) => ({ ...prev, [id]: !prev[id] }));');
   });
 
@@ -84,7 +85,7 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
 
   it('ChartWidget passa layerVisibility real (do contexto) para EnhancedChart_110_Percent, nunca um segundo estado', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('chartLayerVisibility, emaPeriod } = useContext(WidgetContext) || {};');
+    expect(app).toContain('chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision } = useContext(WidgetContext) || {};');
     expect(app).toContain('layerVisibility={chartLayerVisibility}');
     expect(app).toContain('emaPeriod={emaPeriod}');
   });
@@ -108,7 +109,7 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
   it('painel expõe o seletor real de período da EMA (4 períodos padrão, controle único, nunca uma pilha de linhas)', () => {
     const app = read('../src/App.tsx');
     expect(app).toContain('import { EMA_PERIODS, DEFAULT_EMA_PERIOD, type EmaPeriod } from "./nexus/ema";');
-    expect(app).toContain('const [emaPeriod, setEmaPeriod] = useState<EmaPeriod>(DEFAULT_EMA_PERIOD);');
+    expect(app).toContain('const [emaPeriod, setEmaPeriod] = useState<EmaPeriod>(() => restoredSession.emaPeriod);');
     expect(app).toContain('{id === "ema" && (');
     expect(app).toContain('onClick={() => setEmaPeriod?.(p)}');
   });

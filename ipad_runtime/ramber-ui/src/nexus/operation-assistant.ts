@@ -26,6 +26,7 @@
 import type { CouncilDecision, CouncilStance } from "./council";
 import type { ConvictionReading } from "./confluence-engine";
 import type { InstitutionalScoreReading } from "./institutional-score";
+import type { OrderflowTrendReading } from "./orderflow-history";
 
 export type AssistantTone = "POSITIVE" | "CAUTION" | "RISK" | "NEUTRAL";
 
@@ -49,6 +50,11 @@ export interface OperationAssistantInput {
   scoreReading: InstitutionalScoreReading | null;
   council: CouncilDecision | null;
   inEntryZone: boolean;
+  // Diretriz Complementar §9/§18: tendência REAL do mesmo fluxo que já
+  // sustenta "Fluxo comprador/vendedor" abaixo — permite honrar o exemplo
+  // literal da diretriz ("Fluxo comprador aumentando") sem uma segunda
+  // medida (ver orderflow-history.ts). null = sem histórico suficiente.
+  orderflowTrend: OrderflowTrendReading | null;
 }
 
 /** Postura real de um agente específico do Conselho (voto já computado —
@@ -114,12 +120,31 @@ export function buildAssistantMessages(input: OperationAssistantInput): Assistan
     out.push({ text: "Liquidez abaixo", tone: "NEUTRAL", basis: "LiquidityAgent: mais EQL intactos abaixo do preço real" });
   }
 
-  // 5. Fluxo real (voto já computado do OrderflowAgent sobre o CVD real).
+  // 5. Fluxo real (voto já computado do OrderflowAgent sobre o CVD real) +
+  // tendência real do MESMO fluxo (§9/§18) — "fortalecendo"/"perdendo
+  // força" honra o exemplo literal da diretriz sem fabricar uma segunda
+  // medida. FORTALECENDO/ENFRAQUECENDO em orderflow-history.ts descrevem
+  // sempre a pressão COMPRADORA (recentSlope vs priorSlope do CVD), nunca
+  // o lado atualmente dominante — por isso o rótulo se inverte para o
+  // lado SHORT (ENFRAQUECENDO da pressão compradora = fluxo vendedor
+  // fortalecendo). ESTAVEL/insuficiente => sem qualificador, mesma
+  // disciplina fail-closed do resto do arquivo.
   const flow = agentStance(input.council ?? null, "ORDERFLOW");
+  const flowTrend = input.orderflowTrend?.status === "OK" ? input.orderflowTrend.trend : null;
   if (flow === "LONG") {
-    out.push({ text: "Fluxo comprador", tone: "NEUTRAL", basis: "OrderflowAgent: CVD real positivo (MEXC Spot)" });
+    const qualifier = flowTrend === "FORTALECENDO" ? " fortalecendo" : flowTrend === "ENFRAQUECENDO" ? " perdendo força" : "";
+    out.push({
+      text: `Fluxo comprador${qualifier}`,
+      tone: "NEUTRAL",
+      basis: `OrderflowAgent: CVD real positivo (MEXC Spot)${flowTrend ? ` · tendência real do fluxo: ${flowTrend}` : ""}`,
+    });
   } else if (flow === "SHORT") {
-    out.push({ text: "Fluxo vendedor", tone: "NEUTRAL", basis: "OrderflowAgent: CVD real negativo (MEXC Spot)" });
+    const qualifier = flowTrend === "ENFRAQUECENDO" ? " fortalecendo" : flowTrend === "FORTALECENDO" ? " perdendo força" : "";
+    out.push({
+      text: `Fluxo vendedor${qualifier}`,
+      tone: "NEUTRAL",
+      basis: `OrderflowAgent: CVD real negativo (MEXC Spot)${flowTrend ? ` · tendência real do fluxo: ${flowTrend}` : ""}`,
+    });
   }
 
   // 6. Zona de entrada real do plano ativo (mesmo boolean com histerese

@@ -13,16 +13,22 @@
 //     against the ORIGINAL stop — a genuine loss.
 //   - The instant a real target is touched, the plan does NOT close: it
 //     keeps tracking toward the NEXT real target (if any), and the
-//     effective stop for everything from here on is the ENTRY price
-//     (break-even) — `breakEvenSuggested` on the active plan reflects this
-//     real, mechanical fact for the UI to display (§4 "Break-even
-//     sugerido").
+//     effective stop for everything from here on ratchets forward —
+//     entry price (break-even) after the 1st real target, then the
+//     PREVIOUS target's price after each subsequent one (§18 "trailing
+//     stop além do break-even": locks in the gain already validated,
+//     never gives it all back). `breakEvenSuggested` on the active plan
+//     reflects that the stop has moved off its original risk (§4
+//     "Break-even sugerido"); the exact level is
+//     `effectiveStopForTargetsHit()` in trade-plan.ts — single real
+//     source, also consumed by the chart's hit-boost effect.
 //   - If every real target in the plan is eventually touched, in order,
 //     the plan resolves TARGET_HIT (full read).
-//   - If price returns to break-even (or beyond) after banking >=1 real
-//     target but before the final one, the plan resolves PARTIAL_HIT — a
-//     validated read that didn't run its full course, honestly distinct
-//     from both a full win and a clean loss (never counted as a stop).
+//   - If price returns to the current ratcheted stop (or beyond) after
+//     banking >=1 real target but before the final one, the plan resolves
+//     PARTIAL_HIT — a validated read that didn't run its full course,
+//     honestly distinct from both a full win and a clean loss (never
+//     counted as a stop).
 //
 // Methodology (extends the v1 first-touch evaluation, stated openly):
 //   - A plan is OPEN from the moment it forms. Each tick is checked against
@@ -46,6 +52,7 @@
 // own. Functions return the ORIGINAL state reference when nothing changed,
 // so a store write with an unchanged state never notifies the organism.
 import type { TradePlan } from "./trade-plan";
+import { effectiveStopForTargetsHit } from "./trade-plan";
 
 export const TRACK_RECORD_CONTRACT_VERSION = 2 as const;
 
@@ -150,8 +157,7 @@ export function trackPriceTick(state: TrackRecordState, price: number, now: numb
   const targetsHit = active.targetsHit;
   const totalTargets = plan.targets.length;
 
-  const entryMid = (plan.entry.low + plan.entry.high) / 2;
-  const effectiveStopPrice = targetsHit > 0 ? entryMid : plan.stop.price;
+  const effectiveStopPrice = effectiveStopForTargetsHit(plan, targetsHit);
   const stopTouched = long ? price <= effectiveStopPrice : price >= effectiveStopPrice;
 
   const nextTarget = plan.targets[targetsHit] ?? null;

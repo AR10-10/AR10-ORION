@@ -4,7 +4,7 @@
 // geometry, including up to MAX_TARGETS real opposing levels. Pure logic,
 // no network, no store.
 import { describe, it, expect } from 'vitest';
-import { buildTradePlan, TRADE_PLAN_CONTRACT_VERSION, MAX_TARGETS, type TradePlanInputs } from '../src/nexus/trade-plan';
+import { buildTradePlan, effectiveStopForTargetsHit, TRADE_PLAN_CONTRACT_VERSION, MAX_TARGETS, type TradePlanInputs } from '../src/nexus/trade-plan';
 
 const BASE: TradePlanInputs = {
   stance: 'LONG',
@@ -171,5 +171,39 @@ describe('buildTradePlan: SHORT geometry — exact mirror of LONG', () => {
     expect(plan.stop.price).toBe(51_400);
     expect(plan.targets[0].price).toBe(49_000);
     expect(plan.riskRewardRatios[0]).toBeGreaterThan(0);
+  });
+});
+
+describe('effectiveStopForTargetsHit: single real source for the trailing-stop ratchet (Diretriz Complementar §18)', () => {
+  const plan = buildTradePlan({
+    ...BASE,
+    zones: [{ low: 49_200, high: 49_500, kind: 'OB_BULLISH' }],
+  })!; // LONG, entry 49_200-49_500, stop 48_800, targets [51_000, 52_200]
+  const entryMid = (49_200 + 49_500) / 2;
+
+  it('no real target proven yet: the ORIGINAL structural stop, untouched', () => {
+    expect(effectiveStopForTargetsHit(plan, 0)).toBe(plan.stop.price);
+  });
+
+  it('1 real target proven: break-even (entry midpoint) — same convention as before', () => {
+    expect(effectiveStopForTargetsHit(plan, 1)).toBe(entryMid);
+  });
+
+  it('2+ real targets proven: the stop TRAILS to the PREVIOUS target — locks in gain already validated, never just flat break-even', () => {
+    expect(effectiveStopForTargetsHit(plan, 2)).toBe(plan.targets[0].price);
+  });
+
+  it('a 3-target ladder trails one more rung: 3 proven => stop at target 2 (index 1)', () => {
+    const threeTargetPlan = buildTradePlan({
+      ...BASE,
+      zones: [{ low: 49_200, high: 49_500, kind: 'OB_BULLISH' }],
+      levels: [...BASE.levels, { price: 53_000, kind: 'FIB_161.8' }],
+    })!;
+    expect(threeTargetPlan.targets).toHaveLength(3);
+    expect(effectiveStopForTargetsHit(threeTargetPlan, 3)).toBe(threeTargetPlan.targets[1].price);
+  });
+
+  it('a negative targetsHit is treated the same as zero — never an out-of-bounds read', () => {
+    expect(effectiveStopForTargetsHit(plan, -1)).toBe(plan.stop.price);
   });
 });

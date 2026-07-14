@@ -6,6 +6,7 @@ import {
   computeLargeTradeThreshold,
   ingestTradesForLargeDetection,
   pushOrderflowHistory,
+  computeOrderflowTrend,
   EMPTY_THRESHOLD_STATE,
   ORDERFLOW_HISTORY_CAPACITY,
   type OrderflowTrade,
@@ -96,5 +97,66 @@ describe('pushOrderflowHistory: ring real de CVD+bolhas, respeita o teto, nunca 
     let ring: OrderflowHistoryEntry[] = [];
     for (let i = 0; i < ORDERFLOW_HISTORY_CAPACITY + 5; i++) ring = pushOrderflowHistory(ring, entry(i, i));
     expect(ring).toHaveLength(ORDERFLOW_HISTORY_CAPACITY);
+  });
+});
+
+describe('computeOrderflowTrend: tendência real de força do fluxo (Diretriz Complementar §18) — inclinação recente vs. anterior da MESMA série de CVD já real', () => {
+  const entry = (t: number, cvd: number): OrderflowHistoryEntry => ({ time: t, cvd, largeTrades: [] });
+
+  it('FAIL_CLOSED: histórico curto demais (< 10 entradas) => DADOS_INSUFICIENTES, nunca uma tendência fabricada', () => {
+    const short = Array.from({ length: 9 }, (_, i) => entry(i, i));
+    const r = computeOrderflowTrend(short);
+    expect(r.status).toBe('DADOS_INSUFICIENTES');
+    expect(r.reason).toBe('historico_real_insuficiente_para_tendencia');
+    expect(r.trend).toBeNull();
+  });
+
+  it('FORTALECENDO: a metade recente acelera bem além da zona-morta real', () => {
+    const history: OrderflowHistoryEntry[] = [
+      ...Array.from({ length: 10 }, (_, i) => entry(i, i)), // slope ~0.9 na metade anterior
+      ...Array.from({ length: 10 }, (_, i) => entry(10 + i, 9 + (i + 1) * 10)), // slope 10 na metade recente
+    ];
+    const r = computeOrderflowTrend(history);
+    expect(r.status).toBe('OK');
+    expect(r.trend).toBe('FORTALECENDO');
+    expect(r.recentSlope).toBeGreaterThan(r.priorSlope!);
+  });
+
+  it('ENFRAQUECENDO: a metade recente desacelera bem além da zona-morta real', () => {
+    const history: OrderflowHistoryEntry[] = [
+      ...Array.from({ length: 10 }, (_, i) => entry(i, i * 10)), // slope 10 na metade anterior
+      ...Array.from({ length: 10 }, (_, i) => entry(10 + i, 90 + (i + 1))), // slope 1 na metade recente
+    ];
+    const r = computeOrderflowTrend(history);
+    expect(r.status).toBe('OK');
+    expect(r.trend).toBe('ENFRAQUECENDO');
+    expect(r.recentSlope).toBeLessThan(r.priorSlope!);
+  });
+
+  it('ESTAVEL: inclinação real constante em toda a janela — a diferença fica dentro da zona-morta', () => {
+    const history = Array.from({ length: 20 }, (_, i) => entry(i, i)); // slope 1 constante
+    const r = computeOrderflowTrend(history);
+    expect(r.status).toBe('OK');
+    expect(r.trend).toBe('ESTAVEL');
+  });
+
+  it('CVD real completamente parado (amplitude 0) => ESTAVEL honesto, nunca NaN/erro', () => {
+    const history = Array.from({ length: 15 }, (_, i) => entry(i, 100));
+    const r = computeOrderflowTrend(history);
+    expect(r.status).toBe('OK');
+    expect(r.trend).toBe('ESTAVEL');
+    expect(Number.isFinite(r.recentSlope)).toBe(true);
+    expect(Number.isFinite(r.priorSlope)).toBe(true);
+  });
+
+  it('determinística: mesma série real, mesma leitura', () => {
+    const history = Array.from({ length: 20 }, (_, i) => entry(i, i * (i % 2 === 0 ? 3 : 1)));
+    expect(computeOrderflowTrend(history, 5_000)).toEqual(computeOrderflowTrend(history, 5_000));
+  });
+
+  it('a palavra "probabilidade" não aparece — tendência de fluxo é inclinação real, nunca chance de acerto (Regra de Ouro 2)', () => {
+    const history = Array.from({ length: 20 }, (_, i) => entry(i, i));
+    const r = computeOrderflowTrend(history);
+    expect(JSON.stringify(r).toLowerCase()).not.toContain('probabilidade');
   });
 });

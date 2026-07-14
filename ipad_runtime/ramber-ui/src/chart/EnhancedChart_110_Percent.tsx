@@ -60,6 +60,13 @@ import { patchLastCandleWithLiveTick } from "../nexus/live-candle-sync";
 import type { Timeframe } from "../nexus/types";
 // Signal Precision order: actionable plan drawn as silk-thread price lines.
 import type { TradePlan } from "../nexus/trade-plan";
+import { effectiveStopForTargetsHit } from "../nexus/trade-plan";
+import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
+import type { ScenarioProjection } from "../nexus/scenario-engine";
+import type { PremiumDiscountReading } from "../nexus/premium-discount";
+import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
+import type { NexusDecision } from "../nexus/decision-layer";
+import { formatEtaRange } from "../nexus/eta-engine";
 // Research-driven precision order: VWAP, the institutional-standard
 // intraday reference level this system was missing entirely (confirmed
 // via a full-codebase grep before writing nexus/vwap.ts).
@@ -186,6 +193,12 @@ interface EnhancedChartProps {
   // break-even stop redraw below. Optional/fail-closed: absent => 0, the
   // same as "no real progress yet" (never a fabricated hit).
   targetsHit?: number;
+  // Diretriz Complementar §17 ("Projeção Visual Inteligente"): a MESMA
+  // Zona de Confiança Institucional já real (§16, institutional-score.ts)
+  // — a zona de entrada abaixo lê mais ou menos nítida conforme esta
+  // confluência real. Optional/fail-closed: absent/null => peso neutro
+  // default (ver TradePlanZonePlugin).
+  confidenceZone?: InstitutionalConfidenceZone | null;
   // Camadas do Gráfico (Finding M): per-plugin visibility toggle from the
   // new settings panel. Optional and fail-closed: absent/undefined means
   // every layer stays visible (DEFAULT_CHART_LAYER_VISIBILITY), the exact
@@ -204,6 +217,27 @@ interface EnhancedChartProps {
   // como buscar/mesclar a página nova; este componente só detecta a
   // intenção real do usuário.
   onRequestOlderCandles?: () => void;
+  // §6 "Smart Projection Engine" (Diretriz Complementar): achado real de
+  // auditoria — o Motor de Cenários (scenario-engine.ts) já existia,
+  // já é 100% honesto (basis: "COUNCIL_OPINION_MASS_NOT_MARKET_PROBABILITY",
+  // alvos = níveis reais já mapeados por outros motores, peso = massa de
+  // opinião real do Conselho), e já estava na store — só nunca tinha sido
+  // desenhado no gráfico (só texto em widgets). Isto é o que fecha a
+  // lacuna real sem fabricar nenhuma "probabilidade estatística" nova, o
+  // risco que bloqueou este item por várias sessões. Optional/fail-closed:
+  // null/absent desenha nada, igual a tradePlan/aura acima.
+  scenario?: ScenarioProjection | null;
+  // Refinamento Final §7: dealing range Premium/EQ/Discount real
+  // (premium-discount.ts) — 3 linhas fio-de-seda discretas. Fail-closed.
+  premiumDiscount?: PremiumDiscountReading | null;
+  // Auditoria Final §3: harmônicos RENDERIZADOS — a linha do ponto D do
+  // melhor padrão real (fit desc) + EPA quando Wolfe. Fail-closed.
+  harmonicHits?: HarmonicPatternHit[] | null;
+  // Auditoria Final §3/§4: a leitura fundida — usada AQUI só para
+  // enriquecer os títulos das linhas de alvo com ETA em faixa (a
+  // distância % vem do livePrice real). Geometria continua vindo de
+  // tradePlan — decision.plan deriva do MESMO objeto, zero divergência.
+  decision?: NexusDecision | null;
 }
 
 // Auditoria de arquitetura (revisão completa) — paginação histórica real:
@@ -256,6 +290,11 @@ export function EnhancedChart_110_Percent({
   tradePlan,
   aura,
   targetsHit,
+  confidenceZone,
+  scenario,
+  premiumDiscount,
+  harmonicHits,
+  decision,
   layerVisibility,
   emaPeriod,
   onRequestOlderCandles,
@@ -269,6 +308,9 @@ export function EnhancedChart_110_Percent({
   const zoneLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
   const tradePlanLinesRef = useRef<IPriceLine[]>([]);
+  const scenarioLinesRef = useRef<IPriceLine[]>([]);
+  const premiumDiscountLinesRef = useRef<IPriceLine[]>([]);
+  const harmonicLinesRef = useRef<IPriceLine[]>([]);
   // Named refs to the stop/target lines specifically (a subset of
   // tradePlanLinesRef above) — lets the hit-boost effect below update
   // color/title in place via applyOptions() instead of tearing down and
@@ -313,12 +355,20 @@ export function EnhancedChart_110_Percent({
         vertLines: { color: "rgba(0, 240, 255, 0.06)" },
         horzLines: { color: "rgba(0, 240, 255, 0.06)" },
       },
-      crosshair: { mode: CrosshairMode.Normal },
+      // Diretriz Mestra §2 ("Magnetismo OHLC / Snap em candles"): Magnet
+      // gruda o crosshair no valor da série (o close do candle) — snap
+      // real da própria lightweight-charts, zero implementação paralela.
+      crosshair: { mode: CrosshairMode.Magnet },
       rightPriceScale: { borderColor: "rgba(138, 180, 248, 0.15)" },
       timeScale: {
         borderColor: "rgba(138, 180, 248, 0.15)",
         timeVisible: true,
         secondsVisible: false,
+        // Diretriz Mestra §2 ("Scroll para projeções futuras"): respiro à
+        // direita da última vela — as price lines de plano/cenário/P-D
+        // continuam legíveis na região futura; o operador pode arrastar
+        // mais além (fixRightEdge segue no padrão false da lib).
+        rightOffset: 8,
       },
       // Diretriz explícita do Sprint 1: pan/zoom real e nativo — nunca
       // hand-rolled. handleScroll cobre arrastar (mouse + touch);
@@ -412,6 +462,9 @@ export function EnhancedChart_110_Percent({
       zoneLinesRef.current = [];
       fibLinesRef.current = [];
       tradePlanLinesRef.current = [];
+      scenarioLinesRef.current = [];
+      premiumDiscountLinesRef.current = [];
+      harmonicLinesRef.current = [];
       cvdSeriesRef.current = null;
       vwapSeriesRef.current = null;
       emaSeriesRef.current = null;
@@ -663,6 +716,123 @@ export function EnhancedChart_110_Percent({
     });
   }, [fibonacciLevels]);
 
+  // §6 "Smart Projection Engine" (achado real de auditoria, ver comentário
+  // da prop `scenario` acima): as 2 rotas reais do Motor de Cenários
+  // (Path A/B) como price lines nativas — mesmo padrão das linhas Fibonacci
+  // acima, "fio de seda" (1px sólida, nunca pontilhada). Cor = mesma
+  // convenção LONG/SHORT (#00ffaa/#ff0055) já usada pelo próprio texto
+  // "SCENARIO A/B" no CouncilWidget — MESMA leitura, nunca uma segunda.
+  // Deliberadamente mais discretas que o Trade Plan ATIVO (teto de opacidade
+  // mais baixo, sem rótulo no eixo de preço): isto é confluência/contexto
+  // do Conselho, nunca uma segunda decisão de trading (LEI 24) — o alvo
+  // REAL do plano ativo continua a linha com mais peso visual na tela.
+  // Opacidade escala linearmente pela opinionWeight REAL (0..1, nunca uma
+  // probabilidade — o próprio scenario.basis documenta isso); piso honesto
+  // mesmo quando o peso é null (conselho travado/ausente) para nunca
+  // esconder um alvo real só porque a confiança numérica não existe ainda.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    scenarioLinesRef.current.forEach((line) => series.removePriceLine(line));
+    scenarioLinesRef.current = [];
+    if (!scenario) return;
+
+    const alphaOf = (weight: number | null): number => {
+      const floor = 0.12;
+      const ceiling = 0.55; // sempre abaixo do 0.75 real do Trade Plan ativo
+      if (weight === null || !Number.isFinite(weight)) return floor;
+      return floor + Math.max(0, Math.min(1, weight)) * (ceiling - floor);
+    };
+
+    ([
+      { path: scenario.pathA, label: "SCENARIO A" },
+      { path: scenario.pathB, label: "SCENARIO B" },
+    ] as const).forEach(({ path, label }) => {
+      if (!path.target || !Number.isFinite(path.target.price)) return;
+      const isLong = path.direction === "LONG";
+      const rgb = isLong ? "0, 255, 170" : "255, 0, 85";
+      const alpha = alphaOf(path.opinionWeight);
+      const weightLabel = path.opinionWeight !== null
+        ? `opinion ${Math.round(path.opinionWeight * 100)}%`
+        : "opinion n/a";
+      scenarioLinesRef.current.push(
+        series.createPriceLine({
+          price: path.target.price,
+          color: `rgba(${rgb}, ${alpha.toFixed(2)})`,
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: false,
+          title: `${label} · ${path.direction} · ${path.target.sourceKind} · ${weightLabel}`,
+        }),
+      );
+    });
+  }, [scenario]);
+
+  // Refinamento Final §7 (Premium/Discount zones): as 3 fronteiras REAIS do
+  // dealing range atual (último swing high confirmado, equilíbrio 50%,
+  // último swing low confirmado — premium-discount.ts, mesmo findSwings
+  // compartilhado dos motores). Fio de seda (1px sólida), MAIS discretas que
+  // Scenario e Trade Plan (contexto de zona, não alvo): opacidade fixa
+  // baixa, sem rótulo de eixo. Fail-closed: sem leitura real, zero linhas.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    premiumDiscountLinesRef.current.forEach((line) => series.removePriceLine(line));
+    premiumDiscountLinesRef.current = [];
+    if (!premiumDiscount) return;
+    const mkPd = (price: number, color: string, title: string) => {
+      if (!Number.isFinite(price)) return;
+      premiumDiscountLinesRef.current.push(
+        series.createPriceLine({
+          price,
+          color,
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: false,
+          title,
+        }),
+      );
+    };
+    mkPd(premiumDiscount.rangeHigh.price, "rgba(255, 0, 85, 0.30)", "Premium · topo do range");
+    mkPd(premiumDiscount.equilibrium, "rgba(138, 180, 248, 0.30)", "Equilibrium · 50%");
+    mkPd(premiumDiscount.rangeLow.price, "rgba(0, 255, 170, 0.30)", "Discount · fundo do range");
+  }, [premiumDiscount]);
+
+  // Auditoria Final §3 ("caso esteja calculado mas não desenhado, ativar
+  // renderização"): o MELHOR padrão harmônico real (hits[0] — a lista já
+  // vem ordenada por fit desc do motor) vira uma price line no ponto de
+  // reversão esperado (D / ponto 5), + a linha EPA quando Wolfe. Púrpura
+  // (acento do Conselho/opinião agregada), mais discreta que Trade Plan e
+  // Scenario; fio de seda; o título carrega o fit com o rótulo honesto —
+  // aderência, nunca probabilidade. Fail-closed: sem padrão, zero linhas.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));
+    harmonicLinesRef.current = [];
+    const top = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;
+    if (!top || !Number.isFinite(top.points.D.price)) return;
+    const mkH = (price: number, title: string) => {
+      harmonicLinesRef.current.push(
+        series.createPriceLine({
+          price,
+          color: "rgba(176, 38, 255, 0.40)",
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: false,
+          title,
+        }),
+      );
+    };
+    mkH(
+      top.points.D.price,
+      `${top.pattern} ${top.direction} · D · fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)`,
+    );
+    if (top.pattern === "WOLFE" && typeof top.epaPrice === "number" && Number.isFinite(top.epaPrice)) {
+      mkH(top.epaPrice, "WOLFE · EPA (linha 1→4 real)");
+    }
+  }, [harmonicHits]);
+
   // Signal Precision order: the Trade Plan drawn on the chart — subtle,
   // silk-thread annotations (1px solid, never dashed; hierarchy only via
   // color/opacity). Entry zone = two lines bounding the real structure
@@ -728,20 +898,26 @@ export function EnhancedChart_110_Percent({
   // instantaneous livePrice alone — a target once proven stays marked
   // REACHED even if price later pulls back below it (re-deriving from
   // livePrice would flip the marker back off, which is dishonest: the
-  // level WAS touched). The stop line itself moves to break-even (real
-  // entry price) the instant targetsHit > 0 — the same mechanical
-  // convention the track record applies internally — "quando o cenário
-  // muda, o desenho muda" (Diretriz Complementar §5).
+  // level WAS touched). The stop line itself ratchets forward the instant
+  // targetsHit > 0 — break-even after the 1st real target, then the
+  // PREVIOUS target's price after each subsequent one (§18 "trailing stop
+  // além do break-even") — via effectiveStopForTargetsHit(), the SAME
+  // single real source the track record uses internally, never a second
+  // formula here. "Quando o cenário muda, o desenho muda" (Diretriz
+  // Complementar §5).
   useEffect(() => {
     if (!tradePlan) return;
     const hits = targetsHit ?? 0;
-    const entryMid = (tradePlan.entry.low + tradePlan.entry.high) / 2;
-    const breakEvenActive = hits > 0;
-    const effectiveStopPrice = breakEvenActive ? entryMid : tradePlan.stop.price;
+    const stopRatchetActive = hits > 0;
+    const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);
     const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
     const long = tradePlan.direction === "LONG";
     const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
-    const stopTitle = breakEvenActive ? `STOP · BREAK-EVEN (real)` : `STOP · ${tradePlan.stop.basis}`;
+    const stopTitle = hits >= 2
+      ? `STOP · TRILHADO (alvo ${hits - 1})`
+      : stopRatchetActive
+        ? `STOP · BREAK-EVEN (real)`
+        : `STOP · ${tradePlan.stop.basis}`;
     stopLineRef.current?.applyOptions({
       price: effectiveStopPrice,
       color: stopHitNow ? "rgba(255, 0, 85, 1)" : "rgba(255, 0, 85, 0.75)",
@@ -754,13 +930,22 @@ export function EnhancedChart_110_Percent({
       const reached = i < hits;
       const rr = tradePlan.riskRewardRatios[i];
       const label = multi ? `TARGET ${i + 1}` : "TARGET";
-      const title = `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}`;
+      // Auditoria Final §3: distância % REAL ao preço vivo + ETA em faixa
+      // do contrato fundido (decision.plan deriva do MESMO tradePlan; o
+      // guard de preço torna divergência de render intermediário inócua).
+      const distPct = p !== null && p > 0 ? ` · ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";
+      const fusedTarget = decision?.plan?.targets[i];
+      const etaLabel =
+        fusedTarget && Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)
+          ? formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)
+          : null;
+      const title = `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}`;
       line.applyOptions({
         color: reached ? "rgba(0, 255, 170, 1)" : "rgba(0, 255, 170, 0.75)",
         title: reached ? `${title} · REACHED` : title,
       });
     });
-  }, [tradePlan, livePrice, targetsHit]);
+  }, [tradePlan, livePrice, targetsHit, decision]);
 
   return (
     <div className="absolute inset-0">
@@ -832,6 +1017,7 @@ export function EnhancedChart_110_Percent({
           series={chartReady?.series ?? null}
           entryLow={tradePlan?.entry.low ?? null}
           entryHigh={tradePlan?.entry.high ?? null}
+          confidenceZone={confidenceZone ?? null}
         />
       )}
     </div>
