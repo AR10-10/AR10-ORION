@@ -47,7 +47,10 @@ import { computeRSI } from '../../../src/research/engines/lorentzian-classifier.
 import { buildEnsembleConsensus, opinionFromLabel, opinionFromVote } from '../../../src/consensus/index.js';
 import { momentumAgentVote } from './council';
 
-export const MULTI_TIMEFRAME_LIST = ['1m', '5m', '15m', '1h', '4h', '1d'] as const;
+// Diretriz Mestra §7: lista ampliada com 3m/30m/1w (intervalos nativos da
+// Binance Futures — o Bus repassa a string direto; +3 fetches por ciclo de
+// 60s, custo real medido e aceitável). 9 prazos, do scalp ao macro semanal.
+export const MULTI_TIMEFRAME_LIST = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d', '1w'] as const;
 export type MultiTimeframeId = (typeof MULTI_TIMEFRAME_LIST)[number];
 
 export interface MultiTimeframeCandle {

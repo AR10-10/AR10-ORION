@@ -133,3 +133,86 @@ describe('§8 Harmônicos: display gated pelo fit mínimo honesto', () => {
     expect(harmonic).not.toMatch(/setTradePlan|setCouncil|fetch\(|Math\.random/);
   });
 });
+
+// ─── Diretriz Mestra (Consolidação Final) — fiação dos gaps reais ───────────
+describe('Diretriz Mestra: Heat Score + TENDÊNCIA no header, Magnet, futuro, MTF 9 prazos', () => {
+  it('heatReading computada UMA vez em App (useMemo) de 3 fontes reais e exposta via contextValue', () => {
+    const a = app();
+    const m = a.match(/const heatReading = useMemo\(([\s\S]*?)\);/);
+    expect(m, 'heatReading não encontrada').not.toBeNull();
+    expect(m![1]).toContain('bandwidthPercentile: engine?.marketRegime?.bandwidthPercentile ?? null');
+    expect(m![1]).toContain('deltaPct: priceData?.deltaPct ?? null');
+    expect(m![1]).toContain('recentLiquidationCount: liquidations?.length ?? null');
+    expect(a).toContain('import { computeHeatScore } from "./nexus/heat-score";');
+    const ctx = a.match(/const contextValue = useMemo\(\s*\(\) => \(\{([\s\S]*?)\}\),/);
+    expect(ctx![1]).toContain('heatReading,');
+  });
+
+  it('chip HEAT no header: DASH honesto sem 2 componentes; tooltip nega probabilidade/direção', () => {
+    const a = app();
+    expect(a).toContain('{heatReading?.status === "OK" ? heatReading.score : DASH}');
+    expect(a).toContain('Nunca probabilidade, nunca direção.');
+  });
+
+  it('chip TENDÊNCIA: passthrough do marketStructureLabel real do Core Engine — zero segunda classificação', () => {
+    const a = app();
+    const idx = a.indexOf('{marketMode === "CRYPTO" && engine?.marketStructureLabel && (');
+    expect(idx, 'chip TENDÊNCIA não encontrado').toBeGreaterThan(-1);
+    expect(a.slice(idx, idx + 900)).toContain('{engine.marketStructureLabel}');
+  });
+
+  it('§2: crosshair Magnet (snap real da lib) + rightOffset para a região futura', () => {
+    const c = chart();
+    expect(c).toContain('crosshair: { mode: CrosshairMode.Magnet }');
+    expect(c).not.toContain('CrosshairMode.Normal');
+    expect(c).toContain('rightOffset: 8,');
+  });
+
+  it('§6: barra e painel usam a FAIXA formatEtaRange(msMin, ms) — nunca mais um único número', () => {
+    const a = app();
+    expect(a).toContain('formatEtaRange(activeEta.msMin ?? null, activeEta.ms)');
+    expect(a).toContain('formatEtaRange(etaReading.etas[i].msMin ?? null, etaReading.etas[i].ms)');
+  });
+
+  it('§7: matriz MTF com os 9 prazos (labels completos, zero buraco no Record)', () => {
+    const a = app();
+    expect(a).toContain('"1m": "1M", "3m": "3M", "5m": "5M", "15m": "15M", "30m": "30M", "1h": "1H", "4h": "4H", "1d": "1D", "1w": "1W",');
+  });
+
+  it('§5: alvos do painel ANALYSIS carregam a distância % real do preço vivo', () => {
+    expect(app()).toContain('` · ${(Math.abs(target.price - price.price) / price.price * 100).toFixed(2)}%`');
+  });
+});
+
+// ─── Diretriz Evolução Contínua §3/§4 — restauração de sessão Local-First ───
+describe('Sessão Local-First: ativo/timeframe/modo sobrevivem a refresh ("o sistema nunca foi fechado")', () => {
+  it('leitura no module-load com validação estrita + fail-closed para os padrões', () => {
+    const a = app();
+    expect(a).toContain('const SESSION_STATE_KEY = "ar10cyborg_session_v1";');
+    expect(a).toContain('const restoredSession = readRestoredSession();');
+    // validação real: símbolo por regex, timeframe pela lista real, TradFi pela taxonomia
+    expect(a).toContain('/^[A-Z0-9]{2,12}$/.test(parsed.asset)');
+    expect(a).toContain('VALID_TIMEFRAMES.has(parsed.timeframe)');
+    expect(a).toContain('TRADFI_ASSETS.find((a) => a.symbol === parsed.tradFiSymbol)');
+    // TRADFI restaurado sem ativo restaurável degrada para CRYPTO
+    expect(a).toContain('if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe };');
+  });
+
+  it('os 4 estados hidratam por inicializador preguiçoso e persistem num único efeito', () => {
+    const a = app();
+    expect(a).toContain('useState<AssetSymbol>(() => restoredSession.asset)');
+    expect(a).toContain('useState(() => restoredSession.timeframe)');
+    expect(a).toContain('useState<"CRYPTO" | "TRADFI">(() => restoredSession.marketMode)');
+    expect(a).toContain('useState<TradFiAsset | null>(() => restoredSession.tradFiAsset)');
+    const m = a.match(/persistSessionState\(\{[\s\S]*?\}\);\n  \}, \[selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset\]\);/);
+    expect(m, 'efeito único de persistência não encontrado').not.toBeNull();
+  });
+
+  it('persistência nunca quebra o boot: try/catch nos dois lados (storage cheio/corrompido)', () => {
+    const a = app();
+    const readIdx = a.indexOf('function readRestoredSession()');
+    expect(a.slice(readIdx, readIdx + 1600)).toContain('} catch {');
+    const writeIdx = a.indexOf('function persistSessionState(');
+    expect(a.slice(writeIdx, writeIdx + 500)).toContain('} catch {');
+  });
+});

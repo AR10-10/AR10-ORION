@@ -341,12 +341,20 @@ export function EnhancedChart_110_Percent({
         vertLines: { color: "rgba(0, 240, 255, 0.06)" },
         horzLines: { color: "rgba(0, 240, 255, 0.06)" },
       },
-      crosshair: { mode: CrosshairMode.Normal },
+      // Diretriz Mestra §2 ("Magnetismo OHLC / Snap em candles"): Magnet
+      // gruda o crosshair no valor da série (o close do candle) — snap
+      // real da própria lightweight-charts, zero implementação paralela.
+      crosshair: { mode: CrosshairMode.Magnet },
       rightPriceScale: { borderColor: "rgba(138, 180, 248, 0.15)" },
       timeScale: {
         borderColor: "rgba(138, 180, 248, 0.15)",
         timeVisible: true,
         secondsVisible: false,
+        // Diretriz Mestra §2 ("Scroll para projeções futuras"): respiro à
+        // direita da última vela — as price lines de plano/cenário/P-D
+        // continuam legíveis na região futura; o operador pode arrastar
+        // mais além (fixRightEdge segue no padrão false da lib).
+        rightOffset: 8,
       },
       // Diretriz explícita do Sprint 1: pan/zoom real e nativo — nunca
       // hand-rolled. handleScroll cobre arrastar (mouse + touch);

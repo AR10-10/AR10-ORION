@@ -106,7 +106,7 @@ import { computeAuraReading, TIMEFRAME_MS } from "./nexus/aura-lifecycle";
 // gráfico; estimativa recomputada a cada ciclo, nunca uma garantia (ver
 // cabeçalho de nexus/eta-engine.ts para a metodologia e os desvios
 // documentados).
-import { computeTargetEtas, formatEtaDuration } from "./nexus/eta-engine";
+import { computeTargetEtas, formatEtaDuration, formatEtaRange } from "./nexus/eta-engine";
 // Diretriz V-MAX de Refinamento Institucional (itens 5/6): Score Geral
 // 0-100 (contrato de apresentação sobre a confluência real — zero segunda
 // matemática de consenso) + Assistente Operacional (frases curtas, sempre
@@ -123,6 +123,7 @@ import { buildAssistantMessages } from "./nexus/operation-assistant";
 import { computePremiumDiscount } from "./nexus/premium-discount";
 import { detectHarmonicPatterns, MIN_FIT_SCORE } from "./nexus/harmonic-patterns";
 import { marketSessionFromUtc } from "./nexus/market-session";
+import { computeHeatScore } from "./nexus/heat-score";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
 import {
@@ -187,7 +188,7 @@ import { computeConsensus, type ConsensusInput } from "./gmil/consensus-engine";
 // exige quando um ativo TradFi é escolhido (diretriz 4).
 import { SmartOmnibox } from "./omnibox/SmartOmnibox";
 import { TradFiEmptyState } from "./omnibox/TradFiEmptyState";
-import { type TradFiAsset } from "./omnibox/tradfi-assets";
+import { TRADFI_ASSETS, type TradFiAsset } from "./omnibox/tradfi-assets";
 // Master Panel handoff (Multi-Source Market Data Fusion, escopo reduzido a
 // UMA fonte adicional real por decisão do Operador): Bybit USDT-M Perpétuo
 // como segundo dado real e independente, comparado só contra o markPrice
@@ -278,6 +279,60 @@ const lorentzianConfidencePct = (lorentzian: { ok: boolean; confidence?: number 
 // nunca um segundo código.
 const ASSETS = ["BTC", "ETH", "SOL", "BNB", "XRP"] as const;
 type AssetSymbol = string;
+
+// ─── Diretriz Evolução Contínua §3/§4: restauração de sessão Local-First ───
+// A "memória de curto prazo" da UI que precisa sobreviver a refresh/fechar
+// o PWA/reiniciar o iPad: ativo, timeframe e modo de mercado. Os DADOS já
+// persistem por mecanismos próprios (candles via saveCandles, track record
+// via nexus/persistence.ts IndexedDB) — isto restaura só o PONTO DE VISTA
+// do Operador, para a tela reabrir exatamente onde parou. localStorage
+// (síncrono) de propósito: precisa estar pronto ANTES do primeiro render
+// para os inicializadores preguiçosos — IndexedDB é assíncrono demais para
+// esse papel específico. Validação estrita: timeframe fora da lista real
+// ou JSON corrompido => padrões de sempre (fail-closed, nunca quebra boot).
+const SESSION_STATE_KEY = "ar10cyborg_session_v1";
+const VALID_TIMEFRAMES = new Set(["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "1w", "1M", "1H", "2H", "4H", "6H", "8H", "12H", "1D", "1W"]);
+
+interface RestoredSession {
+  asset: string;
+  timeframe: string;
+  marketMode: "CRYPTO" | "TRADFI";
+  tradFiAsset: TradFiAsset | null;
+}
+
+function readRestoredSession(): RestoredSession {
+  const fallback: RestoredSession = { asset: "BTC", timeframe: "15m", marketMode: "CRYPTO", tradFiAsset: null };
+  try {
+    const raw = window.localStorage.getItem(SESSION_STATE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    const asset = typeof parsed?.asset === "string" && /^[A-Z0-9]{2,12}$/.test(parsed.asset) ? parsed.asset : fallback.asset;
+    const timeframe = typeof parsed?.timeframe === "string" && VALID_TIMEFRAMES.has(parsed.timeframe) ? parsed.timeframe : fallback.timeframe;
+    const marketMode = parsed?.marketMode === "TRADFI" ? "TRADFI" as const : "CRYPTO" as const;
+    const tradFiAsset =
+      marketMode === "TRADFI" && typeof parsed?.tradFiSymbol === "string"
+        ? (TRADFI_ASSETS.find((a) => a.symbol === parsed.tradFiSymbol) ?? null)
+        : null;
+    // Modo TRADFI sem ativo TradFi restaurável degrada para CRYPTO — nunca
+    // um cockpit em modo macro apontando para o nada.
+    if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe };
+    return { asset, timeframe, marketMode, tradFiAsset };
+  } catch {
+    return fallback;
+  }
+}
+// Lido UMA vez no module-load (antes do primeiro render do App) — os
+// inicializadores preguiçosos dos useState abaixo consomem este objeto.
+const restoredSession = readRestoredSession();
+
+function persistSessionState(s: { asset: string; timeframe: string; marketMode: string; tradFiSymbol: string | null }): void {
+  try {
+    window.localStorage.setItem(SESSION_STATE_KEY, JSON.stringify(s));
+  } catch {
+    // storage cheio/indisponível (Safari private mode): sessão simplesmente
+    // não persiste — nunca um erro visível por causa de uma conveniência.
+  }
+}
 
 // V18.1 (pedido do Operador: "o gráfico tá com poucas velas... a gente
 // olhar o passado também"): 200 velas reais por busca — 4x a janela
@@ -405,7 +460,7 @@ export default function App() {
   // porque o timeframe mudou); o ref deixa o tick periódico de 30s sempre
   // ler o timeframe ATUAL sem precisar recriar esse efeito nem
   // reconectar o WebSocket.
-  const [chartTimeframe, setChartTimeframe] = useState("15m");
+  const [chartTimeframe, setChartTimeframe] = useState(() => restoredSession.timeframe);
   const chartTimeframeRef = useRef(chartTimeframe);
   useEffect(() => {
     chartTimeframeRef.current = chartTimeframe;
@@ -481,7 +536,14 @@ export default function App() {
   // the market-data WS/REST, engine cycle, and order-flow feed exactly like
   // a manual "RESTART SYSTEM" does, just scoped to the new symbol
   // instead of the same one.
-  const [selectedAsset, setSelectedAsset] = useState<AssetSymbol>("BTC");
+  //
+  // Diretriz Evolução Contínua §3/§4 ("o sistema nunca foi fechado"):
+  // ativo/timeframe/modo são hidratados da ÚLTIMA sessão real
+  // (localStorage, mesmo mecanismo do portão de acesso; os candles em si
+  // já persistem Local-First via saveCandles desde antes). Inicializador
+  // preguiçoso + try/catch: storage indisponível/corrompido degrada para
+  // os padrões de sempre, nunca quebra o boot (fail-closed).
+  const [selectedAsset, setSelectedAsset] = useState<AssetSymbol>(() => restoredSession.asset);
 
   // Overhaul Cross-Market (Missão 2): o Smart Omnibox também lista a
   // taxonomia TradFi (índices/ações/commodities/forex) para conexão
@@ -491,8 +553,8 @@ export default function App() {
   // TRADFI, que faz os painéis específicos de ativo mostrarem o Empty
   // State fail-closed em vez de tentar (e falhar) puxar dado da Binance
   // para um símbolo que não é dela (diretriz 4, Modo Fail-Closed).
-  const [marketMode, setMarketMode] = useState<"CRYPTO" | "TRADFI">("CRYPTO");
-  const [selectedTradFiAsset, setSelectedTradFiAsset] = useState<TradFiAsset | null>(null);
+  const [marketMode, setMarketMode] = useState<"CRYPTO" | "TRADFI">(() => restoredSession.marketMode);
+  const [selectedTradFiAsset, setSelectedTradFiAsset] = useState<TradFiAsset | null>(() => restoredSession.tradFiAsset);
 
   // Bumping bootGeneration tears down and re-runs every real boot effect
   // below (REST fetch + WS connect, engine cycle, order flow feed,
@@ -1559,6 +1621,19 @@ export default function App() {
     useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();
   }, [chartTimeframe]);
 
+  // Diretriz Evolução Contínua §3/§4: cada mudança real do ponto de vista
+  // do Operador (ativo/timeframe/modo) é persistida na hora — reabrir o
+  // PWA/refresh restaura exatamente onde parou (readRestoredSession no
+  // module-load + inicializadores preguiçosos dos useState).
+  useEffect(() => {
+    persistSessionState({
+      asset: selectedAsset,
+      timeframe: chartTimeframe,
+      marketMode,
+      tradFiSymbol: selectedTradFiAsset?.symbol ?? null,
+    });
+  }, [selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset]);
+
   // V-MAX Fase 1 item 4: Conselho Multi-Agente. Cada insumo abaixo é dado
   // REAL já coletado por este componente ou pela store — o conselho é um
   // consumidor transversal puro, nunca uma segunda fonte de dados. O
@@ -1873,6 +1948,20 @@ export default function App() {
   // Diretriz Complementar §18/§4 ("Conviction Engine"): tendência real do
   // Score Geral (média recente vs. anterior da MESMA série acima).
   const convictionTrend = useMemo(() => computeConvictionTrend(institutionalScoreHistory), [institutionalScoreHistory]);
+  // Diretriz Mestra §1/§12 ("Heat Score"): intensidade de ATIVIDADE real
+  // — 3 magnitudes já medidas (percentil de volatilidade do regime, |Δ24h|
+  // do ticker, liquidações na janela viva), média simples, fail-closed com
+  // <2 componentes. NUNCA probabilidade nem direção (heat-score.ts).
+  const heatReading = useMemo(
+    () =>
+      computeHeatScore({
+        bandwidthPercentile: engine?.marketRegime?.bandwidthPercentile ?? null,
+        deltaPct: priceData?.deltaPct ?? null,
+        recentLiquidationCount: liquidations?.length ?? null,
+      }),
+    [engine?.marketRegime, priceData?.deltaPct, liquidations],
+  );
+
   const assistantMessages = useMemo(
     () =>
       buildAssistantMessages({
@@ -2273,6 +2362,7 @@ export default function App() {
       orderflowTrend,
       convictionTrend,
       assistantMessages,
+      heatReading,
       etaReading,
       riskSuggestion,
       cycleLatencyMs,
@@ -2327,6 +2417,7 @@ export default function App() {
       orderflowTrend,
       convictionTrend,
       assistantMessages,
+      heatReading,
       etaReading,
       riskSuggestion,
       cycleLatencyMs,
@@ -3711,7 +3802,9 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   // leitura única computada em App() (contexto), nunca recalculada aqui.
   // null honesto (sem progresso direcional/ATR/horizonte) => campo ausente.
   const activeEta = etaReading?.status === "OK" ? (etaReading.etas[activeTargetIndex] ?? null) : null;
-  const etaLabel = activeEta && !targetHit ? formatEtaDuration(activeEta.ms) : null;
+  // Diretriz Mestra §6: faixa [mínimo, provável] do mesmo modelo real —
+  // "12–20m" em vez de um único número (formatEtaRange, eta-engine.ts).
+  const etaLabel = activeEta && !targetHit ? formatEtaRange(activeEta.msMin ?? null, activeEta.ms) : null;
   // Bandeira de divergência real (achado real de auditoria, FASE Ω Priority
   // 3): o Confluence Engine (Phase Ω Priority 2) já calcula, todo ciclo, se
   // os 3 subsistemas independentes concordam com a direção ATIVA do Core
@@ -3916,6 +4009,7 @@ function TopBar({ data }: { data?: PriceState | null }) {
     chartTimeframe,
     cycleLatencyMs,
     voiceSnapshot,
+    heatReading,
   } = useContext(WidgetContext) || {};
   // Refinamento Final §1 ("Sessão Atual"): derivação pura do relógio UTC
   // real (market-session.ts). Computada no render — a TopBar re-renderiza
@@ -4044,6 +4138,24 @@ function TopBar({ data }: { data?: PriceState | null }) {
                 {chartTimeframe}
               </span>
             )}
+            {/* Diretriz Mestra §12 ("TENDÊNCIA"): a MESMA leitura real de
+                estrutura do Core Engine já usada em toda parte
+                (marketStructureLabel do timeframe ativo) — display-only,
+                zero segunda classificação. */}
+            {marketMode === "CRYPTO" && engine?.marketStructureLabel && (
+              <span
+                title={`Estrutura real do timeframe ativo (${chartTimeframe ?? ""}) — mesma leitura do Market Structure Engine exibida em ANALYSIS.`}
+                className={`text-[0.5rem] px-1 py-0.5 rounded uppercase tracking-wider whitespace-nowrap shrink-0 font-bold border ${
+                  engine.marketStructureLabel === "ALTA"
+                    ? "bg-[#00ffaa12] text-[#00ffaa] border-[#00ffaa30]"
+                    : engine.marketStructureLabel === "BAIXA"
+                      ? "bg-[#ff005512] text-[#ff0055] border-[#ff005530]"
+                      : "bg-[#8ab4f812] text-[#8ab4f8]/80 border-[#8ab4f825]"
+                }`}
+              >
+                {engine.marketStructureLabel}
+              </span>
+            )}
           </div>
 
           {/* O preço — única ocorrência em toda a interface. Em modo
@@ -4125,6 +4237,44 @@ function TopBar({ data }: { data?: PriceState | null }) {
                 <span className={`text-[0.38rem] font-bold uppercase tracking-wider ${confidenceZone.colorClass}`}>
                   {confidenceZone.emoji} {confidenceZone.label}
                 </span>
+              )}
+            </div>
+          )}
+
+          {/* Diretriz Mestra §12 ("HEAT SCORE"): intensidade de atividade
+              real do mercado (heat-score.ts) — NUNCA probabilidade nem
+              direção; o tooltip carrega as componentes reais. Ao lado do
+              Score de confluência, como a diretriz pede. leading-none nos
+              três spans: a auditoria de responsividade pegou o chip
+              estourando os 46px da linha (empilhado dentro do Score por um
+              bug de inserção + line-height padrão) — corrigido junto. */}
+          {marketMode === "CRYPTO" && (
+            <div
+              className="hidden md:flex flex-col items-center justify-center gap-[2px] pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
+              title={
+                heatReading?.status === "OK"
+                  ? `Heat ${heatReading.score}/100 (${heatReading.tier}) — intensidade de ATIVIDADE real: ${heatReading.components.map((c: { id: string; value01: number }) => `${c.id} ${(c.value01 * 100).toFixed(0)}%`).join(" · ")}. Nunca probabilidade, nunca direção.`
+                  : "Heat Score aguardando ao menos 2 componentes reais medidas (volatilidade/Δ24h/liquidações)."
+              }
+            >
+              <span className="text-[0.42rem] leading-none tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">Heat</span>
+              <span
+                className={`text-[0.7rem] leading-none font-black font-mono tabular-nums ${
+                  heatReading?.status !== "OK"
+                    ? "text-[#8ab4f8]/40"
+                    : heatReading.tier === "EXTREMO"
+                      ? "text-[#ff0055] drop-shadow-[0_0_5px_currentColor]"
+                      : heatReading.tier === "QUENTE"
+                        ? "text-[#f0d06f] drop-shadow-[0_0_5px_currentColor]"
+                        : heatReading.tier === "MORNO"
+                          ? "text-[#a0f0ff]"
+                          : "text-[#8ab4f8]/70"
+                }`}
+              >
+                {heatReading?.status === "OK" ? heatReading.score : DASH}
+              </span>
+              {heatReading?.status === "OK" && heatReading.tier && (
+                <span className="text-[0.38rem] leading-none font-bold uppercase tracking-wider text-[#8ab4f8]/60">{heatReading.tier}</span>
               )}
             </div>
           )}
@@ -4856,7 +5006,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
                 <ModuleStat
                   key={i}
                   label={tradePlan.targets.length > 1 ? `Target ${i + 1}` : "Target"}
-                  value={`${target.price.toFixed(0)} (${target.basis})${tradePlan.riskRewardRatios[i] !== null ? ` · 1:${tradePlan.riskRewardRatios[i]!.toFixed(2)}` : ""}${etaReading?.status === "OK" && etaReading.etas[i] ? ` · ${formatEtaDuration(etaReading.etas[i].ms) ?? ""}` : ""}`}
+                  value={`${target.price.toFixed(0)} (${target.basis})${typeof price.price === "number" && Number.isFinite(price.price) && price.price > 0 ? ` · ${(Math.abs(target.price - price.price) / price.price * 100).toFixed(2)}%` : ""}${tradePlan.riskRewardRatios[i] !== null ? ` · 1:${tradePlan.riskRewardRatios[i]!.toFixed(2)}` : ""}${etaReading?.status === "OK" && etaReading.etas[i] ? ` · ${formatEtaRange(etaReading.etas[i].msMin ?? null, etaReading.etas[i].ms) ?? ""}` : ""}`}
                   tone="long"
                 />
               ))}
@@ -6374,7 +6524,7 @@ function CouncilWidget() {
 // — NUNCA uma probabilidade calibrada, mesmo rótulo honesto usado em toda
 // parte deste app (agreement do Conselho, CPI, TrustScore).
 const MTF_ROW_LABEL: Record<MultiTimeframeId, string> = {
-  "1m": "1M", "5m": "5M", "15m": "15M", "1h": "1H", "4h": "4H", "1d": "1D",
+  "1m": "1M", "3m": "3M", "5m": "5M", "15m": "15M", "30m": "30M", "1h": "1H", "4h": "4H", "1d": "1D", "1w": "1W",
 };
 const MTF_STANCE_COLOR: Record<string, string> = {
   LONG: "text-[#00ffaa]",

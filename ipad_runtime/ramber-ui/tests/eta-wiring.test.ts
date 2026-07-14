@@ -13,7 +13,7 @@ const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 describe('App.tsx: etaReading computada UMA vez (padrão currentRsi/convictionReading), compartilhada via contextValue', () => {
   it('importa o motor puro real', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('import { computeTargetEtas, formatEtaDuration } from "./nexus/eta-engine";');
+    expect(app).toContain('import { computeTargetEtas, formatEtaDuration, formatEtaRange } from "./nexus/eta-engine";');
   });
 
   it('consome o plano/ratchet AUTORITATIVOS do track record + ATR real + closes reais + timeframe real — nunca segunda fonte', () => {
@@ -57,7 +57,9 @@ describe('TradePlanTopStrip + painel Trade Plan: exibição honesta da ETA (§3/
   it('a barra mostra a ETA do alvo ATIVO da leitura única do contexto — nunca recalcula', () => {
     const app = read('../src/App.tsx');
     expect(app).toContain('const activeEta = etaReading?.status === "OK" ? (etaReading.etas[activeTargetIndex] ?? null) : null;');
-    expect(app).toContain('const etaLabel = activeEta && !targetHit ? formatEtaDuration(activeEta.ms) : null;');
+    // Diretriz Mestra §6: a barra passou a mostrar a FAIXA [mínimo, provável]
+    // do mesmo modelo real (formatEtaRange) — nunca um teto fabricado.
+    expect(app).toContain('const etaLabel = activeEta && !targetHit ? formatEtaRange(activeEta.msMin ?? null, activeEta.ms) : null;');
   });
 
   it('ETA ausente (sem progresso direcional/ATR/horizonte) => campo simplesmente não renderiza — nunca um número fabricado', () => {
@@ -72,7 +74,7 @@ describe('TradePlanTopStrip + painel Trade Plan: exibição honesta da ETA (§3/
 
   it('painel Trade Plan (ANALYSIS) anexa a ETA real por alvo restante da mesma leitura única', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('etaReading?.status === "OK" && etaReading.etas[i] ? ` · ${formatEtaDuration(etaReading.etas[i].ms) ?? ""}` : ""');
+    expect(app).toContain('etaReading?.status === "OK" && etaReading.etas[i] ? ` · ${formatEtaRange(etaReading.etas[i].msMin ?? null, etaReading.etas[i].ms) ?? ""}` : ""');
   });
 });
 
