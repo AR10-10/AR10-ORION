@@ -30,15 +30,49 @@ import {
   type ISeriesApi,
   type IPriceLine,
   type UTCTimestamp,
+  type LogicalRange,
 } from "lightweight-charts";
 // V-MAX Fase 1 (superfície visual, fechamento do §3.1): linha de CVD real
 // — a série do orderflowHistory (Fase 1.2) com eixo Y próprio nativo.
 import { useOrderflowHistory } from "../store/unified-snapshot-store";
 import { LiquidityZonesPlugin, type FillableZone } from "./LiquidityZonesPlugin";
+// Ordem "Ciborgue Vivo" §1: anotação temporária de BOS/CHOCH — mesma
+// arquitetura de overlay do LiquidityZonesPlugin acima, dado real diferente.
+import { StructureBreakMarkersPlugin } from "./StructureBreakMarkersPlugin";
 import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
 // V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
 // barras à direita — dado direto da store (Fase 1.3), ver header do plugin.
 import { VolumeProfilePlugin } from "./VolumeProfilePlugin";
+// Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
+// the chart-side companion to the price lines below.
+import { TradePlanZonePlugin } from "./TradePlanZonePlugin";
+// Neural Market Aura (especificação do Operador): corredor de convicção
+// real entre entrada e alvo — ver o cabeçalho de NeuralMarketAuraPlugin.tsx
+// para a divisão de responsabilidade com TradePlanZonePlugin (zero
+// duplicação: aquele desenha a caixa da zona, este desenha o corredor).
+import { NeuralMarketAuraPlugin } from "./NeuralMarketAuraPlugin";
+import type { AuraReading } from "../nexus/aura-lifecycle";
+// Correção de latência (Ordem "Sincronização em Tempo Real"): funde o
+// último preço real do ticker WS na vela em formação via series.update() —
+// nunca via `data`/setData (isso recomputaria SMC/Fibonacci/VP a cada
+// tick). Ver header do módulo para o porquê da separação.
+import { patchLastCandleWithLiveTick } from "../nexus/live-candle-sync";
+import type { Timeframe } from "../nexus/types";
+// Signal Precision order: actionable plan drawn as silk-thread price lines.
+import type { TradePlan } from "../nexus/trade-plan";
+// Research-driven precision order: VWAP, the institutional-standard
+// intraday reference level this system was missing entirely (confirmed
+// via a full-codebase grep before writing nexus/vwap.ts).
+import { computeSessionVwapSeries } from "../nexus/vwap";
+// Diretriz Camada de Decisão Profissional, item 1 ("linha de EMA real
+// marcada automaticamente no gráfico") — ver cabeçalho de nexus/ema.ts
+// para a auditoria completa (WASM já calcula EMA, mas só o valor escalar
+// final; uma série com um ponto por candle é uma implementação nova
+// legítima, mesma fórmula/semente do motor WASM).
+import { computeEmaSeries, DEFAULT_EMA_PERIOD } from "../nexus/ema";
+// Ordem "Ciborgue Vivo" §1: BOS/CHOCH real (bos-choch-engine.js via
+// engine-bridge.ts's computeBosChoch) — mesmo tipo que StructureBreakMarkersPlugin usa.
+import type { StructureBreak } from "../engine-bridge";
 
 export interface EnhancedChartCandle {
   time: number; // Unix segundos real (Bus/Binance) — nunca sintetizado
@@ -46,6 +80,12 @@ export interface EnhancedChartCandle {
   high: number;
   low: number;
   close: number;
+  // V-MAX Fase 1.3: já sempre real em App.tsx's chartData (nunca opcional
+  // -fabricado) — declarado aqui como opcional só para não quebrar algum
+  // outro chamador de teste que ainda monta um EnhancedChartCandle à mão
+  // sem volume; o cálculo real de VWAP abaixo trata ausência como 0 velas
+  // válidas (fail-closed), nunca uma média fabricada.
+  volume?: number;
 }
 
 // V-MAX Fase 0.7: ganha `index` (posição real no array de candles onde a
@@ -79,6 +119,37 @@ export interface EnhancedChartFibLevel {
   score: number;
 }
 
+// Camadas do Gráfico (Finding M, FASE Ω Priority 3 — painel novo aditivo,
+// mesmo padrão do Workspace Manager em App.tsx, mas para os overlays do
+// CANVAS do gráfico em vez dos widgets do layout). Lista canônica única:
+// App.tsx importa este tipo/array para desenhar o painel de toggles, nunca
+// redefine os ids à parte. Esconder uma camada DESMONTA o plugin (JSX
+// condicional abaixo) em vez de só passar chart=null — um plugin de canvas
+// dirty-flag só redesenha quando algo real muda; passar chart=null congela
+// o último frame real já pintado (nunca mais limpo), não o esconde. Todas
+// as 6 ligadas por padrão — o painel nunca esconde nada sem uma ação
+// explícita do Operador.
+export const CHART_LAYER_IDS = [
+  "liquidity_zones",
+  "structure_breaks",
+  "order_flow_heatmap",
+  "volume_profile",
+  "trade_plan_zone",
+  "neural_market_aura",
+  "ema",
+] as const;
+export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
+export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
+export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
+  liquidity_zones: true,
+  structure_breaks: true,
+  order_flow_heatmap: true,
+  volume_profile: true,
+  trade_plan_zone: true,
+  neural_market_aura: true,
+  ema: true,
+};
+
 interface EnhancedChartProps {
   data: EnhancedChartCandle[];
   support?: number | null;
@@ -90,7 +161,73 @@ interface EnhancedChartProps {
   fairValueGaps?: EnhancedChartZone[];
   orderBlocks?: EnhancedChartZone[];
   liquidityZones?: EnhancedChartLiquidity[];
+  // Ordem "Ciborgue Vivo" §1: rompimento de estrutura real mais recente
+  // (BOS/CHOCH). null = nenhum rompimento na amostra, honesto — nunca desenha um palpite.
+  structureBreak?: StructureBreak | null;
   fibonacciLevels?: EnhancedChartFibLevel[] | null;
+  // Correção de latência: o último preço REAL do ticker WS (mesma fonte da
+  // barra superior, já na store desde o primeiro tick) e o timeframe ativo
+  // — só para o patch cirúrgico da vela em formação abaixo. Opcionais: sem
+  // eles o gráfico funciona exatamente como antes (fail-closed, nunca
+  // quebra um chamador que ainda não os passa).
+  livePrice?: number | null;
+  activeTimeframe?: Timeframe;
+  // Trade Plan (real structure only): entry zone / stop / target drawn as
+  // silk-thread price lines with English labels. Optional and fail-closed:
+  // null/absent draws nothing.
+  tradePlan?: TradePlan | null;
+  // Neural Market Aura: visual translation of the SAME real Trade Plan +
+  // Signal Track Record + Confluence Engine reading above — never a second
+  // trading signal (LEI 24). null/DADOS_INSUFICIENTES draws nothing.
+  aura?: AuraReading | null;
+  // v2 (Diretriz Complementar §2/§4): how many of tradePlan.targets the
+  // AUTHORITATIVE track record (signal-track-record.ts) has actually
+  // proven so far — drives the per-target "REACHED" boost and the
+  // break-even stop redraw below. Optional/fail-closed: absent => 0, the
+  // same as "no real progress yet" (never a fabricated hit).
+  targetsHit?: number;
+  // Camadas do Gráfico (Finding M): per-plugin visibility toggle from the
+  // new settings panel. Optional and fail-closed: absent/undefined means
+  // every layer stays visible (DEFAULT_CHART_LAYER_VISIBILITY), the exact
+  // behavior this component already had before the toggle existed.
+  layerVisibility?: ChartLayerVisibility;
+  // Diretriz Camada de Decisão Profissional, item 1: período real da EMA
+  // exibida, controlado pelo painel Camadas do Gráfico. Optional/fail-
+  // closed: ausente => DEFAULT_EMA_PERIOD (21), o mesmo comportamento de
+  // sempre para qualquer chamador que ainda não passa esta prop.
+  emaPeriod?: number;
+  // Auditoria de arquitetura (revisão completa) — paginação histórica
+  // real: chamado quando o usuário arrasta perto da borda esquerda dos
+  // candles já carregados (ver efeito de subscribeVisibleLogicalRangeChange
+  // abaixo). Optional/fail-closed: sem esta prop, o gráfico continua
+  // exatamente como antes — janela fixa, sem paginação. App.tsx decide
+  // como buscar/mesclar a página nova; este componente só detecta a
+  // intenção real do usuário.
+  onRequestOlderCandles?: () => void;
+}
+
+// Auditoria de arquitetura (revisão completa) — paginação histórica real:
+// detecta se `next` é EXATAMENTE `prev` com N candles novos prependados na
+// frente (mesmo sufixo, mesma ordem, comparado por `time` — App.tsx sempre
+// cria arrays novos, nunca a mesma referência). É o ÚNICO caso em que o
+// gráfico precisa deslocar a faixa visível manualmente (ver efeito de
+// `data` abaixo) para não "pular" para trás quando o usuário está parado
+// perto da borda esquerda logo após uma página antiga chegar. Retorna 0
+// para qualquer outro tipo de atualização real (troca de timeframe,
+// refresh periódico do topo, primeira carga) — nesses casos o
+// comportamento padrão de setData() já preserva pan/zoom corretamente
+// (comentário original do efeito abaixo), nenhum deslocamento é
+// necessário ou seguro.
+export function detectPrependCount(
+  prev: EnhancedChartCandle[] | null | undefined,
+  next: EnhancedChartCandle[] | null | undefined,
+): number {
+  if (!prev || !next || prev.length === 0 || next.length <= prev.length) return 0;
+  const count = next.length - prev.length;
+  for (let i = 0; i < prev.length; i++) {
+    if (next[count + i]?.time !== prev[i]?.time) return 0;
+  }
+  return count;
 }
 
 // Mesmo formato de texto que o gráfico antigo já usava para S1/R1 — só a
@@ -112,8 +249,18 @@ export function EnhancedChart_110_Percent({
   fairValueGaps,
   orderBlocks,
   liquidityZones,
+  structureBreak,
   fibonacciLevels,
+  livePrice,
+  activeTimeframe,
+  tradePlan,
+  aura,
+  targetsHit,
+  layerVisibility,
+  emaPeriod,
+  onRequestOlderCandles,
 }: EnhancedChartProps) {
+  const visibility = layerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -121,7 +268,27 @@ export function EnhancedChart_110_Percent({
   const resistanceLineRef = useRef<IPriceLine | null>(null);
   const zoneLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
+  const tradePlanLinesRef = useRef<IPriceLine[]>([]);
+  // Named refs to the stop/target lines specifically (a subset of
+  // tradePlanLinesRef above) — lets the hit-boost effect below update
+  // color/title in place via applyOptions() instead of tearing down and
+  // recreating all trade-plan lines on every live-price tick (which would
+  // churn the chart at WebSocket cadence for what is only a color change).
+  const stopLineRef = useRef<IPriceLine | null>(null);
+  // v2 (Diretriz Complementar §2): até MAX_TARGETS linhas reais, uma por
+  // plan.targets[i] — nunca uma única linha fixa como no contrato v1.
+  const targetLinesArrayRef = useRef<IPriceLine[]>([]);
   const cvdSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Research-driven precision order: VWAP as a native line series on the
+  // SAME price scale as the candles (unlike cvdSeriesRef, which needs its
+  // own scale because CVD is signed volume, not price) — it overlays
+  // directly at the correct real price level.
+  const vwapSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Diretriz Camada de Decisão Profissional, item 1: EMA na MESMA escala
+  // de preço das velas (é um preço médio real, como VWAP) — cor própria,
+  // nunca reaproveitando a paleta semântica (verde/vermelho=direção,
+  // âmbar=zona de entrada, roxo=liquidez EQH/EQL).
+  const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Espelha chartRef/seriesRef em state só para o LiquidityZonesPlugin
   // montar assim que o chart existe de verdade — refs sozinhas não
   // disparam re-render, então o plugin ficaria esperando por uma
@@ -202,6 +369,37 @@ export function EnhancedChart_110_Percent({
     });
     chart.priceScale("cvd").applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
     cvdSeriesRef.current = cvdSeries;
+    // Research-driven precision order: VWAP on the MAIN price scale (no
+    // priceScaleId override — it shares the candles' own axis, unlike
+    // CVD, since it IS a real price). Neutral off-white, low opacity: a
+    // pure reference level, deliberately not competing with the
+    // directional/semantic palette (green=bullish, red=bearish, amber=
+    // entry) used everywhere else on this chart. Fio de seda: lineWidth
+    // 1, solid.
+    const vwapSeries = chart.addSeries(LineSeries, {
+      color: "rgba(255, 255, 255, 0.45)",
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: false,
+      title: "VWAP",
+    });
+    vwapSeriesRef.current = vwapSeries;
+    // Diretriz Camada de Decisão Profissional, item 1: EMA como série
+    // nativa na escala principal — azul distinto, nunca competindo com a
+    // paleta direcional/semântica já em uso (ver comentário no ref
+    // acima). Fio de seda: lineWidth 1, sólida.
+    const emaSeries = chart.addSeries(LineSeries, {
+      color: "rgba(66, 165, 245, 0.85)",
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: false,
+      title: "EMA",
+    });
+    emaSeriesRef.current = emaSeries;
     chartRef.current = chart;
     seriesRef.current = series;
     setChartReady({ chart, series });
@@ -213,7 +411,10 @@ export function EnhancedChart_110_Percent({
       resistanceLineRef.current = null;
       zoneLinesRef.current = [];
       fibLinesRef.current = [];
+      tradePlanLinesRef.current = [];
       cvdSeriesRef.current = null;
+      vwapSeriesRef.current = null;
+      emaSeriesRef.current = null;
       setChartReady(null);
     };
   }, []);
@@ -223,6 +424,16 @@ export function EnhancedChart_110_Percent({
   // recarregar tudo)": trocar chartTimeframe em App.tsx só troca o
   // conteúdo de `data`, este efeito só chama setData() na mesma série, e o
   // pan/zoom/crosshair do operador nunca são resetados por isso.
+  //
+  // Auditoria de arquitetura (revisão completa) — paginação histórica
+  // real: a EXCEÇÃO a essa regra é um prepend real (detectPrependCount >
+  // 0, ver função acima). Nesse caso específico, TODO índice de barra já
+  // visível desloca (candles novos entraram na frente), então a faixa
+  // visível REAL (mesma faixa em índice de tempo) teria mudado sob os pés
+  // do usuário — captura a faixa antes, aplica o mesmo deslocamento
+  // depois. Para qualquer outro tipo de atualização, prependedCount é 0 e
+  // este bloco não faz nada — comportamento idêntico ao de sempre.
+  const prevChartDataRef = useRef<EnhancedChartCandle[]>([]);
   useEffect(() => {
     if (!seriesRef.current || !data || data.length === 0) return;
     const formatted = data
@@ -234,8 +445,70 @@ export function EnhancedChart_110_Percent({
         low: c.low,
         close: c.close,
       }));
+    const prependedCount = detectPrependCount(prevChartDataRef.current, data);
+    const savedRange = prependedCount > 0 ? chartRef.current?.timeScale().getVisibleLogicalRange() ?? null : null;
     seriesRef.current.setData(formatted);
+    if (prependedCount > 0 && savedRange && chartRef.current) {
+      chartRef.current.timeScale().setVisibleLogicalRange({
+        from: savedRange.from + prependedCount,
+        to: savedRange.to + prependedCount,
+      });
+    }
+    prevChartDataRef.current = data;
   }, [data]);
+
+  // Correção de latência (barra superior ↔ gráfico): patch cirúrgico da
+  // vela em formação a cada tick real do ticker WS, via series.update() —
+  // API nativa da lib pra atualização incremental de UMA barra, nunca um
+  // segundo setData(). Deliberadamente ISOLADO do efeito acima: não lê nem
+  // escreve `data` como referência de re-render, só o último elemento já
+  // renderizado — SMC/Fibonacci/Volume Profile (que dependem de `data` lá
+  // em cima, em App.tsx) nunca recomputam por causa de um tick de preço,
+  // só quando uma vela REAL nova/fechada chega do REST/kline.
+  useEffect(() => {
+    if (!seriesRef.current || !data || data.length === 0) return;
+    if (typeof livePrice !== "number" || !activeTimeframe) return;
+    const patched = patchLastCandleWithLiveTick(data[data.length - 1], activeTimeframe, livePrice);
+    if (!patched) return;
+    seriesRef.current.update({ time: patched.time as UTCTimestamp, open: patched.open, high: patched.high, low: patched.low, close: patched.close });
+  }, [livePrice, activeTimeframe, data]);
+
+  // Auditoria de arquitetura (revisão completa) — paginação histórica
+  // real: achado da auditoria de Chart Engine — não existia NENHUM
+  // caminho para carregar mais história ao arrastar para trás (borda dura
+  // assim que os candles carregados terminavam). Dispara
+  // onRequestOlderCandles quando a borda ESQUERDA da faixa visível chega
+  // perto do candle mais antigo já carregado — App.tsx decide como
+  // buscar/mesclar/limitar a página nova (fetch real, dedupe, teto de
+  // memória); este componente só detecta a intenção real do usuário (ele
+  // parou de arrastar perto da borda), nunca decide o que fazer com isso.
+  // EDGE_BARS é medido em barras (índice lógico), não em pixels — a mesma
+  // margem funciona igual em qualquer nível de zoom. `requested` é
+  // reamarrado (não um ref de módulo) a cada nova assinatura: uma vez
+  // disparado, só dispara de novo depois que a faixa se afasta da borda —
+  // o que acontece sozinho após um prepend bem-sucedido (a faixa é
+  // deslocada pelo efeito de `data` acima), ou quando o usuário rola para
+  // longe manualmente. Uma falha real (sem mais história, ou erro
+  // transitório de rede) nunca entra num loop de novas tentativas.
+  useEffect(() => {
+    if (!chartReady || !onRequestOlderCandles) return;
+    const EDGE_BARS = 20;
+    let requested = false;
+    const handler = (range: LogicalRange | null) => {
+      if (!range || !data || data.length === 0) return;
+      if (range.from > EDGE_BARS) {
+        requested = false;
+        return;
+      }
+      if (requested) return;
+      requested = true;
+      onRequestOlderCandles();
+    };
+    chartReady.chart.timeScale().subscribeVisibleLogicalRangeChange(handler);
+    return () => {
+      chartReady.chart.timeScale().unsubscribeVisibleLogicalRangeChange(handler);
+    };
+  }, [chartReady, onRequestOlderCandles, data]);
 
   // S1/R1 reais — o MESMO engine.support/resistance que os outros widgets
   // já exibem, aqui como price lines nativas (createPriceLine), nunca uma
@@ -327,6 +600,43 @@ export function EnhancedChart_110_Percent({
     );
   }, [orderflowHistory]);
 
+  // Research-driven precision order: VWAP, computed straight from the
+  // same real candle array driving the whole chart (chartData already
+  // carries real per-candle volume, V-MAX Fase 1.3) — zero new fetch,
+  // zero second data source. UTC-day-anchored (see nexus/vwap.ts header
+  // for why); an empty result (no candle in the current UTC day, or a
+  // day with zero real volume) sets an empty series — never a fabricated
+  // flat line.
+  useEffect(() => {
+    if (!vwapSeriesRef.current) return;
+    const series = computeSessionVwapSeries(data);
+    vwapSeriesRef.current.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+  }, [data]);
+
+  // Diretriz Camada de Decisão Profissional, item 1: EMA recomputada do
+  // MESMO array real de candles (zero segunda fonte de dado), sempre que
+  // o histórico ou o período selecionado no painel Camadas do Gráfico
+  // mudar. Título carrega o período real ("EMA 21") — nunca um rótulo
+  // genérico que dessincronizaria do que está de fato desenhado.
+  const activeEmaPeriod = emaPeriod ?? DEFAULT_EMA_PERIOD;
+  useEffect(() => {
+    if (!emaSeriesRef.current) return;
+    const series = computeEmaSeries(
+      data.map((c) => ({ time: c.time, close: c.close })),
+      activeEmaPeriod,
+    );
+    emaSeriesRef.current.applyOptions({ title: `EMA ${activeEmaPeriod}` });
+    emaSeriesRef.current.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+  }, [data, activeEmaPeriod]);
+
+  // Camadas do Gráfico (Finding M): esconder a camada "ema" nunca altera
+  // o dado real já computado acima — só a exibição, via applyOptions
+  // nativo da própria lib (mais barato que recriar a série).
+  useEffect(() => {
+    if (!emaSeriesRef.current) return;
+    emaSeriesRef.current.applyOptions({ visible: visibility.ema });
+  }, [visibility.ema]);
+
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // Fibonacci como price lines nativas — "fio de seda" (1px sólida, nunca
   // pontilhada); a hierarquia entre níveis vem da OPACIDADE pela confluência
@@ -353,6 +663,105 @@ export function EnhancedChart_110_Percent({
     });
   }, [fibonacciLevels]);
 
+  // Signal Precision order: the Trade Plan drawn on the chart — subtle,
+  // silk-thread annotations (1px solid, never dashed; hierarchy only via
+  // color/opacity). Entry zone = two lines bounding the real structure
+  // (one line when the zone is a zero-width level); Stop and Target with
+  // their real structure basis and the R:R in the label. English labels
+  // (professional trading terminology). Fail-closed: no plan, no lines.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    tradePlanLinesRef.current.forEach((line) => series.removePriceLine(line));
+    tradePlanLinesRef.current = [];
+    stopLineRef.current = null;
+    targetLinesArrayRef.current = [];
+    if (!tradePlan) return;
+
+    const mk = (price: number, color: string, title: string) => {
+      if (!Number.isFinite(price)) return null;
+      const line = series.createPriceLine({
+        price,
+        color,
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title,
+      });
+      tradePlanLinesRef.current.push(line);
+      return line;
+    };
+    const entryColor = "rgba(240, 208, 111, 0.75)"; // amber — the acceptance zone
+    if (tradePlan.entry.low === tradePlan.entry.high) {
+      mk(tradePlan.entry.low, entryColor, `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`);
+    } else {
+      mk(tradePlan.entry.high, entryColor, `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`);
+      mk(tradePlan.entry.low, "rgba(240, 208, 111, 0.45)", "ENTRY ZONE LOW");
+    }
+    const stopTitle = `STOP · ${tradePlan.stop.basis}`;
+    stopLineRef.current = mk(tradePlan.stop.price, "rgba(255, 0, 85, 0.75)", stopTitle);
+    // v2 (Diretriz Complementar §2): uma linha por alvo real (1 a
+    // MAX_TARGETS), numeradas "TARGET 1/2/3" — nunca uma linha única fixa.
+    const multi = tradePlan.targets.length > 1;
+    tradePlan.targets.forEach((target, i) => {
+      const rr = tradePlan.riskRewardRatios[i];
+      const label = multi ? `TARGET ${i + 1}` : "TARGET";
+      const title = `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}`;
+      const line = mk(target.price, "rgba(0, 255, 170, 0.75)", title);
+      if (line) targetLinesArrayRef.current.push(line);
+    });
+  }, [tradePlan]);
+
+  // Ordem Final Autonomia Evolução §1 + Diretriz Complementar §2/§4:
+  // "alertas visuais sutis quando o preço romper estrutura relevante" — the
+  // chart-side counterpart to the command bar's TARGET REACHED/STOP
+  // BREACHED tone shift (TradePlanTopStrip in App.tsx). Deliberately a
+  // SEPARATE, lightweight effect: applyOptions() nudges color/title on the
+  // lines already created above in place — it never removes/recreates the
+  // trade-plan lines on every WebSocket tick the way the [tradePlan]
+  // effect above does on a real plan change. Regra de Ouro 2 ("fio de
+  // seda"): hierarchy stays color/opacity-only — lineWidth and lineStyle
+  // are never touched here.
+  //
+  // v2: "REACHED" is driven by the AUTHORITATIVE targetsHit prop (the real
+  // ratchet from signal-track-record.ts), never re-derived from the
+  // instantaneous livePrice alone — a target once proven stays marked
+  // REACHED even if price later pulls back below it (re-deriving from
+  // livePrice would flip the marker back off, which is dishonest: the
+  // level WAS touched). The stop line itself moves to break-even (real
+  // entry price) the instant targetsHit > 0 — the same mechanical
+  // convention the track record applies internally — "quando o cenário
+  // muda, o desenho muda" (Diretriz Complementar §5).
+  useEffect(() => {
+    if (!tradePlan) return;
+    const hits = targetsHit ?? 0;
+    const entryMid = (tradePlan.entry.low + tradePlan.entry.high) / 2;
+    const breakEvenActive = hits > 0;
+    const effectiveStopPrice = breakEvenActive ? entryMid : tradePlan.stop.price;
+    const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
+    const long = tradePlan.direction === "LONG";
+    const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
+    const stopTitle = breakEvenActive ? `STOP · BREAK-EVEN (real)` : `STOP · ${tradePlan.stop.basis}`;
+    stopLineRef.current?.applyOptions({
+      price: effectiveStopPrice,
+      color: stopHitNow ? "rgba(255, 0, 85, 1)" : "rgba(255, 0, 85, 0.75)",
+      title: stopHitNow ? `${stopTitle} · BREACHED` : stopTitle,
+    });
+    const multi = tradePlan.targets.length > 1;
+    tradePlan.targets.forEach((target, i) => {
+      const line = targetLinesArrayRef.current[i];
+      if (!line) return;
+      const reached = i < hits;
+      const rr = tradePlan.riskRewardRatios[i];
+      const label = multi ? `TARGET ${i + 1}` : "TARGET";
+      const title = `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}`;
+      line.applyOptions({
+        color: reached ? "rgba(0, 255, 170, 1)" : "rgba(0, 255, 170, 0.75)",
+        title: reached ? `${title} · REACHED` : title,
+      });
+    });
+  }, [tradePlan, livePrice, targetsHit]);
+
   return (
     <div className="absolute inset-0">
       {/* V-MAX Fase 1.2: densidade L2 + bolhas de trades grandes, ANTES do
@@ -361,10 +770,12 @@ export function EnhancedChart_110_Percent({
          velas (não só semi-transparente por cima), o visual institucional
          padrão (Bookmap-style) sem precisar de nenhuma API de camadas da
          lib. */}
-      <OrderFlowHeatmapPlugin
-        chart={chartReady?.chart ?? null}
-        series={chartReady?.series ?? null}
-      />
+      {visibility.order_flow_heatmap && (
+        <OrderFlowHeatmapPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+        />
+      )}
       <div ref={containerRef} className="absolute inset-0" />
       {/* V-MAX Fase 0.7: FVG/Order Blocks (bullish|bearish) — mesmo dado real
          de computeSmcZones, já filtrado (!mitigated) e limitado em contagem
@@ -372,20 +783,57 @@ export function EnhancedChart_110_Percent({
          (Blueprint §3.1 LiquidityZonesPlugin) em vez de duas price lines —
          restaura a cor que o gráfico SVG anterior tinha, sem tirar nenhuma
          cor do gráfico (pedido explícito do Operador). */}
-      <LiquidityZonesPlugin
-        chart={chartReady?.chart ?? null}
-        series={chartReady?.series ?? null}
-        data={data}
-        fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}
-        orderBlocks={(orderBlocks ?? []) as FillableZone[]}
-      />
+      {visibility.liquidity_zones && (
+        <LiquidityZonesPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}
+          orderBlocks={(orderBlocks ?? []) as FillableZone[]}
+        />
+      )}
+      {/* Ordem "Ciborgue Vivo" §1: BOS/CHOCH real, mesma anotação temporária
+         que "pensa e esquece" — mesmo array `data` que LiquidityZonesPlugin
+         acima já usa, então o índice do rompimento fica alinhado. */}
+      {visibility.structure_breaks && (
+        <StructureBreakMarkersPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          structureBreak={structureBreak ?? null}
+        />
+      )}
       {/* V-MAX Fase 1 (superfície visual): Volume Profile real (Fase 1.3)
          como barras à direita + linha do POC — overlay por cima do chart
          (pointer-events-none), dado direto da store. */}
-      <VolumeProfilePlugin
-        chart={chartReady?.chart ?? null}
-        series={chartReady?.series ?? null}
-      />
+      {visibility.volume_profile && (
+        <VolumeProfilePlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+        />
+      )}
+      {/* Neural Market Aura: the conviction corridor, mounted BEFORE the
+         crisp entry-zone box below so the soft gradient stays visually
+         underneath it, not competing with it. */}
+      {visibility.neural_market_aura && (
+        <NeuralMarketAuraPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          aura={aura ?? null}
+        />
+      )}
+      {/* Ordem Final Autonomia Evolução §1 ("caixas semi-transparentes"):
+         the Trade Plan's entry zone, mounted last so it stays the topmost
+         overlay — it is the most actionable, currently-live information
+         on the chart, above the more diagnostic FVG/OB zones. */}
+      {visibility.trade_plan_zone && (
+        <TradePlanZonePlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          entryLow={tradePlan?.entry.low ?? null}
+          entryHigh={tradePlan?.entry.high ?? null}
+        />
+      )}
     </div>
   );
 }

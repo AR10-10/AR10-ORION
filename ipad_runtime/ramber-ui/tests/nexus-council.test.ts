@@ -11,6 +11,7 @@ import {
   riskAgentVote,
   manipulationAgentVote,
   fibonacciAgentVote,
+  momentumAgentVote,
   aggregateCouncil,
   buildCouncilDecision,
   COUNCIL_CONTRACT_VERSION,
@@ -176,6 +177,44 @@ describe('FibonacciAgent: vota da matriz real (fontes já incluem POC/HVN do WAS
   });
 });
 
+describe('MomentumAgent: RSI de Wilder real (computeRSI, mesma função do k-NN — zero segunda matemática)', () => {
+  it('ABSTAIN sem histórico real suficiente (null) ou RSI não-finito (NaN)', () => {
+    expect(momentumAgentVote(null).stance).toBe('ABSTAIN');
+    expect(momentumAgentVote(NaN).stance).toBe('ABSTAIN');
+  });
+
+  it('sobrecompra (>=70) => SHORT; confiança escala linearmente até o extremo 100', () => {
+    const v = momentumAgentVote(85);
+    expect(v.stance).toBe('SHORT');
+    expect(v.confidence).toBeCloseTo(0.5, 10); // (85-70)/30
+    const extreme = momentumAgentVote(100);
+    expect(extreme.confidence).toBe(1);
+  });
+
+  it('sobrevenda (<=30) => LONG; confiança escala linearmente até o extremo 0', () => {
+    const v = momentumAgentVote(15);
+    expect(v.stance).toBe('LONG');
+    expect(v.confidence).toBeCloseTo(0.5, 10); // (30-15)/30
+    const extreme = momentumAgentVote(0);
+    expect(extreme.confidence).toBe(1);
+  });
+
+  it('fronteiras exatas (70 e 30) já contam como leitura extrema, mas com confiança 0 honesta', () => {
+    const overbought = momentumAgentVote(70);
+    expect(overbought.stance).toBe('SHORT');
+    expect(overbought.confidence).toBe(0);
+    const oversold = momentumAgentVote(30);
+    expect(oversold.stance).toBe('LONG');
+    expect(oversold.confidence).toBe(0);
+  });
+
+  it('zona neutra (30-70) => NEUTRAL honesto, nunca um voto forçado', () => {
+    const v = momentumAgentVote(50);
+    expect(v.stance).toBe('NEUTRAL');
+    expect(v.confidence).toBe(0);
+  });
+});
+
 describe('Meta-Agent: quórum + gate de risco + pool real da Fase F', () => {
   it('RiskAgent ABSTAIN trava o conselho inteiro (fail-closed), mas o debate sai completo', () => {
     const votes = [
@@ -240,7 +279,7 @@ describe('Meta-Agent: quórum + gate de risco + pool real da Fase F', () => {
 });
 
 describe('buildCouncilDecision: composição de ponta a ponta com dados reais mínimos', () => {
-  it('cenário saudável e concordante produz decisão direcional com 6 votos', () => {
+  it('cenário saudável e concordante produz decisão direcional com 7 votos', () => {
     const d = buildCouncilDecision({
       price: 100,
       liquidityZones: [eqh(110), eqh(112), eql(95)],
@@ -252,8 +291,9 @@ describe('buildCouncilDecision: composição de ponta a ponta com dados reais m�
       isDataFresh: true,
       engineStatus: 'ok',
       fibonacci: null, // fib ABSTAIN — quórum segue real com os demais
+      rsi: null, // MOMENTUM ABSTAIN aqui — sua contribuição ao pool já é coberta pelos testes dedicados acima, este teste prova só a composição de 7 votos
     }, 999);
-    expect(d.votes).toHaveLength(6);
+    expect(d.votes).toHaveLength(7);
     expect(d.stance).toBe('LONG');
     expect(d.riskGated).toBe(false);
     expect(d.computedAt).toBe(999);
@@ -271,6 +311,7 @@ describe('buildCouncilDecision: composição de ponta a ponta com dados reais m�
       isDataFresh: false,
       engineStatus: 'pending',
       fibonacci: null,
+      rsi: null,
     });
     expect(d.stance).toBe('ABSTAIN');
     expect(d.riskGated).toBe(true);

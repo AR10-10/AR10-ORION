@@ -65,17 +65,27 @@ describe('V16 Workspace Manager: widgets ganham collapsed+pinned (5 estados) sem
     expect(app).toContain('const WORKSPACE_STATES = ["hidden", "docked", "collapsed", "pinned", "floating"] as const;');
   });
 
-  it('WorkspaceManagerPanel lista exatamente os 9 módulos secundários — nunca o Gráfico nem as colunas sempre-visíveis', () => {
+  it('WorkspaceManagerPanel lista exatamente os 10 módulos secundários — nunca o Gráfico nem as colunas sempre-visíveis', () => {
     const app = read('../src/App.tsx');
     const listMatch = app.match(/const WORKSPACE_MANAGER_MODULES: \{ id: string; label: string \}\[\] = \[([\s\S]*?)\n\];/);
     expect(listMatch, 'WORKSPACE_MANAGER_MODULES não encontrado').not.toBeNull();
     const ids = [...listMatch![1].matchAll(/\{ id: "(\w+)"/g)].map((m) => m[1]);
     expect(ids.sort()).toEqual(
-      ['orderbook', 'orderflow', 'heatmap', 'scanner', 'exposure', 'events', 'neural_core', 'asset_heatmap', 'tactical'].sort(),
+      // Fase Ω Priority 1: multi_timeframe entrou como 10º módulo secundário
+      // opt-in (mesma disciplina de densidade/zero-scroll dos outros 9).
+      ['orderbook', 'orderflow', 'heatmap', 'scanner', 'exposure', 'events', 'neural_core', 'asset_heatmap', 'tactical', 'multi_timeframe'].sort(),
     );
     for (const permanent of ['chart', 'market_direction', 'se_core', 'gmil_context', 'market_regime', 'decision_validation', 'system_health']) {
       expect(ids).not.toContain(permanent);
     }
+  });
+
+  it('Widget(): o botão de fechar (X) só existe para os 9 módulos secundários — achado real de auditoria: chart/gmil_context/market_regime/system_health/decision_validation/council podiam ser fechados pelo próprio X sem NENHUM caminho de volta pelo Workspace Manager', () => {
+    const app = read('../src/App.tsx');
+    // Mesma fonte de verdade da lista do Workspace Manager — nunca uma
+    // segunda lista que poderia dessincronizar dela.
+    expect(app).toContain('const WORKSPACE_MANAGER_MODULE_IDS = new Set(WORKSPACE_MANAGER_MODULES.map((m) => m.id));');
+    expect(app).toContain('{widgetState && WORKSPACE_MANAGER_MODULE_IDS.has(id) && (');
   });
 });
 
@@ -98,11 +108,33 @@ describe('V16 §4 Decision Status (WAIT/CONFIRM/EXECUTE): confluência honesta, 
     const fnMatch = app.match(/function MarketBiasDecisionCard\(\) \{([\s\S]*?)\n\}\n/);
     const body = fnMatch![1];
     expect(body).toContain('Rótulo analítico — nunca aciona ordens (READ_ONLY)');
-    expect(body).toContain('SUGESTÃO ALGORÍTMICA · NÃO É CONSELHO FINANCEIRO');
+    expect(body).toContain('ALGORITHMIC SUGGESTION · NOT FINANCIAL ADVICE');
   });
 });
 
 describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (passthrough) e rompimentos REAIS (contagem nova, honesta)', () => {
+  it('Auditoria de arquitetura: runRealAnalysisCycle aceita timeframe real como parâmetro — achado: ficava fixo em 15m internamente mesmo com o chamador podendo escolher outro', () => {
+    const bridge = read('../src/engine-bridge.ts');
+    expect(bridge).toContain("export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): Promise<RealCycleResult> {");
+    // O único hardcode ficava na própria requisição do snapshot — o resto
+    // da função já era passthrough real de snapshot.timeframe.
+    expect(bridge).not.toContain("timeframe: '15m', limit: 100, maxAgeMs: 25_000,");
+    expect(bridge).toContain('symbol, timeframe, limit: 100, maxAgeMs: 25_000,');
+  });
+
+  it('App.tsx: o ciclo real recebe chartTimeframe (nunca um literal) e o efeito depende dele — trocar o timeframe do gráfico dispara um novo ciclo na hora', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('await runRealAnalysisCycle(selectedAsset, chartTimeframe)');
+    expect(app).toContain('}, [bootGeneration, selectedAsset, chartTimeframe]);');
+  });
+
+  it('S1/R1 na MarketRegimeWidget/SystemHealth/DecisionValidation mostram o timeframe REAL selecionado — nunca mais um "15M" fixo que mentiria sobre qual ciclo alimentou o dado', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('label={`TENDÊNCIA (ESTRUTURA ${chartTimeframe?.toUpperCase() ?? "15M"})`}');
+    expect(app).toContain('label={`LATÊNCIA DO CICLO (${chartTimeframe?.toUpperCase() ?? "15M"})`}');
+    expect(app).toContain('label: `Ciclo do Motor (${chartTimeframe?.toUpperCase() ?? "15M"})`');
+  });
+
   it('RealCycleResult.supportStrength/resistanceStrength são passthrough puro de frame.support_1_strength/resistance_1_strength — nunca recomputados', () => {
     const bridge = read('../src/engine-bridge.ts');
     expect(bridge).toContain("supportStrength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;");
@@ -196,7 +228,7 @@ describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (pass
 
   it('ChartWidget passa engine.support/resistance/strength/breakouts REAIS para EnhancedChart_110_Percent — mesma fonte de sempre, nunca recomputado', () => {
     const app = read('../src/App.tsx');
-    const fnMatch = app.match(/function ChartWidget\(\{ chartData \}: any\) \{([\s\S]*?)\n\}\n/);
+    const fnMatch = app.match(/function ChartWidget\(\{ chartData, onRequestOlderCandles \}: any\) \{([\s\S]*?)\n\}\n/);
     expect(fnMatch, 'ChartWidget não encontrada').not.toBeNull();
     const body = fnMatch![1];
     expect(body).toContain('<EnhancedChart_110_Percent');
@@ -303,16 +335,18 @@ describe('V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas): e
   });
 });
 
-describe('Fusão visual (imagem de referência AR10 CYBORG v15.1 GOD TIER): SideBar renomeada, ganho circular do Siriform, DIREÇÃO/GESTÃO DE POSIÇÃO em cards separados', () => {
+describe('Fusão visual (imagem de referência AR10 CYBORG v15.1 GOD TIER): SideBar renomeada, ganho circular do Siriform, DIREÇÃO/POSITION MANAGEMENT em cards separados', () => {
   it('SideBar desacopla id (roteamento real) de label (texto exibido) — só DASHBOARD/SETTINGS continuam com comportamento próprio', () => {
     const app = read('../src/App.tsx');
     const itemsMatch = app.match(/const items: \{ icon: any; id: string; label: string \}\[\] = \[([\s\S]*?)\n {2}\];/);
     expect(itemsMatch, 'items do SideBar não encontrado').not.toBeNull();
     const body = itemsMatch![1];
     expect(body).toContain('id: "DASHBOARD", label: "COCKPIT"');
-    expect(body).toContain('id: "SETTINGS", label: "CONFIGURAÇÕES"');
-    // o roteamento real (App(), ternário do activeTab) continua comparando
-    // contra as strings originais — a troca de label nunca pode quebrá-lo.
+    // Ordem de migração de idioma: ids/labels da navegação migraram para
+    // inglês (SETTINGS/MARKETS/ANALYSIS/...) — as views secundárias agora
+    // roteiam dado real via SecondaryModuleView, então os ids são
+    // roteamento vivo, não mais só rótulo.
+    expect(body).toContain('id: "SETTINGS", label: "SETTINGS"');
     expect(app).toContain('activeTab === "DASHBOARD" ?');
     expect(app).toContain('activeTab === "SETTINGS" ?');
     expect(app).toContain('onClick={() => setActiveTab(item.id)}');
@@ -329,15 +363,15 @@ describe('Fusão visual (imagem de referência AR10 CYBORG v15.1 GOD TIER): Side
     expect(body).not.toMatch(/syncPct = engineStatus === "pending" \? \d/);
   });
 
-  it('MarketBiasDecisionCard renderiza DIREÇÃO e GESTÃO DE POSIÇÃO como 2 cyber-panels distintos (imagem de referência), mesmos campos reais de antes', () => {
+  it('MarketBiasDecisionCard renderiza DIREÇÃO e POSITION MANAGEMENT como 2 cyber-panels distintos (imagem de referência), mesmos campos reais de antes', () => {
     const app = read('../src/App.tsx');
     const fnMatch = app.match(/function MarketBiasDecisionCard\(\) \{([\s\S]*?)\n\}\n/);
     expect(fnMatch, 'MarketBiasDecisionCard não encontrada').not.toBeNull();
     const body = fnMatch![1];
     const panelCount = (body.match(/className="cyber-panel shrink-0 flex flex-col gap-2 p-3"/g) ?? []).length;
     expect(panelCount).toBe(2);
-    expect(body).toContain('>DIREÇÃO<');
-    expect(body).toContain('GESTÃO DE POSIÇÃO');
+    expect(body).toContain('>DIRECTION<');
+    expect(body).toContain('POSITION MANAGEMENT');
     // a alavancagem sugerida e o slider de quantidade/botão "TRADE
     // ASSISTIDO" da imagem de referência continuam FORA — READ_ONLY
     // permanente, sem caminho de execução em lugar nenhum do código.

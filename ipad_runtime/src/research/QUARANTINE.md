@@ -24,6 +24,7 @@ src/research/
     ├── market-structure-engine.js     ACTIVE_READ_ONLY (graduado 2026-06-25)
     ├── fvg-order-block-engine.js      ACTIVE_READ_ONLY (graduado 2026-07-01)
     ├── lorentzian-classifier.js       ACTIVE_READ_ONLY (graduado 2026-07-01)
+    ├── bos-choch-engine.js            ACTIVE_READ_ONLY (graduado 2026-07-12)
     └── fractal-swings.js              utilitário compartilhado (extraído 2026-07-03,
                                         não é um engine — ver secao "Utilitários" abaixo)
 ```
@@ -71,6 +72,15 @@ import reverso de volta para `js/**`.
   (nunca gate/sobrescreve o LONG/SHORT/WAIT primário). Importado por
   `ramber-ui/src/engine-bridge.ts`. Reporta sempre `sampleSize` junto da
   classificação — amostra pequena nunca vira confiança inflada.
+- **`engines/bos-choch-engine.js`** (graduado 2026-07-12, Ordem "Ciborgue
+  Vivo") — Break of Structure / Change of Character: reaproveita
+  `fractal-swings.js` e o `structure_label` de `market-structure-engine.js`
+  (zero segunda detecção de swing/estrutura), só adiciona a varredura real
+  de rompimento por fechamento além do último swing confirmado. Importado
+  por `ramber-ui/src/engine-bridge.ts`. Display only (LEI 24) — alimenta
+  anotações temporárias no gráfico e o alerta de estrutura, nunca uma
+  segunda decisão de trading. Zero `fetch()` novo, zero credencial, zero
+  `order_send`.
 
 Nota sobre `PRECACHE_URLS`: em 2026-07-03 (Auditoria Mestra 360°, secao 2) o
 `service-worker.js` atual foi confirmado como um shim de autodestruição (zero

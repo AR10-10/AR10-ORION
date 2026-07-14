@@ -3,13 +3,16 @@
 // arquivo reinventar sua própria forma do mesmo dado real (Regra de Ouro
 // 9, "Backward-compatible... aditivas").
 //
-// Exchange: só as 3 fontes REAIS que este sistema já tem conector para
-// (Binance Futures = fonte primária de candles/L2/Core Engine; Bybit/OKX =
-// cross-check de markPrice via REST, ver cross-exchange/). Nenhuma quarta
-// exchange é declarada aqui até que exista um conector real para ela —
-// declarar o tipo sem o conector seria a mesma dívida de "zero mocks" que
-// as Regras de Ouro proíbem, só que no nível de tipos.
-export type Exchange = "BINANCE" | "BYBIT" | "OKX";
+// Exchange: só as fontes REAIS que este sistema já tem conector para
+// (Binance Futures = fonte primária de candles/L2/Core Engine, exclusiva
+// — trava intocada; Bybit/OKX = cross-check de markPrice via REST; MEXC =
+// cross-check de preço SPOT + profundidade L2 real via REST, ver
+// cross-exchange/mexc-spot.ts — prioridade explícita do Operador,
+// preferida por profundidade de dado e cobertura de altcoins/memecoins).
+// Nenhuma exchange é declarada aqui até que exista um conector real para
+// ela — declarar o tipo sem o conector seria a mesma dívida de "zero
+// mocks" que as Regras de Ouro proíbem, só que no nível de tipos.
+export type Exchange = "BINANCE" | "BYBIT" | "OKX" | "MEXC";
 
 // Os 14 timeframes reais já aceitos pela API pública de klines de Futuros
 // da Binance e já expostos na régua de timeframe do gráfico

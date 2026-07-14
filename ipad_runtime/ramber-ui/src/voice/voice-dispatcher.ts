@@ -76,5 +76,66 @@ export function computeAlerts(
     alerts.push({ text: 'Motor de análise operacional.', priority: 'INFO' });
   }
 
+  // 6. Ordem "Ciborgue Vivo" §2: rompimento REAL de estrutura (BOS/CHOCH,
+  // bos-choch-engine.js) — a chave (tipo+índice) muda só quando um
+  // rompimento NOVO acontece; o mesmo evento ainda vivo na tela (mesma
+  // chave) nunca repete o alerta. CHOCH é o evento mais significativo
+  // (primeiro sinal real de possível reversão); BOS é confirmatório
+  // (continuação já esperada), mesma graduação de severidade do resto
+  // deste arquivo (CRITICAL/ALERT para o inesperado, INFO para a
+  // confirmação).
+  if (next.structureBreakKey && next.structureBreakKey !== prev.structureBreakKey) {
+    const dir = next.structureBreakDirection === 'ALTA' ? 'de alta' : 'de baixa';
+    if (next.structureBreakType === 'CHOCH') {
+      alerts.push({ text: `Mudança de caráter ${dir}. Estrutura pode estar revertendo.`, priority: 'ALERT' });
+    } else {
+      alerts.push({ text: `Rompimento de estrutura ${dir} confirma continuação.`, priority: 'INFO' });
+    }
+  }
+
+  // 7. Neural Market Aura ("Comunicação por Voz"): ciclo de vida REAL do
+  // Trade Plan (nexus/trade-plan.ts + signal-track-record.ts) — mesma
+  // regra anti-ruído de chave-muda-uma-vez-por-evento do item 6 acima.
+  if (next.tradePlanOpenKey && next.tradePlanOpenKey !== prev.tradePlanOpenKey) {
+    alerts.push({
+      text: `Entrada ${next.tradePlanDirection === 'LONG' ? 'de compra' : 'de venda'} identificada pelo Trade Plan real.`,
+      priority: 'INFO',
+    });
+  }
+  if (!prev.inEntryZone && next.inEntryZone) {
+    alerts.push({ text: 'Preço real na região ideal de entrada do plano ativo.', priority: 'INFO' });
+  }
+  // v2 (Diretriz Complementar §2/§4): progresso real de alvo ENQUANTO o
+  // plano continua aberto — evento distinto da resolução final abaixo,
+  // dispara uma vez por alvo real adicional provado ("Alvo 1 alcançado",
+  // "Alvo 2 alcançado"...), nunca na abertura do plano (targetsHit=0 aí).
+  if (next.tradePlanTargetProgressKey && next.tradePlanTargetProgressKey !== prev.tradePlanTargetProgressKey && next.tradePlanTargetsHit > 0) {
+    alerts.push({
+      text: `Alvo ${next.tradePlanTargetsHit} do Trade Plan alcançado. Stop movido para break-even.`,
+      priority: 'ALERT',
+    });
+  }
+  if (next.tradePlanResolutionKey && next.tradePlanResolutionKey !== prev.tradePlanResolutionKey) {
+    if (next.tradePlanResolutionStatus === 'TARGET_HIT') {
+      alerts.push({ text: 'Alvo real do Trade Plan alcançado.', priority: 'ALERT' });
+    } else if (next.tradePlanResolutionStatus === 'PARTIAL_HIT') {
+      alerts.push({ text: 'Plano encerrado em break-even após alcançar pelo menos um alvo real.', priority: 'INFO' });
+    } else if (next.tradePlanResolutionStatus === 'STOP_HIT') {
+      alerts.push({ text: 'Stop real atingido. Estrutura do plano perdida.', priority: 'ALERT' });
+    } else if (next.tradePlanResolutionStatus === 'REPLACED') {
+      alerts.push({ text: 'Plano substituído por uma leitura de estrutura mais recente.', priority: 'INFO' });
+    }
+  }
+  // Convicção real caindo (Confluence Engine) — só entre duas leituras
+  // reais (nunca a partir de null/sem-leitura, que não é "reduzida", é
+  // "indisponível"). CONFIRMS > MIXED > CONTRADICTS.
+  const verdictRank: Record<'CONFIRMS' | 'MIXED' | 'CONTRADICTS', number> = { CONFIRMS: 2, MIXED: 1, CONTRADICTS: 0 };
+  if (
+    prev.convictionVerdict && next.convictionVerdict &&
+    verdictRank[next.convictionVerdict] < verdictRank[prev.convictionVerdict]
+  ) {
+    alerts.push({ text: 'Convicção real reduzida entre os subsistemas de confluência.', priority: 'ALERT' });
+  }
+
   return alerts;
 }

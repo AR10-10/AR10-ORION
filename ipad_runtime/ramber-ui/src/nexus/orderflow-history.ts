@@ -13,6 +13,8 @@
 // trades reais (amostra deslizante). Sem amostra suficiente ainda,
 // honestamente nenhum trade é marcado como grande — nunca um palpite
 // antes de dado real suficiente.
+import { realPercentile } from "./percentile";
+
 export interface OrderflowTrade {
   time: number; // ms real (Tick.timestamp)
   price: number;
@@ -42,12 +44,13 @@ export const EMPTY_THRESHOLD_STATE: OrderflowThresholdState = { recentVolumes: [
 
 /** Percentil real (não interpolado — o valor real mais próximo da amostra,
  *  nunca um número sintetizado entre dois pontos reais) da amostra de
- *  volumes observados. null com amostra curta demais. */
+ *  volumes observados. null com amostra curta demais. Fórmula compartilhada
+ *  com volume-profile.ts via percentile.ts (achado real de auditoria, FASE
+ *  Ω Priority 3 — as duas reimplementavam a mesma conta separadamente). */
 export function computeLargeTradeThreshold(recentVolumes: number[]): number | null {
   if (recentVolumes.length < MIN_SAMPLE_FOR_THRESHOLD) return null;
   const sorted = [...recentVolumes].sort((a, b) => a - b);
-  const idx = Math.min(Math.floor(sorted.length * LARGE_TRADE_PERCENTILE), sorted.length - 1);
-  return sorted[idx];
+  return realPercentile(sorted, LARGE_TRADE_PERCENTILE);
 }
 
 /** Função pura: dado o estado real anterior da amostra + um lote real novo

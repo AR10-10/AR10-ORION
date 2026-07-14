@@ -13,6 +13,13 @@ import {
   DIVERGENCE_THRESHOLD_PCT,
 } from '../src/cross-exchange/bybit-futures';
 import { extractOkxPerpTicker, fetchOkxPerpTicker } from '../src/cross-exchange/okx-futures';
+import {
+  extractMexcPerpTicker,
+  fetchMexcPerpTicker,
+  validateMexcDepthShape,
+  mexcDepthToSnapshot,
+  fetchMexcDepth,
+} from '../src/cross-exchange/mexc-spot';
 
 describe('bybit-futures: extractBybitPerpTicker — payload real de /v5/market/tickers (category=linear)', () => {
   it('extrai markPrice/fundingRate/openInterest de um payload bem formado', () => {
@@ -159,5 +166,113 @@ describe('okx-futures + shared: compareCrossExchange também funciona com um tic
   it('OKX indisponível (ok:false) => INDISPONIVEL — nunca bloqueia nem afeta Binance ou Bybit', () => {
     const result = compareCrossExchange(65000, { ok: false, price: null, fundingRate: null, openInterest: null });
     expect(result).toEqual({ ok: false, priceDeltaPct: null, consensus: 'INDISPONIVEL' });
+  });
+});
+
+describe('mexc-spot: extractMexcPerpTicker — payload real de /api/v3/ticker/price (MEXC Spot)', () => {
+  it('extrai o preço real; funding/openInterest sempre null (Spot não é derivativo, nunca inventados)', () => {
+    expect(extractMexcPerpTicker({ symbol: 'BTCUSDT', price: '65000.5' })).toEqual({ ok: true, price: 65000.5, fundingRate: null, openInterest: null });
+  });
+
+  it('price ausente/não-numérico => ok:false honesto, nunca lança', () => {
+    expect(extractMexcPerpTicker({ symbol: 'BTCUSDT' })).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+    expect(extractMexcPerpTicker(null)).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+    expect(extractMexcPerpTicker(undefined)).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+    expect(extractMexcPerpTicker({})).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+  });
+});
+
+describe('mexc-spot: fetchMexcPerpTicker — fail-closed real, nunca bloqueia Binance/Bybit/OKX', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('erro de rede (fetch lança) => ok:false honesto, nunca uma exceção não tratada', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+    expect(await fetchMexcPerpTicker('BTC')).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+  });
+
+  it('resposta HTTP não-ok => ok:false honesto', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
+    expect(await fetchMexcPerpTicker('BTC')).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+  });
+
+  it('resposta ok real é extraída por extractMexcPerpTicker, e a URL usa o par esperado (api.mexc.com)', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toContain('SOLUSDT');
+      expect(url).toContain('api.mexc.com');
+      return { ok: true, json: async () => ({ symbol: 'SOLUSDT', price: '150.25' }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await fetchMexcPerpTicker('SOL')).toEqual({ ok: true, price: 150.25, fundingRate: null, openInterest: null });
+  });
+});
+
+describe('mexc-spot: compareCrossExchange também funciona com um ticker da MEXC (mesma lógica genérica)', () => {
+  it('MEXC alinhada com a Binance => ALINHADO', () => {
+    const result = compareCrossExchange(65000, { ok: true, price: 65010, fundingRate: null, openInterest: null });
+    expect(result.consensus).toBe('ALINHADO');
+  });
+
+  it('MEXC indisponível (ok:false) => INDISPONIVEL', () => {
+    const result = compareCrossExchange(65000, { ok: false, price: null, fundingRate: null, openInterest: null });
+    expect(result).toEqual({ ok: false, priceDeltaPct: null, consensus: 'INDISPONIVEL' });
+  });
+});
+
+describe('mexc-spot: profundidade L2 real de /api/v3/depth — capacidade nova (nem Bybit nem OKX têm)', () => {
+  it('validateMexcDepthShape: bids/asks como arrays reais é válido; qualquer outra forma é inválida', () => {
+    expect(validateMexcDepthShape({ bids: [], asks: [] })).toBe(true);
+    expect(validateMexcDepthShape({ bids: [['1', '2']], asks: [] })).toBe(true);
+    expect(validateMexcDepthShape({ bids: [] })).toBe(false);
+    expect(validateMexcDepthShape(null)).toBe(false);
+    expect(validateMexcDepthShape([])).toBe(false);
+  });
+
+  it('mexcDepthToSnapshot: mapeia níveis reais, asks em ordem decrescente (mesma convenção da UI), cap de 8 níveis por lado', () => {
+    const raw = {
+      bids: [['100', '1'], ['99', '2'], ['98', '3']],
+      asks: [['101', '1'], ['102', '2'], ['103', '3']],
+    };
+    const snapshot = mexcDepthToSnapshot(raw);
+    expect(snapshot.ok).toBe(true);
+    expect(snapshot.bids).toEqual([{ price: 100, size: 1 }, { price: 99, size: 2 }, { price: 98, size: 3 }]);
+    expect(snapshot.asks).toEqual([{ price: 103, size: 3 }, { price: 102, size: 2 }, { price: 101, size: 1 }]);
+  });
+
+  it('linha malformada é descartada por nível — nunca derruba o snapshot inteiro', () => {
+    const raw = { bids: [['100', '1'], ['not-a-price', '2'], 'not-an-array'], asks: [] };
+    expect(mexcDepthToSnapshot(raw).bids).toEqual([{ price: 100, size: 1 }]);
+  });
+
+  it('forma real inválida => ok:false honesto, nunca lança nem inventa um nível', () => {
+    expect(mexcDepthToSnapshot(null)).toEqual({ ok: false, bids: [], asks: [] });
+    expect(mexcDepthToSnapshot({})).toEqual({ ok: false, bids: [], asks: [] });
+  });
+});
+
+describe('mexc-spot: fetchMexcDepth — fail-closed real', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('erro de rede (fetch lança) => ok:false honesto, nunca uma exceção não tratada', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+    expect(await fetchMexcDepth('BTC')).toEqual({ ok: false, bids: [], asks: [] });
+  });
+
+  it('resposta HTTP não-ok => ok:false honesto', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
+    expect(await fetchMexcDepth('BTC')).toEqual({ ok: false, bids: [], asks: [] });
+  });
+
+  it('resposta ok real é mapeada por mexcDepthToSnapshot, e a URL usa o par esperado', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toContain('BTCUSDT');
+      expect(url).toContain('/depth');
+      return { ok: true, json: async () => ({ bids: [['100', '1']], asks: [['101', '1']] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await fetchMexcDepth('BTC')).toEqual({ ok: true, bids: [{ price: 100, size: 1 }], asks: [{ price: 101, size: 1 }] });
   });
 });

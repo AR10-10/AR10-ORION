@@ -9,6 +9,14 @@
 // API uniforme de "kline+L2" para as três seria a mesma dívida de mock que
 // a Regra de Ouro 1 proíbe, só que arquitetural em vez de num valor.
 //
+// MEXC (Ordem "Multi-Source Data Ingestion Layer", fonte prioritária do
+// Operador): sonda REST de preço SPOT (mesmo padrão de Bybit/OKX) + a
+// PRIMEIRA profundidade L2 real de uma exchange além da Binance neste
+// código (mexc-spot.ts) — instrumento SPOT, não Futures, então o
+// cross-check de preço carrega uma base real (prêmio/desconto de
+// perpétuo) contra o markPrice de Futures da Binance; ver o header de
+// mexc-spot.ts para o porquê disso NÃO alimentar o TrustScoreEngine ainda.
+//
 // Deliberadamente NÃO iniciado por App.tsx nesta fase (isso é a Fase 0.6,
 // escopada à parte por ser o passo de maior risco: substituir o WS/REST
 // inline que já funciona em produção). Este arquivo entrega o serviço
@@ -20,6 +28,12 @@ import type { Candle, Exchange, L2Snapshot, Timeframe } from "./types";
 import { useUnifiedSnapshotStore } from "../store/unified-snapshot-store";
 import { fetchBybitPerpTicker } from "../cross-exchange/bybit-futures";
 import { fetchOkxPerpTicker } from "../cross-exchange/okx-futures";
+// Ordem "Multi-Source Data Ingestion Layer": MEXC como fonte prioritária
+// (preço SPOT via REST, mesmo padrão de Bybit/OKX) + profundidade L2 REAL
+// — capacidade que nem Bybit nem OKX têm hoje neste código. Ver o header
+// de mexc-spot.ts para o porquê de MEXC não alimentar TrustScoreEngine
+// ainda (spot-vs-perp é base real, não ruído de confiança).
+import { fetchMexcPerpTicker, fetchMexcDepth } from "../cross-exchange/mexc-spot";
 import type { PerpTicker } from "../cross-exchange/shared";
 
 const CHART_CANDLE_LIMIT = 200; // mesmo teto real já usado por App.tsx/o Bus — nunca um segundo número solto.
@@ -71,8 +85,10 @@ export class CrossExchangeService {
   private binanceManager: ConnectionManager | null = null;
   private bybitTimer: ReturnType<typeof setInterval> | null = null;
   private okxTimer: ReturnType<typeof setInterval> | null = null;
+  private mexcTimer: ReturnType<typeof setInterval> | null = null;
   private lastBybitOk: boolean | null = null;
   private lastOkxOk: boolean | null = null;
+  private lastMexcOk: boolean | null = null;
   private running = false;
 
   constructor(options: CrossExchangeServiceOptions) {
@@ -91,6 +107,8 @@ export class CrossExchangeService {
     this.bybitTimer = setInterval(() => this.pollBybit(), this.restPollMs);
     this.pollOkx();
     this.okxTimer = setInterval(() => this.pollOkx(), this.restPollMs);
+    this.pollMexc();
+    this.mexcTimer = setInterval(() => this.pollMexc(), this.restPollMs);
   }
 
   stop(): void {
@@ -104,6 +122,10 @@ export class CrossExchangeService {
     if (this.okxTimer) {
       clearInterval(this.okxTimer);
       this.okxTimer = null;
+    }
+    if (this.mexcTimer) {
+      clearInterval(this.mexcTimer);
+      this.mexcTimer = null;
     }
   }
 
@@ -205,13 +227,35 @@ export class CrossExchangeService {
     await this.pollRestExchange("OKX", (symbol) => fetchOkxPerpTicker(symbol));
   }
 
+  // MEXC: preço SPOT real (mesmo padrão de ticker que Bybit/OKX, via
+  // pollRestExchange abaixo) + profundidade L2 real — capacidade que nem
+  // Bybit nem OKX têm hoje. Duas buscas reais por ciclo, deliberadamente
+  // sequenciais (nunca Promise.all): se o ticker cair a depth ainda roda,
+  // e vice-versa — uma falha nunca esconde a outra atrás de um catch
+  // combinado.
+  private async pollMexc(): Promise<void> {
+    await this.pollRestExchange("MEXC", (symbol) => fetchMexcPerpTicker(symbol));
+    await this.pollMexcDepth();
+  }
+
+  private async pollMexcDepth(): Promise<void> {
+    const symbol = this.symbol;
+    const depth = await fetchMexcDepth(symbol);
+    if (!this.running || symbol !== this.symbol || !depth.ok) return; // fail-closed: mantém o último snapshot real em vez de apagar por uma falha pontual — connections.MEXC/updatedAt já contam a idade honestamente.
+    const snapshot: L2Snapshot = { bids: depth.bids, asks: depth.asks, updatedAt: Date.now() };
+    useUnifiedSnapshotStore.getState().setExchangeOrderBook("MEXC", snapshot);
+    this.bus.emit({ type: "DATA.ORDERBOOK_UPDATED", payload: { exchange: "MEXC" } });
+  }
+
   private async pollRestExchange(exchange: Exchange, fetcher: (symbol: string) => Promise<PerpTicker>): Promise<void> {
     const symbol = this.symbol;
     const ticker = await fetcher(symbol);
     if (!this.running || symbol !== this.symbol) return; // resposta tardia de um símbolo já trocado — descarta.
-    const last = exchange === "BYBIT" ? this.lastBybitOk : this.lastOkxOk;
+    const last = exchange === "BYBIT" ? this.lastBybitOk : exchange === "OKX" ? this.lastOkxOk : this.lastMexcOk;
     if (last === ticker.ok) return; // sem transição real — nunca reescreve a store/emite evento à toa.
-    if (exchange === "BYBIT") this.lastBybitOk = ticker.ok; else this.lastOkxOk = ticker.ok;
+    if (exchange === "BYBIT") this.lastBybitOk = ticker.ok;
+    else if (exchange === "OKX") this.lastOkxOk = ticker.ok;
+    else this.lastMexcOk = ticker.ok;
     const state = ticker.ok ? "LIVE" : "DEGRADED";
     useUnifiedSnapshotStore.getState().setConnectionState(exchange, state);
     this.bus.emit({ type: "DATA.CONNECTION_CHANGED", payload: { exchange, state } });

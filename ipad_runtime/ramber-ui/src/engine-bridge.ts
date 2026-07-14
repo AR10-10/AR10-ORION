@@ -51,6 +51,10 @@ import { startLiquidationStream } from '../../js/real-data/binance-liquidations-
 import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg-order-block-engine.js';
 import { classify as classifyLorentzian } from '../../src/research/engines/lorentzian-classifier.js';
 import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
+// Ordem "Ciborgue Vivo": BOS/CHOCH — reaproveita fractal-swings.js e o
+// structure_label de market-structure-engine.js por baixo (ver header do
+// próprio arquivo); este import só traz a varredura de rompimento real.
+import { analyze as analyzeBosChoch } from '../../src/research/engines/bos-choch-engine.js';
 import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/index.js';
 // V-MAX Fase 1.3: derivação pura (HVN/LVN/preço-por-bucket) do Volume
 // Profile computado pelo WASM no quant-worker — ver bloco no fim do arquivo.
@@ -61,6 +65,18 @@ import { detectHvnLvn, bucketMidPrice, type VolumeProfileResult } from './nexus/
 // motor de S/R, nunca uma segunda definição de swing.
 import { findSwings, FRACTAL_K } from '../../src/research/engines/fractal-swings.js';
 import { buildFibonacciConfluence, type ConfluenceSource, type FibonacciConfluenceMatrix } from './nexus/fibonacci-confluence';
+// Fase Ω Priority 1 (Adaptive Multi-Timeframe Intelligence): motor puro
+// já reaproveita analyzeMarketStructure/classifyMarketRegime/S-R/RSI por
+// import próprio (ver header de multi-timeframe-engine.ts) — este arquivo
+// só importa a função de orquestração e os tipos, nunca uma segunda cópia
+// dos motores.
+import {
+  analyzeTimeframe,
+  MULTI_TIMEFRAME_LIST,
+  type MultiTimeframeId,
+  type MultiTimeframeMatrix,
+  type TimeframeContext,
+} from './nexus/multi-timeframe-engine';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fase G (V15, diretriz 4): envelope de tipos do santuário. A saída
@@ -332,7 +348,16 @@ function getHtfMarketStructure(symbol: string): { label: string | null; updatedA
 // the same pipeline app.js's handleGenerateRealAnalysis() +
 // refreshTargetTracker() run — same connector, same WASM, same engines,
 // called directly here instead of triggered by a button/DOM event.
-export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleResult> {
+// Auditoria de arquitetura (revisão completa): `timeframe` era fixo em
+// '15m' aqui embaixo mesmo com o parâmetro existindo no chamador — S1/R1 e
+// parte do Trade Plan ficavam presos a essa análise de 15m
+// independentemente do timeframe selecionado no gráfico. O resto da função
+// já era 100% passthrough real (evidence.timeframe/regimeResult vêm de
+// snapshot.timeframe, nunca do literal) — o único hardcode ficava na
+// própria requisição do snapshot. Default '15m' preserva o comportamento
+// anterior para qualquer chamador que não passe o parâmetro (mesmo padrão
+// já usado por getChartCandles nesta auditoria P1).
+export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): Promise<RealCycleResult> {
   const { workerClient, wasmReady } = getWorkerClient();
   let wasmVariant: string | null = null;
   try {
@@ -352,7 +377,7 @@ export async function runRealAnalysisCycle(symbol = 'BTC'): Promise<RealCycleRes
   let snapshot: BusSnapshot;
   try {
     snapshot = await requestFuturesCandleSnapshot({
-      symbol, timeframe: '15m', limit: 100, maxAgeMs: 25_000,
+      symbol, timeframe, limit: 100, maxAgeMs: 25_000,
     });
   } catch (err: any) {
     return { ok: false, reason: `market_data_bus_lancou_excecao: ${describeError(err)}` };
@@ -523,6 +548,81 @@ export async function getChartCandles(
   return snapshot.candles.map((c: { t: number; o: number; h: number; l: number; c: number; v: number }) => ({
     time: c.t, open: c.o, high: c.h, low: c.l, close: c.c, volume: c.v,
   }));
+}
+
+// Auditoria de arquitetura (revisão completa): paginação histórica real do
+// gráfico — achado: CHART_CANDLE_LIMIT era uma janela fixa de 200 candles,
+// sem NENHUM caminho para carregar mais história ao arrastar para trás
+// (borda dura, achado da auditoria de Chart Engine). Deliberadamente NUNCA
+// passa pelo Market Data Bus/requestFuturesCandleSnapshot acima: o Bus é um
+// cache de "snapshot MAIS RECENTE" por symbol:timeframe, compartilhado por
+// todo o app real (este mesmo getChartCandles, o ciclo de análise, o
+// contexto HTF) — escrever uma página antiga naquele mesmo buffer
+// corromperia o snapshot canônico que os outros consumidores dependem
+// sempre estar atualizado. Esta função chama o conector real diretamente
+// (mesmo collectBinanceFuturesKlines, já importado acima), uma busca
+// avulsa — nunca cacheada, nunca publicada a assinante nenhum. Fail-closed
+// puro: qualquer falha real vira null, nunca uma página fabricada.
+export async function getOlderChartCandles(
+  symbol: string,
+  beforeTime: number,
+  limit: number,
+  timeframe: string,
+): Promise<Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }> | null> {
+  try {
+    // beforeTime é o `time` (epoch SEGUNDOS) do candle mais antigo já
+    // carregado no gráfico; endTime da Binance é epoch MILISSEGUNDOS e
+    // inclusivo (open time <= endTime) — subtrai 1s antes de converter
+    // para nunca reincluir esse mesmo candle numa borda inclusiva
+    // (garantido menor que a duração de qualquer timeframe real, mesmo o
+    // de 1m).
+    const raw = await collectBinanceFuturesKlines({
+      symbol: `${symbol}-PERP`, timeframe, limit, endTime: (beforeTime - 1) * 1000,
+    });
+    if (!Array.isArray(raw) || raw.length === 0) return null;
+    return raw.map((c: { t: number; o: number; h: number; l: number; c: number; v: number }) => ({
+      time: c.t, open: c.o, high: c.h, low: c.l, close: c.c, volume: c.v,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+// Fase Ω Priority 1 — Adaptive Multi-Timeframe Intelligence: busca os 6
+// prazos reais (1m/5m/15m/1h/4h/1d) em paralelo, cada um via o MESMO Bus/
+// conector que o ciclo principal já usa (requestFuturesCandleSnapshot —
+// zero segunda fonte de dado, zero segunda sonda de rede fora do que o Bus
+// já dedupe entre chamadores concorrentes). Cadência PRÓPRIA e mais lenta
+// que o ciclo principal (App.tsx chama isto a cada ~60s, não a cada ~30s):
+// isto é confluência/contexto entre prazos, nunca o caminho crítico do
+// sinal principal — mesma filosofia não-bloqueante já usada pelo contexto
+// HTF acima (refreshHtfMarketStructureInBackground). LEI 24: apenas
+// contexto/confluência entre prazos, nunca um segundo motor de decisão.
+const MTF_CANDLE_LIMIT = 100;
+const MTF_MAX_AGE_MS = 50_000;
+
+export async function buildMultiTimeframeContext(symbol = 'BTC'): Promise<MultiTimeframeMatrix | null> {
+  const entries = await Promise.all(
+    MULTI_TIMEFRAME_LIST.map(async (tf): Promise<[MultiTimeframeId, TimeframeContext]> => {
+      try {
+        const snapshot = await requestFuturesCandleSnapshot({
+          symbol, timeframe: tf, limit: MTF_CANDLE_LIMIT, maxAgeMs: MTF_MAX_AGE_MS,
+        });
+        return [tf, analyzeTimeframe(tf, snapshot.ok ? snapshot.candles : [])];
+      } catch {
+        // Bus lançou (rede/exceção real) — mesmo caminho honesto de "sem
+        // candles reais para este prazo agora" que uma resposta ok:false.
+        return [tf, analyzeTimeframe(tf, [])];
+      }
+    }),
+  );
+  // Todos os 6 prazos sem NENHUMA leitura real (ex.: rede totalmente fora)
+  // devolve null honesto em vez de uma matriz de 6 linhas vazias — mesma
+  // semântica de "ainda sem leitura" que os outros motores da store já
+  // usam (volumeProfile, trustScore, etc. também começam null).
+  const anyOk = entries.some(([, ctx]) => ctx.status === 'OK');
+  if (!anyOk) return null;
+  return Object.fromEntries(entries) as MultiTimeframeMatrix;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -807,6 +907,32 @@ export function computeSmcZones(candles: Array<{ open: number; high: number; low
     orderBlocks: result.order_blocks,
     liquidityZones: result.liquidity_zones,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ordem "Ciborgue Vivo": BOS/CHOCH (bos-choch-engine.js) — reaproveita o
+// MESMO fractal-swings.js e o MESMO structure_label de
+// market-structure-engine.js já usados acima; a única lógica nova é a
+// varredura de rompimento real por fechamento. Computado contra o MESMO
+// array de candles do gráfico que computeSmcZones acima já recebe (mesmo
+// motivo: o `index` só faz sentido alinhado ao array que o caller desenha).
+// Display only (LEI 24): alimenta anotação temporária + alerta, nunca uma
+// segunda decisão de trading.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface StructureBreak {
+  type: 'BOS' | 'CHOCH';
+  direction: 'ALTA' | 'BAIXA';
+  level: number;
+  index: number;
+  time: number;
+}
+
+export function computeBosChoch(
+  candles: Array<{ open: number; high: number; low: number; close: number }>,
+): { break: StructureBreak | null; structureLabel: string | null } {
+  const result = analyzeBosChoch({ ohlcv_series: candles });
+  if (result.status !== 'OK') return { break: null, structureLabel: null };
+  return { break: result.break, structureLabel: result.structure_label };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

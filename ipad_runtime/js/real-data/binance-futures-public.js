@@ -78,7 +78,7 @@ function validateLongShortShape(json) {
     return { valid: true };
 }
 
-/** @param {{symbol?: string, interval?: string, limit?: number, timeoutMs?: number, includeDerivatives?: boolean}} opts
+/** @param {{symbol?: string, interval?: string, limit?: number, timeoutMs?: number, includeDerivatives?: boolean, endTime?: number}} opts
  *  includeDerivatives (default true, preserva o comportamento original para
  *  qualquer chamador que precise do Evidence Object completo): quando
  *  false, pula as 4 sondas de depth/funding/open_interest/long_short —
@@ -88,8 +88,13 @@ function validateLongShortShape(json) {
  *  evidence.candles — as 4 sondas extras eram buscadas via Promise.all e
  *  DESCARTADAS por inteiro a cada ciclo real (~a cada 25s), atrasando o
  *  caminho crítico do gráfico/Risk Engine por 4 round-trips de rede sem
- *  nenhum uso real do resultado. */
-export async function probe({ symbol = 'BTC', interval = '1h', limit = 100, timeoutMs = 8000, includeDerivatives = true } = {}) {
+ *  nenhum uso real do resultado.
+ *  endTime (auditoria de arquitetura — paginação histórica do gráfico):
+ *  epoch ms real, repassado direto ao parâmetro nativo `endTime` da Binance
+ *  (documentado, não uma invenção) — devolve os `limit` candles mais
+ *  recentes que fecham em ou antes desse instante, em vez dos mais
+ *  recentes absolutos. undefined preserva o comportamento de sempre. */
+export async function probe({ symbol = 'BTC', interval = '1h', limit = 100, timeoutMs = 8000, includeDerivatives = true, endTime } = {}) {
     const pair = SYMBOL_TO_PAIR[symbol] || `${symbol}USDT`;
     const evidence = createEmptyEvidence({
         source_id: meta.connector_id,
@@ -99,7 +104,8 @@ export async function probe({ symbol = 'BTC', interval = '1h', limit = 100, time
         instrument_type: meta.instrument_type,
     });
 
-    const klinesUrl = `${FUTURES_BASE}/fapi/v1/klines?symbol=${encodeURIComponent(pair)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`;
+    const klinesUrl = `${FUTURES_BASE}/fapi/v1/klines?symbol=${encodeURIComponent(pair)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`
+        + (Number.isFinite(endTime) ? `&endTime=${encodeURIComponent(Math.round(endTime))}` : '');
     const klinesProbe = await probeJsonEndpoint({ url: klinesUrl, timeoutMs, validate: validateKlinesShape });
 
     if (klinesProbe.state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) {

@@ -100,6 +100,29 @@ export async function saveSnapshotSummary(
   }
 }
 
+// Autonomy order: the signal track record survives reloads — accumulating
+// accuracy over sessions is the whole point of measuring it. Same
+// best-effort/fail-closed discipline as everything else in this file; the
+// caller re-validates the shape (rehydrateTrackRecord) before trusting it.
+export async function saveTrackRecord(state: unknown): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.put(SNAPSHOT_STORE, { key: "track-record", state, savedAt: Date.now() });
+  } catch {
+    // best-effort — see file header.
+  }
+}
+
+export async function loadTrackRecord(): Promise<unknown | null> {
+  try {
+    const db = await getDb();
+    const record = (await db.get(SNAPSHOT_STORE, "track-record")) as { state?: unknown } | undefined;
+    return record?.state ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function loadSnapshotSummary(): Promise<PersistedSnapshotSummary | null> {
   try {
     const db = await getDb();

@@ -34,6 +34,10 @@
 // arbitrário.
 import { getQuantWorkerState } from "../engine-bridge";
 import { useUnifiedSnapshotStore } from "../store/unified-snapshot-store";
+// Ordem "Próxima Evolução do Organismo": serviços imperativos leem o
+// organismo pelo gateway versionado — mesma store, mesma referência viva,
+// só que através do contrato único que todo motor (atual ou futuro) usa.
+import { getSnapshotForEngine } from "./organism-orchestrator";
 import type { TypedEventBus } from "./event-bus";
 import type { HealthSnapshot } from "./types";
 
@@ -71,20 +75,24 @@ export class HealthMonitor {
   }
 
   private emitSnapshot(): void {
-    const store = useUnifiedSnapshotStore.getState();
+    // Leitura EXCLUSIVA via UnifiedGlobalSnapshot (gateway versionado);
+    // escrita via as actions da própria store — leitura e escrita separadas
+    // de propósito: a visão de motor não carrega ações.
+    const { snapshot: organism } = getSnapshotForEngine();
     const snapshot: HealthSnapshot = {
-      fps: store.uiFps,
-      cycleLatencyMs: store.core.cycleLatencyMs,
+      fps: organism.uiFps,
+      cycleLatencyMs: organism.core.cycleLatencyMs,
       memoryMb: readMemoryMb(),
       workersAlive: getQuantWorkerState() === "ready" ? 1 : 0,
-      isOnline: !store.offline,
+      isOnline: !organism.offline,
       lastUpdatedAt: Date.now(),
     };
-    store.setHealth(snapshot);
+    const actions = useUnifiedSnapshotStore.getState();
+    actions.setHealth(snapshot);
     this.bus.emit({ type: "HEALTH.CHANGED", payload: snapshot });
 
-    const freshest = Math.max(store.price.updatedAt ?? 0, store.orderBook.updatedAt ?? 0);
-    store.setDataFresh(freshest > 0 && Date.now() - freshest < FRESHNESS_THRESHOLD_MS);
+    const freshest = Math.max(organism.price.updatedAt ?? 0, organism.orderBook.updatedAt ?? 0);
+    actions.setDataFresh(freshest > 0 && Date.now() - freshest < FRESHNESS_THRESHOLD_MS);
   }
 }
 
