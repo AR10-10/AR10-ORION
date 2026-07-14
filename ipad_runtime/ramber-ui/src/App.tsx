@@ -73,14 +73,13 @@ import {
   type ConfluenceSource,
   buildMultiTimeframeContext,
   computeBosChoch,
-  type StructureBreak,
 } from "./engine-bridge";
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
 // pura — a matemática pesada roda no WASM do quant-worker).
 import { filterSessionCandles, bucketMidPrice } from "./nexus/volume-profile";
 // V-MAX Fase 1 item 4: Conselho Multi-Agente (7 agentes puros + Meta-Agent
 // que delega a agregação ao linear opinion pool real da Fase F).
-import { buildCouncilDecision } from "./nexus/council";
+import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD } from "./nexus/council";
 import { computeConsensusRadar, type ConsensusRadarCategory } from "./nexus/consensus-radar";
 // MomentumAgent order ("chegando à perfeição"): RSI de Wilder, o mesmo
 // exato computeRSI já real/exportado como feature interna do
@@ -3495,7 +3494,7 @@ function NucleoVoiceOrb() {
   // fail-closed da Fase 0.9); o CPI é MEMÓRIA da sessão — deixá-lo pintar
   // o orb de verde mascararia um estado degradado atual (proibido).
   const cpi = useCpiSnapshot();
-  const cpiLabel = cpi === null ? "—" : `${Math.round(cpi * 100)}%`;
+  const cpiLabel = cpi === null ? DASH : `${Math.round(cpi * 100)}%`;
 
   let coreColor: string;
   let coreLabel: string;
@@ -3650,9 +3649,9 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   const diverging = convictionForThisPlan !== null && convictionForThisPlan.verdict !== "CONFIRMS";
   const entryLabel = plan.entry.low === plan.entry.high ? f(plan.entry.low) : `${f(plan.entry.low)}–${f(plan.entry.high)}`;
   // Redesenho radical (modelo do Operador): "E/S/T" mono cramped viram
-  // rótulos limpos em inglês (Entry Zone/Target/Stop), mesma linguagem
-  // visual do TopStat (label pequeno acima, valor tabular abaixo) — só a
-  // apresentação muda, a detecção real de targetHit/stopHit é idêntica.
+  // rótulos limpos em inglês (Entry Zone/Target/Stop) — label pequeno
+  // acima, valor tabular abaixo — só a apresentação muda, a detecção real
+  // de targetHit/stopHit é idêntica.
   // Geometria real medida (Playwright + CSS compilado): Entry/Target/Stop/
   // R:R + Support/Resistance juntos NÃO cabem numa única linha 1 em iPad
   // portrait (768-834px) sem voltar a abreviações cramped — por isso este
@@ -4138,37 +4137,6 @@ function SystemStatusBadge() {
     </div>
   );
 }
-interface TopStatProps {
-  label: string;
-  value: string | number;
-  color: string;
-  className?: string;
-}
-
-// V11.5 §13 auto-otimização: subValue/subColor/active existiam só para os
-// chips MODO e FEED, removidos na consolidação da barra única (DADOS n/4 na
-// faixa essencial já cobre o mesmo sinal de WebSocket). Nenhum caller restante
-// os usa — confirmado via grep antes de remover, não suposição.
-const TopStat = React.memo(function TopStat({
-  label,
-  value,
-  color,
-  className = "",
-}: TopStatProps) {
-  return (
-    <div className={`flex flex-col justify-center min-w-[85px] h-[36px] px-2.5 rounded transition-colors hover:bg-white/5 ${className}`}>
-      <span className="text-[0.45rem] text-[#8ab4f8] tracking-[0.15em] mb-[2px] text-center font-bold">
-        {label}
-      </span>
-      <div className="flex items-center justify-center gap-1.5 leading-none">
-        <span className={`text-[0.65rem] font-bold tracking-widest tabular-nums ${color}`}>
-          {value}
-        </span>
-      </div>
-    </div>
-  );
-});
-
 // --- NAV RAIL BUTTON (Fase M.1: Navigation Rail + Overlay Drawers) ---
 // Botão-ícone compartilhado pelas duas réguas verticais (SideBar à
 // esquerda, RightRail à direita) — mesmo toque/estado ativo, só o lado
@@ -4821,7 +4789,21 @@ function SecondaryModuleView({ tab }: { tab: string }) {
           <ModuleStat label="Open Plan" value={trackRecord.active ? `${trackRecord.active.plan.direction} since ${new Date(trackRecord.active.openedAt).toLocaleTimeString("en-US", { hour12: false })}` : "NONE"} />
           <ModuleStat label="Target Hits" value={String(trackRecord.targetHits)} tone="long" />
           <ModuleStat label="Stop Hits" value={String(trackRecord.stopHits)} tone="short" />
-          <ModuleStat label="Hit Rate" value={hitRate(trackRecord) !== null ? pct(hitRate(trackRecord)) : "NO RESOLVED PLAN YET (honest)"} tone={hitRate(trackRecord) !== null && hitRate(trackRecord)! >= 0.5 ? "long" : hitRate(trackRecord) !== null ? "short" : "neutral"} />
+          {/* Achado real de auditoria: hitRate(trackRecord) era chamada 4x
+              inline na mesma expressão JSX pelo mesmo trackRecord real —
+              mesmo padrão já corrigido e documentado alhures neste arquivo
+              (ver comentário de lorentzianConfidencePct). IIFE calcula uma
+              vez, zero mudança de comportamento/valor exibido. */}
+          {(() => {
+            const currentHitRate = hitRate(trackRecord);
+            return (
+              <ModuleStat
+                label="Hit Rate"
+                value={currentHitRate !== null ? pct(currentHitRate) : "NO RESOLVED PLAN YET (honest)"}
+                tone={currentHitRate !== null && currentHitRate >= 0.5 ? "long" : currentHitRate !== null ? "short" : "neutral"}
+              />
+            );
+          })()}
           <ModuleStat label="Superseded" value={String(trackRecord.replaced)} />
           <span className="text-[0.42rem] text-[#8ab4f8]/40 leading-tight">
             First-touch evaluation, conservative on gaps (stop wins). Superseded plans never count as wins or losses.
@@ -5919,14 +5901,17 @@ function MarketRegimeWidget() {
 
   // MomentumAgent order: mesmo RSI de Wilder real já votado pelo Conselho
   // (currentRsi, computado uma vez em App() — zero segunda matemática).
-  // Mesma leitura clássica de exaustão do agente: ≥70 sobrecomprado,
-  // ≤30 sobrevendido, cores espelham a semântica de stance do voto.
+  // Mesma leitura clássica de exaustão do agente — RSI_OVERBOUGHT/
+  // RSI_OVERSOLD importados de council.ts (achado real de auditoria: este
+  // gauge reimplementava 70/30 como literais soltos, um segundo lugar que
+  // silenciosamente desincronizaria da cor se o limiar real do voto do
+  // Conselho um dia mudasse), cores espelham a semântica de stance do voto.
   const rsiLabel = num(currentRsi) ? currentRsi.toFixed(1) : AWAIT;
   const rsiColor = !num(currentRsi)
     ? "text-[#8ab4f8]"
-    : currentRsi >= 70
+    : currentRsi >= RSI_OVERBOUGHT
       ? "text-[#ff0055]"
-      : currentRsi <= 30
+      : currentRsi <= RSI_OVERSOLD
         ? "text-[#00ffaa]"
         : "text-[#8ab4f8]";
 
@@ -6034,8 +6019,13 @@ function CouncilWidget() {
   // de mercado; o rótulo "coesão" diz o que o número realmente é.
   const agreementLabel = council?.agreement !== null && council?.agreement !== undefined
     ? `${Math.round(council.agreement * 100)}%`
-    : "—";
-  const cpiLabel = cpi === null ? AWAIT : `${Math.round(cpi * 100)}%`;
+    : DASH;
+  // Achado real de auditoria: este cpiLabel usava AWAIT ("AWAITING", 9
+  // caracteres) enquanto agreementLabel (mesma linha de layout — fatia
+  // percentual compacta, font-mono tiny) usa DASH, e a OUTRA leitura real
+  // do mesmo CPI em NucleoVoiceOrb também já usa DASH — DASH alinhado aqui
+  // por consistência visual real, zero mudança de dado.
+  const cpiLabel = cpi === null ? DASH : `${Math.round(cpi * 100)}%`;
   const cpiColor = cpi === null ? "text-[#8ab4f8]" : cpi >= 0.7 ? "text-[#00ffaa]" : cpi >= 0.4 ? "text-[#f0d06f]" : "text-[#ff0055]";
 
   return (
@@ -6479,7 +6469,16 @@ function ageLabelOf(updatedAt: number | null): string {
 // institutionalConsensus.score (mesmo achado de duplicação da auditoria de
 // Sincronização Global).
 function formatConsensusScore(score: number | null): string {
-  return score === null ? AWAIT : `${score >= 0 ? "+" : ""}${(score * 100).toFixed(0)}`;
+  if (score === null) return AWAIT;
+  // Achado real de auditoria: score>=0 ? "+" : "" combinado com
+  // .toFixed(0) produzia o literal "-0" pra qualquer score real pequeno e
+  // negativo (ex.: -0.001) — o sinal era decidido ANTES do arredondamento.
+  // Arredondar primeiro e decidir o sinal do valor JÁ arredondado (mesmo
+  // padrão Math.round(x*100) do resto do arquivo) elimina o "-0" por
+  // construção: JS nunca serializa -0 como "-0" via interpolação de
+  // template literal (só .toFixed/.toString(radix) fazem isso).
+  const rounded = Math.round(score * 100);
+  return rounded > 0 ? `+${rounded}` : `${rounded}`;
 }
 
 function DecisionValidationWidget() {
