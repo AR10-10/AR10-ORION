@@ -64,6 +64,9 @@ import { effectiveStopForTargetsHit } from "../nexus/trade-plan";
 import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
+import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
+import type { NexusDecision } from "../nexus/decision-layer";
+import { formatEtaRange } from "../nexus/eta-engine";
 // Research-driven precision order: VWAP, the institutional-standard
 // intraday reference level this system was missing entirely (confirmed
 // via a full-codebase grep before writing nexus/vwap.ts).
@@ -227,6 +230,14 @@ interface EnhancedChartProps {
   // Refinamento Final §7: dealing range Premium/EQ/Discount real
   // (premium-discount.ts) — 3 linhas fio-de-seda discretas. Fail-closed.
   premiumDiscount?: PremiumDiscountReading | null;
+  // Auditoria Final §3: harmônicos RENDERIZADOS — a linha do ponto D do
+  // melhor padrão real (fit desc) + EPA quando Wolfe. Fail-closed.
+  harmonicHits?: HarmonicPatternHit[] | null;
+  // Auditoria Final §3/§4: a leitura fundida — usada AQUI só para
+  // enriquecer os títulos das linhas de alvo com ETA em faixa (a
+  // distância % vem do livePrice real). Geometria continua vindo de
+  // tradePlan — decision.plan deriva do MESMO objeto, zero divergência.
+  decision?: NexusDecision | null;
 }
 
 // Auditoria de arquitetura (revisão completa) — paginação histórica real:
@@ -282,6 +293,8 @@ export function EnhancedChart_110_Percent({
   confidenceZone,
   scenario,
   premiumDiscount,
+  harmonicHits,
+  decision,
   layerVisibility,
   emaPeriod,
   onRequestOlderCandles,
@@ -297,6 +310,7 @@ export function EnhancedChart_110_Percent({
   const tradePlanLinesRef = useRef<IPriceLine[]>([]);
   const scenarioLinesRef = useRef<IPriceLine[]>([]);
   const premiumDiscountLinesRef = useRef<IPriceLine[]>([]);
+  const harmonicLinesRef = useRef<IPriceLine[]>([]);
   // Named refs to the stop/target lines specifically (a subset of
   // tradePlanLinesRef above) — lets the hit-boost effect below update
   // color/title in place via applyOptions() instead of tearing down and
@@ -450,6 +464,7 @@ export function EnhancedChart_110_Percent({
       tradePlanLinesRef.current = [];
       scenarioLinesRef.current = [];
       premiumDiscountLinesRef.current = [];
+      harmonicLinesRef.current = [];
       cvdSeriesRef.current = null;
       vwapSeriesRef.current = null;
       emaSeriesRef.current = null;
@@ -783,6 +798,41 @@ export function EnhancedChart_110_Percent({
     mkPd(premiumDiscount.rangeLow.price, "rgba(0, 255, 170, 0.30)", "Discount · fundo do range");
   }, [premiumDiscount]);
 
+  // Auditoria Final §3 ("caso esteja calculado mas não desenhado, ativar
+  // renderização"): o MELHOR padrão harmônico real (hits[0] — a lista já
+  // vem ordenada por fit desc do motor) vira uma price line no ponto de
+  // reversão esperado (D / ponto 5), + a linha EPA quando Wolfe. Púrpura
+  // (acento do Conselho/opinião agregada), mais discreta que Trade Plan e
+  // Scenario; fio de seda; o título carrega o fit com o rótulo honesto —
+  // aderência, nunca probabilidade. Fail-closed: sem padrão, zero linhas.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));
+    harmonicLinesRef.current = [];
+    const top = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;
+    if (!top || !Number.isFinite(top.points.D.price)) return;
+    const mkH = (price: number, title: string) => {
+      harmonicLinesRef.current.push(
+        series.createPriceLine({
+          price,
+          color: "rgba(176, 38, 255, 0.40)",
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: false,
+          title,
+        }),
+      );
+    };
+    mkH(
+      top.points.D.price,
+      `${top.pattern} ${top.direction} · D · fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)`,
+    );
+    if (top.pattern === "WOLFE" && typeof top.epaPrice === "number" && Number.isFinite(top.epaPrice)) {
+      mkH(top.epaPrice, "WOLFE · EPA (linha 1→4 real)");
+    }
+  }, [harmonicHits]);
+
   // Signal Precision order: the Trade Plan drawn on the chart — subtle,
   // silk-thread annotations (1px solid, never dashed; hierarchy only via
   // color/opacity). Entry zone = two lines bounding the real structure
@@ -880,13 +930,22 @@ export function EnhancedChart_110_Percent({
       const reached = i < hits;
       const rr = tradePlan.riskRewardRatios[i];
       const label = multi ? `TARGET ${i + 1}` : "TARGET";
-      const title = `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}`;
+      // Auditoria Final §3: distância % REAL ao preço vivo + ETA em faixa
+      // do contrato fundido (decision.plan deriva do MESMO tradePlan; o
+      // guard de preço torna divergência de render intermediário inócua).
+      const distPct = p !== null && p > 0 ? ` · ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";
+      const fusedTarget = decision?.plan?.targets[i];
+      const etaLabel =
+        fusedTarget && Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)
+          ? formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)
+          : null;
+      const title = `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}`;
       line.applyOptions({
         color: reached ? "rgba(0, 255, 170, 1)" : "rgba(0, 255, 170, 0.75)",
         title: reached ? `${title} · REACHED` : title,
       });
     });
-  }, [tradePlan, livePrice, targetsHit]);
+  }, [tradePlan, livePrice, targetsHit, decision]);
 
   return (
     <div className="absolute inset-0">

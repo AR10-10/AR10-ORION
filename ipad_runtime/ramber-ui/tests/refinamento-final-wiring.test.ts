@@ -195,7 +195,7 @@ describe('Sessão Local-First: ativo/timeframe/modo sobrevivem a refresh ("o sis
     expect(a).toContain('VALID_TIMEFRAMES.has(parsed.timeframe)');
     expect(a).toContain('TRADFI_ASSETS.find((a) => a.symbol === parsed.tradFiSymbol)');
     // TRADFI restaurado sem ativo restaurável degrada para CRYPTO
-    expect(a).toContain('if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe };');
+    expect(a).toContain('if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe, chartLayers, emaPeriod };');
   });
 
   it('os 4 estados hidratam por inicializador preguiçoso e persistem num único efeito', () => {
@@ -204,16 +204,16 @@ describe('Sessão Local-First: ativo/timeframe/modo sobrevivem a refresh ("o sis
     expect(a).toContain('useState(() => restoredSession.timeframe)');
     expect(a).toContain('useState<"CRYPTO" | "TRADFI">(() => restoredSession.marketMode)');
     expect(a).toContain('useState<TradFiAsset | null>(() => restoredSession.tradFiAsset)');
-    const m = a.match(/persistSessionState\(\{[\s\S]*?\}\);\n  \}, \[selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset\]\);/);
+    const m = a.match(/persistSessionState\(\{[\s\S]*?\}\);\n  \}, \[selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, emaPeriod\]\);/);
     expect(m, 'efeito único de persistência não encontrado').not.toBeNull();
   });
 
   it('persistência nunca quebra o boot: try/catch nos dois lados (storage cheio/corrompido)', () => {
     const a = app();
     const readIdx = a.indexOf('function readRestoredSession()');
-    expect(a.slice(readIdx, readIdx + 1600)).toContain('} catch {');
+    expect(a.slice(readIdx, readIdx + 2600)).toContain('} catch {');
     const writeIdx = a.indexOf('function persistSessionState(');
-    expect(a.slice(writeIdx, writeIdx + 500)).toContain('} catch {');
+    expect(a.slice(writeIdx, writeIdx + 800)).toContain('} catch {');
   });
 });
 
@@ -269,5 +269,53 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
     expect(a).toContain('· Estado: ${decision.operationalState}');
     expect(a).toContain('`Favoráveis: ${decision.reasonsFor.join(" · ")}`');
     expect(a).toContain('`Contrários: ${decision.reasonsAgainst.join(" · ")}`');
+  });
+});
+
+// ─── Auditoria Final V-MAX — renderização ativada + persistência de prefs ───
+describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no gráfico', () => {
+  it('EnhancedChart: linha do ponto D do melhor padrão (fit desc) + EPA quando Wolfe — fio de seda, rótulo honesto', () => {
+    const c = chart();
+    expect(c).toContain('harmonicHits?: HarmonicPatternHit[] | null;');
+    const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
+    expect(idx).toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 1200);
+    expect(block).toContain('const top = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;');
+    expect(block).toContain('fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)');
+    expect(block).toContain('"WOLFE · EPA (linha 1→4 real)"');
+    expect(block).toContain('lineStyle: LineStyle.Solid,');
+    const cleanupIdx = c.indexOf('chart.remove();');
+    expect(c.slice(cleanupIdx, cleanupIdx + 700)).toContain('harmonicLinesRef.current = [];');
+  });
+
+  it('títulos das linhas de alvo carregam distância % ao preço VIVO + ETA em faixa do contrato fundido (guard de preço)', () => {
+    const c = chart();
+    expect(c).toContain('const distPct = p !== null && p > 0 ? ` · ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";');
+    expect(c).toContain('const fusedTarget = decision?.plan?.targets[i];');
+    expect(c).toContain('Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)');
+    expect(c).toContain('${etaLabel ? ` · ETA ${etaLabel}` : ""}');
+  });
+
+  it('ChartWidget passa harmonicHits (mesma fatia da ANALYSIS) e decision (contrato fundido) ao gráfico', () => {
+    const a = app();
+    expect(a).toContain('const chartHarmonics = useHarmonicPatternsSnapshot();');
+    expect(a).toContain('harmonicHits={chartHarmonics}');
+    expect(a).toContain('decision={nexusDecision ?? null}');
+  });
+});
+
+describe('Auditoria §6: configurações do Operador (camadas + EMA) sobrevivem a refresh', () => {
+  it('RestoredSession carrega chartLayers validadas por chave conhecida e emaPeriod validado pela lista real', () => {
+    const a = app();
+    expect(a).toContain('chartLayers: ChartLayerVisibility;');
+    expect(a).toContain('if (typeof parsed.chartLayers[key] === "boolean") chartLayers[key] = parsed.chartLayers[key];');
+    expect(a).toContain('(EMA_PERIODS as readonly number[]).includes(parsed?.emaPeriod)');
+  });
+
+  it('os dois estados hidratam por inicializador preguiçoso e entram no MESMO efeito único de persistência', () => {
+    const a = app();
+    expect(a).toContain('useState<ChartLayerVisibility>(() => restoredSession.chartLayers)');
+    expect(a).toContain('useState<EmaPeriod>(() => restoredSession.emaPeriod)');
+    expect(a).toContain('}, [selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, emaPeriod]);');
   });
 });

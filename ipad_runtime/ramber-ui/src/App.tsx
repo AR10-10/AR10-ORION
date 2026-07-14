@@ -299,10 +299,15 @@ interface RestoredSession {
   timeframe: string;
   marketMode: "CRYPTO" | "TRADFI";
   tradFiAsset: TradFiAsset | null;
+  // Auditoria Final §6: configurações reais do Operador — visibilidade
+  // das camadas do gráfico e período da EMA — também sobrevivem a
+  // refresh/fechar o PWA. Validação por chave conhecida/valor da lista.
+  chartLayers: ChartLayerVisibility;
+  emaPeriod: EmaPeriod;
 }
 
 function readRestoredSession(): RestoredSession {
-  const fallback: RestoredSession = { asset: "BTC", timeframe: "15m", marketMode: "CRYPTO", tradFiAsset: null };
+  const fallback: RestoredSession = { asset: "BTC", timeframe: "15m", marketMode: "CRYPTO", tradFiAsset: null, chartLayers: DEFAULT_CHART_LAYER_VISIBILITY, emaPeriod: DEFAULT_EMA_PERIOD };
   try {
     const raw = window.localStorage.getItem(SESSION_STATE_KEY);
     if (!raw) return fallback;
@@ -314,10 +319,22 @@ function readRestoredSession(): RestoredSession {
       marketMode === "TRADFI" && typeof parsed?.tradFiSymbol === "string"
         ? (TRADFI_ASSETS.find((a) => a.symbol === parsed.tradFiSymbol) ?? null)
         : null;
+    // Camadas: só chaves conhecidas entram; ausentes ficam no default ON
+    // (§2 Ativação Completa: nada nasce desligado — o restore respeita a
+    // ESCOLHA do Operador, nunca inventa um estado).
+    const chartLayers: ChartLayerVisibility = { ...DEFAULT_CHART_LAYER_VISIBILITY };
+    if (parsed?.chartLayers && typeof parsed.chartLayers === "object") {
+      for (const key of Object.keys(chartLayers) as ChartLayerId[]) {
+        if (typeof parsed.chartLayers[key] === "boolean") chartLayers[key] = parsed.chartLayers[key];
+      }
+    }
+    const emaPeriod: EmaPeriod = (EMA_PERIODS as readonly number[]).includes(parsed?.emaPeriod)
+      ? (parsed.emaPeriod as EmaPeriod)
+      : DEFAULT_EMA_PERIOD;
     // Modo TRADFI sem ativo TradFi restaurável degrada para CRYPTO — nunca
     // um cockpit em modo macro apontando para o nada.
-    if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe };
-    return { asset, timeframe, marketMode, tradFiAsset };
+    if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe, chartLayers, emaPeriod };
+    return { asset, timeframe, marketMode, tradFiAsset, chartLayers, emaPeriod };
   } catch {
     return fallback;
   }
@@ -326,7 +343,7 @@ function readRestoredSession(): RestoredSession {
 // inicializadores preguiçosos dos useState abaixo consomem este objeto.
 const restoredSession = readRestoredSession();
 
-function persistSessionState(s: { asset: string; timeframe: string; marketMode: string; tradFiSymbol: string | null }): void {
+function persistSessionState(s: { asset: string; timeframe: string; marketMode: string; tradFiSymbol: string | null; chartLayers: ChartLayerVisibility; emaPeriod: number }): void {
   try {
     window.localStorage.setItem(SESSION_STATE_KEY, JSON.stringify(s));
   } catch {
@@ -492,7 +509,7 @@ export default function App() {
   // camadas continuam ligadas por padrão (DEFAULT_CHART_LAYER_VISIBILITY),
   // nada muda no comportamento existente até o Operador desligar algo.
   const [chartLayersOpen, setChartLayersOpen] = useState(false);
-  const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(DEFAULT_CHART_LAYER_VISIBILITY);
+  const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);
   const toggleChartLayer = useCallback((id: ChartLayerId) => {
     setChartLayerVisibility((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
@@ -500,7 +517,7 @@ export default function App() {
   // controlado no mesmo painel Camadas do Gráfico — um único período
   // ativo por vez (não uma pilha de linhas), mesmo padrão de "um controle
   // por camada" já usado ali.
-  const [emaPeriod, setEmaPeriod] = useState<EmaPeriod>(DEFAULT_EMA_PERIOD);
+  const [emaPeriod, setEmaPeriod] = useState<EmaPeriod>(() => restoredSession.emaPeriod);
   // V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas):
   // Market Intelligence (esquerda) / Core Intelligence (direita) são
   // gavetas fechadas por padrão — o Gráfico reina sozinho no boot.
@@ -1632,8 +1649,10 @@ export default function App() {
       timeframe: chartTimeframe,
       marketMode,
       tradFiSymbol: selectedTradFiAsset?.symbol ?? null,
+      chartLayers: chartLayerVisibility,
+      emaPeriod,
     });
-  }, [selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset]);
+  }, [selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, emaPeriod]);
 
   // V-MAX Fase 1 item 4: Conselho Multi-Agente. Cada insumo abaixo é dado
   // REAL já coletado por este componente ou pela store — o conselho é um
@@ -5351,7 +5370,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod, confidenceZone } = useContext(WidgetContext) || {};
+  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision } = useContext(WidgetContext) || {};
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
   // Correção de latência: o MESMO preço real que já alimenta a barra
   // superior (usePriceSnapshot — escrito na store a cada tick do WS,
@@ -5397,6 +5416,9 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // Refinamento Final §7: dealing range Premium/EQ/Discount real para as 3
   // linhas de contexto do gráfico (mesma fatia lida pelo Trade Plan strip).
   const chartPremiumDiscount = usePremiumDiscountSnapshot();
+  // Auditoria Final §3: melhor padrão harmônico real renderizado no
+  // gráfico (mesma fatia da store lida pela aba ANALYSIS).
+  const chartHarmonics = useHarmonicPatternsSnapshot();
 
   return (
     <Widget
@@ -5471,6 +5493,8 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             confidenceZone={confidenceZone ?? null}
             scenario={chartScenario ?? null}
             premiumDiscount={chartPremiumDiscount ?? null}
+            harmonicHits={chartHarmonics}
+            decision={nexusDecision ?? null}
             layerVisibility={chartLayerVisibility}
             emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}
