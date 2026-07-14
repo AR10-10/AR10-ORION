@@ -45,6 +45,7 @@ import { pushConvictionHistory, type ConvictionScoreSample } from "../nexus/inst
 import type { VolumeProfileSnapshot } from "../nexus/volume-profile";
 import type { FibonacciConfluenceMatrix } from "../nexus/fibonacci-confluence";
 import type { CouncilDecision } from "../nexus/council";
+import type { ConsensusRadarReading } from "../nexus/consensus-radar";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
 import type { TradePlan } from "../nexus/trade-plan";
@@ -188,6 +189,11 @@ export interface UnifiedSnapshotState {
   // Fase 2 — armadilhas por corroboração de eventos REAIS consumados.
   // Lista vazia é o estado honesto comum, não erro.
   trapSignals: TrapSignal[];
+  // Diretriz Complementar §8 ("Radar de Consenso"): reempacote de 6
+  // magnitudes 0..1 reais já votadas/computadas alhures (ver
+  // consensus-radar.ts) — zero segunda matemática de consenso. null =
+  // ainda sem primeiro ciclo real do Conselho.
+  consensusRadar: ConsensusRadarReading | null;
   // Signal Precision order (phase 4) — actionable plan from REAL structure
   // (entry zone / stop / target / R:R). null = honest "no coherent plan"
   // (no directional stance, risk gate locked, or missing real structure).
@@ -270,6 +276,7 @@ interface UnifiedSnapshotActions {
   setCouncil: (decision: CouncilDecision | null) => void;
   setScenario: (projection: ScenarioProjection | null) => void;
   setTrapSignals: (traps: TrapSignal[]) => void;
+  setConsensusRadar: (reading: ConsensusRadarReading | null) => void;
   setTradePlan: (plan: TradePlan | null) => void;
   setMultiTimeframeContext: (matrix: MultiTimeframeMatrix | null) => void;
   // Diretriz Complementar §18/§4: registra uma amostra REAL do Score Geral
@@ -315,6 +322,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     council: null,
     scenario: null,
     trapSignals: [],
+    consensusRadar: null,
     tradePlan: null,
     multiTimeframeContext: null,
     institutionalScoreHistory: [],
@@ -359,6 +367,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setCouncil: (decision) => set((s) => { s.council = decision; }),
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
     setTrapSignals: (traps) => set((s) => { s.trapSignals = traps; }),
+    setConsensusRadar: (reading) => set((s) => { s.consensusRadar = reading; }),
     setTradePlan: (plan) => set((s) => { s.tradePlan = plan; }),
     setMultiTimeframeContext: (matrix) => set((s) => { s.multiTimeframeContext = matrix; }),
     recordInstitutionalScore: (score) => set((s) => {
@@ -441,6 +450,8 @@ export const useScenarioSnapshot = (): ScenarioProjection | null =>
   useUnifiedSnapshotStore((s) => s.scenario);
 export const useTrapSignalsSnapshot = (): TrapSignal[] =>
   useUnifiedSnapshotStore((s) => s.trapSignals ?? EMPTY_TRAPS);
+export const useConsensusRadarSnapshot = (): ConsensusRadarReading | null =>
+  useUnifiedSnapshotStore((s) => s.consensusRadar);
 export const useTradePlanSnapshot = (): TradePlan | null =>
   useUnifiedSnapshotStore((s) => s.tradePlan);
 export const useMultiTimeframeSnapshot = (): MultiTimeframeMatrix | null =>

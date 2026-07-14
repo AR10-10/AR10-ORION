@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory } from "./store/unified-snapshot-store";
 // Ordem "Ciborgue Vivo" §3: síntese real de autodiagnóstico — mesmos
 // sinais do Health Monitor/Data Quality Layer, nunca uma segunda medição.
 import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/self-diagnostics";
@@ -81,6 +81,7 @@ import { filterSessionCandles, bucketMidPrice } from "./nexus/volume-profile";
 // V-MAX Fase 1 item 4: Conselho Multi-Agente (7 agentes puros + Meta-Agent
 // que delega a agregação ao linear opinion pool real da Fase F).
 import { buildCouncilDecision } from "./nexus/council";
+import { computeConsensusRadar, type ConsensusRadarCategory } from "./nexus/consensus-radar";
 // MomentumAgent order ("chegando à perfeição"): RSI de Wilder, o mesmo
 // exato computeRSI já real/exportado como feature interna do
 // classificador k-NN — reaproveitado aqui integral (zero segunda
@@ -1617,6 +1618,26 @@ export default function App() {
       buildScenarioProjection(priceFromSnapshot.price, levels, councilFromSnapshot),
     );
   }, [councilFromSnapshot, priceFromSnapshot, smcZones, engine, fibonacciMatrix, volumeProfileSnapshot]);
+
+  // Diretriz Complementar §8 ("Radar de Consenso"): mesma disciplina do
+  // efeito de Cenários acima — zero comunicação direta motor→motor, este
+  // efeito relê o Conselho da própria store (councilFromSnapshot) e só
+  // acrescenta 2 leituras reais que o Conselho não vota: bandwidthPercentile
+  // (regime real, nunca antes lido aqui — achado real de auditoria, dado
+  // morto até este commit) e a magnitude do GMIL
+  // (|institutionalConsensus.score|, sinal descartado de propósito — ver
+  // consensus-radar.ts para o porquê). "Risk Engine" fica de fora: não
+  // existe magnitude contínua real para essa categoria em lugar nenhum do
+  // código (fabricar uma violaria a Regra de Ouro 1).
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setConsensusRadar(
+      computeConsensusRadar({
+        council: councilFromSnapshot ?? null,
+        bandwidthPercentile: engine?.marketRegime?.bandwidthPercentile ?? null,
+        gmilScore: institutionalConsensus.score,
+      }),
+    );
+  }, [councilFromSnapshot, engine?.marketRegime, institutionalConsensus]);
 
   // Signal Precision order (phase 4): actionable Trade Plan — when the
   // Council reads LONG/SHORT, derive entry zone / stop / target from REAL
@@ -5947,6 +5968,17 @@ const COUNCIL_AGENT_LABEL: Record<string, string> = {
   FIBONACCI: "FIBONACCI",
   MOMENTUM: "MOMENTUM (RSI)",
 };
+// Diretriz Complementar §8 ("Radar de Consenso") — rótulos das 6 categorias
+// reais de consensus-radar.ts. Estrutura/Liquidez/Fluxo/Momentum aqui são o
+// MESMO rótulo do Conselho acima de propósito (mesmo dado, visão resumida).
+const CONSENSUS_RADAR_LABEL: Record<ConsensusRadarCategory, string> = {
+  ESTRUTURA: "ESTRUTURA",
+  LIQUIDEZ: "LIQUIDEZ",
+  FLUXO: "FLUXO",
+  MOMENTUM: "MOMENTUM",
+  VOLATILIDADE: "VOLATILIDADE",
+  GMIL: "GMIL (GLOBAL)",
+};
 
 function CouncilWidget() {
   const council = useCouncilSnapshot();
@@ -5955,6 +5987,8 @@ function CouncilWidget() {
   const scenario = useScenarioSnapshot();
   const traps = useTrapSignalsSnapshot();
   const trustScore = useTrustScoreSnapshot();
+  // Diretriz Complementar §8: mesma store, fatia própria (ver consensus-radar.ts).
+  const consensusRadar = useConsensusRadarSnapshot();
 
   const pathLabel = (p: { direction: string; target: { price: number; sourceKind: string } | null; opinionWeight: number | null }) => {
     const target = p.target ? `${p.target.price.toFixed(0)} (${p.target.sourceKind})` : "no real level";
@@ -5986,6 +6020,42 @@ function CouncilWidget() {
               <span className="text-[#8ab4f8]/60 font-normal"> · coesão {agreementLabel} · quórum {council.quorum}/6</span>
             ) : null}
           </span>
+        </div>
+        {/* Diretriz Complementar §8 ("Radar de Consenso"): as 6 magnitudes
+            reais lado a lado para leitura num relance. Estrutura/Liquidez/
+            Fluxo/Momentum são os MESMOS 4 votos do Conselho detalhados
+            abaixo — nunca uma segunda fonte. Volatilidade (bandwidth
+            percentile do regime) e GMIL (|institutionalConsensus.score|)
+            são leituras reais que o Conselho não vota. "Risk Engine" fica
+            de fora de propósito: nenhuma magnitude contínua real existe
+            para essa categoria neste sistema (ver consensus-radar.ts) —
+            omissão honesta, não um buraco silencioso. Barras estáticas,
+            sem animação (Clareza Visual + 60fps): só o preenchimento muda
+            de largura quando o dado real muda. */}
+        <div className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
+          <span className="text-[0.4rem] text-[#8ab4f8]/50 font-bold tracking-[0.2em]">RADAR DE CONSENSO</span>
+          {consensusRadar ? (
+            consensusRadar.spokes.map((spoke) => (
+              <div key={spoke.category} className="flex items-center gap-1.5">
+                <span className="text-[0.4rem] text-[#8ab4f8]/60 font-bold tracking-wide w-[54px] shrink-0">
+                  {CONSENSUS_RADAR_LABEL[spoke.category]}
+                </span>
+                <div className="flex-1 h-1 bg-[#00131a] rounded-full overflow-hidden border border-[#00f0ff15]">
+                  {spoke.value !== null && (
+                    <div
+                      className="h-full bg-[#00f0ff] shadow-[0_0_4px_#00f0ff]"
+                      style={{ width: `${Math.round(spoke.value * 100)}%` }}
+                    />
+                  )}
+                </div>
+                <span className="text-[0.4rem] font-mono text-[#8ab4f8]/70 w-[22px] text-right shrink-0">
+                  {spoke.value !== null ? `${Math.round(spoke.value * 100)}%` : AWAIT}
+                </span>
+              </div>
+            ))
+          ) : (
+            <span className="text-[0.4rem] text-[#8ab4f8]/40 text-center py-1">{AWAIT}</span>
+          )}
         </div>
         {(council?.votes ?? []).map((v) => (
           <div

@@ -28,6 +28,7 @@ const RESET = {
   cpi: null,
   scenario: null,
   trapSignals: [],
+  consensusRadar: null,
   tradePlan: null,
   trackRecord: { contractVersion: 2 as const, active: null, history: [], targetHits: 0, partialHits: 0, stopHits: 0, replaced: 0 },
   trustScore: null,
@@ -290,5 +291,30 @@ describe('unified-snapshot-store (Diretriz Complementar §18/§4): institutional
     useUnifiedSnapshotStore.getState().recordInstitutionalScore(80);
     useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();
     expect(useUnifiedSnapshotStore.getState().institutionalScoreHistory).toEqual([]);
+  });
+});
+
+describe('unified-snapshot-store (Diretriz Complementar §8): consensusRadar honesto — null até o primeiro ciclo real do Conselho', () => {
+  beforeEach(() => {
+    useUnifiedSnapshotStore.setState(RESET);
+  });
+
+  it('começa null — nenhuma leitura fabricada antes do primeiro ciclo real', () => {
+    expect(useUnifiedSnapshotStore.getState().consensusRadar).toBeNull();
+  });
+
+  it('setConsensusRadar grava exatamente a leitura real recebida', () => {
+    const reading = {
+      spokes: [{ category: 'ESTRUTURA' as const, value: 0.5 }],
+      computedAt: 123,
+    };
+    useUnifiedSnapshotStore.getState().setConsensusRadar(reading);
+    expect(useUnifiedSnapshotStore.getState().consensusRadar).toEqual(reading);
+  });
+
+  it('setConsensusRadar(null) devolve ao estado honesto de ausência (ex.: troca de ativo)', () => {
+    useUnifiedSnapshotStore.getState().setConsensusRadar({ spokes: [], computedAt: 1 });
+    useUnifiedSnapshotStore.getState().setConsensusRadar(null);
+    expect(useUnifiedSnapshotStore.getState().consensusRadar).toBeNull();
   });
 });
