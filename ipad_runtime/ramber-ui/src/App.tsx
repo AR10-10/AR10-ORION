@@ -124,6 +124,7 @@ import { computePremiumDiscount } from "./nexus/premium-discount";
 import { detectHarmonicPatterns, MIN_FIT_SCORE } from "./nexus/harmonic-patterns";
 import { marketSessionFromUtc } from "./nexus/market-session";
 import { computeHeatScore } from "./nexus/heat-score";
+import { buildNexusDecision, NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./nexus/decision-layer";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
 import {
@@ -1977,6 +1978,34 @@ export default function App() {
     [engineStatus, engine?.direction, engine?.marketStructureLabel, convictionReading, institutionalScore, councilFromSnapshot, inEntryZoneNow, orderflowTrend],
   );
 
+  // Diretriz Final ("Fusão da Inteligência Operacional"): o Nexus Decision
+  // Layer como leitura ÚNICA — funde as leituras já computadas acima num
+  // só contrato (decision-layer.ts). LEI 24 preservada por construção:
+  // operation é passthrough do Core Engine; nada aqui decide, pondera ou
+  // bloqueia. Toda a matemática continua nos motores — este objeto é a
+  // resposta consolidada que a UI (e futuras camadas: voz, replay) leem
+  // de UMA vez em vez de recompor de 5 fatias.
+  const nexusDecision = useMemo(
+    () =>
+      buildNexusDecision({
+        coreDirection: engine?.direction ?? null,
+        coreConfidence: engine?.confidence ?? null,
+        plan: trackedPlan,
+        targetsHit: trackRecordSlice.active?.targetsHit ?? 0,
+        etaReading,
+        score: institutionalScore?.score ?? null,
+        scoreZoneLabel: confidenceZone?.label ?? null,
+        scoreTrend: convictionTrend?.status === "OK" ? (convictionTrend.trend ?? null) : null,
+        councilStance: councilFromSnapshot?.stance ?? null,
+        councilRiskGated: councilFromSnapshot ? (councilFromSnapshot.riskGated ?? false) : null,
+        assistantMessage:
+          assistantMessages && assistantMessages.length > 0
+            ? { text: assistantMessages[0].text, basis: assistantMessages[0].basis }
+            : null,
+      }),
+    [engine?.direction, engine?.confidence, trackedPlan, trackRecordSlice, etaReading, institutionalScore, confidenceZone, convictionTrend, councilFromSnapshot, assistantMessages],
+  );
+
   // Achado real de auditoria (sincronização/performance): este objeto era
   // um literal recriado em TODO render (referência nova sempre) e usado
   // como dependência do useMemo de voiceSnapshot logo abaixo — na prática
@@ -2363,6 +2392,7 @@ export default function App() {
       convictionTrend,
       assistantMessages,
       heatReading,
+      nexusDecision,
       etaReading,
       riskSuggestion,
       cycleLatencyMs,
@@ -2418,6 +2448,7 @@ export default function App() {
       convictionTrend,
       assistantMessages,
       heatReading,
+      nexusDecision,
       etaReading,
       riskSuggestion,
       cycleLatencyMs,
@@ -3962,9 +3993,40 @@ function StructureLevelsStrip() {
 // "Confidence" por extenso embaixo, dentro da altura fixa de 46px da
 // barra (Zero Scroll permanece intacto: cresce a hierarquia visual, nunca
 // a barra). Continua sendo a ÚNICA leitura do Core Engine em toda a tela.
-function CoreSignalBadge({ direction, confidence }: { direction: "LONG" | "SHORT" | null; confidence: string | null }) {
+function CoreSignalBadge({
+  direction,
+  confidence,
+  decision,
+}: {
+  direction: "LONG" | "SHORT" | null;
+  confidence: string | null;
+  // Diretriz Final (Nexus Decision Layer): a leitura ÚNICA fundida — usada
+  // aqui SÓ para o tooltip do elemento herói contar o raciocínio completo
+  // num toque (Operação/Confiança/Entrada/Stop/TPs/ETA/R:R/Motivo), sem um
+  // pixel novo na tela (§6 da própria diretriz: fusão nunca vira poluição).
+  decision?: NexusDecision | null;
+}) {
   const isLong = direction === "LONG";
   const isShort = direction === "SHORT";
+  const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
+  const fusedTitle = decision
+    ? [
+        `NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24)`,
+        `Confiança: ${decision.confidenceLabel ?? DASH} · Score ${decision.score ?? DASH}${decision.scoreZone ? ` (${decision.scoreZone})` : ""}${decision.scoreTrend ? ` · ${decision.scoreTrend}` : ""} — confluência real, nunca probabilidade`,
+        decision.plan
+          ? `Entrada: ${f(decision.plan.entryLow)}–${f(decision.plan.entryHigh)} (${decision.plan.entryBasis}) · Stop: ${f(decision.plan.stopPrice)} (${decision.plan.stopBasis})`
+          : `Plano: ${decision.planGap ? NEXUS_PLAN_GAP_LABEL[decision.planGap] : DASH}`,
+        ...(decision.plan
+          ? decision.plan.targets.map(
+              (t, i) =>
+                `TP${i + 1}: ${f(t.price)} (${t.basis})${t.riskReward !== null ? ` · R:R 1:${t.riskReward.toFixed(2)}` : ""}${formatEtaRange(t.etaMsMin, t.etaMs) ? ` · ETA ${formatEtaRange(t.etaMsMin, t.etaMs)}` : ""}${t.hit ? " · ATINGIDO" : ""}`,
+            )
+          : []),
+        decision.reason ? `Motivo: ${decision.reason} (${decision.reasonBasis ?? "base real"})` : null,
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "Core Engine — primary directional read (mathematical S/R + structure classifier)";
   const textTone = isLong
     ? "text-[#00ffaa] drop-shadow-[0_0_10px_rgba(0,255,170,0.65)]"
     : isShort
@@ -3978,7 +4040,7 @@ function CoreSignalBadge({ direction, confidence }: { direction: "LONG" | "SHORT
   return (
     <div
       className={`flex flex-col items-center justify-center leading-none h-[38px] px-3 md:px-4 rounded-lg border mr-2 md:mr-3 shrink-0 ${boxTone}`}
-      title="Core Engine — primary directional read (mathematical S/R + structure classifier)"
+      title={fusedTitle}
     >
       <span className={`text-sm md:text-base font-black tracking-wider ${textTone}`}>{direction ?? AWAIT}</span>
       <span className="text-[0.4rem] md:text-[0.45rem] font-bold text-[#8ab4f8]/60 tracking-[0.18em] uppercase mt-[1px] whitespace-nowrap">
@@ -4010,6 +4072,7 @@ function TopBar({ data }: { data?: PriceState | null }) {
     cycleLatencyMs,
     voiceSnapshot,
     heatReading,
+    nexusDecision,
   } = useContext(WidgetContext) || {};
   // Refinamento Final §1 ("Sessão Atual"): derivação pura do relógio UTC
   // real (market-session.ts). Computada no render — a TopBar re-renderiza
@@ -4185,7 +4248,7 @@ function TopBar({ data }: { data?: PriceState | null }) {
             </div>
           )}
 
-          {marketMode === "CRYPTO" && <CoreSignalBadge direction={engine?.direction ?? null} confidence={engine?.confidence ?? null} />}
+          {marketMode === "CRYPTO" && <CoreSignalBadge direction={engine?.direction ?? null} confidence={engine?.confidence ?? null} decision={nexusDecision ?? null} />}
 
           {/* Diretriz V-MAX item 5/7 + Diretriz Complementar §16 (Zona de
               Confiança Institucional): Score Geral 0-100 no header — massa

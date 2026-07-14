@@ -216,3 +216,35 @@ describe('Sessão Local-First: ativo/timeframe/modo sobrevivem a refresh ("o sis
     expect(a.slice(writeIdx, writeIdx + 500)).toContain('} catch {');
   });
 });
+
+// ─── Diretriz Final — Nexus Decision Layer (fusão, LEI 24 preservada) ───────
+describe('Nexus Decision Layer: leitura única fundida, computada 1x e exposta no elemento herói', () => {
+  it('nexusDecision computada UMA vez (useMemo) das leituras reais já existentes — zero segunda matemática', () => {
+    const a = app();
+    const m = a.match(/const nexusDecision = useMemo\(([\s\S]*?)\);/);
+    expect(m, 'nexusDecision não encontrada').not.toBeNull();
+    expect(m![1]).toContain('coreDirection: engine?.direction ?? null');
+    expect(m![1]).toContain('plan: trackedPlan');
+    expect(m![1]).toContain('targetsHit: trackRecordSlice.active?.targetsHit ?? 0');
+    expect(m![1]).toContain('etaReading,');
+    expect(m![1]).toContain('councilStance: councilFromSnapshot?.stance ?? null');
+    expect(a).toContain('import { buildNexusDecision, NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./nexus/decision-layer";');
+    const ctx = a.match(/const contextValue = useMemo\(\s*\(\) => \(\{([\s\S]*?)\}\),/);
+    expect(ctx![1]).toContain('nexusDecision,');
+  });
+
+  it('tooltip do CoreSignalBadge conta o raciocínio completo — zero pixel novo (§6: fusão nunca vira poluição)', () => {
+    const a = app();
+    expect(a).toContain('decision?: NexusDecision | null;');
+    expect(a).toContain('NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24)');
+    expect(a).toContain('confluência real, nunca probabilidade');
+    expect(a).toContain('title={fusedTitle}');
+    expect(a).toContain('decision={nexusDecision ?? null}');
+  });
+
+  it('LEI 24 no nível do fonte: o módulo de fusão nunca escreve em motor/planos — só lê e empacota', () => {
+    const layer = read('../src/nexus/decision-layer.ts');
+    expect(layer).not.toMatch(/setTradePlan|setCouncil|setScenario|fetch\(|Math\.random/);
+    expect(layer).toContain('operationSource: "CORE_ENGINE"');
+  });
+});
