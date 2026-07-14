@@ -1515,7 +1515,14 @@ export default function App() {
     useUnifiedSnapshotStore.getState().setFibonacciConfluence(
       computeRealFibonacciConfluence(chartData, sources),
     );
-  }, [chartData, smcZones, engine, volumeProfileSnapshot]);
+  // Achado real de auditoria (sincronização/performance): `engine` inteiro
+  // troca de referência a cada tick de livro/preço (5-6x/s) porque agrupa
+  // campos rápidos com os poucos campos LENTOS que este efeito realmente lê
+  // (support/resistance, só mudam no ciclo real do motor, ~30s) — dependia
+  // do objeto inteiro e recomputava/escrevia na store nessa cadência rápida
+  // por nada. Estreitado aos 2 campos reais lidos acima (mesmo padrão já
+  // usado por ensembleConsensus/consensusRadar/auraReading neste arquivo).
+  }, [chartData, smcZones, engine?.support, engine?.resistance, volumeProfileSnapshot]);
 
   // V-MAX Fase 1 item 4: Conselho Multi-Agente. Cada insumo abaixo é dado
   // REAL já coletado por este componente ou pela store — o conselho é um
@@ -1553,7 +1560,12 @@ export default function App() {
       rsi: currentRsi,
     });
     useUnifiedSnapshotStore.getState().setCouncil(decision);
-  }, [priceData, smcZones, engine, cvd, orderflowSignals, councilOffline, councilDataFresh, engineStatus, fibonacciMatrix, currentRsi]);
+  // Mesmo achado de auditoria do efeito Fibonacci acima: só marketStructureLabel/
+  // htfMarketStructureLabel (rótulos lentos do ciclo real do motor) entram
+  // na decisão — `engine` inteiro como dependência recomputava o Conselho
+  // (e sobrescrevia a store) a cada tick de livro/preço, não só quando a
+  // estrutura real mudava.
+  }, [priceData, smcZones, engine?.marketStructureLabel, engine?.htfMarketStructureLabel, cvd, orderflowSignals, councilOffline, councilDataFresh, engineStatus, fibonacciMatrix, currentRsi]);
 
   // V-MAX Fase 2 (Motor de Cenários) — reescrito pela Ordem "Próxima
   // Evolução do Organismo": zero comunicação direta motor→motor. Antes, o
@@ -1617,7 +1629,10 @@ export default function App() {
     useUnifiedSnapshotStore.getState().setScenario(
       buildScenarioProjection(priceFromSnapshot.price, levels, councilFromSnapshot),
     );
-  }, [councilFromSnapshot, priceFromSnapshot, smcZones, engine, fibonacciMatrix, volumeProfileSnapshot]);
+  // Mesmo achado de auditoria: só support/resistance (lentos) entram nos
+  // níveis do cenário — `engine` inteiro recomputava a projeção a cada
+  // tick de livro/preço em vez de só quando S/R real do motor mudava.
+  }, [councilFromSnapshot, priceFromSnapshot, smcZones, engine?.support, engine?.resistance, fibonacciMatrix, volumeProfileSnapshot]);
 
   // Diretriz Complementar §8 ("Radar de Consenso"): mesma disciplina do
   // efeito de Cenários acima — zero comunicação direta motor→motor, este
@@ -1683,7 +1698,11 @@ export default function App() {
         levels: planLevels,
       }),
     );
-  }, [councilFromSnapshot, priceFromSnapshot, smcZones, engine, fibonacciMatrix, volumeProfileSnapshot]);
+  // Mesmo achado de auditoria: só support/resistance (lentos) entram nos
+  // níveis do plano — `engine` inteiro recomputava/reescrevia o Trade Plan
+  // a cada tick de livro/preço, disparando remoção/recriação desnecessária
+  // das price-lines reais no gráfico (EnhancedChart_110_Percent.tsx).
+  }, [councilFromSnapshot, priceFromSnapshot, smcZones, engine?.support, engine?.resistance, fibonacciMatrix, volumeProfileSnapshot]);
 
   // Autonomy order — honest signal accuracy. Store-mediated chain:
   // (1) the tradePlan slice feeds the tracker (same-value re-derivations
@@ -1834,23 +1853,34 @@ export default function App() {
     [engineStatus, engine?.direction, engine?.marketStructureLabel, convictionReading, institutionalScore, councilFromSnapshot, inEntryZoneNow, orderflowTrend],
   );
 
-  const auraVoiceInputs = {
-    tradePlanOpenKey: trackRecordSlice.active ? `${trackRecordSlice.active.plan.direction}:${trackRecordSlice.active.openedAt}` : null,
-    tradePlanDirection: trackRecordSlice.active?.plan.direction ?? null,
-    tradePlanResolutionKey: lastResolvedPlan ? `${lastResolvedPlan.status}:${lastResolvedPlan.resolvedAt}` : null,
-    tradePlanResolutionStatus: lastResolvedPlan && lastResolvedPlan.status !== 'OPEN' ? lastResolvedPlan.status : null,
-    // v2 (Diretriz Complementar §2/§4): progresso real de alvo enquanto o
-    // plano continua ABERTO — chave muda a cada alvo real adicional
-    // provado, nunca na abertura do plano (targetsHit começa em 0 nesse
-    // instante, então a chave é idêntica à anterior e o consumidor não
-    // dispara nada).
-    tradePlanTargetProgressKey: trackRecordSlice.active
-      ? `${trackRecordSlice.active.plan.direction}:${trackRecordSlice.active.openedAt}:${trackRecordSlice.active.targetsHit}`
-      : null,
-    tradePlanTargetsHit: trackRecordSlice.active?.targetsHit ?? 0,
-    inEntryZone: inEntryZoneNow,
-    convictionVerdict: convictionReading.status === 'OK' ? convictionReading.verdict : null,
-  };
+  // Achado real de auditoria (sincronização/performance): este objeto era
+  // um literal recriado em TODO render (referência nova sempre) e usado
+  // como dependência do useMemo de voiceSnapshot logo abaixo — na prática
+  // desativava aquela memoização (objeto novo sempre "!=" o anterior, então
+  // o useMemo recomputava em todo render, não só nas transições reais de
+  // Trade Plan). useMemo real aqui, com os insumos reais que efetivamente
+  // compõem o objeto (trackRecordSlice/lastResolvedPlan já são referências
+  // estáveis da store — só trocam quando o dado real por trás muda).
+  const auraVoiceInputs = useMemo(
+    () => ({
+      tradePlanOpenKey: trackRecordSlice.active ? `${trackRecordSlice.active.plan.direction}:${trackRecordSlice.active.openedAt}` : null,
+      tradePlanDirection: trackRecordSlice.active?.plan.direction ?? null,
+      tradePlanResolutionKey: lastResolvedPlan ? `${lastResolvedPlan.status}:${lastResolvedPlan.resolvedAt}` : null,
+      tradePlanResolutionStatus: lastResolvedPlan && lastResolvedPlan.status !== 'OPEN' ? lastResolvedPlan.status : null,
+      // v2 (Diretriz Complementar §2/§4): progresso real de alvo enquanto o
+      // plano continua ABERTO — chave muda a cada alvo real adicional
+      // provado, nunca na abertura do plano (targetsHit começa em 0 nesse
+      // instante, então a chave é idêntica à anterior e o consumidor não
+      // dispara nada).
+      tradePlanTargetProgressKey: trackRecordSlice.active
+        ? `${trackRecordSlice.active.plan.direction}:${trackRecordSlice.active.openedAt}:${trackRecordSlice.active.targetsHit}`
+        : null,
+      tradePlanTargetsHit: trackRecordSlice.active?.targetsHit ?? 0,
+      inEntryZone: inEntryZoneNow,
+      convictionVerdict: convictionReading.status === 'OK' ? convictionReading.verdict : null,
+    }),
+    [trackRecordSlice, lastResolvedPlan, inEntryZoneNow, convictionReading],
+  );
 
   const voiceSnapshot = useMemo<TerminalSnapshot>(
     () => ({
