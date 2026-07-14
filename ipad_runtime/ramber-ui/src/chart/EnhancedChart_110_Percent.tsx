@@ -62,6 +62,7 @@ import type { Timeframe } from "../nexus/types";
 import type { TradePlan } from "../nexus/trade-plan";
 import { effectiveStopForTargetsHit } from "../nexus/trade-plan";
 import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
+import type { ScenarioProjection } from "../nexus/scenario-engine";
 // Research-driven precision order: VWAP, the institutional-standard
 // intraday reference level this system was missing entirely (confirmed
 // via a full-codebase grep before writing nexus/vwap.ts).
@@ -212,6 +213,16 @@ interface EnhancedChartProps {
   // como buscar/mesclar a página nova; este componente só detecta a
   // intenção real do usuário.
   onRequestOlderCandles?: () => void;
+  // §6 "Smart Projection Engine" (Diretriz Complementar): achado real de
+  // auditoria — o Motor de Cenários (scenario-engine.ts) já existia,
+  // já é 100% honesto (basis: "COUNCIL_OPINION_MASS_NOT_MARKET_PROBABILITY",
+  // alvos = níveis reais já mapeados por outros motores, peso = massa de
+  // opinião real do Conselho), e já estava na store — só nunca tinha sido
+  // desenhado no gráfico (só texto em widgets). Isto é o que fecha a
+  // lacuna real sem fabricar nenhuma "probabilidade estatística" nova, o
+  // risco que bloqueou este item por várias sessões. Optional/fail-closed:
+  // null/absent desenha nada, igual a tradePlan/aura acima.
+  scenario?: ScenarioProjection | null;
 }
 
 // Auditoria de arquitetura (revisão completa) — paginação histórica real:
@@ -265,6 +276,7 @@ export function EnhancedChart_110_Percent({
   aura,
   targetsHit,
   confidenceZone,
+  scenario,
   layerVisibility,
   emaPeriod,
   onRequestOlderCandles,
@@ -278,6 +290,7 @@ export function EnhancedChart_110_Percent({
   const zoneLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
   const tradePlanLinesRef = useRef<IPriceLine[]>([]);
+  const scenarioLinesRef = useRef<IPriceLine[]>([]);
   // Named refs to the stop/target lines specifically (a subset of
   // tradePlanLinesRef above) — lets the hit-boost effect below update
   // color/title in place via applyOptions() instead of tearing down and
@@ -421,6 +434,7 @@ export function EnhancedChart_110_Percent({
       zoneLinesRef.current = [];
       fibLinesRef.current = [];
       tradePlanLinesRef.current = [];
+      scenarioLinesRef.current = [];
       cvdSeriesRef.current = null;
       vwapSeriesRef.current = null;
       emaSeriesRef.current = null;
@@ -671,6 +685,58 @@ export function EnhancedChart_110_Percent({
       );
     });
   }, [fibonacciLevels]);
+
+  // §6 "Smart Projection Engine" (achado real de auditoria, ver comentário
+  // da prop `scenario` acima): as 2 rotas reais do Motor de Cenários
+  // (Path A/B) como price lines nativas — mesmo padrão das linhas Fibonacci
+  // acima, "fio de seda" (1px sólida, nunca pontilhada). Cor = mesma
+  // convenção LONG/SHORT (#00ffaa/#ff0055) já usada pelo próprio texto
+  // "SCENARIO A/B" no CouncilWidget — MESMA leitura, nunca uma segunda.
+  // Deliberadamente mais discretas que o Trade Plan ATIVO (teto de opacidade
+  // mais baixo, sem rótulo no eixo de preço): isto é confluência/contexto
+  // do Conselho, nunca uma segunda decisão de trading (LEI 24) — o alvo
+  // REAL do plano ativo continua a linha com mais peso visual na tela.
+  // Opacidade escala linearmente pela opinionWeight REAL (0..1, nunca uma
+  // probabilidade — o próprio scenario.basis documenta isso); piso honesto
+  // mesmo quando o peso é null (conselho travado/ausente) para nunca
+  // esconder um alvo real só porque a confiança numérica não existe ainda.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    scenarioLinesRef.current.forEach((line) => series.removePriceLine(line));
+    scenarioLinesRef.current = [];
+    if (!scenario) return;
+
+    const alphaOf = (weight: number | null): number => {
+      const floor = 0.12;
+      const ceiling = 0.55; // sempre abaixo do 0.75 real do Trade Plan ativo
+      if (weight === null || !Number.isFinite(weight)) return floor;
+      return floor + Math.max(0, Math.min(1, weight)) * (ceiling - floor);
+    };
+
+    ([
+      { path: scenario.pathA, label: "SCENARIO A" },
+      { path: scenario.pathB, label: "SCENARIO B" },
+    ] as const).forEach(({ path, label }) => {
+      if (!path.target || !Number.isFinite(path.target.price)) return;
+      const isLong = path.direction === "LONG";
+      const rgb = isLong ? "0, 255, 170" : "255, 0, 85";
+      const alpha = alphaOf(path.opinionWeight);
+      const weightLabel = path.opinionWeight !== null
+        ? `opinion ${Math.round(path.opinionWeight * 100)}%`
+        : "opinion n/a";
+      scenarioLinesRef.current.push(
+        series.createPriceLine({
+          price: path.target.price,
+          color: `rgba(${rgb}, ${alpha.toFixed(2)})`,
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: false,
+          title: `${label} · ${path.direction} · ${path.target.sourceKind} · ${weightLabel}`,
+        }),
+      );
+    });
+  }, [scenario]);
 
   // Signal Precision order: the Trade Plan drawn on the chart — subtle,
   // silk-thread annotations (1px solid, never dashed; hierarchy only via

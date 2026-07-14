@@ -4946,6 +4946,11 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   const fibonacciLevels = fibonacciMatrix
     ? fibonacciMatrix.levels.map((l) => ({ ratio: l.ratio, price: l.price, score: l.score }))
     : null;
+  // §6 "Smart Projection Engine": mesma leitura real do Motor de Cenários
+  // já usada pelo CouncilWidget/SecondaryModuleView (texto) — aqui vira as
+  // 2 price lines reais Path A/B no gráfico (ver comentário da prop
+  // `scenario` em EnhancedChart_110_Percent.tsx). Zero segunda fonte.
+  const chartScenario = useScenarioSnapshot();
 
   return (
     <Widget
@@ -5018,6 +5023,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             aura={auraReading}
             targetsHit={auraTrackRecord.active?.targetsHit ?? 0}
             confidenceZone={confidenceZone ?? null}
+            scenario={chartScenario ?? null}
             layerVisibility={chartLayerVisibility}
             emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}
