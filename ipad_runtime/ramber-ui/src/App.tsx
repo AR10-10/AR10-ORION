@@ -111,7 +111,7 @@ import { computeTargetEtas, formatEtaDuration } from "./nexus/eta-engine";
 // 0-100 (contrato de apresentação sobre a confluência real — zero segunda
 // matemática de consenso) + Assistente Operacional (frases curtas, sempre
 // tradução de leitura real, LEI 24 — ver cabeçalhos dos dois módulos).
-import { computeInstitutionalScore } from "./nexus/institutional-score";
+import { computeInstitutionalScore, institutionalConfidenceZone } from "./nexus/institutional-score";
 import { buildAssistantMessages } from "./nexus/operation-assistant";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
@@ -1762,6 +1762,10 @@ export default function App() {
       }),
     [engineStatus, engine?.direction, convictionReading, councilFromSnapshot],
   );
+  // Diretriz Complementar §16 ("Zona de Confiança Institucional"): banda
+  // pura de apresentação sobre o mesmo institutionalScore acima — zero
+  // segunda fonte, zero matemática nova (ver institutional-score.ts).
+  const confidenceZone = useMemo(() => institutionalConfidenceZone(institutionalScore.score), [institutionalScore]);
   const assistantMessages = useMemo(
     () =>
       buildAssistantMessages({
@@ -2146,6 +2150,7 @@ export default function App() {
       ensembleConsensus,
       convictionReading,
       institutionalScore,
+      confidenceZone,
       assistantMessages,
       etaReading,
       riskSuggestion,
@@ -2197,6 +2202,7 @@ export default function App() {
       ensembleConsensus,
       convictionReading,
       institutionalScore,
+      confidenceZone,
       assistantMessages,
       etaReading,
       riskSuggestion,
@@ -3719,6 +3725,7 @@ function TopBar({ data }: { data?: PriceState | null }) {
     realCycle,
     engine,
     institutionalScore,
+    confidenceZone,
     assistantMessages,
   } = useContext(WidgetContext) || {};
   // Overhaul Cross-Market (Diretriz 2): o rótulo do mercado é passthrough
@@ -3859,33 +3866,35 @@ function TopBar({ data }: { data?: PriceState | null }) {
 
           {marketMode === "CRYPTO" && <CoreSignalBadge direction={engine?.direction ?? null} confidence={engine?.confidence ?? null} />}
 
-          {/* Diretriz V-MAX item 5/7: Score Geral 0-100 no header — massa
+          {/* Diretriz V-MAX item 5/7 + Diretriz Complementar §16 (Zona de
+              Confiança Institucional): Score Geral 0-100 no header — massa
               real de confluência entre subsistemas (institutional-score.ts),
               NUNCA probabilidade (Regra de Ouro 2, tooltip diz isso). null
-              honesto (—) em WAIT: pontuar o nada seria fabricação. */}
+              honesto (—) em WAIT: pontuar o nada seria fabricação. A cor e o
+              rótulo do tier vêm 1:1 de confidenceZone — zero segunda
+              matemática, mesmo score bandado nas 5 faixas da diretriz. */}
           {marketMode === "CRYPTO" && (
             <div
               className="hidden md:flex flex-col items-center justify-center pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
               title={
                 institutionalScore?.score !== null && institutionalScore?.score !== undefined
-                  ? `Score real de confluência entre subsistemas (0-100) — nunca probabilidade de acerto. ${institutionalScore.opportunity ? "Acima do nível mínimo de oportunidade." : "Abaixo do nível mínimo, ou risco travado."}`
+                  ? `Score real de confluência entre subsistemas (0-100) — nunca probabilidade de acerto. Zona: ${confidenceZone?.label ?? DASH}. ${institutionalScore.opportunity ? "Acima do nível mínimo de oportunidade." : "Abaixo do nível mínimo, ou risco travado."}`
                   : "Sem oportunidade direcional a pontuar agora (Core Engine em WAIT ou dados insuficientes)."
               }
             >
               <span className="text-[0.42rem] tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">Score</span>
               <span
                 className={`text-[0.7rem] font-black font-mono tabular-nums ${
-                  institutionalScore?.score === null || institutionalScore?.score === undefined
-                    ? "text-[#8ab4f8]/40"
-                    : institutionalScore.opportunity
-                      ? "text-[#00ffaa] drop-shadow-[0_0_5px_currentColor]"
-                      : institutionalScore.score < 40
-                        ? "text-[#ff0055]"
-                        : "text-[#f0d06f]"
+                  confidenceZone === null ? "text-[#8ab4f8]/40" : `${confidenceZone.colorClass} drop-shadow-[0_0_5px_currentColor]`
                 }`}
               >
                 {institutionalScore?.score ?? DASH}
               </span>
+              {confidenceZone && (
+                <span className={`text-[0.38rem] font-bold uppercase tracking-wider ${confidenceZone.colorClass}`}>
+                  {confidenceZone.emoji} {confidenceZone.label}
+                </span>
+              )}
             </div>
           )}
 

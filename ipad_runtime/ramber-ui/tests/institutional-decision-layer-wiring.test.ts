@@ -14,7 +14,7 @@ const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 describe('App.tsx: Score + Assistente computados UMA vez (padrão convictionReading), compartilhados via contextValue', () => {
   it('importa os dois módulos puros reais', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('import { computeInstitutionalScore } from "./nexus/institutional-score";');
+    expect(app).toContain('import { computeInstitutionalScore, institutionalConfidenceZone } from "./nexus/institutional-score";');
     expect(app).toContain('import { buildAssistantMessages } from "./nexus/operation-assistant";');
   });
 

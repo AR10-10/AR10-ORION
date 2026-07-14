@@ -109,3 +109,36 @@ export function computeInstitutionalScore(input: InstitutionalScoreInput): Insti
     computedAt,
   };
 }
+
+// Diretriz Complementar §16 ("Zona de Confiança Institucional"): banda de
+// APRESENTAÇÃO honesta sobre o mesmo score real acima — zero matemática
+// nova, zero segunda fonte. Os 5 cortes/rótulos vêm literais da diretriz
+// (parâmetros documentados, mesma natureza dos limiares 70/30 do RSI).
+// "Inválida" (< 50) não é um erro: é a leitura honesta de que a massa de
+// confluência real não sustenta uma leitura confiável agora.
+export type InstitutionalConfidenceTier = "MUITO_FORTE" | "FORTE" | "MODERADA" | "FRACA" | "INVALIDA";
+
+export interface InstitutionalConfidenceZone {
+  tier: InstitutionalConfidenceTier;
+  label: string;
+  emoji: string;
+  colorClass: string;
+}
+
+const CONFIDENCE_TIERS: readonly { min: number; tier: InstitutionalConfidenceTier; label: string; emoji: string; colorClass: string }[] = [
+  { min: 90, tier: "MUITO_FORTE", label: "Muito Forte", emoji: "🟢", colorClass: "text-[#00ffaa]" },
+  { min: 80, tier: "FORTE", label: "Forte", emoji: "🟢", colorClass: "text-[#00ffaa]" },
+  { min: 65, tier: "MODERADA", label: "Moderada", emoji: "🟡", colorClass: "text-[#f0d06f]" },
+  { min: 50, tier: "FRACA", label: "Fraca", emoji: "🟠", colorClass: "text-[#ff9f40]" },
+  { min: -Infinity, tier: "INVALIDA", label: "Inválida", emoji: "🔴", colorClass: "text-[#ff0055]" },
+];
+
+/** Banda o score real 0-100 em uma das 5 zonas da diretriz §16. null
+ *  honesto (sem oportunidade a bandar) quando o score em si é null — nunca
+ *  uma banda fabricada para um WAIT. */
+export function institutionalConfidenceZone(score: number | null): InstitutionalConfidenceZone | null {
+  if (score === null || !Number.isFinite(score)) return null;
+  const clamped = Math.max(0, Math.min(100, score));
+  const match = CONFIDENCE_TIERS.find((t) => clamped >= t.min)!;
+  return { tier: match.tier, label: match.label, emoji: match.emoji, colorClass: match.colorClass };
+}
