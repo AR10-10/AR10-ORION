@@ -319,3 +319,26 @@ describe('Auditoria §6: configurações do Operador (camadas + EMA) sobrevivem 
     expect(a).toContain('}, [selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, emaPeriod]);');
   });
 });
+
+// ─── Diretriz Consolidação Operacional §5: compactação automática da memória ───
+describe('Consolidação §5: compactPersistedCandles roda uma vez por boot (envelhecimento do cache Local-First)', () => {
+  it('App.tsx importa e dispara a compactação fire-and-forget no efeito de boot ([]), nunca no caminho quente', () => {
+    const a = app();
+    expect(a).toContain('compactPersistedCandles } from "./nexus/persistence"');
+    expect(a).toContain('void compactPersistedCandles().catch(() => {});');
+    // a chamada vive no MESMO efeito one-shot que hidrata o track record —
+    // um único ponto de boot, nunca um segundo ciclo de vida paralelo.
+    const idx = a.indexOf('void compactPersistedCandles().catch(() => {});');
+    const before = a.slice(Math.max(0, idx - 700), idx);
+    expect(before).toContain('hydrateTrackRecord(rehydrateTrackRecord(raw));');
+  });
+
+  it('persistence.ts documenta TTL + teto e NUNCA toca a snapshot store (track record é conhecimento real, não cache)', () => {
+    const p = readFileSync(resolve(__dirname, '../src/nexus/persistence.ts'), 'utf8');
+    expect(p).toContain('export const CANDLE_CACHE_MAX_AGE_MS');
+    expect(p).toContain('export const CANDLE_CACHE_MAX_RECORDS');
+    // a transação de remoção é aberta exclusivamente sobre a CANDLES_STORE
+    expect(p).toContain('db.transaction(CANDLES_STORE, "readwrite")');
+    expect(p).not.toContain('db.transaction(SNAPSHOT_STORE, "readwrite")');
+  });
+});

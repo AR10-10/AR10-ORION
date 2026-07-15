@@ -40,7 +40,7 @@ import { getOrganismOrchestrator } from "./nexus/organism-orchestrator";
 // Local-First (closes the persistence gap flagged in the audit): candles
 // persisted to IndexedDB on every real REST arrival; on boot the chart
 // paints instantly from the last REAL session before the network answers.
-import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord } from "./nexus/persistence";
+import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord, compactPersistedCandles } from "./nexus/persistence";
 // V18 Sprint 1 (Tarefa B): "Destravar o Gráfico Institucional" — substitui
 // o SVG feito à mão por lightweight-charts (pan/zoom/crosshair nativos).
 import {
@@ -1885,6 +1885,10 @@ export default function App() {
       if (cancelled || raw === null) return;
       useUnifiedSnapshotStore.getState().hydrateTrackRecord(rehydrateTrackRecord(raw));
     })();
+    // Consolidação Operacional §5: envelhecimento/compactação do cache de
+    // candles roda UMA vez por boot, fire-and-forget — nunca no caminho
+    // quente, nunca bloqueia a hidratação acima (stores independentes).
+    void compactPersistedCandles().catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
