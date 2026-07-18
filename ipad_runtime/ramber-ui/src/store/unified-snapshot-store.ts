@@ -55,8 +55,10 @@ import type { MultiTimeframeMatrix } from "../nexus/multi-timeframe-engine";
 import {
   trackPlanTransition,
   trackPriceTick,
+  stampOpenContext,
   EMPTY_TRACK_RECORD,
   type TrackRecordState,
+  type PlanOpenContext,
 } from "../nexus/signal-track-record";
 import {
   ingestAffectiveEvent,
@@ -311,6 +313,10 @@ interface UnifiedSnapshotActions {
   recordAffectiveEvent: (source: AffectiveEventSource) => void;
   trackPlanTransition: (plan: TradePlan | null) => void;
   trackPriceTick: (price: number) => void;
+  // Cockpit de Leitura §11: carimbo único do contexto de abertura no plano
+  // ativo (ETA previsto + estados VWAP/NL + score) — stampOpenContext puro,
+  // nunca reescreve (memória jamais altera o histórico retroativamente).
+  stampPlanOpenContext: (ctx: PlanOpenContext) => void;
   hydrateTrackRecord: (state: TrackRecordState) => void;
 }
 
@@ -412,6 +418,9 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     }),
     trackPriceTick: (price) => set((s) => {
       s.trackRecord = trackPriceTick(s.trackRecord as TrackRecordState, price, Date.now());
+    }),
+    stampPlanOpenContext: (ctx) => set((s) => {
+      s.trackRecord = stampOpenContext(s.trackRecord as TrackRecordState, ctx);
     }),
     hydrateTrackRecord: (state) => set((s) => { s.trackRecord = state; }),
   })),

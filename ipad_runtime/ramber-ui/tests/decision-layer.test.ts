@@ -175,3 +175,41 @@ describe('V2 §4 — justificativa estruturada de fontes reais nomeadas', () => 
     expect(d.reasonsFor.length).toBeLessThanOrEqual(NEXUS_MAX_REASONS);
   });
 });
+
+describe('Cockpit de Leitura §4 — equilíbrios na justificativa (nunca um bloqueio, LEI 24)', () => {
+  // Fixture reduzida (sem Conselho/Conviction) para os motivos das linhas
+  // ficarem dentro do cap NEXUS_MAX_REASONS e serem observáveis.
+  const slim = {
+    ...base,
+    councilVotes: [],
+    convictionMembers: [],
+    premiumDiscountZone: null,
+    vwapState: 'BULLISH' as const,
+    nexusLineState: 'BULLISH' as const,
+  };
+
+  it('o exemplo canônico da diretriz: decisão LONG + VWAP vendedora => contrário NOMEADO e visível', () => {
+    const d = buildNexusDecision({ ...slim, vwapState: 'BEARISH' });
+    expect(d.reasonsAgainst).toContain('Preço abaixo da VWAP — estado vendedor (VWAP)');
+    expect(d.operation).toBe('LONG'); // LEI 24: o conflito informa, jamais altera a operação
+  });
+
+  it('alinhamento vira favorável para as DUAS linhas; SHORT espelhado', () => {
+    const d = buildNexusDecision(slim);
+    expect(d.reasonsFor).toContain('Preço acima da VWAP — estado comprador (VWAP)');
+    expect(d.reasonsFor).toContain('Nexus Line compradora (Nexus Line)');
+    const s = buildNexusDecision({ ...slim, coreDirection: 'SHORT' as const, vwapState: 'BEARISH' as const, nexusLineState: 'BEARISH' as const });
+    expect(s.reasonsFor).toContain('Preço abaixo da VWAP — estado vendedor (VWAP)');
+    expect(s.reasonsFor).toContain('Nexus Line vendedora (Nexus Line)');
+  });
+
+  it('NEUTRAL/null fica fora das duas listas (sem desvio confirmado, sem lado fabricado)', () => {
+    const d = buildNexusDecision({ ...slim, vwapState: 'NEUTRAL', nexusLineState: null });
+    expect([...d.reasonsFor, ...d.reasonsAgainst].join()).not.toMatch(/VWAP|Nexus Line/);
+  });
+
+  it('AGUARDAR não fabrica motivo direcional a partir das linhas', () => {
+    const d = buildNexusDecision({ ...slim, coreDirection: null });
+    expect(d.reasonsFor).toEqual([]);
+  });
+});

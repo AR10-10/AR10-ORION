@@ -133,6 +133,13 @@ export interface NexusDecisionInputs {
   heatTier: string | null;
   // Zona Premium/Discount real do último fechamento.
   premiumDiscountZone: "PREMIUM" | "EQUILIBRIUM" | "DISCOUNT" | null;
+  // Cockpit de Leitura §4/§5-sexto: estados reais das duas linhas de
+  // equilíbrio (histerese de vwap-state.ts) — entram na justificativa
+  // estruturada como fontes nomeadas. Display-only: informam conflito,
+  // NUNCA bloqueiam/alteram a operação (LEI 24). Optional/fail-closed:
+  // null/NEUTRAL não fabrica lado nenhum.
+  vwapState?: "BULLISH" | "BEARISH" | "NEUTRAL" | null;
+  nexusLineState?: "BULLISH" | "BEARISH" | "NEUTRAL" | null;
 }
 
 function deriveOperationalState(
@@ -175,6 +182,22 @@ function buildReasons(
       const favors = (operation === "LONG") === (inputs.premiumDiscountZone === "DISCOUNT");
       (favors ? reasonsFor : reasonsAgainst).push(
         `Preço em ${inputs.premiumDiscountZone} do range (Premium/Discount)`,
+      );
+    }
+    // Cockpit de Leitura §4: os equilíbrios entram na justificativa — o
+    // exemplo canônico da diretriz ("Tendência LONG + VWAP vendedora")
+    // vira um contrário VISÍVEL e nomeado, nunca um bloqueio (LEI 24).
+    // NEUTRAL fica de fora (sem desvio direcional confirmado, sem lado).
+    if (inputs.vwapState === "BULLISH" || inputs.vwapState === "BEARISH") {
+      const favors = (operation === "LONG") === (inputs.vwapState === "BULLISH");
+      (favors ? reasonsFor : reasonsAgainst).push(
+        `Preço ${inputs.vwapState === "BULLISH" ? "acima" : "abaixo"} da VWAP — estado ${inputs.vwapState === "BULLISH" ? "comprador" : "vendedor"} (VWAP)`,
+      );
+    }
+    if (inputs.nexusLineState === "BULLISH" || inputs.nexusLineState === "BEARISH") {
+      const favors = (operation === "LONG") === (inputs.nexusLineState === "BULLISH");
+      (favors ? reasonsFor : reasonsAgainst).push(
+        `Nexus Line ${inputs.nexusLineState === "BULLISH" ? "compradora" : "vendedora"} (Nexus Line)`,
       );
     }
   }

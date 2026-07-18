@@ -1975,6 +1975,25 @@ export default function App() {
       }),
     [engineStatus, engine?.direction, convictionReading, councilFromSnapshot],
   );
+  // Cockpit de Leitura §11 ("ETA previsto / ETA realizado" + contexto):
+  // carimbo ÚNICO do contexto real de abertura no plano ativo. O guard do
+  // stampOpenContext puro garante que só o PRIMEIRO ciclo com leituras do
+  // plano recém-aberto escreve (etaReading deste render já deriva do
+  // active novo — mesma árvore de render); depois disso, toda re-execução
+  // devolve o estado original (memória nunca reescreve o histórico).
+  useEffect(() => {
+    const active = trackRecordSlice.active;
+    if (!active || active.contextAtOpen !== undefined) return;
+    const nextEta = etaReading.status === "OK" ? (etaReading.etas[active.targetsHit] ?? null) : null;
+    useUnifiedSnapshotStore.getState().stampPlanOpenContext({
+      etaMsAtOpen: nextEta?.ms ?? null,
+      etaMsMinAtOpen: nextEta?.msMin ?? null,
+      vwapState: vwapCtx?.state ?? null,
+      nexusLineState: nlState,
+      score: institutionalScore?.score ?? null,
+    });
+  }, [trackRecordSlice.active, etaReading, vwapCtx, nlState, institutionalScore]);
+
   // Diretriz Complementar §18/§4 ("Conviction Engine"): registra na store a
   // amostra REAL do Score Geral a cada ciclo em que ele existe (WAIT/
   // DADOS_INSUFICIENTES nunca — pontuar o nada seria fabricação). Efeito,
@@ -2075,8 +2094,12 @@ export default function App() {
           })) ?? null,
         heatTier: heatReading?.status === "OK" ? heatReading.tier : null,
         premiumDiscountZone: pdForDecision?.zone ?? null,
+        // Cockpit de Leitura §4: os equilíbrios entram na justificativa
+        // estruturada (conflito nomeado e visível, nunca um bloqueio).
+        vwapState: vwapCtx?.state ?? null,
+        nexusLineState: nlState,
       }),
-    [engine?.direction, engine?.confidence, trackedPlan, trackRecordSlice, etaReading, institutionalScore, confidenceZone, convictionTrend, councilFromSnapshot, assistantMessages, inEntryZoneNow, convictionReading, heatReading, pdForDecision],
+    [engine?.direction, engine?.confidence, trackedPlan, trackRecordSlice, etaReading, institutionalScore, confidenceZone, convictionTrend, councilFromSnapshot, assistantMessages, inEntryZoneNow, convictionReading, heatReading, pdForDecision, vwapCtx, nlState],
   );
 
   // Consolidação Final §30: confluência VWAP × Nexus Line × Decision Layer
@@ -5389,6 +5412,24 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         <ModulePanel title="Signal Track Record (real first-touch outcomes, persisted)">
           <ModuleStat label="Open Plan" value={trackRecord.active ? `${trackRecord.active.plan.direction} since ${new Date(trackRecord.active.openedAt).toLocaleTimeString("en-US", { hour12: false })}` : "NONE"} />
           <ModuleStat label="Target Hits" value={String(trackRecord.targetHits)} tone="long" />
+          {/* Cockpit de Leitura §11: ETA previsto (carimbado na abertura) ×
+              realizado (resolvedAt − openedAt, fatos já registrados) do
+              último plano RESOLVIDO com carimbo — dash honesto sem ambos. */}
+          {(() => {
+            for (let i = trackRecord.history.length - 1; i >= 0; i--) {
+              const h = trackRecord.history[i];
+              if (h.status === "REPLACED" || h.resolvedAt === null) continue;
+              const previsto = h.contextAtOpen ? formatEtaRange(h.contextAtOpen.etaMsMinAtOpen, h.contextAtOpen.etaMsAtOpen) : null;
+              const realizado = formatEtaDuration(h.resolvedAt - h.openedAt);
+              return (
+                <ModuleStat
+                  label="ETA previsto × realizado (último resolvido)"
+                  value={previsto && realizado ? `${previsto} × ${realizado}` : MODULE_EMPTY}
+                />
+              );
+            }
+            return null;
+          })()}
           <ModuleStat label="Stop Hits" value={String(trackRecord.stopHits)} tone="short" />
           {/* Achado real de auditoria: hitRate(trackRecord) era chamada 4x
               inline na mesma expressão JSX pelo mesmo trackRecord real —

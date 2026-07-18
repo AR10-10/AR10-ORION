@@ -457,3 +457,34 @@ describe('Continuidade §6: níveis apertados => rótulos TP compactos, preço N
     expect(c).toContain('ancoradas no preço real: o preço matemático nunca muda para caber');
   });
 });
+
+// ─── Cockpit de Leitura §4/§11: fiação das duas lacunas reais ───
+describe('Cockpit §4: estados VWAP/NL entram como inputs do buildNexusDecision', () => {
+  it('App passa os MESMOS estados do header/gráfico (fonte única) + deps atualizadas', () => {
+    const a = app();
+    expect(a).toContain('vwapState: vwapCtx?.state ?? null,\n        nexusLineState: nlState,');
+    expect(a).toContain('pdForDecision, vwapCtx, nlState],');
+  });
+});
+
+describe('Cockpit §11: carimbo do contexto de abertura + ETA previsto × realizado', () => {
+  it('efeito do App carimba UMA vez (guard contextAtOpen !== undefined) com leituras reais', () => {
+    const a = app();
+    expect(a).toContain('if (!active || active.contextAtOpen !== undefined) return;');
+    expect(a).toContain('useUnifiedSnapshotStore.getState().stampPlanOpenContext({');
+    expect(a).toContain('etaMsAtOpen: nextEta?.ms ?? null,');
+  });
+
+  it('store expõe a ação stampPlanOpenContext ligada ao stampOpenContext puro', () => {
+    const s = store();
+    expect(s).toContain('stampPlanOpenContext: (ctx: PlanOpenContext) => void;');
+    expect(s).toContain('s.trackRecord = stampOpenContext(s.trackRecord as TrackRecordState, ctx);');
+  });
+
+  it('painel Track Record exibe previsto × realizado do último plano resolvido (dash honesto sem ambos)', () => {
+    const a = app();
+    expect(a).toContain('label="ETA previsto × realizado (último resolvido)"');
+    expect(a).toContain('formatEtaDuration(h.resolvedAt - h.openedAt)');
+    expect(a).toContain('h.contextAtOpen ? formatEtaRange(h.contextAtOpen.etaMsMinAtOpen, h.contextAtOpen.etaMsAtOpen) : null');
+  });
+});
