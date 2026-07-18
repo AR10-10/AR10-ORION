@@ -488,3 +488,30 @@ describe('Cockpit §11: carimbo do contexto de abertura + ETA previsto × realiz
     expect(a).toContain('h.contextAtOpen ? formatEtaRange(h.contextAtOpen.etaMsMinAtOpen, h.contextAtOpen.etaMsAtOpen) : null');
   });
 });
+
+// ─── Foto ao vivo do Operador: colisão orb×cartão VWAP no header ───
+describe('Header ancorado (colisão da 1ª foto com dados reais): região central rolável + âncoras fixas', () => {
+  it('região central: overflow-x-auto + scrollbar oculta + NENHUM filho encolhe (nada vaza sobre vizinho)', () => {
+    const a = app();
+    expect(a).toContain('flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0');
+  });
+
+  it('omnibox fica FORA da região rolável (dropdown absoluto seria clipado) e o cluster do ativo é shrink-0', () => {
+    const a = app();
+    expect(a).toContain('border-r border-[#00f0ff20] h-[70%] shrink-0');
+    // a região rolável abre DEPOIS do fechamento do cluster do ativo
+    const cluster = a.indexOf('h-[70%] shrink-0');
+    const region = a.indexOf('[&>*]:shrink-0');
+    expect(cluster).toBeGreaterThan(-1);
+    expect(region).toBeGreaterThan(cluster);
+  });
+
+  it('âncora direita (estado + orbs + power) vive num cluster shrink-0 fora da região rolável', () => {
+    const a = app();
+    const anchorIdx = a.indexOf('{/* Âncora direita fixa (§5 do header)');
+    expect(anchorIdx).toBeGreaterThan(a.indexOf('[&>*]:shrink-0'));
+    const anchorBlock = a.slice(anchorIdx, anchorIdx + 700);
+    expect(anchorBlock).toContain('<div className="flex items-center gap-2 md:gap-3 h-full shrink-0">');
+    expect(anchorBlock).toContain('<SystemStatusBadge />');
+  });
+});

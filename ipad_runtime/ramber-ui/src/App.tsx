@@ -4248,7 +4248,7 @@ function TopBar({ data }: { data?: PriceState | null }) {
               Macro) continua 100% real (mesma expressão de sempre,
               cryptoMarketLabel), só que agora ao lado do gatilho em vez
               de dentro do nome estático removido. */}
-          <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%]">
+          <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%] shrink-0">
             <div
               className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
                 marketMode === "TRADFI"
@@ -4341,6 +4341,21 @@ function TopBar({ data }: { data?: PriceState | null }) {
             )}
           </div>
 
+          {/* Correção da colisão REAL vista na primeira foto ao vivo do
+              Operador (janela Retina ~1133px CSS COM dados): os chips
+              populados excediam a largura, o flex ENCOLHIA o cartão VWAP
+              (whitespace-nowrap vaza do box encolhido) e os orbs eram
+              pintados por cima do texto. Só se manifesta com dados reais —
+              por isso a auditoria no sandbox vazio dava CLEAN. A regra §5
+              do header ("compactação progressiva; overflow controlado;
+              NENHUM elemento cobre outro"): os chips centrais vivem numa
+              região com [&>*]:shrink-0 (nenhum chip encolhe => nenhum
+              texto vaza sobre vizinho) e overflow-x rolável de scrollbar
+              oculta (nada coberto, nada cortado, zero scroll de página —
+              o overflow é interno à faixa). Omnibox fica FORA (o dropdown
+              absoluto seria clipado por um scroll container); orbs/power
+              ancorados à direita, nunca cobertos. */}
+          <div className="flex gap-2 md:gap-3 items-center h-full flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
           {/* O preço — única ocorrência em toda a interface. Em modo
               TRADFI não existe fonte real ligada (fail-closed, Missão 2
               diretriz 4): mostra o rótulo honesto em vez de um preço de
@@ -4593,6 +4608,12 @@ function TopBar({ data }: { data?: PriceState | null }) {
               Operador. Só reaparece aqui o que o redesenho radical abaixo
               tinha deliberadamente removido da hero line (não desfaz essa
               decisão: cabe num badge minúsculo, não em números crus). */}
+          </div>
+
+          {/* Âncora direita fixa (§5 do header): estado do sistema + orbs +
+              power NUNCA entram na região rolável — jamais cobertos, jamais
+              fora do alcance. */}
+          <div className="flex items-center gap-2 md:gap-3 h-full shrink-0">
           {marketMode === "CRYPTO" && <SystemStatusBadge />}
           {/* V18.1: núcleo + voz sempre visíveis no cantinho, ao lado do
               botão de energia — ver header de NucleoVoiceOrb. Redesenho
@@ -4610,6 +4631,7 @@ function TopBar({ data }: { data?: PriceState | null }) {
           >
             <Power size={14} />
           </button>
+          </div>
         </div>
       </div>
 
