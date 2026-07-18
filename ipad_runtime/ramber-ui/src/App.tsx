@@ -4459,7 +4459,18 @@ function TopBar({ data }: { data?: PriceState | null }) {
                   : "VWAP aguardando volume real da sessão UTC (fail-closed, nunca um valor fabricado)."
               }
             >
-              <span className="text-[0.42rem] leading-none tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">VWAP</span>
+              <span className="text-[0.42rem] leading-none tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">
+                VWAP
+                {/* §30 compacto: veredito da confluência NL como sufixo
+                    discreto — detalhe completo no tooltip e na ANALYSIS. */}
+                {nexusConfluence && (
+                  <span className={nexusConfluence === "ALINHADA" ? "text-[#00ffaa]/80" : "text-[#ff0055]/80"}>
+                    {nexusConfluence === "ALINHADA" ? " ✓" : " ⚠"}
+                  </span>
+                )}
+              </span>
+              {/* Continuidade §5: o VALOR real da VWAP visível (nunca só a
+                  relação) — mesmo formatador fmt() do resto do header. */}
               <span
                 className={`text-[0.7rem] leading-none font-black font-mono tabular-nums ${
                   !vwapCtx
@@ -4471,19 +4482,25 @@ function TopBar({ data }: { data?: PriceState | null }) {
                         : "text-[#f0d06f]"
                 }`}
               >
-                {vwapCtx
-                  ? `${vwapCtx.state === "BULLISH" ? "↑" : vwapCtx.state === "BEARISH" ? "↓" : "•"} ${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}%`
-                  : DASH}
+                {vwapCtx ? fmt(vwapCtx.vwap, vwapCtx.vwap >= 1000 ? 0 : 2) : "DADOS"}
               </span>
-              {nexusConfluence && (
-                <span
-                  className={`text-[0.38rem] leading-none font-bold uppercase tracking-wider ${
-                    nexusConfluence === "ALINHADA" ? "text-[#00ffaa]/80" : "text-[#ff0055]/80"
-                  }`}
-                >
-                  {nexusConfluence === "ALINHADA" ? "NL ALINHADA" : "NL CONFLITO"}
-                </span>
-              )}
+              <span
+                className={`text-[0.38rem] leading-none font-bold uppercase tracking-wider ${
+                  !vwapCtx
+                    ? "text-[#8ab4f8]/40"
+                    : vwapCtx.state === "BULLISH"
+                      ? "text-[#00ffaa]/80"
+                      : vwapCtx.state === "BEARISH"
+                        ? "text-[#ff0055]/80"
+                        : "text-[#8ab4f8]/60"
+                }`}
+              >
+                {vwapCtx
+                  ? `${vwapCtx.state === "BULLISH" ? "↑" : vwapCtx.state === "BEARISH" ? "↓" : "•"} ${fmtSignedPct(vwapCtx.distancePct)} · ${
+                      vwapCtx.state === "BULLISH" ? "COMPRADOR" : vwapCtx.state === "BEARISH" ? "VENDEDOR" : "NEUTRA"
+                    }`
+                  : "INSUFICIENTES"}
+              </span>
             </div>
           )}
 

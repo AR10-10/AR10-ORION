@@ -50,6 +50,10 @@ export function directionalStateWithHysteresis(
 
 export interface VwapContext {
   state: DirectionalLineState;
+  // Diretriz de Continuidade §5: o cartão do header exibe o próprio VALOR
+  // real da VWAP — carregado aqui para o consumidor nunca precisar de uma
+  // segunda leitura/derivação (Single Source of Truth).
+  vwap: number;
   distanceAbs: number; // preço − VWAP, com sinal (moeda de cotação)
   distancePct: number; // (preço − VWAP)/VWAP × 100, com sinal
   side: "ACIMA" | "ABAIXO" | "NA_LINHA";
@@ -70,6 +74,7 @@ export function computeVwapContext(
   const distancePct = (distanceAbs * 100) / vwap;
   return {
     state: directionalStateWithHysteresis(prevState, price, vwap, atrAbs),
+    vwap,
     distanceAbs,
     distancePct,
     side: distanceAbs > 0 ? "ACIMA" : distanceAbs < 0 ? "ABAIXO" : "NA_LINHA",

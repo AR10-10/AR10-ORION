@@ -360,7 +360,7 @@ describe('Consolidação Final §20-§25: VWAP com estados/histerese SEM tocar a
 
   it('cartão VWAP no header (§23): estado + Preço×VWAP % real, e o TopBar lê do contexto único', () => {
     const a = app();
-    expect(a).toContain('tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">VWAP</span>');
+    expect(a).toContain('tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">\n                VWAP'); // §5: rótulo agora carrega sufixo NL ✓/⚠
     expect(a).toContain('${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}%');
     expect(a).toContain('"VWAP aguardando volume real da sessão UTC (fail-closed, nunca um valor fabricado)."');
   });
@@ -420,5 +420,22 @@ describe('Consolidação Final §5/§6: SHARK + AB=CD no motor, PRZ/ETA na super
   it('ANALYSIS usa PRZ no lugar do rótulo D cru', () => {
     const a = app();
     expect(a).toContain('value={`PRZ @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}');
+  });
+});
+
+// ─── Diretriz de Continuidade §5: cartão VWAP com valor + estado nomeado ───
+describe('Continuidade §5: o cartão VWAP exibe o VALOR real + estado COMPRADOR/VENDEDOR/NEUTRA', () => {
+  it('valor com o MESMO formatador fmt() do header; estado nomeado; DADOS INSUFICIENTES no vazio (nunca dash mudo)', () => {
+    const a = app();
+    expect(a).toContain('{vwapCtx ? fmt(vwapCtx.vwap, vwapCtx.vwap >= 1000 ? 0 : 2) : "DADOS"}');
+    expect(a).toContain('vwapCtx.state === "BULLISH" ? "COMPRADOR" : vwapCtx.state === "BEARISH" ? "VENDEDOR" : "NEUTRA"');
+    expect(a).toContain(': "INSUFICIENTES"}');
+    // a % continua vindo do fmtSignedPct compartilhado (zero segunda formatação)
+    expect(a).toContain('${fmtSignedPct(vwapCtx.distancePct)} · ${');
+  });
+
+  it('confluência NL vira sufixo discreto no rótulo (✓/⚠) — detalhe completo segue no tooltip/ANALYSIS', () => {
+    const a = app();
+    expect(a).toContain('{nexusConfluence === "ALINHADA" ? " ✓" : " ⚠"}');
   });
 });

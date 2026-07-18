@@ -49,9 +49,10 @@ describe('directionalStateWithHysteresis: duas bandas reais (entra 0.30·ATR, sa
 });
 
 describe('computeVwapContext (§23/§24): distância percentual/absoluta/lado, fail-closed', () => {
-  it('acima da VWAP: sinais e lado corretos, pct exato', () => {
+  it('acima da VWAP: sinais e lado corretos, pct exato, e o VALOR da VWAP carregado (Continuidade §5)', () => {
     const ctx = computeVwapContext('NEUTRAL', 100.35, 100, 10);
     expect(ctx).not.toBeNull();
+    expect(ctx!.vwap).toBe(100); // o cartão exibe o valor real — nunca precisa de segunda leitura
     expect(ctx!.distanceAbs).toBeCloseTo(0.35, 10);
     expect(ctx!.distancePct).toBeCloseTo(0.35, 10);
     expect(ctx!.side).toBe('ACIMA');
