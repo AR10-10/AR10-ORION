@@ -165,3 +165,56 @@ describe('honestidade e fail-closed', () => {
     expect(hits.find((h) => h.points.D.price === 1021.4)).toBeUndefined();
   });
 });
+
+// ─── Consolidação Final §5: SHARK + AB=CD (definições reais; ver módulo) ───
+describe('SHARK (Carney, O-X-A-B-C nos slots X..D): razões exatas => fit 1.0', () => {
+  // X=1000 A=1100 B=1050 C=1115 D=991.5:
+  //   BC/AB = 65/50 = 1.3 ∈ [1.13, 1.618] ✓ (deles: AB estende XA)
+  //   CD/BC = 123.5/65 = 1.9 ∈ [1.618, 2.24] ✓ (deles: BC estende AB)
+  //   AD/XA = 108.5/100 = 1.085 ∈ [0.886, 1.13] ✓ (completa 0.886–1.13 de OX)
+  // C=1115 > A=1100 => shape de extensão (grupo do Cypher); o CYPHER em si
+  // é rejeitado nesta janela (CD/XC = 123.5/115 ≈ 1.074, longe de 0.786).
+  it('bullish SHARK com todas as razões dentro dos ranges', () => {
+    const hits = detectHarmonicPatterns({ candles: zigzagFromPivots([1000, 1100, 1050, 1115, 991.5], 1), maxPatterns: 5 });
+    const s = hits.find((h) => h.pattern === 'SHARK');
+    expect(s, JSON.stringify(hits.map((h) => h.pattern))).toBeDefined();
+    expect(s!.direction).toBe('BULLISH');
+    expect(s!.fitScore).toBeCloseTo(1, 5);
+    expect(s!.ratios.BC_AB).toBeCloseTo(1.3, 6);
+    expect(s!.ratios.CD_BC).toBeCloseTo(1.9, 6);
+    expect(s!.ratios.AD_XA).toBeCloseTo(1.085, 6);
+    expect(hits.find((h) => h.pattern === 'CYPHER')).toBeUndefined();
+  });
+
+  it('bearish SHARK espelhado', () => {
+    const hits = detectHarmonicPatterns({ candles: zigzagFromPivots([1100, 1000, 1050, 985, 1108.5], -1), maxPatterns: 5 });
+    const s = hits.find((h) => h.pattern === 'SHARK');
+    expect(s).toBeDefined();
+    expect(s!.direction).toBe('BEARISH');
+  });
+});
+
+describe('AB=CD (4 pontos REAIS): igualdade CD=AB com BC no retracement clássico', () => {
+  // Pivô-guia 1120(H) + A=1000 B=1100 C=1038.2 D=1138.2:
+  //   BC/AB = 61.8/100 = 0.618 (o retracement IDEAL da literatura)
+  //   CD/AB = 100/100 = 1.0 exato => fit 1.0; D é topo => BEARISH.
+  // O pivô-guia existe só porque o motor exige >= 5 pivôs na varredura —
+  // as janelas XABCD que o incluem são todas rejeitadas (verificado à mão).
+  it('AB=CD exato: fit 1.0, direção pela ponta D, e X honestamente ausente', () => {
+    const hits = detectHarmonicPatterns({ candles: zigzagFromPivots([1120, 1000, 1100, 1038.2, 1138.2], -1), maxPatterns: 5 });
+    const a = hits.find((h) => h.pattern === 'ABCD');
+    expect(a, JSON.stringify(hits.map((h) => h.pattern))).toBeDefined();
+    expect(a!.direction).toBe('BEARISH');
+    expect(a!.fitScore).toBeCloseTo(1, 5);
+    expect(a!.ratios.BC_AB).toBeCloseTo(0.618, 6);
+    expect(a!.ratios.CD_AB).toBeCloseTo(1.0, 6);
+    expect(a!.points.X).toBeUndefined();
+    expect(a!.points.D.price).toBeCloseTo(1138.2, 6);
+  });
+
+  it('CD muito diferente de AB (além da janela de aderência) => sem ABCD', () => {
+    // CD/AB = 0.65 => desvio 3.5x a tolerância => rejeita
+    const hits = detectHarmonicPatterns({ candles: zigzagFromPivots([1120, 1000, 1100, 1038.2, 1103.2], -1), maxPatterns: 5 });
+    expect(hits.find((h) => h.pattern === 'ABCD')).toBeUndefined();
+  });
+});

@@ -121,7 +121,8 @@ describe('§8 Harmônicos: display gated pelo fit mínimo honesto', () => {
     expect(a).toContain('const harmonicHits = useHarmonicPatternsSnapshot();');
     expect(a).toContain('title="Harmonic Patterns · ratio fit, never probability"');
     expect(a).toContain('NO FRESH XABCD PATTERN ≥ {(MIN_FIT_SCORE * 100).toFixed(0)}% RATIO FIT (honest result)');
-    expect(a).toContain('value={`D @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}');
+    // Consolidação Final §6: rótulo profissional PRZ no lugar do D cru (contrato novo deliberado)
+    expect(a).toContain('value={`PRZ @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}');
   });
 
   it('LEI 24: o motor harmônico nunca alimenta engine/tradePlan — só a própria fatia de display', () => {
@@ -279,10 +280,10 @@ describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no grá
     expect(c).toContain('harmonicHits?: HarmonicPatternHit[] | null;');
     const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
     expect(idx).toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 1200);
+    const block = c.slice(idx, idx + 2200);
     expect(block).toContain('const top = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;');
     expect(block).toContain('fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)');
-    expect(block).toContain('"WOLFE · EPA (linha 1→4 real)"');
+    expect(block).toContain('`WOLFE · EPA (linha 1→4 real)${etaLabel ? ` · ETA ${etaLabel} (ápice da cunha)` : ""}`'); // §6: + ETA do ápice
     expect(block).toContain('lineStyle: LineStyle.Solid,');
     const cleanupIdx = c.indexOf('chart.remove();');
     expect(c.slice(cleanupIdx, cleanupIdx + 700)).toContain('harmonicLinesRef.current = [];');
@@ -340,5 +341,84 @@ describe('Consolidação §5: compactPersistedCandles roda uma vez por boot (env
     // a transação de remoção é aberta exclusivamente sobre a CANDLES_STORE
     expect(p).toContain('db.transaction(CANDLES_STORE, "readwrite")');
     expect(p).not.toContain('db.transaction(SNAPSHOT_STORE, "readwrite")');
+  });
+});
+
+// ─── Diretriz Mestra Consolidação Final: VWAP estados + Nexus Line + confluência ───
+describe('Consolidação Final §20-§25: VWAP com estados/histerese SEM tocar a matemática', () => {
+  it('App computa o último VWAP com a MESMA função pura do gráfico (zero segunda implementação)', () => {
+    const a = app();
+    expect(a).toContain('import { computeSessionVwapSeries, latestVwap } from "./nexus/vwap";');
+    expect(a).toContain('const vwapNow = useMemo(() => latestVwap(computeSessionVwapSeries(chartData)), [chartData]);');
+  });
+
+  it('histerese real (§22): transição lê o estado ANTERIOR via updater funcional — nunca useMemo', () => {
+    const a = app();
+    expect(a).toContain('setVwapCtx((prev) => computeVwapContext(prev?.state ?? "NEUTRAL", livePriceForZone, vwapNow, atrAbsForLines));');
+    expect(a).toContain('setNlState((prev) => nexusLineState(prev, livePriceForZone, nexusLineNow, atrAbsForLines));');
+  });
+
+  it('cartão VWAP no header (§23): estado + Preço×VWAP % real, e o TopBar lê do contexto único', () => {
+    const a = app();
+    expect(a).toContain('tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">VWAP</span>');
+    expect(a).toContain('${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}%');
+    expect(a).toContain('"VWAP aguardando volume real da sessão UTC (fail-closed, nunca um valor fabricado)."');
+  });
+
+  it('o gráfico aplica cor/etiqueta de estado via applyOptions — a série VWAP continua a mesma (§20/§21)', () => {
+    const c = chart();
+    expect(c).toContain('vwapSeriesRef.current.applyOptions({ color: VWAP_STATE_COLOR[s], title: `VWAP ${LINE_STATE_GLYPH[s]}` });');
+    expect(c).toContain('const series = computeSessionVwapSeries(data);'); // matemática intocada
+  });
+});
+
+describe('Consolidação Final §26-§30: Nexus Line + confluência informativa', () => {
+  it('NL nasce no MESMO efeito da VWAP no gráfico (mesmos candles, nunca dessincroniza)', () => {
+    const c = chart();
+    expect(c).toContain('const nl = computeNexusLineSeries(data);');
+    expect(c).toContain('nexusLineSeriesRef.current.setData(nl.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));');
+    // fio de seda + título com glifo de estado
+    expect(c).toContain('nexusLineSeriesRef.current.applyOptions({ color: NL_STATE_COLOR[s], title: `NL ${LINE_STATE_GLYPH[s]}` });');
+  });
+
+  it('§30: veredito de confluência VWAP×NL×Decision computado no App e exposto pelo contexto (2 listas)', () => {
+    const a = app();
+    expect(a).toContain('nexusConfluenceVerdict(vwapCtx?.state ?? "NEUTRAL", nlState, nexusDecision?.operation ?? null)');
+    const occurrences = a.split('      vwapCtx,\n      nlState,\n      nexusConfluence,').length - 1;
+    expect(occurrences).toBe(2); // objeto do contexto + array de deps
+  });
+
+  it('ANALYSIS ganha o painel VWAP × Nexus Line com o aviso LEI 24 explícito', () => {
+    const a = app();
+    expect(a).toContain('title="VWAP × Nexus Line (equilíbrios reais + confluência informativa)"');
+    expect(a).toContain('Informativo (LEI 24): confluência nunca altera nem bloqueia a operação do Core Engine.');
+  });
+
+  it('elemento do gráfico recebe os DOIS estados (mesma fonte única do header)', () => {
+    const a = app();
+    expect(a).toContain('vwapState={vwapCtx?.state ?? null}');
+    expect(a).toContain('nexusLineState={nlState ?? null}');
+  });
+});
+
+describe('Consolidação Final §5/§6: SHARK + AB=CD no motor, PRZ/ETA na superfície', () => {
+  it('motor harmônico: SHARK e ABCD no contrato + janela de convergência Wolfe CORRIGIDA (razão > 1)', () => {
+    const h = readFileSync(resolve(__dirname, '../src/nexus/harmonic-patterns.ts'), 'utf8');
+    expect(h).toContain('| "SHARK"');
+    expect(h).toContain('| "ABCD"');
+    expect(h).toContain('const WOLFE_CONVERGENCE_WINDOW = { min: 1.001, max: 50, idealMin: 1.1, idealMax: 5 };');
+    expect(h).toContain('etaIndex?: number;');
+  });
+
+  it('gráfico: terminologia PRZ profissional + ETA do ápice na linha EPA da Wolfe', () => {
+    const c = chart();
+    expect(c).toContain('· PRZ · fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)');
+    expect(c).toContain('`WOLFE · EPA (linha 1→4 real)${etaLabel ? ` · ETA ${etaLabel} (ápice da cunha)` : ""}`');
+    expect(c).toContain('}, [harmonicHits, data]);'); // intervalo real de barra vem de data
+  });
+
+  it('ANALYSIS usa PRZ no lugar do rótulo D cru', () => {
+    const a = app();
+    expect(a).toContain('value={`PRZ @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}');
   });
 });

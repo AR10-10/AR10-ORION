@@ -122,6 +122,11 @@ import { timeframeProfile } from "./nexus/timeframe-profile";
 import { buildAssistantMessages } from "./nexus/operation-assistant";
 import { computePremiumDiscount } from "./nexus/premium-discount";
 import { detectHarmonicPatterns, MIN_FIT_SCORE } from "./nexus/harmonic-patterns";
+// Consolidação Final §20-§30: estados da VWAP (matemática intocada, §20) +
+// Nexus Line proprietária + confluência informativa — módulos puros novos.
+import { computeSessionVwapSeries, latestVwap } from "./nexus/vwap";
+import { computeVwapContext, type VwapContext, type DirectionalLineState } from "./nexus/vwap-state";
+import { computeNexusLineSeries, latestNexusLine, nexusLineState, nexusConfluenceVerdict } from "./nexus/nexus-line";
 import { marketSessionFromUtc } from "./nexus/market-session";
 import { computeHeatScore } from "./nexus/heat-score";
 import { buildNexusDecision, NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./nexus/decision-layer";
@@ -1938,6 +1943,23 @@ export default function App() {
     [trackRecordSlice.active, livePriceForZone, engine?.marketRegime, chartData, chartTimeframe],
   );
 
+  // ── Consolidação Final §20-§30: VWAP (estados/distância) + Nexus Line ──
+  // A MATEMÁTICA da VWAP fica intocada (§20): computeSessionVwapSeries é a
+  // MESMA função pura que o gráfico desenha, avaliada sobre o MESMO
+  // chartData canônico — aqui só o último valor real, para header/estado.
+  const vwapNow = useMemo(() => latestVwap(computeSessionVwapSeries(chartData)), [chartData]);
+  const nexusLineNow = useMemo(() => latestNexusLine(computeNexusLineSeries(chartData)), [chartData]);
+  // Estados com histerese real (§22 "nunca trocar de estado a cada
+  // candle"): a transição depende do estado ANTERIOR — useState + efeito
+  // com updater funcional, nunca useMemo (mesma lição do inEntryZone).
+  const [vwapCtx, setVwapCtx] = useState<VwapContext | null>(null);
+  const [nlState, setNlState] = useState<DirectionalLineState>("NEUTRAL");
+  const atrAbsForLines = etaReading.atrAbsolute;
+  useEffect(() => {
+    setVwapCtx((prev) => computeVwapContext(prev?.state ?? "NEUTRAL", livePriceForZone, vwapNow, atrAbsForLines));
+    setNlState((prev) => nexusLineState(prev, livePriceForZone, nexusLineNow, atrAbsForLines));
+  }, [livePriceForZone, vwapNow, nexusLineNow, atrAbsForLines]);
+
   // Diretriz V-MAX (itens 5/6): Score Geral + Assistente — computados UMA
   // vez aqui (mesmo padrão de convictionReading, que ambos reaproveitam),
   // compartilhados via contextValue. Declarados DEPOIS de convictionReading/
@@ -2055,6 +2077,14 @@ export default function App() {
         premiumDiscountZone: pdForDecision?.zone ?? null,
       }),
     [engine?.direction, engine?.confidence, trackedPlan, trackRecordSlice, etaReading, institutionalScore, confidenceZone, convictionTrend, councilFromSnapshot, assistantMessages, inEntryZoneNow, convictionReading, heatReading, pdForDecision],
+  );
+
+  // Consolidação Final §30: confluência VWAP × Nexus Line × Decision Layer
+  // — veredito INFORMATIVO ("informar conflito estrutural"); LEI 24: nunca
+  // altera/bloqueia a operação, que segue passthrough do Core Engine.
+  const nexusConfluence = useMemo(
+    () => nexusConfluenceVerdict(vwapCtx?.state ?? "NEUTRAL", nlState, nexusDecision?.operation ?? null),
+    [vwapCtx, nlState, nexusDecision],
   );
 
   // Achado real de auditoria (sincronização/performance): este objeto era
@@ -2444,6 +2474,9 @@ export default function App() {
       assistantMessages,
       heatReading,
       nexusDecision,
+      vwapCtx,
+      nlState,
+      nexusConfluence,
       etaReading,
       riskSuggestion,
       cycleLatencyMs,
@@ -2500,6 +2533,9 @@ export default function App() {
       assistantMessages,
       heatReading,
       nexusDecision,
+      vwapCtx,
+      nlState,
+      nexusConfluence,
       etaReading,
       riskSuggestion,
       cycleLatencyMs,
@@ -4129,6 +4165,11 @@ function TopBar({ data }: { data?: PriceState | null }) {
     voiceSnapshot,
     heatReading,
     nexusDecision,
+    // Consolidação Final §23/§30: cartão VWAP + confluência no header —
+    // mesmas leituras únicas do App (contexto), zero recomputação.
+    vwapCtx,
+    nlState,
+    nexusConfluence,
   } = useContext(WidgetContext) || {};
   // Refinamento Final §1 ("Sessão Atual"): derivação pura do relógio UTC
   // real (market-session.ts). Computada no render — a TopBar re-renderiza
@@ -4394,6 +4435,54 @@ function TopBar({ data }: { data?: PriceState | null }) {
               </span>
               {heatReading?.status === "OK" && heatReading.tier && (
                 <span className="text-[0.38rem] leading-none font-bold uppercase tracking-wider text-[#8ab4f8]/60">{heatReading.tier}</span>
+              )}
+            </div>
+          )}
+
+          {/* Consolidação Final §23: cartão VWAP — estado com histerese
+              (§22, nunca troca a cada candle) + Preço×VWAP em % real
+              (§24). Display-only: contexto, nunca decisão (§25, LEI 24).
+              O tooltip carrega distância absoluta + o veredito §30 da
+              confluência VWAP × Nexus Line × Decision Layer. */}
+          {marketMode === "CRYPTO" && (
+            <div
+              className="hidden md:flex flex-col items-center justify-center gap-[2px] pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
+              title={
+                vwapCtx
+                  ? `Preço ${vwapCtx.side === "ACIMA" ? "acima" : vwapCtx.side === "ABAIXO" ? "abaixo" : "na linha"} da VWAP: ${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}% (${vwapCtx.distanceAbs >= 0 ? "+" : ""}${vwapCtx.distanceAbs.toFixed(2)} abs). Estado ${vwapCtx.state} com histerese real. Nexus Line: ${nlState}. ${
+                      nexusConfluence === "ALINHADA"
+                        ? "Confluência VWAP×NL×Decisão: ALINHADA."
+                        : nexusConfluence === "CONFLITO_ESTRUTURAL"
+                          ? "CONFLITO ESTRUTURAL VWAP/NL/Decisão — informativo, nunca altera a operação (LEI 24)."
+                          : "Sem veredito de confluência (leitura incompleta ou AGUARDAR)."
+                    }`
+                  : "VWAP aguardando volume real da sessão UTC (fail-closed, nunca um valor fabricado)."
+              }
+            >
+              <span className="text-[0.42rem] leading-none tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">VWAP</span>
+              <span
+                className={`text-[0.7rem] leading-none font-black font-mono tabular-nums ${
+                  !vwapCtx
+                    ? "text-[#8ab4f8]/40"
+                    : vwapCtx.state === "BULLISH"
+                      ? "text-[#00ffaa] drop-shadow-[0_0_5px_currentColor]"
+                      : vwapCtx.state === "BEARISH"
+                        ? "text-[#ff0055] drop-shadow-[0_0_5px_currentColor]"
+                        : "text-[#f0d06f]"
+                }`}
+              >
+                {vwapCtx
+                  ? `${vwapCtx.state === "BULLISH" ? "↑" : vwapCtx.state === "BEARISH" ? "↓" : "•"} ${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}%`
+                  : DASH}
+              </span>
+              {nexusConfluence && (
+                <span
+                  className={`text-[0.38rem] leading-none font-bold uppercase tracking-wider ${
+                    nexusConfluence === "ALINHADA" ? "text-[#00ffaa]/80" : "text-[#ff0055]/80"
+                  }`}
+                >
+                  {nexusConfluence === "ALINHADA" ? "NL ALINHADA" : "NL CONFLITO"}
+                </span>
               )}
             </div>
           )}
@@ -4988,6 +5077,11 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     okxCrossExchangeCheck,
     chartTimeframe,
     etaReading,
+    // Consolidação Final §21-§30: leituras VWAP/NL/confluência (App-level,
+    // mesma fonte do header e do gráfico — zero recomputação aqui).
+    vwapCtx,
+    nlState,
+    nexusConfluence,
   } = ctx as any;
   const connections = useConnectionsSnapshot();
   const derivatives = useDerivativesSnapshot();
@@ -5202,7 +5296,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
               <ModuleStat
                 key={i}
                 label={`${h.pattern} ${h.direction}`}
-                value={`D @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}
+                value={`PRZ @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}
                 tone={h.direction === "BULLISH" ? "long" : "short"}
               />
             ))
@@ -5230,6 +5324,30 @@ function SecondaryModuleView({ tab }: { tab: string }) {
           <ModuleStat label="Point of Control" value={vp ? vp.pocPrice.toFixed(0) : MODULE_EMPTY} />
           <ModuleStat label="High-Volume Nodes" value={vp ? String(vp.hvnIndices.length) : MODULE_EMPTY} />
           <ModuleStat label="Low-Volume Nodes" value={vp ? String(vp.lvnIndices.length) : MODULE_EMPTY} />
+        </ModulePanel>
+        {/* Consolidação Final §21-§30: VWAP (estado + distância, matemática
+            intocada) × Nexus Line (equilíbrio proprietário, pesos 0.5/0.5
+            documentados) × confluência informativa — mesmas leituras do
+            header/gráfico, nunca uma segunda computação. */}
+        <ModulePanel title="VWAP × Nexus Line (equilíbrios reais + confluência informativa)">
+          <ModuleStat
+            label="VWAP (estado c/ histerese)"
+            value={vwapCtx ? `${vwapCtx.state} · ${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}% do preço` : MODULE_EMPTY}
+            tone={vwapCtx?.state === "BULLISH" ? "long" : vwapCtx?.state === "BEARISH" ? "short" : "neutral"}
+          />
+          <ModuleStat
+            label="Nexus Line (NL)"
+            value={nlState ?? MODULE_EMPTY}
+            tone={nlState === "BULLISH" ? "long" : nlState === "BEARISH" ? "short" : "neutral"}
+          />
+          <ModuleStat
+            label="Confluência VWAP×NL×Decisão"
+            value={nexusConfluence ?? "SEM VEREDITO (leitura incompleta ou AGUARDAR)"}
+            tone={nexusConfluence === "ALINHADA" ? "long" : nexusConfluence === "CONFLITO_ESTRUTURAL" ? "short" : "neutral"}
+          />
+          <span className="text-[0.42rem] text-[#8ab4f8]/40 leading-tight">
+            Informativo (LEI 24): confluência nunca altera nem bloqueia a operação do Core Engine.
+          </span>
         </ModulePanel>
       </>
     );
@@ -5374,7 +5492,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision } = useContext(WidgetContext) || {};
+  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState } = useContext(WidgetContext) || {};
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
   // Correção de latência: o MESMO preço real que já alimenta a barra
   // superior (usePriceSnapshot — escrito na store a cada tick do WS,
@@ -5499,6 +5617,8 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             premiumDiscount={chartPremiumDiscount ?? null}
             harmonicHits={chartHarmonics}
             decision={nexusDecision ?? null}
+            vwapState={vwapCtx?.state ?? null}
+            nexusLineState={nlState ?? null}
             layerVisibility={chartLayerVisibility}
             emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}

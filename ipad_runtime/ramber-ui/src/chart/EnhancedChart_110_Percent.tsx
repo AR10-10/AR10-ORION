@@ -66,7 +66,7 @@ import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
 import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
 import type { NexusDecision } from "../nexus/decision-layer";
-import { formatEtaRange } from "../nexus/eta-engine";
+import { formatEtaRange, formatEtaDuration } from "../nexus/eta-engine";
 // Research-driven precision order: VWAP, the institutional-standard
 // intraday reference level this system was missing entirely (confirmed
 // via a full-codebase grep before writing nexus/vwap.ts).
@@ -77,6 +77,12 @@ import { computeSessionVwapSeries } from "../nexus/vwap";
 // final; uma série com um ponto por candle é uma implementação nova
 // legítima, mesma fórmula/semente do motor WASM).
 import { computeEmaSeries, DEFAULT_EMA_PERIOD } from "../nexus/ema";
+// Consolidação Final §26-§29: Nexus Line (linha proprietária de equilíbrio,
+// nexus-line.ts) — série computada do MESMO array real de candles (zero
+// segunda fonte), estados visuais aplicados via a MESMA histerese
+// compartilhada calculada no App (vwap-state.ts).
+import { computeNexusLineSeries } from "../nexus/nexus-line";
+import type { DirectionalLineState } from "../nexus/vwap-state";
 // Ordem "Ciborgue Vivo" §1: BOS/CHOCH real (bos-choch-engine.js via
 // engine-bridge.ts's computeBosChoch) — mesmo tipo que StructureBreakMarkersPlugin usa.
 import type { StructureBreak } from "../engine-bridge";
@@ -238,7 +244,28 @@ interface EnhancedChartProps {
   // distância % vem do livePrice real). Geometria continua vindo de
   // tradePlan — decision.plan deriva do MESMO objeto, zero divergência.
   decision?: NexusDecision | null;
+  // Consolidação Final §22/§29: estado visual das duas linhas de equilíbrio
+  // (VWAP e Nexus Line). Calculado no App com a histerese compartilhada
+  // (vwap-state.ts) porque precisa de preço vivo + ATR + estado anterior —
+  // o gráfico só APLICA cor/etiqueta (a matemática da VWAP fica intocada,
+  // §20). Optional/fail-closed: ausente => NEUTRAL (visual de sempre).
+  vwapState?: DirectionalLineState | null;
+  nexusLineState?: DirectionalLineState | null;
 }
+
+// §22: paleta institucional de estado + seta discreta. A NL usa a mesma
+// paleta com opacidade menor — §29 "nunca competir visualmente com a VWAP".
+const LINE_STATE_GLYPH: Record<DirectionalLineState, string> = { BULLISH: "↑", BEARISH: "↓", NEUTRAL: "•" };
+const VWAP_STATE_COLOR: Record<DirectionalLineState, string> = {
+  BULLISH: "rgba(0, 230, 160, 0.75)",
+  BEARISH: "rgba(255, 61, 113, 0.75)",
+  NEUTRAL: "rgba(255, 235, 190, 0.50)", // branco-dourado (§22 Neutra)
+};
+const NL_STATE_COLOR: Record<DirectionalLineState, string> = {
+  BULLISH: "rgba(0, 230, 160, 0.50)",
+  BEARISH: "rgba(255, 61, 113, 0.50)",
+  NEUTRAL: "rgba(255, 214, 130, 0.45)",
+};
 
 // Auditoria de arquitetura (revisão completa) — paginação histórica real:
 // detecta se `next` é EXATAMENTE `prev` com N candles novos prependados na
@@ -295,6 +322,8 @@ export function EnhancedChart_110_Percent({
   premiumDiscount,
   harmonicHits,
   decision,
+  vwapState,
+  nexusLineState,
   layerVisibility,
   emaPeriod,
   onRequestOlderCandles,
@@ -331,6 +360,9 @@ export function EnhancedChart_110_Percent({
   // nunca reaproveitando a paleta semântica (verde/vermelho=direção,
   // âmbar=zona de entrada, roxo=liquidez EQH/EQL).
   const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Consolidação Final §26-§29: Nexus Line na MESMA escala de preço (é um
+  // nível de equilíbrio real, como VWAP/EMA) — nunca uma segunda escala.
+  const nexusLineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Espelha chartRef/seriesRef em state só para o LiquidityZonesPlugin
   // montar assim que o chart existe de verdade — refs sozinhas não
   // disparam re-render, então o plugin ficaria esperando por uma
@@ -450,6 +482,20 @@ export function EnhancedChart_110_Percent({
       title: "EMA",
     });
     emaSeriesRef.current = emaSeries;
+    // Consolidação Final §29: Nexus Line — "extremamente fina, elegante,
+    // suavizada" = fio de seda (1px sólida, obrigatório de qualquer forma)
+    // em branco-dourado neutro mais discreto que a VWAP; a cor de estado
+    // real é aplicada pelo efeito de vwapState/nexusLineState abaixo.
+    const nexusLineSeries = chart.addSeries(LineSeries, {
+      color: NL_STATE_COLOR.NEUTRAL,
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: false,
+      title: "NL •",
+    });
+    nexusLineSeriesRef.current = nexusLineSeries;
     chartRef.current = chart;
     seriesRef.current = series;
     setChartReady({ chart, series });
@@ -468,6 +514,7 @@ export function EnhancedChart_110_Percent({
       cvdSeriesRef.current = null;
       vwapSeriesRef.current = null;
       emaSeriesRef.current = null;
+      nexusLineSeriesRef.current = null;
       setChartReady(null);
     };
   }, []);
@@ -664,7 +711,29 @@ export function EnhancedChart_110_Percent({
     if (!vwapSeriesRef.current) return;
     const series = computeSessionVwapSeries(data);
     vwapSeriesRef.current.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+    // Consolidação Final §26-§28: a Nexus Line nasce do MESMO array real,
+    // no MESMO efeito — os dois equilíbrios nunca dessincronizam por
+    // construção. Série vazia (sem range confirmado/sem VWAP) => nada.
+    if (nexusLineSeriesRef.current) {
+      const nl = computeNexusLineSeries(data);
+      nexusLineSeriesRef.current.setData(nl.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+    }
   }, [data]);
+
+  // Consolidação Final §21-§22 (VWAP) e §29 (NL): estados visuais aplicados
+  // in place via applyOptions — cor institucional + seta discreta no
+  // título. A MATEMÁTICA das séries acima fica intocada (§20); a histerese
+  // (§22 "nunca trocar de estado a cada candle") já aconteceu no App.
+  useEffect(() => {
+    if (!vwapSeriesRef.current) return;
+    const s: DirectionalLineState = vwapState ?? "NEUTRAL";
+    vwapSeriesRef.current.applyOptions({ color: VWAP_STATE_COLOR[s], title: `VWAP ${LINE_STATE_GLYPH[s]}` });
+  }, [vwapState]);
+  useEffect(() => {
+    if (!nexusLineSeriesRef.current) return;
+    const s: DirectionalLineState = nexusLineState ?? "NEUTRAL";
+    nexusLineSeriesRef.current.applyOptions({ color: NL_STATE_COLOR[s], title: `NL ${LINE_STATE_GLYPH[s]}` });
+  }, [nexusLineState]);
 
   // Diretriz Camada de Decisão Profissional, item 1: EMA recomputada do
   // MESMO array real de candles (zero segunda fonte de dado), sempre que
@@ -824,14 +893,27 @@ export function EnhancedChart_110_Percent({
         }),
       );
     };
+    // Consolidação Final §6 (terminologia profissional): o ponto de
+    // reversão esperado é a PRZ — Potential Reversal Zone (D nos XABCD/
+    // AB=CD; ponto 5 na Wolfe).
     mkH(
       top.points.D.price,
-      `${top.pattern} ${top.direction} · D · fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)`,
+      `${top.pattern} ${top.direction} · PRZ · fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)`,
     );
     if (top.pattern === "WOLFE" && typeof top.epaPrice === "number" && Number.isFinite(top.epaPrice)) {
-      mkH(top.epaPrice, "WOLFE · EPA (linha 1→4 real)");
+      // §6: ETA canônica da Wolfe = ápice da cunha (cruzamento real
+      // 1→3 × 2→4, etaIndex do motor). Convertida em tempo pelo intervalo
+      // REAL entre as duas últimas barras carregadas — nunca um mapa de
+      // timeframe paralelo. Sem ápice à frente => só a EPA, sem ETA.
+      const barSec = data.length >= 2 ? data[data.length - 1].time - data[data.length - 2].time : null;
+      const remainingBars = typeof top.etaIndex === "number" ? top.etaIndex - (data.length - 1) : null;
+      const etaLabel =
+        barSec !== null && remainingBars !== null && remainingBars > 0
+          ? formatEtaDuration(remainingBars * barSec * 1000)
+          : null;
+      mkH(top.epaPrice, `WOLFE · EPA (linha 1→4 real)${etaLabel ? ` · ETA ${etaLabel} (ápice da cunha)` : ""}`);
     }
-  }, [harmonicHits]);
+  }, [harmonicHits, data]);
 
   // Signal Precision order: the Trade Plan drawn on the chart — subtle,
   // silk-thread annotations (1px solid, never dashed; hierarchy only via

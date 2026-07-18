@@ -85,7 +85,7 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
 
   it('ChartWidget passa layerVisibility real (do contexto) para EnhancedChart_110_Percent, nunca um segundo estado', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision } = useContext(WidgetContext) || {};');
+    expect(app).toContain('chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState } = useContext(WidgetContext) || {};');
     expect(app).toContain('layerVisibility={chartLayerVisibility}');
     expect(app).toContain('emaPeriod={emaPeriod}');
   });

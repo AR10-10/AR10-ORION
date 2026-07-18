@@ -11,9 +11,19 @@
 //   BAT       B=0.382–0.50·XA     · C=0.382–0.886·AB · D=0.886·XA (âncora) · CD=1.618–2.618·BC
 //   BUTTERFLY B=0.786·XA (âncora) · C=0.382–0.886·AB · D=1.27–1.618·XA ext · CD=1.618–2.24·BC
 //   CRAB      B=0.382–0.618·XA    · C=0.382–0.886·AB · D=1.618·XA ext (âncora) · CD=2.618–3.618·BC
-//   CYPHER    B=0.382–0.618·XA    · C=1.13–1.414·XA ext (C ALÉM de A — única
-//             estrutura diferente) · D=0.786·XC (âncora — medido sobre XC,
-//             não XA; regra própria do Cypher)
+//   CYPHER    B=0.382–0.618·XA    · C=1.13–1.414·XA ext (C ALÉM de A —
+//             estrutura de extensão) · D=0.786·XC (âncora — medido sobre
+//             XC, não XA; regra própria do Cypher)
+//   SHARK     (Carney 2011, notação O-X-A-B-C mapeada nos MESMOS slots
+//             X..D deste contrato): perna 3 estende a perna 2 em
+//             1.13–1.618 (nossa BC/AB); perna 4 estende a perna 3 em
+//             1.618–2.24 (nossa CD/BC); o ponto final completa em
+//             0.886–1.13 da perna inicial (nossa AD/XA). Mesma estrutura
+//             de extensão do Cypher (C além de A).
+//   AB=CD     (4 pontos reais — X é honestamente ausente no contrato):
+//             BC=0.382–0.886·AB (ideal 0.618) · CD=AB (âncora 1.0 —
+//             a igualdade que dá nome ao padrão; a tolerância documentada
+//             é a janela de aderência, nunca uma "variante" inventada).
 //
 // HONESTIDADE (Regra de Ouro 2, inegociável): fitScore é ADERÊNCIA DE
 // RAZÃO — o quão perto as pernas medidas estão das razões definidas do
@@ -35,8 +45,9 @@
 // O fitScore aqui também é ADERÊNCIA GEOMÉTRICA (overshoot dentro da banda
 // documentada + cunha convergente) — nunca probabilidade. O preço EPA
 // exposto é a linha 1→4 avaliada no TEMPO do ponto 5 (geometria real
-// consumada); projetá-la para um tempo futuro exigiria assumir QUANDO o
-// preço chega lá — isso é papel da ETA, não deste detector.
+// consumada). A ETA canônica da Wolfe (Consolidação Final §6) é o ÁPICE da
+// cunha — o cruzamento das linhas 1→3 e 2→4, também geometria real dos
+// pivôs (etaIndex) — exposta apenas quando está à frente do ponto 5.
 import { findSwings, FRACTAL_K } from "../../../src/research/engines/fractal-swings.js";
 
 export const HARMONIC_CONTRACT_VERSION = 1 as const;
@@ -48,7 +59,15 @@ export const MIN_FIT_SCORE = 0.75;
 // Quantos pivôs recentes entram na varredura (janelas de 5 consecutivos).
 const MAX_PIVOTS_SCANNED = 12;
 
-export type HarmonicPatternName = "GARTLEY" | "BAT" | "BUTTERFLY" | "CRAB" | "CYPHER" | "WOLFE";
+export type HarmonicPatternName =
+  | "GARTLEY"
+  | "BAT"
+  | "BUTTERFLY"
+  | "CRAB"
+  | "CYPHER"
+  | "SHARK"
+  | "ABCD"
+  | "WOLFE";
 
 export interface HarmonicPoint {
   index: number; // índice do candle onde o swing confirmou
@@ -62,10 +81,12 @@ export interface HarmonicPatternHit {
   // reversão para cima); BEARISH espelhado. É a convenção do PADRÃO —
   // display-only, nunca uma segunda decisão de trading (LEI 24).
   direction: "BULLISH" | "BEARISH";
-  // XABCD para os 5 harmônicos de razão; para WOLFE os mesmos slots
-  // carregam os pontos 1..5 (X=1, A=2, B=3, C=4, D=5 — mesma ordem
-  // temporal alternada, zero segundo formato de contrato).
-  points: { X: HarmonicPoint; A: HarmonicPoint; B: HarmonicPoint; C: HarmonicPoint; D: HarmonicPoint };
+  // XABCD para os harmônicos de razão de 5 pontos; para WOLFE os mesmos
+  // slots carregam os pontos 1..5 (X=1, A=2, B=3, C=4, D=5 — mesma ordem
+  // temporal alternada, zero segundo formato de contrato). Para AB=CD
+  // (4 pontos reais) o X é honestamente AUSENTE — nunca um ponto
+  // duplicado/fabricado para preencher o slot.
+  points: { X?: HarmonicPoint; A: HarmonicPoint; B: HarmonicPoint; C: HarmonicPoint; D: HarmonicPoint };
   // Razões realmente medidas (verificáveis contra a tabela do cabeçalho).
   // Para WOLFE: overshoot do ponto 5 além da linha 1→3 (fração da altura
   // da cunha) e razão de convergência das linhas.
@@ -75,6 +96,13 @@ export interface HarmonicPatternHit {
   // Só WOLFE: preço da linha EPA (1→4) avaliada no tempo do ponto 5 —
   // o alvo clássico do padrão, geometria real consumada (ver cabeçalho).
   epaPrice?: number;
+  // Só WOLFE (§ ETA, terminologia canônica do padrão): índice FRACIONÁRIO
+  // de barra onde as linhas 1→3 e 2→4 se cruzam (o ápice da cunha) — a
+  // literatura usa esse cruzamento como o tempo estimado de chegada à EPA.
+  // Presente apenas quando o ápice está À FRENTE do ponto 5 (um ápice no
+  // passado não é uma ETA honesta). É geometria real dos pivôs — nunca
+  // uma previsão fabricada; a UI o apresenta como "≈" e o rótulo diz isso.
+  etaIndex?: number;
 }
 
 interface RatioSpec {
@@ -144,6 +172,35 @@ const PATTERNS: PatternSpec[] = [
       { key: "CD_XC", kind: "ideal", ideal: 0.786, tol: 0.06 },
     ],
   },
+  {
+    // SHARK (Carney 2011; Diretriz Mestra Consolidação Final §5) — pontos
+    // canônicos O-X-A-B-C mapeados nos nossos slots X-A-B-C-D (mesma ordem
+    // temporal alternada). Regras reais confirmadas por pesquisa (ver PR):
+    //   deles AB estende XA 1.13–1.618  => nosso BC_AB ∈ [1.13, 1.618]
+    //   deles BC estende AB 1.618–2.24  => nosso CD_BC ∈ [1.618, 2.24]
+    //   deles C completa 0.886–1.13 de OX => nosso AD_XA ∈ [0.886, 1.13]
+    // A extensão >1 do "AB deles" além do início da perna é exatamente o
+    // shape com C além de A (o mesmo grupo geométrico do Cypher).
+    name: "SHARK",
+    cypherShape: true,
+    rules: [
+      { key: "BC_AB", kind: "range", min: 1.13, max: 1.618, hardTol: RANGE_HARD_TOL },
+      { key: "CD_BC", kind: "range", min: 1.618, max: 2.24, hardTol: RANGE_HARD_TOL },
+      { key: "AD_XA", kind: "range", min: 0.886, max: 1.13, hardTol: RANGE_HARD_TOL },
+    ],
+  },
+];
+
+// AB=CD (Diretriz Mestra Consolidação Final §5) — o único padrão de 4
+// pontos reais da família. Regras clássicas confirmadas por pesquisa (ver
+// PR): BC retrai AB em 0.382–0.886 (ideal 0.618) e CD ≈ AB (a igualdade
+// que dá nome ao padrão; a tolerância de ±10% é a janela de aderência
+// prática — o fitScore mede exatamente o desvio dela, nunca uma
+// probabilidade). Detector próprio de janela de 4 pivôs — o slot X fica
+// honestamente ausente no hit (ver comentário do contrato).
+const ABCD_RULES: RatioSpec[] = [
+  { key: "BC_AB", kind: "range", min: 0.382, max: 0.886, hardTol: RANGE_HARD_TOL },
+  { key: "CD_AB", kind: "ideal", ideal: 1.0, tol: 0.1 },
 ];
 
 const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -261,10 +318,57 @@ export function detectHarmonicPatterns(
     }
   }
 
+  // AB=CD (§5): janela própria de 4 pivôs, mesmas regras de frescor.
+  hits.push(...detectAbcdInPivots(pivots));
+
   // Wolfe Waves (§9): mesma varredura de pivôs, geometria própria.
   hits.push(...detectWolfeInPivots(pivots));
 
   return hits.sort((a, b) => b.fitScore - a.fitScore).slice(0, Math.max(0, maxPatterns));
+}
+
+// AB=CD: varredura de janelas de 4 pivôs alternados (A,B,C,D). Direção
+// pela convenção do padrão: D fundo => BULLISH (reversão para cima
+// esperada), D topo => BEARISH — display-only, nunca decisão (LEI 24).
+function detectAbcdInPivots(pivots: Array<HarmonicPoint & { type: "H" | "L" }>): HarmonicPatternHit[] {
+  const hits: HarmonicPatternHit[] = [];
+  for (let end = 3; end < pivots.length; end++) {
+    if (end < pivots.length - 2) continue; // frescor: D no último/penúltimo pivô (mesma regra dos XABCD)
+    const [A, B, C, D] = pivots.slice(end - 3, end + 1);
+    const AB = Math.abs(A.price - B.price);
+    const BC = Math.abs(C.price - B.price);
+    const CD = Math.abs(C.price - D.price);
+    if (AB <= 0 || BC <= 0 || CD <= 0) continue;
+    const ratios: Record<string, number> = { BC_AB: BC / AB, CD_AB: CD / AB };
+    let devSum = 0;
+    let rejected = false;
+    for (const rule of ABCD_RULES) {
+      const d = scoreRule(rule, ratios[rule.key]);
+      if (d === null) {
+        rejected = true;
+        break;
+      }
+      devSum += d;
+    }
+    if (rejected) continue;
+    const fitScore = 1 - devSum / ABCD_RULES.length;
+    if (fitScore < MIN_FIT_SCORE) continue;
+    hits.push({
+      contractVersion: HARMONIC_CONTRACT_VERSION,
+      pattern: "ABCD",
+      direction: D.type === "L" ? "BULLISH" : "BEARISH",
+      points: {
+        A: { index: A.index, price: A.price },
+        B: { index: B.index, price: B.price },
+        C: { index: C.index, price: C.price },
+        D: { index: D.index, price: D.price },
+      },
+      ratios,
+      fitScore,
+      completedAtIndex: D.index,
+    });
+  }
+  return hits;
 }
 
 // Bandas geométricas documentadas da Wolfe (parâmetros declarados, mesma
@@ -272,10 +376,17 @@ export function detectHarmonicPatterns(
 //   overshoot do ponto 5 além da linha 1→3, como fração da altura da cunha
 //   no tempo de 5: aceito em [-0.05, 0.50] (levemente aquém até metade da
 //   altura além), ideal em [0, 0.25] — a "sweet zone" da literatura.
-//   convergência: |slope(2→4)| / |slope(1→3)| em (0, 1) — a cunha precisa
-//   estreitar; ideal em [0.2, 0.9].
+//   convergência: |slope(2→4)| / |slope(1→3)| — a cunha precisa ESTREITAR
+//   para frente, e isso exige a linha 2→4 mais íngreme que a 1→3 (razão
+//   > 1): o gap entre as linhas é L24−L13 e a derivada dele é s24−s13 —
+//   com as duas descendo (bullish), só encolhe quando |s24| > |s13|.
+//   CORREÇÃO REAL (Consolidação Final §6): a primeira versão exigia razão
+//   em (0, 1) — aceitava cunhas que ALARGAM (ápice no passado) e rejeitava
+//   as convergentes canônicas. O bug foi exposto ao derivar a ETA (ápice =
+//   cruzamento 1→3 × 2→4, que precisa estar À FRENTE do ponto 5). Janela
+//   corrigida: (1.001, 50], ideal [1.1, 5].
 const WOLFE_OVERSHOOT_WINDOW = { min: -0.05, max: 0.5, idealMin: 0, idealMax: 0.25 };
-const WOLFE_CONVERGENCE_WINDOW = { min: 0.02, max: 0.999, idealMin: 0.2, idealMax: 0.9 };
+const WOLFE_CONVERGENCE_WINDOW = { min: 1.001, max: 50, idealMin: 1.1, idealMax: 5 };
 
 function bandDeviation(v: number, w: { min: number; max: number; idealMin: number; idealMax: number }): number | null {
   if (!fin(v) || v < w.min || v > w.max) return null; // fora da janela dura => rejeita
@@ -321,6 +432,19 @@ function detectWolfeInPivots(pivots: Array<HarmonicPoint & { type: "H" | "L" }>)
     const slope14 = (p4.price - p1.price) / Math.max(1, p4.index - p1.index);
     const epaPrice = p1.price + slope14 * (p5.index - p1.index);
 
+    // ETA canônica da Wolfe (Diretriz Mestra §6): o ápice da cunha — o
+    // índice (fracionário) onde as linhas 1→3 e 2→4 se cruzam. Geometria
+    // real dos pivôs, nunca previsão: só é exposta quando o ápice está À
+    // FRENTE do ponto 5 (cruzamento no passado não é uma ETA honesta).
+    // Denominador nunca ~0 aqui: a janela de convergência já exigiu
+    // |slope24| < |slope13| com o mesmo sinal (cunha real).
+    const slopeGap = slope13 - slope24;
+    let etaIndex: number | undefined;
+    if (Math.abs(slopeGap) > 1e-12) {
+      const apex = (p2.price - slope24 * p2.index - p1.price + slope13 * p1.index) / slopeGap;
+      if (Number.isFinite(apex) && apex > p5.index) etaIndex = apex;
+    }
+
     hits.push({
       contractVersion: HARMONIC_CONTRACT_VERSION,
       pattern: "WOLFE",
@@ -336,6 +460,7 @@ function detectWolfeInPivots(pivots: Array<HarmonicPoint & { type: "H" | "L" }>)
       fitScore,
       completedAtIndex: p5.index,
       epaPrice,
+      etaIndex,
     });
   }
   return hits;
