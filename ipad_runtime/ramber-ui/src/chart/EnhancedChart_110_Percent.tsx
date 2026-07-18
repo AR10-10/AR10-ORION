@@ -253,6 +253,14 @@ interface EnhancedChartProps {
   nexusLineState?: DirectionalLineState | null;
 }
 
+// Continuidade §6 (hierarquia visual dos alvos): quando dois níveis
+// adjacentes do plano (stop efetivo + alvos) ficam a menos deste limiar
+// (% do preço médio do par) um do outro, os rótulos de TODOS os alvos
+// entram no modo compacto — label + distância + ETA, sem basis/R:R (que
+// continuam no Trade Plan strip e nos painéis). As LINHAS permanecem
+// ancoradas no preço real: o preço matemático nunca muda para caber.
+const TARGET_LABEL_COMPACT_PCT = 0.35;
+
 // §22: paleta institucional de estado + seta discreta. A NL usa a mesma
 // paleta com opacidade menor — §29 "nunca competir visualmente com a VWAP".
 const LINE_STATE_GLYPH: Record<DirectionalLineState, string> = { BULLISH: "↑", BEARISH: "↓", NEUTRAL: "•" };
@@ -1006,6 +1014,15 @@ export function EnhancedChart_110_Percent({
       title: stopHitNow ? `${stopTitle} · BREACHED` : stopTitle,
     });
     const multi = tradePlan.targets.length > 1;
+    // Continuidade §6: níveis apertados => rótulos compactos (nunca preço
+    // deslocado). O stop EFETIVO entra na medição — o ratchet de
+    // break-even pode encostá-lo num alvo real.
+    const levels = [effectiveStopPrice, ...tradePlan.targets.map((t) => t.price)].sort((a, b) => a - b);
+    const compactLabels = levels.some((price, i) => {
+      if (i === 0) return false;
+      const ref = (price + levels[i - 1]) / 2;
+      return ref > 0 && ((price - levels[i - 1]) * 100) / ref < TARGET_LABEL_COMPACT_PCT;
+    });
     tradePlan.targets.forEach((target, i) => {
       const line = targetLinesArrayRef.current[i];
       if (!line) return;
@@ -1021,7 +1038,9 @@ export function EnhancedChart_110_Percent({
         fusedTarget && Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)
           ? formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)
           : null;
-      const title = `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}`;
+      const title = compactLabels
+        ? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}`
+        : `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}`;
       line.applyOptions({
         color: reached ? "rgba(0, 255, 170, 1)" : "rgba(0, 255, 170, 0.75)",
         title: reached ? `${title} · REACHED` : title,

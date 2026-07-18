@@ -439,3 +439,21 @@ describe('Continuidade §5: o cartão VWAP exibe o VALOR real + estado COMPRADOR
     expect(a).toContain('{nexusConfluence === "ALINHADA" ? " ✓" : " ⚠"}');
   });
 });
+
+// ─── Continuidade Final §6: rótulos compactos condicionais dos alvos ───
+describe('Continuidade §6: níveis apertados => rótulos TP compactos, preço NUNCA deslocado', () => {
+  it('limiar documentado + medição inclui o stop EFETIVO (ratchet pode encostar num alvo)', () => {
+    const c = chart();
+    expect(c).toContain('const TARGET_LABEL_COMPACT_PCT = 0.35;');
+    expect(c).toContain('const levels = [effectiveStopPrice, ...tradePlan.targets.map((t) => t.price)].sort((a, b) => a - b);');
+    expect(c).toContain('((price - levels[i - 1]) * 100) / ref < TARGET_LABEL_COMPACT_PCT');
+  });
+
+  it('modo compacto: label + distância + ETA (basis/R:R seguem no strip); modo cheio inalterado', () => {
+    const c = chart();
+    expect(c).toContain('? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}`');
+    expect(c).toContain(': `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
+    // a âncora do preço real permanece: applyOptions nunca recebe um price deslocado no título compacto
+    expect(c).toContain('ancoradas no preço real: o preço matemático nunca muda para caber');
+  });
+});
