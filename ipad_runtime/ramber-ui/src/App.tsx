@@ -127,6 +127,9 @@ import { detectHarmonicPatterns, MIN_FIT_SCORE } from "./nexus/harmonic-patterns
 import { computeSessionVwapSeries, latestVwap } from "./nexus/vwap";
 import { computeVwapContext, type VwapContext, type DirectionalLineState } from "./nexus/vwap-state";
 import { computeNexusLineSeries, latestNexusLine, nexusLineState, nexusConfluenceVerdict } from "./nexus/nexus-line";
+// Evolução Integrativa §7: Operational Readability Layer — NexusDecision
+// vira apresentação num módulo puro nomeado (zero matemática de direção).
+import { buildOperationalSummary } from "./nexus/operational-readability";
 import { marketSessionFromUtc } from "./nexus/market-session";
 import { computeHeatScore } from "./nexus/heat-score";
 import { buildNexusDecision, NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./nexus/decision-layer";
@@ -4118,27 +4121,11 @@ function CoreSignalBadge({
 }) {
   const isLong = direction === "LONG";
   const isShort = direction === "SHORT";
-  const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
-  const fusedTitle = decision
-    ? [
-        `NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24) · Estado: ${decision.operationalState}`,
-        `Confiança: ${decision.confidenceLabel ?? DASH} · Score ${decision.score ?? DASH}${decision.scoreZone ? ` (${decision.scoreZone})` : ""}${decision.scoreTrend ? ` · ${decision.scoreTrend}` : ""} — confluência real, nunca probabilidade`,
-        decision.plan
-          ? `Entrada: ${f(decision.plan.entryLow)}–${f(decision.plan.entryHigh)} (${decision.plan.entryBasis}) · Stop: ${f(decision.plan.stopPrice)} (${decision.plan.stopBasis})`
-          : `Plano: ${decision.planGap ? NEXUS_PLAN_GAP_LABEL[decision.planGap] : DASH}`,
-        ...(decision.plan
-          ? decision.plan.targets.map(
-              (t, i) =>
-                `TP${i + 1}: ${f(t.price)} (${t.basis})${t.riskReward !== null ? ` · R:R 1:${t.riskReward.toFixed(2)}` : ""}${formatEtaRange(t.etaMsMin, t.etaMs) ? ` · ETA ${formatEtaRange(t.etaMsMin, t.etaMs)}` : ""}${t.hit ? " · ATINGIDO" : ""}`,
-            )
-          : []),
-        decision.reason ? `Motivo: ${decision.reason} (${decision.reasonBasis ?? "base real"})` : null,
-        decision.reasonsFor.length > 0 ? `Favoráveis: ${decision.reasonsFor.join(" · ")}` : null,
-        decision.reasonsAgainst.length > 0 ? `Contrários: ${decision.reasonsAgainst.join(" · ")}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n")
-    : "Core Engine — primary directional read (mathematical S/R + structure classifier)";
+  // Evolução Integrativa §7: a montagem multi-linha foi REALOCADA para a
+  // Operational Readability Layer (nexus/operational-readability.ts) —
+  // camada nomeada, pura e com execução real de teste. Conteúdo idêntico;
+  // o badge só exibe (§7: consumidores nunca reinterpretam).
+  const fusedTitle = buildOperationalSummary(decision).join("\n");
   const textTone = isLong
     ? "text-[#00ffaa] drop-shadow-[0_0_10px_rgba(0,255,170,0.65)]"
     : isShort

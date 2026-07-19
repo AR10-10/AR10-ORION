@@ -234,13 +234,18 @@ describe('Nexus Decision Layer: leitura única fundida, computada 1x e exposta n
     expect(ctx![1]).toContain('nexusDecision,');
   });
 
-  it('tooltip do CoreSignalBadge conta o raciocínio completo — zero pixel novo (§6: fusão nunca vira poluição)', () => {
+  it('tooltip do CoreSignalBadge consome a Operational Readability Layer (§7 Evolução Integrativa) — zero montagem inline', () => {
     const a = app();
     expect(a).toContain('decision?: NexusDecision | null;');
-    expect(a).toContain('NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24)');
-    expect(a).toContain('confluência real, nunca probabilidade');
+    // realocado (nunca apagado): a montagem vive no módulo nomeado; o
+    // conteúdo das linhas é travado por EXECUÇÃO REAL no teste do módulo.
+    expect(a).toContain('const fusedTitle = buildOperationalSummary(decision).join("\\n");');
+    expect(a).not.toContain('NEXUS DECISION · Operação: ${'); // inline extinto no App
     expect(a).toContain('title={fusedTitle}');
     expect(a).toContain('decision={nexusDecision ?? null}');
+    const layer = read('../src/nexus/operational-readability.ts');
+    expect(layer).toContain('NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24)');
+    expect(layer).toContain('confluência real, nunca probabilidade');
   });
 
   it('LEI 24 no nível do fonte: o módulo de fusão nunca escreve em motor/planos — só lê e empacota', () => {
@@ -267,9 +272,11 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
   it('badge herói: estado no subtítulo existente e tooltip com Estado + Favoráveis/Contrários', () => {
     const a = app();
     expect(a).toContain('{decision?.operationalState ? ` · ${decision.operationalState}` : ""}');
-    expect(a).toContain('· Estado: ${decision.operationalState}');
-    expect(a).toContain('`Favoráveis: ${decision.reasonsFor.join(" · ")}`');
-    expect(a).toContain('`Contrários: ${decision.reasonsAgainst.join(" · ")}`');
+    // §7: Estado/Favoráveis/Contrários agora nascem na Readability Layer
+    const layer = read('../src/nexus/operational-readability.ts');
+    expect(layer).toContain('· Estado: ${decision.operationalState}');
+    expect(layer).toContain('`Favoráveis: ${decision.reasonsFor.join(" · ")}`');
+    expect(layer).toContain('`Contrários: ${decision.reasonsAgainst.join(" · ")}`');
   });
 });
 
