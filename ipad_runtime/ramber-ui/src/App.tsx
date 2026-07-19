@@ -887,6 +887,17 @@ export default function App() {
     volumeProfileLastComputeRef.current = 0;
     orderflowThresholdStateRef.current = EMPTY_THRESHOLD_STATE;
     pendingLargeTradesRef.current = [];
+    // Evolução Profunda §11/§13-J (achado real de auditoria): trackRecord é
+    // uma fatia GLOBAL única (hitRate/targetHits/stopHits agregados), não
+    // escopada por ativo — trackPlanTransition já marca o plano antigo
+    // REPLACED corretamente na troca, mas os AGREGADOS de acerto do ativo
+    // ANTERIOR seguiam contando para o novo. multiTimeframeContext também
+    // é buscado só por [selectedAsset] (efeito abaixo) — sem limpar aqui, a
+    // Matriz do ativo antigo ficava visível até a primeira leitura real do
+    // novo resolver (mesmo padrão de "tela em branco até dado real" já
+    // usado acima para price/chartData/orderBook).
+    useUnifiedSnapshotStore.getState().resetTrackRecord();
+    useUnifiedSnapshotStore.getState().setMultiTimeframeContext(null);
   }, [selectedAsset]);
 
   useEffect(() => {
@@ -1645,6 +1656,11 @@ export default function App() {
   // faltava. Idempotente quando os dois disparam juntos.
   useEffect(() => {
     useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();
+    // Evolução Profunda §13-K: o mesmo racional do Score Geral vale para o
+    // track record — trocar o timeframe muda o regime de leitura (S/R,
+    // estrutura, plano) mesmo no mesmo ativo, então acertos/erros de 15m
+    // não podem contar como se fossem de 1H.
+    useUnifiedSnapshotStore.getState().resetTrackRecord();
   }, [chartTimeframe]);
 
   // Diretriz Evolução Contínua §3/§4: cada mudança real do ponto de vista

@@ -8,6 +8,7 @@ import { buildNexusDecision } from '../src/nexus/decision-layer';
 import {
   buildOperationalSummary,
   deriveOutcomeLabel,
+  deriveSetupState,
   READABILITY_FALLBACK_LINE,
 } from '../src/nexus/operational-readability';
 import type { TradePlan } from '../src/nexus/trade-plan';
@@ -63,12 +64,14 @@ describe('buildOperationalSummary: o "bateu o olho" (§6) por execução real', 
     expect(lines[0]).toBe('NEXUS DECISION · Operação: LONG (fonte: Core Engine — LEI 24) · Estado: GERENCIANDO');
     // §7/§9 Omega Core: BIAS×ENTRY já reconciliados (GERENCIANDO = timing confirmado) => rótulo puro "LONG", sem cláusula de aguardo
     expect(lines[1]).toBe('Leitura: LONG');
-    expect(lines[2]).toContain('Confiança: ALTA · Score 72 (ZONA FORTE) · FORTALECENDO — confluência real, nunca probabilidade');
-    expect(lines[3]).toBe('Entrada: 99.00–100.00 (OB_BULLISH) · Stop: 95.00 (SR_SUPPORT_1)');
+    // Evolução Profunda §2/§3: SETUP separado de BIAS/ENTRY — GERENCIANDO já é ENTRY confirmado, então o eixo SETUP também resolve para o rótulo direcional puro
+    expect(lines[2]).toBe('Setup: LONG_SETUP — estrutura real de compra ativa (entrada/stop/alvo mapeados)');
+    expect(lines[3]).toContain('Confiança: ALTA · Score 72 (ZONA FORTE) · FORTALECENDO — confluência real, nunca probabilidade');
+    expect(lines[4]).toBe('Entrada: 99.00–100.00 (OB_BULLISH) · Stop: 95.00 (SR_SUPPORT_1)');
     // f(): < 1000 com 2 casas, >= 1000 sem casas — a convenção do cockpit
-    expect(lines[4]).toBe('TP1: 105.00 (VP_POC) · R:R 1:1.22 · ETA ≈ 5m–10m · ATINGIDO');
-    expect(lines[5]).toBe('TP2: 64100 (EQH) · R:R 1:2.44'); // sem ETA real => sem sufixo fabricado
-    expect(lines[6]).toBe('Motivo: Compra favorecida. (conselho LONG + fluxo real)');
+    expect(lines[5]).toBe('TP1: 105.00 (VP_POC) · R:R 1:1.22 · ETA ≈ 5m–10m · ATINGIDO');
+    expect(lines[6]).toBe('TP2: 64100 (EQH) · R:R 1:2.44'); // sem ETA real => sem sufixo fabricado
+    expect(lines[7]).toBe('Motivo: Compra favorecida. (conselho LONG + fluxo real)');
     expect(lines.find((l) => l.startsWith('Favoráveis:'))).toContain('estrutura real de alta (Conselho·STRUCTURE)');
     expect(lines.find((l) => l.startsWith('Contrários:'))).toContain('3/9 prazos concordam (Conviction·MULTI_TIMEFRAME)');
   });
@@ -100,6 +103,54 @@ describe('buildOperationalSummary: o "bateu o olho" (§6) por execução real', 
     );
     expect(justResolved.operationalState).toBe('ENCERRADO');
     expect(deriveOutcomeLabel(justResolved)).toBe('OBSERVAR');
+  });
+
+  it('Evolução Profunda §2/§3: SETUP é um terceiro eixo, separado de BIAS e ENTRY — plano real mas fora da zona (CONFIRMANDO) => WAITING_FOR_RETEST', () => {
+    const waiting = buildNexusDecision({ ...inputs, targetsHit: 0, inEntryZone: false });
+    expect(waiting.operationalState).toBe('CONFIRMANDO');
+    expect(deriveSetupState(waiting)).toBe('WAITING_FOR_RETEST');
+  });
+
+  it('SETUP espelhado em SHORT: direção lida da geometria real do plano (stop acima da entrada), nunca de `operation`', () => {
+    const shortPlan: TradePlan = {
+      contractVersion: 2,
+      direction: 'SHORT',
+      entry: { low: 100, high: 101, basis: 'OB_BEARISH' },
+      stop: { price: 105, basis: 'SR_RESISTANCE_1' },
+      targets: [{ price: 95, basis: 'SR_SUPPORT_1' }],
+      riskRewardRatios: [1.5],
+      computedAt: 0,
+    };
+    const d = buildNexusDecision({ ...inputs, coreDirection: 'SHORT', plan: shortPlan, councilStance: 'SHORT', targetsHit: 1 });
+    expect(d.operationalState).toBe('GERENCIANDO');
+    expect(deriveSetupState(d)).toBe('SHORT_SETUP');
+  });
+
+  it('SETUP: plano do Conselho na direção oposta ao Núcleo (DIRECTION_CONFLICT) => INVALIDATED', () => {
+    const conflictingPlan: TradePlan = {
+      contractVersion: 2,
+      direction: 'SHORT',
+      entry: { low: 100, high: 101, basis: 'OB_BEARISH' },
+      stop: { price: 105, basis: 'SR_RESISTANCE_1' },
+      targets: [{ price: 95, basis: 'SR_SUPPORT_1' }],
+      riskRewardRatios: [1.5],
+      computedAt: 0,
+    };
+    const d = buildNexusDecision({ ...inputs, coreDirection: 'LONG', plan: conflictingPlan });
+    expect(d.planGap).toBe('DIRECTION_CONFLICT');
+    expect(deriveSetupState(d)).toBe('INVALIDATED');
+  });
+
+  it('SETUP: Conselho travado por risco (sem plano ainda) => WAITING_FOR_CONFIRMATION, distinto de NO_VALID_SETUP', () => {
+    const gated = buildNexusDecision({ ...inputs, plan: null, councilRiskGated: true, targetsHit: 0 });
+    expect(gated.planGap).toBe('RISK_GATED');
+    expect(deriveSetupState(gated)).toBe('WAITING_FOR_CONFIRMATION');
+  });
+
+  it('SETUP: Conselho real e direcional mas nenhuma estrutura mapeada (NO_STRUCTURE) => NO_VALID_SETUP', () => {
+    const noStructure = buildNexusDecision({ ...inputs, plan: null, councilStance: 'LONG', councilRiskGated: false, targetsHit: 0 });
+    expect(noStructure.planGap).toBe('NO_STRUCTURE');
+    expect(deriveSetupState(noStructure)).toBe('NO_VALID_SETUP');
   });
 
   it('AGUARDAR sem plano: a linha de plano carrega o motivo NOMEADO do gap (nunca dash mudo com causa conhecida)', () => {

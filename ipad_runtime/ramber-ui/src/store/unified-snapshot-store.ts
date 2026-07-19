@@ -318,6 +318,15 @@ interface UnifiedSnapshotActions {
   // nunca reescreve (memória jamais altera o histórico retroativamente).
   stampPlanOpenContext: (ctx: PlanOpenContext) => void;
   hydrateTrackRecord: (state: TrackRecordState) => void;
+  // Evolução Profunda §11/§13-J/K: o track record é uma fatia GLOBAL única
+  // (não escopada por ativo/timeframe) — sem este reset, estatísticas
+  // agregadas (hitRate/targetHits/stopHits) de um ativo/prazo vazavam para
+  // o próximo (achado real de auditoria; trackPlanTransition já marca o
+  // plano antigo REPLACED corretamente, mas os agregados persistiam).
+  // Chamado nos mesmos dois efeitos de troca que já zeram outras séries
+  // escopadas (resetL2History/resetOrderflowHistory no ativo,
+  // resetInstitutionalScoreHistory no timeframe).
+  resetTrackRecord: () => void;
 }
 
 export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnapshotActions>()(
@@ -423,6 +432,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
       s.trackRecord = stampOpenContext(s.trackRecord as TrackRecordState, ctx);
     }),
     hydrateTrackRecord: (state) => set((s) => { s.trackRecord = state; }),
+    resetTrackRecord: () => set((s) => { s.trackRecord = EMPTY_TRACK_RECORD; }),
   })),
 );
 

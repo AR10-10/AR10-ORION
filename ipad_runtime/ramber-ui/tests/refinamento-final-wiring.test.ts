@@ -51,7 +51,22 @@ describe('App: efeito único computa os 2 motores novos da MESMA série real do 
   });
 
   it('§10 Inteligência Temporal: trocar timeframe reseta a série do Score (nunca mistura regimes na tendência)', () => {
-    expect(app()).toContain('useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();\n  }, [chartTimeframe]);');
+    expect(app()).toContain('useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();');
+  });
+
+  it('Evolução Profunda §13-K: trocar timeframe também reseta o track record (acertos/erros de 15m não podem contar como 1H)', () => {
+    const a = app();
+    const m = a.match(/useEffect\(\(\) => \{\s*useUnifiedSnapshotStore\.getState\(\)\.resetInstitutionalScoreHistory\(\);[\s\S]*?\}, \[chartTimeframe\]\);/);
+    expect(m, 'efeito de reset por troca de timeframe não encontrado').not.toBeNull();
+    expect(m![0]).toContain('useUnifiedSnapshotStore.getState().resetTrackRecord();');
+  });
+
+  it('Evolução Profunda §11/§13-J: trocar de ATIVO também reseta o track record e limpa a Matriz Multi-Timeframe antiga', () => {
+    const a = app();
+    const m = a.match(/useEffect\(\(\) => \{\s*setPriceData\(null\);[\s\S]*?\}, \[selectedAsset\]\);/);
+    expect(m, 'efeito de reset por troca de ativo não encontrado').not.toBeNull();
+    expect(m![0]).toContain('useUnifiedSnapshotStore.getState().resetTrackRecord();');
+    expect(m![0]).toContain('useUnifiedSnapshotStore.getState().setMultiTimeframeContext(null);');
   });
 });
 

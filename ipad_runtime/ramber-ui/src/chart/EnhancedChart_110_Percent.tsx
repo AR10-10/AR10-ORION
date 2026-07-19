@@ -1048,6 +1048,27 @@ export function EnhancedChart_110_Percent({
     });
   }, [tradePlan, livePrice, targetsHit, decision]);
 
+  // Evolução Profunda §8/§9: auditoria confirmou que a ordem de montagem
+  // abaixo (cada plugin comentado individualmente desde suas próprias
+  // diretrizes) já corresponde, na prática, aos 4 níveis de prioridade
+  // visual pedidos — nenhuma sobreposição real encontrada, então a ordem
+  // NÃO foi alterada (§12: "preservar o que já está provado"). Mapa
+  // documentado aqui pela primeira vez, para a leitura ficar explícita:
+  //   Nível 1 (PRINCIPAL) — velas + VWAP/EMA/Nexus Line: séries NATIVAS do
+  //     lightweight-charts (não plugins deste array), vivem no próprio
+  //     pane do gráfico — sempre acima de qualquer plugin em div overlay.
+  //   Nível 2 (RISCO) — TradePlanZonePlugin (entrada/stop/TPs): montado
+  //     POR ÚLTIMO neste array de propósito (comentário original abaixo),
+  //     portanto o overlay-div mais acima de todos os outros.
+  //   Nível 3 (CONTEXTO) — LiquidityZonesPlugin (FVG/OB), VolumeProfilePlugin,
+  //     StructureBreakMarkersPlugin: estrutura/S-R/liquidez, no meio da pilha.
+  //   Nível 4 (AUXILIAR) — OrderFlowHeatmapPlugin: montado PRIMEIRO
+  //     (comentário original abaixo) — fica atrás das velas de propósito, o
+  //     mesmo padrão institucional (Bookmap-style) já documentado; Neural
+  //     Market Aura também é Nível 4 (gradiente de fundo, nunca compete
+  //     visualmente — ver comentário próprio abaixo).
+  // Harmônicos/Wolfe/ETA/Heat/Score vivem como price lines/títulos no
+  // próprio pane nativo (fio de seda), não neste array de plugins.
   return (
     <div className="absolute inset-0">
       {/* V-MAX Fase 1.2: densidade L2 + bolhas de trades grandes, ANTES do

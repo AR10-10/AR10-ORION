@@ -141,9 +141,15 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     const app = read('../src/App.tsx');
     const idx = app.indexOf('setPriceData(null);');
     expect(idx, 'efeito de reset ao trocar de ativo não encontrado').toBeGreaterThan(-1);
-    const block = app.slice(Math.max(0, idx - 30), idx + 1500);
+    // Evolução Profunda §11/§13-J acrescentou resetTrackRecord/
+    // setMultiTimeframeContext(null) real ao mesmo efeito — janela ampliada
+    // para caber o conteúdo novo (limite ainda finito: continua provando
+    // que é um efeito PRÓPRIO e contido, nunca o arquivo inteiro).
+    const block = app.slice(Math.max(0, idx - 30), idx + 2000);
     expect(block).toContain('setChartData([]);');
     expect(block).toContain('setOrderBook({ bids: [], asks: [] });');
+    expect(block).toContain('useUnifiedSnapshotStore.getState().resetTrackRecord();');
+    expect(block).toContain('useUnifiedSnapshotStore.getState().setMultiTimeframeContext(null);');
     expect(block).toMatch(/\}, \[selectedAsset\]\);/);
   });
 

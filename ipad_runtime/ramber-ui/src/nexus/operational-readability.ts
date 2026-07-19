@@ -28,7 +28,7 @@
 import { NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./decision-layer";
 import { formatEtaRange } from "./eta-engine";
 
-export const READABILITY_CONTRACT_VERSION = 2 as const;
+export const READABILITY_CONTRACT_VERSION = 3 as const;
 
 const DASH = "—"; // mesmo caractere honesto de ausência usado em todo o header
 
@@ -66,19 +66,61 @@ const OUTCOME_CLAUSE: Record<NexusOutcomeLabel, string> = {
   "SEM OPERAÇÃO": " — nenhum viés e nenhum plano neste momento",
 };
 
+// Evolução Profunda §2/§3: terceiro eixo, explicitamente SEPARADO de BIAS
+// (deriveOutcomeLabel acima) e de ENTRY (operationalState em decision-
+// layer.ts) — "existe uma ESTRUTURA que poderia permitir uma operação?".
+// Puro: deriva só de decision.plan/planGap/operationalState, já reais —
+// zero input novo, zero segunda fonte de verdade (o Trade Plan continua
+// sendo o único lugar que decide se uma estrutura é real). A direção usa
+// stopPrice vs entryLow (nunca `decision.operation`): plan pode existir
+// com operation="AGUARDAR" quando o Conselho ainda segura um plano de um
+// ciclo anterior ao Núcleo — SETUP reporta a direção da ESTRUTURA em si,
+// não presume a do Núcleo.
+export type NexusSetupState =
+  | "LONG_SETUP"
+  | "SHORT_SETUP"
+  | "WAITING_FOR_RETEST"
+  | "WAITING_FOR_CONFIRMATION"
+  | "INVALIDATED"
+  | "NO_VALID_SETUP";
+
+export function deriveSetupState(decision: NexusDecision): NexusSetupState {
+  if (decision.plan) {
+    const timingConfirmed = decision.operationalState === "EXECUTAVEL" || decision.operationalState === "GERENCIANDO";
+    if (!timingConfirmed) return "WAITING_FOR_RETEST";
+    return decision.plan.stopPrice < decision.plan.entryLow ? "LONG_SETUP" : "SHORT_SETUP";
+  }
+  if (decision.planGap === "DIRECTION_CONFLICT") return "INVALIDATED";
+  if (decision.planGap === "AWAITING_COUNCIL" || decision.planGap === "RISK_GATED" || decision.planGap === "COUNCIL_NEUTRAL") {
+    return "WAITING_FOR_CONFIRMATION";
+  }
+  return "NO_VALID_SETUP"; // NO_STRUCTURE, ou sem plano e sem gap (Núcleo em AGUARDAR)
+}
+
+const SETUP_CLAUSE: Record<NexusSetupState, string> = {
+  LONG_SETUP: "estrutura real de compra ativa (entrada/stop/alvo mapeados)",
+  SHORT_SETUP: "estrutura real de venda ativa (entrada/stop/alvo mapeados)",
+  WAITING_FOR_RETEST: "estrutura real formada — aguardando o preço voltar à zona",
+  WAITING_FOR_CONFIRMATION: "viés presente, mas confluência/estrutura ainda insuficiente",
+  INVALIDATED: "estrutura formada contradiz o viés do Núcleo — invalidada",
+  NO_VALID_SETUP: "nenhuma estrutura real mapeada agora",
+};
+
 /** Resumo operacional multi-linha do contrato fundido — a resposta do
- *  "bateu o olho" (§6): leitura BIAS×ENTRY (§7/§9), operação+estado,
- *  confiança (com o aviso real "nunca probabilidade"), plano (entrada/
- *  stop OU o motivo nomeado do gap), um TP por linha (R:R/ETA/ATINGIDO
- *  reais), motivo do assistente e as duas listas de justificativa
- *  estruturada. Linhas ausentes são omitidas — nunca preenchidas com
- *  placeholder fabricado. */
+ *  "bateu o olho" (§6): leitura BIAS×ENTRY (§7/§9), SETUP separado dos
+ *  dois (Evolução Profunda §2/§3), operação+estado, confiança (com o
+ *  aviso real "nunca probabilidade"), plano (entrada/stop OU o motivo
+ *  nomeado do gap), um TP por linha (R:R/ETA/ATINGIDO reais), motivo do
+ *  assistente e as duas listas de justificativa estruturada. Linhas
+ *  ausentes são omitidas — nunca preenchidas com placeholder fabricado. */
 export function buildOperationalSummary(decision: NexusDecision | null | undefined): string[] {
   if (!decision) return [READABILITY_FALLBACK_LINE];
   const outcome = deriveOutcomeLabel(decision);
+  const setup = deriveSetupState(decision);
   return [
     `NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24) · Estado: ${decision.operationalState}`,
     `Leitura: ${outcome}${OUTCOME_CLAUSE[outcome]}`,
+    `Setup: ${setup} — ${SETUP_CLAUSE[setup]}`,
     `Confiança: ${decision.confidenceLabel ?? DASH} · Score ${decision.score ?? DASH}${decision.scoreZone ? ` (${decision.scoreZone})` : ""}${decision.scoreTrend ? ` · ${decision.scoreTrend}` : ""} — confluência real, nunca probabilidade`,
     decision.plan
       ? `Entrada: ${f(decision.plan.entryLow)}–${f(decision.plan.entryHigh)} (${decision.plan.entryBasis}) · Stop: ${f(decision.plan.stopPrice)} (${decision.plan.stopBasis})`
