@@ -263,7 +263,44 @@ for (const vp of VIEWPORTS) {
     return out.length ? out : ["CLEAN"];
   });
 
-  const combined = [...issues, ...drawerIssues].filter((i) => i !== "CLEAN");
+  // Diretriz de Evolução Visual e Operacional Final §9: terceira passada —
+  // o painel Síntese Operacional (aba ANALYSIS) com a string mais longa
+  // REAL da tabela de Risco (dois fatores acumulados). Verificado uma vez
+  // ao vivo (wrap limpo em 2 linhas no iPad Mini); esta passada torna a
+  // verificação PERMANENTE — mesma disciplina da gaveta acima.
+  const synthOpened = await page.evaluate(() => {
+    const btn = [...document.querySelectorAll("button")].find((b) => (b.getAttribute("title") ?? "") === "ANALYSIS");
+    if (!btn) return false;
+    btn.click();
+    return true;
+  });
+  let synthIssues = ["CLEAN"];
+  if (!synthOpened) {
+    synthIssues = ["FALHA: aba ANALYSIS não encontrada"];
+  } else {
+    await page.waitForTimeout(300);
+    synthIssues = await page.evaluate(() => {
+      const out = [];
+      const rows = [...document.querySelectorAll("div")].filter((d) => d.className.includes("justify-between"));
+      const riscoRow = rows.find((d) => d.firstElementChild?.textContent?.trim() === "Risco");
+      const decisaoRow = rows.find((d) => d.firstElementChild?.textContent?.trim() === "Decisão");
+      if (!decisaoRow) return ["FALHA: painel Síntese Operacional não renderizou na ANALYSIS"];
+      // pior caso real: Risco pode estar omitido (null honesto) — clona a
+      // linha de Decisão para medir a geometria com a string mais longa.
+      const row = riscoRow ?? decisaoRow;
+      const valueSpan = row.lastElementChild;
+      if (valueSpan) valueSpan.textContent = "ELEVADO — Heat EXTREMO · R:R do TP1 abaixo do piso 1:2";
+      const rowRect = row.getBoundingClientRect();
+      const panel = row.closest("div.cyber-panel") ?? row.parentElement;
+      const panelRect = panel.getBoundingClientRect();
+      if (rowRect.right > panelRect.right + 1) out.push(`SÍNTESE: linha estoura o painel ${Math.round(rowRect.right - panelRect.right)}px`);
+      if (valueSpan && valueSpan.scrollWidth > valueSpan.clientWidth + 1) out.push(`SÍNTESE: valor clipado ${valueSpan.scrollWidth - valueSpan.clientWidth}px`);
+      if (document.body.scrollWidth > window.innerWidth + 1) out.push(`BODY overflow-x ${document.body.scrollWidth} (ANALYSIS aberta)`);
+      return out.length ? out : ["CLEAN"];
+    });
+  }
+
+  const combined = [...issues, ...drawerIssues, ...synthIssues].filter((i) => i !== "CLEAN");
   results.push({ vp: vp.name, issues: combined.length ? combined : ["CLEAN"] });
   await page.close();
 }
