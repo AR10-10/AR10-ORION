@@ -17,18 +17,18 @@
 // Fluxo (§7): NexusDecision → Operational Readability → Header/Chart/
 // Assistente. Consumidores exibem as linhas; nunca as reinterpretam.
 //
-// Omega Core §7/§9 (v2 do contrato de linhas): "A direção e o timing não
+// Omega Core §7/§9 (contrato de linhas v2+): "A direção e o timing não
 // devem ser tratados como a mesma coisa" + "Separar: BIAS de: ENTRY —
 // BIAS = LONG, ENTRY = AGUARDAR... preferir LONG + entrada confirmada a
-// LONG + entrada forçada". deriveOutcomeLabel() é a tradução PURA disso:
-// nenhum input novo, nenhuma matemática nova — só recombina operation
-// (BIAS real, passthrough do Núcleo, LEI 24) com operationalState (ENTRY
-// real, já derivado em decision-layer.ts) num rótulo de 6 valores que o
-// Operador reconhece de bate-olho sem precisar cruzar duas leituras.
+// LONG + entrada forçada". BIAS/SETUP/ENTRY (abaixo) são três eixos
+// PRÓPRIOS e independentes — cada um sua função dedicada, cada uma pura
+// (zero input novo, zero matemática nova, só releitura de campos já
+// reais do NexusDecision); deriveOutcomeLabel() é a SÍNTESE dos três num
+// rótulo de bate-olho, nunca uma quarta fonte de verdade.
 import { NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./decision-layer";
 import { formatEtaRange } from "./eta-engine";
 
-export const READABILITY_CONTRACT_VERSION = 4 as const;
+export const READABILITY_CONTRACT_VERSION = 5 as const;
 
 const DASH = "—"; // mesmo caractere honesto de ausência usado em todo o header
 
@@ -62,41 +62,24 @@ export function deriveBiasLabel(decision: NexusDecision): NexusBiasLabel {
   return decision.confidenceLabel === null && decision.score === null ? "INSUFFICIENT_DATA" : "NEUTRAL_BIAS";
 }
 
-// §7 Omega Core: o vocabulário de seis rótulos — LONG/SHORT só quando o
-// TIMING (operationalState) já confirma execução; AGUARDAR LONG/AGUARDAR
-// SHORT quando o BIAS existe mas o timing ainda não (§9, BIAS ≠ ENTRY);
-// OBSERVAR/SEM OPERAÇÃO quando o Núcleo não tem direção real (AGUARDAR).
-export type NexusOutcomeLabel = "LONG" | "SHORT" | "AGUARDAR LONG" | "AGUARDAR SHORT" | "OBSERVAR" | "SEM OPERAÇÃO";
-
-export function deriveOutcomeLabel(decision: NexusDecision): NexusOutcomeLabel {
-  const timingConfirmed = decision.operationalState === "EXECUTAVEL" || decision.operationalState === "GERENCIANDO";
-  if (decision.operation === "LONG") return timingConfirmed ? "LONG" : "AGUARDAR LONG";
-  if (decision.operation === "SHORT") return timingConfirmed ? "SHORT" : "AGUARDAR SHORT";
-  // operation === "AGUARDAR": Núcleo sem direção real agora. OBSERVANDO é
-  // o estado de repouso genuíno (nada real para acompanhar); qualquer
-  // outro estado (ex.: ENCERRADO — resolução recente) ainda vale observar.
-  return decision.operationalState === "OBSERVANDO" ? "SEM OPERAÇÃO" : "OBSERVAR";
-}
-
-const OUTCOME_CLAUSE: Record<NexusOutcomeLabel, string> = {
-  LONG: "",
-  SHORT: "",
-  "AGUARDAR LONG": " — viés real do Núcleo; entrada ainda não confirmada (BIAS ≠ ENTRY)",
-  "AGUARDAR SHORT": " — viés real do Núcleo; entrada ainda não confirmada (BIAS ≠ ENTRY)",
-  OBSERVAR: " — sem viés direcional ativo agora; leitura recente para acompanhar",
-  "SEM OPERAÇÃO": " — nenhum viés e nenhum plano neste momento",
-};
-
 // Evolução Profunda §2/§3: terceiro eixo, explicitamente SEPARADO de BIAS
-// (deriveOutcomeLabel acima) e de ENTRY (operationalState em decision-
-// layer.ts) — "existe uma ESTRUTURA que poderia permitir uma operação?".
-// Puro: deriva só de decision.plan/planGap/operationalState, já reais —
-// zero input novo, zero segunda fonte de verdade (o Trade Plan continua
-// sendo o único lugar que decide se uma estrutura é real). A direção usa
-// stopPrice vs entryLow (nunca `decision.operation`): plan pode existir
-// com operation="AGUARDAR" quando o Conselho ainda segura um plano de um
-// ciclo anterior ao Núcleo — SETUP reporta a direção da ESTRUTURA em si,
-// não presume a do Núcleo.
+// (acima) e de ENTRY (abaixo) — "existe uma ESTRUTURA que poderia
+// permitir uma operação?". Puro: deriva só de decision.plan/planGap, já
+// reais — zero input novo, zero segunda fonte de verdade (o Trade Plan
+// continua sendo o único lugar que decide se uma estrutura é real). A
+// direção usa stopPrice vs entryLow (nunca `decision.operation`): plan
+// pode existir com operation="AGUARDAR" quando o Conselho ainda segura um
+// plano de um ciclo anterior ao Núcleo — SETUP reporta a direção da
+// ESTRUTURA em si, não presume a do Núcleo.
+//
+// Fase Final de Evolução Operacional (correção real de auditoria): a
+// versão anterior exigia TIMING confirmado (operationalState EXECUTAVEL/
+// GERENCIANDO) para retornar LONG_SETUP/SHORT_SETUP — mas a própria
+// diretriz define, textualmente e duas vezes em cartas diferentes, "um
+// setup pode existir sem que a entrada esteja autorizada" / "SETUP não
+// significa que o operador deve entrar imediatamente". SETUP agora
+// reflete só a EXISTÊNCIA real da estrutura (plan !== null) — o timing
+// vira responsabilidade exclusiva de ENTRY, abaixo, nunca duplicado aqui.
 export type NexusSetupState =
   | "LONG_SETUP"
   | "SHORT_SETUP"
@@ -107,8 +90,6 @@ export type NexusSetupState =
 
 export function deriveSetupState(decision: NexusDecision): NexusSetupState {
   if (decision.plan) {
-    const timingConfirmed = decision.operationalState === "EXECUTAVEL" || decision.operationalState === "GERENCIANDO";
-    if (!timingConfirmed) return "WAITING_FOR_RETEST";
     return decision.plan.stopPrice < decision.plan.entryLow ? "LONG_SETUP" : "SHORT_SETUP";
   }
   if (decision.planGap === "DIRECTION_CONFLICT") return "INVALIDATED";
@@ -119,44 +100,95 @@ export function deriveSetupState(decision: NexusDecision): NexusSetupState {
 }
 
 const SETUP_CLAUSE: Record<NexusSetupState, string> = {
-  LONG_SETUP: "estrutura real de compra ativa (entrada/stop/alvo mapeados)",
-  SHORT_SETUP: "estrutura real de venda ativa (entrada/stop/alvo mapeados)",
-  WAITING_FOR_RETEST: "estrutura real formada — aguardando o preço voltar à zona",
+  LONG_SETUP: "estrutura real de compra mapeada (entrada/stop/alvo reais)",
+  SHORT_SETUP: "estrutura real de venda mapeada (entrada/stop/alvo reais)",
+  // Não produzido pelos motores reais atuais nesta camada de leitura — o
+  // dado real disponível não distingue "estrutura que já existiu e foi
+  // perdida, aguardando reformar" de "nenhuma estrutura ainda"; mantido
+  // no vocabulário para não quebrar o contrato de tipos, documentado
+  // honestamente como não-alcançável até essa distinção ter uma fonte
+  // real (nunca fabricada).
+  WAITING_FOR_RETEST: "estrutura anterior perdida — aguardando nova formação",
   WAITING_FOR_CONFIRMATION: "viés presente, mas confluência/estrutura ainda insuficiente",
   INVALIDATED: "estrutura formada contradiz o viés do Núcleo — invalidada",
   NO_VALID_SETUP: "nenhuma estrutura real mapeada agora",
 };
 
-// Evolução Profunda §4: ENTRY como eixo NOMEADO próprio — "o momento de
-// entrada está confirmado AGORA?". Espelho 1:1 de deriveSetupState (zero
-// matemática nova, zero input novo): SETUP já responde exatamente esta
-// pergunta por trás de outro nome ("existe configuração" vs "é hora
-// agora" colapsam na MESMA leitura real — plan/operationalState/planGap),
-// mas a diretriz pede os dois como campos INDEPENDENTES e nomeados
-// (mesmo par mostrado junto: "SETUP: LONG_SETUP" + "ENTRY: ..."). A
-// direção fica implícita em ENTRY_READY (BIAS já carrega a direção — não
-// repetir LONG/SHORT aqui evita a mesma informação em dois rótulos).
-export type NexusEntryState = "ENTRY_READY" | "ENTRY_WAIT_RETEST" | "ENTRY_WAIT_CONFIRMATION" | "ENTRY_INVALIDATED" | "NO_ENTRY";
-
-const SETUP_TO_ENTRY: Record<NexusSetupState, NexusEntryState> = {
-  LONG_SETUP: "ENTRY_READY",
-  SHORT_SETUP: "ENTRY_READY",
-  WAITING_FOR_RETEST: "ENTRY_WAIT_RETEST",
-  WAITING_FOR_CONFIRMATION: "ENTRY_WAIT_CONFIRMATION",
-  INVALIDATED: "ENTRY_INVALIDATED",
-  NO_VALID_SETUP: "NO_ENTRY",
-};
+// Fase Final de Evolução Operacional §3: ENTRY como eixo NOMEADO e
+// INDEPENDENTE — "existe confirmação suficiente para uma entrada AGORA?"
+// — nunca mais um espelho de SETUP (a versão anterior colapsava as duas
+// perguntas; a diretriz mostra explicitamente SETUP e ENTRY divergindo no
+// mesmo instante: "SETUP: SHORT_SETUP" + "ENTRY: WAITING_FOR_RETEST").
+// Vocabulário desta carta (renomeado da carta anterior: ENTRY_READY →
+// ENTRY_CONFIRMED; ENTRY_WAIT_RETEST/ENTRY_WAIT_CONFIRMATION →
+// WAITING_FOR_RETEST/WAITING_FOR_CONFIRMATION, sem prefixo). Puro: deriva
+// só de plan/operationalState/planGap, já reais — zero input novo.
+export type NexusEntryState = "ENTRY_CONFIRMED" | "WAITING_FOR_RETEST" | "WAITING_FOR_CONFIRMATION" | "ENTRY_INVALIDATED" | "NO_ENTRY";
 
 export function deriveEntryState(decision: NexusDecision): NexusEntryState {
-  return SETUP_TO_ENTRY[deriveSetupState(decision)];
+  if (decision.plan) {
+    const timingConfirmed = decision.operationalState === "EXECUTAVEL" || decision.operationalState === "GERENCIANDO";
+    // Estrutura real existe (SETUP já confirmou); o único sinal real de
+    // timing que resta é se o preço está OU NÃO na zona de entrada agora
+    // — tecnicamente um reteste (o preço precisa alcançar/retornar ao
+    // nível real mapeado), por isso "WAITING_FOR_RETEST" aqui, mesmo
+    // quando um exemplo isolado da diretriz escreveu "WAITING_FOR_
+    // CONFIRMATION" para este caso: os dados reais só sustentam UM sinal
+    // de timing pendente com plano já formado, nunca dois distintos —
+    // fabricar essa segunda distinção violaria a Regra de Ouro 2/3.
+    return timingConfirmed ? "ENTRY_CONFIRMED" : "WAITING_FOR_RETEST";
+  }
+  if (decision.planGap === "DIRECTION_CONFLICT") return "ENTRY_INVALIDATED";
+  if (decision.planGap === "AWAITING_COUNCIL" || decision.planGap === "RISK_GATED" || decision.planGap === "COUNCIL_NEUTRAL") {
+    return "WAITING_FOR_CONFIRMATION";
+  }
+  return "NO_ENTRY";
 }
 
 const ENTRY_CLAUSE: Record<NexusEntryState, string> = {
-  ENTRY_READY: "confirmação estrutural — timing agora",
-  ENTRY_WAIT_RETEST: "aguardando o preço retornar ao nível real mapeado",
-  ENTRY_WAIT_CONFIRMATION: "estrutura ainda insuficiente — timing ausente",
+  ENTRY_CONFIRMED: "confirmação estrutural — timing agora",
+  WAITING_FOR_RETEST: "aguardando o preço retornar ao nível real mapeado",
+  WAITING_FOR_CONFIRMATION: "estrutura ainda insuficiente — timing ausente",
   ENTRY_INVALIDATED: "premissa quebrada — plano contraditório",
   NO_ENTRY: "nenhuma estrutura real para avaliar timing",
+};
+
+// §7 Omega Core + Fase Final de Evolução Operacional §3: a síntese final
+// que combina BIAS×SETUP×ENTRY num só rótulo de leitura rápida. LONG/
+// SHORT só quando o TIMING (ENTRY) já confirma execução (ganha o sufixo
+// real "— PLANO ATIVO", já que timing confirmado implica plan!==null por
+// construção); AGUARDAR LONG/SHORT quando existe BIAS E uma estrutura
+// real ainda pendente de timing (SETUP direcional ou aguardando
+// confirmação — §9, BIAS ≠ ENTRY); OBSERVAR quando o BIAS existe mas NÃO
+// há nenhuma estrutura real por trás (SETUP inválido ou inexistente —
+// nunca prometer "aguarde" por algo que não existe); SEM OPERAÇÃO/
+// OBSERVAR quando o Núcleo não tem direção real (AGUARDAR).
+export type NexusOutcomeLabel = "LONG" | "SHORT" | "AGUARDAR LONG" | "AGUARDAR SHORT" | "OBSERVAR" | "SEM OPERAÇÃO";
+
+export function deriveOutcomeLabel(decision: NexusDecision): NexusOutcomeLabel {
+  const timingConfirmed = decision.operationalState === "EXECUTAVEL" || decision.operationalState === "GERENCIANDO";
+  if (decision.operation === "LONG" || decision.operation === "SHORT") {
+    if (timingConfirmed) return decision.operation;
+    const setup = deriveSetupState(decision);
+    // BIAS real, mas nenhuma estrutura real por trás dele (nunca
+    // invalidada nem inexistente) — "AGUARDAR" prometeria algo concreto
+    // que não existe; OBSERVAR é a leitura honesta.
+    if (setup === "NO_VALID_SETUP" || setup === "INVALIDATED") return "OBSERVAR";
+    return decision.operation === "LONG" ? "AGUARDAR LONG" : "AGUARDAR SHORT";
+  }
+  // operation === "AGUARDAR": Núcleo sem direção real agora. OBSERVANDO é
+  // o estado de repouso genuíno (nada real para acompanhar); qualquer
+  // outro estado (ex.: ENCERRADO — resolução recente) ainda vale observar.
+  return decision.operationalState === "OBSERVANDO" ? "SEM OPERAÇÃO" : "OBSERVAR";
+}
+
+const OUTCOME_CLAUSE: Record<NexusOutcomeLabel, string> = {
+  LONG: " — PLANO ATIVO",
+  SHORT: " — PLANO ATIVO",
+  "AGUARDAR LONG": " — viés real do Núcleo; entrada ainda não confirmada (BIAS ≠ ENTRY)",
+  "AGUARDAR SHORT": " — viés real do Núcleo; entrada ainda não confirmada (BIAS ≠ ENTRY)",
+  OBSERVAR: " — sem estrutura real para aguardar agora; leitura recente para acompanhar",
+  "SEM OPERAÇÃO": " — nenhum viés e nenhum plano neste momento",
 };
 
 /** Resumo operacional multi-linha do contrato fundido — a resposta do
