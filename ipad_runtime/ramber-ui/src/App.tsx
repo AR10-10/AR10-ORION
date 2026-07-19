@@ -6052,11 +6052,20 @@ function MiniStat({ label, value, color }: { label: string; value: string; color
 }
 
 function MarketBiasDecisionCard() {
-  const { engine, riskSuggestion, ensembleConsensus } = useContext(WidgetContext) || {};
+  const { engine, riskSuggestion, ensembleConsensus, nexusDecision } = useContext(WidgetContext) || {};
   const direction: Direction = engine?.direction ?? null;
   const isLong = direction === "LONG";
   const isShort = direction === "SHORT";
   const dirLabelColor = isLong ? "text-[#00ffaa]" : isShort ? "text-[#ff0055]" : "text-[#8ab4f8]/60";
+  // Continuidade (auditoria de sincronização, mesmo achado do badge herói):
+  // "Sinal Institucional" mostrava só o `direction` cru do Núcleo — o
+  // mesmo "LONG + entrada forçada" que a Diretriz BIAS≠ENTRY pediu para
+  // nunca comunicar sozinho. Mesmo qualificador real já testado
+  // (OUTCOME_QUALIFIER, deriveOutcomeLabel), zero matemática nova — só
+  // relocado para este segundo lugar que também é uma verdade de "DIREÇÃO"
+  // dedicada (não um detalhe entre outros, como nos cards de contexto).
+  const biasOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;
+  const biasOutcomeQualifier = biasOutcome ? (OUTCOME_QUALIFIER[biasOutcome] ?? null) : null;
   const entry: number | null = engine?.entry ?? null;
   const target: number | null = engine?.target ?? null;
   const target2: number | null = engine?.target2 ?? null;
@@ -6144,6 +6153,11 @@ function MarketBiasDecisionCard() {
         </span>
         <span className={`text-[0.75rem] font-black tracking-wide -mt-1 ${dirLabelColor}`}>
           {direction ?? AWAIT}
+          {biasOutcomeQualifier && (
+            <span className="ml-1.5 text-[0.4rem] font-bold tracking-[0.1em] text-[#8ab4f8]/60 uppercase align-middle">
+              {biasOutcomeQualifier}
+            </span>
+          )}
         </span>
 
         <MiniStat label="Conviction (Core Engine)" value={confidenceLabel} color="text-[#8ab4f8]" />

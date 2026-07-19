@@ -64,7 +64,7 @@ import { effectiveStopForTargetsHit } from "../nexus/trade-plan";
 import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
-import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
+import type { HarmonicPatternHit, HarmonicPoint } from "../nexus/harmonic-patterns";
 import type { NexusDecision } from "../nexus/decision-layer";
 import { formatEtaRange, formatEtaDuration } from "../nexus/eta-engine";
 // Research-driven precision order: VWAP, the institutional-standard
@@ -355,6 +355,15 @@ export function EnhancedChart_110_Percent({
   const scenarioLinesRef = useRef<IPriceLine[]>([]);
   const premiumDiscountLinesRef = useRef<IPriceLine[]>([]);
   const harmonicLinesRef = useRef<IPriceLine[]>([]);
+  // Continuidade (pendência honesta já documentada em 3 PRs anteriores:
+  // "polilinha XABCD/Wolfe no canvas — hoje só a linha do ponto D"): a
+  // FIGURA GEOMÉTRICA COMPLETA do melhor padrão real, não só a PRZ. Série
+  // NATIVA (mesmo padrão de EMA/Nexus Line/Trend Channel) — X/A/B/C/D já
+  // vêm em ordem temporal por construção do próprio motor (cada ponto é um
+  // swing fractal mais recente que o anterior), então uma LineSeries comum
+  // com esses pontos plotados em ordem de tempo desenha exatamente o
+  // zigue-zague clássico, zero overlay de canvas novo.
+  const harmonicPolylineRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Named refs to the stop/target lines specifically (a subset of
   // tradePlanLinesRef above) — lets the hit-boost effect below update
   // color/title in place via applyOptions() instead of tearing down and
@@ -562,6 +571,21 @@ export function EnhancedChart_110_Percent({
     trendChannelMidRef.current = trendChannelMid;
     trendChannelUpperRef.current = trendChannelUpper;
     trendChannelLowerRef.current = trendChannelLower;
+    // Continuidade: figura XABCD/Wolfe completa — mesma cor roxa da PRZ já
+    // existente (acento do Conselho/opinião agregada), um pouco mais forte
+    // no TRAÇO em si (a PRZ continua a leitura de preço mais importante).
+    // Zero rótulo de eixo/último valor: a forma da polilinha já comunica o
+    // padrão, um rótulo repetiria a mesma informação do title da PRZ.
+    const harmonicPolyline = chart.addSeries(LineSeries, {
+      color: "rgba(176, 38, 255, 0.55)",
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      title: "XABCD",
+    });
+    harmonicPolylineRef.current = harmonicPolyline;
     chartRef.current = chart;
     seriesRef.current = series;
     setChartReady({ chart, series });
@@ -584,6 +608,7 @@ export function EnhancedChart_110_Percent({
       trendChannelMidRef.current = null;
       trendChannelUpperRef.current = null;
       trendChannelLowerRef.current = null;
+      harmonicPolylineRef.current = null;
       setChartReady(null);
     };
   }, []);
@@ -972,8 +997,33 @@ export function EnhancedChart_110_Percent({
     const series = seriesRef.current;
     harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));
     harmonicLinesRef.current = [];
+    // Continuidade: limpa a polilinha ANTES do early-return abaixo — sem
+    // padrão real agora, zero figura antiga lingerindo na tela (mesmo
+    // fail-closed das price lines desta função).
+    harmonicPolylineRef.current?.setData([]);
     const top = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;
     if (!top || !Number.isFinite(top.points.D.price)) return;
+    // Continuidade: a figura XABCD/Wolfe completa — X/A/B/C/D (ou 1..5 na
+    // Wolfe) já vêm em ordem temporal crescente por construção do motor
+    // (cada pivô fractal é necessariamente mais recente que o anterior);
+    // ordenar por tempo aqui é uma trava DEFENSIVA na borda de renderização
+    // (a lib exige tempo estritamente crescente), nunca uma segunda regra
+    // de ordenação inventada. AB=CD honestamente não tem X — filtrado, nunca
+    // um ponto fabricado para "completar" a figura.
+    const rawPoints: HarmonicPoint[] = [top.points.X, top.points.A, top.points.B, top.points.C, top.points.D].filter(
+      (p): p is HarmonicPoint => p !== undefined,
+    );
+    const polylinePoints = rawPoints
+      .map((p) => {
+        const candle = data[p.index];
+        return candle && Number.isFinite(p.price) ? { time: candle.time as UTCTimestamp, value: p.price } : null;
+      })
+      .filter((p): p is { time: UTCTimestamp; value: number } => p !== null)
+      .sort((a, b) => a.time - b.time)
+      .filter((p, i, arr) => i === 0 || p.time !== arr[i - 1].time); // tempo estritamente crescente, exigência real da lib
+    if (polylinePoints.length >= 2) {
+      harmonicPolylineRef.current?.setData(polylinePoints);
+    }
     const mkH = (price: number, title: string) => {
       harmonicLinesRef.current.push(
         series.createPriceLine({

@@ -305,6 +305,21 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
     // title continua existindo (o raciocínio completo ainda está lá para desktop/mouse) — isto é ADITIVO, nunca uma substituição do tooltip
     expect(a).toContain('title={fusedTitle}');
   });
+
+  it('Continuidade (auditoria de sincronização): MarketBiasDecisionCard ("Sinal Institucional", segundo lugar dedicado a DIREÇÃO) ganha o MESMO qualificador real — reusa OUTCOME_QUALIFIER/deriveOutcomeLabel já testados, nunca uma segunda tabela/lógica', () => {
+    const a = app();
+    const idx = a.indexOf('function MarketBiasDecisionCard()');
+    const nextFnIdx = a.indexOf('\nfunction ', idx + 1);
+    expect(idx).toBeGreaterThan(-1);
+    expect(nextFnIdx).toBeGreaterThan(idx);
+    const block = a.slice(idx, nextFnIdx); // função inteira, sem chutar um tamanho de janela
+    expect(block).toContain('nexusDecision } = useContext(WidgetContext) || {};');
+    expect(block).toContain('const biasOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;');
+    expect(block).toContain('const biasOutcomeQualifier = biasOutcome ? (OUTCOME_QUALIFIER[biasOutcome] ?? null) : null;');
+    expect(block).toContain('{biasOutcomeQualifier && (');
+    // o texto grande continua o passthrough cru do Núcleo (LEI 24) — o qualificador é ADITIVO, nunca substitui `direction`
+    expect(block).toContain('{direction ?? AWAIT}');
+  });
 });
 
 // ─── Auditoria Final V-MAX — renderização ativada + persistência de prefs ───
@@ -314,13 +329,43 @@ describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no grá
     expect(c).toContain('harmonicHits?: HarmonicPatternHit[] | null;');
     const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
     expect(idx).toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 2200);
+    const block = c.slice(idx, idx + 3600);
     expect(block).toContain('const top = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;');
     expect(block).toContain('fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)');
     expect(block).toContain('`WOLFE · EPA (linha 1→4 real)${etaLabel ? ` · ETA ${etaLabel} (ápice da cunha)` : ""}`'); // §6: + ETA do ápice
     expect(block).toContain('lineStyle: LineStyle.Solid,');
     const cleanupIdx = c.indexOf('chart.remove();');
     expect(c.slice(cleanupIdx, cleanupIdx + 700)).toContain('harmonicLinesRef.current = [];');
+  });
+
+  it('Continuidade: a figura XABCD/Wolfe COMPLETA (não só o ponto D/PRZ) é uma polilinha nativa real, limpa fail-closed antes do early-return, tempo estritamente crescente na borda de renderização', () => {
+    const c = chart();
+    expect(c).toContain('const harmonicPolylineRef = useRef<ISeriesApi<"Line"> | null>(null);');
+    const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
+    const block = c.slice(idx, idx + 3600);
+    // limpa a polilinha ANTES do guard de "sem padrão" — nunca deixa uma figura velha na tela
+    const clearIdx = block.indexOf('harmonicPolylineRef.current?.setData([]);');
+    const guardIdx = block.indexOf('if (!top || !Number.isFinite(top.points.D.price)) return;');
+    expect(clearIdx).toBeGreaterThan(-1);
+    expect(guardIdx).toBeGreaterThan(clearIdx);
+    // os 5 pontos reais (X opcional/A/B/C/D), nunca um ponto fabricado para AB=CD
+    expect(block).toContain('[top.points.X, top.points.A, top.points.B, top.points.C, top.points.D].filter(');
+    expect(block).toContain('(p): p is HarmonicPoint => p !== undefined,');
+    // trava defensiva real na borda (a lib exige tempo estritamente crescente)
+    expect(block).toContain('.sort((a, b) => a.time - b.time)');
+    expect(block).toContain('i === 0 || p.time !== arr[i - 1].time');
+    expect(block).toContain('if (polylinePoints.length >= 2) {');
+    expect(block).toContain('harmonicPolylineRef.current?.setData(polylinePoints);');
+    // criada como série nativa (mesmo padrão de EMA/Nexus Line/Trend Channel) — zero rótulo de eixo/último valor
+    const seriesIdx = c.indexOf('const harmonicPolyline = chart.addSeries(LineSeries, {');
+    expect(seriesIdx).toBeGreaterThan(-1);
+    const seriesBlock = c.slice(seriesIdx, seriesIdx + 300);
+    expect(seriesBlock).toContain('priceLineVisible: false');
+    expect(seriesBlock).toContain('lastValueVisible: false');
+    expect(seriesBlock).toContain('lineStyle: LineStyle.Solid');
+    // limpa no unmount, mesma disciplina de todas as outras refs
+    const cleanupIdx = c.indexOf('chart.remove();');
+    expect(c.slice(cleanupIdx, cleanupIdx + 900)).toContain('harmonicPolylineRef.current = null;');
   });
 
   it('títulos das linhas de alvo carregam distância % ao preço VIVO + ETA em faixa do contrato fundido (guard de preço)', () => {
