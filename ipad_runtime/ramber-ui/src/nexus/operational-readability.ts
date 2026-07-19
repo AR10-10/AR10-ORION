@@ -16,10 +16,19 @@
 //
 // Fluxo (§7): NexusDecision → Operational Readability → Header/Chart/
 // Assistente. Consumidores exibem as linhas; nunca as reinterpretam.
+//
+// Omega Core §7/§9 (v2 do contrato de linhas): "A direção e o timing não
+// devem ser tratados como a mesma coisa" + "Separar: BIAS de: ENTRY —
+// BIAS = LONG, ENTRY = AGUARDAR... preferir LONG + entrada confirmada a
+// LONG + entrada forçada". deriveOutcomeLabel() é a tradução PURA disso:
+// nenhum input novo, nenhuma matemática nova — só recombina operation
+// (BIAS real, passthrough do Núcleo, LEI 24) com operationalState (ENTRY
+// real, já derivado em decision-layer.ts) num rótulo de 6 valores que o
+// Operador reconhece de bate-olho sem precisar cruzar duas leituras.
 import { NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./decision-layer";
 import { formatEtaRange } from "./eta-engine";
 
-export const READABILITY_CONTRACT_VERSION = 1 as const;
+export const READABILITY_CONTRACT_VERSION = 2 as const;
 
 const DASH = "—"; // mesmo caractere honesto de ausência usado em todo o header
 
@@ -32,16 +41,44 @@ const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
 export const READABILITY_FALLBACK_LINE =
   "Core Engine — primary directional read (mathematical S/R + structure classifier)";
 
+// §7 Omega Core: o vocabulário de seis rótulos — LONG/SHORT só quando o
+// TIMING (operationalState) já confirma execução; AGUARDAR LONG/AGUARDAR
+// SHORT quando o BIAS existe mas o timing ainda não (§9, BIAS ≠ ENTRY);
+// OBSERVAR/SEM OPERAÇÃO quando o Núcleo não tem direção real (AGUARDAR).
+export type NexusOutcomeLabel = "LONG" | "SHORT" | "AGUARDAR LONG" | "AGUARDAR SHORT" | "OBSERVAR" | "SEM OPERAÇÃO";
+
+export function deriveOutcomeLabel(decision: NexusDecision): NexusOutcomeLabel {
+  const timingConfirmed = decision.operationalState === "EXECUTAVEL" || decision.operationalState === "GERENCIANDO";
+  if (decision.operation === "LONG") return timingConfirmed ? "LONG" : "AGUARDAR LONG";
+  if (decision.operation === "SHORT") return timingConfirmed ? "SHORT" : "AGUARDAR SHORT";
+  // operation === "AGUARDAR": Núcleo sem direção real agora. OBSERVANDO é
+  // o estado de repouso genuíno (nada real para acompanhar); qualquer
+  // outro estado (ex.: ENCERRADO — resolução recente) ainda vale observar.
+  return decision.operationalState === "OBSERVANDO" ? "SEM OPERAÇÃO" : "OBSERVAR";
+}
+
+const OUTCOME_CLAUSE: Record<NexusOutcomeLabel, string> = {
+  LONG: "",
+  SHORT: "",
+  "AGUARDAR LONG": " — viés real do Núcleo; entrada ainda não confirmada (BIAS ≠ ENTRY)",
+  "AGUARDAR SHORT": " — viés real do Núcleo; entrada ainda não confirmada (BIAS ≠ ENTRY)",
+  OBSERVAR: " — sem viés direcional ativo agora; leitura recente para acompanhar",
+  "SEM OPERAÇÃO": " — nenhum viés e nenhum plano neste momento",
+};
+
 /** Resumo operacional multi-linha do contrato fundido — a resposta do
- *  "bateu o olho" (§6): operação+estado, confiança (com o aviso real
- *  "nunca probabilidade"), plano (entrada/stop OU o motivo nomeado do
- *  gap), um TP por linha (R:R/ETA/ATINGIDO reais), motivo do assistente
- *  e as duas listas de justificativa estruturada. Linhas ausentes são
- *  omitidas — nunca preenchidas com placeholder fabricado. */
+ *  "bateu o olho" (§6): leitura BIAS×ENTRY (§7/§9), operação+estado,
+ *  confiança (com o aviso real "nunca probabilidade"), plano (entrada/
+ *  stop OU o motivo nomeado do gap), um TP por linha (R:R/ETA/ATINGIDO
+ *  reais), motivo do assistente e as duas listas de justificativa
+ *  estruturada. Linhas ausentes são omitidas — nunca preenchidas com
+ *  placeholder fabricado. */
 export function buildOperationalSummary(decision: NexusDecision | null | undefined): string[] {
   if (!decision) return [READABILITY_FALLBACK_LINE];
+  const outcome = deriveOutcomeLabel(decision);
   return [
     `NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24) · Estado: ${decision.operationalState}`,
+    `Leitura: ${outcome}${OUTCOME_CLAUSE[outcome]}`,
     `Confiança: ${decision.confidenceLabel ?? DASH} · Score ${decision.score ?? DASH}${decision.scoreZone ? ` (${decision.scoreZone})` : ""}${decision.scoreTrend ? ` · ${decision.scoreTrend}` : ""} — confluência real, nunca probabilidade`,
     decision.plan
       ? `Entrada: ${f(decision.plan.entryLow)}–${f(decision.plan.entryHigh)} (${decision.plan.entryBasis}) · Stop: ${f(decision.plan.stopPrice)} (${decision.plan.stopBasis})`

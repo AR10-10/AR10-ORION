@@ -64,7 +64,8 @@ export type NexusPlanGap =
   | "AWAITING_COUNCIL" // Conselho ainda sem primeira leitura real
   | "RISK_GATED" // RiskAgent travou o Conselho (fail-closed)
   | "COUNCIL_NEUTRAL" // Conselho neutro/sem quórum (pode divergir do Núcleo — honesto)
-  | "NO_STRUCTURE"; // stance direcional mas sem estrutura real p/ entrada/stop/alvo
+  | "NO_STRUCTURE" // stance direcional mas sem estrutura real p/ entrada/stop/alvo
+  | "DIRECTION_CONFLICT"; // plano do Conselho na direção OPOSTA à operação do Núcleo (§16-8)
 
 export interface NexusDecisionTarget {
   price: number;
@@ -218,7 +219,18 @@ export function buildNexusDecision(inputs: NexusDecisionInputs, computedAt: numb
 
   let plan: NexusDecision["plan"] = null;
   let planGap: NexusPlanGap | null = null;
-  if (inputs.plan) {
+  // §16-8 (Omega Core, "não permite LONG e SHORT simultâneos"): trade-plan.ts
+  // trava pela leitura do CONSELHO, não pela do Core Engine (LEI 24) — as
+  // duas podem divergir por um ciclo real (já documentado no
+  // TradePlanTopStrip). Sem esta guarda, um plano SHORT sobreviveria um
+  // render fundido como "Operação: LONG" — a mesma tela mostrando as duas
+  // direções ao mesmo tempo. A guarda NUNCA barra o Núcleo (operation
+  // continua passthrough literal); só impede RENDERIZAR um plano cuja
+  // direção contradiz a operação — o gap fica nomeado, nunca um plano
+  // silenciosamente incoerente.
+  if (inputs.plan && operation !== "AGUARDAR" && inputs.plan.direction !== operation) {
+    planGap = "DIRECTION_CONFLICT";
+  } else if (inputs.plan) {
     const p = inputs.plan;
     const targetsHit = Math.max(0, Math.min(inputs.targetsHit, p.targets.length));
     plan = {
@@ -286,4 +298,5 @@ export const NEXUS_PLAN_GAP_LABEL: Record<NexusPlanGap, string> = {
   RISK_GATED: "Conselho travado por risco (fail-closed)",
   COUNCIL_NEUTRAL: "Conselho neutro — sem plano acionável",
   NO_STRUCTURE: "Sem estrutura real para entrada/stop/alvo",
+  DIRECTION_CONFLICT: "Plano do Conselho na direção oposta ao Núcleo — aguardando realinhamento",
 };

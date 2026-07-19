@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { buildNexusDecision } from '../src/nexus/decision-layer';
 import {
   buildOperationalSummary,
+  deriveOutcomeLabel,
   READABILITY_FALLBACK_LINE,
 } from '../src/nexus/operational-readability';
 import type { TradePlan } from '../src/nexus/trade-plan';
@@ -60,14 +61,45 @@ describe('buildOperationalSummary: o "bateu o olho" (§6) por execução real', 
   it('LONG completo: operação+estado, confiança com o aviso honesto, entrada/stop, um TP por linha (R:R/ETA/ATINGIDO), motivo e justificativas', () => {
     const lines = buildOperationalSummary(buildNexusDecision(inputs));
     expect(lines[0]).toBe('NEXUS DECISION · Operação: LONG (fonte: Core Engine — LEI 24) · Estado: GERENCIANDO');
-    expect(lines[1]).toContain('Confiança: ALTA · Score 72 (ZONA FORTE) · FORTALECENDO — confluência real, nunca probabilidade');
-    expect(lines[2]).toBe('Entrada: 99.00–100.00 (OB_BULLISH) · Stop: 95.00 (SR_SUPPORT_1)');
+    // §7/§9 Omega Core: BIAS×ENTRY já reconciliados (GERENCIANDO = timing confirmado) => rótulo puro "LONG", sem cláusula de aguardo
+    expect(lines[1]).toBe('Leitura: LONG');
+    expect(lines[2]).toContain('Confiança: ALTA · Score 72 (ZONA FORTE) · FORTALECENDO — confluência real, nunca probabilidade');
+    expect(lines[3]).toBe('Entrada: 99.00–100.00 (OB_BULLISH) · Stop: 95.00 (SR_SUPPORT_1)');
     // f(): < 1000 com 2 casas, >= 1000 sem casas — a convenção do cockpit
-    expect(lines[3]).toBe('TP1: 105.00 (VP_POC) · R:R 1:1.22 · ETA ≈ 5m–10m · ATINGIDO');
-    expect(lines[4]).toBe('TP2: 64100 (EQH) · R:R 1:2.44'); // sem ETA real => sem sufixo fabricado
-    expect(lines[5]).toBe('Motivo: Compra favorecida. (conselho LONG + fluxo real)');
+    expect(lines[4]).toBe('TP1: 105.00 (VP_POC) · R:R 1:1.22 · ETA ≈ 5m–10m · ATINGIDO');
+    expect(lines[5]).toBe('TP2: 64100 (EQH) · R:R 1:2.44'); // sem ETA real => sem sufixo fabricado
+    expect(lines[6]).toBe('Motivo: Compra favorecida. (conselho LONG + fluxo real)');
     expect(lines.find((l) => l.startsWith('Favoráveis:'))).toContain('estrutura real de alta (Conselho·STRUCTURE)');
     expect(lines.find((l) => l.startsWith('Contrários:'))).toContain('3/9 prazos concordam (Conviction·MULTI_TIMEFRAME)');
+  });
+
+  it('BIAS ≠ ENTRY (§9): Núcleo LONG mas timing ainda não confirmado (PREPARANDO/CONFIRMANDO) => "AGUARDAR LONG", nunca "LONG" liso', () => {
+    const preparing = buildNexusDecision({ ...inputs, plan: null, councilStance: null, targetsHit: 0 });
+    expect(preparing.operationalState).toBe('PREPARANDO');
+    const lines = buildOperationalSummary(preparing);
+    expect(lines[1]).toBe('Leitura: AGUARDAR LONG — viés real do Núcleo; entrada ainda não confirmada (BIAS ≠ ENTRY)');
+  });
+
+  it('BIAS ≠ ENTRY (§9) espelhado em SHORT: mesma regra, nunca uma fórmula separada por direção', () => {
+    const preparing = buildNexusDecision({ ...inputs, coreDirection: 'SHORT', plan: null, councilStance: null, targetsHit: 0 });
+    expect(preparing.operationalState).toBe('PREPARANDO');
+    const lines = buildOperationalSummary(preparing);
+    expect(lines[1]).toBe('Leitura: AGUARDAR SHORT — viés real do Núcleo; entrada ainda não confirmada (BIAS ≠ ENTRY)');
+  });
+
+  it('§7 vocabulário completo: sem direção real do Núcleo e sem qualquer estado notável => "SEM OPERAÇÃO"', () => {
+    const idle = buildNexusDecision({ ...inputs, coreDirection: null, plan: null, councilStance: null, targetsHit: 0, lastResolvedAt: null });
+    expect(idle.operationalState).toBe('OBSERVANDO');
+    expect(deriveOutcomeLabel(idle)).toBe('SEM OPERAÇÃO');
+  });
+
+  it('§7 vocabulário completo: sem direção real do Núcleo mas com resolução recente (ENCERRADO) => "OBSERVAR", nunca confundido com repouso total', () => {
+    const justResolved = buildNexusDecision(
+      { ...inputs, coreDirection: null, plan: null, councilStance: null, targetsHit: 0, lastResolvedAt: 900_000 },
+      1_000_000,
+    );
+    expect(justResolved.operationalState).toBe('ENCERRADO');
+    expect(deriveOutcomeLabel(justResolved)).toBe('OBSERVAR');
   });
 
   it('AGUARDAR sem plano: a linha de plano carrega o motivo NOMEADO do gap (nunca dash mudo com causa conhecida)', () => {
