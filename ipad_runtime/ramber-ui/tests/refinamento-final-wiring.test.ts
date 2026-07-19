@@ -306,7 +306,12 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
     const a = app();
     expect(a).toContain('const outcome = decision ? deriveOutcomeLabel(decision) : null;');
     expect(a).toContain('{outcomeQualifier ? ` · ${outcomeQualifier}` : ""}');
-    expect(a).toContain('import { buildOperationalSummary, deriveOutcomeLabel, type NexusOutcomeLabel } from "./nexus/operational-readability";');
+    // v7: import multi-linha (ganhou os derives dos 6 eixos) — trava o bloco inteiro vindo do módulo certo
+    const importMatch = a.match(/import \{([\s\S]*?)\} from "\.\/nexus\/operational-readability";/);
+    expect(importMatch, 'import da Readability Layer não encontrado').not.toBeNull();
+    for (const name of ['buildOperationalSummary', 'deriveOutcomeLabel', 'deriveRiskState', 'deriveConfluenceState', 'type NexusOutcomeLabel']) {
+      expect(importMatch![1]).toContain(name);
+    }
     const m = a.match(/const OUTCOME_QUALIFIER: Partial<Record<NexusOutcomeLabel, string>> = \{([\s\S]*?)\};/);
     expect(m, 'tabela de qualificadores visíveis não encontrada').not.toBeNull();
     expect(m![1]).toContain('LONG: "PLANO ATIVO"');
@@ -357,6 +362,34 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
 });
 
 // ─── Auditoria Final V-MAX — renderização ativada + persistência de prefs ───
+// ─── Evolução Integrativa §6: Síntese Operacional na aba ANALYSIS ───
+describe('§6: painel Síntese Operacional — 6 eixos derivados do MESMO NexusDecision, visível em toque (nunca só tooltip)', () => {
+  it('painel vem PRIMEIRO no corpo da ANALYSIS (Nível 1 antes da evidência), com os 6 eixos e fallback fail-closed', () => {
+    const a = app();
+    const synthIdx = a.indexOf('<ModulePanel title="Síntese Operacional · 6 eixos auditáveis (mesma fonte do badge)">');
+    const planIdx = a.indexOf('<ModulePanel title="Trade Plan · real structure only (advisory, read-only)">');
+    expect(synthIdx).toBeGreaterThan(-1);
+    expect(planIdx).toBeGreaterThan(synthIdx); // síntese antes do plano — hierarquia §3 da diretriz
+    const block = a.slice(synthIdx, planIdx);
+    expect(block).toContain('label="Direção (BIAS)"');
+    expect(block).toContain('label="Estrutura (SETUP)"');
+    expect(block).toContain('label="Timing (ENTRY)"');
+    expect(block).toContain('{synthRisk && (');
+    expect(block).toContain('label="Confluência"');
+    expect(block).toContain('label="Decisão"');
+    // deriva do contrato fundido, nunca recomputa: só chamadas derive*(nexusDecision)
+    expect(block).toContain('deriveBiasLabel(nexusDecision)');
+    expect(block).toContain('deriveConfluenceState(nexusDecision)');
+    expect(block).toContain('AWAITING FIRST REAL CYCLE'); // fallback honesto sem decisão
+  });
+
+  it('Risco omitido quando null (nunca fabricado) e a fonte do risco vem nomeada no valor', () => {
+    const a = app();
+    expect(a).toContain('const synthRisk = nexusDecision ? deriveRiskState(nexusDecision) : null;');
+    expect(a).toContain('value={`${synthRisk.state} — ${synthRisk.basis}`}');
+  });
+});
+
 describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no gráfico', () => {
   it('EnhancedChart: linha do ponto D do melhor padrão (fit desc) + EPA quando Wolfe — fio de seda, rótulo honesto', () => {
     const c = chart();

@@ -129,7 +129,16 @@ import { computeVwapContext, type VwapContext, type DirectionalLineState } from 
 import { computeNexusLineSeries, latestNexusLine, nexusLineState, nexusConfluenceVerdict } from "./nexus/nexus-line";
 // Evolução Integrativa §7: Operational Readability Layer — NexusDecision
 // vira apresentação num módulo puro nomeado (zero matemática de direção).
-import { buildOperationalSummary, deriveOutcomeLabel, type NexusOutcomeLabel } from "./nexus/operational-readability";
+import {
+  buildOperationalSummary,
+  deriveBiasLabel,
+  deriveConfluenceState,
+  deriveEntryState,
+  deriveOutcomeLabel,
+  deriveRiskState,
+  deriveSetupState,
+  type NexusOutcomeLabel,
+} from "./nexus/operational-readability";
 // Fecho da pendência "R:R mínimo": piso DECLARADO 1:2 (ver rr-quality.ts),
 // display-only — anota, nunca esconde/bloqueia um plano real (LEI 24).
 import { rrFloorSuffix } from "./nexus/rr-quality";
@@ -5204,6 +5213,9 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     vwapCtx,
     nlState,
     nexusConfluence,
+    // Evolução Integrativa §6: o contrato fundido para a Síntese
+    // Operacional da aba ANALYSIS — mesma fonte única do badge (LEI 24).
+    nexusDecision,
   } = ctx as any;
   const connections = useConnectionsSnapshot();
   const derivatives = useDerivativesSnapshot();
@@ -5316,8 +5328,44 @@ function SecondaryModuleView({ tab }: { tab: string }) {
       engineStatus === "ok",
     ].filter(Boolean).length;
     const gmilConsensus = institutionalConsensus ?? { score: null, sampleSize: 0, contributingProviders: [] };
+    // Evolução Integrativa §6: os 6 eixos do modelo de síntese auditável,
+    // derivados do MESMO NexusDecision do badge (derive* puros — zero
+    // recomputação, LEI 24). Vive AQUI (lista vertical, visível em toque no
+    // iPad) porque o tooltip do badge não aparece em tap — a mesma lição da
+    // Auditoria Final de Integração.
+    const synthRisk = nexusDecision ? deriveRiskState(nexusDecision) : null;
     body = (
       <>
+        <ModulePanel title="Síntese Operacional · 6 eixos auditáveis (mesma fonte do badge)">
+          {nexusDecision ? (
+            <>
+              <ModuleStat
+                label="Direção (BIAS)"
+                value={deriveBiasLabel(nexusDecision)}
+                tone={deriveBiasLabel(nexusDecision) === "LONG_BIAS" ? "long" : deriveBiasLabel(nexusDecision) === "SHORT_BIAS" ? "short" : "neutral"}
+              />
+              <ModuleStat label="Estrutura (SETUP)" value={deriveSetupState(nexusDecision)} />
+              <ModuleStat label="Timing (ENTRY)" value={deriveEntryState(nexusDecision)} />
+              {synthRisk && (
+                <ModuleStat
+                  label="Risco"
+                  value={`${synthRisk.state} — ${synthRisk.basis}`}
+                  tone={synthRisk.state === "ACEITÁVEL" ? "long" : "short"}
+                />
+              )}
+              <ModuleStat label="Confluência" value={deriveConfluenceState(nexusDecision)} />
+              <ModuleStat
+                label="Decisão"
+                value={deriveOutcomeLabel(nexusDecision)}
+                tone={deriveOutcomeLabel(nexusDecision) === "LONG" ? "long" : deriveOutcomeLabel(nexusDecision) === "SHORT" ? "short" : "neutral"}
+              />
+            </>
+          ) : (
+            <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">
+              AWAITING FIRST REAL CYCLE — synthesis derives from the fused NexusDecision contract (fail-closed)
+            </span>
+          )}
+        </ModulePanel>
         <ModulePanel title="Trade Plan · real structure only (advisory, read-only)">
           {tradePlan ? (
             <>

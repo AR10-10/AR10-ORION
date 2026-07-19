@@ -25,7 +25,11 @@
 import type { TradePlan } from "./trade-plan";
 import type { EtaReading } from "./eta-engine";
 
-export const NEXUS_DECISION_CONTRACT_VERSION = 2 as const;
+// v3 (Evolução Integrativa §6): o contrato passa a CARREGAR heatTier —
+// passthrough literal do tier real já recebido nos inputs (que até aqui
+// só alimentava reasonsAgainst). Fonte do eixo RISCO da Readability Layer;
+// este módulo continua não decidindo nada com ele (LEI 24).
+export const NEXUS_DECISION_CONTRACT_VERSION = 3 as const;
 
 // V2 §3 — Estado operacional padronizado, derivado SÓ de leituras reais
 // (prioridades documentadas em deriveOperationalState):
@@ -105,6 +109,9 @@ export interface NexusDecision {
   planGap: NexusPlanGap | null; // só quando plan === null
   reason: string | null; // frase curta REAL do Assistente Operacional (1ª prioridade)
   reasonBasis: string | null; // base verificável da frase
+  // v3: tier real do Heat Score (passthrough dos inputs) — consumido pelo
+  // eixo RISCO da Readability; null honesto quando o motor não tem leitura.
+  heatTier: string | null;
   computedAt: number;
 }
 
@@ -287,6 +294,7 @@ export function buildNexusDecision(inputs: NexusDecisionInputs, computedAt: numb
     planGap,
     reason: inputs.assistantMessage?.text ?? null,
     reasonBasis: inputs.assistantMessage?.basis ?? null,
+    heatTier: inputs.heatTier ?? null,
     computedAt,
   };
 }

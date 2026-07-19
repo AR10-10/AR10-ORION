@@ -30,9 +30,9 @@ import { formatEtaRange } from "./eta-engine";
 // v6: piso declarado de R:R (fecho da pendência "R:R mínimo") — anota o
 // alvo cujo R:R real fica abaixo da convenção 1:2; ver rr-quality.ts para
 // a natureza honesta do número (parâmetro declarado, nunca medição).
-import { rrFloorSuffix } from "./rr-quality";
+import { rrBelowFloor, rrFloorSuffix } from "./rr-quality";
 
-export const READABILITY_CONTRACT_VERSION = 6 as const;
+export const READABILITY_CONTRACT_VERSION = 7 as const;
 
 const DASH = "—"; // mesmo caractere honesto de ausência usado em todo o header
 
@@ -195,6 +195,58 @@ const OUTCOME_CLAUSE: Record<NexusOutcomeLabel, string> = {
   "SEM OPERAÇÃO": " — nenhum viés e nenhum plano neste momento",
 };
 
+// Evolução Integrativa §6 (v7 do contrato): os DOIS eixos que faltavam do
+// modelo de síntese auditável — RISCO e CONFLUÊNCIA. Mesma lei de sempre:
+// derivações PURAS de leituras que o contrato já carrega (heatTier real,
+// R:R real vs piso declarado, planGap real, e os próprios eixos BIAS/
+// ENTRY já derivados acima) — zero input novo, zero "super-score mágico"
+// (§6 veta explicitamente), zero segunda decisão (LEI 24). Cada estado
+// nomeia a FONTE real que o disparou — auditável, nunca um veredito solto.
+export type NexusRiskState = "ACEITÁVEL" | "ELEVADO" | "INVÁLIDO";
+
+/** Leitura de risco do plano/premissa atual, ou null honesto quando não
+ *  há plano nem sinal real de risco a qualificar (linha omitida — nunca
+ *  um julgamento fabricado sobre o nada). */
+export function deriveRiskState(decision: NexusDecision): { state: NexusRiskState; basis: string } | null {
+  if (decision.planGap === "DIRECTION_CONFLICT") {
+    return { state: "INVÁLIDO", basis: "estrutura mapeada contradiz o viés do Núcleo (DIRECTION_CONFLICT)" };
+  }
+  if (decision.planGap === "RISK_GATED") {
+    return { state: "ELEVADO", basis: "Conselho travado por risco (fail-closed)" };
+  }
+  if (decision.plan) {
+    const factors: string[] = [];
+    if (decision.heatTier === "EXTREMO") factors.push("Heat EXTREMO");
+    if (rrBelowFloor(decision.plan.targets[0]?.riskReward ?? null)) factors.push("R:R do TP1 abaixo do piso 1:2");
+    if (factors.length > 0) return { state: "ELEVADO", basis: factors.join(" · ") };
+    return { state: "ACEITÁVEL", basis: "stop real mapeado · R:R no piso ou acima · sem fator extremo" };
+  }
+  return null;
+}
+
+export type NexusConfluenceState = "ALINHADA" | "MISTA" | "CONFLITANTE" | "INSUFICIENTE";
+
+const CONFLUENCE_CLAUSE: Record<NexusConfluenceState, string> = {
+  ALINHADA: "direção, estrutura e timing apontam juntos",
+  MISTA: "evidência parcial — nem tudo confirmado ainda",
+  CONFLITANTE: "estrutura mapeada contradiz o viés do Núcleo",
+  INSUFICIENTE: "sem leitura real suficiente agora",
+};
+
+/** Síntese de alinhamento dos próprios eixos (§6): consequência das
+ *  regras já existentes, nunca um número arbitrário. CONFLITANTE só nasce
+ *  do único sinal real e inequívoco de conflito (DIRECTION_CONFLICT via
+ *  CONFLICTED_BIAS) — nunca de reasonsAgainst, que também acumula fatores
+ *  de RISCO (precedente já estabelecido em deriveBiasLabel). */
+export function deriveConfluenceState(decision: NexusDecision): NexusConfluenceState {
+  const bias = deriveBiasLabel(decision);
+  if (bias === "INSUFFICIENT_DATA") return "INSUFICIENTE";
+  if (bias === "CONFLICTED_BIAS") return "CONFLITANTE";
+  const directional = bias === "LONG_BIAS" || bias === "SHORT_BIAS";
+  if (directional && deriveEntryState(decision) === "ENTRY_CONFIRMED") return "ALINHADA";
+  return "MISTA";
+}
+
 /** Resumo operacional multi-linha do contrato fundido — a resposta do
  *  "bateu o olho" (§6): BIAS/SETUP/ENTRY como três eixos nomeados e
  *  independentes (Evolução Profunda §4), a síntese Leitura (BIAS×ENTRY,
@@ -208,12 +260,19 @@ export function buildOperationalSummary(decision: NexusDecision | null | undefin
   const bias = deriveBiasLabel(decision);
   const setup = deriveSetupState(decision);
   const entry = deriveEntryState(decision);
+  const risk = deriveRiskState(decision);
+  const confluence = deriveConfluenceState(decision);
   const outcome = deriveOutcomeLabel(decision);
+  // v7 (Evolução Integrativa §6): a ordem das linhas é a ordem exata do
+  // modelo de síntese — DIREÇÃO, ESTRUTURA, TIMING, RISCO, CONFLUÊNCIA,
+  // DECISÃO. Risco sem plano/sinal real é omitido (nunca fabricado).
   return [
     `NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24) · Estado: ${decision.operationalState}`,
     `BIAS: ${bias}`,
     `Setup: ${setup} — ${SETUP_CLAUSE[setup]}`,
     `Entry: ${entry} — ${ENTRY_CLAUSE[entry]}`,
+    risk ? `Risco: ${risk.state} — ${risk.basis}` : null,
+    `Confluência: ${confluence} — ${CONFLUENCE_CLAUSE[confluence]}`,
     `Leitura: ${outcome}${OUTCOME_CLAUSE[outcome]}`,
     `Confiança: ${decision.confidenceLabel ?? DASH} · Score ${decision.score ?? DASH}${decision.scoreZone ? ` (${decision.scoreZone})` : ""}${decision.scoreTrend ? ` · ${decision.scoreTrend}` : ""} — confluência real, nunca probabilidade`,
     decision.plan

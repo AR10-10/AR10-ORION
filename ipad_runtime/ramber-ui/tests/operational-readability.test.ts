@@ -8,8 +8,10 @@ import { buildNexusDecision } from '../src/nexus/decision-layer';
 import {
   buildOperationalSummary,
   deriveBiasLabel,
+  deriveConfluenceState,
   deriveEntryState,
   deriveOutcomeLabel,
+  deriveRiskState,
   deriveSetupState,
   READABILITY_FALLBACK_LINE,
 } from '../src/nexus/operational-readability';
@@ -68,15 +70,20 @@ describe('buildOperationalSummary: o "bateu o olho" (§6) por execução real', 
     expect(lines[1]).toBe('BIAS: LONG_BIAS');
     expect(lines[2]).toBe('Setup: LONG_SETUP — estrutura real de compra mapeada (entrada/stop/alvo reais)');
     expect(lines[3]).toBe('Entry: ENTRY_CONFIRMED — confirmação estrutural — timing agora');
-    // §7/§9 Omega Core: a síntese Leitura (BIAS×ENTRY) continua logo depois dos três eixos crus; "— PLANO ATIVO" porque timing confirmado sempre implica plan!==null
-    expect(lines[4]).toBe('Leitura: LONG — PLANO ATIVO');
-    expect(lines[5]).toContain('Confiança: ALTA · Score 72 (ZONA FORTE) · FORTALECENDO — confluência real, nunca probabilidade');
-    expect(lines[6]).toBe('Entrada: 99.00–100.00 (OB_BULLISH) · Stop: 95.00 (SR_SUPPORT_1)');
+    // v7 (Evolução Integrativa §6): RISCO e CONFLUÊNCIA na ordem exata do
+    // modelo — TP1 com R:R 1.22 < piso declarado => ELEVADO com a fonte
+    // nomeada; timing confirmado + viés direcional => ALINHADA.
+    expect(lines[4]).toBe('Risco: ELEVADO — R:R do TP1 abaixo do piso 1:2');
+    expect(lines[5]).toBe('Confluência: ALINHADA — direção, estrutura e timing apontam juntos');
+    // §7/§9 Omega Core: a síntese Leitura (DECISÃO, o 6º eixo) fecha o modelo; "— PLANO ATIVO" porque timing confirmado sempre implica plan!==null
+    expect(lines[6]).toBe('Leitura: LONG — PLANO ATIVO');
+    expect(lines[7]).toContain('Confiança: ALTA · Score 72 (ZONA FORTE) · FORTALECENDO — confluência real, nunca probabilidade');
+    expect(lines[8]).toBe('Entrada: 99.00–100.00 (OB_BULLISH) · Stop: 95.00 (SR_SUPPORT_1)');
     // f(): < 1000 com 2 casas, >= 1000 sem casas — a convenção do cockpit.
     // v6: R:R 1.22 < piso declarado 1:2 => anotação honesta; 2.44 => nada.
-    expect(lines[7]).toBe('TP1: 105.00 (VP_POC) · R:R 1:1.22 (abaixo do piso 1:2) · ETA ≈ 5m–10m · ATINGIDO');
-    expect(lines[8]).toBe('TP2: 64100 (EQH) · R:R 1:2.44'); // sem ETA real => sem sufixo fabricado; R:R no piso ou acima => sem anotação
-    expect(lines[9]).toBe('Motivo: Compra favorecida. (conselho LONG + fluxo real)');
+    expect(lines[9]).toBe('TP1: 105.00 (VP_POC) · R:R 1:1.22 (abaixo do piso 1:2) · ETA ≈ 5m–10m · ATINGIDO');
+    expect(lines[10]).toBe('TP2: 64100 (EQH) · R:R 1:2.44'); // sem ETA real => sem sufixo fabricado; R:R no piso ou acima => sem anotação
+    expect(lines[11]).toBe('Motivo: Compra favorecida. (conselho LONG + fluxo real)');
     expect(lines.find((l) => l.startsWith('Favoráveis:'))).toContain('estrutura real de alta (Conselho·STRUCTURE)');
     expect(lines.find((l) => l.startsWith('Contrários:'))).toContain('3/9 prazos concordam (Conviction·MULTI_TIMEFRAME)');
   });
@@ -269,5 +276,98 @@ describe('buildOperationalSummary: o "bateu o olho" (§6) por execução real', 
     const src = require('node:fs').readFileSync(require.resolve('../src/nexus/operational-readability.ts'), 'utf8');
     expect(src).not.toMatch(/probabilit(y|ies)|probabilidade de acerto|chance de subir/i);
     expect(src).not.toMatch(/buildTradePlan|computeTargetEtas|buildNexusDecision/); // nunca recomputa decisão
+  });
+});
+
+// ─── Evolução Integrativa §6 (v7): RISCO e CONFLUÊNCIA — os 2 eixos que
+// fecham o modelo de síntese auditável, cada estado com a FONTE nomeada ───
+describe('deriveRiskState — leitura de risco auditável, nunca um score', () => {
+  const goodRrPlan: TradePlan = {
+    contractVersion: 2,
+    direction: 'LONG',
+    entry: { low: 99, high: 100, basis: 'OB_BULLISH' },
+    stop: { price: 95, basis: 'SR_SUPPORT_1' },
+    targets: [{ price: 110, basis: 'EQH' }],
+    riskRewardRatios: [2.33],
+    computedAt: 0,
+  };
+
+  it('ELEVADO por R:R do TP1 abaixo do piso declarado (fixture LONG: 1.22 < 1:2), fonte nomeada', () => {
+    const risk = deriveRiskState(buildNexusDecision(inputs))!;
+    expect(risk.state).toBe('ELEVADO');
+    expect(risk.basis).toBe('R:R do TP1 abaixo do piso 1:2');
+  });
+
+  it('ELEVADO por Heat EXTREMO mesmo com R:R saudável — os dois fatores reais se acumulam quando presentes', () => {
+    const risk = deriveRiskState(buildNexusDecision({ ...inputs, plan: goodRrPlan, heatTier: 'EXTREMO' }))!;
+    expect(risk.state).toBe('ELEVADO');
+    expect(risk.basis).toBe('Heat EXTREMO');
+    const both = deriveRiskState(buildNexusDecision({ ...inputs, heatTier: 'EXTREMO' }))!;
+    expect(both.basis).toBe('Heat EXTREMO · R:R do TP1 abaixo do piso 1:2');
+  });
+
+  it('ACEITÁVEL: plano real com R:R no piso ou acima e sem Heat extremo', () => {
+    const risk = deriveRiskState(buildNexusDecision({ ...inputs, plan: goodRrPlan }))!;
+    expect(risk.state).toBe('ACEITÁVEL');
+  });
+
+  it('INVÁLIDO: premissa quebrada (DIRECTION_CONFLICT) — o único conflito real e inequívoco', () => {
+    const conflictingPlan: TradePlan = {
+      contractVersion: 2,
+      direction: 'SHORT',
+      entry: { low: 100, high: 101, basis: 'OB_BEARISH' },
+      stop: { price: 105, basis: 'SR_RESISTANCE_1' },
+      targets: [{ price: 95, basis: 'SR_SUPPORT_1' }],
+      riskRewardRatios: [1.5],
+      computedAt: 0,
+    };
+    const d = buildNexusDecision({ ...inputs, coreDirection: 'LONG', plan: conflictingPlan });
+    expect(d.planGap).toBe('DIRECTION_CONFLICT');
+    expect(deriveRiskState(d)!.state).toBe('INVÁLIDO');
+  });
+
+  it('ELEVADO: Conselho travado por risco (RISK_GATED, fail-closed real) mesmo sem plano', () => {
+    const d = buildNexusDecision({ ...inputs, plan: null, councilRiskGated: true, targetsHit: 0 });
+    expect(d.planGap).toBe('RISK_GATED');
+    expect(deriveRiskState(d)!.state).toBe('ELEVADO');
+  });
+
+  it('null honesto (linha OMITIDA do resumo) quando não há plano nem sinal real de risco — nunca um julgamento fabricado sobre o nada', () => {
+    const d = buildNexusDecision({ ...inputs, plan: null, councilStance: 'LONG', councilRiskGated: false, targetsHit: 0 });
+    expect(d.planGap).toBe('NO_STRUCTURE');
+    expect(deriveRiskState(d)).toBeNull();
+    expect(buildOperationalSummary(d).some((l) => l.startsWith('Risco:'))).toBe(false);
+  });
+});
+
+describe('deriveConfluenceState — consequência dos próprios eixos, nunca um número arbitrário', () => {
+  it('ALINHADA: viés direcional + timing confirmado (fixture LONG completa)', () => {
+    expect(deriveConfluenceState(buildNexusDecision(inputs))).toBe('ALINHADA');
+  });
+
+  it('MISTA: estrutura real mas timing pendente (aguardando reteste) — evidência parcial honesta', () => {
+    const d = buildNexusDecision({ ...inputs, targetsHit: 0, inEntryZone: false });
+    expect(deriveEntryState(d)).toBe('WAITING_FOR_RETEST');
+    expect(deriveConfluenceState(d)).toBe('MISTA');
+  });
+
+  it('CONFLITANTE: só do sinal real e inequívoco (CONFLICTED_BIAS/DIRECTION_CONFLICT) — nunca de Contrários genéricos', () => {
+    const conflictingPlan: TradePlan = {
+      contractVersion: 2,
+      direction: 'SHORT',
+      entry: { low: 100, high: 101, basis: 'OB_BEARISH' },
+      stop: { price: 105, basis: 'SR_RESISTANCE_1' },
+      targets: [{ price: 95, basis: 'SR_SUPPORT_1' }],
+      riskRewardRatios: [1.5],
+      computedAt: 0,
+    };
+    expect(deriveConfluenceState(buildNexusDecision({ ...inputs, coreDirection: 'LONG', plan: conflictingPlan }))).toBe('CONFLITANTE');
+    // Heat EXTREMO sozinho (fator de risco, não de direção) NUNCA vira conflito
+    expect(deriveConfluenceState(buildNexusDecision({ ...inputs, heatTier: 'EXTREMO' }))).toBe('ALINHADA');
+  });
+
+  it('INSUFICIENTE: Núcleo sem leitura real nenhuma (mesma distinção fail-closed de INSUFFICIENT_DATA do BIAS)', () => {
+    const d = buildNexusDecision({ ...inputs, coreDirection: null, coreConfidence: null, plan: null, score: null, scoreZoneLabel: null, scoreTrend: null, councilStance: null });
+    expect(deriveConfluenceState(d)).toBe('INSUFICIENTE');
   });
 });
