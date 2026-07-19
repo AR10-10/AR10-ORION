@@ -56,9 +56,14 @@ describe('App.tsx: institutionalScoreHistory alimentada em efeito real, convicti
     expect(depsMatch![1]).toContain('orderflowTrend,\n      convictionTrend,');
   });
 
-  it('a série é resetada na troca de ativo, mesma disciplina de l2History/orderflowHistory', () => {
+  it('a série é resetada DENTRO do efeito real de troca de ativo (nunca uma ocorrência solta em outro lugar) — junto de l2History/orderflowHistory/trackRecord/multiTimeframeContext, mesma disciplina, mesmo efeito', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();');
+    const m = app.match(/useEffect\(\(\) => \{\s*setPriceData\(null\);[\s\S]*?\}, \[selectedAsset\]\);/);
+    expect(m, 'efeito de reset por troca de ativo não encontrado').not.toBeNull();
+    const block = m![0];
+    expect(block).toContain('useUnifiedSnapshotStore.getState().resetL2History();');
+    expect(block).toContain('useUnifiedSnapshotStore.getState().resetOrderflowHistory();');
+    expect(block).toContain('useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();');
   });
 });
 
