@@ -7,6 +7,8 @@ import { describe, it, expect } from 'vitest';
 import { buildNexusDecision } from '../src/nexus/decision-layer';
 import {
   buildOperationalSummary,
+  deriveBiasLabel,
+  deriveEntryState,
   deriveOutcomeLabel,
   deriveSetupState,
   READABILITY_FALLBACK_LINE,
@@ -62,16 +64,18 @@ describe('buildOperationalSummary: o "bateu o olho" (§6) por execução real', 
   it('LONG completo: operação+estado, confiança com o aviso honesto, entrada/stop, um TP por linha (R:R/ETA/ATINGIDO), motivo e justificativas', () => {
     const lines = buildOperationalSummary(buildNexusDecision(inputs));
     expect(lines[0]).toBe('NEXUS DECISION · Operação: LONG (fonte: Core Engine — LEI 24) · Estado: GERENCIANDO');
-    // §7/§9 Omega Core: BIAS×ENTRY já reconciliados (GERENCIANDO = timing confirmado) => rótulo puro "LONG", sem cláusula de aguardo
-    expect(lines[1]).toBe('Leitura: LONG');
-    // Evolução Profunda §2/§3: SETUP separado de BIAS/ENTRY — GERENCIANDO já é ENTRY confirmado, então o eixo SETUP também resolve para o rótulo direcional puro
+    // Evolução Profunda §4 (Diretriz de Continuidade): BIAS/SETUP/ENTRY como três eixos nomeados próprios, nesta ordem
+    expect(lines[1]).toBe('BIAS: LONG_BIAS');
     expect(lines[2]).toBe('Setup: LONG_SETUP — estrutura real de compra ativa (entrada/stop/alvo mapeados)');
-    expect(lines[3]).toContain('Confiança: ALTA · Score 72 (ZONA FORTE) · FORTALECENDO — confluência real, nunca probabilidade');
-    expect(lines[4]).toBe('Entrada: 99.00–100.00 (OB_BULLISH) · Stop: 95.00 (SR_SUPPORT_1)');
+    expect(lines[3]).toBe('Entry: ENTRY_READY — confirmação estrutural — timing agora');
+    // §7/§9 Omega Core: a síntese Leitura (BIAS×ENTRY) continua logo depois dos três eixos crus
+    expect(lines[4]).toBe('Leitura: LONG');
+    expect(lines[5]).toContain('Confiança: ALTA · Score 72 (ZONA FORTE) · FORTALECENDO — confluência real, nunca probabilidade');
+    expect(lines[6]).toBe('Entrada: 99.00–100.00 (OB_BULLISH) · Stop: 95.00 (SR_SUPPORT_1)');
     // f(): < 1000 com 2 casas, >= 1000 sem casas — a convenção do cockpit
-    expect(lines[5]).toBe('TP1: 105.00 (VP_POC) · R:R 1:1.22 · ETA ≈ 5m–10m · ATINGIDO');
-    expect(lines[6]).toBe('TP2: 64100 (EQH) · R:R 1:2.44'); // sem ETA real => sem sufixo fabricado
-    expect(lines[7]).toBe('Motivo: Compra favorecida. (conselho LONG + fluxo real)');
+    expect(lines[7]).toBe('TP1: 105.00 (VP_POC) · R:R 1:1.22 · ETA ≈ 5m–10m · ATINGIDO');
+    expect(lines[8]).toBe('TP2: 64100 (EQH) · R:R 1:2.44'); // sem ETA real => sem sufixo fabricado
+    expect(lines[9]).toBe('Motivo: Compra favorecida. (conselho LONG + fluxo real)');
     expect(lines.find((l) => l.startsWith('Favoráveis:'))).toContain('estrutura real de alta (Conselho·STRUCTURE)');
     expect(lines.find((l) => l.startsWith('Contrários:'))).toContain('3/9 prazos concordam (Conviction·MULTI_TIMEFRAME)');
   });
@@ -80,14 +84,43 @@ describe('buildOperationalSummary: o "bateu o olho" (§6) por execução real', 
     const preparing = buildNexusDecision({ ...inputs, plan: null, councilStance: null, targetsHit: 0 });
     expect(preparing.operationalState).toBe('PREPARANDO');
     const lines = buildOperationalSummary(preparing);
-    expect(lines[1]).toBe('Leitura: AGUARDAR LONG — viés real do Núcleo; entrada ainda não confirmada (BIAS ≠ ENTRY)');
+    expect(lines.find((l) => l.startsWith('Leitura:'))).toBe('Leitura: AGUARDAR LONG — viés real do Núcleo; entrada ainda não confirmada (BIAS ≠ ENTRY)');
+    // Evolução Profunda §4: BIAS já é LONG_BIAS (o Núcleo tem direção real) mesmo com ENTRY ainda não pronto — os dois eixos nunca colapsam num só
+    expect(lines.find((l) => l.startsWith('BIAS:'))).toBe('BIAS: LONG_BIAS');
+    expect(lines.find((l) => l.startsWith('Entry:'))).toBe('Entry: ENTRY_WAIT_CONFIRMATION — estrutura ainda insuficiente — timing ausente');
   });
 
   it('BIAS ≠ ENTRY (§9) espelhado em SHORT: mesma regra, nunca uma fórmula separada por direção', () => {
     const preparing = buildNexusDecision({ ...inputs, coreDirection: 'SHORT', plan: null, councilStance: null, targetsHit: 0 });
     expect(preparing.operationalState).toBe('PREPARANDO');
     const lines = buildOperationalSummary(preparing);
-    expect(lines[1]).toBe('Leitura: AGUARDAR SHORT — viés real do Núcleo; entrada ainda não confirmada (BIAS ≠ ENTRY)');
+    expect(lines.find((l) => l.startsWith('Leitura:'))).toBe('Leitura: AGUARDAR SHORT — viés real do Núcleo; entrada ainda não confirmada (BIAS ≠ ENTRY)');
+    expect(lines.find((l) => l.startsWith('BIAS:'))).toBe('BIAS: SHORT_BIAS');
+  });
+
+  it('Evolução Profunda §4: BIAS distingue INSUFFICIENT_DATA (Núcleo sem leitura real nenhuma) de NEUTRAL_BIAS (Núcleo leu e concluiu AGUARDAR com dado real)', () => {
+    const noData = buildNexusDecision({ ...inputs, coreDirection: null, coreConfidence: null, plan: null, score: null, scoreZoneLabel: null, scoreTrend: null, councilStance: null });
+    expect(deriveBiasLabel(noData)).toBe('INSUFFICIENT_DATA');
+    const neutralRead = buildNexusDecision({ ...inputs, coreDirection: null, plan: null, councilStance: null });
+    expect(neutralRead.confidenceLabel).not.toBeNull(); // coreConfidence real herdado de `inputs`
+    expect(deriveBiasLabel(neutralRead)).toBe('NEUTRAL_BIAS');
+  });
+
+  it('Evolução Profunda §4: BIAS vira CONFLICTED_BIAS exatamente quando o plano do Conselho contradiz a operação do Núcleo (DIRECTION_CONFLICT) — nunca a partir de Contrários genéricos (ex.: Heat EXTREMO)', () => {
+    const conflictingPlan: TradePlan = {
+      contractVersion: 2,
+      direction: 'SHORT',
+      entry: { low: 100, high: 101, basis: 'OB_BEARISH' },
+      stop: { price: 105, basis: 'SR_RESISTANCE_1' },
+      targets: [{ price: 95, basis: 'SR_SUPPORT_1' }],
+      riskRewardRatios: [1.5],
+      computedAt: 0,
+    };
+    const d = buildNexusDecision({ ...inputs, coreDirection: 'LONG', plan: conflictingPlan, heatTier: 'EXTREMO' });
+    expect(d.planGap).toBe('DIRECTION_CONFLICT');
+    expect(deriveBiasLabel(d)).toBe('CONFLICTED_BIAS');
+    // heatTier EXTREMO sozinho (sem DIRECTION_CONFLICT) NÃO deve gerar CONFLICTED_BIAS — é fator de risco, não de direção
+    expect(deriveBiasLabel(buildNexusDecision({ ...inputs, heatTier: 'EXTREMO' }))).toBe('LONG_BIAS');
   });
 
   it('§7 vocabulário completo: sem direção real do Núcleo e sem qualquer estado notável => "SEM OPERAÇÃO"', () => {
@@ -151,6 +184,28 @@ describe('buildOperationalSummary: o "bateu o olho" (§6) por execução real', 
     const noStructure = buildNexusDecision({ ...inputs, plan: null, councilStance: 'LONG', councilRiskGated: false, targetsHit: 0 });
     expect(noStructure.planGap).toBe('NO_STRUCTURE');
     expect(deriveSetupState(noStructure)).toBe('NO_VALID_SETUP');
+  });
+
+  it('Evolução Profunda §4: ENTRY é espelho 1:1 do SETUP (mesma leitura real, vocabulário próprio) — mapeamento completo das seis leituras', () => {
+    const ready = buildNexusDecision(inputs); // GERENCIANDO => LONG_SETUP
+    expect(deriveEntryState(ready)).toBe('ENTRY_READY');
+    const retest = buildNexusDecision({ ...inputs, targetsHit: 0, inEntryZone: false }); // CONFIRMANDO => WAITING_FOR_RETEST
+    expect(deriveEntryState(retest)).toBe('ENTRY_WAIT_RETEST');
+    const awaitingCouncil = buildNexusDecision({ ...inputs, plan: null, councilStance: null, targetsHit: 0 }); // AWAITING_COUNCIL
+    expect(deriveEntryState(awaitingCouncil)).toBe('ENTRY_WAIT_CONFIRMATION');
+    const noStructure = buildNexusDecision({ ...inputs, plan: null, councilStance: 'LONG', councilRiskGated: false, targetsHit: 0 }); // NO_STRUCTURE
+    expect(deriveEntryState(noStructure)).toBe('NO_ENTRY');
+    const conflictingPlan: TradePlan = {
+      contractVersion: 2,
+      direction: 'SHORT',
+      entry: { low: 100, high: 101, basis: 'OB_BEARISH' },
+      stop: { price: 105, basis: 'SR_RESISTANCE_1' },
+      targets: [{ price: 95, basis: 'SR_SUPPORT_1' }],
+      riskRewardRatios: [1.5],
+      computedAt: 0,
+    };
+    const conflicted = buildNexusDecision({ ...inputs, coreDirection: 'LONG', plan: conflictingPlan }); // DIRECTION_CONFLICT
+    expect(deriveEntryState(conflicted)).toBe('ENTRY_INVALIDATED');
   });
 
   it('AGUARDAR sem plano: a linha de plano carrega o motivo NOMEADO do gap (nunca dash mudo com causa conhecida)', () => {

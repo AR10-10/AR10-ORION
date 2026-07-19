@@ -28,7 +28,7 @@
 import { NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./decision-layer";
 import { formatEtaRange } from "./eta-engine";
 
-export const READABILITY_CONTRACT_VERSION = 3 as const;
+export const READABILITY_CONTRACT_VERSION = 4 as const;
 
 const DASH = "—"; // mesmo caractere honesto de ausência usado em todo o header
 
@@ -40,6 +40,27 @@ const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
 /** Linha única honesta quando a fusão ainda não existe (motor sem ciclo). */
 export const READABILITY_FALLBACK_LINE =
   "Core Engine — primary directional read (mathematical S/R + structure classifier)";
+
+// Evolução Profunda §4 (Diretriz de Continuidade): BIAS como eixo NOMEADO
+// próprio, distinto da síntese LONG/SHORT×timing de deriveOutcomeLabel —
+// "Qual é a direção estrutural dominante?" puro, sem nenhuma leitura de
+// timing misturada. Deriva só de operation (passthrough real do Núcleo,
+// LEI 24) e planGap==="DIRECTION_CONFLICT" (o único sinal real e
+// inequívoco de que a estrutura mapeada contradiz o viés — nunca um
+// "conflito" inventado a partir de reasonsAgainst, que também acumula
+// fatores de RISCO como Heat EXTREMO, não de direção). NEUTRAL_BIAS vs
+// INSUFFICIENT_DATA usa a mesma distinção fail-closed já usada em toda a
+// base: confidenceLabel/score nulos = o Núcleo não tem leitura real
+// nenhuma agora (dado ausente); presentes com operation AGUARDAR = o
+// Núcleo LEU o mercado e concluiu, com dado real, que não há direção.
+export type NexusBiasLabel = "LONG_BIAS" | "SHORT_BIAS" | "NEUTRAL_BIAS" | "CONFLICTED_BIAS" | "INSUFFICIENT_DATA";
+
+export function deriveBiasLabel(decision: NexusDecision): NexusBiasLabel {
+  if (decision.planGap === "DIRECTION_CONFLICT") return "CONFLICTED_BIAS";
+  if (decision.operation === "LONG") return "LONG_BIAS";
+  if (decision.operation === "SHORT") return "SHORT_BIAS";
+  return decision.confidenceLabel === null && decision.score === null ? "INSUFFICIENT_DATA" : "NEUTRAL_BIAS";
+}
 
 // §7 Omega Core: o vocabulário de seis rótulos — LONG/SHORT só quando o
 // TIMING (operationalState) já confirma execução; AGUARDAR LONG/AGUARDAR
@@ -106,21 +127,58 @@ const SETUP_CLAUSE: Record<NexusSetupState, string> = {
   NO_VALID_SETUP: "nenhuma estrutura real mapeada agora",
 };
 
+// Evolução Profunda §4: ENTRY como eixo NOMEADO próprio — "o momento de
+// entrada está confirmado AGORA?". Espelho 1:1 de deriveSetupState (zero
+// matemática nova, zero input novo): SETUP já responde exatamente esta
+// pergunta por trás de outro nome ("existe configuração" vs "é hora
+// agora" colapsam na MESMA leitura real — plan/operationalState/planGap),
+// mas a diretriz pede os dois como campos INDEPENDENTES e nomeados
+// (mesmo par mostrado junto: "SETUP: LONG_SETUP" + "ENTRY: ..."). A
+// direção fica implícita em ENTRY_READY (BIAS já carrega a direção — não
+// repetir LONG/SHORT aqui evita a mesma informação em dois rótulos).
+export type NexusEntryState = "ENTRY_READY" | "ENTRY_WAIT_RETEST" | "ENTRY_WAIT_CONFIRMATION" | "ENTRY_INVALIDATED" | "NO_ENTRY";
+
+const SETUP_TO_ENTRY: Record<NexusSetupState, NexusEntryState> = {
+  LONG_SETUP: "ENTRY_READY",
+  SHORT_SETUP: "ENTRY_READY",
+  WAITING_FOR_RETEST: "ENTRY_WAIT_RETEST",
+  WAITING_FOR_CONFIRMATION: "ENTRY_WAIT_CONFIRMATION",
+  INVALIDATED: "ENTRY_INVALIDATED",
+  NO_VALID_SETUP: "NO_ENTRY",
+};
+
+export function deriveEntryState(decision: NexusDecision): NexusEntryState {
+  return SETUP_TO_ENTRY[deriveSetupState(decision)];
+}
+
+const ENTRY_CLAUSE: Record<NexusEntryState, string> = {
+  ENTRY_READY: "confirmação estrutural — timing agora",
+  ENTRY_WAIT_RETEST: "aguardando o preço retornar ao nível real mapeado",
+  ENTRY_WAIT_CONFIRMATION: "estrutura ainda insuficiente — timing ausente",
+  ENTRY_INVALIDATED: "premissa quebrada — plano contraditório",
+  NO_ENTRY: "nenhuma estrutura real para avaliar timing",
+};
+
 /** Resumo operacional multi-linha do contrato fundido — a resposta do
- *  "bateu o olho" (§6): leitura BIAS×ENTRY (§7/§9), SETUP separado dos
- *  dois (Evolução Profunda §2/§3), operação+estado, confiança (com o
- *  aviso real "nunca probabilidade"), plano (entrada/stop OU o motivo
- *  nomeado do gap), um TP por linha (R:R/ETA/ATINGIDO reais), motivo do
- *  assistente e as duas listas de justificativa estruturada. Linhas
- *  ausentes são omitidas — nunca preenchidas com placeholder fabricado. */
+ *  "bateu o olho" (§6): BIAS/SETUP/ENTRY como três eixos nomeados e
+ *  independentes (Evolução Profunda §4), a síntese Leitura (BIAS×ENTRY,
+ *  §7/§9 Omega Core), operação+estado, confiança (com o aviso real
+ *  "nunca probabilidade"), plano (entrada/stop OU o motivo nomeado do
+ *  gap), um TP por linha (R:R/ETA/ATINGIDO reais), motivo do assistente
+ *  e as duas listas de justificativa estruturada. Linhas ausentes são
+ *  omitidas — nunca preenchidas com placeholder fabricado. */
 export function buildOperationalSummary(decision: NexusDecision | null | undefined): string[] {
   if (!decision) return [READABILITY_FALLBACK_LINE];
-  const outcome = deriveOutcomeLabel(decision);
+  const bias = deriveBiasLabel(decision);
   const setup = deriveSetupState(decision);
+  const entry = deriveEntryState(decision);
+  const outcome = deriveOutcomeLabel(decision);
   return [
     `NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24) · Estado: ${decision.operationalState}`,
-    `Leitura: ${outcome}${OUTCOME_CLAUSE[outcome]}`,
+    `BIAS: ${bias}`,
     `Setup: ${setup} — ${SETUP_CLAUSE[setup]}`,
+    `Entry: ${entry} — ${ENTRY_CLAUSE[entry]}`,
+    `Leitura: ${outcome}${OUTCOME_CLAUSE[outcome]}`,
     `Confiança: ${decision.confidenceLabel ?? DASH} · Score ${decision.score ?? DASH}${decision.scoreZone ? ` (${decision.scoreZone})` : ""}${decision.scoreTrend ? ` · ${decision.scoreTrend}` : ""} — confluência real, nunca probabilidade`,
     decision.plan
       ? `Entrada: ${f(decision.plan.entryLow)}–${f(decision.plan.entryHigh)} (${decision.plan.entryBasis}) · Stop: ${f(decision.plan.stopPrice)} (${decision.plan.stopBasis})`
