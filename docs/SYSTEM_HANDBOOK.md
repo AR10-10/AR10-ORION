@@ -44,10 +44,18 @@ direção/entrada/stop/alvo — todos leem o mesmo `NexusDecision`.
 
 | Eixo | Pergunta | Valores | Onde deriva |
 |---|---|---|---|
-| BIAS | Para que lado o contexto inclina? | `LONG_BIAS · SHORT_BIAS · NEUTRAL_BIAS · CONFLICTED_BIAS · INSUFFICIENT_DATA` | `deriveBiasLabel()` |
-| SETUP | Existe estrutura real? (nunca timing) | `LONG_SETUP · SHORT_SETUP · WAITING_FOR_CONFIRMATION · INVALIDATED · NO_VALID_SETUP` (+`WAITING_FOR_RETEST` no tipo, hoje não-alcançável — ver §6.5) | `deriveSetupState()` |
-| ENTRY | O timing autoriza AGORA? | `ENTRY_CONFIRMED · WAITING_FOR_RETEST · WAITING_FOR_CONFIRMATION · ENTRY_INVALIDATED · NO_ENTRY` | `deriveEntryState()` |
-| OPERATION (Leitura) | Síntese de bate-olho | `LONG/SHORT — PLANO ATIVO · AGUARDAR LONG/SHORT · OBSERVAR · SEM OPERAÇÃO` | `deriveOutcomeLabel()` |
+| DIREÇÃO (BIAS) | Para que lado o contexto inclina? | `LONG_BIAS · SHORT_BIAS · NEUTRAL_BIAS · CONFLICTED_BIAS · INSUFFICIENT_DATA` | `deriveBiasLabel()` |
+| ESTRUTURA (SETUP) | Existe estrutura real? (nunca timing) | `LONG_SETUP · SHORT_SETUP · WAITING_FOR_CONFIRMATION · INVALIDATED · NO_VALID_SETUP` (+`WAITING_FOR_RETEST` no tipo, hoje não-alcançável — ver §6.5) | `deriveSetupState()` |
+| TIMING (ENTRY) | O timing autoriza AGORA? | `ENTRY_CONFIRMED · WAITING_FOR_RETEST · WAITING_FOR_CONFIRMATION · ENTRY_INVALIDATED · NO_ENTRY` | `deriveEntryState()` |
+| RISCO | O risco do plano/premissa é qualificável? | `ACEITÁVEL · ELEVADO · INVÁLIDO` (ou omitido — sem plano/sinal real, nunca fabricado); cada estado nomeia a fonte (Heat EXTREMO, R:R vs piso, DIRECTION_CONFLICT, RISK_GATED) | `deriveRiskState()` |
+| CONFLUÊNCIA | Os eixos apontam juntos? | `ALINHADA · MISTA · CONFLITANTE · INSUFICIENTE` — consequência dos próprios eixos, nunca um super-score | `deriveConfluenceState()` |
+| DECISÃO (Leitura) | Síntese de bate-olho | `LONG/SHORT — PLANO ATIVO · AGUARDAR LONG/SHORT · OBSERVAR · SEM OPERAÇÃO` | `deriveOutcomeLabel()` |
+
+Contratos: `NexusDecision` v3 (carrega `heatTier` como passthrough) ·
+Readability v7 (linhas na ordem exata do modelo — DIREÇÃO, ESTRUTURA,
+TIMING, RISCO, CONFLUÊNCIA, DECISÃO). Superfícies: tooltip do badge
+(desktop/mouse) + painel "Síntese Operacional" na aba ANALYSIS (visível
+em toque no iPad).
 
 A direção exibida em QUALQUER lugar da tela (badge herói,
 MarketBiasDecisionCard, MarketDirectionWidget, AssistantOrb expandido)
@@ -166,6 +174,42 @@ permanecem como registro (Regra de Ouro 4 — nunca apagar sem ordem).
 
 ---
 
-*Manutenção: atualizar as seções 2-4 quando a arquitetura mudar (mesma
-disciplina da seção Arquitetura do `CLAUDE.md`); a seção 6 só cresce —
-uma pendência nova entra com destino declarado, nunca fica vaga.*
+## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
+
+Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
+de cada fonte real no pipeline:
+
+| Papel | Fontes reais |
+|---|---|
+| A. DIREÇÃO | Core Engine (único emissor LONG/SHORT/WAIT) · EMA (ema.ts) · estado VWAP · estado Nexus Line · Matriz Multi-Timeframe · Lorentzian k-NN · tendência do Score (Conviction) · Trend Channel (inclinação) |
+| B. ESTRUTURA | fractal-swings (detecção única compartilhada) · S/R com força · HH/HL/LH/LL (market-structure) · FVG/OB (SMC) · BOS/CHOCH · harmônicos XABCD/Wolfe (PRZ/EPA) · Premium/Discount · Volume Profile (POC/HVN) · Fibonacci Confluence |
+| C. TIMING | inEntryZone (histerese real) · operationalState · eixo ENTRY · rompimentos BOS/CHOCH · tendência de order flow (momentum) |
+| D. RISCO | stop real do plano · R:R vs piso declarado 1:2 · Heat Score (tier) · gates DIRECTION_CONFLICT/RISK_GATED · Risk Engine (sizing sugerido, fail-closed) · invalidação/track record |
+| E. CONTEXTO | funding · open interest · liquidações · cross-exchange Δ (Bybit/OKX) · GMIL (consenso global) · sessão de mercado · CVD/order flow · votos do Conselho |
+
+Redundância deliberada e documentada: VWAP e Nexus Line medem equilíbrio
+por métodos distintos (preço médio ponderado vs equilíbrio estrutural) —
+convergência entre eles é informação real, não dupla contagem.
+
+## 8. Fontes externas — avaliação pelos 9 critérios (§7 da Evolução Integrativa)
+
+Critérios: confiabilidade · latência · custo · histórico · replay ·
+qualidade · risco de duplicação · READ_ONLY · FAIL_CLOSED.
+
+| Fonte | Estado | Avaliação resumida |
+|---|---|---|
+| Funding / Open Interest / Liquidações | **JÁ INTEGRADAS** | Binance Futures público; freshness verificável; fail-closed em toda parte. |
+| Cross-Exchange (Bybit/OKX Δ) | **JÁ INTEGRADA** (cross-check advisory) | Cutover do serviço dedicado permanece adiado (§6.4). |
+| Notícias cripto/macro · Sentimento | Avaliadas, NÃO integradas | Fontes gratuitas: confiabilidade/qualidade baixas e sem replay honesto (sem histórico armazenável determinístico); pagas: custo sem ganho demonstrado. Falham nos critérios 1, 5 e 6. |
+| On-chain · Dominância · Stablecoins · Correlação | Avaliadas, NÃO integradas | Compatíveis com READ_ONLY, mas sem caminho de replay/walk-forward no repositório hoje (critério 5) e com risco real de duplicação com o contexto já coberto por GMIL (critério 7). |
+| Calendário econômico | Avaliada, NÃO integrada | Dado de baixa frequência; valor real só com curadoria — reavaliar se o Operador pedir contexto macro explícito. |
+| Fluxo institucional dedicado | Avaliada, NÃO integrada | Fontes confiáveis são pagas/licenciadas; proxies gratuitos falham no critério 1. |
+
+Regra aplicada (§7): mais dados somente se produzirem melhor contexto —
+nenhuma integração nova nesta fase.
+
+---
+
+*Manutenção: atualizar as seções 2-4 e 7-8 quando a arquitetura mudar
+(mesma disciplina da seção Arquitetura do `CLAUDE.md`); a seção 6 só
+cresce — uma pendência nova entra com destino declarado, nunca fica vaga.*
