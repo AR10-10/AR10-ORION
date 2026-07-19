@@ -15,7 +15,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 
 describe('EnhancedChart_110_Percent.tsx: lista canônica única de camadas, todas visíveis por padrão', () => {
-  it('exporta CHART_LAYER_IDS com exatamente os 7 overlays reais do canvas (Camada de Decisão adiciona "ema")', () => {
+  it('exporta CHART_LAYER_IDS com exatamente os 8 overlays reais do canvas (Auditoria do painel do gráfico adiciona "trend_channel")', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     expect(chart).toContain('export const CHART_LAYER_IDS = [');
     for (const id of [
@@ -26,17 +26,18 @@ describe('EnhancedChart_110_Percent.tsx: lista canônica única de camadas, toda
       '"trade_plan_zone"',
       '"neural_market_aura"',
       '"ema"',
+      '"trend_channel"',
     ]) {
       expect(chart).toContain(id);
     }
   });
 
-  it('DEFAULT_CHART_LAYER_VISIBILITY liga as 7 camadas por padrão — o painel nunca esconde nada sem ação explícita do Operador', () => {
+  it('DEFAULT_CHART_LAYER_VISIBILITY liga as 8 camadas por padrão — o painel nunca esconde nada sem ação explícita do Operador', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     const defMatch = chart.match(/export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = \{([\s\S]*?)\};/);
     expect(defMatch, 'DEFAULT_CHART_LAYER_VISIBILITY não encontrado').not.toBeNull();
     const body = defMatch![1];
-    for (const key of ['liquidity_zones', 'structure_breaks', 'order_flow_heatmap', 'volume_profile', 'trade_plan_zone', 'neural_market_aura', 'ema']) {
+    for (const key of ['liquidity_zones', 'structure_breaks', 'order_flow_heatmap', 'volume_profile', 'trade_plan_zone', 'neural_market_aura', 'ema', 'trend_channel']) {
       expect(body).toContain(`${key}: true,`);
     }
   });
@@ -57,9 +58,30 @@ describe('EnhancedChart_110_Percent.tsx: lista canônica única de camadas, toda
     expect(chart).toContain('{visibility.trade_plan_zone && (');
   });
 
-  it('"ema" é a exceção deliberada: série NATIVA (não um plugin de canvas), então esconder alterna visible via applyOptions em vez de desmontar JSX — dado real já computado nunca se perde', () => {
+  it('"ema" e "trend_channel" são a exceção deliberada: séries NATIVAS (não um plugin de canvas), então esconder alterna visible via applyOptions em vez de desmontar JSX — dado real já computado nunca se perde', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     expect(chart).toContain('emaSeriesRef.current.applyOptions({ visible: visibility.ema });');
+    expect(chart).toContain('trendChannelMidRef.current.applyOptions({ visible: visibility.trend_channel });');
+    expect(chart).toContain('trendChannelUpperRef.current.applyOptions({ visible: visibility.trend_channel });');
+    expect(chart).toContain('trendChannelLowerRef.current.applyOptions({ visible: visibility.trend_channel });');
+  });
+
+  it('Trend Channel: zero rótulo novo na borda de preço (lastValueVisible/priceLineVisible desligados nas 3 séries) — o canal se lê pela posição, nunca compete com CHOCH/VWAP/NL/EMA já empilhados', () => {
+    const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
+    const idx = chart.indexOf('const trendChannelSeriesOptions = {');
+    expect(idx).toBeGreaterThan(-1);
+    const block = chart.slice(idx, idx + 600);
+    expect(block).toContain('priceLineVisible: false');
+    expect(block).toContain('lastValueVisible: false');
+    // fio de seda: sólida, nunca tracejada
+    expect(block).toContain('lineStyle: LineStyle.Solid');
+  });
+
+  it('Trend Channel deriva SEMPRE da mesma `data` de candles do gráfico (zero segunda fonte), computeTrendChannel importado do motor puro real', () => {
+    const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
+    expect(chart).toContain('import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW } from "../nexus/trend-channel-engine";');
+    expect(chart).toContain('const reading = computeTrendChannel(');
+    expect(chart).toContain('data.map((c) => ({ time: c.time, close: c.close })),');
   });
 });
 
@@ -98,12 +120,13 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(clIdx).toBeGreaterThan(-1);
   });
 
-  it('CHART_LAYER_PANEL_MODULES lista exatamente as 7 camadas reais, cada id um ChartLayerId válido (o próprio TypeScript trava isso — este teste só confirma que a lista não encolheu/cresceu silenciosamente)', () => {
+  it('CHART_LAYER_PANEL_MODULES lista exatamente as 8 camadas reais, cada id um ChartLayerId válido (o próprio TypeScript trava isso — este teste só confirma que a lista não encolheu/cresceu silenciosamente)', () => {
     const app = read('../src/App.tsx');
     const listMatch = app.match(/const CHART_LAYER_PANEL_MODULES: \{ id: ChartLayerId; label: string \}\[\] = \[([\s\S]*?)\];/);
     expect(listMatch, 'CHART_LAYER_PANEL_MODULES não encontrado').not.toBeNull();
     const entries = listMatch![1].trim().split('\n').filter((l) => l.trim().length > 0);
-    expect(entries).toHaveLength(7);
+    expect(entries).toHaveLength(8);
+    expect(listMatch![1]).toContain('{ id: "trend_channel", label: "TREND CHANNEL" }');
   });
 
   it('painel expõe o seletor real de período da EMA (4 períodos padrão, controle único, nunca uma pilha de linhas)', () => {

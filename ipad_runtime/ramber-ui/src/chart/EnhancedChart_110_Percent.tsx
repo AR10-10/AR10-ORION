@@ -86,6 +86,11 @@ import type { DirectionalLineState } from "../nexus/vwap-state";
 // Ordem "Ciborgue Vivo" §1: BOS/CHOCH real (bos-choch-engine.js via
 // engine-bridge.ts's computeBosChoch) — mesmo tipo que StructureBreakMarkersPlugin usa.
 import type { StructureBreak } from "../engine-bridge";
+// Auditoria do painel do gráfico: "canais de tendência", gap real já
+// documentado em rodadas anteriores — ver cabeçalho de
+// nexus/trend-channel-engine.ts para a definição real (Linear Regression
+// Channel) e a pesquisa que a confirmou.
+import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW } from "../nexus/trend-channel-engine";
 
 export interface EnhancedChartCandle {
   time: number; // Unix segundos real (Bus/Binance) — nunca sintetizado
@@ -150,6 +155,7 @@ export const CHART_LAYER_IDS = [
   "trade_plan_zone",
   "neural_market_aura",
   "ema",
+  "trend_channel",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -161,6 +167,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   trade_plan_zone: true,
   neural_market_aura: true,
   ema: true,
+  trend_channel: true,
 };
 
 interface EnhancedChartProps {
@@ -371,6 +378,18 @@ export function EnhancedChart_110_Percent({
   // Consolidação Final §26-§29: Nexus Line na MESMA escala de preço (é um
   // nível de equilíbrio real, como VWAP/EMA) — nunca uma segunda escala.
   const nexusLineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Auditoria do painel do gráfico: Linear Regression Channel real (mesma
+  // escala de preço das velas) — 3 séries nativas (mid/upper/lower), cor
+  // única em tons de opacidade (convenção padrão da indústria para este
+  // indicador: um canal é UMA leitura, não três linhas concorrentes).
+  // lastValueVisible/priceLineVisible desligados nas três (ver useEffect
+  // de criação abaixo): o valor se lê pela POSIÇÃO do canal no gráfico,
+  // nunca por mais três rótulos empilhados na borda de preço já disputada
+  // por CHOCH/VWAP/NL/EMA — clareza visual (Regra de Ouro/"gráfico limpo")
+  // antes de qualquer indicador novo.
+  const trendChannelMidRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const trendChannelUpperRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const trendChannelLowerRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Espelha chartRef/seriesRef em state só para o LiquidityZonesPlugin
   // montar assim que o chart existe de verdade — refs sozinhas não
   // disparam re-render, então o plugin ficaria esperando por uma
@@ -390,6 +409,14 @@ export function EnhancedChart_110_Percent({
         textColor: "#8ab4f8",
         fontFamily: "ui-monospace, monospace",
         fontSize: 10,
+        // Auditoria do painel do gráfico (achado real): a lib desenha por
+        // padrão o logo "powered by TradingView" sobre o próprio canvas —
+        // destoa do terminal proprietário AR10 CYBORG. A licença Apache-2.0
+        // permite desligar ("attributionLogo: false") DESDE QUE o link real
+        // para tradingview.com continue visível em outro lugar da tela —
+        // ver FooterBar em App.tsx, que agora carrega essa obrigação real
+        // (nunca uma remoção silenciosa da atribuição exigida).
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: "rgba(0, 240, 255, 0.06)" },
@@ -504,6 +531,37 @@ export function EnhancedChart_110_Percent({
       title: "NL •",
     });
     nexusLineSeriesRef.current = nexusLineSeries;
+    // Auditoria do painel do gráfico: Linear Regression Channel — cor
+    // única (slate, tom neutro não usado por nenhum outro overlay: verde/
+    // vermelho=direção, âmbar=zona de entrada, roxo=harmônicos/EQH-EQL,
+    // azul-material=EMA, branco=VWAP), banda mais translúcida que o
+    // centro. lastValueVisible/priceLineVisible desligados nas três — ver
+    // comentário no ref acima (zero rótulo novo na borda de preço).
+    const trendChannelSeriesOptions = {
+      lineWidth: 1 as const,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    };
+    const trendChannelMid = chart.addSeries(LineSeries, {
+      ...trendChannelSeriesOptions,
+      color: "rgba(148, 163, 184, 0.55)",
+      title: "TREND",
+    });
+    const trendChannelUpper = chart.addSeries(LineSeries, {
+      ...trendChannelSeriesOptions,
+      color: "rgba(148, 163, 184, 0.28)",
+      title: "TREND +2σ",
+    });
+    const trendChannelLower = chart.addSeries(LineSeries, {
+      ...trendChannelSeriesOptions,
+      color: "rgba(148, 163, 184, 0.28)",
+      title: "TREND -2σ",
+    });
+    trendChannelMidRef.current = trendChannelMid;
+    trendChannelUpperRef.current = trendChannelUpper;
+    trendChannelLowerRef.current = trendChannelLower;
     chartRef.current = chart;
     seriesRef.current = series;
     setChartReady({ chart, series });
@@ -523,6 +581,9 @@ export function EnhancedChart_110_Percent({
       vwapSeriesRef.current = null;
       emaSeriesRef.current = null;
       nexusLineSeriesRef.current = null;
+      trendChannelMidRef.current = null;
+      trendChannelUpperRef.current = null;
+      trendChannelLowerRef.current = null;
       setChartReady(null);
     };
   }, []);
@@ -766,6 +827,30 @@ export function EnhancedChart_110_Percent({
     if (!emaSeriesRef.current) return;
     emaSeriesRef.current.applyOptions({ visible: visibility.ema });
   }, [visibility.ema]);
+
+  // Auditoria do painel do gráfico: Linear Regression Channel real sobre a
+  // MESMA `data` de candles (zero segunda fonte de dado) — mesmo padrão do
+  // efeito de EMA acima. null (histórico insuficiente) => setData([]) nas
+  // três séries, nunca uma linha fabricada sobre janela vazia.
+  useEffect(() => {
+    if (!trendChannelMidRef.current || !trendChannelUpperRef.current || !trendChannelLowerRef.current) return;
+    const reading = computeTrendChannel(
+      data.map((c) => ({ time: c.time, close: c.close })),
+      TREND_CHANNEL_DEFAULT_WINDOW,
+    );
+    trendChannelMidRef.current.setData((reading?.mid ?? []).map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+    trendChannelUpperRef.current.setData((reading?.upper ?? []).map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+    trendChannelLowerRef.current.setData((reading?.lower ?? []).map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+  }, [data]);
+
+  // Camadas do Gráfico: mesmo padrão de "ema" — esconder alterna visible
+  // nas três séries nativas, nunca desmonta/recomputa.
+  useEffect(() => {
+    if (!trendChannelMidRef.current || !trendChannelUpperRef.current || !trendChannelLowerRef.current) return;
+    trendChannelMidRef.current.applyOptions({ visible: visibility.trend_channel });
+    trendChannelUpperRef.current.applyOptions({ visible: visibility.trend_channel });
+    trendChannelLowerRef.current.applyOptions({ visible: visibility.trend_channel });
+  }, [visibility.trend_channel]);
 
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // Fibonacci como price lines nativas — "fio de seda" (1px sólida, nunca

@@ -511,9 +511,10 @@ export default function App() {
   // per secondary module) — opened from the SideBar's footer button.
   const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState(false);
   // Camadas do Gráfico (Finding M, FASE Ω Priority 3) — mesmo padrão do
-  // Workspace Manager acima, mas para os 6 overlays do CANVAS do gráfico
+  // Workspace Manager acima, mas para os overlays do CANVAS do gráfico
   // (LiquidityZones/StructureBreaks/OrderFlowHeatmap/VolumeProfile/
-  // TradePlanZone/NeuralMarketAura). Painel novo e aditivo: todas as
+  // TradePlanZone/NeuralMarketAura/EMA/TrendChannel — 8 desde a Auditoria
+  // do painel do gráfico). Painel novo e aditivo: todas as
   // camadas continuam ligadas por padrão (DEFAULT_CHART_LAYER_VISIBILITY),
   // nada muda no comportamento existente até o Operador desligar algo.
   const [chartLayersOpen, setChartLayersOpen] = useState(false);
@@ -3041,6 +3042,7 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "trade_plan_zone", label: "TRADE PLAN ZONE" },
   { id: "neural_market_aura", label: "NEURAL MARKET AURA" },
   { id: "ema", label: "EMA" },
+  { id: "trend_channel", label: "TREND CHANNEL" },
 ];
 
 function ChartLayersPanel() {
@@ -7693,6 +7695,25 @@ function FooterBar() {
         <span className="text-[#00f0ff] drop-shadow-[0_0_5px_#00f0ff]">AR10 CYBORG</span>
         <span className="hidden md:inline">|</span>
         <span className="hidden md:inline">TERMINAL READ-ONLY</span>
+        <span className="hidden lg:inline">|</span>
+        {/* Auditoria do painel do gráfico: o logo de atribuição PADRÃO da
+            lightweight-charts (canto do próprio canvas, "powered by
+            TradingView") foi desligado abaixo (attributionLogo: false) por
+            destoar do terminal proprietário AR10 CYBORG — mas a licença
+            Apache-2.0 da biblioteca exige manter um link real para
+            tradingview.com em algum lugar visível ao usuário quando esse
+            logo é desligado (texto real da própria lib, ver typings.d.ts).
+            Este link relocaliza essa obrigação real para a barra de rodapé
+            — nunca a remove (Regra de Ouro 4: realocar, nunca apagar). */}
+        <a
+          href="https://www.tradingview.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Biblioteca de gráfico: TradingView Lightweight Charts™"
+          className="hidden lg:inline text-[#8ab4f8]/45 hover:text-[#8ab4f8]/80"
+        >
+          TRADINGVIEW
+        </a>
       </div>
 
       <div className="flex gap-2 hidden lg:flex items-center text-[#8ab4f8]/60">
