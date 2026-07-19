@@ -14,6 +14,15 @@ const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 const app = () => read('../src/App.tsx');
 const store = () => read('../src/store/unified-snapshot-store.ts');
 const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+// Fatia o corpo INTEIRO de uma function declaration (nunca uma janela de
+// tamanho chutado — achado real: `slice(idx, idx+2200)` quebrou
+// silenciosamente quando MarketBiasDecisionCard cresceu além disso).
+const wholeFunction = (src: string, signature: string): string => {
+  const idx = src.indexOf(signature);
+  if (idx === -1) return '';
+  const nextFnIdx = src.indexOf('\nfunction ', idx + 1);
+  return nextFnIdx === -1 ? src.slice(idx) : src.slice(idx, nextFnIdx);
+};
 
 describe('Store: premiumDiscount + harmonicPatterns nos 4 lugares canônicos do domínio §3', () => {
   it('estado, ação, default e seletor — os 4, para os 2 campos', () => {
@@ -307,18 +316,43 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
   });
 
   it('Continuidade (auditoria de sincronização): MarketBiasDecisionCard ("Sinal Institucional", segundo lugar dedicado a DIREÇÃO) ganha o MESMO qualificador real — reusa OUTCOME_QUALIFIER/deriveOutcomeLabel já testados, nunca uma segunda tabela/lógica', () => {
-    const a = app();
-    const idx = a.indexOf('function MarketBiasDecisionCard()');
-    const nextFnIdx = a.indexOf('\nfunction ', idx + 1);
-    expect(idx).toBeGreaterThan(-1);
-    expect(nextFnIdx).toBeGreaterThan(idx);
-    const block = a.slice(idx, nextFnIdx); // função inteira, sem chutar um tamanho de janela
+    const block = wholeFunction(app(), 'function MarketBiasDecisionCard()');
+    expect(block).not.toBe('');
     expect(block).toContain('nexusDecision } = useContext(WidgetContext) || {};');
     expect(block).toContain('const biasOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;');
     expect(block).toContain('const biasOutcomeQualifier = biasOutcome ? (OUTCOME_QUALIFIER[biasOutcome] ?? null) : null;');
     expect(block).toContain('{biasOutcomeQualifier && (');
     // o texto grande continua o passthrough cru do Núcleo (LEI 24) — o qualificador é ADITIVO, nunca substitui `direction`
     expect(block).toContain('{direction ?? AWAIT}');
+  });
+
+  it('Continuidade (fecha os 3 itens deixados de fora na rodada anterior): MarketDirectionWidget ("Vetor"), SiriformCoreCard ("Sinal") e AssistantOrb expandido ("VETOR") ganham o MESMO qualificador real — 4 lugares reais agora sincronizados com o badge herói, sempre reusando OUTCOME_QUALIFIER/deriveOutcomeLabel, nunca uma quinta lógica', () => {
+    const a = app();
+
+    const mdw = wholeFunction(a, 'function MarketDirectionWidget()');
+    expect(mdw).not.toBe('');
+    expect(mdw).toContain('nexusDecision } = useContext(WidgetContext) || {};');
+    expect(mdw).toContain('const vectorOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;');
+    expect(mdw).toContain('const vectorOutcomeQualifier = vectorOutcome ? (OUTCOME_QUALIFIER[vectorOutcome] ?? null) : null;');
+    expect(mdw).toContain('{vectorOutcomeQualifier && (');
+    // não cresce sem motivo real: só renderiza quando existe (fail-closed)
+    expect(mdw).toContain('Livro Real');
+
+    const siriform = wholeFunction(a, 'function SiriformCoreCard()');
+    expect(siriform).not.toBe('');
+    expect(siriform).toContain('nexusDecision } = useContext(WidgetContext) || {};');
+    expect(siriform).toContain('const sinalOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;');
+    // MiniStat só aceita string — concatenado, nunca uma segunda versão do componente
+    expect(siriform).toContain('const sinalValue = direction ? (sinalOutcomeQualifier ? `${direction} · ${sinalOutcomeQualifier}` : direction) : AWAIT;');
+    expect(siriform).toContain('<MiniStat label="Sinal" value={sinalValue} color={dirColor} />');
+
+    const orb = wholeFunction(a, 'function AssistantOrb(');
+    expect(orb).not.toBe('');
+    expect(orb).toContain('nexusDecision } =\n    useContext(WidgetContext) || {};');
+    expect(orb).toContain('const orbOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;');
+    expect(orb).toContain('{orbOutcomeQualifier && (');
+    // VETOR {dirLabel} continua intocado (LEI 24) — o qualificador é uma 4ª linha aditiva, nunca uma substituição
+    expect(orb).toContain('VETOR {dirLabel}');
   });
 });
 

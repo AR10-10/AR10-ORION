@@ -3133,8 +3133,15 @@ function ChartLayersPanel() {
 // (forecast/voice/quick actions, nothing removed) renders below the
 // 3-column row when expanded (see the DASHBOARD strip in App()).
 function SiriformCoreCard() {
-  const { engine, engineStatus, realCycle, widgets, toggleWidget } = useContext(WidgetContext) || {};
+  const { engine, engineStatus, realCycle, widgets, toggleWidget, nexusDecision } = useContext(WidgetContext) || {};
   const direction: Direction = engine?.direction ?? null;
+  // Continuidade (sincronização BIAS≠ENTRY): mesmo qualificador real já
+  // testado (OUTCOME_QUALIFIER/deriveOutcomeLabel) — concatenado ao valor
+  // do MiniStat "Sinal" porque o componente reutilizável só aceita string
+  // (nunca uma segunda versão do MiniStat só para isto).
+  const sinalOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;
+  const sinalOutcomeQualifier = sinalOutcome ? (OUTCOME_QUALIFIER[sinalOutcome] ?? null) : null;
+  const sinalValue = direction ? (sinalOutcomeQualifier ? `${direction} · ${sinalOutcomeQualifier}` : direction) : AWAIT;
   const collapsed = widgets?.se_core?.collapsed ?? true;
   const statusLabel = engineStatus === "pending" ? AWAIT : engineStatus === "ok" ? "SYNCED" : "FAILED";
   const statusColor =
@@ -3189,7 +3196,7 @@ function SiriformCoreCard() {
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         <MiniStat label="Analysis Cycle" value={statusLabel} color={statusColor} />
-        <MiniStat label="Sinal" value={direction ?? AWAIT} color={dirColor} />
+        <MiniStat label="Sinal" value={sinalValue} color={dirColor} />
         <MiniStat label="k-NN Lorentz." value={lorentzianLabel} color="text-[#8ab4f8]" />
         <MiniStat
           label="Estrutura (15m)"
@@ -3215,7 +3222,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
   const [msgIdx, setMsgIdx] = useState(0);
   const [inputValue, setInputValue] = useState("");
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
-  const { widgets, engine, engineStatus, realCycle, voiceSnapshot, handleManualRestart } =
+  const { widgets, engine, engineStatus, realCycle, voiceSnapshot, handleManualRestart, nexusDecision } =
     useContext(WidgetContext) || {};
 
   if (widgets && inCenter && !widgets.se_core?.visible) return null;
@@ -3223,6 +3230,10 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
   const direction: Direction = engine?.direction ?? null;
   const isLong = direction === "LONG";
   const isShort = direction === "SHORT";
+  // Continuidade (sincronização BIAS≠ENTRY, último dos 4 lugares
+  // auditados): mesmo deriveOutcomeLabel/OUTCOME_QUALIFIER real e testado.
+  const orbOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;
+  const orbOutcomeQualifier = orbOutcome ? (OUTCOME_QUALIFIER[orbOutcome] ?? null) : null;
   const entry: number | null = engine?.entry ?? null;
   const target: number | null = engine?.target ?? null;
   const stop: number | null = engine?.stop ?? null;
@@ -3288,6 +3299,11 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                 <span className="text-[0.5rem] sm:text-[0.55rem] tracking-[0.2em] text-[#8ab4f8] font-bold uppercase opacity-80 mt-1 sm:mt-0">
                   (ESTRUTURA REAL)
                 </span>
+                {orbOutcomeQualifier && (
+                  <span className="text-[0.5rem] sm:text-[0.55rem] tracking-[0.2em] text-[#8ab4f8]/70 font-bold uppercase mt-1 sm:mt-0">
+                    · {orbOutcomeQualifier}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 bg-[#00ffaa10] px-3 py-1 rounded border border-[#00ffaa30]">
                 <Wifi size={12} className="animate-pulse text-[#00ffaa]" />
@@ -5965,7 +5981,7 @@ function HeatmapWidget({ book, data }: any) {
 
 // --- MIDDLE COLUMN: DIRECTION ---
 function MarketDirectionWidget() {
-  const { widgets, engine } = useContext(WidgetContext) || {};
+  const { widgets, engine, nexusDecision } = useContext(WidgetContext) || {};
   if (widgets && !widgets.market_direction.visible) return null;
 
   const buyPercent: number | null = engine?.buyPercent ?? null;
@@ -5973,6 +5989,13 @@ function MarketDirectionWidget() {
   const direction: Direction = engine?.direction ?? null;
   const isLong = direction === "LONG";
   const isShort = direction === "SHORT";
+  // Continuidade (sincronização BIAS≠ENTRY, 3º/4º lugar): mesmo
+  // deriveOutcomeLabel/OUTCOME_QUALIFIER já real e testado — reusado, nunca
+  // uma segunda lógica. Só renderiza quando existe (fail-closed): o widget
+  // nunca cresce sem um motivo real (SEM OPERAÇÃO deliberadamente sem
+  // entrada na tabela).
+  const vectorOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;
+  const vectorOutcomeQualifier = vectorOutcome ? (OUTCOME_QUALIFIER[vectorOutcome] ?? null) : null;
 
   const vectorLabel = isLong ? "Long Dominance" : isShort ? "Short Dominance" : AWAIT;
   const vectorColor = isLong
@@ -6020,6 +6043,11 @@ function MarketDirectionWidget() {
             Livro Real
           </span>
         </div>
+        {vectorOutcomeQualifier && (
+          <span className="text-[0.3rem] uppercase tracking-widest font-bold text-[#8ab4f8]/50 whitespace-nowrap">
+            {vectorOutcomeQualifier}
+          </span>
+        )}
       </div>
 
       <div className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
