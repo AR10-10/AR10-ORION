@@ -91,6 +91,16 @@ describe('§2 Matriz de consistência obrigatória — Casos A-E por execução 
     expect(d.plan).toBeNull();
   });
 
+  it('CASO B espelhado em SHORT (exemplo obrigatório da Diretriz de Evolução Profissional Fase 2): BIAS SHORT_BIAS · SETUP NO_VALID_SETUP · ENTRY NO_ENTRY · OPERATION OBSERVAR — mesma simetria já provada em LONG, travada aqui na direção literal do exemplo', () => {
+    const d = buildNexusDecision({ ...DECISION_BASE, coreDirection: 'SHORT', coreConfidence: 'ALTA', score: 70, councilStance: 'SHORT', councilRiskGated: false });
+    expect(d.planGap).toBe('NO_STRUCTURE');
+    expect(deriveBiasLabel(d)).toBe('SHORT_BIAS');
+    expect(deriveSetupState(d)).toBe('NO_VALID_SETUP');
+    expect(deriveEntryState(d)).toBe('NO_ENTRY');
+    expect(deriveOutcomeLabel(d)).toBe('OBSERVAR');
+    expect(d.plan).toBeNull();
+  });
+
   it('CASO C — BIAS LONG + SETUP LONG, timing ainda pendente: LEITURA AGUARDAR LONG (SETUP e ENTRY podem divergir honestamente)', () => {
     const plan = buildTradePlan(LONG_PLAN_INPUTS, 1_000)!;
     const d = buildNexusDecision({ ...DECISION_BASE, coreDirection: 'LONG', coreConfidence: 'ALTA', score: 70, councilStance: 'LONG', plan, targetsHit: 0, inEntryZone: false });

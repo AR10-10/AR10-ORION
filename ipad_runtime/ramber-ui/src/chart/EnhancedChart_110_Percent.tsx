@@ -91,6 +91,7 @@ import type { StructureBreak } from "../engine-bridge";
 // nexus/trend-channel-engine.ts para a definição real (Linear Regression
 // Channel) e a pesquisa que a confirmou.
 import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW } from "../nexus/trend-channel-engine";
+import { shouldCompactLabels } from "./label-compaction";
 
 export interface EnhancedChartCandle {
   time: number; // Unix segundos real (Bus/Binance) — nunca sintetizado
@@ -260,13 +261,11 @@ interface EnhancedChartProps {
   nexusLineState?: DirectionalLineState | null;
 }
 
-// Continuidade §6 (hierarquia visual dos alvos): quando dois níveis
-// adjacentes do plano (stop efetivo + alvos) ficam a menos deste limiar
-// (% do preço médio do par) um do outro, os rótulos de TODOS os alvos
-// entram no modo compacto — label + distância + ETA, sem basis/R:R (que
-// continuam no Trade Plan strip e nos painéis). As LINHAS permanecem
-// ancoradas no preço real: o preço matemático nunca muda para caber.
-const TARGET_LABEL_COMPACT_PCT = 0.35;
+// Continuidade §6 (hierarquia visual dos alvos) — Diretriz de Evolução
+// Profissional Fase 10 item P: a lógica em si (limiar + decisão de
+// compactar) agora vive em label-compaction.ts como função pura testável
+// por execução real; este arquivo só importa e usa (Regra de Ouro 4:
+// realocar, nunca duplicar).
 
 // §22: paleta institucional de estado + seta discreta. A NL usa a mesma
 // paleta com opacidade menor — §29 "nunca competir visualmente com a VWAP".
@@ -1153,11 +1152,7 @@ export function EnhancedChart_110_Percent({
     // deslocado). O stop EFETIVO entra na medição — o ratchet de
     // break-even pode encostá-lo num alvo real.
     const levels = [effectiveStopPrice, ...tradePlan.targets.map((t) => t.price)].sort((a, b) => a - b);
-    const compactLabels = levels.some((price, i) => {
-      if (i === 0) return false;
-      const ref = (price + levels[i - 1]) / 2;
-      return ref > 0 && ((price - levels[i - 1]) * 100) / ref < TARGET_LABEL_COMPACT_PCT;
-    });
+    const compactLabels = shouldCompactLabels(levels);
     tradePlan.targets.forEach((target, i) => {
       const line = targetLinesArrayRef.current[i];
       if (!line) return;

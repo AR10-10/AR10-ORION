@@ -163,7 +163,108 @@ for (const vp of VIEWPORTS) {
     return out.length ? out : ["CLEAN"];
   });
 
-  results.push({ vp: vp.name, issues });
+  // Diretriz de Evolução Profissional, Fase 11 ("A condição mais
+  // importante é testar com conteúdo real preenchido. Não validar somente
+  // o estado vazio."): achado real de auditoria — o bloco acima só
+  // preenche o HEADER; a gaveta Market Intelligence (MarketDirectionWidget
+  // + MarketBiasDecisionCard, os 2 lugares mais recentes a ganhar o
+  // qualificador BIAS≠ENTRY) nunca tinha sido testada com o texto mais
+  // longo realista ("AGUARDANDO ENTRADA", o pior caso das 3 opções da
+  // tabela real). Mesma técnica (mutação de texto real + medição síncrona,
+  // zero dado fabricado exibido a um usuário real — sandbox de auditoria).
+  // Clicar e medir precisam ser DUAS chamadas separadas: React só reconcilia
+  // a nova classe "drawer-open" depois do click() retornar (o flush do
+  // scheduler não é síncrono dentro do mesmo evaluate) — achado real ao
+  // rodar este script pela primeira vez, não uma suposição.
+  const opened = await page.evaluate(() => {
+    const btn = [...document.querySelectorAll("button")].find((b) => (b.getAttribute("title") ?? "") === "Market Intelligence");
+    if (!btn) return false;
+    btn.click();
+    return true;
+  });
+  if (!opened) {
+    results.push({ vp: vp.name, issues: [...issues.filter((i) => i !== "CLEAN"), "FALHA: botão 'Market Intelligence' não encontrado"] });
+    await page.close();
+    continue;
+  }
+  await page.waitForTimeout(300);
+
+  const drawerIssues = await page.evaluate(() => {
+    const out = [];
+    const all = (sel) => [...document.querySelectorAll(sel)];
+    const set = (el, text) => {
+      if (el) el.textContent = text;
+    };
+    // MarketDirectionWidget: "Vetor" + qualificador (pior caso: mais longo)
+    const vetorLabel = all("span").find((s) => s.textContent?.trim() === "Vetor");
+    if (vetorLabel?.parentElement) {
+      const kids = [...vetorLabel.parentElement.children];
+      set(kids[1], "Short Dominance");
+      const qualifierSpan = kids[3]; // 4ª linha condicional (só existe quando há qualificador — clona se ausente)
+      if (qualifierSpan) {
+        set(qualifierSpan, "AGUARDANDO ENTRADA");
+      } else {
+        const bookRow = kids[2];
+        const clone = bookRow?.cloneNode(true);
+        if (clone) {
+          clone.textContent = "AGUARDANDO ENTRADA";
+          bookRow.after(clone);
+        }
+      }
+    }
+    // MarketBiasDecisionCard: "Sinal Institucional" + qualificador (pior caso)
+    const sinalLabel = all("span").find((s) => s.textContent?.trim() === "Sinal Institucional");
+    if (sinalLabel?.parentElement) {
+      const valueSpan = [...sinalLabel.parentElement.children].find((c) => c !== sinalLabel);
+      if (valueSpan) {
+        valueSpan.textContent = "";
+        const direction = document.createTextNode("SHORT");
+        const qualifier = document.createElement("span");
+        qualifier.className = "ml-1.5 text-[0.4rem] font-bold tracking-[0.1em] text-[#8ab4f8]/60 uppercase align-middle";
+        qualifier.textContent = "AGUARDANDO ENTRADA";
+        valueSpan.appendChild(direction);
+        valueSpan.appendChild(qualifier);
+      }
+    }
+
+    // Medição: nenhum irmão visível dentro da gaveta pode se sobrepor.
+    const drawer = all("div").find((d) => d.className.includes("terminal-left") && d.className.includes("drawer-open"));
+    if (!drawer) return ["FALHA: gaveta Market Intelligence não abriu"];
+    if (document.body.scrollWidth > window.innerWidth + 1) out.push(`BODY overflow-x ${document.body.scrollWidth} (gaveta aberta)`);
+    const cards = [...drawer.children].filter((c) => c.getBoundingClientRect().width > 4 && c.getBoundingClientRect().height > 4);
+    for (let i = 0; i < cards.length; i++) {
+      for (let j = i + 1; j < cards.length; j++) {
+        const a = cards[i].getBoundingClientRect();
+        const b = cards[j].getBoundingClientRect();
+        const ix = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const iy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        if (ix > 3 && iy > 3) out.push(`GAVETA: cartões sobrepostos ${Math.round(ix)}x${Math.round(iy)}px (índices ${i}×${j})`);
+      }
+    }
+    // dentro de cada cartão, os próprios filhos de texto tampouco podem colidir
+    for (const card of cards) {
+      const leaves = all("span,div")
+        .filter((e) => card.contains(e) && e.childElementCount === 0 && (e.textContent ?? "").trim().length > 0)
+        .filter((e) => e.getBoundingClientRect().width > 2 && e.getBoundingClientRect().height > 2);
+      for (let i = 0; i < leaves.length; i++) {
+        for (let j = i + 1; j < leaves.length; j++) {
+          const a = leaves[i].getBoundingClientRect();
+          const b = leaves[j].getBoundingClientRect();
+          const ix = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+          const iy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+          if (ix > 3 && iy > 3) {
+            out.push(
+              `GAVETA: texto sobreposto ${Math.round(ix)}x${Math.round(iy)}px: [${(leaves[i].textContent ?? "").slice(0, 24)}] × [${(leaves[j].textContent ?? "").slice(0, 24)}]`,
+            );
+          }
+        }
+      }
+    }
+    return out.length ? out : ["CLEAN"];
+  });
+
+  const combined = [...issues, ...drawerIssues].filter((i) => i !== "CLEAN");
+  results.push({ vp: vp.name, issues: combined.length ? combined : ["CLEAN"] });
   await page.close();
 }
 await browser.close();
