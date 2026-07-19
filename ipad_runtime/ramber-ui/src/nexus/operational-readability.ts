@@ -27,8 +27,12 @@
 // rótulo de bate-olho, nunca uma quarta fonte de verdade.
 import { NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./decision-layer";
 import { formatEtaRange } from "./eta-engine";
+// v6: piso declarado de R:R (fecho da pendência "R:R mínimo") — anota o
+// alvo cujo R:R real fica abaixo da convenção 1:2; ver rr-quality.ts para
+// a natureza honesta do número (parâmetro declarado, nunca medição).
+import { rrFloorSuffix } from "./rr-quality";
 
-export const READABILITY_CONTRACT_VERSION = 5 as const;
+export const READABILITY_CONTRACT_VERSION = 6 as const;
 
 const DASH = "—"; // mesmo caractere honesto de ausência usado em todo o header
 
@@ -218,7 +222,7 @@ export function buildOperationalSummary(decision: NexusDecision | null | undefin
     ...(decision.plan
       ? decision.plan.targets.map(
           (t, i) =>
-            `TP${i + 1}: ${f(t.price)} (${t.basis})${t.riskReward !== null ? ` · R:R 1:${t.riskReward.toFixed(2)}` : ""}${formatEtaRange(t.etaMsMin, t.etaMs) ? ` · ETA ${formatEtaRange(t.etaMsMin, t.etaMs)}` : ""}${t.hit ? " · ATINGIDO" : ""}`,
+            `TP${i + 1}: ${f(t.price)} (${t.basis})${t.riskReward !== null ? ` · R:R 1:${t.riskReward.toFixed(2)}${rrFloorSuffix(t.riskReward)}` : ""}${formatEtaRange(t.etaMsMin, t.etaMs) ? ` · ETA ${formatEtaRange(t.etaMsMin, t.etaMs)}` : ""}${t.hit ? " · ATINGIDO" : ""}`,
         )
       : []),
     decision.reason ? `Motivo: ${decision.reason} (${decision.reasonBasis ?? "base real"})` : null,

@@ -72,9 +72,10 @@ describe('buildOperationalSummary: o "bateu o olho" (§6) por execução real', 
     expect(lines[4]).toBe('Leitura: LONG — PLANO ATIVO');
     expect(lines[5]).toContain('Confiança: ALTA · Score 72 (ZONA FORTE) · FORTALECENDO — confluência real, nunca probabilidade');
     expect(lines[6]).toBe('Entrada: 99.00–100.00 (OB_BULLISH) · Stop: 95.00 (SR_SUPPORT_1)');
-    // f(): < 1000 com 2 casas, >= 1000 sem casas — a convenção do cockpit
-    expect(lines[7]).toBe('TP1: 105.00 (VP_POC) · R:R 1:1.22 · ETA ≈ 5m–10m · ATINGIDO');
-    expect(lines[8]).toBe('TP2: 64100 (EQH) · R:R 1:2.44'); // sem ETA real => sem sufixo fabricado
+    // f(): < 1000 com 2 casas, >= 1000 sem casas — a convenção do cockpit.
+    // v6: R:R 1.22 < piso declarado 1:2 => anotação honesta; 2.44 => nada.
+    expect(lines[7]).toBe('TP1: 105.00 (VP_POC) · R:R 1:1.22 (abaixo do piso 1:2) · ETA ≈ 5m–10m · ATINGIDO');
+    expect(lines[8]).toBe('TP2: 64100 (EQH) · R:R 1:2.44'); // sem ETA real => sem sufixo fabricado; R:R no piso ou acima => sem anotação
     expect(lines[9]).toBe('Motivo: Compra favorecida. (conselho LONG + fluxo real)');
     expect(lines.find((l) => l.startsWith('Favoráveis:'))).toContain('estrutura real de alta (Conselho·STRUCTURE)');
     expect(lines.find((l) => l.startsWith('Contrários:'))).toContain('3/9 prazos concordam (Conviction·MULTI_TIMEFRAME)');
