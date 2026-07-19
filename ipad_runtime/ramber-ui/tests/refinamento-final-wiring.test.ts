@@ -286,12 +286,24 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
 
   it('badge herói: estado no subtítulo existente e tooltip com Estado + Favoráveis/Contrários', () => {
     const a = app();
-    expect(a).toContain('{decision?.operationalState ? ` · ${decision.operationalState}` : ""}');
     // §7: Estado/Favoráveis/Contrários agora nascem na Readability Layer
     const layer = read('../src/nexus/operational-readability.ts');
     expect(layer).toContain('· Estado: ${decision.operationalState}');
     expect(layer).toContain('`Favoráveis: ${decision.reasonsFor.join(" · ")}`');
     expect(layer).toContain('`Contrários: ${decision.reasonsAgainst.join(" · ")}`');
+  });
+
+  it('Auditoria Final de Integração: o subtítulo VISÍVEL do badge herói (nunca só o tooltip, que não aparece em toque no iPad) qualifica BIAS≠ENTRY com deriveOutcomeLabel — mesmo dado real do Estado, agora legível sem hover', () => {
+    const a = app();
+    expect(a).toContain('const outcome = decision ? deriveOutcomeLabel(decision) : null;');
+    expect(a).toContain('{outcomeQualifier ? ` · ${outcomeQualifier}` : ""}');
+    expect(a).toContain('import { buildOperationalSummary, deriveOutcomeLabel, type NexusOutcomeLabel } from "./nexus/operational-readability";');
+    const m = a.match(/const OUTCOME_QUALIFIER: Partial<Record<NexusOutcomeLabel, string>> = \{([\s\S]*?)\};/);
+    expect(m, 'tabela de qualificadores visíveis não encontrada').not.toBeNull();
+    expect(m![1]).toContain('LONG: "PLANO ATIVO"');
+    expect(m![1]).toContain('OBSERVAR: "SEM ESTRUTURA"');
+    // title continua existindo (o raciocínio completo ainda está lá para desktop/mouse) — isto é ADITIVO, nunca uma substituição do tooltip
+    expect(a).toContain('title={fusedTitle}');
   });
 });
 

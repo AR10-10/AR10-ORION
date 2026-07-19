@@ -129,7 +129,7 @@ import { computeVwapContext, type VwapContext, type DirectionalLineState } from 
 import { computeNexusLineSeries, latestNexusLine, nexusLineState, nexusConfluenceVerdict } from "./nexus/nexus-line";
 // Evolução Integrativa §7: Operational Readability Layer — NexusDecision
 // vira apresentação num módulo puro nomeado (zero matemática de direção).
-import { buildOperationalSummary } from "./nexus/operational-readability";
+import { buildOperationalSummary, deriveOutcomeLabel, type NexusOutcomeLabel } from "./nexus/operational-readability";
 import { marketSessionFromUtc } from "./nexus/market-session";
 import { computeHeatScore } from "./nexus/heat-score";
 import { buildNexusDecision, NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./nexus/decision-layer";
@@ -4122,6 +4122,22 @@ function StructureLevelsStrip() {
 // "Confidence" por extenso embaixo, dentro da altura fixa de 46px da
 // barra (Zero Scroll permanece intacto: cresce a hierarquia visual, nunca
 // a barra). Continua sendo a ÚNICA leitura do Core Engine em toda a tela.
+//
+// Auditoria Final de Integração (BIAS→SETUP→ENTRY→PLANO): qualificador
+// VISÍVEL do subtítulo — releitura pura de deriveOutcomeLabel (nenhuma
+// matemática nova), nunca do `direction` grande acima (que continua
+// passthrough literal do Núcleo, LEI 24 intocada). Fecha a lacuna real
+// encontrada: o mesmo raciocínio BIAS≠ENTRY só existia dentro do
+// title=fusedTitle (tooltip nativo — nunca aparece em toque no iPad).
+const OUTCOME_QUALIFIER: Partial<Record<NexusOutcomeLabel, string>> = {
+  LONG: "PLANO ATIVO",
+  SHORT: "PLANO ATIVO",
+  "AGUARDAR LONG": "AGUARDANDO ENTRADA",
+  "AGUARDAR SHORT": "AGUARDANDO ENTRADA",
+  OBSERVAR: "SEM ESTRUTURA",
+  // "SEM OPERAÇÃO" fica de fora de propósito: nada de notável a qualificar.
+};
+
 function CoreSignalBadge({
   direction,
   confidence,
@@ -4142,6 +4158,21 @@ function CoreSignalBadge({
   // camada nomeada, pura e com execução real de teste. Conteúdo idêntico;
   // o badge só exibe (§7: consumidores nunca reinterpretam).
   const fusedTitle = buildOperationalSummary(decision).join("\n");
+  // Auditoria Final de Integração (achado real): title=fusedTitle é um
+  // tooltip nativo — nunca aparece em toque/tap no iPad Safari (a
+  // plataforma-alvo real deste app, CLAUDE.md "60 FPS em iPad Safari").
+  // Sem esta linha, BIAS/SETUP/ENTRY ficavam matematicamente corretos mas
+  // 100% inacessíveis na tela real do Operador: o texto grande (`direction`)
+  // é o passthrough literal do Núcleo (LEI 24, nunca alterado aqui), mas
+  // sozinho ele não distinguia "LONG com entrada confirmada" de "LONG só
+  // como viés" — exatamente o "LONG + entrada forçada" que a Diretriz
+  // BIAS≠ENTRY pediu para nunca comunicar. O qualificador abaixo é uma
+  // RELOCAÇÃO do mesmo rótulo já real e testado (deriveOutcomeLabel), só
+  // visível agora sem precisar de hover — nenhuma matemática nova.
+  const outcome = decision ? deriveOutcomeLabel(decision) : null;
+  const outcomeQualifier: string | null = outcome
+    ? OUTCOME_QUALIFIER[outcome] ?? null
+    : null;
   const textTone = isLong
     ? "text-[#00ffaa] drop-shadow-[0_0_10px_rgba(0,255,170,0.65)]"
     : isShort
@@ -4160,9 +4191,14 @@ function CoreSignalBadge({
       <span className={`text-sm md:text-base font-black tracking-wider ${textTone}`}>{direction ?? AWAIT}</span>
       <span className="text-[0.4rem] md:text-[0.45rem] font-bold text-[#8ab4f8]/60 tracking-[0.18em] uppercase mt-[1px] whitespace-nowrap">
         {/* V2 §3: o estado operacional único no subtítulo do MESMO badge —
-            header alimentado pelo contrato sem um elemento novo. */}
+            header alimentado pelo contrato sem um elemento novo. Auditoria
+            Final de Integração: o qualificador BIAS≠ENTRY (PLANO ATIVO /
+            AGUARDANDO ENTRADA / SEM ESTRUTURA) substitui o operationalState
+            cru — o mesmo dado real continua na linha 1 do tooltip
+            ("Estado: ..."), aqui vira a síntese que o Operador reconhece
+            sem abrir o tooltip. */}
         {confidence ? `Confidence · ${confidence}` : AWAIT}
-        {decision?.operationalState ? ` · ${decision.operationalState}` : ""}
+        {outcomeQualifier ? ` · ${outcomeQualifier}` : ""}
       </span>
     </div>
   );
