@@ -42,19 +42,26 @@ import { CONNECTOR_STATES } from '../../js/real-data/schema.js';
 // originalmente reportado. Correção: o sufixo de cache nunca pode
 // vazar para o parâmetro real de símbolo enviado à API — é removido
 // aqui, na fronteira entre o Bus e o conector real.
-/** @param {{symbol: string, timeframe: string, limit: number, endTime?: number}} opts
+/** @param {{symbol: string, timeframe: string, limit: number, endTime?: number, returnEvidence?: boolean}} opts
  *  endTime (auditoria de arquitetura — paginação histórica do gráfico):
  *  repassado integralmente a probe() abaixo, mesma semântica real da
  *  Binance. undefined preserva o comportamento de sempre (candles mais
  *  recentes) — usado pelo Market Data Bus, que nunca pede uma página
- *  antiga. Só o novo fetch de paginação em engine-bridge.ts passa este
- *  campo, e ele NUNCA passa pelo Bus (ver getOlderChartCandles).
- *  @returns {Promise<Array<{t:number,o:number,h:number,l:number,c:number,v:number}>>} */
-export async function collectBinanceFuturesKlines({ symbol, timeframe, limit, endTime }) {
+ *  antiga. Só o fetch de paginação em engine-bridge.ts passa este campo,
+ *  e ele NUNCA passa pelo Bus (ver getOlderChartCandles).
+ *  returnEvidence (Fase 2 do backtest honesto — captura de histórico com
+ *  proveniência, laboratório em src/research/backtest/): default
+ *  false preserva 100% o retorno original (só o array de candles, único
+ *  formato que getOlderChartCandles já consome). true devolve o Evidence
+ *  Object completo (fetched_at/raw_sample_hash/source_id inclusos) — a
+ *  MESMA proveniência que já rege todo o Real Data Layer, nunca um
+ *  campo novo inventado para este caso de uso.
+ *  @returns {Promise<Array<{t:number,o:number,h:number,l:number,c:number,v:number}>> | Promise<object>} */
+export async function collectBinanceFuturesKlines({ symbol, timeframe, limit, endTime, returnEvidence = false }) {
     const realSymbol = symbol.endsWith('-PERP') ? symbol.slice(0, -'-PERP'.length) : symbol;
     const result = await probeBinanceFutures({ symbol: realSymbol, interval: timeframe, limit, includeDerivatives: false, endTime });
     if (result.state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) {
         throw new Error(`conector_binance_futures_estado:${result.state}`);
     }
-    return result.evidence.candles;
+    return returnEvidence ? result.evidence : result.evidence.candles;
 }

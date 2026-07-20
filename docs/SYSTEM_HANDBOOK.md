@@ -91,14 +91,17 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 | Janela do Trend Channel | 50 candles | `nexus/trend-channel-engine.ts` | Mesma ordem de grandeza do EMA50; bandas ±2σ (cobertura amostral, nunca probabilidade). |
 | Janela ENCERRADO | 5 min | `nexus/decision-layer.ts` | Pós-operação recente. |
 | Decaimento de zonas | 30→100 candles | `chart/annotation-decay.ts` | Zonas velhas esmaecem até 15% e saem da TELA (nunca do dado). |
+| Página de captura de histórico | 1000 candles | `research/backtest/history-capture.js` | Abaixo do limite documentado da Binance (1500), folga deliberada. Laboratório (fase 2 do backtest honesto, §6.7) — não é caminho de produção. |
+| Teto de páginas de captura | 50 páginas | `research/backtest/history-capture.js` | Segurança contra laço sem fim (50 000 candles no pior caso); nunca atingido em captura normal. |
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (97+ arquivos, 1470+ testes) +
+- `npx tsc --noEmit` + `npx vitest run` (100+ arquivos, 1514+ testes) +
   `npm run build`.
-- `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 10
-  viewports (iPad Mini→ultrawide 34") com CONTEÚDO MÁXIMO injetado no
-  header E na gaveta Market Intelligence (nunca só estado vazio).
+- `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
+  viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
+  de MacBook em Retina 2x) com CONTEÚDO MÁXIMO injetado no header E na
+  gaveta Market Intelligence (nunca só estado vazio).
 - Replay sem look-ahead: `tests/replay-walk-forward.test.ts` (521 janelas,
   snapshot congelado) sobre fixture versionada por seed
   (`tests/replay-fixture.test.ts` — proveniência bit-a-bit).
@@ -186,12 +189,30 @@ evolução comprovadamente mais importante; autorizada pelo Operador.
   LONG/SHORT provados por execução real (11 testes). Aviso de honestidade
   gravado no contrato. Nenhum fio com o caminho ao vivo (LEI 24,
   fronteira travada por teste).
-- **Fase 2 — PRÓXIMA**: captura e armazenamento de histórico REAL com
-  proveniência (paginação via conector direto — nunca pelo Bus, regra do
-  `CLAUDE.md` — + persistência versionada). Exige ambiente com egress às
-  exchanges (produção/dispositivo do Operador; o sandbox de CI não tem).
-- **Fase 3 — DEPOIS**: rodar o laboratório sobre a amostra real capturada
-  e reportar contagens auditáveis (só então §6.3/§13 reabre de fato).
+- **Fase 2 — CÓDIGO PRONTO, CAPTURA REAL AINDA PENDENTE** (2026-07-20):
+  `src/research/backtest/history-capture.js` pagina candles reais para
+  trás pelo MESMO conector direto já usado pelo scroll-back do gráfico
+  (`collectBinanceFuturesKlines` — mudança aditiva: `returnEvidence`
+  opcional, default preserva 100% o comportamento existente; nunca pelo
+  Bus, regra do `CLAUDE.md`), acumulando proveniência real por página (o
+  MESMO Evidence Object de `js/real-data/schema.js` — nenhum campo novo
+  inventado), com dedup, detecção EXATA de gaps e fail-closed que nunca
+  descarta captura parcial boa. 18 testes de execução real, incluindo
+  fronteira LEI 24 (`ramber-ui/tests/history-capture.test.ts`). Duas
+  coisas continuam honestamente pendentes, sem as quais a fase 2 não
+  "aconteceu" de fato:
+  1. **Decisão de superfície**: onde/como o Operador dispara a captura
+     real (botão em painel existente, outro caminho) — deliberadamente
+     não decidida nesta entrega para não misturar decisão de produto com
+     a matemática de paginação (mesma disciplina da Regra de Ouro 6:
+     iniciativa própria isolada).
+  2. **A captura em si**: exige ambiente com egress real às exchanges
+     (produção/dispositivo do Operador; o sandbox de CI não tem). Sem
+     ela, nenhum histórico real existe ainda — só a ferramenta para
+     produzi-lo.
+- **Fase 3 — DEPOIS**: rodar o laboratório (`structural-backtest.js`)
+  sobre a amostra real capturada pela fase 2 e reportar contagens
+  auditáveis (só então §6.3/§13 reabre de fato).
 
 ---
 

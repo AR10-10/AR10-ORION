@@ -94,7 +94,11 @@ describe('Fiação real: getOlderChartCandles nunca passa pelo Market Data Bus (
     expect(publicConnector).toContain('endTime } = {}) {');
     expect(publicConnector).toContain("`&endTime=${encodeURIComponent(Math.round(endTime))}`");
     const futuresConnector = read('../../src/market-data-bus/binance-futures-candle-connector.js');
-    expect(futuresConnector).toContain('export async function collectBinanceFuturesKlines({ symbol, timeframe, limit, endTime }) {');
+    // Fase 2 do backtest honesto (captura de histórico com proveniência)
+    // acrescentou returnEvidence com default false — o scroll-back do
+    // gráfico (getOlderChartCandles) não passa esse campo, então seu
+    // comportamento real é bit-a-bit idêntico a antes.
+    expect(futuresConnector).toContain('export async function collectBinanceFuturesKlines({ symbol, timeframe, limit, endTime, returnEvidence = false }) {');
     expect(futuresConnector).toContain('includeDerivatives: false, endTime });');
   });
 });

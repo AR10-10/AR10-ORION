@@ -120,6 +120,37 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   (captura/armazenamento de histórico REAL — sem ela, qualquer número
   daqui descreve apenas a série fornecida).
 
+- **`backtest/history-capture.js`** (2026-07-20, fase 2 da mesma
+  iniciativa). Pagina candles reais para trás a partir do conector direto
+  já usado pelo scroll-back do gráfico (`collectBinanceFuturesKlines`,
+  `src/market-data-bus/binance-futures-candle-connector.js` — mudança
+  aditiva nesse arquivo: `returnEvidence` opcional, default `false`
+  preserva 100% o comportamento existente do scroll-back), acumulando
+  candles + proveniência real por página (reusa o MESMO Evidence Object
+  de `js/real-data/schema.js` — `fetched_at`/`raw_sample_hash`/
+  `source_id` — nenhum campo novo de proveniência foi inventado). Dedup
+  por tempo, detecção EXATA de gaps (via `timeframeToSeconds` de
+  `quality-engine.js`, reaproveitado — não uma segunda matemática de
+  passo de timeframe), fail-closed em toda falha real (para a paginação
+  sem descartar o que já foi capturado com sucesso, nunca finge alcançar
+  o alvo), teto de segurança `maxPages` contra laço sem fim. Provado só
+  com `fetchPage` injetado (fixture determinística) e, para
+  `fetchRealPage`, mock na MESMA fronteira de rede que o resto do Real
+  Data Layer já usa (`js/real-data/binance-futures-public.js`) — nunca
+  executado contra rede real nesta sessão de implementação (sandbox sem
+  egress a exchanges).
+  Status: **LABORATÓRIO, sem gatilho de UI ainda** — nenhum módulo de
+  produção importa daqui (fronteira travada por teste em
+  `ramber-ui/tests/history-capture.test.ts`). O código de paginação está
+  pronto e testado, mas duas coisas continuam pendentes antes da fase 2
+  "acontecer" de fato: (1) decidir ONDE/COMO o Operador dispara a
+  captura real (botão em algum painel existente, ou outro caminho —
+  decisão de superfície de produto, deliberadamente não tomada nesta
+  entrega para não misturar com a matemática de paginação) e (2) rodar a
+  captura de verdade num ambiente com egress real às exchanges
+  (produção/dispositivo do Operador — o sandbox de CI não tem). Ver
+  `SYSTEM_HANDBOOK.md` §6.7.
+
 ## Regra de quarentena daqui para frente
 
 Nenhum arquivo de `src/research/**` pode ser importado por `js/**` sem,
