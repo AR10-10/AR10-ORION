@@ -126,6 +126,16 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   (excursão ÷ risco do próprio trial); o agregado ganhou `avgMfeR`/
   `avgMaeR` totais e por direção. Zero mudança na regra estrutural de
   medição em si.
+  **Atualização (Diretriz de Evolução Quantitativa e Aprendizado Real §2,
+  "alvo máximo estrutural"):** cada trial ganhou `farTarget` — a 2ª linha
+  real de S/R do mesmo `support-resistance-engine.js` (`resistance_2`/
+  `support_2`, dado já calculado por esse engine mas nunca lido aqui
+  antes), só quando genuinamente mais distante que o alvo primário
+  (fail-closed: null quando a janela não tem 2 swings reais distintos).
+  `farTargetHit`/`farTargetBarsToHit` são uma medição PARALELA e
+  independente da resolução TARGET/STOP do trial — nunca reabre, nunca
+  estende, nunca muda `outcome`/`barsToResolve`. Agregado ganhou
+  `farTargetEligible`/`farTargetHitRate`. Zero engine nova.
 
 - **`backtest/history-capture.js`** (2026-07-20, fase 2 da mesma
   iniciativa). Pagina candles reais para trás a partir do conector direto
@@ -157,6 +167,25 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   captura de verdade num ambiente com egress real às exchanges
   (produção/dispositivo do Operador — o sandbox de CI não tem). Ver
   `SYSTEM_HANDBOOK.md` §6.7.
+
+- **`backtest/compare-runs.js`** (2026-07-20, Fase 9 "Autoevolução
+  Controlada" da Diretriz de Evolução Quantitativa e Aprendizado Real).
+  `compareBacktestRuns(baseline, candidate)` — veredito estatístico
+  (`MELHOROU`/`PIOROU`/`NEUTRO`/`DADOS_INSUFICIENTES`) sobre duas
+  execuções reais de `runStructuralBacktest`, via two-proportion z-test
+  agrupado (método padrão de inferência estatística, mesmo usado para
+  comparar taxa de conversão A/B — não uma fórmula inventada). Amostra
+  abaixo do mínimo declarado (`MIN_RESOLVED_PER_GROUP=20`, por grupo) ou
+  variância pooled nula ⇒ sempre `DADOS_INSUFICIENTES`, nunca um veredito
+  fabricado. Nunca aplica nada sozinho — devolve o veredito para leitura
+  humana; a "APROVAÇÃO" da Fase 9 continua manual, sempre.
+  Status: **LABORATÓRIO** — nenhum módulo de produção importa daqui
+  (fronteira travada por teste em
+  `ramber-ui/tests/compare-runs.test.ts`). Já é totalmente usável hoje
+  para comparar duas execuções sobre qualquer série de candles (fixture
+  OU real, quando existir) — não depende da Fase 2 do backtest para
+  funcionar como mecanismo, só depende dela para que a comparação
+  descreva desempenho de mercado real em vez de uma série de teste.
 
 ## Regra de quarentena daqui para frente
 

@@ -57,6 +57,19 @@
 // comparáveis entre trials com preços/riscos diferentes — mesma
 // convenção de R-múltiplo já usada por riskReward abaixo. null honesto
 // quando risco é 0 (trial degenerado), nunca uma divisão fabricada.
+//
+// ALVO MÁXIMO ESTRUTURAL (Diretriz de Evolução Quantitativa e Aprendizado
+// Real §2 — "TP1/TP2/TP3/alvo máximo estrutural" como medições distintas):
+// `support-resistance-engine.js` já calcula um 2º nível real por lado
+// (resistance_2/support_2, mais distante que o 1º, com força própria) —
+// dado que o laboratório recebia mas nunca lia. farTarget = esse nível,
+// quando estruturalmente mais distante que o alvo primário (nunca um
+// "alvo mais próximo" disfarçado de "máximo" por erro de geometria do
+// motor). farTargetHit é uma medição PARALELA e independente da
+// resolução TARGET/STOP do trial — responde só "o preço chegou até onde
+// a estrutura permitia, dentro do mesmo horizonte?", nunca substitui nem
+// altera o desfecho primário (que continua resolvido só pelo alvo/stop
+// de 1ª linha, como sempre).
 import { createReplaySession, REPLAY_DEFAULT_WINDOW } from '../../replay/replay-engine.js';
 import { analyze as analyzeStructure } from '../engines/market-structure-engine.js';
 import { analyze as analyzeSupportResistance } from '../engines/support-resistance-engine.js';
@@ -89,10 +102,24 @@ function updateExcursion(trial, candle) {
     trial.mae = Math.max(trial.mae, adverse);
 }
 
+// Medição paralela e independente da resolução TARGET/STOP — nunca fecha
+// o trial, só registra a PRIMEIRA vez que o nível mais distante (2ª linha
+// real de S/R) é tocado dentro do mesmo horizonte já em curso.
+function updateFarTarget(trial, candle, bars) {
+    if (trial.farTarget === null || trial.farTargetHit) return;
+    const long = trial.direction === 'LONG';
+    const touched = long ? candle.h >= trial.farTarget : candle.l <= trial.farTarget;
+    if (touched) {
+        trial.farTargetHit = true;
+        trial.farTargetBarsToHit = bars;
+    }
+}
+
 function emptyBucket() {
     return {
         trials: 0, targetHits: 0, stopHits: 0, bothTouchedCountedAsStop: 0, unresolved: 0,
         mfeRSum: 0, mfeRCount: 0, maeRSum: 0, maeRCount: 0,
+        farTargetEligible: 0, farTargetHitCount: 0,
     };
 }
 
@@ -105,11 +132,17 @@ function accumulate(bucket, trial) {
     else bucket.unresolved += 1;
     if (trial.mfeR !== null) { bucket.mfeRSum += trial.mfeR; bucket.mfeRCount += 1; }
     if (trial.maeR !== null) { bucket.maeRSum += trial.maeR; bucket.maeRCount += 1; }
+    if (trial.farTarget !== null) {
+        bucket.farTargetEligible += 1;
+        if (trial.farTargetHit) bucket.farTargetHitCount += 1;
+    }
 }
 
 // avgMfeR/avgMaeR: média aritmética real sobre os trials com risco válido
 // (nunca fabricada); null honesto sem nenhum trial elegível — mesma
-// disciplina de taxaAlvoAmostra abaixo.
+// disciplina de taxaAlvoAmostra abaixo. farTargetHitRate: mesma disciplina,
+// só sobre os trials que TINHAM um 2º nível real (farTargetEligible) —
+// nunca conta contra trials sem 2ª linha de S/R mapeada.
 function finalizeBucket(bucket) {
     return Object.freeze({
         trials: bucket.trials,
@@ -119,6 +152,8 @@ function finalizeBucket(bucket) {
         unresolved: bucket.unresolved,
         avgMfeR: bucket.mfeRCount > 0 ? bucket.mfeRSum / bucket.mfeRCount : null,
         avgMaeR: bucket.maeRCount > 0 ? bucket.maeRSum / bucket.maeRCount : null,
+        farTargetEligible: bucket.farTargetEligible,
+        farTargetHitRate: bucket.farTargetEligible > 0 ? bucket.farTargetHitCount / bucket.farTargetEligible : null,
     });
 }
 
@@ -185,6 +220,7 @@ export async function runStructuralBacktest({
             if (!trial || newCandleIdx < trial.decisionIndex) continue;
             updateExcursion(trial, newCandle);
             const bars = newCandleIdx - trial.decisionIndex + 1;
+            updateFarTarget(trial, newCandle, bars);
             const outcome = resolveTrialWithCandle(trial, newCandle);
             if (outcome) closeTrial(trial, outcome, bars);
             else if (bars >= trial.horizonBars) closeTrial(trial, 'NAO_RESOLVIDO', null);
@@ -213,6 +249,13 @@ export async function runStructuralBacktest({
         const stop = long ? support : resistance;
         const target = long ? resistance : support;
         const risk = Math.abs(close - stop);
+        // Alvo máximo estrutural: 2ª linha real de S/R do mesmo engine
+        // graduado, só quando genuinamente MAIS distante que o alvo
+        // primário — nunca um "mais próximo" apresentado como "máximo"
+        // por uma geometria estranha do motor (fail-closed: null honesto
+        // nesse caso, não uma correção silenciosa).
+        const farCandidate = long ? sr.resistance_2 : sr.support_2;
+        const farTargetValid = Number.isFinite(farCandidate) && (long ? farCandidate > target : farCandidate < target);
         openByDirection[direction] = {
             decisionIndex: frame.index, // primeiro candle de desfecho = candles[frame.index]
             t: frame.t,
@@ -229,6 +272,9 @@ export async function runStructuralBacktest({
             mae: 0,
             mfeR: null,
             maeR: null,
+            farTarget: farTargetValid ? farCandidate : null,
+            farTargetHit: false,
+            farTargetBarsToHit: null,
         };
     }
 
@@ -274,6 +320,12 @@ export async function runStructuralBacktest({
             // amostra, null honesto sem trials elegíveis.
             avgMfeR: total.mfeRCount > 0 ? total.mfeRSum / total.mfeRCount : null,
             avgMaeR: total.maeRCount > 0 ? total.maeRSum / total.maeRCount : null,
+            // Alvo máximo estrutural (Diretriz de Evolução Quantitativa e
+            // Aprendizado Real §2): fração REAL dos trials com uma 2ª linha
+            // de S/R mapeada que também a tocaram dentro do horizonte —
+            // null honesto sem nenhum trial elegível (nunca 0 fabricado).
+            farTargetEligible: total.farTargetEligible,
+            farTargetHitRate: total.farTargetEligible > 0 ? total.farTargetHitCount / total.farTargetEligible : null,
             porDirecao: Object.freeze({
                 LONG: finalizeBucket(porDirecao.LONG),
                 SHORT: finalizeBucket(porDirecao.SHORT),

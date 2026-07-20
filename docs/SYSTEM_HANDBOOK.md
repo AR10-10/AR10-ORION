@@ -96,7 +96,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (100+ arquivos, 1530+ testes) +
+- `npx tsc --noEmit` + `npx vitest run` (101 arquivos, 1544 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -393,6 +393,83 @@ completo (arquivar → trocar para vazio → restaurar → o desempenho real
 volta), o fechamento honesto de um plano aberto como `REPLACED`, e a
 não-contaminação entre duas chaves distintas — usando `buildTradePlan`
 real, nunca um objeto de decisão fabricado à mão.
+
+### 6.10 Diretriz de Evolução Quantitativa e Aprendizado Real — auditoria
+da cadeia completa (Fase 1, feita ANTES de qualquer código, como a
+diretriz exige) + o que foi honestamente possível evoluir
+
+A diretriz pediu para provar, elo a elo, a cadeia `DADO REAL →
+PROVENIÊNCIA → CAPTURA → REPLAY → CONTEXTO → DECISÃO → RESULTADO →
+MEMÓRIA → MÉTRICA`, declarando `DADOS_INSUFICIENTES` em qualquer elo não
+verificável — nunca assumir que uma métrica é real só porque o código
+existe. Auditoria real (código lido, não suposição):
+
+| Elo | Veredito | Evidência real |
+|---|---|---|
+| DADO REAL | Real, mas nunca buscado nesta sessão | Binance Futures público, sem chave (`js/real-data/binance-futures-public.js`) — a fonte é real e testável, mas o sandbox de CI não tem egress a exchange nenhuma. |
+| PROVENIÊNCIA | Real e testada | Evidence Object (`js/real-data/schema.js`) — `fetched_at`/`raw_sample_hash`/`source_id` — o MESMO contrato usado por todo o Real Data Layer, reaproveitado por `history-capture.js`, nunca um campo novo inventado. |
+| **CAPTURA** | **QUEBRA AQUI** | `history-capture.js` (Fase 2 do backtest, §6.7) pagina e persiste corretamente — PROVADO só com `fetchPage` injetado (fixture). A captura real EM SI nunca rodou: zero dataset histórico real existe neste repositório, em lugar nenhum, hoje. |
+| REPLAY | Real e provado | Walk-forward real (`src/replay/`), zero-lookahead provado por teste (mutar candles futuros nunca muda decisões passadas) — mas só exercido sobre séries FIXTURE (a única coisa que existe), nunca sobre histórico real (porque não existe). |
+| CONTEXTO | Real, mas deliberadamente estreito | `structural-backtest.js` usa só `market-structure-engine` + `support-resistance-engine` (candle-only) — nunca teve acesso a Conselho/GMIL/L2/fluxo, que só existem ao vivo. Isto é um limite ESTRUTURAL do laboratório, não um bug: documentado no próprio aviso do contrato desde a Fase 1. |
+| DECISÃO | Real, mas é a regra do LABORATÓRIO, não o `NexusDecision` ao vivo | A "regra de medição" de `structural-backtest.js` é deliberadamente mais simples que o pipeline BIAS/SETUP/ENTRY/RISCO/CONFLUÊNCIA real — nunca um segundo motor (LEI 24), nunca finge ser o mesmo contrato. |
+| RESULTADO | Real e provado (matemática correta) | Target/stop/empate/não-resolvido + MFE/MAE + (nesta rodada) alvo máximo estrutural — tudo provado por teste sobre fixture. A matemática está certa; só nunca correu sobre dado real. |
+| MEMÓRIA | Dois sistemas REAIS, mas DESCONECTADOS entre si | Track Record (§6.9, vivo, agora por symbol:timeframe) é memória do pipeline AO VIVO. O laboratório de backtest não tem memória própria — cada `runStructuralBacktest` é stateless, não alimenta nem é alimentado pelo Track Record. Nenhum dos dois é falso; eles simplesmente nunca foram unificados (nem precisam ser, para os propósitos de cada um). |
+| MÉTRICA | Aritmética real, mas **nunca sobre amostra real** | `taxaAlvoAmostra`/`avgMfeR`/`avgMaeR`/`farTargetHitRate` são somas/frações verificáveis — mas todo número que este laboratório já produziu, na história inteira deste repositório, foi sobre séries FIXTURE (versionadas, nunca apresentadas como mercado real). Nenhuma métrica de mercado real jamais foi calculada aqui. |
+
+**Separabilidade** (pedida explicitamente pela diretriz): por **ativo** e
+**timeframe** — real, já no `provenance` de `structural-backtest.js`. Por
+**direção** (LONG/SHORT) — real, `porDirecao`. Por **exchange/contrato**
+— só IMPLÍCITO (`source_id` da Binance Futures, nunca um campo explícito
+separado — hoje é a única fonte, então não importa na prática, mas se um
+dia MEXC/Bybit/OKX entrarem como histórico próprio, precisaria virar
+campo explícito). Por **sessão** e **regime** — NÃO capturado hoje (nem
+`history-capture.js` nem `structural-backtest.js` tagueiam trials com
+sessão de mercado ou regime de volatilidade). Por **versão do motor** —
+NÃO capturado (nenhum trial grava qual versão de `market-structure-engine`/
+`support-resistance-engine` o produziu).
+
+**Veredito honesto sobre as Fases 2-5 da diretriz** (que pedem MEDIR
+qualidade real de decisões, eixos, pesos e regimes com evidência
+histórica): **DADOS_INSUFICIENTES**, declarado exatamente como a própria
+diretriz instrui — a cadeia quebra em CAPTURA (nenhum histórico real
+existe), então nenhuma conclusão real pode nascer de Fases 2-5 hoje. Isto
+NÃO é novidade desta auditoria — é a MESMA limitação documentada desde
+§6.7 (Fase 2 do backtest) e reafirmada em §6.8 (pré-requisito da
+recalibração de pesos). A Fase 4 especificamente pergunta "o peso atual
+tem evidência histórica real?" — a resposta, para TODO peso do sistema
+hoje (`weight-matrix.js` e todo o resto), é **PESO DECLARADO, SEM
+VALIDAR COMO PROBABILIDADE** — exatamente a categoria que a própria
+diretriz nomeia como aceitável até existir evidência.
+
+**O que foi honestamente possível evoluir sem violar isso** (ferramentas
+do laboratório, prontas para quando a captura real acontecer — nunca
+uma medição fabricada sobre dado que não existe):
+- **Alvo máximo estrutural** (`farTarget`/`farTargetHit` em
+  `structural-backtest.js`, Fase 2 da diretriz, "TP1/TP2/TP3/alvo máximo
+  estrutural") — reaproveita `resistance_2`/`support_2`, dado que
+  `support-resistance-engine.js` já calculava mas o laboratório nunca
+  lia. Medição PARALELA, nunca reabre nem muda o desfecho primário do
+  trial.
+- **`compare-runs.js`** (Fase 9, "Autoevolução Controlada") — o
+  mecanismo de COMPARAÇÃO explícito que a diretriz pede
+  (`MELHOROU`/`PIOROU`/`NEUTRO`/`DADOS_INSUFICIENTES` via
+  two-proportion z-test agrupado, método estatístico padrão). Já
+  totalmente funcional HOJE sobre qualquer par de execuções (fixture ou
+  real) — não precisa esperar a captura real para EXISTIR como
+  ferramenta, só precisa dela para que o resultado descreva mercado real
+  em vez de uma série de teste. Amostra abaixo do mínimo declarado
+  (`MIN_RESOLVED_PER_GROUP=20` por grupo) ou variância nula ⇒ sempre
+  `DADOS_INSUFICIENTES`, nunca um veredito fabricado.
+
+**O que continua deliberadamente NÃO construído** (Fase 6 da diretriz,
+"Memória de Aprendizado" — events/contexto/resultado/aprendizado,
+versionada, histórico original imutável): avaliado e adiado nesta
+rodada. Construir esse schema AGORA, vazio e sem nenhum aprendizado real
+para popular (já que a captura nunca aconteceu), correria o risco de
+parecer uma funcionalidade pronta quando na verdade não há nada real
+para ela guardar ainda — melhor esperar a Fase 2 real (captura) para
+desenhar essa memória sabendo exatamente a forma do dado que vai
+alimentá-la, em vez de adivinhar o schema agora e ter que migrar depois.
 
 ---
 

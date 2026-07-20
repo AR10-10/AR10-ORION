@@ -81,6 +81,17 @@ describe('runStructuralBacktest — fixture determinística versionada (mecânic
     } else {
       expect(a.avgMaeR).toBeNull();
     }
+    // farTargetHitRate (Diretriz de Evolução Quantitativa §2, "alvo máximo
+    // estrutural") bate com a contagem recomputada à mão sobre os trials
+    // elegíveis (os que tinham uma 2ª linha real de S/R mapeada).
+    const eligible = r.trials.filter((t: any) => t.farTarget !== null);
+    expect(a.farTargetEligible).toBe(eligible.length);
+    if (eligible.length > 0) {
+      const manualRate = eligible.filter((t: any) => t.farTargetHit).length / eligible.length;
+      expect(a.farTargetHitRate).toBeCloseTo(manualRate, 12);
+    } else {
+      expect(a.farTargetHitRate).toBeNull();
+    }
     // trials congelados e ordenados por decisão
     for (let i = 1; i < r.trials.length; i++) {
       expect(r.trials[i].decisionIndex).toBeGreaterThanOrEqual(r.trials[i - 1].decisionIndex);
@@ -112,7 +123,7 @@ describe('runStructuralBacktest — resolução determinística em séries de m�
   // cada caso pede.
   const WINDOW = 64;
 
-  async function firstTrialWith(extra: (levels: { stop: number; target: number; entry: number }) => Candle[]) {
+  async function firstTrialWith(extra: (levels: { stop: number; target: number; entry: number; farTarget: number | null }) => Candle[]) {
     const windowCandles = ascendingZigzag(WINDOW);
     // roda uma vez só com a janela + 1 candle neutro para descobrir os níveis reais do 1º trial
     const probeTail: Candle[] = [{ t: windowCandles[WINDOW - 1].t + 900, o: 130, h: 130.2, l: 129.8, c: 130, v: 10 }];
@@ -122,7 +133,7 @@ describe('runStructuralBacktest — resolução determinística em séries de m�
     const t0 = probe.trials[0];
     expect(t0.direction).toBe('LONG'); // estrutura ascendente real
     expect(t0.decisionIndex).toBe(WINDOW); // decidido no 1º frame — níveis vêm da janela pura, nunca do tail
-    const levels = { stop: t0.stop, target: t0.target, entry: t0.entry };
+    const levels = { stop: t0.stop, target: t0.target, entry: t0.entry, farTarget: t0.farTarget };
     const tail = extra(levels);
     const full = [...windowCandles, ...tail.map((c, i) => ({ ...c, t: windowCandles[WINDOW - 1].t + 900 * (i + 1) }))];
     const r = await runStructuralBacktest({ candles: full, windowSize: WINDOW, horizonBars: tail.length });
@@ -198,6 +209,58 @@ describe('runStructuralBacktest — resolução determinística em séries de m�
     // mae real vem do candle 3, onde o stop foi de fato tocado — sempre
     // >= o risco inteiro quando o stop é tocado, nunca os 0.2/0.4 menores.
     expect(trial.maeR).toBeCloseTo((trial.risk + 0.01) / trial.risk, 8);
+  });
+
+  it('ALVO MÁXIMO ESTRUTURAL (Diretriz de Evolução Quantitativa §2): farTarget real da fixture, quando disponível, é SEMPRE mais distante que o alvo primário — e farTargetHit nunca fica true sem o preço realmente tocá-lo', async () => {
+    const probe = await firstTrialWith(({ target, stop }) => [
+      { t: 0, o: (target + stop) / 2, h: target - 0.01, l: stop + 0.01, c: (target + stop) / 2, v: 10 }, // não toca nada
+    ]);
+    // Achado real (auditoria de support-resistance-engine.js): resistance_2
+    // é, por construção do próprio engine graduado (highPrices ordenado
+    // desc + dedup), sempre o MAIS extremo entre os swings altos reais —
+    // nunca um "mais próximo" disfarçado de "máximo". farTarget honesto
+    // (null) só quando a janela não tem 2 swing highs distintos.
+    if (probe.farTarget !== null) {
+      expect(probe.farTarget).toBeGreaterThan(probe.target);
+      expect(probe.farTargetHit).toBe(false); // este tail nunca chegou lá
+      expect(probe.farTargetBarsToHit).toBeNull();
+    } else {
+      expect(probe.farTargetHit).toBe(false);
+      expect(probe.farTargetBarsToHit).toBeNull();
+    }
+  });
+
+  it('ALVO MÁXIMO ESTRUTURAL: achado real de geometria — farTarget é SEMPRE mais distante que o alvo primário, então tocá-lo implica ter tocado o alvo primário no MESMO candle (nunca antes de fechar o trial); farTargetHit e outcome=TARGET coincidem honestamente no mesmo candle, com o mesmo barsToHit/barsToResolve', async () => {
+    const probe = await firstTrialWith(({ target, stop }) => [
+      { t: 0, o: (target + stop) / 2, h: target - 0.01, l: stop + 0.01, c: (target + stop) / 2, v: 10 },
+    ]);
+    if (probe.farTarget === null) return; // fixture honesta sem 2ª linha — nada a provar aqui, já coberto no teste irmão
+    const far = probe.farTarget;
+    const trial = await firstTrialWith(({ target, stop }) => [
+      { t: 0, o: (target + stop) / 2, h: target - 0.01, l: stop + 0.01, c: (target + stop) / 2, v: 10 }, // candle 1: nada
+      { t: 0, o: target, h: far + 1, l: stop + 0.01, c: far, v: 10 }, // candle 2: candle grande, cruza alvo primário E farTarget juntos
+    ]);
+    expect(trial.outcome).toBe('TARGET');
+    expect(trial.barsToResolve).toBe(2);
+    expect(trial.farTargetHit).toBe(true);
+    expect(trial.farTargetBarsToHit).toBe(2); // mesmo candle real que fechou o trial — nunca um número inventado à parte
+  });
+
+  it('ALVO MÁXIMO ESTRUTURAL: nunca reabre nem estende um trial já fechado — um candle POSTERIOR ao fechamento nunca é processado para este trial', async () => {
+    const probe = await firstTrialWith(({ target, stop }) => [
+      { t: 0, o: (target + stop) / 2, h: target - 0.01, l: stop + 0.01, c: (target + stop) / 2, v: 10 },
+    ]);
+    if (probe.farTarget === null) return;
+    const far = probe.farTarget;
+    const trial = await firstTrialWith(({ target, stop }) => [
+      { t: 0, o: (target + stop) / 2, h: target - 0.01, l: stop + 0.01, c: (target + stop) / 2, v: 10 }, // candle 1: nada
+      { t: 0, o: target, h: target + 0.5, l: stop + 0.01, c: target, v: 10 }, // candle 2: toca só o alvo primário => TARGET fecha o trial aqui
+      { t: 0, o: far, h: far + 1, l: far - 1, c: far, v: 10 }, // candle 3: tocaria farTarget, mas o trial já fechou — nunca chega a ser lido
+    ]);
+    expect(trial.outcome).toBe('TARGET');
+    expect(trial.barsToResolve).toBe(2); // fechou no candle 2, não no 3
+    expect(trial.farTargetHit).toBe(false); // candle 3 nunca processado para este trial
+    expect(trial.farTargetBarsToHit).toBeNull();
   });
 
   it('SIMETRIA LONG/SHORT: a série espelhada em preço produz os MESMOS trials com direção invertida, níveis espelhados e desfechos idênticos', async () => {
