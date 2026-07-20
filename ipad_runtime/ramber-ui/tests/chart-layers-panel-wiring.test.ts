@@ -161,4 +161,37 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(block).not.toContain('title: "TREND +2σ"');
     expect(block).not.toContain('title: "TREND -2σ"');
   });
+
+  it('Diretriz de Evolução Autônoma Integral §11: Modo Operacional/Auditoria — preset real sobre o mesmo estado do toggle individual, nunca uma segunda fonte de visibilidade', () => {
+    const app = read('../src/App.tsx');
+    const presetMatch = app.match(/const CHART_LAYERS_OPERATIONAL_PRESET = new Set<ChartLayerId>\(\[([\s\S]*?)\]\);/);
+    expect(presetMatch, 'CHART_LAYERS_OPERATIONAL_PRESET não encontrado').not.toBeNull();
+    // as 3 camadas que desenham o PLANO/direção de relance — nunca as de
+    // estrutura/contexto (prioridades 7-8 da diretriz).
+    expect(presetMatch![1]).toContain('"trade_plan_zone"');
+    expect(presetMatch![1]).toContain('"neural_market_aura"');
+    expect(presetMatch![1]).toContain('"ema"');
+    expect(presetMatch![1]).not.toContain('"liquidity_zones"');
+    expect(presetMatch![1]).not.toContain('"structure_breaks"');
+    expect(presetMatch![1]).not.toContain('"order_flow_heatmap"');
+    expect(presetMatch![1]).not.toContain('"volume_profile"');
+    expect(presetMatch![1]).not.toContain('"trend_channel"');
+
+    const fnMatch = app.match(/const applyChartLayerPreset = useCallback\(\(preset: "operational" \| "audit"\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
+    expect(fnMatch, 'applyChartLayerPreset não encontrada').not.toBeNull();
+    const body = fnMatch![1];
+    // audit = o MESMO default de sempre (todas ligadas), nunca uma segunda lista
+    expect(body).toContain('setChartLayerVisibility(DEFAULT_CHART_LAYER_VISIBILITY);');
+    // operational = reduz sobre CHART_LAYER_IDS (a lista canônica única), nunca hardcoded
+    expect(body).toContain('CHART_LAYER_IDS.reduce(');
+    expect(body).toContain('CHART_LAYERS_OPERATIONAL_PRESET.has(id)');
+
+    // exposto no contexto e consumido pelo painel — nunca um segundo painel
+    expect(app).toContain('applyChartLayerPreset,');
+    expect(app).toContain('toggleChartLayer, applyChartLayerPreset, emaPeriod, setEmaPeriod } =');
+    expect(app).toContain('onClick={() => applyChartLayerPreset?.("operational")}');
+    expect(app).toContain('onClick={() => applyChartLayerPreset?.("audit")}');
+    // o botão continua sendo um atalho — o toggle individual não foi removido
+    expect(app).toContain('onClick={() => toggleChartLayer?.(id)}');
+  });
 });

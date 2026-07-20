@@ -96,7 +96,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (100+ arquivos, 1521+ testes) +
+- `npx tsc --noEmit` + `npx vitest run` (100+ arquivos, 1523+ testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -143,8 +143,49 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
   agregadas totais + por direção. Zero matemática de mercado nova —
   método de medição padrão, mesma disciplina de honestidade do resto do
   laboratório.
+- **2 bugs reais de staleness de overlay ao trocar TIMEFRAME** (Diretriz
+  de Evolução Autônoma Integral, auditoria dedicada — troca de ATIVO já
+  era imune por desmontar o gráfico inteiro quando `chartData` vira
+  `[]`; troca de TIMEFRAME não desmonta nada): (1) as price lines S1/R1
+  vêm de `engine.support/resistance`, derivadas de `realCycle` —
+  resetado só na troca de ativo, nunca na de timeframe; como o ciclo de
+  análise é assíncrono, um nível estrutural do timeframe ANTERIOR ficava
+  rotulado como válido no novo até o ciclo novo resolver (diferente da
+  decisão P1, que deliberadamente mantém `chartData` visível por ser o
+  MESMO regime, só levemente atrasado — aqui o dado é de OUTRO regime,
+  então limpar é o fail-closed correto). (2) O throttle de 5s do
+  `VolumeProfilePlugin` só zerava na troca de ativo — trocar de
+  timeframe dentro da janela mantinha o histograma/POC do timeframe
+  anterior desenhado sobre os candles novos por até 5s. Ambos corrigidos
+  no mesmo efeito `[chartTimeframe]` que já existia (nenhum efeito novo).
+- **Modo Operacional / Modo Auditoria** (Diretriz de Evolução Autônoma
+  Integral §11, achado real: só existia toggle individual por camada,
+  nenhum atalho para as 2 leituras reais que o Operador alterna). 2
+  botões no painel Camadas do Gráfico aplicam presets sobre o MESMO
+  estado do toggle individual (nunca uma segunda fonte de visibilidade):
+  Operacional = as 3 camadas que desenham o plano/direção de relance
+  (`trade_plan_zone`/`neural_market_aura`/`ema`, prioridades visuais 1-6
+  da diretriz); Auditoria = todas as 8 (o `DEFAULT_CHART_LAYER_VISIBILITY`
+  de sempre). Puramente aditivo — nenhuma camada removida, cálculo de
+  todas continua ativo, toggle individual continua funcionando.
 
 ### 6.2 Fechadas como JÁ COBERTAS (auditadas, nada a construir)
+- **Inventário matemático da Diretriz de Evolução Autônoma Integral §6**:
+  todos os itens nomeados já são reais e conectados — RSI de Wilder e
+  ATR% (`lorentzian-classifier.js`, feature real do k-NN), EMA 9/21/50/200
+  (`nexus/ema.ts`, overlay selecionável), CVD (`orderflow-history.ts` e
+  consumidores), e os 6 harmônicos de razão clássicos + AB=CD + Wolfe
+  (`harmonic-patterns.ts`: Gartley/Bat/Butterfly/Crab/Cypher/**Shark**,
+  incluindo Shark — Carney 2011 — que uma primeira varredura textual
+  quase classificou como ausente por diferença de maiúsculas/minúsculas
+  na busca, corrigido antes de virar um falso gap no registro). Trade
+  Plan: TP1/2/3 já são garantidamente não-sobrepostos e ordenados por
+  construção (`trade-plan.ts` — dedup por preço exato + sort por
+  distância + filtro de recompensa<=0 ANTES do teto de alvos, nunca
+  depois). Síntese operacional explicável (BIAS/Setup/Entry/Risco/
+  Confluência/Leitura/Motivo, o exemplo exato citado pela diretriz) já é
+  `buildOperationalSummary` (`operational-readability.ts`). Nenhuma
+  destas ferramentas precisou ser adicionada — só confirmadas.
 - **Contexto HTF vs timing atual**: o cruzamento já existe em DOIS
   lugares reais — o membro `Conviction·MULTI_TIMEFRAME` alimenta
   Favoráveis/Contrários do contrato (ex.: "3/9 prazos concordam") e a

@@ -71,6 +71,24 @@ describe('App: efeito único computa os 2 motores novos da MESMA série real do 
     expect(a).not.toContain('resetTrackRecord'); // ação removida da store por inteiro, não só deste efeito
   });
 
+  it('Diretriz de Evolução Autônoma Integral (auditoria de staleness de overlays): trocar de TIMEFRAME agora limpa realCycle/engineStatus e o throttle do Volume Profile — troca de ATIVO já era imune (desmonta o gráfico inteiro), troca de TIMEFRAME não desmonta nada e deixava S1/R1 e o histograma do timeframe ANTERIOR pendurados sobre os candles novos', () => {
+    const a = app();
+    const m = a.match(/useEffect\(\(\) => \{\s*useUnifiedSnapshotStore\.getState\(\)\.resetInstitutionalScoreHistory\(\);[\s\S]*?\}, \[chartTimeframe\]\);/);
+    expect(m, 'efeito de reset por troca de timeframe não encontrado').not.toBeNull();
+    const body = m![0];
+    // S1/R1 (createPriceLine) vêm de engine.support/resistance, derivados
+    // de realCycle — sem isto, um nível estrutural do timeframe anterior
+    // ficava rotulado como válido no novo até o próximo ciclo assíncrono
+    // resolver (achado real, não hipotético).
+    expect(body).toContain('setRealCycle(null);');
+    expect(body).toContain('setEngineStatus("pending");');
+    // VolumeProfilePlugin: o throttle de 5s só zerava na troca de ativo —
+    // trocar de timeframe dentro dessa janela mantinha o histograma/POC
+    // do timeframe anterior desenhado sobre os candles novos.
+    expect(body).toContain('useUnifiedSnapshotStore.getState().setVolumeProfile(null);');
+    expect(body).toContain('volumeProfileLastComputeRef.current = 0;');
+  });
+
   it('Diretriz de Evolução Geral do Organismo §6.8 (substitui o antigo §11/§13-J): trocar de ATIVO não zera mais o track record (só arquiva/restaura no efeito dedicado), mas continua limpando a Matriz Multi-Timeframe antiga', () => {
     const a = app();
     const m = a.match(/useEffect\(\(\) => \{\s*setPriceData\(null\);[\s\S]*?\}, \[selectedAsset\]\);/);

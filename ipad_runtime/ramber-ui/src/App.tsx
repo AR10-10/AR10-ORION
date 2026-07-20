@@ -46,6 +46,7 @@ import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord, compactPers
 import {
   EnhancedChart_110_Percent,
   DEFAULT_CHART_LAYER_VISIBILITY,
+  CHART_LAYER_IDS,
   type ChartLayerId,
   type ChartLayerVisibility,
 } from "./chart/EnhancedChart_110_Percent";
@@ -533,6 +534,30 @@ export default function App() {
   const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);
   const toggleChartLayer = useCallback((id: ChartLayerId) => {
     setChartLayerVisibility((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+  // Diretriz de Evolução Autônoma Integral §11 ("MODO OPERACIONAL... E:
+  // MODO AUDITORIA"), achado real de auditoria: o painel só tinha toggle
+  // individual por camada — nenhum atalho para as 2 leituras reais que o
+  // Operador de fato alterna entre si. Parâmetro declarado (convenção,
+  // nunca medição — mesmo espírito do piso R:R): as 3 camadas que
+  // desenham o PLANO em si (trade_plan_zone/neural_market_aura) e a
+  // direção de tendência mais lida "de relance" (ema) — mapeiam
+  // diretamente às prioridades visuais 1-6 da diretriz (direção/entrada/
+  // invalidação/TP1-3); as outras 5 (estrutura/contexto, prioridades
+  // 7-8) ficam ligadas só no Modo Auditoria. Puramente aditivo: nenhuma
+  // camada é removida, o cálculo de todas continua ativo — só a exibição
+  // muda, e o toggle individual continua funcionando normalmente depois.
+  const applyChartLayerPreset = useCallback((preset: "operational" | "audit") => {
+    if (preset === "audit") {
+      setChartLayerVisibility(DEFAULT_CHART_LAYER_VISIBILITY);
+      return;
+    }
+    setChartLayerVisibility(
+      CHART_LAYER_IDS.reduce((acc, id) => {
+        acc[id] = CHART_LAYERS_OPERATIONAL_PRESET.has(id);
+        return acc;
+      }, {} as ChartLayerVisibility),
+    );
   }, []);
   // Diretriz Camada de Decisão Profissional, item 1: período real da EMA,
   // controlado no mesmo painel Camadas do Gráfico — um único período
@@ -1726,6 +1751,31 @@ export default function App() {
     useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();
     // trackRecord não é zerado aqui — arquivado/restaurado por
     // symbol:timeframe no efeito dedicado logo acima (§6.8).
+    //
+    // Achados reais (Diretriz de Evolução Autônoma Integral, auditoria de
+    // staleness de overlays — troca de ATIVO já é imune por desmontar o
+    // gráfico inteiro quando chartData vira []; troca de TIMEFRAME não
+    // desmonta nada, então precisa dos resets abaixo):
+    // 1. S1/R1 (createPriceLine em EnhancedChart_110_Percent.tsx) vêm de
+    //    engine.support/resistance, derivados de realCycle — só
+    //    resetado na troca de ATIVO, nunca na de timeframe. Como
+    //    runRealAnalysisCycle (efeito próprio, já reage a chartTimeframe)
+    //    é assíncrono, as linhas S1/R1 do timeframe ANTERIOR ficavam
+    //    penduradas sobre os candles do novo timeframe até o ciclo novo
+    //    resolver — um nível estrutural de 15m rotulado como se fosse
+    //    válido no 4h, não só "um pouco velho": errado para o contexto
+    //    novo. Diferente da decisão P1 (chartData permanece visível de
+    //    propósito, mesmo timeframe, só levemente atrasado) — aqui o
+    //    dado é de OUTRO regime, então o fail-closed correto é limpar,
+    //    não reter.
+    setRealCycle(null);
+    setEngineStatus("pending");
+    // 2. VolumeProfilePlugin: o throttle de 5s (volumeProfileLastComputeRef)
+    //    só era zerado na troca de ativo — trocar de timeframe dentro
+    //    dessa janela mantinha o histograma/POC do timeframe anterior
+    //    desenhado sobre os candles novos por até 5s.
+    useUnifiedSnapshotStore.getState().setVolumeProfile(null);
+    volumeProfileLastComputeRef.current = 0;
   }, [chartTimeframe]);
 
   // Diretriz Evolução Contínua §3/§4: cada mudança real do ponto de vista
@@ -2537,6 +2587,7 @@ export default function App() {
       setChartLayersOpen,
       chartLayerVisibility,
       toggleChartLayer,
+      applyChartLayerPreset,
       emaPeriod,
       setEmaPeriod,
       leftDrawerOpen,
@@ -3098,6 +3149,15 @@ function WorkspaceManagerPanel() {
 // overlays do CANVAS do gráfico em vez dos widgets do layout. Toggle
 // simples ligado/desligado (não 5 estados como o Workspace Manager — uma
 // camada de canvas só faz sentido visível ou invisível, não "flutuante").
+// Diretriz de Evolução Autônoma Integral §11 — as camadas do Modo
+// Operacional: as que desenham o PLANO em si (entrada/stop/TPs, o
+// corredor de convicção que reforça visualmente o mesmo plano) mais a
+// direção de tendência mais lida "de relance" — prioridades visuais 1-6
+// da diretriz (direção/entrada/invalidação/TP1-3). As outras 5 camadas
+// (estrutura/contexto, prioridades 7-8: FVG/OB, BOS/CHOCH, heatmap,
+// volume profile, trend channel) só aparecem no Modo Auditoria.
+const CHART_LAYERS_OPERATIONAL_PRESET = new Set<ChartLayerId>(["trade_plan_zone", "neural_market_aura", "ema"]);
+
 const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "liquidity_zones", label: "FVG / ORDER BLOCKS" },
   { id: "structure_breaks", label: "BOS / CHOCH" },
@@ -3110,10 +3170,15 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
 ];
 
 function ChartLayersPanel() {
-  const { chartLayersOpen, setChartLayersOpen, chartLayerVisibility, toggleChartLayer, emaPeriod, setEmaPeriod } =
+  const { chartLayersOpen, setChartLayersOpen, chartLayerVisibility, toggleChartLayer, applyChartLayerPreset, emaPeriod, setEmaPeriod } =
     useContext(WidgetContext) || {};
   if (!chartLayersOpen) return null;
   const visibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
+  // Highlight real (não decorativo): compara o estado atual byte-a-byte
+  // contra os dois presets — só acende quando bate exatamente, nunca um
+  // "quase" fingido de correspondência.
+  const isOperationalPreset = CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_OPERATIONAL_PRESET.has(id));
+  const isAuditPreset = CHART_LAYER_IDS.every((id) => visibility[id] === true);
 
   return (
     <div
@@ -3134,6 +3199,33 @@ function ChartLayersPanel() {
           </div>
         </div>
         <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+          {/* Diretriz de Evolução Autônoma Integral §11: atalho para os 2
+              modos reais — nunca substitui o toggle individual abaixo,
+              só pré-seleciona o que ele já controla. */}
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => applyChartLayerPreset?.("operational")}
+              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+                isOperationalPreset
+                  ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+              }`}
+            >
+              Modo Operacional
+            </button>
+            <button
+              type="button"
+              onClick={() => applyChartLayerPreset?.("audit")}
+              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+                isAuditPreset
+                  ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+              }`}
+            >
+              Modo Auditoria
+            </button>
+          </div>
           <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
             Overlays reais do canvas — esconder uma camada nunca altera o dado, só a exibição
           </span>
