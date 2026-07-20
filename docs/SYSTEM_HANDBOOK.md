@@ -30,8 +30,8 @@ SNAPSHOT GLOBAL UNIFICADO (Zustand+Immer, 5 domínios)
   ↓ engines puros (research/engines + nexus/*)
 CORE ENGINE — único emissor de LONG/SHORT/WAIT (LEI 24)
   ↓ Conselho/Confluence/Heat/Score/MTF (contexto, nunca decisão)
-TRADE PLAN (trade-plan.ts — estrutura real: entrada/stop/alvos/R:R)
-  ↓ buildNexusDecision (decision-layer.ts — contrato único, v3)
+TRADE PLAN (trade-plan.ts — estrutura real: entrada/stop/alvos/R:R/obstacleCount)
+  ↓ buildNexusDecision (decision-layer.ts — contrato único, v4)
 OPERATIONAL READABILITY (operational-readability.ts — contrato v7)
   ↓
 HEADER (badge herói) + CHART + GAVETAS + ABA ANALYSIS + TOOLTIP
@@ -96,7 +96,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (100+ arquivos, 1523+ testes) +
+- `npx tsc --noEmit` + `npx vitest run` (100+ arquivos, 1530+ testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -168,6 +168,28 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
   da diretriz); Auditoria = todas as 8 (o `DEFAULT_CHART_LAYER_VISIBILITY`
   de sempre). Puramente aditivo — nenhuma camada removida, cálculo de
   todas continua ativo, toggle individual continua funcionando.
+- **`obstacleCount` por alvo** (Diretriz de Evolução Integral, §5/§6,
+  pedidos duas vezes: "até onde existe espaço real para o preço se mover
+  antes de encontrar uma barreira relevante?"). Achado real de auditoria:
+  `trade-plan.ts` já recebia `inputs.zones` (Order Blocks/FVGs) mas só os
+  usava para selecionar a ENTRADA — nunca cruzados contra os ALVOS (que
+  vêm só de `inputs.levels`). `countObstacleZones` conta zonas estruturais
+  reais entre a entrada e cada alvo (a própria zona de entrada nunca
+  conta); passthrough literal até `decision-layer.ts` (v4) e
+  `operational-readability.ts`/painel ANALYSIS (`obstacleSuffix`, mesma
+  função reusada nos dois lugares — nunca uma segunda frase). Puramente
+  aditivo: nunca muda preço/R:R/ordem dos alvos, só anota — mesma
+  disciplina do sufixo de piso R:R. `undefined` honesto (nunca 0
+  fabricado) em planos de contrato anterior.
+- **Recusado/avaliado (mesma diretriz §5, "entrada atrasada")**: a
+  diretriz também pede identificar "se a entrada está atrasada, se o
+  preço já percorreu grande parte do movimento". Avaliado e NÃO
+  integrado — definir "atrasado" exigiria uma magnitude de movimento
+  esperado como referência, e a única forma honesta de estimar isso
+  seria uma probabilidade/projeção que a Regra de Ouro 2 já proíbe
+  fabricar sem backtest real. Sem uma referência não-arbitrária, "% do
+  movimento já percorrido" seria só um limiar inventado disfarçado de
+  medição — mesma categoria recusada do §13 (Alvo Máximo Estatístico).
 
 ### 6.2 Fechadas como JÁ COBERTAS (auditadas, nada a construir)
 - **Inventário matemático da Diretriz de Evolução Autônoma Integral §6**:

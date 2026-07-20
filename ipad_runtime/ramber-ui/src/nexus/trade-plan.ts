@@ -37,6 +37,15 @@ export interface TradePlanZone {
 export interface TradePlanLevel {
   price: number;
   basis: string;
+  // Diretriz de Evolução Integral (Omega Core, rodada 2) §5/§6 — "até onde
+  // existe espaço real para o preço se mover antes de encontrar uma
+  // barreira relevante?": contagem de zonas estruturais REAIS (Order
+  // Blocks/FVGs — inputs.zones, nunca cruzadas contra alvos antes desta
+  // evolução) que ficam entre a entrada e ESTE alvo. Só em targets[i]
+  // (undefined em stop, onde o conceito não se aplica). Nunca invalida o
+  // alvo nem altera preço/R:R — é uma anotação honesta a mais, igual ao
+  // R:R abaixo do piso: o Operador decide o que fazer com a informação.
+  obstacleCount?: number;
 }
 
 export interface TradePlan {
@@ -83,6 +92,31 @@ export interface TradePlanInputs {
 }
 
 const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+// Diretriz de Evolução Integral (Omega Core, rodada 2) §5/§6 — conta zonas
+// estruturais REAIS (inputs.zones — Order Blocks/FVGs, qualquer kind, nunca
+// só as elegíveis como entrada) cujo intervalo [low,high] cruza o caminho
+// entre a entrada e o alvo. A própria zona de entrada nunca conta (é de
+// onde se está saindo, não uma barreira à frente). Não é o mesmo dado que
+// "targets" (que só vem de inputs.levels — S/R, EQH/EQL, Fib, VP) nem
+// duplica seleção nenhuma: zonas nunca competiam por uma vaga de alvo,
+// isto só soma uma leitura honesta a mais sobre o MESMO plano já real.
+function countObstacleZones(
+  zones: TradePlanStructureZone[],
+  entry: TradePlanZone,
+  entryMid: number,
+  targetPrice: number,
+  long: boolean,
+): number {
+  let count = 0;
+  for (const z of zones) {
+    if (!fin(z.low) || !fin(z.high) || z.low > z.high) continue;
+    if (z.low === entry.low && z.high === entry.high) continue; // a própria zona de entrada nunca é obstáculo do próprio plano
+    const overlapsPath = long ? z.high > entryMid && z.low < targetPrice : z.low < entryMid && z.high > targetPrice;
+    if (overlapsPath) count++;
+  }
+  return count;
+}
 
 // Entry basis whitelist per direction: acceptance/defense structures only.
 const LONG_ENTRY_KINDS = /^(OB_BULLISH|FVG_BULLISH|SR_SUPPORT_1|FIB_|VP_POC$|VP_HVN$)/;
@@ -159,7 +193,7 @@ export function buildTradePlan(inputs: TradePlanInputs, computedAt: number = Dat
     seenPrices.add(t.price);
     const reward = long ? t.price - entryMid : entryMid - t.price;
     if (!(risk > 0 && reward > 0)) continue;
-    targets.push({ price: t.price, basis: t.kind });
+    targets.push({ price: t.price, basis: t.kind, obstacleCount: countObstacleZones(inputs.zones, entry, entryMid, t.price, long) });
     riskRewardRatios.push(reward / risk);
     if (targets.length === MAX_TARGETS) break;
   }

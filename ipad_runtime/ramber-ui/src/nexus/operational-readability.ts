@@ -41,6 +41,15 @@ const DASH = "—"; // mesmo caractere honesto de ausência usado em todo o head
 // pura (o módulo não importa React nem App).
 const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
 
+/** Omega Core §5/§6: sufixo honesto de obstacleCount (trade-plan.ts) — só
+ *  aparece quando há de fato >=1 zona real no caminho até o alvo; nunca
+ *  invalida o alvo, só anota. Exportado (mesmo padrão de rrFloorSuffix)
+ *  para o painel ANALYSIS reusar a MESMA frase, nunca uma segunda. */
+export function obstacleSuffix(count: number | undefined): string {
+  if (!count || count <= 0) return "";
+  return ` · ${count} ${count === 1 ? "zona estrutural" : "zonas estruturais"} no caminho`;
+}
+
 /** Linha única honesta quando a fusão ainda não existe (motor sem ciclo). */
 export const READABILITY_FALLBACK_LINE =
   "Core Engine — primary directional read (mathematical S/R + structure classifier)";
@@ -281,7 +290,7 @@ export function buildOperationalSummary(decision: NexusDecision | null | undefin
     ...(decision.plan
       ? decision.plan.targets.map(
           (t, i) =>
-            `TP${i + 1}: ${f(t.price)} (${t.basis})${t.riskReward !== null ? ` · R:R 1:${t.riskReward.toFixed(2)}${rrFloorSuffix(t.riskReward)}` : ""}${formatEtaRange(t.etaMsMin, t.etaMs) ? ` · ETA ${formatEtaRange(t.etaMsMin, t.etaMs)}` : ""}${t.hit ? " · ATINGIDO" : ""}`,
+            `TP${i + 1}: ${f(t.price)} (${t.basis})${t.riskReward !== null ? ` · R:R 1:${t.riskReward.toFixed(2)}${rrFloorSuffix(t.riskReward)}` : ""}${formatEtaRange(t.etaMsMin, t.etaMs) ? ` · ETA ${formatEtaRange(t.etaMsMin, t.etaMs)}` : ""}${obstacleSuffix(t.obstacleCount)}${t.hit ? " · ATINGIDO" : ""}`,
         )
       : []),
     decision.reason ? `Motivo: ${decision.reason} (${decision.reasonBasis ?? "base real"})` : null,

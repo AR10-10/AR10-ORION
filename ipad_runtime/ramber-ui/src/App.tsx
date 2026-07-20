@@ -138,6 +138,7 @@ import {
   deriveOutcomeLabel,
   deriveRiskState,
   deriveSetupState,
+  obstacleSuffix,
   type NexusOutcomeLabel,
 } from "./nexus/operational-readability";
 // Fecho da pendência "R:R mínimo": piso DECLARADO 1:2 (ver rr-quality.ts),
@@ -5541,7 +5542,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
                 <ModuleStat
                   key={i}
                   label={tradePlan.targets.length > 1 ? `Target ${i + 1}` : "Target"}
-                  value={`${target.price.toFixed(0)} (${target.basis})${typeof price.price === "number" && Number.isFinite(price.price) && price.price > 0 ? ` · ${(Math.abs(target.price - price.price) / price.price * 100).toFixed(2)}%` : ""}${tradePlan.riskRewardRatios[i] !== null ? ` · 1:${tradePlan.riskRewardRatios[i]!.toFixed(2)}${rrFloorSuffix(tradePlan.riskRewardRatios[i])}` : ""}${etaReading?.status === "OK" && etaReading.etas[i] ? ` · ${formatEtaRange(etaReading.etas[i].msMin ?? null, etaReading.etas[i].ms) ?? ""}` : ""}`}
+                  value={`${target.price.toFixed(0)} (${target.basis})${typeof price.price === "number" && Number.isFinite(price.price) && price.price > 0 ? ` · ${(Math.abs(target.price - price.price) / price.price * 100).toFixed(2)}%` : ""}${tradePlan.riskRewardRatios[i] !== null ? ` · 1:${tradePlan.riskRewardRatios[i]!.toFixed(2)}${rrFloorSuffix(tradePlan.riskRewardRatios[i])}` : ""}${etaReading?.status === "OK" && etaReading.etas[i] ? ` · ${formatEtaRange(etaReading.etas[i].msMin ?? null, etaReading.etas[i].ms) ?? ""}` : ""}${obstacleSuffix(target.obstacleCount)}`}
                   tone="long"
                 />
               ))}

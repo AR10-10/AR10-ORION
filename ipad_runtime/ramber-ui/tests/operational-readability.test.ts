@@ -88,6 +88,14 @@ describe('buildOperationalSummary: o "bateu o olho" (§6) por execução real', 
     expect(lines.find((l) => l.startsWith('Contrários:'))).toContain('3/9 prazos concordam (Conviction·MULTI_TIMEFRAME)');
   });
 
+  it('Omega Core §5/§6: obstacleCount aparece na linha do TP quando >=1, nunca quando 0/ausente — mesmo padrão de anotação honesta do R:R/ETA', () => {
+    const withObstacle: TradePlan = { ...plan, targets: [{ ...plan.targets[0], obstacleCount: 2 }, plan.targets[1]] };
+    const lines = buildOperationalSummary(buildNexusDecision({ ...inputs, plan: withObstacle }));
+    expect(lines[9]).toBe('TP1: 105.00 (VP_POC) · R:R 1:1.22 (abaixo do piso 1:2) · ETA ≈ 5m–10m · 2 zonas estruturais no caminho · ATINGIDO');
+    // TP2 não ganhou obstacleCount (undefined) — sufixo continua ausente, igual antes.
+    expect(lines[10]).toBe('TP2: 64100 (EQH) · R:R 1:2.44');
+  });
+
   it('BIAS ≠ ENTRY (§9): Núcleo LONG mas timing ainda não confirmado (PREPARANDO/CONFIRMANDO) => "AGUARDAR LONG", nunca "LONG" liso', () => {
     const preparing = buildNexusDecision({ ...inputs, plan: null, councilStance: null, targetsHit: 0 });
     expect(preparing.operationalState).toBe('PREPARANDO');

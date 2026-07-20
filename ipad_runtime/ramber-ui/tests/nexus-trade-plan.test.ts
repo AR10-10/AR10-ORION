@@ -4,7 +4,7 @@
 // geometry, including up to MAX_TARGETS real opposing levels. Pure logic,
 // no network, no store.
 import { describe, it, expect } from 'vitest';
-import { buildTradePlan, effectiveStopForTargetsHit, TRADE_PLAN_CONTRACT_VERSION, MAX_TARGETS, type TradePlanInputs } from '../src/nexus/trade-plan';
+import { buildTradePlan, effectiveStopForTargetsHit, TRADE_PLAN_CONTRACT_VERSION, MAX_TARGETS, type TradePlanInputs, type TradePlanStructureZone } from '../src/nexus/trade-plan';
 
 const BASE: TradePlanInputs = {
   stance: 'LONG',
@@ -68,9 +68,12 @@ describe('buildTradePlan: LONG geometry — every price is a real mapped level',
     expect(plan.stop).toEqual({ price: 48_800, basis: 'SR_SUPPORT_1' }); // nearest real level below entry.low
     // Two real opposing levels exist above price (51,000 and 52,200) —
     // both become real targets, nearest first, never truncated to one.
+    // obstacleCount (Omega Core §5/§6): a zona OB_BEARISH real do fixture
+    // (51,500–51,800) fica entre o 1º e o 2º alvo — 0 obstáculos para
+    // chegar no 1º, 1 obstáculo real no caminho até o 2º.
     expect(plan.targets).toEqual([
-      { price: 51_000, basis: 'SR_RESISTANCE_1' },
-      { price: 52_200, basis: 'EQH' },
+      { price: 51_000, basis: 'SR_RESISTANCE_1', obstacleCount: 0 },
+      { price: 52_200, basis: 'EQH', obstacleCount: 1 },
     ]);
     const entryMid = (49_200 + 49_500) / 2;
     expect(plan.riskRewardRatios).toHaveLength(2);
@@ -91,7 +94,8 @@ describe('buildTradePlan: LONG geometry — every price is a real mapped level',
       ],
     })!;
     expect(plan.entry.basis).toBe('SR_SUPPORT_1');
-    expect(plan.targets).toEqual([{ price: 52_200, basis: 'EQH' }]);
+    // zones: [] neste teste — zero zonas reais para cruzar, obstacleCount sempre 0.
+    expect(plan.targets).toEqual([{ price: 52_200, basis: 'EQH', obstacleCount: 0 }]);
   });
 
   it('deterministic: same inputs always produce the same plan', () => {
@@ -119,7 +123,7 @@ describe('buildTradePlan v2 (Diretriz Complementar §2): multi-target ceiling an
       ...BASE,
       levels: BASE.levels.filter((l) => l.price !== 52_200), // remove the 2nd LONG target candidate
     })!;
-    expect(plan.targets).toEqual([{ price: 51_000, basis: 'SR_RESISTANCE_1' }]);
+    expect(plan.targets).toEqual([{ price: 51_000, basis: 'SR_RESISTANCE_1', obstacleCount: 0 }]);
   });
 
   it('two real sources mapping the EXACT same price count as ONE target, never a duplicate', () => {
@@ -148,9 +152,12 @@ describe('buildTradePlan: SHORT geometry — exact mirror of LONG', () => {
     // Next real anchor above the entry is the bearish OB's far edge (51,800).
     expect(plan.stop).toEqual({ price: 51_800, basis: 'OB_BEARISH' });
     // Two real levels below price: S1 @ 48,800 (nearer) and EQL @ 47,900.
+    // obstacleCount: a zona OB_BULLISH real do fixture (49,200–49,500) fica
+    // entre a entrada (51,000) e OS DOIS alvos abaixo dela — 1 obstáculo
+    // real para cada um (a OB_BEARISH, acima da entrada, nunca conta aqui).
     expect(plan.targets).toEqual([
-      { price: 48_800, basis: 'SR_SUPPORT_1' },
-      { price: 47_900, basis: 'EQL' },
+      { price: 48_800, basis: 'SR_SUPPORT_1', obstacleCount: 1 },
+      { price: 47_900, basis: 'EQL', obstacleCount: 1 },
     ]);
     const entryMid = 51_000;
     expect(plan.riskRewardRatios[0]).toBeCloseTo((entryMid - 48_800) / (51_800 - entryMid), 10);
@@ -171,6 +178,94 @@ describe('buildTradePlan: SHORT geometry — exact mirror of LONG', () => {
     expect(plan.stop.price).toBe(51_400);
     expect(plan.targets[0].price).toBe(49_000);
     expect(plan.riskRewardRatios[0]).toBeGreaterThan(0);
+  });
+});
+
+describe('obstacleCount (Omega Core, rodada 2, §5/§6): "até onde existe espaço real antes de uma barreira" — cruza inputs.zones (nunca usadas para seleção de alvo) contra o caminho até cada alvo', () => {
+  it('sem nenhuma zona real entre entrada e alvo => obstacleCount 0, campo sempre presente (nunca omitido quando computável)', () => {
+    const plan = buildTradePlan({
+      ...BASE,
+      zones: [{ low: 49_200, high: 49_500, kind: 'OB_BULLISH' }], // só a própria zona de entrada
+    })!;
+    expect(plan.targets[0].obstacleCount).toBe(0);
+    expect(plan.targets[1].obstacleCount).toBe(0);
+  });
+
+  it('a própria zona de ENTRADA nunca conta como obstáculo do próprio plano, mesmo com preço exatamente igual', () => {
+    // zona de entrada real coincide em preço com onde uma zona "obstáculo"
+    // poderia ser confundida — a exclusão é por identidade (low/high), não
+    // só por não estar no caminho.
+    const plan = buildTradePlan({
+      ...BASE,
+      zones: [{ low: 49_200, high: 49_500, kind: 'OB_BULLISH' }],
+    })!;
+    expect(plan.entry).toEqual({ low: 49_200, high: 49_500, basis: 'OB_BULLISH' });
+    expect(plan.targets[0].obstacleCount).toBe(0);
+  });
+
+  it('duas zonas reais empilhadas no caminho até o mesmo alvo contam as DUAS — nunca satura em 1', () => {
+    const plan = buildTradePlan({
+      ...BASE,
+      zones: [
+        { low: 49_200, high: 49_500, kind: 'OB_BULLISH' }, // entrada
+        { low: 50_000, high: 50_200, kind: 'FVG_BEARISH' }, // obstáculo real 1, antes do 1º alvo
+        { low: 50_400, high: 50_600, kind: 'OB_BEARISH' },  // obstáculo real 2, antes do 1º alvo
+      ],
+    })!;
+    expect(plan.targets[0].price).toBe(51_000);
+    expect(plan.targets[0].obstacleCount).toBe(2);
+  });
+
+  it('zona que fica ANTES da entrada (nunca no caminho até nenhum alvo) não conta', () => {
+    const plan = buildTradePlan({
+      ...BASE,
+      zones: [
+        { low: 49_200, high: 49_500, kind: 'OB_BULLISH' }, // entrada
+        { low: 47_000, high: 47_200, kind: 'FVG_BULLISH' }, // abaixo da entrada — nunca no caminho para cima
+      ],
+    })!;
+    expect(plan.targets[0].obstacleCount).toBe(0);
+    expect(plan.targets[1].obstacleCount).toBe(0);
+  });
+
+  it('SIMETRIA LONG/SHORT: a mesma geometria espelhada em preço produz a MESMA contagem de obstáculos, direção invertida', () => {
+    const K = 100_000;
+    const mirrorZone = (z: TradePlanStructureZone) => ({ low: 2 * K - z.high, high: 2 * K - z.low, kind: z.kind.includes('BULLISH') ? z.kind.replace('BULLISH', 'BEARISH') : z.kind.replace('BEARISH', 'BULLISH') });
+    // Espelhar preço não basta: SR_SUPPORT_1/SR_RESISTANCE_1 são rótulos de
+    // LADO (achado real ao escrever este teste — a 1ª versão espelhava só o
+    // preço e o plano SHORT saía null, porque um support espelhado cai do
+    // lado da resistência mas continuava rotulado support, falhando o
+    // filtro de kind por lado em LONG_TARGET_KINDS/SHORT_TARGET_KINDS).
+    const mirrorLevel = (l: { price: number; kind: string }) => ({
+      price: 2 * K - l.price,
+      kind: l.kind === 'SR_SUPPORT_1' ? 'SR_RESISTANCE_1' : l.kind === 'SR_RESISTANCE_1' ? 'SR_SUPPORT_1' : l.kind,
+    });
+    const longInputs: TradePlanInputs = {
+      stance: 'LONG',
+      riskGated: false,
+      price: 50_000,
+      zones: [
+        { low: 49_200, high: 49_500, kind: 'OB_BULLISH' },
+        { low: 50_000, high: 50_200, kind: 'FVG_BEARISH' },
+      ],
+      levels: [
+        { price: 48_800, kind: 'SR_SUPPORT_1' },
+        { price: 51_000, kind: 'SR_RESISTANCE_1' },
+      ],
+    };
+    const shortInputs: TradePlanInputs = {
+      stance: 'SHORT',
+      riskGated: false,
+      price: 2 * K - 50_000,
+      zones: longInputs.zones.map(mirrorZone),
+      levels: longInputs.levels.map(mirrorLevel),
+    };
+    const longPlan = buildTradePlan(longInputs)!;
+    const shortPlan = buildTradePlan(shortInputs)!;
+    expect(longPlan.targets).toHaveLength(1);
+    expect(shortPlan.targets).toHaveLength(1);
+    expect(longPlan.targets[0].obstacleCount).toBe(1); // a FVG_BEARISH real fica entre a entrada e o alvo
+    expect(shortPlan.targets[0].obstacleCount).toBe(longPlan.targets[0].obstacleCount);
   });
 });
 

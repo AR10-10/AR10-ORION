@@ -29,7 +29,10 @@ import type { EtaReading } from "./eta-engine";
 // passthrough literal do tier real já recebido nos inputs (que até aqui
 // só alimentava reasonsAgainst). Fonte do eixo RISCO da Readability Layer;
 // este módulo continua não decidindo nada com ele (LEI 24).
-export const NEXUS_DECISION_CONTRACT_VERSION = 3 as const;
+// v4 (Omega Core, rodada 2, §5/§6): cada alvo carrega obstacleCount —
+// passthrough literal de TradePlanLevel.obstacleCount (trade-plan.ts),
+// nunca recalculado aqui.
+export const NEXUS_DECISION_CONTRACT_VERSION = 4 as const;
 
 // V2 §3 — Estado operacional padronizado, derivado SÓ de leituras reais
 // (prioridades documentadas em deriveOperationalState):
@@ -80,6 +83,11 @@ export interface NexusDecisionTarget {
   etaMsMin: number | null;
   etaMs: number | null;
   hit: boolean; // ratchet REAL do track record — nunca re-derivado do tick
+  // v4 (Omega Core §5/§6): zonas estruturais reais (OB/FVG) entre a
+  // entrada e este alvo — passthrough literal de trade-plan.ts, nunca
+  // recalculado. undefined em planos persistidos de contrato anterior
+  // (rehydrate honesto, nunca um 0 fabricado retroativo).
+  obstacleCount?: number;
 }
 
 export interface NexusDecision {
@@ -254,6 +262,7 @@ export function buildNexusDecision(inputs: NexusDecisionInputs, computedAt: numb
           riskReward: p.riskRewardRatios[i] ?? null,
           etaMsMin: eta ? eta.msMin : null,
           etaMs: eta ? eta.ms : null,
+          obstacleCount: t.obstacleCount,
           hit: i < targetsHit,
         };
       }),

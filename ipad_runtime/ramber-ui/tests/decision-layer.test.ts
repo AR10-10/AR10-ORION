@@ -78,6 +78,19 @@ describe('buildNexusDecision: fusão pura das leituras reais', () => {
     expect(d.planGap).toBeNull();
   });
 
+  it('Omega Core §5/§6: obstacleCount é passthrough LITERAL de TradePlanLevel — nunca recalculado neste módulo (LEI 24: fusão, não um segundo motor)', () => {
+    const planWithObstacles: TradePlan = {
+      ...plan,
+      targets: [
+        { price: 105, basis: 'VP_POC', obstacleCount: 2 },
+        { price: 110, basis: 'EQH' }, // sem obstacleCount — plano de contrato anterior, undefined honesto
+      ],
+    };
+    const d = buildNexusDecision({ ...base, plan: planWithObstacles });
+    expect(d.plan!.targets[0].obstacleCount).toBe(2);
+    expect(d.plan!.targets[1].obstacleCount).toBeUndefined();
+  });
+
   it('confiança = leituras reais existentes (rótulo do motor + Score + zona + tendência) — nunca um número novo', () => {
     const d = buildNexusDecision(base);
     expect(d.confidenceLabel).toBe('ALTA');
