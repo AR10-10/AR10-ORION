@@ -250,6 +250,16 @@ export interface UnifiedSnapshotState {
   // against the real price (first touch: target vs stop; conservative on
   // gaps). Session state hydrated from IndexedDB (Local-First).
   trackRecord: TrackRecordState;
+  // Achado real de auditoria (Diretriz de Evolução Geral do Organismo
+  // §6.8, "memória de decisões hoje é uma fatia GLOBAL"): arquivo do
+  // agregado (history/targetHits/partialHits/stopHits/replaced) por
+  // chave symbol:timeframe (mesma convenção de candleKey em
+  // persistence.ts) — trocar de ativo/timeframe não perde mais o
+  // desempenho real já medido daquela combinação. O plano ATIVO
+  // (`trackRecord.active`) continua resetando sempre — é o
+  // rastreamento AO VIVO do que está na tela agora, nunca deve
+  // reaparecer stale de uma combinação antiga.
+  trackRecordArchive: Record<string, TrackRecordState>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -318,15 +328,14 @@ interface UnifiedSnapshotActions {
   // nunca reescreve (memória jamais altera o histórico retroativamente).
   stampPlanOpenContext: (ctx: PlanOpenContext) => void;
   hydrateTrackRecord: (state: TrackRecordState) => void;
-  // Evolução Profunda §11/§13-J/K: o track record é uma fatia GLOBAL única
-  // (não escopada por ativo/timeframe) — sem este reset, estatísticas
-  // agregadas (hitRate/targetHits/stopHits) de um ativo/prazo vazavam para
-  // o próximo (achado real de auditoria; trackPlanTransition já marca o
-  // plano antigo REPLACED corretamente, mas os agregados persistiam).
-  // Chamado nos mesmos dois efeitos de troca que já zeram outras séries
-  // escopadas (resetL2History/resetOrderflowHistory no ativo,
-  // resetInstitutionalScoreHistory no timeframe).
-  resetTrackRecord: () => void;
+  // Substitui o antigo resetTrackRecord (Evolução Profunda §11/§13-J/K,
+  // que zerava o agregado inteiro na troca — perdia memória real em vez
+  // de só evitar que ela vazasse entre combinações). Fecha o plano ATIVO
+  // como REPLACED (reusa trackPlanTransition(state, null, now), nunca
+  // uma segunda lógica de fechamento) e arquiva o agregado resultante
+  // sob `key` — chamado só no cleanup do efeito de troca de
+  // ativo/timeframe (App.tsx), nunca durante o uso normal.
+  archiveTrackRecord: (key: string) => void;
 }
 
 export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnapshotActions>()(
@@ -366,6 +375,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     affectiveMemory: EMPTY_AFFECTIVE_STATE,
     cpi: null,
     trackRecord: EMPTY_TRACK_RECORD,
+    trackRecordArchive: {},
 
     // §1 MERCADO
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
@@ -432,7 +442,15 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
       s.trackRecord = stampOpenContext(s.trackRecord as TrackRecordState, ctx);
     }),
     hydrateTrackRecord: (state) => set((s) => { s.trackRecord = state; }),
-    resetTrackRecord: () => set((s) => { s.trackRecord = EMPTY_TRACK_RECORD; }),
+    archiveTrackRecord: (key) => set((s) => {
+      const closed = trackPlanTransition(s.trackRecord as TrackRecordState, null, Date.now());
+      // Escreve nos DOIS lugares: o arquivo (memória durável da chave) e o
+      // trackRecord AO VIVO (nunca deixa um plano aberto "stale" pendurado
+      // ali se o chamador não emendar um hydrateTrackRecord logo em
+      // seguida — a ação fica correta sozinha, não depende de quem chama).
+      s.trackRecord = closed;
+      s.trackRecordArchive[key] = closed;
+    }),
   })),
 );
 
@@ -512,3 +530,5 @@ export const useAffectiveMemorySnapshot = (): AffectiveMemoryState =>
   useUnifiedSnapshotStore((s) => s.affectiveMemory);
 export const useTrackRecordSnapshot = (): TrackRecordState =>
   useUnifiedSnapshotStore((s) => s.trackRecord);
+export const useTrackRecordArchive = (): Record<string, TrackRecordState> =>
+  useUnifiedSnapshotStore((s) => s.trackRecordArchive);

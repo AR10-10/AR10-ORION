@@ -96,7 +96,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (100+ arquivos, 1516+ testes) +
+- `npx tsc --noEmit` + `npx vitest run` (100+ arquivos, 1521+ testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -241,7 +241,7 @@ que a diretriz nomeou:
 | Tipo de memória | Estado real | Onde |
 |---|---|---|
 | Sessão | EXISTE E FUNCIONA | `nexus/persistence.ts` (IndexedDB, candles + resumo do snapshot) |
-| Decisões | EXISTE, PARCIAL | `signal-track-record.ts` (`TrackedPlan`, histórico com teto de 100, persistido) — fatia GLOBAL única, não por símbolo/timeframe |
+| Decisões | EXISTE, PARCIAL → resolvido em parte no mesmo dia (ver §6.9) | `signal-track-record.ts` (`TrackedPlan`, histórico com teto de 100, persistido) — era uma fatia GLOBAL única; agora arquivada/restaurada por `symbol:timeframe` dentro da sessão (§6.9). Persistência do arquivo INTEIRO através de reload continua pendente. |
 | Resultados | EXISTE E FUNCIONA | `trackPriceTick` resolve `TARGET_HIT`/`PARTIAL_HIT`/`STOP_HIT`/`REPLACED` reais; `hitRate()` acumulado — mas só EXIBIDO (painel Track Record), nunca consumido por nenhum cálculo de confiança/score |
 | Padrões | NÃO EXISTE | Nenhum arquivo acumula estatística padrão→desfecho entre sessões |
 | Regimes | EXISTE, PARCIAL | `RegimeHistory` (`market-regime/regime-history.js`) roda em produção a cada ciclo real, mas só em memória (nunca persiste) e só alimenta um rótulo "regime há N min" — nunca um cálculo de confiança |
@@ -272,11 +272,10 @@ Council/GMIL, não um laboratório):
   declarado, ajustável/desligável pelo Operador) — exatamente a
   disciplina do §7/§12 da diretriz, nunca um super-score que esconda a
   origem.
-- Pré-requisito honesto: a fatia de Track Record hoje é GLOBAL (todos os
-  símbolos/timeframes juntos) — recalibrar pesos por regime a partir
-  dela hoje misturaria resultados de contextos diferentes. Escopar
-  `TrackedPlan`/`hitRate()` por símbolo (ou por regime) é o passo real
-  que provavelmente precisa vir ANTES do recalibre em si.
+- **Pré-requisito — FEITO no mesmo dia, ver §6.9**: escopar
+  `TrackedPlan`/`hitRate()` por `symbol:timeframe` em vez de uma fatia
+  GLOBAL. O recalibre de `weight-matrix.js` em si continua NÃO
+  construído — este item cobria só o pré-requisito.
 
 **Confirmado sem gap real** (mesma auditoria, não precisa de nova
 iniciativa): performance/main thread. Os 4 Workers reais (orderflow
@@ -287,6 +286,50 @@ memória (não a história inteira) com custo O(N) ou O(N·k) limitado, o
 ciclo do Core Engine só recomputa quando ativo/timeframe/boot realmente
 mudam (nunca por re-render não relacionado), e os 6 plugins de overlay
 do canvas seguem o padrão dirty-flag+rAF. Nenhuma ação necessária.
+
+### 6.9 Pré-requisito entregue: Track Record real por symbol:timeframe
+(mesma diretriz, mesmo dia — resposta ao pedido "evoluir a memória")
+
+**Achado real, mais preciso que o §6.8 original**: não era só "uma fatia
+GLOBAL que mistura símbolos" — dois efeitos distintos em `App.tsx`
+(`[selectedAsset]` e `[chartTimeframe]`, cada um por um motivo real
+documentado no próprio código) chamavam `resetTrackRecord()`, um reset
+CEGO que zerava `history`/`targetHits`/`partialHits`/`stopHits`/
+`replaced` por inteiro. Na prática: trocar de ativo e voltar (ou só
+trocar de timeframe e voltar) apagava o desempenho real já medido
+daquela combinação — perda de memória, não só risco de mistura.
+
+**Solução aplicada**: `resetTrackRecord` removido; substituído por
+`archiveTrackRecord(key)` — arquiva o agregado atual sob
+`symbol:timeframe` (mesma convenção de `candleKey` em
+`persistence.ts`, reusada, nunca uma segunda função de chave), fechando
+antes um plano ainda ABERTO como `REPLACED` (reusa
+`trackPlanTransition(state, null, now)`, a mesma lógica honesta já
+usada por toda troca de plano — nunca resolve em ausência, nunca uma
+segunda lógica de fechamento). Um efeito PRÓPRIO e dedicado em
+`App.tsx`, com `[selectedAsset, chartTimeframe]` como dependência única,
+restaura o arquivo real ao entrar numa combinação e arquiva ao sair
+(cleanup) — nunca mais um reset cego. O plano ATIVO (rastreamento ao
+vivo do que está na tela agora) continua começando do zero em toda
+troca, por design — só o AGREGADO histórico (o que realmente importa
+para medir desempenho real) sobrevive.
+
+**Escopo desta entrega, deliberadamente limitado**: só a memória DENTRO
+da sessão (troca de aba/timeframe). O arquivo inteiro (`Record<string,
+TrackRecordState>`) ainda não é persistido em IndexedDB através de um
+reload/fechar-o-app — hoje só a combinação ATIVA no momento é salva
+(mesmo `saveTrackRecord`/`loadTrackRecord` de sempre, comportamento
+inalterado). Persistir o arquivo completo é uma extensão mecânica óbvia
+do mesmo padrão já usado para `candles` em `persistence.ts` (nova store
+IndexedDB, chave `symbol:timeframe` idêntica) — não uma decisão de
+arquitetura nova, só não estava no escopo desta rodada.
+
+Verificação: 4 testes novos de execução real contra a store Zustand de
+verdade (`tests/unified-snapshot-store.test.ts`) provam o round-trip
+completo (arquivar → trocar para vazio → restaurar → o desempenho real
+volta), o fechamento honesto de um plano aberto como `REPLACED`, e a
+não-contaminação entre duas chaves distintas — usando `buildTradePlan`
+real, nunca um objeto de decisão fabricado à mão.
 
 ---
 

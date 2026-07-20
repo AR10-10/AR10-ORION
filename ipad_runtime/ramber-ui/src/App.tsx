@@ -22,7 +22,7 @@ import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } fr
 import { buildTradePlan, effectiveStopForTargetsHit, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
 // Autonomy order: honest signal accuracy — plans tracked against the real
 // price, persisted across sessions, felt by the affective memory.
-import { rehydrateTrackRecord, hitRate } from "./nexus/signal-track-record";
+import { rehydrateTrackRecord, hitRate, EMPTY_TRACK_RECORD } from "./nexus/signal-track-record";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -40,7 +40,7 @@ import { getOrganismOrchestrator } from "./nexus/organism-orchestrator";
 // Local-First (closes the persistence gap flagged in the audit): candles
 // persisted to IndexedDB on every real REST arrival; on boot the chart
 // paints instantly from the last REAL session before the network answers.
-import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord, compactPersistedCandles } from "./nexus/persistence";
+import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord, compactPersistedCandles, candleKey } from "./nexus/persistence";
 // V18 Sprint 1 (Tarefa B): "Destravar o Gráfico Institucional" — substitui
 // o SVG feito à mão por lightweight-charts (pan/zoom/crosshair nativos).
 import {
@@ -922,18 +922,44 @@ export default function App() {
     volumeProfileLastComputeRef.current = 0;
     orderflowThresholdStateRef.current = EMPTY_THRESHOLD_STATE;
     pendingLargeTradesRef.current = [];
-    // Evolução Profunda §11/§13-J (achado real de auditoria): trackRecord é
-    // uma fatia GLOBAL única (hitRate/targetHits/stopHits agregados), não
-    // escopada por ativo — trackPlanTransition já marca o plano antigo
-    // REPLACED corretamente na troca, mas os AGREGADOS de acerto do ativo
-    // ANTERIOR seguiam contando para o novo. multiTimeframeContext também
-    // é buscado só por [selectedAsset] (efeito abaixo) — sem limpar aqui, a
-    // Matriz do ativo antigo ficava visível até a primeira leitura real do
-    // novo resolver (mesmo padrão de "tela em branco até dado real" já
-    // usado acima para price/chartData/orderBook).
-    useUnifiedSnapshotStore.getState().resetTrackRecord();
+    // multiTimeframeContext é buscado só por [selectedAsset] (efeito
+    // abaixo) — sem limpar aqui, a Matriz do ativo antigo ficava visível
+    // até a primeira leitura real do novo resolver (mesmo padrão de
+    // "tela em branco até dado real" já usado acima para
+    // price/chartData/orderBook).
     useUnifiedSnapshotStore.getState().setMultiTimeframeContext(null);
+    // trackRecord (o agregado hitRate/targetHits/stopHits) NÃO é zerado
+    // aqui — tem seu próprio efeito dedicado logo abaixo, que arquiva e
+    // restaura por symbol:timeframe em vez de descartar (Diretriz de
+    // Evolução Geral do Organismo §6.8, achado real: um reset cego aqui
+    // perdia memória de desempenho real ao trocar de aba e voltar).
   }, [selectedAsset]);
+
+  // Diretriz de Evolução Geral do Organismo §6.8 (achado real de
+  // auditoria: "memória de decisões" era uma fatia GLOBAL — trocar de
+  // ativo OU timeframe zerava hitRate/targetHits/stopHits/history por
+  // completo, mesmo que a mesma combinação já tivesse desempenho real
+  // medido antes). Efeito PRÓPRIO, dedicado só a isto (nunca misturado
+  // com os resets acima, que continuam zerando de verdade o que É
+  // pontual por natureza — preço/candles/order book/L2/etc.):
+  //   - Ao ENTRAR numa combinação symbol:timeframe: restaura o arquivo
+  //     real dela se existir, ou começa vazio se nunca visitada.
+  //   - Ao SAIR (cleanup, fecha sobre os valores REAIS desta combinação
+  //     — nunca uma ref stale): arquiva o agregado atual, primeiro
+  //     fechando um plano ainda ABERTO como REPLACED (reusa
+  //     trackPlanTransition(state, null, now), a mesma lógica honesta já
+  //     usada por toda troca de plano — nunca resolve em ausência).
+  // O plano ATIVO (rastreamento ao vivo do que está na tela agora)
+  // continua começando do zero em toda troca — só o AGREGADO histórico
+  // (o que realmente importa para medir desempenho real) sobrevive.
+  useEffect(() => {
+    const key = candleKey(selectedAsset, chartTimeframe as Timeframe);
+    const archived = useUnifiedSnapshotStore.getState().trackRecordArchive[key];
+    useUnifiedSnapshotStore.getState().hydrateTrackRecord(archived ?? EMPTY_TRACK_RECORD);
+    return () => {
+      useUnifiedSnapshotStore.getState().archiveTrackRecord(key);
+    };
+  }, [selectedAsset, chartTimeframe]);
 
   useEffect(() => {
     let unmounted = false;
@@ -1698,11 +1724,8 @@ export default function App() {
   // faltava. Idempotente quando os dois disparam juntos.
   useEffect(() => {
     useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();
-    // Evolução Profunda §13-K: o mesmo racional do Score Geral vale para o
-    // track record — trocar o timeframe muda o regime de leitura (S/R,
-    // estrutura, plano) mesmo no mesmo ativo, então acertos/erros de 15m
-    // não podem contar como se fossem de 1H.
-    useUnifiedSnapshotStore.getState().resetTrackRecord();
+    // trackRecord não é zerado aqui — arquivado/restaurado por
+    // symbol:timeframe no efeito dedicado logo acima (§6.8).
   }, [chartTimeframe]);
 
   // Diretriz Evolução Contínua §3/§4: cada mudança real do ponto de vista

@@ -4,6 +4,7 @@
 // dados, nunca UI.
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useUnifiedSnapshotStore } from '../src/store/unified-snapshot-store';
+import { buildTradePlan } from '../src/nexus/trade-plan';
 
 const RESET = {
   symbol: 'BTC',
@@ -31,8 +32,21 @@ const RESET = {
   consensusRadar: null,
   tradePlan: null,
   trackRecord: { contractVersion: 2 as const, active: null, history: [], targetHits: 0, partialHits: 0, stopHits: 0, replaced: 0 },
+  trackRecordArchive: {},
   trustScore: null,
 };
+
+const realPlan = (price = 50_000) =>
+  buildTradePlan({
+    stance: 'LONG',
+    riskGated: false,
+    price,
+    zones: [{ low: 49_200, high: 49_500, kind: 'OB_BULLISH' }],
+    levels: [
+      { price: 48_800, kind: 'SR_SUPPORT_1' },
+      { price: 51_000, kind: 'SR_RESISTANCE_1' },
+    ],
+  })!;
 
 describe('unified-snapshot-store: boots fail-closed (nada fabricado antes do primeiro dado real)', () => {
   beforeEach(() => {
@@ -316,5 +330,82 @@ describe('unified-snapshot-store (Diretriz Complementar §8): consensusRadar hon
     useUnifiedSnapshotStore.getState().setConsensusRadar({ spokes: [], computedAt: 1 });
     useUnifiedSnapshotStore.getState().setConsensusRadar(null);
     expect(useUnifiedSnapshotStore.getState().consensusRadar).toBeNull();
+  });
+});
+
+describe('unified-snapshot-store (Diretriz de Evolução Geral do Organismo §6.8): trackRecordArchive — o agregado real sobrevive a uma troca de ativo/timeframe, nunca mais um reset cego', () => {
+  beforeEach(() => {
+    useUnifiedSnapshotStore.setState(RESET);
+  });
+
+  it('archiveTrackRecord sem plano ativo só copia o agregado atual (já resolvido) para a chave — nada a fechar', () => {
+    const store = useUnifiedSnapshotStore.getState();
+    store.trackPlanTransition(realPlan(50_000));
+    store.trackPriceTick(51_000); // toca o único alvo real => TARGET_HIT, active volta a null
+    expect(useUnifiedSnapshotStore.getState().trackRecord.active).toBeNull();
+    expect(useUnifiedSnapshotStore.getState().trackRecord.targetHits).toBe(1);
+
+    useUnifiedSnapshotStore.getState().archiveTrackRecord('BTC:15m');
+    const archived = useUnifiedSnapshotStore.getState().trackRecordArchive['BTC:15m'];
+    expect(archived.targetHits).toBe(1);
+    expect(archived.active).toBeNull();
+  });
+
+  it('archiveTrackRecord com um plano AINDA ABERTO fecha como REPLACED antes de arquivar — nunca arquiva (nem deixa ao vivo) um plano stale como se ainda estivesse em aberto', () => {
+    useUnifiedSnapshotStore.getState().trackPlanTransition(realPlan(50_000));
+    expect(useUnifiedSnapshotStore.getState().trackRecord.active).not.toBeNull();
+
+    useUnifiedSnapshotStore.getState().archiveTrackRecord('BTC:15m');
+
+    const archived = useUnifiedSnapshotStore.getState().trackRecordArchive['BTC:15m'];
+    expect(archived.active).toBeNull();
+    expect(archived.replaced).toBe(1);
+    expect(archived.history).toHaveLength(1);
+    expect(archived.history[0].status).toBe('REPLACED');
+    // a fixação defensiva: o trackRecord AO VIVO também reflete o fechamento
+    // — nunca fica um plano "stale" pendurado se o chamador não emendar um
+    // hydrateTrackRecord logo em seguida.
+    expect(useUnifiedSnapshotStore.getState().trackRecord.active).toBeNull();
+    expect(useUnifiedSnapshotStore.getState().trackRecord.replaced).toBe(1);
+  });
+
+  it('round-trip real: arquivar, trocar para um agregado vazio, restaurar — o desempenho real da chave original nunca se perde (o bug real que esta iniciativa corrige)', () => {
+    const store = useUnifiedSnapshotStore.getState();
+    store.trackPlanTransition(realPlan(50_000));
+    store.trackPriceTick(51_000); // TARGET_HIT real
+    expect(useUnifiedSnapshotStore.getState().trackRecord.targetHits).toBe(1);
+
+    useUnifiedSnapshotStore.getState().archiveTrackRecord('BTC:15m');
+    // "troca de aba": a UI hidrata um agregado vazio para a NOVA combinação
+    useUnifiedSnapshotStore.getState().hydrateTrackRecord({
+      contractVersion: 2, active: null, history: [], targetHits: 0, partialHits: 0, stopHits: 0, replaced: 0,
+    });
+    expect(useUnifiedSnapshotStore.getState().trackRecord.targetHits).toBe(0);
+
+    // "volta pra aba": restaura o arquivo REAL da combinação original
+    const archived = useUnifiedSnapshotStore.getState().trackRecordArchive['BTC:15m'];
+    useUnifiedSnapshotStore.getState().hydrateTrackRecord(archived);
+    expect(useUnifiedSnapshotStore.getState().trackRecord.targetHits).toBe(1);
+  });
+
+  it('duas chaves distintas (ex.: BTC:15m e ETH:15m) nunca se contaminam — cada uma guarda o próprio desempenho real', () => {
+    const store = useUnifiedSnapshotStore.getState();
+    store.trackPlanTransition(realPlan(50_000));
+    store.trackPriceTick(51_000); // "BTC": toca o alvo real => TARGET_HIT
+    useUnifiedSnapshotStore.getState().archiveTrackRecord('BTC:15m');
+    useUnifiedSnapshotStore.getState().hydrateTrackRecord({
+      contractVersion: 2, active: null, history: [], targetHits: 0, partialHits: 0, stopHits: 0, replaced: 0,
+    });
+
+    useUnifiedSnapshotStore.getState().trackPlanTransition(realPlan(50_000));
+    useUnifiedSnapshotStore.getState().trackPriceTick(48_800); // "ETH": toca o stop real => STOP_HIT
+    useUnifiedSnapshotStore.getState().archiveTrackRecord('ETH:15m');
+
+    const btc = useUnifiedSnapshotStore.getState().trackRecordArchive['BTC:15m'];
+    const eth = useUnifiedSnapshotStore.getState().trackRecordArchive['ETH:15m'];
+    expect(btc.targetHits).toBe(1);
+    expect(btc.stopHits).toBe(0);
+    expect(eth.targetHits).toBe(0);
+    expect(eth.stopHits).toBe(1);
   });
 });

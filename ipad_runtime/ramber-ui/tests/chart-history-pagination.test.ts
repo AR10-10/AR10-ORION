@@ -179,16 +179,22 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     const app = read('../src/App.tsx');
     const idx = app.indexOf('setPriceData(null);');
     expect(idx, 'efeito de reset ao trocar de ativo não encontrado').toBeGreaterThan(-1);
-    // Evolução Profunda §11/§13-J acrescentou resetTrackRecord/
-    // setMultiTimeframeContext(null) real ao mesmo efeito — janela ampliada
-    // para caber o conteúdo novo (limite ainda finito: continua provando
-    // que é um efeito PRÓPRIO e contido, nunca o arquivo inteiro).
+    // Evolução Profunda §11/§13-J acrescentou setMultiTimeframeContext(null)
+    // real ao mesmo efeito — janela ampliada para caber o conteúdo novo
+    // (limite ainda finito: continua provando que é um efeito PRÓPRIO e
+    // contido, nunca o arquivo inteiro).
     const block = app.slice(Math.max(0, idx - 30), idx + 2000);
     expect(block).toContain('setChartData([]);');
     expect(block).toContain('setOrderBook({ bids: [], asks: [] });');
-    expect(block).toContain('useUnifiedSnapshotStore.getState().resetTrackRecord();');
     expect(block).toContain('useUnifiedSnapshotStore.getState().setMultiTimeframeContext(null);');
     expect(block).toMatch(/\}, \[selectedAsset\]\);/);
+    // Diretriz de Evolução Geral do Organismo §6.8 (achado real): o antigo
+    // resetTrackRecord (zerava tudo) foi substituído por um efeito PRÓPRIO
+    // logo depois, que arquiva/restaura por symbol:timeframe — nunca mais
+    // um reset cego dentro deste efeito de troca de ativo.
+    expect(block).not.toContain('resetTrackRecord');
+    const archiveEffectMatch = app.match(/const key = candleKey\(selectedAsset, chartTimeframe as Timeframe\);\n {4}const archived = useUnifiedSnapshotStore\.getState\(\)\.trackRecordArchive\[key\];\n {4}useUnifiedSnapshotStore\.getState\(\)\.hydrateTrackRecord\(archived \?\? EMPTY_TRACK_RECORD\);\n {4}return \(\) => \{\n {6}useUnifiedSnapshotStore\.getState\(\)\.archiveTrackRecord\(key\);\n {4}\};\n {2}\}, \[selectedAsset, chartTimeframe\]\);/);
+    expect(archiveEffectMatch, 'efeito de arquivo/restauração do track record não encontrado').not.toBeNull();
   });
 
   it('ChartWidget repassa onRequestOlderCandles até EnhancedChart_110_Percent — mesma prop, ponta a ponta', () => {

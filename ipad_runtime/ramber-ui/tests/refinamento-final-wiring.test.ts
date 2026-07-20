@@ -63,19 +63,31 @@ describe('App: efeito único computa os 2 motores novos da MESMA série real do 
     expect(app()).toContain('useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();');
   });
 
-  it('Evolução Profunda §13-K: trocar timeframe também reseta o track record (acertos/erros de 15m não podem contar como 1H)', () => {
+  it('Diretriz de Evolução Geral do Organismo §6.8 (substitui o antigo §13-K): trocar timeframe NÃO zera mais o track record — nenhum dos 2 efeitos de reset (ativo/timeframe) toca resetTrackRecord, que não existe mais como ação', () => {
     const a = app();
     const m = a.match(/useEffect\(\(\) => \{\s*useUnifiedSnapshotStore\.getState\(\)\.resetInstitutionalScoreHistory\(\);[\s\S]*?\}, \[chartTimeframe\]\);/);
     expect(m, 'efeito de reset por troca de timeframe não encontrado').not.toBeNull();
-    expect(m![0]).toContain('useUnifiedSnapshotStore.getState().resetTrackRecord();');
+    expect(m![0]).not.toContain('resetTrackRecord');
+    expect(a).not.toContain('resetTrackRecord'); // ação removida da store por inteiro, não só deste efeito
   });
 
-  it('Evolução Profunda §11/§13-J: trocar de ATIVO também reseta o track record e limpa a Matriz Multi-Timeframe antiga', () => {
+  it('Diretriz de Evolução Geral do Organismo §6.8 (substitui o antigo §11/§13-J): trocar de ATIVO não zera mais o track record (só arquiva/restaura no efeito dedicado), mas continua limpando a Matriz Multi-Timeframe antiga', () => {
     const a = app();
     const m = a.match(/useEffect\(\(\) => \{\s*setPriceData\(null\);[\s\S]*?\}, \[selectedAsset\]\);/);
     expect(m, 'efeito de reset por troca de ativo não encontrado').not.toBeNull();
-    expect(m![0]).toContain('useUnifiedSnapshotStore.getState().resetTrackRecord();');
+    expect(m![0]).not.toContain('resetTrackRecord');
     expect(m![0]).toContain('useUnifiedSnapshotStore.getState().setMultiTimeframeContext(null);');
+  });
+
+  it('track record: efeito PRÓPRIO arquiva o agregado (nunca o plano ativo) por symbol:timeframe ao trocar, restaura o arquivo real ao entrar de novo na mesma combinação', () => {
+    const a = app();
+    const idx = a.indexOf('const key = candleKey(selectedAsset, chartTimeframe as Timeframe);');
+    expect(idx, 'efeito de arquivo/restauração do track record não encontrado').toBeGreaterThan(-1);
+    const block = a.slice(idx, idx + 500);
+    expect(block).toContain('const archived = useUnifiedSnapshotStore.getState().trackRecordArchive[key];');
+    expect(block).toContain('useUnifiedSnapshotStore.getState().hydrateTrackRecord(archived ?? EMPTY_TRACK_RECORD);');
+    expect(block).toContain('useUnifiedSnapshotStore.getState().archiveTrackRecord(key);');
+    expect(block).toMatch(/\}, \[selectedAsset, chartTimeframe\]\);/);
   });
 });
 
@@ -480,7 +492,7 @@ describe('Auditoria §6: configurações do Operador (camadas + EMA) sobrevivem 
 describe('Consolidação §5: compactPersistedCandles roda uma vez por boot (envelhecimento do cache Local-First)', () => {
   it('App.tsx importa e dispara a compactação fire-and-forget no efeito de boot ([]), nunca no caminho quente', () => {
     const a = app();
-    expect(a).toContain('compactPersistedCandles } from "./nexus/persistence"');
+    expect(a).toContain('compactPersistedCandles, candleKey } from "./nexus/persistence"');
     expect(a).toContain('void compactPersistedCandles().catch(() => {});');
     // a chamada vive no MESMO efeito one-shot que hidrata o track record —
     // um único ponto de boot, nunca um segundo ciclo de vida paralelo.
