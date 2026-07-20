@@ -31,8 +31,8 @@ SNAPSHOT GLOBAL UNIFICADO (Zustand+Immer, 5 domínios)
 CORE ENGINE — único emissor de LONG/SHORT/WAIT (LEI 24)
   ↓ Conselho/Confluence/Heat/Score/MTF (contexto, nunca decisão)
 TRADE PLAN (trade-plan.ts — estrutura real: entrada/stop/alvos/R:R)
-  ↓ buildNexusDecision (decision-layer.ts — contrato único, v2)
-OPERATIONAL READABILITY (operational-readability.ts — contrato v6)
+  ↓ buildNexusDecision (decision-layer.ts — contrato único, v3)
+OPERATIONAL READABILITY (operational-readability.ts — contrato v7)
   ↓
 HEADER (badge herói) + CHART + GAVETAS + ABA ANALYSIS + TOOLTIP
 ```
@@ -141,8 +141,11 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 - Execução real de ordens / chaves de API — recusa permanente
   (`CLAUDE.md`, restrição inegociável).
 - **§13 "Alvo Máximo Estatístico"** — exigiria probabilidade calibrada
-  sem backtest real neste repositório (Regra de Ouro 2). Só reabre se um
-  dia existir infraestrutura real de backtest com histórico auditável.
+  sem backtest real neste repositório (Regra de Ouro 2). O gate começou a
+  ser destravado: a **fase 1 da infraestrutura de backtest existe**
+  (`src/research/backtest/structural-backtest.js`, laboratório — ver
+  §6.7); a recusa só cai por completo quando a fase 2 (histórico REAL
+  armazenado com proveniência) existir e produzir amostra auditável.
 
 ### 6.4 Adiamentos deliberados (decisão registrada, não esquecimento)
 Cada um destes é da classe que `CLAUDE.md` (Regra de Ouro 6) exige tratar
@@ -171,6 +174,24 @@ arquivamento de handoffs HTML, poda de docs do PR #6 — já mergeado)
 são SUPERADAS por este documento: escrever aquele conteúdo hoje
 descreveria um sistema que não existe mais. Os `docs/` históricos
 permanecem como registro (Regra de Ouro 4 — nunca apagar sem ordem).
+
+### 6.7 Iniciativa em andamento: histórico real + backtest honesto
+Nomeada na conclusão da Diretriz de Evolução de Produto como a única
+evolução comprovadamente mais importante; autorizada pelo Operador.
+- **Fase 1 — FEITA** (2026-07-20): núcleo puro do laboratório
+  (`src/research/backtest/structural-backtest.js`) — walk-forward via
+  Motor de Replay real + engines graduados candle-only; desfechos
+  first-touch com empate conservador (nunca vira acerto); no máximo 1
+  trial aberto por direção (dedup de amostra); zero-lookahead e simetria
+  LONG/SHORT provados por execução real (11 testes). Aviso de honestidade
+  gravado no contrato. Nenhum fio com o caminho ao vivo (LEI 24,
+  fronteira travada por teste).
+- **Fase 2 — PRÓXIMA**: captura e armazenamento de histórico REAL com
+  proveniência (paginação via conector direto — nunca pelo Bus, regra do
+  `CLAUDE.md` — + persistência versionada). Exige ambiente com egress às
+  exchanges (produção/dispositivo do Operador; o sandbox de CI não tem).
+- **Fase 3 — DEPOIS**: rodar o laboratório sobre a amostra real capturada
+  e reportar contagens auditáveis (só então §6.3/§13 reabre de fato).
 
 ---
 

@@ -101,6 +101,25 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   própria constante `FRACTAL_K` redeclarada. Sem lógica própria de sinal, só a
   primitiva geométrica compartilhada; os três engines acima o importam.
 
+## Laboratório de backtest (nunca caminho de produção)
+
+- **`backtest/structural-backtest.js`** (2026-07-20, fase 1 da iniciativa
+  "histórico real + backtest honesto" — a única evolução nomeada como mais
+  importante na conclusão da Diretriz de Evolução de Produto, autorizada
+  pelo Operador). Medidor de desfechos estruturais em walk-forward: reusa o
+  Motor de Replay REAL (`src/replay/`) e os engines graduados candle-only
+  (`market-structure-engine` + `support-resistance-engine`) — zero
+  matemática de mercado nova; a regra estrutural é de MEDIÇÃO do
+  laboratório, documentada no cabeçalho. Saída = CONTAGEM de eventos da
+  amostra com aviso de honestidade gravado no contrato ("NUNCA
+  probabilidade futura, NUNCA o desempenho do sistema completo ao vivo").
+  Status: **LABORATÓRIO** — nenhum módulo de produção importa daqui
+  (fronteira travada por teste em
+  `ramber-ui/tests/structural-backtest.test.ts`); só se aplica a regra de
+  quarentena abaixo se um dia for graduado, o que exigirá antes a fase 2
+  (captura/armazenamento de histórico REAL — sem ela, qualquer número
+  daqui descreve apenas a série fornecida).
+
 ## Regra de quarentena daqui para frente
 
 Nenhum arquivo de `src/research/**` pode ser importado por `js/**` sem,
