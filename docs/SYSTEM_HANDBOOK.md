@@ -96,7 +96,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (100+ arquivos, 1514+ testes) +
+- `npx tsc --noEmit` + `npx vitest run` (100+ arquivos, 1516+ testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -126,6 +126,23 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 - Auditoria visual com conteúdo real na gaveta Market Intelligence.
 - Gap de teste: resets de L2/orderflow/score escopados ao efeito real de
   troca de ativo.
+- **Bug real de sincronização (Diretriz de Evolução Geral do Organismo,
+  auditoria de sincronização entre widgets)**: `fetchSymbolData`/
+  `fetchDerivatives` (`App.tsx`) não verificavam se o Operador já tinha
+  trocado de ativo enquanto um fetch estava em voo — uma resposta tardia
+  do ativo ANTERIOR podia ser mesclada no `chartData` do ativo NOVO, já
+  resetado, rotulada sob o título errado. Corrigido com o MESMO padrão
+  `cancelled`/`isStale` já usado pelos efeitos irmãos (`runCycle`, o
+  efeito de troca de timeframe) — checagem antes de cada `setState`
+  subsequente a um `await`, nos dois pontos de chamada (retry de boot e
+  o `setInterval` de refresh). Aditivo puro, zero mudança de
+  comportamento no caminho não-stale.
+- **MFE/MAE estratificado no laboratório de backtest** (§5 da mesma
+  diretriz): `structural-backtest.js` ganhou Maximum Favorable/Adverse
+  Excursion por trial (R-múltiplo, método padrão de backtest) e médias
+  agregadas totais + por direção. Zero matemática de mercado nova —
+  método de medição padrão, mesma disciplina de honestidade do resto do
+  laboratório.
 
 ### 6.2 Fechadas como JÁ COBERTAS (auditadas, nada a construir)
 - **Contexto HTF vs timing atual**: o cruzamento já existe em DOIS
@@ -213,6 +230,63 @@ evolução comprovadamente mais importante; autorizada pelo Operador.
 - **Fase 3 — DEPOIS**: rodar o laboratório (`structural-backtest.js`)
   sobre a amostra real capturada pela fase 2 e reportar contagens
   auditáveis (só então §6.3/§13 reabre de fato).
+
+### 6.8 Auditoria de memória e aprendizado adaptativo (Diretriz de
+Evolução Geral do Organismo, 2026-07-20) — mapa real + próxima
+iniciativa proposta, ainda NÃO construída
+
+Auditoria de código real (não suposição) contra os 6 tipos de memória
+que a diretriz nomeou:
+
+| Tipo de memória | Estado real | Onde |
+|---|---|---|
+| Sessão | EXISTE E FUNCIONA | `nexus/persistence.ts` (IndexedDB, candles + resumo do snapshot) |
+| Decisões | EXISTE, PARCIAL | `signal-track-record.ts` (`TrackedPlan`, histórico com teto de 100, persistido) — fatia GLOBAL única, não por símbolo/timeframe |
+| Resultados | EXISTE E FUNCIONA | `trackPriceTick` resolve `TARGET_HIT`/`PARTIAL_HIT`/`STOP_HIT`/`REPLACED` reais; `hitRate()` acumulado — mas só EXIBIDO (painel Track Record), nunca consumido por nenhum cálculo de confiança/score |
+| Padrões | NÃO EXISTE | Nenhum arquivo acumula estatística padrão→desfecho entre sessões |
+| Regimes | EXISTE, PARCIAL | `RegimeHistory` (`market-regime/regime-history.js`) roda em produção a cada ciclo real, mas só em memória (nunca persiste) e só alimenta um rótulo "regime há N min" — nunca um cálculo de confiança |
+| Erros | NÃO EXISTE | Nenhum log de sinal falho/gate rejeitado |
+
+**Aprendizado adaptativo: não implementado hoje, em lugar nenhum.**
+Toda superfície de score/peso real auditada (`ensemble-engine.js`,
+`weight-matrix.js`, `regime-engine.js`, `lorentzian-classifier.js`)
+calcula só a partir do snapshot ATUAL — nenhuma delas lê um resultado
+passado real. O próprio código já nomeia esta lacuna como trabalho
+futuro deliberado, não descoberto agora: `weight-matrix.js` (a tabela
+estática regime→peso que alimenta `ensemble-engine.js`) documenta no
+próprio cabeçalho "quando o autoaprendizado estatístico da V15 existir,
+ele recalibra ESTA tabela".
+
+**Proposta concreta para a próxima iniciativa** (não construída nesta
+trilha — Regra de Ouro 6, própria iniciativa isolada, dado que toca
+`weight-matrix.js`/`ensemble-engine.js`, código de produção ao vivo do
+Council/GMIL, não um laboratório):
+- Fonte real já pronta: `hitRate()`/`trackRecord` (memória de
+  Resultados acima) já acumula acerto real, só nunca foi lido por nada
+  além do painel.
+- Mecanismo: recalibrar `weight-matrix.js` a partir de `hitRate()` real,
+  nunca substituí-la — ajuste GRADUAL (ex.: multiplicador limitado por
+  faixa, nunca um peso arbitrário), MEDIDO (cada ajuste seu próprio
+  commit/teste), AUDITÁVEL (a tabela final continua legível, a origem
+  do número continua rastreável ao dado real), REVERSÍVEL (parâmetro
+  declarado, ajustável/desligável pelo Operador) — exatamente a
+  disciplina do §7/§12 da diretriz, nunca um super-score que esconda a
+  origem.
+- Pré-requisito honesto: a fatia de Track Record hoje é GLOBAL (todos os
+  símbolos/timeframes juntos) — recalibrar pesos por regime a partir
+  dela hoje misturaria resultados de contextos diferentes. Escopar
+  `TrackedPlan`/`hitRate()` por símbolo (ou por regime) é o passo real
+  que provavelmente precisa vir ANTES do recalibre em si.
+
+**Confirmado sem gap real** (mesma auditoria, não precisa de nova
+iniciativa): performance/main thread. Os 4 Workers reais (orderflow
+heatmap, conviction cyclone, LLM, quant WASM) estão genuinely wired,
+WASM cobre Volume Profile/TrustScore como o `CLAUDE.md` documenta, todos
+os engines em `research/engines/` operam sobre a janela de candles em
+memória (não a história inteira) com custo O(N) ou O(N·k) limitado, o
+ciclo do Core Engine só recomputa quando ativo/timeframe/boot realmente
+mudam (nunca por re-render não relacionado), e os 6 plugins de overlay
+do canvas seguem o padrão dirty-flag+rAF. Nenhuma ação necessária.
 
 ---
 

@@ -771,10 +771,23 @@ export default function App() {
   // B). Retorna success/failure so the boot sequence below can retry a
   // transient failure quickly instead of silently waiting for the next 60s
   // tick.
-  const fetchSymbolData = async (): Promise<boolean> => {
+  // isStale (Diretriz de Evolução Geral do Organismo — auditoria de
+  // sincronização, achado real): antes desta correção, nem o retry de
+  // boot nem o setInterval de 30s abaixo verificavam se o Operador já
+  // tinha trocado de ativo ENQUANTO um destes awaits estava em voo — o
+  // mesmo padrão que runCycle (efeito do ciclo do motor, mais abaixo)
+  // já usa com `cancelled`, só que fetchSymbolData/fetchDerivatives vivem
+  // FORA do efeito (deliberado — ver comentário de chartTimeframeRef
+  // acima), então a checagem precisa ser passada como parâmetro em vez
+  // de vir de uma closure direta sobre a variável do efeito. Sem isto:
+  // trocar de BTC pra ETH com uma resposta de BTC ainda em voo faria
+  // candles de BTC serem mesclados no chartData do ETH, já resetado,
+  // rotulados sob o título errado.
+  const fetchSymbolData = async (isStale: () => boolean): Promise<boolean> => {
     try {
       const candles = await getChartCandles(selectedAsset, CHART_CANDLE_LIMIT, chartTimeframeRef.current);
       if (!candles) throw new Error('market_data_bus_sem_candles_validos');
+      if (isStale()) return true; // ativo trocou durante o fetch — descarta, nunca aplica dado do ativo errado
       // Auditoria de arquitetura: merge, nunca um replace cego — preserva
       // história real que a paginação (arrastar para trás) já carregou.
       setChartData((prev) => mergeFreshTail(prev, candles));
@@ -787,6 +800,7 @@ export default function App() {
       );
       if (!tickerRes.ok) throw new Error(`ticker HTTP ${tickerRes.status}`);
       const tickerData = await tickerRes.json();
+      if (isStale()) return true; // 2ª checagem: o ativo pode ter trocado durante ESTE await também
       if (Array.isArray(tickerData)) {
         setScannerData(
           tickerData.map((t) => {
@@ -808,7 +822,11 @@ export default function App() {
   };
 
   // REST: real Binance futures funding rate + open interest (public, read-only).
-  const fetchDerivatives = async (): Promise<boolean> => {
+  // isStale: mesmo raciocínio/mesma correção de fetchSymbolData acima —
+  // sem isto, dados de derivativos do ativo ANTERIOR (ou pior, um
+  // fundingRate/openInterest nulo do catch) podiam sobrescrever o estado
+  // já resetado do ativo novo.
+  const fetchDerivatives = async (isStale: () => boolean): Promise<boolean> => {
     let binanceOk = false;
     let binanceMarkPrice: number | null = null;
     try {
@@ -820,17 +838,19 @@ export default function App() {
       const funding = await fundingRes.json();
       const oi = await oiRes.json();
       binanceMarkPrice = num(Number(funding?.markPrice)) ? Number(funding.markPrice) : null;
-      setDerivatives({
-        fundingRate: num(Number(funding?.lastFundingRate))
-          ? Number(funding.lastFundingRate)
-          : null,
-        openInterest: num(Number(oi?.openInterest))
-          ? Number(oi.openInterest)
-          : null,
-      });
+      if (!isStale()) {
+        setDerivatives({
+          fundingRate: num(Number(funding?.lastFundingRate))
+            ? Number(funding.lastFundingRate)
+            : null,
+          openInterest: num(Number(oi?.openInterest))
+            ? Number(oi.openInterest)
+            : null,
+        });
+      }
       binanceOk = true;
     } catch {
-      setDerivatives({ fundingRate: null, openInterest: null });
+      if (!isStale()) setDerivatives({ fundingRate: null, openInterest: null });
     }
 
     // Master Panel handoff: cross-check Bybit + OKX — independente do
@@ -843,8 +863,10 @@ export default function App() {
       fetchBybitPerpTicker(selectedAsset),
       fetchOkxPerpTicker(selectedAsset),
     ]);
-    setCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, bybit));
-    setOkxCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, okx));
+    if (!isStale()) {
+      setCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, bybit));
+      setOkxCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, okx));
+    }
 
     return binanceOk;
   };
@@ -915,18 +937,25 @@ export default function App() {
 
   useEffect(() => {
     let unmounted = false;
+    // Fecha sobre o `unmounted` DESTE efeito — retry de boot e o tick de
+    // 30/60s abaixo reusam as MESMAS closures, então uma resposta tardia
+    // de um ativo já trocado (unmounted true na hora em que o await
+    // resolve) nunca aplica dado do ativo errado (ver isStale dentro de
+    // fetchSymbolData/fetchDerivatives).
+    const fetchSymbolDataGuarded = () => fetchSymbolData(() => unmounted);
+    const fetchDerivativesGuarded = () => fetchDerivatives(() => unmounted);
     (async () => {
       const [restOk, derivOk] = await Promise.all([
-        retryBoot(fetchSymbolData, () => unmounted),
-        retryBoot(fetchDerivatives, () => unmounted),
+        retryBoot(fetchSymbolDataGuarded, () => unmounted),
+        retryBoot(fetchDerivativesGuarded, () => unmounted),
       ]);
       if (!unmounted) setBootRestFailed(!restOk && !derivOk);
     })();
     // Klines a 30s: mantém o último candle do gráfico em sincronia com o
     // ciclo do motor (mesma cadência). Derivativos (funding/OI) mudam devagar
     // — 60s continua correto para eles.
-    const restInterval = setInterval(fetchSymbolData, 30000);
-    const derivInterval = setInterval(fetchDerivatives, 60000);
+    const restInterval = setInterval(fetchSymbolDataGuarded, 30000);
+    const derivInterval = setInterval(fetchDerivativesGuarded, 60000);
 
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;

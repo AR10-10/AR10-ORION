@@ -119,6 +119,13 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   quarentena abaixo se um dia for graduado, o que exigirá antes a fase 2
   (captura/armazenamento de histórico REAL — sem ela, qualquer número
   daqui descreve apenas a série fornecida).
+  **Atualização (Diretriz de Evolução Geral do Organismo, mesmo dia):**
+  cada trial ganhou MFE/MAE (Maximum Favorable/Adverse Excursion, método
+  padrão de backtest — não uma métrica proprietária), medido candle a
+  candle durante toda a vida do trial e expresso em R-múltiplo
+  (excursão ÷ risco do próprio trial); o agregado ganhou `avgMfeR`/
+  `avgMaeR` totais e por direção. Zero mudança na regra estrutural de
+  medição em si.
 
 - **`backtest/history-capture.js`** (2026-07-20, fase 2 da mesma
   iniciativa). Pagina candles reais para trás a partir do conector direto

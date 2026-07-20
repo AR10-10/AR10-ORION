@@ -46,6 +46,17 @@
 // convenções documentadas e ajustáveis, nunca medições):
 //   windowSize  default do replay (120) — janela de análise por frame.
 //   horizonBars default 48 — em 15m, ~12h para o cenário se resolver.
+//
+// MFE/MAE (Diretriz de Evolução Geral do Organismo §5 — estatística
+// estratificada, não um único número mágico): Maximum Favorable/Adverse
+// Excursion por trial, método padrão de backtest (não uma métrica
+// proprietária) — o maior avanço a favor e o maior avanço contra,
+// medidos candle a candle desde a decisão até a resolução (ou o fim do
+// horizonte, se NAO_RESOLVIDO), expressos como múltiplo do risco real do
+// próprio trial (mfeR/maeR = excursão ÷ |entry-stop|) para serem
+// comparáveis entre trials com preços/riscos diferentes — mesma
+// convenção de R-múltiplo já usada por riskReward abaixo. null honesto
+// quando risco é 0 (trial degenerado), nunca uma divisão fabricada.
 import { createReplaySession, REPLAY_DEFAULT_WINDOW } from '../../replay/replay-engine.js';
 import { analyze as analyzeStructure } from '../engines/market-structure-engine.js';
 import { analyze as analyzeSupportResistance } from '../engines/support-resistance-engine.js';
@@ -66,16 +77,49 @@ function resolveTrialWithCandle(trial, candle) {
     return null;
 }
 
-function emptyBucket() {
-    return { trials: 0, targetHits: 0, stopHits: 0, bothTouchedCountedAsStop: 0, unresolved: 0 };
+// Atualiza a excursão favorável/adversa (preço absoluto, ainda não em
+// R-múltiplo) com UM candle real — chamado a cada candle em que o trial
+// está aberto, incluindo o candle de resolução, para capturar o extremo
+// real de todo o intervalo (não só o ponto final).
+function updateExcursion(trial, candle) {
+    const long = trial.direction === 'LONG';
+    const favorable = long ? candle.h - trial.entry : trial.entry - candle.l;
+    const adverse = long ? trial.entry - candle.l : candle.h - trial.entry;
+    trial.mfe = Math.max(trial.mfe, favorable);
+    trial.mae = Math.max(trial.mae, adverse);
 }
 
-function accumulate(bucket, outcome) {
+function emptyBucket() {
+    return {
+        trials: 0, targetHits: 0, stopHits: 0, bothTouchedCountedAsStop: 0, unresolved: 0,
+        mfeRSum: 0, mfeRCount: 0, maeRSum: 0, maeRCount: 0,
+    };
+}
+
+function accumulate(bucket, trial) {
     bucket.trials += 1;
+    const outcome = trial.outcome;
     if (outcome === 'TARGET') bucket.targetHits += 1;
     else if (outcome === 'STOP') bucket.stopHits += 1;
     else if (outcome === 'AMBOS_STOP_CONSERVADOR') { bucket.stopHits += 1; bucket.bothTouchedCountedAsStop += 1; }
     else bucket.unresolved += 1;
+    if (trial.mfeR !== null) { bucket.mfeRSum += trial.mfeR; bucket.mfeRCount += 1; }
+    if (trial.maeR !== null) { bucket.maeRSum += trial.maeR; bucket.maeRCount += 1; }
+}
+
+// avgMfeR/avgMaeR: média aritmética real sobre os trials com risco válido
+// (nunca fabricada); null honesto sem nenhum trial elegível — mesma
+// disciplina de taxaAlvoAmostra abaixo.
+function finalizeBucket(bucket) {
+    return Object.freeze({
+        trials: bucket.trials,
+        targetHits: bucket.targetHits,
+        stopHits: bucket.stopHits,
+        bothTouchedCountedAsStop: bucket.bothTouchedCountedAsStop,
+        unresolved: bucket.unresolved,
+        avgMfeR: bucket.mfeRCount > 0 ? bucket.mfeRSum / bucket.mfeRCount : null,
+        avgMaeR: bucket.maeRCount > 0 ? bucket.maeRSum / bucket.maeRCount : null,
+    });
 }
 
 /**
@@ -120,6 +164,8 @@ export async function runStructuralBacktest({
     const closeTrial = (trial, outcome, barsToResolve) => {
         trial.outcome = outcome;
         trial.barsToResolve = outcome === 'NAO_RESOLVIDO' ? null : barsToResolve;
+        trial.mfeR = trial.risk > 0 ? trial.mfe / trial.risk : null;
+        trial.maeR = trial.risk > 0 ? trial.mae / trial.risk : null;
         trials.push(Object.freeze(trial));
         openByDirection[trial.direction] = null;
     };
@@ -137,6 +183,7 @@ export async function runStructuralBacktest({
         for (const dir of ['LONG', 'SHORT']) {
             const trial = openByDirection[dir];
             if (!trial || newCandleIdx < trial.decisionIndex) continue;
+            updateExcursion(trial, newCandle);
             const bars = newCandleIdx - trial.decisionIndex + 1;
             const outcome = resolveTrialWithCandle(trial, newCandle);
             if (outcome) closeTrial(trial, outcome, bars);
@@ -173,10 +220,15 @@ export async function runStructuralBacktest({
             entry: close,
             stop,
             target,
+            risk,
             riskReward: risk > 0 ? Math.abs(target - close) / risk : null,
             horizonBars,
             outcome: null,
             barsToResolve: null,
+            mfe: 0,
+            mae: 0,
+            mfeR: null,
+            maeR: null,
         };
     }
 
@@ -190,8 +242,8 @@ export async function runStructuralBacktest({
     const total = emptyBucket();
     const porDirecao = { LONG: emptyBucket(), SHORT: emptyBucket() };
     for (const trial of trials) {
-        accumulate(total, trial.outcome);
-        accumulate(porDirecao[trial.direction], trial.outcome);
+        accumulate(total, trial);
+        accumulate(porDirecao[trial.direction], trial);
     }
     const resolved = total.targetHits + total.stopHits;
 
@@ -217,9 +269,14 @@ export async function runStructuralBacktest({
             // aritmética sobre eventos contados, com o aviso ao lado; null
             // honesto sem amostra resolvida (nunca 0 fabricado).
             taxaAlvoAmostra: resolved > 0 ? total.targetHits / resolved : null,
+            // MFE/MAE médios em R-múltiplo (Diretriz de Evolução Geral do
+            // Organismo §5) — mesma disciplina: aritmética real sobre a
+            // amostra, null honesto sem trials elegíveis.
+            avgMfeR: total.mfeRCount > 0 ? total.mfeRSum / total.mfeRCount : null,
+            avgMaeR: total.maeRCount > 0 ? total.maeRSum / total.maeRCount : null,
             porDirecao: Object.freeze({
-                LONG: Object.freeze(porDirecao.LONG),
-                SHORT: Object.freeze(porDirecao.SHORT),
+                LONG: finalizeBucket(porDirecao.LONG),
+                SHORT: finalizeBucket(porDirecao.SHORT),
             }),
         }),
         aviso: BACKTEST_AVISO,

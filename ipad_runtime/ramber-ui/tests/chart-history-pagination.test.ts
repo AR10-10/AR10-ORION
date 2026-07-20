@@ -130,6 +130,40 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     expect(tfEffectMatch![1]).not.toContain('mergeFreshTail');
   });
 
+  it('Achado real (auditoria de sincronização entre widgets): fetchSymbolData/fetchDerivatives checam isStale() antes de TODO setState — uma resposta tardia do ativo trocado nunca aplica dado do ativo errado', () => {
+    const app = read('../src/App.tsx');
+    const symbolFnMatch = app.match(/const fetchSymbolData = async \(isStale: \(\) => boolean\): Promise<boolean> => \{([\s\S]*?)\n {2}\};/);
+    expect(symbolFnMatch, 'fetchSymbolData não encontrada com o parâmetro isStale').not.toBeNull();
+    const symbolBody = symbolFnMatch![1];
+    // 2 checagens: uma depois de getChartCandles, outra depois do fetch do ticker —
+    // o ativo pode trocar durante QUALQUER um dos dois awaits, não só o primeiro.
+    expect(symbolBody.match(/if \(isStale\(\)\) return true;/g)).toHaveLength(2);
+    // a checagem vem ANTES do setState correspondente, nunca depois
+    expect(symbolBody.indexOf('if (isStale()) return true;')).toBeLessThan(symbolBody.indexOf('setChartData((prev) => mergeFreshTail'));
+
+    const derivFnMatch = app.match(/const fetchDerivatives = async \(isStale: \(\) => boolean\): Promise<boolean> => \{([\s\S]*?)\n {2}\};/);
+    expect(derivFnMatch, 'fetchDerivatives não encontrada com o parâmetro isStale').not.toBeNull();
+    const derivBody = derivFnMatch![1];
+    expect(derivBody).toContain('if (!isStale()) {\n        setDerivatives({');
+    expect(derivBody).toContain('if (!isStale()) setDerivatives({ fundingRate: null, openInterest: null });');
+    expect(derivBody).toContain('if (!isStale()) {\n      setCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, bybit));');
+
+    // os DOIS call sites (retry de boot E o setInterval de refresh) usam a
+    // MESMA closure guardada — nunca a função crua sem proteção.
+    const bootEffectMatch = app.match(/useEffect\(\(\) => \{\n {4}let unmounted = false;\n[\s\S]*?\n {2}\}, \[bootGeneration, selectedAsset\]\);/);
+    expect(bootEffectMatch, 'efeito de boot/WS não encontrado').not.toBeNull();
+    const bootBody = bootEffectMatch![0];
+    expect(bootBody).toContain('const fetchSymbolDataGuarded = () => fetchSymbolData(() => unmounted);');
+    expect(bootBody).toContain('const fetchDerivativesGuarded = () => fetchDerivatives(() => unmounted);');
+    expect(bootBody).toContain('retryBoot(fetchSymbolDataGuarded, () => unmounted)');
+    expect(bootBody).toContain('retryBoot(fetchDerivativesGuarded, () => unmounted)');
+    expect(bootBody).toContain('setInterval(fetchSymbolDataGuarded, 30000)');
+    expect(bootBody).toContain('setInterval(fetchDerivativesGuarded, 60000)');
+    expect(bootBody).toContain('unmounted = true;'); // cleanup real, não só a variável declarada
+    expect(bootBody).not.toContain('retryBoot(fetchSymbolData,'); // a função crua nunca deve voltar a ser passada direto
+    expect(bootBody).not.toContain('retryBoot(fetchDerivatives,');
+  });
+
   // Relato real do Operador (voz): "esse gráfico também tem que buscar os
   // dado... de qualquer ativo... direto da raiz". Achado desta sessão: o
   // gráfico JÁ busca `selectedAsset` (a string real, seja ela um dos 5

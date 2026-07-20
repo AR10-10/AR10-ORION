@@ -65,6 +65,22 @@ describe('runStructuralBacktest — fixture determinística versionada (mecânic
     } else {
       expect(a.taxaAlvoAmostra).toBeNull();
     }
+    // avgMfeR/avgMaeR do agregado batem com a média recomputada à mão
+    // sobre os próprios trials — prova cruzada real, não só presença.
+    const withMfe = r.trials.filter((t: any) => t.mfeR !== null);
+    const withMae = r.trials.filter((t: any) => t.maeR !== null);
+    if (withMfe.length > 0) {
+      const manualAvg = withMfe.reduce((s: number, t: any) => s + t.mfeR, 0) / withMfe.length;
+      expect(a.avgMfeR).toBeCloseTo(manualAvg, 10);
+    } else {
+      expect(a.avgMfeR).toBeNull();
+    }
+    if (withMae.length > 0) {
+      const manualAvg = withMae.reduce((s: number, t: any) => s + t.maeR, 0) / withMae.length;
+      expect(a.avgMaeR).toBeCloseTo(manualAvg, 10);
+    } else {
+      expect(a.avgMaeR).toBeNull();
+    }
     // trials congelados e ordenados por decisão
     for (let i = 1; i < r.trials.length; i++) {
       expect(r.trials[i].decisionIndex).toBeGreaterThanOrEqual(r.trials[i - 1].decisionIndex);
@@ -123,6 +139,10 @@ describe('runStructuralBacktest — resolução determinística em séries de m�
     ]);
     expect(trial.outcome).toBe('TARGET');
     expect(trial.barsToResolve).toBe(2);
+    // MFE/MAE em R-múltiplo: candle 2 tem o high mais alto (target+0.5), os
+    // dois candles têm o MESMO low (stop+0.01) — cálculo de mão exato.
+    expect(trial.mfeR).toBeCloseTo((trial.target + 0.5 - trial.entry) / trial.risk, 10);
+    expect(trial.maeR).toBeCloseTo((trial.risk - 0.01) / trial.risk, 10);
   });
 
   it('STOP: candle posterior toca só o stop => STOP', async () => {
@@ -131,6 +151,11 @@ describe('runStructuralBacktest — resolução determinística em séries de m�
     ]);
     expect(trial.outcome).toBe('STOP');
     expect(trial.barsToResolve).toBe(1);
+    const h = Math.min(trial.stop + 2, trial.target - 0.01);
+    // mfe nunca fica negativo (Math.max contra o piso 0 do trial recém-
+    // aberto) — este candle pode nem chegar a devolver o preço a `entry`.
+    expect(trial.mfeR).toBeCloseTo(Math.max(0, h - trial.entry) / trial.risk, 10);
+    expect(trial.maeR).toBeCloseTo((trial.risk + 0.5) / trial.risk, 10);
   });
 
   it('EMPATE CONSERVADOR: mesmo candle toca stop E alvo => AMBOS_STOP_CONSERVADOR (o empate nunca vira acerto)', async () => {
@@ -138,6 +163,8 @@ describe('runStructuralBacktest — resolução determinística em séries de m�
       { t: 0, o: (target + stop) / 2, h: target + 1, l: stop - 1, c: (target + stop) / 2, v: 10 },
     ]);
     expect(trial.outcome).toBe('AMBOS_STOP_CONSERVADOR');
+    expect(trial.mfeR).toBeCloseTo((trial.target + 1 - trial.entry) / trial.risk, 10);
+    expect(trial.maeR).toBeCloseTo((trial.risk + 1) / trial.risk, 10);
   });
 
   it('NAO_RESOLVIDO: nenhum toque dentro do horizonte => nunca conta como acerto; barsToResolve null honesto', async () => {
@@ -147,6 +174,30 @@ describe('runStructuralBacktest — resolução determinística em séries de m�
     ]);
     expect(trial.outcome).toBe('NAO_RESOLVIDO');
     expect(trial.barsToResolve).toBeNull();
+    // NAO_RESOLVIDO não impede MFE/MAE de serem medições reais e válidas —
+    // só o desfecho de toque é que ficou indefinido, a excursão é real.
+    expect(trial.mfeR).toBeCloseTo((trial.target - 0.01 - trial.entry) / trial.risk, 10);
+    expect(trial.maeR).toBeCloseTo((trial.risk - 0.01) / trial.risk, 10);
+  });
+
+  it('MFE/MAE: memoriza o extremo real de TODA a vida do trial, não só o candle de resolução — o pico favorável de um candle anterior sobrevive mesmo quando um candle posterior e menor é quem resolve', async () => {
+    const trial = await firstTrialWith(({ entry, target, stop }) => {
+      const riskSpan = entry - stop;
+      const rewardSpan = target - entry;
+      return [
+        { t: 0, o: entry, h: entry + 0.3 * rewardSpan, l: entry - 0.4 * riskSpan, c: entry, v: 10 }, // não toca nada
+        { t: 0, o: entry, h: entry + 0.7 * rewardSpan, l: entry - 0.2 * riskSpan, c: entry, v: 10 }, // pico favorável real, ainda não toca
+        { t: 0, o: entry, h: entry + 0.5 * rewardSpan, l: stop - 0.01, c: entry, v: 10 }, // toca o stop aqui — resolve STOP
+      ];
+    });
+    expect(trial.outcome).toBe('STOP');
+    expect(trial.barsToResolve).toBe(3);
+    // mfe real vem do candle 2 (0.7·rewardSpan) — MAIOR que o candle de
+    // resolução (0.5·rewardSpan) — a memória sobrevive ao 3º candle.
+    expect(trial.mfeR).toBeCloseTo((0.7 * (trial.target - trial.entry)) / trial.risk, 8);
+    // mae real vem do candle 3, onde o stop foi de fato tocado — sempre
+    // >= o risco inteiro quando o stop é tocado, nunca os 0.2/0.4 menores.
+    expect(trial.maeR).toBeCloseTo((trial.risk + 0.01) / trial.risk, 8);
   });
 
   it('SIMETRIA LONG/SHORT: a série espelhada em preço produz os MESMOS trials com direção invertida, níveis espelhados e desfechos idênticos', async () => {
@@ -173,6 +224,8 @@ describe('runStructuralBacktest — resolução determinística em séries de m�
       expect(b.target).toBeCloseTo(2 * K - a.target, 8);
       expect(b.outcome).toBe(a.outcome);
       expect(b.riskReward).toBeCloseTo(a.riskReward, 8);
+      expect(b.mfeR).toBeCloseTo(a.mfeR, 8);
+      expect(b.maeR).toBeCloseTo(a.maeR, 8);
     }
   });
 
