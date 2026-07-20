@@ -43,6 +43,10 @@ const VIEWPORTS = [
   { name: "ipad-air-portrait", width: 820, height: 1180 },
   { name: "ipad-pro-portrait", width: 1024, height: 1366 },
   { name: "ipad-pro-landscape", width: 1366, height: 1024 },
+  // Achado real (captura do Operador em Retina 2x): janela macOS de
+  // ~1000px LÓGICOS — a classe de largura que cortava o badge herói na
+  // borda da região rolável e nunca estava na matriz.
+  { name: "macbook-half", width: 1000, height: 656 },
   { name: "desktop", width: 1440, height: 900 },
   { name: "monitor-large", width: 1920, height: 1080 },
   { name: "ultrawide-21x9", width: 2560, height: 1080 },
@@ -92,7 +96,9 @@ for (const vp of VIEWPORTS) {
     // achado real: o seletor textual antigo ("OBSERVANDO") era um no-op
     // silencioso no estado ocioso, a fixture do subtítulo nunca aplicava.
     const badgeEl = all("[title]").find((e) => (e.getAttribute("title") ?? "").includes("NEXUS DECISION"));
-    set(badgeEl?.children?.[1] ?? null, "Confidence · DADOS_INSUFICIENTES · AGUARDANDO ENTRADA");
+    // Formato pós-captura (o prefixo "Confidence · " foi removido do
+    // subtítulo — o rótulo vive no tooltip): pior caso real atual.
+    set(badgeEl?.children?.[1] ?? null, "DADOS_INSUFICIENTES · AGUARDANDO ENTRADA");
     // Score / Heat / zona
     const scoreLabel = all("span").find((s) => s.textContent === "Score");
     if (scoreLabel?.parentElement) {

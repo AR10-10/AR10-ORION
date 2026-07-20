@@ -545,6 +545,11 @@ export function EnhancedChart_110_Percent({
     // azul-material=EMA, branco=VWAP), banda mais translúcida que o
     // centro. lastValueVisible/priceLineVisible desligados nas três — ver
     // comentário no ref acima (zero rótulo novo na borda de preço).
+    // Achado real (captura do Operador, BTC 1H ao vivo): a lib desenha o
+    // `title` no eixo MESMO com lastValueVisible:false — três etiquetas
+    // "TREND" apareceram num eixo já disputado por R1/NL/EMA/VWAP/preço.
+    // title:"" nas três: a identidade do canal é a cor/geometria slate
+    // única, exatamente como o desenho original prometia.
     const trendChannelSeriesOptions = {
       lineWidth: 1 as const,
       lineStyle: LineStyle.Solid,
@@ -555,17 +560,17 @@ export function EnhancedChart_110_Percent({
     const trendChannelMid = chart.addSeries(LineSeries, {
       ...trendChannelSeriesOptions,
       color: "rgba(148, 163, 184, 0.55)",
-      title: "TREND",
+      title: "",
     });
     const trendChannelUpper = chart.addSeries(LineSeries, {
       ...trendChannelSeriesOptions,
       color: "rgba(148, 163, 184, 0.28)",
-      title: "TREND +2σ",
+      title: "",
     });
     const trendChannelLower = chart.addSeries(LineSeries, {
       ...trendChannelSeriesOptions,
       color: "rgba(148, 163, 184, 0.28)",
-      title: "TREND -2σ",
+      title: "",
     });
     trendChannelMidRef.current = trendChannelMid;
     trendChannelUpperRef.current = trendChannelUpper;

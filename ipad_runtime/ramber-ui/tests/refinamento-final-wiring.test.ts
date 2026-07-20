@@ -320,6 +320,15 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
     expect(a).toContain('title={fusedTitle}');
   });
 
+  it('Achado real (captura do Operador, janela ~1000px lógicos): o subtítulo do badge herói NÃO carrega mais o prefixo "Confidence · " — a região central rolável cortava "CONFIDENCE · MEDIUM · AGUARDANDO ENTRADA" em "AGUARDAN"; o rótulo categórico cru agora vai direto ao ponto (o rótulo "Confiança:" já existe na linha própria do tooltip)', () => {
+    const block = wholeFunction(app(), 'function CoreSignalBadge(');
+    expect(block).not.toBe('');
+    expect(block).toContain('{confidence ?? AWAIT}');
+    expect(block).toContain('{outcomeQualifier ? ` · ${outcomeQualifier}` : ""}');
+    // regressão: o prefixo decorativo não pode voltar a colidir com a borda real medida
+    expect(block).not.toContain('`Confidence · ${confidence}`');
+  });
+
   it('Continuidade (auditoria de sincronização): MarketBiasDecisionCard ("Sinal Institucional", segundo lugar dedicado a DIREÇÃO) ganha o MESMO qualificador real — reusa OUTCOME_QUALIFIER/deriveOutcomeLabel já testados, nunca uma segunda tabela/lógica', () => {
     const block = wholeFunction(app(), 'function MarketBiasDecisionCard()');
     expect(block).not.toBe('');

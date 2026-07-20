@@ -147,4 +147,18 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(sideBarBody).toContain('title="Camadas do Gráfico"');
     expect(sideBarBody).toContain('onClick={() => setChartLayersOpen?.((v: boolean) => !v)}');
   });
+
+  it('Achado real (captura do Operador, BTC 1H ao vivo): as 3 séries do Trend Channel têm title EM BRANCO — a lib desenha title no eixo de preço mesmo com lastValueVisible:false, e três etiquetas "TREND" clutteravam um eixo já disputado por R1/NL/EMA/VWAP/preço', () => {
+    const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
+    const midIdx = chart.indexOf('const trendChannelMid = chart.addSeries(LineSeries, {');
+    const lowerIdx = chart.indexOf('trendChannelMidRef.current = trendChannelMid;');
+    expect(midIdx).toBeGreaterThan(-1);
+    expect(lowerIdx).toBeGreaterThan(midIdx);
+    const block = chart.slice(midIdx, lowerIdx);
+    expect(block.match(/title: ""/g)).toHaveLength(3);
+    // regressão: nenhuma das 3 séries pode voltar a rotular o eixo
+    expect(block).not.toContain('title: "TREND"');
+    expect(block).not.toContain('title: "TREND +2σ"');
+    expect(block).not.toContain('title: "TREND -2σ"');
+  });
 });

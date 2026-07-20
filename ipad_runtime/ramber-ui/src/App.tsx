@@ -4227,7 +4227,15 @@ function CoreSignalBadge({
             cru — o mesmo dado real continua na linha 1 do tooltip
             ("Estado: ..."), aqui vira a síntese que o Operador reconhece
             sem abrir o tooltip. */}
-        {confidence ? `Confidence · ${confidence}` : AWAIT}
+        {/* Achado real (captura do Operador, janela ~1000px lógicos): a
+            região central rolável corta o badge na borda sem indício — o
+            subtítulo "CONFIDENCE · MEDIUM · AGUARDANDO ENTRADA" morria em
+            "AGUARDAN". O prefixo "Confidence · " era decorativo (o rótulo
+            "Confiança:" já vive na linha própria do tooltip) — removê-lo
+            faz o pior caso real caber na janela real medida (~30 chars).
+            Os DOIS valores reais permanecem: o rótulo categórico do motor
+            e o qualificador BIAS≠ENTRY. */}
+        {confidence ?? AWAIT}
         {outcomeQualifier ? ` · ${outcomeQualifier}` : ""}
       </span>
     </div>
