@@ -81,8 +81,18 @@ for (const vp of VIEWPORTS) {
     for (const s of bySnippet("AWAITING")) {
       if (s.className.includes("tracking") || s.textContent === "AWAITING") set(s, "LONG");
     }
-    const subtitle = all("span").find((s) => (s.textContent ?? "").includes("OBSERVANDO"));
-    set(subtitle, "CONFIDENCE · ALTA · GERENCIANDO");
+    // Evolução de Produto (avaliação como operador): o pior subtítulo REAL
+    // não é "ALTA" — matrix.confidence pode ser literalmente
+    // "DADOS_INSUFICIENTES" (visível na captura real do Operador), e o
+    // qualificador mais longo é "AGUARDANDO ENTRADA". Fixture = pior caso
+    // combinado verificado ao vivo (o pill cresce dentro da região rolável,
+    // nunca clipa/sobrepõe — esta linha trava isso para sempre).
+    // Seletor ESTRUTURAL (children[1] do badge), não textual: a mutação de
+    // "AWAITING"→"LONG" acima já trocou o texto do subtítulo neste ponto —
+    // achado real: o seletor textual antigo ("OBSERVANDO") era um no-op
+    // silencioso no estado ocioso, a fixture do subtítulo nunca aplicava.
+    const badgeEl = all("[title]").find((e) => (e.getAttribute("title") ?? "").includes("NEXUS DECISION"));
+    set(badgeEl?.children?.[1] ?? null, "Confidence · DADOS_INSUFICIENTES · AGUARDANDO ENTRADA");
     // Score / Heat / zona
     const scoreLabel = all("span").find((s) => s.textContent === "Score");
     if (scoreLabel?.parentElement) {
