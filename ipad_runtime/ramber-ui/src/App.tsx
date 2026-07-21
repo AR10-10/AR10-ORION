@@ -1471,17 +1471,6 @@ export default function App() {
         ? Math.abs(((target - entry) / entry) * 100)
         : null;
 
-    // Real, honest volatility proxy (Market Regime panel, V11 §13): mean
-    // (high-low)/close across the fetched candle window, as a percentage —
-    // the same idea as ATR%, computed from the exact same real klines the
-    // chart draws, not a separate/invented source.
-    const volatilityPct =
-      chartData && chartData.length > 0
-        ? (chartData.reduce((sum: number, c: any) => sum + (c.close > 0 ? (c.high - c.low) / c.close : 0), 0) /
-            chartData.length) *
-          100
-        : null;
-
     // Real, already-computed Order Flow Imbalance from the actual Signal
     // Engine (src/orderflow/signal-engine.js), reused for the institutional
     // consensus index (V11.5 Fase 5) — not recomputed, not a second source.
@@ -1529,7 +1518,6 @@ export default function App() {
       supportBreakouts,
       resistanceBreakouts,
       moveToTargetPct,
-      volatilityPct,
       flowImbalance,
       htfMarketStructureLabel,
       htfTimeframe,
@@ -7163,7 +7151,17 @@ function MarketRegimeWidget() {
         ? "text-[#00ffaa]"
         : "text-[#8ab4f8]";
 
-  const volPct = num(engine?.volatilityPct) ? engine.volatilityPct : null;
+  // ORDEM DE AUDITORIA FINAL §3/§4 (achado real): esta row recomputava um
+  // proxy PRÓPRIO (média ingênua de (high-low)/close, sem gaps) quando o
+  // Market Regime Engine (regime-engine.js) já calcula o ATR% REAL (true
+  // range com gaps, período de Wilder) como regime.evidence.atr_percent —
+  // já repassado em engine.marketRegime.atrPercent, já insumo real do Risk
+  // Engine e já o mesmo número mostrado no tooltip do Multi-Timeframe
+  // Matrix para os OUTROS 5 prazos. Duas fórmulas diferentes reivindicando
+  // "volatilidade" para o MESMO prazo era uma duplicação real (cálculo
+  // redundante) — corrigido para ler a única fonte real (Single Source of
+  // Truth), a mesma que eta-engine.ts e aura-lifecycle.ts já consomem.
+  const volPct = num(engine?.marketRegime?.atrPercent) ? engine.marketRegime.atrPercent : null;
   const volLabel = volPct === null ? AWAIT : `${volPct.toFixed(2)}%`;
   const volColor = volPct === null ? "text-[#8ab4f8]" : volPct > 1.5 ? "text-[#ff0055]" : volPct > 0.6 ? "text-[#f0d06f]" : "text-[#00ffaa]";
 
@@ -7205,7 +7203,7 @@ function MarketRegimeWidget() {
         <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
         <Row label="TENDÊNCIA DO FLUXO" value={flowTrendLabel} valueClass={flowTrendColor} />
         <Row label="RSI (14)" value={rsiLabel} valueClass={rsiColor} />
-        <Row label="VOLATILIDADE" value={volLabel} valueClass={volColor} />
+        <Row label="VOLATILIDADE (ATR%)" value={volLabel} valueClass={volColor} />
       </div>
     </Widget>
   );
@@ -7780,7 +7778,7 @@ function DecisionValidationWidget() {
 
   const checks: { label: string; available: boolean | null }[] = [
     { label: "Liquidez (Livro de Ofertas)", available: !!engine?.hasBook },
-    { label: "Volatilidade", available: num(engine?.volatilityPct) },
+    { label: "Volatilidade (ATR%)", available: num(engine?.marketRegime?.atrPercent) },
     { label: "Contexto Global (Consenso)", available: num(institutionalConsensus?.score) },
     { label: "Consenso Entre Corretoras", available: null }, // null = NÃO_APLICAVEL, nunca fabricado
     { label: "Fluxo Institucional (OFI)", available: num(engine?.flowImbalance) },
