@@ -15,7 +15,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 
 describe('EnhancedChart_110_Percent.tsx: lista canônica única de camadas, todas visíveis por padrão', () => {
-  it('exporta CHART_LAYER_IDS com exatamente os 8 overlays reais do canvas (Auditoria do painel do gráfico adiciona "trend_channel")', () => {
+  it('exporta CHART_LAYER_IDS com exatamente os 15 overlays reais do canvas (Auditoria de pendências adiciona VWAP/Nexus Line/CVD/Fibonacci/Premium-Discount/harmônico/EQH-EQL aos 8 anteriores)', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     expect(chart).toContain('export const CHART_LAYER_IDS = [');
     for (const id of [
@@ -27,17 +27,24 @@ describe('EnhancedChart_110_Percent.tsx: lista canônica única de camadas, toda
       '"neural_market_aura"',
       '"ema"',
       '"trend_channel"',
+      '"vwap"',
+      '"nexus_line"',
+      '"cvd"',
+      '"fibonacci"',
+      '"premium_discount"',
+      '"harmonics"',
+      '"equal_highs_lows"',
     ]) {
       expect(chart).toContain(id);
     }
   });
 
-  it('DEFAULT_CHART_LAYER_VISIBILITY liga as 8 camadas por padrão — o painel nunca esconde nada sem ação explícita do Operador', () => {
+  it('DEFAULT_CHART_LAYER_VISIBILITY liga as 15 camadas por padrão — o painel nunca esconde nada sem ação explícita do Operador', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     const defMatch = chart.match(/export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = \{([\s\S]*?)\};/);
     expect(defMatch, 'DEFAULT_CHART_LAYER_VISIBILITY não encontrado').not.toBeNull();
     const body = defMatch![1];
-    for (const key of ['liquidity_zones', 'structure_breaks', 'order_flow_heatmap', 'volume_profile', 'trade_plan_zone', 'neural_market_aura', 'ema', 'trend_channel']) {
+    for (const key of ['liquidity_zones', 'structure_breaks', 'order_flow_heatmap', 'volume_profile', 'trade_plan_zone', 'neural_market_aura', 'ema', 'trend_channel', 'vwap', 'nexus_line', 'cvd', 'fibonacci', 'premium_discount', 'harmonics', 'equal_highs_lows']) {
       expect(body).toContain(`${key}: true,`);
     }
   });
@@ -120,13 +127,41 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(clIdx).toBeGreaterThan(-1);
   });
 
-  it('CHART_LAYER_PANEL_MODULES lista exatamente as 8 camadas reais, cada id um ChartLayerId válido (o próprio TypeScript trava isso — este teste só confirma que a lista não encolheu/cresceu silenciosamente)', () => {
+  it('CHART_LAYER_PANEL_MODULES lista exatamente as 15 camadas reais, cada id um ChartLayerId válido (o próprio TypeScript trava isso — este teste só confirma que a lista não encolheu/cresceu silenciosamente)', () => {
     const app = read('../src/App.tsx');
     const listMatch = app.match(/const CHART_LAYER_PANEL_MODULES: \{ id: ChartLayerId; label: string \}\[\] = \[([\s\S]*?)\];/);
     expect(listMatch, 'CHART_LAYER_PANEL_MODULES não encontrado').not.toBeNull();
     const entries = listMatch![1].trim().split('\n').filter((l) => l.trim().length > 0);
-    expect(entries).toHaveLength(8);
+    expect(entries).toHaveLength(15);
     expect(listMatch![1]).toContain('{ id: "trend_channel", label: "TREND CHANNEL" }');
+  });
+
+  it('Auditoria de pendências: os 7 toggles novos (VWAP/Nexus Line/CVD/Fibonacci/Premium-Discount/harmônico/EQH-EQL) entram no painel — nenhum elemento nativo do gráfico fica sem controle', () => {
+    const app = read('../src/App.tsx');
+    const listMatch = app.match(/const CHART_LAYER_PANEL_MODULES: \{ id: ChartLayerId; label: string \}\[\] = \[([\s\S]*?)\];/);
+    expect(listMatch, 'CHART_LAYER_PANEL_MODULES não encontrado').not.toBeNull();
+    const body = listMatch![1];
+    expect(body).toContain('{ id: "vwap", label: "VWAP" }');
+    expect(body).toContain('{ id: "nexus_line", label: "NEXUS LINE" }');
+    expect(body).toContain('{ id: "cvd", label: "CVD" }');
+    expect(body).toContain('{ id: "fibonacci", label: "FIBONACCI" }');
+    expect(body).toContain('{ id: "premium_discount", label: "PREMIUM / DISCOUNT" }');
+    expect(body).toContain('{ id: "harmonics", label: "HARMÔNICOS" }');
+    expect(body).toContain('{ id: "equal_highs_lows", label: "EQH / EQL" }');
+  });
+
+  it('Auditoria de pendências: os 7 toggles novos entram no Modo Inteligência (leitura de mercado/estrutura, nenhum específico do plano ativo) — nunca no Modo Operacional (que fica enxuto de propósito)', () => {
+    const app = read('../src/App.tsx');
+    const intelMatch = app.match(/const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>\(\[([\s\S]*?)\]\);/);
+    expect(intelMatch, 'CHART_LAYERS_INTELLIGENCE_PRESET não encontrado').not.toBeNull();
+    const intelBody = intelMatch![1];
+    for (const id of ['"vwap"', '"nexus_line"', '"cvd"', '"fibonacci"', '"premium_discount"', '"harmonics"', '"equal_highs_lows"']) {
+      expect(intelBody).toContain(id);
+    }
+    const opIdx = app.indexOf('const CHART_LAYERS_OPERATIONAL_PRESET = new Set<ChartLayerId>([');
+    const opEnd = app.indexOf(']);', opIdx);
+    const opBody = app.slice(opIdx, opEnd);
+    expect(opBody).toEqual(expect.not.stringContaining('"vwap"'));
   });
 
   it('painel expõe o seletor real de período da EMA (4 períodos padrão, controle único, nunca uma pilha de linhas)', () => {
@@ -270,7 +305,122 @@ describe('Diretriz de Refinamento Visual §5: Trend Channel reposicionado para a
 
   it('priceAxisLabels recalcula sempre que visibility.trend_channel ou trendChannelInfo mudam — nunca uma etiqueta desatualizada', () => {
     const c = chart();
-    const depsIdx = c.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, nlLastValue, nexusLineState, emaLastValue, activeEmaPeriod, data, visibility.trend_channel, trendChannelInfo, livePrice]);');
+    const depsIdx = c.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice]);');
     expect(depsIdx, 'dependency array de priceAxisLabels não encontrado ou não inclui trend_channel/trendChannelInfo/livePrice').toBeGreaterThan(-1);
+  });
+});
+
+describe('Auditoria de pendências: os 7 elementos nativos do gráfico ainda sem controle (VWAP/Nexus Line/CVD/Fibonacci/Premium-Discount/harmônico/EQH-EQL) ganham visibility real', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('VWAP/Nexus Line/CVD são séries NATIVAS (mesmo padrão de EMA/Trend Channel) — visible via applyOptions, dado real nunca recalcula ao esconder', () => {
+    const c = chart();
+    expect(c).toContain('vwapSeriesRef.current.applyOptions({ visible: visibility.vwap });');
+    expect(c).toContain('nexusLineSeriesRef.current.applyOptions({ visible: visibility.nexus_line });');
+    expect(c).toContain('cvdSeriesRef.current.applyOptions({ visible: visibility.cvd });');
+  });
+
+  it('EQH/EQL: fail-closed real — sem visibility.equal_highs_lows, zero price line desenhada (mesmo padrão de "sem dado real, zero linhas")', () => {
+    const c = chart();
+    const idx = c.indexOf('zoneLinesRef.current.forEach((line) => series.removePriceLine(line));');
+    expect(idx).toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 300);
+    expect(block).toContain('if (!visibility.equal_highs_lows) return;');
+    const depsIdx = c.indexOf('}, [liquidityZones, visibility.equal_highs_lows]);');
+    expect(depsIdx).toBeGreaterThan(-1);
+  });
+
+  it('Fibonacci: fail-closed real — sem visibility.fibonacci, zero price line desenhada', () => {
+    const c = chart();
+    const idx = c.indexOf('fibLinesRef.current.forEach((line) => series.removePriceLine(line));');
+    expect(idx).toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 200);
+    expect(block).toContain('if (!visibility.fibonacci) return;');
+    const depsIdx = c.indexOf('}, [fibonacciLevels, visibility.fibonacci]);');
+    expect(depsIdx).toBeGreaterThan(-1);
+  });
+
+  it('Premium/Discount: fail-closed real — sem visibility.premium_discount (E sem leitura real), zero price line desenhada', () => {
+    const c = chart();
+    expect(c).toContain('if (!premiumDiscount || !visibility.premium_discount) return;');
+    const depsIdx = c.indexOf('}, [premiumDiscount, visibility.premium_discount]);');
+    expect(depsIdx).toBeGreaterThan(-1);
+  });
+
+  it('Harmônico: fail-closed real — sem visibility.harmonics, zero price line E zero polilinha (limpa ANTES do early-return, mesma disciplina das outras camadas)', () => {
+    const c = chart();
+    const idx = c.indexOf('harmonicPolylineRef.current?.setData([]);');
+    expect(idx).toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 150);
+    expect(block).toContain('if (!visibility.harmonics) return;');
+    const depsIdx = c.indexOf('}, [harmonicHits, data, visibility.harmonics]);');
+    expect(depsIdx).toBeGreaterThan(-1);
+  });
+
+  it('esconder uma camada nunca apaga o dado computado — só a exibição (Regra de Ouro 4): nenhum dos 7 novos gates remove um setData/computeXxx real, só envolve o desenho em early-return/applyOptions', () => {
+    const c = chart();
+    // VWAP/NL continuam computados incondicionalmente (mesmo efeito de
+    // sempre, setData nunca fica atrás de um if de visibilidade).
+    expect(c).toContain('vwapSeriesRef.current.setData(');
+    expect(c).toContain('nexusLineSeriesRef.current.setData(');
+    expect(c).toContain('cvdSeriesRef.current.setData(');
+  });
+});
+
+describe('Auditoria de pendências (achado real via harness Playwright, duas instâncias comparadas): esconder VWAP/Nexus Line/EMA no painel escondia a SÉRIE mas a ETIQUETA do eixo continuava aparecendo', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('as 3 entradas de priceAxisLabels (VWAP/NL/EMA) agora checam visibility antes de empurrar a etiqueta — mesma condição que já escondia a série', () => {
+    const c = chart();
+    const idx = c.indexOf('const priceAxisLabels = useMemo');
+    const block = c.slice(idx, idx + 1800);
+    expect(block).toContain('if (visibility.vwap && vwapLastValue !== null && Number.isFinite(vwapLastValue)) {');
+    expect(block).toContain('if (visibility.nexus_line && nlLastValue !== null && Number.isFinite(nlLastValue)) {');
+    expect(block).toContain('if (visibility.ema && emaLastValue !== null && Number.isFinite(emaLastValue)) {');
+  });
+
+  it('priceAxisLabels recalcula quando visibility.vwap/nexus_line/ema mudam — sem isso a etiqueta ficaria presa no valor/estado de visibilidade do primeiro render', () => {
+    const c = chart();
+    const depsIdx = c.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice]);');
+    expect(depsIdx, 'dependency array de priceAxisLabels não inclui visibility.vwap/nexus_line/ema').toBeGreaterThan(-1);
+  });
+
+  it('S1/R1/último preço/Trend Channel NÃO ganham essa checagem — nenhum toggle existe pra eles (S1/R1/último preço) ou já tinham a checagem própria (Trend Channel) — nenhuma regressão nas entradas que já funcionavam', () => {
+    const c = chart();
+    const idx = c.indexOf('const priceAxisLabels = useMemo');
+    const block = c.slice(idx, idx + 400);
+    // S1/R1 continuam incondicionais (só checam Number.isFinite do preço).
+    expect(block).toContain('if (Number.isFinite(support)) {');
+    expect(block).toContain('if (Number.isFinite(resistance)) {');
+  });
+});
+
+describe('Auditoria de pendências: obstacleCount (sem teto) reconciliado com o .slice(0,3) de FVG/OB desenhados no gráfico', () => {
+  const app = () => read('../src/App.tsx');
+
+  it('unmitigatedFvgs/unmitigatedBlocks incluem os 3 mais recentes E qualquer obstáculo real do plano ativo — nunca um obstáculo citado no texto que fica invisível no gráfico', () => {
+    const a = app();
+    expect(a).toContain('const isRealObstacle = (z: PriceZone) => chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);');
+    expect(a).toContain('const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);');
+    expect(a).toContain('const unmitigatedBlocksAll = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated);');
+    expect(a).toContain('const unmitigatedFvgs = unmitigatedFvgsAll.filter((z, i) => i < 3 || isRealObstacle(z));');
+    expect(a).toContain('const unmitigatedBlocks = unmitigatedBlocksAll.filter((z, i) => i < 3 || isRealObstacle(z));');
+  });
+
+  it('isRealObstacle referencia chartObstacleZones (a MESMA lista sem teto que já alimenta obstacleCount/LiquidityZonesPlugin) — nunca um segundo cálculo de obstáculo', () => {
+    const a = app();
+    const isRealObstacleIdx = a.indexOf('const isRealObstacle = ');
+    const chartObstacleZonesIdx = a.indexOf('const chartObstacleZones = useMemo(');
+    expect(chartObstacleZonesIdx, 'chartObstacleZones não encontrado').toBeGreaterThan(-1);
+    expect(isRealObstacleIdx, 'isRealObstacle não encontrado').toBeGreaterThan(chartObstacleZonesIdx);
+  });
+
+  it('sem plano ativo (chartObstacleZones vazio), o comportamento é IDÊNTICO ao .slice(0,3) de sempre — isRealObstacle nunca é true para nada, união é um no-op', () => {
+    const a = app();
+    // chartObstacleZones já é fail-closed (retorna [] sem chartTradePlan/
+    // tradePlanStructureZones) — a união com um array vazio nunca inclui
+    // zonas além dos 3 primeiros, preservando o decluttering de sempre
+    // quando não há nenhum obstáculo real para destacar.
+    expect(a).toContain('if (!chartTradePlan || !tradePlanStructureZones) return [];');
   });
 });

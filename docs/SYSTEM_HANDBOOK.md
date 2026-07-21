@@ -96,7 +96,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1623 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1639 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -984,6 +984,105 @@ harness Playwright dedicado — última vela sintética com `close` "velho"
 confirma visualmente que o rótulo do eixo passa a mostrar `65468.00`,
 nunca mais o valor congelado · `audit-header-maxcontent.mjs` CLEAN nos 11
 viewports no build final.
+
+---
+
+### 6.16 Pendências de backlog executadas: 7 toggles novos + reconciliação
+de obstáculo, mais dois achados reais (title "XABCD" e etiquetas VWAP/NL/
+EMA presas) encontrados durante a verificação
+
+Pedido do Operador: "executa todas as pendências que tiver pra trás" — as
+5 pendências honestas do backlog (PR #13). Duas delas seguem bloqueadas
+em decisão do Operador (Fase 2 do backtest/superfície de captura;
+recalibração de `weight-matrix.js`; ledger versionado aguardando formato
+real do dado) — não executáveis sem essa decisão, continuam listadas.
+Duas eram acionáveis sem nenhuma decisão pendente:
+
+**Toggles individuais (VWAP/Nexus Line/CVD/Fibonacci/Premium-Discount/
+harmônico/EQH-EQL)**: auditoria confirmou que nenhum dos 7 tinha QUALQUER
+controle de visibilidade (grep: zero `applyOptions({ visible` para
+qualquer um deles). `CHART_LAYER_IDS`/`DEFAULT_CHART_LAYER_VISIBILITY`
+crescem de 8 para 15; cada camada ganha o gate real no efeito que já
+desenha (VWAP/NL/CVD: `applyOptions({visible})` na série nativa, mesmo
+padrão de EMA/Trend Channel; Fibonacci/Premium-Discount/Harmônico/EQH-
+EQL: early-return antes de desenhar qualquer price line, mesmo fail-
+closed de "sem dado real, zero linhas" já usado nesses efeitos). Painel
+(`CHART_LAYER_PANEL_MODULES`) e Modo Inteligência
+(`CHART_LAYERS_INTELLIGENCE_PRESET`) ganham as 7 entradas — todas leitura
+de mercado/estrutura, nenhuma específica do plano ativo, mesma lógica já
+documentada para as 6 camadas anteriores do preset; Modo Operacional
+deliberadamente NÃO ganha nenhuma (fica enxuto de propósito, como já era).
+
+**Achado real #1 (harness Playwright, comparação de 2 instâncias lado a
+lado — mesmos dados, só `layerVisibility` diferente)**: a polilinha
+harmônica (XABCD/Wolfe) tinha `title: "XABCD"` — MESMA classe de bug do
+Trend Channel/VWAP/NL/EMA (§6.14/6.15): a lib desenha `title` no eixo
+mesmo com `lastValueVisible:false`. O comentário original já argumentava
+que o rótulo seria redundante com o title da PRZ — `title:""` corrige
+sem perder nenhuma informação real.
+
+**Achado real #2 (mesmo harness, achado só depois de comparar as DUAS
+instâncias — uma só screenshot não teria pego)**: esconder VWAP/Nexus
+Line/EMA no painel escondia a SÉRIE (linha do gráfico) via
+`applyOptions({visible:false})`, mas a ETIQUETA do eixo
+(`priceAxisLabels`/`PriceLabelStackPlugin`) nunca checava o mesmo
+`visibility` — a caixa "VWAP • 63951.81"/"NL • .../"EMA 21 ..." continuava
+aparecendo como se a camada estivesse ligada. Ground-truth via
+`console.log` temporário (removido antes do commit) confirmou que os 4
+efeitos de price-line (EQH/EQL/Fibonacci/Premium-Discount/Harmônico)
+respeitavam `visibility` corretamente desde o início (early-return real,
+zero linha desenhada) — o gap era específico das 3 entradas de
+`priceAxisLabels` que também tinham um toggle dedicado (VWAP/NL/EMA).
+Corrigido: as 3 entradas agora checam `visibility.vwap`/
+`visibility.nexus_line`/`visibility.ema` antes de empurrar a etiqueta —
+mesma condição que já escondia a série.
+
+**Reconciliação de obstacleCount (achado real do próprio backlog,
+confirmado por auditoria de código)**: `unmitigatedFvgs`/
+`unmitigatedBlocks` (App.tsx, alimentam o desenho de zonas FVG/OB no
+gráfico) cortavam em `.slice(0,3)` por decluttering visual — mas
+`chartObstacleZones` (mesmo arquivo, alimenta `obstacleCount` no texto do
+alvo E o destaque `⚠` do `LiquidityZonesPlugin`) usa o conjunto COMPLETO,
+sem teto algum. Resultado real possível: um obstáculo genuíno do plano
+ativo citado no texto ("TP2 · obstáculo x2") sem NUNCA aparecer
+desenhado/destacado no gráfico, porque caiu fora dos 3 mais recentes — a
+informação existia, mas ficava invisível pro Operador conferir onde ela
+está. Corrigido: `unmitigatedFvgs`/`unmitigatedBlocks` agora incluem os 3
+mais recentes MAIS qualquer zona que seja um obstáculo real do plano
+ativo (união via `isRealObstacle`, casado por low/high real — mesma
+identidade que `LiquidityZonesPlugin` já usa internamente). Sem plano
+ativo, `chartObstacleZones` já é `[]` (fail-closed existente) — a união é
+um no-op, comportamento idêntico ao `.slice(0,3)` de sempre.
+
+**Pendência honesta identificada, NÃO executada nesta rodada** (pedido do
+Operador incluía "bateu o olho a gente sabe se a entrada é longa ou
+saída" — clareza de leitura imediata de ENTRY/STOP/TARGET): auditoria de
+`label-compaction.ts` confirmou que `shouldCompactLabels` só decide o
+FORMATO do texto (compacto vs. completo) — nunca reposiciona nada
+verticalmente. As linhas de Trade Plan (ENTRY/STOP/TARGET) continuam
+`axisLabelVisible:true`, o sistema NATIVO da lib, nunca migradas para
+`PriceLabelStackPlugin` (decisão deliberada do §6.13: "fora do escopo
+real da captura de tela" daquele momento, que não mostrava um plano
+ativo). Isso significa que ENTRY/STOP/TARGET1-3 (até 5 níveis) ainda
+podem colidir visualmente entre si quando ficam numericamente próximos —
+exatamente a classe de bug que motivou o `PriceLabelStackPlugin` em
+primeiro lugar, só que nunca fechada para esta camada. Não corrigida
+agora porque é uma migração real e mais arriscada que as duas de cima
+(Trade Plan muda de cor/título a cada tick via `targetsHit`/ratchet de
+stop/break-even — precisa de sua própria verificação isolada e cuidadosa,
+não uma mudança apressada junto de outras 4 correções no mesmo commit).
+Registrado aqui como o próximo passo honesto mais concreto.
+
+**Verificação**: `tsc --noEmit` limpo · `npx vitest run` **103
+arquivos/1639 testes** (era 1623; +16: 9 de wiring dos 7 toggles + 2 de
+reconciliação de obstáculo + 2 do fix de title "XABCD" + 3 do fix de
+etiquetas VWAP/NL/EMA presas) · `npm run build` ok · grep por string
+literal confirma `"PREMIUM / DISCOUNT"`/`"EQH / EQL"`/`"NEXUS LINE"`/
+`"HARMÔNICOS"` no bundle de produção · `audit-header-maxcontent.mjs`
+CLEAN nos 11 viewports no build final · harness Playwright com 2
+instâncias do gráfico lado a lado (mesmos dados reais, só
+`layerVisibility` diferente) confirma visualmente os 7 toggles
+funcionando ponta a ponta — série E etiqueta desaparecem juntas.
 
 ---
 

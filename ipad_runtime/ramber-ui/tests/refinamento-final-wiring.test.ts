@@ -140,7 +140,7 @@ describe('§7 Premium/Discount: gráfico + Trade Plan strip (display-only, LEI 2
     const idx = c.indexOf('premiumDiscountLinesRef.current.forEach((line) => series.removePriceLine(line));');
     expect(idx).toBeGreaterThan(-1);
     const block = c.slice(idx, idx + 900);
-    expect(block).toContain('if (!premiumDiscount) return;');
+    expect(block).toContain('if (!premiumDiscount || !visibility.premium_discount) return;');
     expect(block).toContain('lineWidth: 1,');
     expect(block).toContain('lineStyle: LineStyle.Solid,');
     expect(block).toContain('axisLabelVisible: false,');
@@ -618,7 +618,7 @@ describe('Consolidação Final §5/§6: SHARK + AB=CD no motor, PRZ/ETA na super
     const c = chart();
     expect(c).toContain('· PRZ · fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)');
     expect(c).toContain('`WOLFE · EPA (linha 1→4 real)${etaLabel ? ` · ETA ${etaLabel} (ápice da cunha)` : ""}`');
-    expect(c).toContain('}, [harmonicHits, data]);'); // intervalo real de barra vem de data
+    expect(c).toContain('}, [harmonicHits, data, visibility.harmonics]);'); // intervalo real de barra vem de data
   });
 
   it('ANALYSIS usa PRZ no lugar do rótulo D cru', () => {

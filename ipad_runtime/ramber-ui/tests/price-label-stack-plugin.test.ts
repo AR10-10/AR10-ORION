@@ -226,7 +226,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
   it('VWAP/NL reaproveitam LINE_STATE_GLYPH/VWAP_STATE_COLOR/NL_STATE_COLOR reais — mesma paleta institucional já usada pelas séries', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 1400);
+    const block = s.slice(idx, idx + 1700);
     expect(block).toContain('VWAP ${LINE_STATE_GLYPH[s]} ${vwapLastValue.toFixed(2)}');
     expect(block).toContain('color: VWAP_STATE_COLOR[s]');
     expect(block).toContain('NL ${LINE_STATE_GLYPH[s]} ${nlLastValue.toFixed(2)}');
@@ -236,7 +236,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
   it('último preço usa a MESMA cor up/down real da própria série de candles (#00ffaa/#ff0055) — nunca uma cor nova', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 2750);
+    const block = s.slice(idx, idx + 3300);
     expect(block).toContain('displayPrice >= lastCandle.open ? "#00ffaa" : "#ff0055"');
   });
 
@@ -259,7 +259,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('priceAxisLabels recalcula a cada tick real de livePrice — nunca uma etiqueta de preço congelada', () => {
     const s = chart();
-    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, nlLastValue, nexusLineState, emaLastValue, activeEmaPeriod, data, visibility.trend_channel, trendChannelInfo, livePrice]);');
+    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice]);');
     expect(depsIdx, 'dependency array de priceAxisLabels não inclui livePrice').toBeGreaterThan(-1);
   });
 
@@ -268,5 +268,23 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
     expect(s).toContain('setVwapLastValue(series.length > 0 ? series[series.length - 1].value : null);');
     expect(s).toContain('setNlLastValue(nl.length > 0 ? nl[nl.length - 1].value : null);');
     expect(s).toContain('setEmaLastValue(series.length > 0 ? series[series.length - 1].value : null);');
+  });
+});
+
+describe('Auditoria de pendências (achado real via harness Playwright): a polilinha harmônica (XABCD/Wolfe) também tinha title nativo poluindo o eixo — terceira ocorrência do MESMO achado do Trend Channel/VWAP/NL/EMA', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('harmonicPolyline nasce com title:"" — o comentário original presumia que lastValueVisible:false já bastava, mas a lib desenha title no eixo mesmo assim (mesmo achado real)', () => {
+    const s = chart();
+    expect(s).not.toContain('title: "XABCD"');
+    const idx = s.indexOf('const harmonicPolyline = chart.addSeries(LineSeries, {');
+    expect(idx, 'criação da série harmonicPolyline não encontrada').toBeGreaterThan(-1);
+    const closeIdx = s.indexOf('harmonicPolylineRef.current = harmonicPolyline;');
+    expect(s.slice(idx, closeIdx)).toContain('title: "",');
+  });
+
+  it('zero informação perdida: a forma da polilinha + o title real da PRZ (price line do ponto D) já comunicam o padrão — nunca um rótulo redundante flutuando na posição natural sem resolução de colisão', () => {
+    const s = chart();
+    expect(s).toContain('· PRZ · fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)');
   });
 });

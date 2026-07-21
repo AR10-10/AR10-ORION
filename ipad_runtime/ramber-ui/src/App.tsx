@@ -3194,6 +3194,11 @@ const CHART_LAYERS_OPERATIONAL_PRESET = new Set<ChartLayerId>(["trade_plan_zone"
 // relance" que já ajuda o Operacional), SEM as duas camadas que só fazem
 // sentido quando existe um plano ATIVO (trade_plan_zone/neural_market_
 // aura) — análise profunda do mercado, não do plano em si.
+// Auditoria de pendências: os 7 novos toggles (VWAP/Nexus Line/CVD/
+// Fibonacci/Premium-Discount/harmônico/EQH-EQL) são TODOS leitura de
+// mercado/estrutura — nenhum é específico do plano ativo — então entram
+// aqui pela mesma lógica, nunca no Operacional (que fica deliberadamente
+// enxuto).
 const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>([
   "liquidity_zones",
   "structure_breaks",
@@ -3201,6 +3206,13 @@ const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>([
   "volume_profile",
   "ema",
   "trend_channel",
+  "vwap",
+  "nexus_line",
+  "cvd",
+  "fibonacci",
+  "premium_discount",
+  "harmonics",
+  "equal_highs_lows",
 ]);
 
 const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
@@ -3212,6 +3224,13 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "neural_market_aura", label: "NEURAL MARKET AURA" },
   { id: "ema", label: "EMA" },
   { id: "trend_channel", label: "TREND CHANNEL" },
+  { id: "vwap", label: "VWAP" },
+  { id: "nexus_line", label: "NEXUS LINE" },
+  { id: "cvd", label: "CVD" },
+  { id: "fibonacci", label: "FIBONACCI" },
+  { id: "premium_discount", label: "PREMIUM / DISCOUNT" },
+  { id: "harmonics", label: "HARMÔNICOS" },
+  { id: "equal_highs_lows", label: "EQH / EQL" },
 ];
 
 function ChartLayersPanel() {
@@ -5934,8 +5953,21 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
     [auraTrackRecord, livePrice, convictionReading, engine?.marketRegime, chartTimeframe],
   );
 
-  const unmitigatedFvgs = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
-  const unmitigatedBlocks = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
+  // Auditoria de pendências (reconciliação real): o .slice(0,3) abaixo é
+  // só decluttering visual do conjunto GERAL de zonas não mitigadas — mas
+  // chartObstacleZones/obstacleCount (acima/trade-plan.ts) usam o
+  // conjunto COMPLETO, sem teto algum. Sem a união abaixo, um obstáculo
+  // REAL do plano ativo podia cair fora dos 3 mais recentes e nunca
+  // aparecer desenhado/destacado (⚠, LiquidityZonesPlugin) no gráfico —
+  // mesmo sendo citado no texto do alvo ("TP2 · obstáculo x2"): a
+  // informação existia, mas ficava invisível para o Operador conferir
+  // onde ela está. isObstacle casa por low/high real (mesma identidade
+  // que LiquidityZonesPlugin já usa internamente), nunca por índice.
+  const isRealObstacle = (z: PriceZone) => chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);
+  const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);
+  const unmitigatedBlocksAll = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated);
+  const unmitigatedFvgs = unmitigatedFvgsAll.filter((z, i) => i < 3 || isRealObstacle(z));
+  const unmitigatedBlocks = unmitigatedBlocksAll.filter((z, i) => i < 3 || isRealObstacle(z));
   const unsweptLiquidity = (smcZones?.liquidityZones ?? []).filter((z: LiquidityZone) => !z.swept).slice(0, 4);
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // (Fase 1.4) — mesma store que os agentes leem, só mapeada para o formato

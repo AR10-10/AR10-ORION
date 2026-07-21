@@ -147,8 +147,14 @@ export interface EnhancedChartFibLevel {
 // condicional abaixo) em vez de só passar chart=null — um plugin de canvas
 // dirty-flag só redesenha quando algo real muda; passar chart=null congela
 // o último frame real já pintado (nunca mais limpo), não o esconde. Todas
-// as 6 ligadas por padrão — o painel nunca esconde nada sem uma ação
-// explícita do Operador.
+// ligadas por padrão — o painel nunca esconde nada sem uma ação explícita
+// do Operador.
+// Auditoria de pendências (achado real: os 7 ids abaixo não tinham NENHUM
+// controle de visibilidade — grep confirmou zero "applyOptions({ visible"
+// para VWAP/NL/CVD/Fibonacci/Premium-Discount/harmônico/EQH-EQL, ao
+// contrário dos 8 ids originais acima): cada um já era uma série/price
+// line real (nenhum cálculo novo), só nunca tinha ganhado o mesmo
+// interruptor que liquidity_zones/structure_breaks/etc já têm.
 export const CHART_LAYER_IDS = [
   "liquidity_zones",
   "structure_breaks",
@@ -158,6 +164,13 @@ export const CHART_LAYER_IDS = [
   "neural_market_aura",
   "ema",
   "trend_channel",
+  "vwap",
+  "nexus_line",
+  "cvd",
+  "fibonacci",
+  "premium_discount",
+  "harmonics",
+  "equal_highs_lows",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -170,6 +183,13 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   neural_market_aura: true,
   ema: true,
   trend_channel: true,
+  vwap: true,
+  nexus_line: true,
+  cvd: true,
+  fibonacci: true,
+  premium_discount: true,
+  harmonics: true,
+  equal_highs_lows: true,
 };
 
 interface EnhancedChartProps {
@@ -638,6 +658,15 @@ export function EnhancedChart_110_Percent({
     // no TRAÇO em si (a PRZ continua a leitura de preço mais importante).
     // Zero rótulo de eixo/último valor: a forma da polilinha já comunica o
     // padrão, um rótulo repetiria a mesma informação do title da PRZ.
+    // Auditoria de pendências (achado real via harness Playwright): o
+    // title:"XABCD" acima presumia que lastValueVisible:false já bastava
+    // pra suprimir o rótulo — MESMO achado/MESMA correção do Trend
+    // Channel/VWAP/NL/EMA (a lib desenha `title` no eixo mesmo assim). O
+    // texto ficava flutuando na posição NATURAL da polilinha (sem nenhuma
+    // resolução de colisão), exatamente a poluição que o comentário
+    // original queria evitar. title:"" agora — zero informação perdida
+    // (o próprio comentário original já argumentava que o rótulo era
+    // redundante com o title da PRZ).
     const harmonicPolyline = chart.addSeries(LineSeries, {
       color: "rgba(176, 38, 255, 0.55)",
       lineWidth: 1,
@@ -645,7 +674,7 @@ export function EnhancedChart_110_Percent({
       priceLineVisible: false,
       lastValueVisible: false,
       crosshairMarkerVisible: false,
-      title: "XABCD",
+      title: "",
     });
     harmonicPolylineRef.current = harmonicPolyline;
     chartRef.current = chart;
@@ -820,11 +849,15 @@ export function EnhancedChart_110_Percent({
   // não existe uma "área" real para preencher, então uma linha continua
   // sendo a representação honesta (mesmo dado, mesmo filtro !swept de
   // sempre, aplicado rio acima em App.tsx/ChartWidget).
+  // Auditoria de pendências: ganha visibility.equal_highs_lows — mesmo
+  // fail-closed de "sem camada visível, zero linhas" já usado quando o
+  // dado real está ausente (early-return dentro do próprio array vazio).
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
     zoneLinesRef.current.forEach((line) => series.removePriceLine(line));
     zoneLinesRef.current = [];
+    if (!visibility.equal_highs_lows) return;
 
     (liquidityZones ?? []).forEach((z) => {
       zoneLinesRef.current.push(
@@ -838,7 +871,7 @@ export function EnhancedChart_110_Percent({
         }),
       );
     });
-  }, [liquidityZones]);
+  }, [liquidityZones, visibility.equal_highs_lows]);
 
   // V-MAX Fase 1 (fechamento do §3.1): alimenta a série de CVD com o
   // histórico REAL da store (mesmo orderflowHistory do heatmap — um dado,
@@ -933,6 +966,23 @@ export function EnhancedChart_110_Percent({
     emaSeriesRef.current.applyOptions({ visible: visibility.ema });
   }, [visibility.ema]);
 
+  // Auditoria de pendências (mesmo padrão do EMA acima): VWAP/Nexus Line/
+  // CVD ganham o mesmo interruptor real — o cálculo/setData de cada uma
+  // continua intocado nos efeitos próprios (nada recomputa ao esconder),
+  // só a exibição muda via applyOptions nativo.
+  useEffect(() => {
+    if (!vwapSeriesRef.current) return;
+    vwapSeriesRef.current.applyOptions({ visible: visibility.vwap });
+  }, [visibility.vwap]);
+  useEffect(() => {
+    if (!nexusLineSeriesRef.current) return;
+    nexusLineSeriesRef.current.applyOptions({ visible: visibility.nexus_line });
+  }, [visibility.nexus_line]);
+  useEffect(() => {
+    if (!cvdSeriesRef.current) return;
+    cvdSeriesRef.current.applyOptions({ visible: visibility.cvd });
+  }, [visibility.cvd]);
+
   // Auditoria do painel do gráfico: Linear Regression Channel real sobre a
   // MESMA `data` de candles (zero segunda fonte de dado) — mesmo padrão do
   // efeito de EMA acima. null (histórico insuficiente) => setData([]) nas
@@ -963,12 +1013,15 @@ export function EnhancedChart_110_Percent({
   // Fibonacci como price lines nativas — "fio de seda" (1px sólida, nunca
   // pontilhada); a hierarquia entre níveis vem da OPACIDADE pela confluência
   // real (score ≥ 1 fonte => mais presente), nunca do estilo do traço.
-  // Título carrega ratio + score reais ("FIB 61.8% ×2").
+  // Título carrega ratio + score reais ("FIB 61.8% ×2"). Auditoria de
+  // pendências: ganha visibility.fibonacci (mesmo fail-closed de "sem
+  // camada visível, zero linhas" das outras price lines deste arquivo).
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
     fibLinesRef.current.forEach((line) => series.removePriceLine(line));
     fibLinesRef.current = [];
+    if (!visibility.fibonacci) return;
 
     (fibonacciLevels ?? []).forEach((level) => {
       if (!Number.isFinite(level.price)) return;
@@ -983,7 +1036,7 @@ export function EnhancedChart_110_Percent({
         }),
       );
     });
-  }, [fibonacciLevels]);
+  }, [fibonacciLevels, visibility.fibonacci]);
 
   // §6 "Smart Projection Engine" (achado real de auditoria, ver comentário
   // da prop `scenario` acima): as 2 rotas reais do Motor de Cenários
@@ -1092,12 +1145,14 @@ export function EnhancedChart_110_Percent({
   // compartilhado dos motores). Fio de seda (1px sólida), MAIS discretas que
   // Scenario e Trade Plan (contexto de zona, não alvo): opacidade fixa
   // baixa, sem rótulo de eixo. Fail-closed: sem leitura real, zero linhas.
+  // Auditoria de pendências: ganha visibility.premium_discount, mesmo
+  // fail-closed acima (early-return antes de desenhar).
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
     premiumDiscountLinesRef.current.forEach((line) => series.removePriceLine(line));
     premiumDiscountLinesRef.current = [];
-    if (!premiumDiscount) return;
+    if (!premiumDiscount || !visibility.premium_discount) return;
     const mkPd = (price: number, color: string, title: string) => {
       if (!Number.isFinite(price)) return;
       premiumDiscountLinesRef.current.push(
@@ -1114,7 +1169,7 @@ export function EnhancedChart_110_Percent({
     mkPd(premiumDiscount.rangeHigh.price, "rgba(255, 0, 85, 0.30)", "Premium · topo do range");
     mkPd(premiumDiscount.equilibrium, "rgba(138, 180, 248, 0.30)", "Equilibrium · 50%");
     mkPd(premiumDiscount.rangeLow.price, "rgba(0, 255, 170, 0.30)", "Discount · fundo do range");
-  }, [premiumDiscount]);
+  }, [premiumDiscount, visibility.premium_discount]);
 
   // Auditoria Final §3 ("caso esteja calculado mas não desenhado, ativar
   // renderização"): o MELHOR padrão harmônico real (hits[0] — a lista já
@@ -1123,6 +1178,8 @@ export function EnhancedChart_110_Percent({
   // (acento do Conselho/opinião agregada), mais discreta que Trade Plan e
   // Scenario; fio de seda; o título carrega o fit com o rótulo honesto —
   // aderência, nunca probabilidade. Fail-closed: sem padrão, zero linhas.
+  // Auditoria de pendências: ganha visibility.harmonics, mesmo fail-closed
+  // (early-return antes de desenhar qualquer price line/polilinha nova).
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
@@ -1132,6 +1189,7 @@ export function EnhancedChart_110_Percent({
     // padrão real agora, zero figura antiga lingerindo na tela (mesmo
     // fail-closed das price lines desta função).
     harmonicPolylineRef.current?.setData([]);
+    if (!visibility.harmonics) return;
     const top = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;
     if (!top || !Number.isFinite(top.points.D.price)) return;
     // Continuidade: a figura XABCD/Wolfe completa — X/A/B/C/D (ou 1..5 na
@@ -1187,7 +1245,7 @@ export function EnhancedChart_110_Percent({
           : null;
       mkH(top.epaPrice, `WOLFE · EPA (linha 1→4 real)${etaLabel ? ` · ETA ${etaLabel} (ápice da cunha)` : ""}`);
     }
-  }, [harmonicHits, data]);
+  }, [harmonicHits, data, visibility.harmonics]);
 
   // Signal Precision order: the Trade Plan drawn on the chart — subtle,
   // silk-thread annotations (1px solid, never dashed; hierarchy only via
@@ -1362,15 +1420,21 @@ export function EnhancedChart_110_Percent({
         color: "rgba(255, 0, 85, 0.65)",
       });
     }
-    if (vwapLastValue !== null && Number.isFinite(vwapLastValue)) {
+    // Auditoria de pendências (achado real via harness Playwright): as 3
+    // linhas abaixo já escondiam a SÉRIE nativa (applyOptions visible)
+    // quando a camada era desligada, mas a ETIQUETA do eixo (aqui) nunca
+    // checava o mesmo visibility — esconder VWAP/NL/EMA no painel deixava
+    // a série invisível, mas a caixa "VWAP • 63951.81"/"NL • .../"EMA 21
+    // ..." continuava aparecendo no eixo como se nada tivesse mudado.
+    if (visibility.vwap && vwapLastValue !== null && Number.isFinite(vwapLastValue)) {
       const s: DirectionalLineState = vwapState ?? "NEUTRAL";
       out.push({ price: vwapLastValue, text: `VWAP ${LINE_STATE_GLYPH[s]} ${vwapLastValue.toFixed(2)}`, color: VWAP_STATE_COLOR[s] });
     }
-    if (nlLastValue !== null && Number.isFinite(nlLastValue)) {
+    if (visibility.nexus_line && nlLastValue !== null && Number.isFinite(nlLastValue)) {
       const s: DirectionalLineState = nexusLineState ?? "NEUTRAL";
       out.push({ price: nlLastValue, text: `NL ${LINE_STATE_GLYPH[s]} ${nlLastValue.toFixed(2)}`, color: NL_STATE_COLOR[s] });
     }
-    if (emaLastValue !== null && Number.isFinite(emaLastValue)) {
+    if (visibility.ema && emaLastValue !== null && Number.isFinite(emaLastValue)) {
       out.push({ price: emaLastValue, text: `EMA ${activeEmaPeriod} ${emaLastValue.toFixed(2)}`, color: "rgba(66, 165, 245, 0.85)" });
     }
     const lastCandle = data.length > 0 ? data[data.length - 1] : null;
@@ -1410,7 +1474,7 @@ export function EnhancedChart_110_Percent({
       });
     }
     return out;
-  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, nlLastValue, nexusLineState, emaLastValue, activeEmaPeriod, data, visibility.trend_channel, trendChannelInfo, livePrice]);
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice]);
 
   return (
     <div className="absolute inset-0">
