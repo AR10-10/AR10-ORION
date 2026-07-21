@@ -1,0 +1,206 @@
+// price-label-stack-plugin.test.ts — achado real de captura de tela do
+// Operador (BTC/USDT 1H, preço formando perto de R1): R1/VWAP/NL/último
+// preço ficaram empilhados/ilegíveis no eixo. Trava PriceLabelStackPlugin
+// e a migração dos "last value label"/"axis label" nativos no nível de
+// código-fonte — mesma técnica de liquidity-zones-plugin.test.ts/
+// trade-plan-zone-plugin.test.ts (node env, sem canvas real; verificação
+// visual real via harness Playwright antes do commit).
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
+const plugin = () => read('../src/chart/PriceLabelStackPlugin.tsx');
+const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+describe('PriceLabelStackPlugin: "Fio de Seda" — conector nunca tracejado, sempre 1px', () => {
+  it('nunca chama setLineDash', () => {
+    expect(plugin()).not.toMatch(/\.setLineDash\(/);
+  });
+
+  it('o conector é sempre lineWidth = 1, nunca um valor maior', () => {
+    expect(plugin()).toContain('ctx.lineWidth = 1');
+    expect(plugin()).not.toMatch(/ctx\.lineWidth = [2-9]/);
+  });
+
+  it('o conector só aparece quando o rótulo realmente deslocou (>0.5px) — nunca uma linha fantasma quando a posição já é a natural', () => {
+    const s = plugin();
+    expect(s).toContain('if (Math.abs(entry.resolvedY - entry.naturalY) > 0.5) {');
+  });
+});
+
+describe('PriceLabelStackPlugin: achado real via harness Playwright — fundo da caixa sempre 100% opaco', () => {
+  it('a cor reaproveitada das linhas (translúcida de propósito, ex.: rgba(...,0.65)) nunca vira o fundo da caixa direto — passa por opaque() primeiro, senão o tick do eixo nativo (ex.: "64800.00") sangra através do rótulo', () => {
+    const s = plugin();
+    expect(s).toContain('ctx.fillStyle = opaque(entry.color);');
+    expect(s).not.toContain('ctx.fillStyle = entry.color;\n        ctx.fillRect');
+  });
+
+  it('opaque() descarta o canal alfa (rgba→rgb), nunca decide uma cor nova — mesmo R/G/B real, só sem transparência', () => {
+    const s = plugin();
+    const idx = s.indexOf('function opaque(rgba: string): string {');
+    expect(idx).toBeGreaterThan(-1);
+    const block = s.slice(idx, idx + 300);
+    expect(block).toContain('rgb(${m[1]},${m[2]},${m[3]})');
+  });
+
+  it('o conector fino continua com a opacidade REAL da linha (globalAlpha 0.5), só o fundo da caixa é forçado opaco — a linha nunca deveria competir visualmente com o resto do gráfico', () => {
+    const s = plugin();
+    const idx = s.indexOf('ctx.strokeStyle = entry.color;');
+    expect(idx).toBeGreaterThan(-1);
+    const block = s.slice(idx, idx + 100);
+    expect(block).toContain('ctx.globalAlpha = 0.5;');
+  });
+});
+
+describe('PriceLabelStackPlugin: geometria real via lightweight-charts, nunca posição fabricada', () => {
+  it('resolve preço→pixel via series.priceToCoordinate — nunca uma coordenada fixa/chutada', () => {
+    expect(plugin()).toContain('series.priceToCoordinate(');
+  });
+
+  it('preço fora da área visível (priceToCoordinate null) nunca é desenhado — fail-closed', () => {
+    expect(plugin()).toContain('coord === null ? null :');
+  });
+
+  it('rótulo resolvido fora do canvas (boxY fora de [0,cssHeight]) nunca desenha — fail-closed, nunca desenha fora do canvas', () => {
+    expect(plugin()).toContain('if (boxY + LABEL_HEIGHT_PX < 0 || boxY > cssHeight) continue;');
+  });
+
+  it('nunca usa Math.random nem qualquer dado sintético (Regra de Ouro 1)', () => {
+    expect(plugin()).not.toMatch(/Math\.random/);
+  });
+
+  it('a resolução de colisão vem da função pura real (price-label-stack.ts) — nunca uma heurística reinventada aqui', () => {
+    expect(plugin()).toContain('import { resolveLabelStackPositions } from "./price-label-stack";');
+    expect(plugin()).toContain('resolveLabelStackPositions(withNaturalY, MIN_GAP_PX)');
+  });
+
+  it('o gap mínimo real (MIN_GAP_PX) é MAIOR que a altura da caixa (LABEL_HEIGHT_PX) — achado real via harness Playwright: gap igual à altura deixa duas etiquetas ENCOSTADAS (zero sobreposição matemática, mas ilegível/"uma coisa só" visualmente); a folga extra garante uma fresta real e visível', () => {
+    const s = plugin();
+    expect(s).toContain('const MIN_GAP_PX = LABEL_HEIGHT_PX + 4;');
+  });
+});
+
+describe('PriceLabelStackPlugin: dirty-flag + requestAnimationFrame, nunca um loop perpétuo', () => {
+  it('agenda redraw via requestAnimationFrame, guardado por uma flag', () => {
+    expect(plugin()).toContain('requestAnimationFrame(');
+    expect(plugin()).toMatch(/if \(rafScheduled\) return;/);
+  });
+
+  it('reage a mudança de range visível (pan/zoom) via subscribeVisibleLogicalRangeChange real da lib', () => {
+    expect(plugin()).toContain('subscribeVisibleLogicalRangeChange(');
+  });
+
+  it('acompanha o tamanho real do canvas via ResizeObserver', () => {
+    expect(plugin()).toContain('new ResizeObserver(');
+  });
+
+  it('desmonta limpo: cancela a assinatura de range e desconecta o ResizeObserver', () => {
+    expect(plugin()).toContain('unsubscribeVisibleLogicalRangeChange(');
+    expect(plugin()).toContain('resizeObserver.disconnect()');
+  });
+});
+
+describe('EnhancedChart_110_Percent: os "last value label"/"axis label" NATIVOS de S1/R1/VWAP/NL/EMA/último preço estão desligados — substituídos pelo overlay', () => {
+  it('candlestick series: lastValueVisible false (era true) — priceLineVisible continua true (a linha horizontal de referência não muda)', () => {
+    const s = chart();
+    const idx = s.indexOf('const series = chart.addSeries(CandlestickSeries, {');
+    const block = s.slice(idx, idx + 1000);
+    expect(block).toContain('priceLineVisible: true,');
+    expect(block).toContain('lastValueVisible: false,');
+  });
+
+  it('VWAP/EMA/NL series: lastValueVisible false nas 3 (eram true)', () => {
+    const s = chart();
+    const vwapIdx = s.indexOf('const vwapSeries = chart.addSeries(LineSeries, {');
+    expect(s.slice(vwapIdx, vwapIdx + 500)).toContain('lastValueVisible: false,');
+    const emaIdx = s.indexOf('const emaSeries = chart.addSeries(LineSeries, {');
+    expect(s.slice(emaIdx, emaIdx + 350)).toContain('lastValueVisible: false,');
+    const nlIdx = s.indexOf('const nexusLineSeries = chart.addSeries(LineSeries, {');
+    expect(s.slice(nlIdx, nlIdx + 350)).toContain('lastValueVisible: false,');
+  });
+
+  it('S1/R1: axisLabelVisible false nas duas price lines (era true) — a LINHA horizontal continua desenhada, só o tag do eixo muda de dono', () => {
+    const s = chart();
+    const supportIdx = s.indexOf('supportLineRef.current = seriesRef.current.createPriceLine({');
+    expect(s.slice(supportIdx, supportIdx + 500)).toContain('axisLabelVisible: false,');
+    const resistanceIdx = s.indexOf('resistanceLineRef.current = seriesRef.current.createPriceLine({');
+    expect(s.slice(resistanceIdx, resistanceIdx + 350)).toContain('axisLabelVisible: false,');
+  });
+
+  it('Trade Plan (ENTRY/STOP/TARGET) NUNCA foi tocado — continua axisLabelVisible:true, fora do escopo desta correção (já tem seu próprio mecanismo de compactação, label-compaction.ts)', () => {
+    const s = chart();
+    const idx = s.indexOf('const mk = (price: number, color: string, title: string) => {');
+    const block = s.slice(idx, idx + 300);
+    expect(block).toContain('axisLabelVisible: true,');
+  });
+});
+
+describe('EnhancedChart_110_Percent: monta PriceLabelStackPlugin como o overlay MAIS ACIMA de todos (Nível 0) — a mesma garantia de "sempre legível" que os rótulos nativos tinham', () => {
+  it('importa e monta com o chart/série reais e o array real de labels', () => {
+    const s = chart();
+    expect(s).toContain('import { PriceLabelStackPlugin, type PriceAxisLabel } from "./PriceLabelStackPlugin";');
+    expect(s).toContain('<PriceLabelStackPlugin');
+    expect(s).toContain('chart={chartReady?.chart ?? null}');
+    expect(s).toContain('series={chartReady?.series ?? null}');
+    expect(s).toContain('labels={priceAxisLabels}');
+  });
+
+  it('é o ÚLTIMO elemento do array de overlays (depois de TradePlanZonePlugin) — nunca fica atrás de nada', () => {
+    const s = chart();
+    const tradePlanIdx = s.lastIndexOf('<TradePlanZonePlugin');
+    const priceLabelIdx = s.lastIndexOf('<PriceLabelStackPlugin');
+    expect(tradePlanIdx).toBeGreaterThan(-1);
+    expect(priceLabelIdx).toBeGreaterThan(tradePlanIdx);
+  });
+
+  it('nunca sujeito a um toggle de camada — os rótulos que ele substitui (S1/R1/VWAP/NL/EMA/preço) sempre foram sempre-visíveis por padrão, sem entrada em CHART_LAYER_IDS', () => {
+    const s = chart();
+    const idx = s.indexOf('<PriceLabelStackPlugin');
+    const block = s.slice(Math.max(0, idx - 60), idx);
+    expect(block).not.toMatch(/visibility\.\w+ && \($/);
+  });
+});
+
+describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores/cores já reais, zero cálculo novo, useMemo (nunca recalculado à toa)', () => {
+  it('é um useMemo real, nunca construído incondicionalmente a cada render', () => {
+    const s = chart();
+    expect(s).toContain('const priceAxisLabels = useMemo<PriceAxisLabel[]>(() => {');
+  });
+
+  it('S1/R1 reaproveitam levelTitle (mesma função já usada pelas price lines nativas) — nunca uma segunda formatação', () => {
+    const s = chart();
+    const idx = s.indexOf('const priceAxisLabels = useMemo');
+    const block = s.slice(idx, idx + 1400);
+    expect(block).toContain('levelTitle("S1", supportStrength, supportBreakouts)');
+    expect(block).toContain('levelTitle("R1", resistanceStrength, resistanceBreakouts)');
+    expect(block).toContain('color: "rgba(0, 255, 170, 0.65)"'); // mesma cor real da price line S1
+    expect(block).toContain('color: "rgba(255, 0, 85, 0.65)"'); // mesma cor real da price line R1
+  });
+
+  it('VWAP/NL reaproveitam LINE_STATE_GLYPH/VWAP_STATE_COLOR/NL_STATE_COLOR reais — mesma paleta institucional já usada pelas séries', () => {
+    const s = chart();
+    const idx = s.indexOf('const priceAxisLabels = useMemo');
+    const block = s.slice(idx, idx + 1400);
+    expect(block).toContain('VWAP ${LINE_STATE_GLYPH[s]} ${vwapLastValue.toFixed(2)}');
+    expect(block).toContain('color: VWAP_STATE_COLOR[s]');
+    expect(block).toContain('NL ${LINE_STATE_GLYPH[s]} ${nlLastValue.toFixed(2)}');
+    expect(block).toContain('color: NL_STATE_COLOR[s]');
+  });
+
+  it('último preço usa a MESMA cor up/down real da própria série de candles (#00ffaa/#ff0055) — nunca uma cor nova', () => {
+    const s = chart();
+    const idx = s.indexOf('const priceAxisLabels = useMemo');
+    const block = s.slice(idx, idx + 1700);
+    expect(block).toContain('lastCandle.close >= lastCandle.open ? "#00ffaa" : "#ff0055"');
+  });
+
+  it('vwapLastValue/nlLastValue/emaLastValue vêm da PONTA real de cada série já computada (zero segunda fonte) — capturados nos MESMOS efeitos que já chamam setData', () => {
+    const s = chart();
+    expect(s).toContain('setVwapLastValue(series.length > 0 ? series[series.length - 1].value : null);');
+    expect(s).toContain('setNlLastValue(nl.length > 0 ? nl[nl.length - 1].value : null);');
+    expect(s).toContain('setEmaLastValue(series.length > 0 ? series[series.length - 1].value : null);');
+  });
+});

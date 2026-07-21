@@ -18,7 +18,7 @@
 // preço real top/bottom de cada zona ainda não mitigada/varrida, o
 // mesmo filtro (!mitigated / !swept) e o mesmo cap de contagem que o
 // componente antigo já usava.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -92,6 +92,7 @@ import type { StructureBreak } from "../engine-bridge";
 // Channel) e a pesquisa que a confirmou.
 import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER, type TrendChannelDirection } from "../nexus/trend-channel-engine";
 import { shouldCompactLabels } from "./label-compaction";
+import { PriceLabelStackPlugin, type PriceAxisLabel } from "./PriceLabelStackPlugin";
 
 export interface EnhancedChartCandle {
   time: number; // Unix segundos real (Bus/Binance) — nunca sintetizado
@@ -420,6 +421,19 @@ export function EnhancedChart_110_Percent({
   // Esta leitura NUNCA vai para o eixo — só alimenta a legenda em <div>
   // abaixo (JSX), fora do sistema de price-scale da lib.
   const [trendChannelInfo, setTrendChannelInfo] = useState<{ direction: TrendChannelDirection; windowSize: number } | null>(null);
+  // Achado real de captura de tela do Operador (BTC/USDT 1H, preço
+  // formando perto de R1): os "last value label"/"axis label" NATIVOS de
+  // VWAP/NL/EMA/S1/R1/último preço não têm nenhuma consciência uns dos
+  // outros — quando os preços reais ficam próximos, colidem/empilham.
+  // Estes 3 valores (a PONTA real de cada série já computada nos efeitos
+  // abaixo — zero cálculo novo) alimentam PriceLabelStackPlugin, que
+  // resolve a posição vertical de TODOS os rótulos de uma vez (ver
+  // price-label-stack.ts) — os "last value label"/"axis label" nativos
+  // são desligados logo abaixo (lastValueVisible/axisLabelVisible:false)
+  // e substituídos por esse overlay.
+  const [vwapLastValue, setVwapLastValue] = useState<number | null>(null);
+  const [nlLastValue, setNlLastValue] = useState<number | null>(null);
+  const [emaLastValue, setEmaLastValue] = useState<number | null>(null);
 
   // Cria o chart UMA vez por montagem — nunca recriado por troca de
   // timeframe/dado (isso destruiria o estado de pan/zoom do operador a
@@ -485,7 +499,16 @@ export function EnhancedChart_110_Percent({
       wickUpColor: "#00ffaa",
       wickDownColor: "#ff0055",
       priceLineVisible: true,
-      lastValueVisible: true,
+      // Achado real de captura de tela do Operador (BTC/USDT 1H): o
+      // "last value label" nativo (antes lastValueVisible:true) colidia
+      // com R1/VWAP/NL quando os preços reais ficam próximos — a lib não
+      // tem nenhuma consciência cross-série da posição de cada rótulo.
+      // Desligado aqui, substituído por PriceLabelStackPlugin (ver JSX
+      // abaixo), que resolve a posição de TODOS os rótulos de uma vez
+      // (price-label-stack.ts) e nunca perde a informação — só reorganiza
+      // quando preciso. A LINHA horizontal de referência (priceLineVisible
+      // acima) continua exatamente igual, só o rótulo/tag muda de dono.
+      lastValueVisible: false,
       // Achado real via verificação com harness Playwright (V-MAX Fase
       // 0.7): sem este campo, a lib desenha essa linha automática de
       // último preço tracejada por padrão — quebra silenciosa da Regra de
@@ -523,7 +546,10 @@ export function EnhancedChart_110_Percent({
       lineWidth: 1,
       lineStyle: LineStyle.Solid,
       priceLineVisible: false,
-      lastValueVisible: true,
+      // Achado real de captura de tela (ver comentário na criação da
+      // série de candles acima): rótulo nativo desligado, substituído
+      // por PriceLabelStackPlugin — nunca mais colide com R1/NL/preço.
+      lastValueVisible: false,
       crosshairMarkerVisible: false,
       title: "VWAP",
     });
@@ -537,7 +563,8 @@ export function EnhancedChart_110_Percent({
       lineWidth: 1,
       lineStyle: LineStyle.Solid,
       priceLineVisible: false,
-      lastValueVisible: true,
+      // Mesmo achado/mesma correção do VWAP acima.
+      lastValueVisible: false,
       crosshairMarkerVisible: false,
       title: "EMA",
     });
@@ -551,7 +578,8 @@ export function EnhancedChart_110_Percent({
       lineWidth: 1,
       lineStyle: LineStyle.Solid,
       priceLineVisible: false,
-      lastValueVisible: true,
+      // Mesmo achado/mesma correção do VWAP acima.
+      lastValueVisible: false,
       crosshairMarkerVisible: false,
       title: "NL •",
     });
@@ -746,7 +774,10 @@ export function EnhancedChart_110_Percent({
         color: "rgba(0, 255, 170, 0.65)",
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
-        axisLabelVisible: true,
+        // Mesmo achado/mesma correção da série de candles acima — o tag
+        // nativo do eixo colidia com VWAP/NL/preço quando os valores
+        // reais ficam próximos; PriceLabelStackPlugin assume o rótulo.
+        axisLabelVisible: false,
         title: levelTitle("S1", supportStrength, supportBreakouts),
       });
     }
@@ -764,7 +795,8 @@ export function EnhancedChart_110_Percent({
         color: "rgba(255, 0, 85, 0.65)",
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
-        axisLabelVisible: true,
+        // Mesmo achado/mesma correção do S1 acima.
+        axisLabelVisible: false,
         title: levelTitle("R1", resistanceStrength, resistanceBreakouts),
       });
     }
@@ -826,12 +858,14 @@ export function EnhancedChart_110_Percent({
     if (!vwapSeriesRef.current) return;
     const series = computeSessionVwapSeries(data);
     vwapSeriesRef.current.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+    setVwapLastValue(series.length > 0 ? series[series.length - 1].value : null);
     // Consolidação Final §26-§28: a Nexus Line nasce do MESMO array real,
     // no MESMO efeito — os dois equilíbrios nunca dessincronizam por
     // construção. Série vazia (sem range confirmado/sem VWAP) => nada.
     if (nexusLineSeriesRef.current) {
       const nl = computeNexusLineSeries(data);
       nexusLineSeriesRef.current.setData(nl.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+      setNlLastValue(nl.length > 0 ? nl[nl.length - 1].value : null);
     }
   }, [data]);
 
@@ -864,6 +898,7 @@ export function EnhancedChart_110_Percent({
     );
     emaSeriesRef.current.applyOptions({ title: `EMA ${activeEmaPeriod}` });
     emaSeriesRef.current.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+    setEmaLastValue(series.length > 0 ? series[series.length - 1].value : null);
   }, [data, activeEmaPeriod]);
 
   // Camadas do Gráfico (Finding M): esconder a camada "ema" nunca altera
@@ -1271,6 +1306,59 @@ export function EnhancedChart_110_Percent({
   //     visualmente — ver comentário próprio abaixo).
   // Harmônicos/Wolfe/ETA/Heat/Score vivem como price lines/títulos no
   // próprio pane nativo (fio de seda), não neste array de plugins.
+  //
+  // Nível 0 (NOVO, acima de tudo — achado real de captura de tela do
+  // Operador): PriceLabelStackPlugin. Os rótulos de S1/R1/VWAP/NL/EMA/
+  // último preço eram "last value label"/"axis label" NATIVOS — sempre
+  // acima de qualquer plugin em div overlay, por definição do Nível 1
+  // documentado acima. Ao substituí-los por um overlay próprio (única
+  // forma de resolver colisão entre eles — a lib não tem essa
+  // consciência cross-série), o overlay precisa ficar acima de TODOS os
+  // outros plugins (inclusive TradePlanZonePlugin, Nível 2) pra manter a
+  // MESMA garantia de "sempre legível" que os rótulos nativos já tinham.
+  // useMemo (não construído direto no corpo do render): mesma disciplina
+  // de dirty-flag do resto do gráfico — PriceLabelStackPlugin só reagenda
+  // um redraw real quando a referência de `labels` muda, então uma nova
+  // array a cada render (por um re-render não relacionado, ex.:
+  // harmonicHits mudando) nunca deveria disparar um redraw à toa.
+  const priceAxisLabels = useMemo<PriceAxisLabel[]>(() => {
+    const out: PriceAxisLabel[] = [];
+    if (Number.isFinite(support)) {
+      out.push({
+        price: support as number,
+        text: `${levelTitle("S1", supportStrength, supportBreakouts)} ${(support as number).toFixed(2)}`,
+        color: "rgba(0, 255, 170, 0.65)",
+      });
+    }
+    if (Number.isFinite(resistance)) {
+      out.push({
+        price: resistance as number,
+        text: `${levelTitle("R1", resistanceStrength, resistanceBreakouts)} ${(resistance as number).toFixed(2)}`,
+        color: "rgba(255, 0, 85, 0.65)",
+      });
+    }
+    if (vwapLastValue !== null && Number.isFinite(vwapLastValue)) {
+      const s: DirectionalLineState = vwapState ?? "NEUTRAL";
+      out.push({ price: vwapLastValue, text: `VWAP ${LINE_STATE_GLYPH[s]} ${vwapLastValue.toFixed(2)}`, color: VWAP_STATE_COLOR[s] });
+    }
+    if (nlLastValue !== null && Number.isFinite(nlLastValue)) {
+      const s: DirectionalLineState = nexusLineState ?? "NEUTRAL";
+      out.push({ price: nlLastValue, text: `NL ${LINE_STATE_GLYPH[s]} ${nlLastValue.toFixed(2)}`, color: NL_STATE_COLOR[s] });
+    }
+    if (emaLastValue !== null && Number.isFinite(emaLastValue)) {
+      out.push({ price: emaLastValue, text: `EMA ${activeEmaPeriod} ${emaLastValue.toFixed(2)}`, color: "rgba(66, 165, 245, 0.85)" });
+    }
+    const lastCandle = data.length > 0 ? data[data.length - 1] : null;
+    if (lastCandle && Number.isFinite(lastCandle.close)) {
+      out.push({
+        price: lastCandle.close,
+        text: lastCandle.close.toFixed(2),
+        color: lastCandle.close >= lastCandle.open ? "#00ffaa" : "#ff0055",
+      });
+    }
+    return out;
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, nlLastValue, nexusLineState, emaLastValue, activeEmaPeriod, data]);
+
   return (
     <div className="absolute inset-0">
       {/* V-MAX Fase 1.2: densidade L2 + bolhas de trades grandes, ANTES do
@@ -1360,6 +1448,15 @@ export function EnhancedChart_110_Percent({
           confidenceZone={confidenceZone ?? null}
         />
       )}
+      {/* Nível 0 (ver comentário acima do useMemo de priceAxisLabels):
+         montado por último de propósito — precisa ficar acima de TODOS os
+         outros overlays, a mesma garantia que os "last value label"/
+         "axis label" nativos que ele substitui sempre tiveram. */}
+      <PriceLabelStackPlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+        labels={priceAxisLabels}
+      />
     </div>
   );
 }

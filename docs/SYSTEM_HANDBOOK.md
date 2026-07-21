@@ -96,7 +96,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (101 arquivos, 1576 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1614 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -743,6 +743,82 @@ testes; `npm run build` ok (hash de bundle mudou); grep mecânico confirma
 as evoluções desta rodada no bundle; harness Playwright isolado confirma
 visualmente o ladder de cenários (3 linhas, opacidade decrescente por
 rank), descartado antes do commit.
+
+---
+
+### 6.13 Colisão de rótulos no eixo de preço — achado real de captura de
+tela do Operador (BTC/USDT 1H perto de R1) + PriceLabelStackPlugin
+
+O Operador enviou uma captura de tela real do terminal ao vivo (BTC/USDT
+1H, preço formando perto de R1) pedindo para "organizar tudo" e garantir
+que "nenhum objeto fique em cima do outro" — cada rótulo "exato no lugar
+preciso", "bem elite". A imagem mostrava R1/VWAP/NL/último preço
+literalmente empilhados/ilegíveis no canto superior direito do eixo de
+preço.
+
+**Causa raiz real**: os rótulos de S1/R1/VWAP/NL/EMA/último preço eram
+"last value label"/"axis label" NATIVOS da lightweight-charts — cada
+série/price line desenha o próprio rótulo de forma totalmente
+independente, sem NENHUMA consciência da posição das outras. Quando os
+valores reais ficam próximos (o caso normal sempre que o preço se
+aproxima de um nível estrutural relevante — exatamente quando o operador
+mais precisa ler os dois com clareza), os rótulos colidem. Confirmado por
+leitura da documentação da lib e observação real via harness Playwright:
+não existe nenhum mecanismo nativo de anti-colisão para isso.
+
+**Solução aplicada** (aditivo — nenhum preço/linha muda, só o dono do
+rótulo de eixo):
+1. **`price-label-stack.ts`** (função pura, testada por execução real):
+   `resolveLabelStackPositions` recebe as posições Y NATURAIS (já
+   convertidas de preço→pixel pela própria lib) de todos os rótulos,
+   agrupa as que colidem (mais perto que um gap mínimo declarado) e
+   redistribui cada grupo CENTRADO na média das posições naturais do
+   grupo — nunca desloca uma entrada que não colide, nunca desloca mais
+   que o necessário, e uma segunda passada de segurança garante a
+   invariante absoluta ("nenhum par fica a menos do gap mínimo") mesmo
+   no caso raro de dois grupos vizinhos colidirem depois de centralizados.
+2. **`PriceLabelStackPlugin.tsx`** (overlay de canvas, mesma arquitetura
+   de todo o resto do gráfico — canvas próprio, dirty-flag+rAF,
+   ResizeObserver): desenha os rótulos resolvidos como caixas coloridas
+   (MESMA cor real já usada por cada linha/série — nunca uma cor nova) +
+   um CONECTOR fino (Fio de Seda: 1px sólido, nunca tracejado) de volta
+   ao preço real sempre que o rótulo precisou deslocar — a informação
+   nunca desaparece, só reorganiza.
+3. Os "last value label"/"axis label" nativos de S1/R1/VWAP/NL/EMA/
+   candle são desligados (`lastValueVisible`/`axisLabelVisible: false`)
+   — as LINHAS/séries continuam exatamente as mesmas, só o rótulo de
+   eixo muda de dono. Trade Plan (ENTRY/STOP/TARGET) foi deliberadamente
+   **não tocado** — já tem seu próprio mecanismo de compactação
+   (`label-compaction.ts`, baseado em formato de texto, não posição) e
+   não aparecia na captura de tela real (nenhum plano ativo no momento).
+
+**Achado real durante a verificação visual** (harness Playwright isolado,
+não um passo pulado): a primeira versão usava o mesmo valor para a
+altura da caixa E o gap mínimo do resolvedor — matematicamente correto
+(zero sobreposição), mas duas etiquetas colidindo ficavam exatamente
+ENCOSTADAS (gap zero), o que lia como "uma coisa só" visualmente mesmo
+sem sobreposição real de pixels. Corrigido com um gap mínimo maior que a
+altura da caixa (`MIN_GAP_PX = LABEL_HEIGHT_PX + 4`) — uma fresta real e
+visível, não só uma garantia matemática. Um segundo achado real: as
+cores reaproveitadas das linhas são translúcidas de propósito (para as
+LINHAS do gráfico) — usadas direto como fundo de uma CAIXA de rótulo,
+deixavam o tick do eixo nativo (ex.: "64800.00") sangrar através. Corrigi
+forçando o fundo da caixa a 100% opaco (`opaque()`, descarta só o canal
+alfa, nunca decide uma cor nova) — o conector fino continua com a
+opacidade real da linha, que faz sentido para uma linha auxiliar fina,
+nunca para o texto principal do rótulo.
+
+**Verificação**: 10 testes de execução real do resolvedor (incluindo o
+formato exato do cluster da captura de tela: 4 níveis próximos + 1 nível
+bem distante que nunca deveria deslocar) + 28 testes de padrão de código
+da fiação do plugin/composer. Ground-truth via `console.log` temporário
+no draw loop (removido antes do commit) confirmou os limites exatos de
+cada caixa resolvida no cenário real de teste — nenhum par a menos de
+`MIN_GAP_PX` um do outro, prova empírica além da prova matemática.
+`tsc --noEmit` limpo · **103 arquivos/1614 testes** · `npm run build` ok
+(hash de bundle mudou) · grep por string literal (`#050810`, cor de
+texto exclusiva deste plugin) confirma presença no bundle de produção
+(grep por nome de identificador não serve — minificação renomeia).
 
 ---
 
