@@ -3444,11 +3444,19 @@ function ChartLayersPanel() {
                   <span className="text-[0.55rem] font-bold tracking-widest text-white">{label}</span>
                   <div className="flex items-center gap-1">
                     {isAuto && (
+                      // EPC FINAL §3/§12 ("quando destacar"): emphasis real
+                      // (só existe onde há um gradiente real no sinal, ver
+                      // layer-relevance.ts) some no texto do badge — nunca
+                      // um efeito visual novo sem motivo real por trás.
                       <span
-                        className="text-[0.38rem] px-1.5 py-1 rounded border border-[#00ffaa]/40 text-[#00ffaa]/80 font-bold uppercase tracking-wider"
+                        className={`text-[0.38rem] px-1.5 py-1 rounded border font-bold uppercase tracking-wider ${
+                          relevance?.emphasis === "highlight"
+                            ? "border-[#00ffaa] bg-[#00ffaa20] text-[#00ffaa]"
+                            : "border-[#00ffaa]/40 text-[#00ffaa]/80"
+                        }`}
                         title={relevance?.reason ?? "Relevance Engine ainda sem leitura real neste ciclo."}
                       >
-                        auto
+                        auto{relevance?.emphasis === "highlight" ? " · destaque" : ""}
                       </span>
                     )}
                     <button

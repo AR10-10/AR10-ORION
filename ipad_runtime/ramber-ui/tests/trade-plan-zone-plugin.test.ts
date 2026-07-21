@@ -163,11 +163,12 @@ describe('EnhancedChart_110_Percent: stop/target hit-boost v2 (Ordem Final Auton
     expect(chart()).toContain('}, [tradePlan, livePrice, targetsHit]);');
   });
 
-  it('as literais base de ENTRY/STOP/TARGET continuam intactas — agora em priceAxisLabels (migração para o sistema anti-colisão), nunca reformatadas', () => {
+  it('as literais base de EN/ST/TP continuam consistentes — em priceAxisLabels (sistema anti-colisão), nomenclatura curta real (EPC FINAL §8)', () => {
     const s = chart();
-    expect(s).toContain('`ENTRY ${tradePlan.direction}');
-    expect(s).toContain('`STOP · ${tradePlan.stop.basis}`');
+    expect(s).toContain('`EN ${tradePlan.direction}');
+    expect(s).toContain('`ST · ${tradePlan.stop.basis}`');
     expect(s).toContain('${label} · ${target.basis}');
+    expect(s).toContain('const label = `TP${i + 1}`;');
   });
 
   it('v2: "REACHED" is driven by the AUTHORITATIVE targetsHit prop, never re-derived from livePrice alone — a target stays marked reached even if price later pulls back', () => {

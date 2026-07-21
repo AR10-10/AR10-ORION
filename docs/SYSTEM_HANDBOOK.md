@@ -98,7 +98,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (105 arquivos, 1748 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (105 arquivos, 1755 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -2106,6 +2106,68 @@ rodadas anteriores (Entry/Stop/Target1-3/BE/Trailing do Conselho e
 Entry/Stop/Target1-2 do fallback do Núcleo já desenham automaticamente
 sem o Operador habilitar nada — `trade_plan_zone` é isento do gate
 exatamente por isso).
+
+---
+
+### 6.33 EPC FINAL — Consolidação Final: nomenclatura curta nos objetos do
+canvas (EN/ST/TP1-3), destaque real na relevância automática, auditoria
+honesta do critério de conclusão §14
+
+Terceira rodada da mesma diretiva (Núcleo Gravitacional/Fusion Engine),
+agora com um checklist explícito de conclusão (§14). Nenhuma pergunta
+nova de escopo foi necessária — as duas decisões da rodada anterior
+(§6.32: Fusion Engine display-only, toggles como override) continuam
+válidas e cobrem as seções desta versão também.
+
+**§8 "Objetos Inteligentes" (nomenclatura curta EN/ST/TP1/TP2/TP3)**:
+achado real — os rótulos do CANVAS (Trade Plan do Conselho e fallback do
+Núcleo, `priceAxisLabels` em `EnhancedChart_110_Percent.tsx`) usavam
+"ENTRY LONG/SHORT"/"STOP"/"TARGET N" por extenso, não a forma curta agora
+pedida explicitamente. Corrigido: `EN`/`ST`/`TP{n}` (sempre numerado,
+mesmo com 1 alvo só). **Decisão deliberada de NÃO tocar**: a barra de
+comando (`BarField` "Entry Zone"/"Stop"/"Target", `App.tsx`) já passou
+por um "Redesenho radical" pedido explicitamente pelo Operador em rodada
+anterior, trocando "E/S/T" cramped por rótulos legíveis — reverter isso
+sem um pedido novo desfaria uma decisão real já tomada. A distinção
+(canvas = curto; barra de comando = legível) é intencional, não uma
+aplicação parcial.
+
+**§3/§12 ("quando reduzir opacidade"/"quando destacar")**: extensão do
+Relevance Engine (`layer-relevance.ts`) — `LayerRelevanceResult` ganha um
+3º campo, `emphasis: "normal" | "highlight"`, mas SÓ nas 5 camadas que já
+carregam um número contínuo real no input (nunca um sinal novo):
+`liquidity_zones` (>= 2 obstáculos reais no caminho vs. 1),
+`structure_breaks` (alpha de decaimento ainda alto vs. já esmaecendo),
+`trend_channel` (banda muito mais estreita que o limiar de relevância),
+`harmonics` (fitScore real bem acima do limiar). As outras 10 camadas
+(sinal booleano puro — hasOrderBook, orderflowTrendActive, etc.) ficam
+sempre "normal" quando relevantes — honesto por não ter gradiente real
+pra medir, nunca um destaque fabricado. Aplicado ao badge "auto" do
+painel de camadas (mostra "auto · destaque" só quando `emphasis ===
+"highlight"`). **Honestamente NÃO aplicado ainda** à renderização real do
+canvas (opacidade/cor dos ~8 plugins de overlay) — cada plugin tem seu
+próprio laço de desenho com valores `rgba()` hardcoded; alterar 8
+arquivos de renderização sem poder verificar visualmente ao vivo neste
+sandbox (sem rede real) seria um risco real de regressão não detectável
+aqui. Proposto como próxima iniciativa isolada, não construído às pressas
+junto de outra coisa.
+
+**§14 (Critério de Conclusão) — auditoria honesta, item a item**:
+
+| Critério | Status | Evidência |
+|---|---|---|
+| Nenhuma camada exige ativação manual | ✅ | Fase 1 (§6.32): 15 camadas do canvas, todas em modo automático por padrão |
+| Nenhuma informação duplicada | ✅ | ORDEM (§6.31): 1 redundância real encontrada e eliminada (VOLATILIDADE/ATR%); resto confirmado single-source |
+| Nenhum objeto sobrepõe outro | ✅ (estrutural) / ⚠️ (canvas ao vivo) | `PriceLabelStackPlugin` resolve todos os rótulos do eixo por 1 sistema único; `audit-header-maxcontent.mjs` 11 viewports CLEAN; verificação do CANVAS ao vivo depende de rede real, indisponível neste sandbox — mitigado por capturas de tela reais de rodadas anteriores |
+| Trade Plan sincronizado | ✅ | `tradePlanAbsenceReason` + `obstacleZonesInPath` como fontes únicas, Conselho e Núcleo cobertos (§6.19-§6.22) |
+| Todos os motores ativos | ✅ | Nenhum motor de cálculo jamais foi gateado por ativação manual — só a EXIBIÇÃO tinha toggle; auditoria §7.2/§7.3 (`AUDITORIA_ECOSSISTEMA_VISUAL.md`) já confirmou as 8 dimensões do EPC §3 cobertas |
+| Interface auto-organizada | ⚠️ parcial | Show/hide automático: ✅ (Fase 1). Reorganização de layout por relevância: ❌ não construído — os widgets de painel têm posição fixa por design (V16 Institutional Command Center), reorganizar dinamicamente seria uma mudança arquitetural maior, não decidida ainda |
+| Visualização totalmente automática | ⚠️ parcial | Mesma ressalva acima — camadas do canvas sim, mas o Centro Gravitacional/Corredor de Confluência (síntese visual unificada, §6/§9) ainda não foi construído |
+| Pronto pra operar imediatamente após abrir | ✅ | Sempre foi verdade — nenhum onboarding/ativação jamais foi exigido; confirmado nesta auditoria, não uma mudança nova |
+
+**Verificação real**: `tsc --noEmit` limpo · **105 arquivos / 1755
+testes** (100%, +7 desde §6.32: emphasis real + badge de destaque) ·
+`npm run build` ok · `audit-header-maxcontent.mjs` 11 viewports CLEAN.
 
 ---
 

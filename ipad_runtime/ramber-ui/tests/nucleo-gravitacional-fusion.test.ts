@@ -21,9 +21,14 @@ describe('LEI 24 (resposta explícita do Operador): Fusion Engine é display-onl
     const tradePlan = readFileSync(resolve(here, '../src/nexus/trade-plan.ts'), 'utf8');
     expect(tradePlan).not.toContain('layer-relevance');
   });
-  it('computeLayerRelevance devolve só { relevant, reason } — nunca um campo de preço/nível/risco', () => {
+  it('computeLayerRelevance devolve só { relevant, reason, emphasis } — nunca um campo de preço/nível/risco', () => {
     const src = readFileSync(resolve(here, '../src/nexus/layer-relevance.ts'), 'utf8');
-    expect(src).toContain('export interface LayerRelevanceResult {\n  relevant: boolean;\n  reason: string;\n}');
+    const idx = src.indexOf('export interface LayerRelevanceResult {');
+    const block = src.slice(idx, src.indexOf('}', idx));
+    expect(block).toContain('relevant: boolean;');
+    expect(block).toContain('reason: string;');
+    expect(block).toContain('emphasis: "normal" | "highlight";');
+    expect(block).not.toMatch(/price|level|risk|stop|target|entry/i);
   });
 });
 
@@ -155,5 +160,15 @@ describe('Painel: badge AUTO real + reset por camada + 4º preset — nunca um s
     const a = app();
     expect(a).toContain('onClick={() => applyChartLayerPreset?.("automatic")}');
     expect(a).toContain('const isAutomaticPreset = CHART_LAYER_IDS.every((id) => autoMode[id] === true);');
+  });
+});
+
+describe('EPC FINAL §3/§12 ("quando destacar"): badge auto do painel mostra o emphasis real, nunca um efeito sem motivo', () => {
+  it('badge acende (borda/fundo sólidos) e mostra "· destaque" só quando relevance.emphasis === "highlight" — nunca decorativo', () => {
+    const a = app();
+    const idx = a.indexOf('{isAuto && (');
+    const block = a.slice(idx, a.indexOf(')}', a.indexOf('destaque', idx)) + 2);
+    expect(block).toContain('relevance?.emphasis === "highlight"');
+    expect(block).toContain('auto{relevance?.emphasis === "highlight" ? " · destaque" : ""}');
   });
 });

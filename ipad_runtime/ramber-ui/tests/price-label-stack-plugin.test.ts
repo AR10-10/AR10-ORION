@@ -439,8 +439,9 @@ describe('"bater o olho profissional" (pendência honesta do turno anterior): EN
     const block = s.slice(idx, end);
     // gate fail-closed do plano inteiro
     expect(block).toContain('if (tradePlan) {');
-    // ENTRY âmbar, direção real (LONG/SHORT) no texto — "bater o olho"
-    expect(block).toContain('text: `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor');
+    // EN âmbar, direção real (LONG/SHORT) no texto — "bater o olho"
+    // (EPC FINAL §8: nomenclatura curta EN/ST/TP1-3 nos objetos gráficos)
+    expect(block).toContain('text: `EN ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor');
     expect(block).toContain('const entryColor = "rgba(240, 208, 111, 0.75)";');
     // STOP vermelho no preço EFETIVO (ratchet real), BREACHED do preço vivo
     expect(block).toContain('const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);');
@@ -530,10 +531,11 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     const end = s.indexOf('return out;', idx);
     const block = s.slice(idx, end);
     expect(block).toContain('if (engineFallbackLevels) {');
-    expect(block).toContain('text: breached ? "STOP · BREACHED" : "STOP",');
+    // EPC FINAL §8: ST/TP1/TP2 (nomenclatura curta), sempre numerado.
+    expect(block).toContain('text: breached ? "ST · BREACHED" : "ST",');
     expect(block).toContain('color: "rgba(255, 0, 85, 0.5)",');
-    expect(block).toContain('const label = engineFallbackLevels.target2 !== null ? "TARGET 1" : "TARGET";');
-    expect(block).toContain('text: `TARGET 2${strengthSuffix(engineFallbackLevels.target2Strength)}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,');
+    expect(block).toContain('text: `TP1${strengthSuffix(engineFallbackLevels.target1Strength)}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}${reached ? " · REACHED" : ""}`,');
+    expect(block).toContain('text: `TP2${strengthSuffix(engineFallbackLevels.target2Strength)}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,');
   });
 
   it('EPC MODO ELITE §4: rótulos dos alvos do Núcleo carregam ⚠ N (obstáculos estruturais reais no caminho) — só quando N>0, mesmo glifo ⚠ da zona destacada; o Núcleo não tem painel, então o rótulo é o único lugar dessa contagem', () => {

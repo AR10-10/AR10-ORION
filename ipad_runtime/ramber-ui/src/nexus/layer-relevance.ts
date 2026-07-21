@@ -83,6 +83,14 @@ export interface LayerRelevanceInput {
 export interface LayerRelevanceResult {
   relevant: boolean;
   reason: string;
+  // EPC FINAL §3/§12 ("quando destacar"/"quando reduzir opacidade"): 3º
+  // nível opcional sobre um gradiente REAL já presente no input (nunca um
+  // sinal novo/fabricado) — "highlight" quando o mesmo sinal que decidiu
+  // relevant=true está no seu extremo mais forte. Só as camadas que já
+  // carregam um número contínuo real (não um booleano puro) ganham esta
+  // distinção; as demais ficam sempre "normal" quando relevantes, honesto
+  // por não ter um gradiente real pra medir.
+  emphasis: "normal" | "highlight";
 }
 
 export type LayerRelevanceReading = Record<RelevanceLayerId, LayerRelevanceResult>;
@@ -100,6 +108,13 @@ export const TREND_CHANNEL_TIGHT_BANDWIDTH_PCT = 3;
 // reaproveitada aqui só para o limiar "ainda vale a pena mostrar"
 // (alpha > 0), zero nova config de decaimento.
 export const STRUCTURE_BREAK_RELEVANCE_MIN_ALPHA = 0;
+// EPC FINAL §3/§12: limiares de DESTAQUE — mesmo gradiente real que já
+// decide relevant=true, só um corte mais exigente dentro dele (convenção
+// declarada, não medição — mesmo espírito dos limiares acima).
+export const HARMONIC_HIGHLIGHT_FIT = 0.9;
+export const TREND_CHANNEL_HIGHLIGHT_BANDWIDTH_PCT = TREND_CHANNEL_TIGHT_BANDWIDTH_PCT / 2;
+export const STRUCTURE_BREAK_HIGHLIGHT_MIN_ALPHA = 0.9;
+export const LIQUIDITY_HIGHLIGHT_MIN_OBSTACLES = 2;
 
 function fmtPct(p: number): string {
   return `${p.toFixed(1)}%`;
@@ -132,24 +147,29 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
 
   const premiumDiscountRelevant = input.premiumDiscountZone !== null && input.premiumDiscountZone !== "EQUILIBRIUM";
 
+  const liquidityHighlight = input.tradePlanActive && input.obstacleZoneCount >= LIQUIDITY_HIGHLIGHT_MIN_OBSTACLES;
+  const structureBreakHighlight = structureBreakRelevant && input.structureBreakAlpha! >= STRUCTURE_BREAK_HIGHLIGHT_MIN_ALPHA;
+  const trendChannelHighlight = trendChannelRelevant && input.trendChannelBandwidthPct! <= TREND_CHANNEL_HIGHLIGHT_BANDWIDTH_PCT;
+  const harmonicsHighlight = harmonicsRelevant && input.harmonicBestFitScore! >= HARMONIC_HIGHLIGHT_FIT;
+
   return {
     liquidity_zones: hasObstacle
-      ? { relevant: true, reason: `${input.obstacleZoneCount} obstáculo(s) real(is) no caminho do plano ativo` }
+      ? { relevant: true, emphasis: liquidityHighlight ? "highlight" : "normal", reason: `${input.obstacleZoneCount} obstáculo(s) real(is) no caminho do plano ativo` }
       : input.unsweptLiquidityNearPrice
-        ? { relevant: true, reason: `liquidez não varrida a menos de ${fmtPct(LIQUIDITY_PROXIMITY_PCT)} do preço` }
-        : { relevant: false, reason: "nenhuma zona real no caminho do plano nem liquidez próxima do preço" },
+        ? { relevant: true, emphasis: "normal", reason: `liquidez não varrida a menos de ${fmtPct(LIQUIDITY_PROXIMITY_PCT)} do preço` }
+        : { relevant: false, emphasis: "normal", reason: "nenhuma zona real no caminho do plano nem liquidez próxima do preço" },
 
     structure_breaks: structureBreakRelevant
-      ? { relevant: true, reason: "rompimento BOS/CHOCH ainda dentro da janela real de decaimento (annotation-decay.ts)" }
-      : { relevant: false, reason: input.structureBreakAlpha === null ? "nenhum rompimento registrado" : "rompimento mais antigo esmaeceu (idade em candles)" },
+      ? { relevant: true, emphasis: structureBreakHighlight ? "highlight" : "normal", reason: "rompimento BOS/CHOCH ainda dentro da janela real de decaimento (annotation-decay.ts)" }
+      : { relevant: false, emphasis: "normal", reason: input.structureBreakAlpha === null ? "nenhum rompimento registrado" : "rompimento mais antigo esmaeceu (idade em candles)" },
 
     order_flow_heatmap: input.hasOrderBook
-      ? { relevant: true, reason: "livro de ofertas ao vivo real presente" }
-      : { relevant: false, reason: "sem livro de ofertas ao vivo real neste momento" },
+      ? { relevant: true, emphasis: "normal", reason: "livro de ofertas ao vivo real presente" }
+      : { relevant: false, emphasis: "normal", reason: "sem livro de ofertas ao vivo real neste momento" },
 
     volume_profile: input.volumeProfileNearPrice
-      ? { relevant: true, reason: `preço vivo a menos de ${fmtPct(VOLUME_PROFILE_PROXIMITY_PCT)} de um POC/HVN real` }
-      : { relevant: false, reason: "preço vivo longe de qualquer POC/HVN real" },
+      ? { relevant: true, emphasis: "normal", reason: `preço vivo a menos de ${fmtPct(VOLUME_PROFILE_PROXIMITY_PCT)} de um POC/HVN real` }
+      : { relevant: false, emphasis: "normal", reason: "preço vivo longe de qualquer POC/HVN real" },
 
     // Trade Plan Zone e Neural Market Aura são o núcleo do plano em si —
     // a diretiva pede menos POLUIÇÃO, não menos PLANO: seguem sua própria
@@ -157,44 +177,44 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
     // nunca ficam sujeitas ao gate de relevância (ficariam sem sentido
     // como "camada opcional" quando são o próprio resultado da decisão).
     trade_plan_zone: input.tradePlanActive
-      ? { relevant: true, reason: "plano real ativo (Conselho ou fallback do Núcleo) — nunca sujeito ao gate de relevância" }
-      : { relevant: false, reason: "nenhum plano real ativo agora" },
-    neural_market_aura: { relevant: true, reason: "ciclo de vida próprio (aura-lifecycle.ts) — nunca sujeito ao gate de relevância" },
+      ? { relevant: true, emphasis: "normal", reason: "plano real ativo (Conselho ou fallback do Núcleo) — nunca sujeito ao gate de relevância" }
+      : { relevant: false, emphasis: "normal", reason: "nenhum plano real ativo agora" },
+    neural_market_aura: { relevant: true, emphasis: "normal", reason: "ciclo de vida próprio (aura-lifecycle.ts) — nunca sujeito ao gate de relevância" },
 
     ema: emaRelevant
-      ? { relevant: true, reason: "referência de tendência central — mantida junto de VWAP/Nexus Line quando alguma leitura é direcional (ou sem leitura real ainda)" }
-      : { relevant: false, reason: "VWAP e Nexus Line neutros — sem leitura direcional real agora" },
+      ? { relevant: true, emphasis: "normal", reason: "referência de tendência central — mantida junto de VWAP/Nexus Line quando alguma leitura é direcional (ou sem leitura real ainda)" }
+      : { relevant: false, emphasis: "normal", reason: "VWAP e Nexus Line neutros — sem leitura direcional real agora" },
 
     trend_channel: trendChannelRelevant
-      ? { relevant: true, reason: `banda real estreita (${input.trendChannelBandwidthPct!.toFixed(2)}% <= ${TREND_CHANNEL_TIGHT_BANDWIDTH_PCT}%) — canal estruturalmente informativo` }
-      : { relevant: false, reason: input.trendChannelBandwidthPct === null ? "sem canal real detectado" : "banda real larga demais para ser um contexto estrutural forte agora" },
+      ? { relevant: true, emphasis: trendChannelHighlight ? "highlight" : "normal", reason: `banda real estreita (${input.trendChannelBandwidthPct!.toFixed(2)}% <= ${TREND_CHANNEL_TIGHT_BANDWIDTH_PCT}%) — canal estruturalmente informativo` }
+      : { relevant: false, emphasis: "normal", reason: input.trendChannelBandwidthPct === null ? "sem canal real detectado" : "banda real larga demais para ser um contexto estrutural forte agora" },
 
     vwap: vwapRelevant
-      ? { relevant: true, reason: `estado direcional real: ${input.vwapState}` }
-      : { relevant: false, reason: input.vwapState === null ? "sem leitura real de VWAP ainda" : "VWAP neutro" },
+      ? { relevant: true, emphasis: "normal", reason: `estado direcional real: ${input.vwapState}` }
+      : { relevant: false, emphasis: "normal", reason: input.vwapState === null ? "sem leitura real de VWAP ainda" : "VWAP neutro" },
 
     nexus_line: nexusLineRelevant
-      ? { relevant: true, reason: `estado direcional real: ${input.nexusLineState}` }
-      : { relevant: false, reason: input.nexusLineState === null ? "sem leitura real de Nexus Line ainda" : "Nexus Line neutro" },
+      ? { relevant: true, emphasis: "normal", reason: `estado direcional real: ${input.nexusLineState}` }
+      : { relevant: false, emphasis: "normal", reason: input.nexusLineState === null ? "sem leitura real de Nexus Line ainda" : "Nexus Line neutro" },
 
     cvd: input.orderflowTrendActive
-      ? { relevant: true, reason: "tendência real do fluxo (CVD) fortalecendo ou enfraquecendo, não estável" }
-      : { relevant: false, reason: "sem tendência real de fluxo detectável (estável ou dado insuficiente)" },
+      ? { relevant: true, emphasis: "normal", reason: "tendência real do fluxo (CVD) fortalecendo ou enfraquecendo, não estável" }
+      : { relevant: false, emphasis: "normal", reason: "sem tendência real de fluxo detectável (estável ou dado insuficiente)" },
 
     fibonacci: input.fibonacciNearPrice
-      ? { relevant: true, reason: `nível real da Matriz de Confluência a menos de ${fmtPct(FIBONACCI_PROXIMITY_PCT)} do preço` }
-      : { relevant: false, reason: "nenhum nível real de Fibonacci próximo do preço vivo" },
+      ? { relevant: true, emphasis: "normal", reason: `nível real da Matriz de Confluência a menos de ${fmtPct(FIBONACCI_PROXIMITY_PCT)} do preço` }
+      : { relevant: false, emphasis: "normal", reason: "nenhum nível real de Fibonacci próximo do preço vivo" },
 
     premium_discount: premiumDiscountRelevant
-      ? { relevant: true, reason: `zona real ${input.premiumDiscountZone} (fora do equilíbrio)` }
-      : { relevant: false, reason: input.premiumDiscountZone === null ? "sem dealing range real confirmado ainda" : "preço na zona de equilíbrio (EQUILIBRIUM) — sem vantagem de zona real" },
+      ? { relevant: true, emphasis: "normal", reason: `zona real ${input.premiumDiscountZone} (fora do equilíbrio)` }
+      : { relevant: false, emphasis: "normal", reason: input.premiumDiscountZone === null ? "sem dealing range real confirmado ainda" : "preço na zona de equilíbrio (EQUILIBRIUM) — sem vantagem de zona real" },
 
     harmonics: harmonicsRelevant
-      ? { relevant: true, reason: `fitScore real ${(input.harmonicBestFitScore! * 100).toFixed(0)}% >= limiar de relevância (${(HARMONIC_MIN_RELEVANT_FIT * 100).toFixed(0)}%)` }
-      : { relevant: false, reason: input.harmonicBestFitScore === null ? "nenhum padrão harmônico real vivo" : "padrão real abaixo do limiar de relevância" },
+      ? { relevant: true, emphasis: harmonicsHighlight ? "highlight" : "normal", reason: `fitScore real ${(input.harmonicBestFitScore! * 100).toFixed(0)}% >= limiar de relevância (${(HARMONIC_MIN_RELEVANT_FIT * 100).toFixed(0)}%)` }
+      : { relevant: false, emphasis: "normal", reason: input.harmonicBestFitScore === null ? "nenhum padrão harmônico real vivo" : "padrão real abaixo do limiar de relevância" },
 
     equal_highs_lows: input.unsweptLiquidityNearPrice
-      ? { relevant: true, reason: `EQH/EQL real não varrida a menos de ${fmtPct(LIQUIDITY_PROXIMITY_PCT)} do preço` }
-      : { relevant: false, reason: "nenhuma EQH/EQL real não varrida próxima do preço" },
+      ? { relevant: true, emphasis: "normal", reason: `EQH/EQL real não varrida a menos de ${fmtPct(LIQUIDITY_PROXIMITY_PCT)} do preço` }
+      : { relevant: false, emphasis: "normal", reason: "nenhuma EQH/EQL real não varrida próxima do preço" },
   };
 }

@@ -1615,16 +1615,23 @@ export function EnhancedChart_110_Percent({
       const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
       const long = tradePlan.direction === "LONG";
       const entryColor = "rgba(240, 208, 111, 0.75)";
+      // EPC FINAL §8 ("Objetos Inteligentes"): nomenclatura curta e
+      // padronizada pedida explicitamente — EN/ST/TP1/TP2/TP3 nos OBJETOS
+      // GRÁFICOS do canvas (aqui). A barra de comando (BarField "Entry
+      // Zone"/"Stop"/"Target", App.tsx) NÃO é tocada por este achado: já
+      // passou por um "Redesenho radical" anterior — pedido explícito do
+      // Operador — trocando "E/S/T" cramped por rótulos legíveis; reverter
+      // isso sem pedido novo desfaria uma decisão real já tomada.
       if (tradePlan.entry.low === tradePlan.entry.high) {
         if (Number.isFinite(tradePlan.entry.low)) {
-          out.push({ price: tradePlan.entry.low, text: `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor });
+          out.push({ price: tradePlan.entry.low, text: `EN ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor });
         }
       } else {
         if (Number.isFinite(tradePlan.entry.high)) {
-          out.push({ price: tradePlan.entry.high, text: `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor });
+          out.push({ price: tradePlan.entry.high, text: `EN ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor });
         }
         if (Number.isFinite(tradePlan.entry.low)) {
-          out.push({ price: tradePlan.entry.low, text: "ENTRY ZONE LOW", color: entryColor });
+          out.push({ price: tradePlan.entry.low, text: "EN ZONE LOW", color: entryColor });
         }
       }
       // Stop no preço EFETIVO (ratchet real, MESMA função pura do efeito da
@@ -1634,13 +1641,12 @@ export function EnhancedChart_110_Percent({
       if (Number.isFinite(effectiveStopPrice)) {
         const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
         const stopBase = hits >= 2
-          ? `STOP · TRILHADO (alvo ${hits - 1})`
+          ? `ST · TRILHADO (alvo ${hits - 1})`
           : hits > 0
-            ? `STOP · BREAK-EVEN (real)`
-            : `STOP · ${tradePlan.stop.basis}`;
+            ? `ST · BREAK-EVEN (real)`
+            : `ST · ${tradePlan.stop.basis}`;
         out.push({ price: effectiveStopPrice, text: stopHitNow ? `${stopBase} · BREACHED` : stopBase, color: "rgba(255, 0, 85, 0.75)" });
       }
-      const multi = tradePlan.targets.length > 1;
       // Continuidade §6: níveis apertados => rótulos compactos (WIDTH); o
       // resolvedor de colisão já cuida da separação VERTICAL. O stop
       // EFETIVO entra na medição (o ratchet pode encostá-lo num alvo real).
@@ -1650,7 +1656,9 @@ export function EnhancedChart_110_Percent({
         if (!Number.isFinite(target.price)) return;
         const reached = i < hits;
         const rr = tradePlan.riskRewardRatios[i];
-        const label = multi ? `TARGET ${i + 1}` : "TARGET";
+        // EPC FINAL §8: TP1/TP2/TP3 sempre numerado (mesmo com 1 alvo só) —
+        // a mesma convenção pedida, sem distinção "singular vs plural".
+        const label = `TP${i + 1}`;
         const distPct = p !== null && p > 0 ? ` · ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";
         const fusedTarget = decision?.plan?.targets[i];
         const etaLabel =
@@ -1697,17 +1705,18 @@ export function EnhancedChart_110_Percent({
         const breached = p !== null && (longFb ? p <= engineFallbackLevels.stop : p >= engineFallbackLevels.stop);
         out.push({
           price: engineFallbackLevels.stop,
-          text: breached ? "STOP · BREACHED" : "STOP",
+          text: breached ? "ST · BREACHED" : "ST",
           color: "rgba(255, 0, 85, 0.5)",
         });
       }
+      // EPC FINAL §8: TP1/TP2 sempre numerado, mesma convenção do Trade
+      // Plan do Conselho acima — zero distinção singular/plural no rótulo.
       if (Number.isFinite(engineFallbackLevels.target1)) {
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target1 : p <= engineFallbackLevels.target1);
         const rr = engineFallbackLevels.riskRewardRatio;
-        const label = engineFallbackLevels.target2 !== null ? "TARGET 1" : "TARGET";
         out.push({
           price: engineFallbackLevels.target1,
-          text: `${label}${strengthSuffix(engineFallbackLevels.target1Strength)}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}${reached ? " · REACHED" : ""}`,
+          text: `TP1${strengthSuffix(engineFallbackLevels.target1Strength)}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}${reached ? " · REACHED" : ""}`,
           color: "rgba(0, 255, 170, 0.5)",
         });
       }
@@ -1715,7 +1724,7 @@ export function EnhancedChart_110_Percent({
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target2 : p <= engineFallbackLevels.target2);
         out.push({
           price: engineFallbackLevels.target2,
-          text: `TARGET 2${strengthSuffix(engineFallbackLevels.target2Strength)}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,
+          text: `TP2${strengthSuffix(engineFallbackLevels.target2Strength)}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,
           color: "rgba(0, 255, 170, 0.35)",
         });
       }

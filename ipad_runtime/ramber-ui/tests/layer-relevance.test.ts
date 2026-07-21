@@ -17,6 +17,10 @@ import {
   FIBONACCI_PROXIMITY_PCT,
   HARMONIC_MIN_RELEVANT_FIT,
   TREND_CHANNEL_TIGHT_BANDWIDTH_PCT,
+  HARMONIC_HIGHLIGHT_FIT,
+  TREND_CHANNEL_HIGHLIGHT_BANDWIDTH_PCT,
+  STRUCTURE_BREAK_HIGHLIGHT_MIN_ALPHA,
+  LIQUIDITY_HIGHLIGHT_MIN_OBSTACLES,
   type LayerRelevanceInput,
 } from '../src/nexus/layer-relevance';
 
@@ -62,6 +66,61 @@ describe('computeLayerRelevance: completude — sempre devolve as 15 chaves, nun
       expect(typeof reading[id].relevant).toBe('boolean');
       expect(typeof reading[id].reason).toBe('string');
       expect(reading[id].reason.length).toBeGreaterThan(0);
+      expect(['normal', 'highlight']).toContain(reading[id].emphasis);
+    }
+  });
+});
+
+describe('EPC FINAL §3/§12: emphasis (destaque) — só sobre um gradiente REAL já presente no input, nunca um sinal fabricado', () => {
+  it('liquidity_zones: 1 obstáculo real = normal, >=2 obstáculos reais = highlight (mesmo obstacleZoneCount que já decide relevant)', () => {
+    const r1 = computeLayerRelevance({ ...BASE, tradePlanActive: true, obstacleZoneCount: 1 });
+    expect(r1.liquidity_zones.emphasis).toBe('normal');
+    const r2 = computeLayerRelevance({ ...BASE, tradePlanActive: true, obstacleZoneCount: LIQUIDITY_HIGHLIGHT_MIN_OBSTACLES });
+    expect(r2.liquidity_zones.emphasis).toBe('highlight');
+  });
+  it('liquidity_zones por proximidade (sem obstáculo real) nunca é highlight — não há gradiente real nesse caminho', () => {
+    const r = computeLayerRelevance({ ...BASE, unsweptLiquidityNearPrice: true });
+    expect(r.liquidity_zones.relevant).toBe(true);
+    expect(r.liquidity_zones.emphasis).toBe('normal');
+  });
+
+  it('structure_breaks: alpha alto (rompimento ainda fresco) = highlight; alpha baixo mas > 0 (esmaecendo) = normal', () => {
+    const fresh = computeLayerRelevance({ ...BASE, structureBreakAlpha: STRUCTURE_BREAK_HIGHLIGHT_MIN_ALPHA });
+    expect(fresh.structure_breaks.emphasis).toBe('highlight');
+    const fading = computeLayerRelevance({ ...BASE, structureBreakAlpha: STRUCTURE_BREAK_HIGHLIGHT_MIN_ALPHA - 0.5 });
+    expect(fading.structure_breaks.relevant).toBe(true);
+    expect(fading.structure_breaks.emphasis).toBe('normal');
+  });
+
+  it('trend_channel: banda MUITO estreita (metade do limiar de relevância) = highlight; só dentro do limiar = normal', () => {
+    const tight = computeLayerRelevance({ ...BASE, trendChannelBandwidthPct: TREND_CHANNEL_HIGHLIGHT_BANDWIDTH_PCT });
+    expect(tight.trend_channel.emphasis).toBe('highlight');
+    const loose = computeLayerRelevance({ ...BASE, trendChannelBandwidthPct: TREND_CHANNEL_TIGHT_BANDWIDTH_PCT });
+    expect(loose.trend_channel.relevant).toBe(true);
+    expect(loose.trend_channel.emphasis).toBe('normal');
+  });
+
+  it('harmonics: fitScore real muito alto (>= HARMONIC_HIGHLIGHT_FIT) = highlight; só acima do limiar de relevância = normal', () => {
+    const strong = computeLayerRelevance({ ...BASE, harmonicBestFitScore: HARMONIC_HIGHLIGHT_FIT });
+    expect(strong.harmonics.emphasis).toBe('highlight');
+    const justAbove = computeLayerRelevance({ ...BASE, harmonicBestFitScore: HARMONIC_MIN_RELEVANT_FIT });
+    expect(justAbove.harmonics.relevant).toBe(true);
+    expect(justAbove.harmonics.emphasis).toBe('normal');
+  });
+
+  it('camadas sem gradiente real (booleano puro) nunca ficam highlight — honesto, não fabricado', () => {
+    const r = computeLayerRelevance({
+      ...BASE,
+      volumeProfileNearPrice: true,
+      fibonacciNearPrice: true,
+      hasOrderBook: true,
+      orderflowTrendActive: true,
+      premiumDiscountZone: 'PREMIUM',
+      vwapState: 'BULLISH',
+      nexusLineState: 'BEARISH',
+    });
+    for (const id of ['volume_profile', 'fibonacci', 'order_flow_heatmap', 'cvd', 'premium_discount', 'vwap', 'nexus_line', 'ema', 'equal_highs_lows'] as const) {
+      expect(r[id].emphasis, `${id} não deveria ter highlight fabricado`).toBe('normal');
     }
   });
 });
