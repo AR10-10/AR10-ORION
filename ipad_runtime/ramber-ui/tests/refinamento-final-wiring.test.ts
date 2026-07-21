@@ -427,6 +427,20 @@ describe('§6: painel Síntese Operacional — 6 eixos derivados do MESMO NexusD
     expect(a).toContain('const synthRisk = nexusDecision ? deriveRiskState(nexusDecision) : null;');
     expect(a).toContain('value={`${synthRisk.state} — ${synthRisk.basis}`}');
   });
+
+  it('EPC MODO ELITE ABSOLUTO §10 (Recuperação de Recursos): engine.condition — a confirmação REAL que o Core Engine exige (required_confirmation/trigger_to_reevaluate) — era computada pelo engine-bridge e nunca exibida; agora entra na Síntese, fail-closed', () => {
+    const a = app();
+    // passthrough puro no objeto engine (mesmo padrão dos outros campos do realCycle)
+    expect(a).toContain('const condition = cycleOk ? (realCycle?.condition ?? null) : null;');
+    // exibida na Síntese Operacional, só quando há string real (nunca DADOS_INSUFICIENTES/null)
+    expect(a).toContain('{typeof engine?.condition === "string" && engine.condition.length > 0 && engine.condition !== "DADOS_INSUFICIENTES" && (');
+    expect(a).toContain('<ModuleStat label="Confirmação exigida (Núcleo)" value={engine.condition} />');
+  });
+
+  it('engine-bridge realmente computa e expõe condition (a matriz de setup real) — a fonte que estava presente mas sem consumidor', () => {
+    const bridge = read('../src/engine-bridge.ts');
+    expect(bridge).toContain("condition: typeof matrix.condition === 'string' ? matrix.condition : null,");
+  });
 });
 
 describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no gráfico', () => {

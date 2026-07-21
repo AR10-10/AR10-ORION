@@ -98,7 +98,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1688 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1690 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -1889,6 +1889,61 @@ run build` ok · grep do bundle de produção confirma `obstacleSuffix`/
 viewports CLEAN (iPad Mini incluído). Confirmação visual ao vivo do
 `⚠ N` sobre o alvo do Núcleo depende de sessão com rede real (sandbox
 sem egress).
+
+---
+
+### 6.29 EPC MODO ELITE ABSOLUTO §10 (Recuperação de Recursos):
+inteligência real ESCONDIDA restaurada — `engine.condition` (a
+confirmação que o Core Engine exige) nunca era exibida a ninguém
+
+O EPC re-emitido (MODO ELITE ABSOLUTO) trouxe uma ênfase nova e concreta:
+§10 "Recuperação de Recursos" — verificar se alguma inteligência se
+perdeu ou ficou escondida durante as evoluções, e restaurá-la na forma
+mais evoluída. A auditoria certa para isso: cruzar campo-a-campo o que o
+núcleo CALCULA (`realCycle`/`engine`) contra o que realmente chega à
+tela, procurando um valor real computado mas sem NENHUM consumidor.
+
+**Achado real (inteligência escondida, não especulação)**: `realCycle.condition`
+— computado e exposto pelo `engine-bridge.ts` (`condition: typeof
+matrix.condition === 'string' ? matrix.condition : null`, linha ~489)
+desde sempre — NUNCA era lido por nenhum consumidor (grep confirmou: zero
+usos fora da própria definição). O que esse campo É (rastreado até
+`trade-setup-matrix.js` → `research-engine.js`): a **confirmação REAL que
+o Core Engine exige** antes do setup valer — `required_confirmation` para
+LONG/SHORT (ex.: confirmação por volume real), ou `trigger_to_reevaluate`
+para WAIT (ex.: "Nova leitura após rompimento claro de suporte ou
+resistência reais"). É exatamente o tipo de inteligência que o §7 (Setup/
+Contexto), o §11 ("cada cálculo deve possuir representação visual") e a
+Regra Final ("se existe inteligência dentro do núcleo, ela deve aparecer")
+pedem — e estava invisível.
+
+**Restauração aplicada** (na forma mais evoluída, §10 — passthrough puro,
+zero matemática nova):
+- `engine.condition` (App.tsx) — passthrough do `realCycle.condition`,
+  mesmo padrão de `rationale`/`marketStructure`/todos os outros campos.
+- Nova linha na **Síntese Operacional** (aba ANALYSIS): "Confirmação
+  exigida (Núcleo)" logo após "Decisão" — só quando há string real
+  (fail-closed: `DADOS_INSUFICIENTES`/null/vazio some). A Síntese já era
+  o painel dos 6 eixos auditáveis do NexusDecision; a confirmação exigida
+  é o 7º dado real, do mesmo núcleo, no mesmo lugar.
+
+**Auditoria §10 mais ampla (registrada honestamente)**: os demais campos
+do núcleo mais relevantes foram verificados e TÊM representação —
+`forecast` (widget de horizontes), `lorentzian` (confluência),
+`moveToTargetPct` (3728), `timeframeConfluence`/`htfMarketStructureLabel`
+(widget Multi-Timeframe), `volatilityPct`/`marketRegime` (Market Regime),
+`rationale` (voiceSnapshot). `condition` era o único genuinamente órfão.
+Nenhuma FUNCIONALIDADE removida em evolução anterior foi encontrada (as
+migrações desta trilha — rótulos nativos → priceAxisLabels, BOS/CHOCH →
+eixo, compactações — todas preservaram o dado, nunca o descartaram; §6.19-
+6.28 documentam cada uma).
+
+**Verificação real**: `tsc --noEmit` limpo · **103 arquivos / 1690
+testes** (100%, +2: fiação do passthrough + exibição na Síntese, e a
+prova de que o engine-bridge já computava o campo) · `npm run build` ok ·
+grep do bundle confirma `"Confirmação exigida"` compilado · `audit-header-
+maxcontent.mjs` 11 viewports CLEAN. Confirmação visual ao vivo (a linha na
+aba ANALYSIS com uma leitura real) depende de sessão com rede real.
 
 ---
 

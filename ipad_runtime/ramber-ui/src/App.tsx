@@ -1403,6 +1403,16 @@ export default function App() {
     const target1Strength = cycleOk ? (realCycle?.target1Strength ?? null) : null;
     const target2Strength = cycleOk ? (realCycle?.target2Strength ?? null) : null;
     const confidence = cycleOk ? (realCycle?.confidence ?? null) : null;
+    // EPC MODO ELITE ABSOLUTO §10 (Recuperação de Recursos — inteligência
+    // escondida): `condition` é a CONFIRMAÇÃO REAL que o Core Engine exige
+    // antes do setup valer (required_confirmation, LONG/SHORT) ou o gatilho
+    // de reavaliação (trigger_to_reevaluate, WAIT) — trade-setup-matrix.js/
+    // research-engine.js. O engine-bridge já computava e expunha esse campo
+    // em realCycle.condition, mas NENHUM consumidor o lia: inteligência real
+    // do núcleo, nunca vista pelo Operador. Passthrough puro aqui (mesmo
+    // padrão de rationale/marketStructure), agora exibido na Síntese
+    // Operacional da aba ANALYSIS. "Se o núcleo calcula, o operador enxerga."
+    const condition = cycleOk ? (realCycle?.condition ?? null) : null;
     const marketStructure = cycleOk ? (realCycle?.marketStructure ?? null) : null;
     // Clean label for marketStructure's raw internal string, computed once
     // here instead of re-derived by every consumer (AssistantOrb's
@@ -1509,6 +1519,7 @@ export default function App() {
       target1Strength,
       target2Strength,
       confidence,
+      condition,
       marketStructure,
       marketStructureLabel,
       support,
@@ -5625,6 +5636,16 @@ function SecondaryModuleView({ tab }: { tab: string }) {
                 value={deriveOutcomeLabel(nexusDecision)}
                 tone={deriveOutcomeLabel(nexusDecision) === "LONG" ? "long" : deriveOutcomeLabel(nexusDecision) === "SHORT" ? "short" : "neutral"}
               />
+              {/* EPC MODO ELITE ABSOLUTO §10 (Recuperação de Recursos): a
+                  CONFIRMAÇÃO real que o Core Engine exige antes do setup valer
+                  (required_confirmation, LONG/SHORT) ou o gatilho de
+                  reavaliação (WAIT) — engine.condition, computado pelo
+                  engine-bridge desde sempre mas nunca exibido a ninguém.
+                  Inteligência real do núcleo, agora visível. Só quando há
+                  string real (fail-closed: DADOS_INSUFICIENTES/null some). */}
+              {typeof engine?.condition === "string" && engine.condition.length > 0 && engine.condition !== "DADOS_INSUFICIENTES" && (
+                <ModuleStat label="Confirmação exigida (Núcleo)" value={engine.condition} />
+              )}
             </>
           ) : (
             <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">
