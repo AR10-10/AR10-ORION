@@ -96,7 +96,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1614 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1621 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -819,6 +819,100 @@ cada caixa resolvida no cenário real de teste — nenhum par a menos de
 (hash de bundle mudou) · grep por string literal (`#050810`, cor de
 texto exclusiva deste plugin) confirma presença no bundle de produção
 (grep por nome de identificador não serve — minificação renomeia).
+
+---
+
+### 6.14 Diretriz de Refinamento Visual — cabeçalho, Trend Channel na
+lateral do eixo, e dois achados reais de captura de tela (z-index nativo
+da lib + title nativo poluindo VWAP/NL/EMA)
+
+Diretriz do Operador em duas partes: (A) auditar o cabeçalho superior
+("muito carregado", "elementos competindo pelo mesmo espaço") e corrigir
+via layout/responsividade — nunca removendo informação; (B) tirar a
+legenda do Trend Channel do canto superior esquerdo do gráfico (onde a
+correção anterior, §6.11/6.13, a tinha deixado como um `<div>` solto) e
+integrá-la à mesma linguagem visual do eixo de preço (R1/NL/VWAP/EMA/S1),
+com posicionamento anti-colisão real — a diretriz descreve, quase
+literal, o próprio `PriceLabelStackPlugin` do §6.13.
+
+**Parte A — cabeçalho: auditoria primeiro, "não fazer faxina cega"**
+(exigência explícita da própria diretriz). `scripts/audit-header-
+maxcontent.mjs` (11 viewports, conteúdo de pior caso real: preço longo,
+badge "LONG", subtítulo "DADOS_INSUFICIENTES · AGUARDANDO ENTRADA",
+"ELEVADO — Heat EXTREMO · R:R do TP1 abaixo do piso 1:2" no painel de
+risco, etc.) rodou **CLEAN nos 11 viewports** antes de qualquer mudança —
+confirmado de novo, ao final, contra o build já com as mudanças da Parte
+B (também CLEAN). Leitura direta de `TopBar` (App.tsx) confirma que o
+cabeçalho já usa `min-w-0`, `shrink-0`, `gap` responsivo e `px` por
+breakpoint — as técnicas que a diretriz pede. Conclusão honesta: sob
+teste real de pior caso já existente e rigoroso, o cabeçalho não tem os
+defeitos descritos — nenhuma reescrita foi forçada só para "fazer algo".
+Isto não fecha o assunto de forma permanente (nenhuma entrega é a versão
+final) — é a leitura honesta de HOJE, com a auditoria automatizada
+disponível para qualquer sessão futura reconfirmar.
+
+**Parte B — Trend Channel na lateral**: `trendChannelInfo` ganhou
+`midPrice` (a ponta real da linha mid, já computada, zero cálculo novo).
+O `<div className="absolute left-2 top-2 ...">` foi removido por inteiro;
+em seu lugar, `priceAxisLabels` (mesmo array que já alimenta S1/R1/VWAP/
+NL/EMA/último preço) ganhou uma entrada condicional (`visibility.
+trend_channel && trendChannelInfo`) com o texto real (`TREND · OLS
+{windowSize} · ±{multiplicador}σ · {direção} {midPrice}`) e a MESMA cor
+real já usada pela linha mid do canal. Reuso total do sistema do
+§6.13 — zero segunda implementação de anti-colisão.
+
+**Achado real #1 (harness Playwright, síntese de candles pós-fix)**: com
+o Trend Channel reintegrado, um cluster denso de 7 rótulos (TREND/R1/
+preço/VWAP/S1/NL/EMA) expôs um bug de CSS que o §6.13 não tinha pego —
+`PriceLabelStackPlugin` estava em `z-index:auto`; a lightweight-charts
+desenha seus PRÓPRIOS canvases internos (painel + gutter do eixo) com
+`z-index:1`/`z-index:2` explícitos. Por regra do CSS, z-index positivo
+SEMPRE pinta por cima de z-index:auto — **não importa a ordem no DOM**.
+Resultado real observado: o tick nativo do eixo (ex.: "64800.00",
+desenhado pela lib em intervalos redondos, independente de qualquer
+série) vazava por cima da caixa opaca de um rótulo nosso sempre que os
+dois caíam perto (ex.: R1 real ≈64807 vs. tick nativo 64800.00). Corrigido
+com `zIndex: 5` explícito no `<canvas>` do plugin (folga sobre o maior
+valor observado da lib, 2). O teste de wiring que já existia (`price-
+label-stack-plugin.test.ts`, "é o ÚLTIMO elemento do array de overlays")
+só provava ordem de DOM — condição NECESSÁRIA mas, como este achado
+provou, NUNCA suficiente sozinha; ganhou um teste irmão que verifica o
+z-index explícito.
+
+**Achado real #2 (mesmo harness, zoom no cluster)**: mesmo depois do fix
+de z-index, um crop de alta resolução mostrou "EMA 21" fantasma
+sobrepondo a caixa de S1. Ground-truth via `console.log` temporário no
+draw loop (removido antes do commit, mesma disciplina do §6.13) provou
+que os 7 rótulos RESOLVIDOS estavam perfeitamente espaçados (20px exatos
+entre todos, `MIN_GAP_PX`) — o "EMA 21" fantasma não vinha do nosso
+overlay. Causa raiz: `vwapSeriesRef`/`nexusLineSeriesRef`/`emaSeriesRef`
+tinham `title` NÃO-vazio (`"VWAP"`, `"NL •"`, `"EMA"` na criação,
+reescrito para `` `VWAP ${glifo}` ``/`` `NL ${glifo}` ``/`` `EMA
+${período}` `` a cada mudança de estado/período) — o MESMO achado que já
+tinha motivado `title:""` nas 3 séries do Trend Channel no §6.11 (a lib
+desenha `title` no eixo mesmo com `lastValueVisible:false`), só que nunca
+generalizado para VWAP/NL/EMA na época. O título nativo renderiza na
+posição NATURAL da série (sem nenhuma consciência da cascata anti-
+colisão) — por isso "flutuava" livre e colidia com qualquer rótulo
+resolvido que passasse perto. Corrigido: `title:""` fixo na criação das 3
+séries; os 3 efeitos de estado/período (`applyOptions`) pararam de
+reescrever `title` — só `color`/dado real muda agora. A identidade
+completa (glifo, período, valor) já chegava ao Operador inteira via
+`priceAxisLabels`; o título nativo era 100% redundante, nunca a única
+fonte.
+
+**Verificação**: `tsc --noEmit` limpo · `npx vitest run` **103
+arquivos/1621 testes** (+7 sobre o §6.13: describe reescrito do Trend
+Channel na lateral, 2 testes novos de title:"" em VWAP/NL/EMA, 1 teste
+novo de z-index explícito) · `npm run build` ok · `audit-header-
+maxcontent.mjs` CLEAN nos 11 viewports (antes E depois das mudanças da
+Parte B) · harness Playwright isolado (candles sintéticos, nunca no
+caminho ao vivo) com `support`/`resistance` propositalmente próximos do
+preço real — o mesmo pior caso "vários níveis reais disputando a mesma
+faixa vertical" da captura original do Operador (§6.13) — confirmando
+visualmente as 7 etiquetas (TREND/R1/preço/VWAP/S1/NL/EMA) legíveis, sem
+sobreposição, sem texto fantasma, sem vazamento do eixo nativo, canto
+superior esquerdo do gráfico vazio (legenda antiga removida por completo).
 
 ---
 

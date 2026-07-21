@@ -218,37 +218,59 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
   });
 });
 
-describe('Diretriz Restauração/Inteligência Visual: identidade do Trend Channel restaurada SEM voltar ao eixo de preço', () => {
+describe('Diretriz de Refinamento Visual §5: Trend Channel reposicionado para a lateral do eixo de preço (mesmo sistema anti-colisão de R1/NL/VWAP/EMA/S1)', () => {
   const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
 
-  it('a legenda NUNCA usa title de série/price-line — é um <div> HTML solto, fora do sistema de eixo da lib que causou a poluição original', () => {
+  it('o <div> solto no canto superior (identidade v1, commit anterior) foi removido — nunca mais um título flutuando fora do eixo', () => {
     const c = chart();
-    expect(c).toContain('const [trendChannelInfo, setTrendChannelInfo] = useState<{ direction: TrendChannelDirection; windowSize: number } | null>(null);');
-    expect(c).toContain('setTrendChannelInfo(reading ? { direction: reading.direction, windowSize: reading.windowSize } : null);');
-    // regressão: as 3 séries continuam com title vazio (mesma trava de
-    // tests/chart-layers-panel-wiring.test.ts acima) — a legenda não
-    // reverte a correção real de eixo poluído, só devolve a identidade
-    // por outro caminho.
+    expect(c).not.toContain('left-2 top-2');
+    expect(c).not.toContain('{visibility.trend_channel && trendChannelInfo && (');
+  });
+
+  it('trendChannelInfo agora carrega midPrice (ponta real da linha mid) — o dado que ancora o rótulo no eixo', () => {
+    const c = chart();
+    expect(c).toContain('const [trendChannelInfo, setTrendChannelInfo] = useState<{ direction: TrendChannelDirection; windowSize: number; midPrice: number } | null>(null);');
+  });
+
+  it('midPrice vem da ÚLTIMA leitura real da linha mid do motor — nunca um valor hardcoded ou derivado de outra série', () => {
+    const c = chart();
+    expect(c).toContain('const midTail = reading && reading.mid.length > 0 ? reading.mid[reading.mid.length - 1].value : null;');
+    expect(c).toContain('setTrendChannelInfo(reading && midTail !== null ? { direction: reading.direction, windowSize: reading.windowSize, midPrice: midTail } : null);');
+  });
+
+  it('regressão: as 3 séries do Trend Channel continuam com title vazio — o rótulo não volta a poluir o eixo NATIVO da lib', () => {
+    const c = chart();
     const midIdx = c.indexOf('const trendChannelMid = chart.addSeries(LineSeries, {');
     const lowerIdx = c.indexOf('const trendChannelLower = chart.addSeries(LineSeries, {');
     expect(c.slice(midIdx, lowerIdx).match(/title: ""/g)).not.toBeNull();
   });
 
-  it('a legenda só aparece com leitura real (fail-closed) E a camada trend_channel visível — nunca sem origem', () => {
+  it('a identidade do canal entra em priceAxisLabels — mesmo array/sistema anti-colisão de R1/NL/VWAP/EMA/último preço, nunca uma segunda implementação', () => {
     const c = chart();
-    const idx = c.indexOf('{visibility.trend_channel && trendChannelInfo && (');
-    expect(idx, 'JSX da legenda não encontrado').toBeGreaterThan(-1);
-  });
-
-  it('conteúdo vem de valores REAIS do motor (windowSize/direction/TREND_CHANNEL_STDDEV_MULTIPLIER) — nunca um número hardcoded novo', () => {
-    const c = chart();
-    expect(c).toContain('TREND · OLS {trendChannelInfo.windowSize} · ±{TREND_CHANNEL_STDDEV_MULTIPLIER}σ · {trendChannelInfo.direction}');
-  });
-
-  it('pointer-events-none: a legenda nunca captura um gesto de pan/zoom do gráfico', () => {
-    const c = chart();
-    const idx = c.indexOf('{visibility.trend_channel && trendChannelInfo && (');
+    const idx = c.indexOf('if (visibility.trend_channel && trendChannelInfo) {');
+    expect(idx, 'push condicional em priceAxisLabels não encontrado').toBeGreaterThan(-1);
     const block = c.slice(idx, idx + 400);
-    expect(block).toContain('pointer-events-none');
+    expect(block).toContain('price: trendChannelInfo.midPrice');
+    expect(block).toContain('text: `TREND · OLS ${trendChannelInfo.windowSize} · ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ · ${trendChannelInfo.direction} ${trendChannelInfo.midPrice.toFixed(2)}`');
+    // cor = a MESMA cor real da linha mid (definida na criação da série,
+    // acima) — nunca uma cor nova inventada só para o rótulo.
+    expect(block).toContain('color: "rgba(148, 163, 184, 0.55)"');
+  });
+
+  it('fail-closed: só entra em priceAxisLabels com leitura real E a camada trend_channel visível — nunca sem origem', () => {
+    const c = chart();
+    const idx = c.indexOf('if (visibility.trend_channel && trendChannelInfo) {');
+    expect(idx).toBeGreaterThan(-1);
+    // o push fica DENTRO do useMemo de priceAxisLabels, antes do
+    // `return out;` final — nunca um caminho paralelo fora do array real
+    // que alimenta PriceLabelStackPlugin.
+    const returnIdx = c.indexOf('return out;\n  }, [support, resistance,', idx);
+    expect(returnIdx, 'push do Trend Channel não está dentro do useMemo de priceAxisLabels').toBeGreaterThan(idx);
+  });
+
+  it('priceAxisLabels recalcula sempre que visibility.trend_channel ou trendChannelInfo mudam — nunca uma etiqueta desatualizada', () => {
+    const c = chart();
+    const depsIdx = c.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, nlLastValue, nexusLineState, emaLastValue, activeEmaPeriod, data, visibility.trend_channel, trendChannelInfo]);');
+    expect(depsIdx, 'dependency array de priceAxisLabels não encontrado ou não inclui trend_channel/trendChannelInfo').toBeGreaterThan(-1);
   });
 });

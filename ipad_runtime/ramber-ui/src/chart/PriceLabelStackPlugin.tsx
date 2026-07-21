@@ -178,7 +178,21 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      // Achado real via harness Playwright (Diretriz de Refinamento Visual
+      // §5/§6): a lightweight-charts desenha seus PRÓPRIOS canvases
+      // internos (painel principal + gutter do eixo de preço) com
+      // z-index:1/z-index:2 explícitos. Sem um z-index explícito aqui, ESTE
+      // canvas cai no z-index:auto — e por regra do CSS (stacking context),
+      // z-index positivo SEMPRE pinta por cima de z-index:auto, não importa
+      // a ordem no DOM. Resultado real observado: o próprio ticker nativo
+      // do eixo (ex.: "64800.00", desenhado pela lib em intervalos
+      // "redondos" independente de qualquer série) vazava por cima da
+      // caixa opaca de um rótulo nosso sempre que os dois calhavam perto
+      // (ex.: R1 ~64807 vs. tick nativo 64800.00) — exatamente a colisão
+      // visual que este plugin existe para eliminar. z-index bem acima do
+      // maior valor usado pela lib (2) garante que este overlay SEMPRE
+      // pinta por último, cobrindo o tick nativo por completo.
+      style={{ width: "100%", height: "100%", zIndex: 5 }}
     />
   );
 }

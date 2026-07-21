@@ -550,10 +550,18 @@ describe('Consolidação Final §20-§25: VWAP com estados/histerese SEM tocar a
     expect(a).toContain('"VWAP aguardando volume real da sessão UTC (fail-closed, nunca um valor fabricado)."');
   });
 
-  it('o gráfico aplica cor/etiqueta de estado via applyOptions — a série VWAP continua a mesma (§20/§21)', () => {
+  it('o gráfico aplica cor de estado via applyOptions — a série VWAP continua a mesma (§20/§21)', () => {
     const c = chart();
-    expect(c).toContain('vwapSeriesRef.current.applyOptions({ color: VWAP_STATE_COLOR[s], title: `VWAP ${LINE_STATE_GLYPH[s]}` });');
+    expect(c).toContain('vwapSeriesRef.current.applyOptions({ color: VWAP_STATE_COLOR[s] });');
     expect(c).toContain('const series = computeSessionVwapSeries(data);'); // matemática intocada
+  });
+
+  it('Diretriz de Refinamento Visual §5/§6: applyOptions NUNCA mais reescreve title — title:"" fixo na criação, glifo de estado só via priceAxisLabels', () => {
+    const c = chart();
+    expect(c).not.toContain('title: `VWAP ${LINE_STATE_GLYPH[s]}`');
+    const idx = c.indexOf('const vwapSeries = chart.addSeries(LineSeries, {');
+    const closeIdx = c.indexOf('vwapSeriesRef.current = vwapSeries;');
+    expect(c.slice(idx, closeIdx)).toContain('title: "",');
   });
 });
 
@@ -562,8 +570,19 @@ describe('Consolidação Final §26-§30: Nexus Line + confluência informativa'
     const c = chart();
     expect(c).toContain('const nl = computeNexusLineSeries(data);');
     expect(c).toContain('nexusLineSeriesRef.current.setData(nl.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));');
-    // fio de seda + título com glifo de estado
-    expect(c).toContain('nexusLineSeriesRef.current.applyOptions({ color: NL_STATE_COLOR[s], title: `NL ${LINE_STATE_GLYPH[s]}` });');
+    // fio de seda — cor de estado real via applyOptions (Diretriz de
+    // Refinamento Visual §5/§6: title NUNCA mais reescrito aqui, ver teste
+    // dedicado abaixo — o glifo de estado chega ao Operador só via
+    // priceAxisLabels/PriceLabelStackPlugin agora).
+    expect(c).toContain('nexusLineSeriesRef.current.applyOptions({ color: NL_STATE_COLOR[s] });');
+  });
+
+  it('Diretriz de Refinamento Visual §5/§6: NL também nunca mais reescreve title — mesma correção da VWAP (achado real: title nativo colidia com S1/EMA na posição NATURAL, sem resolução de colisão)', () => {
+    const c = chart();
+    expect(c).not.toContain('title: `NL ${LINE_STATE_GLYPH[s]}`');
+    const idx = c.indexOf('const nexusLineSeries = chart.addSeries(LineSeries, {');
+    const closeIdx = c.indexOf('nexusLineSeriesRef.current = nexusLineSeries;');
+    expect(c.slice(idx, closeIdx)).toContain('title: "",');
   });
 
   it('§30: veredito de confluência VWAP×NL×Decision computado no App e exposto pelo contexto (2 listas)', () => {

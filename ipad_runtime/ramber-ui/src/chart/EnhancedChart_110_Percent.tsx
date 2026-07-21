@@ -415,12 +415,17 @@ export function EnhancedChart_110_Percent({
   // Diretriz Restauração/Inteligência Visual (achado real de auditoria):
   // "Achados da captura real do Operador" (commit anterior) apagou o title
   // das 3 séries do Trend Channel porque a lib desenha title no EIXO mesmo
-  // com lastValueVisible:false — remoção válida (eixo poluído), mas a
-  // identidade do canal ficou sem NENHUM destino visual, violando "se a
+  // com lastValueVisible:false — remoção válida (eixo nativo poluído), mas
+  // a identidade do canal ficou sem NENHUM destino visual, violando "se a
   // informação antiga era útil, reabilitar de forma mais profissional".
-  // Esta leitura NUNCA vai para o eixo — só alimenta a legenda em <div>
-  // abaixo (JSX), fora do sistema de price-scale da lib.
-  const [trendChannelInfo, setTrendChannelInfo] = useState<{ direction: TrendChannelDirection; windowSize: number } | null>(null);
+  // Diretriz de Refinamento Visual §5 (revisão desta leitura): um <div>
+  // solto no canto superior não é "tratar o Trend Channel como camada do
+  // eixo de preço" — a identidade volta para a lateral via
+  // priceAxisLabels/PriceLabelStackPlugin abaixo, o MESMO sistema
+  // anti-colisão de R1/NL/VWAP/EMA/S1 (nunca o title/last-value-label
+  // NATIVO da lib, que é a fonte real da poluição original). midPrice é o
+  // preço real ancorado (ponta da linha mid) que alimenta esse rótulo.
+  const [trendChannelInfo, setTrendChannelInfo] = useState<{ direction: TrendChannelDirection; windowSize: number; midPrice: number } | null>(null);
   // Achado real de captura de tela do Operador (BTC/USDT 1H, preço
   // formando perto de R1): os "last value label"/"axis label" NATIVOS de
   // VWAP/NL/EMA/S1/R1/último preço não têm nenhuma consciência uns dos
@@ -551,7 +556,15 @@ export function EnhancedChart_110_Percent({
       // por PriceLabelStackPlugin — nunca mais colide com R1/NL/preço.
       lastValueVisible: false,
       crosshairMarkerVisible: false,
-      title: "VWAP",
+      // Achado real via harness Playwright (Diretriz de Refinamento Visual
+      // §5/§6): title:"" aqui — MESMO achado/MESMA correção do Trend
+      // Channel abaixo (a lib desenha `title` no eixo mesmo com
+      // lastValueVisible:false). O efeito de estado logo adiante
+      // (applyOptions ao mudar vwapState) também para de tocar em title —
+      // a identidade "VWAP" já vem inteira do priceAxisLabels/
+      // PriceLabelStackPlugin, nunca duplicada por um título nativo solto
+      // na posição NATURAL (sem resolução de colisão) da série.
+      title: "",
     });
     vwapSeriesRef.current = vwapSeries;
     // Diretriz Camada de Decisão Profissional, item 1: EMA como série
@@ -566,7 +579,7 @@ export function EnhancedChart_110_Percent({
       // Mesmo achado/mesma correção do VWAP acima.
       lastValueVisible: false,
       crosshairMarkerVisible: false,
-      title: "EMA",
+      title: "",
     });
     emaSeriesRef.current = emaSeries;
     // Consolidação Final §29: Nexus Line — "extremamente fina, elegante,
@@ -581,7 +594,7 @@ export function EnhancedChart_110_Percent({
       // Mesmo achado/mesma correção do VWAP acima.
       lastValueVisible: false,
       crosshairMarkerVisible: false,
-      title: "NL •",
+      title: "",
     });
     nexusLineSeriesRef.current = nexusLineSeries;
     // Auditoria do painel do gráfico: Linear Regression Channel — cor
@@ -870,25 +883,37 @@ export function EnhancedChart_110_Percent({
   }, [data]);
 
   // Consolidação Final §21-§22 (VWAP) e §29 (NL): estados visuais aplicados
-  // in place via applyOptions — cor institucional + seta discreta no
-  // título. A MATEMÁTICA das séries acima fica intocada (§20); a histerese
-  // (§22 "nunca trocar de estado a cada candle") já aconteceu no App.
+  // in place via applyOptions — cor institucional real (a MATEMÁTICA das
+  // séries acima fica intocada, §20; a histerese, §22 "nunca trocar de
+  // estado a cada candle", já aconteceu no App). Diretriz de Refinamento
+  // Visual §5/§6 (achado real via harness Playwright): este efeito ANTES
+  // também escrevia `title` a cada mudança de estado — reintroduzia a
+  // MESMA poluição de eixo que o Trend Channel corrigiu (a lib desenha
+  // title na posição NATURAL da série, sem nenhuma consciência da
+  // resolução de colisão do PriceLabelStackPlugin, e por isso volta e
+  // meia colidia com S1/R1/EMA vizinhos). O glifo de estado (↑/↓/•) já
+  // chega ao Operador via priceAxisLabels (`VWAP ${glifo} ${valor}` /
+  // `NL ${glifo} ${valor}`, useMemo abaixo) — nunca duas fontes da mesma
+  // informação.
   useEffect(() => {
     if (!vwapSeriesRef.current) return;
     const s: DirectionalLineState = vwapState ?? "NEUTRAL";
-    vwapSeriesRef.current.applyOptions({ color: VWAP_STATE_COLOR[s], title: `VWAP ${LINE_STATE_GLYPH[s]}` });
+    vwapSeriesRef.current.applyOptions({ color: VWAP_STATE_COLOR[s] });
   }, [vwapState]);
   useEffect(() => {
     if (!nexusLineSeriesRef.current) return;
     const s: DirectionalLineState = nexusLineState ?? "NEUTRAL";
-    nexusLineSeriesRef.current.applyOptions({ color: NL_STATE_COLOR[s], title: `NL ${LINE_STATE_GLYPH[s]}` });
+    nexusLineSeriesRef.current.applyOptions({ color: NL_STATE_COLOR[s] });
   }, [nexusLineState]);
 
   // Diretriz Camada de Decisão Profissional, item 1: EMA recomputada do
   // MESMO array real de candles (zero segunda fonte de dado), sempre que
   // o histórico ou o período selecionado no painel Camadas do Gráfico
-  // mudar. Título carrega o período real ("EMA 21") — nunca um rótulo
-  // genérico que dessincronizaria do que está de fato desenhado.
+  // mudar. O período real ("EMA 21") chega ao Operador via priceAxisLabels
+  // (useMemo abaixo, fonte: activeEmaPeriod) — nunca via `title` nativo da
+  // série (mesmo achado/mesma correção de VWAP/NL acima e Trend Channel
+  // abaixo: title:"" na criação, nunca reescrito aqui, para não reabrir a
+  // poluição de eixo na posição NATURAL/sem-colisão da série).
   const activeEmaPeriod = emaPeriod ?? DEFAULT_EMA_PERIOD;
   useEffect(() => {
     if (!emaSeriesRef.current) return;
@@ -896,7 +921,6 @@ export function EnhancedChart_110_Percent({
       data.map((c) => ({ time: c.time, close: c.close })),
       activeEmaPeriod,
     );
-    emaSeriesRef.current.applyOptions({ title: `EMA ${activeEmaPeriod}` });
     emaSeriesRef.current.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
     setEmaLastValue(series.length > 0 ? series[series.length - 1].value : null);
   }, [data, activeEmaPeriod]);
@@ -922,7 +946,8 @@ export function EnhancedChart_110_Percent({
     trendChannelMidRef.current.setData((reading?.mid ?? []).map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
     trendChannelUpperRef.current.setData((reading?.upper ?? []).map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
     trendChannelLowerRef.current.setData((reading?.lower ?? []).map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
-    setTrendChannelInfo(reading ? { direction: reading.direction, windowSize: reading.windowSize } : null);
+    const midTail = reading && reading.mid.length > 0 ? reading.mid[reading.mid.length - 1].value : null;
+    setTrendChannelInfo(reading && midTail !== null ? { direction: reading.direction, windowSize: reading.windowSize, midPrice: midTail } : null);
   }, [data]);
 
   // Camadas do Gráfico: mesmo padrão de "ema" — esconder alterna visible
@@ -1356,8 +1381,22 @@ export function EnhancedChart_110_Percent({
         color: lastCandle.close >= lastCandle.open ? "#00ffaa" : "#ff0055",
       });
     }
+    // Diretriz de Refinamento Visual §5: o Trend Channel volta a ser uma
+    // camada identificável do eixo de preço — mesmo tratamento de R1/NL/
+    // VWAP/EMA/S1 acima, mesmo sistema anti-colisão (nunca mais um <div>
+    // solto competindo com o cabeçalho ou flutuando sem relação com
+    // nenhum nível real). Respeita visibility.trend_channel como sempre
+    // (a camada continua controlável no painel); ancorado na PONTA real
+    // da linha mid (o mesmo preço que a própria linha termina).
+    if (visibility.trend_channel && trendChannelInfo) {
+      out.push({
+        price: trendChannelInfo.midPrice,
+        text: `TREND · OLS ${trendChannelInfo.windowSize} · ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ · ${trendChannelInfo.direction} ${trendChannelInfo.midPrice.toFixed(2)}`,
+        color: "rgba(148, 163, 184, 0.55)",
+      });
+    }
     return out;
-  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, nlLastValue, nexusLineState, emaLastValue, activeEmaPeriod, data]);
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, nlLastValue, nexusLineState, emaLastValue, activeEmaPeriod, data, visibility.trend_channel, trendChannelInfo]);
 
   return (
     <div className="absolute inset-0">
@@ -1374,21 +1413,6 @@ export function EnhancedChart_110_Percent({
         />
       )}
       <div ref={containerRef} className="absolute inset-0" />
-      {/* Diretriz Restauração/Inteligência Visual: identidade do Trend
-         Channel restaurada SEM voltar ao eixo de preço (ver comentário do
-         state trendChannelInfo acima) — <div> HTML solto no canto, nunca
-         um title de série/price-line. Some por completo sem leitura real
-         (fail-closed) ou com a camada desligada — nunca aparece sem
-         origem. Zero interação (pointer-events-none): nunca captura um
-         gesto de pan/zoom que era pro chart. */}
-      {visibility.trend_channel && trendChannelInfo && (
-        <div
-          className="absolute left-2 top-2 pointer-events-none select-none font-mono whitespace-nowrap"
-          style={{ fontSize: "9px", color: "rgba(148, 163, 184, 0.65)", letterSpacing: "0.02em" }}
-        >
-          TREND · OLS {trendChannelInfo.windowSize} · ±{TREND_CHANNEL_STDDEV_MULTIPLIER}σ · {trendChannelInfo.direction}
-        </div>
-      )}
       {/* V-MAX Fase 0.7: FVG/Order Blocks (bullish|bearish) — mesmo dado real
          de computeSmcZones, já filtrado (!mitigated) e limitado em contagem
          rio acima (App.tsx/ChartWidget), agora como área colorida real

@@ -122,6 +122,30 @@ describe('EnhancedChart_110_Percent: os "last value label"/"axis label" NATIVOS 
     expect(s.slice(nlIdx, nlIdx + 350)).toContain('lastValueVisible: false,');
   });
 
+  it('Diretriz de Refinamento Visual §5/§6 (achado real via harness Playwright): VWAP/EMA/NL também têm title:"" fixo — lastValueVisible:false SOZINHO não bastava', () => {
+    // A lib desenha `title` no eixo (posição NATURAL da série, sem
+    // NENHUMA consciência da resolução de colisão do PriceLabelStackPlugin)
+    // mesmo com lastValueVisible:false — o MESMO achado que já motivou
+    // title:"" nas 3 séries do Trend Channel (teste dedicado abaixo).
+    // Antes desta correção, VWAP/NL/EMA reescreviam um title não-vazio a
+    // cada mudança de estado/período (`VWAP ${glifo}`, `NL ${glifo}`,
+    // `EMA ${período}`) — visto colidir de verdade com S1 no harness
+    // (ex.: "EMA 21" fantasma sobre a caixa de S1) porque o title nativo
+    // ignora completamente a cascata anti-colisão.
+    const s = chart();
+    const vwapIdx = s.indexOf('const vwapSeries = chart.addSeries(LineSeries, {');
+    expect(s.slice(vwapIdx, vwapIdx + 1100)).toContain('title: "",');
+    const emaIdx = s.indexOf('const emaSeries = chart.addSeries(LineSeries, {');
+    expect(s.slice(emaIdx, emaIdx + 350)).toContain('title: "",');
+    const nlIdx = s.indexOf('const nexusLineSeries = chart.addSeries(LineSeries, {');
+    expect(s.slice(nlIdx, nlIdx + 350)).toContain('title: "",');
+    // nenhum dos 3 efeitos de estado/período pode reescrever title nunca
+    // mais — só a EMA period, o VWAP state e o NL state effects.
+    expect(s).not.toContain('title: `VWAP ${LINE_STATE_GLYPH[s]}`');
+    expect(s).not.toContain('title: `NL ${LINE_STATE_GLYPH[s]}`');
+    expect(s).not.toContain('title: `EMA ${activeEmaPeriod}`');
+  });
+
   it('S1/R1: axisLabelVisible false nas duas price lines (era true) — a LINHA horizontal continua desenhada, só o tag do eixo muda de dono', () => {
     const s = chart();
     const supportIdx = s.indexOf('supportLineRef.current = seriesRef.current.createPriceLine({');
@@ -148,12 +172,31 @@ describe('EnhancedChart_110_Percent: monta PriceLabelStackPlugin como o overlay 
     expect(s).toContain('labels={priceAxisLabels}');
   });
 
-  it('é o ÚLTIMO elemento do array de overlays (depois de TradePlanZonePlugin) — nunca fica atrás de nada', () => {
+  it('é o ÚLTIMO elemento do array de overlays (depois de TradePlanZonePlugin) — condição NECESSÁRIA, mas ver teste de z-index abaixo para a condição SUFICIENTE', () => {
     const s = chart();
     const tradePlanIdx = s.lastIndexOf('<TradePlanZonePlugin');
     const priceLabelIdx = s.lastIndexOf('<PriceLabelStackPlugin');
     expect(tradePlanIdx).toBeGreaterThan(-1);
     expect(priceLabelIdx).toBeGreaterThan(tradePlanIdx);
+  });
+
+  it('Diretriz de Refinamento Visual §5/§6 (achado real via harness Playwright): z-index explícito no canvas — ordem no DOM SOZINHA não bastava', () => {
+    // A lightweight-charts desenha seus PRÓPRIOS canvases internos (painel
+    // principal + gutter do eixo de preço) com z-index:1/z-index:2
+    // explícitos. Um canvas nosso em z-index:auto, mesmo sendo o ÚLTIMO no
+    // DOM (teste acima), ainda PERDE desses — por regra do CSS, z-index
+    // positivo sempre pinta por cima de z-index:auto, DOM order não
+    // importa nesse caso. Achado real: o próprio ticker nativo do eixo
+    // (ex.: "64800.00") vazava por cima de uma caixa opaca nossa sempre
+    // que colidiam em Y. z-index explícito > 2 (maior valor usado pela
+    // lib) é a condição que FAZ este overlay realmente pintar por último.
+    const p = plugin();
+    const idx = p.indexOf('<canvas');
+    const closeIdx = p.indexOf('/>', idx);
+    const block = p.slice(idx, closeIdx);
+    const zIndexMatch = block.match(/zIndex:\s*(\d+)/);
+    expect(zIndexMatch, 'zIndex explícito não encontrado no <canvas> do PriceLabelStackPlugin').not.toBeNull();
+    expect(Number(zIndexMatch![1])).toBeGreaterThan(2);
   });
 
   it('nunca sujeito a um toggle de camada — os rótulos que ele substitui (S1/R1/VWAP/NL/EMA/preço) sempre foram sempre-visíveis por padrão, sem entrada em CHART_LAYER_IDS', () => {
