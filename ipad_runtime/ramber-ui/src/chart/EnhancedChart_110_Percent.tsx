@@ -250,8 +250,13 @@ interface EnhancedChartProps {
     stop: number;
     target1: number;
     target1Strength: { label: "FORTE" | "FRACA"; touches: number } | null;
+    // EPC MODO ELITE §4: contagem REAL de obstáculos estruturais no caminho
+    // até cada alvo (obstacleZonesInPath, App.tsx) — o Núcleo não tem painel
+    // próprio, então o rótulo do gráfico é o único lugar dessa contagem.
+    target1ObstacleCount?: number | null;
     target2: number | null;
     target2Strength: { label: "FORTE" | "FRACA"; touches: number } | null;
+    target2ObstacleCount?: number | null;
     riskRewardRatio: number | null;
   } | null;
   // Neural Market Aura: visual translation of the SAME real Trade Plan +
@@ -1660,6 +1665,12 @@ export function EnhancedChart_110_Percent({
       // strengthSuffix também alinhado ao estilo tight de levelTitle()
       // (S1/R1 acima) — espaço, nunca "·", mesmo padrão em todo o eixo.
       const strengthSuffix = (s: { label: "FORTE" | "FRACA"; touches: number } | null) => (s ? ` ${s.label}` : "");
+      // EPC MODO ELITE §4 ("Obstáculos estruturais" na lista permanente): o
+      // Núcleo não tem painel próprio (o Conselho tem o ANALYSIS), então o
+      // rótulo é o único lugar dessa contagem — sufixo compacto "⚠ N"
+      // (mesmo glifo ⚠ da zona destacada no LiquidityZonesPlugin), só quando
+      // há obstáculo real no caminho. Zero quando o caminho está livre.
+      const obstacleSuffix = (n: number | null | undefined) => (typeof n === "number" && n > 0 ? ` ⚠ ${n}` : "");
       if (Number.isFinite(engineFallbackLevels.stop)) {
         const breached = p !== null && (longFb ? p <= engineFallbackLevels.stop : p >= engineFallbackLevels.stop);
         out.push({
@@ -1674,7 +1685,7 @@ export function EnhancedChart_110_Percent({
         const label = engineFallbackLevels.target2 !== null ? "TARGET 1" : "TARGET";
         out.push({
           price: engineFallbackLevels.target1,
-          text: `${label}${strengthSuffix(engineFallbackLevels.target1Strength)}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${reached ? " · REACHED" : ""}`,
+          text: `${label}${strengthSuffix(engineFallbackLevels.target1Strength)}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}${reached ? " · REACHED" : ""}`,
           color: "rgba(0, 255, 170, 0.5)",
         });
       }
@@ -1682,7 +1693,7 @@ export function EnhancedChart_110_Percent({
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target2 : p <= engineFallbackLevels.target2);
         out.push({
           price: engineFallbackLevels.target2,
-          text: `TARGET 2${strengthSuffix(engineFallbackLevels.target2Strength)}${reached ? " · REACHED" : ""}`,
+          text: `TARGET 2${strengthSuffix(engineFallbackLevels.target2Strength)}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,
           color: "rgba(0, 255, 170, 0.35)",
         });
       }

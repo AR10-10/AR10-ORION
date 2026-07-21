@@ -6011,17 +6011,31 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
     // estruturais REAIS no caminho até cada alvo do Núcleo. null quando o
     // ciclo não tem entrada real (fail-closed).
     const entry = typeof engine?.entry === "number" && Number.isFinite(engine.entry) ? engine.entry : null;
+    // EPC MODO ELITE §4 ("Obstáculos estruturais" na lista do Trade Plan
+    // permanente): contagem REAL por alvo, via a MESMA obstacleZonesInPath
+    // (trade-plan.ts) que o plano do Conselho usa — zero segundo cálculo.
+    // O Núcleo, diferente do Conselho, NÃO tem painel próprio (ANALYSIS),
+    // então o rótulo do gráfico é o único lugar onde essa contagem chega ao
+    // Operador — por isso entra aqui (o rótulo do Conselho não mostra ⚠N
+    // porque o painel dele já mostra). null quando falta entrada real.
+    const structZones = tradePlanStructureZones ?? [];
+    const obstacleCountTo = (targetPrice: number | null): number | null =>
+      entry !== null && targetPrice !== null && Number.isFinite(targetPrice)
+        ? obstacleZonesInPath(structZones, { low: entry, high: entry, basis: "" }, targetPrice, dir === "LONG").length
+        : null;
     return {
       direction: dir,
       entry,
       stop,
       target1,
       target1Strength: engine?.target1Strength ?? null,
+      target1ObstacleCount: obstacleCountTo(target1),
       target2,
       target2Strength: engine?.target2Strength ?? null,
+      target2ObstacleCount: obstacleCountTo(target2),
       riskRewardRatio: typeof engine?.riskRewardRatio === "number" && Number.isFinite(engine.riskRewardRatio) ? engine.riskRewardRatio : null,
     };
-  }, [chartTradePlan, engine?.direction, engine?.entry, engine?.stop, engine?.target, engine?.target2, engine?.target1Strength, engine?.target2Strength, engine?.riskRewardRatio]);
+  }, [chartTradePlan, tradePlanStructureZones, engine?.direction, engine?.entry, engine?.stop, engine?.target, engine?.target2, engine?.target1Strength, engine?.target2Strength, engine?.riskRewardRatio]);
   // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
   // estrutural"): união das zonas REAIS (tradePlanStructureZones, as MESMAS
   // que já geram targets[i].obstacleCount acima na store) que ficam no

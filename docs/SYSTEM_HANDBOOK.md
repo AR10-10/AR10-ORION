@@ -98,7 +98,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1687 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1688 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -1843,7 +1843,52 @@ indisponível aqui.
 (`obstacleCount` no rótulo/painel) continua só no plano do Conselho; o
 fallback do Núcleo ganhou a ênfase VISUAL da zona mas não um número
 `⚠ N` próprio no rótulo — próximo passo natural se o Operador quiser a
-contagem explícita também no fallback.
+contagem explícita também no fallback. **(Resolvido em §6.28.)**
+
+---
+
+### 6.28 EPC MODO ELITE §4: contagem numérica `⚠ N` de obstáculos no
+rótulo do fallback do Núcleo — fecha a pendência do §6.27
+
+O EPC re-emitido (MODO ELITE) lista explicitamente "Obstáculos
+estruturais" entre o que o Trade Plan permanente sempre deve mostrar
+(§4). O §6.27 fechou a ênfase VISUAL da zona (borda ⚠) para o fallback
+do Núcleo mas deixou registrada a pendência: a CONTAGEM numérica por
+alvo continuava só no plano do Conselho. Chave da decisão de design:
+o Conselho tem um painel próprio (ANALYSIS/ModulePanel) onde a contagem
+`obstacleCount` vive — por isso o rótulo do gráfico do Conselho NÃO
+mostra `⚠ N` (evita duplicar). O Núcleo NÃO tem painel próprio — o
+rótulo do gráfico é o ÚNICO lugar onde essa contagem chega ao Operador.
+Então adicionar `⚠ N` ao rótulo do Núcleo não é inconsistência, é o
+oposto: dá ao Núcleo o mesmo acesso à informação que o Conselho já
+tinha, no único canal disponível.
+
+**Correção aplicada** (aditiva, zero matemática nova — Regra de Ouro 4):
+- `engineFallbackLevels` (App.tsx) ganhou `target1ObstacleCount`/
+  `target2ObstacleCount`, computados por `obstacleCountTo(price)` — um
+  wrapper fino sobre a MESMA `obstacleZonesInPath(...).length`
+  (`trade-plan.ts`) que o Conselho e o `chartObstacleZones` já usam.
+  `tradePlanStructureZones` entrou nas deps do `useMemo`.
+- `EnhancedChart_110_Percent.tsx`: prop `engineFallbackLevels` ganhou os
+  dois campos opcionais; o rótulo de cada alvo do Núcleo agora anexa
+  `obstacleSuffix(n)` = `" ⚠ N"` só quando `N > 0` (caminho livre não
+  polui), mesmo glifo ⚠ da zona destacada — leitura instantânea (EPC §6)
+  de "há N obstáculos estruturais entre o preço atual e este alvo".
+
+Resultado: os 3 pontos de obstáculo agora sincronizados no fallback do
+Núcleo — a borda ⚠ da zona (§6.27), o número `⚠ N` no rótulo do alvo
+(esta entrega), ambos da MESMA `obstacleZonesInPath` real. "Se o núcleo
+calcula, o operador enxerga" (Regra Suprema do EPC MODO ELITE) — a
+contagem, que o Target Tracker do Núcleo permite derivar, deixou de
+ficar escondida.
+
+**Verificação real**: `tsc --noEmit` limpo · **103 arquivos / 1688
+testes** (100%, +1: fiação do `⚠ N` no rótulo + tipos da prop) · `npm
+run build` ok · grep do bundle de produção confirma `obstacleSuffix`/
+`" ⚠ ${n}"` realmente compilados · `audit-header-maxcontent.mjs` 11
+viewports CLEAN (iPad Mini incluído). Confirmação visual ao vivo do
+`⚠ N` sobre o alvo do Núcleo depende de sessão com rede real (sandbox
+sem egress).
 
 ---
 

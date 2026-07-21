@@ -481,12 +481,16 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     const s = chart();
     const idx = s.indexOf('engineFallbackLevels?: {');
     expect(idx, 'prop engineFallbackLevels não encontrada na interface').toBeGreaterThan(-1);
-    const block = s.slice(idx, idx + 400);
+    const block = s.slice(idx, idx + 750);
     expect(block).toContain('direction: "LONG" | "SHORT";');
     expect(block).toContain('stop: number;');
     expect(block).toContain('target1: number;');
     expect(block).toContain('target2: number | null;');
     expect(block).toContain('riskRewardRatio: number | null;');
+    // EPC MODO ELITE §4: contagem de obstáculos por alvo (opcional, o
+    // Núcleo não tem painel próprio — o rótulo é o único lugar).
+    expect(block).toContain('target1ObstacleCount?: number | null;');
+    expect(block).toContain('target2ObstacleCount?: number | null;');
   });
 
   it('linhas próprias (refs isoladas de tradePlanLinesRef/stopLineRef/targetLinesArrayRef) — Fio de Seda: lineWidth 1, Solid, nunca tracejado', () => {
@@ -529,7 +533,17 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     expect(block).toContain('text: breached ? "STOP · BREACHED" : "STOP",');
     expect(block).toContain('color: "rgba(255, 0, 85, 0.5)",');
     expect(block).toContain('const label = engineFallbackLevels.target2 !== null ? "TARGET 1" : "TARGET";');
-    expect(block).toContain('text: `TARGET 2${strengthSuffix(engineFallbackLevels.target2Strength)}${reached ? " · REACHED" : ""}`,');
+    expect(block).toContain('text: `TARGET 2${strengthSuffix(engineFallbackLevels.target2Strength)}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,');
+  });
+
+  it('EPC MODO ELITE §4: rótulos dos alvos do Núcleo carregam ⚠ N (obstáculos estruturais reais no caminho) — só quando N>0, mesmo glifo ⚠ da zona destacada; o Núcleo não tem painel, então o rótulo é o único lugar dessa contagem', () => {
+    const s = chart();
+    const idx = s.indexOf('const priceAxisLabels = useMemo');
+    const end = s.indexOf('return out;', idx);
+    const block = s.slice(idx, end);
+    expect(block).toContain('const obstacleSuffix = (n: number | null | undefined) => (typeof n === "number" && n > 0 ? ` ⚠ ${n}` : "");');
+    expect(block).toContain('${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}');
+    expect(block).toContain('${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}');
   });
 
   it('strengthSuffix alinhado ao estilo tight de levelTitle() (S1/R1) — espaço, nunca "·", mesmo padrão de rótulo em todo o eixo', () => {
@@ -592,7 +606,7 @@ describe('EPC §5/§6 (continuação): App.tsx computa engineFallbackLevels a pa
   it('lê exatamente os campos reais já expostos por engine-bridge.ts (stop/target/target2/target1Strength/target2Strength/riskRewardRatio) — zero cálculo novo aqui, nunca um nome de campo inventado', () => {
     const s = app();
     const idx = s.indexOf('const engineFallbackLevels = useMemo');
-    const block = s.slice(idx, idx + 2100);
+    const block = s.slice(idx, idx + 3000);
     expect(block).toContain('const stop = engine?.stop;');
     expect(block).toContain('const target1 = engine?.target;');
     expect(block).not.toContain('const target1 = engine?.target1;');
@@ -602,6 +616,11 @@ describe('EPC §5/§6 (continuação): App.tsx computa engineFallbackLevels a pa
     // EPC §5: entrada real do Núcleo (preço atual) — referência de
     // caminho para chartObstacleZones contar os obstáculos estruturais.
     expect(block).toContain('const entry = typeof engine?.entry === "number" && Number.isFinite(engine.entry) ? engine.entry : null;');
+    // EPC MODO ELITE §4: contagem por alvo via a MESMA obstacleZonesInPath
+    // (trade-plan.ts) — zero segundo cálculo.
+    expect(block).toContain('obstacleZonesInPath(structZones, { low: entry, high: entry, basis: "" }, targetPrice, dir === "LONG").length');
+    expect(block).toContain('target1ObstacleCount: obstacleCountTo(target1),');
+    expect(block).toContain('target2ObstacleCount: obstacleCountTo(target2),');
   });
 
   // Execução real (não só padrão de fonte): reproduz o MESMO shape do
