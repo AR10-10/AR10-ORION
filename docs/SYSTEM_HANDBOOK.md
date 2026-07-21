@@ -96,7 +96,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (101 arquivos, 1564 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (101 arquivos, 1576 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -602,6 +602,147 @@ rodada desde #12 a tocar código de produção real do gráfico, não só
 laboratório); grep mecânico confirma as 3 evoluções presentes no bundle
 de produção; harness Playwright isolado confirma visualmente, descartado
 antes do commit.
+
+---
+
+### 6.12 Diretriz Suprema de Evolução Integrativa — auditoria total
+(Fase 1-2) + evolução escopada (Fase 3-5) + relatório honesto (Fase 8)
+
+Diretriz de 17 seções cobrindo o ecossistema inteiro (dados→snapshot→
+memória→indicadores→estrutura→confluência→BIAS→SETUP→ENTRY→risco→
+cenários→trade plan→projeção→readability→gráfico→track record→
+aprendizado→recalibração), com ordem explícita de execução (Auditar →
+Mapear → Reabilitar → Evoluir → Adicionar → Integrar → Validar →
+Reportar). Dois agentes de auditoria em paralelo responderam perguntas
+factuais específicas antes de qualquer código — resultado abaixo,
+seguindo a mesma estrutura de relatório que a diretriz pede.
+
+**O QUE JÁ EXISTIA (confirmado, nada a construir)**:
+- Camada "OPERATION" (§3 da diretriz): `NexusOperationalState` já existe
+  em `decision-layer.ts` — `OBSERVANDO`/`PREPARANDO`/`CONFIRMANDO`/
+  `EXECUTAVEL`/`GERENCIANDO`/`ENCERRADO`, já em produção (subtítulo do
+  badge de header). Nomes literais diferem um pouco dos exemplos da
+  diretriz (`PREPARANDO` vs `PREPARANDO_ENTRADA`), mas os 6 conceitos
+  batem 1:1. `NexusRiskState`/`NexusConfluenceState`
+  (`operational-readability.ts`) também já existem — respondem "qual é o
+  risco?"/"qual é a confluência?" (item 16 da diretriz) sem nada novo.
+- Simetria LONG/SHORT em BIAS/SETUP/ENTRY: já auditada e confirmada real
+  em §6.11.
+- Liquidações "exchange-wide": auditado como suspeita de staleness, mas
+  o próprio label ("Forced Liquidations · Binance Futures... Exchange-
+  wide, not BTC-only") já se declara honestamente como feed de mercado
+  inteiro — não é um bug, é o desenho original.
+
+**O QUE ESTAVA OCULTO (achado real, corrigido nesta rodada)**:
+- Funding rate, Open Interest e os dois cross-exchange checks (Binance×
+  Bybit, Binance×OKX) NÃO eram resetados ao trocar de ativo — mostravam
+  o valor do ativo ANTERIOR por até 8s reais (pior caso do retry de
+  `fetchDerivatives`) enquanto preço/candles/order book já mostravam o
+  novo. `App.tsx`, efeito `[selectedAsset]`.
+
+**O QUE FOI REABILITADO**: nada nesta rodada específica — a Fase 1
+(auditoria) já tinha reabilitado o Trend Channel/obstáculos/projeção em
+§6.11; esta rodada não achou nenhuma segunda regressão real além da já
+corrigida.
+
+**O QUE FOI EVOLUÍDO**:
+1. **Staleness de funding/OI/cross-exchange** corrigida — mesmos valores
+   iniciais dos `useState`, nunca um sentinel novo inventado (o mesmo
+   "carregando" honesto que o primeiro boot já usa).
+2. **Motor de Cenários v2 — "Future Path Map" (§5/§6 da diretriz)**:
+   achado real de auditoria — `scenario-engine.ts` só tinha UM alvo por
+   caminho (Path A/B), sem ladder (TP1/TP2/TP3) e sem invalidação
+   explícita; busca completa no repositório (código, testes, docs,
+   QUARANTINE.md) confirmou zero implementação parcial em qualquer outro
+   lugar. Evoluído para até `MAX_SCENARIO_TARGETS=3` níveis reais por
+   caminho (mesma convenção de `MAX_TARGETS` em `trade-plan.ts`) mais
+   `invalidation`. A invalidação é **matematicamente sempre igual ao
+   alvo mais próximo do caminho OPOSTO** (zero cálculo novo: o próximo
+   nível real abaixo, que já é o alvo do Path SHORT, é a mesma leitura
+   estrutural de "onde a tese do Path LONG perde a estrutura que a
+   sustentava") — por isso o gráfico deliberadamente NÃO desenha uma
+   price line própria para invalidação: seria uma segunda linha no MESMO
+   preço já real na tela, a "linha fantasma" redundante que a diretriz
+   proíbe (item 7/15). A informação continua real e auditável (contrato
+   + `formatScenarioPathLabel`, "· inv NNNN" nos painéis de texto).
+   `SCENARIO_CONTRACT_VERSION` 1→2. Alvos extras desenham mais apagados
+   por rank (`TARGET_ALPHA_FALLOFF = [1, 0.65, 0.4]`) — nunca todos com o
+   mesmo peso visual. Achado colateral: `App.tsx` tinha a MESMA lógica de
+   formatação de texto duplicada em 2 pontos (painel "Scenario Paths" e
+   `CouncilWidget`) — unificada em `formatScenarioPathLabel`, exportada
+   do próprio motor.
+
+**O QUE FOI ADICIONADO**:
+- **"Modo Inteligência"** (§8 da diretriz): 3º preset do painel Camadas
+  do Gráfico — achado real de auditoria: só existiam 2 (Operacional/
+  Auditoria). Definido como o COMPLEMENTO do Operacional: todas as
+  camadas de leitura estrutural/contexto (FVG/OB, BOS/CHOCH, heatmap de
+  liquidez, volume profile, EMA, trend channel) SEM as duas que só fazem
+  sentido com um plano ATIVO (trade_plan_zone/neural_market_aura) — mesmo
+  mecanismo aditivo, nenhum cálculo novo, nenhuma camada nova.
+
+**O QUE FOI RECUSADO e POR QUÊ**:
+- **"Evolution Engine" formal e persistido** (§13 da diretriz —
+  observar→identificar→medir→detectar→propor→testar→validar→promover com
+  rollback): auditoria confirma que só existe `compare-runs.js`
+  (comparação pura, sem persistência) e `src/replay/` (walk-forward,
+  explicitamente sem estado persistido) — nenhum ledger versionado em
+  lugar nenhum do repositório. Já avaliado e deliberadamente adiado em
+  §6.10 (Fase 6 da diretriz anterior); reafirmado aqui pela mesma razão:
+  desenhar um ledger vazio antes de a Fase 2 real (captura de histórico)
+  existir arrisca migrar depois. Recusa mantida, não uma nova.
+- **Recalibração de memória/aprendizado por regime/setup** (§9/§10 da
+  diretriz — "o sistema deve aprender quais combinações funcionam
+  melhor"): continua `DADOS_INSUFICIENTES` pela mesma razão já
+  documentada em §6.10 — a cadeia quebra em CAPTURA, nenhum histórico
+  real existe para aprender nada com evidência auditável. A própria
+  diretriz pede isso ("só mostrar taxa de acerto quando houver amostra
+  real auditável suficiente") — a recusa é literalmente seguir a regra
+  que ela mesma escreveu.
+- **Pesquisa externa profunda (§12)**: nenhuma técnica nomeada específica
+  foi identificada como faltante durante esta auditoria que justificasse
+  pesquisa externa dedicada — a diretriz também não pede pesquisa cega,
+  só quando "houver ambiente de pesquisa autorizado" para uma lacuna
+  concreta já identificada.
+- **9 elementos do gráfico sem toggle individual** e o teto `.slice(0,3)`
+  do desenho vs. contagem sem teto do `obstacleCount`: já documentados em
+  §6.11 como pendências honestas para rodada dedicada — não revisados de
+  novo aqui (auditados uma vez, não precisam de segunda auditoria sem
+  novo dado).
+
+**TESTES**: 32 novos/atualizados (staleness: 3 fixture; Scenario Engine
+v2: 15 execução real, reescrito por completo para o novo contrato +
+`formatScenarioPathLabel`; chart wiring: ladder/invalidation/preset,
+source-pattern). Todos os consumidores de `ScenarioProjection` migrados
+— `tsc --noEmit` limpo confirma que nenhum acesso a `.target` (removido)
+sobrou em lugar nenhum do código (a mudança de tipo teria quebrado a
+build se algum consumidor tivesse escapado da migração).
+
+**BUILD**: `npm run build` ok, hash de bundle mudou (esperado — produção
+real tocada de novo). Grep mecânico confirma `TARGET_ALPHA_FALLOFF`/
+"Modo Inteligência"/`CHART_LAYERS_INTELLIGENCE_PRESET`/
+`formatScenarioPathLabel` presentes no bundle de produção.
+
+**PERFORMANCE**: nenhuma mudança de complexidade — o Motor de Cenários
+já iterava os níveis reais para achar o mais próximo (`O(n log n)` do
+sort); agora fatia até 3 do mesmo array já ordenado (`O(1)` adicional).
+Zero novo timer/polling/loop.
+
+**LIMITAÇÕES REAIS**: a Fase 2 real do backtest (captura de histórico)
+continua não executada neste sandbox (zero egress de rede a exchange) —
+todo aprendizado/recalibração real permanece `DADOS_INSUFICIENTES` até
+isso mudar, independente de quantas rodadas de evolução visual/estrutural
+aconteçam em cima do que já existe.
+
+**PRÓXIMO PASSO**: decisão do Operador sobre superfície de UI + execução
+real da captura (mesmo próximo passo de §6.10/§6.11 — continua sendo o
+único bloqueio real para todo o eixo de aprendizado da diretriz).
+
+**Verificação**: `tsc --noEmit` limpo; `vitest run` 101 arquivos/1576
+testes; `npm run build` ok (hash de bundle mudou); grep mecânico confirma
+as evoluções desta rodada no bundle; harness Playwright isolado confirma
+visualmente o ladder de cenários (3 linhas, opacidade decrescente por
+rank), descartado antes do commit.
 
 ---
 

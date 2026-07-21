@@ -1,8 +1,11 @@
-// nexus-scenario-engine.test.ts — V-MAX Fase 2: trava o Motor de Cenários.
-// Alvos = níveis reais mais próximos; pesos = massa de opinião do conselho
-// (nunca probabilidade — o rótulo `basis` é permanente e testado).
+// nexus-scenario-engine.test.ts — V-MAX Fase 2 + v2 (Diretriz Suprema de
+// Evolução Integrativa §5/§6, "Future Path Map"): trava o Motor de
+// Cenários. Alvos = níveis reais mais próximos (até MAX_SCENARIO_TARGETS,
+// mais perto primeiro); invalidação = nível real mais próximo do lado
+// OPOSTO; pesos = massa de opinião do conselho (nunca probabilidade — o
+// rótulo `basis` é permanente e testado).
 import { describe, it, expect } from 'vitest';
-import { buildScenarioProjection, type ScenarioLevel } from '../src/nexus/scenario-engine';
+import { buildScenarioProjection, formatScenarioPathLabel, MAX_SCENARIO_TARGETS, type ScenarioLevel } from '../src/nexus/scenario-engine';
 import type { CouncilDecision } from '../src/nexus/council';
 
 const council = (over: Partial<CouncilDecision> = {}): CouncilDecision => ({
@@ -30,11 +33,37 @@ describe('buildScenarioProjection: geografia real de níveis + opinião real do 
     expect(buildScenarioProjection(Number.NaN, levels, council())).toBeNull();
   });
 
-  it('alvo de cada caminho é o nível real MAIS PRÓXIMO daquele lado', () => {
+  it('targets[0] de cada caminho é o nível real MAIS PRÓXIMO daquele lado, ordenado por distância', () => {
     const p = buildScenarioProjection(100, levels, council(), 5)!;
     expect(p.pathA.direction).toBe('LONG'); // postura do conselho
-    expect(p.pathA.target).toEqual({ price: 110, sourceKind: 'EQH' }); // 110 < 118
-    expect(p.pathB.target).toEqual({ price: 95, sourceKind: 'VP_POC' }); // 95 > 90
+    expect(p.pathA.targets).toEqual([
+      { price: 110, sourceKind: 'EQH' },
+      { price: 118, sourceKind: 'SR_RESISTANCE_1' },
+    ]); // 110 < 118, mais perto primeiro
+    expect(p.pathB.targets).toEqual([
+      { price: 95, sourceKind: 'VP_POC' },
+      { price: 90, sourceKind: 'EQL' },
+    ]); // 95 > 90, mais perto primeiro
+  });
+
+  it('invalidação de cada caminho é o alvo mais próximo do lado OPOSTO — a mesma leitura estrutural, zero cálculo novo', () => {
+    const p = buildScenarioProjection(100, levels, council())!;
+    expect(p.pathA.invalidation).toEqual({ price: 95, sourceKind: 'VP_POC' }); // = pathB.targets[0]
+    expect(p.pathB.invalidation).toEqual({ price: 110, sourceKind: 'EQH' }); // = pathA.targets[0]
+    expect(p.pathA.invalidation).toEqual(p.pathB.targets[0]);
+    expect(p.pathB.invalidation).toEqual(p.pathA.targets[0]);
+  });
+
+  it('teto real de MAX_SCENARIO_TARGETS por caminho — nunca inventa um 4º nível projetado além do que os motores mapearam', () => {
+    const manyAbove: ScenarioLevel[] = [
+      { price: 105, sourceKind: 'FIB_38.2' },
+      { price: 110, sourceKind: 'EQH' },
+      { price: 115, sourceKind: 'SR_RESISTANCE_1' },
+      { price: 120, sourceKind: 'VP_HVN' }, // 4º nível real — deve ficar de fora
+    ];
+    const p = buildScenarioProjection(100, manyAbove, council())!;
+    expect(p.pathA.targets).toHaveLength(MAX_SCENARIO_TARGETS);
+    expect(p.pathA.targets.map((t) => t.price)).toEqual([105, 110, 115]);
   });
 
   it('pesos vêm da massa real do pool (long/short), nunca inventados', () => {
@@ -46,7 +75,7 @@ describe('buildScenarioProjection: geografia real de níveis + opinião real do 
   it('conselho SHORT inverte o Path A (direção primária real)', () => {
     const p = buildScenarioProjection(100, levels, council({ stance: 'SHORT' }))!;
     expect(p.pathA.direction).toBe('SHORT');
-    expect(p.pathA.target?.sourceKind).toBe('VP_POC');
+    expect(p.pathA.targets[0]?.sourceKind).toBe('VP_POC');
     expect(p.pathA.opinionWeight).toBeCloseTo(0.2, 12);
   });
 
@@ -54,25 +83,79 @@ describe('buildScenarioProjection: geografia real de níveis + opinião real do 
     const p = buildScenarioProjection(100, levels, council({ riskGated: true, stance: 'ABSTAIN', opinionMass: null }))!;
     expect(p.pathA.opinionWeight).toBeNull();
     expect(p.pathB.opinionWeight).toBeNull();
-    expect(p.pathA.target).not.toBeNull();
+    expect(p.pathA.targets.length).toBeGreaterThan(0);
   });
 
   it('sem conselho nenhum => pesos null, caminhos ainda mapeiam os níveis reais', () => {
     const p = buildScenarioProjection(100, levels, null)!;
     expect(p.pathA.opinionWeight).toBeNull();
-    expect(p.pathA.target?.price).toBe(110);
+    expect(p.pathA.targets[0]?.price).toBe(110);
   });
 
-  it('lado sem nenhum nível real => target null honesto (nunca um alvo projetado)', () => {
+  it('lado sem nenhum nível real => targets [] honesto (nunca um alvo projetado) e invalidation null quando o lado oposto TAMBÉM está vazio', () => {
     const onlyBelow: ScenarioLevel[] = [{ price: 90, sourceKind: 'EQL' }];
     const p = buildScenarioProjection(100, onlyBelow, council())!;
-    expect(p.pathA.target).toBeNull(); // nada acima
-    expect(p.pathB.target?.price).toBe(90);
+    expect(p.pathA.targets).toEqual([]); // nada acima
+    expect(p.pathA.invalidation).toEqual({ price: 90, sourceKind: 'EQL' }); // invalidação de A = alvo de B
+    expect(p.pathB.targets[0]?.price).toBe(90);
+    expect(p.pathB.invalidation).toBeNull(); // nada acima para invalidar B
   });
 
-  it('o rótulo de honestidade é permanente no contrato', () => {
+  it('o rótulo de honestidade é permanente no contrato; contractVersion 2 (v2: targets[]/invalidation)', () => {
     const p = buildScenarioProjection(100, levels, council())!;
     expect(p.basis).toBe('COUNCIL_OPINION_MASS_NOT_MARKET_PROBABILITY');
-    expect(p.contractVersion).toBe(1);
+    expect(p.contractVersion).toBe(2);
+  });
+});
+
+describe('formatScenarioPathLabel: formatador único (Diretriz Suprema §5/§6) — reaproveitado por App.tsx em 2 pontos antes duplicados', () => {
+  it('sem alvo real: "no real level", nunca um preço fabricado', () => {
+    const label = formatScenarioPathLabel({ direction: 'LONG', targets: [], invalidation: null, opinionWeight: null });
+    expect(label).toBe('LONG → no real level');
+  });
+
+  it('1 alvo real: preço + fonte, sem sufixo "+N" (só há 1)', () => {
+    const label = formatScenarioPathLabel({
+      direction: 'LONG',
+      targets: [{ price: 110, sourceKind: 'EQH' }],
+      invalidation: null,
+      opinionWeight: null,
+    });
+    expect(label).toBe('LONG → 110 (EQH)');
+  });
+
+  it('3 alvos reais: sufixo "+2" honesto (quantos outros existem além do mais próximo)', () => {
+    const label = formatScenarioPathLabel({
+      direction: 'SHORT',
+      targets: [
+        { price: 95, sourceKind: 'VP_POC' },
+        { price: 92, sourceKind: 'FIB_61.8' },
+        { price: 90, sourceKind: 'EQL' },
+      ],
+      invalidation: { price: 110, sourceKind: 'EQH' },
+      opinionWeight: 0.42,
+    });
+    expect(label).toBe('SHORT → 95 (VP_POC) +2 · inv 110 · opinion 42%');
+  });
+
+  it('invalidação null nunca aparece no texto (sem "· inv" pendurado)', () => {
+    const label = formatScenarioPathLabel({
+      direction: 'LONG',
+      targets: [{ price: 110, sourceKind: 'EQH' }],
+      invalidation: null,
+      opinionWeight: 0.5,
+    });
+    expect(label).not.toContain('inv');
+    expect(label).toBe('LONG → 110 (EQH) · opinion 50%');
+  });
+
+  it('peso null vira ausência honesta de sufixo de opinião (nunca "opinion n/a" fabricado dentro deste formatador específico — App.tsx decide seu próprio fallback quando precisa)', () => {
+    const label = formatScenarioPathLabel({
+      direction: 'LONG',
+      targets: [{ price: 110, sourceKind: 'EQH' }],
+      invalidation: null,
+      opinionWeight: null,
+    });
+    expect(label).toBe('LONG → 110 (EQH)');
   });
 });

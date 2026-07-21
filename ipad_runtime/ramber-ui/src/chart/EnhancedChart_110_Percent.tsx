@@ -957,6 +957,21 @@ export function EnhancedChart_110_Percent({
   // probabilidade — o próprio scenario.basis documenta isso); piso honesto
   // mesmo quando o peso é null (conselho travado/ausente) para nunca
   // esconder um alvo real só porque a confiança numérica não existe ainda.
+  //
+  // v2 (Diretriz Suprema de Evolução Integrativa §5/§6, "Future Path
+  // Map"): scenario-engine.ts agora expõe até MAX_SCENARIO_TARGETS níveis
+  // reais por caminho (não só o mais próximo) + `invalidation`. Os alvos
+  // extras desenham aqui, mais apagados quanto mais longe (TARGET_ALPHA_
+  // FALLOFF) — a mesma lógica de "o mais próximo pesa mais" já usada em
+  // outros lugares deste gráfico. `invalidation` DELIBERADAMENTE não
+  // ganha uma linha própria: por construção do motor, a invalidação de um
+  // caminho é sempre exatamente o alvo mais próximo do caminho OPOSTO
+  // (scenario-engine.ts: `longPath.invalidation = below[0] = shortPath.
+  // targets[0]`) — desenhá-la de novo aqui seria uma segunda linha no
+  // MESMO preço já real na tela, a "linha fantasma"/redundância que a
+  // diretriz pede para nunca criar. A informação continua real e
+  // auditável (contrato + formatScenarioPathLabel, "· inv NNNN" nos
+  // painéis de texto), só não duplica geometria já desenhada.
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
@@ -970,6 +985,11 @@ export function EnhancedChart_110_Percent({
       if (weight === null || !Number.isFinite(weight)) return floor;
       return floor + Math.max(0, Math.min(1, weight)) * (ceiling - floor);
     };
+    // Índice 0 = alvo mais próximo (peso cheio); cada alvo mais distante
+    // na mesma rota pesa menos — mesmo espírito do "hierarquia visual dos
+    // alvos" já usado no Trade Plan real (label-compaction.ts), aqui só
+    // por opacidade (cor/traço continuam intocados, Regra de Ouro 5).
+    const TARGET_ALPHA_FALLOFF = [1, 0.65, 0.4];
 
     // Lavanda dedicada — nunca a mesma cor de nenhum nível real já
     // desenhado (ver comentário acima). Única para as duas rotas: a
@@ -980,27 +1000,29 @@ export function EnhancedChart_110_Percent({
       { path: scenario.pathA, label: "SCENARIO A" },
       { path: scenario.pathB, label: "SCENARIO B" },
     ] as const).forEach(({ path, label }) => {
-      if (!path.target || !Number.isFinite(path.target.price)) return;
-      const rgb = PROJECTION_RGB;
-      const alpha = alphaOf(path.opinionWeight);
       const weightLabel = path.opinionWeight !== null
         ? `opinion ${Math.round(path.opinionWeight * 100)}%`
         : "opinion n/a";
-      scenarioLinesRef.current.push(
-        series.createPriceLine({
-          price: path.target.price,
-          color: `rgba(${rgb}, ${alpha.toFixed(2)})`,
-          lineWidth: 1,
-          lineStyle: LineStyle.Solid,
-          axisLabelVisible: false,
-          // Prefixo explícito "PROJEÇÃO": metadado real (title da própria
-          // lib), correto e auditável mesmo hoje sem UI de hover/legenda
-          // que o exiba — a diferenciação que o OPERADOR realmente vê
-          // agora é a cor lavanda dedicada acima, não este texto (ver
-          // comentário no topo do efeito).
-          title: `PROJEÇÃO · ${label} · ${path.direction} · ${path.target.sourceKind} · ${weightLabel}`,
-        }),
-      );
+      path.targets.forEach((target, i) => {
+        if (!Number.isFinite(target.price)) return;
+        const alpha = alphaOf(path.opinionWeight) * (TARGET_ALPHA_FALLOFF[i] ?? TARGET_ALPHA_FALLOFF[TARGET_ALPHA_FALLOFF.length - 1]);
+        scenarioLinesRef.current.push(
+          series.createPriceLine({
+            price: target.price,
+            color: `rgba(${PROJECTION_RGB}, ${alpha.toFixed(2)})`,
+            lineWidth: 1,
+            lineStyle: LineStyle.Solid,
+            axisLabelVisible: false,
+            // Prefixo explícito "PROJEÇÃO": metadado real (title da
+            // própria lib), correto e auditável mesmo hoje sem UI de
+            // hover/legenda que o exiba — a diferenciação que o OPERADOR
+            // realmente vê é a cor lavanda dedicada + a opacidade
+            // decrescente por rank, não este texto (ver comentário no
+            // topo do efeito).
+            title: `PROJEÇÃO · ${label} · ${path.direction} · TP${i + 1} · ${target.sourceKind} · ${weightLabel}`,
+          }),
+        );
+      });
     });
   }, [scenario]);
 

@@ -90,7 +90,7 @@ import { computeConsensusRadar, type ConsensusRadarCategory } from "./nexus/cons
 import { computeRSI } from "../../src/research/engines/lorentzian-classifier.js";
 // V-MAX Fase 2: cenários Path A/B (níveis reais + massa de opinião real do
 // conselho) e armadilhas por corroboração de eventos reais.
-import { buildScenarioProjection, type ScenarioLevel } from "./nexus/scenario-engine";
+import { buildScenarioProjection, formatScenarioPathLabel, type ScenarioLevel } from "./nexus/scenario-engine";
 import { detectInstitutionalTraps } from "./nexus/trap-detection";
 // Phase Ω Priority 2 ("Probability Engine" no pedido original do Operador —
 // entregue honestamente como Confluence/Conviction Engine, ver o cabeçalho
@@ -548,14 +548,20 @@ export default function App() {
   // 7-8) ficam ligadas só no Modo Auditoria. Puramente aditivo: nenhuma
   // camada é removida, o cálculo de todas continua ativo — só a exibição
   // muda, e o toggle individual continua funcionando normalmente depois.
-  const applyChartLayerPreset = useCallback((preset: "operational" | "audit") => {
+  // Diretriz Suprema de Evolução Integrativa §8 ("Modo Inteligência"):
+  // achado real de auditoria — só existiam 2 presets (Operacional/
+  // Auditoria); a diretriz pede um 3º para análise profunda sem o ruído
+  // do plano ativo. Mesmo mecanismo aditivo dos outros dois — nenhuma
+  // camada nova, nenhum cálculo novo, só uma pré-seleção a mais.
+  const applyChartLayerPreset = useCallback((preset: "operational" | "audit" | "intelligence") => {
     if (preset === "audit") {
       setChartLayerVisibility(DEFAULT_CHART_LAYER_VISIBILITY);
       return;
     }
+    const activeSet = preset === "intelligence" ? CHART_LAYERS_INTELLIGENCE_PRESET : CHART_LAYERS_OPERATIONAL_PRESET;
     setChartLayerVisibility(
       CHART_LAYER_IDS.reduce((acc, id) => {
-        acc[id] = CHART_LAYERS_OPERATIONAL_PRESET.has(id);
+        acc[id] = activeSet.has(id);
         return acc;
       }, {} as ChartLayerVisibility),
     );
@@ -935,6 +941,17 @@ export default function App() {
     setEngineStatus("pending");
     setPriceUpdatedAt(null);
     setOrderBookUpdatedAt(null);
+    // Diretriz Suprema de Evolução Integrativa §3 (achado real de
+    // auditoria): ao contrário dos campos acima, funding/OI e os dois
+    // cross-exchange checks NÃO eram resetados aqui — mostravam o valor
+    // do ativo ANTERIOR (até 8s de atraso real, o pior caso do retry de
+    // fetchDerivatives) enquanto preço/candles/order book já mostravam o
+    // novo. Mesmos valores iniciais dos useState acima — o mesmo "estado
+    // de carregamento honesto" que o primeiro boot já usa, nunca um dado
+    // fabricado do ativo novo.
+    setDerivatives({ fundingRate: null, openInterest: null });
+    setCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
+    setOkxCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
     // V-MAX Fase 1.1/1.2: l2History/orderflowHistory na store são séries
     // acumuladas ao longo do tempo (não um valor pontual como os acima) do
     // ativo ANTERIOR — sem isto, o OrderFlowHeatmapPlugin mostraria amostras
@@ -3170,6 +3187,21 @@ function WorkspaceManagerPanel() {
 // (estrutura/contexto, prioridades 7-8: FVG/OB, BOS/CHOCH, heatmap,
 // volume profile, trend channel) só aparecem no Modo Auditoria.
 const CHART_LAYERS_OPERATIONAL_PRESET = new Set<ChartLayerId>(["trade_plan_zone", "neural_market_aura", "ema"]);
+// Diretriz Suprema de Evolução Integrativa §8 ("Modo Inteligência"): o
+// COMPLEMENTO do Operacional — todas as camadas de leitura
+// estrutural/contexto (FVG/OB, BOS/CHOCH, heatmap de liquidez, volume
+// profile, trend channel) mais EMA (mesma direção de tendência "de
+// relance" que já ajuda o Operacional), SEM as duas camadas que só fazem
+// sentido quando existe um plano ATIVO (trade_plan_zone/neural_market_
+// aura) — análise profunda do mercado, não do plano em si.
+const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>([
+  "liquidity_zones",
+  "structure_breaks",
+  "order_flow_heatmap",
+  "volume_profile",
+  "ema",
+  "trend_channel",
+]);
 
 const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "liquidity_zones", label: "FVG / ORDER BLOCKS" },
@@ -3192,6 +3224,7 @@ function ChartLayersPanel() {
   // "quase" fingido de correspondência.
   const isOperationalPreset = CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_OPERATIONAL_PRESET.has(id));
   const isAuditPreset = CHART_LAYER_IDS.every((id) => visibility[id] === true);
+  const isIntelligencePreset = CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));
 
   return (
     <div
@@ -3226,6 +3259,17 @@ function ChartLayersPanel() {
               }`}
             >
               Modo Operacional
+            </button>
+            <button
+              type="button"
+              onClick={() => applyChartLayerPreset?.("intelligence")}
+              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+                isIntelligencePreset
+                  ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+              }`}
+            >
+              Modo Inteligência
             </button>
             <button
               type="button"
@@ -5592,8 +5636,8 @@ function SecondaryModuleView({ tab }: { tab: string }) {
           <ModuleStat label="Risk Gate" value={council ? (council.riskGated ? "LOCKED (fail-closed)" : "CLEAR") : MODULE_EMPTY} tone={council?.riskGated ? "short" : "long"} />
         </ModulePanel>
         <ModulePanel title="Scenario Paths · council opinion mass, never market probability">
-          <ModuleStat label="Path A" value={scenario ? `${scenario.pathA.direction} → ${scenario.pathA.target ? `${scenario.pathA.target.price.toFixed(0)} (${scenario.pathA.target.sourceKind})` : "no real level"}${scenario.pathA.opinionWeight !== null ? ` · ${pct(scenario.pathA.opinionWeight)}` : ""}` : MODULE_EMPTY} tone={scenario?.pathA.direction === "LONG" ? "long" : "short"} />
-          <ModuleStat label="Path B" value={scenario ? `${scenario.pathB.direction} → ${scenario.pathB.target ? `${scenario.pathB.target.price.toFixed(0)} (${scenario.pathB.target.sourceKind})` : "no real level"}${scenario.pathB.opinionWeight !== null ? ` · ${pct(scenario.pathB.opinionWeight)}` : ""}` : MODULE_EMPTY} tone={scenario?.pathB.direction === "LONG" ? "long" : "short"} />
+          <ModuleStat label="Path A" value={scenario ? formatScenarioPathLabel(scenario.pathA) : MODULE_EMPTY} tone={scenario?.pathA.direction === "LONG" ? "long" : "short"} />
+          <ModuleStat label="Path B" value={scenario ? formatScenarioPathLabel(scenario.pathB) : MODULE_EMPTY} tone={scenario?.pathB.direction === "LONG" ? "long" : "short"} />
         </ModulePanel>
         {/* Support S1/Resistance R1 used to live here too — moved out per
             Zero Repetição once the always-visible bar's StructureLevelsStrip
@@ -7004,12 +7048,6 @@ function CouncilWidget() {
   // Diretriz Complementar §8: mesma store, fatia própria (ver consensus-radar.ts).
   const consensusRadar = useConsensusRadarSnapshot();
 
-  const pathLabel = (p: { direction: string; target: { price: number; sourceKind: string } | null; opinionWeight: number | null }) => {
-    const target = p.target ? `${p.target.price.toFixed(0)} (${p.target.sourceKind})` : "no real level";
-    const weight = p.opinionWeight !== null ? ` · opinion ${Math.round(p.opinionWeight * 100)}%` : "";
-    return `${p.direction} → ${target}${weight}`;
-  };
-
   const stance = council?.stance ?? null;
   const stanceLabel = stance ?? AWAIT;
   const stanceColor = stance ? COUNCIL_STANCE_COLOR[stance] : "text-[#8ab4f8]";
@@ -7111,13 +7149,13 @@ function CouncilWidget() {
             <div className="flex justify-between items-center">
               <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">SCENARIO A</span>
               <span className={`text-[0.48rem] font-mono font-black ${scenario.pathA.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
-                {pathLabel(scenario.pathA)}
+                {formatScenarioPathLabel(scenario.pathA)}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">SCENARIO B</span>
               <span className={`text-[0.48rem] font-mono font-black ${scenario.pathB.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
-                {pathLabel(scenario.pathB)}
+                {formatScenarioPathLabel(scenario.pathB)}
               </span>
             </div>
           </div>

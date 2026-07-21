@@ -177,14 +177,15 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(presetMatch![1]).not.toContain('"volume_profile"');
     expect(presetMatch![1]).not.toContain('"trend_channel"');
 
-    const fnMatch = app.match(/const applyChartLayerPreset = useCallback\(\(preset: "operational" \| "audit"\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
+    const fnMatch = app.match(/const applyChartLayerPreset = useCallback\(\(preset: "operational" \| "audit" \| "intelligence"\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
     expect(fnMatch, 'applyChartLayerPreset não encontrada').not.toBeNull();
     const body = fnMatch![1];
     // audit = o MESMO default de sempre (todas ligadas), nunca uma segunda lista
     expect(body).toContain('setChartLayerVisibility(DEFAULT_CHART_LAYER_VISIBILITY);');
-    // operational = reduz sobre CHART_LAYER_IDS (a lista canônica única), nunca hardcoded
+    // operational/intelligence = reduz sobre CHART_LAYER_IDS (a lista canônica única), nunca hardcoded
     expect(body).toContain('CHART_LAYER_IDS.reduce(');
-    expect(body).toContain('CHART_LAYERS_OPERATIONAL_PRESET.has(id)');
+    expect(body).toContain('activeSet.has(id)');
+    expect(body).toContain('preset === "intelligence" ? CHART_LAYERS_INTELLIGENCE_PRESET : CHART_LAYERS_OPERATIONAL_PRESET');
 
     // exposto no contexto e consumido pelo painel — nunca um segundo painel
     expect(app).toContain('applyChartLayerPreset,');
@@ -193,6 +194,27 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(app).toContain('onClick={() => applyChartLayerPreset?.("audit")}');
     // o botão continua sendo um atalho — o toggle individual não foi removido
     expect(app).toContain('onClick={() => toggleChartLayer?.(id)}');
+  });
+
+  it('Diretriz Suprema de Evolução Integrativa §8 ("Modo Inteligência"): 3º preset real — todas as camadas de leitura estrutural/contexto, SEM as duas que só existem para o plano ATIVO', () => {
+    const app = read('../src/App.tsx');
+    const presetMatch = app.match(/const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>\(\[([\s\S]*?)\]\);/);
+    expect(presetMatch, 'CHART_LAYERS_INTELLIGENCE_PRESET não encontrado').not.toBeNull();
+    const body = presetMatch![1];
+    expect(body).toContain('"liquidity_zones"');
+    expect(body).toContain('"structure_breaks"');
+    expect(body).toContain('"order_flow_heatmap"');
+    expect(body).toContain('"volume_profile"');
+    expect(body).toContain('"ema"');
+    expect(body).toContain('"trend_channel"');
+    // as duas camadas do plano ATIVO nunca entram no Modo Inteligência —
+    // análise profunda do MERCADO, não do plano em si.
+    expect(body).not.toContain('"trade_plan_zone"');
+    expect(body).not.toContain('"neural_market_aura"');
+
+    expect(app).toContain('onClick={() => applyChartLayerPreset?.("intelligence")}');
+    expect(app).toContain('const isIntelligencePreset = CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));');
+    expect(app).toContain('Modo Inteligência');
   });
 });
 

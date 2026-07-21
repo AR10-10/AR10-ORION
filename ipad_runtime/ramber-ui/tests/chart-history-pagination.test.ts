@@ -180,10 +180,12 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     const idx = app.indexOf('setPriceData(null);');
     expect(idx, 'efeito de reset ao trocar de ativo não encontrado').toBeGreaterThan(-1);
     // Evolução Profunda §11/§13-J acrescentou setMultiTimeframeContext(null)
-    // real ao mesmo efeito — janela ampliada para caber o conteúdo novo
-    // (limite ainda finito: continua provando que é um efeito PRÓPRIO e
-    // contido, nunca o arquivo inteiro).
-    const block = app.slice(Math.max(0, idx - 30), idx + 2000);
+    // real ao mesmo efeito, e a Diretriz Suprema de Evolução Integrativa
+    // acrescentou os 3 resets de derivatives/cross-exchange — janela
+    // ampliada de novo para caber o conteúdo novo (limite ainda finito:
+    // continua provando que é um efeito PRÓPRIO e contido, nunca o
+    // arquivo inteiro).
+    const block = app.slice(Math.max(0, idx - 30), idx + 2700);
     expect(block).toContain('setChartData([]);');
     expect(block).toContain('setOrderBook({ bids: [], asks: [] });');
     expect(block).toContain('useUnifiedSnapshotStore.getState().setMultiTimeframeContext(null);');
@@ -195,6 +197,29 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     expect(block).not.toContain('resetTrackRecord');
     const archiveEffectMatch = app.match(/const key = candleKey\(selectedAsset, chartTimeframe as Timeframe\);\n {4}const archived = useUnifiedSnapshotStore\.getState\(\)\.trackRecordArchive\[key\];\n {4}useUnifiedSnapshotStore\.getState\(\)\.hydrateTrackRecord\(archived \?\? EMPTY_TRACK_RECORD\);\n {4}return \(\) => \{\n {6}useUnifiedSnapshotStore\.getState\(\)\.archiveTrackRecord\(key\);\n {4}\};\n {2}\}, \[selectedAsset, chartTimeframe\]\);/);
     expect(archiveEffectMatch, 'efeito de arquivo/restauração do track record não encontrado').not.toBeNull();
+  });
+
+  it('Diretriz Suprema de Evolução Integrativa §3 (achado real de auditoria): funding/OI e os DOIS cross-exchange checks agora resetam no mesmo efeito de troca de ativo — antes ficavam mostrando o valor do ativo ANTERIOR até fetchDerivatives resolver (até 8s de atraso real no pior caso)', () => {
+    const app = read('../src/App.tsx');
+    const idx = app.indexOf('setPriceData(null);');
+    const block = app.slice(Math.max(0, idx - 30), idx + 2000);
+    expect(block).toContain('setDerivatives({ fundingRate: null, openInterest: null });');
+    expect(block).toContain('setCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });');
+    expect(block).toContain('setOkxCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });');
+    // mesmos valores exatos dos useState iniciais — nunca um sentinel novo
+    // inventado, o mesmo "carregando" honesto que o primeiro boot já usa.
+    expect(app).toContain('const [crossExchangeCheck, setCrossExchangeCheck] = useState<CrossExchangeCheck>({\n    ok: false,\n    priceDeltaPct: null,\n    consensus: "INDISPONIVEL",\n  });');
+    expect(app).toContain('const [derivatives, setDerivatives] = useState<DerivativesState>({\n    fundingRate: null,\n    openInterest: null,\n  });');
+  });
+
+  it('liquidações NÃO precisam resetar por ativo: o próprio label já se declara exchange-wide, nunca fingindo ser por símbolo — achado de auditoria confirmando que não é um bug de staleness', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('Forced Liquidations · Binance Futures (real feed');
+    expect(app).toContain('no key — engine-bridge.ts\'s startRealLiquidationFeed). Exchange-wide,');
+    expect(app).toContain('not BTC-only — large forced liquidations anywhere are the real signal');
+    const idx = app.indexOf('setPriceData(null);');
+    const block = app.slice(Math.max(0, idx - 30), idx + 2000);
+    expect(block).not.toContain('setLiquidations');
   });
 
   it('ChartWidget repassa onRequestOlderCandles até EnhancedChart_110_Percent — mesma prop, ponta a ponta', () => {
