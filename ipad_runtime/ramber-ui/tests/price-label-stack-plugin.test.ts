@@ -592,13 +592,16 @@ describe('EPC §5/§6 (continuação): App.tsx computa engineFallbackLevels a pa
   it('lê exatamente os campos reais já expostos por engine-bridge.ts (stop/target/target2/target1Strength/target2Strength/riskRewardRatio) — zero cálculo novo aqui, nunca um nome de campo inventado', () => {
     const s = app();
     const idx = s.indexOf('const engineFallbackLevels = useMemo');
-    const block = s.slice(idx, idx + 1600);
+    const block = s.slice(idx, idx + 2100);
     expect(block).toContain('const stop = engine?.stop;');
     expect(block).toContain('const target1 = engine?.target;');
     expect(block).not.toContain('const target1 = engine?.target1;');
     expect(block).toContain('const target2 = typeof engine?.target2 === "number" && Number.isFinite(engine.target2) ? engine.target2 : null;');
     expect(block).toContain('target1Strength: engine?.target1Strength ?? null,');
     expect(block).toContain('target2Strength: engine?.target2Strength ?? null,');
+    // EPC §5: entrada real do Núcleo (preço atual) — referência de
+    // caminho para chartObstacleZones contar os obstáculos estruturais.
+    expect(block).toContain('const entry = typeof engine?.entry === "number" && Number.isFinite(engine.entry) ? engine.entry : null;');
   });
 
   // Execução real (não só padrão de fonte): reproduz o MESMO shape do

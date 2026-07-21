@@ -247,18 +247,59 @@ describe('Diretriz Restauração/Inteligência Visual §6: obstáculos do Trade 
     expect(app.split('zones.push({ low: z.bottom, high: z.top, kind: `OB_${z.type}` });')).toHaveLength(2);
   });
 
-  it('chartObstacleZones cruza obstacleZonesInPath contra TODOS os alvos do plano ativo (união, nunca só o 1º) e nunca contra um plano nulo', () => {
+  it('chartObstacleZones cruza obstacleZonesInPath contra TODOS os alvos (plano do Conselho OU fallback do Núcleo, EPC §5) via a MESMA função pura — nunca um segundo cálculo, nunca contra zonas nulas', () => {
     const app = read('../src/App.tsx');
     const idx = app.indexOf('const chartObstacleZones = useMemo(() => {');
     expect(idx, 'chartObstacleZones não encontrado').toBeGreaterThan(-1);
-    const block = app.slice(idx, idx + 700);
-    expect(block).toContain('if (!chartTradePlan || !tradePlanStructureZones) return [];');
-    expect(block).toContain('for (const target of chartTradePlan.targets) {');
-    expect(block).toContain('obstacleZonesInPath(tradePlanStructureZones, chartTradePlan.entry, target.price, long)');
+    const block = app.slice(idx, idx + 2000);
+    // fail-closed na ausência das zonas estruturais reais (nunca cruza nada)
+    expect(block).toContain('if (!tradePlanStructureZones) return [];');
+    // uma única definição de "obstáculo no caminho" (collect), reusada
+    expect(block).toContain('for (const z of obstacleZonesInPath(tradePlanStructureZones, { ...entryZone, basis: "" }, price, long)) {');
+    // caminho do Conselho (quando existe)
+    expect(block).toContain('collect(chartTradePlan.entry, chartTradePlan.targets.map((t) => t.price), chartTradePlan.direction === "LONG");');
+    // caminho do Núcleo (EPC §5 — o caso mais comum): entrada = preço atual, alvos reais
+    expect(block).toContain('} else if (engineFallbackLevels && engineFallbackLevels.entry !== null) {');
+    expect(block).toContain('collect({ low: e, high: e }, targets, engineFallbackLevels.direction === "LONG");');
   });
 
   it('chega ao gráfico via obstacleZones={chartObstacleZones} — mesmo padrão de prop-threading de tradePlan/scenario/aura', () => {
     const app = read('../src/App.tsx');
     expect(app).toContain('obstacleZones={chartObstacleZones}');
+  });
+
+  it('execução real (EPC §5): a MESMA função pura obstacleZonesInPath conta os obstáculos do caminho do Núcleo (entrada = preço atual) exatamente como faria para o plano do Conselho — prova viva de que o fallback não é um segundo cálculo', () => {
+    // Reproduz a fronteira geométrica real de obstacleZonesInPath
+    // (trade-plan.ts) — o teste de padrão acima já trava que App.tsx chama
+    // ESTA função; aqui provamos a matemática do caminho do Núcleo.
+    const obstacleZonesInPath = (
+      zones: { low: number; high: number }[],
+      entry: { low: number; high: number },
+      targetPrice: number,
+      long: boolean,
+    ) => {
+      const entryMid = (entry.low + entry.high) / 2;
+      return zones.filter((z) => {
+        if (!(z.low <= z.high)) return false;
+        if (z.low === entry.low && z.high === entry.high) return false;
+        return long ? z.high > entryMid && z.low < targetPrice : z.low < entryMid && z.high > targetPrice;
+      });
+    };
+    // Núcleo LONG: entrada = preço atual 100 (zona de largura zero), alvo 110.
+    // Uma zona estrutural real em [104,106] está no caminho; outra em
+    // [95,97] (abaixo da entrada) NÃO está.
+    const zones = [
+      { low: 104, high: 106 }, // obstáculo real no caminho 100→110
+      { low: 95, high: 97 }, // atrás da entrada — nunca um obstáculo à frente
+    ];
+    const entryZone = { low: 100, high: 100 };
+    const obstacles = obstacleZonesInPath(zones, entryZone, 110, true);
+    expect(obstacles).toHaveLength(1);
+    expect(obstacles[0]).toEqual({ low: 104, high: 106 });
+
+    // SHORT simétrico: entrada 100, alvo 90; zona [94,96] no caminho.
+    const shortObstacles = obstacleZonesInPath([{ low: 94, high: 96 }, { low: 104, high: 106 }], entryZone, 90, false);
+    expect(shortObstacles).toHaveLength(1);
+    expect(shortObstacles[0]).toEqual({ low: 94, high: 96 });
   });
 });

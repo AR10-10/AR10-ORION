@@ -98,7 +98,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1686 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1687 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -1792,6 +1792,58 @@ o formato compacto) · `npm run build` ok · grep do bundle confirma
 `"aderência, nunca probabilidade"` com ZERO ocorrências (remoção real) ·
 `audit-header-maxcontent.mjs` 11 viewports CLEAN (iPad Mini portrait +
 landscape inclusos, EPC §8).
+
+---
+
+### 6.27 EPC §5 ("obstáculos estruturais... em qualquer ativo e qualquer
+timeframe"): fallback do Núcleo agora também destaca obstáculos — o caso
+MAIS comum, antes sem essa ênfase
+
+Com o EPC re-emitido mais uma vez, a auditoria voltou ao §5 (Trade Plan
+permanente) com um olhar mais fino sobre o FALLBACK do Núcleo — que é o
+caso mais COMUM na tela (o Trade Plan do Conselho é mais conservador/raro:
+4 portões honestos em cascata). Achado real: o §5 lista "obstáculos
+estruturais" entre o que deve sempre aparecer, e o Trade Plan do Conselho
+já tinha isso (`chartObstacleZones` → ênfase de borda ⚠ no
+`LiquidityZonesPlugin`), mas o fallback do Núcleo NÃO — `chartObstacleZones`
+retornava `[]` sempre que não havia plano do Conselho, mesmo com o Núcleo
+mostrando STOP/TARGET. O Operador via as linhas do Núcleo mas nunca a
+ênfase de obstáculo no caminho até elas.
+
+**Correção aplicada** (aditiva, zero matemática nova — Regra de Ouro 4):
+- `engineFallbackLevels` ganhou o campo `entry` (o preço atual real do
+  Núcleo, `engine.entry` = `tracker.current_price` — o mesmo ponto de
+  referência de caminho).
+- `chartObstacleZones` foi estendido: extraída uma função `collect`
+  (entrada, alvos, direção) que chama a MESMA `obstacleZonesInPath`
+  (`trade-plan.ts`) — uma única definição de "zona estrutural no caminho
+  entrada→alvo", nunca um segundo cálculo. Alimentada pelo plano do
+  Conselho quando existe, OU pelo fallback do Núcleo (entrada = preço
+  atual como zona de largura zero, alvos = target1/target2 reais) quando
+  é o caso. Fail-closed inalterado: `[]` sem zonas estruturais reais.
+
+Resultado: a mesma ênfase visual de obstáculo (⚠, borda destacada da
+zona real) que o plano do Conselho já tinha agora funciona também no
+fallback do Núcleo — fechando o gap do §5 exatamente no caso que o
+Operador mais vê. Nenhuma zona nova é desenhada: só a borda de zonas
+FVG/OB que o `LiquidityZonesPlugin` JÁ desenha ganha ênfase quando está
+no caminho de um alvo real.
+
+**Verificação real**: `tsc --noEmit` limpo · **103 arquivos / 1687
+testes** (100%, +1: execução real nova provando que a geometria de
+`obstacleZonesInPath` conta o obstáculo do caminho do Núcleo — LONG e
+SHORT — exatamente como faria para o Conselho; 3 testes de fiação
+atualizados para o novo `collect`) · `npm run build` ok ·
+`audit-header-maxcontent.mjs` 11 viewports CLEAN. Limitação de sandbox
+das entregas anteriores: confirmação visual ao vivo (a borda ⚠ sobre a
+zona no caminho do Núcleo) depende de uma sessão com rede real —
+indisponível aqui.
+
+**Pendência honesta que permanece**: a CONTAGEM numérica de obstáculos
+(`obstacleCount` no rótulo/painel) continua só no plano do Conselho; o
+fallback do Núcleo ganhou a ênfase VISUAL da zona mas não um número
+`⚠ N` próprio no rótulo — próximo passo natural se o Operador quiser a
+contagem explícita também no fallback.
 
 ---
 

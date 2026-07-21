@@ -6004,8 +6004,16 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
     if (typeof stop !== "number" || !Number.isFinite(stop)) return null;
     if (typeof target1 !== "number" || !Number.isFinite(target1)) return null;
     const target2 = typeof engine?.target2 === "number" && Number.isFinite(engine.target2) ? engine.target2 : null;
+    // EPC §5 ("obstáculos estruturais... em qualquer ativo e qualquer
+    // timeframe"): a entrada real do Núcleo é o preço atual
+    // (tracker.current_price, exposto como engine.entry) — o mesmo ponto de
+    // referência que chartObstacleZones usa abaixo para contar as zonas
+    // estruturais REAIS no caminho até cada alvo do Núcleo. null quando o
+    // ciclo não tem entrada real (fail-closed).
+    const entry = typeof engine?.entry === "number" && Number.isFinite(engine.entry) ? engine.entry : null;
     return {
       direction: dir,
+      entry,
       stop,
       target1,
       target1Strength: engine?.target1Strength ?? null,
@@ -6013,7 +6021,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       target2Strength: engine?.target2Strength ?? null,
       riskRewardRatio: typeof engine?.riskRewardRatio === "number" && Number.isFinite(engine.riskRewardRatio) ? engine.riskRewardRatio : null,
     };
-  }, [chartTradePlan, engine?.direction, engine?.stop, engine?.target, engine?.target2, engine?.target1Strength, engine?.target2Strength, engine?.riskRewardRatio]);
+  }, [chartTradePlan, engine?.direction, engine?.entry, engine?.stop, engine?.target, engine?.target2, engine?.target1Strength, engine?.target2Strength, engine?.riskRewardRatio]);
   // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
   // estrutural"): união das zonas REAIS (tradePlanStructureZones, as MESMAS
   // que já geram targets[i].obstacleCount acima na store) que ficam no
@@ -6021,16 +6029,38 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // isto só para destacar a borda das zonas que já desenha, nunca uma zona
   // nova. Vazio sem plano ativo (fail-closed, zero mudança visual de hoje).
   const chartObstacleZones = useMemo(() => {
-    if (!chartTradePlan || !tradePlanStructureZones) return [];
-    const long = chartTradePlan.direction === "LONG";
+    if (!tradePlanStructureZones) return [];
     const seen = new Map<string, { low: number; high: number }>();
-    for (const target of chartTradePlan.targets) {
-      for (const z of obstacleZonesInPath(tradePlanStructureZones, chartTradePlan.entry, target.price, long)) {
-        seen.set(`${z.low}:${z.high}`, { low: z.low, high: z.high });
+    // Reusa a MESMA função pura obstacleZonesInPath (trade-plan.ts) — uma
+    // única definição de "zona estrutural no caminho entrada→alvo", nunca
+    // um segundo cálculo. Fonte da entrada+alvos varia (plano do Conselho
+    // OU fallback do Núcleo), a matemática é idêntica.
+    const collect = (entryZone: { low: number; high: number }, targetPrices: number[], long: boolean) => {
+      for (const price of targetPrices) {
+        if (!Number.isFinite(price)) continue;
+        for (const z of obstacleZonesInPath(tradePlanStructureZones, { ...entryZone, basis: "" }, price, long)) {
+          seen.set(`${z.low}:${z.high}`, { low: z.low, high: z.high });
+        }
       }
+    };
+    if (chartTradePlan) {
+      collect(chartTradePlan.entry, chartTradePlan.targets.map((t) => t.price), chartTradePlan.direction === "LONG");
+    } else if (engineFallbackLevels && engineFallbackLevels.entry !== null) {
+      // EPC §5: o fallback do Núcleo é o caso MAIS comum (o Conselho é mais
+      // conservador/raro) — antes desta evolução, o Operador via as linhas
+      // STOP/TARGET do Núcleo mas NUNCA a ênfase de obstáculo estrutural no
+      // caminho, exatamente o que o §5 pede "em qualquer ativo/timeframe".
+      // A entrada do Núcleo é o preço atual (zona de largura zero); os alvos
+      // são target1/target2 reais. Mesma ênfase visual (⚠, LiquidityZonesPlugin)
+      // que o plano do Conselho já tinha.
+      const e = engineFallbackLevels.entry;
+      const targets = [engineFallbackLevels.target1, engineFallbackLevels.target2].filter(
+        (x): x is number => typeof x === "number" && Number.isFinite(x),
+      );
+      collect({ low: e, high: e }, targets, engineFallbackLevels.direction === "LONG");
     }
     return [...seen.values()];
-  }, [chartTradePlan, tradePlanStructureZones]);
+  }, [chartTradePlan, tradePlanStructureZones, engineFallbackLevels]);
   // Neural Market Aura: mesmo TrackRecordState real que o Signal Track
   // Record já mantém (useTrackRecordSnapshot, mesmo hook usado pelo efeito
   // de rastreamento em App()) — zero segunda fonte de verdade sobre o

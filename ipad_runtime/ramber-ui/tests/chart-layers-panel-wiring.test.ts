@@ -429,12 +429,13 @@ describe('Auditoria de pendências: obstacleCount (sem teto) reconciliado com o 
     expect(isRealObstacleIdx, 'isRealObstacle não encontrado').toBeGreaterThan(chartObstacleZonesIdx);
   });
 
-  it('sem plano ativo (chartObstacleZones vazio), o comportamento é IDÊNTICO ao .slice(0,3) de sempre — isRealObstacle nunca é true para nada, união é um no-op', () => {
+  it('sem NENHUM plano (nem Conselho nem fallback do Núcleo) e sem zonas estruturais, chartObstacleZones é vazio — isRealObstacle nunca é true, união com [] é no-op, decluttering de sempre preservado', () => {
     const a = app();
-    // chartObstacleZones já é fail-closed (retorna [] sem chartTradePlan/
-    // tradePlanStructureZones) — a união com um array vazio nunca inclui
-    // zonas além dos 3 primeiros, preservando o decluttering de sempre
-    // quando não há nenhum obstáculo real para destacar.
-    expect(a).toContain('if (!chartTradePlan || !tradePlanStructureZones) return [];');
+    // chartObstacleZones continua fail-closed: retorna [] sem
+    // tradePlanStructureZones, e o bloco só popula quando há um plano do
+    // Conselho OU um fallback do Núcleo com entrada real (EPC §5). Sem
+    // nenhum dos dois, a união com [] nunca inclui zonas além dos 3
+    // primeiros — mesmo decluttering de sempre.
+    expect(a).toContain('if (!tradePlanStructureZones) return [];');
   });
 });
