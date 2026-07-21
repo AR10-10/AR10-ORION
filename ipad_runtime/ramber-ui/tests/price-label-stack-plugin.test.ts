@@ -507,16 +507,32 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     expect(block).toContain('if (engineFallbackLevels.target2 !== null) mk(engineFallbackLevels.target2,');
   });
 
-  it('rótulos entram em priceAxisLabels com "(Núcleo)" no texto — nunca confundível com o Trade Plan do Conselho (cores mais apagadas, mesma paleta vermelho/verde)', () => {
+  // Achado real do Operador ("nome Grandão, um monte de letra... mais
+  // padrão, mais profissional"): "(Núcleo)" repetido em CADA rótulo era
+  // redundante — o overlay do canto (tradePlanAbsenceReason) já diz
+  // "linhas abaixo são do Núcleo" uma vez, persistente enquanto o
+  // fallback está ativo. Removido do texto por rótulo; a distinção real
+  // continua existindo por COR (0.5/0.35 — sempre mais apagada que o
+  // Trade Plan do Conselho, 0.75) — nunca confundível, só sem repetir a
+  // mesma palavra 3x.
+  it('rótulos entram em priceAxisLabels SEM "(Núcleo)" no texto (redundante — o overlay do canto já diz uma vez) — distinção real continua por cor mais apagada (0.5/0.35 vs. 0.75 do Conselho)', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
     const end = s.indexOf('return out;', idx);
     const block = s.slice(idx, end);
     expect(block).toContain('if (engineFallbackLevels) {');
-    expect(block).toContain('text: breached ? "STOP (Núcleo) · BREACHED" : "STOP (Núcleo)",');
+    expect(block).toContain('text: breached ? "STOP · BREACHED" : "STOP",');
     expect(block).toContain('color: "rgba(255, 0, 85, 0.5)",');
-    expect(block).toContain('const label = engineFallbackLevels.target2 !== null ? "TARGET 1 (Núcleo)" : "TARGET (Núcleo)";');
-    expect(block).toContain('text: `TARGET 2 (Núcleo)${strengthSuffix(engineFallbackLevels.target2Strength)}${reached ? " · REACHED" : ""}`,');
+    expect(block).toContain('const label = engineFallbackLevels.target2 !== null ? "TARGET 1" : "TARGET";');
+    expect(block).toContain('text: `TARGET 2${strengthSuffix(engineFallbackLevels.target2Strength)}${reached ? " · REACHED" : ""}`,');
+  });
+
+  it('strengthSuffix alinhado ao estilo tight de levelTitle() (S1/R1) — espaço, nunca "·", mesmo padrão de rótulo em todo o eixo', () => {
+    const s = chart();
+    const idx = s.indexOf('const priceAxisLabels = useMemo');
+    const end = s.indexOf('return out;', idx);
+    const block = s.slice(idx, end);
+    expect(block).toContain('const strengthSuffix = (s: { label: "FORTE" | "FRACA"; touches: number } | null) => (s ? ` ${s.label}` : "");');
   });
 
   it('REACHED/BREACHED é derivação simples do preço vivo — nunca usa o ratchet effectiveStopForTargetsHit nem o Track Record autoritativo (que rastreiam o Trade Plan do Conselho, não este fallback)', () => {

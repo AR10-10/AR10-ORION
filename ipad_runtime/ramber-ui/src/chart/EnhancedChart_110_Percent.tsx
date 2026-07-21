@@ -327,6 +327,14 @@ interface EnhancedChartProps {
 // §22: paleta institucional de estado + seta discreta. A NL usa a mesma
 // paleta com opacidade menor — §29 "nunca competir visualmente com a VWAP".
 const LINE_STATE_GLYPH: Record<DirectionalLineState, string> = { BULLISH: "↑", BEARISH: "↓", NEUTRAL: "•" };
+// Achado real do Operador ("nome Grandão, um monte de letra... mais
+// padrão, mais profissional"): a palavra "ASCENDING"/"DESCENDING" no
+// rótulo do Trend Channel destoava do resto do eixo (VWAP/NL já usam
+// glifo, nunca a palavra) — mesmo princípio de LINE_STATE_GLYPH acima,
+// tipo diferente (TrendChannelDirection tem 3 valores próprios, nunca
+// os mesmos de DirectionalLineState). Zero informação perdida: o glifo
+// É a mesma direção real, só mais compacto.
+const TREND_DIRECTION_GLYPH: Record<TrendChannelDirection, string> = { ASCENDING: "↑", DESCENDING: "↓", FLAT: "→" };
 const VWAP_STATE_COLOR: Record<DirectionalLineState, string> = {
   BULLISH: "rgba(0, 230, 160, 0.75)",
   BEARISH: "rgba(255, 61, 113, 0.75)",
@@ -1544,7 +1552,11 @@ export function EnhancedChart_110_Percent({
     if (visibility.trend_channel && trendChannelInfo) {
       out.push({
         price: trendChannelInfo.midPrice,
-        text: `TREND · OLS ${trendChannelInfo.windowSize} · ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ · ${trendChannelInfo.direction} ${trendChannelInfo.midPrice.toFixed(2)}`,
+        // Achado real do Operador: ASCENDING/DESCENDING (9-10 letras) vira
+        // ↑/↓ — mesmo padrão de VWAP/NL. OLS/janela/σ continuam intactos:
+        // é a ÚNICA leitura visível deles em todo o app (grep confirma),
+        // remover seria apagar dado real (Regra de Ouro 4), não simplificar.
+        text: `TREND · OLS ${trendChannelInfo.windowSize} · ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ · ${TREND_DIRECTION_GLYPH[trendChannelInfo.direction]} ${trendChannelInfo.midPrice.toFixed(2)}`,
         color: "rgba(148, 163, 184, 0.55)",
         side: "left",
       });
@@ -1626,19 +1638,30 @@ export function EnhancedChart_110_Percent({
     if (engineFallbackLevels) {
       const longFb = engineFallbackLevels.direction === "LONG";
       const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
-      const strengthSuffix = (s: { label: "FORTE" | "FRACA"; touches: number } | null) => (s ? ` · ${s.label}` : "");
+      // Achado real do Operador ("nome Grandão, um monte de letra... mais
+      // padrão, mais profissional"): "(Núcleo)" repetido em CADA rótulo
+      // (STOP/TARGET1/TARGET2) era redundante — o overlay do canto
+      // superior esquerdo (tradePlanAbsenceReason) já deixa "linhas
+      // abaixo são do Núcleo" explícito UMA vez, persistente enquanto o
+      // fallback estiver ativo (nunca some sozinho). Removido daqui —
+      // zero informação perdida, só zero repetição (Regra de Ouro 4). A
+      // distinção visual real continua existindo: cor mais opaca/apagada
+      // (0.5/0.35) que o Trade Plan do Conselho (0.75) sempre teve.
+      // strengthSuffix também alinhado ao estilo tight de levelTitle()
+      // (S1/R1 acima) — espaço, nunca "·", mesmo padrão em todo o eixo.
+      const strengthSuffix = (s: { label: "FORTE" | "FRACA"; touches: number } | null) => (s ? ` ${s.label}` : "");
       if (Number.isFinite(engineFallbackLevels.stop)) {
         const breached = p !== null && (longFb ? p <= engineFallbackLevels.stop : p >= engineFallbackLevels.stop);
         out.push({
           price: engineFallbackLevels.stop,
-          text: breached ? "STOP (Núcleo) · BREACHED" : "STOP (Núcleo)",
+          text: breached ? "STOP · BREACHED" : "STOP",
           color: "rgba(255, 0, 85, 0.5)",
         });
       }
       if (Number.isFinite(engineFallbackLevels.target1)) {
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target1 : p <= engineFallbackLevels.target1);
         const rr = engineFallbackLevels.riskRewardRatio;
-        const label = engineFallbackLevels.target2 !== null ? "TARGET 1 (Núcleo)" : "TARGET (Núcleo)";
+        const label = engineFallbackLevels.target2 !== null ? "TARGET 1" : "TARGET";
         out.push({
           price: engineFallbackLevels.target1,
           text: `${label}${strengthSuffix(engineFallbackLevels.target1Strength)}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${reached ? " · REACHED" : ""}`,
@@ -1649,7 +1672,7 @@ export function EnhancedChart_110_Percent({
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target2 : p <= engineFallbackLevels.target2);
         out.push({
           price: engineFallbackLevels.target2,
-          text: `TARGET 2 (Núcleo)${strengthSuffix(engineFallbackLevels.target2Strength)}${reached ? " · REACHED" : ""}`,
+          text: `TARGET 2${strengthSuffix(engineFallbackLevels.target2Strength)}${reached ? " · REACHED" : ""}`,
           color: "rgba(0, 255, 170, 0.35)",
         });
       }

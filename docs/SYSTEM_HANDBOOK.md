@@ -98,7 +98,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1684 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1686 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -1665,6 +1665,64 @@ sandbox das entregas §6.19-6.22: confirmação visual ao vivo do
 resultado (lado esquerdo realmente aliviando o direito, sem cobrir
 candles de forma inaceitável) depende da próxima captura de tela do
 Operador — sem rede real para Binance neste ambiente.
+
+---
+
+### 6.25 Segunda captura real do Operador: confirma §6.20/§6.22/§6.24 ao
+vivo (fallback do Núcleo + divisão de lados funcionando) + rótulos
+compactados ("nome Grandão, um monte de letra")
+
+O Operador enviou uma segunda captura de tela real (BTC/USDT 1H, ao
+vivo, `13:23`) — a primeira confirmação visual completa desta trilha.
+
+**Confirmado funcionando ao vivo**: o overlay do canto mostra o formato
+NOVO (`"SEM PLANO DO CONSELHO · Núcleo LONG, Conselho neutro · linhas
+abaixo são do Núcleo"`, §6.20) — o ambiente já roda o commit mais
+recente. STOP/TARGET1/TARGET2 do Núcleo aparecem de verdade no canvas
+(§6.22 corrigiu o bug real que impedia isso). A divisão de lados
+(§6.24) também: TREND/R1/S1 à esquerda, VWAP/EMA/NL/TARGET1-2/STOP/
+preço à direita — exatamente o critério real projetado.
+
+**Achado novo, direto da imagem**: o rótulo `"TARGET 1 (Núcleo) · FRACA
+· 1:0.28 · REACHED"` (4 segmentos concatenados) destoava visivelmente
+dos vizinhos compactos (`"NL ↑ 65811.69"`, `"EMA 21 66009.14"`) — a
+caixa mais larga de toda a tela. Mesmo problema no `"TREND · OLS 50 ·
+±2σ · ASCENDING 66352.66"` (5 segmentos).
+
+**Correção aplicada** (aditiva, zero informação real perdida):
+1. `"(Núcleo)"` removido do texto de CADA rótulo individual (STOP/
+   TARGET1/TARGET2) — era redundante: o overlay do canto já diz "linhas
+   abaixo são do Núcleo" uma única vez, persistente enquanto o fallback
+   está ativo. A distinção real continua existindo por COR (0.5/0.35 de
+   opacidade — sempre mais apagada que o Trade Plan do Conselho, 0.75).
+2. `strengthSuffix` (FORTE/FRACA) alinhado ao estilo tight de
+   `levelTitle()` (já usado por S1/R1) — espaço, nunca `"·"`, mesmo
+   padrão de rótulo em todo o eixo agora.
+3. `TREND_DIRECTION_GLYPH` novo (`ASCENDING→↑`, `DESCENDING→↓`,
+   `FLAT→→`) — mesmo princípio de `LINE_STATE_GLYPH` (VWAP/NL), tipo
+   próprio (`TrendChannelDirection` tem valores diferentes). A palavra
+   `"ASCENDING"` (9 letras) vira 1 glifo. **`"OLS 50 · ±2σ"` NÃO foi
+   removido** — confirmado por grep que é a ÚNICA leitura visível dessa
+   informação em todo o app; apagar seria violar a Regra de Ouro 4
+   ("nunca apagar dado real"), não simplificar.
+
+**Pendência honesta registrada, não corrigida agora**: o Trade Plan do
+CONSELHO já tem um sistema de compactação real (`shouldCompactLabels`/
+`TARGET_LABEL_COMPACT_PCT`, `label-compaction.ts`) que droppa basis/R:R
+quando níveis ficam próximos — o fallback do Núcleo nunca ganhou o
+mesmo tratamento (`engineFallbackLevels` não participa dessa checagem
+de proximidade). Não corrigido nesta rodada porque os níveis na captura
+real não estavam próximos o suficiente para o cenário se manifestar
+(não era a causa do problema relatado) — fica registrado como
+inconsistência real entre os dois caminhos, candidato honesto pra
+próxima rodada.
+
+**Verificação real**: `tsc --noEmit` limpo · **103 arquivos / 1686
+testes** (100%, +2: `TREND_DIRECTION_GLYPH` declarado + `strengthSuffix`
+no novo formato) · `npm run build` ok · grep do bundle de produção
+confirma `"(Núcleo)"` com ZERO ocorrências (remoção real, não só no
+código-fonte) e `"STOP · BREACHED"` (formato novo) presente ·
+`audit-header-maxcontent.mjs` 11 viewports CLEAN.
 
 ---
 

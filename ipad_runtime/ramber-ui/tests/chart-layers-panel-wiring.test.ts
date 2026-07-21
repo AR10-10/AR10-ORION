@@ -290,12 +290,20 @@ describe('Diretriz de Refinamento Visual §5: Trend Channel reposicionado para a
     const c = chart();
     const idx = c.indexOf('if (visibility.trend_channel && trendChannelInfo) {');
     expect(idx, 'push condicional em priceAxisLabels não encontrado').toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 400);
+    const block = c.slice(idx, idx + 800);
     expect(block).toContain('price: trendChannelInfo.midPrice');
-    expect(block).toContain('text: `TREND · OLS ${trendChannelInfo.windowSize} · ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ · ${trendChannelInfo.direction} ${trendChannelInfo.midPrice.toFixed(2)}`');
+    // Achado real do Operador ("nome Grandão"): ASCENDING/DESCENDING virou
+    // glifo (TREND_DIRECTION_GLYPH) — OLS/janela/σ continuam intactos, a
+    // ÚNICA leitura visível deles em todo o app (Regra de Ouro 4).
+    expect(block).toContain('text: `TREND · OLS ${trendChannelInfo.windowSize} · ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ · ${TREND_DIRECTION_GLYPH[trendChannelInfo.direction]} ${trendChannelInfo.midPrice.toFixed(2)}`');
     // cor = a MESMA cor real da linha mid (definida na criação da série,
     // acima) — nunca uma cor nova inventada só para o rótulo.
     expect(block).toContain('color: "rgba(148, 163, 184, 0.55)"');
+  });
+
+  it('TREND_DIRECTION_GLYPH cobre os 3 valores reais de TrendChannelDirection (ASCENDING/DESCENDING/FLAT) — mesmo princípio de LINE_STATE_GLYPH (VWAP/NL), tipo próprio', () => {
+    const c = chart();
+    expect(c).toContain('const TREND_DIRECTION_GLYPH: Record<TrendChannelDirection, string> = { ASCENDING: "↑", DESCENDING: "↓", FLAT: "→" };');
   });
 
   it('fail-closed: só entra em priceAxisLabels com leitura real E a camada trend_channel visível — nunca sem origem', () => {
