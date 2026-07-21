@@ -38,7 +38,11 @@ import { useOrderflowHistory } from "../store/unified-snapshot-store";
 import { LiquidityZonesPlugin, type FillableZone } from "./LiquidityZonesPlugin";
 // Ordem "Ciborgue Vivo" §1: anotação temporária de BOS/CHOCH — mesma
 // arquitetura de overlay do LiquidityZonesPlugin acima, dado real diferente.
-import { StructureBreakMarkersPlugin } from "./StructureBreakMarkersPlugin";
+// BREAK_DECAY: achado real de captura de tela (rótulo "CHOC" colidindo com
+// a caixa "EMA 21") — o TEXTO migrou para priceAxisLabels abaixo, reusando
+// a MESMA config de decaimento do plugin (zero segunda curva).
+import { StructureBreakMarkersPlugin, BREAK_DECAY } from "./StructureBreakMarkersPlugin";
+import { ageAlpha } from "./annotation-decay";
 import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
 // V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
 // barras à direita — dado direto da store (Fase 1.3), ver header do plugin.
@@ -1632,8 +1636,33 @@ export function EnhancedChart_110_Percent({
         });
       }
     }
+    // Ordem "Ciborgue Vivo" §1 (achado real de captura de tela do
+    // Operador: o rótulo "CHOC" desenhado pelo StructureBreakMarkersPlugin
+    // colidia com a caixa "EMA 21" — canvas próprio sem consciência dos
+    // outros rótulos do eixo). O TEXTO ("BOS"/"CHOCH") migra pra cá — MESMO
+    // preço/cor que a LINHA de rompimento (StructureBreakMarkersPlugin
+    // continua desenhando-a, intocada) e o MESMO ageAlpha(age, BREAK_DECAY)
+    // real que decide quando "esquecer" (idade em candles, nunca relógio
+    // de parede) — zero segunda fonte, zero segunda curva de decaimento.
+    // alpha<=0 nunca entra: mesma honestidade de "esquecido" do plugin.
+    if (structureBreak) {
+      const point = data[structureBreak.index];
+      if (point) {
+        const age = data.length - 1 - structureBreak.index;
+        const alpha = ageAlpha(age, BREAK_DECAY);
+        if (alpha > 0 && Number.isFinite(structureBreak.level)) {
+          const bullish = structureBreak.direction === "ALTA";
+          out.push({
+            price: structureBreak.level,
+            text: structureBreak.type,
+            color: bullish ? "rgba(0, 255, 170, 0.75)" : "rgba(255, 0, 85, 0.75)",
+            alpha,
+          });
+        }
+      }
+    }
     return out;
-  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels]);
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak]);
 
   return (
     <div className="absolute inset-0">

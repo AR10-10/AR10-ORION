@@ -30,6 +30,11 @@ export interface PriceAxisLabel {
   // cor de estado real, EMA = azul-material, último preço = up/down da
   // própria vela).
   color: string;
+  // Opcional (default 1 — opaco, comportamento de sempre para todo rótulo
+  // existente): decaimento real por idade (ex.: BOS/CHOCH via ageAlpha/
+  // BREAK_DECAY, StructureBreakMarkersPlugin) — "o sistema pensa e depois
+  // esquece" sem perder a garantia de zero colisão deste plugin.
+  alpha?: number;
 }
 
 // Altura real de uma etiqueta (px) — folga para o texto 9px + padding
@@ -119,6 +124,10 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
       const resolved = resolveLabelStackPositions(withNaturalY, MIN_GAP_PX);
 
       for (const entry of resolved) {
+        // Decaimento real por idade (BOS/CHOCH) — default 1 preserva o
+        // comportamento de sempre (opaco) para todo rótulo que não declara
+        // alpha (S1/R1/VWAP/NL/EMA/TREND/ENTRY/STOP/TARGET/etc).
+        const labelAlpha = entry.alpha ?? 1;
         const textWidth = ctx.measureText(entry.text).width;
         const boxWidth = textWidth + LABEL_PADDING_X * 2;
         const boxX = cssWidth - RIGHT_MARGIN_PX - boxWidth;
@@ -130,7 +139,7 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
         // quando o rótulo já está na própria posição natural.
         if (Math.abs(entry.resolvedY - entry.naturalY) > 0.5) {
           ctx.strokeStyle = entry.color;
-          ctx.globalAlpha = 0.5;
+          ctx.globalAlpha = 0.5 * labelAlpha;
           ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.moveTo(boxX - 0.5, entry.naturalY);
@@ -139,6 +148,7 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           ctx.globalAlpha = 1;
         }
 
+        ctx.globalAlpha = labelAlpha;
         ctx.fillStyle = opaque(entry.color);
         ctx.fillRect(boxX, boxY, boxWidth, LABEL_HEIGHT_PX);
 
@@ -146,6 +156,7 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
         ctx.textBaseline = "middle";
         ctx.textAlign = "left";
         ctx.fillText(entry.text, boxX + LABEL_PADDING_X, entry.resolvedY + 0.5);
+        ctx.globalAlpha = 1;
       }
     };
 

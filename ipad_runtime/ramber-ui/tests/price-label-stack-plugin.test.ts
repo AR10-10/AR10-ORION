@@ -51,7 +51,36 @@ describe('PriceLabelStackPlugin: achado real via harness Playwright — fundo da
     const idx = s.indexOf('ctx.strokeStyle = entry.color;');
     expect(idx).toBeGreaterThan(-1);
     const block = s.slice(idx, idx + 100);
-    expect(block).toContain('ctx.globalAlpha = 0.5;');
+    expect(block).toContain('ctx.globalAlpha = 0.5 * labelAlpha;');
+  });
+});
+
+describe('PriceLabelStackPlugin: alpha opcional por rótulo (achado real: BOS/CHOCH precisa esmaecer com a idade DENTRO do resolvedor de colisão, sem perder a garantia de zero sobreposição)', () => {
+  it('PriceAxisLabel declara alpha?: number — default 1 preserva o comportamento opaco de todo rótulo existente (S1/R1/VWAP/NL/EMA/TREND/ENTRY/STOP/TARGET/Núcleo)', () => {
+    const s = plugin();
+    const idx = s.indexOf('export interface PriceAxisLabel {');
+    const block = s.slice(idx, idx + 650);
+    expect(block).toContain('alpha?: number;');
+  });
+
+  it('labelAlpha = entry.alpha ?? 1 é lido UMA vez por entrada e aplicado à caixa+texto (globalAlpha), nunca só à cor', () => {
+    const s = plugin();
+    const idx = s.indexOf('for (const entry of resolved) {');
+    const end = s.indexOf('ctx.fillText(entry.text', idx);
+    const block = s.slice(idx, end);
+    expect(block).toContain('const labelAlpha = entry.alpha ?? 1;');
+    expect(block).toContain('ctx.globalAlpha = labelAlpha;');
+    expect(block).toContain('ctx.fillStyle = opaque(entry.color);');
+  });
+
+  it('globalAlpha é restaurado para 1 depois de cada entrada — nunca vaza pra próxima iteração do loop', () => {
+    const s = plugin();
+    const idx = s.indexOf('for (const entry of resolved) {');
+    const closeIdx = s.indexOf('\n      }\n    };', idx);
+    const block = s.slice(idx, closeIdx);
+    // 2 resets: um depois do conector (se desenhado), outro no fim de CADA entrada
+    const resets = block.match(/ctx\.globalAlpha = 1;/g) ?? [];
+    expect(resets.length).toBeGreaterThanOrEqual(2);
   });
 });
 
@@ -263,7 +292,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('priceAxisLabels recalcula a cada tick real de livePrice — nunca uma etiqueta de preço congelada', () => {
     const s = chart();
-    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels]);');
+    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak]);');
     expect(depsIdx, 'dependency array de priceAxisLabels não inclui livePrice').toBeGreaterThan(-1);
   });
 
@@ -408,7 +437,7 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
 
   it('engineFallbackLevels entra nas deps de priceAxisLabels — recalcula quando o Núcleo muda de leitura', () => {
     const s = chart();
-    expect(s).toContain('livePrice, tradePlan, targetsHit, decision, engineFallbackLevels]);');
+    expect(s).toContain('livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak]);');
   });
 
   it('overlay de texto do canto (tradePlanAbsenceReason) nunca fica auto-contraditório: quando as linhas do Núcleo estão visíveis, o texto deixa explícito que é só o plano do CONSELHO que falta — nunca "SEM TRADE PLAN" sozinho com linhas reais na tela', () => {

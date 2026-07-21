@@ -98,7 +98,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1666 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1674 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -1405,6 +1405,73 @@ viewports CLEAN. Mesma limitação honesta de sandbox do §6.19: sem rede
 de saída para a Binance, o canvas não monta neste ambiente
 (`chartData.length > 0` é pré-requisito), então a captura visual ao vivo
 das novas linhas/rótulos continua pendente de uma sessão com rede real.
+
+---
+
+### 6.21 Captura de tela real do Operador (primeira desta trilha):
+confirma §6.19/§6.20 ao vivo + achado novo — "CHOC" cortado pela caixa
+"EMA 21"
+
+O Operador enviou a primeira captura de tela REAL desta trilha (BTC/USDT
+1H, ao vivo). Auditoria direta da imagem, não especulação:
+
+**Confirmado funcionando**: a barra de comando mostra `"TRADE PLAN:
+Núcleo LONG, Conselho neutro"` — exatamente o texto real de
+`tradePlanAbsenceReason` (§6.19). O overlay no canto do canvas mostra
+`"SEM TRADE PLAN · Núcleo LONG, Conselho neutro"` — o formato ANTIGO
+(pré-§6.20; o formato novo seria `"SEM PLANO DO CONSELHO · ... ·
+linhas abaixo são do Núcleo"` quando `engineFallbackLevels` existe).
+Isso é evidência real de que o ambiente que gerou a captura ainda não
+tinha o commit da §6.20 — nunca uma prova de bug na correção em si.
+Auditado matematicamente: `engine.direction`/`entry`/`target1`/
+`target2`/`stop` (App.tsx, linhas ~1386-1395) vêm todos do MESMO gate
+`cycleOk && realCycle?.signal` — se o badge mostra `direction === "LONG"`
+(como na captura), `target1`/`target2`/`stop` deveriam estar populados
+também, então o fallback do Núcleo (§6.20) tem tudo para aparecer numa
+vez que o ambiente rode o commit mais recente.
+
+**Achado novo, real, direto da imagem**: o rótulo `"CHOC"` (BOS/CHOCH,
+`StructureBreakMarkersPlugin`) aparece parcialmente coberto pela caixa
+opaca de `"EMA 21"` — uma colisão real que o sistema anti-colisão
+(`priceAxisLabels`/`PriceLabelStackPlugin`) NUNCA resolvia, porque o
+texto BOS/CHOCH era desenhado num canvas PRÓPRIO (`ctx.fillText`), sem
+nenhuma consciência da posição dos outros rótulos do eixo — a mesma
+categoria de bug já corrigida para Trend Channel/Trade Plan em sessões
+anteriores, agora encontrada numa 4ª camada.
+
+**Correção aplicada (aditiva, Regra de Ouro 4)**: o TEXTO
+(`"BOS"`/`"CHOCH"`) migrou para `priceAxisLabels`, reaproveitando o MESMO
+`brk.level`/`brk.type`/`brk.direction` e o MESMO `ageAlpha(age,
+BREAK_DECAY)` (`BREAK_DECAY` agora exportado de
+`StructureBreakMarkersPlugin.tsx`) — zero segunda curva de decaimento. A
+LINHA horizontal de rompimento continua exatamente igual, no canvas
+próprio (`StructureBreakMarkersPlugin`, intocado nessa parte). Como
+BOS/CHOCH é a PRIMEIRA etiqueta deste sistema que precisa esmaecer com o
+tempo (todas as outras — S1/R1/VWAP/NL/EMA/TREND/ENTRY/STOP/TARGET — são
+sempre opacas), `PriceAxisLabel` ganhou `alpha?: number` opcional
+(default 1 — zero mudança de comportamento para todo rótulo existente);
+`PriceLabelStackPlugin` aplica `ctx.globalAlpha = entry.alpha ?? 1` à
+caixa+texto e `0.5 * labelAlpha` ao conector, sempre restaurado a 1 no
+fim de cada entrada.
+
+**Verificação real**: `tsc --noEmit` limpo · **103 arquivos / 1674
+testes** (100%, +8: 5 de fiação real do rótulo BOS/CHOCH em
+`priceAxisLabels` + 3 do suporte a `alpha` em `PriceLabelStackPlugin`) ·
+`npm run build` ok · grep do bundle de produção: `"fillText(brk.type"`
+(padrão antigo) zero ocorrências — confirma a remoção real, não só no
+código-fonte; `"fadeStartCandles"` (a config `BREAK_DECAY`) presente uma
+única vez — zero segunda cópia · `audit-header-maxcontent.mjs` 11
+viewports CLEAN. Mesma limitação de sandbox das entregas §6.19/§6.20: a
+verificação visual final do "CHOC" já não colidindo com "EMA 21" precisa
+de uma sessão com rede real para a Binance.
+
+**Pendência honesta**: a frase do Operador "a seta ali dos alvos" não
+ficou clara o suficiente para agir com segurança (possível pedido de
+glifo direcional ↑/↓ nos rótulos TARGET, no mesmo padrão já usado em
+VWAP/NL/FVG/OB — mas tocar o texto do Trade Plan do Conselho arriscaria
+quebrar várias asserções exatas já testadas sem confirmação do pedido
+real). Registrado para confirmação direta com o Operador antes de
+qualquer mudança nesse ponto específico.
 
 ---
 

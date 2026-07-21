@@ -66,7 +66,7 @@ describe('App.tsx → EnhancedChart_110_Percent: structureBreak passa ponta a po
   it('EnhancedChart_110_Percent aceita structureBreak e monta StructureBreakMarkersPlugin com o mesmo array `data` do LiquidityZonesPlugin', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     expect(chart).toContain('structureBreak?: StructureBreak | null;');
-    expect(chart).toContain('import { StructureBreakMarkersPlugin } from "./StructureBreakMarkersPlugin";');
+    expect(chart).toContain('import { StructureBreakMarkersPlugin, BREAK_DECAY } from "./StructureBreakMarkersPlugin";');
     const mountMatch = chart.match(/<StructureBreakMarkersPlugin([\s\S]*?)\/>/);
     expect(mountMatch, 'StructureBreakMarkersPlugin não montado').not.toBeNull();
     expect(mountMatch![1]).toContain('data={data}');
@@ -113,6 +113,56 @@ describe('StructureBreakMarkersPlugin.tsx: mesma arquitetura de overlay do Liqui
   it('sem rompimento real (structureBreak null) não desenha nada — honesto, nunca um palpite', () => {
     const plugin = read('../src/chart/StructureBreakMarkersPlugin.tsx');
     expect(plugin).toContain('if (!brk) return; // sem rompimento real na amostra — nada a desenhar, honesto.');
+  });
+
+  it('achado real de captura de tela do Operador ("CHOC" cortado/sobreposto pela caixa "EMA 21"): o TEXTO ("BOS"/"CHOCH") não é mais desenhado neste canvas próprio — migrou pra priceAxisLabels; a LINHA de rompimento continua intocada', () => {
+    const plugin = read('../src/chart/StructureBreakMarkersPlugin.tsx');
+    expect(plugin).not.toMatch(/ctx\.fillText\(brk\.type/);
+    expect(plugin).not.toContain('ctx.font = "10px -apple-system, sans-serif";');
+    // a linha real (moveTo/lineTo/stroke) continua exatamente como antes
+    expect(plugin).toContain('ctx.moveTo(x1, yLine);');
+    expect(plugin).toContain('ctx.lineTo(cssWidth, yLine);');
+    expect(plugin).toContain('ctx.stroke();');
+  });
+
+  it('BREAK_DECAY exportado — reaproveitado por priceAxisLabels (EnhancedChart_110_Percent.tsx), zero segunda curva de decaimento', () => {
+    const plugin = read('../src/chart/StructureBreakMarkersPlugin.tsx');
+    expect(plugin).toContain('export const BREAK_DECAY: DecayConfig = { fadeStartCandles: 20, expireCandles: 100, minAlpha: 0.15 };');
+  });
+});
+
+describe('Achado real de captura de tela do Operador: rótulo BOS/CHOCH migrado para priceAxisLabels (mesmo sistema anti-colisão de S1/R1/VWAP/NL/EMA/TREND/Trade Plan) — nunca mais atrás da caixa de outro rótulo', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('EnhancedChart_110_Percent importa BREAK_DECAY do plugin e ageAlpha de annotation-decay — mesma dupla real, zero segunda fonte', () => {
+    const c = chart();
+    expect(c).toContain('import { StructureBreakMarkersPlugin, BREAK_DECAY } from "./StructureBreakMarkersPlugin";');
+    expect(c).toContain('import { ageAlpha } from "./annotation-decay";');
+  });
+
+  it('a entrada em priceAxisLabels usa o MESMO price/type/direction do structureBreak real — nunca uma segunda leitura', () => {
+    const c = chart();
+    const idx = c.indexOf('if (structureBreak) {', c.indexOf('const priceAxisLabels = useMemo'));
+    expect(idx, 'bloco do structureBreak não encontrado em priceAxisLabels').toBeGreaterThan(-1);
+    const end = c.indexOf('return out;', idx);
+    const block = c.slice(idx, end);
+    expect(block).toContain('const point = data[structureBreak.index];');
+    expect(block).toContain('const age = data.length - 1 - structureBreak.index;');
+    expect(block).toContain('const alpha = ageAlpha(age, BREAK_DECAY);');
+    expect(block).toContain('const bullish = structureBreak.direction === "ALTA";');
+    expect(block).toContain('price: structureBreak.level,');
+    expect(block).toContain('text: structureBreak.type,');
+    expect(block).toContain('color: bullish ? "rgba(0, 255, 170, 0.75)" : "rgba(255, 0, 85, 0.75)",');
+    expect(block).toContain('alpha,');
+  });
+
+  it('fail-closed: sem ponto real na janela de candles carregada, ou alpha já esquecido (<=0), nunca empurra a etiqueta', () => {
+    const c = chart();
+    const idx = c.indexOf('if (structureBreak) {', c.indexOf('const priceAxisLabels = useMemo'));
+    const end = c.indexOf('return out;', idx);
+    const block = c.slice(idx, end);
+    expect(block).toContain('if (point) {');
+    expect(block).toContain('if (alpha > 0 && Number.isFinite(structureBreak.level)) {');
   });
 });
 
