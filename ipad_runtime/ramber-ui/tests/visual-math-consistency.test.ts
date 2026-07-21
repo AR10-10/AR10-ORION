@@ -51,7 +51,7 @@ describe('B1: gauge de RSI reusa RSI_OVERBOUGHT/RSI_OVERSOLD reais do Conselho â
 
   it('App.tsx importa e usa os MESMOS limiares no gauge â€” nunca mais 70/30 soltos', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD } from "./nexus/council";');
+    expect(app).toContain('import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD, type CouncilDecision } from "./nexus/council";');
     expect(app).toContain('currentRsi >= RSI_OVERBOUGHT');
     expect(app).toContain('currentRsi <= RSI_OVERSOLD');
   });

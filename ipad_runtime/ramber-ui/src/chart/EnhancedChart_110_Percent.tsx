@@ -225,6 +225,12 @@ interface EnhancedChartProps {
   // silk-thread price lines with English labels. Optional and fail-closed:
   // null/absent draws nothing.
   tradePlan?: TradePlan | null;
+  // EPC §5/§6 ("Nunca simplesmente esconder essas informações"): quando
+  // tradePlan é null, o motivo REAL (mesmo texto/lógica da barra de
+  // comando, App.tsx: tradePlanAbsenceReason) — nunca um silêncio que o
+  // Operador não consegue distinguir de um bug. null/absent (tradePlan
+  // ativo, ou chamador que ainda não passa esta prop) não desenha nada.
+  tradePlanAbsenceReason?: string | null;
   // Neural Market Aura: visual translation of the SAME real Trade Plan +
   // Signal Track Record + Confluence Engine reading above — never a second
   // trading signal (LEI 24). null/DADOS_INSUFICIENTES draws nothing.
@@ -358,6 +364,7 @@ export function EnhancedChart_110_Percent({
   livePrice,
   activeTimeframe,
   tradePlan,
+  tradePlanAbsenceReason,
   aura,
   targetsHit,
   confidenceZone,
@@ -1544,6 +1551,22 @@ export function EnhancedChart_110_Percent({
         />
       )}
       <div ref={containerRef} className="absolute inset-0" />
+      {/* EPC §5/§6 ("Nunca simplesmente esconder essas informações"): sem
+         Trade Plan ativo, o canto superior esquerdo (vazio desde que o
+         Trend Channel migrou pro eixo, Diretriz de Refinamento Visual §5)
+         explica o motivo REAL — mesmo texto/lógica da barra de comando
+         (App.tsx: tradePlanAbsenceReason), nunca um silêncio que o
+         Operador não consegue distinguir de um bug. pointer-events-none:
+         nunca captura um gesto de pan/zoom, mesma disciplina de todo
+         overlay deste gráfico. */}
+      {tradePlanAbsenceReason && (
+        <div
+          className="absolute left-2 top-2 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide"
+          style={{ color: "rgba(138, 180, 248, 0.55)" }}
+        >
+          SEM TRADE PLAN · {tradePlanAbsenceReason}
+        </div>
+      )}
       {/* V-MAX Fase 0.7: FVG/Order Blocks (bullish|bearish) — mesmo dado real
          de computeSmcZones, já filtrado (!mitigated) e limitado em contagem
          rio acima (App.tsx/ChartWidget), agora como área colorida real

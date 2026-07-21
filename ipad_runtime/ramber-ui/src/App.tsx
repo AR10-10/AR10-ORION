@@ -80,7 +80,7 @@ import {
 import { filterSessionCandles, bucketMidPrice } from "./nexus/volume-profile";
 // V-MAX Fase 1 item 4: Conselho Multi-Agente (7 agentes puros + Meta-Agent
 // que delega a agregação ao linear opinion pool real da Fase F).
-import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD } from "./nexus/council";
+import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD, type CouncilDecision } from "./nexus/council";
 import { computeConsensusRadar, type ConsensusRadarCategory } from "./nexus/consensus-radar";
 // MomentumAgent order ("chegando à perfeição"): RSI de Wilder, o mesmo
 // exato computeRSI já real/exportado como feature interna do
@@ -1849,6 +1849,15 @@ export default function App() {
   }, [chartData]);
   useEffect(() => {
     const price = typeof priceData?.price === "number" ? priceData.price : null;
+    // EPC §5/§6 (achado real de auditoria, prioridade máxima): este
+    // efeito recomputa a cada tick real de preço (priceData nas deps
+    // abaixo) — sem histerese no stance publicado, o Conselho piscava
+    // LONG/SHORT↔NEUTRAL perto de qualquer fronteira de decisão, criando
+    // e destruindo o Trade Plan repetidamente (ver council.ts,
+    // councilStanceWithHysteresis). prevStance lido direto da store
+    // (getState() síncrono, sempre fresco — nunca uma closure velha) ANTES
+    // de escrever a nova leitura.
+    const prevStance = useUnifiedSnapshotStore.getState().council?.stance ?? "NEUTRAL";
     const decision = buildCouncilDecision({
       price,
       liquidityZones: smcZones.liquidityZones,
@@ -1861,7 +1870,7 @@ export default function App() {
       engineStatus,
       fibonacci: fibonacciMatrix,
       rsi: currentRsi,
-    });
+    }, Date.now(), prevStance);
     useUnifiedSnapshotStore.getState().setCouncil(decision);
   // Mesmo achado de auditoria do efeito Fibonacci acima: só marketStructureLabel/
   // htfMarketStructureLabel (rótulos lentos do ciclo real do motor) entram
@@ -4143,6 +4152,49 @@ function BarField({
   );
 }
 
+// EPC §5/§6 ("Nunca simplesmente esconder essas informações" — o motivo
+// real da ausência de Trade Plan deve aparecer, não só a barra sumir):
+// extraído da barra de comando (TradePlanTopStrip abaixo) pra ser
+// reaproveitado também no CANVAS do gráfico (ChartWidget) — mesma lógica
+// real, zero segunda implementação (Regra de Ouro 4). Cobre os 4 motivos
+// reais possíveis, na mesma ordem de checagem de trade-plan.ts: sem
+// Conselho ainda, risco travado, Conselho neutro/sem quórum (com ou sem
+// o Núcleo já direcional — a divergência LEI 24 entre Núcleo e Conselho é
+// real e honesta, nunca "corrigida" escondendo um dos dois lados), ou
+// Conselho direcional mas sem estrutura real mapeável.
+function tradePlanAbsenceReason(
+  council: CouncilDecision | null,
+  coreDir: "LONG" | "SHORT" | null,
+): { reason: string; tooltip: string } {
+  if (!council) {
+    return {
+      reason: "Aguardando Conselho",
+      tooltip: "O Conselho Multi-Agente ainda não computou nenhuma leitura nesta sessão — sem base real para um plano ainda.",
+    };
+  }
+  if (council.riskGated) {
+    return {
+      reason: "Conselho travado (risco)",
+      tooltip: "O RiskAgent absteve por dado degradado e travou o Conselho (fail-closed) — nenhum plano acionável enquanto durar.",
+    };
+  }
+  if (council.stance === "NEUTRAL" || council.stance === "ABSTAIN") {
+    return coreDir
+      ? {
+          reason: `Núcleo ${coreDir}, Conselho neutro`,
+          tooltip: `O Core Engine (LEI 24, única decisão real de LONG/SHORT/WAIT) lê ${coreDir}, mas o Conselho Multi-Agente — mais conservador, soma várias fontes independentes — está neutro ou sem quórum direcional. O Trade Plan usa a base do Conselho, não a do Núcleo diretamente; por isso Entry/Stop/Target não aparecem agora mesmo com o Núcleo direcional. Nunca um plano fabricado sem essa base.`,
+        }
+      : {
+          reason: "Conselho neutro",
+          tooltip: "O Conselho Multi-Agente está neutro ou sem quórum direcional — sem base real para Entry/Stop/Target agora.",
+        };
+  }
+  return {
+    reason: `Conselho ${council.stance}, sem estrutura`,
+    tooltip: `O Conselho lê ${council.stance}, mas nenhuma estrutura real mapeada (Order Blocks, FVGs, S/R, Fibonacci, Volume Profile) forma uma entrada/invalidação/alvo coerentes agora — nunca um plano fabricado sem base real.`,
+  };
+}
+
 function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   const plan = useTradePlanSnapshot();
   // v2 (Diretriz Complementar §2/§4): a barra compacta mostra o PRÓXIMO
@@ -4173,25 +4225,11 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
     // "bug" de "nenhum plano acionável agora". Correção: NUNCA trocar qual
     // sinal trava o Trade Plan (território de LEI 24 — decisão do
     // Operador, não uma correção de bug) — só tornar o null honesto e
-    // visível, com o motivo real.
+    // visível, com o motivo real. EPC §5/§6: a derivação em si agora vive
+    // em tradePlanAbsenceReason (módulo), reaproveitada também pelo
+    // CANVAS do gráfico — zero segunda implementação.
     const coreDir = engine?.direction ?? null;
-    let reason: string;
-    let tooltip: string;
-    if (!council) {
-      reason = "Aguardando Conselho";
-      tooltip = "O Conselho Multi-Agente ainda não computou nenhuma leitura nesta sessão — sem base real para um plano ainda.";
-    } else if (council.riskGated) {
-      reason = "Conselho travado (risco)";
-      tooltip = "O RiskAgent absteve por dado degradado e travou o Conselho (fail-closed) — nenhum plano acionável enquanto durar.";
-    } else if (council.stance === "NEUTRAL" || council.stance === "ABSTAIN") {
-      reason = coreDir ? `Núcleo ${coreDir}, Conselho neutro` : "Conselho neutro";
-      tooltip = coreDir
-        ? `O Core Engine (LEI 24, única decisão real de LONG/SHORT/WAIT) lê ${coreDir}, mas o Conselho Multi-Agente — mais conservador, soma várias fontes independentes — está neutro ou sem quórum direcional. O Trade Plan usa a base do Conselho, não a do Núcleo diretamente; por isso Entry/Stop/Target não aparecem agora mesmo com o Núcleo direcional. Nunca um plano fabricado sem essa base.`
-        : "O Conselho Multi-Agente está neutro ou sem quórum direcional — sem base real para Entry/Stop/Target agora.";
-    } else {
-      reason = `Conselho ${council.stance}, sem estrutura`;
-      tooltip = `O Conselho lê ${council.stance}, mas nenhuma estrutura real mapeada (Order Blocks, FVGs, S/R, Fibonacci, Volume Profile) forma uma entrada/invalidação/alvo coerentes agora — nunca um plano fabricado sem base real.`;
-    }
+    const { reason, tooltip } = tradePlanAbsenceReason(council, coreDir);
     return (
       <div className="flex items-stretch pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap" title={tooltip}>
         <BarField label="Trade Plan" value={reason} labelClass="text-[#8ab4f8]/50" valueClass="text-[#8ab4f8]/70" />
@@ -5919,6 +5957,15 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // Signal Precision order: the same real Trade Plan slice the ANALYSIS
   // view shows, now drawn on the chart as silk-thread price lines.
   const chartTradePlan = useTradePlanSnapshot();
+  // EPC §5/§6 ("Nunca simplesmente esconder essas informações"): sem
+  // plano ativo, o CANVAS agora explica o motivo real — mesma função pura
+  // já usada pela barra de comando (tradePlanAbsenceReason, módulo acima),
+  // nunca uma segunda leitura/lógica. useCouncilSnapshot() é o MESMO hook
+  // Zustand que TradePlanTopStrip já usa — zero prop-drilling novo.
+  const councilForChart = useCouncilSnapshot();
+  const chartTradePlanAbsenceReason = chartTradePlan
+    ? null
+    : tradePlanAbsenceReason(councilForChart, engine?.direction ?? null).reason;
   // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
   // estrutural"): união das zonas REAIS (tradePlanStructureZones, as MESMAS
   // que já geram targets[i].obstacleCount acima na store) que ficam no
@@ -6057,6 +6104,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             livePrice={livePrice.price}
             activeTimeframe={chartTimeframe as Timeframe}
             tradePlan={chartTradePlan}
+            tradePlanAbsenceReason={chartTradePlanAbsenceReason}
             aura={auraReading}
             targetsHit={auraTrackRecord.active?.targetsHit ?? 0}
             confidenceZone={confidenceZone ?? null}

@@ -258,8 +258,14 @@ describe('Diretriz de Refinamento Visual §5: Trend Channel reposicionado para a
 
   it('o <div> solto no canto superior (identidade v1, commit anterior) foi removido — nunca mais um título flutuando fora do eixo', () => {
     const c = chart();
-    expect(c).not.toContain('left-2 top-2');
+    // EPC §5/§6: left-2 top-2 foi realocado (Regra de Ouro 4) para o overlay
+    // honesto "SEM TRADE PLAN · {motivo}" (tradePlanAbsenceReason) — mesmo
+    // canto, propósito novo. A garantia real de que o Trend Channel nunca
+    // mais flutua solto fora do eixo é: (1) o guard JSX antigo sumiu, e
+    // (2) o texto antigo "TREND · OLS" nunca aparece dentro de um <div>
+    // com essa classe (só no rótulo do eixo agora).
     expect(c).not.toContain('{visibility.trend_channel && trendChannelInfo && (');
+    expect(c).not.toMatch(/left-2 top-2[^>]*>[\s\S]{0,80}TREND · OLS/);
   });
 
   it('trendChannelInfo agora carrega midPrice (ponta real da linha mid) — o dado que ancora o rótulo no eixo', () => {

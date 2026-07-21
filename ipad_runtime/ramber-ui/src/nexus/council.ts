@@ -365,11 +365,73 @@ const POOL_DIRECTION_TO_STANCE: Record<string, CouncilStance> = {
   NEUTRO: "NEUTRAL",
 };
 
+// Achado real de auditoria (Diretriz EPC §5/§6, prioridade máxima —
+// Operador: "o gráfico frequentemente deixa de mostrar ENTRY/STOP/TARGET
+// mesmo quando deveria existir uma leitura operacional disponível"):
+// pool.direcao (ensemble-engine.js) é um argmax honesto — alta>baixa e
+// alta>neutro por qualquer margem, sem banda nenhuma — sobre um pool que
+// RECOMPUTA A CADA TICK de preço (App.tsx: `priceData` nas deps do efeito
+// que escreve Council na store, ~300ms). Perto de qualquer fronteira de
+// decisão real (mercado em range/transição — o caso mais comum, não uma
+// exceção), o stance publicado podia piscar LONG↔NEUTRAL↔LONG a cada
+// tick. O Trade Plan (trade-plan.ts) só existe com stance LONG/SHORT —
+// era criado e destruído repetidamente: exatamente o sintoma relatado.
+//
+// Fix: MESMO princípio de histerese de duas bandas já usado em VWAP/Nexus
+// Line (vwap-state.ts, "nunca trocar de estado a cada candle") — nunca
+// fabrica uma opinião que não existe (pool.direcao continua o argmax
+// honesto de sempre, intocado em ensemble-engine.js, usado por 2 outros
+// consumidores que não devem herdar esta mudança); só suaviza a
+// TRANSIÇÃO publicada no tempo. `margin` é a massa REAL do lado vencedor
+// menos o segundo colocado real — a MESMA distribuição `pooled` já
+// honesta, nunca um número novo. ENTER exige uma margem de ~1 membro
+// típico do comitê (7 agentes, peso 1/7≈0.14 sem modulação de regime)
+// para reivindicar um lado NOVO — perder um membro isolado nunca deveria
+// virar o veredito sozinho. EXIT (razão 3:1 com ENTER, mesma proporção
+// da VWAP) só solta um lado já assumido quando a margem murcha bem mais
+// — nunca gruda quando o argmax realmente virou pro lado oposto ou pro
+// NEUTRO (ver councilStanceWithHysteresis abaixo). ABSTAIN (gate de
+// risco/quórum 0/pool insuficiente) nunca passa por aqui — aquele
+// caminho é sempre imediato e honesto, no early-return logo acima desta
+// função no código.
+export const COUNCIL_STANCE_ENTER_MARGIN = 0.12;
+export const COUNCIL_STANCE_EXIT_MARGIN = 0.04;
+
+/** Histerese pura sobre o veredito já honesto do pool — nunca decide uma
+ *  direção que o argmax não decidiu, só atrasa quando ele solta um lado
+ *  já assumido. `prev` é o stance PUBLICADO anteriormente (nunca o
+ *  ABSTAIN interno — ver aggregateCouncil); direção nova precisa de
+ *  ENTER; manter uma direção já ativa precisa só de EXIT; um argmax que
+ *  virou pro lado oposto ou pro NEUTRO nunca herda a antiga (sticky é
+ *  estritamente same-side, nunca cross-side). */
+export function councilStanceWithHysteresis(
+  prev: CouncilStance,
+  direcao: "ALTA" | "BAIXA" | "NEUTRO",
+  pooled: { alta: number; baixa: number; neutro: number },
+): "LONG" | "SHORT" | "NEUTRAL" {
+  if (direcao === "ALTA") {
+    const margin = pooled.alta - Math.max(pooled.baixa, pooled.neutro);
+    if (margin >= COUNCIL_STANCE_ENTER_MARGIN) return "LONG";
+    if (prev === "LONG" && margin >= COUNCIL_STANCE_EXIT_MARGIN) return "LONG";
+    return "NEUTRAL";
+  }
+  if (direcao === "BAIXA") {
+    const margin = pooled.baixa - Math.max(pooled.alta, pooled.neutro);
+    if (margin >= COUNCIL_STANCE_ENTER_MARGIN) return "SHORT";
+    if (prev === "SHORT" && margin >= COUNCIL_STANCE_EXIT_MARGIN) return "SHORT";
+    return "NEUTRAL";
+  }
+  return "NEUTRAL"; // pool genuinamente NEUTRO (neutro é o argmax real) — sempre honesto, nunca gruda
+}
+
 /** Agrega os votos: gate de risco primeiro (fail-closed), depois quórum,
  *  depois o linear opinion pool REAL da Fase F sobre os votos direcionais
  *  (opinionFromVote: postura+confiança => distribuição; massa desconhecida
- *  vira NEUTRO, conservador). O debate completo (votes) sai sempre. */
-export function aggregateCouncil(votes: CouncilVote[], computedAt: number): CouncilDecision {
+ *  vira NEUTRO, conservador). O debate completo (votes) sai sempre.
+ *  `prevStance` (histerese, achado EPC §5/§6 acima): o stance PUBLICADO
+ *  na leitura anterior — default "NEUTRAL" (primeira leitura real, sem
+ *  histórico, mesmo fallback de vwap-state.ts). */
+export function aggregateCouncil(votes: CouncilVote[], computedAt: number, prevStance: CouncilStance = "NEUTRAL"): CouncilDecision {
   const risk = votes.find((v) => v.agent === "RISK");
   const riskGated = risk?.stance === "ABSTAIN";
   const directional = votes.filter((v) => v.agent !== "RISK" && v.stance !== "ABSTAIN");
@@ -411,7 +473,13 @@ export function aggregateCouncil(votes: CouncilVote[], computedAt: number): Coun
 
   return {
     contractVersion: COUNCIL_CONTRACT_VERSION,
-    stance: POOL_DIRECTION_TO_STANCE[pool.direcao as string] ?? "NEUTRAL",
+    // EPC §5/§6: histerese sobre o veredito do pool, nunca sobre o pool em
+    // si — pool.direcao/pooled continuam o argmax honesto de sempre.
+    stance: councilStanceWithHysteresis(
+      prevStance,
+      pool.direcao as "ALTA" | "BAIXA" | "NEUTRO",
+      pool.opiniao as { alta: number; baixa: number; neutro: number },
+    ),
     agreement: pool.forca as number,
     opinionMass: {
       long: (pool.opiniao as any).alta as number,
@@ -425,8 +493,12 @@ export function aggregateCouncil(votes: CouncilVote[], computedAt: number): Coun
   };
 }
 
-/** Conveniência: os 7 agentes + Meta-Agent numa chamada, ordem fixa. */
-export function buildCouncilDecision(inputs: CouncilInputs, computedAt: number = Date.now()): CouncilDecision {
+/** Conveniência: os 7 agentes + Meta-Agent numa chamada, ordem fixa.
+ *  `prevStance` (EPC §5/§6, histerese): o stance PUBLICADO na leitura
+ *  anterior — o chamador real (App.tsx) lê da própria store antes de
+ *  escrever a nova decisão, mesmo padrão de `getState()` síncrono já
+ *  usado nos outros efeitos store-mediated deste arquivo. */
+export function buildCouncilDecision(inputs: CouncilInputs, computedAt: number = Date.now(), prevStance: CouncilStance = "NEUTRAL"): CouncilDecision {
   const votes: CouncilVote[] = [
     liquidityAgentVote(inputs.liquidityZones, inputs.price),
     structureAgentVote(inputs.structure15, inputs.structure1h),
@@ -436,5 +508,5 @@ export function buildCouncilDecision(inputs: CouncilInputs, computedAt: number =
     fibonacciAgentVote(inputs.fibonacci),
     momentumAgentVote(inputs.rsi),
   ];
-  return aggregateCouncil(votes, computedAt);
+  return aggregateCouncil(votes, computedAt, prevStance);
 }

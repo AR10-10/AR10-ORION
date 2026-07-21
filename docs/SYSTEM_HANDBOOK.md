@@ -9,7 +9,7 @@ propósito com a razão registrada). As regras permanentes vivem em
 `CLAUDE.md` (raiz) e não são repetidas aqui; este documento é o mapa,
 não a lei.
 
-Data de referência: 2026-07-19 · Branch: `claude/eloquent-cannon-qyt86y` · PR #13.
+Data de referência: 2026-07-21 · Branch: `claude/eloquent-cannon-qyt86y` · PR #13.
 
 ---
 
@@ -93,10 +93,12 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 | Decaimento de zonas | 30→100 candles | `chart/annotation-decay.ts` | Zonas velhas esmaecem até 15% e saem da TELA (nunca do dado). |
 | Página de captura de histórico | 1000 candles | `research/backtest/history-capture.js` | Abaixo do limite documentado da Binance (1500), folga deliberada. Laboratório (fase 2 do backtest honesto, §6.7) — não é caminho de produção. |
 | Teto de páginas de captura | 50 páginas | `research/backtest/history-capture.js` | Segurança contra laço sem fim (50 000 candles no pior caso); nunca atingido em captura normal. |
+| Histerese do stance do Council (ENTER) | 0.12 | `nexus/council.ts` | Margem mínima do pool (Stone/DeGroot) pra reivindicar um lado NUNCA ocupado. EPC §5/§6 — corrige o flicker LONG↔NEUTRAL a cada tick de preço. |
+| Histerese do stance do Council (EXIT) | 0.04 | `nexus/council.ts` | Margem mínima pra MANTER um lado JÁ ocupado; abaixo disso solta pra NEUTRAL. Nunca herda entre lados opostos. |
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1644 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1656 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -1220,6 +1222,114 @@ fonte nova) — ficam para o Operador decidir, com o relatório servindo de
 base honesta. Verificação: `tsc --noEmit` limpo · **103 arquivos/1644
 testes** (+1 do glifo de direção; +1 teste de wiring reescrito) · `npm
 run build` ok.
+
+---
+
+### 6.19 EPC §5/§6 (prioridade máxima): "Trade Plan frequentemente não
+aparece" — causa raiz real, histerese no Council, motivo honesto agora
+também no canvas
+
+Pedido do Operador (EPC — Evolução Suprema do Ecossistema Visual,
+Matemático e Persistência Operacional), §5 marcado prioridade máxima:
+"o gráfico frequentemente deixa de mostrar ENTRY/STOP/TARGET mesmo
+quando deveria existir uma leitura operacional disponível" — exige
+auditar o ciclo completo Core Engine→Council→Risk Gate→Trade
+Plan→Store→Canvas e responder objetivamente se o plano é criado/
+descartado/escondido/substituído, se há perda de persistência ou
+sincronização incorreta, e garantir "persistência obrigatória": nunca
+esconder silenciosamente, sempre informar o motivo real quando não há
+operação ativa.
+
+**Causa raiz real, confirmada por leitura direta do código (não
+especulação)**: `council.ts`'s `aggregateCouncil`/`buildCouncilDecision`
+era uma função pura sem estado; `ensemble-engine.js`'s
+`buildEnsembleConsensus` deriva `direcao` por argmax puro (`pooled.alta
+> pooled.baixa && pooled.alta > pooled.neutro`), sem faixa neutra; o
+efeito em App.tsx que recomputa o Council roda a CADA tick de preço via
+WebSocket (`priceData` nas deps). Combinado: perto de qualquer fronteira
+de decisão, o stance do Council podia alternar LONG↔NEUTRAL a cada
+~300ms, destruindo e recriando o Trade Plan repetidamente — exatamente o
+sintoma relatado.
+
+Resposta objetiva às perguntas do §5: **criado?** sim, quando há
+confluência real. **Descartado?** sim, repetidamente, por ruído de
+tick — não por mudança real de mercado. **Substituído?** sim, um objeto
+novo a cada oscilação. **Perda de persistência?** sim — zero mecanismo
+de continuidade existia antes desta correção. **Sincronização
+incorreta?** em certo sentido sim: o Core Engine podia ficar estável
+(LEI 24, seu próprio ciclo) enquanto o Council piscava, e o Trade Plan
+segue o Council, nunca o Núcleo diretamente — divergência real e
+honesta (território de LEI 24), nunca "corrigida" trocando qual sinal
+trava o plano.
+
+**Correção aplicada — histerese de dois patamares** (reaproveita o
+padrão já usado por `vwap-state.ts`'s `directionalStateWithHysteresis`):
+`council.ts` ganhou `councilStanceWithHysteresis(prevStance, direcao,
+pooled)` com `COUNCIL_STANCE_ENTER_MARGIN = 0.12` (margem maior, exigida
+pra reivindicar um lado nunca ocupado) e `COUNCIL_STANCE_EXIT_MARGIN =
+0.04` (margem menor, suficiente pra MANTER um lado já ocupado) —
+parâmetros de convenção, mesma categoria da tabela em §4. Nunca herda
+entre lados opostos, nunca gruda em NEUTRO por argmax genuíno. Aplicada
+SÓ na camada de derivação do stance do Council (`aggregateCouncil`/
+`buildCouncilDecision`, agora aceitando `prevStance` como 3º parâmetro,
+default `"NEUTRAL"`) — deliberadamente SEM tocar `ensemble-engine.js`
+(linear opinion pool de Stone 1961/DeGroot 1974), primitiva
+compartilhada por mais dois consumidores (`confluence-engine.ts`,
+`multi-timeframe-engine.ts`) com necessidades de estabilidade
+potencialmente diferentes; mudar ali afetaria os três de forma
+imprevisível, contra a disciplina de nunca uma mudança apressada junto
+de outras coisas. App.tsx lê `prevStance` da própria store
+(`useUnifiedSnapshotStore.getState().council?.stance`) antes de escrever
+a nova decisão — síncrono, sempre fresco (Zustand `getState()`, sem o
+truque de updater funcional do React state).
+
+**Persistência obrigatória (§5) — nunca mais um silêncio indistinguível
+de bug**: a lógica de motivo honesto (já existente numa sessão anterior
+só pra barra de comando) foi extraída para uma função pura module-scope,
+`tradePlanAbsenceReason(council, coreDir)`, com as 4 causas reais e
+mutuamente exclusivas (aguardando Conselho / Conselho travado por risco
+/ Conselho neutro-ou-sem-quórum — com a divergência Núcleo-vs-Conselho
+explícita quando existe / Conselho direcional mas sem estrutura real
+mapeável). Reaproveitada (Regra de Ouro 4 — nunca duplicar, sempre
+realocar) em DOIS lugares agora: a barra de comando (já existia) e um
+overlay novo no canto superior esquerdo do PRÓPRIO CANVAS
+(`"SEM TRADE PLAN · {motivo}"`, `EnhancedChart_110_Percent.tsx`, mesma
+posição que o Trend Channel vagou ao migrar pro eixo na Diretriz de
+Refinamento Visual §5) — o Operador agora vê o motivo real sem precisar
+olhar a barra de comando, direto onde ele já está olhando.
+
+**Verificação real**:
+- `tsc --noEmit` limpo.
+- **103 arquivos / 1656 testes** (100% passando) — 45 testes em
+  `nexus-council.test.ts` cobrem a histerese com execução real,
+  incluindo uma "prova viva do sintoma": reproduz o flicker ORIGINAL
+  quando `prevStance` não é encadeado entre chamadas, e contrasta com o
+  comportamento CORRIGIDO quando é.
+- `npm run build` ok.
+- `audit-header-maxcontent.mjs` — 11 viewports, CLEAN.
+- Verificação Playwright ao vivo confirmou a barra de comando exibindo o
+  motivo REAL (`"Trade Plan: Conselho travado (risco)"`, mesma função
+  nova). O overlay no CANVAS não pôde ser capturado ao vivo NESTE
+  sandbox especificamente: `EnhancedChart_110_Percent` só monta quando
+  `chartData.length > 0` (App.tsx:6089, fail-closed por design — nunca
+  um gráfico fabricado sem candle real), e este ambiente não tem rede de
+  saída para a Binance (proxy retorna 403, confirmado via `curl`) — a
+  MESMA causa do estado "AWAITING CANDLES…" já visível na tela, não uma
+  falha da feature nova. Evidência restante, honesta e suficiente: os
+  testes de padrão de código confirmam byte-a-byte que `ChartWidget`
+  computa `chartTradePlanAbsenceReason` com a MESMA função já provada ao
+  vivo na barra, e a passa como prop pro canvas — zero segunda
+  implementação, zero lugar pra divergir.
+
+**Pendência honesta (nunca fingir completude)**: a verificação visual do
+overlay dentro do CANVAS em si só é possível numa sessão com rede real
+(Binance) ou, futuramente, um modo Replay real alimentado por histórico
+real capturado com proveniência (mesmo padrão de `docs/` já usado no
+backtest). Achado incidental desta auditoria, registrado mesmo sem ter
+sido o foco: "Replay" hoje existe só como palavra num comentário
+(`App.tsx:2221`, cogitando uma "camada futura"), nunca como feature
+real — candidato honesto para o EPC §1/§3 (inventário do que existe vs.
+o que é só menção).
 
 ---
 
