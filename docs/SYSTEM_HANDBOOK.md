@@ -98,7 +98,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1690 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1691 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -1944,6 +1944,51 @@ prova de que o engine-bridge já computava o campo) · `npm run build` ok ·
 grep do bundle confirma `"Confirmação exigida"` compilado · `audit-header-
 maxcontent.mjs` 11 viewports CLEAN. Confirmação visual ao vivo (a linha na
 aba ANALYSIS com uma leitura real) depende de sessão com rede real.
+
+---
+
+### 6.30 EPC MODO ELITE (Recuperação de Inteligência Oculta, rodada 2):
+`council.opinionMass` — a distribuição real do pool, mostrada só como
+escalar derivado até agora
+
+Segunda passada da auditoria §10/§2 (localizar inteligência calculada que
+não chega ao Operador). Depois do `condition` (§6.29), a varredura
+campo-a-campo do `CouncilDecision` achou `opinionMass` — a DISTRIBUIÇÃO
+real do pool linear (Stone 1961/DeGroot 1974): massa de opinião do comitê
+em long/short/neutral. Ela já PARTICIPA da decisão (o `scenario-engine.ts`
+a lê para pesar os caminhos Path A/B, linha ~87), mas nunca era mostrada
+como número ao Operador. O painel Council exibia `agreement` — que é só o
+ESCALAR de coesão derivado dela (0=dividido, 1=unânime); `agreement` é uma
+projeção com perda (não dá pra recuperar a distribuição a partir dele),
+então mostrar `opinionMass` NÃO é duplicação (§2): adiciona a FORMA real
+da divisão — onde o não-consenso senta (ex.: o resto está em short com
+convicção, ou espalhado em neutral?).
+
+**Recuperação aplicada** (§2 — nunca duplicar, nunca recalcular; forma
+mais profissional): nova linha "Opinion Mass (L/S/N)" no painel
+Multi-Agent Council (aba ANALYSIS), logo após Agreement — formato
+compacto `L 72 · S 15 · N 13` (percentuais reais do pool). Honestidade de
+sempre preservada (o painel Scenario Paths já carrega o rótulo "council
+opinion mass, never market probability"; o valor é massa de opinião real,
+nunca probabilidade de mercado). Fail-closed: Conselho abstido
+(`opinionMass` null) → `MODULE_EMPTY` ("AWAITING REAL DATA").
+
+**Auditoria §2 mais ampla desta rodada (registrada honestamente)**: os
+demais campos ricos do núcleo foram verificados e TÊM representação —
+`lorentzian` (classificação+confiança+n= no widget), `dataQuality`
+(indicador de qualidade), votos individuais do Conselho (CouncilWidget),
+`agreement`/`quorum` (painel), `htfUpdatedAt` (idade do cache HTF),
+`forecast` multi-horizonte (classificação+confidence+sampleSize por
+chip). `opinionMass` era o último campo substancial genuinamente não
+exibido. **Conclusão honesta**: o poço de "inteligência de alto valor
+genuinamente escondida" está essencialmente esgotado após `condition`
+(§6.29) e `opinionMass` (esta) — as próximas evoluções reais de valor
+(ChartDOM, bandas VWAP, footprint) são CONSTRUÇÕES novas que dependem de
+decisão de produto do Operador, não campos órfãos a recuperar.
+
+**Verificação real**: `tsc --noEmit` limpo · **103 arquivos / 1691
+testes** (100%, +1: fiação da linha Opinion Mass, fail-closed) · `npm run
+build` ok · `audit-header-maxcontent.mjs` 11 viewports CLEAN.
 
 ---
 

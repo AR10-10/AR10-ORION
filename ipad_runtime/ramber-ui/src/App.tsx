@@ -5710,6 +5710,18 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         <ModulePanel title="Multi-Agent Council (real votes)">
           <ModuleStat label="Stance" value={council ? council.stance : MODULE_EMPTY} tone={council?.stance === "LONG" ? "long" : council?.stance === "SHORT" ? "short" : "neutral"} />
           <ModuleStat label="Agreement" value={council?.agreement !== null && council ? pct(council.agreement) : MODULE_EMPTY} />
+          {/* EPC MODO ELITE (Recuperação de Inteligência Oculta §2): a
+              DISTRIBUIÇÃO real do pool linear (Stone/DeGroot) — L/S/N — já
+              alimenta o Scenario Engine (pesa os caminhos), mas nunca era
+              mostrada como número. Agreement é só o escalar de coesão
+              derivado dela (não revela a FORMA da divisão: onde o
+              não-consenso senta). Massa de OPINIÃO do comitê, NUNCA
+              probabilidade de mercado (mesma honestidade de todo o pool).
+              Fail-closed: abstido (opinionMass null) → MODULE_EMPTY. */}
+          <ModuleStat
+            label="Opinion Mass (L/S/N)"
+            value={council?.opinionMass ? `L ${Math.round(council.opinionMass.long * 100)} · S ${Math.round(council.opinionMass.short * 100)} · N ${Math.round(council.opinionMass.neutral * 100)}` : MODULE_EMPTY}
+          />
           <ModuleStat label="Quorum" value={council ? `${council.quorum}/6` : MODULE_EMPTY} />
           <ModuleStat label="Risk Gate" value={council ? (council.riskGated ? "LOCKED (fail-closed)" : "CLEAR") : MODULE_EMPTY} tone={council?.riskGated ? "short" : "long"} />
         </ModulePanel>
