@@ -1726,6 +1726,75 @@ código-fonte) e `"STOP · BREACHED"` (formato novo) presente ·
 
 ---
 
+### 6.26 EPC re-emitido (checagem integral + "Identificação dos Objetos"
+§4): auditoria completa de todos os rótulos do gráfico + último verboso
+compactado (harmônico/Wolfe)
+
+O Operador re-emitiu a diretriz EPC completa (idêntica, 3x) pedindo uma
+CHECAGEM de que todas as ordens foram executadas e o sistema esteja
+"100% sem nenhuma falha". A resposta honesta: a grande maioria do EPC já
+foi entregue ao longo desta trilha (§6.19-6.25 + as duas auditorias em
+`AUDITORIA_ECOSSISTEMA_VISUAL.md` §7/§8). O único item concreto do §4
+("Identificação dos Objetos — usar apenas as iniciais... menor
+poluição") ainda não 100% varrido era o conjunto de rótulos DESENHADOS
+no gráfico — auditados agora um a um por leitura direta do código:
+
+| Objeto | Rótulo real hoje | EPC §4? |
+|---|---|---|
+| OB / FVG | `OB ↑`/`OB ↓`/`FVG ↑`/`FVG ↓` (+`⚠` obstáculo) | ✅ já compacto |
+| BOS / CHOCH | `BOS`/`CHOCH` (glifo de cor por direção) | ✅ já compacto |
+| EQH / EQL | `EQH x2`/`EQL x3` | ✅ já compacto |
+| VWAP / NL / EMA | `VWAP ↑ …`/`NL ↑ …`/`EMA 21 …` | ✅ já compacto |
+| S1 / R1 | `S1 FORTE 4x/45x …`/`R1 …` | ✅ sigla + força real |
+| TREND | `TREND · OLS 50 · ±2σ · ↑ …` | ✅ (§6.24, glifo) |
+| STOP/TARGET (Núcleo) | `STOP`/`TARGET 1 …` | ✅ (§6.25, sem "(Núcleo)") |
+| FIB | `FIB 61.8% ×2` | ✅ já compacto |
+| VP (Volume Profile) | linha POC, sem texto | ✅ sem poluição |
+| CVD | série na banda inferior, sem texto | ✅ sem poluição |
+| PROJEÇÃO | `title` nativo, `axisLabelVisible:false` | ✅ tooltip, não polui |
+| **Harmônico (PRZ)** | `GARTLEY BULLISH · PRZ · fit 87% (aderência, nunca probabilidade)` | ❌ **verboso — ÚNICO fora do padrão** |
+| **Wolfe (EPA)** | `WOLFE · EPA (linha 1→4 real) · ETA … (ápice da cunha)` | ❌ **verboso** |
+
+**Correção aplicada** (o último rótulo verboso do gráfico):
+- PRZ: `${pattern} ↑/↓ PRZ ${fit}%` — direção BULLISH/BEARISH vira glifo
+  ↑/↓ (mesmo vocabulário de FVG/OB/VWAP), palavra "fit" dropada (o % logo
+  após PRZ é inequívoco), e o disclaimer `"(aderência, nunca
+  probabilidade)"` sai do rótulo flutuante — confirmado por leitura de
+  código que ele já vive ÍNTEGRO no título do painel Harmonic Patterns
+  (`"ratio fit, never probability"`, App.tsx) — mesma disciplina de
+  zero-repetição do `"(Núcleo)"` (§6.25).
+- Wolfe EPA: `WOLFE EPA · ETA {dur}` — `EPA` já é a sigla profissional
+  (Estimated Price at Apex); `"(linha 1→4 real)"`/`"(ápice da cunha)"`
+  eram descrições, não dado — o significado segue em
+  `harmonic-patterns.ts` e no comentário do código.
+
+Regra de Ouro 4 respeitada: zero informação real perdida — só siglas no
+lugar de frases, e o disclaimer de honestidade preservado onde ele
+importa (o painel), nunca removido do sistema.
+
+**Checagem das demais seções do EPC** (respondida honestamente ao
+Operador, sem código novo por já estarem cobertas): §1 auditoria integral
+(`AUDITORIA_ECOSSISTEMA_VISUAL.md` §7 — 42/43 módulos conectados); §2
+pesquisa técnica (idem §8 — Sierra/Exocharts/IA); §3 evolução matemática
+(checklist das 8 categorias, nenhuma ausente); §5 Trade Plan permanente
+(§6.19-6.22, fallback do Núcleo + motivo honesto sempre visível); §6
+inteligência visual (todos os objetos do núcleo têm rótulo real); §7
+projeções (Scenario Engine Path A/B, já real); §8 responsividade (11
+viewports CLEAN, iPad Mini incluído). Pendências reais continuam as já
+registradas (bandas VWAP, OI/Funding, footprint, ChartDOM, Fase 2 do
+backtest, tipagem do WidgetContext, compactação por proximidade do
+fallback do Núcleo) — todas bloqueadas em decisão do Operador ou
+refactor maior, nunca em "matemática/inteligência faltando escondida".
+
+**Verificação real**: `tsc --noEmit` limpo · **103 arquivos / 1686
+testes** (100%, 3 testes de string do rótulo harmônico atualizados para
+o formato compacto) · `npm run build` ok · grep do bundle confirma
+`"aderência, nunca probabilidade"` com ZERO ocorrências (remoção real) ·
+`audit-header-maxcontent.mjs` 11 viewports CLEAN (iPad Mini portrait +
+landscape inclusos, EPC §8).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

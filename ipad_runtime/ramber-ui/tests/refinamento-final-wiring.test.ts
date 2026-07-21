@@ -435,10 +435,13 @@ describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no grá
     expect(c).toContain('harmonicHits?: HarmonicPatternHit[] | null;');
     const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
     expect(idx).toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 3600);
+    const block = c.slice(idx, idx + 4200);
     expect(block).toContain('const top = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;');
-    expect(block).toContain('fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)');
-    expect(block).toContain('`WOLFE · EPA (linha 1→4 real)${etaLabel ? ` · ETA ${etaLabel} (ápice da cunha)` : ""}`'); // §6: + ETA do ápice
+    // EPC §4 (rótulos compactos por iniciais): PRZ com glifo ↑/↓, EPA sem
+    // as descrições parentéticas — o disclaimer/significado seguem no
+    // painel Harmonic Patterns e em harmonic-patterns.ts.
+    expect(block).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
+    expect(block).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`'); // §6: + ETA do ápice (compacto EPC §4)
     expect(block).toContain('lineStyle: LineStyle.Solid,');
     const cleanupIdx = c.indexOf('chart.remove();');
     expect(c.slice(cleanupIdx, cleanupIdx + 700)).toContain('harmonicLinesRef.current = [];');
@@ -614,10 +617,10 @@ describe('Consolidação Final §5/§6: SHARK + AB=CD no motor, PRZ/ETA na super
     expect(h).toContain('etaIndex?: number;');
   });
 
-  it('gráfico: terminologia PRZ profissional + ETA do ápice na linha EPA da Wolfe', () => {
+  it('gráfico: terminologia PRZ profissional + ETA do ápice na linha EPA da Wolfe (rótulos compactos EPC §4)', () => {
     const c = chart();
-    expect(c).toContain('· PRZ · fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)');
-    expect(c).toContain('`WOLFE · EPA (linha 1→4 real)${etaLabel ? ` · ETA ${etaLabel} (ápice da cunha)` : ""}`');
+    expect(c).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
+    expect(c).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
     expect(c).toContain('}, [harmonicHits, data, visibility.harmonics]);'); // intervalo real de barra vem de data
   });
 

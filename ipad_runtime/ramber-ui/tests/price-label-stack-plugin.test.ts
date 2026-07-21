@@ -412,7 +412,12 @@ describe('Auditoria de pendências (achado real via harness Playwright): a polil
 
   it('zero informação perdida: a forma da polilinha + o title real da PRZ (price line do ponto D) já comunicam o padrão — nunca um rótulo redundante flutuando na posição natural sem resolução de colisão', () => {
     const s = chart();
-    expect(s).toContain('· PRZ · fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)');
+    // EPC §4 ("apenas as iniciais... menor poluição"): rótulo compacto
+    // `${pattern} ↑/↓ PRZ ${fit}%` — o disclaimer "never probability"
+    // vive íntegro no título do painel Harmonic Patterns (App.tsx), não
+    // repetido no rótulo flutuante do gráfico.
+    expect(s).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
+    expect(s).toContain('const hDirGlyph = top.direction === "BULLISH" ? "↑" : "↓";');
   });
 });
 

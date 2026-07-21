@@ -1274,10 +1274,16 @@ export function EnhancedChart_110_Percent({
     };
     // Consolidação Final §6 (terminologia profissional): o ponto de
     // reversão esperado é a PRZ — Potential Reversal Zone (D nos XABCD/
-    // AB=CD; ponto 5 na Wolfe).
+    // AB=CD; ponto 5 na Wolfe). EPC §4 ("apenas as iniciais... menor
+    // poluição"): direção BULLISH/BEARISH vira glifo ↑/↓ (mesmo
+    // vocabulário de FVG/OB/VWAP/NL) e o disclaimer "(aderência, nunca
+    // probabilidade)" sai do rótulo flutuante — já vive, íntegro, no
+    // título do painel Harmonic Patterns ("ratio fit, never probability",
+    // App.tsx) — mesma disciplina de zero-repetição do "(Núcleo)".
+    const hDirGlyph = top.direction === "BULLISH" ? "↑" : "↓";
     mkH(
       top.points.D.price,
-      `${top.pattern} ${top.direction} · PRZ · fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)`,
+      `${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`,
     );
     if (top.pattern === "WOLFE" && typeof top.epaPrice === "number" && Number.isFinite(top.epaPrice)) {
       // §6: ETA canônica da Wolfe = ápice da cunha (cruzamento real
@@ -1290,7 +1296,11 @@ export function EnhancedChart_110_Percent({
         barSec !== null && remainingBars !== null && remainingBars > 0
           ? formatEtaDuration(remainingBars * barSec * 1000)
           : null;
-      mkH(top.epaPrice, `WOLFE · EPA (linha 1→4 real)${etaLabel ? ` · ETA ${etaLabel} (ápice da cunha)` : ""}`);
+      // EPC §4: EPA já é a sigla profissional (Estimated Price at Apex);
+      // "(linha 1→4 real)"/"(ápice da cunha)" eram descrições, não dado
+      // — removidas do rótulo flutuante (o significado da EPA/ETA da Wolfe
+      // continua documentado em harmonic-patterns.ts e no comentário acima).
+      mkH(top.epaPrice, `WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`);
     }
   }, [harmonicHits, data, visibility.harmonics]);
 
