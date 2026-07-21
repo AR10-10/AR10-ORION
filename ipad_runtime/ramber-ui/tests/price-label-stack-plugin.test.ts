@@ -84,6 +84,95 @@ describe('PriceLabelStackPlugin: alpha opcional por rótulo (achado real: BOS/CH
   });
 });
 
+// Achado real do Operador ("tá ficando só numa lateral direita... qual
+// forma mais inteligente... mais profissional"): pesquisa real confirmou
+// que dividir rótulos entre os dois lados do eixo é prática profissional
+// real (Lightweight Charts documenta price scales nativas nos dois
+// lados; TradingView Supercharts permite até 8 escalas simultâneas).
+describe('PriceLabelStackPlugin: side opcional (left/right) — dois lados resolvem colisão de forma TOTALMENTE independente', () => {
+  it('PriceAxisLabel declara side?: "left" | "right" — default "right" preserva o comportamento de sempre pra todo rótulo que não declara o campo', () => {
+    const s = plugin();
+    const idx = s.indexOf('export interface PriceAxisLabel {');
+    const block = s.slice(idx, idx + 1500);
+    expect(block).toContain('side?: "left" | "right";');
+  });
+
+  it('withNaturalY(side) filtra por (l.side ?? "right") === side — nunca um rótulo aparece nos dois lados nem em nenhum', () => {
+    const s = plugin();
+    const idx = s.indexOf('const withNaturalY = (side:');
+    expect(idx, 'withNaturalY parametrizado por lado não encontrado').toBeGreaterThan(-1);
+    const block = s.slice(idx, idx + 400);
+    expect(block).toContain('.filter((l) => (l.side ?? "right") === side)');
+  });
+
+  it('drawSide resolve CADA lado com sua PRÓPRIA chamada de resolveLabelStackPositions — um rótulo da esquerda nunca desloca um da direita', () => {
+    const s = plugin();
+    expect(s).toContain('drawSide(withNaturalY("right"), "right");');
+    expect(s).toContain('drawSide(withNaturalY("left"), "left");');
+    // as DUAS chamadas passam pela MESMA função pura — zero heurística
+    // paralela reinventada por lado.
+    const drawSideIdx = s.indexOf('const drawSide = ');
+    const drawSideBlock = s.slice(drawSideIdx, drawSideIdx + 600);
+    expect(drawSideBlock).toContain('resolveLabelStackPositions(entries, MIN_GAP_PX)');
+  });
+
+  it('geometria espelhada real: boxX ancora em LEFT_MARGIN_PX à esquerda, cssWidth-RIGHT_MARGIN_PX-boxWidth à direita — mesma margem mínima nos dois lados (LEFT_MARGIN_PX === RIGHT_MARGIN_PX)', () => {
+    const s = plugin();
+    expect(s).toContain('const LEFT_MARGIN_PX = 2;');
+    expect(s).toContain('const RIGHT_MARGIN_PX = 2;');
+    const drawSideIdx = s.indexOf('const drawSide = ');
+    const drawSideBlock = s.slice(drawSideIdx, drawSideIdx + 900);
+    expect(drawSideBlock).toContain('const boxX = side === "right" ? cssWidth - RIGHT_MARGIN_PX - boxWidth : LEFT_MARGIN_PX;');
+  });
+
+  it('o conector do lado esquerdo fica na borda DIREITA da caixa (espelhado do direito, que fica na borda esquerda) — sempre entre a caixa e o centro do gráfico, nunca cortando pra fora da tela', () => {
+    const s = plugin();
+    const drawSideIdx = s.indexOf('const drawSide = ');
+    const drawSideBlock = s.slice(drawSideIdx, drawSideIdx + 1700);
+    expect(drawSideBlock).toContain('const connectorX = side === "right" ? boxX - 0.5 : boxX + boxWidth + 0.5;');
+  });
+
+  it('execução real (prova viva de independência): dois rótulos com a MESMA posição Y natural, um em cada lado, NUNCA colidem entre si — cada lado só vê os próprios rótulos ao chamar resolveLabelStackPositions; os DOIS ficam na posição natural exata, nenhum deslocado', () => {
+    // Mesma função pura real (price-label-stack.ts), reproduzida aqui só
+    // para provar a matemática de independência — o teste de padrão acima
+    // já trava que o componente real chama exatamente esta função 2x.
+    const resolve = <T extends { naturalY: number }>(entries: T[], minGapPx: number): (T & { resolvedY: number })[] => {
+      if (entries.length === 0) return [];
+      const sorted = [...entries].sort((a, b) => a.naturalY - b.naturalY);
+      const result: (T & { resolvedY: number })[] = [];
+      let clusterStart = 0;
+      while (clusterStart < sorted.length) {
+        let clusterEnd = clusterStart;
+        while (clusterEnd + 1 < sorted.length && sorted[clusterEnd + 1].naturalY - sorted[clusterEnd].naturalY < minGapPx) clusterEnd++;
+        const cluster = sorted.slice(clusterStart, clusterEnd + 1);
+        const center = cluster.reduce((sum, e) => sum + e.naturalY, 0) / cluster.length;
+        const k = cluster.length;
+        cluster.forEach((entry, i) => result.push({ ...entry, resolvedY: center - ((k - 1) * minGapPx) / 2 + i * minGapPx }));
+        clusterStart = clusterEnd + 1;
+      }
+      return result;
+    };
+    const MIN_GAP_PX = 20;
+    // R1 (direita) e Trend Channel (esquerda) formando exatamente no MESMO
+    // preço/Y — cenário real: um nível estrutural e o canal de tendência
+    // podem convergir. Se resolvidos JUNTOS (bug), um dos dois deslocaria;
+    // resolvidos SEPARADOS (comportamento real), nenhum desloca.
+    const right = [{ naturalY: 100, id: "R1" }];
+    const left = [{ naturalY: 100, id: "TREND" }];
+    const resolvedRight = resolve(right, MIN_GAP_PX);
+    const resolvedLeft = resolve(left, MIN_GAP_PX);
+    expect(resolvedRight[0].resolvedY).toBe(100); // nunca deslocado
+    expect(resolvedLeft[0].resolvedY).toBe(100); // nunca deslocado
+
+    // prova viva do CONTRASTE: os dois no MESMO lado, mesmo Y, colidem de
+    // verdade (exatamente o comportamento que o resolvedor existe para
+    // evitar) — confirma que a independência acima não é coincidência.
+    const sameSide = [{ naturalY: 100, id: "R1" }, { naturalY: 100, id: "TREND" }];
+    const resolvedSame = resolve(sameSide, MIN_GAP_PX);
+    expect(resolvedSame[0].resolvedY).not.toBe(resolvedSame[1].resolvedY);
+  });
+});
+
 describe('PriceLabelStackPlugin: geometria real via lightweight-charts, nunca posição fabricada', () => {
   it('resolve preço→pixel via series.priceToCoordinate — nunca uma coordenada fixa/chutada', () => {
     expect(plugin()).toContain('series.priceToCoordinate(');
@@ -103,7 +192,12 @@ describe('PriceLabelStackPlugin: geometria real via lightweight-charts, nunca po
 
   it('a resolução de colisão vem da função pura real (price-label-stack.ts) — nunca uma heurística reinventada aqui', () => {
     expect(plugin()).toContain('import { resolveLabelStackPositions } from "./price-label-stack";');
-    expect(plugin()).toContain('resolveLabelStackPositions(withNaturalY, MIN_GAP_PX)');
+    // Achado real do Operador (densidade só do lado direito): a resolução
+    // agora roda uma vez por lado (drawSide), cada lado 100% independente
+    // — mesma função pura, chamada 2x (nunca uma segunda heurística).
+    expect(plugin()).toContain('resolveLabelStackPositions(entries, MIN_GAP_PX)');
+    expect(plugin()).toContain('drawSide(withNaturalY("right"), "right");');
+    expect(plugin()).toContain('drawSide(withNaturalY("left"), "left");');
   });
 
   it('o gap mínimo real (MIN_GAP_PX) é MAIOR que a altura da caixa (LABEL_HEIGHT_PX) — achado real via harness Playwright: gap igual à altura deixa duas etiquetas ENCOSTADAS (zero sobreposição matemática, mas ilegível/"uma coisa só" visualmente); a folga extra garante uma fresta real e visível', () => {
@@ -249,7 +343,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
   it('S1/R1 reaproveitam levelTitle (mesma função já usada pelas price lines nativas) — nunca uma segunda formatação', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 1400);
+    const block = s.slice(idx, idx + 1700);
     expect(block).toContain('levelTitle("S1", supportStrength, supportBreakouts)');
     expect(block).toContain('levelTitle("R1", resistanceStrength, resistanceBreakouts)');
     expect(block).toContain('color: "rgba(0, 255, 170, 0.65)"'); // mesma cor real da price line S1
@@ -259,7 +353,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
   it('VWAP/NL reaproveitam LINE_STATE_GLYPH/VWAP_STATE_COLOR/NL_STATE_COLOR reais — mesma paleta institucional já usada pelas séries', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 1700);
+    const block = s.slice(idx, idx + 2800);
     expect(block).toContain('VWAP ${LINE_STATE_GLYPH[s]} ${vwapLastValue.toFixed(2)}');
     expect(block).toContain('color: VWAP_STATE_COLOR[s]');
     expect(block).toContain('NL ${LINE_STATE_GLYPH[s]} ${nlLastValue.toFixed(2)}');
@@ -269,7 +363,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
   it('último preço usa a MESMA cor up/down real da própria série de candles (#00ffaa/#ff0055) — nunca uma cor nova', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 3300);
+    const block = s.slice(idx, idx + 4400);
     expect(block).toContain('displayPrice >= lastCandle.open ? "#00ffaa" : "#ff0055"');
   });
 
@@ -517,5 +611,50 @@ describe('EPC §5/§6 (continuação): App.tsx computa engineFallbackLevels a pa
   it('passado para o canvas como prop dedicada — nunca fundido com chartTradePlan', () => {
     const s = app();
     expect(s).toContain('engineFallbackLevels={engineFallbackLevels}');
+  });
+});
+
+describe('Achado real do Operador ("tá ficando só numa lateral direita"): critério de divisão entre os dois lados do eixo — direita = acionável agora, esquerda = mapa estrutural', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('S1/R1/Trend Channel/BOS-CHOCH (contexto estrutural, muda devagar ou já é histórico) declaram side: "left"', () => {
+    const c = chart();
+    const idx = c.indexOf('const priceAxisLabels = useMemo');
+
+    const s1Idx = c.indexOf('if (Number.isFinite(support)) {', idx);
+    const s1Block = c.slice(s1Idx, c.indexOf('}', c.indexOf('side:', s1Idx)) + 1);
+    expect(s1Block).toContain('side: "left",');
+
+    const r1Idx = c.indexOf('if (Number.isFinite(resistance)) {', idx);
+    const r1Block = c.slice(r1Idx, c.indexOf('}', c.indexOf('side:', r1Idx)) + 1);
+    expect(r1Block).toContain('side: "left",');
+
+    const trendIdx = c.indexOf('if (visibility.trend_channel && trendChannelInfo) {', idx);
+    const trendBlock = c.slice(trendIdx, c.indexOf('}', c.indexOf('side:', trendIdx)) + 1);
+    expect(trendBlock).toContain('side: "left",');
+
+    const chocIdx = c.indexOf('if (structureBreak) {', idx);
+    const chocBlock = c.slice(chocIdx, c.indexOf('}', c.indexOf('side:', chocIdx)) + 1);
+    expect(chocBlock).toContain('side: "left",');
+  });
+
+  it('VWAP/NL/EMA/último preço/ENTRY/STOP/TARGET (acionável agora — referência dinâmica ou plano ativo) NUNCA declaram side — ficam no default "right"', () => {
+    const c = chart();
+    const idx = c.indexOf('const priceAxisLabels = useMemo');
+    const end = c.indexOf('return out;', idx);
+    const block = c.slice(idx, end);
+    // as linhas reais de push destes rótulos, cada uma sem side: no fim
+    expect(block).toContain('out.push({ price: vwapLastValue, text: `VWAP ${LINE_STATE_GLYPH[s]} ${vwapLastValue.toFixed(2)}`, color: VWAP_STATE_COLOR[s] });');
+    expect(block).toContain('out.push({ price: nlLastValue, text: `NL ${LINE_STATE_GLYPH[s]} ${nlLastValue.toFixed(2)}`, color: NL_STATE_COLOR[s] });');
+    expect(block).toContain('out.push({ price: emaLastValue, text: `EMA ${activeEmaPeriod} ${emaLastValue.toFixed(2)}`, color: "rgba(66, 165, 245, 0.85)" });');
+  });
+
+  it('resultado real esperado: até 4 rótulos possíveis do lado esquerdo (S1/R1/TREND/CHOC), até 8 do lado direito (VWAP/NL/EMA + até 5 do plano ativo Conselho OU Núcleo) — redução real de densidade no lado que o Operador reportou, não só estética', () => {
+    const c = chart();
+    const idx = c.indexOf('const priceAxisLabels = useMemo');
+    const end = c.indexOf('return out;', idx);
+    const block = c.slice(idx, end);
+    const leftSideCount = (block.match(/side: "left",/g) ?? []).length;
+    expect(leftSideCount).toBe(4);
   });
 });

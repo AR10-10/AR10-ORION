@@ -1464,11 +1464,27 @@ export function EnhancedChart_110_Percent({
   // harmonicHits mudando) nunca deveria disparar um redraw à toa.
   const priceAxisLabels = useMemo<PriceAxisLabel[]>(() => {
     const out: PriceAxisLabel[] = [];
+    // Achado real do Operador ("tá ficando só numa lateral direita...
+    // qual forma mais inteligente... mais profissional"): pesquisa real
+    // (Lightweight Charts documenta price scales nativas nos dois lados;
+    // TradingView Supercharts permite até 8) confirma que dividir rótulos
+    // entre os dois lados é prática profissional real. Critério de
+    // divisão, pensado como um trader pensaria: lado DIREITO (onde o olho
+    // já rastreia o preço ao vivo) = "o que eu ajo AGORA" — VWAP/NL/EMA
+    // (referências dinâmicas, recalculadas a cada candle) + ENTRY/STOP/
+    // TARGET (o plano ativo, Conselho ou Núcleo). Lado ESQUERDO = "o mapa
+    // estrutural" — S1/R1 (limites da faixa atual, mudam devagar), Trend
+    // Channel (contexto de tendência) e BOS/CHOCH (evento HISTÓRICO, já
+    // esmaecendo com a idade — o menos urgente de todos, candidato ideal
+    // pro lado secundário). Resultado real: o lado direito cai de até 12
+    // caixas possíveis para até 8 — redução real de densidade, não só
+    // estética.
     if (Number.isFinite(support)) {
       out.push({
         price: support as number,
         text: `${levelTitle("S1", supportStrength, supportBreakouts)} ${(support as number).toFixed(2)}`,
         color: "rgba(0, 255, 170, 0.65)",
+        side: "left",
       });
     }
     if (Number.isFinite(resistance)) {
@@ -1476,6 +1492,7 @@ export function EnhancedChart_110_Percent({
         price: resistance as number,
         text: `${levelTitle("R1", resistanceStrength, resistanceBreakouts)} ${(resistance as number).toFixed(2)}`,
         color: "rgba(255, 0, 85, 0.65)",
+        side: "left",
       });
     }
     // Auditoria de pendências (achado real via harness Playwright): as 3
@@ -1529,6 +1546,7 @@ export function EnhancedChart_110_Percent({
         price: trendChannelInfo.midPrice,
         text: `TREND · OLS ${trendChannelInfo.windowSize} · ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ · ${trendChannelInfo.direction} ${trendChannelInfo.midPrice.toFixed(2)}`,
         color: "rgba(148, 163, 184, 0.55)",
+        side: "left",
       });
     }
     // "bater o olho profissional" (pendência honesta do turno anterior): os
@@ -1657,6 +1675,7 @@ export function EnhancedChart_110_Percent({
             text: structureBreak.type,
             color: bullish ? "rgba(0, 255, 170, 0.75)" : "rgba(255, 0, 85, 0.75)",
             alpha,
+            side: "left",
           });
         }
       }

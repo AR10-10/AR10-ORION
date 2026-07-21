@@ -98,7 +98,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1675 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1684 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -1596,6 +1596,75 @@ adicionado ao Context sem ninguém notar via `tsc`. Registrado para o
 EPC §1/§3 (Task #26): tipar `WidgetContext` de verdade — um refactor
 maior e mais arriscado, fora do escopo de uma auditoria pontual — é a
 correção estrutural que fecharia esta classe inteira de bug de vez.
+
+---
+
+### 6.24 Achado real do Operador ("tá ficando só numa lateral direita"):
+rótulos do eixo divididos entre os dois lados — pesquisa real confirma
+prática profissional
+
+O Operador notou, olhando o gráfico ao vivo, que TODOS os rótulos do
+sistema anti-colisão (S1/R1/VWAP/NL/EMA/TREND/ENTRY/STOP/TARGET/CHOC)
+empilhavam só no lado direito — em pior caso, até 12 caixas competindo
+por uma única coluna vertical — e perguntou qual seria a forma "mais
+inteligente"/"mais profissional" de organizar.
+
+**Pesquisa real antes de implementar** (CLAUDE.md, "pesquise de verdade
+quando a tarefa toca... um método com nome próprio" — aqui, uma
+convenção real de charting profissional): confirmado que Lightweight
+Charts (a lib deste gráfico) documenta suporte nativo a múltiplas price
+scales, e TradingView Supercharts permite até 8 escalas simultâneas —
+dividir rótulos entre os dois lados do eixo é prática profissional real
+documentada, não um desenho inventado para agradar o pedido.
+
+**Critério de divisão** (pensado como um trader pensaria, não arbitrário):
+- **Lado DIREITO** (onde o olho já rastreia o preço ao vivo) = "o que eu
+  ajo AGORA": VWAP/Nexus Line/EMA (referências dinâmicas, recalculadas a
+  cada candle) + ENTRY/STOP/TARGET (o plano ativo — Conselho ou
+  fallback do Núcleo, nunca os dois ao mesmo tempo) + último preço
+  (nativo, fora deste sistema).
+- **Lado ESQUERDO** = "o mapa estrutural": S1/R1 (limites da faixa
+  atual, mudam devagar), Trend Channel (contexto de tendência) e
+  BOS/CHOCH (evento HISTÓRICO, já esmaecendo com a idade — o menos
+  urgente de todos, candidato ideal pro lado secundário).
+
+Resultado real: o lado direito cai de até 12 caixas possíveis para até
+8 — redução real de densidade, não só reorganização estética.
+
+**Implementação** (aditiva, Regra de Ouro 4 — zero duplicação): `PriceAxisLabel`
+ganhou `side?: "left" | "right"` opcional (default `"right"` — zero
+mudança de comportamento pra todo rótulo que não declara o campo).
+`PriceLabelStackPlugin` resolve cada lado de forma TOTALMENTE
+independente — `resolveLabelStackPositions` (mesma função pura de
+sempre, zero segunda heurística) roda uma vez por lado, então um rótulo
+da esquerda NUNCA desloca um da direita e vice-versa. Geometria
+espelhada: a caixa ancora em `LEFT_MARGIN_PX` (esquerda) ou
+`cssWidth - RIGHT_MARGIN_PX - boxWidth` (direita) — mesma margem mínima
+nos dois lados (`LEFT_MARGIN_PX === RIGHT_MARGIN_PX === 2`); o conector
+fino (Fio de Seda) espelha a direção — sempre entre a caixa e o centro
+do gráfico, nunca cortando pra fora da tela.
+
+**Tradeoff conhecido, honesto**: diferente do lado direito (que tem
+`rightOffset: 8` reservando espaço vazio real após a última vela), o
+lado esquerdo não tem um respiro equivalente — em zoom baixo ou ao
+rolar até o início do histórico carregado, as caixas do lado esquerdo
+PODEM sobrepor candles reais. Mesmo tradeoff já aceito no lado direito
+hoje (candles recentes também podem ficar atrás de caixas em zoom
+baixo) — não um problema novo, e terminais profissionais (TradingView
+incluso) aceitam a mesma sobreposição ocasional em vez de reservar
+espaço permanentemente vazio.
+
+**Verificação real**: `tsc --noEmit` limpo · **103 arquivos / 1684
+testes** (100%, +9: 6 sobre a independência real de resolução por lado
+— incluindo execução real provando que dois rótulos no MESMO Y mas em
+lados diferentes nunca colidem, contrastada com o mesmo cenário no MESMO
+lado colidindo de verdade — + 3 sobre o critério real de categorização
+em `EnhancedChart_110_Percent.tsx`) · `npm run build` ok ·
+`audit-header-maxcontent.mjs` 11 viewports CLEAN. Mesma limitação de
+sandbox das entregas §6.19-6.22: confirmação visual ao vivo do
+resultado (lado esquerdo realmente aliviando o direito, sem cobrir
+candles de forma inaceitável) depende da próxima captura de tela do
+Operador — sem rede real para Binance neste ambiente.
 
 ---
 

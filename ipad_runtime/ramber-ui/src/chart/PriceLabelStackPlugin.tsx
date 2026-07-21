@@ -35,6 +35,18 @@ export interface PriceAxisLabel {
   // BREAK_DECAY, StructureBreakMarkersPlugin) — "o sistema pensa e depois
   // esquece" sem perder a garantia de zero colisão deste plugin.
   alpha?: number;
+  // Achado real do Operador ("tá ficando só numa lateral direita... qual
+  // forma mais inteligente... mais profissional"): pesquisa real (Lightweight
+  // Charts documenta suporte nativo a múltiplas price scales; TradingView
+  // Supercharts permite até 8) confirma que dividir rótulos entre os dois
+  // lados é prática profissional real, não um desenho inventado. Opcional
+  // (default "right" — zero mudança de comportamento pra todo rótulo
+  // existente que não declara o campo): cada lado resolve colisão de forma
+  // TOTALMENTE independente (nunca um rótulo da esquerda desloca um da
+  // direita) — ver EnhancedChart_110_Percent.tsx para o critério real de
+  // qual lado cada tipo de rótulo usa (contexto estrutural estático vs.
+  // leitura acionável agora).
+  side?: "left" | "right";
 }
 
 // Altura real de uma etiqueta (px) — folga para o texto 9px + padding
@@ -53,6 +65,10 @@ export const LABEL_HEIGHT_PX = 16;
 const MIN_GAP_PX = LABEL_HEIGHT_PX + 4;
 const LABEL_PADDING_X = 5;
 const RIGHT_MARGIN_PX = 2;
+// Achado real do Operador (densidade de rótulos só no lado direito): o
+// lado esquerdo usa a mesma margem mínima real do direito — nenhuma
+// assimetria arbitrária entre os dois.
+const LEFT_MARGIN_PX = 2;
 
 // Achado real via harness Playwright (verificação desta correção): as
 // cores reaproveitadas (rgba(...), 0.65/0.75/0.85) são translúcidas de
@@ -109,55 +125,77 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
       ctx.clearRect(0, 0, cssWidth, cssHeight);
       ctx.font = "9px -apple-system, sans-serif";
 
-      const withNaturalY = labelsRef.current
-        .map((l) => {
-          const coord = series.priceToCoordinate(l.price);
-          // Coordinate é um tipo nominal da própria lib (branded number) —
-          // convertido pra number puro aqui, na fronteira: price-label-
-          // stack.ts é matemática de posicionamento genérica, nunca deve
-          // depender de um tipo específico da lightweight-charts.
-          return coord === null ? null : { ...l, naturalY: coord as unknown as number };
-        })
-        .filter((e): e is PriceAxisLabel & { naturalY: number } => e !== null);
-      if (withNaturalY.length === 0) return;
+      // Achado real do Operador ("tá ficando só numa lateral direita"):
+      // cada lado resolve colisão de forma TOTALMENTE independente — um
+      // rótulo da esquerda nunca desloca um da direita e vice-versa (são
+      // duas pilhas físicas separadas, cada uma com sua própria garantia
+      // de "nunca um em cima do outro"). side ausente = "right", mesmo
+      // comportamento de sempre pra todo rótulo que não declara o campo.
+      const withNaturalY = (side: "left" | "right") =>
+        labelsRef.current
+          .filter((l) => (l.side ?? "right") === side)
+          .map((l) => {
+            const coord = series.priceToCoordinate(l.price);
+            // Coordinate é um tipo nominal da própria lib (branded number) —
+            // convertido pra number puro aqui, na fronteira: price-label-
+            // stack.ts é matemática de posicionamento genérica, nunca deve
+            // depender de um tipo específico da lightweight-charts.
+            return coord === null ? null : { ...l, naturalY: coord as unknown as number };
+          })
+          .filter((e): e is PriceAxisLabel & { naturalY: number } => e !== null);
 
-      const resolved = resolveLabelStackPositions(withNaturalY, MIN_GAP_PX);
+      // Desenha UMA pilha já resolvida (esquerda OU direita) — caixa+texto+
+      // conector idênticos nos dois lados, só o ponto de ancoragem espelha
+      // (boxX/direção do conector). Zero duplicação de lógica (Regra de
+      // Ouro 4): a única diferença real entre os dois lados é geométrica.
+      const drawSide = (entries: (PriceAxisLabel & { naturalY: number })[], side: "left" | "right") => {
+        if (entries.length === 0) return;
+        const resolved = resolveLabelStackPositions(entries, MIN_GAP_PX);
 
-      for (const entry of resolved) {
-        // Decaimento real por idade (BOS/CHOCH) — default 1 preserva o
-        // comportamento de sempre (opaco) para todo rótulo que não declara
-        // alpha (S1/R1/VWAP/NL/EMA/TREND/ENTRY/STOP/TARGET/etc).
-        const labelAlpha = entry.alpha ?? 1;
-        const textWidth = ctx.measureText(entry.text).width;
-        const boxWidth = textWidth + LABEL_PADDING_X * 2;
-        const boxX = cssWidth - RIGHT_MARGIN_PX - boxWidth;
-        const boxY = entry.resolvedY - LABEL_HEIGHT_PX / 2;
-        if (boxY + LABEL_HEIGHT_PX < 0 || boxY > cssHeight) continue; // fora da área visível — Fail-Closed, nunca desenha fora do canvas
+        for (const entry of resolved) {
+          // Decaimento real por idade (BOS/CHOCH) — default 1 preserva o
+          // comportamento de sempre (opaco) para todo rótulo que não declara
+          // alpha (S1/R1/VWAP/NL/EMA/TREND/ENTRY/STOP/TARGET/etc).
+          const labelAlpha = entry.alpha ?? 1;
+          const textWidth = ctx.measureText(entry.text).width;
+          const boxWidth = textWidth + LABEL_PADDING_X * 2;
+          const boxX = side === "right" ? cssWidth - RIGHT_MARGIN_PX - boxWidth : LEFT_MARGIN_PX;
+          const boxY = entry.resolvedY - LABEL_HEIGHT_PX / 2;
+          if (boxY + LABEL_HEIGHT_PX < 0 || boxY > cssHeight) continue; // fora da área visível — Fail-Closed, nunca desenha fora do canvas
 
-        // Conector fino de volta ao preço real quando o rótulo deslocou
-        // — Fio de Seda (1px sólida, nunca tracejada). Nunca aparece
-        // quando o rótulo já está na própria posição natural.
-        if (Math.abs(entry.resolvedY - entry.naturalY) > 0.5) {
-          ctx.strokeStyle = entry.color;
-          ctx.globalAlpha = 0.5 * labelAlpha;
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(boxX - 0.5, entry.naturalY);
-          ctx.lineTo(boxX - 0.5, entry.resolvedY);
-          ctx.stroke();
+          // Conector fino de volta ao preço real quando o rótulo deslocou
+          // — Fio de Seda (1px sólida, nunca tracejada). Nunca aparece
+          // quando o rótulo já está na própria posição natural. Do lado
+          // direito o conector fica na borda ESQUERDA da caixa (entre a
+          // caixa e o gráfico); do lado esquerdo, espelhado, na borda
+          // DIREITA da caixa — mesma direção real: sempre entre a caixa e
+          // o centro do gráfico, nunca cortando pra fora da tela.
+          if (Math.abs(entry.resolvedY - entry.naturalY) > 0.5) {
+            const connectorX = side === "right" ? boxX - 0.5 : boxX + boxWidth + 0.5;
+            ctx.strokeStyle = entry.color;
+            ctx.globalAlpha = 0.5 * labelAlpha;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(connectorX, entry.naturalY);
+            ctx.lineTo(connectorX, entry.resolvedY);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+          }
+
+          ctx.globalAlpha = labelAlpha;
+          ctx.fillStyle = opaque(entry.color);
+          ctx.fillRect(boxX, boxY, boxWidth, LABEL_HEIGHT_PX);
+
+          ctx.fillStyle = "#050810"; // texto escuro sobre fundo colorido — mesmo contraste dos tags nativos que este overlay substitui
+          ctx.textBaseline = "middle";
+          ctx.textAlign = "left";
+          ctx.fillText(entry.text, boxX + LABEL_PADDING_X, entry.resolvedY + 0.5);
           ctx.globalAlpha = 1;
         }
+      };
 
-        ctx.globalAlpha = labelAlpha;
-        ctx.fillStyle = opaque(entry.color);
-        ctx.fillRect(boxX, boxY, boxWidth, LABEL_HEIGHT_PX);
-
-        ctx.fillStyle = "#050810"; // texto escuro sobre fundo colorido — mesmo contraste dos tags nativos que este overlay substitui
-        ctx.textBaseline = "middle";
-        ctx.textAlign = "left";
-        ctx.fillText(entry.text, boxX + LABEL_PADDING_X, entry.resolvedY + 0.5);
-        ctx.globalAlpha = 1;
-      }
+      drawSide(withNaturalY("right"), "right");
+      drawSide(withNaturalY("left"), "left");
     };
 
     const markDirty = () => {

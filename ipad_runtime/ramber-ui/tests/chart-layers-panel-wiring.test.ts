@@ -379,7 +379,7 @@ describe('Auditoria de pendências (achado real via harness Playwright, duas ins
   it('as 3 entradas de priceAxisLabels (VWAP/NL/EMA) agora checam visibility antes de empurrar a etiqueta — mesma condição que já escondia a série', () => {
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
-    const block = c.slice(idx, idx + 1800);
+    const block = c.slice(idx, idx + 2900);
     expect(block).toContain('if (visibility.vwap && vwapLastValue !== null && Number.isFinite(vwapLastValue)) {');
     expect(block).toContain('if (visibility.nexus_line && nlLastValue !== null && Number.isFinite(nlLastValue)) {');
     expect(block).toContain('if (visibility.ema && emaLastValue !== null && Number.isFinite(emaLastValue)) {');
@@ -394,7 +394,7 @@ describe('Auditoria de pendências (achado real via harness Playwright, duas ins
   it('S1/R1/último preço/Trend Channel NÃO ganham essa checagem — nenhum toggle existe pra eles (S1/R1/último preço) ou já tinham a checagem própria (Trend Channel) — nenhuma regressão nas entradas que já funcionavam', () => {
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
-    const block = c.slice(idx, idx + 400);
+    const block = c.slice(idx, idx + 1500);
     // S1/R1 continuam incondicionais (só checam Number.isFinite do preço).
     expect(block).toContain('if (Number.isFinite(support)) {');
     expect(block).toContain('if (Number.isFinite(resistance)) {');
