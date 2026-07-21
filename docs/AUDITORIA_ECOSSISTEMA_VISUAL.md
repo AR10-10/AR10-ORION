@@ -348,6 +348,87 @@ itens acima (todos prontos ou quase prontos, todos bloqueados em decisão
 
 ---
 
+## 8. EPC §2 — pesquisa técnica estendida (Sierra Chart, Exocharts, IA
+aplicada a mercados) — pedido explícito do Operador, repetido em
+múltiplas mensagens
+
+### 8.1 Sierra Chart / Exocharts — o que têm que o AR10 não tem
+
+**Sierra Chart**: plataforma muito mais ampla em SUPERFÍCIE (400+
+indicadores/estudos, automação de estratégia via script, ChartDOM —
+book de ofertas totalmente integrado ao gráfico como ladder visual).
+Boa parte dessa amplitude é exatamente o tipo de "ferramenta demais"
+já reprovado na seção 5 (osciladores clássicos redesenhados) — não é
+uma lacuna real, é uma escolha de produto diferente (editor genérico vs.
+terminal de auto-análise). Os 2 diferenciais REAIS que valem nomear:
+- **Footprint chart** (bid/ask volume-at-price por vela) — já listado
+  como item 4.1 da seção 4 ("Vale muito, decisão + auditoria de
+  granularidade do dado"), sem mudança de veredito aqui.
+- **ChartDOM** (profundidade de mercado como ladder visual ao lado do
+  candle) — o AR10 já tem o book real (bids/asks, imbalance, buy/sell
+  %) mas nunca como ladder visual tradicional. Candidato honesto NOVO,
+  registrado aqui pela primeira vez: exigiria layout novo (painel
+  lateral dedicado), não é um encaixe trivial no gráfico atual — decisão
+  de produto, não handicap matemático.
+- **Automação de estratégia** (system trading) — permanentemente FORA
+  de escopo (READ_ONLY/FAIL_CLOSED incondicional, CLAUDE.md) — nunca um
+  gap a fechar, uma fronteira que não se move.
+
+**Exocharts**: foco em order flow pra futuros+cripto, feature-set
+bem próximo do que o AR10 já cobre no núcleo (CVD, heatmap de order
+flow, footprint-adjacent) — SaaS comercial (~US$38/mês), sem
+diferencial técnico que o AR10 ainda não tenha ou já não tenha
+avaliado nas seções 3-4.
+
+### 8.2 IA aplicada a mercados — pesquisa real, achado que VALIDA a
+disciplina já existente do projeto
+
+Pesquisa em papers/estudos recentes (2025-2026) sobre ML/IA aplicada à
+previsão de direção de criptomoedas trouxe um achado direto e
+importante:
+
+> **"Pure technical analysis achieves directional accuracy of
+> approximately 40-45% for Bitcoin price movements over 7-day
+> horizons — marginally better than random chance."**
+
+Mais achados reais da mesma pesquisa:
+- Séries de tempo de criptomoedas compartilham propriedades
+  semelhantes a ruído Browniano — modelos NAIVE (ingênuos) às vezes
+  superam modelos de ML/deep learning mais complexos.
+- Modelos "caixa-preta" baseados em correlação sofrem de baixa
+  interpretabilidade e robustez.
+- Manipulação de mercado e wash trading em exchanges pouco reguladas
+  distorcem indicadores de liquidez/volume que modelos dependem.
+- Não existe padrão de benchmark comparável ao de finanças
+  tradicionais — cada estudo cria sua própria metodologia de avaliação,
+  dificultando comparação real entre resultados.
+
+**Por que isto importa pra este projeto, concretamente**: é evidência
+EXTERNA e real que confirma — não apenas por cautela interna, mas por
+pesquisa de mercado — que a Regra de Ouro 2 (confiança/força nunca é
+probabilidade calibrada, porque este repositório não tem backtest real
+que sustente essa afirmação) está correta, não excessivamente
+conservadora. A abordagem já escolhida pelo AR10 (pools de opinião
+lineares transparentes — Stone/DeGroot —, projeções sobre NÍVEIS REAIS
+já mapeados, nunca uma rede neural fechada tentando prever preço
+diretamente) está mais alinhada com o estado real da pesquisa do que
+uma alternativa "mais IA" seria: os próprios papers mostram que
+modelos mais complexos e opacos não superam de forma confiável
+abordagens simples/interpretáveis nesta classe de ativo. `lorentzian-
+classifier.js` (já graduado, confluência independente, nunca decisão
+primária) já é o ponto certo nesse espectro — sinal de confluência
+honesto, `sampleSize` sempre reportado, nunca fingindo mais certeza do
+que a amostra sustenta.
+
+**Conclusão honesta**: nenhuma descoberta desta pesquisa recomenda
+construir um preditor de ML novo. Recomendaria o OPOSTO — qualquer
+pedido futuro de "usa IA pra prever o preço" deve ser respondido
+apontando para esta mesma pesquisa: a literatura real não sustenta essa
+promessa hoje, e fabricar uma não seria "mais inteligente", seria menos
+honesto.
+
+---
+
 ## Fontes (pesquisa real)
 - [ATAS — Order Flow & Volume Analysis Software](https://atas.net/)
 - [ATAS — Heatmap Trading / Liquidity Heat Map](https://atas.net/blog/heatmap/)
@@ -355,3 +436,15 @@ itens acima (todos prontos ou quase prontos, todos bloqueados em decisão
 - [Bookmap — Order Flow Strategies](https://bookmap.com/en/content/order-flow-strategies)
 - [GetChart — Pro Indicators (Liquidation Heatmap, CVD, Order Flow)](https://getchart.cc/en/features)
 - [LuxAlgo — Liquidity Structure & Order Flow](https://www.luxalgo.com/library/indicator/liquidity-structure-order-flow/)
+
+### Seção 8 (EPC §2)
+- [Sierra Chart — plataforma oficial](https://www.sierrachart.com/)
+- [TraderVPS — In-Depth Sierra Chart Analysis and Leading Alternatives for 2026](https://www.tradervps.com/blog/sierra-chart-analysis-alternatives-futures-trading)
+- [Sierra Chart — Support Board, Order Flow Futures trading Charts](https://www.sierrachart.com/SupportBoard.php?ThreadID=99947)
+- [Exocharts — OrderFlow charting platform for futures/crypto](https://exocharts.com/)
+- [Causal-Structure-Based Cryptocurrency Price Direction Prediction Model (Forecast, MDPI)](https://doi.org/10.3390/forecast8040058)
+- [Predicting cryptocurrency returns with machine learning: high-dimensional factor modeling (ScienceDirect)](https://www.sciencedirect.com/science/article/abs/pii/S0927538X25003701)
+- [Machine learning approaches to cryptocurrency trading optimization: a comparative analysis (Springer, Discover AI)](https://link.springer.com/article/10.1007/s44163-025-00519-y)
+- [Evaluating machine learning models for predictive accuracy in cryptocurrency price forecasting (PMC)](https://pmc.ncbi.nlm.nih.gov/articles/PMC12571449/)
+- [Cryptocurrency Price Forecasting Using Machine Learning (arXiv)](https://arxiv.org/pdf/2508.01419)
+- [Forecasting and Trading Cryptocurrencies with Machine Learning Under Changing Market Conditions (Springer)](https://link.springer.com/chapter/10.1007/978-981-96-6839-7_10)
