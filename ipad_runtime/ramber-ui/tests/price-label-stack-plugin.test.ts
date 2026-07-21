@@ -263,7 +263,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('priceAxisLabels recalcula a cada tick real de livePrice — nunca uma etiqueta de preço congelada', () => {
     const s = chart();
-    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision]);');
+    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels]);');
     expect(depsIdx, 'dependency array de priceAxisLabels não inclui livePrice').toBeGreaterThan(-1);
   });
 
@@ -343,5 +343,111 @@ describe('"bater o olho profissional" (pendência honesta do turno anterior): EN
     expect(block).not.toContain('title:');
     // decision saiu das deps do efeito (só o rótulo, no useMemo, usa ETA)
     expect(s).not.toContain('}, [tradePlan, livePrice, targetsHit, decision]);');
+  });
+});
+
+describe('EPC §5/§6 (continuação — relato direto do Operador: "falta aparecer entrada e alvo/alvo2/alvo3 no gráfico"): fallback do Core Engine (engineFallbackLevels) desenha STOP/TARGET1/TARGET2 reais quando o Trade Plan do Conselho está ausente', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('prop tipada como fail-closed (null/absent não desenha nada) — mesma disciplina de tradePlan/tradePlanAbsenceReason', () => {
+    const s = chart();
+    const idx = s.indexOf('engineFallbackLevels?: {');
+    expect(idx, 'prop engineFallbackLevels não encontrada na interface').toBeGreaterThan(-1);
+    const block = s.slice(idx, idx + 400);
+    expect(block).toContain('direction: "LONG" | "SHORT";');
+    expect(block).toContain('stop: number;');
+    expect(block).toContain('target1: number;');
+    expect(block).toContain('target2: number | null;');
+    expect(block).toContain('riskRewardRatio: number | null;');
+  });
+
+  it('linhas próprias (refs isoladas de tradePlanLinesRef/stopLineRef/targetLinesArrayRef) — Fio de Seda: lineWidth 1, Solid, nunca tracejado', () => {
+    const s = chart();
+    expect(s).toContain('const engineFallbackLinesRef = useRef<IPriceLine[]>([]);');
+    const idx = s.indexOf('engineFallbackLinesRef.current.forEach((line) => series.removePriceLine(line));');
+    expect(idx, 'efeito de desenho do fallback não encontrado').toBeGreaterThan(-1);
+    const block = s.slice(idx, s.indexOf('}, [engineFallbackLevels]);'));
+    expect(block).toContain('if (!engineFallbackLevels) return;');
+    expect(block).toContain('lineWidth: 1,');
+    expect(block).toContain('lineStyle: LineStyle.Solid,');
+    expect(block).not.toMatch(/setLineDash/);
+  });
+
+  it('nunca desenha ENTRY (é o preço vivo, já nativo no eixo — uma 2ª linha ali seria redundante, não informação nova)', () => {
+    const s = chart();
+    const idx = s.indexOf('engineFallbackLinesRef.current.forEach((line) => series.removePriceLine(line));');
+    const block = s.slice(idx, s.indexOf('}, [engineFallbackLevels]);'));
+    expect(block).not.toMatch(/ENTRY/);
+    // só 3 chamadas reais de mk: stop, target1, target2 condicional
+    expect(block).toContain('mk(engineFallbackLevels.stop,');
+    expect(block).toContain('mk(engineFallbackLevels.target1,');
+    expect(block).toContain('if (engineFallbackLevels.target2 !== null) mk(engineFallbackLevels.target2,');
+  });
+
+  it('rótulos entram em priceAxisLabels com "(Núcleo)" no texto — nunca confundível com o Trade Plan do Conselho (cores mais apagadas, mesma paleta vermelho/verde)', () => {
+    const s = chart();
+    const idx = s.indexOf('const priceAxisLabels = useMemo');
+    const end = s.indexOf('return out;', idx);
+    const block = s.slice(idx, end);
+    expect(block).toContain('if (engineFallbackLevels) {');
+    expect(block).toContain('text: breached ? "STOP (Núcleo) · BREACHED" : "STOP (Núcleo)",');
+    expect(block).toContain('color: "rgba(255, 0, 85, 0.5)",');
+    expect(block).toContain('const label = engineFallbackLevels.target2 !== null ? "TARGET 1 (Núcleo)" : "TARGET (Núcleo)";');
+    expect(block).toContain('text: `TARGET 2 (Núcleo)${strengthSuffix(engineFallbackLevels.target2Strength)}${reached ? " · REACHED" : ""}`,');
+  });
+
+  it('REACHED/BREACHED é derivação simples do preço vivo — nunca usa o ratchet effectiveStopForTargetsHit nem o Track Record autoritativo (que rastreiam o Trade Plan do Conselho, não este fallback)', () => {
+    const s = chart();
+    const idx = s.indexOf('if (engineFallbackLevels) {', s.indexOf('const priceAxisLabels = useMemo'));
+    const end = s.indexOf('return out;', idx);
+    const block = s.slice(idx, end);
+    expect(block).not.toContain('effectiveStopForTargetsHit');
+    expect(block).not.toContain('targetsHit');
+    expect(block).toContain('const longFb = engineFallbackLevels.direction === "LONG";');
+  });
+
+  it('engineFallbackLevels entra nas deps de priceAxisLabels — recalcula quando o Núcleo muda de leitura', () => {
+    const s = chart();
+    expect(s).toContain('livePrice, tradePlan, targetsHit, decision, engineFallbackLevels]);');
+  });
+
+  it('overlay de texto do canto (tradePlanAbsenceReason) nunca fica auto-contraditório: quando as linhas do Núcleo estão visíveis, o texto deixa explícito que é só o plano do CONSELHO que falta — nunca "SEM TRADE PLAN" sozinho com linhas reais na tela', () => {
+    const s = chart();
+    const idx = s.indexOf('{tradePlanAbsenceReason && (');
+    expect(idx, 'overlay de texto não encontrado').toBeGreaterThan(-1);
+    const block = s.slice(idx, idx + 500);
+    expect(block).toContain('? `SEM PLANO DO CONSELHO · ${tradePlanAbsenceReason} · linhas abaixo são do Núcleo`');
+    expect(block).toContain(': `SEM TRADE PLAN · ${tradePlanAbsenceReason}`');
+  });
+});
+
+describe('EPC §5/§6 (continuação): App.tsx computa engineFallbackLevels a partir do MESMO Target Tracker do Core Engine (target-tracker.js) que já alimenta ANALYSIS/RISK — zero motor novo, zero segunda fonte', () => {
+  const app = () => read('../src/App.tsx');
+
+  it('gate: só existe quando o Trade Plan do Conselho está ausente E o Núcleo já tem direção real (LONG/SHORT) — nunca sobrepõe o plano do Conselho', () => {
+    const s = app();
+    const idx = s.indexOf('const engineFallbackLevels = useMemo');
+    expect(idx, 'engineFallbackLevels não encontrado em App.tsx').toBeGreaterThan(-1);
+    const block = s.slice(idx, idx + 900);
+    expect(block).toContain('if (chartTradePlan) return null;');
+    expect(block).toContain('if (dir !== "LONG" && dir !== "SHORT") return null;');
+    expect(block).toContain('if (typeof stop !== "number" || !Number.isFinite(stop)) return null;');
+    expect(block).toContain('if (typeof target1 !== "number" || !Number.isFinite(target1)) return null;');
+  });
+
+  it('lê exatamente os campos reais já expostos por engine-bridge.ts (stop/target1/target2/target1Strength/target2Strength/riskRewardRatio) — zero cálculo novo aqui', () => {
+    const s = app();
+    const idx = s.indexOf('const engineFallbackLevels = useMemo');
+    const block = s.slice(idx, idx + 900);
+    expect(block).toContain('const stop = engine?.stop;');
+    expect(block).toContain('const target1 = engine?.target1;');
+    expect(block).toContain('const target2 = typeof engine?.target2 === "number" && Number.isFinite(engine.target2) ? engine.target2 : null;');
+    expect(block).toContain('target1Strength: engine?.target1Strength ?? null,');
+    expect(block).toContain('target2Strength: engine?.target2Strength ?? null,');
+  });
+
+  it('passado para o canvas como prop dedicada — nunca fundido com chartTradePlan', () => {
+    const s = app();
+    expect(s).toContain('engineFallbackLevels={engineFallbackLevels}');
   });
 });

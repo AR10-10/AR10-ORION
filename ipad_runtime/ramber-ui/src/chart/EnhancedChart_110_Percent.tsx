@@ -231,6 +231,25 @@ interface EnhancedChartProps {
   // Operador não consegue distinguir de um bug. null/absent (tradePlan
   // ativo, ou chamador que ainda não passa esta prop) não desenha nada.
   tradePlanAbsenceReason?: string | null;
+  // EPC §5/§6 (continuação — relato direto do Operador: "falta aparecer
+  // entrada e alvo/alvo2/alvo3 no gráfico"): quando o Trade Plan do
+  // Conselho está ausente mas o Core Engine (LEI 24) já tem direção real
+  // própria, o STOP/TARGET1/TARGET2 que o Target Tracker (target-
+  // tracker.js) já computa a cada ciclo — dado real, só nunca antes
+  // desenhado. ENTRY fica de fora de propósito (é o preço vivo, já
+  // desenhado nativamente pelo eixo). null/absent (Trade Plan do Conselho
+  // presente, Núcleo neutro, ou chamador que ainda não passa esta prop)
+  // não desenha nada — nunca substitui o Trade Plan do Conselho quando
+  // ele existe.
+  engineFallbackLevels?: {
+    direction: "LONG" | "SHORT";
+    stop: number;
+    target1: number;
+    target1Strength: { label: "FORTE" | "FRACA"; touches: number } | null;
+    target2: number | null;
+    target2Strength: { label: "FORTE" | "FRACA"; touches: number } | null;
+    riskRewardRatio: number | null;
+  } | null;
   // Neural Market Aura: visual translation of the SAME real Trade Plan +
   // Signal Track Record + Confluence Engine reading above — never a second
   // trading signal (LEI 24). null/DADOS_INSUFICIENTES draws nothing.
@@ -365,6 +384,7 @@ export function EnhancedChart_110_Percent({
   activeTimeframe,
   tradePlan,
   tradePlanAbsenceReason,
+  engineFallbackLevels,
   aura,
   targetsHit,
   confidenceZone,
@@ -387,6 +407,14 @@ export function EnhancedChart_110_Percent({
   const zoneLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
   const tradePlanLinesRef = useRef<IPriceLine[]>([]);
+  // EPC §5/§6 (continuação): linhas do fallback do Core Engine
+  // (engineFallbackLevels) — refs PRÓPRIAS, nunca reaproveita
+  // tradePlanLinesRef/stopLineRef/targetLinesArrayRef acima. Os dois
+  // efeitos nunca desenham ao mesmo tempo na prática (engineFallbackLevels
+  // já vem null de App.tsx quando tradePlan existe), mas manter refs
+  // separadas evita acoplar dois efeitos independentes por um cleanup
+  // compartilhado.
+  const engineFallbackLinesRef = useRef<IPriceLine[]>([]);
   const scenarioLinesRef = useRef<IPriceLine[]>([]);
   const premiumDiscountLinesRef = useRef<IPriceLine[]>([]);
   const harmonicLinesRef = useRef<IPriceLine[]>([]);
@@ -1307,6 +1335,37 @@ export function EnhancedChart_110_Percent({
     });
   }, [tradePlan]);
 
+  // EPC §5/§6 (continuação — relato direto do Operador: "falta aparecer
+  // entrada e alvo/alvo2/alvo3 no gráfico"): STOP/TARGET1/TARGET2 do Core
+  // Engine (LEI 24) quando o Trade Plan do Conselho ainda não confirma.
+  // Mesmo padrão Fio de Seda (lineWidth:1 solid) das linhas acima — cores
+  // mais apagadas (alpha menor) sinalizam honestamente "fonte diferente,
+  // mais provisória" sem quebrar a Regra de Ouro 5 (zero linha tracejada).
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    engineFallbackLinesRef.current.forEach((line) => series.removePriceLine(line));
+    engineFallbackLinesRef.current = [];
+    if (!engineFallbackLevels) return;
+
+    const mk = (price: number, color: string) => {
+      if (!Number.isFinite(price)) return null;
+      const line = series.createPriceLine({
+        price,
+        color,
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: false,
+        title: "",
+      });
+      engineFallbackLinesRef.current.push(line);
+      return line;
+    };
+    mk(engineFallbackLevels.stop, "rgba(255, 0, 85, 0.5)");
+    mk(engineFallbackLevels.target1, "rgba(0, 255, 170, 0.5)");
+    if (engineFallbackLevels.target2 !== null) mk(engineFallbackLevels.target2, "rgba(0, 255, 170, 0.35)");
+  }, [engineFallbackLevels]);
+
   // Ordem Final Autonomia Evolução §1 + Diretriz Complementar §2/§4:
   // "alertas visuais sutis quando o preço romper estrutura relevante" — the
   // chart-side counterpart to the command bar's TARGET REACHED/STOP
@@ -1533,8 +1592,48 @@ export function EnhancedChart_110_Percent({
         out.push({ price: target.price, text: reached ? `${base} · REACHED` : base, color: "rgba(0, 255, 170, 0.75)" });
       });
     }
+    // EPC §5/§6 (continuação): rótulos do fallback do Core Engine — MESMO
+    // sistema anti-colisão, "(Núcleo)" no texto deixa explícito que é uma
+    // fonte diferente do Trade Plan do Conselho acima (nunca os dois ao
+    // mesmo tempo: engineFallbackLevels já vem null quando tradePlan
+    // existe). REACHED/BREACHED aqui é derivação simples do preço vivo
+    // contra o nível — não usa o ratchet effectiveStopForTargetsHit nem o
+    // Track Record autoritativo (signal-track-record.ts), que rastreiam
+    // especificamente o Trade Plan do Conselho; misturar os dois
+    // conflaria dois planos distintos.
+    if (engineFallbackLevels) {
+      const longFb = engineFallbackLevels.direction === "LONG";
+      const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
+      const strengthSuffix = (s: { label: "FORTE" | "FRACA"; touches: number } | null) => (s ? ` · ${s.label}` : "");
+      if (Number.isFinite(engineFallbackLevels.stop)) {
+        const breached = p !== null && (longFb ? p <= engineFallbackLevels.stop : p >= engineFallbackLevels.stop);
+        out.push({
+          price: engineFallbackLevels.stop,
+          text: breached ? "STOP (Núcleo) · BREACHED" : "STOP (Núcleo)",
+          color: "rgba(255, 0, 85, 0.5)",
+        });
+      }
+      if (Number.isFinite(engineFallbackLevels.target1)) {
+        const reached = p !== null && (longFb ? p >= engineFallbackLevels.target1 : p <= engineFallbackLevels.target1);
+        const rr = engineFallbackLevels.riskRewardRatio;
+        const label = engineFallbackLevels.target2 !== null ? "TARGET 1 (Núcleo)" : "TARGET (Núcleo)";
+        out.push({
+          price: engineFallbackLevels.target1,
+          text: `${label}${strengthSuffix(engineFallbackLevels.target1Strength)}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${reached ? " · REACHED" : ""}`,
+          color: "rgba(0, 255, 170, 0.5)",
+        });
+      }
+      if (engineFallbackLevels.target2 !== null && Number.isFinite(engineFallbackLevels.target2)) {
+        const reached = p !== null && (longFb ? p >= engineFallbackLevels.target2 : p <= engineFallbackLevels.target2);
+        out.push({
+          price: engineFallbackLevels.target2,
+          text: `TARGET 2 (Núcleo)${strengthSuffix(engineFallbackLevels.target2Strength)}${reached ? " · REACHED" : ""}`,
+          color: "rgba(0, 255, 170, 0.35)",
+        });
+      }
+    }
     return out;
-  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision]);
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels]);
 
   return (
     <div className="absolute inset-0">
@@ -1558,13 +1657,21 @@ export function EnhancedChart_110_Percent({
          (App.tsx: tradePlanAbsenceReason), nunca um silêncio que o
          Operador não consegue distinguir de um bug. pointer-events-none:
          nunca captura um gesto de pan/zoom, mesma disciplina de todo
-         overlay deste gráfico. */}
+         overlay deste gráfico.
+         Continuação EPC §5/§6: quando engineFallbackLevels também existe,
+         "SEM TRADE PLAN" sozinho ficaria auto-contraditório — as linhas
+         STOP/TARGET (Núcleo) já estão visíveis no canvas. O texto então
+         deixa explícito que é só o plano do CONSELHO que está ausente, e
+         aponta para as linhas reais já desenhadas — nunca dois sinais
+         divergentes sem explicação lado a lado. */}
       {tradePlanAbsenceReason && (
         <div
           className="absolute left-2 top-2 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide"
           style={{ color: "rgba(138, 180, 248, 0.55)" }}
         >
-          SEM TRADE PLAN · {tradePlanAbsenceReason}
+          {engineFallbackLevels
+            ? `SEM PLANO DO CONSELHO · ${tradePlanAbsenceReason} · linhas abaixo são do Núcleo`
+            : `SEM TRADE PLAN · ${tradePlanAbsenceReason}`}
         </div>
       )}
       {/* V-MAX Fase 0.7: FVG/Order Blocks (bullish|bearish) — mesmo dado real

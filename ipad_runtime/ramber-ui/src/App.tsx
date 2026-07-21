@@ -5966,6 +5966,45 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   const chartTradePlanAbsenceReason = chartTradePlan
     ? null
     : tradePlanAbsenceReason(councilForChart, engine?.direction ?? null).reason;
+  // EPC §5/§6 (continuação — relato direto do Operador: "falta aparecer
+  // entrada e alvo/alvo2/alvo3 no gráfico"): o Core Engine (LEI 24, único
+  // emissor real de LONG/SHORT/WAIT) já computa seu PRÓPRIO stop/target1/
+  // target2/R:R a cada ciclo real — Target Tracker (target-tracker.js,
+  // rota_a_long/rota_b_short), alimentado por support_1/2 e resistance_1/2
+  // do support-resistance-engine.js (motor graduado, já rodando). Esse
+  // dado real já alimenta os painéis ANALYSIS/RISK há sessões, mas NUNCA
+  // era desenhado no canvas — só o Trade Plan do Conselho (mais raro: 4
+  // portões honestos em cascata, trade-plan.ts) chegava ao gráfico. Isto é
+  // aditivo puro (Regra de Ouro 4): quando o Conselho ainda não confirma
+  // (chartTradePlan null) mas o Núcleo já tem direção real, o canvas
+  // finalmente mostra o que o Núcleo sabe — mesmo texto final do EPC ("Se
+  // o núcleo sabe, o operador também deve saber"). NUNCA substitui/altera
+  // o Trade Plan do Conselho quando ele existe (LEI 24 intacta: o Núcleo
+  // continua sendo só o Núcleo, isto não é uma 2ª "trade plan" oficial).
+  // ENTRY fica de fora de propósito: o "entry" do Núcleo é tracker.
+  // current_price — o PRÓPRIO preço vivo, já desenhado nativamente pelo
+  // eixo (lightweight-charts) — uma 2ª linha ali seria redundante, nunca
+  // informação nova (contra "nada cobrindo a visão", achado de sessão
+  // anterior).
+  const engineFallbackLevels = useMemo(() => {
+    if (chartTradePlan) return null;
+    const dir = engine?.direction;
+    if (dir !== "LONG" && dir !== "SHORT") return null;
+    const stop = engine?.stop;
+    const target1 = engine?.target1;
+    if (typeof stop !== "number" || !Number.isFinite(stop)) return null;
+    if (typeof target1 !== "number" || !Number.isFinite(target1)) return null;
+    const target2 = typeof engine?.target2 === "number" && Number.isFinite(engine.target2) ? engine.target2 : null;
+    return {
+      direction: dir,
+      stop,
+      target1,
+      target1Strength: engine?.target1Strength ?? null,
+      target2,
+      target2Strength: engine?.target2Strength ?? null,
+      riskRewardRatio: typeof engine?.riskRewardRatio === "number" && Number.isFinite(engine.riskRewardRatio) ? engine.riskRewardRatio : null,
+    };
+  }, [chartTradePlan, engine?.direction, engine?.stop, engine?.target1, engine?.target2, engine?.target1Strength, engine?.target2Strength, engine?.riskRewardRatio]);
   // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
   // estrutural"): união das zonas REAIS (tradePlanStructureZones, as MESMAS
   // que já geram targets[i].obstacleCount acima na store) que ficam no
@@ -6105,6 +6144,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             activeTimeframe={chartTimeframe as Timeframe}
             tradePlan={chartTradePlan}
             tradePlanAbsenceReason={chartTradePlanAbsenceReason}
+            engineFallbackLevels={engineFallbackLevels}
             aura={auraReading}
             targetsHit={auraTrackRecord.active?.targetsHit ?? 0}
             confidenceZone={confidenceZone ?? null}

@@ -98,7 +98,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1656 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1666 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -1330,6 +1330,81 @@ sido o foco: "Replay" hoje existe só como palavra num comentário
 (`App.tsx:2221`, cogitando uma "camada futura"), nunca como feature
 real — candidato honesto para o EPC §1/§3 (inventário do que existe vs.
 o que é só menção).
+
+---
+
+### 6.20 EPC §5/§6 (continuação — relato direto do Operador): ENTRY/
+STOP/TARGET faltando no canvas — o Core Engine já tinha os próprios
+níveis reais, nunca desenhados
+
+Depois da correção §6.19, o Operador relatou de novo (em linguagem
+direta): "falta aparecer... entrada e os alvo, alvo dois, alvo três...
+tudo no gráfico... profissional". Auditoria objetiva do caminho de
+desenho (não só da causa da instabilidade, desta vez do que realmente
+fica desenhado quando não há Trade Plan do Conselho).
+
+**Achado real, por leitura direta do código**: o canvas só desenha
+ENTRY/STOP/TARGET a partir do `TradePlan` do CONSELHO
+(`trade-plan.ts`/`buildTradePlan` — 4 portões honestos em cascata:
+stance direcional, entrada real, invalidação real, alvo real). Mas o
+**Core Engine** (LEI 24, único emissor real de LONG/SHORT/WAIT) **já
+computa seu PRÓPRIO stop/target1/target2/R:R** a cada ciclo real —
+`target-tracker.js` (`rota_a_long`/`rota_b_short`), alimentado por
+`support_1`/`support_2`/`resistance_1`/`resistance_2` do
+`support-resistance-engine.js` (motor graduado, já rodando: 2 níveis por
+lado + força FORTE/FRACA por confluência real de swings). O nível 1
+(`support`/`resistance`) já chegava ao canvas como as linhas S1/R1
+sempre-visíveis — mas SEM direção, SEM ligação com o sinal do Núcleo:
+apenas dois níveis estruturais neutros, iguais estejam o Núcleo em LONG,
+SHORT ou WAIT. O nível 2 (`support_2`/`resistance_2`) e a leitura como
+STOP/TARGET1/TARGET2 de um sinal real (`engine.target1`/`engine.target2`/
+`engine.stop`/`engine.riskRewardRatio`, `engine-bridge.ts`) já
+alimentavam os painéis ANALYSIS/RISK havia sessões — mas nunca chegavam
+ao CANVAS como tal. Resultado: sempre que o Núcleo tinha LONG/SHORT mas
+o Conselho (mais conservador) ainda não confirmava com estrutura
+própria, o gráfico não mostrava NENHUMA leitura de ENTRY/STOP/TARGET
+ligada a um sinal — só as duas linhas neutras de S1/R1 — mesmo com uma
+leitura operacional real disponível. O cerne exato do relato do
+Operador.
+
+**Correção aplicada (aditiva, Regra de Ouro 4 — zero motor novo, zero
+segunda fonte)**: `App.tsx` (`ChartWidget`) ganhou `engineFallbackLevels`
+— só existe quando (1) o Trade Plan do Conselho está ausente E (2) o
+Núcleo já tem direção real E (3) `stop`/`target1` são números finitos.
+Nunca sobrepõe/substitui o Trade Plan do Conselho (LEI 24 intacta: o
+Núcleo continua só o Núcleo, isto não é uma 2ª "trade plan" oficial).
+`EnhancedChart_110_Percent.tsx` desenha STOP/TARGET1/TARGET2 (refs
+próprias, nunca reaproveita as do Trade Plan do Conselho) com o MESMO
+Fio de Seda (`lineWidth:1`, `LineStyle.Solid`) em alpha mais apagado
+(0.5/0.5/0.35) — sinaliza "fonte diferente, mais provisória" sem violar
+a Regra de Ouro 5 (zero linha tracejada). Rótulos entram no MESMO
+sistema anti-colisão (`priceAxisLabels`) com sufixo `"(Núcleo)"`
+explícito — nunca confundível com o Trade Plan do Conselho — incluindo a
+força FORTE/FRACA real de cada nível.
+
+**ENTRY fica de fora, de propósito**: o "entry" do Núcleo
+(`tracker.current_price`) é literalmente o preço vivo corrente — já
+desenhado nativamente pelo eixo (`lastValueVisible`). Uma 2ª linha ali
+seria redundante, não informação nova (contra "nada cobrindo a visão",
+achado de sessão anterior).
+
+**Coerência do overlay de texto**: com `engineFallbackLevels` presente,
+"SEM TRADE PLAN" sozinho no canto ficaria auto-contraditório (há linhas
+reais na tela). O texto agora distingue os dois casos: `"SEM PLANO DO
+CONSELHO · {motivo} · linhas abaixo são do Núcleo"` quando o fallback
+está ativo, `"SEM TRADE PLAN · {motivo}"` inalterado quando não há
+absolutamente nada desenhado.
+
+**Verificação real**: `tsc --noEmit` limpo · **103 arquivos / 1666
+testes** (100%, +10 desde §6.19: 9 testes de fiação real App.tsx↔canvas
++ 1 do texto condicional do overlay) · `npm run build` ok · grep do
+bundle de produção confirma `"STOP (Núcleo)"`/`"TARGET 1 (Núcleo)"`/
+`"TARGET 2 (Núcleo)"`/`"SEM PLANO DO CONSELHO"` realmente compilados
+(nunca eliminados por dead-code) · `audit-header-maxcontent.mjs` 11
+viewports CLEAN. Mesma limitação honesta de sandbox do §6.19: sem rede
+de saída para a Binance, o canvas não monta neste ambiente
+(`chartData.length > 0` é pré-requisito), então a captura visual ao vivo
+das novas linhas/rótulos continua pendente de uma sessão com rede real.
 
 ---
 
