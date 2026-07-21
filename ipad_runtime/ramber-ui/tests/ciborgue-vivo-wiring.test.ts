@@ -48,7 +48,10 @@ describe('App.tsx: bosChoch computado antes de voiceSnapshot (dependência real 
   it('smcZones e bosChoch entram em contextValue (WidgetContext) para o ChartWidget consumir', () => {
     const app = read('../src/App.tsx');
     // A mesma chave aparece no objeto de valor E no array de deps do useMemo.
-    const occurrences = app.match(/\bsmcZones,\n\s*bosChoch,/g) ?? [];
+    // tradePlanStructureZones (Diretriz Restauração/Inteligência Visual §6)
+    // viaja hoje na mesma posição — reaproveitado pelo destaque de
+    // obstáculos no gráfico, mesma disciplina de zero segunda fonte.
+    const occurrences = app.match(/\bsmcZones,\n\s*tradePlanStructureZones,\n\s*bosChoch,/g) ?? [];
     expect(occurrences.length).toBe(2);
   });
 });
@@ -56,7 +59,7 @@ describe('App.tsx: bosChoch computado antes de voiceSnapshot (dependência real 
 describe('App.tsx → EnhancedChart_110_Percent: structureBreak passa ponta a ponta até o plugin', () => {
   it('ChartWidget lê bosChoch do contexto e repassa structureBreak={bosChoch?.break ?? null}', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState } = useContext(WidgetContext) || {};');
+    expect(app).toContain('const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState } = useContext(WidgetContext) || {};');
     expect(app).toContain('structureBreak={bosChoch?.break ?? null}');
   });
 
@@ -86,8 +89,12 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
   it('label do tipo de zona (FVG/OB) desenhado só quando a zona é grande o bastante pra caber texto legível', () => {
     const plugin = read('../src/chart/LiquidityZonesPlugin.tsx');
     expect(plugin).toContain('if (rectWidth > 24 && rectHeight > 10) {');
-    expect(plugin).toContain('fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type), "FVG"));');
-    expect(plugin).toContain('obs.forEach((z) => drawZone(z, paletteFor("OB", z.type), "OB"));');
+    // Diretriz Restauração/Inteligência Visual §6: label ganha "⚠" e a
+    // paleta ganha o 3º argumento isObstacle(z) quando a MESMA zona é um
+    // obstáculo real do plano ativo — mesma chamada de sempre, só honesta
+    // sobre a nova informação opcional.
+    expect(plugin).toContain('fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), isObstacle(z) ? "FVG ⚠" : "FVG"));');
+    expect(plugin).toContain('obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), isObstacle(z) ? "OB ⚠" : "OB"));');
   });
 });
 
@@ -172,5 +179,34 @@ describe('App.tsx: TelemetryHealthWidget ganha o gerador de relatório de autodi
     expect(body).toContain('health,');
     expect(body).toContain('connections,');
     expect(body).toContain('formatDiagnosticReportMarkdown(diagnosticReport)');
+  });
+});
+
+describe('Diretriz Restauração/Inteligência Visual §6: obstáculos do Trade Plan destacados no gráfico — zero segundo cálculo das zonas', () => {
+  it('tradePlanStructureZones é hoisted logo após smcZones e REAPROVEITADO pelo efeito de buildTradePlan (nunca recomputado ali dentro)', () => {
+    const app = read('../src/App.tsx');
+    const memoIdx = app.indexOf('const tradePlanStructureZones = useMemo<TradePlanStructureZone[]>(() => {');
+    expect(memoIdx, 'tradePlanStructureZones não encontrado').toBeGreaterThan(-1);
+    expect(app).toContain('zones.push({ low: z.bottom, high: z.top, kind: `OB_${z.type}` });');
+    expect(app).toContain('zones.push({ low: z.bottom, high: z.top, kind: `FVG_${z.type}` });');
+    // o efeito de buildTradePlan usa a referência, nunca reconstrói o array
+    expect(app).toContain('const zones = tradePlanStructureZones;');
+    // a transformação OB_${type}/FVG_${type} aparece só UMA vez no arquivo inteiro
+    expect(app.split('zones.push({ low: z.bottom, high: z.top, kind: `OB_${z.type}` });')).toHaveLength(2);
+  });
+
+  it('chartObstacleZones cruza obstacleZonesInPath contra TODOS os alvos do plano ativo (união, nunca só o 1º) e nunca contra um plano nulo', () => {
+    const app = read('../src/App.tsx');
+    const idx = app.indexOf('const chartObstacleZones = useMemo(() => {');
+    expect(idx, 'chartObstacleZones não encontrado').toBeGreaterThan(-1);
+    const block = app.slice(idx, idx + 700);
+    expect(block).toContain('if (!chartTradePlan || !tradePlanStructureZones) return [];');
+    expect(block).toContain('for (const target of chartTradePlan.targets) {');
+    expect(block).toContain('obstacleZonesInPath(tradePlanStructureZones, chartTradePlan.entry, target.price, long)');
+  });
+
+  it('chega ao gráfico via obstacleZones={chartObstacleZones} — mesmo padrão de prop-threading de tradePlan/scenario/aura', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('obstacleZones={chartObstacleZones}');
   });
 });

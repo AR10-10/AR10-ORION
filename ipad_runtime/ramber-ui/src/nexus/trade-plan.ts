@@ -93,7 +93,7 @@ export interface TradePlanInputs {
 
 const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-// Diretriz de Evolução Integral (Omega Core, rodada 2) §5/§6 — conta zonas
+// Diretriz de Evolução Integral (Omega Core, rodada 2) §5/§6 — zonas
 // estruturais REAIS (inputs.zones — Order Blocks/FVGs, qualquer kind, nunca
 // só as elegíveis como entrada) cujo intervalo [low,high] cruza o caminho
 // entre a entrada e o alvo. A própria zona de entrada nunca conta (é de
@@ -101,21 +101,34 @@ const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinit
 // "targets" (que só vem de inputs.levels — S/R, EQH/EQL, Fib, VP) nem
 // duplica seleção nenhuma: zonas nunca competiam por uma vaga de alvo,
 // isto só soma uma leitura honesta a mais sobre o MESMO plano já real.
+//
+// Exportada (Diretriz Restauração/Inteligência Visual §6, "risco visual...
+// obstáculo estrutural"): countObstacleZones abaixo só precisava do
+// TAMANHO da lista; o gráfico (App.tsx) precisa da lista em si, para
+// destacar EXATAMENTE essas zonas — já desenhadas pelo LiquidityZonesPlugin
+// — com uma borda de ênfase. Mesma função, dois consumidores, zero cálculo
+// duplicado.
+export function obstacleZonesInPath(
+  zones: TradePlanStructureZone[],
+  entry: TradePlanZone,
+  targetPrice: number,
+  long: boolean,
+): TradePlanStructureZone[] {
+  const entryMid = (entry.low + entry.high) / 2;
+  return zones.filter((z) => {
+    if (!fin(z.low) || !fin(z.high) || z.low > z.high) return false;
+    if (z.low === entry.low && z.high === entry.high) return false; // a própria zona de entrada nunca é obstáculo do próprio plano
+    return long ? z.high > entryMid && z.low < targetPrice : z.low < entryMid && z.high > targetPrice;
+  });
+}
+
 function countObstacleZones(
   zones: TradePlanStructureZone[],
   entry: TradePlanZone,
-  entryMid: number,
   targetPrice: number,
   long: boolean,
 ): number {
-  let count = 0;
-  for (const z of zones) {
-    if (!fin(z.low) || !fin(z.high) || z.low > z.high) continue;
-    if (z.low === entry.low && z.high === entry.high) continue; // a própria zona de entrada nunca é obstáculo do próprio plano
-    const overlapsPath = long ? z.high > entryMid && z.low < targetPrice : z.low < entryMid && z.high > targetPrice;
-    if (overlapsPath) count++;
-  }
-  return count;
+  return obstacleZonesInPath(zones, entry, targetPrice, long).length;
 }
 
 // Entry basis whitelist per direction: acceptance/defense structures only.
@@ -193,7 +206,7 @@ export function buildTradePlan(inputs: TradePlanInputs, computedAt: number = Dat
     seenPrices.add(t.price);
     const reward = long ? t.price - entryMid : entryMid - t.price;
     if (!(risk > 0 && reward > 0)) continue;
-    targets.push({ price: t.price, basis: t.kind, obstacleCount: countObstacleZones(inputs.zones, entry, entryMid, t.price, long) });
+    targets.push({ price: t.price, basis: t.kind, obstacleCount: countObstacleZones(inputs.zones, entry, t.price, long) });
     riskRewardRatios.push(reward / risk);
     if (targets.length === MAX_TARGETS) break;
   }

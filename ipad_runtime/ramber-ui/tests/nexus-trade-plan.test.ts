@@ -4,7 +4,7 @@
 // geometry, including up to MAX_TARGETS real opposing levels. Pure logic,
 // no network, no store.
 import { describe, it, expect } from 'vitest';
-import { buildTradePlan, effectiveStopForTargetsHit, TRADE_PLAN_CONTRACT_VERSION, MAX_TARGETS, type TradePlanInputs, type TradePlanStructureZone } from '../src/nexus/trade-plan';
+import { buildTradePlan, effectiveStopForTargetsHit, obstacleZonesInPath, TRADE_PLAN_CONTRACT_VERSION, MAX_TARGETS, type TradePlanInputs, type TradePlanStructureZone } from '../src/nexus/trade-plan';
 
 const BASE: TradePlanInputs = {
   stance: 'LONG',
@@ -266,6 +266,52 @@ describe('obstacleCount (Omega Core, rodada 2, §5/§6): "até onde existe espa�
     expect(shortPlan.targets).toHaveLength(1);
     expect(longPlan.targets[0].obstacleCount).toBe(1); // a FVG_BEARISH real fica entre a entrada e o alvo
     expect(shortPlan.targets[0].obstacleCount).toBe(longPlan.targets[0].obstacleCount);
+  });
+});
+
+describe('obstacleZonesInPath (Diretriz Restauração/Inteligência Visual §6): as ZONAS em si, não só a contagem — reusada pelo destaque visual no gráfico (App.tsx/LiquidityZonesPlugin)', () => {
+  it('devolve exatamente as zonas reais que ficam no caminho — mesmo fixture das "duas zonas empilhadas", agora conferindo os objetos, não só o tamanho', () => {
+    const entry = { low: 49_200, high: 49_500, basis: 'OB_BULLISH' };
+    const zones: TradePlanStructureZone[] = [
+      { low: 49_200, high: 49_500, kind: 'OB_BULLISH' }, // a própria entrada
+      { low: 50_000, high: 50_200, kind: 'FVG_BEARISH' }, // obstáculo real 1
+      { low: 50_400, high: 50_600, kind: 'OB_BEARISH' },  // obstáculo real 2
+    ];
+    const found = obstacleZonesInPath(zones, entry, 51_000, true);
+    expect(found).toEqual([
+      { low: 50_000, high: 50_200, kind: 'FVG_BEARISH' },
+      { low: 50_400, high: 50_600, kind: 'OB_BEARISH' },
+    ]);
+  });
+
+  it('a própria zona de entrada nunca aparece na lista devolvida, mesmo com preço idêntico', () => {
+    const entry = { low: 49_200, high: 49_500, basis: 'OB_BULLISH' };
+    const zones: TradePlanStructureZone[] = [{ low: 49_200, high: 49_500, kind: 'OB_BULLISH' }];
+    expect(obstacleZonesInPath(zones, entry, 51_000, true)).toEqual([]);
+  });
+
+  it('zona antes da entrada (nunca no caminho para cima) fica de fora da lista devolvida', () => {
+    const entry = { low: 49_200, high: 49_500, basis: 'OB_BULLISH' };
+    const zones: TradePlanStructureZone[] = [{ low: 47_000, high: 47_200, kind: 'FVG_BULLISH' }];
+    expect(obstacleZonesInPath(zones, entry, 51_000, true)).toEqual([]);
+  });
+
+  it('SHORT: mesma geometria, direção invertida (z.low < entryMid && z.high > targetPrice)', () => {
+    const entry = { low: 51_000, high: 51_000, basis: 'SR_RESISTANCE_1' };
+    const zones: TradePlanStructureZone[] = [
+      { low: 49_200, high: 49_500, kind: 'OB_BULLISH' }, // entre a entrada (51k) e o alvo (48.8k) abaixo
+    ];
+    expect(obstacleZonesInPath(zones, entry, 48_800, false)).toEqual([
+      { low: 49_200, high: 49_500, kind: 'OB_BULLISH' },
+    ]);
+  });
+
+  it('contrato: .length bate exatamente com targets[i].obstacleCount que buildTradePlan já reporta — a extração não mudou o número, só expôs a lista', () => {
+    const plan = buildTradePlan(BASE)!;
+    for (const target of plan.targets) {
+      const long = plan.direction === 'LONG';
+      expect(obstacleZonesInPath(BASE.zones, plan.entry, target.price, long).length).toBe(target.obstacleCount);
+    }
   });
 });
 

@@ -47,9 +47,18 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
     expect(src()).toContain('if (!path.target || !Number.isFinite(path.target.price)) return;');
   });
 
-  it('cor vem da MESMA convenção LONG/SHORT real (#00ffaa/#ff0055) já usada no texto SCENARIO A/B do CouncilWidget', () => {
+  it('Diretriz Restauração/Inteligência Visual §3: cor dedicada (lavanda), NUNCA a mesma do LONG/SHORT real — achado real via harness Playwright: title só aparece via axisLabelVisible/hover, que esta linha não tem, então cor é o ÚNICO sinal que o operador vê', () => {
     const s = src();
-    expect(s).toContain('const rgb = isLong ? "0, 255, 170" : "255, 0, 85";');
+    expect(s).toContain('const PROJECTION_RGB = "186, 168, 255";');
+    expect(s).toContain('const rgb = PROJECTION_RGB;');
+  });
+
+  it('regressão: a cor da projeção nunca volta a ser rgba(0,255,170,...)/rgba(255,0,85,...) — a mesma cor de um nível LONG/SHORT já confirmado tornaria a projeção indistinguível de estrutura real', () => {
+    const s = src();
+    const idx = s.indexOf('const PROJECTION_RGB');
+    const block = s.slice(idx, idx + 700);
+    expect(block).not.toContain('0, 255, 170');
+    expect(block).not.toContain('255, 0, 85');
   });
 
   it('opacidade real escala linearmente por opinionWeight (0..1), piso honesto quando null — nunca invisível, nunca inventado', () => {
@@ -72,9 +81,16 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
   it('axisLabelVisible false (mais discreto que o Trade Plan, que usa true) e título carrega direção + fonte real + peso real', () => {
     const s = src();
     const idx = s.indexOf('scenarioLinesRef.current.push(');
-    const block = s.slice(idx, idx + 500);
+    const block = s.slice(idx, idx + 1100);
     expect(block).toContain('axisLabelVisible: false,');
-    expect(block).toContain('title: `${label} · ${path.direction} · ${path.target.sourceKind} · ${weightLabel}`,');
+    expect(block).toContain('title: `PROJEÇÃO · ${label} · ${path.direction} · ${path.target.sourceKind} · ${weightLabel}`,');
+  });
+
+  it('Diretriz Restauração/Inteligência Visual §3: título começa explicitamente com "PROJEÇÃO" — passado/presente/projeção nunca se confundem só pela cor/opacidade', () => {
+    const s = src();
+    const idx = s.indexOf('scenarioLinesRef.current.push(');
+    const block = s.slice(idx, idx + 1100);
+    expect(block).toMatch(/title: `PROJEÇÃO · /);
   });
 
   it('peso null vira "opinion n/a" honesto no título — nunca uma porcentagem fabricada', () => {

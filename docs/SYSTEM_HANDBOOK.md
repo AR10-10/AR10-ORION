@@ -96,7 +96,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (101 arquivos, 1544 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (101 arquivos, 1564 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -470,6 +470,138 @@ parecer uma funcionalidade pronta quando na verdade não há nada real
 para ela guardar ainda — melhor esperar a Fase 2 real (captura) para
 desenhar essa memória sabendo exatamente a forma do dado que vai
 alimentá-la, em vez de adivinhar o schema agora e ter que migrar depois.
+
+---
+
+### 6.11 Diretriz Restauração/Inteligência Visual — auditoria de
+regressão do gráfico (suspeita concreta do Operador) + reabilitação
+profissional (nunca reversão)
+
+A diretriz partiu de uma suspeita concreta do Operador: um elemento que
+"lembrava um T ou símbolo matemático", junto com outras marcações
+estruturais/de projeção, teria desaparecido do gráfico. A regra pedida:
+auditar antes de assumir qualquer coisa (nem que sumiu por engano, nem
+que a remoção foi sempre correta), classificar cada elemento
+(CALCULADO E VISÍVEL / OCULTO / SUPRIMIDO POR VALIDADE / DESCONECTADO /
+REMOVIDO / SUBSTITUÍDO / DADOS_INSUFICIENTES) e só então decidir.
+
+**Auditoria (dois agentes de exploração em paralelo — inventário do
+código atual + mineração real de `git log --full-history`)**:
+
+- **O elemento "T"/símbolo matemático identificado com evidência real**:
+  rótulos de eixo **"TREND"**, **"TREND +2σ"**, **"TREND -2σ"** (Trend
+  Channel/Linear Regression Channel, `nexus/trend-channel-engine.ts`) —
+  adicionados no commit `887a93e` (2026-07-19) e removidos no commit
+  `8fc1879` (2026-07-20, **mesmo dia**, nesta mesma sessão) por poluírem
+  o eixo de preço já disputado por R1/NL/EMA/VWAP — a própria remoção
+  foi motivada por uma captura de tela real enviada pelo Operador
+  (ver §9 "Achados da captura real"). Classificação honesta: **CALCULADO
+  E OCULTO POR DECISÃO EXPLÍCITA VÁLIDA** — as 3 linhas do canal (a
+  geometria/cor slate) continuaram desenhadas o tempo todo; só o texto
+  identificador sumiu. A remoção em si foi correta (o eixo estava real e
+  visivelmente poluído); o que faltava, pela própria regra desta
+  diretriz ("se a informação antiga era útil, reabilitar de forma mais
+  profissional"), era encontrar OUTRO destino visual para essa
+  identidade — não reverter a correção.
+- **Todo o resto do checklist da diretriz** (S/R, Order Blocks, FVGs,
+  zonas de liquidez, alvos/stop/entrada, Nexus Line, VWAP, Volume
+  Profile, CVD, fractais, harmônicos XABCD, Fibonacci, Scenario Path
+  A/B): **CALCULADO E VISÍVEL** — nenhum plugin de `chart/` ficou órfão
+  (os 6 plugins de canvas + EMA/Trend Channel nativos estão todos
+  montados); nenhum engine graduado (`QUARANTINE.md`) ficou sem
+  consumidor real de UI. Nenhuma segunda remoção real foi encontrada além
+  do caso do Trend Channel — confirmado por mineração completa do
+  histórico (arquivos deletados em `chart/`/`nexus/`: zero, em toda a
+  história do repositório; a reescrita SVG→lightweight-charts de
+  2026-07-10 não perdeu nada porque nenhum desses indicadores existia
+  ainda naquele SVG antigo).
+- **Simetria LONG/SHORT** (`operational-readability.ts`): já 100% real e
+  simétrica — `SHORT_BIAS`/`SHORT_SETUP`/`WAITING_FOR_RETEST`/
+  `WAITING_FOR_CONFIRMATION`/`ENTRY_CONFIRMED` existem, com a mesma
+  grafia pedida pela diretriz, derivados por geometria pura (nunca
+  favorecendo um lado). Nada a construir aqui — já cobria o pedido.
+
+**O que foi reabilitado/evoluído nesta rodada** (aditivo, matemática
+existente intacta):
+
+1. **Legenda do Trend Channel restaurada SEM voltar ao eixo poluído**
+   (`EnhancedChart_110_Percent.tsx`): um `<div>` HTML solto no canto
+   superior esquerdo — nunca o `title` de série/price-line que causou a
+   poluição original (mesmo elemento nativo da lib, mesma causa) —
+   mostrando `TREND · OLS {janela real} · ±{multiplicador real}σ
+   · {direção real}` (ASCENDING/DESCENDING/FLAT). Só aparece com leitura
+   real (`computeTrendChannel` não-nula) E a camada `trend_channel`
+   visível — fail-closed, nunca um valor inventado. `pointer-events-none`:
+   nunca captura um gesto de pan/zoom.
+2. **Obstáculos estruturais destacados no próprio gráfico**
+   (`trade-plan.ts`, `LiquidityZonesPlugin.tsx`, `App.tsx`) — achado
+   real de auditoria: `targets[i].obstacleCount` (Omega Core rodada 2,
+   §6.1) já contava as zonas reais no caminho entrada→alvo, mas o
+   gráfico nunca sabia QUAIS zonas eram essas para destacá-las. Extraída
+   a contagem para `obstacleZonesInPath` (exportada, reaproveitada pela
+   própria contagem — zero cálculo duplicado); `App.tsx` cruza os
+   MESMOS `tradePlanStructureZones` que já alimentam a store contra
+   TODOS os alvos do plano ativo. O plugin colore a borda dessas zonas
+   com o MESMO tom (só mais opaco) e adiciona "⚠" ao rótulo — nunca uma
+   cor nova, nunca tira a identidade BULLISH/BEARISH já pedida
+   explicitamente pelo Operador em uma rodada anterior. Sem plano ativo,
+   zero mudança visual (fail-closed).
+3. **Projeção do Motor de Cenários agora visualmente distinta de
+   estrutura confirmada** (`EnhancedChart_110_Percent.tsx`) — a Fase 3
+   da diretriz pede explicitamente "a projeção deve ser visualmente
+   diferente daquilo que já foi confirmado". A correção inicial (prefixo
+   textual "PROJEÇÃO" no `title`) foi **verificada com um harness
+   Playwright isolado real** (candles sintéticos, nunca no fluxo de
+   mercado real — descartado antes do commit) e provou-se **inerte**: a
+   lib nunca mostra o `title` de uma price line com `axisLabelVisible:
+   false` sem uma UI de hover/legenda que este gráfico não tem — a cor
+   era o ÚNICO sinal que o operador realmente vê, e Scenario usava a
+   MESMA cor verde/vermelho de um nível LONG/SHORT já confirmado,
+   tornando a projeção indistinguível de fato a olho nu. Corrigido com
+   uma cor lavanda dedicada (nunca compartilhada com nenhum outro
+   overlay), mantendo Regra de Ouro 5 (fio de seda, 1px sólida — nunca
+   tracejada) intacta; direção continua legível pela posição real
+   (acima/abaixo do preço), mesma leitura que Fibonacci/S1/R1 já pedem.
+
+**Verificação visual real** (não só teste de padrão de código): harness
+Playwright isolado com candles/zonas/plano/cenário sintéticos, screenshot
+antes/depois de cada mudança, confirmando visualmente as 3 evoluções
+acima (legenda legível sem sobrepor nada, borda de obstáculo claramente
+mais vívida que uma zona normal, linha de projeção claramente lavanda
+vs. as linhas verdes/vermelhas reais) — harness e scripts descartados
+antes do commit, nenhum arquivo temporário entrou no repositório.
+
+**Achados honestos que ficam para uma rodada dedicada** (documentados,
+não esquecidos — nenhum é o "T" que motivou a diretriz, mas surgiram na
+mesma auditoria):
+- 9 elementos nativos do gráfico (VWAP, Nexus Line, CVD, Fibonacci,
+  Scenario A/B, Premium/Discount, harmônico XABCD, S1/R1, liquidez
+  EQH/EQL) não têm toggle individual no painel Camadas do Gráfico — só
+  os 8 `CHART_LAYER_IDS` têm. Nunca ficam ocultos por engano (sempre
+  visíveis com dado real), mas o Operador não pode escondê-los
+  individualmente hoje.
+- O `TypedEventBus` do Nexus Core (`organism-orchestrator.ts`) emite 12
+  tipos de evento (`UI.SYMBOL_CHANGED`, `BRAIN.SCENARIO.UPDATED`, etc.)
+  + `HEALTH.CHANGED` — nenhum tem assinante em lugar nenhum do código; a
+  UI real lê a store direto via os hooks atômicos. Infraestrutura
+  paralela que não quebra nada hoje, mas publica no vazio.
+- `unmitigatedFvgs`/`unmitigatedBlocks` (o que o gráfico DESENHA) usam
+  `.slice(0, 3)`; `tradePlanStructureZones` (o que `obstacleCount`
+  CONTA) não tem esse teto — um plano pode honestamente reportar um
+  obstáculo que não está entre as 3 zonas desenhadas daquele tipo
+  (destaque silenciosamente não aparece nesse caso raro, nunca um erro,
+  mas vale reconciliar os dois limites numa rodada dedicada).
+- Só o harmônico de melhor `fitScore` é desenhado; os demais candidatos
+  calculados por `detectHarmonicPatterns` ficam na store sem consumidor
+  visual — escolha deliberada de rodadas anteriores (evitar poluição),
+  não revisada nesta auditoria.
+
+**Verificação**: `tsc --noEmit` limpo; `vitest run` 101 arquivos/1564
+testes; `npm run build` ok (hash de bundle mudou — esperado, primeira
+rodada desde #12 a tocar código de produção real do gráfico, não só
+laboratório); grep mecânico confirma as 3 evoluções presentes no bundle
+de produção; harness Playwright isolado confirma visualmente, descartado
+antes do commit.
 
 ---
 

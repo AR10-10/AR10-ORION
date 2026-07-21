@@ -79,7 +79,7 @@ describe('EnhancedChart_110_Percent.tsx: lista canônica única de camadas, toda
 
   it('Trend Channel deriva SEMPRE da mesma `data` de candles do gráfico (zero segunda fonte), computeTrendChannel importado do motor puro real', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
-    expect(chart).toContain('import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW } from "../nexus/trend-channel-engine";');
+    expect(chart).toContain('import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER, type TrendChannelDirection } from "../nexus/trend-channel-engine";');
     expect(chart).toContain('const reading = computeTrendChannel(');
     expect(chart).toContain('data.map((c) => ({ time: c.time, close: c.close })),');
   });
@@ -193,5 +193,40 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(app).toContain('onClick={() => applyChartLayerPreset?.("audit")}');
     // o botão continua sendo um atalho — o toggle individual não foi removido
     expect(app).toContain('onClick={() => toggleChartLayer?.(id)}');
+  });
+});
+
+describe('Diretriz Restauração/Inteligência Visual: identidade do Trend Channel restaurada SEM voltar ao eixo de preço', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('a legenda NUNCA usa title de série/price-line — é um <div> HTML solto, fora do sistema de eixo da lib que causou a poluição original', () => {
+    const c = chart();
+    expect(c).toContain('const [trendChannelInfo, setTrendChannelInfo] = useState<{ direction: TrendChannelDirection; windowSize: number } | null>(null);');
+    expect(c).toContain('setTrendChannelInfo(reading ? { direction: reading.direction, windowSize: reading.windowSize } : null);');
+    // regressão: as 3 séries continuam com title vazio (mesma trava de
+    // tests/chart-layers-panel-wiring.test.ts acima) — a legenda não
+    // reverte a correção real de eixo poluído, só devolve a identidade
+    // por outro caminho.
+    const midIdx = c.indexOf('const trendChannelMid = chart.addSeries(LineSeries, {');
+    const lowerIdx = c.indexOf('const trendChannelLower = chart.addSeries(LineSeries, {');
+    expect(c.slice(midIdx, lowerIdx).match(/title: ""/g)).not.toBeNull();
+  });
+
+  it('a legenda só aparece com leitura real (fail-closed) E a camada trend_channel visível — nunca sem origem', () => {
+    const c = chart();
+    const idx = c.indexOf('{visibility.trend_channel && trendChannelInfo && (');
+    expect(idx, 'JSX da legenda não encontrado').toBeGreaterThan(-1);
+  });
+
+  it('conteúdo vem de valores REAIS do motor (windowSize/direction/TREND_CHANNEL_STDDEV_MULTIPLIER) — nunca um número hardcoded novo', () => {
+    const c = chart();
+    expect(c).toContain('TREND · OLS {trendChannelInfo.windowSize} · ±{TREND_CHANNEL_STDDEV_MULTIPLIER}σ · {trendChannelInfo.direction}');
+  });
+
+  it('pointer-events-none: a legenda nunca captura um gesto de pan/zoom do gráfico', () => {
+    const c = chart();
+    const idx = c.indexOf('{visibility.trend_channel && trendChannelInfo && (');
+    const block = c.slice(idx, idx + 400);
+    expect(block).toContain('pointer-events-none');
   });
 });

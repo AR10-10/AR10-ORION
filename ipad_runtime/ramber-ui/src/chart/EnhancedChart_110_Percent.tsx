@@ -90,7 +90,7 @@ import type { StructureBreak } from "../engine-bridge";
 // documentado em rodadas anteriores — ver cabeçalho de
 // nexus/trend-channel-engine.ts para a definição real (Linear Regression
 // Channel) e a pesquisa que a confirmou.
-import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW } from "../nexus/trend-channel-engine";
+import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER, type TrendChannelDirection } from "../nexus/trend-channel-engine";
 import { shouldCompactLabels } from "./label-compaction";
 
 export interface EnhancedChartCandle {
@@ -182,6 +182,13 @@ interface EnhancedChartProps {
   fairValueGaps?: EnhancedChartZone[];
   orderBlocks?: EnhancedChartZone[];
   liquidityZones?: EnhancedChartLiquidity[];
+  // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
+  // estrutural"): quais dessas MESMAS zonas (por low/high real) o Trade
+  // Plan ATIVO cruza a caminho de algum alvo — repassado direto ao
+  // LiquidityZonesPlugin, que já desenha fairValueGaps/orderBlocks acima;
+  // isto só pede ênfase visual nas que importam. Optional/fail-closed:
+  // ausente/vazio => desenho idêntico ao de sempre.
+  obstacleZones?: { low: number; high: number }[];
   // Ordem "Ciborgue Vivo" §1: rompimento de estrutura real mais recente
   // (BOS/CHOCH). null = nenhum rompimento na amostra, honesto — nunca desenha um palpite.
   structureBreak?: StructureBreak | null;
@@ -324,6 +331,7 @@ export function EnhancedChart_110_Percent({
   fairValueGaps,
   orderBlocks,
   liquidityZones,
+  obstacleZones,
   structureBreak,
   fibonacciLevels,
   livePrice,
@@ -403,6 +411,15 @@ export function EnhancedChart_110_Percent({
   // disparam re-render, então o plugin ficaria esperando por uma
   // atualização de `data` não relacionada para "descobrir" o chart pronto.
   const [chartReady, setChartReady] = useState<{ chart: IChartApi; series: ISeriesApi<"Candlestick"> } | null>(null);
+  // Diretriz Restauração/Inteligência Visual (achado real de auditoria):
+  // "Achados da captura real do Operador" (commit anterior) apagou o title
+  // das 3 séries do Trend Channel porque a lib desenha title no EIXO mesmo
+  // com lastValueVisible:false — remoção válida (eixo poluído), mas a
+  // identidade do canal ficou sem NENHUM destino visual, violando "se a
+  // informação antiga era útil, reabilitar de forma mais profissional".
+  // Esta leitura NUNCA vai para o eixo — só alimenta a legenda em <div>
+  // abaixo (JSX), fora do sistema de price-scale da lib.
+  const [trendChannelInfo, setTrendChannelInfo] = useState<{ direction: TrendChannelDirection; windowSize: number } | null>(null);
 
   // Cria o chart UMA vez por montagem — nunca recriado por troca de
   // timeframe/dado (isso destruiria o estado de pan/zoom do operador a
@@ -870,6 +887,7 @@ export function EnhancedChart_110_Percent({
     trendChannelMidRef.current.setData((reading?.mid ?? []).map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
     trendChannelUpperRef.current.setData((reading?.upper ?? []).map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
     trendChannelLowerRef.current.setData((reading?.lower ?? []).map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+    setTrendChannelInfo(reading ? { direction: reading.direction, windowSize: reading.windowSize } : null);
   }, [data]);
 
   // Camadas do Gráfico: mesmo padrão de "ema" — esconder alterna visible
@@ -910,9 +928,27 @@ export function EnhancedChart_110_Percent({
   // §6 "Smart Projection Engine" (achado real de auditoria, ver comentário
   // da prop `scenario` acima): as 2 rotas reais do Motor de Cenários
   // (Path A/B) como price lines nativas — mesmo padrão das linhas Fibonacci
-  // acima, "fio de seda" (1px sólida, nunca pontilhada). Cor = mesma
-  // convenção LONG/SHORT (#00ffaa/#ff0055) já usada pelo próprio texto
-  // "SCENARIO A/B" no CouncilWidget — MESMA leitura, nunca uma segunda.
+  // acima, "fio de seda" (1px sólida, nunca pontilhada).
+  //
+  // Diretriz Restauração/Inteligência Visual §3 ("a projeção deve ser
+  // visualmente diferente daquilo que já foi confirmado... nunca misturar
+  // passado/presente/futuro"): achado real ao VERIFICAR com um harness
+  // Playwright isolado — o título (`title` abaixo) só aparece via
+  // axisLabelVisible:true ou uma legenda de hover que este gráfico não
+  // tem; com axisLabelVisible:false (linha abaixo, deliberado para não
+  // repetir a poluição de eixo que "Achados da captura real do Operador"
+  // já corrigiu no Trend Channel), o texto "PROJEÇÃO"/"SCENARIO A/B" NUNCA
+  // chega à tela — cor é o ÚNICO sinal que o operador realmente vê. A
+  // convenção anterior (verde/vermelho = MESMA cor do LONG/SHORT real)
+  // deixava uma projeção INDISTINGUÍVEL de estrutura já confirmada a
+  // olho nu. Agora usa uma cor própria (lavanda), na mesma família de
+  // "isto é leitura estatística/de contexto, não um nível real" do Trend
+  // Channel (slate) — nunca compartilhada com nenhum outro overlay
+  // (verde/vermelho=direção real, âmbar=zona de entrada, roxo=harmônicos/
+  // EQH-EQL, azul-material=EMA, branco=VWAP, slate=Trend Channel, ciano=
+  // Fibonacci). Direção continua legível pela POSIÇÃO real (Path acima do
+  // preço = LONG, abaixo = SHORT) — a mesma leitura que Fibonacci/S1/R1
+  // já pedem do operador sem cor direcional própria.
   // Deliberadamente mais discretas que o Trade Plan ATIVO (teto de opacidade
   // mais baixo, sem rótulo no eixo de preço): isto é confluência/contexto
   // do Conselho, nunca uma segunda decisão de trading (LEI 24) — o alvo
@@ -935,13 +971,17 @@ export function EnhancedChart_110_Percent({
       return floor + Math.max(0, Math.min(1, weight)) * (ceiling - floor);
     };
 
+    // Lavanda dedicada — nunca a mesma cor de nenhum nível real já
+    // desenhado (ver comentário acima). Única para as duas rotas: a
+    // direção já é legível pela posição real acima/abaixo do preço.
+    const PROJECTION_RGB = "186, 168, 255";
+
     ([
       { path: scenario.pathA, label: "SCENARIO A" },
       { path: scenario.pathB, label: "SCENARIO B" },
     ] as const).forEach(({ path, label }) => {
       if (!path.target || !Number.isFinite(path.target.price)) return;
-      const isLong = path.direction === "LONG";
-      const rgb = isLong ? "0, 255, 170" : "255, 0, 85";
+      const rgb = PROJECTION_RGB;
       const alpha = alphaOf(path.opinionWeight);
       const weightLabel = path.opinionWeight !== null
         ? `opinion ${Math.round(path.opinionWeight * 100)}%`
@@ -953,7 +993,12 @@ export function EnhancedChart_110_Percent({
           lineWidth: 1,
           lineStyle: LineStyle.Solid,
           axisLabelVisible: false,
-          title: `${label} · ${path.direction} · ${path.target.sourceKind} · ${weightLabel}`,
+          // Prefixo explícito "PROJEÇÃO": metadado real (title da própria
+          // lib), correto e auditável mesmo hoje sem UI de hover/legenda
+          // que o exiba — a diferenciação que o OPERADOR realmente vê
+          // agora é a cor lavanda dedicada acima, não este texto (ver
+          // comentário no topo do efeito).
+          title: `PROJEÇÃO · ${label} · ${path.direction} · ${path.target.sourceKind} · ${weightLabel}`,
         }),
       );
     });
@@ -1219,6 +1264,21 @@ export function EnhancedChart_110_Percent({
         />
       )}
       <div ref={containerRef} className="absolute inset-0" />
+      {/* Diretriz Restauração/Inteligência Visual: identidade do Trend
+         Channel restaurada SEM voltar ao eixo de preço (ver comentário do
+         state trendChannelInfo acima) — <div> HTML solto no canto, nunca
+         um title de série/price-line. Some por completo sem leitura real
+         (fail-closed) ou com a camada desligada — nunca aparece sem
+         origem. Zero interação (pointer-events-none): nunca captura um
+         gesto de pan/zoom que era pro chart. */}
+      {visibility.trend_channel && trendChannelInfo && (
+        <div
+          className="absolute left-2 top-2 pointer-events-none select-none font-mono whitespace-nowrap"
+          style={{ fontSize: "9px", color: "rgba(148, 163, 184, 0.65)", letterSpacing: "0.02em" }}
+        >
+          TREND · OLS {trendChannelInfo.windowSize} · ±{TREND_CHANNEL_STDDEV_MULTIPLIER}σ · {trendChannelInfo.direction}
+        </div>
+      )}
       {/* V-MAX Fase 0.7: FVG/Order Blocks (bullish|bearish) — mesmo dado real
          de computeSmcZones, já filtrado (!mitigated) e limitado em contagem
          rio acima (App.tsx/ChartWidget), agora como área colorida real
@@ -1232,6 +1292,7 @@ export function EnhancedChart_110_Percent({
           data={data}
           fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}
           orderBlocks={(orderBlocks ?? []) as FillableZone[]}
+          obstacleZones={obstacleZones ?? []}
         />
       )}
       {/* Ordem "Ciborgue Vivo" §1: BOS/CHOCH real, mesma anotação temporária

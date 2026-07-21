@@ -19,7 +19,7 @@ import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/s
 // engine-bridge.ts usa para orquestrar, nunca uma segunda lista duplicada.
 import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } from "./nexus/multi-timeframe-engine";
 // Signal Precision order (phase 4): actionable plan from real structure.
-import { buildTradePlan, effectiveStopForTargetsHit, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
+import { buildTradePlan, effectiveStopForTargetsHit, obstacleZonesInPath, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
 // Autonomy order: honest signal accuracy — plans tracked against the real
 // price, persisted across sessions, felt by the affective memory.
 import { rehydrateTrackRecord, hitRate, EMPTY_TRACK_RECORD } from "./nexus/signal-track-record";
@@ -1645,6 +1645,22 @@ export default function App() {
     [chartData],
   );
 
+  // Hoisted (Diretriz Restauração/Inteligência Visual §6): as MESMAS zonas
+  // reais (OB/FVG não mitigadas) que o efeito de buildTradePlan abaixo já
+  // montava inline — agora reaproveitadas também pelo destaque de
+  // obstáculos no gráfico (chartObstacleZones, perto do JSX do chart) sem
+  // recomputar a mesma transformação duas vezes.
+  const tradePlanStructureZones = useMemo<TradePlanStructureZone[]>(() => {
+    const zones: TradePlanStructureZone[] = [];
+    smcZones.orderBlocks.filter((z) => !z.mitigated).forEach((z) => {
+      zones.push({ low: z.bottom, high: z.top, kind: `OB_${z.type}` });
+    });
+    smcZones.fairValueGaps.filter((z) => !z.mitigated).forEach((z) => {
+      zones.push({ low: z.bottom, high: z.top, kind: `FVG_${z.type}` });
+    });
+    return zones;
+  }, [smcZones]);
+
   // V-MAX Fase 1.3: Volume Profile real (WASM no quant-worker) sobre os
   // MESMOS candles reais que o chart exibe — zero rede nova. Cadência
   // limitada a 1 cálculo por 5s (o candle vivo muda a cada tick de WS;
@@ -1933,13 +1949,7 @@ export default function App() {
   // the orchestrator (BRAIN.TRADE_PLAN.UPDATED). Advisory only — this
   // terminal never routes orders (permanent read-only design).
   useEffect(() => {
-    const zones: TradePlanStructureZone[] = [];
-    smcZones.orderBlocks.filter((z) => !z.mitigated).forEach((z) => {
-      zones.push({ low: z.bottom, high: z.top, kind: `OB_${z.type}` });
-    });
-    smcZones.fairValueGaps.filter((z) => !z.mitigated).forEach((z) => {
-      zones.push({ low: z.bottom, high: z.top, kind: `FVG_${z.type}` });
-    });
+    const zones = tradePlanStructureZones;
     const planLevels: TradePlanLevelInput[] = [];
     const level = (kind: string, price: number | null | undefined) => {
       if (typeof price === "number" && Number.isFinite(price)) planLevels.push({ price, kind });
@@ -1972,7 +1982,7 @@ export default function App() {
   // níveis do plano — `engine` inteiro recomputava/reescrevia o Trade Plan
   // a cada tick de livro/preço, disparando remoção/recriação desnecessária
   // das price-lines reais no gráfico (EnhancedChart_110_Percent.tsx).
-  }, [councilFromSnapshot, priceFromSnapshot, smcZones, engine?.support, engine?.resistance, fibonacciMatrix, volumeProfileSnapshot]);
+  }, [councilFromSnapshot, priceFromSnapshot, tradePlanStructureZones, engine?.support, engine?.resistance, fibonacciMatrix, volumeProfileSnapshot]);
 
   // Autonomy order — honest signal accuracy. Store-mediated chain:
   // (1) the tradePlan slice feeds the tracker (same-value re-derivations
@@ -2599,6 +2609,7 @@ export default function App() {
       setChartTimeframe,
       engine,
       smcZones,
+      tradePlanStructureZones,
       bosChoch,
       bootAt,
       engineStatus,
@@ -2661,6 +2672,7 @@ export default function App() {
       chartTimeframe,
       engine,
       smcZones,
+      tradePlanStructureZones,
       bosChoch,
       bootAt,
       engineStatus,
@@ -5833,7 +5845,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState } = useContext(WidgetContext) || {};
+  const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState } = useContext(WidgetContext) || {};
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
   // Correção de latência: o MESMO preço real que já alimenta a barra
   // superior (usePriceSnapshot — escrito na store a cada tick do WS,
@@ -5844,6 +5856,23 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // Signal Precision order: the same real Trade Plan slice the ANALYSIS
   // view shows, now drawn on the chart as silk-thread price lines.
   const chartTradePlan = useTradePlanSnapshot();
+  // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
+  // estrutural"): união das zonas REAIS (tradePlanStructureZones, as MESMAS
+  // que já geram targets[i].obstacleCount acima na store) que ficam no
+  // caminho entrada→algum alvo do plano ATIVO — o LiquidityZonesPlugin usa
+  // isto só para destacar a borda das zonas que já desenha, nunca uma zona
+  // nova. Vazio sem plano ativo (fail-closed, zero mudança visual de hoje).
+  const chartObstacleZones = useMemo(() => {
+    if (!chartTradePlan || !tradePlanStructureZones) return [];
+    const long = chartTradePlan.direction === "LONG";
+    const seen = new Map<string, { low: number; high: number }>();
+    for (const target of chartTradePlan.targets) {
+      for (const z of obstacleZonesInPath(tradePlanStructureZones, chartTradePlan.entry, target.price, long)) {
+        seen.set(`${z.low}:${z.high}`, { low: z.low, high: z.high });
+      }
+    }
+    return [...seen.values()];
+  }, [chartTradePlan, tradePlanStructureZones]);
   // Neural Market Aura: mesmo TrackRecordState real que o Signal Track
   // Record já mantém (useTrackRecordSnapshot, mesmo hook usado pelo efeito
   // de rastreamento em App()) — zero segunda fonte de verdade sobre o
@@ -5945,6 +5974,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             resistanceBreakouts={engine?.resistanceBreakouts ?? 0}
             fairValueGaps={unmitigatedFvgs}
             orderBlocks={unmitigatedBlocks}
+            obstacleZones={chartObstacleZones}
             liquidityZones={unsweptLiquidity}
             structureBreak={bosChoch?.break ?? null}
             fibonacciLevels={fibonacciLevels}
