@@ -1548,6 +1548,57 @@ mais fundo aqui.
 
 ---
 
+### 6.23 Auditoria de sincronização (pedido do Operador: "sincronizado
+perfeitamente") — varredura campo-a-campo além do bug já corrigido
+
+Depois do bug real do §6.22 (`engine?.target1`), o Operador pediu pra
+aumentar a inteligência/precisão de todo o sistema visual de LONG/SHORT/
+entrada/saída, com ênfase em ficar "sincronizado perfeitamente". Como o
+bug anterior só existiu porque `WidgetContext = createContext<any>(null)`
+(App.tsx:254) deixa QUALQUER nome de campo errado invisível pro `tsc`,
+a auditoria certa não é ler só `engine` de novo — é conferir campo-a-
+campo cada objeto real exposto por esse Context contra a fonte que o
+constrói, procurando a MESMA classe de bug. Sem mudança de código nesta
+rodada — só verificação.
+
+Auditados (todo uso de `objeto?.campo`/`objeto.campo` em App.tsx
+comparado 1:1 contra o `return {...}` real da fonte):
+- **`engine`**: o bug do §6.22, já corrigido — nenhum outro campo errado
+  nos ~35 campos reais do `useMemo` (App.tsx ~linha 1367).
+- **`realCycle`**: limpo — todo uso (`target1`/`target2`/`stop`/
+  `support`/`resistance`/`riskRewardRatio`/etc) confere exatamente com o
+  `return { ok: true, ... }` de `runRealCycle()` (`engine-bridge.ts`
+  ~linha 473). Notável: `realCycle` usa `target1` (não `target`) — é o
+  `engine` (App.tsx) que RENOMEIA pra `target` ao processar; ler os dois
+  objetos como se fossem intercambiáveis é exatamente o erro do §6.22.
+- **`bosChoch`**: limpo — superfície pequena, só `.break` usado.
+- **`nexusDecision`**: limpo — `.operation` confere com
+  `NexusDecision.operation` (`decision-layer.ts`). `.plan` (que teria
+  ENTRY/STOP/TARGETS + ETA) é 100% dependente de `trackedPlan =
+  useTradePlanSnapshot()` — o MESMO Trade Plan do Conselho, nunca uma
+  3ª fonte independente. A enriquecimento de ETA no rótulo TARGET do
+  canvas (`decision?.plan?.targets[i]`, `EnhancedChart_110_Percent.tsx`
+  ~linha 1588) por isso só se aplica ao plano do Conselho — ausência de
+  ETA no fallback do Núcleo é honesta (não existe cálculo de ETA
+  independente pro Núcleo), não um bug.
+- **`vwapCtx`**: limpo — os 5 campos usados (`state`/`vwap`/
+  `distanceAbs`/`distancePct`/`side`) conferem exatamente com
+  `vwap-state.ts`.
+
+**Conclusão honesta**: o bug do §6.22 era real e isolado — a varredura
+dos outros objetos mais diretamente ligados a LONG/SHORT/entrada/saída
+não encontrou nenhum outro. **Pendência real**: os ~60 campos restantes
+do `WidgetContext` (65 chaves no total; ver `contextValue`, App.tsx
+~linha 2616) continuam sem essa auditoria campo-a-campo — e a lacuna
+estrutural de fundo (`WidgetContext` tipado `any`) continua existindo,
+então esta classe de bug pode reaparecer em qualquer objeto novo
+adicionado ao Context sem ninguém notar via `tsc`. Registrado para o
+EPC §1/§3 (Task #26): tipar `WidgetContext` de verdade — um refactor
+maior e mais arriscado, fora do escopo de uma auditoria pontual — é a
+correção estrutural que fecharia esta classe inteira de bug de vez.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
