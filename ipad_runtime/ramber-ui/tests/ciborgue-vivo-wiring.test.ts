@@ -91,10 +91,12 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
     expect(plugin).toContain('if (rectWidth > 24 && rectHeight > 10) {');
     // Diretriz Restauração/Inteligência Visual §6: label ganha "⚠" e a
     // paleta ganha o 3º argumento isObstacle(z) quando a MESMA zona é um
-    // obstáculo real do plano ativo — mesma chamada de sempre, só honesta
-    // sobre a nova informação opcional.
-    expect(plugin).toContain('fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), isObstacle(z) ? "FVG ⚠" : "FVG"));');
-    expect(plugin).toContain('obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), isObstacle(z) ? "OB ⚠" : "OB"));');
+    // obstáculo real do plano ativo. Auditoria do ecossistema visual
+    // (pergunta do Operador "era pra cima ou pra baixo?"): o label também
+    // carrega o glifo de direção ↑/↓ real (z.type do motor SMC), nunca só
+    // a cor — mesma chamada de sempre, só honesta sobre mais informação.
+    expect(plugin).toContain('fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
+    expect(plugin).toContain('obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
   });
 });
 

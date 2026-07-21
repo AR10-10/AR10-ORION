@@ -96,7 +96,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1643 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1644 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -1171,6 +1171,55 @@ permanentemente NÃO podem virar automáticas são, por design não-negociável
 (2) um laço de pesquisa perpétuo em segundo plano — não existe
 infraestrutura para uma sessão rodar sem ser invocada. "Automático" aqui
 já é verdade para tudo que é honesto ser automático.
+
+---
+
+### 6.18 Auditoria + pesquisa do ecossistema visual + direção nas zonas
+FVG/OB (pergunta concreta do Operador)
+
+Pedido do Operador: revisão do ecossistema visual inteiro + pesquisa do
+que terminais profissionais têm que falta, com julgamento honesto ("ou
+ferramenta demais"), mais uma pergunta concreta ("aquela zona vermelha
+tipo liquidez, era pra cima ou pra baixo? Está aparecendo?").
+
+**Fix concreto aplicado**: o rótulo das zonas FVG/Order Block dizia só
+`"FVG"`/`"OB"` — a direção (alta/baixa) vinha SÓ da cor (verde=demanda,
+vermelho=oferta), exigindo o Operador já saber a convenção. Exatamente a
+confusão relatada. Corrigido em `LiquidityZonesPlugin.tsx`: o rótulo
+carrega o glifo de direção real do motor SMC — `FVG ↑`/`OB ↑` (bullish,
+demanda) e `FVG ↓`/`OB ↓` (bearish, oferta), mesmo vocabulário ↑/↓ de
+VWAP/Nexus Line; a marca `⚠` de obstáculo continua acompanhando. Zero
+cálculo novo (`z.type` já é a direção real do motor). Verificado com
+harness Playwright: a zona vermelha lê `OB ↓`/`FVG ↓` sem ambiguidade.
+
+**Pesquisa/revisão (entregável principal)**: documento honesto em
+`docs/AUDITORIA_ECOSSISTEMA_VISUAL.md` — inventário completo das 22
+camadas visuais reais, comparação com terminais profissionais (ATAS/
+Bookmap/GetChart/LuxAlgo, pesquisa real com fontes), e lista priorizada
+com veredito. Conclusão honesta: no núcleo order flow + SMC o AR10 já
+está em nível profissional; lacunas reais pontuais, cada uma com custo e
+bloqueio honesto:
+- **Recomendado primeiro** (baixo custo, alto valor, zero dado novo):
+  bandas da VWAP (±σ) — a VWAP já é computada, as bandas são o mesmo
+  cálculo + desvio real.
+- **Em seguida** (dado já coletado): desenhar OI/Funding como sub-série.
+- **Vale, decisão do Operador** (motor novo): footprint/cluster
+  (bid×ask por vela — auditar granularidade do `orderflow-history`
+  antes), padrões geométricos triângulo/cunha/bandeira (o Operador pediu
+  "triângulo").
+- **Bloqueado em fonte de dado nova**: liquidation heatmap (precisa feed
+  de liquidação — não é falta de código).
+- **NÃO recomendo (ferramenta demais)**: osciladores clássicos
+  desenhados (MACD/Ichimoku/Bollinger/RSI em série) — RSI/ADX/ATR já
+  alimentam o Council, desenhar a "sopa" contradiz a tese "o Core Engine
+  decide"; e ferramentas de desenho MANUAL — mudaria a categoria do
+  produto (auto-análise → editor tipo TradingView).
+
+Nada dos itens 4.x foi construído (todos motores novos ou dependem de
+fonte nova) — ficam para o Operador decidir, com o relatório servindo de
+base honesta. Verificação: `tsc --noEmit` limpo · **103 arquivos/1644
+testes** (+1 do glifo de direção; +1 teste de wiring reescrito) · `npm
+run build` ok.
 
 ---
 

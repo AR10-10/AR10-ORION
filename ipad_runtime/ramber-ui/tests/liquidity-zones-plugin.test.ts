@@ -64,6 +64,15 @@ describe('LiquidityZonesPlugin: destaque de obstáculo (Diretriz Restauração/I
     fillOpacities.forEach((fillOpacity, i) => expect(fillOpacity).toBeLessThan(borderOpacities[i]));
   });
 
+  it('pergunta do Operador ("era pra cima ou pra baixo?"): o rótulo da zona carrega a DIREÇÃO por glifo ↑/↓, nunca só a cor — BULLISH=↑ (demanda), BEARISH=↓ (oferta), o glifo vem de z.type real do motor SMC', () => {
+    const p = plugin();
+    expect(p).toContain('const dir = (t: "BULLISH" | "BEARISH") => (t === "BULLISH" ? "↑" : "↓");');
+    expect(p).toContain('`FVG ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`');
+    expect(p).toContain('`OB ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`');
+    // o glifo nunca substitui a marca de obstáculo (⚠), só a acompanha
+    expect(p).toContain('" ⚠"');
+  });
+
   it('a identidade do obstáculo é por low/high REAL (mesmos números que já formam a zona) — nunca por índice/posição', () => {
     const p = plugin();
     expect(p).toContain('const isObstacle = (zone: FillableZone) =>\n        (obstacles ?? []).some((o) => o.low === zone.bottom && o.high === zone.top);');

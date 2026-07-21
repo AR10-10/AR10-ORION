@@ -180,8 +180,17 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
         ctx.globalAlpha = 1;
       };
 
-      fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), isObstacle(z) ? "FVG ⚠" : "FVG"));
-      obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), isObstacle(z) ? "OB ⚠" : "OB"));
+      // Achado real (pergunta do Operador: "aquela zona vermelha tipo
+      // liquidez, era pra cima ou pra baixo?"): o rótulo dizia só "FVG"/"OB"
+      // — a direção vinha SÓ da cor (verde=alta/demanda abaixo,
+      // vermelho=baixa/oferta acima), o que exige o Operador já saber a
+      // convenção de cor. Glifo ↑/↓ explícito (mesmo vocabulário de
+      // VWAP/NL): BULLISH=↑ (zona de demanda, viés de alta), BEARISH=↓
+      // (zona de oferta, viés de baixa). Zero cálculo novo — z.type já é a
+      // direção real do motor SMC.
+      const dir = (t: "BULLISH" | "BEARISH") => (t === "BULLISH" ? "↑" : "↓");
+      fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));
+      obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));
     };
 
     const markDirty = () => {
