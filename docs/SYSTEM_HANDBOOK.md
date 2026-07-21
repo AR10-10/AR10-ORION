@@ -96,7 +96,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1621 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1623 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -913,6 +913,77 @@ faixa vertical" da captura original do Operador (§6.13) — confirmando
 visualmente as 7 etiquetas (TREND/R1/preço/VWAP/S1/NL/EMA) legíveis, sem
 sobreposição, sem texto fantasma, sem vazamento do eixo nativo, canto
 superior esquerdo do gráfico vazio (legenda antiga removida por completo).
+
+---
+
+### 6.15 Rótulo de último preço desatualizado — achado real de captura de
+tela do Operador (app ao vivo, header 65,468.00 × eixo 65439.20)
+
+O Operador enviou uma captura de tela real do terminal RODANDO (não um
+harness) pedindo auditoria de precisão dos desenhos/cálculos matemáticos
+— "a gente sabia a posição dos alvos", "liberdade total pra ajustar...
+sem nenhuma falha". A imagem mostrava dois números diferentes
+reivindicando "o preço atual" ao mesmo tempo: a barra superior (WS ao
+vivo) em `65,468.00`, o rótulo de eixo (§6.13/6.14, sem prefixo) em
+`65439.20` — uma diferença real de ~$29 (~0.04%).
+
+**Causa raiz real** (confirmada por leitura de código, não suposição):
+`priceAxisLabels` (o rótulo de último preço, sem prefixo) lê
+`data[último].close` — o array React de candles. `live-candle-sync.ts`
+(`patchLastCandleWithLiveTick`) funde o tick real do WebSocket na vela em
+formação, mas **deliberadamente só via `series.update()`** (API nativa da
+lightweight-charts para a vela RENDERIZADA) — o próprio arquivo documenta
+por quê: "SMC/Fibonacci/Volume Profile são derivações estruturais que não
+precisam (nem devem) recomputar a cada tick de preço". Ou seja: a vela
+DESENHADA no gráfico já seguia o preço ao vivo; o array `data` (e
+qualquer leitura direta dele) ficava até ~30s atrás (o intervalo real do
+poll REST, `setInterval(fetchSymbolData, 30000)`). O rótulo de último
+preço, construído lendo `data` diretamente, herdou essa mesma defasagem
+— uma regressão real introduzida quando o rótulo nativo da lib (que lia
+o estado INTERNO da série, sempre live) foi substituído pelo overlay
+customizado no §6.13.
+
+**Solução aplicada**: `EnhancedChart_110_Percent` já recebe `livePrice`
+como prop (a MESMA fonte `usePriceSnapshot()` que alimenta a barra
+superior E o patch da vela). O rótulo de último preço passou a preferir
+`livePrice` quando é um número finito, com fallback pro `close` da vela
+só quando ainda não existe nenhum tick real (fail-closed, carregamento
+inicial) — zero fonte de dado nova, só reconciliar duas leituras que já
+existiam e deveriam sempre ter sido a mesma. A cor up/down (verde/
+vermelho) passou a comparar esse mesmo valor contra `lastCandle.open`,
+por consistência. `livePrice` entrou na dependency array do `useMemo` —
+sem isso o rótulo continuaria congelado apesar de ler a variável certa.
+
+**Por que isto não regride a Regra de Ouro 6 (Main Thread sagrada)**:
+`priceAxisLabels` é um array de ~7 objetos — recomputá-lo a cada tick
+(~335ms, ver `LIVE 335ms` na captura) é ínfimo comparado à recomputação
+de VWAP/EMA/SMC que o isolamento do `live-candle-sync.ts` evita de
+propósito. `PriceLabelStackPlugin` já throttla o redesenho real via
+dirty-flag + `requestAnimationFrame` (§6.13) — o array pode mudar de
+referência a cada tick sem gerar mais de um repaint por frame.
+
+**Auditoria do resto da captura** (mesma disciplina "reportar toda
+limitação encontrada, mesmo fora do pedido direto"): a ausência de linhas
+de ENTRY/STOP/TARGET ou projeção de cenário no gráfico da captura **não é
+um bug** — a própria captura mostra "TRADE PLAN — Núcleo LONG, Conselho
+neutro"; `buildTradePlan`/`buildScenarioProjection` (App.tsx) usam
+`councilFromSnapshot?.stance`, e com o Conselho neutro nenhum dos dois
+produz uma estrutura real para desenhar — fail-closed correto, não uma
+lacuna visual. As linhas diagonais do Trend Channel e o cluster TREND/R1/
+VWAP/S1/NL/EMA na captura foram lidas visualmente como consistentes com
+os fixes do §6.14 (nenhuma sobreposição/vazamento óbvio na captura), mas
+sem certeza de que a captura já refletia aquele build no momento exato do
+envio — o `audit-header-maxcontent.mjs`/harness Playwright deste commit
+são a prova real independente disso, não a leitura da captura em si.
+
+**Verificação**: `tsc --noEmit` limpo · `npx vitest run` **103
+arquivos/1623 testes** (+2 sobre o §6.14: 1 teste do fix de
+`livePrice`/fallback, 1 teste da dependency array) · `npm run build` ok ·
+harness Playwright dedicado — última vela sintética com `close` "velho"
+(65439.20) + `livePrice` diferente (65468.00, valor real da captura) —
+confirma visualmente que o rótulo do eixo passa a mostrar `65468.00`,
+nunca mais o valor congelado · `audit-header-maxcontent.mjs` CLEAN nos 11
+viewports no build final.
 
 ---
 

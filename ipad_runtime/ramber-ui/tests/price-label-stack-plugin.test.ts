@@ -236,8 +236,31 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
   it('último preço usa a MESMA cor up/down real da própria série de candles (#00ffaa/#ff0055) — nunca uma cor nova', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 1700);
-    expect(block).toContain('lastCandle.close >= lastCandle.open ? "#00ffaa" : "#ff0055"');
+    const block = s.slice(idx, idx + 2750);
+    expect(block).toContain('displayPrice >= lastCandle.open ? "#00ffaa" : "#ff0055"');
+  });
+
+  it('achado real de captura de tela do Operador (BTC/USDT 1H ao vivo, header 65,468.00 vs. rótulo do eixo 65439.20 — mesma fonte, dessincronizada): o rótulo de último preço prefere livePrice (tick real, mesma fonte da barra superior) — nunca fica preso no data[último].close desatualizado', () => {
+    // patchLastCandleWithLiveTick (live-candle-sync.ts) só atualiza a vela
+    // RENDERIZADA via series.update() — deliberadamente nunca escreve de
+    // volta no array `data` (documentado no próprio live-candle-sync.ts:
+    // SMC/Fibonacci/Volume Profile não podem recomputar a cada tick). Sem
+    // este fix, o rótulo de último preço (leitura direta de
+    // data[último].close) congelava no valor do último REST/kline
+    // (até ~30s desatualizado) enquanto a barra superior seguia ao vivo.
+    const s = chart();
+    const idx = s.indexOf('const lastCandle = data.length > 0 ? data[data.length - 1] : null;');
+    expect(idx, 'bloco do último preço não encontrado').toBeGreaterThan(-1);
+    const block = s.slice(idx, idx + 1300);
+    expect(block).toContain('const displayPrice = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : lastCandle.close;');
+    expect(block).toContain('price: displayPrice,');
+    expect(block).toContain('text: displayPrice.toFixed(2),');
+  });
+
+  it('priceAxisLabels recalcula a cada tick real de livePrice — nunca uma etiqueta de preço congelada', () => {
+    const s = chart();
+    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, nlLastValue, nexusLineState, emaLastValue, activeEmaPeriod, data, visibility.trend_channel, trendChannelInfo, livePrice]);');
+    expect(depsIdx, 'dependency array de priceAxisLabels não inclui livePrice').toBeGreaterThan(-1);
   });
 
   it('vwapLastValue/nlLastValue/emaLastValue vêm da PONTA real de cada série já computada (zero segunda fonte) — capturados nos MESMOS efeitos que já chamam setData', () => {

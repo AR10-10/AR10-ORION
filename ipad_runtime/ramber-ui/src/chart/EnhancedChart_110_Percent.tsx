@@ -1375,10 +1375,24 @@ export function EnhancedChart_110_Percent({
     }
     const lastCandle = data.length > 0 ? data[data.length - 1] : null;
     if (lastCandle && Number.isFinite(lastCandle.close)) {
+      // Achado real de captura de tela do Operador (BTC/USDT 1H ao vivo):
+      // este rótulo (antes sempre lastCandle.close) ficava atrás do preço
+      // real — patchLastCandleWithLiveTick (live-candle-sync.ts) só
+      // atualiza a vela RENDERIZADA via series.update() (deliberado:
+      // SMC/Fibonacci/Volume Profile não podem recomputar a cada tick de
+      // preço), nunca escreve de volta no array `data`. A barra superior
+      // (mesmo usePriceSnapshot() que alimenta `livePrice` aqui) seguia ao
+      // vivo enquanto este rótulo congelava no último REST/kline — dois
+      // números diferentes reivindicando "o preço atual" ao mesmo tempo
+      // (~30s de defasagem possível, o intervalo real do poll REST).
+      // livePrice já chega como prop (mesma fonte do patch da vela acima)
+      // — preferido aqui, com fallback pro close da vela só quando ainda
+      // não existe nenhum tick real (fail-closed, carregamento inicial).
+      const displayPrice = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : lastCandle.close;
       out.push({
-        price: lastCandle.close,
-        text: lastCandle.close.toFixed(2),
-        color: lastCandle.close >= lastCandle.open ? "#00ffaa" : "#ff0055",
+        price: displayPrice,
+        text: displayPrice.toFixed(2),
+        color: displayPrice >= lastCandle.open ? "#00ffaa" : "#ff0055",
       });
     }
     // Diretriz de Refinamento Visual §5: o Trend Channel volta a ser uma
@@ -1396,7 +1410,7 @@ export function EnhancedChart_110_Percent({
       });
     }
     return out;
-  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, nlLastValue, nexusLineState, emaLastValue, activeEmaPeriod, data, visibility.trend_channel, trendChannelInfo]);
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, nlLastValue, nexusLineState, emaLastValue, activeEmaPeriod, data, visibility.trend_channel, trendChannelInfo, livePrice]);
 
   return (
     <div className="absolute inset-0">
