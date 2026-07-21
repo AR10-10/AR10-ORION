@@ -96,7 +96,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1639 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1643 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -1083,6 +1083,94 @@ CLEAN nos 11 viewports no build final · harness Playwright com 2
 instâncias do gráfico lado a lado (mesmos dados reais, só
 `layerVisibility` diferente) confirma visualmente os 7 toggles
 funcionando ponta a ponta — série E etiqueta desaparecem juntas.
+
+---
+
+### 6.17 Rótulos do Trade Plan (ENTRY/STOP/TARGET) migrados para o sistema
+anti-colisão — o ÚLTIMO grupo que ainda podia sobrepor a visão
+
+Pedido do Operador: "bater o olho a gente sabe se a entrada é longa ou
+saída... nada fica cobrindo e atrapalhando a visão". Esta era a pendência
+honesta EXPLICITAMENTE registrada no §6.16 como não-executada naquela
+rodada (por ser mais arriscada). Executada agora, isolada e com
+verificação própria.
+
+**O que era**: ENTRY/STOP/TARGET1-3 (até 6 linhas: entrada high/low +
+stop + 3 alvos) eram os ÚNICOS rótulos ainda no eixo NATIVO da
+lightweight-charts (`axisLabelVisible:true`) — sem NENHUMA consciência da
+posição dos rótulos de S1/R1/VWAP/NL/EMA/último preço/Trend Channel (que
+já viviam no `PriceLabelStackPlugin` desde §6.13). Quando um plano ativo
+tinha níveis perto de S1/R1/VWAP (o caso NORMAL de um setup real perto de
+estrutura — exatamente quando o Operador mais precisa ler tudo limpo), os
+rótulos nativos do plano sobrepunham os do overlay. Mesma classe de bug
+que motivou o `PriceLabelStackPlugin`, nunca fechada para esta camada.
+
+**Solução aplicada** (mesmo padrão de S1/R1 do §6.13): a LINHA horizontal
+continua desenhada (`createPriceLine`, agora `axisLabelVisible:false` +
+`title:""`); o RÓTULO migra para `priceAxisLabels` — o MESMO array/sistema
+de cascata anti-colisão dos demais níveis. Divisão de responsabilidade:
+- O **efeito de mutação** (`[tradePlan, livePrice, targetsHit]`) cuida SÓ
+  da LINHA: o stop RATCHEA de posição (break-even → trailing) via
+  `effectiveStopForTargetsHit` e brilha quando o preço vivo rompe; cada
+  alvo brilha quando ATINGIDO (`targetsHit` autoritativo). Nunca mais
+  escreve `title`. `decision` saiu das suas deps (só o rótulo, no useMemo,
+  usa a ETA fundida).
+- O **useMemo `priceAxisLabels`** compõe o RÓTULO (texto + cor + preço) das
+  MESMAS funções puras (`effectiveStopForTargetsHit`,
+  `shouldCompactLabels`, `formatEtaRange`) e MESMOS inputs reais que o
+  efeito da linha — então linha e rótulo NUNCA divergem. Ganhou
+  `tradePlan`/`targetsHit`/`decision` nas deps.
+
+Estado vivo IDÊNTICO ao que a lib desenhava: `ENTRY LONG/SHORT · basis`
+(âmbar), `STOP · BREAK-EVEN/TRILHADO · BREACHED` (vermelho, no preço
+EFETIVO do ratchet), `TARGET n · basis · R:R · distância% · ETA · REACHED`
+(verde, com compactação de largura quando os níveis apertam). A leitura
+"bater o olho" fica na COR da caixa: âmbar=entrada, vermelho=stop,
+verde=alvo — e `ENTRY LONG`/`ENTRY SHORT` explícito no texto. Fail-closed:
+sem plano, zero rótulos; cada push guardado por `Number.isFinite` do preço
+real.
+
+**Verificação**: `tsc --noEmit` limpo · `npx vitest run` **103
+arquivos/1643 testes** (4 testes de estrutura antiga reescritos para a
+nova realidade — assinatura de `mk` sem `title`, `axisLabelVisible:false`,
+deps do efeito/useMemo; + 4 testes novos travando os invariantes da
+migração) · `npm run build` ok · grep por string literal confirma
+`"ENTRY ZONE LOW"`/`"BREAK-EVEN (real)"` no bundle · `audit-header-
+maxcontent.mjs` CLEAN nos 11 viewports · **harness Playwright dedicado**:
+plano LONG ativo com ENTRY/STOP/TARGET1-3 propositalmente perto de
+S1/R1/VWAP/EMA + `targetsHit=1` (o pior caso da migração) — 13 rótulos
+simultâneos no eixo, TODOS legíveis, ZERO sobreposição, `TARGET 1 ·
+REACHED`/`STOP · BREAK-EVEN`/`ENTRY LONG` corretos, cores distinguindo
+entrada/stop/alvo à primeira vista.
+
+**Auditoria "faltando tecnologia/biblioteca/ferramenta?" (pedido do
+Operador, resposta honesta)**: levantamento real do arsenal de análise já
+ligado — market structure (BOS/CHOCH, S/R, FVG/Order Blocks, fractal
+swings, `lorentzian-classifier` k-NN graduado 2026-07-01), confluência
+(Council/linear opinion pool, Consensus Radar, Confluence Engine),
+multi-timeframe, Trade Plan/Decision Layer/Scenario Engine v2/ETA
+Engine/RR Quality, VWAP/EMA/Nexus Line/Volume Profile (WASM)/Fibonacci/
+harmônicos XABCD+Wolfe/Premium-Discount/Trend Channel OLS, Institutional
+Score (GMIL)/Heat Score/Trap Detection, Track Record/Affective Memory/
+Self-Diagnostics, cross-exchange (Binance/MEXC/Bybit/OKX)/L2 history/
+orderflow heatmap+CVD. Conclusão honesta: o conjunto de análise já é o de
+um terminal profissional de elite — não há uma lacuna de "biblioteca/
+tecnologia faltando" que justifique construir um motor novo especulativo
+(fazê-lo violaria a disciplina de auditar-antes-de-construir e a Regra de
+Ouro 1). Os próximos passos REAIS continuam sendo os já listados (Fase 2
+do backtest / recalibração de `weight-matrix.js` / ledger versionado),
+todos bloqueados em decisão do Operador, não em falta de ferramenta.
+
+**Sobre "põe pra fazer tudo automático" (resposta honesta)**: a cadeia de
+análise JÁ é 100% reativa/automática — a arquitetura store-mediated
+(Zustand) recomputa SMC/VWAP/Fibonacci/Scenario/Trade Plan/Council/etc
+automaticamente a cada dado real que chega, e o Core Engine emite
+LONG/SHORT/WAIT sozinho, sem nenhum clique manual. As DUAS coisas que
+permanentemente NÃO podem virar automáticas são, por design não-negociável
+(CLAUDE.md): (1) execução de ordens — READ_ONLY/FAIL_CLOSED para sempre; e
+(2) um laço de pesquisa perpétuo em segundo plano — não existe
+infraestrutura para uma sessão rodar sem ser invocada. "Automático" aqui
+já é verdade para tudo que é honesto ser automático.
 
 ---
 

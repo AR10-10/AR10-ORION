@@ -145,7 +145,7 @@ describe('App.tsx: threads the real confidenceZone (§16) from context into Char
 describe('EnhancedChart_110_Percent: stop/target hit-boost v2 (Ordem Final Autonomia Evolução §1 + Diretriz Complementar §2/§4)', () => {
   it('updates the existing lines in place via applyOptions — never removes/recreates them on a live-price tick', () => {
     const s = chart();
-    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit, decision]);'));
+    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit]);'));
     expect(block).toContain('stopLineRef.current?.applyOptions(');
     expect(block).toContain('line.applyOptions(');
     expect(block).not.toContain('createPriceLine(');
@@ -154,16 +154,16 @@ describe('EnhancedChart_110_Percent: stop/target hit-boost v2 (Ordem Final Auton
 
   it('hierarchy stays color/opacity-only (Regra de Ouro 2) — lineWidth/lineStyle are never touched by the hit-boost effect', () => {
     const s = chart();
-    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit, decision]);'));
+    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit]);'));
     expect(block).not.toContain('lineWidth');
     expect(block).not.toContain('lineStyle');
   });
 
   it('is a separate effect from line creation — depends on [tradePlan, livePrice, targetsHit], not just [tradePlan]', () => {
-    expect(chart()).toContain('}, [tradePlan, livePrice, targetsHit, decision]);');
+    expect(chart()).toContain('}, [tradePlan, livePrice, targetsHit]);');
   });
 
-  it('the base ENTRY/STOP/TARGET title literals stay intact for both the creation effect and the hit-boost effect', () => {
+  it('as literais base de ENTRY/STOP/TARGET continuam intactas — agora em priceAxisLabels (migração para o sistema anti-colisão), nunca reformatadas', () => {
     const s = chart();
     expect(s).toContain('`ENTRY ${tradePlan.direction}');
     expect(s).toContain('`STOP · ${tradePlan.stop.basis}`');
@@ -172,15 +172,14 @@ describe('EnhancedChart_110_Percent: stop/target hit-boost v2 (Ordem Final Auton
 
   it('v2: "REACHED" is driven by the AUTHORITATIVE targetsHit prop, never re-derived from livePrice alone — a target stays marked reached even if price later pulls back', () => {
     const s = chart();
-    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit, decision]);'));
+    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit]);'));
     expect(block).toContain('const hits = targetsHit ?? 0;');
     expect(block).toContain('const reached = i < hits;');
   });
 
   it('v2: the stop line itself ratchets forward once targetsHit > 0 — "quando o cenário muda, o desenho muda"', () => {
     const s = chart();
-    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit, decision]);'));
-    expect(block).toContain('const stopRatchetActive = hits > 0;');
+    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit]);'));
     expect(block).toContain('const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);');
     expect(block).toContain('price: effectiveStopPrice,');
   });
@@ -188,13 +187,13 @@ describe('EnhancedChart_110_Percent: stop/target hit-boost v2 (Ordem Final Auton
   it('§18 trailing stop além do break-even: the ratchet formula is imported from the SAME single real source signal-track-record.ts uses — never a second local formula', () => {
     const s = chart();
     expect(s).toContain('import { effectiveStopForTargetsHit } from "../nexus/trade-plan";');
-    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit, decision]);'));
+    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit]);'));
     expect(block).not.toContain('const entryMid =');
   });
 
   it('a non-finite or absent live price never resolves a STOP BREACHED (fail-closed) — target REACHED still updates from the authoritative ratchet regardless', () => {
     const s = chart();
-    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit, decision]);'));
+    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit]);'));
     expect(block).toContain('const stopHitNow = p !== null &&');
   });
 });

@@ -154,11 +154,15 @@ describe('EnhancedChart_110_Percent: os "last value label"/"axis label" NATIVOS 
     expect(s.slice(resistanceIdx, resistanceIdx + 350)).toContain('axisLabelVisible: false,');
   });
 
-  it('Trade Plan (ENTRY/STOP/TARGET) NUNCA foi tocado — continua axisLabelVisible:true, fora do escopo desta correção (já tem seu próprio mecanismo de compactação, label-compaction.ts)', () => {
+  it('Trade Plan (ENTRY/STOP/TARGET) MIGROU para o overlay ("bater o olho profissional"): a LINHA continua (axisLabelVisible:false, title:""), o RÓTULO vai para priceAxisLabels — era o ÚLTIMO grupo ainda no eixo nativo, podendo sobrepor S1/R1/VWAP', () => {
     const s = chart();
-    const idx = s.indexOf('const mk = (price: number, color: string, title: string) => {');
+    const idx = s.indexOf('const mk = (price: number, color: string) => {');
+    expect(idx, 'helper mk do Trade Plan não encontrado (assinatura sem title agora)').toBeGreaterThan(-1);
     const block = s.slice(idx, idx + 300);
-    expect(block).toContain('axisLabelVisible: true,');
+    expect(block).toContain('axisLabelVisible: false,');
+    expect(block).toContain('title: "",');
+    // regressão: nenhuma linha do Trade Plan volta a acender axisLabelVisible
+    expect(block).not.toContain('axisLabelVisible: true,');
   });
 });
 
@@ -259,7 +263,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('priceAxisLabels recalcula a cada tick real de livePrice — nunca uma etiqueta de preço congelada', () => {
     const s = chart();
-    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice]);');
+    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision]);');
     expect(depsIdx, 'dependency array de priceAxisLabels não inclui livePrice').toBeGreaterThan(-1);
   });
 
@@ -286,5 +290,58 @@ describe('Auditoria de pendências (achado real via harness Playwright): a polil
   it('zero informação perdida: a forma da polilinha + o title real da PRZ (price line do ponto D) já comunicam o padrão — nunca um rótulo redundante flutuando na posição natural sem resolução de colisão', () => {
     const s = chart();
     expect(s).toContain('· PRZ · fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)');
+  });
+});
+
+describe('"bater o olho profissional" (pendência honesta do turno anterior): ENTRY/STOP/TARGET migram do eixo NATIVO para o sistema anti-colisão (priceAxisLabels) — eram o ÚLTIMO grupo que ainda podia sobrepor S1/R1/VWAP', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('a LINHA horizontal continua (createPriceLine), só o RÓTULO muda de dono: mk agora sem parâmetro title, axisLabelVisible:false, title:""', () => {
+    const s = chart();
+    expect(s).toContain('const mk = (price: number, color: string) => {');
+    // regressão: a assinatura antiga com title nunca volta (era o que
+    // desenhava o rótulo no eixo nativo, sem consciência de colisão).
+    expect(s).not.toContain('const mk = (price: number, color: string, title: string) => {');
+  });
+
+  it('os rótulos de ENTRY/STOP/TARGET entram em priceAxisLabels com as cores REAIS já usadas pelas linhas (âmbar/vermelho/verde) — leitura instantânea por cor', () => {
+    const s = chart();
+    const idx = s.indexOf('const priceAxisLabels = useMemo');
+    const end = s.indexOf('return out;', idx);
+    const block = s.slice(idx, end);
+    // gate fail-closed do plano inteiro
+    expect(block).toContain('if (tradePlan) {');
+    // ENTRY âmbar, direção real (LONG/SHORT) no texto — "bater o olho"
+    expect(block).toContain('text: `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor');
+    expect(block).toContain('const entryColor = "rgba(240, 208, 111, 0.75)";');
+    // STOP vermelho no preço EFETIVO (ratchet real), BREACHED do preço vivo
+    expect(block).toContain('const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);');
+    expect(block).toContain('color: "rgba(255, 0, 85, 0.75)"');
+    // TARGET verde, REACHED do targetsHit autoritativo
+    expect(block).toContain('const reached = i < hits;');
+    expect(block).toContain('reached ? `${base} · REACHED` : base, color: "rgba(0, 255, 170, 0.75)"');
+  });
+
+  it('estado/texto vivo (BREACHED/REACHED/distância %/ETA/compactação) é o MESMO que a lib desenhava — mesmas funções puras reais, nunca uma segunda formatação divergente', () => {
+    const s = chart();
+    const idx = s.indexOf('const priceAxisLabels = useMemo');
+    const end = s.indexOf('return out;', idx);
+    const block = s.slice(idx, end);
+    expect(block).toContain('const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);');
+    expect(block).toContain('const compactLabels = shouldCompactLabels(levels);');
+    expect(block).toContain('formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)');
+    // fail-closed: cada push guardado por Number.isFinite do preço real
+    expect(block).toContain('if (Number.isFinite(effectiveStopPrice)) {');
+    expect(block).toContain('if (!Number.isFinite(target.price)) return;');
+  });
+
+  it('o efeito de mutação da LINHA nunca mais escreve title (só a LINHA: price/color) — o texto é 100% do overlay agora', () => {
+    const s = chart();
+    const block = s.slice(s.indexOf('const hits = targetsHit'), s.indexOf('}, [tradePlan, livePrice, targetsHit]);'));
+    // a linha do stop ratchea posição + cor; nenhum title
+    expect(block).toContain('stopLineRef.current?.applyOptions({');
+    expect(block).not.toContain('title:');
+    // decision saiu das deps do efeito (só o rótulo, no useMemo, usa ETA)
+    expect(s).not.toContain('}, [tradePlan, livePrice, targetsHit, decision]);');
   });
 });

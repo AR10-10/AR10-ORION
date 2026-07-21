@@ -1250,9 +1250,18 @@ export function EnhancedChart_110_Percent({
   // Signal Precision order: the Trade Plan drawn on the chart — subtle,
   // silk-thread annotations (1px solid, never dashed; hierarchy only via
   // color/opacity). Entry zone = two lines bounding the real structure
-  // (one line when the zone is a zero-width level); Stop and Target with
-  // their real structure basis and the R:R in the label. English labels
-  // (professional trading terminology). Fail-closed: no plan, no lines.
+  // (one line when the zone is a zero-width level); Stop and Target lines.
+  // Fail-closed: no plan, no lines.
+  //
+  // "bater o olho profissional" (pendência honesta do turno anterior): os
+  // RÓTULOS de ENTRY/STOP/TARGET migraram para priceAxisLabels — o MESMO
+  // sistema anti-colisão de S1/R1/VWAP/NL/EMA/último preço/Trend Channel.
+  // Antes eram os ÚNICOS rótulos ainda no eixo NATIVO da lib
+  // (axisLabelVisible:true), sem NENHUMA consciência da posição dos
+  // outros; podiam sobrepor exatamente quando um plano ativo tem níveis
+  // perto de S1/R1/VWAP (o pior caso que o Operador mais precisa ler
+  // limpo). axisLabelVisible:false aqui: a LINHA horizontal continua
+  // desenhada (mesmo padrão de S1/R1), só o tag de eixo muda de dono.
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
@@ -1262,36 +1271,31 @@ export function EnhancedChart_110_Percent({
     targetLinesArrayRef.current = [];
     if (!tradePlan) return;
 
-    const mk = (price: number, color: string, title: string) => {
+    const mk = (price: number, color: string) => {
       if (!Number.isFinite(price)) return null;
       const line = series.createPriceLine({
         price,
         color,
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
-        axisLabelVisible: true,
-        title,
+        axisLabelVisible: false,
+        title: "",
       });
       tradePlanLinesRef.current.push(line);
       return line;
     };
     const entryColor = "rgba(240, 208, 111, 0.75)"; // amber — the acceptance zone
     if (tradePlan.entry.low === tradePlan.entry.high) {
-      mk(tradePlan.entry.low, entryColor, `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`);
+      mk(tradePlan.entry.low, entryColor);
     } else {
-      mk(tradePlan.entry.high, entryColor, `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`);
-      mk(tradePlan.entry.low, "rgba(240, 208, 111, 0.45)", "ENTRY ZONE LOW");
+      mk(tradePlan.entry.high, entryColor);
+      mk(tradePlan.entry.low, "rgba(240, 208, 111, 0.45)");
     }
-    const stopTitle = `STOP · ${tradePlan.stop.basis}`;
-    stopLineRef.current = mk(tradePlan.stop.price, "rgba(255, 0, 85, 0.75)", stopTitle);
+    stopLineRef.current = mk(tradePlan.stop.price, "rgba(255, 0, 85, 0.75)");
     // v2 (Diretriz Complementar §2): uma linha por alvo real (1 a
-    // MAX_TARGETS), numeradas "TARGET 1/2/3" — nunca uma linha única fixa.
-    const multi = tradePlan.targets.length > 1;
-    tradePlan.targets.forEach((target, i) => {
-      const rr = tradePlan.riskRewardRatios[i];
-      const label = multi ? `TARGET ${i + 1}` : "TARGET";
-      const title = `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}`;
-      const line = mk(target.price, "rgba(0, 255, 170, 0.75)", title);
+    // MAX_TARGETS) — nunca uma linha única fixa.
+    tradePlan.targets.forEach((target) => {
+      const line = mk(target.price, "rgba(0, 255, 170, 0.75)");
       if (line) targetLinesArrayRef.current.push(line);
     });
   }, [tradePlan]);
@@ -1319,54 +1323,38 @@ export function EnhancedChart_110_Percent({
   // single real source the track record uses internally, never a second
   // formula here. "Quando o cenário muda, o desenho muda" (Diretriz
   // Complementar §5).
+  // Este efeito agora cuida SÓ da geometria/cor da LINHA horizontal: o
+  // stop RATCHEA de posição (break-even → trailing) via
+  // effectiveStopForTargetsHit e brilha quando o preço vivo rompe; cada
+  // alvo brilha quando ATINGIDO (targetsHit autoritativo, nunca
+  // re-derivado do livePrice instantâneo). O RÓTULO (texto ENTRY/STOP/
+  // TARGET + REACHED/BREACHED + distância %/ETA/compactação) vive em
+  // priceAxisLabels (useMemo abaixo, mesmo sistema anti-colisão dos
+  // demais níveis) — computado das MESMAS funções puras e MESMOS inputs
+  // reais, então linha e rótulo nunca divergem. applyOptions() atualiza a
+  // linha JÁ criada acima, nunca a recria a cada tick (Regra de Ouro 6:
+  // caminho quente do gráfico). Hierarquia só por cor/opacidade (Regra de
+  // Ouro 2) — lineWidth/lineStyle nunca tocados aqui.
   useEffect(() => {
     if (!tradePlan) return;
     const hits = targetsHit ?? 0;
-    const stopRatchetActive = hits > 0;
     const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);
     const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
     const long = tradePlan.direction === "LONG";
     const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
-    const stopTitle = hits >= 2
-      ? `STOP · TRILHADO (alvo ${hits - 1})`
-      : stopRatchetActive
-        ? `STOP · BREAK-EVEN (real)`
-        : `STOP · ${tradePlan.stop.basis}`;
     stopLineRef.current?.applyOptions({
       price: effectiveStopPrice,
       color: stopHitNow ? "rgba(255, 0, 85, 1)" : "rgba(255, 0, 85, 0.75)",
-      title: stopHitNow ? `${stopTitle} · BREACHED` : stopTitle,
     });
-    const multi = tradePlan.targets.length > 1;
-    // Continuidade §6: níveis apertados => rótulos compactos (nunca preço
-    // deslocado). O stop EFETIVO entra na medição — o ratchet de
-    // break-even pode encostá-lo num alvo real.
-    const levels = [effectiveStopPrice, ...tradePlan.targets.map((t) => t.price)].sort((a, b) => a - b);
-    const compactLabels = shouldCompactLabels(levels);
     tradePlan.targets.forEach((target, i) => {
       const line = targetLinesArrayRef.current[i];
       if (!line) return;
       const reached = i < hits;
-      const rr = tradePlan.riskRewardRatios[i];
-      const label = multi ? `TARGET ${i + 1}` : "TARGET";
-      // Auditoria Final §3: distância % REAL ao preço vivo + ETA em faixa
-      // do contrato fundido (decision.plan deriva do MESMO tradePlan; o
-      // guard de preço torna divergência de render intermediário inócua).
-      const distPct = p !== null && p > 0 ? ` · ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";
-      const fusedTarget = decision?.plan?.targets[i];
-      const etaLabel =
-        fusedTarget && Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)
-          ? formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)
-          : null;
-      const title = compactLabels
-        ? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}`
-        : `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}`;
       line.applyOptions({
         color: reached ? "rgba(0, 255, 170, 1)" : "rgba(0, 255, 170, 0.75)",
-        title: reached ? `${title} · REACHED` : title,
       });
     });
-  }, [tradePlan, livePrice, targetsHit, decision]);
+  }, [tradePlan, livePrice, targetsHit]);
 
   // Evolução Profunda §8/§9: auditoria confirmou que a ordem de montagem
   // abaixo (cada plugin comentado individualmente desde suas próprias
@@ -1473,8 +1461,73 @@ export function EnhancedChart_110_Percent({
         color: "rgba(148, 163, 184, 0.55)",
       });
     }
+    // "bater o olho profissional" (pendência honesta do turno anterior): os
+    // rótulos de ENTRY/STOP/TARGET entram no MESMO array/sistema
+    // anti-colisão dos demais níveis — nunca mais o eixo NATIVO, que os
+    // deixava sobrepor S1/R1/VWAP quando um plano ativo tem níveis
+    // próximos. Cores reais já usadas pelas LINHAS acima (âmbar=entrada,
+    // vermelho=stop, verde=alvo) — leitura instantânea de ENTRY LONG/SHORT/
+    // STOP/TARGET pela cor da caixa. O texto/estado (REACHED/BREACHED,
+    // distância %/ETA, compactação) é IDÊNTICO ao que a lib desenhava,
+    // computado das MESMAS funções puras (effectiveStopForTargetsHit,
+    // shouldCompactLabels, formatEtaRange) e MESMOS inputs reais que o
+    // efeito da LINHA acima — linha e rótulo nunca divergem. Fail-closed:
+    // sem plano, zero rótulos (early guard de cada push por Number.isFinite).
+    if (tradePlan) {
+      const hits = targetsHit ?? 0;
+      const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
+      const long = tradePlan.direction === "LONG";
+      const entryColor = "rgba(240, 208, 111, 0.75)";
+      if (tradePlan.entry.low === tradePlan.entry.high) {
+        if (Number.isFinite(tradePlan.entry.low)) {
+          out.push({ price: tradePlan.entry.low, text: `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor });
+        }
+      } else {
+        if (Number.isFinite(tradePlan.entry.high)) {
+          out.push({ price: tradePlan.entry.high, text: `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor });
+        }
+        if (Number.isFinite(tradePlan.entry.low)) {
+          out.push({ price: tradePlan.entry.low, text: "ENTRY ZONE LOW", color: entryColor });
+        }
+      }
+      // Stop no preço EFETIVO (ratchet real, MESMA função pura do efeito da
+      // linha) — BREACHED quando o preço vivo já rompeu (fail-closed:
+      // preço não-finito nunca resolve BREACHED).
+      const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);
+      if (Number.isFinite(effectiveStopPrice)) {
+        const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
+        const stopBase = hits >= 2
+          ? `STOP · TRILHADO (alvo ${hits - 1})`
+          : hits > 0
+            ? `STOP · BREAK-EVEN (real)`
+            : `STOP · ${tradePlan.stop.basis}`;
+        out.push({ price: effectiveStopPrice, text: stopHitNow ? `${stopBase} · BREACHED` : stopBase, color: "rgba(255, 0, 85, 0.75)" });
+      }
+      const multi = tradePlan.targets.length > 1;
+      // Continuidade §6: níveis apertados => rótulos compactos (WIDTH); o
+      // resolvedor de colisão já cuida da separação VERTICAL. O stop
+      // EFETIVO entra na medição (o ratchet pode encostá-lo num alvo real).
+      const levels = [effectiveStopPrice, ...tradePlan.targets.map((t) => t.price)].sort((a, b) => a - b);
+      const compactLabels = shouldCompactLabels(levels);
+      tradePlan.targets.forEach((target, i) => {
+        if (!Number.isFinite(target.price)) return;
+        const reached = i < hits;
+        const rr = tradePlan.riskRewardRatios[i];
+        const label = multi ? `TARGET ${i + 1}` : "TARGET";
+        const distPct = p !== null && p > 0 ? ` · ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";
+        const fusedTarget = decision?.plan?.targets[i];
+        const etaLabel =
+          fusedTarget && Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)
+            ? formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)
+            : null;
+        const base = compactLabels
+          ? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}`
+          : `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}`;
+        out.push({ price: target.price, text: reached ? `${base} · REACHED` : base, color: "rgba(0, 255, 170, 0.75)" });
+      });
+    }
     return out;
-  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice]);
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision]);
 
   return (
     <div className="absolute inset-0">
