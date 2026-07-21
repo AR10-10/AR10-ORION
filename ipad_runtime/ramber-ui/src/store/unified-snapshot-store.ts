@@ -48,6 +48,7 @@ import type { CouncilDecision } from "../nexus/council";
 import type { ConsensusRadarReading } from "../nexus/consensus-radar";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
 import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
+import type { LayerRelevanceReading } from "../nexus/layer-relevance";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
 import type { TradePlan } from "../nexus/trade-plan";
@@ -191,6 +192,12 @@ export interface UnifiedSnapshotState {
   // MIN_FIT_SCORE, D recente). Lista vazia é o estado honesto comum;
   // fitScore é aderência de razão, NUNCA probabilidade (Regra de Ouro 2).
   harmonicPatterns: HarmonicPatternHit[];
+  // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6 — leitura real do Relevance Engine
+  // (nexus/layer-relevance.ts), computada uma vez em ChartWidget (onde os
+  // sinais reais que a alimentam já convergem) e lida daqui por QUALQUER
+  // outro consumidor (o painel de camadas precisa da mesma leitura, sem
+  // recomputar). null = ainda sem nenhum ciclo real processado.
+  layerRelevance: LayerRelevanceReading | null;
 
   // §4 CÉREBRO (camada de análise — LEI 24: jamais alimenta o Core Engine)
   // Item 4 — Conselho Multi-Agente (contrato versionado): 6 votos reais +
@@ -296,6 +303,7 @@ interface UnifiedSnapshotActions {
   setFibonacciConfluence: (matrix: FibonacciConfluenceMatrix | null) => void;
   setPremiumDiscount: (reading: PremiumDiscountReading | null) => void;
   setHarmonicPatterns: (hits: HarmonicPatternHit[]) => void;
+  setLayerRelevance: (reading: LayerRelevanceReading | null) => void;
 
   // §4 CÉREBRO
   setCouncil: (decision: CouncilDecision | null) => void;
@@ -357,6 +365,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     fibonacciConfluence: null,
     premiumDiscount: null,
     harmonicPatterns: [],
+    layerRelevance: null,
     // §4 CÉREBRO
     council: null,
     scenario: null,
@@ -405,6 +414,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setFibonacciConfluence: (matrix) => set((s) => { s.fibonacciConfluence = matrix; }),
     setPremiumDiscount: (reading) => set((s) => { s.premiumDiscount = reading; }),
     setHarmonicPatterns: (hits) => set((s) => { s.harmonicPatterns = hits; }),
+    setLayerRelevance: (reading) => set((s) => { s.layerRelevance = reading; }),
     // §4 CÉREBRO
     setCouncil: (decision) => set((s) => { s.council = decision; }),
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
@@ -500,6 +510,8 @@ export const usePremiumDiscountSnapshot = (): PremiumDiscountReading | null =>
   useUnifiedSnapshotStore((s) => s.premiumDiscount);
 export const useHarmonicPatternsSnapshot = (): HarmonicPatternHit[] =>
   useUnifiedSnapshotStore((s) => s.harmonicPatterns ?? EMPTY_HARMONIC_HITS);
+export const useLayerRelevanceSnapshot = (): LayerRelevanceReading | null =>
+  useUnifiedSnapshotStore((s) => s.layerRelevance);
 
 // §4 CÉREBRO
 export const useCouncilSnapshot = (): CouncilDecision | null =>

@@ -112,10 +112,14 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(body).toContain('toggleChartLayer,');
   });
 
-  it('ChartWidget passa layerVisibility real (do contexto) para EnhancedChart_110_Percent, nunca um segundo estado', () => {
+  it('ChartWidget passa a visibilidade EFETIVA (automática + override manual resolvidos) para EnhancedChart_110_Percent, nunca o boolean manual cru', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState } = useContext(WidgetContext) || {};');
-    expect(app).toContain('layerVisibility={chartLayerVisibility}');
+    // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: o componente do canvas nunca sabe o
+    // que é automático ou manual (Regra de Ouro 4) — recebe só o resultado
+    // já resolvido de effectiveChartLayerVisibility.
+    expect(app).toContain('chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend } = useContext(WidgetContext) || {};');
+    expect(app).toContain('layerVisibility={effectiveChartLayerVisibility}');
+    expect(app).not.toContain('layerVisibility={chartLayerVisibility}');
     expect(app).toContain('emaPeriod={emaPeriod}');
   });
 
@@ -212,9 +216,15 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(presetMatch![1]).not.toContain('"volume_profile"');
     expect(presetMatch![1]).not.toContain('"trend_channel"');
 
-    const fnMatch = app.match(/const applyChartLayerPreset = useCallback\(\(preset: "operational" \| "audit" \| "intelligence"\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
+    // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: applyChartLayerPreset ganhou um 4º
+    // valor ("automatic") — aplicar um preset manual (operational/audit/
+    // intelligence) também sai do automático nas 15 camadas (curadoria
+    // deliberada, mesma categoria do toggle individual); "automatic" é a
+    // única ação que devolve todas ao comportamento automático de uma vez.
+    const fnMatch = app.match(/const applyChartLayerPreset = useCallback\(\(preset: "operational" \| "audit" \| "intelligence" \| "automatic"\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
     expect(fnMatch, 'applyChartLayerPreset não encontrada').not.toBeNull();
     const body = fnMatch![1];
+    expect(body).toContain('if (preset === "automatic") {');
     // audit = o MESMO default de sempre (todas ligadas), nunca uma segunda lista
     expect(body).toContain('setChartLayerVisibility(DEFAULT_CHART_LAYER_VISIBILITY);');
     // operational/intelligence = reduz sobre CHART_LAYER_IDS (a lista canônica única), nunca hardcoded
@@ -224,7 +234,10 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
 
     // exposto no contexto e consumido pelo painel — nunca um segundo painel
     expect(app).toContain('applyChartLayerPreset,');
-    expect(app).toContain('toggleChartLayer, applyChartLayerPreset, emaPeriod, setEmaPeriod } =');
+    expect(app).toContain('toggleChartLayer,');
+    expect(app).toContain('applyChartLayerPreset,');
+    expect(app).toContain('chartLayerAutoMode,');
+    expect(app).toContain('resetChartLayerToAuto,');
     expect(app).toContain('onClick={() => applyChartLayerPreset?.("operational")}');
     expect(app).toContain('onClick={() => applyChartLayerPreset?.("audit")}');
     // o botão continua sendo um atalho — o toggle individual não foi removido
@@ -248,7 +261,10 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(body).not.toContain('"neural_market_aura"');
 
     expect(app).toContain('onClick={() => applyChartLayerPreset?.("intelligence")}');
-    expect(app).toContain('const isIntelligencePreset = CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));');
+    // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: highlight do preset agora também
+    // exige todas as 15 camadas fora do automático (allManual) — um preset
+    // é curadoria manual deliberada, nunca uma coincidência do automático.
+    expect(app).toContain('const isIntelligencePreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));');
     expect(app).toContain('Modo Inteligência');
   });
 });

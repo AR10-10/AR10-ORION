@@ -11,7 +11,25 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot } from "./store/unified-snapshot-store";
+// NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
+// camada — display-only (resposta do Operador: nunca gera/altera Entry/
+// Stop/Target/Risco, LEI 24 intacta).
+import {
+  computeLayerRelevance,
+  LIQUIDITY_PROXIMITY_PCT,
+  FIBONACCI_PROXIMITY_PCT,
+  VOLUME_PROFILE_PROXIMITY_PCT,
+  type LayerRelevanceInput,
+} from "./nexus/layer-relevance";
+import { ageAlpha } from "./chart/annotation-decay";
+import { BREAK_DECAY } from "./chart/StructureBreakMarkersPlugin";
+// Mesmo motor puro que EnhancedChart_110_Percent.tsx já usa para desenhar
+// o canal — chamado uma 2ª vez aqui de propósito (função determinística
+// sobre os MESMOS candles reais, nunca uma segunda fórmula) porque o
+// Relevance Engine roda fora do componente do canvas e precisa da largura
+// real da banda.
+import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER } from "./nexus/trend-channel-engine";
 // Ordem "Ciborgue Vivo" §3: síntese real de autodiagnóstico — mesmos
 // sinais do Health Monitor/Data Quality Layer, nunca uma segunda medição.
 import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/self-diagnostics";
@@ -46,6 +64,7 @@ import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord, compactPers
 import {
   EnhancedChart_110_Percent,
   DEFAULT_CHART_LAYER_VISIBILITY,
+  DEFAULT_CHART_LAYER_AUTO_MODE,
   CHART_LAYER_IDS,
   type ChartLayerId,
   type ChartLayerVisibility,
@@ -325,11 +344,19 @@ interface RestoredSession {
   // das camadas do gráfico e período da EMA — também sobrevivem a
   // refresh/fechar o PWA. Validação por chave conhecida/valor da lista.
   chartLayers: ChartLayerVisibility;
+  // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: campo NOVO e aditivo — chave
+  // ausente em sessões antigas (persistidas antes desta rodada) cai no
+  // default automático de propósito (mesmo raciocínio de
+  // DEFAULT_CHART_LAYER_VISIBILITY acima: nunca inventar um estado, só
+  // que aqui o estado honesto de "nunca escolhido antes" É o automático,
+  // não precisa de bump de versão da chave — chartLayers continua com a
+  // MESMA forma/significado de sempre).
+  chartLayerAutoMode: ChartLayerVisibility;
   emaPeriod: EmaPeriod;
 }
 
 function readRestoredSession(): RestoredSession {
-  const fallback: RestoredSession = { asset: "BTC", timeframe: "15m", marketMode: "CRYPTO", tradFiAsset: null, chartLayers: DEFAULT_CHART_LAYER_VISIBILITY, emaPeriod: DEFAULT_EMA_PERIOD };
+  const fallback: RestoredSession = { asset: "BTC", timeframe: "15m", marketMode: "CRYPTO", tradFiAsset: null, chartLayers: DEFAULT_CHART_LAYER_VISIBILITY, chartLayerAutoMode: DEFAULT_CHART_LAYER_AUTO_MODE, emaPeriod: DEFAULT_EMA_PERIOD };
   try {
     const raw = window.localStorage.getItem(SESSION_STATE_KEY);
     if (!raw) return fallback;
@@ -350,13 +377,19 @@ function readRestoredSession(): RestoredSession {
         if (typeof parsed.chartLayers[key] === "boolean") chartLayers[key] = parsed.chartLayers[key];
       }
     }
+    const chartLayerAutoMode: ChartLayerVisibility = { ...DEFAULT_CHART_LAYER_AUTO_MODE };
+    if (parsed?.chartLayerAutoMode && typeof parsed.chartLayerAutoMode === "object") {
+      for (const key of Object.keys(chartLayerAutoMode) as ChartLayerId[]) {
+        if (typeof parsed.chartLayerAutoMode[key] === "boolean") chartLayerAutoMode[key] = parsed.chartLayerAutoMode[key];
+      }
+    }
     const emaPeriod: EmaPeriod = (EMA_PERIODS as readonly number[]).includes(parsed?.emaPeriod)
       ? (parsed.emaPeriod as EmaPeriod)
       : DEFAULT_EMA_PERIOD;
     // Modo TRADFI sem ativo TradFi restaurável degrada para CRYPTO — nunca
     // um cockpit em modo macro apontando para o nada.
-    if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe, chartLayers, emaPeriod };
-    return { asset, timeframe, marketMode, tradFiAsset, chartLayers, emaPeriod };
+    if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe, chartLayers, chartLayerAutoMode, emaPeriod };
+    return { asset, timeframe, marketMode, tradFiAsset, chartLayers, chartLayerAutoMode, emaPeriod };
   } catch {
     return fallback;
   }
@@ -365,7 +398,7 @@ function readRestoredSession(): RestoredSession {
 // inicializadores preguiçosos dos useState abaixo consomem este objeto.
 const restoredSession = readRestoredSession();
 
-function persistSessionState(s: { asset: string; timeframe: string; marketMode: string; tradFiSymbol: string | null; chartLayers: ChartLayerVisibility; emaPeriod: number }): void {
+function persistSessionState(s: { asset: string; timeframe: string; marketMode: string; tradFiSymbol: string | null; chartLayers: ChartLayerVisibility; chartLayerAutoMode: ChartLayerVisibility; emaPeriod: number }): void {
   try {
     window.localStorage.setItem(SESSION_STATE_KEY, JSON.stringify(s));
   } catch {
@@ -533,8 +566,29 @@ export default function App() {
   // nada muda no comportamento existente até o Operador desligar algo.
   const [chartLayersOpen, setChartLayersOpen] = useState(false);
   const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);
+  // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7 (resposta do Operador à pergunta
+  // de escopo: os 15 toggles manuais continuam existindo como OVERRIDE
+  // real, o padrão novo é o comportamento automático por trás deles).
+  // Estrutura paralela, NUNCA uma reforma do tipo existente
+  // (ChartLayerVisibility continua Record<ChartLayerId, boolean>, zero
+  // migração, zero risco de regressão nos 15 toggles que já funcionavam):
+  // true = "automático" (o Relevance Engine decide agora), false =
+  // "manual" (chartLayerVisibility[id] vale, exatamente como sempre
+  // valeu). Default: tudo automático — é o comportamento novo pedido
+  // ("eliminar a necessidade de ativar"), sem apagar o boolean antigo.
+  const [chartLayerAutoMode, setChartLayerAutoMode] = useState<ChartLayerVisibility>(() => restoredSession.chartLayerAutoMode);
   const toggleChartLayer = useCallback((id: ChartLayerId) => {
+    // Clicar no toggle individual é um ato explícito de override manual —
+    // sai do automático nesse exato momento (resposta do Operador: toggle
+    // manual sempre vence quando usado).
+    setChartLayerAutoMode((prev) => ({ ...prev, [id]: false }));
     setChartLayerVisibility((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+  // Reset explícito: devolve 1 camada ao comportamento automático (o
+  // Operador muda de ideia sobre um override específico, sem precisar
+  // resetar as outras 14).
+  const resetChartLayerToAuto = useCallback((id: ChartLayerId) => {
+    setChartLayerAutoMode((prev) => ({ ...prev, [id]: true }));
   }, []);
   // Diretriz de Evolução Autônoma Integral §11 ("MODO OPERACIONAL... E:
   // MODO AUDITORIA"), achado real de auditoria: o painel só tinha toggle
@@ -553,7 +607,30 @@ export default function App() {
   // Auditoria); a diretriz pede um 3º para análise profunda sem o ruído
   // do plano ativo. Mesmo mecanismo aditivo dos outros dois — nenhuma
   // camada nova, nenhum cálculo novo, só uma pré-seleção a mais.
-  const applyChartLayerPreset = useCallback((preset: "operational" | "audit" | "intelligence") => {
+  // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: um preset é curadoria manual
+  // deliberada (mesma categoria do toggle individual) — aplicar
+  // operational/audit/intelligence também sai do automático nas 15
+  // camadas, para o resultado do preset nunca ser silenciosamente
+  // sobrescrito pelo Relevance Engine. "automatic" é o 4º preset novo: a
+  // única ação que devolve TODAS as camadas ao comportamento automático
+  // de uma vez (o reset por camada individual, resetChartLayerToAuto,
+  // continua existindo para ajustes finos).
+  const applyChartLayerPreset = useCallback((preset: "operational" | "audit" | "intelligence" | "automatic") => {
+    if (preset === "automatic") {
+      setChartLayerAutoMode(
+        CHART_LAYER_IDS.reduce((acc, id) => {
+          acc[id] = true;
+          return acc;
+        }, {} as ChartLayerVisibility),
+      );
+      return;
+    }
+    setChartLayerAutoMode(
+      CHART_LAYER_IDS.reduce((acc, id) => {
+        acc[id] = false;
+        return acc;
+      }, {} as ChartLayerVisibility),
+    );
     if (preset === "audit") {
       setChartLayerVisibility(DEFAULT_CHART_LAYER_VISIBILITY);
       return;
@@ -1822,9 +1899,10 @@ export default function App() {
       marketMode,
       tradFiSymbol: selectedTradFiAsset?.symbol ?? null,
       chartLayers: chartLayerVisibility,
+      chartLayerAutoMode,
       emaPeriod,
     });
-  }, [selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, emaPeriod]);
+  }, [selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, chartLayerAutoMode, emaPeriod]);
 
   // V-MAX Fase 1 item 4: Conselho Multi-Agente. Cada insumo abaixo é dado
   // REAL já coletado por este componente ou pela store — o conselho é um
@@ -2624,6 +2702,8 @@ export default function App() {
       chartLayerVisibility,
       toggleChartLayer,
       applyChartLayerPreset,
+      chartLayerAutoMode,
+      resetChartLayerToAuto,
       emaPeriod,
       setEmaPeriod,
       leftDrawerOpen,
@@ -2689,6 +2769,7 @@ export default function App() {
       workspaceManagerOpen,
       chartLayersOpen,
       chartLayerVisibility,
+      chartLayerAutoMode,
       emaPeriod,
       leftDrawerOpen,
       toggleLeftDrawer,
@@ -3242,16 +3323,32 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
 ];
 
 function ChartLayersPanel() {
-  const { chartLayersOpen, setChartLayersOpen, chartLayerVisibility, toggleChartLayer, applyChartLayerPreset, emaPeriod, setEmaPeriod } =
-    useContext(WidgetContext) || {};
+  const {
+    chartLayersOpen,
+    setChartLayersOpen,
+    chartLayerVisibility,
+    toggleChartLayer,
+    applyChartLayerPreset,
+    chartLayerAutoMode,
+    resetChartLayerToAuto,
+    emaPeriod,
+    setEmaPeriod,
+  } = useContext(WidgetContext) || {};
+  const layerRelevance = useLayerRelevanceSnapshot();
   if (!chartLayersOpen) return null;
   const visibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
+  const autoMode = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
   // Highlight real (não decorativo): compara o estado atual byte-a-byte
   // contra os dois presets — só acende quando bate exatamente, nunca um
-  // "quase" fingido de correspondência.
-  const isOperationalPreset = CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_OPERATIONAL_PRESET.has(id));
-  const isAuditPreset = CHART_LAYER_IDS.every((id) => visibility[id] === true);
-  const isIntelligencePreset = CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));
+  // "quase" fingido de correspondência. NÚCLEO GRAVITACIONAL AUTÔNOMO §1:
+  // os 3 presets manuais exigem TODAS as 15 camadas fora do automático —
+  // uma camada em modo automático que coincidentemente bate com o preset
+  // agora não é a mesma coisa que o Operador ter escolhido esse preset.
+  const allManual = CHART_LAYER_IDS.every((id) => autoMode[id] === false);
+  const isOperationalPreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_OPERATIONAL_PRESET.has(id));
+  const isAuditPreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === true);
+  const isIntelligencePreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));
+  const isAutomaticPreset = CHART_LAYER_IDS.every((id) => autoMode[id] === true);
 
   return (
     <div
@@ -3276,6 +3373,22 @@ function ChartLayersPanel() {
               modos reais — nunca substitui o toggle individual abaixo,
               só pré-seleciona o que ele já controla. */}
           <div className="flex gap-1.5">
+            {/* NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: 4º preset — a única ação
+                que devolve as 15 camadas ao comportamento automático de uma
+                vez (resposta do Operador: toggles continuam existindo como
+                override, mas o padrão novo é automático). */}
+            <button
+              type="button"
+              onClick={() => applyChartLayerPreset?.("automatic")}
+              title="Cada camada aparece só quando tem relevância estatística real agora (Relevance Engine) — nunca precisa ser ligada manualmente."
+              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+                isAutomaticPreset
+                  ? "border-[#00ffaa] bg-[#00ffaa20] text-[#00ffaa]"
+                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+              }`}
+            >
+              Automático
+            </button>
             <button
               type="button"
               onClick={() => applyChartLayerPreset?.("operational")}
@@ -3314,7 +3427,14 @@ function ChartLayersPanel() {
             Overlays reais do canvas — esconder uma camada nunca altera o dado, só a exibição
           </span>
           {CHART_LAYER_PANEL_MODULES.map(({ id, label }) => {
-            const on = visibility[id];
+            // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: em modo automático, o
+            // estado real vem do Relevance Engine (nunca do boolean manual,
+            // que só é o valor efetivo quando o Operador assumiu controle
+            // — mesma resolução que effectiveChartLayerVisibility já faz
+            // pro canvas, aqui só pra exibir corretamente no painel).
+            const isAuto = autoMode[id];
+            const relevance = layerRelevance?.[id] ?? null;
+            const on = isAuto ? (relevance?.relevant ?? true) : visibility[id];
             return (
               <div
                 key={id}
@@ -3322,17 +3442,38 @@ function ChartLayersPanel() {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[0.55rem] font-bold tracking-widest text-white">{label}</span>
-                  <button
-                    type="button"
-                    onClick={() => toggleChartLayer?.(id)}
-                    className={`text-[0.4rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
-                      on
-                        ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                        : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
-                    }`}
-                  >
-                    {on ? "visível" : "oculta"}
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {isAuto && (
+                      <span
+                        className="text-[0.38rem] px-1.5 py-1 rounded border border-[#00ffaa]/40 text-[#00ffaa]/80 font-bold uppercase tracking-wider"
+                        title={relevance?.reason ?? "Relevance Engine ainda sem leitura real neste ciclo."}
+                      >
+                        auto
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleChartLayer?.(id)}
+                      title={isAuto ? "Clicar assume controle manual desta camada (override real)." : "Override manual ativo."}
+                      className={`text-[0.4rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
+                        on
+                          ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                          : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
+                      }`}
+                    >
+                      {on ? "visível" : "oculta"}
+                    </button>
+                    {!isAuto && (
+                      <button
+                        type="button"
+                        onClick={() => resetChartLayerToAuto?.(id)}
+                        title="Devolver esta camada ao comportamento automático (Relevance Engine decide)."
+                        className="text-[0.38rem] px-1.5 py-1 rounded border border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#00ffaa] hover:border-[#00ffaa]/40 font-bold uppercase tracking-wider"
+                      >
+                        ⟲ auto
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {/* Diretriz Camada de Decisão Profissional, item 1: período
                     real da EMA — um único controle, os 4 períodos padrão da
@@ -5967,7 +6108,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState } = useContext(WidgetContext) || {};
+  const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend } = useContext(WidgetContext) || {};
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
   // Correção de latência: o MESMO preço real que já alimenta a barra
   // superior (usePriceSnapshot — escrito na store a cada tick do WS,
@@ -6148,6 +6289,71 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // gráfico (mesma fatia da store lida pela aba ANALYSIS).
   const chartHarmonics = useHarmonicPatternsSnapshot();
 
+  // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6/§7 — Fase 1 (respostas do
+  // Operador: display-only, LEI 24 intacta; toggles manuais continuam
+  // como override). Mesma leitura real do Volume Profile já usada pela
+  // Matriz de Confluência Fibonacci em App() — 2º consumidor do MESMO
+  // seletor Zustand, zero segunda computação.
+  const volumeProfileSnapshot = useVolumeProfileSnapshot();
+  const trendChannelForRelevance = useMemo(
+    () => computeTrendChannel((chartData ?? []).map((c: any) => ({ time: c.time, close: c.close })), TREND_CHANNEL_DEFAULT_WINDOW),
+    [chartData],
+  );
+  const relevanceInput: LayerRelevanceInput = useMemo(() => {
+    const p = typeof livePrice.price === "number" && Number.isFinite(livePrice.price) ? livePrice.price : null;
+    const withinPct = (target: number, pct: number) => p !== null && p > 0 && (Math.abs(target - p) * 100) / p <= pct;
+    const liquidityZones: LiquidityZone[] = smcZones?.liquidityZones ?? [];
+    const unsweptLiquidityNearPrice = liquidityZones.some((z) => !z.swept && withinPct(z.price, LIQUIDITY_PROXIMITY_PCT));
+    const fibLevels = fibonacciMatrix?.levels ?? [];
+    const fibonacciNearPrice = fibLevels.some((l) => withinPct(l.price, FIBONACCI_PROXIMITY_PCT));
+    const vp = volumeProfileSnapshot?.fixedRange;
+    const volumeProfileNearPrice = !vp
+      ? false
+      : withinPct(vp.pocPrice, VOLUME_PROFILE_PROXIMITY_PCT) ||
+        vp.hvnIndices.some((i) => withinPct(bucketMidPrice(i, vp.rangeMin, vp.rangeMax, vp.bucketCount), VOLUME_PROFILE_PROXIMITY_PCT));
+    const brk = bosChoch?.break ?? null;
+    const structureBreakAlpha =
+      brk && Array.isArray(chartData) ? ageAlpha(chartData.length - 1 - brk.index, BREAK_DECAY) : null;
+    const trendChannelBandwidthPct =
+      trendChannelForRelevance && trendChannelForRelevance.mid.length > 0
+        ? (2 * TREND_CHANNEL_STDDEV_MULTIPLIER * trendChannelForRelevance.stdDev * 100) /
+          trendChannelForRelevance.mid[trendChannelForRelevance.mid.length - 1].value
+        : null;
+    return {
+      tradePlanActive: Boolean(chartTradePlan) || Boolean(engineFallbackLevels),
+      obstacleZoneCount: chartObstacleZones.length,
+      unsweptLiquidityNearPrice,
+      structureBreakAlpha,
+      volumeProfileNearPrice,
+      harmonicBestFitScore: chartHarmonics && chartHarmonics.length > 0 ? chartHarmonics[0].fitScore : null,
+      fibonacciNearPrice,
+      premiumDiscountZone: chartPremiumDiscount?.zone ?? null,
+      vwapState: vwapCtx?.state ?? null,
+      nexusLineState: nlState ?? null,
+      trendChannelBandwidthPct,
+      orderflowTrendActive: orderflowTrend?.status === "OK" && orderflowTrend.trend !== "ESTAVEL",
+      hasOrderBook: Boolean(engine?.hasBook),
+    };
+  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook]);
+  const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setLayerRelevance(layerRelevance);
+  }, [layerRelevance]);
+  // Visibilidade EFETIVA: por camada, 'auto' consulta a leitura real acima;
+  // manual usa exatamente o boolean que sempre existiu (chartLayerVisibility
+  // — zero mudança de comportamento para quem nunca mexeu no automático).
+  // EnhancedChart_110_Percent recebe só este resultado já resolvido — nunca
+  // precisa saber o que é automático ou manual (Regra de Ouro 4: zero
+  // segunda implementação do "visible ou não" dentro do componente do canvas).
+  const effectiveChartLayerVisibility: ChartLayerVisibility = useMemo(() => {
+    const autoMode: ChartLayerVisibility = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
+    const manual: ChartLayerVisibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
+    return CHART_LAYER_IDS.reduce((acc, id) => {
+      acc[id] = autoMode[id] ? layerRelevance[id].relevant : manual[id];
+      return acc;
+    }, {} as ChartLayerVisibility);
+  }, [chartLayerAutoMode, chartLayerVisibility, layerRelevance]);
+
   return (
     <Widget
       id="chart"
@@ -6228,7 +6434,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             decision={nexusDecision ?? null}
             vwapState={vwapCtx?.state ?? null}
             nexusLineState={nlState ?? null}
-            layerVisibility={chartLayerVisibility}
+            layerVisibility={effectiveChartLayerVisibility}
             emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}
           />

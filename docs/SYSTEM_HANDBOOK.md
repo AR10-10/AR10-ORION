@@ -98,7 +98,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1691 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (105 arquivos, 1748 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -1989,6 +1989,123 @@ decisão de produto do Operador, não campos órfãos a recuperar.
 **Verificação real**: `tsc --noEmit` limpo · **103 arquivos / 1691
 testes** (100%, +1: fiação da linha Opinion Mass, fail-closed) · `npm run
 build` ok · `audit-header-maxcontent.mjs` 11 viewports CLEAN.
+
+---
+
+### 6.31 ORDEM DE AUDITORIA FINAL — Certificação de Qualidade Operacional:
+duplicação real VOLATILIDADE/ATR% encontrada e eliminada
+
+Auditoria completa nas 7 seções pedidas pelo Operador (Certificação/Trade
+Plan/Auditoria de Dados/Auditoria Matemática/Auditoria Visual/Demanda e
+Oferta/Relatório Final) — relatório completo em
+`docs/RELATORIO_AUDITORIA_FINAL.md`. Achado real (§3/§4): a row
+"VOLATILIDADE" do painel Market Regime recomputava seu próprio proxy
+(média ingênua de `(high-low)/close`, sem gaps) na mesma hora em que
+`regime-engine.js` já calcula o ATR% real (true range com gaps, Wilder) e
+repassa via `engine.marketRegime.atrPercent` — o mesmo campo que
+`eta-engine.ts`, `aura-lifecycle.ts` e o tooltip do Multi-Timeframe Matrix
+já usavam. Corrigido: `engine.volatilityPct` removido por inteiro, a row
+(renomeada "VOLATILIDADE (ATR%)") e o checklist de fontes agora leem a
+única fonte real.
+
+**Validado, sem lacuna nova**: Break Even/Trailing Stop confirmado
+Council-only por arquitetura real (Track Record precisa de identidade de
+plano estável — só o Conselho tem quórum para isso honestamente),
+documentado como limitação de design, não bug. Demanda/Oferta↔Trade Plan
+confirmada sincronizada (garantia `isRealObstacle` de rodada anterior
+segue correta). RSI/ADX confirmados single-source (achado inicial
+impreciso sobre "duas implementações de RSI" corrigido antes de publicar
+— `computeRSI` é uma função só, em `lorentzian-classifier.js`, reusada
+por `App.tsx` e `multi-timeframe-engine.ts`). Memória/persistência: 4
+mecanismos, zero sobreposição.
+
+**Verificação real**: `tsc --noEmit` limpo · **103 arquivos / 1694
+testes** (100%, +3: fonte real VOLATILIDADE/ATR%) · `npm run build` ok
+(10.88s, 1821 módulos) · `audit-header-maxcontent.mjs` 11 viewports CLEAN.
+Commit `864f65f`.
+
+---
+
+### 6.32 NÚCLEO GRAVITACIONAL AUTÔNOMO (AUTO FUSION ENGINE) — Fase 1:
+Relevance Engine + visibilidade automática por camada
+
+Diretiva do Operador pedindo um "organismo inteligente" onde nenhuma
+camada precisa de ativação manual — Fusion Engine, Centro Gravitacional,
+Corredor de Probabilidade, Projeção Automática. Antes de escrever
+qualquer código, duas perguntas de escopo genuinamente do Operador
+(`AskUserQuestion`, porque a leitura literal da diretiva colidia com duas
+regras não-negociáveis do próprio CLAUDE.md): (1) o Fusion Engine pode
+gerar/alterar Entry/Stop/Target/Risco por conta própria, ou fica só
+apresentação sobre os MESMOS números do Conselho/Núcleo? — resposta:
+**display-only, LEI 24 intacta**. (2) os 15 toggles manuais somem, ou
+continuam como override? — resposta: **continuam como override,
+comportamento padrão novo é automático por trás deles**.
+
+**Fase 1 entregue** (as outras seções da diretiva — Corredor de
+Confluência/Centro Gravitacional visual, síntese unificada — ficam para
+uma próxima rodada, propostas mas não construídas ainda, mesma disciplina
+de "documentar honestamente o que falta"):
+
+- **`nexus/layer-relevance.ts`** (motor puro, graduado com suíte própria
+  antes de qualquer ligação — Laboratório de Evolução): `computeLayerRelevance`
+  decide, para cada uma das 15 camadas reais do gráfico, SIM/NÃO de
+  exibição a partir de sinais JÁ REAIS já computados em outros lugares do
+  app — obstáculo real no caminho do Trade Plan (`chartObstacleZones`),
+  decaimento de idade de BOS/CHOCH (o MESMO `ageAlpha`/`BREAK_DECAY` que
+  `StructureBreakMarkersPlugin` já usa), proximidade a POC/HVN, fitScore
+  de harmônico, estado direcional de VWAP/Nexus Line, zona Premium/
+  Discount, tendência real do fluxo. Zero número fabricado — cada regra é
+  um SIM/NÃO sobre um cálculo que já existia. `trade_plan_zone`/
+  `neural_market_aura` ficam fora do gate (seguem seu próprio ciclo de
+  vida real, nunca fazem sentido como "camada opcional"). 37 testes de
+  execução real (`layer-relevance.test.ts`) — inclusive uma varredura que
+  confirma nenhum motivo textual usa a palavra "probabilidade" (Regra de
+  Ouro 2).
+- **Modelo de visibilidade paralelo** (`chartLayerAutoMode`, mesma forma
+  de `ChartLayerVisibility` — zero migração do boolean manual que já
+  existia): `true` = automático (Relevance Engine decide), `false` =
+  override manual. Clicar no toggle individual (que sempre existiu)
+  agora TAMBÉM sai do automático — um ato explícito assume controle,
+  exatamente como o Operador pediu. Os 3 presets manuais
+  (Operacional/Auditoria/Inteligência) também saem do automático ao
+  aplicar (curadoria deliberada); um 4º preset, "Automático", devolve as
+  15 camadas ao comportamento novo de uma vez. Persistência aditiva
+  (campo novo em `RestoredSession`, sessão antiga sem a chave cai no
+  default automático — zero versão nova da chave, `chartLayers` mantém a
+  MESMA forma/significado de sempre).
+- **Store**: `layerRelevance` — novo slice §3 MOTORES QUANT (mesmo padrão
+  de 5 lugares de `harmonicPatterns`), computado uma vez em `ChartWidget`
+  e lido por 2 consumidores reais (o canvas via `effectiveChartLayerVisibility`
+  e o painel de camadas via `useLayerRelevanceSnapshot()`), nunca
+  recomputado duas vezes.
+- **Painel**: cada camada mostra um badge real "auto" com o motivo
+  (tooltip, nunca um sumiço silencioso) quando em modo automático, e um
+  botão real de reset (`⟲ auto`) quando manual.
+- **`trendChannelBandwidthPct`**: `computeTrendChannel` (motor puro já
+  usado por `EnhancedChart_110_Percent.tsx` para desenhar o canal)
+  chamado uma 2ª vez em `ChartWidget` — mesma função determinística sobre
+  os mesmos candles reais, nunca pode divergir, só não havia como
+  reaproveitar o `useState` interno do componente do canvas sem um
+  refactor maior fora de escopo desta rodada.
+
+**Verificação real**: `tsc --noEmit` limpo · **105 arquivos / 1748
+testes** (100%, +54: 37 execução real do motor puro + 17 fiação da
+integração) · `npm run build` ok (9.75s, 1822 módulos) ·
+`audit-header-maxcontent.mjs` 11 viewports CLEAN.
+
+**Honestamente pendente desta diretiva** (próxima rodada, não construído
+sem confirmar escopo primeiro): Corredor de Confluência (renomeado de
+"Corredor de Probabilidade" — Regra de Ouro 2 proíbe rotular como
+probabilidade calibrada; será visualizado como largura/intensidade de
+confluência real: opinionMass do Conselho + institutionalScore + MTF
+agreement + contagem de obstáculos, nunca uma nova fonte de decisão);
+síntese unificada do "Centro Gravitacional" (mesma ideia visual do
+Corredor, tratada como 1 feature só — não duas — para não duplicar);
+Projeção Automática (§4 da diretiva) já está, na prática, coberta desde
+rodadas anteriores (Entry/Stop/Target1-3/BE/Trailing do Conselho e
+Entry/Stop/Target1-2 do fallback do Núcleo já desenham automaticamente
+sem o Operador habilitar nada — `trade_plan_zone` é isento do gate
+exatamente por isso).
 
 ---
 

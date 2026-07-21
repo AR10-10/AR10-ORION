@@ -250,7 +250,7 @@ describe('Sessão Local-First: ativo/timeframe/modo sobrevivem a refresh ("o sis
     expect(a).toContain('VALID_TIMEFRAMES.has(parsed.timeframe)');
     expect(a).toContain('TRADFI_ASSETS.find((a) => a.symbol === parsed.tradFiSymbol)');
     // TRADFI restaurado sem ativo restaurável degrada para CRYPTO
-    expect(a).toContain('if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe, chartLayers, emaPeriod };');
+    expect(a).toContain('if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe, chartLayers, chartLayerAutoMode, emaPeriod };');
   });
 
   it('os 4 estados hidratam por inicializador preguiçoso e persistem num único efeito', () => {
@@ -259,7 +259,7 @@ describe('Sessão Local-First: ativo/timeframe/modo sobrevivem a refresh ("o sis
     expect(a).toContain('useState(() => restoredSession.timeframe)');
     expect(a).toContain('useState<"CRYPTO" | "TRADFI">(() => restoredSession.marketMode)');
     expect(a).toContain('useState<TradFiAsset | null>(() => restoredSession.tradFiAsset)');
-    const m = a.match(/persistSessionState\(\{[\s\S]*?\}\);\n  \}, \[selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, emaPeriod\]\);/);
+    const m = a.match(/persistSessionState\(\{[\s\S]*?\}\);\n  \}, \[selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, chartLayerAutoMode, emaPeriod\]\);/);
     expect(m, 'efeito único de persistência não encontrado').not.toBeNull();
   });
 
@@ -515,11 +515,14 @@ describe('Auditoria §6: configurações do Operador (camadas + EMA) sobrevivem 
     expect(a).toContain('(EMA_PERIODS as readonly number[]).includes(parsed?.emaPeriod)');
   });
 
-  it('os dois estados hidratam por inicializador preguiçoso e entram no MESMO efeito único de persistência', () => {
+  it('os três estados hidratam por inicializador preguiçoso e entram no MESMO efeito único de persistência', () => {
     const a = app();
     expect(a).toContain('useState<ChartLayerVisibility>(() => restoredSession.chartLayers)');
+    // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: campo novo e aditivo, mesma forma
+    // de ChartLayerVisibility, mesmo padrão de hidratação/persistência.
+    expect(a).toContain('useState<ChartLayerVisibility>(() => restoredSession.chartLayerAutoMode)');
     expect(a).toContain('useState<EmaPeriod>(() => restoredSession.emaPeriod)');
-    expect(a).toContain('}, [selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, emaPeriod]);');
+    expect(a).toContain('}, [selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, chartLayerAutoMode, emaPeriod]);');
   });
 });
 

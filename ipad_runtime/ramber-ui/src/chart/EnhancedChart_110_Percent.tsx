@@ -195,6 +195,28 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   harmonics: true,
   equal_highs_lows: true,
 };
+// NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
+// (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
+// true = camada em modo automático (Relevance Engine decide), false =
+// override manual (chartLayerVisibility[id] vale). Default: tudo
+// automático, o comportamento novo pedido pela diretiva.
+export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
+  liquidity_zones: true,
+  structure_breaks: true,
+  order_flow_heatmap: true,
+  volume_profile: true,
+  trade_plan_zone: true,
+  neural_market_aura: true,
+  ema: true,
+  trend_channel: true,
+  vwap: true,
+  nexus_line: true,
+  cvd: true,
+  fibonacci: true,
+  premium_discount: true,
+  harmonics: true,
+  equal_highs_lows: true,
+};
 
 interface EnhancedChartProps {
   data: EnhancedChartCandle[];
