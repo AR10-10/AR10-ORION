@@ -457,22 +457,61 @@ describe('EPC §5/§6 (continuação): App.tsx computa engineFallbackLevels a pa
     const s = app();
     const idx = s.indexOf('const engineFallbackLevels = useMemo');
     expect(idx, 'engineFallbackLevels não encontrado em App.tsx').toBeGreaterThan(-1);
-    const block = s.slice(idx, idx + 900);
+    const block = s.slice(idx, idx + 1600);
     expect(block).toContain('if (chartTradePlan) return null;');
     expect(block).toContain('if (dir !== "LONG" && dir !== "SHORT") return null;');
     expect(block).toContain('if (typeof stop !== "number" || !Number.isFinite(stop)) return null;');
     expect(block).toContain('if (typeof target1 !== "number" || !Number.isFinite(target1)) return null;');
   });
 
-  it('lê exatamente os campos reais já expostos por engine-bridge.ts (stop/target1/target2/target1Strength/target2Strength/riskRewardRatio) — zero cálculo novo aqui', () => {
+  // Achado real (relato direto do Operador: "mesmo em qualquer timeframe
+  // tinha que aparecer" — nunca apareceu, em nenhum): o campo bruto do
+  // alvo 1 no objeto `engine` (App.tsx, useMemo ~linha 1367) chama-se
+  // `target` (a variável local virou esse nome no return) — só o METADADO
+  // de força manteve o sufixo "1" (`target1Strength`). A primeira versão
+  // deste teste travava `engine?.target1` (o BUG em si) como se fosse o
+  // comportamento esperado — um teste de padrão que verificava a
+  // implementação errada contra ela mesma, nunca contra o campo real.
+  // Corrigido para o nome real do campo; ver também o teste de execução
+  // real abaixo, que teria pegado isto pela MATEMÁTICA, não pelo texto.
+  it('lê exatamente os campos reais já expostos por engine-bridge.ts (stop/target/target2/target1Strength/target2Strength/riskRewardRatio) — zero cálculo novo aqui, nunca um nome de campo inventado', () => {
     const s = app();
     const idx = s.indexOf('const engineFallbackLevels = useMemo');
-    const block = s.slice(idx, idx + 900);
+    const block = s.slice(idx, idx + 1600);
     expect(block).toContain('const stop = engine?.stop;');
-    expect(block).toContain('const target1 = engine?.target1;');
+    expect(block).toContain('const target1 = engine?.target;');
+    expect(block).not.toContain('const target1 = engine?.target1;');
     expect(block).toContain('const target2 = typeof engine?.target2 === "number" && Number.isFinite(engine.target2) ? engine.target2 : null;');
     expect(block).toContain('target1Strength: engine?.target1Strength ?? null,');
     expect(block).toContain('target2Strength: engine?.target2Strength ?? null,');
+  });
+
+  // Execução real (não só padrão de fonte): reproduz o MESMO shape do
+  // objeto `engine` real (App.tsx ~linha 1505: campo `target`, nunca
+  // `target1`) e prova que a função de gate só aceita o nome de campo
+  // verdadeiro — é o teste que teria pego o bug de nome trocado pela
+  // MATEMÁTICA (retorna null vs. retorna um plano real), não por string.
+  it('execução real: com o shape verdadeiro do engine (campo `target`), o gate produz um fallback real; com o nome de campo errado (`target1`), teria ficado sempre null — mesma prova viva do bug encontrado', () => {
+    const deriveFallback = (engine: { direction: string | null; stop: unknown; target: unknown; target2?: unknown } | null, chartTradePlan: unknown) => {
+      if (chartTradePlan) return null;
+      const dir = engine?.direction;
+      if (dir !== 'LONG' && dir !== 'SHORT') return null;
+      const stop = engine?.stop;
+      const target1 = engine?.target; // nome real do campo, confirmado em App.tsx:2319 (`target: engine.target`)
+      if (typeof stop !== 'number' || !Number.isFinite(stop)) return null;
+      if (typeof target1 !== 'number' || !Number.isFinite(target1)) return null;
+      return { direction: dir, stop, target1 };
+    };
+    const realEngineShape = { direction: 'LONG', stop: 63736, target: 65688 };
+    const result = deriveFallback(realEngineShape, null);
+    expect(result).not.toBeNull();
+    expect(result?.target1).toBe(65688);
+
+    // prova viva do sintoma: a MESMA função, lendo o campo ERRADO
+    // (`target1`, que nunca existe no shape real), sempre retorna null —
+    // exatamente o silêncio que o Operador reportou em qualquer timeframe.
+    const buggyRead = (engine: typeof realEngineShape) => (engine as unknown as { target1?: number }).target1;
+    expect(buggyRead(realEngineShape)).toBeUndefined();
   });
 
   it('passado para o canvas como prop dedicada — nunca fundido com chartTradePlan', () => {

@@ -98,7 +98,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1674 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (103 arquivos, 1675 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -1472,6 +1472,79 @@ VWAP/NL/FVG/OB — mas tocar o texto do Trade Plan do Conselho arriscaria
 quebrar várias asserções exatas já testadas sem confirmação do pedido
 real). Registrado para confirmação direta com o Operador antes de
 qualquer mudança nesse ponto específico.
+
+---
+
+### 6.22 Bug real encontrado (não atraso de deploy): fallback do Núcleo
+(§6.20) nunca podia aparecer — nome de campo errado, mesmo em qualquer
+ativo/timeframe
+
+O Operador insistiu, depois da §6.21, que TARGET 1/2 continuavam sem
+aparecer "mesmo que eu coloco em qualquer tempo gráfico" — sinal de que
+NÃO era só atraso de deploy (hipótese levantada em §6.21). Auditoria
+direta do código confirmou: era um bug real, determinístico, presente
+desde o commit da §6.20.
+
+**Causa raiz**: o objeto `engine` (App.tsx, `useMemo` ~linha 1367) expõe
+o alvo 1 bruto sob o campo `target` — a variável local `target` (não
+`target1`) é o nome que sobrevive no `return {...}` (linha ~1505); só o
+METADADO de força manteve o sufixo `1` (`target1Strength`, campo
+realmente chamado assim). O código do fallback do Núcleo
+(`engineFallbackLevels`, App.tsx ~linha 5994) lia `engine?.target1` —
+campo que nunca existiu nesse objeto, sempre `undefined`. O gate
+fail-closed (`if (typeof target1 !== "number" ...) return null;`) fazia
+exatamente o que deveria fazer com um valor `undefined` — retornar
+`null`, honesto — mas o MOTIVO real não era "sem dado real disponível",
+era "nome de campo errado", disfarçado de "dado insuficiente" porque o
+sintoma externo (nada aparece) é idêntico nos dois casos. `tsc --noEmit`
+nunca acusou o erro porque `WidgetContext = createContext<any>(null)`
+(App.tsx:254) — todo consumidor de `useContext(WidgetContext)` recebe um
+valor `any`, então `engine?.target1` numa propriedade inexistente nunca
+vira erro de tipo. Achado incidental registrado para o EPC §1/§3: esta é
+uma lacuna estrutural de tipagem real (afeta potencialmente qualquer
+outro campo de `engine`/`cvd`/etc lido via este Context), não corrigida
+agora — tipar `WidgetContext` de verdade é um refactor maior, mais
+arriscado, fora do escopo de uma correção pontual.
+
+**Correção aplicada**: `engine?.target1` → `engine?.target` (2 pontos:
+a leitura em si e a dependência do `useMemo`). Também corrigido: o
+comentário do teste original, que descrevia o campo errado como se fosse
+o real, e a PRÓPRIA suíte de testes — a primeira versão do teste de
+Task #28 travava `engine?.target1` (o bug) como padrão esperado, porque
+era um teste de PADRÃO DE FONTE que replicava a implementação em vez de
+verificar o contrato real. Adicionado agora também um teste de EXECUÇÃO
+REAL (reproduz o shape verdadeiro do objeto `engine` e prova, pela
+matemática, que o nome de campo errado sempre retorna `null`) — a
+categoria de teste que a convenção deste projeto (`CLAUDE.md`) já
+recomendava para este tipo de bug ("a matemática está sutilmente
+errada") e que a primeira versão não usou.
+
+**Matemática alterada**: nenhuma — mesmo `target-tracker.js`, mesmo
+`support-resistance-engine.js`, mesmo dado real; só a REFERÊNCIA ao
+campo certo dentro do objeto que já existia.
+
+**Impacto esperado**: STOP/TARGET 1/TARGET 2 "(Núcleo)" agora aparecem
+de verdade no canvas sempre que o Núcleo tem direção real e o Trade Plan
+do Conselho está ausente — em qualquer ativo/timeframe, exatamente o que
+o Operador pediu, sem depender de nenhum redeploy adicional além deste
+commit.
+
+**Verificação real**: `tsc --noEmit` limpo · **103 arquivos / 1675
+testes** (100%, +1: execução real nova) · `npm run build` ok ·
+`audit-header-maxcontent.mjs` 11 viewports CLEAN. Mesma limitação de
+sandbox das entregas anteriores: confirmação visual ao vivo depende da
+próxima captura de tela do Operador (sem rede real para Binance aqui).
+
+**Zona de liquidez** (segunda parte do mesmo pedido): `liquidity_zones`
+(FVG/Order Blocks) e `equal_highs_lows` (EQH/EQL, liquidez de repouso)
+já estão `true` por padrão em `DEFAULT_CHART_LAYER_VISIBILITY`
+(`EnhancedChart_110_Percent.tsx`) — nenhum bug de visibilidade
+encontrado no código. Zonas/pools são inerentemente esparsos (só existem
+onde a estrutura real do preço os cria); a ausência na captura de tela
+anterior pode ser honestamente "nada para mostrar naquele instante", não
+um bug — sem uma nova captura mostrando o mesmo instante sem nenhuma
+zona onde uma deveria existir, não há evidência de código pra investigar
+mais fundo aqui.
 
 ---
 

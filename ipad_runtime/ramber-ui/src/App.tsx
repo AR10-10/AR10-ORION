@@ -5991,7 +5991,16 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
     const dir = engine?.direction;
     if (dir !== "LONG" && dir !== "SHORT") return null;
     const stop = engine?.stop;
-    const target1 = engine?.target1;
+    // Achado real (relato direto do Operador: "mesmo em qualquer timeframe
+    // tinha que aparecer" — nunca apareceu, em nenhum). Bug real, não
+    // atraso de deploy: o objeto `engine` (useMemo acima, ~linha 1505)
+    // expõe o alvo 1 bruto sob o nome `target` (a variável local que virou
+    // esse nome no return — só `target1Strength`, o METADADO de força,
+    // manteve o sufixo "1"). `engine?.target1` nunca existiu — sempre
+    // `undefined`, então este gate fail-closed retornava null 100% do
+    // tempo, disfarçado de "sem dado real" quando na verdade era "nome de
+    // campo errado". Corrigido para o nome real do campo.
+    const target1 = engine?.target;
     if (typeof stop !== "number" || !Number.isFinite(stop)) return null;
     if (typeof target1 !== "number" || !Number.isFinite(target1)) return null;
     const target2 = typeof engine?.target2 === "number" && Number.isFinite(engine.target2) ? engine.target2 : null;
@@ -6004,7 +6013,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       target2Strength: engine?.target2Strength ?? null,
       riskRewardRatio: typeof engine?.riskRewardRatio === "number" && Number.isFinite(engine.riskRewardRatio) ? engine.riskRewardRatio : null,
     };
-  }, [chartTradePlan, engine?.direction, engine?.stop, engine?.target1, engine?.target2, engine?.target1Strength, engine?.target2Strength, engine?.riskRewardRatio]);
+  }, [chartTradePlan, engine?.direction, engine?.stop, engine?.target, engine?.target2, engine?.target1Strength, engine?.target2Strength, engine?.riskRewardRatio]);
   // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
   // estrutural"): união das zonas REAIS (tradePlanStructureZones, as MESMAS
   // que já geram targets[i].obstacleCount acima na store) que ficam no
