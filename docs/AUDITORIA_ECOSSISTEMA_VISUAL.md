@@ -235,6 +235,119 @@ custo e bloqueio honestos.
 
 ---
 
+## 7. Inventário do motor matemático/quantitativo (EPC §1/§3, pedido do
+Operador: "mapear todo ecossistema... o que falta... mais perto dos
+100%") — o lado do CÁLCULO, não do desenho
+
+As seções 1-6 acima auditam o que o GRÁFICO desenha. Esta seção audita o
+que o SISTEMA CALCULA — os motores em si, se estão conectados de verdade
+(nunca construídos e esquecidos), e onde o pipeline quantitativo
+realmente tem uma lacuna vs. onde só falta autorização/decisão do
+Operador. Verificado por leitura direta do código (grep de import real
++ leitura do cabeçalho de cada módulo), nunca por suposição.
+
+### 7.1 Camada graduada (`ipad_runtime/src/research/engines/`)
+
+5 engines + 1 utilitário compartilhado, todos `ACTIVE_READ_ONLY`,
+todos importados de verdade por `engine-bridge.ts`/`analysis-frame.js`
+(lista completa e mantida em `research/QUARANTINE.md`, não duplicada
+aqui): `support-resistance-engine.js` (S/R fractal + força por
+confluência), `market-structure-engine.js` (HH/HL/LH/LL),
+`fvg-order-block-engine.js` (FVG/OB/EQH/EQL — SMC), `lorentzian-
+classifier.js` (k-NN, confluência independente), `bos-choch-engine.js`
+(rompimento de estrutura). Zero código morto nesta camada — os 21
+arquivos "FUTURE"/stub sem import real já foram removidos no purge de
+2026-06-30 (documentado no próprio `QUARANTINE.md`).
+
+### 7.2 Camada `nexus/` (43 módulos, contagem real via `find`) — status
+de conexão real
+
+Auditados via `grep` de import real (não só o nome aparecendo em
+comentário) em `App.tsx`/`engine-bridge.ts`/outros módulos `nexus/`.
+**42 dos 43 estão conectados de verdade.** O único que não está:
+
+- **`cross-exchange-service.ts`** — serviço UNIFICADO de dados
+  multi-exchange (Binance kline+L2 real, Bybit/OKX/MEXC via REST),
+  `ConnectionManager` reusável, testado — mas o PRÓPRIO cabeçalho do
+  arquivo já documenta, honestamente, por que ele não está ligado:
+  *"Deliberadamente NÃO iniciado por App.tsx nesta fase (isso é a Fase
+  0.6, escopada à parte por ser o passo de maior risco: substituir o
+  WS/REST inline que já funciona em produção)."* Confirmado: o
+  `crossExchangeCheck`/`okxCrossExchangeCheck` que JÁ aparecem no header
+  hoje vêm de um `useState` mais simples em `App.tsx` (sondas REST
+  inline de Bybit/OKX), não desta classe — cross-check multi-exchange
+  **já funciona hoje**, só não pela via unificada mais nova. Não é um
+  bug nem uma lacuna escondida — é uma decisão de risco já tomada e
+  registrada; fica pra quando o Operador quiser autorizar a troca do
+  caminho que já está no ar.
+
+Os outros 42 (Council, Confluence Engine, Multi-Timeframe Engine,
+Scenario Engine, Trade Plan, ETA Engine, Heat Score, Trap Detection,
+Institutional Score, Harmonic Patterns, Premium/Discount, Trend Channel,
+VWAP/VWAP State/Nexus Line, RR Quality, Signal Track Record, Affective
+Memory, Self-Diagnostics, Organism Orchestrator/Nexus Core/Event Bus,
+Connection Manager, Health Monitor, Consensus Radar, Decision Layer/
+Operational Readability, Operation Assistant, Volume Profile, Fibonacci
+Confluence, L2 History, Orderflow History/Orderflow Heatmap Draw, Market
+Session, Timeframe Profile, Persistence, Live Candle Sync, Percentile,
+EMA, Aura Lifecycle, Conviction Cyclone Draw, Types) estão todos
+conectados e ativos.
+
+### 7.3 Checklist EPC §3 — filtro por filtro, honesto
+
+| Categoria pedida | Cobertura real | Onde |
+|---|---|---|
+| Filtros/pesos | ✅ | `ensemble-engine.js` (linear opinion pool Stone 1961/DeGroot 1974) + histerese nova do Council (`councilStanceWithHysteresis`, EPC §5/§6) |
+| Confluências | ✅ (categoria mais forte) | `confluence-engine.ts`, `institutional-score.ts` (9 insumos → 1 score), `harmonic-patterns.ts`, `premium-discount.ts`, VWAP/NL states |
+| Modelos estatísticos | ✅ (descritivos, nunca preditivos calibrados — Regra de Ouro 2) | `lorentzian-classifier.js` (k-NN + sampleSize honesto), `heat-score.ts` (percentil real), `compare-runs.js` (two-proportion z-test, laboratório) |
+| Validações estruturais | ✅ | `market-structure-engine.js`, `bos-choch-engine.js`, `fvg-order-block-engine.js`, `support-resistance-engine.js` com força por confluência |
+| Validações temporais | ✅ | `multi-timeframe-engine.ts` (1m→1D), `timeframeConfluence` (15m×1H), `market-session.ts` (sessão Londres/NY, já no header) |
+| Projeções quantitativas | ✅ (níveis reais, nunca previsão) | `scenario-engine.ts` (Path A/B sobre níveis já mapeados), `eta-engine.ts` (ETA dinâmico, 2 blocos reais nomeados) |
+| Modelos de risco | ✅ (escopo honesto de sistema READ_ONLY) | `rr-quality.ts` (piso 1:2 declarado), Risk Gate (Council `riskGated`), `risk_reward_ratio` real (target-tracker.js). Um modelo de VaR/position-sizing não se aplica — não existe posição real para dimensionar (Regra de Ouro 1). |
+| Validações multi-timeframe | ✅ | mesma cobertura de "validações temporais" acima — confluência HTF já compara estrutura 15m vs. 1H de verdade |
+
+**Conclusão honesta desta checklist**: nenhuma categoria pedida pelo EPC
+§3 está genuinamente ausente. O pipeline quantitativo deste terminal já
+cobre, com engines reais e testados, todas as 8 dimensões — a mesma
+conclusão da auditoria visual (seção 3 acima): não há lacuna de
+"motor/biblioteca faltando" que justifique construir algo novo
+especulativo agora.
+
+### 7.4 Achado incidental (fora do escopo original, registrado mesmo
+assim — disciplina de auditoria)
+
+`WidgetContext = createContext<any>(null)` (`App.tsx:254`) — todo
+consumidor de `useContext(WidgetContext)` recebe um valor `any`, então
+um nome de campo errado (ex.: o bug real corrigido em `be1fbf8`,
+`engine?.target1` em vez de `engine?.target`) nunca vira erro de
+compilação. Não é uma lacuna de MOTOR — é uma lacuna de TIPAGEM que
+afeta a PRECISÃO de qualquer novo código escrito contra este Context.
+Corrigir de verdade (tipar as ~65 chaves do Context com uma interface
+real) é um refactor maior, mais arriscado, que merece sua própria
+iniciativa isolada — não uma correção apressada junto de outra coisa
+(mesma disciplina da Regra de Ouro 6 para o Core Engine).
+
+### 7.5 O que falta de verdade, resumido
+
+Cruzando esta seção com a seção 6 (resumo executivo visual): **as
+lacunas reais deste ecossistema, hoje, são todas já conhecidas e
+nomeadas** — nenhuma nova foi descoberta nesta auditoria:
+1. Bandas da VWAP, OI/Funding desenhado, footprint/cluster, padrões
+   geométricos, liquidation heatmap (seção 6 acima) — aguardando
+   autorização/decisão do Operador.
+2. `cross-exchange-service.ts` pronto, aguardando decisão de trocar o
+   caminho inline que já funciona (Fase 0.6).
+3. Backtest Fase 2 (`history-capture.js`) pronto, aguardando decisão de
+   ONDE o Operador dispara a captura real + um ambiente com rede real.
+4. Tipagem real do `WidgetContext` — fecha uma classe inteira de bug
+   silencioso, refactor maior fora de escopo de uma correção pontual.
+
+"Mais perto dos 100%" honesto, neste momento, significa: destravar os 4
+itens acima (todos prontos ou quase prontos, todos bloqueados em decisão
+— não em matemática faltando) — não inventar um 5º motor especulativo.
+
+---
+
 ## Fontes (pesquisa real)
 - [ATAS — Order Flow & Volume Analysis Software](https://atas.net/)
 - [ATAS — Heatmap Trading / Liquidity Heat Map](https://atas.net/blog/heatmap/)
