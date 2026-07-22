@@ -101,6 +101,92 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   própria constante `FRACTAL_K` redeclarada. Sem lógica própria de sinal, só a
   primitiva geométrica compartilhada; os três engines acima o importam.
 
+## Laboratório de backtest (nunca caminho de produção)
+
+- **`backtest/structural-backtest.js`** (2026-07-20, fase 1 da iniciativa
+  "histórico real + backtest honesto" — a única evolução nomeada como mais
+  importante na conclusão da Diretriz de Evolução de Produto, autorizada
+  pelo Operador). Medidor de desfechos estruturais em walk-forward: reusa o
+  Motor de Replay REAL (`src/replay/`) e os engines graduados candle-only
+  (`market-structure-engine` + `support-resistance-engine`) — zero
+  matemática de mercado nova; a regra estrutural é de MEDIÇÃO do
+  laboratório, documentada no cabeçalho. Saída = CONTAGEM de eventos da
+  amostra com aviso de honestidade gravado no contrato ("NUNCA
+  probabilidade futura, NUNCA o desempenho do sistema completo ao vivo").
+  Status: **LABORATÓRIO** — nenhum módulo de produção importa daqui
+  (fronteira travada por teste em
+  `ramber-ui/tests/structural-backtest.test.ts`); só se aplica a regra de
+  quarentena abaixo se um dia for graduado, o que exigirá antes a fase 2
+  (captura/armazenamento de histórico REAL — sem ela, qualquer número
+  daqui descreve apenas a série fornecida).
+  **Atualização (Diretriz de Evolução Geral do Organismo, mesmo dia):**
+  cada trial ganhou MFE/MAE (Maximum Favorable/Adverse Excursion, método
+  padrão de backtest — não uma métrica proprietária), medido candle a
+  candle durante toda a vida do trial e expresso em R-múltiplo
+  (excursão ÷ risco do próprio trial); o agregado ganhou `avgMfeR`/
+  `avgMaeR` totais e por direção. Zero mudança na regra estrutural de
+  medição em si.
+  **Atualização (Diretriz de Evolução Quantitativa e Aprendizado Real §2,
+  "alvo máximo estrutural"):** cada trial ganhou `farTarget` — a 2ª linha
+  real de S/R do mesmo `support-resistance-engine.js` (`resistance_2`/
+  `support_2`, dado já calculado por esse engine mas nunca lido aqui
+  antes), só quando genuinamente mais distante que o alvo primário
+  (fail-closed: null quando a janela não tem 2 swings reais distintos).
+  `farTargetHit`/`farTargetBarsToHit` são uma medição PARALELA e
+  independente da resolução TARGET/STOP do trial — nunca reabre, nunca
+  estende, nunca muda `outcome`/`barsToResolve`. Agregado ganhou
+  `farTargetEligible`/`farTargetHitRate`. Zero engine nova.
+
+- **`backtest/history-capture.js`** (2026-07-20, fase 2 da mesma
+  iniciativa). Pagina candles reais para trás a partir do conector direto
+  já usado pelo scroll-back do gráfico (`collectBinanceFuturesKlines`,
+  `src/market-data-bus/binance-futures-candle-connector.js` — mudança
+  aditiva nesse arquivo: `returnEvidence` opcional, default `false`
+  preserva 100% o comportamento existente do scroll-back), acumulando
+  candles + proveniência real por página (reusa o MESMO Evidence Object
+  de `js/real-data/schema.js` — `fetched_at`/`raw_sample_hash`/
+  `source_id` — nenhum campo novo de proveniência foi inventado). Dedup
+  por tempo, detecção EXATA de gaps (via `timeframeToSeconds` de
+  `quality-engine.js`, reaproveitado — não uma segunda matemática de
+  passo de timeframe), fail-closed em toda falha real (para a paginação
+  sem descartar o que já foi capturado com sucesso, nunca finge alcançar
+  o alvo), teto de segurança `maxPages` contra laço sem fim. Provado só
+  com `fetchPage` injetado (fixture determinística) e, para
+  `fetchRealPage`, mock na MESMA fronteira de rede que o resto do Real
+  Data Layer já usa (`js/real-data/binance-futures-public.js`) — nunca
+  executado contra rede real nesta sessão de implementação (sandbox sem
+  egress a exchanges).
+  Status: **LABORATÓRIO, sem gatilho de UI ainda** — nenhum módulo de
+  produção importa daqui (fronteira travada por teste em
+  `ramber-ui/tests/history-capture.test.ts`). O código de paginação está
+  pronto e testado, mas duas coisas continuam pendentes antes da fase 2
+  "acontecer" de fato: (1) decidir ONDE/COMO o Operador dispara a
+  captura real (botão em algum painel existente, ou outro caminho —
+  decisão de superfície de produto, deliberadamente não tomada nesta
+  entrega para não misturar com a matemática de paginação) e (2) rodar a
+  captura de verdade num ambiente com egress real às exchanges
+  (produção/dispositivo do Operador — o sandbox de CI não tem). Ver
+  `SYSTEM_HANDBOOK.md` §6.7.
+
+- **`backtest/compare-runs.js`** (2026-07-20, Fase 9 "Autoevolução
+  Controlada" da Diretriz de Evolução Quantitativa e Aprendizado Real).
+  `compareBacktestRuns(baseline, candidate)` — veredito estatístico
+  (`MELHOROU`/`PIOROU`/`NEUTRO`/`DADOS_INSUFICIENTES`) sobre duas
+  execuções reais de `runStructuralBacktest`, via two-proportion z-test
+  agrupado (método padrão de inferência estatística, mesmo usado para
+  comparar taxa de conversão A/B — não uma fórmula inventada). Amostra
+  abaixo do mínimo declarado (`MIN_RESOLVED_PER_GROUP=20`, por grupo) ou
+  variância pooled nula ⇒ sempre `DADOS_INSUFICIENTES`, nunca um veredito
+  fabricado. Nunca aplica nada sozinho — devolve o veredito para leitura
+  humana; a "APROVAÇÃO" da Fase 9 continua manual, sempre.
+  Status: **LABORATÓRIO** — nenhum módulo de produção importa daqui
+  (fronteira travada por teste em
+  `ramber-ui/tests/compare-runs.test.ts`). Já é totalmente usável hoje
+  para comparar duas execuções sobre qualquer série de candles (fixture
+  OU real, quando existir) — não depende da Fase 2 do backtest para
+  funcionar como mecanismo, só depende dela para que a comparação
+  descreva desempenho de mercado real em vez de uma série de teste.
+
 ## Regra de quarentena daqui para frente
 
 Nenhum arquivo de `src/research/**` pode ser importado por `js/**` sem,

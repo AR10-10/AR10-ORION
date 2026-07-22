@@ -67,4 +67,13 @@ describe('binance-futures-candle-connector: o sufixo -PERP (chave de cache do Bu
       collectBinanceFuturesKlines({ symbol: 'BTC-PERP', timeframe: '15m', limit: 100 }),
     ).rejects.toThrow(/conector_binance_futures_estado:BLOCKED_BY_CORS/);
   });
+
+  it('returnEvidence:true (Fase 2 do backtest honesto — captura de histórico com proveniência) devolve o Evidence Object completo, não só os candles — e o default (sem o campo) continua devolvendo só o array, como sempre', async () => {
+    const evidence = { candles: fakeCandles(), fetched_at: '2026-07-20T00:00:00.000Z', raw_sample_hash: 'abc', source_id: 'binance-futures-public-adapter' };
+    mockedProbe.mockResolvedValue({ state: CONNECTOR_STATES.ACTIVE_READ_ONLY, evidence });
+    const withEvidence = await collectBinanceFuturesKlines({ symbol: 'BTC-PERP', timeframe: '15m', limit: 100, returnEvidence: true });
+    expect(withEvidence).toBe(evidence);
+    const withoutEvidence = await collectBinanceFuturesKlines({ symbol: 'BTC-PERP', timeframe: '15m', limit: 100 });
+    expect(withoutEvidence).toBe(evidence.candles);
+  });
 });

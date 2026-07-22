@@ -4,6 +4,9 @@
 // opinion pool REAL da Fase F (zero repetição) e aplica quórum + gate de
 // risco fail-closed por cima.
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import {
   liquidityAgentVote,
   structureAgentVote,
@@ -19,6 +22,9 @@ import {
   type CouncilLiquidityZone,
 } from '../src/nexus/council';
 import type { FibonacciConfluenceMatrix } from '../src/nexus/fibonacci-confluence';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 
 const eqh = (price: number, swept = false): CouncilLiquidityZone => ({ type: 'EQUAL_HIGH', price, swept });
 const eql = (price: number, swept = false): CouncilLiquidityZone => ({ type: 'EQUAL_LOW', price, swept });
@@ -315,5 +321,105 @@ describe('buildCouncilDecision: composição de ponta a ponta com dados reais m�
     });
     expect(d.stance).toBe('ABSTAIN');
     expect(d.riskGated).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// EPC §5/§6 (Diretriz de Evolução Suprema, prioridade máxima): achado real
+// de auditoria — pool.direcao é um argmax honesto SEM margem nenhuma sobre
+// um pool que recomputa a cada tick de preço (App.tsx). Perto de qualquer
+// fronteira de decisão, o stance publicado podia piscar LONG↔NEUTRAL a
+// cada tick, criando e destruindo o Trade Plan repetidamente — o sintoma
+// relatado ("frequentemente deixa de mostrar ENTRY/STOP/TARGET"). Testes
+// de EXECUÇÃO REAL (matemática de fronteira, convenção deste projeto) para
+// councilStanceWithHysteresis — a margem é calculada à mão a partir da
+// MESMA fórmula real de opinionFromVote (peso 1 sem modulação de regime:
+// pooled = média aritmética simples com 1 único agente direcional real).
+// ─────────────────────────────────────────────────────────────────────────
+import { councilStanceWithHysteresis, COUNCIL_STANCE_ENTER_MARGIN, COUNCIL_STANCE_EXIT_MARGIN } from '../src/nexus/council';
+
+// 1 agente real votando (LIQUIDITY) + RISK saudável — quórum 1, peso 1 sem
+// modulação: pooled = a própria opinião do agente (opinionFromVote), zero
+// média com outros votos para manter a margem sob controle exato.
+const singleVote = (stance: 'LONG' | 'SHORT', confidence: number, prevStance: Parameters<typeof aggregateCouncil>[2] = 'NEUTRAL') =>
+  aggregateCouncil([vote('LIQUIDITY', stance, confidence), vote('RISK', 'NEUTRAL', 1)], 1, prevStance);
+
+describe('councilStanceWithHysteresis: função pura, execução real — nunca fabrica direção, só atrasa a transição', () => {
+  it('margem clara (>= ENTER) reivindica um lado NOVO mesmo sem stance anterior', () => {
+    expect(councilStanceWithHysteresis('NEUTRAL', 'ALTA', { alta: 0.6, baixa: 0, neutro: 0.4 })).toBe('LONG');
+    expect(councilStanceWithHysteresis('NEUTRAL', 'BAIXA', { alta: 0, baixa: 0.6, neutro: 0.4 })).toBe('SHORT');
+  });
+
+  it('zona morta (entre EXIT e ENTER): gruda no MESMO lado se prev já era esse lado', () => {
+    const pooled = { alta: 0.54, baixa: 0, neutro: 0.46 }; // margem 0.08, entre 0.04 e 0.12
+    expect(councilStanceWithHysteresis('LONG', 'ALTA', pooled)).toBe('LONG');
+  });
+
+  it('zona morta: NUNCA reivindica um lado novo (prev era NEUTRAL) — ENTER é obrigatório pra estrear', () => {
+    const pooled = { alta: 0.54, baixa: 0, neutro: 0.46 }; // mesma margem 0.08 do teste acima
+    expect(councilStanceWithHysteresis('NEUTRAL', 'ALTA', pooled)).toBe('NEUTRAL');
+  });
+
+  it('margem abaixo de EXIT: solta o lado mesmo com prev grudado (a favor não é o bastante pra segurar)', () => {
+    const pooled = { alta: 0.51, baixa: 0, neutro: 0.49 }; // margem 0.02 < EXIT (0.04)
+    expect(councilStanceWithHysteresis('LONG', 'ALTA', pooled)).toBe('NEUTRAL');
+  });
+
+  it('argmax cruzou pro lado OPOSTO: nunca herda o stance antigo, mesmo em zona morta do lado novo', () => {
+    const pooled = { alta: 0, baixa: 0.54, neutro: 0.46 }; // BAIXA em zona morta (margem 0.08)
+    expect(councilStanceWithHysteresis('LONG', 'BAIXA', pooled)).toBe('NEUTRAL'); // não vira SHORT sem ENTER, e não fica LONG (argmax não é mais ALTA)
+  });
+
+  it('argmax genuinamente NEUTRO nunca gruda, mesmo com prev direcional forte', () => {
+    expect(councilStanceWithHysteresis('LONG', 'NEUTRO', { alta: 0.4, baixa: 0.1, neutro: 0.5 })).toBe('NEUTRAL');
+    expect(councilStanceWithHysteresis('SHORT', 'NEUTRO', { alta: 0.1, baixa: 0.4, neutro: 0.5 })).toBe('NEUTRAL');
+  });
+
+  it('constantes são as documentadas no código-fonte (parâmetro declarado, nunca medição — mesma convenção de TARGET_LABEL_COMPACT_PCT)', () => {
+    expect(COUNCIL_STANCE_ENTER_MARGIN).toBe(0.12);
+    expect(COUNCIL_STANCE_EXIT_MARGIN).toBe(0.04);
+    expect(COUNCIL_STANCE_EXIT_MARGIN).toBeLessThan(COUNCIL_STANCE_ENTER_MARGIN); // exit sempre mais estreito, senão a histerese não existe
+  });
+});
+
+describe('aggregateCouncil: histerese fim-a-fim com votos reais (execução real, não só a função pura isolada)', () => {
+  it('1º tick forte estabelece LONG; ticks seguintes na zona morta NÃO piscam de volta pra NEUTRAL — a cadeia real de prevStance segura', () => {
+    const tick1 = singleVote('LONG', 0.60); // margem 0.20, ENTER claro
+    expect(tick1.stance).toBe('LONG');
+    const tick2 = singleVote('LONG', 0.54, tick1.stance); // margem 0.08, zona morta — SEM histerese isto seria NEUTRAL
+    expect(tick2.stance).toBe('LONG');
+    const tick3 = singleVote('LONG', 0.53, tick2.stance); // margem 0.06, ainda zona morta
+    expect(tick3.stance).toBe('LONG');
+  });
+
+  it('mesma sequência SEM encadear prevStance (o bug original, prevStance sempre default NEUTRAL) — reproduz o flicker relatado', () => {
+    const tick1 = singleVote('LONG', 0.60);
+    expect(tick1.stance).toBe('LONG');
+    const tick2 = singleVote('LONG', 0.54); // prevStance NÃO encadeado (default NEUTRAL) — mesma margem 0.08 do teste acima
+    expect(tick2.stance).toBe('NEUTRAL'); // prova viva do sintoma: SEM a cadeia real de prevStance, o mesmo dado pisca
+  });
+
+  it('uma queda REAL abaixo de EXIT solta o LONG mesmo dentro da cadeia real', () => {
+    const tick1 = singleVote('LONG', 0.60);
+    const tick2 = singleVote('LONG', 0.51, tick1.stance); // margem 0.02 < EXIT
+    expect(tick2.stance).toBe('NEUTRAL');
+  });
+
+  it('buildCouncilDecision aceita prevStance como 3º parâmetro opcional (default "NEUTRAL", nunca quebra um chamador de 2 argumentos)', () => {
+    const withDefault = buildCouncilDecision({
+      price: 100, liquidityZones: [], structure15: null, structure1h: null, cvd: null,
+      orderflowSignals: [], offline: false, isDataFresh: true, engineStatus: 'ok', fibonacci: null, rsi: null,
+    }, 1);
+    expect(withDefault.stance).toBe('ABSTAIN'); // quórum 0, sem votos reais — comportamento intocado
+  });
+});
+
+describe('App.tsx: prevStance lido da PRÓPRIA store (getState síncrono) antes de escrever a nova decisão — fiação real, nunca uma closure velha', () => {
+  it('lê council?.stance da store real ANTES do buildCouncilDecision, e passa como 3º argumento', () => {
+    const app = read('../src/App.tsx');
+    const idx = app.indexOf('const prevStance = useUnifiedSnapshotStore.getState().council?.stance ?? "NEUTRAL";');
+    expect(idx, 'leitura de prevStance não encontrada').toBeGreaterThan(-1);
+    const block = app.slice(idx, idx + 550);
+    expect(block).toContain('}, Date.now(), prevStance);');
   });
 });

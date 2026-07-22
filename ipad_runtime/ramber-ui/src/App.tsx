@@ -11,7 +11,25 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot } from "./store/unified-snapshot-store";
+// NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
+// camada — display-only (resposta do Operador: nunca gera/altera Entry/
+// Stop/Target/Risco, LEI 24 intacta).
+import {
+  computeLayerRelevance,
+  LIQUIDITY_PROXIMITY_PCT,
+  FIBONACCI_PROXIMITY_PCT,
+  VOLUME_PROFILE_PROXIMITY_PCT,
+  type LayerRelevanceInput,
+} from "./nexus/layer-relevance";
+import { ageAlpha } from "./chart/annotation-decay";
+import { BREAK_DECAY } from "./chart/StructureBreakMarkersPlugin";
+// Mesmo motor puro que EnhancedChart_110_Percent.tsx já usa para desenhar
+// o canal — chamado uma 2ª vez aqui de propósito (função determinística
+// sobre os MESMOS candles reais, nunca uma segunda fórmula) porque o
+// Relevance Engine roda fora do componente do canvas e precisa da largura
+// real da banda.
+import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER } from "./nexus/trend-channel-engine";
 // Ordem "Ciborgue Vivo" §3: síntese real de autodiagnóstico — mesmos
 // sinais do Health Monitor/Data Quality Layer, nunca uma segunda medição.
 import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/self-diagnostics";
@@ -19,10 +37,10 @@ import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/s
 // engine-bridge.ts usa para orquestrar, nunca uma segunda lista duplicada.
 import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } from "./nexus/multi-timeframe-engine";
 // Signal Precision order (phase 4): actionable plan from real structure.
-import { buildTradePlan, effectiveStopForTargetsHit, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
+import { buildTradePlan, effectiveStopForTargetsHit, obstacleZonesInPath, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
 // Autonomy order: honest signal accuracy — plans tracked against the real
 // price, persisted across sessions, felt by the affective memory.
-import { rehydrateTrackRecord, hitRate } from "./nexus/signal-track-record";
+import { rehydrateTrackRecord, hitRate, EMPTY_TRACK_RECORD } from "./nexus/signal-track-record";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -40,12 +58,14 @@ import { getOrganismOrchestrator } from "./nexus/organism-orchestrator";
 // Local-First (closes the persistence gap flagged in the audit): candles
 // persisted to IndexedDB on every real REST arrival; on boot the chart
 // paints instantly from the last REAL session before the network answers.
-import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord } from "./nexus/persistence";
+import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord, compactPersistedCandles, candleKey } from "./nexus/persistence";
 // V18 Sprint 1 (Tarefa B): "Destravar o Gráfico Institucional" — substitui
 // o SVG feito à mão por lightweight-charts (pan/zoom/crosshair nativos).
 import {
   EnhancedChart_110_Percent,
   DEFAULT_CHART_LAYER_VISIBILITY,
+  DEFAULT_CHART_LAYER_AUTO_MODE,
+  CHART_LAYER_IDS,
   type ChartLayerId,
   type ChartLayerVisibility,
 } from "./chart/EnhancedChart_110_Percent";
@@ -79,7 +99,7 @@ import {
 import { filterSessionCandles, bucketMidPrice } from "./nexus/volume-profile";
 // V-MAX Fase 1 item 4: Conselho Multi-Agente (7 agentes puros + Meta-Agent
 // que delega a agregação ao linear opinion pool real da Fase F).
-import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD } from "./nexus/council";
+import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD, type CouncilDecision } from "./nexus/council";
 import { computeConsensusRadar, type ConsensusRadarCategory } from "./nexus/consensus-radar";
 // MomentumAgent order ("chegando à perfeição"): RSI de Wilder, o mesmo
 // exato computeRSI já real/exportado como feature interna do
@@ -89,7 +109,7 @@ import { computeConsensusRadar, type ConsensusRadarCategory } from "./nexus/cons
 import { computeRSI } from "../../src/research/engines/lorentzian-classifier.js";
 // V-MAX Fase 2: cenários Path A/B (níveis reais + massa de opinião real do
 // conselho) e armadilhas por corroboração de eventos reais.
-import { buildScenarioProjection, type ScenarioLevel } from "./nexus/scenario-engine";
+import { buildScenarioProjection, formatScenarioPathLabel, type ScenarioLevel } from "./nexus/scenario-engine";
 import { detectInstitutionalTraps } from "./nexus/trap-detection";
 // Phase Ω Priority 2 ("Probability Engine" no pedido original do Operador —
 // entregue honestamente como Confluence/Conviction Engine, ver o cabeçalho
@@ -122,6 +142,27 @@ import { timeframeProfile } from "./nexus/timeframe-profile";
 import { buildAssistantMessages } from "./nexus/operation-assistant";
 import { computePremiumDiscount } from "./nexus/premium-discount";
 import { detectHarmonicPatterns, MIN_FIT_SCORE } from "./nexus/harmonic-patterns";
+// Consolidação Final §20-§30: estados da VWAP (matemática intocada, §20) +
+// Nexus Line proprietária + confluência informativa — módulos puros novos.
+import { computeSessionVwapSeries, latestVwap } from "./nexus/vwap";
+import { computeVwapContext, type VwapContext, type DirectionalLineState } from "./nexus/vwap-state";
+import { computeNexusLineSeries, latestNexusLine, nexusLineState, nexusConfluenceVerdict } from "./nexus/nexus-line";
+// Evolução Integrativa §7: Operational Readability Layer — NexusDecision
+// vira apresentação num módulo puro nomeado (zero matemática de direção).
+import {
+  buildOperationalSummary,
+  deriveBiasLabel,
+  deriveConfluenceState,
+  deriveEntryState,
+  deriveOutcomeLabel,
+  deriveRiskState,
+  deriveSetupState,
+  obstacleSuffix,
+  type NexusOutcomeLabel,
+} from "./nexus/operational-readability";
+// Fecho da pendência "R:R mínimo": piso DECLARADO 1:2 (ver rr-quality.ts),
+// display-only — anota, nunca esconde/bloqueia um plano real (LEI 24).
+import { rrFloorSuffix } from "./nexus/rr-quality";
 import { marketSessionFromUtc } from "./nexus/market-session";
 import { computeHeatScore } from "./nexus/heat-score";
 import { buildNexusDecision, NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./nexus/decision-layer";
@@ -200,6 +241,10 @@ import { fetchBybitPerpTicker, compareCrossExchange, type CrossExchangeCheck } f
 // qualquer outra corretora"): OKX Perpétuo, mesmo papel e mesma trava
 // fail-closed da Bybit acima — ver header de okx-futures.ts.
 import { fetchOkxPerpTicker } from "./cross-exchange/okx-futures";
+// EPC FINAL §27 (Aditivo de Automação Total): MEXC Futures, 4ª fonte real
+// de cross-check — resposta do Operador, secundária/mais completa, nunca
+// substitui a Binance como fonte primária.
+import { fetchMexcFuturesPerpTicker } from "./cross-exchange/mexc-futures";
 import {
   LayoutDashboard,
   BarChart2,
@@ -278,7 +323,17 @@ const lorentzianConfidencePct = (lorentzian: { ok: boolean; confidence?: number 
 // engine-bridge.ts's runRealAnalysisCycle/startMexcOrderflowFeed já
 // aceitam qualquer símbolo (string), então isto reusa o mesmo caminho —
 // nunca um segundo código.
-const ASSETS = ["BTC", "ETH", "SOL", "BNB", "XRP"] as const;
+// EPC FINAL §27 (Aditivo de Automação Total, resposta do Operador —
+// expandir a lista curada antes de descoberta automática completa):
+// achado real relevante — esta lista SEMPRE foi só os atalhos de 1 toque
+// (comentário acima), nunca o universo de escolha; o Smart Omnibox já
+// busca ao vivo QUALQUER par USDT real da Binance (fetchBinanceUsdtSymbols,
+// omnibox/binance-symbols.ts), então "compatibilidade universal" já
+// existia antes desta expansão. O que muda aqui é só o conjunto de
+// atalhos: 7 pares reais adicionados, todos líquidos e listados tanto na
+// Binance USDT-M Futures (fonte primária) quanto na MEXC Futures
+// (cross-check, mexc-futures.ts) — nunca um par exótico de baixa liquidez.
+const ASSETS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "LINK", "DOT", "TON", "TRX"] as const;
 type AssetSymbol = string;
 
 // ─── Diretriz Evolução Contínua §3/§4: restauração de sessão Local-First ───
@@ -303,11 +358,19 @@ interface RestoredSession {
   // das camadas do gráfico e período da EMA — também sobrevivem a
   // refresh/fechar o PWA. Validação por chave conhecida/valor da lista.
   chartLayers: ChartLayerVisibility;
+  // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: campo NOVO e aditivo — chave
+  // ausente em sessões antigas (persistidas antes desta rodada) cai no
+  // default automático de propósito (mesmo raciocínio de
+  // DEFAULT_CHART_LAYER_VISIBILITY acima: nunca inventar um estado, só
+  // que aqui o estado honesto de "nunca escolhido antes" É o automático,
+  // não precisa de bump de versão da chave — chartLayers continua com a
+  // MESMA forma/significado de sempre).
+  chartLayerAutoMode: ChartLayerVisibility;
   emaPeriod: EmaPeriod;
 }
 
 function readRestoredSession(): RestoredSession {
-  const fallback: RestoredSession = { asset: "BTC", timeframe: "15m", marketMode: "CRYPTO", tradFiAsset: null, chartLayers: DEFAULT_CHART_LAYER_VISIBILITY, emaPeriod: DEFAULT_EMA_PERIOD };
+  const fallback: RestoredSession = { asset: "BTC", timeframe: "15m", marketMode: "CRYPTO", tradFiAsset: null, chartLayers: DEFAULT_CHART_LAYER_VISIBILITY, chartLayerAutoMode: DEFAULT_CHART_LAYER_AUTO_MODE, emaPeriod: DEFAULT_EMA_PERIOD };
   try {
     const raw = window.localStorage.getItem(SESSION_STATE_KEY);
     if (!raw) return fallback;
@@ -328,13 +391,19 @@ function readRestoredSession(): RestoredSession {
         if (typeof parsed.chartLayers[key] === "boolean") chartLayers[key] = parsed.chartLayers[key];
       }
     }
+    const chartLayerAutoMode: ChartLayerVisibility = { ...DEFAULT_CHART_LAYER_AUTO_MODE };
+    if (parsed?.chartLayerAutoMode && typeof parsed.chartLayerAutoMode === "object") {
+      for (const key of Object.keys(chartLayerAutoMode) as ChartLayerId[]) {
+        if (typeof parsed.chartLayerAutoMode[key] === "boolean") chartLayerAutoMode[key] = parsed.chartLayerAutoMode[key];
+      }
+    }
     const emaPeriod: EmaPeriod = (EMA_PERIODS as readonly number[]).includes(parsed?.emaPeriod)
       ? (parsed.emaPeriod as EmaPeriod)
       : DEFAULT_EMA_PERIOD;
     // Modo TRADFI sem ativo TradFi restaurável degrada para CRYPTO — nunca
     // um cockpit em modo macro apontando para o nada.
-    if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe, chartLayers, emaPeriod };
-    return { asset, timeframe, marketMode, tradFiAsset, chartLayers, emaPeriod };
+    if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe, chartLayers, chartLayerAutoMode, emaPeriod };
+    return { asset, timeframe, marketMode, tradFiAsset, chartLayers, chartLayerAutoMode, emaPeriod };
   } catch {
     return fallback;
   }
@@ -343,7 +412,7 @@ function readRestoredSession(): RestoredSession {
 // inicializadores preguiçosos dos useState abaixo consomem este objeto.
 const restoredSession = readRestoredSession();
 
-function persistSessionState(s: { asset: string; timeframe: string; marketMode: string; tradFiSymbol: string | null; chartLayers: ChartLayerVisibility; emaPeriod: number }): void {
+function persistSessionState(s: { asset: string; timeframe: string; marketMode: string; tradFiSymbol: string | null; chartLayers: ChartLayerVisibility; chartLayerAutoMode: ChartLayerVisibility; emaPeriod: number }): void {
   try {
     window.localStorage.setItem(SESSION_STATE_KEY, JSON.stringify(s));
   } catch {
@@ -457,6 +526,14 @@ export default function App() {
     priceDeltaPct: null,
     consensus: "INDISPONIVEL",
   });
+  // EPC FINAL §27 (Aditivo de Automação Total): MEXC Futures, 4ª fonte de
+  // cross-check real (resposta do Operador — secundária, nunca substitui
+  // a Binance como fonte primária do ciclo do Core Engine).
+  const [mexcCrossExchangeCheck, setMexcCrossExchangeCheck] = useState<CrossExchangeCheck>({
+    ok: false,
+    priceDeltaPct: null,
+    consensus: "INDISPONIVEL",
+  });
   const [derivatives, setDerivatives] = useState<DerivativesState>({
     fundingRate: null,
     openInterest: null,
@@ -503,15 +580,90 @@ export default function App() {
   // per secondary module) — opened from the SideBar's footer button.
   const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState(false);
   // Camadas do Gráfico (Finding M, FASE Ω Priority 3) — mesmo padrão do
-  // Workspace Manager acima, mas para os 6 overlays do CANVAS do gráfico
+  // Workspace Manager acima, mas para os overlays do CANVAS do gráfico
   // (LiquidityZones/StructureBreaks/OrderFlowHeatmap/VolumeProfile/
-  // TradePlanZone/NeuralMarketAura). Painel novo e aditivo: todas as
+  // TradePlanZone/NeuralMarketAura/EMA/TrendChannel — 8 desde a Auditoria
+  // do painel do gráfico). Painel novo e aditivo: todas as
   // camadas continuam ligadas por padrão (DEFAULT_CHART_LAYER_VISIBILITY),
   // nada muda no comportamento existente até o Operador desligar algo.
   const [chartLayersOpen, setChartLayersOpen] = useState(false);
   const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);
+  // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7 (resposta do Operador à pergunta
+  // de escopo: os 15 toggles manuais continuam existindo como OVERRIDE
+  // real, o padrão novo é o comportamento automático por trás deles).
+  // Estrutura paralela, NUNCA uma reforma do tipo existente
+  // (ChartLayerVisibility continua Record<ChartLayerId, boolean>, zero
+  // migração, zero risco de regressão nos 15 toggles que já funcionavam):
+  // true = "automático" (o Relevance Engine decide agora), false =
+  // "manual" (chartLayerVisibility[id] vale, exatamente como sempre
+  // valeu). Default: tudo automático — é o comportamento novo pedido
+  // ("eliminar a necessidade de ativar"), sem apagar o boolean antigo.
+  const [chartLayerAutoMode, setChartLayerAutoMode] = useState<ChartLayerVisibility>(() => restoredSession.chartLayerAutoMode);
   const toggleChartLayer = useCallback((id: ChartLayerId) => {
+    // Clicar no toggle individual é um ato explícito de override manual —
+    // sai do automático nesse exato momento (resposta do Operador: toggle
+    // manual sempre vence quando usado).
+    setChartLayerAutoMode((prev) => ({ ...prev, [id]: false }));
     setChartLayerVisibility((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+  // Reset explícito: devolve 1 camada ao comportamento automático (o
+  // Operador muda de ideia sobre um override específico, sem precisar
+  // resetar as outras 14).
+  const resetChartLayerToAuto = useCallback((id: ChartLayerId) => {
+    setChartLayerAutoMode((prev) => ({ ...prev, [id]: true }));
+  }, []);
+  // Diretriz de Evolução Autônoma Integral §11 ("MODO OPERACIONAL... E:
+  // MODO AUDITORIA"), achado real de auditoria: o painel só tinha toggle
+  // individual por camada — nenhum atalho para as 2 leituras reais que o
+  // Operador de fato alterna entre si. Parâmetro declarado (convenção,
+  // nunca medição — mesmo espírito do piso R:R): as 3 camadas que
+  // desenham o PLANO em si (trade_plan_zone/neural_market_aura) e a
+  // direção de tendência mais lida "de relance" (ema) — mapeiam
+  // diretamente às prioridades visuais 1-6 da diretriz (direção/entrada/
+  // invalidação/TP1-3); as outras 5 (estrutura/contexto, prioridades
+  // 7-8) ficam ligadas só no Modo Auditoria. Puramente aditivo: nenhuma
+  // camada é removida, o cálculo de todas continua ativo — só a exibição
+  // muda, e o toggle individual continua funcionando normalmente depois.
+  // Diretriz Suprema de Evolução Integrativa §8 ("Modo Inteligência"):
+  // achado real de auditoria — só existiam 2 presets (Operacional/
+  // Auditoria); a diretriz pede um 3º para análise profunda sem o ruído
+  // do plano ativo. Mesmo mecanismo aditivo dos outros dois — nenhuma
+  // camada nova, nenhum cálculo novo, só uma pré-seleção a mais.
+  // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: um preset é curadoria manual
+  // deliberada (mesma categoria do toggle individual) — aplicar
+  // operational/audit/intelligence também sai do automático nas 15
+  // camadas, para o resultado do preset nunca ser silenciosamente
+  // sobrescrito pelo Relevance Engine. "automatic" é o 4º preset novo: a
+  // única ação que devolve TODAS as camadas ao comportamento automático
+  // de uma vez (o reset por camada individual, resetChartLayerToAuto,
+  // continua existindo para ajustes finos).
+  const applyChartLayerPreset = useCallback((preset: "operational" | "audit" | "intelligence" | "automatic") => {
+    if (preset === "automatic") {
+      setChartLayerAutoMode(
+        CHART_LAYER_IDS.reduce((acc, id) => {
+          acc[id] = true;
+          return acc;
+        }, {} as ChartLayerVisibility),
+      );
+      return;
+    }
+    setChartLayerAutoMode(
+      CHART_LAYER_IDS.reduce((acc, id) => {
+        acc[id] = false;
+        return acc;
+      }, {} as ChartLayerVisibility),
+    );
+    if (preset === "audit") {
+      setChartLayerVisibility(DEFAULT_CHART_LAYER_VISIBILITY);
+      return;
+    }
+    const activeSet = preset === "intelligence" ? CHART_LAYERS_INTELLIGENCE_PRESET : CHART_LAYERS_OPERATIONAL_PRESET;
+    setChartLayerVisibility(
+      CHART_LAYER_IDS.reduce((acc, id) => {
+        acc[id] = activeSet.has(id);
+        return acc;
+      }, {} as ChartLayerVisibility),
+    );
   }, []);
   // Diretriz Camada de Decisão Profissional, item 1: período real da EMA,
   // controlado no mesmo painel Camadas do Gráfico — um único período
@@ -750,10 +902,23 @@ export default function App() {
   // B). Retorna success/failure so the boot sequence below can retry a
   // transient failure quickly instead of silently waiting for the next 60s
   // tick.
-  const fetchSymbolData = async (): Promise<boolean> => {
+  // isStale (Diretriz de Evolução Geral do Organismo — auditoria de
+  // sincronização, achado real): antes desta correção, nem o retry de
+  // boot nem o setInterval de 30s abaixo verificavam se o Operador já
+  // tinha trocado de ativo ENQUANTO um destes awaits estava em voo — o
+  // mesmo padrão que runCycle (efeito do ciclo do motor, mais abaixo)
+  // já usa com `cancelled`, só que fetchSymbolData/fetchDerivatives vivem
+  // FORA do efeito (deliberado — ver comentário de chartTimeframeRef
+  // acima), então a checagem precisa ser passada como parâmetro em vez
+  // de vir de uma closure direta sobre a variável do efeito. Sem isto:
+  // trocar de BTC pra ETH com uma resposta de BTC ainda em voo faria
+  // candles de BTC serem mesclados no chartData do ETH, já resetado,
+  // rotulados sob o título errado.
+  const fetchSymbolData = async (isStale: () => boolean): Promise<boolean> => {
     try {
       const candles = await getChartCandles(selectedAsset, CHART_CANDLE_LIMIT, chartTimeframeRef.current);
       if (!candles) throw new Error('market_data_bus_sem_candles_validos');
+      if (isStale()) return true; // ativo trocou durante o fetch — descarta, nunca aplica dado do ativo errado
       // Auditoria de arquitetura: merge, nunca um replace cego — preserva
       // história real que a paginação (arrastar para trás) já carregou.
       setChartData((prev) => mergeFreshTail(prev, candles));
@@ -766,6 +931,7 @@ export default function App() {
       );
       if (!tickerRes.ok) throw new Error(`ticker HTTP ${tickerRes.status}`);
       const tickerData = await tickerRes.json();
+      if (isStale()) return true; // 2ª checagem: o ativo pode ter trocado durante ESTE await também
       if (Array.isArray(tickerData)) {
         setScannerData(
           tickerData.map((t) => {
@@ -787,7 +953,11 @@ export default function App() {
   };
 
   // REST: real Binance futures funding rate + open interest (public, read-only).
-  const fetchDerivatives = async (): Promise<boolean> => {
+  // isStale: mesmo raciocínio/mesma correção de fetchSymbolData acima —
+  // sem isto, dados de derivativos do ativo ANTERIOR (ou pior, um
+  // fundingRate/openInterest nulo do catch) podiam sobrescrever o estado
+  // já resetado do ativo novo.
+  const fetchDerivatives = async (isStale: () => boolean): Promise<boolean> => {
     let binanceOk = false;
     let binanceMarkPrice: number | null = null;
     try {
@@ -799,31 +969,38 @@ export default function App() {
       const funding = await fundingRes.json();
       const oi = await oiRes.json();
       binanceMarkPrice = num(Number(funding?.markPrice)) ? Number(funding.markPrice) : null;
-      setDerivatives({
-        fundingRate: num(Number(funding?.lastFundingRate))
-          ? Number(funding.lastFundingRate)
-          : null,
-        openInterest: num(Number(oi?.openInterest))
-          ? Number(oi.openInterest)
-          : null,
-      });
+      if (!isStale()) {
+        setDerivatives({
+          fundingRate: num(Number(funding?.lastFundingRate))
+            ? Number(funding.lastFundingRate)
+            : null,
+          openInterest: num(Number(oi?.openInterest))
+            ? Number(oi.openInterest)
+            : null,
+        });
+      }
       binanceOk = true;
     } catch {
-      setDerivatives({ fundingRate: null, openInterest: null });
+      if (!isStale()) setDerivatives({ fundingRate: null, openInterest: null });
     }
 
-    // Master Panel handoff: cross-check Bybit + OKX — independente do
-    // try/catch acima por design, buscados em paralelo (Zero Latência: uma
-    // fonte lenta não atrasa a outra). fetchBybitPerpTicker()/
-    // fetchOkxPerpTicker() já são fail-closed internamente (nunca lançam),
-    // então uma falha em qualquer uma nunca reverte nem atrasa o resultado
-    // real da Binance já processado logo acima.
-    const [bybit, okx] = await Promise.all([
+    // Master Panel handoff: cross-check Bybit + OKX + MEXC Futures —
+    // independente do try/catch acima por design, buscados em paralelo
+    // (Zero Latência: uma fonte lenta não atrasa a outra).
+    // fetchBybitPerpTicker()/fetchOkxPerpTicker()/fetchMexcFuturesPerpTicker()
+    // já são fail-closed internamente (nunca lançam), então uma falha em
+    // qualquer uma nunca reverte nem atrasa o resultado real da Binance já
+    // processado logo acima.
+    const [bybit, okx, mexc] = await Promise.all([
       fetchBybitPerpTicker(selectedAsset),
       fetchOkxPerpTicker(selectedAsset),
+      fetchMexcFuturesPerpTicker(selectedAsset),
     ]);
-    setCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, bybit));
-    setOkxCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, okx));
+    if (!isStale()) {
+      setCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, bybit));
+      setOkxCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, okx));
+      setMexcCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, mexc));
+    }
 
     return binanceOk;
   };
@@ -866,6 +1043,18 @@ export default function App() {
     setEngineStatus("pending");
     setPriceUpdatedAt(null);
     setOrderBookUpdatedAt(null);
+    // Diretriz Suprema de Evolução Integrativa §3 (achado real de
+    // auditoria): ao contrário dos campos acima, funding/OI e os dois
+    // cross-exchange checks NÃO eram resetados aqui — mostravam o valor
+    // do ativo ANTERIOR (até 8s de atraso real, o pior caso do retry de
+    // fetchDerivatives) enquanto preço/candles/order book já mostravam o
+    // novo. Mesmos valores iniciais dos useState acima — o mesmo "estado
+    // de carregamento honesto" que o primeiro boot já usa, nunca um dado
+    // fabricado do ativo novo.
+    setDerivatives({ fundingRate: null, openInterest: null });
+    setCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
+    setOkxCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
+    setMexcCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
     // V-MAX Fase 1.1/1.2: l2History/orderflowHistory na store são séries
     // acumuladas ao longo do tempo (não um valor pontual como os acima) do
     // ativo ANTERIOR — sem isto, o OrderFlowHeatmapPlugin mostraria amostras
@@ -879,22 +1068,66 @@ export default function App() {
     volumeProfileLastComputeRef.current = 0;
     orderflowThresholdStateRef.current = EMPTY_THRESHOLD_STATE;
     pendingLargeTradesRef.current = [];
+    // multiTimeframeContext é buscado só por [selectedAsset] (efeito
+    // abaixo) — sem limpar aqui, a Matriz do ativo antigo ficava visível
+    // até a primeira leitura real do novo resolver (mesmo padrão de
+    // "tela em branco até dado real" já usado acima para
+    // price/chartData/orderBook).
+    useUnifiedSnapshotStore.getState().setMultiTimeframeContext(null);
+    // trackRecord (o agregado hitRate/targetHits/stopHits) NÃO é zerado
+    // aqui — tem seu próprio efeito dedicado logo abaixo, que arquiva e
+    // restaura por symbol:timeframe em vez de descartar (Diretriz de
+    // Evolução Geral do Organismo §6.8, achado real: um reset cego aqui
+    // perdia memória de desempenho real ao trocar de aba e voltar).
   }, [selectedAsset]);
+
+  // Diretriz de Evolução Geral do Organismo §6.8 (achado real de
+  // auditoria: "memória de decisões" era uma fatia GLOBAL — trocar de
+  // ativo OU timeframe zerava hitRate/targetHits/stopHits/history por
+  // completo, mesmo que a mesma combinação já tivesse desempenho real
+  // medido antes). Efeito PRÓPRIO, dedicado só a isto (nunca misturado
+  // com os resets acima, que continuam zerando de verdade o que É
+  // pontual por natureza — preço/candles/order book/L2/etc.):
+  //   - Ao ENTRAR numa combinação symbol:timeframe: restaura o arquivo
+  //     real dela se existir, ou começa vazio se nunca visitada.
+  //   - Ao SAIR (cleanup, fecha sobre os valores REAIS desta combinação
+  //     — nunca uma ref stale): arquiva o agregado atual, primeiro
+  //     fechando um plano ainda ABERTO como REPLACED (reusa
+  //     trackPlanTransition(state, null, now), a mesma lógica honesta já
+  //     usada por toda troca de plano — nunca resolve em ausência).
+  // O plano ATIVO (rastreamento ao vivo do que está na tela agora)
+  // continua começando do zero em toda troca — só o AGREGADO histórico
+  // (o que realmente importa para medir desempenho real) sobrevive.
+  useEffect(() => {
+    const key = candleKey(selectedAsset, chartTimeframe as Timeframe);
+    const archived = useUnifiedSnapshotStore.getState().trackRecordArchive[key];
+    useUnifiedSnapshotStore.getState().hydrateTrackRecord(archived ?? EMPTY_TRACK_RECORD);
+    return () => {
+      useUnifiedSnapshotStore.getState().archiveTrackRecord(key);
+    };
+  }, [selectedAsset, chartTimeframe]);
 
   useEffect(() => {
     let unmounted = false;
+    // Fecha sobre o `unmounted` DESTE efeito — retry de boot e o tick de
+    // 30/60s abaixo reusam as MESMAS closures, então uma resposta tardia
+    // de um ativo já trocado (unmounted true na hora em que o await
+    // resolve) nunca aplica dado do ativo errado (ver isStale dentro de
+    // fetchSymbolData/fetchDerivatives).
+    const fetchSymbolDataGuarded = () => fetchSymbolData(() => unmounted);
+    const fetchDerivativesGuarded = () => fetchDerivatives(() => unmounted);
     (async () => {
       const [restOk, derivOk] = await Promise.all([
-        retryBoot(fetchSymbolData, () => unmounted),
-        retryBoot(fetchDerivatives, () => unmounted),
+        retryBoot(fetchSymbolDataGuarded, () => unmounted),
+        retryBoot(fetchDerivativesGuarded, () => unmounted),
       ]);
       if (!unmounted) setBootRestFailed(!restOk && !derivOk);
     })();
     // Klines a 30s: mantém o último candle do gráfico em sincronia com o
     // ciclo do motor (mesma cadência). Derivativos (funding/OI) mudam devagar
     // — 60s continua correto para eles.
-    const restInterval = setInterval(fetchSymbolData, 30000);
-    const derivInterval = setInterval(fetchDerivatives, 60000);
+    const restInterval = setInterval(fetchSymbolDataGuarded, 30000);
+    const derivInterval = setInterval(fetchDerivativesGuarded, 60000);
 
     let ws: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1273,6 +1506,16 @@ export default function App() {
     const target1Strength = cycleOk ? (realCycle?.target1Strength ?? null) : null;
     const target2Strength = cycleOk ? (realCycle?.target2Strength ?? null) : null;
     const confidence = cycleOk ? (realCycle?.confidence ?? null) : null;
+    // EPC MODO ELITE ABSOLUTO §10 (Recuperação de Recursos — inteligência
+    // escondida): `condition` é a CONFIRMAÇÃO REAL que o Core Engine exige
+    // antes do setup valer (required_confirmation, LONG/SHORT) ou o gatilho
+    // de reavaliação (trigger_to_reevaluate, WAIT) — trade-setup-matrix.js/
+    // research-engine.js. O engine-bridge já computava e expunha esse campo
+    // em realCycle.condition, mas NENHUM consumidor o lia: inteligência real
+    // do núcleo, nunca vista pelo Operador. Passthrough puro aqui (mesmo
+    // padrão de rationale/marketStructure), agora exibido na Síntese
+    // Operacional da aba ANALYSIS. "Se o núcleo calcula, o operador enxerga."
+    const condition = cycleOk ? (realCycle?.condition ?? null) : null;
     const marketStructure = cycleOk ? (realCycle?.marketStructure ?? null) : null;
     // Clean label for marketStructure's raw internal string, computed once
     // here instead of re-derived by every consumer (AssistantOrb's
@@ -1331,17 +1574,6 @@ export default function App() {
         ? Math.abs(((target - entry) / entry) * 100)
         : null;
 
-    // Real, honest volatility proxy (Market Regime panel, V11 §13): mean
-    // (high-low)/close across the fetched candle window, as a percentage —
-    // the same idea as ATR%, computed from the exact same real klines the
-    // chart draws, not a separate/invented source.
-    const volatilityPct =
-      chartData && chartData.length > 0
-        ? (chartData.reduce((sum: number, c: any) => sum + (c.close > 0 ? (c.high - c.low) / c.close : 0), 0) /
-            chartData.length) *
-          100
-        : null;
-
     // Real, already-computed Order Flow Imbalance from the actual Signal
     // Engine (src/orderflow/signal-engine.js), reused for the institutional
     // consensus index (V11.5 Fase 5) — not recomputed, not a second source.
@@ -1379,6 +1611,7 @@ export default function App() {
       target1Strength,
       target2Strength,
       confidence,
+      condition,
       marketStructure,
       marketStructureLabel,
       support,
@@ -1388,7 +1621,6 @@ export default function App() {
       supportBreakouts,
       resistanceBreakouts,
       moveToTargetPct,
-      volatilityPct,
       flowImbalance,
       htfMarketStructureLabel,
       htfTimeframe,
@@ -1532,6 +1764,22 @@ export default function App() {
     [chartData],
   );
 
+  // Hoisted (Diretriz Restauração/Inteligência Visual §6): as MESMAS zonas
+  // reais (OB/FVG não mitigadas) que o efeito de buildTradePlan abaixo já
+  // montava inline — agora reaproveitadas também pelo destaque de
+  // obstáculos no gráfico (chartObstacleZones, perto do JSX do chart) sem
+  // recomputar a mesma transformação duas vezes.
+  const tradePlanStructureZones = useMemo<TradePlanStructureZone[]>(() => {
+    const zones: TradePlanStructureZone[] = [];
+    smcZones.orderBlocks.filter((z) => !z.mitigated).forEach((z) => {
+      zones.push({ low: z.bottom, high: z.top, kind: `OB_${z.type}` });
+    });
+    smcZones.fairValueGaps.filter((z) => !z.mitigated).forEach((z) => {
+      zones.push({ low: z.bottom, high: z.top, kind: `FVG_${z.type}` });
+    });
+    return zones;
+  }, [smcZones]);
+
   // V-MAX Fase 1.3: Volume Profile real (WASM no quant-worker) sobre os
   // MESMOS candles reais que o chart exibe — zero rede nova. Cadência
   // limitada a 1 cálculo por 5s (o candle vivo muda a cada tick de WS;
@@ -1637,6 +1885,33 @@ export default function App() {
   // faltava. Idempotente quando os dois disparam juntos.
   useEffect(() => {
     useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();
+    // trackRecord não é zerado aqui — arquivado/restaurado por
+    // symbol:timeframe no efeito dedicado logo acima (§6.8).
+    //
+    // Achados reais (Diretriz de Evolução Autônoma Integral, auditoria de
+    // staleness de overlays — troca de ATIVO já é imune por desmontar o
+    // gráfico inteiro quando chartData vira []; troca de TIMEFRAME não
+    // desmonta nada, então precisa dos resets abaixo):
+    // 1. S1/R1 (createPriceLine em EnhancedChart_110_Percent.tsx) vêm de
+    //    engine.support/resistance, derivados de realCycle — só
+    //    resetado na troca de ATIVO, nunca na de timeframe. Como
+    //    runRealAnalysisCycle (efeito próprio, já reage a chartTimeframe)
+    //    é assíncrono, as linhas S1/R1 do timeframe ANTERIOR ficavam
+    //    penduradas sobre os candles do novo timeframe até o ciclo novo
+    //    resolver — um nível estrutural de 15m rotulado como se fosse
+    //    válido no 4h, não só "um pouco velho": errado para o contexto
+    //    novo. Diferente da decisão P1 (chartData permanece visível de
+    //    propósito, mesmo timeframe, só levemente atrasado) — aqui o
+    //    dado é de OUTRO regime, então o fail-closed correto é limpar,
+    //    não reter.
+    setRealCycle(null);
+    setEngineStatus("pending");
+    // 2. VolumeProfilePlugin: o throttle de 5s (volumeProfileLastComputeRef)
+    //    só era zerado na troca de ativo — trocar de timeframe dentro
+    //    dessa janela mantinha o histograma/POC do timeframe anterior
+    //    desenhado sobre os candles novos por até 5s.
+    useUnifiedSnapshotStore.getState().setVolumeProfile(null);
+    volumeProfileLastComputeRef.current = 0;
   }, [chartTimeframe]);
 
   // Diretriz Evolução Contínua §3/§4: cada mudança real do ponto de vista
@@ -1650,9 +1925,10 @@ export default function App() {
       marketMode,
       tradFiSymbol: selectedTradFiAsset?.symbol ?? null,
       chartLayers: chartLayerVisibility,
+      chartLayerAutoMode,
       emaPeriod,
     });
-  }, [selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, emaPeriod]);
+  }, [selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, chartLayerAutoMode, emaPeriod]);
 
   // V-MAX Fase 1 item 4: Conselho Multi-Agente. Cada insumo abaixo é dado
   // REAL já coletado por este componente ou pela store — o conselho é um
@@ -1676,6 +1952,15 @@ export default function App() {
   }, [chartData]);
   useEffect(() => {
     const price = typeof priceData?.price === "number" ? priceData.price : null;
+    // EPC §5/§6 (achado real de auditoria, prioridade máxima): este
+    // efeito recomputa a cada tick real de preço (priceData nas deps
+    // abaixo) — sem histerese no stance publicado, o Conselho piscava
+    // LONG/SHORT↔NEUTRAL perto de qualquer fronteira de decisão, criando
+    // e destruindo o Trade Plan repetidamente (ver council.ts,
+    // councilStanceWithHysteresis). prevStance lido direto da store
+    // (getState() síncrono, sempre fresco — nunca uma closure velha) ANTES
+    // de escrever a nova leitura.
+    const prevStance = useUnifiedSnapshotStore.getState().council?.stance ?? "NEUTRAL";
     const decision = buildCouncilDecision({
       price,
       liquidityZones: smcZones.liquidityZones,
@@ -1688,7 +1973,7 @@ export default function App() {
       engineStatus,
       fibonacci: fibonacciMatrix,
       rsi: currentRsi,
-    });
+    }, Date.now(), prevStance);
     useUnifiedSnapshotStore.getState().setCouncil(decision);
   // Mesmo achado de auditoria do efeito Fibonacci acima: só marketStructureLabel/
   // htfMarketStructureLabel (rótulos lentos do ciclo real do motor) entram
@@ -1793,13 +2078,7 @@ export default function App() {
   // the orchestrator (BRAIN.TRADE_PLAN.UPDATED). Advisory only — this
   // terminal never routes orders (permanent read-only design).
   useEffect(() => {
-    const zones: TradePlanStructureZone[] = [];
-    smcZones.orderBlocks.filter((z) => !z.mitigated).forEach((z) => {
-      zones.push({ low: z.bottom, high: z.top, kind: `OB_${z.type}` });
-    });
-    smcZones.fairValueGaps.filter((z) => !z.mitigated).forEach((z) => {
-      zones.push({ low: z.bottom, high: z.top, kind: `FVG_${z.type}` });
-    });
+    const zones = tradePlanStructureZones;
     const planLevels: TradePlanLevelInput[] = [];
     const level = (kind: string, price: number | null | undefined) => {
       if (typeof price === "number" && Number.isFinite(price)) planLevels.push({ price, kind });
@@ -1832,7 +2111,7 @@ export default function App() {
   // níveis do plano — `engine` inteiro recomputava/reescrevia o Trade Plan
   // a cada tick de livro/preço, disparando remoção/recriação desnecessária
   // das price-lines reais no gráfico (EnhancedChart_110_Percent.tsx).
-  }, [councilFromSnapshot, priceFromSnapshot, smcZones, engine?.support, engine?.resistance, fibonacciMatrix, volumeProfileSnapshot]);
+  }, [councilFromSnapshot, priceFromSnapshot, tradePlanStructureZones, engine?.support, engine?.resistance, fibonacciMatrix, volumeProfileSnapshot]);
 
   // Autonomy order — honest signal accuracy. Store-mediated chain:
   // (1) the tradePlan slice feeds the tracker (same-value re-derivations
@@ -1885,6 +2164,10 @@ export default function App() {
       if (cancelled || raw === null) return;
       useUnifiedSnapshotStore.getState().hydrateTrackRecord(rehydrateTrackRecord(raw));
     })();
+    // Consolidação Operacional §5: envelhecimento/compactação do cache de
+    // candles roda UMA vez por boot, fire-and-forget — nunca no caminho
+    // quente, nunca bloqueia a hidratação acima (stores independentes).
+    void compactPersistedCandles().catch(() => {});
     return () => { cancelled = true; };
   }, []);
 
@@ -1934,6 +2217,23 @@ export default function App() {
     [trackRecordSlice.active, livePriceForZone, engine?.marketRegime, chartData, chartTimeframe],
   );
 
+  // ── Consolidação Final §20-§30: VWAP (estados/distância) + Nexus Line ──
+  // A MATEMÁTICA da VWAP fica intocada (§20): computeSessionVwapSeries é a
+  // MESMA função pura que o gráfico desenha, avaliada sobre o MESMO
+  // chartData canônico — aqui só o último valor real, para header/estado.
+  const vwapNow = useMemo(() => latestVwap(computeSessionVwapSeries(chartData)), [chartData]);
+  const nexusLineNow = useMemo(() => latestNexusLine(computeNexusLineSeries(chartData)), [chartData]);
+  // Estados com histerese real (§22 "nunca trocar de estado a cada
+  // candle"): a transição depende do estado ANTERIOR — useState + efeito
+  // com updater funcional, nunca useMemo (mesma lição do inEntryZone).
+  const [vwapCtx, setVwapCtx] = useState<VwapContext | null>(null);
+  const [nlState, setNlState] = useState<DirectionalLineState>("NEUTRAL");
+  const atrAbsForLines = etaReading.atrAbsolute;
+  useEffect(() => {
+    setVwapCtx((prev) => computeVwapContext(prev?.state ?? "NEUTRAL", livePriceForZone, vwapNow, atrAbsForLines));
+    setNlState((prev) => nexusLineState(prev, livePriceForZone, nexusLineNow, atrAbsForLines));
+  }, [livePriceForZone, vwapNow, nexusLineNow, atrAbsForLines]);
+
   // Diretriz V-MAX (itens 5/6): Score Geral + Assistente — computados UMA
   // vez aqui (mesmo padrão de convictionReading, que ambos reaproveitam),
   // compartilhados via contextValue. Declarados DEPOIS de convictionReading/
@@ -1949,6 +2249,25 @@ export default function App() {
       }),
     [engineStatus, engine?.direction, convictionReading, councilFromSnapshot],
   );
+  // Cockpit de Leitura §11 ("ETA previsto / ETA realizado" + contexto):
+  // carimbo ÚNICO do contexto real de abertura no plano ativo. O guard do
+  // stampOpenContext puro garante que só o PRIMEIRO ciclo com leituras do
+  // plano recém-aberto escreve (etaReading deste render já deriva do
+  // active novo — mesma árvore de render); depois disso, toda re-execução
+  // devolve o estado original (memória nunca reescreve o histórico).
+  useEffect(() => {
+    const active = trackRecordSlice.active;
+    if (!active || active.contextAtOpen !== undefined) return;
+    const nextEta = etaReading.status === "OK" ? (etaReading.etas[active.targetsHit] ?? null) : null;
+    useUnifiedSnapshotStore.getState().stampPlanOpenContext({
+      etaMsAtOpen: nextEta?.ms ?? null,
+      etaMsMinAtOpen: nextEta?.msMin ?? null,
+      vwapState: vwapCtx?.state ?? null,
+      nexusLineState: nlState,
+      score: institutionalScore?.score ?? null,
+    });
+  }, [trackRecordSlice.active, etaReading, vwapCtx, nlState, institutionalScore]);
+
   // Diretriz Complementar §18/§4 ("Conviction Engine"): registra na store a
   // amostra REAL do Score Geral a cada ciclo em que ele existe (WAIT/
   // DADOS_INSUFICIENTES nunca — pontuar o nada seria fabricação). Efeito,
@@ -2049,8 +2368,20 @@ export default function App() {
           })) ?? null,
         heatTier: heatReading?.status === "OK" ? heatReading.tier : null,
         premiumDiscountZone: pdForDecision?.zone ?? null,
+        // Cockpit de Leitura §4: os equilíbrios entram na justificativa
+        // estruturada (conflito nomeado e visível, nunca um bloqueio).
+        vwapState: vwapCtx?.state ?? null,
+        nexusLineState: nlState,
       }),
-    [engine?.direction, engine?.confidence, trackedPlan, trackRecordSlice, etaReading, institutionalScore, confidenceZone, convictionTrend, councilFromSnapshot, assistantMessages, inEntryZoneNow, convictionReading, heatReading, pdForDecision],
+    [engine?.direction, engine?.confidence, trackedPlan, trackRecordSlice, etaReading, institutionalScore, confidenceZone, convictionTrend, councilFromSnapshot, assistantMessages, inEntryZoneNow, convictionReading, heatReading, pdForDecision, vwapCtx, nlState],
+  );
+
+  // Consolidação Final §30: confluência VWAP × Nexus Line × Decision Layer
+  // — veredito INFORMATIVO ("informar conflito estrutural"); LEI 24: nunca
+  // altera/bloqueia a operação, que segue passthrough do Core Engine.
+  const nexusConfluence = useMemo(
+    () => nexusConfluenceVerdict(vwapCtx?.state ?? "NEUTRAL", nlState, nexusDecision?.operation ?? null),
+    [vwapCtx, nlState, nexusDecision],
   );
 
   // Achado real de auditoria (sincronização/performance): este objeto era
@@ -2253,13 +2584,16 @@ export default function App() {
     if (okxCrossExchangeCheck.ok && typeof okxCrossExchangeCheck.priceDeltaPct === "number") {
       divergences.push(Math.abs(okxCrossExchangeCheck.priceDeltaPct) * 100);
     }
+    if (mexcCrossExchangeCheck.ok && typeof mexcCrossExchangeCheck.priceDeltaPct === "number") {
+      divergences.push(Math.abs(mexcCrossExchangeCheck.priceDeltaPct) * 100);
+    }
     let stale = false;
     (async () => {
       const score = await computeRealTrustScore([...priceGapsRef.current], divergences);
       if (!stale) useUnifiedSnapshotStore.getState().setTrustScore(score);
     })();
     return () => { stale = true; };
-  }, [priceUpdatedAt, crossExchangeCheck, okxCrossExchangeCheck]);
+  }, [priceUpdatedAt, crossExchangeCheck, okxCrossExchangeCheck, mexcCrossExchangeCheck]);
 
   // V18 Sprint 1 (Tarefa A): espelha o dado real já coletado por App.tsx
   // para dentro da UnifiedGlobalSnapshot store (Zustand+Immer) — nenhuma
@@ -2373,6 +2707,9 @@ export default function App() {
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setConnectionState("OKX", okxCrossExchangeCheck.ok ? "LIVE" : "DEGRADED");
   }, [okxCrossExchangeCheck]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setConnectionState("MEXC", mexcCrossExchangeCheck.ok ? "LIVE" : "DEGRADED");
+  }, [mexcCrossExchangeCheck]);
   // V-MAX Fase 1.2 (achado real durante a auditoria para o
   // OrderFlowHeatmapPlugin): `fps` acima (Fase J, "FPS REAL da UI") é a
   // ÚNICA medição real de frame rate desta árvore — o Health Monitor
@@ -2396,6 +2733,9 @@ export default function App() {
       setChartLayersOpen,
       chartLayerVisibility,
       toggleChartLayer,
+      applyChartLayerPreset,
+      chartLayerAutoMode,
+      resetChartLayerToAuto,
       emaPeriod,
       setEmaPeriod,
       leftDrawerOpen,
@@ -2406,6 +2746,7 @@ export default function App() {
       setChartTimeframe,
       engine,
       smcZones,
+      tradePlanStructureZones,
       bosChoch,
       bootAt,
       engineStatus,
@@ -2440,6 +2781,9 @@ export default function App() {
       assistantMessages,
       heatReading,
       nexusDecision,
+      vwapCtx,
+      nlState,
+      nexusConfluence,
       etaReading,
       riskSuggestion,
       cycleLatencyMs,
@@ -2448,6 +2792,7 @@ export default function App() {
       orderBookUpdatedAt,
       crossExchangeCheck,
       okxCrossExchangeCheck,
+      mexcCrossExchangeCheck,
       currentRsi,
     }),
     [
@@ -2457,6 +2802,7 @@ export default function App() {
       workspaceManagerOpen,
       chartLayersOpen,
       chartLayerVisibility,
+      chartLayerAutoMode,
       emaPeriod,
       leftDrawerOpen,
       toggleLeftDrawer,
@@ -2465,6 +2811,7 @@ export default function App() {
       chartTimeframe,
       engine,
       smcZones,
+      tradePlanStructureZones,
       bosChoch,
       bootAt,
       engineStatus,
@@ -2496,6 +2843,9 @@ export default function App() {
       assistantMessages,
       heatReading,
       nexusDecision,
+      vwapCtx,
+      nlState,
+      nexusConfluence,
       etaReading,
       riskSuggestion,
       cycleLatencyMs,
@@ -2504,6 +2854,7 @@ export default function App() {
       orderBookUpdatedAt,
       crossExchangeCheck,
       okxCrossExchangeCheck,
+      mexcCrossExchangeCheck,
       currentRsi,
     ],
   );
@@ -2951,6 +3302,42 @@ function WorkspaceManagerPanel() {
 // overlays do CANVAS do gráfico em vez dos widgets do layout. Toggle
 // simples ligado/desligado (não 5 estados como o Workspace Manager — uma
 // camada de canvas só faz sentido visível ou invisível, não "flutuante").
+// Diretriz de Evolução Autônoma Integral §11 — as camadas do Modo
+// Operacional: as que desenham o PLANO em si (entrada/stop/TPs, o
+// corredor de convicção que reforça visualmente o mesmo plano) mais a
+// direção de tendência mais lida "de relance" — prioridades visuais 1-6
+// da diretriz (direção/entrada/invalidação/TP1-3). As outras 5 camadas
+// (estrutura/contexto, prioridades 7-8: FVG/OB, BOS/CHOCH, heatmap,
+// volume profile, trend channel) só aparecem no Modo Auditoria.
+const CHART_LAYERS_OPERATIONAL_PRESET = new Set<ChartLayerId>(["trade_plan_zone", "neural_market_aura", "ema"]);
+// Diretriz Suprema de Evolução Integrativa §8 ("Modo Inteligência"): o
+// COMPLEMENTO do Operacional — todas as camadas de leitura
+// estrutural/contexto (FVG/OB, BOS/CHOCH, heatmap de liquidez, volume
+// profile, trend channel) mais EMA (mesma direção de tendência "de
+// relance" que já ajuda o Operacional), SEM as duas camadas que só fazem
+// sentido quando existe um plano ATIVO (trade_plan_zone/neural_market_
+// aura) — análise profunda do mercado, não do plano em si.
+// Auditoria de pendências: os 7 novos toggles (VWAP/Nexus Line/CVD/
+// Fibonacci/Premium-Discount/harmônico/EQH-EQL) são TODOS leitura de
+// mercado/estrutura — nenhum é específico do plano ativo — então entram
+// aqui pela mesma lógica, nunca no Operacional (que fica deliberadamente
+// enxuto).
+const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>([
+  "liquidity_zones",
+  "structure_breaks",
+  "order_flow_heatmap",
+  "volume_profile",
+  "ema",
+  "trend_channel",
+  "vwap",
+  "nexus_line",
+  "cvd",
+  "fibonacci",
+  "premium_discount",
+  "harmonics",
+  "equal_highs_lows",
+]);
+
 const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "liquidity_zones", label: "FVG / ORDER BLOCKS" },
   { id: "structure_breaks", label: "BOS / CHOCH" },
@@ -2959,13 +3346,43 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "trade_plan_zone", label: "TRADE PLAN ZONE" },
   { id: "neural_market_aura", label: "NEURAL MARKET AURA" },
   { id: "ema", label: "EMA" },
+  { id: "trend_channel", label: "TREND CHANNEL" },
+  { id: "vwap", label: "VWAP" },
+  { id: "nexus_line", label: "NEXUS LINE" },
+  { id: "cvd", label: "CVD" },
+  { id: "fibonacci", label: "FIBONACCI" },
+  { id: "premium_discount", label: "PREMIUM / DISCOUNT" },
+  { id: "harmonics", label: "HARMÔNICOS" },
+  { id: "equal_highs_lows", label: "EQH / EQL" },
 ];
 
 function ChartLayersPanel() {
-  const { chartLayersOpen, setChartLayersOpen, chartLayerVisibility, toggleChartLayer, emaPeriod, setEmaPeriod } =
-    useContext(WidgetContext) || {};
+  const {
+    chartLayersOpen,
+    setChartLayersOpen,
+    chartLayerVisibility,
+    toggleChartLayer,
+    applyChartLayerPreset,
+    chartLayerAutoMode,
+    resetChartLayerToAuto,
+    emaPeriod,
+    setEmaPeriod,
+  } = useContext(WidgetContext) || {};
+  const layerRelevance = useLayerRelevanceSnapshot();
   if (!chartLayersOpen) return null;
   const visibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
+  const autoMode = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
+  // Highlight real (não decorativo): compara o estado atual byte-a-byte
+  // contra os dois presets — só acende quando bate exatamente, nunca um
+  // "quase" fingido de correspondência. NÚCLEO GRAVITACIONAL AUTÔNOMO §1:
+  // os 3 presets manuais exigem TODAS as 15 camadas fora do automático —
+  // uma camada em modo automático que coincidentemente bate com o preset
+  // agora não é a mesma coisa que o Operador ter escolhido esse preset.
+  const allManual = CHART_LAYER_IDS.every((id) => autoMode[id] === false);
+  const isOperationalPreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_OPERATIONAL_PRESET.has(id));
+  const isAuditPreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === true);
+  const isIntelligencePreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));
+  const isAutomaticPreset = CHART_LAYER_IDS.every((id) => autoMode[id] === true);
 
   return (
     <div
@@ -2986,11 +3403,72 @@ function ChartLayersPanel() {
           </div>
         </div>
         <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+          {/* Diretriz de Evolução Autônoma Integral §11: atalho para os 2
+              modos reais — nunca substitui o toggle individual abaixo,
+              só pré-seleciona o que ele já controla. */}
+          <div className="flex gap-1.5">
+            {/* NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: 4º preset — a única ação
+                que devolve as 15 camadas ao comportamento automático de uma
+                vez (resposta do Operador: toggles continuam existindo como
+                override, mas o padrão novo é automático). */}
+            <button
+              type="button"
+              onClick={() => applyChartLayerPreset?.("automatic")}
+              title="Cada camada aparece só quando tem relevância estatística real agora (Relevance Engine) — nunca precisa ser ligada manualmente."
+              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+                isAutomaticPreset
+                  ? "border-[#00ffaa] bg-[#00ffaa20] text-[#00ffaa]"
+                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+              }`}
+            >
+              Automático
+            </button>
+            <button
+              type="button"
+              onClick={() => applyChartLayerPreset?.("operational")}
+              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+                isOperationalPreset
+                  ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+              }`}
+            >
+              Modo Operacional
+            </button>
+            <button
+              type="button"
+              onClick={() => applyChartLayerPreset?.("intelligence")}
+              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+                isIntelligencePreset
+                  ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+              }`}
+            >
+              Modo Inteligência
+            </button>
+            <button
+              type="button"
+              onClick={() => applyChartLayerPreset?.("audit")}
+              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+                isAuditPreset
+                  ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+              }`}
+            >
+              Modo Auditoria
+            </button>
+          </div>
           <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
             Overlays reais do canvas — esconder uma camada nunca altera o dado, só a exibição
           </span>
           {CHART_LAYER_PANEL_MODULES.map(({ id, label }) => {
-            const on = visibility[id];
+            // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: em modo automático, o
+            // estado real vem do Relevance Engine (nunca do boolean manual,
+            // que só é o valor efetivo quando o Operador assumiu controle
+            // — mesma resolução que effectiveChartLayerVisibility já faz
+            // pro canvas, aqui só pra exibir corretamente no painel).
+            const isAuto = autoMode[id];
+            const relevance = layerRelevance?.[id] ?? null;
+            const on = isAuto ? (relevance?.relevant ?? true) : visibility[id];
             return (
               <div
                 key={id}
@@ -2998,17 +3476,46 @@ function ChartLayersPanel() {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[0.55rem] font-bold tracking-widest text-white">{label}</span>
-                  <button
-                    type="button"
-                    onClick={() => toggleChartLayer?.(id)}
-                    className={`text-[0.4rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
-                      on
-                        ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                        : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
-                    }`}
-                  >
-                    {on ? "visível" : "oculta"}
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {isAuto && (
+                      // EPC FINAL §3/§12 ("quando destacar"): emphasis real
+                      // (só existe onde há um gradiente real no sinal, ver
+                      // layer-relevance.ts) some no texto do badge — nunca
+                      // um efeito visual novo sem motivo real por trás.
+                      <span
+                        className={`text-[0.38rem] px-1.5 py-1 rounded border font-bold uppercase tracking-wider ${
+                          relevance?.emphasis === "highlight"
+                            ? "border-[#00ffaa] bg-[#00ffaa20] text-[#00ffaa]"
+                            : "border-[#00ffaa]/40 text-[#00ffaa]/80"
+                        }`}
+                        title={relevance?.reason ?? "Relevance Engine ainda sem leitura real neste ciclo."}
+                      >
+                        auto{relevance?.emphasis === "highlight" ? " · destaque" : ""}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleChartLayer?.(id)}
+                      title={isAuto ? "Clicar assume controle manual desta camada (override real)." : "Override manual ativo."}
+                      className={`text-[0.4rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
+                        on
+                          ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                          : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
+                      }`}
+                    >
+                      {on ? "visível" : "oculta"}
+                    </button>
+                    {!isAuto && (
+                      <button
+                        type="button"
+                        onClick={() => resetChartLayerToAuto?.(id)}
+                        title="Devolver esta camada ao comportamento automático (Relevance Engine decide)."
+                        className="text-[0.38rem] px-1.5 py-1 rounded border border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#00ffaa] hover:border-[#00ffaa]/40 font-bold uppercase tracking-wider"
+                      >
+                        ⟲ auto
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {/* Diretriz Camada de Decisão Profissional, item 1: período
                     real da EMA — um único controle, os 4 períodos padrão da
@@ -3049,8 +3556,15 @@ function ChartLayersPanel() {
 // (forecast/voice/quick actions, nothing removed) renders below the
 // 3-column row when expanded (see the DASHBOARD strip in App()).
 function SiriformCoreCard() {
-  const { engine, engineStatus, realCycle, widgets, toggleWidget } = useContext(WidgetContext) || {};
+  const { engine, engineStatus, realCycle, widgets, toggleWidget, nexusDecision } = useContext(WidgetContext) || {};
   const direction: Direction = engine?.direction ?? null;
+  // Continuidade (sincronização BIAS≠ENTRY): mesmo qualificador real já
+  // testado (OUTCOME_QUALIFIER/deriveOutcomeLabel) — concatenado ao valor
+  // do MiniStat "Sinal" porque o componente reutilizável só aceita string
+  // (nunca uma segunda versão do MiniStat só para isto).
+  const sinalOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;
+  const sinalOutcomeQualifier = sinalOutcome ? (OUTCOME_QUALIFIER[sinalOutcome] ?? null) : null;
+  const sinalValue = direction ? (sinalOutcomeQualifier ? `${direction} · ${sinalOutcomeQualifier}` : direction) : AWAIT;
   const collapsed = widgets?.se_core?.collapsed ?? true;
   const statusLabel = engineStatus === "pending" ? AWAIT : engineStatus === "ok" ? "SYNCED" : "FAILED";
   const statusColor =
@@ -3105,7 +3619,7 @@ function SiriformCoreCard() {
       </div>
       <div className="grid grid-cols-2 gap-1.5">
         <MiniStat label="Analysis Cycle" value={statusLabel} color={statusColor} />
-        <MiniStat label="Sinal" value={direction ?? AWAIT} color={dirColor} />
+        <MiniStat label="Sinal" value={sinalValue} color={dirColor} />
         <MiniStat label="k-NN Lorentz." value={lorentzianLabel} color="text-[#8ab4f8]" />
         <MiniStat
           label="Estrutura (15m)"
@@ -3131,7 +3645,7 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
   const [msgIdx, setMsgIdx] = useState(0);
   const [inputValue, setInputValue] = useState("");
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
-  const { widgets, engine, engineStatus, realCycle, voiceSnapshot, handleManualRestart } =
+  const { widgets, engine, engineStatus, realCycle, voiceSnapshot, handleManualRestart, nexusDecision } =
     useContext(WidgetContext) || {};
 
   if (widgets && inCenter && !widgets.se_core?.visible) return null;
@@ -3139,6 +3653,10 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
   const direction: Direction = engine?.direction ?? null;
   const isLong = direction === "LONG";
   const isShort = direction === "SHORT";
+  // Continuidade (sincronização BIAS≠ENTRY, último dos 4 lugares
+  // auditados): mesmo deriveOutcomeLabel/OUTCOME_QUALIFIER real e testado.
+  const orbOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;
+  const orbOutcomeQualifier = orbOutcome ? (OUTCOME_QUALIFIER[orbOutcome] ?? null) : null;
   const entry: number | null = engine?.entry ?? null;
   const target: number | null = engine?.target ?? null;
   const stop: number | null = engine?.stop ?? null;
@@ -3204,6 +3722,11 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                 <span className="text-[0.5rem] sm:text-[0.55rem] tracking-[0.2em] text-[#8ab4f8] font-bold uppercase opacity-80 mt-1 sm:mt-0">
                   (ESTRUTURA REAL)
                 </span>
+                {orbOutcomeQualifier && (
+                  <span className="text-[0.5rem] sm:text-[0.55rem] tracking-[0.2em] text-[#8ab4f8]/70 font-bold uppercase mt-1 sm:mt-0">
+                    · {orbOutcomeQualifier}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 bg-[#00ffaa10] px-3 py-1 rounded border border-[#00ffaa30]">
                 <Wifi size={12} className="animate-pulse text-[#00ffaa]" />
@@ -3811,6 +4334,49 @@ function BarField({
   );
 }
 
+// EPC §5/§6 ("Nunca simplesmente esconder essas informações" — o motivo
+// real da ausência de Trade Plan deve aparecer, não só a barra sumir):
+// extraído da barra de comando (TradePlanTopStrip abaixo) pra ser
+// reaproveitado também no CANVAS do gráfico (ChartWidget) — mesma lógica
+// real, zero segunda implementação (Regra de Ouro 4). Cobre os 4 motivos
+// reais possíveis, na mesma ordem de checagem de trade-plan.ts: sem
+// Conselho ainda, risco travado, Conselho neutro/sem quórum (com ou sem
+// o Núcleo já direcional — a divergência LEI 24 entre Núcleo e Conselho é
+// real e honesta, nunca "corrigida" escondendo um dos dois lados), ou
+// Conselho direcional mas sem estrutura real mapeável.
+function tradePlanAbsenceReason(
+  council: CouncilDecision | null,
+  coreDir: "LONG" | "SHORT" | null,
+): { reason: string; tooltip: string } {
+  if (!council) {
+    return {
+      reason: "Aguardando Conselho",
+      tooltip: "O Conselho Multi-Agente ainda não computou nenhuma leitura nesta sessão — sem base real para um plano ainda.",
+    };
+  }
+  if (council.riskGated) {
+    return {
+      reason: "Conselho travado (risco)",
+      tooltip: "O RiskAgent absteve por dado degradado e travou o Conselho (fail-closed) — nenhum plano acionável enquanto durar.",
+    };
+  }
+  if (council.stance === "NEUTRAL" || council.stance === "ABSTAIN") {
+    return coreDir
+      ? {
+          reason: `Núcleo ${coreDir}, Conselho neutro`,
+          tooltip: `O Core Engine (LEI 24, única decisão real de LONG/SHORT/WAIT) lê ${coreDir}, mas o Conselho Multi-Agente — mais conservador, soma várias fontes independentes — está neutro ou sem quórum direcional. O Trade Plan usa a base do Conselho, não a do Núcleo diretamente; por isso Entry/Stop/Target não aparecem agora mesmo com o Núcleo direcional. Nunca um plano fabricado sem essa base.`,
+        }
+      : {
+          reason: "Conselho neutro",
+          tooltip: "O Conselho Multi-Agente está neutro ou sem quórum direcional — sem base real para Entry/Stop/Target agora.",
+        };
+  }
+  return {
+    reason: `Conselho ${council.stance}, sem estrutura`,
+    tooltip: `O Conselho lê ${council.stance}, mas nenhuma estrutura real mapeada (Order Blocks, FVGs, S/R, Fibonacci, Volume Profile) forma uma entrada/invalidação/alvo coerentes agora — nunca um plano fabricado sem base real.`,
+  };
+}
+
 function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   const plan = useTradePlanSnapshot();
   // v2 (Diretriz Complementar §2/§4): a barra compacta mostra o PRÓXIMO
@@ -3841,25 +4407,11 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
     // "bug" de "nenhum plano acionável agora". Correção: NUNCA trocar qual
     // sinal trava o Trade Plan (território de LEI 24 — decisão do
     // Operador, não uma correção de bug) — só tornar o null honesto e
-    // visível, com o motivo real.
+    // visível, com o motivo real. EPC §5/§6: a derivação em si agora vive
+    // em tradePlanAbsenceReason (módulo), reaproveitada também pelo
+    // CANVAS do gráfico — zero segunda implementação.
     const coreDir = engine?.direction ?? null;
-    let reason: string;
-    let tooltip: string;
-    if (!council) {
-      reason = "Aguardando Conselho";
-      tooltip = "O Conselho Multi-Agente ainda não computou nenhuma leitura nesta sessão — sem base real para um plano ainda.";
-    } else if (council.riskGated) {
-      reason = "Conselho travado (risco)";
-      tooltip = "O RiskAgent absteve por dado degradado e travou o Conselho (fail-closed) — nenhum plano acionável enquanto durar.";
-    } else if (council.stance === "NEUTRAL" || council.stance === "ABSTAIN") {
-      reason = coreDir ? `Núcleo ${coreDir}, Conselho neutro` : "Conselho neutro";
-      tooltip = coreDir
-        ? `O Core Engine (LEI 24, única decisão real de LONG/SHORT/WAIT) lê ${coreDir}, mas o Conselho Multi-Agente — mais conservador, soma várias fontes independentes — está neutro ou sem quórum direcional. O Trade Plan usa a base do Conselho, não a do Núcleo diretamente; por isso Entry/Stop/Target não aparecem agora mesmo com o Núcleo direcional. Nunca um plano fabricado sem essa base.`
-        : "O Conselho Multi-Agente está neutro ou sem quórum direcional — sem base real para Entry/Stop/Target agora.";
-    } else {
-      reason = `Conselho ${council.stance}, sem estrutura`;
-      tooltip = `O Conselho lê ${council.stance}, mas nenhuma estrutura real mapeada (Order Blocks, FVGs, S/R, Fibonacci, Volume Profile) forma uma entrada/invalidação/alvo coerentes agora — nunca um plano fabricado sem base real.`;
-    }
+    const { reason, tooltip } = tradePlanAbsenceReason(council, coreDir);
     return (
       <div className="flex items-stretch pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap" title={tooltip}>
         <BarField label="Trade Plan" value={reason} labelClass="text-[#8ab4f8]/50" valueClass="text-[#8ab4f8]/70" />
@@ -4040,6 +4592,22 @@ function StructureLevelsStrip() {
 // "Confidence" por extenso embaixo, dentro da altura fixa de 46px da
 // barra (Zero Scroll permanece intacto: cresce a hierarquia visual, nunca
 // a barra). Continua sendo a ÚNICA leitura do Core Engine em toda a tela.
+//
+// Auditoria Final de Integração (BIAS→SETUP→ENTRY→PLANO): qualificador
+// VISÍVEL do subtítulo — releitura pura de deriveOutcomeLabel (nenhuma
+// matemática nova), nunca do `direction` grande acima (que continua
+// passthrough literal do Núcleo, LEI 24 intocada). Fecha a lacuna real
+// encontrada: o mesmo raciocínio BIAS≠ENTRY só existia dentro do
+// title=fusedTitle (tooltip nativo — nunca aparece em toque no iPad).
+const OUTCOME_QUALIFIER: Partial<Record<NexusOutcomeLabel, string>> = {
+  LONG: "PLANO ATIVO",
+  SHORT: "PLANO ATIVO",
+  "AGUARDAR LONG": "AGUARDANDO ENTRADA",
+  "AGUARDAR SHORT": "AGUARDANDO ENTRADA",
+  OBSERVAR: "SEM ESTRUTURA",
+  // "SEM OPERAÇÃO" fica de fora de propósito: nada de notável a qualificar.
+};
+
 function CoreSignalBadge({
   direction,
   confidence,
@@ -4055,27 +4623,26 @@ function CoreSignalBadge({
 }) {
   const isLong = direction === "LONG";
   const isShort = direction === "SHORT";
-  const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
-  const fusedTitle = decision
-    ? [
-        `NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24) · Estado: ${decision.operationalState}`,
-        `Confiança: ${decision.confidenceLabel ?? DASH} · Score ${decision.score ?? DASH}${decision.scoreZone ? ` (${decision.scoreZone})` : ""}${decision.scoreTrend ? ` · ${decision.scoreTrend}` : ""} — confluência real, nunca probabilidade`,
-        decision.plan
-          ? `Entrada: ${f(decision.plan.entryLow)}–${f(decision.plan.entryHigh)} (${decision.plan.entryBasis}) · Stop: ${f(decision.plan.stopPrice)} (${decision.plan.stopBasis})`
-          : `Plano: ${decision.planGap ? NEXUS_PLAN_GAP_LABEL[decision.planGap] : DASH}`,
-        ...(decision.plan
-          ? decision.plan.targets.map(
-              (t, i) =>
-                `TP${i + 1}: ${f(t.price)} (${t.basis})${t.riskReward !== null ? ` · R:R 1:${t.riskReward.toFixed(2)}` : ""}${formatEtaRange(t.etaMsMin, t.etaMs) ? ` · ETA ${formatEtaRange(t.etaMsMin, t.etaMs)}` : ""}${t.hit ? " · ATINGIDO" : ""}`,
-            )
-          : []),
-        decision.reason ? `Motivo: ${decision.reason} (${decision.reasonBasis ?? "base real"})` : null,
-        decision.reasonsFor.length > 0 ? `Favoráveis: ${decision.reasonsFor.join(" · ")}` : null,
-        decision.reasonsAgainst.length > 0 ? `Contrários: ${decision.reasonsAgainst.join(" · ")}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n")
-    : "Core Engine — primary directional read (mathematical S/R + structure classifier)";
+  // Evolução Integrativa §7: a montagem multi-linha foi REALOCADA para a
+  // Operational Readability Layer (nexus/operational-readability.ts) —
+  // camada nomeada, pura e com execução real de teste. Conteúdo idêntico;
+  // o badge só exibe (§7: consumidores nunca reinterpretam).
+  const fusedTitle = buildOperationalSummary(decision).join("\n");
+  // Auditoria Final de Integração (achado real): title=fusedTitle é um
+  // tooltip nativo — nunca aparece em toque/tap no iPad Safari (a
+  // plataforma-alvo real deste app, CLAUDE.md "60 FPS em iPad Safari").
+  // Sem esta linha, BIAS/SETUP/ENTRY ficavam matematicamente corretos mas
+  // 100% inacessíveis na tela real do Operador: o texto grande (`direction`)
+  // é o passthrough literal do Núcleo (LEI 24, nunca alterado aqui), mas
+  // sozinho ele não distinguia "LONG com entrada confirmada" de "LONG só
+  // como viés" — exatamente o "LONG + entrada forçada" que a Diretriz
+  // BIAS≠ENTRY pediu para nunca comunicar. O qualificador abaixo é uma
+  // RELOCAÇÃO do mesmo rótulo já real e testado (deriveOutcomeLabel), só
+  // visível agora sem precisar de hover — nenhuma matemática nova.
+  const outcome = decision ? deriveOutcomeLabel(decision) : null;
+  const outcomeQualifier: string | null = outcome
+    ? OUTCOME_QUALIFIER[outcome] ?? null
+    : null;
   const textTone = isLong
     ? "text-[#00ffaa] drop-shadow-[0_0_10px_rgba(0,255,170,0.65)]"
     : isShort
@@ -4094,9 +4661,22 @@ function CoreSignalBadge({
       <span className={`text-sm md:text-base font-black tracking-wider ${textTone}`}>{direction ?? AWAIT}</span>
       <span className="text-[0.4rem] md:text-[0.45rem] font-bold text-[#8ab4f8]/60 tracking-[0.18em] uppercase mt-[1px] whitespace-nowrap">
         {/* V2 §3: o estado operacional único no subtítulo do MESMO badge —
-            header alimentado pelo contrato sem um elemento novo. */}
-        {confidence ? `Confidence · ${confidence}` : AWAIT}
-        {decision?.operationalState ? ` · ${decision.operationalState}` : ""}
+            header alimentado pelo contrato sem um elemento novo. Auditoria
+            Final de Integração: o qualificador BIAS≠ENTRY (PLANO ATIVO /
+            AGUARDANDO ENTRADA / SEM ESTRUTURA) substitui o operationalState
+            cru — o mesmo dado real continua na linha 1 do tooltip
+            ("Estado: ..."), aqui vira a síntese que o Operador reconhece
+            sem abrir o tooltip. */}
+        {/* Achado real (captura do Operador, janela ~1000px lógicos): a
+            região central rolável corta o badge na borda sem indício — o
+            subtítulo "CONFIDENCE · MEDIUM · AGUARDANDO ENTRADA" morria em
+            "AGUARDAN". O prefixo "Confidence · " era decorativo (o rótulo
+            "Confiança:" já vive na linha própria do tooltip) — removê-lo
+            faz o pior caso real caber na janela real medida (~30 chars).
+            Os DOIS valores reais permanecem: o rótulo categórico do motor
+            e o qualificador BIAS≠ENTRY. */}
+        {confidence ?? AWAIT}
+        {outcomeQualifier ? ` · ${outcomeQualifier}` : ""}
       </span>
     </div>
   );
@@ -4125,6 +4705,11 @@ function TopBar({ data }: { data?: PriceState | null }) {
     voiceSnapshot,
     heatReading,
     nexusDecision,
+    // Consolidação Final §23/§30: cartão VWAP + confluência no header —
+    // mesmas leituras únicas do App (contexto), zero recomputação.
+    vwapCtx,
+    nlState,
+    nexusConfluence,
   } = useContext(WidgetContext) || {};
   // Refinamento Final §1 ("Sessão Atual"): derivação pura do relógio UTC
   // real (market-session.ts). Computada no render — a TopBar re-renderiza
@@ -4180,7 +4765,7 @@ function TopBar({ data }: { data?: PriceState | null }) {
               Macro) continua 100% real (mesma expressão de sempre,
               cryptoMarketLabel), só que agora ao lado do gatilho em vez
               de dentro do nome estático removido. */}
-          <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%]">
+          <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%] shrink-0">
             <div
               className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
                 marketMode === "TRADFI"
@@ -4273,6 +4858,21 @@ function TopBar({ data }: { data?: PriceState | null }) {
             )}
           </div>
 
+          {/* Correção da colisão REAL vista na primeira foto ao vivo do
+              Operador (janela Retina ~1133px CSS COM dados): os chips
+              populados excediam a largura, o flex ENCOLHIA o cartão VWAP
+              (whitespace-nowrap vaza do box encolhido) e os orbs eram
+              pintados por cima do texto. Só se manifesta com dados reais —
+              por isso a auditoria no sandbox vazio dava CLEAN. A regra §5
+              do header ("compactação progressiva; overflow controlado;
+              NENHUM elemento cobre outro"): os chips centrais vivem numa
+              região com [&>*]:shrink-0 (nenhum chip encolhe => nenhum
+              texto vaza sobre vizinho) e overflow-x rolável de scrollbar
+              oculta (nada coberto, nada cortado, zero scroll de página —
+              o overflow é interno à faixa). Omnibox fica FORA (o dropdown
+              absoluto seria clipado por um scroll container); orbs/power
+              ancorados à direita, nunca cobertos. */}
+          <div className="flex gap-2 md:gap-3 items-center h-full flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
           {/* O preço — única ocorrência em toda a interface. Em modo
               TRADFI não existe fonte real ligada (fail-closed, Missão 2
               diretriz 4): mostra o rótulo honesto em vez de um preço de
@@ -4310,11 +4910,21 @@ function TopBar({ data }: { data?: PriceState | null }) {
               rótulo do tier vêm 1:1 de confidenceZone — zero segunda
               matemática, mesmo score bandado nas 5 faixas da diretriz. */}
           {marketMode === "CRYPTO" && (
+            // EPC FINAL §35 ("Indicador Institucional do Cabeçalho"): achado
+            // real — este indicador mostrava a palavra "Score" (nunca deve
+            // aparecer) e o tier (Muito Forte/Forte/...) como uma linha
+            // sempre visível separada, em vez de só cor+percentual juntos.
+            // Fonte real única preservada (institutionalScore/confidenceZone,
+            // institutional-score.ts) — confirmado por grep que este é o
+            // ÚNICO ponto de renderização visual deste score em todo o app
+            // (SSOT já real, não precisou de nova ligação). O rótulo do tier
+            // não foi apagado (Regra de Ouro 4) — só realocado para o
+            // tooltip, que já carregava "Zona: ${confidenceZone.label}".
             <div
               className="hidden md:flex flex-col items-center justify-center pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
               title={
                 institutionalScore?.score !== null && institutionalScore?.score !== undefined
-                  ? `Score real de confluência entre subsistemas (0-100) — nunca probabilidade de acerto. Zona: ${confidenceZone?.label ?? DASH}. ${institutionalScore.opportunity ? "Acima do nível mínimo de oportunidade." : "Abaixo do nível mínimo, ou risco travado."} ${
+                  ? `Score real de confluência entre subsistemas (0-100), exibido como percentual — nunca probabilidade de acerto. Zona: ${confidenceZone?.label ?? DASH}. ${institutionalScore.opportunity ? "Acima do nível mínimo de oportunidade." : "Abaixo do nível mínimo, ou risco travado."} ${
                       convictionTrend?.status === "OK" && convictionTrend.trend
                         ? `Tendência: ${convictionTrend.trend} (média recente ${convictionTrend.recentAverage!.toFixed(1)} vs. anterior ${convictionTrend.priorAverage!.toFixed(1)}).`
                         : "Diretriz Complementar §4 (Conviction Engine): histórico real ainda insuficiente para uma tendência honesta."
@@ -4322,18 +4932,19 @@ function TopBar({ data }: { data?: PriceState | null }) {
                   : "Sem oportunidade direcional a pontuar agora (Core Engine em WAIT ou dados insuficientes)."
               }
             >
-              <span className="text-[0.42rem] tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">Score</span>
-              <div className="flex items-center gap-0.5">
+              <div className="flex items-center gap-1">
                 <span
-                  className={`text-[0.7rem] font-black font-mono tabular-nums ${
+                  className={`text-[0.85rem] font-black font-mono tabular-nums leading-none ${
                     confidenceZone === null ? "text-[#8ab4f8]/40" : `${confidenceZone.colorClass} drop-shadow-[0_0_5px_currentColor]`
                   }`}
                 >
+                  {confidenceZone ? `${confidenceZone.emoji} ` : ""}
                   {institutionalScore?.score ?? DASH}
+                  {institutionalScore?.score !== null && institutionalScore?.score !== undefined ? "%" : ""}
                 </span>
                 {/* Diretriz Complementar §4 ("Conviction Engine"): ▲/▬/▼ real
-                    sobre a MESMA série do Score acima — nunca substitui o
-                    Score, só informa se a confluência está subindo/caindo. */}
+                    sobre a MESMA série do score acima — nunca substitui o
+                    valor, só informa se a confluência está subindo/caindo. */}
                 {convictionTrend?.status === "OK" && convictionTrend.trend && (
                   <span
                     className={`text-[0.55rem] font-black leading-none ${
@@ -4348,11 +4959,6 @@ function TopBar({ data }: { data?: PriceState | null }) {
                   </span>
                 )}
               </div>
-              {confidenceZone && (
-                <span className={`text-[0.38rem] font-bold uppercase tracking-wider ${confidenceZone.colorClass}`}>
-                  {confidenceZone.emoji} {confidenceZone.label}
-                </span>
-              )}
             </div>
           )}
 
@@ -4391,6 +4997,71 @@ function TopBar({ data }: { data?: PriceState | null }) {
               {heatReading?.status === "OK" && heatReading.tier && (
                 <span className="text-[0.38rem] leading-none font-bold uppercase tracking-wider text-[#8ab4f8]/60">{heatReading.tier}</span>
               )}
+            </div>
+          )}
+
+          {/* Consolidação Final §23: cartão VWAP — estado com histerese
+              (§22, nunca troca a cada candle) + Preço×VWAP em % real
+              (§24). Display-only: contexto, nunca decisão (§25, LEI 24).
+              O tooltip carrega distância absoluta + o veredito §30 da
+              confluência VWAP × Nexus Line × Decision Layer. */}
+          {marketMode === "CRYPTO" && (
+            <div
+              className="hidden md:flex flex-col items-center justify-center gap-[2px] pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
+              title={
+                vwapCtx
+                  ? `Preço ${vwapCtx.side === "ACIMA" ? "acima" : vwapCtx.side === "ABAIXO" ? "abaixo" : "na linha"} da VWAP: ${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}% (${vwapCtx.distanceAbs >= 0 ? "+" : ""}${vwapCtx.distanceAbs.toFixed(2)} abs). Estado ${vwapCtx.state} com histerese real. Nexus Line: ${nlState}. ${
+                      nexusConfluence === "ALINHADA"
+                        ? "Confluência VWAP×NL×Decisão: ALINHADA."
+                        : nexusConfluence === "CONFLITO_ESTRUTURAL"
+                          ? "CONFLITO ESTRUTURAL VWAP/NL/Decisão — informativo, nunca altera a operação (LEI 24)."
+                          : "Sem veredito de confluência (leitura incompleta ou AGUARDAR)."
+                    }`
+                  : "VWAP aguardando volume real da sessão UTC (fail-closed, nunca um valor fabricado)."
+              }
+            >
+              <span className="text-[0.42rem] leading-none tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">
+                VWAP
+                {/* §30 compacto: veredito da confluência NL como sufixo
+                    discreto — detalhe completo no tooltip e na ANALYSIS. */}
+                {nexusConfluence && (
+                  <span className={nexusConfluence === "ALINHADA" ? "text-[#00ffaa]/80" : "text-[#ff0055]/80"}>
+                    {nexusConfluence === "ALINHADA" ? " ✓" : " ⚠"}
+                  </span>
+                )}
+              </span>
+              {/* Continuidade §5: o VALOR real da VWAP visível (nunca só a
+                  relação) — mesmo formatador fmt() do resto do header. */}
+              <span
+                className={`text-[0.7rem] leading-none font-black font-mono tabular-nums ${
+                  !vwapCtx
+                    ? "text-[#8ab4f8]/40"
+                    : vwapCtx.state === "BULLISH"
+                      ? "text-[#00ffaa] drop-shadow-[0_0_5px_currentColor]"
+                      : vwapCtx.state === "BEARISH"
+                        ? "text-[#ff0055] drop-shadow-[0_0_5px_currentColor]"
+                        : "text-[#f0d06f]"
+                }`}
+              >
+                {vwapCtx ? fmt(vwapCtx.vwap, vwapCtx.vwap >= 1000 ? 0 : 2) : "DADOS"}
+              </span>
+              <span
+                className={`text-[0.38rem] leading-none font-bold uppercase tracking-wider ${
+                  !vwapCtx
+                    ? "text-[#8ab4f8]/40"
+                    : vwapCtx.state === "BULLISH"
+                      ? "text-[#00ffaa]/80"
+                      : vwapCtx.state === "BEARISH"
+                        ? "text-[#ff0055]/80"
+                        : "text-[#8ab4f8]/60"
+                }`}
+              >
+                {vwapCtx
+                  ? `${vwapCtx.state === "BULLISH" ? "↑" : vwapCtx.state === "BEARISH" ? "↓" : "•"} ${fmtSignedPct(vwapCtx.distancePct)} · ${
+                      vwapCtx.state === "BULLISH" ? "COMPRADOR" : vwapCtx.state === "BEARISH" ? "VENDEDOR" : "NEUTRA"
+                    }`
+                  : "INSUFICIENTES"}
+              </span>
             </div>
           )}
 
@@ -4460,6 +5131,12 @@ function TopBar({ data }: { data?: PriceState | null }) {
               Operador. Só reaparece aqui o que o redesenho radical abaixo
               tinha deliberadamente removido da hero line (não desfaz essa
               decisão: cabe num badge minúsculo, não em números crus). */}
+          </div>
+
+          {/* Âncora direita fixa (§5 do header): estado do sistema + orbs +
+              power NUNCA entram na região rolável — jamais cobertos, jamais
+              fora do alcance. */}
+          <div className="flex items-center gap-2 md:gap-3 h-full shrink-0">
           {marketMode === "CRYPTO" && <SystemStatusBadge />}
           {/* V18.1: núcleo + voz sempre visíveis no cantinho, ao lado do
               botão de energia — ver header de NucleoVoiceOrb. Redesenho
@@ -4477,6 +5154,7 @@ function TopBar({ data }: { data?: PriceState | null }) {
           >
             <Power size={14} />
           </button>
+          </div>
         </div>
       </div>
 
@@ -4982,8 +5660,17 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     institutionalConsensus,
     crossExchangeCheck,
     okxCrossExchangeCheck,
+    mexcCrossExchangeCheck,
     chartTimeframe,
     etaReading,
+    // Consolidação Final §21-§30: leituras VWAP/NL/confluência (App-level,
+    // mesma fonte do header e do gráfico — zero recomputação aqui).
+    vwapCtx,
+    nlState,
+    nexusConfluence,
+    // Evolução Integrativa §6: o contrato fundido para a Síntese
+    // Operacional da aba ANALYSIS — mesma fonte única do badge (LEI 24).
+    nexusDecision,
   } = ctx as any;
   const connections = useConnectionsSnapshot();
   const derivatives = useDerivativesSnapshot();
@@ -5071,6 +5758,18 @@ function SecondaryModuleView({ tab }: { tab: string }) {
             }
             tone={okxCrossExchangeCheck?.consensus === "ALINHADO" ? "long" : okxCrossExchangeCheck?.consensus === "DIVERGENTE" ? "short" : "neutral"}
           />
+          {/* EPC FINAL §27 (Aditivo de Automação Total): MEXC Futures, 4ª
+              fonte real — mesmo padrão Bybit/OKX, fairPrice (mark) vs
+              markPrice da Binance. */}
+          <ModuleStat
+            label="MEXC Δ"
+            value={
+              mexcCrossExchangeCheck?.consensus === "INDISPONIVEL" || mexcCrossExchangeCheck?.priceDeltaPct == null
+                ? MODULE_EMPTY
+                : `${mexcCrossExchangeCheck.priceDeltaPct.toFixed(3)}%`
+            }
+            tone={mexcCrossExchangeCheck?.consensus === "ALINHADO" ? "long" : mexcCrossExchangeCheck?.consensus === "DIVERGENTE" ? "short" : "neutral"}
+          />
         </ModulePanel>
         {scannerTable}
       </>
@@ -5096,8 +5795,54 @@ function SecondaryModuleView({ tab }: { tab: string }) {
       engineStatus === "ok",
     ].filter(Boolean).length;
     const gmilConsensus = institutionalConsensus ?? { score: null, sampleSize: 0, contributingProviders: [] };
+    // Evolução Integrativa §6: os 6 eixos do modelo de síntese auditável,
+    // derivados do MESMO NexusDecision do badge (derive* puros — zero
+    // recomputação, LEI 24). Vive AQUI (lista vertical, visível em toque no
+    // iPad) porque o tooltip do badge não aparece em tap — a mesma lição da
+    // Auditoria Final de Integração.
+    const synthRisk = nexusDecision ? deriveRiskState(nexusDecision) : null;
     body = (
       <>
+        <ModulePanel title="Síntese Operacional · 6 eixos auditáveis (mesma fonte do badge)">
+          {nexusDecision ? (
+            <>
+              <ModuleStat
+                label="Direção (BIAS)"
+                value={deriveBiasLabel(nexusDecision)}
+                tone={deriveBiasLabel(nexusDecision) === "LONG_BIAS" ? "long" : deriveBiasLabel(nexusDecision) === "SHORT_BIAS" ? "short" : "neutral"}
+              />
+              <ModuleStat label="Estrutura (SETUP)" value={deriveSetupState(nexusDecision)} />
+              <ModuleStat label="Timing (ENTRY)" value={deriveEntryState(nexusDecision)} />
+              {synthRisk && (
+                <ModuleStat
+                  label="Risco"
+                  value={`${synthRisk.state} — ${synthRisk.basis}`}
+                  tone={synthRisk.state === "ACEITÁVEL" ? "long" : "short"}
+                />
+              )}
+              <ModuleStat label="Confluência" value={deriveConfluenceState(nexusDecision)} />
+              <ModuleStat
+                label="Decisão"
+                value={deriveOutcomeLabel(nexusDecision)}
+                tone={deriveOutcomeLabel(nexusDecision) === "LONG" ? "long" : deriveOutcomeLabel(nexusDecision) === "SHORT" ? "short" : "neutral"}
+              />
+              {/* EPC MODO ELITE ABSOLUTO §10 (Recuperação de Recursos): a
+                  CONFIRMAÇÃO real que o Core Engine exige antes do setup valer
+                  (required_confirmation, LONG/SHORT) ou o gatilho de
+                  reavaliação (WAIT) — engine.condition, computado pelo
+                  engine-bridge desde sempre mas nunca exibido a ninguém.
+                  Inteligência real do núcleo, agora visível. Só quando há
+                  string real (fail-closed: DADOS_INSUFICIENTES/null some). */}
+              {typeof engine?.condition === "string" && engine.condition.length > 0 && engine.condition !== "DADOS_INSUFICIENTES" && (
+                <ModuleStat label="Confirmação exigida (Núcleo)" value={engine.condition} />
+              )}
+            </>
+          ) : (
+            <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">
+              AWAITING FIRST REAL CYCLE — synthesis derives from the fused NexusDecision contract (fail-closed)
+            </span>
+          )}
+        </ModulePanel>
         <ModulePanel title="Trade Plan · real structure only (advisory, read-only)">
           {tradePlan ? (
             <>
@@ -5121,7 +5866,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
                 <ModuleStat
                   key={i}
                   label={tradePlan.targets.length > 1 ? `Target ${i + 1}` : "Target"}
-                  value={`${target.price.toFixed(0)} (${target.basis})${typeof price.price === "number" && Number.isFinite(price.price) && price.price > 0 ? ` · ${(Math.abs(target.price - price.price) / price.price * 100).toFixed(2)}%` : ""}${tradePlan.riskRewardRatios[i] !== null ? ` · 1:${tradePlan.riskRewardRatios[i]!.toFixed(2)}` : ""}${etaReading?.status === "OK" && etaReading.etas[i] ? ` · ${formatEtaRange(etaReading.etas[i].msMin ?? null, etaReading.etas[i].ms) ?? ""}` : ""}`}
+                  value={`${target.price.toFixed(0)} (${target.basis})${typeof price.price === "number" && Number.isFinite(price.price) && price.price > 0 ? ` · ${(Math.abs(target.price - price.price) / price.price * 100).toFixed(2)}%` : ""}${tradePlan.riskRewardRatios[i] !== null ? ` · 1:${tradePlan.riskRewardRatios[i]!.toFixed(2)}${rrFloorSuffix(tradePlan.riskRewardRatios[i])}` : ""}${etaReading?.status === "OK" && etaReading.etas[i] ? ` · ${formatEtaRange(etaReading.etas[i].msMin ?? null, etaReading.etas[i].ms) ?? ""}` : ""}${obstacleSuffix(target.obstacleCount)}`}
                   tone="long"
                 />
               ))}
@@ -5155,12 +5900,24 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         <ModulePanel title="Multi-Agent Council (real votes)">
           <ModuleStat label="Stance" value={council ? council.stance : MODULE_EMPTY} tone={council?.stance === "LONG" ? "long" : council?.stance === "SHORT" ? "short" : "neutral"} />
           <ModuleStat label="Agreement" value={council?.agreement !== null && council ? pct(council.agreement) : MODULE_EMPTY} />
+          {/* EPC MODO ELITE (Recuperação de Inteligência Oculta §2): a
+              DISTRIBUIÇÃO real do pool linear (Stone/DeGroot) — L/S/N — já
+              alimenta o Scenario Engine (pesa os caminhos), mas nunca era
+              mostrada como número. Agreement é só o escalar de coesão
+              derivado dela (não revela a FORMA da divisão: onde o
+              não-consenso senta). Massa de OPINIÃO do comitê, NUNCA
+              probabilidade de mercado (mesma honestidade de todo o pool).
+              Fail-closed: abstido (opinionMass null) → MODULE_EMPTY. */}
+          <ModuleStat
+            label="Opinion Mass (L/S/N)"
+            value={council?.opinionMass ? `L ${Math.round(council.opinionMass.long * 100)} · S ${Math.round(council.opinionMass.short * 100)} · N ${Math.round(council.opinionMass.neutral * 100)}` : MODULE_EMPTY}
+          />
           <ModuleStat label="Quorum" value={council ? `${council.quorum}/6` : MODULE_EMPTY} />
           <ModuleStat label="Risk Gate" value={council ? (council.riskGated ? "LOCKED (fail-closed)" : "CLEAR") : MODULE_EMPTY} tone={council?.riskGated ? "short" : "long"} />
         </ModulePanel>
         <ModulePanel title="Scenario Paths · council opinion mass, never market probability">
-          <ModuleStat label="Path A" value={scenario ? `${scenario.pathA.direction} → ${scenario.pathA.target ? `${scenario.pathA.target.price.toFixed(0)} (${scenario.pathA.target.sourceKind})` : "no real level"}${scenario.pathA.opinionWeight !== null ? ` · ${pct(scenario.pathA.opinionWeight)}` : ""}` : MODULE_EMPTY} tone={scenario?.pathA.direction === "LONG" ? "long" : "short"} />
-          <ModuleStat label="Path B" value={scenario ? `${scenario.pathB.direction} → ${scenario.pathB.target ? `${scenario.pathB.target.price.toFixed(0)} (${scenario.pathB.target.sourceKind})` : "no real level"}${scenario.pathB.opinionWeight !== null ? ` · ${pct(scenario.pathB.opinionWeight)}` : ""}` : MODULE_EMPTY} tone={scenario?.pathB.direction === "LONG" ? "long" : "short"} />
+          <ModuleStat label="Path A" value={scenario ? formatScenarioPathLabel(scenario.pathA) : MODULE_EMPTY} tone={scenario?.pathA.direction === "LONG" ? "long" : "short"} />
+          <ModuleStat label="Path B" value={scenario ? formatScenarioPathLabel(scenario.pathB) : MODULE_EMPTY} tone={scenario?.pathB.direction === "LONG" ? "long" : "short"} />
         </ModulePanel>
         {/* Support S1/Resistance R1 used to live here too — moved out per
             Zero Repetição once the always-visible bar's StructureLevelsStrip
@@ -5198,7 +5955,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
               <ModuleStat
                 key={i}
                 label={`${h.pattern} ${h.direction}`}
-                value={`D @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}
+                value={`PRZ @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}
                 tone={h.direction === "BULLISH" ? "long" : "short"}
               />
             ))
@@ -5227,6 +5984,30 @@ function SecondaryModuleView({ tab }: { tab: string }) {
           <ModuleStat label="High-Volume Nodes" value={vp ? String(vp.hvnIndices.length) : MODULE_EMPTY} />
           <ModuleStat label="Low-Volume Nodes" value={vp ? String(vp.lvnIndices.length) : MODULE_EMPTY} />
         </ModulePanel>
+        {/* Consolidação Final §21-§30: VWAP (estado + distância, matemática
+            intocada) × Nexus Line (equilíbrio proprietário, pesos 0.5/0.5
+            documentados) × confluência informativa — mesmas leituras do
+            header/gráfico, nunca uma segunda computação. */}
+        <ModulePanel title="VWAP × Nexus Line (equilíbrios reais + confluência informativa)">
+          <ModuleStat
+            label="VWAP (estado c/ histerese)"
+            value={vwapCtx ? `${vwapCtx.state} · ${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}% do preço` : MODULE_EMPTY}
+            tone={vwapCtx?.state === "BULLISH" ? "long" : vwapCtx?.state === "BEARISH" ? "short" : "neutral"}
+          />
+          <ModuleStat
+            label="Nexus Line (NL)"
+            value={nlState ?? MODULE_EMPTY}
+            tone={nlState === "BULLISH" ? "long" : nlState === "BEARISH" ? "short" : "neutral"}
+          />
+          <ModuleStat
+            label="Confluência VWAP×NL×Decisão"
+            value={nexusConfluence ?? "SEM VEREDITO (leitura incompleta ou AGUARDAR)"}
+            tone={nexusConfluence === "ALINHADA" ? "long" : nexusConfluence === "CONFLITO_ESTRUTURAL" ? "short" : "neutral"}
+          />
+          <span className="text-[0.42rem] text-[#8ab4f8]/40 leading-tight">
+            Informativo (LEI 24): confluência nunca altera nem bloqueia a operação do Core Engine.
+          </span>
+        </ModulePanel>
       </>
     );
   } else if (tab === "RISK") {
@@ -5250,6 +6031,24 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         <ModulePanel title="Signal Track Record (real first-touch outcomes, persisted)">
           <ModuleStat label="Open Plan" value={trackRecord.active ? `${trackRecord.active.plan.direction} since ${new Date(trackRecord.active.openedAt).toLocaleTimeString("en-US", { hour12: false })}` : "NONE"} />
           <ModuleStat label="Target Hits" value={String(trackRecord.targetHits)} tone="long" />
+          {/* Cockpit de Leitura §11: ETA previsto (carimbado na abertura) ×
+              realizado (resolvedAt − openedAt, fatos já registrados) do
+              último plano RESOLVIDO com carimbo — dash honesto sem ambos. */}
+          {(() => {
+            for (let i = trackRecord.history.length - 1; i >= 0; i--) {
+              const h = trackRecord.history[i];
+              if (h.status === "REPLACED" || h.resolvedAt === null) continue;
+              const previsto = h.contextAtOpen ? formatEtaRange(h.contextAtOpen.etaMsMinAtOpen, h.contextAtOpen.etaMsAtOpen) : null;
+              const realizado = formatEtaDuration(h.resolvedAt - h.openedAt);
+              return (
+                <ModuleStat
+                  label="ETA previsto × realizado (último resolvido)"
+                  value={previsto && realizado ? `${previsto} × ${realizado}` : MODULE_EMPTY}
+                />
+              );
+            }
+            return null;
+          })()}
           <ModuleStat label="Stop Hits" value={String(trackRecord.stopHits)} tone="short" />
           {/* Achado real de auditoria: hitRate(trackRecord) era chamada 4x
               inline na mesma expressão JSX pelo mesmo trackRecord real —
@@ -5370,7 +6169,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision } = useContext(WidgetContext) || {};
+  const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend } = useContext(WidgetContext) || {};
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
   // Correção de latência: o MESMO preço real que já alimenta a barra
   // superior (usePriceSnapshot — escrito na store a cada tick do WS,
@@ -5381,6 +6180,124 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // Signal Precision order: the same real Trade Plan slice the ANALYSIS
   // view shows, now drawn on the chart as silk-thread price lines.
   const chartTradePlan = useTradePlanSnapshot();
+  // EPC §5/§6 ("Nunca simplesmente esconder essas informações"): sem
+  // plano ativo, o CANVAS agora explica o motivo real — mesma função pura
+  // já usada pela barra de comando (tradePlanAbsenceReason, módulo acima),
+  // nunca uma segunda leitura/lógica. useCouncilSnapshot() é o MESMO hook
+  // Zustand que TradePlanTopStrip já usa — zero prop-drilling novo.
+  const councilForChart = useCouncilSnapshot();
+  const chartTradePlanAbsenceReason = chartTradePlan
+    ? null
+    : tradePlanAbsenceReason(councilForChart, engine?.direction ?? null).reason;
+  // EPC §5/§6 (continuação — relato direto do Operador: "falta aparecer
+  // entrada e alvo/alvo2/alvo3 no gráfico"): o Core Engine (LEI 24, único
+  // emissor real de LONG/SHORT/WAIT) já computa seu PRÓPRIO stop/target1/
+  // target2/R:R a cada ciclo real — Target Tracker (target-tracker.js,
+  // rota_a_long/rota_b_short), alimentado por support_1/2 e resistance_1/2
+  // do support-resistance-engine.js (motor graduado, já rodando). Esse
+  // dado real já alimenta os painéis ANALYSIS/RISK há sessões, mas NUNCA
+  // era desenhado no canvas — só o Trade Plan do Conselho (mais raro: 4
+  // portões honestos em cascata, trade-plan.ts) chegava ao gráfico. Isto é
+  // aditivo puro (Regra de Ouro 4): quando o Conselho ainda não confirma
+  // (chartTradePlan null) mas o Núcleo já tem direção real, o canvas
+  // finalmente mostra o que o Núcleo sabe — mesmo texto final do EPC ("Se
+  // o núcleo sabe, o operador também deve saber"). NUNCA substitui/altera
+  // o Trade Plan do Conselho quando ele existe (LEI 24 intacta: o Núcleo
+  // continua sendo só o Núcleo, isto não é uma 2ª "trade plan" oficial).
+  // ENTRY fica de fora de propósito: o "entry" do Núcleo é tracker.
+  // current_price — o PRÓPRIO preço vivo, já desenhado nativamente pelo
+  // eixo (lightweight-charts) — uma 2ª linha ali seria redundante, nunca
+  // informação nova (contra "nada cobrindo a visão", achado de sessão
+  // anterior).
+  const engineFallbackLevels = useMemo(() => {
+    if (chartTradePlan) return null;
+    const dir = engine?.direction;
+    if (dir !== "LONG" && dir !== "SHORT") return null;
+    const stop = engine?.stop;
+    // Achado real (relato direto do Operador: "mesmo em qualquer timeframe
+    // tinha que aparecer" — nunca apareceu, em nenhum). Bug real, não
+    // atraso de deploy: o objeto `engine` (useMemo acima, ~linha 1505)
+    // expõe o alvo 1 bruto sob o nome `target` (a variável local que virou
+    // esse nome no return — só `target1Strength`, o METADADO de força,
+    // manteve o sufixo "1"). `engine?.target1` nunca existiu — sempre
+    // `undefined`, então este gate fail-closed retornava null 100% do
+    // tempo, disfarçado de "sem dado real" quando na verdade era "nome de
+    // campo errado". Corrigido para o nome real do campo.
+    const target1 = engine?.target;
+    if (typeof stop !== "number" || !Number.isFinite(stop)) return null;
+    if (typeof target1 !== "number" || !Number.isFinite(target1)) return null;
+    const target2 = typeof engine?.target2 === "number" && Number.isFinite(engine.target2) ? engine.target2 : null;
+    // EPC §5 ("obstáculos estruturais... em qualquer ativo e qualquer
+    // timeframe"): a entrada real do Núcleo é o preço atual
+    // (tracker.current_price, exposto como engine.entry) — o mesmo ponto de
+    // referência que chartObstacleZones usa abaixo para contar as zonas
+    // estruturais REAIS no caminho até cada alvo do Núcleo. null quando o
+    // ciclo não tem entrada real (fail-closed).
+    const entry = typeof engine?.entry === "number" && Number.isFinite(engine.entry) ? engine.entry : null;
+    // EPC MODO ELITE §4 ("Obstáculos estruturais" na lista do Trade Plan
+    // permanente): contagem REAL por alvo, via a MESMA obstacleZonesInPath
+    // (trade-plan.ts) que o plano do Conselho usa — zero segundo cálculo.
+    // O Núcleo, diferente do Conselho, NÃO tem painel próprio (ANALYSIS),
+    // então o rótulo do gráfico é o único lugar onde essa contagem chega ao
+    // Operador — por isso entra aqui (o rótulo do Conselho não mostra ⚠N
+    // porque o painel dele já mostra). null quando falta entrada real.
+    const structZones = tradePlanStructureZones ?? [];
+    const obstacleCountTo = (targetPrice: number | null): number | null =>
+      entry !== null && targetPrice !== null && Number.isFinite(targetPrice)
+        ? obstacleZonesInPath(structZones, { low: entry, high: entry, basis: "" }, targetPrice, dir === "LONG").length
+        : null;
+    return {
+      direction: dir,
+      entry,
+      stop,
+      target1,
+      target1Strength: engine?.target1Strength ?? null,
+      target1ObstacleCount: obstacleCountTo(target1),
+      target2,
+      target2Strength: engine?.target2Strength ?? null,
+      target2ObstacleCount: obstacleCountTo(target2),
+      riskRewardRatio: typeof engine?.riskRewardRatio === "number" && Number.isFinite(engine.riskRewardRatio) ? engine.riskRewardRatio : null,
+    };
+  }, [chartTradePlan, tradePlanStructureZones, engine?.direction, engine?.entry, engine?.stop, engine?.target, engine?.target2, engine?.target1Strength, engine?.target2Strength, engine?.riskRewardRatio]);
+  // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
+  // estrutural"): união das zonas REAIS (tradePlanStructureZones, as MESMAS
+  // que já geram targets[i].obstacleCount acima na store) que ficam no
+  // caminho entrada→algum alvo do plano ATIVO — o LiquidityZonesPlugin usa
+  // isto só para destacar a borda das zonas que já desenha, nunca uma zona
+  // nova. Vazio sem plano ativo (fail-closed, zero mudança visual de hoje).
+  const chartObstacleZones = useMemo(() => {
+    if (!tradePlanStructureZones) return [];
+    const seen = new Map<string, { low: number; high: number }>();
+    // Reusa a MESMA função pura obstacleZonesInPath (trade-plan.ts) — uma
+    // única definição de "zona estrutural no caminho entrada→alvo", nunca
+    // um segundo cálculo. Fonte da entrada+alvos varia (plano do Conselho
+    // OU fallback do Núcleo), a matemática é idêntica.
+    const collect = (entryZone: { low: number; high: number }, targetPrices: number[], long: boolean) => {
+      for (const price of targetPrices) {
+        if (!Number.isFinite(price)) continue;
+        for (const z of obstacleZonesInPath(tradePlanStructureZones, { ...entryZone, basis: "" }, price, long)) {
+          seen.set(`${z.low}:${z.high}`, { low: z.low, high: z.high });
+        }
+      }
+    };
+    if (chartTradePlan) {
+      collect(chartTradePlan.entry, chartTradePlan.targets.map((t) => t.price), chartTradePlan.direction === "LONG");
+    } else if (engineFallbackLevels && engineFallbackLevels.entry !== null) {
+      // EPC §5: o fallback do Núcleo é o caso MAIS comum (o Conselho é mais
+      // conservador/raro) — antes desta evolução, o Operador via as linhas
+      // STOP/TARGET do Núcleo mas NUNCA a ênfase de obstáculo estrutural no
+      // caminho, exatamente o que o §5 pede "em qualquer ativo/timeframe".
+      // A entrada do Núcleo é o preço atual (zona de largura zero); os alvos
+      // são target1/target2 reais. Mesma ênfase visual (⚠, LiquidityZonesPlugin)
+      // que o plano do Conselho já tinha.
+      const e = engineFallbackLevels.entry;
+      const targets = [engineFallbackLevels.target1, engineFallbackLevels.target2].filter(
+        (x): x is number => typeof x === "number" && Number.isFinite(x),
+      );
+      collect({ low: e, high: e }, targets, engineFallbackLevels.direction === "LONG");
+    }
+    return [...seen.values()];
+  }, [chartTradePlan, tradePlanStructureZones, engineFallbackLevels]);
   // Neural Market Aura: mesmo TrackRecordState real que o Signal Track
   // Record já mantém (useTrackRecordSnapshot, mesmo hook usado pelo efeito
   // de rastreamento em App()) — zero segunda fonte de verdade sobre o
@@ -5398,8 +6315,21 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
     [auraTrackRecord, livePrice, convictionReading, engine?.marketRegime, chartTimeframe],
   );
 
-  const unmitigatedFvgs = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
-  const unmitigatedBlocks = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated).slice(0, 3);
+  // Auditoria de pendências (reconciliação real): o .slice(0,3) abaixo é
+  // só decluttering visual do conjunto GERAL de zonas não mitigadas — mas
+  // chartObstacleZones/obstacleCount (acima/trade-plan.ts) usam o
+  // conjunto COMPLETO, sem teto algum. Sem a união abaixo, um obstáculo
+  // REAL do plano ativo podia cair fora dos 3 mais recentes e nunca
+  // aparecer desenhado/destacado (⚠, LiquidityZonesPlugin) no gráfico —
+  // mesmo sendo citado no texto do alvo ("TP2 · obstáculo x2"): a
+  // informação existia, mas ficava invisível para o Operador conferir
+  // onde ela está. isObstacle casa por low/high real (mesma identidade
+  // que LiquidityZonesPlugin já usa internamente), nunca por índice.
+  const isRealObstacle = (z: PriceZone) => chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);
+  const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);
+  const unmitigatedBlocksAll = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated);
+  const unmitigatedFvgs = unmitigatedFvgsAll.filter((z, i) => i < 3 || isRealObstacle(z));
+  const unmitigatedBlocks = unmitigatedBlocksAll.filter((z, i) => i < 3 || isRealObstacle(z));
   const unsweptLiquidity = (smcZones?.liquidityZones ?? []).filter((z: LiquidityZone) => !z.swept).slice(0, 4);
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // (Fase 1.4) — mesma store que os agentes leem, só mapeada para o formato
@@ -5419,6 +6349,71 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // Auditoria Final §3: melhor padrão harmônico real renderizado no
   // gráfico (mesma fatia da store lida pela aba ANALYSIS).
   const chartHarmonics = useHarmonicPatternsSnapshot();
+
+  // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6/§7 — Fase 1 (respostas do
+  // Operador: display-only, LEI 24 intacta; toggles manuais continuam
+  // como override). Mesma leitura real do Volume Profile já usada pela
+  // Matriz de Confluência Fibonacci em App() — 2º consumidor do MESMO
+  // seletor Zustand, zero segunda computação.
+  const volumeProfileSnapshot = useVolumeProfileSnapshot();
+  const trendChannelForRelevance = useMemo(
+    () => computeTrendChannel((chartData ?? []).map((c: any) => ({ time: c.time, close: c.close })), TREND_CHANNEL_DEFAULT_WINDOW),
+    [chartData],
+  );
+  const relevanceInput: LayerRelevanceInput = useMemo(() => {
+    const p = typeof livePrice.price === "number" && Number.isFinite(livePrice.price) ? livePrice.price : null;
+    const withinPct = (target: number, pct: number) => p !== null && p > 0 && (Math.abs(target - p) * 100) / p <= pct;
+    const liquidityZones: LiquidityZone[] = smcZones?.liquidityZones ?? [];
+    const unsweptLiquidityNearPrice = liquidityZones.some((z) => !z.swept && withinPct(z.price, LIQUIDITY_PROXIMITY_PCT));
+    const fibLevels = fibonacciMatrix?.levels ?? [];
+    const fibonacciNearPrice = fibLevels.some((l) => withinPct(l.price, FIBONACCI_PROXIMITY_PCT));
+    const vp = volumeProfileSnapshot?.fixedRange;
+    const volumeProfileNearPrice = !vp
+      ? false
+      : withinPct(vp.pocPrice, VOLUME_PROFILE_PROXIMITY_PCT) ||
+        vp.hvnIndices.some((i) => withinPct(bucketMidPrice(i, vp.rangeMin, vp.rangeMax, vp.bucketCount), VOLUME_PROFILE_PROXIMITY_PCT));
+    const brk = bosChoch?.break ?? null;
+    const structureBreakAlpha =
+      brk && Array.isArray(chartData) ? ageAlpha(chartData.length - 1 - brk.index, BREAK_DECAY) : null;
+    const trendChannelBandwidthPct =
+      trendChannelForRelevance && trendChannelForRelevance.mid.length > 0
+        ? (2 * TREND_CHANNEL_STDDEV_MULTIPLIER * trendChannelForRelevance.stdDev * 100) /
+          trendChannelForRelevance.mid[trendChannelForRelevance.mid.length - 1].value
+        : null;
+    return {
+      tradePlanActive: Boolean(chartTradePlan) || Boolean(engineFallbackLevels),
+      obstacleZoneCount: chartObstacleZones.length,
+      unsweptLiquidityNearPrice,
+      structureBreakAlpha,
+      volumeProfileNearPrice,
+      harmonicBestFitScore: chartHarmonics && chartHarmonics.length > 0 ? chartHarmonics[0].fitScore : null,
+      fibonacciNearPrice,
+      premiumDiscountZone: chartPremiumDiscount?.zone ?? null,
+      vwapState: vwapCtx?.state ?? null,
+      nexusLineState: nlState ?? null,
+      trendChannelBandwidthPct,
+      orderflowTrendActive: orderflowTrend?.status === "OK" && orderflowTrend.trend !== "ESTAVEL",
+      hasOrderBook: Boolean(engine?.hasBook),
+    };
+  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook]);
+  const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setLayerRelevance(layerRelevance);
+  }, [layerRelevance]);
+  // Visibilidade EFETIVA: por camada, 'auto' consulta a leitura real acima;
+  // manual usa exatamente o boolean que sempre existiu (chartLayerVisibility
+  // — zero mudança de comportamento para quem nunca mexeu no automático).
+  // EnhancedChart_110_Percent recebe só este resultado já resolvido — nunca
+  // precisa saber o que é automático ou manual (Regra de Ouro 4: zero
+  // segunda implementação do "visible ou não" dentro do componente do canvas).
+  const effectiveChartLayerVisibility: ChartLayerVisibility = useMemo(() => {
+    const autoMode: ChartLayerVisibility = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
+    const manual: ChartLayerVisibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
+    return CHART_LAYER_IDS.reduce((acc, id) => {
+      acc[id] = autoMode[id] ? layerRelevance[id].relevant : manual[id];
+      return acc;
+    }, {} as ChartLayerVisibility);
+  }, [chartLayerAutoMode, chartLayerVisibility, layerRelevance]);
 
   return (
     <Widget
@@ -5482,12 +6477,15 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             resistanceBreakouts={engine?.resistanceBreakouts ?? 0}
             fairValueGaps={unmitigatedFvgs}
             orderBlocks={unmitigatedBlocks}
+            obstacleZones={chartObstacleZones}
             liquidityZones={unsweptLiquidity}
             structureBreak={bosChoch?.break ?? null}
             fibonacciLevels={fibonacciLevels}
             livePrice={livePrice.price}
             activeTimeframe={chartTimeframe as Timeframe}
             tradePlan={chartTradePlan}
+            tradePlanAbsenceReason={chartTradePlanAbsenceReason}
+            engineFallbackLevels={engineFallbackLevels}
             aura={auraReading}
             targetsHit={auraTrackRecord.active?.targetsHit ?? 0}
             confidenceZone={confidenceZone ?? null}
@@ -5495,7 +6493,9 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             premiumDiscount={chartPremiumDiscount ?? null}
             harmonicHits={chartHarmonics}
             decision={nexusDecision ?? null}
-            layerVisibility={chartLayerVisibility}
+            vwapState={vwapCtx?.state ?? null}
+            nexusLineState={nlState ?? null}
+            layerVisibility={effectiveChartLayerVisibility}
             emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}
           />
@@ -5720,7 +6720,7 @@ function HeatmapWidget({ book, data }: any) {
 
 // --- MIDDLE COLUMN: DIRECTION ---
 function MarketDirectionWidget() {
-  const { widgets, engine } = useContext(WidgetContext) || {};
+  const { widgets, engine, nexusDecision } = useContext(WidgetContext) || {};
   if (widgets && !widgets.market_direction.visible) return null;
 
   const buyPercent: number | null = engine?.buyPercent ?? null;
@@ -5728,6 +6728,13 @@ function MarketDirectionWidget() {
   const direction: Direction = engine?.direction ?? null;
   const isLong = direction === "LONG";
   const isShort = direction === "SHORT";
+  // Continuidade (sincronização BIAS≠ENTRY, 3º/4º lugar): mesmo
+  // deriveOutcomeLabel/OUTCOME_QUALIFIER já real e testado — reusado, nunca
+  // uma segunda lógica. Só renderiza quando existe (fail-closed): o widget
+  // nunca cresce sem um motivo real (SEM OPERAÇÃO deliberadamente sem
+  // entrada na tabela).
+  const vectorOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;
+  const vectorOutcomeQualifier = vectorOutcome ? (OUTCOME_QUALIFIER[vectorOutcome] ?? null) : null;
 
   const vectorLabel = isLong ? "Long Dominance" : isShort ? "Short Dominance" : AWAIT;
   const vectorColor = isLong
@@ -5775,6 +6782,11 @@ function MarketDirectionWidget() {
             Livro Real
           </span>
         </div>
+        {vectorOutcomeQualifier && (
+          <span className="text-[0.3rem] uppercase tracking-widest font-bold text-[#8ab4f8]/50 whitespace-nowrap">
+            {vectorOutcomeQualifier}
+          </span>
+        )}
       </div>
 
       <div className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
@@ -5807,11 +6819,20 @@ function MiniStat({ label, value, color }: { label: string; value: string; color
 }
 
 function MarketBiasDecisionCard() {
-  const { engine, riskSuggestion, ensembleConsensus } = useContext(WidgetContext) || {};
+  const { engine, riskSuggestion, ensembleConsensus, nexusDecision } = useContext(WidgetContext) || {};
   const direction: Direction = engine?.direction ?? null;
   const isLong = direction === "LONG";
   const isShort = direction === "SHORT";
   const dirLabelColor = isLong ? "text-[#00ffaa]" : isShort ? "text-[#ff0055]" : "text-[#8ab4f8]/60";
+  // Continuidade (auditoria de sincronização, mesmo achado do badge herói):
+  // "Sinal Institucional" mostrava só o `direction` cru do Núcleo — o
+  // mesmo "LONG + entrada forçada" que a Diretriz BIAS≠ENTRY pediu para
+  // nunca comunicar sozinho. Mesmo qualificador real já testado
+  // (OUTCOME_QUALIFIER, deriveOutcomeLabel), zero matemática nova — só
+  // relocado para este segundo lugar que também é uma verdade de "DIREÇÃO"
+  // dedicada (não um detalhe entre outros, como nos cards de contexto).
+  const biasOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;
+  const biasOutcomeQualifier = biasOutcome ? (OUTCOME_QUALIFIER[biasOutcome] ?? null) : null;
   const entry: number | null = engine?.entry ?? null;
   const target: number | null = engine?.target ?? null;
   const target2: number | null = engine?.target2 ?? null;
@@ -5899,6 +6920,11 @@ function MarketBiasDecisionCard() {
         </span>
         <span className={`text-[0.75rem] font-black tracking-wide -mt-1 ${dirLabelColor}`}>
           {direction ?? AWAIT}
+          {biasOutcomeQualifier && (
+            <span className="ml-1.5 text-[0.4rem] font-bold tracking-[0.1em] text-[#8ab4f8]/60 uppercase align-middle">
+              {biasOutcomeQualifier}
+            </span>
+          )}
         </span>
 
         <MiniStat label="Conviction (Core Engine)" value={confidenceLabel} color="text-[#8ab4f8]" />
@@ -6392,7 +7418,17 @@ function MarketRegimeWidget() {
         ? "text-[#00ffaa]"
         : "text-[#8ab4f8]";
 
-  const volPct = num(engine?.volatilityPct) ? engine.volatilityPct : null;
+  // ORDEM DE AUDITORIA FINAL §3/§4 (achado real): esta row recomputava um
+  // proxy PRÓPRIO (média ingênua de (high-low)/close, sem gaps) quando o
+  // Market Regime Engine (regime-engine.js) já calcula o ATR% REAL (true
+  // range com gaps, período de Wilder) como regime.evidence.atr_percent —
+  // já repassado em engine.marketRegime.atrPercent, já insumo real do Risk
+  // Engine e já o mesmo número mostrado no tooltip do Multi-Timeframe
+  // Matrix para os OUTROS 5 prazos. Duas fórmulas diferentes reivindicando
+  // "volatilidade" para o MESMO prazo era uma duplicação real (cálculo
+  // redundante) — corrigido para ler a única fonte real (Single Source of
+  // Truth), a mesma que eta-engine.ts e aura-lifecycle.ts já consomem.
+  const volPct = num(engine?.marketRegime?.atrPercent) ? engine.marketRegime.atrPercent : null;
   const volLabel = volPct === null ? AWAIT : `${volPct.toFixed(2)}%`;
   const volColor = volPct === null ? "text-[#8ab4f8]" : volPct > 1.5 ? "text-[#ff0055]" : volPct > 0.6 ? "text-[#f0d06f]" : "text-[#00ffaa]";
 
@@ -6434,7 +7470,7 @@ function MarketRegimeWidget() {
         <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
         <Row label="TENDÊNCIA DO FLUXO" value={flowTrendLabel} valueClass={flowTrendColor} />
         <Row label="RSI (14)" value={rsiLabel} valueClass={rsiColor} />
-        <Row label="VOLATILIDADE" value={volLabel} valueClass={volColor} />
+        <Row label="VOLATILIDADE (ATR%)" value={volLabel} valueClass={volColor} />
       </div>
     </Widget>
   );
@@ -6482,12 +7518,6 @@ function CouncilWidget() {
   const trustScore = useTrustScoreSnapshot();
   // Diretriz Complementar §8: mesma store, fatia própria (ver consensus-radar.ts).
   const consensusRadar = useConsensusRadarSnapshot();
-
-  const pathLabel = (p: { direction: string; target: { price: number; sourceKind: string } | null; opinionWeight: number | null }) => {
-    const target = p.target ? `${p.target.price.toFixed(0)} (${p.target.sourceKind})` : "no real level";
-    const weight = p.opinionWeight !== null ? ` · opinion ${Math.round(p.opinionWeight * 100)}%` : "";
-    return `${p.direction} → ${target}${weight}`;
-  };
 
   const stance = council?.stance ?? null;
   const stanceLabel = stance ?? AWAIT;
@@ -6590,13 +7620,13 @@ function CouncilWidget() {
             <div className="flex justify-between items-center">
               <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">SCENARIO A</span>
               <span className={`text-[0.48rem] font-mono font-black ${scenario.pathA.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
-                {pathLabel(scenario.pathA)}
+                {formatScenarioPathLabel(scenario.pathA)}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">SCENARIO B</span>
               <span className={`text-[0.48rem] font-mono font-black ${scenario.pathB.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff0055]"}`}>
-                {pathLabel(scenario.pathB)}
+                {formatScenarioPathLabel(scenario.pathB)}
               </span>
             </div>
           </div>
@@ -7015,7 +8045,7 @@ function DecisionValidationWidget() {
 
   const checks: { label: string; available: boolean | null }[] = [
     { label: "Liquidez (Livro de Ofertas)", available: !!engine?.hasBook },
-    { label: "Volatilidade", available: num(engine?.volatilityPct) },
+    { label: "Volatilidade (ATR%)", available: num(engine?.marketRegime?.atrPercent) },
     { label: "Contexto Global (Consenso)", available: num(institutionalConsensus?.score) },
     { label: "Consenso Entre Corretoras", available: null }, // null = NÃO_APLICAVEL, nunca fabricado
     { label: "Fluxo Institucional (OFI)", available: num(engine?.flowImbalance) },
@@ -7450,6 +8480,25 @@ function FooterBar() {
         <span className="text-[#00f0ff] drop-shadow-[0_0_5px_#00f0ff]">AR10 CYBORG</span>
         <span className="hidden md:inline">|</span>
         <span className="hidden md:inline">TERMINAL READ-ONLY</span>
+        <span className="hidden lg:inline">|</span>
+        {/* Auditoria do painel do gráfico: o logo de atribuição PADRÃO da
+            lightweight-charts (canto do próprio canvas, "powered by
+            TradingView") foi desligado abaixo (attributionLogo: false) por
+            destoar do terminal proprietário AR10 CYBORG — mas a licença
+            Apache-2.0 da biblioteca exige manter um link real para
+            tradingview.com em algum lugar visível ao usuário quando esse
+            logo é desligado (texto real da própria lib, ver typings.d.ts).
+            Este link relocaliza essa obrigação real para a barra de rodapé
+            — nunca a remove (Regra de Ouro 4: realocar, nunca apagar). */}
+        <a
+          href="https://www.tradingview.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Biblioteca de gráfico: TradingView Lightweight Charts™"
+          className="hidden lg:inline text-[#8ab4f8]/45 hover:text-[#8ab4f8]/80"
+        >
+          TRADINGVIEW
+        </a>
       </div>
 
       <div className="flex gap-2 hidden lg:flex items-center text-[#8ab4f8]/60">

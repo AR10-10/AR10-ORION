@@ -56,9 +56,14 @@ describe('App.tsx: institutionalScoreHistory alimentada em efeito real, convicti
     expect(depsMatch![1]).toContain('orderflowTrend,\n      convictionTrend,');
   });
 
-  it('a série é resetada na troca de ativo, mesma disciplina de l2History/orderflowHistory', () => {
+  it('a série é resetada DENTRO do efeito real de troca de ativo (nunca uma ocorrência solta em outro lugar) — junto de l2History/orderflowHistory/trackRecord/multiTimeframeContext, mesma disciplina, mesmo efeito', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();');
+    const m = app.match(/useEffect\(\(\) => \{\s*setPriceData\(null\);[\s\S]*?\}, \[selectedAsset\]\);/);
+    expect(m, 'efeito de reset por troca de ativo não encontrado').not.toBeNull();
+    const block = m![0];
+    expect(block).toContain('useUnifiedSnapshotStore.getState().resetL2History();');
+    expect(block).toContain('useUnifiedSnapshotStore.getState().resetOrderflowHistory();');
+    expect(block).toContain('useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();');
   });
 });
 
@@ -78,9 +83,12 @@ describe('Header: glifo ▲/▬/▼ real do Conviction Engine (Evolução da Int
     expect(app).toContain('{convictionTrend?.status === "OK" && convictionTrend.trend && (');
   });
 
-  it('o Conviction Engine NUNCA substitui o Score — é um glifo adicional ao lado do número, não uma segunda métrica separada', () => {
+  it('o Conviction Engine NUNCA substitui o score — é um glifo adicional ao lado do número, não uma segunda métrica separada', () => {
     const app = read('../src/App.tsx');
-    const badgeStart = app.indexOf('marketMode === "CRYPTO" && (\n            <div\n              className="hidden md:flex flex-col items-center justify-center pr-2 md:pr-3');
+    // Âncora estável (EPC FINAL §35 acrescentou um bloco de comentário
+    // entre o `&& (` e a `<div>` — este ponto de partida não depende
+    // desse comentário nem de nenhum outro que venha a ser inserido ali).
+    const badgeStart = app.indexOf('institutionalScore?.score !== null && institutionalScore?.score !== undefined\n                  ? `Score real de confluência');
     const badgeEnd = app.indexOf('</div>\n          )}\n\n          {/* Diretriz V-MAX item 6', badgeStart);
     expect(badgeStart).toBeGreaterThan(-1);
     const block = app.slice(badgeStart, badgeEnd > -1 ? badgeEnd : badgeStart + 2500);

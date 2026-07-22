@@ -94,7 +94,11 @@ describe('Fiação real: getOlderChartCandles nunca passa pelo Market Data Bus (
     expect(publicConnector).toContain('endTime } = {}) {');
     expect(publicConnector).toContain("`&endTime=${encodeURIComponent(Math.round(endTime))}`");
     const futuresConnector = read('../../src/market-data-bus/binance-futures-candle-connector.js');
-    expect(futuresConnector).toContain('export async function collectBinanceFuturesKlines({ symbol, timeframe, limit, endTime }) {');
+    // Fase 2 do backtest honesto (captura de histórico com proveniência)
+    // acrescentou returnEvidence com default false — o scroll-back do
+    // gráfico (getOlderChartCandles) não passa esse campo, então seu
+    // comportamento real é bit-a-bit idêntico a antes.
+    expect(futuresConnector).toContain('export async function collectBinanceFuturesKlines({ symbol, timeframe, limit, endTime, returnEvidence = false }) {');
     expect(futuresConnector).toContain('includeDerivatives: false, endTime });');
   });
 });
@@ -126,6 +130,40 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     expect(tfEffectMatch![1]).not.toContain('mergeFreshTail');
   });
 
+  it('Achado real (auditoria de sincronização entre widgets): fetchSymbolData/fetchDerivatives checam isStale() antes de TODO setState — uma resposta tardia do ativo trocado nunca aplica dado do ativo errado', () => {
+    const app = read('../src/App.tsx');
+    const symbolFnMatch = app.match(/const fetchSymbolData = async \(isStale: \(\) => boolean\): Promise<boolean> => \{([\s\S]*?)\n {2}\};/);
+    expect(symbolFnMatch, 'fetchSymbolData não encontrada com o parâmetro isStale').not.toBeNull();
+    const symbolBody = symbolFnMatch![1];
+    // 2 checagens: uma depois de getChartCandles, outra depois do fetch do ticker —
+    // o ativo pode trocar durante QUALQUER um dos dois awaits, não só o primeiro.
+    expect(symbolBody.match(/if \(isStale\(\)\) return true;/g)).toHaveLength(2);
+    // a checagem vem ANTES do setState correspondente, nunca depois
+    expect(symbolBody.indexOf('if (isStale()) return true;')).toBeLessThan(symbolBody.indexOf('setChartData((prev) => mergeFreshTail'));
+
+    const derivFnMatch = app.match(/const fetchDerivatives = async \(isStale: \(\) => boolean\): Promise<boolean> => \{([\s\S]*?)\n {2}\};/);
+    expect(derivFnMatch, 'fetchDerivatives não encontrada com o parâmetro isStale').not.toBeNull();
+    const derivBody = derivFnMatch![1];
+    expect(derivBody).toContain('if (!isStale()) {\n        setDerivatives({');
+    expect(derivBody).toContain('if (!isStale()) setDerivatives({ fundingRate: null, openInterest: null });');
+    expect(derivBody).toContain('if (!isStale()) {\n      setCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, bybit));');
+
+    // os DOIS call sites (retry de boot E o setInterval de refresh) usam a
+    // MESMA closure guardada — nunca a função crua sem proteção.
+    const bootEffectMatch = app.match(/useEffect\(\(\) => \{\n {4}let unmounted = false;\n[\s\S]*?\n {2}\}, \[bootGeneration, selectedAsset\]\);/);
+    expect(bootEffectMatch, 'efeito de boot/WS não encontrado').not.toBeNull();
+    const bootBody = bootEffectMatch![0];
+    expect(bootBody).toContain('const fetchSymbolDataGuarded = () => fetchSymbolData(() => unmounted);');
+    expect(bootBody).toContain('const fetchDerivativesGuarded = () => fetchDerivatives(() => unmounted);');
+    expect(bootBody).toContain('retryBoot(fetchSymbolDataGuarded, () => unmounted)');
+    expect(bootBody).toContain('retryBoot(fetchDerivativesGuarded, () => unmounted)');
+    expect(bootBody).toContain('setInterval(fetchSymbolDataGuarded, 30000)');
+    expect(bootBody).toContain('setInterval(fetchDerivativesGuarded, 60000)');
+    expect(bootBody).toContain('unmounted = true;'); // cleanup real, não só a variável declarada
+    expect(bootBody).not.toContain('retryBoot(fetchSymbolData,'); // a função crua nunca deve voltar a ser passada direto
+    expect(bootBody).not.toContain('retryBoot(fetchDerivatives,');
+  });
+
   // Relato real do Operador (voz): "esse gráfico também tem que buscar os
   // dado... de qualquer ativo... direto da raiz". Achado desta sessão: o
   // gráfico JÁ busca `selectedAsset` (a string real, seja ela um dos 5
@@ -141,10 +179,48 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     const app = read('../src/App.tsx');
     const idx = app.indexOf('setPriceData(null);');
     expect(idx, 'efeito de reset ao trocar de ativo não encontrado').toBeGreaterThan(-1);
-    const block = app.slice(Math.max(0, idx - 30), idx + 1500);
+    // Evolução Profunda §11/§13-J acrescentou setMultiTimeframeContext(null)
+    // real ao mesmo efeito, a Diretriz Suprema de Evolução Integrativa
+    // acrescentou os 3 resets de derivatives/cross-exchange, e o Aditivo
+    // §27 (MEXC Futures, 4ª fonte) acrescentou um 4º reset de
+    // cross-exchange — janela ampliada de novo para caber o conteúdo novo
+    // (limite ainda finito: continua provando que é um efeito PRÓPRIO e
+    // contido, nunca o arquivo inteiro).
+    const block = app.slice(Math.max(0, idx - 30), idx + 2734);
     expect(block).toContain('setChartData([]);');
     expect(block).toContain('setOrderBook({ bids: [], asks: [] });');
+    expect(block).toContain('useUnifiedSnapshotStore.getState().setMultiTimeframeContext(null);');
     expect(block).toMatch(/\}, \[selectedAsset\]\);/);
+    // Diretriz de Evolução Geral do Organismo §6.8 (achado real): o antigo
+    // resetTrackRecord (zerava tudo) foi substituído por um efeito PRÓPRIO
+    // logo depois, que arquiva/restaura por symbol:timeframe — nunca mais
+    // um reset cego dentro deste efeito de troca de ativo.
+    expect(block).not.toContain('resetTrackRecord');
+    const archiveEffectMatch = app.match(/const key = candleKey\(selectedAsset, chartTimeframe as Timeframe\);\n {4}const archived = useUnifiedSnapshotStore\.getState\(\)\.trackRecordArchive\[key\];\n {4}useUnifiedSnapshotStore\.getState\(\)\.hydrateTrackRecord\(archived \?\? EMPTY_TRACK_RECORD\);\n {4}return \(\) => \{\n {6}useUnifiedSnapshotStore\.getState\(\)\.archiveTrackRecord\(key\);\n {4}\};\n {2}\}, \[selectedAsset, chartTimeframe\]\);/);
+    expect(archiveEffectMatch, 'efeito de arquivo/restauração do track record não encontrado').not.toBeNull();
+  });
+
+  it('Diretriz Suprema de Evolução Integrativa §3 (achado real de auditoria): funding/OI e os DOIS cross-exchange checks agora resetam no mesmo efeito de troca de ativo — antes ficavam mostrando o valor do ativo ANTERIOR até fetchDerivatives resolver (até 8s de atraso real no pior caso)', () => {
+    const app = read('../src/App.tsx');
+    const idx = app.indexOf('setPriceData(null);');
+    const block = app.slice(Math.max(0, idx - 30), idx + 2000);
+    expect(block).toContain('setDerivatives({ fundingRate: null, openInterest: null });');
+    expect(block).toContain('setCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });');
+    expect(block).toContain('setOkxCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });');
+    // mesmos valores exatos dos useState iniciais — nunca um sentinel novo
+    // inventado, o mesmo "carregando" honesto que o primeiro boot já usa.
+    expect(app).toContain('const [crossExchangeCheck, setCrossExchangeCheck] = useState<CrossExchangeCheck>({\n    ok: false,\n    priceDeltaPct: null,\n    consensus: "INDISPONIVEL",\n  });');
+    expect(app).toContain('const [derivatives, setDerivatives] = useState<DerivativesState>({\n    fundingRate: null,\n    openInterest: null,\n  });');
+  });
+
+  it('liquidações NÃO precisam resetar por ativo: o próprio label já se declara exchange-wide, nunca fingindo ser por símbolo — achado de auditoria confirmando que não é um bug de staleness', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('Forced Liquidations · Binance Futures (real feed');
+    expect(app).toContain('no key — engine-bridge.ts\'s startRealLiquidationFeed). Exchange-wide,');
+    expect(app).toContain('not BTC-only — large forced liquidations anywhere are the real signal');
+    const idx = app.indexOf('setPriceData(null);');
+    const block = app.slice(Math.max(0, idx - 30), idx + 2000);
+    expect(block).not.toContain('setLiquidations');
   });
 
   it('ChartWidget repassa onRequestOlderCandles até EnhancedChart_110_Percent — mesma prop, ponta a ponta', () => {

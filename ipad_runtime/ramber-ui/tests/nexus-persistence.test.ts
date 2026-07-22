@@ -4,13 +4,18 @@
 // 'node') não tem IndexedDB nativo, então isto é o que torna a camada
 // Local-First genuinely testável em vez de só confiada por inspeção.
 import "fake-indexeddb/auto";
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   candleKey,
   saveCandles,
   loadCandles,
   saveSnapshotSummary,
   loadSnapshotSummary,
+  saveTrackRecord,
+  loadTrackRecord,
+  compactPersistedCandles,
+  CANDLE_CACHE_MAX_AGE_MS,
+  CANDLE_CACHE_MAX_RECORDS,
   __closeDbConnectionForTests,
 } from '../src/nexus/persistence';
 import type { Candle } from '../src/nexus/types';
@@ -89,5 +94,66 @@ describe('persistence: resumo do snapshot (símbolo/timeframe ativos, conexões)
     await saveSnapshotSummary({ activeSymbol: 'ETH', activeTimeframe: '1h', connections: { OKX: 'LIVE' } });
     const result = await loadSnapshotSummary();
     expect(result?.activeSymbol).toBe('ETH');
+  });
+});
+
+// ─── Consolidação Operacional §5: envelhecimento/compactação do cache ───
+// Execução real via fake-indexeddb (mesma convenção do resto do arquivo):
+// savedAt é controlado espionando Date.now() durante cada save — nunca um
+// sleep frágil, nunca um registro fabricado direto na store.
+describe('persistence §5: compactPersistedCandles (envelhecimento + teto, nunca toca o track record)', () => {
+  async function saveAt(savedAt: number, symbol: string, tf: '1m' | '5m' | '15m' | '1h') {
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(savedAt);
+    try {
+      await saveCandles(symbol, tf, [candle(savedAt)]);
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it('expira registros além do TTL e preserva os dentro dele — contagens honestas no resultado', async () => {
+    await saveAt(1_000, 'BTC', '15m'); // idade 9_000 > TTL 5_000 → expira
+    await saveAt(6_000, 'ETH', '1h'); //  idade 4_000 ≤ TTL 5_000 → fica
+    const result = await compactPersistedCandles(10_000, 5_000, 64);
+    expect(result).toEqual({ scanned: 2, expired: 1, evicted: 0 });
+    expect(await loadCandles('BTC', '15m')).toBeNull();
+    expect(await loadCandles('ETH', '1h')).not.toBeNull();
+  });
+
+  it('acima do teto despeja os MAIS ANTIGOS primeiro (savedAt), preservando os recentes', async () => {
+    await saveAt(1_000, 'BTC', '1m');
+    await saveAt(2_000, 'ETH', '1m');
+    await saveAt(3_000, 'SOL', '1m');
+    const result = await compactPersistedCandles(4_000, 1_000_000, 2);
+    expect(result).toEqual({ scanned: 3, expired: 0, evicted: 1 });
+    expect(await loadCandles('BTC', '1m')).toBeNull(); // o mais antigo saiu
+    expect(await loadCandles('ETH', '1m')).not.toBeNull();
+    expect(await loadCandles('SOL', '1m')).not.toBeNull();
+  });
+
+  it('sem expiração nem excesso: zero remoções e os dados ficam intactos (compactação nunca é destrutiva à toa)', async () => {
+    await saveAt(9_000, 'BTC', '5m');
+    await saveAt(9_500, 'ETH', '5m');
+    const result = await compactPersistedCandles(10_000, 5_000, 64);
+    expect(result).toEqual({ scanned: 2, expired: 0, evicted: 0 });
+    expect(await loadCandles('BTC', '5m')).not.toBeNull();
+    expect(await loadCandles('ETH', '5m')).not.toBeNull();
+  });
+
+  it('NUNCA toca a snapshot store: track record e resumo sobrevivem a uma compactação agressiva', async () => {
+    await saveAt(1_000, 'BTC', '15m');
+    await saveTrackRecord({ contractVersion: 2, active: null, history: [], targetHits: 3, partialHits: 1, stopHits: 2, replaced: 0 });
+    await saveSnapshotSummary({ activeSymbol: 'BTC', activeTimeframe: '15m', connections: {} });
+    const result = await compactPersistedCandles(1_000_000_000, 1, 0); // TTL 1ms + teto 0: remove TODO candle
+    expect(result?.scanned).toBe(1);
+    expect(await loadCandles('BTC', '15m')).toBeNull();
+    const track = (await loadTrackRecord()) as { targetHits: number } | null;
+    expect(track?.targetHits).toBe(3); // conhecimento acumulado real intacto
+    expect((await loadSnapshotSummary())?.activeSymbol).toBe('BTC');
+  });
+
+  it('constantes documentadas são reais: TTL de 14 dias e teto de 64 registros', () => {
+    expect(CANDLE_CACHE_MAX_AGE_MS).toBe(14 * 24 * 60 * 60 * 1000);
+    expect(CANDLE_CACHE_MAX_RECORDS).toBe(64);
   });
 });

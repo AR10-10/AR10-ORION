@@ -51,7 +51,7 @@ describe('B1: gauge de RSI reusa RSI_OVERBOUGHT/RSI_OVERSOLD reais do Conselho �
 
   it('App.tsx importa e usa os MESMOS limiares no gauge — nunca mais 70/30 soltos', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD } from "./nexus/council";');
+    expect(app).toContain('import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD, type CouncilDecision } from "./nexus/council";');
     expect(app).toContain('currentRsi >= RSI_OVERBOUGHT');
     expect(app).toContain('currentRsi <= RSI_OVERSOLD');
   });
@@ -104,5 +104,33 @@ describe('B2: conviction-cyclone-draw.ts nomeia os 2 parâmetros de velocidade a
     expect(src).toContain('const SPEED_ALONG_AXIS_CONVICTION_SCALE = 0.00028;');
     expect(src).toContain('const speedAlongAxis = SPEED_ALONG_AXIS_BASE + conviction * SPEED_ALONG_AXIS_CONVICTION_SCALE;');
     expect(src).not.toContain('0.00012 + conviction * 0.00028');
+  });
+});
+
+// ORDEM DE AUDITORIA FINAL §3/§4 (achado real): MarketRegimeWidget
+// recomputava seu PRÓPRIO proxy de volatilidade (média ingênua de
+// (high-low)/close, sem gaps) na mesma hora em que regime-engine.js já
+// calcula o ATR% real (true range com gaps, período de Wilder) e repassa
+// via engine.marketRegime.atrPercent — o MESMO campo que eta-engine.ts,
+// aura-lifecycle.ts e o tooltip do Multi-Timeframe Matrix (para os outros
+// 5 prazos) já usam como fonte única. Duas fórmulas para a mesma grandeza
+// no mesmo timeframe é o tipo exato de "cálculo redundante" que a
+// auditoria de dados pede para eliminar — corrigido para ler a única
+// fonte real (Single Source of Truth).
+describe('ORDEM §3/§4: VOLATILIDADE (MarketRegimeWidget) lê o ATR% real do Market Regime Engine — zero proxy paralelo', () => {
+  it('engine.volatilityPct (proxy ingênuo duplicado) não existe mais em App.tsx', () => {
+    const app = read('../src/App.tsx');
+    expect(app).not.toContain('volatilityPct');
+  });
+
+  it('a row VOLATILIDADE lê engine.marketRegime.atrPercent (mesma fonte real do resto do app)', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('const volPct = num(engine?.marketRegime?.atrPercent) ? engine.marketRegime.atrPercent : null;');
+    expect(app).toContain('<Row label="VOLATILIDADE (ATR%)" value={volLabel} valueClass={volColor} />');
+  });
+
+  it('o checklist de fontes (Síntese Operacional) confere a mesma fonte real, não o proxy removido', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('{ label: "Volatilidade (ATR%)", available: num(engine?.marketRegime?.atrPercent) },');
   });
 });

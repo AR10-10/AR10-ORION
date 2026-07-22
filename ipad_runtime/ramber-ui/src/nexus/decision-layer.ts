@@ -25,7 +25,14 @@
 import type { TradePlan } from "./trade-plan";
 import type { EtaReading } from "./eta-engine";
 
-export const NEXUS_DECISION_CONTRACT_VERSION = 2 as const;
+// v3 (Evolução Integrativa §6): o contrato passa a CARREGAR heatTier —
+// passthrough literal do tier real já recebido nos inputs (que até aqui
+// só alimentava reasonsAgainst). Fonte do eixo RISCO da Readability Layer;
+// este módulo continua não decidindo nada com ele (LEI 24).
+// v4 (Omega Core, rodada 2, §5/§6): cada alvo carrega obstacleCount —
+// passthrough literal de TradePlanLevel.obstacleCount (trade-plan.ts),
+// nunca recalculado aqui.
+export const NEXUS_DECISION_CONTRACT_VERSION = 4 as const;
 
 // V2 §3 — Estado operacional padronizado, derivado SÓ de leituras reais
 // (prioridades documentadas em deriveOperationalState):
@@ -64,7 +71,8 @@ export type NexusPlanGap =
   | "AWAITING_COUNCIL" // Conselho ainda sem primeira leitura real
   | "RISK_GATED" // RiskAgent travou o Conselho (fail-closed)
   | "COUNCIL_NEUTRAL" // Conselho neutro/sem quórum (pode divergir do Núcleo — honesto)
-  | "NO_STRUCTURE"; // stance direcional mas sem estrutura real p/ entrada/stop/alvo
+  | "NO_STRUCTURE" // stance direcional mas sem estrutura real p/ entrada/stop/alvo
+  | "DIRECTION_CONFLICT"; // plano do Conselho na direção OPOSTA à operação do Núcleo (§16-8)
 
 export interface NexusDecisionTarget {
   price: number;
@@ -75,6 +83,11 @@ export interface NexusDecisionTarget {
   etaMsMin: number | null;
   etaMs: number | null;
   hit: boolean; // ratchet REAL do track record — nunca re-derivado do tick
+  // v4 (Omega Core §5/§6): zonas estruturais reais (OB/FVG) entre a
+  // entrada e este alvo — passthrough literal de trade-plan.ts, nunca
+  // recalculado. undefined em planos persistidos de contrato anterior
+  // (rehydrate honesto, nunca um 0 fabricado retroativo).
+  obstacleCount?: number;
 }
 
 export interface NexusDecision {
@@ -104,6 +117,9 @@ export interface NexusDecision {
   planGap: NexusPlanGap | null; // só quando plan === null
   reason: string | null; // frase curta REAL do Assistente Operacional (1ª prioridade)
   reasonBasis: string | null; // base verificável da frase
+  // v3: tier real do Heat Score (passthrough dos inputs) — consumido pelo
+  // eixo RISCO da Readability; null honesto quando o motor não tem leitura.
+  heatTier: string | null;
   computedAt: number;
 }
 
@@ -133,6 +149,13 @@ export interface NexusDecisionInputs {
   heatTier: string | null;
   // Zona Premium/Discount real do último fechamento.
   premiumDiscountZone: "PREMIUM" | "EQUILIBRIUM" | "DISCOUNT" | null;
+  // Cockpit de Leitura §4/§5-sexto: estados reais das duas linhas de
+  // equilíbrio (histerese de vwap-state.ts) — entram na justificativa
+  // estruturada como fontes nomeadas. Display-only: informam conflito,
+  // NUNCA bloqueiam/alteram a operação (LEI 24). Optional/fail-closed:
+  // null/NEUTRAL não fabrica lado nenhum.
+  vwapState?: "BULLISH" | "BEARISH" | "NEUTRAL" | null;
+  nexusLineState?: "BULLISH" | "BEARISH" | "NEUTRAL" | null;
 }
 
 function deriveOperationalState(
@@ -177,6 +200,22 @@ function buildReasons(
         `Preço em ${inputs.premiumDiscountZone} do range (Premium/Discount)`,
       );
     }
+    // Cockpit de Leitura §4: os equilíbrios entram na justificativa — o
+    // exemplo canônico da diretriz ("Tendência LONG + VWAP vendedora")
+    // vira um contrário VISÍVEL e nomeado, nunca um bloqueio (LEI 24).
+    // NEUTRAL fica de fora (sem desvio direcional confirmado, sem lado).
+    if (inputs.vwapState === "BULLISH" || inputs.vwapState === "BEARISH") {
+      const favors = (operation === "LONG") === (inputs.vwapState === "BULLISH");
+      (favors ? reasonsFor : reasonsAgainst).push(
+        `Preço ${inputs.vwapState === "BULLISH" ? "acima" : "abaixo"} da VWAP — estado ${inputs.vwapState === "BULLISH" ? "comprador" : "vendedor"} (VWAP)`,
+      );
+    }
+    if (inputs.nexusLineState === "BULLISH" || inputs.nexusLineState === "BEARISH") {
+      const favors = (operation === "LONG") === (inputs.nexusLineState === "BULLISH");
+      (favors ? reasonsFor : reasonsAgainst).push(
+        `Nexus Line ${inputs.nexusLineState === "BULLISH" ? "compradora" : "vendedora"} (Nexus Line)`,
+      );
+    }
   }
   // Atividade extrema é fator CONTRÁRIO independente de direção (§4 da
   // diretriz: "volatilidade elevada") — leitura real do Heat Score.
@@ -195,7 +234,18 @@ export function buildNexusDecision(inputs: NexusDecisionInputs, computedAt: numb
 
   let plan: NexusDecision["plan"] = null;
   let planGap: NexusPlanGap | null = null;
-  if (inputs.plan) {
+  // §16-8 (Omega Core, "não permite LONG e SHORT simultâneos"): trade-plan.ts
+  // trava pela leitura do CONSELHO, não pela do Core Engine (LEI 24) — as
+  // duas podem divergir por um ciclo real (já documentado no
+  // TradePlanTopStrip). Sem esta guarda, um plano SHORT sobreviveria um
+  // render fundido como "Operação: LONG" — a mesma tela mostrando as duas
+  // direções ao mesmo tempo. A guarda NUNCA barra o Núcleo (operation
+  // continua passthrough literal); só impede RENDERIZAR um plano cuja
+  // direção contradiz a operação — o gap fica nomeado, nunca um plano
+  // silenciosamente incoerente.
+  if (inputs.plan && operation !== "AGUARDAR" && inputs.plan.direction !== operation) {
+    planGap = "DIRECTION_CONFLICT";
+  } else if (inputs.plan) {
     const p = inputs.plan;
     const targetsHit = Math.max(0, Math.min(inputs.targetsHit, p.targets.length));
     plan = {
@@ -212,6 +262,7 @@ export function buildNexusDecision(inputs: NexusDecisionInputs, computedAt: numb
           riskReward: p.riskRewardRatios[i] ?? null,
           etaMsMin: eta ? eta.msMin : null,
           etaMs: eta ? eta.ms : null,
+          obstacleCount: t.obstacleCount,
           hit: i < targetsHit,
         };
       }),
@@ -252,6 +303,7 @@ export function buildNexusDecision(inputs: NexusDecisionInputs, computedAt: numb
     planGap,
     reason: inputs.assistantMessage?.text ?? null,
     reasonBasis: inputs.assistantMessage?.basis ?? null,
+    heatTier: inputs.heatTier ?? null,
     computedAt,
   };
 }
@@ -263,4 +315,5 @@ export const NEXUS_PLAN_GAP_LABEL: Record<NexusPlanGap, string> = {
   RISK_GATED: "Conselho travado por risco (fail-closed)",
   COUNCIL_NEUTRAL: "Conselho neutro — sem plano acionável",
   NO_STRUCTURE: "Sem estrutura real para entrada/stop/alvo",
+  DIRECTION_CONFLICT: "Plano do Conselho na direção oposta ao Núcleo — aguardando realinhamento",
 };

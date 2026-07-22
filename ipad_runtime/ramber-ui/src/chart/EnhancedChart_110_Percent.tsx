@@ -18,7 +18,7 @@
 // preço real top/bottom de cada zona ainda não mitigada/varrida, o
 // mesmo filtro (!mitigated / !swept) e o mesmo cap de contagem que o
 // componente antigo já usava.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createChart,
   CandlestickSeries,
@@ -38,7 +38,11 @@ import { useOrderflowHistory } from "../store/unified-snapshot-store";
 import { LiquidityZonesPlugin, type FillableZone } from "./LiquidityZonesPlugin";
 // Ordem "Ciborgue Vivo" §1: anotação temporária de BOS/CHOCH — mesma
 // arquitetura de overlay do LiquidityZonesPlugin acima, dado real diferente.
-import { StructureBreakMarkersPlugin } from "./StructureBreakMarkersPlugin";
+// BREAK_DECAY: achado real de captura de tela (rótulo "CHOC" colidindo com
+// a caixa "EMA 21") — o TEXTO migrou para priceAxisLabels abaixo, reusando
+// a MESMA config de decaimento do plugin (zero segunda curva).
+import { StructureBreakMarkersPlugin, BREAK_DECAY } from "./StructureBreakMarkersPlugin";
+import { ageAlpha } from "./annotation-decay";
 import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
 // V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
 // barras à direita — dado direto da store (Fase 1.3), ver header do plugin.
@@ -64,9 +68,9 @@ import { effectiveStopForTargetsHit } from "../nexus/trade-plan";
 import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
-import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
+import type { HarmonicPatternHit, HarmonicPoint } from "../nexus/harmonic-patterns";
 import type { NexusDecision } from "../nexus/decision-layer";
-import { formatEtaRange } from "../nexus/eta-engine";
+import { formatEtaRange, formatEtaDuration } from "../nexus/eta-engine";
 // Research-driven precision order: VWAP, the institutional-standard
 // intraday reference level this system was missing entirely (confirmed
 // via a full-codebase grep before writing nexus/vwap.ts).
@@ -77,9 +81,22 @@ import { computeSessionVwapSeries } from "../nexus/vwap";
 // final; uma série com um ponto por candle é uma implementação nova
 // legítima, mesma fórmula/semente do motor WASM).
 import { computeEmaSeries, DEFAULT_EMA_PERIOD } from "../nexus/ema";
+// Consolidação Final §26-§29: Nexus Line (linha proprietária de equilíbrio,
+// nexus-line.ts) — série computada do MESMO array real de candles (zero
+// segunda fonte), estados visuais aplicados via a MESMA histerese
+// compartilhada calculada no App (vwap-state.ts).
+import { computeNexusLineSeries } from "../nexus/nexus-line";
+import type { DirectionalLineState } from "../nexus/vwap-state";
 // Ordem "Ciborgue Vivo" §1: BOS/CHOCH real (bos-choch-engine.js via
 // engine-bridge.ts's computeBosChoch) — mesmo tipo que StructureBreakMarkersPlugin usa.
 import type { StructureBreak } from "../engine-bridge";
+// Auditoria do painel do gráfico: "canais de tendência", gap real já
+// documentado em rodadas anteriores — ver cabeçalho de
+// nexus/trend-channel-engine.ts para a definição real (Linear Regression
+// Channel) e a pesquisa que a confirmou.
+import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER, type TrendChannelDirection } from "../nexus/trend-channel-engine";
+import { shouldCompactLabels } from "./label-compaction";
+import { PriceLabelStackPlugin, type PriceAxisLabel } from "./PriceLabelStackPlugin";
 
 export interface EnhancedChartCandle {
   time: number; // Unix segundos real (Bus/Binance) — nunca sintetizado
@@ -134,8 +151,14 @@ export interface EnhancedChartFibLevel {
 // condicional abaixo) em vez de só passar chart=null — um plugin de canvas
 // dirty-flag só redesenha quando algo real muda; passar chart=null congela
 // o último frame real já pintado (nunca mais limpo), não o esconde. Todas
-// as 6 ligadas por padrão — o painel nunca esconde nada sem uma ação
-// explícita do Operador.
+// ligadas por padrão — o painel nunca esconde nada sem uma ação explícita
+// do Operador.
+// Auditoria de pendências (achado real: os 7 ids abaixo não tinham NENHUM
+// controle de visibilidade — grep confirmou zero "applyOptions({ visible"
+// para VWAP/NL/CVD/Fibonacci/Premium-Discount/harmônico/EQH-EQL, ao
+// contrário dos 8 ids originais acima): cada um já era uma série/price
+// line real (nenhum cálculo novo), só nunca tinha ganhado o mesmo
+// interruptor que liquidity_zones/structure_breaks/etc já têm.
 export const CHART_LAYER_IDS = [
   "liquidity_zones",
   "structure_breaks",
@@ -144,6 +167,14 @@ export const CHART_LAYER_IDS = [
   "trade_plan_zone",
   "neural_market_aura",
   "ema",
+  "trend_channel",
+  "vwap",
+  "nexus_line",
+  "cvd",
+  "fibonacci",
+  "premium_discount",
+  "harmonics",
+  "equal_highs_lows",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -155,6 +186,36 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   trade_plan_zone: true,
   neural_market_aura: true,
   ema: true,
+  trend_channel: true,
+  vwap: true,
+  nexus_line: true,
+  cvd: true,
+  fibonacci: true,
+  premium_discount: true,
+  harmonics: true,
+  equal_highs_lows: true,
+};
+// NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
+// (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
+// true = camada em modo automático (Relevance Engine decide), false =
+// override manual (chartLayerVisibility[id] vale). Default: tudo
+// automático, o comportamento novo pedido pela diretiva.
+export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
+  liquidity_zones: true,
+  structure_breaks: true,
+  order_flow_heatmap: true,
+  volume_profile: true,
+  trade_plan_zone: true,
+  neural_market_aura: true,
+  ema: true,
+  trend_channel: true,
+  vwap: true,
+  nexus_line: true,
+  cvd: true,
+  fibonacci: true,
+  premium_discount: true,
+  harmonics: true,
+  equal_highs_lows: true,
 };
 
 interface EnhancedChartProps {
@@ -168,6 +229,13 @@ interface EnhancedChartProps {
   fairValueGaps?: EnhancedChartZone[];
   orderBlocks?: EnhancedChartZone[];
   liquidityZones?: EnhancedChartLiquidity[];
+  // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
+  // estrutural"): quais dessas MESMAS zonas (por low/high real) o Trade
+  // Plan ATIVO cruza a caminho de algum alvo — repassado direto ao
+  // LiquidityZonesPlugin, que já desenha fairValueGaps/orderBlocks acima;
+  // isto só pede ênfase visual nas que importam. Optional/fail-closed:
+  // ausente/vazio => desenho idêntico ao de sempre.
+  obstacleZones?: { low: number; high: number }[];
   // Ordem "Ciborgue Vivo" §1: rompimento de estrutura real mais recente
   // (BOS/CHOCH). null = nenhum rompimento na amostra, honesto — nunca desenha um palpite.
   structureBreak?: StructureBreak | null;
@@ -183,6 +251,36 @@ interface EnhancedChartProps {
   // silk-thread price lines with English labels. Optional and fail-closed:
   // null/absent draws nothing.
   tradePlan?: TradePlan | null;
+  // EPC §5/§6 ("Nunca simplesmente esconder essas informações"): quando
+  // tradePlan é null, o motivo REAL (mesmo texto/lógica da barra de
+  // comando, App.tsx: tradePlanAbsenceReason) — nunca um silêncio que o
+  // Operador não consegue distinguir de um bug. null/absent (tradePlan
+  // ativo, ou chamador que ainda não passa esta prop) não desenha nada.
+  tradePlanAbsenceReason?: string | null;
+  // EPC §5/§6 (continuação — relato direto do Operador: "falta aparecer
+  // entrada e alvo/alvo2/alvo3 no gráfico"): quando o Trade Plan do
+  // Conselho está ausente mas o Core Engine (LEI 24) já tem direção real
+  // própria, o STOP/TARGET1/TARGET2 que o Target Tracker (target-
+  // tracker.js) já computa a cada ciclo — dado real, só nunca antes
+  // desenhado. ENTRY fica de fora de propósito (é o preço vivo, já
+  // desenhado nativamente pelo eixo). null/absent (Trade Plan do Conselho
+  // presente, Núcleo neutro, ou chamador que ainda não passa esta prop)
+  // não desenha nada — nunca substitui o Trade Plan do Conselho quando
+  // ele existe.
+  engineFallbackLevels?: {
+    direction: "LONG" | "SHORT";
+    stop: number;
+    target1: number;
+    target1Strength: { label: "FORTE" | "FRACA"; touches: number } | null;
+    // EPC MODO ELITE §4: contagem REAL de obstáculos estruturais no caminho
+    // até cada alvo (obstacleZonesInPath, App.tsx) — o Núcleo não tem painel
+    // próprio, então o rótulo do gráfico é o único lugar dessa contagem.
+    target1ObstacleCount?: number | null;
+    target2: number | null;
+    target2Strength: { label: "FORTE" | "FRACA"; touches: number } | null;
+    target2ObstacleCount?: number | null;
+    riskRewardRatio: number | null;
+  } | null;
   // Neural Market Aura: visual translation of the SAME real Trade Plan +
   // Signal Track Record + Confluence Engine reading above — never a second
   // trading signal (LEI 24). null/DADOS_INSUFICIENTES draws nothing.
@@ -238,7 +336,42 @@ interface EnhancedChartProps {
   // distância % vem do livePrice real). Geometria continua vindo de
   // tradePlan — decision.plan deriva do MESMO objeto, zero divergência.
   decision?: NexusDecision | null;
+  // Consolidação Final §22/§29: estado visual das duas linhas de equilíbrio
+  // (VWAP e Nexus Line). Calculado no App com a histerese compartilhada
+  // (vwap-state.ts) porque precisa de preço vivo + ATR + estado anterior —
+  // o gráfico só APLICA cor/etiqueta (a matemática da VWAP fica intocada,
+  // §20). Optional/fail-closed: ausente => NEUTRAL (visual de sempre).
+  vwapState?: DirectionalLineState | null;
+  nexusLineState?: DirectionalLineState | null;
 }
+
+// Continuidade §6 (hierarquia visual dos alvos) — Diretriz de Evolução
+// Profissional Fase 10 item P: a lógica em si (limiar + decisão de
+// compactar) agora vive em label-compaction.ts como função pura testável
+// por execução real; este arquivo só importa e usa (Regra de Ouro 4:
+// realocar, nunca duplicar).
+
+// §22: paleta institucional de estado + seta discreta. A NL usa a mesma
+// paleta com opacidade menor — §29 "nunca competir visualmente com a VWAP".
+const LINE_STATE_GLYPH: Record<DirectionalLineState, string> = { BULLISH: "↑", BEARISH: "↓", NEUTRAL: "•" };
+// Achado real do Operador ("nome Grandão, um monte de letra... mais
+// padrão, mais profissional"): a palavra "ASCENDING"/"DESCENDING" no
+// rótulo do Trend Channel destoava do resto do eixo (VWAP/NL já usam
+// glifo, nunca a palavra) — mesmo princípio de LINE_STATE_GLYPH acima,
+// tipo diferente (TrendChannelDirection tem 3 valores próprios, nunca
+// os mesmos de DirectionalLineState). Zero informação perdida: o glifo
+// É a mesma direção real, só mais compacto.
+const TREND_DIRECTION_GLYPH: Record<TrendChannelDirection, string> = { ASCENDING: "↑", DESCENDING: "↓", FLAT: "→" };
+const VWAP_STATE_COLOR: Record<DirectionalLineState, string> = {
+  BULLISH: "rgba(0, 230, 160, 0.75)",
+  BEARISH: "rgba(255, 61, 113, 0.75)",
+  NEUTRAL: "rgba(255, 235, 190, 0.50)", // branco-dourado (§22 Neutra)
+};
+const NL_STATE_COLOR: Record<DirectionalLineState, string> = {
+  BULLISH: "rgba(0, 230, 160, 0.50)",
+  BEARISH: "rgba(255, 61, 113, 0.50)",
+  NEUTRAL: "rgba(255, 214, 130, 0.45)",
+};
 
 // Auditoria de arquitetura (revisão completa) — paginação histórica real:
 // detecta se `next` é EXATAMENTE `prev` com N candles novos prependados na
@@ -283,11 +416,14 @@ export function EnhancedChart_110_Percent({
   fairValueGaps,
   orderBlocks,
   liquidityZones,
+  obstacleZones,
   structureBreak,
   fibonacciLevels,
   livePrice,
   activeTimeframe,
   tradePlan,
+  tradePlanAbsenceReason,
+  engineFallbackLevels,
   aura,
   targetsHit,
   confidenceZone,
@@ -295,6 +431,8 @@ export function EnhancedChart_110_Percent({
   premiumDiscount,
   harmonicHits,
   decision,
+  vwapState,
+  nexusLineState,
   layerVisibility,
   emaPeriod,
   onRequestOlderCandles,
@@ -308,9 +446,26 @@ export function EnhancedChart_110_Percent({
   const zoneLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
   const tradePlanLinesRef = useRef<IPriceLine[]>([]);
+  // EPC §5/§6 (continuação): linhas do fallback do Core Engine
+  // (engineFallbackLevels) — refs PRÓPRIAS, nunca reaproveita
+  // tradePlanLinesRef/stopLineRef/targetLinesArrayRef acima. Os dois
+  // efeitos nunca desenham ao mesmo tempo na prática (engineFallbackLevels
+  // já vem null de App.tsx quando tradePlan existe), mas manter refs
+  // separadas evita acoplar dois efeitos independentes por um cleanup
+  // compartilhado.
+  const engineFallbackLinesRef = useRef<IPriceLine[]>([]);
   const scenarioLinesRef = useRef<IPriceLine[]>([]);
   const premiumDiscountLinesRef = useRef<IPriceLine[]>([]);
   const harmonicLinesRef = useRef<IPriceLine[]>([]);
+  // Continuidade (pendência honesta já documentada em 3 PRs anteriores:
+  // "polilinha XABCD/Wolfe no canvas — hoje só a linha do ponto D"): a
+  // FIGURA GEOMÉTRICA COMPLETA do melhor padrão real, não só a PRZ. Série
+  // NATIVA (mesmo padrão de EMA/Nexus Line/Trend Channel) — X/A/B/C/D já
+  // vêm em ordem temporal por construção do próprio motor (cada ponto é um
+  // swing fractal mais recente que o anterior), então uma LineSeries comum
+  // com esses pontos plotados em ordem de tempo desenha exatamente o
+  // zigue-zague clássico, zero overlay de canvas novo.
+  const harmonicPolylineRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Named refs to the stop/target lines specifically (a subset of
   // tradePlanLinesRef above) — lets the hit-boost effect below update
   // color/title in place via applyOptions() instead of tearing down and
@@ -331,11 +486,53 @@ export function EnhancedChart_110_Percent({
   // nunca reaproveitando a paleta semântica (verde/vermelho=direção,
   // âmbar=zona de entrada, roxo=liquidez EQH/EQL).
   const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Consolidação Final §26-§29: Nexus Line na MESMA escala de preço (é um
+  // nível de equilíbrio real, como VWAP/EMA) — nunca uma segunda escala.
+  const nexusLineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Auditoria do painel do gráfico: Linear Regression Channel real (mesma
+  // escala de preço das velas) — 3 séries nativas (mid/upper/lower), cor
+  // única em tons de opacidade (convenção padrão da indústria para este
+  // indicador: um canal é UMA leitura, não três linhas concorrentes).
+  // lastValueVisible/priceLineVisible desligados nas três (ver useEffect
+  // de criação abaixo): o valor se lê pela POSIÇÃO do canal no gráfico,
+  // nunca por mais três rótulos empilhados na borda de preço já disputada
+  // por CHOCH/VWAP/NL/EMA — clareza visual (Regra de Ouro/"gráfico limpo")
+  // antes de qualquer indicador novo.
+  const trendChannelMidRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const trendChannelUpperRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const trendChannelLowerRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Espelha chartRef/seriesRef em state só para o LiquidityZonesPlugin
   // montar assim que o chart existe de verdade — refs sozinhas não
   // disparam re-render, então o plugin ficaria esperando por uma
   // atualização de `data` não relacionada para "descobrir" o chart pronto.
   const [chartReady, setChartReady] = useState<{ chart: IChartApi; series: ISeriesApi<"Candlestick"> } | null>(null);
+  // Diretriz Restauração/Inteligência Visual (achado real de auditoria):
+  // "Achados da captura real do Operador" (commit anterior) apagou o title
+  // das 3 séries do Trend Channel porque a lib desenha title no EIXO mesmo
+  // com lastValueVisible:false — remoção válida (eixo nativo poluído), mas
+  // a identidade do canal ficou sem NENHUM destino visual, violando "se a
+  // informação antiga era útil, reabilitar de forma mais profissional".
+  // Diretriz de Refinamento Visual §5 (revisão desta leitura): um <div>
+  // solto no canto superior não é "tratar o Trend Channel como camada do
+  // eixo de preço" — a identidade volta para a lateral via
+  // priceAxisLabels/PriceLabelStackPlugin abaixo, o MESMO sistema
+  // anti-colisão de R1/NL/VWAP/EMA/S1 (nunca o title/last-value-label
+  // NATIVO da lib, que é a fonte real da poluição original). midPrice é o
+  // preço real ancorado (ponta da linha mid) que alimenta esse rótulo.
+  const [trendChannelInfo, setTrendChannelInfo] = useState<{ direction: TrendChannelDirection; windowSize: number; midPrice: number } | null>(null);
+  // Achado real de captura de tela do Operador (BTC/USDT 1H, preço
+  // formando perto de R1): os "last value label"/"axis label" NATIVOS de
+  // VWAP/NL/EMA/S1/R1/último preço não têm nenhuma consciência uns dos
+  // outros — quando os preços reais ficam próximos, colidem/empilham.
+  // Estes 3 valores (a PONTA real de cada série já computada nos efeitos
+  // abaixo — zero cálculo novo) alimentam PriceLabelStackPlugin, que
+  // resolve a posição vertical de TODOS os rótulos de uma vez (ver
+  // price-label-stack.ts) — os "last value label"/"axis label" nativos
+  // são desligados logo abaixo (lastValueVisible/axisLabelVisible:false)
+  // e substituídos por esse overlay.
+  const [vwapLastValue, setVwapLastValue] = useState<number | null>(null);
+  const [nlLastValue, setNlLastValue] = useState<number | null>(null);
+  const [emaLastValue, setEmaLastValue] = useState<number | null>(null);
 
   // Cria o chart UMA vez por montagem — nunca recriado por troca de
   // timeframe/dado (isso destruiria o estado de pan/zoom do operador a
@@ -350,6 +547,14 @@ export function EnhancedChart_110_Percent({
         textColor: "#8ab4f8",
         fontFamily: "ui-monospace, monospace",
         fontSize: 10,
+        // Auditoria do painel do gráfico (achado real): a lib desenha por
+        // padrão o logo "powered by TradingView" sobre o próprio canvas —
+        // destoa do terminal proprietário AR10 CYBORG. A licença Apache-2.0
+        // permite desligar ("attributionLogo: false") DESDE QUE o link real
+        // para tradingview.com continue visível em outro lugar da tela —
+        // ver FooterBar em App.tsx, que agora carrega essa obrigação real
+        // (nunca uma remoção silenciosa da atribuição exigida).
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: "rgba(0, 240, 255, 0.06)" },
@@ -393,7 +598,16 @@ export function EnhancedChart_110_Percent({
       wickUpColor: "#00ffaa",
       wickDownColor: "#ff0055",
       priceLineVisible: true,
-      lastValueVisible: true,
+      // Achado real de captura de tela do Operador (BTC/USDT 1H): o
+      // "last value label" nativo (antes lastValueVisible:true) colidia
+      // com R1/VWAP/NL quando os preços reais ficam próximos — a lib não
+      // tem nenhuma consciência cross-série da posição de cada rótulo.
+      // Desligado aqui, substituído por PriceLabelStackPlugin (ver JSX
+      // abaixo), que resolve a posição de TODOS os rótulos de uma vez
+      // (price-label-stack.ts) e nunca perde a informação — só reorganiza
+      // quando preciso. A LINHA horizontal de referência (priceLineVisible
+      // acima) continua exatamente igual, só o rótulo/tag muda de dono.
+      lastValueVisible: false,
       // Achado real via verificação com harness Playwright (V-MAX Fase
       // 0.7): sem este campo, a lib desenha essa linha automática de
       // último preço tracejada por padrão — quebra silenciosa da Regra de
@@ -431,9 +645,20 @@ export function EnhancedChart_110_Percent({
       lineWidth: 1,
       lineStyle: LineStyle.Solid,
       priceLineVisible: false,
-      lastValueVisible: true,
+      // Achado real de captura de tela (ver comentário na criação da
+      // série de candles acima): rótulo nativo desligado, substituído
+      // por PriceLabelStackPlugin — nunca mais colide com R1/NL/preço.
+      lastValueVisible: false,
       crosshairMarkerVisible: false,
-      title: "VWAP",
+      // Achado real via harness Playwright (Diretriz de Refinamento Visual
+      // §5/§6): title:"" aqui — MESMO achado/MESMA correção do Trend
+      // Channel abaixo (a lib desenha `title` no eixo mesmo com
+      // lastValueVisible:false). O efeito de estado logo adiante
+      // (applyOptions ao mudar vwapState) também para de tocar em title —
+      // a identidade "VWAP" já vem inteira do priceAxisLabels/
+      // PriceLabelStackPlugin, nunca duplicada por um título nativo solto
+      // na posição NATURAL (sem resolução de colisão) da série.
+      title: "",
     });
     vwapSeriesRef.current = vwapSeries;
     // Diretriz Camada de Decisão Profissional, item 1: EMA como série
@@ -445,11 +670,87 @@ export function EnhancedChart_110_Percent({
       lineWidth: 1,
       lineStyle: LineStyle.Solid,
       priceLineVisible: false,
-      lastValueVisible: true,
+      // Mesmo achado/mesma correção do VWAP acima.
+      lastValueVisible: false,
       crosshairMarkerVisible: false,
-      title: "EMA",
+      title: "",
     });
     emaSeriesRef.current = emaSeries;
+    // Consolidação Final §29: Nexus Line — "extremamente fina, elegante,
+    // suavizada" = fio de seda (1px sólida, obrigatório de qualquer forma)
+    // em branco-dourado neutro mais discreto que a VWAP; a cor de estado
+    // real é aplicada pelo efeito de vwapState/nexusLineState abaixo.
+    const nexusLineSeries = chart.addSeries(LineSeries, {
+      color: NL_STATE_COLOR.NEUTRAL,
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      // Mesmo achado/mesma correção do VWAP acima.
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      title: "",
+    });
+    nexusLineSeriesRef.current = nexusLineSeries;
+    // Auditoria do painel do gráfico: Linear Regression Channel — cor
+    // única (slate, tom neutro não usado por nenhum outro overlay: verde/
+    // vermelho=direção, âmbar=zona de entrada, roxo=harmônicos/EQH-EQL,
+    // azul-material=EMA, branco=VWAP), banda mais translúcida que o
+    // centro. lastValueVisible/priceLineVisible desligados nas três — ver
+    // comentário no ref acima (zero rótulo novo na borda de preço).
+    // Achado real (captura do Operador, BTC 1H ao vivo): a lib desenha o
+    // `title` no eixo MESMO com lastValueVisible:false — três etiquetas
+    // "TREND" apareceram num eixo já disputado por R1/NL/EMA/VWAP/preço.
+    // title:"" nas três: a identidade do canal é a cor/geometria slate
+    // única, exatamente como o desenho original prometia.
+    const trendChannelSeriesOptions = {
+      lineWidth: 1 as const,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    };
+    const trendChannelMid = chart.addSeries(LineSeries, {
+      ...trendChannelSeriesOptions,
+      color: "rgba(148, 163, 184, 0.55)",
+      title: "",
+    });
+    const trendChannelUpper = chart.addSeries(LineSeries, {
+      ...trendChannelSeriesOptions,
+      color: "rgba(148, 163, 184, 0.28)",
+      title: "",
+    });
+    const trendChannelLower = chart.addSeries(LineSeries, {
+      ...trendChannelSeriesOptions,
+      color: "rgba(148, 163, 184, 0.28)",
+      title: "",
+    });
+    trendChannelMidRef.current = trendChannelMid;
+    trendChannelUpperRef.current = trendChannelUpper;
+    trendChannelLowerRef.current = trendChannelLower;
+    // Continuidade: figura XABCD/Wolfe completa — mesma cor roxa da PRZ já
+    // existente (acento do Conselho/opinião agregada), um pouco mais forte
+    // no TRAÇO em si (a PRZ continua a leitura de preço mais importante).
+    // Zero rótulo de eixo/último valor: a forma da polilinha já comunica o
+    // padrão, um rótulo repetiria a mesma informação do title da PRZ.
+    // Auditoria de pendências (achado real via harness Playwright): o
+    // title:"XABCD" acima presumia que lastValueVisible:false já bastava
+    // pra suprimir o rótulo — MESMO achado/MESMA correção do Trend
+    // Channel/VWAP/NL/EMA (a lib desenha `title` no eixo mesmo assim). O
+    // texto ficava flutuando na posição NATURAL da polilinha (sem nenhuma
+    // resolução de colisão), exatamente a poluição que o comentário
+    // original queria evitar. title:"" agora — zero informação perdida
+    // (o próprio comentário original já argumentava que o rótulo era
+    // redundante com o title da PRZ).
+    const harmonicPolyline = chart.addSeries(LineSeries, {
+      color: "rgba(176, 38, 255, 0.55)",
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      title: "",
+    });
+    harmonicPolylineRef.current = harmonicPolyline;
     chartRef.current = chart;
     seriesRef.current = series;
     setChartReady({ chart, series });
@@ -468,6 +769,11 @@ export function EnhancedChart_110_Percent({
       cvdSeriesRef.current = null;
       vwapSeriesRef.current = null;
       emaSeriesRef.current = null;
+      nexusLineSeriesRef.current = null;
+      trendChannelMidRef.current = null;
+      trendChannelUpperRef.current = null;
+      trendChannelLowerRef.current = null;
+      harmonicPolylineRef.current = null;
       setChartReady(null);
     };
   }, []);
@@ -584,7 +890,10 @@ export function EnhancedChart_110_Percent({
         color: "rgba(0, 255, 170, 0.65)",
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
-        axisLabelVisible: true,
+        // Mesmo achado/mesma correção da série de candles acima — o tag
+        // nativo do eixo colidia com VWAP/NL/preço quando os valores
+        // reais ficam próximos; PriceLabelStackPlugin assume o rótulo.
+        axisLabelVisible: false,
         title: levelTitle("S1", supportStrength, supportBreakouts),
       });
     }
@@ -602,7 +911,8 @@ export function EnhancedChart_110_Percent({
         color: "rgba(255, 0, 85, 0.65)",
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
-        axisLabelVisible: true,
+        // Mesmo achado/mesma correção do S1 acima.
+        axisLabelVisible: false,
         title: levelTitle("R1", resistanceStrength, resistanceBreakouts),
       });
     }
@@ -613,11 +923,15 @@ export function EnhancedChart_110_Percent({
   // não existe uma "área" real para preencher, então uma linha continua
   // sendo a representação honesta (mesmo dado, mesmo filtro !swept de
   // sempre, aplicado rio acima em App.tsx/ChartWidget).
+  // Auditoria de pendências: ganha visibility.equal_highs_lows — mesmo
+  // fail-closed de "sem camada visível, zero linhas" já usado quando o
+  // dado real está ausente (early-return dentro do próprio array vazio).
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
     zoneLinesRef.current.forEach((line) => series.removePriceLine(line));
     zoneLinesRef.current = [];
+    if (!visibility.equal_highs_lows) return;
 
     (liquidityZones ?? []).forEach((z) => {
       zoneLinesRef.current.push(
@@ -631,7 +945,7 @@ export function EnhancedChart_110_Percent({
         }),
       );
     });
-  }, [liquidityZones]);
+  }, [liquidityZones, visibility.equal_highs_lows]);
 
   // V-MAX Fase 1 (fechamento do §3.1): alimenta a série de CVD com o
   // histórico REAL da store (mesmo orderflowHistory do heatmap — um dado,
@@ -664,13 +978,49 @@ export function EnhancedChart_110_Percent({
     if (!vwapSeriesRef.current) return;
     const series = computeSessionVwapSeries(data);
     vwapSeriesRef.current.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+    setVwapLastValue(series.length > 0 ? series[series.length - 1].value : null);
+    // Consolidação Final §26-§28: a Nexus Line nasce do MESMO array real,
+    // no MESMO efeito — os dois equilíbrios nunca dessincronizam por
+    // construção. Série vazia (sem range confirmado/sem VWAP) => nada.
+    if (nexusLineSeriesRef.current) {
+      const nl = computeNexusLineSeries(data);
+      nexusLineSeriesRef.current.setData(nl.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+      setNlLastValue(nl.length > 0 ? nl[nl.length - 1].value : null);
+    }
   }, [data]);
+
+  // Consolidação Final §21-§22 (VWAP) e §29 (NL): estados visuais aplicados
+  // in place via applyOptions — cor institucional real (a MATEMÁTICA das
+  // séries acima fica intocada, §20; a histerese, §22 "nunca trocar de
+  // estado a cada candle", já aconteceu no App). Diretriz de Refinamento
+  // Visual §5/§6 (achado real via harness Playwright): este efeito ANTES
+  // também escrevia `title` a cada mudança de estado — reintroduzia a
+  // MESMA poluição de eixo que o Trend Channel corrigiu (a lib desenha
+  // title na posição NATURAL da série, sem nenhuma consciência da
+  // resolução de colisão do PriceLabelStackPlugin, e por isso volta e
+  // meia colidia com S1/R1/EMA vizinhos). O glifo de estado (↑/↓/•) já
+  // chega ao Operador via priceAxisLabels (`VWAP ${glifo} ${valor}` /
+  // `NL ${glifo} ${valor}`, useMemo abaixo) — nunca duas fontes da mesma
+  // informação.
+  useEffect(() => {
+    if (!vwapSeriesRef.current) return;
+    const s: DirectionalLineState = vwapState ?? "NEUTRAL";
+    vwapSeriesRef.current.applyOptions({ color: VWAP_STATE_COLOR[s] });
+  }, [vwapState]);
+  useEffect(() => {
+    if (!nexusLineSeriesRef.current) return;
+    const s: DirectionalLineState = nexusLineState ?? "NEUTRAL";
+    nexusLineSeriesRef.current.applyOptions({ color: NL_STATE_COLOR[s] });
+  }, [nexusLineState]);
 
   // Diretriz Camada de Decisão Profissional, item 1: EMA recomputada do
   // MESMO array real de candles (zero segunda fonte de dado), sempre que
   // o histórico ou o período selecionado no painel Camadas do Gráfico
-  // mudar. Título carrega o período real ("EMA 21") — nunca um rótulo
-  // genérico que dessincronizaria do que está de fato desenhado.
+  // mudar. O período real ("EMA 21") chega ao Operador via priceAxisLabels
+  // (useMemo abaixo, fonte: activeEmaPeriod) — nunca via `title` nativo da
+  // série (mesmo achado/mesma correção de VWAP/NL acima e Trend Channel
+  // abaixo: title:"" na criação, nunca reescrito aqui, para não reabrir a
+  // poluição de eixo na posição NATURAL/sem-colisão da série).
   const activeEmaPeriod = emaPeriod ?? DEFAULT_EMA_PERIOD;
   useEffect(() => {
     if (!emaSeriesRef.current) return;
@@ -678,8 +1028,8 @@ export function EnhancedChart_110_Percent({
       data.map((c) => ({ time: c.time, close: c.close })),
       activeEmaPeriod,
     );
-    emaSeriesRef.current.applyOptions({ title: `EMA ${activeEmaPeriod}` });
     emaSeriesRef.current.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+    setEmaLastValue(series.length > 0 ? series[series.length - 1].value : null);
   }, [data, activeEmaPeriod]);
 
   // Camadas do Gráfico (Finding M): esconder a camada "ema" nunca altera
@@ -690,16 +1040,62 @@ export function EnhancedChart_110_Percent({
     emaSeriesRef.current.applyOptions({ visible: visibility.ema });
   }, [visibility.ema]);
 
+  // Auditoria de pendências (mesmo padrão do EMA acima): VWAP/Nexus Line/
+  // CVD ganham o mesmo interruptor real — o cálculo/setData de cada uma
+  // continua intocado nos efeitos próprios (nada recomputa ao esconder),
+  // só a exibição muda via applyOptions nativo.
+  useEffect(() => {
+    if (!vwapSeriesRef.current) return;
+    vwapSeriesRef.current.applyOptions({ visible: visibility.vwap });
+  }, [visibility.vwap]);
+  useEffect(() => {
+    if (!nexusLineSeriesRef.current) return;
+    nexusLineSeriesRef.current.applyOptions({ visible: visibility.nexus_line });
+  }, [visibility.nexus_line]);
+  useEffect(() => {
+    if (!cvdSeriesRef.current) return;
+    cvdSeriesRef.current.applyOptions({ visible: visibility.cvd });
+  }, [visibility.cvd]);
+
+  // Auditoria do painel do gráfico: Linear Regression Channel real sobre a
+  // MESMA `data` de candles (zero segunda fonte de dado) — mesmo padrão do
+  // efeito de EMA acima. null (histórico insuficiente) => setData([]) nas
+  // três séries, nunca uma linha fabricada sobre janela vazia.
+  useEffect(() => {
+    if (!trendChannelMidRef.current || !trendChannelUpperRef.current || !trendChannelLowerRef.current) return;
+    const reading = computeTrendChannel(
+      data.map((c) => ({ time: c.time, close: c.close })),
+      TREND_CHANNEL_DEFAULT_WINDOW,
+    );
+    trendChannelMidRef.current.setData((reading?.mid ?? []).map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+    trendChannelUpperRef.current.setData((reading?.upper ?? []).map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+    trendChannelLowerRef.current.setData((reading?.lower ?? []).map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
+    const midTail = reading && reading.mid.length > 0 ? reading.mid[reading.mid.length - 1].value : null;
+    setTrendChannelInfo(reading && midTail !== null ? { direction: reading.direction, windowSize: reading.windowSize, midPrice: midTail } : null);
+  }, [data]);
+
+  // Camadas do Gráfico: mesmo padrão de "ema" — esconder alterna visible
+  // nas três séries nativas, nunca desmonta/recomputa.
+  useEffect(() => {
+    if (!trendChannelMidRef.current || !trendChannelUpperRef.current || !trendChannelLowerRef.current) return;
+    trendChannelMidRef.current.applyOptions({ visible: visibility.trend_channel });
+    trendChannelUpperRef.current.applyOptions({ visible: visibility.trend_channel });
+    trendChannelLowerRef.current.applyOptions({ visible: visibility.trend_channel });
+  }, [visibility.trend_channel]);
+
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // Fibonacci como price lines nativas — "fio de seda" (1px sólida, nunca
   // pontilhada); a hierarquia entre níveis vem da OPACIDADE pela confluência
   // real (score ≥ 1 fonte => mais presente), nunca do estilo do traço.
-  // Título carrega ratio + score reais ("FIB 61.8% ×2").
+  // Título carrega ratio + score reais ("FIB 61.8% ×2"). Auditoria de
+  // pendências: ganha visibility.fibonacci (mesmo fail-closed de "sem
+  // camada visível, zero linhas" das outras price lines deste arquivo).
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
     fibLinesRef.current.forEach((line) => series.removePriceLine(line));
     fibLinesRef.current = [];
+    if (!visibility.fibonacci) return;
 
     (fibonacciLevels ?? []).forEach((level) => {
       if (!Number.isFinite(level.price)) return;
@@ -714,14 +1110,32 @@ export function EnhancedChart_110_Percent({
         }),
       );
     });
-  }, [fibonacciLevels]);
+  }, [fibonacciLevels, visibility.fibonacci]);
 
   // §6 "Smart Projection Engine" (achado real de auditoria, ver comentário
   // da prop `scenario` acima): as 2 rotas reais do Motor de Cenários
   // (Path A/B) como price lines nativas — mesmo padrão das linhas Fibonacci
-  // acima, "fio de seda" (1px sólida, nunca pontilhada). Cor = mesma
-  // convenção LONG/SHORT (#00ffaa/#ff0055) já usada pelo próprio texto
-  // "SCENARIO A/B" no CouncilWidget — MESMA leitura, nunca uma segunda.
+  // acima, "fio de seda" (1px sólida, nunca pontilhada).
+  //
+  // Diretriz Restauração/Inteligência Visual §3 ("a projeção deve ser
+  // visualmente diferente daquilo que já foi confirmado... nunca misturar
+  // passado/presente/futuro"): achado real ao VERIFICAR com um harness
+  // Playwright isolado — o título (`title` abaixo) só aparece via
+  // axisLabelVisible:true ou uma legenda de hover que este gráfico não
+  // tem; com axisLabelVisible:false (linha abaixo, deliberado para não
+  // repetir a poluição de eixo que "Achados da captura real do Operador"
+  // já corrigiu no Trend Channel), o texto "PROJEÇÃO"/"SCENARIO A/B" NUNCA
+  // chega à tela — cor é o ÚNICO sinal que o operador realmente vê. A
+  // convenção anterior (verde/vermelho = MESMA cor do LONG/SHORT real)
+  // deixava uma projeção INDISTINGUÍVEL de estrutura já confirmada a
+  // olho nu. Agora usa uma cor própria (lavanda), na mesma família de
+  // "isto é leitura estatística/de contexto, não um nível real" do Trend
+  // Channel (slate) — nunca compartilhada com nenhum outro overlay
+  // (verde/vermelho=direção real, âmbar=zona de entrada, roxo=harmônicos/
+  // EQH-EQL, azul-material=EMA, branco=VWAP, slate=Trend Channel, ciano=
+  // Fibonacci). Direção continua legível pela POSIÇÃO real (Path acima do
+  // preço = LONG, abaixo = SHORT) — a mesma leitura que Fibonacci/S1/R1
+  // já pedem do operador sem cor direcional própria.
   // Deliberadamente mais discretas que o Trade Plan ATIVO (teto de opacidade
   // mais baixo, sem rótulo no eixo de preço): isto é confluência/contexto
   // do Conselho, nunca uma segunda decisão de trading (LEI 24) — o alvo
@@ -730,6 +1144,21 @@ export function EnhancedChart_110_Percent({
   // probabilidade — o próprio scenario.basis documenta isso); piso honesto
   // mesmo quando o peso é null (conselho travado/ausente) para nunca
   // esconder um alvo real só porque a confiança numérica não existe ainda.
+  //
+  // v2 (Diretriz Suprema de Evolução Integrativa §5/§6, "Future Path
+  // Map"): scenario-engine.ts agora expõe até MAX_SCENARIO_TARGETS níveis
+  // reais por caminho (não só o mais próximo) + `invalidation`. Os alvos
+  // extras desenham aqui, mais apagados quanto mais longe (TARGET_ALPHA_
+  // FALLOFF) — a mesma lógica de "o mais próximo pesa mais" já usada em
+  // outros lugares deste gráfico. `invalidation` DELIBERADAMENTE não
+  // ganha uma linha própria: por construção do motor, a invalidação de um
+  // caminho é sempre exatamente o alvo mais próximo do caminho OPOSTO
+  // (scenario-engine.ts: `longPath.invalidation = below[0] = shortPath.
+  // targets[0]`) — desenhá-la de novo aqui seria uma segunda linha no
+  // MESMO preço já real na tela, a "linha fantasma"/redundância que a
+  // diretriz pede para nunca criar. A informação continua real e
+  // auditável (contrato + formatScenarioPathLabel, "· inv NNNN" nos
+  // painéis de texto), só não duplica geometria já desenhada.
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
@@ -743,28 +1172,44 @@ export function EnhancedChart_110_Percent({
       if (weight === null || !Number.isFinite(weight)) return floor;
       return floor + Math.max(0, Math.min(1, weight)) * (ceiling - floor);
     };
+    // Índice 0 = alvo mais próximo (peso cheio); cada alvo mais distante
+    // na mesma rota pesa menos — mesmo espírito do "hierarquia visual dos
+    // alvos" já usado no Trade Plan real (label-compaction.ts), aqui só
+    // por opacidade (cor/traço continuam intocados, Regra de Ouro 5).
+    const TARGET_ALPHA_FALLOFF = [1, 0.65, 0.4];
+
+    // Lavanda dedicada — nunca a mesma cor de nenhum nível real já
+    // desenhado (ver comentário acima). Única para as duas rotas: a
+    // direção já é legível pela posição real acima/abaixo do preço.
+    const PROJECTION_RGB = "186, 168, 255";
 
     ([
       { path: scenario.pathA, label: "SCENARIO A" },
       { path: scenario.pathB, label: "SCENARIO B" },
     ] as const).forEach(({ path, label }) => {
-      if (!path.target || !Number.isFinite(path.target.price)) return;
-      const isLong = path.direction === "LONG";
-      const rgb = isLong ? "0, 255, 170" : "255, 0, 85";
-      const alpha = alphaOf(path.opinionWeight);
       const weightLabel = path.opinionWeight !== null
         ? `opinion ${Math.round(path.opinionWeight * 100)}%`
         : "opinion n/a";
-      scenarioLinesRef.current.push(
-        series.createPriceLine({
-          price: path.target.price,
-          color: `rgba(${rgb}, ${alpha.toFixed(2)})`,
-          lineWidth: 1,
-          lineStyle: LineStyle.Solid,
-          axisLabelVisible: false,
-          title: `${label} · ${path.direction} · ${path.target.sourceKind} · ${weightLabel}`,
-        }),
-      );
+      path.targets.forEach((target, i) => {
+        if (!Number.isFinite(target.price)) return;
+        const alpha = alphaOf(path.opinionWeight) * (TARGET_ALPHA_FALLOFF[i] ?? TARGET_ALPHA_FALLOFF[TARGET_ALPHA_FALLOFF.length - 1]);
+        scenarioLinesRef.current.push(
+          series.createPriceLine({
+            price: target.price,
+            color: `rgba(${PROJECTION_RGB}, ${alpha.toFixed(2)})`,
+            lineWidth: 1,
+            lineStyle: LineStyle.Solid,
+            axisLabelVisible: false,
+            // Prefixo explícito "PROJEÇÃO": metadado real (title da
+            // própria lib), correto e auditável mesmo hoje sem UI de
+            // hover/legenda que o exiba — a diferenciação que o OPERADOR
+            // realmente vê é a cor lavanda dedicada + a opacidade
+            // decrescente por rank, não este texto (ver comentário no
+            // topo do efeito).
+            title: `PROJEÇÃO · ${label} · ${path.direction} · TP${i + 1} · ${target.sourceKind} · ${weightLabel}`,
+          }),
+        );
+      });
     });
   }, [scenario]);
 
@@ -774,12 +1219,14 @@ export function EnhancedChart_110_Percent({
   // compartilhado dos motores). Fio de seda (1px sólida), MAIS discretas que
   // Scenario e Trade Plan (contexto de zona, não alvo): opacidade fixa
   // baixa, sem rótulo de eixo. Fail-closed: sem leitura real, zero linhas.
+  // Auditoria de pendências: ganha visibility.premium_discount, mesmo
+  // fail-closed acima (early-return antes de desenhar).
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
     premiumDiscountLinesRef.current.forEach((line) => series.removePriceLine(line));
     premiumDiscountLinesRef.current = [];
-    if (!premiumDiscount) return;
+    if (!premiumDiscount || !visibility.premium_discount) return;
     const mkPd = (price: number, color: string, title: string) => {
       if (!Number.isFinite(price)) return;
       premiumDiscountLinesRef.current.push(
@@ -796,7 +1243,7 @@ export function EnhancedChart_110_Percent({
     mkPd(premiumDiscount.rangeHigh.price, "rgba(255, 0, 85, 0.30)", "Premium · topo do range");
     mkPd(premiumDiscount.equilibrium, "rgba(138, 180, 248, 0.30)", "Equilibrium · 50%");
     mkPd(premiumDiscount.rangeLow.price, "rgba(0, 255, 170, 0.30)", "Discount · fundo do range");
-  }, [premiumDiscount]);
+  }, [premiumDiscount, visibility.premium_discount]);
 
   // Auditoria Final §3 ("caso esteja calculado mas não desenhado, ativar
   // renderização"): o MELHOR padrão harmônico real (hits[0] — a lista já
@@ -805,13 +1252,41 @@ export function EnhancedChart_110_Percent({
   // (acento do Conselho/opinião agregada), mais discreta que Trade Plan e
   // Scenario; fio de seda; o título carrega o fit com o rótulo honesto —
   // aderência, nunca probabilidade. Fail-closed: sem padrão, zero linhas.
+  // Auditoria de pendências: ganha visibility.harmonics, mesmo fail-closed
+  // (early-return antes de desenhar qualquer price line/polilinha nova).
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
     harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));
     harmonicLinesRef.current = [];
+    // Continuidade: limpa a polilinha ANTES do early-return abaixo — sem
+    // padrão real agora, zero figura antiga lingerindo na tela (mesmo
+    // fail-closed das price lines desta função).
+    harmonicPolylineRef.current?.setData([]);
+    if (!visibility.harmonics) return;
     const top = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;
     if (!top || !Number.isFinite(top.points.D.price)) return;
+    // Continuidade: a figura XABCD/Wolfe completa — X/A/B/C/D (ou 1..5 na
+    // Wolfe) já vêm em ordem temporal crescente por construção do motor
+    // (cada pivô fractal é necessariamente mais recente que o anterior);
+    // ordenar por tempo aqui é uma trava DEFENSIVA na borda de renderização
+    // (a lib exige tempo estritamente crescente), nunca uma segunda regra
+    // de ordenação inventada. AB=CD honestamente não tem X — filtrado, nunca
+    // um ponto fabricado para "completar" a figura.
+    const rawPoints: HarmonicPoint[] = [top.points.X, top.points.A, top.points.B, top.points.C, top.points.D].filter(
+      (p): p is HarmonicPoint => p !== undefined,
+    );
+    const polylinePoints = rawPoints
+      .map((p) => {
+        const candle = data[p.index];
+        return candle && Number.isFinite(p.price) ? { time: candle.time as UTCTimestamp, value: p.price } : null;
+      })
+      .filter((p): p is { time: UTCTimestamp; value: number } => p !== null)
+      .sort((a, b) => a.time - b.time)
+      .filter((p, i, arr) => i === 0 || p.time !== arr[i - 1].time); // tempo estritamente crescente, exigência real da lib
+    if (polylinePoints.length >= 2) {
+      harmonicPolylineRef.current?.setData(polylinePoints);
+    }
     const mkH = (price: number, title: string) => {
       harmonicLinesRef.current.push(
         series.createPriceLine({
@@ -824,21 +1299,53 @@ export function EnhancedChart_110_Percent({
         }),
       );
     };
+    // Consolidação Final §6 (terminologia profissional): o ponto de
+    // reversão esperado é a PRZ — Potential Reversal Zone (D nos XABCD/
+    // AB=CD; ponto 5 na Wolfe). EPC §4 ("apenas as iniciais... menor
+    // poluição"): direção BULLISH/BEARISH vira glifo ↑/↓ (mesmo
+    // vocabulário de FVG/OB/VWAP/NL) e o disclaimer "(aderência, nunca
+    // probabilidade)" sai do rótulo flutuante — já vive, íntegro, no
+    // título do painel Harmonic Patterns ("ratio fit, never probability",
+    // App.tsx) — mesma disciplina de zero-repetição do "(Núcleo)".
+    const hDirGlyph = top.direction === "BULLISH" ? "↑" : "↓";
     mkH(
       top.points.D.price,
-      `${top.pattern} ${top.direction} · D · fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)`,
+      `${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`,
     );
     if (top.pattern === "WOLFE" && typeof top.epaPrice === "number" && Number.isFinite(top.epaPrice)) {
-      mkH(top.epaPrice, "WOLFE · EPA (linha 1→4 real)");
+      // §6: ETA canônica da Wolfe = ápice da cunha (cruzamento real
+      // 1→3 × 2→4, etaIndex do motor). Convertida em tempo pelo intervalo
+      // REAL entre as duas últimas barras carregadas — nunca um mapa de
+      // timeframe paralelo. Sem ápice à frente => só a EPA, sem ETA.
+      const barSec = data.length >= 2 ? data[data.length - 1].time - data[data.length - 2].time : null;
+      const remainingBars = typeof top.etaIndex === "number" ? top.etaIndex - (data.length - 1) : null;
+      const etaLabel =
+        barSec !== null && remainingBars !== null && remainingBars > 0
+          ? formatEtaDuration(remainingBars * barSec * 1000)
+          : null;
+      // EPC §4: EPA já é a sigla profissional (Estimated Price at Apex);
+      // "(linha 1→4 real)"/"(ápice da cunha)" eram descrições, não dado
+      // — removidas do rótulo flutuante (o significado da EPA/ETA da Wolfe
+      // continua documentado em harmonic-patterns.ts e no comentário acima).
+      mkH(top.epaPrice, `WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`);
     }
-  }, [harmonicHits]);
+  }, [harmonicHits, data, visibility.harmonics]);
 
   // Signal Precision order: the Trade Plan drawn on the chart — subtle,
   // silk-thread annotations (1px solid, never dashed; hierarchy only via
   // color/opacity). Entry zone = two lines bounding the real structure
-  // (one line when the zone is a zero-width level); Stop and Target with
-  // their real structure basis and the R:R in the label. English labels
-  // (professional trading terminology). Fail-closed: no plan, no lines.
+  // (one line when the zone is a zero-width level); Stop and Target lines.
+  // Fail-closed: no plan, no lines.
+  //
+  // "bater o olho profissional" (pendência honesta do turno anterior): os
+  // RÓTULOS de ENTRY/STOP/TARGET migraram para priceAxisLabels — o MESMO
+  // sistema anti-colisão de S1/R1/VWAP/NL/EMA/último preço/Trend Channel.
+  // Antes eram os ÚNICOS rótulos ainda no eixo NATIVO da lib
+  // (axisLabelVisible:true), sem NENHUMA consciência da posição dos
+  // outros; podiam sobrepor exatamente quando um plano ativo tem níveis
+  // perto de S1/R1/VWAP (o pior caso que o Operador mais precisa ler
+  // limpo). axisLabelVisible:false aqui: a LINHA horizontal continua
+  // desenhada (mesmo padrão de S1/R1), só o tag de eixo muda de dono.
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
@@ -848,39 +1355,65 @@ export function EnhancedChart_110_Percent({
     targetLinesArrayRef.current = [];
     if (!tradePlan) return;
 
-    const mk = (price: number, color: string, title: string) => {
+    const mk = (price: number, color: string) => {
       if (!Number.isFinite(price)) return null;
       const line = series.createPriceLine({
         price,
         color,
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
-        axisLabelVisible: true,
-        title,
+        axisLabelVisible: false,
+        title: "",
       });
       tradePlanLinesRef.current.push(line);
       return line;
     };
     const entryColor = "rgba(240, 208, 111, 0.75)"; // amber — the acceptance zone
     if (tradePlan.entry.low === tradePlan.entry.high) {
-      mk(tradePlan.entry.low, entryColor, `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`);
+      mk(tradePlan.entry.low, entryColor);
     } else {
-      mk(tradePlan.entry.high, entryColor, `ENTRY ${tradePlan.direction} · ${tradePlan.entry.basis}`);
-      mk(tradePlan.entry.low, "rgba(240, 208, 111, 0.45)", "ENTRY ZONE LOW");
+      mk(tradePlan.entry.high, entryColor);
+      mk(tradePlan.entry.low, "rgba(240, 208, 111, 0.45)");
     }
-    const stopTitle = `STOP · ${tradePlan.stop.basis}`;
-    stopLineRef.current = mk(tradePlan.stop.price, "rgba(255, 0, 85, 0.75)", stopTitle);
+    stopLineRef.current = mk(tradePlan.stop.price, "rgba(255, 0, 85, 0.75)");
     // v2 (Diretriz Complementar §2): uma linha por alvo real (1 a
-    // MAX_TARGETS), numeradas "TARGET 1/2/3" — nunca uma linha única fixa.
-    const multi = tradePlan.targets.length > 1;
-    tradePlan.targets.forEach((target, i) => {
-      const rr = tradePlan.riskRewardRatios[i];
-      const label = multi ? `TARGET ${i + 1}` : "TARGET";
-      const title = `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}`;
-      const line = mk(target.price, "rgba(0, 255, 170, 0.75)", title);
+    // MAX_TARGETS) — nunca uma linha única fixa.
+    tradePlan.targets.forEach((target) => {
+      const line = mk(target.price, "rgba(0, 255, 170, 0.75)");
       if (line) targetLinesArrayRef.current.push(line);
     });
   }, [tradePlan]);
+
+  // EPC §5/§6 (continuação — relato direto do Operador: "falta aparecer
+  // entrada e alvo/alvo2/alvo3 no gráfico"): STOP/TARGET1/TARGET2 do Core
+  // Engine (LEI 24) quando o Trade Plan do Conselho ainda não confirma.
+  // Mesmo padrão Fio de Seda (lineWidth:1 solid) das linhas acima — cores
+  // mais apagadas (alpha menor) sinalizam honestamente "fonte diferente,
+  // mais provisória" sem quebrar a Regra de Ouro 5 (zero linha tracejada).
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    engineFallbackLinesRef.current.forEach((line) => series.removePriceLine(line));
+    engineFallbackLinesRef.current = [];
+    if (!engineFallbackLevels) return;
+
+    const mk = (price: number, color: string) => {
+      if (!Number.isFinite(price)) return null;
+      const line = series.createPriceLine({
+        price,
+        color,
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: false,
+        title: "",
+      });
+      engineFallbackLinesRef.current.push(line);
+      return line;
+    };
+    mk(engineFallbackLevels.stop, "rgba(255, 0, 85, 0.5)");
+    mk(engineFallbackLevels.target1, "rgba(0, 255, 170, 0.5)");
+    if (engineFallbackLevels.target2 !== null) mk(engineFallbackLevels.target2, "rgba(0, 255, 170, 0.35)");
+  }, [engineFallbackLevels]);
 
   // Ordem Final Autonomia Evolução §1 + Diretriz Complementar §2/§4:
   // "alertas visuais sutis quando o preço romper estrutura relevante" — the
@@ -905,47 +1438,325 @@ export function EnhancedChart_110_Percent({
   // single real source the track record uses internally, never a second
   // formula here. "Quando o cenário muda, o desenho muda" (Diretriz
   // Complementar §5).
+  // Este efeito agora cuida SÓ da geometria/cor da LINHA horizontal: o
+  // stop RATCHEA de posição (break-even → trailing) via
+  // effectiveStopForTargetsHit e brilha quando o preço vivo rompe; cada
+  // alvo brilha quando ATINGIDO (targetsHit autoritativo, nunca
+  // re-derivado do livePrice instantâneo). O RÓTULO (texto ENTRY/STOP/
+  // TARGET + REACHED/BREACHED + distância %/ETA/compactação) vive em
+  // priceAxisLabels (useMemo abaixo, mesmo sistema anti-colisão dos
+  // demais níveis) — computado das MESMAS funções puras e MESMOS inputs
+  // reais, então linha e rótulo nunca divergem. applyOptions() atualiza a
+  // linha JÁ criada acima, nunca a recria a cada tick (Regra de Ouro 6:
+  // caminho quente do gráfico). Hierarquia só por cor/opacidade (Regra de
+  // Ouro 2) — lineWidth/lineStyle nunca tocados aqui.
   useEffect(() => {
     if (!tradePlan) return;
     const hits = targetsHit ?? 0;
-    const stopRatchetActive = hits > 0;
     const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);
     const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
     const long = tradePlan.direction === "LONG";
     const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
-    const stopTitle = hits >= 2
-      ? `STOP · TRILHADO (alvo ${hits - 1})`
-      : stopRatchetActive
-        ? `STOP · BREAK-EVEN (real)`
-        : `STOP · ${tradePlan.stop.basis}`;
     stopLineRef.current?.applyOptions({
       price: effectiveStopPrice,
       color: stopHitNow ? "rgba(255, 0, 85, 1)" : "rgba(255, 0, 85, 0.75)",
-      title: stopHitNow ? `${stopTitle} · BREACHED` : stopTitle,
     });
-    const multi = tradePlan.targets.length > 1;
     tradePlan.targets.forEach((target, i) => {
       const line = targetLinesArrayRef.current[i];
       if (!line) return;
       const reached = i < hits;
-      const rr = tradePlan.riskRewardRatios[i];
-      const label = multi ? `TARGET ${i + 1}` : "TARGET";
-      // Auditoria Final §3: distância % REAL ao preço vivo + ETA em faixa
-      // do contrato fundido (decision.plan deriva do MESMO tradePlan; o
-      // guard de preço torna divergência de render intermediário inócua).
-      const distPct = p !== null && p > 0 ? ` · ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";
-      const fusedTarget = decision?.plan?.targets[i];
-      const etaLabel =
-        fusedTarget && Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)
-          ? formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)
-          : null;
-      const title = `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}`;
       line.applyOptions({
         color: reached ? "rgba(0, 255, 170, 1)" : "rgba(0, 255, 170, 0.75)",
-        title: reached ? `${title} · REACHED` : title,
       });
     });
-  }, [tradePlan, livePrice, targetsHit, decision]);
+  }, [tradePlan, livePrice, targetsHit]);
+
+  // Evolução Profunda §8/§9: auditoria confirmou que a ordem de montagem
+  // abaixo (cada plugin comentado individualmente desde suas próprias
+  // diretrizes) já corresponde, na prática, aos 4 níveis de prioridade
+  // visual pedidos — nenhuma sobreposição real encontrada, então a ordem
+  // NÃO foi alterada (§12: "preservar o que já está provado"). Mapa
+  // documentado aqui pela primeira vez, para a leitura ficar explícita:
+  //   Nível 1 (PRINCIPAL) — velas + VWAP/EMA/Nexus Line: séries NATIVAS do
+  //     lightweight-charts (não plugins deste array), vivem no próprio
+  //     pane do gráfico — sempre acima de qualquer plugin em div overlay.
+  //   Nível 2 (RISCO) — TradePlanZonePlugin (entrada/stop/TPs): montado
+  //     POR ÚLTIMO neste array de propósito (comentário original abaixo),
+  //     portanto o overlay-div mais acima de todos os outros.
+  //   Nível 3 (CONTEXTO) — LiquidityZonesPlugin (FVG/OB), VolumeProfilePlugin,
+  //     StructureBreakMarkersPlugin: estrutura/S-R/liquidez, no meio da pilha.
+  //   Nível 4 (AUXILIAR) — OrderFlowHeatmapPlugin: montado PRIMEIRO
+  //     (comentário original abaixo) — fica atrás das velas de propósito, o
+  //     mesmo padrão institucional (Bookmap-style) já documentado; Neural
+  //     Market Aura também é Nível 4 (gradiente de fundo, nunca compete
+  //     visualmente — ver comentário próprio abaixo).
+  // Harmônicos/Wolfe/ETA/Heat/Score vivem como price lines/títulos no
+  // próprio pane nativo (fio de seda), não neste array de plugins.
+  //
+  // Nível 0 (NOVO, acima de tudo — achado real de captura de tela do
+  // Operador): PriceLabelStackPlugin. Os rótulos de S1/R1/VWAP/NL/EMA/
+  // último preço eram "last value label"/"axis label" NATIVOS — sempre
+  // acima de qualquer plugin em div overlay, por definição do Nível 1
+  // documentado acima. Ao substituí-los por um overlay próprio (única
+  // forma de resolver colisão entre eles — a lib não tem essa
+  // consciência cross-série), o overlay precisa ficar acima de TODOS os
+  // outros plugins (inclusive TradePlanZonePlugin, Nível 2) pra manter a
+  // MESMA garantia de "sempre legível" que os rótulos nativos já tinham.
+  // useMemo (não construído direto no corpo do render): mesma disciplina
+  // de dirty-flag do resto do gráfico — PriceLabelStackPlugin só reagenda
+  // um redraw real quando a referência de `labels` muda, então uma nova
+  // array a cada render (por um re-render não relacionado, ex.:
+  // harmonicHits mudando) nunca deveria disparar um redraw à toa.
+  const priceAxisLabels = useMemo<PriceAxisLabel[]>(() => {
+    const out: PriceAxisLabel[] = [];
+    // Achado real do Operador ("tá ficando só numa lateral direita...
+    // qual forma mais inteligente... mais profissional"): pesquisa real
+    // (Lightweight Charts documenta price scales nativas nos dois lados;
+    // TradingView Supercharts permite até 8) confirma que dividir rótulos
+    // entre os dois lados é prática profissional real. Critério de
+    // divisão, pensado como um trader pensaria: lado DIREITO (onde o olho
+    // já rastreia o preço ao vivo) = "o que eu ajo AGORA" — VWAP/NL/EMA
+    // (referências dinâmicas, recalculadas a cada candle) + ENTRY/STOP/
+    // TARGET (o plano ativo, Conselho ou Núcleo). Lado ESQUERDO = "o mapa
+    // estrutural" — S1/R1 (limites da faixa atual, mudam devagar), Trend
+    // Channel (contexto de tendência) e BOS/CHOCH (evento HISTÓRICO, já
+    // esmaecendo com a idade — o menos urgente de todos, candidato ideal
+    // pro lado secundário). Resultado real: o lado direito cai de até 12
+    // caixas possíveis para até 8 — redução real de densidade, não só
+    // estética.
+    if (Number.isFinite(support)) {
+      out.push({
+        price: support as number,
+        text: `${levelTitle("S1", supportStrength, supportBreakouts)} ${(support as number).toFixed(2)}`,
+        color: "rgba(0, 255, 170, 0.65)",
+        side: "left",
+      });
+    }
+    if (Number.isFinite(resistance)) {
+      out.push({
+        price: resistance as number,
+        text: `${levelTitle("R1", resistanceStrength, resistanceBreakouts)} ${(resistance as number).toFixed(2)}`,
+        color: "rgba(255, 0, 85, 0.65)",
+        side: "left",
+      });
+    }
+    // Auditoria de pendências (achado real via harness Playwright): as 3
+    // linhas abaixo já escondiam a SÉRIE nativa (applyOptions visible)
+    // quando a camada era desligada, mas a ETIQUETA do eixo (aqui) nunca
+    // checava o mesmo visibility — esconder VWAP/NL/EMA no painel deixava
+    // a série invisível, mas a caixa "VWAP • 63951.81"/"NL • .../"EMA 21
+    // ..." continuava aparecendo no eixo como se nada tivesse mudado.
+    if (visibility.vwap && vwapLastValue !== null && Number.isFinite(vwapLastValue)) {
+      const s: DirectionalLineState = vwapState ?? "NEUTRAL";
+      out.push({ price: vwapLastValue, text: `VWAP ${LINE_STATE_GLYPH[s]} ${vwapLastValue.toFixed(2)}`, color: VWAP_STATE_COLOR[s] });
+    }
+    if (visibility.nexus_line && nlLastValue !== null && Number.isFinite(nlLastValue)) {
+      const s: DirectionalLineState = nexusLineState ?? "NEUTRAL";
+      out.push({ price: nlLastValue, text: `NL ${LINE_STATE_GLYPH[s]} ${nlLastValue.toFixed(2)}`, color: NL_STATE_COLOR[s] });
+    }
+    if (visibility.ema && emaLastValue !== null && Number.isFinite(emaLastValue)) {
+      out.push({ price: emaLastValue, text: `EMA ${activeEmaPeriod} ${emaLastValue.toFixed(2)}`, color: "rgba(66, 165, 245, 0.85)" });
+    }
+    const lastCandle = data.length > 0 ? data[data.length - 1] : null;
+    if (lastCandle && Number.isFinite(lastCandle.close)) {
+      // Achado real de captura de tela do Operador (BTC/USDT 1H ao vivo):
+      // este rótulo (antes sempre lastCandle.close) ficava atrás do preço
+      // real — patchLastCandleWithLiveTick (live-candle-sync.ts) só
+      // atualiza a vela RENDERIZADA via series.update() (deliberado:
+      // SMC/Fibonacci/Volume Profile não podem recomputar a cada tick de
+      // preço), nunca escreve de volta no array `data`. A barra superior
+      // (mesmo usePriceSnapshot() que alimenta `livePrice` aqui) seguia ao
+      // vivo enquanto este rótulo congelava no último REST/kline — dois
+      // números diferentes reivindicando "o preço atual" ao mesmo tempo
+      // (~30s de defasagem possível, o intervalo real do poll REST).
+      // livePrice já chega como prop (mesma fonte do patch da vela acima)
+      // — preferido aqui, com fallback pro close da vela só quando ainda
+      // não existe nenhum tick real (fail-closed, carregamento inicial).
+      const displayPrice = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : lastCandle.close;
+      out.push({
+        price: displayPrice,
+        text: displayPrice.toFixed(2),
+        color: displayPrice >= lastCandle.open ? "#00ffaa" : "#ff0055",
+      });
+    }
+    // Diretriz de Refinamento Visual §5: o Trend Channel volta a ser uma
+    // camada identificável do eixo de preço — mesmo tratamento de R1/NL/
+    // VWAP/EMA/S1 acima, mesmo sistema anti-colisão (nunca mais um <div>
+    // solto competindo com o cabeçalho ou flutuando sem relação com
+    // nenhum nível real). Respeita visibility.trend_channel como sempre
+    // (a camada continua controlável no painel); ancorado na PONTA real
+    // da linha mid (o mesmo preço que a própria linha termina).
+    if (visibility.trend_channel && trendChannelInfo) {
+      out.push({
+        price: trendChannelInfo.midPrice,
+        // Achado real do Operador: ASCENDING/DESCENDING (9-10 letras) vira
+        // ↑/↓ — mesmo padrão de VWAP/NL. OLS/janela/σ continuam intactos:
+        // é a ÚNICA leitura visível deles em todo o app (grep confirma),
+        // remover seria apagar dado real (Regra de Ouro 4), não simplificar.
+        text: `TREND · OLS ${trendChannelInfo.windowSize} · ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ · ${TREND_DIRECTION_GLYPH[trendChannelInfo.direction]} ${trendChannelInfo.midPrice.toFixed(2)}`,
+        color: "rgba(148, 163, 184, 0.55)",
+        side: "left",
+      });
+    }
+    // "bater o olho profissional" (pendência honesta do turno anterior): os
+    // rótulos de ENTRY/STOP/TARGET entram no MESMO array/sistema
+    // anti-colisão dos demais níveis — nunca mais o eixo NATIVO, que os
+    // deixava sobrepor S1/R1/VWAP quando um plano ativo tem níveis
+    // próximos. Cores reais já usadas pelas LINHAS acima (âmbar=entrada,
+    // vermelho=stop, verde=alvo) — leitura instantânea de ENTRY LONG/SHORT/
+    // STOP/TARGET pela cor da caixa. O texto/estado (REACHED/BREACHED,
+    // distância %/ETA, compactação) é IDÊNTICO ao que a lib desenhava,
+    // computado das MESMAS funções puras (effectiveStopForTargetsHit,
+    // shouldCompactLabels, formatEtaRange) e MESMOS inputs reais que o
+    // efeito da LINHA acima — linha e rótulo nunca divergem. Fail-closed:
+    // sem plano, zero rótulos (early guard de cada push por Number.isFinite).
+    if (tradePlan) {
+      const hits = targetsHit ?? 0;
+      const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
+      const long = tradePlan.direction === "LONG";
+      const entryColor = "rgba(240, 208, 111, 0.75)";
+      // EPC FINAL §8 ("Objetos Inteligentes"): nomenclatura curta e
+      // padronizada pedida explicitamente — EN/ST/TP1/TP2/TP3 nos OBJETOS
+      // GRÁFICOS do canvas (aqui). A barra de comando (BarField "Entry
+      // Zone"/"Stop"/"Target", App.tsx) NÃO é tocada por este achado: já
+      // passou por um "Redesenho radical" anterior — pedido explícito do
+      // Operador — trocando "E/S/T" cramped por rótulos legíveis; reverter
+      // isso sem pedido novo desfaria uma decisão real já tomada.
+      if (tradePlan.entry.low === tradePlan.entry.high) {
+        if (Number.isFinite(tradePlan.entry.low)) {
+          out.push({ price: tradePlan.entry.low, text: `EN ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor });
+        }
+      } else {
+        if (Number.isFinite(tradePlan.entry.high)) {
+          out.push({ price: tradePlan.entry.high, text: `EN ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor });
+        }
+        if (Number.isFinite(tradePlan.entry.low)) {
+          out.push({ price: tradePlan.entry.low, text: "EN ZONE LOW", color: entryColor });
+        }
+      }
+      // Stop no preço EFETIVO (ratchet real, MESMA função pura do efeito da
+      // linha) — BREACHED quando o preço vivo já rompeu (fail-closed:
+      // preço não-finito nunca resolve BREACHED).
+      const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);
+      if (Number.isFinite(effectiveStopPrice)) {
+        const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
+        const stopBase = hits >= 2
+          ? `ST · TRILHADO (alvo ${hits - 1})`
+          : hits > 0
+            ? `ST · BREAK-EVEN (real)`
+            : `ST · ${tradePlan.stop.basis}`;
+        out.push({ price: effectiveStopPrice, text: stopHitNow ? `${stopBase} · BREACHED` : stopBase, color: "rgba(255, 0, 85, 0.75)" });
+      }
+      // Continuidade §6: níveis apertados => rótulos compactos (WIDTH); o
+      // resolvedor de colisão já cuida da separação VERTICAL. O stop
+      // EFETIVO entra na medição (o ratchet pode encostá-lo num alvo real).
+      const levels = [effectiveStopPrice, ...tradePlan.targets.map((t) => t.price)].sort((a, b) => a - b);
+      const compactLabels = shouldCompactLabels(levels);
+      tradePlan.targets.forEach((target, i) => {
+        if (!Number.isFinite(target.price)) return;
+        const reached = i < hits;
+        const rr = tradePlan.riskRewardRatios[i];
+        // EPC FINAL §8: TP1/TP2/TP3 sempre numerado (mesmo com 1 alvo só) —
+        // a mesma convenção pedida, sem distinção "singular vs plural".
+        const label = `TP${i + 1}`;
+        const distPct = p !== null && p > 0 ? ` · ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";
+        const fusedTarget = decision?.plan?.targets[i];
+        const etaLabel =
+          fusedTarget && Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)
+            ? formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)
+            : null;
+        const base = compactLabels
+          ? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}`
+          : `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}`;
+        out.push({ price: target.price, text: reached ? `${base} · REACHED` : base, color: "rgba(0, 255, 170, 0.75)" });
+      });
+    }
+    // EPC §5/§6 (continuação): rótulos do fallback do Core Engine — MESMO
+    // sistema anti-colisão, "(Núcleo)" no texto deixa explícito que é uma
+    // fonte diferente do Trade Plan do Conselho acima (nunca os dois ao
+    // mesmo tempo: engineFallbackLevels já vem null quando tradePlan
+    // existe). REACHED/BREACHED aqui é derivação simples do preço vivo
+    // contra o nível — não usa o ratchet effectiveStopForTargetsHit nem o
+    // Track Record autoritativo (signal-track-record.ts), que rastreiam
+    // especificamente o Trade Plan do Conselho; misturar os dois
+    // conflaria dois planos distintos.
+    if (engineFallbackLevels) {
+      const longFb = engineFallbackLevels.direction === "LONG";
+      const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
+      // Achado real do Operador ("nome Grandão, um monte de letra... mais
+      // padrão, mais profissional"): "(Núcleo)" repetido em CADA rótulo
+      // (STOP/TARGET1/TARGET2) era redundante — o overlay do canto
+      // superior esquerdo (tradePlanAbsenceReason) já deixa "linhas
+      // abaixo são do Núcleo" explícito UMA vez, persistente enquanto o
+      // fallback estiver ativo (nunca some sozinho). Removido daqui —
+      // zero informação perdida, só zero repetição (Regra de Ouro 4). A
+      // distinção visual real continua existindo: cor mais opaca/apagada
+      // (0.5/0.35) que o Trade Plan do Conselho (0.75) sempre teve.
+      // strengthSuffix também alinhado ao estilo tight de levelTitle()
+      // (S1/R1 acima) — espaço, nunca "·", mesmo padrão em todo o eixo.
+      const strengthSuffix = (s: { label: "FORTE" | "FRACA"; touches: number } | null) => (s ? ` ${s.label}` : "");
+      // EPC MODO ELITE §4 ("Obstáculos estruturais" na lista permanente): o
+      // Núcleo não tem painel próprio (o Conselho tem o ANALYSIS), então o
+      // rótulo é o único lugar dessa contagem — sufixo compacto "⚠ N"
+      // (mesmo glifo ⚠ da zona destacada no LiquidityZonesPlugin), só quando
+      // há obstáculo real no caminho. Zero quando o caminho está livre.
+      const obstacleSuffix = (n: number | null | undefined) => (typeof n === "number" && n > 0 ? ` ⚠ ${n}` : "");
+      if (Number.isFinite(engineFallbackLevels.stop)) {
+        const breached = p !== null && (longFb ? p <= engineFallbackLevels.stop : p >= engineFallbackLevels.stop);
+        out.push({
+          price: engineFallbackLevels.stop,
+          text: breached ? "ST · BREACHED" : "ST",
+          color: "rgba(255, 0, 85, 0.5)",
+        });
+      }
+      // EPC FINAL §8: TP1/TP2 sempre numerado, mesma convenção do Trade
+      // Plan do Conselho acima — zero distinção singular/plural no rótulo.
+      if (Number.isFinite(engineFallbackLevels.target1)) {
+        const reached = p !== null && (longFb ? p >= engineFallbackLevels.target1 : p <= engineFallbackLevels.target1);
+        const rr = engineFallbackLevels.riskRewardRatio;
+        out.push({
+          price: engineFallbackLevels.target1,
+          text: `TP1${strengthSuffix(engineFallbackLevels.target1Strength)}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}${reached ? " · REACHED" : ""}`,
+          color: "rgba(0, 255, 170, 0.5)",
+        });
+      }
+      if (engineFallbackLevels.target2 !== null && Number.isFinite(engineFallbackLevels.target2)) {
+        const reached = p !== null && (longFb ? p >= engineFallbackLevels.target2 : p <= engineFallbackLevels.target2);
+        out.push({
+          price: engineFallbackLevels.target2,
+          text: `TP2${strengthSuffix(engineFallbackLevels.target2Strength)}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,
+          color: "rgba(0, 255, 170, 0.35)",
+        });
+      }
+    }
+    // Ordem "Ciborgue Vivo" §1 (achado real de captura de tela do
+    // Operador: o rótulo "CHOC" desenhado pelo StructureBreakMarkersPlugin
+    // colidia com a caixa "EMA 21" — canvas próprio sem consciência dos
+    // outros rótulos do eixo). O TEXTO ("BOS"/"CHOCH") migra pra cá — MESMO
+    // preço/cor que a LINHA de rompimento (StructureBreakMarkersPlugin
+    // continua desenhando-a, intocada) e o MESMO ageAlpha(age, BREAK_DECAY)
+    // real que decide quando "esquecer" (idade em candles, nunca relógio
+    // de parede) — zero segunda fonte, zero segunda curva de decaimento.
+    // alpha<=0 nunca entra: mesma honestidade de "esquecido" do plugin.
+    if (structureBreak) {
+      const point = data[structureBreak.index];
+      if (point) {
+        const age = data.length - 1 - structureBreak.index;
+        const alpha = ageAlpha(age, BREAK_DECAY);
+        if (alpha > 0 && Number.isFinite(structureBreak.level)) {
+          const bullish = structureBreak.direction === "ALTA";
+          out.push({
+            price: structureBreak.level,
+            text: structureBreak.type,
+            color: bullish ? "rgba(0, 255, 170, 0.75)" : "rgba(255, 0, 85, 0.75)",
+            alpha,
+            side: "left",
+          });
+        }
+      }
+    }
+    return out;
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak]);
 
   return (
     <div className="absolute inset-0">
@@ -962,6 +1773,30 @@ export function EnhancedChart_110_Percent({
         />
       )}
       <div ref={containerRef} className="absolute inset-0" />
+      {/* EPC §5/§6 ("Nunca simplesmente esconder essas informações"): sem
+         Trade Plan ativo, o canto superior esquerdo (vazio desde que o
+         Trend Channel migrou pro eixo, Diretriz de Refinamento Visual §5)
+         explica o motivo REAL — mesmo texto/lógica da barra de comando
+         (App.tsx: tradePlanAbsenceReason), nunca um silêncio que o
+         Operador não consegue distinguir de um bug. pointer-events-none:
+         nunca captura um gesto de pan/zoom, mesma disciplina de todo
+         overlay deste gráfico.
+         Continuação EPC §5/§6: quando engineFallbackLevels também existe,
+         "SEM TRADE PLAN" sozinho ficaria auto-contraditório — as linhas
+         STOP/TARGET (Núcleo) já estão visíveis no canvas. O texto então
+         deixa explícito que é só o plano do CONSELHO que está ausente, e
+         aponta para as linhas reais já desenhadas — nunca dois sinais
+         divergentes sem explicação lado a lado. */}
+      {tradePlanAbsenceReason && (
+        <div
+          className="absolute left-2 top-2 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide"
+          style={{ color: "rgba(138, 180, 248, 0.55)" }}
+        >
+          {engineFallbackLevels
+            ? `SEM PLANO DO CONSELHO · ${tradePlanAbsenceReason} · linhas abaixo são do Núcleo`
+            : `SEM TRADE PLAN · ${tradePlanAbsenceReason}`}
+        </div>
+      )}
       {/* V-MAX Fase 0.7: FVG/Order Blocks (bullish|bearish) — mesmo dado real
          de computeSmcZones, já filtrado (!mitigated) e limitado em contagem
          rio acima (App.tsx/ChartWidget), agora como área colorida real
@@ -975,6 +1810,7 @@ export function EnhancedChart_110_Percent({
           data={data}
           fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}
           orderBlocks={(orderBlocks ?? []) as FillableZone[]}
+          obstacleZones={obstacleZones ?? []}
         />
       )}
       {/* Ordem "Ciborgue Vivo" §1: BOS/CHOCH real, mesma anotação temporária
@@ -1020,6 +1856,15 @@ export function EnhancedChart_110_Percent({
           confidenceZone={confidenceZone ?? null}
         />
       )}
+      {/* Nível 0 (ver comentário acima do useMemo de priceAxisLabels):
+         montado por último de propósito — precisa ficar acima de TODOS os
+         outros overlays, a mesma garantia que os "last value label"/
+         "axis label" nativos que ele substitui sempre tiveram. */}
+      <PriceLabelStackPlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+        labels={priceAxisLabels}
+      />
     </div>
   );
 }

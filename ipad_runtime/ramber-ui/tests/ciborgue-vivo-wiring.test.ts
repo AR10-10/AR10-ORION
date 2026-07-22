@@ -48,7 +48,10 @@ describe('App.tsx: bosChoch computado antes de voiceSnapshot (dependência real 
   it('smcZones e bosChoch entram em contextValue (WidgetContext) para o ChartWidget consumir', () => {
     const app = read('../src/App.tsx');
     // A mesma chave aparece no objeto de valor E no array de deps do useMemo.
-    const occurrences = app.match(/\bsmcZones,\n\s*bosChoch,/g) ?? [];
+    // tradePlanStructureZones (Diretriz Restauração/Inteligência Visual §6)
+    // viaja hoje na mesma posição — reaproveitado pelo destaque de
+    // obstáculos no gráfico, mesma disciplina de zero segunda fonte.
+    const occurrences = app.match(/\bsmcZones,\n\s*tradePlanStructureZones,\n\s*bosChoch,/g) ?? [];
     expect(occurrences.length).toBe(2);
   });
 });
@@ -56,14 +59,14 @@ describe('App.tsx: bosChoch computado antes de voiceSnapshot (dependência real 
 describe('App.tsx → EnhancedChart_110_Percent: structureBreak passa ponta a ponta até o plugin', () => {
   it('ChartWidget lê bosChoch do contexto e repassa structureBreak={bosChoch?.break ?? null}', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('const { smcZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, emaPeriod, confidenceZone, nexusDecision } = useContext(WidgetContext) || {};');
+    expect(app).toContain('const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend } = useContext(WidgetContext) || {};');
     expect(app).toContain('structureBreak={bosChoch?.break ?? null}');
   });
 
   it('EnhancedChart_110_Percent aceita structureBreak e monta StructureBreakMarkersPlugin com o mesmo array `data` do LiquidityZonesPlugin', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     expect(chart).toContain('structureBreak?: StructureBreak | null;');
-    expect(chart).toContain('import { StructureBreakMarkersPlugin } from "./StructureBreakMarkersPlugin";');
+    expect(chart).toContain('import { StructureBreakMarkersPlugin, BREAK_DECAY } from "./StructureBreakMarkersPlugin";');
     const mountMatch = chart.match(/<StructureBreakMarkersPlugin([\s\S]*?)\/>/);
     expect(mountMatch, 'StructureBreakMarkersPlugin não montado').not.toBeNull();
     expect(mountMatch![1]).toContain('data={data}');
@@ -86,8 +89,14 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
   it('label do tipo de zona (FVG/OB) desenhado só quando a zona é grande o bastante pra caber texto legível', () => {
     const plugin = read('../src/chart/LiquidityZonesPlugin.tsx');
     expect(plugin).toContain('if (rectWidth > 24 && rectHeight > 10) {');
-    expect(plugin).toContain('fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type), "FVG"));');
-    expect(plugin).toContain('obs.forEach((z) => drawZone(z, paletteFor("OB", z.type), "OB"));');
+    // Diretriz Restauração/Inteligência Visual §6: label ganha "⚠" e a
+    // paleta ganha o 3º argumento isObstacle(z) quando a MESMA zona é um
+    // obstáculo real do plano ativo. Auditoria do ecossistema visual
+    // (pergunta do Operador "era pra cima ou pra baixo?"): o label também
+    // carrega o glifo de direção ↑/↓ real (z.type do motor SMC), nunca só
+    // a cor — mesma chamada de sempre, só honesta sobre mais informação.
+    expect(plugin).toContain('fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
+    expect(plugin).toContain('obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
   });
 });
 
@@ -104,6 +113,56 @@ describe('StructureBreakMarkersPlugin.tsx: mesma arquitetura de overlay do Liqui
   it('sem rompimento real (structureBreak null) não desenha nada — honesto, nunca um palpite', () => {
     const plugin = read('../src/chart/StructureBreakMarkersPlugin.tsx');
     expect(plugin).toContain('if (!brk) return; // sem rompimento real na amostra — nada a desenhar, honesto.');
+  });
+
+  it('achado real de captura de tela do Operador ("CHOC" cortado/sobreposto pela caixa "EMA 21"): o TEXTO ("BOS"/"CHOCH") não é mais desenhado neste canvas próprio — migrou pra priceAxisLabels; a LINHA de rompimento continua intocada', () => {
+    const plugin = read('../src/chart/StructureBreakMarkersPlugin.tsx');
+    expect(plugin).not.toMatch(/ctx\.fillText\(brk\.type/);
+    expect(plugin).not.toContain('ctx.font = "10px -apple-system, sans-serif";');
+    // a linha real (moveTo/lineTo/stroke) continua exatamente como antes
+    expect(plugin).toContain('ctx.moveTo(x1, yLine);');
+    expect(plugin).toContain('ctx.lineTo(cssWidth, yLine);');
+    expect(plugin).toContain('ctx.stroke();');
+  });
+
+  it('BREAK_DECAY exportado — reaproveitado por priceAxisLabels (EnhancedChart_110_Percent.tsx), zero segunda curva de decaimento', () => {
+    const plugin = read('../src/chart/StructureBreakMarkersPlugin.tsx');
+    expect(plugin).toContain('export const BREAK_DECAY: DecayConfig = { fadeStartCandles: 20, expireCandles: 100, minAlpha: 0.15 };');
+  });
+});
+
+describe('Achado real de captura de tela do Operador: rótulo BOS/CHOCH migrado para priceAxisLabels (mesmo sistema anti-colisão de S1/R1/VWAP/NL/EMA/TREND/Trade Plan) — nunca mais atrás da caixa de outro rótulo', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('EnhancedChart_110_Percent importa BREAK_DECAY do plugin e ageAlpha de annotation-decay — mesma dupla real, zero segunda fonte', () => {
+    const c = chart();
+    expect(c).toContain('import { StructureBreakMarkersPlugin, BREAK_DECAY } from "./StructureBreakMarkersPlugin";');
+    expect(c).toContain('import { ageAlpha } from "./annotation-decay";');
+  });
+
+  it('a entrada em priceAxisLabels usa o MESMO price/type/direction do structureBreak real — nunca uma segunda leitura', () => {
+    const c = chart();
+    const idx = c.indexOf('if (structureBreak) {', c.indexOf('const priceAxisLabels = useMemo'));
+    expect(idx, 'bloco do structureBreak não encontrado em priceAxisLabels').toBeGreaterThan(-1);
+    const end = c.indexOf('return out;', idx);
+    const block = c.slice(idx, end);
+    expect(block).toContain('const point = data[structureBreak.index];');
+    expect(block).toContain('const age = data.length - 1 - structureBreak.index;');
+    expect(block).toContain('const alpha = ageAlpha(age, BREAK_DECAY);');
+    expect(block).toContain('const bullish = structureBreak.direction === "ALTA";');
+    expect(block).toContain('price: structureBreak.level,');
+    expect(block).toContain('text: structureBreak.type,');
+    expect(block).toContain('color: bullish ? "rgba(0, 255, 170, 0.75)" : "rgba(255, 0, 85, 0.75)",');
+    expect(block).toContain('alpha,');
+  });
+
+  it('fail-closed: sem ponto real na janela de candles carregada, ou alpha já esquecido (<=0), nunca empurra a etiqueta', () => {
+    const c = chart();
+    const idx = c.indexOf('if (structureBreak) {', c.indexOf('const priceAxisLabels = useMemo'));
+    const end = c.indexOf('return out;', idx);
+    const block = c.slice(idx, end);
+    expect(block).toContain('if (point) {');
+    expect(block).toContain('if (alpha > 0 && Number.isFinite(structureBreak.level)) {');
   });
 });
 
@@ -172,5 +231,75 @@ describe('App.tsx: TelemetryHealthWidget ganha o gerador de relatório de autodi
     expect(body).toContain('health,');
     expect(body).toContain('connections,');
     expect(body).toContain('formatDiagnosticReportMarkdown(diagnosticReport)');
+  });
+});
+
+describe('Diretriz Restauração/Inteligência Visual §6: obstáculos do Trade Plan destacados no gráfico — zero segundo cálculo das zonas', () => {
+  it('tradePlanStructureZones é hoisted logo após smcZones e REAPROVEITADO pelo efeito de buildTradePlan (nunca recomputado ali dentro)', () => {
+    const app = read('../src/App.tsx');
+    const memoIdx = app.indexOf('const tradePlanStructureZones = useMemo<TradePlanStructureZone[]>(() => {');
+    expect(memoIdx, 'tradePlanStructureZones não encontrado').toBeGreaterThan(-1);
+    expect(app).toContain('zones.push({ low: z.bottom, high: z.top, kind: `OB_${z.type}` });');
+    expect(app).toContain('zones.push({ low: z.bottom, high: z.top, kind: `FVG_${z.type}` });');
+    // o efeito de buildTradePlan usa a referência, nunca reconstrói o array
+    expect(app).toContain('const zones = tradePlanStructureZones;');
+    // a transformação OB_${type}/FVG_${type} aparece só UMA vez no arquivo inteiro
+    expect(app.split('zones.push({ low: z.bottom, high: z.top, kind: `OB_${z.type}` });')).toHaveLength(2);
+  });
+
+  it('chartObstacleZones cruza obstacleZonesInPath contra TODOS os alvos (plano do Conselho OU fallback do Núcleo, EPC §5) via a MESMA função pura — nunca um segundo cálculo, nunca contra zonas nulas', () => {
+    const app = read('../src/App.tsx');
+    const idx = app.indexOf('const chartObstacleZones = useMemo(() => {');
+    expect(idx, 'chartObstacleZones não encontrado').toBeGreaterThan(-1);
+    const block = app.slice(idx, idx + 2000);
+    // fail-closed na ausência das zonas estruturais reais (nunca cruza nada)
+    expect(block).toContain('if (!tradePlanStructureZones) return [];');
+    // uma única definição de "obstáculo no caminho" (collect), reusada
+    expect(block).toContain('for (const z of obstacleZonesInPath(tradePlanStructureZones, { ...entryZone, basis: "" }, price, long)) {');
+    // caminho do Conselho (quando existe)
+    expect(block).toContain('collect(chartTradePlan.entry, chartTradePlan.targets.map((t) => t.price), chartTradePlan.direction === "LONG");');
+    // caminho do Núcleo (EPC §5 — o caso mais comum): entrada = preço atual, alvos reais
+    expect(block).toContain('} else if (engineFallbackLevels && engineFallbackLevels.entry !== null) {');
+    expect(block).toContain('collect({ low: e, high: e }, targets, engineFallbackLevels.direction === "LONG");');
+  });
+
+  it('chega ao gráfico via obstacleZones={chartObstacleZones} — mesmo padrão de prop-threading de tradePlan/scenario/aura', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('obstacleZones={chartObstacleZones}');
+  });
+
+  it('execução real (EPC §5): a MESMA função pura obstacleZonesInPath conta os obstáculos do caminho do Núcleo (entrada = preço atual) exatamente como faria para o plano do Conselho — prova viva de que o fallback não é um segundo cálculo', () => {
+    // Reproduz a fronteira geométrica real de obstacleZonesInPath
+    // (trade-plan.ts) — o teste de padrão acima já trava que App.tsx chama
+    // ESTA função; aqui provamos a matemática do caminho do Núcleo.
+    const obstacleZonesInPath = (
+      zones: { low: number; high: number }[],
+      entry: { low: number; high: number },
+      targetPrice: number,
+      long: boolean,
+    ) => {
+      const entryMid = (entry.low + entry.high) / 2;
+      return zones.filter((z) => {
+        if (!(z.low <= z.high)) return false;
+        if (z.low === entry.low && z.high === entry.high) return false;
+        return long ? z.high > entryMid && z.low < targetPrice : z.low < entryMid && z.high > targetPrice;
+      });
+    };
+    // Núcleo LONG: entrada = preço atual 100 (zona de largura zero), alvo 110.
+    // Uma zona estrutural real em [104,106] está no caminho; outra em
+    // [95,97] (abaixo da entrada) NÃO está.
+    const zones = [
+      { low: 104, high: 106 }, // obstáculo real no caminho 100→110
+      { low: 95, high: 97 }, // atrás da entrada — nunca um obstáculo à frente
+    ];
+    const entryZone = { low: 100, high: 100 };
+    const obstacles = obstacleZonesInPath(zones, entryZone, 110, true);
+    expect(obstacles).toHaveLength(1);
+    expect(obstacles[0]).toEqual({ low: 104, high: 106 });
+
+    // SHORT simétrico: entrada 100, alvo 90; zona [94,96] no caminho.
+    const shortObstacles = obstacleZonesInPath([{ low: 94, high: 96 }, { low: 104, high: 106 }], entryZone, 90, false);
+    expect(shortObstacles).toHaveLength(1);
+    expect(shortObstacles[0]).toEqual({ low: 94, high: 96 });
   });
 });

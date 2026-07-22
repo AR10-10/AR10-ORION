@@ -23,7 +23,12 @@ import { ageAlpha, type DecayConfig } from "./annotation-decay";
 // annotation-decay.ts — função compartilhada, zero duplicação), mesma
 // unidade honesta de "idade" (candles reais desde o rompimento, não
 // relógio de parede — funciona igual em qualquer timeframe).
-const BREAK_DECAY: DecayConfig = { fadeStartCandles: 20, expireCandles: 100, minAlpha: 0.15 };
+// Exportada (achado real de captura de tela do Operador: o rótulo "CHOC"
+// desenhado aqui colidia com a caixa "EMA 21" do eixo — este canvas não
+// tinha NENHUMA consciência da posição dos outros rótulos): o TEXTO migrou
+// para priceAxisLabels (EnhancedChart_110_Percent.tsx), que reusa esta
+// MESMA config de decaimento — zero segunda curva de esmaecimento.
+export const BREAK_DECAY: DecayConfig = { fadeStartCandles: 20, expireCandles: 100, minAlpha: 0.15 };
 
 interface StructureBreakMarkersPluginProps {
   chart: IChartApi | null;
@@ -87,20 +92,23 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
       ctx.globalAlpha = alpha;
       // Fio de Seda (Regra de Ouro 2): 1px sólida real, do ponto real de
       // rompimento até a borda direita — mesma primitiva do
-      // LiquidityZonesPlugin, nunca setLineDash.
+      // LiquidityZonesPlugin, nunca setLineDash. O TEXTO ("BOS"/"CHOCH")
+      // não é mais desenhado aqui — achado real de captura de tela do
+      // Operador: este canvas próprio não tinha nenhuma consciência da
+      // posição dos rótulos do eixo (S1/R1/VWAP/NL/EMA/...), então "CHOC"
+      // colidia/ficava atrás da caixa opaca de "EMA 21" sempre que o
+      // rompimento acontecia perto de um nível já rotulado — o caso
+      // COMUM, não raro. O rótulo migrou para priceAxisLabels
+      // (EnhancedChart_110_Percent.tsx), que reusa brk.level/brk.type/
+      // esta MESMA cor e o MESMO ageAlpha(age, BREAK_DECAY) — zero segunda
+      // fonte — e agora participa do resolvedor de colisão real
+      // (PriceLabelStackPlugin) como qualquer outro rótulo do eixo.
       ctx.lineWidth = 1;
       ctx.strokeStyle = color;
       ctx.beginPath();
       ctx.moveTo(x1, yLine);
       ctx.lineTo(cssWidth, yLine);
       ctx.stroke();
-
-      // Label elegante: BOS ou CHOCH, no ponto real de rompimento — nunca
-      // um ícone genérico, o texto já diz exatamente o que aconteceu.
-      ctx.font = "10px -apple-system, sans-serif";
-      ctx.fillStyle = color;
-      ctx.textBaseline = bullish ? "bottom" : "top";
-      ctx.fillText(brk.type, Math.min(x1 + 4, cssWidth - 40), bullish ? y - 3 : y + 3);
       ctx.globalAlpha = 1;
     };
 

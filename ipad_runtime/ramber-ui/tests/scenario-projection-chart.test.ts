@@ -43,13 +43,35 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
     expect(block).toContain('lineStyle: LineStyle.Solid,');
   });
 
-  it('cada path desenha SÓ quando tem alvo real (target !== null) — fail-closed por lado, nunca um alvo fabricado', () => {
-    expect(src()).toContain('if (!path.target || !Number.isFinite(path.target.price)) return;');
+  it('v2 (Future Path Map): desenha até MAX_SCENARIO_TARGETS por caminho — path.targets.forEach, nunca só o primeiro; lado sem nível real (targets=[]) desenha zero linhas naturalmente (fail-closed por construção, não por um if extra)', () => {
+    const s = src();
+    expect(s).toContain('path.targets.forEach((target, i) => {');
+    expect(s).toContain('if (!Number.isFinite(target.price)) return;');
   });
 
-  it('cor vem da MESMA convenção LONG/SHORT real (#00ffaa/#ff0055) já usada no texto SCENARIO A/B do CouncilWidget', () => {
+  it('v2: opacidade decresce por rank (TARGET_ALPHA_FALLOFF) — o alvo mais próximo pesa mais que o 2º/3º, nunca todos com o mesmo peso visual', () => {
     const s = src();
-    expect(s).toContain('const rgb = isLong ? "0, 255, 170" : "255, 0, 85";');
+    expect(s).toContain('const TARGET_ALPHA_FALLOFF = [1, 0.65, 0.4];');
+    expect(s).toContain('TARGET_ALPHA_FALLOFF[i] ?? TARGET_ALPHA_FALLOFF[TARGET_ALPHA_FALLOFF.length - 1]');
+  });
+
+  it('v2: invalidation NUNCA vira uma price line própria — por construção do motor ela é sempre igual ao alvo mais próximo do caminho OPOSTO (já desenhado), então uma segunda linha no mesmo preço seria a "linha fantasma" redundante que a diretriz proíbe', () => {
+    const s = src();
+    expect(s).not.toContain('path.invalidation');
+  });
+
+  it('Diretriz Restauração/Inteligência Visual §3: cor dedicada (lavanda), NUNCA a mesma do LONG/SHORT real — achado real via harness Playwright: title só aparece via axisLabelVisible/hover, que esta linha não tem, então cor é o ÚNICO sinal que o operador vê', () => {
+    const s = src();
+    expect(s).toContain('const PROJECTION_RGB = "186, 168, 255";');
+    expect(s).toContain('color: `rgba(${PROJECTION_RGB}, ${alpha.toFixed(2)})`,');
+  });
+
+  it('regressão: a cor da projeção nunca volta a ser rgba(0,255,170,...)/rgba(255,0,85,...) — a mesma cor de um nível LONG/SHORT já confirmado tornaria a projeção indistinguível de estrutura real', () => {
+    const s = src();
+    const idx = s.indexOf('const PROJECTION_RGB');
+    const block = s.slice(idx, idx + 700);
+    expect(block).not.toContain('0, 255, 170');
+    expect(block).not.toContain('255, 0, 85');
   });
 
   it('opacidade real escala linearmente por opinionWeight (0..1), piso honesto quando null — nunca invisível, nunca inventado', () => {
@@ -69,12 +91,19 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
     expect(s).toContain('rgba(255, 0, 85, 0.75)'); // linha real do Stop do Trade Plan, referência do teto
   });
 
-  it('axisLabelVisible false (mais discreto que o Trade Plan, que usa true) e título carrega direção + fonte real + peso real', () => {
+  it('axisLabelVisible false (mais discreto que o Trade Plan, que usa true) e título carrega direção + rank real (TP1/TP2/TP3) + fonte real + peso real', () => {
     const s = src();
     const idx = s.indexOf('scenarioLinesRef.current.push(');
-    const block = s.slice(idx, idx + 500);
+    const block = s.slice(idx, idx + 1100);
     expect(block).toContain('axisLabelVisible: false,');
-    expect(block).toContain('title: `${label} · ${path.direction} · ${path.target.sourceKind} · ${weightLabel}`,');
+    expect(block).toContain('title: `PROJEÇÃO · ${label} · ${path.direction} · TP${i + 1} · ${target.sourceKind} · ${weightLabel}`,');
+  });
+
+  it('Diretriz Restauração/Inteligência Visual §3: título começa explicitamente com "PROJEÇÃO" — passado/presente/projeção nunca se confundem só pela cor/opacidade', () => {
+    const s = src();
+    const idx = s.indexOf('scenarioLinesRef.current.push(');
+    const block = s.slice(idx, idx + 1100);
+    expect(block).toMatch(/title: `PROJEÇÃO · /);
   });
 
   it('peso null vira "opinion n/a" honesto no título — nunca uma porcentagem fabricada', () => {

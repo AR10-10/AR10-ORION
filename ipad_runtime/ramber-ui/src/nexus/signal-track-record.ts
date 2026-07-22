@@ -58,6 +58,20 @@ export const TRACK_RECORD_CONTRACT_VERSION = 2 as const;
 
 export type TrackedPlanStatus = "OPEN" | "TARGET_HIT" | "PARTIAL_HIT" | "STOP_HIT" | "REPLACED";
 
+// Cockpit de Leitura §11 ("ETA previsto / ETA realizado" + contexto):
+// fotografia REAL do momento em que o plano abriu — carimbada UMA vez
+// (stampOpenContext), nunca reescrita (a memória "não deve alterar
+// retroativamente os dados históricos"). O ETA REALIZADO nunca é
+// armazenado à parte: é derivável de resolvedAt − openedAt, que já são
+// fatos registrados — armazenar de novo seria uma segunda fonte.
+export interface PlanOpenContext {
+  etaMsAtOpen: number | null; // ETA provável do PRÓXIMO alvo na abertura
+  etaMsMinAtOpen: number | null; // piso da faixa (modelo ER=1) na abertura
+  vwapState: "BULLISH" | "BEARISH" | "NEUTRAL" | null;
+  nexusLineState: "BULLISH" | "BEARISH" | "NEUTRAL" | null;
+  score: number | null; // Institutional Score na abertura
+}
+
 export interface TrackedPlan {
   plan: TradePlan;
   openedAt: number;
@@ -73,6 +87,9 @@ export interface TrackedPlan {
   // mechanical break-even convention (§4). Always false once the plan is
   // fully resolved or before the first real target is touched.
   breakEvenSuggested: boolean;
+  // §11: presente só quando o carimbo real aconteceu (campo opcional —
+  // registros antigos persistidos continuam válidos no rehydrate v2).
+  contextAtOpen?: PlanOpenContext;
 }
 
 export interface TrackRecordState {
@@ -143,6 +160,16 @@ export function trackPlanTransition(state: TrackRecordState, plan: TradePlan | n
     history: pushHistory(state.history, { ...state.active, status: "REPLACED", resolvedAt: now, resolvedPrice: null }),
     replaced: state.replaced + 1,
   };
+}
+
+/** §11: carimba o contexto de abertura no plano ATIVO — uma única vez.
+ *  Sem plano ativo, ou já carimbado, devolve o estado ORIGINAL (nenhuma
+ *  transição, nenhum evento, nunca uma reescrita retroativa). Chamado
+ *  pelo App no primeiro ciclo em que as leituras do plano recém-aberto
+ *  existem (o etaReading daquele render já é o do plano novo). */
+export function stampOpenContext(state: TrackRecordState, ctx: PlanOpenContext): TrackRecordState {
+  if (!state.active || state.active.contextAtOpen !== undefined) return state;
+  return { ...state, active: { ...state.active, contextAtOpen: ctx } };
 }
 
 /** Real price tick vs the open plan's CURRENT rung of the target ladder and

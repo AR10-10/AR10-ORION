@@ -14,6 +14,15 @@ const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 const app = () => read('../src/App.tsx');
 const store = () => read('../src/store/unified-snapshot-store.ts');
 const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+// Fatia o corpo INTEIRO de uma function declaration (nunca uma janela de
+// tamanho chutado — achado real: `slice(idx, idx+2200)` quebrou
+// silenciosamente quando MarketBiasDecisionCard cresceu além disso).
+const wholeFunction = (src: string, signature: string): string => {
+  const idx = src.indexOf(signature);
+  if (idx === -1) return '';
+  const nextFnIdx = src.indexOf('\nfunction ', idx + 1);
+  return nextFnIdx === -1 ? src.slice(idx) : src.slice(idx, nextFnIdx);
+};
 
 describe('Store: premiumDiscount + harmonicPatterns nos 4 lugares canônicos do domínio §3', () => {
   it('estado, ação, default e seletor — os 4, para os 2 campos', () => {
@@ -51,7 +60,52 @@ describe('App: efeito único computa os 2 motores novos da MESMA série real do 
   });
 
   it('§10 Inteligência Temporal: trocar timeframe reseta a série do Score (nunca mistura regimes na tendência)', () => {
-    expect(app()).toContain('useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();\n  }, [chartTimeframe]);');
+    expect(app()).toContain('useUnifiedSnapshotStore.getState().resetInstitutionalScoreHistory();');
+  });
+
+  it('Diretriz de Evolução Geral do Organismo §6.8 (substitui o antigo §13-K): trocar timeframe NÃO zera mais o track record — nenhum dos 2 efeitos de reset (ativo/timeframe) toca resetTrackRecord, que não existe mais como ação', () => {
+    const a = app();
+    const m = a.match(/useEffect\(\(\) => \{\s*useUnifiedSnapshotStore\.getState\(\)\.resetInstitutionalScoreHistory\(\);[\s\S]*?\}, \[chartTimeframe\]\);/);
+    expect(m, 'efeito de reset por troca de timeframe não encontrado').not.toBeNull();
+    expect(m![0]).not.toContain('resetTrackRecord');
+    expect(a).not.toContain('resetTrackRecord'); // ação removida da store por inteiro, não só deste efeito
+  });
+
+  it('Diretriz de Evolução Autônoma Integral (auditoria de staleness de overlays): trocar de TIMEFRAME agora limpa realCycle/engineStatus e o throttle do Volume Profile — troca de ATIVO já era imune (desmonta o gráfico inteiro), troca de TIMEFRAME não desmonta nada e deixava S1/R1 e o histograma do timeframe ANTERIOR pendurados sobre os candles novos', () => {
+    const a = app();
+    const m = a.match(/useEffect\(\(\) => \{\s*useUnifiedSnapshotStore\.getState\(\)\.resetInstitutionalScoreHistory\(\);[\s\S]*?\}, \[chartTimeframe\]\);/);
+    expect(m, 'efeito de reset por troca de timeframe não encontrado').not.toBeNull();
+    const body = m![0];
+    // S1/R1 (createPriceLine) vêm de engine.support/resistance, derivados
+    // de realCycle — sem isto, um nível estrutural do timeframe anterior
+    // ficava rotulado como válido no novo até o próximo ciclo assíncrono
+    // resolver (achado real, não hipotético).
+    expect(body).toContain('setRealCycle(null);');
+    expect(body).toContain('setEngineStatus("pending");');
+    // VolumeProfilePlugin: o throttle de 5s só zerava na troca de ativo —
+    // trocar de timeframe dentro dessa janela mantinha o histograma/POC
+    // do timeframe anterior desenhado sobre os candles novos.
+    expect(body).toContain('useUnifiedSnapshotStore.getState().setVolumeProfile(null);');
+    expect(body).toContain('volumeProfileLastComputeRef.current = 0;');
+  });
+
+  it('Diretriz de Evolução Geral do Organismo §6.8 (substitui o antigo §11/§13-J): trocar de ATIVO não zera mais o track record (só arquiva/restaura no efeito dedicado), mas continua limpando a Matriz Multi-Timeframe antiga', () => {
+    const a = app();
+    const m = a.match(/useEffect\(\(\) => \{\s*setPriceData\(null\);[\s\S]*?\}, \[selectedAsset\]\);/);
+    expect(m, 'efeito de reset por troca de ativo não encontrado').not.toBeNull();
+    expect(m![0]).not.toContain('resetTrackRecord');
+    expect(m![0]).toContain('useUnifiedSnapshotStore.getState().setMultiTimeframeContext(null);');
+  });
+
+  it('track record: efeito PRÓPRIO arquiva o agregado (nunca o plano ativo) por symbol:timeframe ao trocar, restaura o arquivo real ao entrar de novo na mesma combinação', () => {
+    const a = app();
+    const idx = a.indexOf('const key = candleKey(selectedAsset, chartTimeframe as Timeframe);');
+    expect(idx, 'efeito de arquivo/restauração do track record não encontrado').toBeGreaterThan(-1);
+    const block = a.slice(idx, idx + 500);
+    expect(block).toContain('const archived = useUnifiedSnapshotStore.getState().trackRecordArchive[key];');
+    expect(block).toContain('useUnifiedSnapshotStore.getState().hydrateTrackRecord(archived ?? EMPTY_TRACK_RECORD);');
+    expect(block).toContain('useUnifiedSnapshotStore.getState().archiveTrackRecord(key);');
+    expect(block).toMatch(/\}, \[selectedAsset, chartTimeframe\]\);/);
   });
 });
 
@@ -86,7 +140,7 @@ describe('§7 Premium/Discount: gráfico + Trade Plan strip (display-only, LEI 2
     const idx = c.indexOf('premiumDiscountLinesRef.current.forEach((line) => series.removePriceLine(line));');
     expect(idx).toBeGreaterThan(-1);
     const block = c.slice(idx, idx + 900);
-    expect(block).toContain('if (!premiumDiscount) return;');
+    expect(block).toContain('if (!premiumDiscount || !visibility.premium_discount) return;');
     expect(block).toContain('lineWidth: 1,');
     expect(block).toContain('lineStyle: LineStyle.Solid,');
     expect(block).toContain('axisLabelVisible: false,');
@@ -121,7 +175,8 @@ describe('§8 Harmônicos: display gated pelo fit mínimo honesto', () => {
     expect(a).toContain('const harmonicHits = useHarmonicPatternsSnapshot();');
     expect(a).toContain('title="Harmonic Patterns · ratio fit, never probability"');
     expect(a).toContain('NO FRESH XABCD PATTERN ≥ {(MIN_FIT_SCORE * 100).toFixed(0)}% RATIO FIT (honest result)');
-    expect(a).toContain('value={`D @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}');
+    // Consolidação Final §6: rótulo profissional PRZ no lugar do D cru (contrato novo deliberado)
+    expect(a).toContain('value={`PRZ @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}');
   });
 
   it('LEI 24: o motor harmônico nunca alimenta engine/tradePlan — só a própria fatia de display', () => {
@@ -195,7 +250,7 @@ describe('Sessão Local-First: ativo/timeframe/modo sobrevivem a refresh ("o sis
     expect(a).toContain('VALID_TIMEFRAMES.has(parsed.timeframe)');
     expect(a).toContain('TRADFI_ASSETS.find((a) => a.symbol === parsed.tradFiSymbol)');
     // TRADFI restaurado sem ativo restaurável degrada para CRYPTO
-    expect(a).toContain('if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe, chartLayers, emaPeriod };');
+    expect(a).toContain('if (marketMode === "TRADFI" && !tradFiAsset) return { ...fallback, asset, timeframe, chartLayers, chartLayerAutoMode, emaPeriod };');
   });
 
   it('os 4 estados hidratam por inicializador preguiçoso e persistem num único efeito', () => {
@@ -204,7 +259,7 @@ describe('Sessão Local-First: ativo/timeframe/modo sobrevivem a refresh ("o sis
     expect(a).toContain('useState(() => restoredSession.timeframe)');
     expect(a).toContain('useState<"CRYPTO" | "TRADFI">(() => restoredSession.marketMode)');
     expect(a).toContain('useState<TradFiAsset | null>(() => restoredSession.tradFiAsset)');
-    const m = a.match(/persistSessionState\(\{[\s\S]*?\}\);\n  \}, \[selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, emaPeriod\]\);/);
+    const m = a.match(/persistSessionState\(\{[\s\S]*?\}\);\n  \}, \[selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, chartLayerAutoMode, emaPeriod\]\);/);
     expect(m, 'efeito único de persistência não encontrado').not.toBeNull();
   });
 
@@ -233,13 +288,18 @@ describe('Nexus Decision Layer: leitura única fundida, computada 1x e exposta n
     expect(ctx![1]).toContain('nexusDecision,');
   });
 
-  it('tooltip do CoreSignalBadge conta o raciocínio completo — zero pixel novo (§6: fusão nunca vira poluição)', () => {
+  it('tooltip do CoreSignalBadge consome a Operational Readability Layer (§7 Evolução Integrativa) — zero montagem inline', () => {
     const a = app();
     expect(a).toContain('decision?: NexusDecision | null;');
-    expect(a).toContain('NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24)');
-    expect(a).toContain('confluência real, nunca probabilidade');
+    // realocado (nunca apagado): a montagem vive no módulo nomeado; o
+    // conteúdo das linhas é travado por EXECUÇÃO REAL no teste do módulo.
+    expect(a).toContain('const fusedTitle = buildOperationalSummary(decision).join("\\n");');
+    expect(a).not.toContain('NEXUS DECISION · Operação: ${'); // inline extinto no App
     expect(a).toContain('title={fusedTitle}');
     expect(a).toContain('decision={nexusDecision ?? null}');
+    const layer = read('../src/nexus/operational-readability.ts');
+    expect(layer).toContain('NEXUS DECISION · Operação: ${decision.operation} (fonte: Core Engine — LEI 24)');
+    expect(layer).toContain('confluência real, nunca probabilidade');
   });
 
   it('LEI 24 no nível do fonte: o módulo de fusão nunca escreve em motor/planos — só lê e empacota', () => {
@@ -265,27 +325,170 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
 
   it('badge herói: estado no subtítulo existente e tooltip com Estado + Favoráveis/Contrários', () => {
     const a = app();
-    expect(a).toContain('{decision?.operationalState ? ` · ${decision.operationalState}` : ""}');
-    expect(a).toContain('· Estado: ${decision.operationalState}');
-    expect(a).toContain('`Favoráveis: ${decision.reasonsFor.join(" · ")}`');
-    expect(a).toContain('`Contrários: ${decision.reasonsAgainst.join(" · ")}`');
+    // §7: Estado/Favoráveis/Contrários agora nascem na Readability Layer
+    const layer = read('../src/nexus/operational-readability.ts');
+    expect(layer).toContain('· Estado: ${decision.operationalState}');
+    expect(layer).toContain('`Favoráveis: ${decision.reasonsFor.join(" · ")}`');
+    expect(layer).toContain('`Contrários: ${decision.reasonsAgainst.join(" · ")}`');
+  });
+
+  it('Auditoria Final de Integração: o subtítulo VISÍVEL do badge herói (nunca só o tooltip, que não aparece em toque no iPad) qualifica BIAS≠ENTRY com deriveOutcomeLabel — mesmo dado real do Estado, agora legível sem hover', () => {
+    const a = app();
+    expect(a).toContain('const outcome = decision ? deriveOutcomeLabel(decision) : null;');
+    expect(a).toContain('{outcomeQualifier ? ` · ${outcomeQualifier}` : ""}');
+    // v7: import multi-linha (ganhou os derives dos 6 eixos) — trava o bloco inteiro vindo do módulo certo
+    const importMatch = a.match(/import \{([\s\S]*?)\} from "\.\/nexus\/operational-readability";/);
+    expect(importMatch, 'import da Readability Layer não encontrado').not.toBeNull();
+    for (const name of ['buildOperationalSummary', 'deriveOutcomeLabel', 'deriveRiskState', 'deriveConfluenceState', 'type NexusOutcomeLabel']) {
+      expect(importMatch![1]).toContain(name);
+    }
+    const m = a.match(/const OUTCOME_QUALIFIER: Partial<Record<NexusOutcomeLabel, string>> = \{([\s\S]*?)\};/);
+    expect(m, 'tabela de qualificadores visíveis não encontrada').not.toBeNull();
+    expect(m![1]).toContain('LONG: "PLANO ATIVO"');
+    expect(m![1]).toContain('OBSERVAR: "SEM ESTRUTURA"');
+    // title continua existindo (o raciocínio completo ainda está lá para desktop/mouse) — isto é ADITIVO, nunca uma substituição do tooltip
+    expect(a).toContain('title={fusedTitle}');
+  });
+
+  it('Achado real (captura do Operador, janela ~1000px lógicos): o subtítulo do badge herói NÃO carrega mais o prefixo "Confidence · " — a região central rolável cortava "CONFIDENCE · MEDIUM · AGUARDANDO ENTRADA" em "AGUARDAN"; o rótulo categórico cru agora vai direto ao ponto (o rótulo "Confiança:" já existe na linha própria do tooltip)', () => {
+    const block = wholeFunction(app(), 'function CoreSignalBadge(');
+    expect(block).not.toBe('');
+    expect(block).toContain('{confidence ?? AWAIT}');
+    expect(block).toContain('{outcomeQualifier ? ` · ${outcomeQualifier}` : ""}');
+    // regressão: o prefixo decorativo não pode voltar a colidir com a borda real medida
+    expect(block).not.toContain('`Confidence · ${confidence}`');
+  });
+
+  it('Continuidade (auditoria de sincronização): MarketBiasDecisionCard ("Sinal Institucional", segundo lugar dedicado a DIREÇÃO) ganha o MESMO qualificador real — reusa OUTCOME_QUALIFIER/deriveOutcomeLabel já testados, nunca uma segunda tabela/lógica', () => {
+    const block = wholeFunction(app(), 'function MarketBiasDecisionCard()');
+    expect(block).not.toBe('');
+    expect(block).toContain('nexusDecision } = useContext(WidgetContext) || {};');
+    expect(block).toContain('const biasOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;');
+    expect(block).toContain('const biasOutcomeQualifier = biasOutcome ? (OUTCOME_QUALIFIER[biasOutcome] ?? null) : null;');
+    expect(block).toContain('{biasOutcomeQualifier && (');
+    // o texto grande continua o passthrough cru do Núcleo (LEI 24) — o qualificador é ADITIVO, nunca substitui `direction`
+    expect(block).toContain('{direction ?? AWAIT}');
+  });
+
+  it('Continuidade (fecha os 3 itens deixados de fora na rodada anterior): MarketDirectionWidget ("Vetor"), SiriformCoreCard ("Sinal") e AssistantOrb expandido ("VETOR") ganham o MESMO qualificador real — 4 lugares reais agora sincronizados com o badge herói, sempre reusando OUTCOME_QUALIFIER/deriveOutcomeLabel, nunca uma quinta lógica', () => {
+    const a = app();
+
+    const mdw = wholeFunction(a, 'function MarketDirectionWidget()');
+    expect(mdw).not.toBe('');
+    expect(mdw).toContain('nexusDecision } = useContext(WidgetContext) || {};');
+    expect(mdw).toContain('const vectorOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;');
+    expect(mdw).toContain('const vectorOutcomeQualifier = vectorOutcome ? (OUTCOME_QUALIFIER[vectorOutcome] ?? null) : null;');
+    expect(mdw).toContain('{vectorOutcomeQualifier && (');
+    // não cresce sem motivo real: só renderiza quando existe (fail-closed)
+    expect(mdw).toContain('Livro Real');
+
+    const siriform = wholeFunction(a, 'function SiriformCoreCard()');
+    expect(siriform).not.toBe('');
+    expect(siriform).toContain('nexusDecision } = useContext(WidgetContext) || {};');
+    expect(siriform).toContain('const sinalOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;');
+    // MiniStat só aceita string — concatenado, nunca uma segunda versão do componente
+    expect(siriform).toContain('const sinalValue = direction ? (sinalOutcomeQualifier ? `${direction} · ${sinalOutcomeQualifier}` : direction) : AWAIT;');
+    expect(siriform).toContain('<MiniStat label="Sinal" value={sinalValue} color={dirColor} />');
+
+    const orb = wholeFunction(a, 'function AssistantOrb(');
+    expect(orb).not.toBe('');
+    expect(orb).toContain('nexusDecision } =\n    useContext(WidgetContext) || {};');
+    expect(orb).toContain('const orbOutcome = nexusDecision ? deriveOutcomeLabel(nexusDecision) : null;');
+    expect(orb).toContain('{orbOutcomeQualifier && (');
+    // VETOR {dirLabel} continua intocado (LEI 24) — o qualificador é uma 4ª linha aditiva, nunca uma substituição
+    expect(orb).toContain('VETOR {dirLabel}');
   });
 });
 
 // ─── Auditoria Final V-MAX — renderização ativada + persistência de prefs ───
+// ─── Evolução Integrativa §6: Síntese Operacional na aba ANALYSIS ───
+describe('§6: painel Síntese Operacional — 6 eixos derivados do MESMO NexusDecision, visível em toque (nunca só tooltip)', () => {
+  it('painel vem PRIMEIRO no corpo da ANALYSIS (Nível 1 antes da evidência), com os 6 eixos e fallback fail-closed', () => {
+    const a = app();
+    const synthIdx = a.indexOf('<ModulePanel title="Síntese Operacional · 6 eixos auditáveis (mesma fonte do badge)">');
+    const planIdx = a.indexOf('<ModulePanel title="Trade Plan · real structure only (advisory, read-only)">');
+    expect(synthIdx).toBeGreaterThan(-1);
+    expect(planIdx).toBeGreaterThan(synthIdx); // síntese antes do plano — hierarquia §3 da diretriz
+    const block = a.slice(synthIdx, planIdx);
+    expect(block).toContain('label="Direção (BIAS)"');
+    expect(block).toContain('label="Estrutura (SETUP)"');
+    expect(block).toContain('label="Timing (ENTRY)"');
+    expect(block).toContain('{synthRisk && (');
+    expect(block).toContain('label="Confluência"');
+    expect(block).toContain('label="Decisão"');
+    // deriva do contrato fundido, nunca recomputa: só chamadas derive*(nexusDecision)
+    expect(block).toContain('deriveBiasLabel(nexusDecision)');
+    expect(block).toContain('deriveConfluenceState(nexusDecision)');
+    expect(block).toContain('AWAITING FIRST REAL CYCLE'); // fallback honesto sem decisão
+  });
+
+  it('Risco omitido quando null (nunca fabricado) e a fonte do risco vem nomeada no valor', () => {
+    const a = app();
+    expect(a).toContain('const synthRisk = nexusDecision ? deriveRiskState(nexusDecision) : null;');
+    expect(a).toContain('value={`${synthRisk.state} — ${synthRisk.basis}`}');
+  });
+
+  it('EPC MODO ELITE ABSOLUTO §10 (Recuperação de Recursos): engine.condition — a confirmação REAL que o Core Engine exige (required_confirmation/trigger_to_reevaluate) — era computada pelo engine-bridge e nunca exibida; agora entra na Síntese, fail-closed', () => {
+    const a = app();
+    // passthrough puro no objeto engine (mesmo padrão dos outros campos do realCycle)
+    expect(a).toContain('const condition = cycleOk ? (realCycle?.condition ?? null) : null;');
+    // exibida na Síntese Operacional, só quando há string real (nunca DADOS_INSUFICIENTES/null)
+    expect(a).toContain('{typeof engine?.condition === "string" && engine.condition.length > 0 && engine.condition !== "DADOS_INSUFICIENTES" && (');
+    expect(a).toContain('<ModuleStat label="Confirmação exigida (Núcleo)" value={engine.condition} />');
+  });
+
+  it('engine-bridge realmente computa e expõe condition (a matriz de setup real) — a fonte que estava presente mas sem consumidor', () => {
+    const bridge = read('../src/engine-bridge.ts');
+    expect(bridge).toContain("condition: typeof matrix.condition === 'string' ? matrix.condition : null,");
+  });
+});
+
 describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no gráfico', () => {
   it('EnhancedChart: linha do ponto D do melhor padrão (fit desc) + EPA quando Wolfe — fio de seda, rótulo honesto', () => {
     const c = chart();
     expect(c).toContain('harmonicHits?: HarmonicPatternHit[] | null;');
     const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
     expect(idx).toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 1200);
+    const block = c.slice(idx, idx + 4200);
     expect(block).toContain('const top = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;');
-    expect(block).toContain('fit ${(top.fitScore * 100).toFixed(0)}% (aderência, nunca probabilidade)');
-    expect(block).toContain('"WOLFE · EPA (linha 1→4 real)"');
+    // EPC §4 (rótulos compactos por iniciais): PRZ com glifo ↑/↓, EPA sem
+    // as descrições parentéticas — o disclaimer/significado seguem no
+    // painel Harmonic Patterns e em harmonic-patterns.ts.
+    expect(block).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
+    expect(block).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`'); // §6: + ETA do ápice (compacto EPC §4)
     expect(block).toContain('lineStyle: LineStyle.Solid,');
     const cleanupIdx = c.indexOf('chart.remove();');
     expect(c.slice(cleanupIdx, cleanupIdx + 700)).toContain('harmonicLinesRef.current = [];');
+  });
+
+  it('Continuidade: a figura XABCD/Wolfe COMPLETA (não só o ponto D/PRZ) é uma polilinha nativa real, limpa fail-closed antes do early-return, tempo estritamente crescente na borda de renderização', () => {
+    const c = chart();
+    expect(c).toContain('const harmonicPolylineRef = useRef<ISeriesApi<"Line"> | null>(null);');
+    const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
+    const block = c.slice(idx, idx + 3600);
+    // limpa a polilinha ANTES do guard de "sem padrão" — nunca deixa uma figura velha na tela
+    const clearIdx = block.indexOf('harmonicPolylineRef.current?.setData([]);');
+    const guardIdx = block.indexOf('if (!top || !Number.isFinite(top.points.D.price)) return;');
+    expect(clearIdx).toBeGreaterThan(-1);
+    expect(guardIdx).toBeGreaterThan(clearIdx);
+    // os 5 pontos reais (X opcional/A/B/C/D), nunca um ponto fabricado para AB=CD
+    expect(block).toContain('[top.points.X, top.points.A, top.points.B, top.points.C, top.points.D].filter(');
+    expect(block).toContain('(p): p is HarmonicPoint => p !== undefined,');
+    // trava defensiva real na borda (a lib exige tempo estritamente crescente)
+    expect(block).toContain('.sort((a, b) => a.time - b.time)');
+    expect(block).toContain('i === 0 || p.time !== arr[i - 1].time');
+    expect(block).toContain('if (polylinePoints.length >= 2) {');
+    expect(block).toContain('harmonicPolylineRef.current?.setData(polylinePoints);');
+    // criada como série nativa (mesmo padrão de EMA/Nexus Line/Trend Channel) — zero rótulo de eixo/último valor
+    const seriesIdx = c.indexOf('const harmonicPolyline = chart.addSeries(LineSeries, {');
+    expect(seriesIdx).toBeGreaterThan(-1);
+    const seriesBlock = c.slice(seriesIdx, seriesIdx + 300);
+    expect(seriesBlock).toContain('priceLineVisible: false');
+    expect(seriesBlock).toContain('lastValueVisible: false');
+    expect(seriesBlock).toContain('lineStyle: LineStyle.Solid');
+    // limpa no unmount, mesma disciplina de todas as outras refs
+    const cleanupIdx = c.indexOf('chart.remove();');
+    expect(c.slice(cleanupIdx, cleanupIdx + 900)).toContain('harmonicPolylineRef.current = null;');
   });
 
   it('títulos das linhas de alvo carregam distância % ao preço VIVO + ETA em faixa do contrato fundido (guard de preço)', () => {
@@ -312,10 +515,231 @@ describe('Auditoria §6: configurações do Operador (camadas + EMA) sobrevivem 
     expect(a).toContain('(EMA_PERIODS as readonly number[]).includes(parsed?.emaPeriod)');
   });
 
-  it('os dois estados hidratam por inicializador preguiçoso e entram no MESMO efeito único de persistência', () => {
+  it('os três estados hidratam por inicializador preguiçoso e entram no MESMO efeito único de persistência', () => {
     const a = app();
     expect(a).toContain('useState<ChartLayerVisibility>(() => restoredSession.chartLayers)');
+    // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: campo novo e aditivo, mesma forma
+    // de ChartLayerVisibility, mesmo padrão de hidratação/persistência.
+    expect(a).toContain('useState<ChartLayerVisibility>(() => restoredSession.chartLayerAutoMode)');
     expect(a).toContain('useState<EmaPeriod>(() => restoredSession.emaPeriod)');
-    expect(a).toContain('}, [selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, emaPeriod]);');
+    expect(a).toContain('}, [selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, chartLayerAutoMode, emaPeriod]);');
+  });
+});
+
+// ─── Diretriz Consolidação Operacional §5: compactação automática da memória ───
+describe('Consolidação §5: compactPersistedCandles roda uma vez por boot (envelhecimento do cache Local-First)', () => {
+  it('App.tsx importa e dispara a compactação fire-and-forget no efeito de boot ([]), nunca no caminho quente', () => {
+    const a = app();
+    expect(a).toContain('compactPersistedCandles, candleKey } from "./nexus/persistence"');
+    expect(a).toContain('void compactPersistedCandles().catch(() => {});');
+    // a chamada vive no MESMO efeito one-shot que hidrata o track record —
+    // um único ponto de boot, nunca um segundo ciclo de vida paralelo.
+    const idx = a.indexOf('void compactPersistedCandles().catch(() => {});');
+    const before = a.slice(Math.max(0, idx - 700), idx);
+    expect(before).toContain('hydrateTrackRecord(rehydrateTrackRecord(raw));');
+  });
+
+  it('persistence.ts documenta TTL + teto e NUNCA toca a snapshot store (track record é conhecimento real, não cache)', () => {
+    const p = readFileSync(resolve(__dirname, '../src/nexus/persistence.ts'), 'utf8');
+    expect(p).toContain('export const CANDLE_CACHE_MAX_AGE_MS');
+    expect(p).toContain('export const CANDLE_CACHE_MAX_RECORDS');
+    // a transação de remoção é aberta exclusivamente sobre a CANDLES_STORE
+    expect(p).toContain('db.transaction(CANDLES_STORE, "readwrite")');
+    expect(p).not.toContain('db.transaction(SNAPSHOT_STORE, "readwrite")');
+  });
+});
+
+// ─── Diretriz Mestra Consolidação Final: VWAP estados + Nexus Line + confluência ───
+describe('Consolidação Final §20-§25: VWAP com estados/histerese SEM tocar a matemática', () => {
+  it('App computa o último VWAP com a MESMA função pura do gráfico (zero segunda implementação)', () => {
+    const a = app();
+    expect(a).toContain('import { computeSessionVwapSeries, latestVwap } from "./nexus/vwap";');
+    expect(a).toContain('const vwapNow = useMemo(() => latestVwap(computeSessionVwapSeries(chartData)), [chartData]);');
+  });
+
+  it('histerese real (§22): transição lê o estado ANTERIOR via updater funcional — nunca useMemo', () => {
+    const a = app();
+    expect(a).toContain('setVwapCtx((prev) => computeVwapContext(prev?.state ?? "NEUTRAL", livePriceForZone, vwapNow, atrAbsForLines));');
+    expect(a).toContain('setNlState((prev) => nexusLineState(prev, livePriceForZone, nexusLineNow, atrAbsForLines));');
+  });
+
+  it('cartão VWAP no header (§23): estado + Preço×VWAP % real, e o TopBar lê do contexto único', () => {
+    const a = app();
+    expect(a).toContain('tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">\n                VWAP'); // §5: rótulo agora carrega sufixo NL ✓/⚠
+    expect(a).toContain('${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}%');
+    expect(a).toContain('"VWAP aguardando volume real da sessão UTC (fail-closed, nunca um valor fabricado)."');
+  });
+
+  it('o gráfico aplica cor de estado via applyOptions — a série VWAP continua a mesma (§20/§21)', () => {
+    const c = chart();
+    expect(c).toContain('vwapSeriesRef.current.applyOptions({ color: VWAP_STATE_COLOR[s] });');
+    expect(c).toContain('const series = computeSessionVwapSeries(data);'); // matemática intocada
+  });
+
+  it('Diretriz de Refinamento Visual §5/§6: applyOptions NUNCA mais reescreve title — title:"" fixo na criação, glifo de estado só via priceAxisLabels', () => {
+    const c = chart();
+    expect(c).not.toContain('title: `VWAP ${LINE_STATE_GLYPH[s]}`');
+    const idx = c.indexOf('const vwapSeries = chart.addSeries(LineSeries, {');
+    const closeIdx = c.indexOf('vwapSeriesRef.current = vwapSeries;');
+    expect(c.slice(idx, closeIdx)).toContain('title: "",');
+  });
+});
+
+describe('Consolidação Final §26-§30: Nexus Line + confluência informativa', () => {
+  it('NL nasce no MESMO efeito da VWAP no gráfico (mesmos candles, nunca dessincroniza)', () => {
+    const c = chart();
+    expect(c).toContain('const nl = computeNexusLineSeries(data);');
+    expect(c).toContain('nexusLineSeriesRef.current.setData(nl.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));');
+    // fio de seda — cor de estado real via applyOptions (Diretriz de
+    // Refinamento Visual §5/§6: title NUNCA mais reescrito aqui, ver teste
+    // dedicado abaixo — o glifo de estado chega ao Operador só via
+    // priceAxisLabels/PriceLabelStackPlugin agora).
+    expect(c).toContain('nexusLineSeriesRef.current.applyOptions({ color: NL_STATE_COLOR[s] });');
+  });
+
+  it('Diretriz de Refinamento Visual §5/§6: NL também nunca mais reescreve title — mesma correção da VWAP (achado real: title nativo colidia com S1/EMA na posição NATURAL, sem resolução de colisão)', () => {
+    const c = chart();
+    expect(c).not.toContain('title: `NL ${LINE_STATE_GLYPH[s]}`');
+    const idx = c.indexOf('const nexusLineSeries = chart.addSeries(LineSeries, {');
+    const closeIdx = c.indexOf('nexusLineSeriesRef.current = nexusLineSeries;');
+    expect(c.slice(idx, closeIdx)).toContain('title: "",');
+  });
+
+  it('§30: veredito de confluência VWAP×NL×Decision computado no App e exposto pelo contexto (2 listas)', () => {
+    const a = app();
+    expect(a).toContain('nexusConfluenceVerdict(vwapCtx?.state ?? "NEUTRAL", nlState, nexusDecision?.operation ?? null)');
+    const occurrences = a.split('      vwapCtx,\n      nlState,\n      nexusConfluence,').length - 1;
+    expect(occurrences).toBe(2); // objeto do contexto + array de deps
+  });
+
+  it('ANALYSIS ganha o painel VWAP × Nexus Line com o aviso LEI 24 explícito', () => {
+    const a = app();
+    expect(a).toContain('title="VWAP × Nexus Line (equilíbrios reais + confluência informativa)"');
+    expect(a).toContain('Informativo (LEI 24): confluência nunca altera nem bloqueia a operação do Core Engine.');
+  });
+
+  it('elemento do gráfico recebe os DOIS estados (mesma fonte única do header)', () => {
+    const a = app();
+    expect(a).toContain('vwapState={vwapCtx?.state ?? null}');
+    expect(a).toContain('nexusLineState={nlState ?? null}');
+  });
+});
+
+describe('Consolidação Final §5/§6: SHARK + AB=CD no motor, PRZ/ETA na superfície', () => {
+  it('motor harmônico: SHARK e ABCD no contrato + janela de convergência Wolfe CORRIGIDA (razão > 1)', () => {
+    const h = readFileSync(resolve(__dirname, '../src/nexus/harmonic-patterns.ts'), 'utf8');
+    expect(h).toContain('| "SHARK"');
+    expect(h).toContain('| "ABCD"');
+    expect(h).toContain('const WOLFE_CONVERGENCE_WINDOW = { min: 1.001, max: 50, idealMin: 1.1, idealMax: 5 };');
+    expect(h).toContain('etaIndex?: number;');
+  });
+
+  it('gráfico: terminologia PRZ profissional + ETA do ápice na linha EPA da Wolfe (rótulos compactos EPC §4)', () => {
+    const c = chart();
+    expect(c).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
+    expect(c).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
+    expect(c).toContain('}, [harmonicHits, data, visibility.harmonics]);'); // intervalo real de barra vem de data
+  });
+
+  it('ANALYSIS usa PRZ no lugar do rótulo D cru', () => {
+    const a = app();
+    expect(a).toContain('value={`PRZ @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}');
+  });
+});
+
+// ─── Diretriz de Continuidade §5: cartão VWAP com valor + estado nomeado ───
+describe('Continuidade §5: o cartão VWAP exibe o VALOR real + estado COMPRADOR/VENDEDOR/NEUTRA', () => {
+  it('valor com o MESMO formatador fmt() do header; estado nomeado; DADOS INSUFICIENTES no vazio (nunca dash mudo)', () => {
+    const a = app();
+    expect(a).toContain('{vwapCtx ? fmt(vwapCtx.vwap, vwapCtx.vwap >= 1000 ? 0 : 2) : "DADOS"}');
+    expect(a).toContain('vwapCtx.state === "BULLISH" ? "COMPRADOR" : vwapCtx.state === "BEARISH" ? "VENDEDOR" : "NEUTRA"');
+    expect(a).toContain(': "INSUFICIENTES"}');
+    // a % continua vindo do fmtSignedPct compartilhado (zero segunda formatação)
+    expect(a).toContain('${fmtSignedPct(vwapCtx.distancePct)} · ${');
+  });
+
+  it('confluência NL vira sufixo discreto no rótulo (✓/⚠) — detalhe completo segue no tooltip/ANALYSIS', () => {
+    const a = app();
+    expect(a).toContain('{nexusConfluence === "ALINHADA" ? " ✓" : " ⚠"}');
+  });
+});
+
+// ─── Continuidade Final §6: rótulos compactos condicionais dos alvos ───
+describe('Continuidade §6: níveis apertados => rótulos TP compactos, preço NUNCA deslocado', () => {
+  it('medição inclui o stop EFETIVO (ratchet pode encostar num alvo); a decisão em si vem da função pura testada por execução real em label-compaction.test.ts (Diretriz de Evolução Profissional, Fase 10-P)', () => {
+    const c = chart();
+    expect(c).toContain('import { shouldCompactLabels } from "./label-compaction";');
+    expect(c).toContain('const levels = [effectiveStopPrice, ...tradePlan.targets.map((t) => t.price)].sort((a, b) => a - b);');
+    expect(c).toContain('const compactLabels = shouldCompactLabels(levels);');
+  });
+
+  it('modo compacto: label + distância + ETA (basis/R:R seguem no strip); modo cheio inalterado', () => {
+    const c = chart();
+    expect(c).toContain('? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}`');
+    expect(c).toContain(': `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
+  });
+
+  it('a âncora do preço real permanece documentada onde a decisão de compactar agora vive (label-compaction.ts): applyOptions nunca recebe um price deslocado no título compacto', () => {
+    const lc = read('../src/chart/label-compaction.ts');
+    expect(lc).toContain('ancoradas no preço real: o preço matemático nunca muda para');
+    expect(lc).toContain('caber a etiqueta.');
+  });
+});
+
+// ─── Cockpit de Leitura §4/§11: fiação das duas lacunas reais ───
+describe('Cockpit §4: estados VWAP/NL entram como inputs do buildNexusDecision', () => {
+  it('App passa os MESMOS estados do header/gráfico (fonte única) + deps atualizadas', () => {
+    const a = app();
+    expect(a).toContain('vwapState: vwapCtx?.state ?? null,\n        nexusLineState: nlState,');
+    expect(a).toContain('pdForDecision, vwapCtx, nlState],');
+  });
+});
+
+describe('Cockpit §11: carimbo do contexto de abertura + ETA previsto × realizado', () => {
+  it('efeito do App carimba UMA vez (guard contextAtOpen !== undefined) com leituras reais', () => {
+    const a = app();
+    expect(a).toContain('if (!active || active.contextAtOpen !== undefined) return;');
+    expect(a).toContain('useUnifiedSnapshotStore.getState().stampPlanOpenContext({');
+    expect(a).toContain('etaMsAtOpen: nextEta?.ms ?? null,');
+  });
+
+  it('store expõe a ação stampPlanOpenContext ligada ao stampOpenContext puro', () => {
+    const s = store();
+    expect(s).toContain('stampPlanOpenContext: (ctx: PlanOpenContext) => void;');
+    expect(s).toContain('s.trackRecord = stampOpenContext(s.trackRecord as TrackRecordState, ctx);');
+  });
+
+  it('painel Track Record exibe previsto × realizado do último plano resolvido (dash honesto sem ambos)', () => {
+    const a = app();
+    expect(a).toContain('label="ETA previsto × realizado (último resolvido)"');
+    expect(a).toContain('formatEtaDuration(h.resolvedAt - h.openedAt)');
+    expect(a).toContain('h.contextAtOpen ? formatEtaRange(h.contextAtOpen.etaMsMinAtOpen, h.contextAtOpen.etaMsAtOpen) : null');
+  });
+});
+
+// ─── Foto ao vivo do Operador: colisão orb×cartão VWAP no header ───
+describe('Header ancorado (colisão da 1ª foto com dados reais): região central rolável + âncoras fixas', () => {
+  it('região central: overflow-x-auto + scrollbar oculta + NENHUM filho encolhe (nada vaza sobre vizinho)', () => {
+    const a = app();
+    expect(a).toContain('flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0');
+  });
+
+  it('omnibox fica FORA da região rolável (dropdown absoluto seria clipado) e o cluster do ativo é shrink-0', () => {
+    const a = app();
+    expect(a).toContain('border-r border-[#00f0ff20] h-[70%] shrink-0');
+    // a região rolável abre DEPOIS do fechamento do cluster do ativo
+    const cluster = a.indexOf('h-[70%] shrink-0');
+    const region = a.indexOf('[&>*]:shrink-0');
+    expect(cluster).toBeGreaterThan(-1);
+    expect(region).toBeGreaterThan(cluster);
+  });
+
+  it('âncora direita (estado + orbs + power) vive num cluster shrink-0 fora da região rolável', () => {
+    const a = app();
+    const anchorIdx = a.indexOf('{/* Âncora direita fixa (§5 do header)');
+    expect(anchorIdx).toBeGreaterThan(a.indexOf('[&>*]:shrink-0'));
+    const anchorBlock = a.slice(anchorIdx, anchorIdx + 700);
+    expect(anchorBlock).toContain('<div className="flex items-center gap-2 md:gap-3 h-full shrink-0">');
+    expect(anchorBlock).toContain('<SystemStatusBadge />');
   });
 });

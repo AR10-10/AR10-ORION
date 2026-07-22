@@ -52,6 +52,17 @@ describe('Secondary module views: real data routing, English labels, fail-closed
   it('empty states are honest text, never a fabricated number', () => {
     expect(app()).toContain('const MODULE_EMPTY = "AWAITING REAL DATA"');
   });
+
+  // EPC MODO ELITE (Recuperação de Inteligência Oculta): opinionMass (a
+  // distribuição real L/S/N do pool linear) já alimentava o Scenario
+  // Engine mas nunca era mostrada como número — agreement é só o escalar
+  // de coesão derivado. Recuperada no painel Council, fail-closed, com a
+  // honestidade de sempre (massa de opinião, nunca probabilidade).
+  it('Council: opinionMass (L/S/N) recuperada no painel ANALYSIS — não-duplicativa (agreement é derivado, não revela a forma), fail-closed em MODULE_EMPTY', () => {
+    const s = app();
+    expect(s).toContain('label="Opinion Mass (L/S/N)"');
+    expect(s).toContain('council?.opinionMass ? `L ${Math.round(council.opinionMass.long * 100)} · S ${Math.round(council.opinionMass.short * 100)} · N ${Math.round(council.opinionMass.neutral * 100)}` : MODULE_EMPTY');
+  });
 });
 
 describe('Command bar: Trade Plan strip (critical numbers in the header, fail-closed)', () => {
@@ -77,16 +88,25 @@ describe('Command bar: Trade Plan strip (critical numbers in the header, fail-cl
     expect(strip).toContain('const council = useCouncilSnapshot();');
     expect(strip).not.toContain('if (!plan) return null;');
     expect(strip).toMatch(/if \(!plan\) \{/);
-    // as 4 causas reais e mutuamente exclusivas do null, nunca uma 5ª inventada
-    expect(strip).toContain('if (!council) {');
-    expect(strip).toContain('} else if (council.riskGated) {');
-    expect(strip).toContain('} else if (council.stance === "NEUTRAL" || council.stance === "ABSTAIN") {');
-    expect(strip).toContain('} else {');
-    // a divergência Núcleo vs. Conselho (achado real) fica explícita quando existe
+    // EPC §5/§6: a derivação do motivo agora vive em tradePlanAbsenceReason
+    // (função pura, module-scope), reaproveitada também pelo overlay do
+    // CANVAS do gráfico (Regra de Ouro 4 — nunca duplicar) — a barra só
+    // chama a função e exibe o resultado.
     expect(strip).toContain('const coreDir = engine?.direction ?? null;');
-    expect(strip).toContain('reason = coreDir ? `Núcleo ${coreDir}, Conselho neutro` : "Conselho neutro";');
+    expect(strip).toContain('const { reason, tooltip } = tradePlanAbsenceReason(council, coreDir);');
     expect(strip).not.toMatch(/fetch\(/);
     expect(strip).not.toMatch(/Math\.random/);
+
+    // as 4 causas reais e mutuamente exclusivas do null, nunca uma 5ª
+    // inventada — fonte única de verdade dentro da própria função.
+    const fnSrc = s.slice(s.indexOf('function tradePlanAbsenceReason('), s.indexOf('function TradePlanTopStrip('));
+    expect(fnSrc).toContain('if (!council) {');
+    expect(fnSrc).toContain('if (council.riskGated) {');
+    expect(fnSrc).toContain('if (council.stance === "NEUTRAL" || council.stance === "ABSTAIN") {');
+    // a divergência Núcleo vs. Conselho (achado real) fica explícita quando existe
+    expect(fnSrc).toContain('reason: `Núcleo ${coreDir}, Conselho neutro`,');
+    expect(fnSrc).not.toMatch(/fetch\(/);
+    expect(fnSrc).not.toMatch(/Math\.random/);
   });
 
   it('LEI 24: o fallback honesto nunca escreve em engine/council/plan — só lê e exibe (mesma disciplina display-only)', () => {

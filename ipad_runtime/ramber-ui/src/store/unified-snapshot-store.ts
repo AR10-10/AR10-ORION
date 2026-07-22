@@ -48,6 +48,7 @@ import type { CouncilDecision } from "../nexus/council";
 import type { ConsensusRadarReading } from "../nexus/consensus-radar";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
 import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
+import type { LayerRelevanceReading } from "../nexus/layer-relevance";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
 import type { TradePlan } from "../nexus/trade-plan";
@@ -55,8 +56,10 @@ import type { MultiTimeframeMatrix } from "../nexus/multi-timeframe-engine";
 import {
   trackPlanTransition,
   trackPriceTick,
+  stampOpenContext,
   EMPTY_TRACK_RECORD,
   type TrackRecordState,
+  type PlanOpenContext,
 } from "../nexus/signal-track-record";
 import {
   ingestAffectiveEvent,
@@ -189,6 +192,12 @@ export interface UnifiedSnapshotState {
   // MIN_FIT_SCORE, D recente). Lista vazia é o estado honesto comum;
   // fitScore é aderência de razão, NUNCA probabilidade (Regra de Ouro 2).
   harmonicPatterns: HarmonicPatternHit[];
+  // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6 — leitura real do Relevance Engine
+  // (nexus/layer-relevance.ts), computada uma vez em ChartWidget (onde os
+  // sinais reais que a alimentam já convergem) e lida daqui por QUALQUER
+  // outro consumidor (o painel de camadas precisa da mesma leitura, sem
+  // recomputar). null = ainda sem nenhum ciclo real processado.
+  layerRelevance: LayerRelevanceReading | null;
 
   // §4 CÉREBRO (camada de análise — LEI 24: jamais alimenta o Core Engine)
   // Item 4 — Conselho Multi-Agente (contrato versionado): 6 votos reais +
@@ -248,6 +257,16 @@ export interface UnifiedSnapshotState {
   // against the real price (first touch: target vs stop; conservative on
   // gaps). Session state hydrated from IndexedDB (Local-First).
   trackRecord: TrackRecordState;
+  // Achado real de auditoria (Diretriz de Evolução Geral do Organismo
+  // §6.8, "memória de decisões hoje é uma fatia GLOBAL"): arquivo do
+  // agregado (history/targetHits/partialHits/stopHits/replaced) por
+  // chave symbol:timeframe (mesma convenção de candleKey em
+  // persistence.ts) — trocar de ativo/timeframe não perde mais o
+  // desempenho real já medido daquela combinação. O plano ATIVO
+  // (`trackRecord.active`) continua resetando sempre — é o
+  // rastreamento AO VIVO do que está na tela agora, nunca deve
+  // reaparecer stale de uma combinação antiga.
+  trackRecordArchive: Record<string, TrackRecordState>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -284,6 +303,7 @@ interface UnifiedSnapshotActions {
   setFibonacciConfluence: (matrix: FibonacciConfluenceMatrix | null) => void;
   setPremiumDiscount: (reading: PremiumDiscountReading | null) => void;
   setHarmonicPatterns: (hits: HarmonicPatternHit[]) => void;
+  setLayerRelevance: (reading: LayerRelevanceReading | null) => void;
 
   // §4 CÉREBRO
   setCouncil: (decision: CouncilDecision | null) => void;
@@ -311,7 +331,19 @@ interface UnifiedSnapshotActions {
   recordAffectiveEvent: (source: AffectiveEventSource) => void;
   trackPlanTransition: (plan: TradePlan | null) => void;
   trackPriceTick: (price: number) => void;
+  // Cockpit de Leitura §11: carimbo único do contexto de abertura no plano
+  // ativo (ETA previsto + estados VWAP/NL + score) — stampOpenContext puro,
+  // nunca reescreve (memória jamais altera o histórico retroativamente).
+  stampPlanOpenContext: (ctx: PlanOpenContext) => void;
   hydrateTrackRecord: (state: TrackRecordState) => void;
+  // Substitui o antigo resetTrackRecord (Evolução Profunda §11/§13-J/K,
+  // que zerava o agregado inteiro na troca — perdia memória real em vez
+  // de só evitar que ela vazasse entre combinações). Fecha o plano ATIVO
+  // como REPLACED (reusa trackPlanTransition(state, null, now), nunca
+  // uma segunda lógica de fechamento) e arquiva o agregado resultante
+  // sob `key` — chamado só no cleanup do efeito de troca de
+  // ativo/timeframe (App.tsx), nunca durante o uso normal.
+  archiveTrackRecord: (key: string) => void;
 }
 
 export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnapshotActions>()(
@@ -333,6 +365,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     fibonacciConfluence: null,
     premiumDiscount: null,
     harmonicPatterns: [],
+    layerRelevance: null,
     // §4 CÉREBRO
     council: null,
     scenario: null,
@@ -351,6 +384,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     affectiveMemory: EMPTY_AFFECTIVE_STATE,
     cpi: null,
     trackRecord: EMPTY_TRACK_RECORD,
+    trackRecordArchive: {},
 
     // §1 MERCADO
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
@@ -380,6 +414,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setFibonacciConfluence: (matrix) => set((s) => { s.fibonacciConfluence = matrix; }),
     setPremiumDiscount: (reading) => set((s) => { s.premiumDiscount = reading; }),
     setHarmonicPatterns: (hits) => set((s) => { s.harmonicPatterns = hits; }),
+    setLayerRelevance: (reading) => set((s) => { s.layerRelevance = reading; }),
     // §4 CÉREBRO
     setCouncil: (decision) => set((s) => { s.council = decision; }),
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
@@ -413,7 +448,19 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     trackPriceTick: (price) => set((s) => {
       s.trackRecord = trackPriceTick(s.trackRecord as TrackRecordState, price, Date.now());
     }),
+    stampPlanOpenContext: (ctx) => set((s) => {
+      s.trackRecord = stampOpenContext(s.trackRecord as TrackRecordState, ctx);
+    }),
     hydrateTrackRecord: (state) => set((s) => { s.trackRecord = state; }),
+    archiveTrackRecord: (key) => set((s) => {
+      const closed = trackPlanTransition(s.trackRecord as TrackRecordState, null, Date.now());
+      // Escreve nos DOIS lugares: o arquivo (memória durável da chave) e o
+      // trackRecord AO VIVO (nunca deixa um plano aberto "stale" pendurado
+      // ali se o chamador não emendar um hydrateTrackRecord logo em
+      // seguida — a ação fica correta sozinha, não depende de quem chama).
+      s.trackRecord = closed;
+      s.trackRecordArchive[key] = closed;
+    }),
   })),
 );
 
@@ -463,6 +510,8 @@ export const usePremiumDiscountSnapshot = (): PremiumDiscountReading | null =>
   useUnifiedSnapshotStore((s) => s.premiumDiscount);
 export const useHarmonicPatternsSnapshot = (): HarmonicPatternHit[] =>
   useUnifiedSnapshotStore((s) => s.harmonicPatterns ?? EMPTY_HARMONIC_HITS);
+export const useLayerRelevanceSnapshot = (): LayerRelevanceReading | null =>
+  useUnifiedSnapshotStore((s) => s.layerRelevance);
 
 // §4 CÉREBRO
 export const useCouncilSnapshot = (): CouncilDecision | null =>
@@ -493,3 +542,5 @@ export const useAffectiveMemorySnapshot = (): AffectiveMemoryState =>
   useUnifiedSnapshotStore((s) => s.affectiveMemory);
 export const useTrackRecordSnapshot = (): TrackRecordState =>
   useUnifiedSnapshotStore((s) => s.trackRecord);
+export const useTrackRecordArchive = (): Record<string, TrackRecordState> =>
+  useUnifiedSnapshotStore((s) => s.trackRecordArchive);

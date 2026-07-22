@@ -291,3 +291,53 @@ describe('hitRate + rehydration honesty', () => {
     expect(EMPTY_TRACK_RECORD.contractVersion).toBe(2);
   });
 });
+
+// ─── Cockpit de Leitura §11: contexto de abertura (ETA previsto etc.) ───
+import { stampOpenContext, type PlanOpenContext } from '../src/nexus/signal-track-record';
+
+describe('§11 stampOpenContext: carimbo único, nunca reescrita retroativa', () => {
+  const ctx: PlanOpenContext = {
+    etaMsAtOpen: 600_000,
+    etaMsMinAtOpen: 300_000,
+    vwapState: 'BULLISH',
+    nexusLineState: 'BULLISH',
+    score: 72,
+  };
+
+  it('carimba o plano ativo UMA vez; a segunda chamada devolve o estado ORIGINAL (identidade)', () => {
+    const opened = trackPlanTransition(EMPTY_TRACK_RECORD, realPlan(), 1_000);
+    const stamped = stampOpenContext(opened, ctx);
+    expect(stamped.active!.contextAtOpen).toEqual(ctx);
+    const again = stampOpenContext(stamped, { ...ctx, score: 99 });
+    expect(again).toBe(stamped); // guard: já carimbado => referência original, zero reescrita
+    expect(again.active!.contextAtOpen!.score).toBe(72);
+  });
+
+  it('sem plano ativo => estado original intocado (nenhum carimbo fabricado)', () => {
+    expect(stampOpenContext(EMPTY_TRACK_RECORD, ctx)).toBe(EMPTY_TRACK_RECORD);
+  });
+
+  it('o carimbo viaja para o histórico na resolução — ETA realizado é derivável de resolvedAt − openedAt', () => {
+    const opened = trackPlanTransition(EMPTY_TRACK_RECORD, realPlan(), 1_000);
+    const stamped = stampOpenContext(opened, ctx);
+    // stop real do plano single-target: 48_800 => tick abaixo resolve STOP_HIT
+    const resolved = trackPriceTick(stamped, 48_700, 901_000);
+    const last = resolved.history[resolved.history.length - 1];
+    expect(last.status).toBe('STOP_HIT');
+    expect(last.contextAtOpen).toEqual(ctx); // fotografia preservada
+    expect(last.resolvedAt! - last.openedAt).toBe(900_000); // realizado real (15m)
+  });
+
+  it('rehydrate v2 preserva o campo opcional (registros antigos SEM ele continuam válidos)', () => {
+    const opened = trackPlanTransition(EMPTY_TRACK_RECORD, realPlan(), 1_000);
+    const stamped = stampOpenContext(opened, ctx);
+    const resolved = trackPriceTick(stamped, 48_700, 901_000);
+    const roundTrip = rehydrateTrackRecord(JSON.parse(JSON.stringify(resolved)));
+    const last = roundTrip.history[roundTrip.history.length - 1];
+    expect(last.contextAtOpen).toEqual(ctx);
+    // registro legado sem o campo: rehydrate aceita normalmente
+    const legacy = JSON.parse(JSON.stringify(resolved));
+    delete legacy.history[legacy.history.length - 1].contextAtOpen;
+    expect(rehydrateTrackRecord(legacy).history.length).toBe(resolved.history.length);
+  });
+});

@@ -44,6 +44,62 @@ describe('LiquidityZonesPlugin: reaproveita exatamente a identidade de cor real 
   });
 });
 
+describe('LiquidityZonesPlugin: destaque de obstáculo (Diretriz Restauração/Inteligência Visual §6) — mesma cor de tipo, só a borda em ênfase', () => {
+  const plugin = () => read('../src/chart/LiquidityZonesPlugin.tsx');
+
+  it('as 4 paletas de obstáculo reaproveitam o MESMO fill das paletas normais — "não é pra tirar as cor do gráfico" continua valendo', () => {
+    const p = plugin();
+    expect(p).toContain('const FVG_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 255, 170, 0.10)", border: "rgba(0, 255, 170, 0.85)" };');
+    expect(p).toContain('const FVG_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.10)", border: "rgba(255, 0, 85, 0.85)" };');
+    expect(p).toContain('const OB_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 255, 170, 0.15)", border: "rgba(0, 255, 170, 0.85)" };');
+    expect(p).toContain('const OB_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.15)", border: "rgba(255, 0, 85, 0.85)" };');
+  });
+
+  it('hierarquia fill<border continua valendo para TODAS as paletas do arquivo, incluindo as 4 novas de obstáculo (regex cega, mesma trava do teste de cor acima)', () => {
+    const p = plugin();
+    const fillOpacities = [...p.matchAll(/fill: "rgba\([^)]+, ([0-9.]+)\)"/g)].map((m) => Number(m[1]));
+    const borderOpacities = [...p.matchAll(/border: "rgba\([^)]+, ([0-9.]+)\)"/g)].map((m) => Number(m[1]));
+    expect(fillOpacities.length).toBe(8); // 4 normais + 4 de obstáculo
+    expect(borderOpacities.length).toBe(fillOpacities.length);
+    fillOpacities.forEach((fillOpacity, i) => expect(fillOpacity).toBeLessThan(borderOpacities[i]));
+  });
+
+  it('pergunta do Operador ("era pra cima ou pra baixo?"): o rótulo da zona carrega a DIREÇÃO por glifo ↑/↓, nunca só a cor — BULLISH=↑ (demanda), BEARISH=↓ (oferta), o glifo vem de z.type real do motor SMC', () => {
+    const p = plugin();
+    expect(p).toContain('const dir = (t: "BULLISH" | "BEARISH") => (t === "BULLISH" ? "↑" : "↓");');
+    expect(p).toContain('`FVG ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`');
+    expect(p).toContain('`OB ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`');
+    // o glifo nunca substitui a marca de obstáculo (⚠), só a acompanha
+    expect(p).toContain('" ⚠"');
+  });
+
+  it('a identidade do obstáculo é por low/high REAL (mesmos números que já formam a zona) — nunca por índice/posição', () => {
+    const p = plugin();
+    expect(p).toContain('const isObstacle = (zone: FillableZone) =>\n        (obstacles ?? []).some((o) => o.low === zone.bottom && o.high === zone.top);');
+  });
+
+  it('sem obstacleZones (undefined/vazio), o desenho é idêntico ao de sempre — fail-closed, zero mudança visual sem plano ativo', () => {
+    const p = plugin();
+    expect(p).toContain('obstacleZones?: { low: number; high: number }[];');
+    expect(p).toContain('(obstacles ?? []).some(');
+  });
+
+  it('prop obstacleZones entra no mirror ref e no dep array do dirty-flag — nunca fica stale ao trocar de plano', () => {
+    const p = plugin();
+    expect(p).toContain('const zonesRef = useRef({ fairValueGaps, orderBlocks, data, obstacleZones });');
+    expect(p).toContain('zonesRef.current = { fairValueGaps, orderBlocks, data, obstacleZones };');
+    expect(p).toContain('}, [fairValueGaps, orderBlocks, data, obstacleZones]);');
+  });
+});
+
+describe('EnhancedChart_110_Percent → LiquidityZonesPlugin: obstacleZones passa ponta a ponta (App.tsx já cruza tradePlanStructureZones)', () => {
+  it('a prop chega ao plugin com fallback honesto para array vazio (nunca undefined quebrando .some acima)', () => {
+    const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
+    expect(chart).toContain('obstacleZones?: { low: number; high: number }[];');
+    expect(chart).toContain('obstacleZones={obstacleZones ?? []}');
+  });
+});
+
 describe('LiquidityZonesPlugin: geometria real via lightweight-charts, nunca posição fabricada em pixel fixo', () => {
   it('resolve preço→pixel via priceToCoordinate/timeToCoordinate reais da própria lib', () => {
     const plugin = read('../src/chart/LiquidityZonesPlugin.tsx');

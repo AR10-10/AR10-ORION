@@ -78,6 +78,19 @@ describe('buildNexusDecision: fusão pura das leituras reais', () => {
     expect(d.planGap).toBeNull();
   });
 
+  it('Omega Core §5/§6: obstacleCount é passthrough LITERAL de TradePlanLevel — nunca recalculado neste módulo (LEI 24: fusão, não um segundo motor)', () => {
+    const planWithObstacles: TradePlan = {
+      ...plan,
+      targets: [
+        { price: 105, basis: 'VP_POC', obstacleCount: 2 },
+        { price: 110, basis: 'EQH' }, // sem obstacleCount — plano de contrato anterior, undefined honesto
+      ],
+    };
+    const d = buildNexusDecision({ ...base, plan: planWithObstacles });
+    expect(d.plan!.targets[0].obstacleCount).toBe(2);
+    expect(d.plan!.targets[1].obstacleCount).toBeUndefined();
+  });
+
   it('confiança = leituras reais existentes (rótulo do motor + Score + zona + tendência) — nunca um número novo', () => {
     const d = buildNexusDecision(base);
     expect(d.confidenceLabel).toBe('ALTA');
@@ -173,5 +186,43 @@ describe('V2 §4 — justificativa estruturada de fontes reais nomeadas', () => 
     const manyVotes = Array.from({ length: 10 }, (_, i) => ({ agent: `A${i}`, stance: 'LONG', rationale: `motivo ${i}` }));
     const d = buildNexusDecision({ ...base, councilVotes: manyVotes });
     expect(d.reasonsFor.length).toBeLessThanOrEqual(NEXUS_MAX_REASONS);
+  });
+});
+
+describe('Cockpit de Leitura §4 — equilíbrios na justificativa (nunca um bloqueio, LEI 24)', () => {
+  // Fixture reduzida (sem Conselho/Conviction) para os motivos das linhas
+  // ficarem dentro do cap NEXUS_MAX_REASONS e serem observáveis.
+  const slim = {
+    ...base,
+    councilVotes: [],
+    convictionMembers: [],
+    premiumDiscountZone: null,
+    vwapState: 'BULLISH' as const,
+    nexusLineState: 'BULLISH' as const,
+  };
+
+  it('o exemplo canônico da diretriz: decisão LONG + VWAP vendedora => contrário NOMEADO e visível', () => {
+    const d = buildNexusDecision({ ...slim, vwapState: 'BEARISH' });
+    expect(d.reasonsAgainst).toContain('Preço abaixo da VWAP — estado vendedor (VWAP)');
+    expect(d.operation).toBe('LONG'); // LEI 24: o conflito informa, jamais altera a operação
+  });
+
+  it('alinhamento vira favorável para as DUAS linhas; SHORT espelhado', () => {
+    const d = buildNexusDecision(slim);
+    expect(d.reasonsFor).toContain('Preço acima da VWAP — estado comprador (VWAP)');
+    expect(d.reasonsFor).toContain('Nexus Line compradora (Nexus Line)');
+    const s = buildNexusDecision({ ...slim, coreDirection: 'SHORT' as const, vwapState: 'BEARISH' as const, nexusLineState: 'BEARISH' as const });
+    expect(s.reasonsFor).toContain('Preço abaixo da VWAP — estado vendedor (VWAP)');
+    expect(s.reasonsFor).toContain('Nexus Line vendedora (Nexus Line)');
+  });
+
+  it('NEUTRAL/null fica fora das duas listas (sem desvio confirmado, sem lado fabricado)', () => {
+    const d = buildNexusDecision({ ...slim, vwapState: 'NEUTRAL', nexusLineState: null });
+    expect([...d.reasonsFor, ...d.reasonsAgainst].join()).not.toMatch(/VWAP|Nexus Line/);
+  });
+
+  it('AGUARDAR não fabrica motivo direcional a partir das linhas', () => {
+    const d = buildNexusDecision({ ...slim, coreDirection: null });
+    expect(d.reasonsFor).toEqual([]);
   });
 });

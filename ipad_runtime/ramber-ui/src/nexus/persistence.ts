@@ -123,6 +123,55 @@ export async function loadTrackRecord(): Promise<unknown | null> {
   }
 }
 
+// ─── Consolidação Operacional §5: envelhecimento/compactação automática ───
+// A store de candles ganha uma chave por symbol:timeframe visitado e nunca
+// perdia nenhuma — crescimento indefinido real (um Operador curioso no
+// omnibox × 9 timeframes acumula centenas de registros ao longo de meses).
+// Compactar aqui NÃO viola a Regra de Ouro 4 ("nunca apagar dado real"):
+// esta store é um CACHE de instant-paint (o gráfico pinta a última sessão
+// real enquanto a rede responde) — a fonte da verdade é a exchange, e um
+// registro não tocado há semanas é substituído pelo fetch real assim que
+// aquele par é reaberto. Envelhecer um cache é manutenção honesta; apagar
+// um dado-fonte seria violação. O track record (SNAPSHOT_STORE) nunca é
+// tocado por esta função — aquele SIM é conhecimento acumulado real, e já
+// é ring-capped na própria estrutura (TRACK_RECORD_HISTORY_CAP).
+export const CANDLE_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000; // 14 dias sem uso => expirado
+export const CANDLE_CACHE_MAX_RECORDS = 64; // teto: ~7 ativos de rotação real × 9 timeframes
+
+export interface CandleCompactionResult {
+  scanned: number;
+  expired: number; // removidos por idade (savedAt além do TTL)
+  evicted: number; // removidos por excesso além do teto (os mais antigos primeiro)
+}
+
+/** Roda uma vez por boot (App.tsx), fire-and-forget. Mantém os registros
+ *  MAIS RECENTES por savedAt; null quando o IndexedDB falhou (mesmo
+ *  best-effort de todo este arquivo — compactação nunca pode virar um novo
+ *  ponto de falha do caminho real). */
+export async function compactPersistedCandles(
+  now: number = Date.now(),
+  maxAgeMs: number = CANDLE_CACHE_MAX_AGE_MS,
+  maxRecords: number = CANDLE_CACHE_MAX_RECORDS,
+): Promise<CandleCompactionResult | null> {
+  try {
+    const db = await getDb();
+    const records = (await db.getAll(CANDLES_STORE)) as PersistedCandles[];
+    const expired = records.filter((r) => now - r.savedAt > maxAgeMs);
+    const alive = records
+      .filter((r) => now - r.savedAt <= maxAgeMs)
+      .sort((a, b) => b.savedAt - a.savedAt);
+    const evicted = alive.slice(maxRecords);
+    if (expired.length > 0 || evicted.length > 0) {
+      const tx = db.transaction(CANDLES_STORE, "readwrite");
+      for (const r of [...expired, ...evicted]) await tx.store.delete(r.key);
+      await tx.done;
+    }
+    return { scanned: records.length, expired: expired.length, evicted: evicted.length };
+  } catch {
+    return null;
+  }
+}
+
 export async function loadSnapshotSummary(): Promise<PersistedSnapshotSummary | null> {
   try {
     const db = await getDb();

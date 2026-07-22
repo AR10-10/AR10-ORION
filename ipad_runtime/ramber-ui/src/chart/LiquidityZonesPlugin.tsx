@@ -57,8 +57,24 @@ const FVG_BEARISH: ZonePalette = { fill: "rgba(255, 0, 85, 0.10)", border: "rgba
 const OB_BULLISH: ZonePalette = { fill: "rgba(0, 255, 170, 0.15)", border: "rgba(0, 255, 170, 0.40)" };
 const OB_BEARISH: ZonePalette = { fill: "rgba(255, 0, 85, 0.15)", border: "rgba(255, 0, 85, 0.40)" };
 
-function paletteFor(kind: "FVG" | "OB", type: "BULLISH" | "BEARISH"): ZonePalette {
-  if (kind === "FVG") return type === "BULLISH" ? FVG_BULLISH : FVG_BEARISH;
+// Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
+// estrutural"): MESMA cor/hierarquia acima — o preenchimento nunca muda
+// ("não é pra tirar as cor do gráfico não" continua valendo aqui também) —
+// só a borda fica bem mais opaca quando esta MESMA zona já desenhada é, no
+// plano ATIVO, um obstáculo real no caminho entrada→alvo
+// (trade-plan.ts:obstacleZonesInPath, reusado por App.tsx — zero segundo
+// cálculo). Sem plano ativo, obstacleZones vem vazio e nada muda.
+const FVG_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 255, 170, 0.10)", border: "rgba(0, 255, 170, 0.85)" };
+const FVG_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.10)", border: "rgba(255, 0, 85, 0.85)" };
+const OB_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 255, 170, 0.15)", border: "rgba(0, 255, 170, 0.85)" };
+const OB_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.15)", border: "rgba(255, 0, 85, 0.85)" };
+
+function paletteFor(kind: "FVG" | "OB", type: "BULLISH" | "BEARISH", isObstacle: boolean): ZonePalette {
+  if (kind === "FVG") {
+    if (isObstacle) return type === "BULLISH" ? FVG_BULLISH_OBSTACLE : FVG_BEARISH_OBSTACLE;
+    return type === "BULLISH" ? FVG_BULLISH : FVG_BEARISH;
+  }
+  if (isObstacle) return type === "BULLISH" ? OB_BULLISH_OBSTACLE : OB_BEARISH_OBSTACLE;
   return type === "BULLISH" ? OB_BULLISH : OB_BEARISH;
 }
 
@@ -78,21 +94,26 @@ interface LiquidityZonesPluginProps {
   data: { time: number }[];
   fairValueGaps: FillableZone[];
   orderBlocks: FillableZone[];
+  // Diretriz Restauração/Inteligência Visual §6: zonas reais (as MESMAS já
+  // desenhadas acima, identificadas por low/high) que o Trade Plan ATIVO
+  // cruza a caminho de algum alvo — opcional/fail-closed: ausente/vazio =>
+  // desenho idêntico ao de sempre, nenhuma zona em ênfase.
+  obstacleZones?: { low: number; high: number }[];
 }
 
-export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks }: LiquidityZonesPluginProps) {
+export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, obstacleZones }: LiquidityZonesPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const zonesRef = useRef({ fairValueGaps, orderBlocks, data });
+  const zonesRef = useRef({ fairValueGaps, orderBlocks, data, obstacleZones });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente das zonas/candles para o loop de desenho
   // ler — nunca dispara o efeito de setup abaixo de novo (evita reabrir a
   // conexão com o chart/reassinar os listeners a cada atualização de dado).
-  zonesRef.current = { fairValueGaps, orderBlocks, data };
+  zonesRef.current = { fairValueGaps, orderBlocks, data, obstacleZones };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [fairValueGaps, orderBlocks, data]);
+  }, [fairValueGaps, orderBlocks, data, obstacleZones]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -116,9 +137,14 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
       const timeScale = chart.timeScale();
-      const { fairValueGaps: fvgs, orderBlocks: obs, data: candles } = zonesRef.current;
+      const { fairValueGaps: fvgs, orderBlocks: obs, data: candles, obstacleZones: obstacles } = zonesRef.current;
 
       const currentIndex = candles.length - 1;
+      // Identidade por low/high real (mesmos números, zero recálculo) —
+      // nunca por índice/posição, que pode divergir entre a lista de zonas
+      // do gráfico e a lista de obstáculos do plano.
+      const isObstacle = (zone: FillableZone) =>
+        (obstacles ?? []).some((o) => o.low === zone.bottom && o.high === zone.top);
 
       const drawZone = (zone: FillableZone, palette: ZonePalette, label: string) => {
         const point = candles[zone.index];
@@ -154,8 +180,17 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
         ctx.globalAlpha = 1;
       };
 
-      fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type), "FVG"));
-      obs.forEach((z) => drawZone(z, paletteFor("OB", z.type), "OB"));
+      // Achado real (pergunta do Operador: "aquela zona vermelha tipo
+      // liquidez, era pra cima ou pra baixo?"): o rótulo dizia só "FVG"/"OB"
+      // — a direção vinha SÓ da cor (verde=alta/demanda abaixo,
+      // vermelho=baixa/oferta acima), o que exige o Operador já saber a
+      // convenção de cor. Glifo ↑/↓ explícito (mesmo vocabulário de
+      // VWAP/NL): BULLISH=↑ (zona de demanda, viés de alta), BEARISH=↓
+      // (zona de oferta, viés de baixa). Zero cálculo novo — z.type já é a
+      // direção real do motor SMC.
+      const dir = (t: "BULLISH" | "BEARISH") => (t === "BULLISH" ? "↑" : "↓");
+      fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));
+      obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));
     };
 
     const markDirty = () => {
