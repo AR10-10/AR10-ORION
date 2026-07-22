@@ -20,6 +20,7 @@ import {
   mexcDepthToSnapshot,
   fetchMexcDepth,
 } from '../src/cross-exchange/mexc-spot';
+import { extractMexcFuturesPerpTicker, fetchMexcFuturesPerpTicker } from '../src/cross-exchange/mexc-futures';
 
 describe('bybit-futures: extractBybitPerpTicker — payload real de /v5/market/tickers (category=linear)', () => {
   it('extrai markPrice/fundingRate/openInterest de um payload bem formado', () => {
@@ -274,5 +275,91 @@ describe('mexc-spot: fetchMexcDepth — fail-closed real', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     expect(await fetchMexcDepth('BTC')).toEqual({ ok: true, bids: [{ price: 100, size: 1 }], asks: [{ price: 101, size: 1 }] });
+  });
+});
+
+// EPC FINAL §27 (Aditivo de Automação Total): MEXC ganha Futures completo
+// (resposta do Operador — secundária/cross-check mais completa, nunca
+// primária). Payload de exemplo real (data.fairPrice/data.fundingRate)
+// vem da documentação pública da MEXC (api-docs/futures/market-endpoints/
+// get-funding-rate) — mesmo grau de honestidade dos demais conectores
+// (schema não re-verificado ao vivo, sandbox sem rede de saída).
+describe('mexc-futures: extractMexcFuturesPerpTicker — payload real de /api/v1/contract/funding_rate/{symbol}', () => {
+  it('extrai fairPrice (mark price real) + fundingRate de um payload bem formado (exemplo real da documentação MEXC)', () => {
+    const raw = {
+      success: true,
+      code: 0,
+      data: {
+        symbol: 'BTC_USDT',
+        fundingRate: 0.000018,
+        maxFundingRate: 0.0018,
+        minFundingRate: -0.0018,
+        collectCycle: 8,
+        nextSettleTime: 1761897600000,
+        timestamp: 1761879755894,
+        idxPrice: 81254.9,
+        fairPrice: 81212.8,
+      },
+    };
+    expect(extractMexcFuturesPerpTicker(raw)).toEqual({ ok: true, price: 81212.8, fundingRate: 0.000018, openInterest: null });
+  });
+
+  it('openInterest é sempre null nesta integração (holdVol exigiria uma 2ª chamada de rede — mesmo raciocínio já documentado para fundingRate/openInterest da OKX)', () => {
+    const raw = { data: { fairPrice: 150.25, fundingRate: 0.0001 } };
+    expect(extractMexcFuturesPerpTicker(raw).openInterest).toBeNull();
+  });
+
+  it('fundingRate ausente não derruba o ticker inteiro (melhor-esforço, fairPrice basta)', () => {
+    const raw = { data: { fairPrice: 150.25 } };
+    expect(extractMexcFuturesPerpTicker(raw)).toEqual({ ok: true, price: 150.25, fundingRate: null, openInterest: null });
+  });
+
+  it('fairPrice ausente/não-numérico => ok:false honesto (preço é o único campo obrigatório)', () => {
+    expect(extractMexcFuturesPerpTicker({ data: { fundingRate: 0.0001 } })).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+  });
+
+  it('data vazio ou ausente => ok:false, nunca lança exceção', () => {
+    expect(extractMexcFuturesPerpTicker({ data: {} })).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+    expect(extractMexcFuturesPerpTicker({})).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+    expect(extractMexcFuturesPerpTicker(null)).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+    expect(extractMexcFuturesPerpTicker(undefined)).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+  });
+});
+
+describe('mexc-futures: fetchMexcFuturesPerpTicker — fail-closed real, nunca bloqueia Binance/Bybit/OKX/MEXC Spot', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('erro de rede (fetch lança) => ok:false honesto, nunca uma exceção não tratada', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')));
+    expect(await fetchMexcFuturesPerpTicker('BTC')).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+  });
+
+  it('resposta HTTP não-ok => ok:false honesto', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
+    expect(await fetchMexcFuturesPerpTicker('BTC')).toEqual({ ok: false, price: null, fundingRate: null, openInterest: null });
+  });
+
+  it('resposta ok real é extraída por extractMexcFuturesPerpTicker, e a URL usa o símbolo Futures real (BTC_USDT, underscore — diferente do Spot BTCUSDT)', async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toContain('SOL_USDT');
+      expect(url).toContain('api.mexc.com/api/v1/contract/funding_rate');
+      return { ok: true, json: async () => ({ data: { fairPrice: 150.25, fundingRate: 0.00005 } }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    expect(await fetchMexcFuturesPerpTicker('SOL')).toEqual({ ok: true, price: 150.25, fundingRate: 0.00005, openInterest: null });
+  });
+});
+
+describe('mexc-futures: compareCrossExchange também funciona com um ticker da MEXC Futures (mesma lógica genérica, apples-to-apples via mark price)', () => {
+  it('MEXC Futures alinhada com a Binance => ALINHADO', () => {
+    const result = compareCrossExchange(65000, { ok: true, price: 65010, fundingRate: null, openInterest: null });
+    expect(result.consensus).toBe('ALINHADO');
+  });
+
+  it('MEXC Futures indisponível (ok:false) => INDISPONIVEL — nunca bloqueia nem afeta as outras 3 fontes', () => {
+    const result = compareCrossExchange(65000, { ok: false, price: null, fundingRate: null, openInterest: null });
+    expect(result).toEqual({ ok: false, priceDeltaPct: null, consensus: 'INDISPONIVEL' });
   });
 });

@@ -98,7 +98,7 @@ ESTRUTURA`) — mesma tabela `OUTCOME_QUALIFIER`, nunca uma segunda lógica.
 
 ## 5. Como se verifica (infraestrutura real)
 
-- `npx tsc --noEmit` + `npx vitest run` (105 arquivos, 1755 testes) +
+- `npx tsc --noEmit` + `npx vitest run` (105 arquivos, 1765 testes) +
   `npm run build`.
 - `scripts/audit-header-maxcontent.mjs` — auditoria responsiva em 11
   viewports (iPad Mini→ultrawide 34", incluindo a classe ~1000px lógicos
@@ -2168,6 +2168,79 @@ junto de outra coisa.
 **Verificação real**: `tsc --noEmit` limpo · **105 arquivos / 1755
 testes** (100%, +7 desde §6.32: emphasis real + badge de destaque) ·
 `npm run build` ok · `audit-header-maxcontent.mjs` 11 viewports CLEAN.
+
+---
+
+### 6.34 EPC FINAL — Aditivo de Automação Total (§21-28): MEXC Futures real
+como 4ª fonte de cross-check, achado real do Smart Omnibox, ZigZag
+honestamente não-encontrado
+
+Quarta rodada da mesma diretiva (§21-28, "nenhuma inteligência será
+perdida... todo o ecossistema permanece vivo, sincronizado, automático").
+Uma pergunta de escopo genuinamente nova (§27, MEXC): resolvida pelo
+Operador (`AskUserQuestion`) — **MEXC continua secundária/cross-check**
+(nunca substitui a Binance como fonte primária do ciclo do Core Engine,
+LEI 24/CLAUDE.md intactos), ganhando Futures completo; **lista de ativos
+expandida de forma curada**, não descoberta automática de centenas de
+pares (isso fica para uma rodada futura, com redesenho do seletor).
+
+**§21/§24/§26 — confirmados por evidência, sem trabalho novo**: nenhum
+motor jamais foi gateado por ativação manual; `engine` e toda leitura
+computada são `useMemo`s dependentes de dado ao vivo (recomputam a cada
+candle/tick por construção); o único código asset-específico encontrado
+(₿ para BTC) é puramente cosmético e degrada bem para qualquer símbolo.
+
+**§22 — gap já conhecido, reconfirmado**: todas as ferramentas listadas
+são reais e ativas, exceto Centro Gravitacional/Corredor de Confluência
+(ainda não construídos — não há nada "para manter habilitado").
+
+**§25 (ZigZag) — achado real, não uma recuperação**: auditoria completa
+(`golden-master.html` + busca full-text por "zigzag") não encontrou
+nenhuma evidência de um sistema de linhas estruturais coloridas (azul/
+cinza/roxa) que tenha existido e sido removido/ocultado. `golden-master.html`
+é um protótipo mais antigo e completamente diferente (footprint chart,
+visualização de partículas) — seu roxo/ciano/laranja são cores de tema de
+UI, não linhas de análise. Os elementos estruturais REAIS (Trend Channel,
+BOS/CHOCH, S1/R1) permanecem ativos desde sempre nesta sessão. Achado
+paralelo: `fractal-swings.js` já computa swing highs/lows reais
+(compartilhado por vários motores), mas nada desenha uma linha zigzag
+conectando-os no canvas hoje — feature nova genuína, barata (o dado já
+existe), proposta e não construída sem pedido explícito.
+
+**§27 (MEXC) — entregue**:
+- `cross-exchange/mexc-futures.ts` (novo): 4ª fonte real de cross-check,
+  mesmo padrão de `bybit-futures.ts`/`okx-futures.ts`. Endpoint real
+  `GET /api/v1/contract/funding_rate/{symbol}` (API pública MEXC Contract
+  v1, símbolo formato `BTC_USDT`, pesquisado e confirmado contra a
+  documentação pública real da MEXC antes de implementar — nunca
+  inventado). `fairPrice` (mark price real) comparado apples-to-apples
+  com o markPrice da Binance/Bybit/OKX (mesma disciplina já estabelecida
+  — evita um DIVERGENTE falso por ruído de last-trade); `fundingRate`
+  vem de graça na mesma chamada; `openInterest` fica null de propósito
+  (exigiria uma 2ª chamada de rede só pra um campo que nenhum consumidor
+  exibe hoje — mesmo raciocínio já documentado para a OKX). Ligado ao
+  mesmo `Promise.all` de Bybit/OKX, mesma linha de UI "Cross-Exchange
+  Consensus", mesmo `setConnectionState`/contribuição ao TrustScore.
+  Schema não verificado ao vivo (sandbox sem rede de saída — mesma
+  limitação já documentada nos outros 3 conectores).
+- **Achado real relevante durante a auditoria**: `ASSETS` (a lista de 5
+  botões-atalho) NUNCA foi o universo de escolha do app — o Smart Omnibox
+  já busca ao vivo qualquer par USDT real da Binance
+  (`fetchBinanceUsdtSymbols`, `omnibox/binance-symbols.ts`), então
+  "Compatibilidade Universal" (§26) e boa parte de "detectar novos ativos
+  automaticamente" (§27) já existiam antes desta rodada. O que mudou:
+  `ASSETS` expandido de 5 para 12 (DOGE/ADA/AVAX/LINK/DOT/TON/TRX
+  adicionados) — pares reais, líquidos, listados tanto na Binance Futures
+  quanto na MEXC Futures — só os atalhos de 1 toque, não uma mudança
+  arquitetural. Verificado ao vivo (build + preview real) que a fileira
+  de 12 botões não quebra layout em nenhum dos 11 viewports, incluindo os
+  que ativam o breakpoint `lg:` (iPad Pro landscape, MacBook meia-tela).
+
+**Verificação real**: `tsc --noEmit` limpo · **105 arquivos / 1765
+testes** (100%, +10: 16 execução real do conector MEXC Futures - 6
+reaproveitadas do padrão existente + fiação de reset por troca de ativo
+ajustada) · `npm run build` ok (9.08s, 1823 módulos) ·
+`audit-header-maxcontent.mjs` 11 viewports CLEAN.
 
 ---
 

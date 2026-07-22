@@ -241,6 +241,10 @@ import { fetchBybitPerpTicker, compareCrossExchange, type CrossExchangeCheck } f
 // qualquer outra corretora"): OKX Perpétuo, mesmo papel e mesma trava
 // fail-closed da Bybit acima — ver header de okx-futures.ts.
 import { fetchOkxPerpTicker } from "./cross-exchange/okx-futures";
+// EPC FINAL §27 (Aditivo de Automação Total): MEXC Futures, 4ª fonte real
+// de cross-check — resposta do Operador, secundária/mais completa, nunca
+// substitui a Binance como fonte primária.
+import { fetchMexcFuturesPerpTicker } from "./cross-exchange/mexc-futures";
 import {
   LayoutDashboard,
   BarChart2,
@@ -319,7 +323,17 @@ const lorentzianConfidencePct = (lorentzian: { ok: boolean; confidence?: number 
 // engine-bridge.ts's runRealAnalysisCycle/startMexcOrderflowFeed já
 // aceitam qualquer símbolo (string), então isto reusa o mesmo caminho —
 // nunca um segundo código.
-const ASSETS = ["BTC", "ETH", "SOL", "BNB", "XRP"] as const;
+// EPC FINAL §27 (Aditivo de Automação Total, resposta do Operador —
+// expandir a lista curada antes de descoberta automática completa):
+// achado real relevante — esta lista SEMPRE foi só os atalhos de 1 toque
+// (comentário acima), nunca o universo de escolha; o Smart Omnibox já
+// busca ao vivo QUALQUER par USDT real da Binance (fetchBinanceUsdtSymbols,
+// omnibox/binance-symbols.ts), então "compatibilidade universal" já
+// existia antes desta expansão. O que muda aqui é só o conjunto de
+// atalhos: 7 pares reais adicionados, todos líquidos e listados tanto na
+// Binance USDT-M Futures (fonte primária) quanto na MEXC Futures
+// (cross-check, mexc-futures.ts) — nunca um par exótico de baixa liquidez.
+const ASSETS = ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "LINK", "DOT", "TON", "TRX"] as const;
 type AssetSymbol = string;
 
 // ─── Diretriz Evolução Contínua §3/§4: restauração de sessão Local-First ───
@@ -508,6 +522,14 @@ export default function App() {
   });
   // Mesmo papel do crossExchangeCheck acima, para a OKX (terceira fonte).
   const [okxCrossExchangeCheck, setOkxCrossExchangeCheck] = useState<CrossExchangeCheck>({
+    ok: false,
+    priceDeltaPct: null,
+    consensus: "INDISPONIVEL",
+  });
+  // EPC FINAL §27 (Aditivo de Automação Total): MEXC Futures, 4ª fonte de
+  // cross-check real (resposta do Operador — secundária, nunca substitui
+  // a Binance como fonte primária do ciclo do Core Engine).
+  const [mexcCrossExchangeCheck, setMexcCrossExchangeCheck] = useState<CrossExchangeCheck>({
     ok: false,
     priceDeltaPct: null,
     consensus: "INDISPONIVEL",
@@ -962,19 +984,22 @@ export default function App() {
       if (!isStale()) setDerivatives({ fundingRate: null, openInterest: null });
     }
 
-    // Master Panel handoff: cross-check Bybit + OKX — independente do
-    // try/catch acima por design, buscados em paralelo (Zero Latência: uma
-    // fonte lenta não atrasa a outra). fetchBybitPerpTicker()/
-    // fetchOkxPerpTicker() já são fail-closed internamente (nunca lançam),
-    // então uma falha em qualquer uma nunca reverte nem atrasa o resultado
-    // real da Binance já processado logo acima.
-    const [bybit, okx] = await Promise.all([
+    // Master Panel handoff: cross-check Bybit + OKX + MEXC Futures —
+    // independente do try/catch acima por design, buscados em paralelo
+    // (Zero Latência: uma fonte lenta não atrasa a outra).
+    // fetchBybitPerpTicker()/fetchOkxPerpTicker()/fetchMexcFuturesPerpTicker()
+    // já são fail-closed internamente (nunca lançam), então uma falha em
+    // qualquer uma nunca reverte nem atrasa o resultado real da Binance já
+    // processado logo acima.
+    const [bybit, okx, mexc] = await Promise.all([
       fetchBybitPerpTicker(selectedAsset),
       fetchOkxPerpTicker(selectedAsset),
+      fetchMexcFuturesPerpTicker(selectedAsset),
     ]);
     if (!isStale()) {
       setCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, bybit));
       setOkxCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, okx));
+      setMexcCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, mexc));
     }
 
     return binanceOk;
@@ -1029,6 +1054,7 @@ export default function App() {
     setDerivatives({ fundingRate: null, openInterest: null });
     setCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
     setOkxCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
+    setMexcCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
     // V-MAX Fase 1.1/1.2: l2History/orderflowHistory na store são séries
     // acumuladas ao longo do tempo (não um valor pontual como os acima) do
     // ativo ANTERIOR — sem isto, o OrderFlowHeatmapPlugin mostraria amostras
@@ -2558,13 +2584,16 @@ export default function App() {
     if (okxCrossExchangeCheck.ok && typeof okxCrossExchangeCheck.priceDeltaPct === "number") {
       divergences.push(Math.abs(okxCrossExchangeCheck.priceDeltaPct) * 100);
     }
+    if (mexcCrossExchangeCheck.ok && typeof mexcCrossExchangeCheck.priceDeltaPct === "number") {
+      divergences.push(Math.abs(mexcCrossExchangeCheck.priceDeltaPct) * 100);
+    }
     let stale = false;
     (async () => {
       const score = await computeRealTrustScore([...priceGapsRef.current], divergences);
       if (!stale) useUnifiedSnapshotStore.getState().setTrustScore(score);
     })();
     return () => { stale = true; };
-  }, [priceUpdatedAt, crossExchangeCheck, okxCrossExchangeCheck]);
+  }, [priceUpdatedAt, crossExchangeCheck, okxCrossExchangeCheck, mexcCrossExchangeCheck]);
 
   // V18 Sprint 1 (Tarefa A): espelha o dado real já coletado por App.tsx
   // para dentro da UnifiedGlobalSnapshot store (Zustand+Immer) — nenhuma
@@ -2678,6 +2707,9 @@ export default function App() {
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setConnectionState("OKX", okxCrossExchangeCheck.ok ? "LIVE" : "DEGRADED");
   }, [okxCrossExchangeCheck]);
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setConnectionState("MEXC", mexcCrossExchangeCheck.ok ? "LIVE" : "DEGRADED");
+  }, [mexcCrossExchangeCheck]);
   // V-MAX Fase 1.2 (achado real durante a auditoria para o
   // OrderFlowHeatmapPlugin): `fps` acima (Fase J, "FPS REAL da UI") é a
   // ÚNICA medição real de frame rate desta árvore — o Health Monitor
@@ -2760,6 +2792,7 @@ export default function App() {
       orderBookUpdatedAt,
       crossExchangeCheck,
       okxCrossExchangeCheck,
+      mexcCrossExchangeCheck,
       currentRsi,
     }),
     [
@@ -2821,6 +2854,7 @@ export default function App() {
       orderBookUpdatedAt,
       crossExchangeCheck,
       okxCrossExchangeCheck,
+      mexcCrossExchangeCheck,
       currentRsi,
     ],
   );
@@ -5620,6 +5654,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     institutionalConsensus,
     crossExchangeCheck,
     okxCrossExchangeCheck,
+    mexcCrossExchangeCheck,
     chartTimeframe,
     etaReading,
     // Consolidação Final §21-§30: leituras VWAP/NL/confluência (App-level,
@@ -5716,6 +5751,18 @@ function SecondaryModuleView({ tab }: { tab: string }) {
                 : `${okxCrossExchangeCheck.priceDeltaPct.toFixed(3)}%`
             }
             tone={okxCrossExchangeCheck?.consensus === "ALINHADO" ? "long" : okxCrossExchangeCheck?.consensus === "DIVERGENTE" ? "short" : "neutral"}
+          />
+          {/* EPC FINAL §27 (Aditivo de Automação Total): MEXC Futures, 4ª
+              fonte real — mesmo padrão Bybit/OKX, fairPrice (mark) vs
+              markPrice da Binance. */}
+          <ModuleStat
+            label="MEXC Δ"
+            value={
+              mexcCrossExchangeCheck?.consensus === "INDISPONIVEL" || mexcCrossExchangeCheck?.priceDeltaPct == null
+                ? MODULE_EMPTY
+                : `${mexcCrossExchangeCheck.priceDeltaPct.toFixed(3)}%`
+            }
+            tone={mexcCrossExchangeCheck?.consensus === "ALINHADO" ? "long" : mexcCrossExchangeCheck?.consensus === "DIVERGENTE" ? "short" : "neutral"}
           />
         </ModulePanel>
         {scannerTable}
