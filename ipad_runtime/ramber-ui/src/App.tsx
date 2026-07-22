@@ -4910,11 +4910,21 @@ function TopBar({ data }: { data?: PriceState | null }) {
               rótulo do tier vêm 1:1 de confidenceZone — zero segunda
               matemática, mesmo score bandado nas 5 faixas da diretriz. */}
           {marketMode === "CRYPTO" && (
+            // EPC FINAL §35 ("Indicador Institucional do Cabeçalho"): achado
+            // real — este indicador mostrava a palavra "Score" (nunca deve
+            // aparecer) e o tier (Muito Forte/Forte/...) como uma linha
+            // sempre visível separada, em vez de só cor+percentual juntos.
+            // Fonte real única preservada (institutionalScore/confidenceZone,
+            // institutional-score.ts) — confirmado por grep que este é o
+            // ÚNICO ponto de renderização visual deste score em todo o app
+            // (SSOT já real, não precisou de nova ligação). O rótulo do tier
+            // não foi apagado (Regra de Ouro 4) — só realocado para o
+            // tooltip, que já carregava "Zona: ${confidenceZone.label}".
             <div
               className="hidden md:flex flex-col items-center justify-center pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
               title={
                 institutionalScore?.score !== null && institutionalScore?.score !== undefined
-                  ? `Score real de confluência entre subsistemas (0-100) — nunca probabilidade de acerto. Zona: ${confidenceZone?.label ?? DASH}. ${institutionalScore.opportunity ? "Acima do nível mínimo de oportunidade." : "Abaixo do nível mínimo, ou risco travado."} ${
+                  ? `Score real de confluência entre subsistemas (0-100), exibido como percentual — nunca probabilidade de acerto. Zona: ${confidenceZone?.label ?? DASH}. ${institutionalScore.opportunity ? "Acima do nível mínimo de oportunidade." : "Abaixo do nível mínimo, ou risco travado."} ${
                       convictionTrend?.status === "OK" && convictionTrend.trend
                         ? `Tendência: ${convictionTrend.trend} (média recente ${convictionTrend.recentAverage!.toFixed(1)} vs. anterior ${convictionTrend.priorAverage!.toFixed(1)}).`
                         : "Diretriz Complementar §4 (Conviction Engine): histórico real ainda insuficiente para uma tendência honesta."
@@ -4922,18 +4932,19 @@ function TopBar({ data }: { data?: PriceState | null }) {
                   : "Sem oportunidade direcional a pontuar agora (Core Engine em WAIT ou dados insuficientes)."
               }
             >
-              <span className="text-[0.42rem] tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">Score</span>
-              <div className="flex items-center gap-0.5">
+              <div className="flex items-center gap-1">
                 <span
-                  className={`text-[0.7rem] font-black font-mono tabular-nums ${
+                  className={`text-[0.85rem] font-black font-mono tabular-nums leading-none ${
                     confidenceZone === null ? "text-[#8ab4f8]/40" : `${confidenceZone.colorClass} drop-shadow-[0_0_5px_currentColor]`
                   }`}
                 >
+                  {confidenceZone ? `${confidenceZone.emoji} ` : ""}
                   {institutionalScore?.score ?? DASH}
+                  {institutionalScore?.score !== null && institutionalScore?.score !== undefined ? "%" : ""}
                 </span>
                 {/* Diretriz Complementar §4 ("Conviction Engine"): ▲/▬/▼ real
-                    sobre a MESMA série do Score acima — nunca substitui o
-                    Score, só informa se a confluência está subindo/caindo. */}
+                    sobre a MESMA série do score acima — nunca substitui o
+                    valor, só informa se a confluência está subindo/caindo. */}
                 {convictionTrend?.status === "OK" && convictionTrend.trend && (
                   <span
                     className={`text-[0.55rem] font-black leading-none ${
@@ -4948,11 +4959,6 @@ function TopBar({ data }: { data?: PriceState | null }) {
                   </span>
                 )}
               </div>
-              {confidenceZone && (
-                <span className={`text-[0.38rem] font-bold uppercase tracking-wider ${confidenceZone.colorClass}`}>
-                  {confidenceZone.emoji} {confidenceZone.label}
-                </span>
-              )}
             </div>
           )}
 

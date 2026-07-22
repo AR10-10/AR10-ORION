@@ -53,10 +53,19 @@ describe('Header: Score badge exibe a banda real §16 — cor e rótulo 1:1 com 
     expect(app).toContain('confidenceZone === null ? "text-[#8ab4f8]/40" : `${confidenceZone.colorClass} drop-shadow-[0_0_5px_currentColor]`');
   });
 
-  it('o rótulo do tier (emoji + label) só renderiza quando a zona é real — null honesto em WAIT não vira uma legenda fabricada', () => {
+  // EPC FINAL §35 ("Indicador Institucional do Cabeçalho"): achado real —
+  // a palavra "Score" e o rótulo de tier como linha sempre visível
+  // violavam o pedido explícito ("somente cor; percentual", nunca a
+  // palavra "Score"). O emoji real da zona (🟢/🟡/🟠/🔴) entra JUNTO do
+  // número (nunca sozinho — "nunca exibir apenas a bolinha"), e o rótulo
+  // do tier (Muito Forte/Forte/...) não foi apagado (Regra de Ouro 4) —
+  // só realocado pro tooltip, que já carregava "Zona: ${confidenceZone.label}".
+  it('emoji real da zona entra junto do percentual (nunca sozinho), null honesto em WAIT não vira um emoji fabricado', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('{confidenceZone && (');
-    expect(app).toContain('{confidenceZone.emoji} {confidenceZone.label}');
+    expect(app).toContain('{confidenceZone ? `${confidenceZone.emoji} ` : ""}');
+    expect(app).toContain('{institutionalScore?.score ?? DASH}');
+    expect(app).toContain('{institutionalScore?.score !== null && institutionalScore?.score !== undefined ? "%" : ""}');
+    expect(app).not.toContain('>Score</span>');
   });
 
   it('o tooltip cita a zona real, nunca um número solto sem contexto', () => {

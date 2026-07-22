@@ -83,9 +83,12 @@ describe('Header: glifo ▲/▬/▼ real do Conviction Engine (Evolução da Int
     expect(app).toContain('{convictionTrend?.status === "OK" && convictionTrend.trend && (');
   });
 
-  it('o Conviction Engine NUNCA substitui o Score — é um glifo adicional ao lado do número, não uma segunda métrica separada', () => {
+  it('o Conviction Engine NUNCA substitui o score — é um glifo adicional ao lado do número, não uma segunda métrica separada', () => {
     const app = read('../src/App.tsx');
-    const badgeStart = app.indexOf('marketMode === "CRYPTO" && (\n            <div\n              className="hidden md:flex flex-col items-center justify-center pr-2 md:pr-3');
+    // Âncora estável (EPC FINAL §35 acrescentou um bloco de comentário
+    // entre o `&& (` e a `<div>` — este ponto de partida não depende
+    // desse comentário nem de nenhum outro que venha a ser inserido ali).
+    const badgeStart = app.indexOf('institutionalScore?.score !== null && institutionalScore?.score !== undefined\n                  ? `Score real de confluência');
     const badgeEnd = app.indexOf('</div>\n          )}\n\n          {/* Diretriz V-MAX item 6', badgeStart);
     expect(badgeStart).toBeGreaterThan(-1);
     const block = app.slice(badgeStart, badgeEnd > -1 ? badgeEnd : badgeStart + 2500);

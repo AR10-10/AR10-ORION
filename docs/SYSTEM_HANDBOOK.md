@@ -2244,6 +2244,100 @@ ajustada) · `npm run build` ok (9.08s, 1823 módulos) ·
 
 ---
 
+### 6.35 EPC FINAL — Aditivo de Universalização e Consolidação (§29-44):
+indicador institucional do cabeçalho corrigido, genericidade confirmada
+por evidência, esclarecimentos honestos sobre escopo já combinado
+
+Quinta rodada da mesma diretiva (§29-44). A maior parte reafirma seções
+já auditadas/respondidas em rodadas anteriores (§21-28, EPC FINAL §1-14,
+Núcleo Gravitacional Fase 1) — reconfirmadas aqui por evidência real, sem
+repetir trabalho já feito. Duas seções trouxeram trabalho novo real
+(§35) ou mereceram um esclarecimento explícito que não existia ainda
+(§31); as demais foram checadas e, quando já cobertas, apontadas para
+onde a evidência já vive.
+
+**§35 (Indicador Institucional do Cabeçalho) — corrigido**: achado real
+— o indicador de "Score Geral" no header (`App.tsx`) mostrava a palavra
+"Score" (nunca deveria) e o rótulo do tier (Muito Forte/Forte/Moderada/
+Fraca/Inválida) como uma linha sempre visível separada, em vez de só
+cor+percentual juntos como a diretiva pede (`🟢 92%`). Corrigido: emoji
+real da zona (`confidenceZone.emoji`, já existia) agora entra junto do
+número (nunca só a bolinha sozinha), o número ganhou o sufixo `%`
+(mesmo valor real 0-100, só formatado como percentual — não é uma nova
+medição), a palavra "Score" foi removida. O rótulo do tier não foi
+apagado (Regra de Ouro 4) — só realocado para o tooltip, que já carregava
+"Zona: ${confidenceZone.label}" desde a Diretriz Complementar §16.
+Confirmado por grep, antes de tocar no código, que este é o ÚNICO ponto
+de renderização visual deste score em todo o app — Single Source of
+Truth já era real (institutional-score.ts), só precisou da correção de
+apresentação. Fusion Engine/Centro Gravitacional (citados na diretiva
+como fontes que deveriam compartilhar essa mesma matemática) ainda não
+existem — não há como compartilhar fonte com algo que não foi construído
+ainda; quando existirem, precisam ser display-only sobre os MESMOS
+números (mesma disciplina já estabelecida na Fase 1 do Núcleo
+Gravitacional), nunca uma segunda fórmula de confluência.
+
+**§29/§30/§40 (Universalização dos Motores) — confirmado por evidência
+real, não suposição**: varredura por padrão em `nexus/`, `research/
+engines/`, `market-regime/` e `consensus/` — zero comparação de símbolo
+de ativo hardcoded (`symbol === "BTC"` ou similar) e zero comparação de
+timeframe hardcoded (`timeframe === "15m"` ou similar) fora de valores
+DEFAULT de parâmetro nunca realmente usados (confirmado que os 2 call
+sites reais de `getChartCandles` sempre passam `selectedAsset`/
+`chartTimeframe` explícitos — o default `symbol = 'BTC'` existe só como
+fallback seguro de teste/invocação direta, nunca um caminho ao vivo).
+
+**§31 (Universalização da IA) — esclarecimento honesto**: a leitura
+literal ("a IA adapta automaticamente os parâmetros mais adequados para
+o comportamento de cada ativo... sem calibração manual") pediria
+calibração REAL por ativo (ex.: limiares de RSI/harmônico/proximidade
+diferentes para BTC vs. um altcoin de baixa liquidez) — isso não existe
+e não deveria ser fabricado: este repositório não tem infraestrutura de
+backtest que sustente honestamente "estes são os parâmetros ótimos para
+este ativo específico" (mesma razão pela qual os limiares declarados em
+`layer-relevance.ts`/`rr-quality.ts`/etc são convenção documentada, nunca
+medição). A adaptação REAL que já existe: as FÓRMULAS/limiares são
+universais, mas o RESULTADO se adapta automaticamente porque cada cálculo
+roda sobre os dados AO VIVO e reais daquele ativo específico (ATR% de um
+altcoin volátil sai naturalmente maior que o do BTC, por exemplo, sem
+nenhuma configuração por ativo) — adaptação via dado real, nunca via
+calibração fabricada.
+
+**§36 (Consolidação Final) — sem duplicação nova encontrada**: as 2
+adições desta trilha desde a última auditoria de duplicação (ORDEM,
+§6.31) — `layer-relevance.ts` e `mexc-futures.ts` — foram desenhadas
+desde o início para reusar fonte única (ver seus próprios cabeçalhos:
+zero segunda curva de decaimento, zero segunda fórmula de comparação
+markPrice). Nenhuma duplicação nova identificada.
+
+**§37 — confirmado alinhado**: "a IA poderá apenas controlar: destaque;
+intensidade; transparência; prioridade visual. Nunca desligar o cálculo"
+é exatamente o que a Fase 1 do Núcleo Gravitacional já implementa
+(`layer-relevance.ts`: motor sempre calcula, só decide exibição/ênfase).
+
+**§41 (Integração Completa da MEXC) — escopo já combinado, não mudou**:
+esta seção repete o pedido de "sincronização automática do catálogo
+público" já respondido pelo Operador na rodada anterior (curadoria
+primeiro, não descoberta automática completa). Sem uma nova resposta
+explícita mudando essa decisão, o escopo continua o combinado — não
+reinterpretado silenciosamente para "agora sim, descoberta completa" só
+porque a diretiva repetiu o pedido.
+
+**§38/§42 (reorganização/reposicionamento automático) — honestamente
+ainda não construído**: mesma pendência já registrada nas 2 rodadas
+anteriores (Fase 1 cobre mostrar/ocultar/destacar; mover/reorganizar
+elementos dinamicamente no layout é um escopo maior, ainda não
+começado).
+
+**Verificação real**: `tsc --noEmit` limpo · **105 arquivos / 1765
+testes** (100%, 2 arquivos de fiação do header ajustados para a nova
+estrutura — mesmo total de testes, sem teste novo necessário: a correção
+foi de apresentação, não de matemática nova) · `npm run build` ok (8.92s,
+1823 módulos) · `audit-header-maxcontent.mjs` 11 viewports CLEAN
+(verificado ao vivo via build+preview, não só tsc).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
