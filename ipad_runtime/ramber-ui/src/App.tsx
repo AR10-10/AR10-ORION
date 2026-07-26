@@ -4764,7 +4764,23 @@ function TopBar({ data }: { data?: PriceState | null }) {
               "deixa só o necessário"). A tag de mercado (Futures/Spot/
               Macro) continua 100% real (mesma expressão de sempre,
               cryptoMarketLabel), só que agora ao lado do gatilho em vez
-              de dentro do nome estático removido. */}
+              de dentro do nome estático removido.
+              Achado real de captura de tela (pedido explícito do
+              Operador): a fileira de 12 botões de atalho (ASSETS.map)
+              que morava aqui era 100% redundante com o próprio gatilho do
+              Omnibox logo ao lado — os dois disparam exatamente a mesma
+              transição de estado (setMarketMode/setSelectedTradFiAsset/
+              setSelectedAsset), só que o Omnibox já busca QUALQUER par
+              real da Binance, não só os 12 fixos. Com os 12 botões
+              expandidos (rodada anterior), a fileira "comia" o espaço da
+              barra e cortava/escondia o preço/variação ao vivo em telas
+              reais — removida por inteiro (zero capacidade perdida,
+              Regra de Ouro 4: o Omnibox já cobre o mesmo caminho real, com
+              mais alcance). Só o badge do ativo ATUAL (ícone) permanece
+              no canto, exatamente como o Operador pediu ("só fica o
+              primeiro ativo no canto"). ASSETS continua real e em uso em
+              outro lugar (AssetHeatmapWidget) — nunca removido, só
+              realocado para onde ainda faz sentido. */}
           <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%] shrink-0">
             <div
               className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
@@ -4782,26 +4798,6 @@ function TopBar({ data }: { data?: PriceState | null }) {
                     ? "₿"
                     : selectedAsset?.[0]}
               </span>
-            </div>
-            <div className="hidden lg:flex items-center gap-1">
-              {ASSETS.map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => {
-                    setMarketMode?.("CRYPTO");
-                    setSelectedTradFiAsset?.(null);
-                    setSelectedAsset?.(a);
-                  }}
-                  className={`px-1.5 py-1 rounded text-[0.5rem] font-bold tracking-wider transition-colors ${
-                    marketMode === "CRYPTO" && selectedAsset === a
-                      ? "bg-[#00f0ff20] text-[#00f0ff] border border-[#00f0ff40]"
-                      : "text-[#8ab4f8]/50 hover:text-[#8ab4f8] border border-transparent"
-                  }`}
-                >
-                  {a}
-                </button>
-              ))}
             </div>
             {/* Diretriz V-MAX item 7 ("Header Profissional"): o gatilho vira
                 "SÍMBOLO ▼" com o ativo REAL selecionado — não mais um campo
