@@ -22,6 +22,7 @@ import {
   VOLUME_PROFILE_PROXIMITY_PCT,
   type LayerRelevanceInput,
 } from "./nexus/layer-relevance";
+import { computeConfluenceCorridor } from "./nexus/confluence-corridor";
 import { ageAlpha } from "./chart/annotation-decay";
 import { BREAK_DECAY } from "./chart/StructureBreakMarkersPlugin";
 // Mesmo motor puro que EnhancedChart_110_Percent.tsx já usa para desenhar
@@ -1057,6 +1058,14 @@ export default function App() {
     // useEffect([smcZones])/useEffect([orderflowSignals]) já espelham o
     // valor honesto (zonas vazias / [] local, ambos já zerados acima).
     useUnifiedSnapshotStore.getState().setCvd(null);
+    // OMEGA CORE V-MAX (Fase 5): o Corredor de Confluência é derivado de
+    // sinais já escopados ao ativo (opinionMass/institutionalScore/MTF/
+    // obstáculo) — o próprio useEffect que o computa já reage a
+    // engine?.direction/councilFromSnapshot/etc, todos zerados por este
+    // mesmo efeito; setConfluenceCorridor(null) aqui só torna a transição
+    // explícita e imediata (fail-closed honesto), em vez de esperar o
+    // ciclo de re-render do useMemo pra chegar no mesmo null.
+    useUnifiedSnapshotStore.getState().setConfluenceCorridor(null);
     setRealCycle(null);
     setEngineStatus("pending");
     setPriceUpdatedAt(null);
@@ -2309,6 +2318,34 @@ export default function App() {
   // pura de apresentação sobre o mesmo institutionalScore acima — zero
   // segunda fonte, zero matemática nova (ver institutional-score.ts).
   const confidenceZone = useMemo(() => institutionalConfidenceZone(institutionalScore.score), [institutionalScore]);
+  // OMEGA CORE V-MAX Fase 5 (Fusion §5, "Corredor de Confluência" — task
+  // já escopada e aprovada pelo Operador numa rodada anterior, mesma ideia
+  // visual do "Centro Gravitacional" da diretriz nova): organizador de
+  // contexto puro que cruza 4 sinais JÁ reais e já computados acima
+  // (opinionMass do Conselho, institutionalScore, concordância da Matriz
+  // Multi-Timeframe, obstáculos reais no caminho até o alvo mais próximo
+  // do Trade Plan — trackedPlan é o MESMO useTradePlanSnapshot() que
+  // chartTradePlan em ChartWidget, zero segunda leitura) — zero segunda
+  // matemática de consenso, zero recálculo. Display-only (LEI 24):
+  // direction/obstacleCount chegam já decididos em outro lugar, nunca
+  // recalculados aqui. Visual no canvas ainda NÃO implementado nesta
+  // rodada (decisão deliberada, ver handbook e commit) — a fatia fica
+  // pronta e real na store para o consumidor visual futuro, sem precisar
+  // recomputar nada quando ele existir.
+  const confluenceCorridor = useMemo(
+    () =>
+      computeConfluenceCorridor({
+        direction: engine?.direction ?? null,
+        opinionMass: councilFromSnapshot?.opinionMass ?? null,
+        institutionalScore: institutionalScore?.score ?? null,
+        multiTimeframe: multiTimeframeForConviction ?? null,
+        activeObstacleCount: trackedPlan?.targets?.[0]?.obstacleCount ?? null,
+      }),
+    [engine?.direction, councilFromSnapshot, institutionalScore, multiTimeframeForConviction, trackedPlan],
+  );
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setConfluenceCorridor(confluenceCorridor);
+  }, [confluenceCorridor]);
   // Diretriz Complementar §18: tendência real de força do fluxo — mesma
   // série de CVD já retida, reduzida a FORTALECENDO/ENFRAQUECENDO/ESTAVEL.
   const orderflowTrend = useMemo(() => computeOrderflowTrend(orderflowHistoryForTrend), [orderflowHistoryForTrend]);

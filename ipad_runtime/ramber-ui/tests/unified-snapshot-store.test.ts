@@ -27,6 +27,7 @@ const RESET = {
   smc: null,
   cvd: null,
   orderflowSignals: [],
+  confluenceCorridor: null,
   council: null,
   affectiveMemory: { contractVersion: 1 as const, reward: 0, pain: 0, lastEventAt: null, eventCount: 0 },
   cpi: null,

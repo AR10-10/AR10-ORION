@@ -95,8 +95,8 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
     // (pergunta do Operador "era pra cima ou pra baixo?"): o label também
     // carrega o glifo de direção ↑/↓ real (z.type do motor SMC), nunca só
     // a cor — mesma chamada de sempre, só honesta sobre mais informação.
-    expect(plugin).toContain('fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
-    expect(plugin).toContain('obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
+    expect(plugin).toContain('fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
+    expect(plugin).toContain('obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
   });
 });
 

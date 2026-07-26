@@ -184,10 +184,11 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     // acrescentou os 3 resets de derivatives/cross-exchange, o Aditivo §27
     // (MEXC Futures, 4ª fonte) acrescentou um 4º reset de cross-exchange, e
     // o OMEGA CORE V-MAX (Fase 1.1) acrescentou o reset explícito de
-    // setCvd(null) na store (fatia nova) — janela ampliada de novo para
-    // caber o conteúdo novo (limite ainda finito: continua provando que é
-    // um efeito PRÓPRIO e contido, nunca o arquivo inteiro).
-    const block = app.slice(Math.max(0, idx - 30), idx + 3444);
+    // setCvd(null) na store (fatia nova), e a Fase 5 acrescentou o reset
+    // de setConfluenceCorridor(null) — janela ampliada de novo para caber
+    // o conteúdo novo (limite ainda finito: continua provando que é um
+    // efeito PRÓPRIO e contido, nunca o arquivo inteiro).
+    const block = app.slice(Math.max(0, idx - 30), idx + 4006);
     expect(block).toContain('setChartData([]);');
     expect(block).toContain('setOrderBook({ bids: [], asks: [] });');
     expect(block).toContain('useUnifiedSnapshotStore.getState().setMultiTimeframeContext(null);');
@@ -204,7 +205,10 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
   it('Diretriz Suprema de Evolução Integrativa §3 (achado real de auditoria): funding/OI e os DOIS cross-exchange checks agora resetam no mesmo efeito de troca de ativo — antes ficavam mostrando o valor do ativo ANTERIOR até fetchDerivatives resolver (até 8s de atraso real no pior caso)', () => {
     const app = read('../src/App.tsx');
     const idx = app.indexOf('setPriceData(null);');
-    const block = app.slice(Math.max(0, idx - 30), idx + 2000);
+    // Janela ampliada (OMEGA CORE V-MAX Fase 1.1/5: setCvd(null)/
+    // setConfluenceCorridor(null) novos entram ANTES destas linhas no
+    // mesmo efeito) — mesmo racional de janela finita da suíte irmã acima.
+    const block = app.slice(Math.max(0, idx - 30), idx + 2301);
     expect(block).toContain('setDerivatives({ fundingRate: null, openInterest: null });');
     expect(block).toContain('setCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });');
     expect(block).toContain('setOkxCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });');

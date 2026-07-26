@@ -1610,6 +1610,14 @@ export function EnhancedChart_110_Percent({
     // shouldCompactLabels, formatEtaRange) e MESMOS inputs reais que o
     // efeito da LINHA acima — linha e rótulo nunca divergem. Fail-closed:
     // sem plano, zero rótulos (early guard de cada push por Number.isFinite).
+    // OMEGA CORE V-MAX Fase 4 (§4.2/§4.4 — auditoria "Bate-Olho"): achado
+    // real — esta função só existia dentro do bloco engineFallbackLevels
+    // abaixo, então o Trade Plan REAL do Conselho nunca mostrava a
+    // contagem de obstáculos no rótulo do alvo (só a zona destacada no
+    // LiquidityZonesPlugin a exibia). Hoisted para o escopo externo — os
+    // DOIS blocos agora reusam a MESMA função, zero duplicação (antes
+    // havia uma cópia idêntica só dentro do bloco do fallback).
+    const obstacleSuffix = (n: number | null | undefined) => (typeof n === "number" && n > 0 ? ` ⚠ ${n}` : "");
     if (tradePlan) {
       const hits = targetsHit ?? 0;
       const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
@@ -1666,8 +1674,8 @@ export function EnhancedChart_110_Percent({
             ? formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)
             : null;
         const base = compactLabels
-          ? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}`
-          : `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}`;
+          ? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`
+          : `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`;
         out.push({ price: target.price, text: reached ? `${base} · REACHED` : base, color: "rgba(0, 255, 170, 0.75)" });
       });
     }
@@ -1695,12 +1703,12 @@ export function EnhancedChart_110_Percent({
       // strengthSuffix também alinhado ao estilo tight de levelTitle()
       // (S1/R1 acima) — espaço, nunca "·", mesmo padrão em todo o eixo.
       const strengthSuffix = (s: { label: "FORTE" | "FRACA"; touches: number } | null) => (s ? ` ${s.label}` : "");
-      // EPC MODO ELITE §4 ("Obstáculos estruturais" na lista permanente): o
-      // Núcleo não tem painel próprio (o Conselho tem o ANALYSIS), então o
-      // rótulo é o único lugar dessa contagem — sufixo compacto "⚠ N"
-      // (mesmo glifo ⚠ da zona destacada no LiquidityZonesPlugin), só quando
-      // há obstáculo real no caminho. Zero quando o caminho está livre.
-      const obstacleSuffix = (n: number | null | undefined) => (typeof n === "number" && n > 0 ? ` ⚠ ${n}` : "");
+      // EPC MODO ELITE §4 ("Obstáculos estruturais" na lista permanente):
+      // sufixo compacto "⚠ N" (mesmo glifo ⚠ da zona destacada no
+      // LiquidityZonesPlugin), só quando há obstáculo real no caminho —
+      // zero quando livre. obstacleSuffix agora vem do escopo externo
+      // (Fase 4: hoisted para ser reusado pelo Trade Plan REAL acima
+      // também, ver comentário na declaração).
       if (Number.isFinite(engineFallbackLevels.stop)) {
         const breached = p !== null && (longFb ? p <= engineFallbackLevels.stop : p >= engineFallbackLevels.stop);
         out.push({

@@ -673,10 +673,10 @@ describe('Continuidade §6: níveis apertados => rótulos TP compactos, preço N
     expect(c).toContain('const compactLabels = shouldCompactLabels(levels);');
   });
 
-  it('modo compacto: label + distância + ETA (basis/R:R seguem no strip); modo cheio inalterado', () => {
+  it('modo compacto: label + distância + ETA (basis/R:R seguem no strip); modo cheio inalterado; OMEGA CORE V-MAX Fase 4 (§4.2) acrescentou o sufixo real de obstáculos aos dois modos', () => {
     const c = chart();
-    expect(c).toContain('? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}`');
-    expect(c).toContain(': `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
+    expect(c).toContain('? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`');
+    expect(c).toContain(': `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`');
   });
 
   it('a âncora do preço real permanece documentada onde a decisão de compactar agora vive (label-compaction.ts): applyOptions nunca recebe um price deslocado no título compacto', () => {

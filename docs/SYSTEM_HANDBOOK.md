@@ -2483,6 +2483,130 @@ stale após a inserção do reset de `cvd`) · `npm run build` ok (15.44s,
 1823 módulos) · `audit-header-maxcontent.mjs` 11 viewports CLEAN
 (verificado ao vivo via build+preview).
 
+### 6.37 OMEGA CORE V-MAX — FASE 3 (Stage Runner) + FASE 4 (auditoria
+"Bate-Olho") + FASE 5 (Corredor de Confluência) + FASE 6 (universalização):
+continuação imediata da mesma diretiva (§6.36)
+
+**FASE 3 — Stage Runner formalizado**: a diretiva pediu para "formalizar"
+um "pipeline linear auditável" em `nexus/`, mas cortou antes de nomear os
+estágios — em vez de inventar uma estrutura nova, `docs/SYSTEM_HANDBOOK.md`
+§2 ("Pipeline canônico de decisão") já desenha exatamente esse pipeline
+(`DADOS REAIS → SNAPSHOT → CORE ENGINE → TRADE PLAN → buildNexusDecision →
+OPERATIONAL READABILITY`) — usado como base real, não fabricada. Criado
+`nexus/stage-runner.ts`: `traceStages(snapshot, seq)`, função pura
+read-only (zero import de motor/engine — só o TIPO do snapshot) que
+reporta 4 estágios inspecionáveis pela store hoje (`DATA → CORE_ENGINE →
+COUNCIL → TRADE_PLAN`, cada um com `{ok, reason}`). "ok" significa "teve
+insumo causal real do estágio anterior" — NUNCA "produziu um resultado
+positivo": um Trade Plan `null` porque o Conselho está NEUTRAL/ABSTAIN é
+uma resposta honesta esperada (ROTA C), nunca reportada como estágio
+quebrado. Invariante causal (nenhum estágio ok=true depois de um
+ok=false) provada por construção (`ok` downstream sempre `anteriorOk &&
+condiçãoPrópria`) e testada adversarialmente em
+`tests/stage-runner.test.ts` (11 testes). **Gap honesto registrado**: os
+últimos 2 elos do pipeline §2 (`buildNexusDecision`/`OperationalReadability`)
+ainda não têm fatia própria na store (mesmo padrão "insumo pré-store" que
+smcZones tinha antes da Fase 1.1) — não rastreáveis pelo Stage Runner
+ainda, documentado no próprio cabeçalho do módulo, não fabricado.
+
+**FASE 4 — auditoria "Bate-Olho"**: delegada a uma exploração dedicada
+antes de qualquer edição. Resultado, item a item: **§4.1** (6 eixos
+canônicos DIREÇÃO→ESTRUTURA→TIMING→RISCO→CONFLUÊNCIA→DECISÃO) já real e
+idêntico ao documentado, zero drift. **§4.3** (Score do header) já no
+formato `🟢94%` sem a palavra "Score" (confirma §35 de rodada anterior,
+sem regressão). **§4.5** (Relevance Engine) confirmado com evidência de
+teste real: ligado por padrão nos 15 layers, nunca importado por
+`trade-plan.ts`, override manual intacto. **§4.2/§4.4 — 2 achados reais,
+corrigidos**: (1) `OB↑/OB↓/FVG↑/FVG↓` (LiquidityZonesPlugin.tsx) tinham um
+espaço antes do glifo ("OB ↑") — removido, forma exata agora; (2) o Trade
+Plan REAL do Conselho (EnhancedChart_110_Percent.tsx) nunca mostrava a
+contagem de obstáculos no rótulo do alvo — só o fallback do Núcleo tinha
+essa contagem (`obstacleSuffix`, duplicado ali dentro). Hoisted para o
+escopo externo da função (mesma função, zero duplicação agora) e aplicado
+também ao Trade Plan real. **§4.4 — decisão deliberada de NÃO forçar**:
+`HARM`/`VP`/`CVD`/`OI`/`FD` continuam fora do canvas na forma literal de
+5 letras pedida. Colapsar o harmônico para "HARM" perderia a informação
+que mais importa (QUAL padrão — Gartley/Bat/Butterfly/Crab/Wolfe — não
+"que existe um harmônico"), uma regressão de clareza, não uma compactação
+— contradiria o próprio objetivo "bater o olho em <2s" da Fase 4. VP/CVD
+já se comunicam visualmente (barras/posição de linha) sem precisar de
+texto; OI/FD (funding/open interest) não são hoje conceitos de CANVAS —
+são números de sessão em widgets dedicados, não algo com posição de
+preço própria no eixo. Forçar os 5 no canvas seria adicionar escopo novo
+(um visual que não existe), não compactar um rótulo existente — fora do
+que a Fase 4 realmente pede.
+
+**FASE 5 — Corredor de Confluência (retomando a task pendente já aprovada
+pelo Operador numa rodada anterior, "Fusion §5")**: criado
+`nexus/confluence-corridor.ts` — `computeConfluenceCorridor()`, função
+pura que cruza 4 sinais JÁ reais (opinionMass do Conselho do lado ativo,
+institutionalScore normalizado, concordância real da Matriz
+Multi-Timeframe, `1/(1+obstáculos)` do alvo mais próximo do Trade Plan) em
+uma única leitura `intensity` (0-1) — display-only (LEI 24: `direction`/
+`activeObstacleCount` chegam como parâmetros já decididos, nunca
+recalculados aqui) e nunca rotulada como probabilidade (Regra de Ouro 2 —
+suíte dedicada `tests/confluence-corridor.test.ts`, 12 testes, prova isso
+inclusive verificando que o tipo de saída não tem nenhum campo
+`probability`/`chance`/`odds`). Fatia nova `confluenceCorridor` na store
+(§3 MOTORES QUANT), evento `QUANT.CONFLUENCE_CORRIDOR.UPDATED`, espelhado
+em `App.tsx` a partir de valores já computados (`engine?.direction`,
+`councilFromSnapshot`, `institutionalScore`, `multiTimeframeForConviction`,
+`trackedPlan` — todos já existiam, zero segunda leitura). **Achado real
+durante a implementação**: a primeira tentativa colocou o cálculo dentro
+de `ChartWidget()` (perto de `layerRelevance`), mas `institutionalScore`/
+`councilFromSnapshot`/`multiTimeframeForConviction` só existem no escopo
+de `App()` — um componente React diferente, não visível de dentro de
+`ChartWidget` (erro real de `tsc`, corrigido movendo o cálculo para
+`App()`, reaproveitando `trackedPlan` — o mesmo `useTradePlanSnapshot()`
+que `chartTradePlan` em `ChartWidget` já chamava, zero segunda leitura da
+store). **Escopo deliberadamente NÃO incluído nesta rodada**: o visual no
+canvas (a largura/opacidade real do corredor desenhada sobre o gráfico) —
+a fatia fica pronta, real, testada e disponível via
+`getSnapshotForEngine()`/seletor para quando esse consumidor visual for
+construído, sem precisar recomputar nada; construir E verificar
+visualmente (Playwright ao vivo, conforme a disciplina deste repositório
+para mudanças de UI) na mesma tacada que 3 outras fases desta diretiva
+arriscaria uma entrega apressada de uma peça visual nova.
+
+**FASE 6 — universalização + troca de contexto**: reconfirmado sem
+código novo necessário. `§29/30/40` (genericidade) já auditado na rodada
+anterior, sem regressão desde então. Reset de contexto: o efeito de troca
+de TIMEFRAME (App.tsx, dep `[chartTimeframe]`) já zera explicitamente
+`realCycle`/`engineStatus`/`volumeProfile`/`institutionalScoreHistory` —
+achados de uma auditoria de staleness anterior (S1/R1 e o histograma do
+Volume Profile ficavam presos ao timeframe antigo por até 5s). `smcZones`
+(e demais overlays derivados de `chartData`) nunca sofrem esse problema
+por construção: computados da MESMA variável `chartData` que os candles
+do próprio gráfico usam — nunca podem mostrar geometria de um regime
+diferente do que já está na tela, ao contrário de `realCycle` (fonte
+assíncrona independente, por isso precisou do reset explícito). `cvd`/
+`orderflowSignals` corretamente NÃO resetam na troca de timeframe (order
+flow é escopado ao ATIVO, não ao timeframe — mesmo princípio que já valia
+antes da Fase 1.1, preservado). IA/voz (`llm-bridge.ts`/`voice-intents.ts`)
+confirmadas sem nenhum caminho de emissão de direção — só leitura/
+narração do `engine.direction` real.
+
+**Verificação real**: `tsc --noEmit` limpo (inclui a correção do erro
+real de escopo App()/ChartWidget acima) · **108 arquivos / 1799 testes**
+(100%: +11 `stage-runner.test.ts`, +12 `confluence-corridor.test.ts`, +5
+novos em `nexus-organism-orchestrator.test.ts` — 4 da Fase 1.1/5 mais 1 de
+fiação do Corredor —, +1 ajuste de reason em teste próprio corrigido por
+falso-positivo — a palavra "falha" aparecia tanto no motivo de bloqueio
+quanto na prosa honesta do caso de sucesso, mesma classe de erro já
+resolvida antes nesta trilha para "ASSETS.map" —, 5 ajustes de testes
+existentes stale após os 2 achados reais da Fase 4, e 2 janelas de
+offset recalculadas via medição exata, nunca chute) · `npm run build` ok
+(12.36s, 1824 módulos) · `audit-header-maxcontent.mjs` 11 viewports
+CLEAN (verificado ao vivo via build+preview real).
+
+**Pendente, honestamente**: visual do Corredor de Confluência no canvas
+(Fase 5, ver acima). Migração de consumidores existentes para os
+seletores da store (Fase 1.1, já registrada em §6.36). FASE 7 (Radar/OIH)
+da mesma diretiva ainda não recebida do Operador — a mensagem cortou
+exatamente no início desta fase ("Painel no header (substitui botão
+pulsante)\nExemplo:" sem conteúdo); aguardando reenvio em vez de fabricar
+o painel/exemplo/critérios de filtro.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)

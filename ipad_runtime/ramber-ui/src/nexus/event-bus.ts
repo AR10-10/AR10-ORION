@@ -19,6 +19,7 @@ import type { TradePlan } from "./trade-plan";
 import type { AffectiveMemoryState } from "./affective-memory";
 import type { TrackRecordState } from "./signal-track-record";
 import type { TrustScoreSnapshot, SmcZonesSnapshot, OrderflowSignal } from "../engine-bridge";
+import type { ConfluenceCorridorReading } from "./confluence-corridor";
 
 // Diretamente do Blueprint V-MAX §1.3 — os únicos eventos reais que este
 // sistema publica. Nenhum evento é adicionado especulativamente; cada um
@@ -54,6 +55,7 @@ export type NexusEvent =
   | { type: "QUANT.SMC.UPDATED"; payload: { zones: SmcZonesSnapshot | null } }
   | { type: "QUANT.CVD.UPDATED"; payload: { cvd: number | null } }
   | { type: "QUANT.ORDERFLOW_SIGNALS.UPDATED"; payload: { signals: OrderflowSignal[] } }
+  | { type: "QUANT.CONFLUENCE_CORRIDOR.UPDATED"; payload: { reading: ConfluenceCorridorReading | null } }
   // §4 CÉREBRO
   | { type: "BRAIN.COUNCIL.UPDATED"; payload: { decision: CouncilDecision | null } }
   | { type: "BRAIN.SCENARIO.UPDATED"; payload: { projection: ScenarioProjection | null } }

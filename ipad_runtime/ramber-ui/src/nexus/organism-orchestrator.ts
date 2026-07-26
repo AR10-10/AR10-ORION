@@ -118,6 +118,10 @@ export class OrganismOrchestrator {
       if (state.orderflowSignals !== prev.orderflowSignals) {
         this.bus.emit({ type: "QUANT.ORDERFLOW_SIGNALS.UPDATED", payload: { signals: state.orderflowSignals } });
       }
+      // OMEGA CORE V-MAX (Fase 5) — Corredor de Confluência (Fusion §5).
+      if (state.confluenceCorridor !== prev.confluenceCorridor) {
+        this.bus.emit({ type: "QUANT.CONFLUENCE_CORRIDOR.UPDATED", payload: { reading: state.confluenceCorridor } });
+      }
       // §4 CÉREBRO
       if (state.council !== prev.council) {
         this.bus.emit({ type: "BRAIN.COUNCIL.UPDATED", payload: { decision: state.council } });

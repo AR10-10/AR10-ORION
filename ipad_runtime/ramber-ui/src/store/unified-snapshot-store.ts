@@ -51,6 +51,7 @@ import type { ConsensusRadarReading } from "../nexus/consensus-radar";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
 import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
 import type { LayerRelevanceReading } from "../nexus/layer-relevance";
+import type { ConfluenceCorridorReading } from "../nexus/confluence-corridor";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
 import type { TradePlan } from "../nexus/trade-plan";
@@ -219,6 +220,12 @@ export interface UnifiedSnapshotState {
   // real do useState espelhado); ver setCvd(null) no efeito de troca.
   cvd: number | null;
   orderflowSignals: OrderflowSignal[];
+  // OMEGA CORE V-MAX (Fase 5, Fusion §5 — task já aprovada pelo Operador
+  // "Corredor de Confluência"): organizador de contexto real que cruza
+  // opinionMass/institutionalScore/MTF/obstáculos já reais — nunca gera
+  // LONG/SHORT/WAIT (LEI 24). null enquanto o Core Engine está em WAIT ou
+  // nenhum componente real está disponível ainda.
+  confluenceCorridor: ConfluenceCorridorReading | null;
 
   // §4 CÉREBRO (camada de análise — LEI 24: jamais alimenta o Core Engine)
   // Item 4 — Conselho Multi-Agente (contrato versionado): 6 votos reais +
@@ -328,6 +335,7 @@ interface UnifiedSnapshotActions {
   setSmc: (zones: SmcZonesSnapshot | null) => void;
   setCvd: (cvd: number | null) => void;
   setOrderflowSignals: (signals: OrderflowSignal[]) => void;
+  setConfluenceCorridor: (reading: ConfluenceCorridorReading | null) => void;
 
   // §4 CÉREBRO
   setCouncil: (decision: CouncilDecision | null) => void;
@@ -393,6 +401,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     smc: null,
     cvd: null,
     orderflowSignals: [],
+    confluenceCorridor: null,
     // §4 CÉREBRO
     council: null,
     scenario: null,
@@ -445,6 +454,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setSmc: (zones) => set((s) => { s.smc = zones; }),
     setCvd: (cvd) => set((s) => { s.cvd = cvd; }),
     setOrderflowSignals: (signals) => set((s) => { s.orderflowSignals = signals; }),
+    setConfluenceCorridor: (reading) => set((s) => { s.confluenceCorridor = reading; }),
     // §4 CÉREBRO
     setCouncil: (decision) => set((s) => { s.council = decision; }),
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
@@ -548,6 +558,8 @@ export const useCvdSnapshot = (): number | null =>
   useUnifiedSnapshotStore((s) => s.cvd);
 export const useOrderflowSignalsSnapshot = (): OrderflowSignal[] =>
   useUnifiedSnapshotStore((s) => s.orderflowSignals ?? EMPTY_ORDERFLOW_SIGNALS);
+export const useConfluenceCorridorSnapshot = (): ConfluenceCorridorReading | null =>
+  useUnifiedSnapshotStore((s) => s.confluenceCorridor);
 
 // §4 CÉREBRO
 export const useCouncilSnapshot = (): CouncilDecision | null =>
