@@ -752,6 +752,14 @@ export default function App() {
   // poll cycle reports a state, matching the FAIL_CLOSED rule used everywhere
   // else in this file.
   const [orderflowSignals, setOrderflowSignals] = useState<OrderflowSignal[]>([]);
+  // OMEGA CORE V-MAX (Fase 1.1): espelha o MESMO orderflowSignals real (nunca
+  // recomputado) para a fatia §3 da store — um useEffect em vez de escrever
+  // dentro do updater funcional de setOrderflowSignals acima, porque um
+  // updater funcional pode rodar 2x sob StrictMode (dev): um efeito colateral
+  // ali dentro emitiria um evento espúrio duplicado no bus.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setOrderflowSignals(orderflowSignals);
+  }, [orderflowSignals]);
   const [orderflowState, setOrderflowState] = useState<OrderflowConnectorState | "pending">("pending");
   const [orderflowReason, setOrderflowReason] = useState<string | null>(null);
   // Real Cumulative Volume Delta — running sum of signed real MEXC trade
@@ -1039,6 +1047,16 @@ export default function App() {
     setOrderBook({ bids: [], asks: [] });
     setOrderflowSignals([]);
     setCvd(0);
+    // OMEGA CORE V-MAX (Fase 1.1): a fatia §3 `cvd` da store usa null (não o
+    // 0 cosmético acima) — null é o "ainda sem leitura real deste ativo"
+    // honesto (Regra de Ouro 3); a soma corrida real no worker de order
+    // flow nunca é de fato reiniciada por troca de ativo (ver
+    // signal-engine.js), então nem o 0 local nem um null aqui mudam esse
+    // comportamento real — só a exibição enquanto o próximo poll não chega.
+    // `smc`/`orderflowSignals` não precisam de reset explícito aqui: os
+    // useEffect([smcZones])/useEffect([orderflowSignals]) já espelham o
+    // valor honesto (zonas vazias / [] local, ambos já zerados acima).
+    useUnifiedSnapshotStore.getState().setCvd(null);
     setRealCycle(null);
     setEngineStatus("pending");
     setPriceUpdatedAt(null);
@@ -1416,6 +1434,9 @@ export default function App() {
       },
       (value) => {
         setCvd(value);
+        // OMEGA CORE V-MAX (Fase 1.1): mesmo valor real de cvd, mesmo
+        // commit — espelhado na fatia §3 `cvd`.
+        useUnifiedSnapshotStore.getState().setCvd(value);
         // V-MAX Fase 1.2: onCvd sempre dispara DEPOIS de onTrades dentro do
         // MESMO ciclo de poll (garantia real de engine-bridge.ts) — os
         // trades grandes já calculados abaixo pertencem exatamente a este
@@ -1763,6 +1784,13 @@ export default function App() {
         : { fairValueGaps: [], orderBlocks: [], liquidityZones: [] },
     [chartData],
   );
+  // OMEGA CORE V-MAX (Fase 1.1, "matar a segunda verdade"): espelha o MESMO
+  // smcZones real (nunca uma segunda computação) para a fatia §3 `smc` da
+  // store — gateway novo para getSnapshotForEngine()/bus, sem tirar
+  // nenhum consumidor existente de WidgetContext (aditivo, não substitui).
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setSmc(smcZones);
+  }, [smcZones]);
 
   // Hoisted (Diretriz Restauração/Inteligência Visual §6): as MESMAS zonas
   // reais (OB/FVG não mitigadas) que o efeito de buildTradePlan abaixo já

@@ -15,7 +15,9 @@
 //   §2 SÉRIES HISTÓRICAS — memória temporal do mercado (rings reais)
 //      l2History (Fase 1.1) · orderflowHistory (Fase 1.2)
 //   §3 MOTORES QUANT — derivações computadas de dado real
-//      volumeProfile (Fase 1.3, WASM) · fibonacciConfluence (Fase 1.4)
+//      volumeProfile (Fase 1.3, WASM) · fibonacciConfluence (Fase 1.4) ·
+//      premiumDiscount · harmonicPatterns · layerRelevance · smc/cvd/
+//      orderflowSignals (OMEGA CORE V-MAX Fase 1.1)
 //   §4 CÉREBRO — deliberação e projeção (camada de análise, LEI 24)
 //      council (item 4) · scenario (Fase 2) · trapSignals (Fase 2)
 //   §5 ORGANISMO — estado do próprio sistema
@@ -70,7 +72,7 @@ import {
 } from "../nexus/affective-memory";
 // import type puro — apagado na compilação, nunca puxa o engine-bridge
 // (e seus módulos js pesados) para dentro do bundle da store em runtime.
-import type { TrustScoreSnapshot } from "../engine-bridge";
+import type { TrustScoreSnapshot, SmcZonesSnapshot, OrderflowSignal } from "../engine-bridge";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Formas (§1 e §5 — as demais vêm dos módulos nexus/, um contrato por motor)
@@ -143,6 +145,7 @@ const EMPTY_ORDERFLOW_HISTORY: OrderflowHistoryEntry[] = [];
 const EMPTY_TRAPS: TrapSignal[] = [];
 const EMPTY_CONVICTION_HISTORY: ConvictionScoreSample[] = [];
 const EMPTY_HARMONIC_HITS: HarmonicPatternHit[] = [];
+const EMPTY_ORDERFLOW_SIGNALS: OrderflowSignal[] = [];
 
 // ─────────────────────────────────────────────────────────────────────────
 // Estado — na ordem canônica dos domínios (§1 → §5)
@@ -198,6 +201,24 @@ export interface UnifiedSnapshotState {
   // outro consumidor (o painel de camadas precisa da mesma leitura, sem
   // recomputar). null = ainda sem nenhum ciclo real processado.
   layerRelevance: LayerRelevanceReading | null;
+  // OMEGA CORE V-MAX (Fase 1.1, "matar a segunda verdade") — Fair Value
+  // Gaps/Order Blocks/liquidez (fvg-order-block-engine.js via
+  // engine-bridge.ts's computeSmcZones) e o Order Flow ao vivo (CVD +
+  // sinais OFI/Absorção/Exaustão do MEXC via src/orderflow/signal-engine.js)
+  // — os dois já reais e já computados em App.tsx desde antes desta fase;
+  // só não tinham fatia própria (ver docs/ORGANISM_DATA_FLOW.md, "Insumos
+  // pré-store"). Espelho fiel do MESMO dado real, escrito no MESMO commit
+  // de render — zero segunda computação, zero segundo motor. Consumidores
+  // existentes (WidgetContext) continuam sem migração forçada (nota no
+  // topo do arquivo); esta fatia é o gateway novo para
+  // getSnapshotForEngine()/futuros assinantes do bus.
+  smc: SmcZonesSnapshot | null;
+  // Soma corrida real desde a criação do worker de order flow desta aba —
+  // null só até a primeira leitura real (ver signal-engine.js). Nunca
+  // resetada de fato na fonte ao trocar de ativo (mesmo comportamento já
+  // real do useState espelhado); ver setCvd(null) no efeito de troca.
+  cvd: number | null;
+  orderflowSignals: OrderflowSignal[];
 
   // §4 CÉREBRO (camada de análise — LEI 24: jamais alimenta o Core Engine)
   // Item 4 — Conselho Multi-Agente (contrato versionado): 6 votos reais +
@@ -304,6 +325,9 @@ interface UnifiedSnapshotActions {
   setPremiumDiscount: (reading: PremiumDiscountReading | null) => void;
   setHarmonicPatterns: (hits: HarmonicPatternHit[]) => void;
   setLayerRelevance: (reading: LayerRelevanceReading | null) => void;
+  setSmc: (zones: SmcZonesSnapshot | null) => void;
+  setCvd: (cvd: number | null) => void;
+  setOrderflowSignals: (signals: OrderflowSignal[]) => void;
 
   // §4 CÉREBRO
   setCouncil: (decision: CouncilDecision | null) => void;
@@ -366,6 +390,9 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     premiumDiscount: null,
     harmonicPatterns: [],
     layerRelevance: null,
+    smc: null,
+    cvd: null,
+    orderflowSignals: [],
     // §4 CÉREBRO
     council: null,
     scenario: null,
@@ -415,6 +442,9 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setPremiumDiscount: (reading) => set((s) => { s.premiumDiscount = reading; }),
     setHarmonicPatterns: (hits) => set((s) => { s.harmonicPatterns = hits; }),
     setLayerRelevance: (reading) => set((s) => { s.layerRelevance = reading; }),
+    setSmc: (zones) => set((s) => { s.smc = zones; }),
+    setCvd: (cvd) => set((s) => { s.cvd = cvd; }),
+    setOrderflowSignals: (signals) => set((s) => { s.orderflowSignals = signals; }),
     // §4 CÉREBRO
     setCouncil: (decision) => set((s) => { s.council = decision; }),
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
@@ -512,6 +542,12 @@ export const useHarmonicPatternsSnapshot = (): HarmonicPatternHit[] =>
   useUnifiedSnapshotStore((s) => s.harmonicPatterns ?? EMPTY_HARMONIC_HITS);
 export const useLayerRelevanceSnapshot = (): LayerRelevanceReading | null =>
   useUnifiedSnapshotStore((s) => s.layerRelevance);
+export const useSmcSnapshot = (): SmcZonesSnapshot | null =>
+  useUnifiedSnapshotStore((s) => s.smc);
+export const useCvdSnapshot = (): number | null =>
+  useUnifiedSnapshotStore((s) => s.cvd);
+export const useOrderflowSignalsSnapshot = (): OrderflowSignal[] =>
+  useUnifiedSnapshotStore((s) => s.orderflowSignals ?? EMPTY_ORDERFLOW_SIGNALS);
 
 // §4 CÉREBRO
 export const useCouncilSnapshot = (): CouncilDecision | null =>

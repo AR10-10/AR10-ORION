@@ -18,7 +18,7 @@ import type { TrapSignal } from "./trap-detection";
 import type { TradePlan } from "./trade-plan";
 import type { AffectiveMemoryState } from "./affective-memory";
 import type { TrackRecordState } from "./signal-track-record";
-import type { TrustScoreSnapshot } from "../engine-bridge";
+import type { TrustScoreSnapshot, SmcZonesSnapshot, OrderflowSignal } from "../engine-bridge";
 
 // Diretamente do Blueprint V-MAX §1.3 — os únicos eventos reais que este
 // sistema publica. Nenhum evento é adicionado especulativamente; cada um
@@ -49,6 +49,11 @@ export type NexusEvent =
   // continuar exibindo um resultado velho de outro ativo).
   | { type: "QUANT.VOLUME_PROFILE.UPDATED"; payload: { profile: VolumeProfileSnapshot | null } }
   | { type: "QUANT.FIBONACCI.UPDATED"; payload: { matrix: FibonacciConfluenceMatrix | null } }
+  // OMEGA CORE V-MAX (Fase 1.1) — smc (FVG/OB/liquidez) e o Order Flow ao
+  // vivo (CVD + sinais OFI/Absorção/Exaustão), mesma família QUANT.*.
+  | { type: "QUANT.SMC.UPDATED"; payload: { zones: SmcZonesSnapshot | null } }
+  | { type: "QUANT.CVD.UPDATED"; payload: { cvd: number | null } }
+  | { type: "QUANT.ORDERFLOW_SIGNALS.UPDATED"; payload: { signals: OrderflowSignal[] } }
   // §4 CÉREBRO
   | { type: "BRAIN.COUNCIL.UPDATED"; payload: { decision: CouncilDecision | null } }
   | { type: "BRAIN.SCENARIO.UPDATED"; payload: { projection: ScenarioProjection | null } }

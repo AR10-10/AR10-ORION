@@ -181,12 +181,13 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     expect(idx, 'efeito de reset ao trocar de ativo não encontrado').toBeGreaterThan(-1);
     // Evolução Profunda §11/§13-J acrescentou setMultiTimeframeContext(null)
     // real ao mesmo efeito, a Diretriz Suprema de Evolução Integrativa
-    // acrescentou os 3 resets de derivatives/cross-exchange, e o Aditivo
-    // §27 (MEXC Futures, 4ª fonte) acrescentou um 4º reset de
-    // cross-exchange — janela ampliada de novo para caber o conteúdo novo
-    // (limite ainda finito: continua provando que é um efeito PRÓPRIO e
-    // contido, nunca o arquivo inteiro).
-    const block = app.slice(Math.max(0, idx - 30), idx + 2734);
+    // acrescentou os 3 resets de derivatives/cross-exchange, o Aditivo §27
+    // (MEXC Futures, 4ª fonte) acrescentou um 4º reset de cross-exchange, e
+    // o OMEGA CORE V-MAX (Fase 1.1) acrescentou o reset explícito de
+    // setCvd(null) na store (fatia nova) — janela ampliada de novo para
+    // caber o conteúdo novo (limite ainda finito: continua provando que é
+    // um efeito PRÓPRIO e contido, nunca o arquivo inteiro).
+    const block = app.slice(Math.max(0, idx - 30), idx + 3444);
     expect(block).toContain('setChartData([]);');
     expect(block).toContain('setOrderBook({ bids: [], asks: [] });');
     expect(block).toContain('useUnifiedSnapshotStore.getState().setMultiTimeframeContext(null);');

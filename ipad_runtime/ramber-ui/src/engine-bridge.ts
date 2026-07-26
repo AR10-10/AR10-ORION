@@ -895,11 +895,18 @@ export interface LiquidityZone {
   swept: boolean;
 }
 
-export function computeSmcZones(candles: Array<{ open: number; high: number; low: number; close: number }>): {
+// OMEGA CORE V-MAX (Fase 1.1) — nomeado (era um tipo de retorno anônimo)
+// para a store poder importar a MESMA forma real via `import type`, em vez
+// de redeclarar os 3 campos por conta própria (ver unified-snapshot-store.ts
+// §3 `smc`). Puramente aditivo: o objeto literal devolvido abaixo já
+// satisfazia esta forma antes de ela ter nome.
+export interface SmcZonesSnapshot {
   fairValueGaps: PriceZone[];
   orderBlocks: PriceZone[];
   liquidityZones: LiquidityZone[];
-} {
+}
+
+export function computeSmcZones(candles: Array<{ open: number; high: number; low: number; close: number }>): SmcZonesSnapshot {
   const result = analyzeFvgOrderBlocks({ ohlcv_series: candles });
   if (result.status !== 'OK') return { fairValueGaps: [], orderBlocks: [], liquidityZones: [] };
   return {

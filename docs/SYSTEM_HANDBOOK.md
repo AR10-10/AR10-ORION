@@ -2336,6 +2336,153 @@ foi de apresentação, não de matemática nova) · `npm run build` ok (8.92s,
 1823 módulos) · `audit-header-maxcontent.mjs` 11 viewports CLEAN
 (verificado ao vivo via build+preview, não só tsc).
 
+### 6.36 OMEGA CORE V-MAX — FASE 0 (congelar a lei) + FASE 1 (matar a
+segunda verdade): auditoria de fronteiras + migração real de smc/cvd/
+orderflowSignals para a store
+
+Primeira leva de fases de uma diretiva nova, mais estruturada que as
+anteriores (Prioridade MÁXIMA, execução em fases, ordem obrigatória —
+"não pular"). FASE 0 é auditoria pura (sem código); FASE 1.1 é a única
+com trabalho de código real nesta rodada; FASE 1.2/1.3 são auditorias que
+confirmaram invariantes já corretos, sem alteração necessária.
+
+**FASE 0 — "Fase 0 aceita: leis congeladas".** Três auditorias exigidas,
+todas limpas, com evidência (não suposição):
+
+1. **Emissão de LONG/SHORT/WAIT fora do Core Engine**: zero encontrada.
+   Achado central: `tests/core-engine-boundary.test.ts` (Fase G/V15,
+   já existente) já tranca isto em CI — `engine-bridge.ts` nunca importa
+   `gmil/`/`consensus/`, `CoreSignal` é um tipo fechado
+   (`'LONG'|'SHORT'|'WAIT'`), os módulos puros do núcleo nunca importam
+   consultivo/`.tsx`, e o Ensemble depende só de `market-regime/`. Camada
+   por camada: GMIL (`gmil/types.ts`) não tem campo `direction`/`decision`
+   nenhum — só tipos de provider/fetch; a Matriz Multi-Timeframe usa
+   vocabulário `'ALTA'|'BAIXA'` (não `LONG/SHORT`) alimentando um pool de
+   opinião linear, nunca uma decisão; o Motor de Cenários sempre computa
+   AMBOS os paths (LONG e SHORT, nunca só um) como projeção de alvos —
+   mesmo espírito ROTA A/B/C do `ANALYSIS_OUTPUT_CONTRACT.md`; o
+   Confluence Engine só COMPARA 3 subsistemas contra a direção ativa do
+   Core, nunca emite a própria. Ponto investigado a fundo (o mais
+   plausível de violar a LEI 24): o painel de Trade Plan prioriza o plano
+   estrutural do CONSELHO sobre o fallback simples do NÚCLEO quando os
+   dois existem — mas o badge de decisão principal
+   (`CoreSignalBadge`) lê exclusivamente `engine?.direction`, sempre; os
+   dois planos são mutuamente exclusivos por construção
+   (`engineFallbackLevels` já vem `null` quando o plano do Conselho
+   existe) e uma divergência real Conselho×Núcleo é SURFACADA
+   honestamente (comentário "as duas leituras podem divergir de forma
+   real e honesta"), nunca escondida nem resolvida por sobrescrita
+   silenciosa — achado de uma auditoria anterior desta mesma trilha
+   (tarefas EPC §5/§6), não uma violação nova.
+2. **`order_send`/segredo/live trading**: zero encontrado em código real.
+   Toda ocorrência do grep é config/schema declarando ausência
+   (`"order_send": "ABSENT"`, `no_order_send: true`) ou `QUARANTINE.md`/
+   teste afirmando a mesma regra em texto.
+3. **Isolamento do laboratório de backtest**: confirmado. Só arquivos de
+   teste (`*.test.ts`) importam de `src/research/backtest/*`; os 3
+   módulos do laboratório importam apenas conectores reais e os MESMOS
+   engines de produção (reuso, nunca 2ª matemática) — nunca o inverso.
+4. Nenhuma feature das fases proibidas (Radar/OIH/heatmap/ferramentas
+   elite) foi iniciada nesta trilha. Evidência executável: 65/65 testes
+   passando nas 5 suítes mais diretamente relevantes antes de prosseguir.
+
+**FASE 1.1 — migração real**: `docs/ORGANISM_DATA_FLOW.md` já documentava
+(seção "Insumos pré-store") que `smcZones` (FVG/OB/EQH-EQL,
+`engine-bridge.ts`'s `computeSmcZones`) e `cvd`/`orderflowSignals`
+(Order Flow real via MEXC, `src/orderflow/signal-engine.js`) eram dado
+real já computado em `App.tsx` sem fatia própria na store — com a receita
+de migração já escrita. Fechado:
+
+- `engine-bridge.ts`: nomeado o retorno anônimo de `computeSmcZones` como
+  `SmcZonesSnapshot` (aditivo — mesmo objeto literal, só ganhou nome).
+- `unified-snapshot-store.ts` (§3 MOTORES QUANT): 3 fatias novas — `smc`,
+  `cvd`, `orderflowSignals` — com action/default/seletor cada
+  (`setSmc`/`setCvd`/`setOrderflowSignals`,
+  `useSmcSnapshot`/`useCvdSnapshot`/`useOrderflowSignalsSnapshot`), mesmo
+  padrão de `volumeProfile`/`fibonacciConfluence` (as únicas 2 fatias §3
+  com os 5 passos da receita JÁ completos — achado da auditoria:
+  `harmonicPatterns`/`layerRelevance`/`premiumDiscount` pararam nos passos
+  1-3, nunca ganharam caso no orquestrador nem entraram nos RESETs de
+  teste; gap pré-existente, não desta migração, registrado aqui por
+  transparência em vez de silenciado).
+- `organism-orchestrator.ts` + `event-bus.ts`: 3 casos novos de diff
+  (`QUANT.SMC.UPDATED`/`QUANT.CVD.UPDATED`/`QUANT.ORDERFLOW_SIGNALS.UPDATED`),
+  mesmo padrão referência-a-referência dos casos QUANT.* existentes.
+- `App.tsx`: `smcZones`/`orderflowSignals` espelhados via `useEffect`
+  próprio (reage à MESMA variável já computada, nunca recomputa);
+  `cvd` espelhado diretamente no callback real `onCvd` do MEXC feed (mais
+  preciso que um `useEffect`, zero atraso de um ciclo de render). Reset:
+  `smc`/`orderflowSignals` zeram sozinhos porque os efeitos de espelho
+  reagem ao valor local, que já zera na troca de ativo; `cvd` ganhou um
+  reset explícito para `null` (não o `0` cosmético do `useState` local —
+  achado da investigação: a soma corrida real no worker de order flow
+  NUNCA é reiniciada de fato por troca de ativo, `0` local é só exibição;
+  `null` é o "ainda sem leitura real" honesto para o gateway novo).
+- **Decisão de escopo, deliberada e documentada**: consumidores existentes
+  (Conselho, Cenário, Trade Plan, Detecção de Armadilhas, ChartWidget,
+  NeuralCoreWidget, StructureLevelsStrip, OrderFlowWidget,
+  MarketRegimeWidget — todos via `WidgetContext`) **não** foram migrados
+  para ler da store nesta rodada. Isto não é preguiça: o próprio cabeçalho
+  do arquivo da store já declara a política ("Consumidores antigos
+  continuam via WidgetContext sem migração forçada") — trocar ~10 pontos
+  de consumo no arquivo mais sensível do app, todos cobertos por testes de
+  fiação que travam a string literal exata da leitura via Context, é um
+  refactor maior e de risco real, não uma auditoria+fechamento de gap. A
+  fatia nova na store é o gateway REAL e completo para
+  `getSnapshotForEngine()`/futuros assinantes do bus — não existe mais
+  "segunda verdade" (o cálculo continua único), só uma segunda ROTA DE
+  LEITURA ainda não adotada por quem já funciona. Migrar consumidor a
+  consumidor é trabalho futuro honesto, não fingido como feito aqui.
+- Testes: `nexus-organism-orchestrator.test.ts` ganhou 4 testes reais (3
+  de write→evento com motor/fixture real, 1 de fiação de código-fonte);
+  os RESETs de `unified-snapshot-store.test.ts`/`nexus-health-monitor.test.ts`
+  ganharam as 3 fatias novas (fechando o passo 5 da receita para elas
+  especificamente — os outros gaps pré-existentes citados acima
+  continuam em aberto, fora do escopo desta migração).
+
+**FASE 1.2 — rotas paralelas**: auditado `engine-bridge.ts` +
+`js/research/*`. `runRealAnalysisCycle()` é o único chamador real de
+`buildResearchEngineFrame`/`buildTradeSetupMatrix`/`buildTargetTracker`
+(grep confirma: só `engine-bridge.ts` e os próprios arquivos de teste).
+`research-engine.js` sempre computa as 3 rotas (LONG/SHORT/WAIT) em
+paralelo; `trade-setup-matrix.js` é presentation-only sobre rotas já
+calculadas ("nunca uma heurística nova/paralela de decisão", texto
+literal do próprio cabeçalho); `target-tracker.js` nunca recalcula
+alvo/S/R a partir do preço vivo, só compara. Direção/entrada/stop/
+alvo/R:R existem em exatamente um lugar. Zero violação, zero mudança de
+código necessária.
+
+**FASE 1.3 — swings unificados**: `support-resistance-engine.js`,
+`market-structure-engine.js`, `fvg-order-block-engine.js` e
+`bos-choch-engine.js` importam exclusivamente `FRACTAL_K`/`findSwings` de
+`fractal-swings.js` — zero constante `FRACTAL_K` local redeclarada, zero
+algoritmo de swing duplicado. Esta consolidação já tinha acontecido numa
+remediação anterior (Auditoria Mestra 360°, documentada no próprio
+cabeçalho de `fractal-swings.js`); esta fase reconfirmou que não houve
+regressão. Zero violação, zero mudança de código necessária.
+
+**FASE 2 (Skills Limpas) — reafirmação de política, sem ação nesta
+rodada**: nenhuma skill/motor novo foi promovido nesta trilha (a migração
+da FASE 1.1 usa engines já graduados — `fvg-order-block-engine.js`, order
+flow real — nunca introduz um novo). A regra de quarentena de
+`QUARANTINE.md` e a regra "anti-teatro" (nunca inventar nome de
+ferramenta sem implementação real por trás) continuam vigentes e
+inalteradas para a próxima vez que uma skill nova for de fato proposta.
+
+**FASE 3 (Stage Runner) — ainda não recebida**: a mensagem do Operador
+cortou exatamente no início desta fase ("Objetivo: pipeline linear
+auditável... Formalizar/implementar em `ramber-ui/src/nexus/`:") sem
+conteúdo. Não foi fabricado/suposto — aguardando o reenvio do restante
+antes de prosseguir, mesma disciplina já usada quando isto aconteceu com
+a primeira metade deste mesmo prompt mestre.
+
+**Verificação real**: `tsc --noEmit` limpo · **106 arquivos / 1774
+testes** (100%, +4 testes novos reais para as 3 fatias novas + 1 ajuste
+de janela de offset em teste de padrão de código-fonte já existente,
+stale após a inserção do reset de `cvd`) · `npm run build` ok (15.44s,
+1823 módulos) · `audit-header-maxcontent.mjs` 11 viewports CLEAN
+(verificado ao vivo via build+preview).
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
