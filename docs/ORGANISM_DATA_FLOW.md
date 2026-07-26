@@ -84,6 +84,10 @@ própria fatia (referência idêntica à escrita na store).
 | `UI.SYMBOL_CHANGED` / `UI.TIMEFRAME_CHANGED` / `OFFLINE.CHANGED` | símbolo/tf/offline | Organism Orchestrator (primeiro emissor vivo destes tipos da Fase 0) |
 | `QUANT.VOLUME_PROFILE.UPDATED` | `{ profile: VolumeProfileSnapshot \| null }` | Organism Orchestrator |
 | `QUANT.FIBONACCI.UPDATED` | `{ matrix: FibonacciConfluenceMatrix \| null }` | Organism Orchestrator |
+| `QUANT.SMC.UPDATED` | `{ zones: SmcZonesSnapshot \| null }` (FVG/OB/liquidez, OMEGA CORE V-MAX Fase 1.1) | Organism Orchestrator |
+| `QUANT.CVD.UPDATED` | `{ cvd: number \| null }` (Fase 1.1) | Organism Orchestrator |
+| `QUANT.ORDERFLOW_SIGNALS.UPDATED` | `{ signals: OrderflowSignal[] }` (Fase 1.1) | Organism Orchestrator |
+| `QUANT.CONFLUENCE_CORRIDOR.UPDATED` | `{ reading: ConfluenceCorridorReading \| null }` (Fase 5 — opinionMass+institutionalScore+MTF+obstáculos, zero probabilidade) | Organism Orchestrator |
 | `BRAIN.COUNCIL.UPDATED` | `{ decision: CouncilDecision \| null }` | Organism Orchestrator |
 | `BRAIN.SCENARIO.UPDATED` | `{ projection: ScenarioProjection \| null }` | Organism Orchestrator |
 | `BRAIN.TRAPS.UPDATED` | `{ traps: TrapSignal[] }` | Organism Orchestrator |
@@ -95,6 +99,27 @@ própria fatia (referência idêntica à escrita na store).
 O bus é **notificação**, o snapshot é **estado**: não há replay. Todo
 consumidor novo faz a leitura inicial pelo snapshot e então assina o bus —
 nunca o contrário.
+
+## Observadores puros read-only (OMEGA CORE V-MAX Fase 3/7)
+
+Dois módulos novos em `nexus/` não escrevem fatia nenhuma e não publicam
+evento — são **avaliadores puros** chamados sob demanda, lendo só o que
+já está real em outro lugar:
+
+- **`nexus/stage-runner.ts`** (`traceStages(snapshot, seq)`) — formaliza o
+  Pipeline canônico (§2 do `SYSTEM_HANDBOOK.md`) como 4 estágios
+  inspecionáveis hoje (`DATA → CORE_ENGINE → COUNCIL → TRADE_PLAN`), cada
+  um `{ok, reason}` — fail-closed causal (nenhum `ok=true` depois de um
+  `ok=false`). Os 2 últimos elos do pipeline §2
+  (`buildNexusDecision`/`OperationalReadability`) ainda não têm fatia
+  própria — não rastreáveis por este módulo ainda, gap honesto registrado.
+- **`nexus/radar-qualification.ts`** (`qualifyRadarCandidate`/
+  `rankRadarCandidates`) — Fase 7 (Radar/OIH) v1: avalia UM candidato já
+  pronto (estrutura + Trade Plan + riskGated + Corredor de Confluência,
+  todos já reais) contra o filtro mínimo da diretiva, sem recalcular nada.
+  O varredor multi-ativo em segundo plano (Workers/fila/cache/painel no
+  header) que vai chamar isto repetidamente ainda não existe — deliberado,
+  ver `SYSTEM_HANDBOOK.md` §6.38.
 
 ## Receita de evolução 100% aditiva (motor novo)
 

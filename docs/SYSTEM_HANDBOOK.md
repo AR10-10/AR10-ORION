@@ -2607,6 +2607,130 @@ exatamente no início desta fase ("Painel no header (substitui botão
 pulsante)\nExemplo:" sem conteúdo); aguardando reenvio em vez de fabricar
 o painel/exemplo/critérios de filtro.
 
+### 6.38 OMEGA CORE V-MAX — FASE 7 (Radar/OIH v1) + FASE 8/9 (auditoria) —
+fechamento da diretiva completa (Fase 0→9) e relatório final por
+"Entregáveis de cada ciclo/PR"
+
+Conclusão do restante da diretiva, recebido em duas mensagens (o fim de
+Fase 7 + Fase 8/9/regras globais/critérios finais).
+
+**Achado real antes de escrever qualquer código (grep em todo o
+repositório)**: nenhum "Radar Global", "Operation Intelligence Hub" ou
+"botão pulsante" existe hoje neste código — a única correspondência é
+`consensus-radar.ts`, um motor DIFERENTE (reempacotamento de 6
+magnitudes já votadas, não um varredor multi-ativo). `computeDrawdownPct`
+(pendência citada pela diretiva) também não existe em nenhum arquivo
+deste repositório, que não tem nenhuma feature de paper-trading.
+Confirmado com o Operador via `AskUserQuestion` antes de prosseguir (3
+perguntas, as 3 com a opção recomendada escolhida):
+
+1. **Universo de ativos do Radar v1**: a lista curada já real de
+   `configs/asset-universe.default.json` — não descoberta ao vivo de
+   "todos os pares da MEXC" (infraestrutura nova, não pesquisada).
+2. **`computeDrawdownPct`**: confirmado que pertence a outro projeto do
+   Operador, não a este repositório — não fabricado aqui.
+3. **Escopo desta rodada**: v1 real e testado do NÚCLEO de qualificação/
+   ranking; a infraestrutura de varredura em segundo plano (Workers/
+   fila/cache/painel no header) fica para uma rodada própria — mesma
+   disciplina da Regra de Ouro 6 (mover trabalho pesado/novo pra Worker
+   exige iniciativa isolada, nunca uma mudança apressada).
+
+**FASE 7 entregue**: `nexus/radar-qualification.ts` —
+`qualifyRadarCandidate()` avalia UM candidato contra o filtro mínimo da
+diretiva (direção ativa real, estrutura ALTA/BAIXA confirmada — LATERAL
+reprova —, Trade Plan real não-null, `riskGated` real do Conselho —
+reusado, nunca um gate novo inventado —, Corredor de Confluência real
+≥ 0.6, mesmo piso de "oportunidade" já convencionado em
+`institutional-score.ts`). `qualityIndex` é literalmente a MESMA
+`intensity` do Corredor de Confluência (Fase 5) — zero segunda fórmula
+de consenso, satisfaz "sem heurística sem base matemática já presente"
+por construção. `rankRadarCandidates()` filtra e ordena só quem
+qualifica — nunca inventa posição para quem não qualifica.
+Deliberadamente NÃO construído nesta rodada (aguardando rodada própria,
+por decisão do Operador): Workers/fila/cache/scan incremental, painel no
+header, clique→abrir ativo/timeframe/centralizar gráfico.
+
+**FASE 8 — auditoria (sem heatmap/ferramentas elite novos nesta
+rodada)**: consolidação (FVG/OB/BOS/CHOCH/VP/EMA/VWAP) já real, sem novo
+achado além dos 2 já corrigidos na Fase 4. Heatmap de liquidação: feed
+real já existe (`startRealLiquidationFeed`, Binance Futures público) mas
+só alimenta uma lista/painel ("Forced Liquidations"), nunca um heatmap
+de intensidade por nível de preço no canvas — gap real, não construído
+ainda (Prioridade 2 da própria Fase 8, depois da consolidação). "Ferramentas
+elite" — auditoria por item, evidência real, não suposição:
+
+| Item da diretiva | Estado real |
+|---|---|
+| Harmônicos clássicos (Gartley/Bat/Butterfly/Crab/Shark/Cypher) | **JÁ EXISTE** — os 6 confirmados em `nexus/harmonic-patterns.ts` |
+| Wolfe Waves | **JÁ EXISTE** — mesma varredura de pivôs, `detectWolfeInPivots` |
+| Auto Fibonacci | **JÁ EXISTE** sob outro nome — `fibonacci-confluence.ts` já deriva a retração automaticamente do último swing real confirmado, zero desenho manual |
+| Dynamic trend projection | **Substancialmente já coberto** — `trend-channel-engine.ts` (canal OLS real, direção ASCENDING/DESCENDING/FLAT, bandas ±2σ) |
+| Liquidity sweep / projection | **Parcialmente já coberto** — `LiquidityZonesPlugin`/`trap-detection.ts` já detectam sweep real de EQH/EQL; a parte de "projection" (previsão) não existe |
+| Institutional volume zones | **Parcialmente já coberto** — Volume Profile (POC/HVN/LVN) + bolhas de trade grande no Order Flow Heatmap já existem; um conceito distinto e novo não foi construído |
+| Pitchfork (Andrews) | **Genuinamente ausente** — zero ocorrência no repositório |
+| Elliott simplificado | **Genuinamente ausente** — zero ocorrência no repositório |
+
+Só 2 de 8 itens são lacuna real e nova (Pitchfork, Elliott) — ambos
+exigem pesquisa real da metodologia (mediana de Andrews; regras de
+contagem de onda) antes de qualquer implementação, por disciplina de
+"pesquise de verdade" do `CLAUDE.md` — não construídos nesta rodada,
+flagados como backlog real para uma rodada com essa pesquisa dedicada,
+nunca fabricados sem base.
+
+**FASE 9 — auditoria de performance**: as 3 adições novas desta rodada
+completa (`stage-runner.ts`, `confluence-corridor.ts`,
+`radar-qualification.ts`) são funções puras O(1)/O(n pequeno) —
+comparações e um `.filter`/`.sort` sobre no máximo ~9 prazos ou 3 alvos,
+zero risco real de Main Thread. Confirmado por revisão de código (zero
+`fetch`, zero motor pesado, zero laço sem teto) — este ambiente não tem
+instrumentação real de FPS/dispositivo físico para medir jank ao vivo
+(mesma limitação já documentada do sandbox de CI sem egress a
+exchanges); a confirmação aqui é por leitura de código + suíte/build
+verdes, nunca uma medição de FPS que não foi de fato feita.
+
+## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
+diretiva) — cobre §6.35, §6.36, §6.37 e este §6.38 em conjunto
+
+- **Arquivos alterados**: ver os 3 commits desta trilha
+  (`aa88134` e anteriores citados em §6.35; `ed3f4db` FASE 0/1;
+  `e482fd2` FASE 3-6; + o commit desta entrega, FASE 7-9). Novos módulos
+  puros: `nexus/stage-runner.ts`, `nexus/confluence-corridor.ts`,
+  `nexus/radar-qualification.ts`. Fatias novas na store: `smc`, `cvd`,
+  `orderflowSignals`, `confluenceCorridor`.
+- **O que foi unificado/removido**: fileira de 12 botões redundante do
+  header (SmartOmnibox já cobria); `obstacleSuffix` duplicado entre o
+  Trade Plan real e o fallback do Núcleo (agora 1 função compartilhada);
+  espaço redundante nos glifos `OB↑/OB↓/FVG↑/FVG↓`.
+- **Diagrama do fluxo final**: `docs/ORGANISM_DATA_FLOW.md` (seção "O
+  fluxo, ponta a ponta" + catálogo de eventos, ambos atualizados nesta
+  trilha com os 4 eventos QUANT.* novos e os 2 observadores puros).
+- **"Uma fatia = um dono"**: confirmado — cada fatia nova
+  (smc/cvd/orderflowSignals/confluenceCorridor) tem exatamente 1 motor
+  real que a escreve, verificado por teste de fiação em cada caso.
+- **"Zero recálculo na UI"**: confirmado para os 3 motores novos — todos
+  são funções puras chamadas uma vez por transição real, nunca
+  recomputadas por consumidor. Migração completa dos consumidores
+  antigos (WidgetContext) para os seletores da store permanece pendência
+  registrada (§6.36), não uma violação nova.
+- **Backlog flagado (não inventado)**: visual do Corredor de Confluência
+  no canvas; varredura em segundo plano do Radar (Workers/fila/cache/
+  painel no header); heatmap de liquidação no canvas; Pitchfork; Elliott
+  simplificado; "liquidity sweep projection"/"institutional volume
+  zones" como conceitos distintos (hoje parcialmente cobertos por
+  motores já reais, não expandidos); migração de consumidores da FASE
+  1.1.
+- **Pendências de produto**: `computeDrawdownPct`/paper-trading —
+  confirmado pertencer a outro projeto do Operador, não a este
+  repositório.
+- **Conformidade com todas as leis**: FASE 0 já auditou e confirmou (LEI
+  24/Permanentes 1-9) — reconfirmado nesta entrega que nenhum módulo
+  novo (Stage Runner, Corredor, Radar) emite ou altera LONG/SHORT/WAIT/
+  Entry/Stop/Target; todos são observadores/qualificadores read-only.
+- **Testes executados**: `tsc --noEmit` limpo · **109 arquivos / 1812
+  testes** (100%, +13 `radar-qualification.test.ts` desde §6.37) ·
+  `npm run build` ok · `audit-header-maxcontent.mjs` 11 viewports CLEAN
+  via build+preview real.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
