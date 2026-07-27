@@ -131,7 +131,7 @@ describe('diretriz 2 + V15.1 GOD TIER: roteamento Futuros exclusivo — Gráfico
     // é o único caminho (market-data-adapter.ts), mesmo dado real por
     // baixo (collectBinanceFuturesKlines continua a única função que fala
     // com a Binance, só não é mais importada aqui).
-    expect(bridge).toContain("import { getMarketDataProvider } from './market-data-adapter';");
+    expect(bridge).toContain("import { getMarketDataProvider, type MarketDataProviderId } from './market-data-adapter';");
     expect(bridge).not.toContain("from '../../src/market-data-bus/binance-futures-candle-connector.js'");
     expect(bridge).not.toContain('collectBinanceKlines');
     expect(bridge).not.toContain('binance-candle-connector.js');
@@ -148,21 +148,39 @@ describe('diretriz 2 + V15.1 GOD TIER: roteamento Futuros exclusivo — Gráfico
     expect(helper).not.toContain('collectBinanceKlines');
   });
 
-  it('as 6 chamadas reais ao Bus (HTF, ciclo principal, getChartCandles, Fase Ω Multi-Timeframe, scanRadarCandidate x2) passam por requestFuturesCandleSnapshot — nenhuma chama requestSnapshot() direto', () => {
+  it('as 4 chamadas reais ao ciclo Binance-only (HTF, ciclo principal, getChartCandles, Fase Ω Multi-Timeframe) passam por requestFuturesCandleSnapshot — nenhuma chama requestSnapshot() direto', () => {
     const bridge = read('../src/engine-bridge.ts');
     const helperCallSites = bridge.match(/await requestFuturesCandleSnapshot\(\{/g) ?? [];
     // Fase Ω Priority 1: buildMultiTimeframeContext somou um 4º call site
     // real (mesmo helper, 6 prazos em paralelo) — nenhuma perna de spot,
-    // nenhum bypass do helper. OMEGA CORE V-MAX (completar Fase 7):
-    // scanRadarCandidate somou mais 2 (o candidato em si + o loop de 3
-    // prazos de referência da confluência-leve) — mesmo helper, mesma
-    // disciplina, zero perna de spot nova.
-    expect(helperCallSites).toHaveLength(6);
-    // requestSnapshot() só pode aparecer DENTRO do próprio helper (1 única
-    // perna, futuros) — se esse número mudar, algum call site voltou a
-    // ignorar o helper e chamar o Bus direto, ou uma perna de spot voltou.
+    // nenhum bypass do helper. ADITIVO V-MAX Etapa 9: scanRadarCandidate
+    // migrou seus 2 call sites (o candidato em si + o loop de 3 prazos de
+    // referência) para requestRadarCandleSnapshot (provider-aware, ver
+    // teste abaixo) — o ciclo real do Core Engine/gráfico permanece 100%
+    // Binance, intocado, sempre por este helper.
+    expect(helperCallSites).toHaveLength(4);
+    // requestSnapshot() só pode aparecer DENTRO de um dos dois helpers
+    // reais (requestFuturesCandleSnapshot, Binance-only; ou
+    // requestRadarCandleSnapshot, provider-aware, só para o Radar) — se
+    // esse número mudar, algum call site voltou a ignorar os helpers e
+    // chamar o Bus direto, ou uma perna de spot voltou.
     const directBusCalls = bridge.match(/getMarketDataBus\(\)\.requestSnapshot\(\{/g) ?? [];
-    expect(directBusCalls).toHaveLength(1);
+    expect(directBusCalls).toHaveLength(2);
+  });
+
+  it('ADITIVO V-MAX Etapa 9: os 2 call sites de scanRadarCandidate passam por requestRadarCandleSnapshot (provider-aware), nunca pelo helper Binance-only', () => {
+    const bridge = read('../src/engine-bridge.ts');
+    const radarHelperCallSites = bridge.match(/await requestRadarCandleSnapshot\(\{/g) ?? [];
+    expect(radarHelperCallSites).toHaveLength(2);
+  });
+
+  it('requestRadarCandleSnapshot resolve o sufixo de cache-key por provider (-PERP Binance / -MEXC MEXC) — nunca colide as duas fontes na mesma chave do Bus', () => {
+    const bridge = read('../src/engine-bridge.ts');
+    const helperMatch = bridge.match(/async function requestRadarCandleSnapshot\([\s\S]*?\n\}\n/);
+    expect(helperMatch, 'requestRadarCandleSnapshot não encontrada').not.toBeNull();
+    const body = helperMatch![0];
+    expect(body).toContain("const cacheSuffix = provider === 'MEXC' ? '-MEXC' : '-PERP';");
+    expect(body).toContain('collect: getMarketDataProvider(provider).collect');
   });
 
   it('CoreEvidence.instrument_type na construção real é sempre \'crypto_futures\' (união de tipos permanece fechada, sem fallback pra decidir dinamicamente)', () => {

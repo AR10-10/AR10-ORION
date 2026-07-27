@@ -3229,6 +3229,97 @@ MEXCProvider não pôde ser exercitado contra a API real neste sandbox
 (zero egress) — lógica coberta por 16 testes reais com fetch mockado,
 igual à disciplina já usada para o conector Binance.
 
+### 6.44 MASTER EXECUTION DIRECTIVE (MED) — reconciliação + ADITIVO V-MAX
+Etapa 9 (infraestrutura): MEXC symbol-universe + Radar provider-aware
+
+O Operador enviou um novo documento mestre ("MED") de escopo muito
+amplo, sobrepondo fortemente a EPC OMEGA FINAL (§6.42) e o ADITIVO
+V-MAX (§6.43) já em andamento — organismo único, Snapshot único, Fusion
+Engine nunca decide, Core Engine único emissor, ferramentas gráficas/
+institucionais, Radar Global, universalização, performance, testes,
+documentação. Inclui uma "Carta Branca Controlada" explícita: liberdade
+para escolher arquitetura superior à literal, desde que LEI 24/
+READ_ONLY/FAIL_CLOSED/Organismo Único/Snapshot/Core Engine/zero
+regressões permaneçam intactos.
+
+**Decisão de execução**: em vez de abrir um 3º checklist paralelo ao
+já tracked (EPC OMEGA FINAL Etapas 2-21, ADITIVO V-MAX Etapas 2-15), o
+MED foi RECONCILIADO com o backlog existente — é a mesma direção geral
+reafirmada num nível mais alto, não uma lista de tarefas atômicas
+distinta. Usando a própria "Carta Branca" do documento: uma auditoria
+LEVE (não uma repetição da auditoria completa de §6.42, feita há 2
+rodadas nesta mesma sessão) confirmou 2 achados honestos que a redação
+do MED presumia diferente:
+
+- **Harmônicos (Gartley/Bat/Butterfly/Crab/Shark/Cypher)**: já 100%
+  implementados — `nexus/harmonic-patterns.ts`'s `HarmonicPatternName`
+  cobre os 6 nomeados pelo MED mais ABCD e Wolfe. O MED pedia
+  "adicionar quando matematicamente compatíveis"; já estavam.
+- **Auto Fibonacci**: já existe — `nexus/fibonacci-confluence.ts`
+  (Matriz de Confluência, auto-detectada sobre swings reais, não
+  desenho manual).
+
+Genuinamente ausentes (confirmado, não presumido): Kill Zones, SMT
+Divergence (o próprio MED já qualifica "quando suportado" — SMT
+tipicamente exige correlação entre ativos, que este app não computa
+hoje), Andrews Pitchfork, Market Structure Projection, Institutional
+Volume Zones como conceito distinto do Volume Profile.
+
+**Achado próprio corrigido no mesmo commit**: `mexc-futures-public.js`
+(§6.43) usava o host `contract.mexc.com` para klines, baseado em fontes
+secundárias — mas `cross-exchange/mexc-futures.ts` (já real, já em
+produção, pesquisado numa rodada ANTERIOR desta mesma sessão) usa
+`api.mexc.com` para o MESMO family de endpoint `/api/v1/contract/*`.
+Padronizado em `api.mexc.com` — o host com maior confiança real
+disponível neste repositório; `contract.mexc.com` nas buscas
+provavelmente refletia o domínio do SITE, não da API.
+
+**Entregue — infraestrutura para ADITIVO V-MAX Etapa 9 (Radar Global/
+OIH sobre MEXC)**:
+- `omnibox/mexc-symbols.ts` (novo) — irmão direto de
+  `binance-symbols.ts`: `fetchMexcUsdtSymbols()` real via
+  `GET /api/v1/contract/detail` (público), extração pura testável sem
+  rede. Honestidade documentada: ao contrário do filtro
+  `status === "TRADING"` da Binance (bem confirmado), a MEXC não tem um
+  campo de estado equivalente com a mesma confiança de pesquisa —
+  filtro usa só os 2 campos reais corroborados (`isHidden`/
+  `apiAllowed`), nunca um valor de enum adivinhado.
+- `engine-bridge.ts` — `scanRadarCandidate` ganhou 3º parâmetro
+  `provider: MarketDataProviderId = 'BINANCE'` (default preserva 100%
+  o comportamento de sempre). Novo helper interno
+  `requestRadarCandleSnapshot` (irmão PROVIDER-AWARE de
+  `requestFuturesCandleSnapshot`, que permanece intocada e 100%
+  Binance) resolve o sufixo de cache-key por provider (`-PERP` Binance,
+  `-MEXC` MEXC) — nunca deixa dois providers colidirem na mesma entrada
+  do Bus. `RadarCandidateScanResult` ganhou o campo `provider` —
+  honestidade de proveniência (um candidato MEXC e um Binance do mesmo
+  ticker são leituras de fontes genuinamente diferentes).
+
+**Deliberadamente NÃO feito nesta entrada**: wiring do loop de scan em
+App.tsx para varrer o universo MEXC inteiro continuamente. Mesmo
+precedente já aprovado pelo Operador na construção original do Radar
+(FASE 7 v1, `AskUserQuestion`): "varredura em segundo plano (Workers/
+fila/cache/painel no header) fica para rodada própria" — a MEXC pode
+ter centenas de símbolos, e decidir cadência/fila/throttle de rede sem
+isso virar um problema de performance é uma decisão arquitetural que
+merece sua própria rodada cuidadosa, não um anexo apressado a este
+commit (mesmo princípio da Regra de Ouro 6 aplicado aqui).
+
+**Testes**: `tsc --noEmit` limpo · **115 arquivos / 1882 testes**
+(100%, +14 novos: 11 para `mexc-symbols.ts`, 3 para
+`requestRadarCandleSnapshot`/contagem de call sites) · `npm run build`
+ok · verificação Playwright ao vivo (boot, painéis, zero regressão).
+
+**Backlog honesto**: o wiring real do scan MEXC-wide (a próxima fatia
+natural — universo real via `fetchMexcUsdtSymbols` + chamadas
+`scanRadarCandidate(symbol, tf, 'MEXC')` + exibição do provider no
+painel "OPORTUNIDADES") continua pendente, junto de todas as demais
+Etapas do ADITIVO V-MAX (2-8, 10-15) e da EPC OMEGA FINAL (2-9, 11-21).
+Kill Zones/SMT Divergence/Andrews Pitchfork/Market Structure Projection
+somam-se à lista já real de AUSENTES (Liquidity Voids, Volume Clusters,
+Cross Timeframe Liquidity, Footprint, Chart Integrity Engine, Adaptive
+Zoom).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

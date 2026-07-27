@@ -44,7 +44,7 @@ import { getMarketDataBus } from '../../src/market-data-bus/index.js';
 // collectBinanceFuturesKlines/collectMexcFuturesKlines diretamente mais —
 // getMarketDataProvider('BINANCE') é o único caminho, mesmo dado real,
 // zero mudança de comportamento (default explícito, nunca implícito).
-import { getMarketDataProvider } from './market-data-adapter';
+import { getMarketDataProvider, type MarketDataProviderId } from './market-data-adapter';
 import { createLivePoller } from '../../js/real-data/mexc-trades-stream.js';
 import { CONNECTOR_STATES } from '../../js/real-data/schema.js';
 import { buildRealAnalysisFrame } from '../../js/real-data/analysis-frame.js';
@@ -1067,6 +1067,28 @@ export interface RadarCandidateScanResult {
   tradePlan: TradePlan | null;
   riskGated: boolean;
   confluence: ConfluenceCorridorReading;
+  // ADITIVO V-MAX Etapa 9: exchange real que forneceu este candle/estrutura
+  // — honestidade de proveniência (um candidato MEXC e um candidato
+  // Binance do mesmo símbolo são leituras de fontes genuinamente
+  // diferentes, nunca a "mesma verdade" por acaso terem o mesmo ticker).
+  provider: MarketDataProviderId;
+}
+
+/** Igual a requestFuturesCandleSnapshot, mas PROVIDER-AWARE — usado só
+ *  pelo scanner de fundo do Radar (scanRadarCandidate), nunca pelo ciclo
+ *  real do Core Engine/gráfico (requestFuturesCandleSnapshot continua
+ *  100% Binance, intocada). Mesmo Bus, mesmo dedupe — só o sufixo de
+ *  cache-key muda por provider (nota de arquitetura em
+ *  market-data-adapter.ts: sem isso, um candidato MEXC e um candidato
+ *  Binance do MESMO símbolo colidiriam na mesma entrada do Bus e
+ *  poderiam misturar candles de duas exchanges sob uma única chave). */
+async function requestRadarCandleSnapshot({
+  symbol, timeframe, limit, maxAgeMs, provider,
+}: { symbol: string; timeframe: string; limit: number; maxAgeMs: number; provider: MarketDataProviderId }): Promise<BusSnapshot> {
+  const cacheSuffix = provider === 'MEXC' ? '-MEXC' : '-PERP';
+  return getMarketDataBus().requestSnapshot({
+    symbol: `${symbol}${cacheSuffix}`, timeframe, limit, collect: getMarketDataProvider(provider).collect, maxAgeMs,
+  });
 }
 
 /** Regime real (classifyMarketRegime, mesmo motor do ciclo principal e da
@@ -1081,11 +1103,15 @@ function directionFromRegime(regimeDirection: 'ALTA' | 'BAIXA' | null): 'LONG' |
 
 /** UM candidato real de background — null honesto quando a rede falhou
  *  ou não há candles suficientes (fail-closed, nunca fabricado). */
-export async function scanRadarCandidate(symbol: string, timeframe: string): Promise<RadarCandidateScanResult | null> {
+export async function scanRadarCandidate(
+  symbol: string,
+  timeframe: string,
+  provider: MarketDataProviderId = 'BINANCE',
+): Promise<RadarCandidateScanResult | null> {
   let snapshot: BusSnapshot;
   try {
-    snapshot = await requestFuturesCandleSnapshot({
-      symbol, timeframe, limit: RADAR_SCAN_CANDLE_LIMIT, maxAgeMs: RADAR_SCAN_MAX_AGE_MS,
+    snapshot = await requestRadarCandleSnapshot({
+      symbol, timeframe, limit: RADAR_SCAN_CANDLE_LIMIT, maxAgeMs: RADAR_SCAN_MAX_AGE_MS, provider,
     });
   } catch {
     return null;
@@ -1122,7 +1148,7 @@ export async function scanRadarCandidate(symbol: string, timeframe: string): Pro
         const tfSnapshot =
           tf === timeframe
             ? snapshot
-            : await requestFuturesCandleSnapshot({ symbol, timeframe: tf, limit: RADAR_SCAN_CANDLE_LIMIT, maxAgeMs: RADAR_SCAN_MAX_AGE_MS });
+            : await requestRadarCandleSnapshot({ symbol, timeframe: tf, limit: RADAR_SCAN_CANDLE_LIMIT, maxAgeMs: RADAR_SCAN_MAX_AGE_MS, provider });
         if (!tfSnapshot.ok) return null;
         const tfRegime: any = classifyMarketRegime({ ohlcv_series: tfSnapshot.candles, timeframe: tf });
         return tfRegime.status === 'OK' ? (tfRegime.direction as 'ALTA' | 'BAIXA' | null) : null;
@@ -1165,5 +1191,5 @@ export async function scanRadarCandidate(symbol: string, timeframe: string): Pro
     activeObstacleCount: null,
   });
 
-  return { symbol, timeframe, structureLabel, direction, tradePlan, riskGated: false, confluence };
+  return { symbol, timeframe, structureLabel, direction, tradePlan, riskGated: false, confluence, provider };
 }

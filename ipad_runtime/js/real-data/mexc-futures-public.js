@@ -24,6 +24,19 @@
 // abaixo falha visivelmente (BLOCKED_BY_SCHEMA), nunca silenciosamente
 // errado. Mesma disciplina/mesma ressalva que binance-futures-public.js
 // já documenta para si mesmo.
+//
+// Correção (achado próprio, mesma sessão): a primeira versão deste
+// arquivo usava o host `contract.mexc.com` (visto em fontes
+// secundárias). `cross-exchange/mexc-futures.ts` — já real, já
+// integrado, pesquisado numa rodada anterior desta mesma sessão — usa
+// `api.mexc.com/api/v1/contract/funding_rate/` para o MESMO family de
+// endpoint `/api/v1/contract/*`. Padronizado aqui em `api.mexc.com`: é
+// o host com maior confiança real disponível (já vetted, já em
+// produção neste repositório), e `contract.mexc.com` nas buscas
+// provavelmente refletia o domínio do SITE (ex.:
+// contract.mexc.com/information/contract_detail é a página web, não a
+// API) — nunca dois hosts reais servindo o mesmo endpoint sem um dos
+// dois estar documentado por engano.
 import { probeJsonEndpoint } from './probe.js';
 import { CONNECTOR_STATES, createEmptyEvidence, markFieldMissing, hashRawSample, computeDataQuality } from './schema.js';
 
@@ -36,7 +49,7 @@ export const meta = Object.freeze({
     supports_private_endpoints: false,
 });
 
-const CONTRACT_BASE = 'https://contract.mexc.com';
+const CONTRACT_BASE = 'https://api.mexc.com';
 
 // Símbolo MEXC Futures real: formato BTC_USDT (underscore) — MESMA
 // convenção já documentada/usada em cross-exchange/mexc-futures.ts,
