@@ -85,3 +85,33 @@ describe('detectInstitutionalTraps: só eventos REAIS contam', () => {
     expect(traps.map((t) => t.kind).sort()).toEqual(['STOP_HUNT_FUNDO', 'STOP_HUNT_TOPO']);
   });
 });
+
+describe('EPC OMEGA FINAL Etapa 10 (v2): sweptPrices — preço real exposto para o canvas desenhar sem recalcular', () => {
+  it('STOP_HUNT_TOPO carrega o preço real do(s) EQH varrido(s), mesmo número já usado em evidence', () => {
+    const traps = detectInstitutionalTraps({ liquidityZones: [eqh(110, true)], orderflowSignals: [], now: NOW });
+    expect(traps[0].sweptPrices).toEqual([110]);
+  });
+
+  it('STOP_HUNT_FUNDO carrega o preço real do(s) EQL varrido(s)', () => {
+    const traps = detectInstitutionalTraps({ liquidityZones: [eql(90, true)], orderflowSignals: [], now: NOW });
+    expect(traps[0].sweptPrices).toEqual([90]);
+  });
+
+  it('múltiplos EQH varridos no mesmo ciclo => todos os preços reais na lista, nenhum perdido', () => {
+    const traps = detectInstitutionalTraps({
+      liquidityZones: [eqh(110, true), eqh(111.5, true)],
+      orderflowSignals: [],
+      now: NOW,
+    });
+    expect(traps[0].sweptPrices.sort()).toEqual([110, 111.5]);
+  });
+
+  it('ABSORCAO_ANOMALA não tem preço-âncora único real => sweptPrices vazio, nunca um preço fabricado', () => {
+    const traps = detectInstitutionalTraps({
+      liquidityZones: [],
+      orderflowSignals: [sig('ABSORPTION', 1_000), sig('ABSORPTION', 8_000)],
+      now: NOW,
+    });
+    expect(traps[0].sweptPrices).toEqual([]);
+  });
+});

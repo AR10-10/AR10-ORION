@@ -3513,6 +3513,11 @@ const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>([
   // reais é leitura de mercado/estrutura, nunca específica do plano
   // ativo, então entra aqui, nunca no Operacional.
   "liquidation_heatmap",
+  // EPC OMEGA FINAL Etapa 10: sweep de liquidez e sessão institucional são
+  // igualmente leitura de mercado/estrutura, nunca específicas do plano
+  // ativo — mesma lógica acima.
+  "liquidity_sweep",
+  "market_sessions",
 ]);
 
 const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
@@ -3537,6 +3542,9 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // visualmente com "LIQUIDITY HEATMAP" (order_flow_heatmap, 2 linhas
   // acima) e confundiria qual camada o Operador está ligando/desligando.
   { id: "liquidation_heatmap", label: "LIQUIDAÇÕES FORÇADAS" },
+  // EPC OMEGA FINAL Etapa 10 (Novas Camadas Institucionais).
+  { id: "liquidity_sweep", label: "LIQUIDITY SWEEP" },
+  { id: "market_sessions", label: "SESSÕES (ÁSIA/LONDRES/NY)" },
 ];
 
 function ChartLayersPanel() {
@@ -6489,6 +6497,12 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // (mesmo padrão de useLayerRelevanceSnapshot já usado neste componente),
   // nunca uma segunda leitura via WidgetContext para o mesmo dado.
   const confluenceCorridor = useConfluenceCorridorSnapshot();
+  // EPC OMEGA FINAL, Etapa 10 ("Liquidity Sweep"): mesma store que
+  // AssistantOrb/CouncilWidget já leem (nexus/trap-detection.ts) — o
+  // gráfico nunca tinha assinado esta fatia, então o sweep real nunca
+  // ganhava sua própria price line (só existia como texto em outros
+  // painéis). Zero segunda coleta/cálculo.
+  const traps = useTrapSignalsSnapshot();
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
   // Correção de latência: o MESMO preço real que já alimenta a barra
   // superior (usePriceSnapshot — escrito na store a cada tick do WS,
@@ -6829,6 +6843,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             vwapState={vwapCtx?.state ?? null}
             nexusLineState={nlState ?? null}
             liquidations={liquidations ?? []}
+            traps={traps ?? []}
             symbol={selectedAsset ?? null}
             layerVisibility={effectiveChartLayerVisibility}
             emaPeriod={emaPeriod}

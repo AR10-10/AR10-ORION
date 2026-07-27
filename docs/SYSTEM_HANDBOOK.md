@@ -2982,6 +2982,149 @@ ambiente sem egress real a Binance — lógica coberta por 15 testes reais;
 Pitchfork e Elliott simplificado (Fase 8, ainda precisam de pesquisa real
 de metodologia); migração de consumidores WidgetContext→store (§6.36).
 
+### 6.42 EPC OMEGA FINAL — Etapa 1 (auditoria completa de ~20
+subsistemas) + Etapa 10 fatia 1 (Liquidity Sweep + Institutional Session
+Engine no canvas)
+
+Nova diretiva do Operador (Agente 4/Chief Software Engineer, Prioridade
+MÁXIMA, escopo `ipad_runtime/` exclusivo, 22 etapas), começando por sua
+própria Etapa 1: "auditar integralmente... classificar cada módulo
+IMPLEMENTADO/PARCIAL/AUSENTE... implementar imediatamente tudo que
+estiver parcial ou ausente". Dado o tamanho real do que as 22 etapas
+pedem (múltiplas features institucionais novas — Footprint, Pitchfork,
+Elliott, scanner contínuo de universo inteiro, Chart Integrity Engine com
+bloqueio de renderização, dashboard de Organism Health ao vivo — cada uma
+razoavelmente uma entrega própria), esta entrada cobre só a Etapa 1
+completa mais a primeira fatia real da Etapa 10, seguindo a mesma
+disciplina de rodadas escopadas e verificadas já usada em toda a trilha
+OMEGA CORE V-MAX (§6.36-§6.41) em vez de uma tentativa atômica de tudo de
+uma vez.
+
+**Tabela de auditoria real (Etapa 1)** — evidência própria + 3 agentes
+Explore paralelos, read-only:
+
+| Subsistema | Classificação | Evidência |
+|---|---|---|
+| UnifiedGlobalSnapshot | IMPLEMENTADO | `store/unified-snapshot-store.ts`, Zustand+Immer, 5 domínios |
+| Stage Runner | PARCIAL | `nexus/stage-runner.ts` é traçador read-only real (`DATA→CORE_ENGINE→COUNCIL→TRADE_PLAN`), nunca bloqueia, zero wiring em App.tsx/UI — chamado só pelo próprio teste |
+| Fusion Engine (Corredor de Confluência) | IMPLEMENTADO | contrato v2 corrigido em §6.40 |
+| Core Engine | IMPLEMENTADO | único emissor LONG/SHORT/WAIT, LEI 24 |
+| Trade Plan | IMPLEMENTADO | campos ETA/Obstáculos/Conviction vivem em módulos próprios de dono único (`eta-engine.ts`, `TradePlanLevel.obstacleCount`, `institutional-score.ts`) — BE/Trailing já resolvido Council-only em §6 anterior (ORDEM §2) |
+| Relevance Engine | IMPLEMENTADO | `nexus/layer-relevance.ts` |
+| Organism Orchestrator | IMPLEMENTADO | `nexus/organism-orchestrator.ts` |
+| Event Bus | IMPLEMENTADO | `nexus/event-bus.ts` + `gmil/event-bus.ts` (domínios separados de propósito) |
+| Engine Bridge | IMPLEMENTADO | `engine-bridge.ts` |
+| Conselho | IMPLEMENTADO | 7 agentes reais, linear opinion pool Stone/DeGroot via `src/consensus`; limitação real documentada: OrderflowAgent usa CVD spot MEXC vs resto do Conselho em perp Binance |
+| GMIL | PARCIAL | 4/6 categorias com provider real (ONCHAIN/MACRO permanentemente `null` — exigiriam chave de API, proibida) |
+| Skills/QUARANTINE | IMPLEMENTADO | 5 engines graduados confirmados contra o filesystem real (doc corrigido nesta entrada, ver abaixo) |
+| Voice | IMPLEMENTADO | TTS/STT reais do browser, push-to-talk, `computeAlerts` só reage a transição real de estado |
+| Radar/OIH | PARCIAL | v1 real (§6.38/§6.39), universo hoje é a lista curada `asset-universe.default.json` (~30 símbolos Binance), não "todos os ativos públicos" |
+| Heatmap | IMPLEMENTADO | 2 reais (order flow + liquidação, §6.41) |
+| Chart (camadas) | IMPLEMENTADO (núcleo) | 18 camadas após esta entrada — ver checklist Etapa 8 abaixo |
+| HUD | IMPLEMENTADO | padrão widget, não um módulo único nomeado |
+| Smart Labels (Etapa 13) | IMPLEMENTADO | `chart/label-compaction.ts` |
+| Adaptive Zoom (Etapa 14) | AUSENTE | zero sistema deliberado — só o subproduto geométrico passivo de `priceToCoordinate` |
+| Market Regime Detector (Etapa 15) | PARCIAL | motor real (Wilder ADX/DI + Bollinger, `market-regime/regime-engine.js`), mas nunca alimenta `layer-relevance.ts` |
+| Data Quality Monitor (Etapa 16) | PARCIAL | fragmentado — 3 motores de qualidade independentes (Market Data Bus, GMIL, `data-sufficiency.js`), sem vocabulário/limiar único |
+| Chart Integrity Engine (Etapa 17) | AUSENTE | nada bloqueia render em desync Snapshot→TradePlan→HUD→Chart→Voice |
+| Auto Layout (Etapa 18) | PARCIAL | `audit-header-maxcontent.mjs` real (11 viewports) cobre só TopBar + 1 painel, não a área do gráfico/grid completo |
+| Organism Health (Etapa 19) | PARCIAL | `self-diagnostics.ts` é sob-demanda (clique), não contínuo; `organism-orchestrator.ts`/`useHealthSnapshot()` já é contínuo em paralelo |
+
+**Checklist Etapa 8 (camadas do gráfico)** — dos itens exaustivos pedidos:
+Order Blocks/FVG/BOS/CHOCH/EMA/VWAP/Trend Channel/Liquidity Zones/Supply-
+Demand/Heatmap/Volume Profile/POC/HVN/LVN/CVD/Centro Gravitacional/
+Corredor de Confluência/Harmônicos/Fibonacci/Linhas estruturais —
+IMPLEMENTADOS. Forecast — PARCIAL (existe em `realCycle.forecast`, só em
+lista de texto no HUD, nunca no canvas). OI/Funding — AUSENTES como
+camada do gráfico (dado real existe via GMIL/cross-exchange, nunca
+desenhado no canvas). ZigZag — PARCIAL (helper interno em
+`fractal-swings.js`, nunca um overlay próprio). Pitchfork/Andrews
+Pitchfork/Elliott/Triângulos — AUSENTES (zero ocorrência no código-fonte).
+Wolfe Waves — IMPLEMENTADO (`harmonic-patterns.ts` + linha EPA no
+canvas). Dynamic Trend Projection — projeção para o futuro é uma recusa
+DELIBERADA e documentada (`trend-channel-engine.ts`: extrapolação OLS
+chamada estatisticamente não-confiável), não uma lacuna esquecida.
+Institutional Volume Zones — sem conceito distinto do Volume Profile já
+real.
+
+**Checklist Etapa 10 (novas camadas institucionais)**: Liquidity Sweep —
+PARCIAL antes desta entrada (detecção real em `trap-detection.ts`, zero
+marca no canvas — ver entrega abaixo). Institutional Session Engine —
+PARCIAL antes desta entrada (`market-session.ts` real, só texto no
+header — ver entrega abaixo). Liquidity Voids — AUSENTE (LVN existente é
+percentil dentro do histograma negociado, não um vazio de preço real).
+Volume Clusters — AUSENTE como conceito distinto (duplicaria Volume
+Profile). Cross Timeframe Liquidity — AUSENTE, exclusão DELIBERADA
+documentada em `multi-timeframe-engine.ts`. Footprint — AUSENTE (zero
+ocorrência).
+
+**Discrepância real encontrada, sinalizada honestamente (Disciplina de
+trabalho CLAUDE.md item 1)**: a Etapa 11 pede radar sobre "todos os
+ativos públicos da MEXC", mas todo o pipeline real de candle/estrutura
+deste app roda sobre Binance Futures (fonte primária declarada no próprio
+CLAUDE.md; `scanRadarCandidate` usa exclusivamente
+`requestFuturesCandleSnapshot`, uma função só-Binance). Existe hoje
+`omnibox/binance-symbols.ts` — fetch real, testado, já em produção
+(SmartOmnibox) do universo INTEIRO de perpétuos USDT-M da Binance — uma
+base direta para expandir o universo do Radar além dos ~30 símbolos
+curados. Um scan literal MEXC-wide exigiria construir do zero um
+pipeline paralelo de descoberta de símbolos + candles MEXC, nunca
+auditado neste repositório. Etapa 11 fica deliberadamente FORA desta
+entrada — decisão de escopo real demais para decidir sem confirmar com o
+Operador qual das duas leituras é a pretendida.
+
+**Correção de documentação (achado da própria auditoria)**:
+`src/research/QUARANTINE.md` dizia "apenas os 4 engines graduados" desde
+antes de `bos-choch-engine.js` graduar (2026-07-12) — a tabela real
+sempre teve 5. Resumo corrigido nesta entrada.
+
+**Entregue (Etapa 10, fatia 1)**:
+- `nexus/trap-detection.ts` → contrato v2: `TrapSignal.sweptPrices:
+  number[]` expõe o preço real já em escopo dentro de
+  `detectInstitutionalTraps` (zero recálculo, zero parsing das strings de
+  `evidence`) para STOP_HUNT_TOPO/FUNDO; `[]` honesto em
+  ABSORCAO_ANOMALA (sem preço-âncora único real).
+- `chart/EnhancedChart_110_Percent.tsx` → nova price line âmbar
+  (`rgba(255, 191, 0, 0.85)`, cor nunca usada por EQH/EQL roxo nem OB/FVG
+  verde/vermelho) no preço real de cada sweep — a zona EQH/EQL varrida
+  hoje simplesmente some da tela (filtro `!swept`) sem deixar rastro do
+  momento do sweep; agora deixa.
+- `nexus/market-session.ts` → `computeSessionBoundaries(candles)`, função
+  pura nova: varre a série real e devolve só pontos de TRANSIÇÃO (nunca
+  uma sessão por candle). Propriedade emergente honesta (não um caso
+  especial escrito à mão): candles diários+ (open sempre 00:00 UTC na
+  Binance) caem sempre na mesma janela candle a candle, então a função
+  devolve `[]` sem precisar de limiar de timeframe hardcoded.
+- `chart/MarketSessionBandsPlugin.tsx` (novo) — mesma arquitetura de
+  overlay já provada 2x (canvas próprio, dirty-flag+rAF, fio de seda):
+  linha vertical 1px discreta em cada transição real + rótulo compacto
+  (texto pula, nunca a linha, quando dois rótulos ficam a menos de 56px).
+- 17ª/18ª camadas do painel "Camadas do Gráfico": "LIQUIDITY SWEEP" e
+  "SESSÕES (ÁSIA/LONDRES/NY)" — entram no preset "Modo Inteligência"
+  (leitura de mercado/estrutura, mesma lógica das camadas anteriores),
+  registradas em `KNOWN_UNCOVERED_LAYERS` (`layer-relevance.test.ts`) —
+  mesmo gap honesto documentado que `liquidation_heatmap` já tinha
+  (§6.41): visíveis por padrão em modo automático via fallback
+  `?.relevant ?? true`, cobertura própria do Relevance Engine fica para
+  uma rodada dedicada.
+
+**Testes**: `tsc --noEmit` limpo · **111 arquivos / 1845 testes** (100%,
++11 novos: 4 para `sweptPrices`, 7 para `computeSessionBoundaries`) ·
+`npm run build` ok · verificação Playwright ao vivo (boot limpo, painel
+"Camadas do Gráfico" mostrando as 2 camadas novas + as 16 anteriores sem
+regressão, toggle clicado sem crash, zero erro de console fora do ruído
+de rede conhecido do sandbox).
+
+**Backlog honesto desta entrada**: Etapas 2-9, 11-21 completas (a auditoria
+acima é a Etapa 1; Etapa 10 tem só a fatia 1 de 6 conceitos, as outras 4
+seguem AUSENTES); barra populada de sweep/sessão não pôde ser vista ao
+vivo com dado real neste sandbox sem egress a Binance (mesma limitação
+conhecida de toda a trilha, lógica coberta por 11 testes reais);
+discrepância MEXC/Binance da Etapa 11 aguardando decisão do Operador;
+cobertura do Relevance Engine para as 3 camadas sem regra própria
+(`liquidation_heatmap`/`liquidity_sweep`/`market_sessions`) continua uma
+rodada própria futura.
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

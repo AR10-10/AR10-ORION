@@ -52,6 +52,7 @@ import { VolumeProfilePlugin } from "./VolumeProfilePlugin";
 // responsabilidade com VolumeProfilePlugin (barras à esquerda vs. à
 // direita, zero sobreposição visual).
 import { LiquidationHeatmapPlugin } from "./LiquidationHeatmapPlugin";
+import { MarketSessionBandsPlugin } from "./MarketSessionBandsPlugin";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
 import { TradePlanZonePlugin } from "./TradePlanZonePlugin";
@@ -95,6 +96,7 @@ import type { DirectionalLineState } from "../nexus/vwap-state";
 // Ordem "Ciborgue Vivo" §1: BOS/CHOCH real (bos-choch-engine.js via
 // engine-bridge.ts's computeBosChoch) — mesmo tipo que StructureBreakMarkersPlugin usa.
 import type { StructureBreak, LiquidationEvent } from "../engine-bridge";
+import type { TrapSignal } from "../nexus/trap-detection";
 // Auditoria do painel do gráfico: "canais de tendência", gap real já
 // documentado em rodadas anteriores — ver cabeçalho de
 // nexus/trend-channel-engine.ts para a definição real (Linear Regression
@@ -181,6 +183,12 @@ export const CHART_LAYER_IDS = [
   "harmonics",
   "equal_highs_lows",
   "liquidation_heatmap",
+  // EPC OMEGA FINAL, Etapa 10 (Novas Camadas Institucionais): sweep real
+  // (trap-detection.ts, antes sem marca própria — a zona EQH/EQL varrida
+  // só sumia da tela) + sessão institucional real (market-session.ts,
+  // antes só texto no header).
+  "liquidity_sweep",
+  "market_sessions",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -201,6 +209,8 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   harmonics: true,
   equal_highs_lows: true,
   liquidation_heatmap: true,
+  liquidity_sweep: true,
+  market_sessions: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -224,6 +234,8 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   harmonics: true,
   equal_highs_lows: true,
   liquidation_heatmap: true,
+  liquidity_sweep: true,
+  market_sessions: true,
 };
 
 interface EnhancedChartProps {
@@ -357,6 +369,12 @@ interface EnhancedChartProps {
   // componente nunca recalcula nada. Optional/fail-closed: ausente =>
   // nenhuma barra desenhada, igual a qualquer outra camada opcional acima.
   liquidations?: LiquidationEvent[];
+  // EPC OMEGA FINAL, Etapa 10 ("Liquidity Sweep: captura/direção/
+  // absorção"): mesmos TrapSignal[] já reais (trap-detection.ts, via
+  // useTrapSignalsSnapshot) que os widgets de texto já mostravam — o
+  // canvas nunca tinha ganhado sua própria marca no preço exato do sweep.
+  // Optional/fail-closed: ausente => nenhuma price line de sweep.
+  traps?: TrapSignal[];
   symbol?: string | null;
 }
 
@@ -449,6 +467,7 @@ export function EnhancedChart_110_Percent({
   vwapState,
   nexusLineState,
   liquidations,
+  traps,
   symbol,
   layerVisibility,
   emaPeriod,
@@ -461,6 +480,11 @@ export function EnhancedChart_110_Percent({
   const supportLineRef = useRef<IPriceLine | null>(null);
   const resistanceLineRef = useRef<IPriceLine | null>(null);
   const zoneLinesRef = useRef<IPriceLine[]>([]);
+  // EPC OMEGA FINAL, Etapa 10: price lines do sweep real (TrapSignal.
+  // sweptPrices) — ref PRÓPRIA, nunca reusa zoneLinesRef (ciclos de
+  // limpeza/redesenho independentes, mesma separação que support/
+  // resistance já têm entre si).
+  const sweepLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
   const tradePlanLinesRef = useRef<IPriceLine[]>([]);
   // EPC §5/§6 (continuação): linhas do fallback do Core Engine
@@ -778,6 +802,7 @@ export function EnhancedChart_110_Percent({
       supportLineRef.current = null;
       resistanceLineRef.current = null;
       zoneLinesRef.current = [];
+      sweepLinesRef.current = [];
       fibLinesRef.current = [];
       tradePlanLinesRef.current = [];
       scenarioLinesRef.current = [];
@@ -963,6 +988,38 @@ export function EnhancedChart_110_Percent({
       );
     });
   }, [liquidityZones, visibility.equal_highs_lows]);
+
+  // EPC OMEGA FINAL, Etapa 10 ("Liquidity Sweep: captura/direção/
+  // absorção"): auditoria da Etapa 1 encontrou trap-detection.ts real e já
+  // corroborando sweeps (STOP_HUNT_TOPO/FUNDO), mas a zona EQH/EQL varrida
+  // simplesmente some do bloco acima (filtro !swept) sem deixar rastro do
+  // momento do sweep — mesmo mecanismo de price line, cor âmbar própria
+  // (nunca usada por EQH/EQL roxo nem OB/FVG verde/vermelho), preço real
+  // de TrapSignal.sweptPrices (zero recálculo, mesmo dado que a zona já
+  // tinha antes de sumir).
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    sweepLinesRef.current.forEach((line) => series.removePriceLine(line));
+    sweepLinesRef.current = [];
+    if (!visibility.liquidity_sweep) return;
+
+    (traps ?? []).forEach((t) => {
+      if (t.kind !== "STOP_HUNT_TOPO" && t.kind !== "STOP_HUNT_FUNDO") return;
+      t.sweptPrices.forEach((price) => {
+        sweepLinesRef.current.push(
+          series.createPriceLine({
+            price,
+            color: "rgba(255, 191, 0, 0.85)",
+            lineWidth: 1,
+            lineStyle: LineStyle.Solid,
+            axisLabelVisible: false,
+            title: `⚡ SWEEP ${t.kind === "STOP_HUNT_TOPO" ? "↑" : "↓"} ${Math.round(t.confidence * 100)}%`,
+          }),
+        );
+      });
+    });
+  }, [traps, visibility.liquidity_sweep]);
 
   // V-MAX Fase 1 (fechamento do §3.1): alimenta a série de CVD com o
   // histórico REAL da store (mesmo orderflowHistory do heatmap — um dado,
@@ -1868,6 +1925,16 @@ export function EnhancedChart_110_Percent({
           series={chartReady?.series ?? null}
           liquidations={liquidations ?? []}
           symbol={symbol ?? null}
+        />
+      )}
+      {/* EPC OMEGA FINAL, Etapa 10 (Institutional Session Engine): mesmo
+         array `data` que os overlays acima já usam — computeSessionBoundaries
+         é puro/derivado, zero prop nova de App.tsx além do que já existe. */}
+      {visibility.market_sessions && (
+        <MarketSessionBandsPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
         />
       )}
       {/* Neural Market Aura: the conviction corridor, mounted BEFORE the

@@ -2,9 +2,14 @@
 
 Codinome interno: `AR10_CYBORG_FUSION_RESEARCH_QUARANTINE_V1`.
 
-**Status desta árvore: apenas os 4 engines graduados + 1 utilitário
+**Status desta árvore: apenas os 5 engines graduados + 1 utilitário
 compartilhado abaixo são ACTIVE_READ_ONLY. Todo o restante foi excluído em
 2026-06-30 (purge de código morto).**
+
+**Correção (EPC OMEGA FINAL, Etapa 1, 2026-07-27): este resumo dizia "4
+engines" desde antes de `bos-choch-engine.js` graduar (2026-07-12) e nunca
+foi atualizado — gap de documentação puro, a tabela abaixo sempre esteve
+correta com 5 entradas ACTIVE_READ_ONLY.**
 
 **Correção (Auditoria Mestra 360°, secao 4 / remediação item 2, 2026-07-03):
 `fvg-order-block-engine.js` e `lorentzian-classifier.js` já estavam
