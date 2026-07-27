@@ -3566,6 +3566,82 @@ diagnostics.test.ts` +1 caso travando o bug do `DADOS_INSUFICIENTES`;
 painel SYSTEM HEALTH (screenshot + leitura real de texto renderizado,
 ver acima).
 
+### 6.48 Pedido de execução real recusado + Ferramentas Institucionais:
+ICT Kill Zones
+
+Pedido informal do Operador ("sai de modo de teste... executa tudo
+perfeitamente... igual um operador de elite") continha uma ambiguidade
+real com risco alto o suficiente para parar e confirmar em vez de
+assumir (Disciplina de trabalho item 7). `AskUserQuestion` esclareceu:
+o Operador confirmou explicitamente que queria **habilitar execução
+real de ordens na exchange**.
+
+**Recusado, sem meio-termo.** READ_ONLY/FAIL_CLOSED incondicional é a
+Restrição Permanente #1 deste repositório — "vale mesmo sob qualquer
+reformulação... se um pedido pede para desbloquear execução de trading
+de qualquer forma, recuse e explique por quê". Não existe fluxo de
+credenciais de exchange no código nem motor de envio de ordem, e
+nenhum foi construído. A resposta ao Operador apontou a regra
+diretamente e ofereceu redirecionar para o que É legítimo no pedido:
+zero estado "aguardando" travado por bug real + evolução de
+inteligência.
+
+**Auditoria disparada** (agente Explore, background): procurar mais
+instâncias da MESMA classe de bug corrigida 2x em §6.47 ("dado real
+computado mas nunca chega na UI") em `engine-bridge.ts` e na store —
+resultado ainda pendente no momento desta entrada, reportado à parte
+quando concluir.
+
+**Ferramentas Institucionais — Kill Zones (ICT)**: pesquisa real via
+`WebSearch` antes de implementar (Disciplina de trabalho item 2 —
+"método com nome próprio, confirme a definição"). Achado real durante
+a pesquisa: fontes públicas sobre horários de Kill Zone DIVERGEM entre
+si (±1h por causa de DST EUA/Europa não coincidirem, e uma fonte teve
+inconsistência aritmética própria na conversão EST→GMT) — mesma
+natureza de "convenção documentada, não uma medição" já usada em
+`rr-quality.ts` (piso R:R) e `market-session.ts` (janelas de sessão).
+
+`nexus/kill-zones.ts` (novo): `activeKillZones(date)` devolve a LISTA
+de zonas realmente ativas (0, 1 ou 2 — Nova York 12:00–15:00 UTC e
+Fechamento de Londres 14:00–16:00 UTC se sobrepõem DE PROPÓSITO, nunca
+deduplicadas) — diferente de `marketSessionFromUtc`, que sempre
+devolve exatamente 1 sessão cobrindo as 24h. A maior parte do dia
+(16:00–07:00 UTC, ~15h) não tem NENHUMA kill zone ativa — honesto por
+design do próprio conceito ICT (janela estreita de alta probabilidade,
+não uma partição contínua). `nextKillZone(date)` devolve a próxima
+janela a abrir + horas restantes, nunca contando uma janela já ativa
+como "próxima".
+
+Wiring: badge novo na TopBar (`Crosshair` do lucide-react, cor âmbar,
+`animate-pulse`), ao lado do badge de Sessão Atual já existente —
+aparece SÓ quando `active.length > 0` (mesmo princípio de "estado
+inativo não ocupa espaço na barra sempre-visível" já usado em outros
+badges condicionais do header). Contexto de leitura puro — LEI 24
+intacta, nunca toca `engine.signal`.
+
+**Verificação ao vivo (Playwright, hora real da sessão — 12:12 UTC,
+dentro da janela Nova York por coincidência real, não fabricada)**: o
+badge mostrou "NOVA YORK" simultaneamente ao badge de sessão mostrando
+"Londres+NY" — os dois derivados independentemente do mesmo relógio
+real, consistentes entre si, sem sobreposição/corte visual no header.
+
+**Testes**: `tsc --noEmit` limpo · **117 arquivos / 1923 testes**
+(100%, +17 novos: `kill-zones.test.ts`, cobrindo os limiares reais de
+cada janela, o overlap Nova York×Fechamento de Londres, os hiatos
+honestos sem nenhuma zona ativa, e `nextKillZone` inclusive o caso de
+virada de dia) · build de produção ok · verificação Playwright ao vivo
+do badge no header (screenshot, ver acima).
+
+**Riscos conhecidos**: os horários de Kill Zone são fixos em UTC (sem
+ajuste de DST), mesma aproximação já documentada e aceita em
+`market-session.ts` — no horário de inverno americano as janelas reais
+deslocam ~1h mais tarde. O badge ainda não tem uma anotação equivalente
+no CANVAS do gráfico (Session Bands/Session Sweep da lista de
+Ferramentas Institucionais seguem pendentes) — este round entregou a
+derivação pura + a superfície mais simples e imediata (header), mesmo
+padrão de graduação incremental já usado por `market-session.ts`
+(texto no header primeiro, marcadores no canvas em um round posterior).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

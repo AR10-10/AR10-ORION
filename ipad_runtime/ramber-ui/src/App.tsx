@@ -180,6 +180,10 @@ import {
 // display-only — anota, nunca esconde/bloqueia um plano real (LEI 24).
 import { rrFloorSuffix } from "./nexus/rr-quality";
 import { marketSessionFromUtc } from "./nexus/market-session";
+// Ferramentas Institucionais (ADITIVO V-MAX/MED, prioridade #1): ICT Kill
+// Zones — janela ESTREITA de alta probabilidade dentro da sessão, nunca
+// uma 2ª partição de 24h (ver header de kill-zones.ts).
+import { activeKillZones } from "./nexus/kill-zones";
 import { computeHeatScore } from "./nexus/heat-score";
 import { buildNexusDecision, NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./nexus/decision-layer";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
@@ -270,6 +274,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Target,
+  Crosshair,
   Wifi,
   Disc,
   X,
@@ -5104,6 +5109,12 @@ function TopBar({ data }: { data?: PriceState | null }) {
   // ao menos 1x/s pelo tick de preço, então o rótulo nunca fica >1s
   // desatualizado sem precisar de um timer próprio.
   const marketSession = marketSessionFromUtc(new Date());
+  // Ferramentas Institucionais: janela de kill zone real agora (0, 1 ou 2
+  // — Nova York e Fechamento de Londres se sobrepõem de propósito, ver
+  // kill-zones.ts). Mesmo princípio de computação no render que
+  // marketSession já usa acima (TopBar re-renderiza >=1x/s pelo tick de
+  // preço — nunca fica desatualizado sem precisar de timer próprio).
+  const killZones = activeKillZones(new Date());
   const wsLiveNow: boolean = voiceSnapshot?.wsLive === true;
   // Overhaul Cross-Market (Diretriz 2): o rótulo do mercado é passthrough
   // REAL de realCycle.instrumentType (mesmo padrão de wasmVariant) — nunca
@@ -5506,6 +5517,21 @@ function TopBar({ data }: { data?: PriceState | null }) {
                   className="text-[0.5rem] font-bold uppercase tracking-wider text-[#8ab4f8]/70"
                 >
                   {marketSession.label}
+                </span>
+              )}
+              {/* Ferramentas Institucionais: Kill Zone ICT — só aparece
+                  quando uma janela ESTREITA de alta probabilidade está de
+                  fato em curso (a maior parte do dia não tem nenhuma,
+                  honestamente omitido em vez de um estado "inativo" ocupando
+                  espaço na barra sempre-visível). Contexto de leitura, LEI 24
+                  intacta: nunca gera nem altera o sinal do Core Engine. */}
+              {killZones && killZones.active.length > 0 && (
+                <span
+                  title={`Kill Zone ICT ativa agora — janela estreita onde a atividade institucional (varredura de liquidez) historicamente se concentra. Janela fixa em UTC, mesma aproximação de DST da Sessão Atual — nunca finge mais precisão do que existe.`}
+                  className="flex items-center gap-1 text-[0.5rem] font-black uppercase tracking-wider text-[#ffb020] animate-pulse"
+                >
+                  <Crosshair size={10} />
+                  {killZones.active.map((z) => z.label.replace("Kill Zone · ", "")).join(" + ")}
                 </span>
               )}
             </div>
