@@ -2900,25 +2900,111 @@ sessões anteriores, só a FONTE do dado mudou.
 consumidores WidgetContext→store (§6.36); heatmap de liquidação no
 canvas + Pitchfork + Elliott simplificado (Fase 8, §6.38).
 
+### 6.41 OMEGA CORE V-MAX — Fase 8.1: heatmap real de liquidação no canvas
+
+Retoma a pendência flagada em §6.38/§6.40 ("Heatmap de liquidação: feed
+real já existe... nunca um heatmap de intensidade por nível de preço no
+canvas").
+
+**Honestidade retrospectiva (achado antes de construir)**: o feed real
+(`startRealLiquidationFeed`, stream `!forceOrder@arr` da Binance) só tem
+eventos DISCRETOS de liquidações que JÁ aconteceram — sem REST
+equivalente, sem seed histórico. Isto **não é** o tipo de "heatmap de
+liquidação preditivo" que produtos como Coinglass anunciam (mapa de onde
+posições alavancadas SERIAM liquidadas) — esse tipo exige distribuição
+real de open interest por alavancagem, dado privado que nenhuma exchange
+publica. O que foi construído é honestamente retrospectivo: densidade
+real de liquidações já executadas nesta sessão, nunca uma previsão.
+Documentado explicitamente no cabeçalho de `nexus/liquidation-heatmap.ts`
+e do plugin, para nenhum futuro leitor confundir os dois.
+
+**Entregue**:
+- `nexus/liquidation-heatmap.ts` (+ 15 testes) — `computeLiquidationHeatmap`
+  filtra o feed exchange-wide para o símbolo ativo (`${symbol}USDT`,
+  mesma convenção real de `bybit-futures.ts`/`binance-futures-public.js`),
+  bucketiza por preço (16 buckets, parâmetro documentado — mais grosso
+  que o Volume Profile de propósito, já que liquidações são reais mas
+  esparsas), soma `notionalUsd` real por lado (LONG/SHORT). Fail-closed
+  com `MIN_EVENTS_FOR_HEATMAP=3` — nunca chama 1-2 pontos isolados de
+  "heatmap".
+- `chart/LiquidationHeatmapPlugin.tsx` — mesma arquitetura já provada
+  (canvas próprio, dirty-flag+rAF, `series.priceToCoordinate` real, fio
+  de seda). Barras à ESQUERDA (Volume Profile já ancora à direita) — de
+  propósito, para os dois heatmaps por preço nunca se sobreporem
+  visualmente (FASE 4, "um objeto gráfico por evento real). Cada barra é
+  2 segmentos empilhados (LONG verde + SHORT vermelho, mesma paleta de
+  sempre) — magnitude real E composição real no mesmo traço.
+- 16ª camada do painel "Camadas do Gráfico" — rótulo deliberado
+  "LIQUIDAÇÕES FORÇADAS" (reaproveita o termo já usado no painel de lista
+  real "Forced Liquidations"), nunca "LIQUIDATION HEATMAP" — colidiria
+  com "LIQUIDITY HEATMAP" (`order_flow_heatmap`, já existente, 2 linhas
+  acima no mesmo painel) e confundiria qual camada o Operador liga/
+  desliga. Entra no preset "Modo Inteligência" (leitura de mercado/
+  estrutura, nunca específica do plano ativo), nunca no "Modo
+  Operacional" (deliberadamente enxuto).
+- Retenção do feed subiu de 30 para 500 eventos (exchange-wide) — 30
+  eventos de TODOS os símbolos raramente sobravam o suficiente para UM
+  símbolo específico após o filtro; sem seed histórico, reter mais é a
+  única forma real de dar densidade ao heatmap sem fabricar nada. A lista
+  "Forced Liquidations" continua mostrando só os 8 mais recentes,
+  comportamento inalterado.
+
+**Bug real encontrado e corrigido no mesmo commit (achado pela própria
+disciplina de verificação Playwright, não pela suíte)**: `tsc`/`vitest`/
+`build` ficaram limpos, mas o app quebrava ao vivo —
+`effectiveChartLayerVisibility` (App.tsx) fazia
+`layerRelevance[id].relevant` sem guarda; `computeLayerRelevance`
+(layer-relevance.ts) só cobre as 15 camadas com regra própria, então
+`liquidation_heatmap` (nova, em modo automático por padrão) vinha
+`undefined` e quebrava o render inteiro (`Cannot read properties of
+undefined`). Corrigido com o MESMO fallback que `ChartLayersPanel` já
+usava (`relevance?.relevant ?? true`) — uma camada nova sem regra própria
+de relevância fica visível por padrão em modo automático, nunca derruba
+o app. `layer-relevance.test.ts` foi atualizado para registrar
+`liquidation_heatmap` como gap CONHECIDO (não coberto pelo Relevance
+Engine ainda — cobri-lo exigiria passar o `LiquidationHeatmapResult`
+inteiro para dentro de `LayerRelevanceInput`, escopo maior que "adicionar
+a camada"), e um teste de regressão novo trava o fallback
+`?.relevant ?? true` na própria fonte para este bug nunca voltar
+silenciosamente.
+
+**Testes**: `tsc --noEmit` limpo · **111 arquivos / 1834 testes** (100%)
+· `npm run build` ok · `audit-header-maxcontent.mjs` 11 viewports CLEAN
+(rodado DEPOIS da correção do crash — a primeira tentativa, antes da
+correção, travou em timeout esperando o gráfico renderizar, exatamente o
+sintoma do bug acima) · verificação Playwright ao vivo (boot limpo,
+painel "Camadas do Gráfico" mostrando "LIQUIDAÇÕES FORÇADAS" distinto de
+"LIQUIDITY HEATMAP", screenshot capturado).
+
+**Backlog que continua real**: uma barra POPULADA do heatmap (com
+eventos reais do símbolo ativo) não pôde ser vista ao vivo neste
+ambiente sem egress real a Binance — lógica coberta por 15 testes reais;
+Pitchfork e Elliott simplificado (Fase 8, ainda precisam de pesquisa real
+de metodologia); migração de consumidores WidgetContext→store (§6.36).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
-diretiva) — cobre §6.35 a §6.40 em conjunto
+diretiva) — cobre §6.35 a §6.41 em conjunto
 
 - **Arquivos alterados**: ver os commits desta trilha (`aa88134` e
   anteriores citados em §6.35; `ed3f4db` FASE 0/1; `e482fd2` FASE 3-6;
-  FASE 7-9; Completar Fase 7 — scanner/painel/clique; + o commit desta
-  entrega, Fase 5 fechamento — correção de contrato + visual). Novos
-  módulos puros: `nexus/stage-runner.ts`, `nexus/confluence-corridor.ts`,
-  `nexus/radar-qualification.ts`, `nexus/radar-universe.ts`. Fatias
-  novas na store: `smc`, `cvd`, `orderflowSignals`, `confluenceCorridor`,
-  `radarCandidates`. `engine-bridge.ts` ganhou `scanRadarCandidate()`
-  (fetch real + motores puros já existentes); `App.tsx` ganhou o efeito
-  de scan em lote, o painel "OPORTUNIDADES", o 3º entry point na SideBar,
-  e agora `ChartWidget` lê `confluenceCorridor` (seletor direto da store)
-  para a largura da Neural Market Aura; `confluence-engine.ts` teve seu
-  tipo de entrada de multi-timeframe afrouxado para um formato estrutural
-  mínimo; `configs/asset-universe.default.json` teve sua própria
-  metadata (`status`/`wired_into_live_app`/`note`) corrigida para
-  refletir que agora É lido de verdade (achado honesto, ver §6.39).
+  FASE 7-9; Completar Fase 7 — scanner/painel/clique; Fase 5 fechamento —
+  correção de contrato + visual; + o commit desta entrega, Fase 8.1 —
+  heatmap de liquidação). Novos módulos puros: `nexus/stage-runner.ts`,
+  `nexus/confluence-corridor.ts`, `nexus/radar-qualification.ts`,
+  `nexus/radar-universe.ts`, `nexus/liquidation-heatmap.ts`. Novo plugin
+  de canvas: `chart/LiquidationHeatmapPlugin.tsx` (16ª camada do painel
+  "Camadas do Gráfico"). Fatias novas na store: `smc`, `cvd`,
+  `orderflowSignals`, `confluenceCorridor`, `radarCandidates`.
+  `engine-bridge.ts` ganhou `scanRadarCandidate()` (fetch real + motores
+  puros já existentes); `App.tsx` ganhou o efeito de scan em lote, o
+  painel "OPORTUNIDADES", o 3º entry point na SideBar, o toggle
+  "LIQUIDAÇÕES FORÇADAS", o teto de retenção do feed de liquidação subiu
+  de 30 para 500, e o crash real de `effectiveChartLayerVisibility` foi
+  corrigido (fallback `?.relevant ?? true`); `confluence-engine.ts` teve
+  seu tipo de entrada de multi-timeframe afrouxado para um formato
+  estrutural mínimo; `configs/asset-universe.default.json` teve sua
+  própria metadata (`status`/`wired_into_live_app`/`note`) corrigida
+  para refletir que agora É lido de verdade (achado honesto, ver §6.39).
 - **O que foi unificado/removido**: fileira de 12 botões redundante do
   header (SmartOmnibox já cobria); `obstacleSuffix` duplicado entre o
   Trade Plan real e o fallback do Núcleo (agora 1 função compartilhada);
@@ -2946,29 +3032,34 @@ diretiva) — cobre §6.35 a §6.40 em conjunto
   `confluenceCorridor.intensity` já pronto. Migração completa dos
   consumidores antigos (WidgetContext) para os seletores da store
   permanece pendência registrada (§6.36), não uma violação nova.
-- **Backlog flagado (não inventado)**: heatmap de liquidação no canvas;
-  Pitchfork; Elliott simplificado; "liquidity sweep projection"/
-  "institutional volume zones" como conceitos distintos (hoje
-  parcialmente cobertos por motores já reais, não expandidos); migração
-  de consumidores da FASE 1.1 (§6.36). O visual do Corredor de
-  Confluência no canvas e a sobreposição `confluence-corridor.ts` ×
-  `ConvictionReading` — ambos flagados em §6.39 — foram entregues e
-  corrigidos nesta rodada (§6.40), não continuam pendentes.
+- **Backlog flagado (não inventado)**: Pitchfork; Elliott simplificado;
+  "liquidity sweep projection"/"institutional volume zones" como
+  conceitos distintos (hoje parcialmente cobertos por motores já reais,
+  não expandidos); migração de consumidores da FASE 1.1 (§6.36);
+  cobertura do Relevance Engine para `liquidation_heatmap` (gap
+  documentado, §6.41). O visual do Corredor de Confluência no canvas e a
+  sobreposição `confluence-corridor.ts` × `ConvictionReading` (§6.39) e o
+  heatmap real de liquidação no canvas (§6.38) — todos entregues e
+  corrigidos nas rodadas §6.40/§6.41, não continuam pendentes.
 - **Pendências de produto**: `computeDrawdownPct`/paper-trading —
   confirmado pertencer a outro projeto do Operador, não a este
   repositório.
 - **Conformidade com todas as leis**: FASE 0 já auditou e confirmou (LEI
   24/Permanentes 1-9) — reconfirmado nesta entrega que nenhum módulo
-  novo (Stage Runner, Corredor, Radar/scanner/painel) emite ou altera
-  LONG/SHORT/WAIT/Entry/Stop/Target; todos são observadores/
-  qualificadores read-only. `riskGated` do scanner de fundo é sempre
-  `false` honestamente rotulado (nenhum Conselho roda para candidatos em
-  segundo plano) — nunca fabricado como risco liberado de verdade.
-- **Testes executados**: `tsc --noEmit` limpo · **110 arquivos / 1817
+  novo (Stage Runner, Corredor, Radar/scanner/painel, Liquidation
+  Heatmap) emite ou altera LONG/SHORT/WAIT/Entry/Stop/Target; todos são
+  observadores/qualificadores read-only. `riskGated` do scanner de fundo
+  é sempre `false` honestamente rotulado (nenhum Conselho roda para
+  candidatos em segundo plano) — nunca fabricado como risco liberado de
+  verdade. O heatmap de liquidação é explicitamente retrospectivo (ver
+  §6.41) — nenhum rótulo/comentário o apresenta como preditivo.
+- **Testes executados**: `tsc --noEmit` limpo · **111 arquivos / 1834
   testes** (100%) · `npm run build` ok · `audit-header-maxcontent.mjs` 11
-  viewports CLEAN via build+preview real (§6.39) · verificação Playwright
-  ao vivo do painel "OPORTUNIDADES" (§6.39) e do boot pós-refatoração do
-  Corredor de Confluência (§6.40, zero erro de console novo).
+  viewports CLEAN via build+preview real (§6.39, §6.41) · verificação
+  Playwright ao vivo do painel "OPORTUNIDADES" (§6.39), do boot
+  pós-refatoração do Corredor de Confluência (§6.40) e do painel
+  "Camadas do Gráfico" com "LIQUIDAÇÕES FORÇADAS" pós-correção do crash
+  de `effectiveChartLayerVisibility` (§6.41).
 
 ---
 

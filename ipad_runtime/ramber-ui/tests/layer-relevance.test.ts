@@ -46,14 +46,38 @@ const BASE: LayerRelevanceInput = {
   hasOrderBook: false,
 };
 
-describe('RELEVANCE_LAYER_IDS espelha exatamente CHART_LAYER_IDS (EnhancedChart_110_Percent.tsx) — sem drift silencioso', () => {
-  it('as 15 chaves batem 1:1, mesma ordem não é exigida mas o conjunto sim', () => {
+describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent.tsx) — sem drift silencioso além do gap documentado', () => {
+  // OMEGA CORE V-MAX Fase 8.1: "liquidation_heatmap" é o único gap real e
+  // deliberado — a camada existe e desenha (LiquidationHeatmapPlugin),
+  // mas ainda não tem uma regra própria de relevância automática (exigiria
+  // passar o LiquidationHeatmapResult inteiro para dentro de
+  // LayerRelevanceInput, escopo maior que "adicionar a camada"). Em modo
+  // automático ela cai no fallback já real do ChartLayersPanel
+  // (`relevance?.relevant ?? true` — sempre visível), nunca quebra nem
+  // finge uma regra que não existe. Qualquer OUTRO drift (uma camada nova
+  // esquecida sem sequer entrar nesta lista de exceções) ainda derruba
+  // este teste.
+  const KNOWN_UNCOVERED_LAYERS = new Set(['liquidation_heatmap']);
+
+  it('toda chave de CHART_LAYER_IDS está em RELEVANCE_LAYER_IDS OU na lista de gaps conhecidos — nunca esquecida silenciosamente', () => {
     const chartSrc = read('../src/chart/EnhancedChart_110_Percent.tsx');
     const m = chartSrc.match(/export const CHART_LAYER_IDS = \[([\s\S]*?)\] as const;/);
     expect(m, 'CHART_LAYER_IDS não encontrado em EnhancedChart_110_Percent.tsx').not.toBeNull();
     const chartIds = Array.from(m![1].matchAll(/"([a-z_]+)"/g)).map((x) => x[1]);
-    expect(new Set(chartIds)).toEqual(new Set(RELEVANCE_LAYER_IDS));
-    expect(chartIds.length).toBe(15);
+    const relevanceSet = new Set<string>(RELEVANCE_LAYER_IDS);
+    for (const id of chartIds) {
+      expect(relevanceSet.has(id) || KNOWN_UNCOVERED_LAYERS.has(id), `camada "${id}" nem em RELEVANCE_LAYER_IDS nem nos gaps conhecidos`).toBe(true);
+    }
+    expect(chartIds.length).toBe(16);
+  });
+
+  it('toda chave de RELEVANCE_LAYER_IDS é uma camada real de CHART_LAYER_IDS — nunca uma chave órfã', () => {
+    const chartSrc = read('../src/chart/EnhancedChart_110_Percent.tsx');
+    const m = chartSrc.match(/export const CHART_LAYER_IDS = \[([\s\S]*?)\] as const;/);
+    const chartIds = new Set(Array.from(m![1].matchAll(/"([a-z_]+)"/g)).map((x) => x[1]));
+    for (const id of RELEVANCE_LAYER_IDS) {
+      expect(chartIds.has(id), `RELEVANCE_LAYER_IDS tem "${id}" que não existe mais em CHART_LAYER_IDS`).toBe(true);
+    }
     expect(RELEVANCE_LAYER_IDS.length).toBe(15);
   });
 });

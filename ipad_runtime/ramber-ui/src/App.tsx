@@ -484,6 +484,13 @@ const RADAR_SCAN_BATCH_DELAY_MS = 2000;
 // segundo plano, nunca o caminho crítico do sinal (LEI 24).
 const RADAR_SCAN_FULL_CYCLE_MS = 5 * 60_000;
 
+// OMEGA CORE V-MAX (Fase 8.1, heatmap real de liquidação): teto de
+// retenção do feed exchange-wide de liquidações — ver comentário no
+// efeito de startRealLiquidationFeed para o racional completo (o
+// heatmap filtra por símbolo, então precisa de mais história do que a
+// lista "Forced Liquidations" sozinha exigia).
+const LIQUIDATION_RETENTION_CAP = 500;
+
 export type ChartCandle = { time: number; open: number; high: number; low: number; close: number; volume: number };
 
 // Funde o refresh periódico (`fresh`, sempre "os CHART_CANDLE_LIMIT mais
@@ -1560,10 +1567,22 @@ export default function App() {
   // no key — engine-bridge.ts's startRealLiquidationFeed). Exchange-wide,
   // not BTC-only — large forced liquidations anywhere are the real signal
   // this widget shows.
+  //
+  // OMEGA CORE V-MAX Fase 8.1: cap subiu de 30 para
+  // LIQUIDATION_RETENTION_CAP — o heatmap real (nexus/liquidation-heatmap.ts)
+  // filtra este array exchange-wide para SÓ o ativo selecionado, então 30
+  // eventos de TODOS os símbolos raramente sobrariam o suficiente
+  // (MIN_EVENTS_FOR_HEATMAP) para um único ativo. O feed não tem seed
+  // histórico (sem REST equivalente, ver binance-liquidations-stream.js) —
+  // reter mais do que já chegou nesta sessão é a única forma real de dar
+  // ao heatmap mais densidade, sem fabricar nada. Custo desprezível
+  // (objetos pequenos, mesma ordem de grandeza de MAX_CHART_HISTORY). A
+  // lista "Forced Liquidations" continua mostrando só os 8 mais recentes
+  // (.slice(0,8)), comportamento inalterado.
   useEffect(() => {
     const stop = startRealLiquidationFeed(
       (event) => {
-        setLiquidations((prev) => [event, ...prev].slice(0, 30));
+        setLiquidations((prev) => [event, ...prev].slice(0, LIQUIDATION_RETENTION_CAP));
       },
       (state) => setLiquidationState(state),
     );
@@ -3490,6 +3509,10 @@ const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>([
   "premium_discount",
   "harmonics",
   "equal_highs_lows",
+  // OMEGA CORE V-MAX Fase 8.1: mesma lógica — densidade de liquidações
+  // reais é leitura de mercado/estrutura, nunca específica do plano
+  // ativo, então entra aqui, nunca no Operacional.
+  "liquidation_heatmap",
 ]);
 
 const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
@@ -3508,6 +3531,12 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "premium_discount", label: "PREMIUM / DISCOUNT" },
   { id: "harmonics", label: "HARMÔNICOS" },
   { id: "equal_highs_lows", label: "EQH / EQL" },
+  // OMEGA CORE V-MAX Fase 8.1: rótulo deliberadamente "LIQUIDAÇÕES
+  // FORÇADAS" (mesmo termo já usado no painel de lista real, "Forced
+  // Liquidations") — nunca "LIQUIDATION HEATMAP", que colidiria
+  // visualmente com "LIQUIDITY HEATMAP" (order_flow_heatmap, 2 linhas
+  // acima) e confundiria qual camada o Operador está ligando/desligando.
+  { id: "liquidation_heatmap", label: "LIQUIDAÇÕES FORÇADAS" },
 ];
 
 function ChartLayersPanel() {
@@ -6451,7 +6480,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend } = useContext(WidgetContext) || {};
+  const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};
   // OMEGA CORE V-MAX Fase 5 (Corredor de Confluência): a Neural Market
   // Aura lia direto convictionReading (só o pool de 3 subsistemas) para a
   // largura do corredor — mesma leitura que confluenceCorridor.intensity
@@ -6706,7 +6735,15 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
     const autoMode: ChartLayerVisibility = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
     const manual: ChartLayerVisibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
     return CHART_LAYER_IDS.reduce((acc, id) => {
-      acc[id] = autoMode[id] ? layerRelevance[id].relevant : manual[id];
+      // Achado real (crash em runtime, Fase 8.1): computeLayerRelevance só
+      // cobre as 15 camadas com regra própria — uma camada nova em modo
+      // automático sem cobertura ainda (ex.: liquidation_heatmap, gap
+      // documentado em layer-relevance.test.ts) fazia layerRelevance[id]
+      // vir undefined, e ".relevant" quebrava o render inteiro. Mesmo
+      // fallback já usado em ChartLayersPanel (`relevance?.relevant ??
+      // true`) — camada sem regra própria fica visível por padrão em modo
+      // automático, nunca derruba o app.
+      acc[id] = autoMode[id] ? (layerRelevance[id]?.relevant ?? true) : manual[id];
       return acc;
     }, {} as ChartLayerVisibility);
   }, [chartLayerAutoMode, chartLayerVisibility, layerRelevance]);
@@ -6791,6 +6828,8 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             decision={nexusDecision ?? null}
             vwapState={vwapCtx?.state ?? null}
             nexusLineState={nlState ?? null}
+            liquidations={liquidations ?? []}
+            symbol={selectedAsset ?? null}
             layerVisibility={effectiveChartLayerVisibility}
             emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}

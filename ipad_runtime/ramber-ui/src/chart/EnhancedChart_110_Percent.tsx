@@ -47,6 +47,11 @@ import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
 // V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
 // barras à direita — dado direto da store (Fase 1.3), ver header do plugin.
 import { VolumeProfilePlugin } from "./VolumeProfilePlugin";
+// OMEGA CORE V-MAX Fase 8.1: heatmap real de liquidação — mesma
+// arquitetura de overlay, ver header do plugin para a divisão de
+// responsabilidade com VolumeProfilePlugin (barras à esquerda vs. à
+// direita, zero sobreposição visual).
+import { LiquidationHeatmapPlugin } from "./LiquidationHeatmapPlugin";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
 import { TradePlanZonePlugin } from "./TradePlanZonePlugin";
@@ -89,7 +94,7 @@ import { computeNexusLineSeries } from "../nexus/nexus-line";
 import type { DirectionalLineState } from "../nexus/vwap-state";
 // Ordem "Ciborgue Vivo" §1: BOS/CHOCH real (bos-choch-engine.js via
 // engine-bridge.ts's computeBosChoch) — mesmo tipo que StructureBreakMarkersPlugin usa.
-import type { StructureBreak } from "../engine-bridge";
+import type { StructureBreak, LiquidationEvent } from "../engine-bridge";
 // Auditoria do painel do gráfico: "canais de tendência", gap real já
 // documentado em rodadas anteriores — ver cabeçalho de
 // nexus/trend-channel-engine.ts para a definição real (Linear Regression
@@ -175,6 +180,7 @@ export const CHART_LAYER_IDS = [
   "premium_discount",
   "harmonics",
   "equal_highs_lows",
+  "liquidation_heatmap",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -194,6 +200,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   premium_discount: true,
   harmonics: true,
   equal_highs_lows: true,
+  liquidation_heatmap: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -216,6 +223,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   premium_discount: true,
   harmonics: true,
   equal_highs_lows: true,
+  liquidation_heatmap: true,
 };
 
 interface EnhancedChartProps {
@@ -343,6 +351,13 @@ interface EnhancedChartProps {
   // §20). Optional/fail-closed: ausente => NEUTRAL (visual de sempre).
   vwapState?: DirectionalLineState | null;
   nexusLineState?: DirectionalLineState | null;
+  // OMEGA CORE V-MAX Fase 8.1 ("heatmap real de liquidação"): eventos JÁ
+  // reais do feed exchange-wide (App.tsx, startRealLiquidationFeed) +
+  // símbolo ativo — LiquidationHeatmapPlugin filtra/bucketiza, este
+  // componente nunca recalcula nada. Optional/fail-closed: ausente =>
+  // nenhuma barra desenhada, igual a qualquer outra camada opcional acima.
+  liquidations?: LiquidationEvent[];
+  symbol?: string | null;
 }
 
 // Continuidade §6 (hierarquia visual dos alvos) — Diretriz de Evolução
@@ -433,6 +448,8 @@ export function EnhancedChart_110_Percent({
   decision,
   vwapState,
   nexusLineState,
+  liquidations,
+  symbol,
   layerVisibility,
   emaPeriod,
   onRequestOlderCandles,
@@ -1839,6 +1856,18 @@ export function EnhancedChart_110_Percent({
         <VolumeProfilePlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
+        />
+      )}
+      {/* OMEGA CORE V-MAX Fase 8.1: densidade real de liquidações JÁ
+         acontecidas nesta sessão (retrospectivo, nunca preditivo — ver
+         header do plugin), barras à ESQUERDA para nunca sobrepor o Volume
+         Profile acima (à direita). */}
+      {visibility.liquidation_heatmap && (
+        <LiquidationHeatmapPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          liquidations={liquidations ?? []}
+          symbol={symbol ?? null}
         />
       )}
       {/* Neural Market Aura: the conviction corridor, mounted BEFORE the
