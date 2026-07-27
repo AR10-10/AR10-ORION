@@ -133,7 +133,7 @@ describe('EnhancedChart_110_Percent: mounts TradePlanZonePlugin as the topmost o
 describe('App.tsx: threads the real confidenceZone (§16) from context into ChartWidget → EnhancedChart_110_Percent', () => {
   it('ChartWidget destructures confidenceZone from the shared WidgetContext', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('convictionReading, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend } = useContext(WidgetContext) || {};');
+    expect(app).toContain('setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend } = useContext(WidgetContext) || {};');
   });
 
   it('passes it straight through to EnhancedChart_110_Percent — zero recomputation', () => {

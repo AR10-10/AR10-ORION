@@ -357,9 +357,18 @@ describe('OMEGA CORE V-MAX (Fase 1.1): smc/cvd/orderflowSignals — insumos pré
     bus.on('QUANT.CONFLUENCE_CORRIDOR.UPDATED', (p) => received.push(p.reading));
     const reading = computeConfluenceCorridor({
       direction: 'LONG',
-      opinionMass: { long: 0.7, short: 0.2, neutral: 0.1 },
-      institutionalScore: 75,
-      multiTimeframe: null,
+      conviction: {
+        status: 'OK',
+        reason: null,
+        coreDirection: 'LONG',
+        conviction: 0.75,
+        convictionAdjusted: null,
+        verdict: 'CONFIRMS',
+        agreeingCount: 1,
+        totalReadable: 1,
+        members: [],
+        computedAt: Date.now(),
+      },
       activeObstacleCount: 0,
     });
     expect(reading.status).toBe('OK'); // sanidade: o motor real produziu uma leitura
@@ -435,9 +444,7 @@ describe('Fiação real no código-fonte: App e Health Monitor obedecem a camada
     expect(idx, 'computação do Corredor de Confluência não encontrada').toBeGreaterThan(-1);
     const block = s.slice(idx, s.indexOf('useEffect(() => {\n    useUnifiedSnapshotStore.getState().setConfluenceCorridor(confluenceCorridor);\n  }, [confluenceCorridor]);', idx) + 200);
     expect(block).toContain('direction: engine?.direction ?? null,');
-    expect(block).toContain('opinionMass: councilFromSnapshot?.opinionMass ?? null,');
-    expect(block).toContain('institutionalScore: institutionalScore?.score ?? null,');
-    expect(block).toContain('multiTimeframe: multiTimeframeForConviction ?? null,');
+    expect(block).toContain('conviction: convictionReading,');
     expect(block).toContain('activeObstacleCount: trackedPlan?.targets?.[0]?.obstacleCount ?? null,');
     expect(block).toContain('useUnifiedSnapshotStore.getState().setConfluenceCorridor(confluenceCorridor);');
   });

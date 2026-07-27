@@ -87,7 +87,7 @@ própria fatia (referência idêntica à escrita na store).
 | `QUANT.SMC.UPDATED` | `{ zones: SmcZonesSnapshot \| null }` (FVG/OB/liquidez, OMEGA CORE V-MAX Fase 1.1) | Organism Orchestrator |
 | `QUANT.CVD.UPDATED` | `{ cvd: number \| null }` (Fase 1.1) | Organism Orchestrator |
 | `QUANT.ORDERFLOW_SIGNALS.UPDATED` | `{ signals: OrderflowSignal[] }` (Fase 1.1) | Organism Orchestrator |
-| `QUANT.CONFLUENCE_CORRIDOR.UPDATED` | `{ reading: ConfluenceCorridorReading \| null }` (Fase 5 — opinionMass+institutionalScore+MTF+obstáculos, zero probabilidade) | Organism Orchestrator |
+| `QUANT.CONFLUENCE_CORRIDOR.UPDATED` | `{ reading: ConfluenceCorridorReading \| null }` (Fase 5, contrato v2 — conviction (ConvictionReading inteira) + obstáculos, zero probabilidade; v1 tinha 4 componentes com dupla contagem real, corrigido — ver SYSTEM_HANDBOOK.md §6.40) | Organism Orchestrator |
 | `BRAIN.COUNCIL.UPDATED` | `{ decision: CouncilDecision \| null }` | Organism Orchestrator |
 | `BRAIN.SCENARIO.UPDATED` | `{ projection: ScenarioProjection \| null }` | Organism Orchestrator |
 | `BRAIN.TRAPS.UPDATED` | `{ traps: TrapSignal[] }` | Organism Orchestrator |
@@ -134,8 +134,12 @@ motores puros já existentes (`analyzeMarketStructure`/
 `analyzeSupportResistance`/`classifyMarketRegime`), monta um `TradePlan`
 real (S/R apenas — sem FVG/OB, custo de fetch extra não vale para
 varredura de fundo) com `riskGated: false` sempre honesto (nenhum
-Conselho roda para candidatos de fundo), e uma confluência-leve (3
-prazos de referência, mesmo `computeConfluenceCorridor` da Fase 5). O
+Conselho roda para candidatos de fundo), e uma confluência-leve: monta
+sua própria `ConvictionReading` "leve" via `buildConvictionReading`
+(confluence-engine.ts, ensemble/council `null` honestos, só o membro
+Multi-Timeframe é legível sobre 3 prazos de referência) e alimenta essa
+leitura inteira em `computeConfluenceCorridor` (Fase 5, contrato v2) —
+zero segunda fórmula de pool, mesmo motor que o ativo selecionado usa. O
 efeito em `App.tsx` orquestra o LOTE (3 candidatos + 2s de respiro, ciclo
 completo a cada 5min, exclui `selectedAsset`) e escreve o resultado
 ranqueado na fatia `radarCandidates` — nenhum dos 2 módulos puros acima

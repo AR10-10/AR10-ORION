@@ -54,7 +54,21 @@
 // nesta cadeia vira probabilidade só por trocar de nome.
 import { buildEnsembleConsensus, opinionFromVote } from '../../../src/consensus/index.js';
 import type { CouncilDecision } from './council';
-import type { MultiTimeframeMatrix } from './multi-timeframe-engine';
+
+// Tipo estrutural mínimo — só os 2 campos que readMultiTimeframeMember
+// de fato lê, nunca o MultiTimeframeMatrix inteiro (mesmo princípio já
+// documentado em confluence-corridor.ts: "não acoplar ao tipo inteiro...
+// não criar uma dependência de import desnecessária"). O MultiTimeframeMatrix
+// real (multi-timeframe-engine.ts) tem MUITO mais campos por prazo
+// (structureLabel/regime/atrPercent/rsi/...) — todos continuam sendo
+// aceitos aqui de graça (um objeto com mais campos que o exigido ainda
+// satisfaz um tipo estrutural menor), mas um leitor "leve" (ex.: o
+// scanner de fundo do Radar/OIH, engine-bridge.ts) pode montar só estes 2
+// campos por prazo sem fabricar os outros 10 só para bater um tipo.
+export interface MultiTimeframeAgreementEntry {
+  status: 'OK' | 'DADOS_INSUFICIENTES';
+  confidenceStance: 'LONG' | 'SHORT' | 'NEUTRAL' | null;
+}
 
 export type CoreActiveDirection = 'LONG' | 'SHORT';
 
@@ -161,13 +175,15 @@ function readCouncilMember(council: CouncilDecision | null, coreDirection: CoreA
  *  concordam com a direção ativa do Core Engine — UM voto (não 6, ver
  *  racional no cabeçalho do arquivo). */
 function readMultiTimeframeMember(
-  matrix: MultiTimeframeMatrix | null,
+  matrix: Record<string, MultiTimeframeAgreementEntry | undefined> | null,
   coreDirection: CoreActiveDirection,
 ): ConfluenceMemberReading {
   if (!matrix) {
     return { id: 'MULTI_TIMEFRAME', agreesWithCore: null, strength: null, detail: 'Matriz Multi-Timeframe ainda sem primeiro ciclo real' };
   }
-  const readings = Object.values(matrix).filter((tf) => tf.status === 'OK' && tf.confidenceStance !== null);
+  const readings = Object.values(matrix).filter(
+    (tf): tf is MultiTimeframeAgreementEntry => !!tf && tf.status === 'OK' && tf.confidenceStance !== null,
+  );
   if (readings.length === 0) {
     return { id: 'MULTI_TIMEFRAME', agreesWithCore: null, strength: null, detail: 'nenhum prazo real com confidence disponível nesta janela' };
   }
@@ -189,7 +205,7 @@ export function buildConvictionReading(input: {
   coreDirection: 'LONG' | 'SHORT' | 'WAIT' | null;
   ensembleConsensus: { status: string; direcao: string; forca: number; forca_ajustada?: number | null } | null;
   council: CouncilDecision | null;
-  multiTimeframe: MultiTimeframeMatrix | null;
+  multiTimeframe: Record<string, MultiTimeframeAgreementEntry | undefined> | null;
   trustScore: number | null;
 }): ConvictionReading {
   const computedAt = Date.now();

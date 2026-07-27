@@ -26,11 +26,11 @@ const realPlan = () =>
   });
 
 const goodConfluence = (intensity: number): ConfluenceCorridorReading => ({
-  contractVersion: 1,
+  contractVersion: 2,
   status: 'OK',
   reason: null,
   intensity,
-  components: { opinionMass: intensity, institutionalScore: intensity, mtfAgreement: intensity, obstacleClearance: intensity },
+  components: { conviction: intensity, obstacleClearance: intensity },
   computedAt: Date.now(),
 });
 
@@ -41,7 +41,7 @@ const BASE: RadarCandidateInput = {
   direction: 'LONG',
   tradePlan: null,
   riskGated: false,
-  confluence: { contractVersion: 1, status: 'DADOS_INSUFICIENTES', reason: 'x', intensity: null, components: { opinionMass: null, institutionalScore: null, mtfAgreement: null, obstacleClearance: null }, computedAt: Date.now() },
+  confluence: { contractVersion: 2, status: 'DADOS_INSUFICIENTES', reason: 'x', intensity: null, components: { conviction: null, obstacleClearance: null }, computedAt: Date.now() },
 };
 
 describe('qualifyRadarCandidate: filtro mínimo real (LEI 24 — nunca recalcula, nunca emite direção)', () => {

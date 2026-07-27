@@ -68,6 +68,14 @@ import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/ind
 // dois, só os alimenta com dado real de OUTROS ativos.
 import { buildTradePlan, type TradePlan, type TradePlanLevelInput } from './nexus/trade-plan';
 import { computeConfluenceCorridor, type ConfluenceCorridorReading } from './nexus/confluence-corridor';
+// Correção real (achado de auditoria ao completar a Fase 7 — CLAUDE.md
+// exige corrigir/reportar mesmo fora do foco direto): confluence-corridor
+// agora consome uma ConvictionReading INTEIRA (nunca os 3 sinais brutos
+// que já vivem dentro dela) — o scanner do Radar monta a SUA própria
+// leitura "leve" (só o membro Multi-Timeframe é legível para um
+// candidato de fundo) através do MESMO buildConvictionReading real que o
+// ativo selecionado usa, nunca uma segunda fórmula de pool.
+import { buildConvictionReading, type MultiTimeframeAgreementEntry } from './nexus/confluence-engine';
 // V-MAX Fase 1.3: derivação pura (HVN/LVN/preço-por-bucket) do Volume
 // Profile computado pelo WASM no quant-worker — ver bloco no fim do arquivo.
 import { detectHvnLvn, bucketMidPrice, type VolumeProfileResult } from './nexus/volume-profile';
@@ -1119,19 +1127,37 @@ export async function scanRadarCandidate(symbol: string, timeframe: string): Pro
       }
     }),
   );
-  const multiTimeframeLite: Record<string, { confidenceStance: 'LONG' | 'SHORT' | null }> | null = mtfEntries.some(
+  // status: 'OK' é honesto para toda entrada aqui — cada prazo de
+  // referência TEVE uma busca/classificação real tentada; confidenceStance
+  // null (regime CONSOLIDACAO ou fetch falho) já é filtrado por
+  // buildConvictionReading independente do status, mesma semântica do
+  // ativo selecionado (readMultiTimeframeMember, confluence-engine.ts).
+  const multiTimeframeLite: Record<string, MultiTimeframeAgreementEntry> | null = mtfEntries.some(
     (d) => d !== null,
   )
     ? Object.fromEntries(
-        RADAR_SCAN_TIMEFRAMES.map((tf, i) => [tf, { confidenceStance: directionFromRegime(mtfEntries[i]) }]),
+        RADAR_SCAN_TIMEFRAMES.map((tf, i) => [tf, { status: 'OK' as const, confidenceStance: directionFromRegime(mtfEntries[i]) }]),
       )
     : null;
 
+  // Conviction "leve": mesmo buildConvictionReading real do ativo
+  // selecionado (confluence-engine.ts) — nunca uma segunda fórmula de
+  // pool. Ensemble/Council ficam null honestamente (nenhum dos dois roda
+  // para candidatos de fundo, ver header do arquivo); só o membro
+  // Multi-Timeframe é legível, então `conviction`/`convictionAdjusted`
+  // saem inteiramente dessa única leitura real — mais fraco que o ativo
+  // ao vivo, nunca fabricado como equivalente.
+  const convictionLite = buildConvictionReading({
+    coreDirection: direction,
+    ensembleConsensus: null,
+    council: null,
+    multiTimeframe: multiTimeframeLite,
+    trustScore: null,
+  });
+
   const confluence = computeConfluenceCorridor({
     direction,
-    opinionMass: null,
-    institutionalScore: null,
-    multiTimeframe: multiTimeframeLite,
+    conviction: convictionLite,
     activeObstacleCount: null,
   });
 

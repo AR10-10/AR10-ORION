@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -2407,27 +2407,26 @@ export default function App() {
   // OMEGA CORE V-MAX Fase 5 (Fusion §5, "Corredor de Confluência" — task
   // já escopada e aprovada pelo Operador numa rodada anterior, mesma ideia
   // visual do "Centro Gravitacional" da diretriz nova): organizador de
-  // contexto puro que cruza 4 sinais JÁ reais e já computados acima
-  // (opinionMass do Conselho, institutionalScore, concordância da Matriz
-  // Multi-Timeframe, obstáculos reais no caminho até o alvo mais próximo
-  // do Trade Plan — trackedPlan é o MESMO useTradePlanSnapshot() que
-  // chartTradePlan em ChartWidget, zero segunda leitura) — zero segunda
-  // matemática de consenso, zero recálculo. Display-only (LEI 24):
-  // direction/obstacleCount chegam já decididos em outro lugar, nunca
-  // recalculados aqui. Visual no canvas ainda NÃO implementado nesta
-  // rodada (decisão deliberada, ver handbook e commit) — a fatia fica
-  // pronta e real na store para o consumidor visual futuro, sem precisar
-  // recomputar nada quando ele existir.
+  // contexto puro que cruza a leitura JÁ real do Conviction Engine
+  // (convictionReading, já computado acima — nunca uma segunda pool de
+  // ensemble/council/multi-timeframe) com obstáculos reais no caminho até
+  // o alvo mais próximo do Trade Plan (trackedPlan é o MESMO
+  // useTradePlanSnapshot() que chartTradePlan em ChartWidget, zero segunda
+  // leitura). Correção de auditoria (completar Fase 7, ver
+  // confluence-corridor.ts): a v1 lia opinionMass/institutionalScore/
+  // multiTimeframe em paralelo, mas institutionalScore já É uma cópia
+  // reescalada de convictionReading.conviction — dupla contagem corrigida
+  // consumindo convictionReading INTEIRO como componente único. Display-
+  // only (LEI 24): direction/obstacleCount chegam já decididos em outro
+  // lugar, nunca recalculados aqui.
   const confluenceCorridor = useMemo(
     () =>
       computeConfluenceCorridor({
         direction: engine?.direction ?? null,
-        opinionMass: councilFromSnapshot?.opinionMass ?? null,
-        institutionalScore: institutionalScore?.score ?? null,
-        multiTimeframe: multiTimeframeForConviction ?? null,
+        conviction: convictionReading,
         activeObstacleCount: trackedPlan?.targets?.[0]?.obstacleCount ?? null,
       }),
-    [engine?.direction, councilFromSnapshot, institutionalScore, multiTimeframeForConviction, trackedPlan],
+    [engine?.direction, convictionReading, trackedPlan],
   );
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setConfluenceCorridor(confluenceCorridor);
@@ -6452,7 +6451,15 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend } = useContext(WidgetContext) || {};
+  const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend } = useContext(WidgetContext) || {};
+  // OMEGA CORE V-MAX Fase 5 (Corredor de Confluência): a Neural Market
+  // Aura lia direto convictionReading (só o pool de 3 subsistemas) para a
+  // largura do corredor — mesma leitura que confluenceCorridor.intensity
+  // já é, agora TAMBÉM ciente de obstáculos estruturais reais no caminho
+  // até o alvo (Fase 5, confluence-corridor.ts). Seletor direto da store
+  // (mesmo padrão de useLayerRelevanceSnapshot já usado neste componente),
+  // nunca uma segunda leitura via WidgetContext para o mesmo dado.
+  const confluenceCorridor = useConfluenceCorridorSnapshot();
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
   // Correção de latência: o MESMO preço real que já alimenta a barra
   // superior (usePriceSnapshot — escrito na store a cada tick do WS,
@@ -6591,11 +6598,17 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       computeAuraReading({
         trackRecord: auraTrackRecord,
         livePrice: livePrice.price,
-        conviction: convictionReading?.status === "OK" ? (convictionReading.convictionAdjusted ?? convictionReading.conviction) : null,
+        // Fase 5: confluenceCorridor.intensity já É a mesma leitura de
+        // convicção (convictionAdjusted ?? conviction) que este campo lia
+        // antes, AGORA também descontada por obstáculos estruturais reais
+        // no caminho até o alvo — o corredor da Aura fica mais largo
+        // (menos concentrado) quando o caminho está obstruído, mesmo com
+        // convicção alta, em vez de ignorar essa informação real.
+        conviction: confluenceCorridor?.status === "OK" ? confluenceCorridor.intensity : null,
         atrPercent: engine?.marketRegime?.atrPercent ?? null,
         timeframeMs: TIMEFRAME_MS[chartTimeframe as string] ?? TIMEFRAME_MS["15m"],
       }),
-    [auraTrackRecord, livePrice, convictionReading, engine?.marketRegime, chartTimeframe],
+    [auraTrackRecord, livePrice, confluenceCorridor, engine?.marketRegime, chartTimeframe],
   );
 
   // Auditoria de pendências (reconciliação real): o .slice(0,3) abaixo é

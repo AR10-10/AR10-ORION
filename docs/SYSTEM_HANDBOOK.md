@@ -2809,26 +2809,122 @@ rodada anterior, ainda não simplificado); migração de consumidores
 WidgetContext→store (§6.36); heatmap de liquidação no canvas + Pitchfork
 + Elliott simplificado (Fase 8, §6.38).
 
-## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
-diretiva) — cobre §6.35 a §6.39 em conjunto
+### 6.40 OMEGA CORE V-MAX — Fase 5, fechamento real: corrigir a
+sobreposição flagada em §6.39 + ligar o Corredor de Confluência ao canvas
 
-- **Arquivos alterados**: ver os 3 commits desta trilha
-  (`aa88134` e anteriores citados em §6.35; `ed3f4db` FASE 0/1;
-  `e482fd2` FASE 3-6; `FASE 7-9`; + o commit desta entrega, Completar
-  Fase 7 — scanner/painel/clique). Novos módulos puros:
-  `nexus/stage-runner.ts`, `nexus/confluence-corridor.ts`,
+Retoma a pendência #49 ("Corredor de Confluência: visual no canvas") e o
+achado de §6.39 ("sobreposição parcial... ainda não simplificado") na
+mesma rodada — os dois eram, na prática, o mesmo trabalho: a sobreposição
+precisava ser corrigida ANTES de dar mais peso visual a um número que já
+sabia estar enviesado.
+
+**Achado real (mais grave do que §6.39 havia caracterizado)**: não era
+uma sobreposição "parcial". `institutionalScore.score`
+(`institutional-score.ts`) é, por construção,
+`round(100 * (ConvictionReading.convictionAdjusted ?? conviction))` — uma
+cópia reescalada 1:1 da MESMA leitura que `confluence-corridor.ts` v1
+também lia via `opinionMass` (bruto, componente do Council) e
+`multiTimeframe` (bruto, também já dentro do pool de conviction). Dos 4
+"componentes independentes" da v1, 3 mediam fatias do MESMO sinal —
+council e multi-timeframe contavam 2x cada (uma vez brutos, uma vez
+dentro de institutionalScore), ensemble só contava 1x (escondido dentro
+de institutionalScore), e só `obstacleClearance` era genuinamente
+ortogonal. A média resultante super-representava concordância de
+Council/Multi-Timeframe e sub-representava Ensemble — um viés estatístico
+real, não cosmético.
+
+**Correção (contrato v1 → v2, `CONFLUENCE_CORRIDOR_CONTRACT_VERSION`)**:
+`ConfluenceCorridorInput`/`ConfluenceCorridorComponents` reduzidos de 4
+campos para 2 — `conviction` (a `ConvictionReading` inteira, lida do
+Confluence/Conviction Engine já correto, nunca decomposta de novo) +
+`obstacleClearance` (inalterado, único componente genuinamente novo).
+Zero segunda matemática de consenso, zero dupla contagem. Efeito em
+cascata, todos corrigidos no mesmo commit:
+- `confluence-engine.ts`: `readMultiTimeframeMember`/`buildConvictionReading`
+  passam a aceitar um tipo estrutural mínimo
+  (`MultiTimeframeAgreementEntry: {status, confidenceStance}`) em vez do
+  `MultiTimeframeMatrix` inteiro — mesmo princípio de acoplamento mínimo
+  que `confluence-corridor.ts` já seguia, agora consistente nos dois
+  arquivos. Isto libera o scanner do Radar (Fase 7) de fabricar um
+  `TimeframeContext` completo (11 campos, a maioria fake) só para
+  satisfazer um tipo.
+- `engine-bridge.ts` (`scanRadarCandidate`): em vez de alimentar
+  `confluence-corridor` com 3 sinais brutos, monta sua própria
+  `ConvictionReading` "leve" chamando o MESMO `buildConvictionReading`
+  real (ensemble/council `null` honestos — nenhum dos dois roda em
+  segundo plano — só o membro Multi-Timeframe é legível) — zero segunda
+  fórmula de pool, mesma disciplina fail-closed de sempre.
+- `App.tsx`: o `useMemo` de `confluenceCorridor` passa a consumir
+  `convictionReading` (já computado, já real) diretamente, em vez de
+  redecompor 3 sinais que já estavam dentro dele.
+
+**Visual no canvas (a entrega real desta pendência)**: auditoria antes de
+construir (CLAUDE.md item 1) encontrou que um "corredor de confluência"
+no canvas **já existe** — `NeuralMarketAuraPlugin.tsx`, cuja largura de
+banda (`corridorWidthFactor`) já é descrita no próprio cabeçalho do
+arquivo como "a MASSA DE CONVICÇÃO real (Confluence Engine, 0..1)", lida
+de `ConvictionReading.conviction` sozinha. Criar um SEGUNDO objeto visual
+"corredor" no mesmo gráfico teria violado FASE 4 (consolidação visual:
+"um objeto gráfico por evento real") e o teste de evolução visual do
+Ω-INFINITY ("aumentar compreensão real, nunca só efeito estético") — dois
+corredores parecidos, um conviction-only e um conviction+obstáculo,
+teriam confundido mais do que esclarecido. Em vez disso: `ChartWidget`
+(App.tsx) passou a ler `confluenceCorridor` (seletor direto da store,
+`useConfluenceCorridorSnapshot`) em vez de recomputar `conviction` a
+partir de `convictionReading` — a largura do corredor da Aura agora
+reflete a MESMA leitura v2 (conviction + obstáculos estruturais reais no
+caminho), então um plano com forte concordância entre subsistemas mas
+caminho obstruído mostra um corredor mais largo/difuso do que antes,
+informação real que a versão anterior descartava.
+
+**Testes**: `confluence-corridor.test.ts` reescrito para o contrato v2
+(11 testes, incluindo um teste de não-regressão que trava as chaves
+exatas de `components` e barra a reintrodução dos 3 campos sobrepostos);
+3 testes de fiação desatualizados corrigidos (`nexus-organism-orchestrator.
+test.ts`, `neural-market-aura-wiring.test.ts`, mais 2 asserções de
+destructure em `ciborgue-vivo-wiring.test.ts`/`trade-plan-zone-plugin.
+test.ts` que citavam `convictionReading` no local exato que saiu do
+destructure de `ChartWidget`).
+
+**Verificação real**: `tsc --noEmit` limpo · **110 arquivos / 1817
+testes** (100%) · `npm run build` ok · verificação Playwright ao vivo
+(boot limpo, screenshot capturado, zero erro de console novo além do
+ruído de rede já conhecido deste sandbox sem egress real). Uma Aura
+POPULADA (Trade Plan real ativo) não pôde ser vista ao vivo neste
+ambiente pela mesma razão já documentada em §6.39 (sem egress real a
+Binance) — a lógica nova está coberta pela suíte, e o consumidor
+(`NeuralMarketAuraPlugin.tsx`) é código já visualmente verificado em
+sessões anteriores, só a FONTE do dado mudou.
+
+**Backlog que continua real (não desta rodada)**: migração de
+consumidores WidgetContext→store (§6.36); heatmap de liquidação no
+canvas + Pitchfork + Elliott simplificado (Fase 8, §6.38).
+
+## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
+diretiva) — cobre §6.35 a §6.40 em conjunto
+
+- **Arquivos alterados**: ver os commits desta trilha (`aa88134` e
+  anteriores citados em §6.35; `ed3f4db` FASE 0/1; `e482fd2` FASE 3-6;
+  FASE 7-9; Completar Fase 7 — scanner/painel/clique; + o commit desta
+  entrega, Fase 5 fechamento — correção de contrato + visual). Novos
+  módulos puros: `nexus/stage-runner.ts`, `nexus/confluence-corridor.ts`,
   `nexus/radar-qualification.ts`, `nexus/radar-universe.ts`. Fatias
   novas na store: `smc`, `cvd`, `orderflowSignals`, `confluenceCorridor`,
   `radarCandidates`. `engine-bridge.ts` ganhou `scanRadarCandidate()`
   (fetch real + motores puros já existentes); `App.tsx` ganhou o efeito
-  de scan em lote, o painel "OPORTUNIDADES" e o 3º entry point na
-  SideBar; `configs/asset-universe.default.json` teve sua própria
+  de scan em lote, o painel "OPORTUNIDADES", o 3º entry point na SideBar,
+  e agora `ChartWidget` lê `confluenceCorridor` (seletor direto da store)
+  para a largura da Neural Market Aura; `confluence-engine.ts` teve seu
+  tipo de entrada de multi-timeframe afrouxado para um formato estrutural
+  mínimo; `configs/asset-universe.default.json` teve sua própria
   metadata (`status`/`wired_into_live_app`/`note`) corrigida para
   refletir que agora É lido de verdade (achado honesto, ver §6.39).
 - **O que foi unificado/removido**: fileira de 12 botões redundante do
   header (SmartOmnibox já cobria); `obstacleSuffix` duplicado entre o
   Trade Plan real e o fallback do Núcleo (agora 1 função compartilhada);
-  espaço redundante nos glifos `OB↑/OB↓/FVG↑/FVG↓`.
+  espaço redundante nos glifos `OB↑/OB↓/FVG↑/FVG↓`; a dupla/tripla
+  contagem de council/multi-timeframe no Corredor de Confluência v1
+  (§6.40, achado e corrigido na mesma rodada).
 - **Diagrama do fluxo final**: `docs/ORGANISM_DATA_FLOW.md` — catálogo de
   eventos atualizado nesta trilha com os 4 eventos QUANT.* + este
   `BRAIN.RADAR_CANDIDATES.UPDATED`, e a seção "Observadores puros
@@ -2838,22 +2934,26 @@ diretiva) — cobre §6.35 a §6.39 em conjunto
 - **"Uma fatia = um dono"**: confirmado — cada fatia nova
   (smc/cvd/orderflowSignals/confluenceCorridor/radarCandidates) tem
   exatamente 1 motor/efeito real que a escreve, verificado por teste de
-  fiação em cada caso.
+  fiação em cada caso; `confluenceCorridor` agora tem exatamente 1
+  consumidor visual real (`NeuralMarketAuraPlugin` via `ChartWidget`),
+  nunca um segundo objeto gráfico "corredor" concorrente.
 - **"Zero recálculo na UI"**: confirmado para os motores novos — todos
   são funções puras chamadas uma vez por transição real, nunca
   recomputadas por consumidor; o painel "OPORTUNIDADES" só lê
   `radarCandidates` via seletor, nunca reordena/refiltra localmente
-  (`rankRadarCandidates` já entrega a lista final). Migração completa dos
+  (`rankRadarCandidates` já entrega a lista final); `ChartWidget` não
+  recomputa mais `conviction` a partir de `convictionReading` — lê
+  `confluenceCorridor.intensity` já pronto. Migração completa dos
   consumidores antigos (WidgetContext) para os seletores da store
   permanece pendência registrada (§6.36), não uma violação nova.
-- **Backlog flagado (não inventado)**: visual do Corredor de Confluência
-  no canvas (Fase 5); sobreposição parcial `confluence-corridor.ts` ×
-  `ConvictionReading` de `confluence-engine.ts` (achado anterior, ainda
-  não simplificado); heatmap de liquidação no canvas; Pitchfork; Elliott
-  simplificado; "liquidity sweep projection"/"institutional volume
-  zones" como conceitos distintos (hoje parcialmente cobertos por
-  motores já reais, não expandidos); migração de consumidores da FASE
-  1.1 (§6.36).
+- **Backlog flagado (não inventado)**: heatmap de liquidação no canvas;
+  Pitchfork; Elliott simplificado; "liquidity sweep projection"/
+  "institutional volume zones" como conceitos distintos (hoje
+  parcialmente cobertos por motores já reais, não expandidos); migração
+  de consumidores da FASE 1.1 (§6.36). O visual do Corredor de
+  Confluência no canvas e a sobreposição `confluence-corridor.ts` ×
+  `ConvictionReading` — ambos flagados em §6.39 — foram entregues e
+  corrigidos nesta rodada (§6.40), não continuam pendentes.
 - **Pendências de produto**: `computeDrawdownPct`/paper-trading —
   confirmado pertencer a outro projeto do Operador, não a este
   repositório.
@@ -2864,12 +2964,11 @@ diretiva) — cobre §6.35 a §6.39 em conjunto
   qualificadores read-only. `riskGated` do scanner de fundo é sempre
   `false` honestamente rotulado (nenhum Conselho roda para candidatos em
   segundo plano) — nunca fabricado como risco liberado de verdade.
-- **Testes executados**: `tsc --noEmit` limpo · **110 arquivos / 1818
-  testes** (100%, +6 `radar-universe.test.ts` desde §6.38, +1 ajuste de
-  contagem de call sites em `diretriz3-fixes.test.ts`) · `npm run build`
-  ok · `audit-header-maxcontent.mjs` 11 viewports CLEAN via build+preview
-  real · verificação Playwright ao vivo do painel "OPORTUNIDADES" (ver
-  §6.39 para o detalhe).
+- **Testes executados**: `tsc --noEmit` limpo · **110 arquivos / 1817
+  testes** (100%) · `npm run build` ok · `audit-header-maxcontent.mjs` 11
+  viewports CLEAN via build+preview real (§6.39) · verificação Playwright
+  ao vivo do painel "OPORTUNIDADES" (§6.39) e do boot pós-refatoração do
+  Corredor de Confluência (§6.40, zero erro de console novo).
 
 ---
 

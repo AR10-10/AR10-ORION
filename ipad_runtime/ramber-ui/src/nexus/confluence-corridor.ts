@@ -10,15 +10,34 @@
 // Formaliza o "organizador de contexto" que a Fase 5 pede: uma função pura
 // que CRUZA sinais de confluência JÁ reais e já computados em outro lugar
 // — zero motor novo, zero segunda matemática de consenso, zero fetch:
-//   1. council.opinionMass — massa real do pool linear (Stone 1961/DeGroot
-//      1974), do lado que coincide com a direção ATIVA do Core Engine.
-//   2. institutionalScore.score — confluência real 0-100 (institutional-
-//      score.ts), normalizada para 0-1.
-//   3. Concordância real da Matriz Multi-Timeframe — proporção dos prazos
-//      com confidenceStance real que concordam com a direção ativa.
-//   4. Obstáculos estruturais reais no caminho até o alvo ATIVO do Trade
+//   1. conviction — leitura JÁ correta do Confluence/Conviction Engine
+//      (confluence-engine.ts, buildConvictionReading): o pool linear real
+//      (Stone 1961/DeGroot 1974) dos 3 subsistemas independentes
+//      (Ensemble/Council/Multi-Timeframe) já combinados. Lida INTEIRA,
+//      nunca decomposta de novo aqui.
+//   2. Obstáculos estruturais reais no caminho até o alvo ATIVO do Trade
 //      Plan (obstacleCount, trade-plan.ts) — mais obstáculos, menor
-//      clareza de caminho.
+//      clareza de caminho. Único componente genuinamente NOVO em relação
+//      ao que o Conviction Engine já mede.
+//
+// CORREÇÃO REAL (achado de auditoria, completar Fase 7 — não é o foco
+// direto daquela tarefa, mas CLAUDE.md exige reportar/corrigir limitação
+// real encontrada mesmo fora de escopo): a v1 deste motor tinha 4
+// componentes — opinionMass (council), institutionalScore, mtfAgreement,
+// obstacleClearance. `institutionalScore.score` (institutional-score.ts)
+// é, por construção, uma cópia reescalada (0-100) do MESMO
+// `ConvictionReading.conviction` que já é ele próprio um pool de
+// {ensemble, council, multiTimeframe}. Isso significa que os 2 primeiros
+// componentes antigos (opinionMass e mtfAgreement) já estavam DENTRO do
+// 2º (institutionalScore) — a média de 4 "componentes independentes" na
+// verdade contava council e multi-timeframe 2x cada, e ensemble só 1x
+// (escondido dentro de institutionalScore), enquanto obstacleClearance
+// era o único componente genuinamente ortogonal. Corrigido substituindo
+// os 3 componentes sobrepostos por UMA leitura só (`conviction`, lida
+// inteira do Conviction Engine) — zero dupla contagem, zero segunda
+// matemática de consenso, e o único componente perdido (a nuance fina do
+// opinionMass bruto do Council) é honestamente menos importante que
+// eliminar uma leitura estatisticamente enviesada.
 //
 // Display-only (LEI 24 / Lei Permanente 1): nunca gera, altera ou bloqueia
 // Entry/Stop/Target/Decisão — `direction` e `activeObstacleCount` chegam
@@ -26,19 +45,16 @@
 // nunca recalculados aqui. `intensity` é sempre uma leitura de
 // LARGURA/OPACIDADE visual (0-1), nunca rotulada como probabilidade em
 // nenhum consumidor deste contrato.
-export const CONFLUENCE_CORRIDOR_CONTRACT_VERSION = 1 as const;
+export const CONFLUENCE_CORRIDOR_CONTRACT_VERSION = 2 as const;
+
+import type { ConvictionReading } from "./confluence-engine";
 
 export interface ConfluenceCorridorComponents {
-  // Massa real do pool do Conselho do lado da direção ativa (0-1) — null
-  // enquanto o Conselho não tem opinionMass real (ABSTAIN/riskGated).
-  opinionMass: number | null;
-  // institutionalScore.score / 100 (0-1) — null quando o Score Geral está
-  // DADOS_INSUFICIENTES ou o Core Engine está em WAIT (nada a pontuar).
-  institutionalScore: number | null;
-  // Proporção real de prazos da Matriz Multi-Timeframe cujo
-  // confidenceStance concorda com a direção ativa (0-1) — null enquanto
-  // nenhum prazo tem leitura real.
-  mtfAgreement: number | null;
+  // ConvictionReading.convictionAdjusted (preferida, amortecida pelo
+  // TrustScore real) com fallback honesto para .conviction bruto — MESMA
+  // leitura, zero recálculo. null quando o Conviction Engine está
+  // DADOS_INSUFICIENTES nesta janela.
+  conviction: number | null;
   // 1 / (1 + obstáculos reais no caminho) — 1.0 quando o caminho está
   // livre, decrescendo (nunca zerando de vez) a cada obstáculo real
   // mapeado. Convenção documentada (mesma natureza do piso 1:2 de
@@ -61,15 +77,14 @@ export interface ConfluenceCorridorReading {
 
 export interface ConfluenceCorridorInput {
   // Direção ATIVA real do Core Engine — nunca recomputada aqui, só lida.
+  // Gate independente do componente `conviction`: sem direção ativa não
+  // existe corredor a desenhar, mesmo que obstacleClearance esteja
+  // disponível (um corredor "sem lado" seria uma leitura inventada).
   direction: "LONG" | "SHORT" | null;
-  opinionMass: { long: number; short: number; neutral: number } | null;
-  institutionalScore: number | null;
-  // Mapa de prazo → leitura real da Matriz Multi-Timeframe (só o campo
-  // que este motor de fato usa, para não acoplar ao tipo inteiro
-  // MultiTimeframeMatrix e não criar uma dependência de import
-  // desnecessária — mesmo espírito de council.ts's tipos de entrada
-  // mínimos/estruturais).
-  multiTimeframe: Record<string, { confidenceStance: "LONG" | "SHORT" | "NEUTRAL" | null } | undefined> | null;
+  // Leitura JÁ real do Conviction Engine (confluence-engine.ts) — inteira,
+  // nunca decomposta. null quando o chamador ainda não a computou nesta
+  // janela (fail-closed honesto, nunca 0 fabricado).
+  conviction: ConvictionReading | null;
   // obstacleCount do alvo ATIVO do Trade Plan (trade-plan.ts) — null
   // quando não há Trade Plan ativo.
   activeObstacleCount: number | null;
@@ -85,7 +100,7 @@ export function computeConfluenceCorridor(input: ConfluenceCorridorInput): Confl
     status: "DADOS_INSUFICIENTES",
     reason,
     intensity: null,
-    components: { opinionMass: null, institutionalScore: null, mtfAgreement: null, obstacleClearance: null },
+    components: { conviction: null, obstacleClearance: null },
     computedAt,
   });
 
@@ -96,26 +111,14 @@ export function computeConfluenceCorridor(input: ConfluenceCorridorInput): Confl
     return empty("sem_direcao_ativa_do_core_engine");
   }
 
-  const opinionMass = input.opinionMass
-    ? (input.direction === "LONG" ? input.opinionMass.long : input.opinionMass.short)
+  const convictionValue = input.conviction?.status === "OK"
+    ? (input.conviction.convictionAdjusted ?? input.conviction.conviction)
     : null;
-
-  const institutionalScore = fin(input.institutionalScore) ? (input.institutionalScore as number) / 100 : null;
-
-  let mtfAgreement: number | null = null;
-  if (input.multiTimeframe) {
-    const readings = Object.values(input.multiTimeframe).filter(
-      (c): c is { confidenceStance: "LONG" | "SHORT" | "NEUTRAL" | null } => !!c && c.confidenceStance !== null,
-    );
-    if (readings.length > 0) {
-      const agreeing = readings.filter((c) => c.confidenceStance === input.direction).length;
-      mtfAgreement = agreeing / readings.length;
-    }
-  }
+  const conviction = fin(convictionValue) ? convictionValue : null;
 
   const obstacleClearance = fin(input.activeObstacleCount) ? 1 / (1 + (input.activeObstacleCount as number)) : null;
 
-  const components: ConfluenceCorridorComponents = { opinionMass, institutionalScore, mtfAgreement, obstacleClearance };
+  const components: ConfluenceCorridorComponents = { conviction, obstacleClearance };
   const present = Object.values(components).filter(fin);
   if (present.length === 0) return empty("nenhum_componente_real_disponivel_ainda");
 
