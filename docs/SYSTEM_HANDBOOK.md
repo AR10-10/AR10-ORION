@@ -3125,6 +3125,110 @@ cobertura do Relevance Engine para as 3 camadas sem regra própria
 (`liquidation_heatmap`/`liquidity_sweep`/`market_sessions`) continua uma
 rodada própria futura.
 
+### 6.43 ADITIVO DE EXECUÇÃO (pós PR #14) — Etapa 1: Market Data Adapter
+(BinanceProvider + MEXCProvider)
+
+Resposta direta à discrepância MEXC×Binance sinalizada em §6.42: o
+Operador respondeu com um aditivo de 15 etapas cuja Etapa 1
+("PRIORIDADE ABSOLUTA") resolve a ambiguidade explicitamente — "Não
+substituir Binance por MEXC. Não criar um pipeline paralelo para MEXC.
+Criar uma camada única de abstração", arquitetura `Radar → Market Data
+Adapter → Provider Ativo → UnifiedGlobalSnapshot → Fusion Engine → Core
+Engine`, preparada para Bybit/OKX/Hyperliquid futuros. Etapa 9 do mesmo
+aditivo (Radar MEXC-wide) depende explicitamente desta Etapa 1 estar
+pronta primeiro — por isso esta é a fatia escolhida para a rodada
+atual, mesma disciplina "auditar antes de construir" de sempre.
+
+**Achado real da auditoria (antes de construir)**: o Market Data Bus
+(`market-data-bus/bus.js`) já era agnóstico de exchange desde a Fase B —
+`requestSnapshot({..., collect})` sempre recebeu `collect` como função
+INJETADA pelo chamador, nunca hardcoded dentro do Bus. O que faltava não
+era o Bus, era (1) um segundo `collect` real para MEXC — só existia o de
+Binance — e (2) um lugar ÚNICO que resolvesse "qual `collect` uso",
+hoje espalhado como import direto de `collectBinanceFuturesKlines` em
+cada call site real (2 em `engine-bridge.ts`:
+`requestFuturesCandleSnapshot`, o ciclo real do Core Engine/gráfico; e
+`getOlderChartCandles`, a paginação histórica que bypassa o Bus por
+design). Construir o Adapter sem essa auditoria teria arriscado duplicar
+o Bus inteiro — exatamente o "segundo pipeline" que a própria diretiva
+proíbe.
+
+**Pesquisa real antes de implementar (CLAUDE.md item 2)**: a
+documentação oficial da API MEXC Contract (`mexcdevelop.github.io/
+apidocs/contract_v1_en`, `www.mexc.com/api-docs/futures/market-
+endpoints`) bloqueou fetch direto nesta sessão (HTTP 403 nas duas).
+Endpoint/schema foram corroborados por múltiplas fontes secundárias
+independentes (a collection Postman oficial `mexcdevelop/mexc-api-
+postman`, buscas cruzadas) — achado real e documentado no cabeçalho do
+conector: a resposta MEXC é um **objeto de arrays paralelos**
+(`{success, code, data: {time[], open[], high[], low[], close[],
+vol[]}}`), nunca array-de-arrays como a Binance; `data.time` vem em
+**segundos** enquanto o parâmetro de query `end` é em **milissegundos**
+— assimetria real da API, não um erro deste conector. Nunca verificado
+ao vivo neste sandbox (zero egress a exchanges) — mesma ressalva já
+documentada por `binance-futures-public.js` para si mesmo: se o schema
+real vier diferente, os validadores falham visivelmente
+(`BLOCKED_BY_SCHEMA`), nunca silenciosamente errado.
+
+**Entregue**:
+- `js/real-data/mexc-futures-public.js` (novo) — sonda real MEXC
+  Contract, candles-only (funding/mark price da MEXC já tinham sonda
+  própria e independente em `cross-exchange/mexc-futures.ts`, cross-
+  check consultivo — zero duplicação aqui). Mapa real de timeframe→enum
+  MEXC (`Min15`/`Hour4`/...); timeframe sem mapeamento falha fechado
+  (`BLOCKED_BY_SCHEMA`) em vez de adivinhar um enum inexistente.
+- `market-data-bus/mexc-futures-candle-connector.js` (novo) — irmão
+  direto de `binance-futures-candle-connector.js`, mesmo contrato de
+  `collect()`; aceita e remove tanto o sufixo `-PERP` (herdado da
+  convenção Binance) quanto `-MEXC` (novo) do parâmetro de símbolo antes
+  de chamar a API real — nunca deixa um sufixo de cache-key vazar para
+  fora, mesma disciplina que corrigiu o bug real documentado em
+  `binance-futures-candle-connector.js`.
+- `market-data-adapter.ts` (novo, `ramber-ui/src/`) — `MarketDataAdapter`
+  real: `getMarketDataProvider(id?)` resolve `BinanceProvider`/
+  `MEXCProvider`, default `BINANCE` explícito. Provider é PARÂMETRO por
+  chamada, nunca um toggle global mutável — o risco que este projeto
+  mais evita é o ciclo de decisão real trocar de fonte silenciosamente.
+- `engine-bridge.ts` — os 2 call sites reais (`requestFuturesCandleSnapshot`,
+  `getOlderChartCandles`) agora resolvem via
+  `getMarketDataProvider('BINANCE').collect` em vez de importar
+  `collectBinanceFuturesKlines` diretamente — mesmo dado real, zero
+  mudança de comportamento (refatoração pura de indireção, confirmada
+  por Playwright ao vivo pós-mudança). `history-capture.js`
+  (laboratório quarantined, `returnEvidence:true`) mantém seu import
+  direto — consumidor genuinamente diferente, fora do escopo do Adapter.
+
+**Nota de arquitetura para a Etapa 9 (Radar MEXC-wide, ainda não
+construída)**: a chave de cache do Bus é `${symbol}:${timeframe}`, sem
+conhecimento de provider — dois providers pedindo o mesmo par
+colidiriam na mesma entrada e poderiam misturar candles de duas
+exchanges sob uma única chave. Documentado no próprio
+`market-data-adapter.ts`: um futuro caller MEXC deve usar um sufixo de
+cache-key PRÓPRIO (`-MEXC`, já suportado pelo conector) para nunca
+colidir com a entrada Binance do mesmo ativo.
+
+**Testes**: `tsc --noEmit` limpo · **114 arquivos / 1868 testes** (100%,
++23 novos: 9 para o schema real MEXC, 7 para o conector MEXC, 7 para o
+Adapter) · `npm run build` ok · verificação Playwright ao vivo pós-
+refatoração (boot limpo, painéis "Camadas do Gráfico"/"OPORTUNIDADES"
+abrindo/fechando, troca de aba, zero erro de console fora do ruído de
+rede conhecido do sandbox) — a mais importante desta entrada, já que o
+refactor toca os 2 call sites reais do ciclo crítico do gráfico/Core
+Engine.
+
+**Backlog honesto**: Etapas 2-15 do aditivo completas (Chart Integrity
+Engine, Adaptive Zoom, Liquidity Voids, Volume Clusters, Cross
+Timeframe Liquidity, Footprint condicional, Pitchfork/Elliott/
+Triângulos/Projeções Dinâmicas, Radar MEXC-wide via este Adapter, Data
+Quality Monitor unificado, Market Regime→Relevance Engine, Organism
+Health, Auto Layout, confirmação de responsabilidade do Relevance
+Engine, auditoria final); MEXCProvider construído mas ainda não
+CONSUMIDO por nenhum caller real (o Radar continua no universo curado
+Binance de sempre — ligá-lo à Etapa 9 é a próxima fatia natural);
+MEXCProvider não pôde ser exercitado contra a API real neste sandbox
+(zero egress) — lógica coberta por 16 testes reais com fetch mockado,
+igual à disciplina já usada para o conector Binance.
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

@@ -78,12 +78,12 @@ describe('detectPrependCount: só reconhece um prepend real e limpo — nunca um
 });
 
 describe('Fiação real: getOlderChartCandles nunca passa pelo Market Data Bus (fonte compartilhada, cache errado corromperia outros consumidores)', () => {
-  it('chama collectBinanceFuturesKlines diretamente, nunca requestFuturesCandleSnapshot/getMarketDataBus', () => {
+  it('chama getMarketDataProvider(\'BINANCE\').collect diretamente (ADITIVO V-MAX Etapa 1), nunca requestFuturesCandleSnapshot/getMarketDataBus', () => {
     const bridge = read('../src/engine-bridge.ts');
     const fnMatch = bridge.match(/export async function getOlderChartCandles\(([\s\S]*?)\n\}/);
     expect(fnMatch, 'getOlderChartCandles não encontrada').not.toBeNull();
     const body = fnMatch![1];
-    expect(body).toContain('collectBinanceFuturesKlines({');
+    expect(body).toContain("getMarketDataProvider('BINANCE').collect({");
     expect(body).toContain('endTime:');
     expect(body).not.toContain('requestFuturesCandleSnapshot');
     expect(body).not.toContain('getMarketDataBus');

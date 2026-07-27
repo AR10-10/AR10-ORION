@@ -40,7 +40,11 @@
 import { QuantWorkerClient } from '../../js/worker-client.js';
 import { OrderflowWorkerClient } from '../../js/orderflow-client.js';
 import { getMarketDataBus } from '../../src/market-data-bus/index.js';
-import { collectBinanceFuturesKlines } from '../../src/market-data-bus/binance-futures-candle-connector.js';
+// ADITIVO V-MAX Etapa 1 (Market Data Adapter): nenhum consumidor importa
+// collectBinanceFuturesKlines/collectMexcFuturesKlines diretamente mais —
+// getMarketDataProvider('BINANCE') é o único caminho, mesmo dado real,
+// zero mudança de comportamento (default explícito, nunca implícito).
+import { getMarketDataProvider } from './market-data-adapter';
 import { createLivePoller } from '../../js/real-data/mexc-trades-stream.js';
 import { CONNECTOR_STATES } from '../../js/real-data/schema.js';
 import { buildRealAnalysisFrame } from '../../js/real-data/analysis-frame.js';
@@ -299,7 +303,7 @@ async function requestFuturesCandleSnapshot({
   symbol, timeframe, limit, maxAgeMs,
 }: { symbol: string; timeframe: string; limit: number; maxAgeMs: number }): Promise<BusSnapshot> {
   return getMarketDataBus().requestSnapshot({
-    symbol: `${symbol}-PERP`, timeframe, limit, collect: collectBinanceFuturesKlines, maxAgeMs,
+    symbol: `${symbol}-PERP`, timeframe, limit, collect: getMarketDataProvider('BINANCE').collect, maxAgeMs,
   });
 }
 
@@ -596,7 +600,7 @@ export async function getOlderChartCandles(
     // para nunca reincluir esse mesmo candle numa borda inclusiva
     // (garantido menor que a duração de qualquer timeframe real, mesmo o
     // de 1m).
-    const raw = await collectBinanceFuturesKlines({
+    const raw = await getMarketDataProvider('BINANCE').collect({
       symbol: `${symbol}-PERP`, timeframe, limit, endTime: (beforeTime - 1) * 1000,
     });
     if (!Array.isArray(raw) || raw.length === 0) return null;

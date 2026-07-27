@@ -124,21 +124,27 @@ describe('bug 3: scroll em paisagem — pointer-events-none removido dos contain
 });
 
 describe('diretriz 2 + V15.1 GOD TIER: roteamento Futuros exclusivo — Gráfico e Risk Engine SÓ consomem /fapi/v1/, zero fallback para Spot', () => {
-  it('engine-bridge.ts importa collectBinanceFuturesKlines e NUNCA collectBinanceKlines (spot) — instrução explícita: "extinguindo qualquer roteamento de gráficos para mercado Spot"', () => {
+  it('engine-bridge.ts resolve Binance Futuros via o Market Data Adapter (ADITIVO V-MAX Etapa 1) e NUNCA collectBinanceKlines (spot) — instrução explícita: "extinguindo qualquer roteamento de gráficos para mercado Spot"', () => {
     const bridge = read('../src/engine-bridge.ts');
-    expect(bridge).toContain("import { collectBinanceFuturesKlines } from '../../src/market-data-bus/binance-futures-candle-connector.js'");
+    // ADITIVO V-MAX Etapa 1: nenhum consumidor importa
+    // collectBinanceFuturesKlines diretamente mais — getMarketDataProvider
+    // é o único caminho (market-data-adapter.ts), mesmo dado real por
+    // baixo (collectBinanceFuturesKlines continua a única função que fala
+    // com a Binance, só não é mais importada aqui).
+    expect(bridge).toContain("import { getMarketDataProvider } from './market-data-adapter';");
+    expect(bridge).not.toContain("from '../../src/market-data-bus/binance-futures-candle-connector.js'");
     expect(bridge).not.toContain('collectBinanceKlines');
     expect(bridge).not.toContain('binance-candle-connector.js');
   });
 
-  it('requestFuturesCandleSnapshot não tem nenhuma perna de spot — só a chave symbol-PERP via collectBinanceFuturesKlines', () => {
+  it('requestFuturesCandleSnapshot não tem nenhuma perna de spot — só a chave symbol-PERP via getMarketDataProvider(\'BINANCE\')', () => {
     const bridge = read('../src/engine-bridge.ts');
     expect(bridge).toContain('async function requestFuturesCandleSnapshot(');
     const helperMatch = bridge.match(/async function requestFuturesCandleSnapshot\([\s\S]*?\n\}\n/);
     expect(helperMatch, 'requestFuturesCandleSnapshot não encontrada').not.toBeNull();
     const helper = helperMatch![0];
     expect(helper).toContain('symbol: `${symbol}-PERP`');
-    expect(helper).toContain('collect: collectBinanceFuturesKlines');
+    expect(helper).toContain("collect: getMarketDataProvider('BINANCE').collect");
     expect(helper).not.toContain('collectBinanceKlines');
   });
 
