@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -1720,6 +1720,11 @@ export default function App() {
     const entry = cycleOk ? (realCycle?.entry ?? null) : null;
     const target = cycleOk ? (realCycle?.target1 ?? null) : null;
     const target2 = cycleOk ? (realCycle?.target2 ?? null) : null;
+    // Achado de auditoria (Ferramentas Institucionais): extensão de
+    // Fibonacci 61.8% sobre a última perna confirmada — já calculada todo
+    // ciclo (support-resistance-engine.js) mas descartada antes de sair de
+    // engine-bridge.ts. Passthrough puro, mesmo padrão de target/target2.
+    const extendedTarget = cycleOk ? (realCycle?.extendedTarget ?? null) : null;
     const stop = cycleOk ? (realCycle?.stop ?? null) : null;
     // V11.5 Fase 6: razão real distância-ao-alvo/distância-à-invalidação
     // (target-tracker.js) e força por confluência de swings do Alvo 2
@@ -1831,6 +1836,7 @@ export default function App() {
       entry,
       target,
       target2,
+      extendedTarget,
       stop,
       riskRewardRatio,
       target1Strength,
@@ -6676,6 +6682,12 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
     if (typeof stop !== "number" || !Number.isFinite(stop)) return null;
     if (typeof target1 !== "number" || !Number.isFinite(target1)) return null;
     const target2 = typeof engine?.target2 === "number" && Number.isFinite(engine.target2) ? engine.target2 : null;
+    // Achado de auditoria (Ferramentas Institucionais): extensão de
+    // Fibonacci 61.8% — mesmo passthrough de target/target2, nenhum
+    // cálculo novo. target-tracker.js não computa força/obstáculos para
+    // este nível (só existe em support-resistance-engine.js), então TP3
+    // é mais simples que TP1/TP2: só o preço, sem strength/obstacleCount.
+    const target3 = typeof engine?.extendedTarget === "number" && Number.isFinite(engine.extendedTarget) ? engine.extendedTarget : null;
     // EPC §5 ("obstáculos estruturais... em qualquer ativo e qualquer
     // timeframe"): a entrada real do Núcleo é o preço atual
     // (tracker.current_price, exposto como engine.entry) — o mesmo ponto de
@@ -6705,9 +6717,10 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       target2,
       target2Strength: engine?.target2Strength ?? null,
       target2ObstacleCount: obstacleCountTo(target2),
+      target3,
       riskRewardRatio: typeof engine?.riskRewardRatio === "number" && Number.isFinite(engine.riskRewardRatio) ? engine.riskRewardRatio : null,
     };
-  }, [chartTradePlan, tradePlanStructureZones, engine?.direction, engine?.entry, engine?.stop, engine?.target, engine?.target2, engine?.target1Strength, engine?.target2Strength, engine?.riskRewardRatio]);
+  }, [chartTradePlan, tradePlanStructureZones, engine?.direction, engine?.entry, engine?.stop, engine?.target, engine?.target2, engine?.extendedTarget, engine?.target1Strength, engine?.target2Strength, engine?.riskRewardRatio]);
   // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
   // estrutural"): união das zonas REAIS (tradePlanStructureZones, as MESMAS
   // que já geram targets[i].obstacleCount acima na store) que ficam no
@@ -7978,6 +7991,12 @@ const CONSENSUS_RADAR_LABEL: Record<ConsensusRadarCategory, string> = {
 function CouncilWidget() {
   const council = useCouncilSnapshot();
   const cpi = useCpiSnapshot();
+  // Achado de auditoria: reward/pain/eventCount reais já são alimentados
+  // por 8 call sites reais de recordAffectiveEvent (App.tsx) mas só o
+  // ratio derivado (cpi) era exibido — nenhum consumidor distinguia "CPI
+  // 50% com 2 eventos" de "CPI 50% com 200 eventos". Mesmo padrão do
+  // TRUST SCORE logo abaixo (componentes reais no tooltip).
+  const affectiveMemory = useAffectiveMemorySnapshot();
   // V-MAX Fase 2: cenários Path A/B e armadilhas reais — mesma store.
   const scenario = useScenarioSnapshot();
   const traps = useTrapSignalsSnapshot();
@@ -8109,7 +8128,14 @@ function CouncilWidget() {
             ))}
           </div>
         )}
-        <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
+        <div
+          className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+          title={
+            affectiveMemory.eventCount > 0
+              ? `Reward ${affectiveMemory.reward.toFixed(2)} · Pain ${affectiveMemory.pain.toFixed(2)} · ${affectiveMemory.eventCount} eventos reais desde o boot`
+              : "Nenhum evento afetivo real registrado ainda nesta sessão"
+          }
+        >
           <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CPI · MEMÓRIA AFETIVA</span>
           <span className={`text-[0.5rem] font-mono font-black ${cpiColor}`}>{cpiLabel}</span>
         </div>
@@ -8444,10 +8470,14 @@ function AssetHeatmapWidget() {
 //
 // Cada linha reflete DISPONIBILIDADE de um dado real já computado em outro
 // lugar desta sessão (engine useMemo / institutionalConsensus / GMIL) — zero
-// fetch novo, zero cálculo duplicado. "Consenso entre corretoras" é
-// honestamente NÃO_APLICAVEL: este terminal só tem uma fonte real de preço
-// (Binance); fabricar um consenso multi-exchange que não existe violaria o
-// princípio de dado real deste projeto. "Integridade dos dados" não vira uma
+// fetch novo, zero cálculo duplicado. Achado de auditoria (Ferramentas
+// Institucionais): "Consenso entre corretoras" estava hardcoded como
+// NÃO_APLICÁVEL com um comentário desatualizado ("só uma fonte real de
+// preço") — o app já tem 3 checagens cross-exchange reais (Bybit/OKX/MEXC
+// vs. Binance) alimentando trustScore.crossExchangeConvergence, já exibido
+// em 2 outros widgets (Decision Context, TRUST SCORE do Council). Corrigido
+// para ler o mesmo valor real via useTrustScoreSnapshot(), zero cálculo
+// novo. "Integridade dos dados" não vira uma
 // linha aqui de propósito — já é o campo "Data Feeds n/4" do painel Decision
 // Context (aba ANALYSIS, relocado da antiga barra operacional); repetir o
 // mesmo cálculo aqui seria a exata duplicação que a LEI 25 (Self Audit) pede
@@ -8485,6 +8515,11 @@ function formatConsensusScore(score: number | null): string {
 function DecisionValidationWidget() {
   const { engine, institutionalConsensus, ensembleConsensus, convictionReading: convictionReadingFromContext, riskSuggestion, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt, chartTimeframe } =
     useContext(WidgetContext) || {};
+  // Achado de auditoria: mesmo hook já usado por 2 outros widgets
+  // (Decision Context, TRUST SCORE do Council) — trustScore.crossExchangeConvergence
+  // é o dado real que faltava aqui para a linha "Consenso Entre Corretoras"
+  // deixar de ser um NÃO_APLICÁVEL hardcoded.
+  const trustScore = useTrustScoreSnapshot();
 
   // Fase H: sugestão de dimensionamento (% equity / % risco). Fail-closed:
   // SEM_SUGESTAO exibe 0% com o motivo real. O selo é PERMANENTE e
@@ -8541,7 +8576,7 @@ function DecisionValidationWidget() {
     { label: "Liquidez (Livro de Ofertas)", available: !!engine?.hasBook },
     { label: "Volatilidade (ATR%)", available: num(engine?.marketRegime?.atrPercent) },
     { label: "Contexto Global (Consenso)", available: num(institutionalConsensus?.score) },
-    { label: "Consenso Entre Corretoras", available: null }, // null = NÃO_APLICAVEL, nunca fabricado
+    { label: "Consenso Entre Corretoras", available: num(trustScore?.crossExchangeConvergence) },
     { label: "Fluxo Institucional (OFI)", available: num(engine?.flowImbalance) },
     { label: "Structural Target Strength", available: !!engine?.target2Strength },
     { label: "Estrutura de Mercado", available: !!engine?.marketStructureLabel },

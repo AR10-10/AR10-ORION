@@ -258,3 +258,39 @@ describe('ADITIVO V-MAX Etapa 10 (Data Quality Monitor unificado): dado real já
     expect(diag).toContain('const qualityState = classifyBusQuality(quality);');
   });
 });
+
+describe('Ferramentas Institucionais (achados de auditoria em background, 3 instâncias reais de "dado real computado, nunca surfaceado")', () => {
+  it('RealCycleResult.extendedTarget seleciona pela MESMA direção que route (signal), lendo fib_extension_long_target/short_target direto do frame — nunca uma 4ª fórmula', () => {
+    const bridge = read('../src/engine-bridge.ts');
+    expect(bridge).toContain('extendedTarget?: number | null;');
+    expect(bridge).toContain("signal === 'LONG' && isNum(frame.fib_extension_long_target)");
+    expect(bridge).toContain('? frame.fib_extension_long_target');
+    expect(bridge).toContain("signal === 'SHORT' && isNum(frame.fib_extension_short_target)");
+    expect(bridge).toContain('? frame.fib_extension_short_target');
+  });
+
+  it('App.tsx engine useMemo repassa realCycle.extendedTarget puro (mesmo padrão de target/target2, fail-closed atrás de cycleOk)', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('const extendedTarget = cycleOk ? (realCycle?.extendedTarget ?? null) : null;');
+  });
+
+  it('bug real corrigido: "Consenso Entre Corretoras" não é mais um NÃO_APLICÁVEL hardcoded — lê trustScore.crossExchangeConvergence real (mesmo hook já usado por 2 outros widgets)', () => {
+    const app = read('../src/App.tsx');
+    expect(app).not.toContain('{ label: "Consenso Entre Corretoras", available: null }');
+    expect(app).toContain('{ label: "Consenso Entre Corretoras", available: num(trustScore?.crossExchangeConvergence) },');
+    const widgetMatch = app.match(/function DecisionValidationWidget\(\) \{[\s\S]*?\n {2}const trustScore = useTrustScoreSnapshot\(\);/);
+    expect(widgetMatch, 'useTrustScoreSnapshot não encontrado dentro de DecisionValidationWidget').not.toBeNull();
+  });
+
+  it('affectiveMemory (reward/pain/eventCount reais) ganha tooltip no CPI do Council — mesmo padrão já usado pelo TRUST SCORE ao lado ("componentes reais no tooltip")', () => {
+    const app = read('../src/App.tsx');
+    const idx = app.indexOf('function CouncilWidget() {');
+    expect(idx, 'CouncilWidget não encontrado').toBeGreaterThan(-1);
+    const end = app.indexOf('TRUST SCORE · FONTE', idx);
+    const body = app.slice(idx, end);
+    expect(body).toContain('const affectiveMemory = useAffectiveMemorySnapshot();');
+    expect(body).toContain('affectiveMemory.eventCount > 0');
+    expect(body).toContain('affectiveMemory.reward.toFixed(2)');
+    expect(body).toContain('affectiveMemory.pain.toFixed(2)');
+  });
+});

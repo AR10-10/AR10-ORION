@@ -195,6 +195,17 @@ export interface RealCycleResult {
   riskRewardRatio?: number | null;
   target1Strength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
   target2Strength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
+  // Achado de auditoria (ADITIVO V-MAX: Ferramentas Institucionais):
+  // support-resistance-engine.js já calcula fib_extension_long_target/
+  // fib_extension_short_target TODO ciclo (extensão de Fibonacci 61.8%
+  // sobre a última perna confirmada) — o comentário da própria EPC §5/§6
+  // no chart ("falta aparecer entrada e alvo/alvo2/alvo3") já esperava
+  // este campo, mas ele morria dentro de research-engine.js (só como
+  // texto formatado em rota_a_long/rota_b_short) e nunca chegava aqui.
+  // Selecionado pela MESMA direção que já seleciona target1/target2
+  // (route acima) — nunca uma 3ª fórmula, só o campo do frame que faltava
+  // repassar.
+  extendedTarget?: number | null;
   // V11.5 §2 (Evolução Matemática — "melhorar contexto multitemporal"):
   // estrutura real de um timeframe MAIOR (1H), para o operador ver se o
   // sinal de 15m está confluente ou divergente com a tendência de prazo
@@ -532,6 +543,17 @@ export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): P
       riskRewardRatio: route && isNum(route.risk_reward_ratio) ? route.risk_reward_ratio : null,
       target1Strength: route && route.target_1_strength ? route.target_1_strength : null,
       target2Strength: route && route.target_2_strength ? route.target_2_strength : null,
+      // Mesma seleção por direção que `route` já faz acima (signal ===
+      // 'SHORT' ? rota_b_short : signal === 'LONG' ? rota_a_long : null) —
+      // frame.fib_extension_long_target/short_target não passam por
+      // target-tracker.js (route), então a escolha do lado certo precisa
+      // ser feita aqui diretamente sobre o frame.
+      extendedTarget:
+        signal === 'LONG' && isNum(frame.fib_extension_long_target)
+          ? frame.fib_extension_long_target
+          : signal === 'SHORT' && isNum(frame.fib_extension_short_target)
+            ? frame.fib_extension_short_target
+            : null,
       htfMarketStructure: htf.label,
       htfTimeframe: HTF_INTERVAL,
       htfUpdatedAt: htf.updatedAt,

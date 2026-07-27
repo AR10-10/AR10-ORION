@@ -3642,6 +3642,86 @@ derivação pura + a superfície mais simples e imediata (header), mesmo
 padrão de graduação incremental já usado por `market-session.ts`
 (texto no header primeiro, marcadores no canvas em um round posterior).
 
+### 6.49 Auditoria de background concluída (3 achados reais) + Target 3
+(extensão de Fibonacci) no gráfico
+
+Pergunta aberta do Operador ("o que falta evoluir, principalmente o
+visual do gráfico e as ferramentas... pra ficar mais precisa?") chegou
+enquanto o agente Explore lançado no fechamento de §6.48 ainda rodava
+em background — a notificação chegou no meio desta rodada, com 3
+achados reais e verificados (não teóricos):
+
+1. **Target 3 nunca chegava ao gráfico** (o achado mais diretamente
+   relevante à pergunta do Operador sobre precisão visual).
+   `support-resistance-engine.js` já calcula
+   `fib_extension_long_target`/`fib_extension_short_target` (extensão
+   de Fibonacci 61.8% sobre a última perna confirmada) EM TODO ciclo —
+   o próprio comentário da EPC §5/§6 no chart já dizia "falta aparecer
+   entrada e alvo/alvo2/**alvo3**", confirmando que isto era um pedido
+   antigo do Operador nunca completado. O valor morria dentro de
+   `research-engine.js` (só virava texto formatado em
+   `rota_a_long.extended_target`) e nunca saía de `engine-bridge.ts`.
+2. **"Consenso Entre Corretoras" hardcoded como NÃO_APLICÁVEL** — bug
+   real em `DecisionValidationWidget`, com um comentário desatualizado
+   afirmando que o terminal só tem uma fonte de preço. Falso: 3
+   checagens cross-exchange reais (Bybit/OKX/MEXC vs. Binance) já
+   alimentam `trustScore.crossExchangeConvergence`, um score 0-1 real
+   já exibido em 2 outros widgets — só esta linha específica nunca lia
+   o valor.
+3. **`affectiveMemory` (reward/pain/eventCount reais)** alimentada por
+   8 call sites reais (`recordAffectiveEvent`) mas só o ratio derivado
+   (CPI) era exibido — nenhum consumidor distinguia "CPI 50% com 2
+   eventos" de "CPI 50% com 200 eventos", ao contrário do painel TRUST
+   SCORE vizinho, que já expõe seus componentes reais via tooltip.
+
+**Solução aplicada** (todos passthrough/wiring puro, zero motor novo):
+
+- `RealCycleResult.extendedTarget` (engine-bridge.ts): seleciona
+  `frame.fib_extension_long_target`/`short_target` pela MESMA direção
+  que `route` já seleciona target1/target2 — nunca uma 4ª fórmula.
+  Threading completo: `engine-bridge.ts` → `App.tsx`'s `engine` useMemo
+  (`extendedTarget`) → `engineFallbackLevels` (`target3`) →
+  `EnhancedChart_110_Percent.tsx` (nova prop tipada, nova linha de
+  preço via `mk()`, novo rótulo `TP3` no eixo). TP3 é deliberadamente
+  MAIS SIMPLES que TP1/TP2 — sem `strengthSuffix`/`obstacleSuffix`,
+  porque a fonte (`support-resistance-engine.js`) não computa esses
+  metadados para este nível; nunca um valor fabricado só para uniformizar
+  o rótulo.
+- `DecisionValidationWidget` ganhou `useTrustScoreSnapshot()` (mesmo
+  hook já usado por 2 outros widgets, seguro chamar de múltiplos
+  componentes — ao contrário do singleton `useGmilSnapshot()`) e a
+  linha "Consenso Entre Corretoras" agora lê
+  `num(trustScore?.crossExchangeConvergence)` real. Comentário
+  desatualizado do widget corrigido junto.
+- `CouncilWidget` ganhou `useAffectiveMemorySnapshot()` + tooltip na
+  linha CPI (`Reward X.XX · Pain Y.YY · N eventos reais`), mesmo padrão
+  já usado pelo TRUST SCORE ao lado.
+
+**Verificação ao vivo (Playwright)**: tooltip do CPI mostrou
+`"Reward 0.20 · Pain 0.95 · 3 eventos reais desde o boot"` — 3 eventos
+afetivos reais já ocorreram neste sandbox (ciclo com falha de rede,
+feed WS indisponível), e o rótulo `17%` bate exatamente com
+`0.20/(0.20+0.95)`. Header mostrou simultaneamente `NOVA YORK` +
+`FECHAMENTO DE LONDRES` às 14:59 UTC — confirmação ao vivo adicional
+do overlap de Kill Zones (§6.48) no build de produção.
+
+**Riscos conhecidos**: `chartObstacleZones` (destaque de zona
+estrutural no caminho entrada→alvo) NÃO foi estendido para incluir
+TP3 — decisão deliberada de manter TP3 simples nesta rodada (consistente
+com não ter obstacleCount); extensão futura natural, não esquecida.
+Duas travas de teste de janela fixa (`s.slice(idx, idx + N)`) em
+`price-label-stack-plugin.test.ts` precisaram de janela maior — mesmo
+padrão de manutenção já visto neste arquivo, não um sinal de fragilidade
+nova.
+
+**Testes**: `tsc --noEmit` limpo · **117 arquivos / 1928 testes** (100%,
++5 novos: 1 em `price-label-stack-plugin.test.ts` (rótulo TP3 dedicado;
+os outros 2 testes existentes desse arquivo ganharam assertions extras,
+sem virar testes novos) + 4 em `diretriz3-fixes.test.ts` (1 por achado,
+mais 1 cobrindo separadamente o lado engine-bridge.ts e o lado App.tsx
+do Target 3) · build de produção ok · verificação Playwright ao vivo
+(CPI tooltip + Kill Zones overlap, screenshot).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

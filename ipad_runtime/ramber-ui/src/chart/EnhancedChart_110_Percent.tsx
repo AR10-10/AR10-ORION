@@ -299,6 +299,12 @@ interface EnhancedChartProps {
     target2: number | null;
     target2Strength: { label: "FORTE" | "FRACA"; touches: number } | null;
     target2ObstacleCount?: number | null;
+    // Achado de auditoria (Ferramentas Institucionais): extensão de
+    // Fibonacci 61.8% sobre a última perna confirmada
+    // (support-resistance-engine.js) — mais simples que target1/target2 de
+    // propósito: nenhuma força/obstáculo é computada para este nível na
+    // fonte, então TP3 é preço puro, sem os mesmos metadados.
+    target3?: number | null;
     riskRewardRatio: number | null;
   } | null;
   // Neural Market Aura: visual translation of the SAME real Trade Plan +
@@ -1487,6 +1493,7 @@ export function EnhancedChart_110_Percent({
     mk(engineFallbackLevels.stop, "rgba(255, 0, 85, 0.5)");
     mk(engineFallbackLevels.target1, "rgba(0, 255, 170, 0.5)");
     if (engineFallbackLevels.target2 !== null) mk(engineFallbackLevels.target2, "rgba(0, 255, 170, 0.35)");
+    if (engineFallbackLevels.target3 != null) mk(engineFallbackLevels.target3, "rgba(0, 255, 170, 0.2)");
   }, [engineFallbackLevels]);
 
   // Ordem Final Autonomia Evolução §1 + Diretriz Complementar §2/§4:
@@ -1808,6 +1815,19 @@ export function EnhancedChart_110_Percent({
           price: engineFallbackLevels.target2,
           text: `TP2${strengthSuffix(engineFallbackLevels.target2Strength)}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,
           color: "rgba(0, 255, 170, 0.35)",
+        });
+      }
+      // Achado de auditoria (Ferramentas Institucionais): TP3 = extensão
+      // de Fibonacci 61.8%, mesma convenção TP1/TP2/TP3 numerada sempre
+      // (EPC FINAL §8) — sem strengthSuffix/obstacleSuffix porque a fonte
+      // (support-resistance-engine.js) não computa esses metadados para
+      // este nível, nunca um valor fabricado só para preencher o rótulo.
+      if (engineFallbackLevels.target3 != null && Number.isFinite(engineFallbackLevels.target3)) {
+        const reached = p !== null && (longFb ? p >= engineFallbackLevels.target3 : p <= engineFallbackLevels.target3);
+        out.push({
+          price: engineFallbackLevels.target3,
+          text: `TP3${reached ? " · REACHED" : ""}`,
+          color: "rgba(0, 255, 170, 0.2)",
         });
       }
     }
