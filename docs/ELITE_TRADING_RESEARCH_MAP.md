@@ -84,12 +84,62 @@ coluna "Decisão" de cada tabela abaixo:
 
 ## 2. TradingView
 
-*(Pesquisa em andamento — agente dedicado, cobrindo Pine Script,
-Replay, Alertas, Screener, Heatmaps de setor/mercado. Parte da
-comparação de indicadores de order flow/liquidez já está coberta por
-`AUDITORIA_ECOSSISTEMA_VISUAL.md` §3, citada e não repetida aqui.)*
+Pesquisa real via `WebSearch` (agente dedicado). **Limite honesto
+declarado pelo próprio agente**: `WebFetch` direto em
+`tradingview.com`/`mql5.com`/`metatrader5.com` retornou HTTP 403 de
+forma consistente — o relatório se apoia em sínteses de busca real
+sobre o conteúdo dessas páginas, não em leitura linha-a-linha do HTML.
+Suficiente para "o que existe e como funciona", não equivale a
+auditoria de código-fonte de terceiros.
 
-**Placeholder — preenchido quando o agente de pesquisa retornar.**
+| # | Nome | Categoria | Existe no AR10? | Decisão |
+|---|---|---|---|---|
+| 1 | Smart Money Concepts (LuxAlgo, all-in-one) | Indicador | ⚠️ PARCIAL — AR10 tem a MESMA cobertura conceitual (FVG/OB/BOS-CHOCH/EQH-EQL/Premium-Discount) mas como TypeScript/canvas nativo integrado ao Core Engine, não um indicador Pine isolado sobre velas | **Produção** (arquitetura já superior — integração nativa com decisão, não só overlay visual) |
+| 2 | Fair Value Gap — variante Volumétrica (soma volume dentro da zona + proporção comprador/vendedor) | Indicador | ❌ NÃO — `liquidity_zones` desenha a zona geométrica, sem volume agregado dentro dela | **Laboratório**: melhoria real (não reempacotamento), reaproveitaria volume já real por candle; escopo pequeno |
+| 3 | TradingView Volume Profile (nativo, 5 variantes) | Indicador | ✅ SIM — WASM real, POC + HVN | **Produção** |
+| 4 | CVD (Cumulative Volume Delta) | Indicador | ✅ SIM — `cvd` (chart layer) | **Produção** — metodologia de inferência de polaridade (open/close relativo, tie-break) não comparada linha a linha nesta rodada |
+| 5 | TradingView Bar Replay (+ Synchronized multi-gráfico) | Replay | ⚠️ PARCIAL — `src/replay/` já é o Motor de Replay real usado pelo laboratório de backtest (§7.6); sincronização MULTI-símbolo simultânea não se aplica ao AR10 hoje (visão de 1 ativo por vez) | **Produção** (para o caso de uso real do AR10) — sync multi-símbolo é **Descartar**: não combina com o design de "um ativo selecionado por vez" |
+| 6 | TradingView Alerts / Webhooks | Alertas | ❌ NÃO | **Laboratório com cautela explícita**: alertas de LEITURA (ex. "Kill Zone abriu", "estrutura mudou") são compatíveis com READ_ONLY; um webhook que dispara AUTOMAÇÃO EXTERNA de execução, mesmo que o AR10 nunca envie a ordem diretamente, é o tipo de "reformulação" que a regra permanente do projeto pede para tratar com o mesmo cuidado de um pedido de execução real — qualquer implementação futura precisa deixar claro que é notificação, nunca um gatilho de trading |
+| 7 | TradingView Screener (Stock + Pine Screener Beta) | Screener | ✅ SIM (equivalente funcional) — Radar/OIH já escaneia um universo (Binance curado + MEXC paginado) contra lógica de pontuação própria, exatamente o papel do Pine Screener | **Produção** |
+| 8 | TradingView Heatmap de setor/mercado (cor=variação, tamanho=peso) | Heatmap | ❌ NÃO | **Laboratório**: o Radar já produz os dados (cada candidato tem direção+confluência); render-los como grade de calor em vez de lista seria reaproveitamento de dado já real, não um motor novo |
+| 9 | TradingView Liquidation Heatmap — **proxy/estimado**, não dado real (a própria TradingView não tem feed de liquidação real; usa heurística de preço/volatilidade) | Heatmap | ✅ SIM, e **melhor** — `liquidation_heatmap` do AR10 usa feed real de liquidações forçadas, não uma estimativa | **Produção** (achado que confirma vantagem real, não lacuna) |
+| 10 | Bar Magnifier / Deep Backtesting (fidelidade intrabar via timeframe inferior) | Backtesting | ❌ NÃO — `structural-backtest.js` opera na resolução do candle, sem reconstrução intrabar | **Laboratório**, baixa prioridade — o próprio backtest já é honesto sobre medir só o subconjunto estrutural candle-only (§7.6); ganho de precisão intrabar teria retorno pequeno frente à honestidade já existente sobre a limitação |
+| 11 | Deeptest (biblioteca Pine de comunidade: Sharpe/Sortino/VaR/CVaR/drawdown/Monte Carlo/Walk-Forward num só pacote) | Backtesting | ❌ NÃO | Ver §7 (Gestão de Risco) — mesmo conjunto de lacunas (Drawdown, Monte Carlo, Walk-Forward formal), cross-referenciado aqui para não duplicar análise |
+
+**Achado transversal do próprio agente, reafirmado**: SMC/ICT (order
+blocks, FVG, BOS/CHoCH, premium/discount) é a categoria de indicador
+mais replicada em ambos os ecossistemas pesquisados — mas a fonte
+(Michael J. Huddleston/"ICT") nunca publicou uma definição formal
+única, então duas implementações com o mesmo nome de conceito não
+garantem medir a mesma coisa. Vale como contexto para o próprio AR10:
+suas escolhas de tolerância/definição SMC são tão legítimas quanto
+qualquer outra, desde que documentadas (já são).
+
+---
+
+## 3. MetaTrader 5 / MQL5
+
+Mesma rodada de pesquisa do agente acima (mesma limitação de acesso
+declarada — WebFetch bloqueado, WebSearch usado).
+
+| # | Nome | Categoria | Existe no AR10? | Decisão |
+|---|---|---|---|---|
+| 1 | MQL5 Standard Library — Trade/Money-Management classes (`CMoneyFixedRisk`, `CMoneySizeOptimized`, etc.) | Biblioteca | ⚠️ PARCIAL — `risk-engine.js` cobre o mesmo PAPEL (calcular tamanho de posição a partir de regra de risco) como função pura autocontida, sem hierarquia de classes OOP nem execução real acoplada (MQL5 é pensado para enviar ordem; o AR10 nunca envia) | **Produção** — arquitetura mais simples E mais segura para o propósito real do AR10 (cálculo desacoplado de execução) |
+| 2 | MT5 Strategy Tester — Modeling Quality / tick real vs. sintético | Backtesting | ❌ NÃO diretamente aplicável — o AR10 nunca simula preenchimento de ordem (não executa), então "fidelidade de fill" não é um problema que o AR10 precisa resolver | **Descartar** — fora de escopo por design, não lacuna |
+| 3 | Otimização por Algoritmo Genético (espaço de parâmetros grande) | Otimização | ❌ NÃO, e coerente com §7.7: o AR10 não otimiza parâmetro nenhum contra histórico por princípio (RSI 70/30, piso R:R, ATR budgets são convenções declaradas) | **Descartar** — o próprio motivo de existir (acelerar otimização) não se aplica a um sistema que não otimiza |
+| 4 | Walk-Forward Analysis / Monte Carlo no MT5 — **não nativo**, exige biblioteca/automação externa mesmo no MQL5 | Otimização/Metodologia | Ver §7.5-7.6 | Cross-referenciado — achado interessante: nem o MT5 (a plataforma mais madura de EAs) resolveu isso nativamente; reforça que é lacuna genuína da indústria, não peculiaridade do AR10 |
+| 5 | Arquitetura orientada a eventos + "Single Trade Gateway" (todo pedido de ordem passa por 1 verificador central de risco) | Metodologia/Arquitetura | ✅ SIM, em espírito — LEI 24 do AR10 (Core Engine como único emissor real de LONG/SHORT/WAIT, nenhuma camada de confluência pode gerar uma segunda decisão) é a MESMA ideia arquitetural (um único ponto de decisão, tudo mais é consultivo), aplicada a leitura em vez de execução | **Produção** — achado que VALIDA a arquitetura já escolhida pelo AR10 como alinhada com boas práticas reconhecidas, não uma lacuna |
+| 6 | Motores de detecção de padrão em MQL5 (Order Blocks OOP, harmônicos, Wolfe Wave — tolerâncias variam por autor, sem padrão único) | Indicador | ✅ SIM — AR10 já tem Order Blocks, harmônicos (Gartley/Bat/Butterfly/Crab/Cypher/Shark) e Wolfe Wave (com PRZ/EPA) | **Produção** — confirma paridade com o estado da arte da comunidade MQL5, mesma observação de "tolerância é escolha documentada, não padrão único" já seguida pelo AR10 |
+
+**Achado do próprio agente que vale registrar por si só**: MQL5
+CodeBase/Market não tem equivalente a "open-source com licença
+padrão" (cada produto é livre ou comercial, sem convenção uniforme);
+TradingView formalizou isso com 3 modos explícitos (open-source/
+MPL-2.0, protected, invite-only). Diferença real de maturidade de
+governança entre as duas comunidades — não relevante para decisão
+técnica do AR10, mas relevante para qualquer avaliação futura de
+"vale a pena adaptar código de terceiros" (checar licença sempre,
+nunca assumir).
 
 ---
 
@@ -191,11 +241,167 @@ consistente com o veredito já documentado.
 
 ## 7. Gestão de Risco
 
-*(Pesquisa em andamento — agente dedicado, cobrindo ATR/Position
-Sizing, Kelly Criterion, Drawdown, Monte Carlo, Walk Forward,
-Out-of-Sample.)*
+Pesquisa real via `WebSearch` (agente dedicado), priorizando papers
+originais/peer-reviewed e documentação de plataformas profissionais
+como fonte primária. Controvérsias reais da literatura (Kelly pleno
+vs. fracionário, o que Monte Carlo prova vs. não prova) são reportadas
+como controvérsias, nunca resolvidas artificialmente.
 
-**Placeholder — preenchido quando o agente de pesquisa retornar.**
+Os 7 métodos formam dois grupos: **(1) dimensionamento em tempo real**
+(ATR, Position Sizing, Kelly) — respondem "quanto arriscar numa
+posição"; **(2) validação offline** (Monte Carlo, Walk Forward,
+Out-of-Sample) — respondem "essa estratégia tem edge real, ou é ruído
+ajustado?". Drawdown conecta os dois grupos.
+
+### 7.1 ATR (Average True Range) como unidade de risco
+
+**Origem**: J. Welles Wilder Jr., *New Concepts in Technical Trading
+Systems*, 1978 (mesmo livro do RSI/ADX). **Fórmula real**: `TR_t =
+max[High_t−Low_t, |High_t−Close_(t-1)|, |Low_t−Close_(t-1)|]`; `ATR_t
+= (ATR_(t-1)×(n−1) + TR_t)/n` — suavização de Wilder (equivalente a
+EMA com α=1/n), NÃO uma média móvel simples. Uso em sizing: `Tamanho =
+(Capital × %Risco) / (k × ATR)`. **Limitação real**: é volatilidade
+*passada* (lagging), não prediz rupturas de regime (gaps, liquidações
+em cascata). **Maturidade**: muito alta, padrão de fato há 47 anos.
+
+**Existe no AR10?** ✅ **SIM, Produção** — `risk-engine.js`:
+`unidade_de_risco% = max(stop_dist%, ATR%)` (ATR real vindo do Market
+Regime Engine). Confirma exatamente o "Percent Volatility Model" da
+pesquisa (item 7.2 abaixo), já combinado com o stop real da rota.
+
+### 7.2 Position Sizing (família de modelos)
+
+**Origem**: Van K. Tharp, *The Definitive Guide to Position Sizing
+Strategies*. **Modelo relevante**: Percent Risk Model — `Tamanho =
+(Capital × %Risco_por_trade) / |Entrada − Stop|`, tipicamente
+0,5%–2% do equity (heurística de indústria, não teorema).
+**Limitação real**: por si só não diferencia qualidade/confiança do
+setup — arrisca o mesmo % em trade de alta e baixa convicção, a menos
+que combinado com outra camada.
+
+**Existe no AR10?** ✅ **SIM, Produção** — `risk-engine.js` combina
+EXATAMENTE essa limitação real: o Percent Risk Model puro (`stop_dist%`)
+É combinado com ATR% (item 7.1) via `max()`, e o resultado ainda passa
+por um teto de Kelly fracionado ponderado pela força REAL do comitê
+(item 7.3) — ou seja, a "diferenciação por confiança" que a pesquisa
+aponta como limitação do modelo puro já é o que o AR10 adiciona por
+cima.
+
+### 7.3 Kelly Criterion e Kelly Fracionário
+
+**Origem**: John L. Kelly Jr., *Bell System Technical Journal*, 1956.
+Kelly fracionário: MacLean/Thorp/Ziemba, *Quantitative Finance*.
+**Fórmula**: `f* = p − q/b` (forma de trading: `K% = W − (1−W)/R`).
+**Controvérsia REAL e documentada** (não resolvida na literatura):
+Paul Samuelson (Nobel 1970) publicou objeções formais ao critério de
+Kelly como "ótimo universal"; Ziemba/Thorp/MacLean responderam
+formalmente — é uma disputa acadêmica de peso, não um ponto fechado.
+**Limitação crítica**: Kelly pleno assume p e b **conhecidos com
+exatidão** — em trading real são estimativas ruidosas; superestimar o
+edge leva a apostar acima do Kelly real, que a própria matemática do
+modelo mostra ser pior que não apostar. 0,5× Kelly captura ~75% do
+crescimento com ~25% da variância (MacLean/Thorp/Ziemba).
+
+**Existe no AR10?** ✅ **SIM, Produção — e já resolve a limitação
+crítica da forma mais honesta possível**: `risk-engine.js` NUNCA
+estima p (a taxa de acerto). Fixa `p₀ = 0.5` permanentemente
+("moeda honesta — o motor não reivindica edge direcional nenhum") e
+deriva Kelly pleno só da assimetria real do R:R (`Kelly_pleno = 0.5 −
+0.5/b`) — positivo só quando b>1. Por cima disso, aplica frações FIXAS
+e conservadoras (1/2, 1/4, 1/8-Kelly, nunca Kelly pleno) escalonadas
+pela força REAL do comitê. Isto é precisamente a forma que a pesquisa
+recomenda como mais defensável: em vez de estimar p de uma amostra
+pequena e não-estacionária (o cerne da crítica de Samuelson), o AR10
+recusa-se a estimar p e usa uma constante honesta — o "edge" reportado
+nunca é maior que o que a assimetria de payoff sozinha sustenta.
+
+### 7.4 Drawdown (Max Drawdown, Duration, Recovery Factor, Calmar Ratio)
+
+**Origem**: Magdon-Ismail & Atiya, *Risk Magazine*, 2004 (tratamento
+analítico); CFA Institute (padronização). **Achado real importante**:
+a literatura de processos estocásticos mostra que o **drawdown
+esperado cresce com a raiz do tempo** — quanto mais tempo um sistema
+roda, maior o MDD esperado, mesmo sem mudança de regime. Um MDD
+histórico NÃO é um teto para o MDD futuro.
+
+**Existe no AR10?** ❌ **NÃO** — nenhum motor de drawdown (realizado ou
+projetado) existe hoje. O Track Record real (`signal-track-record.ts`)
+já persiste resultado de plano por symbol:timeframe, então o dado bruto
+pra calcular MDD real já existe parcialmente — calcular MDD sobre isso
+seria aditivo, não um motor novo do zero. **Laboratório**.
+
+### 7.5 Monte Carlo Simulation (validação de estratégia)
+
+**Origem acadêmica rigorosa**: Halbert White, "A Reality Check for
+Data Snooping", *Econometrica*, 2000; Sullivan/Timmermann/White,
+*Journal of Finance*, 1999. **Prática comercial**: reshuffle (mesmos
+trades, ordem embaralhada) ou resampling (bootstrap com reposição).
+**Limitação crítica, ênfase deliberada da pesquisa**: Monte Carlo
+**NÃO testa se a estratégia tem edge real** — reembaralha os MESMOS
+trades já ocorridos. Se o conjunto original vem de uma estratégia
+overfitted, o Monte Carlo produz uma distribuição elegante e igualmente
+sem validade preditiva. Pressupõe implicitamente trades i.i.d. —
+premissa frequentemente falsa em mercados reais (autocorrelação de
+regime, clusters de volatilidade).
+
+**Existe no AR10?** ❌ **NÃO** — nenhuma forma de reamostragem/
+reembaralhamento de trades existe. **Laboratório**, mas de prioridade
+baixa dado o próprio veredito da pesquisa: sem uma amostra grande de
+trades reais (o Track Record ainda é jovem, symbol:timeframe por
+symbol:timeframe), Monte Carlo sobre poucos trades reais teria pouco
+valor — e aplicá-lo cedo demais correria o risco real, já documentado
+por esta pesquisa, de parecer "validação" sem ser.
+
+### 7.6 Walk Forward Analysis
+
+**Origem**: Robert Pardo, *Design, Testing, and Optimization of
+Trading Systems*, 1992. **Metodologia real**: janela IS (otimização) +
+janela OOS (teste, nunca vista) deslizando no tempo; **Walk-Forward
+Efficiency (WFE) = Performance OOS / Performance IS** (heurística de
+mercado: WFE≥50% aceitável, não um teorema formal). **Limitação
+real**: WFA não elimina overfitting — só reduz a chance de um
+overfitting óbvio passar despercebido; a escolha do tamanho de
+janela é ela mesma um hiperparâmetro com efeito grande (pesquisa
+recente, arXiv 2602.10785).
+
+**Existe no AR10?** ⚠️ **PARCIAL** — `research/backtest/
+structural-backtest.js` (Fase 1, "backtest honesto") já roda uma
+medição de desfechos estruturais **no espírito walk-forward**: usa o
+Motor de Replay real, processa candle a candle cronologicamente
+(nunca olha à frente), conta alvo/stop/não-resolvido sobre uma REGRA
+FIXA (não otimizada). A diferença real para Walk-Forward Analysis
+"de livro-texto" (Pardo): não há etapa de OTIMIZAÇÃO de parâmetros em
+janela IS seguida de teste OOS — a regra estrutural é fixa por
+design, então o conceito de "degradação IS→OOS" não se aplica da
+mesma forma. **Homologação** — já é honesto sobre o que mede
+(contagem de desfechos, nunca probabilidade futura, campo próprio no
+contrato avisando isso), mas o nome "backtest" convida à comparação
+com WFA formal, que ele não é.
+
+### 7.7 Out-of-Sample (OOS) Testing
+
+**Origem**: princípio fundamental de estatística/ML (Hastie/
+Tibshirani/Friedman); extensão a finança quantitativa: Marcos López de
+Prado, *Advances in Financial Machine Learning*, 2018 (Combinatorial
+Purged Cross-Validation); Bailey & López de Prado, "The Deflated
+Sharpe Ratio", *Journal of Portfolio Management*, 2014 — ajusta o
+Sharpe observado pelo número de configurações testadas, penalizando
+estatisticamente a seleção múltipla.
+
+**Existe no AR10?** ❌ **NÃO** como conceito formal (não há separação
+explícita treino/teste em nada do AR10) — mas **estruturalmente quase
+inevitável por construção**: o AR10 não otimiza NENHUM parâmetro
+contra dado histórico (RSI 70/30, piso R:R 1:2, ATR budgets — todos
+são convenções declaradas, nunca ajustadas por fit em dados passados,
+princípio já documentado no próprio código como "mesma natureza do
+RSI 70/30... convenções documentadas e ajustáveis, nunca medições").
+Isso significa que boa parte do risco que OOS testing existe para
+detectar (overfitting de parâmetro) já não se aplica da mesma forma —
+não porque o AR10 testou e validou, mas porque nunca ajustou parâmetro
+nenhum a dado histórico para começo de conversa. **Pesquisar mais**:
+vale mais como um princípio a MANTER (nunca introduzir otimização de
+parâmetro sem também introduzir OOS/walk-forward formal) do que como
+lacuna a fechar agora.
 
 ---
 
