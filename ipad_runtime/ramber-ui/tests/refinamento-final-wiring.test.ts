@@ -126,7 +126,7 @@ describe('Header §1: TF + LIVE + latência + sessão — todas leituras REAIS j
 
   it('sessão: derivação pura do relógio UTC real (market-session.ts), tooltip divulga a janela verificável', () => {
     const a = app();
-    expect(a).toContain('import { marketSessionFromUtc } from "./nexus/market-session";');
+    expect(a).toContain('import { marketSessionFromUtc, computeSessionBoundaries } from "./nexus/market-session";');
     expect(a).toContain('const marketSession = marketSessionFromUtc(new Date());');
     expect(a).toContain('{marketSession.label}');
     expect(a).toContain('${marketSession.windowUtc}');

@@ -39,6 +39,16 @@ export const RELEVANCE_LAYER_IDS = [
   "premium_discount",
   "harmonics",
   "equal_highs_lows",
+  // Achado de auditoria (declutter do gráfico, pedido direto do
+  // Operador): as 3 camadas institucionais mais recentes (EPC OMEGA
+  // FINAL Etapa 10 / OMEGA CORE V-MAX Fase 8.1) nunca entraram no
+  // gate de relevância — ficavam sempre visíveis em modo AUTO
+  // independente de terem algo real pra mostrar agora, o oposto do
+  // resto do painel "Camadas do Gráfico". Mesmo princípio das 15
+  // acima: cada regra só decide SIM/NÃO sobre um dado já real.
+  "liquidation_heatmap",
+  "liquidity_sweep",
+  "market_sessions",
 ] as const;
 export type RelevanceLayerId = (typeof RELEVANCE_LAYER_IDS)[number];
 
@@ -78,6 +88,18 @@ export interface LayerRelevanceInput {
   // de ofertas ao vivo para o heatmap ter dado pra desenhar.
   orderflowTrendActive: boolean;
   hasOrderBook: boolean;
+  // Liquidações Forçadas: pelo menos 1 evento real no feed atual — mesma
+  // condição que o próprio painel de lista (SecondaryModuleView) já usa
+  // para decidir se tem algo real pra mostrar.
+  hasRecentLiquidation: boolean;
+  // Liquidity Sweep: pelo menos 1 trap real STOP_HUNT_TOPO/FUNDO no
+  // momento — mesmo filtro que o canvas (LiquiditySweep no
+  // EnhancedChart) já usa para decidir o que desenhar.
+  hasRecentLiquiditySweep: boolean;
+  // Sessões institucionais: uma transição real de sessão aconteceu
+  // dentro da janela recente declarada (mesma computeSessionBoundaries
+  // pura que MarketSessionBandsPlugin já usa pra desenhar).
+  recentSessionBoundary: boolean;
 }
 
 export interface LayerRelevanceResult {
@@ -115,6 +137,12 @@ export const HARMONIC_HIGHLIGHT_FIT = 0.9;
 export const TREND_CHANNEL_HIGHLIGHT_BANDWIDTH_PCT = TREND_CHANNEL_TIGHT_BANDWIDTH_PCT / 2;
 export const STRUCTURE_BREAK_HIGHLIGHT_MIN_ALPHA = 0.9;
 export const LIQUIDITY_HIGHLIGHT_MIN_OBSTACLES = 2;
+// Sessões institucionais: janela real declarada de "acabou de mudar de
+// sessão" — mesma natureza de convenção documentada, não medição (a
+// sessão só transiciona 4x/dia; uma janela pequena mantém a camada
+// visível logo após a virada e some depois, em vez de acender/apagar
+// só no candle exato da transição).
+export const MARKET_SESSION_RECENT_BOUNDARY_CANDLES = 5;
 
 function fmtPct(p: number): string {
   return `${p.toFixed(1)}%`;
@@ -216,5 +244,17 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
     equal_highs_lows: input.unsweptLiquidityNearPrice
       ? { relevant: true, emphasis: "normal", reason: `EQH/EQL real não varrida a menos de ${fmtPct(LIQUIDITY_PROXIMITY_PCT)} do preço` }
       : { relevant: false, emphasis: "normal", reason: "nenhuma EQH/EQL real não varrida próxima do preço" },
+
+    liquidation_heatmap: input.hasRecentLiquidation
+      ? { relevant: true, emphasis: "normal", reason: "evento(s) real(is) de liquidação forçada no feed atual" }
+      : { relevant: false, emphasis: "normal", reason: "nenhuma liquidação forçada real no feed atual" },
+
+    liquidity_sweep: input.hasRecentLiquiditySweep
+      ? { relevant: true, emphasis: "normal", reason: "sweep de liquidez real (STOP_HUNT) detectado agora" }
+      : { relevant: false, emphasis: "normal", reason: "nenhum sweep de liquidez real detectado agora" },
+
+    market_sessions: input.recentSessionBoundary
+      ? { relevant: true, emphasis: "normal", reason: `transição real de sessão dentro dos últimos ${MARKET_SESSION_RECENT_BOUNDARY_CANDLES} candles` }
+      : { relevant: false, emphasis: "normal", reason: "nenhuma transição de sessão recente — sessão vigente estável" },
   };
 }

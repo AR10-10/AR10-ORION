@@ -3722,6 +3722,131 @@ mais 1 cobrindo separadamente o lado engine-bridge.ts e o lado App.tsx
 do Target 3) · build de produção ok · verificação Playwright ao vivo
 (CPI tooltip + Kill Zones overlap, screenshot).
 
+### 6.50 AR10 CYBORG — ELITE TRADING RESEARCH MAP: pesquisa externa
+consolidada (9 categorias + síntese)
+
+Diretiva formal do Operador (estrutura numerada §10.1-§10.5, metodologia
+obrigatória: zero recomendação por popularidade, todo item com
+objetivo/benefícios/limitações/evidências/maturidade/compatibilidade/
+complexidade/impacto/dependências/riscos, coluna "Existe no AR10?
+SIM/PARCIAL/NÃO" em toda comparação, vocabulário de classificação
+fechado Descartar/Pesquisar Mais/Laboratório/Experimental/Quarentena/
+Homologação/Produção) pedindo 1 único `.md` consolidado cobrindo
+TradingView, MetaTrader/MQL5, GitHub, IA, Estrutura de Mercado, Gestão
+de Risco, Interface/UX, Engenharia e Auditoria.
+
+**Solução aplicada**: `docs/ELITE_TRADING_RESEARCH_MAP.md` (717 linhas,
+14 seções). Metodologia dividida por origem do conhecimento, nunca
+misturada silenciosamente:
+
+- §1 (Metodologia), §5 (IA) e §6 (Estrutura de Mercado) escritos direto
+  do conhecimento já real desta sessão + leitura direta do código —
+  zero pesquisa nova onde a resposta já existia (Regra de Ouro / "Audite
+  antes de construir").
+- §2 (TradingView), §3 (MetaTrader/MQL5), §4 (GitHub), §7 (Gestão de
+  Risco), §8 (UX) e §9 (Engenharia) vieram de 4 agentes de pesquisa em
+  background rodando `WebSearch` real em paralelo (mesmo padrão já
+  usado na auditoria "EPC OMEGA FINAL Etapa 1" de 3 agentes) — cada um
+  instruído a citar URLs reais e marcar explicitamente claims de baixa
+  confiança (ex.: benchmark autodeclarado por fornecedor) como tal,
+  nunca apresentar como fato. A coluna "Existe no AR10?" foi reservada
+  para mim (nunca delegada aos agentes) — exige conhecimento direto e
+  confiável do código-fonte, que um agente teria que re-derivar do zero.
+- §10-14 (Matriz de lacunas, Backlog em 4 tiers por impacto×complexidade,
+  Roadmap em 6 fases, Riscos, Fontes) são síntese original sobre os
+  achados acima.
+
+**Achados de maior impacto já confirmados por código real**: o Risk
+Engine (`risk-engine.js`) resolve a controvérsia acadêmica real
+Samuelson-vs-Ziemba/Thorp do Critério de Kelly da forma mais defensável
+possível (nunca estima win-rate real, Kelly fracionado fixo por faixa de
+força do Comitê); o padrão "Single Trade Gateway" da comunidade MQL5
+valida arquiteturalmente a LEI 24 (Core Engine como único emissor real);
+a dívida de migração WidgetContext→seletores Zustand (já flagada há
+várias rodadas) é literalmente o antipadrão que a comunidade Zustand
+documenta como causa raiz de re-render desnecessário (existência do
+pacote `eslint-plugin-granular-selectors` como evidência).
+
+**Riscos conhecidos**: nenhuma tecnologia nova foi integrada nesta
+rodada — o documento é só o mapa, a decisão de puxar algo do backlog
+técnico (§11) para dentro do repositório continua sendo rodada própria,
+isolada, nunca misturada com pesquisa.
+
+**Testes**: documento markdown puro, sem superfície de código nova —
+`tsc`/`vitest`/build desta rodada não se aplicam; verificação foi
+leitura própria do documento final (checagem de cabeçalho duplicado
+deixado por um checkpoint incremental, corrigido antes da entrega).
+Commits: `817a937` (checkpoint 2/6), `d0debd8` (checkpoint 4/6),
+`8f36fe3` (entrega completa).
+
+### 6.51 Declutter do gráfico: Relevance Engine passa a cobrir as 18
+camadas reais (antes cobria 15 de 18)
+
+Pedido do Operador ("tira as camada que não tem necessidade... organiza
+a parte gráfica do gráfico pra ficar mais perfeito possível... total
+liberdade pra não quebrar nada"). Regra de Ouro 4 (nunca apagar dado
+real ou funcionalidade) descarta a leitura literal de "remover camadas"
+— a interpretação real e segura é fechar o gap já documentado desde a
+Fase 8.1 (§6.41): `liquidation_heatmap`, `liquidity_sweep` e
+`market_sessions` são as 3 camadas mais recentes do painel "Camadas do
+Gráfico" e nunca ganharam regra própria no Relevance Engine
+(`nexus/layer-relevance.ts`) — ficavam sempre visíveis em modo
+AUTOMÁTICO via fallback (`relevance?.relevant ?? true`), o oposto do
+resto do painel, que já esconde uma camada sem dado real por trás.
+
+**Solução aplicada** (3 sinais novos, cada um espelhando uma condição
+que JÁ existe em outro lugar do código — zero segunda matemática):
+
+- `hasRecentLiquidation`: mesma condição do painel de lista real
+  (`Array.isArray(liquidations) && liquidations.length > 0`).
+- `hasRecentLiquiditySweep`: mesmo filtro que o canvas
+  (`EnhancedChart_110_Percent.tsx`) já usa pra desenhar o sweep —
+  `traps` com `kind` `STOP_HUNT_TOPO`/`STOP_HUNT_FUNDO`.
+- `recentSessionBoundary`: mesma `computeSessionBoundaries` pura
+  (`market-session.ts`) que `MarketSessionBandsPlugin` já usa pra
+  desenhar — relevante quando a transição mais recente está a menos de
+  `MARKET_SESSION_RECENT_BOUNDARY_CANDLES` (5, convenção declarada,
+  mesmo espírito dos outros limiares do arquivo) candles do candle vivo.
+
+Threading: `App.tsx` importa `computeSessionBoundaries` de
+`market-session.ts` (import já existente, só estendido) e monta os 3
+campos dentro do `relevanceInput` useMemo já existente (nenhum novo
+efeito, nenhuma nova assinatura — `traps`/`liquidations` já estavam no
+escopo do `ChartWidget`, "zero segunda coleta"). `RELEVANCE_LAYER_IDS`
+passa de 15 para 18 entradas; o teste de sincronia com
+`CHART_LAYER_IDS` (`layer-relevance.test.ts`) deixa de precisar de uma
+lista de exceções (`KNOWN_UNCOVERED_LAYERS`) — cobertura agora é 1:1
+sem exceção nenhuma. Aproveitando a mesma vizinhança: 6 comentários
+desatualizados em `App.tsx` que ainda diziam "15 camadas"/"15
+toggles"/"outras 14" (defasados desde que as 3 camadas foram
+adicionadas em rodadas anteriores) foram corrigidos para refletir as 18
+reais — só prosa, zero mudança de comportamento (o código já iterava
+`CHART_LAYER_IDS` inteiro, nunca um número hardcoded).
+
+**Verificação ao vivo (Playwright)**: painel "Camadas do Gráfico" aberto
+em modo AUTOMÁTICO neste sandbox sem rede real — as 3 camadas novas
+mostram corretamente `OCULTA` com o motivo real exato:
+`"nenhuma liquidação forçada real no feed atual"`, `"nenhum sweep de
+liquidez real detectado agora"`, `"nenhuma transição de sessão recente
+— sessão vigente estável"`. Resultado esperado e honesto (fail-closed):
+sem dado real de mercado neste ambiente, as 3 camadas se escondem
+sozinhas — exatamente o comportamento de declutter pedido, provado ao
+vivo, não só por teste unitário.
+
+**Riscos conhecidos**: nenhum — mudança é aditiva (3 campos de input +
+3 casos de retorno, mesmo formato dos 15 já existentes), o fallback
+defensivo `relevance?.relevant ?? true` continua no lugar como proteção
+contra uma camada FUTURA esquecida, nunca removido.
+
+**Testes**: `tsc --noEmit` limpo · **117 arquivos / 1934 testes** (100%,
++6 novos: BASE estendida + 2 describe blocks reais para
+liquidation_heatmap/liquidity_sweep/market_sessions, cobrindo os 2
+estados de cada camada) · build de produção ok (6.03MB llm-worker/
+5.91MB llm-bridge inalterados, chunk principal 850KB) · 1 teste de
+padrão-de-fonte (`refinamento-final-wiring.test.ts`) precisou de
+atualização de string por causa do novo import — mesma manutenção de
+baixo risco já vista em rodadas anteriores, não uma regressão.
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

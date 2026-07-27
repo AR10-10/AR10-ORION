@@ -20,6 +20,7 @@ import {
   LIQUIDITY_PROXIMITY_PCT,
   FIBONACCI_PROXIMITY_PCT,
   VOLUME_PROFILE_PROXIMITY_PCT,
+  MARKET_SESSION_RECENT_BOUNDARY_CANDLES,
   type LayerRelevanceInput,
 } from "./nexus/layer-relevance";
 import { computeConfluenceCorridor } from "./nexus/confluence-corridor";
@@ -179,7 +180,7 @@ import {
 // Fecho da pendência "R:R mínimo": piso DECLARADO 1:2 (ver rr-quality.ts),
 // display-only — anota, nunca esconde/bloqueia um plano real (LEI 24).
 import { rrFloorSuffix } from "./nexus/rr-quality";
-import { marketSessionFromUtc } from "./nexus/market-session";
+import { marketSessionFromUtc, computeSessionBoundaries } from "./nexus/market-session";
 // Ferramentas Institucionais (ADITIVO V-MAX/MED, prioridade #1): ICT Kill
 // Zones — janela ESTREITA de alta probabilidade dentro da sessão, nunca
 // uma 2ª partição de 24h (ver header de kill-zones.ts).
@@ -661,11 +662,11 @@ export default function App() {
   const [radarPanelOpen, setRadarPanelOpen] = useState(false);
   const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7 (resposta do Operador à pergunta
-  // de escopo: os 15 toggles manuais continuam existindo como OVERRIDE
+  // de escopo: os 18 toggles manuais continuam existindo como OVERRIDE
   // real, o padrão novo é o comportamento automático por trás deles).
   // Estrutura paralela, NUNCA uma reforma do tipo existente
   // (ChartLayerVisibility continua Record<ChartLayerId, boolean>, zero
-  // migração, zero risco de regressão nos 15 toggles que já funcionavam):
+  // migração, zero risco de regressão nos toggles que já funcionavam):
   // true = "automático" (o Relevance Engine decide agora), false =
   // "manual" (chartLayerVisibility[id] vale, exatamente como sempre
   // valeu). Default: tudo automático — é o comportamento novo pedido
@@ -680,7 +681,7 @@ export default function App() {
   }, []);
   // Reset explícito: devolve 1 camada ao comportamento automático (o
   // Operador muda de ideia sobre um override específico, sem precisar
-  // resetar as outras 14).
+  // resetar as outras).
   const resetChartLayerToAuto = useCallback((id: ChartLayerId) => {
     setChartLayerAutoMode((prev) => ({ ...prev, [id]: true }));
   }, []);
@@ -703,7 +704,7 @@ export default function App() {
   // camada nova, nenhum cálculo novo, só uma pré-seleção a mais.
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: um preset é curadoria manual
   // deliberada (mesma categoria do toggle individual) — aplicar
-  // operational/audit/intelligence também sai do automático nas 15
+  // operational/audit/intelligence também sai do automático em todas as
   // camadas, para o resultado do preset nunca ser silenciosamente
   // sobrescrito pelo Relevance Engine. "automatic" é o 4º preset novo: a
   // única ação que devolve TODAS as camadas ao comportamento automático
@@ -3662,7 +3663,7 @@ function ChartLayersPanel() {
   // Highlight real (não decorativo): compara o estado atual byte-a-byte
   // contra os dois presets — só acende quando bate exatamente, nunca um
   // "quase" fingido de correspondência. NÚCLEO GRAVITACIONAL AUTÔNOMO §1:
-  // os 3 presets manuais exigem TODAS as 15 camadas fora do automático —
+  // os 3 presets manuais exigem TODAS as 18 camadas fora do automático —
   // uma camada em modo automático que coincidentemente bate com o preset
   // agora não é a mesma coisa que o Operador ter escolhido esse preset.
   const allManual = CHART_LAYER_IDS.every((id) => autoMode[id] === false);
@@ -3695,7 +3696,7 @@ function ChartLayersPanel() {
               só pré-seleciona o que ele já controla. */}
           <div className="flex gap-1.5">
             {/* NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: 4º preset — a única ação
-                que devolve as 15 camadas ao comportamento automático de uma
+                que devolve as 18 camadas ao comportamento automático de uma
                 vez (resposta do Operador: toggles continuam existindo como
                 override, mas o padrão novo é automático). */}
             <button
@@ -6848,6 +6849,15 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
         ? (2 * TREND_CHANNEL_STDDEV_MULTIPLIER * trendChannelForRelevance.stdDev * 100) /
           trendChannelForRelevance.mid[trendChannelForRelevance.mid.length - 1].value
         : null;
+    // Sessões institucionais: mesma computeSessionBoundaries pura que
+    // MarketSessionBandsPlugin já usa pra desenhar — só a transição MAIS
+    // RECENTE importa aqui (idade em candles até o último candle vivo).
+    const sessionBoundaries = Array.isArray(chartData) ? computeSessionBoundaries(chartData) : [];
+    const lastSessionBoundary = sessionBoundaries.length > 0 ? sessionBoundaries[sessionBoundaries.length - 1] : null;
+    const recentSessionBoundary =
+      lastSessionBoundary !== null && Array.isArray(chartData) && chartData.length > 0
+        ? chartData.length - 1 - lastSessionBoundary.index < MARKET_SESSION_RECENT_BOUNDARY_CANDLES
+        : false;
     return {
       tradePlanActive: Boolean(chartTradePlan) || Boolean(engineFallbackLevels),
       obstacleZoneCount: chartObstacleZones.length,
@@ -6862,8 +6872,11 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       trendChannelBandwidthPct,
       orderflowTrendActive: orderflowTrend?.status === "OK" && orderflowTrend.trend !== "ESTAVEL",
       hasOrderBook: Boolean(engine?.hasBook),
+      hasRecentLiquidation: Array.isArray(liquidations) && liquidations.length > 0,
+      hasRecentLiquiditySweep: (traps ?? []).some((t) => t.kind === "STOP_HUNT_TOPO" || t.kind === "STOP_HUNT_FUNDO"),
+      recentSessionBoundary,
     };
-  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook]);
+  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps]);
   const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setLayerRelevance(layerRelevance);
@@ -6879,13 +6892,14 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
     const manual: ChartLayerVisibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
     return CHART_LAYER_IDS.reduce((acc, id) => {
       // Achado real (crash em runtime, Fase 8.1): computeLayerRelevance só
-      // cobre as 15 camadas com regra própria — uma camada nova em modo
-      // automático sem cobertura ainda (ex.: liquidation_heatmap, gap
-      // documentado em layer-relevance.test.ts) fazia layerRelevance[id]
-      // vir undefined, e ".relevant" quebrava o render inteiro. Mesmo
-      // fallback já usado em ChartLayersPanel (`relevance?.relevant ??
-      // true`) — camada sem regra própria fica visível por padrão em modo
-      // automático, nunca derruba o app.
+      // cobria 15 das 18 camadas reais — uma camada nova em modo automático
+      // sem cobertura (liquidation_heatmap/liquidity_sweep/market_sessions,
+      // fechado no declutter do gráfico) fazia layerRelevance[id] vir
+      // undefined, e ".relevant" quebrava o render inteiro. As 18 camadas
+      // já têm regra própria agora (layer-relevance.test.ts prova 1:1 com
+      // CHART_LAYER_IDS), mas o fallback (`relevance?.relevant ?? true`)
+      // fica como defesa contra uma camada FUTURA esquecida — nunca derruba
+      // o app mesmo se layer-relevance.ts ficar defasado de novo.
       acc[id] = autoMode[id] ? (layerRelevance[id]?.relevant ?? true) : manual[id];
       return acc;
     }, {} as ChartLayerVisibility);
