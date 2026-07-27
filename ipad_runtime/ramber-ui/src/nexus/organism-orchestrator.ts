@@ -135,6 +135,11 @@ export class OrganismOrchestrator {
       if (state.tradePlan !== prev.tradePlan) {
         this.bus.emit({ type: "BRAIN.TRADE_PLAN.UPDATED", payload: { plan: state.tradePlan } });
       }
+      // OMEGA CORE V-MAX (completar Fase 7) — Radar/OIH: lista já
+      // qualificada/ranqueada, mesmo padrão referência-a-referência.
+      if (state.radarCandidates !== prev.radarCandidates) {
+        this.bus.emit({ type: "BRAIN.RADAR_CANDIDATES.UPDATED", payload: { candidates: state.radarCandidates } });
+      }
       // §5 ORGANISMO — HEALTH.CHANGED continua do Health Monitor (publicador
       // único histórico da Fase 0.8) e DATA.* do CrossExchangeService: um
       // evento nunca ganha um segundo emissor.

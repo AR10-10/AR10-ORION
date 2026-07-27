@@ -142,13 +142,16 @@ describe('diretriz 2 + V15.1 GOD TIER: roteamento Futuros exclusivo — Gráfico
     expect(helper).not.toContain('collectBinanceKlines');
   });
 
-  it('as 4 chamadas reais ao Bus (HTF, ciclo principal, getChartCandles, Fase Ω Multi-Timeframe) passam por requestFuturesCandleSnapshot — nenhuma chama requestSnapshot() direto', () => {
+  it('as 6 chamadas reais ao Bus (HTF, ciclo principal, getChartCandles, Fase Ω Multi-Timeframe, scanRadarCandidate x2) passam por requestFuturesCandleSnapshot — nenhuma chama requestSnapshot() direto', () => {
     const bridge = read('../src/engine-bridge.ts');
     const helperCallSites = bridge.match(/await requestFuturesCandleSnapshot\(\{/g) ?? [];
     // Fase Ω Priority 1: buildMultiTimeframeContext somou um 4º call site
     // real (mesmo helper, 6 prazos em paralelo) — nenhuma perna de spot,
-    // nenhum bypass do helper.
-    expect(helperCallSites).toHaveLength(4);
+    // nenhum bypass do helper. OMEGA CORE V-MAX (completar Fase 7):
+    // scanRadarCandidate somou mais 2 (o candidato em si + o loop de 3
+    // prazos de referência da confluência-leve) — mesmo helper, mesma
+    // disciplina, zero perna de spot nova.
+    expect(helperCallSites).toHaveLength(6);
     // requestSnapshot() só pode aparecer DENTRO do próprio helper (1 única
     // perna, futuros) — se esse número mudar, algum call site voltou a
     // ignorar o helper e chamar o Bus direto, ou uma perna de spot voltou.

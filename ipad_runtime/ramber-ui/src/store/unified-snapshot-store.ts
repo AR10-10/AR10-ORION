@@ -52,6 +52,7 @@ import type { PremiumDiscountReading } from "../nexus/premium-discount";
 import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
 import type { LayerRelevanceReading } from "../nexus/layer-relevance";
 import type { ConfluenceCorridorReading } from "../nexus/confluence-corridor";
+import type { RadarQualificationResult } from "../nexus/radar-qualification";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
 import type { TradePlan } from "../nexus/trade-plan";
@@ -251,6 +252,14 @@ export interface UnifiedSnapshotState {
   // motores puros do ciclo principal (LEI 24: confluência/contexto, nunca um
   // segundo motor de decisão). null até o primeiro ciclo real.
   multiTimeframeContext: MultiTimeframeMatrix | null;
+  // OMEGA CORE V-MAX Fase 7 (Radar/OIH v1): lista JÁ filtrada e ordenada
+  // por qualityIndex real (rankRadarCandidates, radar-qualification.ts) —
+  // só ativos que passaram no filtro mínimo real (estrutura confirmada,
+  // Trade Plan real, risk gate liberado, confluência-leve suficiente).
+  // Nunca uma segunda decisão (LEI 24) — puro achado de contexto já
+  // validado em outro lugar. Lista vazia é o estado honesto comum
+  // (nenhum candidato qualificado agora), não um erro.
+  radarCandidates: RadarQualificationResult[];
   // Diretriz Complementar §18/§4 ("tendência de convicção" / "Conviction
   // Engine"): série real do Score Geral (institutional-score.ts) ao longo
   // do tempo — só amostras REAIS entram (WAIT/DADOS_INSUFICIENTES nunca,
@@ -344,6 +353,7 @@ interface UnifiedSnapshotActions {
   setConsensusRadar: (reading: ConsensusRadarReading | null) => void;
   setTradePlan: (plan: TradePlan | null) => void;
   setMultiTimeframeContext: (matrix: MultiTimeframeMatrix | null) => void;
+  setRadarCandidates: (candidates: RadarQualificationResult[]) => void;
   // Diretriz Complementar §18/§4: registra uma amostra REAL do Score Geral
   // (nunca chamado com null/WAIT — o efeito que chama já filtra isso).
   recordInstitutionalScore: (score: number) => void;
@@ -409,6 +419,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     consensusRadar: null,
     tradePlan: null,
     multiTimeframeContext: null,
+    radarCandidates: [],
     institutionalScoreHistory: [],
     // §5 ORGANISMO
     core: EMPTY_CORE,
@@ -462,6 +473,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setConsensusRadar: (reading) => set((s) => { s.consensusRadar = reading; }),
     setTradePlan: (plan) => set((s) => { s.tradePlan = plan; }),
     setMultiTimeframeContext: (matrix) => set((s) => { s.multiTimeframeContext = matrix; }),
+    setRadarCandidates: (candidates) => set((s) => { s.radarCandidates = candidates; }),
     recordInstitutionalScore: (score) => set((s) => {
       s.institutionalScoreHistory = pushConvictionHistory(s.institutionalScoreHistory as ConvictionScoreSample[], { score, at: Date.now() });
     }),
@@ -574,6 +586,9 @@ export const useTradePlanSnapshot = (): TradePlan | null =>
   useUnifiedSnapshotStore((s) => s.tradePlan);
 export const useMultiTimeframeSnapshot = (): MultiTimeframeMatrix | null =>
   useUnifiedSnapshotStore((s) => s.multiTimeframeContext);
+const EMPTY_RADAR_CANDIDATES: RadarQualificationResult[] = [];
+export const useRadarCandidatesSnapshot = (): RadarQualificationResult[] =>
+  useUnifiedSnapshotStore((s) => s.radarCandidates ?? EMPTY_RADAR_CANDIDATES);
 export const useInstitutionalScoreHistory = (): ConvictionScoreSample[] =>
   useUnifiedSnapshotStore((s) => s.institutionalScoreHistory ?? EMPTY_CONVICTION_HISTORY);
 

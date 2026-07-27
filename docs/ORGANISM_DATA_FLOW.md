@@ -92,6 +92,7 @@ própria fatia (referência idêntica à escrita na store).
 | `BRAIN.SCENARIO.UPDATED` | `{ projection: ScenarioProjection \| null }` | Organism Orchestrator |
 | `BRAIN.TRAPS.UPDATED` | `{ traps: TrapSignal[] }` | Organism Orchestrator |
 | `BRAIN.TRADE_PLAN.UPDATED` | `{ plan: TradePlan \| null }` (entry zone / stop / target from real structure) | Organism Orchestrator |
+| `BRAIN.RADAR_CANDIDATES.UPDATED` | `{ candidates: RadarQualificationResult[] }` (OMEGA CORE V-MAX Fase 7 completa — só candidatos JÁ qualificados/ranqueados, `rankRadarCandidates`) | Organism Orchestrator |
 | `ORGANISM.TRUST.UPDATED` | `{ score: TrustScoreSnapshot \| null }` | Organism Orchestrator |
 | `ORGANISM.AFFECT.UPDATED` | `{ cpi, memory }` (uma ingestão real = um evento) | Organism Orchestrator |
 | `ORGANISM.TRACK_RECORD.UPDATED` | `{ record: TrackRecordState }` (honest first-touch signal accuracy, persisted) | Organism Orchestrator |
@@ -102,9 +103,10 @@ nunca o contrário.
 
 ## Observadores puros read-only (OMEGA CORE V-MAX Fase 3/7)
 
-Dois módulos novos em `nexus/` não escrevem fatia nenhuma e não publicam
-evento — são **avaliadores puros** chamados sob demanda, lendo só o que
-já está real em outro lugar:
+Três módulos em `nexus/` não escrevem fatia nenhuma e não publicam
+evento — são **avaliadores/extratores puros**, chamados sob demanda ou
+por um orquestrador impuro externo, lendo/recebendo só o que já é real em
+outro lugar:
 
 - **`nexus/stage-runner.ts`** (`traceStages(snapshot, seq)`) — formaliza o
   Pipeline canônico (§2 do `SYSTEM_HANDBOOK.md`) como 4 estágios
@@ -114,12 +116,30 @@ já está real em outro lugar:
   (`buildNexusDecision`/`OperationalReadability`) ainda não têm fatia
   própria — não rastreáveis por este módulo ainda, gap honesto registrado.
 - **`nexus/radar-qualification.ts`** (`qualifyRadarCandidate`/
-  `rankRadarCandidates`) — Fase 7 (Radar/OIH) v1: avalia UM candidato já
+  `rankRadarCandidates`) — Fase 7 (Radar/OIH): avalia UM candidato já
   pronto (estrutura + Trade Plan + riskGated + Corredor de Confluência,
   todos já reais) contra o filtro mínimo da diretiva, sem recalcular nada.
-  O varredor multi-ativo em segundo plano (Workers/fila/cache/painel no
-  header) que vai chamar isto repetidamente ainda não existe — deliberado,
-  ver `SYSTEM_HANDBOOK.md` §6.38.
+  Chamado repetidamente pelo efeito de scan em lote de `App.tsx` (ver
+  abaixo) — o próprio módulo continua sem saber de rede/tempo/UI.
+- **`nexus/radar-universe.ts`** (`extractRadarUniverseSymbols`) — filtra
+  `configs/asset-universe.default.json` aos grupos `asset_class ===
+  "CRYPTO"` (exclui o grupo de equities de mineração/IA) e deduplica por
+  símbolo. Puro sobre um import estático — zero I/O próprio.
+
+O lado **impure** que liga os dois acima ao mundo real vive em
+`engine-bridge.ts` (mesma convenção do arquivo: toda função que busca
+rede mora lá, nunca num módulo `nexus/*` puro): `scanRadarCandidate(symbol,
+timeframe)` busca candles reais (`requestFuturesCandleSnapshot`), roda os
+motores puros já existentes (`analyzeMarketStructure`/
+`analyzeSupportResistance`/`classifyMarketRegime`), monta um `TradePlan`
+real (S/R apenas — sem FVG/OB, custo de fetch extra não vale para
+varredura de fundo) com `riskGated: false` sempre honesto (nenhum
+Conselho roda para candidatos de fundo), e uma confluência-leve (3
+prazos de referência, mesmo `computeConfluenceCorridor` da Fase 5). O
+efeito em `App.tsx` orquestra o LOTE (3 candidatos + 2s de respiro, ciclo
+completo a cada 5min, exclui `selectedAsset`) e escreve o resultado
+ranqueado na fatia `radarCandidates` — nenhum dos 2 módulos puros acima
+sabe que um scanner ou um timer existe.
 
 ## Receita de evolução 100% aditiva (motor novo)
 

@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -23,6 +23,12 @@ import {
   type LayerRelevanceInput,
 } from "./nexus/layer-relevance";
 import { computeConfluenceCorridor } from "./nexus/confluence-corridor";
+// OMEGA CORE V-MAX (completar Fase 7, Radar/OIH): universo curado real +
+// núcleo puro de qualificação/ranking (Fase 7 v1) + scanner real por
+// ativo (engine-bridge.ts) — nenhum dos 3 é reimplementado aqui.
+import { extractRadarUniverseSymbols, type AssetUniverseFile } from "./nexus/radar-universe";
+import { qualifyRadarCandidate, rankRadarCandidates, type RadarQualificationResult } from "./nexus/radar-qualification";
+import assetUniverseDefault from "../../configs/asset-universe.default.json";
 import { ageAlpha } from "./chart/annotation-decay";
 import { BREAK_DECAY } from "./chart/StructureBreakMarkersPlugin";
 // Mesmo motor puro que EnhancedChart_110_Percent.tsx já usa para desenhar
@@ -94,6 +100,7 @@ import {
   type ConfluenceSource,
   buildMultiTimeframeContext,
   computeBosChoch,
+  scanRadarCandidate,
 } from "./engine-bridge";
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
 // pura — a matemática pesada roda no WASM do quant-worker).
@@ -273,6 +280,7 @@ import {
   Mic,
   MicOff,
   Layers,
+  Radar as RadarIcon,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -455,6 +463,27 @@ const MAX_CHART_HISTORY = 2000;
 // além da margem) — a primeira entrada real continua exata, sem atraso.
 const ENTRY_ZONE_HYSTERESIS_FACTOR = 0.25;
 
+// OMEGA CORE V-MAX (completar Fase 7, Radar/OIH): universo curado
+// computado UMA vez no módulo — configs/asset-universe.default.json é um
+// import estático (não muda em runtime), recomputar a cada render/efeito
+// seria custo sem propósito. Só os 3 grupos CRYPTO reais (a função já
+// filtra o grupo EQUITY — ver radar-universe.ts).
+const RADAR_UNIVERSE_SYMBOLS = extractRadarUniverseSymbols(assetUniverseDefault as AssetUniverseFile);
+// O Market Data Bus dedupa POR chave symbol:timeframe mas não tem
+// nenhum throttle ENTRE chaves diferentes (ver header do bus.js) — um
+// scan do universo inteiro sem seu próprio limite de concorrência
+// martelaria a REST da Binance ao mesmo tempo que o ciclo do ativo
+// selecionado. 3 candidatos por lote + 2s de respiro: ~35 ativos varridos
+// em ~25s, nunca competindo por throughput com o ciclo de 30s do ativo
+// ao vivo nem com o de 60s do multi-timeframe. Regra de Ouro 6: 100%
+// fetch assíncrono, zero cálculo síncrono pesado no Main Thread.
+const RADAR_SCAN_BATCH_SIZE = 3;
+const RADAR_SCAN_BATCH_DELAY_MS = 2000;
+// Ciclo completo a cada 5min — bem mais lento que o ciclo do ativo
+// selecionado e o multi-timeframe: o Radar é contexto de descoberta em
+// segundo plano, nunca o caminho crítico do sinal (LEI 24).
+const RADAR_SCAN_FULL_CYCLE_MS = 5 * 60_000;
+
 export type ChartCandle = { time: number; open: number; high: number; low: number; close: number; volume: number };
 
 // Funde o refresh periódico (`fresh`, sempre "os CHART_CANDLE_LIMIT mais
@@ -588,6 +617,13 @@ export default function App() {
   // camadas continuam ligadas por padrão (DEFAULT_CHART_LAYER_VISIBILITY),
   // nada muda no comportamento existente até o Operador desligar algo.
   const [chartLayersOpen, setChartLayersOpen] = useState(false);
+  // OMEGA CORE V-MAX (completar Fase 7, Radar/OIH): mesmo padrão de painel
+  // dos dois acima — um toggle simples, ícone dedicado na SideBar, painel
+  // fixed/centered. Lista só candidatos JÁ qualificados (radarCandidates,
+  // fatia §4 CÉREBRO da store) — este flag controla só a VISIBILIDADE do
+  // painel, nunca o próprio scan em segundo plano (que roda independente
+  // do painel estar aberto, mesmo espírito do Workspace Manager).
+  const [radarPanelOpen, setRadarPanelOpen] = useState(false);
   const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7 (resposta do Operador à pergunta
   // de escopo: os 15 toggles manuais continuam existindo como OVERRIDE
@@ -1401,6 +1437,56 @@ export default function App() {
       clearInterval(mtfInterval);
     };
   }, [bootGeneration, selectedAsset]);
+
+  // OMEGA CORE V-MAX (completar Fase 7, Radar/OIH): scanner de fundo real
+  // — cadência própria (5min), mais lenta que o ciclo do ativo selecionado
+  // (30s) e o multi-timeframe (60s) acima: o Radar é descoberta de
+  // contexto, nunca o caminho crítico do sinal (LEI 24). Cada candidato
+  // passa por scanRadarCandidate (fetch real + motores puros já
+  // existentes, engine-bridge.ts) e depois por qualifyRadarCandidate
+  // (núcleo puro, radar-qualification.ts) — este efeito só orquestra LOTE
+  // e TIMER, zero motor novo escrito aqui. Depende de chartTimeframe (não
+  // uma ref) de propósito: trocar o prazo do gráfico precisa CANCELAR
+  // qualquer lote em voo do prazo antigo e recomeçar do zero no prazo
+  // novo — mesmo espírito fail-closed da Fase 6 (zero staleness na troca
+  // de contexto), mesmo padrão de deps do ciclo principal acima. Exclui
+  // sempre o ativo já selecionado: ele já tem seu próprio Conselho/Trade
+  // Plan completo rodando à parte — escaneá-lo de novo aqui produziria
+  // uma segunda leitura mais fraca do MESMO ativo, redundante por
+  // definição.
+  useEffect(() => {
+    let cancelled = false;
+    const runRadarScan = async () => {
+      const candidateSymbols = RADAR_UNIVERSE_SYMBOLS.filter((s) => s !== selectedAsset);
+      const qualified: RadarQualificationResult[] = [];
+      for (let i = 0; i < candidateSymbols.length; i += RADAR_SCAN_BATCH_SIZE) {
+        if (cancelled) return;
+        const batch = candidateSymbols.slice(i, i + RADAR_SCAN_BATCH_SIZE);
+        const scans = await Promise.all(batch.map((symbol) => scanRadarCandidate(symbol, chartTimeframe)));
+        if (cancelled) return;
+        for (const scan of scans) {
+          if (!scan) continue; // fail-closed: rede falhou/candles insuficientes para ESTE candidato — nunca bloqueia o lote inteiro
+          qualified.push(qualifyRadarCandidate(scan));
+        }
+        if (i + RADAR_SCAN_BATCH_SIZE < candidateSymbols.length) {
+          await new Promise((resolve) => setTimeout(resolve, RADAR_SCAN_BATCH_DELAY_MS));
+        }
+      }
+      // Escreve sempre, mesmo lista vazia — mesmo padrão fail-closed do
+      // ciclo principal (setRealCycle sempre escreve): um universo sem
+      // NENHUM candidato qualificado agora é um resultado real, nunca
+      // deixa candidatos de um ciclo/prazo/ativo anterior na tela.
+      if (!cancelled) {
+        useUnifiedSnapshotStore.getState().setRadarCandidates(rankRadarCandidates(qualified));
+      }
+    };
+    void runRadarScan();
+    const radarInterval = setInterval(() => void runRadarScan(), RADAR_SCAN_FULL_CYCLE_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(radarInterval);
+    };
+  }, [bootGeneration, selectedAsset, chartTimeframe]);
 
   // Fase J (Cap. 17): FPS REAL da UI via requestAnimationFrame — contagem
   // de frames por janela de 1s. É a medição verdadeira do que o Safari
@@ -2796,6 +2882,8 @@ export default function App() {
       setWorkspaceManagerOpen,
       chartLayersOpen,
       setChartLayersOpen,
+      radarPanelOpen,
+      setRadarPanelOpen,
       chartLayerVisibility,
       toggleChartLayer,
       applyChartLayerPreset,
@@ -2866,6 +2954,7 @@ export default function App() {
       setWidgetWorkspaceState,
       workspaceManagerOpen,
       chartLayersOpen,
+      radarPanelOpen,
       chartLayerVisibility,
       chartLayerAutoMode,
       emaPeriod,
@@ -3182,6 +3271,7 @@ export default function App() {
         <FooterBar />
         <WorkspaceManagerPanel />
         <ChartLayersPanel />
+        <RadarPanel />
       </div>
     </WidgetContext.Provider>
   );
@@ -3606,6 +3696,113 @@ function ChartLayersPanel() {
               </div>
             );
           })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// OMEGA CORE V-MAX (completar Fase 7, Radar/OIH — "módulo único
+// consultivo"): painel de header no MESMO padrão de ChartLayersPanel logo
+// acima (overlay fixed/centered, mesmo shell cyber-panel/cyber-header) —
+// só consome radarCandidates (fatia §4 CÉREBRO, já filtrada/ranqueada por
+// rankRadarCandidates no efeito de scan de App()); este componente NUNCA
+// recalcula nada, só lê e exibe (LEI 24, "consulta snapshot, não
+// recalcula"). Título visível "OPORTUNIDADES" (nunca "Radar" sozinho): o
+// cockpit já tem "RADAR DE CONSENSO" (CouncilWidget) e uma aba "SCANNER"
+// (heurística de %-change de 24h, ScannerWidget) — um terceiro rótulo com
+// a mesma palavra confundiria qual painel está aberto.
+function RadarPanel() {
+  const { radarPanelOpen, setRadarPanelOpen, setSelectedAsset, setMarketMode, setSelectedTradFiAsset } =
+    useContext(WidgetContext) || {};
+  const candidates = useRadarCandidatesSnapshot();
+  if (!radarPanelOpen) return null;
+
+  // Mesmo mecanismo real do SmartOmnibox (onSelectCrypto) — trocar
+  // selectedAsset sozinho já dispara o efeito de boot/WS + o efeito de
+  // fetch de candles (deps [chartTimeframe, selectedAsset]); "centralizar
+  // gráfico" (diretiva) não precisa de nenhum helper à parte. Timeframe
+  // recomendado: esse conceito não existe em nenhum motor real do
+  // organismo hoje — a diretiva já previu esse caso ("senão timeframe
+  // atual"), e é honestamente o MESMO prazo em que o candidato foi
+  // escaneado (o efeito de scan usa chartTimeframe), então nunca há
+  // descompasso entre o que foi avaliado e o que o gráfico mostra a
+  // seguir.
+  const openCandidate = (symbol: string) => {
+    setMarketMode?.("CRYPTO");
+    setSelectedTradFiAsset?.(null);
+    setSelectedAsset?.(symbol);
+    setRadarPanelOpen?.(false);
+  };
+
+  return (
+    <div
+      className="!fixed !inset-0 !z-[1001] bg-[#010308]/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={() => setRadarPanelOpen?.(false)}
+    >
+      <div
+        className="cyber-panel w-full max-w-md max-h-[80dvh] flex flex-col bg-[#010308]/98"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="cyber-header flex items-center justify-between">
+          <span className="font-bold tracking-[0.2em]">OPORTUNIDADES</span>
+          <div
+            className="text-[#8ab4f8]/50 hover:text-[#00f0ff] px-1 py-0.5 rounded cursor-pointer"
+            onClick={() => setRadarPanelOpen?.(false)}
+          >
+            <X size={14} />
+          </div>
+        </div>
+        <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+          <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
+            Radar/OIH — varredura real em segundo plano, nunca recalcula nem emite LONG/SHORT por conta própria (LEI 24). Só lista quem já tem estrutura confirmada, Trade Plan real e confluência suficiente.
+          </span>
+          {candidates.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center">
+              <RadarIcon size={22} className="text-[#8ab4f8]/30" />
+              <span className="text-[0.5rem] text-[#8ab4f8]/50 tracking-[0.1em] uppercase">
+                Nenhuma oportunidade validada agora
+              </span>
+              <span className="text-[0.42rem] text-[#8ab4f8]/35 max-w-[220px]">
+                O organismo varre o universo curado em segundo plano — volte em alguns minutos, ou aguarde o próximo ciclo automático.
+              </span>
+            </div>
+          ) : (
+            candidates.map((c) => {
+              const isLong = c.direction === "LONG";
+              return (
+                <button
+                  key={`${c.symbol}:${c.timeframe}`}
+                  type="button"
+                  onClick={() => openCandidate(c.symbol)}
+                  className="flex items-center justify-between gap-2 bg-[#010205] border border-[#00f0ff15] hover:border-[#00f0ff40] rounded-lg px-3 py-2 text-left transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    {isLong ? (
+                      <ArrowUpRight size={14} className="text-[#00ffaa] shrink-0" />
+                    ) : (
+                      <ArrowDownRight size={14} className="text-[#ff0055] shrink-0" />
+                    )}
+                    <div className="flex flex-col">
+                      <span className="text-[0.6rem] font-bold tracking-wider text-white">{c.symbol}</span>
+                      <span className="text-[0.4rem] text-[#8ab4f8]/50 uppercase tracking-wider">{c.timeframe}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span
+                      className={`text-[0.6rem] font-black font-mono tabular-nums ${isLong ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+                      title="Intensidade real do Corredor de Confluência (0-100%) — nunca probabilidade de acerto."
+                    >
+                      {c.qualityIndex !== null ? `${(c.qualityIndex * 100).toFixed(0)}%` : DASH}
+                    </span>
+                    <span className="text-[0.4rem] text-[#8ab4f8]/50 uppercase tracking-wider">
+                      {c.riskRewardRatio !== null ? `R:R 1:${c.riskRewardRatio.toFixed(2)}` : DASH}
+                    </span>
+                  </div>
+                </button>
+              );
+            })
+          )}
         </div>
       </div>
     </div>
@@ -5343,7 +5540,12 @@ function SideBar({
   activeTab: string;
   setActiveTab: (t: string) => void;
 }) {
-  const { setWorkspaceManagerOpen, setChartLayersOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
+  const { setWorkspaceManagerOpen, setChartLayersOpen, setRadarPanelOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
+  // OMEGA CORE V-MAX (completar Fase 7): contagem real do próprio snapshot
+  // — nunca um badge decorativo. "Substitui o botão pulsante" (diretiva):
+  // um número real (0 quando não há nada) é honesto; uma animação
+  // pulsante sugeriria urgência que a lista pode não ter.
+  const radarCandidateCount = useRadarCandidatesSnapshot().length;
   // Language migration order: nav ids/labels moved to English (standard
   // professional trading terminology). Every id now routes to a DEDICATED
   // view fed by real data (SecondaryModuleView) — the old shared generic
@@ -5410,6 +5612,26 @@ function SideBar({
         className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
       >
         <Layers size={17} className="relative z-10" />
+      </button>
+      {/* OMEGA CORE V-MAX (completar Fase 7, Radar/OIH) — terceiro entry
+          point no mesmo rodapé, mesmo padrão dos dois acima. Rótulo
+          visível "Oportunidades" (nunca "Radar"): o cockpit já tem um
+          widget real chamado "RADAR DE CONSENSO" (CouncilWidget) e uma aba
+          "SCANNER" com heurística de %-change de 24h (ScannerWidget) —
+          nenhum dos dois é este módulo; um terceiro rótulo com a mesma
+          palavra confundiria o Operador sobre qual painel está abrindo. */}
+      <button
+        type="button"
+        onClick={() => setRadarPanelOpen?.((v: boolean) => !v)}
+        title="Radar / OIH — Oportunidades já validadas pelo organismo"
+        className="relative flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+      >
+        <RadarIcon size={17} className="relative z-10" />
+        {radarCandidateCount > 0 && (
+          <span className="absolute top-1 right-1.5 min-w-[13px] h-[13px] px-[2px] rounded-full bg-[#00ffaa] text-[#010308] text-[0.4rem] font-bold flex items-center justify-center leading-none">
+            {radarCandidateCount}
+          </span>
+        )}
       </button>
     </div>
   );

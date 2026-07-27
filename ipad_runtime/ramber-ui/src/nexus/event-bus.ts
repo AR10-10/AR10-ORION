@@ -20,6 +20,7 @@ import type { AffectiveMemoryState } from "./affective-memory";
 import type { TrackRecordState } from "./signal-track-record";
 import type { TrustScoreSnapshot, SmcZonesSnapshot, OrderflowSignal } from "../engine-bridge";
 import type { ConfluenceCorridorReading } from "./confluence-corridor";
+import type { RadarQualificationResult } from "./radar-qualification";
 
 // Diretamente do Blueprint V-MAX §1.3 — os únicos eventos reais que este
 // sistema publica. Nenhum evento é adicionado especulativamente; cada um
@@ -61,6 +62,7 @@ export type NexusEvent =
   | { type: "BRAIN.SCENARIO.UPDATED"; payload: { projection: ScenarioProjection | null } }
   | { type: "BRAIN.TRAPS.UPDATED"; payload: { traps: TrapSignal[] } }
   | { type: "BRAIN.TRADE_PLAN.UPDATED"; payload: { plan: TradePlan | null } }
+  | { type: "BRAIN.RADAR_CANDIDATES.UPDATED"; payload: { candidates: RadarQualificationResult[] } }
   // §5 ORGANISMO
   | { type: "ORGANISM.TRUST.UPDATED"; payload: { score: TrustScoreSnapshot | null } }
   // Uma ingestão afetiva real = um evento (a fatia affectiveMemory é

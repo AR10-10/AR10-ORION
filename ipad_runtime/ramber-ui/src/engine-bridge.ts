@@ -51,11 +51,23 @@ import { startLiquidationStream } from '../../js/real-data/binance-liquidations-
 import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg-order-block-engine.js';
 import { classify as classifyLorentzian } from '../../src/research/engines/lorentzian-classifier.js';
 import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
+// OMEGA CORE V-MAX Fase 7 (completar o Radar/OIH): mesmo motor real de
+// S/R que o ciclo principal já usa (via analysis-frame.js) — importado
+// aqui diretamente porque o scanner do Radar roda para ativos que NÃO
+// são o selecionado (o ciclo principal só cobre o ativo ativo). Zero
+// segunda implementação de S/R.
+import { analyze as analyzeSupportResistance } from '../../src/research/engines/support-resistance-engine.js';
 // Ordem "Ciborgue Vivo": BOS/CHOCH — reaproveita fractal-swings.js e o
 // structure_label de market-structure-engine.js por baixo (ver header do
 // próprio arquivo); este import só traz a varredura de rompimento real.
 import { analyze as analyzeBosChoch } from '../../src/research/engines/bos-choch-engine.js';
 import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/index.js';
+// OMEGA CORE V-MAX Fase 7: mesmo Trade Plan real (Fase 4 do Signal
+// Precision) e mesmo Corredor de Confluência real (Fase 5) que o ativo
+// selecionado já usa — o scanner do Radar nunca reimplementa nenhum dos
+// dois, só os alimenta com dado real de OUTROS ativos.
+import { buildTradePlan, type TradePlan, type TradePlanLevelInput } from './nexus/trade-plan';
+import { computeConfluenceCorridor, type ConfluenceCorridorReading } from './nexus/confluence-corridor';
 // V-MAX Fase 1.3: derivação pura (HVN/LVN/preço-por-bucket) do Volume
 // Profile computado pelo WASM no quant-worker — ver bloco no fim do arquivo.
 import { detectHvnLvn, bucketMidPrice, type VolumeProfileResult } from './nexus/volume-profile';
@@ -1005,4 +1017,123 @@ export function computeMultiHorizonForecast(
       sampleSize: result.sample_size,
     };
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OMEGA CORE V-MAX Fase 7 (completar o Radar/OIH): scanner real de UM
+// candidato de background — chamado pelo varredor em App.tsx, uma vez por
+// ativo da lista curada (radar-universe.ts), nunca para o ativo já
+// selecionado (que já tem o ciclo principal completo cobrindo-o).
+//
+// Nível de riqueza DELIBERADAMENTE menor que o ativo AO VIVO selecionado —
+// honestidade, não atalho escondido: o Conselho (7 agentes) e o
+// institutionalScore precisam de orderflow/liquidez ao vivo que esta
+// arquitetura só transmite para o ativo selecionado no momento (ver
+// docs/ORGANISM_DATA_FLOW.md — "App.tsx é o único coletor real"). Rodar
+// o Conselho completo para 30+ ativos simultâneos exigiria assinar
+// orderflow ao vivo de todos eles ao mesmo tempo — uma mudança
+// arquitetural muito maior que "completar o Radar", fora de escopo aqui.
+// Por isso: `riskGated` é sempre `false` (nenhum Conselho rodou — nunca
+// fabrica um resultado de risco que não foi medido), e a Confluência usa
+// SÓ `multiTimeframe` real sobre 3 prazos de referência — mesmo formato
+// `ConfluenceCorridorReading` da Fase 5, que já degrada honestamente
+// quando opinionMass/institutionalScore/obstáculos vêm null (mesmo
+// comportamento já provado em confluence-corridor.test.ts, ZERO
+// modificação daquele motor). `intensity` para um candidato de background
+// acaba sendo puramente a concordância real de regime entre os 3 prazos —
+// uma base real, porém mais fraca que a leitura de 4 componentes do
+// ativo ao vivo, nunca fabricada como equivalente.
+const RADAR_SCAN_TIMEFRAMES = ['15m', '1h', '4h'] as const;
+const RADAR_SCAN_CANDLE_LIMIT = 100;
+const RADAR_SCAN_MAX_AGE_MS = 60_000;
+
+export interface RadarCandidateScanResult {
+  symbol: string;
+  timeframe: string;
+  structureLabel: 'ESTRUTURA_ALTA' | 'ESTRUTURA_BAIXA' | 'ESTRUTURA_LATERAL' | null;
+  direction: 'LONG' | 'SHORT' | null;
+  tradePlan: TradePlan | null;
+  riskGated: boolean;
+  confluence: ConfluenceCorridorReading;
+}
+
+/** Regime real (classifyMarketRegime, mesmo motor do ciclo principal e da
+ *  Matriz Multi-Timeframe) → direção acionável. null honesto quando o
+ *  regime está em CONSOLIDACAO/COMPRESSAO (ADX real sem força de
+ *  tendência) ou sem leitura — nunca um rótulo forçado. */
+function directionFromRegime(regimeDirection: 'ALTA' | 'BAIXA' | null): 'LONG' | 'SHORT' | null {
+  if (regimeDirection === 'ALTA') return 'LONG';
+  if (regimeDirection === 'BAIXA') return 'SHORT';
+  return null;
+}
+
+/** UM candidato real de background — null honesto quando a rede falhou
+ *  ou não há candles suficientes (fail-closed, nunca fabricado). */
+export async function scanRadarCandidate(symbol: string, timeframe: string): Promise<RadarCandidateScanResult | null> {
+  let snapshot: BusSnapshot;
+  try {
+    snapshot = await requestFuturesCandleSnapshot({
+      symbol, timeframe, limit: RADAR_SCAN_CANDLE_LIMIT, maxAgeMs: RADAR_SCAN_MAX_AGE_MS,
+    });
+  } catch {
+    return null;
+  }
+  if (!snapshot.ok || snapshot.candles.length === 0) return null;
+
+  const structureResult: any = analyzeMarketStructure({ ohlcv_series: snapshot.candles, timeframe });
+  const srResult: any = analyzeSupportResistance({ ohlcv_series: snapshot.candles, timeframe, volume_profile: null });
+  const regimeResult: any = classifyMarketRegime({ ohlcv_series: snapshot.candles, timeframe });
+
+  const structureLabel = structureResult.status === 'OK' ? structureResult.structure_label : null;
+  const direction = regimeResult.status === 'OK' ? directionFromRegime(regimeResult.direction) : null;
+
+  const lastCandle = snapshot.candles[snapshot.candles.length - 1];
+  const price = isNum(lastCandle?.c) ? lastCandle.c : null;
+
+  const levels: TradePlanLevelInput[] = [];
+  if (srResult.status === 'OK') {
+    if (isNum(srResult.support_1)) levels.push({ price: srResult.support_1, kind: 'SR_SUPPORT_1' });
+    if (isNum(srResult.resistance_1)) levels.push({ price: srResult.resistance_1, kind: 'SR_RESISTANCE_1' });
+  }
+  const tradePlan =
+    direction && price !== null
+      ? buildTradePlan({ stance: direction, riskGated: false, price, zones: [], levels })
+      : null;
+
+  // Confluência-leve: concordância real de regime entre os 3 prazos de
+  // referência — cada leitura vem do MESMO classifyMarketRegime, sobre
+  // candles reais desse prazo (reaproveita snapshot já buscado quando o
+  // prazo de referência coincide com o prazo do candidato).
+  const mtfEntries = await Promise.all(
+    RADAR_SCAN_TIMEFRAMES.map(async (tf) => {
+      try {
+        const tfSnapshot =
+          tf === timeframe
+            ? snapshot
+            : await requestFuturesCandleSnapshot({ symbol, timeframe: tf, limit: RADAR_SCAN_CANDLE_LIMIT, maxAgeMs: RADAR_SCAN_MAX_AGE_MS });
+        if (!tfSnapshot.ok) return null;
+        const tfRegime: any = classifyMarketRegime({ ohlcv_series: tfSnapshot.candles, timeframe: tf });
+        return tfRegime.status === 'OK' ? (tfRegime.direction as 'ALTA' | 'BAIXA' | null) : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const multiTimeframeLite: Record<string, { confidenceStance: 'LONG' | 'SHORT' | null }> | null = mtfEntries.some(
+    (d) => d !== null,
+  )
+    ? Object.fromEntries(
+        RADAR_SCAN_TIMEFRAMES.map((tf, i) => [tf, { confidenceStance: directionFromRegime(mtfEntries[i]) }]),
+      )
+    : null;
+
+  const confluence = computeConfluenceCorridor({
+    direction,
+    opinionMass: null,
+    institutionalScore: null,
+    multiTimeframe: multiTimeframeLite,
+    activeObstacleCount: null,
+  });
+
+  return { symbol, timeframe, structureLabel, direction, tradePlan, riskGated: false, confluence };
 }

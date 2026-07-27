@@ -2688,48 +2688,188 @@ instrumentação real de FPS/dispositivo físico para medir jank ao vivo
 exchanges); a confirmação aqui é por leitura de código + suíte/build
 verdes, nunca uma medição de FPS que não foi de fato feita.
 
+### 6.39 OMEGA CORE V-MAX — Completar FASE 7: scanner real de fundo +
+painel "OPORTUNIDADES" no header + clique→abrir ativo
+
+Continuação explícita do Operador ("ESTADO ACEITO": Fase 7 "Parcial —
+ranking puro feito; faltam UI + clique + scan", "FAZER PRIMEIRO" antes de
+qualquer outra pendência do backlog). Fecha os 3 itens que §6.38 havia
+deliberadamente deixado de fora.
+
+**Universo real ligado (achado honesto sobre o próprio dado de
+configuração)**: `configs/asset-universe.default.json` se autodescrevia
+como `"wired_into_live_app": false` / `"status":
+"FUTURE_READY_REFERENCE_ONLY"` / nota afirmando que "nenhum código do PWA
+lê ou ordena este arquivo hoje" — verdadeiro até este commit. Ligar o
+scanner a ele torna essa autodescrição falsa a partir de agora, então os
+3 campos foram corrigidos no MESMO commit (`status`:
+`LIVE_RADAR_SCAN_UNIVERSE_CRYPTO_GROUPS_ONLY`, `wired_into_live_app:
+true`, nota reescrita) — nunca deixado como uma mentira arquivada.
+Precisão importante: só os 3 grupos CRYPTO (`crypto_top_liquidity`,
+`crypto_additional`, `pow_mining_crypto`) são lidos de fato
+(`radar-universe.ts` já filtrava por `asset_class === "CRYPTO"`); o grupo
+EQUITY (`mining_ai_hpc_equities`) continua tão inerte quanto sempre foi.
+
+**Scanner real (`engine-bridge.ts`, `scanRadarCandidate(symbol,
+timeframe)`)**: busca candles reais (`requestFuturesCandleSnapshot`),
+roda `analyzeMarketStructure`/`analyzeSupportResistance`/
+`classifyMarketRegime` (motores puros já existentes, zero motor novo),
+deriva `direction` do regime real, monta um `TradePlan` real só com
+níveis de S/R (sem FVG/OB — buscá-los custaria uma chamada extra por
+candidato, não vale para varredura de fundo) com `riskGated: false`
+sempre — **honestamente**, porque nenhum Conselho roda para candidatos de
+fundo (rodar Conselho completo em ~34 ativos exigiria orderflow ao vivo
+de todos simultaneamente, mudança arquitetural maior que "completar o
+Radar", fora de escopo aqui). A confluência usa
+`computeConfluenceCorridor()` inalterado (Fase 5, zero segunda fórmula),
+alimentado só com uma concordância real de regime entre 3 prazos de
+referência (`15m/1h/4h`) — uma "confluência-leve", mais fraca que a
+leitura de 4 componentes do ativo ao vivo, nunca fabricada como
+equivalente. `RadarCandidateScanResult` tem o mesmo formato exato de
+`RadarCandidateInput` (`radar-qualification.ts`) — zero mapeamento entre
+os dois.
+
+**Orquestração do lote (`App.tsx`)**: `useEffect` próprio, cadência de
+5min (mais lenta que o ciclo do ativo — 30s — e o multi-timeframe — 60s:
+o Radar é descoberta de contexto, nunca o caminho crítico, LEI 24). Lotes
+de 3 candidatos + 2s de respiro entre lotes — o Market Data Bus dedupa
+por chave `symbol:timeframe` mas não tem throttle entre chaves
+diferentes, então o scanner precisa do próprio limite de concorrência
+para não competir por rede com o ciclo do ativo selecionado. Depende de
+`chartTimeframe` (não uma ref): trocar o prazo do gráfico cancela
+qualquer lote em voo e recomeça no prazo novo — mesma disciplina
+fail-closed da Fase 6 (zero staleness na troca de contexto). Exclui
+sempre `selectedAsset`: ele já tem Conselho/Trade Plan completo rodando
+à parte, escaneá-lo de novo produziria uma segunda leitura mais fraca do
+MESMO ativo. Resultado ranqueado substitui a fatia `radarCandidates`
+inteira por ciclo (§4 CÉREBRO, `setRadarCandidates`/
+`useRadarCandidatesSnapshot`), publicado como `BRAIN.RADAR_CANDIDATES.UPDATED`
+pelo orquestrador (mesmo padrão referência-a-referência dos demais
+eventos).
+
+**Painel "OPORTUNIDADES" (não "Radar")**: mesmo padrão de
+`ChartLayersPanel` (overlay fixed/centered, mesmo shell
+cyber-panel/cyber-header), terceiro entry point no rodapé da SideBar
+(ícone `Radar` do lucide-react, contagem real dos candidatos qualificados
+— nunca um badge decorativo/pulsante, "substitui o botão pulsante" da
+diretiva com um número honesto). Título visível deliberadamente NÃO
+"Radar": o cockpit já tem um widget real chamado "RADAR DE CONSENSO"
+(`CouncilWidget`, motor `consensus-radar.ts`) e uma aba "SCANNER"
+(`ScannerWidget`, heurística de %-change de 24h, `scannerData`) — nenhum
+dos dois é este módulo; um terceiro rótulo com a mesma palavra
+confundiria qual painel o Operador está abrindo. Lista só os candidatos
+JÁ qualificados/ranqueados (a fatia da store já vem filtrada por
+`rankRadarCandidates`) — o componente só lê e exibe, nunca recalcula
+(LEI 24). Cada linha mostra símbolo/prazo/direção (verde `#00ffaa`
+LONG, vermelho `#ff0055` SHORT — mesma paleta já usada nos botões de ação
+do Trade Plan) + intensidade do Corredor de Confluência como percentual
+(nunca rotulada "probabilidade"/"chance", Regra de Ouro 2) + R:R real do
+plano. Empty-state honesto quando não há candidatos (nunca um placeholder
+fabricado).
+
+**Clique→abrir ativo**: reusa literalmente o mesmo mecanismo do
+`SmartOmnibox` (`setMarketMode("CRYPTO")` →
+`setSelectedTradFiAsset(null)` → `setSelectedAsset(symbol)`) — trocar
+`selectedAsset` sozinho já dispara os efeitos de boot/fetch de candles
+existentes, nenhum "centralizar gráfico" precisou de código novo.
+"Timeframe recomendado" — esse conceito não existe em nenhum motor real
+do organismo hoje; a diretiva já previa esse caso ("senão timeframe
+atual") — o timeframe atual é honestamente o MESMO prazo em que o
+candidato foi avaliado (o efeito de scan usa `chartTimeframe`), então
+nunca há descompasso entre o que foi avaliado e o que o gráfico mostra a
+seguir.
+
+**Achado real durante a auditoria de call sites (não um bug)**: o teste
+de contagem de `diretriz3-fixes.test.ts` esperava exatamente 4 chamadas
+reais a `requestFuturesCandleSnapshot` em `engine-bridge.ts`;
+`scanRadarCandidate` somou mais 2 (o candidato em si + o laço de 3 prazos
+de referência) — mesmo helper, mesma disciplina de futuros-only, nenhuma
+perna de spot nova. Teste atualizado para 6, nunca contornado.
+
+**Verificação real executada**: `tsc --noEmit` limpo · **110 arquivos /
+1818 testes** (100%) · `npm run build` ok · `audit-header-maxcontent.mjs`
+11 viewports CLEAN via build+preview real · verificação Playwright ao
+vivo do painel novo (botão encontrado na SideBar, abre com título
+"OPORTUNIDADES", empty-state honesto — este sandbox não tem egress real
+à Binance, `net::ERR_TUNNEL_CONNECTION_FAILED` em toda chamada, então
+nenhum candidato real qualifica aqui, comportamento fail-closed correto
+— fecha ao clicar no X, screenshot capturado). **Limitação honesta**: a
+linha de candidato QUALIFICADO (com dados reais) não pôde ser vista ao
+vivo neste ambiente sem egress real; a lógica está coberta por
+`radar-qualification.test.ts`/`radar-universe.test.ts`/
+`confluence-corridor.test.ts` (31 testes reais somados), e o layout da
+linha reusa classes Tailwind já visualmente verificadas em outros lugares
+do mesmo painel (nunca um padrão visual novo e não testado).
+
+**Backlog que continua real e flagado (não resolvido nesta rodada)**:
+visual do Corredor de Confluência no próprio canvas (Fase 5); a
+sobreposição parcial entre `confluence-corridor.ts` (Fase 5) e o
+`ConvictionReading` de `confluence-engine.ts` já existente (achado de
+rodada anterior, ainda não simplificado); migração de consumidores
+WidgetContext→store (§6.36); heatmap de liquidação no canvas + Pitchfork
++ Elliott simplificado (Fase 8, §6.38).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
-diretiva) — cobre §6.35, §6.36, §6.37 e este §6.38 em conjunto
+diretiva) — cobre §6.35 a §6.39 em conjunto
 
 - **Arquivos alterados**: ver os 3 commits desta trilha
   (`aa88134` e anteriores citados em §6.35; `ed3f4db` FASE 0/1;
-  `e482fd2` FASE 3-6; + o commit desta entrega, FASE 7-9). Novos módulos
-  puros: `nexus/stage-runner.ts`, `nexus/confluence-corridor.ts`,
-  `nexus/radar-qualification.ts`. Fatias novas na store: `smc`, `cvd`,
-  `orderflowSignals`, `confluenceCorridor`.
+  `e482fd2` FASE 3-6; `FASE 7-9`; + o commit desta entrega, Completar
+  Fase 7 — scanner/painel/clique). Novos módulos puros:
+  `nexus/stage-runner.ts`, `nexus/confluence-corridor.ts`,
+  `nexus/radar-qualification.ts`, `nexus/radar-universe.ts`. Fatias
+  novas na store: `smc`, `cvd`, `orderflowSignals`, `confluenceCorridor`,
+  `radarCandidates`. `engine-bridge.ts` ganhou `scanRadarCandidate()`
+  (fetch real + motores puros já existentes); `App.tsx` ganhou o efeito
+  de scan em lote, o painel "OPORTUNIDADES" e o 3º entry point na
+  SideBar; `configs/asset-universe.default.json` teve sua própria
+  metadata (`status`/`wired_into_live_app`/`note`) corrigida para
+  refletir que agora É lido de verdade (achado honesto, ver §6.39).
 - **O que foi unificado/removido**: fileira de 12 botões redundante do
   header (SmartOmnibox já cobria); `obstacleSuffix` duplicado entre o
   Trade Plan real e o fallback do Núcleo (agora 1 função compartilhada);
   espaço redundante nos glifos `OB↑/OB↓/FVG↑/FVG↓`.
-- **Diagrama do fluxo final**: `docs/ORGANISM_DATA_FLOW.md` (seção "O
-  fluxo, ponta a ponta" + catálogo de eventos, ambos atualizados nesta
-  trilha com os 4 eventos QUANT.* novos e os 2 observadores puros).
+- **Diagrama do fluxo final**: `docs/ORGANISM_DATA_FLOW.md` — catálogo de
+  eventos atualizado nesta trilha com os 4 eventos QUANT.* + este
+  `BRAIN.RADAR_CANDIDATES.UPDATED`, e a seção "Observadores puros
+  read-only" atualizada com `radar-universe.ts` + o lado impuro real
+  (`scanRadarCandidate`, `engine-bridge.ts`) que liga os avaliadores
+  puros ao mundo real.
 - **"Uma fatia = um dono"**: confirmado — cada fatia nova
-  (smc/cvd/orderflowSignals/confluenceCorridor) tem exatamente 1 motor
-  real que a escreve, verificado por teste de fiação em cada caso.
-- **"Zero recálculo na UI"**: confirmado para os 3 motores novos — todos
+  (smc/cvd/orderflowSignals/confluenceCorridor/radarCandidates) tem
+  exatamente 1 motor/efeito real que a escreve, verificado por teste de
+  fiação em cada caso.
+- **"Zero recálculo na UI"**: confirmado para os motores novos — todos
   são funções puras chamadas uma vez por transição real, nunca
-  recomputadas por consumidor. Migração completa dos consumidores
-  antigos (WidgetContext) para os seletores da store permanece pendência
-  registrada (§6.36), não uma violação nova.
+  recomputadas por consumidor; o painel "OPORTUNIDADES" só lê
+  `radarCandidates` via seletor, nunca reordena/refiltra localmente
+  (`rankRadarCandidates` já entrega a lista final). Migração completa dos
+  consumidores antigos (WidgetContext) para os seletores da store
+  permanece pendência registrada (§6.36), não uma violação nova.
 - **Backlog flagado (não inventado)**: visual do Corredor de Confluência
-  no canvas; varredura em segundo plano do Radar (Workers/fila/cache/
-  painel no header); heatmap de liquidação no canvas; Pitchfork; Elliott
+  no canvas (Fase 5); sobreposição parcial `confluence-corridor.ts` ×
+  `ConvictionReading` de `confluence-engine.ts` (achado anterior, ainda
+  não simplificado); heatmap de liquidação no canvas; Pitchfork; Elliott
   simplificado; "liquidity sweep projection"/"institutional volume
   zones" como conceitos distintos (hoje parcialmente cobertos por
   motores já reais, não expandidos); migração de consumidores da FASE
-  1.1.
+  1.1 (§6.36).
 - **Pendências de produto**: `computeDrawdownPct`/paper-trading —
   confirmado pertencer a outro projeto do Operador, não a este
   repositório.
 - **Conformidade com todas as leis**: FASE 0 já auditou e confirmou (LEI
   24/Permanentes 1-9) — reconfirmado nesta entrega que nenhum módulo
-  novo (Stage Runner, Corredor, Radar) emite ou altera LONG/SHORT/WAIT/
-  Entry/Stop/Target; todos são observadores/qualificadores read-only.
-- **Testes executados**: `tsc --noEmit` limpo · **109 arquivos / 1812
-  testes** (100%, +13 `radar-qualification.test.ts` desde §6.37) ·
-  `npm run build` ok · `audit-header-maxcontent.mjs` 11 viewports CLEAN
-  via build+preview real.
+  novo (Stage Runner, Corredor, Radar/scanner/painel) emite ou altera
+  LONG/SHORT/WAIT/Entry/Stop/Target; todos são observadores/
+  qualificadores read-only. `riskGated` do scanner de fundo é sempre
+  `false` honestamente rotulado (nenhum Conselho roda para candidatos em
+  segundo plano) — nunca fabricado como risco liberado de verdade.
+- **Testes executados**: `tsc --noEmit` limpo · **110 arquivos / 1818
+  testes** (100%, +6 `radar-universe.test.ts` desde §6.38, +1 ajuste de
+  contagem de call sites em `diretriz3-fixes.test.ts`) · `npm run build`
+  ok · `audit-header-maxcontent.mjs` 11 viewports CLEAN via build+preview
+  real · verificação Playwright ao vivo do painel "OPORTUNIDADES" (ver
+  §6.39 para o detalhe).
 
 ---
 

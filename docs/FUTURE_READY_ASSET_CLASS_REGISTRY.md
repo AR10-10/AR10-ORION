@@ -6,14 +6,28 @@ ativos capaz de descrever cripto, equities, futuros sintéticos, ETFs,
 commodities, forex, índices e ações de mineração — sem ambiguidade entre
 categorias parecidas mas tecnicamente distintas.
 
-**Nada neste documento está ligado ao PWA em produção hoje.** Não existe
-nenhuma chamada em `index.html`, `js/app.js`, `service-worker.js` ou
-qualquer outro arquivo já existente que leia o arquivo de configuração
-referenciado abaixo. Este é um fundamento (*foundation*) para trabalho
-futuro, documentado agora para que a próxima etapa de implementação
-tenha uma forma de dados já pensada — exatamente o mesmo espírito de
-`pack/manifest.models.json` (`status: FUTURE`, roadmap honesto, zero
-capacidade falsa).
+**Atualização honesta (OMEGA CORE V-MAX, completar Fase 7 — Radar/OIH):**
+a lista de símbolos CRYPTO de `asset-universe.default.json` **agora É
+lida de verdade**, mas só pelo runtime novo em `ipad_runtime/ramber-ui/`
+(`src/nexus/radar-universe.ts` → `App.tsx`, universo do scanner de fundo
+do Radar/OIH) — nunca pelo PWA legado descrito no parágrafo abaixo
+(`index.html`/`js/app.js`/`service-worker.js` continuam sem nenhuma
+referência a este arquivo, isso não mudou). O restante deste documento
+— taxonomia de `instrument_type`, ranking dinâmico, expansão de
+metadados por instrumento — continua 100% `PLAN_ONLY`, nada disso foi
+implementado; só a extração/filtro/dedupe da LISTA de símbolos dos 3
+grupos CRYPTO graduou para código real. Ver `SYSTEM_HANDBOOK.md` §6.39
+para o relato completo.
+
+**Nada mais neste documento está ligado ao PWA legado em produção
+hoje.** Não existe nenhuma chamada em `index.html`, `js/app.js`,
+`service-worker.js` ou qualquer outro arquivo desse runtime legado que
+leia o arquivo de configuração referenciado abaixo. Fora a única exceção
+real declarada acima, isto continua um fundamento (*foundation*) para
+trabalho futuro, documentado agora para que a próxima etapa de
+implementação tenha uma forma de dados já pensada — exatamente o mesmo
+espírito de `pack/manifest.models.json` (`status: FUTURE`, roadmap
+honesto, zero capacidade falsa).
 
 ## Arquivo de configuração associado
 
@@ -26,9 +40,13 @@ O primeiro arquivo contém **listas seed/referência** (não exaustivas, não
 permanentes) para quatro grupos de partida — `crypto_top_liquidity`,
 `crypto_additional`, `pow_mining_crypto`, `mining_ai_hpc_equities`. O
 segundo é a documentação de forma (schema) desses dados, mantida simples
-de propósito, sem motor de validação acoplado. Nenhum dos dois é
-consumido por código de runtime nesta versão — ambos têm
-`"wired_into_live_app": false` declarado explicitamente no próprio JSON.
+de propósito, sem motor de validação acoplado — este continua sem
+nenhum consumidor de runtime (`"wired_into_live_app": false` real e
+atual no próprio `asset-universe.schema.json`). O arquivo de dados já não
+está mais 100% inerte: os 3 grupos CRYPTO agora têm um consumidor real
+(`ipad_runtime/ramber-ui/src/nexus/radar-universe.ts`), então seu próprio
+`"wired_into_live_app"` virou `true` — só o grupo `mining_ai_hpc_equities`
+(EQUITY) permanece tão não-lido quanto antes.
 
 ### Por que listas seed e não um "universo fixo"
 
@@ -121,10 +139,15 @@ Em português, para reforço (mesmo conteúdo, não uma segunda regra):
 
 ## Por que isso é plano/desenho e não implementação (honestidade de engenharia)
 
-1. **Nenhum código lê este JSON ainda.** `asset-universe.default.json` e
-   `asset-universe.schema.json` são arquivos novos e inertes — não há
-   import, fetch ou `<script>` apontando para `ipad_runtime/configs/` em
-   nenhum arquivo existente do PWA.
+1. **`asset-universe.schema.json` continua sem nenhum código lendo-o** —
+   documentação de forma pura, sem `import`/`fetch` apontando para ele em
+   lugar nenhum. `asset-universe.default.json` deixou de ser inerte: os
+   3 grupos CRYPTO têm um leitor real hoje
+   (`ipad_runtime/ramber-ui/src/nexus/radar-universe.ts`,
+   `extractRadarUniverseSymbols`) — só a LISTA de símbolos, nunca o
+   restante do desenho deste documento (taxonomia `instrument_type`,
+   ranking dinâmico, metadados por instrumento continuam 100%
+   `PLAN_ONLY`, não implementados).
 2. **Ranking dinâmico é `FUTURE`.** Os critérios em
    `ranking_criteria_supported` (market cap, volume, liquidez, OI,
    funding, volatilidade, watchlist, lista do usuário) são suportados
@@ -142,18 +165,28 @@ Em português, para reforço (mesmo conteúdo, não uma segunda regra):
 
 ## Próximos passos quando este desenho for implementado (não compromisso de prazo)
 
-1. Um módulo `js/asset-universe.js` (ou equivalente) que carregue
+1. ~~Um módulo `js/asset-universe.js` (ou equivalente) que carregue
    `configs/asset-universe.default.json` em modo leitura, sem rede
-   externa — mesma filosofia local-first do restante do runtime.
-2. Atualizar `wired_into_live_app` para `true` no JSON somente quando
-   esse módulo existir de fato (nunca antes, para não criar uma
-   capacidade falsa).
+   externa~~ — **parcialmente feito, por um caminho diferente do
+   previsto aqui**: o leitor real que existe hoje é
+   `ipad_runtime/ramber-ui/src/nexus/radar-universe.ts` (runtime
+   React/TS do Radar/OIH), não um `js/asset-universe.js` no PWA legado
+   (esse continua não existindo). Mesma filosofia local-first (import
+   estático, zero rede) — só o runtime consumidor mudou.
+2. ~~Atualizar `wired_into_live_app` para `true` no JSON somente quando
+   esse módulo existir de fato~~ — **feito** para o arquivo de dados
+   (`asset-universe.default.json`), no mesmo commit que ligou o leitor
+   real acima (nunca antes, mesma disciplina). `asset-universe.schema.json`
+   continua `false` — nenhum motor de validação foi acoplado.
 3. Implementar o ranking dinâmico real para os critérios em
    `ranking_criteria_supported`, populando `ranking_criteria_active`
-   conforme cada critério for ligado.
+   conforme cada critério for ligado — **ainda não feito**: o Radar/OIH
+   ordena candidatos pelo `qualityIndex` do Corredor de Confluência
+   (Fase 5), nunca por um dos critérios desta lista (market cap/volume/
+   liquidez/OI/funding/volatilidade/watchlist/lista do usuário).
 4. Expandir os metadados por instrumento (tabela acima) somente quando
    houver uma fonte de dados real para cada campo — nunca preencher com
-   valor decorativo.
+   valor decorativo. **Ainda não feito.**
 
 ## O que este registro nunca vai fazer, nem no futuro
 
