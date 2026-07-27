@@ -29,6 +29,13 @@ de ser feito e a evolução de todos os sistema do ciborgue".
   e nomeado) · **AUSENTE** (zero ocorrência no código) · **RECUSADO**
   (avaliado e descartado deliberadamente, com razão registrada — não é a
   mesma coisa que AUSENTE, que só significa "ainda não construído").
+- **Também NÃO é** o `docs/AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` — aquele
+  documento é o registro de UMA rodada específica de auditoria profunda
+  (duplicação/gargalos de código, censo visual completo, sincronização/
+  consistência de decisão) com achados, correções aplicadas e
+  justificativa técnica de cada uma. Este mapa é a fotografia contínua
+  do estado; aquele é o log de uma investigação pontual — os itens de
+  backlog que ela encontrou já foram mesclados na tabela §7 abaixo.
 
 ---
 
@@ -106,7 +113,8 @@ disponibilidade de dado, não por decisão de produto), SMT Divergence
 ---
 
 ## 7. Backlog técnico consolidado (mescla research map §11 + subitens
-abertos desta auditoria)
+abertos desta auditoria + achados novos de
+`AUDITORIA_CONSOLIDACAO_EVOLUCAO.md`)
 
 ### Tier 1 — barato, baixo risco, próxima rodada natural
 1. Kill Zones **no canvas** (Session Bands já provou o padrão de overlay
@@ -118,46 +126,83 @@ abertos desta auditoria)
    verificar se listas longas já virtualizam ou têm risco de framerate).
 5. Checar a dependência `reconnecting-websocket` (research map §9,
    item de minutos).
+6. Documentar/decidir quais elementos do gráfico sempre desenhados sem
+   toggle próprio (S1/R1, linhas do Trade Plan, alvos de fallback do
+   Core Engine, projeções de Cenário A/B) deveriam ganhar um toggle real
+   — hoje "Camadas do Gráfico" implica ser a superfície de controle
+   completa e não é. Decisão + rótulo, não motor novo.
+7. `AbortController` nos 2 fetches privados que não passam pelo Market
+   Data Bus (ticker em `fetchSymbolData`, funding+OI em
+   `fetchDerivatives`) — isolado, seguro, valor baixo (só eficiência de
+   rede: a correção de aplicação de dado obsoleto já existe via
+   `isStale()`, ver `AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` §3.1/§7).
 
 ### Tier 2 — médio, 1 rodada dedicada cada
-6. Andrews Pitchfork (motor puro + plugin de canvas) — já priorizado
+8. Andrews Pitchfork (motor puro + plugin de canvas) — já priorizado
    pelo Operador em rodada anterior.
-7. Market Regime → Relevance Engine (fechar o gap confirmado na §4
+9. Market Regime → Relevance Engine (fechar o gap confirmado na §4
    acima — `regime-engine.js` real, mas `layer-relevance.ts` ainda não
    lê nada dele).
-8. Drawdown/Track Record — métricas adicionais sobre o histórico já
-   real e arquivado.
-9. Auto Layout — estender `audit-header-maxcontent.mjs` (ou equivalente)
-   para cobrir a área do gráfico/grid inteira, não só TopBar+1 painel.
-10. Forecast no canvas (dado já real em `realCycle.forecast`, só falta
+10. Drawdown/Track Record — métricas adicionais sobre o histórico já
+    real e arquivado.
+11. Auto Layout — estender `audit-header-maxcontent.mjs` (ou
+    equivalente) para cobrir a área do gráfico/grid inteira, não só
+    TopBar+1 painel.
+12. Forecast no canvas (dado já real em `realCycle.forecast`, só falta
     o desenho — cuidado para não confundir com Target1/2/3 real).
+13. Unificar ATR% — hoje existem duas fórmulas divergentes: Wilder real
+    (`lorentzian-classifier.js`, não usada por ninguém fora do próprio
+    módulo) e uma média simples (`market-regime/regime-engine.js`) que
+    É a canônica real consumida pelo Risk Engine/ETA/VWAP-NL. Precisa de
+    cuidado real — toca matemática de sizing (achado
+    `AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` §5).
+14. Política de eviction real no Market Data Bus/Quality Monitor/
+    Pipeline Telemetry — crescimento de memória garantido (não
+    especulativo), confirmado via o scanner do Radar paginando o
+    universo MEXC inteiro a cada 5min; singleton compartilhado, exige
+    desenho que não quebre o contrato de dedupe já testado (achado
+    `AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` §5).
+15. Hardening de `mergeFreshTail` contra granularidade mista de candle
+    — janela de corrida real (não determinística) entre o refresh REST
+    de 30s e a troca de timeframe; função pura, testável isolada, baixo
+    raio de explosão (achado `AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` §3.3).
 
 ### Tier 3 — precisa de decisão do Operador antes de começar
-11. Footprint — bloqueado por disponibilidade de dado (volume por
+16. Footprint — bloqueado por disponibilidade de dado (volume por
     preço intra-candle não está nas fontes atuais); precisa avaliar se
     alguma fonte real cobre isso antes de sequer prototipar.
-12. SMT Divergence — exigiria formalizar um 2º ativo correlacionado
+17. SMT Divergence — exigiria formalizar um 2º ativo correlacionado
     dentro do pipeline (hoje o app é mono-ativo por ciclo).
-13. Chart Integrity Engine — decisão de escopo: o que exatamente conta
+18. Chart Integrity Engine — decisão de escopo: o que exatamente conta
     como "desincronização" entre as 5 camadas (Snapshot/TradePlan/HUD/
     Chart/Voice) e o que fazer quando detectada (bloquear render? só
     avisar?) precisa de definição do Operador antes de implementar.
+19. Consolidar a paleta de cores por eixo semântico — hoje 9 eixos
+    diferentes (direção, saúde do sistema, conectividade, qualidade de
+    dado, tier de confluência, Heat Score, CPI/Trust Score, alerta/trap)
+    reaproveitam a mesma paleta verde/vermelho/dourado; internamente
+    consistente em cada eixo, ambíguo entre eixos. Grande — toca dezenas
+    de widgets — precisa de decisão de design do Operador sobre a nova
+    paleta antes de implementar (achado `AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` §4).
 
 ### Tier 4 — grande, arquitetural, cada um merece sua própria trilha
-14. Migração WidgetContext → seletores Zustand granulares — dívida já
+20. Migração WidgetContext → seletores Zustand granulares — dívida já
     flagada há várias rodadas, agora com validação externa (research
     map §9: é o antipadrão que a comunidade Zustand documenta como
     causa raiz de re-render desnecessário, `eslint-plugin-granular-
-    selectors` existe justamente pra isso).
-15. Mover o ciclo do Core Engine para Web Worker — Regra de Ouro 6 exige
+    selectors` existe justamente pra isso) e evidência concreta nova
+    (o gap de timing real entre `priceData`/TopBar e
+    `usePriceSnapshot()`/gráfico é a mesma dívida — ver
+    `AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` §3.3).
+21. Mover o ciclo do Core Engine para Web Worker — Regra de Ouro 6 exige
     que isso seja uma iniciativa isolada e cuidadosa, nunca misturada
     com outra mudança.
-16. `OffscreenCanvas` + rendering em Worker para os overlays mais
+22. `OffscreenCanvas` + rendering em Worker para os overlays mais
     pesados (Liquidation Heatmap, Order Flow Heatmap) — mesma cautela
     da Regra de Ouro 6.
-17. Chart Integrity Engine (implementação, após a decisão de escopo do
+23. Chart Integrity Engine (implementação, após a decisão de escopo do
     Tier 3).
-18. Adaptive Zoom (sistema deliberado, não o subproduto passivo atual).
+24. Adaptive Zoom (sistema deliberado, não o subproduto passivo atual).
 
 ---
 
@@ -175,9 +220,12 @@ abertos desta auditoria)
   code-splitting; redução adicional do tamanho absoluto não foi tentada
   (fora do escopo daquela auditoria).
 - **`WidgetContext` como fonte de leitura em paralelo aos seletores da
-  store**: migração incompleta (Tier 4, item 14 acima) — não é uma
-  inconsistência de dado (mesma fonte real por trás dos dois caminhos),
-  é uma dívida de performance/manutenção.
+  store**: migração incompleta (Tier 4, item 20 acima) — não é uma
+  inconsistência de dado em geral (mesma fonte real por trás dos dois
+  caminhos), mas já tem 1 instância concreta onde o TIMING diverge
+  (`priceData`/TopBar vs. `usePriceSnapshot()`/gráfico, ver item 20) —
+  maioria dos casos continua sendo dívida de performance/manutenção,
+  não de correção.
 - **GMIL ONCHAIN/MACRO permanentemente `null`**: não é um bug — é a
   Restrição Permanente de nunca guardar credenciais de API se
   cumprindo; qualquer solução futura precisaria ser uma fonte pública
@@ -196,8 +244,9 @@ abertos desta auditoria)
    já mapeado, zero exceção pendente).
 4. Andrews Pitchfork (ferramenta institucional já priorizada).
 5. Decisão do Operador sobre os itens de Tier 3 (Footprint, SMT
-   Divergence, escopo do Chart Integrity Engine) — sem essa decisão,
-   qualquer trabalho nesses 3 itens seria suposição, não implementação.
+   Divergence, escopo do Chart Integrity Engine, nova paleta de cores
+   por eixo semântico) — sem essa decisão, qualquer trabalho nesses 4
+   itens seria suposição, não implementação.
 6. Tier 4 — cada item como sua própria trilha isolada e cuidadosa
    (mesma disciplina já usada para toda mudança de Main Thread/Core
    Engine neste projeto).

@@ -42,6 +42,7 @@ import type {
   Timeframe,
 } from "../nexus/types";
 import { maybeSampleL2History, type L2HistoryEntry } from "../nexus/l2-history";
+import { touchCandlesSymbol } from "../nexus/candles-cache";
 import { pushOrderflowHistory, type OrderflowHistoryEntry } from "../nexus/orderflow-history";
 import { pushConvictionHistory, type ConvictionScoreSample } from "../nexus/institutional-score";
 import type { VolumeProfileSnapshot } from "../nexus/volume-profile";
@@ -127,7 +128,11 @@ export interface CoreSnapshot {
 // referência do Zustand, mesmo sem dado real novo).
 // ─────────────────────────────────────────────────────────────────────────
 
-const EMPTY_PRICE: PriceSnapshot = {
+// Achado real de auditoria (DIRETRIZES AVANÇADAS, sincronização — bug
+// HIGH confirmado): exportado para App.tsx poder repassar este MESMO
+// valor honesto de reset ao trocar de ativo, em vez de silenciosamente
+// pular a escrita (ver o efeito espelho de `setPrice` em App.tsx).
+export const EMPTY_PRICE: PriceSnapshot = {
   price: null, delta: null, deltaPct: null, high: null, low: null, volume: null, direction: null, updatedAt: null,
 };
 const EMPTY_ORDER_BOOK: OrderBookSnapshot = { bids: [], asks: [], updatedAt: null };
@@ -442,7 +447,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setCandles: (symbol, tf, candles) => set((s) => {
       const bySymbol = s.candles[symbol] ?? {};
       bySymbol[tf] = candles;
-      s.candles[symbol] = bySymbol;
+      s.candles = touchCandlesSymbol(s.candles as Record<string, typeof bySymbol>, symbol, bySymbol);
     }),
     setExchangeOrderBook: (exchange, snapshot) => set((s) => { s.orderBooks[exchange] = snapshot; }),
     setConnectionState: (exchange, state) => set((s) => { s.connections[exchange] = state; }),

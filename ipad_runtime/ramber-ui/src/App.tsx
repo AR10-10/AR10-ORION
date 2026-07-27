@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -2870,8 +2870,25 @@ export default function App() {
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setSymbol(selectedAsset);
   }, [selectedAsset]);
+  // Achado real de auditoria (DIRETRIZES AVANÇADAS, sincronização — bug
+  // HIGH confirmado): o guard `if (priceData)` parecia um null-check
+  // inofensivo, mas SUPRIMIA o próprio reset — ao trocar de ativo,
+  // priceData volta a null (efeito acima, [selectedAsset]) para limpar a
+  // tela, mas esta linha silenciosamente PULAVA a escrita em vez de
+  // repassar o reset, deixando store.price com o ÚLTIMO PREÇO REAL DO
+  // ATIVO ANTERIOR até o WS do novo ativo reconectar (até a próxima
+  // virada de rede, não de render). Efeito visível real: o painel de
+  // Derivativos mostrava o preço do ativo velho junto do rótulo do ativo
+  // novo, e o gráfico (livePrice = usePriceSnapshot()) estendia a vela
+  // mais recente do ativo novo com o preço do ativo velho
+  // (patchLastCandleWithLiveTick não valida magnitude/símbolo — um pavio
+  // falso persistia até o próximo resync REST). orderBook/derivatives
+  // logo abaixo nunca tiveram este bug: seus valores de reset já são
+  // objetos verdadeiros ({bids:[],asks:[]}/{fundingRate:null,...}), então
+  // sempre passavam pelo guard `if`. price não tinha um guard — agora
+  // sempre repassa o estado real (reset incluso), igual aos vizinhos.
   useEffect(() => {
-    if (priceData) useUnifiedSnapshotStore.getState().setPrice(priceData);
+    useUnifiedSnapshotStore.getState().setPrice(priceData ?? EMPTY_PRICE);
   }, [priceData]);
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setOrderBook(orderBook);
@@ -7430,7 +7447,15 @@ function MarketBiasDecisionCard() {
 
         {direction ? (
           <div className="grid grid-cols-2 gap-1.5">
-            <LevelCard label="Entrada" value={entry} accent="#00f0ff" tag="REF" />
+            {/* Achado real de auditoria (DIRETRIZES AVANÇADAS, censo
+                visual): Entrada usava ciano aqui, mas âmbar/dourado
+                (#f0d06f = rgba(240,208,111,…)) em TODO o resto do app —
+                linha de preço de entrada e caixa de zona no gráfico
+                (EnhancedChart_110_Percent.tsx/TradePlanZonePlugin.tsx),
+                mesmo tom já usado por VWAP neutro/Heat Score aqui na
+                própria HUD. Stop/Alvo já batiam com o gráfico (vermelho/
+                verde) — só Entrada destoava. */}
+            <LevelCard label="Entrada" value={entry} accent="#f0d06f" tag="REF" />
             <LevelCard label="Invalidação" value={stop} accent="#ff0055" tag="REAL" />
             <LevelCard
               label="Alvo 1"
@@ -8038,8 +8063,19 @@ function CouncilWidget() {
     <Widget id="council" title="MULTI-AGENT COUNCIL" flex="flex-[1] min-h-[210px]">
       <div className="flex flex-col gap-1 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
         <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff20]">
-          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">
-            DECISÃO{council?.riskGated ? " · TRAVADO (RISCO)" : ""}
+          {/* Achado real de auditoria (DIRETRIZES AVANÇADAS, consistência
+              de decisão — LEI 24): esta linha dizia só "DECISÃO", sem
+              tooltip, ao contrário das linhas-irmãs deste mesmo widget
+              (ex.: SCENARIO A/B logo abaixo, que já explicita "never
+              market probability"). O Conselho pode divergir do Core
+              Engine por um ciclo real (decision-layer.ts documenta isso
+              de propósito) — um relance rápido aqui podia confundir o
+              voto do Conselho com a decisão real única do sistema. */}
+          <span
+            className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide"
+            title="Voto do Multi-Agent Council — confluência/contexto real, nunca a decisão do sistema. A única decisão real (LONG/SHORT/WAIT) vem do Core Engine (LEI 24); o Conselho pode divergir por um ciclo real."
+          >
+            VOTO DO CONSELHO{council?.riskGated ? " · TRAVADO (RISCO)" : ""}
           </span>
           <span className={`text-[0.55rem] font-mono font-black ${stanceColor}`}>
             {stanceLabel}

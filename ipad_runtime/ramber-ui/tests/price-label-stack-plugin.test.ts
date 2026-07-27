@@ -363,7 +363,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
   it('último preço usa a MESMA cor up/down real da própria série de candles (#00ffaa/#ff0055) — nunca uma cor nova', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 4400);
+    const block = s.slice(idx, idx + 5600);
     expect(block).toContain('displayPrice >= lastCandle.open ? "#00ffaa" : "#ff0055"');
   });
 
@@ -378,7 +378,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
     const s = chart();
     const idx = s.indexOf('const lastCandle = data.length > 0 ? data[data.length - 1] : null;');
     expect(idx, 'bloco do último preço não encontrado').toBeGreaterThan(-1);
-    const block = s.slice(idx, idx + 1300);
+    const block = s.slice(idx, idx + 2500);
     expect(block).toContain('const displayPrice = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : lastCandle.close;');
     expect(block).toContain('price: displayPrice,');
     expect(block).toContain('text: displayPrice.toFixed(2),');

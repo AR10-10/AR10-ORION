@@ -1646,13 +1646,25 @@ export function EnhancedChart_110_Percent({
       // atualiza a vela RENDERIZADA via series.update() (deliberado:
       // SMC/Fibonacci/Volume Profile não podem recomputar a cada tick de
       // preço), nunca escreve de volta no array `data`. A barra superior
-      // (mesmo usePriceSnapshot() que alimenta `livePrice` aqui) seguia ao
-      // vivo enquanto este rótulo congelava no último REST/kline — dois
-      // números diferentes reivindicando "o preço atual" ao mesmo tempo
-      // (~30s de defasagem possível, o intervalo real do poll REST).
-      // livePrice já chega como prop (mesma fonte do patch da vela acima)
-      // — preferido aqui, com fallback pro close da vela só quando ainda
-      // não existe nenhum tick real (fail-closed, carregamento inicial).
+      // seguia ao vivo enquanto este rótulo congelava no último
+      // REST/kline — dois números diferentes reivindicando "o preço
+      // atual" ao mesmo tempo (~30s de defasagem possível, o intervalo
+      // real do poll REST). livePrice já chega como prop (mesma fonte do
+      // patch da vela acima) — preferido aqui, com fallback pro close da
+      // vela só quando ainda não existe nenhum tick real (fail-closed,
+      // carregamento inicial).
+      //
+      // Correção de comentário (achado real, auditoria de sincronização
+      // DIRETRIZES AVANÇADAS): a frase acima dizia que a barra superior
+      // usa "o mesmo usePriceSnapshot() que alimenta livePrice aqui" —
+      // falso. TopBar lê `priceData` (estado React direto, App.tsx) por
+      // prop; `livePrice` aqui vem de `usePriceSnapshot()`, um espelho
+      // Zustand do MESMO `priceData` escrito um commit de render depois
+      // (App.tsx, efeito `[priceData]`). Ou seja: mesmo dado real na
+      // origem, mas dois caminhos com timing diferente — a barra superior
+      // é sempre igual ou mais nova que este rótulo, nunca o contrário.
+      // Gap estrutural real, ainda não fechado (documentado no backlog);
+      // esta nota só corrige a afirmação factual errada, não o gap em si.
       const displayPrice = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : lastCandle.close;
       out.push({
         price: displayPrice,

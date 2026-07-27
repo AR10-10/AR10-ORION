@@ -3898,6 +3898,120 @@ existe exatamente para isso, mesmo espírito do aviso final do
 classificação de estado que mudou desde §6.42 (citado acima), não
 suposição.
 
+### 6.53 DIRETRIZES AVANÇADAS DE AUDITORIA, CONSOLIDAÇÃO E EVOLUÇÃO —
+3 agentes paralelos (ecossistema/censo visual/sincronização) + 6
+correções reais aplicadas
+
+Diretiva formal de 8 seções do Operador, pedindo auditoria de
+duplicação/gargalos, mapa visual completo, consistência de decisão,
+sincronização, pesquisa tecnológica, consolidação arquitetural,
+autonomia técnica controlada (propor E implementar ajustes seguros) e
+um documento Markdown único. 3 agentes background reais (read-only,
+zero edição própria) rodaram em paralelo: Ecossistema/duplicação
+(leu 51 arquivos de `nexus/` + engines + risk/orderflow/consensus/
+market-data-bus/market-regime/telemetry + gmil/cross-exchange +
+engine-bridge.ts + a store inteira), Censo Visual (18 camadas do
+gráfico, 10 price lines, 9 plugins, ~25 indicadores de HUD), e
+Sincronização/Decisão (timing entre Snapshot/Core/UI, LEI 24).
+
+**Achado de maior impacto — bug HIGH real, corrigido nesta rodada**:
+`store.price` nunca resetava ao trocar de ativo. Causa raiz: o efeito-
+espelho `useEffect(() => { if (priceData) setPrice(priceData); },
+[priceData])` tinha um guard que parecia um null-check inofensivo mas
+SUPRIMIA o próprio reset — ao trocar de ativo, `priceData` volta a
+`null` (efeito dedicado, `[selectedAsset]`), mas a linha simplesmente
+pulava a escrita em vez de repassar o reset, deixando `store.price` com
+o ÚLTIMO PREÇO REAL DO ATIVO ANTERIOR até o WS do novo ativo reconectar
+(defasagem de REDE, não de render). Efeito visível real confirmado pelo
+agente: painel de Derivativos mostrando preço do ativo velho junto do
+rótulo do ativo novo; `patchLastCandleWithLiveTick` (sem validação de
+magnitude/símbolo) estendendo a vela mais recente do ativo NOVO com o
+preço do ativo VELHO — um pavio falso que persiste até o próximo
+resync REST (até ~30s). `orderBook`/`derivatives` nunca tiveram este
+bug porque seus valores de reset já são objetos verdadeiros. Corrigido:
+`EMPTY_PRICE` (constante privada da store) agora exportado e repassado
+explicitamente — `setPrice(priceData ?? EMPTY_PRICE)`, mesmo padrão que
+os vizinhos já usavam corretamente.
+
+**Achado visual concreto pedido pelo Operador ("linhas douradas/
+amarelas")**: não é UMA linha — são 4 elementos reais e documentados
+(tint neutro VWAP/NL, linha+zona de Entrada do Trade Plan, linha de
+Liquidity Sweep, rótulo de pico do Liquidation Heatmap), nenhum bug.
+O achado real por trás da pergunta: uma única paleta (verde/vermelho/
+dourado) é reaproveitada em 9 eixos semânticos diferentes pelo app
+inteiro (direção, saúde do sistema, conectividade — a MESMA bolinha
+`w-1.5 h-1.5` em 6+ indicadores independentes —, qualidade de dado,
+tier de confluência, Heat Score, CPI/Trust Score, alerta/trap).
+Internamente consistente em cada eixo, ambíguo entre eixos.
+`NeuralMarketAuraPlugin.tsx` já documenta, no próprio cabeçalho, ter
+corrigido exatamente esta classe de bug uma vez (corredor colorido por
+direção produzindo contradição visual real) — nunca generalizado para
+o resto da HUD. 1 correção pontual aplicada: `MarketBiasDecisionCard`'s
+Entrada usava ciano onde todo o resto do app usa âmbar — corrigida.
+
+**Outras 4 correções reais aplicadas** (todas pequenas, seguras,
+zero mudança de comportamento fora do caso de bug/documentação):
+`candles` (unified-snapshot-store.ts) ganhou teto de memória —
+`nexus/candles-cache.ts` novo (`touchCandlesSymbol`, LRU real por
+ordem de inserção, teto=12=tamanho do universo curado `ASSETS`),
+mesmo padrão arquitetural de `l2History`/`orderflowHistory`/
+`institutionalScoreHistory`/`trackRecord.history`; comentário
+factualmente errado em `EnhancedChart_110_Percent.tsx` (afirmava que
+TopBar usa "o mesmo `usePriceSnapshot()`" do gráfico — falso, TopBar lê
+`priceData` direto) corrigido; `event-bus.ts` ganhou nota avisando que
+os 3 eventos `DATA.*` não têm publicador vivo hoje
+(`cross-exchange-service.ts` deliberadamente não iniciado); rótulo
+"DECISÃO" sem tooltip em `CouncilWidget` renomeado para "VOTO DO
+CONSELHO" + tooltip citando LEI 24 explicitamente (única linha do
+widget sem qualificação, ao contrário das linhas-irmãs).
+
+**Lacunas reais documentadas, NÃO corrigidas nesta rodada** (todas
+precisam de rodada própria, Regra de Ouro 6): duas fórmulas de ATR%
+divergentes (Wilder real em `lorentzian-classifier.js`, não usada por
+ninguém; média simples em `market-regime/regime-engine.js`, a canônica
+real que alimenta o Risk Engine) — toca matemática de sizing, cuidado
+real necessário; Market Data Bus/Quality Monitor/Pipeline Telemetry sem
+eviction, crescimento garantido (não especulativo) via scanner do Radar
+paginando o universo MEXC inteiro a cada 5min — singleton compartilhado,
+desenho de eviction próprio necessário; gap estrutural real de timing
+entre `priceData` (TopBar, rápido) e `usePriceSnapshot()` (gráfico, 1
+commit atrás) — mesma dívida já rastreada de migração WidgetContext→
+seletores, agora com evidência concreta (badge de stop-breach vs.
+rótulo do próprio gráfico podem discordar por uma fração de segundo);
+janela de corrida real (não determinística) entre o refresh REST de 30s
+e troca de timeframe, podendo mesclar candles de granularidades
+diferentes; consolidação da paleta de 9 eixos semânticos — grande,
+precisa de decisão de design do Operador antes de implementar.
+
+**Pesquisa nova** (delta sobre `ELITE_TRADING_RESEARCH_MAP.md`,
+focada em sincronização): padrão real de mercado 2026 para cancelar
+requisição obsoleta é `AbortController`; AR10 usa a alternativa válida
+(flag `cancelled`/`isStale()` fechada sobre o efeito, checada após cada
+`await`) que já garante CORREÇÃO — a lacuna real que sobra é só
+eficiência de rede (requisição obsoleta continua em voo até resolver,
+mesmo descartada), baixa prioridade, documentada no backlog.
+
+**Entregável único** (§8 da diretiva):
+`docs/AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` — inventário, mapa de
+arquitetura/dependências/sincronização/elementos visuais, pesquisa,
+lacunas, conflitos, registro de melhorias com justificativa técnica,
+backlog priorizado, riscos/benefícios. Cita `ELITE_TRADING_RESEARCH_MAP.md`
+e `MAPA_EVOLUCAO_CIBORGUE.md` em vez de duplicar o que já respondiam.
+
+**Riscos conhecidos**: nenhuma das 6 correções toca Core Engine/Comitê/
+Risk Engine/execução — todas aditivas, reversão de supressão acidental,
+ou texto puro. Os itens de backlog deliberadamente não tocados carregam
+seus próprios riscos reais, documentados individualmente no novo
+documento, nunca escondidos.
+
+**Testes**: `tsc --noEmit` limpo · **119 arquivos / 1950 testes** (100%,
++12 novos: 6 em `nexus-candles-cache.test.ts`, 6 em
+`diretrizes-avancadas-fixes.test.ts`) · build de produção ok (bundles
+inalterados) · 2 janelas de teste de padrão-fixo widened (mesma
+manutenção de baixo risco já vista em rodadas anteriores) ·
+verificação Playwright ao vivo ("VOTO DO CONSELHO" + tooltip
+renderizados corretamente, zero erro de console real).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

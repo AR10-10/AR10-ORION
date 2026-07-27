@@ -38,6 +38,14 @@ import type { RadarQualificationResult } from "./radar-qualification";
 // sem emissor vivo). DATA.* seguem do CrossExchangeService e
 // HEALTH.CHANGED do Health Monitor — um único publicador por evento,
 // nunca dois emissores para o mesmo tipo.
+// Achado real de auditoria (DIRETRIZES AVANÇADAS, ecossistema): os 3
+// DATA.* abaixo NÃO têm publicador vivo hoje — cross-exchange-service.ts
+// (o único código que os emitiria) é deliberadamente NÃO iniciado por
+// App.tsx nesta fase (ver o cabeçalho do próprio arquivo: substituir o
+// caminho WS/REST que já funciona é o passo de maior risco do projeto,
+// adiado de propósito). Um assinante futuro que registrar `bus.on("DATA.…")`
+// esperando receber algo real ficará esperando para sempre, sem erro —
+// documentado aqui pra nunca ser um mistério silencioso.
 export type NexusEvent =
   | { type: "DATA.CANDLES_UPDATED"; payload: { symbol: string; tf: Timeframe; exchange: Exchange } }
   | { type: "DATA.ORDERBOOK_UPDATED"; payload: { exchange: Exchange } }
