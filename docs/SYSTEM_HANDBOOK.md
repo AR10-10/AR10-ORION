@@ -3393,6 +3393,69 @@ WidgetContext→store. Uma página REAL de candidatos MEXC (com dado
 populado) não pôde ser vista ao vivo neste sandbox (zero egress) —
 lógica coberta por testes reais, mesma limitação de sempre.
 
+### 6.46 ORDEM DIRETA DE EVOLUÇÃO CONTÍNUA — Modo Arquiteto-Chefe: 1º
+ciclo (CI + auditoria de performance)
+
+Quarta diretiva ampla do Operador, com uma mudança real de enquadramento:
+em vez de pedir um checklist novo, pede para a sessão atuar
+continuamente como "Arquiteto-Chefe" — auditar e evoluir sem esperar um
+próximo prompt item-a-item, priorizando consistência/simplicidade sobre
+quantidade de funcionalidade. Este é o 1º ciclo sob esse modo.
+
+**CI (fechamento do ciclo anterior)**: o job `deploy` falhou em
+`tests/data-quality.test.ts` (métrica de disponibilidade da fonte,
+`0.5` esperado vs `1` recebido). Investigação real: nem o teste nem
+`quality-engine.js`/`quality-monitor.js`/`bus.js` foram tocados em
+nenhum commit desta sessão (confirmado via `git log`); a matemática de
+`scoreAvailability` é puramente síncrona sobre um array em memória, sem
+relógio/timer — determinística por construção para o cenário do teste
+(2 chamadas sequenciais `await`adas). 8 execuções locais repetidas
+passaram limpo, mesmo resultado de toda verificação anterior desta
+sessão. Diagnóstico: falha transitória do runner de CI, não uma
+regressão real. Re-run disparado via `rerun_failed_jobs` — voltou
+`conclusion: success`, confirmando o diagnóstico.
+
+**Auditoria de performance (achado real, verificado, sem regressão)**:
+todo build desta sessão mostrava `llm-worker-*.js` (~6MB) e
+`llm-bridge-*.js` (~5.9MB) — muito maiores que o bundle principal
+(~845KB) — nunca investigado até agora. Verificação real (não só
+leitura de comentário): `dist/index.html` do build mais recente tem
+exatamente 1 `<script>`, referenciando só o bundle principal — os 2
+chunks LLM não aparecem no boot. Causa raiz confirmada no código-fonte:
+`llm-bridge.ts` (que importa `@mlc-ai/web-llm`, o runtime WebGPU do
+Núcleo Neural opt-in) só entra em `App.tsx` via `import type` (custo
+zero) e `await import(...)` dentro do handler de ativação do widget —
+nunca um import estático de valor. **Conclusão: não é um gargalo, é
+uma arquitetura de code-splitting já correta** (mesma garantia que
+`production-seal.test.ts` já travava do lado do service worker —
+precache exclui os chunks LLM; faltava travar do lado do boot em si).
+
+**Entregue**: `tests/production-seal.test.ts` ganhou 3 testes novos que
+travam essa garantia na fonte — nenhum import estático de valor de
+`llm-bridge` em `App.tsx`, a ativação real passa por `import()`
+dinâmico (≥2 call sites), e o `dist/index.html` real (quando existe no
+ambiente de teste) tem exatamente 1 `<script>` sem menção a `llm-`.
+Protege contra uma regressão futura real: alguém adicionar um import
+estático por engano colaria ~12MB no boot de todo visitante sem o
+Operador ter pedido o Núcleo Neural.
+
+**Testes**: `tsc --noEmit` limpo · **115 arquivos / 1888 testes**
+(100%, +3 novos) · suíte completa re-executada (nenhum arquivo de
+produção tocado nesta entrada, só o teste novo).
+
+**Backlog honesto (mesmo desta entrada — nenhuma implementação nova de
+feature, por design deste ciclo)**: Data Quality Monitor unificado
+(ADITIVO V-MAX Etapa 10) segue sendo o candidato mais concreto de
+"eliminar redundância real" já documentado (3 motores de qualidade
+independentes — Market Data Bus, GMIL, `data-sufficiency.js`) — não
+executado nesta entrada por ser uma mudança que toca 3 sistemas com
+domínios genuinamente distintos; avaliado e deliberadamente adiado para
+uma rodada própria e cuidadosa, mesmo padrão já usado para toda
+mudança de escopo grande nesta sessão (Regra de Ouro 6). Migração
+WidgetContext→store, Ferramentas Institucionais (Kill Zones/SMT
+Divergence/Andrews Pitchfork/etc.) e as demais Etapas do ADITIVO V-MAX/
+EPC OMEGA FINAL continuam pendentes.
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

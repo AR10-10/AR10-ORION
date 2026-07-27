@@ -110,6 +110,43 @@ describe('diretriz 2: service worker real — precache do shell + stale-while-re
   });
 });
 
+// ORDEM DIRETA (Modo Arquiteto-Chefe): achado da auditoria de performance —
+// llm-worker-*.js/llm-bridge-*.js aparecem como ~6MB cada em TODO build
+// (@mlc-ai/web-llm, o runtime WebGPU do Núcleo Neural opt-in). Verificado
+// contra dist/index.html real: só 1 <script> (o bundle principal) —
+// nenhum chunk llm é referenciado no boot. A garantia por trás disso é
+// fonte: zero import ESTÁTICO de llm-bridge.ts em App.tsx, só
+// `import type` (custo zero em runtime) e `await import(...)` dentro do
+// handler de ativação do widget. Este teste trava essa garantia na fonte
+// — nunca deixa um import estático voltar a colar ~12MB no boot de todo
+// visitante sem o Operador ter pedido o Núcleo Neural.
+describe('Achado de auditoria (performance): llm-bridge.ts nunca é importado estaticamente — os ~12MB do WebLLM continuam 100% opt-in', () => {
+  it('App.tsx só importa llm-bridge via `import type` (zero custo) ou `await import()` dinâmico — nunca um import de valor no topo do módulo', () => {
+    const app = read('../src/App.tsx');
+    const staticValueImport = /^import\s*\{[^}]*\}\s*from\s*["']\.\/llm-bridge["'];?\s*$/m;
+    expect(app).not.toMatch(staticValueImport);
+    expect(app).toContain('import type { TacticalContextInput } from "./llm-bridge"');
+  });
+
+  it('a ativação real do Núcleo Neural passa por import() dinâmico — a garantia acima não é só "não usado", é genuinamente lazy', () => {
+    const app = read('../src/App.tsx');
+    const dynamicImports = app.match(/await import\("\.\/llm-bridge"\)/g) ?? [];
+    expect(dynamicImports.length).toBeGreaterThanOrEqual(2); // handleActivate + handleGenerate
+  });
+
+  it('o build real não referencia nenhum chunk llm no <script> de boot — só o bundle principal', () => {
+    let indexHtml: string;
+    try {
+      indexHtml = read('../dist/index.html');
+    } catch {
+      return; // sem build local disponível neste ambiente de teste — a garantia de fonte acima já cobre a causa raiz.
+    }
+    const scriptTags = indexHtml.match(/<script[^>]*>/g) ?? [];
+    expect(scriptTags.length).toBe(1);
+    expect(scriptTags[0]).not.toContain('llm-');
+  });
+});
+
 describe('diretriz 1: governança — o Risk Engine consome a força AJUSTADA pela qualidade', () => {
   it('App.tsx alimenta buildRiskSuggestion com forca_ajustada (e não a força bruta)', () => {
     const app = read('../src/App.tsx');
