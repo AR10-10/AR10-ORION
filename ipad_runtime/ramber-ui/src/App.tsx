@@ -44,6 +44,10 @@ import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV
 // Ordem "Ciborgue Vivo" §3: síntese real de autodiagnóstico — mesmos
 // sinais do Health Monitor/Data Quality Layer, nunca uma segunda medição.
 import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/self-diagnostics";
+// ADITIVO V-MAX Etapa 10 (Data Quality Monitor unificado): vocabulário
+// único OK/WARNING/FAIL/DADOS_INSUFICIENTES por cima dos 3 motores de
+// qualidade reais (Bus/GMIL/Research) — nunca um 4º cálculo, só leitura.
+import { classifyBusQuality, classifyWeight, classifySufficiencyScore, DATA_QUALITY_COLOR } from "./nexus/data-quality-vocabulary";
 // Fase Ω Priority 1: tipos + lista canônica dos 6 prazos — mesma fonte que
 // engine-bridge.ts usa para orquestrar, nunca uma segunda lista duplicada.
 import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } from "./nexus/multi-timeframe-engine";
@@ -8208,7 +8212,7 @@ function MultiTimeframeMatrixWidget() {
 // ZERO REPETIÇÃO: nenhum destes indicadores aparece em outro painel —
 // regime/vieses/comitê/risco moram nos painéis das suas fases.
 function TelemetryHealthWidget() {
-  const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus } = useContext(WidgetContext) || {};
+  const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus, gmilProviders } = useContext(WidgetContext) || {};
   // Ordem "Ciborgue Vivo" §3: mesmos sinais reais já lidos abaixo para as
   // Rows existentes, mais os que só o relatório precisa (offline/frescor/
   // conexões por exchange) — zero segunda medição, só uma segunda síntese
@@ -8223,14 +8227,40 @@ function TelemetryHealthWidget() {
   const qualityLabel = quality
     ? `${quality.classification}${num(quality.weight) ? ` · peso ${(quality.weight * 100).toFixed(0)}%` : ""}`
     : AWAIT;
-  const qualityColor =
-    quality?.classification === "EXCELENTE" || quality?.classification === "SAUDAVEL"
-      ? "text-[#00ffaa]"
-      : quality?.classification === "DEGRADADA"
-        ? "text-[#f0d06f]"
-        : quality?.classification === "QUARENTENA"
-          ? "text-[#ff0055]"
-          : "text-[#8ab4f8]/50";
+  const qualityColor = DATA_QUALITY_COLOR[classifyBusQuality(quality?.classification ?? null)];
+
+  // ADITIVO V-MAX Etapa 10 (achado de auditoria): data-sufficiency.js já
+  // computa um score real 0-100 de cobertura de campos EM TODO ciclo
+  // (js/research/data-sufficiency.js via research-engine.js), mas antes
+  // desta mudança só era usado internamente para rebaixar `confidence` —
+  // nunca chegava à UI, então o Operador via a confiança rebaixada sem
+  // conseguir ver POR QUÊ. Puro passthrough (engine-bridge.ts), nada
+  // recomputado aqui.
+  const sufficiency = realCycle?.dataSufficiency ?? null;
+  const sufficiencyLabel = sufficiency ? `${sufficiency.score}/${sufficiency.max_score}` : AWAIT;
+  const sufficiencyColor = DATA_QUALITY_COLOR[classifySufficiencyScore(sufficiency?.score ?? null, sufficiency?.max_score ?? 100)];
+
+  // ADITIVO V-MAX Etapa 10 (achado de auditoria): GmilOrchestrator.getSnapshot()
+  // já computa um weight 0-1 real por provedor (mesmo computeQuality de
+  // gmil/quality-engine.ts que o consensus-engine usa para amortecer peso),
+  // mas nenhum consumidor sintetizava isso numa leitura única de saúde do
+  // GMIL — cada widget só lia providers individualmente. Média real do
+  // weight sobre os provedores que já tentaram ao menos 1 fetch real
+  // (lastReading !== null); provedor que ainda não rodou nem entra na
+  // média (não é "ruim", é "ainda não medido" — mesmo princípio de
+  // honestidade do resto da base). Mesmo padrão de agregação já usado por
+  // DecisionValidationWidget (contributingGmil) — nenhuma segunda
+  // assinatura de useGmilSnapshot(), só leitura do mesmo gmilProviders via
+  // WidgetContext.
+  const gmilList = gmilProviders ?? [];
+  const gmilAttempted = gmilList.filter((p: any) => p?.lastReading != null);
+  const gmilAvgWeight = gmilAttempted.length
+    ? gmilAttempted.reduce((sum: number, p: any) => sum + p.weight, 0) / gmilAttempted.length
+    : null;
+  const gmilLabel = gmilAvgWeight !== null
+    ? `${(gmilAvgWeight * 100).toFixed(0)}% · ${gmilAttempted.length}/${gmilList.length} fontes`
+    : AWAIT;
+  const gmilColor = DATA_QUALITY_COLOR[classifyWeight(gmilAvgWeight)];
 
   const variant = wasmVariantLabel(realCycle?.wasmVariant ?? null);
   const fpsClass = classifyFps(fps);
@@ -8250,6 +8280,8 @@ function TelemetryHealthWidget() {
     <Widget id="system_health" title="SYSTEM HEALTH" flex="flex-[0.8] min-h-[170px]">
       <div className="flex flex-col gap-1.5 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
         <Row label="QUALIDADE DA FONTE (BUS)" value={qualityLabel} valueClass={qualityColor} />
+        <Row label="SUFICIÊNCIA DE DADOS" value={sufficiencyLabel} valueClass={sufficiencyColor} />
+        <Row label="QUALIDADE GMIL (CONTEXTO)" value={gmilLabel} valueClass={gmilColor} />
         <Row label="WASM ENGINE" value={variant ?? AWAIT} valueClass={variant === "SIMD128" ? "text-[#00ffaa]" : "text-[#8ab4f8]"} />
         <Row
           label={`LATÊNCIA DO CICLO (${chartTimeframe?.toUpperCase() ?? "15M"})`}

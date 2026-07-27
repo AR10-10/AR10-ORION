@@ -3456,6 +3456,116 @@ WidgetContext→store, Ferramentas Institucionais (Kill Zones/SMT
 Divergence/Andrews Pitchfork/etc.) e as demais Etapas do ADITIVO V-MAX/
 EPC OMEGA FINAL continuam pendentes.
 
+### 6.47 Modo Arquiteto-Chefe: 2º ciclo — Data Quality Monitor unificado
+(ADITIVO V-MAX Etapa 10)
+
+Confirmação breve do Operador ("Agora você faz a evolução que tem que
+fazer, né?") para prosseguir com o alvo já mapeado no fechamento de
+§6.46. Executado exatamente como escopado ali: uma camada de LEITURA
+sobre os 3 motores de qualidade reais, nunca uma fusão da matemática
+deles (Regra de Ouro 4).
+
+**Problema identificado**: 3 motores de qualidade independentes
+(Market Data Bus `quality-engine.js`, GMIL `quality-engine.ts`,
+`data-sufficiency.js`) cada um com seu próprio vocabulário/escala —
+zero forma comum de o Operador ler "está tudo bem?" num único relance.
+Auditoria dos 3 pontos de consumo achou 2 lacunas REAIS adicionais,
+nenhuma delas o foco original do pedido: (1) `research.data_sufficiency`
+— um score 0-100 real de cobertura de campos, computado em TODO ciclo
+por `buildResearchEngineFrame` — nunca saía de `engine-bridge.ts`; era
+usado só internamente para rebaixar `confidence` e depois descartado.
+(2) GMIL já computa um `weight` 0-1 real por provedor
+(`ProviderRuntimeSnapshot.weight`, mesmo `computeQuality` que o
+consensus-engine usa), mas nenhum consumidor sintetizava isso numa
+leitura única de saúde do GMIL. (3) Bug real em `self-diagnostics.ts`:
+`dataQualityClassification === 'DADOS_INSUFICIENTES'` (uma string real
+que `classifyScore()` do Bus pode emitir) caía no ramo `quality ? OK :
+...` — o relatório de autodiagnóstico reportava "tudo OK" para uma
+fonte sem dado real, o oposto do que a Ordem "Ciborgue Vivo" §3 pede.
+
+**Análise realizada**: os 3 motores medem coisas genuinamente
+diferentes (stream de candles vs contexto global vs cobertura de
+campos da Evidence) e já são deliberadamente separados (ver o próprio
+header de `quality-engine.js`: "NÃO substitui nem toca o do GMIL:
+domínios distintos") — fundir a matemática violaria Regra de Ouro 4 e
+destruiria informação real (ex.: a classificação do Bus considera
+streak de falhas consecutivas, não só o score composto). A solução
+honesta é uma camada de vocabulário por cima, não uma 4ª fonte de
+verdade: os limiares normalizados (0.6/0.25) foram escolhidos para
+espelhar EXATAMENTE o corte que `classifyScore()` do Bus já usa
+(`QUARANTINE_THRESHOLD = 0.25`), então a compressão para 4 estados
+nunca diverge do que o Bus já decidiu — provado por um teste real que
+varre um `classifyScore` do Bus e cruza contra `classifyWeight` para a
+mesma amostra de scores.
+
+**Solução aplicada**:
+- `nexus/data-quality-vocabulary.ts` (módulo folha, zero imports):
+  `DataQualityLabel = 'OK' | 'WARNING' | 'FAIL' | 'DADOS_INSUFICIENTES'`
+  + `classifyBusQuality(classification)`, `classifyWeight(weight 0-1)`,
+  `classifySufficiencyScore(score, maxScore=100)` + `DATA_QUALITY_COLOR`
+  (mesma paleta que `TelemetryHealthWidget` já usava ad-hoc).
+- `engine-bridge.ts`: `RealCycleResult.dataSufficiency` — passthrough
+  verbatim de `research.data_sufficiency` (shape snake_case preservado,
+  nada reconstruído).
+- `App.tsx` (`TelemetryHealthWidget`, painel SYSTEM HEALTH): passou a
+  ler `gmilProviders` do MESMO `WidgetContext` (zero 2ª assinatura de
+  `useGmilSnapshot`, mesma disciplina já documentada no comentário
+  original do hook); 2 linhas novas — "SUFICIÊNCIA DE DADOS"
+  (`score/max_score` real) e "QUALIDADE GMIL (CONTEXTO)" (média real de
+  `weight` sobre provedores que já tentaram ≥1 fetch — `lastReading !=
+  null`; provedor nunca-rodado não conta como "ruim", só como "ainda
+  não medido"); a linha "QUALIDADE DA FONTE (BUS)" existente trocou seu
+  ternary ad-hoc pelo classificador/paleta compartilhados (mesmo texto,
+  mesmas cores — zero regressão visual).
+- `self-diagnostics.ts`: o achado (2) acima corrigido reusando
+  `classifyBusQuality` em vez de reimplementar o corte
+  QUARENTENA/DEGRADADA — a lacuna do `DADOS_INSUFICIENTES` fecha por
+  construção (não existe mais um 4º caso não-tratado).
+
+**Impacto esperado**: Operador ganha 2 sinais reais que já existiam
+"escondidos" (suficiência de dados por trás de `confidence`, saúde
+agregada do GMIL) sem nenhum cálculo novo; qualquer alerta de qualidade
+futuro (Bus/GMIL/Suficiência/o que vier depois) usa o MESMO vocabulário
+e a MESMA paleta por construção, em vez de cada consumidor inventar sua
+própria leitura ad-hoc (exatamente a "consistência matemática" e
+"integridade arquitetural" que a Ordem Direta prioriza acima de feature
+nova).
+
+**Impacto observado (verificação real ao vivo, Playwright)**: painel
+SYSTEM HEALTH aberto (gaveta "Core Intelligence") — as 3 linhas
+renderizam; "SUFICIÊNCIA DE DADOS" mostra `AWAITING` honesto (a mesma
+constante `AWAIT` que toda outra linha do painel já usa; nenhum ciclo
+real completo neste sandbox sem egress de rede), e "QUALIDADE
+GMIL (CONTEXTO)" mostra um valor REAL computado ao vivo (`55% · 4/4
+fontes`, evoluindo de `47% · 3/4` para `55% · 4/4` conforme mais
+provedores tentaram) — a agregação funciona ponta a ponta mesmo neste
+ambiente restrito, porque o circuito/peso de cada provedor GMIL não
+depende de uma resposta de rede bem-sucedida para produzir um número
+honesto. Zero erro novo de console (só o ruído já documentado:
+`ERR_TUNNEL_CONNECTION_FAILED`, WS para `fstream.binance.com`,
+`pageerror: Event`).
+
+**Riscos conhecidos**: os limiares 0.6/0.25 são compartilhados entre 3
+domínios com escalas nativas diferentes — se um domínio futuro tiver
+uma distribuição de score muito diferente das outras (ex.: quase nunca
+passa de 0.5), o rótulo unificado pode ficar sistematicamente pessimista
+para esse domínio especificamente; nenhuma evidência disso hoje (GMIL
+observado em 47-55%, plausível). `self-diagnostics.ts`'s
+`DiagnosticInput` NÃO ganhou os 2 novos campos (suficiência/GMIL) nesta
+rodada — escopo deliberadamente contido a "corrigir o bug real
+encontrado", não "adicionar 2 novas categorias de achado"; fica
+documentado como próximo passo natural, não silenciosamente esquecido.
+
+**Testes**: `tsc --noEmit` limpo · **116 arquivos / 1906 testes**
+(100%, +18 novos: `data-quality-vocabulary.test.ts` — arquivo novo, 12
+casos cobrindo os 3 classificadores + a paleta + a consistência
+matemática cruzada com `classifyScore` real do Bus; `self-
+diagnostics.test.ts` +1 caso travando o bug do `DADOS_INSUFICIENTES`;
+`diretriz3-fixes.test.ts` +5 casos de wiring) · build de produção ok
+(code-splitting do LLM intocado) · verificação Playwright ao vivo do
+painel SYSTEM HEALTH (screenshot + leitura real de texto renderizado,
+ver acima).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

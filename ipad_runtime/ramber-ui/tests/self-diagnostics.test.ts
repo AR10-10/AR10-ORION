@@ -57,6 +57,20 @@ describe('buildDiagnosticReport: cada sinal real degradado sobe a severidade hon
     expect(report.overallSeverity).toBe('WARN');
   });
 
+  // Achado de auditoria (Data Quality Monitor unificado, corrigido nesta
+  // rodada via classifyBusQuality): dataQualityClassification pode ser o
+  // literal 'DADOS_INSUFICIENTES' (classifyScore real do Bus emite esse
+  // valor quando score é null) — uma string truthy diferente de QUARENTENA/
+  // DEGRADADA. A versão anterior desta função caía no ramo `quality ? OK :
+  // ...` e reportava OK para uma fonte SEM dado real. Trava de regressão:
+  // nunca mais pode voltar a ser OK.
+  it('dataQuality literal DADOS_INSUFICIENTES (não null, a string real que classifyScore emite) => WARN, NUNCA OK', () => {
+    const report = buildDiagnosticReport(baseInput({ dataQualityClassification: 'DADOS_INSUFICIENTES' }));
+    const finding = report.findings.find((f) => f.label === 'Qualidade da fonte');
+    expect(finding?.severity).toBe('WARN');
+    expect(report.overallSeverity).not.toBe('OK');
+  });
+
   it('fps real crítico (< 30) => CRITICAL geral — mesmo limiar real de classifyFps', () => {
     const report = buildDiagnosticReport(baseInput({ health: { ...HEALTHY_HEALTH, fps: 15 } }));
     expect(report.overallSeverity).toBe('CRITICAL');

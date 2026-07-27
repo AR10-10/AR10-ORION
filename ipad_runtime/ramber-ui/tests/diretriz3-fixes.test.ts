@@ -212,3 +212,49 @@ describe('diretriz 2 + V15.1 GOD TIER: roteamento Futuros exclusivo — Gráfico
     expect(app).not.toMatch(/\{marketMode === "TRADFI" \? "Macro" : "Spot"\}/);
   });
 });
+
+describe('ADITIVO V-MAX Etapa 10 (Data Quality Monitor unificado): dado real já computado todo ciclo, antes descartado, agora chega à UI', () => {
+  it('RealCycleResult expõe dataSufficiency como passthrough puro do research-engine (achado de auditoria: era computado e descartado)', () => {
+    const bridge = read('../src/engine-bridge.ts');
+    expect(bridge).toContain('dataSufficiency?: {');
+    // passthrough verbatim — nunca reconstrói o objeto, nunca renomeia campo
+    expect(bridge).toContain('dataSufficiency: research.data_sufficiency,');
+  });
+
+  it('TelemetryHealthWidget lê gmilProviders do MESMO WidgetContext (nenhuma 2ª assinatura de useGmilSnapshot)', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain(
+      'const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus, gmilProviders } = useContext(WidgetContext) || {};',
+    );
+    // a única assinatura real do hook continua exatamente 1 (topo de App())
+    const subscriptions = app.match(/= useGmilSnapshot\(\);/g) ?? [];
+    expect(subscriptions).toHaveLength(1);
+  });
+
+  it('SYSTEM HEALTH usa o vocabulário único (data-quality-vocabulary.ts) para as 3 leituras de qualidade — zero ternary ad-hoc divergente', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain(
+      'import { classifyBusQuality, classifyWeight, classifySufficiencyScore, DATA_QUALITY_COLOR } from "./nexus/data-quality-vocabulary";',
+    );
+    expect(app).toContain('DATA_QUALITY_COLOR[classifyBusQuality(quality?.classification ?? null)]');
+    expect(app).toContain('DATA_QUALITY_COLOR[classifySufficiencyScore(sufficiency?.score ?? null, sufficiency?.max_score ?? 100)]');
+    expect(app).toContain('DATA_QUALITY_COLOR[classifyWeight(gmilAvgWeight)]');
+    // as 2 novas linhas do painel — mesmo padrão <Row> das linhas já existentes
+    expect(app).toContain('<Row label="SUFICIÊNCIA DE DADOS" value={sufficiencyLabel} valueClass={sufficiencyColor} />');
+    expect(app).toContain('<Row label="QUALIDADE GMIL (CONTEXTO)" value={gmilLabel} valueClass={gmilColor} />');
+  });
+
+  it('a média de qualidade GMIL só considera provedores que já tentaram ao menos 1 fetch real — provedor nunca-rodado não conta como "ruim"', () => {
+    const app = read('../src/App.tsx');
+    const widgetMatch = app.match(/function TelemetryHealthWidget\(\) \{[\s\S]*?\n {2}return \(/);
+    expect(widgetMatch, 'TelemetryHealthWidget não encontrado').not.toBeNull();
+    const body = widgetMatch![0];
+    expect(body).toContain('gmilList.filter((p: any) => p?.lastReading != null)');
+  });
+
+  it('self-diagnostics.ts reusa classifyBusQuality (mesmo vocabulário) em vez de reimplementar o corte QUARENTENA/DEGRADADA', () => {
+    const diag = read('../src/nexus/self-diagnostics.ts');
+    expect(diag).toContain("import { classifyBusQuality } from './data-quality-vocabulary';");
+    expect(diag).toContain('const qualityState = classifyBusQuality(quality);');
+  });
+});

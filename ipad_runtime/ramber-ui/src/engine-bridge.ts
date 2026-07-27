@@ -227,6 +227,23 @@ export interface RealCycleResult {
   // o peso como amortecedor de força (forca_ajustada). Puro repasse, nada
   // recomputado.
   dataQuality?: { weight: number | null; score: number | null; classification: string } | null;
+  // ADITIVO V-MAX Etapa 10 (Data Quality Monitor unificado, achado de
+  // auditoria): buildResearchEngineFrame() já computa data_sufficiency
+  // (js/research/data-sufficiency.js) EM TODO ciclo — score 0-100 real de
+  // cobertura de campos da Evidence — mas só usava internamente para
+  // capConfidenceBySufficiency dentro de target-tracker.js; o valor nunca
+  // saía deste arquivo, então a UI não tinha como mostrar AO OPERADOR por
+  // que a confiança foi rebaixada. Puro passthrough (shape snake_case
+  // preservado verbatim — é o mesmo objeto que data-sufficiency.js já
+  // devolve, nunca reconstruído aqui), nada recomputado.
+  dataSufficiency?: {
+    score: number;
+    max_score: number;
+    breakdown: Array<{ field: string; label: string; points_possible: number; points_earned: number; status: string }>;
+    missing_fields: string[];
+    limitation_reason: string;
+    label: string;
+  } | null;
   // Fase J (Cap. 17): variante WASM realmente carregada pelo quant-worker
   // ('escalar' | 'simd128', Fase I) — telemetria pura, capturada do
   // init_wasm_ok real, nunca deduzida.
@@ -526,6 +543,7 @@ export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): P
             classification: snapshot.quality.classification,
           }
         : null,
+      dataSufficiency: research.data_sufficiency,
       instrumentType: evidence.instrument_type,
       wasmVariant,
     };
