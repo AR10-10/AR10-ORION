@@ -92,7 +92,7 @@ própria fatia (referência idêntica à escrita na store).
 | `BRAIN.SCENARIO.UPDATED` | `{ projection: ScenarioProjection \| null }` | Organism Orchestrator |
 | `BRAIN.TRAPS.UPDATED` | `{ traps: TrapSignal[] }` | Organism Orchestrator |
 | `BRAIN.TRADE_PLAN.UPDATED` | `{ plan: TradePlan \| null }` (entry zone / stop / target from real structure) | Organism Orchestrator |
-| `BRAIN.RADAR_CANDIDATES.UPDATED` | `{ candidates: RadarQualificationResult[] }` (OMEGA CORE V-MAX Fase 7 completa — só candidatos JÁ qualificados/ranqueados, `rankRadarCandidates`) | Organism Orchestrator |
+| `BRAIN.RADAR_CANDIDATES.UPDATED` | `{ candidates: RadarQualificationResult[] }` (OMEGA CORE V-MAX Fase 7 completa; ADITIVO V-MAX Etapa 9 estendeu o universo de Binance-only para Binance + MEXC paginado — só candidatos JÁ qualificados/ranqueados, `rankRadarCandidates`, cada um com `provider` de proveniência) | Organism Orchestrator |
 | `ORGANISM.TRUST.UPDATED` | `{ score: TrustScoreSnapshot \| null }` | Organism Orchestrator |
 | `ORGANISM.AFFECT.UPDATED` | `{ cpi, memory }` (uma ingestão real = um evento) | Organism Orchestrator |
 | `ORGANISM.TRACK_RECORD.UPDATED` | `{ record: TrackRecordState }` (honest first-touch signal accuracy, persisted) | Organism Orchestrator |

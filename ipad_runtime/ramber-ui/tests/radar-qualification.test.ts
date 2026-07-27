@@ -42,6 +42,7 @@ const BASE: RadarCandidateInput = {
   tradePlan: null,
   riskGated: false,
   confluence: { contractVersion: 2, status: 'DADOS_INSUFICIENTES', reason: 'x', intensity: null, components: { conviction: null, obstacleClearance: null }, computedAt: Date.now() },
+  provider: 'BINANCE',
 };
 
 describe('qualifyRadarCandidate: filtro mínimo real (LEI 24 — nunca recalcula, nunca emite direção)', () => {
@@ -125,6 +126,27 @@ describe('rankRadarCandidates: só lista oportunidades REALMENTE validadas, orde
   it('lista vazia quando nenhum candidato qualifica — nunca inventa uma oportunidade', () => {
     const ranked = rankRadarCandidates([qualifyRadarCandidate({ ...BASE, tradePlan: null, confluence: goodConfluence(0.9) })]);
     expect(ranked).toEqual([]);
+  });
+});
+
+describe('ADITIVO V-MAX Etapa 9: provider é proveniência real, passthrough puro, nunca um critério de qualificação', () => {
+  it('provider MEXC passa intocado até o resultado — mesmo candidato, mesma qualificação, só a origem muda', () => {
+    const r = qualifyRadarCandidate({ ...BASE, tradePlan: realPlan(), confluence: goodConfluence(0.8), provider: 'MEXC' });
+    expect(r.provider).toBe('MEXC');
+    expect(r.qualifies).toBe(true);
+  });
+
+  it('provider BINANCE passa intocado — mesmo resultado que hoje, comportamento de sempre', () => {
+    const r = qualifyRadarCandidate({ ...BASE, tradePlan: realPlan(), confluence: goodConfluence(0.8), provider: 'BINANCE' });
+    expect(r.provider).toBe('BINANCE');
+  });
+
+  it('provider nunca influencia qualifies/reason — o mesmo candidato reprovado continua reprovado independente da exchange', () => {
+    const binance = qualifyRadarCandidate({ ...BASE, tradePlan: null, provider: 'BINANCE' });
+    const mexc = qualifyRadarCandidate({ ...BASE, tradePlan: null, provider: 'MEXC' });
+    expect(binance.qualifies).toBe(false);
+    expect(mexc.qualifies).toBe(false);
+    expect(binance.reason).toBe(mexc.reason);
   });
 });
 

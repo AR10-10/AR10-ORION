@@ -20,13 +20,17 @@
 // uma vez por ativo candidato, quando existir — construído e testado
 // agora para não bloquear esse trabalho futuro.
 //
-// Universo de ativos (decisão do Operador): a v1 do varredor, quando
-// construído, usa a lista curada já real de
-// ipad_runtime/configs/asset-universe.default.json — não uma descoberta
-// ao vivo de "todos os pares suportados pela MEXC" (infraestrutura nova,
-// não pesquisada, explicitamente adiada).
+// Universo de ativos: a v1 do varredor usava só a lista curada real de
+// ipad_runtime/configs/asset-universe.default.json (Binance). ADITIVO
+// V-MAX Etapa 9 (MED "Radar Global: concluir completamente" + seção
+// MEXC×Binance "separar apenas a camada de Provider"): o varredor em
+// App.tsx agora TAMBÉM pagina pelo universo real de contratos MEXC
+// (omnibox/mexc-symbols.ts) — este módulo continua agnóstico de onde o
+// candidato veio (só lê `provider` como proveniência, nunca decide com
+// base nele).
 import type { TradePlan } from "./trade-plan";
 import type { ConfluenceCorridorReading } from "./confluence-corridor";
+import type { MarketDataProviderId } from "../market-data-adapter";
 
 // Mesmo convenção documentada de "oportunidade" já usada em
 // institutional-score.ts (DEFAULT_MIN_OPPORTUNITY_SCORE = 60/100 = 0.6)
@@ -56,6 +60,9 @@ export interface RadarCandidateInput {
   // Já real (Fase 5, Corredor de Confluência) — zero segunda fórmula de
   // consenso. A ÚNICA fonte do índice de qualidade abaixo.
   confluence: ConfluenceCorridorReading;
+  // ADITIVO V-MAX Etapa 9: exchange real que forneceu este candidato —
+  // honestidade de proveniência, nunca um critério de qualificação.
+  provider: MarketDataProviderId;
 }
 
 export interface RadarQualificationResult {
@@ -71,6 +78,11 @@ export interface RadarQualificationResult {
   qualityIndex: number | null;
   riskRewardRatio: number | null;
   computedAt: number;
+  // ADITIVO V-MAX Etapa 9: mesmo campo de proveniência, passthrough até
+  // a UI — um candidato BTC via MEXC e um BTC via Binance são leituras
+  // reais e independentes, nunca a mesma "verdade" por terem o mesmo
+  // ticker (mesmo princípio já usado pelos cross-checks Bybit/OKX).
+  provider: MarketDataProviderId;
 }
 
 const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -85,6 +97,7 @@ export function qualifyRadarCandidate(input: RadarCandidateInput, now: number = 
     direction: input.direction,
     riskRewardRatio: input.tradePlan?.riskRewardRatios[0] ?? null,
     computedAt: now,
+    provider: input.provider,
   };
   const reject = (reason: string): RadarQualificationResult => ({ ...base, qualifies: false, reason, qualityIndex: null });
 

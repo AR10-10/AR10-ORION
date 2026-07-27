@@ -3320,6 +3320,79 @@ somam-se à lista já real de AUSENTES (Liquidity Voids, Volume Clusters,
 Cross Timeframe Liquidity, Footprint, Chart Integrity Engine, Adaptive
 Zoom).
 
+### 6.45 ADITIVO EPC FINAL V-MAX — Radar Global concluído: scan MEXC
+real ligado no painel "OPORTUNIDADES"
+
+Terceira diretiva ampla do Operador na mesma trilha (após EPC OMEGA
+FINAL §6.42 e a MED §6.44), reafirmando "Radar Global: concluir
+completamente" e confirmando — quase literalmente — a arquitetura
+Provider-layer já construída em §6.43/§6.44 (seção MEXC×Binance do
+documento: "Market Provider → Binance ou MEXC → Unified Snapshot →
+Fusion → Core... nunca duplicar o restante da arquitetura"). Toda a
+infraestrutura (MEXCProvider, `mexc-symbols.ts`, `scanRadarCandidate`
+provider-aware) já existia de §6.43/§6.44 — esta entrada é o wiring
+real que faltava.
+
+**Decisão de execução**: dado que esta 3ª diretiva pede explicitamente
+para concluir o que já estava identificado como "próxima fatia natural"
+na entrada anterior, e reforça a MESMA arquitetura já escolhida, a
+execução seguiu direto para o wiring — sem reabrir a auditoria (feita 3
+rodadas atrás e ainda válida).
+
+**Decisão de performance (própria, dentro da Carta Branca)**: a MEXC
+pode ter centenas de contratos USDT-M, muito além dos ~30 do universo
+curado Binance. Escanear TODOS a cada ciclo de 5min (mesmo lote de 3/
+2s já real) estouraria a janela do próprio timer que dispara o ciclo
+seguinte. Em vez de um scan "tudo de uma vez" ou um segundo timer
+concorrente (que violaria a instrução explícita "nunca duplicar o
+restante da arquitetura"), o MESMO efeito/timer/lote já existente ganhou
+uma segunda perna: pagina o universo MEXC em janelas de
+`RADAR_MEXC_PAGE_SIZE=30` símbolos por ciclo, cursor round-robin
+(`radarMexcCursorRef`) avançando e recomeçando ao fim da lista — o
+universo inteiro é coberto ao longo de várias passagens (dezenas de
+minutos, não segundos), sem nunca inflar a duração de um único ciclo
+nem duplicar o mecanismo de scan.
+
+**Entregue**:
+- `App.tsx` — novo efeito (mount-once) busca `fetchMexcUsdtSymbols()`
+  uma vez, guarda em ref (não state — nenhum componente precisa
+  re-renderizar quando a lista chega). O efeito de scan já existente
+  ganhou a 2ª perna descrita acima: depois do lote Binance de sempre,
+  pagina o universo MEXC com `scanRadarCandidate(symbol, timeframe,
+  'MEXC')`, mesclando os resultados no MESMO `qualified[]` antes de
+  `setRadarCandidates` — um único `setRadarCandidates` por ciclo, nunca
+  duas escritas.
+- `nexus/radar-qualification.ts` — `RadarCandidateInput`/
+  `RadarQualificationResult` ganharam o campo `provider`
+  (passthrough puro, nunca um critério de qualificação — testado
+  explicitamente: mesmo candidato, mesmo resultado, independente da
+  exchange).
+- Painel "OPORTUNIDADES" (`RadarPanel`) — texto atualizado ("Binance +
+  MEXC"), `key` do card agora inclui `provider` (sem isso, um candidato
+  BTC via MEXC e um BTC via Binance no mesmo timeframe colidiriam na
+  mesma chave React), e cada card mostra a exchange real ao lado do
+  timeframe — um candidato MEXC e um Binance do mesmo ticker são
+  leituras genuinamente independentes, nunca deduplicadas (mesmo
+  princípio já usado pelos cross-checks Bybit/OKX/MEXC existentes).
+
+**Testes**: `tsc --noEmit` limpo · **115 arquivos / 1885 testes**
+(100%, +3 novos: passthrough de `provider` em
+`radar-qualification.test.ts`) · `npm run build` ok · verificação
+Playwright ao vivo (boot limpo, painel "OPORTUNIDADES" mostrando o
+texto atualizado, estado vazio honesto — sandbox sem egress real —,
+fechamento correto, zero erro de console fora do ruído de rede
+conhecido).
+
+**Backlog honesto**: Kill Zones, SMT Divergence, Andrews Pitchfork,
+Market Structure Projection, Liquidity Voids, Volume Clusters,
+Footprint, Dynamic Institutional Zones (lista priorizada pela própria
+diretiva, ainda toda pendente); demais Etapas do ADITIVO V-MAX (2-8,
+10-15) e da EPC OMEGA FINAL (2-9, 11-21); cobertura do Relevance Engine
+para as camadas sem regra própria; migração de consumidores
+WidgetContext→store. Uma página REAL de candidatos MEXC (com dado
+populado) não pôde ser vista ao vivo neste sandbox (zero egress) —
+lógica coberta por testes reais, mesma limitação de sempre.
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

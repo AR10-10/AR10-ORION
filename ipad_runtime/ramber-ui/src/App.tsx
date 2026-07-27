@@ -28,6 +28,10 @@ import { computeConfluenceCorridor } from "./nexus/confluence-corridor";
 // ativo (engine-bridge.ts) — nenhum dos 3 é reimplementado aqui.
 import { extractRadarUniverseSymbols, type AssetUniverseFile } from "./nexus/radar-universe";
 import { qualifyRadarCandidate, rankRadarCandidates, type RadarQualificationResult } from "./nexus/radar-qualification";
+// ADITIVO V-MAX Etapa 9: universo MEXC real (irmão de binance-symbols.ts,
+// já usado pelo SmartOmnibox) — busca dinâmica, nunca uma lista curada
+// estática como a Binance acima.
+import { fetchMexcUsdtSymbols } from "./omnibox/mexc-symbols";
 import assetUniverseDefault from "../../configs/asset-universe.default.json";
 import { ageAlpha } from "./chart/annotation-decay";
 import { BREAK_DECAY } from "./chart/StructureBreakMarkersPlugin";
@@ -483,6 +487,21 @@ const RADAR_SCAN_BATCH_DELAY_MS = 2000;
 // selecionado e o multi-timeframe: o Radar é contexto de descoberta em
 // segundo plano, nunca o caminho crítico do sinal (LEI 24).
 const RADAR_SCAN_FULL_CYCLE_MS = 5 * 60_000;
+
+// ADITIVO V-MAX Etapa 9 (MED "Radar Global: concluir completamente" +
+// seção MEXC×Binance "separar apenas a camada de Provider, nunca
+// duplicar o restante da arquitetura"): a MEXC pode ter centenas de
+// contratos USDT-M, MUITO além dos ~30 da lista curada Binance —
+// escanear TODOS a cada ciclo de 5min estouraria a janela (mesma
+// matemática do comentário de RADAR_SCAN_BATCH_SIZE acima: 3/lote/2s
+// não escala para centenas sem inflar a duração do ciclo muito além do
+// timer que o dispara de novo). RADAR_MEXC_PAGE_SIZE limita cada ciclo
+// a uma FATIA real do universo (mesma ordem de grandeza do universo
+// curado Binance) — o cursor (radarMexcCursorRef) avança e recomeça do
+// início ao esgotar a lista, então o universo INTEIRO é coberto ao
+// longo de várias passagens, nunca perdido, nunca escaneado de uma vez
+// só. Mesmo timer/batch/delay já existentes — zero segundo loop.
+const RADAR_MEXC_PAGE_SIZE = 30;
 
 // OMEGA CORE V-MAX (Fase 8.1, heatmap real de liquidação): teto de
 // retenção do feed exchange-wide de liquidações — ver comentário no
@@ -1445,6 +1464,30 @@ export default function App() {
     };
   }, [bootGeneration, selectedAsset]);
 
+  // ADITIVO V-MAX Etapa 9: universo MEXC real, buscado UMA vez (mesmo
+  // espírito do RADAR_UNIVERSE_SYMBOLS estático, mas via rede — não dá
+  // pra ser uma constante de módulo). Ref, não state: nenhum componente
+  // precisa re-renderizar quando a lista chega, só o próximo tick do
+  // scanner precisa lê-la. Falha de rede => [] honesto (mesmo fail-closed
+  // de fetchMexcUsdtSymbols) — o scanner simplesmente não tem página MEXC
+  // nesse ciclo, tenta de novo no próximo (nunca trava o resto do Radar).
+  const radarMexcUniverseRef = useRef<string[]>([]);
+  // Cursor real da paginação — avança a cada ciclo, some ao fim da lista
+  // e recomeça do início (round-robin honesto, nunca perde um símbolo).
+  const radarMexcCursorRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const symbols = await fetchMexcUsdtSymbols();
+      if (cancelled) return;
+      radarMexcUniverseRef.current = Array.from(new Set(symbols.map((s) => s.baseAsset)));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // OMEGA CORE V-MAX (completar Fase 7, Radar/OIH): scanner de fundo real
   // — cadência própria (5min), mais lenta que o ciclo do ativo selecionado
   // (30s) e o multi-timeframe (60s) acima: o Radar é descoberta de
@@ -1461,6 +1504,15 @@ export default function App() {
   // Plan completo rodando à parte — escaneá-lo de novo aqui produziria
   // uma segunda leitura mais fraca do MESMO ativo, redundante por
   // definição.
+  //
+  // ADITIVO V-MAX Etapa 9: MESMO efeito, MESMO lote/timer — depois de
+  // varrer o universo curado Binance (acima), pagina uma FATIA real do
+  // universo MEXC (radarMexcUniverseRef) com scanRadarCandidate(symbol,
+  // timeframe, 'MEXC') — nunca um segundo loop/timer concorrente (seção
+  // MEXC×Binance do MED: "nunca duplicar o restante da arquitetura").
+  // Um candidato MEXC e um Binance do mesmo símbolo são leituras reais e
+  // independentes (provider fica no resultado) — nunca deduplicados,
+  // mesmo princípio já usado pelos cross-checks Bybit/OKX/MEXC.
   useEffect(() => {
     let cancelled = false;
     const runRadarScan = async () => {
@@ -1479,6 +1531,35 @@ export default function App() {
           await new Promise((resolve) => setTimeout(resolve, RADAR_SCAN_BATCH_DELAY_MS));
         }
       }
+
+      const mexcUniverse = radarMexcUniverseRef.current.filter((s) => s !== selectedAsset);
+      if (mexcUniverse.length > 0) {
+        const start = radarMexcCursorRef.current % mexcUniverse.length;
+        // Round-robin real: pega até RADAR_MEXC_PAGE_SIZE símbolos a
+        // partir do cursor, dando a volta na lista sem duplicar dentro
+        // da MESMA página (Set por índice, nunca por valor — 2 bases
+        // iguais por acaso não colidiriam de propósito).
+        const page: string[] = [];
+        for (let k = 0; k < Math.min(RADAR_MEXC_PAGE_SIZE, mexcUniverse.length); k++) {
+          page.push(mexcUniverse[(start + k) % mexcUniverse.length]);
+        }
+        radarMexcCursorRef.current = (start + page.length) % mexcUniverse.length;
+
+        for (let i = 0; i < page.length; i += RADAR_SCAN_BATCH_SIZE) {
+          if (cancelled) return;
+          const batch = page.slice(i, i + RADAR_SCAN_BATCH_SIZE);
+          const scans = await Promise.all(batch.map((symbol) => scanRadarCandidate(symbol, chartTimeframe, 'MEXC')));
+          if (cancelled) return;
+          for (const scan of scans) {
+            if (!scan) continue;
+            qualified.push(qualifyRadarCandidate(scan));
+          }
+          if (i + RADAR_SCAN_BATCH_SIZE < page.length) {
+            await new Promise((resolve) => setTimeout(resolve, RADAR_SCAN_BATCH_DELAY_MS));
+          }
+        }
+      }
+
       // Escreve sempre, mesmo lista vazia — mesmo padrão fail-closed do
       // ciclo principal (setRealCycle sempre escreve): um universo sem
       // NENHUM candidato qualificado agora é um resultado real, nunca
@@ -3791,7 +3872,7 @@ function RadarPanel() {
         </div>
         <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
           <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
-            Radar/OIH — varredura real em segundo plano, nunca recalcula nem emite LONG/SHORT por conta própria (LEI 24). Só lista quem já tem estrutura confirmada, Trade Plan real e confluência suficiente.
+            Radar/OIH — varredura real em segundo plano (Binance + MEXC), nunca recalcula nem emite LONG/SHORT por conta própria (LEI 24). Só lista quem já tem estrutura confirmada, Trade Plan real e confluência suficiente.
           </span>
           {candidates.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center">
@@ -3800,7 +3881,7 @@ function RadarPanel() {
                 Nenhuma oportunidade validada agora
               </span>
               <span className="text-[0.42rem] text-[#8ab4f8]/35 max-w-[220px]">
-                O organismo varre o universo curado em segundo plano — volte em alguns minutos, ou aguarde o próximo ciclo automático.
+                O organismo varre o universo curado (Binance) + o universo real da MEXC em segundo plano — volte em alguns minutos, ou aguarde o próximo ciclo automático.
               </span>
             </div>
           ) : (
@@ -3808,7 +3889,7 @@ function RadarPanel() {
               const isLong = c.direction === "LONG";
               return (
                 <button
-                  key={`${c.symbol}:${c.timeframe}`}
+                  key={`${c.provider}:${c.symbol}:${c.timeframe}`}
                   type="button"
                   onClick={() => openCandidate(c.symbol)}
                   className="flex items-center justify-between gap-2 bg-[#010205] border border-[#00f0ff15] hover:border-[#00f0ff40] rounded-lg px-3 py-2 text-left transition-colors"
@@ -3821,7 +3902,12 @@ function RadarPanel() {
                     )}
                     <div className="flex flex-col">
                       <span className="text-[0.6rem] font-bold tracking-wider text-white">{c.symbol}</span>
-                      <span className="text-[0.4rem] text-[#8ab4f8]/50 uppercase tracking-wider">{c.timeframe}</span>
+                      <span
+                        className="text-[0.4rem] text-[#8ab4f8]/50 uppercase tracking-wider"
+                        title="Exchange real que forneceu este candle/estrutura — um candidato MEXC e um Binance do mesmo símbolo são leituras independentes, nunca a mesma verdade."
+                      >
+                        {c.timeframe} · {c.provider}
+                      </span>
                     </div>
                   </div>
                   <div className="flex flex-col items-end">
