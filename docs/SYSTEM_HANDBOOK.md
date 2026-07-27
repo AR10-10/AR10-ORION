@@ -3847,6 +3847,57 @@ padrão-de-fonte (`refinamento-final-wiring.test.ts`) precisou de
 atualização de string por causa do novo import — mesma manutenção de
 baixo risco já vista em rodadas anteriores, não uma regressão.
 
+### 6.52 Mapa de Evolução do Organismo — raio-X interno consolidado
+(`docs/MAPA_EVOLUCAO_CIBORGUE.md`)
+
+Segunda metade do mesmo pedido do Operador que gerou §6.51: *"mapeia
+tudo que tem de ser feito e a evolução de todos os sistema do
+ciborgue"*. Distinto do `ELITE_TRADING_RESEARCH_MAP.md` (§6.50) — aquele
+olha para FORA (o que o mercado de ferramentas oferece); este olha para
+DENTRO (o estado real de cada subsistema já existente neste
+repositório).
+
+**Solução aplicada**: `docs/MAPA_EVOLUCAO_CIBORGUE.md`, novo documento
+que refresca a tabela de auditoria de ~23 subsistemas de §6.42 ("EPC
+OMEGA FINAL — Etapa 1") com tudo que mudou desde então, verificado por
+grep direto nesta rodada (não por memória): Data Quality Monitor e
+Relevance Engine (18/18) mudaram de PARCIAL para IMPLEMENTADO nesta
+própria trilha; Radar/OIH mudou de PARCIAL (universo curado ~30-41
+símbolos) para IMPLEMENTADO (scan real MEXC-wide já ligado ao painel
+"OPORTUNIDADES", confirmado via `fetchMexcUsdtSymbols` +
+`scanRadarCandidate(..., 'MEXC')` em `App.tsx`); Market Regime Detector
+segue confirmadamente PARCIAL (zero ocorrência de `regime-engine`/
+`marketRegime` em `layer-relevance.ts`, grep direto); Stage Runner,
+Chart Integrity Engine, Adaptive Zoom e Auto Layout seguem no mesmo
+estado de §6.42, também reconfirmado por grep nesta rodada, não
+assumido.
+
+**Estrutura nova, além da tabela refrescada**: uma seção explícita
+distinguindo AUSENTE (nunca construído) de RECUSADO (avaliado e
+descartado deliberadamente, com razão registrada — execução real de
+ordens, Dynamic Trend Projection, Cross-Timeframe Liquidity, Liquidity
+Voids/Volume Clusters como camadas distintas, probabilidade calibrada)
+— distinção que faltava em todo documento anterior e evita reabrir
+debate já fechado sem motivo novo. Backlog técnico consolidado em 4
+tiers (mesma classificação por impacto×complexidade do research map
+§11, mas mesclando também os subitens ainda abertos da task interna
+"ADITIVO V-MAX Etapas 2-15" que nunca tinham virado um item de backlog
+citável). Seção de riscos transversais (sandbox sem rede real, bundle
+LLM, dívida WidgetContext, GMIL ONCHAIN/MACRO) e um roadmap recomendado
+de 6 passos.
+
+**Riscos conhecidos**: é uma fotografia, não um mecanismo — nada impede
+que fique desatualizado se uma rodada futura mudar o estado de um
+subsistema sem revisar este documento; a nota de manutenção no rodapé
+existe exatamente para isso, mesmo espírito do aviso final do
+`CLAUDE.md`.
+
+**Testes**: documento markdown puro, sem superfície de código nova —
+`tsc`/`vitest`/build desta rodada não se aplicam (mesma natureza de
+§6.50); verificação foi grep direto contra o código-fonte para cada
+classificação de estado que mudou desde §6.42 (citado acima), não
+suposição.
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 
