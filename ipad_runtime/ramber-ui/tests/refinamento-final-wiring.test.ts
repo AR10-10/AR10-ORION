@@ -753,25 +753,53 @@ describe('ADENDO "Refinamento das Sessões e Limpeza Visual": Market Sessions tr
 
   it('consome computeSessionKeyLevels (segmentos reais), nunca uma 3ª derivação paralela de sessão', () => {
     const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
-    expect(plugin).toContain('import { computeSessionKeyLevels, type SessionKeyLevel } from "../nexus/market-session";');
+    expect(plugin).toContain('import { computeSessionKeyLevels, marketSessionFromUtc, type SessionKeyLevel } from "../nexus/market-session";');
     expect(plugin).toContain('levels = computeSessionKeyLevels(dataRef.current);');
   });
 
-  it('faixa fina rente à base (yTop = cssHeight - STRIP_HEIGHT_PX), nunca altura total como Kill Zones (papel real é oposto: sessão é partição contínua, sempre presente — teria que ser fina; Kill Zone é ocasional — pode ser alta)', () => {
+  it('redesenho #2 ("chegar mais próximo" da imagem de referência): faixa no TOPO (y=0), não mais rente à base — nunca altura total como Kill Zones (papel real é oposto: sessão é partição contínua, sempre presente — teria que ser fina; Kill Zone é ocasional — pode ser alta)', () => {
     const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
-    expect(plugin).toContain('const STRIP_HEIGHT_PX = 4;');
-    expect(plugin).toContain('const yTop = cssHeight - STRIP_HEIGHT_PX;');
-    expect(plugin).toContain('ctx.fillRect(clippedX, yTop, clippedWidth, STRIP_HEIGHT_PX);');
+    expect(plugin).toContain('const BAND_HEIGHT_PX = 24;');
+    expect(plugin).toContain('ctx.fillRect(clippedX, 0, clippedWidth, BAND_HEIGHT_PX);');
+    expect(plugin).not.toContain('cssHeight - BAND_HEIGHT_PX');
+    expect(plugin).not.toContain('STRIP_HEIGHT_PX');
   });
 
-  it('sessão corrente (closed:false) recebe alpha mais alto e estende até a borda direita; só ela ganha rótulo de texto — sessões fechadas ficam sem texto próprio', () => {
+  it('sessão corrente (closed:false) recebe alpha mais alto e estende até a borda direita; TODA sessão visível tenta rótulo (nome + janela UTC real), não só a corrente — mas só desenha texto com largura real suficiente', () => {
     const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
-    expect(plugin).toContain('const BAND_COLOR_CLOSED = "rgba(148, 163, 184, 0.22)";');
-    expect(plugin).toContain('const BAND_COLOR_OPEN = "rgba(148, 163, 184, 0.50)";');
+    expect(plugin).toContain('const BAND_COLOR_CLOSED = "rgba(148, 163, 184, 0.16)";');
+    expect(plugin).toContain('const BAND_COLOR_OPEN = "rgba(148, 163, 184, 0.42)";');
     expect(plugin).toContain('const isOpen = !level.closed;');
     expect(plugin).toContain('const x2 = isOpen ? cssWidth : timeScale.timeToCoordinate(level.endTime as unknown as Time);');
-    const idx = plugin.indexOf('if (i === lastIndex && clippedWidth >= MIN_LABEL_WIDTH_PX) {');
-    expect(idx, 'bloco de rótulo condicional (só a última sessão) não encontrado').toBeGreaterThan(-1);
+    // achado real (não fica preso a "só a última"): o gate de rótulo é
+    // por LARGURA do segmento, nunca por índice/posição na lista.
+    expect(plugin).not.toContain('i === lastIndex');
+    expect(plugin).toContain('if (clippedWidth >= MIN_LABEL_WIDTH_PX) {');
+    expect(plugin).toContain('if (clippedWidth >= MIN_SUBLABEL_WIDTH_PX) {');
+  });
+
+  it('janela UTC do rótulo (2ª linha) vem de marketSessionFromUtc — mesmo dado real do header, zero segunda fonte fabricada', () => {
+    const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    const idx = plugin.indexOf('const reading = marketSessionFromUtc(new Date(level.startTime * 1000));');
+    expect(idx, 'chamada real a marketSessionFromUtc não encontrada').toBeGreaterThan(-1);
+    const block = plugin.slice(idx, idx + 600);
+    expect(block).toContain("const windowShort = reading.windowUtc.split(\" (\")[0];");
+    expect(block).toContain('ctx.fillText(windowShort, clippedX + 4, 13);');
+  });
+
+  it('divisor real entre sessões: 1px sólida (Fio de Seda), só a borda esquerda de cada segmento (partição contígua — desenhar as duas dobraria o traço)', () => {
+    const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    const idx = plugin.indexOf('if (i > 0) {');
+    expect(idx, 'bloco de divisor não encontrado').toBeGreaterThan(-1);
+    const block = plugin.slice(idx, idx + 300);
+    expect(block).toContain('ctx.lineWidth = 1;');
+    expect(block).not.toContain('setLineDash');
+  });
+
+  it('tradePlanAbsenceReason (overlay de texto do canto) desce de top-2 pra top-7 pra abrir espaço real pra faixa nova de 24px — nunca 2 textos reais sobrepostos', () => {
+    const c = chart();
+    expect(c).toContain('className="absolute left-2 top-7 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide"');
+    expect(c).not.toContain('className="absolute left-2 top-2 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide"');
   });
 
   it('EnhancedChart_110_Percent.tsx: chamada continua recebendo chart/series/data sem prop nova — o redesenho é inteiramente interno ao plugin', () => {

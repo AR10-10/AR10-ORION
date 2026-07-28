@@ -2100,7 +2100,10 @@ export function EnhancedChart_110_Percent({
          divergentes sem explicação lado a lado. */}
       {tradePlanAbsenceReason && (
         <div
-          className="absolute left-2 top-2 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide"
+          // top-7 (era top-2): abre espaço real pra faixa de Market Sessions
+          // que agora vive no topo do painel (BAND_HEIGHT_PX=24,
+          // MarketSessionBandsPlugin.tsx) — nunca sobrepor 2 textos reais.
+          className="absolute left-2 top-7 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide"
           style={{ color: "rgba(138, 180, 248, 0.55)" }}
         >
           {engineFallbackLevels

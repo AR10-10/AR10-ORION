@@ -4,60 +4,70 @@
 // só aparecia como texto no header — auditoria da Etapa 1 confirmou que a
 // mudança de sessão nunca tinha uma marca própria no gráfico.
 //
-// Redesenho real (ADENDO "Refinamento das Sessões e Limpeza Visual",
-// diretiva com imagem de referência — pediu explicitamente "faixas
-// discretas no topo/eixo do tempo" em vez de linhas verticais repetidas):
-// a versão original desenhava uma linha 1px de ALTURA TOTAL (topo a base
-// do painel) para CADA transição de sessão na amostra carregada — como
-// sessões trocam ~5x/dia (Ásia/Londres/Londres+NY/Nova York/Pacífico,
-// ver market-session.ts), qualquer janela de alguns dias em timeframe
-// baixo (1m-15m) empilhava dezenas de linhas quase idênticas cruzando o
-// gráfico inteiro, competindo com candle/estrutura/liquidez — o oposto
-// do papel real desta camada (Prioridade Baixa, puro pano de fundo
-// temporal, AUDITORIA_ECOSSISTEMA_VISUAL.md §9.2/§9.3).
+// Redesenho real #1 (ADENDO "Refinamento das Sessões e Limpeza Visual"):
+// a versão original desenhava uma linha 1px de ALTURA TOTAL por transição
+// de sessão — dezenas de linhas quase idênticas em qualquer janela de
+// vários dias. Fix: faixa fina rente à base, só a sessão corrente com
+// rótulo (ver histórico completo em SYSTEM_HANDBOOK.md §6.60).
 //
-// Fix real: nenhuma linha vertical mais. Cada sessão vira um SEGMENTO de
-// uma faixa fina (STRIP_HEIGHT_PX) rente à borda inferior do painel —
-// mesma ideia de "faixa discreta no eixo do tempo" pedida na diretiva,
-// zero pixel de linha cruzando a área de candle. Geometria de retângulo
-// (início/fim reais) já é o mesmo padrão de KillZoneBandsPlugin — a
-// diferença real: sessão é uma PARTIÇÃO CONTÍNUA (100% do tempo pertence
-// a alguma sessão, nunca lacuna), então a faixa é sempre preenchida de
-// ponta a ponta (nunca ocasional como Kill Zone) — exatamente por isso
-// tem que ser fina/rente à borda, nunca altura total como Kill Zone (uma
-// faixa sempre-presente em altura total tingiria o painel inteiro o
-// tempo todo, a MESMA classe de poluição visual que está sendo corrigida
-// aqui, só trocando "muitas linhas" por "um bloco permanente").
+// Redesenho real #2 ("chegar mais próximo possível" de uma imagem de
+// referência enviada pelo Operador — pedido explícito, não suposição):
+// a referência mostra uma faixa mais informativa no TOPO do painel, com
+// TODAS as sessões visíveis rotuladas (nome + janela), não só a corrente.
+// Adotado o que é diretamente compatível com a arquitetura real:
+// - Posição: topo (y=0), não mais rente à base — mesmo espírito da
+//   referência ("faixa discreta acima do candle"). Risco de colisão com
+//   o candle avaliado antes de mover: a escala de preço principal usa a
+//   margem PADRÃO real da lib (`scaleMargins: { top: 0.2, bottom: 0.1 }`,
+//   confirmado em node_modules/lightweight-charts/dist/typings.d.ts —
+//   nunca lida de memória) — 20% de respiro já reservado acima do maior
+//   preço visível, folga real suficiente para uma faixa de
+//   BAND_HEIGHT_PX na prática, sem precisar mexer no scaleMargins do
+//   painel principal (mudança maior, mais arriscada, não necessária aqui).
+// - Rótulo: TODA sessão visível ganha nome + janela UTC real (via
+//   marketSessionFromUtc, mesmo dado já usado no header — zero segunda
+//   fonte), não só a corrente — mas o texto só desenha se a largura real
+//   do segmento comportar (MIN_LABEL_WIDTH_PX/MIN_SUBLABEL_WIDTH_PX),
+//   nunca espremido ilegível.
+// - Cor: A referência usa tons distintos por sessão; decisão consciente
+//   de NÃO copiar isso — a auditoria de paleta desta mesma sessão
+//   (AUDITORIA_ECOSSISTEMA_VISUAL.md §9.4/§9.6) já documentou que Market
+//   Sessions é Prioridade BAIXA por design (pano de fundo, nunca deveria
+//   competir por atenção) e que introduzir uma família de cor nova por
+//   sessão contradiria o próprio achado desta auditoria ("evitar cor
+//   demais"). O efeito visual de "uma sessão se destaca" da referência é
+//   alcançado aqui por INTENSIDADE (a sessão corrente com alpha bem mais
+//   alto), não por matiz novo — mesmo tom slate-gray já "dono" desta
+//   camada, só a geometria e a densidade de rótulo mudaram.
 //
 // Dado: reaproveita computeSessionKeyLevels (já real, já testada,
 // consumida por SessionKeyLevelsPlugin/EnhancedChart::
-// currentSessionKeyLevel) em vez de computeSessionBoundaries — precisa de
-// SEGMENTOS (startTime/endTime/closed por ocorrência), não pontos de
-// transição; zero segunda função de derivação. computeSessionBoundaries
-// continua viva (App.tsx ainda a usa para o sinal de relevância
-// recentSessionBoundary — consumidor diferente, propósito diferente:
-// "quão recente foi a ÚLTIMA troca", nunca geometria de desenho).
-//
-// Ênfase real (mesma disciplina 2 vezes já provada nesta sessão —
-// SessionKeyLevelsPlugin closed/open, BOS/CHOCH ageAlpha): só a sessão
-// CORRENTE (última, closed:false) ganha alpha alto + rótulo de texto;
-// sessões já fechadas ficam como faixa de referência mais discreta, sem
-// texto próprio — reduz de "um rótulo por transição" pra "um rótulo
-// total", nunca zero contexto (Regra de Ouro 4: realoca, não apaga).
+// currentSessionKeyLevel) — precisa de SEGMENTOS (startTime/endTime/
+// closed por ocorrência), não pontos de transição; zero segunda função
+// de derivação. computeSessionBoundaries continua viva (App.tsx ainda a
+// usa para o sinal de relevância recentSessionBoundary — consumidor
+// diferente, propósito diferente: "quão recente foi a ÚLTIMA troca",
+// nunca geometria de desenho).
 //
 // LEI 24: display only, puro contexto temporal — nunca uma decisão.
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
-import { computeSessionKeyLevels, type SessionKeyLevel } from "../nexus/market-session";
+import { computeSessionKeyLevels, marketSessionFromUtc, type SessionKeyLevel } from "../nexus/market-session";
 
 // Discreto de propósito — contexto de fundo, nunca compete visualmente com
 // estrutura (BOS/CHOCH), liquidez (EQH/EQL) ou o Trade Plan. Mesmo tom
-// slate-gray já "dono" desta camada, só a GEOMETRIA mudou.
-const STRIP_HEIGHT_PX = 4; // faixa fina rente à base — nunca altura total (ver header do arquivo).
-const BAND_COLOR_CLOSED = "rgba(148, 163, 184, 0.22)";
-const BAND_COLOR_OPEN = "rgba(148, 163, 184, 0.50)";
-const LABEL_COLOR = "rgba(148, 163, 184, 0.85)";
-const MIN_LABEL_WIDTH_PX = 40; // abaixo disto, o rótulo não cabe — a faixa ainda desenha, só o texto pula.
+// slate-gray já "dono" desta camada — só INTENSIDADE (alpha) distingue a
+// sessão corrente das já fechadas, zero matiz novo (ver header do arquivo).
+const BAND_HEIGHT_PX = 24; // topo do painel — cabe nome + janela UTC em 2 linhas.
+const BAND_COLOR_CLOSED = "rgba(148, 163, 184, 0.16)";
+const BAND_COLOR_OPEN = "rgba(148, 163, 184, 0.42)";
+const BORDER_COLOR = "rgba(148, 163, 184, 0.30)";
+const LABEL_COLOR_CLOSED = "rgba(203, 213, 225, 0.55)";
+const LABEL_COLOR_OPEN = "rgba(226, 232, 240, 0.95)";
+const SUBLABEL_COLOR_CLOSED = "rgba(148, 163, 184, 0.40)";
+const SUBLABEL_COLOR_OPEN = "rgba(148, 163, 184, 0.80)";
+const MIN_LABEL_WIDTH_PX = 44; // abaixo disto, nome não cabe — a faixa ainda desenha, só o texto pula.
+const MIN_SUBLABEL_WIDTH_PX = 76; // janela UTC (2ª linha) só cabe com mais espaço que o nome sozinho.
 
 interface MarketSessionBandsPluginProps {
   chart: IChartApi | null;
@@ -120,8 +130,6 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
       // sem isto, o retângulo cortaria visualmente metade do candle na
       // fronteira entre 2 sessões.
       const halfBar = (timeScale.options().barSpacing ?? 0) / 2;
-      const yTop = cssHeight - STRIP_HEIGHT_PX;
-      const lastIndex = levels.length - 1;
 
       for (let i = 0; i < levels.length; i++) {
         const level = levels[i];
@@ -140,15 +148,38 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
         if (clippedWidth <= 0) continue;
 
         ctx.fillStyle = isOpen ? BAND_COLOR_OPEN : BAND_COLOR_CLOSED;
-        ctx.fillRect(clippedX, yTop, clippedWidth, STRIP_HEIGHT_PX);
+        ctx.fillRect(clippedX, 0, clippedWidth, BAND_HEIGHT_PX);
 
-        // Só a sessão CORRENTE ganha rótulo (ver header do arquivo) — as
-        // fechadas ficam só como faixa de referência, sem texto próprio.
-        if (i === lastIndex && clippedWidth >= MIN_LABEL_WIDTH_PX) {
+        // Divisor real entre sessões (Fio de Seda, Regra de Ouro 5): 1px
+        // sólida, nunca setLineDash. Só a borda ESQUERDA de cada segmento
+        // — a direita de um é a esquerda do próximo (partição contígua,
+        // desenhar as duas dobraria o traço no mesmo pixel).
+        if (i > 0) {
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = BORDER_COLOR;
+          ctx.beginPath();
+          ctx.moveTo(Math.round(rectX) + 0.5, 0);
+          ctx.lineTo(Math.round(rectX) + 0.5, BAND_HEIGHT_PX);
+          ctx.stroke();
+        }
+
+        if (clippedWidth >= MIN_LABEL_WIDTH_PX) {
           ctx.font = "9px -apple-system, sans-serif";
-          ctx.textBaseline = "bottom";
-          ctx.fillStyle = LABEL_COLOR;
-          ctx.fillText(level.label.toUpperCase(), clippedX + 3, yTop - 2);
+          ctx.textBaseline = "top";
+          ctx.fillStyle = isOpen ? LABEL_COLOR_OPEN : LABEL_COLOR_CLOSED;
+          ctx.fillText(level.label.toUpperCase(), clippedX + 4, 3);
+
+          // Janela UTC real (2ª linha) — mesmo dado do header (marketSessionFromUtc),
+          // zero segunda fonte/duplicação. Só desenha com espaço real de sobra.
+          if (clippedWidth >= MIN_SUBLABEL_WIDTH_PX) {
+            const reading = marketSessionFromUtc(new Date(level.startTime * 1000));
+            if (reading) {
+              const windowShort = reading.windowUtc.split(" (")[0]; // remove o parêntese de DST — cabe em 1 linha curta.
+              ctx.font = "8px -apple-system, sans-serif";
+              ctx.fillStyle = isOpen ? SUBLABEL_COLOR_OPEN : SUBLABEL_COLOR_CLOSED;
+              ctx.fillText(windowShort, clippedX + 4, 13);
+            }
+          }
         }
       }
     };

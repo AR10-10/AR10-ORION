@@ -4718,6 +4718,66 @@ CLOSED · SEM ORDENS · SEM CHAVES` — zero erro JS novo (único erro de
 console é o WebSocket bloqueado do proxy, já confirmado pré-existente
 em §6.60).
 
+### 6.62 Market Sessions, redesenho #2: "chegar mais próximo" de uma
+imagem de referência — topo do painel, todas as sessões rotuladas
+
+Pedido explícito do Operador, direto ("Preciso que o modelo chegue mais
+próximo possível dessa [imagem] que eu te mandei... e fica melhor ainda
+que ela") após uma pergunta de esclarecimento minha (via `AskUserQuestion`
+— a nova imagem de referência mostrava a faixa de sessões bem mais
+proeminente que o §6.60 acabou de entregar; o Operador respondeu "sem
+preferência", então a decisão de design real ficou por minha conta,
+documentada aqui).
+
+**Mudança real**: `MarketSessionBandsPlugin.tsx` migra pela 2ª vez nesta
+sessão.
+- Posição: da base (§6.60) pro **topo** do painel (y=0) — mesmo espírito
+  da referência. Risco de colisão com candle avaliado ANTES de mover
+  (não suposição): a escala de preço principal usa a margem PADRÃO real
+  da lib lightweight-charts (`scaleMargins: { top: 0.2, bottom: 0.1 }`,
+  confirmado direto em
+  `node_modules/lightweight-charts/dist/typings.d.ts`) — 20% de respiro
+  já reservado acima do maior preço visível, folga real suficiente pra
+  uma faixa de 24px sem precisar tocar no `scaleMargins` do painel
+  principal (mudança maior/mais arriscada, não necessária aqui).
+- Rótulo: TODA sessão visível ganha nome + janela UTC real (via
+  `marketSessionFromUtc`, mesmo dado do header — zero segunda fonte),
+  não só a corrente (era o comportamento do §6.60) — mas só desenha
+  texto se a largura real do segmento comportar
+  (`MIN_LABEL_WIDTH_PX`/`MIN_SUBLABEL_WIDTH_PX`), nunca espremido
+  ilegível.
+- Cor: decisão CONSCIENTE de não copiar a paleta multicolorida da
+  referência (uma cor por sessão) — a auditoria de paleta desta mesma
+  sessão (`AUDITORIA_ECOSSISTEMA_VISUAL.md` §9.4/§9.6) já documentou
+  Market Sessions como Prioridade Baixa por design (pano de fundo, nunca
+  deveria competir por atenção) e que introduzir família de cor nova
+  por sessão contradiria o próprio achado ("evitar cor demais"). O
+  efeito de "uma sessão se destaca" da referência é alcançado por
+  INTENSIDADE (a corrente com alpha bem mais alto: 0.42 vs. 0.16 das
+  fechadas), não por matiz novo — mesmo tom slate-gray de sempre.
+- Divisor 1px sólido real entre segmentos (Fio de Seda, Regra de Ouro 5)
+  — só a borda esquerda de cada um (partição contígua, a direita de um
+  já é a esquerda do próximo).
+- `tradePlanAbsenceReason` (overlay de texto condicional do canto)
+  desce de `top-2` pra `top-7` — abre espaço real pra faixa nova de
+  24px, nunca 2 textos reais sobrepostos.
+
+**2 elementos da imagem de referência que continuam fora, pela mesma
+razão já registrada em §6.59** (não repetidos aqui em detalhe): o donut
+"PROBABILIDADE" calibrado e as abas de ORDENS/POSIÇÕES/EXECUÇÕES ao
+vivo — nenhum dos dois apareceu nesta imagem específica, mas a regra
+permanece se aparecerem numa próxima.
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 2021 testes** (100%,
++3 novos: janela UTC real via `marketSessionFromUtc` não fabricada,
+divisor 1px sem `setLineDash`, `tradePlanAbsenceReason` na posição nova
+— mais os pinned-strings do §6.60 reescritos pra refletir a 2ª migração,
+não uma contagem líquida nova de achados) · build de produção ok · smoke
+Playwright real: app carrega, painel "Camadas do Gráfico" idêntico, zero
+erro JS novo (mesmo único erro pré-existente do WebSocket bloqueado).
+Geometria da faixa em si não verificável visualmente neste sandbox
+(zero rede real à Binance, mesma limitação de sempre).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

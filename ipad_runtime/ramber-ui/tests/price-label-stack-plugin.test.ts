@@ -595,7 +595,7 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     const s = chart();
     const idx = s.indexOf('{tradePlanAbsenceReason && (');
     expect(idx, 'overlay de texto não encontrado').toBeGreaterThan(-1);
-    const block = s.slice(idx, idx + 500);
+    const block = s.slice(idx, idx + 900);
     expect(block).toContain('? `SEM PLANO DO CONSELHO · ${tradePlanAbsenceReason} · linhas abaixo são do Núcleo`');
     expect(block).toContain(': `SEM TRADE PLAN · ${tradePlanAbsenceReason}`');
   });
