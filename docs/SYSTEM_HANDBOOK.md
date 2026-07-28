@@ -4528,6 +4528,21 @@ item 19, seguem como Tier 3, candidatos a uma rodada futura da Task #102
 se o Operador confirmar que o achado de 2° de matiz acima foi na direção
 certa.
 
+**Confirmação "SINCRONIZAÇÃO TOTAL"** (seção explícita da diretiva —
+"nunca permitir LONG em um lugar e SHORT em outro"): grep dirigido às 4
+camadas de canvas mais recentes (VWAP Bands, Kill Zones, Session Key
+Levels, Market Sessions — `chart/*Plugin.tsx`) e seus motores puros
+correspondentes (`nexus/vwap-bands.ts`, `nexus/kill-zones.ts`,
+`nexus/market-session.ts`) por qualquer literal `"LONG"`/`"SHORT"`/
+`"WAIT"` ou atribuição a `engine.direction`/`coreDecision`: zero
+ocorrência em qualquer um dos 6 arquivos. Confirma estruturalmente (não
+só por convenção documentada) que nenhuma dessas 4 camadas TEM COMO
+emitir ou influenciar uma decisão — elas nunca constroem esse conceito,
+só geometria/preço. Não substitui os audits completos de pipeline já
+feitos (Tasks #25/#31/#44, `RELATORIO_AUDITORIA_FINAL.md`) — é uma
+confirmação focada nas 4 adições mais novas desde aquele último audit
+completo, que ainda não tinham sido varridas por essa lente específica.
+
 **Testes**: `tsc --noEmit` limpo · suíte completa `vitest` passando
 (2 strings pinadas corrigidas em `refinamento-final-wiring.test.ts` +
 3 testes novos travando as 2 cores novas e confirmando Kill Zones
