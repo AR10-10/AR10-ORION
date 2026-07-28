@@ -81,6 +81,7 @@ import { formatEtaRange, formatEtaDuration } from "../nexus/eta-engine";
 // intraday reference level this system was missing entirely (confirmed
 // via a full-codebase grep before writing nexus/vwap.ts).
 import { computeSessionVwapSeries } from "../nexus/vwap";
+import { computeVwapBands } from "../nexus/vwap-bands";
 // Diretriz Camada de Decisão Profissional, item 1 ("linha de EMA real
 // marcada automaticamente no gráfico") — ver cabeçalho de nexus/ema.ts
 // para a auditoria completa (WASM já calcula EMA, mas só o valor escalar
@@ -528,6 +529,18 @@ export function EnhancedChart_110_Percent({
   // own scale because CVD is signed volume, not price) — it overlays
   // directly at the correct real price level.
   const vwapSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Pedido do Operador ("ferramentas mais precisas"): VWAP Standard
+  // Deviation Bands — pesquisa real confirmada (TradingView/Sierra Chart/
+  // TrendSpider/MultiCharts documentam a MESMA fórmula, ver
+  // nexus/vwap-bands.ts). 4 séries nativas (upper1/lower1/upper2/lower2),
+  // mesma convenção do Trend Channel logo abaixo (banda = leitura única
+  // por opacidade, nunca 4 rótulos concorrentes na borda de preço).
+  // Nasce/some junto do toggle VWAP existente — nunca uma 19ª camada:
+  // as bandas são a MESMA ferramenta, não um conceito novo e separado.
+  const vwapBandUpper1Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const vwapBandLower1Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const vwapBandUpper2Ref = useRef<ISeriesApi<"Line"> | null>(null);
+  const vwapBandLower2Ref = useRef<ISeriesApi<"Line"> | null>(null);
   // Diretriz Camada de Decisão Profissional, item 1: EMA na MESMA escala
   // de preço das velas (é um preço médio real, como VWAP) — cor própria,
   // nunca reaproveitando a paleta semântica (verde/vermelho=direção,
@@ -708,6 +721,29 @@ export function EnhancedChart_110_Percent({
       title: "",
     });
     vwapSeriesRef.current = vwapSeries;
+    // Bandas de desvio-padrão: mesma cor-base neutra da VWAP (branco), só
+    // mais translúcida — reaproveita o "papel" já existente de VWAP em vez
+    // de introduzir mais uma cor no gráfico (achado real da auditoria de
+    // consolidação de cores: 9 eixos semânticos já reaproveitam a mesma
+    // paleta, uma banda derivada da própria VWAP usar o tom da própria
+    // VWAP é o caso honesto, não uma colisão nova). 1σ mais visível que
+    // 2σ, mesma relação de opacidade do Trend Channel mid/banda.
+    const vwapBandSeriesOptions = {
+      lineWidth: 1 as const,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      title: "",
+    };
+    const vwapBandUpper1 = chart.addSeries(LineSeries, { ...vwapBandSeriesOptions, color: "rgba(255, 255, 255, 0.22)" });
+    const vwapBandLower1 = chart.addSeries(LineSeries, { ...vwapBandSeriesOptions, color: "rgba(255, 255, 255, 0.22)" });
+    const vwapBandUpper2 = chart.addSeries(LineSeries, { ...vwapBandSeriesOptions, color: "rgba(255, 255, 255, 0.10)" });
+    const vwapBandLower2 = chart.addSeries(LineSeries, { ...vwapBandSeriesOptions, color: "rgba(255, 255, 255, 0.10)" });
+    vwapBandUpper1Ref.current = vwapBandUpper1;
+    vwapBandLower1Ref.current = vwapBandLower1;
+    vwapBandUpper2Ref.current = vwapBandUpper2;
+    vwapBandLower2Ref.current = vwapBandLower2;
     // Diretriz Camada de Decisão Profissional, item 1: EMA como série
     // nativa na escala principal — azul distinto, nunca competindo com a
     // paleta direcional/semântica já em uso (ver comentário no ref
@@ -816,6 +852,10 @@ export function EnhancedChart_110_Percent({
       harmonicLinesRef.current = [];
       cvdSeriesRef.current = null;
       vwapSeriesRef.current = null;
+      vwapBandUpper1Ref.current = null;
+      vwapBandLower1Ref.current = null;
+      vwapBandUpper2Ref.current = null;
+      vwapBandLower2Ref.current = null;
       emaSeriesRef.current = null;
       nexusLineSeriesRef.current = null;
       trendChannelMidRef.current = null;
@@ -1059,6 +1099,19 @@ export function EnhancedChart_110_Percent({
     const series = computeSessionVwapSeries(data);
     vwapSeriesRef.current.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })));
     setVwapLastValue(series.length > 0 ? series[series.length - 1].value : null);
+    // Bandas de desvio-padrão: MESMO array real, MESMO efeito que a VWAP —
+    // nunca uma segunda leitura de candles, nunca a chance de a banda
+    // dessincronizar da própria linha que ela envolve (mesmo raciocínio já
+    // usado pela Nexus Line logo abaixo). computeVwapBands já reusa
+    // computeSessionVwapSeries por dentro (nexus/vwap-bands.ts) — zero
+    // segunda fórmula de VWAP.
+    if (vwapBandUpper1Ref.current && vwapBandLower1Ref.current && vwapBandUpper2Ref.current && vwapBandLower2Ref.current) {
+      const bands = computeVwapBands(data);
+      vwapBandUpper1Ref.current.setData(bands.map((p) => ({ time: p.time as UTCTimestamp, value: p.upper1 })));
+      vwapBandLower1Ref.current.setData(bands.map((p) => ({ time: p.time as UTCTimestamp, value: p.lower1 })));
+      vwapBandUpper2Ref.current.setData(bands.map((p) => ({ time: p.time as UTCTimestamp, value: p.upper2 })));
+      vwapBandLower2Ref.current.setData(bands.map((p) => ({ time: p.time as UTCTimestamp, value: p.lower2 })));
+    }
     // Consolidação Final §26-§28: a Nexus Line nasce do MESMO array real,
     // no MESMO efeito — os dois equilíbrios nunca dessincronizam por
     // construção. Série vazia (sem range confirmado/sem VWAP) => nada.
@@ -1127,6 +1180,15 @@ export function EnhancedChart_110_Percent({
   useEffect(() => {
     if (!vwapSeriesRef.current) return;
     vwapSeriesRef.current.applyOptions({ visible: visibility.vwap });
+  }, [visibility.vwap]);
+  // Bandas seguem o MESMO interruptor da VWAP (nunca uma 19ª camada
+  // separada) — a ferramenta é uma só, a banda é parte dela.
+  useEffect(() => {
+    if (!vwapBandUpper1Ref.current || !vwapBandLower1Ref.current || !vwapBandUpper2Ref.current || !vwapBandLower2Ref.current) return;
+    vwapBandUpper1Ref.current.applyOptions({ visible: visibility.vwap });
+    vwapBandLower1Ref.current.applyOptions({ visible: visibility.vwap });
+    vwapBandUpper2Ref.current.applyOptions({ visible: visibility.vwap });
+    vwapBandLower2Ref.current.applyOptions({ visible: visibility.vwap });
   }, [visibility.vwap]);
   useEffect(() => {
     if (!nexusLineSeriesRef.current) return;

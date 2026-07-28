@@ -585,6 +585,55 @@ describe('Consolidação Final §20-§25: VWAP com estados/histerese SEM tocar a
   });
 });
 
+describe('VWAP Standard Deviation Bands (pedido do Operador, "ferramentas mais precisas"): 4 séries nativas, mesmo toggle da VWAP, zero segunda matemática', () => {
+  it('importa computeVwapBands de nexus/vwap-bands — nunca uma fórmula própria dentro do componente do gráfico', () => {
+    const c = chart();
+    expect(c).toContain('import { computeVwapBands } from "../nexus/vwap-bands";');
+  });
+
+  it('cria as 4 séries nativas (upper1/lower1/upper2/lower2) com o mesmo contrato "fio de seda" da VWAP/Trend Channel (sem rótulo nativo, sem dash)', () => {
+    const c = chart();
+    for (const ref of ['vwapBandUpper1', 'vwapBandLower1', 'vwapBandUpper2', 'vwapBandLower2']) {
+      expect(c, `${ref}Ref.current nunca atribuído`).toContain(`${ref}Ref.current = ${ref};`);
+    }
+    const idx = c.indexOf('const vwapBandSeriesOptions = {');
+    const closeIdx = c.indexOf('vwapBandUpper2Ref.current = vwapBandUpper2;');
+    const block = c.slice(idx, closeIdx);
+    expect(block).toContain('title: "",');
+    expect(block).toContain('lineStyle: LineStyle.Solid');
+    expect(block).not.toContain('setLineDash');
+  });
+
+  it('as 4 séries são nulificadas no cleanup do chart, mesmo padrão de vwapSeriesRef/trendChannelUpperRef', () => {
+    const c = chart();
+    for (const ref of ['vwapBandUpper1', 'vwapBandLower1', 'vwapBandUpper2', 'vwapBandLower2']) {
+      expect(c).toContain(`${ref}Ref.current = null;`);
+    }
+  });
+
+  it('computeVwapBands roda no MESMO useEffect/mesmos candles que computeSessionVwapSeries — nunca dessincroniza da própria VWAP que envolve', () => {
+    const c = chart();
+    const idx = c.indexOf('const series = computeSessionVwapSeries(data);');
+    const closeIdx = c.indexOf('// Consolidação Final §26-§28: a Nexus Line nasce do MESMO array real,');
+    expect(idx).toBeGreaterThan(-1);
+    expect(closeIdx).toBeGreaterThan(idx);
+    const block = c.slice(idx, closeIdx);
+    expect(block).toContain('const bands = computeVwapBands(data);');
+  });
+
+  it('bandas seguem o MESMO interruptor visibility.vwap — nunca uma 19ª camada própria no painel "Camadas do Gráfico"', () => {
+    const c = chart();
+    const idx = c.indexOf('if (!vwapBandUpper1Ref.current');
+    expect(idx).toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 700);
+    expect(block).toContain('vwapBandUpper1Ref.current.applyOptions({ visible: visibility.vwap });');
+    expect(block).toContain('vwapBandLower1Ref.current.applyOptions({ visible: visibility.vwap });');
+    expect(block).toContain('vwapBandUpper2Ref.current.applyOptions({ visible: visibility.vwap });');
+    expect(block).toContain('vwapBandLower2Ref.current.applyOptions({ visible: visibility.vwap });');
+    expect(block).toContain('[visibility.vwap]');
+  });
+});
+
 describe('Consolidação Final §26-§30: Nexus Line + confluência informativa', () => {
   it('NL nasce no MESMO efeito da VWAP no gráfico (mesmos candles, nunca dessincroniza)', () => {
     const c = chart();

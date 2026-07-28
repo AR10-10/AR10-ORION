@@ -4012,6 +4012,55 @@ manutenção de baixo risco já vista em rodadas anteriores) ·
 verificação Playwright ao vivo ("VOTO DO CONSELHO" + tooltip
 renderizados corretamente, zero erro de console real).
 
+### 6.54 VWAP Standard Deviation Bands — primeiro item Tier 1 do backlog
+executado (pedido do Operador: "ferramentas mais precisas")
+
+PR #14 foi mergeada durante a rodada anterior — branch reiniciada de
+`origin/main` (histórico só já mergeado, nenhum commit local extra
+perdido) antes de começar este trabalho, seguindo a disciplina do
+ambiente para PR já fechada.
+
+Pesquisa real confirmada via WebSearch (TradingView, Sierra Chart,
+TrendSpider, MultiCharts — mesma fórmula documentada em todas):
+banda = VWAP ± k×desvio-padrão PONDERADO POR VOLUME (nunca o desvio-
+padrão simples dos closes, que ignoraria o próprio peso que dá nome à
+ferramenta). `variância = Σ(volume×precoTípico²)/Σvolume − VWAP²`.
+
+**Solução aplicada**: `nexus/vwap-bands.ts` (novo) — `computeVwapBands`,
+companion module de `nexus/vwap.ts` (cuja matemática fica INTOCADA por
+diretiva anterior, §20: "não modificar seu núcleo") — consome
+`computeSessionVwapSeries` já real e acumula a variância por cima, zero
+segunda fórmula de VWAP. k=1 e k=2, mesma convenção de multiplicador
+±σ já usada por `trend-channel-engine.ts`. Wiring no canvas
+(`EnhancedChart_110_Percent.tsx`): 4 novas séries nativas
+(upper1/lower1/upper2/lower2), MESMO efeito/mesmos candles que a
+própria VWAP (nunca dessincroniza), MESMO toggle `visibility.vwap` —
+decisão deliberada de NÃO criar uma 19ª camada no painel "Camadas do
+Gráfico": as bandas são a mesma ferramenta que a VWAP, não um conceito
+novo e separado. Cor: mesmo tom branco/neutro já "dono" da VWAP, só
+mais translúcido (1σ mais visível que 2σ) — reaproveita o papel visual
+já existente em vez de introduzir mais uma cor (achado direto da
+auditoria de consolidação de paleta, §6.53).
+
+**Verificação ao vivo (Playwright)**: painel "Camadas do Gráfico"
+segue mostrando exatamente 18 linhas (nenhuma nova) e "VWAP" aparece
+só 1 vez no painel — confirma que as bandas não geraram uma camada
+duplicada. Zero erro real de console.
+
+**Riscos conhecidos**: nenhum — módulo puro aditivo + 4 séries nativas
+seguindo exatamente o padrão já usado por Trend Channel; nenhuma
+mudança em `vwap.ts`, nenhuma mudança de comportamento pra quem nunca
+liga o toggle VWAP.
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 1963 testes** (100%,
++13 novos: 8 de execução real em `nexus-vwap-bands.test.ts`
+— incluindo um caso hand-verified, VWAP=175/stdDev=25√3≈43.301 —, 5 de
+padrão-de-fonte em `refinamento-final-wiring.test.ts`) · build de
+produção ok · verificação Playwright ao vivo.
+
+**Backlog**: primeiro item Tier 1 de `MAPA_EVOLUCAO_CIBORGUE.md` §7
+executado; Kill Zones no canvas continua o próximo natural.
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

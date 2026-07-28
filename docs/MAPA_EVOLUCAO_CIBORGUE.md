@@ -76,7 +76,7 @@ de ser feito e a evolução de todos os sistema do ciborgue".
 | OI/Funding como camada do gráfico | AUSENTE | Dado real já existe (GMIL/cross-exchange), mas nunca é desenhado no canvas — hoje só texto em painel. |
 | ZigZag como overlay próprio | PARCIAL | Existe só como helper interno em `fractal-swings.js`, nunca uma camada própria toggleable. |
 | Kill Zones (ICT) | IMPLEMENTADO | `nexus/kill-zones.ts` (§6.48) — badge no header; **canvas ainda pendente** (ver backlog §5, Tier 2). |
-| VWAP ±σ bands | AUSENTE | Documentado como lacuna de baixo custo há várias rodadas (research map §7); candidato natural para a próxima evolução pequena do gráfico. |
+| VWAP ±σ bands | **IMPLEMENTADO** (mudou desde §6.53) | `nexus/vwap-bands.ts` (§6.54) — desvio-padrão real ponderado por volume, k=1/2, mesmo toggle da VWAP (nunca uma 19ª camada). |
 
 ## 4. Inteligência, radar e contexto
 
@@ -120,7 +120,8 @@ abertos desta auditoria + achados novos de
 1. Kill Zones **no canvas** (Session Bands já provou o padrão de overlay
    — `kill-zones.ts` só falta o plugin de canvas próprio; o badge do
    header já existe).
-2. VWAP ±σ bands (motor pequeno, mesmo padrão de `vwap-state.ts`).
+2. ~~VWAP ±σ bands~~ — **feito, §6.54** (`nexus/vwap-bands.ts`, wiring no
+   mesmo toggle da VWAP).
 3. Auditoria de touch-target 44×44pt (iPad Safari, Regra de Ouro 7).
 4. Auditoria de list-virtualization (order book / Radar / Omnibox —
    verificar se listas longas já virtualizam ou têm risco de framerate).
@@ -236,9 +237,10 @@ abertos desta auditoria + achados novos de
 
 ## 9. Roadmap recomendado (ordem sugerida, não uma promessa de cronograma)
 
-1. Tier 1 completo (baixo custo, fecha lacunas pequenas já mapeadas).
-2. Kill Zones no canvas + VWAP ±σ bands (visual, resposta direta ao
-   pedido recorrente do Operador por "ferramentas mais precisas").
+1. Tier 1 completo (baixo custo, fecha lacunas pequenas já mapeadas) —
+   VWAP ±σ bands já entregue (§6.54), resposta direta ao pedido
+   recorrente do Operador por "ferramentas mais precisas".
+2. Kill Zones no canvas (próximo item natural do Tier 1).
 3. Market Regime → Relevance Engine (fecha o último gap real do Fusion
    Engine; depois deste, TODA relevância de camada vem de sinal real
    já mapeado, zero exceção pendente).
