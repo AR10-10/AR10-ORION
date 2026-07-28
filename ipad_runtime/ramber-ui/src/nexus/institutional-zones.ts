@@ -45,7 +45,8 @@ export type InstitutionalZoneSourceKind =
   | "FAIR_VALUE_GAP"
   | "ORDER_BLOCK"
   | "LIQUIDITY_EQH"
-  | "LIQUIDITY_EQL";
+  | "LIQUIDITY_EQL"
+  | "SUPPORT_RESISTANCE";
 
 export interface InstitutionalZoneMember {
   sourceKind: InstitutionalZoneSourceKind;
@@ -74,6 +75,14 @@ export interface InstitutionalZoneInput {
   fairValueGaps: { type: "BULLISH" | "BEARISH"; top: number; bottom: number }[];
   orderBlocks: { type: "BULLISH" | "BEARISH"; top: number; bottom: number }[];
   liquidityZones: { type: "EQUAL_HIGH" | "EQUAL_LOW"; price: number }[];
+  // Diretriz Consolidação/Auditoria/Evolução §6 (achado real da auditoria de
+  // unificação: support-resistance-engine.js já graduado e já importado em
+  // engine-bridge.ts, mas nunca alimentava este consolidador — lacuna de
+  // fiação, não de matemática nova). Mesmo S1/R1 já usados pelas price
+  // lines nativas do gráfico (EnhancedChart_110_Percent.tsx:303-304),
+  // passados direto como prop — zero segundo cálculo.
+  support: number | null;
+  resistance: number | null;
   proximityPct?: number;
 }
 
@@ -95,7 +104,7 @@ function fin(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
 }
 
-/** Motor puro: níveis JÁ reais de até 7 ferramentas independentes ->
+/** Motor puro: níveis JÁ reais de até 8 ferramentas independentes ->
  *  Zonas Institucionais reais por proximidade de preço. Determinístico,
  *  nunca lança, nunca depende de estado global. */
 export function computeInstitutionalZones(input: InstitutionalZoneInput): InstitutionalZone[] {
@@ -110,6 +119,12 @@ export function computeInstitutionalZones(input: InstitutionalZoneInput): Instit
   }
   if (fin(input.nexusLine)) {
     members.push({ sourceKind: "NEXUS_LINE", label: "Nexus Line", price: input.nexusLine, top: input.nexusLine, bottom: input.nexusLine });
+  }
+  if (fin(input.support)) {
+    members.push({ sourceKind: "SUPPORT_RESISTANCE", label: "S1", price: input.support, top: input.support, bottom: input.support });
+  }
+  if (fin(input.resistance)) {
+    members.push({ sourceKind: "SUPPORT_RESISTANCE", label: "R1", price: input.resistance, top: input.resistance, bottom: input.resistance });
   }
   for (const z of input.fairValueGaps ?? []) {
     if (!fin(z.top) || !fin(z.bottom)) continue;

@@ -146,11 +146,20 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       const isObstacle = (zone: FillableZone) =>
         (obstacles ?? []).some((o) => o.low === zone.bottom && o.high === zone.top);
 
-      const drawZone = (zone: FillableZone, palette: ZonePalette, label: string) => {
+      const drawZone = (zone: FillableZone, palette: ZonePalette, label: string, isObstacleZone: boolean) => {
         const point = candles[zone.index];
         if (!point) return; // índice fora da janela real de candles — nunca desenha um palpite.
         const age = currentIndex - zone.index;
-        const alpha = ageAlpha(age, ZONE_DECAY);
+        // Correção real (Diretriz Consolidação/Auditoria/Evolução, auditoria
+        // de ciclo de vida, achado confirmado): uma zona que é obstáculo
+        // real do plano ATIVO agora (mesma isObstacle() usada na paleta e no
+        // rótulo ⚠ abaixo — zero segundo cálculo) nunca deve esmaecer por
+        // idade fixa enquanto continuar bloqueando o caminho do plano —
+        // "nunca em tempo fixo, sempre por relevância real" é exatamente o
+        // caso de uma zona antiga que ainda é o obstáculo estrutural de uma
+        // operação aberta. Volta a decair normalmente assim que deixar de
+        // ser obstáculo (plano fechado ou preço já passou da zona).
+        const alpha = isObstacleZone ? 1 : ageAlpha(age, ZONE_DECAY);
         if (alpha <= 0) return; // "esquecida" — só da tela, ver comentário de ageAlpha acima.
         const x1 = timeScale.timeToCoordinate(point.time as unknown as Time);
         const y1 = series.priceToCoordinate(zone.top);
@@ -193,8 +202,14 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       // sigla e o glifo) — havia um espaço aqui. Zero mudança de
       // informação/cor/direção, só a mesma string mais compacta.
       const dir = (t: "BULLISH" | "BEARISH") => (t === "BULLISH" ? "↑" : "↓");
-      fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));
-      obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));
+      fvgs.forEach((z) => {
+        const obstacle = isObstacle(z);
+        drawZone(z, paletteFor("FVG", z.type, obstacle), `FVG${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle);
+      });
+      obs.forEach((z) => {
+        const obstacle = isObstacle(z);
+        drawZone(z, paletteFor("OB", z.type, obstacle), `OB${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle);
+      });
     };
 
     const markDirty = () => {

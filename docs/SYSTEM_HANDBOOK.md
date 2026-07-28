@@ -5065,6 +5065,110 @@ zona real), nunca voltar a "sempre visível incondicional", e por manter
 `emphasis` fazendo o trabalho fino de destacar só o que está genuinamente
 perto do preço agora.
 
+### 6.66 Diretriz Consolidação/Auditoria/Evolução do Ecossistema —
+auditoria real de 4 frentes + correção dos achados confirmados
+
+Diretriz do Operador (formato "carta de intenção", endereçada a um
+"Agente 4" que não existe nas mensagens diretas — CLAUDE.md §7 exige
+confirmar antes de agir nesse padrão; tratado como autorizado porque veio
+direto no chat e o conteúdo só reforça LEI 24/READ_ONLY/SSOT, nunca pede
+para contorná-los) pedindo consolidação ampla: auditoria de conflitos/
+duplicação, unificação da Confluência, ciclo de vida real por camada
+visual, sincronização total, performance, e documentação atualizada.
+Escopo real demais para uma rodada só sem virar trabalho especulativo —
+disciplina aplicada: **auditar antes de construir** (item 1 da Disciplina
+de Trabalho), corrigir só o que a auditoria confirmou com evidência
+arquivo:linha, documentar o resto como backlog honesto (task #82).
+
+**Auditoria (4 agentes paralelos, só leitura, evidência real):**
+
+1. **LEI 24 / duplicação de cálculo.** Zero violação em swing/FVG-OB/
+   opinionMass (todos passthrough real ou motor único). Um achado real:
+   `App.tsx:3930` afirmava que o Radar "nunca recalcula nem emite LONG/
+   SHORT por conta própria (LEI 24)" — falso por leitura direta:
+   `engine-bridge.ts:1138-1166` (`directionFromRegime`/
+   `scanRadarCandidate`) computa LONG/SHORT via `classifyMarketRegime`
+   (regime de mercado, não o Core Engine real) para candidatos em segundo
+   plano, nunca para o ativo selecionado. Texto corrigido para descrever
+   o que o código de fato faz. Um achado documentado, não corrigido: o
+   Trade Plan do Council (`nexus/trade-plan.ts:217`, `direction: stance`)
+   pode divergir de `engine.direction` — design deliberado da task #40
+   ("Council-only por design"), com aviso já existente na UI, não é bug
+   novo. Pergunta explícita levada ao Operador: manter o Radar assim
+   (fora do escopo textual de LEI 24, que fala "para o timeframe
+   selecionado no gráfico") ou converter em ranking sem direção.
+2. **Ciclo de vida visual dos 12 plugins de canvas** (a diretriz falava
+   em 13; confirmado por grep dos imports que são 12). Achado mais grave:
+   `MarketSessionBandsPlugin` era o ÚNICO sem nenhum mecanismo de
+   ciclo de vida — o próprio cabeçalho do arquivo documentava um teto que
+   existiu no "Redesenho real #1" e foi removido no "Redesenho real #2"
+   para mostrar todas as sessões, uma regressão real. Corrigido: mesmo
+   teto `MAX_KEY_LEVELS_SHOWN` já declarado por `SessionKeyLevelsPlugin`
+   (zero segunda constante). Segundo achado: `LiquidityZonesPlugin`
+   deixava uma zona-obstáculo de um plano ATIVO esmaecer por idade fixa
+   (`ageAlpha`) mesmo continuando a bloquear o caminho do plano —
+   corrigido para `alpha=1` enquanto `isObstacleZone`, decaimento normal
+   assim que deixar de ser obstáculo. Três achados de menor severidade
+   (LiquidationHeatmapPlugin sem peso de idade/símbolo,
+   SessionKeyLevelsPlugin com corte abrupto em vez de fade,
+   OrderFlowHeatmapPlugin sem fade gradual no ring buffer) documentados
+   no backlog — refinamentos, não regressões.
+3. **Unificação de Confluência.** `institutional-zones.ts` unificava só
+   4 das ~9 fontes reais pedidas (EMA/VWAP/FVG/OB, + liquidez parcial).
+   Veredito do agente: lacuna de FIAÇÃO, não de matemática — os motores
+   de Suporte/Resistência, Market Structure, Volume Profile e Session Key
+   Levels já são reais e graduados, só nunca alimentavam este
+   consolidador. Fechado nesta rodada: Suporte/Resistência (S1/R1) — dado
+   já era prop existente de `EnhancedChart_110_Percent.tsx`, zero
+   plumbing novo, mesmo princípio "zero prop nova de App.tsx" já
+   documentado no arquivo. Os 3 restantes (Market Structure, Volume
+   Profile POC, Session Key Levels) e o evento de Liquidity Sweep exigem
+   1 prop nova cada — documentados no backlog. Confirmado sem sobreposição
+   real entre `institutional-zones.ts` (domínio de PREÇO),
+   `confluence-engine.ts` e `confluence-corridor.ts` (domínio de
+   DIREÇÃO/CONVICÇÃO) — três perguntas diferentes, não duplicação.
+4. **Performance/infraestrutura.** Nenhum gargalo urgente confirmado: 2
+   loops não-memoizados são "não catastróficos" (O(n) pequeno, teto
+   baixo); o recompute de `relevanceInput`/`priceAxisLabels`/
+   `auraReading` a cada tick de `livePrice` é uma troca JÁ deliberada e
+   documentada no próprio comentário-fonte, não um bug oculto. Achado
+   real de documentação: `docs/READ_ONLY_MARKET_SAFETY.md` e
+   `docs/AR10_CYBORG_2_REAL_DATA_LAYER_RUNTIME_PROBE_V1.md` descreviam um
+   `storage.js` com "OPFS + fallback IndexedDB" que NUNCA existiu no
+   repositório (confirmado por busca no filesystem inteiro) — a
+   persistência real hoje é `nexus/persistence.ts` (IndexedDB via pacote
+   `idb`). Ambos os documentos corrigidos, mantendo o texto original como
+   registro histórico do design nunca implementado (nunca apagar
+   informação real). Achado arquitetural real, só documentado (backlog):
+   `nexus/event-bus.ts` tem 3 publishers reais e ZERO subscribers em todo
+   `ramber-ui/src` — infraestrutura pronta, nunca conectada; a UI lê
+   estado via seletores diretos do Zustand, não via o bus.
+
+**Testes**: `tsc --noEmit` limpo · **121 arquivos / 2047 testes** (100%,
++3 novos: 1 para confluência real S1+EMA em `institutional-zones.ts`, 1
+para a disciplina "2 instâncias da mesma ferramenta não bastam" aplicada
+a S1/R1, 1 travando o comportamento real de `alpha=1` para zona-obstáculo
+em `LiquidityZonesPlugin`) · `npm run build` ok · verificação com
+Playwright real (Chromium headless, bypass documentado do próprio
+`access-gate.tsx` — "cortina contra abertura acidental", não segurança
+real): app carrega sem crash, zero erro de console rastreável aos
+arquivos alterados, e confirmou bônus real — o Fail-Closed funciona
+(sandbox sem egress a exchanges, mesma limitação já documentada em
+`QUARANTINE.md` para `history-capture.js`, produz "AWAITING CANDLES…"
+honesto, nunca um candle fabricado). Sem candles reais disponíveis no
+sandbox, não foi possível confirmar pixel-a-pixel os 2 fixes de canvas —
+decisão deliberada de NÃO injetar candle sintético no pipeline de render
+só para a screenshot, mesmo sendo só verificação local (Regra de Ouro 1).
+Confiança na correção vem da leitura linha-a-linha do código real + dos
+testes que travam o comportamento exato.
+
+**Riscos conhecidos**: nenhum de decisão (LEI 24 intacta nos itens
+corrigidos). O achado do Radar (item 1 acima) continua uma pergunta em
+aberto para o Operador — não uma correção unilateral, porque toca
+diretamente a lei mais importante do projeto. Verificação visual dos 2
+fixes de canvas fica pendente de uma sessão com egress real às exchanges
+(iPad do Operador ou ambiente com rede liberada).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

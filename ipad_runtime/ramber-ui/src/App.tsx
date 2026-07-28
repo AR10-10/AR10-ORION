@@ -3927,7 +3927,7 @@ function RadarPanel() {
         </div>
         <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
           <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
-            Radar/OIH — varredura real em segundo plano (Binance + MEXC), nunca recalcula nem emite LONG/SHORT por conta própria (LEI 24). Só lista quem já tem estrutura confirmada, Trade Plan real e confluência suficiente.
+            Radar/OIH — varredura real em segundo plano (Binance + MEXC): direção por Regime de Mercado real (ADX), nunca o Núcleo do ativo selecionado — que continua sendo o único emissor real de LONG/SHORT/WAIT do gráfico (LEI 24). Só lista quem já tem estrutura confirmada, Trade Plan real e confluência suficiente.
           </span>
           {candidates.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center">

@@ -259,6 +259,27 @@ diagnóstico, e falado via `voice.speak()` (best-effort, sem rede — ver
 
 ## Memória persistente / Session Resume / Evidence Ledger
 
+**Correção real (Diretriz Consolidação/Auditoria/Evolução, achado confirmado
+por busca no filesystem inteiro): a seção abaixo descreve um design que
+nunca foi implementado.** Nenhum dos 4 arquivos citados (`storage.js`,
+`persistent-state.js`, `evidence-ledger.js`, `session-resume.js`) existe em
+`ipad_runtime/js/` (que hoje só tem `crypto-utils.js`, `orderflow-client.js`,
+`orderflow-tick-codec.js`, `worker-client.js`) ou em qualquer outro lugar do
+repositório. Mantido abaixo como registro histórico do design original desta
+"RUNTIME_PROBE_V1" (nunca apagar informação real, só marcar honestamente o
+que é), não como documentação do estado atual.
+
+A persistência real que existe HOJE (app React `ramber-ui`, caminho de
+produção) é `nexus/persistence.ts` — IndexedDB de verdade via pacote `idb`
+(DB `ar10-cyborg-nexus`), cobrindo candles e track record de sinais
+(`saveCandles`/`loadCandles`/`saveTrackRecord`/`loadTrackRecord`/
+`compactPersistedCandles`, todos chamados em `App.tsx`). `localStorage` é
+usado só para sessão/preferências de widget e o flag de unlock — nunca dado
+de mercado, nunca segredo. Ver `docs/READ_ONLY_MARKET_SAFETY.md` (linha
+`NO_SECRET_IN_LOCALSTORAGE`) para o mesmo achado.
+
+Texto original do design (histórico, não implementado):
+
 Tudo em IndexedDB (via `storage.js`), nunca em RAM-only e nunca em
 `localStorage`:
 

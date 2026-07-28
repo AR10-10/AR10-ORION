@@ -95,8 +95,20 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
     // (pergunta do Operador "era pra cima ou pra baixo?"): o label também
     // carrega o glifo de direção ↑/↓ real (z.type do motor SMC), nunca só
     // a cor — mesma chamada de sempre, só honesta sobre mais informação.
-    expect(plugin).toContain('fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
-    expect(plugin).toContain('obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
+    //
+    // Diretriz Consolidação/Auditoria/Evolução (achado real: zona-obstáculo
+    // podia expirar por idade fixa mesmo bloqueando um plano ativo):
+    // `obstacle` agora é computado 1x por zona e passado como 4º argumento
+    // real de drawZone (nunca um 2º cálculo de isObstacle dentro do loop).
+    expect(plugin).toContain('const obstacle = isObstacle(z);');
+    expect(plugin).toContain('drawZone(z, paletteFor("FVG", z.type, obstacle), `FVG${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle);');
+    expect(plugin).toContain('drawZone(z, paletteFor("OB", z.type, obstacle), `OB${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle);');
+  });
+
+  it('Diretriz Consolidação/Auditoria/Evolução (achado real): zona-obstáculo de um plano ATIVO nunca esmaece por idade fixa — alpha=1 enquanto isObstacleZone, ageAlpha normal caso contrário', () => {
+    const plugin = read('../src/chart/LiquidityZonesPlugin.tsx');
+    expect(plugin).toContain('const drawZone = (zone: FillableZone, palette: ZonePalette, label: string, isObstacleZone: boolean) => {');
+    expect(plugin).toContain('const alpha = isObstacleZone ? 1 : ageAlpha(age, ZONE_DECAY);');
   });
 });
 

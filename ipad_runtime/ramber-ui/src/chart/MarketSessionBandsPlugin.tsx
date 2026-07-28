@@ -50,9 +50,23 @@
 // nunca geometria de desenho).
 //
 // LEI 24: display only, puro contexto temporal — nunca uma decisão.
+//
+// Correção real (Diretriz Consolidação/Auditoria/Evolução, auditoria de
+// ciclo de vida dos 12 plugins, achado confirmado): o "Redesenho real #2"
+// acima removeu deliberadamente o teto de contagem que existia no
+// "Redesenho real #1" para mostrar todas as sessões nomeadas — mas isso
+// reintroduziu exatamente a poluição visual sem limite que o Redesenho #1
+// já tinha corrigido uma vez (dezenas/centenas de faixas desenhando juntas
+// em timeframes intraday com MAX_CHART_HISTORY=2000 candles de histórico).
+// Este era o ÚNICO dos 12 plugins do gráfico sem nenhum mecanismo de ciclo
+// de vida. Fix: mesmo teto/mesma convenção já declarada por
+// SessionKeyLevelsPlugin (MAX_KEY_LEVELS_SHOWN, ~1 dia de sessões reais) —
+// zero segunda constante, zero segunda decisão de "quantas sessões
+// mostrar".
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeSessionKeyLevels, marketSessionFromUtc, type SessionKeyLevel } from "../nexus/market-session";
+import { MAX_KEY_LEVELS_SHOWN } from "./SessionKeyLevelsPlugin";
 
 // Discreto de propósito — contexto de fundo, nunca compete visualmente com
 // estrutura (BOS/CHOCH), liquidez (EQH/EQL) ou o Trade Plan. Mesmo tom
@@ -125,14 +139,19 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
       }
       if (levels.length === 0) return; // timeframe sem transição real na amostra (ex. candles diários) — honesto, nada a marcar.
 
+      // Ciclo de vida real (ver header do arquivo): só as MAX_KEY_LEVELS_SHOWN
+      // ocorrências mais recentes desenham — a corrente + as já fechadas mais
+      // próximas, nunca a história inteira carregada no gráfico.
+      const recent = levels.slice(-MAX_KEY_LEVELS_SHOWN);
+
       const timeScale = chart.timeScale();
       // Meia-largura de barra real (mesma correção de KillZoneBandsPlugin):
       // sem isto, o retângulo cortaria visualmente metade do candle na
       // fronteira entre 2 sessões.
       const halfBar = (timeScale.options().barSpacing ?? 0) / 2;
 
-      for (let i = 0; i < levels.length; i++) {
-        const level = levels[i];
+      for (let i = 0; i < recent.length; i++) {
+        const level = recent[i];
         const isOpen = !level.closed;
         const x1 = timeScale.timeToCoordinate(level.startTime as unknown as Time);
         // Sessão corrente: estende até a borda direita real ("ainda em

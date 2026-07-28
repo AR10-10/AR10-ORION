@@ -1316,6 +1316,12 @@ export function EnhancedChart_110_Percent({
   // chegam pré-filtrados — unmitigated/unswept — como props, mesmo padrão
   // de App.tsx:6830-6834). computeInstitutionalZones é puro; o useMemo só
   // evita reclusterizar a cada render sem mudança real de insumo.
+  //
+  // Diretriz Consolidação/Auditoria/Evolução §6 (achado real da auditoria
+  // de unificação de confluência): support/resistance (S1/R1) já são props
+  // deste componente há muito tempo (usadas pelas price lines nativas
+  // linha ~1044/1063 acima) — mesmo princípio "zero prop nova" continua
+  // valendo, só passam a alimentar também o consolidador de zonas.
   const institutionalZoneInput = useMemo<InstitutionalZoneInput>(
     () => ({
       ema: emaLastValue !== null ? { period: activeEmaPeriod, value: emaLastValue } : null,
@@ -1324,8 +1330,10 @@ export function EnhancedChart_110_Percent({
       fairValueGaps: fairValueGaps ?? [],
       orderBlocks: orderBlocks ?? [],
       liquidityZones: liquidityZones ?? [],
+      support: support ?? null,
+      resistance: resistance ?? null,
     }),
-    [emaLastValue, activeEmaPeriod, vwapLastValue, nlLastValue, fairValueGaps, orderBlocks, liquidityZones],
+    [emaLastValue, activeEmaPeriod, vwapLastValue, nlLastValue, fairValueGaps, orderBlocks, liquidityZones, support, resistance],
   );
   const institutionalZones = useMemo(() => computeInstitutionalZones(institutionalZoneInput), [institutionalZoneInput]);
 

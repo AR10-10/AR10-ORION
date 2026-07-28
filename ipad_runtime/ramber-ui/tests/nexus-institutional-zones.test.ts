@@ -19,6 +19,8 @@ const emptyInput: InstitutionalZoneInput = {
   fairValueGaps: [],
   orderBlocks: [],
   liquidityZones: [],
+  support: null,
+  resistance: null,
 };
 
 describe('constantes do contrato', () => {
@@ -97,6 +99,27 @@ describe('computeInstitutionalZones: confluência real cruzada', () => {
     expect(r[0].distinctSourceCount).toBe(2); // EMA + ORDER_BLOCK — 2 FERRAMENTAS, não 3 instâncias
   });
 
+  it('Diretriz Consolidação §6: Suporte/Resistência (S1/R1) agora alimenta o consolidador — 2 ferramentas distintas (S1 + EMA) formam zona real', () => {
+    const r = computeInstitutionalZones({
+      ...emptyInput,
+      ema: { period: 21, value: 100000 },
+      support: 100150, // 0.15% de distância, dentro do limiar padrão (0.35%)
+    });
+    expect(r).toHaveLength(1);
+    expect(r[0].distinctSourceCount).toBe(2);
+    expect(r[0].members.map((m) => m.sourceKind).sort()).toEqual(['EMA', 'SUPPORT_RESISTANCE']);
+    expect(r[0].members.find((m) => m.sourceKind === 'SUPPORT_RESISTANCE')?.label).toBe('S1');
+  });
+
+  it('S1 e R1 são a MESMA ferramenta (SUPPORT_RESISTANCE) — juntos sozinhos nunca formam confluência cruzada', () => {
+    const r = computeInstitutionalZones({
+      ...emptyInput,
+      support: 100000,
+      resistance: 100100, // perto o bastante de se agrupar, mas ambos SUPPORT_RESISTANCE
+    });
+    expect(r).toEqual([]); // 1 ferramenta só (2 instâncias), mesma disciplina do teste adversarial de Order Blocks acima
+  });
+
   it('3 ferramentas distintas concordando => distinctSourceCount real 3', () => {
     const r = computeInstitutionalZones({
       ...emptyInput,
@@ -129,6 +152,8 @@ describe('computeInstitutionalZones: clustering por ÂNCORA FIXA (nunca média m
       nexusLine: 100800, // 800 de distância da âncora 100000 → NÃO entra no grupo 1 (mesmo estando a só 400 do VWAP); vira âncora do grupo 2
       fairValueGaps: [],
       orderBlocks: [],
+      support: null,
+      resistance: null,
       liquidityZones: [{ type: 'EQUAL_HIGH', price: 101100 }], // 300 de distância da âncora 100800 <= 500 → entra no grupo 2
       proximityPct: 0.5,
     });
@@ -171,6 +196,8 @@ describe('computeInstitutionalZones: ordenação e teto real', () => {
       fairValueGaps: [{ type: 'BULLISH', top: 100150, bottom: 100050 }],
       orderBlocks: [{ type: 'BULLISH', top: 100120, bottom: 100080 }],
       liquidityZones: [],
+      support: null,
+      resistance: null,
     });
     expect(r.length).toBeGreaterThanOrEqual(2);
     expect(r[0].distinctSourceCount).toBe(3); // NEXUS_LINE + FVG + OB (200000-region só tem 2: EMA + VWAP)
