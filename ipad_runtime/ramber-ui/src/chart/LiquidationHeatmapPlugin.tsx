@@ -29,6 +29,10 @@ import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { computeLiquidationHeatmap, type LiquidationHeatmapResult } from "../nexus/liquidation-heatmap";
 import type { LiquidationEvent } from "../engine-bridge";
+// Diretriz Final de Lapidação Visual, Adendo, Parte 11: rótulo de pico
+// virou caixa real (mesma primitiva de LiquidityZonesPlugin/
+// KillZoneBandsPlugin/InstitutionalZonePlugin).
+import { drawCanvasLabel, measureCanvasLabel } from "../nexus/canvas-label";
 
 const MAX_BAR_WIDTH_FRACTION = 0.14; // fração da largura do chart — camada secundária, nunca compete com o Volume Profile
 const LONG_FILL = "rgba(0, 255, 170, 0.28)";
@@ -122,16 +126,20 @@ export function LiquidationHeatmapPlugin({ chart, series, liquidations, symbol }
 
       // Rótulo real do bucket de maior notional (mesmo papel do POC no
       // Volume Profile) — um único número honesto, nunca um por bucket.
+      // Diretriz Final Adendo Parte 11: caixa real (canto suave +
+      // contraste garantido) em vez de texto nu — posição igual a antes
+      // (base da caixa 1px acima da barra), só a primitiva de desenho
+      // muda; measureCanvasLabel resolve a altura real antes de
+      // posicionar, nunca um deslocamento aproximado.
       if (peakBucket.totalNotionalUsd > 0) {
         const yLow = series.priceToCoordinate(peakBucket.priceLow);
         const yHigh = series.priceToCoordinate(peakBucket.priceHigh);
         if (yLow !== null && yHigh !== null) {
           const y = Math.min(yLow, yHigh);
           const peakW = (peakBucket.totalNotionalUsd / heat.maxBucketNotionalUsd!) * maxBarWidth;
-          ctx.font = "9px -apple-system, sans-serif";
-          ctx.fillStyle = PEAK_LABEL_COLOR;
-          ctx.textBaseline = "bottom";
-          ctx.fillText(formatUsd(peakBucket.totalNotionalUsd), Math.max(2, peakW + 3), y - 1);
+          const text = formatUsd(peakBucket.totalNotionalUsd);
+          const size = measureCanvasLabel(ctx, text);
+          drawCanvasLabel(ctx, Math.max(2, peakW + 3), y - 1 - size.height, { fill: PEAK_LABEL_COLOR, text });
         }
       }
     };

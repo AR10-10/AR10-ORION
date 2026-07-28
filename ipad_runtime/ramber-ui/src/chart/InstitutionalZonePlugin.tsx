@@ -29,6 +29,13 @@
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { InstitutionalZone } from "../nexus/institutional-zones";
+// Diretriz Final de Lapidação Visual, Adendo, Parte 11: rótulo de
+// confluência virou caixa real (mesma primitiva de LiquidityZonesPlugin/
+// KillZoneBandsPlugin/LiquidationHeatmapPlugin). LABEL_COLOR (claro,
+// pensado antes como texto sobre a faixa violeta) reaproveitado como fundo
+// da caixa — contraste com o texto escuro garantido pela própria
+// primitiva, zero cor nova inventada.
+import { drawCanvasLabel, measureCanvasLabel } from "../nexus/canvas-label";
 
 const FILL_COLOR = "rgba(167, 139, 250, 0.07)";
 const BORDER_COLOR = "rgba(167, 139, 250, 0.35)";
@@ -106,8 +113,9 @@ export function InstitutionalZonePlugin({ chart, series, zones }: InstitutionalZ
 
         if (rectHeight >= MIN_LABEL_HEIGHT_PX) {
           const toolNames = zone.members.map((m) => m.label).join(" + ");
-          ctx.fillStyle = LABEL_COLOR;
-          ctx.fillText(`◆ ZONA INSTITUCIONAL · ${toolNames}`, 6, rectY + rectHeight / 2);
+          const text = `◆ ZONA INSTITUCIONAL · ${toolNames}`;
+          const size = measureCanvasLabel(ctx, text);
+          drawCanvasLabel(ctx, 6, rectY + rectHeight / 2 - size.height / 2, { fill: LABEL_COLOR, text });
         }
       }
     };

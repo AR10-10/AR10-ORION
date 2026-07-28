@@ -317,7 +317,7 @@ rastreável às mudanças desta rodada — mesma limitação de sandbox sem
 egress a exchanges já documentada, impedindo confirmação visual
 pixel-a-pixel.
 
-## Pendência para o Operador
+## Pendência para o Operador (antes do Adendo abaixo)
 
 1. Resposta sobre o Radar computando direção via regime de mercado
    (pergunta feita na rodada anterior desta mesma sessão, ainda em
@@ -326,3 +326,139 @@ pixel-a-pixel.
    real entre motores) é realmente a intenção — se sim, isso reverteria
    uma decisão de transparência já deliberada (task #39) e precisa de
    autorização explícita antes de qualquer implementação.
+
+---
+
+# ADENDO — PADRÃO VISUAL INSTITUCIONAL (Partes 10-16)
+
+Codinome: `AR10_CYBORG_ADENDO_LAPIDACAO_VISUAL_V1`. Mesma sessão, mesmo dia.
+Complemento direto da diretiva acima (Partes 1-9 já cobertas nas seções
+anteriores deste documento) — este Adendo cobre especificamente as Partes
+10-16 (padrão visual institucional, etiquetas, linhas/zonas, hierarquia
+visual, autonomia de design, experiência do Operador, entrega final).
+
+## Auditoria antes de construir (Parte 11)
+
+Antes de qualquer mudança, auditoria real do estado de tipografia/rótulos
+em todo `chart/*.tsx`:
+
+- **Tipografia**: `grep "ctx.font ="` em todo o diretório → 7 ocorrências,
+  todas `"9px -apple-system, sans-serif"` (exceto 1 sublabel
+  deliberadamente menor a 8px, `MarketSessionBandsPlugin`). **Já 100%
+  unificada** — zero trabalho necessário aqui, ao contrário do que a
+  diretiva presumia.
+- **Cantos suavizados**: `grep "roundRect"` em todo o diretório → **zero
+  ocorrências**. Nenhum canto suave em lugar nenhum do gráfico.
+- **Caixas de etiqueta**: de 6 pontos reais de `fillText`, só
+  `PriceLabelStackPlugin.tsx` já desenhava uma caixa sólida (padding
+  consistente, contraste garantido via `#050810` sobre fundo colorido).
+  Os outros 5 (`KillZoneBandsPlugin`, `LiquidationHeatmapPlugin`,
+  `LiquidityZonesPlugin`, `InstitutionalZonePlugin`, e as 2 linhas de
+  `MarketSessionBandsPlugin`) desenhavam texto NU direto sobre o
+  preenchimento da zona, cada um com seu próprio padding ad-hoc — a
+  inconsistência real que a Parte 11 descreve como "parecer improvisada".
+
+## Melhorias implementadas (Parte 11)
+
+`nexus/canvas-label.ts` (novo, motor puro de desenho): `drawCanvasLabel`/
+`measureCanvasLabel` — caixa sólida com cantos suavizados via `roundRect`
+real do Canvas 2D quando o motor suporta (feature-detect honesto, mesmo
+padrão já usado por `OrderFlowHeatmapPlugin::supportsOffscreenWorker`),
+fallback para retângulo comum quando não (Safari mais antigo ainda ganha a
+etiqueta, só sem o canto redondo — nunca fica sem etiqueta por causa de um
+recurso opcional). Padding/altura/fonte consistentes, contraste garantido
+(texto `#050810` sobre fundo colorido, mesma regra já real de
+`PriceLabelStackPlugin`).
+
+Aplicado a **4 dos 5** pontos que desenhavam texto nu:
+`LiquidityZonesPlugin` (FVG/OB), `KillZoneBandsPlugin` (nome da janela),
+`LiquidationHeatmapPlugin` (valor de pico), `InstitutionalZonePlugin`
+(rótulo de confluência). `PriceLabelStackPlugin` ganhou só o `roundRect`
+no seu `fillRect` já existente (mesmo raio, `CANVAS_LABEL_RADIUS`
+compartilhado) — migrar toda a lógica pra `drawCanvasLabel` reabriria
+código já testado (conector, anti-colisão) sem ganho real.
+
+**Deliberadamente NÃO aplicado a `MarketSessionBandsPlugin`**: as 2 linhas
+de texto desse plugin (nome da sessão + janela UTC) já vivem dentro de uma
+faixa de fundo dedicada (24px no topo), e o próprio arquivo documenta
+Sessões como "Prioridade BAIXA por design... nunca deveria competir por
+atenção". Uma caixa opaca ali tornaria a camada de MENOR prioridade MAIS
+proeminente visualmente — direto contra a Parte 13 da própria diretiva
+("quanto menor a importância, mais discreto"). Exceção reasoned, não uma
+omissão.
+
+## Problemas encontrados
+
+- Zero canto suavizado em todo o gráfico (achado real, `roundRect`: 0
+  ocorrências).
+- 5 de 6 rótulos sem caixa/padding/contraste consistente — inconsistência
+  visual real entre plugins, cada um com sua própria convenção ad-hoc.
+- Tipografia, ao contrário do presumido pela diretiva, já estava 100%
+  unificada — não um problema real.
+
+## Otimizações aplicadas
+
+Nenhuma mudança de performance nesta rodada — `drawCanvasLabel` adiciona
+no máximo 1 `beginPath`/`roundRect`/`fill` a mais por rótulo desenhado
+(dezena de rótulos por frame, no pior caso), custo desprezível dentro do
+mesmo orçamento de 3-5ms/frame já medido para os 12 plugins combinados
+(ver auditoria de performance da rodada anterior).
+
+## Itens auditados (Parte 16 — auditoria final)
+
+Varredura final desta sessão, focada em achar qualquer problema real
+restante compatível com o escopo já tocado hoje (LEI 24, decay, labels):
+
+- `grep` por `Math.random()` em todo `ramber-ui/src` → só as 5 ocorrências
+  já conhecidas, todas em comentário (nenhuma no fluxo real).
+- `grep` por `setLineDash` em `chart/*.tsx` → zero ocorrências (Fio de
+  Seda intacto em toda a sessão, incluindo os arquivos tocados hoje).
+- Os 5 arquivos editados nesta rodada (`LiquidityZonesPlugin`,
+  `KillZoneBandsPlugin`, `LiquidationHeatmapPlugin`,
+  `InstitutionalZonePlugin`, `PriceLabelStackPlugin`) — nenhum ganhou
+  nova dependência de rede, nova credencial, ou novo `Math.random()`.
+- `nexus/canvas-label.ts` é 100% puro (zero import de React/
+  lightweight-charts) — mesma disciplina de `annotation-decay.ts`/
+  `orderflow-heatmap-draw.ts`.
+
+Nenhum problema arquitetural novo encontrado além do que já está
+documentado no backlog (task #82) das rodadas anteriores desta sessão.
+
+## Recomendações para a próxima evolução do AR10 CYBORG
+
+1. Resolver as 2 pendências em aberto (Radar/LEI 24, Parte 5) antes de
+   qualquer nova diretiva de confluência — ambas tocam a lei mais
+   importante do projeto.
+2. Fechar os 4 gaps remanescentes de `institutional-zones.ts` (Market
+   Structure, Volume Profile POC, Session Key Levels, Liquidity Sweep
+   evento) — já documentado, aditivo, baixo risco.
+3. Avaliar `event-bus.ts` (3 publishers reais, zero subscribers) — decidir
+   se vira infraestrutura real ou é removido.
+4. Considerar migrar `PriceLabelStackPlugin` para `drawCanvasLabel`
+   completo (não só o raio) numa sessão dedicada, com verificação visual
+   real via Playwright em ambiente com egress — hoje é uma exceção
+   deliberada por baixo risco, não uma decisão permanente.
+5. Verificação visual pixel-a-pixel de TODA a sessão (fade de sessões,
+   reordenação de camadas, etiquetas com canto suave) segue pendente de
+   uma sessão com egress real às exchanges (iPad do Operador).
+
+## Verificação final (Adendo)
+
+`tsc --noEmit` limpo · **122 arquivos / 2069 testes** (100%, +10 novos:
+`nexus-canvas-label.test.ts` — execução real da primitiva de desenho,
+incluindo o caso adversarial de fallback sem `roundRect`) · `npm run
+build` ok · Playwright real confirmou zero regressão de console (mesma
+limitação de sandbox sem egress a exchanges).
+
+**Nota real sobre recuperação de estado**: durante esta rodada, o
+diretório de trabalho local ficou temporariamente dessincronizado do
+commit real já publicado no GitHub (`9053140`, a "Diretriz Final de
+Lapidação Visual" da seção acima) — as edições deste Adendo foram
+inicialmente aplicadas por cima de uma versão desatualizada de 5 arquivos.
+Diagnosticado via contagem de testes inconsistente (2057 em vez do
+esperado 2069), confirmado via `git fetch`/reflog que o commit real
+estava seguro no remoto, corrigido com `git merge --ff-only` para a base
+correta + reaplicação limpa do trabalho deste Adendo (nenhum conflito,
+já que os 5 arquivos não foram tocados pelo commit 9053140). Nenhum
+trabalho foi perdido; documentado aqui por transparência, não por ser um
+problema de arquitetura do produto.

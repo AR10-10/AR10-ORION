@@ -34,6 +34,10 @@ import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeKillZoneSpans, type KillZoneSpan } from "../nexus/kill-zones";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
+// Diretriz Final de Lapidação Visual, Adendo, Parte 11: rótulo de nome da
+// janela virou caixa real (mesma primitiva de LiquidityZonesPlugin/
+// LiquidationHeatmapPlugin/InstitutionalZonePlugin).
+import { drawCanvasLabel } from "../nexus/canvas-label";
 
 export const KILL_ZONE_DECAY: DecayConfig = { fadeStartCandles: 50, expireCandles: 200, minAlpha: 0.12 };
 
@@ -141,8 +145,10 @@ export function KillZoneBandsPlugin({ chart, series, data }: KillZoneBandsPlugin
         ctx.stroke();
 
         if (clippedWidth >= MIN_LABEL_WIDTH_PX) {
-          ctx.fillStyle = `rgba(255, 176, 32, ${(alpha * LABEL_ALPHA).toFixed(3)})`;
-          ctx.fillText(span.label.toUpperCase(), clippedX + 3, 3);
+          // Diretriz Final Adendo Parte 11: caixa real em vez de texto nu
+          // — mesma cor/mesmo decaimento real de antes (alpha*LABEL_ALPHA
+          // já bakeada no rgba), só a primitiva de desenho muda.
+          drawCanvasLabel(ctx, clippedX + 3, 3, { fill: `rgba(255, 176, 32, ${(alpha * LABEL_ALPHA).toFixed(3)})`, text: span.label.toUpperCase() });
         }
       }
     };

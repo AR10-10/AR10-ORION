@@ -21,6 +21,14 @@
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { resolveLabelStackPositions } from "./price-label-stack";
+// Diretriz Final de Lapidação Visual, Adendo, Parte 11 ("cantos
+// suavizados"): só a constante de raio é compartilhada com
+// nexus/canvas-label.ts (mesma primitiva usada pelos outros 4 plugins de
+// etiqueta) — a lógica de caixa/conector/anti-colisão deste plugin já é
+// própria e testada, migrar pra drawCanvasLabel exigiria reabrir essa
+// lógica sem ganho real; só o roundRect com o mesmo raio foi adicionado
+// aqui, com o mesmo fallback honesto para Safari sem suporte.
+import { CANVAS_LABEL_RADIUS } from "../nexus/canvas-label";
 
 export interface PriceAxisLabel {
   price: number;
@@ -184,7 +192,13 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
 
           ctx.globalAlpha = labelAlpha;
           ctx.fillStyle = opaque(entry.color);
-          ctx.fillRect(boxX, boxY, boxWidth, LABEL_HEIGHT_PX);
+          ctx.beginPath();
+          if (typeof ctx.roundRect === "function") {
+            ctx.roundRect(boxX, boxY, boxWidth, LABEL_HEIGHT_PX, CANVAS_LABEL_RADIUS);
+            ctx.fill();
+          } else {
+            ctx.fillRect(boxX, boxY, boxWidth, LABEL_HEIGHT_PX); // fallback honesto — motor sem roundRect ainda desenha a caixa, só com canto reto.
+          }
 
           ctx.fillStyle = "#050810"; // texto escuro sobre fundo colorido — mesmo contraste dos tags nativos que este overlay substitui
           ctx.textBaseline = "middle";

@@ -36,6 +36,12 @@
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
+// Diretriz Final de Lapidação Visual, Adendo, Parte 11 ("etiquetas
+// profissionais"): texto nu direto sobre a zona virou caixa real (canto
+// suave + contraste garantido) — mesma primitiva compartilhada por
+// KillZoneBandsPlugin/LiquidationHeatmapPlugin/InstitutionalZonePlugin,
+// zero segunda implementação de "caixa de etiqueta".
+import { drawCanvasLabel } from "../nexus/canvas-label";
 
 export interface FillableZone {
   type: "BULLISH" | "BEARISH";
@@ -177,14 +183,15 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
         ctx.lineWidth = 1;
         ctx.strokeStyle = palette.border;
         ctx.strokeRect(rectX + 0.5, rectY + 0.5, Math.max(0, rectWidth - 1), Math.max(0, rectHeight - 1));
-        // Label elegante (Ordem "Ciborgue Vivo" §1): identifica o tipo direto
-        // no gráfico, sem abrir painel nenhum — mesma opacidade decrescente
-        // da própria zona, nunca compete visualmente com uma zona já velha.
+        // Label elegante (Ordem "Ciborgue Vivo" §1, caixa real desde a
+        // Diretriz Final Adendo Parte 11): identifica o tipo direto no
+        // gráfico, sem abrir painel nenhum — mesma opacidade decrescente
+        // da própria zona (globalAlpha já ativo aqui), nunca compete
+        // visualmente com uma zona já velha. Caixa usa a cor de borda da
+        // paleta (mais opaca que o fill) — contraste garantido pela
+        // primitiva, nunca decidido por acaso.
         if (rectWidth > 24 && rectHeight > 10) {
-          ctx.font = "9px -apple-system, sans-serif";
-          ctx.fillStyle = palette.border;
-          ctx.textBaseline = "top";
-          ctx.fillText(label, rectX + 3, rectY + 2);
+          drawCanvasLabel(ctx, rectX + 3, rectY + 3, { fill: palette.border, text: label });
         }
         ctx.globalAlpha = 1;
       };
