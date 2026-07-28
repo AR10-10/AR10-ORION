@@ -1121,15 +1121,28 @@ export function EnhancedChart_110_Percent({
     sweepLinesRef.current = [];
     if (!visibility.liquidity_sweep) return;
 
+    // Achado real do Operador (captura de tela: "SWEEP ZONE (2x)" com 2
+    // linhas separadas por trás dela): este efeito desenhava 1 price line
+    // POR NÍVEL BRUTO (t.sweptLevels.forEach), enquanto priceAxisLabels
+    // abaixo já deduplicava+clusterizava (seenSweepPrices + clusterSweptPrices)
+    // pra desenhar 1 rótulo por cluster real — um cluster "(2x)" tinha 1
+    // caixa de texto mas 2 linhas nativas quase idênticas empilhadas por
+    // baixo, o mismatch real que lia como poluição/duplicação. Mesma
+    // deduplicação (Set global de preço, mesmo espírito de dedup entre
+    // traps distintos) + MESMO clusterSweptPrices/LIQUIDITY_PROXIMITY_PCT
+    // do bloco de rótulos — zero segunda regra: 1 cluster real = 1 linha.
+    const seenSweepPrices = new Set<number>();
     (traps ?? []).forEach((t) => {
       if (t.kind !== "STOP_HUNT_TOPO" && t.kind !== "STOP_HUNT_FUNDO") return;
-      t.sweptLevels.forEach(({ price, index }) => {
-        const age = data.length - 1 - index;
+      const uniqueLevels = t.sweptLevels.filter((l) => Number.isFinite(l.price) && !seenSweepPrices.has(l.price));
+      uniqueLevels.forEach((l) => seenSweepPrices.add(l.price));
+      for (const cluster of clusterSweptPrices(uniqueLevels, LIQUIDITY_PROXIMITY_PCT)) {
+        const age = data.length - 1 - cluster.latestIndex;
         const alpha = ageAlpha(age, SWEEP_DECAY);
-        if (alpha <= 0) return; // expirado (>200 candles) — some da TELA, dado real intacto em trap-detection.ts.
+        if (alpha <= 0) continue; // expirado (>200 candles) — some da TELA, dado real intacto em trap-detection.ts.
         sweepLinesRef.current.push(
           series.createPriceLine({
-            price,
+            price: cluster.avgPrice,
             // Lapidação institucional: H33 laranja — era H45 (255,191,0), a
             // 2° do pico do Liquidation Heatmap (LiquidationHeatmapPlugin.tsx
             // PEAK_LABEL_COLOR). Mesma luminosidade/saturação/alpha a 2° de
@@ -1160,7 +1173,7 @@ export function EnhancedChart_110_Percent({
             title: "",
           }),
         );
-      });
+      }
     });
   }, [traps, visibility.liquidity_sweep, data.length]);
 

@@ -75,6 +75,15 @@ export interface LayerRelevanceInput {
   obstacleZoneCount: number; // chartObstacleZones.length — obstáculos REAIS no caminho do plano ativo
   // Liquidez (EQH/EQL não varridas) — proximidade real ao preço vivo.
   unsweptLiquidityNearPrice: boolean;
+  // Achado real (relato do Operador após captura de tela: FVG/Order
+  // Blocks somem do gráfico depois de um movimento forte, mesmo com
+  // zonas reais ainda não mitigadas): proximidade ao preço vivo é o
+  // sinal ERRADO para uma zona ESTRUTURAL — FVG/OB são referência
+  // válida até serem mitigadas, não só quando o preço está em cima
+  // delas agora (mesma categoria de trend_channel abaixo: propriedade
+  // real da própria zona, nunca distância). true quando existe pelo
+  // menos 1 FVG ou Order Block real não mitigado, qualquer distância.
+  hasUnmitigatedStructuralZone: boolean;
   // BOS/CHOCH: idade real em candles já convertida no alpha de decaimento
   // que o próprio StructureBreakMarkersPlugin usa para desenhar — mesma
   // fonte, nunca uma segunda curva. null = nenhum rompimento registrado.
@@ -86,8 +95,15 @@ export interface LayerRelevanceInput {
   // probabilidade (Regra de Ouro 2), só aderência geométrica de razão.
   harmonicBestFitScore: number | null;
   // Fibonacci: pelo menos um nível real da Matriz de Confluência dentro
-  // da faixa de proximidade do preço vivo.
+  // da faixa de proximidade do preço vivo — usado agora só como sinal de
+  // DESTAQUE (emphasis), mesma razão de hasUnmitigatedStructuralZone
+  // acima: a grade de retração é referência estrutural válida a partir
+  // do swing que a originou, não só quando o preço está em cima dela.
   fibonacciNearPrice: boolean;
+  // true quando a Matriz de Confluência tem pelo menos 1 nível real
+  // calculado (qualquer distância do preço vivo) — decide relevant;
+  // fibonacciNearPrice acima decide só o destaque dentro disso.
+  hasFibonacciLevels: boolean;
   // Premium/Discount: zona real do dealing range (null = sem 2 swings
   // opostos confirmados ainda).
   premiumDiscountZone: PremiumDiscountZone | null;
@@ -209,7 +225,9 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
       ? { relevant: true, emphasis: liquidityHighlight ? "highlight" : "normal", reason: `${input.obstacleZoneCount} obstáculo(s) real(is) no caminho do plano ativo` }
       : input.unsweptLiquidityNearPrice
         ? { relevant: true, emphasis: "normal", reason: `liquidez não varrida a menos de ${fmtPct(LIQUIDITY_PROXIMITY_PCT)} do preço` }
-        : { relevant: false, emphasis: "normal", reason: "nenhuma zona real no caminho do plano nem liquidez próxima do preço" },
+        : input.hasUnmitigatedStructuralZone
+          ? { relevant: true, emphasis: "normal", reason: "FVG/Order Block real não mitigado — referência estrutural válida até ser mitigada, mesmo longe do preço vivo agora" }
+          : { relevant: false, emphasis: "normal", reason: "nenhuma zona real no caminho do plano, liquidez próxima do preço, nem FVG/Order Block não mitigado" },
 
     structure_breaks: structureBreakRelevant
       ? { relevant: true, emphasis: structureBreakHighlight ? "highlight" : "normal", reason: "rompimento BOS/CHOCH ainda dentro da janela real de decaimento (annotation-decay.ts)" }
@@ -253,9 +271,15 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
       ? { relevant: true, emphasis: "normal", reason: "tendência real do fluxo (CVD) fortalecendo ou enfraquecendo, não estável" }
       : { relevant: false, emphasis: "normal", reason: "sem tendência real de fluxo detectável (estável ou dado insuficiente)" },
 
-    fibonacci: input.fibonacciNearPrice
-      ? { relevant: true, emphasis: "normal", reason: `nível real da Matriz de Confluência a menos de ${fmtPct(FIBONACCI_PROXIMITY_PCT)} do preço` }
-      : { relevant: false, emphasis: "normal", reason: "nenhum nível real de Fibonacci próximo do preço vivo" },
+    fibonacci: input.hasFibonacciLevels
+      ? {
+          relevant: true,
+          emphasis: input.fibonacciNearPrice ? "highlight" : "normal",
+          reason: input.fibonacciNearPrice
+            ? `nível real da Matriz de Confluência a menos de ${fmtPct(FIBONACCI_PROXIMITY_PCT)} do preço`
+            : "Matriz de Confluência real calculada — grade de retração válida a partir do swing, mesmo longe do preço vivo agora",
+        }
+      : { relevant: false, emphasis: "normal", reason: "nenhum nível real de Fibonacci calculado ainda" },
 
     premium_discount: premiumDiscountRelevant
       ? { relevant: true, emphasis: "normal", reason: `zona real ${input.premiumDiscountZone} (fora do equilíbrio)` }

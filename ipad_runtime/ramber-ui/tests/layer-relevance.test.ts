@@ -34,10 +34,12 @@ const BASE: LayerRelevanceInput = {
   tradePlanActive: false,
   obstacleZoneCount: 0,
   unsweptLiquidityNearPrice: false,
+  hasUnmitigatedStructuralZone: false,
   structureBreakAlpha: null,
   volumeProfileNearPrice: false,
   harmonicBestFitScore: null,
   fibonacciNearPrice: false,
+  hasFibonacciLevels: false,
   premiumDiscountZone: null,
   vwapState: null,
   nexusLineState: null,
@@ -154,8 +156,8 @@ describe('EPC FINAL §3/§12: emphasis (destaque) — só sobre um gradiente REA
   });
 });
 
-describe('liquidity_zones: obstáculo real no caminho OU liquidez real próxima, nunca inventado', () => {
-  it('sem plano ativo e sem liquidez próxima => não relevante', () => {
+describe('liquidity_zones: obstáculo real no caminho OU liquidez real próxima OU FVG/OB real não mitigado, nunca inventado', () => {
+  it('sem plano ativo, sem liquidez próxima e sem FVG/OB real => não relevante', () => {
     expect(computeLayerRelevance(BASE).liquidity_zones.relevant).toBe(false);
   });
   it('plano ativo mas 0 obstáculos reais no caminho => não relevante por obstáculo (obstacleZoneCount governa, não só tradePlanActive)', () => {
@@ -170,6 +172,20 @@ describe('liquidity_zones: obstáculo real no caminho OU liquidez real próxima,
   it('sem plano mas liquidez real não varrida perto do preço => relevante mesmo assim', () => {
     const r = computeLayerRelevance({ ...BASE, unsweptLiquidityNearPrice: true });
     expect(r.liquidity_zones.relevant).toBe(true);
+  });
+  // Achado real (relato do Operador após captura de tela real: FVG/Order
+  // Blocks somem do gráfico depois de um movimento forte de preço) —
+  // existência real de uma zona não mitigada já basta, mesmo longe do
+  // preço vivo e sem obstáculo no caminho do plano.
+  it('sem obstáculo, sem liquidez próxima, mas com FVG/Order Block real não mitigado (longe do preço) => relevante mesmo assim', () => {
+    const r = computeLayerRelevance({ ...BASE, hasUnmitigatedStructuralZone: true });
+    expect(r.liquidity_zones.relevant).toBe(true);
+    expect(r.liquidity_zones.reason).toContain('não mitigado');
+  });
+  it('nenhum dos 3 sinais reais (obstáculo/proximidade/zona não mitigada) => motivo honesto cita os 3', () => {
+    const r = computeLayerRelevance(BASE).liquidity_zones;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('nenhuma zona real no caminho');
   });
 });
 
@@ -282,14 +298,29 @@ describe('cvd: tendência real do fluxo (fortalecendo/enfraquecendo), nunca a le
   });
 });
 
-describe('fibonacci: proximidade real a um nível confirmado da Matriz de Confluência', () => {
-  it('sem nível próximo real => não relevante', () => {
+describe('fibonacci: existência real de nível na Matriz de Confluência decide relevant; proximidade decide só o destaque', () => {
+  // Achado real (relato do Operador após captura de tela real: a grade de
+  // Fibonacci some do gráfico depois de um movimento forte de preço) —
+  // a Matriz de Confluência é referência estrutural válida a partir do
+  // swing que a originou, não só quando o preço está em cima dela agora.
+  it('sem nenhum nível real calculado ainda => não relevante', () => {
     expect(computeLayerRelevance(BASE).fibonacci.relevant).toBe(false);
   });
-  it('com nível real próximo => relevante, motivo cita o limiar declarado', () => {
-    const r = computeLayerRelevance({ ...BASE, fibonacciNearPrice: true });
+  it('nível(is) real(is) calculado(s) mas longe do preço vivo => relevante mesmo assim, emphasis normal', () => {
+    const r = computeLayerRelevance({ ...BASE, hasFibonacciLevels: true });
     expect(r.fibonacci.relevant).toBe(true);
+    expect(r.fibonacci.emphasis).toBe('normal');
+    expect(r.fibonacci.reason).toContain('grade de retração');
+  });
+  it('nível real E perto do preço vivo => relevante COM destaque, motivo cita o limiar declarado', () => {
+    const r = computeLayerRelevance({ ...BASE, hasFibonacciLevels: true, fibonacciNearPrice: true });
+    expect(r.fibonacci.relevant).toBe(true);
+    expect(r.fibonacci.emphasis).toBe('highlight');
     expect(r.fibonacci.reason).toContain(`${FIBONACCI_PROXIMITY_PCT.toFixed(1)}%`);
+  });
+  it('fail-closed defensivo: fibonacciNearPrice sozinho (sem hasFibonacciLevels) nunca basta — existência real governa relevant, nunca proximidade isolada', () => {
+    const r = computeLayerRelevance({ ...BASE, fibonacciNearPrice: true });
+    expect(r.fibonacci.relevant).toBe(false);
   });
 });
 

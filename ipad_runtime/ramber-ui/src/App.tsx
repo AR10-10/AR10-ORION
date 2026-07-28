@@ -6873,8 +6873,18 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
     const withinPct = (target: number, pct: number) => p !== null && p > 0 && (Math.abs(target - p) * 100) / p <= pct;
     const liquidityZones: LiquidityZone[] = smcZones?.liquidityZones ?? [];
     const unsweptLiquidityNearPrice = liquidityZones.some((z) => !z.swept && withinPct(z.price, LIQUIDITY_PROXIMITY_PCT));
+    // Achado real (relato do Operador após captura de tela — FVG/Order
+    // Blocks somem do gráfico depois de um movimento forte): existência
+    // real, qualquer distância do preço — proximidade fica só como sinal
+    // de destaque em outras camadas (Liquidity/Volume Profile), nunca
+    // como gate único para uma zona ESTRUTURAL que continua válida até
+    // ser mitigada.
+    const hasUnmitigatedStructuralZone =
+      (smcZones?.fairValueGaps ?? []).some((z: PriceZone) => !z.mitigated) ||
+      (smcZones?.orderBlocks ?? []).some((z: PriceZone) => !z.mitigated);
     const fibLevels = fibonacciMatrix?.levels ?? [];
     const fibonacciNearPrice = fibLevels.some((l) => withinPct(l.price, FIBONACCI_PROXIMITY_PCT));
+    const hasFibonacciLevels = fibLevels.length > 0;
     const vp = volumeProfileSnapshot?.fixedRange;
     const volumeProfileNearPrice = !vp
       ? false
@@ -6916,10 +6926,12 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       tradePlanActive: Boolean(chartTradePlan) || Boolean(engineFallbackLevels),
       obstacleZoneCount: chartObstacleZones.length,
       unsweptLiquidityNearPrice,
+      hasUnmitigatedStructuralZone,
       structureBreakAlpha,
       volumeProfileNearPrice,
       harmonicBestFitScore: chartHarmonics && chartHarmonics.length > 0 ? chartHarmonics[0].fitScore : null,
       fibonacciNearPrice,
+      hasFibonacciLevels,
       premiumDiscountZone: chartPremiumDiscount?.zone ?? null,
       vwapState: vwapCtx?.state ?? null,
       nexusLineState: nlState ?? null,

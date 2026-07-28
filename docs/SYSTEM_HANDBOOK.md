@@ -4970,6 +4970,101 @@ ok.
 **Riscos conhecidos**: nenhum de decisão (LEI 24 intacta — camada
 puramente informativa/geométrica, nunca gera Entry/Stop/Target).
 
+### 6.65 Captura real (ZECUSDT 1H) + relato do Operador: 3 achados
+distintos — duplicação real de Sweep, "triângulo" no canto sem código
+correspondente, e FVG/OB/Fibonacci somem depois de um movimento forte
+
+O Operador enviou uma segunda captura de tela REAL do app ao vivo,
+apontando 3 problemas concretos. Cada um investigado separadamente antes
+de qualquer correção (nenhum consertado por suposição).
+
+**1) "SWEEP ZONE ↑ (2x) 31%" (caixa larga) sobreposta a "SWEEP ↑ 33%"
+(linha fina) — duplicação real confirmada.** Causa raiz: `priceAxisLabels`
+(rótulos) já deduplicava por preço e clusterizava via `clusterSweptPrices`
+antes de desenhar — 1 cluster real = 1 caixa de texto. O efeito que
+desenha as price lines NATIVAS (`sweepLinesRef`) nunca recebeu a mesma
+disciplina: iterava `t.sweptLevels.forEach` bruto, 1 linha por nível não
+deduplicado. Um cluster "(2x)" tinha 1 rótulo mas 2 linhas quase
+idênticas empilhadas por baixo dele — o mismatch real que lia como
+poluição/duplicação. Corrigido: o efeito da price line agora usa a
+MESMA deduplicação (`Set` global de preço) + o MESMO `clusterSweptPrices`/
+`LIQUIDITY_PROXIMITY_PCT` do bloco de rótulos — 1 cluster real = 1 linha,
+nunca mais.
+
+**2) Forma triangular/hachurada no canto superior esquerdo — investigada,
+sem código correspondente encontrado.** Busca exaustiva (`ctx.rotate`,
+`ctx.clip(path)`, `createPattern`, hachura, wedge/triângulo) em todos os
+plugins de canvas: zero ocorrência em todo o repositório — nenhum plugin
+desenha diagonal ou padrão hachurado (a própria regra "Fio de Seda" já
+proíbe `setLineDash`, e não existe nenhum equivalente pra preenchimento).
+Hipótese fundamentada (não suposição — baseada na ordem real de montagem
+dos plugins, `EnhancedChart_110_Percent.tsx:2196-2299`): múltiplos
+retângulos translúcidos alinhados a eixo de plugins DIFERENTES (banda
+âmbar do Kill Zone recortada na borda esquerda dos dados visíveis +
+linha/caixa de Sweep + eventualmente a banda da Zona Institucional)
+pintando na MESMA região do canto superior esquerdo, comprimidos numa
+captura de tela, podem ler visualmente como "hachurado" mesmo sendo cada
+um deles um retângulo/linha reta comum. A correção do item 1 acima já
+reduz a densidade real de retângulos amber sobrepostos nessa região —
+sem uma nova captura pós-correção, não dá pra confirmar se o efeito
+óptico desaparece por completo; fica como item a reobservar.
+
+**3) FVG/Order Blocks e a grade de Fibonacci sumiam do gráfico depois de
+um movimento forte de preço — achado real, não bug de renderização.**
+Causa raiz confirmada no código: `liquidity_zones` (FVG/OB) e `fibonacci`
+só ficavam `relevant` quando havia obstáculo real no caminho do plano OU
+o nível estava a menos de ~0.4-0.5% do preço vivo — nenhuma das duas
+condições cobre "a zona/nível existe de verdade, só não está perto agora".
+Depois de um movimento de -6.63% como o da captura, toda a estrutura
+mapeada perto do topo anterior fica >5% longe do preço — a Relevance
+Engine escondia CORRETAMENTE por essa regra, mas a regra em si tratava
+proximidade como sinônimo de existência para duas camadas que são
+referência ESTRUTURAL (uma FVG/OB é válida até ser mitigada, a grade de
+Fibonacci é válida a partir do swing que a originou — nenhuma das duas
+"expira" só por o preço se afastar). Corrigido: `LayerRelevanceInput`
+ganha `hasUnmitigatedStructuralZone` (>=1 FVG ou Order Block real não
+mitigado, qualquer distância) e `hasFibonacciLevels` (Matriz de
+Confluência tem >=1 nível real calculado) — cada um vira uma 3ª condição
+real de `relevant`. A proximidade antiga (`fibonacciNearPrice`) não foi
+descartada: virou o sinal de `emphasis: "highlight"` (mesmo mecanismo já
+real do EPC FINAL §3/§12) — perto do preço agora só deixa a camada mais
+destacada, nunca decide sozinha se ela aparece.
+
+**Harmonics ("triângulo" na fala do Operador pode se referir a isto
+também) — gate MANTIDO de propósito, distinção explicada, não uma
+omissão.** `harmonicBestFitScore >= 0.75` não é um filtro de
+PROXIMIDADE — é um filtro de QUALIDADE geométrica do próprio padrão
+(aderência real de razão XABCD). Desenhar um padrão de fit baixo seria
+ativamente enganoso (uma forma que parece um Gartley/Bat mas não bate a
+proporção Fibonacci de verdade), categoria diferente de "referência real
+mas momentaneamente longe do preço". Sem evidência de um limiar melhor
+que 0.75, o número não foi alterado — só a semântica documentada com
+clareza para não confundir com o achado 3 acima.
+
+**Escopo honesto — o que NÃO foi alterado nesta rodada**: `equal_highs_
+lows` (EQH/EQL) continua com o mesmo gate de proximidade
+(`unsweptLiquidityNearPrice`) — mantido de propósito: EQH/EQL é
+fundamentalmente sobre "o preço está prestes a varrer este nível", uma
+pergunta de proximidade genuína (diferente de FVG/OB), e é a MESMA
+matéria-prima do Sweep, que já teve um bug real de acúmulo corrigido em
+§6.63 — soltar o gate aqui reabriria exatamente aquele risco. Se o
+Operador achar que EQH/EQL também deveria aparecer mais, é uma decisão
+separada, não uma extensão automática desta.
+
+**Testes**: `tsc --noEmit` limpo · **121 arquivos / 2044 testes** (100%,
++4 novos: 2 para `liquidity_zones` com `hasUnmitigatedStructuralZone`
+real, incluindo o caso adversarial de proximidade sozinha nunca bastar;
+2 para `fibonacci` reescritos para o novo contrato relevant/emphasis,
+incluindo o mesmo caso adversarial fail-closed) · `npm run build` ok.
+
+**Riscos conhecidos**: nenhum de decisão (LEI 24 intacta). Risco de
+produto, não de arquitetura: mostrar FVG/OB/Fibonacci mais frequentemente
+reintroduz ALGUMA densidade visual que a Relevance Engine existe para
+reduzir — mitigado por manter a decisão binária (existe ou não existe
+zona real), nunca voltar a "sempre visível incondicional", e por manter
+`emphasis` fazendo o trabalho fino de destacar só o que está genuinamente
+perto do preço agora.
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 
