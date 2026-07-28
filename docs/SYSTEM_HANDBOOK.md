@@ -4161,6 +4161,94 @@ list-virtualization (order book/Radar/Omnibox), dependência
 Scenario lines (hoje sem gate nenhum), `AbortController` nos 2 fetches
 privados fora do Bus (ticker, funding+OI).
 
+### 6.56 EXTENSÃO OFICIAL — Fase de Evolução do Organismo: achado real de
+performance (cache por referência em 2 plugins de canvas), evidência
+medida antes de mexer em qualquer coisa
+
+Diretiva do Operador ("EXTENSÃO OFICIAL — FASE DE EVOLUÇÃO DO
+ORGANISMO"): usar o conhecimento da auditoria para reduzir "cálculos
+duplicados"/"renderizações desnecessárias"/latência, sem criar segunda
+arquitetura. Em vez de reabrir a auditoria inteira de novo (já
+consolidada em `AUDITORIA_CONSOLIDACAO_EVOLUCAO.md`/
+`MAPA_EVOLUCAO_CIBORGUE.md`), esta entrada audita concretamente o
+próprio código que acabou de nascer em §6.55 — a disciplina real de
+"organismo vivo" é auto-observação contínua, não só sobre módulos
+antigos.
+
+**Investigação (evidência antes de decisão, nunca suposição)**: os 9
+plugins de overlay do canvas seguem a mesma arquitetura (dirty-flag +
+rAF). Uma varredura (`grep` por `compute[A-Z]` dentro de cada `draw()`)
+achou 3 plugins que chamam uma função de derivação pura DIRETAMENTE
+dentro do closure de desenho: `KillZoneBandsPlugin`
+(`computeKillZoneSpans`), `MarketSessionBandsPlugin`
+(`computeSessionBoundaries`) e `LiquidationHeatmapPlugin`
+(`computeLiquidationHeatmap`). Nos 3 casos, o resultado só depende de
+`data`/`liquidations` (não do range visível), mas `draw()` roda a cada
+pan/zoom/resize via `subscribeVisibleLogicalRangeChange`/
+`ResizeObserver` — ou seja, um recálculo idêntico e descartado a cada
+redraw. Em vez de "consertar os 3 por padrão", um benchmark real
+(candles/eventos sintéticos nos tetos reais do app — `MAX_CHART_HISTORY
+= 2000` de `App.tsx` para candles, retenção de 500 para o feed de
+liquidação) mediu o custo de cada um:
+
+| Função | custo/chamada no teto real |
+|---|---|
+| `computeKillZoneSpans` (N=2000) | ~1,0-1,2ms |
+| `computeSessionBoundaries` (N=2000) | ~0,49-0,57ms |
+| `computeLiquidationHeatmap` (N=500) | ~0,006ms |
+
+`computeKillZoneSpans`/`computeSessionBoundaries` custam 2-3 ordens de
+magnitude mais que `computeLiquidationHeatmap` (o primeiro itera
+`new Date()` + filtro de 4 zonas por candle; o segundo é uma soma linear
+simples sobre eventos, tipicamente dezenas). Num orçamento de 16,6ms/
+frame (60fps, Regra de Ouro 7), ~1,2ms+0,57ms de trabalho REDUNDANTE a
+cada pan contínuo é uma fração real (~10%) só destes dois; 0,006ms não
+é.
+
+**Solução aplicada** (só onde a evidência apoiou): `KillZoneBandsPlugin`
+e `MarketSessionBandsPlugin` ganharam um cache por IDENTIDADE de
+referência (`spansCacheRef`/`boundariesCacheRef`) — `dataRef.current`
+só troca de objeto quando `App.tsx` chama `setChartData` de verdade
+(candle novo/troca de símbolo/timeframe), nunca em pan/zoom/resize
+(confirmado lendo a cadeia real de props: `chartData` state → `data`
+prop de `ChartWidget` → `data` prop de `EnhancedChart_110_Percent` →
+`data` prop do plugin, sem nenhum `.slice()`/spread intermediário que
+quebraria a identidade). `LiquidationHeatmapPlugin` NÃO recebeu o mesmo
+cache — a diretiva pede reduzir latência real, não "consistência" pela
+consistência; adicionar uma abstração sem benefício medido violaria a
+própria disciplina de engenharia deste repositório (CLAUDE.md: não
+introduzir complexidade além do que a tarefa exige).
+
+**Impacto esperado**: pan/zoom contínuo com Kill Zones e/ou Sessões
+ativas deixa de recomputar spans/boundaries a cada frame — só recomputa
+quando candles novos chegam. Zero mudança de comportamento visual
+(mesmo resultado, só sem o trabalho redundante).
+
+**Riscos conhecidos**: nenhum — cache por `===` de referência é
+correto por construção (nunca fica stale, porque QUALQUER mudança real
+de `data` troca a referência); reversível trivialmente (remover as 2
+linhas de cache volta ao comportamento anterior, idêntico exceto no
+custo).
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 1979 testes** (100%,
++3 novos: padrão-de-fonte em `refinamento-final-wiring.test.ts`
+confirmando o cache nos 2 plugins corrigidos e a AUSÊNCIA deliberada do
+cache no 3º, para a decisão de não-mexer ficar travada por teste tanto
+quanto a decisão de mexer) · build de produção ok · verificação
+Playwright ao vivo (painel "Camadas do Gráfico" seguindo idêntico,
+zero regressão). Benchmark descartável (não commitado, `_bench-
+throwaway.test.ts`, deletado após medir).
+
+**Backlog/próximos passos honestos**: este achado nasceu de uma
+varredura focada nos plugins mais recentes, não de uma auditoria
+sistemática dos 9 plugins de overlay — os outros 6
+(`LiquidityZonesPlugin`/`StructureBreakMarkersPlugin`/
+`VolumeProfilePlugin`/`OrderFlowHeatmapPlugin`/`NeuralMarketAuraPlugin`/
+`TradePlanZonePlugin`) recebem dados JÁ pré-computados via props
+(`useMemo` em `App.tsx`), não chamam `compute*` dentro do próprio
+`draw()` — confirmado pela mesma varredura `grep`, não uma suposição.
+Nenhum destes 6 tem o mesmo padrão de recálculo redundante.
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

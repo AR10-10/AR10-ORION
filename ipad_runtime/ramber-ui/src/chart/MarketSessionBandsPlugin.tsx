@@ -12,7 +12,7 @@
 // LEI 24: display only, puro contexto temporal — nunca uma decisão.
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
-import { computeSessionBoundaries } from "../nexus/market-session";
+import { computeSessionBoundaries, type SessionBoundary } from "../nexus/market-session";
 
 // Discreto de propósito — contexto de fundo, nunca compete visualmente com
 // estrutura (BOS/CHOCH), liquidez (EQH/EQL) ou o Trade Plan.
@@ -33,6 +33,13 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dataRef = useRef(data);
   const markDirtyRef = useRef<(() => void) | null>(null);
+  // Evolução do Organismo (Fase 2, "menor cálculos duplicados"): mesmo
+  // achado/mesmo fix de KillZoneBandsPlugin — computeSessionBoundaries só
+  // depende de `data`, nunca do range visível, mas draw() roda a cada
+  // pan/zoom/resize. Cache por identidade de referência evita recomputar
+  // um resultado idêntico a cada redraw (benchmark real: ~0.57ms/chamada
+  // no teto de 2000 candles — App.tsx MAX_CHART_HISTORY).
+  const boundariesCacheRef = useRef<{ data: typeof data; boundaries: SessionBoundary[] } | null>(null);
 
   // Sempre a versão mais recente dos candles para o loop de desenho ler —
   // mesmo padrão de LiquidityZonesPlugin/StructureBreakMarkersPlugin.
@@ -63,7 +70,14 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      const boundaries = computeSessionBoundaries(dataRef.current);
+      const cached = boundariesCacheRef.current;
+      let boundaries: SessionBoundary[];
+      if (cached && cached.data === dataRef.current) {
+        boundaries = cached.boundaries;
+      } else {
+        boundaries = computeSessionBoundaries(dataRef.current);
+        boundariesCacheRef.current = { data: dataRef.current, boundaries };
+      }
       if (boundaries.length === 0) return; // timeframe sem transição real na amostra (ex. candles diários) — honesto, nada a marcar.
 
       const timeScale = chart.timeScale();

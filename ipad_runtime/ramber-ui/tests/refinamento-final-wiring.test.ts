@@ -634,6 +634,38 @@ describe('VWAP Standard Deviation Bands (pedido do Operador, "ferramentas mais p
   });
 });
 
+describe('Evolução do Organismo (Fase 2, "menor cálculos duplicados"): cache por referência evita recomputar spans/boundaries a cada pan/zoom (achado com evidência real de benchmark)', () => {
+  it('KillZoneBandsPlugin cacheia computeKillZoneSpans por identidade de `data` — só recalcula quando a referência muda, nunca a cada redraw', () => {
+    const src = read('../src/chart/KillZoneBandsPlugin.tsx');
+    expect(src).toContain('const spansCacheRef = useRef<{ data: typeof data; spans: KillZoneSpan[] } | null>(null);');
+    const idx = src.indexOf('const cached = spansCacheRef.current;');
+    expect(idx, 'bloco de cache não encontrado antes do computeKillZoneSpans').toBeGreaterThan(-1);
+    const block = src.slice(idx, idx + 400);
+    expect(block).toContain('if (cached && cached.data === dataRef.current) {');
+    expect(block).toContain('spans = cached.spans;');
+    expect(block).toContain('spans = computeKillZoneSpans(dataRef.current);');
+    expect(block).toContain('spansCacheRef.current = { data: dataRef.current, spans };');
+  });
+
+  it('MarketSessionBandsPlugin recebe o MESMO fix (achado idêntico, mesma causa raiz) — cache por identidade de `data` para computeSessionBoundaries', () => {
+    const src = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    expect(src).toContain('const boundariesCacheRef = useRef<{ data: typeof data; boundaries: SessionBoundary[] } | null>(null);');
+    const idx = src.indexOf('const cached = boundariesCacheRef.current;');
+    expect(idx, 'bloco de cache não encontrado antes do computeSessionBoundaries').toBeGreaterThan(-1);
+    const block = src.slice(idx, idx + 400);
+    expect(block).toContain('if (cached && cached.data === dataRef.current) {');
+    expect(block).toContain('boundaries = cached.boundaries;');
+    expect(block).toContain('boundaries = computeSessionBoundaries(dataRef.current);');
+    expect(block).toContain('boundariesCacheRef.current = { data: dataRef.current, boundaries };');
+  });
+
+  it('LiquidationHeatmapPlugin NÃO ganhou o mesmo cache — benchmark real confirmou custo desprezível (computeLiquidationHeatmap ~0.006ms/chamada a N=500, teto real do feed) vs. computeKillZoneSpans (~1.2ms a N=2000): adicionar cache ali seria complexidade sem benefício medido, não "consistência" pela consistência', () => {
+    const src = read('../src/chart/LiquidationHeatmapPlugin.tsx');
+    expect(src).not.toContain('CacheRef');
+    expect(src).toContain('const heat: LiquidationHeatmapResult = computeLiquidationHeatmap(events, sym);');
+  });
+});
+
 describe('Kill Zones ICT no canvas (badge do header já existia, §6.48 — este plugin fecha o desenho real): camada própria, nunca dobrada em market_sessions', () => {
   it('importa KillZoneBandsPlugin — nunca uma segunda implementação de retângulo dentro de EnhancedChart_110_Percent', () => {
     const c = chart();

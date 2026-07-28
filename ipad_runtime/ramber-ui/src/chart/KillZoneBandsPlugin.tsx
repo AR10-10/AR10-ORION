@@ -20,7 +20,7 @@
 // LEI 24: display only, puro contexto temporal — nunca uma decisão.
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
-import { computeKillZoneSpans } from "../nexus/kill-zones";
+import { computeKillZoneSpans, type KillZoneSpan } from "../nexus/kill-zones";
 
 const FILL_COLOR = "rgba(255, 176, 32, 0.06)";
 const BORDER_COLOR = "rgba(255, 176, 32, 0.22)";
@@ -37,6 +37,15 @@ export function KillZoneBandsPlugin({ chart, series, data }: KillZoneBandsPlugin
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dataRef = useRef(data);
   const markDirtyRef = useRef<(() => void) | null>(null);
+  // Evolução do Organismo (Fase 2, "menor cálculos duplicados"): benchmark
+  // real confirmou computeKillZoneSpans em ~1.2ms/chamada no teto real de
+  // MAX_CHART_HISTORY=2000 candles (App.tsx) — nada alarmante isolado, mas
+  // draw() roda a cada pan/zoom/resize (rAF), e o resultado é IDÊNTICO
+  // entre esses redraws porque só depende de `data`, nunca do range
+  // visível. Cache por identidade de referência (dataRef.current só troca
+  // de objeto quando App.tsx chama setChartData de verdade) elimina o
+  // recálculo redundante sem introduzir fingerprint/hash algum.
+  const spansCacheRef = useRef<{ data: typeof data; spans: KillZoneSpan[] } | null>(null);
 
   // Sempre a versão mais recente dos candles para o loop de desenho ler —
   // mesmo padrão de LiquidityZonesPlugin/MarketSessionBandsPlugin.
@@ -67,7 +76,14 @@ export function KillZoneBandsPlugin({ chart, series, data }: KillZoneBandsPlugin
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      const spans = computeKillZoneSpans(dataRef.current);
+      const cached = spansCacheRef.current;
+      let spans: KillZoneSpan[];
+      if (cached && cached.data === dataRef.current) {
+        spans = cached.spans;
+      } else {
+        spans = computeKillZoneSpans(dataRef.current);
+        spansCacheRef.current = { data: dataRef.current, spans };
+      }
       if (spans.length === 0) return; // amostra sem nenhuma kill zone real (comum — a maior parte do dia não tem nenhuma).
 
       const timeScale = chart.timeScale();
