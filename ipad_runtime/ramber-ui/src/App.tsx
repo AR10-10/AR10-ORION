@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -20,8 +20,20 @@ import {
   LIQUIDITY_PROXIMITY_PCT,
   FIBONACCI_PROXIMITY_PCT,
   VOLUME_PROFILE_PROXIMITY_PCT,
+  MARKET_SESSION_RECENT_BOUNDARY_CANDLES,
   type LayerRelevanceInput,
 } from "./nexus/layer-relevance";
+import { computeConfluenceCorridor } from "./nexus/confluence-corridor";
+// OMEGA CORE V-MAX (completar Fase 7, Radar/OIH): universo curado real +
+// núcleo puro de qualificação/ranking (Fase 7 v1) + scanner real por
+// ativo (engine-bridge.ts) — nenhum dos 3 é reimplementado aqui.
+import { extractRadarUniverseSymbols, type AssetUniverseFile } from "./nexus/radar-universe";
+import { qualifyRadarCandidate, rankRadarCandidates, type RadarQualificationResult } from "./nexus/radar-qualification";
+// ADITIVO V-MAX Etapa 9: universo MEXC real (irmão de binance-symbols.ts,
+// já usado pelo SmartOmnibox) — busca dinâmica, nunca uma lista curada
+// estática como a Binance acima.
+import { fetchMexcUsdtSymbols } from "./omnibox/mexc-symbols";
+import assetUniverseDefault from "../../configs/asset-universe.default.json";
 import { ageAlpha } from "./chart/annotation-decay";
 import { BREAK_DECAY } from "./chart/StructureBreakMarkersPlugin";
 // Mesmo motor puro que EnhancedChart_110_Percent.tsx já usa para desenhar
@@ -33,6 +45,10 @@ import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV
 // Ordem "Ciborgue Vivo" §3: síntese real de autodiagnóstico — mesmos
 // sinais do Health Monitor/Data Quality Layer, nunca uma segunda medição.
 import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/self-diagnostics";
+// ADITIVO V-MAX Etapa 10 (Data Quality Monitor unificado): vocabulário
+// único OK/WARNING/FAIL/DADOS_INSUFICIENTES por cima dos 3 motores de
+// qualidade reais (Bus/GMIL/Research) — nunca um 4º cálculo, só leitura.
+import { classifyBusQuality, classifyWeight, classifySufficiencyScore, DATA_QUALITY_COLOR } from "./nexus/data-quality-vocabulary";
 // Fase Ω Priority 1: tipos + lista canônica dos 6 prazos — mesma fonte que
 // engine-bridge.ts usa para orquestrar, nunca uma segunda lista duplicada.
 import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } from "./nexus/multi-timeframe-engine";
@@ -93,6 +109,7 @@ import {
   type ConfluenceSource,
   buildMultiTimeframeContext,
   computeBosChoch,
+  scanRadarCandidate,
 } from "./engine-bridge";
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
 // pura — a matemática pesada roda no WASM do quant-worker).
@@ -163,7 +180,11 @@ import {
 // Fecho da pendência "R:R mínimo": piso DECLARADO 1:2 (ver rr-quality.ts),
 // display-only — anota, nunca esconde/bloqueia um plano real (LEI 24).
 import { rrFloorSuffix } from "./nexus/rr-quality";
-import { marketSessionFromUtc } from "./nexus/market-session";
+import { marketSessionFromUtc, computeSessionBoundaries } from "./nexus/market-session";
+// Ferramentas Institucionais (ADITIVO V-MAX/MED, prioridade #1): ICT Kill
+// Zones — janela ESTREITA de alta probabilidade dentro da sessão, nunca
+// uma 2ª partição de 24h (ver header de kill-zones.ts).
+import { activeKillZones } from "./nexus/kill-zones";
 import { computeHeatScore } from "./nexus/heat-score";
 import { buildNexusDecision, NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./nexus/decision-layer";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
@@ -254,6 +275,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Target,
+  Crosshair,
   Wifi,
   Disc,
   X,
@@ -272,6 +294,7 @@ import {
   Mic,
   MicOff,
   Layers,
+  Radar as RadarIcon,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -454,6 +477,49 @@ const MAX_CHART_HISTORY = 2000;
 // além da margem) — a primeira entrada real continua exata, sem atraso.
 const ENTRY_ZONE_HYSTERESIS_FACTOR = 0.25;
 
+// OMEGA CORE V-MAX (completar Fase 7, Radar/OIH): universo curado
+// computado UMA vez no módulo — configs/asset-universe.default.json é um
+// import estático (não muda em runtime), recomputar a cada render/efeito
+// seria custo sem propósito. Só os 3 grupos CRYPTO reais (a função já
+// filtra o grupo EQUITY — ver radar-universe.ts).
+const RADAR_UNIVERSE_SYMBOLS = extractRadarUniverseSymbols(assetUniverseDefault as AssetUniverseFile);
+// O Market Data Bus dedupa POR chave symbol:timeframe mas não tem
+// nenhum throttle ENTRE chaves diferentes (ver header do bus.js) — um
+// scan do universo inteiro sem seu próprio limite de concorrência
+// martelaria a REST da Binance ao mesmo tempo que o ciclo do ativo
+// selecionado. 3 candidatos por lote + 2s de respiro: ~35 ativos varridos
+// em ~25s, nunca competindo por throughput com o ciclo de 30s do ativo
+// ao vivo nem com o de 60s do multi-timeframe. Regra de Ouro 6: 100%
+// fetch assíncrono, zero cálculo síncrono pesado no Main Thread.
+const RADAR_SCAN_BATCH_SIZE = 3;
+const RADAR_SCAN_BATCH_DELAY_MS = 2000;
+// Ciclo completo a cada 5min — bem mais lento que o ciclo do ativo
+// selecionado e o multi-timeframe: o Radar é contexto de descoberta em
+// segundo plano, nunca o caminho crítico do sinal (LEI 24).
+const RADAR_SCAN_FULL_CYCLE_MS = 5 * 60_000;
+
+// ADITIVO V-MAX Etapa 9 (MED "Radar Global: concluir completamente" +
+// seção MEXC×Binance "separar apenas a camada de Provider, nunca
+// duplicar o restante da arquitetura"): a MEXC pode ter centenas de
+// contratos USDT-M, MUITO além dos ~30 da lista curada Binance —
+// escanear TODOS a cada ciclo de 5min estouraria a janela (mesma
+// matemática do comentário de RADAR_SCAN_BATCH_SIZE acima: 3/lote/2s
+// não escala para centenas sem inflar a duração do ciclo muito além do
+// timer que o dispara de novo). RADAR_MEXC_PAGE_SIZE limita cada ciclo
+// a uma FATIA real do universo (mesma ordem de grandeza do universo
+// curado Binance) — o cursor (radarMexcCursorRef) avança e recomeça do
+// início ao esgotar a lista, então o universo INTEIRO é coberto ao
+// longo de várias passagens, nunca perdido, nunca escaneado de uma vez
+// só. Mesmo timer/batch/delay já existentes — zero segundo loop.
+const RADAR_MEXC_PAGE_SIZE = 30;
+
+// OMEGA CORE V-MAX (Fase 8.1, heatmap real de liquidação): teto de
+// retenção do feed exchange-wide de liquidações — ver comentário no
+// efeito de startRealLiquidationFeed para o racional completo (o
+// heatmap filtra por símbolo, então precisa de mais história do que a
+// lista "Forced Liquidations" sozinha exigia).
+const LIQUIDATION_RETENTION_CAP = 500;
+
 export type ChartCandle = { time: number; open: number; high: number; low: number; close: number; volume: number };
 
 // Funde o refresh periódico (`fresh`, sempre "os CHART_CANDLE_LIMIT mais
@@ -587,13 +653,20 @@ export default function App() {
   // camadas continuam ligadas por padrão (DEFAULT_CHART_LAYER_VISIBILITY),
   // nada muda no comportamento existente até o Operador desligar algo.
   const [chartLayersOpen, setChartLayersOpen] = useState(false);
+  // OMEGA CORE V-MAX (completar Fase 7, Radar/OIH): mesmo padrão de painel
+  // dos dois acima — um toggle simples, ícone dedicado na SideBar, painel
+  // fixed/centered. Lista só candidatos JÁ qualificados (radarCandidates,
+  // fatia §4 CÉREBRO da store) — este flag controla só a VISIBILIDADE do
+  // painel, nunca o próprio scan em segundo plano (que roda independente
+  // do painel estar aberto, mesmo espírito do Workspace Manager).
+  const [radarPanelOpen, setRadarPanelOpen] = useState(false);
   const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7 (resposta do Operador à pergunta
-  // de escopo: os 15 toggles manuais continuam existindo como OVERRIDE
+  // de escopo: os 18 toggles manuais continuam existindo como OVERRIDE
   // real, o padrão novo é o comportamento automático por trás deles).
   // Estrutura paralela, NUNCA uma reforma do tipo existente
   // (ChartLayerVisibility continua Record<ChartLayerId, boolean>, zero
-  // migração, zero risco de regressão nos 15 toggles que já funcionavam):
+  // migração, zero risco de regressão nos toggles que já funcionavam):
   // true = "automático" (o Relevance Engine decide agora), false =
   // "manual" (chartLayerVisibility[id] vale, exatamente como sempre
   // valeu). Default: tudo automático — é o comportamento novo pedido
@@ -608,7 +681,7 @@ export default function App() {
   }, []);
   // Reset explícito: devolve 1 camada ao comportamento automático (o
   // Operador muda de ideia sobre um override específico, sem precisar
-  // resetar as outras 14).
+  // resetar as outras).
   const resetChartLayerToAuto = useCallback((id: ChartLayerId) => {
     setChartLayerAutoMode((prev) => ({ ...prev, [id]: true }));
   }, []);
@@ -631,7 +704,7 @@ export default function App() {
   // camada nova, nenhum cálculo novo, só uma pré-seleção a mais.
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: um preset é curadoria manual
   // deliberada (mesma categoria do toggle individual) — aplicar
-  // operational/audit/intelligence também sai do automático nas 15
+  // operational/audit/intelligence também sai do automático em todas as
   // camadas, para o resultado do preset nunca ser silenciosamente
   // sobrescrito pelo Relevance Engine. "automatic" é o 4º preset novo: a
   // única ação que devolve TODAS as camadas ao comportamento automático
@@ -752,6 +825,14 @@ export default function App() {
   // poll cycle reports a state, matching the FAIL_CLOSED rule used everywhere
   // else in this file.
   const [orderflowSignals, setOrderflowSignals] = useState<OrderflowSignal[]>([]);
+  // OMEGA CORE V-MAX (Fase 1.1): espelha o MESMO orderflowSignals real (nunca
+  // recomputado) para a fatia §3 da store — um useEffect em vez de escrever
+  // dentro do updater funcional de setOrderflowSignals acima, porque um
+  // updater funcional pode rodar 2x sob StrictMode (dev): um efeito colateral
+  // ali dentro emitiria um evento espúrio duplicado no bus.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setOrderflowSignals(orderflowSignals);
+  }, [orderflowSignals]);
   const [orderflowState, setOrderflowState] = useState<OrderflowConnectorState | "pending">("pending");
   const [orderflowReason, setOrderflowReason] = useState<string | null>(null);
   // Real Cumulative Volume Delta — running sum of signed real MEXC trade
@@ -1039,6 +1120,24 @@ export default function App() {
     setOrderBook({ bids: [], asks: [] });
     setOrderflowSignals([]);
     setCvd(0);
+    // OMEGA CORE V-MAX (Fase 1.1): a fatia §3 `cvd` da store usa null (não o
+    // 0 cosmético acima) — null é o "ainda sem leitura real deste ativo"
+    // honesto (Regra de Ouro 3); a soma corrida real no worker de order
+    // flow nunca é de fato reiniciada por troca de ativo (ver
+    // signal-engine.js), então nem o 0 local nem um null aqui mudam esse
+    // comportamento real — só a exibição enquanto o próximo poll não chega.
+    // `smc`/`orderflowSignals` não precisam de reset explícito aqui: os
+    // useEffect([smcZones])/useEffect([orderflowSignals]) já espelham o
+    // valor honesto (zonas vazias / [] local, ambos já zerados acima).
+    useUnifiedSnapshotStore.getState().setCvd(null);
+    // OMEGA CORE V-MAX (Fase 5): o Corredor de Confluência é derivado de
+    // sinais já escopados ao ativo (opinionMass/institutionalScore/MTF/
+    // obstáculo) — o próprio useEffect que o computa já reage a
+    // engine?.direction/councilFromSnapshot/etc, todos zerados por este
+    // mesmo efeito; setConfluenceCorridor(null) aqui só torna a transição
+    // explícita e imediata (fail-closed honesto), em vez de esperar o
+    // ciclo de re-render do useMemo pra chegar no mesmo null.
+    useUnifiedSnapshotStore.getState().setConfluenceCorridor(null);
     setRealCycle(null);
     setEngineStatus("pending");
     setPriceUpdatedAt(null);
@@ -1375,6 +1474,118 @@ export default function App() {
     };
   }, [bootGeneration, selectedAsset]);
 
+  // ADITIVO V-MAX Etapa 9: universo MEXC real, buscado UMA vez (mesmo
+  // espírito do RADAR_UNIVERSE_SYMBOLS estático, mas via rede — não dá
+  // pra ser uma constante de módulo). Ref, não state: nenhum componente
+  // precisa re-renderizar quando a lista chega, só o próximo tick do
+  // scanner precisa lê-la. Falha de rede => [] honesto (mesmo fail-closed
+  // de fetchMexcUsdtSymbols) — o scanner simplesmente não tem página MEXC
+  // nesse ciclo, tenta de novo no próximo (nunca trava o resto do Radar).
+  const radarMexcUniverseRef = useRef<string[]>([]);
+  // Cursor real da paginação — avança a cada ciclo, some ao fim da lista
+  // e recomeça do início (round-robin honesto, nunca perde um símbolo).
+  const radarMexcCursorRef = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const symbols = await fetchMexcUsdtSymbols();
+      if (cancelled) return;
+      radarMexcUniverseRef.current = Array.from(new Set(symbols.map((s) => s.baseAsset)));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // OMEGA CORE V-MAX (completar Fase 7, Radar/OIH): scanner de fundo real
+  // — cadência própria (5min), mais lenta que o ciclo do ativo selecionado
+  // (30s) e o multi-timeframe (60s) acima: o Radar é descoberta de
+  // contexto, nunca o caminho crítico do sinal (LEI 24). Cada candidato
+  // passa por scanRadarCandidate (fetch real + motores puros já
+  // existentes, engine-bridge.ts) e depois por qualifyRadarCandidate
+  // (núcleo puro, radar-qualification.ts) — este efeito só orquestra LOTE
+  // e TIMER, zero motor novo escrito aqui. Depende de chartTimeframe (não
+  // uma ref) de propósito: trocar o prazo do gráfico precisa CANCELAR
+  // qualquer lote em voo do prazo antigo e recomeçar do zero no prazo
+  // novo — mesmo espírito fail-closed da Fase 6 (zero staleness na troca
+  // de contexto), mesmo padrão de deps do ciclo principal acima. Exclui
+  // sempre o ativo já selecionado: ele já tem seu próprio Conselho/Trade
+  // Plan completo rodando à parte — escaneá-lo de novo aqui produziria
+  // uma segunda leitura mais fraca do MESMO ativo, redundante por
+  // definição.
+  //
+  // ADITIVO V-MAX Etapa 9: MESMO efeito, MESMO lote/timer — depois de
+  // varrer o universo curado Binance (acima), pagina uma FATIA real do
+  // universo MEXC (radarMexcUniverseRef) com scanRadarCandidate(symbol,
+  // timeframe, 'MEXC') — nunca um segundo loop/timer concorrente (seção
+  // MEXC×Binance do MED: "nunca duplicar o restante da arquitetura").
+  // Um candidato MEXC e um Binance do mesmo símbolo são leituras reais e
+  // independentes (provider fica no resultado) — nunca deduplicados,
+  // mesmo princípio já usado pelos cross-checks Bybit/OKX/MEXC.
+  useEffect(() => {
+    let cancelled = false;
+    const runRadarScan = async () => {
+      const candidateSymbols = RADAR_UNIVERSE_SYMBOLS.filter((s) => s !== selectedAsset);
+      const qualified: RadarQualificationResult[] = [];
+      for (let i = 0; i < candidateSymbols.length; i += RADAR_SCAN_BATCH_SIZE) {
+        if (cancelled) return;
+        const batch = candidateSymbols.slice(i, i + RADAR_SCAN_BATCH_SIZE);
+        const scans = await Promise.all(batch.map((symbol) => scanRadarCandidate(symbol, chartTimeframe)));
+        if (cancelled) return;
+        for (const scan of scans) {
+          if (!scan) continue; // fail-closed: rede falhou/candles insuficientes para ESTE candidato — nunca bloqueia o lote inteiro
+          qualified.push(qualifyRadarCandidate(scan));
+        }
+        if (i + RADAR_SCAN_BATCH_SIZE < candidateSymbols.length) {
+          await new Promise((resolve) => setTimeout(resolve, RADAR_SCAN_BATCH_DELAY_MS));
+        }
+      }
+
+      const mexcUniverse = radarMexcUniverseRef.current.filter((s) => s !== selectedAsset);
+      if (mexcUniverse.length > 0) {
+        const start = radarMexcCursorRef.current % mexcUniverse.length;
+        // Round-robin real: pega até RADAR_MEXC_PAGE_SIZE símbolos a
+        // partir do cursor, dando a volta na lista sem duplicar dentro
+        // da MESMA página (Set por índice, nunca por valor — 2 bases
+        // iguais por acaso não colidiriam de propósito).
+        const page: string[] = [];
+        for (let k = 0; k < Math.min(RADAR_MEXC_PAGE_SIZE, mexcUniverse.length); k++) {
+          page.push(mexcUniverse[(start + k) % mexcUniverse.length]);
+        }
+        radarMexcCursorRef.current = (start + page.length) % mexcUniverse.length;
+
+        for (let i = 0; i < page.length; i += RADAR_SCAN_BATCH_SIZE) {
+          if (cancelled) return;
+          const batch = page.slice(i, i + RADAR_SCAN_BATCH_SIZE);
+          const scans = await Promise.all(batch.map((symbol) => scanRadarCandidate(symbol, chartTimeframe, 'MEXC')));
+          if (cancelled) return;
+          for (const scan of scans) {
+            if (!scan) continue;
+            qualified.push(qualifyRadarCandidate(scan));
+          }
+          if (i + RADAR_SCAN_BATCH_SIZE < page.length) {
+            await new Promise((resolve) => setTimeout(resolve, RADAR_SCAN_BATCH_DELAY_MS));
+          }
+        }
+      }
+
+      // Escreve sempre, mesmo lista vazia — mesmo padrão fail-closed do
+      // ciclo principal (setRealCycle sempre escreve): um universo sem
+      // NENHUM candidato qualificado agora é um resultado real, nunca
+      // deixa candidatos de um ciclo/prazo/ativo anterior na tela.
+      if (!cancelled) {
+        useUnifiedSnapshotStore.getState().setRadarCandidates(rankRadarCandidates(qualified));
+      }
+    };
+    void runRadarScan();
+    const radarInterval = setInterval(() => void runRadarScan(), RADAR_SCAN_FULL_CYCLE_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(radarInterval);
+    };
+  }, [bootGeneration, selectedAsset, chartTimeframe]);
+
   // Fase J (Cap. 17): FPS REAL da UI via requestAnimationFrame — contagem
   // de frames por janela de 1s. É a medição verdadeira do que o Safari
   // está pintando, não uma constante otimista. O loop é 1 rAF vivo por
@@ -1416,6 +1627,9 @@ export default function App() {
       },
       (value) => {
         setCvd(value);
+        // OMEGA CORE V-MAX (Fase 1.1): mesmo valor real de cvd, mesmo
+        // commit — espelhado na fatia §3 `cvd`.
+        useUnifiedSnapshotStore.getState().setCvd(value);
         // V-MAX Fase 1.2: onCvd sempre dispara DEPOIS de onTrades dentro do
         // MESMO ciclo de poll (garantia real de engine-bridge.ts) — os
         // trades grandes já calculados abaixo pertencem exatamente a este
@@ -1444,10 +1658,22 @@ export default function App() {
   // no key — engine-bridge.ts's startRealLiquidationFeed). Exchange-wide,
   // not BTC-only — large forced liquidations anywhere are the real signal
   // this widget shows.
+  //
+  // OMEGA CORE V-MAX Fase 8.1: cap subiu de 30 para
+  // LIQUIDATION_RETENTION_CAP — o heatmap real (nexus/liquidation-heatmap.ts)
+  // filtra este array exchange-wide para SÓ o ativo selecionado, então 30
+  // eventos de TODOS os símbolos raramente sobrariam o suficiente
+  // (MIN_EVENTS_FOR_HEATMAP) para um único ativo. O feed não tem seed
+  // histórico (sem REST equivalente, ver binance-liquidations-stream.js) —
+  // reter mais do que já chegou nesta sessão é a única forma real de dar
+  // ao heatmap mais densidade, sem fabricar nada. Custo desprezível
+  // (objetos pequenos, mesma ordem de grandeza de MAX_CHART_HISTORY). A
+  // lista "Forced Liquidations" continua mostrando só os 8 mais recentes
+  // (.slice(0,8)), comportamento inalterado.
   useEffect(() => {
     const stop = startRealLiquidationFeed(
       (event) => {
-        setLiquidations((prev) => [event, ...prev].slice(0, 30));
+        setLiquidations((prev) => [event, ...prev].slice(0, LIQUIDATION_RETENTION_CAP));
       },
       (state) => setLiquidationState(state),
     );
@@ -1495,6 +1721,11 @@ export default function App() {
     const entry = cycleOk ? (realCycle?.entry ?? null) : null;
     const target = cycleOk ? (realCycle?.target1 ?? null) : null;
     const target2 = cycleOk ? (realCycle?.target2 ?? null) : null;
+    // Achado de auditoria (Ferramentas Institucionais): extensão de
+    // Fibonacci 61.8% sobre a última perna confirmada — já calculada todo
+    // ciclo (support-resistance-engine.js) mas descartada antes de sair de
+    // engine-bridge.ts. Passthrough puro, mesmo padrão de target/target2.
+    const extendedTarget = cycleOk ? (realCycle?.extendedTarget ?? null) : null;
     const stop = cycleOk ? (realCycle?.stop ?? null) : null;
     // V11.5 Fase 6: razão real distância-ao-alvo/distância-à-invalidação
     // (target-tracker.js) e força por confluência de swings do Alvo 2
@@ -1606,6 +1837,7 @@ export default function App() {
       entry,
       target,
       target2,
+      extendedTarget,
       stop,
       riskRewardRatio,
       target1Strength,
@@ -1763,6 +1995,13 @@ export default function App() {
         : { fairValueGaps: [], orderBlocks: [], liquidityZones: [] },
     [chartData],
   );
+  // OMEGA CORE V-MAX (Fase 1.1, "matar a segunda verdade"): espelha o MESMO
+  // smcZones real (nunca uma segunda computação) para a fatia §3 `smc` da
+  // store — gateway novo para getSnapshotForEngine()/bus, sem tirar
+  // nenhum consumidor existente de WidgetContext (aditivo, não substitui).
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setSmc(smcZones);
+  }, [smcZones]);
 
   // Hoisted (Diretriz Restauração/Inteligência Visual §6): as MESMAS zonas
   // reais (OB/FVG não mitigadas) que o efeito de buildTradePlan abaixo já
@@ -2281,6 +2520,33 @@ export default function App() {
   // pura de apresentação sobre o mesmo institutionalScore acima — zero
   // segunda fonte, zero matemática nova (ver institutional-score.ts).
   const confidenceZone = useMemo(() => institutionalConfidenceZone(institutionalScore.score), [institutionalScore]);
+  // OMEGA CORE V-MAX Fase 5 (Fusion §5, "Corredor de Confluência" — task
+  // já escopada e aprovada pelo Operador numa rodada anterior, mesma ideia
+  // visual do "Centro Gravitacional" da diretriz nova): organizador de
+  // contexto puro que cruza a leitura JÁ real do Conviction Engine
+  // (convictionReading, já computado acima — nunca uma segunda pool de
+  // ensemble/council/multi-timeframe) com obstáculos reais no caminho até
+  // o alvo mais próximo do Trade Plan (trackedPlan é o MESMO
+  // useTradePlanSnapshot() que chartTradePlan em ChartWidget, zero segunda
+  // leitura). Correção de auditoria (completar Fase 7, ver
+  // confluence-corridor.ts): a v1 lia opinionMass/institutionalScore/
+  // multiTimeframe em paralelo, mas institutionalScore já É uma cópia
+  // reescalada de convictionReading.conviction — dupla contagem corrigida
+  // consumindo convictionReading INTEIRO como componente único. Display-
+  // only (LEI 24): direction/obstacleCount chegam já decididos em outro
+  // lugar, nunca recalculados aqui.
+  const confluenceCorridor = useMemo(
+    () =>
+      computeConfluenceCorridor({
+        direction: engine?.direction ?? null,
+        conviction: convictionReading,
+        activeObstacleCount: trackedPlan?.targets?.[0]?.obstacleCount ?? null,
+      }),
+    [engine?.direction, convictionReading, trackedPlan],
+  );
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setConfluenceCorridor(confluenceCorridor);
+  }, [confluenceCorridor]);
   // Diretriz Complementar §18: tendência real de força do fluxo — mesma
   // série de CVD já retida, reduzida a FORTALECENDO/ENFRAQUECENDO/ESTAVEL.
   const orderflowTrend = useMemo(() => computeOrderflowTrend(orderflowHistoryForTrend), [orderflowHistoryForTrend]);
@@ -2604,8 +2870,25 @@ export default function App() {
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setSymbol(selectedAsset);
   }, [selectedAsset]);
+  // Achado real de auditoria (DIRETRIZES AVANÇADAS, sincronização — bug
+  // HIGH confirmado): o guard `if (priceData)` parecia um null-check
+  // inofensivo, mas SUPRIMIA o próprio reset — ao trocar de ativo,
+  // priceData volta a null (efeito acima, [selectedAsset]) para limpar a
+  // tela, mas esta linha silenciosamente PULAVA a escrita em vez de
+  // repassar o reset, deixando store.price com o ÚLTIMO PREÇO REAL DO
+  // ATIVO ANTERIOR até o WS do novo ativo reconectar (até a próxima
+  // virada de rede, não de render). Efeito visível real: o painel de
+  // Derivativos mostrava o preço do ativo velho junto do rótulo do ativo
+  // novo, e o gráfico (livePrice = usePriceSnapshot()) estendia a vela
+  // mais recente do ativo novo com o preço do ativo velho
+  // (patchLastCandleWithLiveTick não valida magnitude/símbolo — um pavio
+  // falso persistia até o próximo resync REST). orderBook/derivatives
+  // logo abaixo nunca tiveram este bug: seus valores de reset já são
+  // objetos verdadeiros ({bids:[],asks:[]}/{fundingRate:null,...}), então
+  // sempre passavam pelo guard `if`. price não tinha um guard — agora
+  // sempre repassa o estado real (reset incluso), igual aos vizinhos.
   useEffect(() => {
-    if (priceData) useUnifiedSnapshotStore.getState().setPrice(priceData);
+    useUnifiedSnapshotStore.getState().setPrice(priceData ?? EMPTY_PRICE);
   }, [priceData]);
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setOrderBook(orderBook);
@@ -2731,6 +3014,8 @@ export default function App() {
       setWorkspaceManagerOpen,
       chartLayersOpen,
       setChartLayersOpen,
+      radarPanelOpen,
+      setRadarPanelOpen,
       chartLayerVisibility,
       toggleChartLayer,
       applyChartLayerPreset,
@@ -2801,6 +3086,7 @@ export default function App() {
       setWidgetWorkspaceState,
       workspaceManagerOpen,
       chartLayersOpen,
+      radarPanelOpen,
       chartLayerVisibility,
       chartLayerAutoMode,
       emaPeriod,
@@ -3117,6 +3403,7 @@ export default function App() {
         <FooterBar />
         <WorkspaceManagerPanel />
         <ChartLayersPanel />
+        <RadarPanel />
       </div>
     </WidgetContext.Provider>
   );
@@ -3336,6 +3623,15 @@ const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>([
   "premium_discount",
   "harmonics",
   "equal_highs_lows",
+  // OMEGA CORE V-MAX Fase 8.1: mesma lógica — densidade de liquidações
+  // reais é leitura de mercado/estrutura, nunca específica do plano
+  // ativo, então entra aqui, nunca no Operacional.
+  "liquidation_heatmap",
+  // EPC OMEGA FINAL Etapa 10: sweep de liquidez e sessão institucional são
+  // igualmente leitura de mercado/estrutura, nunca específicas do plano
+  // ativo — mesma lógica acima.
+  "liquidity_sweep",
+  "market_sessions",
 ]);
 
 const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
@@ -3354,6 +3650,15 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "premium_discount", label: "PREMIUM / DISCOUNT" },
   { id: "harmonics", label: "HARMÔNICOS" },
   { id: "equal_highs_lows", label: "EQH / EQL" },
+  // OMEGA CORE V-MAX Fase 8.1: rótulo deliberadamente "LIQUIDAÇÕES
+  // FORÇADAS" (mesmo termo já usado no painel de lista real, "Forced
+  // Liquidations") — nunca "LIQUIDATION HEATMAP", que colidiria
+  // visualmente com "LIQUIDITY HEATMAP" (order_flow_heatmap, 2 linhas
+  // acima) e confundiria qual camada o Operador está ligando/desligando.
+  { id: "liquidation_heatmap", label: "LIQUIDAÇÕES FORÇADAS" },
+  // EPC OMEGA FINAL Etapa 10 (Novas Camadas Institucionais).
+  { id: "liquidity_sweep", label: "LIQUIDITY SWEEP" },
+  { id: "market_sessions", label: "SESSÕES (ÁSIA/LONDRES/NY)" },
 ];
 
 function ChartLayersPanel() {
@@ -3375,7 +3680,7 @@ function ChartLayersPanel() {
   // Highlight real (não decorativo): compara o estado atual byte-a-byte
   // contra os dois presets — só acende quando bate exatamente, nunca um
   // "quase" fingido de correspondência. NÚCLEO GRAVITACIONAL AUTÔNOMO §1:
-  // os 3 presets manuais exigem TODAS as 15 camadas fora do automático —
+  // os 3 presets manuais exigem TODAS as 18 camadas fora do automático —
   // uma camada em modo automático que coincidentemente bate com o preset
   // agora não é a mesma coisa que o Operador ter escolhido esse preset.
   const allManual = CHART_LAYER_IDS.every((id) => autoMode[id] === false);
@@ -3408,7 +3713,7 @@ function ChartLayersPanel() {
               só pré-seleciona o que ele já controla. */}
           <div className="flex gap-1.5">
             {/* NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: 4º preset — a única ação
-                que devolve as 15 camadas ao comportamento automático de uma
+                que devolve as 18 camadas ao comportamento automático de uma
                 vez (resposta do Operador: toggles continuam existindo como
                 override, mas o padrão novo é automático). */}
             <button
@@ -3541,6 +3846,118 @@ function ChartLayersPanel() {
               </div>
             );
           })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// OMEGA CORE V-MAX (completar Fase 7, Radar/OIH — "módulo único
+// consultivo"): painel de header no MESMO padrão de ChartLayersPanel logo
+// acima (overlay fixed/centered, mesmo shell cyber-panel/cyber-header) —
+// só consome radarCandidates (fatia §4 CÉREBRO, já filtrada/ranqueada por
+// rankRadarCandidates no efeito de scan de App()); este componente NUNCA
+// recalcula nada, só lê e exibe (LEI 24, "consulta snapshot, não
+// recalcula"). Título visível "OPORTUNIDADES" (nunca "Radar" sozinho): o
+// cockpit já tem "RADAR DE CONSENSO" (CouncilWidget) e uma aba "SCANNER"
+// (heurística de %-change de 24h, ScannerWidget) — um terceiro rótulo com
+// a mesma palavra confundiria qual painel está aberto.
+function RadarPanel() {
+  const { radarPanelOpen, setRadarPanelOpen, setSelectedAsset, setMarketMode, setSelectedTradFiAsset } =
+    useContext(WidgetContext) || {};
+  const candidates = useRadarCandidatesSnapshot();
+  if (!radarPanelOpen) return null;
+
+  // Mesmo mecanismo real do SmartOmnibox (onSelectCrypto) — trocar
+  // selectedAsset sozinho já dispara o efeito de boot/WS + o efeito de
+  // fetch de candles (deps [chartTimeframe, selectedAsset]); "centralizar
+  // gráfico" (diretiva) não precisa de nenhum helper à parte. Timeframe
+  // recomendado: esse conceito não existe em nenhum motor real do
+  // organismo hoje — a diretiva já previu esse caso ("senão timeframe
+  // atual"), e é honestamente o MESMO prazo em que o candidato foi
+  // escaneado (o efeito de scan usa chartTimeframe), então nunca há
+  // descompasso entre o que foi avaliado e o que o gráfico mostra a
+  // seguir.
+  const openCandidate = (symbol: string) => {
+    setMarketMode?.("CRYPTO");
+    setSelectedTradFiAsset?.(null);
+    setSelectedAsset?.(symbol);
+    setRadarPanelOpen?.(false);
+  };
+
+  return (
+    <div
+      className="!fixed !inset-0 !z-[1001] bg-[#010308]/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={() => setRadarPanelOpen?.(false)}
+    >
+      <div
+        className="cyber-panel w-full max-w-md max-h-[80dvh] flex flex-col bg-[#010308]/98"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="cyber-header flex items-center justify-between">
+          <span className="font-bold tracking-[0.2em]">OPORTUNIDADES</span>
+          <div
+            className="text-[#8ab4f8]/50 hover:text-[#00f0ff] px-1 py-0.5 rounded cursor-pointer"
+            onClick={() => setRadarPanelOpen?.(false)}
+          >
+            <X size={14} />
+          </div>
+        </div>
+        <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+          <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
+            Radar/OIH — varredura real em segundo plano (Binance + MEXC), nunca recalcula nem emite LONG/SHORT por conta própria (LEI 24). Só lista quem já tem estrutura confirmada, Trade Plan real e confluência suficiente.
+          </span>
+          {candidates.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center">
+              <RadarIcon size={22} className="text-[#8ab4f8]/30" />
+              <span className="text-[0.5rem] text-[#8ab4f8]/50 tracking-[0.1em] uppercase">
+                Nenhuma oportunidade validada agora
+              </span>
+              <span className="text-[0.42rem] text-[#8ab4f8]/35 max-w-[220px]">
+                O organismo varre o universo curado (Binance) + o universo real da MEXC em segundo plano — volte em alguns minutos, ou aguarde o próximo ciclo automático.
+              </span>
+            </div>
+          ) : (
+            candidates.map((c) => {
+              const isLong = c.direction === "LONG";
+              return (
+                <button
+                  key={`${c.provider}:${c.symbol}:${c.timeframe}`}
+                  type="button"
+                  onClick={() => openCandidate(c.symbol)}
+                  className="flex items-center justify-between gap-2 bg-[#010205] border border-[#00f0ff15] hover:border-[#00f0ff40] rounded-lg px-3 py-2 text-left transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    {isLong ? (
+                      <ArrowUpRight size={14} className="text-[#00ffaa] shrink-0" />
+                    ) : (
+                      <ArrowDownRight size={14} className="text-[#ff0055] shrink-0" />
+                    )}
+                    <div className="flex flex-col">
+                      <span className="text-[0.6rem] font-bold tracking-wider text-white">{c.symbol}</span>
+                      <span
+                        className="text-[0.4rem] text-[#8ab4f8]/50 uppercase tracking-wider"
+                        title="Exchange real que forneceu este candle/estrutura — um candidato MEXC e um Binance do mesmo símbolo são leituras independentes, nunca a mesma verdade."
+                      >
+                        {c.timeframe} · {c.provider}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <span
+                      className={`text-[0.6rem] font-black font-mono tabular-nums ${isLong ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+                      title="Intensidade real do Corredor de Confluência (0-100%) — nunca probabilidade de acerto."
+                    >
+                      {c.qualityIndex !== null ? `${(c.qualityIndex * 100).toFixed(0)}%` : DASH}
+                    </span>
+                    <span className="text-[0.4rem] text-[#8ab4f8]/50 uppercase tracking-wider">
+                      {c.riskRewardRatio !== null ? `R:R 1:${c.riskRewardRatio.toFixed(2)}` : DASH}
+                    </span>
+                  </div>
+                </button>
+              );
+            })
+          )}
         </div>
       </div>
     </div>
@@ -4716,6 +5133,12 @@ function TopBar({ data }: { data?: PriceState | null }) {
   // ao menos 1x/s pelo tick de preço, então o rótulo nunca fica >1s
   // desatualizado sem precisar de um timer próprio.
   const marketSession = marketSessionFromUtc(new Date());
+  // Ferramentas Institucionais: janela de kill zone real agora (0, 1 ou 2
+  // — Nova York e Fechamento de Londres se sobrepõem de propósito, ver
+  // kill-zones.ts). Mesmo princípio de computação no render que
+  // marketSession já usa acima (TopBar re-renderiza >=1x/s pelo tick de
+  // preço — nunca fica desatualizado sem precisar de timer próprio).
+  const killZones = activeKillZones(new Date());
   const wsLiveNow: boolean = voiceSnapshot?.wsLive === true;
   // Overhaul Cross-Market (Diretriz 2): o rótulo do mercado é passthrough
   // REAL de realCycle.instrumentType (mesmo padrão de wasmVariant) — nunca
@@ -4764,7 +5187,23 @@ function TopBar({ data }: { data?: PriceState | null }) {
               "deixa só o necessário"). A tag de mercado (Futures/Spot/
               Macro) continua 100% real (mesma expressão de sempre,
               cryptoMarketLabel), só que agora ao lado do gatilho em vez
-              de dentro do nome estático removido. */}
+              de dentro do nome estático removido.
+              Achado real de captura de tela (pedido explícito do
+              Operador): a fileira de 12 botões de atalho (ASSETS.map)
+              que morava aqui era 100% redundante com o próprio gatilho do
+              Omnibox logo ao lado — os dois disparam exatamente a mesma
+              transição de estado (setMarketMode/setSelectedTradFiAsset/
+              setSelectedAsset), só que o Omnibox já busca QUALQUER par
+              real da Binance, não só os 12 fixos. Com os 12 botões
+              expandidos (rodada anterior), a fileira "comia" o espaço da
+              barra e cortava/escondia o preço/variação ao vivo em telas
+              reais — removida por inteiro (zero capacidade perdida,
+              Regra de Ouro 4: o Omnibox já cobre o mesmo caminho real, com
+              mais alcance). Só o badge do ativo ATUAL (ícone) permanece
+              no canto, exatamente como o Operador pediu ("só fica o
+              primeiro ativo no canto"). ASSETS continua real e em uso em
+              outro lugar (AssetHeatmapWidget) — nunca removido, só
+              realocado para onde ainda faz sentido. */}
           <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] h-[70%] shrink-0">
             <div
               className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
@@ -4782,26 +5221,6 @@ function TopBar({ data }: { data?: PriceState | null }) {
                     ? "₿"
                     : selectedAsset?.[0]}
               </span>
-            </div>
-            <div className="hidden lg:flex items-center gap-1">
-              {ASSETS.map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => {
-                    setMarketMode?.("CRYPTO");
-                    setSelectedTradFiAsset?.(null);
-                    setSelectedAsset?.(a);
-                  }}
-                  className={`px-1.5 py-1 rounded text-[0.5rem] font-bold tracking-wider transition-colors ${
-                    marketMode === "CRYPTO" && selectedAsset === a
-                      ? "bg-[#00f0ff20] text-[#00f0ff] border border-[#00f0ff40]"
-                      : "text-[#8ab4f8]/50 hover:text-[#8ab4f8] border border-transparent"
-                  }`}
-                >
-                  {a}
-                </button>
-              ))}
             </div>
             {/* Diretriz V-MAX item 7 ("Header Profissional"): o gatilho vira
                 "SÍMBOLO ▼" com o ativo REAL selecionado — não mais um campo
@@ -5124,6 +5543,21 @@ function TopBar({ data }: { data?: PriceState | null }) {
                   {marketSession.label}
                 </span>
               )}
+              {/* Ferramentas Institucionais: Kill Zone ICT — só aparece
+                  quando uma janela ESTREITA de alta probabilidade está de
+                  fato em curso (a maior parte do dia não tem nenhuma,
+                  honestamente omitido em vez de um estado "inativo" ocupando
+                  espaço na barra sempre-visível). Contexto de leitura, LEI 24
+                  intacta: nunca gera nem altera o sinal do Core Engine. */}
+              {killZones && killZones.active.length > 0 && (
+                <span
+                  title={`Kill Zone ICT ativa agora — janela estreita onde a atividade institucional (varredura de liquidez) historicamente se concentra. Janela fixa em UTC, mesma aproximação de DST da Sessão Atual — nunca finge mais precisão do que existe.`}
+                  className="flex items-center gap-1 text-[0.5rem] font-black uppercase tracking-wider text-[#ffb020] animate-pulse"
+                >
+                  <Crosshair size={10} />
+                  {killZones.active.map((z) => z.label.replace("Kill Zone · ", "")).join(" + ")}
+                </span>
+              )}
             </div>
           )}
           {/* Ordem "Ciborgue Vivo" §2: indicador compacto de risco/saúde
@@ -5282,7 +5716,12 @@ function SideBar({
   activeTab: string;
   setActiveTab: (t: string) => void;
 }) {
-  const { setWorkspaceManagerOpen, setChartLayersOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
+  const { setWorkspaceManagerOpen, setChartLayersOpen, setRadarPanelOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
+  // OMEGA CORE V-MAX (completar Fase 7): contagem real do próprio snapshot
+  // — nunca um badge decorativo. "Substitui o botão pulsante" (diretiva):
+  // um número real (0 quando não há nada) é honesto; uma animação
+  // pulsante sugeriria urgência que a lista pode não ter.
+  const radarCandidateCount = useRadarCandidatesSnapshot().length;
   // Language migration order: nav ids/labels moved to English (standard
   // professional trading terminology). Every id now routes to a DEDICATED
   // view fed by real data (SecondaryModuleView) — the old shared generic
@@ -5349,6 +5788,26 @@ function SideBar({
         className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
       >
         <Layers size={17} className="relative z-10" />
+      </button>
+      {/* OMEGA CORE V-MAX (completar Fase 7, Radar/OIH) — terceiro entry
+          point no mesmo rodapé, mesmo padrão dos dois acima. Rótulo
+          visível "Oportunidades" (nunca "Radar"): o cockpit já tem um
+          widget real chamado "RADAR DE CONSENSO" (CouncilWidget) e uma aba
+          "SCANNER" com heurística de %-change de 24h (ScannerWidget) —
+          nenhum dos dois é este módulo; um terceiro rótulo com a mesma
+          palavra confundiria o Operador sobre qual painel está abrindo. */}
+      <button
+        type="button"
+        onClick={() => setRadarPanelOpen?.((v: boolean) => !v)}
+        title="Radar / OIH — Oportunidades já validadas pelo organismo"
+        className="relative flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+      >
+        <RadarIcon size={17} className="relative z-10" />
+        {radarCandidateCount > 0 && (
+          <span className="absolute top-1 right-1.5 min-w-[13px] h-[13px] px-[2px] rounded-full bg-[#00ffaa] text-[#010308] text-[0.4rem] font-bold flex items-center justify-center leading-none">
+            {radarCandidateCount}
+          </span>
+        )}
       </button>
     </div>
   );
@@ -6169,7 +6628,21 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend } = useContext(WidgetContext) || {};
+  const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};
+  // OMEGA CORE V-MAX Fase 5 (Corredor de Confluência): a Neural Market
+  // Aura lia direto convictionReading (só o pool de 3 subsistemas) para a
+  // largura do corredor — mesma leitura que confluenceCorridor.intensity
+  // já é, agora TAMBÉM ciente de obstáculos estruturais reais no caminho
+  // até o alvo (Fase 5, confluence-corridor.ts). Seletor direto da store
+  // (mesmo padrão de useLayerRelevanceSnapshot já usado neste componente),
+  // nunca uma segunda leitura via WidgetContext para o mesmo dado.
+  const confluenceCorridor = useConfluenceCorridorSnapshot();
+  // EPC OMEGA FINAL, Etapa 10 ("Liquidity Sweep"): mesma store que
+  // AssistantOrb/CouncilWidget já leem (nexus/trap-detection.ts) — o
+  // gráfico nunca tinha assinado esta fatia, então o sweep real nunca
+  // ganhava sua própria price line (só existia como texto em outros
+  // painéis). Zero segunda coleta/cálculo.
+  const traps = useTrapSignalsSnapshot();
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
   // Correção de latência: o MESMO preço real que já alimenta a barra
   // superior (usePriceSnapshot — escrito na store a cada tick do WS,
@@ -6227,6 +6700,12 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
     if (typeof stop !== "number" || !Number.isFinite(stop)) return null;
     if (typeof target1 !== "number" || !Number.isFinite(target1)) return null;
     const target2 = typeof engine?.target2 === "number" && Number.isFinite(engine.target2) ? engine.target2 : null;
+    // Achado de auditoria (Ferramentas Institucionais): extensão de
+    // Fibonacci 61.8% — mesmo passthrough de target/target2, nenhum
+    // cálculo novo. target-tracker.js não computa força/obstáculos para
+    // este nível (só existe em support-resistance-engine.js), então TP3
+    // é mais simples que TP1/TP2: só o preço, sem strength/obstacleCount.
+    const target3 = typeof engine?.extendedTarget === "number" && Number.isFinite(engine.extendedTarget) ? engine.extendedTarget : null;
     // EPC §5 ("obstáculos estruturais... em qualquer ativo e qualquer
     // timeframe"): a entrada real do Núcleo é o preço atual
     // (tracker.current_price, exposto como engine.entry) — o mesmo ponto de
@@ -6256,9 +6735,10 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       target2,
       target2Strength: engine?.target2Strength ?? null,
       target2ObstacleCount: obstacleCountTo(target2),
+      target3,
       riskRewardRatio: typeof engine?.riskRewardRatio === "number" && Number.isFinite(engine.riskRewardRatio) ? engine.riskRewardRatio : null,
     };
-  }, [chartTradePlan, tradePlanStructureZones, engine?.direction, engine?.entry, engine?.stop, engine?.target, engine?.target2, engine?.target1Strength, engine?.target2Strength, engine?.riskRewardRatio]);
+  }, [chartTradePlan, tradePlanStructureZones, engine?.direction, engine?.entry, engine?.stop, engine?.target, engine?.target2, engine?.extendedTarget, engine?.target1Strength, engine?.target2Strength, engine?.riskRewardRatio]);
   // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
   // estrutural"): união das zonas REAIS (tradePlanStructureZones, as MESMAS
   // que já geram targets[i].obstacleCount acima na store) que ficam no
@@ -6308,11 +6788,17 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       computeAuraReading({
         trackRecord: auraTrackRecord,
         livePrice: livePrice.price,
-        conviction: convictionReading?.status === "OK" ? (convictionReading.convictionAdjusted ?? convictionReading.conviction) : null,
+        // Fase 5: confluenceCorridor.intensity já É a mesma leitura de
+        // convicção (convictionAdjusted ?? conviction) que este campo lia
+        // antes, AGORA também descontada por obstáculos estruturais reais
+        // no caminho até o alvo — o corredor da Aura fica mais largo
+        // (menos concentrado) quando o caminho está obstruído, mesmo com
+        // convicção alta, em vez de ignorar essa informação real.
+        conviction: confluenceCorridor?.status === "OK" ? confluenceCorridor.intensity : null,
         atrPercent: engine?.marketRegime?.atrPercent ?? null,
         timeframeMs: TIMEFRAME_MS[chartTimeframe as string] ?? TIMEFRAME_MS["15m"],
       }),
-    [auraTrackRecord, livePrice, convictionReading, engine?.marketRegime, chartTimeframe],
+    [auraTrackRecord, livePrice, confluenceCorridor, engine?.marketRegime, chartTimeframe],
   );
 
   // Auditoria de pendências (reconciliação real): o .slice(0,3) abaixo é
@@ -6380,6 +6866,15 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
         ? (2 * TREND_CHANNEL_STDDEV_MULTIPLIER * trendChannelForRelevance.stdDev * 100) /
           trendChannelForRelevance.mid[trendChannelForRelevance.mid.length - 1].value
         : null;
+    // Sessões institucionais: mesma computeSessionBoundaries pura que
+    // MarketSessionBandsPlugin já usa pra desenhar — só a transição MAIS
+    // RECENTE importa aqui (idade em candles até o último candle vivo).
+    const sessionBoundaries = Array.isArray(chartData) ? computeSessionBoundaries(chartData) : [];
+    const lastSessionBoundary = sessionBoundaries.length > 0 ? sessionBoundaries[sessionBoundaries.length - 1] : null;
+    const recentSessionBoundary =
+      lastSessionBoundary !== null && Array.isArray(chartData) && chartData.length > 0
+        ? chartData.length - 1 - lastSessionBoundary.index < MARKET_SESSION_RECENT_BOUNDARY_CANDLES
+        : false;
     return {
       tradePlanActive: Boolean(chartTradePlan) || Boolean(engineFallbackLevels),
       obstacleZoneCount: chartObstacleZones.length,
@@ -6394,8 +6889,11 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       trendChannelBandwidthPct,
       orderflowTrendActive: orderflowTrend?.status === "OK" && orderflowTrend.trend !== "ESTAVEL",
       hasOrderBook: Boolean(engine?.hasBook),
+      hasRecentLiquidation: Array.isArray(liquidations) && liquidations.length > 0,
+      hasRecentLiquiditySweep: (traps ?? []).some((t) => t.kind === "STOP_HUNT_TOPO" || t.kind === "STOP_HUNT_FUNDO"),
+      recentSessionBoundary,
     };
-  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook]);
+  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps]);
   const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setLayerRelevance(layerRelevance);
@@ -6410,7 +6908,16 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
     const autoMode: ChartLayerVisibility = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
     const manual: ChartLayerVisibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
     return CHART_LAYER_IDS.reduce((acc, id) => {
-      acc[id] = autoMode[id] ? layerRelevance[id].relevant : manual[id];
+      // Achado real (crash em runtime, Fase 8.1): computeLayerRelevance só
+      // cobria 15 das 18 camadas reais — uma camada nova em modo automático
+      // sem cobertura (liquidation_heatmap/liquidity_sweep/market_sessions,
+      // fechado no declutter do gráfico) fazia layerRelevance[id] vir
+      // undefined, e ".relevant" quebrava o render inteiro. As 18 camadas
+      // já têm regra própria agora (layer-relevance.test.ts prova 1:1 com
+      // CHART_LAYER_IDS), mas o fallback (`relevance?.relevant ?? true`)
+      // fica como defesa contra uma camada FUTURA esquecida — nunca derruba
+      // o app mesmo se layer-relevance.ts ficar defasado de novo.
+      acc[id] = autoMode[id] ? (layerRelevance[id]?.relevant ?? true) : manual[id];
       return acc;
     }, {} as ChartLayerVisibility);
   }, [chartLayerAutoMode, chartLayerVisibility, layerRelevance]);
@@ -6495,6 +7002,9 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             decision={nexusDecision ?? null}
             vwapState={vwapCtx?.state ?? null}
             nexusLineState={nlState ?? null}
+            liquidations={liquidations ?? []}
+            traps={traps ?? []}
+            symbol={selectedAsset ?? null}
             layerVisibility={effectiveChartLayerVisibility}
             emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}
@@ -6937,7 +7447,15 @@ function MarketBiasDecisionCard() {
 
         {direction ? (
           <div className="grid grid-cols-2 gap-1.5">
-            <LevelCard label="Entrada" value={entry} accent="#00f0ff" tag="REF" />
+            {/* Achado real de auditoria (DIRETRIZES AVANÇADAS, censo
+                visual): Entrada usava ciano aqui, mas âmbar/dourado
+                (#f0d06f = rgba(240,208,111,…)) em TODO o resto do app —
+                linha de preço de entrada e caixa de zona no gráfico
+                (EnhancedChart_110_Percent.tsx/TradePlanZonePlugin.tsx),
+                mesmo tom já usado por VWAP neutro/Heat Score aqui na
+                própria HUD. Stop/Alvo já batiam com o gráfico (vermelho/
+                verde) — só Entrada destoava. */}
+            <LevelCard label="Entrada" value={entry} accent="#f0d06f" tag="REF" />
             <LevelCard label="Invalidação" value={stop} accent="#ff0055" tag="REAL" />
             <LevelCard
               label="Alvo 1"
@@ -7512,6 +8030,12 @@ const CONSENSUS_RADAR_LABEL: Record<ConsensusRadarCategory, string> = {
 function CouncilWidget() {
   const council = useCouncilSnapshot();
   const cpi = useCpiSnapshot();
+  // Achado de auditoria: reward/pain/eventCount reais já são alimentados
+  // por 8 call sites reais de recordAffectiveEvent (App.tsx) mas só o
+  // ratio derivado (cpi) era exibido — nenhum consumidor distinguia "CPI
+  // 50% com 2 eventos" de "CPI 50% com 200 eventos". Mesmo padrão do
+  // TRUST SCORE logo abaixo (componentes reais no tooltip).
+  const affectiveMemory = useAffectiveMemorySnapshot();
   // V-MAX Fase 2: cenários Path A/B e armadilhas reais — mesma store.
   const scenario = useScenarioSnapshot();
   const traps = useTrapSignalsSnapshot();
@@ -7539,8 +8063,19 @@ function CouncilWidget() {
     <Widget id="council" title="MULTI-AGENT COUNCIL" flex="flex-[1] min-h-[210px]">
       <div className="flex flex-col gap-1 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
         <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff20]">
-          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">
-            DECISÃO{council?.riskGated ? " · TRAVADO (RISCO)" : ""}
+          {/* Achado real de auditoria (DIRETRIZES AVANÇADAS, consistência
+              de decisão — LEI 24): esta linha dizia só "DECISÃO", sem
+              tooltip, ao contrário das linhas-irmãs deste mesmo widget
+              (ex.: SCENARIO A/B logo abaixo, que já explicita "never
+              market probability"). O Conselho pode divergir do Core
+              Engine por um ciclo real (decision-layer.ts documenta isso
+              de propósito) — um relance rápido aqui podia confundir o
+              voto do Conselho com a decisão real única do sistema. */}
+          <span
+            className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide"
+            title="Voto do Multi-Agent Council — confluência/contexto real, nunca a decisão do sistema. A única decisão real (LONG/SHORT/WAIT) vem do Core Engine (LEI 24); o Conselho pode divergir por um ciclo real."
+          >
+            VOTO DO CONSELHO{council?.riskGated ? " · TRAVADO (RISCO)" : ""}
           </span>
           <span className={`text-[0.55rem] font-mono font-black ${stanceColor}`}>
             {stanceLabel}
@@ -7643,7 +8178,14 @@ function CouncilWidget() {
             ))}
           </div>
         )}
-        <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
+        <div
+          className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+          title={
+            affectiveMemory.eventCount > 0
+              ? `Reward ${affectiveMemory.reward.toFixed(2)} · Pain ${affectiveMemory.pain.toFixed(2)} · ${affectiveMemory.eventCount} eventos reais desde o boot`
+              : "Nenhum evento afetivo real registrado ainda nesta sessão"
+          }
+        >
           <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CPI · MEMÓRIA AFETIVA</span>
           <span className={`text-[0.5rem] font-mono font-black ${cpiColor}`}>{cpiLabel}</span>
         </div>
@@ -7772,7 +8314,7 @@ function MultiTimeframeMatrixWidget() {
 // ZERO REPETIÇÃO: nenhum destes indicadores aparece em outro painel —
 // regime/vieses/comitê/risco moram nos painéis das suas fases.
 function TelemetryHealthWidget() {
-  const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus } = useContext(WidgetContext) || {};
+  const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus, gmilProviders } = useContext(WidgetContext) || {};
   // Ordem "Ciborgue Vivo" §3: mesmos sinais reais já lidos abaixo para as
   // Rows existentes, mais os que só o relatório precisa (offline/frescor/
   // conexões por exchange) — zero segunda medição, só uma segunda síntese
@@ -7787,14 +8329,40 @@ function TelemetryHealthWidget() {
   const qualityLabel = quality
     ? `${quality.classification}${num(quality.weight) ? ` · peso ${(quality.weight * 100).toFixed(0)}%` : ""}`
     : AWAIT;
-  const qualityColor =
-    quality?.classification === "EXCELENTE" || quality?.classification === "SAUDAVEL"
-      ? "text-[#00ffaa]"
-      : quality?.classification === "DEGRADADA"
-        ? "text-[#f0d06f]"
-        : quality?.classification === "QUARENTENA"
-          ? "text-[#ff0055]"
-          : "text-[#8ab4f8]/50";
+  const qualityColor = DATA_QUALITY_COLOR[classifyBusQuality(quality?.classification ?? null)];
+
+  // ADITIVO V-MAX Etapa 10 (achado de auditoria): data-sufficiency.js já
+  // computa um score real 0-100 de cobertura de campos EM TODO ciclo
+  // (js/research/data-sufficiency.js via research-engine.js), mas antes
+  // desta mudança só era usado internamente para rebaixar `confidence` —
+  // nunca chegava à UI, então o Operador via a confiança rebaixada sem
+  // conseguir ver POR QUÊ. Puro passthrough (engine-bridge.ts), nada
+  // recomputado aqui.
+  const sufficiency = realCycle?.dataSufficiency ?? null;
+  const sufficiencyLabel = sufficiency ? `${sufficiency.score}/${sufficiency.max_score}` : AWAIT;
+  const sufficiencyColor = DATA_QUALITY_COLOR[classifySufficiencyScore(sufficiency?.score ?? null, sufficiency?.max_score ?? 100)];
+
+  // ADITIVO V-MAX Etapa 10 (achado de auditoria): GmilOrchestrator.getSnapshot()
+  // já computa um weight 0-1 real por provedor (mesmo computeQuality de
+  // gmil/quality-engine.ts que o consensus-engine usa para amortecer peso),
+  // mas nenhum consumidor sintetizava isso numa leitura única de saúde do
+  // GMIL — cada widget só lia providers individualmente. Média real do
+  // weight sobre os provedores que já tentaram ao menos 1 fetch real
+  // (lastReading !== null); provedor que ainda não rodou nem entra na
+  // média (não é "ruim", é "ainda não medido" — mesmo princípio de
+  // honestidade do resto da base). Mesmo padrão de agregação já usado por
+  // DecisionValidationWidget (contributingGmil) — nenhuma segunda
+  // assinatura de useGmilSnapshot(), só leitura do mesmo gmilProviders via
+  // WidgetContext.
+  const gmilList = gmilProviders ?? [];
+  const gmilAttempted = gmilList.filter((p: any) => p?.lastReading != null);
+  const gmilAvgWeight = gmilAttempted.length
+    ? gmilAttempted.reduce((sum: number, p: any) => sum + p.weight, 0) / gmilAttempted.length
+    : null;
+  const gmilLabel = gmilAvgWeight !== null
+    ? `${(gmilAvgWeight * 100).toFixed(0)}% · ${gmilAttempted.length}/${gmilList.length} fontes`
+    : AWAIT;
+  const gmilColor = DATA_QUALITY_COLOR[classifyWeight(gmilAvgWeight)];
 
   const variant = wasmVariantLabel(realCycle?.wasmVariant ?? null);
   const fpsClass = classifyFps(fps);
@@ -7814,6 +8382,8 @@ function TelemetryHealthWidget() {
     <Widget id="system_health" title="SYSTEM HEALTH" flex="flex-[0.8] min-h-[170px]">
       <div className="flex flex-col gap-1.5 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
         <Row label="QUALIDADE DA FONTE (BUS)" value={qualityLabel} valueClass={qualityColor} />
+        <Row label="SUFICIÊNCIA DE DADOS" value={sufficiencyLabel} valueClass={sufficiencyColor} />
+        <Row label="QUALIDADE GMIL (CONTEXTO)" value={gmilLabel} valueClass={gmilColor} />
         <Row label="WASM ENGINE" value={variant ?? AWAIT} valueClass={variant === "SIMD128" ? "text-[#00ffaa]" : "text-[#8ab4f8]"} />
         <Row
           label={`LATÊNCIA DO CICLO (${chartTimeframe?.toUpperCase() ?? "15M"})`}
@@ -7950,10 +8520,14 @@ function AssetHeatmapWidget() {
 //
 // Cada linha reflete DISPONIBILIDADE de um dado real já computado em outro
 // lugar desta sessão (engine useMemo / institutionalConsensus / GMIL) — zero
-// fetch novo, zero cálculo duplicado. "Consenso entre corretoras" é
-// honestamente NÃO_APLICAVEL: este terminal só tem uma fonte real de preço
-// (Binance); fabricar um consenso multi-exchange que não existe violaria o
-// princípio de dado real deste projeto. "Integridade dos dados" não vira uma
+// fetch novo, zero cálculo duplicado. Achado de auditoria (Ferramentas
+// Institucionais): "Consenso entre corretoras" estava hardcoded como
+// NÃO_APLICÁVEL com um comentário desatualizado ("só uma fonte real de
+// preço") — o app já tem 3 checagens cross-exchange reais (Bybit/OKX/MEXC
+// vs. Binance) alimentando trustScore.crossExchangeConvergence, já exibido
+// em 2 outros widgets (Decision Context, TRUST SCORE do Council). Corrigido
+// para ler o mesmo valor real via useTrustScoreSnapshot(), zero cálculo
+// novo. "Integridade dos dados" não vira uma
 // linha aqui de propósito — já é o campo "Data Feeds n/4" do painel Decision
 // Context (aba ANALYSIS, relocado da antiga barra operacional); repetir o
 // mesmo cálculo aqui seria a exata duplicação que a LEI 25 (Self Audit) pede
@@ -7991,6 +8565,11 @@ function formatConsensusScore(score: number | null): string {
 function DecisionValidationWidget() {
   const { engine, institutionalConsensus, ensembleConsensus, convictionReading: convictionReadingFromContext, riskSuggestion, gmilProviders, priceUpdatedAt, orderBookUpdatedAt, lastUpdateAt, chartTimeframe } =
     useContext(WidgetContext) || {};
+  // Achado de auditoria: mesmo hook já usado por 2 outros widgets
+  // (Decision Context, TRUST SCORE do Council) — trustScore.crossExchangeConvergence
+  // é o dado real que faltava aqui para a linha "Consenso Entre Corretoras"
+  // deixar de ser um NÃO_APLICÁVEL hardcoded.
+  const trustScore = useTrustScoreSnapshot();
 
   // Fase H: sugestão de dimensionamento (% equity / % risco). Fail-closed:
   // SEM_SUGESTAO exibe 0% com o motivo real. O selo é PERMANENTE e
@@ -8047,7 +8626,7 @@ function DecisionValidationWidget() {
     { label: "Liquidez (Livro de Ofertas)", available: !!engine?.hasBook },
     { label: "Volatilidade (ATR%)", available: num(engine?.marketRegime?.atrPercent) },
     { label: "Contexto Global (Consenso)", available: num(institutionalConsensus?.score) },
-    { label: "Consenso Entre Corretoras", available: null }, // null = NÃO_APLICAVEL, nunca fabricado
+    { label: "Consenso Entre Corretoras", available: num(trustScore?.crossExchangeConvergence) },
     { label: "Fluxo Institucional (OFI)", available: num(engine?.flowImbalance) },
     { label: "Structural Target Strength", available: !!engine?.target2Strength },
     { label: "Estrutura de Mercado", available: !!engine?.marketStructureLabel },

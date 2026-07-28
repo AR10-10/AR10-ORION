@@ -51,3 +51,38 @@ export function marketSessionFromUtc(date: Date): MarketSessionReading | null {
     windowUtc: `${fmt(s.startHour)}–${fmt(s.endHour)} UTC (janela fixa; DST real desloca ±1h)`,
   };
 }
+
+// EPC OMEGA FINAL, Etapa 10 ("Institutional Session Engine: marcar
+// Ásia/Londres/Nova York E MUDANÇAS DE SESSÃO"): auditoria da Etapa 1
+// encontrou marketSessionFromUtc real e já em uso (header), mas só como
+// texto — nunca um marcador de ONDE a sessão mudou dentro do histórico
+// carregado. Varre a série real de candles e devolve só os pontos de
+// TRANSIÇÃO (sessão do candle i difere da sessão do candle i-1) — nunca
+// uma sessão por candle, que seria ruído em qualquer timeframe com mais
+// de uma vela por sessão. O primeiro candle nunca conta como transição
+// (não há "mudança" sem um candle anterior real para comparar).
+//
+// Propriedade honesta emergente (não um caso especial escrito à mão):
+// candles diários+ (Binance ancora o open em 00:00 UTC) caem sempre na
+// mesma janela (ÁSIA) candle a candle, então esta função devolve [] em
+// timeframes onde uma marca de sessão não faria sentido — sem precisar
+// de um limiar de timeframe hardcoded.
+export interface SessionBoundary {
+  index: number; // índice do candle onde a NOVA sessão começa
+  time: number; // candle.time (segundos) neste índice
+  session: MarketSessionReading;
+}
+
+export function computeSessionBoundaries(candles: { time: number }[]): SessionBoundary[] {
+  const out: SessionBoundary[] = [];
+  let prevId: MarketSessionId | null = null;
+  for (let i = 0; i < candles.length; i++) {
+    const reading = marketSessionFromUtc(new Date(candles[i].time * 1000));
+    if (!reading) continue; // Date inválida — fail-closed, pula honesto (mesma regra de marketSessionFromUtc).
+    if (prevId !== null && reading.id !== prevId) {
+      out.push({ index: i, time: candles[i].time, session: reading });
+    }
+    prevId = reading.id;
+  }
+  return out;
+}

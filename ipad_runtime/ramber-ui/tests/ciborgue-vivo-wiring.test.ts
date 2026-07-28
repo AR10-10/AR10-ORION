@@ -59,7 +59,7 @@ describe('App.tsx: bosChoch computado antes de voiceSnapshot (dependência real 
 describe('App.tsx → EnhancedChart_110_Percent: structureBreak passa ponta a ponta até o plugin', () => {
   it('ChartWidget lê bosChoch do contexto e repassa structureBreak={bosChoch?.break ?? null}', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, convictionReading, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend } = useContext(WidgetContext) || {};');
+    expect(app).toContain('const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
     expect(app).toContain('structureBreak={bosChoch?.break ?? null}');
   });
 
@@ -95,8 +95,8 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
     // (pergunta do Operador "era pra cima ou pra baixo?"): o label também
     // carrega o glifo de direção ↑/↓ real (z.type do motor SMC), nunca só
     // a cor — mesma chamada de sempre, só honesta sobre mais informação.
-    expect(plugin).toContain('fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
-    expect(plugin).toContain('obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
+    expect(plugin).toContain('fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
+    expect(plugin).toContain('obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
   });
 });
 

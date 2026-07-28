@@ -44,22 +44,42 @@ const BASE: LayerRelevanceInput = {
   trendChannelBandwidthPct: null,
   orderflowTrendActive: false,
   hasOrderBook: false,
+  hasRecentLiquidation: false,
+  hasRecentLiquiditySweep: false,
+  recentSessionBoundary: false,
 };
 
-describe('RELEVANCE_LAYER_IDS espelha exatamente CHART_LAYER_IDS (EnhancedChart_110_Percent.tsx) — sem drift silencioso', () => {
-  it('as 15 chaves batem 1:1, mesma ordem não é exigida mas o conjunto sim', () => {
+describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent.tsx) 1:1 — zero drift, zero gap', () => {
+  // Declutter do gráfico (pedido direto do Operador): os 3 gaps antigos
+  // (liquidation_heatmap/liquidity_sweep/market_sessions sem regra própria
+  // de relevância, caindo no fallback `relevance?.relevant ?? true` do
+  // ChartLayersPanel) foram fechados — as 18 camadas reais agora têm
+  // cobertura 1:1, sem exceção documentada nenhuma.
+  it('toda chave de CHART_LAYER_IDS está em RELEVANCE_LAYER_IDS — nunca esquecida silenciosamente', () => {
     const chartSrc = read('../src/chart/EnhancedChart_110_Percent.tsx');
     const m = chartSrc.match(/export const CHART_LAYER_IDS = \[([\s\S]*?)\] as const;/);
     expect(m, 'CHART_LAYER_IDS não encontrado em EnhancedChart_110_Percent.tsx').not.toBeNull();
     const chartIds = Array.from(m![1].matchAll(/"([a-z_]+)"/g)).map((x) => x[1]);
-    expect(new Set(chartIds)).toEqual(new Set(RELEVANCE_LAYER_IDS));
-    expect(chartIds.length).toBe(15);
-    expect(RELEVANCE_LAYER_IDS.length).toBe(15);
+    const relevanceSet = new Set<string>(RELEVANCE_LAYER_IDS);
+    for (const id of chartIds) {
+      expect(relevanceSet.has(id), `camada "${id}" existe em CHART_LAYER_IDS mas não em RELEVANCE_LAYER_IDS`).toBe(true);
+    }
+    expect(chartIds.length).toBe(18);
+  });
+
+  it('toda chave de RELEVANCE_LAYER_IDS é uma camada real de CHART_LAYER_IDS — nunca uma chave órfã', () => {
+    const chartSrc = read('../src/chart/EnhancedChart_110_Percent.tsx');
+    const m = chartSrc.match(/export const CHART_LAYER_IDS = \[([\s\S]*?)\] as const;/);
+    const chartIds = new Set(Array.from(m![1].matchAll(/"([a-z_]+)"/g)).map((x) => x[1]));
+    for (const id of RELEVANCE_LAYER_IDS) {
+      expect(chartIds.has(id), `RELEVANCE_LAYER_IDS tem "${id}" que não existe mais em CHART_LAYER_IDS`).toBe(true);
+    }
+    expect(RELEVANCE_LAYER_IDS.length).toBe(18);
   });
 });
 
-describe('computeLayerRelevance: completude — sempre devolve as 15 chaves, nunca uma faltando', () => {
-  it('baseline vazio ainda produz um resultado para cada uma das 15 camadas', () => {
+describe('computeLayerRelevance: completude — sempre devolve as 18 chaves, nunca uma faltando', () => {
+  it('baseline vazio ainda produz um resultado para cada uma das 18 camadas', () => {
     const reading = computeLayerRelevance(BASE);
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(reading[id], `faltando chave ${id}`).toBeDefined();
@@ -118,8 +138,11 @@ describe('EPC FINAL §3/§12: emphasis (destaque) — só sobre um gradiente REA
       premiumDiscountZone: 'PREMIUM',
       vwapState: 'BULLISH',
       nexusLineState: 'BEARISH',
+      hasRecentLiquidation: true,
+      hasRecentLiquiditySweep: true,
+      recentSessionBoundary: true,
     });
-    for (const id of ['volume_profile', 'fibonacci', 'order_flow_heatmap', 'cvd', 'premium_discount', 'vwap', 'nexus_line', 'ema', 'equal_highs_lows'] as const) {
+    for (const id of ['volume_profile', 'fibonacci', 'order_flow_heatmap', 'cvd', 'premium_discount', 'vwap', 'nexus_line', 'ema', 'equal_highs_lows', 'liquidation_heatmap', 'liquidity_sweep', 'market_sessions'] as const) {
       expect(r[id].emphasis, `${id} não deveria ter highlight fabricado`).toBe('normal');
     }
   });
@@ -290,6 +313,45 @@ describe('equal_highs_lows: mesma proximidade real de liquidez usada por liquidi
   });
   it('com EQH/EQL real não varrida próxima => relevante', () => {
     expect(computeLayerRelevance({ ...BASE, unsweptLiquidityNearPrice: true }).equal_highs_lows.relevant).toBe(true);
+  });
+});
+
+describe('liquidation_heatmap: mesma condição real que o painel de lista já usa (liquidations.length > 0)', () => {
+  it('sem liquidação forçada real no feed => não relevante', () => {
+    const r = computeLayerRelevance(BASE);
+    expect(r.liquidation_heatmap.relevant).toBe(false);
+    expect(r.liquidation_heatmap.reason).toContain('nenhuma liquidação');
+  });
+  it('com pelo menos 1 liquidação forçada real => relevante', () => {
+    const r = computeLayerRelevance({ ...BASE, hasRecentLiquidation: true });
+    expect(r.liquidation_heatmap.relevant).toBe(true);
+    expect(r.liquidation_heatmap.reason).toContain('liquidação forçada');
+  });
+});
+
+describe('liquidity_sweep: mesmo filtro STOP_HUNT_TOPO/FUNDO que o canvas (EnhancedChart) já usa pra desenhar', () => {
+  it('sem trap real STOP_HUNT no momento => não relevante', () => {
+    const r = computeLayerRelevance(BASE);
+    expect(r.liquidity_sweep.relevant).toBe(false);
+    expect(r.liquidity_sweep.reason).toContain('nenhum sweep');
+  });
+  it('com trap real STOP_HUNT no momento => relevante', () => {
+    const r = computeLayerRelevance({ ...BASE, hasRecentLiquiditySweep: true });
+    expect(r.liquidity_sweep.relevant).toBe(true);
+    expect(r.liquidity_sweep.reason).toContain('STOP_HUNT');
+  });
+});
+
+describe('market_sessions: mesma computeSessionBoundaries pura que MarketSessionBandsPlugin já usa pra desenhar', () => {
+  it('sem transição de sessão recente => não relevante, sessão vigente estável', () => {
+    const r = computeLayerRelevance(BASE);
+    expect(r.market_sessions.relevant).toBe(false);
+    expect(r.market_sessions.reason).toContain('estável');
+  });
+  it('com transição real dentro da janela declarada => relevante, motivo cita a janela', () => {
+    const r = computeLayerRelevance({ ...BASE, recentSessionBoundary: true });
+    expect(r.market_sessions.relevant).toBe(true);
+    expect(r.market_sessions.reason).toContain('candles');
   });
 });
 

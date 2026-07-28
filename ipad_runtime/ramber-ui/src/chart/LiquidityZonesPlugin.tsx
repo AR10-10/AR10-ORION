@@ -188,9 +188,13 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       // VWAP/NL): BULLISH=↑ (zona de demanda, viés de alta), BEARISH=↓
       // (zona de oferta, viés de baixa). Zero cálculo novo — z.type já é a
       // direção real do motor SMC.
+      // OMEGA CORE V-MAX Fase 4 (§4.4 — auditoria "Bate-Olho"): forma
+      // compacta exata pedida é "FVG↑/FVG↓/OB↑/OB↓" (sem espaço entre a
+      // sigla e o glifo) — havia um espaço aqui. Zero mudança de
+      // informação/cor/direção, só a mesma string mais compacta.
       const dir = (t: "BULLISH" | "BEARISH") => (t === "BULLISH" ? "↑" : "↓");
-      fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));
-      obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB ${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));
+      fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));
+      obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));
     };
 
     const markDirty = () => {

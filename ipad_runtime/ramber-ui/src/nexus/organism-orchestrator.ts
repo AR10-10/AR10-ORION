@@ -105,6 +105,23 @@ export class OrganismOrchestrator {
       if (state.fibonacciConfluence !== prev.fibonacciConfluence) {
         this.bus.emit({ type: "QUANT.FIBONACCI.UPDATED", payload: { matrix: state.fibonacciConfluence } });
       }
+      // OMEGA CORE V-MAX (Fase 1.1) — smc/cvd/orderflowSignals eram
+      // "insumos pré-store" (docs/ORGANISM_DATA_FLOW.md): já reais, já
+      // computados em App.tsx, sem fatia própria até esta fase. Mesmo
+      // padrão de diff por referência dos dois casos QUANT.* acima.
+      if (state.smc !== prev.smc) {
+        this.bus.emit({ type: "QUANT.SMC.UPDATED", payload: { zones: state.smc } });
+      }
+      if (state.cvd !== prev.cvd) {
+        this.bus.emit({ type: "QUANT.CVD.UPDATED", payload: { cvd: state.cvd } });
+      }
+      if (state.orderflowSignals !== prev.orderflowSignals) {
+        this.bus.emit({ type: "QUANT.ORDERFLOW_SIGNALS.UPDATED", payload: { signals: state.orderflowSignals } });
+      }
+      // OMEGA CORE V-MAX (Fase 5) — Corredor de Confluência (Fusion §5).
+      if (state.confluenceCorridor !== prev.confluenceCorridor) {
+        this.bus.emit({ type: "QUANT.CONFLUENCE_CORRIDOR.UPDATED", payload: { reading: state.confluenceCorridor } });
+      }
       // §4 CÉREBRO
       if (state.council !== prev.council) {
         this.bus.emit({ type: "BRAIN.COUNCIL.UPDATED", payload: { decision: state.council } });
@@ -117,6 +134,11 @@ export class OrganismOrchestrator {
       }
       if (state.tradePlan !== prev.tradePlan) {
         this.bus.emit({ type: "BRAIN.TRADE_PLAN.UPDATED", payload: { plan: state.tradePlan } });
+      }
+      // OMEGA CORE V-MAX (completar Fase 7) — Radar/OIH: lista já
+      // qualificada/ranqueada, mesmo padrão referência-a-referência.
+      if (state.radarCandidates !== prev.radarCandidates) {
+        this.bus.emit({ type: "BRAIN.RADAR_CANDIDATES.UPDATED", payload: { candidates: state.radarCandidates } });
       }
       // §5 ORGANISMO — HEALTH.CHANGED continua do Health Monitor (publicador
       // único histórico da Fase 0.8) e DATA.* do CrossExchangeService: um

@@ -8,6 +8,9 @@ export { MarketDataBus, getMarketDataBus } from './bus.js';
 // qualquer roteamento de gráficos para mercado Spot", já travado por
 // tests/diretriz3-fixes.test.ts); zero import real restava em produção.
 export { collectBinanceFuturesKlines } from './binance-futures-candle-connector.js';
+// ADITIVO V-MAX Etapa 1 (Market Data Adapter): irmão MEXC do conector
+// acima, mesmo contrato de collect() — ver mexc-futures-candle-connector.js.
+export { collectMexcFuturesKlines } from './mexc-futures-candle-connector.js';
 export { normalizeCandles } from './normalizer.js';
 export { validateCandleSeries } from './integrity-validator.js';
 export { computeAsOf, computeAgeMs, isStale } from './time-synchronizer.js';

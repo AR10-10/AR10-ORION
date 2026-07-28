@@ -23,7 +23,16 @@
 //
 // Sem evento real => lista vazia honesta, nunca uma armadilha "possível".
 // Camada de análise/exibição — LEI 24 intacta.
-export const TRAP_CONTRACT_VERSION = 1 as const;
+//
+// v2 (EPC OMEGA FINAL, Etapa 10 — "Liquidity Sweep: captura/direção/
+// absorção"): auditoria da Etapa 1 encontrou a detecção real (abaixo) sem
+// NENHUMA marca própria no gráfico — a zona EQH/EQL some da tela no
+// instante em que é varrida (filtro !swept, EnhancedChart_110_Percent),
+// sem deixar rastro do momento do sweep. `sweptPrices` expõe o preço
+// real que sweptEqh/sweptEql já tinham EM ESCOPO aqui dentro (zero
+// recálculo, zero parsing das strings de `evidence`) para o canvas
+// desenhar uma price line no preço exato.
+export const TRAP_CONTRACT_VERSION = 2 as const;
 
 export type TrapKind =
   | "STOP_HUNT_TOPO" // EQH varrido (liquidez compradora tomada acima)
@@ -36,6 +45,10 @@ export interface TrapSignal {
   confidence: number; // escada real de corroboração (documentada acima), 0..1
   evidence: string[]; // eventos reais citados
   at: number;
+  // v2: preço(s) real(is) varrido(s) — só populado em STOP_HUNT_TOPO/FUNDO
+  // (o preço exato do pool EQH/EQL que motivou este sinal); [] em
+  // ABSORCAO_ANOMALA, que não tem um preço-âncora único real.
+  sweptPrices: number[];
 }
 
 export interface TrapInputs {
@@ -78,6 +91,7 @@ export function detectInstitutionalTraps(inputs: TrapInputs): TrapSignal[] {
         ...corroborationEvidence,
       ],
       at: inputs.now,
+      sweptPrices: sweptEqh.map((z) => z.price),
     });
   }
   if (sweptEql.length > 0) {
@@ -90,6 +104,7 @@ export function detectInstitutionalTraps(inputs: TrapInputs): TrapSignal[] {
         ...corroborationEvidence,
       ],
       at: inputs.now,
+      sweptPrices: sweptEql.map((z) => z.price),
     });
   }
 
@@ -101,6 +116,7 @@ export function detectInstitutionalTraps(inputs: TrapInputs): TrapSignal[] {
       confidence: Math.min(1, absorptions.length / 3),
       evidence: [`${absorptions.length} sinais reais de ABSORPTION na janela de ${Math.round(windowMs / 1000)}s`],
       at: inputs.now,
+      sweptPrices: [],
     });
   }
 

@@ -9,6 +9,7 @@
 // não duplica isso — só torna o estado real visível de forma honesta e
 // centralizada quando o Operador pede.
 import { classifyFps, classifyCycleLatency } from '../../../src/telemetry/index.js';
+import { classifyBusQuality } from './data-quality-vocabulary';
 import type { Exchange, ExchangeConnectionState, HealthSnapshot } from './types';
 
 export type DiagnosticSeverity = 'OK' | 'WARN' | 'CRITICAL';
@@ -64,13 +65,25 @@ export function buildDiagnosticReport(input: DiagnosticInput): DiagnosticReport 
         : { severity: 'OK', label: 'Motor de análise', detail: 'Último ciclo real concluído com sucesso.' },
   );
 
+  // Achado de auditoria (Data Quality Monitor unificado): a versão anterior
+  // desta checagem tratava qualquer `quality` truthy que não fosse
+  // QUARENTENA/DEGRADADA como severidade OK — incluindo o literal
+  // 'DADOS_INSUFICIENTES' que classifyScore() do Bus pode de fato emitir
+  // (string truthy, não bate com os 2 casos checados). Um relatório de
+  // autodiagnóstico reportando "tudo OK" para uma fonte SEM dado real era
+  // o oposto do que a Ordem "Ciborgue Vivo" §3 pede. classifyBusQuality
+  // (data-quality-vocabulary.ts, mesmo mapeador agora usado por
+  // TelemetryHealthWidget) fecha essa lacuna por construção — mesmo
+  // vocabulário de 4 estados em todo lugar que interpreta a classificação
+  // do Bus, nunca uma segunda leitura divergente.
   const quality = input.dataQualityClassification;
+  const qualityState = classifyBusQuality(quality);
   findings.push(
-    quality === 'QUARENTENA'
-      ? { severity: 'CRITICAL', label: 'Qualidade da fonte', detail: 'Data Quality Layer classificou a fonte como QUARENTENA — degradada demais para confiança normal.' }
-      : quality === 'DEGRADADA'
-        ? { severity: 'WARN', label: 'Qualidade da fonte', detail: 'Data Quality Layer classificou a fonte como DEGRADADA.' }
-        : quality
+    qualityState === 'FAIL'
+      ? { severity: 'CRITICAL', label: 'Qualidade da fonte', detail: `Data Quality Layer classificou a fonte como ${quality} — degradada demais para confiança normal.` }
+      : qualityState === 'WARNING'
+        ? { severity: 'WARN', label: 'Qualidade da fonte', detail: `Data Quality Layer classificou a fonte como ${quality}.` }
+        : qualityState === 'OK'
           ? { severity: 'OK', label: 'Qualidade da fonte', detail: `Data Quality Layer classificou a fonte como ${quality}.` }
           : { severity: 'WARN', label: 'Qualidade da fonte', detail: 'Ainda sem classificação real (aguardando primeiro snapshot do Bus).' },
   );

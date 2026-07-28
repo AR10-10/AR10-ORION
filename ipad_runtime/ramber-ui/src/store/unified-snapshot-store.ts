@@ -15,7 +15,9 @@
 //   §2 SÉRIES HISTÓRICAS — memória temporal do mercado (rings reais)
 //      l2History (Fase 1.1) · orderflowHistory (Fase 1.2)
 //   §3 MOTORES QUANT — derivações computadas de dado real
-//      volumeProfile (Fase 1.3, WASM) · fibonacciConfluence (Fase 1.4)
+//      volumeProfile (Fase 1.3, WASM) · fibonacciConfluence (Fase 1.4) ·
+//      premiumDiscount · harmonicPatterns · layerRelevance · smc/cvd/
+//      orderflowSignals (OMEGA CORE V-MAX Fase 1.1)
 //   §4 CÉREBRO — deliberação e projeção (camada de análise, LEI 24)
 //      council (item 4) · scenario (Fase 2) · trapSignals (Fase 2)
 //   §5 ORGANISMO — estado do próprio sistema
@@ -40,6 +42,7 @@ import type {
   Timeframe,
 } from "../nexus/types";
 import { maybeSampleL2History, type L2HistoryEntry } from "../nexus/l2-history";
+import { touchCandlesSymbol } from "../nexus/candles-cache";
 import { pushOrderflowHistory, type OrderflowHistoryEntry } from "../nexus/orderflow-history";
 import { pushConvictionHistory, type ConvictionScoreSample } from "../nexus/institutional-score";
 import type { VolumeProfileSnapshot } from "../nexus/volume-profile";
@@ -49,6 +52,8 @@ import type { ConsensusRadarReading } from "../nexus/consensus-radar";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
 import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
 import type { LayerRelevanceReading } from "../nexus/layer-relevance";
+import type { ConfluenceCorridorReading } from "../nexus/confluence-corridor";
+import type { RadarQualificationResult } from "../nexus/radar-qualification";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
 import type { TradePlan } from "../nexus/trade-plan";
@@ -70,7 +75,7 @@ import {
 } from "../nexus/affective-memory";
 // import type puro — apagado na compilação, nunca puxa o engine-bridge
 // (e seus módulos js pesados) para dentro do bundle da store em runtime.
-import type { TrustScoreSnapshot } from "../engine-bridge";
+import type { TrustScoreSnapshot, SmcZonesSnapshot, OrderflowSignal } from "../engine-bridge";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Formas (§1 e §5 — as demais vêm dos módulos nexus/, um contrato por motor)
@@ -123,7 +128,11 @@ export interface CoreSnapshot {
 // referência do Zustand, mesmo sem dado real novo).
 // ─────────────────────────────────────────────────────────────────────────
 
-const EMPTY_PRICE: PriceSnapshot = {
+// Achado real de auditoria (DIRETRIZES AVANÇADAS, sincronização — bug
+// HIGH confirmado): exportado para App.tsx poder repassar este MESMO
+// valor honesto de reset ao trocar de ativo, em vez de silenciosamente
+// pular a escrita (ver o efeito espelho de `setPrice` em App.tsx).
+export const EMPTY_PRICE: PriceSnapshot = {
   price: null, delta: null, deltaPct: null, high: null, low: null, volume: null, direction: null, updatedAt: null,
 };
 const EMPTY_ORDER_BOOK: OrderBookSnapshot = { bids: [], asks: [], updatedAt: null };
@@ -143,6 +152,7 @@ const EMPTY_ORDERFLOW_HISTORY: OrderflowHistoryEntry[] = [];
 const EMPTY_TRAPS: TrapSignal[] = [];
 const EMPTY_CONVICTION_HISTORY: ConvictionScoreSample[] = [];
 const EMPTY_HARMONIC_HITS: HarmonicPatternHit[] = [];
+const EMPTY_ORDERFLOW_SIGNALS: OrderflowSignal[] = [];
 
 // ─────────────────────────────────────────────────────────────────────────
 // Estado — na ordem canônica dos domínios (§1 → §5)
@@ -198,6 +208,30 @@ export interface UnifiedSnapshotState {
   // outro consumidor (o painel de camadas precisa da mesma leitura, sem
   // recomputar). null = ainda sem nenhum ciclo real processado.
   layerRelevance: LayerRelevanceReading | null;
+  // OMEGA CORE V-MAX (Fase 1.1, "matar a segunda verdade") — Fair Value
+  // Gaps/Order Blocks/liquidez (fvg-order-block-engine.js via
+  // engine-bridge.ts's computeSmcZones) e o Order Flow ao vivo (CVD +
+  // sinais OFI/Absorção/Exaustão do MEXC via src/orderflow/signal-engine.js)
+  // — os dois já reais e já computados em App.tsx desde antes desta fase;
+  // só não tinham fatia própria (ver docs/ORGANISM_DATA_FLOW.md, "Insumos
+  // pré-store"). Espelho fiel do MESMO dado real, escrito no MESMO commit
+  // de render — zero segunda computação, zero segundo motor. Consumidores
+  // existentes (WidgetContext) continuam sem migração forçada (nota no
+  // topo do arquivo); esta fatia é o gateway novo para
+  // getSnapshotForEngine()/futuros assinantes do bus.
+  smc: SmcZonesSnapshot | null;
+  // Soma corrida real desde a criação do worker de order flow desta aba —
+  // null só até a primeira leitura real (ver signal-engine.js). Nunca
+  // resetada de fato na fonte ao trocar de ativo (mesmo comportamento já
+  // real do useState espelhado); ver setCvd(null) no efeito de troca.
+  cvd: number | null;
+  orderflowSignals: OrderflowSignal[];
+  // OMEGA CORE V-MAX (Fase 5, Fusion §5 — task já aprovada pelo Operador
+  // "Corredor de Confluência"): organizador de contexto real que cruza
+  // opinionMass/institutionalScore/MTF/obstáculos já reais — nunca gera
+  // LONG/SHORT/WAIT (LEI 24). null enquanto o Core Engine está em WAIT ou
+  // nenhum componente real está disponível ainda.
+  confluenceCorridor: ConfluenceCorridorReading | null;
 
   // §4 CÉREBRO (camada de análise — LEI 24: jamais alimenta o Core Engine)
   // Item 4 — Conselho Multi-Agente (contrato versionado): 6 votos reais +
@@ -223,6 +257,14 @@ export interface UnifiedSnapshotState {
   // motores puros do ciclo principal (LEI 24: confluência/contexto, nunca um
   // segundo motor de decisão). null até o primeiro ciclo real.
   multiTimeframeContext: MultiTimeframeMatrix | null;
+  // OMEGA CORE V-MAX Fase 7 (Radar/OIH v1): lista JÁ filtrada e ordenada
+  // por qualityIndex real (rankRadarCandidates, radar-qualification.ts) —
+  // só ativos que passaram no filtro mínimo real (estrutura confirmada,
+  // Trade Plan real, risk gate liberado, confluência-leve suficiente).
+  // Nunca uma segunda decisão (LEI 24) — puro achado de contexto já
+  // validado em outro lugar. Lista vazia é o estado honesto comum
+  // (nenhum candidato qualificado agora), não um erro.
+  radarCandidates: RadarQualificationResult[];
   // Diretriz Complementar §18/§4 ("tendência de convicção" / "Conviction
   // Engine"): série real do Score Geral (institutional-score.ts) ao longo
   // do tempo — só amostras REAIS entram (WAIT/DADOS_INSUFICIENTES nunca,
@@ -304,6 +346,10 @@ interface UnifiedSnapshotActions {
   setPremiumDiscount: (reading: PremiumDiscountReading | null) => void;
   setHarmonicPatterns: (hits: HarmonicPatternHit[]) => void;
   setLayerRelevance: (reading: LayerRelevanceReading | null) => void;
+  setSmc: (zones: SmcZonesSnapshot | null) => void;
+  setCvd: (cvd: number | null) => void;
+  setOrderflowSignals: (signals: OrderflowSignal[]) => void;
+  setConfluenceCorridor: (reading: ConfluenceCorridorReading | null) => void;
 
   // §4 CÉREBRO
   setCouncil: (decision: CouncilDecision | null) => void;
@@ -312,6 +358,7 @@ interface UnifiedSnapshotActions {
   setConsensusRadar: (reading: ConsensusRadarReading | null) => void;
   setTradePlan: (plan: TradePlan | null) => void;
   setMultiTimeframeContext: (matrix: MultiTimeframeMatrix | null) => void;
+  setRadarCandidates: (candidates: RadarQualificationResult[]) => void;
   // Diretriz Complementar §18/§4: registra uma amostra REAL do Score Geral
   // (nunca chamado com null/WAIT — o efeito que chama já filtra isso).
   recordInstitutionalScore: (score: number) => void;
@@ -366,6 +413,10 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     premiumDiscount: null,
     harmonicPatterns: [],
     layerRelevance: null,
+    smc: null,
+    cvd: null,
+    orderflowSignals: [],
+    confluenceCorridor: null,
     // §4 CÉREBRO
     council: null,
     scenario: null,
@@ -373,6 +424,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     consensusRadar: null,
     tradePlan: null,
     multiTimeframeContext: null,
+    radarCandidates: [],
     institutionalScoreHistory: [],
     // §5 ORGANISMO
     core: EMPTY_CORE,
@@ -395,7 +447,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setCandles: (symbol, tf, candles) => set((s) => {
       const bySymbol = s.candles[symbol] ?? {};
       bySymbol[tf] = candles;
-      s.candles[symbol] = bySymbol;
+      s.candles = touchCandlesSymbol(s.candles as Record<string, typeof bySymbol>, symbol, bySymbol);
     }),
     setExchangeOrderBook: (exchange, snapshot) => set((s) => { s.orderBooks[exchange] = snapshot; }),
     setConnectionState: (exchange, state) => set((s) => { s.connections[exchange] = state; }),
@@ -415,6 +467,10 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setPremiumDiscount: (reading) => set((s) => { s.premiumDiscount = reading; }),
     setHarmonicPatterns: (hits) => set((s) => { s.harmonicPatterns = hits; }),
     setLayerRelevance: (reading) => set((s) => { s.layerRelevance = reading; }),
+    setSmc: (zones) => set((s) => { s.smc = zones; }),
+    setCvd: (cvd) => set((s) => { s.cvd = cvd; }),
+    setOrderflowSignals: (signals) => set((s) => { s.orderflowSignals = signals; }),
+    setConfluenceCorridor: (reading) => set((s) => { s.confluenceCorridor = reading; }),
     // §4 CÉREBRO
     setCouncil: (decision) => set((s) => { s.council = decision; }),
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
@@ -422,6 +478,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setConsensusRadar: (reading) => set((s) => { s.consensusRadar = reading; }),
     setTradePlan: (plan) => set((s) => { s.tradePlan = plan; }),
     setMultiTimeframeContext: (matrix) => set((s) => { s.multiTimeframeContext = matrix; }),
+    setRadarCandidates: (candidates) => set((s) => { s.radarCandidates = candidates; }),
     recordInstitutionalScore: (score) => set((s) => {
       s.institutionalScoreHistory = pushConvictionHistory(s.institutionalScoreHistory as ConvictionScoreSample[], { score, at: Date.now() });
     }),
@@ -512,6 +569,14 @@ export const useHarmonicPatternsSnapshot = (): HarmonicPatternHit[] =>
   useUnifiedSnapshotStore((s) => s.harmonicPatterns ?? EMPTY_HARMONIC_HITS);
 export const useLayerRelevanceSnapshot = (): LayerRelevanceReading | null =>
   useUnifiedSnapshotStore((s) => s.layerRelevance);
+export const useSmcSnapshot = (): SmcZonesSnapshot | null =>
+  useUnifiedSnapshotStore((s) => s.smc);
+export const useCvdSnapshot = (): number | null =>
+  useUnifiedSnapshotStore((s) => s.cvd);
+export const useOrderflowSignalsSnapshot = (): OrderflowSignal[] =>
+  useUnifiedSnapshotStore((s) => s.orderflowSignals ?? EMPTY_ORDERFLOW_SIGNALS);
+export const useConfluenceCorridorSnapshot = (): ConfluenceCorridorReading | null =>
+  useUnifiedSnapshotStore((s) => s.confluenceCorridor);
 
 // §4 CÉREBRO
 export const useCouncilSnapshot = (): CouncilDecision | null =>
@@ -526,6 +591,9 @@ export const useTradePlanSnapshot = (): TradePlan | null =>
   useUnifiedSnapshotStore((s) => s.tradePlan);
 export const useMultiTimeframeSnapshot = (): MultiTimeframeMatrix | null =>
   useUnifiedSnapshotStore((s) => s.multiTimeframeContext);
+const EMPTY_RADAR_CANDIDATES: RadarQualificationResult[] = [];
+export const useRadarCandidatesSnapshot = (): RadarQualificationResult[] =>
+  useUnifiedSnapshotStore((s) => s.radarCandidates ?? EMPTY_RADAR_CANDIDATES);
 export const useInstitutionalScoreHistory = (): ConvictionScoreSample[] =>
   useUnifiedSnapshotStore((s) => s.institutionalScoreHistory ?? EMPTY_CONVICTION_HISTORY);
 

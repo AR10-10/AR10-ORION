@@ -47,6 +47,12 @@ import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
 // V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
 // barras à direita — dado direto da store (Fase 1.3), ver header do plugin.
 import { VolumeProfilePlugin } from "./VolumeProfilePlugin";
+// OMEGA CORE V-MAX Fase 8.1: heatmap real de liquidação — mesma
+// arquitetura de overlay, ver header do plugin para a divisão de
+// responsabilidade com VolumeProfilePlugin (barras à esquerda vs. à
+// direita, zero sobreposição visual).
+import { LiquidationHeatmapPlugin } from "./LiquidationHeatmapPlugin";
+import { MarketSessionBandsPlugin } from "./MarketSessionBandsPlugin";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
 import { TradePlanZonePlugin } from "./TradePlanZonePlugin";
@@ -89,7 +95,8 @@ import { computeNexusLineSeries } from "../nexus/nexus-line";
 import type { DirectionalLineState } from "../nexus/vwap-state";
 // Ordem "Ciborgue Vivo" §1: BOS/CHOCH real (bos-choch-engine.js via
 // engine-bridge.ts's computeBosChoch) — mesmo tipo que StructureBreakMarkersPlugin usa.
-import type { StructureBreak } from "../engine-bridge";
+import type { StructureBreak, LiquidationEvent } from "../engine-bridge";
+import type { TrapSignal } from "../nexus/trap-detection";
 // Auditoria do painel do gráfico: "canais de tendência", gap real já
 // documentado em rodadas anteriores — ver cabeçalho de
 // nexus/trend-channel-engine.ts para a definição real (Linear Regression
@@ -175,6 +182,13 @@ export const CHART_LAYER_IDS = [
   "premium_discount",
   "harmonics",
   "equal_highs_lows",
+  "liquidation_heatmap",
+  // EPC OMEGA FINAL, Etapa 10 (Novas Camadas Institucionais): sweep real
+  // (trap-detection.ts, antes sem marca própria — a zona EQH/EQL varrida
+  // só sumia da tela) + sessão institucional real (market-session.ts,
+  // antes só texto no header).
+  "liquidity_sweep",
+  "market_sessions",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -194,6 +208,9 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   premium_discount: true,
   harmonics: true,
   equal_highs_lows: true,
+  liquidation_heatmap: true,
+  liquidity_sweep: true,
+  market_sessions: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -216,6 +233,9 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   premium_discount: true,
   harmonics: true,
   equal_highs_lows: true,
+  liquidation_heatmap: true,
+  liquidity_sweep: true,
+  market_sessions: true,
 };
 
 interface EnhancedChartProps {
@@ -279,6 +299,12 @@ interface EnhancedChartProps {
     target2: number | null;
     target2Strength: { label: "FORTE" | "FRACA"; touches: number } | null;
     target2ObstacleCount?: number | null;
+    // Achado de auditoria (Ferramentas Institucionais): extensão de
+    // Fibonacci 61.8% sobre a última perna confirmada
+    // (support-resistance-engine.js) — mais simples que target1/target2 de
+    // propósito: nenhuma força/obstáculo é computada para este nível na
+    // fonte, então TP3 é preço puro, sem os mesmos metadados.
+    target3?: number | null;
     riskRewardRatio: number | null;
   } | null;
   // Neural Market Aura: visual translation of the SAME real Trade Plan +
@@ -343,6 +369,19 @@ interface EnhancedChartProps {
   // §20). Optional/fail-closed: ausente => NEUTRAL (visual de sempre).
   vwapState?: DirectionalLineState | null;
   nexusLineState?: DirectionalLineState | null;
+  // OMEGA CORE V-MAX Fase 8.1 ("heatmap real de liquidação"): eventos JÁ
+  // reais do feed exchange-wide (App.tsx, startRealLiquidationFeed) +
+  // símbolo ativo — LiquidationHeatmapPlugin filtra/bucketiza, este
+  // componente nunca recalcula nada. Optional/fail-closed: ausente =>
+  // nenhuma barra desenhada, igual a qualquer outra camada opcional acima.
+  liquidations?: LiquidationEvent[];
+  // EPC OMEGA FINAL, Etapa 10 ("Liquidity Sweep: captura/direção/
+  // absorção"): mesmos TrapSignal[] já reais (trap-detection.ts, via
+  // useTrapSignalsSnapshot) que os widgets de texto já mostravam — o
+  // canvas nunca tinha ganhado sua própria marca no preço exato do sweep.
+  // Optional/fail-closed: ausente => nenhuma price line de sweep.
+  traps?: TrapSignal[];
+  symbol?: string | null;
 }
 
 // Continuidade §6 (hierarquia visual dos alvos) — Diretriz de Evolução
@@ -433,6 +472,9 @@ export function EnhancedChart_110_Percent({
   decision,
   vwapState,
   nexusLineState,
+  liquidations,
+  traps,
+  symbol,
   layerVisibility,
   emaPeriod,
   onRequestOlderCandles,
@@ -444,6 +486,11 @@ export function EnhancedChart_110_Percent({
   const supportLineRef = useRef<IPriceLine | null>(null);
   const resistanceLineRef = useRef<IPriceLine | null>(null);
   const zoneLinesRef = useRef<IPriceLine[]>([]);
+  // EPC OMEGA FINAL, Etapa 10: price lines do sweep real (TrapSignal.
+  // sweptPrices) — ref PRÓPRIA, nunca reusa zoneLinesRef (ciclos de
+  // limpeza/redesenho independentes, mesma separação que support/
+  // resistance já têm entre si).
+  const sweepLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
   const tradePlanLinesRef = useRef<IPriceLine[]>([]);
   // EPC §5/§6 (continuação): linhas do fallback do Core Engine
@@ -761,6 +808,7 @@ export function EnhancedChart_110_Percent({
       supportLineRef.current = null;
       resistanceLineRef.current = null;
       zoneLinesRef.current = [];
+      sweepLinesRef.current = [];
       fibLinesRef.current = [];
       tradePlanLinesRef.current = [];
       scenarioLinesRef.current = [];
@@ -946,6 +994,38 @@ export function EnhancedChart_110_Percent({
       );
     });
   }, [liquidityZones, visibility.equal_highs_lows]);
+
+  // EPC OMEGA FINAL, Etapa 10 ("Liquidity Sweep: captura/direção/
+  // absorção"): auditoria da Etapa 1 encontrou trap-detection.ts real e já
+  // corroborando sweeps (STOP_HUNT_TOPO/FUNDO), mas a zona EQH/EQL varrida
+  // simplesmente some do bloco acima (filtro !swept) sem deixar rastro do
+  // momento do sweep — mesmo mecanismo de price line, cor âmbar própria
+  // (nunca usada por EQH/EQL roxo nem OB/FVG verde/vermelho), preço real
+  // de TrapSignal.sweptPrices (zero recálculo, mesmo dado que a zona já
+  // tinha antes de sumir).
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const series = seriesRef.current;
+    sweepLinesRef.current.forEach((line) => series.removePriceLine(line));
+    sweepLinesRef.current = [];
+    if (!visibility.liquidity_sweep) return;
+
+    (traps ?? []).forEach((t) => {
+      if (t.kind !== "STOP_HUNT_TOPO" && t.kind !== "STOP_HUNT_FUNDO") return;
+      t.sweptPrices.forEach((price) => {
+        sweepLinesRef.current.push(
+          series.createPriceLine({
+            price,
+            color: "rgba(255, 191, 0, 0.85)",
+            lineWidth: 1,
+            lineStyle: LineStyle.Solid,
+            axisLabelVisible: false,
+            title: `⚡ SWEEP ${t.kind === "STOP_HUNT_TOPO" ? "↑" : "↓"} ${Math.round(t.confidence * 100)}%`,
+          }),
+        );
+      });
+    });
+  }, [traps, visibility.liquidity_sweep]);
 
   // V-MAX Fase 1 (fechamento do §3.1): alimenta a série de CVD com o
   // histórico REAL da store (mesmo orderflowHistory do heatmap — um dado,
@@ -1413,6 +1493,7 @@ export function EnhancedChart_110_Percent({
     mk(engineFallbackLevels.stop, "rgba(255, 0, 85, 0.5)");
     mk(engineFallbackLevels.target1, "rgba(0, 255, 170, 0.5)");
     if (engineFallbackLevels.target2 !== null) mk(engineFallbackLevels.target2, "rgba(0, 255, 170, 0.35)");
+    if (engineFallbackLevels.target3 != null) mk(engineFallbackLevels.target3, "rgba(0, 255, 170, 0.2)");
   }, [engineFallbackLevels]);
 
   // Ordem Final Autonomia Evolução §1 + Diretriz Complementar §2/§4:
@@ -1565,13 +1646,25 @@ export function EnhancedChart_110_Percent({
       // atualiza a vela RENDERIZADA via series.update() (deliberado:
       // SMC/Fibonacci/Volume Profile não podem recomputar a cada tick de
       // preço), nunca escreve de volta no array `data`. A barra superior
-      // (mesmo usePriceSnapshot() que alimenta `livePrice` aqui) seguia ao
-      // vivo enquanto este rótulo congelava no último REST/kline — dois
-      // números diferentes reivindicando "o preço atual" ao mesmo tempo
-      // (~30s de defasagem possível, o intervalo real do poll REST).
-      // livePrice já chega como prop (mesma fonte do patch da vela acima)
-      // — preferido aqui, com fallback pro close da vela só quando ainda
-      // não existe nenhum tick real (fail-closed, carregamento inicial).
+      // seguia ao vivo enquanto este rótulo congelava no último
+      // REST/kline — dois números diferentes reivindicando "o preço
+      // atual" ao mesmo tempo (~30s de defasagem possível, o intervalo
+      // real do poll REST). livePrice já chega como prop (mesma fonte do
+      // patch da vela acima) — preferido aqui, com fallback pro close da
+      // vela só quando ainda não existe nenhum tick real (fail-closed,
+      // carregamento inicial).
+      //
+      // Correção de comentário (achado real, auditoria de sincronização
+      // DIRETRIZES AVANÇADAS): a frase acima dizia que a barra superior
+      // usa "o mesmo usePriceSnapshot() que alimenta livePrice aqui" —
+      // falso. TopBar lê `priceData` (estado React direto, App.tsx) por
+      // prop; `livePrice` aqui vem de `usePriceSnapshot()`, um espelho
+      // Zustand do MESMO `priceData` escrito um commit de render depois
+      // (App.tsx, efeito `[priceData]`). Ou seja: mesmo dado real na
+      // origem, mas dois caminhos com timing diferente — a barra superior
+      // é sempre igual ou mais nova que este rótulo, nunca o contrário.
+      // Gap estrutural real, ainda não fechado (documentado no backlog);
+      // esta nota só corrige a afirmação factual errada, não o gap em si.
       const displayPrice = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : lastCandle.close;
       out.push({
         price: displayPrice,
@@ -1610,6 +1703,14 @@ export function EnhancedChart_110_Percent({
     // shouldCompactLabels, formatEtaRange) e MESMOS inputs reais que o
     // efeito da LINHA acima — linha e rótulo nunca divergem. Fail-closed:
     // sem plano, zero rótulos (early guard de cada push por Number.isFinite).
+    // OMEGA CORE V-MAX Fase 4 (§4.2/§4.4 — auditoria "Bate-Olho"): achado
+    // real — esta função só existia dentro do bloco engineFallbackLevels
+    // abaixo, então o Trade Plan REAL do Conselho nunca mostrava a
+    // contagem de obstáculos no rótulo do alvo (só a zona destacada no
+    // LiquidityZonesPlugin a exibia). Hoisted para o escopo externo — os
+    // DOIS blocos agora reusam a MESMA função, zero duplicação (antes
+    // havia uma cópia idêntica só dentro do bloco do fallback).
+    const obstacleSuffix = (n: number | null | undefined) => (typeof n === "number" && n > 0 ? ` ⚠ ${n}` : "");
     if (tradePlan) {
       const hits = targetsHit ?? 0;
       const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
@@ -1666,8 +1767,8 @@ export function EnhancedChart_110_Percent({
             ? formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)
             : null;
         const base = compactLabels
-          ? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}`
-          : `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}`;
+          ? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`
+          : `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`;
         out.push({ price: target.price, text: reached ? `${base} · REACHED` : base, color: "rgba(0, 255, 170, 0.75)" });
       });
     }
@@ -1695,12 +1796,12 @@ export function EnhancedChart_110_Percent({
       // strengthSuffix também alinhado ao estilo tight de levelTitle()
       // (S1/R1 acima) — espaço, nunca "·", mesmo padrão em todo o eixo.
       const strengthSuffix = (s: { label: "FORTE" | "FRACA"; touches: number } | null) => (s ? ` ${s.label}` : "");
-      // EPC MODO ELITE §4 ("Obstáculos estruturais" na lista permanente): o
-      // Núcleo não tem painel próprio (o Conselho tem o ANALYSIS), então o
-      // rótulo é o único lugar dessa contagem — sufixo compacto "⚠ N"
-      // (mesmo glifo ⚠ da zona destacada no LiquidityZonesPlugin), só quando
-      // há obstáculo real no caminho. Zero quando o caminho está livre.
-      const obstacleSuffix = (n: number | null | undefined) => (typeof n === "number" && n > 0 ? ` ⚠ ${n}` : "");
+      // EPC MODO ELITE §4 ("Obstáculos estruturais" na lista permanente):
+      // sufixo compacto "⚠ N" (mesmo glifo ⚠ da zona destacada no
+      // LiquidityZonesPlugin), só quando há obstáculo real no caminho —
+      // zero quando livre. obstacleSuffix agora vem do escopo externo
+      // (Fase 4: hoisted para ser reusado pelo Trade Plan REAL acima
+      // também, ver comentário na declaração).
       if (Number.isFinite(engineFallbackLevels.stop)) {
         const breached = p !== null && (longFb ? p <= engineFallbackLevels.stop : p >= engineFallbackLevels.stop);
         out.push({
@@ -1726,6 +1827,19 @@ export function EnhancedChart_110_Percent({
           price: engineFallbackLevels.target2,
           text: `TP2${strengthSuffix(engineFallbackLevels.target2Strength)}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,
           color: "rgba(0, 255, 170, 0.35)",
+        });
+      }
+      // Achado de auditoria (Ferramentas Institucionais): TP3 = extensão
+      // de Fibonacci 61.8%, mesma convenção TP1/TP2/TP3 numerada sempre
+      // (EPC FINAL §8) — sem strengthSuffix/obstacleSuffix porque a fonte
+      // (support-resistance-engine.js) não computa esses metadados para
+      // este nível, nunca um valor fabricado só para preencher o rótulo.
+      if (engineFallbackLevels.target3 != null && Number.isFinite(engineFallbackLevels.target3)) {
+        const reached = p !== null && (longFb ? p >= engineFallbackLevels.target3 : p <= engineFallbackLevels.target3);
+        out.push({
+          price: engineFallbackLevels.target3,
+          text: `TP3${reached ? " · REACHED" : ""}`,
+          color: "rgba(0, 255, 170, 0.2)",
         });
       }
     }
@@ -1831,6 +1945,28 @@ export function EnhancedChart_110_Percent({
         <VolumeProfilePlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
+        />
+      )}
+      {/* OMEGA CORE V-MAX Fase 8.1: densidade real de liquidações JÁ
+         acontecidas nesta sessão (retrospectivo, nunca preditivo — ver
+         header do plugin), barras à ESQUERDA para nunca sobrepor o Volume
+         Profile acima (à direita). */}
+      {visibility.liquidation_heatmap && (
+        <LiquidationHeatmapPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          liquidations={liquidations ?? []}
+          symbol={symbol ?? null}
+        />
+      )}
+      {/* EPC OMEGA FINAL, Etapa 10 (Institutional Session Engine): mesmo
+         array `data` que os overlays acima já usam — computeSessionBoundaries
+         é puro/derivado, zero prop nova de App.tsx além do que já existe. */}
+      {visibility.market_sessions && (
+        <MarketSessionBandsPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
         />
       )}
       {/* Neural Market Aura: the conviction corridor, mounted BEFORE the

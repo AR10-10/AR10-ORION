@@ -166,20 +166,21 @@ describe('EnhancedChart_110_Percent.tsx: aura montada ANTES da caixa de entrada 
   });
 });
 
-describe('App.tsx: ChartWidget computa auraReading reaproveitando trackRecord real + convictionReading compartilhada', () => {
+describe('App.tsx: ChartWidget computa auraReading reaproveitando trackRecord real + confluenceCorridor da store (Fase 5)', () => {
   it('importa computeAuraReading/TIMEFRAME_MS de nexus/aura-lifecycle', () => {
     const app = read('../src/App.tsx');
     expect(app).toContain('import { computeAuraReading, TIMEFRAME_MS } from "./nexus/aura-lifecycle";');
   });
 
-  it('usa useTrackRecordSnapshot (mesma fatia real do Signal Track Record) + convictionReading do contexto, nunca um segundo cálculo de convicção', () => {
+  it('usa useTrackRecordSnapshot (mesma fatia real do Signal Track Record) + useConfluenceCorridorSnapshot (Fase 5, já obstáculo-ciente), nunca um segundo cálculo de convicção', () => {
     const app = read('../src/App.tsx');
     expect(app).toContain('const auraTrackRecord = useTrackRecordSnapshot();');
+    expect(app).toContain('const confluenceCorridor = useConfluenceCorridorSnapshot();');
     const fnMatch = app.match(/const auraReading = useMemo\(\s*\(\) =>\s*computeAuraReading\(\{([\s\S]*?)\}\),/);
     expect(fnMatch, 'computeAuraReading não encontrada').not.toBeNull();
     const body = fnMatch![1];
     expect(body).toContain('trackRecord: auraTrackRecord,');
-    expect(body).toContain('conviction: convictionReading?.status === "OK" ? (convictionReading.convictionAdjusted ?? convictionReading.conviction) : null,');
+    expect(body).toContain('conviction: confluenceCorridor?.status === "OK" ? confluenceCorridor.intensity : null,');
     expect(body).toContain('atrPercent: engine?.marketRegime?.atrPercent ?? null,');
   });
 

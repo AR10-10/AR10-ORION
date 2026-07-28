@@ -29,6 +29,8 @@ import { buildCouncilDecision } from '../src/nexus/council';
 import { buildScenarioProjection, type ScenarioLevel } from '../src/nexus/scenario-engine';
 import { detectInstitutionalTraps } from '../src/nexus/trap-detection';
 import { buildTradePlan } from '../src/nexus/trade-plan';
+import { computeSmcZones, type OrderflowSignal } from '../src/engine-bridge';
+import { computeConfluenceCorridor } from '../src/nexus/confluence-corridor';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
@@ -68,6 +70,10 @@ beforeEach(() => {
   s.setScenario(null);
   s.setTrapSignals([]);
   s.setTradePlan(null);
+  s.setSmc(null);
+  s.setCvd(null);
+  s.setOrderflowSignals([]);
+  s.setConfluenceCorridor(null);
   s.setSymbol('BTC');
   s.setActiveTimeframe('15m');
   s.setOffline(false);
@@ -308,6 +314,71 @@ describe('OrganismOrchestrator: escrita na store É a publicação — um write 
   });
 });
 
+describe('OMEGA CORE V-MAX (Fase 1.1): smc/cvd/orderflowSignals — insumos pré-store migrados, mesmo padrão QUANT.*', () => {
+  it('setSmc(saída real de computeSmcZones) publica QUANT.SMC.UPDATED com a MESMA referência escrita na store', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('QUANT.SMC.UPDATED', (p) => received.push(p.zones));
+    const zones = computeSmcZones([]); // motor real; amostra vazia = zonas vazias honestas, não fabricado
+    useUnifiedSnapshotStore.getState().setSmc(zones);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(zones);
+    expect(received[0]).toBe(useUnifiedSnapshotStore.getState().smc);
+  });
+
+  it('setCvd(valor real) publica QUANT.CVD.UPDATED; null explícito (troca de ativo) também é transição publicada', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: Array<number | null> = [];
+    bus.on('QUANT.CVD.UPDATED', (p) => received.push(p.cvd));
+    useUnifiedSnapshotStore.getState().setCvd(125.5);
+    useUnifiedSnapshotStore.getState().setCvd(null);
+    expect(received).toEqual([125.5, null]);
+  });
+
+  it('setOrderflowSignals(sinal real OFI/Absorção/Exaustão) publica QUANT.ORDERFLOW_SIGNALS.UPDATED com a mesma referência', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('QUANT.ORDERFLOW_SIGNALS.UPDATED', (p) => received.push(p.signals));
+    const signals: OrderflowSignal[] = [
+      { type: 'ABSORPTION', confidence: 0.8, price: 50_000, timestamp: Date.now(), metadata: {} },
+    ];
+    useUnifiedSnapshotStore.getState().setOrderflowSignals(signals);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(signals);
+  });
+
+  it('setConfluenceCorridor(saída real de computeConfluenceCorridor) publica QUANT.CONFLUENCE_CORRIDOR.UPDATED com a MESMA referência', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('QUANT.CONFLUENCE_CORRIDOR.UPDATED', (p) => received.push(p.reading));
+    const reading = computeConfluenceCorridor({
+      direction: 'LONG',
+      conviction: {
+        status: 'OK',
+        reason: null,
+        coreDirection: 'LONG',
+        conviction: 0.75,
+        convictionAdjusted: null,
+        verdict: 'CONFIRMS',
+        agreeingCount: 1,
+        totalReadable: 1,
+        members: [],
+        computedAt: Date.now(),
+      },
+      activeObstacleCount: 0,
+    });
+    expect(reading.status).toBe('OK'); // sanidade: o motor real produziu uma leitura
+    useUnifiedSnapshotStore.getState().setConfluenceCorridor(reading);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(reading);
+    expect(received[0]).toBe(useUnifiedSnapshotStore.getState().confluenceCorridor);
+  });
+});
+
 describe('Sincronização fim-a-fim (a prova da Ordem): conselho ESCREVE → bus NOTIFICA → cenário RELÊ do snapshot', () => {
   it('a cadeia inteira flui pela camada central — nenhum motor toca no outro, e evento/snapshot são o MESMO dado', () => {
     orch = new OrganismOrchestrator(bus);
@@ -352,5 +423,29 @@ describe('Fiação real no código-fonte: App e Health Monitor obedecem a camada
   it('health-monitor.ts: a leitura do organismo passa pelo gateway versionado (getSnapshotForEngine)', () => {
     const s = read('../src/nexus/health-monitor.ts');
     expect(s).toContain('getSnapshotForEngine()');
+  });
+
+  it('App.tsx: smcZones/cvd/orderflowSignals são espelhados na store (OMEGA CORE V-MAX Fase 1.1) — mesmo commit, zero segunda computação', () => {
+    const s = read('../src/App.tsx');
+    expect(s).toContain('useUnifiedSnapshotStore.getState().setSmc(smcZones);');
+    expect(s).toContain('useUnifiedSnapshotStore.getState().setCvd(value);');
+    expect(s).toContain('useUnifiedSnapshotStore.getState().setOrderflowSignals(orderflowSignals);');
+    // Os dois espelhos por useEffect reagem à MESMA fatia que mirroram —
+    // nunca escritos dentro de um updater funcional (StrictMode roda um
+    // updater funcional 2x; um efeito colateral ali dentro duplicaria o
+    // evento no bus, ver comentário real ao lado da declaração).
+    expect(s).toContain('}, [smcZones]);');
+    expect(s).toContain('}, [orderflowSignals]);');
+  });
+
+  it('App.tsx: Corredor de Confluência (OMEGA CORE V-MAX Fase 5) cruza só sinais JÁ reais/já computados, nunca recalcula direção/plano', () => {
+    const s = read('../src/App.tsx');
+    const idx = s.indexOf('const confluenceCorridor = useMemo(');
+    expect(idx, 'computação do Corredor de Confluência não encontrada').toBeGreaterThan(-1);
+    const block = s.slice(idx, s.indexOf('useEffect(() => {\n    useUnifiedSnapshotStore.getState().setConfluenceCorridor(confluenceCorridor);\n  }, [confluenceCorridor]);', idx) + 200);
+    expect(block).toContain('direction: engine?.direction ?? null,');
+    expect(block).toContain('conviction: convictionReading,');
+    expect(block).toContain('activeObstacleCount: trackedPlan?.targets?.[0]?.obstacleCount ?? null,');
+    expect(block).toContain('useUnifiedSnapshotStore.getState().setConfluenceCorridor(confluenceCorridor);');
   });
 });

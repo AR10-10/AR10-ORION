@@ -363,7 +363,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
   it('último preço usa a MESMA cor up/down real da própria série de candles (#00ffaa/#ff0055) — nunca uma cor nova', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 4400);
+    const block = s.slice(idx, idx + 5600);
     expect(block).toContain('displayPrice >= lastCandle.open ? "#00ffaa" : "#ff0055"');
   });
 
@@ -378,7 +378,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
     const s = chart();
     const idx = s.indexOf('const lastCandle = data.length > 0 ? data[data.length - 1] : null;');
     expect(idx, 'bloco do último preço não encontrado').toBeGreaterThan(-1);
-    const block = s.slice(idx, idx + 1300);
+    const block = s.slice(idx, idx + 2500);
     expect(block).toContain('const displayPrice = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : lastCandle.close;');
     expect(block).toContain('price: displayPrice,');
     expect(block).toContain('text: displayPrice.toFixed(2),');
@@ -482,7 +482,9 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     const s = chart();
     const idx = s.indexOf('engineFallbackLevels?: {');
     expect(idx, 'prop engineFallbackLevels não encontrada na interface').toBeGreaterThan(-1);
-    const block = s.slice(idx, idx + 750);
+    // Janela alargada (Ferramentas Institucionais: target3/extendedTarget
+    // somou um campo + comentário explicativo antes de riskRewardRatio).
+    const block = s.slice(idx, idx + 1150);
     expect(block).toContain('direction: "LONG" | "SHORT";');
     expect(block).toContain('stop: number;');
     expect(block).toContain('target1: number;');
@@ -511,10 +513,12 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     const idx = s.indexOf('engineFallbackLinesRef.current.forEach((line) => series.removePriceLine(line));');
     const block = s.slice(idx, s.indexOf('}, [engineFallbackLevels]);'));
     expect(block).not.toMatch(/ENTRY/);
-    // só 3 chamadas reais de mk: stop, target1, target2 condicional
+    // 4 chamadas reais de mk: stop, target1, target2 condicional, target3
+    // condicional (Ferramentas Institucionais: extensão de Fibonacci).
     expect(block).toContain('mk(engineFallbackLevels.stop,');
     expect(block).toContain('mk(engineFallbackLevels.target1,');
     expect(block).toContain('if (engineFallbackLevels.target2 !== null) mk(engineFallbackLevels.target2,');
+    expect(block).toContain('if (engineFallbackLevels.target3 != null) mk(engineFallbackLevels.target3,');
   });
 
   // Achado real do Operador ("nome Grandão, um monte de letra... mais
@@ -536,6 +540,22 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     expect(block).toContain('color: "rgba(255, 0, 85, 0.5)",');
     expect(block).toContain('text: `TP1${strengthSuffix(engineFallbackLevels.target1Strength)}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}${reached ? " · REACHED" : ""}`,');
     expect(block).toContain('text: `TP2${strengthSuffix(engineFallbackLevels.target2Strength)}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,');
+  });
+
+  // Achado de auditoria (Ferramentas Institucionais): TP3 = extensão de
+  // Fibonacci 61.8% (support-resistance-engine.js), computada e descartada
+  // todo ciclo antes desta correção — nunca chegava ao gráfico. Mais simples
+  // que TP1/TP2 DE PROPÓSITO: a fonte não calcula strength/obstacleCount
+  // para este nível, então o rótulo nunca finge um metadado que não existe.
+  it('TP3 (extensão de Fibonacci) usa preço puro no rótulo — sem strengthSuffix/obstacleSuffix, honesto sobre o que a fonte realmente calcula', () => {
+    const s = chart();
+    const idx = s.indexOf('const priceAxisLabels = useMemo');
+    const end = s.indexOf('return out;', idx);
+    const block = s.slice(idx, end);
+    expect(block).toContain('if (engineFallbackLevels.target3 != null && Number.isFinite(engineFallbackLevels.target3)) {');
+    expect(block).toContain('text: `TP3${reached ? " · REACHED" : ""}`,');
+    expect(block).not.toContain('strengthSuffix(engineFallbackLevels.target3');
+    expect(block).not.toContain('obstacleSuffix(engineFallbackLevels.target3');
   });
 
   it('EPC MODO ELITE §4: rótulos dos alvos do Núcleo carregam ⚠ N (obstáculos estruturais reais no caminho) — só quando N>0, mesmo glifo ⚠ da zona destacada; o Núcleo não tem painel, então o rótulo é o único lugar dessa contagem', () => {
@@ -608,7 +628,9 @@ describe('EPC §5/§6 (continuação): App.tsx computa engineFallbackLevels a pa
   it('lê exatamente os campos reais já expostos por engine-bridge.ts (stop/target/target2/target1Strength/target2Strength/riskRewardRatio) — zero cálculo novo aqui, nunca um nome de campo inventado', () => {
     const s = app();
     const idx = s.indexOf('const engineFallbackLevels = useMemo');
-    const block = s.slice(idx, idx + 3000);
+    // Janela alargada (Ferramentas Institucionais: target3/extendedTarget
+    // somou um trecho novo dentro deste useMemo).
+    const block = s.slice(idx, idx + 3600);
     expect(block).toContain('const stop = engine?.stop;');
     expect(block).toContain('const target1 = engine?.target;');
     expect(block).not.toContain('const target1 = engine?.target1;');
@@ -623,6 +645,11 @@ describe('EPC §5/§6 (continuação): App.tsx computa engineFallbackLevels a pa
     expect(block).toContain('obstacleZonesInPath(structZones, { low: entry, high: entry, basis: "" }, targetPrice, dir === "LONG").length');
     expect(block).toContain('target1ObstacleCount: obstacleCountTo(target1),');
     expect(block).toContain('target2ObstacleCount: obstacleCountTo(target2),');
+    // Achado de auditoria (Ferramentas Institucionais): target3 lê
+    // engine?.extendedTarget — mesmo passthrough puro de target/target2,
+    // nunca um nome de campo inventado.
+    expect(block).toContain('const target3 = typeof engine?.extendedTarget === "number" && Number.isFinite(engine.extendedTarget) ? engine.extendedTarget : null;');
+    expect(block).toContain('target3,');
   });
 
   // Execução real (não só padrão de fonte): reproduz o MESMO shape do

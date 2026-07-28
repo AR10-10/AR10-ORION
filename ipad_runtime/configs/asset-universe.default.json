@@ -2,9 +2,9 @@
   "schema_version": 1,
   "config_id": "AR10_CYBORG_ASSET_UNIVERSE_DEFAULT_V1",
   "target_runtime": "SAFARI_IPAD",
-  "note": "Listas SEED/REFERENCIA, nao hardcoded permanentes e nao exaustivas. Servem como ponto de partida legivel para o registro de classes de ativos (ver docs/FUTURE_READY_ASSET_CLASS_REGISTRY.md). Ranking dinamico real (market cap, volume, liquidez, OI, funding, volatilidade, watchlist, lista definida pelo usuario) e FUTURE — nenhum codigo do PWA le ou ordena este arquivo hoje. Este arquivo e dado de configuracao inerte, nao esta referenciado por index.html, js/app.js, manifest.pack.json nem manifest.webmanifest.",
-  "status": "FUTURE_READY_REFERENCE_ONLY",
-  "wired_into_live_app": false,
+  "note": "Listas SEED/REFERENCIA, nao hardcoded permanentes e nao exaustivas. Servem como ponto de partida legivel para o registro de classes de ativos (ver docs/FUTURE_READY_ASSET_CLASS_REGISTRY.md). Ranking dinamico real (market cap, volume, liquidez, OI, funding, volatilidade, watchlist, lista definida pelo usuario) continua FUTURE (ranking_criteria_active vazio). OMEGA CORE V-MAX (completar Fase 7, Radar/OIH): os 3 grupos CRYPTO (crypto_top_liquidity, crypto_additional, pow_mining_crypto) agora SAO lidos de verdade por ipad_runtime/ramber-ui/src/nexus/radar-universe.ts (extractRadarUniverseSymbols), o universo real do scanner de fundo do Radar/OIH em App.tsx. O grupo EQUITY (mining_ai_hpc_equities) continua inerte -- sem par de futuros USDT-M, fora do escopo do Radar cripto, nao lido por nenhum codigo.",
+  "status": "LIVE_RADAR_SCAN_UNIVERSE_CRYPTO_GROUPS_ONLY",
+  "wired_into_live_app": true,
   "ranking_criteria_supported": [
     "market_cap",
     "volume",

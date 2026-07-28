@@ -142,7 +142,7 @@ describe('ChartWidget: leitura real → Relevance Engine → store → visibilid
     const idx = a.indexOf('const effectiveChartLayerVisibility: ChartLayerVisibility = useMemo(() => {');
     expect(idx).toBeGreaterThan(-1);
     const body = a.slice(idx, a.indexOf('}, [chartLayerAutoMode,', idx));
-    expect(body).toContain('acc[id] = autoMode[id] ? layerRelevance[id].relevant : manual[id];');
+    expect(body).toContain('acc[id] = autoMode[id] ? (layerRelevance[id]?.relevant ?? true) : manual[id];');
     expect(a).toContain('layerVisibility={effectiveChartLayerVisibility}');
   });
 });

@@ -18,7 +18,9 @@ import type { TrapSignal } from "./trap-detection";
 import type { TradePlan } from "./trade-plan";
 import type { AffectiveMemoryState } from "./affective-memory";
 import type { TrackRecordState } from "./signal-track-record";
-import type { TrustScoreSnapshot } from "../engine-bridge";
+import type { TrustScoreSnapshot, SmcZonesSnapshot, OrderflowSignal } from "../engine-bridge";
+import type { ConfluenceCorridorReading } from "./confluence-corridor";
+import type { RadarQualificationResult } from "./radar-qualification";
 
 // Diretamente do Blueprint V-MAX §1.3 — os únicos eventos reais que este
 // sistema publica. Nenhum evento é adicionado especulativamente; cada um
@@ -36,6 +38,14 @@ import type { TrustScoreSnapshot } from "../engine-bridge";
 // sem emissor vivo). DATA.* seguem do CrossExchangeService e
 // HEALTH.CHANGED do Health Monitor — um único publicador por evento,
 // nunca dois emissores para o mesmo tipo.
+// Achado real de auditoria (DIRETRIZES AVANÇADAS, ecossistema): os 3
+// DATA.* abaixo NÃO têm publicador vivo hoje — cross-exchange-service.ts
+// (o único código que os emitiria) é deliberadamente NÃO iniciado por
+// App.tsx nesta fase (ver o cabeçalho do próprio arquivo: substituir o
+// caminho WS/REST que já funciona é o passo de maior risco do projeto,
+// adiado de propósito). Um assinante futuro que registrar `bus.on("DATA.…")`
+// esperando receber algo real ficará esperando para sempre, sem erro —
+// documentado aqui pra nunca ser um mistério silencioso.
 export type NexusEvent =
   | { type: "DATA.CANDLES_UPDATED"; payload: { symbol: string; tf: Timeframe; exchange: Exchange } }
   | { type: "DATA.ORDERBOOK_UPDATED"; payload: { exchange: Exchange } }
@@ -49,11 +59,18 @@ export type NexusEvent =
   // continuar exibindo um resultado velho de outro ativo).
   | { type: "QUANT.VOLUME_PROFILE.UPDATED"; payload: { profile: VolumeProfileSnapshot | null } }
   | { type: "QUANT.FIBONACCI.UPDATED"; payload: { matrix: FibonacciConfluenceMatrix | null } }
+  // OMEGA CORE V-MAX (Fase 1.1) — smc (FVG/OB/liquidez) e o Order Flow ao
+  // vivo (CVD + sinais OFI/Absorção/Exaustão), mesma família QUANT.*.
+  | { type: "QUANT.SMC.UPDATED"; payload: { zones: SmcZonesSnapshot | null } }
+  | { type: "QUANT.CVD.UPDATED"; payload: { cvd: number | null } }
+  | { type: "QUANT.ORDERFLOW_SIGNALS.UPDATED"; payload: { signals: OrderflowSignal[] } }
+  | { type: "QUANT.CONFLUENCE_CORRIDOR.UPDATED"; payload: { reading: ConfluenceCorridorReading | null } }
   // §4 CÉREBRO
   | { type: "BRAIN.COUNCIL.UPDATED"; payload: { decision: CouncilDecision | null } }
   | { type: "BRAIN.SCENARIO.UPDATED"; payload: { projection: ScenarioProjection | null } }
   | { type: "BRAIN.TRAPS.UPDATED"; payload: { traps: TrapSignal[] } }
   | { type: "BRAIN.TRADE_PLAN.UPDATED"; payload: { plan: TradePlan | null } }
+  | { type: "BRAIN.RADAR_CANDIDATES.UPDATED"; payload: { candidates: RadarQualificationResult[] } }
   // §5 ORGANISMO
   | { type: "ORGANISM.TRUST.UPDATED"; payload: { score: TrustScoreSnapshot | null } }
   // Uma ingestão afetiva real = um evento (a fatia affectiveMemory é

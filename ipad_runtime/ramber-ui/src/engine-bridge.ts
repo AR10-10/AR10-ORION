@@ -40,7 +40,11 @@
 import { QuantWorkerClient } from '../../js/worker-client.js';
 import { OrderflowWorkerClient } from '../../js/orderflow-client.js';
 import { getMarketDataBus } from '../../src/market-data-bus/index.js';
-import { collectBinanceFuturesKlines } from '../../src/market-data-bus/binance-futures-candle-connector.js';
+// ADITIVO V-MAX Etapa 1 (Market Data Adapter): nenhum consumidor importa
+// collectBinanceFuturesKlines/collectMexcFuturesKlines diretamente mais —
+// getMarketDataProvider('BINANCE') é o único caminho, mesmo dado real,
+// zero mudança de comportamento (default explícito, nunca implícito).
+import { getMarketDataProvider, type MarketDataProviderId } from './market-data-adapter';
 import { createLivePoller } from '../../js/real-data/mexc-trades-stream.js';
 import { CONNECTOR_STATES } from '../../js/real-data/schema.js';
 import { buildRealAnalysisFrame } from '../../js/real-data/analysis-frame.js';
@@ -51,11 +55,31 @@ import { startLiquidationStream } from '../../js/real-data/binance-liquidations-
 import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg-order-block-engine.js';
 import { classify as classifyLorentzian } from '../../src/research/engines/lorentzian-classifier.js';
 import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
+// OMEGA CORE V-MAX Fase 7 (completar o Radar/OIH): mesmo motor real de
+// S/R que o ciclo principal já usa (via analysis-frame.js) — importado
+// aqui diretamente porque o scanner do Radar roda para ativos que NÃO
+// são o selecionado (o ciclo principal só cobre o ativo ativo). Zero
+// segunda implementação de S/R.
+import { analyze as analyzeSupportResistance } from '../../src/research/engines/support-resistance-engine.js';
 // Ordem "Ciborgue Vivo": BOS/CHOCH — reaproveita fractal-swings.js e o
 // structure_label de market-structure-engine.js por baixo (ver header do
 // próprio arquivo); este import só traz a varredura de rompimento real.
 import { analyze as analyzeBosChoch } from '../../src/research/engines/bos-choch-engine.js';
 import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/index.js';
+// OMEGA CORE V-MAX Fase 7: mesmo Trade Plan real (Fase 4 do Signal
+// Precision) e mesmo Corredor de Confluência real (Fase 5) que o ativo
+// selecionado já usa — o scanner do Radar nunca reimplementa nenhum dos
+// dois, só os alimenta com dado real de OUTROS ativos.
+import { buildTradePlan, type TradePlan, type TradePlanLevelInput } from './nexus/trade-plan';
+import { computeConfluenceCorridor, type ConfluenceCorridorReading } from './nexus/confluence-corridor';
+// Correção real (achado de auditoria ao completar a Fase 7 — CLAUDE.md
+// exige corrigir/reportar mesmo fora do foco direto): confluence-corridor
+// agora consome uma ConvictionReading INTEIRA (nunca os 3 sinais brutos
+// que já vivem dentro dela) — o scanner do Radar monta a SUA própria
+// leitura "leve" (só o membro Multi-Timeframe é legível para um
+// candidato de fundo) através do MESMO buildConvictionReading real que o
+// ativo selecionado usa, nunca uma segunda fórmula de pool.
+import { buildConvictionReading, type MultiTimeframeAgreementEntry } from './nexus/confluence-engine';
 // V-MAX Fase 1.3: derivação pura (HVN/LVN/preço-por-bucket) do Volume
 // Profile computado pelo WASM no quant-worker — ver bloco no fim do arquivo.
 import { detectHvnLvn, bucketMidPrice, type VolumeProfileResult } from './nexus/volume-profile';
@@ -171,6 +195,17 @@ export interface RealCycleResult {
   riskRewardRatio?: number | null;
   target1Strength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
   target2Strength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
+  // Achado de auditoria (ADITIVO V-MAX: Ferramentas Institucionais):
+  // support-resistance-engine.js já calcula fib_extension_long_target/
+  // fib_extension_short_target TODO ciclo (extensão de Fibonacci 61.8%
+  // sobre a última perna confirmada) — o comentário da própria EPC §5/§6
+  // no chart ("falta aparecer entrada e alvo/alvo2/alvo3") já esperava
+  // este campo, mas ele morria dentro de research-engine.js (só como
+  // texto formatado em rota_a_long/rota_b_short) e nunca chegava aqui.
+  // Selecionado pela MESMA direção que já seleciona target1/target2
+  // (route acima) — nunca uma 3ª fórmula, só o campo do frame que faltava
+  // repassar.
+  extendedTarget?: number | null;
   // V11.5 §2 (Evolução Matemática — "melhorar contexto multitemporal"):
   // estrutura real de um timeframe MAIOR (1H), para o operador ver se o
   // sinal de 15m está confluente ou divergente com a tendência de prazo
@@ -203,6 +238,23 @@ export interface RealCycleResult {
   // o peso como amortecedor de força (forca_ajustada). Puro repasse, nada
   // recomputado.
   dataQuality?: { weight: number | null; score: number | null; classification: string } | null;
+  // ADITIVO V-MAX Etapa 10 (Data Quality Monitor unificado, achado de
+  // auditoria): buildResearchEngineFrame() já computa data_sufficiency
+  // (js/research/data-sufficiency.js) EM TODO ciclo — score 0-100 real de
+  // cobertura de campos da Evidence — mas só usava internamente para
+  // capConfidenceBySufficiency dentro de target-tracker.js; o valor nunca
+  // saía deste arquivo, então a UI não tinha como mostrar AO OPERADOR por
+  // que a confiança foi rebaixada. Puro passthrough (shape snake_case
+  // preservado verbatim — é o mesmo objeto que data-sufficiency.js já
+  // devolve, nunca reconstruído aqui), nada recomputado.
+  dataSufficiency?: {
+    score: number;
+    max_score: number;
+    breakdown: Array<{ field: string; label: string; points_possible: number; points_earned: number; status: string }>;
+    missing_fields: string[];
+    limitation_reason: string;
+    label: string;
+  } | null;
   // Fase J (Cap. 17): variante WASM realmente carregada pelo quant-worker
   // ('escalar' | 'simd128', Fase I) — telemetria pura, capturada do
   // init_wasm_ok real, nunca deduzida.
@@ -279,7 +331,7 @@ async function requestFuturesCandleSnapshot({
   symbol, timeframe, limit, maxAgeMs,
 }: { symbol: string; timeframe: string; limit: number; maxAgeMs: number }): Promise<BusSnapshot> {
   return getMarketDataBus().requestSnapshot({
-    symbol: `${symbol}-PERP`, timeframe, limit, collect: collectBinanceFuturesKlines, maxAgeMs,
+    symbol: `${symbol}-PERP`, timeframe, limit, collect: getMarketDataProvider('BINANCE').collect, maxAgeMs,
   });
 }
 
@@ -491,6 +543,17 @@ export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): P
       riskRewardRatio: route && isNum(route.risk_reward_ratio) ? route.risk_reward_ratio : null,
       target1Strength: route && route.target_1_strength ? route.target_1_strength : null,
       target2Strength: route && route.target_2_strength ? route.target_2_strength : null,
+      // Mesma seleção por direção que `route` já faz acima (signal ===
+      // 'SHORT' ? rota_b_short : signal === 'LONG' ? rota_a_long : null) —
+      // frame.fib_extension_long_target/short_target não passam por
+      // target-tracker.js (route), então a escolha do lado certo precisa
+      // ser feita aqui diretamente sobre o frame.
+      extendedTarget:
+        signal === 'LONG' && isNum(frame.fib_extension_long_target)
+          ? frame.fib_extension_long_target
+          : signal === 'SHORT' && isNum(frame.fib_extension_short_target)
+            ? frame.fib_extension_short_target
+            : null,
       htfMarketStructure: htf.label,
       htfTimeframe: HTF_INTERVAL,
       htfUpdatedAt: htf.updatedAt,
@@ -502,6 +565,7 @@ export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): P
             classification: snapshot.quality.classification,
           }
         : null,
+      dataSufficiency: research.data_sufficiency,
       instrumentType: evidence.instrument_type,
       wasmVariant,
     };
@@ -576,7 +640,7 @@ export async function getOlderChartCandles(
     // para nunca reincluir esse mesmo candle numa borda inclusiva
     // (garantido menor que a duração de qualquer timeframe real, mesmo o
     // de 1m).
-    const raw = await collectBinanceFuturesKlines({
+    const raw = await getMarketDataProvider('BINANCE').collect({
       symbol: `${symbol}-PERP`, timeframe, limit, endTime: (beforeTime - 1) * 1000,
     });
     if (!Array.isArray(raw) || raw.length === 0) return null;
@@ -895,11 +959,18 @@ export interface LiquidityZone {
   swept: boolean;
 }
 
-export function computeSmcZones(candles: Array<{ open: number; high: number; low: number; close: number }>): {
+// OMEGA CORE V-MAX (Fase 1.1) — nomeado (era um tipo de retorno anônimo)
+// para a store poder importar a MESMA forma real via `import type`, em vez
+// de redeclarar os 3 campos por conta própria (ver unified-snapshot-store.ts
+// §3 `smc`). Puramente aditivo: o objeto literal devolvido abaixo já
+// satisfazia esta forma antes de ela ter nome.
+export interface SmcZonesSnapshot {
   fairValueGaps: PriceZone[];
   orderBlocks: PriceZone[];
   liquidityZones: LiquidityZone[];
-} {
+}
+
+export function computeSmcZones(candles: Array<{ open: number; high: number; low: number; close: number }>): SmcZonesSnapshot {
   const result = analyzeFvgOrderBlocks({ ohlcv_series: candles });
   if (result.status !== 'OK') return { fairValueGaps: [], orderBlocks: [], liquidityZones: [] };
   return {
@@ -998,4 +1069,167 @@ export function computeMultiHorizonForecast(
       sampleSize: result.sample_size,
     };
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OMEGA CORE V-MAX Fase 7 (completar o Radar/OIH): scanner real de UM
+// candidato de background — chamado pelo varredor em App.tsx, uma vez por
+// ativo da lista curada (radar-universe.ts), nunca para o ativo já
+// selecionado (que já tem o ciclo principal completo cobrindo-o).
+//
+// Nível de riqueza DELIBERADAMENTE menor que o ativo AO VIVO selecionado —
+// honestidade, não atalho escondido: o Conselho (7 agentes) e o
+// institutionalScore precisam de orderflow/liquidez ao vivo que esta
+// arquitetura só transmite para o ativo selecionado no momento (ver
+// docs/ORGANISM_DATA_FLOW.md — "App.tsx é o único coletor real"). Rodar
+// o Conselho completo para 30+ ativos simultâneos exigiria assinar
+// orderflow ao vivo de todos eles ao mesmo tempo — uma mudança
+// arquitetural muito maior que "completar o Radar", fora de escopo aqui.
+// Por isso: `riskGated` é sempre `false` (nenhum Conselho rodou — nunca
+// fabrica um resultado de risco que não foi medido), e a Confluência usa
+// SÓ `multiTimeframe` real sobre 3 prazos de referência — mesmo formato
+// `ConfluenceCorridorReading` da Fase 5, que já degrada honestamente
+// quando opinionMass/institutionalScore/obstáculos vêm null (mesmo
+// comportamento já provado em confluence-corridor.test.ts, ZERO
+// modificação daquele motor). `intensity` para um candidato de background
+// acaba sendo puramente a concordância real de regime entre os 3 prazos —
+// uma base real, porém mais fraca que a leitura de 4 componentes do
+// ativo ao vivo, nunca fabricada como equivalente.
+const RADAR_SCAN_TIMEFRAMES = ['15m', '1h', '4h'] as const;
+const RADAR_SCAN_CANDLE_LIMIT = 100;
+const RADAR_SCAN_MAX_AGE_MS = 60_000;
+
+export interface RadarCandidateScanResult {
+  symbol: string;
+  timeframe: string;
+  structureLabel: 'ESTRUTURA_ALTA' | 'ESTRUTURA_BAIXA' | 'ESTRUTURA_LATERAL' | null;
+  direction: 'LONG' | 'SHORT' | null;
+  tradePlan: TradePlan | null;
+  riskGated: boolean;
+  confluence: ConfluenceCorridorReading;
+  // ADITIVO V-MAX Etapa 9: exchange real que forneceu este candle/estrutura
+  // — honestidade de proveniência (um candidato MEXC e um candidato
+  // Binance do mesmo símbolo são leituras de fontes genuinamente
+  // diferentes, nunca a "mesma verdade" por acaso terem o mesmo ticker).
+  provider: MarketDataProviderId;
+}
+
+/** Igual a requestFuturesCandleSnapshot, mas PROVIDER-AWARE — usado só
+ *  pelo scanner de fundo do Radar (scanRadarCandidate), nunca pelo ciclo
+ *  real do Core Engine/gráfico (requestFuturesCandleSnapshot continua
+ *  100% Binance, intocada). Mesmo Bus, mesmo dedupe — só o sufixo de
+ *  cache-key muda por provider (nota de arquitetura em
+ *  market-data-adapter.ts: sem isso, um candidato MEXC e um candidato
+ *  Binance do MESMO símbolo colidiriam na mesma entrada do Bus e
+ *  poderiam misturar candles de duas exchanges sob uma única chave). */
+async function requestRadarCandleSnapshot({
+  symbol, timeframe, limit, maxAgeMs, provider,
+}: { symbol: string; timeframe: string; limit: number; maxAgeMs: number; provider: MarketDataProviderId }): Promise<BusSnapshot> {
+  const cacheSuffix = provider === 'MEXC' ? '-MEXC' : '-PERP';
+  return getMarketDataBus().requestSnapshot({
+    symbol: `${symbol}${cacheSuffix}`, timeframe, limit, collect: getMarketDataProvider(provider).collect, maxAgeMs,
+  });
+}
+
+/** Regime real (classifyMarketRegime, mesmo motor do ciclo principal e da
+ *  Matriz Multi-Timeframe) → direção acionável. null honesto quando o
+ *  regime está em CONSOLIDACAO/COMPRESSAO (ADX real sem força de
+ *  tendência) ou sem leitura — nunca um rótulo forçado. */
+function directionFromRegime(regimeDirection: 'ALTA' | 'BAIXA' | null): 'LONG' | 'SHORT' | null {
+  if (regimeDirection === 'ALTA') return 'LONG';
+  if (regimeDirection === 'BAIXA') return 'SHORT';
+  return null;
+}
+
+/** UM candidato real de background — null honesto quando a rede falhou
+ *  ou não há candles suficientes (fail-closed, nunca fabricado). */
+export async function scanRadarCandidate(
+  symbol: string,
+  timeframe: string,
+  provider: MarketDataProviderId = 'BINANCE',
+): Promise<RadarCandidateScanResult | null> {
+  let snapshot: BusSnapshot;
+  try {
+    snapshot = await requestRadarCandleSnapshot({
+      symbol, timeframe, limit: RADAR_SCAN_CANDLE_LIMIT, maxAgeMs: RADAR_SCAN_MAX_AGE_MS, provider,
+    });
+  } catch {
+    return null;
+  }
+  if (!snapshot.ok || snapshot.candles.length === 0) return null;
+
+  const structureResult: any = analyzeMarketStructure({ ohlcv_series: snapshot.candles, timeframe });
+  const srResult: any = analyzeSupportResistance({ ohlcv_series: snapshot.candles, timeframe, volume_profile: null });
+  const regimeResult: any = classifyMarketRegime({ ohlcv_series: snapshot.candles, timeframe });
+
+  const structureLabel = structureResult.status === 'OK' ? structureResult.structure_label : null;
+  const direction = regimeResult.status === 'OK' ? directionFromRegime(regimeResult.direction) : null;
+
+  const lastCandle = snapshot.candles[snapshot.candles.length - 1];
+  const price = isNum(lastCandle?.c) ? lastCandle.c : null;
+
+  const levels: TradePlanLevelInput[] = [];
+  if (srResult.status === 'OK') {
+    if (isNum(srResult.support_1)) levels.push({ price: srResult.support_1, kind: 'SR_SUPPORT_1' });
+    if (isNum(srResult.resistance_1)) levels.push({ price: srResult.resistance_1, kind: 'SR_RESISTANCE_1' });
+  }
+  const tradePlan =
+    direction && price !== null
+      ? buildTradePlan({ stance: direction, riskGated: false, price, zones: [], levels })
+      : null;
+
+  // Confluência-leve: concordância real de regime entre os 3 prazos de
+  // referência — cada leitura vem do MESMO classifyMarketRegime, sobre
+  // candles reais desse prazo (reaproveita snapshot já buscado quando o
+  // prazo de referência coincide com o prazo do candidato).
+  const mtfEntries = await Promise.all(
+    RADAR_SCAN_TIMEFRAMES.map(async (tf) => {
+      try {
+        const tfSnapshot =
+          tf === timeframe
+            ? snapshot
+            : await requestRadarCandleSnapshot({ symbol, timeframe: tf, limit: RADAR_SCAN_CANDLE_LIMIT, maxAgeMs: RADAR_SCAN_MAX_AGE_MS, provider });
+        if (!tfSnapshot.ok) return null;
+        const tfRegime: any = classifyMarketRegime({ ohlcv_series: tfSnapshot.candles, timeframe: tf });
+        return tfRegime.status === 'OK' ? (tfRegime.direction as 'ALTA' | 'BAIXA' | null) : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+  // status: 'OK' é honesto para toda entrada aqui — cada prazo de
+  // referência TEVE uma busca/classificação real tentada; confidenceStance
+  // null (regime CONSOLIDACAO ou fetch falho) já é filtrado por
+  // buildConvictionReading independente do status, mesma semântica do
+  // ativo selecionado (readMultiTimeframeMember, confluence-engine.ts).
+  const multiTimeframeLite: Record<string, MultiTimeframeAgreementEntry> | null = mtfEntries.some(
+    (d) => d !== null,
+  )
+    ? Object.fromEntries(
+        RADAR_SCAN_TIMEFRAMES.map((tf, i) => [tf, { status: 'OK' as const, confidenceStance: directionFromRegime(mtfEntries[i]) }]),
+      )
+    : null;
+
+  // Conviction "leve": mesmo buildConvictionReading real do ativo
+  // selecionado (confluence-engine.ts) — nunca uma segunda fórmula de
+  // pool. Ensemble/Council ficam null honestamente (nenhum dos dois roda
+  // para candidatos de fundo, ver header do arquivo); só o membro
+  // Multi-Timeframe é legível, então `conviction`/`convictionAdjusted`
+  // saem inteiramente dessa única leitura real — mais fraco que o ativo
+  // ao vivo, nunca fabricado como equivalente.
+  const convictionLite = buildConvictionReading({
+    coreDirection: direction,
+    ensembleConsensus: null,
+    council: null,
+    multiTimeframe: multiTimeframeLite,
+    trustScore: null,
+  });
+
+  const confluence = computeConfluenceCorridor({
+    direction,
+    conviction: convictionLite,
+    activeObstacleCount: null,
+  });
+
+  return { symbol, timeframe, structureLabel, direction, tradePlan, riskGated: false, confluence, provider };
 }
