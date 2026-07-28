@@ -46,8 +46,16 @@ a zona vermelha agora lê `OB ↓` / `FVG ↓` sem ambiguidade.
 ## 2. Inventário completo do que o gráfico desenha HOJE
 
 Lido direto do código (`EnhancedChart_110_Percent.tsx` + plugins). O
-ecossistema atual é grande — 22 camadas reais, todas com toggle no painel
-"Camadas do Gráfico" quando aplicável:
+ecossistema atual é grande — 20 camadas reais com toggle no painel
+"Camadas do Gráfico" (`CHART_LAYER_IDS`, contagem travada por teste em
+`chart-layers-panel-wiring.test.ts`), mais elementos sempre-ativos sem
+toggle próprio (S1/R1, linhas do Trade Plan, Scenario) — ver §9.2 para o
+inventário completo e atualizado com módulo/cor/prioridade de cada um.
+**Atualização honesta (pós §6.54-§6.58)**: as Bandas da VWAP (§4.2
+abaixo, então listadas como "❌ falta") e Kill Zones/Session Key Levels
+(não existiam nesta rodada) foram implementadas depois — a tabela
+comparativa §3 e o resumo §6 abaixo ficam como registro histórico de
+quando foram escritos; o estado ATUAL de cada item está em §9.2.
 
 ### Preço e tendência
 - **Velas** (candlestick real, com patch de tick ao vivo).
@@ -429,6 +437,177 @@ honesto.
 
 ---
 
+---
+
+## 9. LAPIDAÇÃO PROFISSIONAL DO GRÁFICO (Task #101/#102, diretiva formal
+do Operador pós-achado da "linha amarela", §6.58)
+
+Diretiva: mapear TODO elemento do canvas (origem/módulo/finalidade/
+prioridade), auditar paleta completa (nunca a mesma cor pra conceitos
+diferentes), definir hierarquia de 4 níveis, pesquisar convenções
+profissionais. Objetivo explícito: **não adicionar nada** — só tornar o
+que já existe mais limpo/legível/consolidado.
+
+### 9.1 Metodologia
+
+Inventário construído por leitura direta (`grep`/`Read`) de
+`EnhancedChart_110_Percent.tsx` (todas as `chart.addSeries`/
+`series.createPriceLine`) + os 11 plugins de canvas (`chart/*Plugin.tsx`)
+— toda cor/dependência abaixo é a constante REAL do código, nunca uma
+lembrança aproximada. Nenhum elemento foi testado visualmente com dado
+de mercado ao vivo (este ambiente sandboxed não tem rede real à Binance
+— mesma limitação documentada em §6.55/§6.57) — a classificação de
+prioridade é um julgamento de design fundamentado no PAPEL de cada
+elemento na decisão (LEI 24: só o Core Engine decide; tudo aqui é
+contexto), não uma medição de "quanto tempo o Operador olha pra cada
+um".
+
+### 9.2 Framework de prioridade (4 níveis, critério objetivo)
+
+| Nível | Critério real | O que ganha este nível |
+|---|---|---|
+| **Máxima** | É o preço real ou o plano ativo que o Operador executaria | Candles, Entry/Stop/Target (Trade Plan real ou fallback do Núcleo), último preço ao vivo |
+| **Alta** | Contexto que muda a leitura IMEDIATA do preço atual (estrutura mais recente, referências dinâmicas que o preço testa agora) | S1/R1, VWAP, EMA, Nexus Line, BOS/CHOCH (enquanto não esmaeceu), FVG/OB que são obstáculo real do plano |
+| **Média** | Contexto de apoio real, enriquece a análise mas não muda a leitura imediata do preço | Volume Profile, CVD, Fibonacci, Premium/Discount, Harmônicos, EQH/EQL (sem obstáculo), Trend Channel, Liquidity Sweep, Session Key Levels |
+| **Baixa** | Pano de fundo temporal/ambiental — nunca deveria competir por atenção, só orientar quando consultado | Sessões de mercado, Kill Zones, Liquidation Heatmap, Order Flow Heatmap (L2 profundidade), Neural Market Aura, linhas de Scenario/Projeção |
+
+Esta classificação já é, em boa parte, o que o código FAZ hoje (não uma
+invenção nova) — TP2/TP3 já têm opacidade decrescente vs. TP1, Scenario
+já esmaece por rank, Sessões já são "discreto de propósito" (comentário
+original do arquivo). O valor real desta seção é tornar EXPLÍCITO um
+critério que já existia implícito, pra próximas camadas nascerem já
+classificadas (nunca redescobrir isso caso a caso).
+
+### 9.3 Inventário completo com prioridade
+
+| Elemento | Módulo | Cor real | Nível |
+|---|---|---|---|
+| Candles | `EnhancedChart_110_Percent.tsx` | `#00ffaa` / `#ff0055` | Máxima |
+| Último preço (eixo) | `priceAxisLabels` | up/down da vela | Máxima |
+| Entry (Trade Plan/fallback) | price line nativa + `priceAxisLabels` | `rgba(240,208,111,...)` | Máxima |
+| Stop | idem | `rgba(255,0,85,...)` | Máxima |
+| Target 1/2/3 | idem | `rgba(0,255,170,...)` opacidade decrescente | Máxima |
+| Trade Plan Zone (caixa da entrada) | `TradePlanZonePlugin` | `rgba(240,208,111,...)` | Máxima |
+| S1 / R1 | price line nativa + `priceAxisLabels` | `rgba(0,255,170/255,0,85,0.65)` | Alta |
+| VWAP | série nativa + `priceAxisLabels` | `rgba(255,255,255,0.45)` (estado NEUTRAL usa tom dourado, ver §9.4) | Alta |
+| EMA | série nativa + `priceAxisLabels` | `rgba(66,165,245,0.85)` | Alta |
+| Nexus Line | série nativa + `priceAxisLabels` | estado direcional (dourado NEUTRAL, ver §9.4) | Alta |
+| BOS / CHOCH | `StructureBreakMarkersPlugin` + `priceAxisLabels` | `rgba(0,255,170/255,0,85,0.75)`, `ageAlpha` decai | Alta |
+| FVG / Order Block (obstáculo real) | `LiquidityZonesPlugin` | mesma dupla verde/vermelho, borda mais opaca | Alta |
+| FVG / Order Block (sem obstáculo) | idem | mesma dupla, borda mais translúcida | Média |
+| Volume Profile (POC/HVN) | `VolumeProfilePlugin` | `rgba(0,240,255,...)` | Média |
+| CVD | série nativa (sub-escala) | `rgba(138,180,248,0.85)` | Média |
+| Fibonacci | price lines nativas | `rgba(0,240,255,...)` — **mesmo tom do Volume Profile** | Média |
+| Premium / Discount | price lines nativas | vermelho/azul/verde (topo/EQ/fundo) | Média |
+| Harmônicos (PRZ + polilinha) | price lines + série nativa | `rgba(176,38,255,...)` | Média |
+| EQH / EQL | price lines nativas | `rgba(200,107,255,...)` — tom de roxo PRÓXIMO mas distinto de Harmônicos | Média |
+| Trend Channel | séries nativas + `priceAxisLabels` | `rgba(148,163,184,...)` | Média |
+| Liquidity Sweep | price line nativa + `priceAxisLabels` (§6.58) | `rgba(255,191,0,0.85)` | Média |
+| Session Key Levels | `SessionKeyLevelsPlugin` + `priceAxisLabels` (§6.57/§6.58) | `rgba(255,0,85/0,255,170,...)` (reaproveita S1/R1) | Média |
+| Scenario / Projeção (Path A/B) | price lines nativas | `rgba(186,168,255,...)` "lavanda", opacidade decrescente por rank | Baixa |
+| Market Sessions | `MarketSessionBandsPlugin` | `rgba(148,163,184,...)` — **mesmo tom do Trend Channel** (intencional: ambos "contexto de fundo discreto") | Baixa |
+| Kill Zones (ICT) | `KillZoneBandsPlugin` | `rgba(255,176,32,...)` | Baixa |
+| Liquidation Heatmap | `LiquidationHeatmapPlugin` | verde/vermelho (LONG/SHORT) + pico `rgba(255,200,0,...)` | Baixa |
+| Order Flow Heatmap (L2) | `OrderFlowHeatmapPlugin` | verde/vermelho (bid/ask), alpha dinâmico | Baixa |
+| Neural Market Aura | `NeuralMarketAuraPlugin` | verde/vermelho/azul (LONG/SHORT/NEUTRAL) | Baixa |
+
+### 9.4 Auditoria de paleta — famílias de matiz reais (grep completo)
+
+| Família | Tom(ns) reais | Usado por | Veredito |
+|---|---|---|---|
+| Verde `(0,255,170)` | 1 tom, várias opacidades | Candle alta, S1, FVG/OB bullish, BOS/CHOCH alta, Target, Liquidation LONG, Order Flow bid, Session Key Low, `LONG_RGB` | ✅ consistente — 1 papel real (bullish/suporte/alvo), reforçado pelo research map já citado nesta sessão |
+| Vermelho `(255,0,85)` | 1 tom, várias opacidades | Candle baixa, R1, FVG/OB bearish, BOS/CHOCH baixa, Stop, Liquidation SHORT, Order Flow ask, Session Key High, Premium (topo do range), `SHORT_RGB` | ✅ consistente — mesmo papel real (bearish/resistência/risco) |
+| **Amarelo/âmbar/dourado** | **5 tons distintos**: `(240,208,111)` Entry, `(255,235,190)`/`(255,214,130)` VWAP/NL neutro, `(255,200,0)` pico Liquidation, `(255,176,32)` Kill Zones, `(255,191,0)` Sweep | 5 conceitos DIFERENTES | ⚠️ **achado real, já parcialmente investigado em §6.58** — é a família com mais fragmentação real do gráfico; candidata a Operador decidir uma paleta única por sub-papel (ver §9.6) |
+| Cyan `(0,240,255)` | 1 tom exato | Volume Profile (barras) E Fibonacci (linhas) — **dois conceitos diferentes, mesma cor exata** | ⚠️ achado real novo desta rodada — mitigado por FORMA diferente (barra vs. linha), mas ainda uma coincidência de cor não documentada como decisão deliberada |
+| Roxo/lavanda | 3 tons próximos: `(176,38,255)` Harmônicos, `(200,107,255)` EQH/EQL, `(186,168,255)` Scenario/Projeção | 3 conceitos diferentes | ⚠️ mais brando que o amarelo (tons mais distantes entre si), mas mesma família de risco |
+| Azul-acinzentado `(138,180,248)` | 1 tom | CVD, Premium/Discount Equilibrium, `NEUTRAL_RGB` (Aura) | ✅ consistente — papel real único ("informativo/neutro") |
+| Cinza-ardósia `(148,163,184)` | 1 tom | Trend Channel, Market Sessions | ✅ intencional (ambos documentados como "contexto de fundo discreto, nunca compete") |
+| Azul-material `(66,165,245)` | 1 tom | só EMA | ✅ sem conflito |
+
+**Achado consolidado**: dos 8 famílias reais de cor, 2 têm conflito genuíno
+(amarelo-família com 5 conceitos, cyan com 2), 1 tem sobreposição
+defensável mas não-documentada (roxo-família), e as outras 5 são
+consistentes. Isto NÃO é "excesso de cores" no sentido de ter cores
+demais — é FALTA de mapeamento 1:1 em duas famílias específicas.
+
+### 9.5 Checklist por elemento (10 perguntas do ADENDO) — aplicado aos
+achados REAIS, não a todos os ~28 elementos (repetir a mesma resposta
+"sim/não" 28 vezes sem achado novo seria ruído, não auditoria)
+
+| Elemento | Necessário? | Melhor cor? | Compete com outra info? | Pode consolidar? |
+|---|---|---|---|---|
+| Liquidity Sweep | Sim (evento real corroborado) | Tom próprio, mas dentro da família amarela fragmentada (§9.4) | Não mais (corrigido §6.58) | Não — evento distinto, sem candidato de fusão |
+| Session Key Levels | Sim (pedido explícito do Operador) | Reaproveita S1/R1 (correto — mesmo papel) | Não mais (corrigido §6.58) | Parcialmente já consolidado (reaproveita cor de S1/R1) |
+| Fibonacci vs. Volume Profile | Ambos sim (conceitos reais distintos) | **Não** — mesmo cyan exato | Mitigado pela forma (linha vs. barra), não pela cor | Não deveriam consolidar (são análises diferentes) — deveriam se DIFERENCIAR |
+| Família amarela (5 usos) | Cada um sim, individualmente | **Não** — 5 tons não-relacionados pro mesmo "papel emocional" (atenção/alerta) | Historicamente sim (3 relatos do Operador na sessão) | Candidato real a uma paleta única por sub-papel, não uma fusão total (Entry ≠ Kill Zone ≠ Sweep — são conceitos genuinamente diferentes que merecem tons DA MESMA família mas distinguíveis, não uma cor idêntica) |
+| Scenario/Projeção | Sim (mesma leitura real do Motor de Cenários) | Sim — cor própria, opacidade já decrescente por rank | Não (opacidade baixa por design, `title` inerte confirmado §6.58-correção) | Já bem isolado |
+
+### 9.6 Pesquisa externa (convenções profissionais)
+
+Pesquisa real (WebSearch, complementando as fontes já citadas em §3/§8
+desta mesma auditoria): plataformas profissionais convergem em 3
+princípios que o AR10 já aplica parcialmente e pode reforçar:
+1. **Hierarquia por tamanho/cor/posição, informação crítica maior e mais
+   central** — já é o desenho real do "Núcleo/Conselho" no header +
+   Trade Plan no canvas (Prioridade Máxima, §9.2).
+2. **Tons suaves/translúcidos, nunca berrantes, pra não cansar em
+   períodos parados** — já é a disciplina real de opacidade (0.10-0.85)
+   usada em toda camada nova desde o início da sessão.
+3. **Evitar cor demais — quando tudo tenta se destacar, nada se
+   destaca** — é exatamente o achado da família amarela (§9.4): não é
+   "cor demais" em volume, é a MESMA classe perceptual (amarelo/âmbar)
+   usada 5 vezes pra papéis diferentes, o oposto do princípio.
+
+### 9.7 Recomendações concretas — o que é seguro fazer agora vs. o que
+precisa de decisão do Operador ou verificação visual ao vivo
+
+**Seguro implementar sem decisão nova** (mecânico, sem ambiguidade de
+design, já seria consistente com o padrão real do resto do sistema):
+- Nenhum item novo identificado nesta rodada além dos já corrigidos em
+  §6.58 (Sweep/Session Key Levels) — os 2 achados de paleta restantes
+  (§9.4: família amarela, cyan Fibonacci×Volume Profile) exigem escolher
+  tons NOVOS, que é uma decisão de identidade visual, não um bug
+  mecânico como os já corrigidos.
+
+**Precisa de decisão do Operador (design, não bug)**:
+- **Família amarela (5 tons)**: consolidar numa paleta declarada —
+  ex.: manter âmbar `(255,176,32)` como "o" amarelo-família e dar a
+  Entry/Sweep/Liquidation-peak/VWAP-neutro variações de SATURAÇÃO da
+  MESMA base, em vez de 5 matizes não-relacionados. Já registrado como
+  Tier 3 do backlog (`MAPA_EVOLUCAO_CIBORGUE.md` §7: "color-palette
+  consolidation across 9 semantic axes — needs Operator design
+  decision") — este achado CONFIRMA e detalha esse item pendente, não é
+  novo.
+- **Cyan Fibonacci × Volume Profile**: dar um tom próprio a um dos dois
+  (Volume Profile, por ser o mais recente/menos "dono histórico" do
+  cyan — o cyan já é a cor de marca do app, `#00f0ff` no header/rodapé,
+  então Fibonacci reaproveitar o acento de marca é mais defensável que
+  Volume Profile fazer o mesmo).
+
+**Precisa de verificação visual ao vivo (não uma decisão de design, mas
+não posso confirmar sem dado real)**:
+- Reposicionamento fino de labels/espaçamento em cenários de MÚLTIPLAS
+  camadas simultâneas ativas (ex.: Session Key Levels + Kill Zones +
+  Sweep todos ativos ao mesmo tempo, algo que só um teste com candles
+  reais mostra de verdade) — este ambiente sandboxed não tem rede real
+  à Binance (mesma limitação já documentada §6.55/§6.57).
+
+### 9.8 Escopo restante para a Task #102 (ADENDO — lapidação final)
+
+Esta seção (9.1-9.7) entrega o que a Task #101 pediu: inventário
+completo, prioridade de 4 níveis, auditoria de paleta com achados reais,
+pesquisa externa. A Task #102 pede uma "revisão final como sistema
+único integrado" — isso inclui decisões de design (§9.7, precisam do
+Operador) e verificação visual ao vivo (§9.7, precisa de dado real) que
+honestamente não podem ser concluídas só com leitura de código. Próximo
+passo real: Operador decide a paleta amarela consolidada + cor do
+Volume Profile (as 2 decisões pendentes reais) — depois disso, a
+implementação em si é mecânica e rápida (trocar 1 constante de cor por
+elemento, já com o padrão de "reaproveitar tom existente" comprovado 4x
+nesta sessão).
+
+---
+
 ## Fontes (pesquisa real)
 - [ATAS — Order Flow & Volume Analysis Software](https://atas.net/)
 - [ATAS — Heatmap Trading / Liquidity Heat Map](https://atas.net/blog/heatmap/)
@@ -448,3 +627,9 @@ honesto.
 - [Evaluating machine learning models for predictive accuracy in cryptocurrency price forecasting (PMC)](https://pmc.ncbi.nlm.nih.gov/articles/PMC12571449/)
 - [Cryptocurrency Price Forecasting Using Machine Learning (arXiv)](https://arxiv.org/pdf/2508.01419)
 - [Forecasting and Trading Cryptocurrencies with Machine Learning Under Changing Market Conditions (Springer)](https://link.springer.com/chapter/10.1007/978-981-96-6839-7_10)
+
+### Seção 9 (Lapidação Profissional)
+- [ChartsWatcher — Top Dashboard Design Best Practices for Traders in 2025](https://chartswatcher.com/pages/blog/top-dashboard-design-best-practices-for-traders-in-2025)
+- [TradersDNA — Mastering Trading Chart Colors: A Guide to Enhanced Visualizations](https://www.tradersdna.com/trading-chart-colors/)
+- [TradingView — Pine Script Essential Colors](https://www.tradingview.com/pine-script-docs/v4/essential/colors/)
+- [TradingView lightweight-charts — custom-price-line-price-axis-view.ts (código-fonte real, confirma o mecanismo de `axisLabelVisible`/`title`, §6.58)](https://github.com/tradingview/lightweight-charts/blob/master/src/views/price-axis/custom-price-line-price-axis-view.ts)

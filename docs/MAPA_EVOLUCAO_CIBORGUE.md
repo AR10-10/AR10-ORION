@@ -191,6 +191,12 @@ abertos desta auditoria + achados novos de
     consistente em cada eixo, ambíguo entre eixos. Grande — toca dezenas
     de widgets — precisa de decisão de design do Operador sobre a nova
     paleta antes de implementar (achado `AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` §4).
+    **Detalhamento real do lado do GRÁFICO** (Lapidação Profissional,
+    `AUDITORIA_ECOSSISTEMA_VISUAL.md` §9.4/§9.7): 5 tons de amarelo/âmbar
+    distintos pra 5 conceitos (Entry/VWAP-neutro/pico-Liquidation/Kill
+    Zones/Sweep) e o mesmo cyan exato pra Fibonacci E Volume Profile —
+    mesmas 2 decisões pendentes de design, agora com inventário completo
+    e cores exatas nomeadas.
 
 ### Tier 4 — grande, arquitetural, cada um merece sua própria trilha
 20. Migração WidgetContext → seletores Zustand granulares — dívida já
