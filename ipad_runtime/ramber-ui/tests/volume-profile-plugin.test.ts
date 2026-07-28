@@ -50,6 +50,15 @@ describe('VolumeProfilePlugin: Fio de Seda + geometria real + dirty-flag (mesmas
     expect(s).toContain('useVolumeProfileSnapshot()');
     expect(s).not.toMatch(/fetch\(/);
   });
+
+  it('Lapidação institucional: barras seguem cyan monocromático (precedente real "Black Ice"), mas o POC (mesma forma de linha que Fibonacci) ganha acento magenta próprio — nunca o mesmo cyan exato de Fibonacci numa LINHA', () => {
+    const s = src();
+    expect(s).toContain('const BAR_FILL = "rgba(0, 240, 255, 0.10)";');
+    expect(s).toContain('const BAR_FILL_HVN = "rgba(0, 240, 255, 0.22)";');
+    expect(s).toContain('const BAR_FILL_LVN = "rgba(0, 240, 255, 0.04)";');
+    expect(s).toContain('const POC_LINE = "rgba(236, 81, 205, 0.75)";');
+    expect(s).not.toContain('const POC_LINE = "rgba(0, 240, 255');
+  });
 });
 
 describe('EnhancedChart: níveis Fibonacci reais como price lines fio de seda', () => {

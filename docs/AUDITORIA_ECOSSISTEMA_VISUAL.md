@@ -495,7 +495,8 @@ classificadas (nunca redescobrir isso caso a caso).
 | BOS / CHOCH | `StructureBreakMarkersPlugin` + `priceAxisLabels` | `rgba(0,255,170/255,0,85,0.75)`, `ageAlpha` decai | Alta |
 | FVG / Order Block (obstáculo real) | `LiquidityZonesPlugin` | mesma dupla verde/vermelho, borda mais opaca | Alta |
 | FVG / Order Block (sem obstáculo) | idem | mesma dupla, borda mais translúcida | Média |
-| Volume Profile (POC/HVN) | `VolumeProfilePlugin` | `rgba(0,240,255,...)` | Média |
+| Volume Profile (barras HVN/LVN) | `VolumeProfilePlugin` | `rgba(0,240,255,...)` (mantido, §6.61) | Média |
+| Volume Profile (POC) | `VolumeProfilePlugin` | `rgba(236,81,205,0.75)` magenta (§6.61, era o mesmo cyan das barras) | Média |
 | CVD | série nativa (sub-escala) | `rgba(138,180,248,0.85)` | Média |
 | Fibonacci | price lines nativas | `rgba(0,240,255,...)` — **mesmo tom do Volume Profile** | Média |
 | Premium / Discount | price lines nativas | vermelho/azul/verde (topo/EQ/fundo) | Média |
@@ -518,7 +519,7 @@ classificadas (nunca redescobrir isso caso a caso).
 | Verde `(0,255,170)` | 1 tom, várias opacidades | Candle alta, S1, FVG/OB bullish, BOS/CHOCH alta, Target, Liquidation LONG, Order Flow bid, Session Key Low, `LONG_RGB` | ✅ consistente — 1 papel real (bullish/suporte/alvo), reforçado pelo research map já citado nesta sessão |
 | Vermelho `(255,0,85)` | 1 tom, várias opacidades | Candle baixa, R1, FVG/OB bearish, BOS/CHOCH baixa, Stop, Liquidation SHORT, Order Flow ask, Session Key High, Premium (topo do range), `SHORT_RGB` | ✅ consistente — mesmo papel real (bearish/resistência/risco) |
 | **Amarelo/âmbar/dourado** | **5 tons** (atualizado §6.59): `(240,208,111)` Entry, `(255,235,190)`/`(255,214,130)` VWAP/NL neutro, `(255,213,0)` pico Liquidation, `(255,176,32)` Kill Zones, `(255,140,0)` Sweep (era `(255,191,0)`, H45 — a 2° exatos do pico da Liquidation, mesma L/S/alpha, indistinguível a olho; movido pro extremo laranja H33 da mesma família) | 5 conceitos DIFERENTES | ⚠️ **parcialmente corrigido em §6.59** — o par objetivamente colidente (Sweep×Liquidation-peak, 2° de matiz comprovados por conversão HSL) foi diferenciado; Entry/VWAP-neutro/Kill Zones seguem intocados de propósito (tratamento visual já distinto — zona preenchida, tom pálido deliberado, banda de fundo — sem colisão demonstrada, ver §6.59 pra raciocínio completo). Consolidação total da família segue como decisão do Operador (§9.6/§9.7) |
-| Cyan `(0,240,255)` | 1 tom exato | Volume Profile (barras) E Fibonacci (linhas) — **dois conceitos diferentes, mesma cor exata** | ⚠️ achado real novo desta rodada — mitigado por FORMA diferente (barra vs. linha), mas ainda uma coincidência de cor não documentada como decisão deliberada |
+| Cyan `(0,240,255)` | 1 tom exato | Volume Profile (barras) E Fibonacci (linhas) | ✅ **resolvido em §6.61**: as BARRAS ficam cyan (mitigado por forma, precedente real confirmado — preset "Black Ice" de Volume Profile no TradingView é monocromático cyan); o POC (única LINHA real do Volume Profile, mesma forma que Fibonacci) migrou pra magenta `rgba(236,81,205,...)` — a colisão real era POC×Fibonacci (mesma forma+cor), não barras×Fibonacci |
 | Roxo/lavanda | 3 tons próximos: `(176,38,255)` Harmônicos, `(200,107,255)` EQH/EQL, `(186,168,255)` Scenario/Projeção | 3 conceitos diferentes | ⚠️ mais brando que o amarelo (tons mais distantes entre si), mas mesma família de risco |
 | Azul-acinzentado `(138,180,248)` | 1 tom | CVD, Premium/Discount Equilibrium, `NEUTRAL_RGB` (Aura) | ✅ consistente — papel real único ("informativo/neutro") |
 | Cinza-ardósia `(148,163,184)` | 1 tom | Trend Channel, Market Sessions | ✅ intencional (ambos documentados como "contexto de fundo discreto, nunca compete") |
@@ -586,26 +587,33 @@ design, já seria consistente com o padrão real do resto do sistema):
   MESMA cor. Isso é mecânico (não exige escolher uma identidade nova, só
   separar 2 tons que deveriam sempre ter sido distintos) e foi corrigido:
   Sweep → `rgba(255,140,0,0.85)`, Liquidation-peak → `rgba(255,213,0,0.85)`.
-  Continua valendo que os outros 2 achados de paleta (Entry/VWAP-
-  neutro/Kill Zones dentro da mesma família amarela; cyan
-  Fibonacci×Volume Profile) exigem escolher tons NOVOS sem um par
-  objetivamente colidente como evidência — essa parte é decisão de
-  identidade visual, não bug mecânico.
+  Continua valendo que o achado da família amarela (Entry/VWAP-
+  neutro/Kill Zones) exige escolher tons NOVOS sem um par objetivamente
+  colidente como evidência — decisão de identidade visual, não bug
+  mecânico. **Atualização §6.61**: o cyan Fibonacci×Volume Profile TAMBÉM
+  virou um caso mecânico ao ser reexaminado com o mesmo rigor — a
+  colisão real nunca foi "barras vs. linhas" (mitigado por forma desde
+  sempre), era POC (a ÚNICA linha real do Volume Profile) compartilhando
+  a MESMA cor exata que Fibonacci (também linha). Corrigido sem esperar
+  decisão do Operador: POC → `rgba(236,81,205,0.75)` magenta (precedente
+  real confirmado — presets "Aurora Glass"/"Obsidian Precision" de Volume
+  Profile destacam o POC com acento próprio sobre um perfil
+  monocromático); as barras continuam cyan (precedente real "Black Ice").
 
 **Precisa de decisão do Operador (design, não bug)**:
 - **Família amarela (5 tons)**: consolidar numa paleta declarada —
   ex.: manter âmbar `(255,176,32)` como "o" amarelo-família e dar a
-  Entry/Sweep/Liquidation-peak/VWAP-neutro variações de SATURAÇÃO da
-  MESMA base, em vez de 5 matizes não-relacionados. Já registrado como
-  Tier 3 do backlog (`MAPA_EVOLUCAO_CIBORGUE.md` §7: "color-palette
-  consolidation across 9 semantic axes — needs Operator design
-  decision") — este achado CONFIRMA e detalha esse item pendente, não é
-  novo.
-- **Cyan Fibonacci × Volume Profile**: dar um tom próprio a um dos dois
-  (Volume Profile, por ser o mais recente/menos "dono histórico" do
-  cyan — o cyan já é a cor de marca do app, `#00f0ff` no header/rodapé,
-  então Fibonacci reaproveitar o acento de marca é mais defensável que
-  Volume Profile fazer o mesmo).
+  Entry/VWAP-neutro/Kill Zones variações de SATURAÇÃO da MESMA base, em
+  vez de matizes não-relacionados (Sweep/Liquidation-peak já resolvidos
+  em §6.59 por serem um par objetivamente colidente, não uma decisão de
+  família inteira). Já registrado como Tier 3 do backlog
+  (`MAPA_EVOLUCAO_CIBORGUE.md` §7: "color-palette consolidation across 9
+  semantic axes — needs Operator design decision") — este achado
+  CONFIRMA e detalha esse item pendente, não é novo. Nenhuma mudança
+  adicional foi feita aqui: os pares restantes na família (Entry vs.
+  Kill Zones vs. VWAP-neutro) não têm a mesma colisão objetiva
+  demonstrada (2° de matiz + mesma L/S/alpha) que justificou agir sem
+  esperar o Operador nos outros 2 casos.
 
 **Precisa de verificação visual ao vivo (não uma decisão de design, mas
 não posso confirmar sem dado real)**:

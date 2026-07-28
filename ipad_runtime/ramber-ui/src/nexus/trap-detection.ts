@@ -122,3 +122,47 @@ export function detectInstitutionalTraps(inputs: TrapInputs): TrapSignal[] {
 
   return out;
 }
+
+// Companion function (Lapidação Institucional — diretiva "agrupar
+// automaticamente eventos repetidos próximos, ex.: 8 SWEEPs consecutivos
+// -> SWEEP ZONE (8 eventos)"): achado real, não especulativo — sweptEqh/
+// sweptEql acima já podem conter 2+ zonas EQH/EQL DISTINTAS (cada uma já
+// um cluster real de >=2 toques via clusterEqualLevels em
+// fvg-order-block-engine.js) que ficam PRÓXIMAS entre si sem serem a
+// MESMA zona; se todas forem varridas na mesma janela, cada preço vira
+// um rótulo próprio no canvas. Mesmo idioma de clusterização por âncora
+// FIXA (nunca média rodante) de clusterEqualLevels, reimplementado aqui
+// porque ramber-ui e o engine .js legado vivem em pacotes/runtimes
+// diferentes (nunca um import cross-package). Puro: zero rede/estado,
+// testável por execução real.
+export interface SweptPriceCluster {
+  avgPrice: number;
+  count: number;
+}
+
+export function clusterSweptPrices(prices: number[], proximityPct: number): SweptPriceCluster[] {
+  const sorted = prices.filter((p) => Number.isFinite(p)).sort((a, b) => a - b);
+  const clusters: SweptPriceCluster[] = [];
+  let current: number[] = [];
+  const flush = () => {
+    if (current.length === 0) return;
+    const avgPrice = current.reduce((sum, p) => sum + p, 0) / current.length;
+    clusters.push({ avgPrice, count: current.length });
+  };
+  for (const price of sorted) {
+    if (current.length === 0) {
+      current.push(price);
+      continue;
+    }
+    const anchor = current[0];
+    const closeEnough = anchor !== 0 && (Math.abs(price - anchor) * 100) / anchor <= proximityPct;
+    if (closeEnough) {
+      current.push(price);
+    } else {
+      flush();
+      current = [price];
+    }
+  }
+  flush();
+  return clusters;
+}

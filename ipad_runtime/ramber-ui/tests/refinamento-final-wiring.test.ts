@@ -680,9 +680,14 @@ describe('Achado real do Operador ("linha amarela que eu não sei o que signific
     const c = chart();
     const idx = c.indexOf('if (visibility.liquidity_sweep) {', c.indexOf('const priceAxisLabels = useMemo'));
     expect(idx, 'bloco de Sweep em priceAxisLabels não encontrado').toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 700);
+    const block = c.slice(idx, idx + 1100);
     expect(block).toContain('const seenSweepPrices = new Set<number>();');
-    expect(block).toContain('text: `⚡ SWEEP ${t.kind === "STOP_HUNT_TOPO" ? "↑" : "↓"} ${Math.round(t.confidence * 100)}%`,');
+    // Lapidação institucional ("agrupar SWEEPs próximos"): clusterSweptPrices
+    // (trap-detection.ts) substitui o loop plano por preço — 1 evento isolado
+    // mantém o texto simples, 2+ eventos próximos viram "SWEEP ZONE (Nx)".
+    expect(block).toContain('for (const cluster of clusterSweptPrices(uniquePrices, LIQUIDITY_PROXIMITY_PCT)) {');
+    expect(block).toContain('`⚡ SWEEP ${arrow} ${confidencePct}%`');
+    expect(block).toContain('`⚡ SWEEP ZONE ${arrow} (${cluster.count}x) ${confidencePct}%`');
     expect(block).toContain('side: "left",');
   });
 

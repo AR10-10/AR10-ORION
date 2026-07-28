@@ -30,10 +30,26 @@ import { useVolumeProfileSnapshot } from "../store/unified-snapshot-store";
 import { bucketMidPrice } from "../nexus/volume-profile";
 
 const MAX_BAR_WIDTH_FRACTION = 0.16; // 16% da largura do chart para a barra de maior volume real
+// Barras: cyan monocromático — achado da Lapidação Institucional
+// (AUDITORIA_ECOSSISTEMA_VISUAL.md §9.4/§9.7, pesquisa real confirmou que
+// isto é um preset legítimo e precedente ("Black Ice", scripts reais de
+// Volume Profile no TradingView) mitigado pela FORMA (barra, nunca linha)
+// vs. Fibonacci, que também usa este cyan — mesmo raciocínio já aplicado
+// a Kill Zones × Sweep (§6.59). Nenhuma mudança aqui.
 const BAR_FILL = "rgba(0, 240, 255, 0.10)";
 const BAR_FILL_HVN = "rgba(0, 240, 255, 0.22)";
 const BAR_FILL_LVN = "rgba(0, 240, 255, 0.04)";
-const POC_LINE = "rgba(0, 240, 255, 0.65)";
+// POC: achado real diferente do das barras — esta É uma linha de preço
+// (mesma forma que Fibonacci), então o mesmo cyan exato aqui seria a
+// mesma classe de colisão objetiva já corrigida em Sweep×Liquidation-peak
+// (§6.59), só que contra Fibonacci em vez de outro elemento âmbar.
+// Pesquisa real confirmou precedente pra destacar o POC com um acento
+// PRÓPRIO dentro de um perfil monocromático ("Aurora Glass" usa magenta
+// pro POC sobre gradiente cyan; "Obsidian Precision" usa branco pro POC
+// sobre acento cyan) — magenta H312 escolhido por cair no único
+// corredor de matiz real e aberto entre a família roxa (Harmônicos/EQH-
+// EQL, H278) e o vermelho SHORT (H340), a ~30° de ambos.
+const POC_LINE = "rgba(236, 81, 205, 0.75)";
 
 interface VolumeProfilePluginProps {
   chart: IChartApi | null;

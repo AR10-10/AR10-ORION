@@ -67,6 +67,7 @@ import { SessionKeyLevelsPlugin } from "./SessionKeyLevelsPlugin";
 // sessão CORRENTE entra no sistema anti-colisão do eixo (mesma disciplina
 // de S1/R1) — ver priceAxisLabels abaixo.
 import { computeSessionKeyLevels } from "../nexus/market-session";
+import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
 import { TradePlanZonePlugin } from "./TradePlanZonePlugin";
@@ -112,6 +113,7 @@ import type { DirectionalLineState } from "../nexus/vwap-state";
 // engine-bridge.ts's computeBosChoch) — mesmo tipo que StructureBreakMarkersPlugin usa.
 import type { StructureBreak, LiquidationEvent } from "../engine-bridge";
 import type { TrapSignal } from "../nexus/trap-detection";
+import { clusterSweptPrices } from "../nexus/trap-detection";
 // Auditoria do painel do gráfico: "canais de tendência", gap real já
 // documentado em rodadas anteriores — ver cabeçalho de
 // nexus/trend-channel-engine.ts para a definição real (Linear Regression
@@ -2006,16 +2008,35 @@ export function EnhancedChart_110_Percent({
     // dedupe por preço porque múltiplos traps podem citar o mesmo pool.
     // side:"left" — evento estrutural/histórico (mesma categoria de S1/R1/
     // Trend Channel/BOS-CHOCH), nunca "o que agir agora".
+    // Lapidação institucional (diretiva "agrupar automaticamente eventos
+    // repetidos próximos, ex.: 8 SWEEPs consecutivos -> SWEEP ZONE (8
+    // eventos)"): achado real, não especulativo — clusterEqualLevels
+    // (fvg-order-block-engine.js) já consolida swings BRUTOS em zonas
+    // EQH/EQL por ancoragem fixa, mas zonas DISTINTAS (ex. 2 clusters de
+    // EQH a 60pts de distância) continuam entradas separadas em
+    // liquidityZones; se AMBAS forem varridas na mesma janela,
+    // t.sweptPrices carrega os dois preços próximos, e cada um virava um
+    // rótulo próprio aqui. clusterSweptPrices (trap-detection.ts) faz o
+    // agrupamento real (mesmo idioma de âncora fixa, mesmo limiar já real
+    // de "o que conta como perto" nesta família de dado —
+    // LIQUIDITY_PROXIMITY_PCT, já usado por unsweptLiquidityNearPrice/
+    // hasSessionKeyLevelNearPrice em App.tsx) — zero limiar novo inventado.
     if (visibility.liquidity_sweep) {
       const seenSweepPrices = new Set<number>();
       for (const t of traps ?? []) {
         if (t.kind !== "STOP_HUNT_TOPO" && t.kind !== "STOP_HUNT_FUNDO") continue;
-        for (const price of t.sweptPrices) {
-          if (!Number.isFinite(price) || seenSweepPrices.has(price)) continue;
-          seenSweepPrices.add(price);
+        const uniquePrices = t.sweptPrices.filter((p) => Number.isFinite(p) && !seenSweepPrices.has(p));
+        uniquePrices.forEach((p) => seenSweepPrices.add(p));
+
+        const arrow = t.kind === "STOP_HUNT_TOPO" ? "↑" : "↓";
+        const confidencePct = Math.round(t.confidence * 100);
+        for (const cluster of clusterSweptPrices(uniquePrices, LIQUIDITY_PROXIMITY_PCT)) {
           out.push({
-            price,
-            text: `⚡ SWEEP ${t.kind === "STOP_HUNT_TOPO" ? "↑" : "↓"} ${Math.round(t.confidence * 100)}%`,
+            price: cluster.avgPrice,
+            text:
+              cluster.count === 1
+                ? `⚡ SWEEP ${arrow} ${confidencePct}%`
+                : `⚡ SWEEP ZONE ${arrow} (${cluster.count}x) ${confidencePct}%`,
             color: "rgba(255, 140, 0, 0.85)", // mesmo tom laranja da price line (ver comentário no efeito acima)
             side: "left",
           });

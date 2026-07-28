@@ -202,10 +202,18 @@ abertos desta auditoria + achados novos de
     design — era 2° de matiz na mesma luminosidade/saturação/alpha
     (comprovado por conversão RGB→HSL), ou seja, praticamente a mesma cor
     por acidente. Diferenciado sem esperar decisão do Operador (mecânico,
-    evidência objetiva). Entry/VWAP-neutro/Kill Zones (mesma família) e o
-    cyan Fibonacci×Volume Profile CONTINUAM como decisão de design
-    pendente — nenhum dos dois tem uma colisão objetiva comprovada do
-    mesmo jeito, só sobreposição conceitual de família de cor.
+    evidência objetiva).
+    **Também resolvido em §6.61** (`SYSTEM_HANDBOOK.md`): o cyan
+    Fibonacci×Volume Profile virou o mesmo tipo de caso mecânico ao ser
+    reexaminado — a colisão real nunca foi "barras vs. linha", era o POC
+    (única linha real do Volume Profile) na MESMA cor exata que
+    Fibonacci (também linha). POC migrou pra magenta `rgba(236,81,205,
+    0.75)` (precedente real: presets "Aurora Glass"/"Obsidian Precision"
+    destacam POC com acento próprio); barras seguem cyan (precedente
+    real: preset "Black Ice"). Só resta como decisão de design pendente:
+    Entry/VWAP-neutro/Kill Zones dentro da mesma família amarela —
+    nenhum desses pares tem uma colisão objetiva comprovada do mesmo
+    jeito, só sobreposição conceitual de família de cor.
 
 ### Tier 4 — grande, arquitetural, cada um merece sua própria trilha
 20. Migração WidgetContext → seletores Zustand granulares — dívida já

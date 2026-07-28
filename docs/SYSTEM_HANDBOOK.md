@@ -4622,6 +4622,102 @@ possível verificar visualmente a geometria da faixa com candles reais
 (mesma limitação honesta de sempre — zero rede real à Binance neste
 ambiente).
 
+### 6.61 "DIRETIVA FINAL — LAPIDAÇÃO INSTITUCIONAL" (autonomia explícita
+do Operador): POC do Volume Profile + agrupamento real de Sweeps
+
+Duas diretivas formais adicionais chegaram nesta rodada, ambas com
+"Autorização: Aprovada"/"Operador" explícitos e SEM o endereçamento
+"Agente 4" das anteriores (§6.59) — tratadas como continuidade direta,
+sem ressalva nova. Ambas concedem autonomia técnica ampla, condicionada
+a preservar LEI 24/READ_ONLY/SSOT/arquitetura — nenhuma pediu nada que
+violasse essas 4 restrições.
+
+**Auditorias de confirmação (sem achado novo, registradas por
+completude)**:
+- **Loop de animação no main thread**: grep dirigido a `requestAnimationFrame`
+  nos 13 plugins de canvas — todos usam o mesmo padrão dirty-flag (1
+  `requestAnimationFrame` por arquivo, sempre dentro de `markDirty()`,
+  nunca auto-reagendado incondicionalmente). `NeuralMarketAuraPlugin.tsx`
+  confirmado como o único caso real de animação contínua, e ela já vive
+  isolada em `conviction-cyclone-worker.ts` via `OffscreenCanvas`
+  (Regra de Ouro 6 intacta) — main thread só despacha `postMessage`
+  quando dirty, nunca anima ele mesmo.
+- **"Fios de liquidez"**: `LiquidityZonesPlugin.tsx` (FVG/Order Blocks)
+  já é área preenchida + borda 1px (Fio de Seda) desde V-MAX Fase 0.7 —
+  não são "fios" soltos, já é zona consolidada. Nenhuma ação necessária.
+
+**Achado real 1 — POC do Volume Profile compartilhava o cyan exato de
+Fibonacci na MESMA forma (linha)**: reexame da família cyan (§9.4) com o
+mesmo rigor já aplicado a Sweep×Liquidation-peak (§6.59) — a colisão
+real nunca foi "barras vs. Fibonacci" (mitigado por forma, já
+documentado), era o POC (a única LINHA real do Volume Profile,
+`POC_LINE`) usando o MESMO `rgba(0,240,255,...)` que as price lines de
+Fibonacci. Pesquisa real (WebSearch, presets documentados de Volume
+Profile no TradingView) confirmou 2 precedentes: "Black Ice" (perfil
+inteiro monocromático cyan — valida manter as barras como estão) e
+"Aurora Glass"/"Obsidian Precision" (POC com acento PRÓPRIO sobre um
+perfil de cor única — valida diferenciar só o POC). Corrigido:
+`POC_LINE` → `rgba(236, 81, 205, 0.75)` magenta H312, escolhido por
+cair no único corredor de matiz real aberto entre a família roxa
+(Harmônicos/EQH-EQL, H278) e o vermelho SHORT (H340) — a ~30° de ambos,
+sem colidir com nenhuma família já existente. Barras (HVN/LVN/normal)
+continuam cyan, intocadas.
+
+**Achado real 2 — Sweeps podem legitimamente aparecer em cluster,
+confirmado no motor real (não especulativo)**: a diretiva pediu
+"agrupar automaticamente eventos repetidos próximos (ex.: 8 SWEEPs
+consecutivos → SWEEP ZONE)". Antes de implementar, auditei
+`trap-detection.ts`/`fvg-order-block-engine.js::clusterEqualLevels` pra
+confirmar se isso é um cenário real: `clusterEqualLevels` já consolida
+swings BRUTOS numa zona EQH/EQL por ancoragem fixa (>=2 toques reais),
+mas zonas DISTINTAS (ex. 2 clusters de EQH a alguns pontos de distância,
+cada um já >=2 toques) continuam entradas SEPARADAS em `liquidityZones`
+— se ambas forem varridas na mesma janela, `TrapSignal.sweptPrices`
+carrega os 2 preços próximos, e cada um virava um rótulo próprio no
+canvas. Confirmado: estruturalmente real, não hipotético (embora "8" do
+exemplo do Operador seja provavelmente ilustrativo/exagerado, não uma
+contagem observada).
+
+**Solução aplicada**: nova função pura `clusterSweptPrices` em
+`trap-detection.ts` (companion function, mesmo arquivo que já define
+`TrapSignal`/`sweptPrices` — dono real do dado) — mesmo idioma de
+clusterização por ÂNCORA FIXA (nunca média rodante) de
+`clusterEqualLevels`, reimplementado localmente porque ramber-ui e o
+engine `.js` legado vivem em pacotes/runtimes diferentes (nunca um
+import cross-package). Usa o mesmo limiar já real desta família de dado
+(`LIQUIDITY_PROXIMITY_PCT`, `layer-relevance.ts` — já usado por
+`unsweptLiquidityNearPrice`/`hasSessionKeyLevelNearPrice`), zero limiar
+novo inventado. `EnhancedChart_110_Percent.tsx::priceAxisLabels` agora
+chama `clusterSweptPrices` por trap (TOPO/FUNDO separados, já que são
+direções semanticamente diferentes) — 1 preço isolado mantém `⚡ SWEEP
+↑/↓ N%`; 2+ preços próximos viram `⚡ SWEEP ZONE ↑/↓ (Nx) N%`, ancorado no
+preço médio do cluster.
+
+**Impacto esperado**: quando múltiplas zonas de liquidez próximas forem
+varridas na mesma janela, o Operador vê 1 rótulo consolidado com
+contagem real em vez de N rótulos quase sobrepostos — mesmo espírito de
+"menos linhas, mais contexto" da diretiva, aplicado com evidência do
+motor real, não por suposição.
+
+**Riscos conhecidos**: nenhum — `detectInstitutionalTraps` (a função que
+POPULA `sweptPrices`) está intocada; a clusterização é 100% no lado do
+CANVAS (leitura/agrupamento de exibição), zero mudança na detecção real
+do evento.
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 2018 testes** (100%,
++9 novos: 8 de execução real hand-verified em `nexus-trap-detection.test.ts`
+para `clusterSweptPrices` — incluindo um caso de âncora fixa vs. média
+rodante deliberadamente adversarial — +1 travando o novo `POC_LINE` em
+`volume-profile-plugin.test.ts`; mais ajustes honestos de pinned-string
+em `refinamento-final-wiring.test.ts`/`price-label-stack-plugin.test.ts`
+que mudaram de verdade com o refactor, sem contagem líquida nova) ·
+build de produção ok · smoke
+Playwright real: app carrega, `AWAITING CANDLES…` honesto (zero dado
+real neste sandbox, mesma limitação de sempre), footer mostra `FAIL-
+CLOSED · SEM ORDENS · SEM CHAVES` — zero erro JS novo (único erro de
+console é o WebSocket bloqueado do proxy, já confirmado pré-existente
+em §6.60).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

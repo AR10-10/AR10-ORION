@@ -717,7 +717,13 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     const sweepIdx = c.indexOf('if (visibility.liquidity_sweep) {', idx);
     const sweepBlock = c.slice(sweepIdx, c.indexOf('}', c.indexOf('side:', sweepIdx)) + 1);
     expect(sweepBlock).toContain('side: "left",');
-    expect(sweepBlock).toContain('text: `⚡ SWEEP ${t.kind === "STOP_HUNT_TOPO" ? "↑" : "↓"} ${Math.round(t.confidence * 100)}%`,');
+    // Lapidação institucional ("agrupar SWEEPs próximos"): texto agora
+    // condicional por cluster (clusterSweptPrices, trap-detection.ts) —
+    // 1 evento isolado mantém o texto simples, 2+ eventos próximos viram
+    // "SWEEP ZONE (Nx)".
+    expect(sweepBlock).toContain('for (const cluster of clusterSweptPrices(uniquePrices, LIQUIDITY_PROXIMITY_PCT)) {');
+    expect(sweepBlock).toContain('`⚡ SWEEP ${arrow} ${confidencePct}%`');
+    expect(sweepBlock).toContain('`⚡ SWEEP ZONE ${arrow} (${cluster.count}x) ${confidencePct}%`');
 
     const keyLevelIdx = c.indexOf('if (visibility.session_key_levels && currentSessionKeyLevel) {', idx);
     const keyLevelBlock = c.slice(keyLevelIdx, c.indexOf('return out;', idx));
