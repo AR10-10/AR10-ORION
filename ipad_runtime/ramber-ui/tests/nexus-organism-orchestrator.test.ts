@@ -34,6 +34,7 @@ import { computeConfluenceCorridor } from '../src/nexus/confluence-corridor';
 import { buildNexusDecision } from '../src/nexus/decision-layer';
 import { computeInstitutionalScore } from '../src/nexus/institutional-score';
 import { computeHeatScore } from '../src/nexus/heat-score';
+import { gmilOrchestrator } from '../src/gmil/gmil-orchestrator';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
@@ -80,6 +81,7 @@ beforeEach(() => {
   s.setNexusDecision(null);
   s.setInstitutionalScoreReading(null);
   s.setHeatScoreReading(null);
+  s.setGmil(null);
   s.setSymbol('BTC');
   s.setActiveTimeframe('15m');
   s.setOffline(false);
@@ -439,6 +441,18 @@ describe('EPC OMEGA FINAL Parte 1 ("Meta Engine"): nexusDecision/institutionalSc
     expect(received).toHaveLength(1);
     expect(received[0]).toBe(reading);
   });
+
+  it('setGmil(snapshot real do gmilOrchestrator) publica BRAIN.GMIL.UPDATED com a mesma referência — já alimentava a UI, agora ganha fatia no organismo', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('BRAIN.GMIL.UPDATED', (p) => received.push(p.snapshot));
+    const snapshot = gmilOrchestrator.getSnapshot();
+    useUnifiedSnapshotStore.getState().setGmil(snapshot);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(snapshot);
+    expect(received[0]).toBe(useUnifiedSnapshotStore.getState().gmil);
+  });
 });
 
 describe('Sincronização fim-a-fim (a prova da Ordem): conselho ESCREVE → bus NOTIFICA → cenário RELÊ do snapshot', () => {
@@ -518,5 +532,15 @@ describe('Fiação real no código-fonte: App e Health Monitor obedecem a camada
     expect(s).toContain('useUnifiedSnapshotStore.getState().setHeatScoreReading(heatReading);');
     expect(s).toContain('}, [nexusDecision]);');
     expect(s).toContain('}, [heatReading]);');
+  });
+
+  it('App.tsx: Diretriz Final de Integração Total — o MESMO snapshot do GMIL já usado pelos widgets é espelhado na store (zero segunda assinatura de useGmilSnapshot)', () => {
+    const s = read('../src/App.tsx');
+    expect(s).toContain('const gmilSnapshot = useGmilSnapshot();');
+    expect(s).toContain('useUnifiedSnapshotStore.getState().setGmil(gmilSnapshot);');
+    expect(s).toContain('}, [gmilSnapshot]);');
+    // Nunca uma segunda CHAMADA real ao hook (comentários que citam
+    // "useGmilSnapshot()" em prosa não contam — só atribuições reais).
+    expect(s.match(/= useGmilSnapshot\(\)/g)?.length).toBe(1);
   });
 });

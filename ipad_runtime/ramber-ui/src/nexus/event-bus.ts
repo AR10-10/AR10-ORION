@@ -24,6 +24,7 @@ import type { RadarQualificationResult } from "./radar-qualification";
 import type { NexusDecision } from "./decision-layer";
 import type { InstitutionalScoreReading } from "./institutional-score";
 import type { HeatScoreReading } from "./heat-score";
+import type { GmilSnapshot } from "../gmil/gmil-orchestrator";
 
 // Diretamente do Blueprint V-MAX §1.3 — os únicos eventos reais que este
 // sistema publica. Nenhum evento é adicionado especulativamente; cada um
@@ -82,6 +83,10 @@ export type NexusEvent =
   | { type: "BRAIN.NEXUS_DECISION.UPDATED"; payload: { decision: NexusDecision | null } }
   | { type: "BRAIN.INSTITUTIONAL_SCORE.UPDATED"; payload: { reading: InstitutionalScoreReading | null } }
   | { type: "BRAIN.HEAT_SCORE.UPDATED"; payload: { reading: HeatScoreReading | null } }
+  // Diretriz Final de Integração Total: o GMIL já alimentava a UI real
+  // (App.tsx via useGmilSnapshot) mas nunca tinha evento próprio no
+  // organismo — mesmo passthrough puro dos demais BRAIN.*.
+  | { type: "BRAIN.GMIL.UPDATED"; payload: { snapshot: GmilSnapshot | null } }
   // §5 ORGANISMO
   | { type: "ORGANISM.TRUST.UPDATED"; payload: { score: TrustScoreSnapshot | null } }
   // Uma ingestão afetiva real = um evento (a fatia affectiveMemory é

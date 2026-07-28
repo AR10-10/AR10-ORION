@@ -46,7 +46,7 @@ describe('App.tsx: orderflowTrend computado UMA vez sobre a MESMA série já rea
 describe('MarketRegimeWidget: exibe a tendência real de força do fluxo, honestamente distinta do CVD instantâneo', () => {
   it('destrutura orderflowTrend do WidgetContext', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('const { engine, cvd, currentRsi, chartTimeframe, orderflowTrend } = useContext(WidgetContext) || {};');
+    expect(app).toContain('const { engine, cvd, currentRsi, currentMacd, chartTimeframe, orderflowTrend } = useContext(WidgetContext) || {};');
   });
 
   it('AWAIT honesto quando o histórico ainda não é real/suficiente — nunca uma tendência fabricada', () => {

@@ -152,6 +152,9 @@ export class OrganismOrchestrator {
       if (state.heatScoreReading !== prev.heatScoreReading) {
         this.bus.emit({ type: "BRAIN.HEAT_SCORE.UPDATED", payload: { reading: state.heatScoreReading } });
       }
+      if (state.gmil !== prev.gmil) {
+        this.bus.emit({ type: "BRAIN.GMIL.UPDATED", payload: { snapshot: state.gmil } });
+      }
       // §5 ORGANISMO — HEALTH.CHANGED continua do Health Monitor (publicador
       // único histórico da Fase 0.8) e DATA.* do CrossExchangeService: um
       // evento nunca ganha um segundo emissor.

@@ -22,16 +22,19 @@
 // como `anteriorOk && <condição própria>`, então a invariante vem da própria
 // construção, não de uma checagem redundante depois.
 //
-// Estágios NÃO cobertos aqui (gap honesto, não fabricado): buildNexusDecision
-// (decision-layer.ts) e OperationalReadability (operational-readability.ts)
-// — os 2 últimos elos do pipeline §2 — ainda não têm fatia própria no
-// UnifiedGlobalSnapshot (mesmo padrão de "insumo pré-store" que
-// smcZones/cvd/orderflowSignals tinham antes da Fase 1.1 desta mesma
-// diretiva); só ficam rastreáveis aqui quando ganharem fatia própria, nunca
-// simulados/inferidos por conveniência.
+// Diretriz Final de Integração Total: buildNexusDecision (decision-layer.ts)
+// ganhou fatia própria no UnifiedGlobalSnapshot (EPC OMEGA FINAL, §4
+// CÉREBRO — antes só existia como useMemo local em App.tsx, exatamente o
+// bloqueio que este comentário documentava) — o estágio NEXUS_DECISION
+// abaixo fecha esse gap honesto, não fabricado.
+//
+// Ainda NÃO coberto (gap honesto real, não fabricado): OperationalReadability
+// (operational-readability.ts) — o último elo do pipeline §2 — continua sem
+// fatia própria no UnifiedGlobalSnapshot; só fica rastreável aqui quando
+// ganhar uma, nunca simulado/inferido por conveniência.
 import type { UnifiedSnapshotState } from "../store/unified-snapshot-store";
 
-export const STAGE_ORDER = ["DATA", "CORE_ENGINE", "COUNCIL", "TRADE_PLAN"] as const;
+export const STAGE_ORDER = ["DATA", "CORE_ENGINE", "COUNCIL", "TRADE_PLAN", "NEXUS_DECISION"] as const;
 export type StageId = (typeof STAGE_ORDER)[number];
 
 export interface StageResult {
@@ -125,6 +128,25 @@ export function traceStages(snapshot: UnifiedSnapshotState, seq: number): StageT
     reason: !councilOk
       ? "estágio anterior (COUNCIL) sem insumo real"
       : "conselho real disponível para avaliar um plano (presença/ausência de plano é resposta honesta deste estágio, nunca uma falha)",
+  });
+
+  // NEXUS_DECISION — o contrato único (decision-layer.ts, "Fusão da
+  // Inteligência Operacional") que funde as leituras já reais acima numa
+  // resposta consolidada montou pelo menos uma vez desde o último reset
+  // (mesmo padrão null-inicial de council acima — o efeito real em
+  // App.tsx só escreve depois do primeiro cálculo). Como TRADE_PLAN, este
+  // estágio só herda a validade causal do anterior: presença/ausência de
+  // plano DENTRO do contrato já é resposta honesta do estágio anterior,
+  // aqui só confirma que o contrato em si foi montado com esses insumos.
+  const nexusDecisionOk = tradePlanOk && snapshot.nexusDecision !== null;
+  stages.push({
+    id: "NEXUS_DECISION",
+    ok: nexusDecisionOk,
+    reason: !tradePlanOk
+      ? "estágio anterior (TRADE_PLAN) sem insumo real"
+      : snapshot.nexusDecision !== null
+        ? "contrato único (Nexus Decision Layer) montado com os insumos reais acima"
+        : "contrato ainda não montado nesta geração (boot ou troca de ativo recente)",
   });
 
   let reachedIndex = -1;

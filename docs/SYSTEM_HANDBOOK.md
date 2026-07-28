@@ -5320,6 +5320,64 @@ fora do bundle real).
 
 ---
 
+### 6.68 Diretriz Final de Integração Total — fechar o que já existe:
+GMIL → store, MACD graduado, estágio NEXUS_DECISION; relatório completo
+em `docs/RELATORIO_MESTRE_HOMOLOGACAO.md`
+
+Diretiva de consolidação pura (Operador foi explícito: "não" a motores
+novos, "sim" a concluir ligações já existentes). Varredura de todo
+`nexus/*.ts` por módulos sem importador real fora dos próprios testes
+(em vez de nova bateria de agentes — o estado do sistema já era
+conhecido em profundidade da rodada anterior, mesma sessão) confirmou 3
+lacunas genuínas e várias já corretamente resolvidas.
+
+**Fechado**: (1) GMIL — já alimentava a UI ao vivo (`useGmilSnapshot()`,
+App.tsx:1881, desde a Fase 5) mas nunca tinha fatia em
+`unified-snapshot-store`/evento no `organism-orchestrator.ts`; o
+relatório anterior tinha descrito isso de forma imprecisa como
+"isolado" — correção registrada aqui. Mesmo snapshot já lido, zero
+segunda assinatura, agora também em §4 CÉREBRO (`gmil`) +
+`BRAIN.GMIL.UPDATED`. `core-engine-boundary.test.ts` (6/6) confirmado
+intacto — a fatia nova vive só no lado de exibição, nunca no Core
+Engine. (2) MACD (`nexus/macd.ts`, criado na rodada anterior mas
+tree-shaken do bundle por falta de importador real) graduado: mesmo
+padrão exato de `currentRsi`, nova Row no painel MARKET REGIME —
+deliberadamente não um novo plugin de canvas (a diretiva pede menos
+poluição visual, não mais camadas). Bundle cresceu +0,98 kB, primeira
+mudança real desde a criação do arquivo — prova objetiva de que agora é
+alcançável. (3) `stage-runner.ts`: o próprio cabeçalho do arquivo já
+documentava um TODO explícito — `NexusDecision` "só fica rastreável
+aqui quando ganhar fatia própria" — que a integração do EPC OMEGA FINAL
+já tinha destravado sem ninguém voltar para fechar. Novo estágio
+`NEXUS_DECISION` em `STAGE_ORDER`, mesma disciplina causal dos 4
+existentes.
+
+**Reconfirmado, não retrabalhado** (cada um já tinha justificativa real
+documentada): `PriceLabelStackPlugin` sem `drawCanvasLabel` (reabrir
+sem ganho real), cache de `LiquidationHeatmapPlugin` (já revertido com
+benchmark), `cross-exchange-service.ts` sem publicador (deferimento
+deliberado documentado), `candle-tick-synthesizer.js` órfão (estado
+seguro correto — gerador `SYNTHETIC_DERIVED` NUNCA deveria ser
+"integrado"), colisão de cor cyan (decisão de design pesquisada, não
+bug).
+
+**Limitação real que permanece, documentada não contornada**:
+`OperationalReadability` (`operational-readability.ts`) é o último elo
+do pipeline (`§2` acima) ainda sem fatia própria na store — mesmo motivo
+honesto que bloqueava NEXUS_DECISION até esta rodada. `traceStages()`
+continua sem consumidor ao vivo na UI (motor correto/testado, ninguém
+chama fora dos testes ainda) — recomendado como próximo passo
+(`self-diagnostics.ts`), não implementado às pressas nesta rodada.
+
+**Testes executados**: `tsc --noEmit` limpo · **125 arquivos / 2107
+testes** (100%, +10 novos) · `core-engine-boundary.test.ts` 6/6
+confirmado intacto · `npm run build` ok (870,64 kB / gzip 265,29 kB,
++0,98 kB — único movimento real sendo MACD agora alcançável) ·
+Playwright real confirmou zero novo erro de console e o texto "MACD"
+presente no DOM renderizado.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

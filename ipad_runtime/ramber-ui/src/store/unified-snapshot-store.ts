@@ -60,6 +60,7 @@ import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
 import type { TradePlan } from "../nexus/trade-plan";
 import type { MultiTimeframeMatrix } from "../nexus/multi-timeframe-engine";
+import type { GmilSnapshot } from "../gmil/gmil-orchestrator";
 import {
   trackPlanTransition,
   trackPriceTick,
@@ -282,6 +283,17 @@ export interface UnifiedSnapshotState {
   nexusDecision: NexusDecision | null;
   institutionalScoreReading: InstitutionalScoreReading | null;
   heatScoreReading: HeatScoreReading | null;
+  // Diretriz Final de Integração Total ("nenhum módulo permaneça
+  // parcialmente conectado sem justificativa"): o GMIL (gmil/) já
+  // alimentava a UI real via useGmilSnapshot() (App.tsx, múltiplos
+  // widgets) — mas nunca tinha fatia no organismo central, então
+  // qualquer assinante futuro do bus (getSnapshotForEngine()) não via
+  // esse contexto. Passthrough puro do MESMO snapshot já lido pela UI —
+  // zero segunda assinatura, zero segunda leitura do gmilOrchestrator.
+  // LEI 04/24 intactas por construção: engine-bridge.ts continua sem
+  // nenhum import de gmil/ (core-engine-boundary.test.ts trava isso),
+  // esta fatia só existe no lado de exibição/contexto do organismo.
+  gmil: GmilSnapshot | null;
 
   // §5 ORGANISMO
   // Estado REAL do motor de análise (engineStatus/direção/confiança do
@@ -377,6 +389,7 @@ interface UnifiedSnapshotActions {
   setNexusDecision: (decision: NexusDecision | null) => void;
   setInstitutionalScoreReading: (reading: InstitutionalScoreReading | null) => void;
   setHeatScoreReading: (reading: HeatScoreReading | null) => void;
+  setGmil: (snapshot: GmilSnapshot | null) => void;
 
   // §5 ORGANISMO
   setCore: (core: CoreSnapshot) => void;
@@ -443,6 +456,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     nexusDecision: null,
     institutionalScoreReading: null,
     heatScoreReading: null,
+    gmil: null,
     // §5 ORGANISMO
     core: EMPTY_CORE,
     health: EMPTY_HEALTH,
@@ -503,6 +517,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setNexusDecision: (decision) => set((s) => { s.nexusDecision = decision; }),
     setInstitutionalScoreReading: (reading) => set((s) => { s.institutionalScoreReading = reading; }),
     setHeatScoreReading: (reading) => set((s) => { s.heatScoreReading = reading; }),
+    setGmil: (snapshot) => set((s) => { s.gmil = snapshot; }),
     // §5 ORGANISMO
     setCore: (core) => set((s) => { s.core = core; }),
     setHealth: (health) => set((s) => { s.health = health; }),
@@ -622,6 +637,8 @@ export const useInstitutionalScoreReadingSnapshot = (): InstitutionalScoreReadin
   useUnifiedSnapshotStore((s) => s.institutionalScoreReading);
 export const useHeatScoreReadingSnapshot = (): HeatScoreReading | null =>
   useUnifiedSnapshotStore((s) => s.heatScoreReading);
+export const useGmilSnapshotFromStore = (): GmilSnapshot | null =>
+  useUnifiedSnapshotStore((s) => s.gmil);
 
 // §5 ORGANISMO
 export const useCoreSnapshot = (): CoreSnapshot => useUnifiedSnapshotStore((s) => s.core);

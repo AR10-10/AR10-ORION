@@ -125,6 +125,10 @@ import { computeConsensusRadar, type ConsensusRadarCategory } from "./nexus/cons
 // matemática de RSI). Mesmo padrão de import relativo já usado por
 // engine-bridge.ts para este mesmo arquivo legado.
 import { computeRSI } from "../../src/research/engines/lorentzian-classifier.js";
+// Diretriz Final de Integração Total: graduação real do MACD (EPC OMEGA
+// FINAL) — motor já construído/testado, este é o primeiro consumidor
+// real ao vivo.
+import { computeMacdSeries, latestMacd } from "./nexus/macd";
 // V-MAX Fase 2: cenários Path A/B (níveis reais + massa de opinião real do
 // conselho) e armadilhas por corroboração de eventos reais.
 import { buildScenarioProjection, formatScenarioPathLabel, type ScenarioLevel } from "./nexus/scenario-engine";
@@ -1878,7 +1882,19 @@ export default function App() {
   // engine-bridge.ts nem altera realCycle/engine.direction/confidence.
   // Fase E: além dos provedores, o snapshot agora traz os 4 vieses da
   // Constituição (context-aggregator.ts) — passthrough puro para a UI.
-  const { providers: gmilProviders, biases: gmilBiases } = useGmilSnapshot();
+  const gmilSnapshot = useGmilSnapshot();
+  const { providers: gmilProviders, biases: gmilBiases } = gmilSnapshot;
+  // Diretriz Final de Integração Total ("nenhum módulo permaneça
+  // parcialmente conectado sem justificativa"): o MESMO snapshot que já
+  // alimenta os widgets acima também ganha uma fatia real no organismo
+  // central (unified-snapshot-store §4) — zero segunda assinatura, zero
+  // segunda leitura do gmilOrchestrator, só um espelho para que um
+  // assinante futuro do bus (getSnapshotForEngine()) também veja este
+  // contexto. engine-bridge.ts continua sem nenhum import de gmil/
+  // (core-engine-boundary.test.ts trava isso).
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setGmil(gmilSnapshot);
+  }, [gmilSnapshot]);
   const institutionalConsensus = useMemo(() => {
     const localInputs: ConsensusInput[] = [
       { providerId: "liquidez_livro_ofertas", lean: engine.imbalance, weight: engine.hasBook ? 1 : 0 },
@@ -2189,6 +2205,18 @@ export default function App() {
     const series = computeRSI(chartData.map((c: { close: number }) => c.close), 14);
     const last = series[series.length - 1];
     return Number.isFinite(last) ? (last as number) : null;
+  }, [chartData]);
+  // Diretriz Final de Integração Total ("habilitar recursos já
+  // implementados, mas ainda não conectados ao fluxo principal"):
+  // nexus/macd.ts (EPC OMEGA FINAL) foi construído e testado, mas ficou
+  // isolado — este é o wiring real, mesmo padrão exato de currentRsi
+  // acima (useMemo sobre os MESMOS closes reais de chartData, computado
+  // uma vez aqui). Display-only puro (LEI 24): não participa da votação
+  // do Conselho, é só uma leitura a mais no painel.
+  const currentMacd = useMemo(() => {
+    if (chartData.length === 0) return null;
+    const series = computeMacdSeries(chartData.map((c: { time: number; close: number }) => ({ time: c.time, close: c.close })));
+    return latestMacd(series);
   }, [chartData]);
   useEffect(() => {
     const price = typeof priceData?.price === "number" ? priceData.price : null;
@@ -3101,6 +3129,7 @@ export default function App() {
       okxCrossExchangeCheck,
       mexcCrossExchangeCheck,
       currentRsi,
+      currentMacd,
     }),
     [
       widgets,
@@ -3164,6 +3193,7 @@ export default function App() {
       okxCrossExchangeCheck,
       mexcCrossExchangeCheck,
       currentRsi,
+      currentMacd,
     ],
   );
 
@@ -7941,7 +7971,7 @@ const REGIME_DISPLAY: Record<string, { label: string; color: string }> = {
 };
 
 function MarketRegimeWidget() {
-  const { engine, cvd, currentRsi, chartTimeframe, orderflowTrend } = useContext(WidgetContext) || {};
+  const { engine, cvd, currentRsi, currentMacd, chartTimeframe, orderflowTrend } = useContext(WidgetContext) || {};
 
   // Fase D: linha oficial do Market Regime Engine (ADX/DI + percentil de
   // banda, ver src/market-regime/). Direção colore o rótulo composto;
@@ -8011,6 +8041,20 @@ function MarketRegimeWidget() {
         ? "text-[#00ffaa]"
         : "text-[#8ab4f8]";
 
+  // Diretriz Final de Integração Total: graduação real do MACD
+  // (nexus/macd.ts, EPC OMEGA FINAL) — mesmo padrão de rsiLabel/rsiColor
+  // acima. Histograma > 0 (linha rápida cruzou acima da linha de sinal)
+  // lê como momentum comprador, < 0 como vendedor — mesma paleta
+  // direcional teal/rosa já usada em toda a UI (nunca uma cor nova).
+  const macdLabel = num(currentMacd?.histogram) ? currentMacd.histogram.toFixed(1) : AWAIT;
+  const macdColor = !num(currentMacd?.histogram)
+    ? "text-[#8ab4f8]"
+    : currentMacd.histogram > 0
+      ? "text-[#00ffaa]"
+      : currentMacd.histogram < 0
+        ? "text-[#ff0055]"
+        : "text-[#8ab4f8]";
+
   // ORDEM DE AUDITORIA FINAL §3/§4 (achado real): esta row recomputava um
   // proxy PRÓPRIO (média ingênua de (high-low)/close, sem gaps) quando o
   // Market Regime Engine (regime-engine.js) já calcula o ATR% REAL (true
@@ -8063,6 +8107,7 @@ function MarketRegimeWidget() {
         <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
         <Row label="TENDÊNCIA DO FLUXO" value={flowTrendLabel} valueClass={flowTrendColor} />
         <Row label="RSI (14)" value={rsiLabel} valueClass={rsiColor} />
+        <Row label="MACD (12,26,9)" value={macdLabel} valueClass={macdColor} />
         <Row label="VOLATILIDADE (ATR%)" value={volLabel} valueClass={volColor} />
       </div>
     </Widget>

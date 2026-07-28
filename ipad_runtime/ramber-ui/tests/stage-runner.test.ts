@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { useUnifiedSnapshotStore } from '../src/store/unified-snapshot-store';
 import { buildCouncilDecision, type CouncilDecision } from '../src/nexus/council';
+import { buildNexusDecision } from '../src/nexus/decision-layer';
 import { traceStages, STAGE_ORDER } from '../src/nexus/stage-runner';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -20,8 +21,31 @@ const NO_PRICE = { price: null, delta: null, deltaPct: null, high: null, low: nu
 const PENDING_CORE = { engineStatus: 'pending' as const, direction: null, confidence: null, lastUpdateAt: null, cycleLatencyMs: null };
 
 beforeEach(() => {
-  useUnifiedSnapshotStore.setState({ price: NO_PRICE, core: PENDING_CORE, council: null });
+  useUnifiedSnapshotStore.setState({ price: NO_PRICE, core: PENDING_CORE, council: null, nexusDecision: null });
 });
+
+// Contrato único real (nunca fabricado à mão) com insumos honestamente
+// vazios — mesmo espírito de realAbstainCouncil abaixo.
+const realEmptyNexusDecision = () =>
+  buildNexusDecision({
+    coreDirection: null,
+    coreConfidence: null,
+    plan: null,
+    targetsHit: 0,
+    etaReading: null,
+    score: null,
+    scoreZoneLabel: null,
+    scoreTrend: null,
+    councilStance: null,
+    councilRiskGated: null,
+    assistantMessage: null,
+    inEntryZone: null,
+    lastResolvedAt: null,
+    councilVotes: null,
+    convictionMembers: null,
+    heatTier: null,
+    premiumDiscountZone: null,
+  });
 
 // Decisão real do próprio motor do conselho (nunca um objeto fabricado à
 // mão) — insumos honestamente vazios produzem o ABSTAIN fail-closed real.
@@ -64,42 +88,53 @@ describe('traceStages: ordem causal (fail-closed) — regra central da Fase 3', 
       council: realAbstainCouncil(),
     });
     const trace = traceStages(useUnifiedSnapshotStore.getState(), 1);
-    expect(trace.stages.map((s) => s.ok)).toEqual([false, false, false, false]);
+    expect(trace.stages.map((s) => s.ok)).toEqual([false, false, false, false, false]);
     expect(trace.reachedIndex).toBe(-1);
   });
 
-  it('CORE_ENGINE pendente/erro derruba COUNCIL e TRADE_PLAN mesmo com DATA ok', () => {
+  it('CORE_ENGINE pendente/erro derruba COUNCIL, TRADE_PLAN e NEXUS_DECISION mesmo com DATA ok', () => {
     useUnifiedSnapshotStore.getState().setPrice({ price: 50_000, delta: 0, deltaPct: 0, high: 50_000, low: 50_000, volume: 0, direction: null });
     useUnifiedSnapshotStore.getState().setCouncil(realAbstainCouncil()); // insumo presente mas não deveria contar
     const trace = traceStages(useUnifiedSnapshotStore.getState(), 1);
-    expect(trace.stages.map((s) => s.ok)).toEqual([true, false, false, false]);
+    expect(trace.stages.map((s) => s.ok)).toEqual([true, false, false, false, false]);
     expect(trace.reachedIndex).toBe(0);
   });
 
-  it('COUNCIL null (ainda não rodou) derruba TRADE_PLAN mesmo com CORE_ENGINE ok', () => {
+  it('COUNCIL null (ainda não rodou) derruba TRADE_PLAN e NEXUS_DECISION mesmo com CORE_ENGINE ok', () => {
     useUnifiedSnapshotStore.getState().setPrice({ price: 50_000, delta: 0, deltaPct: 0, high: 50_000, low: 50_000, volume: 0, direction: null });
     useUnifiedSnapshotStore.getState().setCore({ engineStatus: 'ok', direction: null, confidence: null, lastUpdateAt: Date.now(), cycleLatencyMs: 10 });
     const trace = traceStages(useUnifiedSnapshotStore.getState(), 1);
-    expect(trace.stages.map((s) => s.ok)).toEqual([true, true, false, false]);
+    expect(trace.stages.map((s) => s.ok)).toEqual([true, true, false, false, false]);
     expect(trace.reachedIndex).toBe(1);
   });
 
-  it('cadeia inteira ok quando DATA→CORE_ENGINE→COUNCIL têm insumo real, mesmo que a decisão real seja ABSTAIN', () => {
+  it('TRADE_PLAN ok mas NEXUS_DECISION ainda null (contrato ainda não montado) fica honesto, nunca inferido', () => {
+    useUnifiedSnapshotStore.getState().setPrice({ price: 50_000, delta: 0, deltaPct: 0, high: 50_000, low: 50_000, volume: 0, direction: null });
+    useUnifiedSnapshotStore.getState().setCore({ engineStatus: 'ok', direction: null, confidence: null, lastUpdateAt: Date.now(), cycleLatencyMs: 10 });
+    useUnifiedSnapshotStore.getState().setCouncil(realAbstainCouncil());
+    const trace = traceStages(useUnifiedSnapshotStore.getState(), 1);
+    expect(trace.stages.map((s) => s.ok)).toEqual([true, true, true, true, false]);
+    expect(trace.reachedIndex).toBe(3);
+  });
+
+  it('cadeia inteira ok quando DATA→CORE_ENGINE→COUNCIL→NEXUS_DECISION têm insumo real, mesmo que a decisão real seja ABSTAIN', () => {
     useUnifiedSnapshotStore.getState().setPrice({ price: 50_000, delta: 0, deltaPct: 0, high: 50_000, low: 50_000, volume: 0, direction: null });
     useUnifiedSnapshotStore.getState().setCore({ engineStatus: 'ok', direction: null, confidence: null, lastUpdateAt: Date.now(), cycleLatencyMs: 10 });
     const decision = realAbstainCouncil();
     expect(decision.riskGated).toBe(true); // sanidade: insumos vazios REALMENTE travam por risco
     useUnifiedSnapshotStore.getState().setCouncil(decision);
+    useUnifiedSnapshotStore.getState().setNexusDecision(realEmptyNexusDecision());
     const trace = traceStages(useUnifiedSnapshotStore.getState(), 1);
-    expect(trace.stages.map((s) => s.ok)).toEqual([true, true, true, true]);
-    expect(trace.reachedIndex).toBe(3);
-    // TRADE_PLAN reportou ok mesmo com a decisão real sendo ABSTAIN — a
-    // prova central de que "sem plano" não é conflado com "estágio quebrado".
-    // (Prefixo real de todo motivo de bloqueio nas 4 razões acima é
-    // "estágio anterior" — ausência dele aqui prova que este NÃO é um
-    // motivo de bloqueio, sem depender de uma palavra solta que também
-    // aparece na prosa honesta do caso de sucesso.)
+    expect(trace.stages.map((s) => s.ok)).toEqual([true, true, true, true, true]);
+    expect(trace.reachedIndex).toBe(4);
+    // TRADE_PLAN/NEXUS_DECISION reportaram ok mesmo com a decisão real
+    // sendo ABSTAIN — a prova central de que "sem plano" não é conflado
+    // com "estágio quebrado". (Prefixo real de todo motivo de bloqueio
+    // nas razões acima é "estágio anterior" — ausência dele aqui prova
+    // que estes NÃO são motivo de bloqueio, sem depender de uma palavra
+    // solta que também aparece na prosa honesta do caso de sucesso.)
     expect(trace.stages[3].reason).not.toMatch(/^estágio anterior/);
+    expect(trace.stages[4].reason).not.toMatch(/^estágio anterior/);
   });
 
   it('nenhuma combinação real produz um ok=true depois de um ok=false (invariante monotônica)', () => {
@@ -127,7 +162,7 @@ describe('traceStages: seq passthrough e forma do STAGE_ORDER', () => {
   });
 
   it('STAGE_ORDER e a saída de stages[] estão na mesma ordem causal declarada', () => {
-    expect(STAGE_ORDER).toEqual(['DATA', 'CORE_ENGINE', 'COUNCIL', 'TRADE_PLAN']);
+    expect(STAGE_ORDER).toEqual(['DATA', 'CORE_ENGINE', 'COUNCIL', 'TRADE_PLAN', 'NEXUS_DECISION']);
     const trace = traceStages(useUnifiedSnapshotStore.getState(), 1);
     expect(trace.stages.map((s) => s.id)).toEqual([...STAGE_ORDER]);
   });
