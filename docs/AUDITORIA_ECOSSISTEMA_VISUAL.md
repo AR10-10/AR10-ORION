@@ -505,7 +505,7 @@ classificadas (nunca redescobrir isso caso a caso).
 | Liquidity Sweep | price line nativa + `priceAxisLabels` (§6.58) | `rgba(255,191,0,0.85)` | Média |
 | Session Key Levels | `SessionKeyLevelsPlugin` + `priceAxisLabels` (§6.57/§6.58) | `rgba(255,0,85/0,255,170,...)` (reaproveita S1/R1) | Média |
 | Scenario / Projeção (Path A/B) | price lines nativas | `rgba(186,168,255,...)` "lavanda", opacidade decrescente por rank | Baixa |
-| Market Sessions | `MarketSessionBandsPlugin` | `rgba(148,163,184,...)` — **mesmo tom do Trend Channel** (intencional: ambos "contexto de fundo discreto") | Baixa |
+| Market Sessions | `MarketSessionBandsPlugin` (geometria redesenhada §6.60: faixa fina rente à base por segmento, não mais 1 linha de altura total por transição) | `rgba(148,163,184,...)` — **mesmo tom do Trend Channel** (intencional: ambos "contexto de fundo discreto") | Baixa |
 | Kill Zones (ICT) | `KillZoneBandsPlugin` | `rgba(255,176,32,...)` | Baixa |
 | Liquidation Heatmap | `LiquidationHeatmapPlugin` | verde/vermelho (LONG/SHORT) + pico `rgba(255,200,0,...)` | Baixa |
 | Order Flow Heatmap (L2) | `OrderFlowHeatmapPlugin` | verde/vermelho (bid/ask), alpha dinâmico | Baixa |

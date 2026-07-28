@@ -2135,9 +2135,12 @@ export function EnhancedChart_110_Percent({
           symbol={symbol ?? null}
         />
       )}
-      {/* EPC OMEGA FINAL, Etapa 10 (Institutional Session Engine): mesmo
-         array `data` que os overlays acima já usam — computeSessionBoundaries
-         é puro/derivado, zero prop nova de App.tsx além do que já existe. */}
+      {/* EPC OMEGA FINAL, Etapa 10 (Institutional Session Engine), redesenho
+         real no ADENDO "Refinamento das Sessões": mesmo array `data` que os
+         overlays acima já usam — agora consumido via computeSessionKeyLevels
+         (faixa fina por segmento, não mais 1 linha de altura total por
+         transição via computeSessionBoundaries — ver header do plugin),
+         zero prop nova de App.tsx além do que já existe. */}
       {visibility.market_sessions && (
         <MarketSessionBandsPlugin
           chart={chartReady?.chart ?? null}

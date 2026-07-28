@@ -647,16 +647,16 @@ describe('Evolução do Organismo (Fase 2, "menor cálculos duplicados"): cache 
     expect(block).toContain('spansCacheRef.current = { data: dataRef.current, spans };');
   });
 
-  it('MarketSessionBandsPlugin recebe o MESMO fix (achado idêntico, mesma causa raiz) — cache por identidade de `data` para computeSessionBoundaries', () => {
+  it('MarketSessionBandsPlugin recebe o MESMO fix (achado idêntico, mesma causa raiz) — cache por identidade de `data` para computeSessionKeyLevels (pós-redesenho da faixa, ver describe abaixo)', () => {
     const src = read('../src/chart/MarketSessionBandsPlugin.tsx');
-    expect(src).toContain('const boundariesCacheRef = useRef<{ data: typeof data; boundaries: SessionBoundary[] } | null>(null);');
-    const idx = src.indexOf('const cached = boundariesCacheRef.current;');
-    expect(idx, 'bloco de cache não encontrado antes do computeSessionBoundaries').toBeGreaterThan(-1);
+    expect(src).toContain('const levelsCacheRef = useRef<{ data: typeof data; levels: SessionKeyLevel[] } | null>(null);');
+    const idx = src.indexOf('const cached = levelsCacheRef.current;');
+    expect(idx, 'bloco de cache não encontrado antes do computeSessionKeyLevels').toBeGreaterThan(-1);
     const block = src.slice(idx, idx + 400);
     expect(block).toContain('if (cached && cached.data === dataRef.current) {');
-    expect(block).toContain('boundaries = cached.boundaries;');
-    expect(block).toContain('boundaries = computeSessionBoundaries(dataRef.current);');
-    expect(block).toContain('boundariesCacheRef.current = { data: dataRef.current, boundaries };');
+    expect(block).toContain('levels = cached.levels;');
+    expect(block).toContain('levels = computeSessionKeyLevels(dataRef.current);');
+    expect(block).toContain('levelsCacheRef.current = { data: dataRef.current, levels };');
   });
 
   it('LiquidationHeatmapPlugin NÃO ganhou o mesmo cache — benchmark real confirmou custo desprezível (computeLiquidationHeatmap ~0.006ms/chamada a N=500, teto real do feed) vs. computeKillZoneSpans (~1.2ms a N=2000): adicionar cache ali seria complexidade sem benefício medido, não "consistência" pela consistência', () => {
@@ -731,6 +731,53 @@ describe('Lapidação institucional (diretiva com imagem de referência): Liquid
     expect(killZones).toContain('rgba(255, 176, 32, 0.06)');
     expect(killZones).toContain('rgba(255, 176, 32, 0.22)');
     expect(killZones).toContain('rgba(255, 176, 32, 0.65)');
+  });
+});
+
+describe('ADENDO "Refinamento das Sessões e Limpeza Visual": Market Sessions troca N linhas de altura total (1 por transição) por 1 faixa fina por segmento rente à base', () => {
+  it('NUNCA mais desenha linha vertical de altura total (zero ctx.moveTo(x, 0) / lineTo(x, cssHeight)) — regressão travada por teste, não só por revisão manual', () => {
+    const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    expect(plugin).not.toContain('ctx.moveTo(xLine, 0);');
+    // computeSessionBoundaries/SessionBoundary só podem aparecer em PROSA
+    // (comentário explicando a migração/o consumidor que continua vivo em
+    // App.tsx) — nunca em import ou chamada real dentro deste plugin.
+    expect(plugin).not.toContain('import { computeSessionBoundaries');
+    expect(plugin).not.toContain('computeSessionBoundaries(dataRef.current)');
+    expect(plugin).not.toContain(': SessionBoundary[]');
+  });
+
+  it('consome computeSessionKeyLevels (segmentos reais), nunca uma 3ª derivação paralela de sessão', () => {
+    const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    expect(plugin).toContain('import { computeSessionKeyLevels, type SessionKeyLevel } from "../nexus/market-session";');
+    expect(plugin).toContain('levels = computeSessionKeyLevels(dataRef.current);');
+  });
+
+  it('faixa fina rente à base (yTop = cssHeight - STRIP_HEIGHT_PX), nunca altura total como Kill Zones (papel real é oposto: sessão é partição contínua, sempre presente — teria que ser fina; Kill Zone é ocasional — pode ser alta)', () => {
+    const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    expect(plugin).toContain('const STRIP_HEIGHT_PX = 4;');
+    expect(plugin).toContain('const yTop = cssHeight - STRIP_HEIGHT_PX;');
+    expect(plugin).toContain('ctx.fillRect(clippedX, yTop, clippedWidth, STRIP_HEIGHT_PX);');
+  });
+
+  it('sessão corrente (closed:false) recebe alpha mais alto e estende até a borda direita; só ela ganha rótulo de texto — sessões fechadas ficam sem texto próprio', () => {
+    const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    expect(plugin).toContain('const BAND_COLOR_CLOSED = "rgba(148, 163, 184, 0.22)";');
+    expect(plugin).toContain('const BAND_COLOR_OPEN = "rgba(148, 163, 184, 0.50)";');
+    expect(plugin).toContain('const isOpen = !level.closed;');
+    expect(plugin).toContain('const x2 = isOpen ? cssWidth : timeScale.timeToCoordinate(level.endTime as unknown as Time);');
+    const idx = plugin.indexOf('if (i === lastIndex && clippedWidth >= MIN_LABEL_WIDTH_PX) {');
+    expect(idx, 'bloco de rótulo condicional (só a última sessão) não encontrado').toBeGreaterThan(-1);
+  });
+
+  it('EnhancedChart_110_Percent.tsx: chamada continua recebendo chart/series/data sem prop nova — o redesenho é inteiramente interno ao plugin', () => {
+    const c = chart();
+    const idx = c.indexOf('{visibility.market_sessions && (');
+    expect(idx, 'montagem condicional de MarketSessionBandsPlugin não encontrada').toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 200);
+    expect(block).toContain('<MarketSessionBandsPlugin');
+    expect(block).toContain('chart={chartReady?.chart ?? null}');
+    expect(block).toContain('series={chartReady?.series ?? null}');
+    expect(block).toContain('data={data}');
   });
 });
 

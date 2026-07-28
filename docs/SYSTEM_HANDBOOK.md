@@ -4548,6 +4548,80 @@ completo, que ainda não tinham sido varridas por essa lente específica.
 3 testes novos travando as 2 cores novas e confirmando Kill Zones
 intocado) · build de produção ok.
 
+### 6.60 ADENDO "Refinamento das Sessões e Limpeza Visual": Market Sessions
+troca N linhas de altura total por 1 faixa fina por segmento
+
+Complemento formal à diretiva institucional de §6.59 (mesmo endereçamento
+"Agente 4", mesma imagem de referência, mesma avaliação de legitimidade —
+ver nota honesta em §6.59, vale integralmente aqui também): auditoria
+específica da camada Market Sessions, apontada como fonte real de
+poluição visual ("linhas verticais repetidas... competindo com o preço").
+
+**Causa raiz confirmada no código-fonte real** (não suposição):
+`MarketSessionBandsPlugin.tsx` desenhava uma linha 1px de ALTURA TOTAL
+(topo a base do painel) para CADA transição de sessão retornada por
+`computeSessionBoundaries` — e sessões trocam ~5x/dia (Ásia/Londres/
+Londres+NY/Nova York/Pacífico, `nexus/market-session.ts`). Sem nenhum
+limiar de decluttering (diferente de Session Key Levels, que já tinha
+`MAX_KEY_LEVELS_SHOWN`), qualquer janela de alguns dias em timeframe
+baixo empilhava dezenas de linhas quase idênticas cruzando toda a área
+de candle. Confirmado também que o gate de relevância (`layer-
+relevance.ts::market_sessions`) só controla se a camada INTEIRA
+aparece (auto/forced_on/forced_off) — uma vez visível, desenhava TODAS
+as transições sem filtro interno, nunca só a mais recente.
+
+**Solução aplicada**: reescrita completa do plugin.
+- Geometria: de "1 linha vertical de altura total por transição" para
+  "1 faixa fina (`STRIP_HEIGHT_PX = 4`) rente à borda inferior do
+  painel, por SEGMENTO de sessão" — zero pixel cruzando a área de
+  candle. Mesma ideia da sugestão nº1 da própria diretiva ("faixas
+  discretas no topo/eixo do tempo").
+- Dado: migrado de `computeSessionBoundaries` (pontos de transição) para
+  `computeSessionKeyLevels` (segmentos reais com startTime/endTime/
+  closed — já real, já testada, já consumida por `SessionKeyLevelsPlugin`
+  e `currentSessionKeyLevel`) — zero 3ª função de derivação de sessão.
+  `computeSessionBoundaries` continua viva (App.tsx ainda a usa para o
+  sinal `recentSessionBoundary` da Relevance Engine — consumidor e
+  propósito diferentes).
+- Ênfase: só a sessão CORRENTE (closed:false) tem alpha alto (0.50) e
+  ganha rótulo de texto; sessões fechadas ficam com alpha baixo (0.22),
+  sem texto próprio — mesma disciplina já provada 2x nesta sessão
+  (Session Key Levels open/closed, BOS/CHOCH ageAlpha), aplicada pela
+  primeira vez a Market Sessions.
+- Por que faixa FINA (nunca altura total como Kill Zones): sessão é uma
+  PARTIÇÃO CONTÍNUA — 100% do tempo pertence a alguma sessão, nunca
+  lacuna — enquanto Kill Zone é OCASIONAL (só algumas horas/dia). Uma
+  faixa sempre-presente em altura total tingiria o painel inteiro o
+  tempo todo — a mesma classe de poluição sendo corrigida, só trocando
+  "muitas linhas" por "um bloco permanente". Geometrias opostas para
+  papéis opostos, documentado no header do arquivo pra próxima sessão
+  não reverter por engano.
+
+**Impacto esperado**: zero linha vertical cruzando a área de candle;
+contexto de sessão preservado por completo (toda sessão real ainda
+aparece, agora como faixa) — Regra de Ouro 4, realoca nunca apaga;
+apenas 1 rótulo de texto no total (a sessão corrente) em vez de um por
+transição visível.
+
+**Riscos conhecidos**: nenhuma mudança de dado/cálculo, só geometria de
+desenho — `computeSessionKeyLevels` já era usada em produção por
+`SessionKeyLevelsPlugin`.
+
+**Verificação real**: `tsc --noEmit` limpo · **120 arquivos / 2009
+testes** (100%, +5 novos travando a nova geometria — zero linha de
+altura total, uso real de `computeSessionKeyLevels`, faixa fina rente à
+base, ênfase open/closed, wiring inalterado no call site) · build de
+produção ok · smoke Playwright real: app carrega, painel "Camadas do
+Gráfico" abre, zero erro JS novo introduzido pela mudança — confirmado
+por comparação direta contra o baseline pré-mudança (mesmo script
+Playwright rodado nos dois: o único erro de console (`pageerror:
+Event`) aparece IDENTICAMENTE em ambos, é o WebSocket bloqueado do
+proxy deste sandbox (`wss://fstream.binance.com`, mesma limitação já
+documentada §6.55/§6.57/§9.1), não algo introduzido aqui. Não foi
+possível verificar visualmente a geometria da faixa com candles reais
+(mesma limitação honesta de sempre — zero rede real à Binance neste
+ambiente).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 
