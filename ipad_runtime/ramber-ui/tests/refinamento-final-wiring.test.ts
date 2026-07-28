@@ -667,11 +667,11 @@ describe('Evolução do Organismo (Fase 2, "menor cálculos duplicados"): cache 
 });
 
 describe('Achado real do Operador ("linha amarela que eu não sei o que significa" + "etiquetas não podem ficar em cima do valor do ativo"): Liquidity Sweep migra pro eixo anti-colisão, Session Key Levels perde o rótulo flutuante', () => {
-  it('Liquidity Sweep: title nativo da price line fica vazio — o texto real migrou pro eixo, nunca mais um texto solto na coordenada Y exata do preço varrido', () => {
+  it('Liquidity Sweep: title nativo da price line fica vazio (nunca teve efeito visual real com axisLabelVisible:false — o texto real agora vive em priceAxisLabels, um rótulo de verdade onde antes não havia nenhum)', () => {
     const c = chart();
     const idx = c.indexOf('color: "rgba(255, 191, 0, 0.85)",');
     expect(idx, 'price line de Liquidity Sweep não encontrada').toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 800);
+    const block = c.slice(idx, idx + 1300);
     expect(block).toContain('title: "",');
     expect(block).not.toContain('⚡ SWEEP');
   });

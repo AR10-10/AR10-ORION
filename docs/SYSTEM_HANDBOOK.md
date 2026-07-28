@@ -4374,18 +4374,31 @@ amarelo/âmbar/dourada no `chart/`:
 FINAL Etapa 10) sempre teve `title: "⚡ SWEEP ↑/↓ N%"`, mas nunca um
 `priceAxisLabels` correspondente — diferente de TODO outro nível
 (S1/R1/VWAP/NL/EMA/Entry/Stop/Target/BOS-CHOCH), que tem ambos (linha
-nativa + rótulo no eixo anti-colisão). Confirmado via `typings.d.ts` da
-própria lib: `title` renderiza IN-PANE (não só na badge do eixo,
-independente de `axisLabelVisible`), na coordenada Y exata do preço
-varrido — que por definição é onde um candle ACABOU de tocar. Resultado
-real: uma linha âmbar saturada com texto solto competindo com o próprio
-candle, sem nenhuma consciência anti-colisão — exatamente as duas queixas
-do Operador ao mesmo tempo, com a MESMA causa.
+nativa + rótulo no eixo anti-colisão).
+**Correção honesta do mecanismo** (a primeira versão desta entrega
+afirmou que o `title` nativo desenhava solto no painel, competindo com o
+candle — pesquisa mais profunda, direto no código-fonte real da lib
+(`custom-price-line-price-axis-view.ts`, método `_updateRendererData`),
+mostrou que isso está ERRADO): quando `axisLabelVisible` é `false`, o
+método retorna ANTES de marcar o título como visível — `title` nunca é
+desenhado em lugar NENHUM (nem eixo, nem painel) quando `axisLabelVisible:
+false`. O problema real nunca foi "texto sobreposto ao candle" — foi
+AUSÊNCIA TOTAL de qualquer rótulo legível para a linha âmbar (o `title`
+sempre foi metadado morto). Isso ainda explica exatamente a queixa do
+Operador ("linha amarela que eu não sei o que significa"): uma linha sem
+NENHUM texto é tão confusa quanto uma com texto mal posicionado. A
+correção (mover para `priceAxisLabels`) continua certa e necessária —
+antes a linha não tinha rótulo nenhum, agora tem um real e sem colisão —
+só a explicação do "porquê" foi corrigida aqui para não deixar uma
+afirmação técnica errada registrada.
 
-Auditoria did the same check on `SessionKeyLevelsPlugin.tsx` (§6.57,
-entregue na rodada anterior desta mesma PR): seu rótulo flutuante
-desenhava direto na coordenada Y do próprio high/low — o mesmo padrão de
-bug, autoinfligido no código mais recente da sessão.
+A mesma auditoria checou `SessionKeyLevelsPlugin.tsx` (§6.57, entregue na
+rodada anterior desta mesma PR) por um motivo DIFERENTE: seu rótulo
+usava `ctx.fillText` num canvas próprio — mecanismo totalmente
+independente do `title` nativo da lib, sem nenhum gate equivalente a
+`axisLabelVisible`. Esse desenhava mesmo, sempre, direto na coordenada Y
+do próprio high/low — esse SIM era colisão real de texto com candle, o
+mesmo padrão de bug autoinfligido no código mais recente da sessão.
 
 **Solução aplicada** (mesmo precedente já usado para BOS/CHOCH, EPC §5/§6
 — Task #29 do histórico):
@@ -4403,16 +4416,18 @@ bug, autoinfligido no código mais recente da sessão.
   continuam como linha de referência real (cor + posição), sem rótulo
   próprio flutuante.
 
-**Impacto esperado**: zero texto solto competindo com candles no meio do
-gráfico vindo destes dois caminhos; o lado esquerdo do eixo (contexto
-estrutural) ganha até 3 novas entradas possíveis (Sweep + Key Level
-High/Low), sempre dentro do sistema anti-colisão já provado (nunca mais
-de ~7 no pior caso, a mesma escala que S1/R1/VWAP/NL/EMA/Entry/Stop/
+**Impacto esperado**: Liquidity Sweep ganha um rótulo real onde antes não
+tinha NENHUM; Session Key Levels perde o texto que competia diretamente
+com candles na coordenada exata do high/low. O lado esquerdo do eixo
+(contexto estrutural) ganha até 3 novas entradas possíveis (Sweep + Key
+Level High/Low), sempre dentro do sistema anti-colisão já provado (nunca
+mais de ~7 no pior caso, a mesma escala que S1/R1/VWAP/NL/EMA/Entry/Stop/
 Target/BOS-CHOCH já convivem sem sobreposição há várias rodadas).
 
 **Riscos conhecidos**: nenhum — mesma técnica de migração já usada e
 testada para BOS/CHOCH; a LINHA em si (cor/posição/geometria) de nenhum
-dos dois elementos mudou, só o texto flutuante saiu do meio do canvas.
+dos dois elementos mudou, só o rótulo textual (antes inerte no Sweep,
+antes flutuante no Session Key Levels).
 
 **Testes**: `tsc --noEmit` limpo · **120 arquivos / 2001 testes** (100%,
 +4 novos: 1 em `price-label-stack-plugin.test.ts` confirmando Sweep/Key

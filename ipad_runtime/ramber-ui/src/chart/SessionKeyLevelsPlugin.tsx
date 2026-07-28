@@ -39,8 +39,10 @@
 // anti-colisão do eixo (EnhancedChart_110_Percent.tsx::priceAxisLabels,
 // currentSessionKeyLevel), nunca competindo com a área de candles. As
 // sessões já fechadas continuam como referência visual real (cor + linha),
-// sem rótulo próprio — mesma disciplina aplicada à Liquidity Sweep no
-// mesmo achado (o texto nativo saiu do meio do gráfico).
+// sem rótulo próprio — mesma migração pro eixo aplicada à Liquidity Sweep
+// no mesmo achado (causa real ali era outra: title nativo nunca chegava a
+// renderizar em lugar nenhum com axisLabelVisible:false — ver comentário
+// completo em EnhancedChart_110_Percent.tsx).
 //
 // LEI 24: display only, puro contexto estrutural — nunca uma decisão.
 import { useEffect, useRef } from "react";

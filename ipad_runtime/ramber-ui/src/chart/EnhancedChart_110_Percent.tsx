@@ -1091,13 +1091,19 @@ export function EnhancedChart_110_Percent({
             lineStyle: LineStyle.Solid,
             axisLabelVisible: false,
             // Achado real do Operador ("linha amarela que eu não sei o que
-            // significa"): title nativo aqui SEMPRE desenha na coordenada Y
-            // exata do preço varrido — por definição onde um candle acabou
-            // de tocar, competindo com o próprio candle. O texto real migra
-            // pra priceAxisLabels (useMemo abaixo), mesmo preço/mesma cor,
-            // dentro do sistema anti-colisão real — mesma correção já
-            // aplicada a BOS/CHOCH. title vazio aqui = só a LINHA colorida,
-            // nunca um texto solto sem consciência dos outros rótulos.
+            // significa") — causa raiz confirmada no código-fonte real da
+            // lib (custom-price-line-price-axis-view.ts,
+            // _updateRendererData): quando axisLabelVisible é false, o
+            // método retorna ANTES de setar visible=true pro título — ou
+            // seja, este `title` nunca foi desenhado em lugar NENHUM (nem
+            // eixo, nem painel), sempre foi metadado inerte. O problema
+            // real não era colisão de texto — era ausência TOTAL de rótulo
+            // legível pra esta linha âmbar. O texto real agora vive em
+            // priceAxisLabels (useMemo abaixo), mesmo preço/mesma cor,
+            // dentro do sistema anti-colisão real — mesma migração já
+            // aplicada a BOS/CHOCH, mas aqui fechando uma ausência, não uma
+            // sobreposição. title vazio aqui só documenta que este campo
+            // nunca teve efeito visual — remover não muda nada renderizado.
             title: "",
           }),
         );
