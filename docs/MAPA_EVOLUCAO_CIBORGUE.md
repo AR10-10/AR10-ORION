@@ -66,8 +66,8 @@ de ser feito e a evolução de todos os sistema do ciborgue".
 
 | Subsistema | Estado | Evidência / nota |
 |---|---|---|
-| Camadas do gráfico (canvas) | IMPLEMENTADO | 19 camadas reais (`CHART_LAYER_IDS`) — FVG/OB, BOS/CHOCH, Liquidity Heatmap, Volume Profile, Trade Plan Zone, Neural Market Aura, EMA, Trend Channel, VWAP, Nexus Line, CVD, Fibonacci, Premium/Discount, Harmônicos, EQH/EQL, Liquidações Forçadas, Liquidity Sweep, Sessões, Kill Zones (ICT, §6.55). |
-| Relevance Engine (Fusion) | **IMPLEMENTADO — 19/19** (mudou desde §6.53) | `nexus/layer-relevance.ts` cobria 15/18 desde a Fase 8.1, fechou 18/18 em §6.51; `kill_zones` somou-se em §6.55 já com regra própria desde o nascimento (nunca repetiu o gap retroativo) — cobertura continua 1:1 com `CHART_LAYER_IDS`, sem exceção documentada. |
+| Camadas do gráfico (canvas) | IMPLEMENTADO | 20 camadas reais (`CHART_LAYER_IDS`) — FVG/OB, BOS/CHOCH, Liquidity Heatmap, Volume Profile, Trade Plan Zone, Neural Market Aura, EMA, Trend Channel, VWAP, Nexus Line, CVD, Fibonacci, Premium/Discount, Harmônicos, EQH/EQL, Liquidações Forçadas, Liquidity Sweep, Sessões, Kill Zones (ICT, §6.55), Session Key Levels (§6.57). |
+| Relevance Engine (Fusion) | **IMPLEMENTADO — 20/20** (mudou desde §6.53) | `nexus/layer-relevance.ts` cobria 15/18 desde a Fase 8.1, fechou 18/18 em §6.51; `kill_zones` (§6.55) e `session_key_levels` (§6.57) somaram-se depois, ambas já com regra própria desde o nascimento (nunca repetiram o gap retroativo) — cobertura continua 1:1 com `CHART_LAYER_IDS`, sem exceção documentada. |
 | Target 1/2/3 no canvas | IMPLEMENTADO | Target 3 (extensão Fibonacci 61.8%) chegava a ser calculado todo ciclo e descartado antes da UI — corrigido em §6.49 (threading completo `support-resistance-engine.js` → `engine-bridge.ts` → canvas). |
 | Smart Labels / anti-colisão | IMPLEMENTADO | `chart/label-compaction.ts`. |
 | Adaptive Zoom | AUSENTE | Zero sistema deliberado de zoom adaptativo — só o subproduto geométrico passivo de `priceToCoordinate`. |
@@ -76,7 +76,8 @@ de ser feito e a evolução de todos os sistema do ciborgue".
 | OI/Funding como camada do gráfico | AUSENTE | Dado real já existe (GMIL/cross-exchange), mas nunca é desenhado no canvas — hoje só texto em painel. |
 | ZigZag como overlay próprio | PARCIAL | Existe só como helper interno em `fractal-swings.js`, nunca uma camada própria toggleable. |
 | Kill Zones (ICT) | **IMPLEMENTADO — canvas incluído** (mudou desde §6.53) | `nexus/kill-zones.ts` (§6.48) — badge no header; `KillZoneBandsPlugin.tsx` (§6.55) fechou o desenho real no canvas (retângulo âmbar, mesma cor do badge), camada própria com Relevance Engine desde o nascimento. |
-| VWAP ±σ bands | **IMPLEMENTADO** (mudou desde §6.53) | `nexus/vwap-bands.ts` (§6.54) — desvio-padrão real ponderado por volume, k=1/2, mesmo toggle da VWAP (nunca uma 19ª camada). |
+| VWAP ±σ bands | **IMPLEMENTADO** (mudou desde §6.53) | `nexus/vwap-bands.ts` (§6.54) — desvio-padrão real ponderado por volume, k=1/2, mesmo toggle da VWAP (nunca uma nova camada). |
+| Session Key Levels (máxima/mínima de sessão) | **IMPLEMENTADO** (novo, §6.57) | Pedido do Operador (captura de indicador de referência) — `computeSessionKeyLevels` em `market-session.ts` (reaproveita a partição já real), `SessionKeyLevelsPlugin.tsx`, cor reaproveitada de S1/R1, camada própria com Relevance Engine desde o nascimento. PDH/PDL (companion comum deste tipo de indicador) fica como candidato de próxima rodada, não implementado ainda. |
 
 ## 4. Inteligência, radar e contexto
 
@@ -108,7 +109,12 @@ Distinção importante para não reabrir debate já fechado sem motivo novo:
 Pitchfork/Andrews Pitchfork, Elliott Wave, Triângulos, Wyckoff (confirmado
 por grep — zero ocorrência), Footprint (zero ocorrência — bloqueado por
 disponibilidade de dado, não por decisão de produto), SMT Divergence
-(precisaria de um 2º ativo correlacionado no pipeline).
+(precisaria de um 2º ativo correlacionado no pipeline), Previous Day
+High/Low — PDH/PDL (§6.57: companion comum do mesmo tipo de indicador
+"Key Levels" recém-implementado; a mesma `computeSessionKeyLevels`
+generalizada para uma partição diária resolveria, mas não foi pedida
+ainda — escopo da Entrega 4/PR #15 era responder ao pedido concreto do
+Operador, não expandir além dele).
 
 ---
 

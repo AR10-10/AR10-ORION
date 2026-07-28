@@ -58,6 +58,11 @@ import { MarketSessionBandsPlugin } from "./MarketSessionBandsPlugin";
 // estreita dentro de cada sessão, conceito distinto de market-session.ts
 // (ver header de kill-zones.ts/KillZoneBandsPlugin.tsx).
 import { KillZoneBandsPlugin } from "./KillZoneBandsPlugin";
+// Pedido do Operador (captura de indicador de referência "Key Levels"):
+// máxima/mínima real de cada sessão como nível horizontal — companion
+// function de market-session.ts (computeSessionKeyLevels), mesma partição
+// de sessão já real, nunca uma 3ª definição de janelas.
+import { SessionKeyLevelsPlugin } from "./SessionKeyLevelsPlugin";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
 import { TradePlanZonePlugin } from "./TradePlanZonePlugin";
@@ -202,6 +207,11 @@ export const CHART_LAYER_IDS = [
   // (§6.48) — camada própria aqui, nunca dobrada dentro de
   // market_sessions.
   "kill_zones",
+  // Pedido do Operador ("Key Levels"): máxima/mínima de cada sessão real
+  // como nível horizontal — reaproveita a MESMA partição de market_
+  // sessions (computeSessionKeyLevels em market-session.ts), conceito
+  // adicional (nível de PREÇO, não de tempo), então camada própria.
+  "session_key_levels",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -225,6 +235,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   liquidity_sweep: true,
   market_sessions: true,
   kill_zones: true,
+  session_key_levels: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -251,6 +262,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   liquidity_sweep: true,
   market_sessions: true,
   kill_zones: true,
+  session_key_levels: true,
 };
 
 interface EnhancedChartProps {
@@ -2051,6 +2063,17 @@ export function EnhancedChart_110_Percent({
          computeKillZoneSpans (kill-zones.ts). */}
       {visibility.kill_zones && (
         <KillZoneBandsPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+        />
+      )}
+      {/* Pedido do Operador ("Key Levels"): máxima/mínima real de cada
+         sessão como nível horizontal — reaproveita a MESMA `data` e a
+         MESMA partição de sessão de MarketSessionBandsPlugin acima, via
+         computeSessionKeyLevels (market-session.ts). */}
+      {visibility.session_key_levels && (
+        <SessionKeyLevelsPlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           data={data}

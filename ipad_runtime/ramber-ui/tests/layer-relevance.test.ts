@@ -48,15 +48,17 @@ const BASE: LayerRelevanceInput = {
   hasRecentLiquiditySweep: false,
   recentSessionBoundary: false,
   hasActiveKillZone: false,
+  hasSessionKeyLevelNearPrice: false,
 };
 
 describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent.tsx) 1:1 — zero drift, zero gap', () => {
   // Declutter do gráfico (pedido direto do Operador): os 3 gaps antigos
   // (liquidation_heatmap/liquidity_sweep/market_sessions sem regra própria
   // de relevância, caindo no fallback `relevance?.relevant ?? true` do
-  // ChartLayersPanel) foram fechados — as 19 camadas reais agora têm
-  // cobertura 1:1, sem exceção documentada nenhuma (kill_zones somou-se
-  // depois, mesma disciplina desde o nascimento da camada).
+  // ChartLayersPanel) foram fechados — as 20 camadas reais agora têm
+  // cobertura 1:1, sem exceção documentada nenhuma (kill_zones/
+  // session_key_levels somaram-se depois, mesma disciplina desde o
+  // nascimento de cada camada).
   it('toda chave de CHART_LAYER_IDS está em RELEVANCE_LAYER_IDS — nunca esquecida silenciosamente', () => {
     const chartSrc = read('../src/chart/EnhancedChart_110_Percent.tsx');
     const m = chartSrc.match(/export const CHART_LAYER_IDS = \[([\s\S]*?)\] as const;/);
@@ -66,7 +68,7 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of chartIds) {
       expect(relevanceSet.has(id), `camada "${id}" existe em CHART_LAYER_IDS mas não em RELEVANCE_LAYER_IDS`).toBe(true);
     }
-    expect(chartIds.length).toBe(19);
+    expect(chartIds.length).toBe(20);
   });
 
   it('toda chave de RELEVANCE_LAYER_IDS é uma camada real de CHART_LAYER_IDS — nunca uma chave órfã', () => {
@@ -76,12 +78,12 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(chartIds.has(id), `RELEVANCE_LAYER_IDS tem "${id}" que não existe mais em CHART_LAYER_IDS`).toBe(true);
     }
-    expect(RELEVANCE_LAYER_IDS.length).toBe(19);
+    expect(RELEVANCE_LAYER_IDS.length).toBe(20);
   });
 });
 
-describe('computeLayerRelevance: completude — sempre devolve as 19 chaves, nunca uma faltando', () => {
-  it('baseline vazio ainda produz um resultado para cada uma das 19 camadas', () => {
+describe('computeLayerRelevance: completude — sempre devolve as 20 chaves, nunca uma faltando', () => {
+  it('baseline vazio ainda produz um resultado para cada uma das 20 camadas', () => {
     const reading = computeLayerRelevance(BASE);
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(reading[id], `faltando chave ${id}`).toBeDefined();
@@ -144,8 +146,9 @@ describe('EPC FINAL §3/§12: emphasis (destaque) — só sobre um gradiente REA
       hasRecentLiquiditySweep: true,
       recentSessionBoundary: true,
       hasActiveKillZone: true,
+      hasSessionKeyLevelNearPrice: true,
     });
-    for (const id of ['volume_profile', 'fibonacci', 'order_flow_heatmap', 'cvd', 'premium_discount', 'vwap', 'nexus_line', 'ema', 'equal_highs_lows', 'liquidation_heatmap', 'liquidity_sweep', 'market_sessions', 'kill_zones'] as const) {
+    for (const id of ['volume_profile', 'fibonacci', 'order_flow_heatmap', 'cvd', 'premium_discount', 'vwap', 'nexus_line', 'ema', 'equal_highs_lows', 'liquidation_heatmap', 'liquidity_sweep', 'market_sessions', 'kill_zones', 'session_key_levels'] as const) {
       expect(r[id].emphasis, `${id} não deveria ter highlight fabricado`).toBe('normal');
     }
   });
@@ -368,6 +371,19 @@ describe('kill_zones: mesma condição real (activeKillZones) que o badge do hea
     const r = computeLayerRelevance({ ...BASE, hasActiveKillZone: true });
     expect(r.kill_zones.relevant).toBe(true);
     expect(r.kill_zones.reason).toContain('institucional');
+  });
+});
+
+describe('session_key_levels: mesmo papel estrutural de liquidity_zones (relevante só quando o preço vivo está PERTO de um Key Level real)', () => {
+  it('sem Key Level de sessão real próximo => não relevante', () => {
+    const r = computeLayerRelevance(BASE);
+    expect(r.session_key_levels.relevant).toBe(false);
+    expect(r.session_key_levels.reason).toContain('nenhum Key Level');
+  });
+  it('com preço vivo real perto de uma máxima/mínima de sessão => relevante, motivo cita o limiar declarado', () => {
+    const r = computeLayerRelevance({ ...BASE, hasSessionKeyLevelNearPrice: true });
+    expect(r.session_key_levels.relevant).toBe(true);
+    expect(r.session_key_levels.reason).toContain(`${LIQUIDITY_PROXIMITY_PCT.toFixed(1)}%`);
   });
 });
 

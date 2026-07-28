@@ -86,3 +86,65 @@ export function computeSessionBoundaries(candles: { time: number }[]): SessionBo
   }
   return out;
 }
+
+// "Key Levels" (pedido do Operador, captura de um indicador de referência:
+// máxima/mínima de cada sessão real — Ásia/Londres/Londres+NY/Nova York/
+// Pacífico — como níveis horizontais de preço). Conceito ICT/SMC real:
+// liquidez tende a descansar acima da máxima e abaixo da mínima de uma
+// sessão já encerrada (varredura de stops), então o extremo de uma sessão
+// vira uma referência de S/R para as sessões seguintes.
+//
+// Reaproveita a MESMA partição de sessão já real (SESSIONS acima) — nunca
+// uma 3ª definição paralela de "o que é Ásia/Londres/NY" (kill-zones.ts já
+// tem sua própria janela ESTREITA para um propósito diferente; esta função
+// usa a partição CONTÍNUA de 24h que já serve o header). Companion function
+// do mesmo arquivo, mesmo padrão de computeSessionBoundaries acima — varre
+// a série real UMA vez, sem segunda passada.
+export interface SessionKeyLevel {
+  sessionId: MarketSessionId;
+  label: string;
+  startIndex: number;
+  startTime: number; // candle.time real do primeiro candle desta ocorrência
+  endIndex: number; // último candle real visto nesta ocorrência (fechada ou ainda em andamento)
+  endTime: number;
+  high: number; // máxima real (Math.max acumulado) dos candles desta ocorrência
+  low: number; // mínima real (Math.min acumulado)
+  // false = esta é a sessão mais recente da série, ainda em andamento —
+  // high/low podem crescer/cair mais conforme novos candles chegam. true =
+  // a sessão seguinte já começou; o extremo é final, vira um nível de
+  // referência (Key Level) daqui pra frente.
+  closed: boolean;
+}
+
+export function computeSessionKeyLevels(
+  candles: { time: number; high: number; low: number }[],
+): SessionKeyLevel[] {
+  const out: SessionKeyLevel[] = [];
+  let current: Omit<SessionKeyLevel, "closed"> | null = null;
+
+  for (let i = 0; i < candles.length; i++) {
+    const reading = marketSessionFromUtc(new Date(candles[i].time * 1000));
+    if (!reading) continue; // Date inválida — fail-closed, pula honesto (mesma regra de computeSessionBoundaries).
+
+    if (current === null || reading.id !== current.sessionId) {
+      if (current !== null) out.push({ ...current, closed: true });
+      current = {
+        sessionId: reading.id,
+        label: reading.label,
+        startIndex: i,
+        startTime: candles[i].time,
+        endIndex: i,
+        endTime: candles[i].time,
+        high: candles[i].high,
+        low: candles[i].low,
+      };
+    } else {
+      current.endIndex = i;
+      current.endTime = candles[i].time;
+      current.high = Math.max(current.high, candles[i].high);
+      current.low = Math.min(current.low, candles[i].low);
+    }
+  }
+  if (current !== null) out.push({ ...current, closed: false });
+  return out;
+}

@@ -54,6 +54,11 @@ export const RELEVANCE_LAYER_IDS = [
   // em modo automático sem ter uma janela institucional real ativa
   // agora, mesma lógica das 3 linhas acima.
   "kill_zones",
+  // Pedido do Operador ("Key Levels"): máxima/mínima de sessão é uma
+  // referência estrutural de S/R — mesma disciplina de liquidity_zones/
+  // equal_highs_lows (relevante quando o preço vivo está PERTO de um
+  // nível real, nunca sempre-ligado).
+  "session_key_levels",
 ] as const;
 export type RelevanceLayerId = (typeof RELEVANCE_LAYER_IDS)[number];
 
@@ -108,6 +113,11 @@ export interface LayerRelevanceInput {
   // Kill Zone ICT: pelo menos 1 janela institucional real ativa agora —
   // mesma condição (activeKillZones) que o badge do header (§6.48) já usa.
   hasActiveKillZone: boolean;
+  // Key Levels: preço vivo real a menos de LIQUIDITY_PROXIMITY_PCT de
+  // alguma máxima/mínima de sessão dentro da mesma janela de exibição real
+  // do plugin (MAX_KEY_LEVELS_SHOWN) — mesmo papel estrutural de
+  // unsweptLiquidityNearPrice acima.
+  hasSessionKeyLevelNearPrice: boolean;
 }
 
 export interface LayerRelevanceResult {
@@ -268,5 +278,9 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
     kill_zones: input.hasActiveKillZone
       ? { relevant: true, emphasis: "normal", reason: "janela institucional ICT real ativa agora (kill-zones.ts)" }
       : { relevant: false, emphasis: "normal", reason: "nenhuma kill zone ICT ativa neste momento" },
+
+    session_key_levels: input.hasSessionKeyLevelNearPrice
+      ? { relevant: true, emphasis: "normal", reason: `preço vivo a menos de ${fmtPct(LIQUIDITY_PROXIMITY_PCT)} de uma máxima/mínima real de sessão` }
+      : { relevant: false, emphasis: "normal", reason: "nenhum Key Level de sessão real próximo do preço vivo" },
   };
 }

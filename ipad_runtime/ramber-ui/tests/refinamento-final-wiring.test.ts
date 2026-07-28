@@ -126,7 +126,7 @@ describe('Header §1: TF + LIVE + latência + sessão — todas leituras REAIS j
 
   it('sessão: derivação pura do relógio UTC real (market-session.ts), tooltip divulga a janela verificável', () => {
     const a = app();
-    expect(a).toContain('import { marketSessionFromUtc, computeSessionBoundaries } from "./nexus/market-session";');
+    expect(a).toContain('import { marketSessionFromUtc, computeSessionBoundaries, computeSessionKeyLevels } from "./nexus/market-session";');
     expect(a).toContain('const marketSession = marketSessionFromUtc(new Date());');
     expect(a).toContain('{marketSession.label}');
     expect(a).toContain('${marketSession.windowUtc}');
@@ -702,6 +702,65 @@ describe('Kill Zones ICT no canvas (badge do header já existia, §6.48 — este
     expect(a).toContain('import { activeKillZones } from "./nexus/kill-zones";');
     expect(a).toContain('const hasActiveKillZone = (activeKillZones(new Date())?.active.length ?? 0) > 0;');
     expect(a).toContain('hasActiveKillZone,');
+  });
+});
+
+describe('Session Key Levels (pedido do Operador, captura de indicador de referência "Key Levels"): máxima/mínima real de cada sessão como nível horizontal, reaproveitando market-session.ts', () => {
+  it('importa SessionKeyLevelsPlugin — nunca uma segunda geometria de retângulo/linha dentro de EnhancedChart_110_Percent', () => {
+    const c = chart();
+    expect(c).toContain('import { SessionKeyLevelsPlugin } from "./SessionKeyLevelsPlugin";');
+  });
+
+  it('montado condicionalmente por visibility.session_key_levels, recebendo chart/series/data — mesmo contrato de props de MarketSessionBandsPlugin/KillZoneBandsPlugin', () => {
+    const c = chart();
+    const idx = c.indexOf('{visibility.session_key_levels && (');
+    expect(idx, 'mount point de SessionKeyLevelsPlugin não encontrado').toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 300);
+    expect(block).toContain('<SessionKeyLevelsPlugin');
+    expect(block).toContain('chart={chartReady?.chart ?? null}');
+    expect(block).toContain('series={chartReady?.series ?? null}');
+    expect(block).toContain('data={data}');
+  });
+
+  it('session_key_levels é uma camada PRÓPRIA em CHART_LAYER_IDS/DEFAULT_CHART_LAYER_VISIBILITY/DEFAULT_CHART_LAYER_AUTO_MODE', () => {
+    const c = chart();
+    expect(c).toContain('"session_key_levels",');
+    expect(c).toContain('session_key_levels: true,');
+  });
+
+  it('painel "Camadas do Gráfico" (App.tsx) ganha a linha KEY LEVELS (SESSÕES), no Modo Inteligência (mesmo papel estrutural de S1/R1, nunca específica do plano ativo)', () => {
+    const a = app();
+    expect(a).toContain('{ id: "session_key_levels", label: "KEY LEVELS (SESSÕES)" }');
+    const intelMatch = a.match(/const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>\(\[([\s\S]*?)\]\);/);
+    expect(intelMatch, 'CHART_LAYERS_INTELLIGENCE_PRESET não encontrado').not.toBeNull();
+    expect(intelMatch![1]).toContain('"session_key_levels"');
+  });
+
+  it('Relevance Engine cobre session_key_levels desde o nascimento da camada — mesma disciplina de kill_zones/§6.55, nunca repete o gap retroativo do Task #93', () => {
+    const a = app();
+    expect(a).toContain('import { MAX_KEY_LEVELS_SHOWN } from "./chart/SessionKeyLevelsPlugin";');
+    expect(a).toContain('import { marketSessionFromUtc, computeSessionBoundaries, computeSessionKeyLevels } from "./nexus/market-session";');
+    expect(a).toContain('const sessionKeyLevels = Array.isArray(chartData) ? computeSessionKeyLevels(chartData) : [];');
+    expect(a).toContain('const recentSessionKeyLevels = sessionKeyLevels.slice(-MAX_KEY_LEVELS_SHOWN);');
+    expect(a).toContain('hasSessionKeyLevelNearPrice,');
+  });
+
+  it('a janela de exibição (MAX_KEY_LEVELS_SHOWN) usada pelo plugin e pela relevância é a MESMA constante — nunca duas fontes de "quantos níveis contam"', () => {
+    const plugin = read('../src/chart/SessionKeyLevelsPlugin.tsx');
+    expect(plugin).toContain('export const MAX_KEY_LEVELS_SHOWN = 5;');
+    expect(plugin).toContain('const recent = levels.slice(-MAX_KEY_LEVELS_SHOWN);');
+  });
+
+  it('cor reaproveitada de Suporte/Resistência (S1/R1) — máxima da sessão usa o MESMO vermelho de resistência, mínima o MESMO verde de suporte, zero tom novo na paleta', () => {
+    const plugin = read('../src/chart/SessionKeyLevelsPlugin.tsx');
+    expect(plugin).toContain('rgba(255, 0, 85,'); // mesmo tom de R1/SHORT_RGB
+    expect(plugin).toContain('rgba(0, 255, 170,'); // mesmo tom de S1/LONG_RGB
+  });
+
+  it('cache por identidade de referência desde o NASCIMENTO do plugin (aprendizado de §6.56 aplicado, nunca uma correção retroativa)', () => {
+    const plugin = read('../src/chart/SessionKeyLevelsPlugin.tsx');
+    expect(plugin).toContain('const levelsCacheRef = useRef<{ data: typeof data; levels: SessionKeyLevel[] } | null>(null);');
+    expect(plugin).toContain('if (cached && cached.data === dataRef.current) {');
   });
 });
 

@@ -36,6 +36,7 @@ import { fetchMexcUsdtSymbols } from "./omnibox/mexc-symbols";
 import assetUniverseDefault from "../../configs/asset-universe.default.json";
 import { ageAlpha } from "./chart/annotation-decay";
 import { BREAK_DECAY } from "./chart/StructureBreakMarkersPlugin";
+import { MAX_KEY_LEVELS_SHOWN } from "./chart/SessionKeyLevelsPlugin";
 // Mesmo motor puro que EnhancedChart_110_Percent.tsx já usa para desenhar
 // o canal — chamado uma 2ª vez aqui de propósito (função determinística
 // sobre os MESMOS candles reais, nunca uma segunda fórmula) porque o
@@ -180,7 +181,7 @@ import {
 // Fecho da pendência "R:R mínimo": piso DECLARADO 1:2 (ver rr-quality.ts),
 // display-only — anota, nunca esconde/bloqueia um plano real (LEI 24).
 import { rrFloorSuffix } from "./nexus/rr-quality";
-import { marketSessionFromUtc, computeSessionBoundaries } from "./nexus/market-session";
+import { marketSessionFromUtc, computeSessionBoundaries, computeSessionKeyLevels } from "./nexus/market-session";
 // Ferramentas Institucionais (ADITIVO V-MAX/MED, prioridade #1): ICT Kill
 // Zones — janela ESTREITA de alta probabilidade dentro da sessão, nunca
 // uma 2ª partição de 24h (ver header de kill-zones.ts).
@@ -662,7 +663,7 @@ export default function App() {
   const [radarPanelOpen, setRadarPanelOpen] = useState(false);
   const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7 (resposta do Operador à pergunta
-  // de escopo: os 19 toggles manuais continuam existindo como OVERRIDE
+  // de escopo: os 20 toggles manuais continuam existindo como OVERRIDE
   // real, o padrão novo é o comportamento automático por trás deles).
   // Estrutura paralela, NUNCA uma reforma do tipo existente
   // (ChartLayerVisibility continua Record<ChartLayerId, boolean>, zero
@@ -3636,6 +3637,10 @@ const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>([
   // contexto temporal de market_sessions acima — leitura de mercado,
   // nunca específica do plano ativo.
   "kill_zones",
+  // Pedido do Operador ("Key Levels"): máxima/mínima de sessão é leitura
+  // estrutural de mercado (mesmo papel de S1/R1 acima), nunca específica
+  // do plano ativo.
+  "session_key_levels",
 ]);
 
 const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
@@ -3666,6 +3671,9 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // Ferramentas Institucionais: badge do header já existia (§6.48), esta
   // linha liga o canvas (KillZoneBandsPlugin) ao painel de camadas.
   { id: "kill_zones", label: "KILL ZONES (ICT)" },
+  // Pedido do Operador ("Key Levels"): máxima/mínima real de cada sessão
+  // como nível horizontal (SessionKeyLevelsPlugin).
+  { id: "session_key_levels", label: "KEY LEVELS (SESSÕES)" },
 ];
 
 function ChartLayersPanel() {
@@ -3687,7 +3695,7 @@ function ChartLayersPanel() {
   // Highlight real (não decorativo): compara o estado atual byte-a-byte
   // contra os dois presets — só acende quando bate exatamente, nunca um
   // "quase" fingido de correspondência. NÚCLEO GRAVITACIONAL AUTÔNOMO §1:
-  // os 3 presets manuais exigem TODAS as 19 camadas fora do automático —
+  // os 3 presets manuais exigem TODAS as 20 camadas fora do automático —
   // uma camada em modo automático que coincidentemente bate com o preset
   // agora não é a mesma coisa que o Operador ter escolhido esse preset.
   const allManual = CHART_LAYER_IDS.every((id) => autoMode[id] === false);
@@ -3720,7 +3728,7 @@ function ChartLayersPanel() {
               só pré-seleciona o que ele já controla. */}
           <div className="flex gap-1.5">
             {/* NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: 4º preset — a única ação
-                que devolve as 19 camadas ao comportamento automático de uma
+                que devolve as 20 camadas ao comportamento automático de uma
                 vez (resposta do Operador: toggles continuam existindo como
                 override, mas o padrão novo é automático). */}
             <button
@@ -6887,6 +6895,16 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
     // um segundo timer (este useMemo já reroda >=1x/s via livePrice nas
     // deps abaixo, mesmo princípio de marketSession na TopBar).
     const hasActiveKillZone = (activeKillZones(new Date())?.active.length ?? 0) > 0;
+    // "Key Levels" (pedido do Operador): mesma janela real de exibição do
+    // plugin (MAX_KEY_LEVELS_SHOWN) — nunca marca relevante por causa de um
+    // nível antigo que nem está desenhado na tela. Mesmo limiar de
+    // proximidade já usado por liquidez/EQH-EQL (papel estrutural idêntico:
+    // extremo de sessão é uma referência de S/R real).
+    const sessionKeyLevels = Array.isArray(chartData) ? computeSessionKeyLevels(chartData) : [];
+    const recentSessionKeyLevels = sessionKeyLevels.slice(-MAX_KEY_LEVELS_SHOWN);
+    const hasSessionKeyLevelNearPrice = recentSessionKeyLevels.some(
+      (l) => withinPct(l.high, LIQUIDITY_PROXIMITY_PCT) || withinPct(l.low, LIQUIDITY_PROXIMITY_PCT),
+    );
     return {
       tradePlanActive: Boolean(chartTradePlan) || Boolean(engineFallbackLevels),
       obstacleZoneCount: chartObstacleZones.length,
@@ -6905,6 +6923,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       hasRecentLiquiditySweep: (traps ?? []).some((t) => t.kind === "STOP_HUNT_TOPO" || t.kind === "STOP_HUNT_FUNDO"),
       recentSessionBoundary,
       hasActiveKillZone,
+      hasSessionKeyLevelNearPrice,
     };
   }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps]);
   const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);
@@ -6925,10 +6944,11 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       // cobria 15 das 18 camadas reais — uma camada nova em modo automático
       // sem cobertura (liquidation_heatmap/liquidity_sweep/market_sessions,
       // fechado no declutter do gráfico) fazia layerRelevance[id] vir
-      // undefined, e ".relevant" quebrava o render inteiro. As 19 camadas
+      // undefined, e ".relevant" quebrava o render inteiro. As 20 camadas
       // já têm regra própria agora (layer-relevance.test.ts prova 1:1 com
-      // CHART_LAYER_IDS, kill_zones incluída desde o nascimento da camada),
-      // mas o fallback (`relevance?.relevant ?? true`) fica como defesa
+      // CHART_LAYER_IDS, kill_zones/session_key_levels incluídas desde o
+      // nascimento de cada camada), mas o fallback (`relevance?.relevant
+      // ?? true`) fica como defesa
       // contra uma camada FUTURA esquecida — nunca derruba o app mesmo se
       // layer-relevance.ts ficar defasado de novo.
       acc[id] = autoMode[id] ? (layerRelevance[id]?.relevant ?? true) : manual[id];

@@ -4249,6 +4249,108 @@ sistemática dos 9 plugins de overlay — os outros 6
 `draw()` — confirmado pela mesma varredura `grep`, não uma suposição.
 Nenhum destes 6 tem o mesmo padrão de recálculo redundante.
 
+### 6.57 Session Key Levels no canvas — pedido do Operador (captura de
+indicador de referência "Key Levels")
+
+O Operador enviou a legenda de um indicador de referência real (formato
+"NIPS Key Levels · Standard · 30 250 · Medium Small Solid · 1030-1700 ·
+America/New_York · 0300-1200 0800-1700 1900-0400") pedindo para a
+plataforma evoluir "onde encaixar perfeitamente".
+
+**Pesquisa real antes de implementar** (Disciplina de trabalho item 2 —
+nome próprio, confirmar antes de implementar): WebSearch identificou a
+família real desse indicador (TradingView — "Session Highs & Lows", "Key
+Session & Levels", "Trading Sessions with High/Low Levels") — o padrão
+real é plotar a MÁXIMA e a MÍNIMA de cada sessão institucional (Ásia/
+Londres/Nova York) como um NÍVEL HORIZONTAL de preço, ancorado num
+timezone configurável. Conceito ICT/SMC real: liquidez tende a descansar
+acima da máxima/abaixo da mínima de uma sessão já encerrada (varredura de
+stops) — o extremo vira referência de S/R para as sessões seguintes. Os 3
+horários da legenda (0300-1200/0800-1700/1900-0400, timezone America/
+New_York) batem, dentro da aproximação de ±1h já documentada neste
+projeto para DST, com Londres/Nova York/Ásia convertidos de UTC — mesmas
+sessões que `market-session.ts` já modela.
+
+**Decisão de arquitetura (zero 3ª fonte de "o que é uma sessão")**: em
+vez de introduzir uma nova definição paralela de janelas (o codebase já
+tem DUAS: a partição contínua de 24h em `market-session.ts` e a janela
+estreita ICT em `kill-zones.ts`, cada uma com um propósito documentado
+diferente), Key Levels REAPROVEITA a partição já real de
+`market-session.ts` — `computeSessionKeyLevels` é uma companion function
+no mesmo arquivo (mesmo padrão de `computeSessionBoundaries`), que varre
+a série real de candles UMA vez, acumulando `Math.max`/`Math.min` de
+high/low por ocorrência de sessão.
+
+**Solução aplicada**:
+- `nexus/market-session.ts` ganha `computeSessionKeyLevels(candles)` —
+  devolve um `SessionKeyLevel` (sessionId/label/startTime/endTime/high/
+  low/closed) por ocorrência real; `closed:false` na sessão mais recente
+  (ainda em andamento, extremos podem crescer), `closed:true` nas
+  anteriores (extremos finais).
+- `chart/SessionKeyLevelsPlugin.tsx` (novo) — 5ª instância da arquitetura
+  de overlay já provada, cache por identidade de referência DESDE O
+  NASCIMENTO (aprendizado de §6.56 aplicado, nunca uma correção
+  retroativa desta vez). Desenha 2 linhas horizontais por sessão (máxima/
+  mínima), da hora real de abertura da sessão até a borda direita
+  visível (mesmo espírito "referência válida daqui pra frente" de
+  `TradePlanZonePlugin`). Declutter deliberado: só as últimas
+  `MAX_KEY_LEVELS_SHOWN = 5` ocorrências (convenção declarada, mesmo
+  espírito de `MARKET_SESSION_RECENT_BOUNDARY_CANDLES`) — nunca a
+  história inteira carregada.
+- Cor: reaproveita a MESMA dupla vermelho/verde já usada por Suporte/
+  Resistência (S1/R1) e por `LONG_RGB`/`SHORT_RGB`
+  (`NeuralMarketAuraPlugin`) — a máxima de sessão é estruturalmente um
+  teto (mesmo papel de R1), a mínima um piso (mesmo papel de S1). Zero
+  tom novo na paleta (mesma disciplina de §6.53-§6.55).
+- Camada PRÓPRIA `session_key_levels` (nível de PREÇO, conceito adicional
+  a `market_sessions`, que já marca as transições de TEMPO) — painel
+  "Camadas do Gráfico" ganha "KEY LEVELS (SESSÕES)", Modo Inteligência.
+- **Relevance Engine coberto desde o nascimento** — `hasSessionKeyLevelNearPrice`
+  reusa o mesmo limiar `LIQUIDITY_PROXIMITY_PCT` já usado por liquidez/
+  EQH-EQL (mesmo papel estrutural), calculado SÓ sobre os últimos
+  `MAX_KEY_LEVELS_SHOWN` níveis (a mesma constante que o plugin usa para
+  desenhar — importada de `SessionKeyLevelsPlugin.tsx`, nunca um segundo
+  número solto) — nunca marca relevante por um nível que nem está
+  desenhado na tela.
+
+**Verificação ao vivo (Playwright)**: painel "Camadas do Gráfico" passa
+de 19 para 20 linhas; "KEY LEVELS (SESSÕES)" aparece como última linha
+com badge AUTO/OCULTA (honesto — sem candle real neste sandbox sem rede
+à Binance, `sessionKeyLevels` fica `[]`, então `hasSessionKeyLevelNearPrice`
+é `false` e o Relevance Engine corretamente marca não-relevante, mesmo
+comportamento fail-closed de qualquer outra camada dependente de dado
+real). Zero erro de console atribuível ao código novo.
+
+**Riscos conhecidos**: nenhum — módulo puro aditivo + plugin seguindo
+exatamente o padrão já usado 4x, com o cache de §6.56 aplicado desde o
+início; zero mudança em `marketSessionFromUtc`/`computeSessionBoundaries`
+(header/`MarketSessionBandsPlugin` intocados).
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 1996 testes** (100%,
++17 novos: 7 de execução real em `market-session.test.ts`
+— acumulação real de high/low por Math.max/Math.min, transição fechando
+o nível anterior com extremos finais, candle NaN pulado sem contaminar,
+4 sessões em sequência sem contaminação cruzada —, 2 em
+`layer-relevance.test.ts` (describe `session_key_levels`) + ajuste de
+contagem 19→20, 1 ajuste de contagem em `chart-layers-panel-wiring.test.ts`,
+7 de padrão-de-fonte em `refinamento-final-wiring.test.ts` (import, mount
+point, camada própria, label no painel, cobertura do Relevance Engine,
+mesma constante de janela entre plugin/relevância, cor reaproveitada,
+cache desde o nascimento) — 1 teste pré-existente (`Header §1`) precisou
+de ajuste honesto porque o import real de `market-session.ts` mudou de
+string) · build de produção ok · verificação Playwright ao vivo.
+
+**Backlog honesto**: a exibição atual estende a linha do início real da
+sessão até a borda direita — uma versão futura poderia rastrear o candle
+EXATO onde o extremo ocorreu (não só o início da sessão), mas isso
+exigiria um 2º campo de índice/tempo no motor puro (`highTime`/
+`lowTime`) sem benefício visual demonstrado ainda; Previous Day High/Low
+(PDH/PDL, companion comum deste tipo de indicador) é um candidato real
+de próxima rodada — mesma função generalizada para uma partição diária
+em vez da partição de 5 sessões, mas não implementado agora (escopo desta
+entrega era responder ao pedido concreto do Operador, não expandir além
+dele sem pedido).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 
