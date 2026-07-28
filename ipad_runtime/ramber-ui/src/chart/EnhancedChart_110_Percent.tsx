@@ -1086,7 +1086,14 @@ export function EnhancedChart_110_Percent({
         sweepLinesRef.current.push(
           series.createPriceLine({
             price,
-            color: "rgba(255, 191, 0, 0.85)",
+            // Lapidação institucional: H33 laranja — era H45 (255,191,0), a
+            // 2° do pico do Liquidation Heatmap (LiquidationHeatmapPlugin.tsx
+            // PEAK_LABEL_COLOR). Mesma luminosidade/saturação/alpha a 2° de
+            // matiz = mesma cor a olho nu. Sweep fica no lado mais laranja
+            // (evento pontual já ocorrido), heatmap no lado mais amarelo
+            // (pico ao vivo, recalculado a cada tick) — mesma dupla,
+            // diferenciação real (ver comentário completo lá).
+            color: "rgba(255, 140, 0, 0.85)",
             lineWidth: 1,
             lineStyle: LineStyle.Solid,
             axisLabelVisible: false,
@@ -2009,7 +2016,7 @@ export function EnhancedChart_110_Percent({
           out.push({
             price,
             text: `⚡ SWEEP ${t.kind === "STOP_HUNT_TOPO" ? "↑" : "↓"} ${Math.round(t.confidence * 100)}%`,
-            color: "rgba(255, 191, 0, 0.85)",
+            color: "rgba(255, 140, 0, 0.85)", // mesmo tom laranja da price line (ver comentário no efeito acima)
             side: "left",
           });
         }

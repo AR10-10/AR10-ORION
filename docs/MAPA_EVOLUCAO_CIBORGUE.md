@@ -197,6 +197,15 @@ abertos desta auditoria + achados novos de
     Zones/Sweep) e o mesmo cyan exato pra Fibonacci E Volume Profile —
     mesmas 2 decisões pendentes de design, agora com inventário completo
     e cores exatas nomeadas.
+    **Parcialmente resolvido em §6.59** (`SYSTEM_HANDBOOK.md`): dentro da
+    família amarela, o par Sweep×pico-Liquidation não era ambiguidade de
+    design — era 2° de matiz na mesma luminosidade/saturação/alpha
+    (comprovado por conversão RGB→HSL), ou seja, praticamente a mesma cor
+    por acidente. Diferenciado sem esperar decisão do Operador (mecânico,
+    evidência objetiva). Entry/VWAP-neutro/Kill Zones (mesma família) e o
+    cyan Fibonacci×Volume Profile CONTINUAM como decisão de design
+    pendente — nenhum dos dois tem uma colisão objetiva comprovada do
+    mesmo jeito, só sobreposição conceitual de família de cor.
 
 ### Tier 4 — grande, arquitetural, cada um merece sua própria trilha
 20. Migração WidgetContext → seletores Zustand granulares — dívida já

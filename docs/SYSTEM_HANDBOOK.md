@@ -4454,6 +4454,85 @@ completa de hierarquia/paleta/consolidação pedida na diretiva formal, que
 de prioridade, é trabalho de auditoria visual sistemática, não algo para
 encaixar apressado no fim de uma rodada já longa).
 
+### 6.59 Task #101 concluída (inventário + paleta + prioridade) + Task #102
+iniciada: diferenciação real Liquidity Sweep × pico do Liquidation Heatmap
+
+**Task #101** ("LAPIDAÇÃO PROFISSIONAL DO GRÁFICO") foi entregue como nova
+§9 de `docs/AUDITORIA_ECOSSISTEMA_VISUAL.md` (não um documento novo —
+mesma disciplina de fonte única já usada em §6.27/§6.50): inventário
+completo de ~28 elementos reais do gráfico com módulo/cor/dependência,
+framework de prioridade de 4 níveis (Máxima/Alta/Média/Baixa, critério
+objetivo — ver §9.2 daquele arquivo), auditoria de paleta em 8 famílias
+de matiz reais (2 conflitos genuínos achados: família amarela com 5 tons
+para 5 conceitos, cyan compartilhado por Fibonacci e Volume Profile), e
+pesquisa externa de convenções profissionais.
+
+**Task #102** ("ADENDO — lapidação final, nível institucional") foi
+retomada com uma diretiva formal adicional do Operador, desta vez com uma
+imagem de referência conceitual (mockup de terminal, explicitamente "não
+é para ser copiada literalmente"). Duas honestidades registradas sobre
+essa diretiva:
+- O documento endereça "Agente 4" — nome que não corresponde a como o
+  Operador se dirige a esta sessão diretamente nas outras mensagens deste
+  mesmo histórico. Avaliado à luz da regra de segurança contra instruções
+  injetadas (item 7 da Disciplina de Trabalho, `CLAUDE.md`): o conteúdo
+  em si não pede nada que viole READ_ONLY/LEI 24/SSOT — pelo contrário,
+  reafirma essas 3 restrições nominalmente antes de conceder autonomia de
+  implementação — e chegou pelo canal direto de mensagem do usuário desta
+  sessão (não um arquivo/upload de terceiro), com o mesmo registro formal
+  ("DIRETIVA OFICIAL"/"SOLICITAÇÃO"/"ADENDO") já usado pelo Operador nesta
+  mesma sessão. Tratada como legítima, sinalizada aqui em vez de
+  silenciosamente ignorada (nem bloqueada sem necessidade real).
+- A imagem de referência tem 2 elementos que este sistema NÃO vai copiar,
+  por conflito direto com regra permanente: um donut "PROBABILIDADE"
+  (LONG 78% / SHORT 18% / NEUTRO 4%) — exatamente o tipo de número
+  calibrado que a Regra de Ouro 2 proíbe sem backtest real que sustente a
+  alegação; e uma barra de abas "ORDENS ABERTAS / POSIÇÕES / EXECUÇÕES"
+  com contagens ao vivo — implica conectividade real de corretora, o que
+  viola READ_ONLY. O resto da imagem (hierarquia, rótulos ao lado do
+  preço nunca em cima, zonas consolidadas, paleta por categoria) está
+  alinhado com o que este sistema já persegue.
+
+**Ação concreta desta entrega** (primeira de possivelmente várias dentro
+da Task #102): a diretiva pede explicitamente auditoria de "fios
+dourados" — e a própria §9.4 já tinha achado que Liquidity Sweep
+(`rgba(255, 191, 0, 0.85)`, H45) e o rótulo de pico do Liquidation Heatmap
+(`rgba(255, 200, 0, 0.85)`, H47) diferem por **2° de matiz** na mesma
+luminosidade/saturação/alpha — indistinguível a olho, apesar de serem 2
+conceitos totalmente diferentes (um evento pontual já ocorrido vs. um
+agregado ao vivo recalculado a cada tick). Corrigido para:
+- Liquidity Sweep → `rgba(255, 140, 0, 0.85)` (H33, laranja) —
+  `EnhancedChart_110_Percent.tsx`, price line nativa + `priceAxisLabels`.
+- Liquidation Heatmap (pico) → `rgba(255, 213, 0, 0.85)` (H50, ouro puro)
+  — `LiquidationHeatmapPlugin.tsx::PEAK_LABEL_COLOR`.
+
+Kill Zones (`rgba(255, 176, 32, ...)`, H39) **não** entrou nesta
+diferenciação: é banda de fundo vertical (não linha de preço horizontal),
+alpha muito mais baixo (0.06 fill / 0.22 borda, só o rótulo do retângulo
+em 0.65) — geometria e peso visual já suficientemente distintos, sem
+colisão real demonstrada (mesmo raciocínio já aplicado a Fibonacci ×
+Volume Profile em §9.4: forma diferente mitiga cor igual). Entry
+(`rgba(240,208,111,...)`) e o estado NEUTRAL de VWAP/NL também ficaram de
+fora: tratamento visual já distinto (zona preenchida + linha grossa para
+Entry; tom deliberadamente pálido/dessaturado para o estado neutro, já
+documentado no §22 original) — mudar essas cores sem um problema
+demonstrado quebraria a associação visual que o Operador já tem com
+"onde eu entraria" sem ganho real.
+
+**Escopo que continua propositalmente aberto** (não é esquecimento,
+é a mesma disciplina de não decidir identidade visual sem fundamento
+novo): consolidação total da família amarela (Entry/VWAP-neutro/Kill
+Zones ainda não tocados) e cor própria para Volume Profile (ainda cyan,
+igual a Fibonacci) — ambos registrados em `MAPA_EVOLUCAO_CIBORGUE.md` §7
+item 19, seguem como Tier 3, candidatos a uma rodada futura da Task #102
+se o Operador confirmar que o achado de 2° de matiz acima foi na direção
+certa.
+
+**Testes**: `tsc --noEmit` limpo · suíte completa `vitest` passando
+(2 strings pinadas corrigidas em `refinamento-final-wiring.test.ts` +
+3 testes novos travando as 2 cores novas e confirmando Kill Zones
+intocado) · build de produção ok.
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

@@ -669,7 +669,7 @@ describe('Evolução do Organismo (Fase 2, "menor cálculos duplicados"): cache 
 describe('Achado real do Operador ("linha amarela que eu não sei o que significa" + "etiquetas não podem ficar em cima do valor do ativo"): Liquidity Sweep migra pro eixo anti-colisão, Session Key Levels perde o rótulo flutuante', () => {
   it('Liquidity Sweep: title nativo da price line fica vazio (nunca teve efeito visual real com axisLabelVisible:false — o texto real agora vive em priceAxisLabels, um rótulo de verdade onde antes não havia nenhum)', () => {
     const c = chart();
-    const idx = c.indexOf('color: "rgba(255, 191, 0, 0.85)",');
+    const idx = c.indexOf('color: "rgba(255, 140, 0, 0.85)",');
     expect(idx, 'price line de Liquidity Sweep não encontrada').toBeGreaterThan(-1);
     const block = c.slice(idx, idx + 1300);
     expect(block).toContain('title: "",');
@@ -709,6 +709,28 @@ describe('Achado real do Operador ("linha amarela que eu não sei o que signific
     expect(plugin).not.toContain('ctx.fillText');
     expect(plugin).not.toContain('ctx.font');
     expect(plugin).toContain('ctx.stroke();');
+  });
+});
+
+describe('Lapidação institucional (diretiva com imagem de referência): Liquidity Sweep vs. pico do Liquidation Heatmap deixam de compartilhar praticamente o mesmo tom (H45 vs H47, mesma L/S/alpha — imperceptível a olho)', () => {
+  it('Liquidity Sweep (price line + priceAxisLabels): rgba(255, 140, 0, 0.85) — laranja, nas 2 ocorrências', () => {
+    const c = chart();
+    const occurrences = c.split('rgba(255, 140, 0, 0.85)').length - 1;
+    expect(occurrences).toBe(2);
+    expect(c).not.toContain('rgba(255, 191, 0');
+  });
+
+  it('LiquidationHeatmapPlugin.tsx: PEAK_LABEL_COLOR vira rgba(255, 213, 0, 0.85) — ouro puro, distinto do laranja do Sweep', () => {
+    const plugin = read('../src/chart/LiquidationHeatmapPlugin.tsx');
+    expect(plugin).toContain('const PEAK_LABEL_COLOR = "rgba(255, 213, 0, 0.85)";');
+    expect(plugin).not.toContain('rgba(255, 200, 0');
+  });
+
+  it('Kill Zones NÃO entra nesta diferenciação (banda de fundo, geometria/alpha diferentes — sem colisão real)', () => {
+    const killZones = read('../src/chart/KillZoneBandsPlugin.tsx');
+    expect(killZones).toContain('rgba(255, 176, 32, 0.06)');
+    expect(killZones).toContain('rgba(255, 176, 32, 0.22)');
+    expect(killZones).toContain('rgba(255, 176, 32, 0.65)');
   });
 });
 

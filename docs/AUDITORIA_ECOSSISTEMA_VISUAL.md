@@ -517,7 +517,7 @@ classificadas (nunca redescobrir isso caso a caso).
 |---|---|---|---|
 | Verde `(0,255,170)` | 1 tom, várias opacidades | Candle alta, S1, FVG/OB bullish, BOS/CHOCH alta, Target, Liquidation LONG, Order Flow bid, Session Key Low, `LONG_RGB` | ✅ consistente — 1 papel real (bullish/suporte/alvo), reforçado pelo research map já citado nesta sessão |
 | Vermelho `(255,0,85)` | 1 tom, várias opacidades | Candle baixa, R1, FVG/OB bearish, BOS/CHOCH baixa, Stop, Liquidation SHORT, Order Flow ask, Session Key High, Premium (topo do range), `SHORT_RGB` | ✅ consistente — mesmo papel real (bearish/resistência/risco) |
-| **Amarelo/âmbar/dourado** | **5 tons distintos**: `(240,208,111)` Entry, `(255,235,190)`/`(255,214,130)` VWAP/NL neutro, `(255,200,0)` pico Liquidation, `(255,176,32)` Kill Zones, `(255,191,0)` Sweep | 5 conceitos DIFERENTES | ⚠️ **achado real, já parcialmente investigado em §6.58** — é a família com mais fragmentação real do gráfico; candidata a Operador decidir uma paleta única por sub-papel (ver §9.6) |
+| **Amarelo/âmbar/dourado** | **5 tons** (atualizado §6.59): `(240,208,111)` Entry, `(255,235,190)`/`(255,214,130)` VWAP/NL neutro, `(255,213,0)` pico Liquidation, `(255,176,32)` Kill Zones, `(255,140,0)` Sweep (era `(255,191,0)`, H45 — a 2° exatos do pico da Liquidation, mesma L/S/alpha, indistinguível a olho; movido pro extremo laranja H33 da mesma família) | 5 conceitos DIFERENTES | ⚠️ **parcialmente corrigido em §6.59** — o par objetivamente colidente (Sweep×Liquidation-peak, 2° de matiz comprovados por conversão HSL) foi diferenciado; Entry/VWAP-neutro/Kill Zones seguem intocados de propósito (tratamento visual já distinto — zona preenchida, tom pálido deliberado, banda de fundo — sem colisão demonstrada, ver §6.59 pra raciocínio completo). Consolidação total da família segue como decisão do Operador (§9.6/§9.7) |
 | Cyan `(0,240,255)` | 1 tom exato | Volume Profile (barras) E Fibonacci (linhas) — **dois conceitos diferentes, mesma cor exata** | ⚠️ achado real novo desta rodada — mitigado por FORMA diferente (barra vs. linha), mas ainda uma coincidência de cor não documentada como decisão deliberada |
 | Roxo/lavanda | 3 tons próximos: `(176,38,255)` Harmônicos, `(200,107,255)` EQH/EQL, `(186,168,255)` Scenario/Projeção | 3 conceitos diferentes | ⚠️ mais brando que o amarelo (tons mais distantes entre si), mas mesma família de risco |
 | Azul-acinzentado `(138,180,248)` | 1 tom | CVD, Premium/Discount Equilibrium, `NEUTRAL_RGB` (Aura) | ✅ consistente — papel real único ("informativo/neutro") |
@@ -558,16 +558,39 @@ princípios que o AR10 já aplica parcialmente e pode reforçar:
    "cor demais" em volume, é a MESMA classe perceptual (amarelo/âmbar)
    usada 5 vezes pra papéis diferentes, o oposto do princípio.
 
+**Achado adicional (§6.59, pesquisa dirigida a Bloomberg Terminal/
+Quantower/NinjaTrader, pedido explícito de uma diretiva formal
+posterior)**: o âmbar-sobre-preto do Bloomberg Terminal — a referência
+mais reconhecida do setor, herdada dos monitores monocromáticos dos anos
+80 e mantida deliberadamente até hoje como marca — é documentado pela
+própria Bloomberg como "a cor padrão para informação NÃO-semântica"
+(texto neutro/base, sem significado próprio), reservando outras cores
+só para o que É semântico de verdade. Isso reforça, com uma fonte
+concreta, o motivo de NÃO inventar 5 tons novos e não-relacionados pra
+"resolver" a família amarela do AR10: o problema nunca foi amarelo
+carregar uma "marca" (isso é legítimo, é o que Bloomberg faz de
+propósito) — é amarelo carregar 5 SIGNIFICADOS diferentes ao mesmo
+tempo. A correção certa (aplicada em §6.59 ao par realmente colidente,
+Sweep×Liquidation-peak) é diferenciar só onde há colisão OBJETIVA
+comprovada, não recolorir a família inteira.
+
 ### 9.7 Recomendações concretas — o que é seguro fazer agora vs. o que
 precisa de decisão do Operador ou verificação visual ao vivo
 
 **Seguro implementar sem decisão nova** (mecânico, sem ambiguidade de
 design, já seria consistente com o padrão real do resto do sistema):
-- Nenhum item novo identificado nesta rodada além dos já corrigidos em
-  §6.58 (Sweep/Session Key Levels) — os 2 achados de paleta restantes
-  (§9.4: família amarela, cyan Fibonacci×Volume Profile) exigem escolher
-  tons NOVOS, que é uma decisão de identidade visual, não um bug
-  mecânico como os já corrigidos.
+- **Atualização §6.59**: dentro da família amarela, o par Liquidity
+  Sweep × pico do Liquidation Heatmap não era "fragmentação de design" —
+  era um caso mensurável (conversão RGB→HSL: 2° de matiz, mesma
+  luminosidade/saturação/alpha) de 2 cores que já eram, na prática, a
+  MESMA cor. Isso é mecânico (não exige escolher uma identidade nova, só
+  separar 2 tons que deveriam sempre ter sido distintos) e foi corrigido:
+  Sweep → `rgba(255,140,0,0.85)`, Liquidation-peak → `rgba(255,213,0,0.85)`.
+  Continua valendo que os outros 2 achados de paleta (Entry/VWAP-
+  neutro/Kill Zones dentro da mesma família amarela; cyan
+  Fibonacci×Volume Profile) exigem escolher tons NOVOS sem um par
+  objetivamente colidente como evidência — essa parte é decisão de
+  identidade visual, não bug mecânico.
 
 **Precisa de decisão do Operador (design, não bug)**:
 - **Família amarela (5 tons)**: consolidar numa paleta declarada —
@@ -633,3 +656,9 @@ nesta sessão).
 - [TradersDNA — Mastering Trading Chart Colors: A Guide to Enhanced Visualizations](https://www.tradersdna.com/trading-chart-colors/)
 - [TradingView — Pine Script Essential Colors](https://www.tradingview.com/pine-script-docs/v4/essential/colors/)
 - [TradingView lightweight-charts — custom-price-line-price-axis-view.ts (código-fonte real, confirma o mecanismo de `axisLabelVisible`/`title`, §6.58)](https://github.com/tradingview/lightweight-charts/blob/master/src/views/price-axis/custom-price-line-price-axis-view.ts)
+
+### §6.59 (diretiva com imagem de referência — Bloomberg/Quantower/NinjaTrader)
+- [Bloomberg LP — Designing the Terminal for Color Accessibility (âmbar = cor padrão pra informação NÃO-semântica)](https://www.bloomberg.com/company/stories/designing-the-terminal-for-color-accessibility/)
+- [Ted Merz — Amber on Black (história do âmbar-sobre-preto do Bloomberg Terminal)](https://ted-merz.com/2021/06/26/amber-on-black/)
+- [Quantower — Flexible interface features](https://www.quantower.com/interface-features)
+- [QuantVPS — Best Platforms for DOM Trading: NinjaTrader, Bookmap, Quantower & More](https://www.quantvps.com/blog/dom-trading-ninjatrader-bookmap-quantower)
