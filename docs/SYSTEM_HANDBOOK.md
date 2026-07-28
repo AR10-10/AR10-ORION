@@ -5250,6 +5250,76 @@ diretiva) — cobre §6.35 a §6.41 em conjunto
 
 ---
 
+### 6.67 EPC OMEGA FINAL — diretiva de 4 partes (Meta Engine, gráfico
+World Class, performance/autoaprendizado, homologação final); relatório
+completo em `docs/RELATORIO_EPC_OMEGA_FINAL.md`
+
+Diretiva do Operador em 4 partes sequenciais ("ler tudo antes de
+implementar" — seguido à risca: as 4 partes foram lidas por completo antes
+de qualquer auditoria). Auditoria real de 5 frentes paralelas confirmou que
+a maior parte do "Meta Engine" pedido já existia em fragmentos reais
+(Conselho, `decision-layer.ts`, `confluence-engine.ts`,
+`organism-orchestrator.ts`) — trabalho real foi consolidar, não construir
+do zero. Achado-chave que mudou o escopo seguro do resto da diretiva: dos
+~40 indicadores nomeados, 12 são AUSENTES no repositório, e 2 deles
+(On-Chain, Whale Activity) são auto-documentados em `gmil/README.md`/
+`gmil/types.ts` como impossíveis sem API paga embutida no cliente
+(proibido) — não uma lacuna, uma fronteira real do produto.
+
+**Implementado**: (1) `nexus/engine-signal-contract.ts` novo — contrato
+`EngineSignal` com os 10 campos pedidos (peso/confiança/relevância/
+validade/contexto/justificativa/prioridade/qualidade/horizonte/vida útil),
+`deriveEngineSignalsFromCouncil()` populando só o que é real hoje (4/10
+campos), resto `null` honesto; (2) `unified-snapshot-store.ts` §4 CÉREBRO:
+`nexusDecision`/`institutionalScoreReading`/`heatScoreReading` ganharam os
+4 lugares canônicos + evento próprio no bus (`event-bus.ts`/
+`organism-orchestrator.ts`) — antes só existiam como `useMemo` local em
+`App.tsx`, invisíveis para qualquer assinante futuro do organismo; (3)
+`institutional-zones.ts`: +3 fontes (Volume Profile POC, Session Key
+Level, Liquidity Sweep) — fecha 3 dos 4 pares de confluência que a
+diretiva nomeia explicitamente; (4) 1 colisão real de cor corrigida
+(EQH/EQL vs. roxo do Conselho/Harmônico, <1° de matiz —
+`rgba(200, 107, 255)` → `rgba(110, 150, 255)`, azul H223, >40° de
+qualquer outro matiz já atribuído no app); (5) `InstitutionalZonePlugin`:
+opacidade agora escala com `distinctSourceCount` real (antes sempre a
+mesma, independente da força de confluência); (6) `self-diagnostics.ts`:
+novo achado "Memória (heap JS)" expõe `health.memoryMb` (já medido, nunca
+reportado); (7) `nexus/macd.ts` novo — reusa `computeEmaSeries` duas
+vezes (linhas rápida/lenta sobre o preço, sinal sobre o próprio MACD),
+um dos 12 indicadores confirmados ausentes e o único puro-matemático
+sobre dado já real. Construído e testado, mas DELIBERADAMENTE não ligado
+a `engine-bridge.ts`/UI ainda (Laboratório de Evolução, isolar antes de
+integrar) — confirmado que nem entra no bundle de produção hoje
+(tree-shaking, ninguém importa).
+
+**Autocorreção real durante a rodada, registrada por transparência**: eu
+ia estender o cache por referência (padrão `KillZoneBandsPlugin`) para
+`LiquidationHeatmapPlugin` por analogia de padrão — a suíte de testes já
+tinha uma trava (`refinamento-final-wiring.test.ts`) provando que uma
+rodada anterior já bancou essa pergunta com benchmark real
+(`computeLiquidationHeatmap` ~0,006ms/chamada a N=500 vs. ~1,2ms do caso
+que justificou o cache do KillZone) e concluiu que o cache ali seria
+complexidade sem benefício medido. Revertido antes do commit — a suíte de
+testes funcionou exatamente como uma trava de regressão deveria.
+
+**Deliberadamente não implementado, com motivo real** (detalhe completo
+no relatório): reconhecimento automático de padrão gráfico ("Rabiscos
+Inteligentes" — confirmado que não existe nada disso hoje), motor de
+auto-otimização contínuo (sem gargalo urgente confirmado em 3 documentos
+independentes), autoaprendizado real (fundação passiva existe,
+recalibração de peso é trabalho novo e estatisticamente sensível),
+Footprint/Breaker-Mitigation-IFVG/Elliott-Pitchfork-Gann/Correlação
+cross-asset (dado real existe ou pesquisa é necessária, mas cada um
+merece rodada própria), GMIL dentro da store unificada (cruza uma
+fronteira hoje protegida por CI, decisão grande demais para esta rodada).
+
+**Testes executados**: `tsc --noEmit` limpo · **124 arquivos / 2097
+testes** (100%, +28 novos) · `npm run build` ok (869,66 kB / gzip
+264,94 kB, +2,7 kB desta rodada — idêntico com ou sem `macd.ts`, ainda
+fora do bundle real).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

@@ -21,6 +21,9 @@ const emptyInput: InstitutionalZoneInput = {
   liquidityZones: [],
   support: null,
   resistance: null,
+  volumeProfilePoc: null,
+  sessionKeyLevel: null,
+  liquiditySweeps: [],
 };
 
 describe('constantes do contrato', () => {
@@ -155,6 +158,9 @@ describe('computeInstitutionalZones: clustering por ÂNCORA FIXA (nunca média m
       support: null,
       resistance: null,
       liquidityZones: [{ type: 'EQUAL_HIGH', price: 101100 }], // 300 de distância da âncora 100800 <= 500 → entra no grupo 2
+      volumeProfilePoc: null,
+      sessionKeyLevel: null,
+      liquiditySweeps: [],
       proximityPct: 0.5,
     });
     expect(r).toHaveLength(2);
@@ -198,6 +204,9 @@ describe('computeInstitutionalZones: ordenação e teto real', () => {
       liquidityZones: [],
       support: null,
       resistance: null,
+      volumeProfilePoc: null,
+      sessionKeyLevel: null,
+      liquiditySweeps: [],
     });
     expect(r.length).toBeGreaterThanOrEqual(2);
     expect(r[0].distinctSourceCount).toBe(3); // NEXUS_LINE + FVG + OB (200000-region só tem 2: EMA + VWAP)
@@ -212,5 +221,50 @@ describe('computeInstitutionalZones: ordenação e teto real', () => {
     const r = computeInstitutionalZones({ ...emptyInput, liquidityZones, orderBlocks });
     expect(r.length).toBe(MAX_INSTITUTIONAL_ZONES);
     for (const z of r) expect(z.distinctSourceCount).toBeGreaterThanOrEqual(MIN_DISTINCT_SOURCES_FOR_ZONE);
+  });
+});
+
+describe('EPC OMEGA FINAL Parte 2 §7: 3 fontes novas (Volume Profile POC, Session Key Level, Liquidity Sweep)', () => {
+  it('POC + suporte reais na mesma faixa formam a zona VOLUME_PROFILE_POC+SUPPORT_RESISTANCE que a diretiva pede (Volume Profile+S/R)', () => {
+    const r = computeInstitutionalZones({ ...emptyInput, volumeProfilePoc: 100000, support: 100100 });
+    expect(r).toHaveLength(1);
+    expect(r[0].members.map((m) => m.sourceKind).sort()).toEqual(['SUPPORT_RESISTANCE', 'VOLUME_PROFILE_POC']);
+  });
+
+  it('sessionKeyLevel: high e low reais viram 2 membros do MESMO sourceKind (nunca inflam distinctSourceCount sozinhos)', () => {
+    const r = computeInstitutionalZones({ ...emptyInput, sessionKeyLevel: { high: 100050, low: 99950 }, vwap: 100000 });
+    // high(100050) e low(99950) ficam a 0.1% de distância um do outro — dentro
+    // do proximityPct default (0.35%) — então os 3 membros (high/low/vwap)
+    // caem no mesmo grupo; SESSION_KEY_LEVEL conta como 1 fonte distinta só.
+    expect(r).toHaveLength(1);
+    const kinds = r[0].members.map((m) => m.sourceKind);
+    expect(kinds.filter((k) => k === 'SESSION_KEY_LEVEL')).toHaveLength(2);
+    expect(r[0].distinctSourceCount).toBe(2); // SESSION_KEY_LEVEL + VWAP, nunca 3
+  });
+
+  it('sweep real + FVG na mesma faixa formam a zona FAIR_VALUE_GAP+LIQUIDITY_SWEEP que a diretiva pede (FVG+Sweep)', () => {
+    const r = computeInstitutionalZones({
+      ...emptyInput,
+      liquiditySweeps: [{ price: 100000 }],
+      fairValueGaps: [{ type: 'BULLISH', top: 100100, bottom: 99950 }],
+    });
+    expect(r).toHaveLength(1);
+    expect(r[0].members.map((m) => m.sourceKind).sort()).toEqual(['FAIR_VALUE_GAP', 'LIQUIDITY_SWEEP']);
+  });
+
+  it('múltiplos sweeps reais viram múltiplos membros LIQUIDITY_SWEEP, um por cluster recebido', () => {
+    const r = computeInstitutionalZones({
+      ...emptyInput,
+      liquiditySweeps: [{ price: 100000 }, { price: 100050 }],
+      vwap: 100010,
+    });
+    expect(r).toHaveLength(1);
+    expect(r[0].members.filter((m) => m.sourceKind === 'LIQUIDITY_SWEEP')).toHaveLength(2);
+  });
+
+  it('fail-closed: POC/sessionKeyLevel/sweeps não-finitos ou ausentes nunca viram membro fabricado', () => {
+    expect(computeInstitutionalZones({ ...emptyInput, volumeProfilePoc: NaN, vwap: 100000 })).toEqual([]);
+    expect(computeInstitutionalZones({ ...emptyInput, sessionKeyLevel: null, vwap: 100000 })).toEqual([]);
+    expect(computeInstitutionalZones({ ...emptyInput, liquiditySweeps: [{ price: NaN }], vwap: 100000 })).toEqual([]);
   });
 });

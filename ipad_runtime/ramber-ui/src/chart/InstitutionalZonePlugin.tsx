@@ -37,12 +37,34 @@ import type { InstitutionalZone } from "../nexus/institutional-zones";
 // primitiva, zero cor nova inventada.
 import { drawCanvasLabel, measureCanvasLabel } from "../nexus/canvas-label";
 
-const FILL_COLOR = "rgba(167, 139, 250, 0.07)";
-const BORDER_COLOR = "rgba(167, 139, 250, 0.35)";
+const ZONE_HUE_RGB = "167, 139, 250";
 const LABEL_COLOR = "rgba(216, 205, 254, 0.90)";
 // Abaixo desta altura em pixels, a faixa ainda desenha (fill+borda), só o
 // texto pula — mesmo princípio de MIN_LABEL_WIDTH_PX em KillZoneBandsPlugin.
 const MIN_LABEL_HEIGHT_PX = 13;
+
+// EPC OMEGA FINAL Parte 2 §7 ("Confluência Visual": "quanto maior a
+// confluência, maior o destaque visual"): antes desta rodada a faixa
+// desenhava sempre com a MESMA opacidade, com 2 ou com 5 ferramentas
+// concordando — o motor já carrega distinctSourceCount real
+// (computeInstitutionalZones, zero cálculo novo aqui), só nunca virava
+// destaque visual. Piso = valor idêntico ao antigo (nenhuma zona real
+// fica mais fraca que antes); teto em 4 fontes é convenção declarada
+// (mesmo espírito de LIQUIDITY_HIGHLIGHT_MIN_OBSTACLES em
+// layer-relevance.ts) — nenhuma zona observada até hoje passou de 4
+// fontes distintas, não uma medição.
+const CONFLUENCE_FLOOR_SOURCES = 2;
+const CONFLUENCE_CEIL_SOURCES = 4;
+const FILL_ALPHA_MIN = 0.07;
+const FILL_ALPHA_MAX = 0.16;
+const BORDER_ALPHA_MIN = 0.35;
+const BORDER_ALPHA_MAX = 0.65;
+
+function confluenceWeight(distinctSourceCount: number): number {
+  const span = CONFLUENCE_CEIL_SOURCES - CONFLUENCE_FLOOR_SOURCES;
+  const clamped = Math.max(CONFLUENCE_FLOOR_SOURCES, Math.min(CONFLUENCE_CEIL_SOURCES, distinctSourceCount));
+  return span > 0 ? (clamped - CONFLUENCE_FLOOR_SOURCES) / span : 0;
+}
 
 interface InstitutionalZonePluginProps {
   chart: IChartApi | null;
@@ -97,13 +119,14 @@ export function InstitutionalZonePlugin({ chart, series, zones }: InstitutionalZ
 
         const rectY = Math.min(yTop, yBottom);
         const rectHeight = Math.max(1, Math.abs(yBottom - yTop));
+        const weight = confluenceWeight(zone.distinctSourceCount);
 
-        ctx.fillStyle = FILL_COLOR;
+        ctx.fillStyle = `rgba(${ZONE_HUE_RGB}, ${(FILL_ALPHA_MIN + weight * (FILL_ALPHA_MAX - FILL_ALPHA_MIN)).toFixed(3)})`;
         ctx.fillRect(0, rectY, cssWidth, rectHeight);
         // Fio de Seda (Regra de Ouro 5): 1px sólida real nas bordas
         // horizontais da faixa, nunca setLineDash.
         ctx.lineWidth = 1;
-        ctx.strokeStyle = BORDER_COLOR;
+        ctx.strokeStyle = `rgba(${ZONE_HUE_RGB}, ${(BORDER_ALPHA_MIN + weight * (BORDER_ALPHA_MAX - BORDER_ALPHA_MIN)).toFixed(3)})`;
         ctx.beginPath();
         ctx.moveTo(0, Math.round(rectY) + 0.5);
         ctx.lineTo(cssWidth, Math.round(rectY) + 0.5);

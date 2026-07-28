@@ -106,6 +106,22 @@ describe('buildDiagnosticReport: cada sinal real degradado sobe a severidade hon
   });
 });
 
+describe('EPC OMEGA FINAL Parte 3: memória real (heap JS) agora vira achado visível, sem limiar fabricado', () => {
+  it('memoryMb real presente => achado OK com o número real, nunca um julgamento de severidade sem calibração', () => {
+    const report = buildDiagnosticReport(baseInput({ health: { ...HEALTHY_HEALTH, memoryMb: 128.4 } }));
+    const finding = report.findings.find((f) => f.label === 'Memória (heap JS)');
+    expect(finding?.severity).toBe('OK');
+    expect(finding?.detail).toContain('128MB');
+  });
+
+  it('memoryMb null (browser não expõe, ex. Firefox) => OK honesto, nunca WARN/CRITICAL por ausência de instrumentação', () => {
+    const report = buildDiagnosticReport(baseInput({ health: { ...HEALTHY_HEALTH, memoryMb: null } }));
+    const finding = report.findings.find((f) => f.label === 'Memória (heap JS)');
+    expect(finding?.severity).toBe('OK');
+    expect(finding?.detail).toContain('não expõe');
+  });
+});
+
 describe('formatDiagnosticReportMarkdown: texto real, rastreável, nunca um resumo vago', () => {
   it('lista cada achado real com sua severidade e detalhe, mais o carimbo honesto de "nada foi fabricado"', () => {
     const report = buildDiagnosticReport(baseInput({ offline: true }));

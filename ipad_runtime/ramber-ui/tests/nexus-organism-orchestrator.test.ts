@@ -31,6 +31,9 @@ import { detectInstitutionalTraps } from '../src/nexus/trap-detection';
 import { buildTradePlan } from '../src/nexus/trade-plan';
 import { computeSmcZones, type OrderflowSignal } from '../src/engine-bridge';
 import { computeConfluenceCorridor } from '../src/nexus/confluence-corridor';
+import { buildNexusDecision } from '../src/nexus/decision-layer';
+import { computeInstitutionalScore } from '../src/nexus/institutional-score';
+import { computeHeatScore } from '../src/nexus/heat-score';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
@@ -74,6 +77,9 @@ beforeEach(() => {
   s.setCvd(null);
   s.setOrderflowSignals([]);
   s.setConfluenceCorridor(null);
+  s.setNexusDecision(null);
+  s.setInstitutionalScoreReading(null);
+  s.setHeatScoreReading(null);
   s.setSymbol('BTC');
   s.setActiveTimeframe('15m');
   s.setOffline(false);
@@ -379,6 +385,62 @@ describe('OMEGA CORE V-MAX (Fase 1.1): smc/cvd/orderflowSignals — insumos pré
   });
 });
 
+describe('EPC OMEGA FINAL Parte 1 ("Meta Engine"): nexusDecision/institutionalScoreReading/heatScoreReading ganham fatia própria', () => {
+  it('setNexusDecision(saída real de buildNexusDecision) publica BRAIN.NEXUS_DECISION.UPDATED com a MESMA referência', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('BRAIN.NEXUS_DECISION.UPDATED', (p) => received.push(p.decision));
+    const decision = buildNexusDecision({
+      coreDirection: null,
+      coreConfidence: null,
+      plan: null,
+      targetsHit: 0,
+      etaReading: null,
+      score: null,
+      scoreZoneLabel: null,
+      scoreTrend: null,
+      councilStance: null,
+      councilRiskGated: null,
+      assistantMessage: null,
+      inEntryZone: null,
+      lastResolvedAt: null,
+      councilVotes: null,
+      convictionMembers: null,
+      heatTier: null,
+      premiumDiscountZone: null,
+    });
+    expect(decision.operation).toBe('AGUARDAR'); // sanidade: passthrough honesto sem direção real do Core Engine
+    useUnifiedSnapshotStore.getState().setNexusDecision(decision);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(decision);
+    expect(received[0]).toBe(useUnifiedSnapshotStore.getState().nexusDecision);
+  });
+
+  it('setInstitutionalScoreReading(saída real de computeInstitutionalScore) publica BRAIN.INSTITUTIONAL_SCORE.UPDATED com a mesma referência', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('BRAIN.INSTITUTIONAL_SCORE.UPDATED', (p) => received.push(p.reading));
+    const reading = computeInstitutionalScore({ engineStatus: 'pending', coreDirection: null, conviction: null, riskGated: false });
+    useUnifiedSnapshotStore.getState().setInstitutionalScoreReading(reading);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(reading);
+  });
+
+  it('setHeatScoreReading(saída real de computeHeatScore) publica BRAIN.HEAT_SCORE.UPDATED com a mesma referência', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('BRAIN.HEAT_SCORE.UPDATED', (p) => received.push(p.reading));
+    const reading = computeHeatScore({ bandwidthPercentile: null, deltaPct: null, recentLiquidationCount: null });
+    expect(reading.status).toBe('DADOS_INSUFICIENTES'); // sanidade: fail-closed honesto sem componentes reais
+    useUnifiedSnapshotStore.getState().setHeatScoreReading(reading);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(reading);
+  });
+});
+
 describe('Sincronização fim-a-fim (a prova da Ordem): conselho ESCREVE → bus NOTIFICA → cenário RELÊ do snapshot', () => {
   it('a cadeia inteira flui pela camada central — nenhum motor toca no outro, e evento/snapshot são o MESMO dado', () => {
     orch = new OrganismOrchestrator(bus);
@@ -447,5 +509,14 @@ describe('Fiação real no código-fonte: App e Health Monitor obedecem a camada
     expect(block).toContain('conviction: convictionReading,');
     expect(block).toContain('activeObstacleCount: trackedPlan?.targets?.[0]?.obstacleCount ?? null,');
     expect(block).toContain('useUnifiedSnapshotStore.getState().setConfluenceCorridor(confluenceCorridor);');
+  });
+
+  it('App.tsx: EPC OMEGA FINAL Parte 1 — nexusDecision/institutionalScore/heatReading são espelhados na store (mesmo padrão de confluenceCorridor)', () => {
+    const s = read('../src/App.tsx');
+    expect(s).toContain('useUnifiedSnapshotStore.getState().setNexusDecision(nexusDecision);');
+    expect(s).toContain('useUnifiedSnapshotStore.getState().setInstitutionalScoreReading(institutionalScore);');
+    expect(s).toContain('useUnifiedSnapshotStore.getState().setHeatScoreReading(heatReading);');
+    expect(s).toContain('}, [nexusDecision]);');
+    expect(s).toContain('}, [heatReading]);');
   });
 });

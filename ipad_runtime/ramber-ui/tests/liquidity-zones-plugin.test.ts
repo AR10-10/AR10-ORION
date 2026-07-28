@@ -163,7 +163,7 @@ describe('EnhancedChart_110_Percent: LiquidityZonesPlugin substitui as price lin
   it('liquidez (EQH/EQL) continua como price line real — LiquidityZone não tem top/bottom, uma linha continua honesta', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     expect(chart).toContain('EQUAL_HIGH');
-    expect(chart).toContain('rgba(200, 107, 255, 0.45)');
+    expect(chart).toContain('rgba(110, 150, 255, 0.45)');
     expect(chart).toContain('series.createPriceLine({');
   });
 

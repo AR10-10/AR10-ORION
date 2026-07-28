@@ -140,6 +140,18 @@ export class OrganismOrchestrator {
       if (state.radarCandidates !== prev.radarCandidates) {
         this.bus.emit({ type: "BRAIN.RADAR_CANDIDATES.UPDATED", payload: { candidates: state.radarCandidates } });
       }
+      // EPC OMEGA FINAL Parte 1 ("Meta Engine"): mesmo padrão referência-a-
+      // referência de council/scenario acima — estas 3 leituras só ganham
+      // fatia própria agora, o cálculo continua 100% nos mesmos motores.
+      if (state.nexusDecision !== prev.nexusDecision) {
+        this.bus.emit({ type: "BRAIN.NEXUS_DECISION.UPDATED", payload: { decision: state.nexusDecision } });
+      }
+      if (state.institutionalScoreReading !== prev.institutionalScoreReading) {
+        this.bus.emit({ type: "BRAIN.INSTITUTIONAL_SCORE.UPDATED", payload: { reading: state.institutionalScoreReading } });
+      }
+      if (state.heatScoreReading !== prev.heatScoreReading) {
+        this.bus.emit({ type: "BRAIN.HEAT_SCORE.UPDATED", payload: { reading: state.heatScoreReading } });
+      }
       // §5 ORGANISMO — HEALTH.CHANGED continua do Health Monitor (publicador
       // único histórico da Fase 0.8) e DATA.* do CrossExchangeService: um
       // evento nunca ganha um segundo emissor.

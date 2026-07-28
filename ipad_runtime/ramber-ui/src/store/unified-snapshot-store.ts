@@ -44,7 +44,9 @@ import type {
 import { maybeSampleL2History, type L2HistoryEntry } from "../nexus/l2-history";
 import { touchCandlesSymbol } from "../nexus/candles-cache";
 import { pushOrderflowHistory, type OrderflowHistoryEntry } from "../nexus/orderflow-history";
-import { pushConvictionHistory, type ConvictionScoreSample } from "../nexus/institutional-score";
+import { pushConvictionHistory, type ConvictionScoreSample, type InstitutionalScoreReading } from "../nexus/institutional-score";
+import type { HeatScoreReading } from "../nexus/heat-score";
+import type { NexusDecision } from "../nexus/decision-layer";
 import type { VolumeProfileSnapshot } from "../nexus/volume-profile";
 import type { FibonacciConfluenceMatrix } from "../nexus/fibonacci-confluence";
 import type { CouncilDecision } from "../nexus/council";
@@ -271,6 +273,15 @@ export interface UnifiedSnapshotState {
   // pontuar o nada seria fabricação). Escopada ao ativo ativo, mesmo
   // padrão de orderflowHistory.
   institutionalScoreHistory: ConvictionScoreSample[];
+  // EPC OMEGA FINAL Parte 1 ("Meta Engine", achado de auditoria): estas 3
+  // leituras já existiam como useMemo local em App.tsx — nunca tinham fatia
+  // própria no organismo, então recomputavam a cada consumidor e ficavam
+  // invisíveis para qualquer assinante futuro do bus (getSnapshotForEngine).
+  // Passthrough puro (LEI 24): nenhuma matemática nova, os motores
+  // continuam decision-layer.ts/institutional-score.ts/heat-score.ts.
+  nexusDecision: NexusDecision | null;
+  institutionalScoreReading: InstitutionalScoreReading | null;
+  heatScoreReading: HeatScoreReading | null;
 
   // §5 ORGANISMO
   // Estado REAL do motor de análise (engineStatus/direção/confiança do
@@ -363,6 +374,9 @@ interface UnifiedSnapshotActions {
   // (nunca chamado com null/WAIT — o efeito que chama já filtra isso).
   recordInstitutionalScore: (score: number) => void;
   resetInstitutionalScoreHistory: () => void;
+  setNexusDecision: (decision: NexusDecision | null) => void;
+  setInstitutionalScoreReading: (reading: InstitutionalScoreReading | null) => void;
+  setHeatScoreReading: (reading: HeatScoreReading | null) => void;
 
   // §5 ORGANISMO
   setCore: (core: CoreSnapshot) => void;
@@ -426,6 +440,9 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     multiTimeframeContext: null,
     radarCandidates: [],
     institutionalScoreHistory: [],
+    nexusDecision: null,
+    institutionalScoreReading: null,
+    heatScoreReading: null,
     // §5 ORGANISMO
     core: EMPTY_CORE,
     health: EMPTY_HEALTH,
@@ -483,6 +500,9 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
       s.institutionalScoreHistory = pushConvictionHistory(s.institutionalScoreHistory as ConvictionScoreSample[], { score, at: Date.now() });
     }),
     resetInstitutionalScoreHistory: () => set((s) => { s.institutionalScoreHistory = []; }),
+    setNexusDecision: (decision) => set((s) => { s.nexusDecision = decision; }),
+    setInstitutionalScoreReading: (reading) => set((s) => { s.institutionalScoreReading = reading; }),
+    setHeatScoreReading: (reading) => set((s) => { s.heatScoreReading = reading; }),
     // §5 ORGANISMO
     setCore: (core) => set((s) => { s.core = core; }),
     setHealth: (health) => set((s) => { s.health = health; }),
@@ -596,6 +616,12 @@ export const useRadarCandidatesSnapshot = (): RadarQualificationResult[] =>
   useUnifiedSnapshotStore((s) => s.radarCandidates ?? EMPTY_RADAR_CANDIDATES);
 export const useInstitutionalScoreHistory = (): ConvictionScoreSample[] =>
   useUnifiedSnapshotStore((s) => s.institutionalScoreHistory ?? EMPTY_CONVICTION_HISTORY);
+export const useNexusDecisionSnapshot = (): NexusDecision | null =>
+  useUnifiedSnapshotStore((s) => s.nexusDecision);
+export const useInstitutionalScoreReadingSnapshot = (): InstitutionalScoreReading | null =>
+  useUnifiedSnapshotStore((s) => s.institutionalScoreReading);
+export const useHeatScoreReadingSnapshot = (): HeatScoreReading | null =>
+  useUnifiedSnapshotStore((s) => s.heatScoreReading);
 
 // §5 ORGANISMO
 export const useCoreSnapshot = (): CoreSnapshot => useUnifiedSnapshotStore((s) => s.core);

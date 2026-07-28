@@ -21,6 +21,9 @@ import type { TrackRecordState } from "./signal-track-record";
 import type { TrustScoreSnapshot, SmcZonesSnapshot, OrderflowSignal } from "../engine-bridge";
 import type { ConfluenceCorridorReading } from "./confluence-corridor";
 import type { RadarQualificationResult } from "./radar-qualification";
+import type { NexusDecision } from "./decision-layer";
+import type { InstitutionalScoreReading } from "./institutional-score";
+import type { HeatScoreReading } from "./heat-score";
 
 // Diretamente do Blueprint V-MAX §1.3 — os únicos eventos reais que este
 // sistema publica. Nenhum evento é adicionado especulativamente; cada um
@@ -71,6 +74,14 @@ export type NexusEvent =
   | { type: "BRAIN.TRAPS.UPDATED"; payload: { traps: TrapSignal[] } }
   | { type: "BRAIN.TRADE_PLAN.UPDATED"; payload: { plan: TradePlan | null } }
   | { type: "BRAIN.RADAR_CANDIDATES.UPDATED"; payload: { candidates: RadarQualificationResult[] } }
+  // EPC OMEGA FINAL Parte 1 ("Meta Engine", achado de auditoria): estas 3
+  // leituras já existiam (App.tsx, useMemo local) mas nunca tinham fatia
+  // própria no organismo — computadas de novo a cada consumidor, invisíveis
+  // para qualquer assinante futuro do bus. Passthrough puro (LEI 24): os
+  // motores continuam os mesmos, só ganham um lugar real no organismo.
+  | { type: "BRAIN.NEXUS_DECISION.UPDATED"; payload: { decision: NexusDecision | null } }
+  | { type: "BRAIN.INSTITUTIONAL_SCORE.UPDATED"; payload: { reading: InstitutionalScoreReading | null } }
+  | { type: "BRAIN.HEAT_SCORE.UPDATED"; payload: { reading: HeatScoreReading | null } }
   // §5 ORGANISMO
   | { type: "ORGANISM.TRUST.UPDATED"; payload: { score: TrustScoreSnapshot | null } }
   // Uma ingestão afetiva real = um evento (a fatia affectiveMemory é

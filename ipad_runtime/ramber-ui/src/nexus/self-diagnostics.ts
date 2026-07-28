@@ -108,6 +108,21 @@ export function buildDiagnosticReport(input: DiagnosticInput): DiagnosticReport 
         : { severity: 'WARN', label: 'Latência do ciclo', detail: 'Ainda sem amostra real de latência do ciclo.' },
   );
 
+  // EPC OMEGA FINAL Parte 3 §2 (auditoria real): input.health.memoryMb já
+  // era medido pelo Health Monitor (performance.memory.usedJSHeapSize)
+  // desde antes desta rodada, mas nunca virava um achado — a única leitura
+  // de memória do relatório ficava invisível pro Operador. Severidade
+  // sempre OK (nunca WARN/CRITICAL): este repositório não tem backtest de
+  // orçamento de memória por dispositivo pra calibrar um limiar honesto
+  // (mesma disciplina de "nunca fabricar um corte sem medição real" já
+  // documentada em layer-relevance.ts) — o valor real é reportado, o
+  // julgamento de "é muito" fica para uma calibração futura.
+  findings.push(
+    input.health.memoryMb !== null
+      ? { severity: 'OK', label: 'Memória (heap JS)', detail: `${input.health.memoryMb.toFixed(0)}MB reais em uso (performance.memory.usedJSHeapSize) — sem limiar calibrado, número honesto sem julgamento de severidade.` }
+      : { severity: 'OK', label: 'Memória (heap JS)', detail: 'Navegador não expõe performance.memory (comum no Firefox) — ausência de instrumentação, não uma falha real.' },
+  );
+
   findings.push(
     input.health.workersAlive === 0
       ? { severity: 'CRITICAL', label: 'Worker WASM', detail: 'Nenhum Worker do Quant Engine vivo — cálculo pesado não tem onde rodar.' }

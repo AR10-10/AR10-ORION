@@ -46,7 +46,15 @@ export type InstitutionalZoneSourceKind =
   | "ORDER_BLOCK"
   | "LIQUIDITY_EQH"
   | "LIQUIDITY_EQL"
-  | "SUPPORT_RESISTANCE";
+  | "SUPPORT_RESISTANCE"
+  // EPC OMEGA FINAL Parte 2 §7 (Confluência Visual): 3 fontes que a
+  // diretiva nomeia explicitamente e ainda não alimentavam este
+  // consolidador (achado real de auditoria — ver
+  // docs/RELATORIO_EPC_OMEGA_FINAL.md) — fecham os pares Volume
+  // Profile+S/R, Session Key Level+Liquidez e FVG+Sweep.
+  | "VOLUME_PROFILE_POC"
+  | "SESSION_KEY_LEVEL"
+  | "LIQUIDITY_SWEEP";
 
 export interface InstitutionalZoneMember {
   sourceKind: InstitutionalZoneSourceKind;
@@ -83,6 +91,20 @@ export interface InstitutionalZoneInput {
   // passados direto como prop — zero segundo cálculo.
   support: number | null;
   resistance: number | null;
+  // EPC OMEGA FINAL Parte 2 §7: POC real do perfil Fixed Range (mesmo
+  // campo que VolumeProfilePlugin já desenha, zero segundo cálculo —
+  // Session Profile fica de fora, mesma razão documentada no plugin: os
+  // dois juntos duplicariam barras na mesma faixa).
+  volumeProfilePoc: number | null;
+  // Só a sessão mais recente (generationsBack=0 em sessionGenerationWeight/
+  // MarketSessionBandsPlugin) — sessões mais antigas já esmaecem no
+  // próprio SessionKeyLevelsPlugin; puxar todo o histórico de novo aqui
+  // faria confluência com nível já visualmente quase apagado.
+  sessionKeyLevel: { high: number; low: number } | null;
+  // Clusters já reais e já filtrados por decaimento (SWEEP_DECAY,
+  // EnhancedChart_110_Percent.tsx) — este motor não reimplementa a curva
+  // de idade, só recebe o que já sobreviveu ao filtro do chamador.
+  liquiditySweeps: { price: number }[];
   proximityPct?: number;
 }
 
@@ -147,6 +169,21 @@ export function computeInstitutionalZones(input: InstitutionalZoneInput): Instit
       top: z.price,
       bottom: z.price,
     });
+  }
+  if (fin(input.volumeProfilePoc)) {
+    members.push({ sourceKind: "VOLUME_PROFILE_POC", label: "POC", price: input.volumeProfilePoc, top: input.volumeProfilePoc, bottom: input.volumeProfilePoc });
+  }
+  if (input.sessionKeyLevel) {
+    if (fin(input.sessionKeyLevel.high)) {
+      members.push({ sourceKind: "SESSION_KEY_LEVEL", label: "Sessão Alta", price: input.sessionKeyLevel.high, top: input.sessionKeyLevel.high, bottom: input.sessionKeyLevel.high });
+    }
+    if (fin(input.sessionKeyLevel.low)) {
+      members.push({ sourceKind: "SESSION_KEY_LEVEL", label: "Sessão Baixa", price: input.sessionKeyLevel.low, top: input.sessionKeyLevel.low, bottom: input.sessionKeyLevel.low });
+    }
+  }
+  for (const s of input.liquiditySweeps ?? []) {
+    if (!fin(s.price)) continue;
+    members.push({ sourceKind: "LIQUIDITY_SWEEP", label: "Sweep", price: s.price, top: s.price, bottom: s.price });
   }
 
   if (members.length < MIN_DISTINCT_SOURCES_FOR_ZONE) return [];

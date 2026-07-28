@@ -34,7 +34,7 @@ import {
 } from "lightweight-charts";
 // V-MAX Fase 1 (superfície visual, fechamento do §3.1): linha de CVD real
 // — a série do orderflowHistory (Fase 1.2) com eixo Y próprio nativo.
-import { useOrderflowHistory } from "../store/unified-snapshot-store";
+import { useOrderflowHistory, useVolumeProfileSnapshot } from "../store/unified-snapshot-store";
 import { LiquidityZonesPlugin, type FillableZone } from "./LiquidityZonesPlugin";
 // Ordem "Ciborgue Vivo" §1: anotação temporária de BOS/CHOCH — mesma
 // arquitetura de overlay do LiquidityZonesPlugin acima, dado real diferente.
@@ -1084,7 +1084,16 @@ export function EnhancedChart_110_Percent({
       zoneLinesRef.current.push(
         series.createPriceLine({
           price: z.price,
-          color: "rgba(200, 107, 255, 0.45)",
+          // EPC OMEGA FINAL Parte 2 §10 (Paleta de Cores): era H278 quase
+          // idêntico ao roxo do Harmônico/acento do Conselho (176,38,255,
+          // linhas 887/1612 — "Púrpura, acento do Conselho/opinião
+          // agregada"), <1° de distância de matiz — colisão mais apertada
+          // que a já corrigida entre Liquidation/Sweep. Azul H223 novo:
+          // >40° de qualquer outro matiz já atribuído no app (dourados
+          // ~33-50°, teal LONG ~160°, cyan Volume Profile/Fibonacci ~180°,
+          // roxo Conselho ~278°, magenta POC ~312°, rosa SHORT ~340°) —
+          // mesma luminosidade/peso visual do valor antigo, só o matiz muda.
+          color: "rgba(110, 150, 255, 0.45)",
           lineWidth: 1,
           lineStyle: LineStyle.Solid,
           axisLabelVisible: false,
@@ -1322,6 +1331,41 @@ export function EnhancedChart_110_Percent({
   // deste componente há muito tempo (usadas pelas price lines nativas
   // linha ~1044/1063 acima) — mesmo princípio "zero prop nova" continua
   // valendo, só passam a alimentar também o consolidador de zonas.
+  // EPC OMEGA FINAL Parte 2 §7 (Confluência Visual): 3 fontes reais que
+  // faltavam para os pares que a diretiva nomeia (Volume Profile+S/R,
+  // Session Key Level+Liquidez, FVG+Sweep) — zero segundo cálculo em
+  // todas as três:
+  //  - POC: mesma fatia da store que VolumeProfilePlugin já lê
+  //    (useVolumeProfileSnapshot, Fixed Range só, mesma razão documentada
+  //    no plugin para não somar o perfil de Sessão).
+  //  - Session Key Level: MESMO computeSessionKeyLevels(data) que
+  //    SessionKeyLevelsPlugin já usa; só a ocorrência mais recente entra
+  //    aqui — as anteriores já esmaecem no próprio plugin, confluência
+  //    "agora" não faz sentido com um nível quase apagado.
+  //  - Sweeps: MESMO clusterSweptPrices+SWEEP_DECAY+ageAlpha já usado
+  //    pelo efeito de price line do sweep logo acima — só clusters ainda
+  //    vivos (alpha>0) entram, nunca um sweep já esquecido na tela.
+  const volumeProfile = useVolumeProfileSnapshot();
+  const freshestSessionKeyLevel = useMemo(() => {
+    const levels = computeSessionKeyLevels(data);
+    const latest = levels[levels.length - 1];
+    return latest ? { high: latest.high, low: latest.low } : null;
+  }, [data]);
+  const institutionalZoneSweeps = useMemo(() => {
+    const seen = new Set<number>();
+    const out: { price: number }[] = [];
+    (traps ?? []).forEach((t) => {
+      if (t.kind !== "STOP_HUNT_TOPO" && t.kind !== "STOP_HUNT_FUNDO") return;
+      const uniqueLevels = t.sweptLevels.filter((l) => Number.isFinite(l.price) && !seen.has(l.price));
+      uniqueLevels.forEach((l) => seen.add(l.price));
+      for (const cluster of clusterSweptPrices(uniqueLevels, LIQUIDITY_PROXIMITY_PCT)) {
+        const age = data.length - 1 - cluster.latestIndex;
+        if (ageAlpha(age, SWEEP_DECAY) <= 0) continue;
+        out.push({ price: cluster.avgPrice });
+      }
+    });
+    return out;
+  }, [traps, data.length]);
   const institutionalZoneInput = useMemo<InstitutionalZoneInput>(
     () => ({
       ema: emaLastValue !== null ? { period: activeEmaPeriod, value: emaLastValue } : null,
@@ -1332,8 +1376,11 @@ export function EnhancedChart_110_Percent({
       liquidityZones: liquidityZones ?? [],
       support: support ?? null,
       resistance: resistance ?? null,
+      volumeProfilePoc: volumeProfile?.fixedRange?.pocPrice ?? null,
+      sessionKeyLevel: freshestSessionKeyLevel,
+      liquiditySweeps: institutionalZoneSweeps,
     }),
-    [emaLastValue, activeEmaPeriod, vwapLastValue, nlLastValue, fairValueGaps, orderBlocks, liquidityZones, support, resistance],
+    [emaLastValue, activeEmaPeriod, vwapLastValue, nlLastValue, fairValueGaps, orderBlocks, liquidityZones, support, resistance, volumeProfile, freshestSessionKeyLevel, institutionalZoneSweeps],
   );
   const institutionalZones = useMemo(() => computeInstitutionalZones(institutionalZoneInput), [institutionalZoneInput]);
 

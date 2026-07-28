@@ -2517,6 +2517,13 @@ export default function App() {
       useUnifiedSnapshotStore.getState().recordInstitutionalScore(institutionalScore.score);
     }
   }, [institutionalScore]);
+  // EPC OMEGA FINAL Parte 1 ("Meta Engine", achado de auditoria): a leitura
+  // INTEIRA (não só o número da série histórica acima) ganha fatia própria
+  // no organismo — mesmo padrão já usado por confluenceCorridor logo
+  // abaixo, zero segunda leitura.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setInstitutionalScoreReading(institutionalScore);
+  }, [institutionalScore]);
   // Diretriz Complementar §16 ("Zona de Confiança Institucional"): banda
   // pura de apresentação sobre o mesmo institutionalScore acima — zero
   // segunda fonte, zero matemática nova (ver institutional-score.ts).
@@ -2567,6 +2574,11 @@ export default function App() {
       }),
     [engine?.marketRegime, priceData?.deltaPct, liquidations],
   );
+  // EPC OMEGA FINAL Parte 1: mesmo motivo/mesmo padrão do efeito de
+  // institutionalScore acima — Heat Score nunca tinha fatia própria.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setHeatScoreReading(heatReading);
+  }, [heatReading]);
 
   const assistantMessages = useMemo(
     () =>
@@ -2642,6 +2654,15 @@ export default function App() {
       }),
     [engine?.direction, engine?.confidence, trackedPlan, trackRecordSlice, etaReading, institutionalScore, confidenceZone, convictionTrend, councilFromSnapshot, assistantMessages, inEntryZoneNow, convictionReading, heatReading, pdForDecision, vwapCtx, nlState],
   );
+  // EPC OMEGA FINAL Parte 1 ("Meta Engine", achado de auditoria): o
+  // contrato único do Nexus Decision Layer ganha fatia própria no
+  // organismo — hoje só existia como useMemo local, invisível para
+  // qualquer assinante do bus (getSnapshotForEngine). operation continua
+  // passthrough literal do Core Engine (decision-layer.ts) — esta escrita
+  // não muda o que o contrato significa, só onde ele mora.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setNexusDecision(nexusDecision);
+  }, [nexusDecision]);
 
   // Consolidação Final §30: confluência VWAP × Nexus Line × Decision Layer
   // — veredito INFORMATIVO ("informar conflito estrutural"); LEI 24: nunca
