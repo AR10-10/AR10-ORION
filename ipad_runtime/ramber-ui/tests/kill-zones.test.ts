@@ -154,4 +154,31 @@ describe('computeKillZoneSpans: uma ocorrência real CONTÍGUA por zona, nunca u
     expect(spans[0].id).toBe('ASIA');
     expect(spans[0].endTime).toBe(candleAt(1).time);
   });
+
+  // Achado real de captura de tela do Operador (decaimento por idade):
+  // endIndex é o índice REAL no array `candles` (posição, nunca hora do
+  // dia) — base do ageAlpha(totalCandles-1-endIndex, ...) que o plugin
+  // usa pra esmaecer/ocultar ocorrências antigas.
+  it('endIndex é a POSIÇÃO real do último candle da ocorrência no array, não a hora do dia', () => {
+    const candles = [candleAt(0), candleAt(1), candleAt(2), candleAt(3)];
+    const spans = computeKillZoneSpans(candles);
+    expect(spans[0].endIndex).toBe(3); // candleAt(3) é o índice 3 do array — última posição real da Ásia aqui.
+  });
+
+  it('a MESMA zona em dias diferentes: cada span carrega o endIndex real do SEU próprio fim, nunca o índice global', () => {
+    const candles = [candleAt(0), candleAt(1), candleAt(5), candleAt(0, 1), candleAt(1, 1)];
+    const spans = computeKillZoneSpans(candles);
+    expect(spans).toHaveLength(2);
+    expect(spans[0].endIndex).toBe(1); // Ásia dia 1 termina no índice 1 (candleAt(1))
+    expect(spans[1].endIndex).toBe(4); // Ásia dia 2 termina no índice 4 (candleAt(1,1), último do array)
+  });
+
+  it('overlap real (Nova York × Fechamento de Londres): cada span concorrente tem seu PRÓPRIO endIndex real, nunca compartilhado', () => {
+    const candles = [candleAt(12), candleAt(13), candleAt(14), candleAt(15), candleAt(16)];
+    const spans = computeKillZoneSpans(candles);
+    const ny = spans.find((s) => s.id === 'NOVA_YORK');
+    const lc = spans.find((s) => s.id === 'LONDRES_CLOSE');
+    expect(ny?.endIndex).toBe(2); // candleAt(14) é o índice 2 — último candle real com NY ativa.
+    expect(lc?.endIndex).toBe(3); // candleAt(15) é o índice 3 — último candle real com o fechamento de Londres ativo.
+  });
 });

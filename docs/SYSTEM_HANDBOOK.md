@@ -4778,6 +4778,95 @@ erro JS novo (mesmo único erro pré-existente do WebSocket bloqueado).
 Geometria da faixa em si não verificável visualmente neste sandbox
 (zero rede real à Binance, mesma limitação de sempre).
 
+### 6.63 BUG CRÍTICO confirmado por captura de tela real: Sweep/Kill Zones
+acumulavam sem decaimento por idade — causa raiz + correção + auditoria
+completa das demais camadas
+
+O Operador enviou uma captura de tela REAL do app rodando (ZECUSDT 1H) —
+não uma referência conceitual como as anteriores. A imagem mostra ~20
+rótulos "⚡ SWEEP"/"⚡ SWEEP ZONE" empilhados cobrindo TODO o lado esquerdo
+do gráfico, além de múltiplas listras verticais âmbar finas atravessando
+toda a largura. Diretiva formal complementar ("V3.0") confirmou o pedido
+com um horizonte numérico preciso: 0-50 candles = prioridade máxima,
+50-100 = média, 100-200 = transparência reduzida, >200 = ocultar
+automático — mesmo espírito, gradual, "sem desaparecer de forma brusca",
+já implementado pelo utilitário real `annotation-decay.ts::ageAlpha`
+(usado por BOS/CHOCH via `BREAK_DECAY` desde uma rodada anterior).
+
+**Causa raiz real, confirmada no código-fonte (não suposição)**:
+`swept` em `LiquidityZone` (engine-bridge.ts) é uma flag PERMANENTE — uma
+vez que um pool EQH/EQL é varrido, ele nunca "desvarre". `trap-detection.ts`
+agregava TODO nível já varrido na história inteira carregada
+(potencialmente semanas) em `sweptPrices`, sem nenhum filtro por idade —
+`clusterSweptPrices` (Task #104) já agrupava preços PRÓXIMOS
+corretamente, mas nunca removia preços VELHOS. O mesmo padrão existia,
+de forma independente, em `KillZoneBandsPlugin.tsx`: o loop de spans
+desenhava TODA ocorrência de Kill Zone (recorrem diariamente) sem cap
+nenhum — confirmado por leitura direta do `draw()`, não assumido.
+
+**Solução aplicada — raiz, não paliativo**:
+- `LiquidityZone`/`clusterEqualLevels` (fvg-order-block-engine.js) JÁ
+  computavam `index` real (posição do candle) — só nunca era exposto na
+  interface TS estreita de `TrapInputs.liquidityZones`. Corrigido: o tipo
+  agora inclui `index: number` (o dado real já fluía em runtime via
+  structural typing — TypeScript só não o "via").
+- `TrapSignal.sweptPrices: number[]` → `sweptLevels: { price: number;
+  index: number }[]` (`TRAP_CONTRACT_VERSION` 2→3, breaking change
+  interno documentado). `clusterSweptPrices` ganha `latestIndex` por
+  cluster — o MAIOR índice entre os membros (evidência mais recente do
+  grupo, nunca uma média — mesmo princípio de "âncora fixa" já usado
+  pela clusterização em si).
+- `EnhancedChart_110_Percent.tsx`: novo `SWEEP_DECAY = { fadeStartCandles:
+  50, expireCandles: 200, minAlpha: 0.12 }` — horizonte MAIOR que
+  `BREAK_DECAY` (100) de propósito: Sweep é referência de S/R que
+  continua útil por mais tempo que uma anotação de estrutura recém-
+  rompida. Aplicado tanto na price line nativa (cor agora um template
+  dinâmico `rgba(255,140,0,${alpha*0.85})`) quanto em `priceAxisLabels`
+  (novo campo `alpha` no objeto, cluster expirado nunca entra no `out[]`).
+- `computeKillZoneSpans` (nexus/kill-zones.ts) ganha `endIndex: number`
+  real (índice do último candle de cada ocorrência). `KillZoneBandsPlugin.tsx`
+  ganha `KILL_ZONE_DECAY` (mesmos valores 50/200/0.12 — nenhuma evidência
+  de um horizonte diferente ser necessário especificamente aqui) e as 3
+  cores (fill/border/label) viram templates dinâmicos multiplicados pelo
+  alpha real da idade.
+
+**Auditoria honesta das DEMAIS camadas** (o Operador pediu explicitamente
+"sem faltar nada" — verificado por leitura de código, não assumido):
+| Camada | Bound real | Onde |
+|---|---|---|
+| BOS/CHOCH | `ageAlpha`/`BREAK_DECAY` | já existia (rodada anterior) |
+| Liquidity Sweep | `ageAlpha`/`SWEEP_DECAY` | **corrigido agora** |
+| Kill Zones | `ageAlpha`/`KILL_ZONE_DECAY` | **corrigido agora** |
+| FVG/Order Blocks | `.filter((z,i) => i<3 \|\| isRealObstacle(z))` | já existia (App.tsx:6832-6833) |
+| EQH/EQL | `.slice(0,4)` | já existia (App.tsx:6834) |
+| Session Key Levels | `MAX_KEY_LEVELS_SHOWN=5` | já existia (§6.57) |
+| Market Sessions | recortado pelo range de tempo VISÍVEL (`timeToCoordinate` retorna null fora da tela) + faixa fina por design (§6.60/§6.62) — categoria diferente (contexto de "o que aconteceu na janela que você está olhando", não "evento antigo que devia sumir") | sem mudança necessária |
+
+Todos os itens citados nominalmente na diretiva ("Liquidity Sweep antigo,
+FVG antigo, BOS antigo, CHOCH antigo, Session antiga, Marcações antigas")
+confirmados cobertos. "Ordem histórica" da diretiva não se aplica —
+AR10 é READ_ONLY, nunca guarda histórico de ordens reais.
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 2025 testes** (100%,
++10 novos: 8 testes hand-verified para `clusterSweptPrices` com
+`latestIndex` real — incluindo um caso adversarial onde o preço mais
+alto do cluster NÃO é o de índice mais recente —, 3 para `endIndex` real
+de `computeKillZoneSpans` incluindo overlap concorrente; mais os
+pinned-strings de 3 arquivos de teste reescritos pra refletir a
+migração `sweptPrices`→`sweptLevels` e as cores dinâmicas) · build de
+produção ok.
+
+**Riscos conhecidos**: nenhum de decisão (LEI 24 intacta — mudança
+puramente de decaimento visual); geometria/timing do decaimento em si
+não verificável ao vivo neste sandbox (zero rede real à Binance).
+
+**Escopo honesto**: o horizonte de Kill Zones (50/200/0.12, idêntico ao
+de Sweep) foi uma decisão sem evidência numérica própria — reaproveitar
+em vez de inventar um número novo sem justificativa. Se o Operador notar
+que Kill Zones ainda acumula demais dentro da janela de 200 candles
+(recorre com mais frequência que Sweep), esse horizonte específico é
+candidato a ajuste numérico isolado, não uma nova arquitetura.
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

@@ -721,9 +721,16 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     // condicional por cluster (clusterSweptPrices, trap-detection.ts) —
     // 1 evento isolado mantém o texto simples, 2+ eventos próximos viram
     // "SWEEP ZONE (Nx)".
-    expect(sweepBlock).toContain('for (const cluster of clusterSweptPrices(uniquePrices, LIQUIDITY_PROXIMITY_PCT)) {');
+    expect(sweepBlock).toContain('for (const cluster of clusterSweptPrices(uniqueLevels, LIQUIDITY_PROXIMITY_PCT)) {');
     expect(sweepBlock).toContain('`⚡ SWEEP ${arrow} ${confidencePct}%`');
     expect(sweepBlock).toContain('`⚡ SWEEP ZONE ${arrow} (${cluster.count}x) ${confidencePct}%`');
+    // Achado real de captura de tela (dezenas de rótulos empilhados,
+    // decaimento por idade adicionado): cluster expirado nunca entra no
+    // eixo, mesmo SWEEP_DECAY/ageAlpha real usado pela price line nativa.
+    expect(sweepBlock).toContain('const age = data.length - 1 - cluster.latestIndex;');
+    expect(sweepBlock).toContain('const alpha = ageAlpha(age, SWEEP_DECAY);');
+    expect(sweepBlock).toContain('if (alpha <= 0) continue;');
+    expect(sweepBlock).toContain('alpha,');
 
     const keyLevelIdx = c.indexOf('if (visibility.session_key_levels && currentSessionKeyLevel) {', idx);
     const keyLevelBlock = c.slice(keyLevelIdx, c.indexOf('return out;', idx));

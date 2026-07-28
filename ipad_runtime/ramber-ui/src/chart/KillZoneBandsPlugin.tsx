@@ -17,14 +17,31 @@
 // ferramenta, nunca introduz um tom novo na paleta (achado direto da
 // auditoria de consolidação de cores, DIRETRIZES AVANÇADAS §4/§6.53).
 //
+// Decaimento por idade (achado real de captura de tela do Operador —
+// mesma causa raiz de trap-detection.ts v3: sem decaimento, TODA
+// ocorrência de Kill Zone na história inteira carregada ficava
+// permanente, empilhando janelas repetidas — recorrem diariamente, então
+// isto acumula rápido). computeKillZoneSpans agora expõe `endIndex` real
+// (nexus/kill-zones.ts) — mesmo utilitário/mesma curva de
+// annotation-decay.ts::ageAlpha já usado por BOS/CHOCH (BREAK_DECAY) e
+// Liquidity Sweep (SWEEP_DECAY, EnhancedChart_110_Percent.tsx) — zero
+// terceira técnica de decaimento inventada. Mesmo horizonte 50/200/0.12
+// pedido pelo Operador pra "marcações antigas" em geral (nenhuma
+// evidência de um número diferente ser necessário especificamente aqui).
+//
 // LEI 24: display only, puro contexto temporal — nunca uma decisão.
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeKillZoneSpans, type KillZoneSpan } from "../nexus/kill-zones";
+import { ageAlpha, type DecayConfig } from "./annotation-decay";
 
-const FILL_COLOR = "rgba(255, 176, 32, 0.06)";
-const BORDER_COLOR = "rgba(255, 176, 32, 0.22)";
-const LABEL_COLOR = "rgba(255, 176, 32, 0.65)";
+export const KILL_ZONE_DECAY: DecayConfig = { fadeStartCandles: 50, expireCandles: 200, minAlpha: 0.12 };
+
+// Alphas BASE (na frescura máxima) — multiplicados pelo decaimento real
+// por idade a cada desenho, nunca uma rgba fixa.
+const FILL_ALPHA = 0.06;
+const BORDER_ALPHA = 0.22;
+const LABEL_ALPHA = 0.65;
 const MIN_LABEL_WIDTH_PX = 40; // abaixo disto, o rótulo não cabe — a caixa ainda desenha, só o texto pula.
 
 interface KillZoneBandsPluginProps {
@@ -94,7 +111,12 @@ export function KillZoneBandsPlugin({ chart, series, data }: KillZoneBandsPlugin
       ctx.font = "9px -apple-system, sans-serif";
       ctx.textBaseline = "top";
 
+      const totalCandles = dataRef.current.length;
       for (const span of spans) {
+        const age = totalCandles - 1 - span.endIndex;
+        const alpha = ageAlpha(age, KILL_ZONE_DECAY);
+        if (alpha <= 0) continue; // expirado (>200 candles) — some da TELA, mesma honestidade de "esquecido" de BOS/CHOCH/Sweep.
+
         const x1 = timeScale.timeToCoordinate(span.startTime as unknown as Time);
         const x2 = timeScale.timeToCoordinate(span.endTime as unknown as Time);
         if (x1 === null || x2 === null) continue; // fora da área visível agora — Fail-Closed: nunca extrapola.
@@ -105,12 +127,12 @@ export function KillZoneBandsPlugin({ chart, series, data }: KillZoneBandsPlugin
         const clippedWidth = Math.min(rectX + rectWidth, cssWidth) - clippedX;
         if (clippedWidth <= 0) continue;
 
-        ctx.fillStyle = FILL_COLOR;
+        ctx.fillStyle = `rgba(255, 176, 32, ${(alpha * FILL_ALPHA).toFixed(3)})`;
         ctx.fillRect(clippedX, 0, clippedWidth, cssHeight);
         // Fio de Seda (Regra de Ouro 5): 1px sólida real nas bordas
         // verticais da janela, nunca setLineDash.
         ctx.lineWidth = 1;
-        ctx.strokeStyle = BORDER_COLOR;
+        ctx.strokeStyle = `rgba(255, 176, 32, ${(alpha * BORDER_ALPHA).toFixed(3)})`;
         ctx.beginPath();
         ctx.moveTo(Math.round(rectX) + 0.5, 0);
         ctx.lineTo(Math.round(rectX) + 0.5, cssHeight);
@@ -119,7 +141,7 @@ export function KillZoneBandsPlugin({ chart, series, data }: KillZoneBandsPlugin
         ctx.stroke();
 
         if (clippedWidth >= MIN_LABEL_WIDTH_PX) {
-          ctx.fillStyle = LABEL_COLOR;
+          ctx.fillStyle = `rgba(255, 176, 32, ${(alpha * LABEL_ALPHA).toFixed(3)})`;
           ctx.fillText(span.label.toUpperCase(), clippedX + 3, 3);
         }
       }

@@ -161,7 +161,7 @@ describe('OrganismOrchestrator: escrita na store É a publicação — um write 
     const received: unknown[] = [];
     bus.on('BRAIN.TRAPS.UPDATED', (p) => received.push(p.traps));
     const traps = detectInstitutionalTraps({
-      liquidityZones: [{ type: 'EQUAL_HIGH', price: 51_000, swept: true }],
+      liquidityZones: [{ type: 'EQUAL_HIGH', price: 51_000, index: 10, swept: true }],
       orderflowSignals: [],
       now: Date.now(),
     });

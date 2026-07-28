@@ -28,16 +28,35 @@
 // absorção"): auditoria da Etapa 1 encontrou a detecção real (abaixo) sem
 // NENHUMA marca própria no gráfico — a zona EQH/EQL some da tela no
 // instante em que é varrida (filtro !swept, EnhancedChart_110_Percent),
-// sem deixar rastro do momento do sweep. `sweptPrices` expõe o preço
-// real que sweptEqh/sweptEql já tinham EM ESCOPO aqui dentro (zero
-// recálculo, zero parsing das strings de `evidence`) para o canvas
-// desenhar uma price line no preço exato.
-export const TRAP_CONTRACT_VERSION = 2 as const;
+// sem deixar rastro do momento do sweep. `sweptLevels` expõe o preço E O
+// ÍNDICE DE CANDLE reais que sweptEqh/sweptEql já tinham EM ESCOPO aqui
+// dentro (zero recálculo, zero parsing das strings de `evidence`) para o
+// canvas desenhar uma price line no preço exato.
+//
+// v3 (achado real de captura de tela do Operador — dezenas de rótulos
+// "SWEEP" empilhados cobrindo o gráfico inteiro): a causa raiz NUNCA foi
+// a clusterização por preço (v2/clusterSweptPrices abaixo já resolvia
+// isso) — era que `swept` em LiquidityZone (engine-bridge.ts) é uma flag
+// PERMANENTE: uma vez varrida, a zona nunca "desvarre". Sem decaimento
+// por IDADE, TODA zona já varrida na história inteira carregada
+// (potencialmente semanas) virava um rótulo permanente. `index` (já
+// real, já calculado por clusterEqualLevels em fvg-order-block-engine.js,
+// só nunca lido aqui) agora é exposto em `sweptLevels` — o consumidor
+// real (EnhancedChart_110_Percent.tsx) usa `chartData.length-1-index`
+// exatamente como já faz para BOS/CHOCH (annotation-decay.ts::ageAlpha)
+// para esmaecer e eventualmente ocultar sweeps antigos, mesma disciplina
+// já provada, nunca uma segunda técnica de decaimento inventada.
+export const TRAP_CONTRACT_VERSION = 3 as const;
 
 export type TrapKind =
   | "STOP_HUNT_TOPO" // EQH varrido (liquidez compradora tomada acima)
   | "STOP_HUNT_FUNDO" // EQL varrido (liquidez vendedora tomada abaixo)
   | "ABSORCAO_ANOMALA";
+
+export interface SweptLevel {
+  price: number;
+  index: number; // índice real do candle em que este pool foi detectado (fvg-order-block-engine.js::clusterEqualLevels) — base real do decaimento por idade no canvas.
+}
 
 export interface TrapSignal {
   contractVersion: typeof TRAP_CONTRACT_VERSION;
@@ -45,14 +64,14 @@ export interface TrapSignal {
   confidence: number; // escada real de corroboração (documentada acima), 0..1
   evidence: string[]; // eventos reais citados
   at: number;
-  // v2: preço(s) real(is) varrido(s) — só populado em STOP_HUNT_TOPO/FUNDO
-  // (o preço exato do pool EQH/EQL que motivou este sinal); [] em
-  // ABSORCAO_ANOMALA, que não tem um preço-âncora único real.
-  sweptPrices: number[];
+  // v2/v3: nível(is) real(is) varrido(s) — só populado em STOP_HUNT_TOPO/
+  // FUNDO (o preço + índice exatos do pool EQH/EQL que motivou este
+  // sinal); [] em ABSORCAO_ANOMALA, que não tem um preço-âncora único real.
+  sweptLevels: SweptLevel[];
 }
 
 export interface TrapInputs {
-  liquidityZones: Array<{ type: "EQUAL_HIGH" | "EQUAL_LOW"; price: number; swept: boolean }>;
+  liquidityZones: Array<{ type: "EQUAL_HIGH" | "EQUAL_LOW"; price: number; index: number; swept: boolean }>;
   orderflowSignals: Array<{ type: string; timestamp?: number; confidence?: number }>;
   now: number;
   // Janela real de corroboração: 3 ciclos do poller de order flow (4s) +
@@ -91,7 +110,7 @@ export function detectInstitutionalTraps(inputs: TrapInputs): TrapSignal[] {
         ...corroborationEvidence,
       ],
       at: inputs.now,
-      sweptPrices: sweptEqh.map((z) => z.price),
+      sweptLevels: sweptEqh.map((z) => ({ price: z.price, index: z.index })),
     });
   }
   if (sweptEql.length > 0) {
@@ -104,7 +123,7 @@ export function detectInstitutionalTraps(inputs: TrapInputs): TrapSignal[] {
         ...corroborationEvidence,
       ],
       at: inputs.now,
-      sweptPrices: sweptEql.map((z) => z.price),
+      sweptLevels: sweptEql.map((z) => ({ price: z.price, index: z.index })),
     });
   }
 
@@ -116,7 +135,7 @@ export function detectInstitutionalTraps(inputs: TrapInputs): TrapSignal[] {
       confidence: Math.min(1, absorptions.length / 3),
       evidence: [`${absorptions.length} sinais reais de ABSORPTION na janela de ${Math.round(windowMs / 1000)}s`],
       at: inputs.now,
-      sweptPrices: [],
+      sweptLevels: [],
     });
   }
 
@@ -135,32 +154,44 @@ export function detectInstitutionalTraps(inputs: TrapInputs): TrapSignal[] {
 // porque ramber-ui e o engine .js legado vivem em pacotes/runtimes
 // diferentes (nunca um import cross-package). Puro: zero rede/estado,
 // testável por execução real.
+//
+// v2 (achado real de captura de tela — decaimento por idade): cada
+// cluster agora carrega `latestIndex` (o MAIOR índice real entre seus
+// membros — a evidência mais recente do grupo, nunca uma média, pelo
+// mesmo motivo de "âncora fixa" documentado acima: um membro velho
+// misturado com um recente não deveria "diluir" a idade real do grupo
+// pra mais antiga). O caller decide o alpha real via
+// annotation-decay.ts::ageAlpha(chartData.length-1-latestIndex, config).
 export interface SweptPriceCluster {
   avgPrice: number;
   count: number;
+  latestIndex: number;
 }
 
-export function clusterSweptPrices(prices: number[], proximityPct: number): SweptPriceCluster[] {
-  const sorted = prices.filter((p) => Number.isFinite(p)).sort((a, b) => a - b);
+export function clusterSweptPrices(levels: { price: number; index: number }[], proximityPct: number): SweptPriceCluster[] {
+  const sorted = levels
+    .filter((l) => Number.isFinite(l.price) && Number.isFinite(l.index))
+    .sort((a, b) => a.price - b.price);
   const clusters: SweptPriceCluster[] = [];
-  let current: number[] = [];
+  let current: { price: number; index: number }[] = [];
   const flush = () => {
     if (current.length === 0) return;
-    const avgPrice = current.reduce((sum, p) => sum + p, 0) / current.length;
-    clusters.push({ avgPrice, count: current.length });
+    const avgPrice = current.reduce((sum, l) => sum + l.price, 0) / current.length;
+    const latestIndex = Math.max(...current.map((l) => l.index));
+    clusters.push({ avgPrice, count: current.length, latestIndex });
   };
-  for (const price of sorted) {
+  for (const level of sorted) {
     if (current.length === 0) {
-      current.push(price);
+      current.push(level);
       continue;
     }
-    const anchor = current[0];
-    const closeEnough = anchor !== 0 && (Math.abs(price - anchor) * 100) / anchor <= proximityPct;
+    const anchor = current[0].price;
+    const closeEnough = anchor !== 0 && (Math.abs(level.price - anchor) * 100) / anchor <= proximityPct;
     if (closeEnough) {
-      current.push(price);
+      current.push(level);
     } else {
       flush();
-      current = [price];
+      current = [level];
     }
   }
   flush();

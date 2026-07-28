@@ -669,7 +669,9 @@ describe('Evolução do Organismo (Fase 2, "menor cálculos duplicados"): cache 
 describe('Achado real do Operador ("linha amarela que eu não sei o que significa" + "etiquetas não podem ficar em cima do valor do ativo"): Liquidity Sweep migra pro eixo anti-colisão, Session Key Levels perde o rótulo flutuante', () => {
   it('Liquidity Sweep: title nativo da price line fica vazio (nunca teve efeito visual real com axisLabelVisible:false — o texto real agora vive em priceAxisLabels, um rótulo de verdade onde antes não havia nenhum)', () => {
     const c = chart();
-    const idx = c.indexOf('color: "rgba(255, 140, 0, 0.85)",');
+    // v3 (decaimento por idade): a cor nativa virou template dinâmico
+    // (alpha real multiplicado no desenho), não mais uma string fixa.
+    const idx = c.indexOf('color: `rgba(255, 140, 0, ${(alpha * 0.85).toFixed(3)})`,');
     expect(idx, 'price line de Liquidity Sweep não encontrada').toBeGreaterThan(-1);
     const block = c.slice(idx, idx + 1300);
     expect(block).toContain('title: "",');
@@ -680,15 +682,19 @@ describe('Achado real do Operador ("linha amarela que eu não sei o que signific
     const c = chart();
     const idx = c.indexOf('if (visibility.liquidity_sweep) {', c.indexOf('const priceAxisLabels = useMemo'));
     expect(idx, 'bloco de Sweep em priceAxisLabels não encontrado').toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 1100);
+    const block = c.slice(idx, idx + 1300);
     expect(block).toContain('const seenSweepPrices = new Set<number>();');
     // Lapidação institucional ("agrupar SWEEPs próximos"): clusterSweptPrices
     // (trap-detection.ts) substitui o loop plano por preço — 1 evento isolado
     // mantém o texto simples, 2+ eventos próximos viram "SWEEP ZONE (Nx)".
-    expect(block).toContain('for (const cluster of clusterSweptPrices(uniquePrices, LIQUIDITY_PROXIMITY_PCT)) {');
+    expect(block).toContain('for (const cluster of clusterSweptPrices(uniqueLevels, LIQUIDITY_PROXIMITY_PCT)) {');
     expect(block).toContain('`⚡ SWEEP ${arrow} ${confidencePct}%`');
     expect(block).toContain('`⚡ SWEEP ZONE ${arrow} (${cluster.count}x) ${confidencePct}%`');
     expect(block).toContain('side: "left",');
+    // Achado real de captura de tela (decaimento por idade): cluster
+    // expirado (>200 candles) nunca entra no eixo.
+    expect(block).toContain('const alpha = ageAlpha(age, SWEEP_DECAY);');
+    expect(block).toContain('if (alpha <= 0) continue;');
   });
 
   it('Session Key Levels: currentSessionKeyLevel (useMemo puro, sempre a última ocorrência real) alimenta 2 entradas no eixo (High/Low), side:"left"', () => {
@@ -718,10 +724,10 @@ describe('Achado real do Operador ("linha amarela que eu não sei o que signific
 });
 
 describe('Lapidação institucional (diretiva com imagem de referência): Liquidity Sweep vs. pico do Liquidation Heatmap deixam de compartilhar praticamente o mesmo tom (H45 vs H47, mesma L/S/alpha — imperceptível a olho)', () => {
-  it('Liquidity Sweep (price line + priceAxisLabels): rgba(255, 140, 0, 0.85) — laranja, nas 2 ocorrências', () => {
+  it('Liquidity Sweep (price line + priceAxisLabels): laranja H33 nas 2 ocorrências reais — priceAxisLabels mantém a cor base fixa (0.85), a price line nativa virou template dinâmico (decaimento por idade, v3)', () => {
     const c = chart();
-    const occurrences = c.split('rgba(255, 140, 0, 0.85)').length - 1;
-    expect(occurrences).toBe(2);
+    expect(c).toContain('color: "rgba(255, 140, 0, 0.85)", // mesmo tom laranja da price line');
+    expect(c).toContain('color: `rgba(255, 140, 0, ${(alpha * 0.85).toFixed(3)})`,');
     expect(c).not.toContain('rgba(255, 191, 0');
   });
 
@@ -731,11 +737,14 @@ describe('Lapidação institucional (diretiva com imagem de referência): Liquid
     expect(plugin).not.toContain('rgba(255, 200, 0');
   });
 
-  it('Kill Zones NÃO entra nesta diferenciação (banda de fundo, geometria/alpha diferentes — sem colisão real)', () => {
+  it('Kill Zones NÃO entra nesta diferenciação (banda de fundo, geometria/alpha diferentes — sem colisão real). v3: cores viraram templates dinâmicos com decaimento por idade, mas o TOM âmbar (255,176,32) e os 3 alphas base (0.06/0.22/0.65) seguem os mesmos.', () => {
     const killZones = read('../src/chart/KillZoneBandsPlugin.tsx');
-    expect(killZones).toContain('rgba(255, 176, 32, 0.06)');
-    expect(killZones).toContain('rgba(255, 176, 32, 0.22)');
-    expect(killZones).toContain('rgba(255, 176, 32, 0.65)');
+    expect(killZones).toContain('const FILL_ALPHA = 0.06;');
+    expect(killZones).toContain('const BORDER_ALPHA = 0.22;');
+    expect(killZones).toContain('const LABEL_ALPHA = 0.65;');
+    expect(killZones).toContain('rgba(255, 176, 32, ${(alpha * FILL_ALPHA).toFixed(3)})');
+    expect(killZones).toContain('rgba(255, 176, 32, ${(alpha * BORDER_ALPHA).toFixed(3)})');
+    expect(killZones).toContain('rgba(255, 176, 32, ${(alpha * LABEL_ALPHA).toFixed(3)})');
   });
 });
 

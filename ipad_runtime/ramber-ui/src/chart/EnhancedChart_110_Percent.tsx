@@ -42,7 +42,20 @@ import { LiquidityZonesPlugin, type FillableZone } from "./LiquidityZonesPlugin"
 // a caixa "EMA 21") — o TEXTO migrou para priceAxisLabels abaixo, reusando
 // a MESMA config de decaimento do plugin (zero segunda curva).
 import { StructureBreakMarkersPlugin, BREAK_DECAY } from "./StructureBreakMarkersPlugin";
-import { ageAlpha } from "./annotation-decay";
+import { ageAlpha, type DecayConfig } from "./annotation-decay";
+// Achado real de captura de tela do Operador (dezenas de rótulos "SWEEP"
+// empilhados — swept é uma flag permanente em LiquidityZone, sem
+// decaimento por idade nenhum evento nunca "sumia"). Diretiva formal
+// confirmou o horizonte real pedido: 0-50 candles prioridade máxima,
+// 50-100 média, 100-200 transparência reduzida, >200 ocultar automático —
+// mapeado no MESMO utilitário contínuo já real (annotation-decay.ts::
+// ageAlpha) que BOS/CHOCH usa via BREAK_DECAY: fadeStartCandles=50 (fim
+// da "prioridade máxima"), expireCandles=200 (o teto pedido), minAlpha
+// baixo o bastante pra ficar quase invisível pouco antes de sumir de
+// vez. Horizonte maior que BREAK_DECAY (100) de propósito — Sweep é
+// referência de S/R que continua útil por mais tempo que uma anotação
+// de estrutura recém-rompida.
+const SWEEP_DECAY: DecayConfig = { fadeStartCandles: 50, expireCandles: 200, minAlpha: 0.12 };
 import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
 // V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
 // barras à direita — dado direto da store (Fase 1.3), ver header do plugin.
@@ -1073,8 +1086,20 @@ export function EnhancedChart_110_Percent({
   // simplesmente some do bloco acima (filtro !swept) sem deixar rastro do
   // momento do sweep — mesmo mecanismo de price line, cor âmbar própria
   // (nunca usada por EQH/EQL roxo nem OB/FVG verde/vermelho), preço real
-  // de TrapSignal.sweptPrices (zero recálculo, mesmo dado que a zona já
+  // de TrapSignal.sweptLevels (zero recálculo, mesmo dado que a zona já
   // tinha antes de sumir).
+  //
+  // v3 (achado real de captura de tela do Operador — dezenas de rótulos
+  // "SWEEP" empilhados cobrindo o gráfico inteiro): `swept` em
+  // LiquidityZone é uma flag PERMANENTE — sem decaimento por idade, todo
+  // sweep da história inteira carregada virava um rótulo pra sempre.
+  // Mesma disciplina JÁ REAL de BOS/CHOCH (annotation-decay.ts::ageAlpha
+  // + BREAK_DECAY, ver useMemo de priceAxisLabels abaixo) — zero segunda
+  // técnica de decaimento inventada, só um SWEEP_DECAY próprio porque o
+  // Operador pediu um horizonte maior pra Sweep (~200 candles) do que
+  // BOS/CHOCH já usa (100 candles — evento estrutural mais rápido de
+  // ficar obsoleto). `data.length` entra nas deps porque a IDADE muda a
+  // cada candle novo, não só quando `traps` muda.
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
@@ -1084,7 +1109,10 @@ export function EnhancedChart_110_Percent({
 
     (traps ?? []).forEach((t) => {
       if (t.kind !== "STOP_HUNT_TOPO" && t.kind !== "STOP_HUNT_FUNDO") return;
-      t.sweptPrices.forEach((price) => {
+      t.sweptLevels.forEach(({ price, index }) => {
+        const age = data.length - 1 - index;
+        const alpha = ageAlpha(age, SWEEP_DECAY);
+        if (alpha <= 0) return; // expirado (>200 candles) — some da TELA, dado real intacto em trap-detection.ts.
         sweepLinesRef.current.push(
           series.createPriceLine({
             price,
@@ -1094,8 +1122,10 @@ export function EnhancedChart_110_Percent({
             // matiz = mesma cor a olho nu. Sweep fica no lado mais laranja
             // (evento pontual já ocorrido), heatmap no lado mais amarelo
             // (pico ao vivo, recalculado a cada tick) — mesma dupla,
-            // diferenciação real (ver comentário completo lá).
-            color: "rgba(255, 140, 0, 0.85)",
+            // diferenciação real (ver comentário completo lá). Alpha final
+            // multiplicado pelo decaimento real por idade (0.85 é o teto
+            // na freshest, nunca um valor fixo).
+            color: `rgba(255, 140, 0, ${(alpha * 0.85).toFixed(3)})`,
             lineWidth: 1,
             lineStyle: LineStyle.Solid,
             axisLabelVisible: false,
@@ -1118,7 +1148,7 @@ export function EnhancedChart_110_Percent({
         );
       });
     });
-  }, [traps, visibility.liquidity_sweep]);
+  }, [traps, visibility.liquidity_sweep, data.length]);
 
   // V-MAX Fase 1 (fechamento do §3.1): alimenta a série de CVD com o
   // histórico REAL da store (mesmo orderflowHistory do heatmap — um dado,
@@ -2015,29 +2045,40 @@ export function EnhancedChart_110_Percent({
     // EQH/EQL por ancoragem fixa, mas zonas DISTINTAS (ex. 2 clusters de
     // EQH a 60pts de distância) continuam entradas separadas em
     // liquidityZones; se AMBAS forem varridas na mesma janela,
-    // t.sweptPrices carrega os dois preços próximos, e cada um virava um
+    // t.sweptLevels carrega os dois níveis próximos, e cada um virava um
     // rótulo próprio aqui. clusterSweptPrices (trap-detection.ts) faz o
     // agrupamento real (mesmo idioma de âncora fixa, mesmo limiar já real
     // de "o que conta como perto" nesta família de dado —
     // LIQUIDITY_PROXIMITY_PCT, já usado por unsweptLiquidityNearPrice/
     // hasSessionKeyLevelNearPrice em App.tsx) — zero limiar novo inventado.
+    //
+    // v3 (achado real de captura de tela — decaimento por idade): cada
+    // cluster carrega `latestIndex` real (a evidência mais recente do
+    // grupo); alpha vem do MESMO SWEEP_DECAY/ageAlpha real que a price
+    // line nativa usa acima — zero segunda curva de decaimento. Clusters
+    // expirados (alpha<=0) nunca entram no eixo, mesma honestidade de
+    // "esquecido" já aplicada a BOS/CHOCH.
     if (visibility.liquidity_sweep) {
       const seenSweepPrices = new Set<number>();
       for (const t of traps ?? []) {
         if (t.kind !== "STOP_HUNT_TOPO" && t.kind !== "STOP_HUNT_FUNDO") continue;
-        const uniquePrices = t.sweptPrices.filter((p) => Number.isFinite(p) && !seenSweepPrices.has(p));
-        uniquePrices.forEach((p) => seenSweepPrices.add(p));
+        const uniqueLevels = t.sweptLevels.filter((l) => Number.isFinite(l.price) && !seenSweepPrices.has(l.price));
+        uniqueLevels.forEach((l) => seenSweepPrices.add(l.price));
 
         const arrow = t.kind === "STOP_HUNT_TOPO" ? "↑" : "↓";
         const confidencePct = Math.round(t.confidence * 100);
-        for (const cluster of clusterSweptPrices(uniquePrices, LIQUIDITY_PROXIMITY_PCT)) {
+        for (const cluster of clusterSweptPrices(uniqueLevels, LIQUIDITY_PROXIMITY_PCT)) {
+          const age = data.length - 1 - cluster.latestIndex;
+          const alpha = ageAlpha(age, SWEEP_DECAY);
+          if (alpha <= 0) continue; // expirado (>200 candles) — mesma honestidade de "esquecido" de BOS/CHOCH.
           out.push({
             price: cluster.avgPrice,
             text:
               cluster.count === 1
                 ? `⚡ SWEEP ${arrow} ${confidencePct}%`
                 : `⚡ SWEEP ZONE ${arrow} (${cluster.count}x) ${confidencePct}%`,
-            color: "rgba(255, 140, 0, 0.85)", // mesmo tom laranja da price line (ver comentário no efeito acima)
+            color: "rgba(255, 140, 0, 0.85)", // mesmo tom laranja da price line (ver comentário no efeito acima) — alpha real abaixo controla a opacidade final.
+            alpha,
             side: "left",
           });
         }

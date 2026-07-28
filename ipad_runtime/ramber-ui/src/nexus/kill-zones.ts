@@ -107,13 +107,21 @@ export interface KillZoneSpan {
   label: string;
   startTime: number; // candle.time real do primeiro candle desta ocorrência
   endTime: number; // candle.time real do ÚLTIMO candle desta ocorrência (inclusive)
+  // Achado real de captura de tela (mesma causa raiz de trap-detection.ts
+  // v3): sem índice de candle, o canvas não tinha como decair por idade —
+  // toda ocorrência da história inteira carregada ficava permanente.
+  // endIndex é o índice real (posição no array `candles`) do ÚLTIMO
+  // candle desta ocorrência — mesma base de annotation-decay.ts::ageAlpha
+  // já usada por BOS/CHOCH.
+  endIndex: number;
 }
 
 export function computeKillZoneSpans(candles: { time: number }[]): KillZoneSpan[] {
   const spans: KillZoneSpan[] = [];
-  const open = new Map<KillZoneId, { label: string; startTime: number; lastTime: number }>();
+  const open = new Map<KillZoneId, { label: string; startTime: number; lastTime: number; lastIndex: number }>();
 
-  for (const c of candles) {
+  for (let i = 0; i < candles.length; i++) {
+    const c = candles[i];
     const reading = activeKillZones(new Date(c.time * 1000));
     if (!reading) continue; // Date inválida — fail-closed, pula honesto (mesma regra de activeKillZones).
     const activeIds = new Set(reading.active.map((z) => z.id));
@@ -121,20 +129,24 @@ export function computeKillZoneSpans(candles: { time: number }[]): KillZoneSpan[
     // Fecha qualquer span aberto cuja zona não está mais ativa neste candle.
     for (const [id, o] of open) {
       if (!activeIds.has(id)) {
-        spans.push({ id, label: o.label, startTime: o.startTime, endTime: o.lastTime });
+        spans.push({ id, label: o.label, startTime: o.startTime, endTime: o.lastTime, endIndex: o.lastIndex });
         open.delete(id);
       }
     }
     // Abre (ou estende) cada zona real ativa agora.
     for (const z of reading.active) {
       const o = open.get(z.id);
-      if (o) o.lastTime = c.time;
-      else open.set(z.id, { label: z.label, startTime: c.time, lastTime: c.time });
+      if (o) {
+        o.lastTime = c.time;
+        o.lastIndex = i;
+      } else {
+        open.set(z.id, { label: z.label, startTime: c.time, lastTime: c.time, lastIndex: i });
+      }
     }
   }
   // Fecha qualquer span que ainda seguia aberto no último candle real.
   for (const [id, o] of open) {
-    spans.push({ id, label: o.label, startTime: o.startTime, endTime: o.lastTime });
+    spans.push({ id, label: o.label, startTime: o.startTime, endTime: o.lastTime, endIndex: o.lastIndex });
   }
   return spans;
 }
