@@ -386,7 +386,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('priceAxisLabels recalcula a cada tick real de livePrice — nunca uma etiqueta de preço congelada', () => {
     const s = chart();
-    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak]);');
+    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel]);');
     expect(depsIdx, 'dependency array de priceAxisLabels não inclui livePrice').toBeGreaterThan(-1);
   });
 
@@ -588,7 +588,7 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
 
   it('engineFallbackLevels entra nas deps de priceAxisLabels — recalcula quando o Núcleo muda de leitura', () => {
     const s = chart();
-    expect(s).toContain('livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak]);');
+    expect(s).toContain('livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel]);');
   });
 
   it('overlay de texto do canto (tradePlanAbsenceReason) nunca fica auto-contraditório: quando as linhas do Núcleo estão visíveis, o texto deixa explícito que é só o plano do CONSELHO que falta — nunca "SEM TRADE PLAN" sozinho com linhas reais na tela', () => {
@@ -710,6 +710,20 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     expect(chocBlock).toContain('side: "left",');
   });
 
+  it('Liquidity Sweep/Session Key Levels (achado real: "linha amarela que eu não sei o que significa" + "etiquetas em cima do valor do ativo") também são contexto estrutural/histórico — side: "left"', () => {
+    const c = chart();
+    const idx = c.indexOf('const priceAxisLabels = useMemo');
+
+    const sweepIdx = c.indexOf('if (visibility.liquidity_sweep) {', idx);
+    const sweepBlock = c.slice(sweepIdx, c.indexOf('}', c.indexOf('side:', sweepIdx)) + 1);
+    expect(sweepBlock).toContain('side: "left",');
+    expect(sweepBlock).toContain('text: `⚡ SWEEP ${t.kind === "STOP_HUNT_TOPO" ? "↑" : "↓"} ${Math.round(t.confidence * 100)}%`,');
+
+    const keyLevelIdx = c.indexOf('if (visibility.session_key_levels && currentSessionKeyLevel) {', idx);
+    const keyLevelBlock = c.slice(keyLevelIdx, c.indexOf('return out;', idx));
+    expect((keyLevelBlock.match(/side: "left",/g) ?? []).length).toBe(2); // high + low
+  });
+
   it('VWAP/NL/EMA/último preço/ENTRY/STOP/TARGET (acionável agora — referência dinâmica ou plano ativo) NUNCA declaram side — ficam no default "right"', () => {
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
@@ -721,12 +735,12 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     expect(block).toContain('out.push({ price: emaLastValue, text: `EMA ${activeEmaPeriod} ${emaLastValue.toFixed(2)}`, color: "rgba(66, 165, 245, 0.85)" });');
   });
 
-  it('resultado real esperado: até 4 rótulos possíveis do lado esquerdo (S1/R1/TREND/CHOC), até 8 do lado direito (VWAP/NL/EMA + até 5 do plano ativo Conselho OU Núcleo) — redução real de densidade no lado que o Operador reportou, não só estética', () => {
+  it('resultado real esperado: até 7 rótulos possíveis do lado esquerdo (S1/R1/TREND/CHOC/SWEEP/KEY-H/KEY-L), até 8 do lado direito (VWAP/NL/EMA + até 5 do plano ativo Conselho OU Núcleo) — redução real de densidade no lado que o Operador reportou, não só estética (Sweep/Key Levels somaram-se depois, achado real "linha amarela"/"etiqueta em cima do valor")', () => {
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
     const end = c.indexOf('return out;', idx);
     const block = c.slice(idx, end);
     const leftSideCount = (block.match(/side: "left",/g) ?? []).length;
-    expect(leftSideCount).toBe(4);
+    expect(leftSideCount).toBe(7);
   });
 });

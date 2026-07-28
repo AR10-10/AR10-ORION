@@ -29,6 +29,19 @@
 // CANDLES), nunca a história inteira carregada (isso empilharia dezenas de
 // linhas cruzando o gráfico inteiro em qualquer janela de vários dias).
 //
+// Achado real do Operador ("as etiquetas não podem ficar em cima do valor
+// do ativo"): a versão original desenhava um rótulo de texto flutuante
+// direto na coordenada Y do preço (o próprio high/low) — exatamente onde
+// um candle/pulso de preço tem mais chance real de estar, por definição
+// (um Key Level É o preço que a sessão tocou). Este canvas agora desenha
+// SÓ a linha real (nenhum texto flutuante) — a sessão CORRENTE (a mais
+// recente, ainda em andamento) ganha seu rótulo real no sistema
+// anti-colisão do eixo (EnhancedChart_110_Percent.tsx::priceAxisLabels,
+// currentSessionKeyLevel), nunca competindo com a área de candles. As
+// sessões já fechadas continuam como referência visual real (cor + linha),
+// sem rótulo próprio — mesma disciplina aplicada à Liquidity Sweep no
+// mesmo achado (o texto nativo saiu do meio do gráfico).
+//
 // LEI 24: display only, puro contexto estrutural — nunca uma decisão.
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
@@ -38,7 +51,6 @@ const HIGH_COLOR_OPEN = "rgba(255, 0, 85, 0.55)";
 const HIGH_COLOR_CLOSED = "rgba(255, 0, 85, 0.32)";
 const LOW_COLOR_OPEN = "rgba(0, 255, 170, 0.55)";
 const LOW_COLOR_CLOSED = "rgba(0, 255, 170, 0.32)";
-const LABEL_MIN_WIDTH_PX = 36; // abaixo disto, a linha ainda desenha — só o texto pula (mesmo espírito de KillZoneBandsPlugin).
 
 // Convenção declarada (mesmo espírito de MARKET_SESSION_RECENT_BOUNDARY_
 // CANDLES em layer-relevance.ts) — nunca uma medição: últimas 5 ocorrências
@@ -103,10 +115,12 @@ export function SessionKeyLevelsPlugin({ chart, series, data }: SessionKeyLevels
 
       const recent = levels.slice(-MAX_KEY_LEVELS_SHOWN);
       const timeScale = chart.timeScale();
-      ctx.font = "9px -apple-system, sans-serif";
-      ctx.textBaseline = "top";
 
-      const drawLevel = (price: number, startTime: number, color: string, label: string) => {
+      // Só a LINHA real — nenhum texto flutuante (ver header do arquivo).
+      // O rótulo legível da sessão corrente vive no eixo
+      // (priceAxisLabels/currentSessionKeyLevel); sessões já fechadas ficam
+      // como referência visual pura (cor + posição), sem texto próprio.
+      const drawLevel = (price: number, startTime: number, color: string) => {
         const y = series.priceToCoordinate(price);
         if (y === null) return; // fora da faixa de preço visível agora — Fail-Closed: nunca extrapola.
         const xStartRaw = timeScale.timeToCoordinate(startTime as unknown as Time);
@@ -125,19 +139,13 @@ export function SessionKeyLevelsPlugin({ chart, series, data }: SessionKeyLevels
         ctx.moveTo(xStart, yLine);
         ctx.lineTo(cssWidth, yLine);
         ctx.stroke();
-
-        if (cssWidth - xStart >= LABEL_MIN_WIDTH_PX) {
-          ctx.fillStyle = color;
-          ctx.fillText(label, xStart + 3, y - 10 > 0 ? y - 10 : y + 3);
-        }
       };
 
       for (const level of recent) {
         const openColorHigh = level.closed ? HIGH_COLOR_CLOSED : HIGH_COLOR_OPEN;
         const openColorLow = level.closed ? LOW_COLOR_CLOSED : LOW_COLOR_OPEN;
-        const labelPrefix = level.label.toUpperCase();
-        drawLevel(level.high, level.startTime, openColorHigh, `${labelPrefix} H ${level.high.toFixed(2)}`);
-        drawLevel(level.low, level.startTime, openColorLow, `${labelPrefix} L ${level.low.toFixed(2)}`);
+        drawLevel(level.high, level.startTime, openColorHigh);
+        drawLevel(level.low, level.startTime, openColorLow);
       }
     };
 

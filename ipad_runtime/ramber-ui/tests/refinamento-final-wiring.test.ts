@@ -666,6 +666,52 @@ describe('Evolução do Organismo (Fase 2, "menor cálculos duplicados"): cache 
   });
 });
 
+describe('Achado real do Operador ("linha amarela que eu não sei o que significa" + "etiquetas não podem ficar em cima do valor do ativo"): Liquidity Sweep migra pro eixo anti-colisão, Session Key Levels perde o rótulo flutuante', () => {
+  it('Liquidity Sweep: title nativo da price line fica vazio — o texto real migrou pro eixo, nunca mais um texto solto na coordenada Y exata do preço varrido', () => {
+    const c = chart();
+    const idx = c.indexOf('color: "rgba(255, 191, 0, 0.85)",');
+    expect(idx, 'price line de Liquidity Sweep não encontrada').toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 800);
+    expect(block).toContain('title: "",');
+    expect(block).not.toContain('⚡ SWEEP');
+  });
+
+  it('Liquidity Sweep: o texto real (⚡ SWEEP ↑/↓ N%) agora vive em priceAxisLabels, dedupe por preço, side:"left" (estrutural/histórico)', () => {
+    const c = chart();
+    const idx = c.indexOf('if (visibility.liquidity_sweep) {', c.indexOf('const priceAxisLabels = useMemo'));
+    expect(idx, 'bloco de Sweep em priceAxisLabels não encontrado').toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 700);
+    expect(block).toContain('const seenSweepPrices = new Set<number>();');
+    expect(block).toContain('text: `⚡ SWEEP ${t.kind === "STOP_HUNT_TOPO" ? "↑" : "↓"} ${Math.round(t.confidence * 100)}%`,');
+    expect(block).toContain('side: "left",');
+  });
+
+  it('Session Key Levels: currentSessionKeyLevel (useMemo puro, sempre a última ocorrência real) alimenta 2 entradas no eixo (High/Low), side:"left"', () => {
+    const c = chart();
+    expect(c).toContain('import { computeSessionKeyLevels } from "../nexus/market-session";');
+    const memoIdx = c.indexOf('const currentSessionKeyLevel = useMemo(() => {');
+    expect(memoIdx, 'currentSessionKeyLevel não encontrado').toBeGreaterThan(-1);
+    const memoBlock = c.slice(memoIdx, memoIdx + 400);
+    expect(memoBlock).toContain('if (data.length === 0) return null;');
+    expect(memoBlock).toContain('const levels = computeSessionKeyLevels(data);');
+    expect(memoBlock).toContain('return levels.length > 0 ? levels[levels.length - 1] : null;');
+
+    const pushIdx = c.indexOf('if (visibility.session_key_levels && currentSessionKeyLevel) {');
+    expect(pushIdx, 'bloco de Session Key Levels em priceAxisLabels não encontrado').toBeGreaterThan(-1);
+    const pushBlock = c.slice(pushIdx, c.indexOf('return out;', pushIdx));
+    expect(pushBlock).toContain('price: currentSessionKeyLevel.high,');
+    expect(pushBlock).toContain('price: currentSessionKeyLevel.low,');
+    expect((pushBlock.match(/side: "left",/g) ?? []).length).toBe(2);
+  });
+
+  it('SessionKeyLevelsPlugin.tsx: NUNCA mais desenha texto flutuante no canvas (zero ctx.fillText) — só a linha real; regressão travada por teste, não só por revisão manual', () => {
+    const plugin = read('../src/chart/SessionKeyLevelsPlugin.tsx');
+    expect(plugin).not.toContain('ctx.fillText');
+    expect(plugin).not.toContain('ctx.font');
+    expect(plugin).toContain('ctx.stroke();');
+  });
+});
+
 describe('Kill Zones ICT no canvas (badge do header já existia, §6.48 — este plugin fecha o desenho real): camada própria, nunca dobrada em market_sessions', () => {
   it('importa KillZoneBandsPlugin — nunca uma segunda implementação de retângulo dentro de EnhancedChart_110_Percent', () => {
     const c = chart();

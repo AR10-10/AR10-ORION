@@ -4351,6 +4351,94 @@ em vez da partição de 5 sessões, mas não implementado agora (escopo desta
 entrega era responder ao pedido concreto do Operador, não expandir além
 dele sem pedido).
 
+### 6.58 "Linha amarela que eu não sei o que significa" + "etiquetas em
+cima do valor do ativo" — achado real com causa raiz identificada e
+corrigida (primeira fatia da "LAPIDAÇÃO PROFISSIONAL DO GRÁFICO")
+
+O Operador reportou (3ª vez nesta sessão que a pergunta sobre "linha
+amarela" aparece) não reconhecer um elemento amarelo no gráfico, mais um
+pedido geral de que rótulos nunca fiquem em cima do preço/candle. Em vez
+de repetir a resposta anterior (Entry price line, `#f0d06f`) sem
+verificar de novo, esta rodada fez um inventário REAL (grep) de toda cor
+amarelo/âmbar/dourada no `chart/`:
+
+| Cor | Papel real |
+|---|---|
+| `rgba(240, 208, 111, ...)` | Entry (Trade Plan) — já tinha rótulo "EN" no eixo |
+| `rgba(255, 235, 190/214, ...)` | VWAP/Nexus Line em estado NEUTRAL |
+| `rgba(255, 200, 0, ...)` | Pico do Liquidation Heatmap (texto condicional) |
+| `rgba(255, 176, 32, ...)` | Kill Zones (§6.55) — já tem rótulo próprio no retângulo |
+| **`rgba(255, 191, 0, ...)`** | **Liquidity Sweep — SEM equivalente em `priceAxisLabels`** |
+
+**Causa raiz real**: `createPriceLine` do Liquidity Sweep (EPC OMEGA
+FINAL Etapa 10) sempre teve `title: "⚡ SWEEP ↑/↓ N%"`, mas nunca um
+`priceAxisLabels` correspondente — diferente de TODO outro nível
+(S1/R1/VWAP/NL/EMA/Entry/Stop/Target/BOS-CHOCH), que tem ambos (linha
+nativa + rótulo no eixo anti-colisão). Confirmado via `typings.d.ts` da
+própria lib: `title` renderiza IN-PANE (não só na badge do eixo,
+independente de `axisLabelVisible`), na coordenada Y exata do preço
+varrido — que por definição é onde um candle ACABOU de tocar. Resultado
+real: uma linha âmbar saturada com texto solto competindo com o próprio
+candle, sem nenhuma consciência anti-colisão — exatamente as duas queixas
+do Operador ao mesmo tempo, com a MESMA causa.
+
+Auditoria did the same check on `SessionKeyLevelsPlugin.tsx` (§6.57,
+entregue na rodada anterior desta mesma PR): seu rótulo flutuante
+desenhava direto na coordenada Y do próprio high/low — o mesmo padrão de
+bug, autoinfligido no código mais recente da sessão.
+
+**Solução aplicada** (mesmo precedente já usado para BOS/CHOCH, EPC §5/§6
+— Task #29 do histórico):
+- Liquidity Sweep: `title: ""` na price line nativa (só a linha colorida
+  permanece); o texto migra para `priceAxisLabels` (mesmo preço/cor,
+  dedupe por preço — múltiplos traps podem citar o mesmo pool),
+  `side:"left"` (evento estrutural/histórico, mesma categoria de
+  S1/R1/Trend Channel/BOS-CHOCH).
+- Session Key Levels: só a sessão CORRENTE (a mais recente, ainda em
+  andamento) ganha rótulo real — via novo `currentSessionKeyLevel`
+  (useMemo puro em `EnhancedChart_110_Percent.tsx`, sempre a última
+  entrada de `computeSessionKeyLevels(data)`) empurrado em
+  `priceAxisLabels`, `side:"left"`. `SessionKeyLevelsPlugin.tsx` perdeu
+  TODO o desenho de texto (zero `ctx.fillText`) — as sessões já fechadas
+  continuam como linha de referência real (cor + posição), sem rótulo
+  próprio flutuante.
+
+**Impacto esperado**: zero texto solto competindo com candles no meio do
+gráfico vindo destes dois caminhos; o lado esquerdo do eixo (contexto
+estrutural) ganha até 3 novas entradas possíveis (Sweep + Key Level
+High/Low), sempre dentro do sistema anti-colisão já provado (nunca mais
+de ~7 no pior caso, a mesma escala que S1/R1/VWAP/NL/EMA/Entry/Stop/
+Target/BOS-CHOCH já convivem sem sobreposição há várias rodadas).
+
+**Riscos conhecidos**: nenhum — mesma técnica de migração já usada e
+testada para BOS/CHOCH; a LINHA em si (cor/posição/geometria) de nenhum
+dos dois elementos mudou, só o texto flutuante saiu do meio do canvas.
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 2001 testes** (100%,
++4 novos: 1 em `price-label-stack-plugin.test.ts` confirmando Sweep/Key
+Levels com `side:"left"` + 2 ajustes honestos de contagem/string (deps
+array/contagem de rótulos à esquerda, que mudaram de verdade), 4 em
+`refinamento-final-wiring.test.ts` (title vazio na price line nativa,
+entrada real em priceAxisLabels, `currentSessionKeyLevel` real,
+regressão travada contra `ctx.fillText` voltar ao plugin)) · build de
+produção ok · smoke Playwright ao vivo (painel idêntico, zero erro de
+console novo).
+
+**Escopo honesto desta rodada vs. a diretiva completa "LAPIDAÇÃO
+PROFISSIONAL DO GRÁFICO"**: o Operador enviou depois uma diretiva formal
+muito mais ampla (hierarquia de prioridade visual de 4 níveis para TODO
+elemento do gráfico, consolidação de S/R/liquidez/FVG/OB/VWAP/EMA,
+auditoria de paleta completa, mapeamento de TODOS os elementos
+desenhados com origem/módulo/finalidade/prioridade, pesquisa de técnicas
+modernas de visualização). Esta entrega resolve o achado CONCRETO e
+verificável (2 elementos com bug real de sobreposição, identificados com
+evidência, corrigidos com o mesmo padrão já provado) — não é a auditoria
+completa de hierarquia/paleta/consolidação pedida na diretiva formal, que
+é um trabalho real e maior, candidato a uma rodada dedicada própria
+(mapear os ~20 elementos reais do canvas um a um, com critério objetivo
+de prioridade, é trabalho de auditoria visual sistemática, não algo para
+encaixar apressado no fim de uma rodada já longa).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

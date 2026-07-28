@@ -63,6 +63,10 @@ import { KillZoneBandsPlugin } from "./KillZoneBandsPlugin";
 // function de market-session.ts (computeSessionKeyLevels), mesma partição
 // de sessão já real, nunca uma 3ª definição de janelas.
 import { SessionKeyLevelsPlugin } from "./SessionKeyLevelsPlugin";
+// Achado real do Operador ("etiquetas em cima do valor do ativo"): só a
+// sessão CORRENTE entra no sistema anti-colisão do eixo (mesma disciplina
+// de S1/R1) — ver priceAxisLabels abaixo.
+import { computeSessionKeyLevels } from "../nexus/market-session";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
 import { TradePlanZonePlugin } from "./TradePlanZonePlugin";
@@ -1086,7 +1090,15 @@ export function EnhancedChart_110_Percent({
             lineWidth: 1,
             lineStyle: LineStyle.Solid,
             axisLabelVisible: false,
-            title: `⚡ SWEEP ${t.kind === "STOP_HUNT_TOPO" ? "↑" : "↓"} ${Math.round(t.confidence * 100)}%`,
+            // Achado real do Operador ("linha amarela que eu não sei o que
+            // significa"): title nativo aqui SEMPRE desenha na coordenada Y
+            // exata do preço varrido — por definição onde um candle acabou
+            // de tocar, competindo com o próprio candle. O texto real migra
+            // pra priceAxisLabels (useMemo abaixo), mesmo preço/mesma cor,
+            // dentro do sistema anti-colisão real — mesma correção já
+            // aplicada a BOS/CHOCH. title vazio aqui = só a LINHA colorida,
+            // nunca um texto solto sem consciência dos outros rótulos.
+            title: "",
           }),
         );
       });
@@ -1676,6 +1688,18 @@ export function EnhancedChart_110_Percent({
   // um redraw real quando a referência de `labels` muda, então uma nova
   // array a cada render (por um re-render não relacionado, ex.:
   // harmonicHits mudando) nunca deveria disparar um redraw à toa.
+  // Pedido do Operador ("Key Levels"): a sessão CORRENTE real (sempre a
+  // última de computeSessionKeyLevels quando `data` não está vazio —
+  // closed:false por construção) alimenta o rótulo de eixo abaixo. Mesmo
+  // princípio de "recomputa só quando data muda de verdade" que
+  // SessionKeyLevelsPlugin já usa via cache por referência — aqui é um
+  // useMemo React puro e simples porque não roda dentro de um loop rAF.
+  const currentSessionKeyLevel = useMemo(() => {
+    if (data.length === 0) return null;
+    const levels = computeSessionKeyLevels(data);
+    return levels.length > 0 ? levels[levels.length - 1] : null;
+  }, [data]);
+
   const priceAxisLabels = useMemo<PriceAxisLabel[]>(() => {
     const out: PriceAxisLabel[] = [];
     // Achado real do Operador ("tá ficando só numa lateral direita...
@@ -1957,8 +1981,59 @@ export function EnhancedChart_110_Percent({
         }
       }
     }
+    // Achado real do Operador ("aquela linha amarela que eu não sei o que
+    // significa" + "as etiquetas não podem ficar em cima do valor do
+    // ativo"): a price line nativa de Liquidity Sweep (efeito acima, cor
+    // âmbar rgba(255,191,0,...)) tinha `title` só no objeto nativo da lib —
+    // a lib desenha esse texto solto no painel, na MESMA coordenada Y do
+    // preço varrido (por definição, onde um candle acabou de tocar), sem
+    // nenhuma consciência anti-colisão dos outros rótulos. MESMA correção
+    // já aplicada a BOS/CHOCH acima: o texto migra pra cá (mesmo preço/cor
+    // da linha, que continua sendo desenhada intocada pelo efeito nativo);
+    // dedupe por preço porque múltiplos traps podem citar o mesmo pool.
+    // side:"left" — evento estrutural/histórico (mesma categoria de S1/R1/
+    // Trend Channel/BOS-CHOCH), nunca "o que agir agora".
+    if (visibility.liquidity_sweep) {
+      const seenSweepPrices = new Set<number>();
+      for (const t of traps ?? []) {
+        if (t.kind !== "STOP_HUNT_TOPO" && t.kind !== "STOP_HUNT_FUNDO") continue;
+        for (const price of t.sweptPrices) {
+          if (!Number.isFinite(price) || seenSweepPrices.has(price)) continue;
+          seenSweepPrices.add(price);
+          out.push({
+            price,
+            text: `⚡ SWEEP ${t.kind === "STOP_HUNT_TOPO" ? "↑" : "↓"} ${Math.round(t.confidence * 100)}%`,
+            color: "rgba(255, 191, 0, 0.85)",
+            side: "left",
+          });
+        }
+      }
+    }
+    // Pedido do Operador ("Key Levels"): só a sessão CORRENTE (ainda em
+    // andamento, closed:false — sempre a última de computeSessionKeyLevels
+    // quando a série não está vazia) entra no eixo anti-colisão, mesma
+    // disciplina de S1/R1 (nível estrutural real, side:"left"). As sessões
+    // já FECHADAS continuam desenhadas como linha de referência real por
+    // SessionKeyLevelsPlugin (canvas), mas sem rótulo flutuante próprio —
+    // a mesma correção de fundo do Sweep acima: nunca um texto solto
+    // competindo com o preço/candle no meio do gráfico.
+    if (visibility.session_key_levels && currentSessionKeyLevel) {
+      const labelPrefix = currentSessionKeyLevel.label.toUpperCase();
+      out.push({
+        price: currentSessionKeyLevel.high,
+        text: `${labelPrefix} H ${currentSessionKeyLevel.high.toFixed(2)}`,
+        color: "rgba(255, 0, 85, 0.55)",
+        side: "left",
+      });
+      out.push({
+        price: currentSessionKeyLevel.low,
+        text: `${labelPrefix} L ${currentSessionKeyLevel.low.toFixed(2)}`,
+        color: "rgba(0, 255, 170, 0.55)",
+        side: "left",
+      });
+    }
     return out;
-  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak]);
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel]);
 
   return (
     <div className="absolute inset-0">
