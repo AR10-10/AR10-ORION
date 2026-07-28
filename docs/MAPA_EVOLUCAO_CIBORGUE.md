@@ -66,8 +66,9 @@ de ser feito e a evolução de todos os sistema do ciborgue".
 
 | Subsistema | Estado | Evidência / nota |
 |---|---|---|
-| Camadas do gráfico (canvas) | IMPLEMENTADO | 20 camadas reais (`CHART_LAYER_IDS`) — FVG/OB, BOS/CHOCH, Liquidity Heatmap, Volume Profile, Trade Plan Zone, Neural Market Aura, EMA, Trend Channel, VWAP, Nexus Line, CVD, Fibonacci, Premium/Discount, Harmônicos, EQH/EQL, Liquidações Forçadas, Liquidity Sweep, Sessões, Kill Zones (ICT, §6.55), Session Key Levels (§6.57). |
-| Relevance Engine (Fusion) | **IMPLEMENTADO — 20/20** (mudou desde §6.53) | `nexus/layer-relevance.ts` cobria 15/18 desde a Fase 8.1, fechou 18/18 em §6.51; `kill_zones` (§6.55) e `session_key_levels` (§6.57) somaram-se depois, ambas já com regra própria desde o nascimento (nunca repetiram o gap retroativo) — cobertura continua 1:1 com `CHART_LAYER_IDS`, sem exceção documentada. |
+| Camadas do gráfico (canvas) | IMPLEMENTADO | 21 camadas reais (`CHART_LAYER_IDS`) — FVG/OB, BOS/CHOCH, Liquidity Heatmap, Volume Profile, Trade Plan Zone, Neural Market Aura, EMA, Trend Channel, VWAP, Nexus Line, CVD, Fibonacci, Premium/Discount, Harmônicos, EQH/EQL, Liquidações Forçadas, Liquidity Sweep, Sessões, Kill Zones (ICT, §6.55), Session Key Levels (§6.57), Zona Institucional (§6.64). |
+| Relevance Engine (Fusion) | **IMPLEMENTADO — 21/21** (mudou desde §6.63) | `nexus/layer-relevance.ts` cobria 15/18 desde a Fase 8.1, fechou 18/18 em §6.51; `kill_zones` (§6.55), `session_key_levels` (§6.57) e `institutional_zones` (§6.64) somaram-se depois, todas já com regra própria desde o nascimento (nunca repetiram o gap retroativo) — cobertura continua 1:1 com `CHART_LAYER_IDS`, sem exceção documentada. |
+| Zona Institucional (confluência de preço entre ferramentas) | **IMPLEMENTADO — metade aditiva** (novo, §6.64) | `nexus/institutional-zones.ts` agrupa EMA/VWAP/Nexus Line/FVG/OB/EQH-EQL por proximidade real de preço (>=2 ferramentas distintas) numa faixa única (`InstitutionalZonePlugin.tsx`). Deliberadamente NÃO reduz o detalhe individual de cada ferramenta quando já coberta pela faixa (a metade "reduzindo sobreposição" da diretiva) — decisão de UX maior, candidata a rodada isolada própria. |
 | Target 1/2/3 no canvas | IMPLEMENTADO | Target 3 (extensão Fibonacci 61.8%) chegava a ser calculado todo ciclo e descartado antes da UI — corrigido em §6.49 (threading completo `support-resistance-engine.js` → `engine-bridge.ts` → canvas). |
 | Smart Labels / anti-colisão | IMPLEMENTADO | `chart/label-compaction.ts`. |
 | Adaptive Zoom | AUSENTE | Zero sistema deliberado de zoom adaptativo — só o subproduto geométrico passivo de `priceToCoordinate`. |
@@ -102,7 +103,7 @@ Distinção importante para não reabrir debate já fechado sem motivo novo:
 | Cross-Timeframe Liquidity | Exclusão deliberada documentada em `multi-timeframe-engine.ts`. |
 | Liquidity Voids / Volume Clusters como camadas distintas | Avaliados e descartados — duplicariam LVN (já parte do Volume Profile real) e o próprio Volume Profile, sem conceito genuinamente novo por trás. |
 | Probabilidade calibrada de acerto (ex.: "72% de chance de subir") | Regra de Ouro 2 — este repositório não tem backtest real que sustente uma calibração honesta; a resposta correta é sempre uma métrica de confluência/confiança, nunca um número inventado. |
-| Institutional Volume Zones | Sem conceito distinto do Volume Profile já real — mesmo raciocínio de Liquidity Voids acima. |
+| Institutional Volume Zones | Sem conceito distinto do Volume Profile já real — mesmo raciocínio de Liquidity Voids acima. Não confundir com "Zona Institucional" (§6.64, seção 3 acima) — esta é confluência de PREÇO entre ferramentas independentes (EMA/VWAP/FVG/OB/Liquidez), zero relação com volume/Volume Profile. |
 
 ## 6. AUSENTES sem decisão de recusa (backlog real, não descarte)
 

@@ -3641,6 +3641,10 @@ const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>([
   // estrutural de mercado (mesmo papel de S1/R1 acima), nunca específica
   // do plano ativo.
   "session_key_levels",
+  // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4: confluência real entre
+  // ferramentas de ESTRUTURA/MERCADO (EMA/VWAP/FVG/OB/liquidez) — mesma
+  // categoria das demais acima, nunca específica do plano ativo.
+  "institutional_zones",
 ]);
 
 const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
@@ -3674,6 +3678,9 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // Pedido do Operador ("Key Levels"): máxima/mínima real de cada sessão
   // como nível horizontal (SessionKeyLevelsPlugin).
   { id: "session_key_levels", label: "KEY LEVELS (SESSÕES)" },
+  // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4: faixa real de confluência
+  // entre >=2 ferramentas independentes (InstitutionalZonePlugin).
+  { id: "institutional_zones", label: "ZONA INSTITUCIONAL" },
 ];
 
 function ChartLayersPanel() {
@@ -3695,7 +3702,7 @@ function ChartLayersPanel() {
   // Highlight real (não decorativo): compara o estado atual byte-a-byte
   // contra os dois presets — só acende quando bate exatamente, nunca um
   // "quase" fingido de correspondência. NÚCLEO GRAVITACIONAL AUTÔNOMO §1:
-  // os 3 presets manuais exigem TODAS as 20 camadas fora do automático —
+  // os 3 presets manuais exigem TODAS as 21 camadas fora do automático —
   // uma camada em modo automático que coincidentemente bate com o preset
   // agora não é a mesma coisa que o Operador ter escolhido esse preset.
   const allManual = CHART_LAYER_IDS.every((id) => autoMode[id] === false);
@@ -3728,7 +3735,7 @@ function ChartLayersPanel() {
               só pré-seleciona o que ele já controla. */}
           <div className="flex gap-1.5">
             {/* NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: 4º preset — a única ação
-                que devolve as 20 camadas ao comportamento automático de uma
+                que devolve as 21 camadas ao comportamento automático de uma
                 vez (resposta do Operador: toggles continuam existindo como
                 override, mas o padrão novo é automático). */}
             <button
@@ -6944,10 +6951,11 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       // cobria 15 das 18 camadas reais — uma camada nova em modo automático
       // sem cobertura (liquidation_heatmap/liquidity_sweep/market_sessions,
       // fechado no declutter do gráfico) fazia layerRelevance[id] vir
-      // undefined, e ".relevant" quebrava o render inteiro. As 20 camadas
+      // undefined, e ".relevant" quebrava o render inteiro. As 21 camadas
       // já têm regra própria agora (layer-relevance.test.ts prova 1:1 com
-      // CHART_LAYER_IDS, kill_zones/session_key_levels incluídas desde o
-      // nascimento de cada camada), mas o fallback (`relevance?.relevant
+      // CHART_LAYER_IDS, institutional_zones incluída desde o nascimento
+      // da camada, mesma disciplina de kill_zones/session_key_levels
+      // antes dela), mas o fallback (`relevance?.relevant
       // ?? true`) fica como defesa
       // contra uma camada FUTURA esquecida — nunca derruba o app mesmo se
       // layer-relevance.ts ficar defasado de novo.

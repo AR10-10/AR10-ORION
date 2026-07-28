@@ -59,6 +59,12 @@ export const RELEVANCE_LAYER_IDS = [
   // equal_highs_lows (relevante quando o preço vivo está PERTO de um
   // nível real, nunca sempre-ligado).
   "session_key_levels",
+  // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4 ("Consolidação de zonas"):
+  // mesmo papel de trade_plan_zone/neural_market_aura abaixo — ciclo de
+  // vida próprio (computeInstitutionalZones, nexus/institutional-zones.ts
+  // já devolve lista vazia sem confluência real cruzada), nunca sujeito a
+  // uma SEGUNDA regra de relevância aqui.
+  "institutional_zones",
 ] as const;
 export type RelevanceLayerId = (typeof RELEVANCE_LAYER_IDS)[number];
 
@@ -282,5 +288,11 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
     session_key_levels: input.hasSessionKeyLevelNearPrice
       ? { relevant: true, emphasis: "normal", reason: `preço vivo a menos de ${fmtPct(LIQUIDITY_PROXIMITY_PCT)} de uma máxima/mínima real de sessão` }
       : { relevant: false, emphasis: "normal", reason: "nenhum Key Level de sessão real próximo do preço vivo" },
+
+    // Mesmo princípio de neural_market_aura acima: ciclo de vida próprio
+    // (computeInstitutionalZones já devolve [] sem confluência real
+    // cruzada entre >=2 ferramentas independentes) — nunca sujeito a uma
+    // segunda regra de relevância aqui.
+    institutional_zones: { relevant: true, emphasis: "normal", reason: "ciclo de vida próprio (institutional-zones.ts) — sem confluência real cruzada, a lista de zonas vem vazia e nada é desenhado" },
   };
 }

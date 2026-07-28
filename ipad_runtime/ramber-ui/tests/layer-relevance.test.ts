@@ -55,10 +55,10 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
   // Declutter do gráfico (pedido direto do Operador): os 3 gaps antigos
   // (liquidation_heatmap/liquidity_sweep/market_sessions sem regra própria
   // de relevância, caindo no fallback `relevance?.relevant ?? true` do
-  // ChartLayersPanel) foram fechados — as 20 camadas reais agora têm
+  // ChartLayersPanel) foram fechados — as 21 camadas reais agora têm
   // cobertura 1:1, sem exceção documentada nenhuma (kill_zones/
-  // session_key_levels somaram-se depois, mesma disciplina desde o
-  // nascimento de cada camada).
+  // session_key_levels/institutional_zones somaram-se depois, mesma
+  // disciplina desde o nascimento de cada camada).
   it('toda chave de CHART_LAYER_IDS está em RELEVANCE_LAYER_IDS — nunca esquecida silenciosamente', () => {
     const chartSrc = read('../src/chart/EnhancedChart_110_Percent.tsx');
     const m = chartSrc.match(/export const CHART_LAYER_IDS = \[([\s\S]*?)\] as const;/);
@@ -68,7 +68,7 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of chartIds) {
       expect(relevanceSet.has(id), `camada "${id}" existe em CHART_LAYER_IDS mas não em RELEVANCE_LAYER_IDS`).toBe(true);
     }
-    expect(chartIds.length).toBe(20);
+    expect(chartIds.length).toBe(21);
   });
 
   it('toda chave de RELEVANCE_LAYER_IDS é uma camada real de CHART_LAYER_IDS — nunca uma chave órfã', () => {
@@ -78,12 +78,12 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(chartIds.has(id), `RELEVANCE_LAYER_IDS tem "${id}" que não existe mais em CHART_LAYER_IDS`).toBe(true);
     }
-    expect(RELEVANCE_LAYER_IDS.length).toBe(20);
+    expect(RELEVANCE_LAYER_IDS.length).toBe(21);
   });
 });
 
-describe('computeLayerRelevance: completude — sempre devolve as 20 chaves, nunca uma faltando', () => {
-  it('baseline vazio ainda produz um resultado para cada uma das 20 camadas', () => {
+describe('computeLayerRelevance: completude — sempre devolve as 21 chaves, nunca uma faltando', () => {
+  it('baseline vazio ainda produz um resultado para cada uma das 21 camadas', () => {
     const reading = computeLayerRelevance(BASE);
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(reading[id], `faltando chave ${id}`).toBeDefined();
@@ -218,6 +218,15 @@ describe('trade_plan_zone / neural_market_aura: NUNCA sujeitos ao gate — próp
     const r = computeLayerRelevance(BASE).neural_market_aura;
     expect(r.relevant).toBe(true);
     expect(r.reason).toContain('nunca sujeito ao gate');
+  });
+  // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4: mesmo papel de
+  // neural_market_aura acima — computeInstitutionalZones (institutional-
+  // zones.ts) já devolve [] honesto sem confluência real, então o gate
+  // aqui seria uma segunda regra redundante.
+  it('institutional_zones é sempre relevante — ciclo de vida próprio (institutional-zones.ts devolve [] sem confluência real)', () => {
+    const r = computeLayerRelevance(BASE).institutional_zones;
+    expect(r.relevant).toBe(true);
+    expect(r.reason.length).toBeGreaterThan(0);
   });
 });
 

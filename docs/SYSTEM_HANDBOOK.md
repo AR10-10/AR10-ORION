@@ -4867,6 +4867,109 @@ que Kill Zones ainda acumula demais dentro da janela de 200 candles
 (recorre com mais frequência que Sweep), esse horizonte específico é
 candidato a ajuste numérico isolado, não uma nova arquitetura.
 
+### 6.64 "DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO E EVOLUÇÃO VISUAL" (18
+seções) — auditoria honesta seção-a-seção + a única lacuna real
+implementada: Consolidação de Zonas Institucionais (§4)
+
+A diretiva chegou como uma visão de 18 seções (limpeza visual, memória
+dinâmica, organização automática, consolidação de zonas, sessões,
+hierarquia, sistema adaptativo, pesquisa contínua, evolução
+arquitetural, sincronização, refinamento visual, motor de análise
+institucional, pesquisa quantitativa/de ferramentas profissionais,
+organismo adaptativo, pesquisa de gaps). Antes de escrever qualquer
+código (CLAUDE.md, "audite antes de construir"), cada seção foi
+verificada contra o código-fonte real — não assumida como pendente só
+por estar numa diretiva nova.
+
+**Auditoria seção-a-seção**:
+| § | Pedido | Estado real |
+|---|---|---|
+| 1 | Limpeza visual inteligente | Relevance Engine (`layer-relevance.ts`, §6.47/§6.93) já decide show/hide por camada |
+| 2 | Memória visual dinâmica (0-50/50-100/100-200/>200) | `annotation-decay.ts::ageAlpha` já cobre BOS/CHOCH, Sweep, Kill Zones (§6.63) |
+| 3 | Organização automática | Relevance Engine + modo 3-estados auto/manual (§6.46-6.48) |
+| **4** | **Consolidação de zonas (EMA/VWAP/FVG/OB/Liquidity → 1 Zona Institucional)** | **LACUNA REAL — implementada nesta entrega (ver abaixo)** |
+| 5 | Sessões: faixa discreta, não linha vertical | `MarketSessionBandsPlugin` já redesenhado 2x (§6.60/§6.62) |
+| 6 | Hierarquia visual (Candles > Trade Plan > Estrutura > ...) | LEI 24 já garante Core Engine como único emissor; z-order dos plugins já segue esta ordem (Trade Plan/Aura montados por último) |
+| 7 | Sistema adaptativo (timeframe/zoom/ativo/volatilidade) | Relevance Engine já lê sinais ao vivo (proximidade/estado direcional/densidade), recalcula a cada ciclo real |
+| 8 | Pesquisa contínua em plataformas profissionais | Já documentada em `AUDITORIA_ECOSSISTEMA_VISUAL.md` (Bloomberg/Quantower/NinjaTrader/TradingView, múltiplas rodadas) |
+| 9 | Evolução arquitetural (preservando LEI 24/READ_ONLY/SSOT) | Princípio já seguido em toda a sessão — nenhuma mudança violou os 3 |
+| 10 | Sincronização (SSOT, sem sinais contraditórios) | Store única (`unified-snapshot-store.ts`), Core Engine como única decisão — arquitetura já estabelecida |
+| 11 | Refinamento visual (paleta/linhas/tipografia/...) | Auditorias reais já feitas (`AUDITORIA_ECOSSISTEMA_VISUAL.md` §9), itens objetivos corrigidos (Sweep×Liquidação, POC magenta); consolidação subjetiva da paleta amber/Volume Profile permanece decisão do Operador, não implementada (`MAPA_EVOLUCAO_CIBORGUE.md` item 19) |
+| 12 | Resultado esperado (institucional/legível) | Objetivo contínuo, não uma tarefa fechável — guia todas as rodadas de lapidação já feitas |
+| 13 | Motor de Análise Institucional (estrutura/liquidez/regime/confluência/cenários com invalidação, "nunca certeza") | `scenario-engine.ts` (`buildScenarioProjection`) já entrega exatamente isto — `basis: "COUNCIL_OPINION_MASS_NOT_MARKET_PROBABILITY"`, alvos + invalidação reais, rotulado hipótese |
+| 14 | Pesquisa de métodos quantitativos (BOS/CHOCH, Wyckoff, CVD, VWAP, ATR, fractais, clustering, ...) | Já motores reais no repositório para a maioria (ver `ipad_runtime/src/research/engines/`, `QUARANTINE.md`); Wyckoff/footprint charts continuam gaps reais não implementados, já flagados em `MAPA_EVOLUCAO_CIBORGUE.md` |
+| 15 | Pesquisa de ferramentas profissionais | `ELITE TRADING RESEARCH MAP` (Task #92) + `AUDITORIA_ECOSSISTEMA_VISUAL.md` já cobrem isto |
+| 16 | Organismo adaptativo (reorganiza sozinho) | Relevance Engine + decay por idade juntos já formam este comportamento |
+| 17 | Pesquisa de gaps (indicadores ausentes, redundâncias, conflitos) | Disciplina já seguida every rodada (ver achados de auditoria citados em quase toda entrada deste handbook) |
+| 18 | Resultado final | Mesmo objetivo contínuo do §12 |
+
+**A única lacuna real: §4, Consolidação de Zonas**. Os 3 motores de
+"confluência" já existentes no repositório foram lidos antes de escrever
+qualquer linha nova (`confluence-engine.ts` — concordância DIRECIONAL
+entre Ensemble/Council/Multi-Timeframe; `confluence-corridor.ts` —
+intensidade visual do mesmo pool; `layer-relevance.ts` — mostrar/esconder
+camada inteira). Nenhum dos três agrupa por PROXIMIDADE DE PREÇO entre
+ferramentas estruturalmente independentes — confirmado gap real, não
+duplicação.
+
+**Entregue**: `nexus/institutional-zones.ts` — motor puro
+(`computeInstitutionalZones`) que agrupa por proximidade de preço
+(`INSTITUTIONAL_ZONE_PROXIMITY_PCT = 0.35%`, mesma família de convenção
+documentada de `VOLUME_PROFILE_PROXIMITY_PCT`) os níveis JÁ reais de EMA
+atual, VWAP atual, Nexus Line atual, FVG não mitigadas, Order Blocks não
+mitigados e EQH/EQL não varridas — mesmo padrão de clustering por
+"âncora fixa" já usado por `clusterEqualLevels`/`clusterSweptPrices`
+(nunca uma média móvel, um membro no limite nunca arrasta o grupo).
+Confluência real exige `MIN_DISTINCT_SOURCES_FOR_ZONE = 2` FERRAMENTAS
+distintas — duas instâncias da mesma ferramenta (ex.: 2 Order Blocks
+vizinhos) nunca formam uma "Zona Institucional" sozinhas, só ferramentas
+genuinamente independentes concordando. Teto real `MAX_INSTITUTIONAL_ZONES
+= 5` (mesma natureza de `MAX_KEY_LEVELS_SHOWN`), as mais fortes primeiro.
+
+Zero prop nova em `App.tsx`: todo insumo já vivia dentro de
+`EnhancedChart_110_Percent.tsx` (`emaLastValue`/`vwapLastValue`/
+`nlLastValue`, já computados do mesmo array `data`; `fairValueGaps`/
+`orderBlocks`/`liquidityZones`, já chegam pré-filtrados como props —
+mesmo padrão de `App.tsx:6830-6834`). `InstitutionalZonePlugin.tsx` novo
+(21ª camada do painel "Camadas do Gráfico") desenha a faixa real via
+`series.priceToCoordinate` (mesmo padrão de `LiquidationHeatmapPlugin`),
+cor violeta nunca usada antes na paleta (âmbar=Kill Zones/Sweep,
+dourado=Trade Plan Zone, magenta=POC, ciano=Volume Profile), fio de seda
+1px. Mounted ANTES de Neural Market Aura/Trade Plan Zone no z-order —
+fica visualmente atrás do núcleo do plano, nunca compete com ele (§6 da
+própria diretiva: Trade Plan > Confluências). `layer-relevance.ts` ganha
+`institutional_zones` com `relevant: true` incondicional — mesmo
+princípio já usado por `neural_market_aura`: o motor já devolve `[]`
+honesto sem confluência real cruzada, uma segunda regra de relevância
+aqui seria redundante, não mais correta.
+
+**Camada ADITIVA, nunca substituição** (Regra de Ouro 4): as linhas/zonas
+individuais de EMA/VWAP/Nexus Line/FVG/Order Block/Liquidez continuam
+desenhadas exatamente como antes pelos seus próprios plugins/séries —
+esta faixa só soma um destaque visual por trás delas.
+
+**Escopo honesto — o que fica para depois**: a diretiva pede
+"reduzindo sobreposição" — a entrega desta rodada mostra ONDE a
+confluência real está, mas ainda NÃO reduz o detalhe individual de cada
+ferramenta quando já coberta por uma Zona Institucional (ex.: afinar a
+linha de EMA quando ela já está dentro de uma zona destacada). Essa
+segunda metade tocaria simultaneamente os renderizadores de EMA, VWAP,
+Nexus Line, FVG/OB e Liquidez — um raio de mudança maior que esta
+entrega, e uma decisão de UX real (qual camada "cede" visualmente à
+outra) que merece sua própria rodada isolada e verificada, não
+empacotada com a primeira metade.
+
+**Testes**: `tsc --noEmit` limpo · **121 arquivos / 2040 testes** (100%,
++15 novos: 14 de execução real para `computeInstitutionalZones`
+—incluindo o caso adversarial de 2 Order Blocks vizinhos NÃO formando
+confluência sozinhos, e o caso de âncora fixa dividindo 2 zonas reais
+mesmo com vizinhos próximos em cadeia — mais 1 de relevância; 2 arquivos
+de teste com contagem de camadas atualizada de 20→21) · `npm run build`
+ok.
+
+**Riscos conhecidos**: nenhum de decisão (LEI 24 intacta — camada
+puramente informativa/geométrica, nunca gera Entry/Stop/Target).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

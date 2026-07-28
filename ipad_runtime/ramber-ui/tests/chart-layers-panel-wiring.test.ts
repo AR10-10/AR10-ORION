@@ -140,7 +140,7 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(clIdx).toBeGreaterThan(-1);
   });
 
-  it('CHART_LAYER_PANEL_MODULES lista exatamente as 20 camadas reais, cada id um ChartLayerId válido (o próprio TypeScript trava isso — este teste só confirma que a lista não encolheu/cresceu silenciosamente)', () => {
+  it('CHART_LAYER_PANEL_MODULES lista exatamente as 21 camadas reais, cada id um ChartLayerId válido (o próprio TypeScript trava isso — este teste só confirma que a lista não encolheu/cresceu silenciosamente)', () => {
     const app = read('../src/App.tsx');
     const listMatch = app.match(/const CHART_LAYER_PANEL_MODULES: \{ id: ChartLayerId; label: string \}\[\] = \[([\s\S]*?)\];/);
     expect(listMatch, 'CHART_LAYER_PANEL_MODULES não encontrado').not.toBeNull();
@@ -148,7 +148,7 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     // explicativos entre entradas (ex.: liquidation_heatmap, Fase 8.1),
     // nunca uma contagem ingênua de linhas não-vazias.
     const entries = Array.from(listMatch![1].matchAll(/\{ id: "[a-z_]+"/g));
-    expect(entries).toHaveLength(20);
+    expect(entries).toHaveLength(21);
     expect(listMatch![1]).toContain('{ id: "trend_channel", label: "TREND CHANNEL" }');
     // EPC OMEGA FINAL Etapa 10.
     expect(listMatch![1]).toContain('{ id: "liquidity_sweep", label: "LIQUIDITY SWEEP" }');
@@ -157,6 +157,8 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(listMatch![1]).toContain('{ id: "kill_zones", label: "KILL ZONES (ICT)" }');
     // Pedido do Operador: Key Levels de sessão no canvas.
     expect(listMatch![1]).toContain('{ id: "session_key_levels", label: "KEY LEVELS (SESSÕES)" }');
+    // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4: faixa de confluência real.
+    expect(listMatch![1]).toContain('{ id: "institutional_zones", label: "ZONA INSTITUCIONAL" }');
   });
 
   it('Auditoria de pendências: os 7 toggles novos (VWAP/Nexus Line/CVD/Fibonacci/Premium-Discount/harmônico/EQH-EQL) entram no painel — nenhum elemento nativo do gráfico fica sem controle', () => {

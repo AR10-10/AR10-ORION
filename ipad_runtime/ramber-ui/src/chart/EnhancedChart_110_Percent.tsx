@@ -80,6 +80,12 @@ import { SessionKeyLevelsPlugin } from "./SessionKeyLevelsPlugin";
 // sessão CORRENTE entra no sistema anti-colisão do eixo (mesma disciplina
 // de S1/R1) — ver priceAxisLabels abaixo.
 import { computeSessionKeyLevels } from "../nexus/market-session";
+// DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4 ("Consolidação de zonas"):
+// motor puro + plugin de canvas para a faixa de confluência real entre
+// EMA/VWAP/Nexus Line/FVG/Order Block/EQH/EQL — ver header de cada
+// arquivo para o raciocínio completo.
+import { computeInstitutionalZones, type InstitutionalZoneInput } from "../nexus/institutional-zones";
+import { InstitutionalZonePlugin } from "./InstitutionalZonePlugin";
 import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
@@ -231,6 +237,12 @@ export const CHART_LAYER_IDS = [
   // sessions (computeSessionKeyLevels em market-session.ts), conceito
   // adicional (nível de PREÇO, não de tempo), então camada própria.
   "session_key_levels",
+  // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4 ("Consolidação de zonas"):
+  // quando EMA/VWAP/Nexus Line/FVG/Order Block/EQH/EQL concordam numa
+  // mesma faixa de preço real AGORA (computeInstitutionalZones, nexus/
+  // institutional-zones.ts), uma faixa única — nunca substitui o desenho
+  // individual de cada ferramenta, só soma o destaque de confluência.
+  "institutional_zones",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -255,6 +267,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   market_sessions: true,
   kill_zones: true,
   session_key_levels: true,
+  institutional_zones: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -282,6 +295,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   market_sessions: true,
   kill_zones: true,
   session_key_levels: true,
+  institutional_zones: true,
 };
 
 interface EnhancedChartProps {
@@ -1282,6 +1296,26 @@ export function EnhancedChart_110_Percent({
     cvdSeriesRef.current.applyOptions({ visible: visibility.cvd });
   }, [visibility.cvd]);
 
+  // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4 ("Consolidação de zonas"):
+  // zero prop nova de App.tsx — todo insumo já existe DENTRO deste
+  // componente (emaLastValue/vwapLastValue/nlLastValue, calculados acima
+  // do MESMO array `data`; fairValueGaps/orderBlocks/liquidityZones já
+  // chegam pré-filtrados — unmitigated/unswept — como props, mesmo padrão
+  // de App.tsx:6830-6834). computeInstitutionalZones é puro; o useMemo só
+  // evita reclusterizar a cada render sem mudança real de insumo.
+  const institutionalZoneInput = useMemo<InstitutionalZoneInput>(
+    () => ({
+      ema: emaLastValue !== null ? { period: activeEmaPeriod, value: emaLastValue } : null,
+      vwap: vwapLastValue,
+      nexusLine: nlLastValue,
+      fairValueGaps: fairValueGaps ?? [],
+      orderBlocks: orderBlocks ?? [],
+      liquidityZones: liquidityZones ?? [],
+    }),
+    [emaLastValue, activeEmaPeriod, vwapLastValue, nlLastValue, fairValueGaps, orderBlocks, liquidityZones],
+  );
+  const institutionalZones = useMemo(() => computeInstitutionalZones(institutionalZoneInput), [institutionalZoneInput]);
+
   // Auditoria do painel do gráfico: Linear Regression Channel real sobre a
   // MESMA `data` de candles (zero segunda fonte de dado) — mesmo padrão do
   // efeito de EMA acima. null (histórico insuficiente) => setData([]) nas
@@ -2233,6 +2267,21 @@ export function EnhancedChart_110_Percent({
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           data={data}
+        />
+      )}
+      {/* DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4 ("Consolidação de
+         zonas"): faixa real de confluência entre EMA/VWAP/Nexus Line/FVG/
+         Order Block/EQH/EQL (institutionalZones, useMemo acima) — mounted
+         BEFORE Neural Market Aura/Trade Plan Zone de propósito, para a
+         faixa ficar visualmente ATRÁS do que já é o núcleo do plano,
+         nunca competindo com ele (mesma hierarquia da diretiva: Trade
+         Plan > Confluências). Camada aditiva: nunca substitui o desenho
+         individual de cada ferramenta, que continua intacto. */}
+      {visibility.institutional_zones && (
+        <InstitutionalZonePlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          zones={institutionalZones}
         />
       )}
       {/* Neural Market Aura: the conviction corridor, mounted BEFORE the
