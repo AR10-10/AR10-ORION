@@ -762,7 +762,7 @@ describe('ADENDO "Refinamento das Sessões e Limpeza Visual": Market Sessions tr
 
   it('consome computeSessionKeyLevels (segmentos reais), nunca uma 3ª derivação paralela de sessão', () => {
     const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
-    expect(plugin).toContain('import { computeSessionKeyLevels, marketSessionFromUtc, type SessionKeyLevel } from "../nexus/market-session";');
+    expect(plugin).toContain('import { computeSessionKeyLevels, marketSessionFromUtc, sessionGenerationWeight, SESSION_GENERATION_FADE, type SessionKeyLevel } from "../nexus/market-session";');
     expect(plugin).toContain('levels = computeSessionKeyLevels(dataRef.current);');
   });
 

@@ -51,27 +51,33 @@
 //
 // LEI 24: display only, puro contexto temporal — nunca uma decisão.
 //
-// Correção real (Diretriz Consolidação/Auditoria/Evolução, auditoria de
-// ciclo de vida dos 12 plugins, achado confirmado): o "Redesenho real #2"
-// acima removeu deliberadamente o teto de contagem que existia no
-// "Redesenho real #1" para mostrar todas as sessões nomeadas — mas isso
-// reintroduziu exatamente a poluição visual sem limite que o Redesenho #1
-// já tinha corrigido uma vez (dezenas/centenas de faixas desenhando juntas
-// em timeframes intraday com MAX_CHART_HISTORY=2000 candles de histórico).
-// Este era o ÚNICO dos 12 plugins do gráfico sem nenhum mecanismo de ciclo
-// de vida. Fix: mesmo teto/mesma convenção já declarada por
-// SessionKeyLevelsPlugin (MAX_KEY_LEVELS_SHOWN, ~1 dia de sessões reais) —
-// zero segunda constante, zero segunda decisão de "quantas sessões
-// mostrar".
+// Correção real, rodada 1 (Diretriz Consolidação/Auditoria/Evolução,
+// auditoria de ciclo de vida dos 12 plugins): o "Redesenho real #2" acima
+// removeu deliberadamente o teto de contagem que existia no "Redesenho
+// real #1" para mostrar todas as sessões nomeadas — mas isso reintroduziu
+// exatamente a poluição visual sem limite que o Redesenho #1 já tinha
+// corrigido uma vez. Este era o ÚNICO dos 12 plugins do gráfico sem
+// nenhum mecanismo de ciclo de vida. Primeira correção: corte binário
+// reusando MAX_KEY_LEVELS_SHOWN de SessionKeyLevelsPlugin.
+//
+// Correção real, rodada 2 (Diretriz Final de Lapidação Visual, Parte 1 —
+// pedido explícito com números exatos: "sessão atual 100%, imediatamente
+// anterior 40%, 2 sessões atrás 20%, histórico distante 0% removido"): o
+// corte binário da rodada 1 virou fade real por geração via
+// sessionGenerationWeight (nexus/market-session.ts) — mesma função
+// compartilhada com SessionKeyLevelsPlugin, zero segunda tabela de
+// decaimento. O preço volta a ser o protagonista: só 3 gerações reais
+// desenham, cada uma mais discreta que a anterior, nunca dezenas de
+// faixas na mesma opacidade.
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
-import { computeSessionKeyLevels, marketSessionFromUtc, type SessionKeyLevel } from "../nexus/market-session";
-import { MAX_KEY_LEVELS_SHOWN } from "./SessionKeyLevelsPlugin";
+import { computeSessionKeyLevels, marketSessionFromUtc, sessionGenerationWeight, SESSION_GENERATION_FADE, type SessionKeyLevel } from "../nexus/market-session";
 
 // Discreto de propósito — contexto de fundo, nunca compete visualmente com
 // estrutura (BOS/CHOCH), liquidez (EQH/EQL) ou o Trade Plan. Mesmo tom
-// slate-gray já "dono" desta camada — só INTENSIDADE (alpha) distingue a
-// sessão corrente das já fechadas, zero matiz novo (ver header do arquivo).
+// slate-gray já "dono" desta camada — INTENSIDADE (alpha) distingue a
+// sessão corrente das já fechadas E decai por geração (ver header do
+// arquivo), zero matiz novo.
 const BAND_HEIGHT_PX = 24; // topo do painel — cabe nome + janela UTC em 2 linhas.
 const BAND_COLOR_CLOSED = "rgba(148, 163, 184, 0.16)";
 const BAND_COLOR_OPEN = "rgba(148, 163, 184, 0.42)";
@@ -139,10 +145,10 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
       }
       if (levels.length === 0) return; // timeframe sem transição real na amostra (ex. candles diários) — honesto, nada a marcar.
 
-      // Ciclo de vida real (ver header do arquivo): só as MAX_KEY_LEVELS_SHOWN
-      // ocorrências mais recentes desenham — a corrente + as já fechadas mais
-      // próximas, nunca a história inteira carregada no gráfico.
-      const recent = levels.slice(-MAX_KEY_LEVELS_SHOWN);
+      // Ciclo de vida real por geração (ver header do arquivo): só as
+      // SESSION_GENERATION_FADE.maxGenerationsShown ocorrências mais
+      // recentes sequer entram no loop — além disso o peso já seria 0.
+      const recent = levels.slice(-SESSION_GENERATION_FADE.maxGenerationsShown);
 
       const timeScale = chart.timeScale();
       // Meia-largura de barra real (mesma correção de KillZoneBandsPlugin):
@@ -153,6 +159,13 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
       for (let i = 0; i < recent.length; i++) {
         const level = recent[i];
         const isOpen = !level.closed;
+        // generationsBack=0 é sempre a última entrada (a corrente/aberta,
+        // por construção de computeSessionKeyLevels — cronológico, mais
+        // recente por último); 1 = imediatamente anterior; 2 = 2 atrás.
+        const generationsBack = recent.length - 1 - i;
+        const weight = sessionGenerationWeight(generationsBack);
+        if (weight <= 0) continue; // geração distante demais — "removido automaticamente".
+
         const x1 = timeScale.timeToCoordinate(level.startTime as unknown as Time);
         // Sessão corrente: estende até a borda direita real ("ainda em
         // andamento", mesmo espírito de TradePlanZonePlugin/SessionKeyLevelsPlugin
@@ -165,6 +178,12 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
         const clippedX = Math.max(0, rectX);
         const clippedWidth = Math.min(rectX + rectWidth, cssWidth) - clippedX;
         if (clippedWidth <= 0) continue;
+
+        // globalAlpha aplica o peso da geração por cima da cor base — mesmo
+        // padrão já usado por LiquidityZonesPlugin/StructureBreakMarkersPlugin
+        // para decaimento real (ver annotation-decay.ts), reset pra 1 no fim
+        // de cada iteração pra nunca vazar pro próximo desenho.
+        ctx.globalAlpha = weight;
 
         ctx.fillStyle = isOpen ? BAND_COLOR_OPEN : BAND_COLOR_CLOSED;
         ctx.fillRect(clippedX, 0, clippedWidth, BAND_HEIGHT_PX);
@@ -200,6 +219,7 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
             }
           }
         }
+        ctx.globalAlpha = 1;
       }
     };
 

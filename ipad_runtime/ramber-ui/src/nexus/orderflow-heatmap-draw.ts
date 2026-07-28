@@ -113,3 +113,25 @@ export function computeBubbleRadius(volume: number, maxVolume: number, minR = 3,
   const ratio = Math.min(1, volume / maxVolume);
   return minR + ratio * (maxR - minR);
 }
+
+// Diretriz Final de Lapidação Visual, Partes 3/4 ("ciclo de vida
+// automático... sem corte abrupto"): l2History/orderflowHistory
+// (nexus/l2-history.ts, nexus/orderflow-history.ts) são ring buffers de
+// CAPACIDADE FIXA, não uma janela de tempo — o achado real da auditoria
+// era o corte abrupto no momento da EVICÇÃO (amostra 100% opaca em um
+// frame, ausente no próximo). Fix: peso de recência LINEAR pela POSIÇÃO
+// da amostra dentro do próprio ring buffer (índice 0 = mais antiga,
+// prestes a ser evictada; último índice = mais recente) — a amostra já
+// esmaece ANTES de sair do buffer, então a evicção real nunca é um corte
+// visual perceptível. Ligado à MESMA mecânica que já decide o que entra/
+// sai (posição no array), nunca uma segunda noção de "idade" por relógio
+// de parede — l2-history amostra a intervalo fixo (2s) mas
+// orderflow-history é por evento real, então usar wall-clock exigiria 2
+// unidades diferentes; posição no buffer é honesta para os dois.
+export const RECENCY_FADE_FLOOR = 0.25; // amostra mais antiga do buffer nunca fica abaixo disto — ainda visível, só discreta, nunca 0 (dado real nunca é apagado, só perde destaque).
+
+export function computeRecencyWeight(index: number, length: number): number {
+  if (length <= 1) return 1;
+  const fraction = Math.min(1, Math.max(0, index / (length - 1))); // 0 = mais antiga, 1 = mais recente
+  return RECENCY_FADE_FLOOR + fraction * (1 - RECENCY_FADE_FLOOR);
+}

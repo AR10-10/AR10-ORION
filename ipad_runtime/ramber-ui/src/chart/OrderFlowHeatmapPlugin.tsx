@@ -47,6 +47,7 @@ import {
   drawHeatmapFrame,
   computeCellAlpha,
   computeBubbleRadius,
+  computeRecencyWeight,
   type HeatmapCell,
   type HeatmapBubble,
   type HeatmapFrame,
@@ -119,9 +120,16 @@ export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPlugin
         for (const lvl of entry.asks) if (lvl.size > maxAsk) maxAsk = lvl.size;
       }
 
+      // Diretriz Final de Lapidação Visual, Partes 3/4 ("ciclo de vida
+      // automático, sem corte abrupto"): computeRecencyWeight pondera pela
+      // POSIÇÃO real de cada amostra no ring buffer (l2/orderflowHistory
+      // são capacidade fixa, não janela de tempo) — a amostra mais antiga
+      // já esmaece ANTES de ser evictada, então sair do buffer nunca é um
+      // corte visual perceptível de um frame pro outro.
       const cells: HeatmapCell[] = [];
       for (let i = 0; i < l2.length; i++) {
         const entry = l2[i];
+        const recency = computeRecencyWeight(i, l2.length);
         const x1 = timeScale.timeToCoordinate((Math.floor(entry.time / 1000)) as unknown as Time);
         if (x1 === null) continue;
         const next = l2[i + 1];
@@ -133,14 +141,14 @@ export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPlugin
         for (const lvl of entry.bids) {
           const y = series.priceToCoordinate(lvl.price);
           if (y === null) continue;
-          const alpha = computeCellAlpha(lvl.size, maxBid);
+          const alpha = computeCellAlpha(lvl.size, maxBid) * recency;
           if (alpha <= 0) continue;
           cells.push({ x: x1, y: y - CELL_HEIGHT / 2, w: cellWidth, h: CELL_HEIGHT, color: `rgba(0, 255, 170, ${alpha.toFixed(3)})` });
         }
         for (const lvl of entry.asks) {
           const y = series.priceToCoordinate(lvl.price);
           if (y === null) continue;
-          const alpha = computeCellAlpha(lvl.size, maxAsk);
+          const alpha = computeCellAlpha(lvl.size, maxAsk) * recency;
           if (alpha <= 0) continue;
           cells.push({ x: x1, y: y - CELL_HEIGHT / 2, w: cellWidth, h: CELL_HEIGHT, color: `rgba(255, 0, 85, ${alpha.toFixed(3)})` });
         }
@@ -149,17 +157,21 @@ export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPlugin
       let maxVolume = 0;
       for (const entry of of) for (const t of entry.largeTrades) if (t.volume > maxVolume) maxVolume = t.volume;
       const bubbles: HeatmapBubble[] = [];
-      for (const entry of of) {
+      for (let i = 0; i < of.length; i++) {
+        const entry = of[i];
+        const recency = computeRecencyWeight(i, of.length);
         for (const t of entry.largeTrades) {
           const x = timeScale.timeToCoordinate((Math.floor(t.time / 1000)) as unknown as Time);
           const y = series.priceToCoordinate(t.price);
           if (x === null || y === null) continue;
           const r = computeBubbleRadius(t.volume, maxVolume);
           const bullish = t.side === "BUY";
+          const fillAlpha = (0.35 * recency).toFixed(3);
+          const strokeAlpha = (0.85 * recency).toFixed(3);
           bubbles.push({
             x, y, r,
-            fill: bullish ? "rgba(0, 255, 170, 0.35)" : "rgba(255, 0, 85, 0.35)",
-            stroke: bullish ? "rgba(0, 255, 170, 0.85)" : "rgba(255, 0, 85, 0.85)",
+            fill: bullish ? `rgba(0, 255, 170, ${fillAlpha})` : `rgba(255, 0, 85, ${fillAlpha})`,
+            stroke: bullish ? `rgba(0, 255, 170, ${strokeAlpha})` : `rgba(255, 0, 85, ${strokeAlpha})`,
           });
         }
       }

@@ -43,6 +43,19 @@ describe('OrderFlowHeatmapPlugin: geometria real via lightweight-charts, Fail-Cl
   });
 });
 
+describe('OrderFlowHeatmapPlugin: ciclo de vida real (Diretriz Final de Lapidação Visual, Partes 3/4) — sem corte abrupto na evicção do ring buffer', () => {
+  it('pondera cada célula/bolha pela posição real no ring buffer via computeRecencyWeight, nunca um segundo cálculo de idade', () => {
+    expect(plugin).toContain('computeRecencyWeight(');
+    expect(plugin).toMatch(/computeCellAlpha\(lvl\.size, maxBid\) \* recency/);
+    expect(plugin).toMatch(/computeCellAlpha\(lvl\.size, maxAsk\) \* recency/);
+  });
+
+  it('itera l2/orderflowHistory por índice (não for..of puro) para ter a posição real no buffer disponível', () => {
+    expect(plugin).toMatch(/for \(let i = 0; i < l2\.length; i\+\+\)/);
+    expect(plugin).toMatch(/for \(let i = 0; i < of\.length; i\+\+\)/);
+  });
+});
+
 describe('OrderFlowHeatmapPlugin: "Fio de Seda" também vale para bolhas em Canvas 2D (Regra de Ouro 2)', () => {
   it('a primitiva de desenho compartilhada nunca chama setLineDash', () => {
     const draw = read('../src/nexus/orderflow-heatmap-draw.ts');

@@ -2207,6 +2207,50 @@ export function EnhancedChart_110_Percent({
             : `SEM TRADE PLAN · ${tradePlanAbsenceReason}`}
         </div>
       )}
+      {/* Diretriz Final de Lapidação Visual, Parte 2 ("organização das
+         camadas"): sessões movidas pra ANTES de Liquidez/Estrutura/Volume
+         — cada um dos 3 plugins abaixo já se descrevia como "contexto de
+         fundo, nunca compete visualmente com estrutura/liquidez/Trade
+         Plan" (ver headers de MarketSessionBandsPlugin/KillZoneBandsPlugin/
+         SessionKeyLevelsPlugin), mas viviam montados DEPOIS (por cima, no
+         z-stack) das camadas que dizem nunca competir — achado real da
+         auditoria de ordem de camadas, corrigido para bater com a própria
+         intenção documentada de cada plugin. */}
+      {/* EPC OMEGA FINAL, Etapa 10 (Institutional Session Engine), redesenho
+         real no ADENDO "Refinamento das Sessões": mesmo array `data` que os
+         overlays abaixo já usam — agora consumido via computeSessionKeyLevels
+         (faixa fina por segmento, não mais 1 linha de altura total por
+         transição via computeSessionBoundaries — ver header do plugin),
+         zero prop nova de App.tsx além do que já existe. */}
+      {visibility.market_sessions && (
+        <MarketSessionBandsPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+        />
+      )}
+      {/* Ferramentas Institucionais: ICT Kill Zones — janelas estreitas
+         real dentro da série de candles (nunca uma partição de 24h como
+         MarketSessionBandsPlugin acima), retângulo sombreado real via
+         computeKillZoneSpans (kill-zones.ts). */}
+      {visibility.kill_zones && (
+        <KillZoneBandsPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+        />
+      )}
+      {/* Pedido do Operador ("Key Levels"): máxima/mínima real de cada
+         sessão como nível horizontal — reaproveita a MESMA `data` e a
+         MESMA partição de sessão de MarketSessionBandsPlugin acima, via
+         computeSessionKeyLevels (market-session.ts). */}
+      {visibility.session_key_levels && (
+        <SessionKeyLevelsPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+        />
+      )}
       {/* V-MAX Fase 0.7: FVG/Order Blocks (bullish|bearish) — mesmo dado real
          de computeSmcZones, já filtrado (!mitigated) e limitado em contagem
          rio acima (App.tsx/ChartWidget), agora como área colorida real
@@ -2253,41 +2297,6 @@ export function EnhancedChart_110_Percent({
           series={chartReady?.series ?? null}
           liquidations={liquidations ?? []}
           symbol={symbol ?? null}
-        />
-      )}
-      {/* EPC OMEGA FINAL, Etapa 10 (Institutional Session Engine), redesenho
-         real no ADENDO "Refinamento das Sessões": mesmo array `data` que os
-         overlays acima já usam — agora consumido via computeSessionKeyLevels
-         (faixa fina por segmento, não mais 1 linha de altura total por
-         transição via computeSessionBoundaries — ver header do plugin),
-         zero prop nova de App.tsx além do que já existe. */}
-      {visibility.market_sessions && (
-        <MarketSessionBandsPlugin
-          chart={chartReady?.chart ?? null}
-          series={chartReady?.series ?? null}
-          data={data}
-        />
-      )}
-      {/* Ferramentas Institucionais: ICT Kill Zones — janelas estreitas
-         real dentro da série de candles (nunca uma partição de 24h como
-         MarketSessionBandsPlugin acima), retângulo sombreado real via
-         computeKillZoneSpans (kill-zones.ts). */}
-      {visibility.kill_zones && (
-        <KillZoneBandsPlugin
-          chart={chartReady?.chart ?? null}
-          series={chartReady?.series ?? null}
-          data={data}
-        />
-      )}
-      {/* Pedido do Operador ("Key Levels"): máxima/mínima real de cada
-         sessão como nível horizontal — reaproveita a MESMA `data` e a
-         MESMA partição de sessão de MarketSessionBandsPlugin acima, via
-         computeSessionKeyLevels (market-session.ts). */}
-      {visibility.session_key_levels && (
-        <SessionKeyLevelsPlugin
-          chart={chartReady?.chart ?? null}
-          series={chartReady?.series ?? null}
-          data={data}
         />
       )}
       {/* DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4 ("Consolidação de

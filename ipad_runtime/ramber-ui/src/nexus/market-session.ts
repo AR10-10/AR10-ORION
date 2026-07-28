@@ -148,3 +148,27 @@ export function computeSessionKeyLevels(
   if (current !== null) out.push({ ...current, closed: false });
   return out;
 }
+
+// Diretriz Final de Lapidação Visual, Parte 1 ("fade progressivo real"):
+// pedido explícito do Operador com números exatos — sessão atual 100%,
+// imediatamente anterior 40%, 2 sessões atrás 20%, histórico distante 0%
+// (removido automaticamente). `computeSessionKeyLevels` acima devolve
+// cronológico (mais antigo primeiro, mais recente por último) — o
+// consumidor calcula `generationsBack = out.length - 1 - index` e chama
+// esta função. Compartilhado entre MarketSessionBandsPlugin (faixas) e
+// SessionKeyLevelsPlugin (linhas de high/low) — mesma partição de sessão,
+// mesma regra de idade, zero segunda tabela de decaimento.
+export const SESSION_GENERATION_FADE = {
+  currentWeight: 1.0,
+  previousWeight: 0.4,
+  twoBackWeight: 0.2,
+  // gerações >= isto: peso 0, não desenhado — "removido automaticamente".
+  maxGenerationsShown: 3,
+} as const;
+
+export function sessionGenerationWeight(generationsBack: number): number {
+  if (generationsBack <= 0) return SESSION_GENERATION_FADE.currentWeight;
+  if (generationsBack === 1) return SESSION_GENERATION_FADE.previousWeight;
+  if (generationsBack === 2) return SESSION_GENERATION_FADE.twoBackWeight;
+  return 0;
+}

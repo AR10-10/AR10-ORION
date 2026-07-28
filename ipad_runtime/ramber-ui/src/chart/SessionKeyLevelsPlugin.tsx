@@ -45,9 +45,20 @@
 // completo em EnhancedChart_110_Percent.tsx).
 //
 // LEI 24: display only, puro contexto estrutural — nunca uma decisão.
+//
+// Correção real (Diretriz Final de Lapidação Visual, Parte 1/3 — mesmo
+// achado da auditoria de ciclo de vida: corte abrupto por contagem em vez
+// de fade real por relevância): o 6º nível simplesmente sumia inteiro
+// (`slice(-MAX_KEY_LEVELS_SHOWN)`) em vez de esmaecer progressivamente.
+// Agora usa sessionGenerationWeight (nexus/market-session.ts) — MESMA
+// função/MESMOS números (100%/40%/20%/0%) que MarketSessionBandsPlugin,
+// já que ambos particionam a MESMA série de sessões — zero segunda tabela
+// de decaimento. MAX_KEY_LEVELS_SHOWN permanece exportado (histórico de
+// import de MarketSessionBandsPlugin já migrado, mas manter o nome não
+// quebra nenhum consumidor externo que ainda dependa dele).
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
-import { computeSessionKeyLevels, type SessionKeyLevel } from "../nexus/market-session";
+import { computeSessionKeyLevels, sessionGenerationWeight, type SessionKeyLevel } from "../nexus/market-session";
 
 const HIGH_COLOR_OPEN = "rgba(255, 0, 85, 0.55)";
 const HIGH_COLOR_CLOSED = "rgba(255, 0, 85, 0.32)";
@@ -143,11 +154,23 @@ export function SessionKeyLevelsPlugin({ chart, series, data }: SessionKeyLevels
         ctx.stroke();
       };
 
-      for (const level of recent) {
+      for (let i = 0; i < recent.length; i++) {
+        const level = recent[i];
         const openColorHigh = level.closed ? HIGH_COLOR_CLOSED : HIGH_COLOR_OPEN;
         const openColorLow = level.closed ? LOW_COLOR_CLOSED : LOW_COLOR_OPEN;
+        // Fade real por geração (mesma sessionGenerationWeight de
+        // MarketSessionBandsPlugin, mesmos números 100/40/20%) — clamp em
+        // generationsBack=2 pra reusar só as 3 constantes já declaradas
+        // pelo Operador em vez de inventar 2 números novos (gen3/gen4):
+        // o horizonte de MAX_KEY_LEVELS_SHOWN=5 (~1 dia, já justificado
+        // acima) continua o mesmo, só o piso de opacidade passa a ser 20%
+        // em vez de um degrau binário aberto/fechado.
+        const generationsBack = Math.min(recent.length - 1 - i, 2);
+        const weight = sessionGenerationWeight(generationsBack);
+        ctx.globalAlpha = weight;
         drawLevel(level.high, level.startTime, openColorHigh);
         drawLevel(level.low, level.startTime, openColorLow);
+        ctx.globalAlpha = 1;
       }
     };
 

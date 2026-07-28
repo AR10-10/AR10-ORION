@@ -161,6 +161,65 @@ describe('computeLiquidationHeatmap: bucketização real por preço', () => {
   });
 });
 
+describe('computeLiquidationHeatmap: peso de idade real (Diretriz Final de Lapidação Visual, Parte 4)', () => {
+  it('evento recente (idade 0) pesa exatamente notionalUsd cheio — mesmo comportamento de antes da Parte 4', () => {
+    const now = Date.now();
+    const events = [
+      ev('BTCUSDT', 'LONG_LIQUIDATED', 50000, 100000, now),
+      ev('BTCUSDT', 'SHORT_LIQUIDATED', 50010, 50000, now),
+      ev('BTCUSDT', 'LONG_LIQUIDATED', 50020, 30000, now),
+    ];
+    const r = computeLiquidationHeatmap(events, 'BTC', 1, now);
+    expect(r.status).toBe('OK');
+    expect(r.buckets[0].totalNotionalUsd).toBeCloseTo(180000, 5);
+  });
+
+  it('evento bem além de expireCandles (60min) pesa 0 no agregado VISUAL deste render — mesmo comportamento real de ageAlpha já usado por LiquidityZonesPlugin/StructureBreakMarkersPlugin/KillZoneBandsPlugin (decai até minAlpha, depois cai a 0)', () => {
+    const now = Date.now();
+    const oldTimestamp = now - 120 * 60_000; // 2h atrás, bem além de expireCandles=60min
+    const events = [
+      ev('BTCUSDT', 'LONG_LIQUIDATED', 50000, 100000, oldTimestamp),
+      ev('BTCUSDT', 'SHORT_LIQUIDATED', 50010, 50000, oldTimestamp),
+      ev('BTCUSDT', 'LONG_LIQUIDATED', 50020, 30000, oldTimestamp),
+    ];
+    const r = computeLiquidationHeatmap(events, 'BTC', 1, now);
+    expect(r.status).toBe('OK');
+    expect(r.buckets[0].totalNotionalUsd).toBe(0); // peso visual real 0 — mesma disciplina do resto do codebase
+    // mas o evento real nunca é apagado do FEED — eventCount continua contando os 3.
+    expect(r.buckets[0].eventCount).toBe(3);
+    expect(r.eventCount).toBe(3);
+  });
+
+  it('evento DENTRO da janela de fade (entre 10 e 60min) pesa menos que um recente com o MESMO notionalUsd real — decaimento real, não fabricação', () => {
+    const now = Date.now();
+    const events = [
+      ev('BTCUSDT', 'LONG_LIQUIDATED', 50000, 100000, now), // recente, bucket 0
+      ev('BTCUSDT', 'LONG_LIQUIDATED', 50000, 100000, now - 35 * 60_000), // 35min atrás — dentro da janela 10-60min, ainda pesa >0
+      ev('BTCUSDT', 'SHORT_LIQUIDATED', 51000, 10000, now), // bucket distante só pra passar do mínimo de faixa
+    ];
+    const r = computeLiquidationHeatmap(events, 'BTC', 2, now);
+    expect(r.status).toBe('OK');
+    // eventCount real não muda com idade — 2 eventos reais no bucket 0.
+    expect(r.buckets[0].eventCount).toBe(2);
+    // total pesado é MENOS que a soma bruta (200000, o 2º evento decaiu),
+    // mas MAIS que só o evento recente sozinho (o 2º ainda pesa algo, não zerou).
+    expect(r.buckets[0].totalNotionalUsd).toBeLessThan(200000);
+    expect(r.buckets[0].totalNotionalUsd).toBeGreaterThan(100000);
+  });
+
+  it('eventCount nunca é afetado pelo peso de idade (contagem real, sempre)', () => {
+    const now = Date.now();
+    const events = [
+      ev('BTCUSDT', 'LONG_LIQUIDATED', 50000, 100000, now - 500 * 60_000), // muito antigo
+      ev('BTCUSDT', 'SHORT_LIQUIDATED', 50010, 50000, now),
+      ev('BTCUSDT', 'LONG_LIQUIDATED', 50020, 30000, now),
+    ];
+    const r = computeLiquidationHeatmap(events, 'BTC', 1, now);
+    expect(r.eventCount).toBe(3);
+    expect(r.buckets[0].eventCount).toBe(3);
+  });
+});
+
 describe('computeLiquidationHeatmap: contrato estável', () => {
   it('contractVersion sempre presente e estável', () => {
     const events = [
