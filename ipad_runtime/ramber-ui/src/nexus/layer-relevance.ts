@@ -49,6 +49,11 @@ export const RELEVANCE_LAYER_IDS = [
   "liquidation_heatmap",
   "liquidity_sweep",
   "market_sessions",
+  // Ferramentas Institucionais: Kill Zone ICT no canvas (badge do header
+  // já existia, §6.48) entra na mesma disciplina — nunca fica visível
+  // em modo automático sem ter uma janela institucional real ativa
+  // agora, mesma lógica das 3 linhas acima.
+  "kill_zones",
 ] as const;
 export type RelevanceLayerId = (typeof RELEVANCE_LAYER_IDS)[number];
 
@@ -100,6 +105,9 @@ export interface LayerRelevanceInput {
   // dentro da janela recente declarada (mesma computeSessionBoundaries
   // pura que MarketSessionBandsPlugin já usa pra desenhar).
   recentSessionBoundary: boolean;
+  // Kill Zone ICT: pelo menos 1 janela institucional real ativa agora —
+  // mesma condição (activeKillZones) que o badge do header (§6.48) já usa.
+  hasActiveKillZone: boolean;
 }
 
 export interface LayerRelevanceResult {
@@ -256,5 +264,9 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
     market_sessions: input.recentSessionBoundary
       ? { relevant: true, emphasis: "normal", reason: `transição real de sessão dentro dos últimos ${MARKET_SESSION_RECENT_BOUNDARY_CANDLES} candles` }
       : { relevant: false, emphasis: "normal", reason: "nenhuma transição de sessão recente — sessão vigente estável" },
+
+    kill_zones: input.hasActiveKillZone
+      ? { relevant: true, emphasis: "normal", reason: "janela institucional ICT real ativa agora (kill-zones.ts)" }
+      : { relevant: false, emphasis: "normal", reason: "nenhuma kill zone ICT ativa neste momento" },
   };
 }

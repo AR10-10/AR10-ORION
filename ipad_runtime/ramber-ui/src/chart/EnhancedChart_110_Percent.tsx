@@ -53,6 +53,11 @@ import { VolumeProfilePlugin } from "./VolumeProfilePlugin";
 // direita, zero sobreposição visual).
 import { LiquidationHeatmapPlugin } from "./LiquidationHeatmapPlugin";
 import { MarketSessionBandsPlugin } from "./MarketSessionBandsPlugin";
+// Ferramentas Institucionais no canvas (badge do header já existia, §6.48
+// — este plugin fecha a lacuna do desenho real): ICT Kill Zones, janela
+// estreita dentro de cada sessão, conceito distinto de market-session.ts
+// (ver header de kill-zones.ts/KillZoneBandsPlugin.tsx).
+import { KillZoneBandsPlugin } from "./KillZoneBandsPlugin";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
 import { TradePlanZonePlugin } from "./TradePlanZonePlugin";
@@ -190,6 +195,13 @@ export const CHART_LAYER_IDS = [
   // antes só texto no header).
   "liquidity_sweep",
   "market_sessions",
+  // Pedido do Operador ("ferramentas mais precisas"): ICT Kill Zone é um
+  // conceito DIFERENTE de sessão de mercado (kill-zones.ts, cabeçalho) —
+  // janela estreita/institucional dentro de cada sessão, nunca uma
+  // partição contínua das 24h. Mesmo badge já distinto no header
+  // (§6.48) — camada própria aqui, nunca dobrada dentro de
+  // market_sessions.
+  "kill_zones",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -212,6 +224,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   liquidation_heatmap: true,
   liquidity_sweep: true,
   market_sessions: true,
+  kill_zones: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -237,6 +250,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   liquidation_heatmap: true,
   liquidity_sweep: true,
   market_sessions: true,
+  kill_zones: true,
 };
 
 interface EnhancedChartProps {
@@ -2026,6 +2040,17 @@ export function EnhancedChart_110_Percent({
          é puro/derivado, zero prop nova de App.tsx além do que já existe. */}
       {visibility.market_sessions && (
         <MarketSessionBandsPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+        />
+      )}
+      {/* Ferramentas Institucionais: ICT Kill Zones — janelas estreitas
+         real dentro da série de candles (nunca uma partição de 24h como
+         MarketSessionBandsPlugin acima), retângulo sombreado real via
+         computeKillZoneSpans (kill-zones.ts). */}
+      {visibility.kill_zones && (
+        <KillZoneBandsPlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           data={data}

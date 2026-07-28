@@ -662,7 +662,7 @@ export default function App() {
   const [radarPanelOpen, setRadarPanelOpen] = useState(false);
   const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7 (resposta do Operador à pergunta
-  // de escopo: os 18 toggles manuais continuam existindo como OVERRIDE
+  // de escopo: os 19 toggles manuais continuam existindo como OVERRIDE
   // real, o padrão novo é o comportamento automático por trás deles).
   // Estrutura paralela, NUNCA uma reforma do tipo existente
   // (ChartLayerVisibility continua Record<ChartLayerId, boolean>, zero
@@ -3632,6 +3632,10 @@ const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>([
   // ativo — mesma lógica acima.
   "liquidity_sweep",
   "market_sessions",
+  // Ferramentas Institucionais: Kill Zone ICT é a mesma família de
+  // contexto temporal de market_sessions acima — leitura de mercado,
+  // nunca específica do plano ativo.
+  "kill_zones",
 ]);
 
 const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
@@ -3659,6 +3663,9 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // EPC OMEGA FINAL Etapa 10 (Novas Camadas Institucionais).
   { id: "liquidity_sweep", label: "LIQUIDITY SWEEP" },
   { id: "market_sessions", label: "SESSÕES (ÁSIA/LONDRES/NY)" },
+  // Ferramentas Institucionais: badge do header já existia (§6.48), esta
+  // linha liga o canvas (KillZoneBandsPlugin) ao painel de camadas.
+  { id: "kill_zones", label: "KILL ZONES (ICT)" },
 ];
 
 function ChartLayersPanel() {
@@ -3680,7 +3687,7 @@ function ChartLayersPanel() {
   // Highlight real (não decorativo): compara o estado atual byte-a-byte
   // contra os dois presets — só acende quando bate exatamente, nunca um
   // "quase" fingido de correspondência. NÚCLEO GRAVITACIONAL AUTÔNOMO §1:
-  // os 3 presets manuais exigem TODAS as 18 camadas fora do automático —
+  // os 3 presets manuais exigem TODAS as 19 camadas fora do automático —
   // uma camada em modo automático que coincidentemente bate com o preset
   // agora não é a mesma coisa que o Operador ter escolhido esse preset.
   const allManual = CHART_LAYER_IDS.every((id) => autoMode[id] === false);
@@ -3713,7 +3720,7 @@ function ChartLayersPanel() {
               só pré-seleciona o que ele já controla. */}
           <div className="flex gap-1.5">
             {/* NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: 4º preset — a única ação
-                que devolve as 18 camadas ao comportamento automático de uma
+                que devolve as 19 camadas ao comportamento automático de uma
                 vez (resposta do Operador: toggles continuam existindo como
                 override, mas o padrão novo é automático). */}
             <button
@@ -6875,6 +6882,11 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       lastSessionBoundary !== null && Array.isArray(chartData) && chartData.length > 0
         ? chartData.length - 1 - lastSessionBoundary.index < MARKET_SESSION_RECENT_BOUNDARY_CANDLES
         : false;
+    // Kill Zone ICT: mesma condição/mesma função (activeKillZones) que o
+    // badge do header (TopBar, §6.48) já usa — computado no render, nunca
+    // um segundo timer (este useMemo já reroda >=1x/s via livePrice nas
+    // deps abaixo, mesmo princípio de marketSession na TopBar).
+    const hasActiveKillZone = (activeKillZones(new Date())?.active.length ?? 0) > 0;
     return {
       tradePlanActive: Boolean(chartTradePlan) || Boolean(engineFallbackLevels),
       obstacleZoneCount: chartObstacleZones.length,
@@ -6892,6 +6904,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       hasRecentLiquidation: Array.isArray(liquidations) && liquidations.length > 0,
       hasRecentLiquiditySweep: (traps ?? []).some((t) => t.kind === "STOP_HUNT_TOPO" || t.kind === "STOP_HUNT_FUNDO"),
       recentSessionBoundary,
+      hasActiveKillZone,
     };
   }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps]);
   const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);
@@ -6912,11 +6925,12 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       // cobria 15 das 18 camadas reais — uma camada nova em modo automático
       // sem cobertura (liquidation_heatmap/liquidity_sweep/market_sessions,
       // fechado no declutter do gráfico) fazia layerRelevance[id] vir
-      // undefined, e ".relevant" quebrava o render inteiro. As 18 camadas
+      // undefined, e ".relevant" quebrava o render inteiro. As 19 camadas
       // já têm regra própria agora (layer-relevance.test.ts prova 1:1 com
-      // CHART_LAYER_IDS), mas o fallback (`relevance?.relevant ?? true`)
-      // fica como defesa contra uma camada FUTURA esquecida — nunca derruba
-      // o app mesmo se layer-relevance.ts ficar defasado de novo.
+      // CHART_LAYER_IDS, kill_zones incluída desde o nascimento da camada),
+      // mas o fallback (`relevance?.relevant ?? true`) fica como defesa
+      // contra uma camada FUTURA esquecida — nunca derruba o app mesmo se
+      // layer-relevance.ts ficar defasado de novo.
       acc[id] = autoMode[id] ? (layerRelevance[id]?.relevant ?? true) : manual[id];
       return acc;
     }, {} as ChartLayerVisibility);

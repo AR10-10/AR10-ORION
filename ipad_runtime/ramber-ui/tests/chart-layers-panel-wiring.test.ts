@@ -39,12 +39,12 @@ describe('EnhancedChart_110_Percent.tsx: lista canônica única de camadas, toda
     }
   });
 
-  it('DEFAULT_CHART_LAYER_VISIBILITY liga as 18 camadas por padrão — o painel nunca esconde nada sem ação explícita do Operador', () => {
+  it('DEFAULT_CHART_LAYER_VISIBILITY liga as 19 camadas por padrão — o painel nunca esconde nada sem ação explícita do Operador', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     const defMatch = chart.match(/export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = \{([\s\S]*?)\};/);
     expect(defMatch, 'DEFAULT_CHART_LAYER_VISIBILITY não encontrado').not.toBeNull();
     const body = defMatch![1];
-    for (const key of ['liquidity_zones', 'structure_breaks', 'order_flow_heatmap', 'volume_profile', 'trade_plan_zone', 'neural_market_aura', 'ema', 'trend_channel', 'vwap', 'nexus_line', 'cvd', 'fibonacci', 'premium_discount', 'harmonics', 'equal_highs_lows', 'liquidation_heatmap', 'liquidity_sweep', 'market_sessions']) {
+    for (const key of ['liquidity_zones', 'structure_breaks', 'order_flow_heatmap', 'volume_profile', 'trade_plan_zone', 'neural_market_aura', 'ema', 'trend_channel', 'vwap', 'nexus_line', 'cvd', 'fibonacci', 'premium_discount', 'harmonics', 'equal_highs_lows', 'liquidation_heatmap', 'liquidity_sweep', 'market_sessions', 'kill_zones']) {
       expect(body).toContain(`${key}: true,`);
     }
   });
@@ -140,7 +140,7 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(clIdx).toBeGreaterThan(-1);
   });
 
-  it('CHART_LAYER_PANEL_MODULES lista exatamente as 18 camadas reais, cada id um ChartLayerId válido (o próprio TypeScript trava isso — este teste só confirma que a lista não encolheu/cresceu silenciosamente)', () => {
+  it('CHART_LAYER_PANEL_MODULES lista exatamente as 19 camadas reais, cada id um ChartLayerId válido (o próprio TypeScript trava isso — este teste só confirma que a lista não encolheu/cresceu silenciosamente)', () => {
     const app = read('../src/App.tsx');
     const listMatch = app.match(/const CHART_LAYER_PANEL_MODULES: \{ id: ChartLayerId; label: string \}\[\] = \[([\s\S]*?)\];/);
     expect(listMatch, 'CHART_LAYER_PANEL_MODULES não encontrado').not.toBeNull();
@@ -148,11 +148,13 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     // explicativos entre entradas (ex.: liquidation_heatmap, Fase 8.1),
     // nunca uma contagem ingênua de linhas não-vazias.
     const entries = Array.from(listMatch![1].matchAll(/\{ id: "[a-z_]+"/g));
-    expect(entries).toHaveLength(18);
+    expect(entries).toHaveLength(19);
     expect(listMatch![1]).toContain('{ id: "trend_channel", label: "TREND CHANNEL" }');
     // EPC OMEGA FINAL Etapa 10.
     expect(listMatch![1]).toContain('{ id: "liquidity_sweep", label: "LIQUIDITY SWEEP" }');
     expect(listMatch![1]).toContain('{ id: "market_sessions", label: "SESSÕES (ÁSIA/LONDRES/NY)" }');
+    // Ferramentas Institucionais: Kill Zones ICT no canvas.
+    expect(listMatch![1]).toContain('{ id: "kill_zones", label: "KILL ZONES (ICT)" }');
   });
 
   it('Auditoria de pendências: os 7 toggles novos (VWAP/Nexus Line/CVD/Fibonacci/Premium-Discount/harmônico/EQH-EQL) entram no painel — nenhum elemento nativo do gráfico fica sem controle', () => {

@@ -4061,6 +4061,106 @@ produção ok · verificação Playwright ao vivo.
 **Backlog**: primeiro item Tier 1 de `MAPA_EVOLUCAO_CIBORGUE.md` §7
 executado; Kill Zones no canvas continua o próximo natural.
 
+### 6.55 Kill Zones ICT no canvas — segundo item Tier 1 do backlog
+executado (o badge do header já existia desde §6.48; este plugin fecha
+a lacuna do desenho real)
+
+Pesquisa real confirmada via WebSearch antes de implementar (scripts
+reais publicados de ICT Killzones no TradingView — TFLab,
+TakingProphets, BryceWH, 0xCryptoVince): a convenção visual real é um
+retângulo/caixa sombreada cobrindo a janela de tempo inteira, nunca uma
+linha única — geometria diferente de `MarketSessionBandsPlugin`
+(partição contínua de 24h, desenhada como linhas de transição) porque
+Kill Zone é um conceito ICT distinto (janela ESTREITA e institucional
+dentro de cada sessão; a maior parte do dia não tem nenhuma zona ativa,
+e Nova York/Fechamento de Londres se sobrepõem de propósito — ver
+header de `nexus/kill-zones.ts`, §6.48).
+
+**Solução aplicada**:
+- `nexus/kill-zones.ts` ganhou `computeKillZoneSpans(candles)` —
+  varredura real run-length sobre a série de candles, devolvendo um
+  `KillZoneSpan` (id/label/startTime/endTime) por ocorrência CONTÍGUA
+  real de cada zona; overlaps reais (Nova York × Fechamento de Londres)
+  produzem 2 spans concorrentes, nunca mesclados; zonas ainda abertas no
+  último candle da série são fechadas honestamente no fim da varredura.
+- `chart/KillZoneBandsPlugin.tsx` (novo) — 4ª instância da arquitetura
+  de overlay já provada (`LiquidityZonesPlugin`/
+  `StructureBreakMarkersPlugin`/`MarketSessionBandsPlugin`): canvas
+  próprio, dirty-flag + `requestAnimationFrame`, `ResizeObserver`,
+  geometria via `timeToCoordinate` + meia-largura real de
+  `timeScale.options().barSpacing` (para o retângulo cobrir o candle
+  inteiro, não só do centro ao centro), Fio de Seda (bordas 1px sólidas,
+  nunca `setLineDash`), fail-closed (`timeToCoordinate` fora da área
+  visível retorna `null` → span pulado, nunca extrapolado). Cor: o
+  MESMO âmbar `#ffb020` já usado pelo badge de Kill Zone no header —
+  reaproveita o papel visual já existente em vez de introduzir um tom
+  novo (mesma disciplina de paleta de §6.53/§6.54).
+- Camada PRÓPRIA (`kill_zones`) em `CHART_LAYER_IDS`/
+  `DEFAULT_CHART_LAYER_VISIBILITY`/`DEFAULT_CHART_LAYER_AUTO_MODE`,
+  nunca dobrada dentro de `market_sessions` — decisão deliberada, o
+  oposto da decisão tomada para as bandas de VWAP em §6.54: ali as
+  bandas eram a MESMA ferramenta que a VWAP (reaproveitou o toggle);
+  aqui Kill Zone é um conceito conceitualmente distinto de sessão de
+  mercado (o próprio header de `kill-zones.ts` já documentava isso, e o
+  badge do header já os trata como elementos separados) — a mesma
+  disciplina de "reusar vs. criar novo" aplicada com o critério real de
+  cada caso, não uma regra cega.
+- Painel "Camadas do Gráfico" (`App.tsx`) ganha a linha "KILL ZONES
+  (ICT)", entra no Modo Inteligência (leitura de mercado/estrutura,
+  nunca específica do plano ativo — mesma classificação de
+  `market_sessions`).
+- **Relevance Engine** (`nexus/layer-relevance.ts`) ganha cobertura
+  DESDE O NASCIMENTO da camada — `hasActiveKillZone` computado em
+  `App.tsx` com a MESMA função (`activeKillZones(new Date())`) que o
+  badge do header já usa, zero segunda leitura. Fechar isso já na
+  criação evita repetir o gap retroativo que o Task #93 teve que
+  corrigir depois para 3 camadas (`liquidation_heatmap`/
+  `liquidity_sweep`/`market_sessions`, achado real de crash em
+  runtime, §6.41) — aqui a camada nasce com regra própria, nunca cai
+  no fallback `?? true` por omissão.
+
+**Verificação ao vivo (Playwright)**: painel "Camadas do Gráfico" agora
+mostra 19 linhas (era 18 em §6.54), "KILL ZONES (ICT)" aparece como
+última linha com badge AUTO/VISÍVEL — a leitura real no momento do
+teste tinha a Kill Zone Ásia ativa (mesmo instante, mesmo dado, badge do
+header mostrando "ÁSIA"), confirmando que o Relevance Engine e o badge
+do header concordam por usarem a MESMA função pura. O canvas do gráfico
+em si ficou em `AWAITING CANDLES...` (fail-closed honesto — este
+ambiente sandboxed não tem acesso de rede real à Binance, mesma
+limitação que já existia para verificar visualmente qualquer overlay de
+canvas anterior nesta sessão) — o desenho real do retângulo amber fica
+verificado pela suíte de execução real de `computeKillZoneSpans`
+(23/23 em `kill-zones.test.ts`) mais os testes de padrão-de-fonte que
+travam a fiação (mount point, cor, geometria). Zero erro de console
+atribuível ao código novo (os únicos erros de console observados são
+`ERR_TUNNEL_CONNECTION_FAILED`/WebSocket, rede indisponível no sandbox).
+
+**Riscos conhecidos**: nenhum novo — módulo puro aditivo + plugin de
+canvas seguindo exatamente o padrão já usado 3x; `kill-zones.ts` só
+ganhou uma função nova (`computeKillZoneSpans`), zero mudança em
+`activeKillZones`/`nextKillZone` (comportamento do badge do header
+intocado).
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 1976 testes** (100%,
++13 novos desde §6.54: 6 de execução real em `kill-zones.test.ts`
+— overlap Nova York × Fechamento de Londres, não-mesclagem entre dias
+diferentes, span aberto fechado no fim da série —, 2 em
+`layer-relevance.test.ts` (describe `kill_zones`) + ajuste de contagem
+18→19 nos 2 testes de sincronia RELEVANCE_LAYER_IDS↔CHART_LAYER_IDS, 1
+ajuste de contagem em `chart-layers-panel-wiring.test.ts`
+(`CHART_LAYER_PANEL_MODULES` 18→19 entradas), 5 de padrão-de-fonte em
+`refinamento-final-wiring.test.ts` (import, mount point, camada própria,
+label no painel, cobertura do Relevance Engine)) · build de produção ok
+· verificação Playwright ao vivo.
+
+**Backlog**: segundo item Tier 1 de `MAPA_EVOLUCAO_CIBORGUE.md` §7
+executado (VWAP bands em §6.54, Kill Zones aqui); próximos itens Tier 1
+restantes: auditoria de touch-target 44×44pt (iPad Safari),
+list-virtualization (order book/Radar/Omnibox), dependência
+`reconnecting-websocket`, escopo de toggle para S1/R1/Trade Plan/
+Scenario lines (hoje sem gate nenhum), `AbortController` nos 2 fetches
+privados fora do Bus (ticker, funding+OI).
+
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
 

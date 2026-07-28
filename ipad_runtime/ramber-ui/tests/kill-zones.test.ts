@@ -3,9 +3,10 @@
 // contínua das 24h como market-session.ts — a maior parte do dia não tem
 // nenhuma zona ativa, e duas zonas podem se sobrepor de propósito).
 import { describe, it, expect } from 'vitest';
-import { activeKillZones, nextKillZone, KILL_ZONES, KILL_ZONE_CONTRACT_VERSION } from '../src/nexus/kill-zones';
+import { activeKillZones, nextKillZone, computeKillZoneSpans, KILL_ZONES, KILL_ZONE_CONTRACT_VERSION } from '../src/nexus/kill-zones';
 
 const at = (hourUtc: number, minute = 0, second = 0) => new Date(Date.UTC(2026, 6, 14, hourUtc, minute, second));
+const candleAt = (hourUtc: number, dayOffset = 0) => ({ time: at(hourUtc).getTime() / 1000 + dayOffset * 86400 });
 
 describe('activeKillZones: janelas ESTREITAS, nunca uma partição de 24h', () => {
   it('00:00 => Ásia ativa (borda inicial inclusiva)', () => {
@@ -100,5 +101,57 @@ describe('nextKillZone: a próxima janela a abrir, nunca a que já está ativa',
 
   it('Date inválida => null honesto', () => {
     expect(nextKillZone(new Date(NaN))).toBeNull();
+  });
+});
+
+describe('computeKillZoneSpans: uma ocorrência real CONTÍGUA por zona, nunca uma partição de 24h e nunca mesclando dias diferentes', () => {
+  it('entrada vazia devolve [] honesto', () => {
+    expect(computeKillZoneSpans([])).toEqual([]);
+  });
+
+  it('candles inteiramente dentro de uma zona real (Ásia 00h-03h) => 1 span cobrindo o primeiro e o último candle real', () => {
+    const candles = [candleAt(0), candleAt(1), candleAt(2), candleAt(3)];
+    const spans = computeKillZoneSpans(candles);
+    expect(spans).toHaveLength(1);
+    expect(spans[0].id).toBe('ASIA');
+    expect(spans[0].startTime).toBe(candles[0].time);
+    expect(spans[0].endTime).toBe(candles[3].time);
+  });
+
+  it('candles num hiato real (05h-06h, sem zona nenhuma) => [] honesto, nunca um span fabricado', () => {
+    expect(computeKillZoneSpans([candleAt(5), candleAt(6)])).toEqual([]);
+  });
+
+  it('overlap real Nova York × Fechamento de Londres (12h-16h): 2 spans concorrentes reais, nunca mesclados num só', () => {
+    // 12,13,14 => NOVA_YORK ativa; 14,15 => LONDRES_CLOSE ativa (overlap real em 14h);
+    // candle-grid horária resolve o fim de NOVA_YORK no último candle onde apareceu (14h).
+    const candles = [candleAt(12), candleAt(13), candleAt(14), candleAt(15), candleAt(16)];
+    const spans = computeKillZoneSpans(candles);
+    expect(spans).toHaveLength(2);
+    const ny = spans.find((s) => s.id === 'NOVA_YORK');
+    const lc = spans.find((s) => s.id === 'LONDRES_CLOSE');
+    expect(ny?.startTime).toBe(candleAt(12).time);
+    expect(ny?.endTime).toBe(candleAt(14).time);
+    expect(lc?.startTime).toBe(candleAt(14).time);
+    expect(lc?.endTime).toBe(candleAt(15).time);
+  });
+
+  it('a MESMA zona em dias diferentes vira 2 spans reais separados, nunca um span gigante mesclando os dois dias', () => {
+    // Série horária REAL (sem pulos artificiais): Ásia hoje, hiato real de
+    // verdade (hora 5, sem zona nenhuma — mesmo espírito das grades
+    // horárias reais que o app carrega), Ásia amanhã de novo.
+    const candles = [candleAt(0), candleAt(1), candleAt(5), candleAt(0, 1), candleAt(1, 1)];
+    const spans = computeKillZoneSpans(candles);
+    expect(spans).toHaveLength(2);
+    expect(spans.every((s) => s.id === 'ASIA')).toBe(true);
+    expect(spans[0].endTime).toBeLessThan(spans[1].startTime); // dia 1 termina antes do dia 2 começar
+  });
+
+  it('zona ainda ATIVA no último candle real da série é fechada honestamente no fim da varredura (nunca perdida)', () => {
+    const candles = [candleAt(0), candleAt(1)]; // série termina DENTRO da Ásia, nunca chega a fechar "naturalmente"
+    const spans = computeKillZoneSpans(candles);
+    expect(spans).toHaveLength(1);
+    expect(spans[0].id).toBe('ASIA');
+    expect(spans[0].endTime).toBe(candleAt(1).time);
   });
 });

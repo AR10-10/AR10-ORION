@@ -47,14 +47,16 @@ const BASE: LayerRelevanceInput = {
   hasRecentLiquidation: false,
   hasRecentLiquiditySweep: false,
   recentSessionBoundary: false,
+  hasActiveKillZone: false,
 };
 
 describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent.tsx) 1:1 — zero drift, zero gap', () => {
   // Declutter do gráfico (pedido direto do Operador): os 3 gaps antigos
   // (liquidation_heatmap/liquidity_sweep/market_sessions sem regra própria
   // de relevância, caindo no fallback `relevance?.relevant ?? true` do
-  // ChartLayersPanel) foram fechados — as 18 camadas reais agora têm
-  // cobertura 1:1, sem exceção documentada nenhuma.
+  // ChartLayersPanel) foram fechados — as 19 camadas reais agora têm
+  // cobertura 1:1, sem exceção documentada nenhuma (kill_zones somou-se
+  // depois, mesma disciplina desde o nascimento da camada).
   it('toda chave de CHART_LAYER_IDS está em RELEVANCE_LAYER_IDS — nunca esquecida silenciosamente', () => {
     const chartSrc = read('../src/chart/EnhancedChart_110_Percent.tsx');
     const m = chartSrc.match(/export const CHART_LAYER_IDS = \[([\s\S]*?)\] as const;/);
@@ -64,7 +66,7 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of chartIds) {
       expect(relevanceSet.has(id), `camada "${id}" existe em CHART_LAYER_IDS mas não em RELEVANCE_LAYER_IDS`).toBe(true);
     }
-    expect(chartIds.length).toBe(18);
+    expect(chartIds.length).toBe(19);
   });
 
   it('toda chave de RELEVANCE_LAYER_IDS é uma camada real de CHART_LAYER_IDS — nunca uma chave órfã', () => {
@@ -74,12 +76,12 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(chartIds.has(id), `RELEVANCE_LAYER_IDS tem "${id}" que não existe mais em CHART_LAYER_IDS`).toBe(true);
     }
-    expect(RELEVANCE_LAYER_IDS.length).toBe(18);
+    expect(RELEVANCE_LAYER_IDS.length).toBe(19);
   });
 });
 
-describe('computeLayerRelevance: completude — sempre devolve as 18 chaves, nunca uma faltando', () => {
-  it('baseline vazio ainda produz um resultado para cada uma das 18 camadas', () => {
+describe('computeLayerRelevance: completude — sempre devolve as 19 chaves, nunca uma faltando', () => {
+  it('baseline vazio ainda produz um resultado para cada uma das 19 camadas', () => {
     const reading = computeLayerRelevance(BASE);
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(reading[id], `faltando chave ${id}`).toBeDefined();
@@ -141,8 +143,9 @@ describe('EPC FINAL §3/§12: emphasis (destaque) — só sobre um gradiente REA
       hasRecentLiquidation: true,
       hasRecentLiquiditySweep: true,
       recentSessionBoundary: true,
+      hasActiveKillZone: true,
     });
-    for (const id of ['volume_profile', 'fibonacci', 'order_flow_heatmap', 'cvd', 'premium_discount', 'vwap', 'nexus_line', 'ema', 'equal_highs_lows', 'liquidation_heatmap', 'liquidity_sweep', 'market_sessions'] as const) {
+    for (const id of ['volume_profile', 'fibonacci', 'order_flow_heatmap', 'cvd', 'premium_discount', 'vwap', 'nexus_line', 'ema', 'equal_highs_lows', 'liquidation_heatmap', 'liquidity_sweep', 'market_sessions', 'kill_zones'] as const) {
       expect(r[id].emphasis, `${id} não deveria ter highlight fabricado`).toBe('normal');
     }
   });
@@ -352,6 +355,19 @@ describe('market_sessions: mesma computeSessionBoundaries pura que MarketSession
     const r = computeLayerRelevance({ ...BASE, recentSessionBoundary: true });
     expect(r.market_sessions.relevant).toBe(true);
     expect(r.market_sessions.reason).toContain('candles');
+  });
+});
+
+describe('kill_zones: mesma condição real (activeKillZones) que o badge do header (§6.48) já usa', () => {
+  it('sem kill zone ICT ativa agora => não relevante', () => {
+    const r = computeLayerRelevance(BASE);
+    expect(r.kill_zones.relevant).toBe(false);
+    expect(r.kill_zones.reason).toContain('nenhuma kill zone');
+  });
+  it('com pelo menos 1 kill zone ICT ativa agora => relevante', () => {
+    const r = computeLayerRelevance({ ...BASE, hasActiveKillZone: true });
+    expect(r.kill_zones.relevant).toBe(true);
+    expect(r.kill_zones.reason).toContain('institucional');
   });
 });
 

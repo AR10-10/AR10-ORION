@@ -621,7 +621,7 @@ describe('VWAP Standard Deviation Bands (pedido do Operador, "ferramentas mais p
     expect(block).toContain('const bands = computeVwapBands(data);');
   });
 
-  it('bandas seguem o MESMO interruptor visibility.vwap — nunca uma 19ª camada própria no painel "Camadas do Gráfico"', () => {
+  it('bandas seguem o MESMO interruptor visibility.vwap — nunca uma camada própria no painel "Camadas do Gráfico"', () => {
     const c = chart();
     const idx = c.indexOf('if (!vwapBandUpper1Ref.current');
     expect(idx).toBeGreaterThan(-1);
@@ -631,6 +631,45 @@ describe('VWAP Standard Deviation Bands (pedido do Operador, "ferramentas mais p
     expect(block).toContain('vwapBandUpper2Ref.current.applyOptions({ visible: visibility.vwap });');
     expect(block).toContain('vwapBandLower2Ref.current.applyOptions({ visible: visibility.vwap });');
     expect(block).toContain('[visibility.vwap]');
+  });
+});
+
+describe('Kill Zones ICT no canvas (badge do header já existia, §6.48 — este plugin fecha o desenho real): camada própria, nunca dobrada em market_sessions', () => {
+  it('importa KillZoneBandsPlugin — nunca uma segunda implementação de retângulo dentro de EnhancedChart_110_Percent', () => {
+    const c = chart();
+    expect(c).toContain('import { KillZoneBandsPlugin } from "./KillZoneBandsPlugin";');
+  });
+
+  it('montado condicionalmente por visibility.kill_zones, recebendo chart/series/data — mesmo contrato de props de MarketSessionBandsPlugin', () => {
+    const c = chart();
+    const idx = c.indexOf('{visibility.kill_zones && (');
+    expect(idx, 'mount point de KillZoneBandsPlugin não encontrado').toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 300);
+    expect(block).toContain('<KillZoneBandsPlugin');
+    expect(block).toContain('chart={chartReady?.chart ?? null}');
+    expect(block).toContain('series={chartReady?.series ?? null}');
+    expect(block).toContain('data={data}');
+  });
+
+  it('kill_zones é uma camada PRÓPRIA em CHART_LAYER_IDS/DEFAULT_CHART_LAYER_VISIBILITY/DEFAULT_CHART_LAYER_AUTO_MODE — nunca reaproveita market_sessions (conceito distinto, ver header de kill-zones.ts)', () => {
+    const c = chart();
+    expect(c).toContain('"kill_zones",');
+    expect(c).toContain('kill_zones: true,');
+  });
+
+  it('painel "Camadas do Gráfico" (App.tsx) ganha a linha KILL ZONES (ICT), no Modo Inteligência (leitura de mercado, nunca específica do plano ativo)', () => {
+    const a = app();
+    expect(a).toContain('{ id: "kill_zones", label: "KILL ZONES (ICT)" }');
+    const intelMatch = a.match(/const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>\(\[([\s\S]*?)\]\);/);
+    expect(intelMatch, 'CHART_LAYERS_INTELLIGENCE_PRESET não encontrado').not.toBeNull();
+    expect(intelMatch![1]).toContain('"kill_zones"');
+  });
+
+  it('Relevance Engine cobre kill_zones desde o nascimento da camada — nunca repete o gap retroativo do Task #93 (liquidation_heatmap/liquidity_sweep/market_sessions sem regra própria)', () => {
+    const a = app();
+    expect(a).toContain('import { activeKillZones } from "./nexus/kill-zones";');
+    expect(a).toContain('const hasActiveKillZone = (activeKillZones(new Date())?.active.length ?? 0) > 0;');
+    expect(a).toContain('hasActiveKillZone,');
   });
 });
 

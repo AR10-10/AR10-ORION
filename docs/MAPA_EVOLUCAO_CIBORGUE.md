@@ -66,8 +66,8 @@ de ser feito e a evolução de todos os sistema do ciborgue".
 
 | Subsistema | Estado | Evidência / nota |
 |---|---|---|
-| Camadas do gráfico (canvas) | IMPLEMENTADO | 18 camadas reais (`CHART_LAYER_IDS`) — FVG/OB, BOS/CHOCH, Liquidity Heatmap, Volume Profile, Trade Plan Zone, Neural Market Aura, EMA, Trend Channel, VWAP, Nexus Line, CVD, Fibonacci, Premium/Discount, Harmônicos, EQH/EQL, Liquidações Forçadas, Liquidity Sweep, Sessões. |
-| Relevance Engine (Fusion) | **IMPLEMENTADO — 18/18** (mudou nesta rodada) | `nexus/layer-relevance.ts` cobria 15/18 desde a Fase 8.1; esta entrega fechou os 3 gaps restantes (`liquidation_heatmap`/`liquidity_sweep`/`market_sessions`), cobertura agora é 1:1 com `CHART_LAYER_IDS`, sem exceção documentada. |
+| Camadas do gráfico (canvas) | IMPLEMENTADO | 19 camadas reais (`CHART_LAYER_IDS`) — FVG/OB, BOS/CHOCH, Liquidity Heatmap, Volume Profile, Trade Plan Zone, Neural Market Aura, EMA, Trend Channel, VWAP, Nexus Line, CVD, Fibonacci, Premium/Discount, Harmônicos, EQH/EQL, Liquidações Forçadas, Liquidity Sweep, Sessões, Kill Zones (ICT, §6.55). |
+| Relevance Engine (Fusion) | **IMPLEMENTADO — 19/19** (mudou desde §6.53) | `nexus/layer-relevance.ts` cobria 15/18 desde a Fase 8.1, fechou 18/18 em §6.51; `kill_zones` somou-se em §6.55 já com regra própria desde o nascimento (nunca repetiu o gap retroativo) — cobertura continua 1:1 com `CHART_LAYER_IDS`, sem exceção documentada. |
 | Target 1/2/3 no canvas | IMPLEMENTADO | Target 3 (extensão Fibonacci 61.8%) chegava a ser calculado todo ciclo e descartado antes da UI — corrigido em §6.49 (threading completo `support-resistance-engine.js` → `engine-bridge.ts` → canvas). |
 | Smart Labels / anti-colisão | IMPLEMENTADO | `chart/label-compaction.ts`. |
 | Adaptive Zoom | AUSENTE | Zero sistema deliberado de zoom adaptativo — só o subproduto geométrico passivo de `priceToCoordinate`. |
@@ -75,7 +75,7 @@ de ser feito e a evolução de todos os sistema do ciborgue".
 | Forecast no canvas | PARCIAL | `realCycle.forecast` existe e é real, mas só aparece como lista de texto no HUD, nunca desenhado no canvas. |
 | OI/Funding como camada do gráfico | AUSENTE | Dado real já existe (GMIL/cross-exchange), mas nunca é desenhado no canvas — hoje só texto em painel. |
 | ZigZag como overlay próprio | PARCIAL | Existe só como helper interno em `fractal-swings.js`, nunca uma camada própria toggleable. |
-| Kill Zones (ICT) | IMPLEMENTADO | `nexus/kill-zones.ts` (§6.48) — badge no header; **canvas ainda pendente** (ver backlog §5, Tier 2). |
+| Kill Zones (ICT) | **IMPLEMENTADO — canvas incluído** (mudou desde §6.53) | `nexus/kill-zones.ts` (§6.48) — badge no header; `KillZoneBandsPlugin.tsx` (§6.55) fechou o desenho real no canvas (retângulo âmbar, mesma cor do badge), camada própria com Relevance Engine desde o nascimento. |
 | VWAP ±σ bands | **IMPLEMENTADO** (mudou desde §6.53) | `nexus/vwap-bands.ts` (§6.54) — desvio-padrão real ponderado por volume, k=1/2, mesmo toggle da VWAP (nunca uma 19ª camada). |
 
 ## 4. Inteligência, radar e contexto
@@ -117,9 +117,9 @@ abertos desta auditoria + achados novos de
 `AUDITORIA_CONSOLIDACAO_EVOLUCAO.md`)
 
 ### Tier 1 — barato, baixo risco, próxima rodada natural
-1. Kill Zones **no canvas** (Session Bands já provou o padrão de overlay
-   — `kill-zones.ts` só falta o plugin de canvas próprio; o badge do
-   header já existe).
+1. ~~Kill Zones **no canvas**~~ — **feito, §6.55** (`KillZoneBandsPlugin.tsx`,
+   camada própria `kill_zones`, Relevance Engine coberto desde o
+   nascimento).
 2. ~~VWAP ±σ bands~~ — **feito, §6.54** (`nexus/vwap-bands.ts`, wiring no
    mesmo toggle da VWAP).
 3. Auditoria de touch-target 44×44pt (iPad Safari, Regra de Ouro 7).
@@ -237,19 +237,21 @@ abertos desta auditoria + achados novos de
 
 ## 9. Roadmap recomendado (ordem sugerida, não uma promessa de cronograma)
 
-1. Tier 1 completo (baixo custo, fecha lacunas pequenas já mapeadas) —
-   VWAP ±σ bands já entregue (§6.54), resposta direta ao pedido
-   recorrente do Operador por "ferramentas mais precisas".
-2. Kill Zones no canvas (próximo item natural do Tier 1).
-3. Market Regime → Relevance Engine (fecha o último gap real do Fusion
+1. Tier 1 em andamento (baixo custo, fecha lacunas pequenas já
+   mapeadas) — VWAP ±σ bands (§6.54) e Kill Zones no canvas (§6.55) já
+   entregues, resposta direta ao pedido recorrente do Operador por
+   "ferramentas mais precisas". Restam: touch-target 44×44pt,
+   list-virtualization, `reconnecting-websocket`, escopo de toggle para
+   S1/R1/Trade Plan/Cenário.
+2. Market Regime → Relevance Engine (fecha o último gap real do Fusion
    Engine; depois deste, TODA relevância de camada vem de sinal real
    já mapeado, zero exceção pendente).
-4. Andrews Pitchfork (ferramenta institucional já priorizada).
-5. Decisão do Operador sobre os itens de Tier 3 (Footprint, SMT
+3. Andrews Pitchfork (ferramenta institucional já priorizada).
+4. Decisão do Operador sobre os itens de Tier 3 (Footprint, SMT
    Divergence, escopo do Chart Integrity Engine, nova paleta de cores
    por eixo semântico) — sem essa decisão, qualquer trabalho nesses 4
    itens seria suposição, não implementação.
-6. Tier 4 — cada item como sua própria trilha isolada e cuidadosa
+5. Tier 4 — cada item como sua própria trilha isolada e cuidadosa
    (mesma disciplina já usada para toda mudança de Main Thread/Core
    Engine neste projeto).
 
