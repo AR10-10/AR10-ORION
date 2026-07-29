@@ -85,7 +85,7 @@ import { computeSessionKeyLevels } from "../nexus/market-session";
 // EMA/VWAP/Nexus Line/FVG/Order Block/EQH/EQL — ver header de cada
 // arquivo para o raciocínio completo.
 import { computeInstitutionalZones, type InstitutionalZoneInput } from "../nexus/institutional-zones";
-import { InstitutionalZonePlugin } from "./InstitutionalZonePlugin";
+import { InstitutionalZonePlugin, LABEL_COLOR as INSTITUTIONAL_ZONE_LABEL_COLOR } from "./InstitutionalZonePlugin";
 import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
@@ -2217,8 +2217,30 @@ export function EnhancedChart_110_Percent({
         side: "left",
       });
     }
+    // Diretriz Final — Polimento Visual e Sincronização Global §1/§2
+    // (achado real via captura de tela do Operador): o rótulo de texto da
+    // Zona Institucional migrou de dentro de InstitutionalZonePlugin (canvas
+    // próprio, posição vertical própria) para cá — mesmo sistema anti-
+    // colisão de S1/R1/Sweep/Session Key Levels/TREND, único jeito real de
+    // garantir que uma zona institucional nunca sobreponha esses rótulos de
+    // novo (antes desta correção, os dois desenhavam em canvases
+    // independentes sem nenhuma consciência um do outro). price = centro
+    // real da zona (mesma referência vertical que o texto já usava dentro
+    // do plugin); a FAIXA (fill+borda) continua desenhada por
+    // InstitutionalZonePlugin, intocada — só o texto mudou de lugar.
+    if (visibility.institutional_zones) {
+      for (const zone of institutionalZones) {
+        const toolNames = zone.members.map((m) => m.label).join(" + ");
+        out.push({
+          price: (zone.top + zone.bottom) / 2,
+          text: `◆ ${toolNames}`,
+          color: INSTITUTIONAL_ZONE_LABEL_COLOR,
+          side: "left",
+        });
+      }
+    }
     return out;
-  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel]);
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones]);
 
   return (
     <div className="absolute inset-0">

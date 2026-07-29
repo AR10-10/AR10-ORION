@@ -29,19 +29,28 @@
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { InstitutionalZone } from "../nexus/institutional-zones";
-// Diretriz Final de Lapidação Visual, Adendo, Parte 11: rótulo de
-// confluência virou caixa real (mesma primitiva de LiquidityZonesPlugin/
-// KillZoneBandsPlugin/LiquidationHeatmapPlugin). LABEL_COLOR (claro,
-// pensado antes como texto sobre a faixa violeta) reaproveitado como fundo
-// da caixa — contraste com o texto escuro garantido pela própria
-// primitiva, zero cor nova inventada.
-import { drawCanvasLabel, measureCanvasLabel } from "../nexus/canvas-label";
+
+// Diretriz Final — Polimento Visual e Sincronização Global §1/§2 (achado
+// real via captura de tela do Operador, BTC/USDT 1H): o rótulo de texto
+// desta faixa vivia num canvas PRÓPRIO, desenhado por posição vertical
+// PRÓPRIA (centro real da zona), sem nenhuma consciência dos rótulos já
+// resolvidos por priceAxisLabels/PriceLabelStackPlugin (SWEEP/SWEEP ZONE/
+// Session Key Levels/S1/R1/TREND — todos no MESMO sistema anti-colisão
+// desde rodadas anteriores). Resultado real visível na captura: o texto
+// "ZONA INSTITUCIONAL · ..." sobrepondo/colidindo com "LONDRES H/L" e
+// "SWEEP ZONE" sempre que uma zona institucional caía perto de outro
+// nível real — exatamente a classe de bug que price-label-stack.ts existe
+// para eliminar, só que a Zona Institucional nunca tinha entrado nele.
+// Correção: o TEXTO migrou para priceAxisLabels (EnhancedChart_110_
+// Percent.tsx, side:"left", price = centro real da zona) — agora resolve
+// colisão na MESMA pilha que tudo o mais do lado esquerdo, com o MESMO
+// conector fino de volta ao preço quando precisa deslocar. Este plugin
+// continua dono exclusivo da FAIXA (fill+borda, dado geométrico real —
+// zero mudança aqui); LABEL_COLOR exportado para ser a única fonte real
+// dessa cor, nunca duplicada como literal em dois arquivos.
+export const LABEL_COLOR = "rgba(216, 205, 254, 0.90)";
 
 const ZONE_HUE_RGB = "167, 139, 250";
-const LABEL_COLOR = "rgba(216, 205, 254, 0.90)";
-// Abaixo desta altura em pixels, a faixa ainda desenha (fill+borda), só o
-// texto pula — mesmo princípio de MIN_LABEL_WIDTH_PX em KillZoneBandsPlugin.
-const MIN_LABEL_HEIGHT_PX = 13;
 
 // EPC OMEGA FINAL Parte 2 §7 ("Confluência Visual": "quanto maior a
 // confluência, maior o destaque visual"): antes desta rodada a faixa
@@ -109,9 +118,6 @@ export function InstitutionalZonePlugin({ chart, series, zones }: InstitutionalZ
       const currentZones = zonesRef.current;
       if (currentZones.length === 0) return; // sem confluência real agora — nada desenhado, nunca um exemplo.
 
-      ctx.font = "9px -apple-system, sans-serif";
-      ctx.textBaseline = "middle";
-
       for (const zone of currentZones) {
         const yTop = series.priceToCoordinate(zone.top);
         const yBottom = series.priceToCoordinate(zone.bottom);
@@ -133,20 +139,6 @@ export function InstitutionalZonePlugin({ chart, series, zones }: InstitutionalZ
         ctx.moveTo(0, Math.round(rectY + rectHeight) + 0.5);
         ctx.lineTo(cssWidth, Math.round(rectY + rectHeight) + 0.5);
         ctx.stroke();
-
-        if (rectHeight >= MIN_LABEL_HEIGHT_PX) {
-          // Diretriz Final — Lapidação Visual §1 ("eliminar excesso de
-          // texto... evitar textos longos"): "ZONA INSTITUCIONAL" cortado —
-          // a própria faixa violeta (fill+borda) já comunica que isto é uma
-          // anotação de confluência; repetir isso em texto era redundante
-          // com o que a cor já diz. O ◆ sozinho basta como assinatura visual
-          // do tipo de anotação; o conteúdo real (quais ferramentas
-          // concordam) continua 100% intacto.
-          const toolNames = zone.members.map((m) => m.label).join(" + ");
-          const text = `◆ ${toolNames}`;
-          const size = measureCanvasLabel(ctx, text);
-          drawCanvasLabel(ctx, 6, rectY + rectHeight / 2 - size.height / 2, { fill: LABEL_COLOR, text });
-        }
       }
     };
 

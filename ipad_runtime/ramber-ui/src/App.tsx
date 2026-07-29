@@ -5202,6 +5202,16 @@ function TopBar({ data }: { data?: PriceState | null }) {
     nlState,
     nexusConfluence,
   } = useContext(WidgetContext) || {};
+  // Diretriz Final — Polimento Visual e Sincronização Global §4
+  // ("Sincronizar Agora... exibir discretamente o status da
+  // sincronização"): price.updatedAt já é o timestamp real do último tick
+  // de mercado aceito pela store (setPrice, unified-snapshot-store.ts) —
+  // reaproveitado aqui como a leitura mais honesta de "há quanto tempo o
+  // organismo está realmente sincronizado", zero conceito novo inventado
+  // (o botão abaixo já dispara handleManualRestart, que já reconecta REST+
+  // WS+ciclo do motor+feeds — "sincronizador global" já real desde antes
+  // desta rodada, só faltava o status visível).
+  const syncPriceSnapshot = usePriceSnapshot();
   // Refinamento Final §1 ("Sessão Atual"): derivação pura do relógio UTC
   // real (market-session.ts). Computada no render — a TopBar re-renderiza
   // ao menos 1x/s pelo tick de preço, então o rótulo nunca fica >1s
@@ -5657,7 +5667,7 @@ function TopBar({ data }: { data?: PriceState | null }) {
           <button
             type="button"
             onClick={handleManualRestart}
-            title="Force reconnection of all real feeds"
+            title={`Sincronizar Agora — recarrega dados de mercado, motores, feeds em tempo real e cache. Última leitura real: ${syncPriceSnapshot.updatedAt === null ? "aguardando conexão" : `há ${ageLabelOf(syncPriceSnapshot.updatedAt)}`}.`}
             className="ml-1 w-8 h-8 rounded-full border border-[#00f0ff40] bg-[#00f0ff08] flex items-center justify-center text-[#00f0ff] hover:bg-[#00f0ff20] active:scale-95 transition-all shadow-[0_0_10px_rgba(0,240,255,0.15)] animate-pulse"
           >
             <Power size={14} />

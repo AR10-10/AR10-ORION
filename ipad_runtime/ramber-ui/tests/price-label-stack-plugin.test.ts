@@ -386,7 +386,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('priceAxisLabels recalcula a cada tick real de livePrice — nunca uma etiqueta de preço congelada', () => {
     const s = chart();
-    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel]);');
+    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones]);');
     expect(depsIdx, 'dependency array de priceAxisLabels não inclui livePrice').toBeGreaterThan(-1);
   });
 
@@ -588,7 +588,7 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
 
   it('engineFallbackLevels entra nas deps de priceAxisLabels — recalcula quando o Núcleo muda de leitura', () => {
     const s = chart();
-    expect(s).toContain('livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel]);');
+    expect(s).toContain('livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones]);');
   });
 
   it('overlay de texto do canto (tradePlanAbsenceReason) nunca fica auto-contraditório: quando as linhas do Núcleo estão visíveis, o texto deixa explícito que é só o plano do CONSELHO que falta — nunca "SEM TRADE PLAN" sozinho com linhas reais na tela', () => {
@@ -733,7 +733,11 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     expect(sweepBlock).toContain('alpha,');
 
     const keyLevelIdx = c.indexOf('if (visibility.session_key_levels && currentSessionKeyLevel) {', idx);
-    const keyLevelBlock = c.slice(keyLevelIdx, c.indexOf('return out;', idx));
+    // Fatiado até o comentário do bloco seguinte (Zona Institucional),
+    // nunca até 'return out;' — aquele bloco tem seu próprio side:"left"
+    // real (achado real desta correção: fatiar até o fim da função
+    // inflava esta contagem quando um novo bloco era adicionado depois).
+    const keyLevelBlock = c.slice(keyLevelIdx, c.indexOf('// Diretriz Final — Polimento Visual', idx));
     expect((keyLevelBlock.match(/side: "left",/g) ?? []).length).toBe(2); // high + low
   });
 
@@ -748,12 +752,52 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     expect(block).toContain('out.push({ price: emaLastValue, text: `EMA ${activeEmaPeriod} ${emaLastValue.toFixed(2)}`, color: "rgba(66, 165, 245, 0.85)" });');
   });
 
-  it('resultado real esperado: até 7 rótulos possíveis do lado esquerdo (S1/R1/TREND/CHOC/SWEEP/KEY-H/KEY-L), até 8 do lado direito (VWAP/NL/EMA + até 5 do plano ativo Conselho OU Núcleo) — redução real de densidade no lado que o Operador reportou, não só estética (Sweep/Key Levels somaram-se depois, achado real "linha amarela"/"etiqueta em cima do valor")', () => {
+  it('resultado real esperado: até 8 rótulos possíveis do lado esquerdo (S1/R1/TREND/CHOC/SWEEP/KEY-H/KEY-L/ZONA INSTITUCIONAL), até 8 do lado direito (VWAP/NL/EMA + até 5 do plano ativo Conselho OU Núcleo) — redução real de densidade no lado que o Operador reportou, não só estética (Sweep/Key Levels somaram-se depois; Zona Institucional migrou pra cá na Diretriz Final — Polimento Visual, achado real de colisão via captura de tela)', () => {
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
     const end = c.indexOf('return out;', idx);
     const block = c.slice(idx, end);
     const leftSideCount = (block.match(/side: "left",/g) ?? []).length;
-    expect(leftSideCount).toBe(7);
+    expect(leftSideCount).toBe(8);
+  });
+});
+
+// Diretriz Final — Polimento Visual e Sincronização Global §1/§2: achado
+// real via captura de tela do Operador (BTC/USDT 1H) — o rótulo de texto
+// da Zona Institucional (antes desenhado por InstitutionalZonePlugin, num
+// canvas próprio, com posição vertical própria) colidia visivelmente com
+// "LONDRES H/L"/"SWEEP ZONE" porque os dois desenhavam em canvases
+// independentes, sem nenhuma consciência um do outro. Trava a migração do
+// TEXTO para o mesmo sistema anti-colisão real (priceAxisLabels) que já
+// resolvia Sweep/Session Key Levels/S1/R1 — a FAIXA (fill+borda) continua
+// intocada em InstitutionalZonePlugin.
+describe('Diretriz Final — Polimento Visual: rótulo de Zona Institucional migrou para priceAxisLabels (zero colisão com Sweep/Session/S1/R1)', () => {
+  it('InstitutionalZonePlugin.tsx: exporta LABEL_COLOR (única fonte real da cor) e NUNCA mais chama drawCanvasLabel/measureCanvasLabel — só desenha a faixa (fill+borda)', () => {
+    const s = read('../src/chart/InstitutionalZonePlugin.tsx');
+    expect(s).toContain('export const LABEL_COLOR = "rgba(216, 205, 254, 0.90)";');
+    expect(s).not.toContain('drawCanvasLabel(');
+    expect(s).not.toContain('measureCanvasLabel(');
+    expect(s).not.toContain('import { drawCanvasLabel');
+  });
+
+  it('EnhancedChart_110_Percent.tsx: importa LABEL_COLOR do plugin (zero cor duplicada como literal em 2 arquivos) e empurra 1 entrada por zona real em priceAxisLabels, side:"left", price = centro real da zona', () => {
+    const c = chart();
+    expect(c).toContain('import { InstitutionalZonePlugin, LABEL_COLOR as INSTITUTIONAL_ZONE_LABEL_COLOR } from "./InstitutionalZonePlugin";');
+    const idx = c.indexOf('if (visibility.institutional_zones) {', c.indexOf('const priceAxisLabels = useMemo'));
+    expect(idx, 'bloco de Zona Institucional em priceAxisLabels não encontrado').toBeGreaterThan(-1);
+    const block = c.slice(idx, c.indexOf('return out;', idx));
+    expect(block).toContain('for (const zone of institutionalZones) {');
+    expect(block).toContain('price: (zone.top + zone.bottom) / 2,');
+    expect(block).toContain('text: `◆ ${toolNames}`,');
+    expect(block).toContain('color: INSTITUTIONAL_ZONE_LABEL_COLOR,');
+    expect(block).toContain('side: "left",');
+  });
+
+  it('respeita visibility.institutional_zones (fail-closed: camada desligada = zero entrada no eixo, mesma disciplina de todo outro bloco condicional aqui)', () => {
+    const c = chart();
+    const idx = c.indexOf('const priceAxisLabels = useMemo');
+    const block = c.slice(idx, c.indexOf('return out;', idx));
+    const zoneIdx = block.indexOf('if (visibility.institutional_zones) {');
+    expect(zoneIdx).toBeGreaterThan(-1);
   });
 });

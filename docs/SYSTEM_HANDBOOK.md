@@ -5484,6 +5484,66 @@ documentada em rodadas anteriores).
 
 ---
 
+### 6.71 "DIRETRIZ FINAL — POLIMENTO VISUAL E SINCRONIZAÇÃO GLOBAL": bug
+real de colisão confirmado por captura de tela (Zona Institucional ×
+Sweep/Sessão) corrigido; botão de energia vira "Sincronizar Agora" com
+status real
+
+O Operador anexou uma captura de tela real (BTC/USDT 1H) mostrando
+colisão severa de rótulos do lado esquerdo do gráfico — o texto "ZONA
+INSTITUCIONAL · ..." sobrepondo/colidindo visivelmente com "LONDRES
+H/L" e "SWEEP ZONE". Auditoria confirmou a causa raiz: `SWEEP`/`SWEEP
+ZONE`/Session Key Levels/S1/R1/TREND já entravam no sistema anti-colisão
+real (`priceAxisLabels`/`PriceLabelStackPlugin`/`price-label-stack.ts`,
+construído em rodadas anteriores exatamente para isto), mas o rótulo de
+texto da Zona Institucional (`InstitutionalZonePlugin.tsx`) desenhava
+num canvas PRÓPRIO, com posição vertical PRÓPRIA, sem nenhuma
+consciência do que a pilha já tinha resolvido — os dois sistemas
+desenhavam no mesmo espaço de tela sem se falar.
+
+**Corrigido**: o TEXTO da Zona Institucional migrou para
+`priceAxisLabels` (`price = centro real da zona`, `side: "left"`) — a
+MESMA pilha anti-colisão que já resolve Sweep/Session/S1/R1/TREND, com o
+MESMO conector fino de volta ao preço quando precisa deslocar.
+`InstitutionalZonePlugin.tsx` continua dono exclusivo da FAIXA
+(fill+borda, geometria real, zero mudança); `LABEL_COLOR` exportado para
+ser a única fonte real dessa cor (zero duplicação de literal em 2
+arquivos). Este é o achado mais concreto e evidenciado de toda a
+diretiva — resolve diretamente §1 (nunca uma etiqueta cobre outra), §2
+(mesma caixa/tipografia consistente do resto do eixo) e §5
+(reorganização automática, zero intervenção do Operador) para esta
+camada específica.
+
+**Botão de energia (§4, "sincronizador global")**: auditoria confirmou
+que `handleManualRestart` (App.tsx) já ERA um sincronizador global real
+desde antes desta rodada — bumpar `bootGeneration` já reconecta REST+WS+
+ciclo do motor+feeds (comentário real já existente no próprio código).
+Faltava só o que a diretiva pedia de fato: título honesto ("Sincronizar
+Agora", trocado do inglês "Force reconnection of all real feeds") + um
+status real e discreto — reaproveita `price.updatedAt` (já real, `Date.
+now()` em `setPrice`) via `usePriceSnapshot()` + `ageLabelOf()` (helper
+já existente, usado por preço/livro/ciclo/HTF/GMIL) — zero conceito novo
+inventado, zero segundo formatador de idade.
+
+**Reconfirmado sem retrabalho**: §3 (Rabiscos Inteligentes — Fio de Seda
+1px sólido já 100% respeitado, ciclo de vida/decaimento já real em todo
+plugin que precisava, "curvas suaves" deliberadamente não implementadas
+pela mesma razão já documentada na Entrega anterior — implicaria uma
+trajetória de preço prevista, mais forte que "aqui está um nível real");
+etiquetas FVG/OB/BOS/CHOCH já usam a primitiva compartilhada
+`canvas-label.ts` desde o "Adendo Final: etiquetas institucionais
+unificadas" (rodada anterior).
+
+**Testes executados**: `tsc --noEmit` limpo · **126 arquivos / 2130
+testes** (100%, +7 novos: 3 travam a migração do rótulo de Zona
+Institucional, 4 travam a fiação do botão de sincronização) · `npm run
+build` ok (871,37 kB, +0,16 kB) · Playwright real confirmou o app
+carregando sem regressão e o novo título do botão renderizando com
+status real (`"Sincronizar Agora — ... Última leitura real: há 3s."` —
+valor real observado no sandbox, não fabricado).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

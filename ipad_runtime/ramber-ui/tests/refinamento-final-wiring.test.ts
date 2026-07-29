@@ -709,7 +709,10 @@ describe('Achado real do Operador ("linha amarela que eu não sei o que signific
 
     const pushIdx = c.indexOf('if (visibility.session_key_levels && currentSessionKeyLevel) {');
     expect(pushIdx, 'bloco de Session Key Levels em priceAxisLabels não encontrado').toBeGreaterThan(-1);
-    const pushBlock = c.slice(pushIdx, c.indexOf('return out;', pushIdx));
+    // Fatiado até o comentário do bloco seguinte (Zona Institucional),
+    // nunca até 'return out;' — aquele bloco também tem seu próprio
+    // side:"left" real (Diretriz Final — Polimento Visual).
+    const pushBlock = c.slice(pushIdx, c.indexOf('// Diretriz Final — Polimento Visual', pushIdx));
     expect(pushBlock).toContain('price: currentSessionKeyLevel.high,');
     expect(pushBlock).toContain('price: currentSessionKeyLevel.low,');
     expect((pushBlock.match(/side: "left",/g) ?? []).length).toBe(2);
