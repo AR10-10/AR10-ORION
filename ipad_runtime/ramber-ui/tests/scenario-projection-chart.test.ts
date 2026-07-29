@@ -91,12 +91,26 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
     expect(s).toContain('rgba(255, 0, 85, 0.75)'); // linha real do Stop do Trade Plan, referência do teto
   });
 
-  it('axisLabelVisible false (mais discreto que o Trade Plan, que usa true) e título carrega direção + rank real (TP1/TP2/TP3) + fonte real + peso real', () => {
+  it('axisLabelVisible false (mais discreto que o Trade Plan, que usa true) e título carrega direção + rank real (TP1/TP2/TP3) + fonte real + tipo de reação real + confiança real', () => {
     const s = src();
     const idx = s.indexOf('scenarioLinesRef.current.push(');
     const block = s.slice(idx, idx + 1100);
     expect(block).toContain('axisLabelVisible: false,');
-    expect(block).toContain('title: `PROJEÇÃO · ${label} · ${path.direction} · TP${i + 1} · ${target.sourceKind} · ${weightLabel}`,');
+    expect(block).toContain('title: `PROJEÇÃO · ${label} · ${path.direction} · TP${i + 1} · ${target.sourceKind} (${reaction}) · ${weightLabel}`,');
+  });
+
+  it('Diretriz Final — Camada de Cenários Inteligentes §3: reaction real (describeScenarioReaction) computado por alvo, derivado só do sourceKind já real — zero motor novo', () => {
+    const s = src();
+    expect(s).toContain('import { describeScenarioConfidence, describeScenarioReaction } from "../nexus/scenario-engine";');
+    const idx = s.indexOf('const reaction = describeScenarioReaction(target.sourceKind);');
+    expect(idx).toBeGreaterThan(-1);
+  });
+
+  it('Diretriz Final — Camada de Cenários Inteligentes §4: weightLabel usa describeScenarioConfidence (qualitativo), nunca mais Math.round(...*100)', () => {
+    const s = src();
+    expect(s).toContain('const confidence = describeScenarioConfidence(path.opinionWeight);');
+    expect(s).toContain('const weightLabel = confidence !== null ? `opinion ${confidence}` : "opinion n/a";');
+    expect(s).not.toContain('Math.round(path.opinionWeight * 100)');
   });
 
   it('Diretriz Restauração/Inteligência Visual §3: título começa explicitamente com "PROJEÇÃO" — passado/presente/projeção nunca se confundem só pela cor/opacidade', () => {

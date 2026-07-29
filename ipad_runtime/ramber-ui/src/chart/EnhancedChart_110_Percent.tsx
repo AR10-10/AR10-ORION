@@ -107,6 +107,7 @@ import type { TradePlan } from "../nexus/trade-plan";
 import { effectiveStopForTargetsHit } from "../nexus/trade-plan";
 import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
+import { describeScenarioConfidence, describeScenarioReaction } from "../nexus/scenario-engine";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
 import type { HarmonicPatternHit, HarmonicPoint } from "../nexus/harmonic-patterns";
 import type { NexusDecision } from "../nexus/decision-layer";
@@ -1514,12 +1515,19 @@ export function EnhancedChart_110_Percent({
       { path: scenario.pathA, label: "SCENARIO A" },
       { path: scenario.pathB, label: "SCENARIO B" },
     ] as const).forEach(({ path, label }) => {
-      const weightLabel = path.opinionWeight !== null
-        ? `opinion ${Math.round(path.opinionWeight * 100)}%`
-        : "opinion n/a";
+      // Diretriz Final — Camada de Cenários Inteligentes §4: confiança
+      // qualitativa real (describeScenarioConfidence), nunca mais a
+      // porcentagem bruta — mesmo motivo de heatTier (ver header de
+      // scenario-engine.ts).
+      const confidence = describeScenarioConfidence(path.opinionWeight);
+      const weightLabel = confidence !== null ? `opinion ${confidence}` : "opinion n/a";
       path.targets.forEach((target, i) => {
         if (!Number.isFinite(target.price)) return;
         const alpha = alphaOf(path.opinionWeight) * (TARGET_ALPHA_FALLOFF[i] ?? TARGET_ALPHA_FALLOFF[TARGET_ALPHA_FALLOFF.length - 1]);
+        // §3 ("Pontos de Reteste... sempre derivados de cálculos reais"):
+        // classificação honesta do tipo de reação esperada, derivada só
+        // do sourceKind que este nível já carrega — zero motor novo.
+        const reaction = describeScenarioReaction(target.sourceKind);
         scenarioLinesRef.current.push(
           series.createPriceLine({
             price: target.price,
@@ -1533,7 +1541,7 @@ export function EnhancedChart_110_Percent({
             // realmente vê é a cor lavanda dedicada + a opacidade
             // decrescente por rank, não este texto (ver comentário no
             // topo do efeito).
-            title: `PROJEÇÃO · ${label} · ${path.direction} · TP${i + 1} · ${target.sourceKind} · ${weightLabel}`,
+            title: `PROJEÇÃO · ${label} · ${path.direction} · TP${i + 1} · ${target.sourceKind} (${reaction}) · ${weightLabel}`,
           }),
         );
       });

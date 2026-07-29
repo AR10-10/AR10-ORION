@@ -5378,6 +5378,112 @@ presente no DOM renderizado.
 
 ---
 
+### 6.69 "DIRETRIZ FINAL — LAPIDAÇÃO VISUAL E ACABAMENTO PROFISSIONAL":
+último passo antes da homologação — 2 achados reais corrigidos, 5 seções
+reconfirmadas; relatório atualizado em
+`docs/RELATORIO_MESTRE_HOMOLOGACAO.md` §9
+
+Diretiva explicitamente restrita a qualidade visual/acabamento — zero
+funcionalidade nova. Auditoria das 8 seções pedidas contra o código real
+do gráfico e do Radar (sem novo swarm de agentes — conhecimento já
+profundo da mesma sessão).
+
+**Corrigido**: (1) `InstitutionalZonePlugin.tsx` prefixava cada rótulo
+com "◆ ZONA INSTITUCIONAL · " — redundante com o que a própria faixa
+violeta (cor+borda) já comunica; comprimido para "◆ " + nomes das
+ferramentas, conteúdo real intacto. (2) `RadarQualificationResult.reason`
+já carregava uma justificativa real de por que um candidato qualificou,
+mas nunca chegava à UI; `nexus/radar-qualification.ts` ganhou
+`RADAR_QUALIFIES_REASON` + `describeRadarQualificationReason()` (zero
+segunda fonte de verdade), agora exposta como `title` no botão de cada
+candidato — mesmo padrão de tooltip já usado pelos votos do Conselho.
+
+**Reconfirmado, não retrabalhado**: Fio de Seda 100% conforme em todo
+`chart/*.tsx` (grep confirmou zero `setLineDash`/`lineWidth`>1 real);
+ordem de pintura dos 12 plugins de canvas (`InstitutionalZonePlugin`
+ficar atrás de Neural Market Aura/Trade Plan Zone já tem justificativa
+real documentada no próprio ponto de montagem — investigado a fundo,
+nenhuma colisão real observada que justificasse reabrir); ciclo de vida
+real + Relevance Engine já cobrem poluição visual; `conviction-cyclone-
+worker.ts` (única animação contínua real) já isolada em Worker, 25fps,
+movimento contínuo sem saltos.
+
+**Testes executados**: `tsc --noEmit` limpo · **125 arquivos / 2113
+testes** (100%, +6 novos) · `npm run build` ok · Playwright real (bypass
+documentado do access-gate, mesmo usado por
+`scripts/audit-header-maxcontent.mjs`) confirmou o painel OPORTUNIDADES
+renderizando corretamente, zero erro de console novo além da limitação
+de rede já conhecida do sandbox.
+
+---
+
+### 6.70 "DIRETRIZ FINAL — CAMADA DE CENÁRIOS INTELIGENTES (SMART
+SCENARIO LAYER)": auditoria revela que a maior parte já existia
+(`scenario-engine.ts` + projeção nativa no canvas); 2 achados reais
+fechados (confiança qualitativa, tipo de reação)
+
+Diretiva pedia uma camada visual de "Cenário A/Cenário B" com linhas de
+projeção discretas, pontos de reteste, confiança qualitativa (nunca
+porcentagem arbitrária) e explicação visual — auditoria (`grep`/leitura
+de `nexus/scenario-engine.ts`, `tests/scenario-projection-chart.test.ts`)
+confirmou que isto **já existe**, construído em rodadas anteriores desta
+mesma sessão ("Diretriz Suprema §5/§6 — Future Path Map",
+"Diretriz Complementar §6 — Smart Projection Engine",
+"Diretriz Restauração/Inteligência Visual §3"): `buildScenarioProjection`
+já produz Path A (postura real do conselho)/Path B (oposto) com até
+`MAX_SCENARIO_TARGETS` níveis reais por lado (EQH/EQL, S/R, Fibonacci com
+score real, VP POC/HVN), invalidação = nível real mais próximo do lado
+oposto (deliberadamente sem linha própria — seria a "linha fantasma"
+redundante que a diretiva proíbe), já desenhado como price lines nativas
+lavanda (cor dedicada, nunca a mesma de LONG/SHORT confirmado), Fio de
+Seda respeitado (`LineStyle.Solid`, `lineWidth: 1`), opacidade por rank +
+peso real do Conselho, sempre abaixo do teto do Trade Plan ativo (LEI
+24), recomputado a cada mudança real de insumo (câmara viva já
+implementada).
+
+**Achados reais fechados nesta rodada**: (1) §4 — o peso do Conselho
+aparecia como porcentagem bruta ("opinion 62%") no painel visível
+(CouncilWidget) e no metadado da price line — a própria diretiva pede
+"não utilizar porcentagens arbitrárias... usar classificações
+qualitativas". `describeScenarioConfidence()` (novo,
+`nexus/scenario-engine.ts`) traduz o peso real para MUITO_FORTE/FORTE/
+MODERADA/FRACA — mesmos cortes uniformes de 25% já usados por `heatTier`
+(`heat-score.ts`), parâmetro documentado, não uma calibração (Regra de
+Ouro 2). `formatScenarioPathLabel()` (consumido pelos 2 painéis de texto
+já visíveis) e o título da price line no canvas foram atualizados; o
+número real (`opinionWeight`) continua 100% intacto no contrato, só a
+apresentação mudou. (2) §3 — os alvos reais (pontos de "reteste") não
+tinham nenhuma classificação de tipo de reação. `describeScenarioReaction
+()` (novo) deriva um rótulo honesto — varredura de liquidez (EQH/EQL),
+pullback/rejeição (S/R), retração (Fibonacci), ímã de volume (Volume
+Profile) — só do `sourceKind` que o nível já carrega, zero motor novo,
+fallback genérico honesto para família desconhecida. Adicionado ao
+metadado `title` de cada price line de projeção.
+
+**Deliberadamente não implementado, com motivo real**: trajetória
+curva/pontilhada (§5, fraseado como exemplo condicional — "caso o
+sistema represente uma trajetória") — uma curva suave interpolada
+implicaria visualmente um caminho previsto de preço, mais forte do que
+"aqui está um nível real", e uma linha pontilhada violaria Fio de Seda
+(Regra de Ouro 5, zero exceção); a implementação real (linhas retas
+horizontais nos níveis reais, já existente) é mais honesta e já foi essa
+mesma decisão de uma rodada anterior. Glifo/marcador dedicado para
+"pontos de reteste" (§3) além da price line já existente no mesmo preço
+— seria geometria duplicada no mesmo pixel (poluição visual, contra o
+próprio §7 da diretiva) e arriscaria reabrir a colisão de rótulos no
+eixo de preço já corrigida em múltiplas rodadas anteriores; a
+classificação real (texto) foi adicionada ao metadado já existente em
+vez disso.
+
+**Testes executados**: `tsc --noEmit` limpo · **125 arquivos / 2123
+testes** (100%, +10 novos) · `npm run build` ok (871,21 kB, +0,42 kB) ·
+Playwright real confirmou o app e o painel Market Intelligence
+renderizando sem regressão (bloco SCENARIO A/B ausente honestamente —
+sandbox sem rede real para popular `scenario` — mesma limitação já
+documentada em rodadas anteriores).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

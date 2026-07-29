@@ -5,7 +5,14 @@
 // OPOSTO; pesos = massa de opinião do conselho (nunca probabilidade — o
 // rótulo `basis` é permanente e testado).
 import { describe, it, expect } from 'vitest';
-import { buildScenarioProjection, formatScenarioPathLabel, MAX_SCENARIO_TARGETS, type ScenarioLevel } from '../src/nexus/scenario-engine';
+import {
+  buildScenarioProjection,
+  formatScenarioPathLabel,
+  describeScenarioConfidence,
+  describeScenarioReaction,
+  MAX_SCENARIO_TARGETS,
+  type ScenarioLevel,
+} from '../src/nexus/scenario-engine';
 import type { CouncilDecision } from '../src/nexus/council';
 
 const council = (over: Partial<CouncilDecision> = {}): CouncilDecision => ({
@@ -124,7 +131,7 @@ describe('formatScenarioPathLabel: formatador único (Diretriz Suprema §5/§6) 
     expect(label).toBe('LONG → 110 (EQH)');
   });
 
-  it('3 alvos reais: sufixo "+2" honesto (quantos outros existem além do mais próximo)', () => {
+  it('3 alvos reais: sufixo "+2" honesto (quantos outros existem além do mais próximo) — confiança qualitativa, nunca porcentagem', () => {
     const label = formatScenarioPathLabel({
       direction: 'SHORT',
       targets: [
@@ -135,10 +142,10 @@ describe('formatScenarioPathLabel: formatador único (Diretriz Suprema §5/§6) 
       invalidation: { price: 110, sourceKind: 'EQH' },
       opinionWeight: 0.42,
     });
-    expect(label).toBe('SHORT → 95 (VP_POC) +2 · inv 110 · opinion 42%');
+    expect(label).toBe('SHORT → 95 (VP_POC) +2 · inv 110 · opinion MODERADA');
   });
 
-  it('invalidação null nunca aparece no texto (sem "· inv" pendurado)', () => {
+  it('invalidação null nunca aparece no texto (sem "· inv" pendurado) — confiança qualitativa no limite FORTE (0.5)', () => {
     const label = formatScenarioPathLabel({
       direction: 'LONG',
       targets: [{ price: 110, sourceKind: 'EQH' }],
@@ -146,7 +153,7 @@ describe('formatScenarioPathLabel: formatador único (Diretriz Suprema §5/§6) 
       opinionWeight: 0.5,
     });
     expect(label).not.toContain('inv');
-    expect(label).toBe('LONG → 110 (EQH) · opinion 50%');
+    expect(label).toBe('LONG → 110 (EQH) · opinion FORTE');
   });
 
   it('peso null vira ausência honesta de sufixo de opinião (nunca "opinion n/a" fabricado dentro deste formatador específico — App.tsx decide seu próprio fallback quando precisa)', () => {
@@ -157,5 +164,63 @@ describe('formatScenarioPathLabel: formatador único (Diretriz Suprema §5/§6) 
       opinionWeight: null,
     });
     expect(label).toBe('LONG → 110 (EQH)');
+  });
+});
+
+// Diretriz Final — Camada de Cenários Inteligentes §4 ("Não utilizar
+// porcentagens arbitrárias... classificações qualitativas"): cortes
+// uniformes de 25%, mesmo espírito de heatTier (heat-score.ts) — testa
+// os 4 limiares reais + os 2 casos honestos (null/fora de faixa).
+describe('describeScenarioConfidence: faixa qualitativa real, nunca uma porcentagem exposta', () => {
+  it('null/NaN => null honesto (nunca uma faixa fabricada sem peso real)', () => {
+    expect(describeScenarioConfidence(null)).toBeNull();
+    expect(describeScenarioConfidence(Number.NaN)).toBeNull();
+  });
+
+  it('4 faixas reais nos limiares documentados (cortes de 25%)', () => {
+    expect(describeScenarioConfidence(0)).toBe('FRACA');
+    expect(describeScenarioConfidence(0.24)).toBe('FRACA');
+    expect(describeScenarioConfidence(0.25)).toBe('MODERADA');
+    expect(describeScenarioConfidence(0.49)).toBe('MODERADA');
+    expect(describeScenarioConfidence(0.5)).toBe('FORTE');
+    expect(describeScenarioConfidence(0.74)).toBe('FORTE');
+    expect(describeScenarioConfidence(0.75)).toBe('MUITO_FORTE');
+    expect(describeScenarioConfidence(1)).toBe('MUITO_FORTE');
+  });
+
+  it('peso fora de [0,1] é grampeado (fail-safe), nunca lança nem devolve uma faixa fora do vocabulário real', () => {
+    expect(describeScenarioConfidence(-0.5)).toBe('FRACA');
+    expect(describeScenarioConfidence(1.5)).toBe('MUITO_FORTE');
+  });
+});
+
+// §3 ("Pontos de Reteste... possível pullback/rejeição/continuação/
+// reversão... sempre derivados de cálculos reais"): a classificação
+// nasce só do sourceKind que o motor já produz (scenario-engine.ts
+// acima, mesma lista real usada por buildScenarioProjection), zero
+// inferência nova.
+describe('describeScenarioReaction: classificação honesta derivada só do sourceKind real, nunca uma inferência nova', () => {
+  it('família de liquidez (EQH/EQL) => varredura de liquidez', () => {
+    expect(describeScenarioReaction('EQH')).toBe('possível varredura de liquidez');
+    expect(describeScenarioReaction('EQL')).toBe('possível varredura de liquidez');
+  });
+
+  it('família estrutural (SR_*) => pullback/rejeição', () => {
+    expect(describeScenarioReaction('SR_SUPPORT_1')).toBe('possível pullback/rejeição');
+    expect(describeScenarioReaction('SR_RESISTANCE_1')).toBe('possível pullback/rejeição');
+  });
+
+  it('família Fibonacci (FIB_*) => retração', () => {
+    expect(describeScenarioReaction('FIB_61.8')).toBe('possível retração');
+  });
+
+  it('família Volume Profile (VP_*) => ímã de volume', () => {
+    expect(describeScenarioReaction('VP_POC')).toBe('possível ímã de volume');
+    expect(describeScenarioReaction('VP_HVN')).toBe('possível ímã de volume');
+  });
+
+  it('sourceKind desconhecido (motor futuro ainda não mapeado aqui) => fallback honesto genérico, nunca lança exceção', () => {
+    expect(() => describeScenarioReaction('QUALQUER_COISA_NOVA')).not.toThrow();
+    expect(describeScenarioReaction('QUALQUER_COISA_NOVA')).toBe('possível reação estrutural');
   });
 });
