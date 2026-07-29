@@ -221,3 +221,107 @@ real, exatamente como a diretiva pediu.
 - LEI 24 / SSOT / READ_ONLY / demais regras: **atendido por construção**,
   não por convenção — a fronteira crítica (GMIL/Consensus fora do Core
   Engine) é uma trava de CI executável, verificada nesta rodada.
+
+---
+
+## 9. Entrega 7 (adendo) — Diretriz Final: Lapidação Visual e Acabamento Profissional
+
+**Status:** o Operador declarou esta diretiva como *"a última etapa antes
+da homologação definitiva"*, com escopo explicitamente restrito a
+qualidade visual/usabilidade/acabamento profissional — **não** nova
+funcionalidade. Instrução final do próprio Operador: atualizar **este**
+relatório (não criar um novo) com as alterações desta etapa.
+
+### 9.1 Método
+
+Mesma disciplina das rodadas anteriores desta sessão (auditar antes de
+construir), mas sem novo swarm de agentes — o estado do sistema já era
+conhecido em profundidade. Auditoria direta por `grep`/leitura das 8
+seções da diretiva contra o código-fonte real do gráfico
+(`chart/*.tsx`), do Radar (`App.tsx`/`nexus/radar-qualification.ts`) e
+da única animação contínua real do app (`conviction-cyclone-worker.ts`).
+
+### 9.2 Auditoria por seção da diretiva
+
+| § | Achado real | Ação |
+|---|---|---|
+| §1 Etiquetas | Rótulos do eixo de preço já compactos (S1/R1/VWAP/NL/EMA/EN/TP1-3/Sessão H-L); rótulo TREND deliberadamente mais verboso — é a ÚNICA leitura visível de OLS/janela/σ no app inteiro, remover apagaria dado real (Regra de Ouro 4), corretamente preservado. Achado real de excesso: `InstitutionalZonePlugin.tsx` prefixava cada rótulo com `"◆ ZONA INSTITUCIONAL · "` — texto redundante com o que a própria faixa violeta (cor+borda) já comunica. | **Corrigido** (§9.3.1). |
+| §2 Linhas e Rabiscos | `grep` de `setLineDash\|lineWidth = [02-9]\|lineWidth: [02-9]` em todo `chart/*.tsx`: zero ocorrência real (só comentários afirmando conformidade). Fio de Seda (Regra de Ouro 5) 100% respeitado em todos os overlays — BOS/CHOCH, Liquidity Sweep, Order Blocks, FVG, Session Levels, Market Structure, Fibonacci, Harmônicos, Trendlines, Trade Plan, projeções. | Reconfirmado, zero mudança necessária. |
+| §3 Hierarquia Visual | Investigada a ordem real de montagem (= ordem real de pintura) dos 12 plugins de canvas em `EnhancedChart_110_Percent.tsx`. `InstitutionalZonePlugin` (zonas institucionais consolidadas — já incorpora EQH/EQL/S-R/FVG/OB/Sweep num único destaque ponderado por confluência, Entrega 5 anterior) fica posicionado logo antes de Neural Market Aura/Trade Plan Zone, com essa ordem já justificada por comentário real no próprio JSX de montagem ("para a faixa ficar visualmente ATRÁS do que já é o núcleo do plano"). Investiguei se isso conflitava com o comentário do próprio plugin ("por trás delas", referindo-se a EMA/VWAP/Liquidez/FVG/OB) — são duas relações de camada DIFERENTES e ambas já deliberadas em rodadas anteriores, não um bug novo. Reabrir essa ordem sem uma colisão real observada (nenhuma encontrada) seria exatamente o tipo de "mudança apressada" que este projeto evita. | Investigado a fundo, reconfirmado como decisão já correta — zero mudança. |
+| §4 Poluição Visual | Ciclo de vida real (decaimento/fade) já existe em todos os plugins que precisavam dele (Diretriz Consolidação, rodada anterior); Relevance Engine (`layer-relevance.ts`) já esconde/atenua por relevância real; `institutional-zones.ts` já consolida 11 fontes de confluência num único destaque em vez de N sobreposições. | Reconfirmado, zero mudança necessária. |
+| §5 Animações | `conviction-cyclone-worker.ts` (única animação contínua real do app) já roda isolado num Web Worker dedicado (Main Thread sagrada, Regra de Ouro 6), só tica quando existe dado real, pausa e limpa o canvas quando não existe. `conviction-cyclone-draw.ts/computeCycloneFrame` já produz movimento contínuo e suave (partículas fluem por uma curva de progresso determinística, sem "saltos"), 25fps documentado como suficiente para um espiral lento. Já satisfaz "transições suaves, sem movimento brusco, sem distração". | Reconfirmado, zero mudança necessária. |
+| §6 Radar de Oportunidades | `RadarPanel` já usa só motores existentes (`qualifyRadarCandidate`/`rankRadarCandidates`, zero segundo motor de decisão), já documenta conformidade com a LEI 24 em comentário E em aviso visível ao Operador, já encaminha candidatos via `openCandidate()` (só troca `selectedAsset`, deixando o Core Engine real assumir). Achado real de lacuna: `RadarQualificationResult.reason` já carrega uma justificativa real e honesta (por que o candidato qualificou), mas nunca era exibida na UI — violava literalmente o pedido "apresentar justificativas objetivas para cada oportunidade". | **Corrigido** (§9.3.2). |
+| §7 Acabamento | Passe geral de consistência: formato dos rótulos `Row` do painel MARKET REGIME (`"RSI (14)"`, `"MACD (12,26,9)"`, `"VOLATILIDADE (ATR%)"`, `"MOMENTUM (CVD)"`) conferido — já consistente, sem achado real. As 2 correções de §1/§6 acima SÃO a contribuição de acabamento desta rodada; nenhum achado adicional foi fabricado só para preencher a seção. | Ver §9.3. |
+| §8 Objetivo Final | Framing/meta, sem ação própria — servido pela soma de §1-§7. | — |
+
+### 9.3 Mudanças implementadas
+
+#### 9.3.1 `InstitutionalZonePlugin.tsx`: rótulo de confluência sem redundância
+
+Antes: `` `◆ ZONA INSTITUCIONAL · ${toolNames}` `` (ex.: "◆ ZONA
+INSTITUCIONAL · EMA20 + VWAP + Order Block"). Depois: `` `◆ ${toolNames}` ``
+(ex.: "◆ EMA20 + VWAP + Order Block"). A faixa violeta (fill + borda,
+já exclusiva dessa família de matiz no gráfico) já comunica visualmente
+"isto é uma anotação de confluência" — repetir isso em texto era
+exatamente o "excesso de texto" que a diretiva pede para eliminar. O
+conteúdo real (quais ferramentas concordam) permanece 100% intacto; só
+o rótulo do tipo de anotação foi comprimido de uma frase para um glifo.
+
+#### 9.3.2 Radar: justificativa objetiva por candidato (tooltip)
+
+`nexus/radar-qualification.ts` ganhou `RADAR_QUALIFIES_REASON` (a
+constante nomeada do único `reason` que hoje chega a qualificar — zero
+duplicação do literal) e `describeRadarQualificationReason(reason)`,
+que traduz esse código para uma frase curta e legível ("Estrutura
+confirmada · Trade Plan válido · risco liberado pelo Conselho ·
+confluência suficiente"); qualquer código sem tradução dedicada
+(os `reject()` internos, hoje nunca renderizados porque
+`rankRadarCandidates` só deixa passar `qualifies: true`) cai num
+fallback honesto — o próprio código com "_" trocado por espaço — nunca
+uma frase inventada. `App.tsx` agora passa
+`title={describeRadarQualificationReason(c.reason)}` no botão de cada
+candidato do painel OPORTUNIDADES — mesmo padrão de tooltip já usado
+pelos votos do Conselho (`title={v.evidence.join(" · ") ...}`), zero
+poluição visual nova (só aparece ao passar o mouse).
+
+### 9.4 Verificação final
+
+- `tsc --noEmit`: limpo.
+- `vitest run`: **125 arquivos / 2113 testes (100%)** — 2107 antes desta
+  entrega + 6 novos (4 `describeRadarQualificationReason` + 2 fiação
+  App.tsx/RadarPanel).
+- `npm run build`: ok, sem novo erro/aviso.
+- Playwright real (com o mesmo bypass documentado de `access-gate.tsx`
+  já usado por `scripts/audit-header-maxcontent.mjs`): app inicializa,
+  painel OPORTUNIDADES abre e renderiza o estado vazio real (sandbox sem
+  egress a exchange — mesma limitação de rede já documentada em rodadas
+  anteriores, não uma regressão), zero erro de console novo além dos já
+  conhecidos (`ERR_TUNNEL_CONNECTION_FAILED`/WebSocket Binance
+  bloqueados pelo proxy do sandbox). As duas mudanças desta entrega vivem
+  em caminhos condicionados a dado real (zonas de confluência reais,
+  candidato real qualificado) que este sandbox não consegue popular —
+  verificadas por execução real de código (testes) e por confirmação de
+  que a árvore de componentes que as usa renderiza sem erro, não por
+  captura visual da pixel exata.
+
+### 9.5 Arquivos modificados nesta entrega
+
+```
+ docs/RELATORIO_MESTRE_HOMOLOGACAO.md                     | modificado (este adendo, §9)
+ ipad_runtime/ramber-ui/src/App.tsx                        | modificado (import + title tooltip no candidato do Radar)
+ ipad_runtime/ramber-ui/src/chart/InstitutionalZonePlugin.tsx | modificado (rótulo sem prefixo redundante)
+ ipad_runtime/ramber-ui/src/nexus/radar-qualification.ts   | modificado (+RADAR_QUALIFIES_REASON, +describeRadarQualificationReason)
+ ipad_runtime/ramber-ui/tests/radar-qualification.test.ts  | modificado (+6 testes)
+```
+
+### 9.6 Veredito desta etapa
+
+- Diretiva cumprida dentro do escopo declarado (visual/acabamento, zero
+  funcionalidade nova, zero motor novo, zero alteração de LEI 24/SSOT/
+  READ_ONLY/Fail-Closed).
+- 5 das 8 seções (§2/§3/§4/§5/§8) já estavam corretas — reconfirmadas com
+  evidência real (grep/leitura/investigação de z-order), não retrabalhadas.
+- 2 achados reais de excesso/lacuna (§1, §6) corrigidos com o menor diff
+  possível, cada um testado.
+- Nenhuma pendência nova aberta por esta entrega; as pendências já
+  documentadas em §4/§6 deste relatório continuam exatamente como estavam.

@@ -135,8 +135,15 @@ export function InstitutionalZonePlugin({ chart, series, zones }: InstitutionalZ
         ctx.stroke();
 
         if (rectHeight >= MIN_LABEL_HEIGHT_PX) {
+          // Diretriz Final — Lapidação Visual §1 ("eliminar excesso de
+          // texto... evitar textos longos"): "ZONA INSTITUCIONAL" cortado —
+          // a própria faixa violeta (fill+borda) já comunica que isto é uma
+          // anotação de confluência; repetir isso em texto era redundante
+          // com o que a cor já diz. O ◆ sozinho basta como assinatura visual
+          // do tipo de anotação; o conteúdo real (quais ferramentas
+          // concordam) continua 100% intacto.
           const toolNames = zone.members.map((m) => m.label).join(" + ");
-          const text = `◆ ZONA INSTITUCIONAL · ${toolNames}`;
+          const text = `◆ ${toolNames}`;
           const size = measureCanvasLabel(ctx, text);
           drawCanvasLabel(ctx, 6, rectY + rectHeight / 2 - size.height / 2, { fill: LABEL_COLOR, text });
         }

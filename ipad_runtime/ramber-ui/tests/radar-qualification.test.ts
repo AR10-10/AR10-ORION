@@ -4,14 +4,22 @@
 // depois). Execução real da função pura — convenção deste repo para
 // lógica de fronteira.
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import {
   qualifyRadarCandidate,
   rankRadarCandidates,
+  describeRadarQualificationReason,
   RADAR_MIN_CONFLUENCE_INTENSITY,
+  RADAR_QUALIFIES_REASON,
   type RadarCandidateInput,
 } from '../src/nexus/radar-qualification';
 import { buildTradePlan } from '../src/nexus/trade-plan';
 import type { ConfluenceCorridorReading } from '../src/nexus/confluence-corridor';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 
 const realPlan = () =>
   buildTradePlan({
@@ -155,5 +163,54 @@ describe('Regra de Ouro 2 (não-negociável): qualityIndex nunca é exposto/rotu
     const r = qualifyRadarCandidate({ ...BASE, tradePlan: realPlan(), confluence: goodConfluence(0.8) });
     const keys = Object.keys(r).join(',').toLowerCase();
     expect(keys).not.toMatch(/probab|chance|odds/);
+  });
+});
+
+// Diretriz Final — Lapidação Visual §6 ("apresentar justificativas
+// objetivas para cada oportunidade"): describeRadarQualificationReason
+// traduz o MESMO `reason` já retornado acima — zero segunda fonte de
+// verdade sobre por que um candidato qualificou.
+describe('describeRadarQualificationReason: tradução honesta do reason real, nunca uma frase fabricada', () => {
+  it('candidato real que qualifica usa exatamente RADAR_QUALIFIES_REASON como reason', () => {
+    const r = qualifyRadarCandidate({ ...BASE, tradePlan: realPlan(), confluence: goodConfluence(0.8) });
+    expect(r.reason).toBe(RADAR_QUALIFIES_REASON);
+  });
+
+  it('traduz o código que qualifica para uma frase curta e legível', () => {
+    const text = describeRadarQualificationReason(RADAR_QUALIFIES_REASON);
+    expect(text).toBe('Estrutura confirmada · Trade Plan válido · risco liberado pelo Conselho · confluência suficiente');
+  });
+
+  it('fallback honesto para qualquer código sem tradução dedicada — nunca uma frase inventada', () => {
+    expect(describeRadarQualificationReason('sem_trade_plan_valido')).toBe('sem trade plan valido');
+  });
+
+  it('todo reason real de reject() passa pelo fallback sem lançar exceção', () => {
+    const rejected = [
+      qualifyRadarCandidate({ ...BASE, direction: null, tradePlan: realPlan(), confluence: goodConfluence(0.9) }),
+      qualifyRadarCandidate({ ...BASE, structureLabel: 'ESTRUTURA_LATERAL', tradePlan: realPlan(), confluence: goodConfluence(0.9) }),
+      qualifyRadarCandidate({ ...BASE, tradePlan: null, confluence: goodConfluence(0.9) }),
+      qualifyRadarCandidate({ ...BASE, tradePlan: realPlan(), riskGated: true, confluence: goodConfluence(0.9) }),
+      qualifyRadarCandidate({ ...BASE, tradePlan: realPlan(), confluence: BASE.confluence }),
+      qualifyRadarCandidate({ ...BASE, tradePlan: realPlan(), confluence: goodConfluence(RADAR_MIN_CONFLUENCE_INTENSITY - 0.01) }),
+    ];
+    for (const r of rejected) {
+      expect(() => describeRadarQualificationReason(r.reason)).not.toThrow();
+      expect(describeRadarQualificationReason(r.reason)).not.toMatch(/_/); // "_" sempre virou espaço
+    }
+  });
+});
+
+describe('App.tsx: RadarPanel expõe a justificativa real como tooltip — LEI 24 (display-only, zero segunda fonte)', () => {
+  it('importa describeRadarQualificationReason do motor puro (mesmo módulo já usado por qualifyRadarCandidate/rankRadarCandidates)', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain(
+      'import { qualifyRadarCandidate, rankRadarCandidates, describeRadarQualificationReason, type RadarQualificationResult } from "./nexus/radar-qualification";',
+    );
+  });
+
+  it('o botão de cada candidato usa title={describeRadarQualificationReason(c.reason)} — mesmo padrão já usado pelo tooltip de voto do Conselho', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('title={describeRadarQualificationReason(c.reason)}');
   });
 });

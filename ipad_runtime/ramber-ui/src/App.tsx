@@ -28,7 +28,7 @@ import { computeConfluenceCorridor } from "./nexus/confluence-corridor";
 // núcleo puro de qualificação/ranking (Fase 7 v1) + scanner real por
 // ativo (engine-bridge.ts) — nenhum dos 3 é reimplementado aqui.
 import { extractRadarUniverseSymbols, type AssetUniverseFile } from "./nexus/radar-universe";
-import { qualifyRadarCandidate, rankRadarCandidates, type RadarQualificationResult } from "./nexus/radar-qualification";
+import { qualifyRadarCandidate, rankRadarCandidates, describeRadarQualificationReason, type RadarQualificationResult } from "./nexus/radar-qualification";
 // ADITIVO V-MAX Etapa 9: universo MEXC real (irmão de binance-symbols.ts,
 // já usado pelo SmartOmnibox) — busca dinâmica, nunca uma lista curada
 // estática como a Binance acima.
@@ -3998,6 +3998,7 @@ function RadarPanel() {
                   key={`${c.provider}:${c.symbol}:${c.timeframe}`}
                   type="button"
                   onClick={() => openCandidate(c.symbol)}
+                  title={describeRadarQualificationReason(c.reason)}
                   className="flex items-center justify-between gap-2 bg-[#010205] border border-[#00f0ff15] hover:border-[#00f0ff40] rounded-lg px-3 py-2 text-left transition-colors"
                 >
                   <div className="flex items-center gap-2">
