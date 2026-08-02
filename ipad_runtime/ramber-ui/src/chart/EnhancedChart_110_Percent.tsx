@@ -1405,6 +1405,19 @@ export function EnhancedChart_110_Percent({
     Number.isFinite(tradePlan.entry.low) &&
     Number.isFinite(tradePlan.entry.high) &&
     tradePlan.entry.low !== tradePlan.entry.high;
+  // Evolução Visual (continuidade da Ordem Nº 03): 3ª categoria real —
+  // STRUCTURE (BOS/CHOCH). MESMA fórmula já usada pelo priceAxisLabels do
+  // rótulo BOS/CHOCH (age = candles desde o rompimento, ageAlpha real via
+  // BREAK_DECAY) — zero segunda curva de decaimento, só um segundo
+  // consumidor do mesmo cálculo puro.
+  const structureBreakBaseWeight = useMemo(() => {
+    if (!visibility.structure_breaks || !structureBreak) return null;
+    const point = data[structureBreak.index];
+    if (!point) return null;
+    const age = data.length - 1 - structureBreak.index;
+    const alpha = ageAlpha(age, BREAK_DECAY);
+    return alpha > 0 ? alpha : null;
+  }, [visibility.structure_breaks, structureBreak, data]);
   const visualBudgetResults = useMemo(() => {
     const candidates: VisualBudgetCandidate[] = [];
     if (visibility.institutional_zones) {
@@ -1415,14 +1428,21 @@ export function EnhancedChart_110_Percent({
     if (hasTradePlanZone) {
       candidates.push({ id: "trade-plan", category: "TRADE_PLAN", baseWeight: opacityMultiplierFor(confidenceZone ?? null) });
     }
+    if (structureBreakBaseWeight !== null) {
+      candidates.push({ id: "structure-break", category: "STRUCTURE", baseWeight: structureBreakBaseWeight });
+    }
     return resolveVisualBudget(candidates);
-  }, [visibility.institutional_zones, institutionalZones, hasTradePlanZone, confidenceZone]);
+  }, [visibility.institutional_zones, institutionalZones, hasTradePlanZone, confidenceZone, structureBreakBaseWeight]);
   const institutionalZoneVisualWeights = useMemo(() => {
     const byId = new Map(visualBudgetResults.map((r) => [r.id, r.visualWeight]));
     return institutionalZones.map((_, i) => byId.get(`zone-${i}`));
   }, [visualBudgetResults, institutionalZones]);
   const tradePlanVisualWeight = useMemo(
     () => visualBudgetResults.find((r) => r.id === "trade-plan")?.visualWeight ?? null,
+    [visualBudgetResults],
+  );
+  const structureBreakVisualWeight = useMemo(
+    () => visualBudgetResults.find((r) => r.id === "structure-break")?.visualWeight ?? null,
     [visualBudgetResults],
   );
 
@@ -1838,7 +1858,7 @@ export function EnhancedChart_110_Percent({
       price: effectiveStopPrice,
       color: stopHitNow ? "rgba(255, 0, 85, 1)" : "rgba(255, 0, 85, 0.75)",
     });
-    tradePlan.targets.forEach((target, i) => {
+    tradePlan.targets.forEach((_target, i) => {
       const line = targetLinesArrayRef.current[i];
       if (!line) return;
       const reached = i < hits;
@@ -2394,6 +2414,7 @@ export function EnhancedChart_110_Percent({
           series={chartReady?.series ?? null}
           data={data}
           structureBreak={structureBreak ?? null}
+          visualWeight={structureBreakVisualWeight}
         />
       )}
       {/* V-MAX Fase 1 (superfície visual): Volume Profile real (Fase 1.3)

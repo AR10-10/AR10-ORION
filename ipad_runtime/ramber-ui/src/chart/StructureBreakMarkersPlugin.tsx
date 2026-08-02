@@ -35,21 +35,28 @@ interface StructureBreakMarkersPluginProps {
   series: ISeriesApi<"Candlestick"> | null;
   data: { time: number }[];
   structureBreak: StructureBreak | null;
+  // Ordem Nº 03 / Homologação: peso visual final real, já resolvido por
+  // resolveVisualBudget (nexus/visual-budget.ts) — competição CRUZADA com
+  // Zonas Institucionais/Trade Plan, nunca só a idade PRÓPRIA do
+  // rompimento. undefined/null = sem competição real ainda resolvida pelo
+  // chamador; cai de volta em ageAlpha(age, BREAK_DECAY) (comportamento já
+  // validado antes desta rodada, nunca um valor fabricado).
+  visualWeight?: number | null;
 }
 
-export function StructureBreakMarkersPlugin({ chart, series, data, structureBreak }: StructureBreakMarkersPluginProps) {
+export function StructureBreakMarkersPlugin({ chart, series, data, structureBreak, visualWeight }: StructureBreakMarkersPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const stateRef = useRef({ structureBreak, data });
+  const stateRef = useRef({ structureBreak, data, visualWeight });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente para o loop de desenho ler — mesmo padrão
   // do LiquidityZonesPlugin (nunca reabre a conexão com o chart a cada
   // atualização de dado).
-  stateRef.current = { structureBreak, data };
+  stateRef.current = { structureBreak, data, visualWeight };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [structureBreak, data]);
+  }, [structureBreak, data, visualWeight]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -72,12 +79,15 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      const { structureBreak: brk, data: candles } = stateRef.current;
+      const { structureBreak: brk, data: candles, visualWeight: resolvedWeight } = stateRef.current;
       if (!brk) return; // sem rompimento real na amostra — nada a desenhar, honesto.
       const point = candles[brk.index];
       if (!point) return; // índice fora da janela real de candles carregada.
       const age = candles.length - 1 - brk.index;
-      const alpha = ageAlpha(age, BREAK_DECAY);
+      // Ordem Nº 03: resolvedWeight (já competido contra outras categorias
+      // reais) vence quando o chamador o forneceu; senão cai na idade
+      // PRÓPRIA de sempre.
+      const alpha = resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, BREAK_DECAY);
       if (alpha <= 0) return; // "esquecido" — só da tela, o dado real segue intacto em engine-bridge.ts.
 
       const timeScale = chart.timeScale();

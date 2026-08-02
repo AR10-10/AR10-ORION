@@ -130,7 +130,7 @@ describe('captureHistoricalCandles — paginação real para trás sobre fetchPa
 
   it('teto de segurança maxPages nunca vira laço sem fim contra a rede real', async () => {
     let call = 0;
-    const fetchPage = vi.fn(async ({ endTime }: { endTime?: number }) => {
+    const fetchPage = vi.fn(async () => {
       call++;
       const base = 10_000_000 - call * 300;
       return evidence([base, base + 100, base + 200], `p${call}`);

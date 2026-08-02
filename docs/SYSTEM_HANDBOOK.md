@@ -5772,6 +5772,51 @@ reorganizado.
 
 ---
 
+### 6.76 Evolução Visual (pedido informal): STRUCTURE como 3ª categoria
+real de `visual-budget.ts` + poda mecânica de 8 declarações mortas;
+relatório completo em `docs/RELATORIO_EVOLUCAO_VISUAL_STRUCTURE_PODA.md`
+
+Pedido do Operador em português informal/ditado ("foca na parte visual
+pra ficar mais automático, menos etiqueta... o que você acha que tem de
+melhorar... execute o necessário... liberdade pra achar a melhor
+estratégia") — reconstrução comunicada ao Operador antes de agir (sem
+pergunta bloqueante: a mensagem já autoriza execução explicitamente).
+
+**Implementado — STRUCTURE**: `StructureBreakMarkersPlugin.tsx` ganha
+`visualWeight?: number | null` com fallback fail-closed para
+`ageAlpha(age, BREAK_DECAY)` isolado. `EnhancedChart_110_Percent.tsx`
+monta o candidato real (`structureBreakBaseWeight`, mesma fórmula
+EXATA já usada pelo rótulo BOS/CHOCH em `priceAxisLabels`) e alimenta
+`resolveVisualBudget` junto de `INSTITUTIONAL_ZONE`/`TRADE_PLAN` — 3 das
+7 categorias reais da Diretriz Nº 02 agora graduadas.
+
+**Avaliação honesta entregue** (resposta direta ao pedido de opinião):
+maior alavanca real do lado de sistema é o Evidence Fusion Engine
+(`engine-signal-contract.ts`, 4 rodadas sem consumidor real além de 1
+campo) — recomendado, não construído (é iniciativa de arquitetura
+própria, não poda/graduação incremental).
+
+**Poda real**: `noUnusedLocals`/`noUnusedParameters` habilitados como
+diagnóstico no `tsconfig.json`, 8 declarações genuinamente mortas
+encontradas e investigadas individualmente (nenhuma removida às
+cegas). Dois achados revelaram história real: `NEXUS_PLAN_GAP_LABEL`
+importado em `App.tsx` mas relocado para `operational-readability.ts`
+numa rodada anterior (import vestigial); `POOL_DIRECTION_TO_STANCE` em
+`council.ts` era o mapeamento direto ALTA/BAIXA/NEUTRO→LONG/SHORT/
+NEUTRAL substituído por `councilStanceWithHysteresis` (histerese de 2
+bandas) numa evolução anterior, nunca removido. Os outros 6 (import/
+variável/parâmetro/helper de teste não lidos) corrigidos com a mesma
+disciplina. Flags mantidas permanentemente no `tsconfig.json` — melhoria
+estrutural de precisão do processo, não só limpeza pontual.
+
+**Testes executados**: `tsc --noEmit` limpo (com as novas flags
+permanentes) · **128 arquivos / 2185 testes** (100%, +6 novos em
+`tests/visual-budget-chart-wiring.test.ts`) · `npm run build` ok (1846
+módulos, 876,67 kB) · Playwright real confirmou zero regressão
+estrutural (zero erro de React).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

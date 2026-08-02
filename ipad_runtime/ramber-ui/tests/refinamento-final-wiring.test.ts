@@ -283,7 +283,11 @@ describe('Nexus Decision Layer: leitura única fundida, computada 1x e exposta n
     expect(m![1]).toContain('targetsHit: trackRecordSlice.active?.targetsHit ?? 0');
     expect(m![1]).toContain('etaReading,');
     expect(m![1]).toContain('councilStance: councilFromSnapshot?.stance ?? null');
-    expect(a).toContain('import { buildNexusDecision, NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./nexus/decision-layer";');
+    // NEXUS_PLAN_GAP_LABEL foi realocado (Evolução Visual — poda de import
+    // morto): a leitura real vive em operational-readability.ts, que já
+    // importa direto de decision-layer.ts — App.tsx nunca lia o valor por
+    // conta própria, só a caixa/tipo do decision-layer continuam aqui.
+    expect(a).toContain('import { buildNexusDecision, type NexusDecision } from "./nexus/decision-layer";');
     const ctx = a.match(/const contextValue = useMemo\(\s*\(\) => \(\{([\s\S]*?)\}\),/);
     expect(ctx![1]).toContain('nexusDecision,');
   });
@@ -324,7 +328,6 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
   });
 
   it('badge herói: estado no subtítulo existente e tooltip com Estado + Favoráveis/Contrários', () => {
-    const a = app();
     // §7: Estado/Favoráveis/Contrários agora nascem na Readability Layer
     const layer = read('../src/nexus/operational-readability.ts');
     expect(layer).toContain('· Estado: ${decision.operationalState}');

@@ -447,8 +447,6 @@ describe('Auditoria de pendências (achado real via harness Playwright, duas ins
 });
 
 describe('Auditoria de pendências: obstacleCount (sem teto) reconciliado com o .slice(0,3) de FVG/OB desenhados no gráfico', () => {
-  const app = () => read('../src/App.tsx');
-
   it('unmitigatedFvgs/unmitigatedBlocks incluem os 3 mais recentes E qualquer obstáculo real do plano ativo — nunca um obstáculo citado no texto que fica invisível no gráfico', () => {
     const a = read('../src/App.tsx');
     expect(a).toContain('const isRealObstacle = (z: PriceZone) => chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);');

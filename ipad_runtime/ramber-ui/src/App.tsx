@@ -195,7 +195,7 @@ import { marketSessionFromUtc, computeSessionBoundaries, computeSessionKeyLevels
 // uma 2ª partição de 24h (ver header de kill-zones.ts).
 import { activeKillZones } from "./nexus/kill-zones";
 import { computeHeatScore } from "./nexus/heat-score";
-import { buildNexusDecision, NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./nexus/decision-layer";
+import { buildNexusDecision, type NexusDecision } from "./nexus/decision-layer";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
 import {
@@ -5207,7 +5207,6 @@ function CoreSignalBadge({
 // --- TOP BAR ---
 function TopBar({ data }: { data?: PriceState | null }) {
   const {
-    bootAt,
     handleManualRestart,
     selectedAsset,
     setSelectedAsset,

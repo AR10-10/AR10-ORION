@@ -359,12 +359,6 @@ export function momentumAgentVote(rsi: number | null): CouncilVote {
 // Meta-Agent
 // ─────────────────────────────────────────────────────────────────────────
 
-const POOL_DIRECTION_TO_STANCE: Record<string, CouncilStance> = {
-  ALTA: "LONG",
-  BAIXA: "SHORT",
-  NEUTRO: "NEUTRAL",
-};
-
 // Achado real de auditoria (Diretriz EPC §5/§6, prioridade máxima —
 // Operador: "o gráfico frequentemente deixa de mostrar ENTRY/STOP/TARGET
 // mesmo quando deveria existir uma leitura operacional disponível"):

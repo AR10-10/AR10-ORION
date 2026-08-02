@@ -15,6 +15,7 @@ const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
 const institutionalZonePlugin = () => read('../src/chart/InstitutionalZonePlugin.tsx');
 const tradePlanZonePlugin = () => read('../src/chart/TradePlanZonePlugin.tsx');
+const structureBreakMarkersPlugin = () => read('../src/chart/StructureBreakMarkersPlugin.tsx');
 
 describe('InstitutionalZonePlugin.tsx: confluenceWeight exportado + visualWeights real usado com fallback fail-closed', () => {
   it('exporta confluenceWeight (mesma função, zero segunda fórmula) para o chart reusar como baseWeight', () => {
@@ -114,5 +115,61 @@ describe('TradePlanZonePlugin.tsx: opacityMultiplierFor exportado (Ordem Nº 03,
     const s = tradePlanZonePlugin();
     expect(s).toContain('export function opacityMultiplierFor(zone: InstitutionalConfidenceZone | null): number {');
     expect(s).toContain('return zone ? OPACITY_BY_TIER[zone.tier] : DEFAULT_OPACITY_MULTIPLIER;');
+  });
+});
+
+// Evolução Visual (continuidade da Ordem Nº 03): 3ª categoria real do
+// orçamento visual — STRUCTURE (BOS/CHOCH). Mesmo padrão exato das duas
+// categorias anteriores (INSTITUTIONAL_ZONE/TRADE_PLAN): peso PRÓPRIO já
+// real (ageAlpha/BREAK_DECAY) entra como baseWeight, resolveVisualBudget
+// decide o resto, plugin usa o resultado com fallback fail-closed.
+describe('StructureBreakMarkersPlugin.tsx: aceita visualWeight real com fallback fail-closed para ageAlpha(age, BREAK_DECAY) isolado', () => {
+  it('nova prop visualWeight documentada e aceita pelo componente', () => {
+    const s = structureBreakMarkersPlugin();
+    expect(s).toContain('visualWeight?: number | null;');
+    expect(s).toContain(
+      'export function StructureBreakMarkersPlugin({ chart, series, data, structureBreak, visualWeight }: StructureBreakMarkersPluginProps) {',
+    );
+  });
+
+  it('o loop de desenho usa resolvedWeight quando real (!== undefined/null); cai em ageAlpha(age, BREAK_DECAY) isolado (comportamento pré-existente) quando ausente', () => {
+    const s = structureBreakMarkersPlugin();
+    expect(s).toContain(
+      'const alpha = resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, BREAK_DECAY);',
+    );
+  });
+
+  it('visualWeight entra no ref/dirty-check igual a structureBreak/data — uma resolução de orçamento nova redesenha', () => {
+    const s = structureBreakMarkersPlugin();
+    expect(s).toContain('const stateRef = useRef({ structureBreak, data, visualWeight });');
+    expect(s).toContain('stateRef.current = { structureBreak, data, visualWeight };');
+    expect(s).toContain('}, [structureBreak, data, visualWeight]);');
+  });
+});
+
+describe('EnhancedChart_110_Percent.tsx: candidato STRUCTURE real — mesma fórmula do rótulo BOS/CHOCH em priceAxisLabels, zero segunda curva de decaimento', () => {
+  it('structureBreakBaseWeight usa a MESMA fórmula age/ageAlpha/BREAK_DECAY já usada pelo rótulo em priceAxisLabels', () => {
+    const s = chart();
+    const idx = s.indexOf('const structureBreakBaseWeight = useMemo(');
+    expect(idx, 'structureBreakBaseWeight não encontrado').toBeGreaterThan(-1);
+    const block = s.slice(idx, s.indexOf('const visualBudgetResults = useMemo', idx));
+    expect(block).toContain('if (!visibility.structure_breaks || !structureBreak) return null;');
+    expect(block).toContain('const age = data.length - 1 - structureBreak.index;');
+    expect(block).toContain('const alpha = ageAlpha(age, BREAK_DECAY);');
+  });
+
+  it('candidato STRUCTURE só entra no orçamento quando structureBreakBaseWeight é real (não null)', () => {
+    const s = chart();
+    const block = s.slice(s.indexOf('const visualBudgetResults = useMemo'), s.indexOf('const institutionalZoneVisualWeights = useMemo'));
+    expect(block).toContain('if (structureBreakBaseWeight !== null) {');
+    expect(block).toContain('candidates.push({ id: "structure-break", category: "STRUCTURE", baseWeight: structureBreakBaseWeight });');
+  });
+
+  it('StructureBreakMarkersPlugin recebe visualWeight={structureBreakVisualWeight}', () => {
+    const s = chart();
+    const idx = s.indexOf('<StructureBreakMarkersPlugin');
+    const block = s.slice(idx, s.indexOf('/>', idx));
+    expect(block).toContain('structureBreak={structureBreak ?? null}');
+    expect(block).toContain('visualWeight={structureBreakVisualWeight}');
   });
 });
