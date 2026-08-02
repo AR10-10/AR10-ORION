@@ -5657,6 +5657,74 @@ para verificar).
 
 ---
 
+### 6.74 "ORDEM OFICIAL DE EXECUÇÃO Nº 03 — FASE DE IMPLEMENTAÇÃO
+OPERACIONAL E INTEGRAÇÃO TOTAL": primeira graduação real de
+`nexus/visual-budget.ts` (competição INSTITUTIONAL_ZONE × TRADE_PLAN no
+gráfico ao vivo) + auditoria de isolamento completa do ecossistema;
+relatório completo em
+`docs/RELATORIO_ORDEM_03_IMPLEMENTACAO_OPERACIONAL.md`
+
+Ordem muda o critério de "pronto": um motor com testes aprovados mas
+zero consumidor real fica classificado "EM IMPLEMENTAÇÃO" até cumprir o
+ciclo completo (Implementação → Integração → Testes → Validação →
+Operação em tempo real → Consumo por módulos reais → Disponibilização ao
+Operador). Auditoria de importadores reais (`nexus/*.ts`,
+`research/engines/*.js`, `research/backtest/*.js`, 12 plugins de canvas)
+confirmou o ecossistema já muito mais integrado do que o tom de abertura
+da Ordem presume — só 3 módulos reais sem consumidor (`visual-budget.ts`,
+`engine-signal-contract.ts`, `cross-exchange-service.ts`), e o "laboratório
+de backtest" (`structural-backtest.js`/`history-capture.js`/
+`compare-runs.js`) tem isolamento TESTADO como fronteira deliberada
+(`structural-backtest.test.ts`: "nenhum módulo de produção importa do
+laboratório de backtest — só testes"), não uma peça esquecida.
+
+**Implementado**: `resolveVisualBudget()` (Diretriz Nº 02, construído
+isolado/testado na rodada anterior, zero consumidor vivo até esta
+rodada) agora resolve competição real de destaque entre Zonas
+Institucionais e Trade Plan — as 2 categorias que já carregavam peso 0..1
+real e independente (`confluenceWeight`/`opacityMultiplierFor`, ambas
+exportadas e reusadas, zero segunda fórmula). `InstitutionalZonePlugin.
+tsx`/`TradePlanZonePlugin.tsx` ganharam novas props (`visualWeights`/
+`visualWeight`) com fallback automático para o comportamento pré-Ordem-03
+quando ausentes. Regra de Ouro 4 preservada: piso `VISUAL_BUDGET_
+FLOOR_WEIGHT` (0.35), nenhuma zona/plano é escondido, só menos
+enfatizado. Evidência objetiva: `npm run build` foi de 1845→1846 módulos
+(+874,86 kB, +1,49 kB) — mesma técnica de prova usada na Ordem Nº 01.
+
+**Investigado e deliberadamente adiado (não esquecido)**: Market
+Structure como fonte de `institutional-zones.ts` — rastreado até a causa
+raiz exata (`ipad_runtime/js/real-data/analysis-frame.js:123` já calcula
+`last_swing_high`/`last_swing_low` via `market-structure-engine.js`, mas
+descarta os 2 preços antes de retornar o frame, só `structure_label`
+sobrevive). Correção seria pequena (2 campos num objeto literal), mas o
+único ponto de correção é dentro do cálculo canônico do Core Engine — "o
+caminho mais crítico do app" (Regra de Ouro 6) — e por isso fica para sua
+própria iniciativa isolada, com o diagnóstico completo (incluindo os 4
+passos exatos de implementação) já registrado no relatório §3, para
+nenhuma rodada futura precisar reinvestigar.
+
+**Reafirmado com leitura fresca (não repetição mecânica)**:
+`cross-exchange-service.ts` (cutover do WS/REST ao vivo é "o passo de
+maior risco", escopo próprio desde sua criação) e
+`engine-signal-contract.ts` (só 1 dos 10 campos tem montador real hoje;
+um consumidor forçado agora duplicaria a leitura do Conselho ou exigiria
+construir o Evidence Fusion Engine inteiro) continuam isolados por
+motivo técnico específico, não negligência.
+
+**Testes executados**: `tsc --noEmit` limpo · **128 arquivos / 2165
+testes** (100%, +16 novos: 15 em `tests/visual-budget-chart-wiring.test.ts`,
+1 em `trade-plan-zone-plugin.test.ts`) · `npm run build` ok (1846
+módulos, 874,86 kB) · Playwright executado contra o dev server real —
+app carrega sem regressão estrutural, mas a rede de saída do ambiente
+bloqueia os WebSockets reais da Binance (`ERR_TUNNEL_CONNECTION_FAILED`
+no proxy do container), então o gráfico fica honestamente em "AWAITING
+CANDLES…" (fail-closed correto) em vez de mostrar zonas/plano com dado ao
+vivo — limitação do ambiente de verificação, documentada explicitamente
+em vez de omitida, com a suíte de padrão de fonte cobrindo cada literal
+da fiação real.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

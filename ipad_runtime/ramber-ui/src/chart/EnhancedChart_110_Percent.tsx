@@ -85,11 +85,20 @@ import { computeSessionKeyLevels } from "../nexus/market-session";
 // EMA/VWAP/Nexus Line/FVG/Order Block/EQH/EQL — ver header de cada
 // arquivo para o raciocínio completo.
 import { computeInstitutionalZones, type InstitutionalZoneInput } from "../nexus/institutional-zones";
-import { InstitutionalZonePlugin, LABEL_COLOR as INSTITUTIONAL_ZONE_LABEL_COLOR } from "./InstitutionalZonePlugin";
+import { InstitutionalZonePlugin, LABEL_COLOR as INSTITUTIONAL_ZONE_LABEL_COLOR, confluenceWeight } from "./InstitutionalZonePlugin";
 import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
-import { TradePlanZonePlugin } from "./TradePlanZonePlugin";
+import { TradePlanZonePlugin, opacityMultiplierFor } from "./TradePlanZonePlugin";
+// Ordem Oficial de Execução Nº 03 ("Implementação Operacional"): primeira
+// graduação real de nexus/visual-budget.ts (Diretriz Nº 02 — construído
+// isolado/testado na rodada anterior, zero consumidor vivo até agora).
+// Resolve competição CRUZADA de destaque entre o Trade Plan (prioridade 1
+// real, declarada pela própria Diretriz Nº 02) e as Zonas Institucionais
+// (prioridade 2) — as duas categorias do gráfico que já carregavam um
+// peso 0..1 real e independente (confluenceWeight/opacityMultiplierFor,
+// ambos importados acima, agora reusados aqui sem segunda fórmula).
+import { resolveVisualBudget, type VisualBudgetCandidate } from "../nexus/visual-budget";
 // Neural Market Aura (especificação do Operador): corredor de convicção
 // real entre entrada e alvo — ver o cabeçalho de NeuralMarketAuraPlugin.tsx
 // para a divisão de responsabilidade com TradePlanZonePlugin (zero
@@ -1385,6 +1394,38 @@ export function EnhancedChart_110_Percent({
   );
   const institutionalZones = useMemo(() => computeInstitutionalZones(institutionalZoneInput), [institutionalZoneInput]);
 
+  // Ordem Nº 03: candidatos reais para a competição cruzada de destaque —
+  // só as 2 categorias cujo peso PRÓPRIO já existia antes desta rodada
+  // (zero peso fabricado). Gated pela MESMA visibility que decide se cada
+  // plugin sequer é montado — uma camada desligada não deve "gastar"
+  // orçamento visual competindo por algo que não é desenhado.
+  const hasTradePlanZone =
+    visibility.trade_plan_zone &&
+    tradePlan != null &&
+    Number.isFinite(tradePlan.entry.low) &&
+    Number.isFinite(tradePlan.entry.high) &&
+    tradePlan.entry.low !== tradePlan.entry.high;
+  const visualBudgetResults = useMemo(() => {
+    const candidates: VisualBudgetCandidate[] = [];
+    if (visibility.institutional_zones) {
+      institutionalZones.forEach((zone, i) => {
+        candidates.push({ id: `zone-${i}`, category: "INSTITUTIONAL_ZONE", baseWeight: confluenceWeight(zone.distinctSourceCount) });
+      });
+    }
+    if (hasTradePlanZone) {
+      candidates.push({ id: "trade-plan", category: "TRADE_PLAN", baseWeight: opacityMultiplierFor(confidenceZone ?? null) });
+    }
+    return resolveVisualBudget(candidates);
+  }, [visibility.institutional_zones, institutionalZones, hasTradePlanZone, confidenceZone]);
+  const institutionalZoneVisualWeights = useMemo(() => {
+    const byId = new Map(visualBudgetResults.map((r) => [r.id, r.visualWeight]));
+    return institutionalZones.map((_, i) => byId.get(`zone-${i}`));
+  }, [visualBudgetResults, institutionalZones]);
+  const tradePlanVisualWeight = useMemo(
+    () => visualBudgetResults.find((r) => r.id === "trade-plan")?.visualWeight ?? null,
+    [visualBudgetResults],
+  );
+
   // Auditoria do painel do gráfico: Linear Regression Channel real sobre a
   // MESMA `data` de candles (zero segunda fonte de dado) — mesmo padrão do
   // efeito de EMA acima. null (histórico insuficiente) => setData([]) nas
@@ -2383,12 +2424,16 @@ export function EnhancedChart_110_Percent({
          faixa ficar visualmente ATRÁS do que já é o núcleo do plano,
          nunca competindo com ele (mesma hierarquia da diretiva: Trade
          Plan > Confluências). Camada aditiva: nunca substitui o desenho
-         individual de cada ferramenta, que continua intacto. */}
+         individual de cada ferramenta, que continua intacto. Ordem Nº 03:
+         essa MESMA hierarquia (Trade Plan > Confluências), antes só
+         implícita na ORDEM de montagem, agora também vira um peso visual
+         real via visualWeights (visualBudgetResults acima). */}
       {visibility.institutional_zones && (
         <InstitutionalZonePlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           zones={institutionalZones}
+          visualWeights={institutionalZoneVisualWeights}
         />
       )}
       {/* Neural Market Aura: the conviction corridor, mounted BEFORE the
@@ -2412,6 +2457,7 @@ export function EnhancedChart_110_Percent({
           entryLow={tradePlan?.entry.low ?? null}
           entryHigh={tradePlan?.entry.high ?? null}
           confidenceZone={confidenceZone ?? null}
+          visualWeight={tradePlanVisualWeight}
         />
       )}
       {/* Nível 0 (ver comentário acima do useMemo de priceAxisLabels):

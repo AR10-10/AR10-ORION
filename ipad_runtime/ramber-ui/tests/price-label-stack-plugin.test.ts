@@ -782,7 +782,7 @@ describe('Diretriz Final — Polimento Visual: rótulo de Zona Institucional mig
 
   it('EnhancedChart_110_Percent.tsx: importa LABEL_COLOR do plugin (zero cor duplicada como literal em 2 arquivos) e empurra 1 entrada por zona real em priceAxisLabels, side:"left", price = centro real da zona', () => {
     const c = chart();
-    expect(c).toContain('import { InstitutionalZonePlugin, LABEL_COLOR as INSTITUTIONAL_ZONE_LABEL_COLOR } from "./InstitutionalZonePlugin";');
+    expect(c).toContain('import { InstitutionalZonePlugin, LABEL_COLOR as INSTITUTIONAL_ZONE_LABEL_COLOR, confluenceWeight } from "./InstitutionalZonePlugin";');
     const idx = c.indexOf('if (visibility.institutional_zones) {', c.indexOf('const priceAxisLabels = useMemo'));
     expect(idx, 'bloco de Zona Institucional em priceAxisLabels não encontrado').toBeGreaterThan(-1);
     const block = c.slice(idx, c.indexOf('return out;', idx));

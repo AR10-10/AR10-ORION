@@ -68,9 +68,16 @@ describe('TradePlanZonePlugin: §17 confidence-scaled opacity — the SAME real 
 
   it('confidenceZone is threaded through the same ref pattern as entryLow/entryHigh — always latest, never re-triggers the setup effect', () => {
     const s = plugin();
-    expect(s).toContain('const rangeRef = useRef({ entryLow, entryHigh, confidenceZone });');
-    expect(s).toContain('rangeRef.current = { entryLow, entryHigh, confidenceZone };');
-    expect(s).toContain('}, [entryLow, entryHigh, confidenceZone]);');
+    expect(s).toContain('const rangeRef = useRef({ entryLow, entryHigh, confidenceZone, visualWeight });');
+    expect(s).toContain('rangeRef.current = { entryLow, entryHigh, confidenceZone, visualWeight };');
+    expect(s).toContain('}, [entryLow, entryHigh, confidenceZone, visualWeight]);');
+  });
+
+  it('Ordem Nº 03: visualWeight (competição cruzada real via nexus/visual-budget.ts) vence quando fornecido; cai em opacityMultiplierFor(zone) — nunca um segundo esquema — quando ausente', () => {
+    const s = plugin();
+    expect(s).toContain(
+      'const multiplier = resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : opacityMultiplierFor(zone);',
+    );
   });
 });
 
@@ -115,7 +122,7 @@ describe('TradePlanZonePlugin: dirty-flag + requestAnimationFrame, never a perpe
 describe('EnhancedChart_110_Percent: mounts TradePlanZonePlugin as the topmost overlay, real chart/series/plan only', () => {
   it('imports and mounts it with the real chart/series (never a fabricated default) and the real entry range', () => {
     const s = chart();
-    expect(s).toContain('import { TradePlanZonePlugin } from "./TradePlanZonePlugin";');
+    expect(s).toContain('import { TradePlanZonePlugin, opacityMultiplierFor } from "./TradePlanZonePlugin";');
     expect(s).toContain('<TradePlanZonePlugin');
     expect(s).toContain('chart={chartReady?.chart ?? null}');
     expect(s).toContain('series={chartReady?.series ?? null}');

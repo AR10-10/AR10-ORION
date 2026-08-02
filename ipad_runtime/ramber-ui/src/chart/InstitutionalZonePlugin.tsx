@@ -69,7 +69,14 @@ const FILL_ALPHA_MAX = 0.16;
 const BORDER_ALPHA_MIN = 0.35;
 const BORDER_ALPHA_MAX = 0.65;
 
-function confluenceWeight(distinctSourceCount: number): number {
+// Exportado — Ordem Oficial de Execução Nº 03 ("Implementação
+// Operacional"): esta é a mesma função que EnhancedChart_110_Percent.tsx
+// agora reusa para montar o candidato real de INSTITUTIONAL_ZONE que
+// alimenta nexus/visual-budget.ts (Diretriz Nº 02, construído isolado na
+// rodada anterior — esta é sua primeira graduação real). Zero segunda
+// fórmula: o baseWeight que entra na competição cruzada por orçamento
+// visual é exatamente este mesmo número.
+export function confluenceWeight(distinctSourceCount: number): number {
   const span = CONFLUENCE_CEIL_SOURCES - CONFLUENCE_FLOOR_SOURCES;
   const clamped = Math.max(CONFLUENCE_FLOOR_SOURCES, Math.min(CONFLUENCE_CEIL_SOURCES, distinctSourceCount));
   return span > 0 ? (clamped - CONFLUENCE_FLOOR_SOURCES) / span : 0;
@@ -79,20 +86,30 @@ interface InstitutionalZonePluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   zones: InstitutionalZone[];
+  // Ordem Nº 03: peso visual final real, já resolvido por
+  // resolveVisualBudget (competição CRUZADA com o Trade Plan — nunca só
+  // a força PRÓPRIA da zona) — um valor por índice de `zones`, mesma
+  // ordem. Ausente/undefined num índice = sem competição real ainda
+  // resolvida pelo chamador; cai de volta no confluenceWeight isolado de
+  // sempre (fail-closed para o comportamento já validado antes desta
+  // rodada, nunca um valor fabricado).
+  visualWeights?: (number | undefined)[];
 }
 
-export function InstitutionalZonePlugin({ chart, series, zones }: InstitutionalZonePluginProps) {
+export function InstitutionalZonePlugin({ chart, series, zones, visualWeights }: InstitutionalZonePluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const zonesRef = useRef(zones);
+  const visualWeightsRef = useRef(visualWeights);
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente para o loop de desenho ler — mesmo
   // padrão de dataRef em KillZoneBandsPlugin/LiquidationHeatmapPlugin.
   zonesRef.current = zones;
+  visualWeightsRef.current = visualWeights;
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [zones]);
+  }, [zones, visualWeights]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -117,15 +134,22 @@ export function InstitutionalZonePlugin({ chart, series, zones }: InstitutionalZ
 
       const currentZones = zonesRef.current;
       if (currentZones.length === 0) return; // sem confluência real agora — nada desenhado, nunca um exemplo.
+      const currentVisualWeights = visualWeightsRef.current;
 
-      for (const zone of currentZones) {
+      for (let i = 0; i < currentZones.length; i++) {
+        const zone = currentZones[i];
         const yTop = series.priceToCoordinate(zone.top);
         const yBottom = series.priceToCoordinate(zone.bottom);
         if (yTop === null || yBottom === null) continue; // fora da área de preço visível agora — Fail-Closed, nunca extrapola.
 
         const rectY = Math.min(yTop, yBottom);
         const rectHeight = Math.max(1, Math.abs(yBottom - yTop));
-        const weight = confluenceWeight(zone.distinctSourceCount);
+        // Ordem Nº 03: usa o peso já resolvido pela competição cruzada
+        // (nexus/visual-budget.ts) quando o chamador forneceu um real para
+        // este índice; cai de volta na força PRÓPRIA da zona (sem
+        // competição) quando não — nunca um valor fabricado.
+        const resolvedWeight = currentVisualWeights?.[i];
+        const weight = resolvedWeight !== undefined ? resolvedWeight : confluenceWeight(zone.distinctSourceCount);
 
         ctx.fillStyle = `rgba(${ZONE_HUE_RGB}, ${(FILL_ALPHA_MIN + weight * (FILL_ALPHA_MAX - FILL_ALPHA_MIN)).toFixed(3)})`;
         ctx.fillRect(0, rectY, cssWidth, rectHeight);

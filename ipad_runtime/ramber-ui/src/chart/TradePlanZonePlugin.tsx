@@ -31,6 +31,14 @@ interface TradePlanZonePluginProps {
   // opacidade (Regra de Ouro 2). null quando não há score real a bandar
   // (WAIT/DADOS_INSUFICIENTES) — usa o peso neutro default.
   confidenceZone: InstitutionalConfidenceZone | null;
+  // Ordem Oficial de Execução Nº 03 ("Implementação Operacional"): peso
+  // visual final real, já resolvido por resolveVisualBudget
+  // (nexus/visual-budget.ts) — competição CRUZADA com as Zonas
+  // Institucionais, nunca só a confiança PRÓPRIA do plano. undefined/null
+  // = sem competição real ainda resolvida pelo chamador; cai de volta em
+  // opacityMultiplierFor(confidenceZone) (comportamento já validado antes
+  // desta rodada, nunca um valor fabricado).
+  visualWeight?: number | null;
 }
 
 // Same exact amber already used for the entry price lines in
@@ -55,7 +63,10 @@ const OPACITY_BY_TIER: Record<InstitutionalConfidenceZone["tier"], number> = {
 // neutro, nem o teto nem o piso.
 const DEFAULT_OPACITY_MULTIPLIER = 0.7;
 
-function opacityMultiplierFor(zone: InstitutionalConfidenceZone | null): number {
+// Exportado — Ordem Nº 03: EnhancedChart_110_Percent.tsx reusa esta mesma
+// função para montar o baseWeight real do candidato TRADE_PLAN que entra
+// em nexus/visual-budget.ts. Zero segunda fórmula.
+export function opacityMultiplierFor(zone: InstitutionalConfidenceZone | null): number {
   return zone ? OPACITY_BY_TIER[zone.tier] : DEFAULT_OPACITY_MULTIPLIER;
 }
 
@@ -68,18 +79,18 @@ function withAlpha(rgba: string, alpha: number): string {
   return rgba.replace(/,\s*[0-9.]+\)$/, `, ${alpha.toFixed(3)})`);
 }
 
-export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh, confidenceZone }: TradePlanZonePluginProps) {
+export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh, confidenceZone, visualWeight }: TradePlanZonePluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const rangeRef = useRef({ entryLow, entryHigh, confidenceZone });
+  const rangeRef = useRef({ entryLow, entryHigh, confidenceZone, visualWeight });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Always the latest range/zone for the draw loop to read — never
   // re-triggers the setup effect below (same technique as LiquidityZonesPlugin).
-  rangeRef.current = { entryLow, entryHigh, confidenceZone };
+  rangeRef.current = { entryLow, entryHigh, confidenceZone, visualWeight };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [entryLow, entryHigh, confidenceZone]);
+  }, [entryLow, entryHigh, confidenceZone, visualWeight]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -102,7 +113,7 @@ export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh, confid
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      const { entryLow: low, entryHigh: high, confidenceZone: zone } = rangeRef.current;
+      const { entryLow: low, entryHigh: high, confidenceZone: zone, visualWeight: resolvedWeight } = rangeRef.current;
       // No plan, or a zero-width zone (single acceptance price): the
       // existing price line already covers it — a box here would
       // fabricate a width the real plan doesn't have.
@@ -115,8 +126,11 @@ export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh, confid
       const rectHeight = Math.max(1, Math.abs(y2 - y1));
 
       // §17: mesma hierarquia fill<border de sempre, só reescalada pela
-      // confluência real — nunca um segundo esquema de cor.
-      const multiplier = opacityMultiplierFor(zone);
+      // confluência real — nunca um segundo esquema de cor. Ordem Nº 03:
+      // resolvedWeight (já competido contra as Zonas Institucionais) vence
+      // quando o chamador o forneceu; senão cai na confiança PRÓPRIA de
+      // sempre.
+      const multiplier = resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : opacityMultiplierFor(zone);
       ctx.fillStyle = withAlpha(ZONE_FILL, alphaOf(ZONE_FILL) * multiplier);
       ctx.fillRect(0, rectY, cssWidth, rectHeight);
       // Fio de Seda: 1px solid real border (Canvas 2D, never setLineDash).
