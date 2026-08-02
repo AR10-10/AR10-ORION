@@ -5605,6 +5605,58 @@ AUTODIAGNÓSTICO" produzindo o achado "Pipeline causal" ao vivo na UI.
 
 ---
 
+### 6.73 "DIRETRIZ Nº 02 — CAMADA DE INTELIGÊNCIA VISUAL": dois conflitos
+com regras inegociáveis resolvidos + `nexus/visual-budget.ts` (isolado,
+testado); relatório completo em
+`docs/RELATORIO_DIRETRIZ_02_INTELIGENCIA_VISUAL.md`
+
+Diretriz descreve o pipeline final desejado (`... → Knowledge Graph →
+Evidence Fusion Engine → Quality Governor → Meta Engine → Core Engine →
+Visual Intelligence Layer → Gráfico`) e o princípio "nenhum módulo
+poderá desenhar diretamente no gráfico" — mas, ao contrário da Ordem
+Nº 01, não escreve sua própria cláusula de escopo. Interpretação
+aplicada (detalhe completo no relatório, §0): a inversão completa dos 12
+plugins de canvas é alto blast-radius/baixa reversibilidade sem uma
+"Camada de Inteligência Visual" central ainda existente para migrar os
+plugins PARA — mesma disciplina de "isolar antes de integrar" de todo
+motor novo deste projeto, não construída de uma vez.
+
+**Dois conflitos diretos com regras inegociáveis, resolvidos por
+substituição honesta (mesmo padrão do Corredor de Confluência e da
+Camada de Cenários)**:
+1. "Probability Score" (ex.: "87% de probabilidade de reteste") vs.
+   Regra de Ouro 2 — nenhuma probabilidade calibrada nova introduzida;
+   `visual-budget.ts` trabalha só com peso de confluência real (0..1).
+2. Ordenação "Meta Engine → Core Engine" do diagrama vs. LEI 24 —
+   reafirmado que ordem de camada VISUAL não é ordem de autoridade de
+   DECISÃO, citando o precedente já real de `decision-layer.ts`
+   (`operation` é passthrough literal da direção do Core Engine).
+
+**Implementado**: `nexus/visual-budget.ts` — motor puro implementando a
+seção "BUDGET VISUAL" da própria Diretriz: os 7 níveis de prioridade
+declarados (`TRADE_PLAN > INSTITUTIONAL_ZONE > TARGET > INVALIDATION >
+RADAR > MAIN_LIQUIDITY > STRUCTURE`) e `resolveVisualBudget(candidates,
+budget?)`, que resolve competição cruzada por destaque entre objetos já
+relevantes (aditivo sobre `layer-relevance.ts`, que decide relevância/
+ênfase por camada isoladamente). "Esconder automaticamente" da Diretriz
+é reinterpretado honestamente como REDUZIR ÊNFASE (Regra de Ouro 4):
+todo objeto sempre recebe `visualWeight >= VISUAL_BUDGET_FLOOR_WEIGHT`
+(0.35), nunca zero.
+
+**Isolamento real, não só declarado**: `npm run build` produziu os
+mesmos 1845 módulos/873,37 kB de antes desta rodada — prova objetiva de
+que o motor não tem nenhum consumidor vivo ainda (mesma técnica de
+verificação usada na rodada anterior para provar o oposto, quando
+`stage-runner.ts` ganhou seu primeiro consumidor real: 1844 → 1845).
+
+**Testes executados**: `tsc --noEmit` limpo · **127 arquivos / 2149
+testes** (100%, +13 novos em `tests/visual-budget.test.ts`) · `npm run
+build` ok, módulos/bundle idênticos à rodada anterior (isolamento
+confirmado) · Playwright não executado (nenhuma superfície visual nova
+para verificar).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
