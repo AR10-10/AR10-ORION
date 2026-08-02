@@ -5725,6 +5725,53 @@ da fiação real.
 
 ---
 
+### 6.75 "HOMOLOGAÇÃO DA ORDEM Nº 03 E PRÓXIMA EVOLUÇÃO — ORGANISMO
+INTELIGENTE ADAPTATIVO": Market Regime real como "contexto operacional"
+em `layer-relevance.ts` + reorganização (não exclusão) da administração
+de modos no painel "Camadas do Gráfico"; relatório completo em
+`docs/RELATORIO_HOMOLOGACAO_03_ORGANISMO_ADAPTATIVO.md`
+
+Diretriz descreve 6 dimensões adaptativas (prioridade visual/intensidade/
+quantidade de informação/frequência de atualização/relevância dos
+motores/contexto operacional) e pede substituir "Modo Automático/
+Operador/Inteligente/Configurações manuais redundantes" por um único
+"Estado Inteligente Adaptativo". Investigação confirma que os 4 "modos"
+mapeiam byte a byte para código real (`ChartLayersPanel`, `App.tsx:3741`
+— 4 presets + toggle individual por camada) e que 4 das 6 dimensões já
+eram reais (visual-budget.ts/layer-relevance.ts) — só precisavam ser
+reconhecidas como tal.
+
+**Tensão real, nomeada sem rodeio**: a diretriz pede exclusão literal
+dos modos; Regra de Ouro 4 proíbe apagar funcionalidade real, oferecendo
+"realocar/reorganizar" como alternativa. Resolução: **reorganizar,
+nunca apagar**. "Automático" (renomeado na UI para "AR10 CYBORG · Estado
+Inteligente Adaptativo") vira a única ação primária sempre visível; os
+3 presets manuais continuam existindo por inteiro, só recolhidos numa
+seção "avançado" (`useState(false)`, local, nunca persistida); o toggle
+fino por camada fica FORA da seção recolhida (categoricamente diferente
+de "administrar um modo"). Verificado com Playwright real (2 capturas:
+painel recolhido e expandido, ambos funcionando).
+
+**Implementado — contexto operacional real**: `marketRegime` (rótulo
+já calculado a cada ciclo por `regime-engine.js`, zero segundo cálculo)
+entra em `LayerRelevanceInput` e passa a confirmar relevância de
+`trend_channel` por uma segunda via INDEPENDENTE da banda estreita —
+`TENDENCIA_FORTE`/`BREAKOUT` (momentum confirmado por ADX/DI) mesmo com
+banda ainda larga ou desconhecida. Bug real evitado durante a
+implementação: a antiga non-null assertion (`bandwidthPct!`) teria
+acendido highlight por coerção `null <= N → true` do JavaScript quando só
+o regime confirmasse relevância — corrigido com checagem explícita,
+travado por teste de regressão dedicado.
+
+**Testes executados**: `tsc --noEmit` limpo · **128 arquivos / 2179
+testes** (100%, +14 novos: 9 em `layer-relevance.test.ts`, 1 em
+`nucleo-gravitacional-fusion.test.ts`, 4 em
+`chart-layers-panel-wiring.test.ts`) · `npm run build` ok (1846 módulos,
+876,24 kB) · Playwright real confirmou os 2 estados do painel
+reorganizado.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

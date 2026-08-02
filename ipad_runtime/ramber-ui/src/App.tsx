@@ -3751,6 +3751,12 @@ function ChartLayersPanel() {
     setEmaPeriod,
   } = useContext(WidgetContext) || {};
   const layerRelevance = useLayerRelevanceSnapshot();
+  // "HOMOLOGAÇÃO DA ORDEM Nº 03": estado puramente local de disclosure do
+  // painel (nunca persistido/sessão real) — recolhido por padrão a cada
+  // vez que o painel abre, mesma filosofia de "operador não administra
+  // modos" (a seção manual não fica "grudada" aberta de uma sessão pra
+  // outra por acidente).
+  const [advancedPresetsOpen, setAdvancedPresetsOpen] = useState(false);
   if (!chartLayersOpen) return null;
   const visibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
   const autoMode = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
@@ -3785,60 +3791,81 @@ function ChartLayersPanel() {
           </div>
         </div>
         <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
-          {/* Diretriz de Evolução Autônoma Integral §11: atalho para os 2
-              modos reais — nunca substitui o toggle individual abaixo,
-              só pré-seleciona o que ele já controla. */}
-          <div className="flex gap-1.5">
-            {/* NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: 4º preset — a única ação
-                que devolve as 21 camadas ao comportamento automático de uma
-                vez (resposta do Operador: toggles continuam existindo como
-                override, mas o padrão novo é automático). */}
-            <button
-              type="button"
-              onClick={() => applyChartLayerPreset?.("automatic")}
-              title="Cada camada aparece só quando tem relevância estatística real agora (Relevance Engine) — nunca precisa ser ligada manualmente."
-              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-                isAutomaticPreset
-                  ? "border-[#00ffaa] bg-[#00ffaa20] text-[#00ffaa]"
-                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-              }`}
-            >
-              Automático
-            </button>
-            <button
-              type="button"
-              onClick={() => applyChartLayerPreset?.("operational")}
-              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-                isOperationalPreset
-                  ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-              }`}
-            >
-              Modo Operacional
-            </button>
-            <button
-              type="button"
-              onClick={() => applyChartLayerPreset?.("intelligence")}
-              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-                isIntelligencePreset
-                  ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-              }`}
-            >
-              Modo Inteligência
-            </button>
-            <button
-              type="button"
-              onClick={() => applyChartLayerPreset?.("audit")}
-              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-                isAuditPreset
-                  ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-              }`}
-            >
-              Modo Auditoria
-            </button>
-          </div>
+          {/* "HOMOLOGAÇÃO DA ORDEM Nº 03 / ORGANISMO INTELIGENTE ADAPTATIVO":
+              "o operador não deve administrar modos... deve receber uma
+              leitura pronta e contextualizada". Reorganizado, NUNCA apagado
+              (Regra de Ouro 4 — funcionalidade real preservada por
+              inteiro): os 4 presets e o toggle individual abaixo continuam
+              existindo e funcionando byte-a-byte como antes; só a
+              PRIORIDADE VISUAL mudou — Automático é agora a única ação
+              primária sempre visível (o estado adaptativo real: Relevance
+              Engine + Visual Budget, já ligados ao vivo), e os 3 presets
+              manuais viram uma seção secundária, recolhida por padrão, para
+              quem especificamente precisa de uma leitura manual pontual
+              (ex.: Modo Auditoria para revisão profunda). Decisão de design
+              deliberada, não a exclusão literal pedida pela diretriz — ver
+              docs/RELATORIO_HOMOLOGACAO_03_ORGANISMO_ADAPTATIVO.md §3 para
+              o raciocínio completo. */}
+          <button
+            type="button"
+            onClick={() => applyChartLayerPreset?.("automatic")}
+            title="Cada camada aparece só quando tem relevância estatística real agora (Relevance Engine) + competição real de destaque entre camadas (Visual Budget) — nunca precisa ser administrado manualmente."
+            className={`w-full flex flex-col items-center gap-0.5 py-2.5 rounded border-2 font-bold uppercase tracking-wider transition-colors ${
+              isAutomaticPreset
+                ? "border-[#00ffaa] bg-[#00ffaa15] text-[#00ffaa]"
+                : "border-[#8ab4f8]/30 text-[#8ab4f8]/70 hover:text-[#8ab4f8] hover:border-[#8ab4f8]/50"
+            }`}
+          >
+            <span className="text-[0.55rem] tracking-[0.2em]">AR10 CYBORG · Estado Inteligente Adaptativo</span>
+            <span className="text-[0.38rem] font-normal normal-case tracking-normal opacity-80">
+              {isAutomaticPreset ? "ativo agora — leitura pronta, sem modo pra administrar" : "clique para voltar ao estado adaptativo padrão"}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdvancedPresetsOpen((v) => !v)}
+            className="text-[0.4rem] text-[#8ab4f8]/50 hover:text-[#8ab4f8] tracking-[0.15em] uppercase text-left flex items-center gap-1"
+          >
+            <span>{advancedPresetsOpen ? "▾" : "▸"}</span>
+            <span>Predefinições manuais (avançado)</span>
+          </button>
+          {advancedPresetsOpen && (
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => applyChartLayerPreset?.("operational")}
+                className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+                  isOperationalPreset
+                    ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                    : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+                }`}
+              >
+                Modo Operacional
+              </button>
+              <button
+                type="button"
+                onClick={() => applyChartLayerPreset?.("intelligence")}
+                className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+                  isIntelligencePreset
+                    ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                    : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+                }`}
+              >
+                Modo Inteligência
+              </button>
+              <button
+                type="button"
+                onClick={() => applyChartLayerPreset?.("audit")}
+                className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+                  isAuditPreset
+                    ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                    : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+                }`}
+              >
+                Modo Auditoria
+              </button>
+            </div>
+          )}
           <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
             Overlays reais do canvas — esconder uma camada nunca altera o dado, só a exibição
           </span>
@@ -7009,8 +7036,13 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       recentSessionBoundary,
       hasActiveKillZone,
       hasSessionKeyLevelNearPrice,
+      // "HOMOLOGAÇÃO DA ORDEM Nº 03 / ORGANISMO INTELIGENTE ADAPTATIVO":
+      // contexto operacional real — mesmo engine.marketRegime já usado
+      // por Risk Engine/Confluência/Radar em vários pontos deste arquivo,
+      // zero segundo cálculo.
+      marketRegime: engine?.marketRegime?.regime ?? null,
     };
-  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps]);
+  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps, engine?.marketRegime]);
   const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setLayerRelevance(layerRelevance);

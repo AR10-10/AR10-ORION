@@ -140,6 +140,17 @@ export interface LayerRelevanceInput {
   // do plugin (MAX_KEY_LEVELS_SHOWN) — mesmo papel estrutural de
   // unsweptLiquidityNearPrice acima.
   hasSessionKeyLevelNearPrice: boolean;
+  // "HOMOLOGAÇÃO DA ORDEM Nº 03 / ORGANISMO INTELIGENTE ADAPTATIVO":
+  // "contexto operacional" real — o mesmo rótulo de regime já calculado a
+  // cada ciclo (regime-engine.js, Wilder ADX/DI + percentil de largura de
+  // banda de Bollinger: TENDENCIA_FORTE/TENDENCIA_MODERADA/CONSOLIDACAO/
+  // COMPRESSAO/BREAKOUT/DADOS_INSUFICIENTES — engine.marketRegime.regime),
+  // nunca um cálculo novo. Regime é CONTEXTO, nunca um gate de decisão
+  // (mesma regra do próprio motor) — aqui só influencia QUAL camada
+  // estrutural é mais informativa agora, exatamente o papel de todo outro
+  // campo deste contrato. null = regime ainda não calculado (amostra
+  // insuficiente ou ciclo não OK).
+  marketRegime: string | null;
 }
 
 export interface LayerRelevanceResult {
@@ -183,6 +194,13 @@ export const LIQUIDITY_HIGHLIGHT_MIN_OBSTACLES = 2;
 // visível logo após a virada e some depois, em vez de acender/apagar
 // só no candle exato da transição).
 export const MARKET_SESSION_RECENT_BOUNDARY_CANDLES = 5;
+// Organismo Inteligente Adaptativo: os 2 rótulos reais de regime
+// (regime-engine.js, REGIMES) que representam momentum CONFIRMADO por
+// ADX/DI ou por um escape de compressão real — nunca TENDENCIA_MODERADA
+// (ainda ambíguo por design do próprio motor) nem CONSOLIDACAO/
+// COMPRESSAO (ausência de tendência). Convenção declarada (mesmo espírito
+// dos limiares acima), não uma medição.
+export const MARKET_REGIME_TREND_LABELS = new Set(["TENDENCIA_FORTE", "BREAKOUT"]);
 
 function fmtPct(p: number): string {
   return `${p.toFixed(1)}%`;
@@ -199,8 +217,16 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
   const harmonicsRelevant =
     input.harmonicBestFitScore !== null && input.harmonicBestFitScore >= HARMONIC_MIN_RELEVANT_FIT;
 
-  const trendChannelRelevant =
+  // Duas justificativas reais e INDEPENDENTES para um canal de tendência
+  // importar agora — nunca a mesma pergunta duas vezes: banda estreita é
+  // COMPRESSÃO (coiled, rompimento pendente); regime TENDENCIA_FORTE/
+  // BREAKOUT é MOMENTUM já confirmado por ADX/DI (o canal pode estar
+  // largo, expandindo COM a tendência). Qualquer uma das duas torna o
+  // canal relevante.
+  const trendChannelBandwidthTight =
     input.trendChannelBandwidthPct !== null && input.trendChannelBandwidthPct <= TREND_CHANNEL_TIGHT_BANDWIDTH_PCT;
+  const trendChannelRegimeConfirmed = input.marketRegime !== null && MARKET_REGIME_TREND_LABELS.has(input.marketRegime);
+  const trendChannelRelevant = trendChannelBandwidthTight || trendChannelRegimeConfirmed;
 
   const vwapRelevant = input.vwapState !== null && input.vwapState !== "NEUTRAL";
   const nexusLineRelevant = input.nexusLineState !== null && input.nexusLineState !== "NEUTRAL";
@@ -217,7 +243,17 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
 
   const liquidityHighlight = input.tradePlanActive && input.obstacleZoneCount >= LIQUIDITY_HIGHLIGHT_MIN_OBSTACLES;
   const structureBreakHighlight = structureBreakRelevant && input.structureBreakAlpha! >= STRUCTURE_BREAK_HIGHLIGHT_MIN_ALPHA;
-  const trendChannelHighlight = trendChannelRelevant && input.trendChannelBandwidthPct! <= TREND_CHANNEL_HIGHLIGHT_BANDWIDTH_PCT;
+  // Nunca `input.trendChannelBandwidthPct!` aqui: bandwidth pode ser
+  // legitimamente null quando só o regime confirmou relevância (acima) —
+  // um `!` mentiria pro TypeScript e `null <= N` avalia true em JS
+  // (null vira 0), acendendo highlight sem nenhum dado real de banda.
+  // BREAKOUT (o rótulo mais extremo/acionável do motor) é a única
+  // confirmação de regime forte o bastante pra highlight sozinha —
+  // TENDENCIA_FORTE já basta pra relevant, não pro extremo do highlight.
+  const trendChannelHighlight =
+    trendChannelRelevant &&
+    ((input.trendChannelBandwidthPct !== null && input.trendChannelBandwidthPct <= TREND_CHANNEL_HIGHLIGHT_BANDWIDTH_PCT) ||
+      input.marketRegime === "BREAKOUT");
   const harmonicsHighlight = harmonicsRelevant && input.harmonicBestFitScore! >= HARMONIC_HIGHLIGHT_FIT;
 
   return {
@@ -256,8 +292,17 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
       : { relevant: false, emphasis: "normal", reason: "VWAP e Nexus Line neutros — sem leitura direcional real agora" },
 
     trend_channel: trendChannelRelevant
-      ? { relevant: true, emphasis: trendChannelHighlight ? "highlight" : "normal", reason: `banda real estreita (${input.trendChannelBandwidthPct!.toFixed(2)}% <= ${TREND_CHANNEL_TIGHT_BANDWIDTH_PCT}%) — canal estruturalmente informativo` }
-      : { relevant: false, emphasis: "normal", reason: input.trendChannelBandwidthPct === null ? "sem canal real detectado" : "banda real larga demais para ser um contexto estrutural forte agora" },
+      ? {
+          relevant: true,
+          emphasis: trendChannelHighlight ? "highlight" : "normal",
+          reason:
+            trendChannelBandwidthTight && trendChannelRegimeConfirmed
+              ? `banda real estreita (${input.trendChannelBandwidthPct!.toFixed(2)}% <= ${TREND_CHANNEL_TIGHT_BANDWIDTH_PCT}%) e regime real ${input.marketRegime} — compressão e momentum confirmados juntos`
+              : trendChannelBandwidthTight
+                ? `banda real estreita (${input.trendChannelBandwidthPct!.toFixed(2)}% <= ${TREND_CHANNEL_TIGHT_BANDWIDTH_PCT}%) — canal estruturalmente informativo`
+                : `regime real ${input.marketRegime} (contexto operacional) — momentum confirmado por ADX/DI mesmo com a banda ainda larga`,
+        }
+      : { relevant: false, emphasis: "normal", reason: input.trendChannelBandwidthPct === null && input.marketRegime === null ? "sem canal real detectado" : "banda real larga demais e regime sem momentum confirmado — sem contexto estrutural forte agora" },
 
     vwap: vwapRelevant
       ? { relevant: true, emphasis: "normal", reason: `estado direcional real: ${input.vwapState}` }

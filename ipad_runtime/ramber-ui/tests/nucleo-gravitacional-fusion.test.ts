@@ -120,6 +120,16 @@ describe('ChartWidget: leitura real → Relevance Engine → store → visibilid
     expect(body).toContain('hasOrderBook: Boolean(engine?.hasBook),');
   });
 
+  it('"HOMOLOGAÇÃO DA ORDEM Nº 03 / ORGANISMO INTELIGENTE ADAPTATIVO": marketRegime (contexto operacional) reusa o MESMO engine.marketRegime.regime já real em uso pelo Risk Engine/Confluência — zero segundo cálculo', () => {
+    const a = app();
+    const idx = a.indexOf('const relevanceInput: LayerRelevanceInput = useMemo(() => {');
+    const body = a.slice(idx, a.indexOf('}, [livePrice,', idx));
+    expect(body).toContain('marketRegime: engine?.marketRegime?.regime ?? null,');
+    const depsIdx = a.indexOf('}, [livePrice,', idx);
+    const depsEnd = a.indexOf(');', depsIdx);
+    expect(a.slice(depsIdx, depsEnd)).toContain('engine?.marketRegime');
+  });
+
   it('structureBreakAlpha reusa o MESMO ageAlpha/BREAK_DECAY de StructureBreakMarkersPlugin — mesma idade em candles, zero segunda curva de decaimento', () => {
     const a = app();
     expect(a).toContain('import { BREAK_DECAY } from "./chart/StructureBreakMarkersPlugin";');

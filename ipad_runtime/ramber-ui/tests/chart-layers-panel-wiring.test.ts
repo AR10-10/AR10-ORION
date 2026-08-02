@@ -450,7 +450,7 @@ describe('Auditoria de pendências: obstacleCount (sem teto) reconciliado com o 
   const app = () => read('../src/App.tsx');
 
   it('unmitigatedFvgs/unmitigatedBlocks incluem os 3 mais recentes E qualquer obstáculo real do plano ativo — nunca um obstáculo citado no texto que fica invisível no gráfico', () => {
-    const a = app();
+    const a = read('../src/App.tsx');
     expect(a).toContain('const isRealObstacle = (z: PriceZone) => chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);');
     expect(a).toContain('const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);');
     expect(a).toContain('const unmitigatedBlocksAll = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated);');
@@ -459,7 +459,7 @@ describe('Auditoria de pendências: obstacleCount (sem teto) reconciliado com o 
   });
 
   it('isRealObstacle referencia chartObstacleZones (a MESMA lista sem teto que já alimenta obstacleCount/LiquidityZonesPlugin) — nunca um segundo cálculo de obstáculo', () => {
-    const a = app();
+    const a = read('../src/App.tsx');
     const isRealObstacleIdx = a.indexOf('const isRealObstacle = ');
     const chartObstacleZonesIdx = a.indexOf('const chartObstacleZones = useMemo(');
     expect(chartObstacleZonesIdx, 'chartObstacleZones não encontrado').toBeGreaterThan(-1);
@@ -467,12 +467,60 @@ describe('Auditoria de pendências: obstacleCount (sem teto) reconciliado com o 
   });
 
   it('sem NENHUM plano (nem Conselho nem fallback do Núcleo) e sem zonas estruturais, chartObstacleZones é vazio — isRealObstacle nunca é true, união com [] é no-op, decluttering de sempre preservado', () => {
-    const a = app();
+    const a = read('../src/App.tsx');
     // chartObstacleZones continua fail-closed: retorna [] sem
     // tradePlanStructureZones, e o bloco só popula quando há um plano do
     // Conselho OU um fallback do Núcleo com entrada real (EPC §5). Sem
     // nenhum dos dois, a união com [] nunca inclui zonas além dos 3
     // primeiros — mesmo decluttering de sempre.
     expect(a).toContain('if (!tradePlanStructureZones) return [];');
+  });
+});
+
+// "HOMOLOGAÇÃO DA ORDEM Nº 03 / ORGANISMO INTELIGENTE ADAPTATIVO":
+// "o operador não deve administrar modos". Reorganização (Regra de Ouro
+// 4 — nunca apagar funcionalidade real): Automático vira a única ação
+// primária sempre visível; os 3 presets manuais (Operacional/
+// Inteligência/Auditoria) continuam existindo byte-a-byte, só recolhidos
+// numa seção "avançado" por padrão. Trava as DUAS metades da promessa:
+// nada foi apagado (mesmos 3 onClick reais ainda no arquivo) E a
+// hierarquia visual realmente mudou (Automático fora do bloco condicional
+// dos outros 3).
+describe('ChartLayersPanel: Estado Inteligente Adaptativo é a ação primária; presets manuais viram seção "avançado" recolhida — reorganizado, nunca apagado', () => {
+  it('botão primário "AR10 CYBORG · Estado Inteligente Adaptativo" chama applyChartLayerPreset("automatic"), fora de qualquer bloco condicional', () => {
+    const a = read('../src/App.tsx');
+    const idx = a.indexOf('AR10 CYBORG · Estado Inteligente Adaptativo');
+    expect(idx, 'botão primário não encontrado').toBeGreaterThan(-1);
+    const block = a.slice(a.lastIndexOf('<button', idx), idx);
+    expect(block).toContain('onClick={() => applyChartLayerPreset?.("automatic")}');
+  });
+
+  it('disclosure "Predefinições manuais (avançado)" começa recolhida (useState(false)) — nunca aberta por padrão', () => {
+    const a = read('../src/App.tsx');
+    expect(a).toContain('const [advancedPresetsOpen, setAdvancedPresetsOpen] = useState(false);');
+    expect(a).toContain('onClick={() => setAdvancedPresetsOpen((v) => !v)}');
+  });
+
+  it('os 3 presets manuais continuam existindo por inteiro (zero exclusão real) — só dentro do bloco condicional {advancedPresetsOpen && (...)}', () => {
+    const a = read('../src/App.tsx');
+    const discloseIdx = a.indexOf('{advancedPresetsOpen && (');
+    expect(discloseIdx, 'bloco condicional não encontrado').toBeGreaterThan(-1);
+    const nextPanelSectionIdx = a.indexOf('Overlays reais do canvas', discloseIdx);
+    const block = a.slice(discloseIdx, nextPanelSectionIdx);
+    expect(block).toContain('onClick={() => applyChartLayerPreset?.("operational")}');
+    expect(block).toContain('onClick={() => applyChartLayerPreset?.("intelligence")}');
+    expect(block).toContain('onClick={() => applyChartLayerPreset?.("audit")}');
+    expect(block).toContain('Modo Operacional');
+    expect(block).toContain('Modo Inteligência');
+    expect(block).toContain('Modo Auditoria');
+  });
+
+  it('o toggle individual por camada (toggleChartLayer/resetChartLayerToAuto) fica FORA do bloco recolhido — nunca escondido, categoricamente diferente de "administrar um modo"', () => {
+    const a = read('../src/App.tsx');
+    const discloseIdx = a.indexOf('{advancedPresetsOpen && (');
+    const disclosureEnd = a.indexOf(')}', a.indexOf('Modo Auditoria', discloseIdx));
+    const toggleIdx = a.indexOf('onClick={() => toggleChartLayer?.(id)}');
+    expect(toggleIdx, 'toggle individual não encontrado').toBeGreaterThan(-1);
+    expect(toggleIdx).toBeGreaterThan(disclosureEnd);
   });
 });

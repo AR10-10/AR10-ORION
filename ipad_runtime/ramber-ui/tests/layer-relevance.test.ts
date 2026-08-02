@@ -21,6 +21,7 @@ import {
   TREND_CHANNEL_HIGHLIGHT_BANDWIDTH_PCT,
   STRUCTURE_BREAK_HIGHLIGHT_MIN_ALPHA,
   LIQUIDITY_HIGHLIGHT_MIN_OBSTACLES,
+  MARKET_REGIME_TREND_LABELS,
   type LayerRelevanceInput,
 } from '../src/nexus/layer-relevance';
 
@@ -51,6 +52,7 @@ const BASE: LayerRelevanceInput = {
   recentSessionBoundary: false,
   hasActiveKillZone: false,
   hasSessionKeyLevelNearPrice: false,
+  marketRegime: null,
 };
 
 describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent.tsx) 1:1 — zero drift, zero gap', () => {
@@ -271,6 +273,65 @@ describe('trend_channel: banda real estreita = estruturalmente informativo', () 
   it('banda real larga (acima do limiar) => não relevante', () => {
     const r = computeLayerRelevance({ ...BASE, trendChannelBandwidthPct: TREND_CHANNEL_TIGHT_BANDWIDTH_PCT + 5 });
     expect(r.trend_channel.relevant).toBe(false);
+  });
+});
+
+// "HOMOLOGAÇÃO DA ORDEM Nº 03 / ORGANISMO INTELIGENTE ADAPTATIVO":
+// contexto operacional real (regime-engine.js) como 2ª justificativa
+// INDEPENDENTE de relevância — banda larga não invalida um regime real
+// de momentum confirmado (o canal pode estar largo justamente porque
+// está expandindo COM a tendência).
+describe('trend_channel: regime real (contexto operacional) confirma relevância mesmo com banda larga/desconhecida', () => {
+  it('MARKET_REGIME_TREND_LABELS contém exatamente os 2 rótulos reais de momentum confirmado', () => {
+    expect(MARKET_REGIME_TREND_LABELS).toEqual(new Set(['TENDENCIA_FORTE', 'BREAKOUT']));
+  });
+
+  it('regime TENDENCIA_FORTE real, banda ainda null (não calculada) => relevante mesmo assim', () => {
+    const r = computeLayerRelevance({ ...BASE, marketRegime: 'TENDENCIA_FORTE' });
+    expect(r.trend_channel.relevant).toBe(true);
+    expect(r.trend_channel.reason).toContain('TENDENCIA_FORTE');
+  });
+
+  it('regime BREAKOUT real, banda real LARGA (acima do limiar) => relevante mesmo assim (momentum vence banda larga)', () => {
+    const r = computeLayerRelevance({ ...BASE, marketRegime: 'BREAKOUT', trendChannelBandwidthPct: TREND_CHANNEL_TIGHT_BANDWIDTH_PCT + 10 });
+    expect(r.trend_channel.relevant).toBe(true);
+  });
+
+  it('regime BREAKOUT real sozinho (banda null) => highlight direto — o rótulo mais extremo do motor não precisa de banda estreita também', () => {
+    const r = computeLayerRelevance({ ...BASE, marketRegime: 'BREAKOUT' });
+    expect(r.trend_channel.emphasis).toBe('highlight');
+  });
+
+  it('regime TENDENCIA_FORTE real sozinho (banda null) => relevante mas SEM highlight — só BREAKOUT confirma o extremo sozinho', () => {
+    const r = computeLayerRelevance({ ...BASE, marketRegime: 'TENDENCIA_FORTE' });
+    expect(r.trend_channel.relevant).toBe(true);
+    expect(r.trend_channel.emphasis).toBe('normal');
+  });
+
+  it('regime CONSOLIDACAO/COMPRESSAO real (sem momentum confirmado) => nunca confirma relevância sozinho', () => {
+    expect(computeLayerRelevance({ ...BASE, marketRegime: 'CONSOLIDACAO' }).trend_channel.relevant).toBe(false);
+    expect(computeLayerRelevance({ ...BASE, marketRegime: 'COMPRESSAO' }).trend_channel.relevant).toBe(false);
+  });
+
+  it('regime TENDENCIA_MODERADA real (ambíguo por design do próprio motor) => nunca confirma relevância sozinho', () => {
+    expect(computeLayerRelevance({ ...BASE, marketRegime: 'TENDENCIA_MODERADA' }).trend_channel.relevant).toBe(false);
+  });
+
+  it('banda estreita real E regime real confirmado juntos => reason honesto cita as DUAS justificativas, nunca uma só', () => {
+    const r = computeLayerRelevance({ ...BASE, marketRegime: 'TENDENCIA_FORTE', trendChannelBandwidthPct: TREND_CHANNEL_TIGHT_BANDWIDTH_PCT });
+    expect(r.trend_channel.relevant).toBe(true);
+    expect(r.trend_channel.reason).toContain('banda real estreita');
+    expect(r.trend_channel.reason).toContain('TENDENCIA_FORTE');
+  });
+
+  it('nunca usa `!` não-nulo sobre trendChannelBandwidthPct — banda null com regime confirmado não pode virar highlight por coerção null->0', () => {
+    // Regressão real: null <= N avalia true em JS (null vira 0 na
+    // comparação) — se o motor ainda usasse `input.trendChannelBandwidthPct!`
+    // aqui, regime TENDENCIA_FORTE sozinho (banda null) acenderia
+    // highlight por acidente. Trava o comportamento correto (§ acima:
+    // TENDENCIA_FORTE sozinho fica normal, nunca highlight).
+    const r = computeLayerRelevance({ ...BASE, marketRegime: 'TENDENCIA_FORTE', trendChannelBandwidthPct: null });
+    expect(r.trend_channel.emphasis).toBe('normal');
   });
 });
 
