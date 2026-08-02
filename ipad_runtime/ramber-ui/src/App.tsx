@@ -71,7 +71,11 @@ import { getHealthMonitor } from "./nexus/health-monitor";
 // de fatia de saída de motor no UnifiedGlobalSnapshot em um evento tipado no
 // bus do Nexus Core — a publicação dos motores é a própria escrita na store,
 // nunca um emit() manual espalhado pelos efeitos.
-import { getOrganismOrchestrator } from "./nexus/organism-orchestrator";
+import { getOrganismOrchestrator, getSnapshotForEngine } from "./nexus/organism-orchestrator";
+// ORDEM OFICIAL Nº 01 (Autogovernança): traceStages() ganha o primeiro
+// consumidor ao vivo — só o Relatório de Autodiagnóstico (TelemetryHealthWidget),
+// sob demanda, mesma disciplina de "read-only observer" do próprio módulo.
+import { traceStages } from "./nexus/stage-runner";
 // Local-First (closes the persistence gap flagged in the audit): candles
 // persisted to IndexedDB on every real REST arrival; on boot the chart
 // paints instantly from the last REAL session before the network answers.
@@ -8541,7 +8545,13 @@ function TelemetryHealthWidget() {
             estado real visível, não substitui nem duplica aquilo. */}
         <button
           type="button"
-          onClick={() =>
+          onClick={() => {
+            // ORDEM Nº 01: mesma visão versionada/read-only que os motores
+            // reais já usam (getSnapshotForEngine, organism-orchestrator.ts)
+            // — este botão é um OBSERVADOR externo (como o próprio stage-
+            // runner.ts se descreve), nunca um motor, então lê sob demanda
+            // em vez de assinar.
+            const engineView = getSnapshotForEngine();
             setDiagnosticReport(
               buildDiagnosticReport({
                 offline,
@@ -8551,9 +8561,10 @@ function TelemetryHealthWidget() {
                 engineReason: realCycle?.reason ?? null,
                 dataQualityClassification: quality?.classification ?? null,
                 connections,
+                stageTrace: traceStages(engineView.snapshot, engineView.seq),
               }),
-            )
-          }
+            );
+          }}
           className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff30] hover:bg-[#00f0ff10] transition-colors text-left"
         >
           <span className="text-[0.45rem] text-[#00f0ff] font-bold tracking-wide">GERAR RELATÓRIO DE AUTODIAGNÓSTICO</span>

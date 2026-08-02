@@ -5544,6 +5544,67 @@ valor real observado no sandbox, não fabricado).
 
 ---
 
+### 6.72 "ORDEM OFICIAL DE EXECUÇÃO Nº 01 — DIRETRIZ MESTRE DE
+CONSOLIDAÇÃO, EVOLUÇÃO E AUTONOMIA TÉCNICA": `traceStages()` ganha
+consumidor real; 2 recomendações da própria sessão corrigidas após
+investigação mais profunda; relatório completo em
+`docs/RELATORIO_ORDEM_01_CONSOLIDACAO.md`
+
+Ordem de escopo total ("todo o ecossistema... nada deve permanecer
+isolado"), mas o próprio texto da Ordem encerra dizendo que a
+Arquitetura Mestre (Knowledge Graph, Evidence Fusion Engine, Quality
+Governor, Lifecycle Manager, gráfico com desenho centralizado por uma
+única camada de inteligência) **será iniciada DEPOIS desta Ordem** —
+uma diretriz futura e mais detalhada. Interpretação aplicada (detalhe
+completo no relatório, §0): esta rodada é auditoria/consolidação real
+sobre o que já existe, não a construção antecipada do que a próxima
+Ordem vai detalhar — tentar isso agora, sem a especificação, arriscaria
+quebrar os 12 plugins de canvas testados e estáveis (o oposto de
+"preservar tudo o que já foi validado", objetivo explícito da própria
+Ordem).
+
+**Implementado**: `traceStages()` (stage-runner.ts, OMEGA CORE V-MAX
+Fase 3 — pipeline causal real DATA→CORE_ENGINE→COUNCIL→TRADE_PLAN→
+NEXUS_DECISION) ganhou seu primeiro consumidor ao vivo — um novo achado
+"Pipeline causal" em `self-diagnostics.ts` (Relatório de
+Autodiagnóstico), lido via a mesma visão versionada/read-only que os
+motores reais já usam (`getSnapshotForEngine()`). Severidade nunca
+escala além de WARN por design (a causa raiz de qualquer estágio
+quebrado já é CRITICAL em outro achado — repetir seria alarme
+duplicado). Evidência real: bundle foi de 1844 para 1845 módulos
+transformados (stage-runner.ts deixou de ser tree-shaken).
+
+**Corrigido (não executado mecanicamente)**: duas recomendações
+registradas em rodadas anteriores — dar a `operational-readability.ts`
+e a `engine-signal-contract.ts` uma fatia própria em
+`unified-snapshot-store.ts` — foram reexaminadas e a conclusão mudou:
+as duas são funções PURAS de um único insumo já central
+(`nexusDecision`/`council`, respectivamente), ao contrário de
+`nexusDecision`/`gmil`/etc. (que fundem múltiplos insumos dispersos —
+por isso JUSTIFICAM uma fatia própria). Dar-lhes uma fatia seria mirror
+sintético e redundante, não uma integração real. Aplicar o mesmo padrão
+mecanicamente, só porque funcionou antes, seria exatamente a
+complexidade desnecessária que esta Ordem pede para evitar.
+
+**Reconfirmado, não removido**: varredura de módulos órfãos em
+`nexus/*.ts` confirmou `cross-exchange-service.ts`/
+`connection-manager.ts` ainda sem publicador — já documentado como
+adiamento deliberado (maior risco do projeto) em `event-bus.ts`,
+nenhuma mudança. `engine-signal-contract.ts` continua sem consumidor —
+não é esquecimento, é o contrato de 10 campos (peso/confiança/
+relevância/qualidade/contexto/horizonte/validade/justificativa/
+prioridade) já pronto e testado, esperando exatamente o motor de fusão
+que a PRÓXIMA Ordem vai especificar.
+
+**Testes executados**: `tsc --noEmit` limpo · **126 arquivos / 2136
+testes** (100%, +6 novos: 5 em `self-diagnostics.test.ts`, 1 em
+`ciborgue-vivo-wiring.test.ts`) · `core-engine-boundary.test.ts` 6/6
+confirmado intacto · `npm run build` ok (873,37 kB, 1845 módulos, +1) ·
+Playwright real confirmou clique real em "GERAR RELATÓRIO DE
+AUTODIAGNÓSTICO" produzindo o achado "Pipeline causal" ao vivo na UI.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

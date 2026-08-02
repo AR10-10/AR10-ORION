@@ -244,6 +244,21 @@ describe('App.tsx: TelemetryHealthWidget ganha o gerador de relatório de autodi
     expect(body).toContain('connections,');
     expect(body).toContain('formatDiagnosticReportMarkdown(diagnosticReport)');
   });
+
+  // ORDEM OFICIAL Nº 01 (Autogovernança): traceStages() (stage-runner.ts,
+  // já real e testado) ganha aqui seu primeiro consumidor ao vivo — a
+  // mesma visão versionada/read-only que os motores reais já usam
+  // (getSnapshotForEngine), nunca uma segunda leitura da store, nunca um
+  // motor novo.
+  it('lê o snapshot real via getSnapshotForEngine() e passa traceStages(...) real como stageTrace — zero segunda fonte, zero seq fabricado', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('import { getOrganismOrchestrator, getSnapshotForEngine } from "./nexus/organism-orchestrator";');
+    expect(app).toContain('import { traceStages } from "./nexus/stage-runner";');
+    const fnMatch = app.match(/function TelemetryHealthWidget\(\) \{([\s\S]*?)\n\}\n/);
+    const body = fnMatch![1];
+    expect(body).toContain('const engineView = getSnapshotForEngine();');
+    expect(body).toContain('stageTrace: traceStages(engineView.snapshot, engineView.seq),');
+  });
 });
 
 describe('Diretriz Restauração/Inteligência Visual §6: obstáculos do Trade Plan destacados no gráfico — zero segundo cálculo das zonas', () => {

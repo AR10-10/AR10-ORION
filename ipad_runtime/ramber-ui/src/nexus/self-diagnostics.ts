@@ -11,6 +11,14 @@
 import { classifyFps, classifyCycleLatency } from '../../../src/telemetry/index.js';
 import { classifyBusQuality } from './data-quality-vocabulary';
 import type { Exchange, ExchangeConnectionState, HealthSnapshot } from './types';
+// ORDEM OFICIAL Nº 01 ("Autogovernança... detectar falhas ou
+// comportamentos anormais"): traceStages() (stage-runner.ts) já é um
+// observador real e testado do pipeline causal canônico (SYSTEM_HANDBOOK.md
+// §2), mas nunca tinha ganho um consumidor ao vivo — gap honesto já
+// documentado no próprio cabeçalho de stage-runner.ts desde a rodada
+// anterior. Fechado aqui: zero motor novo, zero segunda leitura — este
+// módulo só recebe o StageTrace já real e o traduz num achado a mais.
+import { STAGE_ORDER, type StageTrace } from './stage-runner';
 
 export type DiagnosticSeverity = 'OK' | 'WARN' | 'CRITICAL';
 
@@ -28,6 +36,11 @@ export interface DiagnosticInput {
   engineReason: string | null;
   dataQualityClassification: string | null;
   connections: Partial<Record<Exchange, ExchangeConnectionState>>;
+  // ORDEM Nº 01: leitura real já resolvida por traceStages() (stage-
+  // runner.ts) — null honesto quando o chamador ainda não tem uma (nunca
+  // fabricado por este módulo; a mesma disciplina fail-closed do resto do
+  // arquivo).
+  stageTrace: StageTrace | null;
 }
 
 export interface DiagnosticReport {
@@ -128,6 +141,30 @@ export function buildDiagnosticReport(input: DiagnosticInput): DiagnosticReport 
       ? { severity: 'CRITICAL', label: 'Worker WASM', detail: 'Nenhum Worker do Quant Engine vivo — cálculo pesado não tem onde rodar.' }
       : { severity: 'OK', label: 'Worker WASM', detail: `${input.health.workersAlive} worker(s) real(is) vivo(s).` },
   );
+
+  // ORDEM Nº 01 (Autogovernança): a VISÃO ENCADEADA real do pipeline
+  // causal — até onde DATA→CORE_ENGINE→COUNCIL→TRADE_PLAN→NEXUS_DECISION
+  // chegou de verdade nesta leitura. Severidade nunca passa de WARN: a
+  // causa raiz de qualquer estágio quebrado já vira CRITICAL em outro
+  // achado acima (ex.: offline => Conectividade CRITICAL; engineStatus
+  // error => Motor de análise CRITICAL) — repetir a mesma causa como um
+  // segundo CRITICAL aqui seria alarme duplicado, não informação nova
+  // (Ordem Nº 01: "nenhum [motor] deverá competir entre si"). O valor
+  // real deste achado é mostrar a CADEIA, não redetectar a falha.
+  if (input.stageTrace) {
+    const { stages, reachedIndex } = input.stageTrace;
+    const complete = reachedIndex === stages.length - 1;
+    const firstBroken = stages.find((s) => !s.ok) ?? null;
+    findings.push(
+      complete
+        ? { severity: 'OK', label: 'Pipeline causal', detail: `Cadeia completa: ${STAGE_ORDER.join(' → ')}.` }
+        : {
+            severity: 'WARN',
+            label: 'Pipeline causal',
+            detail: `Alcançou até ${reachedIndex >= 0 ? STAGE_ORDER[reachedIndex] : 'nenhum estágio'} — ${firstBroken?.reason ?? 'motivo não reportado'}.`,
+          },
+    );
+  }
 
   for (const [exchange, state] of Object.entries(input.connections) as Array<[Exchange, ExchangeConnectionState | undefined]>) {
     if (!state) continue;
