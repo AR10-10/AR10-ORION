@@ -685,7 +685,10 @@ describe('Achado real do Operador ("linha amarela que eu não sei o que signific
     const c = chart();
     const idx = c.indexOf('if (visibility.liquidity_sweep) {', c.indexOf('const priceAxisLabels = useMemo'));
     expect(idx, 'bloco de Sweep em priceAxisLabels não encontrado').toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 1300);
+    // Janela 1300→2400: o bloco cresceu com o teto real de etiquetas
+    // (MAX_SWEEP_AXIS_LABELS, Lapidação por captura real) — mesmas
+    // asserções de sempre, só mais espaço para encontrá-las.
+    const block = c.slice(idx, idx + 2400);
     expect(block).toContain('const seenSweepPrices = new Set<number>();');
     // Lapidação institucional ("agrupar SWEEPs próximos"): clusterSweptPrices
     // (trap-detection.ts) substitui o loop plano por preço — 1 evento isolado
@@ -1106,5 +1109,29 @@ describe('EnhancedChart: zoom inteligente na troca de timeframe/símbolo (flag p
     expect(s).toContain('smartZoomPendingRef.current = false;');
     expect(s).toContain('from: Math.max(0, formatted.length - SMART_ZOOM_CANDLES),');
     expect(s).toContain('to: formatted.length - 1 + SMART_ZOOM_RIGHT_PAD_BARS,');
+  });
+});
+
+// Lapidação por captura real do Operador (BTC 1H, "linhas amarelas
+// descendo... bagunça"): 3 fontes reais de poluição corrigidas.
+describe('Lapidação por captura real: kill zone só a ocorrência mais recente + teto de etiquetas Sweep + dedupe de membros da Zona', () => {
+  it('KillZoneBandsPlugin: só a ocorrência MAIS RECENTE de cada janela desenha (latestSpanPerZone) — histórico não vira cerca de faixas verticais', () => {
+    const p = read('../src/chart/KillZoneBandsPlugin.tsx');
+    expect(p).toContain('const latestSpanPerZone = new Map<string, KillZoneSpan>();');
+    expect(p).toContain('if (!prev || span.endIndex > prev.endIndex) latestSpanPerZone.set(span.id, span);');
+    expect(p).toContain('for (const span of latestSpanPerZone.values()) {');
+  });
+
+  it('EnhancedChart: etiquetas de Sweep no eixo têm teto real (MAX_SWEEP_AXIS_LABELS=4, mais recentes primeiro) — price lines de todos continuam', () => {
+    const c = chart();
+    expect(c).toContain('const MAX_SWEEP_AXIS_LABELS = 4;');
+    expect(c).toContain('sweepLabelCandidates.sort((a, b) => b.latestIndex - a.latestIndex);');
+    expect(c).toContain('for (const c of sweepLabelCandidates.slice(0, MAX_SWEEP_AXIS_LABELS)) out.push(c.label);');
+  });
+
+  it('Zona Institucional: membros repetidos agregam com contagem real ("Sweep ×2"), nunca nome repetido', () => {
+    const c = chart();
+    expect(c).toContain('for (const m of zone.members) labelCounts.set(m.label, (labelCounts.get(m.label) ?? 0) + 1);');
+    expect(c).toContain('const toolNames = [...labelCounts.entries()].map(([l, n]) => (n > 1 ? `${l} ×${n}` : l)).join(" + ");');
   });
 });

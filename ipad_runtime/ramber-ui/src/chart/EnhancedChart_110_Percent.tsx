@@ -68,6 +68,12 @@ const SWEEP_DECAY: DecayConfig = { fadeStartCandles: 50, expireCandles: 200, min
 // arquivo. O pan/zoom manual do Operador continua soberano fora da troca.
 const SMART_ZOOM_CANDLES = 120;
 const SMART_ZOOM_RIGHT_PAD_BARS = 6;
+
+// Lapidação por captura real: teto de etiquetas de Sweep no eixo (os
+// clusters mais recentes primeiro) — convenção declarada, mesma natureza
+// de MAX_INSTITUTIONAL_ZONES. As price lines de todos os clusters vivos
+// continuam desenhadas; só a ETIQUETA é seletiva.
+const MAX_SWEEP_AXIS_LABELS = 4;
 import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
 // V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
 // barras à direita — dado direto da store (Fase 1.3), ver header do plugin.
@@ -2321,6 +2327,7 @@ export function EnhancedChart_110_Percent({
     // expirados (alpha<=0) nunca entram no eixo, mesma honestidade de
     // "esquecido" já aplicada a BOS/CHOCH.
     if (visibility.liquidity_sweep) {
+      const sweepLabelCandidates: { latestIndex: number; label: PriceAxisLabel }[] = [];
       const seenSweepPrices = new Set<number>();
       for (const t of traps ?? []) {
         if (t.kind !== "STOP_HUNT_TOPO" && t.kind !== "STOP_HUNT_FUNDO") continue;
@@ -2333,18 +2340,30 @@ export function EnhancedChart_110_Percent({
           const age = data.length - 1 - cluster.latestIndex;
           const alpha = ageAlpha(age, SWEEP_DECAY);
           if (alpha <= 0) continue; // expirado (>200 candles) — mesma honestidade de "esquecido" de BOS/CHOCH.
-          out.push({
-            price: cluster.avgPrice,
-            text:
-              cluster.count === 1
-                ? `⚡ SWEEP ${arrow} ${confidencePct}%`
-                : `⚡ SWEEP ZONE ${arrow} (${cluster.count}x) ${confidencePct}%`,
-            color: "rgba(255, 140, 0, 0.85)", // mesmo tom laranja da price line (ver comentário no efeito acima) — alpha real abaixo controla a opacidade final.
-            alpha,
-            side: "left",
+          sweepLabelCandidates.push({
+            latestIndex: cluster.latestIndex,
+            label: {
+              price: cluster.avgPrice,
+              text:
+                cluster.count === 1
+                  ? `⚡ SWEEP ${arrow} ${confidencePct}%`
+                  : `⚡ SWEEP ZONE ${arrow} (${cluster.count}x) ${confidencePct}%`,
+              color: "rgba(255, 140, 0, 0.85)", // mesmo tom laranja da price line (ver comentário no efeito acima) — alpha real abaixo controla a opacidade final.
+              alpha,
+              side: "left",
+            },
           });
         }
       }
+      // Lapidação por captura real do Operador (coluna esquerda com ~8
+      // etiquetas SWEEP simultâneas): o decay de 200 candles no 1H retém
+      // ~8 dias — tudo "vivo" ao mesmo tempo. Teto real de contagem
+      // (mesma disciplina de MAX_KEY_LEVELS_SHOWN/MAX_INSTITUTIONAL_
+      // ZONES): só os MAX_SWEEP_AXIS_LABELS clusters mais RECENTES ganham
+      // etiqueta no eixo — as price lines continuam desenhadas para todos
+      // (dado intacto, Regra de Ouro 4; só a etiqueta é seletiva).
+      sweepLabelCandidates.sort((a, b) => b.latestIndex - a.latestIndex);
+      for (const c of sweepLabelCandidates.slice(0, MAX_SWEEP_AXIS_LABELS)) out.push(c.label);
     }
     // Pedido do Operador ("Key Levels"): só a sessão CORRENTE (ainda em
     // andamento, closed:false — sempre a última de computeSessionKeyLevels
@@ -2382,7 +2401,13 @@ export function EnhancedChart_110_Percent({
     // InstitutionalZonePlugin, intocada — só o texto mudou de lugar.
     if (visibility.institutional_zones) {
       institutionalZones.forEach((zone, i) => {
-        const toolNames = zone.members.map((m) => m.label).join(" + ");
+        // Lapidação por captura real ("◆ Sessão Baixa + Sweep + Sweep +
+        // EMA21..."): membros com o MESMO label agregam com contagem real
+        // ("Sweep ×2") em vez de repetir o nome — informação idêntica,
+        // etiqueta mais curta e precisa.
+        const labelCounts = new Map<string, number>();
+        for (const m of zone.members) labelCounts.set(m.label, (labelCounts.get(m.label) ?? 0) + 1);
+        const toolNames = [...labelCounts.entries()].map(([l, n]) => (n > 1 ? `${l} ×${n}` : l)).join(" + ");
         // Evolução Total ("um objeto, um peso"): quando o orçamento visual
         // REDUZIU a ênfase da faixa desta zona (competição real entre
         // camadas), a etiqueta segue a mesma redução — razão entre o peso

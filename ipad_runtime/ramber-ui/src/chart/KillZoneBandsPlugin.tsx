@@ -116,7 +116,20 @@ export function KillZoneBandsPlugin({ chart, series, data }: KillZoneBandsPlugin
       ctx.textBaseline = "top";
 
       const totalCandles = dataRef.current.length;
+      // Lapidação por captura real do Operador (BTC 1H, ~6 dias visíveis:
+      // "essas linhas amarelas descendo de cima pra baixo estão
+      // atrapalhando o gráfico"): TODA ocorrência histórica dentro do
+      // decay (200 candles ≈ 8 dias no 1H) desenhava faixa de altura
+      // total — uma cerca de ~18 janelas mortas. Kill zone é contexto do
+      // AGORA: só a ocorrência MAIS RECENTE de cada janela desenha (o
+      // decay continua esmaecendo essa também). computeKillZoneSpans
+      // segue computando todas — dado intacto, só o desenho é seletivo.
+      const latestSpanPerZone = new Map<string, KillZoneSpan>();
       for (const span of spans) {
+        const prev = latestSpanPerZone.get(span.id);
+        if (!prev || span.endIndex > prev.endIndex) latestSpanPerZone.set(span.id, span);
+      }
+      for (const span of latestSpanPerZone.values()) {
         const age = totalCandles - 1 - span.endIndex;
         const alpha = ageAlpha(age, KILL_ZONE_DECAY);
         if (alpha <= 0) continue; // expirado (>200 candles) — some da TELA, mesma honestidade de "esquecido" de BOS/CHOCH/Sweep.
