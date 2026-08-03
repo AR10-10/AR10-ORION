@@ -86,9 +86,12 @@ describe('LiquidityZonesPlugin: destaque de obstáculo (Diretriz Restauração/I
 
   it('prop obstacleZones entra no mirror ref e no dep array do dirty-flag — nunca fica stale ao trocar de plano', () => {
     const p = plugin();
-    expect(p).toContain('const zonesRef = useRef({ fairValueGaps, orderBlocks, data, obstacleZones });');
-    expect(p).toContain('zonesRef.current = { fairValueGaps, orderBlocks, data, obstacleZones };');
-    expect(p).toContain('}, [fairValueGaps, orderBlocks, data, obstacleZones]);');
+    // Ordem Nº 04 (MAIN_LIQUIDITY): fvgVisualWeights/obVisualWeights entram
+    // no MESMO ref/dep array por exatamente o mesmo motivo — nunca stale
+    // quando o orçamento visual cruzado resolve um peso novo.
+    expect(p).toContain('const zonesRef = useRef({ fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights });');
+    expect(p).toContain('zonesRef.current = { fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights };');
+    expect(p).toContain('}, [fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights]);');
   });
 });
 
@@ -146,7 +149,9 @@ describe('LiquidityZonesPlugin: dirty-flag + requestAnimationFrame (Blueprint §
 describe('EnhancedChart_110_Percent: LiquidityZonesPlugin substitui as price lines de FVG/OB (nunca desenha as duas coisas ao mesmo tempo)', () => {
   it('importa e monta LiquidityZonesPlugin com o chart/série reais (nunca null fabricado por padrão) e as zonas reais', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
-    expect(chart).toContain('import { LiquidityZonesPlugin, type FillableZone } from "./LiquidityZonesPlugin";');
+    // Ordem Nº 04: import ganhou ZONE_DECAY (reusado para montar o
+    // candidato MAIN_LIQUIDITY — zero segunda curva de decaimento).
+    expect(chart).toContain('import { LiquidityZonesPlugin, ZONE_DECAY, type FillableZone } from "./LiquidityZonesPlugin";');
     expect(chart).toContain('<LiquidityZonesPlugin');
     expect(chart).toContain('chart={chartReady?.chart ?? null}');
     expect(chart).toContain('series={chartReady?.series ?? null}');

@@ -101,14 +101,22 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
     // `obstacle` agora é computado 1x por zona e passado como 4º argumento
     // real de drawZone (nunca um 2º cálculo de isObstacle dentro do loop).
     expect(plugin).toContain('const obstacle = isObstacle(z);');
-    expect(plugin).toContain('drawZone(z, paletteFor("FVG", z.type, obstacle), `FVG${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle);');
-    expect(plugin).toContain('drawZone(z, paletteFor("OB", z.type, obstacle), `OB${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle);');
+    // Ordem Nº 04 (MAIN_LIQUIDITY em visual-budget.ts): drawZone ganhou um
+    // 5º argumento (resolvedWeight, peso já resolvido pela competição
+    // cruzada) — obstacle continua o 4º, intocado; a chamada real agora
+    // passa fvgWeights?.[i]/obWeights?.[i] no final.
+    expect(plugin).toContain('drawZone(z, paletteFor("FVG", z.type, obstacle), `FVG${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle, fvgWeights?.[i]);');
+    expect(plugin).toContain('drawZone(z, paletteFor("OB", z.type, obstacle), `OB${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle, obWeights?.[i]);');
   });
 
   it('Diretriz Consolidação/Auditoria/Evolução (achado real): zona-obstáculo de um plano ATIVO nunca esmaece por idade fixa — alpha=1 enquanto isObstacleZone, ageAlpha normal caso contrário', () => {
     const plugin = read('../src/chart/LiquidityZonesPlugin.tsx');
-    expect(plugin).toContain('const drawZone = (zone: FillableZone, palette: ZonePalette, label: string, isObstacleZone: boolean) => {');
-    expect(plugin).toContain('const alpha = isObstacleZone ? 1 : ageAlpha(age, ZONE_DECAY);');
+    // Ordem Nº 04: drawZone ganhou resolvedWeight (5º argumento, opcional)
+    // — zona-obstáculo continua alpha=1 incondicional, IGNORANDO
+    // resolvedWeight de propósito (ver visual-budget-chart-wiring.test.ts
+    // para a cobertura completa desta regra nova).
+    expect(plugin).toContain('const drawZone = (zone: FillableZone, palette: ZonePalette, label: string, isObstacleZone: boolean, resolvedWeight?: number) => {');
+    expect(plugin).toContain('const alpha = isObstacleZone ? 1 : resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, ZONE_DECAY);');
   });
 });
 

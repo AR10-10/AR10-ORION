@@ -5817,6 +5817,74 @@ estrutural (zero erro de React).
 
 ---
 
+### 6.77 "ORDEM Nº 04 — CONSOLIDAÇÃO DO ORGANISMO INTELIGENTE
+ADAPTATIVO": auditoria real dos 7 componentes nomeados + 2 entregas
+proporcionais; relatório completo em
+`docs/RELATORIO_ORDEM_04_CONSOLIDACAO.md`
+
+Ordem formal pedindo integração/coordenação (não novos módulos
+isolados) sobre 7 camadas nomeadas: `layer-relevance`, `visual-budget`,
+`scenario-engine`, `institutional-zones`, `trade-plan`, `radar`, `engine
+signals`. Auditoria obrigatória (§7) antes de qualquer mudança.
+
+**Auditoria real (grep/leitura direta, antes de qualquer edição)**: 6
+das 7 camadas já tinham consumidores reais confirmados — reportado
+honestamente em vez de fabricar integração onde já existia. Único
+componente genuinamente isolado: `engine-signal-contract.ts` (EPC OMEGA
+FINAL Parte 1) — zero import fora do próprio arquivo em todo `src/`,
+apesar de ter contrato testado (8 testes) e função real
+(`deriveEngineSignalsFromCouncil`) há 4 rodadas. Achado secundário: a
+categoria `RADAR` de `visual-budget.ts` não tem candidato real no canvas
+(Radar renderiza só em painéis próprios, nunca no `chart/`) — graduá-la
+exigiria inventar um objeto visual, decisão deliberada de não fazer.
+
+**Entrega 1 — `engine-signal-contract.ts` consolidado no
+`CouncilWidget`**: `deriveEngineSignalsFromCouncil(council)` roda em
+paralelo à leitura ad hoc já existente de `council.votes` (zero
+regressão nos campos antigos), expõe o campo real `weight` (já refletia
+corretamente `aggregateCouncil`/`council.ts:429-431`, nunca antes
+exibido por voto) como um marcador visual novo `· fora do pool` em
+qualquer voto RISK/ABSTAIN. Confirmado com captura Playwright AO VIVO
+contra o dev server real (não depende de candles, diferente das
+graduações de `visual-budget.ts`) — os 6 votos ABSTAIN reais mostraram o
+marcador, o único voto direcional real (ORDER FLOW, NEUTRAL 0%) não
+mostrou, exatamente como desenhado. 6 testes novos em
+`tests/engine-signal-consolidation-wiring.test.ts`.
+
+**Entrega 2 — `MAIN_LIQUIDITY` como 4ª categoria real de
+`visual-budget.ts`**: `LiquidityZonesPlugin.tsx` (FVG/Order Blocks) já
+calculava `ageAlpha(age, ZONE_DECAY)` por zona — exportado (mesmo padrão
+de `BREAK_DECAY`), `EnhancedChart_110_Percent.tsx` monta candidatos
+reais só para zonas não-obstáculo. Regra nova (não presente nas 3
+graduações anteriores): zona que é obstáculo real do Trade Plan ativo
+fica FORA da competição de propósito — mantém `alpha=1` incondicional
+(garantia pré-existente da Diretriz Restauração/Inteligência Visual §6),
+nunca reduzida pelo orçamento visual. 9 testes novos em
+`tests/visual-budget-chart-wiring.test.ts`; 4 asserções literais
+pré-existentes (`ciborgue-vivo-wiring.test.ts`,
+`liquidity-zones-plugin.test.ts`) atualizadas para o código real atual
+(mesma manutenção já vista em rodadas anteriores após mudança de
+assinatura).
+
+**O que não foi tocado, e por quê**: `TARGET`/`INVALIDATION` (sem fonte
+de peso individual já isolada, diferente de TRADE_PLAN que trata o plano
+como zona única); `RADAR` (sem candidato real no canvas); os 5 campos
+ainda não instrumentados do contrato de sinais (`relevance`/`priority`/
+`quality`/`temporalHorizon`/`lifespanCandles` — trabalho de motor novo,
+fora do escopo de consolidação); Market Structure em
+`analysis-frame.js`/frequência adaptativa (Regra de Ouro 6, pendências
+já registradas). Zero componente removido.
+
+**Testes executados**: `tsc --noEmit` limpo · **129 arquivos / 2201
+testes** (100%, +6 engine signals +9 MAIN_LIQUIDITY sobre os 2185
+anteriores, líquido de ajustes) · `npm run build` ok (1847 módulos,
+878,48 kB) · Playwright real confirmou zero erro de React E capturou
+visualmente ao vivo o comportamento correto do marcador "fora do pool"
+(evidência mais forte que o padrão usual desta sandbox, por não
+depender de candles).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

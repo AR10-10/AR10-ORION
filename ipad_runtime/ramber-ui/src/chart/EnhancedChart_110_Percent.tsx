@@ -35,7 +35,10 @@ import {
 // V-MAX Fase 1 (superfície visual, fechamento do §3.1): linha de CVD real
 // — a série do orderflowHistory (Fase 1.2) com eixo Y próprio nativo.
 import { useOrderflowHistory, useVolumeProfileSnapshot } from "../store/unified-snapshot-store";
-import { LiquidityZonesPlugin, type FillableZone } from "./LiquidityZonesPlugin";
+// ZONE_DECAY: Ordem Nº 04 — mesma curva que o plugin já usa isolado,
+// reusada aqui para montar o candidato real de MAIN_LIQUIDITY (visual-
+// budget.ts), mesmo padrão de BREAK_DECAY logo abaixo.
+import { LiquidityZonesPlugin, ZONE_DECAY, type FillableZone } from "./LiquidityZonesPlugin";
 // Ordem "Ciborgue Vivo" §1: anotação temporária de BOS/CHOCH — mesma
 // arquitetura de overlay do LiquidityZonesPlugin acima, dado real diferente.
 // BREAK_DECAY: achado real de captura de tela (rótulo "CHOC" colidindo com
@@ -1418,6 +1421,30 @@ export function EnhancedChart_110_Percent({
     const alpha = ageAlpha(age, BREAK_DECAY);
     return alpha > 0 ? alpha : null;
   }, [visibility.structure_breaks, structureBreak, data]);
+  // Ordem Nº 04 (§4/§5): 4ª categoria real — MAIN_LIQUIDITY (FVG/Order
+  // Blocks não-obstáculo, LiquidityZonesPlugin.tsx). MESMA fórmula exata
+  // que o plugin já usa isolado (ZONE_DECAY, exportado de lá — zero
+  // segunda curva). Zonas que SÃO obstáculo real do caminho do plano
+  // ativo ficam DE FORA da competição de propósito (null aqui, nunca
+  // viram candidato): a garantia de alpha=1 sempre que bloqueiam o
+  // caminho (Diretriz Restauração/Inteligência Visual §6) é mais forte
+  // que a prioridade declarada do orçamento — reduzir um obstáculo real
+  // por competição visual esconderia risco real do Operador.
+  const mainLiquidityCandidates = useMemo(() => {
+    if (!visibility.liquidity_zones) return { fvg: [] as (number | null)[], ob: [] as (number | null)[] };
+    const obstacles = obstacleZones ?? [];
+    const isObstacle = (zone: EnhancedChartZone) => obstacles.some((o) => o.low === zone.bottom && o.high === zone.top);
+    const baseWeightOf = (zone: EnhancedChartZone) => {
+      if (isObstacle(zone)) return null;
+      const age = data.length - 1 - zone.index;
+      const alpha = ageAlpha(age, ZONE_DECAY);
+      return alpha > 0 ? alpha : null;
+    };
+    return {
+      fvg: (fairValueGaps ?? []).map(baseWeightOf),
+      ob: (orderBlocks ?? []).map(baseWeightOf),
+    };
+  }, [visibility.liquidity_zones, fairValueGaps, orderBlocks, obstacleZones, data]);
   const visualBudgetResults = useMemo(() => {
     const candidates: VisualBudgetCandidate[] = [];
     if (visibility.institutional_zones) {
@@ -1431,8 +1458,14 @@ export function EnhancedChart_110_Percent({
     if (structureBreakBaseWeight !== null) {
       candidates.push({ id: "structure-break", category: "STRUCTURE", baseWeight: structureBreakBaseWeight });
     }
+    mainLiquidityCandidates.fvg.forEach((w, i) => {
+      if (w !== null) candidates.push({ id: `liquidity-fvg-${i}`, category: "MAIN_LIQUIDITY", baseWeight: w });
+    });
+    mainLiquidityCandidates.ob.forEach((w, i) => {
+      if (w !== null) candidates.push({ id: `liquidity-ob-${i}`, category: "MAIN_LIQUIDITY", baseWeight: w });
+    });
     return resolveVisualBudget(candidates);
-  }, [visibility.institutional_zones, institutionalZones, hasTradePlanZone, confidenceZone, structureBreakBaseWeight]);
+  }, [visibility.institutional_zones, institutionalZones, hasTradePlanZone, confidenceZone, structureBreakBaseWeight, mainLiquidityCandidates]);
   const institutionalZoneVisualWeights = useMemo(() => {
     const byId = new Map(visualBudgetResults.map((r) => [r.id, r.visualWeight]));
     return institutionalZones.map((_, i) => byId.get(`zone-${i}`));
@@ -1445,6 +1478,13 @@ export function EnhancedChart_110_Percent({
     () => visualBudgetResults.find((r) => r.id === "structure-break")?.visualWeight ?? null,
     [visualBudgetResults],
   );
+  const mainLiquidityVisualWeights = useMemo(() => {
+    const byId = new Map(visualBudgetResults.map((r) => [r.id, r.visualWeight]));
+    return {
+      fvg: (fairValueGaps ?? []).map((_, i) => byId.get(`liquidity-fvg-${i}`)),
+      ob: (orderBlocks ?? []).map((_, i) => byId.get(`liquidity-ob-${i}`)),
+    };
+  }, [visualBudgetResults, fairValueGaps, orderBlocks]);
 
   // Auditoria do painel do gráfico: Linear Regression Channel real sobre a
   // MESMA `data` de candles (zero segunda fonte de dado) — mesmo padrão do
@@ -2403,6 +2443,8 @@ export function EnhancedChart_110_Percent({
           fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}
           orderBlocks={(orderBlocks ?? []) as FillableZone[]}
           obstacleZones={obstacleZones ?? []}
+          fvgVisualWeights={mainLiquidityVisualWeights.fvg}
+          obVisualWeights={mainLiquidityVisualWeights.ob}
         />
       )}
       {/* Ordem "Ciborgue Vivo" §1: BOS/CHOCH real, mesma anotação temporária

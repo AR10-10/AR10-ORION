@@ -16,6 +16,7 @@ const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
 const institutionalZonePlugin = () => read('../src/chart/InstitutionalZonePlugin.tsx');
 const tradePlanZonePlugin = () => read('../src/chart/TradePlanZonePlugin.tsx');
 const structureBreakMarkersPlugin = () => read('../src/chart/StructureBreakMarkersPlugin.tsx');
+const liquidityZonesPlugin = () => read('../src/chart/LiquidityZonesPlugin.tsx');
 
 describe('InstitutionalZonePlugin.tsx: confluenceWeight exportado + visualWeights real usado com fallback fail-closed', () => {
   it('exporta confluenceWeight (mesma função, zero segunda fórmula) para o chart reusar como baseWeight', () => {
@@ -171,5 +172,102 @@ describe('EnhancedChart_110_Percent.tsx: candidato STRUCTURE real — mesma fór
     const block = s.slice(idx, s.indexOf('/>', idx));
     expect(block).toContain('structureBreak={structureBreak ?? null}');
     expect(block).toContain('visualWeight={structureBreakVisualWeight}');
+  });
+});
+
+// Ordem Nº 04 (§4/§5): 4ª categoria real — MAIN_LIQUIDITY (FVG/Order
+// Blocks não-obstáculo, LiquidityZonesPlugin.tsx). Mesmo padrão das 3
+// categorias anteriores, com uma regra nova: zona-obstáculo (Diretriz
+// Restauração/Inteligência Visual §6 — alpha=1 GARANTIDO enquanto
+// bloqueia o caminho do plano ativo) fica FORA da competição de
+// propósito, nunca reduzida pelo orçamento visual.
+describe('LiquidityZonesPlugin.tsx: ZONE_DECAY exportado + fvgVisualWeights/obVisualWeights com fallback fail-closed', () => {
+  it('exporta ZONE_DECAY (mesma curva, zero segunda config de decaimento) para o chart reusar', () => {
+    expect(liquidityZonesPlugin()).toContain(
+      'export const ZONE_DECAY: DecayConfig = { fadeStartCandles: 30, expireCandles: 100, minAlpha: 0.15 };',
+    );
+  });
+
+  it('aceita fvgVisualWeights/obVisualWeights (peso já resolvido pela competição cruzada), paralelo a cada array por índice', () => {
+    const s = liquidityZonesPlugin();
+    expect(s).toContain('fvgVisualWeights?: (number | undefined)[];');
+    expect(s).toContain('obVisualWeights?: (number | undefined)[];');
+    expect(s).toContain(
+      'export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, obstacleZones, fvgVisualWeights, obVisualWeights }: LiquidityZonesPluginProps) {',
+    );
+  });
+
+  it('drawZone: zona-obstáculo SEMPRE alpha=1, ignora resolvedWeight de propósito — a garantia de risco real nunca se dobra ao orçamento', () => {
+    const s = liquidityZonesPlugin();
+    expect(s).toContain(
+      'const alpha = isObstacleZone ? 1 : resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, ZONE_DECAY);',
+    );
+  });
+
+  it('os 2 forEach passam o peso resolvido por índice para drawZone (fvgWeights?.[i] / obWeights?.[i])', () => {
+    const s = liquidityZonesPlugin();
+    expect(s).toContain(
+      'drawZone(z, paletteFor("FVG", z.type, obstacle), `FVG${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle, fvgWeights?.[i]);',
+    );
+    expect(s).toContain(
+      'drawZone(z, paletteFor("OB", z.type, obstacle), `OB${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle, obWeights?.[i]);',
+    );
+  });
+
+  it('fvgVisualWeights/obVisualWeights entram no ref/dirty-check igual a fairValueGaps/orderBlocks — uma resolução de orçamento nova redesenha', () => {
+    const s = liquidityZonesPlugin();
+    expect(s).toContain(
+      'const zonesRef = useRef({ fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights });',
+    );
+    expect(s).toContain(
+      'zonesRef.current = { fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights };',
+    );
+    expect(s).toContain('}, [fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights]);');
+  });
+});
+
+describe('EnhancedChart_110_Percent.tsx: candidato MAIN_LIQUIDITY real — mesma ZONE_DECAY do plugin, zonas-obstáculo excluídas da competição', () => {
+  it('importa ZONE_DECAY de LiquidityZonesPlugin — zero segunda curva de decaimento', () => {
+    expect(chart()).toContain('import { LiquidityZonesPlugin, ZONE_DECAY, type FillableZone } from "./LiquidityZonesPlugin";');
+  });
+
+  it('mainLiquidityCandidates: gated por visibility.liquidity_zones, zona-obstáculo vira null (nunca candidato)', () => {
+    const s = chart();
+    const idx = s.indexOf('const mainLiquidityCandidates = useMemo(');
+    expect(idx, 'mainLiquidityCandidates não encontrado').toBeGreaterThan(-1);
+    const block = s.slice(idx, s.indexOf('const visualBudgetResults = useMemo', idx));
+    expect(block).toContain("if (!visibility.liquidity_zones) return { fvg: [] as (number | null)[], ob: [] as (number | null)[] };");
+    expect(block).toContain('const isObstacle = (zone: EnhancedChartZone) => obstacles.some((o) => o.low === zone.bottom && o.high === zone.top);');
+    expect(block).toContain('if (isObstacle(zone)) return null;');
+    expect(block).toContain('const alpha = ageAlpha(age, ZONE_DECAY);');
+  });
+
+  it('candidatos MAIN_LIQUIDITY (fvg/ob) só entram no orçamento quando o peso base é real (não null)', () => {
+    const s = chart();
+    const block = s.slice(s.indexOf('const visualBudgetResults = useMemo'), s.indexOf('const institutionalZoneVisualWeights = useMemo'));
+    expect(block).toContain('mainLiquidityCandidates.fvg.forEach((w, i) => {');
+    expect(block).toContain('if (w !== null) candidates.push({ id: `liquidity-fvg-${i}`, category: "MAIN_LIQUIDITY", baseWeight: w });');
+    expect(block).toContain('mainLiquidityCandidates.ob.forEach((w, i) => {');
+    expect(block).toContain('if (w !== null) candidates.push({ id: `liquidity-ob-${i}`, category: "MAIN_LIQUIDITY", baseWeight: w });');
+  });
+
+  it('mainLiquidityVisualWeights: passthrough por id real (liquidity-fvg-${i}/liquidity-ob-${i}), nunca por posição bruta do resultado', () => {
+    const s = chart();
+    const idx = s.indexOf('const mainLiquidityVisualWeights = useMemo(');
+    expect(idx, 'mainLiquidityVisualWeights não encontrado').toBeGreaterThan(-1);
+    const block = s.slice(idx, idx + 400);
+    expect(block).toContain('const byId = new Map(visualBudgetResults.map((r) => [r.id, r.visualWeight]));');
+    expect(block).toContain('fvg: (fairValueGaps ?? []).map((_, i) => byId.get(`liquidity-fvg-${i}`)),');
+    expect(block).toContain('ob: (orderBlocks ?? []).map((_, i) => byId.get(`liquidity-ob-${i}`)),');
+  });
+
+  it('LiquidityZonesPlugin recebe fvgVisualWeights/obVisualWeights reais', () => {
+    const s = chart();
+    const idx = s.indexOf('<LiquidityZonesPlugin');
+    const block = s.slice(idx, s.indexOf('/>', idx));
+    expect(block).toContain('fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}');
+    expect(block).toContain('orderBlocks={(orderBlocks ?? []) as FillableZone[]}');
+    expect(block).toContain('fvgVisualWeights={mainLiquidityVisualWeights.fvg}');
+    expect(block).toContain('obVisualWeights={mainLiquidityVisualWeights.ob}');
   });
 });

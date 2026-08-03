@@ -92,7 +92,11 @@ function paletteFor(kind: "FVG" | "OB", type: "BULLISH" | "BEARISH", isObstacle:
 // some do desenho — "esquecida" apenas da TELA, nunca do dado real:
 // smcZones (App.tsx) continua com o registro completo para qualquer outro
 // consumidor (ex. Trade Plan), isto só decide o que este canvas pinta.
-const ZONE_DECAY: DecayConfig = { fadeStartCandles: 30, expireCandles: 100, minAlpha: 0.15 };
+// Ordem Nº 04 (§4/§5, MAIN_LIQUIDITY em visual-budget.ts): exportado pelo
+// mesmo motivo que BREAK_DECAY já é exportado de StructureBreakMarkersPlugin
+// — EnhancedChart_110_Percent.tsx reusa esta MESMA curva para montar o
+// candidato de orçamento visual, zero segunda curva de decaimento.
+export const ZONE_DECAY: DecayConfig = { fadeStartCandles: 30, expireCandles: 100, minAlpha: 0.15 };
 
 interface LiquidityZonesPluginProps {
   chart: IChartApi | null;
@@ -105,21 +109,30 @@ interface LiquidityZonesPluginProps {
   // cruza a caminho de algum alvo — opcional/fail-closed: ausente/vazio =>
   // desenho idêntico ao de sempre, nenhuma zona em ênfase.
   obstacleZones?: { low: number; high: number }[];
+  // Ordem Nº 04: peso visual já resolvido pelo orçamento visual cruzado
+  // (visual-budget.ts, categoria MAIN_LIQUIDITY), por posição no array
+  // ORIGINAL de fairValueGaps/orderBlocks — undefined/null (padrão) cai no
+  // ageAlpha isolado de sempre (fail-closed, comportamento anterior
+  // preservado). Zonas-obstáculo IGNORAM este peso de propósito (ver
+  // drawZone abaixo) — a garantia de alpha=1 é mais forte que a
+  // competição por orçamento.
+  fvgVisualWeights?: (number | undefined)[];
+  obVisualWeights?: (number | undefined)[];
 }
 
-export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, obstacleZones }: LiquidityZonesPluginProps) {
+export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, obstacleZones, fvgVisualWeights, obVisualWeights }: LiquidityZonesPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const zonesRef = useRef({ fairValueGaps, orderBlocks, data, obstacleZones });
+  const zonesRef = useRef({ fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente das zonas/candles para o loop de desenho
   // ler — nunca dispara o efeito de setup abaixo de novo (evita reabrir a
   // conexão com o chart/reassinar os listeners a cada atualização de dado).
-  zonesRef.current = { fairValueGaps, orderBlocks, data, obstacleZones };
+  zonesRef.current = { fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [fairValueGaps, orderBlocks, data, obstacleZones]);
+  }, [fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -143,7 +156,7 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
       const timeScale = chart.timeScale();
-      const { fairValueGaps: fvgs, orderBlocks: obs, data: candles, obstacleZones: obstacles } = zonesRef.current;
+      const { fairValueGaps: fvgs, orderBlocks: obs, data: candles, obstacleZones: obstacles, fvgVisualWeights: fvgWeights, obVisualWeights: obWeights } = zonesRef.current;
 
       const currentIndex = candles.length - 1;
       // Identidade por low/high real (mesmos números, zero recálculo) —
@@ -152,7 +165,7 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       const isObstacle = (zone: FillableZone) =>
         (obstacles ?? []).some((o) => o.low === zone.bottom && o.high === zone.top);
 
-      const drawZone = (zone: FillableZone, palette: ZonePalette, label: string, isObstacleZone: boolean) => {
+      const drawZone = (zone: FillableZone, palette: ZonePalette, label: string, isObstacleZone: boolean, resolvedWeight?: number) => {
         const point = candles[zone.index];
         if (!point) return; // índice fora da janela real de candles — nunca desenha um palpite.
         const age = currentIndex - zone.index;
@@ -165,7 +178,14 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
         // caso de uma zona antiga que ainda é o obstáculo estrutural de uma
         // operação aberta. Volta a decair normalmente assim que deixar de
         // ser obstáculo (plano fechado ou preço já passou da zona).
-        const alpha = isObstacleZone ? 1 : ageAlpha(age, ZONE_DECAY);
+        //
+        // Ordem Nº 04: zona-obstáculo IGNORA resolvedWeight de propósito —
+        // a garantia de alpha=1 (risco real do plano ativo) nunca se dobra
+        // à competição por orçamento visual. Zona comum usa o peso já
+        // resolvido pela competição cruzada (visual-budget.ts) quando
+        // presente; ausente/null cai no ageAlpha isolado de sempre
+        // (fail-closed, mesmo comportamento de antes desta rodada).
+        const alpha = isObstacleZone ? 1 : resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, ZONE_DECAY);
         if (alpha <= 0) return; // "esquecida" — só da tela, ver comentário de ageAlpha acima.
         const x1 = timeScale.timeToCoordinate(point.time as unknown as Time);
         const y1 = series.priceToCoordinate(zone.top);
@@ -209,13 +229,13 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       // sigla e o glifo) — havia um espaço aqui. Zero mudança de
       // informação/cor/direção, só a mesma string mais compacta.
       const dir = (t: "BULLISH" | "BEARISH") => (t === "BULLISH" ? "↑" : "↓");
-      fvgs.forEach((z) => {
+      fvgs.forEach((z, i) => {
         const obstacle = isObstacle(z);
-        drawZone(z, paletteFor("FVG", z.type, obstacle), `FVG${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle);
+        drawZone(z, paletteFor("FVG", z.type, obstacle), `FVG${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle, fvgWeights?.[i]);
       });
-      obs.forEach((z) => {
+      obs.forEach((z, i) => {
         const obstacle = isObstacle(z);
-        drawZone(z, paletteFor("OB", z.type, obstacle), `OB${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle);
+        drawZone(z, paletteFor("OB", z.type, obstacle), `OB${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle, obWeights?.[i]);
       });
     };
 

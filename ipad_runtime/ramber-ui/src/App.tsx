@@ -122,6 +122,13 @@ import { filterSessionCandles, bucketMidPrice } from "./nexus/volume-profile";
 // V-MAX Fase 1 item 4: Conselho Multi-Agente (7 agentes puros + Meta-Agent
 // que delega a agregação ao linear opinion pool real da Fase F).
 import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD, type CouncilDecision } from "./nexus/council";
+// Ordem Nº 04 (§4, "consolidar camadas existentes... engine signals"):
+// achado real de auditoria — engine-signal-contract.ts existia desde EPC
+// OMEGA FINAL Parte 1 sem NENHUM consumidor real (zero import fora do
+// próprio arquivo). CouncilWidget abaixo é o primeiro consumidor real —
+// reforma a leitura ad hoc de council.votes para passar pelo contrato
+// único, sem duplicar UI nem criar um segundo painel.
+import { deriveEngineSignalsFromCouncil } from "./nexus/engine-signal-contract";
 import { computeConsensusRadar, type ConsensusRadarCategory } from "./nexus/consensus-radar";
 // MomentumAgent order ("chegando à perfeição"): RSI de Wilder, o mesmo
 // exato computeRSI já real/exportado como feature interna do
@@ -8195,6 +8202,12 @@ const CONSENSUS_RADAR_LABEL: Record<ConsensusRadarCategory, string> = {
 
 function CouncilWidget() {
   const council = useCouncilSnapshot();
+  // Ordem Nº 04 (§4): forma única real (EngineSignal) sobre os MESMOS votos
+  // de `council.votes` — deriveEngineSignalsFromCouncil só reempacota,
+  // nunca recalcula (LEI 24 intacta). Mesma ordem/comprimento de
+  // `council.votes` sempre (decision.votes.map em engine-signal-
+  // contract.ts) — pareável por índice abaixo, zero parsing de `id`.
+  const engineSignals = deriveEngineSignalsFromCouncil(council);
   const cpi = useCpiSnapshot();
   // Achado de auditoria: reward/pain/eventCount reais já são alimentados
   // por 8 call sites reais de recordAffectiveEvent (App.tsx) mas só o
@@ -8286,24 +8299,42 @@ function CouncilWidget() {
             <span className="text-[0.4rem] text-[#8ab4f8]/40 text-center py-1">{AWAIT}</span>
           )}
         </div>
-        {(council?.votes ?? []).map((v) => (
-          <div
-            key={v.agent}
-            className="flex flex-col bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
-            title={v.evidence.length > 0 ? v.evidence.join(" · ") : v.rationale}
-          >
-            <div className="flex justify-between items-center">
-              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">
-                {COUNCIL_AGENT_LABEL[v.agent] ?? v.agent}
-              </span>
-              <span className={`text-[0.5rem] font-mono font-black ${COUNCIL_STANCE_COLOR[v.stance]}`}>
-                {v.stance}
-                {v.confidence !== null ? <span className="text-[#8ab4f8]/60 font-normal"> {Math.round(v.confidence * 100)}%</span> : null}
-              </span>
+        {(council?.votes ?? []).map((v, i) => {
+          // Ordem Nº 04: signal.weight real (engine-signal-contract.ts,
+          // espelha aggregateCouncil/council.ts:429-431 — RISK nunca é
+          // direcional, ABSTAIN nunca tem opinião real) diz se este voto
+          // especificamente ENTROU no linear opinion pool (Stone 1961/
+          // DeGroot 1974) que formou VOTO DO CONSELHO acima. Informação já
+          // real e computada hoje (riskGated/quorum), nunca antes exibida
+          // POR VOTO — só o efeito agregado (quórum N/6) aparecia.
+          const inPool = engineSignals[i]?.weight !== null && engineSignals[i]?.weight !== undefined;
+          return (
+            <div
+              key={v.agent}
+              className="flex flex-col bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+              title={v.evidence.length > 0 ? v.evidence.join(" · ") : v.rationale}
+            >
+              <div className="flex justify-between items-center">
+                <span className={`text-[0.45rem] font-bold tracking-wide ${inPool ? "text-[#8ab4f8]/70" : "text-[#8ab4f8]/40"}`}>
+                  {COUNCIL_AGENT_LABEL[v.agent] ?? v.agent}
+                  {!inPool && (
+                    <span
+                      className="text-[0.38rem] font-normal italic text-[#8ab4f8]/40"
+                      title="Fora do pool linear real do Conselho: RISK é um portão fail-closed (nunca uma opinião direcional); ABSTAIN é ausência real de opinião nesta janela. Nenhum dos dois entra na massa de opinião que forma VOTO DO CONSELHO."
+                    >
+                      {" "}· fora do pool
+                    </span>
+                  )}
+                </span>
+                <span className={`text-[0.5rem] font-mono font-black ${COUNCIL_STANCE_COLOR[v.stance]}`}>
+                  {v.stance}
+                  {v.confidence !== null ? <span className="text-[#8ab4f8]/60 font-normal"> {Math.round(v.confidence * 100)}%</span> : null}
+                </span>
+              </div>
+              <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-tight truncate">{v.rationale}</span>
             </div>
-            <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-tight truncate">{v.rationale}</span>
-          </div>
-        ))}
+          );
+        })}
         {!council && (
           <div className="flex items-center justify-center text-[0.5rem] tracking-[0.25em] text-[#8ab4f8]/40 font-bold py-3">
             {AWAIT}
