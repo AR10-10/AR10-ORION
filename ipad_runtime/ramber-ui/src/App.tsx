@@ -8272,9 +8272,19 @@ function CouncilWidget() {
   // (ver cabeçalho de nexus/evidence-fusion.ts).
   const institutionalZones = useInstitutionalZonesSnapshot();
   const institutionalSignals = deriveEngineSignalsFromInstitutionalZones(institutionalZones);
+  // Ordem Consolidação Final (Prioridade 3, "medir relevância"): mesma
+  // fatia real que o painel de camadas já usa (useLayerRelevanceSnapshot,
+  // linha ~3782) — zero segundo cálculo. Zonas Institucionais mapeia 1:1
+  // para a camada real "institutional_zones"; Conselho não é uma camada de
+  // gráfico togglable, então recebe null honesto (não um valor fabricado).
+  const layerRelevance = useLayerRelevanceSnapshot();
   const evidenceFusion = fuseEvidence([
-    { source: "Conselho", signals: engineSignals },
-    { source: "Zonas Institucionais", signals: institutionalSignals },
+    { source: "Conselho", signals: engineSignals, relevance: null },
+    {
+      source: "Zonas Institucionais",
+      signals: institutionalSignals,
+      relevance: layerRelevance?.institutional_zones ?? null,
+    },
   ] satisfies EvidenceFusionSourceGroup[]);
   const cpi = useCpiSnapshot();
   // Achado de auditoria: reward/pain/eventCount reais já são alimentados
@@ -8480,14 +8490,14 @@ function CouncilWidget() {
           className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
           title={
             evidenceFusion.totalSignals > 0
-              ? `${evidenceFusion.bySource.map((b) => `${b.source}: ${b.valid}/${b.total} válidos${b.meanWeight !== null ? ` · peso médio ${Math.round(b.meanWeight * 100)}%` : ""}`).join(" · ")} · Confiança média (só válidos): ${evidenceFusion.meanConfidence !== null ? `${Math.round(evidenceFusion.meanConfidence * 100)}%` : "sem amostra real"} · Cobertura do contrato de 10 campos: ${Object.values(evidenceFusion.fieldCoverage).filter((v) => v > 0).length}/10 instrumentados — estatística real de cobertura/volume, NUNCA uma direção ou score combinado (LEI 24)`
+              ? `${evidenceFusion.bySource.map((b) => `${b.source}: ${b.valid}/${b.total} válidos${b.meanWeight !== null ? ` · peso médio ${Math.round(b.meanWeight * 100)}%` : ""}${b.relevance ? ` · ${b.relevance.relevant ? "relevante agora" : "fora de relevância agora"}` : ""}`).join(" · ")} · Confiança média (só válidos): ${evidenceFusion.meanConfidence !== null ? `${Math.round(evidenceFusion.meanConfidence * 100)}%` : "sem amostra real"} · Consenso de peso entre fontes: ${evidenceFusion.weightConsensus !== null ? `${Math.round(evidenceFusion.weightConsensus * 100)}%` : "sem amostra real (menos de 2 pesos)"} · Cobertura do contrato de 10 campos: ${Object.values(evidenceFusion.fieldCoverage).filter((v) => v > 0).length}/10 instrumentados — estatística real de cobertura/volume, NUNCA uma direção ou score combinado (LEI 24)`
               : "Nenhuma fonte real montada ainda (Conselho sem quórum e/ou zero Zona Institucional confluente agora)"
           }
         >
           <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">EVIDENCE FUSION · coverage, never a score</span>
           <span className="text-[0.5rem] font-mono font-black text-[#8ab4f8]">
             {evidenceFusion.totalSignals > 0
-              ? `${evidenceFusion.validSignals}/${evidenceFusion.totalSignals} válidos · ${Object.values(evidenceFusion.fieldCoverage).filter((v) => v > 0).length}/10 campos`
+              ? `${evidenceFusion.validSignals}/${evidenceFusion.totalSignals} válidos · ${Object.values(evidenceFusion.fieldCoverage).filter((v) => v > 0).length}/10 campos${evidenceFusion.weightConsensus !== null ? ` · consenso ${Math.round(evidenceFusion.weightConsensus * 100)}%` : ""}`
               : AWAIT}
           </span>
         </div>

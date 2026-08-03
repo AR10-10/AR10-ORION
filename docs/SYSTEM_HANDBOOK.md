@@ -6144,6 +6144,68 @@ de ambiente já documentada em rodadas anteriores (proxy do sandbox
 bloqueia WebSocket real da Binance, gráfico fica honestamente em
 "AWAITING CANDLES…"; não impede a verificação da UI estática/painéis).
 
+### 6.82 "Ordem Oficial de Execução — Consolidação Final do AR10 Cyborg"
+(fase: transição de motores para um organismo único); relatório completo
+em `docs/RELATORIO_CONSOLIDACAO_FINAL_ORGANISMO_UNICO.md`
+
+Diretriz formal, prioridade máxima, 11 prioridades numeradas: o foco muda
+de criar módulos novos para consolidar tudo já construído num organismo
+único. Teste explícito definido pela própria Ordem para toda decisão
+desta rodada: "torna o AR10 mais inteligente como organismo único, ou só
+adiciona mais um módulo? Se só adicionar complexidade: não implementar."
+
+**Prioridade 1 (auditoria total de redundância)**: 2 técnicas
+independentes — contagem de importadores reais por módulo `nexus/*.ts` e
+consumidores reais de cada seletor da store. Achado único, já conhecido
+desde a Ordem 04: `cross-exchange-service.ts`/`connection-manager.ts`
+continuam isolados de propósito (cutover WS/REST ao vivo, maior risco
+técnico do projeto). Zero seletor órfão na store.
+
+**Prioridade 3 (Evidence Fusion Engine vira centro de inteligência)**:
+v2 de `nexus/evidence-fusion.ts` mapeia as 9 dimensões pedidas contra o
+que já existe, honestamente — sem fabricar campo novo só para "bater a
+lista". `weightConsensus: number | null` (novo): desvio padrão real sobre
+os `weight` pooled de TODOS os sinais (não por fonte), normalizado pelo
+teto real de 0.5 (`weight` vive em `[0,1]`) — um único campo cobre
+consenso E conflito de propósito (mesma estatística, dois ângulos; dois
+campos seria a redundância que a própria P1 desta Ordem pede para
+eliminar). `relevance` (novo, passthrough em `EvidenceFusionSourceGroup`/
+`EvidenceFusionSourceBreakdown`): `fuseEvidence` nunca calcula
+relevância — recebe o `LayerRelevanceResult` REAL já pronto do CHAMADOR
+(`CouncilWidget`, mesma fatia `useLayerRelevanceSnapshot` do painel de
+camadas), mesmo raciocínio que `engine-signal-contract.ts` já usava para
+deixar `relevance` null por sinal individual (granularidade certa: o
+GRUPO de fonte, que mapeia 1:1 pra uma camada, não o sinal). Qualidade/
+maturidade/contexto continuam mapeados para campos já existentes da v1,
+sem duplicação. Estabilidade/consistência temporal/persistência
+DEFERIDAS, documentado — exigem série temporal real (ring buffer) que
+não existe ainda.
+
+**Prioridades 6/7 (reconfirmação Gráfico Inteligente/Etiquetas)**:
+auditoria, não reconstrução — 21/21 camadas reais seguem cobertas pelo
+Relevance Engine, `PriceLabelStackPlugin` já tem `alpha`/`side` reais
+(opacidade dinâmica + anti-colisão), só 2 arquivos em `chart/` chamam
+`fillText` direto (o próprio stack + 1 rótulo de sessão já refinado em 2
+rodadas). Achado novo e honesto, deliberadamente fora de escopo: 13 call
+sites de `series.createPriceLine` nativo (EQH/EQL, Premium/Discount,
+vencedor de padrão) e o stack customizado são 2 mecanismos de rótulo
+paralelos sem consciência um do outro — característica arquitetural
+observada, sem confirmação visual de colisão real; migrar quebraria o
+pareamento nativo linha+rótulo, um refactor real sem sintoma confirmado
+(a própria P1 desta Ordem pede o oposto).
+
+**Testes**: `tsc --noEmit` limpo · **134 arquivos / 2280 testes** (100%,
++11 novos: 6 `weightConsensus` + 3 `relevance` passthrough + 2 wiring; 5
+testes de padrão pré-existentes com assertions ajustadas à nova forma
+real, mesma garantia, nenhuma enfraquecida) · `npm run build` ok (1850
+módulos, 889,04 kB) · Playwright real contra o dev server (`localStorage`
+do cortão de acesso desbloqueado localmente, mecanismo não-adversário que
+o próprio `access-gate.tsx` documenta): `relevance` passthrough
+confirmado ao vivo ("Zonas Institucionais... relevante agora", valor
+real), `weightConsensus` corretamente `null` com 1 único peso disponível
+("sem amostra real (menos de 2 pesos)", nunca fabricado), zero erro de
+console novo, zero regressão de layout.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)

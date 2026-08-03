@@ -85,9 +85,28 @@ describe('App.tsx: Evidence Fusion Engine real — primeiro consumidor vivo de e
   it('as 2 fontes reais e independentes alimentam fuseEvidence — Conselho E Zonas Institucionais, nunca Scenario (redundante com o Conselho, documentado no cabeçalho de evidence-fusion.ts)', () => {
     const widgetSrc = councilWidgetSource(read('../src/App.tsx'));
     expect(widgetSrc).toContain('const institutionalSignals = deriveEngineSignalsFromInstitutionalZones(institutionalZones);');
-    expect(widgetSrc).toContain('{ source: "Conselho", signals: engineSignals }');
-    expect(widgetSrc).toContain('{ source: "Zonas Institucionais", signals: institutionalSignals }');
+    expect(widgetSrc).toContain('{ source: "Conselho", signals: engineSignals, relevance: null }');
+    expect(widgetSrc).toContain('source: "Zonas Institucionais",');
+    expect(widgetSrc).toContain('signals: institutionalSignals,');
     expect(widgetSrc).not.toMatch(/source:\s*"Scenario"/);
+  });
+
+  // Ordem Consolidação Final (Prioridade 3, "medir relevância"): v2 do
+  // Evidence Fusion Engine — relevance é repassado pelo CHAMADOR (aqui),
+  // nunca recalculado dentro de fuseEvidence (ver cabeçalho de
+  // evidence-fusion.ts). Zonas Institucionais mapeia 1:1 para a camada
+  // real institutional_zones; Conselho não é uma camada de gráfico, então
+  // recebe null explícito e honesto.
+  it('relevance real passado pelo chamador: MESMA fatia que o painel de camadas usa (useLayerRelevanceSnapshot), zero segundo cálculo', () => {
+    const widgetSrc = councilWidgetSource(read('../src/App.tsx'));
+    expect(widgetSrc).toContain('const layerRelevance = useLayerRelevanceSnapshot();');
+    expect(widgetSrc).toContain('relevance: layerRelevance?.institutional_zones ?? null,');
+    expect(widgetSrc).not.toContain('computeLayerRelevance(');
+  });
+
+  it('weightConsensus real (consenso/conflito) chega até a UI — nem calculado só pra ficar morto no motor', () => {
+    const widgetSrc = councilWidgetSource(read('../src/App.tsx'));
+    expect(widgetSrc).toContain('evidenceFusion.weightConsensus');
   });
 
   it('LEI 24 / Regra de Ouro 2: o painel real nunca usa cor direcional (verde/vermelho) — sempre neutro, porque a leitura nunca é uma direção', () => {

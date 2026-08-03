@@ -34,13 +34,63 @@
 // multiplicar. Uma 3ª fonte real e genuinamente independente (Radar de
 // Qualificação, GMIL, etc.) é evolução futura honesta, não construída
 // agora sem um montador próprio real primeiro.
+//
+// "ORDEM OFICIAL DE EXECUÇÃO — CONSOLIDAÇÃO FINAL" (Prioridade 3): pede
+// este motor como "centro de inteligência", medindo 9 dimensões nomeadas
+// sobre a evidência agregada. Mapa honesto de cada uma — nunca uma
+// fabricação só para preencher os 9 nomes literalmente (mesmo teste da
+// própria Ordem, Diretriz Principal: "se apenas adicionar complexidade,
+// não implementar"):
+//  - qualidade    -> fieldCoverage (v1, sem mudança)
+//  - consenso     -> weightConsensus (v2, novo — ver computeWeightConsensus)
+//  - conflito     -> weightConsensus (MESMO campo do consenso: consenso
+//                    alto === conflito baixo, é a mesma estatística de
+//                    dispersão vista de dois ângulos. Dois campos
+//                    separados repetiria a mesma leitura sob dois nomes —
+//                    exatamente a redundância que a Prioridade 1 desta
+//                    Ordem pede para eliminar, não multiplicar).
+//  - relevância   -> EvidenceFusionSourceGroup.relevance (v2, novo).
+//                    Repassada pelo CHAMADOR (App.tsx), nunca calculada
+//                    aqui: layer-relevance.ts mede relevância por CAMADA de
+//                    gráfico inteira (mesmo precedente já documentado em
+//                    deriveEngineSignalsFromInstitutionalZones, que deixa
+//                    `relevance` null por sinal individual pelo mesmo
+//                    motivo). fuseEvidence não sabe qual fonte corresponde
+//                    a qual RelevanceLayerId — só o chamador sabe — então
+//                    aceita o valor real já calculado em vez de adivinhar.
+//  - maturidade   -> bySource[].valid / bySource[].total (v1, sem campo
+//                    novo — já é a proporção real de sinais válidos desta
+//                    fonte sobre o total rastreado).
+//  - contexto     -> fieldCoverage.context + os textos reais de
+//                    EngineSignal.context (v1, sem mudança).
+//  - estabilidade, consistência temporal, persistência -> DEFERIDO,
+//                    honestamente documentado em vez de silenciosamente
+//                    ignorado (item 5 da Disciplina de trabalho,
+//                    CLAUDE.md). As 3 exigem uma série temporal real de
+//                    leituras passadas (um ring buffer de
+//                    EvidenceFusionReading amostrado a cada ciclo real) —
+//                    infraestrutura que não existe neste repositório
+//                    hoje. Fabricar um número "de estabilidade" sem
+//                    histórico real por trás violaria a Regra de Ouro 3
+//                    (fail-closed); construir a infraestrutura de série
+//                    temporal é sua própria iniciativa futura, não algo a
+//                    encaixar apressadamente aqui.
 import type { EngineSignal } from "./engine-signal-contract";
+import type { LayerRelevanceResult } from "./layer-relevance";
 
 export const EVIDENCE_FUSION_CONTRACT_VERSION = 1 as const;
 
 export interface EvidenceFusionSourceGroup {
   source: string;
   signals: EngineSignal[];
+  // Relevância REAL da camada de gráfico correspondente, quando a fonte
+  // mapeia 1:1 para uma (ex.: Zonas Institucionais -> institutional_zones).
+  // Repassada pelo CHAMADOR (App.tsx já calcula layer-relevance.ts a cada
+  // ciclo) — fuseEvidence nunca importa RelevanceLayerId nem decide qual
+  // fonte é qual camada, só aceita o LayerRelevanceResult real já pronto.
+  // undefined/null = fonte sem camada de gráfico correspondente (ex.:
+  // Conselho não é uma camada togglable), honesto, não um "N/A" fabricado.
+  relevance?: LayerRelevanceResult | null;
 }
 
 export interface EvidenceFusionSourceBreakdown {
@@ -50,6 +100,8 @@ export interface EvidenceFusionSourceBreakdown {
   // Média real do `weight` entre os sinais que TÊM peso não-nulo desta
   // fonte — null honesto quando nenhum sinal desta fonte tem peso.
   meanWeight: number | null;
+  // Passthrough real do relevance de entrada (nunca recalculado aqui).
+  relevance: LayerRelevanceResult | null;
 }
 
 // As 9 chaves reais de EngineSignal além de `id` (que nunca é null por
@@ -80,10 +132,33 @@ export interface EvidenceFusionReading {
   // real do contrato de 10 campos, viva.
   fieldCoverage: Record<(typeof SIGNAL_FIELDS)[number], number>;
   bySource: EvidenceFusionSourceBreakdown[];
+  // Consenso/conflito REAL de peso entre TODAS as fontes agrupadas (ver
+  // computeWeightConsensus) — 1 = pesos idênticos (consenso máximo), 0 =
+  // dispersão máxima possível, null com menos de 2 sinais com peso real.
+  weightConsensus: number | null;
 }
 
 function mean(values: number[]): number | null {
   return values.length > 0 ? values.reduce((sum, v) => sum + v, 0) / values.length : null;
+}
+
+/** Dispersão estatística (desvio padrão populacional) sobre os `weight`
+ *  não-nulos de TODOS os sinais rastreados agora, agrupados — não por
+ *  fonte individual, propositalmente (consenso é uma leitura de "o quanto
+ *  o conjunto inteiro concorda", não uma comparação fonte-a-fonte, que já
+ *  existe em bySource[].meanWeight). weight vive em [0,1] por construção
+ *  (confluenceWeight/pool uniforme — engine-signal-contract.ts), então o
+ *  desvio padrão máximo teoricamente possível é 0.5 (metade dos pesos em
+ *  0, metade em 1) — normalização real sobre esse teto, nunca uma escala
+ *  arbitrária. null honesto com menos de 2 pesos reais (dispersão não
+ *  existe com 1 ponto só). */
+function computeWeightConsensus(signals: EngineSignal[]): number | null {
+  const weights = signals.map((s) => s.weight).filter((w): w is number => w !== null);
+  if (weights.length < 2) return null;
+  const avg = weights.reduce((sum, w) => sum + w, 0) / weights.length;
+  const variance = weights.reduce((sum, w) => sum + (w - avg) ** 2, 0) / weights.length;
+  const stdDev = Math.sqrt(variance);
+  return Math.max(0, Math.min(1, 1 - stdDev * 2));
 }
 
 /** Motor puro: agrega EngineSignal[] de múltiplas fontes JÁ reais em uma
@@ -112,6 +187,7 @@ export function fuseEvidence(groups: EvidenceFusionSourceGroup[]): EvidenceFusio
     total: g.signals.length,
     valid: g.signals.filter((s) => s.validity === true).length,
     meanWeight: mean(g.signals.map((s) => s.weight).filter((w): w is number => w !== null)),
+    relevance: g.relevance ?? null,
   }));
 
   return {
@@ -121,5 +197,6 @@ export function fuseEvidence(groups: EvidenceFusionSourceGroup[]): EvidenceFusio
     meanConfidence: mean(validConfidences),
     fieldCoverage,
     bySource,
+    weightConsensus: computeWeightConsensus(allSignals),
   };
 }

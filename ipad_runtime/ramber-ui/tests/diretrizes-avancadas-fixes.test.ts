@@ -51,7 +51,7 @@ describe('LEI 24 (censo de sincronização/decisão): CouncilWidget nunca mais r
     const app = read('../src/App.tsx');
     const idx = app.indexOf('function CouncilWidget()');
     expect(idx, 'CouncilWidget não encontrado').toBeGreaterThan(-1);
-    const block = app.slice(idx, idx + 4600);
+    const block = app.slice(idx, idx + 5200);
     expect(block).toContain('VOTO DO CONSELHO{council?.riskGated');
     expect(block).not.toMatch(/>\s*DECISÃO\{council\?\.riskGated/);
   });
@@ -59,7 +59,7 @@ describe('LEI 24 (censo de sincronização/decisão): CouncilWidget nunca mais r
   it('a linha de stance do Conselho tem tooltip real explicando que é confluência, nunca a decisão real do sistema (LEI 24)', () => {
     const app = read('../src/App.tsx');
     const idx = app.indexOf('function CouncilWidget()');
-    const block = app.slice(idx, idx + 4600);
+    const block = app.slice(idx, idx + 5200);
     expect(block).toContain('nunca a decisão do sistema');
     expect(block).toContain('LEI 24');
   });
