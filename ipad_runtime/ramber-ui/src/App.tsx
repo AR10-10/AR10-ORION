@@ -192,6 +192,7 @@ import { computeNexusLineSeries, latestNexusLine, nexusLineState, nexusConfluenc
 // Evolução Integrativa §7: Operational Readability Layer — NexusDecision
 // vira apresentação num módulo puro nomeado (zero matemática de direção).
 import {
+  buildNarrativeSummary,
   buildOperationalSummary,
   deriveBiasLabel,
   deriveConfluenceState,
@@ -3370,6 +3371,7 @@ export default function App() {
                           é contexto macro global, sempre real
                           independente do ativo selecionado (mesmo
                           comportamento de sempre, só a posição mudou). */}
+                      {marketMode !== "TRADFI" && <NarrativeSummaryCard />}
                       {marketMode === "TRADFI" ? (
                         <TradFiEmptyState compact assetLabel="SIRIFORM CORE" />
                       ) : (
@@ -4106,6 +4108,32 @@ function RadarPanel() {
 // Workspace Manager panel controls — the full, unmodified AssistantOrb
 // (forecast/voice/quick actions, nothing removed) renders below the
 // 3-column row when expanded (see the DASHBOARD strip in App()).
+// Ordem "Lapidação, Sincronia e Experiência do Operador" §6 ("Inteligência
+// Narrativa") + §5 (painéis devem responder "por que o sistema está
+// comprado?"): buildNarrativeSummary() já existe e já é testado
+// (operational-readability.ts) — este componente só a exibe como TEXTO
+// VISÍVEL, nunca um tooltip. Achado real de auditoria que motivou isto:
+// o único lugar que já sintetizava BIAS/SETUP/ENTRY/RISCO/CONFLUÊNCIA em
+// linguagem (buildOperationalSummary) só chegava ao Operador via
+// `title=` no CoreSignalBadge — e o comentário do próprio badge documenta
+// que tooltips nativos nunca aparecem em toque no iPad Safari (a
+// plataforma-alvo real). Primeiro card da gaveta "Core Intelligence"
+// (antes de SiriformCoreCard) — mesma leitura consolidada que o Operador
+// já tinha matematicamente, agora genuinamente visível. Zero segunda
+// leitura: reusa o MESMO nexusDecision que CoreSignalBadge já consome.
+function NarrativeSummaryCard() {
+  const { nexusDecision } = useContext(WidgetContext) || {};
+  const narrative = buildNarrativeSummary(nexusDecision ?? null);
+  return (
+    <div className="cyber-panel shrink-0 flex flex-col gap-1.5 p-3">
+      <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">
+        LEITURA CONSOLIDADA
+      </span>
+      <p className="text-[0.65rem] leading-relaxed text-[#c8d4e6]">{narrative}</p>
+    </div>
+  );
+}
+
 function SiriformCoreCard() {
   const { engine, engineStatus, realCycle, widgets, toggleWidget, nexusDecision } = useContext(WidgetContext) || {};
   const direction: Direction = engine?.direction ?? null;
@@ -7652,7 +7680,7 @@ function MarketBiasDecisionCard() {
           )}
         </span>
 
-        <MiniStat label="Conviction (Core Engine)" value={confidenceLabel} color="text-[#8ab4f8]" />
+        <MiniStat label="Confiança (Core Engine)" value={confidenceLabel} color="text-[#8ab4f8]" />
       </div>
 
       <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">

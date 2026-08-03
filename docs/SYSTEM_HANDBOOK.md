@@ -6438,6 +6438,69 @@ na Entrega 23 minutos antes).
 
 ---
 
+### 6.87 "Ordem Oficial: Fase de Lapidação, Sincronia e Experiência do
+Operador" (endereçada a "Agente 4", 3ª vez) — relatório completo em
+`docs/RELATORIO_LAPIDACAO_SINCRONIA_EXPERIENCIA.md`
+
+Diferente das 3 Ordens de consolidação anteriores (zero código novo):
+esta pede execução visual/UX real. Mesma Regra de Ouro aplicada a cada
+candidato antes de implementar. "Agente 4" reconfirmado sem elemento
+novo de suspeita — mesma resolução já estabelecida.
+
+**Auditoria com 2 agentes de exploração em paralelo + Playwright real**
+encontrou 3 achados concretos entre os 9 pontos pedidos:
+
+1. **§3/§5/§6 (o achado central)**: Nível 1 (`MarketDirectionWidget`) e
+Nível 3 (`CouncilWidget`/`GmilContextWidget`) vivem nas MESMAS gavetas
+fechadas por padrão (App.tsx:774-775); dentro da gaveta, Nível 4
+(`TelemetryHealthWidget`) não tem diferenciação visual de Nível 3. O
+único texto que já sintetizava BIAS/SETUP/ENTRY/RISCO/CONFLUÊNCIA em
+linguagem (`buildOperationalSummary`) só chegava ao Operador via
+`title=` — tooltip que o próprio código já documentava nunca aparecer
+em toque no iPad Safari. **Implementado**: `buildNarrativeSummary()`
+(novo, `operational-readability.ts`) reusa os MESMOS eixos já
+derivados/testados + `reasonsFor`/`reasonsAgainst` de
+`decision-layer.ts` — zero motor novo, só prosa em vez de linhas
+rotuladas; fail-closed por construção (decision null/INSUFFICIENT_DATA
+vira frase honesta de ausência). `NarrativeSummaryCard` exibe o texto
+como parágrafo VISÍVEL, primeiro item da gaveta "Core Intelligence" —
+confirmado ao vivo via Playwright mostrando o texto fail-closed
+correto sob rede bloqueada. Reestruturar as gavetas em si (Nível 1
+sempre visível fora de qualquer gaveta) foi avaliado e propositalmente
+NÃO tentado — alto blast-radius sobre o TopBar/chrome já muito
+ajustado, sem captura real do Operador confirmando o problema em uso.
+
+2. **§9 (redundância real)**: `engine.confidence` aparecia com 2
+rótulos diferentes — "CONFIANÇA" (App.tsx:4319) e, mais grave, um
+falso cognato "Conviction (Core Engine)" (App.tsx:7655) colidindo com
+o sistema DE FATO chamado Conviction (`convictionReading.conviction`,
+massa de opinião de 3 subsistemas). Corrigido: renomeado para
+"Confiança (Core Engine)" — 1 linha de texto, zero lógica.
+
+3. **§7 (responsividade, reconfirmada limpa)**: Playwright real em 6
+breakpoints (iPad Mini portrait/landscape, iPad Air, iPad Pro, Desktop,
+Ultrawide) — zero scroll de página em qualquer um. Um alarme falso
+("342 elementos overflowing") investigado até a causa real: as gavetas
+fechadas usam `transform: translateX(±110%)` (off-canvas), então
+`getBoundingClientRect()` nos filhos reporta a posição fora da tela por
+design — não é overflow real. Reconfirmado com a gaveta aberta de
+verdade: 320px fixos, dentro do viewport nas 3 larguras testadas.
+
+**Demais seções (§1, §2, §4, §8) reconfirmadas já satisfeitas** com
+evidência fresca (paleta consistente exceto 1 âmbar já documentado como
+intencional; sincronização garantida por Store única + React;
+`visual-budget.ts` já cobre BOS/CHOCH/FVG/OB/Liquidez/Trade Plan;
+coerência visual sem achado novo) — nenhuma mudança fabricada onde não
+havia gap real.
+
+**Testes**: `tsc --noEmit` limpo · 135 arquivos / 2296 testes (100%,
++5 novos de `buildNarrativeSummary`) · `npm run build` ok (1850
+módulos, 891,75 kB, +1,97 kB evidência real do código novo) ·
+Playwright real confirmou o card "LEITURA CONSOLIDADA" ao vivo e zero
+overflow nos 6 breakpoints.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

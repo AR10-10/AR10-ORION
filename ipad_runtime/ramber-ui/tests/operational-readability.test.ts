@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildNexusDecision } from '../src/nexus/decision-layer';
 import {
+  buildNarrativeSummary,
   buildOperationalSummary,
   deriveBiasLabel,
   deriveConfluenceState,
@@ -284,6 +285,64 @@ describe('buildOperationalSummary: o "bateu o olho" (§6) por execução real', 
     const src = require('node:fs').readFileSync(require.resolve('../src/nexus/operational-readability.ts'), 'utf8');
     expect(src).not.toMatch(/probabilit(y|ies)|probabilidade de acerto|chance de subir/i);
     expect(src).not.toMatch(/buildTradePlan|computeTargetEtas|buildNexusDecision/); // nunca recomputa decisão
+  });
+});
+
+// ─── Ordem "Lapidação, Sincronia e Experiência do Operador" §6 —
+// "Inteligência Narrativa": mesmos eixos já provados acima, agora em
+// prosa. Execução real, não padrão de fonte — o texto final é o produto. ───
+describe('buildNarrativeSummary: a mesma leitura em prosa, nunca uma segunda fonte de verdade', () => {
+  it('LONG completo: viés, estrutura+timing, confluência a favor/contra e risco, numa única string em ordem', () => {
+    const narrative = buildNarrativeSummary(buildNexusDecision(inputs));
+    expect(typeof narrative).toBe('string');
+    expect(narrative).toContain('Mercado com viés de alta.');
+    expect(narrative).toContain('Estrutura real mapeada e entrada confirmada agora.');
+    expect(narrative).toContain('Confluência a favor:');
+    expect(narrative).toContain('estrutura real de alta (Conselho·STRUCTURE)');
+    expect(narrative).toContain('Fatores contrários:');
+    expect(narrative).toContain('3/9 prazos concordam (Conviction·MULTI_TIMEFRAME)');
+    expect(narrative).toContain('Risco elevado: R:R do TP1 abaixo do piso 1:2.');
+    expect(narrative).toContain('Entrada permanece ativa (LONG).');
+    // ordem real: BIAS antes de Estrutura antes de Confluência antes de Risco antes do fechamento
+    expect(narrative.indexOf('Mercado com viés')).toBeLessThan(narrative.indexOf('Estrutura real mapeada'));
+    expect(narrative.indexOf('Estrutura real mapeada')).toBeLessThan(narrative.indexOf('Confluência a favor'));
+    expect(narrative.indexOf('Risco elevado')).toBeLessThan(narrative.indexOf('Entrada permanece ativa'));
+  });
+
+  it('AGUARDAR sem estrutura: viés neutro + ausência de estrutura + SEM OPERAÇÃO, sem linha de risco fabricada', () => {
+    const idle = buildNexusDecision({ ...inputs, coreDirection: null, plan: null, councilStance: null, targetsHit: 0, lastResolvedAt: null });
+    const narrative = buildNarrativeSummary(idle);
+    expect(narrative).toBe('Mercado sem viés direcional definido agora. Nenhuma estrutura real mapeada no momento. Nenhum viés real neste momento.');
+  });
+
+  it('CONFLICTED_BIAS (estrutura contradiz o Núcleo): leitura conflitante, estrutura invalidada e risco INVÁLIDO — nunca um parágrafo silenciando o conflito real', () => {
+    const conflictingPlan: TradePlan = {
+      contractVersion: 2,
+      direction: 'SHORT',
+      entry: { low: 100, high: 101, basis: 'OB_BEARISH' },
+      stop: { price: 105, basis: 'SR_RESISTANCE_1' },
+      targets: [{ price: 95, basis: 'SR_SUPPORT_1' }],
+      riskRewardRatios: [1.5],
+      computedAt: 0,
+    };
+    const d = buildNexusDecision({ ...inputs, coreDirection: 'LONG', plan: conflictingPlan });
+    const narrative = buildNarrativeSummary(d);
+    expect(narrative).toContain('Estrutura mapeada contradiz o viés do motor — leitura conflitante.');
+    expect(narrative).toContain('Estrutura anterior foi invalidada.');
+    expect(narrative).toContain('Plano inválido: estrutura mapeada contradiz o viés do Núcleo (DIRECTION_CONFLICT).');
+    expect(narrative).toContain('Sem estrutura real para operar agora — leitura em acompanhamento.');
+  });
+
+  it('fail-closed: decision null/undefined e INSUFFICIENT_DATA nunca viram um parágrafo fabricado — frase honesta de ausência', () => {
+    expect(buildNarrativeSummary(null)).toBe('Sem leitura real do motor ainda — aguardando o primeiro ciclo.');
+    expect(buildNarrativeSummary(undefined)).toBe('Sem leitura real do motor ainda — aguardando o primeiro ciclo.');
+    const noData = buildNexusDecision({ ...inputs, coreDirection: null, coreConfidence: null, plan: null, score: null, scoreZoneLabel: null, scoreTrend: null, councilStance: null });
+    expect(buildNarrativeSummary(noData)).toBe('Dado real insuficiente agora — sem viés direcional para relatar.');
+  });
+
+  it('nunca fala em probabilidade — mesma disciplina LEI 24/Regra de Ouro 2 do resto do arquivo', () => {
+    const narrative = buildNarrativeSummary(buildNexusDecision(inputs));
+    expect(narrative).not.toMatch(/probabilit(y|ies)|probabilidade de acerto|chance de subir/i);
   });
 });
 
