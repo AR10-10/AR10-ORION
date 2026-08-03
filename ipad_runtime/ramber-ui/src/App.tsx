@@ -5456,12 +5456,22 @@ function TopBar({ data }: { data?: PriceState | null }) {
   // uma string fixa. Antes de qualquer ciclo bem-sucedido (ou se o fetch
   // de futuros falhar), fica AGUARDANDO honesto em vez de afirmar
   // "Futures/Perp" sem ter recebido dado real nenhum.
-  const cryptoMarketLabel =
+  // Lapidação Visual (PRIORIDADE 2 — "badges redundantes / textos
+  // repetidos"): sonda real do cabeçalho encontrou "AGUARDANDO" escrito
+  // DUAS vezes na mesma linha — aqui e no CoreSignalBadge, em corpo bem
+  // maior. Pior: é erro de categoria, porque este chip responde "QUAL
+  // instrumento?" (Futures/Perp vs Spot) e não "qual o estado do dado?" —
+  // pergunta que o badge grande e o selo "MOTOR EM FALHA" já respondem.
+  // Sem tipo real de instrumento ainda, não há nada a dizer sobre o
+  // instrumento: o chip vira null e some (fail-closed intacto — nunca
+  // afirma "Futures/Perp" sem dado real, que era a razão original do
+  // fallback).
+  const cryptoMarketLabel: string | null =
     realCycle?.instrumentType === "crypto_futures"
       ? "Futures/Perp"
       : realCycle?.instrumentType === "crypto_spot"
         ? "Spot"
-        : AWAIT;
+        : null;
   const isPos = (data?.deltaPct ?? 0) >= 0;
 
   return (
@@ -5549,13 +5559,15 @@ function TopBar({ data }: { data?: PriceState | null }) {
                 setSelectedTradFiAsset?.(asset);
               }}
             />
-            <span
-              className={`text-[0.5rem] px-1 py-0.5 rounded uppercase tracking-wider whitespace-nowrap shrink-0 ${
-                marketMode === "TRADFI" ? "bg-[#b026ff20] text-[#b026ff]" : "bg-[#00f0ff20] text-[#00f0ff]"
-              }`}
-            >
-              {marketMode === "TRADFI" ? "Macro" : cryptoMarketLabel}
-            </span>
+            {(marketMode === "TRADFI" || cryptoMarketLabel) && (
+              <span
+                className={`text-[0.5rem] px-1 py-0.5 rounded uppercase tracking-wider whitespace-nowrap shrink-0 ${
+                  marketMode === "TRADFI" ? "bg-[#b026ff20] text-[#b026ff]" : "bg-[#00f0ff20] text-[#00f0ff]"
+                }`}
+              >
+                {marketMode === "TRADFI" ? "Macro" : cryptoMarketLabel}
+              </span>
+            )}
             {/* Refinamento Final §1 ("Timeframe" no header): chip DISPLAY-ONLY
                 do timeframe realmente selecionado — a troca continua no
                 seletor interativo do painel do gráfico (um único controle,
