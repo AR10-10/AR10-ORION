@@ -6348,6 +6348,61 @@ medição e o relatório, conforme a própria Ordem pediu.
 
 ---
 
+### 6.85 "Ordem Oficial: Consolidação Final do AR10 Cyborg" (Fase Final —
+"transformar todos os motores em um único organismo inteligente") —
+relatório completo em `docs/RELATORIO_ORGANISMO_UNICO_FASE_FINAL.md`
+
+Segunda Ordem de consolidação pura em sequência (a Entrega 22 já tinha
+homologado o ecossistema): 10 diretrizes obrigatórias + uma Regra de
+Ouro única ("esta mudança torna o AR10 mais inteligente como organismo
+único, ou só adiciona complexidade?"). Aplicada a cada candidato de
+mudança considerado — nenhum sobreviveu ao teste.
+
+**As 8 dimensões pedidas da Evidence Fusion** (contexto/consenso/
+cobertura/qualidade/maturidade/relevância/conflito/leitura consolidada)
+já são campos reais em `nexus/evidence-fusion.ts` — mapeadas de novo,
+com leitura fresca do código atual (não do comentário de cabeçalho da
+Entrega 20): `qualidade` mapeada honestamente a `validSignals/
+totalSignals` (razão real derivável de 2 campos já existentes, zero
+campo novo) — distinta de `cobertura` (`fieldCoverage`, sobre o
+CONTRATO) mesmo sem ganhar seu próprio campo, porque criar um só para
+repetir o nome seria a mesma redundância que a Ordem anterior já pediu
+para eliminar.
+
+**Achado mais importante da rodada**: o diagrama que esta Ordem propõe
+no §3 (`Core Engine → Pattern Engine → Institutional Zones → Council →
+Evidence Fusion → Trade Plan → Painéis`) diverge do grafo real em 3
+pontos, confirmados por grep de import desta rodada — Pattern Engine lê
+os mesmos candles brutos em paralelo ao Core Engine (não é downstream);
+Institutional Zones não alimenta o Council; e, o ponto que importa,
+`buildTradePlan` NUNCA importa `evidence-fusion.ts` — consome só
+`council.stance`/`riskGated` + zonas estruturais brutas (OB/FVG/S-R/Fib/
+VP). Implementar a seta "Evidence Fusion → Trade Plan" literalmente
+introduziria uma segunda influência sobre o dado mais acionável do
+terminal — exatamente a "decisão paralela" que o §3 da própria Ordem
+proíbe e que a LEI 24 (reafirmada no §2 dela) já barra. O código atual
+obedece a intenção da Ordem melhor do que o diagrama literal dela — não
+corrigido para "bater" com o desenho.
+
+**Auditoria nova de `nexus/*.ts`**: as 10 ocorrências reais de import
+não-`type` entre módulos `nexus/*.ts` foram listadas e classificadas
+individualmente — todas caem em utilitário matemático puro (EMA→MACD,
+VWAP→bandas/Nexus Line, percentile compartilhado), infraestrutura
+(ConnectionManager, TypedEventBus), a API de leitura sancionada da
+Snapshot (`getSnapshotForEngine`), ou formatação read-only de uma
+decisão já fechada (`operational-readability.ts` ← `decision-layer.ts`).
+Zero caso de um motor consumindo a OPINIÃO de outro motor diretamente —
+a arquitetura já satisfaz "Motor → Store → Snapshot → Consumidor" (§5)
+sem nenhuma mudança.
+
+**Verificação**: `tsc --noEmit` limpo · `vitest run` 135 arquivos / 2291
+testes (100%, idêntico à Entrega 22 — zero código de produção mudou) ·
+`npm run build` 1850 módulos / 889,78 kB (byte-a-byte idêntico).
+Playwright não executado (zero superfície nova/alterada). Zero pendência
+reaberta.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
