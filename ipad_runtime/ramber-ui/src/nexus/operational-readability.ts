@@ -313,7 +313,24 @@ export function buildOperationalSummary(decision: NexusDecision | null | undefin
 // fica matematicamente correta mas 100% inacessível na tela real do
 // Operador. Fail-closed: decision null ou sem viés real vira uma frase
 // honesta de ausência, nunca um parágrafo fabricado sobre o nada.
-export function buildNarrativeSummary(decision: NexusDecision | null | undefined): string {
+// Entrega 26 Prioridade 8 ("refinar a LEITURA CONSOLIDADA... deve parecer
+// um copiloto institucional"): contexto de mercado REAL já calculado por
+// outros motores, repassado pelo CHAMADOR — nunca calculado aqui (mesmo
+// precedente já usado por EvidenceFusionSourceGroup.relevance, que também
+// recebe pronto em vez de adivinhar). `regimeLabel` vem do REGIME_DISPLAY
+// que o painel MARKET REGIME já usa (zero segundo vocabulário); `flow` é o
+// sinal do CVD real, mesma regra do mesmo painel. Ambos opcionais: sem
+// leitura real, a frase correspondente simplesmente não existe — nunca um
+// "regime desconhecido" fabricado para preencher a narrativa.
+export interface NarrativeMarketContext {
+  regimeLabel: string | null;
+  flow: "COMPRADOR" | "VENDEDOR" | null;
+}
+
+export function buildNarrativeSummary(
+  decision: NexusDecision | null | undefined,
+  context?: NarrativeMarketContext | null,
+): string {
   if (!decision) return "Sem leitura real do motor ainda — aguardando o primeiro ciclo.";
   const bias = deriveBiasLabel(decision);
   if (bias === "INSUFFICIENT_DATA") {
@@ -327,6 +344,13 @@ export function buildNarrativeSummary(decision: NexusDecision | null | undefined
     CONFLICTED_BIAS: "Estrutura mapeada contradiz o viés do motor — leitura conflitante.",
   };
   const sentences: string[] = [BIAS_SENTENCE[bias]];
+
+  // Contexto de mercado real logo após o viés — a ordem de leitura que a
+  // própria Ordem exemplifica ("Mercado em tendência de alta. Liquidez...").
+  if (context?.regimeLabel) sentences.push(`Regime de mercado: ${context.regimeLabel}.`);
+  if (context?.flow) {
+    sentences.push(`Pressão de fluxo ${context.flow === "COMPRADOR" ? "compradora" : "vendedora"}.`);
+  }
 
   const setup = deriveSetupState(decision);
   const entry = deriveEntryState(decision);

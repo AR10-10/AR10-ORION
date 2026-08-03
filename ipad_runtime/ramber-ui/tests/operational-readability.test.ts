@@ -344,6 +344,45 @@ describe('buildNarrativeSummary: a mesma leitura em prosa, nunca uma segunda fon
     const narrative = buildNarrativeSummary(buildNexusDecision(inputs));
     expect(narrative).not.toMatch(/probabilit(y|ies)|probabilidade de acerto|chance de subir/i);
   });
+
+  // ─── Entrega 26 Prioridade 8: contexto de mercado real na narrativa ───
+  it('contexto real (regime + fluxo) entra logo após o viés, na ordem que a própria Ordem exemplifica', () => {
+    const narrative = buildNarrativeSummary(buildNexusDecision(inputs), {
+      regimeLabel: 'Tendência Forte ALTA',
+      flow: 'COMPRADOR',
+    });
+    expect(narrative).toContain('Regime de mercado: Tendência Forte ALTA.');
+    expect(narrative).toContain('Pressão de fluxo compradora.');
+    // ordem: viés → regime → fluxo → estrutura
+    expect(narrative.indexOf('Mercado com viés')).toBeLessThan(narrative.indexOf('Regime de mercado'));
+    expect(narrative.indexOf('Regime de mercado')).toBeLessThan(narrative.indexOf('Pressão de fluxo'));
+    expect(narrative.indexOf('Pressão de fluxo')).toBeLessThan(narrative.indexOf('Estrutura real mapeada'));
+  });
+
+  it('fluxo VENDEDOR vira a frase espelhada — nunca uma fórmula separada por direção', () => {
+    const narrative = buildNarrativeSummary(buildNexusDecision(inputs), { regimeLabel: null, flow: 'VENDEDOR' });
+    expect(narrative).toContain('Pressão de fluxo vendedora.');
+    expect(narrative).not.toContain('Regime de mercado');
+  });
+
+  it('fail-closed: contexto ausente/omitido nunca vira "regime desconhecido" fabricado — a frase simplesmente não existe', () => {
+    const semContexto = buildNarrativeSummary(buildNexusDecision(inputs));
+    const contextoVazio = buildNarrativeSummary(buildNexusDecision(inputs), { regimeLabel: null, flow: null });
+    expect(semContexto).not.toContain('Regime de mercado');
+    expect(semContexto).not.toContain('Pressão de fluxo');
+    // omitir o parâmetro e passá-lo vazio produzem EXATAMENTE a mesma leitura
+    expect(contextoVazio).toBe(semContexto);
+  });
+
+  it('contexto real nunca sobrescreve a frase honesta de ausência (decision null / INSUFFICIENT_DATA)', () => {
+    expect(buildNarrativeSummary(null, { regimeLabel: 'Tendência Forte ALTA', flow: 'COMPRADOR' })).toBe(
+      'Sem leitura real do motor ainda — aguardando o primeiro ciclo.',
+    );
+    const noData = buildNexusDecision({ ...inputs, coreDirection: null, coreConfidence: null, plan: null, score: null, scoreZoneLabel: null, scoreTrend: null, councilStance: null });
+    expect(buildNarrativeSummary(noData, { regimeLabel: 'Tendência Forte ALTA', flow: 'COMPRADOR' })).toBe(
+      'Dado real insuficiente agora — sem viés direcional para relatar.',
+    );
+  });
 });
 
 // ─── Evolução Integrativa §6 (v7): RISCO e CONFLUÊNCIA — os 2 eixos que

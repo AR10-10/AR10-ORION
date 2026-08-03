@@ -6501,6 +6501,74 @@ overflow nos 6 breakpoints.
 
 ---
 
+### 6.88 "Ordem Entrega 26: Lapidação Visual Final + Experiência
+Operacional" — relatório completo em
+`docs/RELATORIO_ENTREGA_26_LAPIDACAO_FINAL.md`
+
+10 Prioridades; 6 delas (1, 2, 5, 7, 9, 10) repetem frentes que a
+Entrega 25 auditou horas antes com evidência fresca e concluiu já
+satisfeitas — referenciadas, não reauditadas. O trabalho real desta
+rodada concentrou-se no que era genuinamente novo ou pendente.
+
+**Prioridade 4 — a pendência da Entrega 25, agora FECHADA.** A Entrega
+25 encontrou que Nível 1 e Nível 3 viviam nas mesmas gavetas fechadas
+por padrão, mitigou parcialmente e registrou a raiz no backlog com um
+gatilho declarado ("uma captura de tela real do Operador"). Esta Ordem
+diz literalmente "Sem abrir gavetas. Sem procurar informações." — é o
+gatilho, por escrito. Implementado `ContextReadStrip`: faixa nova na
+LINHA 2 do cabeçalho (a mesma linha sempre visível de
+`TradePlanTopStrip`/`StructureLevelsStrip`), com 4 leituras que os
+motores JÁ produziam e que só apareciam dentro de gavetas — REGIME
+(`engine.marketRegime` + o mesmo `REGIME_DISPLAY` do painel), FLUXO
+(sinal do CVD, mesma regra do mesmo painel), RISCO
+(`deriveRiskState`), CONFLUÊNCIA (`deriveConfluenceState`). Zero
+cálculo novo (travado por teste que proíbe `Math.*`/`reduce(` no
+bloco), zero sistema visual novo (reusa `BarField`, atendendo a
+Prioridade 5), zero redundância com a linha 1 (direção e score ficam
+deliberadamente de fora — travado por teste), fail-closed campo a
+campo.
+
+**Verificação ao vivo + correção do próprio método**: a primeira sonda
+Playwright usava `body.innerText` e reportou os 4 rótulos presentes —
+**falso positivo**, porque gavetas fechadas usam `translateX(±110%)`,
+que tira da tela mas não de `innerText`; ela estava lendo os rótulos
+homônimos DENTRO das gavetas. Refeita por geometria
+(`getBoundingClientRect`) + ancestralidade (`closest`): RISCO=ELEVADO e
+CONFLUÊNCIA=INSUFICIENTE confirmados a `top:46px`, fora de qualquer
+gaveta, em iPad Air e iPad Mini portrait, `hOverflow:0`. REGIME e FLUXO
+corretamente ausentes — sem candles nesta sandbox não existe regime nem
+CVD, e o fail-closed fez o campo sumir em vez de inventar. O resultado
+real (2 ao vivo, 2 corretamente ausentes) é mais fraco que o primeiro
+relatado, e é o que vale.
+
+**Prioridade 8**: `buildNarrativeSummary(decision, context?)` ganhou 2º
+parâmetro OPCIONAL `{ regimeLabel, flow }` — contexto real repassado
+pelo chamador, nunca calculado no módulo (mesmo precedente de
+`EvidenceFusionSourceGroup.relevance`). Fail-closed testado por
+igualdade literal: omitir o parâmetro e passá-lo vazio produzem a mesma
+string.
+
+**Prioridade 6 — 1 achado real**: das 19 animações em `App.tsx`, 18 são
+condicionais a estado real (conexão viva, microfone falando, ciclo em
+andamento) e foram mantidas; o botão "Sincronizar Agora" pulsava
+PERMANENTEMENTE, independente de estado — movimento constante com zero
+informação. Removido.
+
+**Prioridade 3 — NÃO implementada, com motivo**: "distância até o alvo/
+percentual/ATR restante" não existem como valor calculado hoje;
+produzi-los seria cálculo novo na interface, que a própria Ordem proíbe
+duas vezes. Registrado no backlog: o caminho honesto é um motor puro
+derivá-los com testes, nunca a UI inline.
+
+**Testes**: `tsc` limpo · 136 arquivos / 2308 testes (100%, +12 novos) ·
+build 1850 módulos / 893,77 kB (+3,99 kB, evidência do código novo) ·
+Playwright real em 2 resoluções. 1 asserção minha foi corrigida durante
+a verificação (confundia posição no arquivo com aninhamento de JSX —
+a barra de comando é definida depois das gavetas, mas não está dentro
+delas).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

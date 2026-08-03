@@ -4122,8 +4122,18 @@ function RadarPanel() {
 // já tinha matematicamente, agora genuinamente visível. Zero segunda
 // leitura: reusa o MESMO nexusDecision que CoreSignalBadge já consome.
 function NarrativeSummaryCard() {
-  const { nexusDecision } = useContext(WidgetContext) || {};
-  const narrative = buildNarrativeSummary(nexusDecision ?? null);
+  const { nexusDecision, engine, cvd } = useContext(WidgetContext) || {};
+  // Entrega 26 Prioridade 8: contexto de mercado REAL repassado à narrativa
+  // — regime pelo MESMO REGIME_DISPLAY do painel MARKET REGIME, fluxo pelo
+  // MESMO sinal de CVD. Zero cálculo aqui: só leitura do que já existe.
+  const regime = engine?.marketRegime ?? null;
+  const regimeDisplay = regime ? REGIME_DISPLAY[regime.regime] : null;
+  const narrative = buildNarrativeSummary(nexusDecision ?? null, {
+    regimeLabel: regimeDisplay
+      ? `${regimeDisplay.label}${regime!.direction ? ` ${regime!.direction}` : ""}`
+      : null,
+    flow: num(cvd) && cvd !== 0 ? (cvd! > 0 ? "COMPRADOR" : "VENDEDOR") : null,
+  });
   return (
     <div className="cyber-panel shrink-0 flex flex-col gap-1.5 p-3">
       <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">
@@ -5159,6 +5169,106 @@ function StructureLevelsStrip() {
   );
 }
 
+// Ordem "Entrega 26" Prioridade 4 ("O Operador deve conseguir responder em
+// menos de 2 segundos: tendência? força? risco? liquidez? contexto? SEM
+// ABRIR GAVETAS"): a Entrega 25 identificou exatamente esta lacuna — as
+// leituras consolidadas viviam só dentro das gavetas fechadas por padrão —
+// e a deixou registrada no backlog aguardando um gatilho explícito do
+// Operador. Esta Ordem é esse gatilho, por escrito.
+//
+// Zero cálculo novo (regra explícita desta Ordem: "não recalcular dados na
+// interface"): os 4 campos são leituras que os motores JÁ produzem e que
+// hoje só aparecem dentro de painéis/gavetas —
+//   REGIME      -> engine.marketRegime (regime-engine.js, ADX/DI), mesmo
+//                  REGIME_DISPLAY que MarketRegimeWidget usa (zero segundo
+//                  vocabulário de rótulo);
+//   FLUXO       -> sinal do CVD real, MESMA regra de MarketRegimeWidget
+//                  (>0 comprador, <0 vendedor) — a leitura de "liquidez/
+//                  pressão" que a Ordem pede;
+//   RISCO       -> deriveRiskState(nexusDecision) (operational-readability),
+//                  o mesmo já exibido no painel Trade Plan;
+//   CONFLUÊNCIA -> deriveConfluenceState(nexusDecision), idem.
+// Deliberadamente FORA daqui, por já estarem sempre visíveis na linha 1
+// (evitar a redundância que as Prioridades 1/9 desta mesma Ordem pedem
+// para eliminar): direção LONG/SHORT (CoreSignalBadge) e o percentual de
+// confluência institucional (badge de score).
+//
+// Fail-closed campo a campo: cada BarField só existe quando o valor real
+// existe; sem nenhum valor real, a faixa inteira some (altura zero), nunca
+// uma fileira de trações fabricados.
+function ContextReadStrip() {
+  const { engine, cvd, nexusDecision } = useContext(WidgetContext) || {};
+  const regime = engine?.marketRegime ?? null;
+  const regimeDisplay = regime ? REGIME_DISPLAY[regime.regime] : null;
+  const risk = nexusDecision ? deriveRiskState(nexusDecision) : null;
+  const confluence = nexusDecision ? deriveConfluenceState(nexusDecision) : null;
+  const flowReal = num(cvd) && cvd !== 0;
+
+  if (!regimeDisplay && !flowReal && !risk && !confluence) return null;
+
+  // Classes SEMPRE literais completas (mesma nota do BarField acima: o
+  // scanner JIT do Tailwind só gera CSS para tokens que aparecem por
+  // extenso no fonte) — por isso mapas literais, nunca concatenação.
+  const RISK_TONE: Record<string, string> = {
+    "ACEITÁVEL": "text-[#00ffaa]/90",
+    ELEVADO: "text-[#f0d06f]/90",
+    "INVÁLIDO": "text-[#ff0055]/90",
+  };
+  const CONFLUENCE_TONE: Record<string, string> = {
+    ALINHADA: "text-[#00ffaa]/90",
+    MISTA: "text-[#f0d06f]/90",
+    CONFLITANTE: "text-[#ff0055]/90",
+    INSUFICIENTE: "text-[#8ab4f8]/70",
+  };
+
+  return (
+    <div className="flex items-stretch whitespace-nowrap">
+      {regimeDisplay && (
+        <BarField
+          label="Regime"
+          value={`${regimeDisplay.label}${regime!.direction ? ` ${regime!.direction}` : ""}`}
+          labelClass="text-[#8ab4f8]/50"
+          valueClass={
+            regime!.direction === "ALTA"
+              ? "text-[#00ffaa]/90"
+              : regime!.direction === "BAIXA"
+                ? "text-[#ff0055]/90"
+                : "text-[#8ab4f8]/90"
+          }
+          title="Regime de mercado real (ADX/DI + percentil de banda, regime-engine) — o mesmo já exibido no painel MARKET REGIME, aqui sempre visível."
+        />
+      )}
+      {flowReal && (
+        <BarField
+          label="Fluxo"
+          value={cvd! > 0 ? "COMPRADOR" : "VENDEDOR"}
+          labelClass="text-[#8ab4f8]/50"
+          valueClass={cvd! > 0 ? "text-[#00ffaa]/90" : "text-[#ff0055]/90"}
+          title="Pressão real de fluxo pelo sinal do CVD acumulado — mesma leitura do painel MARKET REGIME, nunca um segundo cálculo."
+        />
+      )}
+      {risk && (
+        <BarField
+          label="Risco"
+          value={risk.state}
+          labelClass="text-[#8ab4f8]/50"
+          valueClass={RISK_TONE[risk.state] ?? "text-[#8ab4f8]/90"}
+          title={`Risco: ${risk.state} — ${risk.basis}. Leitura real da Operational Readability Layer, idêntica à do painel Trade Plan.`}
+        />
+      )}
+      {confluence && (
+        <BarField
+          label="Confluência"
+          value={confluence}
+          labelClass="text-[#8ab4f8]/50"
+          valueClass={CONFLUENCE_TONE[confluence] ?? "text-[#8ab4f8]/90"}
+          title="Alinhamento real entre direção, estrutura e timing (Operational Readability Layer) — confluência, nunca probabilidade."
+        />
+      )}
+    </div>
+  );
+}
+
 // Core Engine signal — the ONE number that matters (research: fintech
 // dashboards should "lead with the single figure the user checks", not
 // bury it among secondary chips). Solid-filled pill = engine of record,
@@ -5755,7 +5865,16 @@ function TopBar({ data }: { data?: PriceState | null }) {
             type="button"
             onClick={handleManualRestart}
             title={`Sincronizar Agora — recarrega dados de mercado, motores, feeds em tempo real e cache. Última leitura real: ${syncPriceSnapshot.updatedAt === null ? "aguardando conexão" : `há ${ageLabelOf(syncPriceSnapshot.updatedAt)}`}.`}
-            className="ml-1 w-8 h-8 rounded-full border border-[#00f0ff40] bg-[#00f0ff08] flex items-center justify-center text-[#00f0ff] hover:bg-[#00f0ff20] active:scale-95 transition-all shadow-[0_0_10px_rgba(0,240,255,0.15)] animate-pulse"
+            /* Entrega 26 Prioridade 6 ("eliminar movimentos desnecessários...
+               transições quase imperceptíveis"): este botão pulsava
+               PERMANENTEMENTE, independente de qualquer estado — movimento
+               constante carregando zero informação, no canto mais estável
+               da barra. Todas as demais animações do app foram auditadas e
+               MANTIDAS: cada uma é condicional a um estado real (ponto de
+               conexão ao vivo, microfone falando, ciclo em andamento) e
+               portanto informa algo. Só esta era ruído puro. Hover/active
+               continuam dando o feedback de interação. */
+            className="ml-1 w-8 h-8 rounded-full border border-[#00f0ff40] bg-[#00f0ff08] flex items-center justify-center text-[#00f0ff] hover:bg-[#00f0ff20] active:scale-95 transition-all shadow-[0_0_10px_rgba(0,240,255,0.15)]"
           >
             <Power size={14} />
           </button>
@@ -5778,6 +5897,10 @@ function TopBar({ data }: { data?: PriceState | null }) {
         <div className="flex flex-wrap items-center gap-y-1 px-3 lg:px-5 pb-1.5">
           <TradePlanTopStrip livePrice={data?.price ?? null} />
           <StructureLevelsStrip />
+          {/* Entrega 26 Prioridade 4: a leitura de contexto (regime/fluxo/
+              risco/confluência) passa a viver AQUI, na mesma linha sempre
+              visível — antes exigia abrir a gaveta "Core Intelligence". */}
+          <ContextReadStrip />
         </div>
       )}
     </div>
