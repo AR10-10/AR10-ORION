@@ -6637,6 +6637,62 @@ pretendidos tocados.
 
 ---
 
+### 6.90 "Ordem Oficial: Fase de Lapidação de Elite" (EPC-05) — relatório
+completo em `docs/RELATORIO_EPC05_LAPIDACAO_ELITE.md`
+
+Quinta mensagem "Agente 4", sem elementos novos de suspeita — conteúdo
+autorizado, persona nunca adotada. A lista de plataformas de referência
+desta Ordem repete quase palavra por palavra a DIRETRIZ 6/7 da Entrega 27
+— não reauditada. Foco real: `src/orderflow/signal-engine.js` (motor
+OFI/Absorption/Exhaustion, porta byte-a-byte de `golden-master.html`),
+nunca lido nem testado por esta sessão antes, apesar de já alimentar o
+Conselho, `trap-detection.ts` e o feed "MEXC ORDERFLOW" visível.
+
+**Achado 1 — nomenclatura**: pesquisa real (`WebSearch`) confirmou que o
+Order Flow Imbalance formal (Cont/Kukanov/Stoikov 2010/2014) é definido
+sobre EVENTOS DO LIVRO DE OFERTAS (mudança de fila no melhor bid/ask) —
+não sobre trades executados. O que este motor calcula sob o mesmo nome
+"OFI" é um desequilíbrio real de volume agressor (compra vs. venda) sobre
+trades — métrica real e útil, mas estruturalmente diferente do conceito
+acadêmico. O projeto não tem (nem pode fabricar, Regra de Ouro 1) fonte
+L2 real — só o poller público de trades da MEXC — então o OFI acadêmico é
+honestamente impossível aqui. Renomear a string de tipo em runtime
+divergiria do vocabulário do próprio `golden-master.html` (protegido) —
+risco desproporcional para uma imprecisão de nome. Corrigido via
+**documentação honesta** (cabeçalho + `metadata`), zero mudança de
+comportamento.
+
+**Achado 2 — zero cobertura de teste**: `processSignals`/
+`createEngineState` nunca tiveram teste de execução real apesar de já
+alimentarem decisão de confluência em produção. Novo
+`signal-engine.test.ts`, 15 testes reais: CVD, OFI (janela real de 400,
+limiar 0.6, volume mínimo 100, cooldown real de 500ms via
+`vi.useFakeTimers`), ABSORPTION (janela real de 5s, gate de preço 0.1%,
+volume mínimo 500), EXHAUSTION (só dispara com os DOIS portões reais —
+z-score extremo E reversão de preço — nunca com o pico de delta sozinho).
+
+**Achado colateral, registrado sem tentativa e erro**: `reversalConfirmation:
+0.2` de produção exige 20% de movimento de preço em só 10 trades para
+confirmar reversão — uma barra alta para o cadenciamento real de tick da
+MEXC. Sem dado real de estatística de tick nesta base para julgar
+calibração, o número foi documentado honestamente (código +
+relatório), **nunca alterado por suposição** — a própria Ordem proíbe
+"tentativa e erro".
+
+**Efeito colateral**: escrever o 1º consumidor TS real do motor expôs
+falta de JSDoc em `processSignals`/`Signal.metadata` (TS inferia tipos
+literais estreitos demais). Corrigido com `@typedef`/`@param` reais —
+zero mudança de runtime, benefício para qualquer consumidor futuro.
+`src/orderflow/` (pasta protegida, só extensões aditivas): nenhuma linha
+de cálculo tocada, só comentários/JSDoc/metadata.
+
+**Testes**: `tsc` limpo · **137 arquivos / 2326 testes (100%, +15
+novos)** · build 1850 módulos / 893,78 kB (byte-idêntico — confirma zero
+mudança de comportamento de produção) · `git diff --stat` confirma só 2
+arquivos de `src/orderflow/` + 1 teste novo tocados.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

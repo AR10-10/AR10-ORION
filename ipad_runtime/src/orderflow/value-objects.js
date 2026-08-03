@@ -49,7 +49,25 @@ export class Tick {
     }
 }
 
+/**
+ * Forma real (não exaustiva — cada motor só preenche os campos que
+ * realmente calcula) dos metadados que signal-engine.js anexa a cada
+ * Signal. Anotação JSDoc pura (Ordem EPC-05): zero mudança de
+ * comportamento, só torna `signal.metadata.imbalance` etc. tipado para
+ * quem consome este arquivo de um `.ts` (signal-engine.test.ts).
+ * @typedef {Object} SignalMetadata
+ * @property {number} [imbalance]
+ * @property {number} [buyVol]
+ * @property {number} [sellVol]
+ * @property {number} [totalVolume]
+ * @property {number} [priceChange]
+ * @property {number} [delta]
+ * @property {number} [zScore]
+ * @property {'BUY_EXHAUSTED'|'SELL_EXHAUSTED'} [direction]
+ */
+
 export class Signal {
+    /** @param {{type: string, confidence: number, price: number, timestamp: number, metadata?: SignalMetadata}} opts */
     constructor({ type, confidence, price, timestamp, metadata = {} }) {
         this.type = type;
         this.confidence = confidence;
