@@ -755,8 +755,14 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     // 1 evento isolado mantém o texto simples, 2+ eventos próximos viram
     // "SWEEP ZONE (Nx)".
     expect(sweepBlock).toContain('for (const cluster of clusterSweptPrices(uniqueLevels, LIQUIDITY_PROXIMITY_PCT)) {');
-    expect(sweepBlock).toContain('`⚡ SWEEP ${arrow} ${confidencePct}%`');
-    expect(sweepBlock).toContain('`⚡ SWEEP ZONE ${arrow} (${cluster.count}x) ${confidencePct}%`');
+    // Lapidação Visual do Gráfico §4: o "N%" saiu do texto. `confidence` é
+    // propriedade do TRAP (compartilhada por todos os seus níveis), então
+    // com N sweeps na tela os N chips traziam o MESMO número — repetição
+    // que não discrimina nada. O valor real segue no painel "Institutional
+    // Traps". O que discrimina (seta e contagem do cluster) permanece.
+    expect(sweepBlock).toContain('`⚡ SWEEP ${arrow}`');
+    expect(sweepBlock).toContain('`⚡ SWEEP ZONE ${arrow} (${cluster.count}x)`');
+    expect(sweepBlock).not.toContain('confidencePct');
     // Achado real de captura de tela (dezenas de rótulos empilhados,
     // decaimento por idade adicionado): cluster expirado nunca entra no
     // eixo, mesmo SWEEP_DECAY/ageAlpha real usado pela price line nativa.

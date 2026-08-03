@@ -730,8 +730,12 @@ describe('Achado real do Operador ("linha amarela que eu não sei o que signific
     // (trap-detection.ts) substitui o loop plano por preço — 1 evento isolado
     // mantém o texto simples, 2+ eventos próximos viram "SWEEP ZONE (Nx)".
     expect(block).toContain('for (const cluster of clusterSweptPrices(uniqueLevels, LIQUIDITY_PROXIMITY_PCT)) {');
-    expect(block).toContain('`⚡ SWEEP ${arrow} ${confidencePct}%`');
-    expect(block).toContain('`⚡ SWEEP ZONE ${arrow} (${cluster.count}x) ${confidencePct}%`');
+    // Lapidação Visual do Gráfico §4: "N%" removido do texto — era o MESMO
+    // número em todos os chips (confidence é do trap, não do nível), então
+    // repetia sem discriminar. Valor real preservado no painel
+    // "Institutional Traps"; seta e contagem do cluster permanecem.
+    expect(block).toContain('`⚡ SWEEP ${arrow}`');
+    expect(block).toContain('`⚡ SWEEP ZONE ${arrow} (${cluster.count}x)`');
     expect(block).toContain('side: "left",');
     // Achado real de captura de tela (decaimento por idade): cluster
     // expirado (>200 candles) nunca entra no eixo.

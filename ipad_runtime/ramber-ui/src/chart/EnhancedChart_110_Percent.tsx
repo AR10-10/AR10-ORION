@@ -2489,7 +2489,19 @@ export function EnhancedChart_110_Percent({
         uniqueLevels.forEach((l) => seenSweepPrices.add(l.price));
 
         const arrow = t.kind === "STOP_HUNT_TOPO" ? "↑" : "↓";
-        const confidencePct = Math.round(t.confidence * 100);
+        // Lapidação Visual do Gráfico §4 ("marcadores repetidos") — achado
+        // de captura real: com 3 sweeps na tela, os 3 chips traziam o MESMO
+        // "33%". Não é coincidência: `confidence` é propriedade do TRAP
+        // (trap-detection.ts: (1 + corroborações) / 3, calculada uma vez por
+        // trap e compartilhada por todos os seus níveis) — nunca do nível
+        // individual. Estampá-la em cada etiqueta repete o mesmo número N
+        // vezes, não discrimina nada entre elas, alarga cada chip e ainda dá
+        // a impressão falsa de N leituras independentes de confiança.
+        // Removida da etiqueta do eixo; o valor real continua no painel
+        // "Institutional Traps" (App.tsx, pct(t.confidence)), que é onde ele
+        // pertence — zero informação perdida (§16 "não diminuir informação
+        // por estética"). O que discrimina de fato — direção (↑/↓) e
+        // contagem do cluster — permanece.
         for (const cluster of clusterSweptPrices(uniqueLevels, LIQUIDITY_PROXIMITY_PCT)) {
           const age = data.length - 1 - cluster.latestIndex;
           const alpha = ageAlpha(age, SWEEP_DECAY);
@@ -2500,8 +2512,8 @@ export function EnhancedChart_110_Percent({
               price: cluster.avgPrice,
               text:
                 cluster.count === 1
-                  ? `⚡ SWEEP ${arrow} ${confidencePct}%`
-                  : `⚡ SWEEP ZONE ${arrow} (${cluster.count}x) ${confidencePct}%`,
+                  ? `⚡ SWEEP ${arrow}`
+                  : `⚡ SWEEP ZONE ${arrow} (${cluster.count}x)`,
               color: "rgba(255, 140, 0, 0.85)", // mesmo tom laranja da price line (ver comentário no efeito acima) — alpha real abaixo controla a opacidade final.
               alpha,
               side: "left",
