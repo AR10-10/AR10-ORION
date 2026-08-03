@@ -6986,6 +6986,37 @@ function SecondaryModuleView({ tab }: { tab: string }) {
   );
 }
 
+// Ordem "Lapidação Visual Final" §7 — leitura O/H/L/C do candle real mais
+// recente. Puramente exibição: lê os 4 campos crus do MESMO array que o
+// gráfico desenha, nunca deriva nada (variação/percentual seriam cálculo
+// novo na UI, que a §6 da própria Ordem proíbe — e a Ordem pede
+// literalmente "O / H / L / C", não a variação). Fail-closed: sem candle
+// real com os 4 campos finitos, devolve null e some — nunca um traço ou
+// zero fabricado ocupando espaço no cabeçalho do gráfico.
+function OhlcReadout({ candles }: { candles?: Array<{ open?: number; high?: number; low?: number; close?: number }> }) {
+  const last = Array.isArray(candles) && candles.length > 0 ? candles[candles.length - 1] : null;
+  if (!last) return null;
+  const fields: Array<[string, number | undefined]> = [
+    ["O", last.open],
+    ["H", last.high],
+    ["L", last.low],
+    ["C", last.close],
+  ];
+  if (!fields.every(([, v]) => num(v))) return null;
+  return (
+    <div
+      className="hidden lg:flex items-center gap-1.5 mr-2 font-mono whitespace-nowrap shrink-0"
+      title="Abertura/Máxima/Mínima/Fechamento do candle real mais recente, do mesmo array que o gráfico desenha — nunca um segundo cálculo."
+    >
+      {fields.map(([k, v]) => (
+        <span key={k} className="text-[#8ab4f8]/90">
+          <span className="text-[#8ab4f8]/40">{k}</span> {fmt(v)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // Real Fair Value Gaps / Order Blocks / Liquidity zones — computed once
   // in App() (see contextValue) against this exact candle array, shared
@@ -7345,6 +7376,18 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       flex="flex-[1.8] min-h-[320px]"
       extraHeader={
         <div className="flex items-center gap-1 text-[0.45rem]">
+          {/* Ordem "Lapidação Visual Final" §7 (OHLC): leitura compacta do
+              candle REAL mais recente do MESMO array que o gráfico desenha
+              (chartData, prop direta) — zero cálculo novo, zero segunda
+              fonte: são os 4 campos crus do candle, não uma derivação.
+              Sincronizado por construção com símbolo/timeframe (§10): quando
+              chartTimeframe muda, chartData é refetchado e este bloco lê o
+              novo array, nunca um snapshot próprio. Fail-closed (§7): sem
+              candle real, não renderiza nada — nunca um O/H/L/C fabricado.
+              Discreto de propósito (§7 "sem competir com preço"): mesmo
+              0.45rem do seletor de timeframe irmão, rótulos a 40% de opacidade,
+              escondido abaixo de lg para não espremer o seletor no iPad Mini. */}
+          <OhlcReadout candles={chartData} />
           {/* Auditoria de estabilização (P1): antes disto, esta linha era
               só <span> sem onClick — nunca respondia a toque nenhum, e
               "15M" ficava marcado ativo por um literal fixo
