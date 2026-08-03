@@ -162,13 +162,17 @@ describe('Achado real de captura de tela do Operador: rótulo BOS/CHOCH migrado 
 
   it('a entrada em priceAxisLabels usa o MESMO price/type/direction do structureBreak real — nunca uma segunda leitura', () => {
     const c = chart();
-    const idx = c.indexOf('if (structureBreak) {', c.indexOf('const priceAxisLabels = useMemo'));
+    // Evolução Total: bloco ganhou gate de visibility.structure_breaks
+    // (mesma disciplina de todo outro bloco do eixo) e o alpha agora é o
+    // MESMO peso resolvido pelo orçamento visual que o marcador já usa
+    // ("um objeto, um peso"), com o ageAlpha isolado como fallback.
+    const idx = c.indexOf('if (visibility.structure_breaks && structureBreak) {', c.indexOf('const priceAxisLabels = useMemo'));
     expect(idx, 'bloco do structureBreak não encontrado em priceAxisLabels').toBeGreaterThan(-1);
     const end = c.indexOf('return out;', idx);
     const block = c.slice(idx, end);
     expect(block).toContain('const point = data[structureBreak.index];');
     expect(block).toContain('const age = data.length - 1 - structureBreak.index;');
-    expect(block).toContain('const alpha = ageAlpha(age, BREAK_DECAY);');
+    expect(block).toContain('const alpha = structureBreakVisualWeight ?? ageAlpha(age, BREAK_DECAY);');
     expect(block).toContain('const bullish = structureBreak.direction === "ALTA";');
     expect(block).toContain('price: structureBreak.level,');
     expect(block).toContain('text: structureBreak.type,');
@@ -178,7 +182,7 @@ describe('Achado real de captura de tela do Operador: rótulo BOS/CHOCH migrado 
 
   it('fail-closed: sem ponto real na janela de candles carregada, ou alpha já esquecido (<=0), nunca empurra a etiqueta', () => {
     const c = chart();
-    const idx = c.indexOf('if (structureBreak) {', c.indexOf('const priceAxisLabels = useMemo'));
+    const idx = c.indexOf('if (visibility.structure_breaks && structureBreak) {', c.indexOf('const priceAxisLabels = useMemo'));
     const end = c.indexOf('return out;', idx);
     const block = c.slice(idx, end);
     expect(block).toContain('if (point) {');

@@ -164,6 +164,12 @@ export interface RealCycleResult {
   signal?: CoreSignal | null;
   confidence?: string | null;
   marketStructure?: string | null;
+  // Evolução Total (fix documentado na Ordem Nº 03 §3): os 2 preços de
+  // swing mais recentes do MESMO analyzeMarketStructure que já produz
+  // marketStructure acima — antes computados e descartados dentro de
+  // analysis-frame.js. Passthrough puro, zero cálculo novo aqui.
+  lastSwingHigh?: number | null;
+  lastSwingLow?: number | null;
   entry?: number | null;
   target1?: number | null;
   target2?: number | null;
@@ -530,6 +536,8 @@ export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): P
       forecast,
       confidence: typeof matrix.confidence === 'string' ? matrix.confidence : null,
       marketStructure: typeof frame.market_structure === 'string' ? frame.market_structure : null,
+      lastSwingHigh: isNum(frame.last_swing_high) ? frame.last_swing_high : null,
+      lastSwingLow: isNum(frame.last_swing_low) ? frame.last_swing_low : null,
       entry: route && isNum(tracker.current_price) ? tracker.current_price : null,
       target1: route && isNum(route.target_1) ? route.target_1 : null,
       target2: route && isNum(route.target_2) ? route.target_2 : null,

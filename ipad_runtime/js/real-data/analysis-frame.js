@@ -81,6 +81,8 @@ function emptyFrame(evidence, reason) {
         fib_extension_long_target: DADOS_INSUFICIENTES,
         fib_extension_short_target: DADOS_INSUFICIENTES,
         market_structure: DADOS_INSUFICIENTES,
+        last_swing_high: DADOS_INSUFICIENTES,
+        last_swing_low: DADOS_INSUFICIENTES,
         volatility_state: DADOS_INSUFICIENTES,
         trend_direction: DADOS_INSUFICIENTES,
         missing_fields: evidence.missing_fields || [],
@@ -139,6 +141,14 @@ export async function buildRealAnalysisFrame({ evidence, workerClient, windowSiz
     const fibLongTarget = srHasLevels ? srResult.fib_extension_long_target : DADOS_INSUFICIENTES;
     const fibShortTarget = srHasLevels ? srResult.fib_extension_short_target : DADOS_INSUFICIENTES;
     const marketStructure = structureResult.status === 'OK' ? structureResult.structure_label : DADOS_INSUFICIENTES;
+    // Evolução Total (fix documentado na Ordem Nº 03 §3, executado sob a
+    // autorização "não deixa nada pendente"): os 2 preços de swing mais
+    // recentes JÁ eram computados por analyzeMarketStructure acima a cada
+    // ciclo, mas eram descartados aqui — só structure_label saía no frame.
+    // Puramente aditivo (nenhum campo existente muda), mesmo padrão
+    // fail-closed de support_1_strength na mesma função.
+    const lastSwingHigh = structureResult.status === 'OK' ? structureResult.last_swing_high : DADOS_INSUFICIENTES;
+    const lastSwingLow = structureResult.status === 'OK' ? structureResult.last_swing_low : DADOS_INSUFICIENTES;
 
     const volumeStatus = (evidence.volume === DADOS_INSUFICIENTES || evidence.volume === NAO_APLICAVEL)
         ? evidence.volume
@@ -169,6 +179,8 @@ export async function buildRealAnalysisFrame({ evidence, workerClient, windowSiz
         fib_extension_long_target: fibLongTarget,
         fib_extension_short_target: fibShortTarget,
         market_structure: marketStructure,
+        last_swing_high: lastSwingHigh,
+        last_swing_low: lastSwingLow,
         volatility_state: volatilityState(result.stddev, lastPrice),
         trend_direction: trendDirection(lastPrice, result.sma),
         missing_fields: evidence.missing_fields || [],

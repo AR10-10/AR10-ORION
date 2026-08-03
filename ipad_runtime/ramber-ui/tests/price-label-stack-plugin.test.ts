@@ -386,7 +386,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('priceAxisLabels recalcula a cada tick real de livePrice — nunca uma etiqueta de preço congelada', () => {
     const s = chart();
-    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones]);');
+    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights]);');
     expect(depsIdx, 'dependency array de priceAxisLabels não inclui livePrice').toBeGreaterThan(-1);
   });
 
@@ -588,7 +588,7 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
 
   it('engineFallbackLevels entra nas deps de priceAxisLabels — recalcula quando o Núcleo muda de leitura', () => {
     const s = chart();
-    expect(s).toContain('livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones]);');
+    expect(s).toContain('livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights]);');
   });
 
   it('overlay de texto do canto (tradePlanAbsenceReason) nunca fica auto-contraditório: quando as linhas do Núcleo estão visíveis, o texto deixa explícito que é só o plano do CONSELHO que falta — nunca "SEM TRADE PLAN" sozinho com linhas reais na tela', () => {
@@ -705,7 +705,10 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     const trendBlock = c.slice(trendIdx, c.indexOf('}', c.indexOf('side:', trendIdx)) + 1);
     expect(trendBlock).toContain('side: "left",');
 
-    const chocIdx = c.indexOf('if (structureBreak) {', idx);
+    // Evolução Total: bloco ganhou gate real de visibility.structure_breaks
+    // (era a única etiqueta do eixo sem gate — linha sumia com o toggle,
+    // etiqueta ficava).
+    const chocIdx = c.indexOf('if (visibility.structure_breaks && structureBreak) {', idx);
     const chocBlock = c.slice(chocIdx, c.indexOf('}', c.indexOf('side:', chocIdx)) + 1);
     expect(chocBlock).toContain('side: "left",');
   });
@@ -786,7 +789,11 @@ describe('Diretriz Final — Polimento Visual: rótulo de Zona Institucional mig
     const idx = c.indexOf('if (visibility.institutional_zones) {', c.indexOf('const priceAxisLabels = useMemo'));
     expect(idx, 'bloco de Zona Institucional em priceAxisLabels não encontrado').toBeGreaterThan(-1);
     const block = c.slice(idx, c.indexOf('return out;', idx));
-    expect(block).toContain('for (const zone of institutionalZones) {');
+    // Evolução Total ("um objeto, um peso"): forEach com índice para a
+    // etiqueta seguir a MESMA redução do orçamento visual aplicada à faixa.
+    expect(block).toContain('institutionalZones.forEach((zone, i) => {');
+    expect(block).toContain('const resolved = institutionalZoneVisualWeights[i];');
+    expect(block).toContain('const alpha = resolved !== undefined && base > 0 ? Math.min(1, resolved / base) : 1;');
     expect(block).toContain('price: (zone.top + zone.bottom) / 2,');
     expect(block).toContain('text: `◆ ${toolNames}`,');
     expect(block).toContain('color: INSTITUTIONAL_ZONE_LABEL_COLOR,');

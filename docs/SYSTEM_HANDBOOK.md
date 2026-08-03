@@ -5885,6 +5885,51 @@ depender de candles).
 
 ---
 
+### 6.78 Evolução Total Autônoma (pedido informal, "autonomia total...
+não deixa nada pendente... sem pedir permissão"): pendência mais antiga
+executada + "um objeto, um peso" + rastreamento reconciliado; relatório
+completo em `docs/RELATORIO_EVOLUCAO_TOTAL_AUTONOMA.md`
+
+**Market Structure em `analysis-frame.js` — EXECUTADO** (o fix
+documentado na Ordem Nº 03 §3, adiado 3 rodadas por Regra de Ouro 6,
+agora autorizado): `last_swing_high`/`last_swing_low` (já computados por
+`analyzeMarketStructure` a cada ciclo, antes descartados) saem no frame
+→ passthrough puro em `engine-bridge.ts` (`lastSwingHigh`/`lastSwingLow`)
+→ props do chart → 11ª fonte real de `institutional-zones.ts`
+(`MARKET_STRUCTURE_SWING`, "Swing H"/"Swing L"). Puramente aditivo —
+`core-decision-rules.test.ts` (caracterização congelada do Core Engine)
+passou INTACTA; 2 testes aditivos de execução real (zigzag → frame ↔
+motor consistentes; candles chapados → DADOS_INSUFICIENTES honesto) + 8
+de wiring (`market-structure-swing-wiring.test.ts`) + 3 de execução real
+da 11ª fonte (swing sozinho nunca vira zona; high+low = mesma
+ferramenta, distinctSourceCount não dobra).
+
+**"Um objeto, um peso"** (achado de auditoria visual): etiquetas do eixo
+anti-colisão agora seguem o MESMO peso resolvido pelo orçamento visual
+que os objetos que nomeiam — BOS/CHOCH usa `structureBreakVisualWeight`
+(fallback `ageAlpha` isolado), Zona Institucional segue a redução da
+faixa (razão `resolved/base`, 1 sem competição, nunca zero). Achado
+extra corrigido: o bloco da etiqueta BOS/CHOCH era o ÚNICO do eixo sem
+gate de `visibility` — camada desligada sumia com a linha mas a etiqueta
+ficava; agora `visibility.structure_breaks` gate o bloco.
+
+**Peso no sistema — auditoria honesta**: `llm-worker`/`llm-bridge`
+(12MB do build) reverificados — já 100% lazy (`await import()` nos
+handlers), zero peso no boot; nada removido porque nada pesava de
+verdade ali. Rastreamento obsoleto reconciliado: task #114 (pergunta
+antiga do Radar) DECIDIDA sob autonomia total — manter direção de
+candidatos via regime (display-only, LEI 24 governa só o símbolo ativo;
+pipeline completo por símbolo escaneado violaria Regra de Ouro 6); task
+#82 (umbrella V-MAX in_progress obsoleta) reconciliada com o histórico
+real de entregas, resto virou backlog honesto explícito.
+
+**Testes executados**: `tsc --noEmit` limpo · **130 arquivos / 2218
+testes** (100%, +17 novos) · `npm run build` ok (1847 módulos, 879,39
+kB) · Playwright real no baseline pré-mudança (zero erro de React, zero
+regressão estrutural).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

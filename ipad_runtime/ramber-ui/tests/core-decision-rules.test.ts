@@ -14,6 +14,10 @@ import { buildResearchEngineFrame } from '../../js/research/research-engine.js';
 import { buildTradeSetupMatrix } from '../../js/research/trade-setup-matrix.js';
 import { computeDataSufficiency } from '../../js/research/data-sufficiency.js';
 import { buildRealAnalysisFrame } from '../../js/real-data/analysis-frame.js';
+// Evolução Total (fix documentado na Ordem Nº 03 §3): o MESMO motor real
+// que analysis-frame.js chama — usado abaixo só para derivar o valor
+// ESPERADO dos swings (consistência frame↔motor, zero número mágico).
+import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
 import { DADOS_INSUFICIENTES, NAO_APLICAVEL } from '../../js/real-data/schema.js';
 
 // Frame/Evidence realistas de instrumento crypto_spot (derivativos
@@ -215,5 +219,41 @@ describe('core-rules: analysis-frame — portões de amostra e rótulos descriti
     expect(frame.status).toBe('OK');
     expect(frame.read_only).toBe(true);
     expect(frame.execution).toBe('DISABLED_BY_POLICY');
+  });
+
+  // Evolução Total (fix documentado na Ordem Nº 03 §3, executado sob "não
+  // deixa nada pendente"): last_swing_high/last_swing_low — os 2 preços já
+  // computados por analyzeMarketStructure a cada ciclo — agora saem no
+  // frame em vez de serem descartados. Puramente ADITIVO: os testes de
+  // caracterização acima continuam intactos, estes 2 só cobrem os campos
+  // novos, nos dois ramos reais (com estrutura OK / sem estrutura).
+  it('ADITIVO: candles com swings fractais reais => last_swing_high/low do frame = exatamente os do próprio motor de estrutura', async () => {
+    // Zigzag real (oscilação senoidal): produz swing highs/lows fractais
+    // confirmados — o valor esperado vem do MESMO motor, nunca hardcoded.
+    const zigzag = Array.from({ length: 60 }, (_, i) => {
+      const c = 50_000 + Math.round(500 * Math.sin(i / 3));
+      return { t: 1_700_000_000 + i * 900, o: c, h: c + 40, l: c - 40, c, v: 5 };
+    });
+    const direct = analyzeMarketStructure({ ohlcv_series: zigzag, timeframe: '15m' });
+    expect(direct.status).toBe('OK'); // pré-condição do próprio teste: a fixture tem estrutura real
+    const frame = await buildRealAnalysisFrame({
+      evidence: { symbol: 'BTC', instrument_type: 'crypto_spot', timeframe: '15m', candles: zigzag, volume: { v: 1 }, missing_fields: [] },
+      workerClient: fakeWorker({ sma: 50_000, ema: 50_000, stddev: 100, zscoreLast: 0 }),
+    });
+    expect(frame.status).toBe('OK');
+    expect(frame.last_swing_high).toBe(direct.last_swing_high);
+    expect(frame.last_swing_low).toBe(direct.last_swing_low);
+    expect(Number.isFinite(frame.last_swing_high)).toBe(true);
+    expect(Number.isFinite(frame.last_swing_low)).toBe(true);
+  });
+
+  it('ADITIVO: candles chapados (sem 2 swings confirmados) => last_swing_high/low = DADOS_INSUFICIENTES honesto, frame continua OK', async () => {
+    const frame = await buildRealAnalysisFrame({
+      evidence: { symbol: 'BTC', instrument_type: 'crypto_spot', timeframe: '15m', candles: busCandles(50), volume: { v: 1 }, missing_fields: [] },
+      workerClient: fakeWorker({ sma: 50_000, ema: 50_000, stddev: 100, zscoreLast: 0 }),
+    });
+    expect(frame.status).toBe('OK'); // o frame em si nunca degrada por falta de estrutura
+    expect(frame.last_swing_high).toBe(DADOS_INSUFICIENTES);
+    expect(frame.last_swing_low).toBe(DADOS_INSUFICIENTES);
   });
 });

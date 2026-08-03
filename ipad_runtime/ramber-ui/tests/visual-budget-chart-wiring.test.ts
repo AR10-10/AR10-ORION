@@ -271,3 +271,44 @@ describe('EnhancedChart_110_Percent.tsx: candidato MAIN_LIQUIDITY real — mesma
     expect(block).toContain('obVisualWeights={mainLiquidityVisualWeights.ob}');
   });
 });
+
+// Evolução Total ("um objeto, um peso"): as ETIQUETAS do eixo seguem o
+// mesmo peso resolvido pelo orçamento visual que os objetos que elas
+// nomeiam — antes, orçamento reduzia o marcador/faixa mas a etiqueta
+// continuava na curva/opacidade isolada própria (um objeto, dois pesos).
+describe('priceAxisLabels: etiquetas seguem o peso resolvido do orçamento visual (nunca um segundo peso para o mesmo objeto)', () => {
+  it('BOS/CHOCH: etiqueta usa structureBreakVisualWeight (fallback ageAlpha isolado) — mesmo peso do marcador', () => {
+    const s = chart();
+    const idx = s.indexOf('const priceAxisLabels = useMemo');
+    const block = s.slice(idx, s.indexOf('return out;', idx));
+    expect(block).toContain('const alpha = structureBreakVisualWeight ?? ageAlpha(age, BREAK_DECAY);');
+  });
+
+  it('BOS/CHOCH: bloco da etiqueta ganhou gate real de visibility.structure_breaks (era o ÚNICO bloco do eixo sem gate — linha sumia com o toggle, etiqueta ficava)', () => {
+    const s = chart();
+    const idx = s.indexOf('const priceAxisLabels = useMemo');
+    const block = s.slice(idx, s.indexOf('return out;', idx));
+    expect(block).toContain('if (visibility.structure_breaks && structureBreak) {');
+    expect(block).not.toContain('\n    if (structureBreak) {');
+  });
+
+  it('Zona Institucional: etiqueta segue a REDUÇÃO da faixa — razão peso resolvido/peso próprio (1 sem competição, nunca zero: piso real 0.35 no motor)', () => {
+    const s = chart();
+    const idx = s.indexOf('const priceAxisLabels = useMemo');
+    const block = s.slice(idx, s.indexOf('return out;', idx));
+    expect(block).toContain('institutionalZones.forEach((zone, i) => {');
+    expect(block).toContain('const base = confluenceWeight(zone.distinctSourceCount);');
+    expect(block).toContain('const resolved = institutionalZoneVisualWeights[i];');
+    expect(block).toContain('const alpha = resolved !== undefined && base > 0 ? Math.min(1, resolved / base) : 1;');
+  });
+
+  it('deps reais do useMemo incluem os pesos resolvidos e o gate novo — etiqueta nunca fica stale quando o orçamento re-resolve', () => {
+    const s = chart();
+    const idx = s.indexOf('const priceAxisLabels = useMemo');
+    const depsIdx = s.indexOf('}, [support, resistance,', idx);
+    const deps = s.slice(depsIdx, s.indexOf(']);', depsIdx));
+    expect(deps).toContain('structureBreakVisualWeight');
+    expect(deps).toContain('visibility.structure_breaks');
+    expect(deps).toContain('institutionalZoneVisualWeights');
+  });
+});

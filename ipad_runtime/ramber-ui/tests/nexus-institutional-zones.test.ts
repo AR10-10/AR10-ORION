@@ -24,6 +24,8 @@ const emptyInput: InstitutionalZoneInput = {
   volumeProfilePoc: null,
   sessionKeyLevel: null,
   liquiditySweeps: [],
+  lastSwingHigh: null,
+  lastSwingLow: null,
 };
 
 describe('constantes do contrato', () => {
@@ -161,6 +163,8 @@ describe('computeInstitutionalZones: clustering por ÂNCORA FIXA (nunca média m
       volumeProfilePoc: null,
       sessionKeyLevel: null,
       liquiditySweeps: [],
+      lastSwingHigh: null,
+      lastSwingLow: null,
       proximityPct: 0.5,
     });
     expect(r).toHaveLength(2);
@@ -172,6 +176,41 @@ describe('computeInstitutionalZones: clustering por ÂNCORA FIXA (nunca média m
     expect(g2.members.map((m) => m.sourceKind).sort()).toEqual(['LIQUIDITY_EQH', 'NEXUS_LINE']);
     expect(g2.bottom).toBe(100800);
     expect(g2.top).toBe(101100);
+  });
+
+  it('Evolução Total (Ordem Nº 03 §3 executada): lastSwingHigh/lastSwingLow são a 11ª fonte real — formam confluência com outra ferramenta', () => {
+    const r = computeInstitutionalZones({
+      ...emptyInput,
+      vwap: 100050,
+      lastSwingHigh: 100000, // a 0.05% do VWAP — mesmo grupo real
+    });
+    expect(r).toHaveLength(1);
+    expect(r[0].distinctSourceCount).toBe(2);
+    const swing = r[0].members.find((m) => m.sourceKind === 'MARKET_STRUCTURE_SWING');
+    expect(swing).toBeDefined();
+    expect(swing!.label).toBe('Swing H');
+    expect(swing!.price).toBe(100000);
+  });
+
+  it('swing sozinho nunca vira zona (1 fonte); high e low são a MESMA ferramenta (distinctSourceCount não dobra)', () => {
+    // Sozinho: nenhuma zona.
+    expect(computeInstitutionalZones({ ...emptyInput, lastSwingHigh: 100000 })).toEqual([]);
+    // High + Low da mesma ferramenta juntos no mesmo cluster: 2 membros,
+    // mas 1 ferramenta distinta — segue sem zona (MIN_DISTINCT_SOURCES=2
+    // exige ferramentas DIFERENTES, mesma regra das 2 Order Blocks vizinhas).
+    expect(
+      computeInstitutionalZones({ ...emptyInput, lastSwingHigh: 100000, lastSwingLow: 99950 }),
+    ).toEqual([]);
+  });
+
+  it('swing não-finito é omitido silenciosamente (fail-closed, nunca membro fabricado)', () => {
+    const r = computeInstitutionalZones({
+      ...emptyInput,
+      vwap: 100050,
+      lastSwingHigh: NaN,
+      lastSwingLow: null,
+    });
+    expect(r).toEqual([]); // só VWAP sobra real — 1 fonte, sem confluência
   });
 
   it('borda exata do limiar (<=) inclui; um tick além exclui', () => {
@@ -207,6 +246,8 @@ describe('computeInstitutionalZones: ordenação e teto real', () => {
       volumeProfilePoc: null,
       sessionKeyLevel: null,
       liquiditySweeps: [],
+      lastSwingHigh: null,
+      lastSwingLow: null,
     });
     expect(r.length).toBeGreaterThanOrEqual(2);
     expect(r[0].distinctSourceCount).toBe(3); // NEXUS_LINE + FVG + OB (200000-region só tem 2: EMA + VWAP)

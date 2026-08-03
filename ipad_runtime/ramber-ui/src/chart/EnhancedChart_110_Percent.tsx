@@ -332,6 +332,12 @@ interface EnhancedChartProps {
   // Ordem "Ciborgue Vivo" §1: rompimento de estrutura real mais recente
   // (BOS/CHOCH). null = nenhum rompimento na amostra, honesto — nunca desenha um palpite.
   structureBreak?: StructureBreak | null;
+  // Evolução Total (fix documentado na Ordem Nº 03 §3): swing high/low
+  // fractais mais recentes do ciclo real (analysis-frame.js →
+  // engine-bridge.ts) — alimentam APENAS o consolidador de Zonas
+  // Institucionais como 11ª fonte pontual; nenhum desenho próprio novo.
+  lastSwingHigh?: number | null;
+  lastSwingLow?: number | null;
   fibonacciLevels?: EnhancedChartFibLevel[] | null;
   // Correção de latência: o último preço REAL do ticker WS (mesma fonte da
   // barra superior, já na store desde o primeiro tick) e o timeframe ativo
@@ -530,6 +536,8 @@ export function EnhancedChart_110_Percent({
   liquidityZones,
   obstacleZones,
   structureBreak,
+  lastSwingHigh,
+  lastSwingLow,
   fibonacciLevels,
   livePrice,
   activeTimeframe,
@@ -1392,8 +1400,13 @@ export function EnhancedChart_110_Percent({
       volumeProfilePoc: volumeProfile?.fixedRange?.pocPrice ?? null,
       sessionKeyLevel: freshestSessionKeyLevel,
       liquiditySweeps: institutionalZoneSweeps,
+      // Evolução Total: 11ª fonte real (fix documentado na Ordem Nº 03 §3)
+      // — mesmo padrão pontual de ema/vwap/nexusLine, fail-closed (null =
+      // membro omitido pelo próprio motor).
+      lastSwingHigh: lastSwingHigh ?? null,
+      lastSwingLow: lastSwingLow ?? null,
     }),
-    [emaLastValue, activeEmaPeriod, vwapLastValue, nlLastValue, fairValueGaps, orderBlocks, liquidityZones, support, resistance, volumeProfile, freshestSessionKeyLevel, institutionalZoneSweeps],
+    [emaLastValue, activeEmaPeriod, vwapLastValue, nlLastValue, fairValueGaps, orderBlocks, liquidityZones, support, resistance, volumeProfile, freshestSessionKeyLevel, institutionalZoneSweeps, lastSwingHigh, lastSwingLow],
   );
   const institutionalZones = useMemo(() => computeInstitutionalZones(institutionalZoneInput), [institutionalZoneInput]);
 
@@ -2220,11 +2233,22 @@ export function EnhancedChart_110_Percent({
     // real que decide quando "esquecer" (idade em candles, nunca relógio
     // de parede) — zero segunda fonte, zero segunda curva de decaimento.
     // alpha<=0 nunca entra: mesma honestidade de "esquecido" do plugin.
-    if (structureBreak) {
+    //
+    // Evolução Total — 2 correções reais de auditoria neste bloco:
+    // (1) gate de visibility.structure_breaks: era a ÚNICA etiqueta do
+    //     eixo sem gate (Sweep/Session/Zona Institucional já têm) — a
+    //     LINHA sumia com o toggle da camada mas a etiqueta ficava,
+    //     um objeto em dois estados divergentes.
+    // (2) "um objeto, um peso": o MARCADOR já usa o peso resolvido pelo
+    //     orçamento visual (structureBreakVisualWeight) desde a rodada
+    //     STRUCTURE — a etiqueta continuava na curva isolada. Agora ambas
+    //     usam o MESMO peso resolvido (fallback fail-closed idêntico ao
+    //     do plugin quando não há candidato real).
+    if (visibility.structure_breaks && structureBreak) {
       const point = data[structureBreak.index];
       if (point) {
         const age = data.length - 1 - structureBreak.index;
-        const alpha = ageAlpha(age, BREAK_DECAY);
+        const alpha = structureBreakVisualWeight ?? ageAlpha(age, BREAK_DECAY);
         if (alpha > 0 && Number.isFinite(structureBreak.level)) {
           const bullish = structureBreak.direction === "ALTA";
           out.push({
@@ -2330,18 +2354,28 @@ export function EnhancedChart_110_Percent({
     // do plugin); a FAIXA (fill+borda) continua desenhada por
     // InstitutionalZonePlugin, intocada — só o texto mudou de lugar.
     if (visibility.institutional_zones) {
-      for (const zone of institutionalZones) {
+      institutionalZones.forEach((zone, i) => {
         const toolNames = zone.members.map((m) => m.label).join(" + ");
+        // Evolução Total ("um objeto, um peso"): quando o orçamento visual
+        // REDUZIU a ênfase da faixa desta zona (competição real entre
+        // camadas), a etiqueta segue a mesma redução — razão entre o peso
+        // resolvido e o peso próprio da zona (1 quando não houve
+        // competição; nunca zero, resolvedWeight tem piso real de 0.35 no
+        // motor). Zero curva nova: só os 2 números já reais.
+        const base = confluenceWeight(zone.distinctSourceCount);
+        const resolved = institutionalZoneVisualWeights[i];
+        const alpha = resolved !== undefined && base > 0 ? Math.min(1, resolved / base) : 1;
         out.push({
           price: (zone.top + zone.bottom) / 2,
           text: `◆ ${toolNames}`,
           color: INSTITUTIONAL_ZONE_LABEL_COLOR,
+          alpha,
           side: "left",
         });
-      }
+      });
     }
     return out;
-  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones]);
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights]);
 
   return (
     <div className="absolute inset-0">

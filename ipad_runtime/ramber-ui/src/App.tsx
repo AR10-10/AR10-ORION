@@ -7145,6 +7145,8 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             obstacleZones={chartObstacleZones}
             liquidityZones={unsweptLiquidity}
             structureBreak={bosChoch?.break ?? null}
+            lastSwingHigh={engine?.lastSwingHigh ?? null}
+            lastSwingLow={engine?.lastSwingLow ?? null}
             fibonacciLevels={fibonacciLevels}
             livePrice={livePrice.price}
             activeTimeframe={chartTimeframe as Timeframe}

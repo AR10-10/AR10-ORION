@@ -54,7 +54,18 @@ export type InstitutionalZoneSourceKind =
   // Profile+S/R, Session Key Level+Liquidez e FVG+Sweep.
   | "VOLUME_PROFILE_POC"
   | "SESSION_KEY_LEVEL"
-  | "LIQUIDITY_SWEEP";
+  | "LIQUIDITY_SWEEP"
+  // Evolução Total (fix documentado na Ordem Nº 03 §3, executado sob
+  // "não deixa nada pendente"): os 2 swings fractais mais recentes do
+  // market-structure-engine.js — a 11ª fonte real, a única que a
+  // auditoria da Ordem Nº 03 apontou como ausente deste consolidador.
+  // Nuance honesta (documentada no próprio §3 na época): swings recentes
+  // e Support/Resistance (nível mais TOCADO) vêm do MESMO
+  // fractal-swings.js por baixo e podem coincidir com frequência — são
+  // perguntas diferentes sobre os mesmos fractais ("o pivô mais novo"
+  // vs "o nível mais revisitado"), então a confluência marginal é real
+  // porém menor do que "mais uma fonte" sugere à primeira vista.
+  | "MARKET_STRUCTURE_SWING";
 
 export interface InstitutionalZoneMember {
   sourceKind: InstitutionalZoneSourceKind;
@@ -105,6 +116,12 @@ export interface InstitutionalZoneInput {
   // EnhancedChart_110_Percent.tsx) — este motor não reimplementa a curva
   // de idade, só recebe o que já sobreviveu ao filtro do chamador.
   liquiditySweeps: { price: number }[];
+  // Evolução Total: swing high/low fractais mais recentes (analysis-
+  // frame.js → engine-bridge.ts lastSwingHigh/lastSwingLow) — membros
+  // pontuais, mesmo padrão de ema/vwap/nexusLine. null = ciclo ainda sem
+  // estrutura real (fail-closed, membro simplesmente omitido).
+  lastSwingHigh: number | null;
+  lastSwingLow: number | null;
   proximityPct?: number;
 }
 
@@ -184,6 +201,12 @@ export function computeInstitutionalZones(input: InstitutionalZoneInput): Instit
   for (const s of input.liquiditySweeps ?? []) {
     if (!fin(s.price)) continue;
     members.push({ sourceKind: "LIQUIDITY_SWEEP", label: "Sweep", price: s.price, top: s.price, bottom: s.price });
+  }
+  if (fin(input.lastSwingHigh)) {
+    members.push({ sourceKind: "MARKET_STRUCTURE_SWING", label: "Swing H", price: input.lastSwingHigh, top: input.lastSwingHigh, bottom: input.lastSwingHigh });
+  }
+  if (fin(input.lastSwingLow)) {
+    members.push({ sourceKind: "MARKET_STRUCTURE_SWING", label: "Swing L", price: input.lastSwingLow, top: input.lastSwingLow, bottom: input.lastSwingLow });
   }
 
   if (members.length < MIN_DISTINCT_SOURCES_FOR_ZONE) return [];
