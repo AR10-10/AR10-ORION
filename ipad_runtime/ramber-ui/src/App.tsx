@@ -8264,28 +8264,48 @@ function CouncilWidget() {
   // nunca recalcula (LEI 24 intacta). Mesma ordem/comprimento de
   // `council.votes` sempre (decision.votes.map em engine-signal-
   // contract.ts) — pareável por índice abaixo, zero parsing de `id`.
-  const engineSignals = deriveEngineSignalsFromCouncil(council);
+  const engineSignals = useMemo(() => deriveEngineSignalsFromCouncil(council), [council]);
   // Carta Branca (Evidence Fusion Engine): 2ª fonte real e independente
   // (zero voto de agente envolvido) — mesma fatia da store que o gráfico
   // já publica (institutionalZones), zero segundo cálculo. fuseEvidence
   // NUNCA produz direção/score — só estatística real de cobertura/volume
   // (ver cabeçalho de nexus/evidence-fusion.ts).
   const institutionalZones = useInstitutionalZonesSnapshot();
-  const institutionalSignals = deriveEngineSignalsFromInstitutionalZones(institutionalZones);
+  const institutionalSignals = useMemo(
+    () => deriveEngineSignalsFromInstitutionalZones(institutionalZones),
+    [institutionalZones],
+  );
   // Ordem Consolidação Final (Prioridade 3, "medir relevância"): mesma
   // fatia real que o painel de camadas já usa (useLayerRelevanceSnapshot,
   // linha ~3782) — zero segundo cálculo. Zonas Institucionais mapeia 1:1
   // para a camada real "institutional_zones"; Conselho não é uma camada de
   // gráfico togglable, então recebe null honesto (não um valor fabricado).
   const layerRelevance = useLayerRelevanceSnapshot();
-  const evidenceFusion = fuseEvidence([
-    { source: "Conselho", signals: engineSignals, relevance: null },
-    {
-      source: "Zonas Institucionais",
-      signals: institutionalSignals,
-      relevance: layerRelevance?.institutional_zones ?? null,
-    },
-  ] satisfies EvidenceFusionSourceGroup[]);
+  // Ordem Fechamento (§3, "Evidence Fusion... barramento inteligente do
+  // ecossistema"): useMemo (não só o cálculo puro) porque o resultado
+  // agora também é PUBLICADO na store logo abaixo — sem isto, uma nova
+  // referência a cada render de CouncilWidget dispararia setEvidenceFusion
+  // (e o produce/freeze do Immer) em todo tick, mesmo quando council/
+  // institutionalZones/layerRelevance não mudaram de verdade.
+  const evidenceFusion = useMemo(
+    () =>
+      fuseEvidence([
+        { source: "Conselho", signals: engineSignals, relevance: null },
+        {
+          source: "Zonas Institucionais",
+          signals: institutionalSignals,
+          relevance: layerRelevance?.institutional_zones ?? null,
+        },
+      ] satisfies EvidenceFusionSourceGroup[]),
+    [engineSignals, institutionalSignals, layerRelevance],
+  );
+  // Publica a MESMA leitura já computada acima (zero segundo cálculo) na
+  // store, mesmo padrão de institutionalZones/layerRelevance — agora
+  // qualquer consumidor futuro (self-diagnostics.ts é o primeiro) lê via
+  // useEvidenceFusionSnapshot()/getSnapshotForEngine() em vez de recomputar.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setEvidenceFusion(evidenceFusion);
+  }, [evidenceFusion]);
   const cpi = useCpiSnapshot();
   // Achado de auditoria: reward/pain/eventCount reais já são alimentados
   // por 8 call sites reais de recordAffectiveEvent (App.tsx) mas só o
@@ -8716,6 +8736,14 @@ function TelemetryHealthWidget() {
             // runner.ts se descreve), nunca um motor, então lê sob demanda
             // em vez de assinar.
             const engineView = getSnapshotForEngine();
+            // Ordem Fechamento (§3): MESMA fórmula já usada pelo painel
+            // "EVIDENCE FUSION" do CouncilWidget (N campos com pelo menos 1
+            // montador real / 10) — zero segunda medição, só lida daqui via
+            // a visão versionada em vez de recomputar fuseEvidence.
+            const evidenceFusion = engineView.snapshot.evidenceFusion;
+            const evidenceFusionFieldCoverage = evidenceFusion
+              ? Object.values(evidenceFusion.fieldCoverage).filter((v) => v > 0).length / 10
+              : null;
             setDiagnosticReport(
               buildDiagnosticReport({
                 offline,
@@ -8726,6 +8754,7 @@ function TelemetryHealthWidget() {
                 dataQualityClassification: quality?.classification ?? null,
                 connections,
                 stageTrace: traceStages(engineView.snapshot, engineView.seq),
+                evidenceFusionFieldCoverage,
               }),
             );
           }}

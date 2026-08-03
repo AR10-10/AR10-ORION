@@ -41,6 +41,14 @@ export interface DiagnosticInput {
   // fabricado por este módulo; a mesma disciplina fail-closed do resto do
   // arquivo).
   stageTrace: StageTrace | null;
+  // Ordem Fechamento (§3, "Evidence Fusion... barramento inteligente"):
+  // fração real (0..1) dos 10 campos do contrato de evidência (EngineSignal,
+  // engine-signal-contract.ts) hoje instrumentados por pelo menos 1 motor
+  // real — o MESMO número já mostrado no painel "EVIDENCE FUSION" do
+  // CouncilWidget (fieldCoverage), lido daqui via a store (evidenceFusion),
+  // nunca uma 2ª medição. null honesto quando nenhuma leitura real do
+  // Evidence Fusion Engine foi publicada ainda nesta sessão.
+  evidenceFusionFieldCoverage: number | null;
 }
 
 export interface DiagnosticReport {
@@ -140,6 +148,18 @@ export function buildDiagnosticReport(input: DiagnosticInput): DiagnosticReport 
     input.health.workersAlive === 0
       ? { severity: 'CRITICAL', label: 'Worker WASM', detail: 'Nenhum Worker do Quant Engine vivo — cálculo pesado não tem onde rodar.' }
       : { severity: 'OK', label: 'Worker WASM', detail: `${input.health.workersAlive} worker(s) real(is) vivo(s).` },
+  );
+
+  // Ordem Fechamento (§3): mesma disciplina de "Memória (heap JS)" acima —
+  // este repositório não tem uma calibração real de "cobertura mínima
+  // aceitável" do contrato de evidência, então a severidade nunca passa de
+  // OK (nunca fabricar um corte sem medição real, layer-relevance.ts já
+  // documenta o mesmo princípio). O valor é reportado honestamente; o
+  // julgamento de "é pouco" fica para quando novos montadores existirem.
+  findings.push(
+    input.evidenceFusionFieldCoverage === null
+      ? { severity: 'OK', label: 'Evidence Fusion · cobertura do contrato', detail: 'Ainda sem leitura real publicada nesta sessão (aguardando o primeiro cálculo do CouncilWidget).' }
+      : { severity: 'OK', label: 'Evidence Fusion · cobertura do contrato', detail: `${Math.round(input.evidenceFusionFieldCoverage * 100)}% dos 10 campos do contrato de evidência instrumentados por pelo menos 1 motor real hoje.` },
   );
 
   // ORDEM Nº 01 (Autogovernança): a VISÃO ENCADEADA real do pipeline

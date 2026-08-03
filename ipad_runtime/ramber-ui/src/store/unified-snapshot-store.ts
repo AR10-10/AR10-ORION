@@ -57,6 +57,7 @@ import type { TrianglePatternHit } from "../nexus/triangle-pattern";
 import type { HeadShouldersHit } from "../nexus/head-shoulders-pattern";
 import type { InstitutionalZone } from "../nexus/institutional-zones";
 import type { LayerRelevanceReading } from "../nexus/layer-relevance";
+import type { EvidenceFusionReading } from "../nexus/evidence-fusion";
 import type { ConfluenceCorridorReading } from "../nexus/confluence-corridor";
 import type { RadarQualificationResult } from "../nexus/radar-qualification";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
@@ -233,6 +234,15 @@ export interface UnifiedSnapshotState {
   // outro consumidor (o painel de camadas precisa da mesma leitura, sem
   // recomputar). null = ainda sem nenhum ciclo real processado.
   layerRelevance: LayerRelevanceReading | null;
+  // Ordem Fechamento (§3, "Evidence Fusion... barramento inteligente do
+  // ecossistema"): mesmo achado de auditoria de institutionalZones acima —
+  // fuseEvidence() já era computado a cada render dentro de CouncilWidget,
+  // mas SEM fatia própria, nenhum outro consumidor conseguia ler a mesma
+  // leitura. Publicado pelo próprio CouncilWidget (zero segundo cálculo)
+  // para que qualquer consumidor futuro (ex.: self-diagnostics.ts) leia a
+  // MESMA leitura via getSnapshotForEngine(), nunca recompute. null = ainda
+  // sem nenhum ciclo real do CouncilWidget processado nesta sessão.
+  evidenceFusion: EvidenceFusionReading | null;
   // OMEGA CORE V-MAX (Fase 1.1, "matar a segunda verdade") — Fair Value
   // Gaps/Order Blocks/liquidez (fvg-order-block-engine.js via
   // engine-bridge.ts's computeSmcZones) e o Order Flow ao vivo (CVD +
@@ -394,6 +404,7 @@ interface UnifiedSnapshotActions {
   setHeadShouldersPattern: (hit: HeadShouldersHit | null) => void;
   setInstitutionalZones: (zones: InstitutionalZone[]) => void;
   setLayerRelevance: (reading: LayerRelevanceReading | null) => void;
+  setEvidenceFusion: (reading: EvidenceFusionReading | null) => void;
   setSmc: (zones: SmcZonesSnapshot | null) => void;
   setCvd: (cvd: number | null) => void;
   setOrderflowSignals: (signals: OrderflowSignal[]) => void;
@@ -468,6 +479,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     headShouldersPattern: null,
     institutionalZones: [],
     layerRelevance: null,
+    evidenceFusion: null,
     smc: null,
     cvd: null,
     orderflowSignals: [],
@@ -529,6 +541,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setHeadShouldersPattern: (hit) => set((s) => { s.headShouldersPattern = hit; }),
     setInstitutionalZones: (zones) => set((s) => { s.institutionalZones = zones; }),
     setLayerRelevance: (reading) => set((s) => { s.layerRelevance = reading; }),
+    setEvidenceFusion: (reading) => set((s) => { s.evidenceFusion = reading; }),
     setSmc: (zones) => set((s) => { s.smc = zones; }),
     setCvd: (cvd) => set((s) => { s.cvd = cvd; }),
     setOrderflowSignals: (signals) => set((s) => { s.orderflowSignals = signals; }),
@@ -641,6 +654,8 @@ export const useInstitutionalZonesSnapshot = (): InstitutionalZone[] =>
   useUnifiedSnapshotStore((s) => s.institutionalZones ?? EMPTY_INSTITUTIONAL_ZONES);
 export const useLayerRelevanceSnapshot = (): LayerRelevanceReading | null =>
   useUnifiedSnapshotStore((s) => s.layerRelevance);
+export const useEvidenceFusionSnapshot = (): EvidenceFusionReading | null =>
+  useUnifiedSnapshotStore((s) => s.evidenceFusion);
 export const useSmcSnapshot = (): SmcZonesSnapshot | null =>
   useUnifiedSnapshotStore((s) => s.smc);
 export const useCvdSnapshot = (): number | null =>

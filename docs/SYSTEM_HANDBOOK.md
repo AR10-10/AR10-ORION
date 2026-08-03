@@ -6206,6 +6206,79 @@ real), `weightConsensus` corretamente `null` com 1 único peso disponível
 ("sem amostra real (menos de 2 pesos)", nunca fabricado), zero erro de
 console novo, zero regressão de layout.
 
+### 6.83 "Ordem Oficial: Fechamento da Arquitetura" (última fase de
+consolidação) — relatório completo em
+`docs/RELATORIO_FECHAMENTO_ARQUITETURA.md`
+
+Diretriz formal encerrando a fase de expansão do sistema. Diretriz
+Principal: não criar novos motores/contratos/camadas/módulos — só fazê-los
+trabalhar como um único ecossistema. Consequência aplicada à própria
+classificação pedida (IMPLEMENTAR AGORA / MANTER ISOLADO COM
+JUSTIFICATIVA TÉCNICA DEFINITIVA / DESCARTAR): IMPLEMENTAR AGORA só é
+válido para wiring/integração de código já existente, nunca construção
+nova.
+
+**§1 (pendências recorrentes)**: auditoria dos próprios relatórios das
+últimas ~8 rodadas + reconfirmação de cada status por leitura direta do
+código. 12 itens classificados com tabela completa no relatório. Achado
+que fecha uma pendência sem escrever código: a alegação "3 fades de
+plugins pendentes" (desde a Entrega 16) estava desatualizada —
+`SessionKeyLevelsPlugin`/`OrderFlowHeatmapPlugin` já têm decaimento real
+por render (`sessionGenerationWeight`/`computeRecencyWeight`),
+`LiquidationHeatmapPlugin` já decai por MAGNITUDE dentro do próprio motor
+(`ageAlpha(ageMinutes, LIQUIDATION_DECAY)` em
+`computeLiquidationHeatmap`, bucket de eventos velhos soma
+efetivamente zero) — retirado do backlog, não implementado.
+`cross-exchange-service.ts` e o backlog V-MAX (Liquidity Voids/Volume
+Clusters/Cross-TF/Footprint/Auto Layout) reconfirmados MANTER ISOLADO
+com justificativa definitiva (o 2º pela própria Diretriz Principal desta
+Ordem). `visual-budget.ts` TARGET/INVALIDATION/RADAR e o pacote
+`01_SYSTEM_ARCHITECTURE...11_FINAL_STATUS` classificados DESCARTAR, com
+motivo real cada um (não fonte de peso individual sem fabricar;
+estruturalmente incompatível com o modelo; 15+ rodadas sem necessidade
+real, já coberto por `SYSTEM_HANDBOOK.md`/`RELATORIO_*.md`).
+
+**§2 (Consolidação Definitiva)**: reconfirmado — consumidor real
+(mesma auditoria de 2 técnicas do §1), função clara + documentação
+(convenção estrutural já em vigor), integração completa (garantida
+estruturalmente por `noUnusedLocals`/`noUnusedParameters` permanentes +
+`tsc` limpo). Único gap real encontrado: `evidenceFusion` computado mas
+nunca publicado — fechado no próprio §3 desta rodada.
+
+**§3 (Evidence Fusion vira barramento)**: `evidenceFusion` ganhou os 4
+lugares reais na store (`unified-snapshot-store.ts`, mesmo padrão de
+`institutionalZones`/`layerRelevance`) — `CouncilWidget` publica a MESMA
+leitura já computada (zero segundo cálculo), agora com `useMemo` real
+(sem isto, `setEvidenceFusion` dispararia em todo render, não só em
+mudança real). Primeiro consumidor novo: `self-diagnostics.ts` ganha
+`evidenceFusionFieldCoverage` (mesma fórmula do painel "EVIDENCE FUSION")
+e um achado novo "Evidence Fusion · cobertura do contrato", severidade
+sempre OK (mesmo princípio de "Memória (heap JS)": sem limiar calibrado,
+nunca fabricar um corte). `consensus-radar.ts` avaliado e rejeitado como
+3ª fonte: 4 de suas 6 categorias são as MESMAS confidences dos votos do
+Conselho re-fatiadas — somar contaria a mesma evidência 2x, mesma razão
+que já excluiu Scenario Engine na Carta Branca.
+
+**§4 (Experiência do Operador)**: revisão linha a linha do painel CORE
+INTELLIGENCE — "SINCRONIZAÇÃO · IDADE DAS FONTES" mantido (defesa real
+contra confiar em dado velho, não ruído); as 3 linhas de confluência de
+"VALIDAÇÃO MULTI-CAMADA" medem 3 coisas genuinamente diferentes, fundir
+perderia sinal real; disclaimer financeiro aparece 1 única vez; painéis
+sempre-visíveis já são uma categoria arquitetural deliberada
+("ALWAYS-docked"). Resultado honesto: nenhuma redução nova — depois de
+10+ rodadas dedicadas de UX já reais, forçar um corte sem achado
+concreto seria a mesma fabricação de trabalho já evitada na auditoria de
+ícones da Carta Branca.
+
+**Testes**: `tsc --noEmit` limpo · **135 arquivos / 2291 testes** (100%,
++11 novos: 4 store-wiring de `evidenceFusion` + 2 self-diagnostics + 5
+assertions de padrão pré-existentes ajustadas à nova forma real,
+nenhuma garantia enfraquecida) · `npm run build` ok (1850 módulos, 889,78
+kB) · Playwright real contra o dev server: clique real em "GERAR
+RELATÓRIO DE AUTODIAGNÓSTICO" produziu `[OK] Evidence Fusion · cobertura
+do contrato — 50%...` — o mesmo número real do painel, agora também no
+relatório; zero erro de console novo, zero regressão de layout.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)

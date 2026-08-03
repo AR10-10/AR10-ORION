@@ -24,6 +24,9 @@ function baseInput(overrides: Partial<DiagnosticInput> = {}): DiagnosticInput {
     // null honesto por padrão nesta suíte (a maioria dos casos aqui não
     // testa o pipeline causal) — ver describe dedicado abaixo.
     stageTrace: null,
+    // null honesto por padrão (a maioria dos casos aqui não testa Evidence
+    // Fusion) — ver describe dedicado abaixo.
+    evidenceFusionFieldCoverage: null,
     ...overrides,
   };
 }
@@ -188,6 +191,32 @@ describe('buildDiagnosticReport: "Pipeline causal" (ORDEM Nº 01) — traceStage
     const finding = report.findings.find((f) => f.label === 'Pipeline causal');
     expect(finding?.detail).toContain('Alcançou até nenhum estágio');
     expect(finding?.detail).not.toContain('-1');
+  });
+});
+
+// Ordem Fechamento (§3, "Evidence Fusion... barramento inteligente"):
+// primeiro consumidor real de evidenceFusion via a store — mesma
+// disciplina de "Pipeline causal" acima (nunca uma 2ª medição, achado
+// sempre OK porque este repositório não tem limiar calibrado, mesmo
+// princípio de "Memória (heap JS)" acima).
+describe('buildDiagnosticReport: "Evidence Fusion · cobertura do contrato" (Ordem Fechamento §3)', () => {
+  it('evidenceFusionFieldCoverage null (nenhuma leitura publicada ainda) => OK honesto, texto explica a ausência', () => {
+    const report = buildDiagnosticReport(baseInput({ evidenceFusionFieldCoverage: null }));
+    const finding = report.findings.find((f) => f.label === 'Evidence Fusion · cobertura do contrato');
+    expect(finding?.severity).toBe('OK');
+    expect(finding?.detail).toContain('Ainda sem leitura real publicada');
+  });
+
+  it('evidenceFusionFieldCoverage real (0.5 = 5/10 campos) => OK, número real formatado como porcentagem, nunca WARN/CRITICAL sem limiar calibrado', () => {
+    const report = buildDiagnosticReport(baseInput({ evidenceFusionFieldCoverage: 0.5 }));
+    const finding = report.findings.find((f) => f.label === 'Evidence Fusion · cobertura do contrato');
+    expect(finding?.severity).toBe('OK');
+    expect(finding?.detail).toContain('50%');
+  });
+
+  it('evidenceFusionFieldCoverage nunca eleva overallSeverity (sempre OK, mesmo cobertura baixa) — mesmo princípio de "Memória (heap JS)"', () => {
+    const report = buildDiagnosticReport(baseInput({ evidenceFusionFieldCoverage: 0.1 }));
+    expect(report.overallSeverity).toBe('OK');
   });
 });
 

@@ -31,7 +31,7 @@ describe('App.tsx: deriveEngineSignalsFromCouncil real, importado e consumido de
   it('CouncilWidget deriva engineSignals a partir do MESMO council da store — reempacota, nunca recalcula', () => {
     const widgetSrc = councilWidgetSource(read('../src/App.tsx'));
     expect(widgetSrc).toContain('const council = useCouncilSnapshot();');
-    expect(widgetSrc).toContain('const engineSignals = deriveEngineSignalsFromCouncil(council);');
+    expect(widgetSrc).toContain('const engineSignals = useMemo(() => deriveEngineSignalsFromCouncil(council), [council]);');
   });
 
   it('LEI 24: CouncilWidget nunca chama aggregateCouncil/buildCouncilDecision — só reformata (mesmo padrão de formatScenarioPathLabel, já usado logo abaixo no mesmo componente)', () => {
@@ -84,7 +84,7 @@ describe('App.tsx: Evidence Fusion Engine real — primeiro consumidor vivo de e
 
   it('as 2 fontes reais e independentes alimentam fuseEvidence — Conselho E Zonas Institucionais, nunca Scenario (redundante com o Conselho, documentado no cabeçalho de evidence-fusion.ts)', () => {
     const widgetSrc = councilWidgetSource(read('../src/App.tsx'));
-    expect(widgetSrc).toContain('const institutionalSignals = deriveEngineSignalsFromInstitutionalZones(institutionalZones);');
+    expect(widgetSrc).toContain('() => deriveEngineSignalsFromInstitutionalZones(institutionalZones),');
     expect(widgetSrc).toContain('{ source: "Conselho", signals: engineSignals, relevance: null }');
     expect(widgetSrc).toContain('source: "Zonas Institucionais",');
     expect(widgetSrc).toContain('signals: institutionalSignals,');
