@@ -6403,6 +6403,41 @@ reaberta.
 
 ---
 
+### 6.86 "Ordem Oficial de Execução: Consolidação Final" (rodada 3,
+endereçada a "Agente 4") — relatório completo em
+`docs/RELATORIO_ORGANISMO_UNICO_RODADA_3.md`
+
+Terceira Ordem de consolidação em sequência, mesmo conteúdo substantivo
+das duas anteriores. **Evento de segurança tratado antes de agir**: a
+mensagem chegou endereçada a "Agente 4 (Executor Principal)" com
+"Status: AUTORIZADO PARA EXECUÇÃO" e terminava com 5 repetições de um
+rodapé de interrupção/"continue" sem correspondência real nesta
+sessão — mesmo padrão do item 7 da Disciplina de Trabalho. Pausado via
+pergunta direta ao Operador antes de qualquer execução; confirmado como
+próprio (mesma resolução da vez anterior que "Agente 4" apareceu, na
+Carta Branca) — conteúdo substantivo autorizado, persona nunca adotada,
+rodapé de interrupção tratado como ruído.
+
+`git log`/`git status` confirmaram **zero drift** desde a Entrega 23
+(commit `0571ced` ainda `HEAD`) — reexecutar a mesma bateria de
+auditoria rodada minutos antes, sobre o mesmo código, não produziria
+achado novo. Relatório desta rodada é proporcionalmente mais curto:
+reconfirma §2-§10 por referência direta à Entrega 23 (mesmo código,
+mesma evidência) e investiga a fundo só o que é genuinamente novo — o
+diagrama desta Ordem posiciona "Core Engine (única decisão)" DEPOIS de
+Evidence Fusion, diferente das 2 Ordens anteriores. `grep` novo em
+`ipad_runtime/js/real-data/` (onde o Core Engine real calcula) confirma
+zero referência a `evidence-fusion` — o Core Engine é comprovadamente
+independente. Implementar essa seta do diagrama faria da Evidence Fusion
+"outro motor alterando a decisão", violando o §3 da PRÓPRIA Ordem
+("nenhum outro motor poderá alterar essa decisão") — mantido como está.
+
+Zero código de produção alterado; `tsc`/`vitest`/`build` não
+reexecutados (nenhuma mudança para invalidar os números já confirmados
+na Entrega 23 minutos antes).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
