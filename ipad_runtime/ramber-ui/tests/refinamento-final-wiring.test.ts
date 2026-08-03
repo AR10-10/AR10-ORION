@@ -768,19 +768,23 @@ describe('ADENDO "Refinamento das Sessões e Limpeza Visual": Market Sessions tr
 
   it('consome computeSessionKeyLevels (segmentos reais), nunca uma 3ª derivação paralela de sessão', () => {
     const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
-    expect(plugin).toContain('import { computeSessionKeyLevels, marketSessionFromUtc, sessionGenerationWeight, SESSION_GENERATION_FADE, type SessionKeyLevel } from "../nexus/market-session";');
+    // Lapidação por feedback (faixa 14px/1 linha): marketSessionFromUtc
+    // saiu do import — a janela UTC era duplicação literal do header.
+    expect(plugin).toContain('import { computeSessionKeyLevels, sessionGenerationWeight, SESSION_GENERATION_FADE, type SessionKeyLevel } from "../nexus/market-session";');
     expect(plugin).toContain('levels = computeSessionKeyLevels(dataRef.current);');
   });
 
   it('redesenho #2 ("chegar mais próximo" da imagem de referência): faixa no TOPO (y=0), não mais rente à base — nunca altura total como Kill Zones (papel real é oposto: sessão é partição contínua, sempre presente — teria que ser fina; Kill Zone é ocasional — pode ser alta)', () => {
     const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
-    expect(plugin).toContain('const BAND_HEIGHT_PX = 24;');
+    // Lapidação por feedback direto do Operador ("está atrapalhando o
+    // visual"): faixa afinada 24px→14px, 1 linha só.
+    expect(plugin).toContain('const BAND_HEIGHT_PX = 14;');
     expect(plugin).toContain('ctx.fillRect(clippedX, 0, clippedWidth, BAND_HEIGHT_PX);');
     expect(plugin).not.toContain('cssHeight - BAND_HEIGHT_PX');
     expect(plugin).not.toContain('STRIP_HEIGHT_PX');
   });
 
-  it('sessão corrente (closed:false) recebe alpha mais alto e estende até a borda direita; TODA sessão visível tenta rótulo (nome + janela UTC real), não só a corrente — mas só desenha texto com largura real suficiente', () => {
+  it('sessão corrente (closed:false) recebe alpha mais alto e estende até a borda direita; TODA sessão visível tenta rótulo (nome — a janela UTC saiu como duplicação do header), não só a corrente — mas só desenha texto com largura real suficiente', () => {
     const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
     expect(plugin).toContain('const BAND_COLOR_CLOSED = "rgba(148, 163, 184, 0.16)";');
     expect(plugin).toContain('const BAND_COLOR_OPEN = "rgba(148, 163, 184, 0.42)";');
@@ -790,16 +794,12 @@ describe('ADENDO "Refinamento das Sessões e Limpeza Visual": Market Sessions tr
     // por LARGURA do segmento, nunca por índice/posição na lista.
     expect(plugin).not.toContain('i === lastIndex');
     expect(plugin).toContain('if (clippedWidth >= MIN_LABEL_WIDTH_PX) {');
-    expect(plugin).toContain('if (clippedWidth >= MIN_SUBLABEL_WIDTH_PX) {');
   });
 
-  it('janela UTC do rótulo (2ª linha) vem de marketSessionFromUtc — mesmo dado real do header, zero segunda fonte fabricada', () => {
+  it('Lapidação por feedback: a 2ª linha (janela UTC) foi removida como DUPLICAÇÃO do header — o plugin nunca mais chama marketSessionFromUtc (o dado continua no header, Regra de Ouro 4 intacta)', () => {
     const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
-    const idx = plugin.indexOf('const reading = marketSessionFromUtc(new Date(level.startTime * 1000));');
-    expect(idx, 'chamada real a marketSessionFromUtc não encontrada').toBeGreaterThan(-1);
-    const block = plugin.slice(idx, idx + 600);
-    expect(block).toContain("const windowShort = reading.windowUtc.split(\" (\")[0];");
-    expect(block).toContain('ctx.fillText(windowShort, clippedX + 4, 13);');
+    expect(plugin).not.toContain('marketSessionFromUtc(new Date(');
+    expect(plugin).not.toContain('MIN_SUBLABEL_WIDTH_PX');
   });
 
   it('divisor real entre sessões: 1px sólida (Fio de Seda), só a borda esquerda de cada segmento (partição contígua — desenhar as duas dobraria o traço)', () => {
@@ -1083,5 +1083,28 @@ describe('Header ancorado (colisão da 1ª foto com dados reais): região centra
     const anchorBlock = a.slice(anchorIdx, anchorIdx + 700);
     expect(anchorBlock).toContain('<div className="flex items-center gap-2 md:gap-3 h-full shrink-0">');
     expect(anchorBlock).toContain('<SystemStatusBadge />');
+  });
+});
+
+// Lapidação por feedback direto do Operador ("zoom inteligente que fica
+// bom na tela pra gente não estar puxando o zoom"): enquadre automático
+// das últimas SMART_ZOOM_CANDLES velas na troca de timeframe/símbolo.
+describe('EnhancedChart: zoom inteligente na troca de timeframe/símbolo (flag pendente, nunca em tick)', () => {
+  const chartSrc = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('constantes declaradas e flag armada SÓ por [activeTimeframe, symbol] — pan/zoom manual continua soberano fora da troca', () => {
+    const s = chartSrc();
+    expect(s).toContain('const SMART_ZOOM_CANDLES = 120;');
+    expect(s).toContain('const SMART_ZOOM_RIGHT_PAD_BARS = 6;');
+    expect(s).toContain('const smartZoomPendingRef = useRef(true);');
+    expect(s).toContain('smartZoomPendingRef.current = true;\n  }, [activeTimeframe, symbol]);');
+  });
+
+  it('a flag é consumida no efeito real de setData — o enquadre só acontece DEPOIS que os candles novos chegaram, nunca sobre dado velho', () => {
+    const s = chartSrc();
+    expect(s).toContain('if (smartZoomPendingRef.current && formatted.length > 0 && chartRef.current) {');
+    expect(s).toContain('smartZoomPendingRef.current = false;');
+    expect(s).toContain('from: Math.max(0, formatted.length - SMART_ZOOM_CANDLES),');
+    expect(s).toContain('to: formatted.length - 1 + SMART_ZOOM_RIGHT_PAD_BARS,');
   });
 });

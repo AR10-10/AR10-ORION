@@ -59,6 +59,15 @@ import { ageAlpha, type DecayConfig } from "./annotation-decay";
 // referência de S/R que continua útil por mais tempo que uma anotação
 // de estrutura recém-rompida.
 const SWEEP_DECAY: DecayConfig = { fadeStartCandles: 50, expireCandles: 200, minAlpha: 0.12 };
+
+// Zoom inteligente (ver efeito de setData): quantas velas recentes o
+// enquadre automático mostra na troca de timeframe/símbolo, + folga real à
+// direita para o preço vivo/etiquetas respirarem. Convenção declarada de
+// leitura confortável (~120 velas ≈ 2h de 1m / 5 dias de 1h numa tela),
+// não uma medição — mesmo espírito de todo limiar documentado deste
+// arquivo. O pan/zoom manual do Operador continua soberano fora da troca.
+const SMART_ZOOM_CANDLES = 120;
+const SMART_ZOOM_RIGHT_PAD_BARS = 6;
 import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";
 // V-MAX Fase 1 (superfície visual): Volume Profile real como overlay de
 // barras à direita — dado direto da store (Fase 1.3), ver header do plugin.
@@ -961,6 +970,18 @@ export function EnhancedChart_110_Percent({
   // depois. Para qualquer outro tipo de atualização, prependedCount é 0 e
   // este bloco não faz nada — comportamento idêntico ao de sempre.
   const prevChartDataRef = useRef<EnhancedChartCandle[]>([]);
+  // Zoom inteligente (pedido direto do Operador: "quando a gente mudar por
+  // tempo... um zoom inteligente que fica bom na tela, pra gente não estar
+  // puxando o zoom"): ao trocar timeframe/símbolo, a PRÓXIMA carga real de
+  // candles enquadra as últimas SMART_ZOOM_CANDLES velas automaticamente.
+  // Flag pendente consumida no efeito de setData abaixo — nunca dispara em
+  // tick/vela nova (o pan/zoom manual do Operador continua soberano fora
+  // da troca de contexto), e nunca enquadra dado velho: só depois que os
+  // candles do NOVO timeframe/símbolo realmente chegaram.
+  const smartZoomPendingRef = useRef(true); // true no mount: 1º enquadre real também é automático.
+  useEffect(() => {
+    smartZoomPendingRef.current = true;
+  }, [activeTimeframe, symbol]);
   useEffect(() => {
     if (!seriesRef.current || !data || data.length === 0) return;
     const formatted = data
@@ -975,7 +996,13 @@ export function EnhancedChart_110_Percent({
     const prependedCount = detectPrependCount(prevChartDataRef.current, data);
     const savedRange = prependedCount > 0 ? chartRef.current?.timeScale().getVisibleLogicalRange() ?? null : null;
     seriesRef.current.setData(formatted);
-    if (prependedCount > 0 && savedRange && chartRef.current) {
+    if (smartZoomPendingRef.current && formatted.length > 0 && chartRef.current) {
+      smartZoomPendingRef.current = false;
+      chartRef.current.timeScale().setVisibleLogicalRange({
+        from: Math.max(0, formatted.length - SMART_ZOOM_CANDLES),
+        to: formatted.length - 1 + SMART_ZOOM_RIGHT_PAD_BARS,
+      });
+    } else if (prependedCount > 0 && savedRange && chartRef.current) {
       chartRef.current.timeScale().setVisibleLogicalRange({
         from: savedRange.from + prependedCount,
         to: savedRange.to + prependedCount,

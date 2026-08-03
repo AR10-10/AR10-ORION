@@ -142,7 +142,14 @@ describe('EnhancedChart: correção de latência (patch da vela em formação) i
     // visível num prepend real), mas o array de deps do efeito continua
     // exatamente [data], nunca ganhou livePrice/activeTimeframe.
     expect(s).toContain('seriesRef.current.setData(formatted);');
-    const setDataEffectMatch = s.match(/const prevChartDataRef = useRef[\s\S]*?seriesRef\.current\.setData\(formatted\);[\s\S]*?\n {2}\}, \[data\]\);/);
+    // Zoom inteligente (Lapidação por feedback): existe agora um efeito
+    // PRÓPRIO da flag smartZoomPendingRef entre prevChartDataRef e o
+    // efeito de setData — ele depende de [activeTimeframe, symbol] de
+    // propósito (é a troca de contexto que arma o enquadre). A âncora do
+    // match começa no PRÓPRIO efeito de setData para continuar travando o
+    // que sempre travou: as deps dele são [data], nunca livePrice/
+    // activeTimeframe (a flag é ref — lida, nunca subscrita).
+    const setDataEffectMatch = s.match(/useEffect\(\(\) => \{\n    if \(!seriesRef\.current \|\| !data \|\| data\.length === 0\) return;\n    const formatted[\s\S]*?seriesRef\.current\.setData\(formatted\);[\s\S]*?\n {2}\}, \[data\]\);/);
     expect(setDataEffectMatch, 'efeito de setData(formatted) não encontrado com deps [data]').not.toBeNull();
     expect(setDataEffectMatch![0]).not.toContain('livePrice');
     expect(setDataEffectMatch![0]).not.toContain('activeTimeframe');

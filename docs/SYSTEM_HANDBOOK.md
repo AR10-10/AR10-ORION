@@ -5930,6 +5930,41 @@ regressão estrutural).
 
 ---
 
+### 6.79 Lapidação por feedback direto: faixa de sessões afinada + zoom
+inteligente na troca de timeframe
+
+Feedback verbal do Operador: a "faixinha dos mercados" (Nova Iorque/
+Londres/Ásia) "da forma que está não está bom, está atrapalhando o
+visual"; e ao trocar de timeframe o gráfico deveria ter "um zoom
+inteligente que fica bom na tela pra gente não estar puxando o zoom".
+
+**Faixa de sessões** (`MarketSessionBandsPlugin.tsx`): afinada de
+24px/2 linhas para **14px/1 linha**. A 2ª linha (janela UTC) era
+duplicação literal do header (`marketSessionFromUtc` — mesmo dado, mesma
+função) — removida como redundância, nunca dado real (Regra de Ouro 4:
+a janela continua no header). A relevância adaptativa já real
+(`recentSessionBoundary` em layer-relevance.ts) continua decidindo
+quando a faixa sequer aparece no estado automático.
+
+**Zoom inteligente** (`EnhancedChart_110_Percent.tsx`): primeira fatia
+real do "Adaptive Zoom" do backlog V-MAX — flag `smartZoomPendingRef`
+armada SÓ por troca de `[activeTimeframe, symbol]` (e no mount),
+consumida no efeito real de `setData`: enquadra as últimas
+`SMART_ZOOM_CANDLES` (120) velas + `SMART_ZOOM_RIGHT_PAD_BARS` (6) de
+folga à direita, SOMENTE depois que os candles do novo contexto
+chegaram — nunca sobre dado velho, nunca em tick (o pan/zoom manual do
+Operador continua soberano fora da troca). Convive com a preservação de
+faixa do prepend (paginação histórica): o enquadre pendente tem
+precedência só na troca de contexto.
+
+**Testes executados**: `tsc --noEmit` limpo · **130 arquivos / 2218
+testes** (100% — 2 novos de zoom inteligente, 5 asserções da faixa
+atualizadas para a forma real, 1 regex re-ancorado no efeito certo de
+setData preservando a trava original) · `npm run build` ok (1847
+módulos, 879,38 kB).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

@@ -27,7 +27,7 @@
 // - Rótulo: TODA sessão visível ganha nome + janela UTC real (via
 //   marketSessionFromUtc, mesmo dado já usado no header — zero segunda
 //   fonte), não só a corrente — mas o texto só desenha se a largura real
-//   do segmento comportar (MIN_LABEL_WIDTH_PX/MIN_SUBLABEL_WIDTH_PX),
+//   do segmento comportar (MIN_LABEL_WIDTH_PX),
 //   nunca espremido ilegível.
 // - Cor: A referência usa tons distintos por sessão; decisão consciente
 //   de NÃO copiar isso — a auditoria de paleta desta mesma sessão
@@ -71,23 +71,26 @@
 // faixas na mesma opacidade.
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
-import { computeSessionKeyLevels, marketSessionFromUtc, sessionGenerationWeight, SESSION_GENERATION_FADE, type SessionKeyLevel } from "../nexus/market-session";
+import { computeSessionKeyLevels, sessionGenerationWeight, SESSION_GENERATION_FADE, type SessionKeyLevel } from "../nexus/market-session";
 
 // Discreto de propósito — contexto de fundo, nunca compete visualmente com
 // estrutura (BOS/CHOCH), liquidez (EQH/EQL) ou o Trade Plan. Mesmo tom
 // slate-gray já "dono" desta camada — INTENSIDADE (alpha) distingue a
 // sessão corrente das já fechadas E decai por geração (ver header do
 // arquivo), zero matiz novo.
-const BAND_HEIGHT_PX = 24; // topo do painel — cabe nome + janela UTC em 2 linhas.
+// Lapidação por feedback direto do Operador ("a faixinha dos mercados...
+// da forma que está não está bom, está atrapalhando o visual"): a faixa
+// afinou de 24px/2 linhas para 14px/1 linha. A 2ª linha (janela UTC) era
+// DUPLICAÇÃO literal do header (marketSessionFromUtc — mesmo dado, mesma
+// função), então removê-la daqui é remover redundância, nunca dado real
+// (Regra de Ouro 4: a janela continua visível no header de sempre).
+const BAND_HEIGHT_PX = 14; // topo do painel — nome da sessão em 1 linha.
 const BAND_COLOR_CLOSED = "rgba(148, 163, 184, 0.16)";
 const BAND_COLOR_OPEN = "rgba(148, 163, 184, 0.42)";
 const BORDER_COLOR = "rgba(148, 163, 184, 0.30)";
 const LABEL_COLOR_CLOSED = "rgba(203, 213, 225, 0.55)";
 const LABEL_COLOR_OPEN = "rgba(226, 232, 240, 0.95)";
-const SUBLABEL_COLOR_CLOSED = "rgba(148, 163, 184, 0.40)";
-const SUBLABEL_COLOR_OPEN = "rgba(148, 163, 184, 0.80)";
 const MIN_LABEL_WIDTH_PX = 44; // abaixo disto, nome não cabe — a faixa ainda desenha, só o texto pula.
-const MIN_SUBLABEL_WIDTH_PX = 76; // janela UTC (2ª linha) só cabe com mais espaço que o nome sozinho.
 
 interface MarketSessionBandsPluginProps {
   chart: IChartApi | null;
@@ -205,19 +208,10 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
           ctx.font = "9px -apple-system, sans-serif";
           ctx.textBaseline = "top";
           ctx.fillStyle = isOpen ? LABEL_COLOR_OPEN : LABEL_COLOR_CLOSED;
+          // 1 linha só (ver comentário de BAND_HEIGHT_PX): a janela UTC que
+          // vivia aqui como 2ª linha era o MESMO marketSessionFromUtc do
+          // header — removida como duplicação, o dado continua no header.
           ctx.fillText(level.label.toUpperCase(), clippedX + 4, 3);
-
-          // Janela UTC real (2ª linha) — mesmo dado do header (marketSessionFromUtc),
-          // zero segunda fonte/duplicação. Só desenha com espaço real de sobra.
-          if (clippedWidth >= MIN_SUBLABEL_WIDTH_PX) {
-            const reading = marketSessionFromUtc(new Date(level.startTime * 1000));
-            if (reading) {
-              const windowShort = reading.windowUtc.split(" (")[0]; // remove o parêntese de DST — cabe em 1 linha curta.
-              ctx.font = "8px -apple-system, sans-serif";
-              ctx.fillStyle = isOpen ? SUBLABEL_COLOR_OPEN : SUBLABEL_COLOR_CLOSED;
-              ctx.fillText(windowShort, clippedX + 4, 13);
-            }
-          }
         }
         ctx.globalAlpha = 1;
       }
