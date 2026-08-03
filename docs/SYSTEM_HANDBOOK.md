@@ -6569,6 +6569,74 @@ delas).
 
 ---
 
+### 6.89 "Ordem Oficial: Etapa de Lapidação Matemática e Visual" —
+relatório completo em `docs/RELATORIO_LAPIDACAO_MATEMATICA.md`
+
+Ordem legítima (sem endereçamento a persona fictícia) fechando
+explicitamente a fase de criação de motores novos: só upgrades de
+precisão em cima do que já existe, gate duplo (justificativa matemática
+real + evidência de que ficou mais preciso, não só mais complexo).
+
+**Auditoria dos engines nomeados contra a definição de referência**:
+ADX/DI de Wilder (`regime-engine.js`), RSI/ROC/ATR de Wilder
+(`lorentzian-classifier.js`), MACD (`macd.ts`), VWAP + bandas de
+desvio-padrão ponderado por volume (`vwap.ts`/`vwap-bands.ts`), linear
+opinion pool de Stone/DeGroot (`council.ts`), pivots/Fibonacci
+(`support-resistance-engine.js`) — todos conferidos e confirmados
+corretos contra a literatura. Nenhuma "modernização" cosmética aplicada
+a nenhum deles.
+
+**O único gap real, pesquisado antes de implementar**: o classificador
+k-NN Lorentziano já citava a técnica de referência (jdehorty, "ML:
+Lorentzian Classification") só para a métrica de distância. `WebSearch` +
+`WebFetch` confirmaram que a técnica original tem uma segunda
+característica não portada — espaçamento cronológico mínimo de 4 barras
+entre vizinhos candidatos, documentado pelo próprio autor como necessário
+para "prevenir viés de agrupamento temporal no treino." Motivo real:
+RSI/ROC/ATR% são recorrências sobre janela móvel — sem espaçamento, os
+k=8 vizinhos mais próximos tendem a vir todos da mesma janela contígua
+recente (1 tendência contada 8 vezes, não 8 analogias independentes),
+inflando a confiança reportada sem ganho real de evidência.
+
+**O que foi portado e o que não foi**: só a ideia com justificativa
+estatística real (o espaçamento) — não o mecanismo de seleção por
+streaming do Pine original (`lastDistance` crescente + FIFO), que é uma
+aproximação motivada pelo orçamento de execução por-barra do TradingView,
+não uma técnica superior ao top-k por ordenação completa que este motor
+já faz em JS. Portar aquele mecanismo teria sido só complexidade sem
+ganho.
+
+**Implementação**: nova constante `CHRONOLOGICAL_SPACING = 4`, filtro de
+uma linha no laço que constrói o `trainingSet` (`i % 4 === 0`), ancorado
+no índice ABSOLUTO do candle — nunca relativo ao candle atual, para
+preservar a invariante já testada de que anexar 1 candle novo nunca pode
+crescer `sample_size` em mais de 1. Qualquer par de múltiplos de 4 difere
+em ≥4 por construção, então o pool já sai mutuamente espaçado sem
+reimplementar a aproximação do original. Tradeoff documentado com
+honestidade em `metadata.limitations`: pool de treino efetivo caiu de
+~60-80 para ~15-20 pontos — mais rigor estatístico, mais casos honestos
+de `DADOS_INSUFICIENTES` em janelas pequenas.
+
+**Interface**: nenhuma mudança necessária — `App.tsx` já exibe "k-NN
+LORENTZ. {classificação} · {confiança}% (n={sample_size})" sem nunca usar
+a palavra "probabilidade" e sempre mostrando o `n` real; um `n` menor e
+mais honesto flui pelo mesmo caminho.
+
+**Visual (DIRETRIZ 5-7)**: Entregas 25/26 (mesma sessão, horas antes) já
+auditaram hierarquia/ruído/cores/camadas com evidência fresca —
+referenciadas, não reauditadas. Verificação direta feita: o rótulo
+"k-NN LORENTZ." (única superfície de UI que este achado toca) confirmado
+fail-closed e livre de linguagem de probabilidade.
+
+**Testes**: `tsc` limpo · **136 arquivos / 2311 testes (100%, +3 novos)**
+— valor da constante, contagem exata do pool espaçado (prova que o
+filtro está ativo, não é comentário morto), propriedade de espaçamento
+mútuo · build 1850 módulos / 893,78 kB (+0,01 kB, consistente com poucas
+linhas em um único módulo) · `git diff --stat` confirma só os 2 arquivos
+pretendidos tocados.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
