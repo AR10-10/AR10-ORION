@@ -6279,6 +6279,73 @@ RELATÓRIO DE AUTODIAGNÓSTICO" produziu `[OK] Evidence Fusion · cobertura
 do contrato — 50%...` — o mesmo número real do painel, agora também no
 relatório; zero erro de console novo, zero regressão de layout.
 
+### 6.84 "Ordem Final: Validação Integral do Ecossistema AR10 Cyborg"
+(homologação, zero código novo) — relatório completo em
+`docs/RELATORIO_HOMOLOGACAO_FINAL_ORGANISMO.md`
+
+Ordem de homologação pura: comprovar com evidência real que o
+ecossistema funciona como um único organismo — sem criar/alterar nada.
+5 etapas.
+
+**Etapa 1 (auditoria)**: 2 técnicas de importador real (60/61 módulos
+com consumidor real; único isolado, `cross-exchange-service.ts`, já
+justificado 5+ rodadas) + auditoria de 40 seletores da store (39/40 com
+consumidor real; `useUnifiedSnapshot` reconfirmado falso-positivo de
+regex). **Achado investigado e resolvido**: `useEvidenceFusionSnapshot`
+tem zero chamadas como hook React — mas o VALOR tem 2 consumidores reais
+(`CouncilWidget` via `useMemo`, `self-diagnostics.ts` via
+`getSnapshotForEngine()`, a única forma válida dentro de um `onClick`,
+já que Hooks não podem rodar em callbacks) — não é código morto.
+**Dependência circular: zero**, confirmado por ferramenta (`madge
+--circular`) em 164 arquivos TS + 20 arquivos JS — primeira vez nesta
+sessão que este check específico roda com uma ferramenta dedicada, não
+auditoria manual.
+
+**Etapa 2 (execução real)**: Playwright contra dev server E build de
+produção (`vite preview`) — todos os 6 painéis do CORE INTELLIGENCE, os
+7 agentes do Council, Evidence Fusion, Chart Layers Panel ("ESTADO
+INTELIGENTE ADAPTATIVO"), Radar/OIH, Pattern Engine ("PADRÕES
+GRÁFICOS") e Self-Diagnostics confirmados ao vivo. 2 discrepâncias
+aparentes (falta de "Adaptativo"/"PADRÕES GRÁFICOS" num primeiro
+grep) investigadas a fundo e resolvidas como falhas do PRÓPRIO script
+de teste (case-sensitivity contra `text-transform: uppercase`; timing
+de sequência de cliques) — não da aplicação. Canvas do gráfico
+confirmado 0 nesta sandbox POR DESENHO (`chartData.length > 0 ?
+<Chart/> : <div>AWAITING...` — o componente inteiro só monta com
+candles reais).
+
+**Etapa 3 (integração)**: rastreamento real da cadeia de dependências
+corrige a sequência que a própria Ordem propôs — "Evidence Fusion →
+Council" está invertido (confirmado por import: `council.ts` tem ZERO
+referência a evidence-fusion; a direção real é Council → Evidence
+Fusion, uma das 2 fontes de entrada); Pattern Engine não é downstream
+do Motor Matemático (lê os mesmos candles brutos em paralelo); Market
+Structure é PARTE do Motor Matemático, não um estágio separado. A
+cadeia REAL funciona sem quebra, confirmada ao vivo (Council →
+Evidence Fusion com dado real mesmo sob rede bloqueada).
+
+**Etapa 4 (performance, só medir)**: bundle de produção com só 3
+requisições reais no boot (266 KB JS gzip + 11 KB CSS + 1 ícone;
+llm-worker/llm-bridge de 6 MB confirmados nunca buscados sem ativação
+do Neural Core) · `domContentLoaded` ~112ms, conteúdo montado ~340ms
+(localhost) · 60fps fluido · ~9MB heap JS. **Achado real de ambiente de
+teste, não de produção**: o Quant Worker WASM sempre reporta "não vivo"
+em teste local isolado — rastreado até a causa raiz exata: o arquivo
+físico vive em `ipad_runtime/workers/`, um nível acima de `ramber-ui/`,
+e só fica ao lado do `index.html` real pelo `cp -r dist/. ../` do
+workflow de deploy (`.github/workflows/deploy-ipad-pwa.yml:62`) — que
+roda só no CI, nunca num preview local isolado. Explica, pela primeira
+vez com causa raiz documentada, por que este check específico nunca
+passou em nenhuma verificação Playwright desta sessão inteira.
+
+**Etapa 5**: relatório único com as 10 seções exatas pedidas
+(arquitetura, fluxograma Mermaid, motores, responsabilidades,
+consumidores, dependências, fluxo de dados, gargalos, pendências reais,
+melhorias futuras só listadas).
+
+**Zero código de produção alterado** — só auditoria, execução real,
+medição e o relatório, conforme a própria Ordem pediu.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
