@@ -5990,6 +5990,8 @@ function NavRailButton({
       type="button"
       onClick={onClick}
       title={label}
+      aria-label={label}
+      aria-pressed={active}
       className={`flex items-center justify-center w-full py-2.5 shrink-0 cursor-pointer transition-colors relative ${active ? "text-[#00f0ff] bg-gradient-to-r from-[#00f0ff1a] to-transparent" : "text-[#8ab4f8]/50 hover:text-[#8ab4f8]"}`}
     >
       {active && (
@@ -6068,6 +6070,7 @@ function SideBar({
         type="button"
         onClick={() => setWorkspaceManagerOpen?.((v: boolean) => !v)}
         title="Workspace Manager"
+        aria-label="Workspace Manager"
         className="mt-auto flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
       >
         <LayoutGrid size={17} className="relative z-10" />
@@ -6079,6 +6082,7 @@ function SideBar({
         type="button"
         onClick={() => setChartLayersOpen?.((v: boolean) => !v)}
         title="Camadas do Gráfico"
+        aria-label="Camadas do Gráfico"
         className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
       >
         <Layers size={17} className="relative z-10" />
@@ -6094,6 +6098,7 @@ function SideBar({
         type="button"
         onClick={() => setRadarPanelOpen?.((v: boolean) => !v)}
         title="Radar / OIH — Oportunidades já validadas pelo organismo"
+        aria-label="Radar / OIH — Oportunidades já validadas pelo organismo"
         className="relative flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
       >
         <RadarIcon size={17} className="relative z-10" />
