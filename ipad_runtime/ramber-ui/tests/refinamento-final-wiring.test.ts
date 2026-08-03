@@ -42,21 +42,27 @@ describe('Store: premiumDiscount + harmonicPatterns nos 4 lugares canônicos do 
 });
 
 describe('App: efeito único computa os 2 motores novos da MESMA série real do gráfico', () => {
-  it('lê chartData, usa o último CLOSE real como referência do P/D (30s, nunca o tick de 1s), escreve as 2 fatias', () => {
+  it('lê chartData, usa o último CLOSE real como referência do P/D (30s, nunca o tick de 1s), escreve as 4 fatias (Carta Branca: + Triângulo + Ombro-Cabeça-Ombro no MESMO efeito)', () => {
     const a = app();
     const idx = a.indexOf('st.setPremiumDiscount(computePremiumDiscount({ candles: chartData, price: lastClose }));');
     expect(idx, 'efeito de cômputo §7/§8 não encontrado').toBeGreaterThan(-1);
-    const block = a.slice(Math.max(0, idx - 700), idx + 300);
+    const block = a.slice(Math.max(0, idx - 700), idx + 750);
     expect(block).toContain('const lastClose = chartData[chartData.length - 1]?.close ?? null;');
     expect(block).toContain('st.setHarmonicPatterns(detectHarmonicPatterns({ candles: chartData }));');
+    // Carta Branca: mesma série real, zero segunda assinatura de chartData.
+    expect(block).toContain('st.setTrianglePattern(detectTrianglePattern({ candles: chartData }));');
+    expect(block).toContain('st.setHeadShouldersPattern(detectHeadAndShoulders({ candles: chartData }));');
     expect(block).toContain('}, [chartData]);');
   });
 
-  it('fail-closed: sem candles => null/[] explícitos, nunca leitura velha retida', () => {
+  it('fail-closed: sem candles => null/[] explícitos, nunca leitura velha retida (4 fatias, Carta Branca inclui as 2 novas)', () => {
     const a = app();
     const idx = a.indexOf('st.setPremiumDiscount(null);');
     expect(idx).toBeGreaterThan(-1);
-    expect(a.slice(idx, idx + 120)).toContain('st.setHarmonicPatterns([]);');
+    const block = a.slice(idx, idx + 220);
+    expect(block).toContain('st.setHarmonicPatterns([]);');
+    expect(block).toContain('st.setTrianglePattern(null);');
+    expect(block).toContain('st.setHeadShouldersPattern(null);');
   });
 
   it('§10 Inteligência Temporal: trocar timeframe reseta a série do Score (nunca mistura regimes na tendência)', () => {
@@ -170,13 +176,18 @@ describe('§7 Premium/Discount: gráfico + Trade Plan strip (display-only, LEI 2
 });
 
 describe('§8 Harmônicos: display gated pelo fit mínimo honesto', () => {
-  it('aba ANALYSIS lista os hits reais da store; título nega probabilidade; vazio honesto mostra o piso', () => {
+  it('aba ANALYSIS lista os hits reais da store; título nega probabilidade; vazio honesto mostra o piso (Carta Branca: painel único ampliado para as 3 famílias — harmônico + Triângulo + Ombro-Cabeça-Ombro)', () => {
     const a = app();
     expect(a).toContain('const harmonicHits = useHarmonicPatternsSnapshot();');
-    expect(a).toContain('title="Harmonic Patterns · ratio fit, never probability"');
-    expect(a).toContain('NO FRESH XABCD PATTERN ≥ {(MIN_FIT_SCORE * 100).toFixed(0)}% RATIO FIT (honest result)');
+    expect(a).toContain('const trianglePattern = useTrianglePatternSnapshot();');
+    expect(a).toContain('const headShouldersPattern = useHeadShouldersPatternSnapshot();');
+    expect(a).toContain('title="Chart Patterns · geometric fit, never probability"');
+    expect(a).toContain('NO FRESH GEOMETRIC PATTERN ≥ {(MIN_FIT_SCORE * 100).toFixed(0)}% FIT (honest result)');
     // Consolidação Final §6: rótulo profissional PRZ no lugar do D cru (contrato novo deliberado)
     expect(a).toContain('value={`PRZ @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}');
+    // Carta Branca: as 2 famílias novas ganham sua própria linha honesta no MESMO painel único.
+    expect(a).toContain('label={`${trianglePattern.kind} TRIANGLE`}');
+    expect(a).toContain('label={headShouldersPattern.kind === "REGULAR" ? "HEAD & SHOULDERS" : "INVERSE H&S"}');
   });
 
   it('LEI 24: o motor harmônico nunca alimenta engine/tradePlan — só a própria fatia de display', () => {
@@ -447,41 +458,62 @@ describe('§6: painel Síntese Operacional — 6 eixos derivados do MESMO NexusD
 });
 
 describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no gráfico', () => {
-  it('EnhancedChart: linha do ponto D do melhor padrão (fit desc) + EPA quando Wolfe — fio de seda, rótulo honesto', () => {
+  it('EnhancedChart: linha do ponto D do melhor padrão (fit desc entre as 3 famílias, Carta Branca) + EPA quando Wolfe — fio de seda, rótulo honesto', () => {
     const c = chart();
     expect(c).toContain('harmonicHits?: HarmonicPatternHit[] | null;');
+    expect(c).toContain('trianglePattern?: TrianglePatternHit | null;');
+    expect(c).toContain('headShouldersPattern?: HeadShouldersHit | null;');
     const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
     expect(idx).toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 4200);
-    expect(block).toContain('const top = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;');
+    // Carta Branca: o efeito unificado cresceu para caber as 3 famílias —
+    // janela ampliada o bastante para cobrir do início até depois do ramo
+    // HEAD_SHOULDERS (medido via node -e contra o arquivo real: ~9.3k chars).
+    const block = c.slice(idx, idx + 9500);
+    expect(block).toContain('const harmonicTop = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;');
+    expect(block).toContain('const harmonicValid = harmonicTop && Number.isFinite(harmonicTop.points.D.price) ? harmonicTop : null;');
     // EPC §4 (rótulos compactos por iniciais): PRZ com glifo ↑/↓, EPA sem
     // as descrições parentéticas — o disclaimer/significado seguem no
-    // painel Harmonic Patterns e em harmonic-patterns.ts.
+    // painel Chart Patterns e em harmonic-patterns.ts.
     expect(block).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
     expect(block).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`'); // §6: + ETA do ápice (compacto EPC §4)
     expect(block).toContain('lineStyle: LineStyle.Solid,');
+    // Carta Branca: Triângulo (2 retas reais) + Ombro-Cabeça-Ombro (outline
+    // reusando o mesmo zigue-zague + neckline extrapolada) — ver os 2 ramos.
+    expect(block).toContain('winner.family === "TRIANGLE" && trianglePattern');
+    expect(block).toContain('winner.family === "HEAD_SHOULDERS" && headShouldersPattern');
+    expect(block).toContain('`${trianglePattern.kind} ${dirGlyph} APEX ${(trianglePattern.fitScore * 100).toFixed(0)}%${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
+    expect(block).toContain('`${hs.kind === "REGULAR" ? "H&S" : "INV H&S"} ${hsDirGlyph} NECKLINE ${(hs.fitScore * 100).toFixed(0)}%`');
     const cleanupIdx = c.indexOf('chart.remove();');
     expect(c.slice(cleanupIdx, cleanupIdx + 700)).toContain('harmonicLinesRef.current = [];');
   });
 
-  it('Continuidade: a figura XABCD/Wolfe COMPLETA (não só o ponto D/PRZ) é uma polilinha nativa real, limpa fail-closed antes do early-return, tempo estritamente crescente na borda de renderização', () => {
+  it('Continuidade: a figura XABCD/Wolfe COMPLETA (não só o ponto D/PRZ) é uma polilinha nativa real, limpa fail-closed antes do early-return, tempo estritamente crescente na borda de renderização (Carta Branca: mesma polilinha reusada pelo outline do Ombro-Cabeça-Ombro, guard agora cobre as 3 famílias)', () => {
     const c = chart();
     expect(c).toContain('const harmonicPolylineRef = useRef<ISeriesApi<"Line"> | null>(null);');
     const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
-    const block = c.slice(idx, idx + 3600);
-    // limpa a polilinha ANTES do guard de "sem padrão" — nunca deixa uma figura velha na tela
+    const block = c.slice(idx, idx + 9500);
+    // limpa a polilinha (E as 3 séries novas do Triângulo/neckline) ANTES
+    // do guard real de "nenhuma das 3 famílias tem hit" — nunca deixa uma
+    // figura velha na tela.
     const clearIdx = block.indexOf('harmonicPolylineRef.current?.setData([]);');
-    const guardIdx = block.indexOf('if (!top || !Number.isFinite(top.points.D.price)) return;');
+    const guardIdx = block.indexOf('if (candidates.length === 0) return;');
     expect(clearIdx).toBeGreaterThan(-1);
     expect(guardIdx).toBeGreaterThan(clearIdx);
-    // os 5 pontos reais (X opcional/A/B/C/D), nunca um ponto fabricado para AB=CD
-    expect(block).toContain('[top.points.X, top.points.A, top.points.B, top.points.C, top.points.D].filter(');
-    expect(block).toContain('(p): p is HarmonicPoint => p !== undefined,');
+    expect(block).toContain('triangleResistanceLineRef.current?.setData([]);');
+    expect(block).toContain('triangleSupportLineRef.current?.setData([]);');
+    expect(block).toContain('necklineExtensionLineRef.current?.setData([]);');
+    // drawZigzagOutline: função compartilhada real (harmônico E H&S usam a
+    // MESMA implementação, zero segunda cópia) — os 5 pontos reais (X
+    // opcional/A/B/C/D na chamada harmônica), nunca um ponto fabricado
+    // para AB=CD.
+    expect(block).toContain('const drawZigzagOutline = (points: Array<HarmonicPoint | undefined>) => {');
+    expect(block).toContain('.filter((p): p is HarmonicPoint => p !== undefined)');
+    expect(block).toContain('drawZigzagOutline([top.points.X, top.points.A, top.points.B, top.points.C, top.points.D]);');
+    expect(block).toContain('drawZigzagOutline([hs.leftShoulder, hs.neckline1, hs.head, hs.neckline2, hs.rightShoulder]);');
     // trava defensiva real na borda (a lib exige tempo estritamente crescente)
     expect(block).toContain('.sort((a, b) => a.time - b.time)');
     expect(block).toContain('i === 0 || p.time !== arr[i - 1].time');
-    expect(block).toContain('if (polylinePoints.length >= 2) {');
-    expect(block).toContain('harmonicPolylineRef.current?.setData(polylinePoints);');
+    expect(block).toContain('if (polylinePoints.length >= 2) harmonicPolylineRef.current?.setData(polylinePoints);');
     // criada como série nativa (mesmo padrão de EMA/Nexus Line/Trend Channel) — zero rótulo de eixo/último valor
     const seriesIdx = c.indexOf('const harmonicPolyline = chart.addSeries(LineSeries, {');
     expect(seriesIdx).toBeGreaterThan(-1);
@@ -489,9 +521,13 @@ describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no grá
     expect(seriesBlock).toContain('priceLineVisible: false');
     expect(seriesBlock).toContain('lastValueVisible: false');
     expect(seriesBlock).toContain('lineStyle: LineStyle.Solid');
-    // limpa no unmount, mesma disciplina de todas as outras refs
+    // limpa no unmount, mesma disciplina de todas as outras refs (incluindo as 3 novas)
     const cleanupIdx = c.indexOf('chart.remove();');
-    expect(c.slice(cleanupIdx, cleanupIdx + 900)).toContain('harmonicPolylineRef.current = null;');
+    const cleanupBlock = c.slice(cleanupIdx, cleanupIdx + 1100);
+    expect(cleanupBlock).toContain('harmonicPolylineRef.current = null;');
+    expect(cleanupBlock).toContain('triangleResistanceLineRef.current = null;');
+    expect(cleanupBlock).toContain('triangleSupportLineRef.current = null;');
+    expect(cleanupBlock).toContain('necklineExtensionLineRef.current = null;');
   });
 
   it('títulos das linhas de alvo carregam distância % ao preço VIVO + ETA em faixa do contrato fundido (guard de preço)', () => {
@@ -983,7 +1019,8 @@ describe('Consolidação Final §5/§6: SHARK + AB=CD no motor, PRZ/ETA na super
     const c = chart();
     expect(c).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
     expect(c).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
-    expect(c).toContain('}, [harmonicHits, data, visibility.harmonics]);'); // intervalo real de barra vem de data
+    // Carta Branca: dependency array cresceu para as 2 famílias novas; intervalo real de barra continua vindo de data.
+    expect(c).toContain('}, [harmonicHits, trianglePattern, headShouldersPattern, data, visibility.harmonics]);');
   });
 
   it('ANALYSIS usa PRZ no lugar do rótulo D cru', () => {

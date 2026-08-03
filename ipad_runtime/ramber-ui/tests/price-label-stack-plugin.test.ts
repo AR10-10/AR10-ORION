@@ -340,20 +340,48 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
     expect(s).toContain('const priceAxisLabels = useMemo<PriceAxisLabel[]>(() => {');
   });
 
-  it('S1/R1 reaproveitam levelTitle (mesma função já usada pelas price lines nativas) — nunca uma segunda formatação', () => {
+  it('S1/R1 reaproveitam levelTitle (mesma função já usada pelas price lines nativas) — nunca uma segunda formatação. Carta Branca: só entram no eixo quando FORTE (>=2 toques reais) — "precisão maciça", não presença', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 1700);
+    const block = s.slice(idx, idx + 2700);
     expect(block).toContain('levelTitle("S1", supportStrength, supportBreakouts)');
     expect(block).toContain('levelTitle("R1", resistanceStrength, resistanceBreakouts)');
     expect(block).toContain('color: "rgba(0, 255, 170, 0.65)"'); // mesma cor real da price line S1
     expect(block).toContain('color: "rgba(255, 0, 85, 0.65)"'); // mesma cor real da price line R1
+    expect(block).toContain('if (Number.isFinite(support) && supportStrength?.label === "FORTE") {');
+    expect(block).toContain('if (Number.isFinite(resistance) && resistanceStrength?.label === "FORTE") {');
+  });
+
+  it('Carta Branca ("etiquetas laterais... só mostrar a precisão maciça"): Regra de Ouro 4 — só a ETIQUETA do eixo fica mais rigorosa, a LINHA nativa de S1/R1 e o próprio valor real de support/resistance continuam incondicionais (Number.isFinite puro, sem gate de força)', () => {
+    const c = chart();
+    // A linha nativa (useEffect dedicado, muito antes de priceAxisLabels no
+    // arquivo) desenha S1/R1 sempre que o preço é finito — o dado real
+    // nunca desaparece, mesmo quando o rótulo do eixo some por FRACA.
+    const supportLineIdx = c.indexOf('useEffect(() => {\n    if (!seriesRef.current) return;\n    if (supportLineRef.current) {');
+    expect(supportLineIdx, 'useEffect nativo de S1 não encontrado').toBeGreaterThan(-1);
+    const supportLineBlock = c.slice(supportLineIdx, supportLineIdx + 700);
+    expect(supportLineBlock).toContain('if (Number.isFinite(support)) {');
+    expect(supportLineBlock).not.toContain('supportStrength?.label === "FORTE"');
+
+    const resistanceLineIdx = c.indexOf('useEffect(() => {\n    if (!seriesRef.current) return;\n    if (resistanceLineRef.current) {');
+    expect(resistanceLineIdx, 'useEffect nativo de R1 não encontrado').toBeGreaterThan(-1);
+    const resistanceLineBlock = c.slice(resistanceLineIdx, resistanceLineIdx + 700);
+    expect(resistanceLineBlock).toContain('if (Number.isFinite(resistance)) {');
+    expect(resistanceLineBlock).not.toContain('resistanceStrength?.label === "FORTE"');
+  });
+
+  it('gate real reusa STRONG_TOUCH_THRESHOLD já existente (support-resistance-engine.js: >=2 toques independentes = FORTE) — zero novo limiar inventado só para esconder etiqueta', () => {
+    const c = chart();
+    const idx = c.indexOf('const priceAxisLabels = useMemo');
+    const block = c.slice(idx, idx + 2700);
+    expect(block).toContain('só FORTE (>=2 toques independentes, STRONG_TOUCH_THRESHOLD)');
+    expect(block).toContain('ganha etiqueta no eixo — "precisão maciça" de verdade, não presença.');
   });
 
   it('VWAP/NL reaproveitam LINE_STATE_GLYPH/VWAP_STATE_COLOR/NL_STATE_COLOR reais — mesma paleta institucional já usada pelas séries', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 2800);
+    const block = s.slice(idx, idx + 3800);
     expect(block).toContain('VWAP ${LINE_STATE_GLYPH[s]} ${vwapLastValue.toFixed(2)}');
     expect(block).toContain('color: VWAP_STATE_COLOR[s]');
     expect(block).toContain('NL ${LINE_STATE_GLYPH[s]} ${nlLastValue.toFixed(2)}');
@@ -363,7 +391,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
   it('último preço usa a MESMA cor up/down real da própria série de candles (#00ffaa/#ff0055) — nunca uma cor nova', () => {
     const s = chart();
     const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 5600);
+    const block = s.slice(idx, idx + 6100);
     expect(block).toContain('displayPrice >= lastCandle.open ? "#00ffaa" : "#ff0055"');
   });
 
@@ -693,11 +721,13 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
 
-    const s1Idx = c.indexOf('if (Number.isFinite(support)) {', idx);
+    // Carta Branca: a condição real ganhou o gate FORTE (só precisão
+    // maciça no eixo) — o texto do `if` mudou, side: "left" continua igual.
+    const s1Idx = c.indexOf('if (Number.isFinite(support) && supportStrength?.label === "FORTE") {', idx);
     const s1Block = c.slice(s1Idx, c.indexOf('}', c.indexOf('side:', s1Idx)) + 1);
     expect(s1Block).toContain('side: "left",');
 
-    const r1Idx = c.indexOf('if (Number.isFinite(resistance)) {', idx);
+    const r1Idx = c.indexOf('if (Number.isFinite(resistance) && resistanceStrength?.label === "FORTE") {', idx);
     const r1Block = c.slice(r1Idx, c.indexOf('}', c.indexOf('side:', r1Idx)) + 1);
     expect(r1Block).toContain('side: "left",');
 

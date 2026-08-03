@@ -34,7 +34,7 @@ import {
 } from "lightweight-charts";
 // V-MAX Fase 1 (superfície visual, fechamento do §3.1): linha de CVD real
 // — a série do orderflowHistory (Fase 1.2) com eixo Y próprio nativo.
-import { useOrderflowHistory, useVolumeProfileSnapshot } from "../store/unified-snapshot-store";
+import { useOrderflowHistory, useVolumeProfileSnapshot, useUnifiedSnapshotStore } from "../store/unified-snapshot-store";
 // ZONE_DECAY: Ordem Nº 04 — mesma curva que o plugin já usa isolado,
 // reusada aqui para montar o candidato real de MAIN_LIQUIDITY (visual-
 // budget.ts), mesmo padrão de BREAK_DECAY logo abaixo.
@@ -137,6 +137,8 @@ import type { ScenarioProjection } from "../nexus/scenario-engine";
 import { describeScenarioConfidence, describeScenarioReaction } from "../nexus/scenario-engine";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
 import type { HarmonicPatternHit, HarmonicPoint } from "../nexus/harmonic-patterns";
+import type { TrianglePatternHit } from "../nexus/triangle-pattern";
+import type { HeadShouldersHit } from "../nexus/head-shoulders-pattern";
 import type { NexusDecision } from "../nexus/decision-layer";
 import { formatEtaRange, formatEtaDuration } from "../nexus/eta-engine";
 // Research-driven precision order: VWAP, the institutional-standard
@@ -451,6 +453,12 @@ interface EnhancedChartProps {
   // Auditoria Final §3: harmônicos RENDERIZADOS — a linha do ponto D do
   // melhor padrão real (fit desc) + EPA quando Wolfe. Fail-closed.
   harmonicHits?: HarmonicPatternHit[] | null;
+  // Carta Branca (Reconhecimento de Padrões): as 2 famílias novas que
+  // competem com harmonicHits[0] pelo MESMO desenho de "único melhor
+  // padrão" — ver o useEffect unificado abaixo. Cada motor já devolve o
+  // único melhor hit da janela (não uma lista). Fail-closed.
+  trianglePattern?: TrianglePatternHit | null;
+  headShouldersPattern?: HeadShouldersHit | null;
   // Auditoria Final §3/§4: a leitura fundida — usada AQUI só para
   // enriquecer os títulos das linhas de alvo com ETA em faixa (a
   // distância % vem do livePrice real). Geometria continua vindo de
@@ -565,6 +573,8 @@ export function EnhancedChart_110_Percent({
   scenario,
   premiumDiscount,
   harmonicHits,
+  trianglePattern,
+  headShouldersPattern,
   decision,
   vwapState,
   nexusLineState,
@@ -609,6 +619,20 @@ export function EnhancedChart_110_Percent({
   // com esses pontos plotados em ordem de tempo desenha exatamente o
   // zigue-zague clássico, zero overlay de canvas novo.
   const harmonicPolylineRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Carta Branca (Reconhecimento de Padrões): mesmo padrão nativo acima,
+  // reaproveitado para as 2 famílias novas que competem pelo MESMO desenho
+  // de "único melhor padrão" (ver o useEffect unificado abaixo). O
+  // outline zigue-zague do Ombro-Cabeça-Ombro (LS→neckline1→Head→
+  // neckline2→RS) é geometricamente idêntico a um XABCD — reusa
+  // harmonicPolylineRef diretamente, zero série nova. O Triângulo NÃO é um
+  // zigue-zague (2 retas paralelas/convergentes avançando no MESMO
+  // intervalo de tempo, não pontos sequenciais) — precisa de 2 séries
+  // dedicadas; a extrapolação da neckline do H&S também é uma reta
+  // separada do outline (index do 1º ponto → índice do último candle),
+  // então ganha sua própria série.
+  const triangleResistanceLineRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const triangleSupportLineRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const necklineExtensionLineRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Named refs to the stop/target lines specifically (a subset of
   // tradePlanLinesRef above) — lets the hit-boost effect below update
   // color/title in place via applyOptions() instead of tearing down and
@@ -929,6 +953,21 @@ export function EnhancedChart_110_Percent({
       title: "",
     });
     harmonicPolylineRef.current = harmonicPolyline;
+    // Carta Branca: mesma cor de acento roxo do padrão geométrico (harmonic
+    // Polyline acima) — as 3 famílias são uma ÚNICA linguagem visual
+    // ("padrão gráfico detectado"), nunca 3 paletas competindo por atenção.
+    const triangleLineOptions = {
+      color: "rgba(176, 38, 255, 0.55)",
+      lineWidth: 1 as const,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      title: "",
+    };
+    triangleResistanceLineRef.current = chart.addSeries(LineSeries, triangleLineOptions);
+    triangleSupportLineRef.current = chart.addSeries(LineSeries, triangleLineOptions);
+    necklineExtensionLineRef.current = chart.addSeries(LineSeries, triangleLineOptions);
     chartRef.current = chart;
     seriesRef.current = series;
     setChartReady({ chart, series });
@@ -957,6 +996,9 @@ export function EnhancedChart_110_Percent({
       trendChannelUpperRef.current = null;
       trendChannelLowerRef.current = null;
       harmonicPolylineRef.current = null;
+      triangleResistanceLineRef.current = null;
+      triangleSupportLineRef.current = null;
+      necklineExtensionLineRef.current = null;
       setChartReady(null);
     };
   }, []);
@@ -1442,6 +1484,16 @@ export function EnhancedChart_110_Percent({
     [emaLastValue, activeEmaPeriod, vwapLastValue, nlLastValue, fairValueGaps, orderBlocks, liquidityZones, support, resistance, volumeProfile, freshestSessionKeyLevel, institutionalZoneSweeps, lastSwingHigh, lastSwingLow],
   );
   const institutionalZones = useMemo(() => computeInstitutionalZones(institutionalZoneInput), [institutionalZoneInput]);
+  // Carta Branca (Evidence Fusion Engine): achado real de auditoria — este
+  // array já era computado aqui há várias rodadas só para o gráfico, sem
+  // NENHUMA fatia própria na store (ao contrário de todo outro motor real
+  // deste app). Publica o MESMO array já resolvido acima (zero segundo
+  // cálculo) para que CouncilWidget/qualquer consumidor futuro leiam a
+  // idêntica leitura — mesmo espírito de "computada uma vez, lida por
+  // QUALQUER outro consumidor" já documentado para layerRelevance.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setInstitutionalZones(institutionalZones);
+  }, [institutionalZones]);
 
   // Ordem Nº 03: candidatos reais para a competição cruzada de destaque —
   // só as 2 categorias cujo peso PRÓPRIO já existia antes desta rodada
@@ -1728,48 +1780,55 @@ export function EnhancedChart_110_Percent({
   }, [premiumDiscount, visibility.premium_discount]);
 
   // Auditoria Final §3 ("caso esteja calculado mas não desenhado, ativar
-  // renderização"): o MELHOR padrão harmônico real (hits[0] — a lista já
-  // vem ordenada por fit desc do motor) vira uma price line no ponto de
-  // reversão esperado (D / ponto 5), + a linha EPA quando Wolfe. Púrpura
-  // (acento do Conselho/opinião agregada), mais discreta que Trade Plan e
-  // Scenario; fio de seda; o título carrega o fit com o rótulo honesto —
-  // aderência, nunca probabilidade. Fail-closed: sem padrão, zero linhas.
-  // Auditoria de pendências: ganha visibility.harmonics, mesmo fail-closed
-  // (early-return antes de desenhar qualquer price line/polilinha nova).
+  // renderização") + Carta Branca (Reconhecimento de Padrões): agora TRÊS
+  // famílias de padrão geométrico competem pelo mesmo desenho — harmônicos
+  // XABCD/Wolfe (harmonic-patterns.ts), Triângulo (triangle-pattern.ts) e
+  // Ombro-Cabeça-Ombro (head-shoulders-pattern.ts). Cada motor já entrega
+  // seu próprio melhor hit (harmonicHits vem pré-ordenado por fit desc;
+  // trianglePattern/headShouldersPattern já são o único melhor da janela);
+  // o vencedor ÚNICO entre as 3 famílias é o de maior fitScore — mesma
+  // disciplina de "só o melhor vai pro canvas, o resto fica no painel"
+  // já usada pelo harmônico sozinho antes desta rodada (visual budget:
+  // silk-thread, zero 3 geometrias competindo pela mesma área). Comparar
+  // fitScore entre motores DIFERENTES é uma heurística declarada (cada um
+  // mede aderência de um jeito distinto — razão Fibonacci/R² de trendline/
+  // simetria de ombros), nunca uma medição única calibrada; empate resolve
+  // pela ordem de checagem abaixo (harmônico > triângulo > H&S), arbitrária
+  // mas determinística. Púrpura (acento do Conselho/opinião agregada) em
+  // toda a família — uma ÚNICA linguagem visual, nunca 3 paletas
+  // competindo por atenção; fio de seda; título carrega o fit com o rótulo
+  // honesto — aderência, nunca probabilidade. Fail-closed: sem padrão
+  // algum, zero linhas. Ganha visibility.harmonics (rótulo do painel
+  // ampliado para "PADRÕES GRÁFICOS", App.tsx) — early-return antes de
+  // desenhar qualquer price line/polilinha nova.
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
     harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));
     harmonicLinesRef.current = [];
-    // Continuidade: limpa a polilinha ANTES do early-return abaixo — sem
-    // padrão real agora, zero figura antiga lingerindo na tela (mesmo
-    // fail-closed das price lines desta função).
+    // Limpa TODAS as geometrias das 3 famílias ANTES de decidir o vencedor
+    // — sem padrão real agora (ou trocou de vencedor), zero figura antiga
+    // lingerindo na tela (mesmo fail-closed das price lines desta função).
     harmonicPolylineRef.current?.setData([]);
+    triangleResistanceLineRef.current?.setData([]);
+    triangleSupportLineRef.current?.setData([]);
+    necklineExtensionLineRef.current?.setData([]);
     if (!visibility.harmonics) return;
-    const top = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;
-    if (!top || !Number.isFinite(top.points.D.price)) return;
-    // Continuidade: a figura XABCD/Wolfe completa — X/A/B/C/D (ou 1..5 na
-    // Wolfe) já vêm em ordem temporal crescente por construção do motor
-    // (cada pivô fractal é necessariamente mais recente que o anterior);
-    // ordenar por tempo aqui é uma trava DEFENSIVA na borda de renderização
-    // (a lib exige tempo estritamente crescente), nunca uma segunda regra
-    // de ordenação inventada. AB=CD honestamente não tem X — filtrado, nunca
-    // um ponto fabricado para "completar" a figura.
-    const rawPoints: HarmonicPoint[] = [top.points.X, top.points.A, top.points.B, top.points.C, top.points.D].filter(
-      (p): p is HarmonicPoint => p !== undefined,
-    );
-    const polylinePoints = rawPoints
-      .map((p) => {
-        const candle = data[p.index];
-        return candle && Number.isFinite(p.price) ? { time: candle.time as UTCTimestamp, value: p.price } : null;
-      })
-      .filter((p): p is { time: UTCTimestamp; value: number } => p !== null)
-      .sort((a, b) => a.time - b.time)
-      .filter((p, i, arr) => i === 0 || p.time !== arr[i - 1].time); // tempo estritamente crescente, exigência real da lib
-    if (polylinePoints.length >= 2) {
-      harmonicPolylineRef.current?.setData(polylinePoints);
+
+    const harmonicTop = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;
+    const harmonicValid = harmonicTop && Number.isFinite(harmonicTop.points.D.price) ? harmonicTop : null;
+    const candidates: Array<{ family: "HARMONIC" | "TRIANGLE" | "HEAD_SHOULDERS"; fitScore: number }> = [];
+    if (harmonicValid) candidates.push({ family: "HARMONIC", fitScore: harmonicValid.fitScore });
+    if (trianglePattern) candidates.push({ family: "TRIANGLE", fitScore: trianglePattern.fitScore });
+    if (headShouldersPattern) candidates.push({ family: "HEAD_SHOULDERS", fitScore: headShouldersPattern.fitScore });
+    if (candidates.length === 0) return;
+    let winner = candidates[0];
+    for (const c of candidates.slice(1)) {
+      if (c.fitScore > winner.fitScore) winner = c;
     }
+
     const mkH = (price: number, title: string) => {
+      if (!Number.isFinite(price)) return;
       harmonicLinesRef.current.push(
         series.createPriceLine({
           price,
@@ -1781,37 +1840,119 @@ export function EnhancedChart_110_Percent({
         }),
       );
     };
-    // Consolidação Final §6 (terminologia profissional): o ponto de
-    // reversão esperado é a PRZ — Potential Reversal Zone (D nos XABCD/
-    // AB=CD; ponto 5 na Wolfe). EPC §4 ("apenas as iniciais... menor
-    // poluição"): direção BULLISH/BEARISH vira glifo ↑/↓ (mesmo
-    // vocabulário de FVG/OB/VWAP/NL) e o disclaimer "(aderência, nunca
-    // probabilidade)" sai do rótulo flutuante — já vive, íntegro, no
-    // título do painel Harmonic Patterns ("ratio fit, never probability",
-    // App.tsx) — mesma disciplina de zero-repetição do "(Núcleo)".
-    const hDirGlyph = top.direction === "BULLISH" ? "↑" : "↓";
-    mkH(
-      top.points.D.price,
-      `${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`,
-    );
-    if (top.pattern === "WOLFE" && typeof top.epaPrice === "number" && Number.isFinite(top.epaPrice)) {
-      // §6: ETA canônica da Wolfe = ápice da cunha (cruzamento real
-      // 1→3 × 2→4, etaIndex do motor). Convertida em tempo pelo intervalo
-      // REAL entre as duas últimas barras carregadas — nunca um mapa de
-      // timeframe paralelo. Sem ápice à frente => só a EPA, sem ETA.
-      const barSec = data.length >= 2 ? data[data.length - 1].time - data[data.length - 2].time : null;
-      const remainingBars = typeof top.etaIndex === "number" ? top.etaIndex - (data.length - 1) : null;
-      const etaLabel =
-        barSec !== null && remainingBars !== null && remainingBars > 0
-          ? formatEtaDuration(remainingBars * barSec * 1000)
-          : null;
-      // EPC §4: EPA já é a sigla profissional (Estimated Price at Apex);
-      // "(linha 1→4 real)"/"(ápice da cunha)" eram descrições, não dado
-      // — removidas do rótulo flutuante (o significado da EPA/ETA da Wolfe
-      // continua documentado em harmonic-patterns.ts e no comentário acima).
-      mkH(top.epaPrice, `WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`);
+    // Mesma técnica de zigue-zague em ordem de tempo para QUALQUER família
+    // cuja figura seja uma sequência de pivôs alternados (harmônico e H&S
+    // — o Triângulo NÃO é: são 2 retas avançando no MESMO intervalo de
+    // tempo, tratado à parte abaixo). Tempo estritamente crescente é
+    // exigência real da lib, nunca uma segunda regra de ordenação
+    // inventada; pontos undefined (AB=CD honestamente não tem X) são
+    // filtrados, nunca fabricados para "completar" a figura.
+    const drawZigzagOutline = (points: Array<HarmonicPoint | undefined>) => {
+      const polylinePoints = points
+        .filter((p): p is HarmonicPoint => p !== undefined)
+        .map((p) => {
+          const candle = data[p.index];
+          return candle && Number.isFinite(p.price) ? { time: candle.time as UTCTimestamp, value: p.price } : null;
+        })
+        .filter((p): p is { time: UTCTimestamp; value: number } => p !== null)
+        .sort((a, b) => a.time - b.time)
+        .filter((p, i, arr) => i === 0 || p.time !== arr[i - 1].time);
+      if (polylinePoints.length >= 2) harmonicPolylineRef.current?.setData(polylinePoints);
+    };
+
+    if (winner.family === "HARMONIC" && harmonicValid) {
+      const top = harmonicValid;
+      drawZigzagOutline([top.points.X, top.points.A, top.points.B, top.points.C, top.points.D]);
+      // Consolidação Final §6 (terminologia profissional): o ponto de
+      // reversão esperado é a PRZ — Potential Reversal Zone (D nos XABCD/
+      // AB=CD; ponto 5 na Wolfe). EPC §4 ("apenas as iniciais... menor
+      // poluição"): direção BULLISH/BEARISH vira glifo ↑/↓ (mesmo
+      // vocabulário de FVG/OB/VWAP/NL) e o disclaimer "(aderência, nunca
+      // probabilidade)" sai do rótulo flutuante — já vive, íntegro, no
+      // título do painel Chart Patterns ("geometric fit, never
+      // probability", App.tsx) — mesma disciplina de zero-repetição do
+      // "(Núcleo)".
+      const hDirGlyph = top.direction === "BULLISH" ? "↑" : "↓";
+      mkH(top.points.D.price, `${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`);
+      if (top.pattern === "WOLFE" && typeof top.epaPrice === "number" && Number.isFinite(top.epaPrice)) {
+        // §6: ETA canônica da Wolfe = ápice da cunha (cruzamento real
+        // 1→3 × 2→4, etaIndex do motor). Convertida em tempo pelo
+        // intervalo REAL entre as duas últimas barras carregadas — nunca
+        // um mapa de timeframe paralelo. Sem ápice à frente => só a EPA,
+        // sem ETA.
+        const barSec = data.length >= 2 ? data[data.length - 1].time - data[data.length - 2].time : null;
+        const remainingBars = typeof top.etaIndex === "number" ? top.etaIndex - (data.length - 1) : null;
+        const etaLabel =
+          barSec !== null && remainingBars !== null && remainingBars > 0
+            ? formatEtaDuration(remainingBars * barSec * 1000)
+            : null;
+        // EPC §4: EPA já é a sigla profissional (Estimated Price at
+        // Apex); "(linha 1→4 real)"/"(ápice da cunha)" eram descrições,
+        // não dado — removidas do rótulo flutuante (o significado da
+        // EPA/ETA da Wolfe continua documentado em harmonic-patterns.ts).
+        mkH(top.epaPrice, `WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`);
+      }
+    } else if (winner.family === "TRIANGLE" && trianglePattern) {
+      // Carta Branca: as 2 retas reais (mínimos quadrados) do triângulo —
+      // avaliadas na PRÓPRIA reta ajustada (nunca no preço bruto do toque,
+      // mesmo quando R²<1) do 1º toque real até o último candle carregado,
+      // exatamente o mesmo valor já exposto em resistanceAtLastCandle/
+      // supportAtLastCandle. Duas retas simultâneas no MESMO intervalo de
+      // tempo — geometria diferente do zigue-zague acima, por isso 2
+      // séries dedicadas em vez de reusar harmonicPolylineRef.
+      const lastIndex = data.length - 1;
+      const lastCandle = data[lastIndex];
+      const firstRes = trianglePattern.resistancePoints[0];
+      const firstSup = trianglePattern.supportPoints[0];
+      const resCandle = firstRes ? data[firstRes.index] : null;
+      const supCandle = firstSup ? data[firstSup.index] : null;
+      if (resCandle && lastCandle && Number.isFinite(trianglePattern.resistanceAtLastCandle) && resCandle.time < lastCandle.time) {
+        triangleResistanceLineRef.current?.setData([
+          { time: resCandle.time as UTCTimestamp, value: trianglePattern.resistanceSlope * firstRes.index + trianglePattern.resistanceIntercept },
+          { time: lastCandle.time as UTCTimestamp, value: trianglePattern.resistanceAtLastCandle },
+        ]);
+      }
+      if (supCandle && lastCandle && Number.isFinite(trianglePattern.supportAtLastCandle) && supCandle.time < lastCandle.time) {
+        triangleSupportLineRef.current?.setData([
+          { time: supCandle.time as UTCTimestamp, value: trianglePattern.supportSlope * firstSup.index + trianglePattern.supportIntercept },
+          { time: lastCandle.time as UTCTimestamp, value: trianglePattern.supportAtLastCandle },
+        ]);
+      }
+      // Ápice real: no cruzamento das 2 retas, resistência e suporte valem
+      // o MESMO preço por definição geométrica — número honesto mesmo sem
+      // um candle futuro pra plotar o ponto (mesma técnica de EPA/ETA da
+      // Wolfe: preço real conhecido agora, tempo mostrado via ETA em texto).
+      if (trianglePattern.apexIndex !== null) {
+        const apexPrice = trianglePattern.resistanceSlope * trianglePattern.apexIndex + trianglePattern.resistanceIntercept;
+        const barSec = data.length >= 2 ? data[data.length - 1].time - data[data.length - 2].time : null;
+        const remainingBars = trianglePattern.apexIndex - lastIndex;
+        const etaLabel = barSec !== null && remainingBars > 0 ? formatEtaDuration(remainingBars * barSec * 1000) : null;
+        const dirGlyph = trianglePattern.direction === "BULLISH" ? "↑" : trianglePattern.direction === "BEARISH" ? "↓" : "↔";
+        mkH(apexPrice, `${trianglePattern.kind} ${dirGlyph} APEX ${(trianglePattern.fitScore * 100).toFixed(0)}%${etaLabel ? ` · ETA ${etaLabel}` : ""}`);
+      }
+    } else if (winner.family === "HEAD_SHOULDERS" && headShouldersPattern) {
+      const hs = headShouldersPattern;
+      // Outline real LS→neckline1→Cabeça→neckline2→RS — geometricamente o
+      // MESMO zigue-zague de um XABCD (5 pivôs em ordem de tempo crescente
+      // por construção do motor), reusa a função acima sem nenhuma segunda
+      // implementação.
+      drawZigzagOutline([hs.leftShoulder, hs.neckline1, hs.head, hs.neckline2, hs.rightShoulder]);
+      // Neckline real extrapolada — reta separada do outline (pode ter
+      // slope diferente do segmento RS→neckline2), do 1º ponto real até o
+      // último candle carregado, exatamente o valor já exposto em
+      // necklineAtLastCandle.
+      const necklineStartCandle = data[hs.neckline1.index];
+      const lastCandle = data[data.length - 1];
+      if (necklineStartCandle && lastCandle && Number.isFinite(hs.necklineAtLastCandle) && necklineStartCandle.time < lastCandle.time) {
+        necklineExtensionLineRef.current?.setData([
+          { time: necklineStartCandle.time as UTCTimestamp, value: hs.neckline1.price },
+          { time: lastCandle.time as UTCTimestamp, value: hs.necklineAtLastCandle },
+        ]);
+      }
+      const hsDirGlyph = hs.direction === "BULLISH" ? "↑" : "↓";
+      mkH(hs.necklineAtLastCandle, `${hs.kind === "REGULAR" ? "H&S" : "INV H&S"} ${hsDirGlyph} NECKLINE ${(hs.fitScore * 100).toFixed(0)}%`);
     }
-  }, [harmonicHits, data, visibility.harmonics]);
+  }, [harmonicHits, trianglePattern, headShouldersPattern, data, visibility.harmonics]);
 
   // Signal Precision order: the Trade Plan drawn on the chart — subtle,
   // silk-thread annotations (1px solid, never dashed; hierarchy only via
@@ -2019,7 +2160,20 @@ export function EnhancedChart_110_Percent({
     // pro lado secundário). Resultado real: o lado direito cai de até 12
     // caixas possíveis para até 8 — redução real de densidade, não só
     // estética.
-    if (Number.isFinite(support)) {
+    // Carta Branca ("etiquetas laterais... só mostrar a precisão maciça"):
+    // achado real de auditoria — este rótulo aparecia sempre que support/
+    // resistance era finito, sem checar a própria FORÇA real que
+    // computeLevelStrength (support-resistance-engine.js) já calcula
+    // (touches conta o próprio nível a si mesmo, então "FRACA" aqui
+    // significa literalmente "nenhum OUTRO swing independente confirmou
+    // esta zona ainda" — o caso genuinamente menos preciso). Gate real
+    // agora: só FORTE (>=2 toques independentes, STRONG_TOUCH_THRESHOLD)
+    // ganha etiqueta no eixo — "precisão maciça" de verdade, não presença.
+    // Regra de Ouro 4: a LINHA nativa (useEffect acima, supportLineRef/
+    // resistanceLineRef) e o valor real de support/resistance (usado pelo
+    // Core Engine/StructureLevelsStrip/etc.) continuam INTOCADOS — só a
+    // etiqueta flutuante do eixo fica mais rigorosa, nunca o dado.
+    if (Number.isFinite(support) && supportStrength?.label === "FORTE") {
       out.push({
         price: support as number,
         text: `${levelTitle("S1", supportStrength, supportBreakouts)} ${(support as number).toFixed(2)}`,
@@ -2027,7 +2181,7 @@ export function EnhancedChart_110_Percent({
         side: "left",
       });
     }
-    if (Number.isFinite(resistance)) {
+    if (Number.isFinite(resistance) && resistanceStrength?.label === "FORTE") {
       out.push({
         price: resistance as number,
         text: `${levelTitle("R1", resistanceStrength, resistanceBreakouts)} ${(resistance as number).toFixed(2)}`,

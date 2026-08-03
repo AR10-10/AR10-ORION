@@ -171,7 +171,11 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(body).toContain('{ id: "cvd", label: "CVD" }');
     expect(body).toContain('{ id: "fibonacci", label: "FIBONACCI" }');
     expect(body).toContain('{ id: "premium_discount", label: "PREMIUM / DISCOUNT" }');
-    expect(body).toContain('{ id: "harmonics", label: "HARMÔNICOS" }');
+    // Carta Branca: rótulo ampliado de "HARMÔNICOS" para "PADRÕES GRÁFICOS"
+    // — o mesmo id/toggle interno agora gate as 3 famílias que competem
+    // pelo mesmo desenho no canvas (harmônico + Triângulo + Ombro-Cabeça-
+    // Ombro), nunca uma migração de preferência salva do Operador.
+    expect(body).toContain('{ id: "harmonics", label: "PADRÕES GRÁFICOS" }');
     expect(body).toContain('{ id: "equal_highs_lows", label: "EQH / EQL" }');
   });
 
@@ -402,9 +406,17 @@ describe('Auditoria de pendências: os 7 elementos nativos do gráfico ainda sem
     const c = chart();
     const idx = c.indexOf('harmonicPolylineRef.current?.setData([]);');
     expect(idx).toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 150);
+    // Carta Branca: 3 chamadas setData([]) novas (Triângulo ×2 + neckline)
+    // ficam entre esta polilinha e o guard real — janela ampliada.
+    const block = c.slice(idx, idx + 550);
+    expect(block).toContain('triangleResistanceLineRef.current?.setData([]);');
+    expect(block).toContain('triangleSupportLineRef.current?.setData([]);');
+    expect(block).toContain('necklineExtensionLineRef.current?.setData([]);');
     expect(block).toContain('if (!visibility.harmonics) return;');
-    const depsIdx = c.indexOf('}, [harmonicHits, data, visibility.harmonics]);');
+    // Carta Branca: a dependency array agora inclui as 2 famílias novas
+    // que competem pelo mesmo desenho (trianglePattern/headShouldersPattern)
+    // — mesmo gate visibility.harmonics, mesma disciplina de limpeza acima.
+    const depsIdx = c.indexOf('}, [harmonicHits, trianglePattern, headShouldersPattern, data, visibility.harmonics]);');
     expect(depsIdx).toBeGreaterThan(-1);
   });
 
@@ -424,7 +436,7 @@ describe('Auditoria de pendências (achado real via harness Playwright, duas ins
   it('as 3 entradas de priceAxisLabels (VWAP/NL/EMA) agora checam visibility antes de empurrar a etiqueta — mesma condição que já escondia a série', () => {
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
-    const block = c.slice(idx, idx + 2900);
+    const block = c.slice(idx, idx + 3900);
     expect(block).toContain('if (visibility.vwap && vwapLastValue !== null && Number.isFinite(vwapLastValue)) {');
     expect(block).toContain('if (visibility.nexus_line && nlLastValue !== null && Number.isFinite(nlLastValue)) {');
     expect(block).toContain('if (visibility.ema && emaLastValue !== null && Number.isFinite(emaLastValue)) {');
@@ -436,13 +448,19 @@ describe('Auditoria de pendências (achado real via harness Playwright, duas ins
     expect(depsIdx, 'dependency array de priceAxisLabels não inclui visibility.vwap/nexus_line/ema').toBeGreaterThan(-1);
   });
 
-  it('S1/R1/último preço/Trend Channel NÃO ganham essa checagem — nenhum toggle existe pra eles (S1/R1/último preço) ou já tinham a checagem própria (Trend Channel) — nenhuma regressão nas entradas que já funcionavam', () => {
+  it('último preço/Trend Channel NÃO ganham essa checagem de visibility — nenhum toggle existe pro último preço, Trend Channel já tinha a checagem própria — nenhuma regressão nas entradas que já funcionavam. S1/R1 ganharam um gate DIFERENTE (Carta Branca: força real FORTE, não visibility)', () => {
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
-    const block = c.slice(idx, idx + 1500);
-    // S1/R1 continuam incondicionais (só checam Number.isFinite do preço).
-    expect(block).toContain('if (Number.isFinite(support)) {');
-    expect(block).toContain('if (Number.isFinite(resistance)) {');
+    const block = c.slice(idx, idx + 2700);
+    // Carta Branca ("etiquetas laterais... só precisão maciça"): S1/R1
+    // deixaram de ser incondicionais — agora exigem strength FORTE real
+    // (>=2 toques independentes) antes de entrar no eixo. Isto NÃO é o
+    // gate de visibility.* (camada ligada/desligada) desta describe — é um
+    // gate de QUALIDADE do próprio nível, deliberado e documentado no
+    // comentário real acima da condição.
+    expect(block).toContain('if (Number.isFinite(support) && supportStrength?.label === "FORTE") {');
+    expect(block).toContain('if (Number.isFinite(resistance) && resistanceStrength?.label === "FORTE") {');
+    expect(block).toContain('só mostrar a precisão maciça');
   });
 });
 

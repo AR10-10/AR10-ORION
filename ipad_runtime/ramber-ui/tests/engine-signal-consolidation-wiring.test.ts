@@ -23,9 +23,9 @@ function councilWidgetSource(app: string): string {
 }
 
 describe('App.tsx: deriveEngineSignalsFromCouncil real, importado e consumido dentro de CouncilWidget', () => {
-  it('importa a função real do contrato único', () => {
+  it('importa a função real do contrato único (Carta Branca: agora junto de deriveEngineSignalsFromInstitutionalZones, 2º montador real)', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('import { deriveEngineSignalsFromCouncil } from "./nexus/engine-signal-contract";');
+    expect(app).toContain('import { deriveEngineSignalsFromCouncil, deriveEngineSignalsFromInstitutionalZones } from "./nexus/engine-signal-contract";');
   });
 
   it('CouncilWidget deriva engineSignals a partir do MESMO council da store — reempacota, nunca recalcula', () => {
@@ -62,5 +62,47 @@ describe('CouncilWidget: marcador real "fora do pool" — signal.weight null (RI
     expect(widgetSrc).toContain('{Math.round(v.confidence * 100)}%');
     expect(widgetSrc).toContain('{v.rationale}');
     expect(widgetSrc).toContain('title={v.evidence.length > 0 ? v.evidence.join(" · ") : v.rationale}');
+  });
+});
+
+// Carta Branca (Evidence Fusion Engine): SYSTEM_HANDBOOK §6.72/§6.74/§6.76
+// classificaram isto como "iniciativa de arquitetura própria" por 3
+// rodadas seguidas, nunca construído. Lógica pura já tem execução real em
+// evidence-fusion.test.ts/nexus-engine-signal-contract.test.ts; aqui
+// trancam-se os pontos de conexão reais (mesma convenção mista de sempre).
+describe('App.tsx: Evidence Fusion Engine real — primeiro consumidor vivo de engine-signal-contract.ts + evidence-fusion.ts', () => {
+  it('importa fuseEvidence do motor isolado (zero segunda implementação dentro de App.tsx)', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('import { fuseEvidence, type EvidenceFusionSourceGroup } from "./nexus/evidence-fusion";');
+  });
+
+  it('CouncilWidget lê institutionalZones da MESMA store que o gráfico publica — zero segundo cálculo de zonas', () => {
+    const widgetSrc = councilWidgetSource(read('../src/App.tsx'));
+    expect(widgetSrc).toContain('const institutionalZones = useInstitutionalZonesSnapshot();');
+    expect(widgetSrc).not.toContain('computeInstitutionalZones(');
+  });
+
+  it('as 2 fontes reais e independentes alimentam fuseEvidence — Conselho E Zonas Institucionais, nunca Scenario (redundante com o Conselho, documentado no cabeçalho de evidence-fusion.ts)', () => {
+    const widgetSrc = councilWidgetSource(read('../src/App.tsx'));
+    expect(widgetSrc).toContain('const institutionalSignals = deriveEngineSignalsFromInstitutionalZones(institutionalZones);');
+    expect(widgetSrc).toContain('{ source: "Conselho", signals: engineSignals }');
+    expect(widgetSrc).toContain('{ source: "Zonas Institucionais", signals: institutionalSignals }');
+    expect(widgetSrc).not.toMatch(/source:\s*"Scenario"/);
+  });
+
+  it('LEI 24 / Regra de Ouro 2: o painel real nunca usa cor direcional (verde/vermelho) — sempre neutro, porque a leitura nunca é uma direção', () => {
+    const widgetSrc = councilWidgetSource(read('../src/App.tsx'));
+    const idx = widgetSrc.indexOf('EVIDENCE FUSION');
+    expect(idx, 'bloco EVIDENCE FUSION não encontrado').toBeGreaterThan(-1);
+    const block = widgetSrc.slice(idx - 400, idx + 700);
+    expect(block).not.toContain('#00ffaa'); // verde real de LONG usado em todo o resto do app
+    expect(block).not.toContain('#ff0055'); // vermelho real de SHORT usado em todo o resto do app
+    expect(block).toContain('text-[#8ab4f8]'); // cor neutra real, mesma família do resto do widget
+  });
+
+  it('estado honesto vazio usa AWAIT (mesma convenção do resto do widget), nunca um número fabricado quando totalSignals é 0', () => {
+    const widgetSrc = councilWidgetSource(read('../src/App.tsx'));
+    expect(widgetSrc).toContain('evidenceFusion.totalSignals > 0');
+    expect(widgetSrc).toMatch(/:\s*AWAIT/);
   });
 });

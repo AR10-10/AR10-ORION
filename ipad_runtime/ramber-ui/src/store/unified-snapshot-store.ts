@@ -53,6 +53,9 @@ import type { CouncilDecision } from "../nexus/council";
 import type { ConsensusRadarReading } from "../nexus/consensus-radar";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
 import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
+import type { TrianglePatternHit } from "../nexus/triangle-pattern";
+import type { HeadShouldersHit } from "../nexus/head-shoulders-pattern";
+import type { InstitutionalZone } from "../nexus/institutional-zones";
 import type { LayerRelevanceReading } from "../nexus/layer-relevance";
 import type { ConfluenceCorridorReading } from "../nexus/confluence-corridor";
 import type { RadarQualificationResult } from "../nexus/radar-qualification";
@@ -156,6 +159,7 @@ const EMPTY_TRAPS: TrapSignal[] = [];
 const EMPTY_CONVICTION_HISTORY: ConvictionScoreSample[] = [];
 const EMPTY_HARMONIC_HITS: HarmonicPatternHit[] = [];
 const EMPTY_ORDERFLOW_SIGNALS: OrderflowSignal[] = [];
+const EMPTY_INSTITUTIONAL_ZONES: InstitutionalZone[] = [];
 
 // ─────────────────────────────────────────────────────────────────────────
 // Estado — na ordem canônica dos domínios (§1 → §5)
@@ -205,6 +209,24 @@ export interface UnifiedSnapshotState {
   // MIN_FIT_SCORE, D recente). Lista vazia é o estado honesto comum;
   // fitScore é aderência de razão, NUNCA probabilidade (Regra de Ouro 2).
   harmonicPatterns: HarmonicPatternHit[];
+  // Carta Branca (Reconhecimento de Padrões) — Triângulo (Ascendente/
+  // Descendente/Simétrico, nexus/triangle-pattern.ts) e Ombro-Cabeça-Ombro
+  // (regular/inverso, nexus/head-shoulders-pattern.ts): mesma disciplina de
+  // harmonicPatterns acima (fitScore é aderência geométrica, NUNCA
+  // probabilidade). Cada motor já devolve o único melhor hit da janela
+  // (não uma lista) — null é o estado honesto comum.
+  trianglePattern: TrianglePatternHit | null;
+  headShouldersPattern: HeadShouldersHit | null;
+  // Carta Branca (Evidence Fusion Engine): achado real de auditoria —
+  // computeInstitutionalZones (nexus/institutional-zones.ts) já era
+  // computado há várias rodadas dentro de EnhancedChart_110_Percent.tsx
+  // (useMemo local, só para o gráfico), mas nunca tinha ganhado uma fatia
+  // própria aqui — ao contrário de QUALQUER outro motor real deste app.
+  // Publicado pelo próprio componente do gráfico (zero segundo cálculo,
+  // mesmo array já resolvido) para que CouncilWidget/Evidence Fusion Engine
+  // leiam a MESMA leitura, sem recomputar zonas fora do gráfico. Lista
+  // vazia é o estado honesto comum (sem confluência real >=2 fontes agora).
+  institutionalZones: InstitutionalZone[];
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6 — leitura real do Relevance Engine
   // (nexus/layer-relevance.ts), computada uma vez em ChartWidget (onde os
   // sinais reais que a alimentam já convergem) e lida daqui por QUALQUER
@@ -368,6 +390,9 @@ interface UnifiedSnapshotActions {
   setFibonacciConfluence: (matrix: FibonacciConfluenceMatrix | null) => void;
   setPremiumDiscount: (reading: PremiumDiscountReading | null) => void;
   setHarmonicPatterns: (hits: HarmonicPatternHit[]) => void;
+  setTrianglePattern: (hit: TrianglePatternHit | null) => void;
+  setHeadShouldersPattern: (hit: HeadShouldersHit | null) => void;
+  setInstitutionalZones: (zones: InstitutionalZone[]) => void;
   setLayerRelevance: (reading: LayerRelevanceReading | null) => void;
   setSmc: (zones: SmcZonesSnapshot | null) => void;
   setCvd: (cvd: number | null) => void;
@@ -439,6 +464,9 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     fibonacciConfluence: null,
     premiumDiscount: null,
     harmonicPatterns: [],
+    trianglePattern: null,
+    headShouldersPattern: null,
+    institutionalZones: [],
     layerRelevance: null,
     smc: null,
     cvd: null,
@@ -497,6 +525,9 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setFibonacciConfluence: (matrix) => set((s) => { s.fibonacciConfluence = matrix; }),
     setPremiumDiscount: (reading) => set((s) => { s.premiumDiscount = reading; }),
     setHarmonicPatterns: (hits) => set((s) => { s.harmonicPatterns = hits; }),
+    setTrianglePattern: (hit) => set((s) => { s.trianglePattern = hit; }),
+    setHeadShouldersPattern: (hit) => set((s) => { s.headShouldersPattern = hit; }),
+    setInstitutionalZones: (zones) => set((s) => { s.institutionalZones = zones; }),
     setLayerRelevance: (reading) => set((s) => { s.layerRelevance = reading; }),
     setSmc: (zones) => set((s) => { s.smc = zones; }),
     setCvd: (cvd) => set((s) => { s.cvd = cvd; }),
@@ -602,6 +633,12 @@ export const usePremiumDiscountSnapshot = (): PremiumDiscountReading | null =>
   useUnifiedSnapshotStore((s) => s.premiumDiscount);
 export const useHarmonicPatternsSnapshot = (): HarmonicPatternHit[] =>
   useUnifiedSnapshotStore((s) => s.harmonicPatterns ?? EMPTY_HARMONIC_HITS);
+export const useTrianglePatternSnapshot = (): TrianglePatternHit | null =>
+  useUnifiedSnapshotStore((s) => s.trianglePattern);
+export const useHeadShouldersPatternSnapshot = (): HeadShouldersHit | null =>
+  useUnifiedSnapshotStore((s) => s.headShouldersPattern);
+export const useInstitutionalZonesSnapshot = (): InstitutionalZone[] =>
+  useUnifiedSnapshotStore((s) => s.institutionalZones ?? EMPTY_INSTITUTIONAL_ZONES);
 export const useLayerRelevanceSnapshot = (): LayerRelevanceReading | null =>
   useUnifiedSnapshotStore((s) => s.layerRelevance);
 export const useSmcSnapshot = (): SmcZonesSnapshot | null =>

@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, EMPTY_PRICE } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -128,7 +128,11 @@ import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD, type CouncilDecisio
 // próprio arquivo). CouncilWidget abaixo é o primeiro consumidor real —
 // reforma a leitura ad hoc de council.votes para passar pelo contrato
 // único, sem duplicar UI nem criar um segundo painel.
-import { deriveEngineSignalsFromCouncil } from "./nexus/engine-signal-contract";
+import { deriveEngineSignalsFromCouncil, deriveEngineSignalsFromInstitutionalZones } from "./nexus/engine-signal-contract";
+// Carta Branca: consumidor real do Evidence Fusion Engine — SYSTEM_HANDBOOK
+// §6.72/§6.74/§6.76 classificaram isto como "iniciativa de arquitetura
+// própria" por 3 rodadas seguidas; agora tem seu primeiro consumidor vivo.
+import { fuseEvidence, type EvidenceFusionSourceGroup } from "./nexus/evidence-fusion";
 import { computeConsensusRadar, type ConsensusRadarCategory } from "./nexus/consensus-radar";
 // MomentumAgent order ("chegando à perfeição"): RSI de Wilder, o mesmo
 // exato computeRSI já real/exportado como feature interna do
@@ -175,6 +179,11 @@ import { timeframeProfile } from "./nexus/timeframe-profile";
 import { buildAssistantMessages } from "./nexus/operation-assistant";
 import { computePremiumDiscount } from "./nexus/premium-discount";
 import { detectHarmonicPatterns, MIN_FIT_SCORE } from "./nexus/harmonic-patterns";
+// Carta Branca (Reconhecimento de Padrões): Triângulo e Ombro-Cabeça-Ombro —
+// mesma disciplina de harmonic-patterns.ts (fail-closed, fitScore nunca
+// probabilidade), motores isolados graduados agora ao pipeline real.
+import { detectTrianglePattern } from "./nexus/triangle-pattern";
+import { detectHeadAndShoulders } from "./nexus/head-shoulders-pattern";
 // Consolidação Final §20-§30: estados da VWAP (matemática intocada, §20) +
 // Nexus Line proprietária + confluência informativa — módulos puros novos.
 import { computeSessionVwapSeries, latestVwap } from "./nexus/vwap";
@@ -2135,11 +2144,18 @@ export default function App() {
     if (!chartData || chartData.length === 0) {
       st.setPremiumDiscount(null);
       st.setHarmonicPatterns([]);
+      st.setTrianglePattern(null);
+      st.setHeadShouldersPattern(null);
       return;
     }
     const lastClose = chartData[chartData.length - 1]?.close ?? null;
     st.setPremiumDiscount(computePremiumDiscount({ candles: chartData, price: lastClose }));
     st.setHarmonicPatterns(detectHarmonicPatterns({ candles: chartData }));
+    // Carta Branca: mesma série real (chartData), mesma cadência de 30s
+    // (candle fechado) — zero segunda assinatura de dado, zero tick de 1s
+    // recomputando geometria de padrão à toa (Main Thread sagrada).
+    st.setTrianglePattern(detectTrianglePattern({ candles: chartData }));
+    st.setHeadShouldersPattern(detectHeadAndShoulders({ candles: chartData }));
   }, [chartData]);
 
   // Refinamento Final §10 (Inteligência Temporal, "sem reaproveitar
@@ -3723,7 +3739,13 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "cvd", label: "CVD" },
   { id: "fibonacci", label: "FIBONACCI" },
   { id: "premium_discount", label: "PREMIUM / DISCOUNT" },
-  { id: "harmonics", label: "HARMÔNICOS" },
+  // Carta Branca: o id interno "harmonics" continua o mesmo (zero migração
+  // de preferência salva do Operador — mesma disciplina de versionamento
+  // aditivo já usada em toda a store), mas o rótulo visível agora cobre as
+  // 3 famílias reais que competem pelo MESMO desenho no canvas (harmônico
+  // XABCD/Wolfe, Triângulo, Ombro-Cabeça-Ombro — ver EnhancedChart_110_
+  // Percent.tsx, useEffect do padrão vencedor).
+  { id: "harmonics", label: "PADRÕES GRÁFICOS" },
   { id: "equal_highs_lows", label: "EQH / EQL" },
   // OMEGA CORE V-MAX Fase 8.1: rótulo deliberadamente "LIQUIDAÇÕES
   // FORÇADAS" (mesmo termo já usado no painel de lista real, "Forced
@@ -6266,6 +6288,10 @@ function SecondaryModuleView({ tab }: { tab: string }) {
   const trackRecord = useTrackRecordSnapshot();
   // Refinamento Final §7/§8 — mesmas fatias reais desenhadas no gráfico.
   const harmonicHits = useHarmonicPatternsSnapshot();
+  // Carta Branca — mesmas fatias reais desenhadas no gráfico (Triângulo e
+  // Ombro-Cabeça-Ombro), mesma disciplina de harmonicHits acima.
+  const trianglePattern = useTrianglePatternSnapshot();
+  const headShouldersPattern = useHeadShouldersPatternSnapshot();
   const premiumDiscountView = usePremiumDiscountSnapshot();
 
   const pct = (v: number | null | undefined, digits = 0) =>
@@ -6523,25 +6549,47 @@ function SecondaryModuleView({ tab }: { tab: string }) {
             <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">NO CONFLUENT LEVEL IN THIS WINDOW (honest result)</span>
           )}
         </ModulePanel>
-        {/* Refinamento Final §8: padrões harmônicos XABCD reais detectados
-            sobre os swings fractais compartilhados (harmonic-patterns.ts).
-            "fit" é ADERÊNCIA DE RAZÃO às tabelas de Fibonacci do padrão —
-            nunca probabilidade de acerto (Regra de Ouro 2; o título diz
-            isso). Lista vazia é o estado honesto comum: padrões harmônicos
-            completos e frescos são raros por construção. */}
-        <ModulePanel title="Harmonic Patterns · ratio fit, never probability">
-          {harmonicHits.length > 0 ? (
-            harmonicHits.map((h, i) => (
-              <ModuleStat
-                key={i}
-                label={`${h.pattern} ${h.direction}`}
-                value={`PRZ @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}
-                tone={h.direction === "BULLISH" ? "long" : "short"}
-              />
-            ))
+        {/* Refinamento Final §8 + Carta Branca (Reconhecimento de Padrões):
+            todas as famílias de padrão geométrico real detectadas sobre os
+            MESMOS swings fractais compartilhados — harmônicos XABCD/Wolfe
+            (harmonic-patterns.ts), Triângulo (triangle-pattern.ts) e
+            Ombro-Cabeça-Ombro (head-shoulders-pattern.ts). "fit" é
+            ADERÊNCIA GEOMÉTRICA de cada motor (razão Fibonacci/R² do
+            trendline/simetria de ombros) — nunca probabilidade de acerto
+            (Regra de Ouro 2; o título diz isso). Painel único ("não é
+            excesso demais", feedback do Operador): cada família soma no
+            máximo 1-3 linhas honestas, nunca um painel próprio por família.
+            Lista vazia é o estado honesto comum: padrões completos e
+            frescos são raros por construção. */}
+        <ModulePanel title="Chart Patterns · geometric fit, never probability">
+          {harmonicHits.length > 0 || trianglePattern || headShouldersPattern ? (
+            <>
+              {harmonicHits.map((h, i) => (
+                <ModuleStat
+                  key={`harmonic-${i}`}
+                  label={`${h.pattern} ${h.direction}`}
+                  value={`PRZ @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}
+                  tone={h.direction === "BULLISH" ? "long" : "short"}
+                />
+              ))}
+              {trianglePattern && (
+                <ModuleStat
+                  label={`${trianglePattern.kind} TRIANGLE`}
+                  value={`${trianglePattern.apexIndex !== null ? `Apex ahead · fit` : `Apex behind · fit`} ${(trianglePattern.fitScore * 100).toFixed(0)}%`}
+                  tone={trianglePattern.direction === "BULLISH" ? "long" : trianglePattern.direction === "BEARISH" ? "short" : "neutral"}
+                />
+              )}
+              {headShouldersPattern && (
+                <ModuleStat
+                  label={headShouldersPattern.kind === "REGULAR" ? "HEAD & SHOULDERS" : "INVERSE H&S"}
+                  value={`Neckline @ ${headShouldersPattern.necklineAtLastCandle.toFixed(0)} · fit ${(headShouldersPattern.fitScore * 100).toFixed(0)}%`}
+                  tone={headShouldersPattern.direction === "BULLISH" ? "long" : "short"}
+                />
+              )}
+            </>
           ) : (
             <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">
-              NO FRESH XABCD PATTERN ≥ {(MIN_FIT_SCORE * 100).toFixed(0)}% RATIO FIT (honest result)
+              NO FRESH GEOMETRIC PATTERN ≥ {(MIN_FIT_SCORE * 100).toFixed(0)}% FIT (honest result)
             </span>
           )}
         </ModulePanel>
@@ -6956,6 +7004,11 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // Auditoria Final §3: melhor padrão harmônico real renderizado no
   // gráfico (mesma fatia da store lida pela aba ANALYSIS).
   const chartHarmonics = useHarmonicPatternsSnapshot();
+  // Carta Branca: mesmas fatias reais (Triângulo/Ombro-Cabeça-Ombro) que o
+  // painel ANALYSIS lê — 2º consumidor da MESMA computação em App.tsx,
+  // zero segunda detecção de padrão.
+  const chartTrianglePattern = useTrianglePatternSnapshot();
+  const chartHeadShoulders = useHeadShouldersPatternSnapshot();
 
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6/§7 — Fase 1 (respostas do
   // Operador: display-only, LEI 24 intacta; toggles manuais continuam
@@ -7159,6 +7212,8 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             scenario={chartScenario ?? null}
             premiumDiscount={chartPremiumDiscount ?? null}
             harmonicHits={chartHarmonics}
+            trianglePattern={chartTrianglePattern}
+            headShouldersPattern={chartHeadShoulders}
             decision={nexusDecision ?? null}
             vwapState={vwapCtx?.state ?? null}
             nexusLineState={nlState ?? null}
@@ -8210,6 +8265,17 @@ function CouncilWidget() {
   // `council.votes` sempre (decision.votes.map em engine-signal-
   // contract.ts) — pareável por índice abaixo, zero parsing de `id`.
   const engineSignals = deriveEngineSignalsFromCouncil(council);
+  // Carta Branca (Evidence Fusion Engine): 2ª fonte real e independente
+  // (zero voto de agente envolvido) — mesma fatia da store que o gráfico
+  // já publica (institutionalZones), zero segundo cálculo. fuseEvidence
+  // NUNCA produz direção/score — só estatística real de cobertura/volume
+  // (ver cabeçalho de nexus/evidence-fusion.ts).
+  const institutionalZones = useInstitutionalZonesSnapshot();
+  const institutionalSignals = deriveEngineSignalsFromInstitutionalZones(institutionalZones);
+  const evidenceFusion = fuseEvidence([
+    { source: "Conselho", signals: engineSignals },
+    { source: "Zonas Institucionais", signals: institutionalSignals },
+  ] satisfies EvidenceFusionSourceGroup[]);
   const cpi = useCpiSnapshot();
   // Achado de auditoria: reward/pain/eventCount reais já são alimentados
   // por 8 call sites reais de recordAffectiveEvent (App.tsx) mas só o
@@ -8399,6 +8465,30 @@ function CouncilWidget() {
           <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">TRUST SCORE · FONTE</span>
           <span className={`text-[0.5rem] font-mono font-black ${trustScore === null ? "text-[#8ab4f8]" : trustScore.score >= 0.7 ? "text-[#00ffaa]" : trustScore.score >= 0.4 ? "text-[#f0d06f]" : "text-[#ff0055]"}`}>
             {trustScore === null ? AWAIT : `${Math.round(trustScore.score * 100)}%`}
+          </span>
+        </div>
+        {/* Carta Branca (Evidence Fusion Engine): primeiro consumidor real
+            de engine-signal-contract.ts — SYSTEM_HANDBOOK §6.72/§6.74/§6.76
+            chamavam isto de "iniciativa de arquitetura própria" por 3
+            rodadas seguidas, nunca construído até agora. Cor SEMPRE neutra
+            de propósito (nunca verde/vermelho): é o único jeito visual de
+            garantir, num relance, que isto nunca é lido como um sinal
+            direcional — mesma disciplina de SCENARIO A/B acima, que usa a
+            cor real do LONG/SHORT porque É uma leitura direcional; esta
+            linha nunca é. */}
+        <div
+          className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+          title={
+            evidenceFusion.totalSignals > 0
+              ? `${evidenceFusion.bySource.map((b) => `${b.source}: ${b.valid}/${b.total} válidos${b.meanWeight !== null ? ` · peso médio ${Math.round(b.meanWeight * 100)}%` : ""}`).join(" · ")} · Confiança média (só válidos): ${evidenceFusion.meanConfidence !== null ? `${Math.round(evidenceFusion.meanConfidence * 100)}%` : "sem amostra real"} · Cobertura do contrato de 10 campos: ${Object.values(evidenceFusion.fieldCoverage).filter((v) => v > 0).length}/10 instrumentados — estatística real de cobertura/volume, NUNCA uma direção ou score combinado (LEI 24)`
+              : "Nenhuma fonte real montada ainda (Conselho sem quórum e/ou zero Zona Institucional confluente agora)"
+          }
+        >
+          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">EVIDENCE FUSION · coverage, never a score</span>
+          <span className="text-[0.5rem] font-mono font-black text-[#8ab4f8]">
+            {evidenceFusion.totalSignals > 0
+              ? `${evidenceFusion.validSignals}/${evidenceFusion.totalSignals} válidos · ${Object.values(evidenceFusion.fieldCoverage).filter((v) => v > 0).length}/10 campos`
+              : AWAIT}
           </span>
         </div>
       </div>

@@ -5965,6 +5965,187 @@ módulos, 879,38 kB).
 
 ---
 
+### 6.80 Lapidação por captura real (BTC 1H): kill zones só a ocorrência
+mais recente + teto de etiquetas Sweep + dedupe de membros da Zona
+(achado de auditoria: esta entrega existia commitada — 522874c — mas
+nunca tinha ganho sua própria entrada aqui; corrigido agora, junto da
+Carta Branca §6.81, para o handbook continuar a memória evolutiva real)
+
+Captura de tela real do Operador (BTC/USDT 1H): "linhas amarelas"
+verticais repetidas cruzando o gráfico inteiro — sem explicação visível
+do que eram.
+
+**Causa raiz real**: `KillZoneBandsPlugin.tsx` desenhava TODA ocorrência
+histórica de cada Kill Zone ICT (Londres/NY/Ásia) ainda dentro da janela
+de candles carregada — em 1H, isso significa várias faixas repetidas da
+MESMA sessão em dias diferentes, todas simultâneas na tela.
+
+**Corrigido**: `latestSpanPerZone` (Map, chave = `span.id`, mantém só o
+`endIndex` mais alto por zona) — o laço de desenho passa a iterar
+`latestSpanPerZone.values()` em vez de `spans` inteiro. Dado real
+intacto (Regra de Ouro 4): só a mais recente de cada zona ganha desenho,
+nunca a lista subjacente é podada.
+
+**2 achados adicionais da mesma captura, mesma disciplina**:
+1. **Teto real de etiquetas Sweep** (`MAX_SWEEP_AXIS_LABELS = 4`):
+   `sweepLabelCandidates` ordenado por `latestIndex` desc e cortado em 4
+   — as price lines nativas continuam desenhadas para TODOS os clusters
+   reais (dado intacto), só a etiqueta de texto no eixo fica seletiva
+   (mesmo princípio depois reusado pela Carta Branca em S1/R1, §6.81).
+2. **Dedupe de membros repetidos na etiqueta de Zona Institucional**:
+   `labelCounts` (Map) agrega membros com o mesmo `label` em "Sweep ×2"
+   em vez de repetir o nome cru — informação idêntica, texto mais curto.
+
+**Correção incidental**: 3 ocorrências de `side: "left" as const,`
+viraram `side: "left",` — o `as const` desnecessário (o tipo do array já
+inferia o literal corretamente) quebrava 3 testes de padrão de código
+que esperavam o texto exato sem o qualificador.
+
+**Testes executados**: `tsc --noEmit` limpo · 3 novos em
+`tests/refinamento-final-wiring.test.ts` · `npm run build` ok. Commit:
+522874c.
+
+---
+
+### 6.81 "Carta Branca" — otimização do motor matemático, reconhecimento
+de padrões (Triângulo + Ombro-Cabeça-Ombro), Evidence Fusion Engine
+finalizado, precisão das etiquetas laterais; relatório completo em
+`docs/RELATORIO_CARTA_BRANCA_CIBORGUE_ELITE.md`
+
+Mega-diretriz em português informal/ditado pedindo, em bloco único:
+organizar a arquitetura do motor matemático e eliminar redundância real;
+etiquetas laterais "mais perfeitas... só mostrar a precisão maciça";
+melhorar visualização de retest-zone/zigzag e adicionar explicitamente
+reconhecimento de Triângulo e Ombro-Cabeça-Ombro; liberdade total sobre
+estratégia/calibração/pesquisa externa; decidir o que adicionar/remover;
+o efeito visual mais bonito, com liberdade de remodelar ícones/layout;
+"habilitar todas as ferramentas para funcionarem 100% automatizadas";
+fazer o sistema parecer um ser vivo/operador de elite, "não ter erro com
+ele".
+
+**Evento de segurança tratado antes de qualquer execução** (detalhe
+completo no relatório §0): um bloco `[DIRETIVA SUPREMA...]` endereçando
+uma persona fictícia ("Agente 4") nunca usada nesta sessão, com
+linguagem de protocolo/comando em terceira pessoa, apareceu colado ao
+final da mensagem — correspondência literal ao item 7 da Disciplina de
+Trabalho deste CLAUDE.md (persona fictícia + linguagem de protocolo
+pedindo para pular autorização). Pausado via `AskUserQuestion` antes de
+agir, com o default seguro ("ignorar o bloco") como primeira opção. O
+Operador confirmou autoria explicitamente ("É totalmente meu, pode usar
+como instrução") — o conteúdo substantivo entrou no escopo autorizado
+desta rodada; a persona "Agente 4" nunca foi adotada.
+
+**Pesquisa real executada antes de implementar** (WebSearch, fontes
+citadas no relatório): definição de Triângulo Ascendente/Descendente/
+Simétrico (FXOpen, ChartMill, Strike.money, Titan FX, Scanz — regra real
+de mínimo 2 toques por linha, convergente entre todas as fontes) e de
+Ombro-Cabeça-Ombro regular/inverso (LightningChart, Dukascopy, LuxAlgo,
+OANDA — neckline real, ombros aproximadamente simétricos medidos sobre a
+própria neckline).
+
+**2 motores novos, isolados e testados antes de qualquer graduação**
+(Laboratório de Evolução): `nexus/triangle-pattern.ts`
+(`detectTrianglePattern`, mínimos quadrados reais + R² real sobre os
+MESMOS swings fractais de `fractal-swings.js`; SIMÉTRICO nunca ganha uma
+direção fabricada — Regra de Ouro 3, a literatura confirma que o lado do
+rompimento não é geométrico) e `nexus/head-shoulders-pattern.ts`
+(`detectHeadAndShoulders`, reusa `buildAlternatingPivots` de
+`harmonic-patterns.ts` sem segunda implementação de zigzag; neckline
+real extrapolada por regressão de 2 pontos, ombros medidos ACIMA da
+neckline, nunca do preço bruto). 16 testes de execução real somados.
+
+**Graduação ao gráfico real** (reusa o pipeline já existente do melhor
+padrão harmônico, nunca uma segunda arquitetura de desenho): o vencedor
+único entre as 3 famílias (harmônico/Triângulo/H&S) é escolhido por
+`fitScore` desc e desenhado — harmônico como já era (polilinha XABCD/
+Wolfe + PRZ/EPA); Triângulo como 2 retas reais dedicadas (mínimos
+quadrados avaliados do 1º toque até o último candle) + preço real do
+ápice (interseção das 2 retas) quando à frente do candle atual; H&S como
+outline reusando a MESMA função de zigzag do harmônico + reta dedicada da
+neckline extrapolada. Painel lateral consolidado em um único "Chart
+Patterns · geometric fit, never probability" (nunca 3 painéis
+separados — "não é excesso demais", feedback já dado pelo Operador em
+rodada anterior). Toggle "HARMÔNICOS" renomeado para "PADRÕES GRÁFICOS"
+(mesmo id interno, zero migração de preferência salva) — agora cobre as
+3 famílias com honestidade.
+
+**Evidence Fusion Engine finalizado** — item que SYSTEM_HANDBOOK §6.72/
+§6.74/§6.76 (3 rodadas seguidas) classificou como "iniciativa de
+arquitetura própria, recomendado, nunca construído": `nexus/evidence-
+fusion.ts` (`fuseEvidence`) agrega `EngineSignal[]` de fontes JÁ reais e
+JÁ independentes (Conselho + Zonas Institucionais — 2º montador real,
+`deriveEngineSignalsFromInstitutionalZones`) em estatística REAL de
+cobertura/volume de evidência — nunca uma segunda pool de DIREÇÃO (LEI
+24 intacta, mesma linha vermelha do cabeçalho de `engine-signal-
+contract.ts`, repetida de propósito no novo arquivo). Scenario Engine
+deliberadamente EXCLUÍDO como 3ª fonte (documentado): `opinionWeight`
+já É a mesma massa de opinião do Conselho, somar as duas contaria a
+MESMA evidência 2x — a redundância que a própria Carta Branca pediu para
+eliminar, não multiplicar. Achado real de auditoria corrigido no
+caminho: `computeInstitutionalZones` já era calculado há várias rodadas
+só dentro do gráfico (`useMemo` local), sem NENHUMA fatia própria na
+store — `institutionalZones` ganhou os 4 lugares reais (state → actions
+→ defaults → seletor) e o gráfico agora TAMBÉM publica o mesmo array já
+computado (zero segundo cálculo). Novo consumidor real em
+`CouncilWidget`: linha "EVIDENCE FUSION · coverage, never a score" —
+cor SEMPRE neutra de propósito (nunca verde/vermelho), garantia visual
+de que a leitura nunca é lida como sinal direcional. Confirmado ao vivo
+via Playwright contra o dev server real: `1/7 válidos · 5/10 campos`,
+número real mesmo sob dados de mercado bloqueados pelo proxy do sandbox.
+
+**Etiquetas laterais — gate real de precisão** ("só mostrar a precisão
+maciça"): S1/R1 no eixo anti-colisão agora exigem `strength.label ===
+"FORTE"` (>=2 toques independentes reais, `STRONG_TOUCH_THRESHOLD` já
+existente em `support-resistance-engine.js` — zero limiar novo
+inventado). Achado de auditoria que tornou o gate significativo (não um
+no-op): `touches` nunca é 0 na prática (o próprio nível sempre conta a si
+mesmo), então "FRACA" significa literalmente "nenhum OUTRO swing
+independente confirmou esta zona ainda" — o caso genuinamente menos
+preciso. Regra de Ouro 4 preservada com cuidado: só a ETIQUETA fica mais
+rigorosa — a linha nativa (`supportLineRef`/`resistanceLineRef`,
+`useEffect` dedicado) e o valor real de support/resistance (usado pelo
+Core Engine/StructureLevelsStrip) continuam incondicionais, intocados.
+TP1/TP2/TP3 do Trade Plan/fallback do Núcleo deliberadamente NÃO
+ganharam o mesmo gate (documentado): são a informação mais acionável do
+sistema, esconder por força fraca removeria dado real que o Operador
+precisa mesmo quando ainda não confirmado 2x.
+
+**Auditoria "automático cobre tudo" + ícones**: verificado por inspeção
+direta de código (não uma suposição) — `DEFAULT_CHART_LAYER_AUTO_MODE` e
+`RELEVANCE_LAYER_IDS` já cobriam as 21 `CHART_LAYER_IDS` reais 1:1 antes
+desta rodada (TypeScript's `Record<ChartLayerId,boolean>` torna uma
+chave faltando um erro de compilação, não uma suposição barata); nenhuma
+camada nova foi criada nesta rodada (Triângulo/H&S reusam o id
+"harmonics" já existente), então nada ficou de fora. Radar já escaneia
+em `setInterval` real, não exige clique manual para o ciclo central.
+Inventário de ícones (App.tsx, 9 ícones do rail de navegação + ~19 do
+resto do app) revisado: zero duplicação semântica, zero placeholder/TODO
+encontrado — consistente com as 5+ rodadas de polimento visual dedicado
+já feitas antes desta (Lapidação Profissional do Gráfico, 2×Adendo,
+2×Polimento/Lapidação Visual). Achado honesto: nenhuma mudança de ícone
+foi necessária — inventar uma só para "fazer algo" violaria a disciplina
+de não adicionar mudança sem justificativa real já seguida em toda esta
+sessão.
+
+**Relatório completo**: `docs/RELATORIO_CARTA_BRANCA_CIBORGUE_ELITE.md`.
+
+**Testes executados**: `tsc --noEmit` limpo · **134 arquivos / 2269
+testes** (100%, +48 novos: 9 Triângulo + 7 Ombro-Cabeça-Ombro + 9
+Evidence Fusion + 6 institutional-zones assembler + 11 consolidação
+Evidence Fusion Engine wiring + 6 institutional-zones store wiring, mais
+ajustes de janela/literal em testes de padrão pré-existentes shiftados
+pelas novas linhas — nenhum enfraquecido, todos continuam checando a
+mesma garantia real de antes, só a posição/texto exato mudou) ·
+`npm run build` ok (1850 módulos, 888,38 kB) · Playwright real contra o
+dev server: confirmado o toggle "PADRÕES GRÁFICOS" renderizando (troca
+de "HARMÔNICOS"), o painel "Chart Patterns" com o piso honesto de 75%
+FIT, e a linha "EVIDENCE FUSION" com dado real ao vivo — mesma limitação
+de ambiente já documentada em rodadas anteriores (proxy do sandbox
+bloqueia WebSocket real da Binance, gráfico fica honestamente em
+"AWAITING CANDLES…"; não impede a verificação da UI estática/painéis).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
