@@ -3279,7 +3279,18 @@ export default function App() {
                     Eventos/Núcleo Neural/Heatmap de ativos) vivem, à
                     parte, no Workspace Manager (Pinned/Docked/Collapsed/
                     Hidden/Floating — ver WorkspaceManagerPanel). */}
-                <div className="terminal-grid flex-1 min-h-0 overflow-y-auto min-[1120px]:overflow-hidden scrollbar-hide p-1">
+                {/* Lapidação Visual (DIRETRIZ 1 — "o gráfico é o
+                    protagonista: maximizar a área útil"): medição real com
+                    Playwright mostrou o painel do gráfico recuado 68px de
+                    cada lado num viewport de 1180 — 56px são as réguas de
+                    navegação (funcionais, ficam), mas os 12px restantes eram
+                    DOIS acolchoamentos aninhados fazendo o mesmo trabalho: o
+                    `p-2` do container-coluna logo acima E este `p-1`. O
+                    externo já dá o respiro entre cabeçalho/grade/rodapé;
+                    este só duplicava o recuo. Removido — a moldura e o
+                    espaçamento entre painéis (`gap-2`) continuam intactos,
+                    o gráfico só deixa de pagar a margem duas vezes. */}
+                <div className="terminal-grid flex-1 min-h-0 overflow-y-auto min-[1120px]:overflow-hidden scrollbar-hide">
                   <div className="terminal-row min-h-0">
                     {/* MAIN — o Gráfico é o coração da operação; sozinho em
                         .terminal-main, sem colunas fixas disputando
@@ -7311,7 +7322,14 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   return (
     <Widget
       id="chart"
-      title={`GRÁFICO · ${selectedAsset ?? ""}/USDT`}
+      // Lapidação Visual (DIRETRIZ 2 — "não repetir informação"): o prefixo
+      // "GRÁFICO · " rotulava o óbvio (o maior elemento da tela, cheio de
+      // candles) e o par já aparece no seletor de ativo da barra superior.
+      // Nenhuma plataforma de referência escreve "CHART" no cabeçalho do
+      // gráfico — elas usam essa linha para a identidade do instrumento.
+      // Mantido só o par, que identifica o painel quando ele está
+      // minimizado/listado no Workspace Manager.
+      title={`${selectedAsset ?? ""}/USDT`}
       flex="flex-[1.8] min-h-[320px]"
       extraHeader={
         <div className="flex items-center gap-1 text-[0.45rem]">
