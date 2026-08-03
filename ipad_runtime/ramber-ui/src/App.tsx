@@ -3969,7 +3969,7 @@ function ChartLayersPanel() {
                         onClick={() => setEmaPeriod?.(p)}
                         className={`flex-1 text-[0.4rem] py-1 rounded border font-bold tracking-wider ${
                           emaPeriod === p
-                            ? "border-[#42a5f5] bg-[#42a5f515] text-[#42a5f5]"
+                            ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
                             : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
                         }`}
                       >
@@ -4139,7 +4139,11 @@ function NarrativeSummaryCard() {
       <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">
         LEITURA CONSOLIDADA
       </span>
-      <p className="text-[0.65rem] leading-relaxed text-[#c8d4e6]">{narrative}</p>
+      {/* Lapidação Visual (DIRETRIZ 7): #c8d4e6 era um cinza-azulado de uso
+          único em toda a árvore — trocado pela cor de texto base real do app
+          (#a0f0ff, a mesma do container raiz), levemente suavizada para
+          leitura prolongada de prosa. Zero cor nova. */}
+      <p className="text-[0.65rem] leading-relaxed text-[#a0f0ff]/85">{narrative}</p>
     </div>
   );
 }
@@ -5348,6 +5352,20 @@ function CoreSignalBadge({
       title={fusedTitle}
     >
       <span className={`text-sm md:text-base font-black tracking-wider ${textTone}`}>{direction ?? AWAIT}</span>
+      {/* Lapidação Visual (DIRETRIZ 2 — "sempre que dois elementos
+          transmitirem praticamente a mesma informação, manter apenas o
+          melhor"): sem direção real E sem confiança real E sem qualificador,
+          este subtítulo renderizava literalmente o MESMO "AGUARDANDO" já
+          escrito em corpo grande logo acima — duas linhas para um único bit
+          ("ainda não há leitura"), visível em toda captura do estado
+          fail-closed. A condição é deliberadamente ESTREITA — exige que a
+          linha grande também esteja em AGUARDANDO (direction null): com uma
+          direção real na tela, "AGUARDANDO" no subtítulo deixa de ser eco e
+          passa a ser informação de verdade ("direção existe, confiança
+          ainda não"), então continua aparecendo. Nada é escondido: no caso
+          suprimido a ausência já está dita, em corpo maior, um pixel acima.
+          A altura fixa (h-[38px]) mantém o cabeçalho sem salto de layout. */}
+      {(direction || confidence || outcomeQualifier) && (
       <span className="text-[0.4rem] md:text-[0.45rem] font-bold text-[#8ab4f8]/60 tracking-[0.18em] uppercase mt-[1px] whitespace-nowrap">
         {/* V2 §3: o estado operacional único no subtítulo do MESMO badge —
             header alimentado pelo contrato sem um elemento novo. Auditoria
@@ -5367,6 +5385,7 @@ function CoreSignalBadge({
         {confidence ?? AWAIT}
         {outcomeQualifier ? ` · ${outcomeQualifier}` : ""}
       </span>
+      )}
     </div>
   );
 }
@@ -9188,7 +9207,15 @@ function DecisionValidationWidget() {
           className="flex justify-between items-center bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0"
           title="Motor de Confluência Cruzada: concordância real entre Ensemble, Comitê e Matriz Multi-Timeframe com a direção já emitida pelo Core Engine. Nunca probabilidade de acerto de mercado."
         >
-          <span className="text-[0.45rem] text-[#c07dff] font-bold tracking-widest">
+          {/* Lapidação Visual (DIRETRIZ 7 — consistência): este rótulo usava
+              o hex solto #c07dff, um quase-duplicado feito à mão do
+              .accent-consensus (#c86bff) que o index.css já define e
+              documenta como "púrpura marca a leitura do Comitê/GMIL (opinião
+              agregada)" — exatamente o que "confluência cruzada entre 3
+              subsistemas" É. Passa a usar a classe nomeada: zero cor nova,
+              mesma semântica declarada dos irmãos accent-risk/accent-consensus
+              deste mesmo cartão. */}
+          <span className="text-[0.45rem] accent-consensus font-bold tracking-widest">
             CONFLUÊNCIA CRUZADA · 3 SUBSISTEMAS
           </span>
           <span className={`text-[0.55rem] font-mono font-black ${convictionColor}`}>{convictionLabel}</span>
