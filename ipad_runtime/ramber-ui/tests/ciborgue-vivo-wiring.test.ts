@@ -135,12 +135,13 @@ describe('StructureBreakMarkersPlugin.tsx: mesma arquitetura de overlay do Liqui
     expect(plugin).toContain('if (!brk) return; // sem rompimento real na amostra — nada a desenhar, honesto.');
   });
 
-  it('achado real de captura de tela do Operador ("CHOC" cortado/sobreposto pela caixa "EMA 21"): o TEXTO ("BOS"/"CHOCH") não é mais desenhado neste canvas próprio — migrou pra priceAxisLabels; a LINHA de rompimento continua intocada', () => {
+  it('achado real de captura de tela do Operador ("CHOC" cortado/sobreposto pela caixa "EMA 21"): o TEXTO ("BOS"/"CHOCH") não é mais desenhado neste canvas próprio — migrou pra priceAxisLabels; a LINHA de rompimento continua real, só nasce depois da seta (Ordem "FECHAMENTO INTEGRAL" §12, ver describe abaixo) em vez de em x1', () => {
     const plugin = read('../src/chart/StructureBreakMarkersPlugin.tsx');
     expect(plugin).not.toMatch(/ctx\.fillText\(brk\.type/);
     expect(plugin).not.toContain('ctx.font = "10px -apple-system, sans-serif";');
-    // a linha real (moveTo/lineTo/stroke) continua exatamente como antes
-    expect(plugin).toContain('ctx.moveTo(x1, yLine);');
+    // a linha real (moveTo/lineTo/stroke) continua real; só o ponto de
+    // partida deslocou para depois da seta, nunca mais sobre ela.
+    expect(plugin).toContain('ctx.moveTo(x1 + ARROW_HALF_SIZE + ARROW_GAP_PX, yLine);');
     expect(plugin).toContain('ctx.lineTo(cssWidth, yLine);');
     expect(plugin).toContain('ctx.stroke();');
   });
@@ -148,6 +149,46 @@ describe('StructureBreakMarkersPlugin.tsx: mesma arquitetura de overlay do Liqui
   it('BREAK_DECAY exportado — reaproveitado por priceAxisLabels (EnhancedChart_110_Percent.tsx), zero segunda curva de decaimento', () => {
     const plugin = read('../src/chart/StructureBreakMarkersPlugin.tsx');
     expect(plugin).toContain('export const BREAK_DECAY: DecayConfig = { fadeStartCandles: 20, expireCandles: 100, minAlpha: 0.15 };');
+  });
+});
+
+// Ordem "FECHAMENTO INTEGRAL" §12 ("Setas e Direção"): seta pequena,
+// precisa, orientada, no ponto real do rompimento — zero dado novo (mesma
+// brk.direction/x1/y que a linha companheira já usa), zero segunda curva
+// de decaimento (mesmo alpha resolvido acima govern a seta também, via
+// ctx.globalAlpha já setado antes do bloco).
+describe('Ordem "FECHAMENTO INTEGRAL" §12: seta de direção no ponto real do rompimento BOS/CHOCH', () => {
+  const plugin = () => read('../src/chart/StructureBreakMarkersPlugin.tsx');
+
+  it('triângulo pequeno (±4px) apontando para a direção real do rompimento — ALTA aponta para cima, o resto para baixo', () => {
+    const p = plugin();
+    expect(p).toContain('const ARROW_HALF_SIZE = 4;');
+    expect(p).toContain('const ARROW_GAP_PX = 3;');
+    // bullish (ALTA): ápice em y - HALF, base em y + HALF — aponta pra cima.
+    expect(p).toContain('ctx.moveTo(x1, y - ARROW_HALF_SIZE);');
+    expect(p).toContain('ctx.lineTo(x1 - ARROW_HALF_SIZE, y + ARROW_HALF_SIZE);');
+    expect(p).toContain('ctx.lineTo(x1 + ARROW_HALF_SIZE, y + ARROW_HALF_SIZE);');
+    // bearish: ápice em y + HALF, base em y - HALF — aponta pra baixo.
+    expect(p).toContain('ctx.moveTo(x1, y + ARROW_HALF_SIZE);');
+    expect(p).toContain('ctx.lineTo(x1 - ARROW_HALF_SIZE, y - ARROW_HALF_SIZE);');
+    expect(p).toContain('ctx.lineTo(x1 + ARROW_HALF_SIZE, y - ARROW_HALF_SIZE);');
+  });
+
+  it('MESMA cor real da linha (color, já derivada de brk.direction acima) — nunca uma cor nova só para a seta', () => {
+    const p = plugin();
+    const idx = p.indexOf('const ARROW_HALF_SIZE = 4;');
+    const block = p.slice(idx, p.indexOf('ctx.fill();', idx) + 'ctx.fill();'.length);
+    expect(block).toContain('ctx.fillStyle = color;');
+    expect(block).toContain('ctx.fill();');
+    expect(block).not.toContain('fillStyle = "');
+  });
+
+  it('seta e linha nunca se sobrepõem: a seta desenha ANTES (no ponto x1), a linha nasce só depois do respiro (x1 + ARROW_HALF_SIZE + ARROW_GAP_PX) — "não deixar setas atravessarem... textos" vale também para a linha companheira', () => {
+    const p = plugin();
+    const arrowIdx = p.indexOf('const ARROW_HALF_SIZE = 4;');
+    const lineIdx = p.indexOf('ctx.moveTo(x1 + ARROW_HALF_SIZE + ARROW_GAP_PX, yLine);');
+    expect(arrowIdx).toBeGreaterThan(-1);
+    expect(lineIdx).toBeGreaterThan(arrowIdx);
   });
 });
 

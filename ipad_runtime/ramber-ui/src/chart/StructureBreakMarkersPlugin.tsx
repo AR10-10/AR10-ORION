@@ -100,6 +100,29 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
       const yLine = Math.round(y) + 0.5;
 
       ctx.globalAlpha = alpha;
+      // Ordem "FECHAMENTO INTEGRAL" §12: seta de direção pequena e precisa
+      // no ponto real do rompimento — ↑ para BOS/CHOCH de alta, ↓ para
+      // baixa. Zero dado novo: MESMA direção/preço/tempo que a linha ao
+      // lado já usa (brk.direction/x1/y), só um segundo traço geométrico
+      // no mesmo ponto. Desenhada ANTES da linha começar (a linha nasce em
+      // x1 + ARROW_HALF_SIZE + ARROW_GAP_PX, nunca em x1) para os dois
+      // elementos nunca se sobreporem — "não deixar setas atravessarem...
+      // textos" também vale para a própria linha companheira.
+      const ARROW_HALF_SIZE = 4;
+      const ARROW_GAP_PX = 3;
+      ctx.beginPath();
+      if (bullish) {
+        ctx.moveTo(x1, y - ARROW_HALF_SIZE);
+        ctx.lineTo(x1 - ARROW_HALF_SIZE, y + ARROW_HALF_SIZE);
+        ctx.lineTo(x1 + ARROW_HALF_SIZE, y + ARROW_HALF_SIZE);
+      } else {
+        ctx.moveTo(x1, y + ARROW_HALF_SIZE);
+        ctx.lineTo(x1 - ARROW_HALF_SIZE, y - ARROW_HALF_SIZE);
+        ctx.lineTo(x1 + ARROW_HALF_SIZE, y - ARROW_HALF_SIZE);
+      }
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
       // Fio de Seda (Regra de Ouro 2): 1px sólida real, do ponto real de
       // rompimento até a borda direita — mesma primitiva do
       // LiquidityZonesPlugin, nunca setLineDash. O TEXTO ("BOS"/"CHOCH")
@@ -116,7 +139,7 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
       ctx.lineWidth = 1;
       ctx.strokeStyle = color;
       ctx.beginPath();
-      ctx.moveTo(x1, yLine);
+      ctx.moveTo(x1 + ARROW_HALF_SIZE + ARROW_GAP_PX, yLine);
       ctx.lineTo(cssWidth, yLine);
       ctx.stroke();
       ctx.globalAlpha = 1;
