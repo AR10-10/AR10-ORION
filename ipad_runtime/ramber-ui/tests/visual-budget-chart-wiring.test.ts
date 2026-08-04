@@ -26,17 +26,27 @@ describe('InstitutionalZonePlugin.tsx: confluenceWeight exportado + visualWeight
   it('aceita visualWeights (peso já resolvido pela competição cruzada), paralelo a zones por índice', () => {
     const s = institutionalZonePlugin();
     expect(s).toContain('visualWeights?: (number | undefined)[];');
-    expect(s).toContain('export function InstitutionalZonePlugin({ chart, series, zones, visualWeights }: InstitutionalZonePluginProps) {');
+    // livePrice (Ordem "Lapidação Visual Final + Nova Linguagem de
+    // Gráfico" §3 — intensidade real por proximidade ao preço): 4º prop,
+    // assinatura re-fixada.
+    expect(s).toContain('export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, livePrice }: InstitutionalZonePluginProps) {');
   });
 
   it('o loop de desenho usa visualWeights[i] quando real (!== undefined); cai em confluenceWeight isolado (comportamento pré-Ordem 03) quando ausente — nunca um valor fabricado', () => {
     const s = institutionalZonePlugin();
     expect(s).toContain('const resolvedWeight = currentVisualWeights?.[i];');
-    expect(s).toContain('const weight = resolvedWeight !== undefined ? resolvedWeight : confluenceWeight(zone.distinctSourceCount);');
+    // baseWeight (renomeado de weight): §3 multiplica por proximityFactor
+    // — a garantia original (fallback fail-closed para confluenceWeight
+    // isolado quando visualWeights não resolveu) continua idêntica, só
+    // ganhou um segundo fator real e independente depois.
+    expect(s).toContain('const baseWeight = resolvedWeight !== undefined ? resolvedWeight : confluenceWeight(zone.distinctSourceCount);');
+    expect(s).toContain('const weight = baseWeight * proximityFactor(zone.centerPrice, livePriceRef.current);');
   });
 
   it('visualWeights entra no dirty-check (useEffect deps) igual a zones — uma resolução de orçamento nova redesenha', () => {
-    expect(institutionalZonePlugin()).toContain('}, [zones, visualWeights]);');
+    // livePrice entrou no mesmo dirty-check (§3): um tick real de preço
+    // que cruza um limiar de proximidade também precisa redesenhar.
+    expect(institutionalZonePlugin()).toContain('}, [zones, visualWeights, livePrice]);');
   });
 });
 

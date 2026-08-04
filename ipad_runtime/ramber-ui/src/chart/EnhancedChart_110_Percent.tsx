@@ -18,7 +18,8 @@
 // preço real top/bottom de cada zona ainda não mitigada/varrida, o
 // mesmo filtro (!mitigated / !swept) e o mesmo cap de contagem que o
 // componente antigo já usava.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Crosshair } from "lucide-react";
 import {
   createChart,
   CandlestickSeries,
@@ -1057,6 +1058,26 @@ export function EnhancedChart_110_Percent({
       });
     }
     prevChartDataRef.current = data;
+  }, [data]);
+
+  // Ordem "Lapidação Visual Final + Nova Linguagem de Gráfico" §8/§9
+  // (RECENTRALIZAR): mesmo enquadre real do "zoom inteligente" acima
+  // (SMART_ZOOM_CANDLES/SMART_ZOOM_RIGHT_PAD_BARS) — zero segunda fórmula
+  // — só que disparado por toque do Operador em vez de automático na
+  // troca de timeframe/símbolo. §9 ("preferir uma ação única"): uma única
+  // chamada resolve as duas metades pedidas (recentralizar preço E
+  // restaurar escala) porque setVisibleLogicalRange já faz as duas ao
+  // mesmo tempo por construção — não existe, nesta lib, um "recentralizar
+  // sem tocar no zoom" que fizesse sentido separado. Toca só o
+  // timeScale() (pan/zoom); símbolo, timeframe e todo dado real
+  // permanecem intocados — nunca recarrega nada.
+  const recenterChart = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart || !data || data.length === 0) return;
+    chart.timeScale().setVisibleLogicalRange({
+      from: Math.max(0, data.length - SMART_ZOOM_CANDLES),
+      to: data.length - 1 + SMART_ZOOM_RIGHT_PAD_BARS,
+    });
   }, [data]);
 
   // Correção de latência (barra superior ↔ gráfico): patch cirúrgico da
@@ -2779,6 +2800,7 @@ export function EnhancedChart_110_Percent({
           series={chartReady?.series ?? null}
           zones={institutionalZones}
           visualWeights={institutionalZoneVisualWeights}
+          livePrice={typeof livePrice === "number" ? livePrice : null}
         />
       )}
       {/* Neural Market Aura: the conviction corridor, mounted BEFORE the
@@ -2814,6 +2836,35 @@ export function EnhancedChart_110_Percent({
         series={chartReady?.series ?? null}
         labels={priceAxisLabels}
       />
+      {/* §8/§9 (RECENTRALIZAR): canto inferior esquerdo — a única área do
+         canvas sem eixo nativo de preço nem etiqueta de contexto por
+         baixo (eixo nativo fica à direita; PriceLabelStackPlugin já usa
+         LEFT_MARGIN_PX mas nunca ocupa a faixa mais baixa da tela nas
+         capturas reais auditadas). Mesma linguagem visual de botão
+         pequeno já usada em App.tsx (px-1.5 py-1, texto 50% → acento
+         cyan no hover) — nenhuma paleta nova. aria-label real (não só
+         title): tooltip nativo não aparece em toque no iPad Safari,
+         achado já registrado e corrigido em outros controles nesta
+         mesma sessão.
+         z-10 (achado real via harness Playwright, elementFromPoint no
+         próprio centro do botão): os canvases INTERNOS da própria
+         lightweight-charts (sem className, geridos pela lib — nenhum dos
+         14 overlays deste projeto, todos com pointer-events-none
+         confirmado) usam z-index próprio e ficavam ACIMA do botão só por
+         não termos nenhum z-index explícito aqui — DOM order sozinha não
+         basta contra um z-index explícito da lib. z-10 garante ficar
+         acima sem entrar em conflito com nenhum overlay real deste
+         projeto (todos pointer-events-none, então nunca competem por
+         clique de qualquer forma). */}
+      <button
+        type="button"
+        onClick={recenterChart}
+        aria-label="Recentralizar gráfico"
+        title="Recentralizar"
+        className="absolute bottom-2 left-2 z-10 flex items-center gap-1 px-1.5 py-1 rounded bg-[#050810]/70 border border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#00f0ff] hover:border-[#00f0ff40] cursor-pointer pointer-events-auto"
+      >
+        <Crosshair size={11} />
+      </button>
     </div>
   );
 }

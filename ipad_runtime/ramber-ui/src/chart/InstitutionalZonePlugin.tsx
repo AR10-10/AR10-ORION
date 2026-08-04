@@ -69,6 +69,45 @@ const FILL_ALPHA_MAX = 0.16;
 const BORDER_ALPHA_MIN = 0.35;
 const BORDER_ALPHA_MAX = 0.65;
 
+// Ordem "Lapidação Visual Final + Nova Linguagem de Gráfico" §3: a faixa
+// (fillRect de largura total) é a representação mais honesta que existe
+// para este dado — InstitutionalZone não carrega um índice de formação
+// (é confluência de indicadores AGORA, não uma estrutura histórica como
+// FVG/OB, que já desenham só do candle real de formação até a direita —
+// ver LiquidityZonesPlugin), então estreitar a largura fabricaria uma
+// origem que o motor não calcula. O pedido real e implementável aqui é
+// outro, dito quase literalmente na Ordem: "faixa que ganha intensidade
+// apenas quando o preço se aproxima" — zero fabricação, só um segundo
+// fator real (distância ao preço vivo) multiplicando o peso que a
+// confluência já resolve. PROXIMITY_FLOOR nunca chega a 0 (Regra de Ouro
+// 4: a zona nunca desaparece por estar longe, só perde ênfase) — mesmo
+// espírito de FILL_ALPHA_MIN/BORDER_ALPHA_MIN acima, um piso, não um
+// apagamento. Limiares declarados (mesma honestidade de rrFloorSuffix/
+// NEXUS_CLOSED_WINDOW_MS neste repositório — parâmetro assumido, nunca
+// medição): dentro de 0.5% (o mesmo "perto" já usado em todo o app via
+// LIQUIDITY_PROXIMITY_PCT) o boost é pleno; a partir de 3% de distância,
+// a zona cai para o piso e passa a valer só pela confluência pura.
+const PROXIMITY_FULL_PCT = 0.5;
+const PROXIMITY_FADE_PCT = 3;
+const PROXIMITY_FLOOR = 0.5;
+
+// Exportada para execução real (não só padrão de fonte): é matemática
+// nova (curva de decaimento por distância), não fiação entre módulos —
+// mesma convenção deste repositório de "lógica pura de fronteira ganha
+// teste de execução real" (CLAUDE.md).
+export function proximityFactor(centerPrice: number, livePrice: number | null | undefined): number {
+  // Fail-closed: sem preço vivo ainda (carregamento inicial), nunca
+  // fabrica uma distância — comportamento idêntico ao de antes desta
+  // correção (peso 100% pela confluência).
+  if (typeof livePrice !== "number" || !Number.isFinite(livePrice) || livePrice <= 0) return 1;
+  const distPct = (Math.abs(centerPrice - livePrice) * 100) / livePrice;
+  if (distPct <= PROXIMITY_FULL_PCT) return 1;
+  if (distPct >= PROXIMITY_FADE_PCT) return PROXIMITY_FLOOR;
+  const span = PROXIMITY_FADE_PCT - PROXIMITY_FULL_PCT;
+  const t = (distPct - PROXIMITY_FULL_PCT) / span;
+  return 1 - t * (1 - PROXIMITY_FLOOR);
+}
+
 // Exportado — Ordem Oficial de Execução Nº 03 ("Implementação
 // Operacional"): esta é a mesma função que EnhancedChart_110_Percent.tsx
 // agora reusa para montar o candidato real de INSTITUTIONAL_ZONE que
@@ -94,22 +133,29 @@ interface InstitutionalZonePluginProps {
   // sempre (fail-closed para o comportamento já validado antes desta
   // rodada, nunca um valor fabricado).
   visualWeights?: (number | undefined)[];
+  // Ordem "Lapidação Visual Final + Nova Linguagem de Gráfico" §3: MESMO
+  // preço vivo já usado pelo resto do gráfico (patch da vela, rótulo
+  // `live` do eixo) — zero segunda coleta. Opcional/fail-closed: ausente
+  // = comportamento de sempre (peso só por confluência).
+  livePrice?: number | null;
 }
 
-export function InstitutionalZonePlugin({ chart, series, zones, visualWeights }: InstitutionalZonePluginProps) {
+export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, livePrice }: InstitutionalZonePluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const zonesRef = useRef(zones);
   const visualWeightsRef = useRef(visualWeights);
+  const livePriceRef = useRef(livePrice);
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente para o loop de desenho ler — mesmo
   // padrão de dataRef em KillZoneBandsPlugin/LiquidationHeatmapPlugin.
   zonesRef.current = zones;
   visualWeightsRef.current = visualWeights;
+  livePriceRef.current = livePrice;
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [zones, visualWeights]);
+  }, [zones, visualWeights, livePrice]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -149,7 +195,11 @@ export function InstitutionalZonePlugin({ chart, series, zones, visualWeights }:
         // este índice; cai de volta na força PRÓPRIA da zona (sem
         // competição) quando não — nunca um valor fabricado.
         const resolvedWeight = currentVisualWeights?.[i];
-        const weight = resolvedWeight !== undefined ? resolvedWeight : confluenceWeight(zone.distinctSourceCount);
+        const baseWeight = resolvedWeight !== undefined ? resolvedWeight : confluenceWeight(zone.distinctSourceCount);
+        // §3 ("ganha intensidade apenas quando o preço se aproxima"):
+        // segundo fator real e independente — nunca substitui a
+        // confluência, só a modula pela distância real ao preço vivo.
+        const weight = baseWeight * proximityFactor(zone.centerPrice, livePriceRef.current);
 
         ctx.fillStyle = `rgba(${ZONE_HUE_RGB}, ${(FILL_ALPHA_MIN + weight * (FILL_ALPHA_MAX - FILL_ALPHA_MIN)).toFixed(3)})`;
         ctx.fillRect(0, rectY, cssWidth, rectHeight);
