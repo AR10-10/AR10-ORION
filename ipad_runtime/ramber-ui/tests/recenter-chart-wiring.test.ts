@@ -10,13 +10,24 @@ import { join } from 'node:path';
 const chart = readFileSync(join(__dirname, '../src/chart/EnhancedChart_110_Percent.tsx'), 'utf8');
 
 describe('recenterChart: mesmo enquadre real do zoom inteligente, disparado por toque', () => {
-  it('reusa SMART_ZOOM_CANDLES/SMART_ZOOM_RIGHT_PAD_BARS — nunca uma segunda constante de enquadre', () => {
+  // Ordem "FECHAMENTO DO AR10 CYBORG" §5/§6: o enquadre restaurado deixou
+  // de ser a constante fixa 120 e passou a ser a MESMA janela adaptativa
+  // real do zoom inteligente (computeViewportCandles, 60-200 por largura
+  // real de plotagem + densidade de dados). A invariante travada aqui
+  // continua sendo a mesma de sempre — uma única fórmula de enquadre no
+  // arquivo inteiro — só que agora ela é uma função, não um número.
+  it('reusa computeViewportCandles/SMART_ZOOM_RIGHT_PAD_BARS — nunca uma segunda fórmula de enquadre', () => {
     const start = chart.indexOf('const recenterChart = useCallback(');
     expect(start, 'recenterChart não encontrado').toBeGreaterThan(-1);
     const end = chart.indexOf('}, [data]);', start);
     const body = chart.slice(start, end);
-    expect(body).toContain('from: Math.max(0, data.length - SMART_ZOOM_CANDLES),');
+    expect(body).toContain('const candles = computeViewportCandles({');
+    expect(body).toContain('widthPx: chart.timeScale().width(),');
+    expect(body).toContain('availableCandles: data.length,');
+    expect(body).toContain('from: Math.max(0, data.length - candles),');
     expect(body).toContain('to: data.length - 1 + SMART_ZOOM_RIGHT_PAD_BARS,');
+    // regressão: a constante fixa nunca volta a decidir o enquadre.
+    expect(body).not.toContain('SMART_ZOOM_CANDLES');
     // Só timeScale() — nunca setData/setSymbol/setTimeframe/recompute.
     expect(body).not.toContain('setData(');
     expect(body).not.toContain('setSymbol');

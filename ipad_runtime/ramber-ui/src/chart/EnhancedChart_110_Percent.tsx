@@ -35,6 +35,7 @@ import {
   type AutoscaleInfoProvider,
 } from "lightweight-charts";
 import { computeAutoFitPriceRange, isFiniteNum, type AutoFitLevels } from "../nexus/price-range-fit";
+import { computeViewportCandles } from "../nexus/chart-viewport";
 // V-MAX Fase 1 (superfície visual, fechamento do §3.1): linha de CVD real
 // — a série do orderflowHistory (Fase 1.2) com eixo Y próprio nativo.
 import { useOrderflowHistory, useVolumeProfileSnapshot, useUnifiedSnapshotStore } from "../store/unified-snapshot-store";
@@ -63,13 +64,19 @@ import { ageAlpha, type DecayConfig } from "./annotation-decay";
 // de estrutura recém-rompida.
 const SWEEP_DECAY: DecayConfig = { fadeStartCandles: 50, expireCandles: 200, minAlpha: 0.12 };
 
-// Zoom inteligente (ver efeito de setData): quantas velas recentes o
-// enquadre automático mostra na troca de timeframe/símbolo, + folga real à
-// direita para o preço vivo/etiquetas respirarem. Convenção declarada de
-// leitura confortável (~120 velas ≈ 2h de 1m / 5 dias de 1h numa tela),
-// não uma medição — mesmo espírito de todo limiar documentado deste
-// arquivo. O pan/zoom manual do Operador continua soberano fora da troca.
-const SMART_ZOOM_CANDLES = 120;
+// Zoom inteligente (ver efeito de setData): folga real à direita para o
+// preço vivo/etiquetas respirarem. O pan/zoom manual do Operador continua
+// soberano fora da troca de contexto.
+//
+// Ordem "FECHAMENTO DO AR10 CYBORG" §5: quantas velas o enquadre mostra
+// deixou de ser a constante fixa `SMART_ZOOM_CANDLES = 120` e passou a ser
+// `computeViewportCandles` (nexus/chart-viewport.ts, motor puro testado
+// por execução real) — 60-200 adaptativo à largura REAL de plotagem e à
+// densidade de dados real. Achado que motivou a troca: 120 fixo dava
+// ~5,8px por vela no iPad Mini retrato (apertado) e ~14,6px no desktop
+// 1920 (esparso, metade da tela virando espaço morto). O motivo de cada
+// termo — e por que timeframe/zoom atual deliberadamente NÃO entram —
+// vive no cabeçalho daquele módulo, nunca duplicado aqui.
 const SMART_ZOOM_RIGHT_PAD_BARS = 6;
 
 // Lapidação por captura real: teto de etiquetas de Sweep no eixo (os
@@ -1069,7 +1076,8 @@ export function EnhancedChart_110_Percent({
   // Zoom inteligente (pedido direto do Operador: "quando a gente mudar por
   // tempo... um zoom inteligente que fica bom na tela, pra gente não estar
   // puxando o zoom"): ao trocar timeframe/símbolo, a PRÓXIMA carga real de
-  // candles enquadra as últimas SMART_ZOOM_CANDLES velas automaticamente.
+  // candles enquadra automaticamente as últimas N velas, com N vindo de
+  // computeViewportCandles (adaptativo à tela real — ver §5 no topo).
   // Flag pendente consumida no efeito de setData abaixo — nunca dispara em
   // tick/vela nova (o pan/zoom manual do Operador continua soberano fora
   // da troca de contexto), e nunca enquadra dado velho: só depois que os
@@ -1094,8 +1102,16 @@ export function EnhancedChart_110_Percent({
     seriesRef.current.setData(formatted);
     if (smartZoomPendingRef.current && formatted.length > 0 && chartRef.current) {
       smartZoomPendingRef.current = false;
+      // Ordem "FECHAMENTO" §5: janela adaptativa real (60-200) em vez da
+      // constante fixa. `timeScale().width()` é a largura REAL da área de
+      // plotagem (já exclui o gutter do eixo de preço) — a mesma medida
+      // que decide a densidade de pixels por vela que o Operador enxerga.
+      const candles = computeViewportCandles({
+        widthPx: chartRef.current.timeScale().width(),
+        availableCandles: formatted.length,
+      });
       chartRef.current.timeScale().setVisibleLogicalRange({
-        from: Math.max(0, formatted.length - SMART_ZOOM_CANDLES),
+        from: Math.max(0, formatted.length - candles),
         to: formatted.length - 1 + SMART_ZOOM_RIGHT_PAD_BARS,
       });
     } else if (prependedCount > 0 && savedRange && chartRef.current) {
@@ -1109,7 +1125,7 @@ export function EnhancedChart_110_Percent({
 
   // Ordem "Lapidação Visual Final + Nova Linguagem de Gráfico" §8/§9
   // (RECENTRALIZAR): mesmo enquadre real do "zoom inteligente" acima
-  // (SMART_ZOOM_CANDLES/SMART_ZOOM_RIGHT_PAD_BARS) — zero segunda fórmula
+  // (computeViewportCandles/SMART_ZOOM_RIGHT_PAD_BARS) — zero segunda fórmula
   // — só que disparado por toque do Operador em vez de automático na
   // troca de timeframe/símbolo. §9 ("preferir uma ação única"): uma única
   // chamada resolve as duas metades pedidas (recentralizar preço E
@@ -1118,11 +1134,24 @@ export function EnhancedChart_110_Percent({
   // sem tocar no zoom" que fizesse sentido separado. Toca só o
   // timeScale() (pan/zoom); símbolo, timeframe e todo dado real
   // permanecem intocados — nunca recarrega nada.
+  //
+  // Ordem "FECHAMENTO DO AR10 CYBORG" §6 ("BOTÃO DE RECUPERAÇÃO VISUAL"):
+  // este botão já era exatamente a ação pedida — recupera o enquadramento,
+  // preserva timeframe/ativo/dados, nunca apaga histórico (só toca
+  // timeScale()). O que mudou aqui foi a JANELA que ele restaura: passou a
+  // ser a mesma janela adaptativa real do zoom inteligente acima
+  // (computeViewportCandles), nunca uma segunda fórmula — "voltar para uma
+  // visualização ótima" agora significa a mesma visualização ótima em
+  // qualquer tela, não 120 velas fixas em todas.
   const recenterChart = useCallback(() => {
     const chart = chartRef.current;
     if (!chart || !data || data.length === 0) return;
+    const candles = computeViewportCandles({
+      widthPx: chart.timeScale().width(),
+      availableCandles: data.length,
+    });
     chart.timeScale().setVisibleLogicalRange({
-      from: Math.max(0, data.length - SMART_ZOOM_CANDLES),
+      from: Math.max(0, data.length - candles),
       to: data.length - 1 + SMART_ZOOM_RIGHT_PAD_BARS,
     });
   }, [data]);
@@ -2273,10 +2302,17 @@ export function EnhancedChart_110_Percent({
     // resistanceLineRef) e o valor real de support/resistance (usado pelo
     // Core Engine/StructureLevelsStrip/etc.) continuam INTOCADOS — só a
     // etiqueta flutuante do eixo fica mais rigorosa, nunca o dado.
+    // Ordem "FECHAMENTO DO AR10 CYBORG" §3 (hierarquia de 3 níveis): o
+    // NOME do nível + o VALOR são Nível 1 ("essencial"); força/toques/
+    // rompimentos são Nível 2 ("qualidade") — mesma informação real, peso
+    // visual menor. levelTitle() continua sendo a fonte única desse texto
+    // (zero segunda formatação): só o que era prefixo do primário virou
+    // segmento secundário, via a mesma função.
     if (Number.isFinite(support) && supportStrength?.label === "FORTE") {
       out.push({
         price: support as number,
-        text: `${levelTitle("S1", supportStrength, supportBreakouts)} ${(support as number).toFixed(2)}`,
+        text: `S1 ${(support as number).toFixed(2)}`,
+        secondaryText: levelTitle("", supportStrength, supportBreakouts).trim() || undefined,
         color: "rgba(0, 255, 170, 0.65)",
         side: "left",
       });
@@ -2284,7 +2320,8 @@ export function EnhancedChart_110_Percent({
     if (Number.isFinite(resistance) && resistanceStrength?.label === "FORTE") {
       out.push({
         price: resistance as number,
-        text: `${levelTitle("R1", resistanceStrength, resistanceBreakouts)} ${(resistance as number).toFixed(2)}`,
+        text: `R1 ${(resistance as number).toFixed(2)}`,
+        secondaryText: levelTitle("", resistanceStrength, resistanceBreakouts).trim() || undefined,
         color: "rgba(255, 0, 85, 0.65)",
         side: "left",
       });
@@ -2361,7 +2398,13 @@ export function EnhancedChart_110_Percent({
         // ↑/↓ — mesmo padrão de VWAP/NL. OLS/janela/σ continuam intactos:
         // é a ÚNICA leitura visível deles em todo o app (grep confirma),
         // remover seria apagar dado real (Regra de Ouro 4), não simplificar.
-        text: `TREND · OLS ${trendChannelInfo.windowSize} · ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ · ${TREND_DIRECTION_GLYPH[trendChannelInfo.direction]} ${trendChannelInfo.midPrice.toFixed(2)}`,
+        // Ordem "FECHAMENTO" §3: era a etiqueta MAIS LARGA do eixo inteiro
+        // (~34 caracteres num único peso). Nível 1 = nome + direção +
+        // valor; Nível 2 = os PARÂMETROS DO MÉTODO (janela OLS, σ), que
+        // são exatamente "informação complementar" na hierarquia da Ordem
+        // — continuam visíveis, agora em fonte menor.
+        text: `TREND ${TREND_DIRECTION_GLYPH[trendChannelInfo.direction]} ${trendChannelInfo.midPrice.toFixed(2)}`,
+        secondaryText: `OLS ${trendChannelInfo.windowSize} ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ`,
         color: "rgba(148, 163, 184, 0.55)",
         side: "left",
       });
@@ -2403,16 +2446,20 @@ export function EnhancedChart_110_Percent({
       // não uma referência como VWAP/EMA (Nível B) — precisam da mesma
       // caixa grande/negrito que o preço vivo usa, sem competir peso
       // visual com o resto do eixo direito.
+      // Ordem "FECHAMENTO" §3: Nível 1 = "EN + direção" (o que o Operador
+      // precisa ler de relance); Nível 2 = o MOTIVO estrutural da entrada
+      // (basis) — a Ordem lista "motivo" explicitamente como Nível 2.
+      // Zero dado apagado: o basis continua sempre visível, em fonte menor.
       if (tradePlan.entry.low === tradePlan.entry.high) {
         if (Number.isFinite(tradePlan.entry.low)) {
-          out.push({ price: tradePlan.entry.low, text: `EN ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor, tier: "critical" });
+          out.push({ price: tradePlan.entry.low, text: `EN ${tradePlan.direction}`, secondaryText: tradePlan.entry.basis, color: entryColor, tier: "critical" });
         }
       } else {
         if (Number.isFinite(tradePlan.entry.high)) {
-          out.push({ price: tradePlan.entry.high, text: `EN ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor, tier: "critical" });
+          out.push({ price: tradePlan.entry.high, text: `EN ${tradePlan.direction}`, secondaryText: tradePlan.entry.basis, color: entryColor, tier: "critical" });
         }
         if (Number.isFinite(tradePlan.entry.low)) {
-          out.push({ price: tradePlan.entry.low, text: "EN ZONE LOW", color: entryColor, tier: "critical" });
+          out.push({ price: tradePlan.entry.low, text: "EN", secondaryText: "ZONE LOW", color: entryColor, tier: "critical" });
         }
       }
       // Stop no preço EFETIVO (ratchet real, MESMA função pura do efeito da
@@ -2693,10 +2740,13 @@ export function EnhancedChart_110_Percent({
             latestIndex: cluster.latestIndex,
             label: {
               price: cluster.avgPrice,
-              text:
-                cluster.count === 1
-                  ? `⚡ SWEEP ${arrow}`
-                  : `⚡ SWEEP ZONE ${arrow} (${cluster.count}x)`,
+              // Ordem "FECHAMENTO" §3: as duas variantes convergem para o
+              // MESMO primário ("⚡ SWEEP ↑" — evento e direção, Nível 1);
+              // a contagem do cluster, que só existe quando há agrupamento
+              // real, vira Nível 2. Zero dado perdido: "ZONE 3x" continua
+              // dizendo exatamente o que "(3x)" dizia antes.
+              text: `⚡ SWEEP ${arrow}`,
+              secondaryText: cluster.count > 1 ? `ZONE ${cluster.count}x` : undefined,
               color: "rgba(255, 140, 0, 0.85)", // mesmo tom laranja da price line (ver comentário no efeito acima) — alpha real abaixo controla a opacidade final.
               alpha,
               side: "left",
@@ -2723,16 +2773,24 @@ export function EnhancedChart_110_Percent({
     // a mesma correção de fundo do Sweep acima: nunca um texto solto
     // competindo com o preço/candle no meio do gráfico.
     if (visibility.session_key_levels && currentSessionKeyLevel) {
+      // Ordem "FECHAMENTO" §3: Nível 1 = o extremo + o preço (o nível
+      // acionável); Nível 2 = QUAL sessão o produziu (contexto). Nomes
+      // reais chegam a "LONDRES+NY"/"NOVA YORK" (market-session.ts), então
+      // demovê-los para a fonte menor é o corte de largura real aqui —
+      // sem nenhuma ambiguidade, porque os dois segmentos vivem na MESMA
+      // caixa (o operador nunca vê um "H" órfão).
       const labelPrefix = currentSessionKeyLevel.label.toUpperCase();
       out.push({
         price: currentSessionKeyLevel.high,
-        text: `${labelPrefix} H ${currentSessionKeyLevel.high.toFixed(2)}`,
+        text: `H ${currentSessionKeyLevel.high.toFixed(2)}`,
+        secondaryText: labelPrefix,
         color: "rgba(255, 0, 85, 0.55)",
         side: "left",
       });
       out.push({
         price: currentSessionKeyLevel.low,
-        text: `${labelPrefix} L ${currentSessionKeyLevel.low.toFixed(2)}`,
+        text: `L ${currentSessionKeyLevel.low.toFixed(2)}`,
+        secondaryText: labelPrefix,
         color: "rgba(0, 255, 170, 0.55)",
         side: "left",
       });
@@ -2766,9 +2824,18 @@ export function EnhancedChart_110_Percent({
         const base = confluenceWeight(zone.distinctSourceCount);
         const resolved = institutionalZoneVisualWeights[i];
         const alpha = resolved !== undefined && base > 0 ? Math.min(1, resolved / base) : 1;
+        // Ordem "FECHAMENTO" §3: junto com TREND, era a etiqueta mais
+        // larga do eixo — "◆ Sessão Baixa + Sweep ×2 + EMA21 + VWAP" passa
+        // de 40 caracteres num único peso, atravessando as velas na
+        // horizontal. Nível 1 é a FORÇA da confluência (quantas fontes
+        // independentes concordam neste preço — a mesma contagem que
+        // alimenta confluenceWeight, nunca um número novo); Nível 2 é
+        // QUAIS ferramentas. Zero dado apagado: a lista completa continua
+        // sempre desenhada, em fonte menor.
         out.push({
           price: (zone.top + zone.bottom) / 2,
-          text: `◆ ${toolNames}`,
+          text: `◆ ${zone.distinctSourceCount} FONTES`,
+          secondaryText: toolNames,
           color: INSTITUTIONAL_ZONE_LABEL_COLOR,
           alpha,
           side: "left",

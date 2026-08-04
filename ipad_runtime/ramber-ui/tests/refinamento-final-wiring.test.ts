@@ -721,10 +721,13 @@ describe('Achado real do Operador ("linha amarela que eu não sei o que signific
     const c = chart();
     const idx = c.indexOf('if (visibility.liquidity_sweep) {', c.indexOf('const priceAxisLabels = useMemo'));
     expect(idx, 'bloco de Sweep em priceAxisLabels não encontrado').toBeGreaterThan(-1);
-    // Janela 1300→2400: o bloco cresceu com o teto real de etiquetas
-    // (MAX_SWEEP_AXIS_LABELS, Lapidação por captura real) — mesmas
-    // asserções de sempre, só mais espaço para encontrá-las.
-    const block = c.slice(idx, idx + 2400);
+    // Janela delimitada pelo FIM REAL do bloco (o comentário do bloco de
+    // Session Key Levels, que vem logo depois), nunca por "os próximos N
+    // chars". Histórico honesto: já foi 1300, depois 2400, e falhou de
+    // novo na Ordem "FECHAMENTO" — sempre pelo TAMANHO da janela, nunca
+    // porque a garantia real tivesse mudado. Uma fronteira estrutural
+    // elimina a classe inteira de falso-negativo.
+    const block = c.slice(idx, c.indexOf('// Pedido do Operador ("Key Levels")', idx));
     expect(block).toContain('const seenSweepPrices = new Set<number>();');
     // Lapidação institucional ("agrupar SWEEPs próximos"): clusterSweptPrices
     // (trap-detection.ts) substitui o loop plano por preço — 1 evento isolado
@@ -735,7 +738,10 @@ describe('Achado real do Operador ("linha amarela que eu não sei o que signific
     // repetia sem discriminar. Valor real preservado no painel
     // "Institutional Traps"; seta e contagem do cluster permanecem.
     expect(block).toContain('`⚡ SWEEP ${arrow}`');
-    expect(block).toContain('`⚡ SWEEP ZONE ${arrow} (${cluster.count}x)`');
+    // Ordem "FECHAMENTO DO AR10 CYBORG" §3: a contagem do cluster migrou
+    // para o segmento secundário (fonte menor, mesma caixa) — o primário
+    // ficou idêntico nas duas variantes. Zero dado perdido.
+    expect(block).toContain('secondaryText: cluster.count > 1 ? `ZONE ${cluster.count}x` : undefined,');
     expect(block).toContain('side: "left",');
     // Achado real de captura de tela (decaimento por idade): cluster
     // expirado (>200 candles) nunca entra no eixo.
@@ -1136,24 +1142,39 @@ describe('Header ancorado (colisão da 1ª foto com dados reais): região centra
 
 // Lapidação por feedback direto do Operador ("zoom inteligente que fica
 // bom na tela pra gente não estar puxando o zoom"): enquadre automático
-// das últimas SMART_ZOOM_CANDLES velas na troca de timeframe/símbolo.
+// das últimas N velas na troca de timeframe/símbolo. Ordem "FECHAMENTO DO
+// AR10 CYBORG" §5: N deixou de ser a constante fixa 120 e passou a vir de
+// computeViewportCandles (nexus/chart-viewport.ts) — 60-200 adaptativo à
+// largura REAL de plotagem e à densidade de dados real. A matemática em si
+// é testada por execução real em chart-viewport.test.ts; aqui só a fiação.
 describe('EnhancedChart: zoom inteligente na troca de timeframe/símbolo (flag pendente, nunca em tick)', () => {
   const chartSrc = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
 
-  it('constantes declaradas e flag armada SÓ por [activeTimeframe, symbol] — pan/zoom manual continua soberano fora da troca', () => {
+  it('janela adaptativa importada do motor puro + flag armada SÓ por [activeTimeframe, symbol] — pan/zoom manual continua soberano fora da troca', () => {
     const s = chartSrc();
-    expect(s).toContain('const SMART_ZOOM_CANDLES = 120;');
+    expect(s).toContain('import { computeViewportCandles } from "../nexus/chart-viewport";');
     expect(s).toContain('const SMART_ZOOM_RIGHT_PAD_BARS = 6;');
     expect(s).toContain('const smartZoomPendingRef = useRef(true);');
     expect(s).toContain('smartZoomPendingRef.current = true;\n  }, [activeTimeframe, symbol]);');
+    // regressão: a constante fixa nunca volta a existir como número real
+    // (só é citada em comentário histórico, nunca declarada).
+    expect(s).not.toContain('const SMART_ZOOM_CANDLES =');
   });
 
   it('a flag é consumida no efeito real de setData — o enquadre só acontece DEPOIS que os candles novos chegaram, nunca sobre dado velho', () => {
     const s = chartSrc();
     expect(s).toContain('if (smartZoomPendingRef.current && formatted.length > 0 && chartRef.current) {');
     expect(s).toContain('smartZoomPendingRef.current = false;');
-    expect(s).toContain('from: Math.max(0, formatted.length - SMART_ZOOM_CANDLES),');
+    expect(s).toContain('from: Math.max(0, formatted.length - candles),');
     expect(s).toContain('to: formatted.length - 1 + SMART_ZOOM_RIGHT_PAD_BARS,');
+  });
+
+  it('a largura que alimenta a janela é a área REAL de plotagem da lib (timeScale().width(), já sem o gutter do eixo) — nunca a largura do container inteiro', () => {
+    const s = chartSrc();
+    const idx = s.indexOf('if (smartZoomPendingRef.current && formatted.length > 0 && chartRef.current) {');
+    const block = s.slice(idx, s.indexOf('} else if (prependedCount > 0', idx));
+    expect(block).toContain('widthPx: chartRef.current.timeScale().width(),');
+    expect(block).toContain('availableCandles: formatted.length,');
   });
 });
 

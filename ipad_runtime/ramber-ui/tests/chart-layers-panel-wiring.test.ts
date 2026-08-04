@@ -331,12 +331,22 @@ describe('Diretriz de Refinamento Visual §5: Trend Channel reposicionado para a
     const c = chart();
     const idx = c.indexOf('if (visibility.trend_channel && trendChannelInfo) {');
     expect(idx, 'push condicional em priceAxisLabels não encontrado').toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 800);
+    // Janela delimitada pelo FIM real do bloco (o push seguinte), nunca
+    // por "os próximos N chars" — mesma correção estrutural já aplicada em
+    // price-label-stack-plugin.test.ts depois desta classe de falso-
+    // negativo ter reaparecido.
+    const block = c.slice(idx, c.indexOf('const obstacleSuffix =', idx));
     expect(block).toContain('price: trendChannelInfo.midPrice');
     // Achado real do Operador ("nome Grandão"): ASCENDING/DESCENDING virou
     // glifo (TREND_DIRECTION_GLYPH) — OLS/janela/σ continuam intactos, a
     // ÚNICA leitura visível deles em todo o app (Regra de Ouro 4).
-    expect(block).toContain('text: `TREND · OLS ${trendChannelInfo.windowSize} · ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ · ${TREND_DIRECTION_GLYPH[trendChannelInfo.direction]} ${trendChannelInfo.midPrice.toFixed(2)}`');
+    // Ordem "FECHAMENTO DO AR10 CYBORG" §3: era a etiqueta MAIS LARGA do
+    // eixo inteiro. Nível 1 = nome + direção + valor; Nível 2 = os
+    // parâmetros do método (janela OLS, σ), em fonte menor — continuam
+    // sendo a única leitura visível deles no app, agora sem atravessar as
+    // velas na horizontal.
+    expect(block).toContain('text: `TREND ${TREND_DIRECTION_GLYPH[trendChannelInfo.direction]} ${trendChannelInfo.midPrice.toFixed(2)}`');
+    expect(block).toContain('secondaryText: `OLS ${trendChannelInfo.windowSize} ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ`');
     // cor = a MESMA cor real da linha mid (definida na criação da série,
     // acima) — nunca uma cor nova inventada só para o rótulo.
     expect(block).toContain('color: "rgba(148, 163, 184, 0.55)"');
@@ -436,7 +446,11 @@ describe('Auditoria de pendências (achado real via harness Playwright, duas ins
   it('as 3 entradas de priceAxisLabels (VWAP/NL/EMA) agora checam visibility antes de empurrar a etiqueta — mesma condição que já escondia a série', () => {
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
-    const block = c.slice(idx, idx + 3900);
+    // Janela = corpo REAL do useMemo (até o `return out;` que o fecha),
+    // nunca "os próximos N chars" — a compactação de etiquetas da Ordem
+    // "FECHAMENTO" empurrou estas 3 linhas para além dos 3900 chars que
+    // esta asserção fatiava, e o teste falhou pelo TAMANHO DA JANELA.
+    const block = c.slice(idx, c.indexOf('return out;', idx));
     expect(block).toContain('if (visibility.vwap && vwapLastValue !== null && Number.isFinite(vwapLastValue)) {');
     expect(block).toContain('if (visibility.nexus_line && nlLastValue !== null && Number.isFinite(nlLastValue)) {');
     expect(block).toContain('if (visibility.ema && emaLastValue !== null && Number.isFinite(emaLastValue)) {');
@@ -451,7 +465,7 @@ describe('Auditoria de pendências (achado real via harness Playwright, duas ins
   it('último preço/Trend Channel NÃO ganham essa checagem de visibility — nenhum toggle existe pro último preço, Trend Channel já tinha a checagem própria — nenhuma regressão nas entradas que já funcionavam. S1/R1 ganharam um gate DIFERENTE (Carta Branca: força real FORTE, não visibility)', () => {
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
-    const block = c.slice(idx, idx + 2700);
+    const block = c.slice(idx, c.indexOf('return out;', idx));
     // Carta Branca ("etiquetas laterais... só precisão maciça"): S1/R1
     // deixaram de ser incondicionais — agora exigem strength FORTE real
     // (>=2 toques independentes) antes de entrar no eixo. Isto NÃO é o

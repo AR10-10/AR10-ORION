@@ -28,6 +28,23 @@ const drawSideBody = () => {
   expect(end).toBeGreaterThan(start);
   return s.slice(start, end);
 };
+// Corpo REAL do useMemo priceAxisLabels, delimitado pelo seu início e pelo
+// `return out;` que o fecha — MESMA correção estrutural de drawSideBody
+// acima, agora aplicada ao outro bloco que estas asserções fatiavam por
+// "os próximos N caracteres". Achado real (repetido pela 2ª vez, Ordem
+// "FECHAMENTO DO AR10 CYBORG" §3): compactar as etiquetas empurrou
+// VWAP/NL/último preço/EN para além das janelas de 2700/3800/6100 chars,
+// e 4 testes falharam pelo TAMANHO DA JANELA — nunca porque a garantia
+// real tivesse mudado. Uma janela que se ajusta sozinha elimina a classe
+// inteira de falso-negativo, em vez de só empurrar os números de novo.
+const priceAxisLabelsBody = () => {
+  const s = chart();
+  const start = s.indexOf('const priceAxisLabels = useMemo');
+  expect(start, 'priceAxisLabels não encontrado').toBeGreaterThan(-1);
+  const end = s.indexOf('return out;', start);
+  expect(end).toBeGreaterThan(start);
+  return s.slice(start, end);
+};
 
 describe('PriceLabelStackPlugin: "Fio de Seda" — conector nunca tracejado, sempre 1px', () => {
   it('nunca chama setLineDash', () => {
@@ -373,12 +390,14 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
     expect(s).toContain('const priceAxisLabels = useMemo<PriceAxisLabel[]>(() => {');
   });
 
-  it('S1/R1 reaproveitam levelTitle (mesma função já usada pelas price lines nativas) — nunca uma segunda formatação. Carta Branca: só entram no eixo quando FORTE (>=2 toques reais) — "precisão maciça", não presença', () => {
-    const s = chart();
-    const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 2700);
-    expect(block).toContain('levelTitle("S1", supportStrength, supportBreakouts)');
-    expect(block).toContain('levelTitle("R1", resistanceStrength, resistanceBreakouts)');
+  it('S1/R1 reaproveitam levelTitle (mesma função já usada pelas price lines nativas) — nunca uma segunda formatação. Carta Branca: só entram no eixo quando FORTE (>=2 toques reais) — "precisão maciça", não presença. Ordem "FECHAMENTO" §3: nome+valor no primário, força/toques no secundário (fonte menor) — levelTitle continua a fonte única do texto de força', () => {
+    const block = priceAxisLabelsBody();
+    expect(block).toContain('text: `S1 ${(support as number).toFixed(2)}`');
+    expect(block).toContain('text: `R1 ${(resistance as number).toFixed(2)}`');
+    // levelTitle com base vazia = só o segmento de força/toques/rompimentos,
+    // exatamente o que era prefixo antes. Zero segunda formatação.
+    expect(block).toContain('secondaryText: levelTitle("", supportStrength, supportBreakouts).trim() || undefined,');
+    expect(block).toContain('secondaryText: levelTitle("", resistanceStrength, resistanceBreakouts).trim() || undefined,');
     expect(block).toContain('color: "rgba(0, 255, 170, 0.65)"'); // mesma cor real da price line S1
     expect(block).toContain('color: "rgba(255, 0, 85, 0.65)"'); // mesma cor real da price line R1
     expect(block).toContain('if (Number.isFinite(support) && supportStrength?.label === "FORTE") {');
@@ -412,9 +431,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
   });
 
   it('VWAP/NL reaproveitam LINE_STATE_GLYPH/VWAP_STATE_COLOR/NL_STATE_COLOR reais — mesma paleta institucional já usada pelas séries', () => {
-    const s = chart();
-    const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 3800);
+    const block = priceAxisLabelsBody();
     expect(block).toContain('VWAP ${LINE_STATE_GLYPH[s]} ${vwapLastValue.toFixed(2)}');
     expect(block).toContain('color: VWAP_STATE_COLOR[s]');
     expect(block).toContain('NL ${LINE_STATE_GLYPH[s]} ${nlLastValue.toFixed(2)}');
@@ -422,10 +439,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
   });
 
   it('último preço usa a MESMA cor up/down real da própria série de candles (#00ffaa/#ff0055) — nunca uma cor nova', () => {
-    const s = chart();
-    const idx = s.indexOf('const priceAxisLabels = useMemo');
-    const block = s.slice(idx, idx + 6100);
-    expect(block).toContain('displayPrice >= lastCandle.open ? "#00ffaa" : "#ff0055"');
+    expect(priceAxisLabelsBody()).toContain('displayPrice >= lastCandle.open ? "#00ffaa" : "#ff0055"');
   });
 
   it('achado real de captura de tela do Operador (BTC/USDT 1H ao vivo, header 65,468.00 vs. rótulo do eixo 65439.20 — mesma fonte, dessincronizada): o rótulo de último preço prefere livePrice (tick real, mesma fonte da barra superior) — nunca fica preso no data[último].close desatualizado', () => {
@@ -501,8 +515,10 @@ describe('"bater o olho profissional" (pendência honesta do turno anterior): EN
     // gate fail-closed do plano inteiro
     expect(block).toContain('if (tradePlan) {');
     // EN âmbar, direção real (LONG/SHORT) no texto — "bater o olho"
-    // (EPC FINAL §8: nomenclatura curta EN/ST/TP1-3 nos objetos gráficos)
-    expect(block).toContain('text: `EN ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor');
+    // (EPC FINAL §8: nomenclatura curta EN/ST/TP1-3 nos objetos gráficos).
+    // Ordem "FECHAMENTO" §3: o MOTIVO estrutural (basis) é Nível 2 — saiu
+    // do primário para o secundário (fonte menor), nunca foi apagado.
+    expect(block).toContain('text: `EN ${tradePlan.direction}`, secondaryText: tradePlan.entry.basis, color: entryColor');
     expect(block).toContain('const entryColor = "rgba(240, 208, 111, 0.75)";');
     // STOP vermelho no preço EFETIVO (ratchet real), BREACHED do preço vivo
     expect(block).toContain('const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);');
@@ -818,8 +834,11 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     // com N sweeps na tela os N chips traziam o MESMO número — repetição
     // que não discrimina nada. O valor real segue no painel "Institutional
     // Traps". O que discrimina (seta e contagem do cluster) permanece.
-    expect(sweepBlock).toContain('`⚡ SWEEP ${arrow}`');
-    expect(sweepBlock).toContain('`⚡ SWEEP ZONE ${arrow} (${cluster.count}x)`');
+    // Ordem "FECHAMENTO" §3: as duas variantes convergiram para um único
+    // primário; a contagem do cluster virou secundário (fonte menor), sem
+    // perder nada — "ZONE 3x" diz exatamente o que "(3x)" dizia.
+    expect(sweepBlock).toContain('text: `⚡ SWEEP ${arrow}`,');
+    expect(sweepBlock).toContain('secondaryText: cluster.count > 1 ? `ZONE ${cluster.count}x` : undefined,');
     expect(sweepBlock).not.toContain('confidencePct');
     // Achado real de captura de tela (dezenas de rótulos empilhados,
     // decaimento por idade adicionado): cluster expirado nunca entra no
@@ -889,7 +908,12 @@ describe('Diretriz Final — Polimento Visual: rótulo de Zona Institucional mig
     expect(block).toContain('const resolved = institutionalZoneVisualWeights[i];');
     expect(block).toContain('const alpha = resolved !== undefined && base > 0 ? Math.min(1, resolved / base) : 1;');
     expect(block).toContain('price: (zone.top + zone.bottom) / 2,');
-    expect(block).toContain('text: `◆ ${toolNames}`,');
+    // Ordem "FECHAMENTO" §3: junto com TREND era a etiqueta mais larga do
+    // eixo. Nível 1 = força da confluência (contagem real de fontes
+    // distintas, a MESMA que alimenta confluenceWeight); Nível 2 = quais
+    // ferramentas — lista completa preservada, em fonte menor.
+    expect(block).toContain('text: `◆ ${zone.distinctSourceCount} FONTES`,');
+    expect(block).toContain('secondaryText: toolNames,');
     expect(block).toContain('color: INSTITUTIONAL_ZONE_LABEL_COLOR,');
     expect(block).toContain('side: "left",');
   });
