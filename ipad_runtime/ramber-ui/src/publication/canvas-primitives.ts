@@ -151,3 +151,42 @@ export function truncateToWidth(ctx: CanvasRenderingContext2D, text: string, fon
   ctx.restore();
   return `${out}…`;
 }
+
+// Evolução Final §11 (narrativa consolidada no formato Análise): quebra de
+// linha real por largura medida (nunca um chute de caracteres por linha —
+// fontes mono/negrito variam largura por peso/tamanho). Além de
+// `maxLines`, a última linha ganha reticência real via truncateToWidth
+// (nunca um corte silencioso no meio de uma palavra).
+export function wrapTextLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  font: string,
+  maxWidth: number,
+  maxLines: number,
+): string[] {
+  ctx.save();
+  ctx.font = font;
+  const words = text.split(/\s+/).filter(Boolean);
+  const allLines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (current && ctx.measureText(candidate).width > maxWidth) {
+      allLines.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) allLines.push(current);
+
+  let lines = allLines;
+  if (allLines.length > maxLines) {
+    const kept = allLines.slice(0, maxLines - 1);
+    const remainder = allLines.slice(maxLines - 1).join(" ");
+    kept.push(truncateToWidth(ctx, remainder, font, maxWidth));
+    lines = kept;
+  }
+  ctx.restore();
+  return lines;
+}

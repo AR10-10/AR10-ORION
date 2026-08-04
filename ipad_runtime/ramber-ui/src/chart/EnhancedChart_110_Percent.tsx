@@ -32,7 +32,9 @@ import {
   type IPriceLine,
   type UTCTimestamp,
   type LogicalRange,
+  type AutoscaleInfoProvider,
 } from "lightweight-charts";
+import { computeAutoFitPriceRange, isFiniteNum, type AutoFitLevels } from "../nexus/price-range-fit";
 // V-MAX Fase 1 (superfície visual, fechamento do §3.1): linha de CVD real
 // — a série do orderflowHistory (Fase 1.2) com eixo Y próprio nativo.
 import { useOrderflowHistory, useVolumeProfileSnapshot, useUnifiedSnapshotStore } from "../store/unified-snapshot-store";
@@ -590,6 +592,22 @@ export function EnhancedChart_110_Percent({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  // Evolução Final §5 ("Enquadramento Automático" / Smart Auto-Fit): lido
+  // pelo autoscaleInfoProvider da série principal abaixo. Precisa ser ref
+  // (não estado/prop direto) porque a série nasce no efeito de montagem
+  // única (deps `[]`, ver createChart abaixo) — o callback não pode fechar
+  // sobre tradePlan/engineFallbackLevels/livePrice mudando a cada render.
+  // Mantido sincronizado por um efeito leve próprio (ver perto do efeito de
+  // price lines do Trade Plan, abaixo). Vazio = autoscale nativo da lib,
+  // sem nenhuma mudança de comportamento (fail-closed: sem plano ativo,
+  // zero intervenção).
+  const autoFitLevelsRef = useRef<AutoFitLevels>({
+    entryLow: null,
+    entryHigh: null,
+    stopPrice: null,
+    targetPrices: [],
+    livePrice: null,
+  });
   const supportLineRef = useRef<IPriceLine | null>(null);
   const resistanceLineRef = useRef<IPriceLine | null>(null);
   const zoneLinesRef = useRef<IPriceLine[]>([]);
@@ -794,6 +812,35 @@ export function EnhancedChart_110_Percent({
       // Ouro 2 (Fio de Seda) que nenhum grep no código-fonte pegaria,
       // porque a causa é uma OMISSÃO, não um valor errado escrito aqui.
       priceLineStyle: LineStyle.Solid,
+      // Evolução Final §5 ("Enquadramento Automático"): estica o autoscale
+      // NATIVO da lib (baseImplementation — o mesmo fit-nos-candles-
+      // visíveis de sempre) só o suficiente para caber Entry/Stop/Target do
+      // plano ATIVO (autoFitLevelsRef, mantido por efeito próprio abaixo).
+      // MESMO núcleo puro do mini-gráfico de exportação
+      // (nexus/price-range-fit.ts) — zero segunda fórmula. Sem plano ativo
+      // (ref vazia): devolve a faixa nativa sem tocar em nada (fail-closed).
+      // paddingRatio fica em 0 aqui de propósito — o scaleMargins nativo da
+      // rightPriceScale (default da lib) já cuida do respiro visual; somar
+      // os dois dobraria o padding.
+      autoscaleInfoProvider: ((baseImplementation: () => ReturnType<AutoscaleInfoProvider>) => {
+        const base = baseImplementation();
+        if (!base || !base.priceRange) return base;
+        const levels = autoFitLevelsRef.current;
+        const hasActivePlan =
+          isFiniteNum(levels.entryLow) ||
+          isFiniteNum(levels.entryHigh) ||
+          isFiniteNum(levels.stopPrice) ||
+          levels.targetPrices.length > 0;
+        if (!hasActivePlan) return base;
+        const fitted = computeAutoFitPriceRange(
+          { min: base.priceRange.minValue, max: base.priceRange.maxValue },
+          levels,
+        );
+        return {
+          priceRange: { minValue: fitted.min, maxValue: fitted.max },
+          margins: base.margins,
+        };
+      }) as AutoscaleInfoProvider,
     });
     // V-MAX Fase 1 (fechamento do §3.1): linha de CVD como série NATIVA em
     // escala de preço PRÓPRIA ('cvd', overlay) — CVD é volume assinado, não
@@ -1974,6 +2021,38 @@ export function EnhancedChart_110_Percent({
       mkH(hs.necklineAtLastCandle, `${hs.kind === "REGULAR" ? "H&S" : "INV H&S"} ${hsDirGlyph} NECKLINE ${(hs.fitScore * 100).toFixed(0)}%`);
     }
   }, [harmonicHits, trianglePattern, headShouldersPattern, data, visibility.harmonics]);
+
+  // Evolução Final §5: mantém autoFitLevelsRef (lido pelo
+  // autoscaleInfoProvider da série, efeito de montagem única acima)
+  // sincronizado com o plano REAL ativo. MESMA prioridade Conselho > Núcleo
+  // já estabelecida no useMemo de priceAxisLabels abaixo (nunca os dois ao
+  // mesmo tempo — engineFallbackLevels já vem null quando tradePlan
+  // existe). ENTRY fica de fora do fallback do Núcleo de propósito (mesma
+  // razão do useMemo: é o preço vivo, já coberto por livePrice abaixo).
+  useEffect(() => {
+    const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
+    if (tradePlan) {
+      autoFitLevelsRef.current = {
+        entryLow: tradePlan.entry.low,
+        entryHigh: tradePlan.entry.high,
+        stopPrice: tradePlan.stop.price,
+        targetPrices: tradePlan.targets.map((t) => t.price),
+        livePrice: p,
+      };
+    } else if (engineFallbackLevels) {
+      autoFitLevelsRef.current = {
+        entryLow: null,
+        entryHigh: null,
+        stopPrice: engineFallbackLevels.stop,
+        targetPrices: [engineFallbackLevels.target1, engineFallbackLevels.target2, engineFallbackLevels.target3].filter(
+          isFiniteNum,
+        ),
+        livePrice: p,
+      };
+    } else {
+      autoFitLevelsRef.current = { entryLow: null, entryHigh: null, stopPrice: null, targetPrices: [], livePrice: p };
+    }
+  }, [tradePlan, engineFallbackLevels, livePrice]);
 
   // Signal Precision order: the Trade Plan drawn on the chart — subtle,
   // silk-thread annotations (1px solid, never dashed; hierarchy only via

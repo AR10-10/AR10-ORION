@@ -7,15 +7,15 @@
 // um formato que não pode ser gerado nunca aparece na lista de saída
 // (nunca um asset vazio/quebrado disfarçado de real).
 import { buildPublicationFilename } from "./filenames";
-import { renderAnalise, renderCard, renderStory, renderX } from "./formats";
+import { renderAnalysis, renderPremium, renderStory, renderX } from "./formats";
 import { canPublishFormat, PUBLICATION_FORMAT_ORDER, PUBLICATION_FORMAT_SPECS } from "./types";
 import type { PublicationAsset, PublicationFormat, PublicationSnapshot } from "./types";
 
 const RENDERERS: Record<PublicationFormat, (ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot) => void> = {
-  ANALISE: renderAnalise,
+  ANALYSIS: renderAnalysis,
   STORY: renderStory,
   X: renderX,
-  CARD: renderCard,
+  PREMIUM: renderPremium,
 };
 
 function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {

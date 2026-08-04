@@ -10,6 +10,7 @@
 import { PUB_COLORS, drawSilkLine, drawText, fmtPrice, MONO_FONT } from "./canvas-primitives";
 import type { PublicationCandle } from "./types";
 import { MIN_CHART_CANDLES, RECENT_CANDLES_FOR_EXPORT } from "./types";
+import { computeAutoFitPriceRange, isFiniteNum, type PriceRange } from "../nexus/price-range-fit";
 
 export interface ChartRangeInput {
   candles: PublicationCandle[];
@@ -20,22 +21,19 @@ export interface ChartRangeInput {
   livePrice: number | null;
 }
 
-export interface PriceRange {
-  min: number;
-  max: number;
-}
-
-export function isFiniteNum(v: unknown): v is number {
-  return typeof v === "number" && Number.isFinite(v);
-}
+export type { PriceRange };
+export { isFiniteNum };
 
 /**
  * Faixa de preço real do mini-gráfico. Candles + Entry/Stop/preço vivo
  * SEMPRE entram (o núcleo do plano nunca fica cortado de fora do quadro).
- * Alvos só esticam a escala até um teto de 2.5x a amplitude do núcleo —
- * um Target 3 muito distante permanece um NÚMERO real no bloco de texto de
- * cada formato (nunca escondido/fabricado), só não força o mini-gráfico a
- * espremer os candles recentes até virar ruído ilegível.
+ * Alvos só esticam a escala até um teto real (nexus/price-range-fit.ts —
+ * MESMO núcleo usado pelo Smart Auto-Fit do gráfico ao vivo) — um Target 3
+ * muito distante permanece um NÚMERO real no bloco de texto de cada
+ * formato (nunca escondido/fabricado), só não força o mini-gráfico a
+ * espremer os candles recentes até virar ruído ilegível. Padding de 8%:
+ * exclusivo desta exportação estática (o gráfico ao vivo já tem
+ * scaleMargins nativo da lib cuidando do respiro visual).
  */
 export function computeChartPriceRange(input: ChartRangeInput): PriceRange | null {
   const { candles } = input;
@@ -48,34 +46,17 @@ export function computeChartPriceRange(input: ChartRangeInput): PriceRange | nul
     if (c.high > max) max = c.high;
   }
 
-  for (const v of [input.entryLow, input.entryHigh, input.stopPrice, input.livePrice]) {
-    if (isFiniteNum(v)) {
-      if (v < min) min = v;
-      if (v > max) max = v;
-    }
-  }
-
-  // Achado real da verificação visual: 3 alvos R:R igualmente espaçados
-  // (o caso mais comum de um Trade Plan real) esbarravam no teto de 2.5x
-  // quase sempre — TP1/TP2 entravam, TP3 ficava de fora por uma margem
-  // pequena (achado concreto: candle range ~4250, TP3 a 10700 do mínimo,
-  // teto de 2.5x = 10625 — falhava por 0.7%). 4x mantém o mesmo princípio
-  // (nunca deixar um alvo isolado e distante esmagar os candles recentes)
-  // sem cortar o caso comum de 3 alvos reais igualmente espaçados.
-  const coreRange = max - min || Math.abs(max) * 0.01 || 1;
-  const cap = coreRange * 4;
-  for (const t of input.targetPrices) {
-    if (!isFiniteNum(t)) continue;
-    const candidateMin = Math.min(min, t);
-    const candidateMax = Math.max(max, t);
-    if (candidateMax - candidateMin <= cap) {
-      min = candidateMin;
-      max = candidateMax;
-    }
-  }
-
-  const pad = (max - min) * 0.08 || Math.abs(max) * 0.01 || 1;
-  return { min: min - pad, max: max + pad };
+  return computeAutoFitPriceRange(
+    { min, max },
+    {
+      entryLow: input.entryLow,
+      entryHigh: input.entryHigh,
+      stopPrice: input.stopPrice,
+      targetPrices: input.targetPrices,
+      livePrice: input.livePrice,
+    },
+    { paddingRatio: 0.08 },
+  );
 }
 
 export interface MiniChartPlan {
@@ -131,12 +112,35 @@ export function drawMiniChart(
 
   const priceToY = (price: number) => rect.y + rect.height * (1 - (price - range.min) / (range.max - range.min));
 
-  // Candles reais — textura de fundo, deliberadamente sem grid/eixo (§3:
-  // composição editorial, não um clone do terminal com réguas).
-  const slot = rect.width / candles.length;
+  // Evolução Final §9 (referência visual: eixo de preço discreto de
+  // terminais reais): poucos ticks (5 rótulos), só na margem ESQUERDA — o
+  // lado DIREITO permanece exclusivo de Entry/Stop/Target (abaixo), nunca
+  // dividindo peso com um nível de contexto. Margem medida pela LARGURA
+  // REAL do rótulo mais largo (nunca um chute fixo) e RESERVADA antes de
+  // plotar os candles — a régua nunca fica por cima de um candle (§8 da
+  // Evolução Final: "rótulos sobre velas" é o exato erro a evitar).
+  const AXIS_TICKS = 4;
+  const axisFont = `500 ${Math.max(9, labelFontSize - 6)}px ${MONO_FONT}`;
+  const axisPrices: number[] = [];
+  for (let i = 0; i <= AXIS_TICKS; i++) {
+    axisPrices.push(range.max - ((range.max - range.min) * i) / AXIS_TICKS);
+  }
+  ctx.save();
+  ctx.font = axisFont;
+  const axisLabelMaxWidth = axisPrices.reduce((max, price) => Math.max(max, ctx.measureText(fmtPrice(price)).width), 0);
+  ctx.restore();
+  const axisMargin = axisLabelMaxWidth + 16;
+  const plotX = rect.x + axisMargin;
+  const plotWidth = rect.width - axisMargin;
+
+  // Candles reais — textura de fundo. Sem grid cruzando a região
+  // operacional (§3 original: composição editorial; §8 da Evolução Final:
+  // "evitar linhas cruzando a região operacional sem necessidade") — só um
+  // traço curto de 6px por tick, contido na margem do eixo.
+  const slot = plotWidth / candles.length;
   const bodyWidth = Math.max(1, slot * 0.62);
   candles.forEach((c, i) => {
-    const cx = rect.x + slot * i + slot / 2;
+    const cx = plotX + slot * i + slot / 2;
     const up = c.close >= c.open;
     const color = up ? PUB_COLORS.candleUp : PUB_COLORS.candleDown;
     const yHigh = priceToY(c.high);
@@ -157,16 +161,34 @@ export function drawMiniChart(
     ctx.restore();
   });
 
+  axisPrices.forEach((price, i) => {
+    const y = rect.y + (rect.height * i) / AXIS_TICKS;
+    drawSilkLine(ctx, plotX - 6, y, plotX, y, PUB_COLORS.textFaint, 1);
+    drawText(ctx, fmtPrice(price), plotX - 10, y, {
+      font: axisFont,
+      color: PUB_COLORS.textFaint,
+      align: "right",
+      baseline: i === 0 ? "top" : i === AXIS_TICKS ? "bottom" : "middle",
+    });
+  });
+
   const withinRange = (p: number) => p >= range.min && p <= range.max;
   const labelPad = 6;
 
+  // Entry/Stop/Target continuam cruzando a largura TOTAL do rect (inclusive
+  // por trás da margem do eixo) — são o plano REAL, prioridade máxima (§8),
+  // a única camada com licença para atravessar a régua de contexto.
   const drawLevelLine = (price: number, color: string, label: string, lineWidth: number) => {
     if (!withinRange(price)) return;
     const y = priceToY(price);
     drawSilkLine(ctx, rect.x, y, rect.x + rect.width, y, color, lineWidth);
+    const font = `700 ${labelFontSize}px ${MONO_FONT}`;
+    ctx.save();
+    ctx.font = font;
     const textW = ctx.measureText(label).width;
+    ctx.restore();
     drawText(ctx, label, rect.x + rect.width - textW - labelPad, y - labelPad, {
-      font: `700 ${labelFontSize}px ${MONO_FONT}`,
+      font,
       color,
       align: "left",
     });

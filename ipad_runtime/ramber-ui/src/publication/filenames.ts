@@ -26,7 +26,9 @@ function cleanToken(v: string): string {
   return v.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 }
 
-// Ex.: AR10_BTCUSDT_1H_2026-08-04_1032_ANALISE.png
+// Evolução Final §13: ordem exata do exemplo da Ordem —
+// AR10_BTCUSDT_1H_ANALYSIS_2026-08-04_1032.png (FORMATO antes de data/hora;
+// Entrega 38 tinha o formato por último, corrigido aqui).
 export function buildPublicationFilename(
   symbol: string,
   timeframe: string,
@@ -34,5 +36,5 @@ export function buildPublicationFilename(
   format: PublicationFormat,
 ): string {
   const { datePart, timePart } = publicationTimestampSlug(generatedAt);
-  return `AR10_${cleanToken(symbol)}_${cleanToken(timeframe)}_${datePart}_${timePart}_${format}.png`;
+  return `AR10_${cleanToken(symbol)}_${cleanToken(timeframe)}_${format}_${datePart}_${timePart}.png`;
 }

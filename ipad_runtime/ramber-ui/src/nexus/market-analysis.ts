@@ -17,6 +17,7 @@
 // para parecer completa. Campos individuais (retest/zona/plano) somem
 // quando a evidência real específica não existe, nunca um traço/zero.
 import {
+  buildNarrativeSummary,
   deriveBiasLabel,
   deriveConfluenceState,
   deriveEntryState,
@@ -84,6 +85,12 @@ export interface MarketAnalysis {
   // NEXUS_PLAN_GAP_LABEL já usado em toda a UI) — nunca um silêncio que o
   // leitor não consegue distinguir de um bug.
   planGapLabel: string | null;
+  // Evolução Final §11 ("leitura consolidada"): MESMA sentença real do
+  // painel "LEITURA CONSOLIDADA" (App.tsx, NarrativeSummaryCard) — reusa
+  // buildNarrativeSummary tal e qual, nunca uma segunda redação. `decision`
+  // já é garantido não-nulo neste ponto (guard acima), então sempre uma
+  // frase real, nunca null.
+  narrative: string;
 }
 
 export interface StrengthReading {
@@ -102,6 +109,11 @@ export interface MarketAnalysisInput {
   resistance: number | null | undefined;
   resistanceStrength: StrengthReading | null | undefined;
   livePrice: number | null | undefined;
+  // Opcional/fail-closed (?? null internamente): MESMO sinal de CVD que
+  // NarrativeSummaryCard já usa para a mesma frase de fluxo — quando o
+  // chamador ainda não repassa, a narrativa simplesmente omite a frase de
+  // fluxo (buildNarrativeSummary já trata null como "sem essa frase").
+  flow?: "COMPRADOR" | "VENDEDOR" | null;
 }
 
 /**
@@ -188,6 +200,7 @@ export function buildMarketAnalysis(input: MarketAnalysisInput): MarketAnalysis 
     retest,
     plan,
     planGapLabel: !decision.plan && decision.planGap ? NEXUS_PLAN_GAP_LABEL[decision.planGap] : null,
+    narrative: buildNarrativeSummary(decision, { regimeLabel: input.regimeLabel, flow: input.flow ?? null }),
   };
 }
 

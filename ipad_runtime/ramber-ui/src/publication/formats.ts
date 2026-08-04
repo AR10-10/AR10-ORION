@@ -1,12 +1,13 @@
-// publication/formats.ts — Ordem "AR10 PUBLICATION STUDIO" §2: os 4
-// formatos publicáveis. Cada render* função é pura composição sobre o
-// MESMO PublicationSnapshot (zero segunda leitura de motor, §1/§10) —
-// todas leem literalmente os mesmos analysis.plan/bias/confluence/risk.
-// Hierarquia (§4): candles + Entry/Stop/Target são os ÚNICOS elementos de
-// mercado desenhados — nenhum overlay de contexto (VWAP/EMA/sessões/
-// sweeps/BOS-CHOCH/zonas/Fibonacci/S-R) entra na composição publicável, a
-// forma mais literal de garantir que nada tenha o mesmo peso visual do
-// plano (ver cabeçalho de mini-chart.ts).
+// publication/formats.ts — Ordem "AR10 PUBLICATION STUDIO" §2 + Evolução
+// Final §10/§11: os 4 formatos publicáveis. Cada render* função é pura
+// composição sobre o MESMO PublicationSnapshot (zero segunda leitura de
+// motor, §1/§10/§16) — todas leem literalmente os mesmos
+// analysis.plan/bias/confluence/risk/narrative. Hierarquia (§4 original,
+// §8 Evolução Final): candles + Entry/Stop/Target são os ÚNICOS elementos
+// de mercado desenhados no mini-gráfico — nenhum overlay de contexto
+// (VWAP/EMA/sessões/sweeps/BOS-CHOCH/zonas/Fibonacci/S-R) entra na
+// composição publicável, a forma mais literal de garantir que nada tenha
+// o mesmo peso visual do plano (ver cabeçalho de mini-chart.ts).
 import type { MarketAnalysis, MarketAnalysisTarget } from "../nexus/market-analysis";
 import { PUBLIC_BIAS_LABEL } from "../nexus/market-analysis";
 import {
@@ -19,6 +20,7 @@ import {
   fmtPrice,
   paintBackground,
   truncateToWidth,
+  wrapTextLines,
 } from "./canvas-primitives";
 import { drawMiniChart, type MiniChartPlan } from "./mini-chart";
 import { publicationTimestampSlug } from "./filenames";
@@ -53,6 +55,23 @@ function generatedAtLabel(generatedAt: number): string {
   return `${datePart} ${timePart.slice(0, 2)}:${timePart.slice(2)}`;
 }
 
+// Evolução Final §11 ("distância até alvo"): MESMA fórmula já usada pelos
+// rótulos do eixo do gráfico ao vivo (EnhancedChart_110_Percent.tsx,
+// priceAxisLabels — distPct1/2/3) — zero segunda fórmula. Fail-closed: sem
+// preço vivo real, nenhum sufixo (nunca uma distância fabricada a partir
+// de um preço ausente).
+function targetDistanceLabel(price: number, livePrice: number | null): string {
+  if (livePrice === null || !Number.isFinite(livePrice) || livePrice <= 0) return "";
+  return ` · ${((Math.abs(price - livePrice) * 100) / livePrice).toFixed(2)}%`;
+}
+
+function targetLineText(t: MarketAnalysisTarget, livePrice: number | null, checkmark: boolean): string {
+  const rr = t.riskReward !== null ? ` · 1:${t.riskReward.toFixed(1)}` : "";
+  const dist = targetDistanceLabel(t.price, livePrice);
+  const reached = checkmark && t.reached ? " ✓" : "";
+  return `${fmtPrice(t.price)}${rr}${dist}${reached}`;
+}
+
 function drawBrandFooter(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -72,9 +91,9 @@ function drawBrandFooter(
   });
 }
 
-// ── A — ANÁLISE COMPLETA (1920×1080) ───────────────────────────────────
-export function renderAnalise(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {
-  const { width, height } = PUBLICATION_FORMAT_SPECS.ANALISE;
+// ── A — MARKET TERMINAL (1920×1080) ─────────────────────────────────────
+export function renderAnalysis(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {
+  const { width, height } = PUBLICATION_FORMAT_SPECS.ANALYSIS;
   const { analysis, candles, livePrice } = snapshot;
   paintBackground(ctx, width, height);
   const pad = 56;
@@ -92,18 +111,40 @@ export function renderAnalise(ctx: CanvasRenderingContext2D, snapshot: Publicati
   }
   drawSilkLine(ctx, pad, 138, width - pad, 138, PUB_COLORS.border, 1);
 
-  const chartRect = { x: pad, y: 164, width: width - pad * 2, height: 552 };
+  // Evolução Final §11 ("leitura consolidada"): a MESMA sentença real do
+  // painel "LEITURA CONSOLIDADA" (App.tsx), nunca uma segunda redação —
+  // truncada em no máximo 2 linhas medidas de verdade (wrapTextLines),
+  // nunca um chute de caracteres por linha.
+  if (analysis.narrative) {
+    const narrativeFont = `500 20px ${MONO_FONT}`;
+    const narrativeLines = wrapTextLines(ctx, analysis.narrative, narrativeFont, width - pad * 2, 2);
+    narrativeLines.forEach((line, i) => {
+      drawText(ctx, line, pad, 172 + i * 26, { font: narrativeFont, color: PUB_COLORS.textMuted });
+    });
+  }
+
+  // Altura do gráfico reduzida (era 552) para abrir espaço real à
+  // narrativa acima, SEM mover nenhum elemento abaixo — a borda inferior
+  // do gráfico permanece exatamente em 736, mesma posição de sempre.
+  const chartRect = { x: pad, y: 222, width: width - pad * 2, height: 514 };
   drawMiniChart(ctx, chartRect, candles, toMiniChartPlan(analysis, livePrice), 16);
   drawSilkLine(ctx, pad, 736, width - pad, 736, PUB_COLORS.border, 1);
 
   const colW = (width - pad * 2) / 4;
   const colY = 764;
-  const drawCol = (i: number, label: string, lines: { text: string; color?: string }[]) => {
+  // Evolução Final §11 (distância até alvo): ALVOS ganhou mais texto por
+  // linha (R:R + distância) — achado real da verificação visual: a 30px o
+  // texto do 3º alvo estourava a coluna e truncava exatamente onde a
+  // distância aparece. fontSize agora é por-coluna (default 30, ALVOS usa
+  // 22) em vez de travado — a mesma truncateToWidth continua como rede de
+  // segurança final, nunca depende só do tamanho escolhido a olho.
+  const drawCol = (i: number, label: string, lines: { text: string; color?: string }[], fontSize = 30) => {
     const x = pad + i * colW;
     drawText(ctx, label, x, colY, { font: `700 17px ${MONO_FONT}`, color: PUB_COLORS.textMuted, letterSpacing: 1.5 });
     lines.forEach((l, li) => {
-      drawText(ctx, truncateToWidth(ctx, l.text, `700 30px ${MONO_FONT}`, colW - 24), x, colY + 46 + li * 40, {
-        font: `700 30px ${MONO_FONT}`,
+      const font = `700 ${fontSize}px ${MONO_FONT}`;
+      drawText(ctx, truncateToWidth(ctx, l.text, font, colW - 24), x, colY + 46 + li * 40, {
+        font,
         color: l.color ?? PUB_COLORS.textPrimary,
       });
     });
@@ -123,9 +164,10 @@ export function renderAnalise(ctx: CanvasRenderingContext2D, snapshot: Publicati
       3,
       "ALVOS",
       analysis.plan.targets.map((t) => ({
-        text: `TP${t.index + 1} ${fmtPrice(t.price)}${t.riskReward !== null ? ` · 1:${t.riskReward.toFixed(1)}` : ""}${t.reached ? " ✓" : ""}`,
+        text: `TP${t.index + 1} ${targetLineText(t, livePrice, true)}`,
         color: PUB_COLORS.long,
       })),
+      22,
     );
   } else if (analysis.planGapLabel) {
     drawCol(1, "PLANO", [{ text: truncateToWidth(ctx, analysis.planGapLabel, `700 26px ${MONO_FONT}`, colW * 2 - 24), color: PUB_COLORS.textMuted }]);
@@ -144,7 +186,7 @@ export function renderAnalise(ctx: CanvasRenderingContext2D, snapshot: Publicati
   drawBrandFooter(ctx, pad, height - 28, width - pad * 2, analysis.generatedAt, 15);
 }
 
-// ── B — STORY (1080×1920) ───────────────────────────────────────────────
+// ── B — INSTAGRAM STORY (1080×1920) ─────────────────────────────────────
 export function renderStory(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {
   const { width, height } = PUBLICATION_FORMAT_SPECS.STORY;
   const { analysis, candles, livePrice } = snapshot;
@@ -198,25 +240,29 @@ export function renderStory(ctx: CanvasRenderingContext2D, snapshot: Publication
   if (analysis.plan) {
     // 4. Entry
     drawPlanRow("ENTRY", `${fmtPrice(analysis.plan.entryLow)}–${fmtPrice(analysis.plan.entryHigh)}`, PUB_COLORS.cyan);
-    // 5. Targets
+    // 5. Targets (+ distância até alvo, §11)
     analysis.plan.targets.forEach((t) => {
-      drawPlanRow(`ALVO ${t.index + 1}`, `${fmtPrice(t.price)}${t.riskReward !== null ? ` · 1:${t.riskReward.toFixed(1)}` : ""}`, PUB_COLORS.long);
+      drawPlanRow(`ALVO ${t.index + 1}`, targetLineText(t, livePrice, false), PUB_COLORS.long);
     });
-    // 6. Stop / invalidação
+    // 6. Reteste (§11 — reintroduzido; omitido quando não há cenário real)
+    if (analysis.retest) {
+      drawPlanRow("RETESTE", `${fmtPrice(analysis.retest.low)}–${fmtPrice(analysis.retest.high)}`, PUB_COLORS.neutral);
+    }
+    // 7. Stop / invalidação
     drawPlanRow("STOP / INVALIDAÇÃO", fmtPrice(analysis.plan.invalidationPrice), PUB_COLORS.short);
   } else if (analysis.planGapLabel) {
     drawPlanRow("PLANO", analysis.planGapLabel, PUB_COLORS.textMuted);
   }
   y += 20;
 
-  // 7. Leitura consolidada
+  // 8. Leitura consolidada
   const readingParts = [`Confluência ${analysis.confluence}`, analysis.risk ? `Risco ${analysis.risk.state}` : null].filter(
     (v): v is string => v !== null,
   );
   drawText(ctx, readingParts.join("  ·  "), width / 2, y, { font: `600 24px ${MONO_FONT}`, color: PUB_COLORS.textMuted, align: "center" });
   y += 72;
 
-  // 8. Identidade AR10 — segue o CONTEÚDO real (nunca um offset fixo do
+  // 9. Identidade AR10 — segue o CONTEÚDO real (nunca um offset fixo do
   // fundo do canvas): achado real da 1a verificação visual — com menos
   // alvos a marca ficava presa lá embaixo, sobrando um vão vazio grande
   // no meio do card. y aqui já reflete exatamente quantas linhas de plano
@@ -265,12 +311,16 @@ export function renderX(ctx: CanvasRenderingContext2D, snapshot: PublicationSnap
 
   if (analysis.plan) {
     drawRow("ENTRY", `${fmtPrice(analysis.plan.entryLow)}–${fmtPrice(analysis.plan.entryHigh)}`, PUB_COLORS.cyan);
-    // Achado real da 1a verificação visual: 3 alvos numa única linha
-    // ("TP1 · TP2 · TP3") transbordava a coluna e truncava pra "T…" —
-    // cada alvo agora é a SUA PRÓPRIA linha, nunca cortado.
+    // Achado real da 1a verificação visual (Entrega 38): 3 alvos numa única
+    // linha ("TP1 · TP2 · TP3") transbordava a coluna e truncava pra "T…" —
+    // cada alvo é a SUA PRÓPRIA linha, nunca cortado. Distância até alvo
+    // (§11) reusa a mesma targetLineText do formato Story.
     analysis.plan.targets.forEach((t) => {
-      drawRow(`ALVO ${t.index + 1}`, `${fmtPrice(t.price)}${t.riskReward !== null ? ` · 1:${t.riskReward.toFixed(1)}` : ""}`, PUB_COLORS.long);
+      drawRow(`ALVO ${t.index + 1}`, targetLineText(t, livePrice, false), PUB_COLORS.long);
     });
+    if (analysis.retest) {
+      drawRow("RETESTE", `${fmtPrice(analysis.retest.low)}–${fmtPrice(analysis.retest.high)}`, PUB_COLORS.neutral);
+    }
     drawRow("STOP / INVALIDAÇÃO", fmtPrice(analysis.plan.invalidationPrice), PUB_COLORS.short);
   } else if (analysis.planGapLabel) {
     drawRow("PLANO", analysis.planGapLabel, PUB_COLORS.textMuted);
@@ -289,71 +339,94 @@ export function renderX(ctx: CanvasRenderingContext2D, snapshot: PublicationSnap
   drawText(ctx, "AR10 CYBORG", colX, y, { font: `800 16px ${MONO_FONT}`, color: PUB_COLORS.cyan, letterSpacing: 2 });
 }
 
-// ── D — CARD EXECUTIVO (1080×1080, sem gráfico por especificação) ───────
-export function renderCard(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {
-  const { width, height } = PUBLICATION_FORMAT_SPECS.CARD;
+// ── D — PREMIUM (1080×1080, sem gráfico por especificação) ──────────────
+// Evolução Final §10-D ("versão visual mais sofisticada"): evolução real do
+// antigo Card Executivo — antes só ENTRY + 1º alvo + STOP; agora TODOS os
+// alvos reais (com R:R + distância), RETESTE quando existe, CONFLUÊNCIA e
+// RISCO como campos próprios, organizados numa grade real de 2 colunas
+// (referência visual estudada: grade de campos do Painel D) em vez de uma
+// pilha de linhas. Decisão consciente de NÃO adotar o rating de estrelas
+// da referência para "confiança": implicaria uma probabilidade calibrada
+// ao leitor leigo — contradiria a Regra de Ouro 2 (confiança/confluência
+// nunca é probabilidade). "Invalidação" também não vira um campo à parte:
+// é o MESMO preço já mostrado em STOP (o único preço de invalidação real
+// do plano) — um campo próprio duplicaria informação (§15: "nenhuma
+// informação duplicada").
+export function renderPremium(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {
+  const { width, height } = PUBLICATION_FORMAT_SPECS.PREMIUM;
   const { analysis, livePrice } = snapshot;
   paintBackground(ctx, width, height);
-  const pad = 80;
+  const pad = 72;
   const color = biasColor(analysis.bias);
-  let y = 140;
+  let y = 128;
 
   drawText(ctx, analysis.symbol, width / 2, y, { font: `800 40px ${MONO_FONT}`, color: PUB_COLORS.textPrimary, align: "center" });
   y += 42;
   drawText(ctx, analysis.timeframe.toUpperCase(), width / 2, y, { font: `700 22px ${MONO_FONT}`, color: PUB_COLORS.textMuted, align: "center" });
-  y += 80;
+  y += 72;
 
   drawText(ctx, `${biasArrow(analysis.bias)} ${PUBLIC_BIAS_LABEL[analysis.bias]}`, width / 2, y, {
-    font: `800 60px ${MONO_FONT}`,
+    font: `800 56px ${MONO_FONT}`,
     color,
     align: "center",
   });
-  y += 40;
+  y += 38;
   const contextLine = [analysis.structureLabel, analysis.regimeLabel].filter(Boolean).join("  ·  ");
   if (contextLine) {
-    drawText(ctx, truncateToWidth(ctx, contextLine, `600 20px ${MONO_FONT}`, width - pad * 2), width / 2, y, {
-      font: `600 20px ${MONO_FONT}`,
+    drawText(ctx, truncateToWidth(ctx, contextLine, `600 19px ${MONO_FONT}`, width - pad * 2), width / 2, y, {
+      font: `600 19px ${MONO_FONT}`,
       color: PUB_COLORS.textMuted,
       align: "center",
     });
   }
-  y += 64;
+  y += 46;
   if (typeof livePrice === "number" && Number.isFinite(livePrice)) {
-    drawText(ctx, fmtPrice(livePrice), width / 2, y, { font: `600 24px ${MONO_FONT}`, color: PUB_COLORS.textMuted, align: "center" });
-    y += 56;
+    drawText(ctx, fmtPrice(livePrice), width / 2, y, { font: `600 22px ${MONO_FONT}`, color: PUB_COLORS.textMuted, align: "center" });
+    y += 40;
   }
+  y += 20;
 
-  const rowW = width - pad * 2;
-  const rowH = 66;
-  const drawRow = (label: string, value: string, valueColor: string) => {
-    drawRoundedRect(ctx, pad, y, rowW, rowH - 12, 8, "rgba(255,255,255,0.03)", PUB_COLORS.border);
-    drawText(ctx, label, pad + 22, y + (rowH - 12) / 2, { font: `700 18px ${MONO_FONT}`, color: PUB_COLORS.textMuted, baseline: "middle" });
-    drawText(ctx, value, pad + rowW - 22, y + (rowH - 12) / 2, { font: `800 26px ${MONO_FONT}`, color: valueColor, align: "right", baseline: "middle" });
-    y += rowH;
-  };
-
+  // Campos reais, só os que existem (fail-closed) — layout mecânico em
+  // grade de 2 colunas (índice par → esquerda, ímpar → direita), nunca um
+  // pareamento manual frágil de campos específicos.
+  type Field = { label: string; value: string; color: string };
+  const fields: Field[] = [];
   if (analysis.plan) {
-    drawRow("ENTRY", `${fmtPrice(analysis.plan.entryLow)}–${fmtPrice(analysis.plan.entryHigh)}`, PUB_COLORS.cyan);
-    const target = analysis.plan.targets[0];
-    if (target) drawRow(`ALVO ${target.index + 1}`, fmtPrice(target.price), PUB_COLORS.long);
-    drawRow("STOP", fmtPrice(analysis.plan.invalidationPrice), PUB_COLORS.short);
-    y += 12;
-    drawText(ctx, `Invalidação do cenário: ${fmtPrice(analysis.plan.invalidationPrice)}`, width / 2, y, {
-      font: `600 17px ${MONO_FONT}`,
-      color: PUB_COLORS.textMuted,
-      align: "center",
+    fields.push({ label: "ENTRY", value: `${fmtPrice(analysis.plan.entryLow)}–${fmtPrice(analysis.plan.entryHigh)}`, color: PUB_COLORS.cyan });
+    fields.push({ label: "STOP", value: fmtPrice(analysis.plan.invalidationPrice), color: PUB_COLORS.short });
+    analysis.plan.targets.forEach((t) => {
+      fields.push({ label: `ALVO ${t.index + 1}`, value: targetLineText(t, livePrice, false), color: PUB_COLORS.long });
     });
-    y += 36;
   } else if (analysis.planGapLabel) {
-    drawRow("PLANO", analysis.planGapLabel, PUB_COLORS.textMuted);
-    y += 24;
+    fields.push({ label: "PLANO", value: analysis.planGapLabel, color: PUB_COLORS.textMuted });
+  }
+  if (analysis.retest) {
+    fields.push({ label: "RETESTE", value: `${fmtPrice(analysis.retest.low)}–${fmtPrice(analysis.retest.high)}`, color: PUB_COLORS.neutral });
+  }
+  fields.push({ label: "CONFLUÊNCIA", value: analysis.confluence, color: PUB_COLORS.textPrimary });
+  if (analysis.risk) {
+    fields.push({ label: "RISCO", value: analysis.risk.state, color: PUB_COLORS.textPrimary });
   }
 
-  const contextParts = [`Confluência ${analysis.confluence}`, analysis.risk ? `Risco ${analysis.risk.state}` : null].filter(
-    (v): v is string => v !== null,
-  );
-  drawText(ctx, contextParts.join("  ·  "), width / 2, y, { font: `600 18px ${MONO_FONT}`, color: PUB_COLORS.textMuted, align: "center" });
-  y += 56;
+  const gridW = width - pad * 2;
+  const colGap = 16;
+  const cellW = (gridW - colGap) / 2;
+  const cellH = 92;
+  const rowGap = 14;
+  fields.forEach((f, i) => {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const x = pad + col * (cellW + colGap);
+    const cellY = y + row * (cellH + rowGap);
+    drawRoundedRect(ctx, x, cellY, cellW, cellH, 10, "rgba(255,255,255,0.03)", PUB_COLORS.border);
+    drawText(ctx, f.label, x + 20, cellY + 30, { font: `700 16px ${MONO_FONT}`, color: PUB_COLORS.textMuted, letterSpacing: 1 });
+    drawText(ctx, truncateToWidth(ctx, f.value, `800 24px ${MONO_FONT}`, cellW - 40), x + 20, cellY + 64, {
+      font: `800 24px ${MONO_FONT}`,
+      color: f.color,
+    });
+  });
+  const rows = Math.ceil(fields.length / 2);
+  y += rows * (cellH + rowGap) + 12;
 
   // AR10 segue o conteúdo real (mesmo achado do gap vazio do Story/X) —
   // nunca um offset fixo do fundo do canvas.

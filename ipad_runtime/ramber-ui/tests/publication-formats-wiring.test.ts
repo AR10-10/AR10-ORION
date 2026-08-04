@@ -17,10 +17,10 @@ describe('formats.ts: as 4 render* funções são PURA composição — zero seg
   const src = read('../src/publication/formats.ts');
 
   it('assinatura de cada render* é (ctx, snapshot) — nunca um parâmetro extra que poderia carregar leitura independente', () => {
-    expect(src).toContain('export function renderAnalise(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {');
+    expect(src).toContain('export function renderAnalysis(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {');
     expect(src).toContain('export function renderStory(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {');
     expect(src).toContain('export function renderX(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {');
-    expect(src).toContain('export function renderCard(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {');
+    expect(src).toContain('export function renderPremium(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {');
   });
 
   it('nunca importa buildMarketAnalysis/buildNexusDecision/engine-bridge — só o TIPO MarketAnalysis e a tradução pública já existente PUBLIC_BIAS_LABEL', () => {
@@ -87,14 +87,14 @@ describe('Hierarquia (§4): nenhum overlay de contexto do terminal é desenhado 
 describe('types.ts: dimensões reais de export por plataforma (não estilo copiado — especificação de pixel)', () => {
   const src = read('../src/publication/types.ts');
 
-  it('ANALISE 16:9 Full HD, STORY 9:16 nativo de Stories, X 16:9 compacto, CARD 1:1', () => {
-    expect(src).toContain('ANALISE: { width: 1920, height: 1080, label: "Análise Completa", needsChart: true },');
+  it('ANALYSIS 16:9 Full HD, STORY 9:16 nativo de Stories, X 16:9 compacto, PREMIUM 1:1', () => {
+    expect(src).toContain('ANALYSIS: { width: 1920, height: 1080, label: "Market Terminal", needsChart: true },');
     expect(src).toContain('STORY: { width: 1080, height: 1920, label: "Story", needsChart: true },');
     expect(src).toContain('X: { width: 1200, height: 675, label: "X", needsChart: true },');
-    expect(src).toContain('CARD: { width: 1080, height: 1080, label: "Card Executivo", needsChart: false },');
+    expect(src).toContain('PREMIUM: { width: 1080, height: 1080, label: "Premium", needsChart: false },');
   });
 
-  it('CARD é o único sem gráfico (§2-D não lista "gráfico" no conteúdo) — os outros 3 exigem', () => {
+  it('PREMIUM é o único sem gráfico (§2-D não lista "gráfico" no conteúdo) — os outros 3 exigem', () => {
     const specMatch = src.match(/PUBLICATION_FORMAT_SPECS[\s\S]*?=\s*\{([\s\S]*?)\};/);
     expect(specMatch, 'PUBLICATION_FORMAT_SPECS não encontrado').not.toBeNull();
     const body = specMatch![1];

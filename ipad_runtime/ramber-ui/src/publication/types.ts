@@ -28,7 +28,7 @@ export interface PublicationSnapshot {
   livePrice: number | null;
 }
 
-export type PublicationFormat = "ANALISE" | "STORY" | "X" | "CARD";
+export type PublicationFormat = "ANALYSIS" | "STORY" | "X" | "PREMIUM";
 
 export interface PublicationFormatSpec {
   width: number;
@@ -45,13 +45,13 @@ export interface PublicationFormatSpec {
 // identidade visual de terceiros — só a resolução de pixel, que é
 // especificação de plataforma, não estilo.
 export const PUBLICATION_FORMAT_SPECS: Record<PublicationFormat, PublicationFormatSpec> = {
-  ANALISE: { width: 1920, height: 1080, label: "Análise Completa", needsChart: true },
+  ANALYSIS: { width: 1920, height: 1080, label: "Market Terminal", needsChart: true },
   STORY: { width: 1080, height: 1920, label: "Story", needsChart: true },
   X: { width: 1200, height: 675, label: "X", needsChart: true },
-  CARD: { width: 1080, height: 1080, label: "Card Executivo", needsChart: false },
+  PREMIUM: { width: 1080, height: 1080, label: "Premium", needsChart: false },
 };
 
-export const PUBLICATION_FORMAT_ORDER: PublicationFormat[] = ["ANALISE", "STORY", "X", "CARD"];
+export const PUBLICATION_FORMAT_ORDER: PublicationFormat[] = ["ANALYSIS", "STORY", "X", "PREMIUM"];
 
 // §2-A: "prioridade máxima para o gráfico" — mas um punhado de candles não
 // forma uma leitura visual real. Abaixo disso, a peça que EXIGE gráfico é

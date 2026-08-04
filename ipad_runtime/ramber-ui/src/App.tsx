@@ -4235,7 +4235,7 @@ function MarketAnalysisPainelTab({ analysis }: { analysis: MarketAnalysis }) {
 function MarketAnalysisPublicationTab({ snapshot }: { snapshot: PublicationSnapshot }) {
   const [assets, setAssets] = useState<PublicationAsset[] | null>(null);
   const [genState, setGenState] = useState<"idle" | "generating" | "ready" | "failed">("idle");
-  const [activeFormat, setActiveFormat] = useState<PublicationFormat>("ANALISE");
+  const [activeFormat, setActiveFormat] = useState<PublicationFormat>("ANALYSIS");
   const [shareState, setShareState] = useState<"idle" | "sharing" | "unsupported">("idle");
   const [captionCopyState, setCaptionCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
@@ -4429,7 +4429,7 @@ function MarketAnalysisPublicationTab({ snapshot }: { snapshot: PublicationSnaps
 // Operacional" (commit f74c533): o preço ao vivo tem exatamente 1 caminho
 // de distribuição real (o state raiz de App()), nunca um espelho.
 function MarketAnalysisPanel({ priceData, chartData }: { priceData: PriceState | null; chartData: PublicationCandle[] }) {
-  const { marketAnalysisOpen, setMarketAnalysisOpen, selectedAsset, chartTimeframe, nexusDecision, engine } =
+  const { marketAnalysisOpen, setMarketAnalysisOpen, selectedAsset, chartTimeframe, nexusDecision, engine, cvd } =
     useContext(WidgetContext) || {};
   const [tab, setTab] = useState<"PAINEL" | "PUBLICACAO">("PAINEL");
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
@@ -4459,6 +4459,10 @@ function MarketAnalysisPanel({ priceData, chartData }: { priceData: PriceState |
         resistance: engine?.resistance ?? null,
         resistanceStrength: engine?.resistanceStrength ?? null,
         livePrice: livePriceNow,
+        // Evolução Final §11 ("leitura consolidada"): MESMA derivação de
+        // fluxo que NarrativeSummaryCard já usa (nexus/market-analysis.ts
+        // repassa direto pra buildNarrativeSummary) — zero segunda fórmula.
+        flow: num(cvd) && cvd !== 0 ? (cvd! > 0 ? "COMPRADOR" : "VENDEDOR") : null,
       }),
     );
     setFrozenCandles(chartData);

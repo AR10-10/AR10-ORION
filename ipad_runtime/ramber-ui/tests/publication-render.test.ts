@@ -53,6 +53,7 @@ const BASE_ANALYSIS: MarketAnalysis = {
     ],
   },
   planGapLabel: null,
+  narrative: 'Mercado com viés de alta. Estrutura real mapeada; entrada ainda aguarda confirmação de timing.',
 };
 
 const baseSnapshot = (overrides: Partial<PublicationSnapshot> = {}): PublicationSnapshot => ({
@@ -151,24 +152,24 @@ describe('computeChartPriceRange: candles + Entry/Stop/preço vivo sempre no qua
 });
 
 describe('buildPublicationFilename / publicationTimestampSlug: nomes automáticos, mesmo timestamp identifica as 4 peças (§8)', () => {
-  it('formato exato do exemplo da Ordem: AR10_{SYMBOL}_{TF}_{YYYY-MM-DD}_{HHmm}_{FORMATO}.png', () => {
+  it('formato exato do exemplo da Ordem: AR10_{SYMBOL}_{TF}_{FORMATO}_{YYYY-MM-DD}_{HHmm}.png', () => {
     const generatedAt = new Date(2026, 7, 4, 10, 32, 0).getTime();
-    expect(buildPublicationFilename('BTCUSDT', '1h', generatedAt, 'ANALISE')).toBe('AR10_BTCUSDT_1H_2026-08-04_1032_ANALISE.png');
-    expect(buildPublicationFilename('BTCUSDT', '1h', generatedAt, 'STORY')).toBe('AR10_BTCUSDT_1H_2026-08-04_1032_STORY.png');
-    expect(buildPublicationFilename('BTCUSDT', '1h', generatedAt, 'X')).toBe('AR10_BTCUSDT_1H_2026-08-04_1032_X.png');
-    expect(buildPublicationFilename('BTCUSDT', '1h', generatedAt, 'CARD')).toBe('AR10_BTCUSDT_1H_2026-08-04_1032_CARD.png');
+    expect(buildPublicationFilename('BTCUSDT', '1h', generatedAt, 'ANALYSIS')).toBe('AR10_BTCUSDT_1H_ANALYSIS_2026-08-04_1032.png');
+    expect(buildPublicationFilename('BTCUSDT', '1h', generatedAt, 'STORY')).toBe('AR10_BTCUSDT_1H_STORY_2026-08-04_1032.png');
+    expect(buildPublicationFilename('BTCUSDT', '1h', generatedAt, 'X')).toBe('AR10_BTCUSDT_1H_X_2026-08-04_1032.png');
+    expect(buildPublicationFilename('BTCUSDT', '1h', generatedAt, 'PREMIUM')).toBe('AR10_BTCUSDT_1H_PREMIUM_2026-08-04_1032.png');
   });
 
-  it('as 4 peças de UMA análise compartilham o MESMO datePart/timePart — só o sufixo de formato muda', () => {
+  it('as 4 peças de UMA análise compartilham o MESMO datePart/timePart — só o token de formato muda', () => {
     const generatedAt = Date.now();
     const names = PUBLICATION_FORMAT_ORDER.map((f) => buildPublicationFilename('ETHUSDT', '4h', generatedAt, f));
-    const stems = names.map((n) => n.replace(/_(ANALISE|STORY|X|CARD)\.png$/, ''));
+    const stems = names.map((n) => n.replace(/_(ANALYSIS|STORY|X|PREMIUM)_\d{4}-\d{2}-\d{2}_\d{4}\.png$/, ''));
     expect(new Set(stems).size).toBe(1);
   });
 
   it('símbolo/timeframe com caracteres não-alfanuméricos são limpos e maiusculizados (nunca quebram o nome do arquivo)', () => {
     const generatedAt = new Date(2026, 0, 1, 9, 5, 0).getTime();
-    expect(buildPublicationFilename('BTC/USDT', '1h', generatedAt, 'CARD')).toBe('AR10_BTCUSDT_1H_2026-01-01_0905_CARD.png');
+    expect(buildPublicationFilename('BTC/USDT', '1h', generatedAt, 'PREMIUM')).toBe('AR10_BTCUSDT_1H_PREMIUM_2026-01-01_0905.png');
   });
 
   it('publicationTimestampSlug pad de zero em mês/dia/hora/minuto de um dígito', () => {
@@ -186,15 +187,15 @@ describe('canPublishFormat: fail-closed por peça (§5) — só formatos com o q
     }
   });
 
-  it('candles insuficientes: ANALISE/STORY/X (precisam de gráfico) ficam bloqueados', () => {
+  it('candles insuficientes: ANALYSIS/STORY/X (precisam de gráfico) ficam bloqueados', () => {
     const snapshot = baseSnapshot({ candles: makeCandles(MIN_CHART_CANDLES - 1) });
-    expect(canPublishFormat('ANALISE', snapshot)).toBe(false);
+    expect(canPublishFormat('ANALYSIS', snapshot)).toBe(false);
     expect(canPublishFormat('STORY', snapshot)).toBe(false);
     expect(canPublishFormat('X', snapshot)).toBe(false);
   });
 
-  it('candles insuficientes: CARD (sem gráfico por especificação §2-D) continua publicável', () => {
+  it('candles insuficientes: PREMIUM (sem gráfico por especificação §2-D) continua publicável', () => {
     const snapshot = baseSnapshot({ candles: [] });
-    expect(canPublishFormat('CARD', snapshot)).toBe(true);
+    expect(canPublishFormat('PREMIUM', snapshot)).toBe(true);
   });
 });

@@ -75,7 +75,7 @@ describe('Snapshot congelado (§12 sincronia): o painel só recomputa quando ABR
     const a = app();
     const idx = a.indexOf('function MarketAnalysisPanel(');
     expect(idx).toBeGreaterThan(-1);
-    const block = a.slice(idx, idx + 2400);
+    const block = a.slice(idx, idx + 2700);
     expect(block).toContain('useEffect(() => {\n    if (!marketAnalysisOpen) return;');
     expect(block).toContain('}, [marketAnalysisOpen]);');
   });
@@ -83,7 +83,7 @@ describe('Snapshot congelado (§12 sincronia): o painel só recomputa quando ABR
   it('a fotografia vem de buildMarketAnalysis (o único montador real, mesmo de market-analysis.test.ts) — nunca uma segunda leitura ad hoc de nexusDecision', () => {
     const a = app();
     const idx = a.indexOf('function MarketAnalysisPanel(');
-    const block = a.slice(idx, idx + 2400);
+    const block = a.slice(idx, idx + 2700);
     expect(block).toContain('setAnalysis(\n      buildMarketAnalysis({');
     expect(block).toContain('decision: nexusDecision ?? null,');
   });
@@ -91,7 +91,7 @@ describe('Snapshot congelado (§12 sincronia): o painel só recomputa quando ABR
   it('regimeLabel usa a MESMA expressão literal de NarrativeSummaryCard (REGIME_DISPLAY + regime.direction) — zero segunda derivação do rótulo de regime', () => {
     const a = app();
     const idx = a.indexOf('function MarketAnalysisPanel(');
-    const block = a.slice(idx, idx + 2400);
+    const block = a.slice(idx, idx + 2700);
     expect(block).toContain('const regime = engine?.marketRegime ?? null;');
     expect(block).toContain('const regimeDisplay = regime ? REGIME_DISPLAY[regime.regime] : null;');
     expect(block).toContain('regimeLabel: regimeDisplay ? `${regimeDisplay.label}${regime!.direction ? ` ${regime!.direction}` : ""}` : null,');
@@ -100,7 +100,7 @@ describe('Snapshot congelado (§12 sincronia): o painel só recomputa quando ABR
   it('estrutura/support/resistance vêm dos MESMOS campos reais já usados pelo gráfico (engine.marketStructureLabel/support/resistance/*Strength) — zero segundo cálculo', () => {
     const a = app();
     const idx = a.indexOf('function MarketAnalysisPanel(');
-    const block = a.slice(idx, idx + 2400);
+    const block = a.slice(idx, idx + 2700);
     expect(block).toContain('structureLabel: engine?.marketStructureLabel ?? null,');
     expect(block).toContain('support: engine?.support ?? null,');
     expect(block).toContain('supportStrength: engine?.supportStrength ?? null,');
@@ -111,7 +111,7 @@ describe('Snapshot congelado (§12 sincronia): o painel só recomputa quando ABR
   it('Ordem "AR10 Publication Studio" §1: candles/preço vivo congelados no MESMO effect/gatilho que analysis — nunca um segundo freeze só pro clique de Gerar Publicação', () => {
     const a = app();
     const idx = a.indexOf('function MarketAnalysisPanel(');
-    const block = a.slice(idx, idx + 2400);
+    const block = a.slice(idx, idx + 2700);
     expect(block).toContain('const livePriceNow = typeof priceData?.price === "number" ? priceData.price : null;');
     expect(block).toContain('setFrozenCandles(chartData);');
     expect(block).toContain('setFrozenLivePrice(livePriceNow);');
@@ -128,7 +128,7 @@ describe('Fail-closed real (§6): sem leitura, o painel mostra DADOS INSUFICIENT
   it('branch !analysis renderiza o texto explícito, nunca um placeholder genérico', () => {
     const a = app();
     const idx = a.indexOf('function MarketAnalysisPanel(');
-    const block = a.slice(idx, idx + 3600);
+    const block = a.slice(idx, idx + 3900);
     expect(block).toContain('{!analysis ? (');
     expect(block).toContain('DADOS INSUFICIENTES');
   });
@@ -151,7 +151,7 @@ describe('Nunca publica sozinha: zero chamada de rede em todo o bloco Publicaç�
   it('disclaimer real e visível: geração é sob demanda do Operador, cópia/captura é sempre ação manual', () => {
     const a = app();
     const idx = a.indexOf('function MarketAnalysisPanel(');
-    const block = a.slice(idx, idx + 4400);
+    const block = a.slice(idx, idx + 4600);
     expect(block).toContain('Gerado sob demanda pelo Operador — esta tela nunca publica sozinha; copiar/capturar é sempre uma ação sua.');
   });
 });
