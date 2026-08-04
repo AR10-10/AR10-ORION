@@ -42,6 +42,17 @@ import { ageAlpha, type DecayConfig } from "./annotation-decay";
 // KillZoneBandsPlugin/LiquidationHeatmapPlugin/InstitutionalZonePlugin,
 // zero segunda implementação de "caixa de etiqueta".
 import { drawCanvasLabel } from "../nexus/canvas-label";
+// Ordem de Fechamento (Operador: "não ficar poluído, só as marca certeira"):
+// achado real de auditoria — cada FVG/OB bruto desenhava seu próprio
+// retângulo full-width independente, sem nenhuma consciência de outras
+// zonas do MESMO tipo sobrepostas no preço. Com muitas zonas reais ativas
+// ao mesmo tempo (comum em mercado real), o preenchimento translúcido de
+// cada caixa EMPILHA visualmente (alpha composto) — a "parede de cor"
+// literal que a Ordem descreve. fuseLiquidityZones funde, só para exibição,
+// zonas próximas/sobrepostas do MESMO grupo semântico — zero segundo
+// cálculo de obstáculo/peso/idade (ver uso abaixo).
+import { fuseLiquidityZones, type FusableZoneInput } from "../nexus/liquidity-zone-fusion";
+import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 
 export interface FillableZone {
   type: "BULLISH" | "BEARISH";
@@ -165,28 +176,33 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       const isObstacle = (zone: FillableZone) =>
         (obstacles ?? []).some((o) => o.low === zone.bottom && o.high === zone.top);
 
-      const drawZone = (zone: FillableZone, palette: ZonePalette, label: string, isObstacleZone: boolean, resolvedWeight?: number) => {
+      // Correção real (Diretriz Consolidação/Auditoria/Evolução, auditoria
+      // de ciclo de vida, achado confirmado): uma zona que é obstáculo
+      // real do plano ATIVO agora (mesma isObstacle() usada na paleta e no
+      // rótulo ⚠ abaixo — zero segundo cálculo) nunca deve esmaecer por
+      // idade fixa enquanto continuar bloqueando o caminho do plano —
+      // "nunca em tempo fixo, sempre por relevância real" é exatamente o
+      // caso de uma zona antiga que ainda é o obstáculo estrutural de uma
+      // operação aberta. Volta a decair normalmente assim que deixar de
+      // ser obstáculo (plano fechado ou preço já passou da zona).
+      //
+      // Ordem Nº 04: zona-obstáculo IGNORA resolvedWeight de propósito —
+      // a garantia de alpha=1 (risco real do plano ativo) nunca se dobra
+      // à competição por orçamento visual. Zona comum usa o peso já
+      // resolvido pela competição cruzada (visual-budget.ts) quando
+      // presente; ausente/null cai no ageAlpha isolado de sempre
+      // (fail-closed, mesmo comportamento de antes desta rodada). Resolvido
+      // por zona BRUTA, antes da fusão — a fusão abaixo só decide como
+      // agrupar/desenhar, nunca recalcula decaimento/obstáculo.
+      const resolveAlpha = (zone: FillableZone, isObstacleZone: boolean, resolvedWeight?: number) => {
+        const age = currentIndex - zone.index;
+        return isObstacleZone ? 1 : resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, ZONE_DECAY);
+      };
+
+      const drawZone = (zone: { top: number; bottom: number; index: number; alpha: number }, palette: ZonePalette, label: string) => {
         const point = candles[zone.index];
         if (!point) return; // índice fora da janela real de candles — nunca desenha um palpite.
-        const age = currentIndex - zone.index;
-        // Correção real (Diretriz Consolidação/Auditoria/Evolução, auditoria
-        // de ciclo de vida, achado confirmado): uma zona que é obstáculo
-        // real do plano ATIVO agora (mesma isObstacle() usada na paleta e no
-        // rótulo ⚠ abaixo — zero segundo cálculo) nunca deve esmaecer por
-        // idade fixa enquanto continuar bloqueando o caminho do plano —
-        // "nunca em tempo fixo, sempre por relevância real" é exatamente o
-        // caso de uma zona antiga que ainda é o obstáculo estrutural de uma
-        // operação aberta. Volta a decair normalmente assim que deixar de
-        // ser obstáculo (plano fechado ou preço já passou da zona).
-        //
-        // Ordem Nº 04: zona-obstáculo IGNORA resolvedWeight de propósito —
-        // a garantia de alpha=1 (risco real do plano ativo) nunca se dobra
-        // à competição por orçamento visual. Zona comum usa o peso já
-        // resolvido pela competição cruzada (visual-budget.ts) quando
-        // presente; ausente/null cai no ageAlpha isolado de sempre
-        // (fail-closed, mesmo comportamento de antes desta rodada).
-        const alpha = isObstacleZone ? 1 : resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, ZONE_DECAY);
-        if (alpha <= 0) return; // "esquecida" — só da tela, ver comentário de ageAlpha acima.
+        if (zone.alpha <= 0) return; // "esquecida" — só da tela, ver comentário de ageAlpha acima.
         const x1 = timeScale.timeToCoordinate(point.time as unknown as Time);
         const y1 = series.priceToCoordinate(zone.top);
         const y2 = series.priceToCoordinate(zone.bottom);
@@ -196,7 +212,7 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
         const rectHeight = Math.max(1, Math.abs(y2 - y1));
         const rectWidth = cssWidth - rectX;
         if (rectWidth <= 0) return;
-        ctx.globalAlpha = alpha;
+        ctx.globalAlpha = zone.alpha;
         ctx.fillStyle = palette.fill;
         ctx.fillRect(rectX, rectY, rectWidth, rectHeight);
         // Fio de Seda: 1px sólida real (Canvas 2D nunca usa setLineDash aqui).
@@ -229,14 +245,34 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       // sigla e o glifo) — havia um espaço aqui. Zero mudança de
       // informação/cor/direção, só a mesma string mais compacta.
       const dir = (t: "BULLISH" | "BEARISH") => (t === "BULLISH" ? "↑" : "↓");
-      fvgs.forEach((z, i) => {
-        const obstacle = isObstacle(z);
-        drawZone(z, paletteFor("FVG", z.type, obstacle), `FVG${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle, fvgWeights?.[i]);
-      });
-      obs.forEach((z, i) => {
-        const obstacle = isObstacle(z);
-        drawZone(z, paletteFor("OB", z.type, obstacle), `OB${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle, obWeights?.[i]);
-      });
+
+      // Ordem de Fechamento (Operador: "não ficar poluído... marca
+      // certeira"): funde, só para exibição, zonas do MESMO kind+type cujo
+      // intervalo de preço se sobrepõe ou fica próximo
+      // (LIQUIDITY_PROXIMITY_PCT — mesma constante real já usada para
+      // clusterizar Sweeps/Session Key Levels, zero limiar novo inventado).
+      // BULLISH nunca funde com BEARISH, FVG nunca funde com OB — fenômenos
+      // estruturais reais distintos; fundi-los apagaria informação real
+      // (Regra de Ouro 4). memberCount>1 vira "×N" no rótulo — mesma
+      // convenção já usada por Sweep/Zona Institucional agrupados.
+      const drawGroup = (raw: FillableZone[], weights: (number | undefined)[] | undefined, kind: "FVG" | "OB", type: "BULLISH" | "BEARISH") => {
+        const fusable: FusableZoneInput[] = [];
+        raw.forEach((z, i) => {
+          if (z.type !== type) return;
+          const obstacle = isObstacle(z);
+          fusable.push({ top: z.top, bottom: z.bottom, index: z.index, isObstacle: obstacle, alpha: resolveAlpha(z, obstacle, weights?.[i]) });
+        });
+        for (const group of fuseLiquidityZones(fusable, LIQUIDITY_PROXIMITY_PCT)) {
+          const palette = paletteFor(kind, type, group.isObstacle);
+          const label = `${kind}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;
+          drawZone(group, palette, label);
+        }
+      };
+
+      drawGroup(fvgs, fvgWeights, "FVG", "BULLISH");
+      drawGroup(fvgs, fvgWeights, "FVG", "BEARISH");
+      drawGroup(obs, obWeights, "OB", "BULLISH");
+      drawGroup(obs, obWeights, "OB", "BEARISH");
     };
 
     const markDirty = () => {

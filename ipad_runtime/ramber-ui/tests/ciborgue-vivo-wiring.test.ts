@@ -79,7 +79,12 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
     const plugin = read('../src/chart/LiquidityZonesPlugin.tsx');
     expect(plugin).toContain('import { ageAlpha, type DecayConfig } from "./annotation-decay";');
     expect(plugin).toContain('const ZONE_DECAY: DecayConfig = { fadeStartCandles: 30, expireCandles: 100, minAlpha: 0.15 };');
-    expect(plugin).toContain('if (alpha <= 0) return;');
+    // Ordem de Fechamento ("não ficar poluído... marca certeira", fusão de
+    // zonas via liquidity-zone-fusion.ts): alpha agora chega PRÉ-RESOLVIDO
+    // no objeto de grupo fundido (resolveAlpha roda 1x por zona bruta, antes
+    // da fusão) — o gate "esquecida" continua o mesmo, só lê zone.alpha em
+    // vez de uma variável solta local a drawZone.
+    expect(plugin).toContain('if (zone.alpha <= 0) return;');
     // Fio de Seda (Regra de Ouro 2) continua 1px sólida real — o decay usa
     // globalAlpha, nunca setLineDash.
     expect(plugin).not.toContain('.setLineDash(');
@@ -93,30 +98,30 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
     // paleta ganha o 3º argumento isObstacle(z) quando a MESMA zona é um
     // obstáculo real do plano ativo. Auditoria do ecossistema visual
     // (pergunta do Operador "era pra cima ou pra baixo?"): o label também
-    // carrega o glifo de direção ↑/↓ real (z.type do motor SMC), nunca só
-    // a cor — mesma chamada de sempre, só honesta sobre mais informação.
+    // carrega o glifo de direção ↑/↓ real (type real do motor SMC), nunca só
+    // a cor.
     //
-    // Diretriz Consolidação/Auditoria/Evolução (achado real: zona-obstáculo
-    // podia expirar por idade fixa mesmo bloqueando um plano ativo):
-    // `obstacle` agora é computado 1x por zona e passado como 4º argumento
-    // real de drawZone (nunca um 2º cálculo de isObstacle dentro do loop).
+    // Ordem de Fechamento: o label por zona bruta virou label por GRUPO
+    // FUNDIDO (drawGroup) — obstacle continua computado 1x por zona bruta
+    // (isObstacle(z), zero 2º cálculo) e entra no FusableZoneInput; o grupo
+    // herda isObstacle=true se QUALQUER membro real for obstáculo
+    // (fuseLiquidityZones, OR real, nunca escondido pela fusão — Regra de
+    // Ouro 4).
     expect(plugin).toContain('const obstacle = isObstacle(z);');
-    // Ordem Nº 04 (MAIN_LIQUIDITY em visual-budget.ts): drawZone ganhou um
-    // 5º argumento (resolvedWeight, peso já resolvido pela competição
-    // cruzada) — obstacle continua o 4º, intocado; a chamada real agora
-    // passa fvgWeights?.[i]/obWeights?.[i] no final.
-    expect(plugin).toContain('drawZone(z, paletteFor("FVG", z.type, obstacle), `FVG${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle, fvgWeights?.[i]);');
-    expect(plugin).toContain('drawZone(z, paletteFor("OB", z.type, obstacle), `OB${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle, obWeights?.[i]);');
+    expect(plugin).toContain('fusable.push({ top: z.top, bottom: z.bottom, index: z.index, isObstacle: obstacle, alpha: resolveAlpha(z, obstacle, weights?.[i]) });');
+    expect(plugin).toContain('const label = `${kind}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;');
   });
 
   it('Diretriz Consolidação/Auditoria/Evolução (achado real): zona-obstáculo de um plano ATIVO nunca esmaece por idade fixa — alpha=1 enquanto isObstacleZone, ageAlpha normal caso contrário', () => {
     const plugin = read('../src/chart/LiquidityZonesPlugin.tsx');
-    // Ordem Nº 04: drawZone ganhou resolvedWeight (5º argumento, opcional)
-    // — zona-obstáculo continua alpha=1 incondicional, IGNORANDO
-    // resolvedWeight de propósito (ver visual-budget-chart-wiring.test.ts
-    // para a cobertura completa desta regra nova).
-    expect(plugin).toContain('const drawZone = (zone: FillableZone, palette: ZonePalette, label: string, isObstacleZone: boolean, resolvedWeight?: number) => {');
-    expect(plugin).toContain('const alpha = isObstacleZone ? 1 : resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, ZONE_DECAY);');
+    // Ordem de Fechamento: a lógica que antes vivia dentro de drawZone
+    // (5º argumento resolvedWeight) virou resolveAlpha, uma função própria
+    // chamada 1x por zona BRUTA antes da fusão — mesma regra exata: zona-
+    // obstáculo continua alpha=1 incondicional, IGNORANDO resolvedWeight de
+    // propósito (ver visual-budget-chart-wiring.test.ts para a cobertura
+    // completa desta regra).
+    expect(plugin).toContain('const resolveAlpha = (zone: FillableZone, isObstacleZone: boolean, resolvedWeight?: number) => {');
+    expect(plugin).toContain('return isObstacleZone ? 1 : resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, ZONE_DECAY);');
   });
 });
 

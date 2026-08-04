@@ -64,11 +64,14 @@ describe('LiquidityZonesPlugin: destaque de obstáculo (Diretriz Restauração/I
     fillOpacities.forEach((fillOpacity, i) => expect(fillOpacity).toBeLessThan(borderOpacities[i]));
   });
 
-  it('pergunta do Operador ("era pra cima ou pra baixo?"): o rótulo da zona carrega a DIREÇÃO por glifo ↑/↓, nunca só a cor — BULLISH=↑ (demanda), BEARISH=↓ (oferta), o glifo vem de z.type real do motor SMC', () => {
+  it('pergunta do Operador ("era pra cima ou pra baixo?"): o rótulo da zona carrega a DIREÇÃO por glifo ↑/↓, nunca só a cor — BULLISH=↑ (demanda), BEARISH=↓ (oferta), o glifo vem de type real do motor SMC', () => {
     const p = plugin();
     expect(p).toContain('const dir = (t: "BULLISH" | "BEARISH") => (t === "BULLISH" ? "↑" : "↓");');
-    expect(p).toContain('`FVG${dir(z.type)}${obstacle ? " ⚠" : ""}`');
-    expect(p).toContain('`OB${dir(z.type)}${obstacle ? " ⚠" : ""}`');
+    // Ordem de Fechamento ("não ficar poluído... marca certeira"): o rótulo
+    // por zona bruta virou rótulo por GRUPO fundido (drawGroup) — mesmo
+    // glifo de direção, ganhou "×N" quando várias zonas reais se fundem e
+    // preservou o "⚠" de obstáculo, nunca escondido pela fusão.
+    expect(p).toContain('const label = `${kind}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;');
     // o glifo nunca substitui a marca de obstáculo (⚠), só a acompanha
     expect(p).toContain('" ⚠"');
   });

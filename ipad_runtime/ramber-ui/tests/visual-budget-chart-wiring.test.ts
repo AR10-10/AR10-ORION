@@ -207,21 +207,22 @@ describe('LiquidityZonesPlugin.tsx: ZONE_DECAY exportado + fvgVisualWeights/obVi
     );
   });
 
-  it('drawZone: zona-obstáculo SEMPRE alpha=1, ignora resolvedWeight de propósito — a garantia de risco real nunca se dobra ao orçamento', () => {
+  it('resolveAlpha: zona-obstáculo SEMPRE alpha=1, ignora resolvedWeight de propósito — a garantia de risco real nunca se dobra ao orçamento (Ordem de Fechamento: a lógica que era inline em drawZone virou resolveAlpha, resolvida 1x por zona bruta ANTES da fusão — mesma regra exata)', () => {
     const s = liquidityZonesPlugin();
     expect(s).toContain(
-      'const alpha = isObstacleZone ? 1 : resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, ZONE_DECAY);',
+      'return isObstacleZone ? 1 : resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, ZONE_DECAY);',
     );
   });
 
-  it('os 2 forEach passam o peso resolvido por índice para drawZone (fvgWeights?.[i] / obWeights?.[i])', () => {
+  it('drawGroup passa o peso resolvido por índice para resolveAlpha (fvgWeights?.[i] / obWeights?.[i]) ao montar cada FusableZoneInput — mesma garantia de antes, agora por zona bruta pré-fusão (Ordem de Fechamento: fuseLiquidityZones funde zonas próximas/sobrepostas do mesmo kind+type, "não ficar poluído... marca certeira")', () => {
     const s = liquidityZonesPlugin();
     expect(s).toContain(
-      'drawZone(z, paletteFor("FVG", z.type, obstacle), `FVG${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle, fvgWeights?.[i]);',
+      'fusable.push({ top: z.top, bottom: z.bottom, index: z.index, isObstacle: obstacle, alpha: resolveAlpha(z, obstacle, weights?.[i]) });',
     );
-    expect(s).toContain(
-      'drawZone(z, paletteFor("OB", z.type, obstacle), `OB${dir(z.type)}${obstacle ? " ⚠" : ""}`, obstacle, obWeights?.[i]);',
-    );
+    expect(s).toContain('drawGroup(fvgs, fvgWeights, "FVG", "BULLISH");');
+    expect(s).toContain('drawGroup(fvgs, fvgWeights, "FVG", "BEARISH");');
+    expect(s).toContain('drawGroup(obs, obWeights, "OB", "BULLISH");');
+    expect(s).toContain('drawGroup(obs, obWeights, "OB", "BEARISH");');
   });
 
   it('fvgVisualWeights/obVisualWeights entram no ref/dirty-check igual a fairValueGaps/orderBlocks — uma resolução de orçamento nova redesenha', () => {
