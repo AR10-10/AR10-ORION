@@ -230,8 +230,14 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
 
   it('ChartWidget repassa onRequestOlderCandles até EnhancedChart_110_Percent — mesma prop, ponta a ponta', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('<ChartWidget chartData={chartData} onRequestOlderCandles={handleRequestOlderCandles} />');
-    expect(app).toContain('function ChartWidget({ chartData, onRequestOlderCandles }: any) {');
+    // priceData={priceData} (Ordem "Unificação da Inteligência Operacional"
+    // §4 — correção de latência real/gap-price-sync-wiring): literal
+    // re-fixado, a garantia real (onRequestOlderCandles ponta a ponta)
+    // continua idêntica.
+    expect(app).toContain(
+      '<ChartWidget chartData={chartData} onRequestOlderCandles={handleRequestOlderCandles} priceData={priceData} />',
+    );
+    expect(app).toContain('function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {');
     expect(app).toContain('onRequestOlderCandles={onRequestOlderCandles}');
   });
 });

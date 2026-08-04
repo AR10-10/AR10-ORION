@@ -228,7 +228,10 @@ describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (pass
 
   it('ChartWidget passa engine.support/resistance/strength/breakouts REAIS para EnhancedChart_110_Percent — mesma fonte de sempre, nunca recomputado', () => {
     const app = read('../src/App.tsx');
-    const fnMatch = app.match(/function ChartWidget\(\{ chartData, onRequestOlderCandles \}: any\) \{([\s\S]*?)\n\}\n/);
+    // priceData (Ordem "Unificação da Inteligência Operacional" §4 —
+    // correção de latência real, gap-price-sync-wiring): assinatura
+    // re-fixada, mesma garantia de sempre.
+    const fnMatch = app.match(/function ChartWidget\(\{ chartData, onRequestOlderCandles, priceData \}: any\) \{([\s\S]*?)\n\}\n/);
     expect(fnMatch, 'ChartWidget não encontrada').not.toBeNull();
     const body = fnMatch![1];
     expect(body).toContain('<EnhancedChart_110_Percent');

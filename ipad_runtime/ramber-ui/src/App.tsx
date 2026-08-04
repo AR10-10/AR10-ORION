@@ -3303,7 +3303,7 @@ export default function App() {
                             assetLabel={`${selectedTradFiAsset?.symbol ?? ""} · ${selectedTradFiAsset?.name ?? ""}`}
                           />
                         ) : (
-                          <ChartWidget chartData={chartData} onRequestOlderCandles={handleRequestOlderCandles} />
+                          <ChartWidget chartData={chartData} onRequestOlderCandles={handleRequestOlderCandles} priceData={priceData} />
                         ))}
                     </div>
 
@@ -7017,7 +7017,7 @@ function OhlcReadout({ candles }: { candles?: Array<{ open?: number; high?: numb
   );
 }
 
-function ChartWidget({ chartData, onRequestOlderCandles }: any) {
+function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // Real Fair Value Gaps / Order Blocks / Liquidity zones — computed once
   // in App() (see contextValue) against this exact candle array, shared
   // with the Neural Core widget's tactical-context prompt so both use the
@@ -7042,12 +7042,25 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // painéis). Zero segunda coleta/cálculo.
   const traps = useTrapSignalsSnapshot();
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
-  // Correção de latência: o MESMO preço real que já alimenta a barra
-  // superior (usePriceSnapshot — escrito na store a cada tick do WS,
-  // zero segunda coleta) — o gráfico funde este preço na vela em formação
-  // via series.update() dentro de EnhancedChart_110_Percent, isolado do
-  // recomputo de chartData/SMC/Fibonacci.
-  const livePrice = usePriceSnapshot();
+  // Correção de latência REAL (achado de auditoria — Ordem "Unificação da
+  // Inteligência Operacional" §4: "preço de uma atualização com níveis de
+  // outra... um painel atualizado e outro atrasado"): esta leitura vinha
+  // do hook de preço da store, um espelho Zustand que um useEffect
+  // (`[priceData]`) em App() escreve — sempre UM commit de render DEPOIS
+  // da barra
+  // superior, que lê `priceData` direto por prop (síncrono com o próprio
+  // tick de WS). Gap documentado no header de EnhancedChart_110_Percent.tsx
+  // desde a captura real que o achou ("~30s de defasagem possível"),
+  // registrado como pendência e nunca fechado até agora. `priceData`
+  // chega aqui como prop — mesmo valor, mesmo commit que a TopBar já usa,
+  // zero segunda coleta de rede — então o preço do gráfico e o da barra
+  // superior agora vêm sempre do mesmo render, nunca mais um atrás do
+  // outro. useMemo por valor (não pela referência sempre-nova que
+  // setPrice() cria a cada tick, mesmo quando só delta/volume mudam):
+  // os dois useMemo abaixo que dependem de `livePrice` só recomputam
+  // quando o NÚMERO do preço muda de verdade — igual ou melhor que a
+  // referência do Zustand, nunca pior.
+  const livePrice = useMemo(() => ({ price: priceData?.price ?? null }), [priceData?.price]);
   // Signal Precision order: the same real Trade Plan slice the ANALYSIS
   // view shows, now drawn on the chart as silk-thread price lines.
   const chartTradePlan = useTradePlanSnapshot();

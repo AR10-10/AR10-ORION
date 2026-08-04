@@ -2222,17 +2222,15 @@ export function EnhancedChart_110_Percent({
       // vela só quando ainda não existe nenhum tick real (fail-closed,
       // carregamento inicial).
       //
-      // Correção de comentário (achado real, auditoria de sincronização
-      // DIRETRIZES AVANÇADAS): a frase acima dizia que a barra superior
-      // usa "o mesmo usePriceSnapshot() que alimenta livePrice aqui" —
-      // falso. TopBar lê `priceData` (estado React direto, App.tsx) por
-      // prop; `livePrice` aqui vem de `usePriceSnapshot()`, um espelho
-      // Zustand do MESMO `priceData` escrito um commit de render depois
-      // (App.tsx, efeito `[priceData]`). Ou seja: mesmo dado real na
-      // origem, mas dois caminhos com timing diferente — a barra superior
-      // é sempre igual ou mais nova que este rótulo, nunca o contrário.
-      // Gap estrutural real, ainda não fechado (documentado no backlog);
-      // esta nota só corrige a afirmação factual errada, não o gap em si.
+      // Gap FECHADO (Ordem "Unificação da Inteligência Operacional" §4):
+      // até aqui, TopBar lia `priceData` (estado React direto, App.tsx)
+      // por prop, enquanto `livePrice` vinha de `usePriceSnapshot()`, um
+      // espelho Zustand do MESMO `priceData` escrito um commit de render
+      // DEPOIS (App.tsx, efeito `[priceData]`) — dois caminhos com timing
+      // diferente para o mesmo dado real. ChartWidget (App.tsx) agora
+      // recebe `priceData` como prop e deriva `livePrice` dele
+      // diretamente (useMemo por valor, zero segundo hop) — TopBar e este
+      // rótulo vêm sempre do mesmo commit de render agora.
       const displayPrice = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : lastCandle.close;
       out.push({
         price: displayPrice,
