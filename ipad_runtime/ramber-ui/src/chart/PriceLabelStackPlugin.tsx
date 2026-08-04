@@ -83,13 +83,14 @@ export interface PriceAxisLabel {
   // qual lado cada tipo de rótulo usa (contexto estrutural estático vs.
   // leitura acionável agora).
   side?: "left" | "right";
-  // Hierarquia visual real (live/primary/context) — ver o bloco de
-  // documentação em price-label-stack.ts, onde o tipo e a regra de default
-  // vivem. Opcional: o default deriva do `side` que a divisão esquerda/
-  // direita já estabelece (esquerda = mapa estrutural = "context";
-  // direita = acionável agora = "primary"), então nenhum dos ~20 pontos
-  // de push precisou declarar o campo — só o preço vivo, que declara
-  // "live" por ser a única etiqueta-âncora do gráfico.
+  // Hierarquia visual real (live/critical/primary/context) — ver o bloco
+  // de documentação em price-label-stack.ts, onde o tipo e a regra de
+  // default vivem. Opcional: o default deriva do `side` que a divisão
+  // esquerda/direita já estabelece (esquerda = mapa estrutural =
+  // "context"; direita = acionável agora = "primary") — só o preço vivo
+  // ("live") e o plano ativo Entry/Stop/Target ("critical") declaram o
+  // campo explicitamente, os dois casos em que o default por `side` não
+  // bastaria.
   tier?: PriceLabelTier;
 }
 
@@ -101,7 +102,11 @@ export interface PriceAxisLabel {
 // etiqueta `live` (o preço agora) tem caixa própria, maior, abaixo.
 export const LABEL_HEIGHT_PX = 18;
 // A âncora de leitura do gráfico inteiro — deliberadamente maior e em
-// negrito, o único elemento do eixo que nunca compete com nada.
+// negrito. Ordem "Lapidação Visual Final e Sincronia Operacional" §3
+// (Nível A — "AGORA"): o plano ATIVO (Entry/Stop/Target) reusa a MESMA
+// altura/peso de fonte — é a segunda informação que o operador precisa
+// achar sem procurar, só sem o anel (exclusivo do preço, a única âncora
+// de "o instante agora"; ver isBigTier abaixo).
 export const LIVE_LABEL_HEIGHT_PX = 21;
 const FONT_LIVE = "bold 11px -apple-system, sans-serif";
 const FONT_BASE = "10px -apple-system, sans-serif";
@@ -256,9 +261,14 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           // alpha (S1/R1/VWAP/NL/EMA/TREND/ENTRY/STOP/TARGET/etc).
           const labelAlpha = entry.alpha ?? 1;
           const tier = resolveLabelTier(entry.side, entry.tier);
-          ctx.font = tier === "live" ? FONT_LIVE : FONT_BASE;
+          // Nível A ("AGORA" — Ordem "Lapidação Visual Final e Sincronia
+          // Operacional" §3): preço vivo E o plano ativo (Entry/Stop/
+          // Target) compartilham a caixa grande/negrito — só o anel
+          // (abaixo) continua exclusivo do preço.
+          const isBigTier = tier === "live" || tier === "critical";
+          ctx.font = isBigTier ? FONT_LIVE : FONT_BASE;
           const textWidth = ctx.measureText(entry.text).width;
-          const boxHeight = tier === "live" ? LIVE_LABEL_HEIGHT_PX : LABEL_HEIGHT_PX;
+          const boxHeight = isBigTier ? LIVE_LABEL_HEIGHT_PX : LABEL_HEIGHT_PX;
           const boxWidth = textWidth + LABEL_PADDING_X * 2;
           const boxX = side === "right" ? cssWidth - RIGHT_MARGIN_PX - boxWidth : LEFT_MARGIN_PX;
           const boxY = entry.resolvedY - boxHeight / 2;
@@ -317,10 +327,11 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
               ctx.stroke();
               ctx.globalAlpha = labelAlpha;
             }
-            // NÍVEL "live" e "primary" (preço agora + VWAP/NL/EMA + EN/ST/TP
-            // do plano ativo): caixa sólida na cor real da própria linha,
-            // exatamente o comportamento que os "last value label" nativos
-            // que este overlay substitui sempre tiveram.
+            // NÍVEL "live"/"critical"/"primary" (preço agora, plano ativo
+            // Entry/Stop/Target, VWAP/NL/EMA): caixa sólida na cor real da
+            // própria linha, exatamente o comportamento que os "last value
+            // label" nativos que este overlay substitui sempre tiveram —
+            // só o TAMANHO da caixa (isBigTier acima) muda entre eles.
             boxPath(boxX, boxY, boxWidth, boxHeight);
             ctx.fillStyle = opaque(entry.color);
             ctx.fill();

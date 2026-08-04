@@ -37,24 +37,42 @@ export interface PositionedLabel {
 // tem por onde começar — e o gráfico deixa de responder à única pergunta
 // que importa ("onde o preço está e o que está perto dele").
 //
-// Três níveis — o mesmo vocabulário que qualquer terminal profissional
+// Ordem "Lapidação Visual Final e Sincronia Operacional" §3: a captura
+// real também mostrou EN/ST/TP (o plano ATIVO, Nível A — "AGORA") com o
+// MESMO peso visual de VWAP/EMA/NL (referências recalculadas a cada
+// candle, mas não uma decisão — Nível B, "RELEVANTE"). A Ordem pede
+// hierarquia de IMPORTÂNCIA além da temporal — dois objetos podem não
+// colidir geometricamente e ainda assim competir pela mesma atenção. A
+// separação ganhou um quarto nível (`critical`), não uma arquitetura
+// nova: mesma família de tratamento sólido de `primary`, só maior/em
+// negrito — a mesma dupla (altura+peso da fonte) que `live` já usa,
+// SEM o anel (o anel continua exclusivo do preço — a única âncora de
+// "agora mesmo" do gráfico; EN/ST/TP são "o plano agora", não "o
+// instante agora").
+//
+// Quatro níveis — o mesmo vocabulário que qualquer terminal profissional
 // usa no eixo de preço (TradingView/Bookmap/Sierra Chart: a etiqueta do
-// preço atual é a âncora, as últimas leituras de indicador vêm logo
-// abaixo dela, e anotações estruturais são chips discretos):
-//   live    — o preço AGORA. Uma por gráfico. Nunca podada, nunca
-//             discreta: é a âncora de leitura de todo o resto.
-//   primary — acionável agora: VWAP/NL/EMA (referências recalculadas a
-//             cada candle) + EN/ST/TP do plano ativo. Nunca podada — cada
-//             uma é uma leitura viva e distinta.
-//   context — mapa estrutural/histórico: S1/R1, sessões, sweeps,
-//             BOS/CHOCH, zonas institucionais, trend channel. É o único
+// preço atual é a âncora, o plano ativo vem logo abaixo dela em destaque
+// quase igual, as últimas leituras de indicador ficam um degrau abaixo,
+// e anotações estruturais são chips discretos):
+//   live     — o preço AGORA. Uma por gráfico. Nunca podada, nunca
+//              discreta: é a âncora de leitura de todo o resto.
+//   critical — o plano ATIVO: Entry/Stop/Target (Conselho OU fallback do
+//              Núcleo). Nunca podado — é a resposta a "onde entro, onde
+//              invalido, onde busco o alvo".
+//   primary  — referências vivas: VWAP/NL/EMA (recalculadas a cada
+//              candle, mas não uma decisão). Nunca podada.
+//   context  — mapa estrutural/histórico: S1/R1, sessões, sweeps,
+//              BOS/CHOCH, zonas institucionais, trend channel. É o único
 //             nível que pode ficar discreto E o único sujeito a teto de
 //             contagem (era exatamente o que enchia a lateral esquerda).
 // O default deriva do `side` que a divisão esquerda/direita já estabelece
-// (esquerda = "mapa estrutural", direita = "acionável agora") — então
-// nenhum dos ~20 pontos de push precisou declarar o campo, só o preço
-// vivo, que é o único que sobe de nível.
-export type PriceLabelTier = "live" | "primary" | "context";
+// (esquerda = "mapa estrutural", direita = "acionável agora") — então a
+// maioria dos pontos de push não precisa declarar o campo; só o preço
+// vivo (`live`) e o plano ativo (`critical`) sobem de nível
+// explicitamente — os dois únicos casos reais em que o default por
+// `side` não bastaria.
+export type PriceLabelTier = "live" | "critical" | "primary" | "context";
 
 export function resolveLabelTier(
   side: "left" | "right" | undefined,

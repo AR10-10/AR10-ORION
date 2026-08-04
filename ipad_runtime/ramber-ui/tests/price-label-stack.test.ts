@@ -194,3 +194,37 @@ describe('resolveLabelTier: o default deriva do lado, para nenhum dos ~20 pontos
     expect(resolveLabelTier('left', 'primary')).toBe('primary');
   });
 });
+
+describe('resolveLabelTier: `critical` (Ordem "Lapidação Visual Final e Sincronia Operacional" §3, Nível A) nunca deriva por default — só tier explícito', () => {
+  it('side sozinho NUNCA produz "critical" — só live/primary/context nascem de default', () => {
+    expect(resolveLabelTier('right', undefined)).not.toBe('critical');
+    expect(resolveLabelTier('left', undefined)).not.toBe('critical');
+    expect(resolveLabelTier(undefined, undefined)).not.toBe('critical');
+  });
+
+  it('tier:"critical" explícito sempre vence, em qualquer lado', () => {
+    expect(resolveLabelTier('right', 'critical')).toBe('critical');
+    expect(resolveLabelTier('left', 'critical')).toBe('critical');
+    expect(resolveLabelTier(undefined, 'critical')).toBe('critical');
+  });
+});
+
+describe('selectRelevantLabels: `critical` nunca é podado — mesma garantia de live/primary, só context tem teto', () => {
+  it('EN/ST/TP (critical) sobrevivem mesmo com o eixo cheio de contexto', () => {
+    const live = { price: 481.4, text: '481.40', tier: 'live' as const };
+    const critical = [
+      { price: 480.0, text: 'EN LONG · retest', tier: 'critical' as const },
+      { price: 478.5, text: 'ST · stop real', tier: 'critical' as const },
+      { price: 490.0, text: 'TP1 · 2.10%', tier: 'critical' as const },
+    ];
+    const ctxFlood = Array.from({ length: 12 }, (_, i) => ({
+      price: 500 + i,
+      text: `CTX ${i}`,
+      side: 'left' as const,
+    }));
+    const out = selectRelevantLabels([live, ...critical, ...ctxFlood], 481.4, 5);
+    for (const c of critical) {
+      expect(out.some((l) => l.text === c.text && l.price === c.price)).toBe(true);
+    }
+  });
+});

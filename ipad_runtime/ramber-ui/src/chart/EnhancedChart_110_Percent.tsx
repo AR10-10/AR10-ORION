@@ -2298,16 +2298,21 @@ export function EnhancedChart_110_Percent({
       // passou por um "Redesenho radical" anterior — pedido explícito do
       // Operador — trocando "E/S/T" cramped por rótulos legíveis; reverter
       // isso sem pedido novo desfaria uma decisão real já tomada.
+      // tier:"critical" (Ordem "Lapidação Visual Final e Sincronia
+      // Operacional" §3, Nível A — "AGORA"): EN/ST/TP são o plano ATIVO,
+      // não uma referência como VWAP/EMA (Nível B) — precisam da mesma
+      // caixa grande/negrito que o preço vivo usa, sem competir peso
+      // visual com o resto do eixo direito.
       if (tradePlan.entry.low === tradePlan.entry.high) {
         if (Number.isFinite(tradePlan.entry.low)) {
-          out.push({ price: tradePlan.entry.low, text: `EN ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor });
+          out.push({ price: tradePlan.entry.low, text: `EN ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor, tier: "critical" });
         }
       } else {
         if (Number.isFinite(tradePlan.entry.high)) {
-          out.push({ price: tradePlan.entry.high, text: `EN ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor });
+          out.push({ price: tradePlan.entry.high, text: `EN ${tradePlan.direction} · ${tradePlan.entry.basis}`, color: entryColor, tier: "critical" });
         }
         if (Number.isFinite(tradePlan.entry.low)) {
-          out.push({ price: tradePlan.entry.low, text: "EN ZONE LOW", color: entryColor });
+          out.push({ price: tradePlan.entry.low, text: "EN ZONE LOW", color: entryColor, tier: "critical" });
         }
       }
       // Stop no preço EFETIVO (ratchet real, MESMA função pura do efeito da
@@ -2321,7 +2326,7 @@ export function EnhancedChart_110_Percent({
           : hits > 0
             ? `ST · BREAK-EVEN (real)`
             : `ST · ${tradePlan.stop.basis}`;
-        out.push({ price: effectiveStopPrice, text: stopHitNow ? `${stopBase} · BREACHED` : stopBase, color: "rgba(255, 0, 85, 0.75)" });
+        out.push({ price: effectiveStopPrice, text: stopHitNow ? `${stopBase} · BREACHED` : stopBase, color: "rgba(255, 0, 85, 0.75)", tier: "critical" });
       }
       // Continuidade §6: níveis apertados => rótulos compactos (WIDTH); o
       // resolvedor de colisão já cuida da separação VERTICAL. O stop
@@ -2344,7 +2349,7 @@ export function EnhancedChart_110_Percent({
         const base = compactLabels
           ? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`
           : `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`;
-        out.push({ price: target.price, text: reached ? `${base} · REACHED` : base, color: "rgba(0, 255, 170, 0.75)" });
+        out.push({ price: target.price, text: reached ? `${base} · REACHED` : base, color: "rgba(0, 255, 170, 0.75)", tier: "critical" });
       });
     }
     // EPC §5/§6 (continuação): rótulos do fallback do Core Engine — MESMO
@@ -2377,12 +2382,24 @@ export function EnhancedChart_110_Percent({
       // zero quando livre. obstacleSuffix agora vem do escopo externo
       // (Fase 4: hoisted para ser reusado pelo Trade Plan REAL acima
       // também, ver comentário na declaração).
+      // tier:"critical" (Ordem "Lapidação Visual Final e Sincronia
+      // Operacional" §3): mesmo Nível A do Trade Plan do Conselho acima —
+      // é o plano ATIVO do Operador quando não há um plano do Conselho,
+      // não uma referência secundária.
+      //
+      // distPct (§4, "distância até o alvo... quando já houver cálculo
+      // real disponível"): o Trade Plan do Conselho acima já calcula essa
+      // distância real (Math.abs(target-p)*100/p) e a exibe — o fallback
+      // do Núcleo nunca reusava a MESMA fórmula, mesmo já tendo `p` em
+      // escopo (usado só para REACHED). Lacuna real fechada aqui: zero
+      // cálculo novo, mesma fórmula, mesmo `p`, mesma convenção "· N.NN%".
       if (Number.isFinite(engineFallbackLevels.stop)) {
         const breached = p !== null && (longFb ? p <= engineFallbackLevels.stop : p >= engineFallbackLevels.stop);
         out.push({
           price: engineFallbackLevels.stop,
           text: breached ? "ST · BREACHED" : "ST",
           color: "rgba(255, 0, 85, 0.5)",
+          tier: "critical",
         });
       }
       // EPC FINAL §8: TP1/TP2 sempre numerado, mesma convenção do Trade
@@ -2390,18 +2407,22 @@ export function EnhancedChart_110_Percent({
       if (Number.isFinite(engineFallbackLevels.target1)) {
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target1 : p <= engineFallbackLevels.target1);
         const rr = engineFallbackLevels.riskRewardRatio;
+        const distPct1 = p !== null && p > 0 ? ` · ${((Math.abs(engineFallbackLevels.target1 - p) * 100) / p).toFixed(2)}%` : "";
         out.push({
           price: engineFallbackLevels.target1,
-          text: `TP1${strengthSuffix(engineFallbackLevels.target1Strength)}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}${reached ? " · REACHED" : ""}`,
+          text: `TP1${strengthSuffix(engineFallbackLevels.target1Strength)}${distPct1}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}${reached ? " · REACHED" : ""}`,
           color: "rgba(0, 255, 170, 0.5)",
+          tier: "critical",
         });
       }
       if (engineFallbackLevels.target2 !== null && Number.isFinite(engineFallbackLevels.target2)) {
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target2 : p <= engineFallbackLevels.target2);
+        const distPct2 = p !== null && p > 0 ? ` · ${((Math.abs(engineFallbackLevels.target2 - p) * 100) / p).toFixed(2)}%` : "";
         out.push({
           price: engineFallbackLevels.target2,
-          text: `TP2${strengthSuffix(engineFallbackLevels.target2Strength)}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,
+          text: `TP2${strengthSuffix(engineFallbackLevels.target2Strength)}${distPct2}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,
           color: "rgba(0, 255, 170, 0.35)",
+          tier: "critical",
         });
       }
       // Achado de auditoria (Ferramentas Institucionais): TP3 = extensão
@@ -2411,10 +2432,12 @@ export function EnhancedChart_110_Percent({
       // este nível, nunca um valor fabricado só para preencher o rótulo.
       if (engineFallbackLevels.target3 != null && Number.isFinite(engineFallbackLevels.target3)) {
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target3 : p <= engineFallbackLevels.target3);
+        const distPct3 = p !== null && p > 0 ? ` · ${((Math.abs(engineFallbackLevels.target3 - p) * 100) / p).toFixed(2)}%` : "";
         out.push({
           price: engineFallbackLevels.target3,
-          text: `TP3${reached ? " · REACHED" : ""}`,
+          text: `TP3${distPct3}${reached ? " · REACHED" : ""}`,
           color: "rgba(0, 255, 170, 0.2)",
+          tier: "critical",
         });
       }
     }

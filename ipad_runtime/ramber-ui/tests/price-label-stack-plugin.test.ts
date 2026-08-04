@@ -192,12 +192,15 @@ describe('PriceLabelStackPlugin: geometria real via lightweight-charts, nunca po
   });
 
   it('rótulo resolvido fora do canvas (boxY fora de [0,cssHeight]) nunca desenha — fail-closed, nunca desenha fora do canvas', () => {
-    // boxHeight (não mais a constante única): a etiqueta `live` tem caixa
-    // própria, maior — o teto do canvas passou a ser checado contra a
-    // altura REAL da caixa daquela etiqueta, nunca contra uma altura fixa
-    // que subestimaria a maior delas.
+    // boxHeight (não mais a constante única): as etiquetas `live` E
+    // `critical` (Ordem "Lapidação Visual Final e Sincronia Operacional"
+    // §3 — Entry/Stop/Target ganham a mesma caixa grande) têm altura
+    // maior — o teto do canvas é checado contra a altura REAL da caixa
+    // daquela etiqueta, nunca contra uma altura fixa que subestimaria a
+    // maior delas.
     expect(plugin()).toContain('if (boxY + boxHeight < 0 || boxY > cssHeight) continue;');
-    expect(plugin()).toContain('const boxHeight = tier === "live" ? LIVE_LABEL_HEIGHT_PX : LABEL_HEIGHT_PX;');
+    expect(plugin()).toContain('const isBigTier = tier === "live" || tier === "critical";');
+    expect(plugin()).toContain('const boxHeight = isBigTier ? LIVE_LABEL_HEIGHT_PX : LABEL_HEIGHT_PX;');
   });
 
   it('nunca usa Math.random nem qualquer dado sintético (Regra de Ouro 1)', () => {
@@ -596,8 +599,17 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     // EPC FINAL §8: ST/TP1/TP2 (nomenclatura curta), sempre numerado.
     expect(block).toContain('text: breached ? "ST · BREACHED" : "ST",');
     expect(block).toContain('color: "rgba(255, 0, 85, 0.5)",');
-    expect(block).toContain('text: `TP1${strengthSuffix(engineFallbackLevels.target1Strength)}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}${reached ? " · REACHED" : ""}`,');
-    expect(block).toContain('text: `TP2${strengthSuffix(engineFallbackLevels.target2Strength)}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,');
+    // distPct1/2 (Ordem "Lapidação Visual Final e Sincronia Operacional"
+    // §4 — "distância até o alvo, quando já houver cálculo real
+    // disponível"): mesma fórmula que o Trade Plan do Conselho já usa
+    // (Math.abs(target-p)*100/p), reaproveitada aqui — zero cálculo novo.
+    expect(block).toContain('const distPct1 = p !== null && p > 0 ? ` · ${((Math.abs(engineFallbackLevels.target1 - p) * 100) / p).toFixed(2)}%` : "";');
+    expect(block).toContain('text: `TP1${strengthSuffix(engineFallbackLevels.target1Strength)}${distPct1}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}${reached ? " · REACHED" : ""}`,');
+    expect(block).toContain('const distPct2 = p !== null && p > 0 ? ` · ${((Math.abs(engineFallbackLevels.target2 - p) * 100) / p).toFixed(2)}%` : "";');
+    expect(block).toContain('text: `TP2${strengthSuffix(engineFallbackLevels.target2Strength)}${distPct2}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,');
+    // tier:"critical" (§3, Nível A): plano ATIVO do Núcleo quando não há
+    // plano do Conselho — mesmo destaque grande/negrito do preço vivo.
+    expect(block).toContain('tier: "critical"');
   });
 
   // Achado de auditoria (Ferramentas Institucionais): TP3 = extensão de
@@ -611,7 +623,11 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     const end = s.indexOf('return out;', idx);
     const block = s.slice(idx, end);
     expect(block).toContain('if (engineFallbackLevels.target3 != null && Number.isFinite(engineFallbackLevels.target3)) {');
-    expect(block).toContain('text: `TP3${reached ? " · REACHED" : ""}`,');
+    // distPct3 (§4): mesma fórmula real de distância, TP3 continua sem
+    // strengthSuffix/obstacleSuffix (a fonte não calcula esses metadados
+    // para este nível — honesto sobre o que existe, nunca fabricado).
+    expect(block).toContain('const distPct3 = p !== null && p > 0 ? ` · ${((Math.abs(engineFallbackLevels.target3 - p) * 100) / p).toFixed(2)}%` : "";');
+    expect(block).toContain('text: `TP3${distPct3}${reached ? " · REACHED" : ""}`,');
     expect(block).not.toContain('strengthSuffix(engineFallbackLevels.target3');
     expect(block).not.toContain('obstacleSuffix(engineFallbackLevels.target3');
   });
