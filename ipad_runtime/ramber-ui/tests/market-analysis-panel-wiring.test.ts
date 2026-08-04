@@ -50,21 +50,23 @@ describe('Entry point real: quarto botão no rodapé da SideBar, mesmo padrão d
 });
 
 describe('Montagem: MarketAnalysisPanel ao lado dos outros 3 painéis, mesmo nível do Provider', () => {
-  it('renderizado depois de RadarPanel, recebendo priceData por PROP (nunca via Context)', () => {
+  it('renderizado depois de RadarPanel, recebendo priceData E chartData por PROP (nunca via Context)', () => {
     const a = app();
     const wsIdx = a.indexOf('<WorkspaceManagerPanel />');
     const clIdx = a.indexOf('<ChartLayersPanel />');
     const rpIdx = a.indexOf('<RadarPanel />');
-    const maIdx = a.indexOf('<MarketAnalysisPanel priceData={priceData} />');
+    const maIdx = a.indexOf('<MarketAnalysisPanel priceData={priceData} chartData={chartData} />');
     expect(wsIdx).toBeGreaterThan(-1);
     expect(clIdx).toBeGreaterThan(wsIdx);
     expect(rpIdx).toBeGreaterThan(clIdx);
     expect(maIdx).toBeGreaterThan(rpIdx);
   });
 
-  it('a assinatura do componente recebe priceData como prop tipada — mesmo padrão fixado pela correção f74c533 (Unificação da Inteligência Operacional): preço ao vivo tem 1 único caminho de distribuição, nunca um espelho de Context', () => {
+  it('a assinatura do componente recebe priceData E chartData como prop tipada — mesmo padrão fixado pela correção f74c533 (Unificação da Inteligência Operacional): dado ao vivo tem 1 único caminho de distribuição, nunca um espelho de Context. Ordem "AR10 Publication Studio" §1 estende essa mesma disciplina para os candles reais (necessários pro mini-gráfico das 4 peças)', () => {
     const a = app();
-    expect(a).toContain('function MarketAnalysisPanel({ priceData }: { priceData: PriceState | null }) {');
+    expect(a).toContain(
+      'function MarketAnalysisPanel({ priceData, chartData }: { priceData: PriceState | null; chartData: PublicationCandle[] }) {',
+    );
   });
 });
 
@@ -105,6 +107,21 @@ describe('Snapshot congelado (§12 sincronia): o painel só recomputa quando ABR
     expect(block).toContain('resistance: engine?.resistance ?? null,');
     expect(block).toContain('resistanceStrength: engine?.resistanceStrength ?? null,');
   });
+
+  it('Ordem "AR10 Publication Studio" §1: candles/preço vivo congelados no MESMO effect/gatilho que analysis — nunca um segundo freeze só pro clique de Gerar Publicação', () => {
+    const a = app();
+    const idx = a.indexOf('function MarketAnalysisPanel(');
+    const block = a.slice(idx, idx + 2400);
+    expect(block).toContain('const livePriceNow = typeof priceData?.price === "number" ? priceData.price : null;');
+    expect(block).toContain('setFrozenCandles(chartData);');
+    expect(block).toContain('setFrozenLivePrice(livePriceNow);');
+    // as duas novas linhas ficam DENTRO do mesmo useEffect de dependência
+    // única — nunca um efeito paralelo com deps próprias.
+    const effectStart = block.indexOf('useEffect(() => {');
+    const effectEnd = block.indexOf('}, [marketAnalysisOpen]);');
+    expect(block.indexOf('setFrozenCandles(chartData);')).toBeGreaterThan(effectStart);
+    expect(block.indexOf('setFrozenCandles(chartData);')).toBeLessThan(effectEnd);
+  });
 });
 
 describe('Fail-closed real (§6): sem leitura, o painel mostra DADOS INSUFICIENTES — nunca uma leitura parcial', () => {
@@ -117,10 +134,10 @@ describe('Fail-closed real (§6): sem leitura, o painel mostra DADOS INSUFICIENT
   });
 });
 
-describe('Nunca publica sozinha: zero chamada de rede em todo o bloco do painel + disclaimer visível', () => {
-  it('do início ao fim de MarketAnalysisPanel, nenhum fetch()/XMLHttpRequest/axios — só clipboard local', () => {
+describe('Nunca publica sozinha: zero chamada de rede em todo o bloco Publicação + disclaimer visível', () => {
+  it('do início de MarketAnalysisPublicationTab ao fim de MarketAnalysisPanel, nenhum fetch()/XMLHttpRequest/axios — só clipboard/share locais', () => {
     const a = app();
-    const start = a.indexOf('function MarketAnalysisPanel(');
+    const start = a.indexOf('function MarketAnalysisPublicationTab(');
     const end = a.indexOf('\n// --- RIGHT COLUMN', start);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
@@ -134,82 +151,91 @@ describe('Nunca publica sozinha: zero chamada de rede em todo o bloco do painel 
   it('disclaimer real e visível: geração é sob demanda do Operador, cópia/captura é sempre ação manual', () => {
     const a = app();
     const idx = a.indexOf('function MarketAnalysisPanel(');
-    const block = a.slice(idx, idx + 4200);
+    const block = a.slice(idx, idx + 4400);
     expect(block).toContain('Gerado sob demanda pelo Operador — esta tela nunca publica sozinha; copiar/capturar é sempre uma ação sua.');
   });
 });
 
-describe('Aba X: reusa formatMarketAnalysisForX literal (zero segunda redação do texto público), Copiar é fail-closed', () => {
-  it('MarketAnalysisXTab chama formatMarketAnalysisForX(analysis) uma única vez, nunca monta o texto na mão', () => {
+describe('Ordem "AR10 Publication Studio": aba Publicação — UMA ação (Gerar Publicação), 4 peças do MESMO snapshot, fail-closed por peça', () => {
+  it('botão principal chama renderPublicationAssets(snapshot) — o mesmo snapshot recebido por prop, nunca uma nova leitura', () => {
     const a = app();
-    const idx = a.indexOf('function MarketAnalysisXTab(');
+    const idx = a.indexOf('function MarketAnalysisPublicationTab(');
     expect(idx).toBeGreaterThan(-1);
-    const block = a.slice(idx, idx + 900);
-    expect(block).toContain('const text = formatMarketAnalysisForX(analysis);');
+    const block = a.slice(idx, idx + 3800);
+    expect(block).toContain('const next = await renderPublicationAssets(snapshot);');
+    expect(block).toContain('Gerar Publicação');
   });
 
-  it('handleCopy só marca "copied" DEPOIS do await resolver, e cai em "failed" no catch — nunca reporta sucesso que não aconteceu', () => {
+  it('object URLs velhos são revogados ANTES de um novo lote e ao desmontar — nunca acumulam entre gerações/fechamentos do painel', () => {
     const a = app();
-    const idx = a.indexOf('const handleCopy = async () => {');
+    const idx = a.indexOf('function MarketAnalysisPublicationTab(');
+    const block = a.slice(idx, idx + 1400);
+    const revokeCount = (block.match(/revokePublicationAssets\(/g) ?? []).length;
+    expect(revokeCount).toBeGreaterThanOrEqual(2); // cleanup do useEffect + antes do novo setAssets
+  });
+
+  it('genState "failed" mostra DADOS INSUFICIENTES — nunca um resultado vazio silencioso', () => {
+    const a = app();
+    const idx = a.indexOf('function MarketAnalysisPublicationTab(');
+    const end = a.indexOf('function MarketAnalysisPanel(', idx);
+    const block = a.slice(idx, end);
+    expect(block).toContain('genState === "failed"');
+    expect(block).toContain('DADOS INSUFICIENTES');
+  });
+
+  it('Baixar Todas dispara downloads a partir do MESMO gesto (loop síncrono), nunca pede um novo clique por arquivo', () => {
+    const a = app();
+    const idx = a.indexOf('const downloadAll = () => {');
     expect(idx).toBeGreaterThan(-1);
-    const block = a.slice(idx, idx + 350);
-    expect(block).toContain('await navigator.clipboard.writeText(formatMarketAnalysisForX(analysis));');
-    expect(block).toContain('setCopyState("copied");');
-    expect(block).toContain('} catch {');
-    expect(block).toContain('setCopyState("failed");');
+    const block = a.slice(idx, idx + 320);
+    expect(block).toContain('assets.forEach((a, i) => setTimeout(() => downloadAsset(a), i * 200));');
+  });
+
+  it('Compartilhar usa Web Share API com feature-detection real (canShare) — nunca finge sucesso quando o navegador não suporta', () => {
+    const a = app();
+    const idx = a.indexOf('const shareAll = async () => {');
+    expect(idx).toBeGreaterThan(-1);
+    const block = a.slice(idx, idx + 700);
+    expect(block).toContain('!nav.share || !nav.canShare || !nav.canShare({ files })');
+    expect(block).toContain('setShareState("unsupported");');
   });
 });
 
-describe('Aba Story: vocabulário público único (PUBLIC_BIAS_LABEL importado, nunca um 2º mapa hardcoded)', () => {
+describe('Legenda de X preservada (Regra de Ouro 4: realocar, nunca apagar) — mesma formatMarketAnalysisForX, mesmo botão Copiar fail-closed, agora ao lado da imagem real', () => {
+  it('a legenda reusa formatMarketAnalysisForX(snapshot.analysis) literal — nunca uma segunda redação do texto público', () => {
+    const a = app();
+    const idx = a.indexOf('function MarketAnalysisPublicationTab(');
+    const end = a.indexOf('function MarketAnalysisPanel(', idx);
+    const block = a.slice(idx, end);
+    expect(block).toContain('Legenda sugerida para X');
+    expect(block).toContain('{formatMarketAnalysisForX(snapshot.analysis)}');
+  });
+
+  it('handleCopyCaption só marca "copied" DEPOIS do await resolver, e cai em "failed" no catch — nunca reporta sucesso que não aconteceu', () => {
+    const a = app();
+    const idx = a.indexOf('const handleCopyCaption = async () => {');
+    expect(idx).toBeGreaterThan(-1);
+    const block = a.slice(idx, idx + 350);
+    expect(block).toContain('await navigator.clipboard.writeText(formatMarketAnalysisForX(snapshot.analysis));');
+    expect(block).toContain('setCaptionCopyState("copied");');
+    expect(block).toContain('} catch {');
+    expect(block).toContain('setCaptionCopyState("failed");');
+  });
+});
+
+describe('Vocabulário público único (PUBLIC_BIAS_LABEL) — reusado por publication/formats.ts, nunca um 2º mapa hardcoded em App.tsx', () => {
   it('market-analysis.ts exporta PUBLIC_BIAS_LABEL', () => {
     const m = read('../src/nexus/market-analysis.ts');
     expect(m).toContain('export const PUBLIC_BIAS_LABEL: Record<NexusBiasLabel, string> = {');
   });
 
-  it('App.tsx importa PUBLIC_BIAS_LABEL de nexus/market-analysis e MarketAnalysisStoryTab a reusa direto — nenhum Record<NexusBiasLabel,...> duplicado em App.tsx', () => {
+  it('App.tsx NÃO importa mais PUBLIC_BIAS_LABEL diretamente (a Ordem "AR10 Publication Studio" moveu a composição visual das 4 peças para publication/formats.ts, que importa e reusa a mesma tradução) — nunca um 2º Record<NexusBiasLabel,...> duplicado em App.tsx', () => {
     const a = app();
-    expect(a).toContain('import { buildMarketAnalysis, formatMarketAnalysisForX, PUBLIC_BIAS_LABEL, type MarketAnalysis } from "./nexus/market-analysis";');
-    const idx = a.indexOf('function MarketAnalysisStoryTab(');
-    expect(idx).toBeGreaterThan(-1);
-    const block = a.slice(idx, idx + 1600);
-    expect(block).toContain('{biasArrow} {PUBLIC_BIAS_LABEL[analysis.bias]}');
     expect(a).not.toMatch(/Record<NexusBiasLabel, string>\s*=\s*\{\s*LONG_BIAS:/);
-  });
-
-  it('ordem de campos §8 presente: symbol/timeframe → bias → estrutura → Entry → Stop → Alvos → Reteste → Invalidação → marca AR10', () => {
-    const a = app();
-    const idx = a.indexOf('function MarketAnalysisStoryTab(');
-    const end = a.indexOf('function MarketAnalysisPanel(', idx);
-    const block = a.slice(idx, end);
-    const order = [
-      'analysis.symbol',
-      'analysis.timeframe.toUpperCase()',
-      'PUBLIC_BIAS_LABEL[analysis.bias]',
-      'contextLine',
-      '>Entry<',
-      '>Stop<',
-      'Alvo/Cenário',
-      'Cenário de reteste',
-      'Invalidação do cenário:',
-      'AR10 CYBORG',
-    ];
-    let cursor = 0;
-    for (const token of order) {
-      const found = block.indexOf(token, cursor);
-      expect(found, `token "${token}" fora de ordem ou ausente`).toBeGreaterThan(-1);
-      cursor = found;
-    }
-  });
-
-  it('nunca exporta PNG/imagem — só a prévia DOM 9:16 e uma instrução de screenshot manual (escopo §17: gerar primeiro, exportar depois se autorizado)', () => {
-    const a = app();
-    const idx = a.indexOf('function MarketAnalysisStoryTab(');
-    const end = a.indexOf('function MarketAnalysisPanel(', idx);
-    const block = a.slice(idx, end);
-    expect(block).toContain('Prévia 9:16 — capture a tela (screenshot) para publicar no Instagram Stories');
-    expect(block).not.toContain('toDataURL');
-    expect(block).not.toContain('html2canvas');
-    expect(block).not.toContain('download=');
+    // publication/formats.ts é quem importa/usa PUBLIC_BIAS_LABEL agora —
+    // confirmado no describe "formats.ts" de publication-formats-wiring.test.ts.
+    const pub = read('../src/publication/formats.ts');
+    expect(pub).toContain('import { PUBLIC_BIAS_LABEL } from "../nexus/market-analysis";');
   });
 });
 
@@ -218,7 +244,7 @@ describe('Aba Painel: reusa ModulePanel/ModuleStat genéricos (mesmo vocabulári
     const a = app();
     const idx = a.indexOf('function MarketAnalysisPainelTab(');
     expect(idx).toBeGreaterThan(-1);
-    const end = a.indexOf('function MarketAnalysisXTab(', idx);
+    const end = a.indexOf('function MarketAnalysisPublicationTab(', idx);
     const block = a.slice(idx, end);
     expect(block).toContain('<ModulePanel title="Leitura">');
     expect(block).toContain('<ModuleStat');

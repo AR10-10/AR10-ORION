@@ -210,7 +210,19 @@ import {
 // 3 vistas (Painel/X/Story); formatMarketAnalysisForX e PUBLIC_BIAS_LABEL
 // são a ÚNICA tradução pública (vocabulário §9), reusada tal e qual em
 // qualquer superfície publicável — nunca uma segunda redação por vista.
-import { buildMarketAnalysis, formatMarketAnalysisForX, PUBLIC_BIAS_LABEL, type MarketAnalysis } from "./nexus/market-analysis";
+import { buildMarketAnalysis, formatMarketAnalysisForX, type MarketAnalysis } from "./nexus/market-analysis";
+// Ordem "AR10 PUBLICATION STUDIO": camada de EXPORTAÇÃO sobre a mesma
+// MarketAnalysis acima — 4 formatos publicáveis (Análise/Story/X/Card)
+// desenhados em canvas puro, zero segunda inteligência (ver cabeçalho de
+// publication/types.ts para o contrato completo).
+import { renderPublicationAssets, revokePublicationAssets } from "./publication/generate";
+import {
+  PUBLICATION_FORMAT_SPECS,
+  type PublicationAsset,
+  type PublicationCandle,
+  type PublicationFormat,
+  type PublicationSnapshot,
+} from "./publication/types";
 // Fecho da pendência "R:R mínimo": piso DECLARADO 1:2 (ver rr-quality.ts),
 // display-only — anota, nunca esconde/bloqueia um plano real (LEI 24).
 import { rrFloorSuffix } from "./nexus/rr-quality";
@@ -332,6 +344,7 @@ import {
   Share2,
   Copy,
   Check,
+  Download,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -3515,7 +3528,7 @@ export default function App() {
         <WorkspaceManagerPanel />
         <ChartLayersPanel />
         <RadarPanel />
-        <MarketAnalysisPanel priceData={priceData} />
+        <MarketAnalysisPanel priceData={priceData} chartData={chartData} />
       </div>
     </WidgetContext.Provider>
   );
@@ -4210,112 +4223,192 @@ function MarketAnalysisPainelTab({ analysis }: { analysis: MarketAnalysis }) {
   );
 }
 
-function MarketAnalysisXTab({
-  analysis,
-  copyState,
-  onCopy,
-}: {
-  analysis: MarketAnalysis;
-  copyState: "idle" | "copied" | "failed";
-  onCopy: () => void;
-}) {
-  const text = formatMarketAnalysisForX(analysis);
+// Ordem "AR10 PUBLICATION STUDIO": substitui as antigas abas X (texto) e
+// STORY (prévia DOM, screenshot manual) da Ordem anterior por UMA aba só,
+// "Publicação" — Regra de Ouro 4 (realocar, nunca apagar): a legenda de
+// texto para X sobrevive integralmente (mesma formatMarketAnalysisForX,
+// mesmo botão Copiar) ao lado da imagem real; a prévia de Story vira a
+// peça PNG de verdade em vez de exigir screenshot manual (§3/§7 da nova
+// Ordem: "não depender de screenshot manual"). §1: as 4 peças nascem do
+// MESMO snapshot já congelado que o painel recebe por prop — este
+// componente nunca chama buildMarketAnalysis/motor nenhum, só desenha.
+function MarketAnalysisPublicationTab({ snapshot }: { snapshot: PublicationSnapshot }) {
+  const [assets, setAssets] = useState<PublicationAsset[] | null>(null);
+  const [genState, setGenState] = useState<"idle" | "generating" | "ready" | "failed">("idle");
+  const [activeFormat, setActiveFormat] = useState<PublicationFormat>("ANALISE");
+  const [shareState, setShareState] = useState<"idle" | "sharing" | "unsupported">("idle");
+  const [captionCopyState, setCaptionCopyState] = useState<"idle" | "copied" | "failed">("idle");
+
+  // Object URLs vivem só enquanto esta sessão de publicação existe —
+  // liberados ao desmontar (painel fechado) ou antes de um novo lote
+  // (regeração), nunca acumulados.
+  useEffect(() => {
+    return () => {
+      setAssets((prev) => {
+        if (prev) revokePublicationAssets(prev);
+        return prev;
+      });
+    };
+  }, []);
+
+  const handleGenerate = async () => {
+    setGenState("generating");
+    const next = await renderPublicationAssets(snapshot);
+    setAssets((prev) => {
+      if (prev) revokePublicationAssets(prev);
+      return next;
+    });
+    if (next.length > 0) {
+      setActiveFormat(next[0].format);
+      setGenState("ready");
+    } else {
+      setGenState("failed");
+    }
+  };
+
+  const downloadAsset = (asset: PublicationAsset) => {
+    const a = document.createElement("a");
+    a.href = asset.objectUrl;
+    a.download = asset.filename;
+    a.click();
+  };
+
+  const downloadAll = () => {
+    if (!assets) return;
+    // Disparados a partir do MESMO gesto do Operador (onClick síncrono),
+    // só espaçados pra não colidir no navegador — nunca um novo gesto por
+    // arquivo.
+    assets.forEach((a, i) => setTimeout(() => downloadAsset(a), i * 200));
+  };
+
+  const shareAll = async () => {
+    if (!assets) return;
+    const files = assets.map((a) => new File([a.blob], a.filename, { type: "image/png" }));
+    const nav = navigator as Navigator & { canShare?: (data?: ShareData) => boolean; share?: (data?: ShareData) => Promise<void> };
+    if (!nav.share || !nav.canShare || !nav.canShare({ files })) {
+      setShareState("unsupported");
+      setTimeout(() => setShareState("idle"), 2600);
+      return;
+    }
+    setShareState("sharing");
+    try {
+      await nav.share({ files, title: `${snapshot.analysis.symbol} · ${snapshot.analysis.timeframe.toUpperCase()}`, text: "Análise gerada pelo AR10 CYBORG" });
+    } catch {
+      // AbortError (Operador cancelou a folha de compartilhamento nativa)
+      // cai aqui também — cancelar não é uma falha, nunca reporta erro.
+    }
+    setShareState("idle");
+  };
+
+  const handleCopyCaption = async () => {
+    try {
+      await navigator.clipboard.writeText(formatMarketAnalysisForX(snapshot.analysis));
+      setCaptionCopyState("copied");
+    } catch {
+      setCaptionCopyState("failed");
+    }
+    setTimeout(() => setCaptionCopyState("idle"), 2000);
+  };
+
+  const active = assets?.find((a) => a.format === activeFormat) ?? null;
+
   return (
-    <div className="flex flex-col gap-2">
-      <pre className="whitespace-pre-wrap break-words text-[0.5rem] leading-relaxed text-[#a0f0ff] bg-[#010205] border border-[#00f0ff15] rounded p-2 font-mono">
-        {text}
-      </pre>
+    <div className="flex flex-col gap-3">
       <button
         type="button"
-        onClick={onCopy}
-        className="self-end flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#00f0ff40] bg-[#00f0ff1a] text-[#00f0ff] text-[0.5rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:bg-[#00f0ff2a]"
+        onClick={handleGenerate}
+        disabled={genState === "generating"}
+        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded border border-[#00f0ff60] bg-[#00f0ff1a] text-[#00f0ff] text-[0.6rem] font-black tracking-[0.2em] uppercase cursor-pointer hover:bg-[#00f0ff2a] disabled:opacity-50 disabled:cursor-wait"
       >
-        {copyState === "copied" ? <Check size={12} /> : <Copy size={12} />}
-        {copyState === "copied" ? "Copiado" : copyState === "failed" ? "Falhou — copie manualmente" : "Copiar texto"}
+        <Share2 size={13} />
+        {genState === "generating" ? "Gerando as 4 peças…" : "Gerar Publicação"}
       </button>
-    </div>
-  );
-}
 
-// Vista Story (§8/§13): vocabulário SEMPRE via PUBLIC_BIAS_LABEL (a mesma
-// tradução pública que formatMarketAnalysisForX usa para X) — zero segunda
-// redação do vocabulário. Ordem de campos §8: Ativo/timeframe → leitura
-// principal → estrutura → Entry → Stop → Alvos → Reteste → Invalidação →
-// marca. Linguagem visual DELIBERADAMENTE mais limpa que o Painel interno
-// (poucos números grandes, sem grade densa de linhas) — nunca um
-// screenshot técnico congestionado (§13). Sem exportação de PNG (decisão
-// documentada: §17 pede a capacidade de GERAR primeiro); o Operador
-// screenshota esta prévia manualmente.
-function MarketAnalysisStoryTab({ analysis }: { analysis: MarketAnalysis }) {
-  const biasColor = analysis.bias === "LONG_BIAS" ? "#00ffaa" : analysis.bias === "SHORT_BIAS" ? "#ff0055" : "#f0d06f";
-  const biasArrow = analysis.bias === "LONG_BIAS" ? "▲" : analysis.bias === "SHORT_BIAS" ? "▼" : "◆";
-  const contextLine = [analysis.structureLabel, analysis.regimeLabel].filter(Boolean).join(" · ");
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <span className="text-[0.4rem] text-[#8ab4f8]/40 uppercase tracking-[0.15em] text-center">
-        Prévia 9:16 — capture a tela (screenshot) para publicar no Instagram Stories
-      </span>
-      <div
-        className="w-full max-w-[260px] aspect-[9/16] rounded-lg overflow-hidden flex flex-col justify-between p-4 shrink-0"
-        style={{ background: "linear-gradient(160deg, #010308 0%, #050b16 100%)", border: "1px solid #00f0ff20" }}
-      >
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[0.55rem] font-black tracking-[0.1em] text-white">{analysis.symbol}</span>
-          <span className="text-[0.4rem] text-[#8ab4f8]/60 uppercase tracking-[0.15em]">{analysis.timeframe.toUpperCase()}</span>
-        </div>
+      {genState === "failed" && (
+        <span className="text-[0.45rem] text-[#ff0055] text-center uppercase tracking-wide">
+          DADOS INSUFICIENTES — sem candles reais suficientes para gerar as peças com gráfico agora.
+        </span>
+      )}
 
-        <div className="flex flex-col items-center gap-1 text-center">
-          <span className="text-[1.1rem] font-black tracking-[0.05em]" style={{ color: biasColor }}>
-            {biasArrow} {PUBLIC_BIAS_LABEL[analysis.bias]}
-          </span>
-          {contextLine && (
-            <span className="text-[0.42rem] text-[#8ab4f8]/60 uppercase tracking-[0.1em]">{contextLine}</span>
-          )}
-        </div>
-
-        {analysis.plan ? (
-          <div className="flex flex-col gap-1 text-[0.42rem] text-[#a0f0ff]">
-            <div className="flex justify-between">
-              <span className="text-[#8ab4f8]/50 uppercase">Entry</span>
-              <span className="font-mono font-bold">
-                {fmtPrice(analysis.plan.entryLow)}–{fmtPrice(analysis.plan.entryHigh)}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[#8ab4f8]/50 uppercase">Stop</span>
-              <span className="font-mono font-bold text-[#ff0055]">{fmtPrice(analysis.plan.invalidationPrice)}</span>
-            </div>
-            {analysis.plan.targets.map((t) => (
-              <div key={t.index} className="flex justify-between">
-                <span className="text-[#8ab4f8]/50 uppercase">Alvo/Cenário {t.index + 1}</span>
-                <span className="font-mono font-bold text-[#00ffaa]">{fmtPrice(t.price)}</span>
-              </div>
+      {genState === "ready" && assets && assets.length > 0 && (
+        <>
+          <div className="flex gap-1 flex-wrap justify-center">
+            {assets.map((a) => (
+              <button
+                key={a.format}
+                type="button"
+                onClick={() => setActiveFormat(a.format)}
+                className={`px-2 py-1 rounded text-[0.42rem] font-black tracking-[0.1em] uppercase cursor-pointer transition-colors ${
+                  activeFormat === a.format
+                    ? "bg-[#00f0ff1a] text-[#00f0ff] border border-[#00f0ff40]"
+                    : "text-[#8ab4f8]/50 border border-transparent hover:text-[#8ab4f8]"
+                }`}
+              >
+                {PUBLICATION_FORMAT_SPECS[a.format].label}
+              </button>
             ))}
-            {analysis.retest && (
-              <div className="flex justify-between">
-                <span className="text-[#8ab4f8]/50 uppercase">Cenário de reteste</span>
-                <span className="font-mono font-bold">
-                  {fmtPrice(analysis.retest.low)}–{fmtPrice(analysis.retest.high)}
-                </span>
-              </div>
-            )}
-            <span className="text-[0.38rem] text-[#f0d06f]/80 mt-1">
-              Invalidação do cenário: {fmtPrice(analysis.plan.invalidationPrice)}
-            </span>
           </div>
-        ) : (
-          analysis.planGapLabel && (
-            <span className="text-[0.42rem] text-[#8ab4f8]/60 text-center">{analysis.planGapLabel}</span>
-          )
-        )}
 
-        <div className="flex flex-col items-center gap-0.5 pt-1 border-t border-[#00f0ff15]">
-          <span className="text-[0.4rem] font-black tracking-[0.2em] text-[#00f0ff]">AR10 CYBORG</span>
-          <span className="text-[0.32rem] text-[#8ab4f8]/40 text-center leading-tight">
-            Leitura de confluência real, não é recomendação de investimento.
-          </span>
-        </div>
-      </div>
+          {active && (
+            <div className="flex flex-col items-center gap-1.5">
+              <img
+                src={active.objectUrl}
+                alt={PUBLICATION_FORMAT_SPECS[active.format].label}
+                className="max-w-full rounded border border-[#00f0ff20]"
+                style={{ maxHeight: 300 }}
+              />
+              <button
+                type="button"
+                onClick={() => downloadAsset(active)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#00f0ff40] bg-[#00f0ff1a] text-[#00f0ff] text-[0.48rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:bg-[#00f0ff2a]"
+              >
+                <Download size={12} />
+                Baixar {PUBLICATION_FORMAT_SPECS[active.format].label}
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1">
+            <span className="text-[0.42rem] text-[#8ab4f8]/50 uppercase tracking-[0.1em]">Legenda sugerida para X</span>
+            <pre className="whitespace-pre-wrap break-words text-[0.46rem] leading-relaxed text-[#a0f0ff] bg-[#010205] border border-[#00f0ff15] rounded p-2 font-mono">
+              {formatMarketAnalysisForX(snapshot.analysis)}
+            </pre>
+            <button
+              type="button"
+              onClick={handleCopyCaption}
+              className="self-end flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#00f0ff40] bg-[#00f0ff1a] text-[#00f0ff] text-[0.48rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:bg-[#00f0ff2a]"
+            >
+              {captionCopyState === "copied" ? <Check size={12} /> : <Copy size={12} />}
+              {captionCopyState === "copied" ? "Copiado" : captionCopyState === "failed" ? "Falhou — copie manualmente" : "Copiar legenda"}
+            </button>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={downloadAll}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded border border-[#8ab4f840] text-[#8ab4f8] text-[0.5rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:border-[#8ab4f870]"
+            >
+              <Download size={12} />
+              Baixar Todas
+            </button>
+            <button
+              type="button"
+              onClick={shareAll}
+              disabled={shareState === "sharing"}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded border border-[#8ab4f840] text-[#8ab4f8] text-[0.5rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:border-[#8ab4f870] disabled:opacity-50"
+            >
+              <Share2 size={12} />
+              {shareState === "sharing" ? "Compartilhando…" : "Compartilhar"}
+            </button>
+          </div>
+          {shareState === "unsupported" && (
+            <span className="text-[0.42rem] text-[#8ab4f8]/50 text-center">
+              Compartilhamento nativo não disponível neste navegador — use Baixar Todas.
+            </span>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -4335,17 +4428,25 @@ function MarketAnalysisStoryTab({ analysis }: { analysis: MarketAnalysis }) {
 // Context) — mesmo padrão fixado pela Ordem "Unificação da Inteligência
 // Operacional" (commit f74c533): o preço ao vivo tem exatamente 1 caminho
 // de distribuição real (o state raiz de App()), nunca um espelho.
-function MarketAnalysisPanel({ priceData }: { priceData: PriceState | null }) {
+function MarketAnalysisPanel({ priceData, chartData }: { priceData: PriceState | null; chartData: PublicationCandle[] }) {
   const { marketAnalysisOpen, setMarketAnalysisOpen, selectedAsset, chartTimeframe, nexusDecision, engine } =
     useContext(WidgetContext) || {};
-  const [tab, setTab] = useState<"PAINEL" | "X" | "STORY">("PAINEL");
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [tab, setTab] = useState<"PAINEL" | "PUBLICACAO">("PAINEL");
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
+  // Ordem "AR10 PUBLICATION STUDIO" §1: candles/preço vivo congelados no
+  // MESMO instante e pelo MESMO gatilho que `analysis` — as 4 peças
+  // publicáveis (aba Publicação) precisam do gráfico real, e ele só pode
+  // vir do exato mesmo momento da leitura, nunca de um tick mais novo
+  // capturado só no clique de "Gerar Publicação" (isso divergiria da
+  // leitura já mostrada na aba Painel durante a mesma sessão do painel).
+  const [frozenCandles, setFrozenCandles] = useState<PublicationCandle[]>([]);
+  const [frozenLivePrice, setFrozenLivePrice] = useState<number | null>(null);
 
   useEffect(() => {
     if (!marketAnalysisOpen) return;
     const regime = engine?.marketRegime ?? null;
     const regimeDisplay = regime ? REGIME_DISPLAY[regime.regime] : null;
+    const livePriceNow = typeof priceData?.price === "number" ? priceData.price : null;
     setAnalysis(
       buildMarketAnalysis({
         symbol: selectedAsset ?? "",
@@ -4357,31 +4458,21 @@ function MarketAnalysisPanel({ priceData }: { priceData: PriceState | null }) {
         supportStrength: engine?.supportStrength ?? null,
         resistance: engine?.resistance ?? null,
         resistanceStrength: engine?.resistanceStrength ?? null,
-        livePrice: typeof priceData?.price === "number" ? priceData.price : null,
+        livePrice: livePriceNow,
       }),
     );
+    setFrozenCandles(chartData);
+    setFrozenLivePrice(livePriceNow);
     setTab("PAINEL");
-    setCopyState("idle");
     // Deps propositalmente estreito: SÓ marketAnalysisOpen. Reabrir o
     // painel é o único gatilho para uma fotografia nova — enquanto o
-    // painel segue aberto, ticks reais de preço/decisão no fundo NUNCA
-    // reescrevem o que já foi gerado.
+    // painel segue aberto, ticks reais de preço/decisão/candle no fundo
+    // NUNCA reescrevem o que já foi gerado.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marketAnalysisOpen]);
 
   if (!marketAnalysisOpen) return null;
   const close = () => setMarketAnalysisOpen?.(false);
-
-  const handleCopy = async () => {
-    if (!analysis) return;
-    try {
-      await navigator.clipboard.writeText(formatMarketAnalysisForX(analysis));
-      setCopyState("copied");
-    } catch {
-      setCopyState("failed");
-    }
-    setTimeout(() => setCopyState("idle"), 2000);
-  };
 
   return (
     <div
@@ -4420,7 +4511,7 @@ function MarketAnalysisPanel({ priceData }: { priceData: PriceState | null }) {
                 Gerado sob demanda pelo Operador — esta tela nunca publica sozinha; copiar/capturar é sempre uma ação sua.
               </span>
               <div className="flex gap-1 border-b border-[#00f0ff15] pb-2">
-                {(["PAINEL", "X", "STORY"] as const).map((t) => (
+                {(["PAINEL", "PUBLICACAO"] as const).map((t) => (
                   <button
                     key={t}
                     type="button"
@@ -4431,14 +4522,15 @@ function MarketAnalysisPanel({ priceData }: { priceData: PriceState | null }) {
                         : "text-[#8ab4f8]/50 border border-transparent hover:text-[#8ab4f8]"
                     }`}
                   >
-                    {t}
+                    {t === "PAINEL" ? "PAINEL" : "PUBLICAÇÃO"}
                   </button>
                 ))}
               </div>
 
               {tab === "PAINEL" && <MarketAnalysisPainelTab analysis={analysis} />}
-              {tab === "X" && <MarketAnalysisXTab analysis={analysis} copyState={copyState} onCopy={handleCopy} />}
-              {tab === "STORY" && <MarketAnalysisStoryTab analysis={analysis} />}
+              {tab === "PUBLICACAO" && (
+                <MarketAnalysisPublicationTab snapshot={{ analysis, candles: frozenCandles, livePrice: frozenLivePrice }} />
+              )}
             </>
           )}
         </div>
