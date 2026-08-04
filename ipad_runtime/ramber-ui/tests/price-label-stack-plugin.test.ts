@@ -507,9 +507,13 @@ describe('"bater o olho profissional" (pendência honesta do turno anterior): EN
     // STOP vermelho no preço EFETIVO (ratchet real), BREACHED do preço vivo
     expect(block).toContain('const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);');
     expect(block).toContain('color: "rgba(255, 0, 85, 0.75)"');
-    // TARGET verde, REACHED do targetsHit autoritativo
+    // TARGET verde, REACHED do targetsHit autoritativo — Ordem "Lapidação
+    // das Etiquetas TP1/TP2" §3/§4: texto primário só label+distância,
+    // REACHED (como o resto do estado) migrou pro secundário.
     expect(block).toContain('const reached = i < hits;');
-    expect(block).toContain('reached ? `${base} · REACHED` : base, color: "rgba(0, 255, 170, 0.75)"');
+    expect(block).toContain('reached ? "REACHED" : null,');
+    expect(block).toContain('text: `TP${i + 1}${distPct}`,');
+    expect(block).toContain('color: "rgba(0, 255, 170, 0.75)"');
   });
 
   it('estado/texto vivo (BREACHED/REACHED/distância %/ETA/compactação) é o MESMO que a lib desenhava — mesmas funções puras reais, nunca uma segunda formatação divergente', () => {
@@ -597,16 +601,23 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     const block = s.slice(idx, end);
     expect(block).toContain('if (engineFallbackLevels) {');
     // EPC FINAL §8: ST/TP1/TP2 (nomenclatura curta), sempre numerado.
-    expect(block).toContain('text: breached ? "ST · BREACHED" : "ST",');
+    // Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4: primário = "ST"/
+    // "TP1<distância>" sozinho; BREACHED/força/R:R/obstáculo/REACHED
+    // migraram pro secundário (fonte menor, PriceLabelStackPlugin).
+    expect(block).toContain('text: "ST",');
+    expect(block).toContain('secondaryText: breached ? "BREACHED" : undefined,');
     expect(block).toContain('color: "rgba(255, 0, 85, 0.5)",');
     // distPct1/2 (Ordem "Lapidação Visual Final e Sincronia Operacional"
     // §4 — "distância até o alvo, quando já houver cálculo real
     // disponível"): mesma fórmula que o Trade Plan do Conselho já usa
     // (Math.abs(target-p)*100/p), reaproveitada aqui — zero cálculo novo.
-    expect(block).toContain('const distPct1 = p !== null && p > 0 ? ` · ${((Math.abs(engineFallbackLevels.target1 - p) * 100) / p).toFixed(2)}%` : "";');
-    expect(block).toContain('text: `TP1${strengthSuffix(engineFallbackLevels.target1Strength)}${distPct1}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}${reached ? " · REACHED" : ""}`,');
-    expect(block).toContain('const distPct2 = p !== null && p > 0 ? ` · ${((Math.abs(engineFallbackLevels.target2 - p) * 100) / p).toFixed(2)}%` : "";');
-    expect(block).toContain('text: `TP2${strengthSuffix(engineFallbackLevels.target2Strength)}${distPct2}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,');
+    expect(block).toContain('const distPct1 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target1 - p) * 100) / p).toFixed(2)}%` : "";');
+    expect(block).toContain('text: `TP1${distPct1}`,');
+    expect(block).toContain('strengthSuffix(engineFallbackLevels.target1Strength).trim() || null,');
+    expect(block).toContain('rr !== null ? `1:${rr.toFixed(2)}` : null,');
+    expect(block).toContain('const distPct2 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target2 - p) * 100) / p).toFixed(2)}%` : "";');
+    expect(block).toContain('text: `TP2${distPct2}`,');
+    expect(block).toContain('strengthSuffix(engineFallbackLevels.target2Strength).trim() || null,');
     // tier:"critical" (§3, Nível A): plano ATIVO do Núcleo quando não há
     // plano do Conselho — mesmo destaque grande/negrito do preço vivo.
     expect(block).toContain('tier: "critical"');
@@ -626,8 +637,9 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     // distPct3 (§4): mesma fórmula real de distância, TP3 continua sem
     // strengthSuffix/obstacleSuffix (a fonte não calcula esses metadados
     // para este nível — honesto sobre o que existe, nunca fabricado).
-    expect(block).toContain('const distPct3 = p !== null && p > 0 ? ` · ${((Math.abs(engineFallbackLevels.target3 - p) * 100) / p).toFixed(2)}%` : "";');
-    expect(block).toContain('text: `TP3${distPct3}${reached ? " · REACHED" : ""}`,');
+    expect(block).toContain('const distPct3 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target3 - p) * 100) / p).toFixed(2)}%` : "";');
+    expect(block).toContain('text: `TP3${distPct3}`,');
+    expect(block).toContain('secondaryText: reached ? "REACHED" : undefined,');
     expect(block).not.toContain('strengthSuffix(engineFallbackLevels.target3');
     expect(block).not.toContain('obstacleSuffix(engineFallbackLevels.target3');
   });
@@ -638,8 +650,8 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     const end = s.indexOf('return out;', idx);
     const block = s.slice(idx, end);
     expect(block).toContain('const obstacleSuffix = (n: number | null | undefined) => (typeof n === "number" && n > 0 ? ` ⚠ ${n}` : "");');
-    expect(block).toContain('${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}');
-    expect(block).toContain('${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}');
+    expect(block).toContain('obstacleSuffix(engineFallbackLevels.target1ObstacleCount).trim() || null,');
+    expect(block).toContain('obstacleSuffix(engineFallbackLevels.target2ObstacleCount).trim() || null,');
   });
 
   it('strengthSuffix alinhado ao estilo tight de levelTitle() (S1/R1) — espaço, nunca "·", mesmo padrão de rótulo em todo o eixo', () => {

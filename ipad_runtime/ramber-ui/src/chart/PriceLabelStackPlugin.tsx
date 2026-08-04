@@ -92,6 +92,20 @@ export interface PriceAxisLabel {
   // campo explicitamente, os dois casos em que o default por `side` não
   // bastaria.
   tier?: PriceLabelTier;
+  // Ordem "Lapidação das Etiquetas TP1/TP2" — achado real de captura de
+  // tela do Operador (ZECUSDT 1H, "TP1 FRACA · 0.34% · 1:0.04 · REACHED"
+  // ocupando uma faixa horizontal grande sobre as velas): o problema não
+  // era o tamanho da fonte, era TUDO ter o MESMO peso visual dentro de
+  // uma etiqueta só. `text` continua a informação PRIMÁRIA (label + valor
+  // — ex.: "TP1 0.34%"); `secondaryText`, quando presente, é desenhado
+  // logo em seguida, na MESMA caixa, em fonte menor + opacidade reduzida
+  // (força/FRACA-FORTE, R:R, status REACHED/BREACHED, obstáculo) — nunca
+  // removido, só reduzido em peso (§2/§11 da Ordem: zero dado apagado).
+  // Opcional/aditivo: `undefined` preserva o comportamento de sempre
+  // (uma única string, um único peso) para todo rótulo que não declara o
+  // campo — S1/R1/VWAP/EMA/NL/sessões/sweeps/BOS-CHOCH/zonas/trend
+  // channel continuam exatamente como eram.
+  secondaryText?: string;
 }
 
 // Altura real de uma etiqueta (px). Achado real de captura de tela do
@@ -110,6 +124,21 @@ export const LABEL_HEIGHT_PX = 18;
 export const LIVE_LABEL_HEIGHT_PX = 21;
 const FONT_LIVE = "bold 11px -apple-system, sans-serif";
 const FONT_BASE = "10px -apple-system, sans-serif";
+// Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4/§11: o texto SECUNDÁRIO
+// (força/FRACA-FORTE, R:R, REACHED/BREACHED, obstáculo — ver
+// secondaryText acima) desenha visivelmente menor que o primário em
+// QUALQUER tier — a mesma informação ocupa menos largura só por ser
+// renderizada num degrau de fonte abaixo, sem precisar abreviar a
+// palavra em si (§2: "não apagar dado real").
+const FONT_SECONDARY = "8px -apple-system, sans-serif";
+// Peso visual reduzido (§4: "REACHED = estado secundário") — a MESMA
+// cor/fundo do primário, só mais transparente, nunca uma cor nova.
+const SECONDARY_ALPHA_MULT = 0.62;
+// Respiro real entre o segmento primário e o secundário — pequeno o
+// bastante para ler como "uma etiqueta só", grande o bastante pra nunca
+// grudar visualmente nas letras (achado real via harness Playwright desta
+// correção).
+const SECONDARY_GAP_PX = 4;
 // Teto real de etiquetas de CONTEXTO simultâneas (ver selectRelevantLabels
 // em price-label-stack.ts para o critério de poda e por que nenhum dado
 // real se perde). 5 é o mesmo número que este repositório já tinha
@@ -266,8 +295,19 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           // Target) compartilham a caixa grande/negrito — só o anel
           // (abaixo) continua exclusivo do preço.
           const isBigTier = tier === "live" || tier === "critical";
-          ctx.font = isBigTier ? FONT_LIVE : FONT_BASE;
-          const textWidth = ctx.measureText(entry.text).width;
+          const primaryFont = isBigTier ? FONT_LIVE : FONT_BASE;
+          ctx.font = primaryFont;
+          const primaryWidth = ctx.measureText(entry.text).width;
+          // Ordem "Lapidação das Etiquetas TP1/TP2": largura real da caixa
+          // já soma o segmento secundário (medido na fonte MENOR) — nunca
+          // um chute; a caixa sempre cabe exatamente o que será desenhado.
+          let secondaryWidth = 0;
+          if (entry.secondaryText) {
+            ctx.font = FONT_SECONDARY;
+            secondaryWidth = ctx.measureText(entry.secondaryText).width;
+          }
+          const secondaryGap = entry.secondaryText ? SECONDARY_GAP_PX : 0;
+          const textWidth = primaryWidth + secondaryGap + secondaryWidth;
           const boxHeight = isBigTier ? LIVE_LABEL_HEIGHT_PX : LABEL_HEIGHT_PX;
           const boxWidth = textWidth + LABEL_PADDING_X * 2;
           const boxX = side === "right" ? cssWidth - RIGHT_MARGIN_PX - boxWidth : LEFT_MARGIN_PX;
@@ -341,10 +381,23 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           // contraste dos tags nativos); nos chips de contexto, a PRÓPRIA
           // cor do nível sobre fundo escuro — a identidade por cor é a
           // mesma nos dois casos, só o que é figura e o que é fundo troca.
-          ctx.fillStyle = tier === "context" ? opaque(entry.color) : "#050810";
+          const textColor = tier === "context" ? opaque(entry.color) : "#050810";
+          ctx.fillStyle = textColor;
           ctx.textBaseline = "middle";
           ctx.textAlign = "left";
+          ctx.font = primaryFont;
           ctx.fillText(entry.text, boxX + LABEL_PADDING_X, entry.resolvedY + 0.5);
+          // Ordem "Lapidação das Etiquetas TP1/TP2" §4/§11: segmento
+          // SECUNDÁRIO (força/R:R/status/obstáculo) na MESMA caixa, fonte
+          // menor + opacidade reduzida — mesma cor de sempre (nunca uma
+          // cor nova), só menos peso visual. Nunca desenhado se a chamada
+          // não declarou secondaryText (zero mudança pro resto do eixo).
+          if (entry.secondaryText) {
+            ctx.font = FONT_SECONDARY;
+            ctx.fillStyle = textColor;
+            ctx.globalAlpha = labelAlpha * SECONDARY_ALPHA_MULT;
+            ctx.fillText(entry.secondaryText, boxX + LABEL_PADDING_X + primaryWidth + secondaryGap, entry.resolvedY + 0.5);
+          }
           ctx.globalAlpha = 1;
         }
       };

@@ -2421,12 +2421,22 @@ export function EnhancedChart_110_Percent({
       const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);
       if (Number.isFinite(effectiveStopPrice)) {
         const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
-        const stopBase = hits >= 2
-          ? `ST · TRILHADO (alvo ${hits - 1})`
+        // Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4: PRIMÁRIO = só "ST"
+        // (a própria etiqueta já diz o que é — o preço no eixo já é o
+        // valor); SECUNDÁRIO = motivo/estado, fonte menor — mesma
+        // informação, sem competir peso visual com o rótulo em si.
+        const stopSecondary = hits >= 2
+          ? `TRILHADO (alvo ${hits - 1})`
           : hits > 0
-            ? `ST · BREAK-EVEN (real)`
-            : `ST · ${tradePlan.stop.basis}`;
-        out.push({ price: effectiveStopPrice, text: stopHitNow ? `${stopBase} · BREACHED` : stopBase, color: "rgba(255, 0, 85, 0.75)", tier: "critical" });
+            ? `BREAK-EVEN (real)`
+            : tradePlan.stop.basis;
+        out.push({
+          price: effectiveStopPrice,
+          text: "ST",
+          secondaryText: stopHitNow ? `${stopSecondary} BREACHED` : stopSecondary,
+          color: "rgba(255, 0, 85, 0.75)",
+          tier: "critical",
+        });
       }
       // Continuidade §6: níveis apertados => rótulos compactos (WIDTH); o
       // resolvedor de colisão já cuida da separação VERTICAL. O stop
@@ -2439,17 +2449,39 @@ export function EnhancedChart_110_Percent({
         const rr = tradePlan.riskRewardRatios[i];
         // EPC FINAL §8: TP1/TP2/TP3 sempre numerado (mesmo com 1 alvo só) —
         // a mesma convenção pedida, sem distinção "singular vs plural".
-        const label = `TP${i + 1}`;
-        const distPct = p !== null && p > 0 ? ` · ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";
+        const distPct = p !== null && p > 0 ? ` ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";
+        // Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4/§11 (achado real
+        // de captura: "TP1 FRACA · 0.34% · 1:0.04 · REACHED" ocupava uma
+        // faixa horizontal grande sobre as velas — o problema não era o
+        // tamanho da fonte, era description/estado com o MESMO peso do
+        // rótulo+valor). PRIMÁRIO = label + distância (prioridades 3/4 da
+        // Ordem — "onde fica o alvo"); SECUNDÁRIO = basis/R:R/ETA/
+        // obstáculo/REACHED (prioridades 5/6 — "descrição/força/status"),
+        // sempre presente, nunca apagado — só menor e mais discreto
+        // (PriceLabelStackPlugin desenha em fonte reduzida + opacidade
+        // menor). compactLabels continua controlando SÓ se basis/R:R
+        // entram no secundário (mesma regra de sempre: níveis apertados
+        // não cabem o detalhe completo); ETA/obstáculo/REACHED sempre
+        // aparecem quando reais, nos dois modos.
         const fusedTarget = decision?.plan?.targets[i];
         const etaLabel =
           fusedTarget && Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)
             ? formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)
             : null;
-        const base = compactLabels
-          ? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`
-          : `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`;
-        out.push({ price: target.price, text: reached ? `${base} · REACHED` : base, color: "rgba(0, 255, 170, 0.75)", tier: "critical" });
+        const secondaryParts = [
+          compactLabels ? null : target.basis,
+          compactLabels || rr === null ? null : `1:${rr.toFixed(2)}`,
+          etaLabel ? `ETA ${etaLabel}` : null,
+          obstacleSuffix(target.obstacleCount).trim() || null,
+          reached ? "REACHED" : null,
+        ].filter((v): v is string => v !== null);
+        out.push({
+          price: target.price,
+          text: `TP${i + 1}${distPct}`,
+          secondaryText: secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined,
+          color: "rgba(0, 255, 170, 0.75)",
+          tier: "critical",
+        });
       });
     }
     // EPC §5/§6 (continuação): rótulos do fallback do Core Engine — MESMO
@@ -2493,11 +2525,18 @@ export function EnhancedChart_110_Percent({
       // do Núcleo nunca reusava a MESMA fórmula, mesmo já tendo `p` em
       // escopo (usado só para REACHED). Lacuna real fechada aqui: zero
       // cálculo novo, mesma fórmula, mesmo `p`, mesma convenção "· N.NN%".
+      // Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4/§11 (achado real de
+      // captura: "TP1 FRACA · 0.34% · 1:0.04 · REACHED" — mesmo problema
+      // do Trade Plan do Conselho acima, mesma correção: PRIMÁRIO = label
+      // + distância (o essencial pra ler "qual alvo, quão longe"),
+      // SECUNDÁRIO = força/R:R/obstáculo/status, em fonte menor via
+      // PriceLabelStackPlugin — zero dado apagado, só peso visual menor.
       if (Number.isFinite(engineFallbackLevels.stop)) {
         const breached = p !== null && (longFb ? p <= engineFallbackLevels.stop : p >= engineFallbackLevels.stop);
         out.push({
           price: engineFallbackLevels.stop,
-          text: breached ? "ST · BREACHED" : "ST",
+          text: "ST",
+          secondaryText: breached ? "BREACHED" : undefined,
           color: "rgba(255, 0, 85, 0.5)",
           tier: "critical",
         });
@@ -2507,20 +2546,33 @@ export function EnhancedChart_110_Percent({
       if (Number.isFinite(engineFallbackLevels.target1)) {
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target1 : p <= engineFallbackLevels.target1);
         const rr = engineFallbackLevels.riskRewardRatio;
-        const distPct1 = p !== null && p > 0 ? ` · ${((Math.abs(engineFallbackLevels.target1 - p) * 100) / p).toFixed(2)}%` : "";
+        const distPct1 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target1 - p) * 100) / p).toFixed(2)}%` : "";
+        const secondary1 = [
+          strengthSuffix(engineFallbackLevels.target1Strength).trim() || null,
+          rr !== null ? `1:${rr.toFixed(2)}` : null,
+          obstacleSuffix(engineFallbackLevels.target1ObstacleCount).trim() || null,
+          reached ? "REACHED" : null,
+        ].filter((v): v is string => v !== null);
         out.push({
           price: engineFallbackLevels.target1,
-          text: `TP1${strengthSuffix(engineFallbackLevels.target1Strength)}${distPct1}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${obstacleSuffix(engineFallbackLevels.target1ObstacleCount)}${reached ? " · REACHED" : ""}`,
+          text: `TP1${distPct1}`,
+          secondaryText: secondary1.length > 0 ? secondary1.join(" ") : undefined,
           color: "rgba(0, 255, 170, 0.5)",
           tier: "critical",
         });
       }
       if (engineFallbackLevels.target2 !== null && Number.isFinite(engineFallbackLevels.target2)) {
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target2 : p <= engineFallbackLevels.target2);
-        const distPct2 = p !== null && p > 0 ? ` · ${((Math.abs(engineFallbackLevels.target2 - p) * 100) / p).toFixed(2)}%` : "";
+        const distPct2 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target2 - p) * 100) / p).toFixed(2)}%` : "";
+        const secondary2 = [
+          strengthSuffix(engineFallbackLevels.target2Strength).trim() || null,
+          obstacleSuffix(engineFallbackLevels.target2ObstacleCount).trim() || null,
+          reached ? "REACHED" : null,
+        ].filter((v): v is string => v !== null);
         out.push({
           price: engineFallbackLevels.target2,
-          text: `TP2${strengthSuffix(engineFallbackLevels.target2Strength)}${distPct2}${obstacleSuffix(engineFallbackLevels.target2ObstacleCount)}${reached ? " · REACHED" : ""}`,
+          text: `TP2${distPct2}`,
+          secondaryText: secondary2.length > 0 ? secondary2.join(" ") : undefined,
           color: "rgba(0, 255, 170, 0.35)",
           tier: "critical",
         });
@@ -2532,10 +2584,11 @@ export function EnhancedChart_110_Percent({
       // este nível, nunca um valor fabricado só para preencher o rótulo.
       if (engineFallbackLevels.target3 != null && Number.isFinite(engineFallbackLevels.target3)) {
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target3 : p <= engineFallbackLevels.target3);
-        const distPct3 = p !== null && p > 0 ? ` · ${((Math.abs(engineFallbackLevels.target3 - p) * 100) / p).toFixed(2)}%` : "";
+        const distPct3 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target3 - p) * 100) / p).toFixed(2)}%` : "";
         out.push({
           price: engineFallbackLevels.target3,
-          text: `TP3${distPct3}${reached ? " · REACHED" : ""}`,
+          text: `TP3${distPct3}`,
+          secondaryText: reached ? "REACHED" : undefined,
           color: "rgba(0, 255, 170, 0.2)",
           tier: "critical",
         });

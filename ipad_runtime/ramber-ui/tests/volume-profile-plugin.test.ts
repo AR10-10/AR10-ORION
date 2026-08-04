@@ -173,11 +173,12 @@ describe('EnhancedChart: Trade Plan drawn as silk-thread price lines (Signal Pre
     expect(block).not.toMatch(/LineStyle\.(Dashed|Dotted|LargeDashed|SparseDotted)/);
   });
 
-  it('English labels carry the real structure basis and the R:R (EN/ST/TP short form, EPC FINAL §8, v2: one line per real target)', () => {
+  it('English labels carry the real structure basis and the R:R (EN/ST/TP short form, EPC FINAL §8, v2: one line per real target); Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4 moved basis/R:R into the secondary (smaller-font) text, primary text is label+distance only', () => {
     const s = chart();
     expect(s).toContain('`EN ${tradePlan.direction}');
-    expect(s).toContain('`ST · ${tradePlan.stop.basis}`');
-    expect(s).toContain('${label} · ${target.basis}');
+    expect(s).toContain('text: "ST",');
+    expect(s).toContain(': tradePlan.stop.basis;');
+    expect(s).toContain('compactLabels ? null : target.basis,');
   });
 
   it('fail-closed: no plan draws nothing, and lines are cleared on every change and on unmount', () => {

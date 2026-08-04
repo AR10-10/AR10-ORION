@@ -170,12 +170,13 @@ describe('EnhancedChart_110_Percent: stop/target hit-boost v2 (Ordem Final Auton
     expect(chart()).toContain('}, [tradePlan, livePrice, targetsHit]);');
   });
 
-  it('as literais base de EN/ST/TP continuam consistentes — em priceAxisLabels (sistema anti-colisão), nomenclatura curta real (EPC FINAL §8)', () => {
+  it('as literais base de EN/ST/TP continuam consistentes — em priceAxisLabels (sistema anti-colisão), nomenclatura curta real (EPC FINAL §8); Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4 moveu basis/estado pro secundário, texto primário ficou só EN/ST/TP+distância', () => {
     const s = chart();
     expect(s).toContain('`EN ${tradePlan.direction}');
-    expect(s).toContain('`ST · ${tradePlan.stop.basis}`');
-    expect(s).toContain('${label} · ${target.basis}');
-    expect(s).toContain('const label = `TP${i + 1}`;');
+    expect(s).toContain('text: "ST",');
+    expect(s).toContain(': tradePlan.stop.basis;');
+    expect(s).toContain('compactLabels ? null : target.basis,');
+    expect(s).toContain('text: `TP${i + 1}${distPct}`,');
   });
 
   it('v2: "REACHED" is driven by the AUTHORITATIVE targetsHit prop, never re-derived from livePrice alone — a target stays marked reached even if price later pulls back', () => {

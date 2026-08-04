@@ -532,10 +532,10 @@ describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no grá
 
   it('títulos das linhas de alvo carregam distância % ao preço VIVO + ETA em faixa do contrato fundido (guard de preço)', () => {
     const c = chart();
-    expect(c).toContain('const distPct = p !== null && p > 0 ? ` · ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";');
+    expect(c).toContain('const distPct = p !== null && p > 0 ? ` ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";');
     expect(c).toContain('const fusedTarget = decision?.plan?.targets[i];');
     expect(c).toContain('Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)');
-    expect(c).toContain('${etaLabel ? ` · ETA ${etaLabel}` : ""}');
+    expect(c).toContain('etaLabel ? `ETA ${etaLabel}` : null,');
   });
 
   it('ChartWidget passa harmonicHits (mesma fatia da ANALYSIS) e decision (contrato fundido) ao gráfico', () => {
@@ -1059,10 +1059,14 @@ describe('Continuidade §6: níveis apertados => rótulos TP compactos, preço N
     expect(c).toContain('const compactLabels = shouldCompactLabels(levels);');
   });
 
-  it('modo compacto: label + distância + ETA (basis/R:R seguem no strip); modo cheio inalterado; OMEGA CORE V-MAX Fase 4 (§4.2) acrescentou o sufixo real de obstáculos aos dois modos', () => {
+  it('modo compacto: secundário sem basis/R:R (ETA/obstáculo/REACHED seguem); modo cheio inclui basis+R:R; OMEGA CORE V-MAX Fase 4 (§4.2) acrescentou o sufixo real de obstáculos aos dois modos — Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4 moveu todo esse detalhe pro secundário (texto primário é só label+distância nos dois modos, ver o teste de "bater o olho profissional" em price-label-stack-plugin.test.ts)', () => {
     const c = chart();
-    expect(c).toContain('? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`');
-    expect(c).toContain(': `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`');
+    expect(c).toContain('compactLabels ? null : target.basis,');
+    expect(c).toContain('compactLabels || rr === null ? null : `1:${rr.toFixed(2)}`,');
+    expect(c).toContain('etaLabel ? `ETA ${etaLabel}` : null,');
+    expect(c).toContain('obstacleSuffix(target.obstacleCount).trim() || null,');
+    expect(c).toContain('reached ? "REACHED" : null,');
+    expect(c).toContain('secondaryText: secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined,');
   });
 
   it('a âncora do preço real permanece documentada onde a decisão de compactar agora vive (label-compaction.ts): applyOptions nunca recebe um price deslocado no título compacto', () => {
