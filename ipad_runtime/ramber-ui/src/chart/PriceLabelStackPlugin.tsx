@@ -18,9 +18,37 @@
 // desaparece: o conector garante que o operador sempre sabe onde o
 // preço real está, mesmo quando o texto precisou se mover pra não
 // colidir.
+//
+// ── HIERARQUIA (achado real de captura de tela do Operador, iPad,
+// ZECUSDT 1H ao vivo) ──────────────────────────────────────────────────
+// A garantia de zero colisão acima estava sendo cumprida — e mesmo assim
+// o gráfico ficou ilegível: 11 etiquetas empilhadas na lateral esquerda,
+// TODAS com o mesmo peso visual (caixa sólida opaca + texto escuro),
+// cobrindo o primeiro terço das velas. Relato literal do Operador: "não
+// tem noção pra onde que o ativo vai". Diagnóstico real: não faltava
+// anti-colisão, faltava HIERARQUIA — um sweep de 8 dias atrás gritava
+// exatamente tão alto quanto o preço de agora.
+// Este overlay passa a desenhar 3 níveis (live/primary/context — tipo,
+// regra de default e critério de poda em price-label-stack.ts):
+//   live    → caixa sólida MAIOR, negrito, com anel fino de 1px. Uma por
+//             gráfico: a âncora que o olho encontra primeiro.
+//   primary → caixa sólida (comportamento de sempre) — VWAP/NL/EMA e o
+//             plano ativo, o que é acionável agora.
+//   context → chip de CONTORNO (fundo do painel + borda 1px na cor do
+//             nível + texto na cor do nível) e sujeito a teto de
+//             contagem — o mapa estrutural, que deve estar lá sem
+//             disputar atenção com o preço.
+// Nenhum dado real some: a LINHA/faixa/marcador de cada nível continua
+// desenhada pelo seu próprio plugin — só o chip de texto flutuante é
+// seletivo.
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
-import { resolveLabelStackPositions } from "./price-label-stack";
+import {
+  resolveLabelStackPositions,
+  resolveLabelTier,
+  selectRelevantLabels,
+  type PriceLabelTier,
+} from "./price-label-stack";
 // Diretriz Final de Lapidação Visual, Adendo, Parte 11 ("cantos
 // suavizados"): só a constante de raio é compartilhada com
 // nexus/canvas-label.ts (mesma primitiva usada pelos outros 4 plugins de
@@ -55,12 +83,42 @@ export interface PriceAxisLabel {
   // qual lado cada tipo de rótulo usa (contexto estrutural estático vs.
   // leitura acionável agora).
   side?: "left" | "right";
+  // Hierarquia visual real (live/primary/context) — ver o bloco de
+  // documentação em price-label-stack.ts, onde o tipo e a regra de default
+  // vivem. Opcional: o default deriva do `side` que a divisão esquerda/
+  // direita já estabelece (esquerda = mapa estrutural = "context";
+  // direita = acionável agora = "primary"), então nenhum dos ~20 pontos
+  // de push precisou declarar o campo — só o preço vivo, que declara
+  // "live" por ser a única etiqueta-âncora do gráfico.
+  tier?: PriceLabelTier;
 }
 
-// Altura real de uma etiqueta (px) — folga para o texto 9px + padding
-// vertical, mesma ordem de grandeza da fonte já usada nos outros
-// overlays deste gráfico.
-export const LABEL_HEIGHT_PX = 16;
+// Altura real de uma etiqueta (px). Achado real de captura de tela do
+// Operador ("os tom de cor, o tamanho das etiquetas... não tá legal"): o
+// texto era 9px numa caixa de 16px — abaixo do que qualquer terminal
+// profissional usa no eixo, e no iPad (a superfície real deste app) fica
+// no limite do legível. Subiu para 10px de texto numa caixa de 18px; a
+// etiqueta `live` (o preço agora) tem caixa própria, maior, abaixo.
+export const LABEL_HEIGHT_PX = 18;
+// A âncora de leitura do gráfico inteiro — deliberadamente maior e em
+// negrito, o único elemento do eixo que nunca compete com nada.
+export const LIVE_LABEL_HEIGHT_PX = 21;
+const FONT_LIVE = "bold 11px -apple-system, sans-serif";
+const FONT_BASE = "10px -apple-system, sans-serif";
+// Teto real de etiquetas de CONTEXTO simultâneas (ver selectRelevantLabels
+// em price-label-stack.ts para o critério de poda e por que nenhum dado
+// real se perde). 5 é o mesmo número que este repositório já tinha
+// convergido de forma independente em MAX_KEY_LEVELS_SHOWN e
+// MAX_INSTITUTIONAL_ZONES para a mesma pergunta ("quantas referências
+// estruturais um operador rastreia de uma vez") — zero limiar novo
+// inventado. Na captura real do Operador havia 11.
+export const MAX_CONTEXT_LABELS = 5;
+// Fundo dos chips de contexto: quase a cor de fundo real do painel, opaco
+// o bastante para o tick nativo do eixo nunca sangrar através (a MESMA
+// razão pela qual opaque() existe, abaixo) e discreto o bastante para o
+// chip ler como anotação sobre o gráfico, nunca como um bloco sólido
+// disputando atenção com o preço.
+const CONTEXT_FILL = "rgba(6, 10, 20, 0.88)";
 // Achado real via harness Playwright (verificação desta correção):
 // alimentar o resolvedor com minGapPx = LABEL_HEIGHT_PX faz duas
 // etiquetas colidindo ficarem exatamente ENCOSTADAS (gap zero) — nunca
@@ -70,8 +128,14 @@ export const LABEL_HEIGHT_PX = 16;
 // real e visível entre duas etiquetas mesmo no pior caso — "cada desenho
 // no lugar preciso, nunca um em cima do outro" de verdade, não só
 // matematicamente.
-const MIN_GAP_PX = LABEL_HEIGHT_PX + 4;
-const LABEL_PADDING_X = 5;
+// A folga extra agora tem uma segunda razão real, além da fresta visível:
+// a etiqueta `live` é fisicamente maior (LIVE_LABEL_HEIGHT_PX=21 + o anel
+// fino de 1px a 1.5px de distância = 24px reais). O passo da pilha
+// precisa ser maior que isso, senão o anel do preço vivo encostaria na
+// caixa vizinha — o mesmo defeito de "uma coisa só" que este gap existe
+// para eliminar.
+const MIN_GAP_PX = LABEL_HEIGHT_PX + 7;
+const LABEL_PADDING_X = 6;
 const RIGHT_MARGIN_PX = 2;
 // Achado real do Operador (densidade de rótulos só no lado direito): o
 // lado esquerdo usa a mesma margem mínima real do direito — nenhuma
@@ -131,7 +195,33 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
-      ctx.font = "9px -apple-system, sans-serif";
+      ctx.font = FONT_BASE;
+
+      // Uma só primitiva de caixa para os 3 níveis (Regra de Ouro 4: zero
+      // lógica duplicada) — o que muda entre eles é só preenchimento vs.
+      // contorno, nunca a geometria. Fallback honesto para motor sem
+      // roundRect (Safari antigo): mesma caixa, só com canto reto.
+      const boxPath = (x: number, y: number, w: number, h: number) => {
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") ctx.roundRect(x, y, w, h, CANVAS_LABEL_RADIUS);
+        else ctx.rect(x, y, w, h);
+      };
+
+      // Poda de densidade ANTES de qualquer geometria (achado real de
+      // captura de tela do Operador: 11 chips de contexto empilhados na
+      // lateral esquerda, cobrindo o primeiro terço das velas). A regra
+      // real e o porquê de nenhum dado se perder vivem em
+      // selectRelevantLabels (price-label-stack.ts) — aqui só a fiação.
+      // A referência de proximidade é a PRÓPRIA etiqueta `live` (o preço
+      // agora), nunca uma segunda fonte de preço: se ela ainda não
+      // existe, a função é fail-closed e mantém uma ordem determinística
+      // em vez de inventar uma distância.
+      const liveEntry = labelsRef.current.find((l) => resolveLabelTier(l.side, l.tier) === "live");
+      const visible = selectRelevantLabels(
+        labelsRef.current,
+        liveEntry ? liveEntry.price : null,
+        MAX_CONTEXT_LABELS,
+      );
 
       // Achado real do Operador ("tá ficando só numa lateral direita"):
       // cada lado resolve colisão de forma TOTALMENTE independente — um
@@ -140,7 +230,7 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
       // de "nunca um em cima do outro"). side ausente = "right", mesmo
       // comportamento de sempre pra todo rótulo que não declara o campo.
       const withNaturalY = (side: "left" | "right") =>
-        labelsRef.current
+        visible
           .filter((l) => (l.side ?? "right") === side)
           .map((l) => {
             const coord = series.priceToCoordinate(l.price);
@@ -165,11 +255,14 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           // comportamento de sempre (opaco) para todo rótulo que não declara
           // alpha (S1/R1/VWAP/NL/EMA/TREND/ENTRY/STOP/TARGET/etc).
           const labelAlpha = entry.alpha ?? 1;
+          const tier = resolveLabelTier(entry.side, entry.tier);
+          ctx.font = tier === "live" ? FONT_LIVE : FONT_BASE;
           const textWidth = ctx.measureText(entry.text).width;
+          const boxHeight = tier === "live" ? LIVE_LABEL_HEIGHT_PX : LABEL_HEIGHT_PX;
           const boxWidth = textWidth + LABEL_PADDING_X * 2;
           const boxX = side === "right" ? cssWidth - RIGHT_MARGIN_PX - boxWidth : LEFT_MARGIN_PX;
-          const boxY = entry.resolvedY - LABEL_HEIGHT_PX / 2;
-          if (boxY + LABEL_HEIGHT_PX < 0 || boxY > cssHeight) continue; // fora da área visível — Fail-Closed, nunca desenha fora do canvas
+          const boxY = entry.resolvedY - boxHeight / 2;
+          if (boxY + boxHeight < 0 || boxY > cssHeight) continue; // fora da área visível — Fail-Closed, nunca desenha fora do canvas
 
           // Conector fino de volta ao preço real quando o rótulo deslocou
           // — Fio de Seda (1px sólida, nunca tracejada). Nunca aparece
@@ -191,16 +284,53 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           }
 
           ctx.globalAlpha = labelAlpha;
-          ctx.fillStyle = opaque(entry.color);
-          ctx.beginPath();
-          if (typeof ctx.roundRect === "function") {
-            ctx.roundRect(boxX, boxY, boxWidth, LABEL_HEIGHT_PX, CANVAS_LABEL_RADIUS);
+          // NÍVEL "context" (mapa estrutural: S1/R1, sessões, sweeps,
+          // BOS/CHOCH, zonas institucionais, trend channel). Achado real da
+          // captura do Operador: como caixa SÓLIDA, cada um destes gritava
+          // tão alto quanto o preço vivo — 11 blocos coloridos cobrindo o
+          // primeiro terço das velas. Como chip de CONTORNO (fundo quase
+          // igual ao do painel + borda de 1px na cor real do nível + texto
+          // NA COR do nível), a informação é exatamente a mesma e a
+          // identidade por cor fica até mais legível — mas o peso visual cai
+          // para o de uma anotação, que é o que ele sempre foi. A borda é
+          // 1px sólida: "Fio de Seda", igual a qualquer outra marcação deste
+          // gráfico. Meio-pixel de recuo só para o traço cair inteiro dentro
+          // de uma coluna de pixels (borda nítida, nunca borrada em 2px).
+          if (tier === "context") {
+            boxPath(boxX + 0.5, boxY + 0.5, boxWidth - 1, boxHeight - 1);
+            ctx.fillStyle = CONTEXT_FILL;
             ctx.fill();
+            ctx.strokeStyle = opaque(entry.color);
+            ctx.lineWidth = 1;
+            ctx.stroke();
           } else {
-            ctx.fillRect(boxX, boxY, boxWidth, LABEL_HEIGHT_PX); // fallback honesto — motor sem roundRect ainda desenha a caixa, só com canto reto.
+            // NÍVEL "live" — a âncora de leitura do gráfico. Anel fino de
+            // 1px em volta da caixa (Fio de Seda, nunca tracejado), a
+            // única etiqueta do eixo que o ganha: é o que faz o olho
+            // encontrar "onde o preço está AGORA" antes de qualquer outra
+            // coisa, sem precisar ler nenhum texto.
+            if (tier === "live") {
+              boxPath(boxX - 1.5, boxY - 1.5, boxWidth + 3, boxHeight + 3);
+              ctx.strokeStyle = opaque(entry.color);
+              ctx.globalAlpha = 0.4 * labelAlpha;
+              ctx.lineWidth = 1;
+              ctx.stroke();
+              ctx.globalAlpha = labelAlpha;
+            }
+            // NÍVEL "live" e "primary" (preço agora + VWAP/NL/EMA + EN/ST/TP
+            // do plano ativo): caixa sólida na cor real da própria linha,
+            // exatamente o comportamento que os "last value label" nativos
+            // que este overlay substitui sempre tiveram.
+            boxPath(boxX, boxY, boxWidth, boxHeight);
+            ctx.fillStyle = opaque(entry.color);
+            ctx.fill();
           }
 
-          ctx.fillStyle = "#050810"; // texto escuro sobre fundo colorido — mesmo contraste dos tags nativos que este overlay substitui
+          // Texto escuro sobre fundo colorido nos níveis sólidos (mesmo
+          // contraste dos tags nativos); nos chips de contexto, a PRÓPRIA
+          // cor do nível sobre fundo escuro — a identidade por cor é a
+          // mesma nos dois casos, só o que é figura e o que é fundo troca.
+          ctx.fillStyle = tier === "context" ? opaque(entry.color) : "#050810";
           ctx.textBaseline = "middle";
           ctx.textAlign = "left";
           ctx.fillText(entry.text, boxX + LABEL_PADDING_X, entry.resolvedY + 0.5);

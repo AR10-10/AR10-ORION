@@ -14,6 +14,20 @@ const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 const plugin = () => read('../src/chart/PriceLabelStackPlugin.tsx');
 const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+// Corpo REAL de drawSide, delimitado pelo seu início e pela primeira
+// chamada depois dele — janela exata em vez de "os próximos N caracteres"
+// (achado real: a hierarquia visual de 3 níveis empurrou boxX/connectorX
+// para depois dos 900/1700 chars que estas asserções fatiavam, e o teste
+// passou a falhar por causa do TAMANHO da janela, nunca porque a garantia
+// real tivesse mudado).
+const drawSideBody = () => {
+  const s = plugin();
+  const start = s.indexOf('const drawSide = ');
+  const end = s.indexOf('drawSide(withNaturalY("right"), "right");', start);
+  expect(start, 'drawSide não encontrado').toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  return s.slice(start, end);
+};
 
 describe('PriceLabelStackPlugin: "Fio de Seda" — conector nunca tracejado, sempre 1px', () => {
   it('nunca chama setLineDash', () => {
@@ -120,16 +134,11 @@ describe('PriceLabelStackPlugin: side opcional (left/right) — dois lados resol
     const s = plugin();
     expect(s).toContain('const LEFT_MARGIN_PX = 2;');
     expect(s).toContain('const RIGHT_MARGIN_PX = 2;');
-    const drawSideIdx = s.indexOf('const drawSide = ');
-    const drawSideBlock = s.slice(drawSideIdx, drawSideIdx + 900);
-    expect(drawSideBlock).toContain('const boxX = side === "right" ? cssWidth - RIGHT_MARGIN_PX - boxWidth : LEFT_MARGIN_PX;');
+    expect(drawSideBody()).toContain('const boxX = side === "right" ? cssWidth - RIGHT_MARGIN_PX - boxWidth : LEFT_MARGIN_PX;');
   });
 
   it('o conector do lado esquerdo fica na borda DIREITA da caixa (espelhado do direito, que fica na borda esquerda) — sempre entre a caixa e o centro do gráfico, nunca cortando pra fora da tela', () => {
-    const s = plugin();
-    const drawSideIdx = s.indexOf('const drawSide = ');
-    const drawSideBlock = s.slice(drawSideIdx, drawSideIdx + 1700);
-    expect(drawSideBlock).toContain('const connectorX = side === "right" ? boxX - 0.5 : boxX + boxWidth + 0.5;');
+    expect(drawSideBody()).toContain('const connectorX = side === "right" ? boxX - 0.5 : boxX + boxWidth + 0.5;');
   });
 
   it('execução real (prova viva de independência): dois rótulos com a MESMA posição Y natural, um em cada lado, NUNCA colidem entre si — cada lado só vê os próprios rótulos ao chamar resolveLabelStackPositions; os DOIS ficam na posição natural exata, nenhum deslocado', () => {
@@ -183,7 +192,12 @@ describe('PriceLabelStackPlugin: geometria real via lightweight-charts, nunca po
   });
 
   it('rótulo resolvido fora do canvas (boxY fora de [0,cssHeight]) nunca desenha — fail-closed, nunca desenha fora do canvas', () => {
-    expect(plugin()).toContain('if (boxY + LABEL_HEIGHT_PX < 0 || boxY > cssHeight) continue;');
+    // boxHeight (não mais a constante única): a etiqueta `live` tem caixa
+    // própria, maior — o teto do canvas passou a ser checado contra a
+    // altura REAL da caixa daquela etiqueta, nunca contra uma altura fixa
+    // que subestimaria a maior delas.
+    expect(plugin()).toContain('if (boxY + boxHeight < 0 || boxY > cssHeight) continue;');
+    expect(plugin()).toContain('const boxHeight = tier === "live" ? LIVE_LABEL_HEIGHT_PX : LABEL_HEIGHT_PX;');
   });
 
   it('nunca usa Math.random nem qualquer dado sintético (Regra de Ouro 1)', () => {
@@ -191,7 +205,8 @@ describe('PriceLabelStackPlugin: geometria real via lightweight-charts, nunca po
   });
 
   it('a resolução de colisão vem da função pura real (price-label-stack.ts) — nunca uma heurística reinventada aqui', () => {
-    expect(plugin()).toContain('import { resolveLabelStackPositions } from "./price-label-stack";');
+    expect(plugin()).toContain('resolveLabelStackPositions,');
+    expect(plugin()).toContain('} from "./price-label-stack";');
     // Achado real do Operador (densidade só do lado direito): a resolução
     // agora roda uma vez por lado (drawSide), cada lado 100% independente
     // — mesma função pura, chamada 2x (nunca uma segunda heurística).
@@ -201,8 +216,23 @@ describe('PriceLabelStackPlugin: geometria real via lightweight-charts, nunca po
   });
 
   it('o gap mínimo real (MIN_GAP_PX) é MAIOR que a altura da caixa (LABEL_HEIGHT_PX) — achado real via harness Playwright: gap igual à altura deixa duas etiquetas ENCOSTADAS (zero sobreposição matemática, mas ilegível/"uma coisa só" visualmente); a folga extra garante uma fresta real e visível', () => {
-    const s = plugin();
-    expect(s).toContain('const MIN_GAP_PX = LABEL_HEIGHT_PX + 4;');
+    // A folga cresceu de +4 para +7 por uma segunda razão real, além da
+    // fresta visível: a etiqueta `live` é fisicamente maior (caixa de 21px
+    // + anel fino de 1px a 1.5px de distância = 24px). O passo da pilha
+    // precisa ser MAIOR que isso, senão o anel do preço vivo encostaria na
+    // caixa vizinha — o mesmo defeito de "uma coisa só" que este gap
+    // existe para eliminar, só que reintroduzido pelo nível novo.
+    expect(plugin()).toContain('const MIN_GAP_PX = LABEL_HEIGHT_PX + 7;');
+    expect(plugin()).toContain('export const LABEL_HEIGHT_PX = 18;');
+    expect(plugin()).toContain('export const LIVE_LABEL_HEIGHT_PX = 21;');
+    // invariante REAL (não só o literal): o passo cobre a maior caixa +
+    // o anel dos dois lados, com fresta sobrando.
+    const LABEL_HEIGHT_PX = 18;
+    const LIVE_LABEL_HEIGHT_PX = 21;
+    const MIN_GAP_PX = LABEL_HEIGHT_PX + 7;
+    const livePhysicalHeight = LIVE_LABEL_HEIGHT_PX + 1.5 * 2; // caixa + anel
+    expect(MIN_GAP_PX).toBeGreaterThan(livePhysicalHeight);
+    expect(MIN_GAP_PX).toBeGreaterThan(LABEL_HEIGHT_PX);
   });
 });
 

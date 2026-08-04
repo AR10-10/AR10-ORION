@@ -2,7 +2,7 @@
 // rótulos de eixo (achado real de captura de tela do Operador: R1/VWAP/
 // NL/último preço empilhados quando os valores reais ficam próximos).
 import { describe, it, expect } from 'vitest';
-import { resolveLabelStackPositions } from '../src/chart/price-label-stack';
+import { resolveLabelStackPositions, resolveLabelTier, selectRelevantLabels, type RelevanceCandidate } from '../src/chart/price-label-stack';
 
 describe('resolveLabelStackPositions: garantia absoluta de "nunca um objeto em cima do outro"', () => {
   it('vazio => vazio', () => {
@@ -90,5 +90,107 @@ describe('resolveLabelStackPositions: garantia absoluta de "nunca um objeto em c
   it('nunca perde nenhuma entrada — length da saída sempre igual à da entrada', () => {
     const entries = Array.from({ length: 7 }, (_, i) => ({ naturalY: i * 3 }));
     expect(resolveLabelStackPositions(entries, 16)).toHaveLength(7);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// selectRelevantLabels — achado real de captura de tela do Operador (iPad,
+// ZECUSDT 1H ao vivo): 11 etiquetas de contexto empilhadas na lateral
+// esquerda, cobrindo o primeiro terço das velas. Execução REAL (não padrão
+// de fonte): o bug mais provável aqui é "a matemática de relevância está
+// sutilmente errada" (podar o nível errado, podar uma leitura viva, ou
+// apagar dois níveis distintos que só por acaso têm o mesmo texto), não
+// "esqueceram de conectar A com B" — convenção mista do CLAUDE.md.
+describe('selectRelevantLabels: hierarquia + teto de densidade, sem nunca apagar dado real', () => {
+  // Mesma forma real que EnhancedChart_110_Percent.tsx empilha em
+  // priceAxisLabels: side ausente = "acionável agora" (direita/primary),
+  // side:"left" = mapa estrutural (context), tier explícito só no preço vivo.
+  type Candidate = RelevanceCandidate;
+  const ctx = (price: number, text: string): Candidate => ({ price, text, side: 'left' });
+  const live = (price: number): Candidate => ({ price, text: String(price), tier: 'live' });
+  const primary = (price: number, text: string): Candidate => ({ price, text });
+
+  it('cenário REAL da captura (11 etiquetas de contexto à esquerda, preço vivo 481.40): sobram exatamente as 5 mais próximas do preço — as mais distantes saem primeiro', () => {
+    const labels = [
+      ctx(484.52, 'ÁSIA H 484.52'),
+      ctx(483.90, '◆ Sessão Baixa + VWAP + Nexus Line'),
+      ctx(481.10, 'ÁSIA L 481.10'),
+      ctx(486.20, '⚡ SWEEP ZONE ↑ (3x)'),
+      ctx(485.60, '◆ FVG Alta + Sweep'),
+      ctx(487.10, '⚡ SWEEP ZONE ↑ (2x)'),
+      ctx(488.40, '◆ FVG Alta + Sweep'),
+      ctx(479.80, '⚡ SWEEP ↓'),
+      ctx(478.90, '◆ Sweep + EQL'),
+      ctx(477.20, '⚡ SWEEP ↓'),
+      ctx(476.10, '◆ EQL + S1'),
+      live(481.40),
+    ];
+    const out = selectRelevantLabels(labels, 481.40, 5);
+    const kept = out.filter((l) => l.side === 'left').map((l) => l.price);
+    expect(kept).toHaveLength(5);
+    // as 5 realmente mais próximas de 481.40, nada além disso
+    expect(new Set(kept)).toEqual(new Set([481.10, 479.80, 483.90, 484.52, 478.90]));
+    // a distante (476.10, ~1.1% abaixo) não sobrevive
+    expect(kept).not.toContain(476.10);
+  });
+
+  it('live e primary NUNCA são podados, por mais denso que o gráfico esteja — só contexto tem teto', () => {
+    const labels = [
+      live(481.40),
+      primary(482.25, 'VWAP ↓ 482.25'),
+      primary(482.51, 'NL ↓ 482.51'),
+      primary(483.23, 'EMA 21 483.23'),
+      primary(479.00, 'ST · BREACHED'),
+      primary(490.00, 'TP1 · 1:2.10'),
+      ...Array.from({ length: 12 }, (_, i) => ctx(500 + i, `CTX ${i}`)),
+    ];
+    const out = selectRelevantLabels(labels, 481.40, 5);
+    expect(out.filter((l) => l.tier === 'live')).toHaveLength(1);
+    expect(out.filter((l) => l.side !== 'left' && !l.tier)).toHaveLength(5);
+    expect(out.filter((l) => l.side === 'left')).toHaveLength(5);
+  });
+
+  it('dois níveis DISTINTOS com o mesmo texto ("⚡ SWEEP ↓" em 2 preços) são dois níveis reais — nunca deduplicados por texto (Regra de Ouro 4: seria apagar um preço)', () => {
+    const labels = [ctx(479.80, '⚡ SWEEP ↓'), ctx(477.20, '⚡ SWEEP ↓'), live(481.40)];
+    const out = selectRelevantLabels(labels, 481.40, 5);
+    expect(out.filter((l) => l.text === '⚡ SWEEP ↓')).toHaveLength(2);
+  });
+
+  it('redundância PURA (mesmo lado + mesmo texto + mesmo preço) sai — é o único caso indistinguível na tela', () => {
+    const labels = [ctx(479.80, '⚡ SWEEP ↓'), ctx(479.80, '⚡ SWEEP ↓'), live(481.40)];
+    const out = selectRelevantLabels(labels, 481.40, 5);
+    expect(out.filter((l) => l.text === '⚡ SWEEP ↓')).toHaveLength(1);
+  });
+
+  it('fail-closed: sem preço de referência (antes do primeiro tick real), nunca inventa distância — mantém as N primeiras na ordem de montagem, determinístico', () => {
+    const labels = Array.from({ length: 9 }, (_, i) => ctx(400 + i, `CTX ${i}`));
+    const out = selectRelevantLabels(labels, null, 5);
+    expect(out.map((l) => l.text)).toEqual(['CTX 0', 'CTX 1', 'CTX 2', 'CTX 3', 'CTX 4']);
+    // e é estável: a mesma entrada devolve exatamente a mesma saída
+    expect(selectRelevantLabels(labels, null, 5).map((l) => l.text)).toEqual(out.map((l) => l.text));
+  });
+
+  it('preço não-finito nunca vira etiqueta (fail-closed), mesmo declarando tier', () => {
+    const labels = [ctx(NaN, 'S1 lixo'), ctx(Infinity, 'R1 lixo'), ctx(481.0, 'S1 real'), live(481.40)];
+    const out = selectRelevantLabels(labels, 481.40, 5);
+    expect(out.map((l) => l.text)).toEqual(['S1 real', '481.4']);
+  });
+
+  it('abaixo do teto, nada é tocado — a lista sai idêntica e na ordem original', () => {
+    const labels = [ctx(479, 'A'), ctx(480, 'B'), live(481.40), primary(482, 'VWAP')];
+    expect(selectRelevantLabels(labels, 481.40, 5)).toEqual(labels);
+  });
+});
+
+describe('resolveLabelTier: o default deriva do lado, para nenhum dos ~20 pontos de push precisar declarar o campo', () => {
+  it('esquerda = mapa estrutural = context; direita (e ausente) = acionável agora = primary', () => {
+    expect(resolveLabelTier('left', undefined)).toBe('context');
+    expect(resolveLabelTier('right', undefined)).toBe('primary');
+    expect(resolveLabelTier(undefined, undefined)).toBe('primary');
+  });
+
+  it('tier explícito sempre vence o default — é assim que o preço vivo vira `live` mesmo estando à direita', () => {
+    expect(resolveLabelTier('right', 'live')).toBe('live');
+    expect(resolveLabelTier('left', 'primary')).toBe('primary');
   });
 });

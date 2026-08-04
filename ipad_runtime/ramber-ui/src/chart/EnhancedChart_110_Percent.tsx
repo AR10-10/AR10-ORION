@@ -2238,6 +2238,15 @@ export function EnhancedChart_110_Percent({
         price: displayPrice,
         text: displayPrice.toFixed(2),
         color: displayPrice >= lastCandle.open ? "#00ffaa" : "#ff0055",
+        // ÚNICA etiqueta do eixo que declara tier explicitamente (todo o
+        // resto deriva do side): é a âncora de leitura do gráfico —
+        // maior, em negrito, com anel fino, nunca podada — e também a
+        // referência de proximidade que decide QUAIS níveis estruturais
+        // valem um chip agora (ver selectRelevantLabels em
+        // price-label-stack.ts). Achado real de captura do Operador: sem
+        // essa âncora, 11 etiquetas de mesmo peso deixavam o gráfico sem
+        // ponto de partida para o olho.
+        tier: "live",
       });
     }
     // Diretriz de Refinamento Visual §5: o Trend Channel volta a ser uma
