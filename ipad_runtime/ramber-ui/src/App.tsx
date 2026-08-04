@@ -4203,6 +4203,26 @@ function MarketAnalysisPainelTab({ analysis }: { analysis: MarketAnalysis }) {
             />
           ))}
         </ModulePanel>
+      ) : analysis.corePlan ? (
+        // Ordem "Correção Definitiva do Market Analysis / Social Card" §5:
+        // MESMA extensão da aba Publicação — o Conselho está neutro, mas o
+        // Núcleo (LEI 24) já tem direção e stop/target reais agora (o
+        // mesmo fallback que o gráfico ao vivo já desenha). Nunca
+        // apresentado como se fosse um plano do Conselho.
+        <ModulePanel title="Plano (Núcleo)">
+          {analysis.planGapLabel && <ModuleStat label="Conselho" value={analysis.planGapLabel} />}
+          <ModuleStat label="Stop" value={fmtPrice(analysis.corePlan.stop)} tone="short" />
+          {[analysis.corePlan.target1, analysis.corePlan.target2, analysis.corePlan.target3]
+            .filter((v): v is number => v !== null)
+            .map((price, i) => (
+              <ModuleStat
+                key={i}
+                label={`Alvo ${i + 1}`}
+                value={`${fmtPrice(price)}${i === 0 && analysis.corePlan!.riskRewardRatio !== null ? ` · R:R 1:${analysis.corePlan!.riskRewardRatio!.toFixed(2)}` : ""}`}
+                tone="long"
+              />
+            ))}
+        </ModulePanel>
       ) : (
         analysis.planGapLabel && (
           <ModulePanel title="Plano">
@@ -4463,6 +4483,22 @@ function MarketAnalysisPanel({ priceData, chartData }: { priceData: PriceState |
         // fluxo que NarrativeSummaryCard já usa (nexus/market-analysis.ts
         // repassa direto pra buildNarrativeSummary) — zero segunda fórmula.
         flow: num(cvd) && cvd !== 0 ? (cvd! > 0 ? "COMPRADOR" : "VENDEDOR") : null,
+        // Ordem "Correção Definitiva" §5: OS MESMOS campos brutos de
+        // `engine` que engineFallbackLevels (abaixo, ChartWidget) já lê
+        // para desenhar o fallback do Núcleo no gráfico ao vivo — cru de
+        // propósito, buildMarketAnalysis valida (finito/direção real)
+        // internamente, mesmo padrão de support/resistance acima. Nunca
+        // uma segunda leitura de campo (mesmos nomes: engine?.target é
+        // target1, engine?.extendedTarget é target3 — achado de nomenclatura
+        // já documentado em engineFallbackLevels).
+        coreFallback: {
+          direction: engine?.direction ?? null,
+          stop: engine?.stop ?? null,
+          target1: engine?.target ?? null,
+          target2: engine?.target2 ?? null,
+          target3: engine?.extendedTarget ?? null,
+          riskRewardRatio: engine?.riskRewardRatio ?? null,
+        },
       }),
     );
     setFrozenCandles(chartData);

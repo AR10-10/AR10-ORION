@@ -26,14 +26,40 @@ import { drawMiniChart, type MiniChartPlan } from "./mini-chart";
 import { publicationTimestampSlug } from "./filenames";
 import { PUBLICATION_FORMAT_SPECS, type PublicationSnapshot } from "./types";
 
+// §5 da Ordem "Correção Definitiva": Conselho sempre vence; o mini-gráfico
+// só cai no plano do Núcleo quando o Conselho não tem nenhum (mesma
+// exclusividade mútua de sempre). Sem os dois: zero linha, só candles —
+// nunca uma faixa fabricada.
 function toMiniChartPlan(analysis: MarketAnalysis, livePrice: number | null): MiniChartPlan {
-  return {
-    entryLow: analysis.plan?.entryLow ?? null,
-    entryHigh: analysis.plan?.entryHigh ?? null,
-    stopPrice: analysis.plan?.invalidationPrice ?? null,
-    targets: analysis.plan?.targets.map((t: MarketAnalysisTarget) => ({ price: t.price, index: t.index, reached: t.reached })) ?? [],
-    livePrice,
-  };
+  if (analysis.plan) {
+    return {
+      entryLow: analysis.plan.entryLow,
+      entryHigh: analysis.plan.entryHigh,
+      stopPrice: analysis.plan.invalidationPrice,
+      targets: analysis.plan.targets.map((t: MarketAnalysisTarget) => ({ price: t.price, index: t.index, reached: t.reached })),
+      livePrice,
+    };
+  }
+  if (analysis.corePlan) {
+    const cp = analysis.corePlan;
+    const targets = [cp.target1, cp.target2, cp.target3]
+      .filter((v): v is number => v !== null)
+      .map((price, i) => ({ price, index: i, reached: false }));
+    return { entryLow: null, entryHigh: null, stopPrice: cp.stop, targets, livePrice };
+  }
+  return { entryLow: null, entryHigh: null, stopPrice: null, targets: [], livePrice };
+}
+
+// §5/§6 da Ordem "Correção Definitiva": alvos reais do Núcleo como a MESMA
+// forma {label, price} usada por targetLineText — TP1/TP2/TP3 na ordem
+// real, nunca reordenados por magnitude.
+function corePlanTargets(cp: NonNullable<MarketAnalysis["corePlan"]>): number[] {
+  return [cp.target1, cp.target2, cp.target3].filter((v): v is number => v !== null);
+}
+
+function coreTargetLineText(price: number, index: number, riskRewardRatio: number | null, livePrice: number | null): string {
+  const rr = index === 0 && riskRewardRatio !== null ? ` · 1:${riskRewardRatio.toFixed(1)}` : "";
+  return `${fmtPrice(price)}${rr}${targetDistanceLabel(price, livePrice)}`;
 }
 
 function biasColor(bias: MarketAnalysis["bias"]): string {
@@ -169,6 +195,26 @@ export function renderAnalysis(ctx: CanvasRenderingContext2D, snapshot: Publicat
       })),
       22,
     );
+  } else if (analysis.corePlan) {
+    // §5 da Ordem "Correção Definitiva": Núcleo tem direção real mas o
+    // Conselho está neutro — mostra o STOP/ALVOS reais que o Núcleo já
+    // calcula (o mesmo fallback do gráfico ao vivo), rotulados "(NÚCLEO)"
+    // pra nunca parecer um plano do Conselho. ENTRY fica de fora (mesmo
+    // motivo do gráfico: seria só o preço vivo, já exibido acima).
+    const cp = analysis.corePlan;
+    if (analysis.planGapLabel) {
+      drawCol(1, "CONSELHO", [{ text: truncateToWidth(ctx, analysis.planGapLabel, `700 22px ${MONO_FONT}`, colW - 24), color: PUB_COLORS.textMuted }], 22);
+    }
+    drawCol(2, "STOP (NÚCLEO)", [{ text: fmtPrice(cp.stop), color: PUB_COLORS.short }]);
+    drawCol(
+      3,
+      "ALVOS (NÚCLEO)",
+      corePlanTargets(cp).map((price, i) => ({
+        text: `TP${i + 1} ${coreTargetLineText(price, i, cp.riskRewardRatio, livePrice)}`,
+        color: PUB_COLORS.long,
+      })),
+      22,
+    );
   } else if (analysis.planGapLabel) {
     drawCol(1, "PLANO", [{ text: truncateToWidth(ctx, analysis.planGapLabel, `700 26px ${MONO_FONT}`, colW * 2 - 24), color: PUB_COLORS.textMuted }]);
   }
@@ -240,16 +286,29 @@ export function renderStory(ctx: CanvasRenderingContext2D, snapshot: Publication
   if (analysis.plan) {
     // 4. Entry
     drawPlanRow("ENTRY", `${fmtPrice(analysis.plan.entryLow)}–${fmtPrice(analysis.plan.entryHigh)}`, PUB_COLORS.cyan);
-    // 5. Targets (+ distância até alvo, §11)
-    analysis.plan.targets.forEach((t) => {
-      drawPlanRow(`ALVO ${t.index + 1}`, targetLineText(t, livePrice, false), PUB_COLORS.long);
-    });
-    // 6. Reteste (§11 — reintroduzido; omitido quando não há cenário real)
+    // 5. Reteste (§6 da Ordem "Correção Definitiva": trajetória real
+    // ENTRY → RETESTE → alvos, STOP sempre por último/separado — mesma
+    // ordem de leitura de um plano operacional real, não uma lista solta).
     if (analysis.retest) {
       drawPlanRow("RETESTE", `${fmtPrice(analysis.retest.low)}–${fmtPrice(analysis.retest.high)}`, PUB_COLORS.neutral);
     }
+    // 6. Targets (+ distância até alvo, §11)
+    analysis.plan.targets.forEach((t) => {
+      drawPlanRow(`ALVO ${t.index + 1}`, targetLineText(t, livePrice, false), PUB_COLORS.long);
+    });
     // 7. Stop / invalidação
     drawPlanRow("STOP / INVALIDAÇÃO", fmtPrice(analysis.plan.invalidationPrice), PUB_COLORS.short);
+  } else if (analysis.corePlan) {
+    // §5: Núcleo tem direção real, Conselho está neutro — mostra o motivo
+    // real (quando existe) + o STOP/ALVOS reais do Núcleo, nunca inventado.
+    const cp = analysis.corePlan;
+    if (analysis.planGapLabel) {
+      drawPlanRow("CONSELHO", analysis.planGapLabel, PUB_COLORS.textMuted);
+    }
+    corePlanTargets(cp).forEach((price, i) => {
+      drawPlanRow(`ALVO ${i + 1} (NÚCLEO)`, coreTargetLineText(price, i, cp.riskRewardRatio, livePrice), PUB_COLORS.long);
+    });
+    drawPlanRow("STOP (NÚCLEO)", fmtPrice(cp.stop), PUB_COLORS.short);
   } else if (analysis.planGapLabel) {
     drawPlanRow("PLANO", analysis.planGapLabel, PUB_COLORS.textMuted);
   }
@@ -311,6 +370,11 @@ export function renderX(ctx: CanvasRenderingContext2D, snapshot: PublicationSnap
 
   if (analysis.plan) {
     drawRow("ENTRY", `${fmtPrice(analysis.plan.entryLow)}–${fmtPrice(analysis.plan.entryHigh)}`, PUB_COLORS.cyan);
+    // §6 da Ordem "Correção Definitiva": trajetória real ENTRY → RETESTE →
+    // alvos, STOP sempre por último/separado.
+    if (analysis.retest) {
+      drawRow("RETESTE", `${fmtPrice(analysis.retest.low)}–${fmtPrice(analysis.retest.high)}`, PUB_COLORS.neutral);
+    }
     // Achado real da 1a verificação visual (Entrega 38): 3 alvos numa única
     // linha ("TP1 · TP2 · TP3") transbordava a coluna e truncava pra "T…" —
     // cada alvo é a SUA PRÓPRIA linha, nunca cortado. Distância até alvo
@@ -318,10 +382,17 @@ export function renderX(ctx: CanvasRenderingContext2D, snapshot: PublicationSnap
     analysis.plan.targets.forEach((t) => {
       drawRow(`ALVO ${t.index + 1}`, targetLineText(t, livePrice, false), PUB_COLORS.long);
     });
-    if (analysis.retest) {
-      drawRow("RETESTE", `${fmtPrice(analysis.retest.low)}–${fmtPrice(analysis.retest.high)}`, PUB_COLORS.neutral);
-    }
     drawRow("STOP / INVALIDAÇÃO", fmtPrice(analysis.plan.invalidationPrice), PUB_COLORS.short);
+  } else if (analysis.corePlan) {
+    // §5: Núcleo tem direção real, Conselho está neutro.
+    const cp = analysis.corePlan;
+    if (analysis.planGapLabel) {
+      drawRow("CONSELHO", analysis.planGapLabel, PUB_COLORS.textMuted);
+    }
+    corePlanTargets(cp).forEach((price, i) => {
+      drawRow(`ALVO ${i + 1} (NÚCLEO)`, coreTargetLineText(price, i, cp.riskRewardRatio, livePrice), PUB_COLORS.long);
+    });
+    drawRow("STOP (NÚCLEO)", fmtPrice(cp.stop), PUB_COLORS.short);
   } else if (analysis.planGapLabel) {
     drawRow("PLANO", analysis.planGapLabel, PUB_COLORS.textMuted);
   }
@@ -396,6 +467,21 @@ export function renderPremium(ctx: CanvasRenderingContext2D, snapshot: Publicati
     fields.push({ label: "STOP", value: fmtPrice(analysis.plan.invalidationPrice), color: PUB_COLORS.short });
     analysis.plan.targets.forEach((t) => {
       fields.push({ label: `ALVO ${t.index + 1}`, value: targetLineText(t, livePrice, false), color: PUB_COLORS.long });
+    });
+  } else if (analysis.corePlan) {
+    // §5 da Ordem "Correção Definitiva": Núcleo tem direção real, Conselho
+    // está neutro — grade continua em ordem mecânica (par/ímpar), STOP
+    // deliberadamente NÃO fica ao lado do último alvo (ver comentário do
+    // reorder em renderStory/renderX — aqui a grade 2 colunas já separa
+    // STOP visualmente pela cor+posição, reordenar quebraria o pareamento
+    // mecânico par/ímpar sem ganho real).
+    const cp = analysis.corePlan;
+    if (analysis.planGapLabel) {
+      fields.push({ label: "CONSELHO", value: analysis.planGapLabel, color: PUB_COLORS.textMuted });
+    }
+    fields.push({ label: "STOP (NÚCLEO)", value: fmtPrice(cp.stop), color: PUB_COLORS.short });
+    corePlanTargets(cp).forEach((price, i) => {
+      fields.push({ label: `ALVO ${i + 1} (NÚCLEO)`, value: coreTargetLineText(price, i, cp.riskRewardRatio, livePrice), color: PUB_COLORS.long });
     });
   } else if (analysis.planGapLabel) {
     fields.push({ label: "PLANO", value: analysis.planGapLabel, color: PUB_COLORS.textMuted });

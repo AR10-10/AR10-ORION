@@ -65,6 +65,24 @@ export interface MarketAnalysisPlan {
   targets: MarketAnalysisTarget[];
 }
 
+// Ordem "Correção Definitiva do Market Analysis / Social Card" §5
+// (achado real do Operador, capturas reais de ZEC 2H: Conselho neutro
+// exibia SÓ "sem plano acionável", mesmo quando o Núcleo — LEI 24, único
+// emissor real de LONG/SHORT/WAIT — já tinha direção e stop/target
+// próprios reais, exatamente o que o gráfico ao vivo já desenha como
+// fallback (engineFallbackLevels, App.tsx) há várias entregas). Nunca
+// substitui plan (Conselho sempre vence — mesma prioridade já usada em
+// toda a fiação do gráfico); ENTRY fica de fora de propósito (é o preço
+// vivo já exibido, mesmo motivo do fallback do gráfico).
+export interface MarketAnalysisCorePlan {
+  direction: "LONG" | "SHORT";
+  stop: number;
+  target1: number;
+  target2: number | null;
+  target3: number | null;
+  riskRewardRatio: number | null;
+}
+
 export interface MarketAnalysis {
   contractVersion: typeof MARKET_ANALYSIS_CONTRACT_VERSION;
   symbol: string;
@@ -85,6 +103,10 @@ export interface MarketAnalysis {
   // NEXUS_PLAN_GAP_LABEL já usado em toda a UI) — nunca um silêncio que o
   // leitor não consegue distinguir de um bug.
   planGapLabel: string | null;
+  // §5 da Ordem "Correção Definitiva": só existe quando plan é null E o
+  // Núcleo tem stop/target1 reais agora — nunca os dois ao mesmo tempo
+  // (mesma regra de exclusividade mútua já documentada no gráfico ao vivo).
+  corePlan: MarketAnalysisCorePlan | null;
   // Evolução Final §11 ("leitura consolidada"): MESMA sentença real do
   // painel "LEITURA CONSOLIDADA" (App.tsx, NarrativeSummaryCard) — reusa
   // buildNarrativeSummary tal e qual, nunca uma segunda redação. `decision`
@@ -114,6 +136,21 @@ export interface MarketAnalysisInput {
   // chamador ainda não repassa, a narrativa simplesmente omite a frase de
   // fluxo (buildNarrativeSummary já trata null como "sem essa frase").
   flow?: "COMPRADOR" | "VENDEDOR" | null;
+  // §5 da Ordem "Correção Definitiva": os MESMOS campos brutos que
+  // App.tsx já lê de `engine` para montar engineFallbackLevels (o fallback
+  // do gráfico ao vivo) — repassados crus de propósito. A validação
+  // (finito, direção real) acontece uma vez só, aqui dentro de
+  // buildMarketAnalysis, igual a support/resistance/livePrice acima; nunca
+  // duplica a leitura de campo, só a validação estrutural (typeof/isFinite
+  // determinístico — não uma segunda fórmula/decisão).
+  coreFallback?: {
+    direction: "LONG" | "SHORT" | "WAIT" | null | undefined;
+    stop: number | null | undefined;
+    target1: number | null | undefined;
+    target2: number | null | undefined;
+    target3: number | null | undefined;
+    riskRewardRatio: number | null | undefined;
+  } | null;
 }
 
 /**
@@ -183,6 +220,31 @@ export function buildMarketAnalysis(input: MarketAnalysisInput): MarketAnalysis 
       }
     : null;
 
+  // §5 da Ordem "Correção Definitiva": plano do Núcleo só entra quando o
+  // Conselho não tem plano — MESMA prioridade Conselho > Núcleo já
+  // estabelecida em todo o resto do sistema (price-lines do gráfico,
+  // priceAxisLabels, autoFitLevelsRef). Guards na MESMA ordem/condição do
+  // engineFallbackLevels real (App.tsx): direção LONG/SHORT + stop/target1
+  // finitos são o mínimo para um plano do Núcleo ser honesto o bastante
+  // pra publicar.
+  const corePlan: MarketAnalysisCorePlan | null = (() => {
+    if (plan) return null;
+    const cf = input.coreFallback;
+    if (!cf) return null;
+    const dir = cf.direction;
+    if (dir !== "LONG" && dir !== "SHORT") return null;
+    if (typeof cf.stop !== "number" || !Number.isFinite(cf.stop)) return null;
+    if (typeof cf.target1 !== "number" || !Number.isFinite(cf.target1)) return null;
+    return {
+      direction: dir,
+      stop: cf.stop,
+      target1: cf.target1,
+      target2: typeof cf.target2 === "number" && Number.isFinite(cf.target2) ? cf.target2 : null,
+      target3: typeof cf.target3 === "number" && Number.isFinite(cf.target3) ? cf.target3 : null,
+      riskRewardRatio: typeof cf.riskRewardRatio === "number" && Number.isFinite(cf.riskRewardRatio) ? cf.riskRewardRatio : null,
+    };
+  })();
+
   return {
     contractVersion: MARKET_ANALYSIS_CONTRACT_VERSION,
     symbol: input.symbol,
@@ -200,6 +262,7 @@ export function buildMarketAnalysis(input: MarketAnalysisInput): MarketAnalysis 
     retest,
     plan,
     planGapLabel: !decision.plan && decision.planGap ? NEXUS_PLAN_GAP_LABEL[decision.planGap] : null,
+    corePlan,
     narrative: buildNarrativeSummary(decision, { regimeLabel: input.regimeLabel, flow: input.flow ?? null }),
   };
 }
@@ -246,6 +309,20 @@ export function formatMarketAnalysisForX(analysis: MarketAnalysis): string {
     analysis.plan.targets.forEach((t) => {
       const rr = t.riskReward !== null ? ` · R:R 1:${t.riskReward.toFixed(2)}` : "";
       lines.push(`Alvo/Cenário ${t.index + 1}: ${fmtPrice(t.price)}${rr}${t.reached ? " · ATINGIDO" : ""}`);
+    });
+  } else if (analysis.corePlan) {
+    // §5 da Ordem "Correção Definitiva": rótulo "(Núcleo)" explícito —
+    // MESMA distinção honesta que o gráfico ao vivo já faz entre plano do
+    // Conselho e fallback do Núcleo, nunca apresentado como se fosse a
+    // mesma coisa.
+    lines.push("");
+    lines.push(`Plano (Núcleo, sem estrutura do Conselho ainda): Stop ${fmtPrice(analysis.corePlan.stop)}`);
+    const coreTargets = [analysis.corePlan.target1, analysis.corePlan.target2, analysis.corePlan.target3].filter(
+      (v): v is number => v !== null,
+    );
+    coreTargets.forEach((price, i) => {
+      const rr = i === 0 && analysis.corePlan!.riskRewardRatio !== null ? ` · R:R 1:${analysis.corePlan!.riskRewardRatio!.toFixed(2)}` : "";
+      lines.push(`Alvo (Núcleo) ${i + 1}: ${fmtPrice(price)}${rr}`);
     });
   } else if (analysis.planGapLabel) {
     lines.push("");

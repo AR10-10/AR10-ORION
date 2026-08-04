@@ -166,6 +166,50 @@ describe('buildMarketAnalysis: Zona de Interesse — só níveis FORTES (mesmo g
   });
 });
 
+describe('buildMarketAnalysis: corePlan — Ordem "Correção Definitiva do Market Analysis / Social Card" §5 (achado real: Conselho neutro escondia o fallback real do Núcleo)', () => {
+  const noCouncilPlan = { plan: null, councilStance: 'NEUTRAL' as const };
+  const realCoreFallback = { direction: 'LONG' as const, stop: 63800, target1: 66800, target2: 68200, target3: 70100, riskRewardRatio: 1.33 };
+
+  it('Conselho sem plano + Núcleo com direção/stop/target1 reais => corePlan real, nunca null quando o dado existe', () => {
+    const decision = buildNexusDecision({ ...BASE_INPUTS, ...noCouncilPlan }, 1_700_000_000_000);
+    const a = buildMarketAnalysis(baseAnalysisInput({ decision, coreFallback: realCoreFallback }))!;
+    expect(a.plan).toBeNull();
+    expect(a.corePlan).toEqual({ direction: 'LONG', stop: 63800, target1: 66800, target2: 68200, target3: 70100, riskRewardRatio: 1.33 });
+  });
+
+  it('Conselho TEM plano real => corePlan sempre null, mesmo com fallback do Núcleo disponível (Conselho sempre vence — mesma prioridade do gráfico ao vivo)', () => {
+    const a = buildMarketAnalysis(baseAnalysisInput({ coreFallback: realCoreFallback }))!;
+    expect(a.plan).not.toBeNull();
+    expect(a.corePlan).toBeNull();
+  });
+
+  it('sem coreFallback repassado (chamador antigo) => corePlan null, nunca undefined tratado como dado', () => {
+    const decision = buildNexusDecision({ ...BASE_INPUTS, ...noCouncilPlan }, 1_700_000_000_000);
+    const a = buildMarketAnalysis(baseAnalysisInput({ decision }))!;
+    expect(a.corePlan).toBeNull();
+  });
+
+  it('Núcleo sem direção real (WAIT) => corePlan null, nunca fabricado a partir de direção ausente', () => {
+    const decision = buildNexusDecision({ ...BASE_INPUTS, ...noCouncilPlan, coreDirection: null }, 1_700_000_000_000);
+    const a = buildMarketAnalysis(baseAnalysisInput({ decision, coreFallback: { ...realCoreFallback, direction: 'WAIT' } }))!;
+    expect(a.corePlan).toBeNull();
+  });
+
+  it('Núcleo sem stop ou sem target1 finito => corePlan null (fail-closed: mínimo real exigido)', () => {
+    const decision = buildNexusDecision({ ...BASE_INPUTS, ...noCouncilPlan }, 1_700_000_000_000);
+    expect(buildMarketAnalysis(baseAnalysisInput({ decision, coreFallback: { ...realCoreFallback, stop: null } }))!.corePlan).toBeNull();
+    expect(buildMarketAnalysis(baseAnalysisInput({ decision, coreFallback: { ...realCoreFallback, target1: NaN } }))!.corePlan).toBeNull();
+  });
+
+  it('target2/target3/riskRewardRatio ausentes => corePlan real só com o que existe, nunca um número inventado para o resto', () => {
+    const decision = buildNexusDecision({ ...BASE_INPUTS, ...noCouncilPlan }, 1_700_000_000_000);
+    const a = buildMarketAnalysis(
+      baseAnalysisInput({ decision, coreFallback: { direction: 'LONG', stop: 63800, target1: 66800, target2: null, target3: undefined, riskRewardRatio: null } }),
+    )!;
+    expect(a.corePlan).toEqual({ direction: 'LONG', stop: 63800, target1: 66800, target2: null, target3: null, riskRewardRatio: null });
+  });
+});
+
 describe('formatMarketAnalysisForX: texto público, zero jargão interno, vocabulário de cenário (§9)', () => {
   it('nunca vaza rótulos internos (LONG_BIAS/CONFIRMANDO/NEXUS_DECISION/etc.)', () => {
     const a = buildMarketAnalysis(baseAnalysisInput())!;
@@ -207,5 +251,20 @@ describe('formatMarketAnalysisForX: texto público, zero jargão interno, vocabu
     const text = formatMarketAnalysisForX(a);
     expect(text).toContain('confluência real, nunca probabilidade');
     expect(text).toContain('não é recomendação de investimento');
+  });
+
+  it('§5 da Ordem "Correção Definitiva": sem plano do Conselho mas com corePlan real, mostra o STOP/alvos do Núcleo rotulados "(Núcleo)" — nunca como se fosse o plano do Conselho', () => {
+    const decision = buildNexusDecision({ ...BASE_INPUTS, plan: null, councilStance: 'NEUTRAL' }, 1_700_000_000_000);
+    const a = buildMarketAnalysis(
+      baseAnalysisInput({
+        decision,
+        coreFallback: { direction: 'LONG', stop: 63800, target1: 66800, target2: 68200, target3: null, riskRewardRatio: 1.33 },
+      }),
+    )!;
+    const text = formatMarketAnalysisForX(a);
+    expect(text).toContain('Plano (Núcleo, sem estrutura do Conselho ainda): Stop 63800');
+    expect(text).toContain('Alvo (Núcleo) 1: 66800 · R:R 1:1.33');
+    expect(text).toContain('Alvo (Núcleo) 2: 68200');
+    expect(text).not.toContain('Entry:');
   });
 });

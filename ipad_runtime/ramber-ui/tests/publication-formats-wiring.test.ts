@@ -37,10 +37,14 @@ describe('formats.ts: as 4 render* funções são PURA composição — zero seg
   });
 
   it('cada formato lê analysis.plan/bias/confluence/risk direto do snapshot — nunca uma variável local recalculando entry/stop/target', () => {
-    // toMiniChartPlan é o ÚNICO adaptador (mapeia analysis.plan -> formato
-    // esperado pelo mini-gráfico) — nunca uma segunda fórmula de preço.
-    expect(src).toContain('entryLow: analysis.plan?.entryLow ?? null,');
-    expect(src).toContain('stopPrice: analysis.plan?.invalidationPrice ?? null,');
+    // toMiniChartPlan é o ÚNICO adaptador (mapeia analysis.plan/corePlan ->
+    // formato esperado pelo mini-gráfico) — nunca uma segunda fórmula de
+    // preço. Correção Definitiva §5: dentro do guard `if (analysis.plan)`
+    // já narrowed, então lê `analysis.plan.entryLow` direto (sem `?.`), e o
+    // fallback do Núcleo (`analysis.corePlan`) usa a MESMA leitura direta.
+    expect(src).toContain('entryLow: analysis.plan.entryLow,');
+    expect(src).toContain('stopPrice: analysis.plan.invalidationPrice,');
+    expect(src).toContain('stopPrice: cp.stop, targets, livePrice');
     expect(src).not.toMatch(/entryLow\s*=\s*analysis\.plan\.entryLow\s*[+\-*/]/);
     expect(src).not.toMatch(/invalidationPrice\s*[+\-*/]/);
   });

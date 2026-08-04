@@ -70,37 +70,43 @@ describe('Montagem: MarketAnalysisPanel ao lado dos outros 3 painéis, mesmo ní
   });
 });
 
+// Fatia pelo PRÓXIMO limite de função (nunca um número mágico de
+// caracteres) — MarketAnalysisPanel já cresceu 3x nesta sessão (narrativa,
+// flow, coreFallback) e cada vez quebrava um offset fixo. MarketAnalysisPanel
+// é definida DEPOIS das duas abas (PainelTab/PublicationTab) no arquivo —
+// NarrativeSummaryCard é a próxima função real após ela. Fatiar até lá é
+// auto-ajustável: sobrevive a qualquer crescimento real do corpo de
+// MarketAnalysisPanel sem precisar de manutenção manual.
+function sliceMarketAnalysisPanel(a: string): string {
+  const start = a.indexOf('function MarketAnalysisPanel(');
+  expect(start, 'function MarketAnalysisPanel não encontrada').toBeGreaterThan(-1);
+  const end = a.indexOf('function NarrativeSummaryCard(', start);
+  expect(end, 'function NarrativeSummaryCard não encontrada após MarketAnalysisPanel').toBeGreaterThan(start);
+  return a.slice(start, end);
+}
+
 describe('Snapshot congelado (§12 sincronia): o painel só recomputa quando ABRE, nunca enquanto está aberto', () => {
   it('useEffect com dependência ÚNICA marketAnalysisOpen — nenhum outro identificador reativo nas deps', () => {
-    const a = app();
-    const idx = a.indexOf('function MarketAnalysisPanel(');
-    expect(idx).toBeGreaterThan(-1);
-    const block = a.slice(idx, idx + 2700);
+    const block = sliceMarketAnalysisPanel(app());
     expect(block).toContain('useEffect(() => {\n    if (!marketAnalysisOpen) return;');
     expect(block).toContain('}, [marketAnalysisOpen]);');
   });
 
   it('a fotografia vem de buildMarketAnalysis (o único montador real, mesmo de market-analysis.test.ts) — nunca uma segunda leitura ad hoc de nexusDecision', () => {
-    const a = app();
-    const idx = a.indexOf('function MarketAnalysisPanel(');
-    const block = a.slice(idx, idx + 2700);
+    const block = sliceMarketAnalysisPanel(app());
     expect(block).toContain('setAnalysis(\n      buildMarketAnalysis({');
     expect(block).toContain('decision: nexusDecision ?? null,');
   });
 
   it('regimeLabel usa a MESMA expressão literal de NarrativeSummaryCard (REGIME_DISPLAY + regime.direction) — zero segunda derivação do rótulo de regime', () => {
-    const a = app();
-    const idx = a.indexOf('function MarketAnalysisPanel(');
-    const block = a.slice(idx, idx + 2700);
+    const block = sliceMarketAnalysisPanel(app());
     expect(block).toContain('const regime = engine?.marketRegime ?? null;');
     expect(block).toContain('const regimeDisplay = regime ? REGIME_DISPLAY[regime.regime] : null;');
     expect(block).toContain('regimeLabel: regimeDisplay ? `${regimeDisplay.label}${regime!.direction ? ` ${regime!.direction}` : ""}` : null,');
   });
 
   it('estrutura/support/resistance vêm dos MESMOS campos reais já usados pelo gráfico (engine.marketStructureLabel/support/resistance/*Strength) — zero segundo cálculo', () => {
-    const a = app();
-    const idx = a.indexOf('function MarketAnalysisPanel(');
-    const block = a.slice(idx, idx + 2700);
+    const block = sliceMarketAnalysisPanel(app());
     expect(block).toContain('structureLabel: engine?.marketStructureLabel ?? null,');
     expect(block).toContain('support: engine?.support ?? null,');
     expect(block).toContain('supportStrength: engine?.supportStrength ?? null,');
@@ -109,9 +115,7 @@ describe('Snapshot congelado (§12 sincronia): o painel só recomputa quando ABR
   });
 
   it('Ordem "AR10 Publication Studio" §1: candles/preço vivo congelados no MESMO effect/gatilho que analysis — nunca um segundo freeze só pro clique de Gerar Publicação', () => {
-    const a = app();
-    const idx = a.indexOf('function MarketAnalysisPanel(');
-    const block = a.slice(idx, idx + 2700);
+    const block = sliceMarketAnalysisPanel(app());
     expect(block).toContain('const livePriceNow = typeof priceData?.price === "number" ? priceData.price : null;');
     expect(block).toContain('setFrozenCandles(chartData);');
     expect(block).toContain('setFrozenLivePrice(livePriceNow);');
@@ -122,13 +126,21 @@ describe('Snapshot congelado (§12 sincronia): o painel só recomputa quando ABR
     expect(block.indexOf('setFrozenCandles(chartData);')).toBeGreaterThan(effectStart);
     expect(block.indexOf('setFrozenCandles(chartData);')).toBeLessThan(effectEnd);
   });
+
+  it('Ordem "Correção Definitiva" §5: coreFallback repassa os MESMOS campos brutos de engine que engineFallbackLevels já lê — nunca uma segunda leitura de campo', () => {
+    const block = sliceMarketAnalysisPanel(app());
+    expect(block).toContain('direction: engine?.direction ?? null,');
+    expect(block).toContain('stop: engine?.stop ?? null,');
+    expect(block).toContain('target1: engine?.target ?? null,');
+    expect(block).toContain('target2: engine?.target2 ?? null,');
+    expect(block).toContain('target3: engine?.extendedTarget ?? null,');
+    expect(block).toContain('riskRewardRatio: engine?.riskRewardRatio ?? null,');
+  });
 });
 
 describe('Fail-closed real (§6): sem leitura, o painel mostra DADOS INSUFICIENTES — nunca uma leitura parcial', () => {
   it('branch !analysis renderiza o texto explícito, nunca um placeholder genérico', () => {
-    const a = app();
-    const idx = a.indexOf('function MarketAnalysisPanel(');
-    const block = a.slice(idx, idx + 3900);
+    const block = sliceMarketAnalysisPanel(app());
     expect(block).toContain('{!analysis ? (');
     expect(block).toContain('DADOS INSUFICIENTES');
   });
@@ -149,9 +161,7 @@ describe('Nunca publica sozinha: zero chamada de rede em todo o bloco Publicaç�
   });
 
   it('disclaimer real e visível: geração é sob demanda do Operador, cópia/captura é sempre ação manual', () => {
-    const a = app();
-    const idx = a.indexOf('function MarketAnalysisPanel(');
-    const block = a.slice(idx, idx + 4600);
+    const block = sliceMarketAnalysisPanel(app());
     expect(block).toContain('Gerado sob demanda pelo Operador — esta tela nunca publica sozinha; copiar/capturar é sempre uma ação sua.');
   });
 });

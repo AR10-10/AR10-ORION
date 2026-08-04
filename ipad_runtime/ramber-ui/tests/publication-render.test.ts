@@ -53,6 +53,7 @@ const BASE_ANALYSIS: MarketAnalysis = {
     ],
   },
   planGapLabel: null,
+  corePlan: null,
   narrative: 'Mercado com viés de alta. Estrutura real mapeada; entrada ainda aguarda confirmação de timing.',
 };
 
