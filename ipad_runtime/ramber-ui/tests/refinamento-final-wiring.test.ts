@@ -749,6 +749,24 @@ describe('Achado real do Operador ("linha amarela que eu não sei o que signific
     expect(block).toContain('if (alpha <= 0) continue;');
   });
 
+  it('Liquidity Sweep: rótulo solto suprimido quando o MESMO cluster.avgPrice já é membro LIQUIDITY_SWEEP de uma Zona Institucional visível — achado real de captura ("+2 FONTES Sweep + R1" ao lado de "⚡ SWEEP ↑" solto, mesmo evento 2x)', () => {
+    const c = chart();
+    const idx = c.indexOf('if (visibility.liquidity_sweep) {', c.indexOf('const priceAxisLabels = useMemo'));
+    const block = c.slice(idx, c.indexOf('// Pedido do Operador ("Key Levels")', idx));
+    // Gated por visibility.institutional_zones: nunca suprime a ÚLTIMA
+    // cópia visível de um evento real (Regra de Ouro 4) — se a camada de
+    // zonas estiver desligada, o sweep solto continua sendo a única
+    // representação e não pode ser descartado.
+    expect(block).toContain('const alreadyShownInInstitutionalZone =\n            visibility.institutional_zones &&\n            institutionalZones.some((zone) => zone.members.some((m) => m.sourceKind === "LIQUIDITY_SWEEP" && m.price === cluster.avgPrice));');
+    expect(block).toContain('if (alreadyShownInInstitutionalZone) continue;');
+    // A checagem roda ANTES de empurrar pra sweepLabelCandidates — nunca
+    // depois (senão o rótulo duplicado já teria entrado na lista).
+    const suppressIdx = block.indexOf('alreadyShownInInstitutionalZone) continue;');
+    const pushIdx = block.indexOf('sweepLabelCandidates.push({');
+    expect(suppressIdx).toBeGreaterThan(-1);
+    expect(pushIdx).toBeGreaterThan(suppressIdx);
+  });
+
   it('Session Key Levels: currentSessionKeyLevel (useMemo puro, sempre a última ocorrência real) alimenta 2 entradas no eixo (High/Low), side:"left"', () => {
     const c = chart();
     expect(c).toContain('import { computeSessionKeyLevels } from "../nexus/market-session";');
@@ -768,6 +786,25 @@ describe('Achado real do Operador ("linha amarela que eu não sei o que signific
     expect(pushBlock).toContain('price: currentSessionKeyLevel.high,');
     expect(pushBlock).toContain('price: currentSessionKeyLevel.low,');
     expect((pushBlock.match(/side: "left",/g) ?? []).length).toBe(2);
+  });
+
+  it('Session Key Levels: rótulo H/L solto suprimido quando o MESMO preço já é membro SESSION_KEY_LEVEL de uma Zona Institucional visível — mesma classe de achado do bloco de Sweep (etiquetas amontoadas)', () => {
+    const c = chart();
+    const pushIdx = c.indexOf('if (visibility.session_key_levels && currentSessionKeyLevel) {');
+    const pushBlock = c.slice(pushIdx, c.indexOf('// Diretriz Final — Polimento Visual', pushIdx));
+    expect(pushBlock).toContain('const highAlreadyShownInInstitutionalZone =\n        visibility.institutional_zones &&\n        institutionalZones.some((zone) => zone.members.some((m) => m.sourceKind === "SESSION_KEY_LEVEL" && m.price === currentSessionKeyLevel.high));');
+    expect(pushBlock).toContain('const lowAlreadyShownInInstitutionalZone =\n        visibility.institutional_zones &&\n        institutionalZones.some((zone) => zone.members.some((m) => m.sourceKind === "SESSION_KEY_LEVEL" && m.price === currentSessionKeyLevel.low));');
+    expect(pushBlock).toContain('if (!highAlreadyShownInInstitutionalZone) {');
+    expect(pushBlock).toContain('if (!lowAlreadyShownInInstitutionalZone) {');
+    // Cada push continua condicionado ao seu PRÓPRIO gate (H nunca some
+    // por causa do gate do L, e vice-versa — são preços independentes).
+    const highGateIdx = pushBlock.indexOf('if (!highAlreadyShownInInstitutionalZone) {');
+    const highPushIdx = pushBlock.indexOf('price: currentSessionKeyLevel.high,');
+    const lowGateIdx = pushBlock.indexOf('if (!lowAlreadyShownInInstitutionalZone) {');
+    const lowPushIdx = pushBlock.indexOf('price: currentSessionKeyLevel.low,');
+    expect(highPushIdx).toBeGreaterThan(highGateIdx);
+    expect(lowPushIdx).toBeGreaterThan(lowGateIdx);
+    expect(lowGateIdx).toBeGreaterThan(highPushIdx); // blocos não se entrelaçam
   });
 
   it('SessionKeyLevelsPlugin.tsx: NUNCA mais desenha texto flutuante no canvas (zero ctx.fillText) — só a linha real; regressão travada por teste, não só por revisão manual', () => {

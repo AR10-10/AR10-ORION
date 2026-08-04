@@ -2736,6 +2736,22 @@ export function EnhancedChart_110_Percent({
           const age = data.length - 1 - cluster.latestIndex;
           const alpha = ageAlpha(age, SWEEP_DECAY);
           if (alpha <= 0) continue; // expirado (>200 candles) — mesma honestidade de "esquecido" de BOS/CHOCH.
+          // Achado real (captura de tela do Operador: "+2 FONTES Sweep + R1"
+          // empilhado ao lado de um "⚡ SWEEP ↑" solto — "etiquetas
+          // amontoadas"): institutionalZoneSweeps (useMemo acima) alimenta
+          // computeInstitutionalZones com o MESMO cluster.avgPrice deste
+          // laço. Quando esse preço exato já formou uma Zona Institucional
+          // REAL (>=2 fontes distintas concordando, visível agora), o
+          // mesmo evento já aparece lá — com MAIS contexto ("N FONTES" +
+          // lista de ferramentas, "Sweep" incluso). Manter também o rótulo
+          // solto duplicaria a mesma informação em 2 caixas. Gated por
+          // visibility.institutional_zones: se a camada de zonas estiver
+          // desligada, a zona não é a única representação visível do
+          // evento — nunca suprime a última cópia visível (Regra de Ouro 4).
+          const alreadyShownInInstitutionalZone =
+            visibility.institutional_zones &&
+            institutionalZones.some((zone) => zone.members.some((m) => m.sourceKind === "LIQUIDITY_SWEEP" && m.price === cluster.avgPrice));
+          if (alreadyShownInInstitutionalZone) continue;
           sweepLabelCandidates.push({
             latestIndex: cluster.latestIndex,
             label: {
@@ -2780,20 +2796,39 @@ export function EnhancedChart_110_Percent({
       // sem nenhuma ambiguidade, porque os dois segmentos vivem na MESMA
       // caixa (o operador nunca vê um "H" órfão).
       const labelPrefix = currentSessionKeyLevel.label.toUpperCase();
-      out.push({
-        price: currentSessionKeyLevel.high,
-        text: `H ${currentSessionKeyLevel.high.toFixed(2)}`,
-        secondaryText: labelPrefix,
-        color: "rgba(255, 0, 85, 0.55)",
-        side: "left",
-      });
-      out.push({
-        price: currentSessionKeyLevel.low,
-        text: `L ${currentSessionKeyLevel.low.toFixed(2)}`,
-        secondaryText: labelPrefix,
-        color: "rgba(0, 255, 170, 0.55)",
-        side: "left",
-      });
+      // Mesma classe de achado/correção do bloco de Sweep acima
+      // ("etiquetas amontoadas" — captura real do Operador): Sessão Alta/
+      // Baixa TAMBÉM alimenta institutionalZoneInput.sessionKeyLevel
+      // (freshestSessionKeyLevel, MESMO computeSessionKeyLevels(data) —
+      // valores bit-idênticos aos de currentSessionKeyLevel). Suprime o
+      // rótulo solto só quando o MESMO preço já é membro SESSION_KEY_LEVEL
+      // de uma Zona Institucional visível agora — gated por
+      // visibility.institutional_zones, nunca suprime a última cópia
+      // visível de um nível real (Regra de Ouro 4).
+      const highAlreadyShownInInstitutionalZone =
+        visibility.institutional_zones &&
+        institutionalZones.some((zone) => zone.members.some((m) => m.sourceKind === "SESSION_KEY_LEVEL" && m.price === currentSessionKeyLevel.high));
+      const lowAlreadyShownInInstitutionalZone =
+        visibility.institutional_zones &&
+        institutionalZones.some((zone) => zone.members.some((m) => m.sourceKind === "SESSION_KEY_LEVEL" && m.price === currentSessionKeyLevel.low));
+      if (!highAlreadyShownInInstitutionalZone) {
+        out.push({
+          price: currentSessionKeyLevel.high,
+          text: `H ${currentSessionKeyLevel.high.toFixed(2)}`,
+          secondaryText: labelPrefix,
+          color: "rgba(255, 0, 85, 0.55)",
+          side: "left",
+        });
+      }
+      if (!lowAlreadyShownInInstitutionalZone) {
+        out.push({
+          price: currentSessionKeyLevel.low,
+          text: `L ${currentSessionKeyLevel.low.toFixed(2)}`,
+          secondaryText: labelPrefix,
+          color: "rgba(0, 255, 170, 0.55)",
+          side: "left",
+        });
+      }
     }
     // Diretriz Final — Polimento Visual e Sincronização Global §1/§2
     // (achado real via captura de tela do Operador): o rótulo de texto da
