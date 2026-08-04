@@ -158,7 +158,11 @@ export function deriveEntryState(decision: NexusDecision): NexusEntryState {
   return "NO_ENTRY";
 }
 
-const ENTRY_CLAUSE: Record<NexusEntryState, string> = {
+// Exportado (Ordem "Market Analysis & Publication Engine" §4): a
+// Análise de Mercado reusa literalmente a cláusula WAITING_FOR_RETEST
+// como condição do campo RETESTE — mesmo texto, zero segunda redação do
+// mesmo conceito.
+export const ENTRY_CLAUSE: Record<NexusEntryState, string> = {
   ENTRY_CONFIRMED: "confirmação estrutural — timing agora",
   WAITING_FOR_RETEST: "aguardando o preço retornar ao nível real mapeado",
   WAITING_FOR_CONFIRMATION: "estrutura ainda insuficiente — timing ausente",

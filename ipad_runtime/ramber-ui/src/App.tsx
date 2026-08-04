@@ -203,6 +203,14 @@ import {
   obstacleSuffix,
   type NexusOutcomeLabel,
 } from "./nexus/operational-readability";
+// Ordem "Market Analysis & Publication Engine": camada de apresentação/
+// publicação PURA sobre o NexusDecision já real (zero cérebro novo, LEI 24
+// intacta) — ver cabeçalho de nexus/market-analysis.ts para o racional
+// completo. buildMarketAnalysis monta a mesma fotografia consumida pelas
+// 3 vistas (Painel/X/Story); formatMarketAnalysisForX e PUBLIC_BIAS_LABEL
+// são a ÚNICA tradução pública (vocabulário §9), reusada tal e qual em
+// qualquer superfície publicável — nunca uma segunda redação por vista.
+import { buildMarketAnalysis, formatMarketAnalysisForX, PUBLIC_BIAS_LABEL, type MarketAnalysis } from "./nexus/market-analysis";
 // Fecho da pendência "R:R mínimo": piso DECLARADO 1:2 (ver rr-quality.ts),
 // display-only — anota, nunca esconde/bloqueia um plano real (LEI 24).
 import { rrFloorSuffix } from "./nexus/rr-quality";
@@ -321,6 +329,9 @@ import {
   MicOff,
   Layers,
   Radar as RadarIcon,
+  Share2,
+  Copy,
+  Check,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -686,6 +697,11 @@ export default function App() {
   // painel, nunca o próprio scan em segundo plano (que roda independente
   // do painel estar aberto, mesmo espírito do Workspace Manager).
   const [radarPanelOpen, setRadarPanelOpen] = useState(false);
+  // Ordem "Market Analysis & Publication Engine" §2: mesmo padrão exato dos
+  // 3 painéis acima (toggle simples, botão dedicado na SideBar, painel
+  // fixed/centered) — a única novidade é o conteúdo (camada de publicação),
+  // nunca um mecanismo de painel diferente.
+  const [marketAnalysisOpen, setMarketAnalysisOpen] = useState(false);
   const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7 (resposta do Operador à pergunta
   // de escopo: os 20 toggles manuais continuam existindo como OVERRIDE
@@ -3094,6 +3110,8 @@ export default function App() {
       setChartLayersOpen,
       radarPanelOpen,
       setRadarPanelOpen,
+      marketAnalysisOpen,
+      setMarketAnalysisOpen,
       chartLayerVisibility,
       toggleChartLayer,
       applyChartLayerPreset,
@@ -3166,6 +3184,7 @@ export default function App() {
       workspaceManagerOpen,
       chartLayersOpen,
       radarPanelOpen,
+      marketAnalysisOpen,
       chartLayerVisibility,
       chartLayerAutoMode,
       emaPeriod,
@@ -3496,6 +3515,7 @@ export default function App() {
         <WorkspaceManagerPanel />
         <ChartLayersPanel />
         <RadarPanel />
+        <MarketAnalysisPanel priceData={priceData} />
       </div>
     </WidgetContext.Provider>
   );
@@ -4104,6 +4124,322 @@ function RadarPanel() {
                 </button>
               );
             })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Ordem "Market Analysis & Publication Engine": preço formatado com a MESMA
+// regra já repetida em outros pontos do painel (StructureLevelsStrip etc.)
+// — convenção de exibição da UI, deliberadamente separada do fmtPrice
+// privado de nexus/market-analysis.ts (que formata para o TEXTO de X, um
+// alvo de renderização diferente).
+function fmtPrice(v: number): string {
+  return v.toFixed(v >= 1000 ? 0 : 2);
+}
+
+function MarketAnalysisPainelTab({ analysis }: { analysis: MarketAnalysis }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <ModulePanel title="Leitura">
+        <ModuleStat
+          label="Viés"
+          value={analysis.bias}
+          tone={analysis.bias === "LONG_BIAS" ? "long" : analysis.bias === "SHORT_BIAS" ? "short" : "neutral"}
+        />
+        {analysis.regimeLabel && <ModuleStat label="Regime" value={analysis.regimeLabel} />}
+        {analysis.structureLabel && <ModuleStat label="Estrutura" value={analysis.structureLabel} />}
+        <ModuleStat label="Confluência" value={analysis.confluence} />
+        <ModuleStat
+          label="Decisão"
+          value={analysis.outcome}
+          tone={analysis.outcome === "LONG" ? "long" : analysis.outcome === "SHORT" ? "short" : "neutral"}
+        />
+        {analysis.risk && (
+          <ModuleStat
+            label="Risco"
+            value={`${analysis.risk.state} — ${analysis.risk.basis}`}
+            tone={analysis.risk.state === "ACEITÁVEL" ? "long" : "short"}
+          />
+        )}
+        {analysis.confidenceLabel && <ModuleStat label="Confiança" value={analysis.confidenceLabel} />}
+        {analysis.score !== null && <ModuleStat label="Score" value={`${analysis.score}`} />}
+      </ModulePanel>
+
+      {analysis.zoneOfInterest && (
+        <ModulePanel title="Zona de Interesse">
+          <ModuleStat
+            label={analysis.zoneOfInterest.label}
+            value={`${fmtPrice(analysis.zoneOfInterest.price)} · ${analysis.zoneOfInterest.touches}x`}
+          />
+        </ModulePanel>
+      )}
+
+      {analysis.plan ? (
+        <ModulePanel title="Plano">
+          <ModuleStat label="Entry" value={`${fmtPrice(analysis.plan.entryLow)}–${fmtPrice(analysis.plan.entryHigh)}`} />
+          <ModuleStat label="Stop" value={fmtPrice(analysis.plan.invalidationPrice)} tone="short" />
+          {analysis.plan.targets.map((t) => (
+            <ModuleStat
+              key={t.index}
+              label={`Alvo ${t.index + 1}`}
+              value={`${fmtPrice(t.price)}${t.riskReward !== null ? ` · R:R 1:${t.riskReward.toFixed(2)}` : ""}${t.reached ? " · ATINGIDO" : ""}`}
+              tone="long"
+            />
+          ))}
+        </ModulePanel>
+      ) : (
+        analysis.planGapLabel && (
+          <ModulePanel title="Plano">
+            <ModuleStat label="Status" value={analysis.planGapLabel} />
+          </ModulePanel>
+        )
+      )}
+
+      {analysis.retest && (
+        <ModulePanel title="Reteste">
+          <ModuleStat label="Zona" value={`${fmtPrice(analysis.retest.low)}–${fmtPrice(analysis.retest.high)}`} />
+          <span className="text-[0.42rem] text-[#8ab4f8]/50">
+            {analysis.retest.condition} ({analysis.retest.context})
+          </span>
+        </ModulePanel>
+      )}
+    </div>
+  );
+}
+
+function MarketAnalysisXTab({
+  analysis,
+  copyState,
+  onCopy,
+}: {
+  analysis: MarketAnalysis;
+  copyState: "idle" | "copied" | "failed";
+  onCopy: () => void;
+}) {
+  const text = formatMarketAnalysisForX(analysis);
+  return (
+    <div className="flex flex-col gap-2">
+      <pre className="whitespace-pre-wrap break-words text-[0.5rem] leading-relaxed text-[#a0f0ff] bg-[#010205] border border-[#00f0ff15] rounded p-2 font-mono">
+        {text}
+      </pre>
+      <button
+        type="button"
+        onClick={onCopy}
+        className="self-end flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#00f0ff40] bg-[#00f0ff1a] text-[#00f0ff] text-[0.5rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:bg-[#00f0ff2a]"
+      >
+        {copyState === "copied" ? <Check size={12} /> : <Copy size={12} />}
+        {copyState === "copied" ? "Copiado" : copyState === "failed" ? "Falhou — copie manualmente" : "Copiar texto"}
+      </button>
+    </div>
+  );
+}
+
+// Vista Story (§8/§13): vocabulário SEMPRE via PUBLIC_BIAS_LABEL (a mesma
+// tradução pública que formatMarketAnalysisForX usa para X) — zero segunda
+// redação do vocabulário. Ordem de campos §8: Ativo/timeframe → leitura
+// principal → estrutura → Entry → Stop → Alvos → Reteste → Invalidação →
+// marca. Linguagem visual DELIBERADAMENTE mais limpa que o Painel interno
+// (poucos números grandes, sem grade densa de linhas) — nunca um
+// screenshot técnico congestionado (§13). Sem exportação de PNG (decisão
+// documentada: §17 pede a capacidade de GERAR primeiro); o Operador
+// screenshota esta prévia manualmente.
+function MarketAnalysisStoryTab({ analysis }: { analysis: MarketAnalysis }) {
+  const biasColor = analysis.bias === "LONG_BIAS" ? "#00ffaa" : analysis.bias === "SHORT_BIAS" ? "#ff0055" : "#f0d06f";
+  const biasArrow = analysis.bias === "LONG_BIAS" ? "▲" : analysis.bias === "SHORT_BIAS" ? "▼" : "◆";
+  const contextLine = [analysis.structureLabel, analysis.regimeLabel].filter(Boolean).join(" · ");
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <span className="text-[0.4rem] text-[#8ab4f8]/40 uppercase tracking-[0.15em] text-center">
+        Prévia 9:16 — capture a tela (screenshot) para publicar no Instagram Stories
+      </span>
+      <div
+        className="w-full max-w-[260px] aspect-[9/16] rounded-lg overflow-hidden flex flex-col justify-between p-4 shrink-0"
+        style={{ background: "linear-gradient(160deg, #010308 0%, #050b16 100%)", border: "1px solid #00f0ff20" }}
+      >
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[0.55rem] font-black tracking-[0.1em] text-white">{analysis.symbol}</span>
+          <span className="text-[0.4rem] text-[#8ab4f8]/60 uppercase tracking-[0.15em]">{analysis.timeframe.toUpperCase()}</span>
+        </div>
+
+        <div className="flex flex-col items-center gap-1 text-center">
+          <span className="text-[1.1rem] font-black tracking-[0.05em]" style={{ color: biasColor }}>
+            {biasArrow} {PUBLIC_BIAS_LABEL[analysis.bias]}
+          </span>
+          {contextLine && (
+            <span className="text-[0.42rem] text-[#8ab4f8]/60 uppercase tracking-[0.1em]">{contextLine}</span>
+          )}
+        </div>
+
+        {analysis.plan ? (
+          <div className="flex flex-col gap-1 text-[0.42rem] text-[#a0f0ff]">
+            <div className="flex justify-between">
+              <span className="text-[#8ab4f8]/50 uppercase">Entry</span>
+              <span className="font-mono font-bold">
+                {fmtPrice(analysis.plan.entryLow)}–{fmtPrice(analysis.plan.entryHigh)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#8ab4f8]/50 uppercase">Stop</span>
+              <span className="font-mono font-bold text-[#ff0055]">{fmtPrice(analysis.plan.invalidationPrice)}</span>
+            </div>
+            {analysis.plan.targets.map((t) => (
+              <div key={t.index} className="flex justify-between">
+                <span className="text-[#8ab4f8]/50 uppercase">Alvo/Cenário {t.index + 1}</span>
+                <span className="font-mono font-bold text-[#00ffaa]">{fmtPrice(t.price)}</span>
+              </div>
+            ))}
+            {analysis.retest && (
+              <div className="flex justify-between">
+                <span className="text-[#8ab4f8]/50 uppercase">Cenário de reteste</span>
+                <span className="font-mono font-bold">
+                  {fmtPrice(analysis.retest.low)}–{fmtPrice(analysis.retest.high)}
+                </span>
+              </div>
+            )}
+            <span className="text-[0.38rem] text-[#f0d06f]/80 mt-1">
+              Invalidação do cenário: {fmtPrice(analysis.plan.invalidationPrice)}
+            </span>
+          </div>
+        ) : (
+          analysis.planGapLabel && (
+            <span className="text-[0.42rem] text-[#8ab4f8]/60 text-center">{analysis.planGapLabel}</span>
+          )
+        )}
+
+        <div className="flex flex-col items-center gap-0.5 pt-1 border-t border-[#00f0ff15]">
+          <span className="text-[0.4rem] font-black tracking-[0.2em] text-[#00f0ff]">AR10 CYBORG</span>
+          <span className="text-[0.32rem] text-[#8ab4f8]/40 text-center leading-tight">
+            Leitura de confluência real, não é recomendação de investimento.
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Ordem "Market Analysis & Publication Engine": camada de apresentação/
+// publicação sobre o NexusDecision já real — mesmo shell modal do
+// RadarPanel acima (fixed inset-0 + cyber-panel centralizado). §12
+// sincronia: o snapshot congela no INSTANTE em que o painel abre (useEffect
+// com dependência única `marketAnalysisOpen`) — Painel/X/Story sempre leem
+// a MESMA fotografia durante toda a sessão de publicação, mesmo que
+// preço/decisão reais sigam mudando por trás enquanto o painel está aberto
+// (o Operador pode demorar para escolher o texto/print certo; a leitura
+// não pode mudar debaixo dele no meio disso). Fail-closed (§6):
+// buildMarketAnalysis já devolve null sem leitura real do Core Engine —
+// este componente só traduz esse null em "DADOS INSUFICIENTES" visível,
+// nunca uma leitura parcial fabricada. priceData chega por PROP (nunca via
+// Context) — mesmo padrão fixado pela Ordem "Unificação da Inteligência
+// Operacional" (commit f74c533): o preço ao vivo tem exatamente 1 caminho
+// de distribuição real (o state raiz de App()), nunca um espelho.
+function MarketAnalysisPanel({ priceData }: { priceData: PriceState | null }) {
+  const { marketAnalysisOpen, setMarketAnalysisOpen, selectedAsset, chartTimeframe, nexusDecision, engine } =
+    useContext(WidgetContext) || {};
+  const [tab, setTab] = useState<"PAINEL" | "X" | "STORY">("PAINEL");
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
+
+  useEffect(() => {
+    if (!marketAnalysisOpen) return;
+    const regime = engine?.marketRegime ?? null;
+    const regimeDisplay = regime ? REGIME_DISPLAY[regime.regime] : null;
+    setAnalysis(
+      buildMarketAnalysis({
+        symbol: selectedAsset ?? "",
+        timeframe: chartTimeframe ?? "",
+        decision: nexusDecision ?? null,
+        regimeLabel: regimeDisplay ? `${regimeDisplay.label}${regime!.direction ? ` ${regime!.direction}` : ""}` : null,
+        structureLabel: engine?.marketStructureLabel ?? null,
+        support: engine?.support ?? null,
+        supportStrength: engine?.supportStrength ?? null,
+        resistance: engine?.resistance ?? null,
+        resistanceStrength: engine?.resistanceStrength ?? null,
+        livePrice: typeof priceData?.price === "number" ? priceData.price : null,
+      }),
+    );
+    setTab("PAINEL");
+    setCopyState("idle");
+    // Deps propositalmente estreito: SÓ marketAnalysisOpen. Reabrir o
+    // painel é o único gatilho para uma fotografia nova — enquanto o
+    // painel segue aberto, ticks reais de preço/decisão no fundo NUNCA
+    // reescrevem o que já foi gerado.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketAnalysisOpen]);
+
+  if (!marketAnalysisOpen) return null;
+  const close = () => setMarketAnalysisOpen?.(false);
+
+  const handleCopy = async () => {
+    if (!analysis) return;
+    try {
+      await navigator.clipboard.writeText(formatMarketAnalysisForX(analysis));
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+    setTimeout(() => setCopyState("idle"), 2000);
+  };
+
+  return (
+    <div
+      className="!fixed !inset-0 !z-[1001] bg-[#010308]/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={close}
+    >
+      <div
+        className="cyber-panel w-full max-w-lg max-h-[92dvh] flex flex-col bg-[#010308]/98"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="cyber-header flex items-center justify-between">
+          <span className="font-bold tracking-[0.2em]">ANÁLISE DE MERCADO</span>
+          <div
+            className="text-[#8ab4f8]/50 hover:text-[#00f0ff] px-1 py-0.5 rounded cursor-pointer"
+            onClick={close}
+          >
+            <X size={14} />
+          </div>
+        </div>
+        <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+          {!analysis ? (
+            <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center">
+              <Share2 size={22} className="text-[#8ab4f8]/30" />
+              <span className="text-[0.5rem] text-[#8ab4f8]/50 tracking-[0.1em] uppercase">DADOS INSUFICIENTES</span>
+              <span className="text-[0.42rem] text-[#8ab4f8]/35 max-w-[260px]">
+                O Núcleo ainda não tem leitura real suficiente para {selectedAsset || "este ativo"} agora — nenhum
+                cenário publicável até que exista viés/estrutura reais.
+              </span>
+            </div>
+          ) : (
+            <>
+              <span className="text-[0.42rem] text-[#8ab4f8]/50 tracking-[0.1em] uppercase">
+                {analysis.symbol} · {analysis.timeframe.toUpperCase()} · fotografia congelada há {ageLabelOf(analysis.generatedAt)}
+              </span>
+              <span className="text-[0.4rem] text-[#8ab4f8]/35 leading-tight">
+                Gerado sob demanda pelo Operador — esta tela nunca publica sozinha; copiar/capturar é sempre uma ação sua.
+              </span>
+              <div className="flex gap-1 border-b border-[#00f0ff15] pb-2">
+                {(["PAINEL", "X", "STORY"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTab(t)}
+                    className={`px-2 py-1 rounded text-[0.45rem] font-black tracking-[0.15em] uppercase cursor-pointer transition-colors ${
+                      tab === t
+                        ? "bg-[#00f0ff1a] text-[#00f0ff] border border-[#00f0ff40]"
+                        : "text-[#8ab4f8]/50 border border-transparent hover:text-[#8ab4f8]"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+
+              {tab === "PAINEL" && <MarketAnalysisPainelTab analysis={analysis} />}
+              {tab === "X" && <MarketAnalysisXTab analysis={analysis} copyState={copyState} onCopy={handleCopy} />}
+              {tab === "STORY" && <MarketAnalysisStoryTab analysis={analysis} />}
+            </>
           )}
         </div>
       </div>
@@ -6054,7 +6390,7 @@ function SideBar({
   activeTab: string;
   setActiveTab: (t: string) => void;
 }) {
-  const { setWorkspaceManagerOpen, setChartLayersOpen, setRadarPanelOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
+  const { setWorkspaceManagerOpen, setChartLayersOpen, setRadarPanelOpen, setMarketAnalysisOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
   // OMEGA CORE V-MAX (completar Fase 7): contagem real do próprio snapshot
   // — nunca um badge decorativo. "Substitui o botão pulsante" (diretiva):
   // um número real (0 quando não há nada) é honesto; uma animação
@@ -6149,6 +6485,21 @@ function SideBar({
             {radarCandidateCount}
           </span>
         )}
+      </button>
+      {/* Ordem "Market Analysis & Publication Engine" §2: "ação simples,
+          discreta e fácil de encontrar" — quarto botão no mesmo rodapé,
+          mesmo padrão dos três acima (toggle de visibilidade do painel).
+          Ícone de compartilhamento (não um dos glifos já usados pelas 9
+          abas + 3 gavetas) porque a ação é literalmente gerar conteúdo
+          publicável, nunca uma view de dado a mais. */}
+      <button
+        type="button"
+        onClick={() => setMarketAnalysisOpen?.((v: boolean) => !v)}
+        title="Análise de Mercado — gerar leitura publicável (Painel/X/Story)"
+        aria-label="Análise de Mercado — gerar leitura publicável (Painel/X/Story)"
+        className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+      >
+        <Share2 size={17} className="relative z-10" />
       </button>
     </div>
   );
