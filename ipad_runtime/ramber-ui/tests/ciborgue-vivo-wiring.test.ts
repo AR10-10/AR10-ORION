@@ -59,7 +59,9 @@ describe('App.tsx: bosChoch computado antes de voiceSnapshot (dependência real 
 describe('App.tsx → EnhancedChart_110_Percent: structureBreak passa ponta a ponta até o plugin', () => {
   it('ChartWidget lê bosChoch do contexto e repassa structureBreak={bosChoch?.break ?? null}', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
+    // liquidityVoids (liquidity-void-engine.js) viaja pelo MESMO contexto,
+    // na mesma posição — zero segunda rota de dado até o gráfico.
+    expect(app).toContain('const { smcZones, tradePlanStructureZones, bosChoch, liquidityVoids, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
     expect(app).toContain('structureBreak={bosChoch?.break ?? null}');
   });
 

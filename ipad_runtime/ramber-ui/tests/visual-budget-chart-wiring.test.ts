@@ -203,8 +203,13 @@ describe('LiquidityZonesPlugin.tsx: ZONE_DECAY exportado + fvgVisualWeights/obVi
     expect(s).toContain('fvgVisualWeights?: (number | undefined)[];');
     expect(s).toContain('obVisualWeights?: (number | undefined)[];');
     expect(s).toContain(
-      'export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, obstacleZones, fvgVisualWeights, obVisualWeights }: LiquidityZonesPluginProps) {',
+      'export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, liquidityVoids, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights }: LiquidityZonesPluginProps) {',
     );
+    // Liquidity Void (liquidity-void-engine.js) ainda NÃO entra na
+    // competição cruzada de orçamento visual — v1 escopado de propósito;
+    // undefined cai no MESMO fallback fail-closed de ageAlpha isolado que
+    // fvg/obVisualWeights já tinham antes de entrarem no orçamento.
+    expect(s).toContain('voidVisualWeights?: (number | undefined)[];');
   });
 
   it('resolveAlpha: zona-obstáculo SEMPRE alpha=1, ignora resolvedWeight de propósito — a garantia de risco real nunca se dobra ao orçamento (Ordem de Fechamento: a lógica que era inline em drawZone virou resolveAlpha, resolvida 1x por zona bruta ANTES da fusão — mesma regra exata)', () => {
@@ -223,17 +228,22 @@ describe('LiquidityZonesPlugin.tsx: ZONE_DECAY exportado + fvgVisualWeights/obVi
     expect(s).toContain('drawGroup(fvgs, fvgWeights, "FVG", "BEARISH");');
     expect(s).toContain('drawGroup(obs, obWeights, "OB", "BULLISH");');
     expect(s).toContain('drawGroup(obs, obWeights, "OB", "BEARISH");');
+    // Liquidity Void reusa a MESMA maquinaria de fusão/desenho (3º kind),
+    // nunca um segundo caminho de render — `voids ?? []` mantém o
+    // fail-closed real quando a camada ainda não tem dado.
+    expect(s).toContain('drawGroup(voids ?? [], voidWeights, "VOID", "BULLISH");');
+    expect(s).toContain('drawGroup(voids ?? [], voidWeights, "VOID", "BEARISH");');
   });
 
-  it('fvgVisualWeights/obVisualWeights entram no ref/dirty-check igual a fairValueGaps/orderBlocks — uma resolução de orçamento nova redesenha', () => {
+  it('fvgVisualWeights/obVisualWeights/voidVisualWeights entram no ref/dirty-check igual a fairValueGaps/orderBlocks/liquidityVoids — uma resolução de orçamento nova redesenha', () => {
     const s = liquidityZonesPlugin();
     expect(s).toContain(
-      'const zonesRef = useRef({ fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights });',
+      'const zonesRef = useRef({ fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights });',
     );
     expect(s).toContain(
-      'zonesRef.current = { fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights };',
+      'zonesRef.current = { fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights };',
     );
-    expect(s).toContain('}, [fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights]);');
+    expect(s).toContain('}, [fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights]);');
   });
 });
 

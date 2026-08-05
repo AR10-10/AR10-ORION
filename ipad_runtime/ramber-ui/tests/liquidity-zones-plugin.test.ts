@@ -55,13 +55,24 @@ describe('LiquidityZonesPlugin: destaque de obstáculo (Diretriz Restauração/I
     expect(p).toContain('const OB_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.15)", border: "rgba(255, 0, 85, 0.85)" };');
   });
 
-  it('hierarquia fill<border continua valendo para TODAS as paletas do arquivo, incluindo as 4 novas de obstáculo (regex cega, mesma trava do teste de cor acima)', () => {
+  it('hierarquia fill<border continua valendo para TODAS as paletas do arquivo, incluindo as de obstáculo e as de Liquidity Void (regex cega, mesma trava do teste de cor acima)', () => {
     const p = plugin();
     const fillOpacities = [...p.matchAll(/fill: "rgba\([^)]+, ([0-9.]+)\)"/g)].map((m) => Number(m[1]));
     const borderOpacities = [...p.matchAll(/border: "rgba\([^)]+, ([0-9.]+)\)"/g)].map((m) => Number(m[1]));
-    expect(fillOpacities.length).toBe(8); // 4 normais + 4 de obstáculo
+    // 4 FVG/OB normais + 4 FVG/OB de obstáculo + 2 VOID normais + 2 VOID de
+    // obstáculo (Liquidity Void, liquidity-void-engine.js — 3º kind real).
+    expect(fillOpacities.length).toBe(12);
     expect(borderOpacities.length).toBe(fillOpacities.length);
     fillOpacities.forEach((fillOpacity, i) => expect(fillOpacity).toBeLessThan(borderOpacities[i]));
+  });
+
+  it('Liquidity Void usa uma família de cor PRÓPRIA (ciano/magenta), nunca o verde/vermelho de FVG/OB — um Void tipicamente CONTÉM vários FVGs, reusar a cor recriaria a "parede de cor" que a Ordem de Fechamento corrigiu', () => {
+    const p = plugin();
+    expect(p).toContain('const VOID_BULLISH: ZonePalette = { fill: "rgba(0, 200, 255, 0.10)", border: "rgba(0, 200, 255, 0.35)" };');
+    expect(p).toContain('const VOID_BEARISH: ZonePalette = { fill: "rgba(255, 60, 172, 0.10)", border: "rgba(255, 60, 172, 0.35)" };');
+    // paletteFor resolve os 3 kinds reais — nunca cai no ramo de OB por engano.
+    expect(p).toContain('function paletteFor(kind: "FVG" | "OB" | "VOID", type: "BULLISH" | "BEARISH", isObstacle: boolean): ZonePalette {');
+    expect(p).toContain('if (kind === "VOID") {');
   });
 
   it('pergunta do Operador ("era pra cima ou pra baixo?"): o rótulo da zona carrega a DIREÇÃO por glifo ↑/↓, nunca só a cor — BULLISH=↑ (demanda), BEARISH=↓ (oferta), o glifo vem de type real do motor SMC', () => {
@@ -92,9 +103,12 @@ describe('LiquidityZonesPlugin: destaque de obstáculo (Diretriz Restauração/I
     // Ordem Nº 04 (MAIN_LIQUIDITY): fvgVisualWeights/obVisualWeights entram
     // no MESMO ref/dep array por exatamente o mesmo motivo — nunca stale
     // quando o orçamento visual cruzado resolve um peso novo.
-    expect(p).toContain('const zonesRef = useRef({ fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights });');
-    expect(p).toContain('zonesRef.current = { fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights };');
-    expect(p).toContain('}, [fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights]);');
+    // liquidityVoids/voidVisualWeights (liquidity-void-engine.js) entram no
+    // MESMO ref/dep array pelo mesmo motivo — um void novo detectado nunca
+    // fica invisível esperando outro prop mudar.
+    expect(p).toContain('const zonesRef = useRef({ fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights });');
+    expect(p).toContain('zonesRef.current = { fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights };');
+    expect(p).toContain('}, [fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights]);');
   });
 });
 

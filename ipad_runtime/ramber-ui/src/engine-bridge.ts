@@ -65,6 +65,11 @@ import { analyze as analyzeSupportResistance } from '../../src/research/engines/
 // structure_label de market-structure-engine.js por baixo (ver header do
 // próprio arquivo); este import só traz a varredura de rompimento real.
 import { analyze as analyzeBosChoch } from '../../src/research/engines/bos-choch-engine.js';
+// Pedido do Operador ("ver o que está faltando... pra ele chegar na
+// perfeição"): Liquidity Void (SMC/ICT) — deslocamento real de múltiplos
+// candles com participação de volume anormalmente baixa, distinto de FVG
+// (ver header do próprio arquivo + QUARANTINE.md).
+import { analyze as analyzeLiquidityVoids } from '../../src/research/engines/liquidity-void-engine.js';
 import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/index.js';
 // OMEGA CORE V-MAX Fase 7: mesmo Trade Plan real (Fase 4 do Signal
 // Precision) e mesmo Corredor de Confluência real (Fase 5) que o ativo
@@ -1012,6 +1017,29 @@ export function computeBosChoch(
   const result = analyzeBosChoch({ ohlcv_series: candles });
   if (result.status !== 'OK') return { break: null, structureLabel: null };
   return { break: result.break, structureLabel: result.structure_label };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Liquidity Void (liquidity-void-engine.js) — mesmo shape real de PriceZone
+// (type/index/top/bottom/mitigated) já usado por FVG/OB acima, computado
+// contra o MESMO array de candles do gráfico (index alinhado ao array que
+// o caller desenha) — mas exige `volume` real por candle (ChartCandle já
+// carrega, ver App.tsx), diferente de computeSmcZones/computeBosChoch que
+// só precisam de OHLC. Display only (LEI 24): camada de confluência/
+// contexto no gráfico, nunca uma segunda decisão de trading.
+// ─────────────────────────────────────────────────────────────────────────────
+export function computeLiquidityVoids(
+  candles: Array<{ open: number; high: number; low: number; close: number; volume: number }>,
+): PriceZone[] {
+  const result = analyzeLiquidityVoids({ ohlcv_series: candles });
+  if (result.status !== 'OK') return [];
+  return result.liquidity_voids.map((v: { type: 'BULLISH' | 'BEARISH'; index: number; top: number; bottom: number; mitigated: boolean }) => ({
+    type: v.type,
+    index: v.index,
+    top: v.top,
+    bottom: v.bottom,
+    mitigated: v.mitigated,
+  }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

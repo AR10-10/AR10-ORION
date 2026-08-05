@@ -348,6 +348,11 @@ interface EnhancedChartProps {
   resistanceBreakouts?: number;
   fairValueGaps?: EnhancedChartZone[];
   orderBlocks?: EnhancedChartZone[];
+  // Pedido do Operador ("ver o que está faltando... pra ele chegar na
+  // perfeição"): Liquidity Void (liquidity-void-engine.js) — mesmo shape
+  // real de fairValueGaps/orderBlocks, repassado direto ao
+  // LiquidityZonesPlugin como um 3º kind ("VOID") de zona preenchida.
+  liquidityVoids?: EnhancedChartZone[];
   liquidityZones?: EnhancedChartLiquidity[];
   // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
   // estrutural"): quais dessas MESMAS zonas (por low/high real) o Trade
@@ -566,6 +571,7 @@ export function EnhancedChart_110_Percent({
   resistanceBreakouts,
   fairValueGaps,
   orderBlocks,
+  liquidityVoids,
   liquidityZones,
   obstacleZones,
   structureBreak,
@@ -2979,6 +2985,7 @@ export function EnhancedChart_110_Percent({
           data={data}
           fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}
           orderBlocks={(orderBlocks ?? []) as FillableZone[]}
+          liquidityVoids={(liquidityVoids ?? []) as FillableZone[]}
           obstacleZones={obstacleZones ?? []}
           fvgVisualWeights={mainLiquidityVisualWeights.fvg}
           obVisualWeights={mainLiquidityVisualWeights.ob}

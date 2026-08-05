@@ -30,6 +30,7 @@ src/research/
     ├── fvg-order-block-engine.js      ACTIVE_READ_ONLY (graduado 2026-07-01)
     ├── lorentzian-classifier.js       ACTIVE_READ_ONLY (graduado 2026-07-01)
     ├── bos-choch-engine.js            ACTIVE_READ_ONLY (graduado 2026-07-12)
+    ├── liquidity-void-engine.js       ACTIVE_READ_ONLY (graduado 2026-08-04)
     └── fractal-swings.js              utilitário compartilhado (extraído 2026-07-03,
                                         não é um engine — ver secao "Utilitários" abaixo)
 ```
@@ -86,6 +87,23 @@ import reverso de volta para `js/**`.
   anotações temporárias no gráfico e o alerta de estrutura, nunca uma
   segunda decisão de trading. Zero `fetch()` novo, zero credencial, zero
   `order_send`.
+- **`engines/liquidity-void-engine.js`** (graduado 2026-08-04, pedido do
+  Operador "ver o que está faltando... pra ele chegar na perfeição" —
+  pesquisa real via WebSearch confirmou que Liquidity Void é um conceito
+  SMC/ICT real e DISTINTO de Fair Value Gap: um deslocamento de MÚLTIPLOS
+  candles com participação de volume anormalmente baixa para o alcance
+  percorrido, não uma reimplementação de FVG sob outro nome) — detecta
+  zonas reais via Volume Efficiency Ratio = (volume/avgVolume) /
+  (range/ATR), mesma fórmula real usada por indicadores de mercado
+  publicados (não uma variante inventada). Reaproveita `computeAtrPercent`
+  de `lorentzian-classifier.js` (zero segunda curva de ATR) e o volume
+  real já carregado por candle (`ChartCandle.volume`, Market Data Bus).
+  Importado por `ramber-ui/src/engine-bridge.ts`. Display only (LEI 24) —
+  camada de confluência/contexto no gráfico, nunca uma segunda decisão de
+  trading. Sem candles suficientes (aquecimento do ATR) ou sem volume real
+  na janela avaliada, retorna lista vazia/`DADOS_INSUFICIENTES` — nunca
+  aproxima volume a partir de outro dado. Zero `fetch()` novo, zero
+  credencial, zero `order_send`.
 
 Nota sobre `PRECACHE_URLS`: em 2026-07-03 (Auditoria Mestra 360°, secao 2) o
 `service-worker.js` atual foi confirmado como um shim de autodestruição (zero

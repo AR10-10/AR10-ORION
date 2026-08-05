@@ -114,6 +114,7 @@ import {
   type ConfluenceSource,
   buildMultiTimeframeContext,
   computeBosChoch,
+  computeLiquidityVoids,
   scanRadarCandidate,
 } from "./engine-bridge";
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
@@ -2044,6 +2045,16 @@ export default function App() {
     [chartData],
   );
 
+  // Pedido do Operador ("ver o que está faltando... pra ele chegar na
+  // perfeição"): Liquidity Void (SMC/ICT) sobre o MESMO array de candles
+  // do gráfico (mesmo motivo de bosChoch/smcZones: `index` alinhado ao
+  // array que o caller desenha) — precisa de `volume` real por candle,
+  // que chartData sempre carrega (ver comentário no useState acima).
+  const liquidityVoids = useMemo<PriceZone[]>(
+    () => (chartData && chartData.length > 0 ? computeLiquidityVoids(chartData) : []),
+    [chartData],
+  );
+
   // voiceSnapshot/criticalPulse/voiceEngine.init() moved below trackRecordSlice
   // (Signal Track Record) and convictionReading — Neural Market Aura's voice
   // events need tradePlanStatus/inEntryZone/convictionVerdict, and those only
@@ -3142,6 +3153,7 @@ export default function App() {
       smcZones,
       tradePlanStructureZones,
       bosChoch,
+      liquidityVoids,
       bootAt,
       engineStatus,
       realCycle,
@@ -3210,6 +3222,7 @@ export default function App() {
       smcZones,
       tradePlanStructureZones,
       bosChoch,
+      liquidityVoids,
       bootAt,
       engineStatus,
       realCycle,
@@ -7509,7 +7522,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};
+  const { smcZones, tradePlanStructureZones, bosChoch, liquidityVoids, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};
   // OMEGA CORE V-MAX Fase 5 (Corredor de Confluência): a Neural Market
   // Aura lia direto convictionReading (só o pool de 3 subsistemas) para a
   // largura do corredor — mesma leitura que confluenceCorridor.intensity
@@ -7711,6 +7724,15 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   const unmitigatedFvgs = unmitigatedFvgsAll.filter((z, i) => i < 3 || isRealObstacle(z));
   const unmitigatedBlocks = unmitigatedBlocksAll.filter((z, i) => i < 3 || isRealObstacle(z));
   const unsweptLiquidity = (smcZones?.liquidityZones ?? []).filter((z: LiquidityZone) => !z.swept).slice(0, 4);
+  // Liquidity Void (liquidity-void-engine.js): MESMA disciplina real de
+  // FVG/Order Block acima — só zonas ainda NÃO mitigadas (preço nunca
+  // voltou a preencher o vazio; uma vez preenchido, o void deixou de ser
+  // uma referência real) e mesmo teto de decluttering de 3, com a mesma
+  // união de obstáculos reais do plano ativo (um void que o plano cruza
+  // nunca fica invisível por causa do teto).
+  const unmitigatedVoids = (liquidityVoids ?? [])
+    .filter((z: PriceZone) => !z.mitigated)
+    .filter((z: PriceZone, i: number) => i < 3 || isRealObstacle(z));
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // (Fase 1.4) — mesma store que os agentes leem, só mapeada para o formato
   // do chart (price/ratio/score reais, nada recalculado aqui).
@@ -7939,6 +7961,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
             resistanceBreakouts={engine?.resistanceBreakouts ?? 0}
             fairValueGaps={unmitigatedFvgs}
             orderBlocks={unmitigatedBlocks}
+            liquidityVoids={unmitigatedVoids}
             obstacleZones={chartObstacleZones}
             liquidityZones={unsweptLiquidity}
             structureBreak={bosChoch?.break ?? null}

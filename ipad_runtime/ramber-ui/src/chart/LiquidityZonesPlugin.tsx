@@ -86,10 +86,30 @@ const FVG_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.10)", bord
 const OB_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 255, 170, 0.15)", border: "rgba(0, 255, 170, 0.85)" };
 const OB_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.15)", border: "rgba(255, 0, 85, 0.85)" };
 
-function paletteFor(kind: "FVG" | "OB", type: "BULLISH" | "BEARISH", isObstacle: boolean): ZonePalette {
+// Pedido do Operador ("ver o que está faltando... pra ele chegar na
+// perfeição"): Liquidity Void (liquidity-void-engine.js) — deliberadamente
+// NÃO reusa o par verde/vermelho de FVG/OB. Pesquisa real (WebSearch,
+// citada no motor) confirma que um Void tipicamente CONTÉM vários FVGs —
+// as duas camadas vão se sobrepor no preço com frequência real, e
+// fuseLiquidityZones (abaixo) nunca funde entre kinds diferentes (Regra de
+// Ouro 4) — reusar a mesma cor faria exatamente a "parede de cor" que a
+// Ordem de Fechamento já corrigiu para zonas do MESMO kind. Par
+// ciano/magenta: alta distinção visual, nenhuma outra camada do gráfico
+// usa essa família (FVG/OB/Sessão=verde/vermelho, Sweep=laranja,
+// harmônico/triângulo/OCO=roxo, Zona Institucional=lavanda).
+const VOID_BULLISH: ZonePalette = { fill: "rgba(0, 200, 255, 0.10)", border: "rgba(0, 200, 255, 0.35)" };
+const VOID_BEARISH: ZonePalette = { fill: "rgba(255, 60, 172, 0.10)", border: "rgba(255, 60, 172, 0.35)" };
+const VOID_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 200, 255, 0.10)", border: "rgba(0, 200, 255, 0.85)" };
+const VOID_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 60, 172, 0.10)", border: "rgba(255, 60, 172, 0.85)" };
+
+function paletteFor(kind: "FVG" | "OB" | "VOID", type: "BULLISH" | "BEARISH", isObstacle: boolean): ZonePalette {
   if (kind === "FVG") {
     if (isObstacle) return type === "BULLISH" ? FVG_BULLISH_OBSTACLE : FVG_BEARISH_OBSTACLE;
     return type === "BULLISH" ? FVG_BULLISH : FVG_BEARISH;
+  }
+  if (kind === "VOID") {
+    if (isObstacle) return type === "BULLISH" ? VOID_BULLISH_OBSTACLE : VOID_BEARISH_OBSTACLE;
+    return type === "BULLISH" ? VOID_BULLISH : VOID_BEARISH;
   }
   if (isObstacle) return type === "BULLISH" ? OB_BULLISH_OBSTACLE : OB_BEARISH_OBSTACLE;
   return type === "BULLISH" ? OB_BULLISH : OB_BEARISH;
@@ -115,6 +135,12 @@ interface LiquidityZonesPluginProps {
   data: { time: number }[];
   fairValueGaps: FillableZone[];
   orderBlocks: FillableZone[];
+  // Pedido do Operador ("ver o que está faltando... pra ele chegar na
+  // perfeição"): Liquidity Void (liquidity-void-engine.js) — mesmo shape
+  // real FillableZone (type/top/bottom/index), kind próprio ("VOID") na
+  // fusão/paleta abaixo. Opcional/fail-closed: ausente/vazio => desenho
+  // idêntico ao de antes desta camada existir.
+  liquidityVoids?: FillableZone[];
   // Diretriz Restauração/Inteligência Visual §6: zonas reais (as MESMAS já
   // desenhadas acima, identificadas por low/high) que o Trade Plan ATIVO
   // cruza a caminho de algum alvo — opcional/fail-closed: ausente/vazio =>
@@ -129,21 +155,28 @@ interface LiquidityZonesPluginProps {
   // competição por orçamento.
   fvgVisualWeights?: (number | undefined)[];
   obVisualWeights?: (number | undefined)[];
+  // Liquidity Void ainda não entra na competição cruzada de orçamento
+  // visual (visual-budget.ts) — v1 deliberadamente escopado: undefined
+  // aqui cai no MESMO fallback fail-closed de ageAlpha isolado que
+  // fvgVisualWeights/obVisualWeights já tinham antes de entrarem no
+  // orçamento cruzado. Entrar no orçamento é uma evolução futura própria,
+  // não um requisito para a camada existir e ser honesta hoje.
+  voidVisualWeights?: (number | undefined)[];
 }
 
-export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, obstacleZones, fvgVisualWeights, obVisualWeights }: LiquidityZonesPluginProps) {
+export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, liquidityVoids, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights }: LiquidityZonesPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const zonesRef = useRef({ fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights });
+  const zonesRef = useRef({ fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente das zonas/candles para o loop de desenho
   // ler — nunca dispara o efeito de setup abaixo de novo (evita reabrir a
   // conexão com o chart/reassinar os listeners a cada atualização de dado).
-  zonesRef.current = { fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights };
+  zonesRef.current = { fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [fairValueGaps, orderBlocks, data, obstacleZones, fvgVisualWeights, obVisualWeights]);
+  }, [fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -167,7 +200,7 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
       const timeScale = chart.timeScale();
-      const { fairValueGaps: fvgs, orderBlocks: obs, data: candles, obstacleZones: obstacles, fvgVisualWeights: fvgWeights, obVisualWeights: obWeights } = zonesRef.current;
+      const { fairValueGaps: fvgs, orderBlocks: obs, liquidityVoids: voids, data: candles, obstacleZones: obstacles, fvgVisualWeights: fvgWeights, obVisualWeights: obWeights, voidVisualWeights: voidWeights } = zonesRef.current;
 
       const currentIndex = candles.length - 1;
       // Identidade por low/high real (mesmos números, zero recálculo) —
@@ -255,7 +288,7 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       // estruturais reais distintos; fundi-los apagaria informação real
       // (Regra de Ouro 4). memberCount>1 vira "×N" no rótulo — mesma
       // convenção já usada por Sweep/Zona Institucional agrupados.
-      const drawGroup = (raw: FillableZone[], weights: (number | undefined)[] | undefined, kind: "FVG" | "OB", type: "BULLISH" | "BEARISH") => {
+      const drawGroup = (raw: FillableZone[], weights: (number | undefined)[] | undefined, kind: "FVG" | "OB" | "VOID", type: "BULLISH" | "BEARISH") => {
         const fusable: FusableZoneInput[] = [];
         raw.forEach((z, i) => {
           if (z.type !== type) return;
@@ -273,6 +306,8 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       drawGroup(fvgs, fvgWeights, "FVG", "BEARISH");
       drawGroup(obs, obWeights, "OB", "BULLISH");
       drawGroup(obs, obWeights, "OB", "BEARISH");
+      drawGroup(voids ?? [], voidWeights, "VOID", "BULLISH");
+      drawGroup(voids ?? [], voidWeights, "VOID", "BEARISH");
     };
 
     const markDirty = () => {
