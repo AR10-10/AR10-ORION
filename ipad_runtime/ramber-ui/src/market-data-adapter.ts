@@ -53,9 +53,18 @@
 // bybit-futures.ts, okx-futures.ts) continuam exatamente como são
 // (comparação de preço consultiva, nunca fonte de candle), fora do
 // escopo deste adapter até o Operador pedir candles reais dessas fontes.
-import { collectBinanceFuturesKlines, collectMexcFuturesKlines } from '../../src/market-data-bus/index.js';
+// Ordem Market Data Fabric, Fase 1: TRADFI_DELAYED é o 3º provider —
+// exatamente a extensão que o header acima já previa ("arquitetura
+// preparada para Bybit/OKX/Hyperliquid futuros... nenhum provider novo
+// implementado nesta entrega além dos 2 pedidos"). Diferente de BINANCE/
+// MEXC, a fonte aqui não é cripto real-time: é o conector delayed (Yahoo,
+// não-oficial) do Instrument Registry TradFi/CME — ver tradfi-delayed-
+// connector.js. Nenhum consumidor cripto muda de comportamento; este
+// provider só é usado por quem pede 'TRADFI_DELAYED' explicitamente
+// (App.tsx, caminho marketMode==='TRADFI').
+import { collectBinanceFuturesKlines, collectMexcFuturesKlines, collectTradfiDelayedKlines } from '../../src/market-data-bus/index.js';
 
-export type MarketDataProviderId = 'BINANCE' | 'MEXC';
+export type MarketDataProviderId = 'BINANCE' | 'MEXC' | 'TRADFI_DELAYED';
 
 export interface MarketDataCandle {
   t: number;
@@ -92,6 +101,11 @@ const PROVIDERS: Record<MarketDataProviderId, MarketDataProvider> = {
     label: 'MEXC USDT-M Futures',
     collect: (opts) => collectMexcFuturesKlines(opts) as Promise<MarketDataCandle[]>,
   },
+  TRADFI_DELAYED: {
+    id: 'TRADFI_DELAYED',
+    label: 'TradFi Delayed (Yahoo Finance, não-oficial)',
+    collect: (opts) => collectTradfiDelayedKlines(opts) as Promise<MarketDataCandle[]>,
+  },
 };
 
 /** Único ponto de resolução "qual provider" de todo o organismo.
@@ -102,4 +116,4 @@ export function getMarketDataProvider(id: MarketDataProviderId = DEFAULT_MARKET_
   return PROVIDERS[id];
 }
 
-export const MARKET_DATA_PROVIDER_IDS: readonly MarketDataProviderId[] = ['BINANCE', 'MEXC'] as const;
+export const MARKET_DATA_PROVIDER_IDS: readonly MarketDataProviderId[] = ['BINANCE', 'MEXC', 'TRADFI_DELAYED'] as const;

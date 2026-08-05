@@ -627,6 +627,32 @@ export async function getChartCandles(
   }));
 }
 
+// getTradFiChartCandles — Ordem Market Data Fabric, Fase 1: mesma FORMA e
+// mesmo CONTRATO de getChartCandles acima (candle canônico {time,open,
+// high,low,close,volume} | null honesto), só que para o Instrument
+// Registry TradFi/CME (instrumentId, ex. 'CME_ES') em vez de um par
+// cripto. Deliberadamente NÃO passa por requestFuturesCandleSnapshot (que
+// sempre monta `${symbol}-PERP` e fixa getMarketDataProvider('BINANCE')):
+// chama getMarketDataBus().requestSnapshot() direto com
+// getMarketDataProvider('TRADFI_DELAYED'). instrumentId já é uma chave de
+// cache inerentemente única no Bus (todo instrument_id do catálogo começa
+// com 'CME_', nunca colide com um symbol cripto de 3-5 letras) — ao
+// contrário de -PERP/-MEXC (ver market-data-adapter.ts), nenhum sufixo de
+// cache-key extra é necessário aqui.
+export async function getTradFiChartCandles(
+  instrumentId: string,
+  limit = 200,
+  timeframe = '1h',
+): Promise<Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }> | null> {
+  const snapshot: BusSnapshot = await getMarketDataBus().requestSnapshot({
+    symbol: instrumentId, timeframe, limit, collect: getMarketDataProvider('TRADFI_DELAYED').collect, maxAgeMs: 25_000,
+  });
+  if (!snapshot.ok) return null;
+  return snapshot.candles.map((c: { t: number; o: number; h: number; l: number; c: number; v: number }) => ({
+    time: c.t, open: c.o, high: c.h, low: c.l, close: c.c, volume: c.v,
+  }));
+}
+
 // Auditoria de arquitetura (revisão completa): paginação histórica real do
 // gráfico — achado: CHART_CANDLE_LIMIT era uma janela fixa de 200 candles,
 // sem NENHUM caminho para carregar mais história ao arrastar para trás

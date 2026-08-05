@@ -159,13 +159,21 @@ describe('diretriz 2 + V15.1 GOD TIER: roteamento Futuros exclusivo — Gráfico
     // teste abaixo) — o ciclo real do Core Engine/gráfico permanece 100%
     // Binance, intocado, sempre por este helper.
     expect(helperCallSites).toHaveLength(4);
-    // requestSnapshot() só pode aparecer DENTRO de um dos dois helpers
-    // reais (requestFuturesCandleSnapshot, Binance-only; ou
-    // requestRadarCandleSnapshot, provider-aware, só para o Radar) — se
-    // esse número mudar, algum call site voltou a ignorar os helpers e
-    // chamar o Bus direto, ou uma perna de spot voltou.
+    // requestSnapshot() aparece DENTRO de 3 pontos reais: os dois helpers
+    // cripto (requestFuturesCandleSnapshot Binance-only;
+    // requestRadarCandleSnapshot provider-aware, só Radar) MAIS
+    // getTradFiChartCandles (Ordem Market Data Fabric, Fase 1) — este
+    // último é um domínio genuinamente diferente (TradFi/CME via
+    // getMarketDataProvider('TRADFI_DELAYED')), não um bypass: instrumentId
+    // (ex. 'CME_ES') já é uma chave de cache inerentemente única (nunca
+    // colide com um symbol cripto), então NENHUM dos dois helpers de
+    // sufixo -PERP/-MEXC se aplica — reusar requestRadarCandleSnapshot
+    // aqui na verdade ADICIONARIA um sufixo -PERP incorreto ao instrumentId
+    // TradFi (a ternária daquele helper só conhece 'MEXC' vs. tudo mais).
+    // Se este número mudar, um NOVO call site apareceu — confirme que é
+    // igualmente legítimo antes de soltar o teste.
     const directBusCalls = bridge.match(/getMarketDataBus\(\)\.requestSnapshot\(\{/g) ?? [];
-    expect(directBusCalls).toHaveLength(2);
+    expect(directBusCalls).toHaveLength(3);
   });
 
   it('ADITIVO V-MAX Etapa 9: os 2 call sites de scanRadarCandidate passam por requestRadarCandleSnapshot (provider-aware), nunca pelo helper Binance-only', () => {

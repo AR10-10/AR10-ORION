@@ -299,6 +299,16 @@ import { computeConsensus, type ConsensusInput } from "./gmil/consensus-engine";
 import { SmartOmnibox } from "./omnibox/SmartOmnibox";
 import { TradFiEmptyState } from "./omnibox/TradFiEmptyState";
 import { TRADFI_ASSETS, type TradFiAsset } from "./omnibox/tradfi-assets";
+// Ordem Market Data Fabric, Fase 1: findByLegacyTradFiAssetSymbol conecta
+// o TradFiAsset escolhido acima (ex. 'SPX') ao Instrument Registry
+// TradFi/CME real (ex. CME_ES) SEM duplicar o catálogo/seletor já
+// existente — 9 dos 17 ativos legados agora resolvem para um contrato
+// real; o resto continua honesto em TradFiEmptyState (ver notes de cada
+// InstrumentDefinition mapeada em instrument-registry.js). TradFiRealChart
+// é deliberadamente minimalista (candlestick real, zero overlay do
+// Institutional Chart Engine, zero Core Engine — LEI 24 intacta).
+import { findByLegacyTradFiAssetSymbol } from "../../src/market-data-bus/index.js";
+import { TradFiRealChart } from "./omnibox/TradFiRealChart";
 // Master Panel handoff (Multi-Source Market Data Fusion, escopo reduzido a
 // UMA fonte adicional real por decisão do Operador): Bybit USDT-M Perpétuo
 // como segundo dado real e independente, comparado só contra o markPrice
@@ -845,15 +855,23 @@ export default function App() {
   const [selectedAsset, setSelectedAsset] = useState<AssetSymbol>(() => restoredSession.asset);
 
   // Overhaul Cross-Market (Missão 2): o Smart Omnibox também lista a
-  // taxonomia TradFi (índices/ações/commodities/forex) para conexão
-  // FUTURA — hoje NENHUMA API macro existe neste sistema. Escolher um
-  // ativo TradFi NUNCA muda `selectedAsset` (o motor real continua
-  // rodando sobre a última cripto real, intocado) — só liga o modo
-  // TRADFI, que faz os painéis específicos de ativo mostrarem o Empty
-  // State fail-closed em vez de tentar (e falhar) puxar dado da Binance
-  // para um símbolo que não é dela (diretriz 4, Modo Fail-Closed).
+  // taxonomia TradFi (índices/ações/commodities/forex). Escolher um ativo
+  // TradFi NUNCA muda `selectedAsset` (o motor real continua rodando sobre
+  // a última cripto real, intocado) — só liga o modo TRADFI, que faz os
+  // painéis específicos de CRIPTO (order book/flow/heatmap/Council/
+  // Siriform/Regime — mecânica de perpétuo, NAO_APLICAVEL para um futuro
+  // CME) mostrarem o Empty State fail-closed em vez de tentar (e falhar)
+  // puxar dado da Binance para um símbolo que não é dela (diretriz 4, Modo
+  // Fail-Closed). Ordem Market Data Fabric, Fase 1: o GRÁFICO PRINCIPAL
+  // não é mais sempre Empty State — resolvedTradFiInstrument abaixo resolve
+  // 9 dos 17 ativos legados para um contrato real do Instrument Registry
+  // (Yahoo delayed); o resto continua honesto em Empty State.
   const [marketMode, setMarketMode] = useState<"CRYPTO" | "TRADFI">(() => restoredSession.marketMode);
   const [selectedTradFiAsset, setSelectedTradFiAsset] = useState<TradFiAsset | null>(() => restoredSession.tradFiAsset);
+  const resolvedTradFiInstrument = useMemo(
+    () => (selectedTradFiAsset ? findByLegacyTradFiAssetSymbol(selectedTradFiAsset.symbol) : null),
+    [selectedTradFiAsset],
+  );
 
   // Bumping bootGeneration tears down and re-runs every real boot effect
   // below (REST fetch + WS connect, engine cycle, order flow feed,
@@ -3344,9 +3362,18 @@ export default function App() {
                     <div className="terminal-main min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2">
                       {widgets.chart.visible &&
                         (marketMode === "TRADFI" ? (
-                          <TradFiEmptyState
-                            assetLabel={`${selectedTradFiAsset?.symbol ?? ""} · ${selectedTradFiAsset?.name ?? ""}`}
-                          />
+                          resolvedTradFiInstrument ? (
+                            // Ordem Market Data Fabric, Fase 1: candle REAL
+                            // (delayed, Yahoo) — só para os 9 ativos legados
+                            // com mapeamento seguro (ver instrument-registry.js).
+                            // chartTimeframe reaproveitado (mesmo seletor de
+                            // timeframe que o modo cripto já usa).
+                            <TradFiRealChart instrument={resolvedTradFiInstrument} timeframe={chartTimeframe} />
+                          ) : (
+                            <TradFiEmptyState
+                              assetLabel={`${selectedTradFiAsset?.symbol ?? ""} · ${selectedTradFiAsset?.name ?? ""}`}
+                            />
+                          )
                         ) : (
                           <ChartWidget chartData={chartData} onRequestOlderCandles={handleRequestOlderCandles} priceData={priceData} />
                         ))}
