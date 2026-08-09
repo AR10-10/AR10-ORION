@@ -198,6 +198,10 @@ self.onmessage = async (ev) => {
             const e = await loadWasm();
             const { closes, window } = ev.data;
             const len = writeBuffer(closes);
+            if (len === 0 || !Number.isInteger(window) || window <= 0 || window > len) {
+                self.postMessage({ id, type: 'compute_series_result', result: null });
+                return;
+            }
             const rollingSma = [];
             const rollingZ = [];
             for (let i = window; i <= len; i++) {

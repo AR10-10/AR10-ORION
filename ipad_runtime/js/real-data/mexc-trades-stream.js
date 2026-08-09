@@ -66,22 +66,37 @@ export function validateTradesShape(json) {
     return { valid: true };
 }
 
+// BUG REAL evitado aqui (mesma classe ja encontrada e corrigida nesta sessao
+// em tradfi-delayed-yahoo.js): Number(null) === 0 em JavaScript. Um campo
+// price/time/qty ausente ou malformado numa linha real da API viraria um
+// zero fabricado — e Number.isFinite(0) e true, entao passaria disfarcado
+// de tick valido — exatamente o que a Regra de Ouro 3 proibe.
+// toFiniteOrNull rejeita null/undefined ANTES de converter para numero.
+function toFiniteOrNull(raw) {
+    if (raw === null || raw === undefined) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+}
+
 /** Mapeia linhas cruas de /api/v3/trades para Tick[] do Order Flow Engine.
  *  Funcao pura: mesma entrada sempre produz a mesma saida, zero rede,
  *  testavel offline (ver evaluations.js). Ordena por tempo ascendente de
  *  forma defensiva — nunca assume a ordem da resposta real, mesmo que a
- *  documentacao publica diga que ja vem ascendente. */
+ *  documentacao publica diga que ja vem ascendente. Linhas com
+ *  price/time/qty ausente, nao-numerico ou volume negativo sao descartadas
+ *  em silencio (fail-closed), nunca viram um Tick fabricado. */
 export function tradesToTicks(rows, exchange = 'MEXC_SPOT_LIVE') {
     return rows
         .slice()
         .sort((a, b) => Number(a.time) - Number(b.time))
-        .map((row) => new Tick({
-            timestamp: Number(row.time),
-            price: Number(row.price),
-            volume: Number(row.qty),
+        .map((row) => ({
+            timestamp: toFiniteOrNull(row.time),
+            price: toFiniteOrNull(row.price),
+            volume: toFiniteOrNull(row.qty),
             side: row.isBuyerMaker ? Side.SELL : Side.BUY,
-            exchange,
-        }));
+        }))
+        .filter((t) => t.timestamp !== null && t.price !== null && t.volume !== null && t.volume >= 0)
+        .map((t) => new Tick({ ...t, exchange }));
 }
 
 /** Filtra so' os trades estritamente mais novos que lastTradeId (dedup

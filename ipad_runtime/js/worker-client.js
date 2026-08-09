@@ -59,5 +59,9 @@ export class QuantWorkerClient {
         return this.call('compute_trust_score', { gaps: g, divergences: d }, 15000, [g.buffer, d.buffer]);
     }
     selfTest() { return this.call('self_test'); }
-    terminate() { this.worker.terminate(); }
+    terminate() {
+        for (const [, entry] of this.pending) entry.reject(new Error('worker terminated'));
+        this.pending.clear();
+        this.worker.terminate();
+    }
 }
