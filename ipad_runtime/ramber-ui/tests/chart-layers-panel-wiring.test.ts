@@ -290,7 +290,7 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     // exige todas as 15 camadas fora do automático (allManual) — um preset
     // é curadoria manual deliberada, nunca uma coincidência do automático.
     expect(app).toContain('const isIntelligencePreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));');
-    expect(app).toContain('Modo Inteligência');
+    expect(app).toContain('Preset Inteligência');
   });
 });
 
@@ -540,15 +540,15 @@ describe('ChartLayersPanel: Estado Inteligente Adaptativo é a ação primária;
     expect(block).toContain('onClick={() => applyChartLayerPreset?.("operational")}');
     expect(block).toContain('onClick={() => applyChartLayerPreset?.("intelligence")}');
     expect(block).toContain('onClick={() => applyChartLayerPreset?.("audit")}');
-    expect(block).toContain('Modo Operacional');
-    expect(block).toContain('Modo Inteligência');
-    expect(block).toContain('Modo Auditoria');
+    expect(block).toContain('Preset Operacional');
+    expect(block).toContain('Preset Inteligência');
+    expect(block).toContain('Preset Auditoria');
   });
 
   it('o toggle individual por camada (toggleChartLayer/resetChartLayerToAuto) fica FORA do bloco recolhido — nunca escondido, categoricamente diferente de "administrar um modo"', () => {
     const a = read('../src/App.tsx');
     const discloseIdx = a.indexOf('{advancedPresetsOpen && (');
-    const disclosureEnd = a.indexOf(')}', a.indexOf('Modo Auditoria', discloseIdx));
+    const disclosureEnd = a.indexOf(')}', a.indexOf('Preset Auditoria', discloseIdx));
     const toggleIdx = a.indexOf('onClick={() => toggleChartLayer?.(id)}');
     expect(toggleIdx, 'toggle individual não encontrado').toBeGreaterThan(-1);
     expect(toggleIdx).toBeGreaterThan(disclosureEnd);

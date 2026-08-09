@@ -3917,7 +3917,7 @@ function ChartLayersPanel() {
               Engine + Visual Budget, já ligados ao vivo), e os 3 presets
               manuais viram uma seção secundária, recolhida por padrão, para
               quem especificamente precisa de uma leitura manual pontual
-              (ex.: Modo Auditoria para revisão profunda). Decisão de design
+              (ex.: Preset Auditoria para revisão profunda). Decisão de design
               deliberada, não a exclusão literal pedida pela diretriz — ver
               docs/RELATORIO_HOMOLOGACAO_03_ORGANISMO_ADAPTATIVO.md §3 para
               o raciocínio completo. */}
@@ -3955,7 +3955,7 @@ function ChartLayersPanel() {
                     : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
                 }`}
               >
-                Modo Operacional
+                Preset Operacional
               </button>
               <button
                 type="button"
@@ -3966,7 +3966,7 @@ function ChartLayersPanel() {
                     : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
                 }`}
               >
-                Modo Inteligência
+                Preset Inteligência
               </button>
               <button
                 type="button"
@@ -3977,7 +3977,7 @@ function ChartLayersPanel() {
                     : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
                 }`}
               >
-                Modo Auditoria
+                Preset Auditoria
               </button>
             </div>
           )}

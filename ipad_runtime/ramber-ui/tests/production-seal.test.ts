@@ -191,3 +191,79 @@ describe('diretriz 4: congelamento — zero console ruidoso no perímetro do pro
     expect(offenders).toEqual([]);
   });
 });
+
+describe('diretriz 5 (achado real, verificação Playwright + auditoria estática): todo host https:// referenciado em código real está coberto pela CSP connect-src', () => {
+  // Duas ocorrências reais desta MESMA classe de bug já existem na história
+  // deste projeto antes desta trava existir: www.okx.com (achada por
+  // Playwright numa auditoria de estabilização anterior) e api.llama.fi
+  // (achada por Playwright nesta sessão, ver index.html) — ambas eram um
+  // host de verdade usado em fetch() que faltava na allowlist, então o
+  // próprio navegador bloqueava a chamada ANTES de qualquer rede real sair
+  // (CSP), independente de CORS/rede estarem perfeitos do lado do servidor.
+  // Esta trava varre o código-fonte real (nunca confia em lista escrita à
+  // mão) para que uma 4ª ocorrência não passe batido até alguém abrir o
+  // DevTools por acaso.
+  const indexHtml = read('../index.html');
+  const cspMatch = indexHtml.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/);
+  if (!cspMatch) throw new Error('meta CSP não encontrada em index.html');
+  const connectSrcMatch = cspMatch[1].match(/connect-src ([^;]+);/);
+  if (!connectSrcMatch) throw new Error('diretiva connect-src não encontrada na CSP');
+  const cspHosts = (connectSrcMatch[1].match(/https:\/\/([a-zA-Z0-9.*-]+)/g) ?? []).map((h) => h.replace('https://', ''));
+
+  function hostAllowed(host: string): boolean {
+    return cspHosts.some((allowed) => (allowed.startsWith('*.') ? host.endsWith(allowed.slice(1)) : host === allowed));
+  }
+
+  // Hosts referenciados no código-fonte que NÃO passam por fetch()/XHR/WS
+  // (portanto não são regidos por connect-src) — cada entrada documentada
+  // com o motivo real, mesmo padrão de KNOWN_UNCOVERED_LAYERS já usado
+  // noutro teste deste projeto para exceções deliberadas e documentadas.
+  const KNOWN_NON_FETCH_HOSTS = new Set([
+    'www.tradingview.com', // <a href target="_blank"> de atribuição da biblioteca de gráfico — navegação, não connect-src.
+  ]);
+
+  it('nenhum host https:// em fetch()/URLs reais de src/js/workers fica de fora da CSP sem exceção documentada', () => {
+    const roots = [
+      resolve(here, '../src'),
+      resolve(here, '../../src'),
+      resolve(here, '../../js'),
+      resolve(here, '../../workers'),
+    ];
+    const found = new Map<string, string>(); // host -> "file:line" da primeira ocorrência
+    const scan = (file: string) => {
+      const code = readFileSync(file, 'utf8');
+      code.split('\n').forEach((line, i) => {
+        if (/^\s*(\/\/|\*)/.test(line)) return; // comentários citando um host não contam
+        const matches = line.match(/https:\/\/([a-zA-Z0-9.-]+)/g) ?? [];
+        for (const m of matches) {
+          const host = m.replace('https://', '');
+          if (!found.has(host)) found.set(host, `${file}:${i + 1}`);
+        }
+      });
+    };
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const abs = join(dir, name);
+        if (statSync(abs).isDirectory()) walk(abs);
+        else if (/\.(ts|tsx|js|mjs)$/.test(name)) scan(abs);
+      }
+    };
+    roots.forEach(walk);
+
+    const offenders: string[] = [];
+    for (const [host, location] of found) {
+      if (KNOWN_NON_FETCH_HOSTS.has(host)) continue;
+      if (!hostAllowed(host)) offenders.push(`${host} (${location})`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('a própria CSP connect-src continua tendo pelo menos os hosts reais já conhecidos (trava não ficou vazia por engano)', () => {
+    expect(cspHosts.length).toBeGreaterThanOrEqual(10);
+    expect(hostAllowed('api.binance.com')).toBe(true);
+    expect(hostAllowed('api.llama.fi')).toBe(true);
+    expect(hostAllowed('query1.finance.yahoo.com')).toBe(true);
+    expect(hostAllowed('sub.huggingface.co')).toBe(true); // wildcard *.huggingface.co
+    expect(hostAllowed('totally-not-allowed.example.com')).toBe(false);
+  });
+});
