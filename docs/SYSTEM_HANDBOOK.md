@@ -6693,6 +6693,56 @@ arquivos de `src/orderflow/` + 1 teste novo tocados.
 
 ---
 
+### 6.91 "Ordem Mestra — AR-10 CYBORG" (47 seções) — relatório completo em `docs/RELATORIO_ORDEM_MESTRA.md`
+
+Texto original não sobreviveu literalmente à compactação de contexto
+desta sessão — relatório é síntese honesta por tema (não pontuação
+item-a-item do checklist de 30 itens original, que não está mais
+disponível verbatim), evidenciada por commit/arquivo/teste real.
+
+**Entregue nesta Ordem**: provedor real DefiLlama (GMIL categoria ONCHAIN
+sai do `null`, `gmil/providers/defillama-provider.ts`, 15 testes) ·
+renomeação "Modo Operacional/Inteligência/Auditoria" → "Preset ..." no
+painel Camadas do Gráfico (achado: "Modo" lia como 2º cérebro decisório
+mesmo sendo só preset de visibilidade, risco cosmético vs. LEI 24) ·
+pesquisa real (WebSearch) + documentação honesta dos bloqueios
+estruturais de MT5 (nenhuma API pública alcançável por `fetch()` de
+navegador — toda rota real exige processo fora do navegador ou
+credencial de corretora a terceiro) e calendário macro (nenhuma fonte
+keyless/CORS-aberta; caminho alternativo real documentado — schedule
+estático curado de `bls.gov`/`federalreserve.gov` — não construído sem
+decisão do Operador).
+
+**Achado real fora do pedido original, corrigido do mesmo jeito
+(Disciplina de trabalho §1)**: 3 bugs reais confirmados por auditoria
+contra um documento externo separado ("Plano de Evolução Orgânica") que
+pedia vocabulário biológico obrigatório + arquitetura wrapper-only —
+ambos rejeitados pelo Operador via `AskUserQuestion` em favor do estilo
+direto já estabelecido. Bugs reais corrigidos: `worker-client.terminate()`
+nunca rejeitava promises pendentes (chamada em voo ficava presa para
+sempre); `quant-worker.compute_series` era o único dos 3 handlers de
+cálculo sem guarda upfront contra `window` inválido; `mexc-trades-
+stream.tradesToTicks()` fabricava tick com `Number(null)===0` (mesma
+classe de bug já corrigida antes em `tradfi-delayed-yahoo.js`).
+
+**2º achado fora do pedido original, mesmo padrão**: verificação
+Playwright real (exigida por CLAUDE.md para toda mudança de UI, mesmo o
+rename cosmético dos botões) capturou um erro de CSP não relacionado —
+`api.llama.fi` bloqueado por `connect-src` incompleta, MESMA classe de
+bug que este projeto já tinha documentado ter acontecido com
+`api.bybit.com`/`www.okx.com` antes. Auditoria estática subsequente (todo
+host `https://` do código-fonte contra a allowlist) achou uma 2ª
+ocorrência pré-existente: `query1.finance.yahoo.com`. Ambos corrigidos +
+nova trava de regressão permanente (`production-seal.test.ts`, "diretriz
+5") para que uma 3ª ocorrência não dependa de alguém abrir o DevTools por
+acaso.
+
+**Testes**: `tsc` limpo · **159 arquivos / 2589 testes (100%)** · build
+ok · verificação Playwright real (dev server + Chromium do ambiente,
+viewport 430×932 `hasTouch:true`).
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel

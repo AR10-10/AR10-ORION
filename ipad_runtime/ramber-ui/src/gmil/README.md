@@ -75,8 +75,32 @@ embutido". As demais:
 - **Stooq** (Macro Market) — endpoint público existe mas o suporte a CORS
   não é oficialmente documentado nem estável o bastante para prometer como
   "real e funcionando".
-- **Economic Calendar** — nenhuma fonte gratuita, sem chave, CORS-aberta e
-  compatível com os termos de uso foi identificada.
+- **Economic Calendar** (Fed/CPI/NFP — Ordem Mestra §36, pesquisa
+  reconfirmada via WebSearch em 2026-08) — nenhuma fonte de CALENDÁRIO
+  (datas/horários de eventos futuros, tipo Trading Economics/FXStreet/
+  Forex Factory/Investing.com) gratuita, sem chave e CORS-aberta foi
+  identificada; toda agregadora de calendário encontrada (Trading
+  Economics, EODHD, Finnhub, Financial Modeling Prep, FXStreet, OHLC.dev)
+  exige chave de API, mesma objeção já aplicada a FRED/Alpha Vantage
+  acima. Achado novo desta rodada: a API pública do BLS
+  (`bls.gov/bls/api_features.htm`) É genuinamente sem-registro para uso
+  básico — mas entrega SÉRIE TEMPORAL de dado já publicado (o número do
+  CPI/payroll depois de sair), não um calendário do que ainda vai sair, e
+  seu suporte a CORS não está documentado (mesma incerteza já vista em
+  Stooq) nem foi possível confirmar ao vivo (sandbox sem saída de rede,
+  mesma limitação de sempre) — não resolve o pedido original. **Caminho
+  alternativo real, não construído nesta rodada:** BLS
+  (`bls.gov/schedule/`) e o Federal Reserve
+  (`federalreserve.gov/data/releaseschedule.htm`) publicam o calendário
+  do ANO INTEIRO de divulgações com bastante antecedência, como
+  informação pública oficial — um arquivo local estático curado à mão
+  (mesmo padrão de `instrument-registry.js`: dado de referência real,
+  confirmado por pesquisa, versionado e revisado por humano, nunca uma
+  chamada de rede ao vivo) resolveria "próximo evento de alto impacto"
+  sem precisar de chave nem CORS. Não é live/autoatualizável — exigiria
+  revisão manual periódica (o calendário raramente muda, mas pode) — por
+  isso não foi implementado sem decisão explícita do Operador; fica
+  documentado aqui como opção real e viável para uma rodada futura.
 - **RSS financeiro / notícias** — RSS/XML não é pensado para `fetch()` de
   navegador; a maioria dos publishers não envia cabeçalho CORS permissivo.
 - **Blockchain.com stats, Book Depth agregado entre exchanges** — viáveis

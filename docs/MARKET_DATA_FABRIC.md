@@ -99,6 +99,63 @@ assumido inicialmente) — a especificação real de tick do SOFR varia por
 vencimento e está documentada como tal (nunca simplificada para um número
 falso-único).
 
+### MT5 — por que a ponte não pode ser um `fetch()` de navegador (Ordem Mestra §4)
+
+`connector-registry.default.json` já tinha `mt5-bridge-adapter` como
+`READ_ONLY_PLACEHOLDER`/`current_status: FUTURE`, com
+`security_posture.mt5_bridge: ABSENT` no manifesto de segurança do
+pacote — mas sem o "porquê" técnico documentado. WebSearch nesta sessão
+confirmou a causa real, não suposta:
+
+- **A MetaQuotes (fabricante do MT5) não publica uma API REST/WebSocket
+  pública, gratuita e alcançável por `fetch()`/`WebSocket` de navegador
+  para dado de mercado ou conta.** O único caminho oficial é o pacote
+  Python `MetaTrader5` (`pypi.org/project/MetaTrader5`), e a própria
+  documentação oficial (`mql5.com/en/docs/python_metatrader5`) é
+  explícita: o pacote fala com o terminal via IPC **local** — "the two
+  must coexist on the same machine" — não é um protocolo de rede, é
+  comunicação entre processos na mesma máquina. Não existe uma URL
+  `https://` que este navegador pudesse chamar mesmo com CORS/CSP
+  perfeitos, porque não há servidor do outro lado — o terminal MT5 do
+  Operador precisaria estar rodando localmente, e este app é uma PWA
+  estática (GitHub Pages) sem processo companheiro nenhum.
+- **O que existe de alcançável por `fetch()`/WebSocket são pontes
+  comerciais de terceiros** (ex.: MetaApi, api2trade, MT5BridgeAPI,
+  MTsocketAPI — todas confirmadas via WebSearch nesta sessão). Elas
+  funcionam hospedando ELAS PRÓPRIAS uma instância do terminal (ou um
+  serviço equivalente) na nuvem delas, e exigem que o Operador entregue
+  as credenciais reais da conta da corretora (login + senha, no mínimo
+  uma "senha de investidor" somente-leitura quando a corretora suporta)
+  para essa empresa terceira — nunca para a corretora original. Isso é
+  exatamente a superfície de exposição de credencial que este projeto
+  recusa por design permanente (ver `../ipad_runtime/ramber-ui/src/gmil/
+  README.md`, seção "Explicitamente recusado": HMAC/assinatura local
+  "criaria o caminho técnico para credenciais/execução real — o que este
+  projeto proíbe permanentemente"). Uma ponte MT5 comercial de terceiros
+  é a mesma classe de risco, só com uma empresa a mais no meio.
+- **A alternativa "menos ruim" — um bridge local rodando na própria
+  máquina do Operador (script MQL5 dentro do terminal + processo local
+  expondo `http://localhost:PORTA`) — ainda exigiria software rodando
+  FORA do navegador**, que o Operador teria que instalar e manter
+  separadamente (quebra a premissa "100% estático, zero backend, zero
+  processo companheiro" deste projeto), e mesmo assim significa
+  credencial (ainda que só a senha de investidor) sendo digitada em algum
+  lugar fora da corretora oficial. É por isso que
+  `connector-registry.default.json` já registra corretamente: "ANY
+  execution capability would require an entirely separate,
+  explicitly-approved future phase" — e o mesmo vale para leitura,
+  não só execução, dado que toda rota real passa por credencial em
+  trânsito.
+- **Conclusão honesta:** MT5 continua `FUTURE`/`enabled_now: false` não
+  por falta de tempo de implementação, mas porque toda rota tecnicamente
+  real hoje (Python local, ponte comercial de terceiros, bridge
+  self-hosted) exige ou (a) um processo fora do navegador que este
+  projeto não tem, ou (b) entregar uma credencial real de corretora a
+  alguém — as duas coisas que as restrições permanentes deste repositório
+  proíbem. Isto não é uma limitação de sandbox desta sessão (diferente do
+  bloqueio de rede da Fase 1) — é uma limitação estrutural de qualquer
+  navegador, em qualquer dispositivo, mesmo com rede 100% liberada.
+
 ## Bloqueio de rede desta sessão de implementação (confirmado, não suposto)
 
 `curl` direto contra `cmegroup.com`, `fapi.binance.com`,
@@ -272,7 +329,11 @@ quê). Suíte completa: **155 arquivos, 2552 testes, 100% verde.**
   catálogo (Priority A o SR3, B/C os cripto-CME) mas sem dado ao vivo
   possível nesta fase.
 - **Rollover/contrato contínuo automatizado, painel de conflito entre 2
-  fontes AO VIVO simultâneas, MT5**: nenhum dos três tem uma segunda fonte
+  fontes AO VIVO simultâneas**: nenhum dos dois tem uma segunda fonte
   real nesta fase para exercitar — `detectSourceConflict` existe e está
   testado, mas com uma única fonte real (Yahoo delayed) não há ainda um
   par de leituras vivas para comparar.
+- **MT5**: não é "falta de uma segunda fonte para testar" — é um
+  bloqueio estrutural real, pesquisado e documentado na seção "MT5 — por
+  que a ponte não pode ser um `fetch()` de navegador (Ordem Mestra §4)"
+  acima. Continua `FUTURE` por design, não por prioridade.
