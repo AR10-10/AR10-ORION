@@ -121,6 +121,30 @@ mockando a lógica de parsing/validação/state-machine em si, que roda de
 verdade em todo teste. Verificação **ao vivo** (contra a rede real) fica
 para um ambiente com saída liberada (dispositivo real do Operador).
 
+### Correção honesta (Ordem Mestra, auditoria pós-Fase-1)
+
+O relatório original da Fase 1 descreveu o bloqueio de verificação ao vivo
+só como "política de rede deste sandbox" — subestimando um risco real e
+mais sério. `ipad_runtime/ramber-ui/src/gmil/README.md` (módulo GMIL,
+sessão anterior) já tinha pesquisado exatamente este mesmo host antes de
+esta Ordem existir e concluído: *"Yahoo Finance (Macro Market) — os
+endpoints não-oficiais mais usados bloqueiam CORS para `fetch()` de
+origem arbitrária; exigiria um proxy de backend que este projeto (100%
+estático, GitHub Pages) não tem."* WebSearch nesta sessão confirmou de
+forma independente, com múltiplas fontes corroborando um problema descrito
+como antigo e conhecido: `query1`/`query2.finance.yahoo.com` não enviam o
+cabeçalho `Access-Control-Allow-Origin`. Ou seja, além do bloqueio de rede
+deste sandbox de implementação, existe um **segundo bloqueio estrutural,
+distinto e mais provável de persistir**: o próprio servidor da Yahoo
+tipicamente rejeita `fetch()` direto de um navegador em outra origem —
+isso afetaria qualquer usuário real rodando este PWA estático, não só
+esta sessão. Nenhuma mudança de código foi necessária: a arquitetura
+Evidence-First já cobre esse cenário exatamente como desenhada —
+`probeJsonEndpoint` classifica isso honestamente como `BLOCKED_BY_CORS`
+(nunca finge sucesso, nunca fabrica candle) — mas a documentação precisava
+desta correção. `current_status` do `yahoo-finance-adapter` continua
+`PLANNED` por esse motivo reforçado (não só rebaixado por precaução).
+
 ## O que foi construído (Fase 1)
 
 1. **`ipad_runtime/js/real-data/schema.js`** (extensão aditiva) —

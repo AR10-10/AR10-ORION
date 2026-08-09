@@ -36,10 +36,30 @@
 // mesma limitação já documentada em history-capture.js e nos demais
 // conectores públicos deste repositório (mexc-public.js, binance-futures-
 // public.js). Verificação real ao vivo fica para um ambiente com saída de
-// rede liberada (dispositivo real do Operador). Por isso o parser abaixo é
-// deliberadamente defensivo: qualquer formato de resposta diferente do
-// esperado falha de forma visível (BLOCKED_BY_SCHEMA), nunca finge sucesso
-// nem inventa um candle para "parecer" que funcionou.
+// rede liberada (dispositivo real do Operador).
+//
+// CORREÇÃO HONESTA (Ordem Mestra, auditoria pós-Fase-1): este mesmo
+// repositório já tinha pesquisado exatamente este host antes — ver
+// ramber-ui/src/gmil/README.md, "Fontes avaliadas e adiadas": "Yahoo
+// Finance (Macro Market) — os endpoints não-oficiais mais usados bloqueiam
+// CORS para fetch() de origem arbitrária; exigiria um proxy de backend que
+// este projeto (100% estático, GitHub Pages) não tem." WebSearch nesta
+// sessão confirmou de forma independente, com múltiplas fontes
+// corroborando: query1/query2.finance.yahoo.com não enviam cabeçalho
+// Access-Control-Allow-Origin — um problema conhecido e antigo, não uma
+// suposição. Ou seja: além do bloqueio de REDE deste sandbox (acima), há
+// um segundo bloqueio estrutural, DISTINTO e mais sério, que afeta
+// qualquer navegador real rodando este PWA estático: o próprio servidor da
+// Yahoo provavelmente rejeita o fetch() por política de CORS, não só esta
+// sessão de implementação. A arquitetura Evidence-First já cobre esse
+// cenário sem mudança de código nenhuma — probeJsonEndpoint (probe.js)
+// classifica isso honestamente como BLOCKED_BY_CORS (nunca finge sucesso,
+// nunca fabrica candle) — mas o Relatório de Fase 1 subestimou esse risco
+// ao descrevê-lo só como "bloqueio de sandbox". Ver docs/MARKET_DATA_FABRIC.md
+// para a correção completa. Nenhuma mudança de código foi necessária aqui:
+// o parser abaixo já era deliberadamente defensivo — qualquer formato de
+// resposta diferente do esperado falha de forma visível (BLOCKED_BY_SCHEMA),
+// nunca finge sucesso nem inventa um candle para "parecer" que funcionou.
 import { probeJsonEndpoint } from './probe.js';
 import {
     CONNECTOR_STATES, DATA_FRESHNESS, createEmptyEvidence, markFieldMissing, hashRawSample, computeDataQuality,

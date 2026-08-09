@@ -29,7 +29,7 @@ providers/*.ts  →  circuit-breaker.ts + quality-engine.ts  →  event-bus.ts  
   provedor (LEI 08), função pura separada do `voice-dispatcher.ts` do
   Core Engine para não misturar os dois domínios num único tipo.
 
-## Provedores ativos (4)
+## Provedores ativos (5)
 
 | Provedor | Categoria | Endpoint real | Por quê |
 |---|---|---|---|
@@ -37,6 +37,7 @@ providers/*.ts  →  circuit-breaker.ts + quality-engine.ts  →  event-bus.ts  
 | `fear_greed_index` | SENTIMENT | `api.alternative.me/fng/` | Público, sem chave, CORS aberto. Índice de sentimento cripto mais referenciado que não exige autenticação. |
 | `trending_coins` | ATTENTION | `api.coingecko.com/api/v3/search/trending` | (V11.5 Fase 4) Mesmo host já integrado por `coingecko_global`, endpoint diferente. Top símbolos mais buscados nas últimas 24h — sinal real de atenção de mercado, categoria distinta de sentimento. `lean` é sempre `null`: "o que está sendo mais buscado" não tem direção alta/baixa inerente, e inventar uma violaria o princípio de dado real deste módulo — por isso nunca entra no `GLOBAL_CONSENSUS_SCORE`, só aparece como contexto exibido. |
 | `derivatives_positioning` | DERIVATIVES | `fapi.binance.com/fapi/v1/premiumIndex` | (V15 Fase E) Público, sem chave — mesmo host que o painel de derivativos do App já usa. Funding rate + basis (mark×index) numa única resposta atômica: o feed combinado Spot×Perpetual do Cap. 7. `lean` = posicionamento por funding (±0.05%/8h clampado), nunca recomendação. |
+| `onchain_tvl_flow` | ONCHAIN | `api.llama.fi/v2/historicalChainTvl` | (Ordem Mestra §7) Público, sem chave. Fluxo real de TVL agregado (soma de todas as chains rastreadas) — variação real de 7 dias vs. valor atual, nunca interpolado. `lean` = capital entrando/saindo (±5%/7d clampado). Nota honesta: é um proxy de fluxo agregado de capital on-chain, não rastreamento de whale/carteira individual (a definição original desta categoria em `types.ts`) — nenhuma fonte keyless de whale-tracking foi encontrada; documentado como tal, nunca apresentado como equivalente. CORS de `api.llama.fi` não foi verificado ao vivo nesta sessão (rede do sandbox bloqueada) — confiança moderada por uso amplo conhecido em dashboards DeFi client-side, não uma certeza confirmada; `probeJsonEndpoint`/fetch já classifica `BLOCKED_BY_CORS` honestamente se a suposição estiver errada. |
 
 ## Fase E — agregação por categoria (V15 Cap. 6)
 
@@ -44,12 +45,14 @@ providers/*.ts  →  circuit-breaker.ts + quality-engine.ts  →  event-bus.ts  
 MESMAS linhas de provedor do snapshot, com a MESMA `computeConsensus`
 (LEI 04 — só particionamento por categoria, nunca uma segunda matemática):
 `contextScore` (todas), `institutionalBias` (DERIVATIVES+ONCHAIN),
-`macroBias` (MACRO), `liquidityBias` (BLOCKCHAIN). Categorias sem provedor
-ativo (ONCHAIN, MACRO — toda fonte prescrita exige chave de API ou não tem
-CORS keyless verificado, ver tabela abaixo) produzem score `null` honesto:
-o gancho existe e é visível na UI como AGUARDANDO; um provedor futuro é
-1 arquivo em `providers/` + 1 linha de registro no orquestrador, e o viés
-da categoria passa a existir sozinho.
+`macroBias` (MACRO), `liquidityBias` (BLOCKCHAIN). `institutionalBias`
+agora tem 2 categorias reais contribuindo (DERIVATIVES + ONCHAIN, desde a
+Ordem Mestra §7). MACRO continua sem provedor ativo — toda fonte
+prescrita exige chave de API ou não tem CORS keyless verificado (ver
+tabela abaixo e "Fontes avaliadas e adiadas") — produz score `null`
+honesto: o gancho existe e é visível na UI como AGUARDANDO; um provedor
+futuro é 1 arquivo em `providers/` + 1 linha de registro no orquestrador,
+e o viés da categoria passa a existir sozinho.
 
 ## Fontes avaliadas e adiadas (com motivo real, não silenciosamente ignoradas)
 
