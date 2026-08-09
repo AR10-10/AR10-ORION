@@ -49,7 +49,7 @@ import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/s
 // ADITIVO V-MAX Etapa 10 (Data Quality Monitor unificado): vocabulário
 // único OK/WARNING/FAIL/DADOS_INSUFICIENTES por cima dos 3 motores de
 // qualidade reais (Bus/GMIL/Research) — nunca um 4º cálculo, só leitura.
-import { classifyBusQuality, classifyWeight, classifySufficiencyScore, DATA_QUALITY_COLOR } from "./nexus/data-quality-vocabulary";
+import { classifyBusQuality, classifyWeight, classifySufficiencyScore, DATA_QUALITY_COLOR, type DataQualityLabel } from "./nexus/data-quality-vocabulary";
 // Fase Ω Priority 1: tipos + lista canônica dos 6 prazos — mesma fonte que
 // engine-bridge.ts usa para orquestrar, nunca uma segunda lista duplicada.
 import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } from "./nexus/multi-timeframe-engine";
@@ -159,6 +159,7 @@ import { buildConvictionReading } from "./nexus/confluence-engine";
 // Neural Market Aura (especificação do Operador, ver o cabeçalho de
 // nexus/aura-lifecycle.ts para o racional completo de escopo/honestidade).
 import { computeAuraReading, TIMEFRAME_MS } from "./nexus/aura-lifecycle";
+import { computeChartIntegrity, type ChartIntegrityStatus } from "./nexus/chart-integrity";
 // Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
 // alvo — ATR real × Efficiency Ratio de Kaufman sobre os closes reais do
 // gráfico; estimativa recomputada a cada ciclo, nunca uma garantia (ver
@@ -9426,8 +9427,25 @@ function MultiTimeframeMatrixWidget() {
 // (Chromium; Safari => SEM_API declarado, nunca um número fabricado).
 // ZERO REPETIÇÃO: nenhum destes indicadores aparece em outro painel —
 // regime/vieses/comitê/risco moram nos painéis das suas fases.
+// ADITIVO V-MAX Etapa 17 (Chart Integrity Engine): vocabulário/cor
+// próprios (mapeados para a MESMA paleta DATA_QUALITY_COLOR já usada
+// pelas outras linhas deste painel — nunca uma 2ª paleta), rótulo curto
+// para caber na largura do Row.
+const CHART_INTEGRITY_LABEL: Record<ChartIntegrityStatus, string> = {
+  SYNCED: "SINCRONIZADO",
+  SYMBOL_MISMATCH: "DESSINCRONIZADO",
+  STALE_DATA: "DADO ATRASADO",
+  DADOS_INSUFICIENTES: "AGUARDANDO",
+};
+const CHART_INTEGRITY_QUALITY: Record<ChartIntegrityStatus, DataQualityLabel> = {
+  SYNCED: "OK",
+  STALE_DATA: "WARNING",
+  SYMBOL_MISMATCH: "FAIL",
+  DADOS_INSUFICIENTES: "DADOS_INSUFICIENTES",
+};
+
 function TelemetryHealthWidget() {
-  const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus, gmilProviders } = useContext(WidgetContext) || {};
+  const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus, gmilProviders, selectedAsset } = useContext(WidgetContext) || {};
   // Ordem "Ciborgue Vivo" §3: mesmos sinais reais já lidos abaixo para as
   // Rows existentes, mais os que só o relatório precisa (offline/frescor/
   // conexões por exchange) — zero segunda medição, só uma segunda síntese
@@ -9477,6 +9495,21 @@ function TelemetryHealthWidget() {
     : AWAIT;
   const gmilColor = DATA_QUALITY_COLOR[classifyWeight(gmilAvgWeight)];
 
+  // ADITIVO V-MAX Etapa 17 (Chart Integrity Engine, achado de auditoria):
+  // o `cancelled` do efeito que dispara runRealAnalysisCycle já evita a
+  // pior forma de desync (ciclo velho sobrescrevendo a seleção nova), mas
+  // nada tornava isso um invariante VISÍVEL/verificável — se um refactor
+  // futuro quebrasse essa guarda, nenhum sinal avisaria o Operador. Puro
+  // passthrough dos mesmos campos que já chegam via realCycle/WidgetContext.
+  const chartIntegrity = computeChartIntegrity({
+    selectedSymbol: selectedAsset ?? null,
+    selectedTimeframe: chartTimeframe ?? null,
+    cycleSymbol: realCycle?.symbol ?? null,
+    cycleTimeframe: realCycle?.timeframe ?? null,
+    candleAgeMs: realCycle?.candleAgeMs ?? null,
+  });
+  const chartIntegrityColor = DATA_QUALITY_COLOR[CHART_INTEGRITY_QUALITY[chartIntegrity.status]];
+
   const variant = wasmVariantLabel(realCycle?.wasmVariant ?? null);
   const fpsClass = classifyFps(fps);
   const fpsColor = fpsClass === "FLUIDO" ? "text-[#00ffaa]" : fpsClass === "ACEITAVEL" ? "text-[#f0d06f]" : fpsClass === "CRITICO" ? "text-[#ff0055]" : "text-[#8ab4f8]/50";
@@ -9497,6 +9530,7 @@ function TelemetryHealthWidget() {
         <Row label="QUALIDADE DA FONTE (BUS)" value={qualityLabel} valueClass={qualityColor} />
         <Row label="SUFICIÊNCIA DE DADOS" value={sufficiencyLabel} valueClass={sufficiencyColor} />
         <Row label="QUALIDADE GMIL (CONTEXTO)" value={gmilLabel} valueClass={gmilColor} />
+        <Row label="INTEGRIDADE DO GRÁFICO" value={CHART_INTEGRITY_LABEL[chartIntegrity.status]} valueClass={chartIntegrityColor} />
         <Row label="WASM ENGINE" value={variant ?? AWAIT} valueClass={variant === "SIMD128" ? "text-[#00ffaa]" : "text-[#8ab4f8]"} />
         <Row
           label={`LATÊNCIA DO CICLO (${chartTimeframe?.toUpperCase() ?? "15M"})`}

@@ -232,7 +232,7 @@ describe('ADITIVO V-MAX Etapa 10 (Data Quality Monitor unificado): dado real já
   it('TelemetryHealthWidget lê gmilProviders do MESMO WidgetContext (nenhuma 2ª assinatura de useGmilSnapshot)', () => {
     const app = read('../src/App.tsx');
     expect(app).toContain(
-      'const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus, gmilProviders } = useContext(WidgetContext) || {};',
+      'const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus, gmilProviders, selectedAsset } = useContext(WidgetContext) || {};',
     );
     // a única assinatura real do hook continua exatamente 1 (topo de App())
     const subscriptions = app.match(/= useGmilSnapshot\(\);/g) ?? [];
@@ -242,7 +242,7 @@ describe('ADITIVO V-MAX Etapa 10 (Data Quality Monitor unificado): dado real já
   it('SYSTEM HEALTH usa o vocabulário único (data-quality-vocabulary.ts) para as 3 leituras de qualidade — zero ternary ad-hoc divergente', () => {
     const app = read('../src/App.tsx');
     expect(app).toContain(
-      'import { classifyBusQuality, classifyWeight, classifySufficiencyScore, DATA_QUALITY_COLOR } from "./nexus/data-quality-vocabulary";',
+      'import { classifyBusQuality, classifyWeight, classifySufficiencyScore, DATA_QUALITY_COLOR, type DataQualityLabel } from "./nexus/data-quality-vocabulary";',
     );
     expect(app).toContain('DATA_QUALITY_COLOR[classifyBusQuality(quality?.classification ?? null)]');
     expect(app).toContain('DATA_QUALITY_COLOR[classifySufficiencyScore(sufficiency?.score ?? null, sufficiency?.max_score ?? 100)]');

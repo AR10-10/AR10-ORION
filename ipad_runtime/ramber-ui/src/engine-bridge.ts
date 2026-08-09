@@ -277,6 +277,18 @@ export interface RealCycleResult {
   // campo, nunca de uma string fixa — se o fetch falhar, o rótulo vira
   // AGUARDANDO honesto em vez de afirmar um mercado que não respondeu.
   instrumentType?: 'crypto_spot' | 'crypto_futures' | null;
+  // ADITIVO V-MAX Etapa 17 (Chart Integrity Engine, achado de auditoria):
+  // symbol/timeframe são os parâmetros reais desta chamada — já existiam
+  // como argumentos de runRealAnalysisCycle, mas nunca saíam no
+  // resultado, então nenhum consumidor conseguia verificar "isto que
+  // estou vendo é realmente do símbolo/timeframe selecionado agora?" sem
+  // confiar cegamente no `cancelled` do efeito que dispara o ciclo em
+  // App.tsx. candleAgeMs é o mesmo snapshot.ageMs real (Market Data Bus,
+  // Fase B) já usado para freshness_ms internamente — puro passthrough,
+  // nada recomputado. Ver nexus/chart-integrity.ts.
+  symbol?: string;
+  timeframe?: string;
+  candleAgeMs?: number;
 }
 
 // Fase D: histórico real de transições de regime por símbolo (V15 Cap. 5,
@@ -581,6 +593,9 @@ export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): P
       dataSufficiency: research.data_sufficiency,
       instrumentType: evidence.instrument_type,
       wasmVariant,
+      symbol,
+      timeframe: snapshot.timeframe,
+      candleAgeMs: snapshot.ageMs,
     };
   } catch (err: any) {
     return { ok: false, reason: `pipeline_de_pesquisa_falhou: ${describeError(err)}` };
