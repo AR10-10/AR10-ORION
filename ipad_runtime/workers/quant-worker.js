@@ -196,17 +196,27 @@ self.onmessage = async (ev) => {
 
         if (type === 'compute_series') {
             const e = await loadWasm();
-            const { closes, window } = ev.data;
+            const { closes, window, includeRolling } = ev.data;
             const len = writeBuffer(closes);
             if (len === 0 || !Number.isInteger(window) || window <= 0 || window > len) {
                 self.postMessage({ id, type: 'compute_series_result', result: null });
                 return;
             }
+            // includeRolling (default false): nenhum consumidor real do
+            // ramber-ui le rollingSma/rollingZ hoje (grep confirma) — o loop
+            // abaixo chamava o WASM ate ~2×(len-window) vezes por ciclo
+            // (centenas de chamadas reais) so' para preencher um array
+            // sempre descartado. Fica opt-in para quem realmente precisar da
+            // serie completa; sma/ema/stddev/zscoreLast/max/min continuam
+            // sempre calculados, comportamento identico para todo chamador
+            // atual.
             const rollingSma = [];
             const rollingZ = [];
-            for (let i = window; i <= len; i++) {
-                rollingSma.push(e.sma(i, window));
-                rollingZ.push(e.zscore_last(i));
+            if (includeRolling) {
+                for (let i = window; i <= len; i++) {
+                    rollingSma.push(e.sma(i, window));
+                    rollingZ.push(e.zscore_last(i));
+                }
             }
             const result = {
                 len,

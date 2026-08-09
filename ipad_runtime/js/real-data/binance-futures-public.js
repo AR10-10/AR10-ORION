@@ -33,6 +33,7 @@
 
 import { probeJsonEndpoint } from './probe.js';
 import { CONNECTOR_STATES, DADOS_INSUFICIENTES, createEmptyEvidence, markFieldMissing, hashRawSample, computeDataQuality } from './schema.js';
+import { SYMBOL_TO_USDT_PAIR as SYMBOL_TO_PAIR } from '../shared/symbols.js';
 
 export const meta = Object.freeze({
     connector_id: 'binance-futures-public-adapter',
@@ -43,7 +44,6 @@ export const meta = Object.freeze({
     supports_private_endpoints: false,
 });
 
-const SYMBOL_TO_PAIR = Object.freeze({ BTC: 'BTCUSDT', ETH: 'ETHUSDT', SOL: 'SOLUSDT', BNB: 'BNBUSDT', XRP: 'XRPUSDT' });
 const FUTURES_BASE = 'https://fapi.binance.com';
 
 function validateKlinesShape(json) {

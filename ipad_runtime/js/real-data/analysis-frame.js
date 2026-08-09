@@ -118,8 +118,17 @@ export async function buildRealAnalysisFrame({ evidence, workerClient, windowSiz
     }
 
     const lastPrice = closes[closes.length - 1];
-    const windowLow = Math.min(...candles.map((c) => c.l));
-    const windowHigh = Math.max(...candles.map((c) => c.h));
+    // Nunca Math.min(...array)/Math.max(...array): um historico grande o
+    // suficiente (paginacao historica, backtest) estoura a pilha de
+    // argumentos do spread — mesmo resultado (incluindo propagacao de NaN,
+    // se algum candle vier corrompido) via acumulador em loop, sem limite
+    // de tamanho de array.
+    let windowLow = Infinity;
+    let windowHigh = -Infinity;
+    for (const c of candles) {
+        windowLow = Math.min(windowLow, c.l);
+        windowHigh = Math.max(windowHigh, c.h);
+    }
 
     const srResult = analyzeSupportResistance({ ohlcv_series: candles, timeframe: evidence.timeframe, volume_profile: null });
     const structureResult = analyzeMarketStructure({ ohlcv_series: candles, timeframe: evidence.timeframe });

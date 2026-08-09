@@ -9,6 +9,7 @@
 
 import { probeJsonEndpoint } from './probe.js';
 import { CONNECTOR_STATES, createEmptyEvidence, hashRawSample, computeDataQuality } from './schema.js';
+import { SYMBOL_TO_USDT_PAIR as SYMBOL_TO_PAIR } from '../shared/symbols.js';
 
 export const meta = Object.freeze({
     connector_id: 'binance-spot-public-adapter',
@@ -18,8 +19,6 @@ export const meta = Object.freeze({
     requires_api_key: false,
     supports_private_endpoints: false,
 });
-
-const SYMBOL_TO_PAIR = Object.freeze({ BTC: 'BTCUSDT', ETH: 'ETHUSDT', SOL: 'SOLUSDT', BNB: 'BNBUSDT', XRP: 'XRPUSDT' });
 
 function validateKlinesShape(json) {
     if (!Array.isArray(json)) return { valid: false, reason: 'resposta_nao_e_array' };

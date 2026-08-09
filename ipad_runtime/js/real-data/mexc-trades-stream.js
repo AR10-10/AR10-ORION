@@ -40,6 +40,7 @@
 import { probeJsonEndpoint } from './probe.js';
 import { CONNECTOR_STATES } from './schema.js';
 import { Tick, Side } from '../../src/orderflow/value-objects.js';
+import { SYMBOL_TO_USDT_PAIR as SYMBOL_TO_PAIR } from '../shared/symbols.js';
 
 export const meta = Object.freeze({
     connector_id: 'mexc-public-trades-stream',
@@ -49,8 +50,6 @@ export const meta = Object.freeze({
     requires_api_key: false,
     supports_private_endpoints: false,
 });
-
-const SYMBOL_TO_PAIR = Object.freeze({ BTC: 'BTCUSDT', ETH: 'ETHUSDT', SOL: 'SOLUSDT', BNB: 'BNBUSDT', XRP: 'XRPUSDT' });
 
 /** Validacao estrutural pura da resposta de /api/v3/trades — formato, nao
  *  conteudo de mercado. Falha fechado (BLOCKED_BY_SCHEMA via probe.js) se
@@ -157,8 +156,16 @@ export function createLivePoller({ symbol = 'BTC', intervalMs = 4000, limit = 50
             if (running) return;
             running = true;
             lastTradeId = null;
-            cycle();
-            timerHandle = setInterval(cycle, intervalMs);
+            // Mesmo padrao ja estabelecido em gmil-orchestrator.js: cycle()
+            // ja e' fail-closed internamente (probe()/probeJsonEndpoint
+            // nunca rejeitam), mas o onResult do chamador e' codigo externo
+            // que pode lancar — sem este catch, isso vazaria como um
+            // unhandledrejection real a cada ciclo de polling.
+            const run = () => {
+                cycle().catch(() => {});
+            };
+            run();
+            timerHandle = setInterval(run, intervalMs);
         },
         stop() {
             running = false;

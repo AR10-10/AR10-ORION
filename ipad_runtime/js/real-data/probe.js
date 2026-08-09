@@ -65,6 +65,13 @@ export async function probeJsonEndpoint({ url, timeoutMs = 8000, validate }) {
     result.elapsed_ms = Date.now() - startedAt;
     result.http_status = response.status;
 
+    // Defesa futura, nao um caminho vivo hoje: com mode:'cors' (unico modo
+    // usado acima), um bloqueio real de CORS faz fetch() REJEITAR (capturado
+    // no catch acima) em vez de resolver com response.type==='opaque' — isso
+    // so aconteceria com mode:'no-cors', que este modulo nunca usa. Mantido
+    // caso um chamador futuro precise de no-cors; nunca removido porque
+    // Regra de Ouro 4 (nunca apagar funcionalidade real) tambem cobre
+    // salvaguardas defensivas ainda corretas.
     if (response.type === 'opaque') {
         result.state = CONNECTOR_STATES.BLOCKED_BY_CORS;
         result.reason = 'resposta_opaca_modo_no-cors_corpo_inacessivel';

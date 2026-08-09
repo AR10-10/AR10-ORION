@@ -57,3 +57,39 @@ describe('quant-worker.js compute_series: guarda upfront, mesmo padrão dos irm�
     }
   });
 });
+
+describe('quant-worker.js compute_series: rollingSma/rollingZ viram opt-in (achado real — grep confirma zero consumidor real em todo ramber-ui/src)', () => {
+  it('o loop de rolling stats só roda quando includeRolling é verdadeiro — nunca por padrão', () => {
+    const worker = read('../../workers/quant-worker.js');
+    const start = worker.indexOf("if (type === 'compute_series')");
+    const end = worker.indexOf('unknown message type', start);
+    const body = worker.slice(start, end);
+
+    expect(body).toContain('const { closes, window, includeRolling } = ev.data;');
+    const guardIdx = body.indexOf('if (includeRolling) {');
+    const loopIdx = body.indexOf('for (let i = window; i <= len; i++)');
+    expect(guardIdx, 'guarda includeRolling não encontrada').toBeGreaterThan(-1);
+    expect(loopIdx, 'loop de rolling stats não encontrado').toBeGreaterThan(-1);
+    expect(guardIdx).toBeLessThan(loopIdx);
+  });
+
+  it('sma/ema/stddev/zscoreLast/max/min continuam sempre calculados — só a série rolling completa é que é opt-in', () => {
+    const worker = read('../../workers/quant-worker.js');
+    const start = worker.indexOf("if (type === 'compute_series')");
+    const end = worker.indexOf('unknown message type', start);
+    const body = worker.slice(start, end);
+    for (const field of ['sma: e.sma(len, window)', 'ema: e.ema(len, window)', 'stddev: e.stddev(len)', 'zscoreLast: e.zscore_last(len)', 'max: e.max_val(len)', 'min: e.min_val(len)']) {
+      expect(body, `campo sempre-calculado ausente: ${field}`).toContain(field);
+    }
+    // rollingSma/rollingZ continuam no formato do result (arrays vazios por
+    // padrão), nunca removidos do contrato — só o CONTEÚDO fica condicional.
+    expect(body).toContain('rollingSma,');
+    expect(body).toContain('rollingZ,');
+  });
+
+  it('worker-client.js: computeSeries() repassa includeRolling (default false) para o worker', () => {
+    const client = read('../../js/worker-client.js');
+    expect(client).toContain('computeSeries(closes, window = 20, includeRolling = false) {');
+    expect(client).toContain("return this.call('compute_series', { closes: packed, window, includeRolling }, 15000, [packed.buffer]);");
+  });
+});

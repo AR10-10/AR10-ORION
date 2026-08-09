@@ -221,6 +221,27 @@ describe('core-rules: analysis-frame — portões de amostra e rótulos descriti
     expect(frame.execution).toBe('DISABLED_BY_POLICY');
   });
 
+  // BUG real corrigido: windowLow/windowHigh usavam Math.min(...array)/
+  // Math.max(...array) — um histórico grande o suficiente (paginação
+  // histórica, backtest) estoura a pilha de argumentos do spread operator
+  // e lança RangeError, derrubando toda a análise em vez de devolver um
+  // frame honesto. 200.000 candles está bem acima do limite prático de
+  // argumentos de qualquer engine JS real.
+  it('BUG real corrigido: histórico grande (200.000 candles) não lança RangeError — sem spread de array gigante em Math.min/max', async () => {
+    const bigCandles = Array.from({ length: 200_000 }, (_, i) => {
+      const close = 50_000 + (i % 500);
+      return { t: 1_700_000_000 + i * 60, o: close, h: close + 10, l: close - 10, c: close, v: 1 };
+    });
+    const evidence = { symbol: 'BTC', instrument_type: 'crypto_spot', timeframe: '1m', candles: bigCandles, volume: { v: 1 }, missing_fields: [] };
+    const frame = await buildRealAnalysisFrame({
+      evidence,
+      workerClient: fakeWorker({ sma: 50_000, ema: 50_000, stddev: 100, zscoreLast: 0 }),
+    });
+    expect(frame.status).toBe('OK');
+    expect(typeof frame.support).toBe('number');
+    expect(typeof frame.resistance).toBe('number');
+  });
+
   // Evolução Total (fix documentado na Ordem Nº 03 §3, executado sob "não
   // deixa nada pendente"): last_swing_high/last_swing_low — os 2 preços já
   // computados por analyzeMarketStructure a cada ciclo — agora saem no

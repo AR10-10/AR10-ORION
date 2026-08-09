@@ -5,8 +5,8 @@
 // travado em tradfi-delayed-yahoo.test.ts para o conector Yahoo — execucao
 // real das funcoes puras, zero rede (tradesToTicks/filterNewTrades/
 // validateTradesShape nao chamam fetch).
-import { describe, it, expect } from 'vitest';
-import { tradesToTicks, filterNewTrades, validateTradesShape } from '../../js/real-data/mexc-trades-stream.js';
+import { describe, it, expect, vi } from 'vitest';
+import { tradesToTicks, filterNewTrades, validateTradesShape, createLivePoller } from '../../js/real-data/mexc-trades-stream.js';
 import { Side } from '../../src/orderflow/value-objects.js';
 
 describe('tradesToTicks: linhas reais e validas viram Tick[] correto, ordenado por tempo', () => {
@@ -115,5 +115,32 @@ describe('filterNewTrades: dedup real entre ciclos de polling', () => {
   it('so retorna linhas com id estritamente maior que lastTradeId', () => {
     const rows = [{ id: 1 }, { id: 2 }, { id: 3 }];
     expect(filterNewTrades(rows, 2)).toEqual([{ id: 3 }]);
+  });
+});
+
+describe('createLivePoller: BUG real corrigido — cycle() sem catch produzia unhandledrejection real a cada ciclo', () => {
+  it('se onResult lança (bug do código chamador), start() não deixa a rejeição escapar sem tratamento (mesmo padrão de gmil-orchestrator.js)', async () => {
+    const rows = [{ price: '1', qty: '1', time: 1, isBuyerMaker: false, id: 1 }];
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => JSON.stringify(rows), json: async () => rows });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const unhandled: unknown[] = [];
+    const onUnhandled = (err: unknown) => unhandled.push(err);
+    process.on('unhandledRejection', onUnhandled);
+
+    const poller = createLivePoller({
+      symbol: 'BTC',
+      intervalMs: 100_000, // longo o bastante para não disparar um 2º ciclo durante o teste
+      onResult: () => {
+        throw new Error('bug proposital do código chamador');
+      },
+    });
+    poller.start();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    poller.stop();
+
+    process.off('unhandledRejection', onUnhandled);
+    vi.unstubAllGlobals();
+    expect(unhandled).toEqual([]);
   });
 });

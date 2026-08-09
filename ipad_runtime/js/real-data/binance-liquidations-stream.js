@@ -79,6 +79,13 @@ export function startLiquidationStream({ onEvent, onState, minNotionalUsd = 5000
         if (stopped) return;
         ws = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
         ws.onopen = () => {
+            // Mesma guarda ja usada em onclose logo abaixo: se stop() rodou
+            // enquanto esta conexao ainda estava CONNECTING (corrida real de
+            // rede), o navegador pode entregar um onopen tardio mesmo depois
+            // do close() que stop() ja disparou — sem isto, o estado
+            // ACTIVE_READ_ONLY seria reportado para uma stream que o
+            // chamador ja mandou parar.
+            if (stopped) return;
             reconnectDelayMs = 1000;
             onState?.(CONNECTOR_STATES.ACTIVE_READ_ONLY);
         };

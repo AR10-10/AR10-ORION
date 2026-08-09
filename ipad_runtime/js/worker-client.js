@@ -36,13 +36,16 @@ export class QuantWorkerClient {
 
     ping() { return this.call('ping'); }
     initWasm() { return this.call('init_wasm'); }
-    computeSeries(closes, window = 20) {
+    computeSeries(closes, window = 20, includeRolling = false) {
         // Fase I (Zero-Copy, diretriz 3): closes viajam como Float64Array
         // TRANSFERIDO — o quant-worker ja escrevia num Float64Array de
         // qualquer forma (writeBuffer), entao a main thread deixa de clonar
         // um array de numeros por ciclo (30s) e nao deixa lixo para o GC.
+        // includeRolling (default false): rollingSma/rollingZ so' sao
+        // calculados quando um chamador realmente precisar da serie
+        // completa — nenhum consumidor real pede isso hoje.
         const packed = closes instanceof Float64Array ? closes : Float64Array.from(closes);
-        return this.call('compute_series', { closes: packed, window }, 15000, [packed.buffer]);
+        return this.call('compute_series', { closes: packed, window, includeRolling }, 15000, [packed.buffer]);
     }
     // V-MAX Fase 1.3: Volume Profile real no WASM do worker. Mesmo padrao
     // zero-copy do computeSeries — os tres arrays viajam TRANSFERIDOS.
