@@ -6743,6 +6743,175 @@ viewport 430×932 `hasTouch:true`).
 
 ---
 
+### 6.92 Fechamento honesto do ADITIVO V-MAX (Etapas 2-15, task interna
+#82) — "execute tudo, habilite todos os modos ativos" (autonomia total
+concedida pelo Operador, aplicada dentro do READ_ONLY permanente)
+
+Pedido do Operador (informal, direto): rodar tudo que falta, sair do modo
+"só teste interno", "habilitar todos os modos ativos". Uma leitura
+possível ("modo ativo" = execução real de ordens) é permanentemente
+proibida por este mesmo arquivo — confirmado via `AskUserQuestion` antes
+de agir; o Operador respondeu concedendo autonomia total em vez de
+escolher uma opção. Interpretação aplicada, ancorada no próprio texto
+deste arquivo ("a reformulação não muda o que o código faria" e "carta
+branca... você faz a escolha mais correta"): verificação/execução
+completas dentro da arquitetura READ_ONLY já existente + fechar
+honestamente o backlog interno "ADITIVO V-MAX Etapas 2-15" (#82), aberto
+desde §6.42 e nunca fechado de ponta a ponta.
+
+**0. Auditoria de um documento externo antes de construir ("Bíblia da
+Evolução")**: mesmo padrão do "Plano de Evolução Orgânica" (§6.91) — um
+2º documento externo (v2.0, mesma dupla de personas fictícias) pedindo
+vocabulário biológico obrigatório + arquitetura `nervous-system/`
+wrapper-only + reorganização de 44 dias/9 fases, com "15 Bugs Críticos".
+Rejeitado via `AskUserQuestion` (Operador escolheu "Auditar + corrigir
+bugs reais, sem vocabulário novo"). Auditoria dos 15 achados contra o
+código REAL antes de qualquer fix: 2 já corrigidos nesta sessão, 1
+repetia uma alegação já derrubada, 6 eram falsos (código já correto),
+5 reais + 1 cosmético corrigidos (commit `5307fca`):
+`worker-client.js`/`quant-worker.js`/`binance-liquidations-stream.js`/
+`analysis-frame.js` tinham 3 símbolos duplicados fora de `shared/
+symbols.js` (novo, `SYMBOL_TO_USDT_PAIR`, único agora); `mexc-trades-
+stream.js.start()` disparava `cycle()` sem `.catch()` no primeiro tick
+(mesmo idioma fire-and-forget já usado em `gmil-orchestrator.ts`,
+faltava só neste ponto); `quant-worker.compute_series` sempre computava
+`rollingSma`/`rollingZ` mesmo quando o chamador não pedia (agora
+condicional via `includeRolling`); `binance-liquidations-stream.js`
+`onopen` não checava `stopped` antes de resetar o backoff (mesma classe
+de bug já corrigida em outros streams); `analysis-frame.js` usava
+`Math.min(...array)`/`Math.max(...array)` — `RangeError` real em arrays
+muito grandes (>~100k elementos), substituído por acumulador com a MESMA
+semântica de propagação de NaN. 1 achado cosmético: comentário
+esclarecendo um `if` defensivo genuinamente inalcançável em `probe.js`.
+
+**1. Chart Integrity Engine (Etapa 17 do V-MAX) — motor novo, commit
+`328f048`**: auditoria prévia (Disciplina de trabalho item 1) achou que o
+`cancelled` do efeito `runCycle` em `App.tsx` já evita a PIOR forma de
+desync (ciclo velho sobrescrevendo a seleção nova de symbol/timeframe) —
+mas isso é um invariante IMPLÍCITO, sem sinal visível se um refactor
+futuro quebrar a guarda. `nexus/chart-integrity.ts` (motor puro,
+`computeChartIntegrity`) torna isso EXPLÍCITO: 4 estados (`SYNCED`/
+`SYMBOL_MISMATCH`/`STALE_DATA`/`DADOS_INSUFICIENTES`), staleness
+calculada como 3× o intervalo real da barra (`TIMEFRAME_MS`, reusado de
+`aura-lifecycle.ts`, nunca redefinido). Graduado: `engine-bridge.ts`
+passa `symbol`/`timeframe`/`candleAgeMs` como passthrough puro (mesmos
+valores já usados no ciclo, nunca uma 2ª leitura); nova Row "INTEGRIDADE
+DO GRÁFICO" no painel SYSTEM HEALTH, mesma paleta `DATA_QUALITY_COLOR`
+das outras 3 linhas de qualidade. 17 testes (10 motor puro + 7 fiação).
+Verificado AO VIVO nesta rodada (Playwright, dev server real): a Row
+renderiza e mostra corretamente `DADOS_INSUFICIENTES` ("AGUARDANDO")
+porque este sandbox não tem egress real para Binance (túnel do proxy
+recusa o WebSocket) — o caminho fail-closed é o único verificável aqui
+sem rede real, e é o mais importante dos 4 (prova que o motor nunca
+fabrica um `SYNCED` falso quando não há candle real).
+
+**2. Organism Health — widget persistente (Etapa 19) + Footprint
+RECUSADO (Etapa 18, achado que virou decisão) — commit `5454194`**:
+`self-diagnostics.ts` (relatório profundo, 10 achados) já existia mas é
+SOB DEMANDA (clique). `nexus/organism-health.ts` (motor puro,
+`computeOrganismHealth`) fecha a lacuna oposta: um veredito agregado
+SEMPRE VISÍVEL, reduzindo os MESMOS 8 sinais já nomeados linha a linha no
+painel (Bus/Suficiência/GMIL/Integridade do Gráfico/FPS/Latência do
+Ciclo/offline/Worker WASM — 3 deles promovidos de inline para const
+nomeada, só para permitir o reuso, zero segunda medição) a "pior sinal
+vence", com um 4º degrau `AGUARDANDO` que nunca é mascarado como OK nem
+como CRITICAL (ausência real de medição ≠ problema confirmado — Regra de
+Ouro 3). Nova Row "SAÚDE DO ORGANISMO", primeira do painel, mesma
+paleta. 18 testes (12 motor puro + 6 fiação). Verificado ao vivo: valor
+de pior caso ("CRÍTICO · Integridade do gráfico", a combinação mais
+longa possível) não estoura a largura do próprio painel nem causa scroll
+de página.
+
+Investigação paralela de Footprint (motor de volume-por-preço-POR-
+CANDLE) esbarrou num achado estrutural: `volume-profile.ts` já
+documentava que não existe tick stream real de Binance Futures neste
+codebase (só klines/liquidations via `forceOrder`/probes REST de
+premium-index) — confirmado de novo por grep direto (`aggTrade`/`@trade`
+— zero ocorrência em `binance-futures-public.js`). O único tick stream
+real do repositório é MEXC Spot, outro mercado. Um Footprint honesto
+precisa de compra-vs-venda dentro do MESMO candle; bucketar ticks MEXC
+Spot dentro de candles Binance Futures atribuiria fluxo de ordens de UM
+mercado a candles de OUTRO — uma classe de dado fabricado mais grave que
+a aproximação OHLCV já declarada do próprio Volume Profile (que ao menos
+preserva o mesmo instrumento/período). **Decisão: RECUSADO**, registrada
+no próprio `volume-profile.ts` (mesmo padrão da nota de escopo honesta
+que já vivia ali) — não construído até existir um tick stream real de
+Binance Futures neste codebase.
+
+**3. Fechamento de #234 (Volume Clusters / Cross-Timeframe Liquidity)**:
+reconfirmados nesta rodada, sem mudança de estado — Volume Clusters
+continua **RECUSADO** (duplicaria Volume Profile como conceito
+distinto); Cross-Timeframe Liquidity continua **RECUSADO** (documentado
+em `multi-timeframe-engine.ts`: Volume Profile/Liquidez ficam fora do
+escopo da Fase Ω v1 por custo de Worker sem necessidade para a pergunta
+central "os prazos concordam?"). Mesma distinção AUSENTE-vs-RECUSADO já
+formalizada em `MAPA_EVOLUCAO_CIBORGUE.md`.
+
+**4. Correção de registro: "Adaptive Zoom" não está AUSENTE** — achado
+de auditoria (Disciplina de trabalho item 1) ao investigar o que
+realmente falta no V-MAX antes de fechar #82: várias entradas deste
+handbook (§6.42, e uma reconfirmação posterior "por grep") classificam
+Adaptive Zoom como AUSENTE, mas §6.79 já tinha entregue e documentado
+"primeira fatia real" (`EnhancedChart_110_Percent.tsx`:
+`smartZoomPendingRef`/`SMART_ZOOM_CANDLES`/`SMART_ZOOM_RIGHT_PAD_BARS` —
+reenquadra as últimas 120 velas + 6 de folga ao trocar symbol/timeframe,
+nunca sobre dado velho, nunca em tick) e §6.42/§221 outro ângulo
+(`nexus/chart-viewport.ts`, janela de candles adaptativa). Confirmado
+por grep direto nesta rodada: ambos os arquivos e símbolos continuam
+reais no código atual, não regrediram. Estado real, honesto: **PARCIAL**
+— reenquadre automático funciona na troca de contexto; o que
+genuinamente falta (zoom reativo contínuo a volatilidade/regime, fora de
+uma troca de symbol/timeframe) nunca foi construído nem prometido, e não
+foi tentado nesta rodada (escopo novo de motor, pesquisa própria, fora
+do que esta rodada já grande comporta com segurança).
+
+**5. Auto Layout (Etapa 18, #240) — fechamento honesto de escopo**:
+`scripts/audit-header-maxcontent.mjs` (11 viewports reais, iPad→
+ultrawide) cobre 3 superfícies reais com fixture de PIOR CASO de
+conteúdo (não só estado vazio): TopBar (3 zonas + chips), gaveta Market
+Intelligence (MarketDirectionWidget + MarketBiasDecisionCard) e o painel
+Síntese Operacional da aba ANALYSIS — correção de registro: entradas
+anteriores diziam "TopBar + 1 painel", são na verdade 3 superfícies
+distintas, todas com fixture dedicada. O que fica de fora, honestamente:
+os demais painéis widget (SYSTEM HEALTH, CouncilWidget, OPORTUNIDADES,
+Publication Studio, Chart Layers) usam os MESMOS primitivos responsivos
+(`flex`/`overflow-y-auto scrollbar-hide`/`min-h-0`) mas nunca passaram
+pelo mesmo script de regressão multi-viewport com fixture de pior caso —
+estender o script para cada um exigiria uma fixture bespoke por painel
+(o próprio script já mostra o quanto de mutação DOM manual cada
+superfície pediu) — escopo real de uma rodada própria, não tentado aqui.
+Como este próprio round adicionou 2 Rows novas ao painel SYSTEM HEALTH
+(Chart Integrity + Organism Health), a superfície que efetivamente
+mudou nesta rodada foi verificada ao vivo (item 2 acima) — não a
+totalidade dos painéis, mas a fatia real que este trabalho tocou.
+
+**6. Fechamento de #82**: com os 13 itens nomeados de Etapas 2-15 agora
+com estado real e decidido (IMPLEMENTADO: Chart Integrity, Liquidity
+Void, ferramentas institucionais, Radar MEXC-wide, Data Quality, Market
+Regime→Relevance, Organism Health · PARCIAL com fatia real registrada:
+Adaptive Zoom, Auto Layout · RECUSADO com razão registrada: Volume
+Clusters, Cross-Timeframe Liquidity, Footprint) — nenhum item
+silenciosamente esquecido — a task interna #82 é fechada nesta entrada.
+PARCIAL não é IMPLEMENTADO: os 2 gaps nomeados acima (zoom reativo a
+volatilidade; cobertura do audit script para os demais painéis)
+continuam reais e abertos para uma rodada futura, não fabricados como
+concluídos aqui.
+
+**Testes**: `tsc --noEmit` limpo · **165 arquivos / 2643 testes (100%)**
+· `npm run build` ok (1869 módulos) · verificação Playwright ao vivo em
+2 rodadas (Chart Integrity + Organism Health, dev server real, viewport
+430×932 `hasTouch:true`) — únicos erros de console são os já conhecidos
+de rede bloqueada pelo proxy do sandbox (WebSocket `forceOrder` para
+`fstream.binance.com`), nunca um erro da aplicação.
+
+**Riscos conhecidos**: este sandbox nunca teve egress real para Binance
+em nenhuma verificação desta sessão — todo veredito `SYNCED`/`OK` dos 2
+motores novos ficou coberto só por teste de execução real (unitário),
+nunca visto ao vivo com dado de mercado de verdade; os 2 gaps PARCIAIS
+documentados no item 6 continuam reais.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
