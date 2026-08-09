@@ -160,6 +160,7 @@ import { buildConvictionReading } from "./nexus/confluence-engine";
 // nexus/aura-lifecycle.ts para o racional completo de escopo/honestidade).
 import { computeAuraReading, TIMEFRAME_MS } from "./nexus/aura-lifecycle";
 import { computeChartIntegrity, type ChartIntegrityStatus } from "./nexus/chart-integrity";
+import { computeOrganismHealth, type OrganismHealthVerdict } from "./nexus/organism-health";
 // Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
 // alvo — ATR real × Efficiency Ratio de Kaufman sobre os closes reais do
 // gráfico; estimativa recomputada a cada ciclo, nunca uma garantia (ver
@@ -9444,6 +9445,22 @@ const CHART_INTEGRITY_QUALITY: Record<ChartIntegrityStatus, DataQualityLabel> = 
   DADOS_INSUFICIENTES: "DADOS_INSUFICIENTES",
 };
 
+// ADITIVO V-MAX Etapa 19 (Organism Health): mesmo padrão de par rótulo+cor
+// das 2 constantes acima — nunca uma 3ª paleta, sempre a mesma
+// DATA_QUALITY_COLOR de 4 estados.
+const ORGANISM_HEALTH_LABEL: Record<OrganismHealthVerdict, string> = {
+  OK: "SAUDÁVEL",
+  WARN: "ATENÇÃO",
+  CRITICAL: "CRÍTICO",
+  AGUARDANDO: "AGUARDANDO",
+};
+const ORGANISM_HEALTH_QUALITY: Record<OrganismHealthVerdict, DataQualityLabel> = {
+  OK: "OK",
+  WARN: "WARNING",
+  CRITICAL: "FAIL",
+  AGUARDANDO: "DADOS_INSUFICIENTES",
+};
+
 function TelemetryHealthWidget() {
   const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus, gmilProviders, selectedAsset } = useContext(WidgetContext) || {};
   // Ordem "Ciborgue Vivo" §3: mesmos sinais reais já lidos abaixo para as
@@ -9460,7 +9477,10 @@ function TelemetryHealthWidget() {
   const qualityLabel = quality
     ? `${quality.classification}${num(quality.weight) ? ` · peso ${(quality.weight * 100).toFixed(0)}%` : ""}`
     : AWAIT;
-  const qualityColor = DATA_QUALITY_COLOR[classifyBusQuality(quality?.classification ?? null)];
+  // Nomeado (em vez de inline) para que Organism Health (Etapa 19) reuse a
+  // MESMA classificação da Row abaixo — zero segunda medição divergente.
+  const busQualityState = classifyBusQuality(quality?.classification ?? null);
+  const qualityColor = DATA_QUALITY_COLOR[busQualityState];
 
   // ADITIVO V-MAX Etapa 10 (achado de auditoria): data-sufficiency.js já
   // computa um score real 0-100 de cobertura de campos EM TODO ciclo
@@ -9471,7 +9491,8 @@ function TelemetryHealthWidget() {
   // recomputado aqui.
   const sufficiency = realCycle?.dataSufficiency ?? null;
   const sufficiencyLabel = sufficiency ? `${sufficiency.score}/${sufficiency.max_score}` : AWAIT;
-  const sufficiencyColor = DATA_QUALITY_COLOR[classifySufficiencyScore(sufficiency?.score ?? null, sufficiency?.max_score ?? 100)];
+  const sufficiencyState = classifySufficiencyScore(sufficiency?.score ?? null, sufficiency?.max_score ?? 100);
+  const sufficiencyColor = DATA_QUALITY_COLOR[sufficiencyState];
 
   // ADITIVO V-MAX Etapa 10 (achado de auditoria): GmilOrchestrator.getSnapshot()
   // já computa um weight 0-1 real por provedor (mesmo computeQuality de
@@ -9493,7 +9514,8 @@ function TelemetryHealthWidget() {
   const gmilLabel = gmilAvgWeight !== null
     ? `${(gmilAvgWeight * 100).toFixed(0)}% · ${gmilAttempted.length}/${gmilList.length} fontes`
     : AWAIT;
-  const gmilColor = DATA_QUALITY_COLOR[classifyWeight(gmilAvgWeight)];
+  const gmilQualityState = classifyWeight(gmilAvgWeight);
+  const gmilColor = DATA_QUALITY_COLOR[gmilQualityState];
 
   // ADITIVO V-MAX Etapa 17 (Chart Integrity Engine, achado de auditoria):
   // o `cancelled` do efeito que dispara runRealAnalysisCycle já evita a
@@ -9517,6 +9539,24 @@ function TelemetryHealthWidget() {
   const cycleColor = cycleClass === "RAPIDO" ? "text-[#00ffaa]" : cycleClass === "OK" ? "text-[#f0d06f]" : cycleClass === "LENTO" ? "text-[#ff0055]" : "text-[#8ab4f8]/50";
   const memMB = typeof performance !== "undefined" ? memoryUsedMB(performance as any) : null;
 
+  // ADITIVO V-MAX Etapa 19 (Organism Health, achado de auditoria): as 8
+  // Rows abaixo já eram cada uma um sinal real de saúde, mas nenhuma
+  // resumia isso num veredito único e SEMPRE VISÍVEL — o Operador só via
+  // "tudo bem" ao ler linha por linha, ou clicando em GERAR RELATÓRIO DE
+  // AUTODIAGNÓSTICO (self-diagnostics.ts, sob demanda). Puro reduce dos
+  // MESMOS estados já nomeados acima — zero segunda medição.
+  const organismHealth = computeOrganismHealth({
+    offline,
+    workersAlive: health.workersAlive,
+    busQuality: busQualityState,
+    sufficiencyQuality: sufficiencyState,
+    gmilQuality: gmilQualityState,
+    chartIntegrityQuality: CHART_INTEGRITY_QUALITY[chartIntegrity.status],
+    fpsClass,
+    cycleClass,
+  });
+  const organismHealthColor = DATA_QUALITY_COLOR[ORGANISM_HEALTH_QUALITY[organismHealth.verdict]];
+
   const Row = ({ label, value, valueClass }: { label: string; value: string; valueClass: string }) => (
     <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
       <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">{label}</span>
@@ -9527,6 +9567,21 @@ function TelemetryHealthWidget() {
   return (
     <Widget id="system_health" title="SYSTEM HEALTH" flex="flex-[0.8] min-h-[170px]">
       <div className="flex flex-col gap-1.5 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
+        {/* ADITIVO V-MAX Etapa 19 (Organism Health): veredito agregado
+            SEMPRE VISÍVEL, primeira linha do painel de propósito — as
+            Rows abaixo continuam existindo intactas para quem quer o
+            detalhe por sinal; esta é só a leitura de 1 olhar. Sufixo com
+            o sinal responsável só aparece quando o veredito não é OK
+            (nunca verboso quando está tudo bem). */}
+        <Row
+          label="SAÚDE DO ORGANISMO"
+          value={
+            organismHealth.verdict === "OK"
+              ? ORGANISM_HEALTH_LABEL[organismHealth.verdict]
+              : `${ORGANISM_HEALTH_LABEL[organismHealth.verdict]} · ${organismHealth.worstSignal}`
+          }
+          valueClass={organismHealthColor}
+        />
         <Row label="QUALIDADE DA FONTE (BUS)" value={qualityLabel} valueClass={qualityColor} />
         <Row label="SUFICIÊNCIA DE DADOS" value={sufficiencyLabel} valueClass={sufficiencyColor} />
         <Row label="QUALIDADE GMIL (CONTEXTO)" value={gmilLabel} valueClass={gmilColor} />

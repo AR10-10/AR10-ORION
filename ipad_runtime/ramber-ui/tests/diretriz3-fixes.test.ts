@@ -244,9 +244,16 @@ describe('ADITIVO V-MAX Etapa 10 (Data Quality Monitor unificado): dado real já
     expect(app).toContain(
       'import { classifyBusQuality, classifyWeight, classifySufficiencyScore, DATA_QUALITY_COLOR, type DataQualityLabel } from "./nexus/data-quality-vocabulary";',
     );
-    expect(app).toContain('DATA_QUALITY_COLOR[classifyBusQuality(quality?.classification ?? null)]');
-    expect(app).toContain('DATA_QUALITY_COLOR[classifySufficiencyScore(sufficiency?.score ?? null, sufficiency?.max_score ?? 100)]');
-    expect(app).toContain('DATA_QUALITY_COLOR[classifyWeight(gmilAvgWeight)]');
+    // ADITIVO V-MAX Etapa 19 (Organism Health): as 3 classificações agora
+    // são nomeadas (em vez de inline dentro do índice) para serem reusadas
+    // pelo veredito agregado — mesma chamada real, mesmo vocabulário único,
+    // só um passo a mais de nomeação antes de indexar DATA_QUALITY_COLOR.
+    expect(app).toContain('const busQualityState = classifyBusQuality(quality?.classification ?? null);');
+    expect(app).toContain('const qualityColor = DATA_QUALITY_COLOR[busQualityState];');
+    expect(app).toContain('const sufficiencyState = classifySufficiencyScore(sufficiency?.score ?? null, sufficiency?.max_score ?? 100);');
+    expect(app).toContain('const sufficiencyColor = DATA_QUALITY_COLOR[sufficiencyState];');
+    expect(app).toContain('const gmilQualityState = classifyWeight(gmilAvgWeight);');
+    expect(app).toContain('const gmilColor = DATA_QUALITY_COLOR[gmilQualityState];');
     // as 2 novas linhas do painel — mesmo padrão <Row> das linhas já existentes
     expect(app).toContain('<Row label="SUFICIÊNCIA DE DADOS" value={sufficiencyLabel} valueClass={sufficiencyColor} />');
     expect(app).toContain('<Row label="QUALIDADE GMIL (CONTEXTO)" value={gmilLabel} valueClass={gmilColor} />');

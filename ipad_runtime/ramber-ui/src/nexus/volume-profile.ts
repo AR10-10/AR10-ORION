@@ -16,6 +16,24 @@
 // [low,high] — ver lib.rs) porque tick stream real para o mercado Futures
 // do chart não existe neste codebase; o único tick stream real é MEXC
 // Spot, outro mercado. Nunca é apresentado como perfil tick-level.
+//
+// Footprint (RECUSADO, auditoria ADITIVO V-MAX Etapa 18, mesma raiz): um
+// Footprint real precisa de volume-por-preço-por-candle (compra vs. venda
+// no mesmo candle), granularidade que exige tick/trade stream do PRÓPRIO
+// mercado do candle. Como não existe tick stream real de Binance Futures
+// neste codebase (só klines, liquidations via forceOrder, e probes REST
+// de premium-index — nenhum dá trade-a-trade), a única fonte de tick real
+// disponível é de novo MEXC Spot. Bucketar ticks de MEXC Spot dentro das
+// colunas de candles de Binance Futures não seria uma aproximação honesta
+// como a deste arquivo (mesmo instrumento, granularidade menor) — seria
+// atribuir fluxo de ordens de UM mercado a candles de OUTRO mercado,
+// apresentado como se fosse do próprio candle. Isso viola a Regra de Ouro 1
+// (zero dado fabricado/mal-atribuído no fluxo real) mais diretamente do
+// que a aproximação OHLCV acima, que ao menos preserva o mesmo instrumento
+// e mesmo período. Decisão: não construir Footprint sobre o gráfico
+// principal até existir um tick stream real de Binance Futures neste
+// codebase. Registrado honestamente em vez de construído — ver
+// SYSTEM_HANDBOOK.md §6.92.
 import { realPercentile } from "./percentile";
 
 export interface VolumeProfileResult {
