@@ -72,6 +72,10 @@ export const RELEVANCE_LAYER_IDS = [
   // Entrega 41: TPO/Market Profile — relevante quando a sessão corrente
   // já produz um perfil real (hasTpoProfile).
   "tpo_profile",
+  // Entrega 47 (pedido direto do Operador): ZigZag graduado do Laboratório
+  // — mesmo padrão de tpo_profile acima (existência real de pivôs
+  // suficientes pro motor desenhar uma linha, nunca proximidade).
+  "zigzag",
 ] as const;
 export type RelevanceLayerId = (typeof RELEVANCE_LAYER_IDS)[number];
 
@@ -134,6 +138,12 @@ export interface LayerRelevanceInput {
   // DADOS_INSUFICIENTES do motor (sessão sem candle real ainda, ou faixa
   // de preço degenerada).
   hasTpoProfile: boolean;
+  // ZigZag (Entrega 47): true quando computeZigZag (research/engines/
+  // zigzag-engine.js) devolve >=2 pivôs confirmados reais — mesmo limiar
+  // mínimo que o próprio ZigZagPlugin usa pra decidir se tem uma linha
+  // real pra traçar (existência real, nunca proximidade — mesmo padrão
+  // de hasTpoProfile/hasFibonacciLevels acima).
+  hasZigZagPivots: boolean;
   // Liquidações Forçadas: pelo menos 1 evento real no feed atual — mesma
   // condição que o próprio painel de lista (SecondaryModuleView) já usa
   // para decidir se tem algo real pra mostrar.
@@ -299,6 +309,12 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
     tpo_profile: input.hasTpoProfile
       ? { relevant: true, emphasis: "normal", reason: "perfil TPO real da sessão corrente já computável (candles suficientes)" }
       : { relevant: false, emphasis: "normal", reason: "sessão sem candle real suficiente ainda para um perfil TPO" },
+
+    // Entrega 47: mesmo papel de tpo_profile acima — existência real de
+    // pivôs suficientes, nunca proximidade ao preço vivo.
+    zigzag: input.hasZigZagPivots
+      ? { relevant: true, emphasis: "normal", reason: "pivôs ZigZag reais suficientes (deviation%+depth) para uma linha de estrutura" }
+      : { relevant: false, emphasis: "normal", reason: "menos de 2 pivôs ZigZag confirmados ainda — sem linha real para desenhar" },
 
     volume_profile: input.volumeProfileNearPrice
       ? { relevant: true, emphasis: "normal", reason: `preço vivo a menos de ${fmtPct(VOLUME_PROFILE_PROXIMITY_PCT)} de um POC/HVN real` }

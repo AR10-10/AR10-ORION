@@ -48,6 +48,7 @@ const BASE: LayerRelevanceInput = {
   orderflowTrendActive: false,
   hasOrderBook: false,
   hasTpoProfile: false,
+  hasZigZagPivots: false,
   hasRecentLiquidation: false,
   hasRecentLiquiditySweep: false,
   recentSessionBoundary: false,
@@ -60,10 +61,11 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
   // Declutter do gráfico (pedido direto do Operador): os 3 gaps antigos
   // (liquidation_heatmap/liquidity_sweep/market_sessions sem regra própria
   // de relevância, caindo no fallback `relevance?.relevant ?? true` do
-  // ChartLayersPanel) foram fechados — as 23 camadas reais agora têm
+  // ChartLayersPanel) foram fechados — as 24 camadas reais agora têm
   // cobertura 1:1, sem exceção documentada nenhuma (kill_zones/
-  // session_key_levels/institutional_zones/order_book_depth/tpo_profile
-  // somaram-se depois, mesma disciplina desde o nascimento de cada camada).
+  // session_key_levels/institutional_zones/order_book_depth/tpo_profile/
+  // zigzag somaram-se depois, mesma disciplina desde o nascimento de cada
+  // camada — zigzag graduado do Laboratório na Entrega 47).
   it('toda chave de CHART_LAYER_IDS está em RELEVANCE_LAYER_IDS — nunca esquecida silenciosamente', () => {
     const chartSrc = read('../src/chart/EnhancedChart_110_Percent.tsx');
     const m = chartSrc.match(/export const CHART_LAYER_IDS = \[([\s\S]*?)\] as const;/);
@@ -73,7 +75,7 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of chartIds) {
       expect(relevanceSet.has(id), `camada "${id}" existe em CHART_LAYER_IDS mas não em RELEVANCE_LAYER_IDS`).toBe(true);
     }
-    expect(chartIds.length).toBe(23);
+    expect(chartIds.length).toBe(24);
   });
 
   it('toda chave de RELEVANCE_LAYER_IDS é uma camada real de CHART_LAYER_IDS — nunca uma chave órfã', () => {
@@ -83,12 +85,12 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(chartIds.has(id), `RELEVANCE_LAYER_IDS tem "${id}" que não existe mais em CHART_LAYER_IDS`).toBe(true);
     }
-    expect(RELEVANCE_LAYER_IDS.length).toBe(23);
+    expect(RELEVANCE_LAYER_IDS.length).toBe(24);
   });
 });
 
-describe('computeLayerRelevance: completude — sempre devolve as 23 chaves, nunca uma faltando', () => {
-  it('baseline vazio ainda produz um resultado para cada uma das 23 camadas', () => {
+describe('computeLayerRelevance: completude — sempre devolve as 24 chaves, nunca uma faltando', () => {
+  it('baseline vazio ainda produz um resultado para cada uma das 24 camadas', () => {
     const reading = computeLayerRelevance(BASE);
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(reading[id], `faltando chave ${id}`).toBeDefined();

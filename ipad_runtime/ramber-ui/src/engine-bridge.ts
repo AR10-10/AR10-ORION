@@ -70,6 +70,10 @@ import { analyze as analyzeBosChoch } from '../../src/research/engines/bos-choch
 // candles com participação de volume anormalmente baixa, distinto de FVG
 // (ver header do próprio arquivo + QUARANTINE.md).
 import { analyze as analyzeLiquidityVoids } from '../../src/research/engines/liquidity-void-engine.js';
+// Entrega 47 (pedido direto do Operador): graduação do ZigZag do
+// Laboratório de Evolução (isolado/testado desde a Entrega 35, nunca
+// importado até aqui — ver QUARANTINE.md). Motor puro inalterado.
+import { computeZigZag as computeZigZagPure } from '../../src/research/engines/zigzag-engine.js';
 import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/index.js';
 // OMEGA CORE V-MAX Fase 7: mesmo Trade Plan real (Fase 4 do Signal
 // Precision) e mesmo Corredor de Confluência real (Fase 5) que o ativo
@@ -1081,6 +1085,31 @@ export function computeLiquidityVoids(
     bottom: v.bottom,
     mitigated: v.mitigated,
   }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ZigZag (zigzag-engine.js) — graduado do Laboratório de Evolução na
+// Entrega 47 (pedido direto do Operador). Indicador clássico de reversão
+// por deviation% + depth (2 parâmetros reais do indicador nomeado,
+// confirmados via pesquisa real ANTES de implementar — ver header do
+// motor). Só pivôs CONFIRMADOS (nunca a perna em formação — Regra de Ouro
+// 3). Display only (LEI 24): estrutura/contexto no gráfico, nunca uma
+// segunda decisão de trading.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface ZigZagPoint {
+  index: number;
+  price: number;
+  kind: 'HIGH' | 'LOW';
+}
+
+export function computeZigZag(
+  candles: Array<{ open: number; high: number; low: number; close: number }>,
+  deviationPct?: number,
+  depth?: number,
+): ZigZagPoint[] {
+  const result = computeZigZagPure(candles, deviationPct, depth);
+  if (result.status !== 'OK') return [];
+  return result.points;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -116,6 +116,7 @@ import { computeInstitutionalZones, type InstitutionalZoneInput } from "../nexus
 import { InstitutionalZonePlugin, LABEL_COLOR as INSTITUTIONAL_ZONE_LABEL_COLOR, confluenceWeight } from "./InstitutionalZonePlugin";
 import { DepthChartPlugin } from "./DepthChartPlugin";
 import { TpoProfilePlugin } from "./TpoProfilePlugin";
+import { ZigZagPlugin } from "./ZigZagPlugin";
 import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
@@ -295,6 +296,10 @@ export const CHART_LAYER_IDS = [
   // Value Area e Initial Balance por CONTAGEM de período (Steidlmayer/
   // CBOT), derivado só de OHLC de candle já carregado, zero fetch novo.
   "tpo_profile",
+  // Entrega 47 (pedido direto do Operador): graduação do ZigZag do
+  // Laboratório de Evolução (research/engines/zigzag-engine.js, isolado e
+  // testado desde a Entrega 35) — pivôs confirmados por deviation%+depth.
+  "zigzag",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -322,6 +327,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   institutional_zones: true,
   order_book_depth: true,
   tpo_profile: true,
+  zigzag: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -352,6 +358,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   institutional_zones: true,
   order_book_depth: true,
   tpo_profile: true,
+  zigzag: true,
 };
 
 interface EnhancedChartProps {
@@ -3074,6 +3081,15 @@ export function EnhancedChart_110_Percent({
          KillZoneBandsPlugin, zero fetch novo. */}
       {visibility.tpo_profile && (
         <TpoProfilePlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+        />
+      )}
+      {/* Entrega 47: ZigZag graduado do Laboratório (pedido direto do
+         Operador) — mesma `data` real, zero fetch novo. */}
+      {visibility.zigzag && (
+        <ZigZagPlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           data={data}

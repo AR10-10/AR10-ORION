@@ -2,9 +2,16 @@
 
 Codinome interno: `AR10_CYBORG_FUSION_RESEARCH_QUARANTINE_V1`.
 
-**Status desta árvore: apenas os 5 engines graduados + 1 utilitário
+**Status desta árvore: apenas os 7 engines graduados + 1 utilitário
 compartilhado abaixo são ACTIVE_READ_ONLY. Todo o restante foi excluído em
 2026-06-30 (purge de código morto).**
+
+**Correção (achado de auditoria durante a graduação do ZigZag, Entrega 47,
+2026-08-10): este resumo dizia "5 engines" desde a correção de 2026-07-27
+abaixo, mas `liquidity-void-engine.js` graduou em 2026-08-04 (6º engine)
+sem essa contagem ser atualizada — mesmo gap de documentação já descrito
+na correção anterior, não um problema de código. `zigzag-engine.js`
+graduado nesta entrega é o 7º.**
 
 **Correção (EPC OMEGA FINAL, Etapa 1, 2026-07-27): este resumo dizia "4
 engines" desde antes de `bos-choch-engine.js` graduar (2026-07-12) e nunca
@@ -31,10 +38,9 @@ src/research/
     ├── lorentzian-classifier.js       ACTIVE_READ_ONLY (graduado 2026-07-01)
     ├── bos-choch-engine.js            ACTIVE_READ_ONLY (graduado 2026-07-12)
     ├── liquidity-void-engine.js       ACTIVE_READ_ONLY (graduado 2026-08-04)
+    ├── zigzag-engine.js               ACTIVE_READ_ONLY (graduado 2026-08-10)
     ├── fractal-swings.js              utilitário compartilhado (extraído 2026-07-03,
     │                                   não é um engine — ver secao "Utilitários" abaixo)
-    ├── zigzag-engine.js               LABORATÓRIO (isolado 2026-08-10, não graduado —
-    │                                   ver secao "Laboratório de engines" abaixo)
     └── hmm-regime-model.js            LABORATÓRIO (isolado 2026-08-10, não graduado —
                                         ver secao "Laboratório de engines" abaixo)
 ```
@@ -108,6 +114,32 @@ import reverso de volta para `js/**`.
   na janela avaliada, retorna lista vazia/`DADOS_INSUFICIENTES` — nunca
   aproxima volume a partir de outro dado. Zero `fetch()` novo, zero
   credencial, zero `order_send`.
+- **`engines/zigzag-engine.js`** (graduado 2026-08-10, Entrega 47 — pedido
+  direto do Operador para "habilitar tudo que tem de habilitar no sistema
+  ... coisas que esteja no teste novos laboratório") —
+  `computeZigZag(candles, deviationPct, depth)`, indicador ZigZag clássico
+  por limiar percentual de reversão + profundidade mínima de barras entre
+  pivô candidato e barra de confirmação (2 parâmetros reais do indicador
+  nomeado, confirmados via pesquisa real — StockCharts ChartSchool,
+  Corporate Finance Institute, Capital.com — antes de implementar,
+  Disciplina de trabalho item 2 do CLAUDE.md). Deliberadamente DISTINTO de
+  `fractal-swings.js` (K=2 candles fixos de confirmação, sem percentual/
+  profundidade configurável) — os dois respondem perguntas diferentes.
+  Só pivôs CONFIRMADOS entram na saída — a perna em formação nunca aparece
+  (fail-closed, Regra de Ouro 3). Achado real do próprio processo de teste
+  original (19 testes de execução real em
+  `ramber-ui/tests/zigzag-engine.test.ts`): a 1ª versão escrita
+  compartilhava um único índice entre o candidato de alta e o de baixa
+  enquanto a direção ainda estava indeterminada, contaminando o gate de
+  `depth` — corrigido separando `extHighIdx`/`extLowIdx` antes de qualquer
+  commit; os 5 testes que expuseram o bug continuam na suíte como
+  regressão permanente. Importado por `ramber-ui/src/engine-bridge.ts`
+  (wrapper `computeZigZag`) e ligado ao gráfico real via
+  `CHART_LAYER_IDS`/`ZigZagPlugin.tsx` (linha poligonal 1px conectando os
+  pivôs, cor azul-neutro de estrutura) e `nexus/layer-relevance.ts`
+  (`hasZigZagPivots`, >=2 pivôs reais). Display only (LEI 24) — estrutura/
+  contexto no gráfico, nunca uma segunda decisão de trading. Zero
+  `fetch()`, zero `WebSocket`, zero `Math.random`/`Date.now`.
 
 Nota sobre `PRECACHE_URLS`: em 2026-07-03 (Auditoria Mestra 360°, secao 2) o
 `service-worker.js` atual foi confirmado como um shim de autodestruição (zero
@@ -129,43 +161,6 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   primitiva geométrica compartilhada; os três engines acima o importam.
 
 ## Laboratório de engines (isolado, não graduado)
-
-- **`engines/zigzag-engine.js`** (2026-08-10, v16.0 PRO MAX §4/§6.3 — pedido
-  do Operador por um "ZigZag: deviation %" no Layer Manager do gráfico).
-  `computeZigZag(candles, deviationPct, depth)` — indicador ZigZag clássico
-  por limiar percentual de reversão + profundidade mínima de barras entre
-  pivô candidato e barra de confirmação. Pesquisa real via WebSearch
-  (StockCharts ChartSchool, Corporate Finance Institute, Capital.com) antes
-  de implementar, confirmando os 2 parâmetros reais do indicador nomeado
-  (Disciplina de trabalho item 2 do CLAUDE.md) — **deliberadamente
-  DISTINTO** de `fractal-swings.js` (K=2 candles fixos de confirmação de
-  cada lado, sem noção de percentual/profundidade configurável); os dois
-  algoritmos respondem perguntas diferentes e nenhum substitui o outro.
-  Só pivôs CONFIRMADOS entram na saída — a perna em formação (ainda sem
-  reversão de deviation% oposta) nunca aparece, mesmo sendo o valor mais
-  extremo da série (fail-closed, Regra de Ouro 3: nunca mostrar um pivô
-  que ainda pode mudar). Candles insuficientes ou parâmetros inválidos
-  (deviationPct<=0, depth<0, não finito) ⇒ sempre `DADOS_INSUFICIENTES`;
-  uma série real que nunca cruza o limiar retorna `points: []` com
-  `status: 'OK'` (dado real, só sem pivô relevante — nunca confundido com
-  falta de dado). Achado real do próprio processo de teste (19 testes de
-  execução real em `ramber-ui/tests/zigzag-engine.test.ts`): a 1ª versão
-  escrita usava um único índice (`extIdx`) compartilhado entre o
-  candidato de alta e o candidato de baixa enquanto a direção ainda está
-  indeterminada (`dir===0`, os 2 lados avançam na mesma iteração) —
-  contaminava o gate de `depth` e o índice do pivô publicado de um lado
-  com o avanço do outro. Corrigido separando em `extHighIdx`/`extLowIdx`
-  antes de qualquer commit; os 5 testes que expuseram o bug (hand-traced
-  contra a execução real do motor, nunca assumidos) continuam na suíte
-  como regressão permanente. Zero `fetch()`, zero `WebSocket`, zero
-  `Math.random`/`Date.now` — função pura de cálculo sobre a série
-  recebida.
-  Status: **LABORATÓRIO** — nenhum módulo de produção importa daqui
-  (fronteira travada por teste em
-  `ramber-ui/tests/zigzag-engine.test.ts`). Graduação (import por
-  `engine-bridge.ts`, entrada em `CHART_LAYER_IDS`, plugin de canvas
-  próprio) é um passo futuro deliberadamente separado desta entrega —
-  ainda não decidido nem construído.
 
 - **`engines/hmm-regime-model.js`** (2026-08-10, "Entrega 43" — evento de
   segurança tratado antes de construir: documento externo endereçando

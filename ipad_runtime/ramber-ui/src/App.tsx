@@ -120,6 +120,7 @@ import {
   buildMultiTimeframeContext,
   computeBosChoch,
   computeLiquidityVoids,
+  computeZigZag,
   scanRadarCandidate,
 } from "./engine-bridge";
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
@@ -4024,6 +4025,10 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // Entrega 41: perfil TPO real da sessão corrente (Steidlmayer/CBOT) —
   // gap real nomeado desde a auditoria v16.0 ULTRA §12.2/12.3.
   { id: "tpo_profile", label: "PERFIL TPO" },
+  // Entrega 47 (pedido direto do Operador): ZigZag graduado do Laboratório
+  // de Evolução (research/engines/zigzag-engine.js, isolado e testado
+  // desde a Entrega 35) — pivôs confirmados por deviation%+depth.
+  { id: "zigzag", label: "ZIGZAG" },
 ];
 
 function ChartLayersPanel() {
@@ -8298,6 +8303,14 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     // referência, pra desenhar (mesmo padrão real já usado por
     // SessionKeyLevelsPlugin — função pura barata, zero fetch).
     const hasTpoProfile = Array.isArray(chartData) && computeTpoProfile(chartData).status === "OK";
+    // Entrega 47: mesmo padrão de hasTpoProfile acima — função pura barata
+    // (zero fetch), recomputada aqui só pra relevância; o ZigZagPlugin
+    // computa o mesmo motor de novo com cache por referência pra desenhar
+    // (mesmo princípio já usado por TpoProfilePlugin/SessionKeyLevelsPlugin).
+    // Mesmo limiar mínimo (>=2 pivôs) que o próprio plugin usa pra decidir
+    // se tem uma linha real pra traçar — nunca marca relevante sem ter
+    // nada real pra mostrar.
+    const hasZigZagPivots = Array.isArray(chartData) && computeZigZag(chartData).length >= 2;
     return {
       tradePlanActive: Boolean(chartTradePlan) || Boolean(engineFallbackLevels),
       obstacleZoneCount: chartObstacleZones.length,
@@ -8315,6 +8328,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
       orderflowTrendActive: orderflowTrend?.status === "OK" && orderflowTrend.trend !== "ESTAVEL",
       hasOrderBook: Boolean(engine?.hasBook),
       hasTpoProfile,
+      hasZigZagPivots,
       hasRecentLiquidation: Array.isArray(liquidations) && liquidations.length > 0,
       hasRecentLiquiditySweep: (traps ?? []).some((t) => t.kind === "STOP_HUNT_TOPO" || t.kind === "STOP_HUNT_FUNDO"),
       recentSessionBoundary,

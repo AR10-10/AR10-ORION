@@ -26,9 +26,11 @@
 // points:[] com status OK (resposta real: "sem pivô relevante nesta
 // janela com este limiar", não "faltou dado").
 //
-// Laboratório de Evolução (CLAUDE.md item 3): isolado, testado, NÃO
-// importado por engine-bridge.ts nem por CHART_LAYER_IDS ainda — ver
-// QUARANTINE.md.
+// Graduado do Laboratório de Evolução na Entrega 47 (pedido direto do
+// Operador) — importado por engine-bridge.ts (computeZigZag) e ligado ao
+// gráfico real via CHART_LAYER_IDS/ZigZagPlugin.tsx, display-only (LEI 24).
+// Motor puro abaixo inalterado desde o isolamento original — ver
+// QUARANTINE.md para o histórico da graduação.
 
 export const ZIGZAG_DEFAULT_DEVIATION_PCT = 5;
 export const ZIGZAG_DEFAULT_DEPTH = 3;
