@@ -33,7 +33,9 @@ src/research/
     ├── liquidity-void-engine.js       ACTIVE_READ_ONLY (graduado 2026-08-04)
     ├── fractal-swings.js              utilitário compartilhado (extraído 2026-07-03,
     │                                   não é um engine — ver secao "Utilitários" abaixo)
-    └── zigzag-engine.js               LABORATÓRIO (isolado 2026-08-10, não graduado —
+    ├── zigzag-engine.js               LABORATÓRIO (isolado 2026-08-10, não graduado —
+    │                                   ver secao "Laboratório de engines" abaixo)
+    └── hmm-regime-model.js            LABORATÓRIO (isolado 2026-08-10, não graduado —
                                         ver secao "Laboratório de engines" abaixo)
 ```
 
@@ -164,6 +166,58 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   `engine-bridge.ts`, entrada em `CHART_LAYER_IDS`, plugin de canvas
   próprio) é um passo futuro deliberadamente separado desta entrega —
   ainda não decidido nem construído.
+
+- **`engines/hmm-regime-model.js`** (2026-08-10, "Entrega 43" — evento de
+  segurança tratado antes de construir: documento externo endereçando
+  "Agente 4" novamente, desta vez acompanhado de um ZIP com código pronto
+  para um `src/regime/` + `src/components/` + `src/hooks/` inteiros —
+  estrutura de pastas que não existe neste projeto. Autoria confirmada
+  pelo Operador via `AskUserQuestion`, mas a direção técnica escolhida foi
+  "estender o regime-engine.js real, nunca duplicar": o
+  `RegimeDetector`/`ATRADXClassifier`/`RegimeCache`/`RegimeBadge` do ZIP
+  foram REJEITADOS, não só adiados — duplicavam `market-regime/
+  regime-engine.js` já graduado, o `ATRADXClassifier.calculateADX()`
+  tinha um bug real e confessado no próprio comentário (devolvia DX puro
+  sem suavização de Wilder e chamava isso de "ADX"), e `RegimeBadge` era
+  redundante com `ContextReadStrip` — já mostra "Regime: {label}
+  {direção}" sempre visível na Linha 2 do header). Hidden Markov Model de
+  3 estados (Rabiner 1989, "A Tutorial on Hidden Markov Models") —
+  `forwardScaled`/`backwardScaled`/`baumWelch`/`viterbi` — sobre features
+  extraídas por `extractFeatureSeries()`, que reusa `computeAdx`
+  (`regime-engine.js`) e `computeAtrPercent` (`lorentzian-classifier.js`,
+  já graduado) — zero segunda curva de ADX/ATR. `labelHmmStates()` rotula
+  os estados anônimos descobertos pelo treino não-supervisionado por
+  CONCORDÂNCIA empírica real com `classifyMarketRegime()` na mesma janela
+  (nunca assume que "estado 0 é trending" a priori).
+  Achado real do próprio processo (comparação com o `HMMAlgorithms.ts` do
+  ZIP rejeitado antes de escrever este arquivo, mesma disciplina de
+  "nunca copiar sem verificar"): o forward/backward do ZIP não é
+  escalonado — para sequências de centenas de observações (o próprio
+  documento pedia treino sobre até ~90 dias de candles) os valores de
+  alpha somem para 0 por underflow de ponto flutuante bem antes disso, e
+  o Baum-Welch resultante reportaria "convergência" falsa (log-likelihood
+  grudado numa constante) sem aprender nada — nunca testado no checklist
+  original (só sequências curtas). Corrigido aqui com o escalonamento
+  padrão de Rabiner (§V-A: c_t = 1/Σα_t(i), log-likelihood = −Σlog(c_t)) —
+  técnica clássica, não uma variante inventada; Viterbi já roda em
+  espaço-log (essa parte do ZIP estava correta). 24 testes de execução
+  real (`ramber-ui/tests/hmm-regime-model.test.ts`), incluindo forward e
+  Viterbi hand-derivados à mão (2 estados/2 símbolos, conferidos antes de
+  rodar) e uma regressão dedicada de 500 observações provando que o
+  escalonamento evita o underflow real encontrado no ZIP.
+  Deliberadamente NÃO construído: pipeline de treino em Web Worker,
+  persistência IndexedDB, retreino semanal automático (exigiria dado real
+  de mercado que este sandbox nunca teve — zero egress Binance em toda a
+  sessão, mesma limitação documentada para `HistoricalSignalCollector` na
+  Entrega 42); `RegimeBadge` (rejeitado, não adiado); integração com o
+  Profitability Engine (expectancy filtrada por regime — ideia real e
+  válida para o futuro, depende de ter tanto um HMM treinado quanto
+  trades suficientes rotulados por regime, nenhum dos dois existe ainda).
+  Status: **LABORATÓRIO** — nenhum módulo de produção importa daqui
+  (fronteira travada por teste em
+  `ramber-ui/tests/hmm-regime-model.test.ts`). Treino/inferência ao vivo,
+  UI e integração com o Core Engine/ProfitabilityEngine são passos
+  futuros deliberadamente separados desta entrega.
 
 ## Laboratório de backtest (nunca caminho de produção)
 
