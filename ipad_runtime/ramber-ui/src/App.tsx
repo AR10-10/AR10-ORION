@@ -3462,6 +3462,16 @@ export default function App() {
                       ) : (
                         widgets.se_core.visible && <SiriformCoreCard />
                       )}
+                      {/* v16.0 PRO Fase 1: destino real dos itens que saíram
+                          da TopBar (Score/Heat/VWAP/Kill Zone) — mesmo
+                          gate CRYPTO-only da origem (institutional-score.ts,
+                          heat-score.ts, vwap-bands.ts e kill-zones.ts não
+                          têm leitura real em modo TRADFI). */}
+                      {marketMode === "TRADFI" ? (
+                        <TradFiEmptyState compact assetLabel="SCORE & CONTEXTO" />
+                      ) : (
+                        <ScoreContextCard />
+                      )}
                       <GmilContextWidget />
                       {marketMode === "TRADFI" ? (
                         <TradFiEmptyState compact assetLabel="REGIME · COMITÊ DE DECISÃO" />
@@ -4745,6 +4755,142 @@ function SiriformCoreCard() {
   );
 }
 
+// v16.0 PRO Fase 1 ("Header Minimalista"): destino real dos 5 itens que
+// saíram da barra sempre-visível — Score Institucional (+ tendência de
+// Conviction), Heat Score, cartão VWAP, mensagem do Assistente e Kill
+// Zone ICT. Mesmos dados reais, mesmas fórmulas (institutional-score.ts/
+// heat-score.ts/vwap-bands.ts/operation-assistant.ts/kill-zones.ts), zero
+// segunda leitura — só um novo lugar para ler, self-contained como os
+// outros cards desta gaveta (SiriformCoreCard, GmilContextWidget). O
+// tooltip de cada MiniStat carrega o mesmo detalhe que a TopBar já
+// mostrava.
+function ScoreContextCard() {
+  const { institutionalScore, confidenceZone, convictionTrend, assistantMessages, heatReading, vwapCtx, nlState, nexusConfluence } =
+    useContext(WidgetContext) || {};
+  const killZones = activeKillZones(new Date());
+
+  const scoreValue =
+    institutionalScore?.score !== null && institutionalScore?.score !== undefined
+      ? `${confidenceZone ? `${confidenceZone.emoji} ` : ""}${institutionalScore.score}%${
+          convictionTrend?.status === "OK" && convictionTrend.trend
+            ? ` ${convictionTrend.trend === "FORTALECENDO" ? "▲" : convictionTrend.trend === "ENFRAQUECENDO" ? "▼" : "▬"}`
+            : ""
+        }`
+      : DASH;
+  const scoreColor = confidenceZone === null ? "text-[#8ab4f8]/40" : confidenceZone.colorClass;
+  const scoreTitle =
+    institutionalScore?.score !== null && institutionalScore?.score !== undefined
+      ? `Score real de confluência entre subsistemas (0-100), exibido como percentual — nunca probabilidade de acerto. Zona: ${confidenceZone?.label ?? DASH}. ${
+          convictionTrend?.status === "OK" && convictionTrend.trend
+            ? `Tendência: ${convictionTrend.trend} (média recente ${convictionTrend.recentAverage!.toFixed(1)} vs. anterior ${convictionTrend.priorAverage!.toFixed(1)}).`
+            : "Histórico real ainda insuficiente para uma tendência honesta."
+        }`
+      : "Sem oportunidade direcional a pontuar agora (Core Engine em WAIT ou dados insuficientes).";
+
+  const heatValue = heatReading?.status === "OK" ? `${heatReading.score}/100 · ${heatReading.tier}` : DASH;
+  const heatColor =
+    heatReading?.status !== "OK"
+      ? "text-[#8ab4f8]/40"
+      : heatReading.tier === "EXTREMO"
+        ? "text-[#ff0055]"
+        : heatReading.tier === "QUENTE"
+          ? "text-[#f0d06f]"
+          : heatReading.tier === "MORNO"
+            ? "text-[#a0f0ff]"
+            : "text-[#8ab4f8]/70";
+  const heatTitle =
+    heatReading?.status === "OK"
+      ? `Heat ${heatReading.score}/100 (${heatReading.tier}) — intensidade de ATIVIDADE real: ${heatReading.components.map((c: { id: string; value01: number }) => `${c.id} ${(c.value01 * 100).toFixed(0)}%`).join(" · ")}. Nunca probabilidade, nunca direção.`
+      : "Heat Score aguardando ao menos 2 componentes reais medidas (volatilidade/Δ24h/liquidações).";
+
+  const vwapStateLabel = vwapCtx
+    ? vwapCtx.state === "BULLISH"
+      ? "COMPRADOR"
+      : vwapCtx.state === "BEARISH"
+        ? "VENDEDOR"
+        : "NEUTRA"
+    : "INSUFICIENTES";
+  // Diretriz "Lapidação, Sincronia e Experiência do Operador" (achado já
+  // documentado nesta base): tooltip nativo (title=) nunca aparece em
+  // toque no iPad Safari, a plataforma-alvo real — por isso vwapStateLabel
+  // precisa estar no VALOR visível, nunca só escondido no tooltip
+  // (vwapTitle repete o mesmo rótulo como reforço para mouse/trackpad,
+  // nunca como única fonte).
+  const vwapValue = vwapCtx
+    ? `${fmt(vwapCtx.vwap, vwapCtx.vwap >= 1000 ? 0 : 2)} ${vwapCtx.state === "BULLISH" ? "↑" : vwapCtx.state === "BEARISH" ? "↓" : "•"} ${fmtSignedPct(vwapCtx.distancePct)} · ${vwapStateLabel}`
+    : "DADOS INSUFICIENTES";
+  const vwapColor = !vwapCtx
+    ? "text-[#8ab4f8]/40"
+    : vwapCtx.state === "BULLISH"
+      ? "text-[#00ffaa]"
+      : vwapCtx.state === "BEARISH"
+        ? "text-[#ff0055]"
+        : "text-[#f0d06f]";
+  const vwapTitle = vwapCtx
+    ? `Preço ${vwapCtx.side === "ACIMA" ? "acima" : vwapCtx.side === "ABAIXO" ? "abaixo" : "na linha"} da VWAP: ${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}% (${vwapCtx.distanceAbs >= 0 ? "+" : ""}${vwapCtx.distanceAbs.toFixed(2)} abs). Estado ${vwapCtx.state} (${vwapStateLabel}) com histerese real. Nexus Line: ${nlState}. ${
+        nexusConfluence === "ALINHADA"
+          ? "Confluência VWAP×NL×Decisão: ALINHADA."
+          : nexusConfluence === "CONFLITO_ESTRUTURAL"
+            ? "CONFLITO ESTRUTURAL VWAP/NL/Decisão — informativo, nunca altera a operação (LEI 24)."
+            : "Sem veredito de confluência (leitura incompleta ou AGUARDAR)."
+      }`
+    : "VWAP aguardando volume real da sessão UTC (fail-closed, nunca um valor fabricado).";
+  // §30 (confluência VWAP×NL×Decisão): sufixo ✓/⚠ visível no RÓTULO — a
+  // mesma posição/semântica de sempre, mas title= não aparece em toque no
+  // iPad Safari (achado já documentado nesta base), então o veredito
+  // precisa estar no texto sempre visível, não só no tooltip acima.
+  const vwapLabel = nexusConfluence ? `VWAP ${nexusConfluence === "ALINHADA" ? "✓" : "⚠"}` : "VWAP";
+
+  return (
+    <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
+      <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">
+        SCORE &amp; CONTEXTO
+      </span>
+      <div className="grid grid-cols-2 gap-1.5">
+        <MiniStat label="Score Institucional" value={scoreValue} color={scoreColor} title={scoreTitle} />
+        <MiniStat label="Heat Score" value={heatValue} color={heatColor} title={heatTitle} />
+        <MiniStat label={vwapLabel} value={vwapValue} color={vwapColor} title={vwapTitle} />
+      </div>
+      {/* Diretriz V-MAX item 6: Assistente Operacional — a frase curta mais
+          prioritária, sempre tradução de leitura real (LEI 24, ver
+          operation-assistant.ts). O tooltip carrega a base real
+          verificável ("nunca recomendação sem justificativa"). */}
+      {assistantMessages && assistantMessages.length > 0 && (
+        <div
+          className="flex flex-col bg-[#010308] px-2 py-1.5 rounded border border-[#8ab4f8]/10"
+          title={assistantMessages.map((m: { text: string; basis: string }) => `${m.text} — ${m.basis}`).join("\n")}
+        >
+          <span className="text-[0.4rem] text-[#8ab4f8]/60 font-bold tracking-widest uppercase">Assistente</span>
+          <span
+            className={`text-[0.55rem] font-bold tracking-wider uppercase ${
+              assistantMessages[0].tone === "POSITIVE"
+                ? "text-[#00ffaa]"
+                : assistantMessages[0].tone === "RISK"
+                  ? "text-[#ff0055]"
+                  : assistantMessages[0].tone === "CAUTION"
+                    ? "text-[#f0d06f]"
+                    : "text-[#8ab4f8]/80"
+            }`}
+          >
+            {assistantMessages[0].text}
+          </span>
+        </div>
+      )}
+      {killZones.active.length > 0 && (
+        <div
+          title="Kill Zone ICT ativa agora — janela estreita onde a atividade institucional (varredura de liquidez) historicamente se concentra. Janela fixa em UTC, aproximação de DST — nunca finge mais precisão do que existe."
+          className="flex items-center gap-1.5 bg-[#010308] px-2 py-1.5 rounded border border-[#ffb02030]"
+        >
+          <Crosshair size={11} className="text-[#ffb020] shrink-0" />
+          <span className="text-[0.5rem] font-black uppercase tracking-wider text-[#ffb020]">
+            Kill Zone · {killZones.active.map((z) => z.label.replace("Kill Zone · ", "")).join(" + ")}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- ASSISTANT ORB / S.E. CORE (center hero, detalhe completo — expandido
 // sob demanda a partir do SiriformCoreCard acima) ---
 const ASSISTANT_MESSAGES = [
@@ -5209,8 +5355,8 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                     {[40, 70, 30, 80, 55, 90, 45, 65].map((h, i) => (
                       <div
                         key={i}
-                        className="w-[2px] sm:w-[3px] bg-[#00f0ff] rounded-full animate-[sound-wave_1s_ease-in-out_infinite]"
-                        style={{ height: `${h}%`, animationDelay: `${i * 0.05}s` }}
+                        className="w-[2px] sm:w-[3px] bg-[#00f0ff]/40 rounded-full"
+                        style={{ height: `${h}%` }}
                       ></div>
                     ))}
                   </div>
@@ -5363,45 +5509,28 @@ function NucleoVoiceOrb() {
     if (next) voiceEngine.speak("Voz operacional. Modo somente leitura.", "INFO");
   };
 
-  // Redesenho radical (modelo do Operador): o botão vira uma esfera
-  // brilhante prominente no canto — mesma cor 100% real (coreColor,
-  // derivada de offline/engineStatus/stale acima, ZERO mudança de lógica)
-  // agora expressa como um orbe com profundidade (radial-gradient +
-  // camadas de glow) em vez de um círculo plano de 32px.
+  // v16.0 PRO Fase 1 ("Orbs de Núcleo/Voz... botão discreto no canto, não
+  // orb visual pesado"): mesma cor 100% real (coreColor, derivada de
+  // offline/engineStatus/stale acima, ZERO mudança de lógica), agora um
+  // círculo plano pequeno (28px, mesma escala do badge de ativo à
+  // esquerda da barra) — sem gradiente radial, sem halo em camadas, sem
+  // anel orbital girando. O estado real continua 100% legível (cor da
+  // borda/ícone + tooltip); só o peso visual foi removido.
   return (
     <button
       type="button"
       onClick={handleToggleVoice}
       title={`Núcleo S.E. · ${coreLabel} · CPI ${cpiLabel} · Voz ${!ttsSupported ? "INDISPONÍVEL" : voiceStatus.enabled ? "ATIVA" : "DESLIGADA"} (toque para alternar)`}
-      className="relative ml-1.5 w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95 shrink-0"
+      className="ml-1.5 w-7 h-7 rounded-full flex items-center justify-center transition-colors active:scale-95 shrink-0 border"
       style={{
-        border: `1px solid ${coreColor}66`,
-        background: `radial-gradient(circle at 32% 28%, ${coreColor}4d, ${coreColor}12 55%, #010308 100%)`,
-        boxShadow: `0 0 18px ${coreColor}55, 0 0 4px ${coreColor}99, inset 0 0 10px ${coreColor}30`,
+        borderColor: `${coreColor}55`,
+        backgroundColor: `${coreColor}15`,
       }}
     >
-      {/* Halo externo suave — puro estilo (blur via box-shadow, barato no
-          compositor), a MESMA coreColor real, nunca uma segunda fonte. */}
-      <div
-        className="absolute -inset-1.5 rounded-full pointer-events-none opacity-60"
-        style={{ boxShadow: `0 0 14px 2px ${coreColor}40` }}
-      ></div>
-      {/* A "bolinha circulando" — mesma linguagem visual dos anéis
-          orbitais do orb grande; gira rápido enquanto o ciclo real ainda
-          não sincronizou (pending), lento em regime normal. Movimento é
-          estilo, não dado: a INFORMAÇÃO honesta é a cor (engineStatus). */}
-      <div
-        className={`absolute inset-0 rounded-full pointer-events-none ${engineStatus === "pending" ? "animate-[spin_1.4s_linear_infinite]" : "animate-[spin_7s_linear_infinite]"}`}
-      >
-        <div
-          className="absolute -top-[2px] left-1/2 -translate-x-1/2 w-2 h-2 rounded-full"
-          style={{ background: coreColor, boxShadow: `0 0 7px ${coreColor}` }}
-        ></div>
-      </div>
       {ttsSupported && voiceStatus.enabled ? (
-        <Mic size={15} className={voiceStatus.speaking ? "animate-pulse" : ""} style={{ color: coreColor }} />
+        <Mic size={13} className={voiceStatus.speaking ? "animate-pulse" : ""} style={{ color: coreColor }} />
       ) : (
-        <MicOff size={15} className="text-[#8ab4f8]/50" />
+        <MicOff size={13} className="text-[#8ab4f8]/50" />
       )}
     </button>
   );
@@ -5924,20 +6053,10 @@ function TopBar({ data }: { data?: PriceState | null }) {
     setSelectedTradFiAsset,
     realCycle,
     engine,
-    institutionalScore,
-    confidenceZone,
-    convictionTrend,
-    assistantMessages,
     chartTimeframe,
     cycleLatencyMs,
     voiceSnapshot,
-    heatReading,
     nexusDecision,
-    // Consolidação Final §23/§30: cartão VWAP + confluência no header —
-    // mesmas leituras únicas do App (contexto), zero recomputação.
-    vwapCtx,
-    nlState,
-    nexusConfluence,
   } = useContext(WidgetContext) || {};
   // Diretriz Final — Polimento Visual e Sincronização Global §4
   // ("Sincronizar Agora... exibir discretamente o status da
@@ -5959,7 +6078,9 @@ function TopBar({ data }: { data?: PriceState | null }) {
   // kill-zones.ts). Mesmo princípio de computação no render que
   // marketSession já usa acima (TopBar re-renderiza >=1x/s pelo tick de
   // preço — nunca fica desatualizado sem precisar de timer próprio).
-  const killZones = activeKillZones(new Date());
+  // v16.0 PRO Fase 1: Kill Zone ICT saiu da TopBar — activeKillZones()
+  // agora só é chamada dentro de ScoreContextCard (gaveta Core
+  // Intelligence), mesmo padrão self-contained dos outros cards da gaveta.
   const wsLiveNow: boolean = voiceSnapshot?.wsLive === true;
   // Overhaul Cross-Market (Diretriz 2): o rótulo do mercado é passthrough
   // REAL de realCycle.instrumentType (mesmo padrão de wasmVariant) — nunca
@@ -6154,193 +6275,25 @@ function TopBar({ data }: { data?: PriceState | null }) {
 
           {marketMode === "CRYPTO" && <CoreSignalBadge direction={engine?.direction ?? null} confidence={engine?.confidence ?? null} decision={nexusDecision ?? null} />}
 
-          {/* Diretriz V-MAX item 5/7 + Diretriz Complementar §16 (Zona de
-              Confiança Institucional): Score Geral 0-100 no header — massa
-              real de confluência entre subsistemas (institutional-score.ts),
-              NUNCA probabilidade (Regra de Ouro 2, tooltip diz isso). null
-              honesto (—) em WAIT: pontuar o nada seria fabricação. A cor e o
-              rótulo do tier vêm 1:1 de confidenceZone — zero segunda
-              matemática, mesmo score bandado nas 5 faixas da diretriz. */}
-          {marketMode === "CRYPTO" && (
-            // EPC FINAL §35 ("Indicador Institucional do Cabeçalho"): achado
-            // real — este indicador mostrava a palavra "Score" (nunca deve
-            // aparecer) e o tier (Muito Forte/Forte/...) como uma linha
-            // sempre visível separada, em vez de só cor+percentual juntos.
-            // Fonte real única preservada (institutionalScore/confidenceZone,
-            // institutional-score.ts) — confirmado por grep que este é o
-            // ÚNICO ponto de renderização visual deste score em todo o app
-            // (SSOT já real, não precisou de nova ligação). O rótulo do tier
-            // não foi apagado (Regra de Ouro 4) — só realocado para o
-            // tooltip, que já carregava "Zona: ${confidenceZone.label}".
-            <div
-              className="hidden md:flex flex-col items-center justify-center pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
-              title={
-                institutionalScore?.score !== null && institutionalScore?.score !== undefined
-                  ? `Score real de confluência entre subsistemas (0-100), exibido como percentual — nunca probabilidade de acerto. Zona: ${confidenceZone?.label ?? DASH}. ${institutionalScore.opportunity ? "Acima do nível mínimo de oportunidade." : "Abaixo do nível mínimo, ou risco travado."} ${
-                      convictionTrend?.status === "OK" && convictionTrend.trend
-                        ? `Tendência: ${convictionTrend.trend} (média recente ${convictionTrend.recentAverage!.toFixed(1)} vs. anterior ${convictionTrend.priorAverage!.toFixed(1)}).`
-                        : "Diretriz Complementar §4 (Conviction Engine): histórico real ainda insuficiente para uma tendência honesta."
-                    }`
-                  : "Sem oportunidade direcional a pontuar agora (Core Engine em WAIT ou dados insuficientes)."
-              }
-            >
-              <div className="flex items-center gap-1">
-                <span
-                  className={`text-[0.85rem] font-black font-mono tabular-nums leading-none ${
-                    confidenceZone === null ? "text-[#8ab4f8]/40" : `${confidenceZone.colorClass} drop-shadow-[0_0_5px_currentColor]`
-                  }`}
-                >
-                  {confidenceZone ? `${confidenceZone.emoji} ` : ""}
-                  {institutionalScore?.score ?? DASH}
-                  {institutionalScore?.score !== null && institutionalScore?.score !== undefined ? "%" : ""}
-                </span>
-                {/* Diretriz Complementar §4 ("Conviction Engine"): ▲/▬/▼ real
-                    sobre a MESMA série do score acima — nunca substitui o
-                    valor, só informa se a confluência está subindo/caindo. */}
-                {convictionTrend?.status === "OK" && convictionTrend.trend && (
-                  <span
-                    className={`text-[0.55rem] font-black leading-none ${
-                      convictionTrend.trend === "FORTALECENDO"
-                        ? "text-[#00ffaa]"
-                        : convictionTrend.trend === "ENFRAQUECENDO"
-                          ? "text-[#ff0055]"
-                          : "text-[#8ab4f8]/60"
-                    }`}
-                  >
-                    {convictionTrend.trend === "FORTALECENDO" ? "▲" : convictionTrend.trend === "ENFRAQUECENDO" ? "▼" : "▬"}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Diretriz Mestra §12 ("HEAT SCORE"): intensidade de atividade
-              real do mercado (heat-score.ts) — NUNCA probabilidade nem
-              direção; o tooltip carrega as componentes reais. Ao lado do
-              Score de confluência, como a diretriz pede. leading-none nos
-              três spans: a auditoria de responsividade pegou o chip
-              estourando os 46px da linha (empilhado dentro do Score por um
-              bug de inserção + line-height padrão) — corrigido junto. */}
-          {marketMode === "CRYPTO" && (
-            <div
-              className="hidden md:flex flex-col items-center justify-center gap-[2px] pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
-              title={
-                heatReading?.status === "OK"
-                  ? `Heat ${heatReading.score}/100 (${heatReading.tier}) — intensidade de ATIVIDADE real: ${heatReading.components.map((c: { id: string; value01: number }) => `${c.id} ${(c.value01 * 100).toFixed(0)}%`).join(" · ")}. Nunca probabilidade, nunca direção.`
-                  : "Heat Score aguardando ao menos 2 componentes reais medidas (volatilidade/Δ24h/liquidações)."
-              }
-            >
-              <span className="text-[0.42rem] leading-none tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">Heat</span>
-              <span
-                className={`text-[0.7rem] leading-none font-black font-mono tabular-nums ${
-                  heatReading?.status !== "OK"
-                    ? "text-[#8ab4f8]/40"
-                    : heatReading.tier === "EXTREMO"
-                      ? "text-[#ff0055] drop-shadow-[0_0_5px_currentColor]"
-                      : heatReading.tier === "QUENTE"
-                        ? "text-[#f0d06f] drop-shadow-[0_0_5px_currentColor]"
-                        : heatReading.tier === "MORNO"
-                          ? "text-[#a0f0ff]"
-                          : "text-[#8ab4f8]/70"
-                }`}
-              >
-                {heatReading?.status === "OK" ? heatReading.score : DASH}
-              </span>
-              {heatReading?.status === "OK" && heatReading.tier && (
-                <span className="text-[0.38rem] leading-none font-bold uppercase tracking-wider text-[#8ab4f8]/60">{heatReading.tier}</span>
-              )}
-            </div>
-          )}
-
-          {/* Consolidação Final §23: cartão VWAP — estado com histerese
-              (§22, nunca troca a cada candle) + Preço×VWAP em % real
-              (§24). Display-only: contexto, nunca decisão (§25, LEI 24).
-              O tooltip carrega distância absoluta + o veredito §30 da
-              confluência VWAP × Nexus Line × Decision Layer. */}
-          {marketMode === "CRYPTO" && (
-            <div
-              className="hidden md:flex flex-col items-center justify-center gap-[2px] pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
-              title={
-                vwapCtx
-                  ? `Preço ${vwapCtx.side === "ACIMA" ? "acima" : vwapCtx.side === "ABAIXO" ? "abaixo" : "na linha"} da VWAP: ${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}% (${vwapCtx.distanceAbs >= 0 ? "+" : ""}${vwapCtx.distanceAbs.toFixed(2)} abs). Estado ${vwapCtx.state} com histerese real. Nexus Line: ${nlState}. ${
-                      nexusConfluence === "ALINHADA"
-                        ? "Confluência VWAP×NL×Decisão: ALINHADA."
-                        : nexusConfluence === "CONFLITO_ESTRUTURAL"
-                          ? "CONFLITO ESTRUTURAL VWAP/NL/Decisão — informativo, nunca altera a operação (LEI 24)."
-                          : "Sem veredito de confluência (leitura incompleta ou AGUARDAR)."
-                    }`
-                  : "VWAP aguardando volume real da sessão UTC (fail-closed, nunca um valor fabricado)."
-              }
-            >
-              <span className="text-[0.42rem] leading-none tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">
-                VWAP
-                {/* §30 compacto: veredito da confluência NL como sufixo
-                    discreto — detalhe completo no tooltip e na ANALYSIS. */}
-                {nexusConfluence && (
-                  <span className={nexusConfluence === "ALINHADA" ? "text-[#00ffaa]/80" : "text-[#ff0055]/80"}>
-                    {nexusConfluence === "ALINHADA" ? " ✓" : " ⚠"}
-                  </span>
-                )}
-              </span>
-              {/* Continuidade §5: o VALOR real da VWAP visível (nunca só a
-                  relação) — mesmo formatador fmt() do resto do header. */}
-              <span
-                className={`text-[0.7rem] leading-none font-black font-mono tabular-nums ${
-                  !vwapCtx
-                    ? "text-[#8ab4f8]/40"
-                    : vwapCtx.state === "BULLISH"
-                      ? "text-[#00ffaa] drop-shadow-[0_0_5px_currentColor]"
-                      : vwapCtx.state === "BEARISH"
-                        ? "text-[#ff0055] drop-shadow-[0_0_5px_currentColor]"
-                        : "text-[#f0d06f]"
-                }`}
-              >
-                {vwapCtx ? fmt(vwapCtx.vwap, vwapCtx.vwap >= 1000 ? 0 : 2) : "DADOS"}
-              </span>
-              <span
-                className={`text-[0.38rem] leading-none font-bold uppercase tracking-wider ${
-                  !vwapCtx
-                    ? "text-[#8ab4f8]/40"
-                    : vwapCtx.state === "BULLISH"
-                      ? "text-[#00ffaa]/80"
-                      : vwapCtx.state === "BEARISH"
-                        ? "text-[#ff0055]/80"
-                        : "text-[#8ab4f8]/60"
-                }`}
-              >
-                {vwapCtx
-                  ? `${vwapCtx.state === "BULLISH" ? "↑" : vwapCtx.state === "BEARISH" ? "↓" : "•"} ${fmtSignedPct(vwapCtx.distancePct)} · ${
-                      vwapCtx.state === "BULLISH" ? "COMPRADOR" : vwapCtx.state === "BEARISH" ? "VENDEDOR" : "NEUTRA"
-                    }`
-                  : "INSUFICIENTES"}
-              </span>
-            </div>
-          )}
-
-          {/* Diretriz V-MAX item 6: Assistente Operacional — a frase curta
-              mais prioritária, sempre tradução de leitura real (LEI 24,
-              ver operation-assistant.ts). O tooltip carrega a base real
-              verificável ("nunca recomendação sem justificativa"). */}
-          {marketMode === "CRYPTO" && assistantMessages && assistantMessages.length > 0 && (
-            <div
-              className="hidden lg:flex items-center pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
-              title={assistantMessages.map((m: { text: string; basis: string }) => `${m.text} — ${m.basis}`).join("\n")}
-            >
-              <span
-                className={`text-[0.55rem] font-bold tracking-wider uppercase ${
-                  assistantMessages[0].tone === "POSITIVE"
-                    ? "text-[#00ffaa]"
-                    : assistantMessages[0].tone === "RISK"
-                      ? "text-[#ff0055]"
-                      : assistantMessages[0].tone === "CAUTION"
-                        ? "text-[#f0d06f]"
-                        : "text-[#8ab4f8]/80"
-                }`}
-              >
-                {assistantMessages[0].text}
-              </span>
-            </div>
-          )}
+          {/* v16.0 PRO Fase 1 ("Header Minimalista"): Score institucional,
+              Heat Score, cartão VWAP e a mensagem do Assistente saíram da
+              barra sempre-visível — mesmos dados reais, zero cálculo
+              perdido (Regra de Ouro 4), agora na gaveta "Core Intelligence"
+              (ScoreContextCard, ao lado do Siriform Core) em vez de
+              competir com o único sinal que precisa ser lido em <5s (o
+              CoreSignalBadge acima). Achado real ao verificar (nunca
+              suposto): AssistantOrb, a única outra superfície nesta
+              gaveta com "Assistente" no nome, NÃO consome o assistantMessages
+              real (operation-assistant.ts) — usa uma rotação decorativa
+              própria (ASSISTANT_MESSAGES, texto fixo tipo "NÚCLEO EM MODO
+              LEITURA"). O resumo real com base verificável (tooltip)
+              teria ficado sem nenhuma casa — corrigido: ScoreContextCard
+              agora exibe a MESMA leitura real que a TopBar mostrava.
+              CoreSignalBadge continua na barra: é o único emissor real de
+              LONG/SHORT/WAIT (LEI 24), a leitura mais essencial de todas —
+              a lista de 6 itens do prompt v16.0 não o menciona por nome,
+              tratado aqui como omissão do documento, não como pedido de
+              remoção (removê-lo esvaziaria o propósito do terminal). */}
         </div>
 
         <div className="flex gap-1 md:gap-2 h-full items-center justify-end shrink-0">
@@ -6376,23 +6329,12 @@ function TopBar({ data }: { data?: PriceState | null }) {
                   {marketSession.label}
                 </span>
               )}
-              {/* Ferramentas Institucionais: Kill Zone ICT — só aparece
-                  quando uma janela ESTREITA de alta probabilidade está de
-                  fato em curso (a maior parte do dia não tem nenhuma,
-                  honestamente omitido em vez de um estado "inativo" ocupando
-                  espaço na barra sempre-visível). Contexto de leitura, LEI 24
-                  intacta: nunca gera nem altera o sinal do Core Engine. */}
-              {killZones && killZones.active.length > 0 && (
-                <span
-                  title={`Kill Zone ICT ativa agora — janela estreita onde a atividade institucional (varredura de liquidez) historicamente se concentra. Janela fixa em UTC, mesma aproximação de DST da Sessão Atual — nunca finge mais precisão do que existe.`}
-                  className="flex items-center gap-1 text-[0.5rem] font-black uppercase tracking-wider text-[#ffb020] animate-pulse"
-                >
-                  <Crosshair size={10} />
-                  {killZones.active.map((z) => z.label.replace("Kill Zone · ", "")).join(" + ")}
-                </span>
-              )}
             </div>
           )}
+          {/* v16.0 PRO Fase 1: Kill Zone ICT saiu da barra sempre-visível
+              (item explícito da lista "REMOVER do header") — mesma leitura
+              real (activeKillZones), agora só na gaveta Core Intelligence
+              (ScoreContextCard). Zero cálculo perdido, Regra de Ouro 4. */}
           {/* Ordem "Ciborgue Vivo" §2: indicador compacto de risco/saúde
               sempre visível, sem abrir aba nenhuma — pedido explícito do
               Operador. Só reaparece aqui o que o redesenho radical abaixo
@@ -6840,7 +6782,6 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
         >
           {title && renderHeader(true)}
           <div className="flex-1 min-h-0 relative p-2 overflow-hidden flex flex-col z-10">
-            <div className="cyber-scanline z-0"></div>
             <WidgetErrorBoundary title={title}>{children}</WidgetErrorBoundary>
           </div>
         </div>
@@ -6903,7 +6844,6 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
         className="flex-1 min-h-0 relative p-2 overflow-hidden flex flex-col z-10"
         onDoubleClick={(e) => e.stopPropagation()}
       >
-        <div className="cyber-scanline z-0"></div>
         <WidgetErrorBoundary title={title}>{children}</WidgetErrorBoundary>
       </div>
     </div>
@@ -8082,15 +8022,11 @@ function OrderFlowWidget() {
           <div
             className="h-full bg-gradient-to-r from-[#00ffaa10] to-[#00ffaa60] border-r border-[#00ffaa] relative overflow-hidden transition-[background-color,opacity] duration-500"
             style={{ width: `${num(buyPercent) ? buyPercent : 50}%` }}
-          >
-            <div className="absolute top-0 bottom-0 w-[50px] bg-gradient-to-r from-transparent via-[#00ffaa] to-transparent opacity-30 -translate-x-full animate-[scan-horizontal_2s_linear_infinite]"></div>
-          </div>
+          ></div>
           <div
             className="h-full bg-gradient-to-l from-[#ff005510] to-[#ff005560] border-l border-[#ff0055] relative overflow-hidden transition-[background-color,opacity] duration-500"
             style={{ width: `${num(sellPercent) ? sellPercent : 50}%` }}
-          >
-            <div className="absolute top-0 bottom-0 w-[50px] bg-gradient-to-l from-transparent via-[#ff0055] to-transparent opacity-30 translate-x-[500%] animate-[scan-horizontal_2s_linear_infinite_reverse]"></div>
-          </div>
+          ></div>
         </div>
 
         {/* Real Order Flow Engine (OFI/Absorption/Exhaustion) fed by real
@@ -8330,9 +8266,9 @@ function MarketDirectionWidget() {
 // instead of a bare LONG/SHORT button. Every number here is a real
 // passthrough from `engine`/`riskSuggestion` (already computed elsewhere
 // in this file, see contextValue) — nothing is recomputed or invented.
-function MiniStat({ label, value, color }: { label: string; value: string; color: string }) {
+function MiniStat({ label, value, color, title }: { label: string; value: string; color: string; title?: string }) {
   return (
-    <div className="flex flex-col bg-[#010308] px-2 py-1.5 rounded border border-[#8ab4f8]/10 min-w-0">
+    <div className="flex flex-col bg-[#010308] px-2 py-1.5 rounded border border-[#8ab4f8]/10 min-w-0" title={title}>
       <span className="text-[0.4rem] text-[#8ab4f8]/60 font-bold tracking-widest uppercase truncate">{label}</span>
       <span className={`text-[0.55rem] font-mono font-black truncate ${color}`}>{value}</span>
     </div>

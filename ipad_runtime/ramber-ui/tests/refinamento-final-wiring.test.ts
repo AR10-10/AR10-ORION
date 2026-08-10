@@ -214,9 +214,9 @@ describe('Diretriz Mestra: Heat Score + TENDÊNCIA no header, Magnet, futuro, MT
     expect(ctx![1]).toContain('heatReading,');
   });
 
-  it('chip HEAT no header: DASH honesto sem 2 componentes; tooltip nega probabilidade/direção', () => {
+  it('chip HEAT (ScoreContextCard, gaveta Core Intelligence): DASH honesto sem 2 componentes; tooltip nega probabilidade/direção', () => {
     const a = app();
-    expect(a).toContain('{heatReading?.status === "OK" ? heatReading.score : DASH}');
+    expect(a).toContain('const heatValue = heatReading?.status === "OK" ? `${heatReading.score}/100 · ${heatReading.tier}` : DASH;');
     expect(a).toContain('Nunca probabilidade, nunca direção.');
   });
 
@@ -602,9 +602,11 @@ describe('Consolidação Final §20-§25: VWAP com estados/histerese SEM tocar a
     expect(a).toContain('setNlState((prev) => nexusLineState(prev, livePriceForZone, nexusLineNow, atrAbsForLines));');
   });
 
-  it('cartão VWAP no header (§23): estado + Preço×VWAP % real, e o TopBar lê do contexto único', () => {
+  it('cartão VWAP (ScoreContextCard, gaveta Core Intelligence) (§23): estado + Preço×VWAP % real, self-contained via o mesmo WidgetContext', () => {
     const a = app();
-    expect(a).toContain('tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">\n                VWAP'); // §5: rótulo agora carrega sufixo NL ✓/⚠
+    // v16.0 PRO Fase 1: saiu da TopBar para ScoreContextCard — mesmos
+    // dados reais (vwapCtx do WidgetContext), zero segunda leitura.
+    expect(a).toContain('const vwapLabel = nexusConfluence ? `VWAP ${nexusConfluence === "ALINHADA" ? "✓" : "⚠"}` : "VWAP";');
     expect(a).toContain('${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}%');
     expect(a).toContain('"VWAP aguardando volume real da sessão UTC (fail-closed, nunca um valor fabricado)."');
   });
@@ -1077,19 +1079,28 @@ describe('Consolidação Final §5/§6: SHARK + AB=CD no motor, PRZ/ETA na super
 });
 
 // ─── Diretriz de Continuidade §5: cartão VWAP com valor + estado nomeado ───
-describe('Continuidade §5: o cartão VWAP exibe o VALOR real + estado COMPRADOR/VENDEDOR/NEUTRA', () => {
-  it('valor com o MESMO formatador fmt() do header; estado nomeado; DADOS INSUFICIENTES no vazio (nunca dash mudo)', () => {
+describe('Continuidade §5: o cartão VWAP (ScoreContextCard) exibe o VALOR real + estado COMPRADOR/VENDEDOR/NEUTRA', () => {
+  it('valor com o MESMO formatador fmt() de sempre; estado nomeado (vwapStateLabel, reusado no valor visível E no tooltip); DADOS INSUFICIENTES no vazio (nunca dash mudo)', () => {
     const a = app();
-    expect(a).toContain('{vwapCtx ? fmt(vwapCtx.vwap, vwapCtx.vwap >= 1000 ? 0 : 2) : "DADOS"}');
-    expect(a).toContain('vwapCtx.state === "BULLISH" ? "COMPRADOR" : vwapCtx.state === "BEARISH" ? "VENDEDOR" : "NEUTRA"');
-    expect(a).toContain(': "INSUFICIENTES"}');
+    expect(a).toContain('fmt(vwapCtx.vwap, vwapCtx.vwap >= 1000 ? 0 : 2)');
+    expect(a).toContain('? "COMPRADOR"');
+    expect(a).toContain('? "VENDEDOR"');
+    expect(a).toContain(': "NEUTRA"');
+    expect(a).toContain(': "INSUFICIENTES";');
+    expect(a).toContain(': "DADOS INSUFICIENTES";');
     // a % continua vindo do fmtSignedPct compartilhado (zero segunda formatação)
-    expect(a).toContain('${fmtSignedPct(vwapCtx.distancePct)} · ${');
+    expect(a).toContain('${fmtSignedPct(vwapCtx.distancePct)} · ${vwapStateLabel}');
   });
 
-  it('confluência NL vira sufixo discreto no rótulo (✓/⚠) — detalhe completo segue no tooltip/ANALYSIS', () => {
+  // Diretriz "Lapidação, Sincronia e Experiência do Operador" (achado já
+  // documentado nesta base): title= nunca aparece em toque no iPad Safari
+  // — por isso o veredito ✓/⚠ precisa estar no RÓTULO sempre visível
+  // (vwapLabel), nunca só escondido dentro do tooltip.
+  it('confluência NL vira sufixo visível no rótulo (✓/⚠) — nunca só no tooltip (touch não mostra title=)', () => {
     const a = app();
-    expect(a).toContain('{nexusConfluence === "ALINHADA" ? " ✓" : " ⚠"}');
+    expect(a).toContain('const vwapLabel = nexusConfluence ? `VWAP ${nexusConfluence === "ALINHADA" ? "✓" : "⚠"}` : "VWAP";');
+    expect(a).toContain('<MiniStat label="Score Institucional"');
+    expect(a).toContain('label={vwapLabel}');
   });
 });
 

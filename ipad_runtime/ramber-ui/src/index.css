@@ -9,41 +9,19 @@
     monospace;
 }
 
+/* v16.0 PRO Fase 1 ("Fundo do Sistema — PRETO OBRIGATÓRIO"): preto puro,
+   zero grid de fundo, zero scanline/CRT (body::after removido por
+   inteiro abaixo) — acentos ciano/âmbar/verde/vermelho ficam vivos e de
+   alto contraste contra um fundo neutro em vez de competir com padrões
+   decorativos atrás deles. */
 body {
   font-family: var(--font-mono);
-  background-color: #010205; /* Deepest space black */
-  background-image:
-    linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  background-position: center center;
+  background-color: #000000;
   color: #a0f0ff;
   overflow: hidden;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
-}
-
-body::after {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background:
-    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
-    linear-gradient(
-      90deg,
-      rgba(255, 0, 0, 0.03),
-      rgba(0, 255, 0, 0.01),
-      rgba(0, 0, 255, 0.03)
-    );
-  background-size:
-    100% 3px,
-    6px 100%;
-  pointer-events: none;
-  z-index: 9999;
 }
 
 .pb-safe {
@@ -100,37 +78,36 @@ body::after {
    gradiente, saturação atrás do blur, borda +21% presente, highlight de
    1px no topo e halo interno/externo reforçado), zero cirurgia por
    painel. :hover mantém um degrau extra para trackpad/mouse. */
-/* Overhaul Cross-Market (Missão 1, diretriz 4) — elevação para Midnight
-   Blue/Black: gradiente mais diagonal e mais escuro no pé, borda mais
-   FINA/translúcida (0.34→0.20 de opacidade — lê como fio delicado, não
-   contorno sólido) e blur mais intenso (24px→30px). Continua sendo UMA
-   classe compartilhada: todo widget que já usa .cyber-panel herda a
-   elevação de graça, sem cirurgia por painel. */
+/* v16.0 PRO Fase 1 ("Glassmorphism — Reduzir ao Essencial"): blur 30px→
+   12px, borda cyan→neutra fina, sombras internas/externas trocadas por
+   valores discretos (nunca mais um glow ciano de 30-40px por painel
+   estático — cada widget inteiro "respirando" competia com os poucos
+   acentos de cor que carregam dado real). Painéis ficam estáticos por
+   padrão; :hover mantém só um passo modesto (trackpad/mouse), sem
+   animação contínua nenhuma (panel-breathe removido — ver ::before
+   abaixo). Gradiente de fundo permanece sutil preto→quase-preto, nunca
+   no body (regra 3.1). */
 .cyber-panel {
-  background: linear-gradient(165deg, rgba(6, 10, 28, 0.8), rgba(1, 3, 9, 0.7));
-  backdrop-filter: blur(30px) saturate(1.25);
-  -webkit-backdrop-filter: blur(30px) saturate(1.25);
-  border: 1px solid rgba(0, 240, 255, 0.2);
+  background: linear-gradient(165deg, #000000, #050508);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow:
-    inset 0 0 34px rgba(0, 240, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 0 30px rgba(0, 240, 255, 0.08),
-    0 10px 40px rgba(0, 0, 0, 0.7);
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 4px 24px rgba(0, 0, 0, 0.5);
   border-radius: 12px;
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .cyber-panel:hover {
-  border-color: rgba(0, 240, 255, 0.34);
+  border-color: rgba(255, 255, 255, 0.12);
   box-shadow:
-    inset 0 0 38px rgba(0, 240, 255, 0.13),
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 0 36px rgba(0, 240, 255, 0.11),
-    0 10px 40px rgba(0, 240, 255, 0.09);
+    0 4px 24px rgba(0, 0, 0, 0.6);
 }
 
 /* Acentos neon reservados a DADOS VITAIS (Missão 1, diretriz 4) — cyan
@@ -147,35 +124,6 @@ body::after {
   text-shadow: 0 0 6px rgba(176, 38, 255, 0.45);
 }
 
-.cyber-panel::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(0, 240, 255, 0.4),
-    transparent
-  );
-  /* Slow, subtle "breathing" highlight — the only genuinely new motion
-     this pass adds, and it's on a 1px line, not a whole panel glow, to
-     stay well short of "chamativo" (flashy). */
-  animation: panel-breathe 5s ease-in-out infinite;
-}
-
-@keyframes panel-breathe {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
 .cyber-header {
   border-bottom: 1px solid rgba(0, 240, 255, 0.1);
   padding: 8px 16px;
@@ -190,44 +138,6 @@ body::after {
   flex-shrink: 0;
 }
 
-.cyber-scanline {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 100%;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    rgba(0, 240, 255, 0.08) 50%,
-    transparent
-  );
-  animation: scan 3s linear infinite;
-  pointer-events: none;
-  will-change: transform;
-}
-
-@keyframes scan {
-  0% {
-    transform: translateY(-100%);
-  }
-  100% {
-    transform: translateY(100%);
-  }
-}
-
-@keyframes scan-horizontal {
-  0% {
-    transform: translateX(0);
-  }
-  50% {
-    transform: translateX(1000%);
-  }
-  100% {
-    transform: translateX(0);
-  }
-}
-
 @keyframes fade-in {
   0% {
     opacity: 0;
@@ -236,16 +146,6 @@ body::after {
   100% {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes sound-wave {
-  0%,
-  100% {
-    transform: scaleY(0.3);
-  }
-  50% {
-    transform: scaleY(1);
   }
 }
 
@@ -392,10 +292,8 @@ body::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cyber-scanline,
   .animate-fade-in,
   .skeleton-shimmer,
-  .cyber-panel::before,
   .animate-pulse-glow {
     animation: none;
   }
