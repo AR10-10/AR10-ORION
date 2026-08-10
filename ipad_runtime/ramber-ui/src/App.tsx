@@ -172,6 +172,12 @@ import { computeBidAskRatio, computeImbalance } from "./nexus/order-book-depth";
 // Entrega 41: mesmo motor real do TpoProfilePlugin, usado aqui só pra
 // derivar o sinal de relevância hasTpoProfile (ver relevanceInput abaixo).
 import { computeTpoProfile } from "./nexus/tpo-profile";
+// Entrega 42 ("Profitability Engine"): custo real sobre o Track Record JÁ
+// resolvido (nunca um replay sintético) + expectativa/FilterEngine. LEI 24
+// (exceção pontual autorizada pelo Operador) — ver comentário no ponto de
+// uso (expectancyFilter) e em CoreSignalBadge.
+import { simulateTradeCostsBatch } from "./nexus/trade-simulation";
+import { evaluateSignalFilter, MIN_TRADES_FOR_VALID_EXPECTANCY, type FilterResult } from "./nexus/expectancy";
 import { computeOrganismHealth, type OrganismHealthVerdict } from "./nexus/organism-health";
 // Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
 // alvo — ATR real × Efficiency Ratio de Kaufman sobre os closes reais do
@@ -2677,6 +2683,20 @@ export default function App() {
       }),
     [engineStatus, engine?.direction, convictionReading, councilFromSnapshot],
   );
+  // Entrega 42 ("Profitability Engine"): expectativa real (R-múltiplo após
+  // comissão+slippage+funding) sobre o Track Record JÁ resolvido deste
+  // symbol:timeframe (trackRecordSlice.history) — nunca um replay sintético
+  // (ver cabeçalho de nexus/trade-simulation.ts para a auditoria completa
+  // do porquê). LEI 24 — exceção pontual autorizada pelo Operador (ver
+  // CLAUDE.md, seção "LEI 24"): CoreSignalBadge usa
+  // expectancyFilter.show para decidir entre a direção real do Núcleo e
+  // NEUTRO quando a expectativa líquida histórica é negativa. O Núcleo em
+  // si (engine.direction) NUNCA é mutado por este cálculo — a supressão é
+  // só de apresentação, computada aqui e consumida no badge/ExpectancyCard.
+  const expectancyFilter: FilterResult = useMemo(
+    () => evaluateSignalFilter(simulateTradeCostsBatch(trackRecordSlice.history)),
+    [trackRecordSlice.history],
+  );
   // Cockpit de Leitura §11 ("ETA previsto / ETA realizado" + contexto):
   // carimbo ÚNICO do contexto real de abertura no plano ativo. O guard do
   // stampOpenContext puro garante que só o PRIMEIRO ciclo com leituras do
@@ -2693,8 +2713,12 @@ export default function App() {
       vwapState: vwapCtx?.state ?? null,
       nexusLineState: nlState,
       score: institutionalScore?.score ?? null,
+      // Entrega 42: mesmo engine.marketRegime.regime já lido em vários
+      // outros pontos deste arquivo (relevanceInput, Trade Plan Zone) —
+      // zero segunda classificação.
+      regime: engine?.marketRegime?.regime ?? null,
     });
-  }, [trackRecordSlice.active, etaReading, vwapCtx, nlState, institutionalScore]);
+  }, [trackRecordSlice.active, etaReading, vwapCtx, nlState, institutionalScore, engine?.marketRegime]);
 
   // Diretriz Complementar §18/§4 ("Conviction Engine"): registra na store a
   // amostra REAL do Score Geral a cada ciclo em que ele existe (WAIT/
@@ -3299,6 +3323,7 @@ export default function App() {
       ensembleConsensus,
       convictionReading,
       institutionalScore,
+      expectancyFilter,
       confidenceZone,
       orderflowTrend,
       convictionTrend,
@@ -3366,6 +3391,7 @@ export default function App() {
       ensembleConsensus,
       convictionReading,
       institutionalScore,
+      expectancyFilter,
       confidenceZone,
       orderflowTrend,
       convictionTrend,
@@ -3570,6 +3596,15 @@ export default function App() {
                         <TradFiEmptyState compact assetLabel="SCORE & CONTEXTO" />
                       ) : (
                         <ScoreContextCard />
+                      )}
+                      {/* Entrega 42: mesmo gate CRYPTO-only de ScoreContextCard
+                          acima — Track Record/expectancy não têm leitura real
+                          em modo TRADFI (Core Engine só emite LONG/SHORT/WAIT
+                          para cripto nesta base). */}
+                      {marketMode === "TRADFI" ? (
+                        <TradFiEmptyState compact assetLabel="MOTOR DE LUCRATIVIDADE" />
+                      ) : (
+                        <ExpectancyCard />
                       )}
                       <GmilContextWidget />
                       {marketMode === "TRADFI" ? (
@@ -5210,6 +5245,78 @@ function ScoreContextCard() {
   );
 }
 
+// Entrega 42 ("Profitability Engine"): expectativa real (após custos) do
+// Track Record deste symbol:timeframe — mesmo expectancyFilter computado
+// uma vez em App() e compartilhado via contextValue (ver comentário no
+// ponto de cálculo). Mesmo padrão visual de ScoreContextCard acima
+// (cyber-panel + MiniStat), sempre visível junto dele — a explicação de
+// POR QUE o CoreSignalBadge pode mostrar NEUTRO precisa estar tão visível
+// quanto o próprio badge (LEI 24: supressão nunca é silenciosa).
+function ExpectancyCard() {
+  const { expectancyFilter }: { expectancyFilter?: FilterResult } = useContext(WidgetContext) || {};
+  const stats = expectancyFilter?.stats ?? null;
+
+  const badgeColor =
+    expectancyFilter?.badge === "green"
+      ? "text-[#00ffaa]"
+      : expectancyFilter?.badge === "cyan"
+        ? "text-[#a0f0ff]"
+        : expectancyFilter?.badge === "amber"
+          ? "text-[#f0d06f]"
+          : expectancyFilter?.badge === "red"
+            ? "text-[#ff0055]"
+            : "text-[#8ab4f8]/40";
+
+  const expectancyValue = stats ? `${stats.expectancyR >= 0 ? "+" : ""}${stats.expectancyR.toFixed(2)}R` : DASH;
+  const winRateValue = stats ? `${(stats.winRate * 100).toFixed(0)}%` : DASH;
+  const sharpeValue = stats && stats.sharpeRatio !== null ? stats.sharpeRatio.toFixed(2) : DASH;
+  const maxDdValue = stats ? `${stats.maxDrawdownR.toFixed(2)}R` : DASH;
+  const costValue = stats
+    ? `${(stats.commissionImpactR + stats.slippageImpactR + stats.fundingImpactR).toFixed(3)}R`
+    : DASH;
+  const sampleValue = stats ? `${stats.totalTrades}` : "0";
+
+  const expectancyTitle =
+    "Expectativa real por trade (R-múltiplo) após comissão+slippage+funding reais sobre o Track Record JÁ resolvido — nunca hitRate isolado (Regra de Ouro 2: taxa de acerto alta com R:R ruim ainda perde dinheiro).";
+  const sampleTitle = `Trades reais resolvidos rastreados neste symbol:timeframe. Amostra mínima de ${MIN_TRADES_FOR_VALID_EXPECTANCY} para uma leitura de expectativa válida — abaixo disso o badge fica neutro e o Núcleo nunca é suprimido (ausência de prova não é prova de inviabilidade).`;
+
+  return (
+    <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">
+          MOTOR DE LUCRATIVIDADE
+        </span>
+        <span className={`text-[0.45rem] font-black uppercase tracking-wide ${badgeColor}`}>
+          {expectancyFilter?.label ?? DASH}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        <MiniStat label="Expectativa" value={expectancyValue} color={badgeColor} title={expectancyTitle} />
+        <MiniStat label="Amostra" value={sampleValue} color="text-[#8ab4f8]/70" title={sampleTitle} />
+        <MiniStat label="Taxa de Acerto" value={winRateValue} color="text-[#8ab4f8]" title="Proporção real de trades resolvidos com resultado líquido positivo (já após custos)." />
+        <MiniStat label="Sharpe" value={sharpeValue} color="text-[#8ab4f8]" title="Média/desvio padrão real do netR da amostra — traço nunca aparece quando o desvio padrão é zero (divisão fabricada nunca acontece aqui)." />
+        <MiniStat label="Drawdown Máx." value={maxDdValue} color="text-[#8ab4f8]" title="Maior queda real pico-a-vale da curva de equity acumulada (soma de netR, ordem cronológica real)." />
+        <MiniStat label="Custo Médio" value={costValue} color="text-[#8ab4f8]/70" title="Comissão + slippage + funding médios reais por trade, em R (taker fee e intervalo de funding verificados via pesquisa real; slippage é fração declarada do risco, nunca medida)." />
+      </div>
+      {/* LEI 24 — exceção pontual autorizada pelo Operador (ver CLAUDE.md,
+          seção "LEI 24"): quando expectancyFilter.show é false, o
+          CoreSignalBadge substitui a direção real do Núcleo por NEUTRO.
+          Esta linha é a explicação SEMPRE visível dessa supressão — nunca
+          silenciosa, nunca só no tooltip do badge. */}
+      {expectancyFilter?.show === false && (
+        <div className="flex items-start gap-1.5 bg-[#ff00550f] border border-[#ff005530] rounded px-2 py-1.5">
+          <span className="text-[0.42rem] text-[#ff0055] leading-tight">
+            Expectativa líquida real negativa nesta amostra — badge principal exibe NEUTRO no lugar da direção real do Núcleo (LEI 24, exceção autorizada pelo Operador). O Núcleo em si não foi alterado.
+          </span>
+        </div>
+      )}
+      {expectancyFilter?.warning && (
+        <span className="text-[0.42rem] text-[#f0d06f]/80 leading-tight">{expectancyFilter.warning}</span>
+      )}
+    </div>
+  );
+}
+
 // --- ASSISTANT ORB / S.E. CORE (center hero, detalhe completo — expandido
 // sob demanda a partir do SiriformCoreCard acima) ---
 const ASSISTANT_MESSAGES = [
@@ -6274,6 +6381,7 @@ function CoreSignalBadge({
   direction,
   confidence,
   decision,
+  expectancyFilter,
 }: {
   direction: "LONG" | "SHORT" | null;
   confidence: string | null;
@@ -6282,29 +6390,57 @@ function CoreSignalBadge({
   // num toque (Operação/Confiança/Entrada/Stop/TPs/ETA/R:R/Motivo), sem um
   // pixel novo na tela (§6 da própria diretriz: fusão nunca vira poluição).
   decision?: NexusDecision | null;
+  // Entrega 42 — LEI 24, exceção pontual autorizada pelo Operador (ver
+  // CLAUDE.md, seção "LEI 24"). Ver bloco "suppressed" abaixo para o único
+  // ponto real onde essa exceção é aplicada.
+  expectancyFilter?: FilterResult | null;
 }) {
-  const isLong = direction === "LONG";
-  const isShort = direction === "SHORT";
+  const rawIsLong = direction === "LONG";
+  const rawIsShort = direction === "SHORT";
+  // LEI 24 — exceção pontual autorizada pelo Operador: quando existe uma
+  // direção real do Núcleo (LONG/SHORT) E expectancyFilter.show é false
+  // (expectativa líquida real negativa sobre o Track Record deste
+  // symbol:timeframe, amostra >= MIN_TRADES_FOR_VALID_EXPECTANCY), o badge
+  // exibe NEUTRO em vez da direção real — SÓ na apresentação: `direction`
+  // continua sendo o passthrough literal de engine.direction (o Núcleo em
+  // si nunca é mutado, nunca recebe um segundo emissor de decisão). Esta é
+  // a ÚNICA leitura deste flag no componente inteiro — todo o resto do
+  // badge (tom, corpo grande, subtítulo) deriva de `effectiveDirection`
+  // computado aqui, nunca de `direction` bruto de novo.
+  const suppressed = (rawIsLong || rawIsShort) && expectancyFilter?.show === false;
+  const effectiveDirection: "LONG" | "SHORT" | null = suppressed ? null : direction;
+  const isLong = effectiveDirection === "LONG";
+  const isShort = effectiveDirection === "SHORT";
   // Evolução Integrativa §7: a montagem multi-linha foi REALOCADA para a
   // Operational Readability Layer (nexus/operational-readability.ts) —
   // camada nomeada, pura e com execução real de teste. Conteúdo idêntico;
   // o badge só exibe (§7: consumidores nunca reinterpretam).
-  const fusedTitle = buildOperationalSummary(decision).join("\n");
+  const fusedTitle = (
+    suppressed
+      ? [
+          `NEUTRO (exibição) — Núcleo real: ${direction}. Expectativa líquida real negativa neste Track Record (${expectancyFilter!.label}${expectancyFilter!.stats ? `, ${expectancyFilter!.stats.expectancyR >= 0 ? "+" : ""}${expectancyFilter!.stats.expectancyR.toFixed(2)}R sobre ${expectancyFilter!.stats.totalTrades} trades reais` : ""}). LEI 24, exceção autorizada pelo Operador — ver MOTOR DE LUCRATIVIDADE. O Núcleo em si não foi alterado.`,
+          ...buildOperationalSummary(decision),
+        ]
+      : buildOperationalSummary(decision)
+  ).join("\n");
   // Auditoria Final de Integração (achado real): title=fusedTitle é um
   // tooltip nativo — nunca aparece em toque/tap no iPad Safari (a
   // plataforma-alvo real deste app, CLAUDE.md "60 FPS em iPad Safari").
   // Sem esta linha, BIAS/SETUP/ENTRY ficavam matematicamente corretos mas
-  // 100% inacessíveis na tela real do Operador: o texto grande (`direction`)
-  // é o passthrough literal do Núcleo (LEI 24, nunca alterado aqui), mas
+  // 100% inacessíveis na tela real do Operador: o texto grande
+  // (`effectiveDirection`) é o passthrough literal do Núcleo (LEI 24, nunca
+  // alterado aqui — exceto pela exceção pontual `suppressed` acima), mas
   // sozinho ele não distinguia "LONG com entrada confirmada" de "LONG só
   // como viés" — exatamente o "LONG + entrada forçada" que a Diretriz
   // BIAS≠ENTRY pediu para nunca comunicar. O qualificador abaixo é uma
   // RELOCAÇÃO do mesmo rótulo já real e testado (deriveOutcomeLabel), só
   // visível agora sem precisar de hover — nenhuma matemática nova.
   const outcome = decision ? deriveOutcomeLabel(decision) : null;
-  const outcomeQualifier: string | null = outcome
-    ? OUTCOME_QUALIFIER[outcome] ?? null
-    : null;
+  const outcomeQualifier: string | null = suppressed
+    ? null
+    : outcome
+      ? OUTCOME_QUALIFIER[outcome] ?? null
+      : null;
   const textTone = isLong
     ? "text-[#00ffaa] drop-shadow-[0_0_10px_rgba(0,255,170,0.65)]"
     : isShort
@@ -6320,7 +6456,9 @@ function CoreSignalBadge({
       className={`flex flex-col items-center justify-center leading-none h-[38px] px-3 md:px-4 rounded-lg border mr-2 md:mr-3 shrink-0 ${boxTone}`}
       title={fusedTitle}
     >
-      <span className={`text-sm md:text-base font-black tracking-wider ${textTone}`}>{direction ?? AWAIT}</span>
+      <span className={`text-sm md:text-base font-black tracking-wider ${textTone}`}>
+        {suppressed ? "NEUTRO" : (effectiveDirection ?? AWAIT)}
+      </span>
       {/* Lapidação Visual (DIRETRIZ 2 — "sempre que dois elementos
           transmitirem praticamente a mesma informação, manter apenas o
           melhor"): sem direção real E sem confiança real E sem qualificador,
@@ -6334,7 +6472,7 @@ function CoreSignalBadge({
           ainda não"), então continua aparecendo. Nada é escondido: no caso
           suprimido a ausência já está dita, em corpo maior, um pixel acima.
           A altura fixa (h-[38px]) mantém o cabeçalho sem salto de layout. */}
-      {(direction || confidence || outcomeQualifier) && (
+      {(suppressed || direction || confidence || outcomeQualifier) && (
       <span className="text-[0.4rem] md:text-[0.45rem] font-bold text-[#8ab4f8]/60 tracking-[0.18em] uppercase mt-[1px] whitespace-nowrap">
         {/* V2 §3: o estado operacional único no subtítulo do MESMO badge —
             header alimentado pelo contrato sem um elemento novo. Auditoria
@@ -6342,7 +6480,11 @@ function CoreSignalBadge({
             AGUARDANDO ENTRADA / SEM ESTRUTURA) substitui o operationalState
             cru — o mesmo dado real continua na linha 1 do tooltip
             ("Estado: ..."), aqui vira a síntese que o Operador reconhece
-            sem abrir o tooltip. */}
+            sem abrir o tooltip. LEI 24 (suppressed): a mesma linha vira a
+            explicação SEMPRE VISÍVEL da supressão (nunca só no tooltip,
+            mesmo achado real de "title= nunca aparece em toque no iPad
+            Safari" citado acima) — rótulo real do FilterEngine, nunca um
+            texto fixo genérico. */}
         {/* Achado real (captura do Operador, janela ~1000px lógicos): a
             região central rolável corta o badge na borda sem indício — o
             subtítulo "CONFIDENCE · MEDIUM · AGUARDANDO ENTRADA" morria em
@@ -6351,8 +6493,8 @@ function CoreSignalBadge({
             faz o pior caso real caber na janela real medida (~30 chars).
             Os DOIS valores reais permanecem: o rótulo categórico do motor
             e o qualificador BIAS≠ENTRY. */}
-        {confidence ?? AWAIT}
-        {outcomeQualifier ? ` · ${outcomeQualifier}` : ""}
+        {suppressed ? `${expectancyFilter!.label} · SUPRIMIDO` : (confidence ?? AWAIT)}
+        {!suppressed && outcomeQualifier ? ` · ${outcomeQualifier}` : ""}
       </span>
       )}
     </div>
@@ -6376,6 +6518,7 @@ function TopBar({ data }: { data?: PriceState | null }) {
     cycleLatencyMs,
     voiceSnapshot,
     nexusDecision,
+    expectancyFilter,
   } = useContext(WidgetContext) || {};
   // Diretriz Final — Polimento Visual e Sincronização Global §4
   // ("Sincronizar Agora... exibir discretamente o status da
@@ -6592,7 +6735,14 @@ function TopBar({ data }: { data?: PriceState | null }) {
             </div>
           )}
 
-          {marketMode === "CRYPTO" && <CoreSignalBadge direction={engine?.direction ?? null} confidence={engine?.confidence ?? null} decision={nexusDecision ?? null} />}
+          {marketMode === "CRYPTO" && (
+            <CoreSignalBadge
+              direction={engine?.direction ?? null}
+              confidence={engine?.confidence ?? null}
+              decision={nexusDecision ?? null}
+              expectancyFilter={expectancyFilter ?? null}
+            />
+          )}
 
           {/* v16.0 PRO Fase 1 ("Header Minimalista"): Score institucional,
               Heat Score, cartão VWAP e a mensagem do Assistente saíram da

@@ -39,13 +39,13 @@ describe('App.tsx: resolvedTradFiInstrument liga selectedTradFiAsset ao Instrume
   it('todo o resto do modo TRADFI (order book/flow/heatmap/Siriform/Council/Regime/ScoreContexto) continua em TradFiEmptyState — Fase 1 não expande escopo além do gráfico principal', () => {
     const app = read('../src/App.tsx');
     const tradfiEmptyStateCount = (app.match(/<TradFiEmptyState/g) ?? []).length;
-    // 1 no branch sem mapeamento do gráfico principal + 8 nos painéis
+    // 1 no branch sem mapeamento do gráfico principal + 9 nos painéis
     // crypto-específicos (Market Intelligence, Siriform, ScoreContextCard
-    // [v16.0 PRO Fase 1, novo], Regime/Comitê, Siriform detalhe, Order
-    // Book, Order Flow, Liquidity Map) — mesma contagem de antes, +1 pelo
-    // novo card gated (institutional-score/heat-score/vwap-bands não têm
-    // leitura real em TRADFI, mesmo gate que os demais).
-    expect(tradfiEmptyStateCount).toBe(9);
+    // [v16.0 PRO Fase 1], ExpectancyCard [Entrega 42, novo], Regime/Comitê,
+    // Siriform detalhe, Order Book, Order Flow, Liquidity Map) — mesma
+    // contagem de antes, +1 pelo novo card gated (Track Record/expectancy
+    // não têm leitura real em TRADFI, mesmo gate que os demais).
+    expect(tradfiEmptyStateCount).toBe(10);
   });
 });
 

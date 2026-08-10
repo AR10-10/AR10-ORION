@@ -84,6 +84,13 @@ export interface PlanOpenContext {
   vwapState: "BULLISH" | "BEARISH" | "NEUTRAL" | null;
   nexusLineState: "BULLISH" | "BEARISH" | "NEUTRAL" | null;
   score: number | null; // Institutional Score na abertura
+  // Entrega 42 (Profitability Engine): rótulo REAL de engine.marketRegime.
+  // regime (market-regime/regime-engine.js, ADX/Bollinger) na abertura —
+  // mesmo motor já usado pelo header/Relevance Engine, zero classificador
+  // novo. Opcional (registros antigos persistidos nunca tiveram este
+  // campo) — expectancy estratificada por regime simplesmente exclui
+  // trades sem este dado, nunca inventa um regime retroativo.
+  regime?: string | null;
 }
 
 export interface TrackedPlan {

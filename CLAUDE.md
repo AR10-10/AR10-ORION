@@ -74,6 +74,25 @@ de trading ou bloquear/alterar a decisão do Core Engine. Toda nova
 Operador — display only — a menos que o próprio Operador peça
 explicitamente para mudar essa hierarquia.
 
+**Exceção pontual registrada (Entrega 42, "Profitability Engine",
+2026-08-10):** o Operador autorizou explicitamente (via `AskUserQuestion`,
+opção "Authorize full suppression as specified") que
+`nexus/expectancy.ts`'s `evaluateSignalFilter()` suprima a exibição do
+LONG/SHORT real do Core Engine quando a expectativa líquida real (R-
+múltiplo, após comissão+slippage+funding reais, `nexus/trade-simulation.ts`)
+sobre o Track Record já resolvido deste symbol:timeframe é negativa, com
+amostra mínima de 30 trades reais (`MIN_TRADES_FOR_VALID_EXPECTANCY`) —
+abaixo disso o Núcleo nunca é suprimido (ausência de prova não é prova de
+inviabilidade). A implementação é estritamente de apresentação:
+`CoreSignalBadge` (App.tsx) computa um `effectiveDirection` local e mostra
+NEUTRO no lugar do LONG/SHORT real só nesse componente — `engine.direction`
+em si (o Core Engine) nunca é mutado, nenhum outro consumidor de
+`engine.direction` é afetado, e a razão real da supressão fica sempre
+visível (nunca só no tooltip): no subtítulo do próprio badge e no
+`ExpectancyCard` (drawer Core Intelligence), nunca escondida. Esta exceção
+é escopada só a este caso — nenhuma outra camada de confluência ganha
+autorização para suprimir o Núcleo a partir deste precedente.
+
 ## Arquitetura — onde as coisas vivem
 
 - `ipad_runtime/src/research/engines/` — motores puros graduados

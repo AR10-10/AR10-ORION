@@ -308,7 +308,12 @@ describe('Nexus Decision Layer: leitura única fundida, computada 1x e exposta n
     expect(a).toContain('decision?: NexusDecision | null;');
     // realocado (nunca apagado): a montagem vive no módulo nomeado; o
     // conteúdo das linhas é travado por EXECUÇÃO REAL no teste do módulo.
-    expect(a).toContain('const fusedTitle = buildOperationalSummary(decision).join("\\n");');
+    // Entrega 42 (LEI 24): fusedTitle ganhou um ramo condicional (linha de
+    // explicação da supressão quando suppressed) mas as DUAS ramificações
+    // continuam chamando buildOperationalSummary(decision) — zero segunda
+    // montagem manual das linhas reais do módulo.
+    expect(a).toContain('...buildOperationalSummary(decision),');
+    expect(a).toContain(': buildOperationalSummary(decision)\n  ).join("\\n");');
     expect(a).not.toContain('NEXUS DECISION · Operação: ${'); // inline extinto no App
     expect(a).toContain('title={fusedTitle}');
     expect(a).toContain('decision={nexusDecision ?? null}');
@@ -349,7 +354,7 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
   it('Auditoria Final de Integração: o subtítulo VISÍVEL do badge herói (nunca só o tooltip, que não aparece em toque no iPad) qualifica BIAS≠ENTRY com deriveOutcomeLabel — mesmo dado real do Estado, agora legível sem hover', () => {
     const a = app();
     expect(a).toContain('const outcome = decision ? deriveOutcomeLabel(decision) : null;');
-    expect(a).toContain('{outcomeQualifier ? ` · ${outcomeQualifier}` : ""}');
+    expect(a).toContain('{!suppressed && outcomeQualifier ? ` · ${outcomeQualifier}` : ""}');
     // v7: import multi-linha (ganhou os derives dos 6 eixos) — trava o bloco inteiro vindo do módulo certo
     const importMatch = a.match(/import \{([\s\S]*?)\} from "\.\/nexus\/operational-readability";/);
     expect(importMatch, 'import da Readability Layer não encontrado').not.toBeNull();
@@ -367,8 +372,12 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
   it('Achado real (captura do Operador, janela ~1000px lógicos): o subtítulo do badge herói NÃO carrega mais o prefixo "Confidence · " — a região central rolável cortava "CONFIDENCE · MEDIUM · AGUARDANDO ENTRADA" em "AGUARDAN"; o rótulo categórico cru agora vai direto ao ponto (o rótulo "Confiança:" já existe na linha própria do tooltip)', () => {
     const block = wholeFunction(app(), 'function CoreSignalBadge(');
     expect(block).not.toBe('');
-    expect(block).toContain('{confidence ?? AWAIT}');
-    expect(block).toContain('{outcomeQualifier ? ` · ${outcomeQualifier}` : ""}');
+    // Entrega 42 (LEI 24): o rótulo cru ganhou um ramo condicional
+    // (suppressed exibe o rótulo real do FilterEngine em vez de NEUTRO
+    // genérico) — o valor real (confidence ?? AWAIT) continua intocado no
+    // ramo não-suprimido, mesma disciplina de sempre.
+    expect(block).toContain('(confidence ?? AWAIT)');
+    expect(block).toContain('{!suppressed && outcomeQualifier ? ` · ${outcomeQualifier}` : ""}');
     // regressão: o prefixo decorativo não pode voltar a colidir com a borda real medida
     expect(block).not.toContain('`Confidence · ${confidence}`');
   });
