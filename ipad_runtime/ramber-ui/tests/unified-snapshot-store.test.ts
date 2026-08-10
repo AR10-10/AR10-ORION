@@ -10,7 +10,7 @@ const RESET = {
   symbol: 'BTC',
   price: { price: null, delta: null, deltaPct: null, high: null, low: null, volume: null, direction: null, updatedAt: null },
   orderBook: { bids: [], asks: [], updatedAt: null },
-  derivatives: { fundingRate: null, openInterest: null },
+  derivatives: { fundingRate: null, openInterest: null, longShortRatio: null },
   core: { engineStatus: 'pending' as const, direction: null, confidence: null, lastUpdateAt: null, cycleLatencyMs: null },
   activeTimeframe: '15m' as const,
   candles: {},
@@ -96,8 +96,8 @@ describe('unified-snapshot-store: setters escrevem exatamente o dado real recebi
   });
 
   it('setDerivatives grava exatamente o objeto recebido (sem timestamp — funding/OI já carregam sua própria idade em outro lugar)', () => {
-    useUnifiedSnapshotStore.getState().setDerivatives({ fundingRate: 0.0001, openInterest: 98765 });
-    expect(useUnifiedSnapshotStore.getState().derivatives).toEqual({ fundingRate: 0.0001, openInterest: 98765 });
+    useUnifiedSnapshotStore.getState().setDerivatives({ fundingRate: 0.0001, openInterest: 98765, longShortRatio: 1.42 });
+    expect(useUnifiedSnapshotStore.getState().derivatives).toEqual({ fundingRate: 0.0001, openInterest: 98765, longShortRatio: 1.42 });
   });
 
   it('setCore grava o estado real do motor (engineStatus/direção/confiança categórica), nunca um score inventado', () => {

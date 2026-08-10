@@ -144,8 +144,14 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     const derivFnMatch = app.match(/const fetchDerivatives = async \(isStale: \(\) => boolean\): Promise<boolean> => \{([\s\S]*?)\n {2}\};/);
     expect(derivFnMatch, 'fetchDerivatives não encontrada com o parâmetro isStale').not.toBeNull();
     const derivBody = derivFnMatch![1];
-    expect(derivBody).toContain('if (!isStale()) {\n        setDerivatives({');
-    expect(derivBody).toContain('if (!isStale()) setDerivatives({ fundingRate: null, openInterest: null });');
+    expect(derivBody).toContain('if (!isStale()) {\n        setDerivatives((prev) => ({');
+    expect(derivBody).toContain('if (!isStale()) setDerivatives((prev) => ({ ...prev, fundingRate: null, openInterest: null }));');
+    // v16.0 ULTRA §15.4: long/short ratio é um fetch PRÓPRIO, independente
+    // do de funding/OI acima (endpoint diferente) — mesma guarda isStale()
+    // nos 2 caminhos (sucesso e catch), nunca um setState desprotegido só
+    // porque é um campo "a mais".
+    expect(derivBody).toContain('if (!isStale()) setDerivatives((prev) => ({ ...prev, longShortRatio: ratio }));');
+    expect(derivBody).toContain('if (!isStale()) setDerivatives((prev) => ({ ...prev, longShortRatio: null }));');
     expect(derivBody).toContain('if (!isStale()) {\n      setCrossExchangeCheck(compareCrossExchange(binanceMarkPrice, bybit));');
 
     // os DOIS call sites (retry de boot E o setInterval de refresh) usam a
@@ -188,7 +194,7 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     // de setConfluenceCorridor(null) — janela ampliada de novo para caber
     // o conteúdo novo (limite ainda finito: continua provando que é um
     // efeito PRÓPRIO e contido, nunca o arquivo inteiro).
-    const block = app.slice(Math.max(0, idx - 30), idx + 4006);
+    const block = app.slice(Math.max(0, idx - 30), idx + 4100);
     expect(block).toContain('setChartData([]);');
     expect(block).toContain('setOrderBook({ bids: [], asks: [] });');
     expect(block).toContain('useUnifiedSnapshotStore.getState().setMultiTimeframeContext(null);');
@@ -208,14 +214,14 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     // Janela ampliada (OMEGA CORE V-MAX Fase 1.1/5: setCvd(null)/
     // setConfluenceCorridor(null) novos entram ANTES destas linhas no
     // mesmo efeito) — mesmo racional de janela finita da suíte irmã acima.
-    const block = app.slice(Math.max(0, idx - 30), idx + 2301);
-    expect(block).toContain('setDerivatives({ fundingRate: null, openInterest: null });');
+    const block = app.slice(Math.max(0, idx - 30), idx + 2400);
+    expect(block).toContain('setDerivatives({ fundingRate: null, openInterest: null, longShortRatio: null });');
     expect(block).toContain('setCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });');
     expect(block).toContain('setOkxCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });');
     // mesmos valores exatos dos useState iniciais — nunca um sentinel novo
     // inventado, o mesmo "carregando" honesto que o primeiro boot já usa.
     expect(app).toContain('const [crossExchangeCheck, setCrossExchangeCheck] = useState<CrossExchangeCheck>({\n    ok: false,\n    priceDeltaPct: null,\n    consensus: "INDISPONIVEL",\n  });');
-    expect(app).toContain('const [derivatives, setDerivatives] = useState<DerivativesState>({\n    fundingRate: null,\n    openInterest: null,\n  });');
+    expect(app).toContain('const [derivatives, setDerivatives] = useState<DerivativesState>({\n    fundingRate: null,\n    openInterest: null,\n    longShortRatio: null,\n  });');
   });
 
   it('liquidações NÃO precisam resetar por ativo: o próprio label já se declara exchange-wide, nunca fingindo ser por símbolo — achado de auditoria confirmando que não é um bug de staleness', () => {

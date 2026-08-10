@@ -638,6 +638,11 @@ interface PriceState {
 interface DerivativesState {
   fundingRate: number | null; // real, Binance futures premiumIndex
   openInterest: number | null; // real, Binance futures openInterest (BTC)
+  // v16.0 ULTRA §15.4: razão global de contas long/short, Binance futures
+  // globalLongShortAccountRatio (público, keyless, período 5m). >1 = mais
+  // contas long que short; <1 = mais short. Posicionamento agregado, nunca
+  // um sinal de entrada.
+  longShortRatio: number | null;
 }
 
 interface Level {
@@ -672,6 +677,7 @@ export default function App() {
   const [derivatives, setDerivatives] = useState<DerivativesState>({
     fundingRate: null,
     openInterest: null,
+    longShortRatio: null,
   });
   // V-MAX Fase 1.3: `volume` real por candle (o `v` que o Bus sempre
   // carregou, agora repassado por getChartCandles) — insumo do Volume
@@ -1142,18 +1148,43 @@ export default function App() {
       const oi = await oiRes.json();
       binanceMarkPrice = num(Number(funding?.markPrice)) ? Number(funding.markPrice) : null;
       if (!isStale()) {
-        setDerivatives({
+        setDerivatives((prev) => ({
+          ...prev,
           fundingRate: num(Number(funding?.lastFundingRate))
             ? Number(funding.lastFundingRate)
             : null,
           openInterest: num(Number(oi?.openInterest))
             ? Number(oi.openInterest)
             : null,
-        });
+        }));
       }
       binanceOk = true;
     } catch {
-      if (!isStale()) setDerivatives({ fundingRate: null, openInterest: null });
+      if (!isStale()) setDerivatives((prev) => ({ ...prev, fundingRate: null, openInterest: null }));
+    }
+
+    // v16.0 ULTRA §15.4: long/short ratio — endpoint público keyless
+    // próprio (globalLongShortAccountRatio), confirmado via WebSearch
+    // contra a documentação oficial da Binance (WebFetch direto ao
+    // domínio foi bloqueado pelo proxy deste sandbox — mesma limitação de
+    // rede de qualquer outro acesso à Binance nesta sessão, nunca
+    // verificado ao vivo aqui). Try/catch PRÓPRIO, independente do de
+    // funding/OI acima: são 2 requisições a endpoints diferentes: uma
+    // falha transitória num nunca deve apagar o outro se ele respondeu
+    // com sucesso no mesmo ciclo — por isso o update funcional (prev =>
+    // ...), nunca um objeto literal que sobrescreveria o campo do outro
+    // fetch por engano numa corrida entre os dois.
+    try {
+      const lsRes = await fetch(
+        `https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${selectedAsset}USDT&period=5m&limit=1`,
+      );
+      if (!lsRes.ok) throw new Error(`long_short HTTP ${lsRes.status}`);
+      const lsJson = await lsRes.json();
+      const latest = Array.isArray(lsJson) ? lsJson[lsJson.length - 1] : null;
+      const ratio = num(Number(latest?.longShortRatio)) ? Number(latest.longShortRatio) : null;
+      if (!isStale()) setDerivatives((prev) => ({ ...prev, longShortRatio: ratio }));
+    } catch {
+      if (!isStale()) setDerivatives((prev) => ({ ...prev, longShortRatio: null }));
     }
 
     // Master Panel handoff: cross-check Bybit + OKX + MEXC Futures —
@@ -1241,7 +1272,7 @@ export default function App() {
     // novo. Mesmos valores iniciais dos useState acima — o mesmo "estado
     // de carregamento honesto" que o primeiro boot já usa, nunca um dado
     // fabricado do ativo novo.
-    setDerivatives({ fundingRate: null, openInterest: null });
+    setDerivatives({ fundingRate: null, openInterest: null, longShortRatio: null });
     setCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
     setOkxCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
     setMexcCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
@@ -7289,6 +7320,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
           <ModuleStat label="24H Volume" value={typeof price.volume === "number" ? Math.round(price.volume).toLocaleString("en-US") : MODULE_EMPTY} />
           <ModuleStat label="Funding Rate" value={typeof derivatives.fundingRate === "number" ? `${(derivatives.fundingRate * 100).toFixed(4)}%` : MODULE_EMPTY} />
           <ModuleStat label="Open Interest" value={num(derivatives.openInterest, 0)} />
+          <ModuleStat label="Long/Short Ratio" value={num(derivatives.longShortRatio)} />
         </ModulePanel>
         {/* Master Panel handoff (Multi-Source Market Data Fusion): cross-
             check real Binance-vs-Bybit/OKX — puramente informativo, nunca

@@ -120,6 +120,7 @@ export interface OrderBookSnapshot {
 export interface DerivativesSnapshot {
   fundingRate: number | null;
   openInterest: number | null;
+  longShortRatio: number | null;
 }
 
 export type EngineStatus = "pending" | "ok" | "error";
@@ -150,7 +151,7 @@ export const EMPTY_PRICE: PriceSnapshot = {
   price: null, delta: null, deltaPct: null, high: null, low: null, volume: null, direction: null, updatedAt: null,
 };
 const EMPTY_ORDER_BOOK: OrderBookSnapshot = { bids: [], asks: [], updatedAt: null };
-const EMPTY_DERIVATIVES: DerivativesSnapshot = { fundingRate: null, openInterest: null };
+const EMPTY_DERIVATIVES: DerivativesSnapshot = { fundingRate: null, openInterest: null, longShortRatio: null };
 const EMPTY_CORE: CoreSnapshot = {
   engineStatus: "pending", direction: null, confidence: null, lastUpdateAt: null, cycleLatencyMs: null,
 };

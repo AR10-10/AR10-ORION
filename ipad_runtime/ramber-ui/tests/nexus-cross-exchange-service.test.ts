@@ -77,7 +77,7 @@ const STORE_RESET = {
   symbol: 'BTC',
   price: { price: null, delta: null, deltaPct: null, high: null, low: null, volume: null, direction: null, updatedAt: null },
   orderBook: { bids: [], asks: [], updatedAt: null },
-  derivatives: { fundingRate: null, openInterest: null },
+  derivatives: { fundingRate: null, openInterest: null, longShortRatio: null },
   core: { engineStatus: 'pending' as const, direction: null, confidence: null, lastUpdateAt: null, cycleLatencyMs: null },
   activeTimeframe: '15m' as const,
   candles: {},
