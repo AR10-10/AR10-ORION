@@ -69,6 +69,9 @@ export const RELEVANCE_LAYER_IDS = [
   // livro de ofertas real é o MESMO dado para as duas camadas, nunca uma
   // segunda medição.
   "order_book_depth",
+  // Entrega 41: TPO/Market Profile — relevante quando a sessão corrente
+  // já produz um perfil real (hasTpoProfile).
+  "tpo_profile",
 ] as const;
 export type RelevanceLayerId = (typeof RELEVANCE_LAYER_IDS)[number];
 
@@ -124,6 +127,13 @@ export interface LayerRelevanceInput {
   // de ofertas ao vivo para o heatmap ter dado pra desenhar.
   orderflowTrendActive: boolean;
   hasOrderBook: boolean;
+  // TPO / Market Profile (Entrega 41): true quando computeTpoProfile
+  // (nexus/tpo-profile.ts) devolve status OK para a sessão corrente —
+  // mesmo padrão de hasFibonacciLevels acima (existência real do dado,
+  // nunca proximidade). false cobre os 2 casos honestos de
+  // DADOS_INSUFICIENTES do motor (sessão sem candle real ainda, ou faixa
+  // de preço degenerada).
+  hasTpoProfile: boolean;
   // Liquidações Forçadas: pelo menos 1 evento real no feed atual — mesma
   // condição que o próprio painel de lista (SecondaryModuleView) já usa
   // para decidir se tem algo real pra mostrar.
@@ -283,6 +293,12 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
     order_book_depth: input.hasOrderBook
       ? { relevant: true, emphasis: "normal", reason: "livro de ofertas ao vivo real presente" }
       : { relevant: false, emphasis: "normal", reason: "sem livro de ofertas ao vivo real neste momento" },
+
+    // Entrega 41: existência real do perfil (computeTpoProfile === OK),
+    // nunca proximidade — mesmo papel de hasFibonacciLevels acima.
+    tpo_profile: input.hasTpoProfile
+      ? { relevant: true, emphasis: "normal", reason: "perfil TPO real da sessão corrente já computável (candles suficientes)" }
+      : { relevant: false, emphasis: "normal", reason: "sessão sem candle real suficiente ainda para um perfil TPO" },
 
     volume_profile: input.volumeProfileNearPrice
       ? { relevant: true, emphasis: "normal", reason: `preço vivo a menos de ${fmtPct(VOLUME_PROFILE_PROXIMITY_PCT)} de um POC/HVN real` }

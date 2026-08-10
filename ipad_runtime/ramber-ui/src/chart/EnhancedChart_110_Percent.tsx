@@ -115,6 +115,7 @@ import { computeSessionKeyLevels } from "../nexus/market-session";
 import { computeInstitutionalZones, type InstitutionalZoneInput } from "../nexus/institutional-zones";
 import { InstitutionalZonePlugin, LABEL_COLOR as INSTITUTIONAL_ZONE_LABEL_COLOR, confluenceWeight } from "./InstitutionalZonePlugin";
 import { DepthChartPlugin } from "./DepthChartPlugin";
+import { TpoProfilePlugin } from "./TpoProfilePlugin";
 import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
@@ -289,6 +290,11 @@ export const CHART_LAYER_IDS = [
   // OrderBookWidget já desenha como ladder) como camada de gráfico —
   // barras ancoradas ao preço real de cada nível, nunca um segundo fetch.
   "order_book_depth",
+  // Entrega 41 (TPO / Market Profile, gap real nomeado desde a auditoria
+  // v16.0 ULTRA §12.2/12.3): perfil TPO real da sessão corrente — POC,
+  // Value Area e Initial Balance por CONTAGEM de período (Steidlmayer/
+  // CBOT), derivado só de OHLC de candle já carregado, zero fetch novo.
+  "tpo_profile",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -315,6 +321,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   session_key_levels: true,
   institutional_zones: true,
   order_book_depth: true,
+  tpo_profile: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -344,6 +351,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   session_key_levels: true,
   institutional_zones: true,
   order_book_depth: true,
+  tpo_profile: true,
 };
 
 interface EnhancedChartProps {
@@ -3059,6 +3067,16 @@ export function EnhancedChart_110_Percent({
         <DepthChartPlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
+        />
+      )}
+      {/* Entrega 41: perfil TPO real da sessão corrente — mesma `data`
+         (candles reais) já threadada a SessionKeyLevelsPlugin/
+         KillZoneBandsPlugin, zero fetch novo. */}
+      {visibility.tpo_profile && (
+        <TpoProfilePlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
         />
       )}
       {/* Neural Market Aura: the conviction corridor, mounted BEFORE the

@@ -169,6 +169,9 @@ import { computeChartIntegrity, type ChartIntegrityStatus } from "./nexus/chart-
 // Imbalance são leituras derivadas puras dos MESMOS bids/asks, zero
 // segunda assinatura de WebSocket (ver cabeçalho de nexus/order-book-depth.ts).
 import { computeBidAskRatio, computeImbalance } from "./nexus/order-book-depth";
+// Entrega 41: mesmo motor real do TpoProfilePlugin, usado aqui só pra
+// derivar o sinal de relevância hasTpoProfile (ver relevanceInput abaixo).
+import { computeTpoProfile } from "./nexus/tpo-profile";
 import { computeOrganismHealth, type OrganismHealthVerdict } from "./nexus/organism-health";
 // Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
 // alvo — ATR real × Efficiency Ratio de Kaufman sobre os closes reais do
@@ -3964,6 +3967,9 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // Entrega 40: livro de ofertas real (DepthChartPlugin) como camada de
   // gráfico — gap nomeado desde a Entrega 35 §4.
   { id: "order_book_depth", label: "PROFUNDIDADE DO LIVRO" },
+  // Entrega 41: perfil TPO real da sessão corrente (Steidlmayer/CBOT) —
+  // gap real nomeado desde a auditoria v16.0 ULTRA §12.2/12.3.
+  { id: "tpo_profile", label: "PERFIL TPO" },
 ];
 
 function ChartLayersPanel() {
@@ -8117,6 +8123,12 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     const hasSessionKeyLevelNearPrice = recentSessionKeyLevels.some(
       (l) => withinPct(l.high, LIQUIDITY_PROXIMITY_PCT) || withinPct(l.low, LIQUIDITY_PROXIMITY_PCT),
     );
+    // Entrega 41: existência real do perfil TPO da sessão corrente — só
+    // pra relevância (mesmo espírito de sessionKeyLevels acima); o
+    // TpoProfilePlugin computa o mesmo motor de novo, com cache por
+    // referência, pra desenhar (mesmo padrão real já usado por
+    // SessionKeyLevelsPlugin — função pura barata, zero fetch).
+    const hasTpoProfile = Array.isArray(chartData) && computeTpoProfile(chartData).status === "OK";
     return {
       tradePlanActive: Boolean(chartTradePlan) || Boolean(engineFallbackLevels),
       obstacleZoneCount: chartObstacleZones.length,
@@ -8133,6 +8145,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
       trendChannelBandwidthPct,
       orderflowTrendActive: orderflowTrend?.status === "OK" && orderflowTrend.trend !== "ESTAVEL",
       hasOrderBook: Boolean(engine?.hasBook),
+      hasTpoProfile,
       hasRecentLiquidation: Array.isArray(liquidations) && liquidations.length > 0,
       hasRecentLiquiditySweep: (traps ?? []).some((t) => t.kind === "STOP_HUNT_TOPO" || t.kind === "STOP_HUNT_FUNDO"),
       recentSessionBoundary,
