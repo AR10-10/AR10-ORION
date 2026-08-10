@@ -165,6 +165,10 @@ import { buildConvictionReading } from "./nexus/confluence-engine";
 // nexus/aura-lifecycle.ts para o racional completo de escopo/honestidade).
 import { computeAuraReading, TIMEFRAME_MS } from "./nexus/aura-lifecycle";
 import { computeChartIntegrity, type ChartIntegrityStatus } from "./nexus/chart-integrity";
+// Entrega 40: mesmo book já desenhado pelo ladder abaixo — Bid/Ask Ratio e
+// Imbalance são leituras derivadas puras dos MESMOS bids/asks, zero
+// segunda assinatura de WebSocket (ver cabeçalho de nexus/order-book-depth.ts).
+import { computeBidAskRatio, computeImbalance } from "./nexus/order-book-depth";
 import { computeOrganismHealth, type OrganismHealthVerdict } from "./nexus/organism-health";
 // Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
 // alvo — ATR real × Efficiency Ratio de Kaufman sobre os closes reais do
@@ -3957,6 +3961,9 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4: faixa real de confluência
   // entre >=2 ferramentas independentes (InstitutionalZonePlugin).
   { id: "institutional_zones", label: "ZONA INSTITUCIONAL" },
+  // Entrega 40: livro de ofertas real (DepthChartPlugin) como camada de
+  // gráfico — gap nomeado desde a Entrega 35 §4.
+  { id: "order_book_depth", label: "PROFUNDIDADE DO LIVRO" },
 ];
 
 function ChartLayersPanel() {
@@ -8772,6 +8779,10 @@ function OrderBookWidget({ data, book }: any) {
   const asks: Level[] = book?.asks ?? [];
   const bids: Level[] = book?.bids ?? [];
   const hasBook = asks.length > 0 || bids.length > 0;
+  // Entrega 40: derivações puras sobre o MESMO book acima — nunca uma
+  // segunda leitura (ver cabeçalho de nexus/order-book-depth.ts).
+  const bidAskRatio = computeBidAskRatio(bids, asks);
+  const imbalance = computeImbalance(bids, asks);
 
   let accumAsk = 0;
   let accumBid = 0;
@@ -8831,6 +8842,25 @@ function OrderBookWidget({ data, book }: any) {
                   </div>
                 );
               })}
+            </div>
+
+            <div className="flex justify-between items-center px-1 pt-1 mt-[2px] border-t border-[#00f0ff1a] shrink-0 gap-2">
+              <div className="flex items-center gap-1">
+                <span className="text-[0.42rem] text-[#8ab4f8]/60 font-bold tracking-wide uppercase">RATIO B/A</span>
+                <span
+                  className={`text-[0.5rem] font-mono font-black ${bidAskRatio === null ? "text-[#8ab4f8]/40" : bidAskRatio >= 1 ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+                >
+                  {fmt(bidAskRatio, 2)}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[0.42rem] text-[#8ab4f8]/60 font-bold tracking-wide uppercase">IMBALANCE</span>
+                <span
+                  className={`text-[0.5rem] font-mono font-black ${imbalance === null ? "text-[#8ab4f8]/40" : imbalance >= 0 ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+                >
+                  {fmtSignedPct(imbalance === null ? null : imbalance * 100, 0)}
+                </span>
+              </div>
             </div>
           </>
         )}

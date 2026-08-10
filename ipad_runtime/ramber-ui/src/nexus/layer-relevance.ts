@@ -65,6 +65,10 @@ export const RELEVANCE_LAYER_IDS = [
   // já devolve lista vazia sem confluência real cruzada), nunca sujeito a
   // uma SEGUNDA regra de relevância aqui.
   "institutional_zones",
+  // Entrega 40: mesma condição de order_flow_heatmap logo abaixo — o
+  // livro de ofertas real é o MESMO dado para as duas camadas, nunca uma
+  // segunda medição.
+  "order_book_depth",
 ] as const;
 export type RelevanceLayerId = (typeof RELEVANCE_LAYER_IDS)[number];
 
@@ -270,6 +274,13 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
       : { relevant: false, emphasis: "normal", reason: input.structureBreakAlpha === null ? "nenhum rompimento registrado" : "rompimento mais antigo esmaeceu (idade em candles)" },
 
     order_flow_heatmap: input.hasOrderBook
+      ? { relevant: true, emphasis: "normal", reason: "livro de ofertas ao vivo real presente" }
+      : { relevant: false, emphasis: "normal", reason: "sem livro de ofertas ao vivo real neste momento" },
+
+    // Entrega 40: mesmo sinal real de order_flow_heatmap acima (mesmo
+    // livro, zero segunda medição) — a camada de profundidade só faz
+    // sentido mostrar quando há bids/asks reais para desenhar.
+    order_book_depth: input.hasOrderBook
       ? { relevant: true, emphasis: "normal", reason: "livro de ofertas ao vivo real presente" }
       : { relevant: false, emphasis: "normal", reason: "sem livro de ofertas ao vivo real neste momento" },
 

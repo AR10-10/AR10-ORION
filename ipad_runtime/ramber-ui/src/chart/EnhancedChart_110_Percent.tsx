@@ -114,6 +114,7 @@ import { computeSessionKeyLevels } from "../nexus/market-session";
 // arquivo para o raciocínio completo.
 import { computeInstitutionalZones, type InstitutionalZoneInput } from "../nexus/institutional-zones";
 import { InstitutionalZonePlugin, LABEL_COLOR as INSTITUTIONAL_ZONE_LABEL_COLOR, confluenceWeight } from "./InstitutionalZonePlugin";
+import { DepthChartPlugin } from "./DepthChartPlugin";
 import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
@@ -283,6 +284,11 @@ export const CHART_LAYER_IDS = [
   // institutional-zones.ts), uma faixa única — nunca substitui o desenho
   // individual de cada ferramenta, só soma o destaque de confluência.
   "institutional_zones",
+  // Entrega 40 (Order Book Depth Overlay, gap real nomeado desde a
+  // Entrega 35 §4): livro de ofertas REAL (mesmo orderBook que
+  // OrderBookWidget já desenha como ladder) como camada de gráfico —
+  // barras ancoradas ao preço real de cada nível, nunca um segundo fetch.
+  "order_book_depth",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -308,6 +314,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   kill_zones: true,
   session_key_levels: true,
   institutional_zones: true,
+  order_book_depth: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -336,6 +343,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   kill_zones: true,
   session_key_levels: true,
   institutional_zones: true,
+  order_book_depth: true,
 };
 
 interface EnhancedChartProps {
@@ -3042,6 +3050,15 @@ export function EnhancedChart_110_Percent({
           zones={institutionalZones}
           visualWeights={institutionalZoneVisualWeights}
           livePrice={typeof livePrice === "number" ? livePrice : null}
+        />
+      )}
+      {/* Entrega 40: livro de ofertas real como camada de gráfico — gap
+         nomeado desde a Entrega 35 §4, mesmo orderBook que OrderBookWidget
+         (painel separado) já desenha, zero segundo fetch. */}
+      {visibility.order_book_depth && (
+        <DepthChartPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
         />
       )}
       {/* Neural Market Aura: the conviction corridor, mounted BEFORE the
