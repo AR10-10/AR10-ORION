@@ -30,6 +30,7 @@ type QuantExports = {
   min_val: (len: number) => number;
   volume_profile: (candleCount: number, bucketCount: number) => number;
   trust_score: (gapCount: number, divergenceCount: number) => number;
+  kelly_fraction: (winRate: number, payoffRatio: number) => number;
   engine_version: () => number;
 };
 
@@ -71,7 +72,7 @@ describe('wasm-quant-core: identidade e fronteira do binário real de produção
     // linker, não API) — filtrados; o que sobra é a superfície funcional.
     const exported = Object.keys(wasm).filter((k) => !k.startsWith('__')).sort();
     expect(exported).toEqual(
-      ['buffer_capacity', 'buffer_ptr', 'ema', 'engine_version', 'max_val', 'memory', 'min_val', 'sma', 'stddev', 'trust_score', 'volume_profile', 'zscore_last'].sort(),
+      ['buffer_capacity', 'buffer_ptr', 'ema', 'engine_version', 'kelly_fraction', 'max_val', 'memory', 'min_val', 'sma', 'stddev', 'trust_score', 'volume_profile', 'zscore_last'].sort(),
     );
   });
 
@@ -302,5 +303,46 @@ describe('wasm-quant-core: TRUST_SCORE — confiança na fonte, FAIL_CLOSED em a
     writeTrust([200, 200], [Number.POSITIVE_INFINITY]);
     expect(Number.isNaN(wasm.trust_score(2, 1))).toBe(true);
     expect(Number.isNaN(wasm.trust_score(0, 0))).toBe(true);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Entrega 44: kelly_fraction — f* = p - (1-p)/b, primitiva pura (não toca
+// o BUFFER estático). Não tem consumidor ao vivo ainda nesta entrega —
+// disponível/testada para uso futuro em Worker. Ver lib.rs para o
+// contexto completo do documento externo rejeitado (SignalEngine
+// paralelo, viola LEI 24) que chegou pedindo Kelly junto.
+// ─────────────────────────────────────────────────────────────────────────
+describe('wasm-quant-core: KELLY_FRACTION — f* = p - (1-p)/b, FAIL_CLOSED, clampado em [0,1]', () => {
+  it('mesmo cenário base hand-derivado de risk-engine.test.ts: p=0.5, b=2 => f*=0.25', () => {
+    expect(wasm.kelly_fraction(0.5, 2)).toBeCloseTo(0.25, 12);
+  });
+
+  it('payoff 1:1 com p=0.5 é breakeven (f*=0), mesmo caso que risk-engine.js rotula kelly_nao_positivo', () => {
+    expect(wasm.kelly_fraction(0.5, 1)).toBe(0);
+  });
+
+  it('edge negativo é clampado em 0 — nunca sugere fração invertida', () => {
+    expect(wasm.kelly_fraction(0.4, 1)).toBe(0);
+  });
+
+  it('taxa de acerto perfeita é clampada em 1 — nunca alavancagem (>100%)', () => {
+    expect(wasm.kelly_fraction(1, 3)).toBe(1);
+  });
+
+  it('FAIL_CLOSED: win_rate fora de [0,1] ou payoff_ratio <= 0/não-finito => NaN, nunca um chute', () => {
+    expect(Number.isNaN(wasm.kelly_fraction(-0.1, 2))).toBe(true);
+    expect(Number.isNaN(wasm.kelly_fraction(1.1, 2))).toBe(true);
+    expect(Number.isNaN(wasm.kelly_fraction(NaN, 2))).toBe(true);
+    expect(Number.isNaN(wasm.kelly_fraction(0.5, 0))).toBe(true);
+    expect(Number.isNaN(wasm.kelly_fraction(0.5, -1))).toBe(true);
+    expect(Number.isNaN(wasm.kelly_fraction(0.5, Infinity))).toBe(true);
+  });
+
+  it('bate com uma referência independente (não importada do código sob teste) em vários pontos', () => {
+    const ref = (p: number, b: number) => Math.max(0, Math.min(1, p - (1 - p) / b));
+    for (const [p, b] of [[0.55, 1.8], [0.35, 2.4], [0.62, 0.9], [0.48, 3.1]]) {
+      expect(wasm.kelly_fraction(p, b)).toBeCloseTo(ref(p, b), 12);
+    }
   });
 });

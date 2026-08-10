@@ -52,9 +52,27 @@
 //   HIERARQUIA: o Core Engine continua intocado — este motor dimensiona o
 //   cenário que o sinal real já descreveu; nunca gera/altera/bloqueia o
 //   sinal. read_only:true em toda saída.
+//
+//   Entrega 44 (taxa de acerto REAL, quando existe amostra): p₀=0.5 acima
+//   continua o FALLBACK — mas agora, se o chamador passar realWinRate +
+//   realWinRateSampleSize (do Profitability Engine real, Entrega 42:
+//   nexus/expectancy.ts, computeExpectancy().winRate/.totalTrades) com
+//   amostra >= MIN_SAMPLE_FOR_REAL_WIN_RATE trades reais resolvidos deste
+//   symbol:timeframe, o Kelly_pleno usa essa taxa de acerto REAL no lugar
+//   de 0.5 — mais honesto que a moeda-honesta assumida quando já existe
+//   histórico de verdade suficiente. Abaixo do mínimo, ou sem os
+//   parâmetros, o comportamento é EXATAMENTE o de antes (0.5 fixo) —
+//   nenhuma mudança para quem não passa os novos parâmetros. A saída
+//   ecoa qual taxa foi de fato usada (effective_win_rate/win_rate_source)
+//   — nunca escondida. MIN_SAMPLE_FOR_REAL_WIN_RATE espelha
+//   MIN_TRADES_FOR_VALID_EXPECTANCY de nexus/expectancy.ts — duplicado
+//   deliberadamente (este módulo continua zero-import por design,
+//   síncrono e autocontido); mantenha os dois numericamente iguais se um
+//   mudar.
 
 export const RISK_PER_TRADE_PCT_DEFAULT = 1.0; // % do equity em risco por operação (política, ajustável por chamada)
-export const ASSUMED_WIN_RATE = 0.5;           // fixo — nenhuma probabilidade fabricada
+export const ASSUMED_WIN_RATE = 0.5;           // fallback — nenhuma probabilidade fabricada quando não há amostra real suficiente
+export const MIN_SAMPLE_FOR_REAL_WIN_RATE = 30; // espelha MIN_TRADES_FOR_VALID_EXPECTANCY (nexus/expectancy.ts)
 export const MAX_POSITION_PCT = 100;           // teto duro: nunca sugerir alavancagem
 export const DISCLAIMER = 'SUGESTAO_ALGORITMICA_NAO_E_CONSELHO_FINANCEIRO';
 
@@ -86,6 +104,8 @@ function semSugestao(reason, inputsEcho) {
         kelly_cap_pct: null,
         kelly_fraction_tier: null,
         assumed_win_rate: ASSUMED_WIN_RATE,
+        effective_win_rate: null,
+        win_rate_source: null,
         effective_risk_unit_pct: null,
         inputs: Object.freeze(inputsEcho ?? {}),
         disclaimer: DISCLAIMER,
@@ -101,6 +121,8 @@ function semSugestao(reason, inputsEcho) {
  *   ensembleDirection: 'ALTA'|'BAIXA'|'NEUTRO'|null,  // Comitê Fase F
  *   ensembleForca: number|null,                   // força do Comitê [0,1]
  *   riskPerTradePct?: number,                     // política: % do equity em risco (default 1.0)
+ *   realWinRate?: number|null,                    // Entrega 44: winRate real (nexus/expectancy.ts computeExpectancy())
+ *   realWinRateSampleSize?: number|null,          // Entrega 44: totalTrades da mesma amostra — precisa ser >= MIN_SAMPLE_FOR_REAL_WIN_RATE
  * }} input */
 export function buildRiskSuggestion({
     signal,
@@ -111,6 +133,8 @@ export function buildRiskSuggestion({
     ensembleDirection,
     ensembleForca,
     riskPerTradePct = RISK_PER_TRADE_PCT_DEFAULT,
+    realWinRate = null,
+    realWinRateSampleSize = null,
 } = {}) {
     const inputsEcho = { signal: signal ?? null, entry: entry ?? null, stop: stop ?? null, atr_percent: atrPercent ?? null, rr: riskRewardRatio ?? null, ensemble_direction: ensembleDirection ?? null, ensemble_forca: ensembleForca ?? null, risk_per_trade_pct: riskPerTradePct };
 
@@ -135,8 +159,17 @@ export function buildRiskSuggestion({
 
     const volSizePct = (riskPerTradePct / effectiveRiskUnitPct) * 100;
 
+    // Entrega 44: taxa de acerto REAL (Track Record, >= amostra mínima)
+    // substitui o p₀=0.5 assumido quando existe; comportamento idêntico ao
+    // de antes quando os parâmetros novos ficam ausentes (ver header).
+    const hasRealWinRate =
+        Number.isFinite(realWinRate) && realWinRate >= 0 && realWinRate <= 1 &&
+        Number.isFinite(realWinRateSampleSize) && realWinRateSampleSize >= MIN_SAMPLE_FOR_REAL_WIN_RATE;
+    const effectiveWinRate = hasRealWinRate ? realWinRate : ASSUMED_WIN_RATE;
+    const winRateSource = hasRealWinRate ? 'track_record_real' : 'assumed_0.5';
+
     const b = riskRewardRatio;
-    const fullKelly = ASSUMED_WIN_RATE - (1 - ASSUMED_WIN_RATE) / b;
+    const fullKelly = effectiveWinRate - (1 - effectiveWinRate) / b;
     if (fullKelly <= 0) {
         return semSugestao('rr_sem_assimetria_de_payoff_kelly_nao_positivo', inputsEcho);
     }
@@ -158,6 +191,8 @@ export function buildRiskSuggestion({
         kelly_cap_pct: kellyCapPct,
         kelly_fraction_tier: kellyFraction,
         assumed_win_rate: ASSUMED_WIN_RATE,
+        effective_win_rate: effectiveWinRate,
+        win_rate_source: winRateSource,
         effective_risk_unit_pct: effectiveRiskUnitPct,
         inputs: Object.freeze(inputsEcho),
         disclaimer: DISCLAIMER,

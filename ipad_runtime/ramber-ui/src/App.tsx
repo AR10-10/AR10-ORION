@@ -2083,32 +2083,6 @@ export default function App() {
     });
   }, [realCycle, engine.marketStructureLabel, engine.htfMarketStructureLabel, engine.marketRegime, cvd, gmilBiases, chartTimeframe]);
 
-  // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
-  // NUNCA valor monetário (o sistema não conhece o capital do operador).
-  // Fail-closed por construção: qualquer insumo ausente/não-finito, comitê
-  // dividido ou contrário ao sinal => 0%. A UI exibe o selo obrigatório ao
-  // lado dos números. Consultivo: nada aqui é lido de volta pelo Core.
-  //
-  // Fase L (diretriz 1 — correção de governança do achado da Fase K): o
-  // Kelly fracionado consome a força AJUSTADA pela qualidade da fonte
-  // (forca_ajustada = forca × peso do Bus da Fase C), nunca mais a força
-  // bruta. Consequência deliberada: fonte em quarentena (peso 0) ou nunca
-  // medida (peso null) => força 0/null => sugestão 0% — a qualidade da
-  // rede agora impacta o lote final, fail-closed de ponta a ponta.
-  const riskSuggestion = useMemo(
-    () =>
-      buildRiskSuggestion({
-        signal: engine.direction === "LONG" || engine.direction === "SHORT" ? engine.direction : null,
-        entry: engine.entry,
-        stop: engine.stop,
-        atrPercent: engine.marketRegime?.atrPercent ?? null,
-        riskRewardRatio: engine.riskRewardRatio,
-        ensembleDirection: ensembleConsensus?.status === "OK" ? ensembleConsensus.direcao : null,
-        ensembleForca: ensembleConsensus?.status === "OK" ? ensembleConsensus.forca_ajustada : null,
-      }),
-    [engine.direction, engine.entry, engine.stop, engine.marketRegime, engine.riskRewardRatio, ensembleConsensus],
-  );
-
   // IRON-VOICE: espelho somente-leitura do estado real para a camada de voz
   // (src/voice/). Mesmos campos que a UI renderiza — nenhum valor novo é
   // computado aqui, só repassado.
@@ -2696,6 +2670,51 @@ export default function App() {
   const expectancyFilter: FilterResult = useMemo(
     () => evaluateSignalFilter(simulateTradeCostsBatch(trackRecordSlice.history)),
     [trackRecordSlice.history],
+  );
+
+  // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
+  // NUNCA valor monetário (o sistema não conhece o capital do operador).
+  // Fail-closed por construção: qualquer insumo ausente/não-finito, comitê
+  // dividido ou contrário ao sinal => 0%. A UI exibe o selo obrigatório ao
+  // lado dos números. Consultivo: nada aqui é lido de volta pelo Core.
+  //
+  // Fase L (diretriz 1 — correção de governança do achado da Fase K): o
+  // Kelly fracionado consome a força AJUSTADA pela qualidade da fonte
+  // (forca_ajustada = forca × peso do Bus da Fase C), nunca mais a força
+  // bruta. Consequência deliberada: fonte em quarentena (peso 0) ou nunca
+  // medida (peso null) => força 0/null => sugestão 0% — a qualidade da
+  // rede agora impacta o lote final, fail-closed de ponta a ponta.
+  //
+  // Entrega 44: declarado DEPOIS de expectancyFilter (relocado de perto do
+  // Comitê, nada entre as duas posições antigas lia riskSuggestion) para
+  // consumir a taxa de acerto REAL já computada ali (nexus/expectancy.ts,
+  // ≥30 trades reais resolvidos deste symbol:timeframe) — risk-engine.js
+  // usa essa taxa no lugar do p₀=0.5 assumido quando a amostra existe,
+  // mesmo comportamento de antes quando não existe (ver header de
+  // risk-engine.js). Nenhum motor novo: mesma fórmula, insumo mais
+  // honesto quando disponível.
+  const riskSuggestion = useMemo(
+    () =>
+      buildRiskSuggestion({
+        signal: engine.direction === "LONG" || engine.direction === "SHORT" ? engine.direction : null,
+        entry: engine.entry,
+        stop: engine.stop,
+        atrPercent: engine.marketRegime?.atrPercent ?? null,
+        riskRewardRatio: engine.riskRewardRatio,
+        ensembleDirection: ensembleConsensus?.status === "OK" ? ensembleConsensus.direcao : null,
+        ensembleForca: ensembleConsensus?.status === "OK" ? ensembleConsensus.forca_ajustada : null,
+        realWinRate: expectancyFilter.stats?.winRate ?? null,
+        realWinRateSampleSize: expectancyFilter.stats?.totalTrades ?? null,
+      }),
+    [
+      engine.direction,
+      engine.entry,
+      engine.stop,
+      engine.marketRegime,
+      engine.riskRewardRatio,
+      ensembleConsensus,
+      expectancyFilter,
+    ],
   );
   // Cockpit de Leitura §11 ("ETA previsto / ETA realizado" + contexto):
   // carimbo ÚNICO do contexto real de abertura no plano ativo. O guard do

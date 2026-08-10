@@ -500,6 +500,57 @@ pub extern "C" fn trust_score(gap_count: usize, divergence_count: usize) -> f64 
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Kelly Criterion — Entrega 44 (Biblioteca Matematica Avancada; motor
+// escolhido e autorizado pelo Operador via AskUserQuestion, ver
+// docs/BIBLIOTECA_MATEMATICA_AVANCADA.md).
+//
+// Um documento externo ("Ponte de Otimizacao Matematica") chegou junto
+// pedindo Kelly + um SignalEngine paralelo (BOS/FVG/EMA -> LONG/SHORT
+// proprio) treinado sobre trades SINTETICOS simulados por ele mesmo.
+// REJEITADO: isso duplicaria um segundo emissor real de decisao (viola
+// LEI 24 do CLAUDE.md -- so o Core Engine emite LONG/SHORT/WAIT) e seu
+// detect_regime() repetia, quase palavra por palavra, o bug de ADX/DX ja
+// rejeitado na Entrega 43 ("ADX verdadeiro requer smoothing, mas dx ja e
+// suficiente"). Nada daquele SignalEngine/regime/trade-sintetico/
+// wasm-bindgen entrou aqui -- so a formula pura de Kelly, isolada.
+//
+// f* = p - (1-p)/b (Kelly 1956, fracao COMPLETA). p = taxa de acerto real,
+// b = payoff ratio (ganho medio / perda media, ou R:R). Esta funcao NAO
+// decide qual fracao de f* e prudente usar na pratica -- essa politica de
+// seguranca (1/2, 1/4, 1/8-Kelly por forca do Comite) ja existe, real e
+// graduada, em risk-engine.js (KELLY_FRACTION_TIERS/kellyFractionForForca,
+// Fase H) desde antes desta entrega. O que risk-engine.js nao tinha ate
+// agora era uma taxa de acerto REAL para alimentar p — usava p=0.5 fixo
+// por falta de historico (documentado ali: "nenhuma probabilidade e
+// fabricada"). Esta primitiva Rust espelha a MESMA formula que
+// risk-engine.js passa a calcular inline em JS quando tem amostra real
+// (trivial o bastante — 2 operacoes aritmeticas — para nao justificar uma
+// dependencia WASM sincrona dentro de um modulo que se declara
+// deliberadamente "zero imports, sincrono" por design); fica aqui
+// disponivel e testada para consumidores futuros em Worker (nenhum
+// caminho ao vivo chama esta funcao ainda nesta entrega — ver PR).
+//
+// FAIL_CLOSED: win_rate fora de [0,1] ou nao-finito, ou payoff_ratio <= 0
+// ou nao-finito => NaN, nunca um chute. Resultado sempre clampado em
+// [0,1]: nunca sugere fracao negativa (sem edge = sem posicao) nem
+// alavancagem (>1) — mesmo teto duro que MAX_POSITION_PCT em
+// risk-engine.js.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Kelly Criterion, fracao COMPLETA (f*), a partir de estatisticas reais.
+#[no_mangle]
+pub extern "C" fn kelly_fraction(win_rate: f64, payoff_ratio: f64) -> f64 {
+    if !win_rate.is_finite() || win_rate < 0.0 || win_rate > 1.0 {
+        return f64::NAN;
+    }
+    if !payoff_ratio.is_finite() || payoff_ratio <= 0.0 {
+        return f64::NAN;
+    }
+    let f_star = win_rate - (1.0 - win_rate) / payoff_ratio;
+    f_star.max(0.0).min(1.0)
+}
+
 /// Build identifier exposed for diagnostics. 1000 = escalar; 1001 = SIMD —
 /// a suite de paridade e o worker usam isto para saber qual variante
 /// realmente carregou.
@@ -523,7 +574,7 @@ pub extern "C" fn engine_version() -> u32 {
 // ─────────────────────────────────────────────────────────────────────────
 #[cfg(test)]
 mod tests {
-    use super::compute_volume_profile;
+    use super::{compute_volume_profile, kelly_fraction};
 
     #[test]
     fn perfil_simples_distribui_proporcional_a_sobreposicao() {
@@ -660,5 +711,43 @@ mod tests {
         compute_volume_profile(&highs, &lows, &vols, &mut hist).unwrap();
         let total: f64 = hist.iter().sum();
         assert!((total - 26.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn kelly_fraction_cenario_base_da_risk_engine_js() {
+        // Mesmo cenario verificavel a mao de risk-engine.test.ts (BASE):
+        // p=0.5, b=2 => f* = 0.5 - 0.5/2 = 0.25.
+        assert!((kelly_fraction(0.5, 2.0) - 0.25).abs() < 1e-12);
+    }
+
+    #[test]
+    fn kelly_fraction_payoff_1_para_1_com_p_05_e_breakeven() {
+        // b=1, p=0.5 => f* = 0.5 - 0.5/1 = 0.0 (sem assimetria de payoff,
+        // mesmo caso que risk-engine.js rotula "kelly_nao_positivo").
+        assert_eq!(kelly_fraction(0.5, 1.0), 0.0);
+    }
+
+    #[test]
+    fn kelly_fraction_negativo_e_clampado_em_zero_nunca_sugere_reversao() {
+        // p=0.4, b=1 => f* = 0.4 - 0.6 = -0.2 => clamp 0 (sem edge = sem
+        // posicao, nunca uma fracao negativa/invertida).
+        assert_eq!(kelly_fraction(0.4, 1.0), 0.0);
+    }
+
+    #[test]
+    fn kelly_fraction_taxa_de_acerto_perfeita_e_clampada_em_1_nunca_alavancagem() {
+        // p=1.0 => f* = 1.0 - 0 = 1.0 (ja <= 1, confirma o teto duro).
+        assert_eq!(kelly_fraction(1.0, 3.0), 1.0);
+    }
+
+    #[test]
+    fn kelly_fraction_fail_closed_em_entrada_invalida() {
+        assert!(kelly_fraction(-0.1, 2.0).is_nan()); // win_rate < 0
+        assert!(kelly_fraction(1.1, 2.0).is_nan()); // win_rate > 1
+        assert!(kelly_fraction(f64::NAN, 2.0).is_nan());
+        assert!(kelly_fraction(0.5, 0.0).is_nan()); // payoff_ratio <= 0
+        assert!(kelly_fraction(0.5, -1.0).is_nan());
+        assert!(kelly_fraction(0.5, f64::NAN).is_nan());
+        assert!(kelly_fraction(0.5, f64::INFINITY).is_nan());
     }
 }

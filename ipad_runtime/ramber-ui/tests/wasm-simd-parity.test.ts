@@ -36,6 +36,7 @@ type QuantExports = {
   min_val: (len: number) => number;
   volume_profile: (candleCount: number, bucketCount: number) => number;
   trust_score: (gapCount: number, divergenceCount: number) => number;
+  kelly_fraction: (winRate: number, payoffRatio: number) => number;
   engine_version: () => number;
 };
 
@@ -213,6 +214,21 @@ describe('simd-parity: trust_score usa os kernels de redução (soma/desvio) —
     for (const w of [scalar, simd]) {
       writeTrust(w, [200], []);
       expect(Number.isNaN(w.trust_score(1, 0))).toBe(true);
+    }
+  });
+});
+
+describe('simd-parity: kelly_fraction (Entrega 44) é escalar puro nos DOIS builds — igualdade EXATA exigida', () => {
+  it('mesma fração completa nos dois binários em vários pontos (sem buffer, sem redução vetorial envolvida)', () => {
+    for (const [p, b] of [[0.5, 2], [0.35, 2.4], [0.62, 0.9], [1, 3], [0.4, 1]] as Array<[number, number]>) {
+      expect(simd.kelly_fraction(p, b)).toBe(scalar.kelly_fraction(p, b));
+    }
+  });
+
+  it('FAIL_CLOSED idêntico nos dois binários', () => {
+    for (const w of [scalar, simd]) {
+      expect(Number.isNaN(w.kelly_fraction(-0.1, 2))).toBe(true);
+      expect(Number.isNaN(w.kelly_fraction(0.5, 0))).toBe(true);
     }
   });
 });
