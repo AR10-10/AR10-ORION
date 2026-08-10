@@ -80,6 +80,13 @@ import {
   type AffectiveMemoryState,
   type AffectiveEventSource,
 } from "../nexus/affective-memory";
+import {
+  openPaperPosition,
+  closePaperPosition,
+  EMPTY_PAPER_TRADING_STATE,
+  type PaperTradingState,
+  type PaperCloseReason,
+} from "../nexus/paper-trading";
 // import type puro — apagado na compilação, nunca puxa o engine-bridge
 // (e seus módulos js pesados) para dentro do bundle da store em runtime.
 import type { TrustScoreSnapshot, SmcZonesSnapshot, OrderflowSignal } from "../engine-bridge";
@@ -364,6 +371,13 @@ export interface UnifiedSnapshotState {
   // rastreamento AO VIVO do que está na tela agora, nunca deve
   // reaparecer stale de uma combinação antiga.
   trackRecordArchive: Record<string, TrackRecordState>;
+  // v16.0 PRO MAX §9.1/§9.4 ("Paper Trading"): posição simulada MANUAL
+  // (decisão explícita do Operador — AskUserQuestion — zero automação:
+  // fechamento e "trailing" só acontecem em resposta a um clique real).
+  // Distinta de trackRecord acima (aquilo resolve sozinho contra o preço,
+  // um scorecard retrospectivo de precisão; isto nunca resolve sozinho).
+  // Persistida em IndexedDB pelo mesmo motivo — histórico real acumulado.
+  paperTrading: PaperTradingState;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -454,6 +468,13 @@ interface UnifiedSnapshotActions {
   // sob `key` — chamado só no cleanup do efeito de troca de
   // ativo/timeframe (App.tsx), nunca durante o uso normal.
   archiveTrackRecord: (key: string) => void;
+  // v16.0 PRO MAX §9.1/§9.4: abrir/fechar são SEMPRE chamadas por um clique
+  // real do Operador na UI — nunca por um efeito de tick de preço (ver
+  // header de nexus/paper-trading.ts). hydratePaperTrading é só para o
+  // boot (IndexedDB) e testes, mesmo padrão de hydrateTrackRecord.
+  openPaperPosition: (plan: TradePlan | null, sizeUsdt: number) => void;
+  closePaperPosition: (currentPrice: number, reason: PaperCloseReason) => void;
+  hydratePaperTrading: (state: PaperTradingState) => void;
 }
 
 export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnapshotActions>()(
@@ -508,6 +529,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     cpi: null,
     trackRecord: EMPTY_TRACK_RECORD,
     trackRecordArchive: {},
+    paperTrading: EMPTY_PAPER_TRADING_STATE,
 
     // §1 MERCADO
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
@@ -597,6 +619,13 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
       s.trackRecord = closed;
       s.trackRecordArchive[key] = closed;
     }),
+    openPaperPosition: (plan, sizeUsdt) => set((s) => {
+      s.paperTrading = openPaperPosition(s.paperTrading as PaperTradingState, plan, sizeUsdt, Date.now());
+    }),
+    closePaperPosition: (currentPrice, reason) => set((s) => {
+      s.paperTrading = closePaperPosition(s.paperTrading as PaperTradingState, currentPrice, Date.now(), reason);
+    }),
+    hydratePaperTrading: (state) => set((s) => { s.paperTrading = state; }),
   })),
 );
 
@@ -707,3 +736,5 @@ export const useTrackRecordSnapshot = (): TrackRecordState =>
   useUnifiedSnapshotStore((s) => s.trackRecord);
 export const useTrackRecordArchive = (): Record<string, TrackRecordState> =>
   useUnifiedSnapshotStore((s) => s.trackRecordArchive);
+export const usePaperTradingSnapshot = (): PaperTradingState =>
+  useUnifiedSnapshotStore((s) => s.paperTrading);

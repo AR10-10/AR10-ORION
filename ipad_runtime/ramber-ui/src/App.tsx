@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, EMPTY_PRICE } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -58,6 +58,7 @@ import { buildTradePlan, effectiveStopForTargetsHit, obstacleZonesInPath, type T
 // Autonomy order: honest signal accuracy — plans tracked against the real
 // price, persisted across sessions, felt by the affective memory.
 import { rehydrateTrackRecord, hitRate, EMPTY_TRACK_RECORD } from "./nexus/signal-track-record";
+import { rehydratePaperTrading, unrealizedPnl, unrealizedPnlPct, paperPositionContext } from "./nexus/paper-trading";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -79,7 +80,7 @@ import { traceStages } from "./nexus/stage-runner";
 // Local-First (closes the persistence gap flagged in the audit): candles
 // persisted to IndexedDB on every real REST arrival; on boot the chart
 // paints instantly from the last REAL session before the network answers.
-import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord, compactPersistedCandles, candleKey } from "./nexus/persistence";
+import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord, savePaperTrading, loadPaperTrading, compactPersistedCandles, candleKey } from "./nexus/persistence";
 // V18 Sprint 1 (Tarefa B): "Destravar o Gráfico Institucional" — substitui
 // o SVG feito à mão por lightweight-charts (pan/zoom/crosshair nativos).
 import {
@@ -358,6 +359,7 @@ import {
   Copy,
   Check,
   Download,
+  Wallet,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -728,6 +730,9 @@ export default function App() {
   // fixed/centered) — a única novidade é o conteúdo (camada de publicação),
   // nunca um mecanismo de painel diferente.
   const [marketAnalysisOpen, setMarketAnalysisOpen] = useState(false);
+  // v16.0 PRO MAX §9.1/§9.4: mesmo padrão exato dos painéis acima (toggle
+  // simples, botão dedicado na SideBar, painel fixed/centered).
+  const [paperTradingOpen, setPaperTradingOpen] = useState(false);
   const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7 (resposta do Operador à pergunta
   // de escopo: os 20 toggles manuais continuam existindo como OVERRIDE
@@ -2490,6 +2495,7 @@ export default function App() {
     }
   }, [priceFromSnapshot]);
   const trackRecordSlice = useTrackRecordSnapshot();
+  const paperTradingSlice = usePaperTradingSnapshot();
   // Diretriz Complementar §18: mesma série real de CVD já retida na store
   // (o heatmap já consome este exato hook) — zero fetch novo, zero segunda
   // série.
@@ -2524,6 +2530,24 @@ export default function App() {
     // candles roda UMA vez por boot, fire-and-forget — nunca no caminho
     // quente, nunca bloqueia a hidratação acima (stores independentes).
     void compactPersistedCandles().catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  // v16.0 PRO MAX §9.1/§9.4: mesmo padrão exato de persistência do track
+  // record acima (best-effort save-on-change + hydrate no boot) — a
+  // posição/histórico simulados sobrevivem a reloads pelo mesmo motivo
+  // (memória real acumulada, Local-First). Zero automação aqui: este
+  // efeito só PERSISTE o que já mudou por um clique do Operador, nunca
+  // decide abrir/fechar nada sozinho.
+  useEffect(() => {
+    void savePaperTrading(paperTradingSlice).catch(() => {});
+  }, [paperTradingSlice]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const raw = await loadPaperTrading().catch(() => null);
+      if (cancelled || raw === null) return;
+      useUnifiedSnapshotStore.getState().hydratePaperTrading(rehydratePaperTrading(raw));
+    })();
     return () => { cancelled = true; };
   }, []);
 
@@ -3156,6 +3180,8 @@ export default function App() {
       setRadarPanelOpen,
       marketAnalysisOpen,
       setMarketAnalysisOpen,
+      paperTradingOpen,
+      setPaperTradingOpen,
       chartLayerVisibility,
       toggleChartLayer,
       applyChartLayerPreset,
@@ -3230,6 +3256,7 @@ export default function App() {
       chartLayersOpen,
       radarPanelOpen,
       marketAnalysisOpen,
+      paperTradingOpen,
       chartLayerVisibility,
       chartLayerAutoMode,
       emaPeriod,
@@ -3581,6 +3608,7 @@ export default function App() {
         <ChartLayersPanel />
         <RadarPanel />
         <MarketAnalysisPanel priceData={priceData} chartData={chartData} />
+        <PaperTradingPanel priceData={priceData} />
       </div>
     </WidgetContext.Provider>
   );
@@ -4624,6 +4652,166 @@ function MarketAnalysisPanel({ priceData, chartData }: { priceData: PriceState |
                 <MarketAnalysisPublicationTab snapshot={{ analysis, candles: frozenCandles, livePrice: frozenLivePrice }} />
               )}
             </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// v16.0 PRO MAX §9.1/§9.4 ("Paper Trading"): posição simulada MANUAL —
+// decisão explícita do Operador (AskUserQuestion, resposta literal "Só
+// painel manual, sem automação"): ZERO automação. Nenhum useEffect aqui
+// chama openPaperPosition/closePaperPosition — as duas únicas chamadas
+// reais vivem nos onClick abaixo, sempre em resposta a um clique real.
+// P&L é aritmética real sobre o MESMO priceData ao vivo que o resto do
+// terminal usa (PROP, nunca Context — mesmo padrão fixado por
+// MarketAnalysisPanel acima); nunca toca exchange real, nunca guarda
+// credencial, nunca envia ordem (nexus/paper-trading.ts).
+function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
+  const { paperTradingOpen, setPaperTradingOpen } = useContext(WidgetContext) || {};
+  const tradePlan = useTradePlanSnapshot();
+  const paperTrading = usePaperTradingSnapshot();
+  const [sizeInput, setSizeInput] = useState("100");
+
+  if (!paperTradingOpen) return null;
+  const close = () => setPaperTradingOpen?.(false);
+  const livePrice = typeof priceData?.price === "number" ? priceData.price : null;
+  const position = paperTrading.position;
+
+  const pnl = position && livePrice !== null ? unrealizedPnl(position, livePrice) : null;
+  const pnlPct = position && livePrice !== null ? unrealizedPnlPct(position, livePrice) : null;
+  const ctx = position && livePrice !== null ? paperPositionContext(position, livePrice) : null;
+
+  const handleOpen = () => {
+    const size = Number(sizeInput);
+    if (!tradePlan || !Number.isFinite(size) || size <= 0) return;
+    useUnifiedSnapshotStore.getState().openPaperPosition(tradePlan, size);
+  };
+  // SEMPRE um clique do Operador — reason só documenta qual leitura ele
+  // reconheceu (perto do alvo/stop) ao decidir fechar, nunca uma decisão
+  // automática do motor (ver header do arquivo nexus/paper-trading.ts).
+  const handleClose = () => {
+    if (!position || livePrice === null) return;
+    const reason: "TARGET" | "STOP" | "MANUAL" = ctx?.nearTarget ? "TARGET" : ctx?.nearStop ? "STOP" : "MANUAL";
+    useUnifiedSnapshotStore.getState().closePaperPosition(livePrice, reason);
+  };
+
+  return (
+    <div
+      className="!fixed !inset-0 !z-[1001] bg-[#010308]/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={close}
+    >
+      <div
+        className="cyber-panel w-full max-w-sm max-h-[92dvh] flex flex-col bg-[#010308]/98"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="cyber-header flex items-center justify-between">
+          <span className="font-bold tracking-[0.2em]">PAPER TRADING</span>
+          <button type="button" onClick={close} aria-label="Fechar" className="text-[#8ab4f8]/60 hover:text-[#00f0ff]">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="p-3 overflow-y-auto flex-1 space-y-3 text-[0.7rem]">
+          {!position ? (
+            <>
+              {!tradePlan ? (
+                <div className="text-[#8ab4f8]/50 text-center py-4">DADOS INSUFICIENTES — sem Trade Plan ativo agora.</div>
+              ) : (
+                <div className="cyber-panel bg-black/30 p-2 space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">Direção</span>
+                    <span className={tradePlan.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff4d6d]"}>{tradePlan.direction}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">Entrada</span>
+                    <span>{fmt((tradePlan.entry.low + tradePlan.entry.high) / 2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">Stop</span>
+                    <span>{fmt(tradePlan.stop.price)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">Alvo 1</span>
+                    <span>{fmt(tradePlan.targets[0]?.price)}</span>
+                  </div>
+                </div>
+              )}
+              <label className="flex items-center justify-between gap-2">
+                <span className="text-[#8ab4f8]/50">Tamanho (USDT)</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={sizeInput}
+                  onChange={(e) => setSizeInput(e.target.value)}
+                  className="w-24 bg-black/40 border border-[#8ab4f8]/20 rounded px-2 py-1 text-right text-[#e8f4ff]"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={handleOpen}
+                disabled={!tradePlan || !(Number(sizeInput) > 0)}
+                className="w-full py-2 rounded bg-[#00f0ff]/15 border border-[#00f0ff]/40 text-[#00f0ff] disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                ABRIR POSIÇÃO SIMULADA
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="cyber-panel bg-black/30 p-2 space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-[#8ab4f8]/50">Direção</span>
+                  <span className={position.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff4d6d]"}>{position.direction}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#8ab4f8]/50">Entrada</span>
+                  <span>{fmt(position.entryPrice)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#8ab4f8]/50">Tamanho</span>
+                  <span>{fmt(position.sizeUsdt, 0)} USDT</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#8ab4f8]/50">Preço atual</span>
+                  <span>{livePrice !== null ? fmt(livePrice) : "—"}</span>
+                </div>
+              </div>
+              <div className="cyber-panel bg-black/30 p-2 text-center">
+                <div className="text-[#8ab4f8]/50 mb-1">P&amp;L NÃO REALIZADO</div>
+                <div className={`text-lg font-bold ${pnl !== null && pnl >= 0 ? "text-[#00ffaa]" : "text-[#ff4d6d]"}`}>
+                  {pnl !== null ? `${pnl >= 0 ? "+" : ""}${fmt(pnl, 2)} USDT` : "DADOS INSUFICIENTES"}
+                </div>
+                {pnlPct !== null && <div className="text-[#8ab4f8]/40">{fmtSignedPct(pnlPct)}</div>}
+              </div>
+              {ctx && (ctx.nearTarget || ctx.nearStop) && (
+                <div className={`text-center ${ctx.nearTarget ? "text-[#00ffaa]" : "text-[#ff4d6d]"}`}>
+                  {ctx.nearTarget ? "Perto do Alvo 1 — considere fechar" : "Perto do Stop — considere fechar"}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={livePrice === null}
+                className="w-full py-2 rounded bg-[#ff4d6d]/15 border border-[#ff4d6d]/40 text-[#ff4d6d] disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                FECHAR POSIÇÃO AGORA
+              </button>
+            </>
+          )}
+          {paperTrading.history.length > 0 && (
+            <div className="pt-2 border-t border-[#8ab4f8]/10">
+              <div className="text-[#8ab4f8]/40 mb-1">HISTÓRICO ({paperTrading.history.length})</div>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {[...paperTrading.history].reverse().slice(0, 20).map((rec, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">{rec.direction} · {rec.closeReason}</span>
+                    <span className={rec.realizedPnl !== null && rec.realizedPnl >= 0 ? "text-[#00ffaa]" : "text-[#ff4d6d]"}>
+                      {rec.realizedPnl !== null ? `${rec.realizedPnl >= 0 ? "+" : ""}${fmt(rec.realizedPnl, 2)}` : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -6506,7 +6694,7 @@ function SideBar({
   activeTab: string;
   setActiveTab: (t: string) => void;
 }) {
-  const { setWorkspaceManagerOpen, setChartLayersOpen, setRadarPanelOpen, setMarketAnalysisOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
+  const { setWorkspaceManagerOpen, setChartLayersOpen, setRadarPanelOpen, setMarketAnalysisOpen, setPaperTradingOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
   // OMEGA CORE V-MAX (completar Fase 7): contagem real do próprio snapshot
   // — nunca um badge decorativo. "Substitui o botão pulsante" (diretiva):
   // um número real (0 quando não há nada) é honesto; uma animação
@@ -6616,6 +6804,19 @@ function SideBar({
         className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
       >
         <Share2 size={17} className="relative z-10" />
+      </button>
+      {/* v16.0 PRO MAX §9.1/§9.4 ("Paper Trading"): quinto botão no mesmo
+          rodapé, mesmo padrão dos quatro acima. Posição simulada MANUAL —
+          decisão do Operador via AskUserQuestion: zero automação, o painel
+          só existe para o Operador abrir/fechar por conta própria. */}
+      <button
+        type="button"
+        onClick={() => setPaperTradingOpen?.((v: boolean) => !v)}
+        title="Paper Trading — posição simulada manual (P&L ao vivo, sem automação)"
+        aria-label="Paper Trading — posição simulada manual (P&L ao vivo, sem automação)"
+        className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+      >
+        <Wallet size={17} className="relative z-10" />
       </button>
     </div>
   );
