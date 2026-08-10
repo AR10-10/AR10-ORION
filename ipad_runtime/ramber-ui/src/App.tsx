@@ -57,8 +57,12 @@ import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } fr
 import { buildTradePlan, effectiveStopForTargetsHit, obstacleZonesInPath, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
 // Autonomy order: honest signal accuracy — plans tracked against the real
 // price, persisted across sessions, felt by the affective memory.
-import { rehydrateTrackRecord, hitRate, EMPTY_TRACK_RECORD } from "./nexus/signal-track-record";
+import { rehydrateTrackRecord, hitRate, EMPTY_TRACK_RECORD, type TrackedPlan } from "./nexus/signal-track-record";
 import { rehydratePaperTrading, unrealizedPnl, unrealizedPnlPct, paperPositionContext } from "./nexus/paper-trading";
+// v16.0 DEFINITIVO §9: primeiro assinante real de ORGANISM.TRACK_RECORD.UPDATED
+// (event-bus.ts) — evento já emitido pelo OrganismOrchestrator, sem consumidor
+// até esta entrega.
+import { deriveTrackRecordAlert, type AlertEvent } from "./nexus/alert-center";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -733,6 +737,12 @@ export default function App() {
   // v16.0 PRO MAX §9.1/§9.4: mesmo padrão exato dos painéis acima (toggle
   // simples, botão dedicado na SideBar, painel fixed/centered).
   const [paperTradingOpen, setPaperTradingOpen] = useState(false);
+  // v16.0 DEFINITIVO §9: fila de toasts — sempre-visível, sem toggle (as
+  // notificações aparecem por conta própria quando uma transição real
+  // acontece). Efêmera por natureza (auto-dismiss em 5s): não entra na
+  // store Local-First, não sobrevive a um reload — persistir um toast já
+  // expirado seria uma confusão, não uma feature.
+  const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7 (resposta do Operador à pergunta
   // de escopo: os 20 toggles manuais continuam existindo como OVERRIDE
@@ -3109,6 +3119,30 @@ export default function App() {
       orchestrator.stop();
     };
   }, []);
+  // v16.0 DEFINITIVO §9 ("Sistema de Sobrevivência"): assina o mesmo bus do
+  // orquestrador acima para o único evento com publicador real hoje
+  // (ORGANISM.TRACK_RECORD.UPDATED — "uma transição real, um evento",
+  // organism-orchestrator.ts). chartIntegrity/organismHealth ainda são
+  // computados por render dentro do SystemHealthWidget, sem fatia própria
+  // na store nem publicador no bus — alertar sobre eles fica para quando
+  // ganharem um (ver Próximos passos), nunca uma segunda medição aqui.
+  // O watermark começa no ÚLTIMO registro já persistido (nunca `null` cru)
+  // para que histórico reidratado de uma sessão anterior nunca dispare um
+  // alerta fantasma no boot.
+  const lastTrackRecordEntryRef = useRef<TrackedPlan | null>(
+    useUnifiedSnapshotStore.getState().trackRecord.history.at(-1) ?? null,
+  );
+  useEffect(() => {
+    const core = getNexusCore();
+    return core.bus.on("ORGANISM.TRACK_RECORD.UPDATED", ({ record }) => {
+      const alert = deriveTrackRecordAlert(lastTrackRecordEntryRef.current, record);
+      lastTrackRecordEntryRef.current = record.history.at(-1) ?? lastTrackRecordEntryRef.current;
+      if (!alert) return;
+      // §9.2: máximo 5 toasts simultâneos, auto-dismiss em 5s.
+      setAlerts((prev) => [...prev, alert].slice(-5));
+      setTimeout(() => setAlerts((prev) => prev.filter((a) => a.id !== alert.id)), 5000);
+    });
+  }, []);
   // V-MAX Fase 0.4: mesmo princípio de espelhamento acima, para as novas
   // fatias do UnifiedGlobalSnapshot (Blueprint §2.3) — nenhuma delas dispara
   // rede nova, todas espelham dado que os efeitos de WS/REST já reais logo
@@ -3609,6 +3643,7 @@ export default function App() {
         <RadarPanel />
         <MarketAnalysisPanel priceData={priceData} chartData={chartData} />
         <PaperTradingPanel priceData={priceData} />
+        <AlertToastStack alerts={alerts} onDismiss={(id) => setAlerts((prev) => prev.filter((a) => a.id !== id))} />
       </div>
     </WidgetContext.Provider>
   );
@@ -4822,6 +4857,51 @@ function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// v16.0 DEFINITIVO §9.2: pilha de toasts, canto inferior direito, máx 5
+// simultâneos (fila mais antiga cai primeiro — ver o `.slice(-5)` em
+// App()). Puramente apresentacional: recebe `alerts` já prontos e um
+// `onDismiss`, nunca lê a store nem o bus diretamente — mesma separação
+// já usada por MarketAnalysisPanel/PaperTradingPanel (props vindas de
+// App(), painel só desenha).
+const ALERT_TONE_STYLE: Record<AlertEvent["tone"], { hex: string; border: string; text: string }> = {
+  success: { hex: "#00ffaa", border: "border-l-[#00ffaa]", text: "text-[#00ffaa]" },
+  info: { hex: "#00f0ff", border: "border-l-[#00f0ff]", text: "text-[#00f0ff]" },
+  danger: { hex: "#ff0055", border: "border-l-[#ff0055]", text: "text-[#ff0055]" },
+};
+
+function AlertToastStack({ alerts, onDismiss }: { alerts: AlertEvent[]; onDismiss: (id: string) => void }) {
+  if (alerts.length === 0) return null;
+  return (
+    <div className="!fixed !z-[1200] bottom-3 right-3 flex flex-col gap-1.5 w-64 max-w-[85vw] pointer-events-none">
+      {alerts.map((a) => {
+        const tone = ALERT_TONE_STYLE[a.tone];
+        return (
+          <div
+            key={a.id}
+            className={`animate-fade-in pointer-events-auto cyber-panel !bg-[#010308]/95 border-l-2 ${tone.border} rounded px-2.5 py-2 relative overflow-hidden`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className={`text-[0.55rem] font-black tracking-wide ${tone.text}`}>{a.title}</div>
+                <div className="text-[0.48rem] text-[#8ab4f8]/80 mt-0.5 leading-snug">{a.message}</div>
+              </div>
+              <button
+                type="button"
+                aria-label="Fechar alerta"
+                onClick={() => onDismiss(a.id)}
+                className="text-[#8ab4f8]/50 active:text-[#8ab4f8] text-[0.6rem] leading-none shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="alert-toast-progress absolute left-0 bottom-0 h-[2px]" style={{ backgroundColor: tone.hex }} />
+          </div>
+        );
+      })}
     </div>
   );
 }

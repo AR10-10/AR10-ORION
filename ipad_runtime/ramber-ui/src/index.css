@@ -154,6 +154,18 @@ body {
   will-change: transform, opacity;
 }
 
+/* v16.0 DEFINITIVO §9.2: barra de progresso do toast — mesma duração do
+   auto-dismiss (5s) fixado em App.tsx (AlertToastStack), nunca duas fontes
+   de verdade para o tempo de vida do alerta (a barra só ILUSTRA o mesmo
+   setTimeout que já remove o toast). */
+@keyframes alert-toast-progress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+.alert-toast-progress {
+  animation: alert-toast-progress 5s linear forwards;
+}
+
 /* Shimmer loading skeleton — used only for the real engine's "pending"
    (still initializing WASM/probing Binance) state, never as a stand-in
    for data that doesn't exist yet. */
