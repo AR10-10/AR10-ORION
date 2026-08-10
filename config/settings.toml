@@ -1,0 +1,24 @@
+[organism]
+designation = "AR10 Orion V5.0 (Digital Android)"
+mode = "HFT_CRYPTO"
+air_gap_enforced = true
+
+[entropy_thresholds]
+ram_critical_pct = 85.0
+cuda_critical_pct = 80.0
+cuda_fragmentation_tolerance = 0.15
+garbage_collection_interval_sec = 60
+
+[temporal_oscillator]
+base_tick_rate_hz = 1000
+max_drift_tolerance_ms = 1.5
+
+[personality_matrix]
+base_cortisol_level = 0.1
+risk_aversion_multiplier = 1.5
+surprise_threshold = 0.8
+dopamine_reward_scale = 1.0
+
+[ui_cockpit]
+grid_gap_mm = 8
+margin_protection_mm = 16

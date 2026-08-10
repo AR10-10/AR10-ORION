@@ -1,0 +1,3 @@
+4988fb2500ed24f48d05a377768ab8e96ed6821d23bf51275489ef3fb88e2235  wasm/cyborg_quant_core.wasm
+d5caad3ebbd881cff7f928fdca66f67d7405221ed74345784b4eacca629f02ee  data/btcusdt_replay.json
+# _package (sha256 of sorted 'path:hash' lines joined by \n): 5a2ae16dcb3d32726f455bd1a59a2498c75335f10aefad98b1cd15f9fabe96de

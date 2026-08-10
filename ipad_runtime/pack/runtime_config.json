@@ -1,0 +1,10 @@
+{
+  "NODE_ENV": "production",
+  "APP_MODE": "READ_ONLY",
+  "CYBORG_RUNTIME": "IPAD_DIRECT",
+  "EXECUTION_LOCK": "FAIL_CLOSED",
+  "PWA_TARGET": "SAFARI_IPAD",
+  "LOCAL_FIRST": true,
+  "NO_REAL_TRADING": true,
+  "NO_PRIVATE_KEYS": true
+}

@@ -1,0 +1,187 @@
+// registry.js — RealDataSourceRegistry + driver do Connector State Machine
+// (mission AR10_CYBORG_2_SAFE_REAL_DATA_LAYER_RUNTIME_PROBE_V1).
+//
+// Regra central, sem excecao: nenhum conector comeca como ACTIVE_READ_ONLY
+// por suposicao. Todo conector nasce PLANNED nesta sessao e SO muda de
+// estado depois que a sonda real (fetch de verdade ou leitura de arquivo
+// local de verdade) responder. O estado mostrado na UI e sempre o ultimo
+// resultado real observado nesta sessao, nunca um valor decorativo.
+//
+// Este registry cobre apenas os conectores com codigo real implementado
+// nesta fase (rede publica sem chave, ou import local sem rede). O roteiro
+// mais amplo (MEXC futures, Binance futures, CoinGlass, Yahoo/Google
+// Finance, MT5 bridge etc.) continua vivendo so como PLANNED/FUTURE em
+// configs/connector-registry.default.json — nao duplicado aqui, para nao
+// criar duas fontes de verdade que podem divergir.
+
+import { CONNECTOR_STATES, validateEvidenceShape } from './schema.js';
+import * as coingeckoPublic from './coingecko-public.js';
+import * as binancePublic from './binance-public.js';
+import * as binanceFuturesPublic from './binance-futures-public.js';
+import * as mexcPublic from './mexc-public.js';
+import * as mexcFuturesPublic from './mexc-futures-public.js';
+import * as csvJsonImport from './csv-json-import.js';
+import * as mexcWsPublic from './mexc-ws-public.js';
+
+// Conectores de rede (probados automaticamente em "Testar fontes reais").
+// Ordem importa: getActiveReadOnlySources()/handleTestRealSources (app.js)
+// escolhem o primeiro ACTIVE_READ_ONLY nesta ordem como evidence ativa da
+// sessao (preco/candles do ticker principal). Os 2 conectores de futures
+// ficam deliberadamente DEPOIS dos 3 conectores spot — so' assumem o papel
+// de fonte ativa se TODOS os spot falharem nesta sessao, nunca preferidos
+// sobre um spot saudavel so' porque vieram depois na lista por acidente.
+const NETWORK_CONNECTORS = Object.freeze([coingeckoPublic, binancePublic, mexcPublic, binanceFuturesPublic, mexcFuturesPublic]);
+
+// Conector local (so probado quando o usuario escolhe um arquivo — nunca
+// disparado por "Testar fontes reais", porque nao ha rede nem arquivo
+// implicito para sondar).
+const LOCAL_CONNECTORS = Object.freeze([csvJsonImport]);
+
+// Conectores de streaming (WebSocket publico, push persistente). Deliberada-
+// mente FORA de NETWORK_CONNECTORS: probeAllNetworkSources()/handleTestReal-
+// Sources (app.js) usam o primeiro ACTIVE_READ_ONLY da lista de rede como a
+// evidence que alimenta AnalysisFrame/ResearchEngineFrame, e estes esperam
+// candles reais — um conector de deals via WS so' produz ticker (preco do
+// ultimo negocio), nunca candles. Misturar aqui faria um conector sem
+// candles "vencer" e degradar o resto do app silenciosamente. Streaming
+// continua visivel em listConnectors() (grid/UI) e sondavel via
+// probeStreamingConnector(), so' nunca selecionado como fonte ativa de
+// analise.
+const STREAMING_CONNECTORS = Object.freeze([mexcWsPublic]);
+
+const ALL_CONNECTORS = Object.freeze([...NETWORK_CONNECTORS, ...LOCAL_CONNECTORS, ...STREAMING_CONNECTORS]);
+
+// Estado por sessao (RAM) — a persistencia entre sessoes e responsabilidade
+// de js/memory/persistent-state.js, que envelopa este modulo a partir do
+// app.js. Aqui vive so a verdade "agora", desta aba.
+const sessionState = new Map(); // connector_id -> { state, evidence, probe_detail, last_probed_at }
+
+for (const mod of ALL_CONNECTORS) {
+    sessionState.set(mod.meta.connector_id, {
+        state: CONNECTOR_STATES.PLANNED,
+        evidence: null,
+        probe_detail: { reason: 'ainda_nao_sondado_nesta_sessao' },
+        last_probed_at: null,
+    });
+}
+
+export function listConnectors() {
+    return ALL_CONNECTORS.map((mod) => ({
+        ...mod.meta,
+        ...sessionState.get(mod.meta.connector_id),
+    }));
+}
+
+export function getConnectorMeta(connectorId) {
+    const mod = ALL_CONNECTORS.find((m) => m.meta.connector_id === connectorId);
+    return mod ? mod.meta : null;
+}
+
+export function getConnectorState(connectorId) {
+    return sessionState.get(connectorId) || null;
+}
+
+/** Fontes que neste exato momento estao ACTIVE_READ_ONLY validado por sonda
+ *  real nesta sessao — nunca um valor assumido/cacheado de outra sessao. */
+export function getActiveReadOnlySources() {
+    return listConnectors().filter((c) => c.state === CONNECTOR_STATES.ACTIVE_READ_ONLY);
+}
+
+// Idade maxima (ms) que um resultado ACTIVE_READ_ONLY pode ter antes da UI
+// trocar o rotulo exibido para STALE. Isto NUNCA reescreve sessionState (a
+// sonda continua sendo a unica fonte de verdade armazenada) — e so um corte
+// de apresentacao para que dado real confirmado ha muito tempo nesta mesma
+// sessao nunca seja confundido com dado fresco "agora".
+const STALE_AFTER_MS = 5 * 60 * 1000;
+
+export function isStale(connectorOrEntry) {
+    if (!connectorOrEntry || connectorOrEntry.state !== CONNECTOR_STATES.ACTIVE_READ_ONLY) return false;
+    if (!connectorOrEntry.last_probed_at) return false;
+    const age = Date.now() - new Date(connectorOrEntry.last_probed_at).getTime();
+    return Number.isFinite(age) && age > STALE_AFTER_MS;
+}
+
+async function runProbe(mod, opts, onTransition) {
+    const id = mod.meta.connector_id;
+    sessionState.set(id, { ...sessionState.get(id), state: CONNECTOR_STATES.PROBING });
+    onTransition?.(id, CONNECTOR_STATES.PROBING);
+
+    let result;
+    try {
+        result = await mod.probe(opts);
+    } catch (err) {
+        result = {
+            state: CONNECTOR_STATES.FAILED,
+            evidence: null,
+            probe_detail: { reason: `excecao_nao_tratada_na_sonda:${err.message || err}` },
+        };
+    }
+
+    // Segunda checagem independente, fail-closed: mesmo que o conector se
+    // declare ACTIVE_READ_ONLY, a evidencia precisa bater com o contrato de
+    // schema.js. Um conector com bug interno que monte evidencia malformada
+    // nunca deve chegar na UI/Ledger como dado real so' porque ele mesmo se
+    // auto-declarou bem-sucedido.
+    if (result.state === CONNECTOR_STATES.ACTIVE_READ_ONLY) {
+        const shapeCheck = validateEvidenceShape(result.evidence);
+        if (!shapeCheck.valid) {
+            result = {
+                state: CONNECTOR_STATES.BLOCKED_BY_SCHEMA,
+                evidence: null,
+                probe_detail: { reason: `evidencia_fora_do_contrato:${shapeCheck.errors.join(',')}` },
+            };
+        }
+    }
+
+    const entry = {
+        state: result.state,
+        evidence: result.evidence || null,
+        probe_detail: result.probe_detail || {},
+        last_probed_at: new Date().toISOString(),
+    };
+    sessionState.set(id, entry);
+    onTransition?.(id, result.state, entry);
+    return { connector_id: id, ...entry };
+}
+
+/** Sonda todos os conectores de rede publica em paralelo (hosts diferentes,
+ *  sem credencial, sem endpoint privado — ver CSP connect-src). Cada
+ *  resultado e 100% derivado da resposta real (ou rejeicao real) do fetch
+ *  desta sessao. */
+export async function probeAllNetworkSources({ symbol = 'BTC', timeoutMs = 8000, onTransition } = {}) {
+    const results = await Promise.all(
+        NETWORK_CONNECTORS.map((mod) => runProbe(mod, { symbol, timeoutMs }, onTransition))
+    );
+    return results;
+}
+
+export async function probeNetworkConnector(connectorId, { symbol = 'BTC', timeoutMs = 8000, onTransition } = {}) {
+    const mod = NETWORK_CONNECTORS.find((m) => m.meta.connector_id === connectorId);
+    if (!mod) throw new Error(`conector_de_rede_desconhecido:${connectorId}`);
+    return runProbe(mod, { symbol, timeoutMs }, onTransition);
+}
+
+/** Import local CSV/JSON — `file` so vem de escolha explicita do usuario num
+ *  <input type=file>; nunca rede, nunca caminho implicito. */
+export async function probeLocalImport({ file, symbol = 'IMPORTADO', onTransition } = {}) {
+    return runProbe(csvJsonImport, { file, symbol }, onTransition);
+}
+
+/** Sonda um conector de streaming (WebSocket publico) individualmente —
+ *  nunca em lote via probeAllNetworkSources, e nunca decide a fonte ativa de
+ *  AnalysisFrame/ResearchEngineFrame (ver nota em STREAMING_CONNECTORS
+ *  acima). So' o toque explicito do usuario num botao dedicado de streaming
+ *  dispara isto. */
+export async function probeStreamingConnector(connectorId, { symbol = 'BTC', timeoutMs = 8000, onTransition } = {}) {
+    const mod = STREAMING_CONNECTORS.find((m) => m.meta.connector_id === connectorId);
+    if (!mod) throw new Error(`conector_de_streaming_desconhecido:${connectorId}`);
+    return runProbe(mod, { symbol, timeoutMs }, onTransition);
+}
+
+export function networkConnectorIds() {
+    return NETWORK_CONNECTORS.map((m) => m.meta.connector_id);
+}
+
+export function streamingConnectorIds() {
+    return STREAMING_CONNECTORS.map((m) => m.meta.connector_id);
+}

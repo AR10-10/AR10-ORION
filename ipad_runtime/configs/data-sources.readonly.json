@@ -1,0 +1,216 @@
+{
+  "schema_version": 1,
+  "config_id": "AR10_CYBORG_DATA_SOURCES_READONLY_V1",
+  "derived_from": "ipad_runtime/configs/connector-registry.default.json",
+  "format_note": "View derivada e somente-leitura do registro de conectores, filtrada para o subconjunto de campos relevantes a postura read-only. Nao e uma segunda fonte de verdade: qualquer alteracao de capacidade, status ou metadado rico de um conector deve ser feita em connector-registry.default.json primeiro (mesma regra ja declarada em docs/DATA_SOURCE_MATRIX.md, 'qualquer alteracao de conteudo deve ser feita primeiro no JSON e depois refletida aqui, nunca o contrario' - aqui o 'aqui' e este arquivo). Gerado/conferido programaticamente a partir do registro para garantir zero divergencia entre os dois arquivos.",
+  "target_runtime": "SAFARI_IPAD",
+  "policy": "Every data source listed here, present or future, operates strictly read-only. execution_supported is false for all entries with no exception. This file adds no capability beyond what connector-registry.default.json already declares - it only restates the read-only subset for fast, auditable inspection.",
+  "policy_pt_br": "Toda fonte de dado listada aqui, presente ou futura, opera estritamente em modo read-only. execution_supported e false para todas as entradas, sem excecao. Este arquivo nao adiciona nenhuma capacidade alem do que connector-registry.default.json ja declara - ele apenas reapresenta o subconjunto read-only para inspecao rapida e auditavel.",
+  "global_read_only_contract": {
+    "mode": "READ_ONLY",
+    "fail_closed": true,
+    "execution_supported_must_always_be_false": true,
+    "no_order_send": true,
+    "no_api_secret_in_registry": true,
+    "no_private_endpoint_calls_from_registry": true,
+    "see_full_law_set": "docs/READ_ONLY_MARKET_SAFETY.md"
+  },
+  "data_sources": [
+    {
+      "connector_id": "mexc-public-market-adapter",
+      "asset_classes_supported": [
+        "crypto_spot"
+      ],
+      "current_status": "PLANNED",
+      "risk_level": "LOW",
+      "requires_api_key": false,
+      "read_only_supported": true,
+      "execution_supported": false,
+      "enabled_now": false
+    },
+    {
+      "connector_id": "mexc-futures-public-adapter",
+      "asset_classes_supported": [
+        "crypto_futures"
+      ],
+      "current_status": "PLANNED",
+      "risk_level": "LOW",
+      "requires_api_key": false,
+      "read_only_supported": true,
+      "execution_supported": false,
+      "enabled_now": false
+    },
+    {
+      "connector_id": "mexc-stock-futures-adapter",
+      "asset_classes_supported": [
+        "stock_futures_synthetic"
+      ],
+      "current_status": "PLANNED",
+      "risk_level": "MEDIUM",
+      "requires_api_key": false,
+      "read_only_supported": true,
+      "execution_supported": false,
+      "enabled_now": false
+    },
+    {
+      "connector_id": "mexc-realstocks-adapter",
+      "asset_classes_supported": [
+        "equities_real"
+      ],
+      "current_status": "PLANNED",
+      "risk_level": "MEDIUM",
+      "requires_api_key": true,
+      "read_only_supported": true,
+      "execution_supported": false,
+      "enabled_now": false
+    },
+    {
+      "connector_id": "binance-futures-public-adapter",
+      "asset_classes_supported": [
+        "crypto_futures"
+      ],
+      "current_status": "PLANNED",
+      "risk_level": "LOW",
+      "requires_api_key": false,
+      "read_only_supported": true,
+      "execution_supported": false,
+      "enabled_now": false
+    },
+    {
+      "connector_id": "coingecko-market-data-adapter",
+      "asset_classes_supported": [
+        "crypto_spot"
+      ],
+      "current_status": "PLANNED",
+      "risk_level": "LOW",
+      "requires_api_key": false,
+      "read_only_supported": true,
+      "execution_supported": false,
+      "enabled_now": false
+    },
+    {
+      "connector_id": "coinglass-derivatives-data-adapter",
+      "asset_classes_supported": [
+        "crypto_futures"
+      ],
+      "current_status": "REQUIRES_API_KEY",
+      "risk_level": "MEDIUM",
+      "requires_api_key": true,
+      "read_only_supported": true,
+      "execution_supported": false,
+      "enabled_now": false
+    },
+    {
+      "connector_id": "yahoo-finance-adapter",
+      "asset_classes_supported": [
+        "equities_real",
+        "etf",
+        "index"
+      ],
+      "current_status": "PLANNED",
+      "risk_level": "LOW",
+      "requires_api_key": false,
+      "read_only_supported": true,
+      "execution_supported": false,
+      "enabled_now": false
+    },
+    {
+      "connector_id": "google-finance-adapter",
+      "asset_classes_supported": [
+        "equities_real",
+        "etf",
+        "index"
+      ],
+      "current_status": "UNSUPPORTED_ON_IPAD",
+      "risk_level": "LOW",
+      "requires_api_key": false,
+      "read_only_supported": false,
+      "execution_supported": false,
+      "enabled_now": false
+    },
+    {
+      "connector_id": "google-sheets-import-adapter",
+      "asset_classes_supported": [
+        "custom_user_defined"
+      ],
+      "current_status": "PLANNED",
+      "risk_level": "LOW",
+      "requires_api_key": false,
+      "read_only_supported": true,
+      "execution_supported": false,
+      "enabled_now": false
+    },
+    {
+      "connector_id": "tradingview-compatible-route",
+      "asset_classes_supported": [
+        "crypto_spot",
+        "crypto_futures",
+        "equities_real"
+      ],
+      "current_status": "FUTURE",
+      "risk_level": "MEDIUM",
+      "requires_api_key": false,
+      "read_only_supported": true,
+      "execution_supported": false,
+      "enabled_now": false
+    },
+    {
+      "connector_id": "custom-csv-import-route",
+      "asset_classes_supported": [
+        "custom_user_defined",
+        "crypto_spot",
+        "crypto_futures",
+        "equities_real"
+      ],
+      "current_status": "PLANNED",
+      "risk_level": "LOW",
+      "requires_api_key": false,
+      "read_only_supported": true,
+      "execution_supported": false,
+      "enabled_now": false
+    },
+    {
+      "connector_id": "mt5-bridge-adapter",
+      "asset_classes_supported": [
+        "crypto_spot",
+        "crypto_futures",
+        "equities_real",
+        "fx"
+      ],
+      "current_status": "FUTURE",
+      "risk_level": "HIGH",
+      "requires_api_key": false,
+      "read_only_supported": true,
+      "execution_supported": false,
+      "enabled_now": false
+    },
+    {
+      "connector_id": "native-companion-adapter",
+      "asset_classes_supported": [
+        "crypto_spot",
+        "crypto_futures"
+      ],
+      "current_status": "FUTURE",
+      "risk_level": "MEDIUM",
+      "requires_api_key": false,
+      "read_only_supported": true,
+      "execution_supported": false,
+      "enabled_now": false
+    }
+  ],
+  "active_now": [],
+  "active_now_note": "Lista vazia por design nesta fase: nenhum conector tem enabled_now=true em connector-registry.default.json. A unica fonte de dado real e ativa no runtime ao vivo hoje e o replay sintetico offline (data/btcusdt_replay.json), que nao e um conector de rede e por isso nao aparece neste registro de conectores.",
+  "how_a_source_could_become_active": [
+    "Mover current_status do conector para ACTIVE_READ_ONLY em connector-registry.default.json (nunca neste arquivo derivado).",
+    "Confirmar read_only_supported=true e execution_supported permanecendo false para esse conector.",
+    "Atualizar enabled_now=true apenas para esse conector especifico no registro.",
+    "Regenerar este arquivo derivado a partir do registro atualizado.",
+    "Nenhum destes passos, isolado ou em conjunto, pode alterar execution_supported para true - isso exigiria uma fase inteiramente separada e explicitamente aprovada (ver docs/READ_ONLY_MARKET_SAFETY.md)."
+  ],
+  "see_also": [
+    "docs/CONNECTOR_REGISTRY_DESIGN.md",
+    "docs/DATA_SOURCE_MATRIX.md",
+    "docs/READ_ONLY_MARKET_SAFETY.md",
+    "ipad_runtime/configs/connector-registry.default.json"
+  ]
+}

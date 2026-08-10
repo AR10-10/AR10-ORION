@@ -1,0 +1,16 @@
+[package]
+name = "cyborg_quant_core"
+version = "1.0.0"
+edition = "2021"
+description = "AR10 Cyborg 2.0 - READ-ONLY analytics WASM core (SMA/EMA/STDDEV/Z-SCORE). No order/execution functions by design."
+license = "Proprietary"
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"
+codegen-units = 1

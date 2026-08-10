@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="color-scheme" content="dark">
+<title>AR10 Cyborg 1.0 PRO — iPad One-Tap Cloud Runtime</title>
+
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.coingecko.com https://api.binance.com https://fapi.binance.com https://api.mexc.com https://contract.mexc.com wss://wbs-api.mexc.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none';">
+
+<meta name="description" content="AR10 Cyborg 1.0 PRO — Nebula Core. Safari Local Runtime para iPad. Execucao local-first, READ_ONLY, FAIL_CLOSED. Sem trading real.">
+<meta name="theme-color" content="#000000">
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.webmanifest">
+
+<!-- iOS / iPadOS Add to Home Screen -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cyborg PRO">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+
+<link rel="stylesheet" href="css/ipad-runtime.css">
+</head>
+<body>
+
+<header class="app-topbar" id="app-topbar">
+  <div class="tb-left">
+    <span class="tb-brand">AR10 Cyborg</span><span class="tb-version-badge">1.0 PRO</span><span class="tb-build-badge" id="tb-build-badge" title="Build/cache do runtime instalado neste iPad">…</span><span class="tb-heartbeat" id="tb-heartbeat" title="Heartbeat: intervalo real entre ticks da UI + idade do último dado real confirmado">● UI …</span>
+  </div>
+  <div class="tb-center">
+    <span class="tb-status" id="topbar-status">Verificando…</span>
+  </div>
+  <div class="tb-right">
+    <span class="tb-chip is-ok" id="tb-readonly">READ_ONLY</span>
+    <span class="tb-chip" id="tb-failclosed">FAIL_CLOSED</span>
+    <span class="tb-chip is-blocked" id="tb-livelocked">LIVE_LOCKED</span>
+    <button type="button" class="tb-btn" id="btn-tb-update">Atualizar sistema</button>
+    <button type="button" class="tb-btn" id="btn-tb-analyze">Analisar sistema</button>
+    <button type="button" class="tb-btn" id="btn-tb-advanced" aria-expanded="false">Modo avançado</button>
+  </div>
+</header>
+
+<div class="sw-update-banner" id="sw-update-banner" role="status" hidden>
+  <span class="sw-update-text" id="sw-update-text">Atualização disponível — nova versão do runtime já foi baixada e está pronta.</span>
+  <button type="button" class="rt-btn primary" id="btn-sw-update-reload">Atualizar agora</button>
+  <button type="button" class="rt-btn" id="btn-sw-update-dismiss">Mais tarde</button>
+</div>
+
+<div class="runtime-shell">
+
+  <div class="live-ticker" id="cyborg-live-ticker" role="status" aria-live="off" aria-label="Letreiro vivo do Cyborg — estado do sistema, dados reais, Long/Short, Hydration e segurança">
+    <span class="lt-rail-label">CYBORG LIVE</span>
+    <div class="live-ticker-viewport">
+      <div class="live-ticker-track" id="live-ticker-track">
+        <span class="lt-item v-pending">[AR10 LIVE] Verificando estado do sistema…</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="hero-row" id="hero-row">
+
+  <section class="card btc-live-panel" id="btc-live-panel">
+    <h2><span class="coin-glyph" aria-hidden="true">🟠</span> BTC/USDT — Preço Atual <span class="step">leitura descritiva — não é recomendação</span></h2>
+    <p class="onboarding-hint">Preço atual é sempre a última sonda real desta sessão (mark-to-market read-only) — nunca um valor parado. Snapshot é o preço e os níveis fixados na última vez que "Gerar AnalysisFrame real" rodou.</p>
+
+    <div class="status-row bl-price-row" id="bl-price-row" data-live-mode="DADOS_INSUFICIENTES">
+      <span class="label">Preço atual</span>
+      <span class="bl-price-wrap"><span class="value v-info" id="bl-current-price">…</span><span class="price-delta-badge v-pending" id="bl-price-delta-badge" title="Diferença vs. snapshot da última análise — não é variação 24h">…</span></span>
+    </div>
+    <div class="status-grid bl-meta-grid">
+      <div class="status-row"><span class="label">Fonte</span><span class="value v-pending" id="bl-current-source">…</span></div>
+      <div class="status-row"><span class="label">Atualizado</span><span class="value v-pending" id="bl-current-freshness">…</span></div>
+      <div class="status-row"><span class="label">Modo</span><span class="value v-pending" id="bl-current-mode">…</span></div>
+      <div class="status-row"><span class="label">Latência</span><span class="value v-pending" id="bl-current-latency" title="Tempo de resposta real da última sonda de rede desta sessão">…</span></div>
+    </div>
+
+    <div class="data-sufficiency-block" id="bl-snapshot-block">
+      <p class="data-sufficiency-label">Snapshot da análise</p>
+      <div class="status-grid">
+        <div class="status-row"><span class="label">Preço usado</span><span class="value v-pending" id="bl-snapshot-price">…</span></div>
+        <div class="status-row"><span class="label">Gerado em</span><span class="value v-pending" id="bl-snapshot-time">…</span></div>
+        <div class="status-row"><span class="label">Idade do snapshot</span><span class="value v-pending" id="bl-snapshot-age">…</span></div>
+        <div class="status-row"><span class="label">Diferença vs. atual</span><span class="value v-pending" id="bl-price-diff">…</span></div>
+      </div>
+    </div>
+
+    <div class="executive-actions" role="group" aria-label="Ações do BTC Live Panel">
+      <button type="button" class="rt-btn" id="bl-btn-refresh-now"><span class="icon">⟳</span> Atualizar preço agora</button>
+    </div>
+  </section>
+
+  <section class="card siriform-card" id="siriform-section">
+    <div class="siriform-stage">
+      <div class="siriform-orbit siriform-orbit-1" aria-hidden="true"></div>
+      <div class="siriform-orbit siriform-orbit-2" aria-hidden="true"></div>
+      <div class="siriform-avatar" id="siriform-avatar" data-state="idle" role="img" aria-label="Siriform Avatar">
+        <div class="siriform-core"></div>
+      </div>
+      <svg class="siriform-wireframe" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="0.6">
+          <ellipse cx="50" cy="50" rx="46" ry="46"/>
+          <ellipse cx="50" cy="50" rx="46" ry="17"/>
+          <ellipse cx="50" cy="50" rx="46" ry="17" transform="rotate(60 50 50)"/>
+          <ellipse cx="50" cy="50" rx="46" ry="17" transform="rotate(120 50 50)"/>
+          <ellipse cx="50" cy="50" rx="17" ry="46"/>
+        </g>
+      </svg>
+    </div>
+    <h2>Siriform Intelligence Core</h2>
+    <div class="siriform-status-line">
+      <span class="siriform-state-tag" id="siriform-state-tag">IDLE</span>
+      <span class="ss-dot" aria-hidden="true">•</span>
+      <span class="macro-state-chip" id="macro-state-chip">PRONTO</span>
+      <span class="ss-dot" aria-hidden="true">•</span>
+      <span class="siriform-safe-tag">READ_ONLY</span>
+    </div>
+    <p class="siriform-caption" id="siriform-caption" aria-live="polite">Cyborg operando em READ_ONLY / FAIL_CLOSED.</p>
+  </section>
+
+  <section class="card cyborg-executive-panel" id="cyborg-executive-panel">
+    <h2>Estado do Sistema <span class="step">resumo executivo</span></h2>
+    <p class="onboarding-hint">Leitura de 1 olhar: o Cyborg está pronto? a fonte de dado é real e fresca? está seguro para analisar? Memória de sessão anterior nunca aparece aqui como dado atual sem revalidação — sem fonte fresca nesta sessão, este card mostra <b>DADOS_INSUFICIENTES</b>.</p>
+    <div class="ex-hero">
+      <div class="status-row ex-hero-row ex-state-row" id="ex-state-row" data-macro-state="IDLE">
+        <span class="label"><span class="ex-icon" aria-hidden="true">🧭</span> Modo</span><span class="value v-pending" id="ex-state">…</span>
+      </div>
+      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">🔒</span> Execução</span><span class="value v-fail" id="ex-live">LIVE_LOCKED</span></div>
+      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">🛡️</span> Segurança</span><span class="value v-ok" id="ex-security">READ_ONLY / FAIL_CLOSED</span></div>
+      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">⚖️</span> Risco</span><span class="value v-pending" id="ex-risk">…</span></div>
+      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">🗄️</span> Cofre</span><span class="value v-pending" id="ex-vault">…</span></div>
+      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">💧</span> Hydration</span><span class="value v-pending" id="ex-hydration">…</span></div>
+      <div class="status-row ex-hero-row"><span class="label"><span class="ex-icon" aria-hidden="true">📍</span> Local</span><span class="value v-pending" id="ex-local">…</span></div>
+    </div>
+    <details class="ex-details">
+      <summary>Detalhes técnicos</summary>
+      <div class="status-grid ex-details-grid">
+        <div class="status-row"><span class="label">Fonte real ativa</span><span class="value v-pending" id="ex-source">…</span></div>
+        <div class="status-row"><span class="label">Atualizado em</span><span class="value v-pending" id="ex-freshness">…</span></div>
+        <div class="status-row"><span class="label">Paper Trading</span><span class="value v-pending" id="ex-paper">…</span></div>
+        <div class="status-row"><span class="label">Último relatório</span><span class="value v-pending" id="ex-report">…</span></div>
+      </div>
+    </details>
+  </section>
+
+  </div><!-- /.hero-row -->
+
+  <!-- ACTION STRIP — faixa horizontal de controles entre o cockpit (hero-row)
+       e a analytics-row abaixo: CTA principal / microfone / acoes rapidas,
+       cada um na sua propria coluna, nunca misturado dentro de um card de
+       cockpit (BTC/Siriform/Estado do Sistema acima ficam so' leitura). -->
+  <section class="card action-strip" id="action-strip">
+    <div class="as-col as-primary">
+      <p class="data-sufficiency-label">Ação principal</p>
+      <button type="button" class="hero-cta" id="btn-prepare-cyborg"><span class="icon">⚡</span> Preparar / Atualizar Cyborg neste iPad</button>
+    </div>
+    <div class="as-col as-mic">
+      <p class="data-sufficiency-label">Microfone</p>
+      <button type="button" class="mic-button" id="mic-button" data-voice-state="voice_idle" aria-label="Falar com o Siriform (comando de voz)">◉</button>
+      <span class="mic-status-label v-info" id="mic-status-label">PRONTO</span>
+      <p class="voice-hint">Toque ou diga um comando seguro. <button type="button" class="voice-info-btn" id="btn-voice-info" aria-label="Saiba mais sobre o Siriform Voice">ⓘ</button></p>
+    </div>
+    <div class="as-col as-quick">
+      <p class="data-sufficiency-label">Ações rápidas</p>
+      <div class="quick-actions" id="quick-actions" role="group" aria-label="Ações rápidas">
+        <button type="button" class="qa-btn" id="qa-diagnostics"><span class="icon">▣</span> Diagnóstico</button>
+        <button type="button" class="qa-btn" id="qa-replay"><span class="icon">▶</span> Replay BTC/USDT</button>
+        <button type="button" class="qa-btn" id="qa-analysis"><span class="icon">∑</span> Análise</button>
+        <button type="button" class="qa-btn" id="qa-report"><span class="icon">▤</span> Relatório</button>
+      </div>
+    </div>
+  </section><!-- /.action-strip -->
+
+  <!-- Selo de seguranca/runtime movido para logo apos a action-strip (era o
+       ultimo bloco do documento) para ficar visivel dentro da 1a tela, sem
+       precisar rolar — pura realocacao de posicao, nenhum id/estilo mudou. -->
+  <div class="law-badges">
+    <span class="law-badge" id="badge-mode">IPAD DIRECT / LOCAL-FIRST</span>
+    <span class="law-badge">READ_ONLY</span>
+    <span class="law-badge">FAIL_CLOSED</span>
+    <span class="law-badge is-ok">Execution Lock: ACTIVE</span>
+    <span class="law-badge is-blocked">Private Keys: DISABLED</span>
+    <span class="law-badge is-blocked">Live Trading: BLOCKED</span>
+    <span class="law-badge">Safari Edge: LOCAL_AUX</span>
+    <span class="law-badge">Telegram: PLANNED_AUX</span>
+  </div>
+  <p class="law-tagline">🔒 SISTEMA 100% SEGURO · READ_ONLY · SEM EXECUÇÃO · SEM ORDENS · SEM CHAVES · SEM CORRETORAS</p>
+
+  <!-- ANALYTICS ROW — Target Tracker / Rota Recomendada / Matriz de Dados,
+       sempre depois da acao, nunca dentro de um card de cockpit. Mesmo
+       padrao responsivo do hero-row (coluna unica < 1000px, grade de 3
+       colunas a partir de 1000px — ver .analytics-row no CSS). -->
+  <div class="analytics-row" id="analytics-row">
+
+  <section class="card target-tracker-panel" id="target-tracker-panel">
+    <h2>Target Tracker <span class="step">snapshot da análise — não é recomendação</span></h2>
+    <p class="onboarding-hint">Os alvos abaixo vêm do snapshot da análise (card BTC/USDT), não do preço vivo: compara dois números reais e mostra a distância entre eles. Alvo 2 mostra DADOS_INSUFICIENTES: o Research Engine ainda calcula só 1 alvo por rota. A barra de progresso é só a mesma distância acima, redesenhada — nunca um novo nível.</p>
+    <div class="route-block route-long" id="bl-route-long">
+      <h3>Rota A (Long)</h3>
+      <div class="status-grid" id="bl-route-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+    <div class="route-block route-short" id="bl-route-short">
+      <h3>Rota B (Short)</h3>
+      <div class="status-grid" id="bl-route-short-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+    <p class="diagnostic-note" id="bl-reanalyze-banner" hidden></p>
+    <p class="diagnostic-note">Leitura descritiva — não é recomendação. Não é execução. Não é ordem. É acompanhamento visual de níveis.</p>
+  </section>
+
+  <section class="card rota-recomendada-panel" id="rota-recomendada-panel">
+    <h2>Rota Recomendada <span class="step">Local Intelligence — descritiva</span></h2>
+    <div class="gauge-wrap is-pending" id="li-gauge-wrap" aria-hidden="true">
+      <div class="gauge-arc"></div>
+      <div class="gauge-needle" id="li-gauge-needle"></div>
+    </div>
+    <div class="data-sufficiency-block rota-recomendada-block" id="rota-recomendada-block">
+      <p class="data-sufficiency-label">Rota recomendada <span class="step">descritiva — não é recomendação</span></p>
+      <div class="status-row"><span class="label">Rota</span><span class="value v-pending" id="li-final-label-hero">…</span></div>
+      <div class="status-row"><span class="label">Confiança qualitativa</span><span class="value v-pending" id="li-confidence-hero">…</span></div>
+    </div>
+  </section>
+
+  <section class="card data-matrix-summary-panel" id="data-matrix-summary-panel">
+    <h2>Matriz de Dados <span class="step">Data Sufficiency</span></h2>
+    <p class="onboarding-hint">Dados usados nesta leitura — cada linha é <b>OK</b>, <b>DADOS_INSUFICIENTES</b> ou <b>NÃO_APLICÁVEL</b>; pontuação derivada só de campos reais desta sessão, nunca estimada. Mesmo dado do Research Engine (Modo avançado), exibido aqui na primeira tela.</p>
+    <div class="status-row" id="dm-source-health-row"><span class="label">Source Health</span><span class="value v-pending" id="dm-source-health-summary">…</span></div>
+    <div class="data-sufficiency-block" id="research-data-sufficiency-block">
+        <p class="data-sufficiency-label" id="research-data-sufficiency-label">Data Sufficiency: — / 100</p>
+        <div class="status-grid" id="research-data-matrix-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+  </section>
+
+  <section class="card supports-resistances-panel" id="supports-resistances-panel">
+    <h2>Suportes / Resistências <span class="step">snapshot da análise</span></h2>
+    <p class="onboarding-hint">Mesmos níveis do Target Tracker (snapshot do BTC/USDT) — leitura, nunca recalculados a partir do preço vivo. R2/S2 mostram DADOS_INSUFICIENTES: o Research Engine ainda calcula só 1 nível de cada lado.</p>
+    <div class="sr-ladder" id="sr-ladder">
+      <div class="sr-row sr-resistance"><span class="label">Resistência 2</span><span class="value v-pending" id="sr-resistance-2">…</span></div>
+      <div class="sr-row sr-resistance"><span class="label">Resistência 1</span><span class="value v-fail" id="sr-resistance-1">…</span></div>
+      <div class="sr-row sr-current"><span class="label">Preço atual</span><span class="value v-info" id="sr-current-price">…</span></div>
+      <div class="sr-row sr-support"><span class="label">Suporte 1</span><span class="value v-ok" id="sr-support-1">…</span></div>
+      <div class="sr-row sr-support"><span class="label">Suporte 2</span><span class="value v-pending" id="sr-support-2">…</span></div>
+    </div>
+  </section>
+
+  </div><!-- /.analytics-row -->
+
+  <div class="bento">
+
+  <section class="card cyborg-readiness-panel" id="cyborg-readiness-panel">
+    <h2>Cyborg Readiness</h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">PWA HTTPS</span><span class="value v-pending" id="cr-pwa">…</span></div>
+      <div class="status-row"><span class="label">Service Worker</span><span class="value v-pending" id="cr-sw">…</span></div>
+      <div class="status-row"><span class="label">Cache API</span><span class="value v-pending" id="cr-cache">…</span></div>
+      <div class="status-row"><span class="label">IndexedDB</span><span class="value v-pending" id="cr-idb">…</span></div>
+      <div class="status-row"><span class="label">OPFS</span><span class="value v-pending" id="cr-opfs">…</span></div>
+      <div class="status-row"><span class="label">Web Crypto</span><span class="value v-pending" id="cr-webcrypto">…</span></div>
+      <div class="status-row"><span class="label">WASM</span><span class="value v-pending" id="cr-wasm">…</span></div>
+      <div class="status-row"><span class="label">Workers</span><span class="value v-pending" id="cr-workers">…</span></div>
+      <div class="status-row"><span class="label">WebGPU</span><span class="value v-pending" id="cr-webgpu">…</span></div>
+      <div class="status-row"><span class="label">Siriform Voice</span><span class="value v-pending" id="cr-voice">…</span></div>
+      <div class="status-row"><span class="label">Meta Llama/WebLLM</span><span class="value v-pending" id="cr-llama">…</span></div>
+      <div class="status-row"><span class="label">Local Pack</span><span class="value v-pending" id="cr-pack">…</span></div>
+      <div class="status-row"><span class="label">Replay BTC/USDT</span><span class="value v-pending" id="cr-replay">…</span></div>
+      <div class="status-row"><span class="label">READ_ONLY / FAIL_CLOSED</span><span class="value v-pending" id="cr-safety">…</span></div>
+    </div>
+    <p class="engine-meta">Resumo unificado de tudo que este runtime já sondou nesta sessão — cada item mostra OK, LIMITED, MISSING, FUTURE ou UNSUPPORTED, nunca um "tudo certo" decorativo. Detalhe completo no Modo avançado.</p>
+  </section>
+
+  </div><!-- /.bento -->
+
+  <section class="advanced-section" id="advanced-section" hidden>
+
+  <section class="card commander-soldier-panel" id="commander-soldier-panel" tabindex="0">
+    <h2>Commander / Soldier <span class="future-badge">Soldier: NOT_DEPLOYED</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Commander (este iPad)</span><span class="value v-pending" id="cs-commander-status">…</span></div>
+      <div class="status-row"><span class="label">Soldier Headless 24/7</span><span class="value v-pending" id="cs-soldier-status">…</span></div>
+      <div class="status-row"><span class="label">Sync Bridge</span><span class="value v-pending" id="cs-sync-bridge-status">…</span></div>
+    </div>
+    <p class="onboarding-hint">Commander é este PWA/iPad — sempre ONLINE enquanto a aba estiver aberta. Soldier é um processo headless 24/7 fora do navegador, ainda não implantado nesta versão: existe só como contrato de tipos em <code>soldier_runtime/</code>, nunca instalado nem executado. Sync Bridge é o canal entre os dois — sem Soldier real, não há o que sincronizar.</p>
+  </section>
+
+  <section class="card safari-edge-layer-panel" id="safari-edge-layer-panel" tabindex="0">
+    <h2>Safari Assisted Edge Layer <span class="step">LOCAL_AUX — NÃO AUTORITATIVO</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Edge Status</span><span class="value v-pending" id="se-edge-status">…</span></div>
+      <div class="status-row"><span class="label">Device</span><span class="value v-pending" id="se-device">…</span></div>
+      <div class="status-row"><span class="label">Session ID</span><span class="value v-pending" id="se-session-id">…</span></div>
+      <div class="status-row"><span class="label">Last Sequence Seen</span><span class="value v-pending" id="se-last-sequence">…</span></div>
+      <div class="status-row"><span class="label">Render Latency</span><span class="value v-pending" id="se-render-latency">…</span></div>
+      <div class="status-row"><span class="label">Dropped Frames</span><span class="value v-pending" id="se-dropped-frames">…</span></div>
+      <div class="status-row"><span class="label">Visible Panels</span><span class="value v-pending" id="se-visible-panels">…</span></div>
+      <div class="status-row"><span class="label">Focused Symbol</span><span class="value v-pending" id="se-focused-symbol">…</span></div>
+      <div class="status-row"><span class="label">Focused Timeframe</span><span class="value v-pending" id="se-focused-timeframe">…</span></div>
+      <div class="status-row"><span class="label">Connection State</span><span class="value v-pending" id="se-connection-state">…</span></div>
+      <div class="status-row"><span class="label">Storage Mirror</span><span class="value v-pending" id="se-storage-mirror">…</span></div>
+      <div class="status-row"><span class="label">Is Authoritative</span><span class="value v-pending" id="se-is-authoritative">…</span></div>
+      <div class="status-row"><span class="label">Soldier Validation</span><span class="value v-pending" id="se-soldier-validation">…</span></div>
+    </div>
+    <p class="onboarding-hint">Safari Edge é uma camada visual/contextual deste iPad/Safari — latência de render, frames perdidos, foco de tela e estado de sessão locais. Nunca decide trade, nunca executa ordem, nunca substitui o Soldier: <code>is_authoritative</code> é sempre <b>FALSE</b>. Sem Soldier real implantado, toda leitura aqui fica como contexto local não validado (toque no card para o resumo completo).</p>
+  </section>
+
+  <section class="card" id="voice-status-panel">
+    <h2>Siriform Voice <span class="future-badge">Apple Intelligence: FUTURE</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Siriform Voice</span><span class="value v-pending" id="st-voice">…</span></div>
+      <div class="status-row"><span class="label">Speech Recognition</span><span class="value v-pending" id="st-speech-rec">…</span></div>
+      <div class="status-row"><span class="label">Speech Synthesis</span><span class="value v-pending" id="st-speech-syn">…</span></div>
+      <div class="status-row"><span class="label">Microphone Permission</span><span class="value v-pending" id="st-mic-perm">…</span></div>
+      <div class="status-row"><span class="label">Siri Native Integration</span><span class="value v-info" id="st-siri-native">FUTURE_NATIVE_COMPANION</span></div>
+      <div class="status-row"><span class="label">Apple Intelligence Route</span><span class="value v-info" id="st-apple-intel">APP_INTENTS_FUTURE</span></div>
+    </div>
+    <p class="engine-meta">Comandos permitidos, comandos bloqueados por política e a rota nativa futura (App Intents / Siri Shortcuts) em <code>docs/SIRIFORM_VOICE_AND_NATIVE_COMPANION_ROUTE.md</code>.</p>
+  </section>
+
+  <section class="card runtime-status-panel" id="status-panel">
+    <h2>Safari Local Runtime Status</h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">PWA HTTPS</span><span class="value v-pending" id="st-pwa">…</span></div>
+      <div class="status-row"><span class="label">Service Worker</span><span class="value v-pending" id="st-sw">…</span></div>
+      <div class="status-row"><span class="label">Cache API</span><span class="value v-pending" id="st-cache">…</span></div>
+      <div class="status-row"><span class="label">Web Crypto</span><span class="value v-pending" id="st-webcrypto">…</span></div>
+      <div class="status-row"><span class="label">Workers</span><span class="value v-pending" id="st-workers">…</span></div>
+      <div class="status-row"><span class="label">Mode</span><span class="value v-info" id="st-mode">IPAD DIRECT / LOCAL-FIRST / READ_ONLY / FAIL_CLOSED</span></div>
+    </div>
+  </section>
+
+  <section class="card" id="feature-detect-panel">
+    <h2>Feature Detection</h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">IndexedDB</span><span class="value v-pending" id="st-idb">…</span></div>
+      <div class="status-row"><span class="label">OPFS</span><span class="value v-pending" id="st-opfs">…</span></div>
+      <div class="status-row"><span class="label">WebGPU</span><span class="value v-pending" id="st-webgpu">…</span></div>
+      <div class="status-row"><span class="label">WebGL/Canvas</span><span class="value v-pending" id="st-webgl">…</span></div>
+    </div>
+  </section>
+
+  <section class="card quant-engine-widget" id="quant-engine-panel">
+    <h2>WASM Quant Engine</h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">WASM</span><span class="value v-pending" id="st-wasm">…</span></div>
+    </div>
+    <p class="engine-meta" id="engine-meta">Motor ainda não inicializado neste boot.</p>
+  </section>
+
+  <section class="card" id="ai-models-panel">
+    <h2>Meta Llama / WebLLM <span class="future-badge">FUTURE</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Meta Llama Layer</span><span class="value v-pending" id="st-llama-layer">…</span></div>
+      <div class="status-row"><span class="label">Llama Profile</span><span class="value v-info" id="st-llama-profile">BALANCED</span></div>
+      <div class="status-row"><span class="label">Llama Runtime</span><span class="value v-pending" id="st-llama-runtime">…</span></div>
+      <div class="status-row"><span class="label">WebGPU Acceleration</span><span class="value v-pending" id="st-llama-webgpu">…</span></div>
+      <div class="status-row"><span class="label">WebLLM/Llama</span><span class="value v-pending" id="st-webllm">…</span></div>
+      <div class="status-row"><span class="label">Transformers</span><span class="value v-pending" id="st-transformers">…</span></div>
+      <div class="status-row"><span class="label">ONNX</span><span class="value v-pending" id="st-onnx">…</span></div>
+      <div class="status-row"><span class="label">Local LLM Adapter — Camada Ativa</span><span class="value v-pending" id="st-llm-adapter-tier">…</span></div>
+    </div>
+    <p class="engine-meta">Roadmap declarado em <code>pack/manifest.models.json</code> e <code>docs/META_LLAMA_WEBLLM_ROUTE.md</code> — nenhum modelo embutido nesta versão, nenhum "fake installed". Meta Llama nunca executa ordens; só explica, resume e interpreta comandos em texto/voz dentro do READ_ONLY / FAIL_CLOSED. "Camada Ativa" é resolvida em tempo real por <code>js/intelligence/local-llm-adapter.js</code> a partir do fallback_chain declarado — hoje sempre <code>FALLBACK_TEXT_ONLY</code> porque nenhum fluxo de download de modelo existe ainda, então as respostas vêm das frases pré-definidas do Siriform.</p>
+  </section>
+
+  <section class="card replay-wrap" id="replay-section">
+    <h2>Replay BTC/USDT <span class="step">simulacao local — sem ordens</span></h2>
+    <p class="diagnostic-note">⚠ Modo de Diagnóstico Técnico: dados sintéticos offline — prova o WASM, o worker, o storage e o engine de replay. <b>Não usar para decisão de mercado, sinal de trade ou recomendação.</b></p>
+    <canvas id="replay-canvas"></canvas>
+    <div class="replay-meta" id="replay-meta">
+      <span>Toque em "Rodar Replay BTC/USDT" para iniciar.</span>
+    </div>
+    <div class="status-row" style="margin-top:10px; border:none; flex-direction:column; align-items:stretch; gap:6px;">
+      <span class="label">Perfil de processamento</span>
+      <div class="profile-toggle" id="profile-toggle" role="group" aria-label="Perfil de processamento">
+        <button type="button" class="profile-btn" id="profile-light" data-profile="light">Light</button>
+        <button type="button" class="profile-btn active" id="profile-balanced" data-profile="balanced">Balanced</button>
+        <button type="button" class="profile-btn" id="profile-heavy" data-profile="heavy">Heavy</button>
+      </div>
+      <span class="profile-hint" id="profile-hint">Balanced: janela SMA/EMA=20, resolução total do replay.</span>
+    </div>
+  </section>
+
+  <section class="card" id="analysis-frame-panel">
+    <h2>AnalysisFrame <span class="step">leitura descritiva — não é recomendação</span></h2>
+    <div class="analysis-frame-grid" id="analysis-frame-grid">
+      <span class="analysis-frame-empty">Rode o Replay BTC/USDT para preencher o AnalysisFrame.</span>
+    </div>
+    <p class="diagnostic-note">Estatística descritiva sobre o dataset sintético de diagnóstico. Para decisão de mercado real seria necessária fonte pública/somente-leitura com símbolo, timeframe, timestamp e frescor — enquanto não houver, o estado honesto é <b>DADOS INSUFICIENTES</b>.</p>
+  </section>
+
+  <section class="card real-data-layer-panel" id="real-data-layer-panel">
+    <h2>Real Data Layer <span class="future-badge">conectores publicos, sem chave</span> <span class="readonly-badge">READ_ONLY_SOURCE</span></h2>
+    <p class="onboarding-hint">Nenhum conector começa como <b>ACTIVE_READ_ONLY</b> por suposição. Todo conector nasce <b>PLANNED</b> nesta sessão e só muda de estado depois que a sonda real (fetch de verdade ou leitura de arquivo local de verdade) responder. O estado abaixo é sempre o último resultado real observado nesta sessão, nunca um valor decorativo.</p>
+    <div class="status-grid" id="rdl-connector-grid">
+        <span class="analysis-frame-empty">Toque em "Testar fontes reais" para sondar os conectores.</span>
+    </div>
+    <p class="engine-meta" id="rdl-active-source">Fonte ativa: nenhuma nesta sessão ainda.</p>
+    <p class="diagnostic-note" id="rdl-connector-session-note" hidden></p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-test-real-sources"><span class="icon">📡</span> Testar fontes reais</button>
+        <button class="rt-btn" id="btn-refresh-real-data"><span class="icon">⟲</span> Atualizar dados reais</button>
+        <button class="rt-btn" id="btn-import-real-csv"><span class="icon">⇪</span> Importar CSV/JSON local</button>
+    </div>
+    <input type="file" id="real-data-import-input" class="hidden-input" accept=".csv,.json,application/json,text/csv">
+    <p class="onboarding-hint">Streaming público (WebSocket, MEXC, sem chave): conector separado, somente leitura, mostra o preço do último negócio em tempo real. Nunca se torna a fonte ativa do AnalysisFrame/Research Engine — só os conectores com candles reais acima podem ser essa fonte.</p>
+    <p class="engine-meta" id="rdl-ws-ticker">Streaming WS: ainda não testado nesta sessão.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-test-ws-stream"><span class="icon">📶</span> Testar streaming WS público</button>
+    </div>
+  </section>
+
+  <section class="card source-health-panel" id="source-health-panel" tabindex="0">
+    <h2>Source Health <span class="step">roadmap + estado real combinados</span></h2>
+    <p class="engine-meta" id="sh-active-count">Fontes ACTIVE_READ_ONLY nesta sessão: —</p>
+    <p class="vault-meta" id="sh-total-count">Total de fontes no roadmap: —</p>
+    <div class="status-grid" id="sh-grid">
+        <span class="analysis-frame-empty">Abra o Modo avançado ou teste fontes reais para popular o Source Health.</span>
+    </div>
+  </section>
+
+  <section class="card" id="real-analysis-frame-panel">
+    <h2>Real AnalysisFrame <span class="step">leitura sobre candle real — não é recomendação</span></h2>
+    <div class="analysis-frame-grid" id="real-analysis-frame-grid">
+        <span class="analysis-frame-empty">Sem fonte ACTIVE_READ_ONLY nesta sessão ainda. Teste uma fonte real primeiro.</span>
+    </div>
+    <p class="diagnostic-note" id="real-analysis-frame-session-note" hidden></p>
+    <p class="diagnostic-note" id="real-analysis-frame-note">DADOS INSUFICIENTES enquanto nenhuma fonte real estiver ACTIVE_READ_ONLY com candles suficientes.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-generate-real-analysis"><span class="icon">∑</span> Gerar AnalysisFrame real</button>
+    </div>
+  </section>
+
+  <section class="card vault-evidence-card" id="real-evidence-panel">
+    <h2>Evidence <span class="step">objeto evidence-first — nunca inventado</span></h2>
+    <div class="status-grid" id="re-evidence-grid">
+        <span class="analysis-frame-empty">Nenhuma evidência real ainda nesta sessão.</span>
+    </div>
+    <p class="vault-meta" id="re-missing-fields">Campos ausentes: —</p>
+    <p class="diagnostic-note" id="re-session-note" hidden></p>
+    <div id="re-evidence-hash"></div>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-show-evidence"><span class="icon">▦</span> Ver fonte/evidência</button>
+        <button class="rt-btn" id="btn-show-missing-fields"><span class="icon">▣</span> Ver campos ausentes</button>
+    </div>
+  </section>
+
+  <section class="card research-engine-panel" id="research-engine-panel">
+    <h2>Research Engine <span class="stub-badge">ROTA A / B / C sempre presentes</span></h2>
+    <p class="onboarding-hint">As três rotas abaixo são sempre mostradas, nunca só a rota "favorita" do momento. Confiança é sempre <b>LOW/MEDIUM/HIGH</b> qualitativo — nunca uma probabilidade estatística. <b>Nenhuma rota aqui executa, envia ou simula ordem.</b></p>
+    <p class="diagnostic-note" id="research-engine-session-note" hidden></p>
+    <p class="onboarding-hint">Data Sufficiency e Matriz de Dados desta sessão aparecem na primeira tela, no card "Matriz de Dados" da Analytics Row (antes do Cyborg Readiness) — mesmo dado, sem duplicar lógica.</p>
+    <div class="route-block route-long" id="route-a-long">
+        <h3>ROTA A — LONG</h3>
+        <div class="status-grid" id="route-a-long-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+    <div class="route-block route-short" id="route-b-short">
+        <h3>ROTA B — SHORT</h3>
+        <div class="status-grid" id="route-b-short-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+    <div class="route-block route-wait" id="route-c-wait">
+        <h3>ROTA C — WAIT / NO TRADE</h3>
+        <div class="status-grid" id="route-c-wait-grid"><span class="analysis-frame-empty">DADOS INSUFICIENTES.</span></div>
+    </div>
+    <p class="diagnostic-note">Target 2 / Extended target ficam DADOS_INSUFICIENTES de propósito — nenhum motor de extensão técnica está implementado nesta fase. Funding/OI/liquidação/long-short ratio dependem da fonte ativa: NÃO_APLICÁVEL para instrumento spot, DADOS_INSUFICIENTES quando a fonte é futures mas o campo ainda não foi confirmado por sonda real. Ver a matriz "Dados usados nesta leitura" acima para o detalhamento campo a campo e o Data Sufficiency Score.</p>
+  </section>
+
+  <section class="card siriform-explanation-panel" id="siriform-explanation-panel">
+    <h2>Siriform — Explicação dos Dados Reais</h2>
+    <p class="df-body" id="rdl-explanation-text">Toque em "Explicar dados reais" para o Siriform descrever, em português, qual fonte foi usada, se foi validada, se houve bloqueio de CORS, quais campos são reais e quais estão ausentes.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-explain-real-data"><span class="icon">◈</span> Explicar dados reais</button>
+        <button class="rt-btn" id="btn-rehydrate-session"><span class="icon">↺</span> Reidratar sessão</button>
+        <button class="rt-btn" id="btn-export-evidence-ledger"><span class="icon">▤</span> Exportar Evidence Ledger</button>
+    </div>
+  </section>
+
+  <section class="card memory-alive-panel" id="memory-alive-panel" tabindex="0">
+    <h2>Memória Viva <span class="step">o sistema lembra por conta própria</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Event Log (memória persistida)</span><span class="value v-pending" id="mv-event-log-count">…</span></div>
+      <div class="status-row"><span class="label">Snapshot atual</span><span class="value v-pending" id="mv-snapshot-status">…</span></div>
+      <div class="status-row"><span class="label">Last Good State</span><span class="value v-pending" id="mv-last-good-status">…</span></div>
+      <div class="status-row"><span class="label">Recovery Report</span><span class="value v-pending" id="mv-recovery-status">…</span></div>
+      <div class="status-row"><span class="label">Hydration Report</span><span class="value v-pending" id="mv-hydration-status">…</span></div>
+    </div>
+    <p class="onboarding-hint">Você nunca precisa salvar manualmente o "estado" deste sistema. Todo evento real (sondagem de fonte, análise, decisão do Risk Gate) já é gravado automaticamente em IndexedDB; um snapshot é tirado a cada boot e promovido a "Last Good State" quando íntegro.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-mv-snapshot"><span class="icon">⛁</span> Tirar snapshot agora</button>
+    </div>
+  </section>
+
+  <section class="card data-policy-panel" id="data-policy-panel">
+    <h2>Política de Dados de Mercado</h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Replay (diagnóstico)</span><span class="value v-info" id="dp-diagnostic">SINTÉTICO / OFFLINE</span></div>
+      <div class="status-row"><span class="label">Modo de dados reais</span><span class="value v-pending" id="dp-realmode">…</span></div>
+      <div class="status-row"><span class="label">Análise de mercado real</span><span class="value v-pending" id="dp-analysis">…</span></div>
+      <div class="status-row"><span class="label">Dados públicos read-only</span><span class="value v-info" id="dp-public">PERMITIDO</span></div>
+      <div class="status-row"><span class="label">Dados financeiros privados</span><span class="value v-fail" id="dp-private">BLOQUEADO</span></div>
+      <div class="status-row"><span class="label">Acesso a conta privada</span><span class="value v-fail" id="dp-account">BLOQUEADO</span></div>
+      <div class="status-row"><span class="label">Execução real</span><span class="value v-fail" id="dp-exec">DISABLED_BY_POLICY</span></div>
+    </div>
+    <p class="engine-meta">Fontes públicas/somente-leitura permitidas (quando conectadas em fase futura): MEXC público, MEXC futuros público, Binance público, CoinGecko, CoinGlass, Yahoo/Google Finance (referência), CSV/JSON público, metadados públicos. Nunca endpoint privado, nunca chave de API, nunca execução. Detalhe em <code>docs/REAL_DATA_POLICY.md</code> e <code>configs/market-data-policy.json</code>.</p>
+  </section>
+
+  <section class="card evaluations-panel" id="evaluations-panel">
+    <h2>Evaluations <span class="future-badge">equivalente local do framework Apple (WWDC26)</span></h2>
+    <p class="onboarding-hint">Não existe LLM embutido nesta versão — isto não é avaliação de modelo. É um auto-teste real do que este runtime já faz: roteamento de comando de voz/texto, postura de segurança (CSP, política de dados, Vault FAIL_CLOSED) e vocabulário de estado do Siriform. Cada linha abaixo chama código vivo do app nesta sessão.</p>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Roteamento de comando</span><span class="value v-pending" id="ev-command-routing">…</span></div>
+      <div class="status-row"><span class="label">Postura de segurança</span><span class="value v-pending" id="ev-security-posture">…</span></div>
+      <div class="status-row"><span class="label">Política DADOS INSUFICIENTES</span><span class="value v-pending" id="ev-data-policy">…</span></div>
+      <div class="status-row"><span class="label">Vault READ_ONLY / FAIL_CLOSED</span><span class="value v-pending" id="ev-fail-closed">…</span></div>
+      <div class="status-row"><span class="label">Estados do Siriform</span><span class="value v-pending" id="ev-siriform-states">…</span></div>
+    </div>
+    <p class="engine-meta" id="ev-summary">Ainda não executado nesta sessão. Toque em "Rodar Evaluations" em Manutenção/Técnico, ou diga "rodar evaluations".</p>
+  </section>
+
+  <section class="card local-intelligence-panel" id="local-intelligence-panel" tabindex="0">
+    <h2>AR10 Local Intelligence Engine <span class="future-badge">sem API paga, 100% local</span></h2>
+    <p class="onboarding-hint">Matemática, memória e regras locais sobre dados que este runtime já mediu nesta sessão (CalculationFrame real ou replay sintético) — nunca um sinal, nunca uma ordem. SetupScore e Reflection Report ficam gravados no Evidence Ledger; Live Trading continua <code>LIVE_LOCKED</code> e qualquer ordem (mesmo Paper) continua passando pelo Risk Gate.</p>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Leitura (SetupScore)</span><span class="value v-pending" id="li-final-label">…</span></div>
+      <div class="status-row"><span class="label">Confiança descritiva</span><span class="value v-pending" id="li-confidence">…</span></div>
+      <div class="status-row"><span class="label">Qualidade de fonte</span><span class="value v-pending" id="li-source-quality">…</span></div>
+      <div class="status-row"><span class="label">Volatilidade</span><span class="value v-pending" id="li-volatility">…</span></div>
+      <div class="status-row"><span class="label">Tendência</span><span class="value v-pending" id="li-trend">…</span></div>
+      <div class="status-row"><span class="label">Risco descritivo</span><span class="value v-pending" id="li-risk">…</span></div>
+      <div class="status-row"><span class="label">Fonte de dados</span><span class="value v-pending" id="li-data-mode">…</span></div>
+    </div>
+    <p class="engine-meta" id="li-explanation">Ainda não executado nesta sessão. Toque em "Rodar Local Intelligence".</p>
+    <p class="engine-meta" id="li-reflection-text">Nenhum Reflection Report gerado ainda nesta sessão.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-li-run"><span class="icon">🧠</span> Rodar Local Intelligence</button>
+        <button class="rt-btn" id="btn-li-reflect"><span class="icon">📝</span> Gerar Reflection Report</button>
+    </div>
+  </section>
+
+  <section class="card decision-frame-panel" id="decision-frame-panel">
+    <h2>DecisionFrame <span class="stub-badge">🔒 STUB CONTROLLED</span></h2>
+    <p class="df-body">
+      Este card é um placeholder transparente. <b>Nenhuma lógica de decisão,
+      sinal de ordem ou execução existe neste runtime.</b> Sem chave de API,
+      sem segredo, sem endpoint privado de corretora e sem rota de rede para
+      nenhuma exchange existe no código (ver Content-Security-Policy). Por lei
+      interna do AR10 Cyborg 1.0 PRO, qualquer decisão de execução exigiria um
+      Risk Gate dedicado a execução real e supervisão humana explícita —
+      nenhum dos dois está implementado ou habilitado aqui; o Risk Gate que
+      existe hoje (ver card "Risk Gate") só governa Paper Trading simulado,
+      nunca ordem real. Este card existe apenas para deixar explícita a
+      fronteira entre "ler estatística" (AnalysisFrame, real) e
+      "decidir/executar" (DecisionFrame, bloqueado por design).
+    </p>
+  </section>
+
+  <section class="card risk-gate-panel" id="risk-gate-panel" tabindex="0">
+    <h2>Risk Gate <span class="step">NO_STOP_NO_TRADE</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Kill Switch</span><span class="value v-pending" id="rg-kill-switch">…</span></div>
+      <div class="status-row"><span class="label">Drawdown máximo</span><span class="value v-pending" id="rg-max-drawdown">…</span></div>
+      <div class="status-row"><span class="label">Tamanho máximo de posição</span><span class="value v-pending" id="rg-max-position">…</span></div>
+      <div class="status-row"><span class="label">Exige Stop Loss</span><span class="value v-pending" id="rg-require-stop">…</span></div>
+      <div class="status-row"><span class="label">Qualidade mínima de fonte</span><span class="value v-pending" id="rg-min-quality">…</span></div>
+    </div>
+    <p class="onboarding-hint">O Risk Gate bloqueia qualquer ordem — mesmo em Paper Trading — sem stop loss, com drawdown acima do limite, com fonte de dados abaixo da qualidade mínima exigida, ou enquanto o Kill Switch estiver ativado. Nenhuma ordem real é enviada por este runtime — ver Live Status abaixo.</p>
+    <div class="btn-grid">
+        <button class="rt-btn danger" id="btn-rg-engage"><span class="icon">⛔</span> Acionar Kill Switch</button>
+        <button class="rt-btn success" id="btn-rg-disengage"><span class="icon">▶</span> Desacionar Kill Switch</button>
+    </div>
+  </section>
+
+  <section class="card paper-trading-panel" id="paper-trading-panel" tabindex="0">
+    <h2>Paper Trading <span class="future-badge">simulado — sem dinheiro real</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Modo</span><span class="value v-info" id="pt-mode">PAPER</span></div>
+      <div class="status-row"><span class="label">Posições abertas</span><span class="value v-pending" id="pt-open-positions">…</span></div>
+      <div class="status-row"><span class="label">Trades fechados</span><span class="value v-pending" id="pt-closed-trades">…</span></div>
+      <div class="status-row"><span class="label">PnL realizado</span><span class="value v-pending" id="pt-realized-pnl">…</span></div>
+      <div class="status-row"><span class="label">Drawdown atual</span><span class="value v-pending" id="pt-drawdown">…</span></div>
+    </div>
+    <div class="status-grid" id="pt-positions-grid">
+        <span class="analysis-frame-empty">Nenhuma posição de papel aberta nesta sessão.</span>
+    </div>
+    <p class="onboarding-hint">Paper Trading usa o último preço real (<code>evidence.ticker.last_price</code>) de uma fonte ACTIVE_READ_ONLY como preço de entrada — nunca um preço inventado. Tamanho e stop loss usam um padrão fixo conservador (até 50 quote, stop a 2% da entrada) e passam pelo Risk Gate antes de abrir.</p>
+    <p class="diagnostic-note" id="pt-block-note" hidden></p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-pt-open"><span class="icon">＋</span> Abrir posição de papel (LONG)</button>
+        <button class="rt-btn danger" id="btn-pt-clear"><span class="icon">⟲</span> Limpar ledger de papel</button>
+    </div>
+  </section>
+
+  <section class="card live-status-panel" id="live-status-panel" tabindex="0">
+    <h2>Live Status <span class="stub-badge">LIVE_LOCKED</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Modo</span><span class="value v-info" id="ls-mode">LIVE</span></div>
+      <div class="status-row"><span class="label">Status</span><span class="value v-fail" id="ls-status">LIVE_LOCKED</span></div>
+    </div>
+    <p class="diagnostic-note" id="ls-reasons">—</p>
+    <p class="vault-meta" id="ls-unlock-requires">—</p>
+  </section>
+
+  <section class="card telegram-aux-panel" id="telegram-aux-panel" tabindex="0">
+    <h2>Telegram AUX / Quarantine <span class="future-badge">PLANNED_AUX</span></h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Telegram Layer</span><span class="value v-pending" id="ta-telegram-layer">…</span></div>
+      <div class="status-row"><span class="label">Bot Token</span><span class="value v-pending" id="ta-bot-token">…</span></div>
+      <div class="status-row"><span class="label">Webhook</span><span class="value v-pending" id="ta-webhook">…</span></div>
+      <div class="status-row"><span class="label">Live Execution</span><span class="value v-pending" id="ta-live-execution">…</span></div>
+      <div class="status-row"><span class="label">Signal Quarantine</span><span class="value v-pending" id="ta-signal-quarantine">…</span></div>
+      <div class="status-row"><span class="label">Source Trust</span><span class="value v-pending" id="ta-source-trust">…</span></div>
+      <div class="status-row"><span class="label">Allowed Commands</span><span class="value v-pending" id="ta-allowed-commands">…</span></div>
+      <div class="status-row"><span class="label">Risk Gate</span><span class="value v-pending" id="ta-risk-gate">…</span></div>
+      <div class="status-row"><span class="label">Event Ledger</span><span class="value v-pending" id="ta-event-ledger">…</span></div>
+      <div class="status-row"><span class="label">Is Authoritative</span><span class="value v-pending" id="ta-is-authoritative">…</span></div>
+    </div>
+    <p class="onboarding-hint">Telegram nesta versão é só um canal auxiliar de notificação planejado — nunca executa ordem, nunca manda comando, nunca vira fonte de verdade. Qualquer sinal futuro entraria em quarentena, seria rejeitado automaticamente sem stop loss, e precisaria de validação do Soldier e do Risk Gate antes de qualquer uso. Sem token, sem webhook, sem rede nesta fase (toque no card para o resumo completo).</p>
+  </section>
+
+  <section class="card vault-evidence-card" id="vault-evidence-panel">
+    <h2>Vault / Evidence</h2>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Vault</span><span class="value v-pending" id="st-vault">…</span></div>
+      <div class="status-row"><span class="label">Replay BTC/USDT</span><span class="value v-pending" id="st-replay">…</span></div>
+    </div>
+    <p class="vault-meta" id="vault-meta">Sem pacote instalado nesta sessão ainda.</p>
+    <div id="vault-hashes"></div>
+  </section>
+
+  <section class="card vault-local-panel" id="vault-local-panel">
+    <h2>Vault Local do iPad</h2>
+    <p class="onboarding-hint">O Cyborg salva automaticamente os arquivos necessários no armazenamento seguro do Safari/PWA. Você não precisa procurar uma pasta raiz. Esta área mostra o que está instalado, validado e pronto para uso neste iPad.</p>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Local Pack</span><span class="value v-pending" id="vl-pack">…</span></div>
+      <div class="status-row"><span class="label">Nome do pacote instalado</span><span class="value v-pending" id="vl-pack-name">…</span></div>
+      <div class="status-row"><span class="label">Versão do pacote</span><span class="value v-pending" id="vl-pack-version">…</span></div>
+      <div class="status-row"><span class="label">Verificação SHA256</span><span class="value v-pending" id="vl-sha256">…</span></div>
+      <div class="status-row"><span class="label">Cache do Service Worker</span><span class="value v-pending" id="vl-sw-cache">…</span></div>
+      <div class="status-row"><span class="label">Cache API</span><span class="value v-pending" id="vl-cache-api">…</span></div>
+      <div class="status-row"><span class="label">IndexedDB</span><span class="value v-pending" id="vl-idb">…</span></div>
+      <div class="status-row"><span class="label">OPFS</span><span class="value v-pending" id="vl-opfs">…</span></div>
+      <div class="status-row"><span class="label">Arquivo WASM</span><span class="value v-pending" id="vl-wasm">…</span></div>
+      <div class="status-row"><span class="label">Dataset de Replay</span><span class="value v-pending" id="vl-replay">…</span></div>
+      <div class="status-row"><span class="label">Última atualização</span><span class="value v-pending" id="vl-updated">…</span></div>
+      <div class="status-row"><span class="label">Versão do cache</span><span class="value v-pending" id="vl-cache-version">…</span></div>
+      <div class="status-row"><span class="label">Armazenamento usado</span><span class="value v-pending" id="vl-storage-used">…</span></div>
+      <div class="status-row"><span class="label">Cota disponível</span><span class="value v-pending" id="vl-storage-quota">…</span></div>
+      <div class="status-row"><span class="label">READ_ONLY / FAIL_CLOSED</span><span class="value v-pending" id="vl-safety">…</span></div>
+      <div class="status-row"><span class="label">Reparo/Reinstalação</span><span class="value v-pending" id="vl-repair">…</span></div>
+    </div>
+    <p class="engine-meta">Tudo aqui é recalculado a partir do estado real do armazenamento local — nenhum valor é assumido ou decorativo. No dia a dia, use o botão principal "Preparar / Atualizar Cyborg neste iPad" na tela inicial; os botões manuais em "Manutenção / Técnico" abaixo são só para casos avançados.</p>
+  </section>
+
+  <section class="card hydration-engine-panel" id="hydration-engine-panel" tabindex="0">
+    <h2>Hydration Engine <span class="step">armazenamento progressivo</span></h2>
+    <p class="onboarding-hint">Em vez de baixar tudo de uma vez, o Cyborg hidrata o iPad em pacotes pequenos, validando cada um por SHA-256 antes de guardar — como beber água pouco a pouco. Se faltar espaço ou a conexão cair, retoma exatamente de onde parou.</p>
+    <div class="he-hero">
+      <div class="he-ring" id="he-ring" data-engine-state="IDLE">
+        <div class="he-ring-core">
+          <span class="he-ring-pct" id="he-progress-pct">0%</span>
+          <span class="he-ring-caption">hidratado</span>
+        </div>
+      </div>
+      <div class="he-hero-rows">
+        <div class="status-row he-hero-row"><span class="label">Status da hidratação</span><span class="value v-pending" id="he-status">…</span></div>
+        <div class="status-row he-hero-row"><span class="label">Pacote atual</span><span class="value v-pending" id="he-current-package">…</span></div>
+        <div class="he-hero-trio">
+          <div class="status-row"><span class="label">Concluídos</span><span class="value v-pending" id="he-completed">…</span></div>
+          <div class="status-row"><span class="label">Pendentes</span><span class="value v-pending" id="he-pending">…</span></div>
+          <div class="status-row"><span class="label">Falhas</span><span class="value v-pending" id="he-failed">…</span></div>
+        </div>
+      </div>
+    </div>
+    <details class="he-details">
+      <summary>Detalhes técnicos</summary>
+      <div class="status-grid he-details-grid">
+        <div class="status-row"><span class="label">Sessão</span><span class="value v-pending" id="he-session">…</span></div>
+        <div class="status-row"><span class="label">Bytes hidratados</span><span class="value v-pending" id="he-bytes">…</span></div>
+        <div class="status-row"><span class="label">Último checkpoint</span><span class="value v-pending" id="he-checkpoint">…</span></div>
+        <div class="status-row"><span class="label">Cota de armazenamento</span><span class="value v-pending" id="he-quota">…</span></div>
+        <div class="status-row"><span class="label">Retomada disponível</span><span class="value v-pending" id="he-resumable">…</span></div>
+        <div class="status-row"><span class="label">Modo offline disponível</span><span class="value v-pending" id="he-offline-available">…</span></div>
+        <div class="status-row"><span class="label">FAIL_CLOSED</span><span class="value v-pending" id="he-fail-closed">…</span></div>
+        <div class="status-row"><span class="label">Último erro</span><span class="value v-pending" id="he-last-error">…</span></div>
+      </div>
+    </details>
+    <p class="engine-meta">Prioridade 1-2 (app shell, WASM, replay) entra primeiro; prioridade 3-4 (memória/extras) só depois, e fica PARTIAL se faltar espaço — o app nunca quebra por isso.</p>
+    <div class="btn-grid">
+        <button class="rt-btn primary" id="btn-he-start"><span class="icon">⛁</span> Iniciar/Retomar hidratação</button>
+        <button class="rt-btn" id="btn-he-pause"><span class="icon">⏸</span> Pausar</button>
+        <button class="rt-btn" id="btn-he-verify"><span class="icon">✓</span> Verificar integridade</button>
+        <button class="rt-btn" id="btn-he-repair"><span class="icon">⚙</span> Reparar</button>
+        <button class="rt-btn" id="btn-he-export"><span class="icon">▤</span> Exportar relatório</button>
+    </div>
+  </section>
+
+  <section class="card metrics-panel" id="metrics-panel">
+    <h2>Métricas <span class="future-badge">equivalente leve do Instruments (WWDC26)</span></h2>
+    <p class="onboarding-hint">Não existe processo nativo para "perfilar" este runtime — então este painel lê, no próprio navegador, sinais que um profiler nativo mostraria. Tudo aqui é leitura de fatos já ocorridos nesta sessão; nada é estimado, e nada sai do dispositivo.</p>
+    <div class="status-grid">
+      <div class="status-row"><span class="label">Tempo de carregamento</span><span class="value v-pending" id="mx-load-time">…</span></div>
+      <div class="status-row"><span class="label">Última duração: Preparar Cyborg</span><span class="value v-pending" id="mx-prep-time">…</span></div>
+      <div class="status-row"><span class="label">Cache do Service Worker</span><span class="value v-pending" id="mx-cache">…</span></div>
+      <div class="status-row"><span class="label">Armazenamento (uso / cota)</span><span class="value v-pending" id="mx-storage">…</span></div>
+      <div class="status-row"><span class="label">Eventos do Siriform nesta sessão</span><span class="value v-pending" id="mx-siriform-events">…</span></div>
+      <div class="status-row"><span class="label">Falhas no último Diagnóstico</span><span class="value v-pending" id="mx-diag-fails">…</span></div>
+      <div class="status-row"><span class="label">Falhas no último Evaluations</span><span class="value v-pending" id="mx-eval-fails">…</span></div>
+      <div class="status-row"><span class="label">Reduced Motion (acessibilidade)</span><span class="value v-pending" id="mx-reduced-motion">…</span></div>
+    </div>
+    <p class="engine-meta">Atualizado sempre que o Modo avançado é aberto. Sem fetch, sem envio de telemetria a terceiros — só leitura local.</p>
+  </section>
+
+  <section class="card local-pack-manager" id="runtime-actions">
+    <h2>Manutenção / Técnico</h2>
+    <p class="onboarding-hint">Estas ações são manuais e avançadas. No dia a dia, use só o botão principal <b>"Preparar / Atualizar Cyborg neste iPad"</b> na tela inicial — ele já baixa, verifica, instala e repara sozinho.</p>
+    <div class="btn-grid">
+      <button class="rt-btn" id="btn-check-safari"><span class="icon">◎</span> Verificar Safari</button>
+      <button class="rt-btn" id="btn-check-install"><span class="icon">◍</span> Verificar instalação local</button>
+      <button class="rt-btn" id="btn-download-pack"><span class="icon">⇩</span> Baixar pacote para backup</button>
+      <button class="rt-btn" id="btn-import-pack"><span class="icon">⇪</span> Importar pacote manual</button>
+      <button class="rt-btn" id="btn-verify-sha"><span class="icon">✓</span> Verificar SHA256 manual</button>
+      <button class="rt-btn success" id="btn-install-storage"><span class="icon">⬢</span> Instalar no Safari Storage</button>
+      <button class="rt-btn" id="btn-run-diagnostics"><span class="icon">▣</span> Rodar Diagnóstico Técnico Offline</button>
+      <button class="rt-btn" id="btn-run-replay"><span class="icon">▶</span> Rodar Replay Técnico Offline</button>
+      <button class="rt-btn" id="btn-run-evaluations"><span class="icon">📡</span> Rodar Evaluations (auto-teste local)</button>
+      <button class="rt-btn" id="btn-repair-install"><span class="icon">⚙</span> Reparar instalação</button>
+      <button class="rt-btn danger" id="btn-clear-reinstall"><span class="icon">⟲</span> Limpar/Reinstalar</button>
+      <button class="rt-btn primary" id="btn-add-home"><span class="icon">＋</span> Adicionar à Tela de Início</button>
+    </div>
+    <input type="file" id="import-input" class="hidden-input" accept=".ar10pack,application/json">
+  </section>
+
+  <section class="card export-panel" id="export-panel">
+    <h2>Arquivos Exportados</h2>
+    <p class="onboarding-hint">Os arquivos internos do app são salvos automaticamente no armazenamento seguro do Safari/PWA — você não gerencia pastas. Quando você <b>exporta</b> algo para o app Arquivos, cada artefato recebe um nome único com data/hora (<code>AR10_CYBORG_TIPO_VERSAO_AAAAMMDD_HHMMSS.ext</code>), então o Safari nunca pede para "substituir" e dois artefatos diferentes nunca colidem.</p>
+    <div class="btn-grid">
+      <button class="rt-btn" id="btn-export-report"><span class="icon">▤</span> Exportar Relatório (.md)</button>
+      <button class="rt-btn" id="btn-export-evidence"><span class="icon">▦</span> Exportar Evidência (.json)</button>
+    </div>
+    <div class="export-list" id="export-list"></div>
+    <p class="engine-meta">Nenhum arquivo exportado contém segredo, chave de API, credencial de corretora ou dado de conta real — só estado de diagnóstico local, estatística descritiva sintética e metadados de integridade.</p>
+  </section>
+
+  <section class="card backup-recovery-panel" id="backup-recovery-panel" tabindex="0">
+    <h2>Backup / Recovery <span class="step">memória viva exportável</span></h2>
+    <p class="onboarding-hint">Gera um pacote único com Real Data Layer, Evidence Ledger, Event Log, snapshots e histórico de recovery — sem nenhum segredo, sem chave de API. Restaurar recalcula o hash e se recusa a aplicar (FAIL_CLOSED) se o pacote estiver corrompido ou adulterado.</p>
+    <p class="vault-meta" id="br-last-backup">Nenhum backup gerado nesta sessão ainda.</p>
+    <div class="btn-grid">
+        <button class="rt-btn" id="btn-br-export"><span class="icon">⇩</span> Exportar memória viva (.json)</button>
+        <button class="rt-btn" id="btn-br-import"><span class="icon">⇪</span> Restaurar memória viva</button>
+    </div>
+    <input type="file" id="br-import-input" class="hidden-input" accept=".json,application/json">
+  </section>
+
+  </section><!-- /.advanced-section -->
+
+  <section class="card telemetry-card" id="console-section">
+    <h2>Telemetria ao Vivo <span class="step">Caixa Preta do Cyborg — eventos reais</span></h2>
+    <div class="telemetry-latest ln-dim" id="telemetry-latest">Aguardando primeiro evento…</div>
+    <div class="console" id="console-log"></div>
+    <div class="activity-log-block">
+      <div class="activity-log-head">
+        <span class="label">Activity Log persistido (memória viva)</span>
+        <span class="value v-pending" id="al-count">…</span>
+        <button class="rt-btn" id="btn-al-refresh"><span class="icon">⟲</span> Atualizar</button>
+      </div>
+      <div class="activity-log-list" id="al-list"></div>
+    </div>
+  </section>
+
+  <footer class="legal">
+    AR10 Cyborg 1.0 PRO · READ_ONLY / FAIL_CLOSED · Local-first · Sem live trading · v1.0.0-pro
+  </footer>
+</div>
+
+<div class="modal-overlay" id="home-modal" hidden>
+  <div class="modal-box">
+    <h3>Adicionar à Tela de Início</h3>
+    <ol>
+      <li>Toque no botão Compartilhar <span class="share-glyph">⬆</span> na barra do Safari (ou na barra inferior no iPad).</li>
+      <li>Role a lista de acoes e toque em <b>"Adicionar à Tela de Início"</b>.</li>
+      <li>Confirme o nome <b>"Cyborg iPad"</b> e toque em <b>Adicionar</b>.</li>
+      <li>O app abre em modo standalone (sem a barra do Safari) e continua funcionando offline depois de instalado.</li>
+    </ol>
+    <p id="standalone-state" class="status-row" style="border:none;"></p>
+    <button class="rt-btn primary close-btn" id="btn-close-modal">Entendi</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="status-modal" hidden>
+  <div class="modal-box">
+    <h3 id="status-modal-title">Resumo</h3>
+    <p id="status-modal-body" class="df-body"></p>
+    <button class="rt-btn primary close-btn" id="btn-status-modal-close">Entendi</button>
+  </div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

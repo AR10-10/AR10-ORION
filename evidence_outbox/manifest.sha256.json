@@ -1,0 +1,107 @@
+{
+  "generated_for": "AR10_CYBORG_2_REAL_IPAD_HOLD_FIX_NATIVE_APP_SHELL_ONE_BUTTON_HEADER_VAULT_EXPORT_V1",
+  "continues_from": "AR10_CYBORG_2_IPAD_LANDSCAPE_VAULT_AUTOSAVE_EXPORT_AND_REAL_DATA_POLICY_FIX_V1",
+  "repo": "AR10-10/AR10-ORION",
+  "branch": "claude/eloquent-cannon-qyt86y",
+  "pull_request": "https://github.com/AR10-10/AR10-ORION/pull/3",
+  "base_dir": "ipad_runtime/",
+  "hash_algorithm": "sha256",
+  "files": {
+    "index.html": {
+      "sha256": "232a4e0cd47fba3061a2f48fe5389f2a3bca290ce15fd3c7851b167b103be97d",
+      "bytes": 22730
+    },
+    "manifest.webmanifest": {
+      "sha256": "3be72f358fcba501f54ed12695006386b5aa86fe4ec959665b12bae281ab29a6",
+      "bytes": 984
+    },
+    "service-worker.js": {
+      "sha256": "19a48d31ba0b655d55b6957ef0381352b269b48cec6750f69d7bbb4538acf771",
+      "bytes": 2225
+    },
+    "css/ipad-runtime.css": {
+      "sha256": "8b43d5fa491bda657b28f24e55c2bc54bba3194df9f4e02161485a6ed35b4210",
+      "bytes": 29431
+    },
+    "js/app.js": {
+      "sha256": "9e8688fc39338a6369d4178d43310d4ca9956423c3dd4196dba82cc2719e95ee",
+      "bytes": 47727
+    },
+    "js/siriform.js": {
+      "sha256": "02111f023248b17f4a9648ac5e139f241127cf53b9a519820901fbd002989264",
+      "bytes": 4784
+    },
+    "js/voice.js": {
+      "sha256": "4be294d21de517e2db4c5d60cb6a2f3cf8101e14a27bba198468c6d75b0e97f9",
+      "bytes": 7694
+    },
+    "js/feature-detect.js": {
+      "sha256": "54171ff018afe5e4546d968c8ea71bb0bacbb069e389c4d117df1e12a8d3f03e",
+      "bytes": 5424
+    },
+    "js/crypto-utils.js": {
+      "sha256": "4933640cbc5e414c384527ca8c6187c16f7a6fb9b4074b51706a3cd694b70795",
+      "bytes": 1326
+    },
+    "js/storage.js": {
+      "sha256": "43284e7f79362da6c017a44dd684bdbbfa393bf144938d96b22a3e560ad6556b",
+      "bytes": 7303
+    },
+    "js/worker-client.js": {
+      "sha256": "5da973a9303016914d7793c7eaa4b4faebda12702a42ba5193ca7255769a71ec",
+      "bytes": 1641
+    },
+    "js/pack-manager.js": {
+      "sha256": "f28b326d2361d63c4ed0656bdde15396c731ecddbda869dd664f28a6074af814",
+      "bytes": 13876
+    },
+    "js/replay-engine.js": {
+      "sha256": "fd5d4f3ad933dd4c70294e80712153852d68325debc40846c46ec4c64c441ee1",
+      "bytes": 3077
+    },
+    "js/diagnostics.js": {
+      "sha256": "503f39db09df4f470e8ebf3e8b31aebdbf80a28ecdb62fef42556922ba930a76",
+      "bytes": 2801
+    },
+    "js/export-manifest.js": {
+      "sha256": "c069177518794c3fa6c9879864465813449f31a52aa157f44f3f936ed1af0951",
+      "bytes": 3723
+    },
+    "js/data-policy.js": {
+      "sha256": "907ce25fd412f30d1dd83d3dadbafe6fc410e3e0f5a72cde67162e52535bdfec",
+      "bytes": 2481
+    },
+    "workers/quant-worker.js": {
+      "sha256": "eb75ffb5717b66996600abfd4c7562ca161b3b254f3d7ddc1a585315169091bb",
+      "bytes": 4043
+    },
+    "wasm/cyborg_quant_core.wasm": {
+      "sha256": "4988fb2500ed24f48d05a377768ab8e96ed6821d23bf51275489ef3fb88e2235",
+      "bytes": 3667
+    },
+    "data/btcusdt_replay.json": {
+      "sha256": "d5caad3ebbd881cff7f928fdca66f67d7405221ed74345784b4eacca629f02ee",
+      "bytes": 58284
+    },
+    "AR10_CYBORG_LOCAL_PACK_V1.ar10pack": {
+      "sha256": "41b2e567740458b48f106b7b7221949eee3b593d687af8a6ff9f03814204b37e",
+      "bytes": 87730
+    },
+    "pack/manifest.pack.json": {
+      "sha256": "3b49e0b5474f0248f57d06ec51a68e1bf58cbe93d44e75cb842debcef0defac0",
+      "bytes": 1058
+    },
+    "pack/manifest.models.json": {
+      "sha256": "0bcdb220c76ef05fa1884b27717634e82964717b5aa7b458499f2381065728a3",
+      "bytes": 4007
+    },
+    "pack/runtime_config.json": {
+      "sha256": "bbe7859d9253d701b13c43cf061dd9922e19227dc3152c2bf4fcc5e81a7e9761",
+      "bytes": 236
+    },
+    "pack/checksums.sha256": {
+      "sha256": "e570a5c62c8e3808a01fac35bb74533bf062ae1ec1993e209c6039e1ad784c20",
+      "bytes": 312
+    }
+  }
+}
