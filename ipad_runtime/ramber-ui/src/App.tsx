@@ -3927,13 +3927,20 @@ function ChartLayersPanel() {
   const isIntelligencePreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));
   const isAutomaticPreset = CHART_LAYER_IDS.every((id) => autoMode[id] === true);
 
+  // v16.0 DEFINITIVO §5.3 ("Layer Manager — UI"): dropdown compacto
+  // ancorado no ícone real que já abre este painel (SideBar, "Camadas do
+  // Gráfico") — nunca mais um modal de tela cheia. Reorganização pura da
+  // CASCA visual (overlay + container); zero campo, preset, auto-mode ou
+  // botão removido — Automático/Predefinições/toggle por camada/reset
+  // "⟲ auto"/seletor de período da EMA continuam exatamente os mesmos
+  // logo abaixo (Regra de Ouro 4). O click-catcher invisível substitui o
+  // antigo backdrop escurecido — um dropdown compacto não deve escurecer
+  // a tela inteira atrás dele, só fechar ao clicar fora.
   return (
-    <div
-      className="!fixed !inset-0 !z-[1001] bg-[#010308]/80 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={() => setChartLayersOpen?.(false)}
-    >
+    <>
+      <div className="!fixed !inset-0 !z-[1000]" onClick={() => setChartLayersOpen?.(false)} />
       <div
-        className="cyber-panel w-full max-w-md max-h-[80dvh] flex flex-col bg-[#010308]/98"
+        className="!fixed !z-[1001] left-14 md:left-16 bottom-36 w-60 max-w-[85vw] max-h-[70dvh] cyber-panel flex flex-col bg-[#010308]/98"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="cyber-header flex items-center justify-between">
@@ -4107,7 +4114,7 @@ function ChartLayersPanel() {
           })}
         </div>
       </div>
-    </div>
+    </>
   );
 }
 
