@@ -166,8 +166,12 @@ export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPlugin
           if (x === null || y === null) continue;
           const r = computeBubbleRadius(t.volume, maxVolume);
           const bullish = t.side === "BUY";
-          const fillAlpha = (0.35 * recency).toFixed(3);
-          const strokeAlpha = (0.85 * recency).toFixed(3);
+          // Pedido do Operador: camada estava "atrapalhando a visão"
+          // (hasOrderBook é quase sempre true ao vivo, então isto aparece
+          // quase o tempo todo) — coeficientes reduzidos de 0.35/0.85 para
+          // 0.22/0.55, mesmo espírito de computeCellAlpha acima.
+          const fillAlpha = (0.22 * recency).toFixed(3);
+          const strokeAlpha = (0.55 * recency).toFixed(3);
           bubbles.push({
             x, y, r,
             fill: bullish ? `rgba(0, 255, 170, ${fillAlpha})` : `rgba(255, 0, 85, ${fillAlpha})`,

@@ -39,11 +39,11 @@ function fakeCtx(): DrawableContext2D & { calls: string[] } {
 
 describe('computeCellAlpha: opacidade real proporcional ao tamanho DENTRO do frame, nunca um limiar fixo (Regra de Ouro 1)', () => {
   it('nível no máximo real observado recebe a maior opacidade da janela', () => {
-    expect(computeCellAlpha(100, 100)).toBeCloseTo(0.30, 5);
+    expect(computeCellAlpha(100, 100)).toBeCloseTo(0.16, 5);
   });
 
   it('metade do máximo real recebe opacidade proporcional real, nunca arredondada a um valor de exemplo', () => {
-    expect(computeCellAlpha(50, 100)).toBeCloseTo(0.04 + 0.5 * (0.30 - 0.04), 5);
+    expect(computeCellAlpha(50, 100)).toBeCloseTo(0.03 + 0.5 * (0.16 - 0.03), 5);
   });
 
   it('sem profundidade real (size<=0) nunca desenha — zero alpha honesto, nunca um piso fabricado', () => {
@@ -56,13 +56,13 @@ describe('computeCellAlpha: opacidade real proporcional ao tamanho DENTRO do fra
   });
 
   it('nunca ultrapassa o teto real mesmo se size > maxSize por alguma inconsistência de amostragem', () => {
-    expect(computeCellAlpha(500, 100)).toBeCloseTo(0.30, 5);
+    expect(computeCellAlpha(500, 100)).toBeCloseTo(0.16, 5);
   });
 });
 
 describe('computeBubbleRadius: raio real proporcional ao volume — trade grande real nunca fica invisível', () => {
   it('volume no máximo real observado recebe o maior raio da janela', () => {
-    expect(computeBubbleRadius(1000, 1000)).toBeCloseTo(11, 5);
+    expect(computeBubbleRadius(1000, 1000)).toBeCloseTo(9, 5);
   });
 
   it('caso degenerado (maxVolume indisponível) devolve o raio MÍNIMO visível, nunca 0 — o trade já é real', () => {

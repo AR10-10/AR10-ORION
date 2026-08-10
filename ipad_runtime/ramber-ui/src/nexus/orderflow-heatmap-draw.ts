@@ -95,7 +95,14 @@ export function drawHeatmapFrame(ctx: DrawableContext2D, frame: HeatmapFrame): v
 // exemplo só para o nível aparecer. minAlpha/maxAlpha são uma janela de
 // legibilidade (o menor nível real ainda precisa ser visível a olho nu, o
 // maior não pode ofuscar as velas por trás), não uma medição.
-export function computeCellAlpha(size: number, maxSize: number, minAlpha = 0.04, maxAlpha = 0.30): number {
+// Pedido do Operador (captura real, camada sempre visível — hasOrderBook
+// é quase sempre true em conexão ao vivo): "aquela camada de liquidez tá
+// atrapalhando a visão" — teto de opacidade reduzido de 0.30 para 0.16
+// (quase pela metade). Continua uma JANELA DE LEGIBILIDADE, nunca uma
+// medição (comentário original acima) — o nível maior real do frame
+// ainda fica visivelmente mais forte que o menor, só não domina mais o
+// candle por trás.
+export function computeCellAlpha(size: number, maxSize: number, minAlpha = 0.03, maxAlpha = 0.16): number {
   if (!(maxSize > 0) || !(size > 0)) return 0;
   const ratio = Math.min(1, size / maxSize);
   return minAlpha + ratio * (maxAlpha - minAlpha);
@@ -108,7 +115,10 @@ export function computeCellAlpha(size: number, maxSize: number, minAlpha = 0.04,
 // caso degenerado (maxVolume indisponível) devolve o raio MÍNIMO visível
 // em vez de 0: esconder um trade grande real seria descartar dado real,
 // pior do que exibi-lo pequeno demais por falta de uma escala melhor.
-export function computeBubbleRadius(volume: number, maxVolume: number, minR = 3, maxR = 11): number {
+// Mesmo pedido do Operador acima: raio máximo reduzido de 11 para 9px —
+// bolha de trade grande continua real e visível, só não domina mais a
+// leitura do candle atrás dela.
+export function computeBubbleRadius(volume: number, maxVolume: number, minR = 3, maxR = 9): number {
   if (!(maxVolume > 0) || !(volume > 0)) return minR;
   const ratio = Math.min(1, volume / maxVolume);
   return minR + ratio * (maxR - minR);
