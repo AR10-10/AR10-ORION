@@ -98,6 +98,17 @@ export interface PlanOpenContext {
   // razão de `regime` acima; nexus/scenario-fingerprint.ts usa o que
   // estiver disponível, nunca fabrica o resto.
   structureLabel?: string | null;
+  // Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
+  // leitura REAL de nexus/model-fusion.ts (Fase 2) na abertura, já
+  // orientada à direção do plano (alignFusedConfidence) — sinal -1..1,
+  // positivo = modelos (SMC/Order Flow/Regime) a favor da direção
+  // efetivamente tomada, negativo = contra. Esta é a amostra que
+  // nexus/platt-calibration.ts consome via TradeCostResult depois que o
+  // plano resolve. Opcional pela mesma razão de `regime`/`structureLabel`
+  // acima (registros antigos, ou nenhum modelo teve voto real no
+  // instante da abertura); ausência aqui nunca é fabricada como 0 —
+  // platt-calibration.ts exclui a amostra inteira quando null.
+  modelAgreement?: number | null;
 }
 
 export interface TrackedPlan {

@@ -35,10 +35,10 @@ describe('App.tsx: confidenceZone computado UMA vez sobre o mesmo institutionalS
     const app = read('../src/App.tsx');
     const memoMatch = app.match(/const contextValue = useMemo\(\s*\(\) => \(\{([\s\S]*?)\}\),/);
     expect(memoMatch).not.toBeNull();
-    expect(memoMatch![1]).toContain('institutionalScore,\n      expectancyFilter,\n      confidenceZone,');
+    expect(memoMatch![1]).toContain('institutionalScore,\n      expectancyFilter,\n      calibrationResult,\n      confidenceZone,');
     const depsMatch = app.match(/const contextValue = useMemo\([\s\S]*?\[([\s\S]*?)\],\s*\);/);
     expect(depsMatch).not.toBeNull();
-    expect(depsMatch![1]).toContain('institutionalScore,\n      expectancyFilter,\n      confidenceZone,');
+    expect(depsMatch![1]).toContain('institutionalScore,\n      expectancyFilter,\n      calibrationResult,\n      confidenceZone,');
   });
 });
 

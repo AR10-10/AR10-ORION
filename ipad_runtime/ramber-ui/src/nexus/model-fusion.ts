@@ -52,7 +52,7 @@
 // dinâmicos por performance real ficam como pendência documentada: nascem
 // quando existir uma amostra real de acerto por modelo para sustentá-los
 // — não antes.
-import type { CouncilStance, CouncilLiquidityZone, CouncilOrderflowSignal } from "./council";
+import type { CouncilStance, CouncilLiquidityZone, CouncilOrderflowSignal, CouncilVote, CouncilAgentId } from "./council";
 import { liquidityAgentVote, manipulationAgentVote, orderflowAgentVote } from "./council";
 
 export type ModelId = "SMC_LIQUIDITY" | "SMC_MANIPULATION" | "ORDERFLOW" | "REGIME";
@@ -92,6 +92,32 @@ export function smcManipulationModelVote(zones: CouncilLiquidityZone[]): ModelVo
 /** Reusa orderflowAgentVote (council.ts) — zero segunda implementação. */
 export function orderflowModelVote(cvd: number | null, signals: CouncilOrderflowSignal[]): ModelVote {
   return toModelVote("ORDERFLOW", orderflowAgentVote(cvd, signals));
+}
+
+// Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade): quando
+// quem chama já TEM a CouncilDecision do mesmo ciclo (App.tsx sempre tem —
+// councilFromSnapshot), extrair os 3 votos aqui é mais direto e honesto que
+// invocar smcLiquidityModelVote/smcManipulationModelVote/orderflowModelVote
+// de novo a partir de zonas/CVD brutos: council.ts JÁ chamou exatamente
+// esses 3 agentes para formar a MESMA CouncilDecision — recomputar seria uma
+// 2ª fonte podendo divergir por um tick entre o painel do Conselho e a
+// fusão (o Conselho já é o mesmo cálculo, só sob outro nome de campo).
+const COUNCIL_AGENT_TO_MODEL: Partial<Record<CouncilAgentId, ModelId>> = {
+  LIQUIDITY: "SMC_LIQUIDITY",
+  MANIPULATION: "SMC_MANIPULATION",
+  ORDERFLOW: "ORDERFLOW",
+};
+
+/** Extrai os votos do Conselho que correspondem aos modelos desta fusão —
+ *  agentes sem modelo equivalente (STRUCTURE/RISK/FIBONACCI/MOMENTUM) são
+ *  ignorados (não fazem parte da cobertura real declarada no header). */
+export function councilVotesToModelVotes(votes: CouncilVote[]): ModelVote[] {
+  const out: ModelVote[] = [];
+  for (const v of votes) {
+    const model = COUNCIL_AGENT_TO_MODEL[v.agent];
+    if (model) out.push({ model, stance: v.stance, confidence: v.confidence });
+  }
+  return out;
 }
 
 // ADX é 0-100 (Wilder) — conversão declarada pra escala 0-1, mesmo
@@ -164,4 +190,26 @@ export function fuseModelVotes(
     disagreement,
     votes,
   };
+}
+
+// Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade): esta
+// fusão é informativa (LEI 24) — ela nunca altera nem veta o Trade Plan
+// real, então a direção fundida (fused.stance) PODE divergir da direção do
+// plano efetivamente rastreado (isso é um estado real e esperado, não um
+// bug a esconder). fusedConfidence sozinho não distingue "modelos confiantes
+// NA direção do plano" de "modelos confiantes na direção OPOSTA" — calibrar
+// esse número bruto misturaria os dois casos sob o mesmo score, o que
+// destruiria qualquer relação real com taxa de acerto. alignFusedConfidence
+// resolve isso projetando a leitura na direção do plano: positivo = modelos
+// a favor, negativo = contra, 0 = NEUTRAL ou desacordo total.
+/** Sinal em -1..1 (nunca 0..100 — Platt scaling aceita score bruto sem
+ *  limite, era esse o uso original em SVMs: distância assinada ao
+ *  hiperplano, não uma % pré-normalizada). effectiveConfidence (já
+ *  descontada pelo desacordo real entre os modelos) é a magnitude usada —
+ *  nunca fusedConfidence bruto. null só quando fused é null (nenhum modelo
+ *  teve voto real — fail-closed, nunca um alinhamento fabricado). */
+export function alignFusedConfidence(fused: FusedReading | null, direction: "LONG" | "SHORT"): number | null {
+  if (fused === null) return null;
+  if (fused.stance === "NEUTRAL") return 0;
+  return fused.stance === direction ? fused.effectiveConfidence : -fused.effectiveConfidence;
 }

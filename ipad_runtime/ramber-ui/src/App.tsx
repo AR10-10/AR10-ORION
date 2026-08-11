@@ -181,6 +181,14 @@ import { computeTpoProfile } from "./nexus/tpo-profile";
 // uso (expectancyFilter) e em CoreSignalBadge.
 import { simulateTradeCostsBatch } from "./nexus/trade-simulation";
 import { evaluateSignalFilter, MIN_TRADES_FOR_VALID_EXPECTANCY, type FilterResult } from "./nexus/expectancy";
+// Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
+// councilVotesToModelVotes/regimeModelVote/fuseModelVotes/alignFusedConfidence
+// (Fase 2, primeiro consumidor real) formam o score orientado à direção do
+// plano; calibrateConfidence (Fase 3) o transforma em probabilidade
+// calibrada só quando a amostra real sustenta isso — ver header dos dois
+// arquivos para a auditoria completa.
+import { councilVotesToModelVotes, regimeModelVote, fuseModelVotes, alignFusedConfidence } from "./nexus/model-fusion";
+import { calibrateConfidence, type CalibrationResult } from "./nexus/platt-calibration";
 import { computeOrganismHealth, type OrganismHealthVerdict } from "./nexus/organism-health";
 // Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
 // alvo — ATR real × Efficiency Ratio de Kaufman sobre os closes reais do
@@ -2675,9 +2683,38 @@ export default function App() {
   // NEUTRO quando a expectativa líquida histórica é negativa. O Núcleo em
   // si (engine.direction) NUNCA é mutado por este cálculo — a supressão é
   // só de apresentação, computada aqui e consumida no badge/ExpectancyCard.
+  // Fase 3: fatorado de dentro do useMemo abaixo para ser compartilhado com
+  // calibrationResult sem recomputar simulateTradeCostsBatch uma 2ª vez
+  // sobre o mesmo trackRecordSlice.history (zero segunda fonte).
+  const trackRecordResults = useMemo(() => simulateTradeCostsBatch(trackRecordSlice.history), [trackRecordSlice.history]);
   const expectancyFilter: FilterResult = useMemo(
-    () => evaluateSignalFilter(simulateTradeCostsBatch(trackRecordSlice.history)),
-    [trackRecordSlice.history],
+    () => evaluateSignalFilter(trackRecordResults),
+    [trackRecordResults],
+  );
+  // Escopo Cirúrgico (Operador, Fase 3): leitura ATUAL da fusão de modelos
+  // (Fase 2), orientada à direção do plano rastreado agora — councilFromSnapshot.votes
+  // já é a MESMA CouncilDecision deste ciclo (zero segunda chamada aos
+  // agentes), engine.marketRegime.direction/adx já são reais e já fluem
+  // pela bridge (engine-bridge.ts) mas nunca tinham consumidor até aqui.
+  // Recalculada a cada render: serve tanto para o carimbo único de abertura
+  // (abaixo) quanto para "o que a calibração diria se um trade fosse aberto
+  // agora" (ExpectancyCard). null sem plano ativo ou sem nenhum modelo com
+  // voto real — fail-closed, nunca um score fabricado.
+  const liveModelAgreement = useMemo(() => {
+    const direction = trackRecordSlice.active?.plan.direction ?? null;
+    if (direction === null) return null;
+    const modelVotes = [
+      ...councilVotesToModelVotes(councilFromSnapshot?.votes ?? []),
+      regimeModelVote(engine?.marketRegime?.direction ?? null, engine?.marketRegime?.adx ?? null),
+    ];
+    return alignFusedConfidence(fuseModelVotes(modelVotes), direction);
+  }, [trackRecordSlice.active, councilFromSnapshot, engine?.marketRegime]);
+  // Platt scaling (Platt 1999, pesquisado via WebSearch antes de
+  // implementar — ver header de nexus/platt-calibration.ts) sobre o MESMO
+  // Track Record real de expectancyFilter — nunca uma 2ª amostra.
+  const calibrationResult: CalibrationResult = useMemo(
+    () => calibrateConfidence(liveModelAgreement, trackRecordResults),
+    [liveModelAgreement, trackRecordResults],
   );
 
   // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
@@ -2757,6 +2794,11 @@ export default function App() {
       // engine.marketStructureLabel já lido pelo header/Relevance Engine
       // — zero segunda classificação.
       structureLabel: engine?.marketStructureLabel ?? null,
+      // Escopo Cirúrgico (Fase 3, Calibração de Probabilidade): mesmo
+      // liveModelAgreement computado acima neste render (o plano recém-
+      // aberto que este efeito está carimbando é o MESMO que liveModelAgreement
+      // já leu via trackRecordSlice.active) — zero segunda fusão.
+      modelAgreement: liveModelAgreement,
     });
   }, [
     trackRecordSlice.active,
@@ -2766,6 +2808,7 @@ export default function App() {
     institutionalScore,
     engine?.marketRegime,
     engine?.marketStructureLabel,
+    liveModelAgreement,
   ]);
 
   // Diretriz Complementar §18/§4 ("Conviction Engine"): registra na store a
@@ -3433,6 +3476,7 @@ export default function App() {
       convictionReading,
       institutionalScore,
       expectancyFilter,
+      calibrationResult,
       confidenceZone,
       orderflowTrend,
       convictionTrend,
@@ -3502,6 +3546,7 @@ export default function App() {
       convictionReading,
       institutionalScore,
       expectancyFilter,
+      calibrationResult,
       confidenceZone,
       orderflowTrend,
       convictionTrend,
@@ -5368,7 +5413,8 @@ function ScoreContextCard() {
 // POR QUE o CoreSignalBadge pode mostrar NEUTRO precisa estar tão visível
 // quanto o próprio badge (LEI 24: supressão nunca é silenciosa).
 function ExpectancyCard() {
-  const { expectancyFilter }: { expectancyFilter?: FilterResult } = useContext(WidgetContext) || {};
+  const { expectancyFilter, calibrationResult }: { expectancyFilter?: FilterResult; calibrationResult?: CalibrationResult } =
+    useContext(WidgetContext) || {};
   const stats = expectancyFilter?.stats ?? null;
 
   const badgeColor =
@@ -5395,6 +5441,17 @@ function ExpectancyCard() {
     "Expectativa real por trade (R-múltiplo) após comissão+slippage+funding reais sobre o Track Record JÁ resolvido — nunca hitRate isolado (Regra de Ouro 2: taxa de acerto alta com R:R ruim ainda perde dinheiro).";
   const sampleTitle = `Trades reais resolvidos rastreados neste symbol:timeframe. Amostra mínima de ${MIN_TRADES_FOR_VALID_EXPECTANCY} para uma leitura de expectativa válida — abaixo disso o badge fica neutro e o Núcleo nunca é suprimido (ausência de prova não é prova de inviabilidade).`;
 
+  // Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
+  // "probabilidade" aqui só aparece quando REALMENTE calibrada (Platt 1999)
+  // contra o Track Record real deste symbol:timeframe, com amostra
+  // suficiente e tamanho sempre visível — exatamente a exceção honesta à
+  // Regra de Ouro 2 (confiança nunca é probabilidade fabricada; isto não é
+  // fabricado, é ajustado a outcomes reais, com o "n" sempre exposto).
+  const calibratedValue =
+    calibrationResult?.calibrated && calibrationResult.probability !== null ? `${calibrationResult.probability}%` : DASH;
+  const calibratedTitle =
+    "Probabilidade calibrada (Platt Scaling, Platt 1999) do score de fusão de modelos atual (SMC+Order Flow+Regime, orientado à direção do plano) contra o Track Record REAL deste symbol:timeframe — alvos suavizados (nunca 0/1 crus), nunca reivindica mais certeza do que a amostra sustenta.";
+
   return (
     <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
       <div className="flex items-center justify-between gap-2">
@@ -5412,7 +5469,16 @@ function ExpectancyCard() {
         <MiniStat label="Sharpe" value={sharpeValue} color="text-[#8ab4f8]" title="Média/desvio padrão real do netR da amostra — traço nunca aparece quando o desvio padrão é zero (divisão fabricada nunca acontece aqui)." />
         <MiniStat label="Drawdown Máx." value={maxDdValue} color="text-[#8ab4f8]" title="Maior queda real pico-a-vale da curva de equity acumulada (soma de netR, ordem cronológica real)." />
         <MiniStat label="Custo Médio" value={costValue} color="text-[#8ab4f8]/70" title="Comissão + slippage + funding médios reais por trade, em R (taker fee e intervalo de funding verificados via pesquisa real; slippage é fração declarada do risco, nunca medida)." />
+        <MiniStat
+          label="Prob. Calibrada"
+          value={calibratedValue}
+          color={calibrationResult?.calibrated ? "text-[#00ffaa]" : "text-[#8ab4f8]/40"}
+          title={calibratedTitle}
+        />
       </div>
+      {calibrationResult && !calibrationResult.calibrated && calibrationResult.reason && (
+        <span className="text-[0.42rem] text-[#8ab4f8]/60 leading-tight">{calibrationResult.reason}</span>
+      )}
       {/* LEI 24 — exceção pontual autorizada pelo Operador (ver CLAUDE.md,
           seção "LEI 24"): quando expectancyFilter.show é false, o
           CoreSignalBadge substitui a direção real do Núcleo por NEUTRO.

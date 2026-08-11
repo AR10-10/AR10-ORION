@@ -69,6 +69,7 @@ function tradeResult(fingerprint: string | null, netR: number): TradeCostResult 
     holdingMs: 0,
     regime: null,
     fingerprint,
+    modelAgreement: null,
   };
 }
 

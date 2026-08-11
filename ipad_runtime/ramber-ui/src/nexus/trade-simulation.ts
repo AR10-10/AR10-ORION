@@ -82,6 +82,13 @@ export interface TradeCostResult {
   // módulo. null quando o contexto de abertura não tem NENHUM dos 4
   // fatores reais (registros anteriores à Entrega 42/Escopo Cirúrgico).
   fingerprint: string | null;
+  // Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
+  // passthrough literal de contextAtOpen.modelAgreement (Fase 2, fusão de
+  // modelos orientada à direção do plano) — zero recomputação. null
+  // quando nenhum modelo teve voto real na abertura, ou em registros
+  // anteriores à Fase 3. nexus/platt-calibration.ts exclui a amostra
+  // inteira quando null (nunca trata ausência como 0/neutro).
+  modelAgreement: number | null;
 }
 
 /** null quando o plano não resolveu de verdade ainda (OPEN/REPLACED nunca
@@ -128,6 +135,7 @@ export function simulateTradeCosts(
     holdingMs,
     regime: tracked.contextAtOpen?.regime ?? null,
     fingerprint: computeScenarioFingerprint(tracked.contextAtOpen),
+    modelAgreement: tracked.contextAtOpen?.modelAgreement ?? null,
   };
 }
 

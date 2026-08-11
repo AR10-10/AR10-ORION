@@ -23,6 +23,7 @@ function mkTracked(
   resolvedAt: number | null,
   regime: string | null = null,
   structureLabel: string | null = null,
+  modelAgreement: number | null = null,
 ): TrackedPlan {
   return {
     plan,
@@ -40,6 +41,7 @@ function mkTracked(
       score: null,
       regime,
       structureLabel,
+      modelAgreement,
     },
   };
 }
@@ -173,6 +175,17 @@ describe('simulateTradeCosts: custos reais (comissão + slippage + funding)', ()
     const trackedNoContext: TrackedPlan = { ...mkTracked('TARGET_HIT', plan, 103, 0, 1000), contextAtOpen: undefined };
     const r2 = simulateTradeCosts(trackedNoContext);
     expect(r2!.fingerprint).toBeNull();
+  });
+
+  it('Escopo Cirúrgico (Fase 3): modelAgreement real carimbado chega intacto (passthrough, zero recomputação); null quando ausente', () => {
+    const plan = mkPlan('LONG', 100, 99, 103);
+    const tracked = mkTracked('TARGET_HIT', plan, 103, 0, 1000, null, null, 0.42);
+    const r = simulateTradeCosts(tracked);
+    expect(r!.modelAgreement).toBe(0.42);
+
+    const trackedNoContext: TrackedPlan = { ...mkTracked('TARGET_HIT', plan, 103, 0, 1000), contextAtOpen: undefined };
+    const r2 = simulateTradeCosts(trackedNoContext);
+    expect(r2!.modelAgreement).toBeNull();
   });
 });
 

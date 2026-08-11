@@ -8,10 +8,17 @@ import {
   orderflowModelVote,
   regimeModelVote,
   fuseModelVotes,
+  councilVotesToModelVotes,
+  alignFusedConfidence,
   REGIME_CONFIDENCE_ADX_SCALE,
   type ModelVote,
+  type FusedReading,
 } from '../src/nexus/model-fusion';
-import type { CouncilLiquidityZone, CouncilOrderflowSignal } from '../src/nexus/council';
+import type { CouncilLiquidityZone, CouncilOrderflowSignal, CouncilVote } from '../src/nexus/council';
+
+function councilVote(agent: CouncilVote['agent'], stance: CouncilVote['stance'], confidence: number | null): CouncilVote {
+  return { agent, stance, confidence, rationale: 'teste', evidence: [] };
+}
 
 const eqh = (price: number, swept = false): CouncilLiquidityZone => ({ type: 'EQUAL_HIGH', price, swept });
 const eql = (price: number, swept = false): CouncilLiquidityZone => ({ type: 'EQUAL_LOW', price, swept });
@@ -136,5 +143,64 @@ describe('fuseModelVotes: pool linear de opinião (Stone/DeGroot) — NUNCA prob
   it('votos com stance NEUTRAL real contam pro desacordo mas não somam confidence direcional', () => {
     const reading = fuseModelVotes([vote('SMC_LIQUIDITY', 'LONG', 0.5), vote('ORDERFLOW', 'NEUTRAL', 0)]);
     expect(reading!.stance).toBe('LONG');
+  });
+});
+
+describe('councilVotesToModelVotes: reusa a MESMA CouncilDecision do ciclo, zero segunda chamada aos agentes', () => {
+  it('mapeia LIQUIDITY/MANIPULATION/ORDERFLOW para os ModelId reais, preservando stance/confidence', () => {
+    const out = councilVotesToModelVotes([
+      councilVote('LIQUIDITY', 'LONG', 0.7),
+      councilVote('MANIPULATION', 'SHORT', 0.4),
+      councilVote('ORDERFLOW', 'NEUTRAL', 0),
+    ]);
+    expect(out).toEqual<ModelVote[]>([
+      { model: 'SMC_LIQUIDITY', stance: 'LONG', confidence: 0.7 },
+      { model: 'SMC_MANIPULATION', stance: 'SHORT', confidence: 0.4 },
+      { model: 'ORDERFLOW', stance: 'NEUTRAL', confidence: 0 },
+    ]);
+  });
+
+  it('ignora agentes sem modelo equivalente (STRUCTURE/RISK/FIBONACCI/MOMENTUM) — não fazem parte da cobertura real desta fusão', () => {
+    const out = councilVotesToModelVotes([
+      councilVote('STRUCTURE', 'LONG', 0.5),
+      councilVote('RISK', 'ABSTAIN', null),
+      councilVote('FIBONACCI', 'LONG', 0.5),
+      councilVote('MOMENTUM', 'SHORT', 0.5),
+    ]);
+    expect(out).toEqual([]);
+  });
+
+  it('ABSTAIN real (sem dado do agente) passa adiante honestamente — quem consome fuseModelVotes já sabe filtrar', () => {
+    const out = councilVotesToModelVotes([councilVote('LIQUIDITY', 'ABSTAIN', null)]);
+    expect(out).toEqual<ModelVote[]>([{ model: 'SMC_LIQUIDITY', stance: 'ABSTAIN', confidence: null }]);
+  });
+
+  it('lista vazia => lista vazia', () => {
+    expect(councilVotesToModelVotes([])).toEqual([]);
+  });
+});
+
+function fusedReading(stance: FusedReading['stance'], effectiveConfidence: number): FusedReading {
+  return { stance, fusedConfidence: effectiveConfidence, effectiveConfidence, disagreement: 0, votes: [] };
+}
+
+describe('alignFusedConfidence: orienta a fusão (LEI 24, informativa) à direção REAL do plano — nunca a direção que os modelos preferiam', () => {
+  it('fused null (nenhum modelo real) => null honesto, nunca 0 fabricado', () => {
+    expect(alignFusedConfidence(null, 'LONG')).toBeNull();
+  });
+
+  it('fused.stance concorda com a direção do plano => sinal positivo = effectiveConfidence', () => {
+    expect(alignFusedConfidence(fusedReading('LONG', 0.65), 'LONG')).toBeCloseTo(0.65, 10);
+    expect(alignFusedConfidence(fusedReading('SHORT', 0.65), 'SHORT')).toBeCloseTo(0.65, 10);
+  });
+
+  it('fused.stance DIVERGE da direção do plano (LEI 24: estado real esperado, nunca escondido) => sinal negativo', () => {
+    expect(alignFusedConfidence(fusedReading('SHORT', 0.65), 'LONG')).toBeCloseTo(-0.65, 10);
+    expect(alignFusedConfidence(fusedReading('LONG', 0.65), 'SHORT')).toBeCloseTo(-0.65, 10);
+  });
+
+  it('fused.stance NEUTRAL => 0, independente da direção do plano', () => {
+    expect(alignFusedConfidence(fusedReading('NEUTRAL', 0), 'LONG')).toBe(0);
+    expect(alignFusedConfidence(fusedReading('NEUTRAL', 0), 'SHORT')).toBe(0);
   });
 });
