@@ -1273,7 +1273,13 @@ export function EnhancedChart_110_Percent({
     if (Number.isFinite(support)) {
       supportLineRef.current = seriesRef.current.createPriceLine({
         price: support as number,
-        color: "rgba(0, 255, 170, 0.65)",
+        // Especificação Visual Profissional v1 (pedido direto do
+        // Operador): S/R unificados em âmbar #f59e0b — "âmbar único para
+        // todos os níveis", mesma família de EQH/EQL abaixo. Distinto do
+        // caso FVG (pergunta direta ao Operador: mantido verde/vermelho
+        // por um pedido V18.2 anterior e explícito) — S1/R1 nunca teve
+        // essa mesma exigência de preservação de cor.
+        color: "rgba(245, 158, 11, 0.65)",
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
         // Mesmo achado/mesma correção da série de candles acima — o tag
@@ -1294,7 +1300,8 @@ export function EnhancedChart_110_Percent({
     if (Number.isFinite(resistance)) {
       resistanceLineRef.current = seriesRef.current.createPriceLine({
         price: resistance as number,
-        color: "rgba(255, 0, 85, 0.65)",
+        // Especificação Visual Profissional v1: mesmo âmbar unificado de S1.
+        color: "rgba(245, 158, 11, 0.65)",
         lineWidth: 1,
         lineStyle: LineStyle.Solid,
         // Mesmo achado/mesma correção do S1 acima.
@@ -1332,7 +1339,23 @@ export function EnhancedChart_110_Percent({
           // ~33-50°, teal LONG ~160°, cyan Volume Profile/Fibonacci ~180°,
           // roxo Conselho ~278°, magenta POC ~312°, rosa SHORT ~340°) —
           // mesma luminosidade/peso visual do valor antigo, só o matiz muda.
-          color: "rgba(110, 150, 255, 0.45)",
+          //
+          // Especificação Visual Profissional v1 (pedido direto do
+          // Operador): EQH/EQL migra pro âmbar unificado de S1/R1 —
+          // "âmbar único para todos os níveis" de liquidez/S-R. Achado
+          // real ao aplicar: #f59e0b (H38) fica a só ~5° do laranja do
+          // Sweep (H33, rgba(255,140,0,...) logo abaixo — "SWEEP" é o
+          // MESMO nível EQH/EQL depois de varrido) e ~4-7° do dourado do
+          // Entry/pico do Liquidation Heatmap (H42/H45) — mais perto do
+          // que a própria disciplina de matiz deste arquivo normalmente
+          // aceita (ver comentário acima, >40° para conceitos DIFERENTES).
+          // Aplicado mesmo assim porque cada um destes 4 elementos já
+          // carrega rótulo de texto próprio (EQH/EQL/S1/R1/SWEEP/ENTRY) —
+          // a cor deixa de ser o único jeito de diferenciar, e Sweep é
+          // literalmente o MESMO evento (zona varrida), não um conceito
+          // concorrente. Documentado para o Operador decidir se quer um
+          // ajuste fino de tom numa rodada futura.
+          color: "rgba(245, 158, 11, 0.45)",
           lineWidth: 1,
           lineStyle: LineStyle.Solid,
           axisLabelVisible: false,
@@ -2359,7 +2382,7 @@ export function EnhancedChart_110_Percent({
         price: support as number,
         text: `S1 ${fmtAxisLabelPrice(support as number)}`,
         secondaryText: levelTitle("", supportStrength, supportBreakouts).trim() || undefined,
-        color: "rgba(0, 255, 170, 0.65)",
+        color: "rgba(245, 158, 11, 0.65)",
         side: "left",
       });
     }
@@ -2368,7 +2391,7 @@ export function EnhancedChart_110_Percent({
         price: resistance as number,
         text: `R1 ${fmtAxisLabelPrice(resistance as number)}`,
         secondaryText: levelTitle("", resistanceStrength, resistanceBreakouts).trim() || undefined,
-        color: "rgba(255, 0, 85, 0.65)",
+        color: "rgba(245, 158, 11, 0.65)",
         side: "left",
       });
     }

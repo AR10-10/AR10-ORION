@@ -323,9 +323,9 @@ describe('EnhancedChart_110_Percent: os "last value label"/"axis label" NATIVOS 
   it('S1/R1: axisLabelVisible false nas duas price lines (era true) — a LINHA horizontal continua desenhada, só o tag do eixo muda de dono', () => {
     const s = chart();
     const supportIdx = s.indexOf('supportLineRef.current = seriesRef.current.createPriceLine({');
-    expect(s.slice(supportIdx, supportIdx + 500)).toContain('axisLabelVisible: false,');
+    expect(s.slice(supportIdx, supportIdx + 900)).toContain('axisLabelVisible: false,');
     const resistanceIdx = s.indexOf('resistanceLineRef.current = seriesRef.current.createPriceLine({');
-    expect(s.slice(resistanceIdx, resistanceIdx + 350)).toContain('axisLabelVisible: false,');
+    expect(s.slice(resistanceIdx, resistanceIdx + 450)).toContain('axisLabelVisible: false,');
   });
 
   it('Trade Plan (ENTRY/STOP/TARGET) MIGROU para o overlay ("bater o olho profissional"): a LINHA continua (axisLabelVisible:false, title:""), o RÓTULO vai para priceAxisLabels — era o ÚLTIMO grupo ainda no eixo nativo, podendo sobrepor S1/R1/VWAP', () => {
@@ -399,8 +399,11 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
     // exatamente o que era prefixo antes. Zero segunda formatação.
     expect(block).toContain('secondaryText: levelTitle("", supportStrength, supportBreakouts).trim() || undefined,');
     expect(block).toContain('secondaryText: levelTitle("", resistanceStrength, resistanceBreakouts).trim() || undefined,');
-    expect(block).toContain('color: "rgba(0, 255, 170, 0.65)"'); // mesma cor real da price line S1
-    expect(block).toContain('color: "rgba(255, 0, 85, 0.65)"'); // mesma cor real da price line R1
+    // Especificação Visual Profissional v1: S1/R1 unificados em âmbar
+    // #f59e0b (era verde/vermelho) — mesma cor real da price line nos
+    // dois casos, nunca uma segunda formatação.
+    expect(block).toContain('color: "rgba(245, 158, 11, 0.65)"'); // mesma cor real da price line S1
+    expect((block.match(/color: "rgba\(245, 158, 11, 0\.65\)"/g) ?? []).length).toBe(2); // S1 e R1 compartilham o mesmo âmbar
     expect(block).toContain('if (Number.isFinite(support) && supportStrength?.label === "FORTE") {');
     expect(block).toContain('if (Number.isFinite(resistance) && resistanceStrength?.label === "FORTE") {');
   });
