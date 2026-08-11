@@ -2753,8 +2753,20 @@ export default function App() {
       // outros pontos deste arquivo (relevanceInput, Trade Plan Zone) —
       // zero segunda classificação.
       regime: engine?.marketRegime?.regime ?? null,
+      // Escopo Cirúrgico (Fase 1, ScenarioFingerprint): mesmo
+      // engine.marketStructureLabel já lido pelo header/Relevance Engine
+      // — zero segunda classificação.
+      structureLabel: engine?.marketStructureLabel ?? null,
     });
-  }, [trackRecordSlice.active, etaReading, vwapCtx, nlState, institutionalScore, engine?.marketRegime]);
+  }, [
+    trackRecordSlice.active,
+    etaReading,
+    vwapCtx,
+    nlState,
+    institutionalScore,
+    engine?.marketRegime,
+    engine?.marketStructureLabel,
+  ]);
 
   // Diretriz Complementar §18/§4 ("Conviction Engine"): registra na store a
   // amostra REAL do Score Geral a cada ciclo em que ele existe (WAIT/

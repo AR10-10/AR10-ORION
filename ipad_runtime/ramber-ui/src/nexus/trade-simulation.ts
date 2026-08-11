@@ -42,6 +42,7 @@
 // escalada pela volatilidade real do stop, mesma lógica de todo R-múltiplo
 // já usado neste código — ver MFE/MAE em structural-backtest.js).
 import type { TrackedPlan } from "./signal-track-record";
+import { computeScenarioFingerprint } from "./scenario-fingerprint";
 
 export interface ExecutionCostConfig {
   takerFeeRate: number; // fração, ex.: 0.0005 = 0.05% por lado (entrada OU saída)
@@ -75,6 +76,12 @@ export interface TradeCostResult {
   netR: number; // grossR - commissionR - slippageR - fundingR
   holdingMs: number;
   regime: string | null; // engine.marketRegime.regime carimbado na abertura (pode ser null em registros antigos)
+  // Escopo Cirúrgico (Operador, Fase 1): assinatura real do cenário
+  // (nexus/scenario-fingerprint.ts) — permite agrupar por família de
+  // configuração antes de chamar computeExpectancy(), sem tocar naquele
+  // módulo. null quando o contexto de abertura não tem NENHUM dos 4
+  // fatores reais (registros anteriores à Entrega 42/Escopo Cirúrgico).
+  fingerprint: string | null;
 }
 
 /** null quando o plano não resolveu de verdade ainda (OPEN/REPLACED nunca
@@ -120,6 +127,7 @@ export function simulateTradeCosts(
     netR,
     holdingMs,
     regime: tracked.contextAtOpen?.regime ?? null,
+    fingerprint: computeScenarioFingerprint(tracked.contextAtOpen),
   };
 }
 

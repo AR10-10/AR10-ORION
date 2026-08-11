@@ -91,6 +91,13 @@ export interface PlanOpenContext {
   // campo) — expectancy estratificada por regime simplesmente exclui
   // trades sem este dado, nunca inventa um regime retroativo.
   regime?: string | null;
+  // Escopo Cirúrgico (Operador, Fase 1 — ScenarioFingerprint): rótulo REAL
+  // de engine.marketStructureLabel (cleanStructureLabel sobre a saída de
+  // market-structure-engine.js) na abertura — mesmo campo já lido pelo
+  // header/Relevance Engine, zero classificador novo. Opcional pela mesma
+  // razão de `regime` acima; nexus/scenario-fingerprint.ts usa o que
+  // estiver disponível, nunca fabrica o resto.
+  structureLabel?: string | null;
 }
 
 export interface TrackedPlan {

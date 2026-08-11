@@ -22,6 +22,7 @@ function mkTracked(
   openedAt: number,
   resolvedAt: number | null,
   regime: string | null = null,
+  structureLabel: string | null = null,
 ): TrackedPlan {
   return {
     plan,
@@ -31,7 +32,15 @@ function mkTracked(
     resolvedPrice,
     targetsHit: status === 'TARGET_HIT' ? 1 : 0,
     breakEvenSuggested: false,
-    contextAtOpen: { etaMsAtOpen: null, etaMsMinAtOpen: null, vwapState: null, nexusLineState: null, score: null, regime },
+    contextAtOpen: {
+      etaMsAtOpen: null,
+      etaMsMinAtOpen: null,
+      vwapState: null,
+      nexusLineState: null,
+      score: null,
+      regime,
+      structureLabel,
+    },
   };
 }
 
@@ -153,6 +162,17 @@ describe('simulateTradeCosts: custos reais (comissão + slippage + funding)', ()
     const trackedNoContext: TrackedPlan = { ...mkTracked('TARGET_HIT', plan, 103, 0, 1000), contextAtOpen: undefined };
     const r2 = simulateTradeCosts(trackedNoContext);
     expect(r2!.regime).toBeNull();
+  });
+
+  it('Escopo Cirúrgico (Fase 1): fingerprint real carimbada quando há contexto; null quando ausente', () => {
+    const plan = mkPlan('LONG', 100, 99, 103);
+    const tracked = mkTracked('TARGET_HIT', plan, 103, 0, 1000, 'TENDENCIA_FORTE', 'ESTRUTURA_ALTA');
+    const r = simulateTradeCosts(tracked);
+    expect(r!.fingerprint).toBe('regime:TENDENCIA_FORTE|structure:ESTRUTURA_ALTA|vwap:—|nl:—');
+
+    const trackedNoContext: TrackedPlan = { ...mkTracked('TARGET_HIT', plan, 103, 0, 1000), contextAtOpen: undefined };
+    const r2 = simulateTradeCosts(trackedNoContext);
+    expect(r2!.fingerprint).toBeNull();
   });
 });
 

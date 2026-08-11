@@ -1156,6 +1156,13 @@ describe('Cockpit §11: carimbo do contexto de abertura + ETA previsto × realiz
     expect(a).toContain('etaMsAtOpen: nextEta?.ms ?? null,');
   });
 
+  it('Escopo Cirúrgico (Fase 1, ScenarioFingerprint): structureLabel carimbado no MESMO efeito, zero segunda classificação', () => {
+    const a = app();
+    const idx = a.indexOf('useUnifiedSnapshotStore.getState().stampPlanOpenContext({');
+    const block = a.slice(idx, idx + 1000);
+    expect(block).toContain('structureLabel: engine?.marketStructureLabel ?? null,');
+  });
+
   it('store expõe a ação stampPlanOpenContext ligada ao stampOpenContext puro', () => {
     const s = store();
     expect(s).toContain('stampPlanOpenContext: (ctx: PlanOpenContext) => void;');
