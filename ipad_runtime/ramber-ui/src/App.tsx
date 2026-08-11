@@ -61,8 +61,10 @@ import { rehydrateTrackRecord, hitRate, EMPTY_TRACK_RECORD, type TrackedPlan } f
 import { rehydratePaperTrading, unrealizedPnl, unrealizedPnlPct, paperPositionContext } from "./nexus/paper-trading";
 // v16.0 DEFINITIVO §9: primeiro assinante real de ORGANISM.TRACK_RECORD.UPDATED
 // (event-bus.ts) — evento já emitido pelo OrganismOrchestrator, sem consumidor
-// até esta entrega.
-import { deriveTrackRecordAlert, type AlertEvent } from "./nexus/alert-center";
+// até esta entrega. Achado da AUDITORIA TÉCNICA COMPLETA (Seção F):
+// deriveSweepAlert assina BRAIN.TRAPS.UPDATED, o segundo publicador real já
+// existente sem consumidor de alerta (ver header de alert-center.ts).
+import { deriveTrackRecordAlert, deriveSweepAlert, sweepIdentity, type AlertEvent } from "./nexus/alert-center";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
@@ -3221,6 +3223,29 @@ export default function App() {
       lastTrackRecordEntryRef.current = record.history.at(-1) ?? lastTrackRecordEntryRef.current;
       if (!alert) return;
       // §9.2: máximo 5 toasts simultâneos, auto-dismiss em 5s.
+      setAlerts((prev) => [...prev, alert].slice(-5));
+      setTimeout(() => setAlerts((prev) => prev.filter((a) => a.id !== alert.id)), 5000);
+    });
+  }, []);
+  // Achado da AUDITORIA TÉCNICA COMPLETA (Seção F): Liquidity Sweep já
+  // tinha publicador real (BRAIN.TRAPS.UPDATED, mesma fatia trapSignals que
+  // CouncilWidget/canvas já leem) mas nunca alertava — só era desenhado.
+  // Watermark seeded com os sweeps JÁ presentes no boot (mesmo cuidado do
+  // Track Record acima: histórico reidratado nunca dispara alerta
+  // fantasma) — sweepIdentity é a identidade REAL e estável (candle+preço
+  // do nível varrido), nunca `trap.at` (recarimbado a cada recomputo).
+  const seenSweepIdsRef = useRef<Set<string>>(
+    new Set(
+      useUnifiedSnapshotStore.getState().trapSignals.flatMap((t) =>
+        t.kind === "STOP_HUNT_TOPO" || t.kind === "STOP_HUNT_FUNDO" ? t.sweptLevels.map(sweepIdentity) : [],
+      ),
+    ),
+  );
+  useEffect(() => {
+    const core = getNexusCore();
+    return core.bus.on("BRAIN.TRAPS.UPDATED", ({ traps }) => {
+      const alert = deriveSweepAlert(seenSweepIdsRef.current, traps);
+      if (!alert) return;
       setAlerts((prev) => [...prev, alert].slice(-5));
       setTimeout(() => setAlerts((prev) => prev.filter((a) => a.id !== alert.id)), 5000);
     });

@@ -2,19 +2,34 @@
 // de Sobrevivência"): primeiro assinante real do evento
 // ORGANISM.TRACK_RECORD.UPDATED (event-bus.ts) — declarado e emitido pelo
 // OrganismOrchestrator desde a introdução do Track Record
-// (signal-track-record.ts), mas sem nenhum consumidor até esta entrega.
+// (signal-track-record.ts), mas sem nenhum consumidor até aquela entrega.
 //
-// Escopo desta fatia: só a fonte que já tem publicador real e único no
-// barramento ("uma transição real, um evento" — organism-orchestrator.ts).
-// chartIntegrity/organismHealth (nexus/chart-integrity.ts,
-// nexus/organism-health.ts) continuam computados por render dentro do
-// próprio SystemHealthWidget, nunca escritos na store nem publicados no
-// bus — alertar sobre eles exigiria antes dar-lhes um publicador real
-// (mudança arquitetural própria, fora desta rodada).
+// Achado da AUDITORIA TÉCNICA COMPLETA (Seção F): deriveTrackRecordAlert
+// era o ÚNICO produtor de AlertEvent no código inteiro — VWAP cross, POC
+// touch, Liquidity Sweep e BOS/CHoCH são detectados e desenhados no
+// gráfico, mas nunca alertavam. Auditados os 4 antes de tocar em qualquer
+// coisa (CLAUDE.md, Disciplina item 1):
+//   - Liquidity Sweep TEM publicador real (BRAIN.TRAPS.UPDATED, a mesma
+//     fatia trapSignals que CouncilWidget/canvas já leem) — deriveSweepAlert
+//     abaixo usa exatamente esse evento, zero segunda coleta.
+//   - VWAP cross (vwapState/nlState, vwap-state.ts) e BOS/CHoCH (bosChoch,
+//     computeBosChoch) NÃO têm fatia na unified-snapshot-store nem evento
+//     no bus hoje — são computados só localmente em App.tsx/ChartWidget e
+//     passados por WidgetContext/props. Dar-lhes um publicador real
+//     (nova fatia na store + tradução no OrganismOrchestrator + migrar os
+//     consumidores atuais a ler da store) é mudança arquitetural própria,
+//     que toca store/orquestrador/múltiplos consumidores — fora do escopo
+//     desta entrega, registrado aqui em vez de forçado às pressas.
+//   - POC touch é de natureza diferente dos outros três: não é uma
+//     transição de estado discreta, é a PROXIMIDADE entre dois valores
+//     contínuos (preço vivo × POC do Volume Profile) — exigiria um motor
+//     de detecção de cruzamento próprio, não só um publicador. Mesmo
+//     raciocínio de "fora de escopo, registrado honestamente".
 //
 // Pure function, zero I/O, zero clock próprio — mesma disciplina do resto
 // de nexus/.
 import type { TrackedPlan, TrackRecordState } from "./signal-track-record";
+import type { TrapSignal, SweptLevel } from "./trap-detection";
 
 export type AlertTone = "success" | "info" | "danger";
 
@@ -83,5 +98,56 @@ export function deriveTrackRecordAlert(prevLastEntry: TrackedPlan | null, record
     title: "Stop atingido",
     message: `${direction} — encerrado em ${price}, zero alvo real provado`,
     createdAt,
+  };
+}
+
+/** Identidade real e estável de um nível varrido — o candle/preço reais em
+ *  que o pool EQH/EQL foi originalmente detectado (fvg-order-block-engine.js
+ *  via trap-detection.ts), NUNCA `trap.at` (carimbado de novo em CADA
+ *  chamada de detectInstitutionalTraps, mesmo para o MESMO sweep real ainda
+ *  dentro da janela de corroboração — usar `at` como identidade alertaria
+ *  de novo a cada recomputo, spam constante). Mesmo anchor que o canvas já
+ *  usa para dedupe (EnhancedChart_110_Percent.tsx's sweepLinesRef effect,
+ *  `seenSweepPrices`) — zero segunda regra de identidade inventada. */
+export function sweepIdentity(level: SweptLevel): string {
+  return `${level.index}:${level.price}`;
+}
+
+/** Compara os traps reais desta chamada contra `seenIds` (mutado in-place
+ *  pelo chamador, mesmo espírito de watermark que `lastTrackRecordEntryRef`
+ *  já usa para o Track Record — o estado "o que já foi visto" pertence a
+ *  quem assina o bus, nunca a esta função pura).
+ *
+ *  Só STOP_HUNT_TOPO/STOP_HUNT_FUNDO: ABSORCAO_ANOMALA tem
+ *  `sweptLevels: []` por design (trap-detection.ts — "não tem um
+ *  preço-âncora único real"), então não tem identidade estável pra
+ *  comparar — a mesma restrição que o canvas já aplica ao desenho do
+ *  price line de sweep, reaproveitada aqui, nunca uma segunda regra.
+ *
+ *  Vários níveis novos na mesma chamada (raro, mas possível): todos
+ *  marcados como vistos (nunca vaza um "ainda novo" pra próxima chamada),
+ *  mas só o mais recente vira alerta — mesma filosofia de "uma transição
+ *  real, um evento" do Track Record acima. */
+export function deriveSweepAlert(seenIds: Set<string>, traps: TrapSignal[]): AlertEvent | null {
+  let newest: { level: SweptLevel; kind: "STOP_HUNT_TOPO" | "STOP_HUNT_FUNDO"; confidence: number } | null = null;
+  for (const trap of traps) {
+    if (trap.kind !== "STOP_HUNT_TOPO" && trap.kind !== "STOP_HUNT_FUNDO") continue;
+    for (const level of trap.sweptLevels) {
+      const id = sweepIdentity(level);
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+      newest = { level, kind: trap.kind, confidence: trap.confidence };
+    }
+  }
+  if (!newest) return null;
+
+  const { level, kind, confidence } = newest;
+  const bullishBias = kind === "STOP_HUNT_FUNDO"; // fundo varrido = liquidez vendedora tomada, viés de reversão pra cima
+  return {
+    id: `sweep-${sweepIdentity(level)}`,
+    tone: "info",
+    title: kind === "STOP_HUNT_TOPO" ? "SWEEP · TOPO VARRIDO" : "SWEEP · FUNDO VARRIDO",
+    message: `${formatPrice(level.price)} · confiança real ${(confidence * 100).toFixed(0)}% · viés ${bullishBias ? "alta" : "baixa"}`,
+    createdAt: Date.now(),
   };
 }
