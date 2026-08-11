@@ -281,7 +281,12 @@ describe('EnhancedChart_110_Percent: os "last value label"/"axis label" NATIVOS 
   it('candlestick series: lastValueVisible false (era true) — priceLineVisible continua true (a linha horizontal de referência não muda)', () => {
     const s = chart();
     const idx = s.indexOf('const series = chart.addSeries(CandlestickSeries, {');
-    const block = s.slice(idx, idx + 1000);
+    // Janela alargada (era 1000): AR10_ESPECIFICACAO_VISUAL_PIXEL_PERFECT.md
+    // acrescentou um comentário real antes de upColor/downColor, empurrando
+    // priceLineVisible/lastValueVisible mais adiante no texto — mesma
+    // classe de ajuste já feita antes neste projeto quando um bloco cresce
+    // (nunca um teto arbitrário reencolhido pra "passar").
+    const block = s.slice(idx, idx + 1500);
     expect(block).toContain('priceLineVisible: true,');
     expect(block).toContain('lastValueVisible: false,');
   });

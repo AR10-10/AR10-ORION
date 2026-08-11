@@ -229,7 +229,17 @@ describe('Diretriz Mestra: Heat Score + TENDÊNCIA no header, Magnet, futuro, MT
 
   it('§2: crosshair Magnet (snap real da lib) + rightOffset para a região futura', () => {
     const c = chart();
-    expect(c).toContain('crosshair: { mode: CrosshairMode.Magnet }');
+    // AR10_ESPECIFICACAO_VISUAL_PIXEL_PERFECT.md: crosshair ganhou
+    // vertLine/horzLine estilizados (cor + labelBackgroundColor reais) —
+    // `mode` continua Magnet, só deixou de ser a ÚNICA chave do objeto.
+    const crosshairIdx = c.indexOf('crosshair: {');
+    expect(crosshairIdx, 'bloco crosshair não encontrado').toBeGreaterThan(-1);
+    const crosshairBlock = c.slice(crosshairIdx, crosshairIdx + 400);
+    expect(crosshairBlock).toContain('mode: CrosshairMode.Magnet,');
+    // Regra de Ouro 5 ("Fio de Seda", zero exceção): mesmo estilizado, a
+    // linha do crosshair nunca é tracejada.
+    expect(crosshairBlock).toContain('LineStyle.Solid');
+    expect(crosshairBlock).not.toMatch(/LineStyle\.(Dashed|Dotted|LargeDashed|SparseDotted)/);
     expect(c).not.toContain('CrosshairMode.Normal');
     expect(c).toContain('rightOffset: 8,');
   });

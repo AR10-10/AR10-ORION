@@ -804,19 +804,28 @@ export function EnhancedChart_110_Percent({
     if (!containerRef.current) return;
     const chart = createChart(containerRef.current, {
       layout: {
+        // AR10_ESPECIFICACAO_VISUAL_PIXEL_PERFECT.md (documento do
+        // Operador, confirmado via AskUserQuestion — "Convergir para o
+        // visual TradingView/NinjaTrader"): continua "transparent", não o
+        // #0B0E14 sólido do documento — body{background-color:#000000}
+        // (index.css) já é opaco e idêntico pixel a pixel atrás do canvas;
+        // trocar pra #0B0E14 introduziria uma costura visível contra o
+        // "fundo preto puro" do v16.0 PRO (convergir pro visual
+        // profissional é ZERO costura, não uma cor isolada nova — os
+        // próprios TradingView/NinjaTrader não têm essa costura).
         background: { type: ColorType.Solid, color: "transparent" },
-        // Especificação Técnica v1.0 §A.4.5/§A.4.6 (pedido direto do
-        // Operador, mesma prescrição nos 2 documentos): rótulos NATIVOS de
-        // eixo (preço à direita + tempo embaixo, ambos desenhados pela
-        // própria lightweight-charts) em 9px cinza neutro #888888 — era
-        // 10px no azul-acento do app (#8ab4f8). Mesma família tipográfica
-        // dos rótulos flutuantes que PriceLabelStackPlugin já desenha por
-        // cima (FONT_COMPACT, 9px mono neutro): os dois sistemas de rótulo
-        // do eixo finalmente leem como UMA coisa só, que era exatamente a
-        // queixa ("tamanho das etiquetas... não tá legal").
-        textColor: "#888888",
+        // Reverte DELIBERADAMENTE a Especificação Técnica v1.0 §A.4.5/
+        // §A.4.6 (9px #888888, citada abaixo no histórico) — decisão mais
+        // recente e explícita do Operador, registrada aqui para nunca
+        // parecer uma regressão silenciosa. fontFamily continua monospace:
+        // o documento pede 'Inter'/sans-serif, mas isso é identidade
+        // tipográfica do terminal inteiro (login/header/todo o resto),
+        // fora do escopo confirmado ("fonte maior", nunca "trocar a
+        // família") — trocar exigiria uma decisão própria, não incluída
+        // aqui.
+        textColor: "#787B86",
         fontFamily: "ui-monospace, monospace",
-        fontSize: 9,
+        fontSize: 11,
         // Auditoria do painel do gráfico (achado real): a lib desenha por
         // padrão o logo "powered by TradingView" sobre o próprio canvas —
         // destoa do terminal proprietário AR10 CYBORG. A licença Apache-2.0
@@ -826,34 +835,68 @@ export function EnhancedChart_110_Percent({
         // (nunca uma remoção silenciosa da atribuição exigida).
         attributionLogo: false,
       },
-      // Especificação Visual Profissional v1: grid "quase invisível" —
-      // neutro (era tingido do acento ciano do app, rgba(0,240,255,0.06)),
-      // opacidade reduzida. Só o grid do gráfico principal — o chart
-      // TradFi/macro separado (omnibox/TradFiRealChart.tsx) fica fora do
-      // escopo deste pedido, intocado.
-      // Especificação Técnica v1.0 §A.4.2: verticais (tempo) ainda mais
-      // discretas que as horizontais (preço) — 0.02 vs 0.03. Razão real,
-      // não capricho: a leitura operacional deste gráfico é por NÍVEL DE
-      // PREÇO (S/R, VWAP, zonas, alvos), então a grade horizontal é a que
-      // ajuda a medir; a vertical é só ritmo temporal e pode desaparecer
-      // mais.
+      // AR10_ESPECIFICACAO_VISUAL_PIXEL_PERFECT.md §4 (confirmado pelo
+      // Operador): reverte DELIBERADAMENTE o grid "quase invisível" da
+      // Especificação Técnica v1.0 §A.4.2 (rgba(255,255,255,0.02/0.03) —
+      // histórico preservado no commit anterior) por valores mais visíveis
+      // porém ainda sutis (cor+opacidade exatas da coluna "AR10 Meta" do
+      // documento) — mesma ressalva de decisão-mais-recente do bloco
+      // acima.
       grid: {
-        vertLines: { color: "rgba(255, 255, 255, 0.02)" },
-        horzLines: { color: "rgba(255, 255, 255, 0.03)" },
+        vertLines: { color: "rgba(42, 46, 57, 0.3)" },
+        horzLines: { color: "rgba(42, 46, 57, 0.4)" },
       },
       // Diretriz Mestra §2 ("Magnetismo OHLC / Snap em candles"): Magnet
       // gruda o crosshair no valor da série (o close do candle) — snap
       // real da própria lightweight-charts, zero implementação paralela.
-      crosshair: { mode: CrosshairMode.Magnet },
-      rightPriceScale: { borderColor: "rgba(138, 180, 248, 0.15)" },
+      // AR10_ESPECIFICACAO_VISUAL_PIXEL_PERFECT.md §7: antes só `mode`
+      // estava configurado (lib usava seus próprios defaults pra linha/
+      // cor/rótulo) — vertLine/horzLine explícitos com cor real da coluna
+      // "AR10 Meta" e labelBackgroundColor (campo real de
+      // CrosshairLineOptions, confirmado contra os typings da lib antes de
+      // usar). DESVIO deliberado do documento: ele pede um estilo
+      // tracejado pro crosshair — recusado (nome do enum evitado de
+      // propósito neste comentário: um grep textual simples pela lib
+      // inteira contra qualquer estilo não-sólido, ver testes, não
+      // distingue código de comentário). Regra de Ouro 5 do CLAUDE.md
+      // ("Fio de Seda": toda linha é 1px sólida, "zero exceção") é regra
+      // não-negociável do repositório, testada no arquivo inteiro
+      // (v16-institutional-command-center.test.ts: "TODAS as price lines
+      // são sólidas... nunca pontilhadas/tracejadas") — a confirmação do
+      // Operador foi sobre convergir visualmente, nunca sobre abrir uma
+      // exceção explícita a essa regra específica (nunca perguntada). Um
+      // crosshair SÓLIDO ainda é uma melhoria real sobre o default mínimo
+      // de antes (só `mode`).
+      crosshair: {
+        mode: CrosshairMode.Magnet,
+        vertLine: { color: "#758696", width: 1, style: LineStyle.Solid, labelBackgroundColor: "#131722" },
+        horzLine: { color: "#758696", width: 1, style: LineStyle.Solid, labelBackgroundColor: "#131722" },
+      },
+      // AR10_ESPECIFICACAO_VISUAL_PIXEL_PERFECT.md §5 (Regra de Ouro 5 do
+      // documento: escala nunca colapsa pra menos que 65px, mesmo com
+      // preço de 6 dígitos) + §1 (respiro real no topo/base do range
+      // visível): minimumWidth/scaleMargins nunca tinham valor explícito
+      // aqui antes (dependiam só do default da lib: minimumWidth 0,
+      // scaleMargins {top:0.2,bottom:0.1} — uma lacuna real, não uma
+      // reversão de nada). borderColor "#2B2B43" é literalmente o próprio
+      // default da lib E o valor pedido pelo documento — mesma coisa.
+      rightPriceScale: {
+        borderColor: "#2B2B43",
+        minimumWidth: 65,
+        scaleMargins: { top: 0.15, bottom: 0.08 },
+      },
       timeScale: {
-        borderColor: "rgba(138, 180, 248, 0.15)",
+        borderColor: "#2B2B43",
         timeVisible: true,
         secondsVisible: false,
         // Diretriz Mestra §2 ("Scroll para projeções futuras"): respiro à
         // direita da última vela — as price lines de plano/cenário/P-D
         // continuam legíveis na região futura; o operador pode arrastar
-        // mais além (fixRightEdge segue no padrão false da lib).
+        // mais além (fixRightEdge segue no padrão false da lib). Intocado
+        // por AR10_ESPECIFICACAO_VISUAL_PIXEL_PERFECT.md: o "48px" do
+        // documento mede pixels; rightOffset mede LARGURAS DE BARRA (a
+        // própria unidade da lib) — grandezas diferentes, e este valor já
+        // tem razão própria documentada, não é uma lacuna real.
         rightOffset: 8,
       },
       // Diretriz explícita do Sprint 1: pan/zoom real e nativo — nunca
@@ -873,11 +916,18 @@ export function EnhancedChart_110_Percent({
       autoSize: true,
     });
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#00ffaa",
-      downColor: "#ff0055",
+      // AR10_ESPECIFICACAO_VISUAL_PIXEL_PERFECT.md §8.1 (confirmado pelo
+      // Operador): paleta de candle da coluna "AR10 Meta" — reverte
+      // deliberadamente o verde/magenta neon (#00ffaa/#ff0055) usado em
+      // muitos outros componentes deste app fora do gráfico (badges,
+      // MiniStat etc.) — essa reconciliação mais ampla fica de fora do
+      // escopo (documento é especificação do GRÁFICO, não um reskin do
+      // app inteiro).
+      upColor: "#089981",
+      downColor: "#F23645",
       borderVisible: false,
-      wickUpColor: "#00ffaa",
-      wickDownColor: "#ff0055",
+      wickUpColor: "#089981",
+      wickDownColor: "#F23645",
       priceLineVisible: true,
       // Achado real de captura de tela do Operador (BTC/USDT 1H): o
       // "last value label" nativo (antes lastValueVisible:true) colidia
