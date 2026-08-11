@@ -124,6 +124,25 @@ export const LABEL_HEIGHT_PX = 18;
 export const LIVE_LABEL_HEIGHT_PX = 21;
 const FONT_LIVE = "bold 11px -apple-system, sans-serif";
 const FONT_BASE = "10px -apple-system, sans-serif";
+// Especificação Visual Profissional v1 (pedido direto do Operador):
+// labels primary/context (VWAP/NL/EMA/S1/R1/estrutura) compactam pra 9px
+// neutro, sem caixa — só live/critical mantêm o tratamento sólido acima
+// (motivo: são os dois números que o Operador precisa achar mais rápido
+// — preço agora e plano ativo — e os exemplos do próprio pedido citavam
+// VWAP/EMA21/NL, nunca esses dois). "JetBrains Mono" pedido: Local-First
+// (Regra de Ouro 8) proíbe fonte via CDN externa — mesma pilha de
+// fallback já declarada em index.css (degrada pra SF Mono, nativa no
+// iPad/macOS, visualmente quase idêntica, zero rede).
+const FONT_COMPACT = "500 9px ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace";
+// Cinza neutro pedido para TODO label primary/context — a identidade por
+// indicador continua no próprio TEXTO ("E21"/"VWAP"/"S1"/"CHOCH") e no
+// conector fino de volta ao preço real (ainda na cor real, abaixo):
+// remover a cor do texto não apaga nenhum dado real (Regra de Ouro 4),
+// só para de repetir a mesma informação num segundo canal visual.
+const LABEL_NEUTRAL_COLOR = "#888";
+// "2px do edge" pedido — distinto do padding interno das caixas sólidas
+// (LABEL_PADDING_X abaixo), que continua servindo só live/critical.
+const COMPACT_EDGE_PADDING_PX = 2;
 // Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4/§11: o texto SECUNDÁRIO
 // (força/FRACA-FORTE, R:R, REACHED/BREACHED, obstáculo — ver
 // secondaryText acima) desenha visivelmente menor que o primário em
@@ -146,13 +165,15 @@ const SECONDARY_GAP_PX = 4;
 // MAX_INSTITUTIONAL_ZONES para a mesma pergunta ("quantas referências
 // estruturais um operador rastreia de uma vez") — zero limiar novo
 // inventado. Na captura real do Operador havia 11.
-export const MAX_CONTEXT_LABELS = 5;
-// Fundo dos chips de contexto: quase a cor de fundo real do painel, opaco
-// o bastante para o tick nativo do eixo nunca sangrar através (a MESMA
-// razão pela qual opaque() existe, abaixo) e discreto o bastante para o
-// chip ler como anotação sobre o gráfico, nunca como um bloco sólido
-// disputando atenção com o preço.
-const CONTEXT_FILL = "rgba(6, 10, 20, 0.88)";
+// Especificação Visual Profissional v1: pedido do Operador reduz pra 3
+// ("só mostrar 3 labels por vez... as outras aparecem no hover"). O
+// hover não é implementado — a superfície real deste app é iPad Safari
+// (CLAUDE.md, Regra de Ouro 7), touch-primeiro, sem cursor/estado
+// :hover alcançável; construir um equivalente de toque (tap-to-reveal)
+// é uma decisão de interação nova, não um ajuste de pixel, e fica
+// deliberadamente fora desta rodada (documentado, não fabricado — ver
+// resposta ao Operador). O teto em si (3, mais apertado) é aplicado.
+export const MAX_CONTEXT_LABELS = 3;
 // Achado real via harness Playwright (verificação desta correção):
 // alimentar o resolvedor com minGapPx = LABEL_HEIGHT_PX faz duas
 // etiquetas colidindo ficarem exatamente ENCOSTADAS (gap zero) — nunca
@@ -295,7 +316,7 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           // Target) compartilham a caixa grande/negrito — só o anel
           // (abaixo) continua exclusivo do preço.
           const isBigTier = tier === "live" || tier === "critical";
-          const primaryFont = isBigTier ? FONT_LIVE : FONT_BASE;
+          const primaryFont = isBigTier ? FONT_LIVE : FONT_COMPACT;
           ctx.font = primaryFont;
           const primaryWidth = ctx.measureText(entry.text).width;
           // Ordem "Lapidação das Etiquetas TP1/TP2": largura real da caixa
@@ -309,8 +330,13 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           const secondaryGap = entry.secondaryText ? SECONDARY_GAP_PX : 0;
           const textWidth = primaryWidth + secondaryGap + secondaryWidth;
           const boxHeight = isBigTier ? LIVE_LABEL_HEIGHT_PX : LABEL_HEIGHT_PX;
-          const boxWidth = textWidth + LABEL_PADDING_X * 2;
-          const boxX = side === "right" ? cssWidth - RIGHT_MARGIN_PX - boxWidth : LEFT_MARGIN_PX;
+          // primary/context (Especificação Visual v1): sem caixa, sem
+          // padding interno — só a folga real pedida até o edge do canvas.
+          const textPaddingX = isBigTier ? LABEL_PADDING_X : 0;
+          const edgePaddingX = isBigTier ? RIGHT_MARGIN_PX : COMPACT_EDGE_PADDING_PX;
+          const edgePaddingXLeft = isBigTier ? LEFT_MARGIN_PX : COMPACT_EDGE_PADDING_PX;
+          const boxWidth = textWidth + textPaddingX * 2;
+          const boxX = side === "right" ? cssWidth - edgePaddingX - boxWidth : edgePaddingXLeft;
           const boxY = entry.resolvedY - boxHeight / 2;
           if (boxY + boxHeight < 0 || boxY > cssHeight) continue; // fora da área visível — Fail-Closed, nunca desenha fora do canvas
 
@@ -334,25 +360,14 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           }
 
           ctx.globalAlpha = labelAlpha;
-          // NÍVEL "context" (mapa estrutural: S1/R1, sessões, sweeps,
-          // BOS/CHOCH, zonas institucionais, trend channel). Achado real da
-          // captura do Operador: como caixa SÓLIDA, cada um destes gritava
-          // tão alto quanto o preço vivo — 11 blocos coloridos cobrindo o
-          // primeiro terço das velas. Como chip de CONTORNO (fundo quase
-          // igual ao do painel + borda de 1px na cor real do nível + texto
-          // NA COR do nível), a informação é exatamente a mesma e a
-          // identidade por cor fica até mais legível — mas o peso visual cai
-          // para o de uma anotação, que é o que ele sempre foi. A borda é
-          // 1px sólida: "Fio de Seda", igual a qualquer outra marcação deste
-          // gráfico. Meio-pixel de recuo só para o traço cair inteiro dentro
-          // de uma coluna de pixels (borda nítida, nunca borrada em 2px).
-          if (tier === "context") {
-            boxPath(boxX + 0.5, boxY + 0.5, boxWidth - 1, boxHeight - 1);
-            ctx.fillStyle = CONTEXT_FILL;
-            ctx.fill();
-            ctx.strokeStyle = opaque(entry.color);
-            ctx.lineWidth = 1;
-            ctx.stroke();
+          // NÍVEIS "primary"/"context" (VWAP/NL/EMA/S1/R1/estrutura/
+          // confluência/BOS-CHOCH): Especificação Visual v1 — sem caixa,
+          // sem badge, sem cor de fundo. A hierarquia visual entre os dois
+          // continua real (context ainda é o único sujeito a
+          // MAX_CONTEXT_LABELS acima), só o TRATAMENTO agora é o mesmo:
+          // texto neutro nu no edge do canvas.
+          if (!isBigTier) {
+            // sem fill/stroke — bare text abaixo é o desenho inteiro.
           } else {
             // NÍVEL "live" — a âncora de leitura do gráfico. Anel fino de
             // 1px em volta da caixa (Fio de Seda, nunca tracejado), a
@@ -367,36 +382,37 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
               ctx.stroke();
               ctx.globalAlpha = labelAlpha;
             }
-            // NÍVEL "live"/"critical"/"primary" (preço agora, plano ativo
-            // Entry/Stop/Target, VWAP/NL/EMA): caixa sólida na cor real da
-            // própria linha, exatamente o comportamento que os "last value
-            // label" nativos que este overlay substitui sempre tiveram —
-            // só o TAMANHO da caixa (isBigTier acima) muda entre eles.
+            // NÍVEL "live"/"critical" (preço agora, plano ativo Entry/
+            // Stop/Target): caixa sólida na cor real da própria linha,
+            // exatamente o comportamento que os "last value label"
+            // nativos que este overlay substitui sempre tiveram.
             boxPath(boxX, boxY, boxWidth, boxHeight);
             ctx.fillStyle = opaque(entry.color);
             ctx.fill();
           }
 
-          // Texto escuro sobre fundo colorido nos níveis sólidos (mesmo
-          // contraste dos tags nativos); nos chips de contexto, a PRÓPRIA
-          // cor do nível sobre fundo escuro — a identidade por cor é a
-          // mesma nos dois casos, só o que é figura e o que é fundo troca.
-          const textColor = tier === "context" ? opaque(entry.color) : "#050810";
+          // Texto escuro sobre fundo colorido em live/critical (mesmo
+          // contraste dos tags nativos); primary/context (Especificação
+          // Visual v1) vira cinza neutro sem fundo — a identidade por
+          // indicador continua no PRÓPRIO texto ("E21"/"VWAP"/"CHOCH"),
+          // nunca reconstruída via cor (Regra de Ouro 4: nenhum dado real
+          // some, só para de repetir num segundo canal).
+          const textColor = isBigTier ? "#050810" : LABEL_NEUTRAL_COLOR;
           ctx.fillStyle = textColor;
           ctx.textBaseline = "middle";
           ctx.textAlign = "left";
           ctx.font = primaryFont;
-          ctx.fillText(entry.text, boxX + LABEL_PADDING_X, entry.resolvedY + 0.5);
+          ctx.fillText(entry.text, boxX + textPaddingX, entry.resolvedY + 0.5);
           // Ordem "Lapidação das Etiquetas TP1/TP2" §4/§11: segmento
-          // SECUNDÁRIO (força/R:R/status/obstáculo) na MESMA caixa, fonte
-          // menor + opacidade reduzida — mesma cor de sempre (nunca uma
-          // cor nova), só menos peso visual. Nunca desenhado se a chamada
-          // não declarou secondaryText (zero mudança pro resto do eixo).
+          // SECUNDÁRIO (força/R:R/status/obstáculo) na MESMA linha, fonte
+          // menor + opacidade reduzida — mesma cor do primário, só menos
+          // peso visual. Nunca desenhado se a chamada não declarou
+          // secondaryText (zero mudança pro resto do eixo).
           if (entry.secondaryText) {
             ctx.font = FONT_SECONDARY;
             ctx.fillStyle = textColor;
             ctx.globalAlpha = labelAlpha * SECONDARY_ALPHA_MULT;
-            ctx.fillText(entry.secondaryText, boxX + LABEL_PADDING_X + primaryWidth + secondaryGap, entry.resolvedY + 0.5);
+            ctx.fillText(entry.secondaryText, boxX + textPaddingX + primaryWidth + secondaryGap, entry.resolvedY + 0.5);
           }
           ctx.globalAlpha = 1;
         }

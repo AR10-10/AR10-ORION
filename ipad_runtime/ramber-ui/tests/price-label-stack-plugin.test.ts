@@ -147,11 +147,12 @@ describe('PriceLabelStackPlugin: side opcional (left/right) — dois lados resol
     expect(drawSideBlock).toContain('resolveLabelStackPositions(entries, MIN_GAP_PX)');
   });
 
-  it('geometria espelhada real: boxX ancora em LEFT_MARGIN_PX à esquerda, cssWidth-RIGHT_MARGIN_PX-boxWidth à direita — mesma margem mínima nos dois lados (LEFT_MARGIN_PX === RIGHT_MARGIN_PX)', () => {
+  it('geometria espelhada real: boxX ancora na margem mínima de cada lado — mesma margem nos dois lados, seja o tier live/critical (LEFT_MARGIN_PX/RIGHT_MARGIN_PX) ou primary/context compacto (COMPACT_EDGE_PADDING_PX, Especificação Visual v1: "2px do edge")', () => {
     const s = plugin();
     expect(s).toContain('const LEFT_MARGIN_PX = 2;');
     expect(s).toContain('const RIGHT_MARGIN_PX = 2;');
-    expect(drawSideBody()).toContain('const boxX = side === "right" ? cssWidth - RIGHT_MARGIN_PX - boxWidth : LEFT_MARGIN_PX;');
+    expect(s).toContain('const COMPACT_EDGE_PADDING_PX = 2;');
+    expect(drawSideBody()).toContain('const boxX = side === "right" ? cssWidth - edgePaddingX - boxWidth : edgePaddingXLeft;');
   });
 
   it('o conector do lado esquerdo fica na borda DIREITA da caixa (espelhado do direito, que fica na borda esquerda) — sempre entre a caixa e o centro do gráfico, nunca cortando pra fora da tela', () => {
@@ -392,8 +393,8 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('S1/R1 reaproveitam levelTitle (mesma função já usada pelas price lines nativas) — nunca uma segunda formatação. Carta Branca: só entram no eixo quando FORTE (>=2 toques reais) — "precisão maciça", não presença. Ordem "FECHAMENTO" §3: nome+valor no primário, força/toques no secundário (fonte menor) — levelTitle continua a fonte única do texto de força', () => {
     const block = priceAxisLabelsBody();
-    expect(block).toContain('text: `S1 ${(support as number).toFixed(2)}`');
-    expect(block).toContain('text: `R1 ${(resistance as number).toFixed(2)}`');
+    expect(block).toContain('text: `S1 ${fmtAxisLabelPrice(support as number)}`');
+    expect(block).toContain('text: `R1 ${fmtAxisLabelPrice(resistance as number)}`');
     // levelTitle com base vazia = só o segmento de força/toques/rompimentos,
     // exatamente o que era prefixo antes. Zero segunda formatação.
     expect(block).toContain('secondaryText: levelTitle("", supportStrength, supportBreakouts).trim() || undefined,');
@@ -432,9 +433,9 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('VWAP/NL reaproveitam LINE_STATE_GLYPH/VWAP_STATE_COLOR/NL_STATE_COLOR reais — mesma paleta institucional já usada pelas séries', () => {
     const block = priceAxisLabelsBody();
-    expect(block).toContain('VWAP ${LINE_STATE_GLYPH[s]} ${vwapLastValue.toFixed(2)}');
+    expect(block).toContain('V ${LINE_STATE_GLYPH[s]}${fmtAxisLabelPrice(vwapLastValue)}');
     expect(block).toContain('color: VWAP_STATE_COLOR[s]');
-    expect(block).toContain('NL ${LINE_STATE_GLYPH[s]} ${nlLastValue.toFixed(2)}');
+    expect(block).toContain('NL ${LINE_STATE_GLYPH[s]}${fmtAxisLabelPrice(nlLastValue)}');
     expect(block).toContain('color: NL_STATE_COLOR[s]');
   });
 
@@ -863,9 +864,9 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     const end = c.indexOf('return out;', idx);
     const block = c.slice(idx, end);
     // as linhas reais de push destes rótulos, cada uma sem side: no fim
-    expect(block).toContain('out.push({ price: vwapLastValue, text: `VWAP ${LINE_STATE_GLYPH[s]} ${vwapLastValue.toFixed(2)}`, color: VWAP_STATE_COLOR[s] });');
-    expect(block).toContain('out.push({ price: nlLastValue, text: `NL ${LINE_STATE_GLYPH[s]} ${nlLastValue.toFixed(2)}`, color: NL_STATE_COLOR[s] });');
-    expect(block).toContain('out.push({ price: emaLastValue, text: `EMA ${activeEmaPeriod} ${emaLastValue.toFixed(2)}`, color: "rgba(66, 165, 245, 0.85)" });');
+    expect(block).toContain('out.push({ price: vwapLastValue, text: `V ${LINE_STATE_GLYPH[s]}${fmtAxisLabelPrice(vwapLastValue)}`, color: VWAP_STATE_COLOR[s] });');
+    expect(block).toContain('out.push({ price: nlLastValue, text: `NL ${LINE_STATE_GLYPH[s]}${fmtAxisLabelPrice(nlLastValue)}`, color: NL_STATE_COLOR[s] });');
+    expect(block).toContain('out.push({ price: emaLastValue, text: `E${activeEmaPeriod} ${fmtAxisLabelPrice(emaLastValue)}`, color: "rgba(66, 165, 245, 0.85)" });');
   });
 
   it('resultado real esperado: até 8 rótulos possíveis do lado esquerdo (S1/R1/TREND/CHOC/SWEEP/KEY-H/KEY-L/ZONA INSTITUCIONAL), até 8 do lado direito (VWAP/NL/EMA + até 5 do plano ativo Conselho OU Núcleo) — redução real de densidade no lado que o Operador reportou, não só estética (Sweep/Key Levels somaram-se depois; Zona Institucional migrou pra cá na Diretriz Final — Polimento Visual, achado real de colisão via captura de tela)', () => {
@@ -912,7 +913,7 @@ describe('Diretriz Final — Polimento Visual: rótulo de Zona Institucional mig
     // eixo. Nível 1 = força da confluência (contagem real de fontes
     // distintas, a MESMA que alimenta confluenceWeight); Nível 2 = quais
     // ferramentas — lista completa preservada, em fonte menor.
-    expect(block).toContain('text: `◆ ${zone.distinctSourceCount} FONTES`,');
+    expect(block).toContain('text: `${zone.distinctSourceCount}F`,');
     expect(block).toContain('secondaryText: toolNames,');
     expect(block).toContain('color: INSTITUTIONAL_ZONE_LABEL_COLOR,');
     expect(block).toContain('side: "left",');

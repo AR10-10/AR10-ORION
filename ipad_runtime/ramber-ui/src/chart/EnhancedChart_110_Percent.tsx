@@ -551,6 +551,23 @@ const NL_STATE_COLOR: Record<DirectionalLineState, string> = {
   BEARISH: "rgba(255, 61, 113, 0.50)",
   NEUTRAL: "rgba(255, 214, 130, 0.45)",
 };
+// Especificação Visual Profissional v1 (pedido direto do Operador):
+// "número inteiro quando possível, decimal só quando necessário" nos
+// labels compactos do eixo (V/NL/E{period}). Mesmo limiar já real e
+// independentemente convergido em App.tsx (fmtPrice, v.toFixed(v>=1000?0:2))
+// — reaproveitado aqui em vez de inventado, aplicado igual aos 3 labels
+// (o mockup do documento mostrava decimais só em 1 dos 3 exemplos, mesma
+// grandeza — inconsistência de mock-up, não uma regra real; uma única
+// regra consistente serve melhor o próprio objetivo do pedido, "mais
+// profissional"). Só o TEXTO do label muda — o preço real usado pra
+// posicionar a linha/conector nunca perde precisão.
+function fmtAxisLabelPrice(v: number): string {
+  if (v >= 1000) return v.toFixed(0);
+  const withDecimals = v.toFixed(2);
+  // "500.00 (nível redondo) → 500": mesmo pedido, aplicado como regra —
+  // nunca um caso especial hardcoded pra um preço específico.
+  return withDecimals.endsWith(".00") ? v.toFixed(0) : withDecimals;
+}
 
 // Auditoria de arquitetura (revisão completa) — paginação histórica real:
 // detecta se `next` é EXATAMENTE `prev` com N candles novos prependados na
@@ -2340,7 +2357,7 @@ export function EnhancedChart_110_Percent({
     if (Number.isFinite(support) && supportStrength?.label === "FORTE") {
       out.push({
         price: support as number,
-        text: `S1 ${(support as number).toFixed(2)}`,
+        text: `S1 ${fmtAxisLabelPrice(support as number)}`,
         secondaryText: levelTitle("", supportStrength, supportBreakouts).trim() || undefined,
         color: "rgba(0, 255, 170, 0.65)",
         side: "left",
@@ -2349,7 +2366,7 @@ export function EnhancedChart_110_Percent({
     if (Number.isFinite(resistance) && resistanceStrength?.label === "FORTE") {
       out.push({
         price: resistance as number,
-        text: `R1 ${(resistance as number).toFixed(2)}`,
+        text: `R1 ${fmtAxisLabelPrice(resistance as number)}`,
         secondaryText: levelTitle("", resistanceStrength, resistanceBreakouts).trim() || undefined,
         color: "rgba(255, 0, 85, 0.65)",
         side: "left",
@@ -2363,14 +2380,14 @@ export function EnhancedChart_110_Percent({
     // ..." continuava aparecendo no eixo como se nada tivesse mudado.
     if (visibility.vwap && vwapLastValue !== null && Number.isFinite(vwapLastValue)) {
       const s: DirectionalLineState = vwapState ?? "NEUTRAL";
-      out.push({ price: vwapLastValue, text: `VWAP ${LINE_STATE_GLYPH[s]} ${vwapLastValue.toFixed(2)}`, color: VWAP_STATE_COLOR[s] });
+      out.push({ price: vwapLastValue, text: `V ${LINE_STATE_GLYPH[s]}${fmtAxisLabelPrice(vwapLastValue)}`, color: VWAP_STATE_COLOR[s] });
     }
     if (visibility.nexus_line && nlLastValue !== null && Number.isFinite(nlLastValue)) {
       const s: DirectionalLineState = nexusLineState ?? "NEUTRAL";
-      out.push({ price: nlLastValue, text: `NL ${LINE_STATE_GLYPH[s]} ${nlLastValue.toFixed(2)}`, color: NL_STATE_COLOR[s] });
+      out.push({ price: nlLastValue, text: `NL ${LINE_STATE_GLYPH[s]}${fmtAxisLabelPrice(nlLastValue)}`, color: NL_STATE_COLOR[s] });
     }
     if (visibility.ema && emaLastValue !== null && Number.isFinite(emaLastValue)) {
-      out.push({ price: emaLastValue, text: `EMA ${activeEmaPeriod} ${emaLastValue.toFixed(2)}`, color: "rgba(66, 165, 245, 0.85)" });
+      out.push({ price: emaLastValue, text: `E${activeEmaPeriod} ${fmtAxisLabelPrice(emaLastValue)}`, color: "rgba(66, 165, 245, 0.85)" });
     }
     const lastCandle = data.length > 0 ? data[data.length - 1] : null;
     if (lastCandle && Number.isFinite(lastCandle.close)) {
@@ -2896,9 +2913,13 @@ export function EnhancedChart_110_Percent({
         // alimenta confluenceWeight, nunca um número novo); Nível 2 é
         // QUAIS ferramentas. Zero dado apagado: a lista completa continua
         // sempre desenhada, em fonte menor.
+        // Especificação Visual Profissional v1 (pedido direto do
+        // Operador): "2F OB+EQH" em vez de "◆ 2 FONTES OB Baixa + EQH" —
+        // já era 2 pesos visuais (Nível 1/Nível 2 acima), só o texto do
+        // Nível 1 compacta mais.
         out.push({
           price: (zone.top + zone.bottom) / 2,
-          text: `◆ ${zone.distinctSourceCount} FONTES`,
+          text: `${zone.distinctSourceCount}F`,
           secondaryText: toolNames,
           color: INSTITUTIONAL_ZONE_LABEL_COLOR,
           alpha,
