@@ -965,11 +965,12 @@ export function EnhancedChart_110_Percent({
     vwapBandUpper2Ref.current = vwapBandUpper2;
     vwapBandLower2Ref.current = vwapBandLower2;
     // Diretriz Camada de Decisão Profissional, item 1: EMA como série
-    // nativa na escala principal — azul distinto, nunca competindo com a
+    // nativa na escala principal — cor distinta, nunca competindo com a
     // paleta direcional/semântica já em uso (ver comentário no ref
-    // acima). Fio de seda: lineWidth 1, sólida.
+    // acima). Fio de seda: lineWidth 1, sólida. Especificação Visual
+    // Profissional v1: ciano #06b6d4 (era azul rgba(66,165,245,...)).
     const emaSeries = chart.addSeries(LineSeries, {
-      color: "rgba(66, 165, 245, 0.85)",
+      color: "rgba(6, 182, 212, 0.85)",
       lineWidth: 1,
       lineStyle: LineStyle.Solid,
       priceLineVisible: false,
@@ -2410,7 +2411,7 @@ export function EnhancedChart_110_Percent({
       out.push({ price: nlLastValue, text: `NL ${LINE_STATE_GLYPH[s]}${fmtAxisLabelPrice(nlLastValue)}`, color: NL_STATE_COLOR[s] });
     }
     if (visibility.ema && emaLastValue !== null && Number.isFinite(emaLastValue)) {
-      out.push({ price: emaLastValue, text: `E${activeEmaPeriod} ${fmtAxisLabelPrice(emaLastValue)}`, color: "rgba(66, 165, 245, 0.85)" });
+      out.push({ price: emaLastValue, text: `E${activeEmaPeriod} ${fmtAxisLabelPrice(emaLastValue)}`, color: "rgba(6, 182, 212, 0.85)" });
     }
     const lastCandle = data.length > 0 ? data[data.length - 1] : null;
     if (lastCandle && Number.isFinite(lastCandle.close)) {

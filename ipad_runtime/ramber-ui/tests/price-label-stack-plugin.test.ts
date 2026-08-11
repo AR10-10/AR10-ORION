@@ -869,7 +869,7 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     // as linhas reais de push destes rótulos, cada uma sem side: no fim
     expect(block).toContain('out.push({ price: vwapLastValue, text: `V ${LINE_STATE_GLYPH[s]}${fmtAxisLabelPrice(vwapLastValue)}`, color: VWAP_STATE_COLOR[s] });');
     expect(block).toContain('out.push({ price: nlLastValue, text: `NL ${LINE_STATE_GLYPH[s]}${fmtAxisLabelPrice(nlLastValue)}`, color: NL_STATE_COLOR[s] });');
-    expect(block).toContain('out.push({ price: emaLastValue, text: `E${activeEmaPeriod} ${fmtAxisLabelPrice(emaLastValue)}`, color: "rgba(66, 165, 245, 0.85)" });');
+    expect(block).toContain('out.push({ price: emaLastValue, text: `E${activeEmaPeriod} ${fmtAxisLabelPrice(emaLastValue)}`, color: "rgba(6, 182, 212, 0.85)" });');
   });
 
   it('resultado real esperado: até 8 rótulos possíveis do lado esquerdo (S1/R1/TREND/CHOC/SWEEP/KEY-H/KEY-L/ZONA INSTITUCIONAL), até 8 do lado direito (VWAP/NL/EMA + até 5 do plano ativo Conselho OU Núcleo) — redução real de densidade no lado que o Operador reportou, não só estética (Sweep/Key Levels somaram-se depois; Zona Institucional migrou pra cá na Diretriz Final — Polimento Visual, achado real de colisão via captura de tela)', () => {
