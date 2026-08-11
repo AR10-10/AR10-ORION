@@ -27,6 +27,7 @@ import {
   ColorType,
   CrosshairMode,
   LineStyle,
+  isUTCTimestamp,
   type IChartApi,
   type ISeriesApi,
   type IPriceLine,
@@ -898,6 +899,25 @@ export function EnhancedChart_110_Percent({
         // própria unidade da lib) — grandezas diferentes, e este valor já
         // tem razão própria documentada, não é uma lacuna real.
         rightOffset: 8,
+        // Achado real da auditoria "AUDITORIA VISUAL CIRÚRGICA" (P14): sem
+        // formatter próprio, a lib cai no formato padrão do locale — em
+        // pt-BR isso inclui abreviação com ponto solto ("ago.") na virada
+        // de mês, inconsistente com o resto da régua (só dígitos). Time é
+        // um union real da lib (UTCTimestamp | BusinessDay | string, ver
+        // typings.d.ts) — isUTCTimestamp() é o guard real que a própria
+        // lib exporta, nunca um cast ingênuo pra number. Este app só
+        // alimenta UTCTimestamp numérico (candles reais, sempre em
+        // segundos); o `return null` no ramo BusinessDay/string nunca
+        // executa na prática, mas devolve ao formato padrão da lib em vez
+        // de fabricar uma data — fail-closed honesto pro tipo que o
+        // contrato real da lib ainda exige tratar.
+        tickMarkFormatter: (time, _tickMarkType, locale) => {
+          if (!isUTCTimestamp(time)) return null;
+          const date = new Date(time * 1000);
+          const day = date.getDate();
+          const month = date.toLocaleString(locale, { month: "short" }).toUpperCase().replace(".", "");
+          return `${String(day).padStart(2, "0")} ${month}`;
+        },
       },
       // Diretriz explícita do Sprint 1: pan/zoom real e nativo — nunca
       // hand-rolled. handleScroll cobre arrastar (mouse + touch);
