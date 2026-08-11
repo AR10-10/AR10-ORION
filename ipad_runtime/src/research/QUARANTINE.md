@@ -39,6 +39,8 @@ src/research/
     ├── bos-choch-engine.js            ACTIVE_READ_ONLY (graduado 2026-07-12)
     ├── liquidity-void-engine.js       ACTIVE_READ_ONLY (graduado 2026-08-04)
     ├── zigzag-engine.js               ACTIVE_READ_ONLY (graduado 2026-08-10)
+    ├── supertrend-engine.js           LABORATÓRIO (isolado 2026-08-11, não graduado —
+    │                                   ver secao "Laboratório de engines" abaixo)
     ├── fractal-swings.js              utilitário compartilhado (extraído 2026-07-03,
     │                                   não é um engine — ver secao "Utilitários" abaixo)
     └── hmm-regime-model.js            LABORATÓRIO (isolado 2026-08-10, não graduado —
@@ -161,6 +163,60 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   primitiva geométrica compartilhada; os três engines acima o importam.
 
 ## Laboratório de engines (isolado, não graduado)
+
+- **`engines/supertrend-engine.js`** (2026-08-11, pedido do Operador
+  "adicione todos os requisitos que foi pesquisado ... evoluir o
+  ecossistema"). `computeSuperTrend(candles, period, multiplier)` —
+  SuperTrend (Olivier Seban): banda ATR travada em catraca que trilha o
+  preço como stop dinâmico e inverte por fechamento real além da banda
+  oposta.
+  **Auditoria antes de construir (CLAUDE.md item 1):** `grep -ri
+  "supertrend"` em `src/` e `ramber-ui/src/` não retornou NADA — gap
+  genuíno. Distinto de vários outros itens do MESMO documento de pesquisa
+  que já existiam há entregas e foram rejeitados como "gap" nesta
+  auditoria: CVD/Cumulative Delta (`nexus/market-analysis.ts`,
+  `nexus/council.ts`), Absorption (`src/orderflow/signal-engine.js`),
+  walk-forward (laboratório de backtest estrutural), Volume Profile/TPO
+  (Entrega 41), Order Book L2 (Entrega 40), Liquidity Sweep
+  (`trap-detection.ts`), Multi-Timeframe (`buildMultiTimeframeContext`),
+  Footprint e VWAP ±σ. Motores vizinhos conferidos e deliberadamente NÃO
+  reaproveitados como substitutos: `regime-engine.js` classifica REGIME
+  (ADX/DI + largura de banda) e `trend-channel-engine.ts` ajusta um canal
+  de REGRESSÃO (OLS ±σ) — nenhum dos dois produz um stop que trilha e
+  trava, que é o que o SuperTrend é.
+  **Pesquisa real da fórmula (CLAUDE.md item 2):** confirmada via
+  WebSearch antes de escrever código (TradingView "Supertrend" support
+  doc, LiteFinance, Strike.money, CrossTrade). O documento de pesquisa
+  que motivou o motor trazia a fórmula **incompleta** — só as bandas
+  básicas, sem a regra de travamento. Sem a catraca isso não é
+  SuperTrend: seria um par de bandas tipo Keltner que oscila junto com o
+  preço e inverte a cada respiro. A regra real ("the upper band only
+  moves down or stays flat when price is above it, and the lower band
+  only moves up or stays flat when price is below it") é o que
+  transforma a banda num trailing stop. Flip só por FECHAMENTO além da
+  banda oposta — nunca por pavio (que geraria flip fantasma em cada
+  sweep de liquidez, evento que `trap-detection.ts` já trata à parte).
+  **Zero segunda matemática (Regra de Ouro 4):** reusa `computeAtrPercent`
+  (ATR de Wilder, `lorentzian-classifier.js`) e converte de volta a
+  unidade de preço por `atr = (atrPct/100) * close` — recuperação exata,
+  nunca uma segunda suavização de Wilder em paralelo; travado por teste.
+  **Achado real do próprio processo de teste** (mesma classe do bug que o
+  ZigZag revelou na Entrega 35): a 1ª versão dos 2 testes de catraca
+  usava séries de passo constante e passava IGUAL com a catraca REMOVIDA
+  do motor — porque numa subida suave a banda básica já sobe sozinha, e
+  monotonicidade não distingue "travado" de "não travado". Descoberto por
+  teste de mutação deliberado (remover a catraca e conferir se a suíte
+  acusa). Fixtures redesenhadas com expansão de volatilidade — o momento
+  em que a banda básica RECUARIA — e re-verificadas por mutação: agora a
+  remoção da catraca derruba 3 testes em vez de 1. Os testes de mutação
+  não ficam no repositório (são um procedimento, não um caso), mas as
+  fixtures endurecidas sim.
+  18 testes de execução real em `ramber-ui/tests/supertrend-engine.test.ts`.
+  Zero `fetch()`, zero `WebSocket`, zero `Math.random`/`Date.now`.
+  Status: **LABORATÓRIO** — nenhum módulo de produção importa daqui.
+  Graduação (import por `engine-bridge.ts`, entrada em `CHART_LAYER_IDS`,
+  plugin de canvas próprio) é um passo seguinte deliberadamente separado,
+  ainda não construído.
 
 - **`engines/hmm-regime-model.js`** (2026-08-10, "Entrega 43" — evento de
   segurança tratado antes de construir: documento externo endereçando
