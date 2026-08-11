@@ -795,9 +795,18 @@ export function EnhancedChart_110_Percent({
     const chart = createChart(containerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#8ab4f8",
+        // Especificação Técnica v1.0 §A.4.5/§A.4.6 (pedido direto do
+        // Operador, mesma prescrição nos 2 documentos): rótulos NATIVOS de
+        // eixo (preço à direita + tempo embaixo, ambos desenhados pela
+        // própria lightweight-charts) em 9px cinza neutro #888888 — era
+        // 10px no azul-acento do app (#8ab4f8). Mesma família tipográfica
+        // dos rótulos flutuantes que PriceLabelStackPlugin já desenha por
+        // cima (FONT_COMPACT, 9px mono neutro): os dois sistemas de rótulo
+        // do eixo finalmente leem como UMA coisa só, que era exatamente a
+        // queixa ("tamanho das etiquetas... não tá legal").
+        textColor: "#888888",
         fontFamily: "ui-monospace, monospace",
-        fontSize: 10,
+        fontSize: 9,
         // Auditoria do painel do gráfico (achado real): a lib desenha por
         // padrão o logo "powered by TradingView" sobre o próprio canvas —
         // destoa do terminal proprietário AR10 CYBORG. A licença Apache-2.0
@@ -812,8 +821,14 @@ export function EnhancedChart_110_Percent({
       // opacidade reduzida. Só o grid do gráfico principal — o chart
       // TradFi/macro separado (omnibox/TradFiRealChart.tsx) fica fora do
       // escopo deste pedido, intocado.
+      // Especificação Técnica v1.0 §A.4.2: verticais (tempo) ainda mais
+      // discretas que as horizontais (preço) — 0.02 vs 0.03. Razão real,
+      // não capricho: a leitura operacional deste gráfico é por NÍVEL DE
+      // PREÇO (S/R, VWAP, zonas, alvos), então a grade horizontal é a que
+      // ajuda a medir; a vertical é só ritmo temporal e pode desaparecer
+      // mais.
       grid: {
-        vertLines: { color: "rgba(255, 255, 255, 0.03)" },
+        vertLines: { color: "rgba(255, 255, 255, 0.02)" },
         horzLines: { color: "rgba(255, 255, 255, 0.03)" },
       },
       // Diretriz Mestra §2 ("Magnetismo OHLC / Snap em candles"): Magnet
