@@ -7959,32 +7959,59 @@ function SecondaryModuleView({ tab }: { tab: string }) {
 }
 
 // Ordem "Lapidação Visual Final" §7 — leitura O/H/L/C do candle real mais
-// recente. Puramente exibição: lê os 4 campos crus do MESMO array que o
+// recente. Puramente exibição: lê os campos crus do MESMO array que o
 // gráfico desenha, nunca deriva nada (variação/percentual seriam cálculo
 // novo na UI, que a §6 da própria Ordem proíbe — e a Ordem pede
 // literalmente "O / H / L / C", não a variação). Fail-closed: sem candle
-// real com os 4 campos finitos, devolve null e some — nunca um traço ou
-// zero fabricado ocupando espaço no cabeçalho do gráfico.
-function OhlcReadout({ candles }: { candles?: Array<{ open?: number; high?: number; low?: number; close?: number }> }) {
+// real com os 4 campos O/H/L/C finitos, devolve null e some — nunca um
+// traço ou zero fabricado ocupando espaço no cabeçalho do gráfico.
+//
+// Especificação Visual Profissional v1 (pedido direto do Operador): V
+// (volume) somado como 5º campo, mesma disciplina — `candle.volume` é o
+// MESMO dado real que já alimenta Footprint/Volume Profile/Liquidity
+// Void neste app (zero segundo cálculo), nunca `volume × preço` (isso
+// SIM seria um cálculo novo — Regra de Ouro 1/4). Rótulo fica "V", nunca
+// "$V" ou qualquer prefixo de moeda: a unidade real de `volume` neste
+// app é o ATIVO-BASE (engine-bridge.ts: `unit: 'base_asset'`, ex. BTC),
+// não notional em USD — um prefixo de dólar aqui seria uma alegação
+// falsa sobre o próprio dado. Opcional/aditivo: candles sem `volume`
+// finito continuam mostrando só O/H/L/C, como sempre (fail-closed por
+// campo, não all-or-nothing).
+// Cores por campo (paleta v1): O neutro, H verde, L vermelho, C branco
+// (o mais recente/acionável), V ciano — mesma família semântica já
+// usada no resto do gráfico (verde/vermelho = alta/baixa, ciano = EMA/
+// referência técnica).
+function fmtVolume(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return v.toFixed(2);
+}
+function OhlcReadout({ candles }: { candles?: Array<{ open?: number; high?: number; low?: number; close?: number; volume?: number }> }) {
   const last = Array.isArray(candles) && candles.length > 0 ? candles[candles.length - 1] : null;
   if (!last) return null;
-  const fields: Array<[string, number | undefined]> = [
-    ["O", last.open],
-    ["H", last.high],
-    ["L", last.low],
-    ["C", last.close],
+  const fields: Array<[string, number | undefined, string]> = [
+    ["O", last.open, "text-[#888888]"],
+    ["H", last.high, "text-[#22c55e]"],
+    ["L", last.low, "text-[#ef4444]"],
+    ["C", last.close, "text-[#e5e5e5] font-semibold"],
   ];
   if (!fields.every(([, v]) => num(v))) return null;
+  const hasVolume = num(last.volume);
   return (
     <div
       className="hidden lg:flex items-center gap-1.5 mr-2 font-mono whitespace-nowrap shrink-0"
-      title="Abertura/Máxima/Mínima/Fechamento do candle real mais recente, do mesmo array que o gráfico desenha — nunca um segundo cálculo."
+      title="Abertura/Máxima/Mínima/Fechamento/Volume do candle real mais recente, do mesmo array que o gráfico desenha — nunca um segundo cálculo. Volume em unidade do ativo-base, nunca notional USD."
     >
-      {fields.map(([k, v]) => (
-        <span key={k} className="text-[#8ab4f8]/90">
+      {fields.map(([k, v, color]) => (
+        <span key={k} className={color}>
           <span className="text-[#8ab4f8]/40">{k}</span> {fmt(v)}
         </span>
       ))}
+      {hasVolume && (
+        <span className="text-[#06b6d4]">
+          <span className="text-[#8ab4f8]/40">V</span> {fmtVolume(last.volume as number)}
+        </span>
+      )}
     </div>
   );
 }

@@ -62,4 +62,29 @@ describe('OhlcReadout (§7): fonte única e zero cálculo derivado', () => {
     expect(block).not.toContain('useUnifiedSnapshot');
     expect(block).not.toContain('livePrice');
   });
+
+  // Especificação Visual Profissional v1: V (volume) somado como 5º campo,
+  // mesma disciplina de zero-cálculo-derivado — trava a única forma real
+  // de regressão nova possível aqui: alguém multiplicar volume × preço
+  // pra fabricar um "volume USD" que o dado real não garante.
+  it('V (volume): mesmo campo cru last.volume, opcional/aditivo (O/H/L/C continuam sem volume), nunca notional USD', () => {
+    const block = ohlcBlock();
+    expect(block).toContain('last.volume');
+    expect(block).toContain('const hasVolume = num(last.volume);');
+    // fail-closed por campo: falta de volume não derruba O/H/L/C.
+    expect(block).toContain('{hasVolume && (');
+    // Nunca vira notional: proibido multiplicar por preço ou prefixar "$".
+    expect(block).not.toMatch(/volume\s*\*\s*last\.(close|open)/);
+    expect(block).not.toContain('$V');
+    expect(block).not.toContain('"$"');
+  });
+
+  it('cores por campo seguem a paleta v1 (O neutro, H verde, L vermelho, C branco, V ciano)', () => {
+    const block = ohlcBlock();
+    expect(block).toContain('"text-[#888888]"');
+    expect(block).toContain('"text-[#22c55e]"');
+    expect(block).toContain('"text-[#ef4444]"');
+    expect(block).toContain('"text-[#e5e5e5] font-semibold"');
+    expect(block).toContain('text-[#06b6d4]');
+  });
 });
