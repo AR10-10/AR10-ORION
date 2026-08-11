@@ -920,7 +920,7 @@ describe('ADENDO "Refinamento das Sessões e Limpeza Visual": Market Sessions tr
 
   it('tradePlanAbsenceReason (overlay de texto do canto) desce de top-2 pra top-7 pra abrir espaço real pra faixa nova de 24px — nunca 2 textos reais sobrepostos', () => {
     const c = chart();
-    expect(c).toContain('className="absolute left-2 top-7 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide"');
+    expect(c).toContain('className="absolute left-2 top-7 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide rounded-[3px] px-1.5 py-0.5"');
     expect(c).not.toContain('className="absolute left-2 top-2 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide"');
   });
 

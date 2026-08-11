@@ -2323,11 +2323,22 @@ export function EnhancedChart_110_Percent({
       mk(tradePlan.entry.high, entryColor);
       mk(tradePlan.entry.low, "rgba(240, 208, 111, 0.45)");
     }
-    stopLineRef.current = mk(tradePlan.stop.price, "rgba(255, 0, 85, 0.75)");
+    // Achado real de 6 screenshots do Operador (iPad + Desktop, BTC/ZEC):
+    // stop/targets/preço vivo ainda no par neon universal (#ff0055/
+    // #00ffaa, canvas-palette.ts) — o MESMO par que candles/grid/crosshair
+    // já deixaram pra trás na Fase 1 (convergência TradingView aprovada
+    // pelo Operador). canvas-palette.ts documenta que esse par é
+    // deliberado em ~10 arquivos (BOS/CHOCH, FVG/OB, sweep, sessões) —
+    // este não é esse caso: aqui é especificamente o Trade Plan/preço
+    // vivo, o mesmo recorte estreito que a Fase 1 já abriu (só o que 3
+    // documentos + screenshots reais evidenciaram, nunca um reskin do
+    // app inteiro). #F23645/#089981 = MESMA cor real de down/up já usada
+    // pelas velas — alinhamento, não uma 3ª paleta nova.
+    stopLineRef.current = mk(tradePlan.stop.price, "rgba(242, 54, 69, 0.75)");
     // v2 (Diretriz Complementar §2): uma linha por alvo real (1 a
     // MAX_TARGETS) — nunca uma linha única fixa.
     tradePlan.targets.forEach((target) => {
-      const line = mk(target.price, "rgba(0, 255, 170, 0.75)");
+      const line = mk(target.price, "rgba(8, 153, 129, 0.75)");
       if (line) targetLinesArrayRef.current.push(line);
     });
   }, [tradePlan]);
@@ -2358,10 +2369,10 @@ export function EnhancedChart_110_Percent({
       engineFallbackLinesRef.current.push(line);
       return line;
     };
-    mk(engineFallbackLevels.stop, "rgba(255, 0, 85, 0.5)");
-    mk(engineFallbackLevels.target1, "rgba(0, 255, 170, 0.5)");
-    if (engineFallbackLevels.target2 !== null) mk(engineFallbackLevels.target2, "rgba(0, 255, 170, 0.35)");
-    if (engineFallbackLevels.target3 != null) mk(engineFallbackLevels.target3, "rgba(0, 255, 170, 0.2)");
+    mk(engineFallbackLevels.stop, "rgba(242, 54, 69, 0.5)");
+    mk(engineFallbackLevels.target1, "rgba(8, 153, 129, 0.5)");
+    if (engineFallbackLevels.target2 !== null) mk(engineFallbackLevels.target2, "rgba(8, 153, 129, 0.35)");
+    if (engineFallbackLevels.target3 != null) mk(engineFallbackLevels.target3, "rgba(8, 153, 129, 0.2)");
   }, [engineFallbackLevels]);
 
   // Ordem Final Autonomia Evolução §1 + Diretriz Complementar §2/§4:
@@ -2408,14 +2419,14 @@ export function EnhancedChart_110_Percent({
     const stopHitNow = p !== null && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
     stopLineRef.current?.applyOptions({
       price: effectiveStopPrice,
-      color: stopHitNow ? "rgba(255, 0, 85, 1)" : "rgba(255, 0, 85, 0.75)",
+      color: stopHitNow ? "rgba(242, 54, 69, 1)" : "rgba(242, 54, 69, 0.75)",
     });
     tradePlan.targets.forEach((_target, i) => {
       const line = targetLinesArrayRef.current[i];
       if (!line) return;
       const reached = i < hits;
       line.applyOptions({
-        color: reached ? "rgba(0, 255, 170, 1)" : "rgba(0, 255, 170, 0.75)",
+        color: reached ? "rgba(8, 153, 129, 1)" : "rgba(8, 153, 129, 0.75)",
       });
     });
   }, [tradePlan, livePrice, targetsHit]);
@@ -2568,7 +2579,7 @@ export function EnhancedChart_110_Percent({
       out.push({
         price: displayPrice,
         text: displayPrice.toFixed(2),
-        color: displayPrice >= lastCandle.open ? "#00ffaa" : "#ff0055",
+        color: displayPrice >= lastCandle.open ? "#089981" : "#F23645",
         // ÚNICA etiqueta do eixo que declara tier explicitamente (todo o
         // resto deriva do side): é a âncora de leitura do gráfico —
         // maior, em negrito, com anel fino, nunca podada — e também a
@@ -2677,7 +2688,7 @@ export function EnhancedChart_110_Percent({
           price: effectiveStopPrice,
           text: "ST",
           secondaryText: stopHitNow ? `${stopSecondary} BREACHED` : stopSecondary,
-          color: "rgba(255, 0, 85, 0.75)",
+          color: "rgba(242, 54, 69, 0.75)",
           tier: "critical",
         });
       }
@@ -2722,7 +2733,7 @@ export function EnhancedChart_110_Percent({
           price: target.price,
           text: `TP${i + 1}${distPct}`,
           secondaryText: secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined,
-          color: "rgba(0, 255, 170, 0.75)",
+          color: "rgba(8, 153, 129, 0.75)",
           tier: "critical",
         });
       });
@@ -2780,7 +2791,7 @@ export function EnhancedChart_110_Percent({
           price: engineFallbackLevels.stop,
           text: "ST",
           secondaryText: breached ? "BREACHED" : undefined,
-          color: "rgba(255, 0, 85, 0.5)",
+          color: "rgba(242, 54, 69, 0.5)",
           tier: "critical",
         });
       }
@@ -2800,7 +2811,7 @@ export function EnhancedChart_110_Percent({
           price: engineFallbackLevels.target1,
           text: `TP1${distPct1}`,
           secondaryText: secondary1.length > 0 ? secondary1.join(" ") : undefined,
-          color: "rgba(0, 255, 170, 0.5)",
+          color: "rgba(8, 153, 129, 0.5)",
           tier: "critical",
         });
       }
@@ -2816,7 +2827,7 @@ export function EnhancedChart_110_Percent({
           price: engineFallbackLevels.target2,
           text: `TP2${distPct2}`,
           secondaryText: secondary2.length > 0 ? secondary2.join(" ") : undefined,
-          color: "rgba(0, 255, 170, 0.35)",
+          color: "rgba(8, 153, 129, 0.35)",
           tier: "critical",
         });
       }
@@ -2832,7 +2843,7 @@ export function EnhancedChart_110_Percent({
           price: engineFallbackLevels.target3,
           text: `TP3${distPct3}`,
           secondaryText: reached ? "REACHED" : undefined,
-          color: "rgba(0, 255, 170, 0.2)",
+          color: "rgba(8, 153, 129, 0.2)",
           tier: "critical",
         });
       }
@@ -3114,8 +3125,15 @@ export function EnhancedChart_110_Percent({
           // top-7 (era top-2): abre espaço real pra faixa de Market Sessions
           // que agora vive no topo do painel (BAND_HEIGHT_PX=24,
           // MarketSessionBandsPlugin.tsx) — nunca sobrepor 2 textos reais.
-          className="absolute left-2 top-7 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide"
-          style={{ color: "rgba(138, 180, 248, 0.55)" }}
+          // Achado real de screenshot (Operador): texto sem nenhum fundo
+          // lê como flutuando sobre o grid, mesmo sendo HTML (não canvas)
+          // — o Operador não distingue os dois mecanismos, só o resultado
+          // visual. Fundo/padding/canto discretos abaixo (mesmo raio de
+          // canvas-label.ts, CANVAS_LABEL_RADIUS=3, pra família visual
+          // consistente com as etiquetas do canvas) — cor/conteúdo/posição
+          // inalterados.
+          className="absolute left-2 top-7 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide rounded-[3px] px-1.5 py-0.5"
+          style={{ color: "rgba(138, 180, 248, 0.75)", background: "rgba(5, 8, 16, 0.75)" }}
         >
           {engineFallbackLevels
             ? `SEM PLANO DO CONSELHO · ${tradePlanAbsenceReason} · linhas abaixo são do Núcleo`

@@ -117,7 +117,17 @@ export function DepthChartPlugin({ chart, series }: DepthChartPluginProps) {
           ctx.strokeRect(cssWidth - w + 0.5, y - barHeight / 2 + 0.5, Math.max(0, w - 1), Math.max(0, barHeight - 1));
           const text = `WALL ${sideLabel}`;
           const size = measureCanvasLabel(ctx, text);
-          drawCanvasLabel(ctx, cssWidth - w - size.width - 4, y - size.height / 2, { fill: WALL_BORDER, text });
+          // Achado real de screenshot (Operador): a etiqueta WALL BID/WALL
+          // ASK usava o MESMO âmbar do destaque de barra pros dois lados —
+          // a própria barra já é bullish/bearish (fill acima), só a
+          // etiqueta não seguia. Reusa os mesmos helpers canônicos
+          // (chartBullishRgba/chartBearishRgba, já importados, já usados
+          // pela barra) em vez de inventar uma 3ª cor — zero par novo, só
+          // a etiqueta alinhada à barra que ela rotula. WALL_BORDER
+          // continua servindo só o contorno de destaque da barra (papel
+          // diferente: "isto é uma wall", não direção).
+          const labelFill = sideLabel === "BID" ? chartBullishRgba(0.85) : chartBearishRgba(0.85);
+          drawCanvasLabel(ctx, cssWidth - w - size.width - 4, y - size.height / 2, { fill: labelFill, text });
         });
       };
 

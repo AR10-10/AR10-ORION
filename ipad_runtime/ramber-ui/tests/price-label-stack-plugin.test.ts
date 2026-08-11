@@ -447,8 +447,8 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
     expect(block).toContain('color: NL_STATE_COLOR[s]');
   });
 
-  it('último preço usa a MESMA cor up/down real da própria série de candles (#00ffaa/#ff0055) — nunca uma cor nova', () => {
-    expect(priceAxisLabelsBody()).toContain('displayPrice >= lastCandle.open ? "#00ffaa" : "#ff0055"');
+  it('último preço usa a MESMA cor up/down real da própria série de candles (#089981/#F23645, convergência TradingView) — nunca uma cor nova', () => {
+    expect(priceAxisLabelsBody()).toContain('displayPrice >= lastCandle.open ? "#089981" : "#F23645"');
   });
 
   it('achado real de captura de tela do Operador (BTC/USDT 1H ao vivo, header 65,468.00 vs. rótulo do eixo 65439.20 — mesma fonte, dessincronizada): o rótulo de último preço prefere livePrice (tick real, mesma fonte da barra superior) — nunca fica preso no data[último].close desatualizado', () => {
@@ -531,14 +531,14 @@ describe('"bater o olho profissional" (pendência honesta do turno anterior): EN
     expect(block).toContain('const entryColor = "rgba(240, 208, 111, 0.75)";');
     // STOP vermelho no preço EFETIVO (ratchet real), BREACHED do preço vivo
     expect(block).toContain('const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);');
-    expect(block).toContain('color: "rgba(255, 0, 85, 0.75)"');
+    expect(block).toContain('color: "rgba(242, 54, 69, 0.75)"');
     // TARGET verde, REACHED do targetsHit autoritativo — Ordem "Lapidação
     // das Etiquetas TP1/TP2" §3/§4: texto primário só label+distância,
     // REACHED (como o resto do estado) migrou pro secundário.
     expect(block).toContain('const reached = i < hits;');
     expect(block).toContain('reached ? "REACHED" : null,');
     expect(block).toContain('text: `TP${i + 1}${distPct}`,');
-    expect(block).toContain('color: "rgba(0, 255, 170, 0.75)"');
+    expect(block).toContain('color: "rgba(8, 153, 129, 0.75)"');
   });
 
   it('estado/texto vivo (BREACHED/REACHED/distância %/ETA/compactação) é o MESMO que a lib desenhava — mesmas funções puras reais, nunca uma segunda formatação divergente', () => {
@@ -631,7 +631,7 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     // migraram pro secundário (fonte menor, PriceLabelStackPlugin).
     expect(block).toContain('text: "ST",');
     expect(block).toContain('secondaryText: breached ? "BREACHED" : undefined,');
-    expect(block).toContain('color: "rgba(255, 0, 85, 0.5)",');
+    expect(block).toContain('color: "rgba(242, 54, 69, 0.5)",');
     // distPct1/2 (Ordem "Lapidação Visual Final e Sincronia Operacional"
     // §4 — "distância até o alvo, quando já houver cálculo real
     // disponível"): mesma fórmula que o Trade Plan do Conselho já usa
@@ -706,7 +706,10 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     const s = chart();
     const idx = s.indexOf('{tradePlanAbsenceReason && (');
     expect(idx, 'overlay de texto não encontrado').toBeGreaterThan(-1);
-    const block = s.slice(idx, idx + 900);
+    // Janela alargada (era 900): achado real de screenshot (Operador,
+    // texto sem fundo lendo como flutuante) somou um comentário explicando
+    // o fundo/padding novos antes do texto SEM PLANO/SEM TRADE PLAN.
+    const block = s.slice(idx, idx + 1700);
     expect(block).toContain('? `SEM PLANO DO CONSELHO · ${tradePlanAbsenceReason} · linhas abaixo são do Núcleo`');
     expect(block).toContain(': `SEM TRADE PLAN · ${tradePlanAbsenceReason}`');
   });
