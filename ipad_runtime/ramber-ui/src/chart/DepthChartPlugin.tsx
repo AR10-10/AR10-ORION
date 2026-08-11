@@ -33,12 +33,20 @@ import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { useOrderBookSnapshot, type OrderBookLevel } from "../store/unified-snapshot-store";
 import { detectWalls } from "../nexus/order-book-depth";
 import { drawCanvasLabel, measureCanvasLabel } from "../nexus/canvas-label";
+import { chartBullishRgba, chartBearishRgba } from "./canvas-palette";
 
 // Mais largo que o VP (0.16): poucos níveis reais (8) por lado, cada um
 // precisa de espaço legível — nunca inventa profundidade que o book não tem.
 const MAX_BAR_WIDTH_FRACTION = 0.22;
-const BID_FILL = "rgba(34, 197, 94, 0.22)";
-const ASK_FILL = "rgba(239, 68, 68, 0.22)";
+// Achado da AUDITORIA TÉCNICA COMPLETA (item B12): bid/ask usavam Tailwind
+// green-500/red-500, um par DIFERENTE do verde/vermelho universal que todo
+// o resto do gráfico usa para o mesmo conceito alta/baixa (candles, FVG/OB,
+// structure breaks, sweep) — drift real, sem nenhuma justificativa no
+// código. Bid (pressão de compra) e ask (pressão de venda) são o mesmo
+// conceito bullish/bearish, então agora reusam o par canônico
+// (canvas-palette.ts) em vez de um segundo par nascido por acidente.
+const BID_FILL = chartBullishRgba(0.22);
+const ASK_FILL = chartBearishRgba(0.22);
 // Mesmo âmbar já usado nas classificações de atenção deste codebase
 // (FPS/latência do ciclo, TelemetryHealthWidget) — nenhum tom novo.
 const WALL_BORDER = "rgba(240, 208, 111, 0.9)";
