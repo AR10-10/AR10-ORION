@@ -807,9 +807,14 @@ export function EnhancedChart_110_Percent({
         // (nunca uma remoção silenciosa da atribuição exigida).
         attributionLogo: false,
       },
+      // Especificação Visual Profissional v1: grid "quase invisível" —
+      // neutro (era tingido do acento ciano do app, rgba(0,240,255,0.06)),
+      // opacidade reduzida. Só o grid do gráfico principal — o chart
+      // TradFi/macro separado (omnibox/TradFiRealChart.tsx) fica fora do
+      // escopo deste pedido, intocado.
       grid: {
-        vertLines: { color: "rgba(0, 240, 255, 0.06)" },
-        horzLines: { color: "rgba(0, 240, 255, 0.06)" },
+        vertLines: { color: "rgba(255, 255, 255, 0.03)" },
+        horzLines: { color: "rgba(255, 255, 255, 0.03)" },
       },
       // Diretriz Mestra §2 ("Magnetismo OHLC / Snap em candles"): Magnet
       // gruda o crosshair no valor da série (o close do candle) — snap
