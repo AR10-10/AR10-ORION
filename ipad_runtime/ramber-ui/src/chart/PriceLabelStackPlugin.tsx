@@ -32,12 +32,12 @@
 // regra de default e critério de poda em price-label-stack.ts):
 //   live    → caixa sólida MAIOR, negrito, com anel fino de 1px. Uma por
 //             gráfico: a âncora que o olho encontra primeiro.
-//   primary → caixa sólida (comportamento de sempre) — VWAP/NL/EMA e o
-//             plano ativo, o que é acionável agora.
-//   context → chip de CONTORNO (fundo do painel + borda 1px na cor do
-//             nível + texto na cor do nível) e sujeito a teto de
-//             contagem — o mapa estrutural, que deve estar lá sem
+//   primary → VWAP/NL/EMA e o plano ativo, o que é acionável agora.
+//   context → o mapa estrutural, sujeito a teto de contagem — não deve
 //             disputar atenção com o preço.
+// (o tratamento visual exato de primary/context mudou mais de uma vez
+// desde que este parágrafo foi escrito — ver o histórico real a partir
+// de FONT_COMPACT abaixo, a fonte da verdade atual)
 // Nenhum dado real some: a LINHA/faixa/marcador de cada nível continua
 // desenhada pelo seu próprio plugin — só o chip de texto flutuante é
 // seletivo.
@@ -143,6 +143,22 @@ const LABEL_NEUTRAL_COLOR = "#888";
 // "2px do edge" pedido — distinto do padding interno das caixas sólidas
 // (LABEL_PADDING_X abaixo), que continua servindo só live/critical.
 const COMPACT_EDGE_PADDING_PX = 2;
+// Retorno real do Operador após a Especificação Visual v1 ("as etiqueta
+// tá num nível amador"): texto flutuando sem nenhum fundo/borda lê como
+// rascunho/debug, não como elemento desenhado — o mesmo defeito de
+// legibilidade que a caixa 100% opaca original tinha, só no extremo
+// oposto (invisível em vez de barulhenta). Ajuste cirúrgico, não uma
+// reversão de v1: o TEXTO continua neutro sem cor por indicador (motivo
+// documentado acima não muda — zero repetição de canal visual) e o teto
+// de contagem/densidade também não muda. Só ganha de volta um chip de
+// CONTENÇÃO baixa-opacidade, na cor real do próprio nível (a mesma já
+// usada pelo conector, nunca uma cor nova) — contraste bem abaixo de
+// live/critical, que continuam os únicos com preenchimento 100% opaco.
+const COMPACT_CHIP_FILL_ALPHA = 0.14;
+const COMPACT_CHIP_BORDER_ALPHA = 0.55;
+// Padding interno real agora que o chip existe — 0 fazia sentido só
+// enquanto não havia nenhum fundo/borda pra respirar contra.
+const COMPACT_PADDING_X = 4;
 // Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4/§11: o texto SECUNDÁRIO
 // (força/FRACA-FORTE, R:R, REACHED/BREACHED, obstáculo — ver
 // secondaryText acima) desenha visivelmente menor que o primário em
@@ -330,9 +346,10 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           const secondaryGap = entry.secondaryText ? SECONDARY_GAP_PX : 0;
           const textWidth = primaryWidth + secondaryGap + secondaryWidth;
           const boxHeight = isBigTier ? LIVE_LABEL_HEIGHT_PX : LABEL_HEIGHT_PX;
-          // primary/context (Especificação Visual v1): sem caixa, sem
-          // padding interno — só a folga real pedida até o edge do canvas.
-          const textPaddingX = isBigTier ? LABEL_PADDING_X : 0;
+          // primary/context: chip de contenção baixa-opacidade (ver
+          // COMPACT_CHIP_FILL_ALPHA acima) — padding menor que live/
+          // critical, só o suficiente pro texto não tocar a borda.
+          const textPaddingX = isBigTier ? LABEL_PADDING_X : COMPACT_PADDING_X;
           const edgePaddingX = isBigTier ? RIGHT_MARGIN_PX : COMPACT_EDGE_PADDING_PX;
           const edgePaddingXLeft = isBigTier ? LEFT_MARGIN_PX : COMPACT_EDGE_PADDING_PX;
           const boxWidth = textWidth + textPaddingX * 2;
@@ -361,13 +378,25 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
 
           ctx.globalAlpha = labelAlpha;
           // NÍVEIS "primary"/"context" (VWAP/NL/EMA/S1/R1/estrutura/
-          // confluência/BOS-CHOCH): Especificação Visual v1 — sem caixa,
-          // sem badge, sem cor de fundo. A hierarquia visual entre os dois
+          // confluência/BOS-CHOCH): chip de contenção baixa-opacidade
+          // (fundo + borda 1px, cor real do nível via opaque() — mesma
+          // normalização que live/critical usam, senão S1/R1 em rgba(...,
+          // 0.65) ficariam mais fracos que NL/EMA em hex sólido pro MESMO
+          // COMPACT_CHIP_FILL_ALPHA). A hierarquia visual entre os dois
           // continua real (context ainda é o único sujeito a
-          // MAX_CONTEXT_LABELS acima), só o TRATAMENTO agora é o mesmo:
-          // texto neutro nu no edge do canvas.
+          // MAX_CONTEXT_LABELS acima) — o chip é igual pros dois, só a
+          // densidade de quantos aparecem muda.
           if (!isBigTier) {
-            // sem fill/stroke — bare text abaixo é o desenho inteiro.
+            const chipColor = opaque(entry.color);
+            boxPath(boxX, boxY, boxWidth, boxHeight);
+            ctx.fillStyle = chipColor;
+            ctx.globalAlpha = COMPACT_CHIP_FILL_ALPHA * labelAlpha;
+            ctx.fill();
+            ctx.strokeStyle = chipColor;
+            ctx.globalAlpha = COMPACT_CHIP_BORDER_ALPHA * labelAlpha;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.globalAlpha = labelAlpha;
           } else {
             // NÍVEL "live" — a âncora de leitura do gráfico. Anel fino de
             // 1px em volta da caixa (Fio de Seda, nunca tracejado), a
@@ -392,11 +421,12 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           }
 
           // Texto escuro sobre fundo colorido em live/critical (mesmo
-          // contraste dos tags nativos); primary/context (Especificação
-          // Visual v1) vira cinza neutro sem fundo — a identidade por
-          // indicador continua no PRÓPRIO texto ("E21"/"VWAP"/"CHOCH"),
-          // nunca reconstruída via cor (Regra de Ouro 4: nenhum dado real
-          // some, só para de repetir num segundo canal).
+          // contraste dos tags nativos); primary/context continua cinza
+          // neutro mesmo com o chip de fundo (acima) — a identidade por
+          // indicador continua no PRÓPRIO texto ("E21"/"VWAP"/"CHOCH") e
+          // agora também na cor do chip, nunca reconstruída via COR DO
+          // TEXTO (Regra de Ouro 4: nenhum dado real some, só para de
+          // repetir a mesma informação num terceiro canal visual).
           const textColor = isBigTier ? "#050810" : LABEL_NEUTRAL_COLOR;
           ctx.fillStyle = textColor;
           ctx.textBaseline = "middle";
