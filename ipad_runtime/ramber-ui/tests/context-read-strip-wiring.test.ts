@@ -63,7 +63,23 @@ describe('ContextReadStrip: a leitura de contexto vive na barra sempre visível,
   it('fail-closed: sem NENHUM valor real a faixa inteira some (altura zero), nunca uma fileira de traços fabricados', () => {
     const idx = app.indexOf('function ContextReadStrip()');
     const block = app.slice(idx, idx + 4200);
-    expect(block).toContain('if (!regimeDisplay && !flowReal && !risk && !confluence) return null;');
+    // Evolução Incremental §Fase 2: topConflict entra no MESMO gate — a
+    // faixa some só quando TODOS os 5 campos (os 4 originais + conflitos)
+    // estão vazios, nunca antes.
+    expect(block).toContain('if (!regimeDisplay && !flowReal && !risk && !confluence && !topConflict) return null;');
+  });
+
+  it('Conflitos (Evolução Incremental §Fase 2, aditivo): badge NOVO, gated por displayConflicts real, nunca sempre visível', () => {
+    const idx = app.indexOf('function ContextReadStrip()');
+    const block = app.slice(idx, idx + 4200);
+    // lê do MESMO WidgetContext dos outros 4 campos, nunca um cálculo
+    // próprio dentro do componente (unified-presentation.ts já resolveu)
+    expect(block).toContain('displayConflicts } = useContext(WidgetContext)');
+    expect(block).toContain('{topConflict && (');
+    expect(block).toContain('label="Conflitos"');
+    // LEI 24: só informa (tooltip explícito), nunca aparece perto de
+    // qualquer alteração do Núcleo/Trade Plan dentro deste bloco
+    expect(block).toContain('informativo, nunca altera o Núcleo');
   });
 
   it('os 4 campos são leituras JÁ existentes (zero cálculo novo na interface, regra explícita da Ordem)', () => {

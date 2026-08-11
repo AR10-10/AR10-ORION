@@ -257,6 +257,11 @@ import { marketSessionFromUtc, computeSessionBoundaries, computeSessionKeyLevels
 import { activeKillZones } from "./nexus/kill-zones";
 import { computeHeatScore } from "./nexus/heat-score";
 import { buildNexusDecision, type NexusDecision } from "./nexus/decision-layer";
+// Evolução Incremental da Inteligência Central, Fase 1→2: primeiro
+// consumidor real de unified-presentation.ts (nasceu isolado/testado,
+// graduado aqui como badge ADITIVO — nunca substitui os badges reais
+// existentes, Regra de Ouro 4).
+import { computePresentationState } from "./nexus/unified-presentation";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
 import {
@@ -2915,6 +2920,35 @@ export default function App() {
     [vwapCtx, nlState, nexusDecision],
   );
 
+  // Evolução Incremental da Inteligência Central, Fase 1→2: mesmo padrão
+  // informativo de nexusConfluence acima, generalizado para os pares que
+  // unified-presentation.ts (Fase 1, isolado/testado) já resolve —
+  // Regime×Structure e Risk×Conselho. LEI 24: só informa, nunca altera o
+  // Núcleo. Adapta engine.marketRegime (shape achatado do App) para o
+  // RegimeReading real, e engine.marketStructureLabel (já limpo por
+  // cleanStructureLabel) de volta ao vocabulário ESTRUTURA_* do motor.
+  const displayConflicts = useMemo(
+    () =>
+      computePresentationState({
+        decision: nexusDecision,
+        council: councilFromSnapshot,
+        regime: engine?.marketRegime
+          ? { status: "OK", regime: engine.marketRegime.regime, direction: engine.marketRegime.direction }
+          : null,
+        aura: null,
+        structureLabel:
+          engine?.marketStructureLabel === "ALTA"
+            ? "ESTRUTURA_ALTA"
+            : engine?.marketStructureLabel === "BAIXA"
+              ? "ESTRUTURA_BAIXA"
+              : engine?.marketStructureLabel === "LATERAL"
+                ? "ESTRUTURA_LATERAL"
+                : null,
+        riskStatus: riskSuggestion?.status ?? null,
+      }).displayConflicts,
+    [nexusDecision, councilFromSnapshot, engine?.marketRegime, engine?.marketStructureLabel, riskSuggestion],
+  );
+
   // Achado real de auditoria (sincronização/performance): este objeto era
   // um literal recriado em TODO render (referência nova sempre) e usado
   // como dependência do useMemo de voiceSnapshot logo abaixo — na prática
@@ -3396,6 +3430,7 @@ export default function App() {
       vwapCtx,
       nlState,
       nexusConfluence,
+      displayConflicts,
       etaReading,
       riskSuggestion,
       cycleLatencyMs,
@@ -3464,6 +3499,7 @@ export default function App() {
       vwapCtx,
       nlState,
       nexusConfluence,
+      displayConflicts,
       etaReading,
       riskSuggestion,
       cycleLatencyMs,
@@ -6344,14 +6380,20 @@ function StructureLevelsStrip() {
 // existe; sem nenhum valor real, a faixa inteira some (altura zero), nunca
 // uma fileira de trações fabricados.
 function ContextReadStrip() {
-  const { engine, cvd, nexusDecision } = useContext(WidgetContext) || {};
+  const { engine, cvd, nexusDecision, displayConflicts } = useContext(WidgetContext) || {};
   const regime = engine?.marketRegime ?? null;
   const regimeDisplay = regime ? REGIME_DISPLAY[regime.regime] : null;
   const risk = nexusDecision ? deriveRiskState(nexusDecision) : null;
   const confluence = nexusDecision ? deriveConfluenceState(nexusDecision) : null;
   const flowReal = num(cvd) && cvd !== 0;
+  // Evolução Incremental da Inteligência Central, Fase 2 (aditivo): badge
+  // NOVO, nunca substitui os 4 acima — só aparece quando há um conflito
+  // real nomeado (unified-presentation.ts/conflict-detector.ts). LEI 24:
+  // informativo, nunca altera o Núcleo.
+  const conflicts: Array<{ motorA: string; motorB: string; severity: string }> = displayConflicts ?? [];
+  const topConflict = conflicts[0] ?? null;
 
-  if (!regimeDisplay && !flowReal && !risk && !confluence) return null;
+  if (!regimeDisplay && !flowReal && !risk && !confluence && !topConflict) return null;
 
   // Classes SEMPRE literais completas (mesma nota do BarField acima: o
   // scanner JIT do Tailwind só gera CSS para tokens que aparecem por
@@ -6366,6 +6408,11 @@ function ContextReadStrip() {
     MISTA: "text-[#f0d06f]/90",
     CONFLITANTE: "text-[#ff0055]/90",
     INSUFICIENTE: "text-[#8ab4f8]/70",
+  };
+  const CONFLICT_TONE: Record<string, string> = {
+    CRITICO: "text-[#ff0055]/90",
+    ALTO: "text-[#f0d06f]/90",
+    MEDIO: "text-[#8ab4f8]/70",
   };
 
   return (
@@ -6410,6 +6457,15 @@ function ContextReadStrip() {
           labelClass="text-[#8ab4f8]/50"
           valueClass={CONFLUENCE_TONE[confluence] ?? "text-[#8ab4f8]/90"}
           title="Alinhamento real entre direção, estrutura e timing (Operational Readability Layer) — confluência, nunca probabilidade."
+        />
+      )}
+      {topConflict && (
+        <BarField
+          label="Conflitos"
+          value={conflicts.length > 1 ? `${topConflict.motorA}×${topConflict.motorB} +${conflicts.length - 1}` : `${topConflict.motorA}×${topConflict.motorB}`}
+          labelClass="text-[#8ab4f8]/50"
+          valueClass={CONFLICT_TONE[topConflict.severity] ?? "text-[#8ab4f8]/90"}
+          title={`Divergência real entre motores (unified-presentation.ts) — informativo, nunca altera o Núcleo (LEI 24). ${conflicts.map((c) => `${c.motorA}×${c.motorB}: ${c.severity}`).join(" · ")}`}
         />
       )}
     </div>
