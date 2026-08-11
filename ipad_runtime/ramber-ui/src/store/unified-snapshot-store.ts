@@ -89,7 +89,7 @@ import {
 } from "../nexus/paper-trading";
 // import type puro — apagado na compilação, nunca puxa o engine-bridge
 // (e seus módulos js pesados) para dentro do bundle da store em runtime.
-import type { TrustScoreSnapshot, SmcZonesSnapshot, OrderflowSignal } from "../engine-bridge";
+import type { TrustScoreSnapshot, SmcZonesSnapshot, OrderflowSignal, RiskSuggestion } from "../engine-bridge";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Formas (§1 e §5 — as demais vêm dos módulos nexus/, um contrato por motor)
@@ -275,6 +275,14 @@ export interface UnifiedSnapshotState {
   // LONG/SHORT/WAIT (LEI 24). null enquanto o Core Engine está em WAIT ou
   // nenhum componente real está disponível ainda.
   confluenceCorridor: ConfluenceCorridorReading | null;
+  // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // item 2): buildRiskSuggestion (risk-engine.js) já era computado real em
+  // App.tsx (useMemo) mas nunca ganhou fatia própria aqui — ao contrário de
+  // QUALQUER outro motor real deste app, nenhum consumidor fora da árvore
+  // React do App podia lê-lo. Publicado pelo próprio App.tsx (zero segundo
+  // cálculo, mesmo objeto já resolvido). null enquanto o Core Engine não
+  // emitiu direção real ainda (mesmo estado honesto comum do resto do §3).
+  riskSuggestion: RiskSuggestion | null;
 
   // §4 CÉREBRO (camada de análise — LEI 24: jamais alimenta o Core Engine)
   // Item 4 — Conselho Multi-Agente (contrato versionado): 6 votos reais +
@@ -424,6 +432,7 @@ interface UnifiedSnapshotActions {
   setCvd: (cvd: number | null) => void;
   setOrderflowSignals: (signals: OrderflowSignal[]) => void;
   setConfluenceCorridor: (reading: ConfluenceCorridorReading | null) => void;
+  setRiskSuggestion: (suggestion: RiskSuggestion | null) => void;
 
   // §4 CÉREBRO
   setCouncil: (decision: CouncilDecision | null) => void;
@@ -506,6 +515,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     cvd: null,
     orderflowSignals: [],
     confluenceCorridor: null,
+    riskSuggestion: null,
     // §4 CÉREBRO
     council: null,
     scenario: null,
@@ -569,6 +579,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setCvd: (cvd) => set((s) => { s.cvd = cvd; }),
     setOrderflowSignals: (signals) => set((s) => { s.orderflowSignals = signals; }),
     setConfluenceCorridor: (reading) => set((s) => { s.confluenceCorridor = reading; }),
+    setRiskSuggestion: (suggestion) => set((s) => { s.riskSuggestion = suggestion; }),
     // §4 CÉREBRO
     setCouncil: (decision) => set((s) => { s.council = decision; }),
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
@@ -694,6 +705,8 @@ export const useOrderflowSignalsSnapshot = (): OrderflowSignal[] =>
   useUnifiedSnapshotStore((s) => s.orderflowSignals ?? EMPTY_ORDERFLOW_SIGNALS);
 export const useConfluenceCorridorSnapshot = (): ConfluenceCorridorReading | null =>
   useUnifiedSnapshotStore((s) => s.confluenceCorridor);
+export const useRiskSuggestionSnapshot = (): RiskSuggestion | null =>
+  useUnifiedSnapshotStore((s) => s.riskSuggestion);
 
 // §4 CÉREBRO
 export const useCouncilSnapshot = (): CouncilDecision | null =>

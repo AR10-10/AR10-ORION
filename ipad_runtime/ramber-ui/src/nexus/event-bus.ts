@@ -25,6 +25,8 @@ import type { NexusDecision } from "./decision-layer";
 import type { InstitutionalScoreReading } from "./institutional-score";
 import type { HeatScoreReading } from "./heat-score";
 import type { GmilSnapshot } from "../gmil/gmil-orchestrator";
+import type { InstitutionalZone } from "./institutional-zones";
+import type { RiskSuggestion } from "../engine-bridge";
 
 // Diretamente do Blueprint V-MAX §1.3 — os únicos eventos reais que este
 // sistema publica. Nenhum evento é adicionado especulativamente; cada um
@@ -69,6 +71,17 @@ export type NexusEvent =
   | { type: "QUANT.CVD.UPDATED"; payload: { cvd: number | null } }
   | { type: "QUANT.ORDERFLOW_SIGNALS.UPDATED"; payload: { signals: OrderflowSignal[] } }
   | { type: "QUANT.CONFLUENCE_CORRIDOR.UPDATED"; payload: { reading: ConfluenceCorridorReading | null } }
+  // Achado da auditoria de evolução (Unificação da Inteligência,
+  // docs/AUDITORIA_UNIFICACAO_VOZ.md §4 item 1): computeInstitutionalZones
+  // já tinha fatia real na store (Carta Branca) mas nunca ganhou evento —
+  // nenhum assinante podia reagir a "uma zona nova se formou" sem antes
+  // recomputar tudo sozinho. Mesmo padrão passthrough de QUANT.SMC acima.
+  | { type: "QUANT.INSTITUTIONAL_ZONES.UPDATED"; payload: { zones: InstitutionalZone[] } }
+  // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // item 2): riskSuggestion (risk-engine.js) já era computado real em
+  // App.tsx mas não tinha fatia na store nem evento — nenhum consumidor
+  // fora da árvore React do App podia lê-lo.
+  | { type: "QUANT.RISK_SUGGESTION.UPDATED"; payload: { suggestion: RiskSuggestion | null } }
   // §4 CÉREBRO
   | { type: "BRAIN.COUNCIL.UPDATED"; payload: { decision: CouncilDecision | null } }
   | { type: "BRAIN.SCENARIO.UPDATED"; payload: { projection: ScenarioProjection | null } }

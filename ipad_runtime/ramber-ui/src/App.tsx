@@ -2719,6 +2719,15 @@ export default function App() {
       expectancyFilter,
     ],
   );
+  // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // item 2): riskSuggestion já era computado real acima mas nunca ganhava
+  // fatia própria na store — mesmo padrão passthrough de nexusDecision
+  // (App.tsx, poucas linhas abaixo): zero segundo cálculo, só espelha a
+  // MESMA referência já resolvida para que o organismo (voz/GMIL/futuros
+  // consumidores) possa lê-la sem reimplementar buildRiskSuggestion.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setRiskSuggestion(riskSuggestion);
+  }, [riskSuggestion]);
   // Cockpit de Leitura §11 ("ETA previsto / ETA realizado" + contexto):
   // carimbo ÚNICO do contexto real de abertura no plano ativo. O guard do
   // stampOpenContext puro garante que só o PRIMEIRO ciclo com leituras do

@@ -792,6 +792,64 @@ export function computeRealFibonacciConfluence(
 const VP_BUCKET_COUNT = 96;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4 item
+// 2): buildRiskSuggestion (ipad_runtime/src/risk/risk-engine.js, chamado
+// direto por App.tsx, não por este arquivo) nunca tinha um nome de tipo TS
+// real — cada consumidor via inferência estrutural implícita. Nomeado aqui
+// pelo MESMO motivo que SmcZonesSnapshot acima (a store precisa importar a
+// forma real via `import type`, nunca redeclará-la por conta própria).
+// União discriminada por `status`: SEM_SUGESTAO é o estado fail-closed real
+// (insumo ausente/degenerado, Comitê sem força direcional, Kelly não
+// positivo — ver risk-engine.js) — os campos numéricos ficam `null`/`0`
+// honestos, nunca um valor neutro fabricado disfarçado de leitura real
+// (Regra de Ouro 3).
+export interface RiskSuggestionInputs {
+  signal: 'LONG' | 'SHORT' | null;
+  entry: number | null;
+  stop: number | null;
+  atr_percent: number | null;
+  rr: number | null;
+  ensemble_direction: string | null;
+  ensemble_forca: number | null;
+  risk_per_trade_pct: number;
+}
+
+export interface RiskSuggestionNone {
+  status: 'SEM_SUGESTAO';
+  reason: string;
+  suggested_position_pct: 0;
+  effective_risk_pct: 0;
+  vol_size_pct: null;
+  kelly_cap_pct: null;
+  kelly_fraction_tier: null;
+  assumed_win_rate: number;
+  effective_win_rate: null;
+  win_rate_source: null;
+  effective_risk_unit_pct: null;
+  inputs: Partial<RiskSuggestionInputs>;
+  disclaimer: string;
+  read_only: true;
+}
+
+export interface RiskSuggestionOk {
+  status: 'OK';
+  reason: string;
+  suggested_position_pct: number;
+  effective_risk_pct: number;
+  vol_size_pct: number;
+  kelly_cap_pct: number;
+  kelly_fraction_tier: number;
+  assumed_win_rate: number;
+  effective_win_rate: number;
+  win_rate_source: 'track_record_real' | 'assumed_0.5';
+  effective_risk_unit_pct: number;
+  inputs: RiskSuggestionInputs;
+  disclaimer: string;
+  read_only: true;
+}
+
+export type RiskSuggestion = RiskSuggestionNone | RiskSuggestionOk;
+
 // V-MAX Fase 2 — TrustScoreEngine (WASM, lib.rs::trust_score): confiança na
 // FONTE de dados a partir de medições reais — regularidade da cadência real
 // de chegada de preço + convergência real entre exchanges. Complementar ao

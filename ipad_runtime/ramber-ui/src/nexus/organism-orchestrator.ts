@@ -122,6 +122,17 @@ export class OrganismOrchestrator {
       if (state.confluenceCorridor !== prev.confluenceCorridor) {
         this.bus.emit({ type: "QUANT.CONFLUENCE_CORRIDOR.UPDATED", payload: { reading: state.confluenceCorridor } });
       }
+      // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md
+      // §4 item 1): institutionalZones tinha fatia real (Carta Branca) mas
+      // nenhum evento — mesmo padrão diff-por-referência dos demais QUANT.*.
+      if (state.institutionalZones !== prev.institutionalZones) {
+        this.bus.emit({ type: "QUANT.INSTITUTIONAL_ZONES.UPDATED", payload: { zones: state.institutionalZones } });
+      }
+      // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md
+      // §4 item 2): riskSuggestion tinha fatia real mas nenhum evento.
+      if (state.riskSuggestion !== prev.riskSuggestion) {
+        this.bus.emit({ type: "QUANT.RISK_SUGGESTION.UPDATED", payload: { suggestion: state.riskSuggestion } });
+      }
       // §4 CÉREBRO
       if (state.council !== prev.council) {
         this.bus.emit({ type: "BRAIN.COUNCIL.UPDATED", payload: { decision: state.council } });

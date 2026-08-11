@@ -31,6 +31,8 @@ import { detectInstitutionalTraps } from '../src/nexus/trap-detection';
 import { buildTradePlan } from '../src/nexus/trade-plan';
 import { computeSmcZones, type OrderflowSignal } from '../src/engine-bridge';
 import { computeConfluenceCorridor } from '../src/nexus/confluence-corridor';
+import { computeInstitutionalZones } from '../src/nexus/institutional-zones';
+import { buildRiskSuggestion } from '../../src/risk/index.js';
 import { buildNexusDecision } from '../src/nexus/decision-layer';
 import { computeInstitutionalScore } from '../src/nexus/institutional-score';
 import { computeHeatScore } from '../src/nexus/heat-score';
@@ -384,6 +386,61 @@ describe('OMEGA CORE V-MAX (Fase 1.1): smc/cvd/orderflowSignals — insumos pré
     expect(received).toHaveLength(1);
     expect(received[0]).toBe(reading);
     expect(received[0]).toBe(useUnifiedSnapshotStore.getState().confluenceCorridor);
+  });
+
+  // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // item 1): institutionalZones já tinha fatia real na store (Carta
+  // Branca) mas nenhum evento — nenhum assinante podia reagir a "uma zona
+  // nova se formou". Mesmo padrão diff-por-referência de todo QUANT.*.
+  it('setInstitutionalZones(saída real de computeInstitutionalZones) publica QUANT.INSTITUTIONAL_ZONES.UPDATED com a MESMA referência', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('QUANT.INSTITUTIONAL_ZONES.UPDATED', (p) => received.push(p.zones));
+    const zones = computeInstitutionalZones({
+      ema: { period: 21, value: 50000 },
+      vwap: 50010,
+      nexusLine: null,
+      fairValueGaps: [],
+      orderBlocks: [],
+      liquidityZones: [],
+      support: null,
+      resistance: null,
+      volumeProfilePoc: null,
+      sessionKeyLevel: null,
+      liquiditySweeps: [],
+      lastSwingHigh: null,
+      lastSwingLow: null,
+    });
+    expect(zones.length).toBeGreaterThan(0); // sanidade: EMA+VWAP próximos formam confluência real (>=2 fontes)
+    useUnifiedSnapshotStore.getState().setInstitutionalZones(zones);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(zones);
+    expect(received[0]).toBe(useUnifiedSnapshotStore.getState().institutionalZones);
+  });
+
+  // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // item 2): riskSuggestion (risk-engine.js) já era computado real em
+  // App.tsx mas não tinha fatia na store nem evento.
+  it('setRiskSuggestion(saída real de buildRiskSuggestion) publica QUANT.RISK_SUGGESTION.UPDATED com a MESMA referência', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('QUANT.RISK_SUGGESTION.UPDATED', (p) => received.push(p.suggestion));
+    const suggestion = buildRiskSuggestion({
+      signal: 'LONG',
+      entry: 100,
+      stop: 95,
+      atrPercent: 2,
+      riskRewardRatio: 3,
+      ensembleDirection: 'ALTA',
+      ensembleForca: 0.65,
+    });
+    expect(suggestion.status).toBe('OK'); // sanidade: o motor real produziu uma sugestão
+    useUnifiedSnapshotStore.getState().setRiskSuggestion(suggestion);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(suggestion);
+    expect(received[0]).toBe(useUnifiedSnapshotStore.getState().riskSuggestion);
   });
 });
 
