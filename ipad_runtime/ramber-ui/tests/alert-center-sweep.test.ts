@@ -64,11 +64,23 @@ describe('alert-center: deriveSweepAlert', () => {
     expect(alert!.message).toContain('viés baixa'); // topo varrido = liquidez compradora tomada, viés de reversão pra baixo
   });
 
-  it('sweep novo (STOP_HUNT_FUNDO) => título e viés opostos ao TOPO', () => {
+  // Achado da auditoria de evolução: voice-dispatcher.ts já narra eventos
+  // institucionais parecidos (liquidação, absorção) mas nunca lia daqui —
+  // Sweep era só toast. `speech` fecha esse buraco.
+  it('sweep novo => speech é uma sentença natural, NUNCA o title/message pontuados (·) pensados pro toast', () => {
+    const trap = makeSweep('STOP_HUNT_TOPO', 51000, 300);
+    const alert = deriveSweepAlert(new Set(), [trap]);
+    expect(alert!.speech).toBe('Varredura de liquidez no topo. Viés de reversão para baixa.');
+    expect(alert!.speech).not.toContain('·');
+    expect(alert!.speech).not.toMatch(/[A-Z]{2,}/); // sem MAIÚSCULAS de toast (SWEEP · TOPO VARRIDO)
+  });
+
+  it('sweep novo (STOP_HUNT_FUNDO) => título, viés e speech opostos ao TOPO', () => {
     const trap = makeSweep('STOP_HUNT_FUNDO', 49000, 200);
     const alert = deriveSweepAlert(new Set(), [trap]);
     expect(alert!.title).toBe('SWEEP · FUNDO VARRIDO');
     expect(alert!.message).toContain('viés alta');
+    expect(alert!.speech).toBe('Varredura de liquidez no fundo. Viés de reversão para alta.');
   });
 
   it('mesmo sweep (mesma identidade) na 2ª chamada => null, mesmo com seenIds do chamador reaproveitado', () => {

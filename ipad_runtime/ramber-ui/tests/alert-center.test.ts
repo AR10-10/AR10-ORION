@@ -114,6 +114,18 @@ describe('alert-center: deriveTrackRecordAlert', () => {
     expect(alert2!.id).not.toBe(alert1!.id);
   });
 
+  // Achado da auditoria de evolução (voz contínua): voice-dispatcher.ts JÁ
+  // narra a resolução do Trade Plan por um diff independente sobre
+  // TerminalSnapshot. Se deriveTrackRecordAlert ganhasse `speech` e algum
+  // chamador o falasse, o Operador ouviria a MESMA resolução duas vezes.
+  // Trava a decisão registrada no cabeçalho de alert-center.ts: nenhum
+  // alerta de Track Record tem versão falada por este arquivo.
+  it('nunca ganha campo speech — já é narrado por voice-dispatcher.ts, falar aqui também duplicaria', () => {
+    const entry = makeTracked('TARGET_HIT');
+    const alert = deriveTrackRecordAlert(null, makeRecord([entry]));
+    expect(alert!.speech).toBeUndefined();
+  });
+
   it('regressão do teto do ring buffer: history.length parado no CAP ainda detecta a transição real (comparação por identidade, nunca por tamanho)', () => {
     const capped: TrackedPlan[] = Array.from({ length: TRACK_RECORD_HISTORY_CAP }, (_, i) =>
       makeTracked('REPLACED', { resolvedAt: 1_700_000_000_000 + i, resolvedPrice: null }),

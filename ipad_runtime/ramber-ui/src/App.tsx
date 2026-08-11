@@ -3248,6 +3248,15 @@ export default function App() {
       if (!alert) return;
       setAlerts((prev) => [...prev, alert].slice(-5));
       setTimeout(() => setAlerts((prev) => prev.filter((a) => a.id !== alert.id)), 5000);
+      // Achado da auditoria de evolução: a voz já existe e já narra
+      // eventos institucionais parecidos (liquidação, absorção — ambos
+      // ALERT em voice-dispatcher.ts), mas nunca lia daqui — o Sweep era
+      // só toast. `speech` é a sentença natural do MESMO evento (nunca
+      // title/message, pontuados pra leitura visual). ALERT (não INFO):
+      // mesma prioridade que voice-dispatcher.ts já usa pra liquidação/
+      // absorção, o precedente mais próximo de "evento institucional real
+      // que vale interromper a fila de voz".
+      if (alert.speech) voiceEngine.speak(alert.speech, "ALERT");
     });
   }, []);
   // V-MAX Fase 0.4: mesmo princípio de espelhamento acima, para as novas

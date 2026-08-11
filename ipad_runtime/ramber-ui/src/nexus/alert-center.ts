@@ -28,6 +28,24 @@
 //
 // Pure function, zero I/O, zero clock próprio — mesma disciplina do resto
 // de nexus/.
+//
+// Achado da auditoria de evolução (voz contínua, pedido direto do
+// Operador): voice/voice-dispatcher.ts já narra proativamente por voz —
+// inclusive o ciclo de vida do Trade Plan (abertura/zona de entrada/alvo
+// provado/resolução) — mas por um SEGUNDO diff independente sobre
+// TerminalSnapshot, nunca lendo os AlertEvent daqui. Resultado real: o
+// Sweep (deriveSweepAlert abaixo) é hoje só toast, nunca falado, embora a
+// voz já exista e já narre eventos institucionais parecidos (liquidação,
+// absorção). `speech` é o campo que fecha esse buraco — a versão em
+// linguagem natural do MESMO evento, opcional (nem todo AlertEvent
+// precisa de uma). deriveTrackRecordAlert deliberadamente NÃO ganha
+// `speech` nesta entrega: já é falado pelo voice-dispatcher (duplicar
+// aqui faria o Operador ouvir a MESMA resolução duas vezes) — registrado
+// como duplicação real e conhecida, não escondida, não resolvida às
+// pressas (consolidar exigiria reconciliar uma diferença real: o
+// voice-dispatcher também narra REPLACED, que este arquivo
+// deliberadamente NUNCA alerta — decisão própria, fora do escopo desta
+// entrega).
 import type { TrackedPlan, TrackRecordState } from "./signal-track-record";
 import type { TrapSignal, SweptLevel } from "./trap-detection";
 
@@ -39,6 +57,11 @@ export interface AlertEvent {
   title: string;
   message: string;
   createdAt: number;
+  // Sentença em português natural para TTS (voice-engine.ts) — nunca o
+  // title/message (pontuados com "·" e MAIÚSCULAS pensados pro toast
+  // visual, não pra fala). Ausente = este alerta não tem versão falada
+  // (por decisão registrada no cabeçalho acima, não por omissão).
+  speech?: string;
 }
 
 function formatPrice(price: number): string {
@@ -149,5 +172,13 @@ export function deriveSweepAlert(seenIds: Set<string>, traps: TrapSignal[]): Ale
     title: kind === "STOP_HUNT_TOPO" ? "SWEEP · TOPO VARRIDO" : "SWEEP · FUNDO VARRIDO",
     message: `${formatPrice(level.price)} · confiança real ${(confidence * 100).toFixed(0)}% · viés ${bullishBias ? "alta" : "baixa"}`,
     createdAt: Date.now(),
+    // Sentença qualitativa (sem número lido em voz alta), mesmo estilo dos
+    // eventos institucionais já falados por voice-dispatcher.ts
+    // ("Liquidez institucional detectada...", "Absorção institucional
+    // detectada..."): confiança/preço exatos continuam só no toast, que é
+    // pra ler, não pra ouvir.
+    speech: kind === "STOP_HUNT_TOPO"
+      ? "Varredura de liquidez no topo. Viés de reversão para baixa."
+      : "Varredura de liquidez no fundo. Viés de reversão para alta.",
   };
 }
