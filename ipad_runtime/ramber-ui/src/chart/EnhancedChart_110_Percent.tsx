@@ -33,6 +33,7 @@ import {
   type UTCTimestamp,
   type LogicalRange,
   type AutoscaleInfoProvider,
+  type MouseEventParams,
 } from "lightweight-charts";
 import { computeAutoFitPriceRange, isFiniteNum, type AutoFitLevels } from "../nexus/price-range-fit";
 import { computeViewportCandles } from "../nexus/chart-viewport";
@@ -522,6 +523,14 @@ interface EnhancedChartProps {
   // Optional/fail-closed: ausente => nenhuma price line de sweep.
   traps?: TrapSignal[];
   symbol?: string | null;
+  // Achado real da AUDITORIA TÉCNICA COMPLETA (item B16): zero
+  // subscribeCrosshairMove em todo o código — o header (OhlcReadout,
+  // App.tsx) sempre mostrava o ÚLTIMO candle, nunca o candle sob o
+  // cursor/dedo. Chamado com o candle real (mesmo objeto de `data`, zero
+  // segundo fetch) sob o crosshair, ou null quando o cursor sai da área
+  // do gráfico. Optional/fail-closed: ausente => nenhuma assinatura nova,
+  // comportamento idêntico a antes desta entrega.
+  onHoverCandleChange?: (candle: EnhancedChartCandle | null) => void;
 }
 
 // Continuidade §6 (hierarquia visual dos alvos) — Diretriz de Evolução
@@ -640,6 +649,7 @@ export function EnhancedChart_110_Percent({
   layerVisibility,
   emaPeriod,
   onRequestOlderCandles,
+  onHoverCandleChange,
 }: EnhancedChartProps) {
   const visibility = layerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -1275,6 +1285,32 @@ export function EnhancedChart_110_Percent({
       chartReady.chart.timeScale().unsubscribeVisibleLogicalRangeChange(handler);
     };
   }, [chartReady, onRequestOlderCandles, data]);
+
+  // Achado real da AUDITORIA TÉCNICA COMPLETA (item B16): zero
+  // subscribeCrosshairMove em todo o código — o header sempre mostrava o
+  // ÚLTIMO candle, nunca o candle sob o cursor/dedo. subscribeCrosshairMove
+  // é API nativa da própria lightweight-charts (zero mouse-tracking
+  // manual); o candle completo (O/H/L/C/V) sai do MESMO array `data` já
+  // desenhado, por busca do `time` real que o evento devolve — nunca um
+  // segundo fetch ou cálculo. param.time vem undefined quando o cursor sai
+  // da área do gráfico (mouse leave nativo da lib): null explícito,
+  // volta ao último candle real no chamador — nunca um valor congelado.
+  useEffect(() => {
+    if (!chartReady || !onHoverCandleChange) return;
+    const handler = (param: MouseEventParams) => {
+      if (param.time === undefined) {
+        onHoverCandleChange(null);
+        return;
+      }
+      const hoveredTime = Number(param.time);
+      const hovered = data.find((c) => c.time === hoveredTime);
+      onHoverCandleChange(hovered ?? null);
+    };
+    chartReady.chart.subscribeCrosshairMove(handler);
+    return () => {
+      chartReady.chart.unsubscribeCrosshairMove(handler);
+    };
+  }, [chartReady, onHoverCandleChange, data]);
 
   // S1/R1 reais — o MESMO engine.support/resistance que os outros widgets
   // já exibem, aqui como price lines nativas (createPriceLine), nunca uma

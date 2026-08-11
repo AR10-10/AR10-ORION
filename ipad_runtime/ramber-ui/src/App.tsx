@@ -7986,22 +7986,41 @@ function fmtVolume(v: number): string {
   if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
   return v.toFixed(2);
 }
-function OhlcReadout({ candles }: { candles?: Array<{ open?: number; high?: number; low?: number; close?: number; volume?: number }> }) {
+function OhlcReadout({
+  candles,
+  hoverCandle,
+}: {
+  candles?: Array<{ open?: number; high?: number; low?: number; close?: number; volume?: number }>;
+  // Achado real da AUDITORIA TÉCNICA COMPLETA (item B16): candle real sob o
+  // cursor/dedo (EnhancedChart_110_Percent's onHoverCandleChange, via
+  // subscribeCrosshairMove nativo da lib). null/absent = cursor fora do
+  // gráfico ou chamador que ainda não passa a prop — cai no último candle
+  // real, o comportamento de sempre (fail-closed, nunca um estado novo
+  // quebra um caso que já funcionava).
+  hoverCandle?: { open?: number; high?: number; low?: number; close?: number; volume?: number } | null;
+}) {
   const last = Array.isArray(candles) && candles.length > 0 ? candles[candles.length - 1] : null;
-  if (!last) return null;
+  const isHover = !!hoverCandle;
+  const shown = hoverCandle ?? last;
+  if (!shown) return null;
   const fields: Array<[string, number | undefined, string]> = [
-    ["O", last.open, "text-[#888888]"],
-    ["H", last.high, "text-[#22c55e]"],
-    ["L", last.low, "text-[#ef4444]"],
-    ["C", last.close, "text-[#e5e5e5] font-semibold"],
+    ["O", shown.open, "text-[#888888]"],
+    ["H", shown.high, "text-[#22c55e]"],
+    ["L", shown.low, "text-[#ef4444]"],
+    ["C", shown.close, "text-[#e5e5e5] font-semibold"],
   ];
   if (!fields.every(([, v]) => num(v))) return null;
-  const hasVolume = num(last.volume);
+  const hasVolume = num(shown.volume);
   return (
     <div
-      className="hidden lg:flex items-center gap-1.5 mr-2 font-mono whitespace-nowrap shrink-0"
-      title="Abertura/Máxima/Mínima/Fechamento/Volume do candle real mais recente, do mesmo array que o gráfico desenha — nunca um segundo cálculo. Volume em unidade do ativo-base, nunca notional USD."
+      className={`hidden lg:flex items-center gap-1.5 mr-2 font-mono whitespace-nowrap shrink-0 ${isHover ? "border-b border-[#00f0ff60]" : ""}`}
+      title={
+        isHover
+          ? "Abertura/Máxima/Mínima/Fechamento/Volume do candle sob o cursor — mesmo array que o gráfico desenha, nunca um segundo cálculo. Volume em unidade do ativo-base, nunca notional USD."
+          : "Abertura/Máxima/Mínima/Fechamento/Volume do candle real mais recente, do mesmo array que o gráfico desenha — nunca um segundo cálculo. Volume em unidade do ativo-base, nunca notional USD."
+      }
     >
+      {isHover && <Crosshair size={9} className="text-[#00f0ff]" strokeWidth={2} />}
       {fields.map(([k, v, color]) => (
         <span key={k} className={color}>
           <span className="text-[#8ab4f8]/40">{k}</span> {fmt(v)}
@@ -8009,7 +8028,7 @@ function OhlcReadout({ candles }: { candles?: Array<{ open?: number; high?: numb
       ))}
       {hasVolume && (
         <span className="text-[#06b6d4]">
-          <span className="text-[#8ab4f8]/40">V</span> {fmtVolume(last.volume as number)}
+          <span className="text-[#8ab4f8]/40">V</span> {fmtVolume(shown.volume as number)}
         </span>
       )}
     </div>
@@ -8041,6 +8060,12 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // painéis). Zero segunda coleta/cálculo.
   const traps = useTrapSignalsSnapshot();
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
+  // Achado real da AUDITORIA TÉCNICA COMPLETA (item B16): candle sob o
+  // cursor/dedo, alimentado por EnhancedChart_110_Percent's
+  // onHoverCandleChange (subscribeCrosshairMove nativo da lib — zero mouse
+  // tracking manual aqui). null = cursor fora do gráfico; OhlcReadout cai
+  // de volta no último candle real, o comportamento de sempre.
+  const [hoveredCandle, setHoveredCandle] = useState<{ time: number; open: number; high: number; low: number; close: number; volume?: number } | null>(null);
   // Correção de latência REAL (achado de auditoria — Ordem "Unificação da
   // Inteligência Operacional" §4: "preço de uma atualização com níveis de
   // outra... um painel atualizado e outro atrasado"): esta leitura vinha
@@ -8424,7 +8449,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
               Discreto de propósito (§7 "sem competir com preço"): mesmo
               0.45rem do seletor de timeframe irmão, rótulos a 40% de opacidade,
               escondido abaixo de lg para não espremer o seletor no iPad Mini. */}
-          <OhlcReadout candles={chartData} />
+          <OhlcReadout candles={chartData} hoverCandle={hoveredCandle} />
           {/* Auditoria de estabilização (P1): antes disto, esta linha era
               só <span> sem onClick — nunca respondia a toque nenhum, e
               "15M" ficava marcado ativo por um literal fixo
@@ -8472,6 +8497,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
         {chartData && chartData.length > 0 ? (
           <EnhancedChart_110_Percent
             data={chartData}
+            onHoverCandleChange={setHoveredCandle}
             support={engine?.support ?? null}
             resistance={engine?.resistance ?? null}
             supportStrength={engine?.supportStrength ?? null}
