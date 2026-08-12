@@ -603,6 +603,50 @@ export function detectPrependCount(
   return count;
 }
 
+// Ordem "AJUSTE VISUAL PARA MONITOR ULTRA LED / ULTRAWIDE / 4K" (Operador):
+// fontSize/minimumWidth/rightOffset do chart eram fixos (11/65/8) em
+// qualquer resolução — auditoria confirmou os 3 valores reais hardcoded
+// (ver createChart abaixo). Legíveis no iPad/desktop-padrão (o alvo
+// primário real do app, Regra de Ouro 7), mas desproporcionalmente
+// pequenos num 4K/UltraWide de verdade. O piso de cada faixa É o valor já
+// em produção — NUNCA reduzido, mesmo nas faixas que o documento pedia
+// encolher (ex.: iPad Pro 1366px cairia na faixa "<1440px" do documento,
+// que pedia rightOffset:6/minimumWidth:60 — uma regressão real no
+// dispositivo que é o alvo primário do app; rejeitado aqui, o piso é
+// sempre o valor atual). viewportWidth é window.innerWidth: a pergunta
+// real é "que CLASSE de monitor é este", não "quanto sobrou depois de
+// abrir uma gaveta/drawer" (o que a largura do próprio canvas mediria).
+//
+// DELIBERADAMENTE FORA deste helper (2 dos pedidos do mesmo documento):
+// - barSpacing: setar isso por breakpoint entraria em conflito direto com
+//   computeViewportCandles (nexus/chart-viewport.ts, Ordem "FECHAMENTO DO
+//   AR10 CYBORG" §5, já em produção) — aquele motor mantém
+//   TARGET_PX_PER_CANDLE=7 CONSTANTE em qualquer resolução de propósito
+//   (legibilidade de UMA vela não muda com o tamanho do monitor) e varia
+//   é QUANTAS velas cabem. Um barSpacing forçado por breakpoint aqui ou
+//   seria imediatamente sobrescrito pelo fit de faixa visível (código
+//   morto) ou brigaria com ele por um frame antes do fit rodar — duplicar
+//   a decisão "quanto espaço por vela" em dois lugares é exatamente a
+//   classe de inconsistência que este arquivo evita em todo o resto.
+// - densidade de grid: auditado contra os typings reais da lib
+//   (GridOptions só expõe vertLines/horzLines.{color,style,visible} —
+//   zero contagem/densidade configurável na API real). O gerador de ticks
+//   nativo já produz mais linhas em telas largas por conta própria (mesmo
+//   algoritmo que espaça os rótulos do eixo) — nada real para construir.
+export function resolveChartUltraWideScale(viewportWidth: number): {
+  fontSize: number;
+  minimumWidth: number;
+  rightOffset: number;
+} {
+  if (Number.isFinite(viewportWidth) && viewportWidth >= 2560) {
+    return { fontSize: 13, minimumWidth: 75, rightOffset: 12 };
+  }
+  if (Number.isFinite(viewportWidth) && viewportWidth >= 1440) {
+    return { fontSize: 12, minimumWidth: 65, rightOffset: 8 };
+  }
+  return { fontSize: 11, minimumWidth: 65, rightOffset: 8 }; // baseline real já em produção — fail-closed (largura inválida) cai aqui também
+}
+
 // Mesmo formato de texto que o gráfico antigo já usava para S1/R1 — só a
 // primitiva que desenha muda (createPriceLine em vez de <span> em pixel
 // fixo), a informação real (força/retest/rompimentos) continua idêntica.
@@ -803,6 +847,7 @@ export function EnhancedChart_110_Percent({
   // própria lib — sem media query manual, sem listener de resize próprio.
   useEffect(() => {
     if (!containerRef.current) return;
+    const initialScale = resolveChartUltraWideScale(window.innerWidth);
     const chart = createChart(containerRef.current, {
       layout: {
         // AR10_ESPECIFICACAO_VISUAL_PIXEL_PERFECT.md (documento do
@@ -826,7 +871,7 @@ export function EnhancedChart_110_Percent({
         // aqui.
         textColor: "#787B86",
         fontFamily: "ui-monospace, monospace",
-        fontSize: 11,
+        fontSize: initialScale.fontSize,
         // Auditoria do painel do gráfico (achado real): a lib desenha por
         // padrão o logo "powered by TradingView" sobre o próprio canvas —
         // destoa do terminal proprietário AR10 CYBORG. A licença Apache-2.0
@@ -883,7 +928,7 @@ export function EnhancedChart_110_Percent({
       // default da lib E o valor pedido pelo documento — mesma coisa.
       rightPriceScale: {
         borderColor: "#2B2B43",
-        minimumWidth: 65,
+        minimumWidth: initialScale.minimumWidth,
         scaleMargins: { top: 0.15, bottom: 0.08 },
       },
       timeScale: {
@@ -898,7 +943,7 @@ export function EnhancedChart_110_Percent({
         // documento mede pixels; rightOffset mede LARGURAS DE BARRA (a
         // própria unidade da lib) — grandezas diferentes, e este valor já
         // tem razão própria documentada, não é uma lacuna real.
-        rightOffset: 8,
+        rightOffset: initialScale.rightOffset,
         // Achado real da auditoria "AUDITORIA VISUAL CIRÚRGICA" (P14): sem
         // formatter próprio, a lib cai no formato padrão do locale — em
         // pt-BR isso inclui abreviação com ponto solto ("ago.") na virada
@@ -1173,7 +1218,38 @@ export function EnhancedChart_110_Percent({
     chartRef.current = chart;
     seriesRef.current = series;
     setChartReady({ chart, series });
+    // Ordem ULTRA LED/UltraWide/4K: os 3 valores acima (fontSize/
+    // minimumWidth/rightOffset) precisam se atualizar se o Operador
+    // redimensionar a janela ou mover pra outro monitor DEPOIS do mount —
+    // o chart em si só é criado uma vez (comentário no topo deste
+    // efeito), então essas 3 options nunca reagiriam sozinhas. Debounce
+    // simples (150ms) e só chama applyOptions quando o breakpoint REAL
+    // muda, nunca em todo pixel de resize.
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
+    let currentScale = initialScale;
+    const handleUltraWideResize = () => {
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        const nextScale = resolveChartUltraWideScale(window.innerWidth);
+        if (
+          nextScale.fontSize === currentScale.fontSize &&
+          nextScale.minimumWidth === currentScale.minimumWidth &&
+          nextScale.rightOffset === currentScale.rightOffset
+        ) {
+          return;
+        }
+        currentScale = nextScale;
+        chart.applyOptions({
+          layout: { fontSize: nextScale.fontSize },
+          rightPriceScale: { minimumWidth: nextScale.minimumWidth },
+          timeScale: { rightOffset: nextScale.rightOffset },
+        });
+      }, 150);
+    };
+    window.addEventListener("resize", handleUltraWideResize);
     return () => {
+      window.removeEventListener("resize", handleUltraWideResize);
+      if (resizeTimeout) clearTimeout(resizeTimeout);
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;

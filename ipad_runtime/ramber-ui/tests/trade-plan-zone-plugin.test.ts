@@ -235,7 +235,7 @@ describe('EnhancedChart_110_Percent: VWAP wiring (research-driven precision orde
 
   it('the ref is cleared on unmount, same discipline as every other series ref', () => {
     const s = chart();
-    const teardown = s.slice(s.indexOf('return () => {\n      chart.remove();'), s.indexOf('setChartReady(null);'));
+    const teardown = s.slice(s.indexOf('chart.remove();'), s.indexOf('setChartReady(null);'));
     expect(teardown).toContain('vwapSeriesRef.current = null;');
   });
 });
