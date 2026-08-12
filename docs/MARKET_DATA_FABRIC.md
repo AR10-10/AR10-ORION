@@ -304,6 +304,68 @@ quê). Suíte completa: **155 arquivos, 2552 testes, 100% verde.**
 | Fail-closed intacto | ✅ |
 | Testes/build verdes | ✅ |
 
+## Fase 2 — 5 ações NASDAQ reais (pedido direto do Operador)
+
+Pedido explícito do Operador: expandir a cobertura americana além dos
+índices/commodities/FX já reais da Fase 1 para incluir ações individuais
+(Tesla, Nvidia, Apple, Microsoft, Meta — os 5 "Big Techs" que já existiam
+como navegação pura em `tradfi-assets.ts` desde o Overhaul Cross-Market,
+sem dado real atrás). Confirmado com o Operador via `AskUserQuestion`
+antes de construir: manter só o que já existia (índices/commodities/FX)
+vs. também conectar as 5 ações — o Operador escolheu expandir.
+
+**Auditado antes de codar**: `instrument-registry.js` é tipado e
+documentado especificamente para futuros CME (`InstrumentDefinition` com
+`designated_contract_market` = bolsa do CME Group, `tick_value_usd` =
+multiplicador de contrato). Uma ação individual não é um futuro CME —
+forçá-la no mesmo `instrument_type` (`tradfi_futures`) seria dado
+estruturalmente errado (uma ação não tem contrato/vencimento/
+multiplicador). Decisão: **mesmo array, `instrument_type` novo e honesto**
+(`tradfi_equity`) — evita tanto forçar semântica errada quanto criar uma
+segunda estrutura de arquivo paralela só para 5 linhas.
+
+**Solução aplicada**: 5 novas entradas em `INSTRUMENT_REGISTRY`
+(`NASDAQ_AAPL`/`NASDAQ_MSFT`/`NASDAQ_NVDA`/`NASDAQ_META`/`NASDAQ_TSLA`),
+`asset_class: EQUITY` (nova), `exchange`/`designated_contract_market:
+'NASDAQ'` (bolsa real de listagem, não um membro do CME Group — os dois
+campos reaproveitados honestamente para significar "onde o instrumento
+troca de mão"), `contract_code`/`continuous_symbol_hint` = o ticker puro
+(convenção real da Yahoo para ações, sem sufixo `=F`), `tick_size`/
+`tick_value_usd` = 0.01 (Reg NMS Rule 612 — incremento mínimo real de
+cotação para ações ≥US$1, não um número inventado). `findByLegacy
+TradFiAssetSymbol`/`tradfi-delayed-connector.js` são genéricos o
+suficiente para resolver as 5 novas entradas **sem nenhuma mudança de
+código** — só a extensão do catálogo. `schema.js` ganhou uma entrada
+`tradfi_equity` em `STRUCTURAL_NAO_APLICAVEL_BY_INSTRUMENT`: mesma
+mecânica de `tradfi_futures` (funding/liquidations/long_short_ratio
+sempre `NAO_APLICAVEL`) **mais `open_interest`**, que aqui também é
+`NAO_APLICAVEL` (diferente de `tradfi_futures`) — open interest é
+conceito de derivativo (contratos de futuro/opção em aberto); uma ação à
+vista não tem esse número (o mais próximo seria o open interest das
+OPÇÕES daquela ação, um instrumento diferente, fora deste catálogo).
+
+**AVISO REAL, não descoberto nesta fase mas reforçado por ela**: as 5
+ações novas herdam o MESMO bloqueio estrutural de CORS já documentado
+acima para os 9 futuros CME (`query1/query2.finance.yahoo.com` não envia
+`Access-Control-Allow-Origin` para `fetch()` de origem arbitrária) —
+"cadastrado no registry" não é o mesmo que "confirmado funcionando ao
+vivo". Nenhum dos 14 instrumentos deste conector (9 futuros + 5 ações) foi
+verificado contra a rede real nesta sessão nem em nenhuma anterior — o
+mesmo bloqueio de rede do sandbox de implementação se aplica.
+
+**Testes**: `instrument-registry.test.ts` ganhou um bloco dedicado (tick_
+size/tick_value real, `contract_code`===`continuous_symbol_hint`===ticker
+puro sem `=F`, exchange NASDAQ, Priority A, `listByAssetClass(EQUITY)`
+exato) + o teste pré-existente de `findByLegacyTradFiAssetSymbol` migrou
+TSLA/NVDA/AAPL/MSFT/META de "unmapped" pra "mapped" (contagem de pares
+reais 9→14). `schema-tradfi.test.ts` ganhou o bloco espelho de
+`tradfi_equity` (incluindo o `open_interest` NAO_APLICAVEL, único ponto
+onde diverge de `tradfi_futures`). `tradfi-assets.ts`/`App.tsx`/
+`docs/DATA_SOURCE_MATRIX.md` tiveram comentários "9 dos 17"/"nenhuma API
+ligada" corrigidos para o estado real (14 dos 17) — achado real desta
+auditoria: esses comentários já estavam parcialmente desatualizados desde
+a própria Fase 1, não só por esta expansão.
+
 ## Deliberadamente fora do escopo desta fase (honesto, não esquecido)
 
 - **CME direto**: bloqueado por licenciamento pago — sem caminho gratuito
@@ -319,10 +381,11 @@ quê). Suíte completa: **155 arquivos, 2552 testes, 100% verde.**
   expiração/rollover, ausência de funding, ausência de liquidations) que
   o Operador não pediu explicitamente — LEI 24 preservada por
   simplesmente nunca conectar o novo dado a essa maquinaria.
-- **8 dos 17 ativos legados sem mapeamento** (TSLA/NVDA/AAPL/MSFT/META —
-  ações, não futuros; GER40 — Eurex, não CME; UKOIL/Brent — ICE, não
+- **3 dos 17 ativos legados sem mapeamento** (atualizado pela Fase 2
+  acima — os 5 de ações TSLA/NVDA/AAPL/MSFT/META já mapeiam para um
+  instrumento real agora): GER40 — Eurex, não CME; UKOIL/Brent — ICE, não
   CME; USDJPY — convenção de cotação do futuro 6J é o inverso do par
-  spot, mapear sem inverter mostraria um preço logicamente errado).
+  spot, mapear sem inverter mostraria um preço logicamente errado.
   Documentado campo a campo em `instrument-registry.js`.
 - **SOFR (SR3), CME_BTC/MBT/ETH/MET**: sem `continuous_symbol_hint` — a
   convenção Yahoo usada pelo conector não cobre esses símbolos. Ficam no

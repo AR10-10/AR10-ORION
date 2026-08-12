@@ -8,7 +8,7 @@
 // seletor em cascata ATIVO→CLASSE→EXCHANGE→CONTRATO (§15).
 import { describe, it, expect } from 'vitest';
 import {
-  ASSET_CLASS, PRIORITY_TIER, TRADFI_FUTURES_INSTRUMENT_TYPE, INSTRUMENT_REGISTRY,
+  ASSET_CLASS, PRIORITY_TIER, TRADFI_FUTURES_INSTRUMENT_TYPE, TRADFI_EQUITY_INSTRUMENT_TYPE, INSTRUMENT_REGISTRY,
   listInstruments, listByPriorityTier, listByAssetClass, findByInstrumentId,
   findByContractCode, findByContinuousSymbolHint, findByLegacyTradFiAssetSymbol, listAssetClasses,
   listDesignatedContractMarkets, buildCascadingSelectorTree,
@@ -30,9 +30,17 @@ describe('instrument-registry: integridade estrutural do catálogo (nenhuma entr
     expect(new Set(hints).size).toBe(hints.length);
   });
 
-  it('todo instrumento usa instrument_type=tradfi_futures (contrato com STRUCTURAL_NAO_APLICAVEL_BY_INSTRUMENT em schema.js)', () => {
-    for (const i of INSTRUMENT_REGISTRY) expect(i.instrument_type).toBe(TRADFI_FUTURES_INSTRUMENT_TYPE);
+  it('todo instrumento usa um instrument_type com STRUCTURAL_NAO_APLICAVEL_BY_INSTRUMENT em schema.js (futuros=tradfi_futures, ações=tradfi_equity, nunca um 3º valor não registrado)', () => {
+    const validTypes = [TRADFI_FUTURES_INSTRUMENT_TYPE, TRADFI_EQUITY_INSTRUMENT_TYPE];
+    for (const i of INSTRUMENT_REGISTRY) expect(validTypes).toContain(i.instrument_type);
     expect(TRADFI_FUTURES_INSTRUMENT_TYPE).toBe('tradfi_futures');
+    expect(TRADFI_EQUITY_INSTRUMENT_TYPE).toBe('tradfi_equity');
+  });
+
+  it('as 5 ações NASDAQ usam tradfi_equity (nunca tradfi_futures — não têm contrato/vencimento/multiplicador)', () => {
+    for (const id of ['NASDAQ_AAPL', 'NASDAQ_MSFT', 'NASDAQ_NVDA', 'NASDAQ_META', 'NASDAQ_TSLA']) {
+      expect(findByInstrumentId(id)?.instrument_type).toBe(TRADFI_EQUITY_INSTRUMENT_TYPE);
+    }
   });
 
   it('todo tick_size e tick_value_usd é um número finito positivo (dado de referência real, nunca um placeholder)', () => {
@@ -75,6 +83,45 @@ describe('instrument-registry: universo Priority A (CORE) cobre o Ordem §5 lite
   });
 });
 
+describe('instrument-registry: as 5 ações NASDAQ (pedido direto do Operador, expansão TradFi) usam a semântica real de uma ação à vista, nunca a de um futuro', () => {
+  const equityIds = ['NASDAQ_AAPL', 'NASDAQ_MSFT', 'NASDAQ_NVDA', 'NASDAQ_META', 'NASDAQ_TSLA'];
+
+  it('tick_size/tick_value_usd = 0.01 (Reg NMS Rule 612 — incremento mínimo real de cotação para ações ≥US$1), nunca um multiplicador de contrato de futuro', () => {
+    for (const id of equityIds) {
+      const eq = findByInstrumentId(id);
+      expect(eq?.tick_size).toBe(0.01);
+      expect(eq?.tick_value_usd).toBe(0.01);
+    }
+  });
+
+  it('contract_code === continuous_symbol_hint === o ticker puro (convenção real da Yahoo Finance para ações: sem sufixo =F)', () => {
+    const tickers = ['AAPL', 'MSFT', 'NVDA', 'META', 'TSLA'];
+    for (const ticker of tickers) {
+      const eq = INSTRUMENT_REGISTRY.find((i) => i.contract_code === ticker && i.instrument_type === TRADFI_EQUITY_INSTRUMENT_TYPE);
+      expect(eq?.continuous_symbol_hint).toBe(ticker);
+      expect(eq?.continuous_symbol_hint).not.toMatch(/=F$/);
+    }
+  });
+
+  it('exchange e designated_contract_market são NASDAQ (bolsa real de listagem), nunca CME/CBOT/NYMEX/COMEX', () => {
+    for (const id of equityIds) {
+      const eq = findByInstrumentId(id);
+      expect(eq?.exchange).toBe('NASDAQ');
+      expect(eq?.designated_contract_market).toBe('NASDAQ');
+    }
+  });
+
+  it('todas em Priority A (mesmo tier dos ativos CORE do documento original)', () => {
+    const tierAIds = listByPriorityTier(PRIORITY_TIER.A).map((i) => i.instrument_id);
+    for (const id of equityIds) expect(tierAIds).toContain(id);
+  });
+
+  it('listByAssetClass(EQUITY) devolve exatamente as 5, nunca mistura com EQUITY_INDEX (índices, classe diferente)', () => {
+    const equities = listByAssetClass(ASSET_CLASS.EQUITY);
+    expect(equities.map((i) => i.instrument_id).sort()).toEqual([...equityIds].sort());
+  });
+});
+
 describe('instrument-registry: consultas puras usadas pelo seletor em cascata (§15)', () => {
   it('findByInstrumentId resolve um contrato real com todos os campos esperados', () => {
     const nq = findByInstrumentId('CME_NQ');
@@ -105,9 +152,9 @@ describe('instrument-registry: consultas puras usadas pelo seletor em cascata (�
 
   it('listAssetClasses/listDesignatedContractMarkets refletem o conteúdo real do catálogo (nunca uma lista fixa desalinhada)', () => {
     expect(listAssetClasses()).toEqual(
-      expect.arrayContaining([ASSET_CLASS.EQUITY_INDEX, ASSET_CLASS.METALS, ASSET_CLASS.ENERGY, ASSET_CLASS.RATES, ASSET_CLASS.FX, ASSET_CLASS.CRYPTO]),
+      expect.arrayContaining([ASSET_CLASS.EQUITY_INDEX, ASSET_CLASS.EQUITY, ASSET_CLASS.METALS, ASSET_CLASS.ENERGY, ASSET_CLASS.RATES, ASSET_CLASS.FX, ASSET_CLASS.CRYPTO]),
     );
-    expect(listDesignatedContractMarkets()).toEqual(expect.arrayContaining(['CME', 'CBOT', 'COMEX', 'NYMEX']));
+    expect(listDesignatedContractMarkets()).toEqual(expect.arrayContaining(['CME', 'CBOT', 'COMEX', 'NYMEX', 'NASDAQ']));
   });
 
   it('listInstruments ordena Priority A antes de B antes de C', () => {
@@ -120,17 +167,18 @@ describe('instrument-registry: consultas puras usadas pelo seletor em cascata (�
     }
   });
 
-  it('findByLegacyTradFiAssetSymbol conecta o catálogo pré-existente (src/omnibox/tradfi-assets.ts) SEM duplicá-lo — 9 pares reais e honestos, o resto null', () => {
+  it('findByLegacyTradFiAssetSymbol conecta o catálogo pré-existente (src/omnibox/tradfi-assets.ts) SEM duplicá-lo — 14 pares reais e honestos (9 futuros CME + 5 ações NASDAQ), o resto null', () => {
     const mapped: Record<string, string> = {
       SPX: 'CME_ES', NDX: 'CME_NQ', US30: 'CME_YM', RUT: 'CME_RTY',
       XAUUSD: 'CME_GC', XAGUSD: 'CME_SI', USOIL: 'CME_CL', EURUSD: 'CME_6E', GBPUSD: 'CME_6B',
+      AAPL: 'NASDAQ_AAPL', MSFT: 'NASDAQ_MSFT', NVDA: 'NASDAQ_NVDA', META: 'NASDAQ_META', TSLA: 'NASDAQ_TSLA',
     };
     for (const [legacy, instrumentId] of Object.entries(mapped)) {
       expect(findByLegacyTradFiAssetSymbol(legacy)?.instrument_id).toBe(instrumentId);
     }
-    // Sem mapeamento seguro (ações, GER40/Eurex, Brent/ICE, USDJPY com
-    // convenção de cotação invertida) — null honesto, nunca um chute.
-    for (const unmapped of ['TSLA', 'NVDA', 'AAPL', 'MSFT', 'META', 'GER40', 'UKOIL', 'USDJPY', 'NAO_EXISTE']) {
+    // Sem mapeamento seguro (GER40/Eurex, Brent/ICE, USDJPY com convenção
+    // de cotação invertida) — null honesto, nunca um chute.
+    for (const unmapped of ['GER40', 'UKOIL', 'USDJPY', 'NAO_EXISTE']) {
       expect(findByLegacyTradFiAssetSymbol(unmapped)).toBeNull();
     }
     expect(findByLegacyTradFiAssetSymbol(null as unknown as string)).toBeNull();
@@ -140,7 +188,7 @@ describe('instrument-registry: consultas puras usadas pelo seletor em cascata (�
   it('todo legacy_tradfi_asset_symbol presente é único (nunca dois instrumentos disputando o mesmo botão do seletor legado)', () => {
     const legacySymbols = INSTRUMENT_REGISTRY.map((i) => i.legacy_tradfi_asset_symbol).filter(Boolean);
     expect(new Set(legacySymbols).size).toBe(legacySymbols.length);
-    expect(legacySymbols).toHaveLength(9);
+    expect(legacySymbols).toHaveLength(14);
   });
 
   it('buildCascadingSelectorTree constrói ATIVO→EXCHANGE→[instrumentos] a partir do MESMO catálogo (nunca uma segunda cópia redigitada)', () => {

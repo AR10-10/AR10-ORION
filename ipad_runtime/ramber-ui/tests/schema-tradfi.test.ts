@@ -48,6 +48,27 @@ describe('schema.js: STRUCTURAL_NAO_APLICAVEL_BY_INSTRUMENT.tradfi_futures (via 
   });
 });
 
+describe('schema.js: STRUCTURAL_NAO_APLICAVEL_BY_INSTRUMENT.tradfi_equity (via createEmptyEvidence) — expansão TradFi, ações NASDAQ', () => {
+  it('funding/liquidations/long_short_ratio nascem NAO_APLICAVEL (mesma mecânica de perpétuo cripto, estruturalmente impossível numa ação à vista)', () => {
+    const evidence = createEmptyEvidence({ source_id: 's', source_name: 'S', endpoint_kind: 'e', symbol: 'NASDAQ_AAPL', instrument_type: 'tradfi_equity' });
+    expect(evidence.funding).toBe(NAO_APLICAVEL);
+    expect(evidence.liquidations).toBe(NAO_APLICAVEL);
+    expect(evidence.long_short_ratio).toBe(NAO_APLICAVEL);
+  });
+
+  it('open_interest TAMBÉM nasce NAO_APLICAVEL aqui (diferente de tradfi_futures) — é conceito de derivativo (futuro/opção), uma ação à vista não tem esse número', () => {
+    const evidence = createEmptyEvidence({ source_id: 's', source_name: 'S', endpoint_kind: 'e', symbol: 'NASDAQ_AAPL', instrument_type: 'tradfi_equity' });
+    expect(evidence.open_interest).toBe(NAO_APLICAVEL);
+  });
+
+  it('order_book/candles/ticker/volume continuam DADOS_INSUFICIENTES — conceitos reais e aplicáveis a uma ação, só não confirmados ainda por nenhuma sonda', () => {
+    const evidence = createEmptyEvidence({ source_id: 's', source_name: 'S', endpoint_kind: 'e', symbol: 'NASDAQ_AAPL', instrument_type: 'tradfi_equity' });
+    for (const field of ['order_book', 'candles', 'ticker', 'volume']) {
+      expect(evidence[field]).toBe(DADOS_INSUFICIENTES);
+    }
+  });
+});
+
 describe('schema.js: detectSourceConflict — Ordem §7 ("nunca escolher um valor silenciosamente")', () => {
   it('2 leituras dentro da tolerância => conflict:false, com o spread real calculado', () => {
     const result = detectSourceConflict([{ source_id: 'a', value: 100 }, { source_id: 'b', value: 100.1 }], 0.5);

@@ -23,6 +23,7 @@
 
 export const ASSET_CLASS = Object.freeze({
     EQUITY_INDEX: 'EQUITY_INDEX',
+    EQUITY: 'EQUITY',
     METALS: 'METALS',
     ENERGY: 'ENERGY',
     RATES: 'RATES',
@@ -37,8 +38,13 @@ export const ASSET_CLASS = Object.freeze({
 export const PRIORITY_TIER = Object.freeze({ A: 'A', B: 'B', C: 'C' });
 
 // instrument_type usado por schema.js/STRUCTURAL_NAO_APLICAVEL_BY_INSTRUMENT
-// — todo instrumento deste catalogo usa este mesmo valor.
+// — os futuros CME acima usam este valor.
 export const TRADFI_FUTURES_INSTRUMENT_TYPE = 'tradfi_futures';
+// Acoes individuais a vista (secao EQUITY abaixo) usam este 2o valor —
+// nunca reaproveitam tradfi_futures: uma acao nao tem contrato/vencimento/
+// tick_value multiplicador, e open_interest (conceito de derivativo) nao
+// se aplica a ela do jeito que se aplica a um futuro (ver schema.js).
+export const TRADFI_EQUITY_INSTRUMENT_TYPE = 'tradfi_equity';
 
 /**
  * @typedef {Object} InstrumentDefinition
@@ -215,6 +221,61 @@ export const INSTRUMENT_REGISTRY = Object.freeze([
       tick_size: 0.5, tick_value_usd: 0.05, contract_size_desc: '0,1 ETH, liquidacao financeira via CME CF Ether-Dollar Reference Rate',
       priority_tier: PRIORITY_TIER.C, instrument_type: TRADFI_FUTURES_INSTRUMENT_TYPE,
       notes: '1/500 do CME_ETH em valor nominal.' },
+
+    // ---- EQUITY (acoes individuais a vista, NAO futuros CME) --------------
+    // Pedido direto do Operador: os 5 "Big Techs" ja existentes como
+    // navegacao pura em tradfi-assets.ts (TSLA/NVDA/AAPL/MSFT/META) ganham
+    // aqui uma entrada real no registry, resolvendo pela MESMA ponte
+    // findByLegacyTradFiAssetSymbol/mesmo conector Yahoo delayed que ja
+    // serve os 9 futuros acima — zero segunda implementacao. exchange/
+    // designated_contract_market sao a bolsa real de listagem (NASDAQ, nao
+    // um membro do CME Group — os dois campos aqui significam "onde o
+    // instrumento troca de mao", nao "bolsa do CME Group", unico jeito
+    // honesto de reaproveitar a mesma forma de InstrumentDefinition sem
+    // forcar uma 2a estrutura de dado so para 5 linhas). contract_code e
+    // continuous_symbol_hint sao o ticker puro (convencao real da Yahoo
+    // Finance para acoes: sem sufixo =F, distinto dos futuros). tick_size
+    // 0.01 e o incremento minimo real de cotacao para acoes >=US$1 nos EUA
+    // (Reg NMS Rule 612, "Sub-Penny Rule"); tick_value_usd = tick_size (1
+    // acao = 1 unidade, sem multiplicador de contrato como nos futuros).
+    //
+    // AVISO REAL, nao um detalhe menor (docs/MARKET_DATA_FABRIC.md): o
+    // MESMO conector Yahoo delayed usado pelos 9 futuros ja registrados tem
+    // um bloqueio ESTRUTURAL de CORS documentado e pesquisado nesta sessao
+    // (query1/query2.finance.yahoo.com nao envia Access-Control-Allow-
+    // Origin para fetch() de origem arbitraria) — isso pode bloquear TODO
+    // instrumento deste conector (futuros E as 5 acoes abaixo) mesmo com
+    // rede real liberada no dispositivo do Operador, nao so no sandbox
+    // desta sessao. "Cadastrado no registry" != "confirmado ao vivo": a
+    // arquitetura Evidence-First (schema.js) ja classifica esse cenario
+    // honestamente como BLOCKED_BY_CORS em vez de fingir sucesso ou
+    // fabricar candle — mas nenhum destes 5 (nem os 9 futuros) foi
+    // confirmado funcionando contra a rede real ainda.
+    { instrument_id: 'NASDAQ_AAPL', display_name: 'Apple Inc.', asset_class: ASSET_CLASS.EQUITY,
+      exchange: 'NASDAQ', designated_contract_market: 'NASDAQ', contract_code: 'AAPL', continuous_symbol_hint: 'AAPL',
+      tick_size: 0.01, tick_value_usd: 0.01, contract_size_desc: '1 ação (instrumento à vista, não futuro)',
+      priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_EQUITY_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'AAPL',
+      notes: 'Ação à vista, não futuro CME — ver aviso de bloqueio de CORS no cabeçalho da seção EQUITY acima.' },
+    { instrument_id: 'NASDAQ_MSFT', display_name: 'Microsoft Corp.', asset_class: ASSET_CLASS.EQUITY,
+      exchange: 'NASDAQ', designated_contract_market: 'NASDAQ', contract_code: 'MSFT', continuous_symbol_hint: 'MSFT',
+      tick_size: 0.01, tick_value_usd: 0.01, contract_size_desc: '1 ação (instrumento à vista, não futuro)',
+      priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_EQUITY_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'MSFT',
+      notes: 'Ação à vista, não futuro CME — ver aviso de bloqueio de CORS no cabeçalho da seção EQUITY acima.' },
+    { instrument_id: 'NASDAQ_NVDA', display_name: 'Nvidia Corp.', asset_class: ASSET_CLASS.EQUITY,
+      exchange: 'NASDAQ', designated_contract_market: 'NASDAQ', contract_code: 'NVDA', continuous_symbol_hint: 'NVDA',
+      tick_size: 0.01, tick_value_usd: 0.01, contract_size_desc: '1 ação (instrumento à vista, não futuro)',
+      priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_EQUITY_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'NVDA',
+      notes: 'Ação à vista, não futuro CME — ver aviso de bloqueio de CORS no cabeçalho da seção EQUITY acima.' },
+    { instrument_id: 'NASDAQ_META', display_name: 'Meta Platforms Inc.', asset_class: ASSET_CLASS.EQUITY,
+      exchange: 'NASDAQ', designated_contract_market: 'NASDAQ', contract_code: 'META', continuous_symbol_hint: 'META',
+      tick_size: 0.01, tick_value_usd: 0.01, contract_size_desc: '1 ação (instrumento à vista, não futuro)',
+      priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_EQUITY_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'META',
+      notes: 'Ação à vista, não futuro CME — ver aviso de bloqueio de CORS no cabeçalho da seção EQUITY acima.' },
+    { instrument_id: 'NASDAQ_TSLA', display_name: 'Tesla Inc.', asset_class: ASSET_CLASS.EQUITY,
+      exchange: 'NASDAQ', designated_contract_market: 'NASDAQ', contract_code: 'TSLA', continuous_symbol_hint: 'TSLA',
+      tick_size: 0.01, tick_value_usd: 0.01, contract_size_desc: '1 ação (instrumento à vista, não futuro)',
+      priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_EQUITY_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'TSLA',
+      notes: 'Ação à vista, não futuro CME — ver aviso de bloqueio de CORS no cabeçalho da seção EQUITY acima.' },
 ]);
 
 // ---------------------------------------------------------------------

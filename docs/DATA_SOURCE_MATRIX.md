@@ -63,13 +63,15 @@ execução").
 | `mt5-bridge-adapter` (role: `READ_ONLY_PLACEHOLDER`) | crypto_spot, crypto_futures, equities_real, fx | `FUTURE` | HIGH | Não |
 | `native-companion-adapter` | crypto_spot, crypto_futures | `FUTURE` | MEDIUM | Não |
 
-¹ **Atualização real (Ordem Market Data Fabric, Fase 1):** o slice
+¹ **Atualização real (Ordem Market Data Fabric, Fase 1; expandida com 5
+ações NASDAQ a pedido direto do Operador):** o slice
 `tradfi_regulated_futures` deste conector (futuros datados/regulados da
 CME — ES/NQ/YM/RTY/GC/SI/CL/6E/6B; distinto de `stock_futures_synthetic`)
-agora tem implementação real e testada — `ipad_runtime/js/real-data/
+E o slice `equities_real` (5 ações NASDAQ — AAPL/MSFT/NVDA/META/TSLA)
+agora têm implementação real e testada — `ipad_runtime/js/real-data/
 tradfi-delayed-yahoo.js` + `ipad_runtime/src/market-data-bus/tradfi-
 delayed-connector.js`, ligado ao Instrument Registry real
-(`instrument-registry.js`) e a `App.tsx` (modo TRADFI, 9 dos 17 ativos
+(`instrument-registry.js`) e a `App.tsx` (modo TRADFI, 14 dos 17 ativos
 legados). `current_status` continua honestamente `PLANNED`: nenhuma
 chamada real contra `query1.finance.yahoo.com` foi executada em nenhuma
 sessão de implementação até agora (sandbox sem saída de rede para esse

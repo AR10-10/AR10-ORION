@@ -88,11 +88,22 @@ export const EVIDENCE_DATA_FIELDS = Object.freeze([
 // nao um substituto). open_interest e order_book NAO entram aqui: sao
 // conceitos reais e publicados pela CME — ficam DADOS_INSUFICIENTES ate um
 // conector real os preencher, nunca NAO_APLICAVEL.
+// tradfi_equity (acoes individuais a vista, ver instrument-registry.js):
+// mesma logica de funding/liquidations/long_short_ratio do tradfi_futures
+// acima (mecanica de perpetual swap/derivativo, nao existe pra uma acao) —
+// MAIS open_interest, que aqui SIM entra na lista (diferente de
+// tradfi_futures): open_interest e um conceito de DERIVATIVO (contratos de
+// futuro/opcao em aberto); uma acao a vista nao tem esse numero — o mais
+// proximo seria "open interest das OPCOES daquela acao", um instrumento
+// diferente que este catalogo nao cobre. order_book continua DADOS_
+// INSUFICIENTES (conceito real e aplicavel a uma acao, so nao buscado
+// ainda por nenhum conector deste catalogo).
 const STRUCTURAL_NAO_APLICAVEL_BY_INSTRUMENT = Object.freeze({
     crypto_spot: ['funding', 'open_interest', 'liquidations', 'long_short_ratio'],
     crypto_futures: [],
     imported_series: ['order_book', 'funding', 'open_interest', 'liquidations', 'long_short_ratio'],
     tradfi_futures: ['funding', 'liquidations', 'long_short_ratio'],
+    tradfi_equity: ['funding', 'open_interest', 'liquidations', 'long_short_ratio'],
 });
 
 /** Evidence Object vazio e honesto: identidade preenchida, todo campo de

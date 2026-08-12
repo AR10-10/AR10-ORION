@@ -338,8 +338,9 @@ import { TRADFI_ASSETS, type TradFiAsset } from "./omnibox/tradfi-assets";
 // Ordem Market Data Fabric, Fase 1: findByLegacyTradFiAssetSymbol conecta
 // o TradFiAsset escolhido acima (ex. 'SPX') ao Instrument Registry
 // TradFi/CME real (ex. CME_ES) SEM duplicar o catálogo/seletor já
-// existente — 9 dos 17 ativos legados agora resolvem para um contrato
-// real; o resto continua honesto em TradFiEmptyState (ver notes de cada
+// existente — 14 dos 17 ativos legados agora resolvem para um contrato
+// real (9 futuros CME + 5 ações NASDAQ); o resto continua honesto em
+// TradFiEmptyState (ver notes de cada
 // InstrumentDefinition mapeada em instrument-registry.js). TradFiRealChart
 // é deliberadamente minimalista (candlestick real, zero overlay do
 // Institutional Chart Engine, zero Core Engine — LEI 24 intacta).
@@ -916,8 +917,9 @@ export default function App() {
   // puxar dado da Binance para um símbolo que não é dela (diretriz 4, Modo
   // Fail-Closed). Ordem Market Data Fabric, Fase 1: o GRÁFICO PRINCIPAL
   // não é mais sempre Empty State — resolvedTradFiInstrument abaixo resolve
-  // 9 dos 17 ativos legados para um contrato real do Instrument Registry
-  // (Yahoo delayed); o resto continua honesto em Empty State.
+  // 14 dos 17 ativos legados (9 futuros CME + 5 ações NASDAQ) para um
+  // contrato real do Instrument Registry (Yahoo delayed); o resto
+  // continua honesto em Empty State.
   const [marketMode, setMarketMode] = useState<"CRYPTO" | "TRADFI">(() => restoredSession.marketMode);
   const [selectedTradFiAsset, setSelectedTradFiAsset] = useState<TradFiAsset | null>(() => restoredSession.tradFiAsset);
   const resolvedTradFiInstrument = useMemo(
