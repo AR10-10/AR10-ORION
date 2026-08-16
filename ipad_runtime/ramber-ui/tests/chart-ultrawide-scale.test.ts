@@ -9,14 +9,21 @@
 // computados, o listener de resize existe e é limpo na desmontagem).
 //
 // Fora do escopo desta função (documentado no próprio header dela em
-// EnhancedChart_110_Percent.tsx, não retestado aqui): barSpacing
-// (conflitaria com nexus/chart-viewport.ts, já em produção) e densidade de
-// grid (não existe como opção real da lib — confirmado contra os typings).
+// chart-ultrawide-scale.ts, não retestado aqui): barSpacing (conflitaria
+// com nexus/chart-viewport.ts, já em produção) e densidade de grid (não
+// existe como opção real da lib — confirmado contra os typings).
+//
+// Achado real, task #341 (auditoria "Estratégia de Evolução Elite"
+// 2026-08-16): a função foi extraída de EnhancedChart_110_Percent.tsx
+// para chart-ultrawide-scale.ts, módulo próprio — PriceLabelStackPlugin
+// passou a precisar da MESMA escala (etiquetas do eixo ficavam com fonte
+// fixa mesmo em monitor 4K) e importar direto do componente do gráfico
+// criaria um ciclo real (aquele arquivo já importa o plugin).
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { resolveChartUltraWideScale } from '../src/chart/EnhancedChart_110_Percent';
+import { resolveChartUltraWideScale } from '../src/chart/chart-ultrawide-scale';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
@@ -60,6 +67,12 @@ describe('resolveChartUltraWideScale: piso nunca abaixo do que já está em prod
 
 describe('EnhancedChart: os 3 valores responsivos realmente alimentam createChart, e o resize é ouvido e limpo', () => {
   const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('importa resolveChartUltraWideScale do módulo próprio (nunca redefine localmente — evita o ciclo real com PriceLabelStackPlugin)', () => {
+    const s = chart();
+    expect(s).toContain('import { resolveChartUltraWideScale } from "./chart-ultrawide-scale";');
+    expect(s).not.toContain('export function resolveChartUltraWideScale');
+  });
 
   it('initialScale computado uma vez por montagem e usado nos 3 pontos reais (layout/rightPriceScale/timeScale)', () => {
     const s = chart();

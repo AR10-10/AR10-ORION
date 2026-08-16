@@ -57,6 +57,16 @@ import {
 // lógica sem ganho real; só o roundRect com o mesmo raio foi adicionado
 // aqui, com o mesmo fallback honesto para Safari sem suporte.
 import { CANVAS_LABEL_RADIUS } from "../nexus/canvas-label";
+// Achado real, task #341 (auditoria "Estratégia de Evolução Elite",
+// 2026-08-16): a Fase A do Ajuste ULTRA LED (EnhancedChart_110_Percent.tsx)
+// já escala o fontSize NATIVO do chart (11→12→13px conforme
+// window.innerWidth) num monitor grande/UltraWide/4K — mas as etiquetas
+// deste overlay (S1/R1/VWAP/POC/etc., desenhadas por CIMA do tick nativo)
+// ficavam com fonte fixa em qualquer resolução, uma inconsistência visual
+// real entre o eixo nativo e o próprio overlay que o substitui. Reusa a
+// MESMA função/mesmos 3 breakpoints já aprovados (nunca um breakpoint
+// novo) — só aplica o mesmo delta às fontes/alturas deste plugin.
+import { resolveChartUltraWideScale } from "./chart-ultrawide-scale";
 
 export interface PriceAxisLabel {
   price: number;
@@ -122,8 +132,16 @@ export const LABEL_HEIGHT_PX = 18;
 // achar sem procurar, só sem o anel (exclusivo do preço, a única âncora
 // de "o instante agora"; ver isBigTier abaixo).
 export const LIVE_LABEL_HEIGHT_PX = 21;
-const FONT_LIVE = "bold 11px -apple-system, sans-serif";
 const FONT_BASE = "10px -apple-system, sans-serif";
+// Tamanhos-base real das 3 fontes deste plugin (px, <1440px — mesma
+// baseline real de LABEL_HEIGHT_PX/LIVE_LABEL_HEIGHT_PX acima). A string
+// de fonte REAL (peso+px+família) é montada dentro de draw() somando
+// fontDelta (escala responsiva ULTRA LED, chart-ultrawide-scale.ts) —
+// achado real, task #341: estas fontes ficavam fixas em qualquer
+// resolução mesmo depois do fontSize NATIVO do chart (11→12→13px) já
+// escalar num monitor 4K/UltraWide, uma inconsistência visual real entre
+// o tick nativo e o overlay que o substitui.
+const FONT_LIVE_BASE_PX = 11;
 // Especificação Visual Profissional v1 (pedido direto do Operador):
 // labels primary/context (VWAP/NL/EMA/S1/R1/estrutura) compactam pra 9px
 // neutro, sem caixa — só live/critical mantêm o tratamento sólido acima
@@ -133,7 +151,7 @@ const FONT_BASE = "10px -apple-system, sans-serif";
 // (Regra de Ouro 8) proíbe fonte via CDN externa — mesma pilha de
 // fallback já declarada em index.css (degrada pra SF Mono, nativa no
 // iPad/macOS, visualmente quase idêntica, zero rede).
-const FONT_COMPACT = "500 9px ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace";
+const FONT_COMPACT_BASE_PX = 9;
 // Cinza neutro pedido para TODO label primary/context — a identidade por
 // indicador continua no próprio TEXTO ("E21"/"VWAP"/"S1"/"CHOCH") e no
 // conector fino de volta ao preço real (ainda na cor real, abaixo):
@@ -165,7 +183,7 @@ const COMPACT_PADDING_X = 4;
 // QUALQUER tier — a mesma informação ocupa menos largura só por ser
 // renderizada num degrau de fonte abaixo, sem precisar abreviar a
 // palavra em si (§2: "não apagar dado real").
-const FONT_SECONDARY = "8px -apple-system, sans-serif";
+const FONT_SECONDARY_BASE_PX = 8;
 // Peso visual reduzido (§4: "REACHED = estado secundário") — a MESMA
 // cor/fundo do primário, só mais transparente, nunca uma cor nova.
 const SECONDARY_ALPHA_MULT = 0.62;
@@ -190,22 +208,18 @@ const SECONDARY_GAP_PX = 4;
 // deliberadamente fora desta rodada (documentado, não fabricado — ver
 // resposta ao Operador). O teto em si (3, mais apertado) é aplicado.
 export const MAX_CONTEXT_LABELS = 3;
-// Achado real via harness Playwright (verificação desta correção):
-// alimentar o resolvedor com minGapPx = LABEL_HEIGHT_PX faz duas
+// Razão real do "+7" de folga (antes MIN_GAP_PX, agora minGapPx computado
+// por desenho dentro de draw() — ver comentário lá — mesma fórmula, só
+// responsiva): alimentar o resolvedor com gap = altura da caixa faz duas
 // etiquetas colidindo ficarem exatamente ENCOSTADAS (gap zero) — nunca
 // sobrepostas de fato, mas visualmente lidas como "uma coisa só" quando
-// as cores/larguras são bem diferentes (ex.: "VWAP ↓ 64854.83" ao lado
-// de um número solto sem prefixo). MIN_GAP_PX folgado garante uma fresta
-// real e visível entre duas etiquetas mesmo no pior caso — "cada desenho
-// no lugar preciso, nunca um em cima do outro" de verdade, não só
-// matematicamente.
-// A folga extra agora tem uma segunda razão real, além da fresta visível:
-// a etiqueta `live` é fisicamente maior (LIVE_LABEL_HEIGHT_PX=21 + o anel
-// fino de 1px a 1.5px de distância = 24px reais). O passo da pilha
-// precisa ser maior que isso, senão o anel do preço vivo encostaria na
-// caixa vizinha — o mesmo defeito de "uma coisa só" que este gap existe
-// para eliminar.
-const MIN_GAP_PX = LABEL_HEIGHT_PX + 7;
+// as cores/larguras são bem diferentes (ex.: "VWAP ↓ 64854.83" ao lado de
+// um número solto sem prefixo). A folga extra tem uma segunda razão real,
+// além da fresta visível: a etiqueta `live` é fisicamente maior (caixa +
+// o anel fino de 1px a 1.5px de distância = +3px reais). O passo da
+// pilha precisa ser maior que isso, senão o anel do preço vivo encostaria
+// na caixa vizinha — o mesmo defeito de "uma coisa só" que este gap
+// existe para eliminar.
 const LABEL_PADDING_X = 6;
 const RIGHT_MARGIN_PX = 2;
 // Achado real do Operador (densidade de rótulos só no lado direito): o
@@ -268,6 +282,21 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
       ctx.clearRect(0, 0, cssWidth, cssHeight);
       ctx.font = FONT_BASE;
 
+      // Mesma escala responsiva da Fase A (chart-ultrawide-scale.ts) —
+      // baseline (fontSize 11, <1440px) devolve delta 0, then o mesmo
+      // +1/+2 já usado pelo tick nativo do chart. Recomputado a cada
+      // desenho (mesmo padrão de cssWidth/cssHeight acima) — nunca precisa
+      // de listener de resize próprio, o ResizeObserver do próprio canvas
+      // já dispara markDirty em qualquer mudança de layout.
+      const uiScale = resolveChartUltraWideScale(window.innerWidth);
+      const fontDelta = uiScale.fontSize - 11;
+      const fontLive = `bold ${FONT_LIVE_BASE_PX + fontDelta}px -apple-system, sans-serif`;
+      const fontCompact = `500 ${FONT_COMPACT_BASE_PX + fontDelta}px ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace`;
+      const fontSecondary = `${FONT_SECONDARY_BASE_PX + fontDelta}px -apple-system, sans-serif`;
+      const labelHeightPx = LABEL_HEIGHT_PX + fontDelta;
+      const liveLabelHeightPx = LIVE_LABEL_HEIGHT_PX + fontDelta;
+      const minGapPx = labelHeightPx + 7; // mesma folga real de MIN_GAP_PX, escalada junto
+
       // Uma só primitiva de caixa para os 3 níveis (Regra de Ouro 4: zero
       // lógica duplicada) — o que muda entre eles é só preenchimento vs.
       // contorno, nunca a geometria. Fallback honesto para motor sem
@@ -319,7 +348,7 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
       // Ouro 4): a única diferença real entre os dois lados é geométrica.
       const drawSide = (entries: (PriceAxisLabel & { naturalY: number })[], side: "left" | "right") => {
         if (entries.length === 0) return;
-        const resolved = resolveLabelStackPositions(entries, MIN_GAP_PX);
+        const resolved = resolveLabelStackPositions(entries, minGapPx);
 
         for (const entry of resolved) {
           // Decaimento real por idade (BOS/CHOCH) — default 1 preserva o
@@ -332,7 +361,7 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           // Target) compartilham a caixa grande/negrito — só o anel
           // (abaixo) continua exclusivo do preço.
           const isBigTier = tier === "live" || tier === "critical";
-          const primaryFont = isBigTier ? FONT_LIVE : FONT_COMPACT;
+          const primaryFont = isBigTier ? fontLive : fontCompact;
           ctx.font = primaryFont;
           const primaryWidth = ctx.measureText(entry.text).width;
           // Ordem "Lapidação das Etiquetas TP1/TP2": largura real da caixa
@@ -340,12 +369,12 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           // um chute; a caixa sempre cabe exatamente o que será desenhado.
           let secondaryWidth = 0;
           if (entry.secondaryText) {
-            ctx.font = FONT_SECONDARY;
+            ctx.font = fontSecondary;
             secondaryWidth = ctx.measureText(entry.secondaryText).width;
           }
           const secondaryGap = entry.secondaryText ? SECONDARY_GAP_PX : 0;
           const textWidth = primaryWidth + secondaryGap + secondaryWidth;
-          const boxHeight = isBigTier ? LIVE_LABEL_HEIGHT_PX : LABEL_HEIGHT_PX;
+          const boxHeight = isBigTier ? liveLabelHeightPx : labelHeightPx;
           // primary/context: chip de contenção baixa-opacidade (ver
           // COMPACT_CHIP_FILL_ALPHA acima) — padding menor que live/
           // critical, só o suficiente pro texto não tocar a borda.
@@ -439,7 +468,7 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           // peso visual. Nunca desenhado se a chamada não declarou
           // secondaryText (zero mudança pro resto do eixo).
           if (entry.secondaryText) {
-            ctx.font = FONT_SECONDARY;
+            ctx.font = fontSecondary;
             ctx.fillStyle = textColor;
             ctx.globalAlpha = labelAlpha * SECONDARY_ALPHA_MULT;
             ctx.fillText(entry.secondaryText, boxX + textPaddingX + primaryWidth + secondaryGap, entry.resolvedY + 0.5);

@@ -144,7 +144,7 @@ describe('PriceLabelStackPlugin: side opcional (left/right) — dois lados resol
     // paralela reinventada por lado.
     const drawSideIdx = s.indexOf('const drawSide = ');
     const drawSideBlock = s.slice(drawSideIdx, drawSideIdx + 600);
-    expect(drawSideBlock).toContain('resolveLabelStackPositions(entries, MIN_GAP_PX)');
+    expect(drawSideBlock).toContain('resolveLabelStackPositions(entries, minGapPx)');
   });
 
   it('geometria espelhada real: boxX ancora na margem mínima de cada lado — mesma margem nos dois lados, seja o tier live/critical (LEFT_MARGIN_PX/RIGHT_MARGIN_PX) ou primary/context compacto (COMPACT_EDGE_PADDING_PX, Especificação Visual v1: "2px do edge")', () => {
@@ -218,7 +218,7 @@ describe('PriceLabelStackPlugin: geometria real via lightweight-charts, nunca po
     // maior delas.
     expect(plugin()).toContain('if (boxY + boxHeight < 0 || boxY > cssHeight) continue;');
     expect(plugin()).toContain('const isBigTier = tier === "live" || tier === "critical";');
-    expect(plugin()).toContain('const boxHeight = isBigTier ? LIVE_LABEL_HEIGHT_PX : LABEL_HEIGHT_PX;');
+    expect(plugin()).toContain('const boxHeight = isBigTier ? liveLabelHeightPx : labelHeightPx;');
   });
 
   it('nunca usa Math.random nem qualquer dado sintético (Regra de Ouro 1)', () => {
@@ -231,19 +231,23 @@ describe('PriceLabelStackPlugin: geometria real via lightweight-charts, nunca po
     // Achado real do Operador (densidade só do lado direito): a resolução
     // agora roda uma vez por lado (drawSide), cada lado 100% independente
     // — mesma função pura, chamada 2x (nunca uma segunda heurística).
-    expect(plugin()).toContain('resolveLabelStackPositions(entries, MIN_GAP_PX)');
+    expect(plugin()).toContain('resolveLabelStackPositions(entries, minGapPx)');
     expect(plugin()).toContain('drawSide(withNaturalY("right"), "right");');
     expect(plugin()).toContain('drawSide(withNaturalY("left"), "left");');
   });
 
-  it('o gap mínimo real (MIN_GAP_PX) é MAIOR que a altura da caixa (LABEL_HEIGHT_PX) — achado real via harness Playwright: gap igual à altura deixa duas etiquetas ENCOSTADAS (zero sobreposição matemática, mas ilegível/"uma coisa só" visualmente); a folga extra garante uma fresta real e visível', () => {
+  it('o gap mínimo real (minGapPx) é MAIOR que a altura da caixa (labelHeightPx) — achado real via harness Playwright: gap igual à altura deixa duas etiquetas ENCOSTADAS (zero sobreposição matemática, mas ilegível/"uma coisa só" visualmente); a folga extra garante uma fresta real e visível', () => {
     // A folga cresceu de +4 para +7 por uma segunda razão real, além da
     // fresta visível: a etiqueta `live` é fisicamente maior (caixa de 21px
     // + anel fino de 1px a 1.5px de distância = 24px). O passo da pilha
     // precisa ser MAIOR que isso, senão o anel do preço vivo encostaria na
     // caixa vizinha — o mesmo defeito de "uma coisa só" que este gap
     // existe para eliminar, só que reintroduzido pelo nível novo.
-    expect(plugin()).toContain('const MIN_GAP_PX = LABEL_HEIGHT_PX + 7;');
+    // Achado real, task #341: labelHeightPx/minGapPx viraram valores
+    // computados por desenho (LABEL_HEIGHT_PX + fontDelta, escala
+    // responsiva ULTRA LED) em vez de constantes de módulo fixas — a
+    // fórmula real (+7) e o invariante abaixo continuam idênticos.
+    expect(plugin()).toContain('const minGapPx = labelHeightPx + 7;');
     expect(plugin()).toContain('export const LABEL_HEIGHT_PX = 18;');
     expect(plugin()).toContain('export const LIVE_LABEL_HEIGHT_PX = 21;');
     // invariante REAL (não só o literal): o passo cobre a maior caixa +
@@ -470,7 +474,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('priceAxisLabels recalcula a cada tick real de livePrice — nunca uma etiqueta de preço congelada', () => {
     const s = chart();
-    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights]);');
+    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights]);');
     expect(depsIdx, 'dependency array de priceAxisLabels não inclui livePrice').toBeGreaterThan(-1);
   });
 
@@ -880,13 +884,13 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     expect(block).toContain('out.push({ price: emaLastValue, text: `E${activeEmaPeriod} ${fmtAxisLabelPrice(emaLastValue)}`, color: "rgba(6, 182, 212, 0.85)" });');
   });
 
-  it('resultado real esperado: até 8 rótulos possíveis do lado esquerdo (S1/R1/TREND/CHOC/SWEEP/KEY-H/KEY-L/ZONA INSTITUCIONAL), até 8 do lado direito (VWAP/NL/EMA + até 5 do plano ativo Conselho OU Núcleo) — redução real de densidade no lado que o Operador reportou, não só estética (Sweep/Key Levels somaram-se depois; Zona Institucional migrou pra cá na Diretriz Final — Polimento Visual, achado real de colisão via captura de tela)', () => {
+  it('resultado real esperado: até 14 rótulos possíveis do lado esquerdo (S1/R1/TREND/CHOC/SWEEP/KEY-H/KEY-L/ZONA INSTITUCIONAL/VPOC/TPOC/VAH/VAL/IBH/IBL), até 8 do lado direito (VWAP/NL/EMA + até 5 do plano ativo Conselho OU Núcleo) — redução real de densidade no lado que o Operador reportou, não só estética (Sweep/Key Levels somaram-se depois; Zona Institucional migrou pra cá na Diretriz Final — Polimento Visual; VPOC/TPOC/VAH/VAL/IBH/IBL somaram-se na auditoria "Estratégia de Evolução Elite" — task #341, achado real: essas 5 linhas de preço nunca tinham rótulo legível)', () => {
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
     const end = c.indexOf('return out;', idx);
     const block = c.slice(idx, end);
     const leftSideCount = (block.match(/side: "left",/g) ?? []).length;
-    expect(leftSideCount).toBe(8);
+    expect(leftSideCount).toBe(14);
   });
 });
 
@@ -936,5 +940,106 @@ describe('Diretriz Final — Polimento Visual: rótulo de Zona Institucional mig
     const block = c.slice(idx, c.indexOf('return out;', idx));
     const zoneIdx = block.indexOf('if (visibility.institutional_zones) {');
     expect(zoneIdx).toBeGreaterThan(-1);
+  });
+});
+
+// Achado real, auditoria "Estratégia de Evolução Elite" (2026-08-16, task
+// #341): POC do Volume Profile, POC do TPO Profile, Value Area High/Low e
+// Initial Balance High/Low — 5 linhas de preço reais desenhadas por
+// VolumeProfilePlugin/TpoProfilePlugin — nunca tinham rótulo de preço
+// legível no eixo, diferente de S1/R1/EMA/VWAP. Trava a fiação real:
+// cores reutilizadas exatamente das próprias linhas (nunca uma cor nova),
+// side:"left" (mesma família de S1/R1/Trend Channel — mapa estrutural,
+// nunca "acionável agora"), IB só quando initialBalanceComplete (mesmo
+// gate real que TpoProfilePlugin já usa pra não apresentar um IB parcial
+// como final).
+describe('Achado real (task #341): rótulos de preço para POC(VP+TPO)/VAH/VAL/IB no eixo', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('importa computeTpoProfile e computa tpoProfileForLabels via useMemo(data) — zero segunda implementação, mesma função pura já usada por TpoProfilePlugin', () => {
+    const c = chart();
+    expect(c).toContain('import { computeTpoProfile } from "../nexus/tpo-profile";');
+    expect(c).toContain('const tpoProfileForLabels = useMemo(() => {');
+    expect(c).toContain('const reading = computeTpoProfile(data);');
+    expect(c).toContain('return reading.status === "OK" ? reading.result : null;');
+  });
+
+  it('VPOC: reusa volumeProfile.fixedRange.pocPrice já lido pela store (zero cálculo novo), cor idêntica ao POC_LINE de VolumeProfilePlugin.tsx, side:"left", gated por visibility.volume_profile', () => {
+    const c = chart();
+    const idx = c.indexOf('const priceAxisLabels = useMemo');
+    const block = c.slice(idx, c.indexOf('return out;', idx));
+    expect(block).toContain('if (visibility.volume_profile && Number.isFinite(volumeProfile?.fixedRange?.pocPrice)) {');
+    expect(block).toContain('text: `VPOC ${fmtAxisLabelPrice(volumeProfile!.fixedRange!.pocPrice)}`,');
+    expect(block).toContain('color: "rgba(236, 81, 205, 0.75)", // mesma cor de POC_LINE em VolumeProfilePlugin.tsx');
+  });
+
+  it('TPOC/VAH/VAL: gated por visibility.tpo_profile && tpoProfileForLabels, cores reais reusadas (âmbar do POC do TPO, azul-neutro da família TPO pro par Value Area)', () => {
+    const c = chart();
+    const idx = c.indexOf('const priceAxisLabels = useMemo');
+    const block = c.slice(idx, c.indexOf('return out;', idx));
+    expect(block).toContain('if (visibility.tpo_profile && tpoProfileForLabels) {');
+    expect(block).toContain('text: `TPOC ${fmtAxisLabelPrice(tpoProfileForLabels.pocPrice)}`,');
+    expect(block).toContain('color: "rgba(240, 208, 111, 0.85)", // mesma cor de POC_LINE em TpoProfilePlugin.tsx');
+    expect(block).toContain('text: `VAH ${fmtAxisLabelPrice(tpoProfileForLabels.valueAreaHighPrice)}`,');
+    expect(block).toContain('text: `VAL ${fmtAxisLabelPrice(tpoProfileForLabels.valueAreaLowPrice)}`,');
+    // VPOC e TPOC nunca podem ser o mesmo texto — os dois POCs medem
+    // coisas diferentes (volume vs. contagem de tempo) e coexistem na
+    // mesma lane desde a correção de colisão desta sessão.
+    expect(block).not.toContain('text: `POC ${fmtAxisLabelPrice');
+  });
+
+  it('IBH/IBL: só entram quando tpoProfileForLabels.initialBalanceComplete é real (nunca um IB parcial apresentado como final — mesmo gate de TpoProfilePlugin.tsx), cores idênticas a IB_HIGH/IB_LOW', () => {
+    const c = chart();
+    const idx = c.indexOf('const priceAxisLabels = useMemo');
+    const block = c.slice(idx, c.indexOf('return out;', idx));
+    expect(block).toContain('if (tpoProfileForLabels.initialBalanceComplete) {');
+    expect(block).toContain('text: `IBH ${fmtAxisLabelPrice(tpoProfileForLabels.initialBalanceHigh)}`,');
+    expect(block).toContain('color: "rgba(255, 0, 85, 0.5)", // mesma cor de IB_HIGH em TpoProfilePlugin.tsx');
+    expect(block).toContain('text: `IBL ${fmtAxisLabelPrice(tpoProfileForLabels.initialBalanceLow)}`,');
+    expect(block).toContain('color: "rgba(0, 255, 170, 0.5)", // mesma cor de IB_LOW em TpoProfilePlugin.tsx');
+  });
+});
+
+// Achado real, mesma auditoria (task #341): a Fase A do Ajuste ULTRA LED
+// já escalava o fontSize NATIVO do chart (11→12→13px, chart-ultrawide-
+// scale.ts) num monitor grande/UltraWide/4K, mas as etiquetas DESTE
+// overlay (desenhadas por CIMA do tick nativo) ficavam com fonte fixa em
+// qualquer resolução — inconsistência visual real entre o eixo nativo e o
+// próprio overlay que o substitui. Trava a fiação: mesma função/mesmos 3
+// breakpoints já aprovados (nunca um breakpoint novo), aplicados às
+// fontes/alturas deste plugin.
+describe('Achado real (task #341): etiquetas do eixo escalam com o monitor (mesma escala real da Fase A ULTRA LED)', () => {
+  it('PriceLabelStackPlugin.tsx importa resolveChartUltraWideScale do módulo compartilhado (nunca um breakpoint novo/duplicado)', () => {
+    const s = plugin();
+    expect(s).toContain('import { resolveChartUltraWideScale } from "./chart-ultrawide-scale";');
+  });
+
+  it('fontDelta computado uma vez por desenho a partir de window.innerWidth — mesma leitura real que EnhancedChart_110_Percent.tsx já usa', () => {
+    const s = plugin();
+    const idx = s.indexOf('const uiScale = resolveChartUltraWideScale(window.innerWidth);');
+    expect(idx).toBeGreaterThan(-1);
+    const block = s.slice(idx, idx + 800);
+    expect(block).toContain('const fontDelta = uiScale.fontSize - 11;');
+    expect(block).toContain('const fontLive = `bold ${FONT_LIVE_BASE_PX + fontDelta}px -apple-system, sans-serif`;');
+    expect(block).toContain("const fontCompact = `500 ${FONT_COMPACT_BASE_PX + fontDelta}px ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace`;");
+    expect(block).toContain('const fontSecondary = `${FONT_SECONDARY_BASE_PX + fontDelta}px -apple-system, sans-serif`;');
+    expect(block).toContain('const labelHeightPx = LABEL_HEIGHT_PX + fontDelta;');
+    expect(block).toContain('const liveLabelHeightPx = LIVE_LABEL_HEIGHT_PX + fontDelta;');
+  });
+
+  it('baseline real (<1440px) nunca muda: FONT_LIVE_BASE_PX/FONT_COMPACT_BASE_PX/FONT_SECONDARY_BASE_PX preservam os valores exatos já em produção (11/9/8)', () => {
+    const s = plugin();
+    expect(s).toContain('const FONT_LIVE_BASE_PX = 11;');
+    expect(s).toContain('const FONT_COMPACT_BASE_PX = 9;');
+    expect(s).toContain('const FONT_SECONDARY_BASE_PX = 8;');
+  });
+
+  it('todo uso de fonte/altura/gap dentro do loop de desenho vem das variáveis responsivas (fontLive/fontCompact/fontSecondary/labelHeightPx/liveLabelHeightPx/minGapPx) — nunca mais uma constante de módulo fixa', () => {
+    const s = plugin();
+    expect(s).toContain('const primaryFont = isBigTier ? fontLive : fontCompact;');
+    expect(s).toContain('ctx.font = fontSecondary;');
+    expect(s).toContain('const boxHeight = isBigTier ? liveLabelHeightPx : labelHeightPx;');
+    expect(s).toContain('const minGapPx = labelHeightPx + 7;');
+    expect(s).toContain('resolveLabelStackPositions(entries, minGapPx)');
   });
 });

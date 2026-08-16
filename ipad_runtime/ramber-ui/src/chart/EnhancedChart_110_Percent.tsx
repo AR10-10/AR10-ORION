@@ -118,6 +118,8 @@ import { computeInstitutionalZones, type InstitutionalZoneInput } from "../nexus
 import { InstitutionalZonePlugin, LABEL_COLOR as INSTITUTIONAL_ZONE_LABEL_COLOR, confluenceWeight } from "./InstitutionalZonePlugin";
 import { DepthChartPlugin } from "./DepthChartPlugin";
 import { TpoProfilePlugin } from "./TpoProfilePlugin";
+import { computeTpoProfile } from "../nexus/tpo-profile";
+import { resolveChartUltraWideScale } from "./chart-ultrawide-scale";
 import { ZigZagPlugin } from "./ZigZagPlugin";
 import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
@@ -603,49 +605,11 @@ export function detectPrependCount(
   return count;
 }
 
-// Ordem "AJUSTE VISUAL PARA MONITOR ULTRA LED / ULTRAWIDE / 4K" (Operador):
-// fontSize/minimumWidth/rightOffset do chart eram fixos (11/65/8) em
-// qualquer resolução — auditoria confirmou os 3 valores reais hardcoded
-// (ver createChart abaixo). Legíveis no iPad/desktop-padrão (o alvo
-// primário real do app, Regra de Ouro 7), mas desproporcionalmente
-// pequenos num 4K/UltraWide de verdade. O piso de cada faixa É o valor já
-// em produção — NUNCA reduzido, mesmo nas faixas que o documento pedia
-// encolher (ex.: iPad Pro 1366px cairia na faixa "<1440px" do documento,
-// que pedia rightOffset:6/minimumWidth:60 — uma regressão real no
-// dispositivo que é o alvo primário do app; rejeitado aqui, o piso é
-// sempre o valor atual). viewportWidth é window.innerWidth: a pergunta
-// real é "que CLASSE de monitor é este", não "quanto sobrou depois de
-// abrir uma gaveta/drawer" (o que a largura do próprio canvas mediria).
-//
-// DELIBERADAMENTE FORA deste helper (2 dos pedidos do mesmo documento):
-// - barSpacing: setar isso por breakpoint entraria em conflito direto com
-//   computeViewportCandles (nexus/chart-viewport.ts, Ordem "FECHAMENTO DO
-//   AR10 CYBORG" §5, já em produção) — aquele motor mantém
-//   TARGET_PX_PER_CANDLE=7 CONSTANTE em qualquer resolução de propósito
-//   (legibilidade de UMA vela não muda com o tamanho do monitor) e varia
-//   é QUANTAS velas cabem. Um barSpacing forçado por breakpoint aqui ou
-//   seria imediatamente sobrescrito pelo fit de faixa visível (código
-//   morto) ou brigaria com ele por um frame antes do fit rodar — duplicar
-//   a decisão "quanto espaço por vela" em dois lugares é exatamente a
-//   classe de inconsistência que este arquivo evita em todo o resto.
-// - densidade de grid: auditado contra os typings reais da lib
-//   (GridOptions só expõe vertLines/horzLines.{color,style,visible} —
-//   zero contagem/densidade configurável na API real). O gerador de ticks
-//   nativo já produz mais linhas em telas largas por conta própria (mesmo
-//   algoritmo que espaça os rótulos do eixo) — nada real para construir.
-export function resolveChartUltraWideScale(viewportWidth: number): {
-  fontSize: number;
-  minimumWidth: number;
-  rightOffset: number;
-} {
-  if (Number.isFinite(viewportWidth) && viewportWidth >= 2560) {
-    return { fontSize: 13, minimumWidth: 75, rightOffset: 12 };
-  }
-  if (Number.isFinite(viewportWidth) && viewportWidth >= 1440) {
-    return { fontSize: 12, minimumWidth: 65, rightOffset: 8 };
-  }
-  return { fontSize: 11, minimumWidth: 65, rightOffset: 8 }; // baseline real já em produção — fail-closed (largura inválida) cai aqui também
-}
+// resolveChartUltraWideScale agora vive em chart-ultrawide-scale.ts
+// (achado real, task #341: PriceLabelStackPlugin precisava importar a
+// MESMA função, e importar direto daqui criaria um ciclo real — este
+// arquivo já importa PriceLabelStackPlugin). Reexportado abaixo (import)
+// só para manter os pontos de uso existentes neste arquivo idênticos.
 
 // Mesmo formato de texto que o gráfico antigo já usava para S1/R1 — só a
 // primitiva que desenha muda (createPriceLine em vez de <span> em pixel
@@ -1811,6 +1775,26 @@ export function EnhancedChart_110_Percent({
   //    pelo efeito de price line do sweep logo acima — só clusters ainda
   //    vivos (alpha>0) entram, nunca um sweep já esquecido na tela.
   const volumeProfile = useVolumeProfileSnapshot();
+  // Achado real da auditoria "Estratégia de Evolução Elite" (2026-08-16,
+  // task #341): POC (Volume Profile E TPO Profile), Value Area High/Low e
+  // Initial Balance High/Low — 5 linhas de preço reais desenhadas por
+  // VolumeProfilePlugin/TpoProfilePlugin — nunca ganharam rótulo legível
+  // no eixo, diferente de S1/R1/EMA/VWAP. VP já expõe pocPrice pronto via
+  // volumeProfile.fixedRange (zero cálculo novo, mesma leitura da store
+  // que a confluência de institutional-zones já usa acima). TPO não tem
+  // equivalente na store — TpoProfilePlugin computa e cacheia
+  // internamente, local ao componente (nunca compartilhado). Recomputar
+  // aqui é uma 2ª chamada real da MESMA função pura sobre a MESMA `data`
+  // (não uma segunda implementação) — computeTpoProfile é síncrono e
+  // barato (bucketing de OHLC já carregado, zero fetch/Worker, mesmo
+  // raciocínio já documentado no cabeçalho do próprio tpo-profile.ts),
+  // então o custo real de rodar 2x por mudança de `data` (não por frame)
+  // é desprezível — bem diferente da classe de "Worker sobrecarregado"
+  // que motivou excluir Volume Profile do Multi-Timeframe Matrix.
+  const tpoProfileForLabels = useMemo(() => {
+    const reading = computeTpoProfile(data);
+    return reading.status === "OK" ? reading.result : null;
+  }, [data]);
   const freshestSessionKeyLevel = useMemo(() => {
     const levels = computeSessionKeyLevels(data);
     const latest = levels[levels.length - 1];
@@ -2692,6 +2676,69 @@ export function EnhancedChart_110_Percent({
         side: "left",
       });
     }
+    // Achado real, task #341 (auditoria "Estratégia de Evolução Elite"):
+    // POC (Volume Profile e TPO Profile), Value Area High/Low e Initial
+    // Balance High/Low nunca tinham rótulo de preço legível — só a
+    // LINHA colorida, sem número, diferente de todo outro nível real
+    // deste eixo. Mesma família visual de S1/R1/Trend Channel acima
+    // (side:"left", mapa estrutural, nunca "acionável agora"). Cores
+    // reutilizadas exatamente das próprias linhas que cada plugin já
+    // desenha (Regra de Ouro: nunca uma cor nova) — VPOC/TPOC
+    // deliberadamente distintos (nunca ambos "POC") porque as duas linhas
+    // agora coexistem na mesma lane desde a correção de colisão desta
+    // sessão (chart-profile-lanes.ts) e um rótulo ambíguo seria pior que
+    // nenhum rótulo.
+    if (visibility.volume_profile && Number.isFinite(volumeProfile?.fixedRange?.pocPrice)) {
+      out.push({
+        price: volumeProfile!.fixedRange!.pocPrice,
+        text: `VPOC ${fmtAxisLabelPrice(volumeProfile!.fixedRange!.pocPrice)}`,
+        color: "rgba(236, 81, 205, 0.75)", // mesma cor de POC_LINE em VolumeProfilePlugin.tsx
+        side: "left",
+      });
+    }
+    if (visibility.tpo_profile && tpoProfileForLabels) {
+      out.push({
+        price: tpoProfileForLabels.pocPrice,
+        text: `TPOC ${fmtAxisLabelPrice(tpoProfileForLabels.pocPrice)}`,
+        color: "rgba(240, 208, 111, 0.85)", // mesma cor de POC_LINE em TpoProfilePlugin.tsx
+        side: "left",
+      });
+      out.push({
+        price: tpoProfileForLabels.valueAreaHighPrice,
+        text: `VAH ${fmtAxisLabelPrice(tpoProfileForLabels.valueAreaHighPrice)}`,
+        // Mesma família azul-neutra já usada pelas barras do TPO
+        // (ROW_FILL/ROW_FILL_VALUE_AREA) — nunca existiu como LINHA antes
+        // desta etiqueta, então não há um traço prévio pra copiar; reusa
+        // a identidade de cor já estabelecida do próprio perfil TPO
+        // (deliberadamente NUNCA o cyan do Volume Profile, mesmo
+        // raciocínio já documentado no cabeçalho de TpoProfilePlugin.tsx).
+        color: "rgba(138, 180, 248, 0.65)",
+        side: "left",
+      });
+      out.push({
+        price: tpoProfileForLabels.valueAreaLowPrice,
+        text: `VAL ${fmtAxisLabelPrice(tpoProfileForLabels.valueAreaLowPrice)}`,
+        color: "rgba(138, 180, 248, 0.65)",
+        side: "left",
+      });
+      // Initial Balance só quando os 2 primeiros períodos já fecharam de
+      // verdade (mesmo gate real de TpoProfilePlugin.tsx) — um IB parcial
+      // nunca é rotulado como se fosse final.
+      if (tpoProfileForLabels.initialBalanceComplete) {
+        out.push({
+          price: tpoProfileForLabels.initialBalanceHigh,
+          text: `IBH ${fmtAxisLabelPrice(tpoProfileForLabels.initialBalanceHigh)}`,
+          color: "rgba(255, 0, 85, 0.5)", // mesma cor de IB_HIGH em TpoProfilePlugin.tsx
+          side: "left",
+        });
+        out.push({
+          price: tpoProfileForLabels.initialBalanceLow,
+          text: `IBL ${fmtAxisLabelPrice(tpoProfileForLabels.initialBalanceLow)}`,
+          color: "rgba(0, 255, 170, 0.5)", // mesma cor de IB_LOW em TpoProfilePlugin.tsx
+          side: "left",
+        });
+      }
+    }
     // "bater o olho profissional" (pendência honesta do turno anterior): os
     // rótulos de ENTRY/STOP/TARGET entram no MESMO array/sistema
     // anti-colisão dos demais níveis — nunca mais o eixo NATIVO, que os
@@ -3165,7 +3212,7 @@ export function EnhancedChart_110_Percent({
       });
     }
     return out;
-  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights]);
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights]);
 
   return (
     <div className="absolute inset-0">
