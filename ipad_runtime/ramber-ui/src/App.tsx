@@ -394,6 +394,7 @@ import {
   Check,
   Download,
   Wallet,
+  SlidersHorizontal,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -867,18 +868,32 @@ export default function App() {
   // gavetas fechadas por padrão — o Gráfico reina sozinho no boot.
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  // Painel Properties 320px (pedido do Operador, "painel e o visual...
+  // nada repetido"): 3ª gaveta, mesmo mecanismo exato de esquerda/direita
+  // (position:absolute, translateX, fechada por padrão) — ocupa o MESMO
+  // slot visual da direita (.terminal-right/.terminal-properties
+  // compartilham right:0 em index.css), nunca as duas ao mesmo tempo
+  // (mutual exclusion abaixo cobre os 3 pares agora, não só 1).
+  const [propertiesDrawerOpen, setPropertiesDrawerOpen] = useState(false);
   // Fase M.1 (Navigation Rail + Overlay Drawers): "Nunca permitir múltiplos
   // Drawers abertos simultaneamente. Somente um módulo poderá permanecer
-  // aberto" — abrir uma gaveta fecha a outra; re-clicar no mesmo ícone da
+  // aberto" — abrir uma gaveta fecha as outras; re-clicar no mesmo ícone da
   // régua fecha (toggle), como pedido em "Fechamento automático quando:
   // clicar novamente no ícone".
   const toggleLeftDrawer = useCallback(() => {
     setRightDrawerOpen(false);
+    setPropertiesDrawerOpen(false);
     setLeftDrawerOpen((v) => !v);
   }, []);
   const toggleRightDrawer = useCallback(() => {
     setLeftDrawerOpen(false);
+    setPropertiesDrawerOpen(false);
     setRightDrawerOpen((v) => !v);
+  }, []);
+  const togglePropertiesDrawer = useCallback(() => {
+    setLeftDrawerOpen(false);
+    setRightDrawerOpen(false);
+    setPropertiesDrawerOpen((v) => !v);
   }, []);
   // "Fechamento automático quando:... pressionar ESC (Desktop)". Estado
   // funcional (v ? false : v) em vez de useCallback-com-dependência: o
@@ -888,6 +903,7 @@ export default function App() {
       if (e.key !== "Escape") return;
       setLeftDrawerOpen((v) => (v ? false : v));
       setRightDrawerOpen((v) => (v ? false : v));
+      setPropertiesDrawerOpen((v) => (v ? false : v));
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -3443,6 +3459,8 @@ export default function App() {
       toggleLeftDrawer,
       rightDrawerOpen,
       toggleRightDrawer,
+      propertiesDrawerOpen,
+      togglePropertiesDrawer,
       chartTimeframe,
       setChartTimeframe,
       engine,
@@ -3517,6 +3535,8 @@ export default function App() {
       toggleLeftDrawer,
       rightDrawerOpen,
       toggleRightDrawer,
+      propertiesDrawerOpen,
+      togglePropertiesDrawer,
       chartTimeframe,
       engine,
       smcZones,
@@ -3668,10 +3688,11 @@ export default function App() {
                         fecha; um único elemento cobre a área do cockpit
                         (nunca a TopBar/FooterBar) para as duas gavetas. */}
                     <div
-                      className={`terminal-drawer-backdrop ${leftDrawerOpen || rightDrawerOpen ? "drawer-open" : ""}`}
+                      className={`terminal-drawer-backdrop ${leftDrawerOpen || rightDrawerOpen || propertiesDrawerOpen ? "drawer-open" : ""}`}
                       onClick={() => {
                         setLeftDrawerOpen(false);
                         setRightDrawerOpen(false);
+                        setPropertiesDrawerOpen(false);
                       }}
                     />
 
@@ -3782,6 +3803,45 @@ export default function App() {
                           agentes leem feeds cripto reais. */}
                       {marketMode !== "TRADFI" && widgets.council?.visible && <CouncilWidget />}
                       <TelemetryHealthWidget />
+                    </div>
+
+                    {/* RIGHT (gaveta) — Properties: Layer Manager docado (o
+                        MESMO conteúdo real de ChartLayersPanel, extraído
+                        para ChartLayersPanelContent e reusado aqui byte-a-
+                        byte — zero segunda implementação) + atalho para
+                        Configurações. Ocupa o MESMO slot visual de
+                        .terminal-right (right:0 em index.css) — nunca as
+                        duas abertas ao mesmo tempo (mutual exclusion em
+                        toggleLeftDrawer/toggleRightDrawer/
+                        togglePropertiesDrawer acima). Risk/Alerts ficaram
+                        FORA de propósito (pedido do Operador: "nada
+                        repetido") — já têm aba própria e mais completa em
+                        SecondaryModuleView (RISK: Position Sizing/Trust
+                        Score/CPI/Track Record/Traps; ALERTS: Order Flow/
+                        Liquidations/Traps); reduplicar aqui, mesmo que só
+                        os 2 números de riskSuggestion, seria exatamente a
+                        "camada duplicada" que este painel existe pra
+                        eliminar. */}
+                    <div
+                      className={`terminal-properties flex flex-col gap-2 ${propertiesDrawerOpen ? "drawer-open" : ""}`}
+                    >
+                      <div className="flex items-center justify-between shrink-0 pb-1 border-b border-[#00f0ff15]">
+                        <span className="text-[0.5rem] font-bold tracking-[0.2em] uppercase text-[#00f0ff]">
+                          Properties
+                        </span>
+                        <div
+                          className="text-[#8ab4f8]/50 hover:text-[#ff0055] px-1 py-0.5 rounded cursor-pointer"
+                          onClick={() => setPropertiesDrawerOpen(false)}
+                        >
+                          <X size={12} />
+                        </div>
+                      </div>
+                      <PropertiesPanelBody
+                        onOpenSettings={() => {
+                          setActiveTab("SETTINGS");
+                          setPropertiesDrawerOpen(false);
+                        }}
+                      />
                     </div>
                   </div>
 
@@ -4169,10 +4229,15 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "zigzag", label: "ZIGZAG" },
 ];
 
-function ChartLayersPanel() {
+// Extraído de ChartLayersPanel (painel Properties 320px, pedido do
+// Operador): o dropdown ancorado na SideBar E o novo painel docado em
+// .terminal-properties precisam do MESMO conteúdo real (presets + toggle
+// por camada + seletor de EMA) — casca (overlay flutuante vs. gaveta fixa)
+// muda, a lógica/JSX de dentro é uma única implementação real, nunca
+// duas. Lê o mesmo WidgetContext que ChartLayersPanel lia antes, menos os
+// 2 campos que agora ficam só no wrapper (chartLayersOpen/setChartLayersOpen).
+function ChartLayersPanelContent() {
   const {
-    chartLayersOpen,
-    setChartLayersOpen,
     chartLayerVisibility,
     toggleChartLayer,
     applyChartLayerPreset,
@@ -4188,7 +4253,6 @@ function ChartLayersPanel() {
   // modos" (a seção manual não fica "grudada" aberta de uma sessão pra
   // outra por acidente).
   const [advancedPresetsOpen, setAdvancedPresetsOpen] = useState(false);
-  if (!chartLayersOpen) return null;
   const visibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
   const autoMode = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
   // Highlight real (não decorativo): compara o estado atual byte-a-byte
@@ -4203,15 +4267,181 @@ function ChartLayersPanel() {
   const isIntelligencePreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));
   const isAutomaticPreset = CHART_LAYER_IDS.every((id) => autoMode[id] === true);
 
+  return (
+    <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+      {/* "HOMOLOGAÇÃO DA ORDEM Nº 03 / ORGANISMO INTELIGENTE ADAPTATIVO":
+          "o operador não deve administrar modos... deve receber uma
+          leitura pronta e contextualizada". Reorganizado, NUNCA apagado
+          (Regra de Ouro 4 — funcionalidade real preservada por
+          inteiro): os 4 presets e o toggle individual abaixo continuam
+          existindo e funcionando byte-a-byte como antes; só a
+          PRIORIDADE VISUAL mudou — Automático é agora a única ação
+          primária sempre visível (o estado adaptativo real: Relevance
+          Engine + Visual Budget, já ligados ao vivo), e os 3 presets
+          manuais viram uma seção secundária, recolhida por padrão, para
+          quem especificamente precisa de uma leitura manual pontual
+          (ex.: Preset Auditoria para revisão profunda). Decisão de design
+          deliberada, não a exclusão literal pedida pela diretriz — ver
+          docs/RELATORIO_HOMOLOGACAO_03_ORGANISMO_ADAPTATIVO.md §3 para
+          o raciocínio completo. */}
+      <button
+        type="button"
+        onClick={() => applyChartLayerPreset?.("automatic")}
+        title="Cada camada aparece só quando tem relevância estatística real agora (Relevance Engine) + competição real de destaque entre camadas (Visual Budget) — nunca precisa ser administrado manualmente."
+        className={`w-full flex flex-col items-center gap-0.5 py-2.5 rounded border-2 font-bold uppercase tracking-wider transition-colors ${
+          isAutomaticPreset
+            ? "border-[#00ffaa] bg-[#00ffaa15] text-[#00ffaa]"
+            : "border-[#8ab4f8]/30 text-[#8ab4f8]/70 hover:text-[#8ab4f8] hover:border-[#8ab4f8]/50"
+        }`}
+      >
+        <span className="text-[0.55rem] tracking-[0.2em]">AR10 CYBORG · Estado Inteligente Adaptativo</span>
+        <span className="text-[0.38rem] font-normal normal-case tracking-normal opacity-80">
+          {isAutomaticPreset ? "ativo agora — leitura pronta, sem modo pra administrar" : "clique para voltar ao estado adaptativo padrão"}
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setAdvancedPresetsOpen((v) => !v)}
+        className="text-[0.4rem] text-[#8ab4f8]/50 hover:text-[#8ab4f8] tracking-[0.15em] uppercase text-left flex items-center gap-1"
+      >
+        <span>{advancedPresetsOpen ? "▾" : "▸"}</span>
+        <span>Predefinições manuais (avançado)</span>
+      </button>
+      {advancedPresetsOpen && (
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            onClick={() => applyChartLayerPreset?.("operational")}
+            className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+              isOperationalPreset
+                ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+            }`}
+          >
+            Preset Operacional
+          </button>
+          <button
+            type="button"
+            onClick={() => applyChartLayerPreset?.("intelligence")}
+            className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+              isIntelligencePreset
+                ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+            }`}
+          >
+            Preset Inteligência
+          </button>
+          <button
+            type="button"
+            onClick={() => applyChartLayerPreset?.("audit")}
+            className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
+              isAuditPreset
+                ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
+            }`}
+          >
+            Preset Auditoria
+          </button>
+        </div>
+      )}
+      <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
+        Overlays reais do canvas — esconder uma camada nunca altera o dado, só a exibição
+      </span>
+      {CHART_LAYER_PANEL_MODULES.map(({ id, label }) => {
+        // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: em modo automático, o
+        // estado real vem do Relevance Engine (nunca do boolean manual,
+        // que só é o valor efetivo quando o Operador assumiu controle
+        // — mesma resolução que effectiveChartLayerVisibility já faz
+        // pro canvas, aqui só pra exibir corretamente no painel).
+        const isAuto = autoMode[id];
+        const relevance = layerRelevance?.[id] ?? null;
+        const on = isAuto ? (relevance?.relevant ?? true) : visibility[id];
+        return (
+          <div
+            key={id}
+            className="flex flex-col gap-1.5 bg-[#010205] border border-[#00f0ff15] rounded-lg px-3 py-2"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[0.55rem] font-bold tracking-widest text-white">{label}</span>
+              <div className="flex items-center gap-1">
+                {isAuto && (
+                  // EPC FINAL §3/§12 ("quando destacar"): emphasis real
+                  // (só existe onde há um gradiente real no sinal, ver
+                  // layer-relevance.ts) some no texto do badge — nunca
+                  // um efeito visual novo sem motivo real por trás.
+                  <span
+                    className={`text-[0.38rem] px-1.5 py-1 rounded border font-bold uppercase tracking-wider ${
+                      relevance?.emphasis === "highlight"
+                        ? "border-[#00ffaa] bg-[#00ffaa20] text-[#00ffaa]"
+                        : "border-[#00ffaa]/40 text-[#00ffaa]/80"
+                    }`}
+                    title={relevance?.reason ?? "Relevance Engine ainda sem leitura real neste ciclo."}
+                  >
+                    auto{relevance?.emphasis === "highlight" ? " · destaque" : ""}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => toggleChartLayer?.(id)}
+                  title={isAuto ? "Clicar assume controle manual desta camada (override real)." : "Override manual ativo."}
+                  className={`text-[0.4rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
+                    on
+                      ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                      : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
+                  }`}
+                >
+                  {on ? "visível" : "oculta"}
+                </button>
+                {!isAuto && (
+                  <button
+                    type="button"
+                    onClick={() => resetChartLayerToAuto?.(id)}
+                    title="Devolver esta camada ao comportamento automático (Relevance Engine decide)."
+                    className="text-[0.38rem] px-1.5 py-1 rounded border border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#00ffaa] hover:border-[#00ffaa]/40 font-bold uppercase tracking-wider"
+                  >
+                    ⟲ auto
+                  </button>
+                )}
+              </div>
+            </div>
+            {/* Diretriz Camada de Decisão Profissional, item 1: período
+                real da EMA — um único controle, os 4 períodos padrão da
+                indústria (nexus/ema.ts), nunca uma lista arbitrária. */}
+            {id === "ema" && (
+              <div className="flex items-center gap-1">
+                {EMA_PERIODS.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setEmaPeriod?.(p)}
+                    className={`flex-1 text-[0.4rem] py-1 rounded border font-bold tracking-wider ${
+                      emaPeriod === p
+                        ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                        : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ChartLayersPanel() {
+  const { chartLayersOpen, setChartLayersOpen } = useContext(WidgetContext) || {};
+  if (!chartLayersOpen) return null;
   // v16.0 DEFINITIVO §5.3 ("Layer Manager — UI"): dropdown compacto
   // ancorado no ícone real que já abre este painel (SideBar, "Camadas do
-  // Gráfico") — nunca mais um modal de tela cheia. Reorganização pura da
-  // CASCA visual (overlay + container); zero campo, preset, auto-mode ou
-  // botão removido — Automático/Predefinições/toggle por camada/reset
-  // "⟲ auto"/seletor de período da EMA continuam exatamente os mesmos
-  // logo abaixo (Regra de Ouro 4). O click-catcher invisível substitui o
-  // antigo backdrop escurecido — um dropdown compacto não deve escurecer
-  // a tela inteira atrás dele, só fechar ao clicar fora.
+  // Gráfico") — nunca mais um modal de tela cheia. O click-catcher
+  // invisível substitui o antigo backdrop escurecido — um dropdown
+  // compacto não deve escurecer a tela inteira atrás dele, só fechar ao
+  // clicar fora. Conteúdo real (presets/toggle/EMA) vive em
+  // ChartLayersPanelContent — este componente é só a casca do dropdown.
   return (
     <>
       <div className="!fixed !inset-0 !z-[1000]" onClick={() => setChartLayersOpen?.(false)} />
@@ -4228,168 +4458,30 @@ function ChartLayersPanel() {
             <X size={14} />
           </div>
         </div>
-        <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
-          {/* "HOMOLOGAÇÃO DA ORDEM Nº 03 / ORGANISMO INTELIGENTE ADAPTATIVO":
-              "o operador não deve administrar modos... deve receber uma
-              leitura pronta e contextualizada". Reorganizado, NUNCA apagado
-              (Regra de Ouro 4 — funcionalidade real preservada por
-              inteiro): os 4 presets e o toggle individual abaixo continuam
-              existindo e funcionando byte-a-byte como antes; só a
-              PRIORIDADE VISUAL mudou — Automático é agora a única ação
-              primária sempre visível (o estado adaptativo real: Relevance
-              Engine + Visual Budget, já ligados ao vivo), e os 3 presets
-              manuais viram uma seção secundária, recolhida por padrão, para
-              quem especificamente precisa de uma leitura manual pontual
-              (ex.: Preset Auditoria para revisão profunda). Decisão de design
-              deliberada, não a exclusão literal pedida pela diretriz — ver
-              docs/RELATORIO_HOMOLOGACAO_03_ORGANISMO_ADAPTATIVO.md §3 para
-              o raciocínio completo. */}
-          <button
-            type="button"
-            onClick={() => applyChartLayerPreset?.("automatic")}
-            title="Cada camada aparece só quando tem relevância estatística real agora (Relevance Engine) + competição real de destaque entre camadas (Visual Budget) — nunca precisa ser administrado manualmente."
-            className={`w-full flex flex-col items-center gap-0.5 py-2.5 rounded border-2 font-bold uppercase tracking-wider transition-colors ${
-              isAutomaticPreset
-                ? "border-[#00ffaa] bg-[#00ffaa15] text-[#00ffaa]"
-                : "border-[#8ab4f8]/30 text-[#8ab4f8]/70 hover:text-[#8ab4f8] hover:border-[#8ab4f8]/50"
-            }`}
-          >
-            <span className="text-[0.55rem] tracking-[0.2em]">AR10 CYBORG · Estado Inteligente Adaptativo</span>
-            <span className="text-[0.38rem] font-normal normal-case tracking-normal opacity-80">
-              {isAutomaticPreset ? "ativo agora — leitura pronta, sem modo pra administrar" : "clique para voltar ao estado adaptativo padrão"}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setAdvancedPresetsOpen((v) => !v)}
-            className="text-[0.4rem] text-[#8ab4f8]/50 hover:text-[#8ab4f8] tracking-[0.15em] uppercase text-left flex items-center gap-1"
-          >
-            <span>{advancedPresetsOpen ? "▾" : "▸"}</span>
-            <span>Predefinições manuais (avançado)</span>
-          </button>
-          {advancedPresetsOpen && (
-            <div className="flex gap-1.5">
-              <button
-                type="button"
-                onClick={() => applyChartLayerPreset?.("operational")}
-                className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-                  isOperationalPreset
-                    ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                    : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-                }`}
-              >
-                Preset Operacional
-              </button>
-              <button
-                type="button"
-                onClick={() => applyChartLayerPreset?.("intelligence")}
-                className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-                  isIntelligencePreset
-                    ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                    : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-                }`}
-              >
-                Preset Inteligência
-              </button>
-              <button
-                type="button"
-                onClick={() => applyChartLayerPreset?.("audit")}
-                className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-                  isAuditPreset
-                    ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                    : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-                }`}
-              >
-                Preset Auditoria
-              </button>
-            </div>
-          )}
-          <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
-            Overlays reais do canvas — esconder uma camada nunca altera o dado, só a exibição
-          </span>
-          {CHART_LAYER_PANEL_MODULES.map(({ id, label }) => {
-            // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: em modo automático, o
-            // estado real vem do Relevance Engine (nunca do boolean manual,
-            // que só é o valor efetivo quando o Operador assumiu controle
-            // — mesma resolução que effectiveChartLayerVisibility já faz
-            // pro canvas, aqui só pra exibir corretamente no painel).
-            const isAuto = autoMode[id];
-            const relevance = layerRelevance?.[id] ?? null;
-            const on = isAuto ? (relevance?.relevant ?? true) : visibility[id];
-            return (
-              <div
-                key={id}
-                className="flex flex-col gap-1.5 bg-[#010205] border border-[#00f0ff15] rounded-lg px-3 py-2"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[0.55rem] font-bold tracking-widest text-white">{label}</span>
-                  <div className="flex items-center gap-1">
-                    {isAuto && (
-                      // EPC FINAL §3/§12 ("quando destacar"): emphasis real
-                      // (só existe onde há um gradiente real no sinal, ver
-                      // layer-relevance.ts) some no texto do badge — nunca
-                      // um efeito visual novo sem motivo real por trás.
-                      <span
-                        className={`text-[0.38rem] px-1.5 py-1 rounded border font-bold uppercase tracking-wider ${
-                          relevance?.emphasis === "highlight"
-                            ? "border-[#00ffaa] bg-[#00ffaa20] text-[#00ffaa]"
-                            : "border-[#00ffaa]/40 text-[#00ffaa]/80"
-                        }`}
-                        title={relevance?.reason ?? "Relevance Engine ainda sem leitura real neste ciclo."}
-                      >
-                        auto{relevance?.emphasis === "highlight" ? " · destaque" : ""}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => toggleChartLayer?.(id)}
-                      title={isAuto ? "Clicar assume controle manual desta camada (override real)." : "Override manual ativo."}
-                      className={`text-[0.4rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
-                        on
-                          ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                          : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
-                      }`}
-                    >
-                      {on ? "visível" : "oculta"}
-                    </button>
-                    {!isAuto && (
-                      <button
-                        type="button"
-                        onClick={() => resetChartLayerToAuto?.(id)}
-                        title="Devolver esta camada ao comportamento automático (Relevance Engine decide)."
-                        className="text-[0.38rem] px-1.5 py-1 rounded border border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#00ffaa] hover:border-[#00ffaa]/40 font-bold uppercase tracking-wider"
-                      >
-                        ⟲ auto
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {/* Diretriz Camada de Decisão Profissional, item 1: período
-                    real da EMA — um único controle, os 4 períodos padrão da
-                    indústria (nexus/ema.ts), nunca uma lista arbitrária. */}
-                {id === "ema" && (
-                  <div className="flex items-center gap-1">
-                    {EMA_PERIODS.map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setEmaPeriod?.(p)}
-                        className={`flex-1 text-[0.4rem] py-1 rounded border font-bold tracking-wider ${
-                          emaPeriod === p
-                            ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                            : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <ChartLayersPanelContent />
       </div>
+    </>
+  );
+}
+
+// Painel Properties 320px (pedido do Operador — ver .terminal-properties em
+// App()): corpo real do painel docado, mesmo ChartLayersPanelContent do
+// dropdown acima (zero segunda implementação) + atalho para Configurações.
+// Risk/Alerts deliberadamente FORA (ver comentário real em .terminal-
+// properties): já têm aba própria e mais completa em SecondaryModuleView.
+function PropertiesPanelBody({ onOpenSettings }: { onOpenSettings: () => void }) {
+  return (
+    <>
+      <ChartLayersPanelContent />
+      <button
+        type="button"
+        onClick={onOpenSettings}
+        title="Ir para Configurações do Sistema (aba SETTINGS)"
+        className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 rounded border border-[#8ab4f8]/20 text-[#8ab4f8]/70 hover:text-[#00f0ff] hover:border-[#00f0ff]/40 text-[0.45rem] font-bold uppercase tracking-wider transition-colors"
+      >
+        <span>Configurações do Sistema</span>
+        <Settings size={12} />
+      </button>
     </>
   );
 }
@@ -7307,16 +7399,18 @@ function SideBar({
 }
 
 // --- RIGHT RAIL (Fase M.1: Navigation Rail + Overlay Drawers) ---
-// Espelho da SideBar à direita — mesma régua fina, um ícone real (Core
-// Intelligence: Siriform/GMIL/Regime/Validação/Saúde, o mesmo conteúdo
-// que já existia atrás da alça antiga). Deliberadamente não preenchida
-// com ícones extra só para "parecer completa": cada módulo sugerido na
-// diretriz (GMIL/Consensus/Risk/Telemetria) já vive DENTRO desta única
-// gaveta real — fragmentar em várias gavetas vazias violaria zero
-// fabricação (nenhum dado novo apareceria do nada) sem ganhar nada em
-// troca, já que só uma gaveta pode ficar aberta por vez de qualquer forma.
+// Espelho da SideBar à direita — mesma régua fina, dois ícones reais: Core
+// Intelligence (Siriform/GMIL/Regime/Validação/Saúde, o mesmo conteúdo que
+// já existia atrás da alça antiga) e Properties (painel Properties 320px,
+// pedido do Operador — Layer Manager docado). Cada um abre um conteúdo
+// genuinamente diferente — nunca a mesma informação fragmentada em duas
+// gavetas vazias só para "parecer completa" (isso violaria zero
+// fabricação, nenhum dado novo apareceria do nada sem ganhar nada em
+// troca). Mutual exclusion (App(), toggleRightDrawer/
+// togglePropertiesDrawer) garante que só uma gaveta fica aberta por vez,
+// mesmo com 2 entry points nesta régua.
 function RightRail() {
-  const { rightDrawerOpen, toggleRightDrawer } = useContext(WidgetContext) || {};
+  const { rightDrawerOpen, toggleRightDrawer, propertiesDrawerOpen, togglePropertiesDrawer } = useContext(WidgetContext) || {};
   return (
     <div className="w-12 md:w-14 border-l border-[#00f0ff20] bg-[#010308]/95 flex flex-col items-center py-3 gap-1 shrink-0 z-10 overflow-y-auto scrollbar-hide backdrop-blur-md">
       <NavRailButton
@@ -7324,6 +7418,19 @@ function RightRail() {
         label="Core Intelligence"
         active={!!rightDrawerOpen}
         onClick={() => toggleRightDrawer?.()}
+        edge="right"
+      />
+      {/* Painel Properties 320px (pedido do Operador): mesmo padrão do
+          botão acima, mesmo slot visual (.terminal-properties), ícone
+          distinto (SlidersHorizontal) para nunca confundir com o de
+          "Camadas do Gráfico" (Layers) da SideBar — chrome diferente
+          (dropdown transitório vs. painel docado), mesmo conteúdo real
+          por baixo (ChartLayersPanelContent). */}
+      <NavRailButton
+        icon={SlidersHorizontal}
+        label="Properties"
+        active={!!propertiesDrawerOpen}
+        onClick={() => togglePropertiesDrawer?.()}
         edge="right"
       />
     </div>

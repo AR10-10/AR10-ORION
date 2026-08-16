@@ -265,16 +265,55 @@ describe('V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas): e
     const app = read('../src/App.tsx');
     expect(app).toContain('const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);');
     expect(app).toContain('const [rightDrawerOpen, setRightDrawerOpen] = useState(false);');
+    // Painel Properties 320px (pedido do Operador): 3ª gaveta, mesmo
+    // mecanismo, mesma regra de "fechada por padrão".
+    expect(app).toContain('const [propertiesDrawerOpen, setPropertiesDrawerOpen] = useState(false);');
   });
 
-  it('.terminal-left/.terminal-right usam position:absolute (nunca dividem flexbox com .terminal-main) e começam deslocadas para fora da tela (transform translateX)', () => {
+  it('.terminal-left/.terminal-right/.terminal-properties usam position:absolute (nunca dividem flexbox com .terminal-main) e começam deslocadas para fora da tela (transform translateX)', () => {
     const css = read('../src/index.css');
-    const sharedMatch = css.match(/\.terminal-left,\s*\n\.terminal-right \{([\s\S]*?)\n\}/);
-    expect(sharedMatch, 'regra combinada .terminal-left/.terminal-right não encontrada').not.toBeNull();
+    const sharedMatch = css.match(/\.terminal-left,\s*\n\.terminal-right,\s*\n\.terminal-properties \{([\s\S]*?)\n\}/);
+    expect(sharedMatch, 'regra combinada .terminal-left/.terminal-right/.terminal-properties não encontrada').not.toBeNull();
     expect(sharedMatch![1]).toContain('position: absolute');
     expect(css).toMatch(/\.terminal-left \{[\s\S]*?transform: translateX\(-110%\);/);
-    expect(css).toMatch(/\.terminal-right \{[\s\S]*?transform: translateX\(110%\);/);
+    // .terminal-properties ocupa o MESMO slot visual de .terminal-right
+    // (right:0, mesmo translateX) — nunca as duas abertas ao mesmo tempo
+    // (mutual exclusion real, testada abaixo), então compartilhar a regra
+    // é seguro e evita duplicar CSS.
+    expect(css).toMatch(/\.terminal-right,\s*\n\.terminal-properties \{[\s\S]*?transform: translateX\(110%\);/);
+    expect(css).toContain('.terminal-left.drawer-open,');
+    expect(css).toContain('.terminal-right.drawer-open,');
+    expect(css).toContain('.terminal-properties.drawer-open {');
     expect(css).toContain('.drawer-open');
+  });
+
+  it('Painel Properties 320px: togglePropertiesDrawer fecha as outras 2 gavetas (mesma mutual exclusion), RightRail ganha o 2º botão, e a gaveta reusa ChartLayersPanelContent (zero segunda implementação)', () => {
+    const app = read('../src/App.tsx');
+    const toggleMatch = app.match(/const togglePropertiesDrawer = useCallback\(\(\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
+    expect(toggleMatch, 'togglePropertiesDrawer não encontrado').not.toBeNull();
+    expect(toggleMatch![1]).toContain('setLeftDrawerOpen(false);');
+    expect(toggleMatch![1]).toContain('setRightDrawerOpen(false);');
+    expect(toggleMatch![1]).toContain('setPropertiesDrawerOpen((v) => !v);');
+    // toggleLeft/toggleRight também fecham a nova 3ª gaveta agora.
+    const toggleLeftMatch = app.match(/const toggleLeftDrawer = useCallback\(\(\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
+    expect(toggleLeftMatch![1]).toContain('setPropertiesDrawerOpen(false);');
+    const toggleRightMatch = app.match(/const toggleRightDrawer = useCallback\(\(\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
+    expect(toggleRightMatch![1]).toContain('setPropertiesDrawerOpen(false);');
+    // ESC também fecha a 3ª gaveta.
+    expect(app).toContain('setPropertiesDrawerOpen((v) => (v ? false : v));');
+    // RightRail: 2º NavRailButton, ícone distinto (nunca reusa PanelRight).
+    const railIdx = app.indexOf('function RightRail() {');
+    expect(railIdx).toBeGreaterThan(-1);
+    const railBody = app.slice(railIdx, app.indexOf('\n}', railIdx));
+    expect(railBody).toContain('icon={SlidersHorizontal}');
+    expect(railBody).toContain('label="Properties"');
+    expect(railBody).toContain('onClick={() => togglePropertiesDrawer?.()}');
+    // Zero segunda implementação: a gaveta docada e o dropdown da SideBar
+    // renderizam o MESMO componente de conteúdo real.
+    expect(app).toContain('function ChartLayersPanelContent() {');
+    expect(app).toContain('<ChartLayersPanelContent />');
+    const contentUsages = app.match(/<ChartLayersPanelContent \/>/g) ?? [];
+    expect(contentUsages).toHaveLength(2);
   });
 
   it('Fase M.1: as réguas de navegação (SideBar/RightRail) abrem cada gaveta via toggleLeftDrawer/toggleRightDrawer; o backdrop e o X do cabeçalho fecham', () => {

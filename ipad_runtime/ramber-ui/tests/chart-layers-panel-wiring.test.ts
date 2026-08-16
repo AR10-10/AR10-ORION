@@ -556,3 +556,45 @@ describe('ChartLayersPanel: Estado Inteligente Adaptativo é a ação primária;
     expect(toggleIdx).toBeGreaterThan(disclosureEnd);
   });
 });
+
+// Painel Properties 320px (pedido do Operador, "painel e o visual... nada
+// repetido"): ChartLayersPanel foi dividido em casca (dropdown, fixed/
+// z-1001, ancorado na SideBar) + ChartLayersPanelContent (presets/toggle/
+// EMA reais, extraídos byte-a-byte) — o novo painel docado em
+// .terminal-properties renderiza o MESMO ChartLayersPanelContent, nunca uma
+// segunda cópia da lógica.
+describe('Painel Properties 320px: ChartLayersPanelContent extraído e reusado (zero segunda implementação)', () => {
+  it('ChartLayersPanelContent existe como função própria e concentra todos os hooks reais (visibility/autoMode/presets/EMA) — ChartLayersPanel não lê mais chartLayerVisibility/toggleChartLayer diretamente', () => {
+    const a = read('../src/App.tsx');
+    const contentIdx = a.indexOf('function ChartLayersPanelContent() {');
+    const panelIdx = a.indexOf('function ChartLayersPanel() {');
+    expect(contentIdx, 'ChartLayersPanelContent não encontrado').toBeGreaterThan(-1);
+    expect(panelIdx, 'ChartLayersPanel não encontrado').toBeGreaterThan(contentIdx);
+    const panelBody = a.slice(panelIdx, a.indexOf('function PropertiesPanelBody', panelIdx));
+    // O wrapper do dropdown só administra chartLayersOpen/setChartLayersOpen
+    // (abrir/fechar) — a lógica real (presets/toggle/EMA) saiu inteira.
+    expect(panelBody).toContain('const { chartLayersOpen, setChartLayersOpen } = useContext(WidgetContext) || {};');
+    expect(panelBody).not.toContain('toggleChartLayer,');
+    expect(panelBody).toContain('<ChartLayersPanelContent />');
+  });
+
+  it('PropertiesPanelBody renderiza ChartLayersPanelContent (mesmo componente do dropdown) + atalho real para Configurações — Risk/Alerts deliberadamente fora (já cobertos por SecondaryModuleView)', () => {
+    const a = read('../src/App.tsx');
+    const bodyIdx = a.indexOf('function PropertiesPanelBody(');
+    expect(bodyIdx, 'PropertiesPanelBody não encontrado').toBeGreaterThan(-1);
+    const bodyEnd = a.indexOf('\n}', a.indexOf('</button>', bodyIdx));
+    const body = a.slice(bodyIdx, bodyEnd);
+    expect(body).toContain('<ChartLayersPanelContent />');
+    expect(body).toContain('onClick={onOpenSettings}');
+  });
+
+  it('.terminal-properties (App(), dentro de .terminal-row): monta PropertiesPanelBody com onOpenSettings real (setActiveTab("SETTINGS") + fecha a gaveta) — nunca um handler vazio', () => {
+    const a = read('../src/App.tsx');
+    const idx = a.indexOf('className={`terminal-properties flex flex-col gap-2');
+    expect(idx, '.terminal-properties não encontrado em App()').toBeGreaterThan(-1);
+    const block = a.slice(idx, a.indexOf('</div>\n                  </div>', idx));
+    expect(block).toContain('<PropertiesPanelBody');
+    expect(block).toContain('setActiveTab("SETTINGS");');
+    expect(block).toContain('setPropertiesDrawerOpen(false);');
+  });
+});

@@ -53,8 +53,11 @@ describe('V16 Institutional Command Center: o Gráfico é o único ocupante de .
 
   it('as gavetas usam position:absolute (index.css) — nunca dividem espaço de flexbox com o Gráfico, mesmo abertas', () => {
     const css = read('../src/index.css');
-    const rulesMatch = css.match(/\.terminal-left,\s*\n\.terminal-right \{([\s\S]*?)\n\}/);
-    expect(rulesMatch, 'regra .terminal-left/.terminal-right não encontrada').not.toBeNull();
+    // Painel Properties 320px: 3ª gaveta (.terminal-properties) somada à
+    // mesma regra combinada — mesmo mecanismo position:absolute, nunca uma
+    // segunda regra CSS paralela.
+    const rulesMatch = css.match(/\.terminal-left,\s*\n\.terminal-right,\s*\n\.terminal-properties \{([\s\S]*?)\n\}/);
+    expect(rulesMatch, 'regra .terminal-left/.terminal-right/.terminal-properties não encontrada').not.toBeNull();
     expect(rulesMatch![1]).toContain('position: absolute');
     // .terminal-row só tem UM filho de verdade no fluxo (.terminal-main)
     // — confirmado por não haver mais "order"/"width" fixo em

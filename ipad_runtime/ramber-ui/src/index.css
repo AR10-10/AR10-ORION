@@ -237,7 +237,8 @@ body {
    esquerda), e ainda rola internamente sem vazar quando o conteúdo é
    maior que o espaço disponível (gaveta direita, ~5-6 cards). */
 .terminal-left,
-.terminal-right {
+.terminal-right,
+.terminal-properties {
   position: absolute;
   top: 0;
   max-height: 100%;
@@ -257,14 +258,21 @@ body {
   border-bottom-right-radius: 0.75rem;
   transform: translateX(-110%);
 }
-.terminal-right {
+/* .terminal-properties (painel Properties 320px): MESMO slot visual de
+   .terminal-right (right:0) — Core Intelligence e Properties nunca abertas
+   ao mesmo tempo (mutual exclusion real em App.tsx), então compartilhar a
+   posição é seguro e evita duplicar as 4 declarações abaixo por um terceiro
+   bloco idêntico. */
+.terminal-right,
+.terminal-properties {
   right: 0;
   border-left: 1px solid rgba(0, 240, 255, 0.15);
   border-bottom-left-radius: 0.75rem;
   transform: translateX(110%);
 }
 .terminal-left.drawer-open,
-.terminal-right.drawer-open {
+.terminal-right.drawer-open,
+.terminal-properties.drawer-open {
   transform: translateX(0);
 }
 /* Clique fora fecha a gaveta — o mesmo padrão de "overlay modal" já usado
