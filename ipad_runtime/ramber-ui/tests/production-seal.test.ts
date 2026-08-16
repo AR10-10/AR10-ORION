@@ -220,6 +220,7 @@ describe('diretriz 5 (achado real, verificação Playwright + auditoria estátic
   // noutro teste deste projeto para exceções deliberadas e documentadas.
   const KNOWN_NON_FETCH_HOSTS = new Set([
     'www.tradingview.com', // <a href target="_blank"> de atribuição da biblioteca de gráfico — navegação, não connect-src.
+    's3.tradingview.com', // TradingViewAdvancedChart.tsx: <script src> do widget de fallback — script-src, não connect-src.
   ]);
 
   it('nenhum host https:// em fetch()/URLs reais de src/js/workers fica de fora da CSP sem exceção documentada', () => {

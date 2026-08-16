@@ -73,7 +73,7 @@ describe('DepthChartPlugin: Fio de Seda + geometria real + dirty-flag (mesmas le
   it('etiqueta WALL BID/WALL ASK segue a cor da própria barra que rotula (fix desta sessão) — WALL_BORDER continua só o contorno de destaque, papel diferente de direção', () => {
     const s = src();
     expect(s).toContain('const labelFill = sideLabel === "BID" ? chartBullishRgba(0.85) : chartBearishRgba(0.85);');
-    expect(s).toContain('drawCanvasLabel(ctx, cssWidth - w - size.width - 4, y - size.height / 2, { fill: labelFill, text });');
+    expect(s).toContain('drawCanvasLabel(ctx, laneRight - w - size.width - 4, y - size.height / 2, { fill: labelFill, text });');
     expect(s).toContain('const WALL_BORDER = "rgba(240, 208, 111, 0.9)";');
     expect(s).toContain('ctx.strokeStyle = WALL_BORDER;');
   });

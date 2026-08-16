@@ -24,12 +24,18 @@
 // Largura máxima das barras: fração documentada da largura do chart
 // (legibilidade — o perfil contextualiza, nunca cobre as velas). O VALOR
 // de cada barra continua 100% real (proporção volume/maxVolume).
+//
+// Lane própria (achado real, ver chart-profile-lanes.ts): Volume Profile,
+// TPO Profile e Order Book Depth desenhavam TODOS a partir do mesmo
+// cssWidth — mesma faixa de pixels sempre que mais de um estava visível
+// ao mesmo tempo (o caso comum: os 3 defaults são true). Volume Profile é
+// a lane 0 (rightmost) — offset sempre 0, então este plugin continua
+// visualmente idêntico a antes; só o nome da fonte da fração mudou.
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { useVolumeProfileSnapshot } from "../store/unified-snapshot-store";
 import { bucketMidPrice } from "../nexus/volume-profile";
-
-const MAX_BAR_WIDTH_FRACTION = 0.16; // 16% da largura do chart para a barra de maior volume real
+import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx } from "./chart-profile-lanes";
 // Barras: cyan monocromático — achado da Lapidação Institucional
 // (AUDITORIA_ECOSSISTEMA_VISUAL.md §9.4/§9.7, pesquisa real confirmou que
 // isto é um preset legítimo e precedente ("Black Ice", scripts reais de
@@ -98,7 +104,8 @@ export function VolumeProfilePlugin({ chart, series }: VolumeProfilePluginProps)
       const maxVolume = vp.histogram.reduce((a, b) => (b > a ? b : a), 0);
       if (!(maxVolume > 0)) return;
 
-      const maxBarWidth = cssWidth * MAX_BAR_WIDTH_FRACTION;
+      const laneRight = getProfileLaneRightEdgePx("volume_profile", cssWidth);
+      const maxBarWidth = getProfileLaneMaxBarWidthPx("volume_profile", cssWidth);
       const hvn = new Set(vp.hvnIndices);
       const lvn = new Set(vp.lvnIndices);
 
@@ -116,7 +123,7 @@ export function VolumeProfilePlugin({ chart, series }: VolumeProfilePluginProps)
         const h = Math.max(1, Math.abs(yLow - yHigh) - 0.5);
         const w = (volume / maxVolume) * maxBarWidth;
         ctx.fillStyle = hvn.has(i) ? BAR_FILL_HVN : lvn.has(i) ? BAR_FILL_LVN : BAR_FILL;
-        ctx.fillRect(cssWidth - w, y, w, h);
+        ctx.fillRect(laneRight - w, y, w, h);
       }
 
       // POC: linha horizontal fio de seda no preço real do bucket de maior
@@ -126,8 +133,8 @@ export function VolumeProfilePlugin({ chart, series }: VolumeProfilePluginProps)
         ctx.lineWidth = 1;
         ctx.strokeStyle = POC_LINE;
         ctx.beginPath();
-        ctx.moveTo(cssWidth - maxBarWidth, pocY + 0.5);
-        ctx.lineTo(cssWidth, pocY + 0.5);
+        ctx.moveTo(laneRight - maxBarWidth, pocY + 0.5);
+        ctx.lineTo(laneRight, pocY + 0.5);
         ctx.stroke();
       }
     };

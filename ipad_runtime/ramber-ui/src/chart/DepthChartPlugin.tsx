@@ -28,16 +28,21 @@
 //
 // "Fio de Seda" (Regra de Ouro 5): a borda de destaque de wall é 1px
 // sólida (strokeRect, nunca setLineDash).
+//
+// Lane própria (achado real, ver chart-profile-lanes.ts): este plugin
+// ancorava em cssWidth — mesma faixa de pixels de VolumeProfilePlugin/
+// TpoProfilePlugin sempre que mais de um estava visível ao mesmo tempo
+// (o caso comum, os 3 defaults são true). Order Book Depth agora é a 3ª
+// lane (mais larga das três — poucos níveis reais, cada um precisa de
+// espaço legível — mesma razão de sempre, valor só realocado pra fonte
+// única).
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { useOrderBookSnapshot, type OrderBookLevel } from "../store/unified-snapshot-store";
 import { detectWalls } from "../nexus/order-book-depth";
 import { drawCanvasLabel, measureCanvasLabel } from "../nexus/canvas-label";
 import { chartBullishRgba, chartBearishRgba } from "./canvas-palette";
-
-// Mais largo que o VP (0.16): poucos níveis reais (8) por lado, cada um
-// precisa de espaço legível — nunca inventa profundidade que o book não tem.
-const MAX_BAR_WIDTH_FRACTION = 0.22;
+import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx } from "./chart-profile-lanes";
 // Achado da AUDITORIA TÉCNICA COMPLETA (item B12): bid/ask usavam Tailwind
 // green-500/red-500, um par DIFERENTE do verde/vermelho universal que todo
 // o resto do gráfico usa para o mesmo conceito alta/baixa (candles, FVG/OB,
@@ -98,7 +103,8 @@ export function DepthChartPlugin({ chart, series }: DepthChartPluginProps) {
       );
       if (!(maxSize > 0)) return;
 
-      const maxBarWidth = cssWidth * MAX_BAR_WIDTH_FRACTION;
+      const laneRight = getProfileLaneRightEdgePx("order_book_depth", cssWidth);
+      const maxBarWidth = getProfileLaneMaxBarWidthPx("order_book_depth", cssWidth);
       const barHeight = Math.max(2, cssHeight / 40); // faixa fina real por nível
       const bidWalls = detectWalls(bids);
       const askWalls = detectWalls(asks);
@@ -109,12 +115,12 @@ export function DepthChartPlugin({ chart, series }: DepthChartPluginProps) {
           if (y === null) return; // fora da área visível agora — Fail-Closed, nunca extrapola
           const w = (lvl.size / maxSize) * maxBarWidth;
           ctx.fillStyle = fill;
-          ctx.fillRect(cssWidth - w, y - barHeight / 2, w, barHeight);
+          ctx.fillRect(laneRight - w, y - barHeight / 2, w, barHeight);
           if (!walls[i]) return;
           // Fio de Seda: 1px sólida real, nunca tracejada.
           ctx.lineWidth = 1;
           ctx.strokeStyle = WALL_BORDER;
-          ctx.strokeRect(cssWidth - w + 0.5, y - barHeight / 2 + 0.5, Math.max(0, w - 1), Math.max(0, barHeight - 1));
+          ctx.strokeRect(laneRight - w + 0.5, y - barHeight / 2 + 0.5, Math.max(0, w - 1), Math.max(0, barHeight - 1));
           const text = `WALL ${sideLabel}`;
           const size = measureCanvasLabel(ctx, text);
           // Achado real de screenshot (Operador): a etiqueta WALL BID/WALL
@@ -127,7 +133,7 @@ export function DepthChartPlugin({ chart, series }: DepthChartPluginProps) {
           // continua servindo só o contorno de destaque da barra (papel
           // diferente: "isto é uma wall", não direção).
           const labelFill = sideLabel === "BID" ? chartBullishRgba(0.85) : chartBearishRgba(0.85);
-          drawCanvasLabel(ctx, cssWidth - w - size.width - 4, y - size.height / 2, { fill: labelFill, text });
+          drawCanvasLabel(ctx, laneRight - w - size.width - 4, y - size.height / 2, { fill: labelFill, text });
         });
       };
 

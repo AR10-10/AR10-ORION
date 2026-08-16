@@ -79,6 +79,17 @@ export const TRADFI_EQUITY_INSTRUMENT_TYPE = 'tradfi_equity';
  *   ver findByLegacyTradFiAssetSymbol). Ponte para o seletor JA existente
  *   no App.tsx (marketMode==='TRADFI') comecar a mostrar dado real sem
  *   duplicar aquele catalogo nem mudar a UX que o Operador ja conhece.
+ * @property {string} [tradingview_symbol] - simbolo real no formato
+ *   EXCHANGE:CODE da TradingView (ex. 'CME_MINI:ES1!', 'NASDAQ:AAPL'),
+ *   usado SO pelo widget de fallback (TradingViewAdvancedChart.tsx) quando
+ *   o conector Yahoo delayed falha (bloqueio real de CORS documentado em
+ *   docs/MARKET_DATA_FABRIC.md). Os 5 simbolos de acao (formato
+ *   EXCHANGE:TICKER) sao confirmados contra exemplo real da documentacao
+ *   da TradingView; os de futuro contínuo (sufixo "1!") seguem a convencao
+ *   publica documentada da TradingView, mas SEM verificacao individual ao
+ *   vivo nesta sessao (rede bloqueada) — o widget usa allow_symbol_change:
+ *   true de proposito, entao um simbolo eventualmente errado e corrigivel
+ *   pelo proprio Operador direto na tela, nunca quebra a experiencia.
  */
 
 /** @type {InstrumentDefinition[]} */
@@ -87,6 +98,7 @@ export const INSTRUMENT_REGISTRY = Object.freeze([
     { instrument_id: 'CME_ES', display_name: 'S&P 500 E-mini', asset_class: ASSET_CLASS.EQUITY_INDEX,
       exchange: 'CME', designated_contract_market: 'CME', contract_code: 'ES', continuous_symbol_hint: 'ES=F',
       tick_size: 0.25, tick_value_usd: 12.5, contract_size_desc: '$50 x indice S&P 500',
+      tradingview_symbol: 'CME_MINI:ES1!',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_FUTURES_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'SPX',
       notes: 'Contrato CORE Ordem §5. tick/valor confirmados via CME Group + fontes de corretoras (2026).' },
     { instrument_id: 'CME_MES', display_name: 'S&P 500 Micro E-mini', asset_class: ASSET_CLASS.EQUITY_INDEX,
@@ -97,6 +109,7 @@ export const INSTRUMENT_REGISTRY = Object.freeze([
     { instrument_id: 'CME_NQ', display_name: 'Nasdaq-100 E-mini', asset_class: ASSET_CLASS.EQUITY_INDEX,
       exchange: 'CME', designated_contract_market: 'CME', contract_code: 'NQ', continuous_symbol_hint: 'NQ=F',
       tick_size: 0.25, tick_value_usd: 5.0, contract_size_desc: '$20 x indice Nasdaq-100',
+      tradingview_symbol: 'CME_MINI:NQ1!',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_FUTURES_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'NDX',
       notes: 'Contrato CORE Ordem §5 (exemplo literal do §15: FUTURES→CME→INDEX→NASDAQ-100→NQ).' },
     { instrument_id: 'CME_MNQ', display_name: 'Nasdaq-100 Micro E-mini', asset_class: ASSET_CLASS.EQUITY_INDEX,
@@ -107,6 +120,7 @@ export const INSTRUMENT_REGISTRY = Object.freeze([
     { instrument_id: 'CME_YM', display_name: 'Dow Jones E-mini', asset_class: ASSET_CLASS.EQUITY_INDEX,
       exchange: 'CME', designated_contract_market: 'CBOT', contract_code: 'YM', continuous_symbol_hint: 'YM=F',
       tick_size: 1.0, tick_value_usd: 5.0, contract_size_desc: '$5 x indice Dow Jones Industrial Average',
+      tradingview_symbol: 'CBOT_MINI:YM1!',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_FUTURES_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'US30',
       notes: 'Registrado na CBOT (bolsa do grupo CME Group), nao na CME propriamente.' },
     { instrument_id: 'CME_MYM', display_name: 'Dow Jones Micro E-mini', asset_class: ASSET_CLASS.EQUITY_INDEX,
@@ -117,6 +131,7 @@ export const INSTRUMENT_REGISTRY = Object.freeze([
     { instrument_id: 'CME_RTY', display_name: 'Russell 2000 E-mini', asset_class: ASSET_CLASS.EQUITY_INDEX,
       exchange: 'CME', designated_contract_market: 'CME', contract_code: 'RTY', continuous_symbol_hint: 'RTY=F',
       tick_size: 0.1, tick_value_usd: 5.0, contract_size_desc: '$50 x indice Russell 2000',
+      tradingview_symbol: 'CME_MINI:RTY1!',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_FUTURES_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'RUT',
       notes: 'Contrato CORE Ordem §5.' },
     { instrument_id: 'CME_M2K', display_name: 'Russell 2000 Micro E-mini', asset_class: ASSET_CLASS.EQUITY_INDEX,
@@ -129,6 +144,7 @@ export const INSTRUMENT_REGISTRY = Object.freeze([
     { instrument_id: 'CME_GC', display_name: 'Ouro (Gold)', asset_class: ASSET_CLASS.METALS,
       exchange: 'CME', designated_contract_market: 'COMEX', contract_code: 'GC', continuous_symbol_hint: 'GC=F',
       tick_size: 0.1, tick_value_usd: 10.0, contract_size_desc: '100 onças troy',
+      tradingview_symbol: 'COMEX:GC1!',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_FUTURES_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'XAUUSD',
       notes: 'Contrato CORE Ordem §5 (exemplo literal do §15: METALS→GOLD→GC). legacy_tradfi_asset_symbol: XAUUSD ' +
         'e a cotacao SPOT de ouro (convencao forex); GC=F e o FUTURO COMEX — precos muito proximos mas nao ' +
@@ -136,6 +152,7 @@ export const INSTRUMENT_REGISTRY = Object.freeze([
     { instrument_id: 'CME_SI', display_name: 'Prata (Silver)', asset_class: ASSET_CLASS.METALS,
       exchange: 'CME', designated_contract_market: 'COMEX', contract_code: 'SI', continuous_symbol_hint: 'SI=F',
       tick_size: 0.005, tick_value_usd: 25.0, contract_size_desc: '5.000 onças troy',
+      tradingview_symbol: 'COMEX:SI1!',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_FUTURES_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'XAGUSD',
       notes: 'Contrato CORE Ordem §5. Mesma ressalva spot-vs-futuro do GC/XAUUSD acima.' },
     { instrument_id: 'CME_HG', display_name: 'Cobre (Copper)', asset_class: ASSET_CLASS.METALS,
@@ -148,6 +165,7 @@ export const INSTRUMENT_REGISTRY = Object.freeze([
     { instrument_id: 'CME_CL', display_name: 'Petroleo WTI (Crude Oil)', asset_class: ASSET_CLASS.ENERGY,
       exchange: 'CME', designated_contract_market: 'NYMEX', contract_code: 'CL', continuous_symbol_hint: 'CL=F',
       tick_size: 0.01, tick_value_usd: 10.0, contract_size_desc: '1.000 barris',
+      tradingview_symbol: 'NYMEX:CL1!',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_FUTURES_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'USOIL',
       notes: 'Contrato CORE Ordem §5.' },
     { instrument_id: 'CME_NG', display_name: 'Gas Natural (Henry Hub)', asset_class: ASSET_CLASS.ENERGY,
@@ -180,6 +198,7 @@ export const INSTRUMENT_REGISTRY = Object.freeze([
     { instrument_id: 'CME_6E', display_name: 'Euro FX', asset_class: ASSET_CLASS.FX,
       exchange: 'CME', designated_contract_market: 'CME', contract_code: '6E', continuous_symbol_hint: '6E=F',
       tick_size: 0.00005, tick_value_usd: 6.25, contract_size_desc: '€125.000',
+      tradingview_symbol: 'CME:6E1!',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_FUTURES_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'EURUSD',
       notes: 'Contrato CORE Ordem §5. Mesma convencao de cotacao do par spot EURUSD (USD por 1 EUR) — mapeamento direto, sem inversao.' },
     { instrument_id: 'CME_6J', display_name: 'Iene Japones', asset_class: ASSET_CLASS.FX,
@@ -190,6 +209,7 @@ export const INSTRUMENT_REGISTRY = Object.freeze([
     { instrument_id: 'CME_6B', display_name: 'Libra Esterlina', asset_class: ASSET_CLASS.FX,
       exchange: 'CME', designated_contract_market: 'CME', contract_code: '6B', continuous_symbol_hint: '6B=F',
       tick_size: 0.0001, tick_value_usd: 6.25, contract_size_desc: '£62.500',
+      tradingview_symbol: 'CME:6B1!',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_FUTURES_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'GBPUSD',
       notes: 'Contrato CORE Ordem §5. Mesma convencao de cotacao do par spot GBPUSD (USD por 1 GBP) — mapeamento direto, sem inversao.' },
 
@@ -254,26 +274,31 @@ export const INSTRUMENT_REGISTRY = Object.freeze([
     { instrument_id: 'NASDAQ_AAPL', display_name: 'Apple Inc.', asset_class: ASSET_CLASS.EQUITY,
       exchange: 'NASDAQ', designated_contract_market: 'NASDAQ', contract_code: 'AAPL', continuous_symbol_hint: 'AAPL',
       tick_size: 0.01, tick_value_usd: 0.01, contract_size_desc: '1 ação (instrumento à vista, não futuro)',
+      tradingview_symbol: 'NASDAQ:AAPL',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_EQUITY_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'AAPL',
       notes: 'Ação à vista, não futuro CME — ver aviso de bloqueio de CORS no cabeçalho da seção EQUITY acima.' },
     { instrument_id: 'NASDAQ_MSFT', display_name: 'Microsoft Corp.', asset_class: ASSET_CLASS.EQUITY,
       exchange: 'NASDAQ', designated_contract_market: 'NASDAQ', contract_code: 'MSFT', continuous_symbol_hint: 'MSFT',
       tick_size: 0.01, tick_value_usd: 0.01, contract_size_desc: '1 ação (instrumento à vista, não futuro)',
+      tradingview_symbol: 'NASDAQ:MSFT',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_EQUITY_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'MSFT',
       notes: 'Ação à vista, não futuro CME — ver aviso de bloqueio de CORS no cabeçalho da seção EQUITY acima.' },
     { instrument_id: 'NASDAQ_NVDA', display_name: 'Nvidia Corp.', asset_class: ASSET_CLASS.EQUITY,
       exchange: 'NASDAQ', designated_contract_market: 'NASDAQ', contract_code: 'NVDA', continuous_symbol_hint: 'NVDA',
       tick_size: 0.01, tick_value_usd: 0.01, contract_size_desc: '1 ação (instrumento à vista, não futuro)',
+      tradingview_symbol: 'NASDAQ:NVDA',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_EQUITY_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'NVDA',
       notes: 'Ação à vista, não futuro CME — ver aviso de bloqueio de CORS no cabeçalho da seção EQUITY acima.' },
     { instrument_id: 'NASDAQ_META', display_name: 'Meta Platforms Inc.', asset_class: ASSET_CLASS.EQUITY,
       exchange: 'NASDAQ', designated_contract_market: 'NASDAQ', contract_code: 'META', continuous_symbol_hint: 'META',
       tick_size: 0.01, tick_value_usd: 0.01, contract_size_desc: '1 ação (instrumento à vista, não futuro)',
+      tradingview_symbol: 'NASDAQ:META',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_EQUITY_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'META',
       notes: 'Ação à vista, não futuro CME — ver aviso de bloqueio de CORS no cabeçalho da seção EQUITY acima.' },
     { instrument_id: 'NASDAQ_TSLA', display_name: 'Tesla Inc.', asset_class: ASSET_CLASS.EQUITY,
       exchange: 'NASDAQ', designated_contract_market: 'NASDAQ', contract_code: 'TSLA', continuous_symbol_hint: 'TSLA',
       tick_size: 0.01, tick_value_usd: 0.01, contract_size_desc: '1 ação (instrumento à vista, não futuro)',
+      tradingview_symbol: 'NASDAQ:TSLA',
       priority_tier: PRIORITY_TIER.A, instrument_type: TRADFI_EQUITY_INSTRUMENT_TYPE, legacy_tradfi_asset_symbol: 'TSLA',
       notes: 'Ação à vista, não futuro CME — ver aviso de bloqueio de CORS no cabeçalho da seção EQUITY acima.' },
 ]);

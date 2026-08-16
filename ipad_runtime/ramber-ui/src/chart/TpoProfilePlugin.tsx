@@ -23,11 +23,18 @@
 //
 // "Fio de Seda" (Regra de Ouro 5): POC e Initial Balance são linhas 1px
 // sólidas reais, nunca setLineDash.
+//
+// Lane própria (achado real, ver chart-profile-lanes.ts): este plugin
+// ancorava em cssWidth, EXATAMENTE a mesma faixa de pixels que
+// VolumeProfilePlugin — os "perfis irmãos" citados acima colidiam de
+// verdade sempre que os dois estavam relevantes/visíveis ao mesmo tempo
+// (o caso comum, os dois defaults são true). Agora TPO Profile é a 2ª
+// lane, imediatamente à esquerda da lane do Volume Profile — nunca cruza
+// para o espaço dele.
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { computeTpoProfile, type TpoProfileResult } from "../nexus/tpo-profile";
-
-const MAX_BAR_WIDTH_FRACTION = 0.16; // mesma fração real do Volume Profile — perfis irmãos, mesma legibilidade
+import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx } from "./chart-profile-lanes";
 // Linhas TPO: azul-neutro já usado pra estrutura (mesmo tom-base de
 // #8ab4f8 onipresente no HUD) — deliberadamente NUNCA o cyan do Volume
 // Profile: os dois perfis podem estar ligados ao mesmo tempo, e cores
@@ -98,7 +105,8 @@ export function TpoProfilePlugin({ chart, series, data }: TpoProfilePluginProps)
       const maxCount = result.rows.reduce((m, row) => Math.max(m, row.letters.length), 0);
       if (!(maxCount > 0)) return;
 
-      const maxBarWidth = cssWidth * MAX_BAR_WIDTH_FRACTION;
+      const laneRight = getProfileLaneRightEdgePx("tpo_profile", cssWidth);
+      const maxBarWidth = getProfileLaneMaxBarWidthPx("tpo_profile", cssWidth);
       const rowWidthPrice = (result.rangeMax - result.rangeMin) / result.rowCount;
 
       for (let i = 0; i < result.rows.length; i++) {
@@ -114,7 +122,7 @@ export function TpoProfilePlugin({ chart, series, data }: TpoProfilePluginProps)
         const w = (count / maxCount) * maxBarWidth;
         const inValueArea = i >= result.valueAreaLowIndex && i <= result.valueAreaHighIndex;
         ctx.fillStyle = inValueArea ? ROW_FILL_VALUE_AREA : ROW_FILL;
-        ctx.fillRect(cssWidth - w, y, w, h);
+        ctx.fillRect(laneRight - w, y, w, h);
       }
 
       const pocY = series.priceToCoordinate(result.pocPrice);
@@ -122,8 +130,8 @@ export function TpoProfilePlugin({ chart, series, data }: TpoProfilePluginProps)
         ctx.lineWidth = 1;
         ctx.strokeStyle = POC_LINE;
         ctx.beginPath();
-        ctx.moveTo(cssWidth - maxBarWidth, pocY + 0.5);
-        ctx.lineTo(cssWidth, pocY + 0.5);
+        ctx.moveTo(laneRight - maxBarWidth, pocY + 0.5);
+        ctx.lineTo(laneRight, pocY + 0.5);
         ctx.stroke();
       }
 
@@ -136,8 +144,8 @@ export function TpoProfilePlugin({ chart, series, data }: TpoProfilePluginProps)
           ctx.lineWidth = 1;
           ctx.strokeStyle = color;
           ctx.beginPath();
-          ctx.moveTo(cssWidth - maxBarWidth, Math.round(y) + 0.5);
-          ctx.lineTo(cssWidth, Math.round(y) + 0.5);
+          ctx.moveTo(laneRight - maxBarWidth, Math.round(y) + 0.5);
+          ctx.lineTo(laneRight, Math.round(y) + 0.5);
           ctx.stroke();
         };
         drawIbLine(result.initialBalanceHigh, IB_HIGH);

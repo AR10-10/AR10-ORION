@@ -21,6 +21,16 @@
 // o dado real, Ordem §16, nunca para o Core Engine analisar futuros CME).
 // Este componente nunca importa nexus-core.ts/o ciclo do Council — não há
 // como ele virar uma segunda fonte de sinal por acidente de import.
+//
+// Achado real pós-Fase-1 (docs/MARKET_DATA_FABRIC.md, "Fase 3" — confirmado
+// ao vivo pelo próprio Operador rodando no PC dele): o conector Yahoo
+// delayed é bloqueado por CORS estrutural do lado do servidor da Yahoo, não
+// um bug daqui. Quando status vira DADOS_INSUFICIENTES e o instrumento tem
+// tradingview_symbol cadastrado, este componente cai para
+// TradingViewAdvancedChart (widget real, hospedado pela própria
+// TradingView — contorna o CORS por não ser um fetch() nosso). A tentativa
+// real via Yahoo continua rodando primeiro sempre — o widget é só o
+// fallback honesto para quando ela falha, nunca substitui a tentativa real.
 import { useEffect, useRef, useState } from "react";
 import {
   createChart,
@@ -33,6 +43,7 @@ import {
 } from "lightweight-charts";
 import { Radio, Clock } from "lucide-react";
 import { getTradFiChartCandles } from "../engine-bridge";
+import { TradingViewAdvancedChart } from "./TradingViewAdvancedChart";
 
 // Mesma cadência do ciclo cripto principal (ver comentário de
 // HTF_REFRESH_MS em engine-bridge.ts: "o ciclo principal roda a cada 30s
@@ -51,6 +62,7 @@ export interface TradFiChartInstrument {
   designated_contract_market: string;
   tick_size: number;
   tick_value_usd: number;
+  tradingview_symbol?: string;
 }
 
 interface TradFiCandle {
@@ -165,6 +177,14 @@ export function TradFiRealChart({
     };
   }, [instrument.instrument_id, timeframe]);
 
+  // Fallback real (achado pós-Fase-1, ver comentário no topo do arquivo):
+  // só troca para o widget da TradingView quando a tentativa real via
+  // Yahoo já rodou e falhou honestamente E o instrumento tem um símbolo
+  // cadastrado — nunca antes da tentativa real, nunca para instrumentos
+  // sem mapeamento (SOFR/futuros cripto da CME continuam no texto
+  // DADOS_INSUFICIENTES simples, mesmo comportamento de sempre).
+  const showTradingViewFallback = status === "DADOS_INSUFICIENTES" && Boolean(instrument.tradingview_symbol);
+
   return (
     <div className="cyber-panel flex-1 min-h-[280px] flex flex-col gap-1 p-2">
       <div className="flex items-center justify-between shrink-0 px-1 gap-2">
@@ -172,16 +192,28 @@ export function TradFiRealChart({
           {instrument.display_name} · {instrument.contract_code} · {instrument.designated_contract_market}
         </span>
         <span className="flex items-center gap-1 text-[0.5rem] font-bold tracking-[0.1em] text-[#ffb020]/80 uppercase shrink-0">
-          <Clock size={10} /> DELAYED · Yahoo Finance (não-oficial)
+          <Clock size={10} /> {showTradingViewFallback ? "DELAYED · TradingView (fallback real)" : "DELAYED · Yahoo Finance (não-oficial)"}
         </span>
       </div>
-      <div ref={containerRef} className="flex-1 min-h-0" />
-      {status === "LOADING" && (
+      {/* containerRef nunca desmonta (só fica oculto) — o chart nativo já
+         foi criado nele por Efeito 1; remover do DOM condicionalmente
+         deixaria a instância de lightweight-charts órfã quando o poll de
+         Efeito 2 tentasse atualizar depois. */}
+      <div ref={containerRef} className={showTradingViewFallback ? "hidden" : "flex-1 min-h-0"} />
+      {showTradingViewFallback && instrument.tradingview_symbol && (
+        <>
+          <div className="text-[0.5rem] text-[#ffb020]/70 uppercase tracking-wide px-1 shrink-0 text-center">
+            Fonte delayed própria indisponível nesta tentativa (bloqueio real de CORS do lado da Yahoo) · widget real da TradingView
+          </div>
+          <TradingViewAdvancedChart symbol={instrument.tradingview_symbol} />
+        </>
+      )}
+      {!showTradingViewFallback && status === "LOADING" && (
         <div className="flex items-center justify-center gap-2 py-6 text-[0.55rem] text-[#8ab4f8]/60 uppercase tracking-wide">
           <Radio size={14} className="animate-pulse-glow" /> Buscando candles reais...
         </div>
       )}
-      {status === "DADOS_INSUFICIENTES" && (
+      {!showTradingViewFallback && status === "DADOS_INSUFICIENTES" && (
         <div className="flex items-center justify-center gap-2 py-6 text-[0.55rem] text-[#ff0055]/80 uppercase tracking-wide text-center px-4">
           DADOS_INSUFICIENTES · fonte delayed indisponível nesta tentativa (nunca simulado)
         </div>

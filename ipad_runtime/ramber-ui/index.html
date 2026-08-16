@@ -43,8 +43,20 @@
          verificado ao vivo, ver docs/MARKET_DATA_FABRIC.md) — mas mesmo
          assim a CSP precisa listar o host real que o código de fato usa,
          nunca depender de um conector nunca ter sido exercitado para
-         "esconder" a lacuna. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.binance.com https://fapi.binance.com wss://stream.binance.com:9443 wss://fstream.binance.com https://api.mexc.com https://api.bybit.com https://www.okx.com https://api.coingecko.com https://api.alternative.me https://api.llama.fi https://query1.finance.yahoo.com https://*.huggingface.co https://*.hf.co https://raw.githubusercontent.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">
+         "esconder" a lacuna.
+         s3.tradingview.com (script-src) + *.tradingview.com/*.tradingview-
+         widget.com (frame-src, novo diretiva) adicionados (achado real:
+         Yahoo delayed confirmado bloqueado por CORS pelo próprio Operador
+         rodando no PC dele — ver docs/MARKET_DATA_FABRIC.md "Fase 3").
+         Autorizado explicitamente pelo Operador via AskUserQuestion,
+         sabendo a troca real (1ª vez que este projeto roda script de
+         terceiro na tela) — nunca uma abertura silenciosa da CSP. Escopo
+         deliberadamente mínimo: só o host que o widget realmente carrega,
+         nunca um script-src/frame-src genérico. frame-src não existia
+         antes porque nenhum recurso deste projeto tinha sido embutido via
+         iframe até agora — default-src 'self' já bloqueava isso
+         implicitamente; a diretiva explícita documenta a exceção real. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://s3.tradingview.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.binance.com https://fapi.binance.com wss://stream.binance.com:9443 wss://fstream.binance.com https://api.mexc.com https://api.bybit.com https://www.okx.com https://api.coingecko.com https://api.alternative.me https://api.llama.fi https://query1.finance.yahoo.com https://*.huggingface.co https://*.hf.co https://raw.githubusercontent.com; frame-src https://*.tradingview.com https://*.tradingview-widget.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">
     <link rel="apple-touch-icon" href="../icons/apple-touch-icon-180.png" />
     <link rel="icon" href="../icons/icon-192.png" />
     <link rel="manifest" href="manifest.webmanifest" />
