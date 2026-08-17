@@ -162,3 +162,83 @@ Registrado como inatingível com dado público, para nunca voltar como "a fazer"
 ### Backlog menor, já rastreado
 #279 (tamanho de etiquetas), #283 (caixas de confluência → overlay lateral),
 #294/#295 (import/export CSV + journal), #340 (Andrews Pitchfork), #342 (ATR%).
+
+---
+
+# Segunda passada — pontas soltas (o Operador estava certo)
+
+O Operador contestou a conclusão da §1 ("store limpa") dizendo que ainda havia
+ponta solta. **Ele estava certo, e a falha era do método.**
+
+## O buraco no método da primeira passada
+
+A §1 mediu "campo referenciado em qualquer lugar fora da store". Isso **conflui
+escrita com leitura**: um campo escrito por um setter aparece como
+"referenciado" pelo próprio setter e escapa da detecção. É exatamente a classe
+do achado #91 (affectiveMemory), que era escrito e nunca exibido.
+
+Segunda passada separou **escritores** de **leitores**, e resolveu o segundo
+ponto cego já registrado (campo lido só por `useXSnapshot`).
+
+## Ponta solta 1 — `orderBooks`: fatia write-only
+
+| | |
+|---|---|
+| **Escritores** | 3 — `App.tsx:3395`, `cross-exchange-service.ts:199` (BINANCE), `cross-exchange-service.ts:246` (MEXC) |
+| **Leitores** | **0** |
+| **Único seletor** | `useExchangeOrderBooks` (store:670) — **nunca importado em lugar nenhum** |
+| **`consensus-radar.ts` usa?** | Não — não lê `orderBooks` nem faz fetch próprio |
+
+O livro L2 de 3 exchanges é capturado e gravado na store a cada tick, e **nada
+no sistema o lê**. Não é lixo: é dado real e valioso (comparação de livro entre
+corretoras é justamente o que sustentaria o "Consenso Entre Corretoras"). É uma
+feature construída até a metade — a captura existe, a superfície nunca foi feita.
+
+**Decisão é do Operador, porque as 2 saídas são legítimas e opostas:**
+- **Surfacing** — construir a leitura de consenso entre corretoras sobre esses
+  dados (o motor de destino, `consensus-radar.ts`, existe e hoje não os usa).
+- **Poda** — parar de escrever, removendo 3 chamadas e uma fatia da store.
+
+Não decido isso sozinho: a Regra de Ouro 4 proíbe apagar dado real, e "surfacing"
+é uma feature nova. Fica registrado como pendência **nomeada**, não como
+"sistema limpo".
+
+## Ponta solta 2 — `health.isOnline`: segundo campo para o mesmo fato
+
+O sistema tem **dois** campos de conectividade:
+
+| campo | escrito por | lido por | veredito |
+|---|---|---|---|
+| `offline` (topo) | `setOffline`, listeners de `window.online/offline` | `useOfflineSnapshot()` em `App.tsx:6180` | **Vivo e exibido** |
+| `health.isOnline` | inicializado de `navigator.onLine` em `EMPTY_HEALTH` | **ninguém** | **Vestígio** |
+
+Duas caixinhas para o mesmo fato, e só uma é usada. Não há divergência visível
+hoje justamente porque a segunda nunca é lida — mas é precisamente o tipo de
+duplicação que produz "dois lugares dizendo coisas diferentes" na primeira vez
+que alguém ligar a segunda.
+
+**Recomendação:** remover `isOnline` de `HealthSnapshot` e manter `offline` como
+fonte única. Zero dado real perdido — `offline` carrega o mesmo fato e é o que
+já aparece na tela. Não executado nesta rodada porque remover campo de store é
+mudança de contrato, e a Regra de Ouro 4 pede confirmação do Operador.
+
+## Placar corrigido da auditoria de store
+
+| métrica | 1ª passada | 2ª passada (correta) |
+|---|---|---|
+| campos de estado analisados | 121 (incluía setters) | **67** (só estado) |
+| dado morto real | "0" | **2** (`orderBooks`, `health.isOnline`) |
+| seletores exportados | não medido | 48 |
+| seletores nunca importados | não medido | **14** (candidatos a poda; `useExchangeOrderBooks` é um deles e confirma a ponta solta 1) |
+
+## Lição de método (a terceira desta sessão)
+
+As três falhas de auditoria desta sessão têm a MESMA forma: **a medição parecia
+rigorosa e tinha um ponto cego que a fazia devolver "está limpo".**
+
+1. grep por nome cru → campo lido por seletor parecia morto (falso positivo)
+2. "referenciado em qualquer lugar" → campo write-only parecia vivo (falso negativo, **o pior dos dois**)
+3. auditoria de cor anterior → mediu só entre famílias, não dentro delas
+
+Um "está tudo limpo" só vale acompanhado do método e do seu ponto cego declarado.
+Esta seção existe para que a próxima auditoria comece já sabendo dos três.
