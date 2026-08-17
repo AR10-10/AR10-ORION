@@ -33,7 +33,7 @@ describe('TradePlanZonePlugin: "Fio de Seda" (Regra de Ouro 2) — border never 
   });
 
   it('reuses the exact amber already used for the entry price lines — one color per role, never a second palette', () => {
-    expect(plugin()).toContain('rgba(240, 208, 111,');
+    expect(plugin()).toContain('rgba(240, 193, 111,');
   });
 });
 

@@ -74,7 +74,7 @@ describe('DepthChartPlugin: Fio de Seda + geometria real + dirty-flag (mesmas le
     const s = src();
     expect(s).toContain('const labelFill = sideLabel === "BID" ? chartBullishRgba(0.85) : chartBearishRgba(0.85);');
     expect(s).toContain('drawCanvasLabel(ctx, laneRight - w - size.width - 4, y - size.height / 2, { fill: labelFill, text });');
-    expect(s).toContain('const WALL_BORDER = "rgba(240, 208, 111, 0.9)";');
+    expect(s).toContain('const WALL_BORDER = "rgba(240, 193, 111, 0.9)";');
     expect(s).toContain('ctx.strokeStyle = WALL_BORDER;');
   });
 

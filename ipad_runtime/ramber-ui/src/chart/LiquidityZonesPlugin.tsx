@@ -69,10 +69,10 @@ interface ZonePalette {
 // Mesmo rgba exato das price lines que este overlay substitui — a
 // hierarquia visual (OB mais presente que FVG) já existia, só ganha um
 // preenchimento proporcionalmente mais translúcido que a borda.
-const FVG_BULLISH: ZonePalette = { fill: "rgba(0, 255, 170, 0.10)", border: "rgba(0, 255, 170, 0.30)" };
-const FVG_BEARISH: ZonePalette = { fill: "rgba(255, 0, 85, 0.10)", border: "rgba(255, 0, 85, 0.30)" };
-const OB_BULLISH: ZonePalette = { fill: "rgba(0, 255, 170, 0.15)", border: "rgba(0, 255, 170, 0.40)" };
-const OB_BEARISH: ZonePalette = { fill: "rgba(255, 0, 85, 0.15)", border: "rgba(255, 0, 85, 0.40)" };
+const FVG_BULLISH: ZonePalette = { fill: "rgba(8, 153, 129, 0.10)", border: "rgba(8, 153, 129, 0.30)" };
+const FVG_BEARISH: ZonePalette = { fill: "rgba(242, 54, 69, 0.10)", border: "rgba(242, 54, 69, 0.30)" };
+const OB_BULLISH: ZonePalette = { fill: "rgba(8, 153, 129, 0.15)", border: "rgba(8, 153, 129, 0.40)" };
+const OB_BEARISH: ZonePalette = { fill: "rgba(242, 54, 69, 0.15)", border: "rgba(242, 54, 69, 0.40)" };
 
 // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
 // estrutural"): MESMA cor/hierarquia acima — o preenchimento nunca muda
@@ -81,10 +81,10 @@ const OB_BEARISH: ZonePalette = { fill: "rgba(255, 0, 85, 0.15)", border: "rgba(
 // plano ATIVO, um obstáculo real no caminho entrada→alvo
 // (trade-plan.ts:obstacleZonesInPath, reusado por App.tsx — zero segundo
 // cálculo). Sem plano ativo, obstacleZones vem vazio e nada muda.
-const FVG_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 255, 170, 0.10)", border: "rgba(0, 255, 170, 0.85)" };
-const FVG_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.10)", border: "rgba(255, 0, 85, 0.85)" };
-const OB_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 255, 170, 0.15)", border: "rgba(0, 255, 170, 0.85)" };
-const OB_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.15)", border: "rgba(255, 0, 85, 0.85)" };
+const FVG_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(8, 153, 129, 0.10)", border: "rgba(8, 153, 129, 0.85)" };
+const FVG_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(242, 54, 69, 0.10)", border: "rgba(242, 54, 69, 0.85)" };
+const OB_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(8, 153, 129, 0.15)", border: "rgba(8, 153, 129, 0.85)" };
+const OB_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(242, 54, 69, 0.15)", border: "rgba(242, 54, 69, 0.85)" };
 
 // Pedido do Operador ("ver o que está faltando... pra ele chegar na
 // perfeição"): Liquidity Void (liquidity-void-engine.js) — deliberadamente
@@ -97,10 +97,10 @@ const OB_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.15)", borde
 // ciano/magenta: alta distinção visual, nenhuma outra camada do gráfico
 // usa essa família (FVG/OB/Sessão=verde/vermelho, Sweep=laranja,
 // harmônico/triângulo/OCO=roxo, Zona Institucional=lavanda).
-const VOID_BULLISH: ZonePalette = { fill: "rgba(0, 200, 255, 0.10)", border: "rgba(0, 200, 255, 0.35)" };
-const VOID_BEARISH: ZonePalette = { fill: "rgba(255, 60, 172, 0.10)", border: "rgba(255, 60, 172, 0.35)" };
-const VOID_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 200, 255, 0.10)", border: "rgba(0, 200, 255, 0.85)" };
-const VOID_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 60, 172, 0.10)", border: "rgba(255, 60, 172, 0.85)" };
+const VOID_BULLISH: ZonePalette = { fill: "rgba(0, 98, 255, 0.10)", border: "rgba(0, 98, 255, 0.35)" };
+const VOID_BEARISH: ZonePalette = { fill: "rgba(236, 81, 205, 0.10)", border: "rgba(236, 81, 205, 0.35)" };
+const VOID_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 98, 255, 0.10)", border: "rgba(0, 98, 255, 0.85)" };
+const VOID_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(236, 81, 205, 0.10)", border: "rgba(236, 81, 205, 0.85)" };
 
 function paletteFor(kind: "FVG" | "OB" | "VOID", type: "BULLISH" | "BEARISH", isObstacle: boolean): ZonePalette {
   if (kind === "FVG") {

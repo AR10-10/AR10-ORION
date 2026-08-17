@@ -48,7 +48,7 @@ import type { InstitutionalZone } from "../nexus/institutional-zones";
 // continua dono exclusivo da FAIXA (fill+borda, dado geométrico real —
 // zero mudança aqui); LABEL_COLOR exportado para ser a única fonte real
 // dessa cor, nunca duplicada como literal em dois arquivos.
-export const LABEL_COLOR = "rgba(216, 205, 254, 0.90)";
+export const LABEL_COLOR = "rgba(217, 205, 254, 0.90)";
 
 const ZONE_HUE_RGB = "167, 139, 250";
 

@@ -35,8 +35,8 @@ import type { LiquidationEvent } from "../engine-bridge";
 import { drawCanvasLabel, measureCanvasLabel } from "../nexus/canvas-label";
 
 const MAX_BAR_WIDTH_FRACTION = 0.14; // fração da largura do chart — camada secundária, nunca compete com o Volume Profile
-const LONG_FILL = "rgba(0, 255, 170, 0.28)";
-const SHORT_FILL = "rgba(255, 0, 85, 0.28)";
+const LONG_FILL = "rgba(8, 153, 129, 0.28)";
+const SHORT_FILL = "rgba(242, 54, 69, 0.28)";
 // Lapidação institucional (§9.4/§9.7 de AUDITORIA_ECOSSISTEMA_VISUAL.md):
 // H50 puro ("ouro") — era H47 (255,200,0), a 2° de Liquidity Sweep (H45,
 // EnhancedChart_110_Percent.tsx). 2° de matiz na mesma luminosidade/
@@ -45,7 +45,7 @@ const SHORT_FILL = "rgba(255, 0, 85, 0.28)";
 // (ver comentário completo no site do Sweep). Kill Zones (H39, âmbar)
 // não entra nesta diferenciação: geometria diferente (banda vertical de
 // fundo, alpha 0.06-0.22) nunca compete lado a lado com estas duas linhas.
-const PEAK_LABEL_COLOR = "rgba(255, 213, 0, 0.85)";
+const PEAK_LABEL_COLOR = "rgba(255, 162, 0, 0.85)";
 
 interface LiquidationHeatmapPluginProps {
   chart: IChartApi | null;

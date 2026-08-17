@@ -42,9 +42,9 @@ import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx } from "./chart-
 // Volume Profile no TradingView) mitigado pela FORMA (barra, nunca linha)
 // vs. Fibonacci, que também usa este cyan — mesmo raciocínio já aplicado
 // a Kill Zones × Sweep (§6.59). Nenhuma mudança aqui.
-const BAR_FILL = "rgba(0, 240, 255, 0.10)";
-const BAR_FILL_HVN = "rgba(0, 240, 255, 0.22)";
-const BAR_FILL_LVN = "rgba(0, 240, 255, 0.04)";
+const BAR_FILL = "rgba(0, 98, 255, 0.10)";
+const BAR_FILL_HVN = "rgba(0, 98, 255, 0.22)";
+const BAR_FILL_LVN = "rgba(0, 98, 255, 0.04)";
 // POC: achado real diferente do das barras — esta É uma linha de preço
 // (mesma forma que Fibonacci), então o mesmo cyan exato aqui seria a
 // mesma classe de colisão objetiva já corrigida em Sweep×Liquidation-peak

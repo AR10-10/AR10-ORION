@@ -568,14 +568,14 @@ const LINE_STATE_GLYPH: Record<DirectionalLineState, string> = { BULLISH: "↑",
 // É a mesma direção real, só mais compacto.
 const TREND_DIRECTION_GLYPH: Record<TrendChannelDirection, string> = { ASCENDING: "↑", DESCENDING: "↓", FLAT: "→" };
 const VWAP_STATE_COLOR: Record<DirectionalLineState, string> = {
-  BULLISH: "rgba(0, 230, 160, 0.75)",
-  BEARISH: "rgba(255, 61, 113, 0.75)",
-  NEUTRAL: "rgba(255, 235, 190, 0.50)", // branco-dourado (§22 Neutra)
+  BULLISH: "rgba(8, 153, 129, 0.75)",
+  BEARISH: "rgba(242, 54, 69, 0.75)",
+  NEUTRAL: "rgba(255, 231, 190, 0.50)", // branco-dourado (§22 Neutra)
 };
 const NL_STATE_COLOR: Record<DirectionalLineState, string> = {
-  BULLISH: "rgba(0, 230, 160, 0.50)",
-  BEARISH: "rgba(255, 61, 113, 0.50)",
-  NEUTRAL: "rgba(255, 214, 130, 0.45)",
+  BULLISH: "rgba(8, 153, 129, 0.50)",
+  BEARISH: "rgba(242, 54, 69, 0.50)",
+  NEUTRAL: "rgba(255, 209, 130, 0.45)",
 };
 // Especificação Visual Profissional v1 (pedido direto do Operador):
 // "número inteiro quando possível, decimal só quando necessário" nos
@@ -1097,7 +1097,7 @@ export function EnhancedChart_110_Percent({
     const series = chart.addSeries(CandlestickSeries, {
       // AR10_ESPECIFICACAO_VISUAL_PIXEL_PERFECT.md §8.1 (confirmado pelo
       // Operador): paleta de candle da coluna "AR10 Meta" — reverte
-      // deliberadamente o verde/magenta neon (#00ffaa/#ff0055) usado em
+      // deliberadamente o verde/magenta neon (#089981/#f23645) usado em
       // muitos outros componentes deste app fora do gráfico (badges,
       // MiniStat etc.) — essa reconciliação mais ampla fica de fora do
       // escopo (documento é especificação do GRÁFICO, não um reskin do
@@ -1229,7 +1229,7 @@ export function EnhancedChart_110_Percent({
     // acima). Fio de seda: lineWidth 1, sólida. Especificação Visual
     // Profissional v1: ciano #06b6d4 (era azul rgba(66,165,245,...)).
     const emaSeries = chart.addSeries(LineSeries, {
-      color: "rgba(6, 182, 212, 0.85)",
+      color: "rgba(6, 85, 212, 0.85)",
       lineWidth: 1,
       lineStyle: LineStyle.Solid,
       priceLineVisible: false,
@@ -1305,7 +1305,7 @@ export function EnhancedChart_110_Percent({
     // (o próprio comentário original já argumentava que o rótulo era
     // redundante com o title da PRZ).
     const harmonicPolyline = chart.addSeries(LineSeries, {
-      color: "rgba(176, 38, 255, 0.55)",
+      color: "rgba(167, 139, 250, 0.55)",
       lineWidth: 1,
       lineStyle: LineStyle.Solid,
       priceLineVisible: false,
@@ -1318,7 +1318,7 @@ export function EnhancedChart_110_Percent({
     // Polyline acima) — as 3 famílias são uma ÚNICA linguagem visual
     // ("padrão gráfico detectado"), nunca 3 paletas competindo por atenção.
     const triangleLineOptions = {
-      color: "rgba(176, 38, 255, 0.55)",
+      color: "rgba(167, 139, 250, 0.55)",
       lineWidth: 1 as const,
       lineStyle: LineStyle.Solid,
       priceLineVisible: false,
@@ -1684,7 +1684,7 @@ export function EnhancedChart_110_Percent({
             // diferenciação real (ver comentário completo lá). Alpha final
             // multiplicado pelo decaimento real por idade (0.85 é o teto
             // na freshest, nunca um valor fixo).
-            color: `rgba(255, 140, 0, ${(alpha * 0.85).toFixed(3)})`,
+            color: `rgba(255, 162, 0, ${(alpha * 0.85).toFixed(3)})`,
             lineWidth: 1,
             lineStyle: LineStyle.Solid,
             axisLabelVisible: false,
@@ -2201,7 +2201,7 @@ export function EnhancedChart_110_Percent({
           // ratio (papel estrutural) + confluência medida + competição de
           // orçamento visual. É isto que faz a razão áurea se destacar das
           // retrações rasas sem nenhuma linha desaparecer (piso real).
-          color: `rgba(0, 240, 255, ${fibLineAlpha(fibonacciVisualWeights[i] ?? null).toFixed(3)})`,
+          color: `rgba(0, 98, 255, ${fibLineAlpha(fibonacciVisualWeights[i] ?? null).toFixed(3)})`,
           lineWidth: 1,
           lineStyle: LineStyle.Solid,
           axisLabelVisible: false,
@@ -2371,11 +2371,11 @@ export function EnhancedChart_110_Percent({
     };
     const fibAlreadyDrawsEquilibrium =
       visibility.fibonacci && (fibonacciLevels ?? []).some((l) => l.ratio === 0.5 && Number.isFinite(l.price));
-    mkPd(premiumDiscount.rangeHigh.price, "rgba(255, 0, 85, 0.30)", "Premium · topo do range");
+    mkPd(premiumDiscount.rangeHigh.price, "rgba(242, 54, 69, 0.30)", "Premium · topo do range");
     if (!fibAlreadyDrawsEquilibrium) {
       mkPd(premiumDiscount.equilibrium, "rgba(138, 180, 248, 0.30)", "Equilibrium · 50%");
     }
-    mkPd(premiumDiscount.rangeLow.price, "rgba(0, 255, 170, 0.30)", "Discount · fundo do range");
+    mkPd(premiumDiscount.rangeLow.price, "rgba(8, 153, 129, 0.30)", "Discount · fundo do range");
   }, [premiumDiscount, visibility.premium_discount, visibility.fibonacci, fibonacciLevels]);
 
   // Auditoria Final §3 ("caso esteja calculado mas não desenhado, ativar
@@ -2431,7 +2431,7 @@ export function EnhancedChart_110_Percent({
       harmonicLinesRef.current.push(
         series.createPriceLine({
           price,
-          color: "rgba(176, 38, 255, 0.40)",
+          color: "rgba(167, 139, 250, 0.40)",
           lineWidth: 1,
           lineStyle: LineStyle.Solid,
           axisLabelVisible: false,
@@ -2622,16 +2622,16 @@ export function EnhancedChart_110_Percent({
       tradePlanLinesRef.current.push(line);
       return line;
     };
-    const entryColor = "rgba(240, 208, 111, 0.75)"; // amber — the acceptance zone
+    const entryColor = "rgba(240, 193, 111, 0.75)"; // amber — the acceptance zone
     if (tradePlan.entry.low === tradePlan.entry.high) {
       mk(tradePlan.entry.low, entryColor);
     } else {
       mk(tradePlan.entry.high, entryColor);
-      mk(tradePlan.entry.low, "rgba(240, 208, 111, 0.45)");
+      mk(tradePlan.entry.low, "rgba(240, 193, 111, 0.45)");
     }
     // Achado real de 6 screenshots do Operador (iPad + Desktop, BTC/ZEC):
-    // stop/targets/preço vivo ainda no par neon universal (#ff0055/
-    // #00ffaa, canvas-palette.ts) — o MESMO par que candles/grid/crosshair
+    // stop/targets/preço vivo ainda no par neon universal (#f23645/
+    // #089981, canvas-palette.ts) — o MESMO par que candles/grid/crosshair
     // já deixaram pra trás na Fase 1 (convergência TradingView aprovada
     // pelo Operador). canvas-palette.ts documenta que esse par é
     // deliberado em ~10 arquivos (BOS/CHOCH, FVG/OB, sweep, sessões) —
@@ -2857,7 +2857,7 @@ export function EnhancedChart_110_Percent({
       out.push({ price: nlLastValue, text: `NL ${LINE_STATE_GLYPH[s]}${fmtAxisLabelPrice(nlLastValue)}`, color: NL_STATE_COLOR[s] });
     }
     if (visibility.ema && emaLastValue !== null && Number.isFinite(emaLastValue)) {
-      out.push({ price: emaLastValue, text: `E${activeEmaPeriod} ${fmtAxisLabelPrice(emaLastValue)}`, color: "rgba(6, 182, 212, 0.85)" });
+      out.push({ price: emaLastValue, text: `E${activeEmaPeriod} ${fmtAxisLabelPrice(emaLastValue)}`, color: "rgba(6, 85, 212, 0.85)" });
     }
     const lastCandle = data.length > 0 ? data[data.length - 1] : null;
     if (lastCandle && Number.isFinite(lastCandle.close)) {
@@ -2949,7 +2949,7 @@ export function EnhancedChart_110_Percent({
       out.push({
         price: tpoProfileForLabels.pocPrice,
         text: `TPOC ${fmtAxisLabelPrice(tpoProfileForLabels.pocPrice)}`,
-        color: "rgba(240, 208, 111, 0.85)", // mesma cor de POC_LINE em TpoProfilePlugin.tsx
+        color: "rgba(240, 193, 111, 0.85)", // mesma cor de POC_LINE em TpoProfilePlugin.tsx
         side: "left",
       });
       out.push({
@@ -2977,13 +2977,13 @@ export function EnhancedChart_110_Percent({
         out.push({
           price: tpoProfileForLabels.initialBalanceHigh,
           text: `IBH ${fmtAxisLabelPrice(tpoProfileForLabels.initialBalanceHigh)}`,
-          color: "rgba(255, 0, 85, 0.5)", // mesma cor de IB_HIGH em TpoProfilePlugin.tsx
+          color: "rgba(242, 54, 69, 0.5)", // mesma cor de IB_HIGH em TpoProfilePlugin.tsx
           side: "left",
         });
         out.push({
           price: tpoProfileForLabels.initialBalanceLow,
           text: `IBL ${fmtAxisLabelPrice(tpoProfileForLabels.initialBalanceLow)}`,
-          color: "rgba(0, 255, 170, 0.5)", // mesma cor de IB_LOW em TpoProfilePlugin.tsx
+          color: "rgba(8, 153, 129, 0.5)", // mesma cor de IB_LOW em TpoProfilePlugin.tsx
           side: "left",
         });
       }
@@ -3020,7 +3020,7 @@ export function EnhancedChart_110_Percent({
           // Mesmo alpha real da LINHA correspondente (fibLineAlpha sobre o
           // mesmo peso resolvido) — rótulo e linha nunca divergem, mesma
           // disciplina já aplicada a S1/R1 no Achado 2.3.
-          color: `rgba(0, 240, 255, ${fibLineAlpha(fibonacciVisualWeights[i] ?? null).toFixed(3)})`,
+          color: `rgba(0, 98, 255, ${fibLineAlpha(fibonacciVisualWeights[i] ?? null).toFixed(3)})`,
           side: "left",
         });
       });
@@ -3049,7 +3049,7 @@ export function EnhancedChart_110_Percent({
       const hits = targetsHit ?? 0;
       const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
       const long = tradePlan.direction === "LONG";
-      const entryColor = "rgba(240, 208, 111, 0.75)";
+      const entryColor = "rgba(240, 193, 111, 0.75)";
       // EPC FINAL §8 ("Objetos Inteligentes"): nomenclatura curta e
       // padronizada pedida explicitamente — EN/ST/TP1/TP2/TP3 nos OBJETOS
       // GRÁFICOS do canvas (aqui). A barra de comando (BarField "Entry
@@ -3287,7 +3287,7 @@ export function EnhancedChart_110_Percent({
           out.push({
             price: structureBreak.level,
             text: structureBreak.type,
-            color: bullish ? "rgba(0, 255, 170, 0.75)" : "rgba(255, 0, 85, 0.75)",
+            color: bullish ? "rgba(8, 153, 129, 0.75)" : "rgba(242, 54, 69, 0.75)",
             alpha,
             side: "left",
           });
@@ -3379,7 +3379,7 @@ export function EnhancedChart_110_Percent({
               // dizendo exatamente o que "(3x)" dizia antes.
               text: `⚡ SWEEP ${arrow}`,
               secondaryText: cluster.count > 1 ? `ZONE ${cluster.count}x` : undefined,
-              color: "rgba(255, 140, 0, 0.85)", // mesmo tom laranja da price line (ver comentário no efeito acima) — alpha real abaixo controla a opacidade final.
+              color: "rgba(255, 162, 0, 0.85)", // mesmo tom laranja da price line (ver comentário no efeito acima) — alpha real abaixo controla a opacidade final.
               alpha,
               side: "left",
             },
@@ -3432,7 +3432,7 @@ export function EnhancedChart_110_Percent({
           price: currentSessionKeyLevel.high,
           text: `H ${currentSessionKeyLevel.high.toFixed(2)}`,
           secondaryText: labelPrefix,
-          color: "rgba(255, 0, 85, 0.55)",
+          color: "rgba(242, 54, 69, 0.55)",
           side: "left",
         });
       }
@@ -3441,7 +3441,7 @@ export function EnhancedChart_110_Percent({
           price: currentSessionKeyLevel.low,
           text: `L ${currentSessionKeyLevel.low.toFixed(2)}`,
           secondaryText: labelPrefix,
-          color: "rgba(0, 255, 170, 0.55)",
+          color: "rgba(8, 153, 129, 0.55)",
           side: "left",
         });
       }

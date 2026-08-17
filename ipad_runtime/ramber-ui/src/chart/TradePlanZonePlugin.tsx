@@ -44,8 +44,8 @@ interface TradePlanZonePluginProps {
 // Same exact amber already used for the entry price lines in
 // EnhancedChart_110_Percent.tsx (entryColor) — one color per role across
 // the whole chart, never a second palette for the same concept.
-const ZONE_FILL = "rgba(240, 208, 111, 0.10)";
-const ZONE_BORDER = "rgba(240, 208, 111, 0.45)";
+const ZONE_FILL = "rgba(240, 193, 111, 0.10)";
+const ZONE_BORDER = "rgba(240, 193, 111, 0.45)";
 
 // §17: peso visual real por tier — a confluência mais forte lê mais
 // nítida, a mais fraca nunca desaparece (piso legível: mesmo a leitura

@@ -26,10 +26,10 @@ describe('LiquidityZonesPlugin: "Fio de Seda" também vale para a borda desenhad
 });
 
 describe('LiquidityZonesPlugin: reaproveita exatamente a identidade de cor real já usada (nunca remove cor do gráfico)', () => {
-  it('BULLISH continua rgba(0, 255, 170, ...) e BEARISH continua rgba(255, 0, 85, ...) — mesma paleta de sempre', () => {
+  it('BULLISH continua rgba(8, 153, 129, ...) e BEARISH continua rgba(242, 54, 69, ...) — mesma paleta de sempre', () => {
     const plugin = read('../src/chart/LiquidityZonesPlugin.tsx');
-    expect(plugin).toContain('rgba(0, 255, 170,');
-    expect(plugin).toContain('rgba(255, 0, 85,');
+    expect(plugin).toContain('rgba(8, 153, 129,');
+    expect(plugin).toContain('rgba(242, 54, 69,');
   });
 
   it('a área preenchida (fill) é mais translúcida que a borda (border) para cada zona — hierarquia visual honesta', () => {
@@ -49,10 +49,10 @@ describe('LiquidityZonesPlugin: destaque de obstáculo (Diretriz Restauração/I
 
   it('as 4 paletas de obstáculo reaproveitam o MESMO fill das paletas normais — "não é pra tirar as cor do gráfico" continua valendo', () => {
     const p = plugin();
-    expect(p).toContain('const FVG_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 255, 170, 0.10)", border: "rgba(0, 255, 170, 0.85)" };');
-    expect(p).toContain('const FVG_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.10)", border: "rgba(255, 0, 85, 0.85)" };');
-    expect(p).toContain('const OB_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 255, 170, 0.15)", border: "rgba(0, 255, 170, 0.85)" };');
-    expect(p).toContain('const OB_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.15)", border: "rgba(255, 0, 85, 0.85)" };');
+    expect(p).toContain('const FVG_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(8, 153, 129, 0.10)", border: "rgba(8, 153, 129, 0.85)" };');
+    expect(p).toContain('const FVG_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(242, 54, 69, 0.10)", border: "rgba(242, 54, 69, 0.85)" };');
+    expect(p).toContain('const OB_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(8, 153, 129, 0.15)", border: "rgba(8, 153, 129, 0.85)" };');
+    expect(p).toContain('const OB_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(242, 54, 69, 0.15)", border: "rgba(242, 54, 69, 0.85)" };');
   });
 
   it('hierarquia fill<border continua valendo para TODAS as paletas do arquivo, incluindo as de obstáculo e as de Liquidity Void (regex cega, mesma trava do teste de cor acima)', () => {
@@ -68,8 +68,8 @@ describe('LiquidityZonesPlugin: destaque de obstáculo (Diretriz Restauração/I
 
   it('Liquidity Void usa uma família de cor PRÓPRIA (ciano/magenta), nunca o verde/vermelho de FVG/OB — um Void tipicamente CONTÉM vários FVGs, reusar a cor recriaria a "parede de cor" que a Ordem de Fechamento corrigiu', () => {
     const p = plugin();
-    expect(p).toContain('const VOID_BULLISH: ZonePalette = { fill: "rgba(0, 200, 255, 0.10)", border: "rgba(0, 200, 255, 0.35)" };');
-    expect(p).toContain('const VOID_BEARISH: ZonePalette = { fill: "rgba(255, 60, 172, 0.10)", border: "rgba(255, 60, 172, 0.35)" };');
+    expect(p).toContain('const VOID_BULLISH: ZonePalette = { fill: "rgba(0, 98, 255, 0.10)", border: "rgba(0, 98, 255, 0.35)" };');
+    expect(p).toContain('const VOID_BEARISH: ZonePalette = { fill: "rgba(236, 81, 205, 0.10)", border: "rgba(236, 81, 205, 0.35)" };');
     // paletteFor resolve os 3 kinds reais — nunca cai no ramo de OB por engano.
     expect(p).toContain('function paletteFor(kind: "FVG" | "OB" | "VOID", type: "BULLISH" | "BEARISH", isObstacle: boolean): ZonePalette {');
     expect(p).toContain('if (kind === "VOID") {');

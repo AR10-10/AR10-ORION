@@ -557,7 +557,7 @@ describe('"bater o olho profissional" (pendência honesta do turno anterior): EN
     // Ordem "FECHAMENTO" §3: o MOTIVO estrutural (basis) é Nível 2 — saiu
     // do primário para o secundário (fonte menor), nunca foi apagado.
     expect(block).toContain('text: `EN ${tradePlan.direction}`, secondaryText: tradePlan.entry.basis, color: entryColor');
-    expect(block).toContain('const entryColor = "rgba(240, 208, 111, 0.75)";');
+    expect(block).toContain('const entryColor = "rgba(240, 193, 111, 0.75)";');
     // STOP vermelho no preço EFETIVO (ratchet real), BREACHED do preço vivo
     expect(block).toContain('const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);');
     expect(block).toContain('color: "rgba(242, 54, 69, 0.75)"');
@@ -906,7 +906,7 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     // as linhas reais de push destes rótulos, cada uma sem side: no fim
     expect(block).toContain('out.push({ price: vwapLastValue, text: `V ${LINE_STATE_GLYPH[s]}${fmtAxisLabelPrice(vwapLastValue)}`, color: VWAP_STATE_COLOR[s] });');
     expect(block).toContain('out.push({ price: nlLastValue, text: `NL ${LINE_STATE_GLYPH[s]}${fmtAxisLabelPrice(nlLastValue)}`, color: NL_STATE_COLOR[s] });');
-    expect(block).toContain('out.push({ price: emaLastValue, text: `E${activeEmaPeriod} ${fmtAxisLabelPrice(emaLastValue)}`, color: "rgba(6, 182, 212, 0.85)" });');
+    expect(block).toContain('out.push({ price: emaLastValue, text: `E${activeEmaPeriod} ${fmtAxisLabelPrice(emaLastValue)}`, color: "rgba(6, 85, 212, 0.85)" });');
   });
 
   it('resultado real esperado: até 15 rótulos possíveis do lado esquerdo (S1/R1/TREND/CHOC/SWEEP/KEY-H/KEY-L/ZONA INSTITUCIONAL/VPOC/TPOC/VAH/VAL/IBH/IBL/FIB), até 8 do lado direito (VWAP/NL/EMA + até 5 do plano ativo Conselho OU Núcleo) — redução real de densidade no lado que o Operador reportou, não só estética (Sweep/Key Levels somaram-se depois; Zona Institucional migrou pra cá na Diretriz Final — Polimento Visual; VPOC/TPOC/VAH/VAL/IBH/IBL somaram-se na auditoria "Estratégia de Evolução Elite" — task #341, achado real: essas 5 linhas de preço nunca tinham rótulo legível; FIB somou-se no Visual Cleanup — mesmo gap de classe, só níveis com confluência real competem)', () => {
@@ -931,7 +931,7 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
 describe('Diretriz Final — Polimento Visual: rótulo de Zona Institucional migrou para priceAxisLabels (zero colisão com Sweep/Session/S1/R1)', () => {
   it('InstitutionalZonePlugin.tsx: exporta LABEL_COLOR (única fonte real da cor) e NUNCA mais chama drawCanvasLabel/measureCanvasLabel — só desenha a faixa (fill+borda)', () => {
     const s = read('../src/chart/InstitutionalZonePlugin.tsx');
-    expect(s).toContain('export const LABEL_COLOR = "rgba(216, 205, 254, 0.90)";');
+    expect(s).toContain('export const LABEL_COLOR = "rgba(217, 205, 254, 0.90)";');
     expect(s).not.toContain('drawCanvasLabel(');
     expect(s).not.toContain('measureCanvasLabel(');
     expect(s).not.toContain('import { drawCanvasLabel');
@@ -1004,7 +1004,7 @@ describe('Achado real (task #341): rótulos de preço para POC(VP+TPO)/VAH/VAL/I
     const block = c.slice(idx, c.indexOf('return out;', idx));
     expect(block).toContain('if (visibility.tpo_profile && tpoProfileForLabels) {');
     expect(block).toContain('text: `TPOC ${fmtAxisLabelPrice(tpoProfileForLabels.pocPrice)}`,');
-    expect(block).toContain('color: "rgba(240, 208, 111, 0.85)", // mesma cor de POC_LINE em TpoProfilePlugin.tsx');
+    expect(block).toContain('color: "rgba(240, 193, 111, 0.85)", // mesma cor de POC_LINE em TpoProfilePlugin.tsx');
     expect(block).toContain('text: `VAH ${fmtAxisLabelPrice(tpoProfileForLabels.valueAreaHighPrice)}`,');
     expect(block).toContain('text: `VAL ${fmtAxisLabelPrice(tpoProfileForLabels.valueAreaLowPrice)}`,');
     // VPOC e TPOC nunca podem ser o mesmo texto — os dois POCs medem
@@ -1019,9 +1019,9 @@ describe('Achado real (task #341): rótulos de preço para POC(VP+TPO)/VAH/VAL/I
     const block = c.slice(idx, c.indexOf('return out;', idx));
     expect(block).toContain('if (tpoProfileForLabels.initialBalanceComplete) {');
     expect(block).toContain('text: `IBH ${fmtAxisLabelPrice(tpoProfileForLabels.initialBalanceHigh)}`,');
-    expect(block).toContain('color: "rgba(255, 0, 85, 0.5)", // mesma cor de IB_HIGH em TpoProfilePlugin.tsx');
+    expect(block).toContain('color: "rgba(242, 54, 69, 0.5)", // mesma cor de IB_HIGH em TpoProfilePlugin.tsx');
     expect(block).toContain('text: `IBL ${fmtAxisLabelPrice(tpoProfileForLabels.initialBalanceLow)}`,');
-    expect(block).toContain('color: "rgba(0, 255, 170, 0.5)", // mesma cor de IB_LOW em TpoProfilePlugin.tsx');
+    expect(block).toContain('color: "rgba(8, 153, 129, 0.5)", // mesma cor de IB_LOW em TpoProfilePlugin.tsx');
   });
 });
 
@@ -1056,7 +1056,7 @@ describe('Achado real (Visual Cleanup): rótulos de preço para Fibonacci — s�
     const block = c.slice(idx, c.indexOf('return out;', idx));
     expect(block).toContain('text: `FIB ${(level.ratio * 100).toFixed(1)}%${level.score > 0 ? ` ×${level.score}` : ""}`,');
     // Mesma função/mesmo peso da linha — rótulo e linha nunca divergem.
-    expect(block).toContain('color: `rgba(0, 240, 255, ${fibLineAlpha(fibonacciVisualWeights[i] ?? null).toFixed(3)})`,');
+    expect(block).toContain('color: `rgba(0, 98, 255, ${fibLineAlpha(fibonacciVisualWeights[i] ?? null).toFixed(3)})`,');
     expect(block).toContain('side: "left",');
   });
 

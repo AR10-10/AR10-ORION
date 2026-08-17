@@ -54,7 +54,7 @@ const BID_FILL = chartBullishRgba(0.22);
 const ASK_FILL = chartBearishRgba(0.22);
 // Mesmo âmbar já usado nas classificações de atenção deste codebase
 // (FPS/latência do ciclo, TelemetryHealthWidget) — nenhum tom novo.
-const WALL_BORDER = "rgba(240, 208, 111, 0.9)";
+const WALL_BORDER = "rgba(240, 193, 111, 0.9)";
 
 // Achado real (task #285, auditoria "Ajuste Visual"): a etiqueta WALL BID/
 // WALL ASK nunca mostrava o preço real do nível — só o lado. Mesmo gap de

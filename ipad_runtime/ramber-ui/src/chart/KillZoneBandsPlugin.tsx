@@ -177,14 +177,14 @@ export function KillZoneBandsPlugin({ chart, series, data }: KillZoneBandsPlugin
         const clippedWidth = Math.min(rectX + rectWidth, cssWidth) - clippedX;
         if (clippedWidth <= 0) continue;
 
-        ctx.fillStyle = `rgba(255, 176, 32, ${(alpha * FILL_ALPHA).toFixed(3)})`;
+        ctx.fillStyle = `rgba(255, 173, 32, ${(alpha * FILL_ALPHA).toFixed(3)})`;
         ctx.fillRect(clippedX, laneTop, clippedWidth, laneHeight);
         // Fio de Seda (Regra de Ouro 5): 1px sólida real nas bordas
         // verticais da janela, nunca setLineDash. Achado 2.6: o traço
         // agora vai só do topo à base da PRÓPRIA lane — é o que marca o
         // início/fim exatos da janela sem atravessar o preço.
         ctx.lineWidth = 1;
-        ctx.strokeStyle = `rgba(255, 176, 32, ${(alpha * BORDER_ALPHA).toFixed(3)})`;
+        ctx.strokeStyle = `rgba(255, 173, 32, ${(alpha * BORDER_ALPHA).toFixed(3)})`;
         ctx.beginPath();
         ctx.moveTo(Math.round(rectX) + 0.5, laneTop);
         ctx.lineTo(Math.round(rectX) + 0.5, laneBottom);

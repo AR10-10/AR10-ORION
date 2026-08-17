@@ -69,9 +69,9 @@ describe('TpoProfilePlugin: Fio de Seda + geometria real + dirty-flag (mesmas le
     const s = src();
     expect(s).toContain('const ROW_FILL = "rgba(138, 180, 248, 0.10)";');
     expect(s).toContain('const ROW_FILL_VALUE_AREA = "rgba(138, 180, 248, 0.24)";');
-    expect(s).toContain('const POC_LINE = "rgba(240, 208, 111, 0.85)";');
-    expect(s).toContain('const IB_HIGH = "rgba(255, 0, 85, 0.5)";');
-    expect(s).toContain('const IB_LOW = "rgba(0, 255, 170, 0.5)";');
+    expect(s).toContain('const POC_LINE = "rgba(240, 193, 111, 0.85)";');
+    expect(s).toContain('const IB_HIGH = "rgba(242, 54, 69, 0.5)";');
+    expect(s).toContain('const IB_LOW = "rgba(8, 153, 129, 0.5)";');
     expect(s).not.toContain('const POC_LINE = "rgba(236, 81, 205');
   });
 });

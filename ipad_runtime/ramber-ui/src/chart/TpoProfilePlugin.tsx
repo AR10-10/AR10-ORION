@@ -46,12 +46,12 @@ const ROW_FILL_VALUE_AREA = "rgba(138, 180, 248, 0.24)";
 // POC de Volume Profile — os dois POCs medem coisas diferentes (contagem
 // de TEMPO vs. VOLUME) e podem cair em preços diferentes; a mesma cor
 // faria parecer o mesmo nível quando não é.
-const POC_LINE = "rgba(240, 208, 111, 0.85)";
+const POC_LINE = "rgba(240, 193, 111, 0.85)";
 // Initial Balance: mesma dupla real já usada por S1/R1/SessionKeyLevels
 // (teto estrutural = vermelho, piso estrutural = verde) — IB alto/baixo
 // tem o MESMO papel estrutural (referência de range, nunca direção).
-const IB_HIGH = "rgba(255, 0, 85, 0.5)";
-const IB_LOW = "rgba(0, 255, 170, 0.5)";
+const IB_HIGH = "rgba(242, 54, 69, 0.5)";
+const IB_LOW = "rgba(8, 153, 129, 0.5)";
 
 interface TpoProfilePluginProps {
   chart: IChartApi | null;

@@ -84,8 +84,8 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
     const s = src();
     const idx = s.indexOf('const PROJECTION_RGB');
     const block = s.slice(idx, idx + 700);
-    expect(block).not.toContain('0, 255, 170');
-    expect(block).not.toContain('255, 0, 85');
+    expect(block).not.toContain('8, 153, 129');
+    expect(block).not.toContain('242, 54, 69');
   });
 
   it('opacidade real escala linearmente por opinionWeight (0..1), piso honesto quando null — nunca invisível, nunca inventado', () => {
@@ -102,7 +102,7 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
     const alphaIdx = s.indexOf('const alphaOf = (weight: number | null): number => {');
     const block = s.slice(alphaIdx, alphaIdx + 300);
     expect(block).toMatch(/const ceiling = 0\.55/);
-    expect(s).toContain('rgba(255, 0, 85, 0.75)'); // linha real do Stop do Trade Plan, referência do teto
+    expect(s).toContain('rgba(242, 54, 69, 0.75)'); // linha real do Stop do Trade Plan, referência do teto
   });
 
   it('axisLabelVisible false (mais discreto que o Trade Plan, que usa true) e título carrega direção + rank real (TP1/TP2/TP3) + fonte real + tipo de reação real + confiança real', () => {

@@ -96,7 +96,7 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
       if (x1 === null || y === null) return; // fora da área visível agora — Fail-Closed: nunca extrapola.
 
       const bullish = brk.direction === "ALTA";
-      const color = bullish ? "rgba(0, 255, 170, 0.75)" : "rgba(255, 0, 85, 0.75)";
+      const color = bullish ? "rgba(8, 153, 129, 0.75)" : "rgba(242, 54, 69, 0.75)";
       const yLine = Math.round(y) + 0.5;
 
       ctx.globalAlpha = alpha;

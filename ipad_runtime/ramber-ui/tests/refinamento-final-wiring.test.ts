@@ -174,9 +174,9 @@ describe('§7 Premium/Discount: gráfico + Trade Plan strip (display-only, LEI 2
     const block = c.slice(idx, idx + 1500);
     expect(block).toContain('const fibAlreadyDrawsEquilibrium =');
     expect(block).toContain('visibility.fibonacci && (fibonacciLevels ?? []).some((l) => l.ratio === 0.5 && Number.isFinite(l.price));');
-    expect(block).toContain('mkPd(premiumDiscount.rangeHigh.price, "rgba(255, 0, 85, 0.30)", "Premium · topo do range");');
+    expect(block).toContain('mkPd(premiumDiscount.rangeHigh.price, "rgba(242, 54, 69, 0.30)", "Premium · topo do range");');
     expect(block).toMatch(/if \(!fibAlreadyDrawsEquilibrium\) \{\s*mkPd\(premiumDiscount\.equilibrium/);
-    expect(block).toContain('mkPd(premiumDiscount.rangeLow.price, "rgba(0, 255, 170, 0.30)", "Discount · fundo do range");');
+    expect(block).toContain('mkPd(premiumDiscount.rangeLow.price, "rgba(8, 153, 129, 0.30)", "Discount · fundo do range");');
     // dependência real do efeito inclui fibonacci agora — senão o dedup
     // ficaria stale quando só o toggle Fibonacci muda.
     const effectIdx = c.indexOf('}, [premiumDiscount, visibility.premium_discount, visibility.fibonacci, fibonacciLevels]);');
@@ -760,7 +760,7 @@ describe('Achado real do Operador ("linha amarela que eu não sei o que signific
     const c = chart();
     // v3 (decaimento por idade): a cor nativa virou template dinâmico
     // (alpha real multiplicado no desenho), não mais uma string fixa.
-    const idx = c.indexOf('color: `rgba(255, 140, 0, ${(alpha * 0.85).toFixed(3)})`,');
+    const idx = c.indexOf('color: `rgba(255, 162, 0, ${(alpha * 0.85).toFixed(3)})`,');
     expect(idx, 'price line de Liquidity Sweep não encontrada').toBeGreaterThan(-1);
     const block = c.slice(idx, idx + 1300);
     expect(block).toContain('title: "",');
@@ -866,17 +866,38 @@ describe('Achado real do Operador ("linha amarela que eu não sei o que signific
 });
 
 describe('Lapidação institucional (diretiva com imagem de referência): Liquidity Sweep vs. pico do Liquidation Heatmap deixam de compartilhar praticamente o mesmo tom (H45 vs H47, mesma L/S/alpha — imperceptível a olho)', () => {
-  it('Liquidity Sweep (price line + priceAxisLabels): laranja H33 nas 2 ocorrências reais — priceAxisLabels mantém a cor base fixa (0.85), a price line nativa virou template dinâmico (decaimento por idade, v3)', () => {
+  // Achado 3.1 (Auditoria Visual Sistemática) REVOGOU a premissa dos 2 testes
+  // abaixo, e isso é registrado aqui de propósito em vez de apagado.
+  //
+  // A diretiva original pediu que o Liquidity Sweep (laranja H33) e o pico do
+  // Liquidation Heatmap (âmbar H45) deixassem de "compartilhar praticamente o
+  // mesmo tom". A intenção era certa — dois objetos diferentes não podem ser
+  // indistinguíveis — mas a SOLUÇÃO estava errada: separar 2 tons por 12° não
+  // resolve nada (a discriminação humana de matiz em alta saturação precisa de
+  // ~15-25°), e ainda ajudou a produzir os 8 âmbares num intervalo de 17° que a
+  // medição desta rodada encontrou.
+  //
+  // A resposta certa para "estes dois não podem se confundir" nunca foi mais
+  // um matiz: os dois SÃO a mesma família semântica (nível âmbar a observar),
+  // e o que os separa é GEOMETRIA e POSIÇÃO (uma price line horizontal no preço
+  // vs. um pico no heatmap lateral), não cor. Agora ambos usam o mesmo
+  // `attention` canônico.
+  it('Achado 3.1: Sweep e pico do Heatmap convergem para o MESMO âmbar canônico — o que os distingue é geometria, nunca 12° de matiz', () => {
     const c = chart();
-    expect(c).toContain('color: "rgba(255, 140, 0, 0.85)", // mesmo tom laranja da price line');
-    expect(c).toContain('color: `rgba(255, 140, 0, ${(alpha * 0.85).toFixed(3)})`,');
-    expect(c).not.toContain('rgba(255, 191, 0');
+    const heatmap = read('../src/chart/LiquidationHeatmapPlugin.tsx');
+    expect(c).toContain('color: "rgba(255, 162, 0, 0.85)", // mesmo tom laranja da price line');
+    expect(c).toContain('color: `rgba(255, 162, 0, ${(alpha * 0.85).toFixed(3)})`,');
+    expect(heatmap).toContain('const PEAK_LABEL_COLOR = "rgba(255, 162, 0, 0.85)";');
   });
 
-  it('LiquidationHeatmapPlugin.tsx: PEAK_LABEL_COLOR vira rgba(255, 213, 0, 0.85) — ouro puro, distinto do laranja do Sweep', () => {
-    const plugin = read('../src/chart/LiquidationHeatmapPlugin.tsx');
-    expect(plugin).toContain('const PEAK_LABEL_COLOR = "rgba(255, 213, 0, 0.85)";');
-    expect(plugin).not.toContain('rgba(255, 200, 0');
+  it('Achado 3.1: o âmbar do Sweep/Heatmap está no matiz da família attention — a trava de canvas-palette.test.ts governa o resto', () => {
+    // 255,162,0 = matiz 38°, o canônico de `attention`. Os tons antigos desta
+    // dupla (255,140,0 = H33 e 255,191,0 = H45) não existem mais.
+    const c = chart();
+    const heatmap = read('../src/chart/LiquidationHeatmapPlugin.tsx');
+    expect(c).not.toContain('rgba(255, 140, 0');
+    expect(heatmap).not.toContain('rgba(255, 191, 0');
+    expect(heatmap).not.toContain('rgba(255, 200, 0');
   });
 
   it('Kill Zones NÃO entra nesta diferenciação — o TOM âmbar (255,176,32) segue o mesmo. Achado 2.6: os alphas base foram recalibrados (0.06/0.22 → 0.38/0.55) porque a geometria deixou de ser lavagem de altura total e virou faixa de 6px; LABEL_ALPHA sumiu junto com o rótulo (duplicação do badge do header)', () => {
@@ -884,8 +905,8 @@ describe('Lapidação institucional (diretiva com imagem de referência): Liquid
     expect(killZones).toContain('const FILL_ALPHA = 0.38;');
     expect(killZones).toContain('const BORDER_ALPHA = 0.55;');
     expect(killZones).not.toContain('LABEL_ALPHA');
-    expect(killZones).toContain('rgba(255, 176, 32, ${(alpha * FILL_ALPHA).toFixed(3)})');
-    expect(killZones).toContain('rgba(255, 176, 32, ${(alpha * BORDER_ALPHA).toFixed(3)})');
+    expect(killZones).toContain('rgba(255, 173, 32, ${(alpha * FILL_ALPHA).toFixed(3)})');
+    expect(killZones).toContain('rgba(255, 173, 32, ${(alpha * BORDER_ALPHA).toFixed(3)})');
   });
 
   it('Achado 2.6 (regressão travada): Kill Zones NUNCA mais desenha de altura total — zero `0, clippedWidth, cssHeight` e zero lineTo(x, cssHeight); toda geometria vertical vem da lane compartilhada', () => {
@@ -1064,8 +1085,8 @@ describe('Session Key Levels (pedido do Operador, captura de indicador de refer�
 
   it('cor reaproveitada de Suporte/Resistência (S1/R1) — máxima da sessão usa o MESMO vermelho de resistência, mínima o MESMO verde de suporte, zero tom novo na paleta', () => {
     const plugin = read('../src/chart/SessionKeyLevelsPlugin.tsx');
-    expect(plugin).toContain('rgba(255, 0, 85,'); // mesmo tom de R1/SHORT_RGB
-    expect(plugin).toContain('rgba(0, 255, 170,'); // mesmo tom de S1/LONG_RGB
+    expect(plugin).toContain('rgba(242, 54, 69,'); // mesmo tom de R1/SHORT_RGB
+    expect(plugin).toContain('rgba(8, 153, 129,'); // mesmo tom de S1/LONG_RGB
   });
 
   it('cache por identidade de referência desde o NASCIMENTO do plugin (aprendizado de §6.56 aplicado, nunca uma correção retroativa)', () => {

@@ -224,7 +224,7 @@ describe('Achado real de captura de tela do Operador: rótulo BOS/CHOCH migrado 
     expect(block).toContain('const bullish = structureBreak.direction === "ALTA";');
     expect(block).toContain('price: structureBreak.level,');
     expect(block).toContain('text: structureBreak.type,');
-    expect(block).toContain('color: bullish ? "rgba(0, 255, 170, 0.75)" : "rgba(255, 0, 85, 0.75)",');
+    expect(block).toContain('color: bullish ? "rgba(8, 153, 129, 0.75)" : "rgba(242, 54, 69, 0.75)",');
     expect(block).toContain('alpha,');
   });
 

@@ -143,14 +143,14 @@ export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPlugin
           if (y === null) continue;
           const alpha = computeCellAlpha(lvl.size, maxBid) * recency;
           if (alpha <= 0) continue;
-          cells.push({ x: x1, y: y - CELL_HEIGHT / 2, w: cellWidth, h: CELL_HEIGHT, color: `rgba(0, 255, 170, ${alpha.toFixed(3)})` });
+          cells.push({ x: x1, y: y - CELL_HEIGHT / 2, w: cellWidth, h: CELL_HEIGHT, color: `rgba(8, 153, 129, ${alpha.toFixed(3)})` });
         }
         for (const lvl of entry.asks) {
           const y = series.priceToCoordinate(lvl.price);
           if (y === null) continue;
           const alpha = computeCellAlpha(lvl.size, maxAsk) * recency;
           if (alpha <= 0) continue;
-          cells.push({ x: x1, y: y - CELL_HEIGHT / 2, w: cellWidth, h: CELL_HEIGHT, color: `rgba(255, 0, 85, ${alpha.toFixed(3)})` });
+          cells.push({ x: x1, y: y - CELL_HEIGHT / 2, w: cellWidth, h: CELL_HEIGHT, color: `rgba(242, 54, 69, ${alpha.toFixed(3)})` });
         }
       }
 
@@ -174,8 +174,8 @@ export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPlugin
           const strokeAlpha = (0.55 * recency).toFixed(3);
           bubbles.push({
             x, y, r,
-            fill: bullish ? `rgba(0, 255, 170, ${fillAlpha})` : `rgba(255, 0, 85, ${fillAlpha})`,
-            stroke: bullish ? `rgba(0, 255, 170, ${strokeAlpha})` : `rgba(255, 0, 85, ${strokeAlpha})`,
+            fill: bullish ? `rgba(8, 153, 129, ${fillAlpha})` : `rgba(242, 54, 69, ${fillAlpha})`,
+            stroke: bullish ? `rgba(8, 153, 129, ${strokeAlpha})` : `rgba(242, 54, 69, ${strokeAlpha})`,
           });
         }
       }

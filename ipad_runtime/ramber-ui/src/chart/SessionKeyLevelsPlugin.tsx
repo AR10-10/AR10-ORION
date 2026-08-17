@@ -60,10 +60,10 @@ import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeSessionKeyLevels, sessionGenerationWeight, type SessionKeyLevel } from "../nexus/market-session";
 
-const HIGH_COLOR_OPEN = "rgba(255, 0, 85, 0.55)";
-const HIGH_COLOR_CLOSED = "rgba(255, 0, 85, 0.32)";
-const LOW_COLOR_OPEN = "rgba(0, 255, 170, 0.55)";
-const LOW_COLOR_CLOSED = "rgba(0, 255, 170, 0.32)";
+const HIGH_COLOR_OPEN = "rgba(242, 54, 69, 0.55)";
+const HIGH_COLOR_CLOSED = "rgba(242, 54, 69, 0.32)";
+const LOW_COLOR_OPEN = "rgba(8, 153, 129, 0.55)";
+const LOW_COLOR_CLOSED = "rgba(8, 153, 129, 0.32)";
 
 // Convenção declarada (mesmo espírito de MARKET_SESSION_RECENT_BOUNDARY_
 // CANDLES em layer-relevance.ts) — nunca uma medição: últimas 5 ocorrências

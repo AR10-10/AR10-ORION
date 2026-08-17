@@ -489,3 +489,111 @@ dados reais ao vivo, no iPad — só o Operador pode fechar isso.
 #286 (paleta unificada — precedente já existe no Trade Plan), #279
 (auditoria de tamanho de etiquetas), #283 (caixas de confluência →
 overlay lateral).
+
+## Auditoria Visual Sistemática (6ª rodada — "julgamento da parte gráfica do
+sistema todinho, pra não ficar poluído demais... pesquisa nos terminais mais
+profissionais do mundo")
+
+### Achado 3.1 — a poluição tinha um número, e o número era 30
+
+Esta rodada começou medindo em vez de opinando: `grep` de todo
+`rgba(r, g, b` em `chart/*` encontrou **30 tripletos RGB distintos**.
+Convertidos para HSL e ordenados por matiz, o padrão real apareceu — não eram
+30 cores, eram ~7 famílias semânticas espalhadas em 2 a 8 tons quase idênticos:
+
+| matiz | tons | o que era |
+|---|---|---|
+| 33-50° | **8** | âmbar/amarelo (o pior aglomerado: 8 tons em 17°) |
+| 160-170° | 3 | verde/teal |
+| 184-193° | 3 | ciano |
+| 253-278° | 3 | lavanda/roxo |
+| 312-326° | 2 | magenta |
+| 340-355° | 3 | vermelho/rosa |
+| 207-217° | 2 | azul saturado (+3 slates dessaturados) |
+
+**Pesquisa real (autorizada explicitamente):** o limite prático de uma paleta
+categórica é **6-8 cores** — acima de ~6, matizes bem escolhidos já ficam
+difíceis de distinguir em elementos pequenos, que é exatamente o caso de uma
+linha de 1px. Bloomberg Terminal opera com 5 cores; a paleta padrão do
+TradingView, com 7. O princípio de fundo é o data-ink ratio de Tufte, a base
+usada por FT/Economist/Bloomberg. A discriminação humana de matiz em alta
+saturação precisa de ~15-25° — então os 8 âmbares em 17° eram,
+perceptualmente, UMA cor fingindo ser oito.
+
+### Duas conclusões anteriores deste repo foram corrigidas por medição
+
+1. **A versão anterior de `canvas-palette.ts` argumentava** que a maior parte
+   dos 25+ tons era "engenharia de matiz deliberada", e concluiu que só o
+   DepthChartPlugin tinha drift real. O argumento está CERTO para os intervalos
+   ENTRE famílias — e por isso foi preservado. Mas ele nunca foi medido, e não
+   cobria os aglomerados DENTRO de cada família, que não tinham nenhum
+   comentário no código defendendo qualquer um deles. Isso era drift puro.
+2. **O mesmo comentário afirmava** que o magenta do POC ficava "a ~30° do
+   vermelho SHORT". Medido: o tom implementado (`255,60,172`, matiz 326°)
+   estava a **14°**. A intenção declarada estava certa; o valor implementado
+   não a cumpria. O tom adotado agora (`236,81,205`, 312°) cumpre: 43°.
+
+### Decisão do Operador registrada: par alta/baixa
+
+A medição encontrou DOIS pares alta/baixa a 10-15° um do outro — o neon
+original (`#00ffaa`/`#ff0055`, 21 usos cada) e o par TradingView
+(`#089981`/`#f23645`, adotado só para o Trade Plan na task #325). Eles não
+podiam coexistir, e escolher entre eles é identidade visual, não limpeza de
+drift — então foi perguntado. **O Operador escolheu os tons TradingView**, que
+agora valem para o gráfico inteiro. Menos fluorescente para sessão longa, e
+continua a direção já aprovada (task #325, e a saída do estilo neon/CRT nas
+tasks #242-246).
+
+### A paleta canônica (6 famílias)
+
+| família | matiz | valor | papel |
+|---|---|---|---|
+| `attention` | 38° | `245, 158, 11` | nível a observar + contexto de tempo (S1/R1, Kill Zone, sessão, sweep, entrada) |
+| `bullish` | 170° | `8, 153, 129` | alta / LONG / bid / alvo |
+| `measurement` | 217° | `138, 180, 248` | medição e referência sem viés (Fibonacci, Volume Profile, VWAP, Equilibrium, TPO, ZigZag) |
+| `projection` | 255° | `167, 139, 250` | o que ainda NÃO aconteceu (cenário, harmônico) |
+| `institutional` | 312° | `236, 81, 205` | zona/perfil institucional (POC) |
+| `bearish` | 355° | `242, 54, 69` | baixa / SHORT / ask / stop |
+
+Separação mínima entre famílias: **38°** (folgadamente acima do limiar de 24°).
+O ciano da Fibonacci teve de sair porque ficaria a 14° do verde TradingView —
+e Fibonacci/Volume Profile/VWAP/Equilibrium/TPO/ZigZag são todos a MESMA coisa
+semanticamente (medem onde o preço esteve, sem opinar para onde vai), então
+viraram uma família só. Luminosidade e alpha seguem livres dentro de cada
+família — é assim que a hierarquia deste projeto sempre funcionou
+(`nexus/visual-budget.ts`), e a paleta reforça isso em vez de competir.
+
+### Resultado medido
+
+| | antes | depois |
+|---|---|---|
+| tripletos RGB distintos no código | **30** | **20** |
+| cores com significado | 25 | **15 tons em 6 matizes** |
+| pares indistinguíveis (<15°) | 13 | **0** |
+
+### A trava (a parte que importa mais que a limpeza)
+
+O Achado 2.6 ensinou a lição do jeito difícil: a Kill Zone foi reclamada DUAS
+vezes porque a primeira correção não deixou nenhum teste impedindo a
+regressão. Drift de cor é a mesma classe de problema, e pior — não volta de uma
+vez, volta um `rgba()` por vez, cada um parecendo inofensivo na revisão do
+próprio PR. Foi assim que chegamos a 30.
+
+`tests/canvas-palette.test.ts` agora MEDE o matiz de toda cor do CÓDIGO de
+`chart/*` a cada rodada e falha se aparecer qualquer tom fora das 6 famílias,
+ou se duas famílias chegarem a menos de 24° uma da outra. Comentários são
+removidos antes da medição (as citações históricas dos tons antigos são
+memória legítima — mesma lição do Achado 2.5). Revisão manual não é mais a
+defesa.
+
+### Escopo honesto do que NÃO foi feito
+
+A unificação cobre o **canvas** (`src/chart/*`), que é onde a medição dos 30
+tons estava e onde a reclamação de poluição vive. O resto da UI (badges,
+widgets, telemetria em `App.tsx`) tem a própria paleta e **não** foi migrado —
+seria uma superfície muito maior, e meia-migração é pior que nenhuma. Fica
+registrado como o próximo passo real dessa frente, não como concluído.
+Também não foi possível conferir ao vivo: a rede deste ambiente nega Binance,
+então a validação foi `tsc`/`vitest` 3058/3058/`build` + a trava de matiz.
+Como a mudança do par alta/baixa se sente com dados reais no iPad só o
+Operador pode fechar.

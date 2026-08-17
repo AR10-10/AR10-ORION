@@ -67,8 +67,8 @@ interface NeuralMarketAuraPluginProps {
 // Mesma paleta direcional já usada em toda a UI (BOS/CHOCH, badges de
 // direção): verde real para ALTA/sucesso, vermelho real para BAIXA/stop —
 // um significado por cor em todo o app, nunca uma segunda paleta.
-const LONG_RGB = "0, 255, 170";
-const SHORT_RGB = "255, 0, 85";
+const LONG_RGB = "8, 153, 129";
+const SHORT_RGB = "242, 54, 69";
 const NEUTRAL_RGB = "138, 180, 248"; // mesmo azul-acinzentado usado para "neutro/informativo" em toda a UI
 
 // Correção real de auditoria (FASE Ω Priority 3, Finding I): a versão
