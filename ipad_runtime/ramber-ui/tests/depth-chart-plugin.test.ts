@@ -77,6 +77,20 @@ describe('DepthChartPlugin: Fio de Seda + geometria real + dirty-flag (mesmas le
     expect(s).toContain('const WALL_BORDER = "rgba(240, 208, 111, 0.9)";');
     expect(s).toContain('ctx.strokeStyle = WALL_BORDER;');
   });
+
+  it('task #285: etiqueta WALL carrega o preço real do nível (fmtWallPrice), nunca só o lado — mesmo gap de classe já fechado para POC/VAH/VAL/IB (task #341)', () => {
+    const s = src();
+    expect(s).toContain('const text = `WALL ${sideLabel} ${fmtWallPrice(lvl.price)}`;');
+    const fnMatch = s.match(/function fmtWallPrice\(v: number\): string \{([\s\S]*?)\n\}/);
+    expect(fnMatch, 'fmtWallPrice não encontrada').not.toBeNull();
+    // Mesma regra de fmtAxisLabelPrice (EnhancedChart_110_Percent.tsx):
+    // preço >= 1000 vira inteiro (BTC/ETH), senão 2 casas com ".00" podado.
+    // Duplicada aqui de propósito (nunca importada) — aquele arquivo já
+    // importa DepthChartPlugin, o sentido contrário criaria um ciclo real.
+    expect(fnMatch![1]).toContain('if (v >= 1000) return v.toFixed(0);');
+    expect(fnMatch![1]).toContain('return withDecimals.endsWith(".00") ? v.toFixed(0) : withDecimals;');
+    expect(s).not.toMatch(/import \{[^}]*fmtAxisLabelPrice[^}]*\} from "\.\/EnhancedChart_110_Percent"/);
+  });
 });
 
 describe('EnhancedChart: DepthChartPlugin montado (CHART_LAYER_IDS + visibilidade padrão + wiring real)', () => {

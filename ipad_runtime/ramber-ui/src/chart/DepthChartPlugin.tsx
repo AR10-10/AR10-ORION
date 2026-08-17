@@ -56,6 +56,21 @@ const ASK_FILL = chartBearishRgba(0.22);
 // (FPS/latência do ciclo, TelemetryHealthWidget) — nenhum tom novo.
 const WALL_BORDER = "rgba(240, 208, 111, 0.9)";
 
+// Achado real (task #285, auditoria "Ajuste Visual"): a etiqueta WALL BID/
+// WALL ASK nunca mostrava o preço real do nível — só o lado. Mesmo gap de
+// classe já fechado para POC/VAH/VAL/IB (task #341): uma zona de preço real
+// desenhada no gráfico sem número legível, o Operador precisava passar o
+// mouse pra saber o valor exato. Mesma lógica de fmtAxisLabelPrice
+// (EnhancedChart_110_Percent.tsx) — duplicada aqui de propósito, não
+// importada: aquele arquivo já importa DepthChartPlugin, então o sentido
+// contrário criaria um ciclo real (mesmo cuidado já registrado para
+// chart-ultrawide-scale.ts).
+function fmtWallPrice(v: number): string {
+  if (v >= 1000) return v.toFixed(0);
+  const withDecimals = v.toFixed(2);
+  return withDecimals.endsWith(".00") ? v.toFixed(0) : withDecimals;
+}
+
 interface DepthChartPluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
@@ -121,7 +136,7 @@ export function DepthChartPlugin({ chart, series }: DepthChartPluginProps) {
           ctx.lineWidth = 1;
           ctx.strokeStyle = WALL_BORDER;
           ctx.strokeRect(laneRight - w + 0.5, y - barHeight / 2 + 0.5, Math.max(0, w - 1), Math.max(0, barHeight - 1));
-          const text = `WALL ${sideLabel}`;
+          const text = `WALL ${sideLabel} ${fmtWallPrice(lvl.price)}`;
           const size = measureCanvasLabel(ctx, text);
           // Achado real de screenshot (Operador): a etiqueta WALL BID/WALL
           // ASK usava o MESMO âmbar do destaque de barra pros dois lados —
