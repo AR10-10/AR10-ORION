@@ -27,9 +27,23 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
     const s = src();
     const idx = s.indexOf('scenarioLinesRef.current.forEach((line) => series.removePriceLine(line));');
     expect(idx, 'efeito de scenario não encontrado').toBeGreaterThan(-1);
-    const block = s.slice(idx, idx + 150);
+    const block = s.slice(idx, idx + 200);
     expect(block).toContain('scenarioLinesRef.current = [];');
-    expect(block).toContain('if (!scenario) return;');
+    // Achado 2.5 (Visual Cleanup & Rendering Audit): mesmo early-return de
+    // sempre, agora TAMBÉM fail-closed por visibilidade — scenario_projection
+    // ganhou o mesmo toggle manual/AUTO que toda outra camada real já tinha.
+    expect(block).toContain('if (!scenario || !visibility.scenario_projection) return;');
+  });
+
+  it('Achado 2.5: scenario_projection existe em CHART_LAYER_IDS (toggle manual real) — era a única camada sem nenhum', () => {
+    const s = src();
+    expect(s).toContain('"scenario_projection",');
+    expect(s).toContain('scenario_projection: true,');
+  });
+
+  it('Achado 2.5: o efeito recomputa quando visibility.scenario_projection muda — senão desligar a camada no painel não desenharia/limparia nada até o próximo tick de scenario', () => {
+    const s = src();
+    expect(s).toContain('}, [scenario, visibility.scenario_projection]);');
   });
 
   it('Fio de Seda: LineStyle.Solid sempre, zero setLineDash em qualquer lugar do arquivo', () => {

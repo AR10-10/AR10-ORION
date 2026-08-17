@@ -304,6 +304,18 @@ export const CHART_LAYER_IDS = [
   // Laboratório de Evolução (research/engines/zigzag-engine.js, isolado e
   // testado desde a Entrega 35) — pivôs confirmados por deviation%+depth.
   "zigzag",
+  // Achado 2.5 (Visual Cleanup & Rendering Audit — auditoria pedida
+  // diretamente pelo Operador: "tirar os excessos de linha"): o Motor de
+  // Cenários (SCENARIO A/B, "Future Path Map", scenario-engine.ts) era a
+  // ÚNICA anotação real do gráfico sem NENHUM controle — nem toggle
+  // manual, nem regra de relevância automática (grep confirmou zero
+  // menção de scenario/cenário em CHART_LAYER_IDS/layer-relevance.ts
+  // antes desta rodada) — desenhava sempre que a leitura existisse, sem
+  // poder ser desligada nem competir por espaço em modo AUTO como
+  // qualquer outra camada. Mesma classe de gap já corrigida antes para
+  // VWAP/NL/CVD/Fibonacci/Premium-Discount/harmônico/EQH-EQL (comentário
+  // acima).
+  "scenario_projection",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -332,6 +344,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   order_book_depth: true,
   tpo_profile: true,
   zigzag: true,
+  scenario_projection: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -363,6 +376,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   order_book_depth: true,
   tpo_profile: true,
   zigzag: true,
+  scenario_projection: true,
 };
 
 interface EnhancedChartProps {
@@ -2136,7 +2150,7 @@ export function EnhancedChart_110_Percent({
     const series = seriesRef.current;
     scenarioLinesRef.current.forEach((line) => series.removePriceLine(line));
     scenarioLinesRef.current = [];
-    if (!scenario) return;
+    if (!scenario || !visibility.scenario_projection) return;
 
     const alphaOf = (weight: number | null): number => {
       const floor = 0.12;
@@ -2190,7 +2204,7 @@ export function EnhancedChart_110_Percent({
         );
       });
     });
-  }, [scenario]);
+  }, [scenario, visibility.scenario_projection]);
 
   // Refinamento Final §7 (Premium/Discount zones): as 3 fronteiras REAIS do
   // dealing range atual (último swing high confirmado, equilíbrio 50%,

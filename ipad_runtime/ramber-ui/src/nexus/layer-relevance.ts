@@ -76,6 +76,10 @@ export const RELEVANCE_LAYER_IDS = [
   // — mesmo padrão de tpo_profile acima (existência real de pivôs
   // suficientes pro motor desenhar uma linha, nunca proximidade).
   "zigzag",
+  // Achado 2.5 (Visual Cleanup & Rendering Audit): SCENARIO A/B (Future
+  // Path Map, scenario-engine.ts) — mesmo padrão de existência real de
+  // tpo_profile/zigzag/fibonacci acima (hasScenario), nunca proximidade.
+  "scenario_projection",
 ] as const;
 export type RelevanceLayerId = (typeof RELEVANCE_LAYER_IDS)[number];
 
@@ -189,6 +193,13 @@ export interface LayerRelevanceInput {
   // campo deste contrato. null = regime ainda não calculado (amostra
   // insuficiente ou ciclo não OK).
   marketRegime: string | null;
+  // Achado 2.5 (Visual Cleanup & Rendering Audit): true quando o Motor de
+  // Cenários (scenario-engine.ts) devolve pelo menos 1 alvo real em
+  // qualquer um dos 2 caminhos (pathA/pathB) — mesma disciplina de
+  // existência real de hasFibonacciLevels/hasZigZagPivots/hasTpoProfile
+  // acima, nunca proximidade ao preço vivo (as 2 rotas já cobrem LONG e
+  // SHORT simultaneamente, então "perto do preço" não distinguiria nada).
+  hasScenario: boolean;
 }
 
 export interface LayerRelevanceResult {
@@ -424,5 +435,12 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
     // cruzada entre >=2 ferramentas independentes) — nunca sujeito a uma
     // segunda regra de relevância aqui.
     institutional_zones: { relevant: true, emphasis: "normal", reason: "ciclo de vida próprio (institutional-zones.ts) — sem confluência real cruzada, a lista de zonas vem vazia e nada é desenhado" },
+
+    // Achado 2.5: mesmo papel de tpo_profile/zigzag acima — existência
+    // real de pelo menos 1 alvo projetado em qualquer caminho, nunca
+    // proximidade ao preço vivo.
+    scenario_projection: input.hasScenario
+      ? { relevant: true, emphasis: "normal", reason: "Motor de Cenários real com pelo menos 1 alvo projetado (pathA ou pathB)" }
+      : { relevant: false, emphasis: "normal", reason: "nenhum alvo real projetado em nenhum dos 2 caminhos do Motor de Cenários" },
   };
 }

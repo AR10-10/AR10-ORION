@@ -316,3 +316,53 @@ novos entre as duas correções desta rodada); `npm run build` limpo
 (1889 módulos); Playwright real confirmou zero erro de console/página e
 que o caminho padrão (sem resolução recente) continua renderizando o
 motivo honesto de sempre.
+
+## Visual Cleanup & Rendering Audit (4ª rodada — "liberdade total pra
+tirar excessos de linha", pedido do Operador)
+
+### Achado 2.5 — Motor de Cenários (SCENARIO A/B) era a única camada sem NENHUM controle
+
+Auditoria sistemática dos 9 pontos reais de `createPriceLine` (mesma
+técnica das rodadas 2-3) confirmou o gap mais completo encontrado até
+agora: o Motor de Cenários ("Future Path Map", `scenario-engine.ts`) não
+tinha entrada em `CHART_LAYER_IDS` NEM em `layer-relevance.ts` — grep
+confirmou zero menção real em qualquer um dos dois arquivos. Diferente
+de S1/R1 (Achado 2.3, que já tinha a linha desenhando com alpha real,
+só sem competir por orçamento visual), o Scenario Projection não tinha
+absolutamente NADA: nem toggle manual no painel Properties, nem
+possibilidade de o Relevance Engine reduzir/esconder em modo AUTO —
+desenhava sempre que o Conselho produzisse pelo menos 1 alvo projetado,
+sem exceção, sem controle do Operador.
+
+**Resolução aplicada:** novo id `scenario_projection` em
+`CHART_LAYER_IDS`/`DEFAULT_CHART_LAYER_VISIBILITY`/
+`DEFAULT_CHART_LAYER_AUTO_MODE` (mesmo padrão dos outros 24) + gate real
+no `useEffect` (`if (!scenario || !visibility.scenario_projection)
+return;`) + entrada em `CHART_LAYER_PANEL_MODULES` ("CENÁRIOS (FUTURE
+PATH MAP)", painel Properties). `layer-relevance.ts` ganhou o caso
+`scenario_projection` — existência real (`hasScenario`: pelo menos 1
+alvo projetado em pathA OU pathB), mesmo padrão de
+`hasFibonacciLevels`/`hasZigZagPivots`/`hasTpoProfile` — nunca
+proximidade ao preço vivo (as 2 rotas já cobrem LONG e SHORT
+simultaneamente). `App.tsx` computa `hasScenario` a partir do MESMO
+`chartScenario` que o gráfico já recebe — zero segundo cálculo.
+
+**Verificação:** `tsc --noEmit` limpo; `vitest` 3016/3016 (189
+arquivos, incluindo o arquivo de teste pré-existente
+`scenario-projection-chart.test.ts`, que já travava a fiação da linha
+nativa e precisou de 3 ajustes/adições para cobrir o novo gate); `npm
+run build` limpo (1889 módulos); Playwright real confirmou zero erro de
+console/página.
+
+**Nota honesta sobre o pedido mais amplo do Operador** ("liberdade
+total... tirar os excessos... qual a forma correta de evoluir"): a
+resposta de fundo é que o sistema já converge para exatamente essa
+forma — AUTO/Relevance Engine como modo único, `nexus/visual-budget.ts`
+como resolvedor de competição cruzada quando várias camadas relevantes
+disputam o mesmo espaço, e cada achado desta auditoria (2.1 a 2.5)
+fechando uma lacuna real e específica dentro dessa mesma arquitetura, já
+validada e aprovada pelo Operador, em vez de qualquer redesenho novo.
+Backlog restante já mapeado e priorizado por evidência real: #286
+(paleta unificada — precedente já existe no Trade Plan), #279 (auditoria
+de tamanho de etiquetas), #283 (caixas de confluência → overlay
+lateral).

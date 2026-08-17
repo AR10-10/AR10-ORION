@@ -55,6 +55,7 @@ const BASE: LayerRelevanceInput = {
   hasActiveKillZone: false,
   hasSessionKeyLevelNearPrice: false,
   marketRegime: null,
+  hasScenario: false,
 };
 
 describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent.tsx) 1:1 — zero drift, zero gap', () => {
@@ -75,7 +76,7 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of chartIds) {
       expect(relevanceSet.has(id), `camada "${id}" existe em CHART_LAYER_IDS mas não em RELEVANCE_LAYER_IDS`).toBe(true);
     }
-    expect(chartIds.length).toBe(24);
+    expect(chartIds.length).toBe(25);
   });
 
   it('toda chave de RELEVANCE_LAYER_IDS é uma camada real de CHART_LAYER_IDS — nunca uma chave órfã', () => {
@@ -85,12 +86,12 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(chartIds.has(id), `RELEVANCE_LAYER_IDS tem "${id}" que não existe mais em CHART_LAYER_IDS`).toBe(true);
     }
-    expect(RELEVANCE_LAYER_IDS.length).toBe(24);
+    expect(RELEVANCE_LAYER_IDS.length).toBe(25);
   });
 });
 
-describe('computeLayerRelevance: completude — sempre devolve as 24 chaves, nunca uma faltando', () => {
-  it('baseline vazio ainda produz um resultado para cada uma das 24 camadas', () => {
+describe('computeLayerRelevance: completude — sempre devolve as 25 chaves, nunca uma faltando', () => {
+  it('baseline vazio ainda produz um resultado para cada uma das 25 camadas', () => {
     const reading = computeLayerRelevance(BASE);
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(reading[id], `faltando chave ${id}`).toBeDefined();
@@ -249,6 +250,28 @@ describe('tpo_profile: nunca automático — Volume Profile é o Point of Contro
   });
   it('volume_profile permanece o único gate por proximidade real — nada mudou no lado canônico', () => {
     expect(computeLayerRelevance({ ...BASE, volumeProfileNearPrice: true }).volume_profile.relevant).toBe(true);
+  });
+});
+
+// Achado 2.5 (Visual Cleanup & Rendering Audit — pedido do Operador:
+// "tirar os excessos de linha"): grep confirmou que o Motor de Cenários
+// (SCENARIO A/B, "Future Path Map") era a ÚNICA camada real do gráfico
+// sem NENHUM controle — nem toggle manual (CHART_LAYER_IDS), nem regra
+// de relevância automática. Mesma disciplina de existência real de
+// hasFibonacciLevels/hasZigZagPivots/hasTpoProfile — nunca proximidade.
+describe('scenario_projection: existência real (Achado 2.5) — mesmo padrão de hasFibonacciLevels/hasZigZagPivots', () => {
+  it('sem nenhum alvo real projetado em nenhum caminho => não relevante, motivo honesto', () => {
+    const r = computeLayerRelevance(BASE).scenario_projection;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('nenhum alvo real projetado');
+  });
+  it('com pelo menos 1 alvo real projetado => relevante, motivo cita o Motor de Cenários', () => {
+    const r = computeLayerRelevance({ ...BASE, hasScenario: true }).scenario_projection;
+    expect(r.relevant).toBe(true);
+    expect(r.reason).toContain('Motor de Cenários');
+  });
+  it('nunca fica highlight — sem gradiente real de força pra medir (booleano puro, mesma honestidade das outras camadas de existência)', () => {
+    expect(computeLayerRelevance({ ...BASE, hasScenario: true }).scenario_projection.emphasis).toBe('normal');
   });
 });
 

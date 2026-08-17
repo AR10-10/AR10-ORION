@@ -4227,6 +4227,10 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // de Evolução (research/engines/zigzag-engine.js, isolado e testado
   // desde a Entrega 35) — pivôs confirmados por deviation%+depth.
   { id: "zigzag", label: "ZIGZAG" },
+  // Achado 2.5 (Visual Cleanup & Rendering Audit): SCENARIO A/B ("Future
+  // Path Map", scenario-engine.ts) ganha o mesmo toggle/relevância que
+  // toda outra camada real já tinha — era a única sem nenhum dos dois.
+  { id: "scenario_projection", label: "CENÁRIOS (FUTURE PATH MAP)" },
 ];
 
 // Extraído de ChartLayersPanel (painel Properties 320px, pedido do
@@ -8705,6 +8709,13 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     // se tem uma linha real pra traçar — nunca marca relevante sem ter
     // nada real pra mostrar.
     const hasZigZagPivots = Array.isArray(chartData) && computeZigZag(chartData).length >= 2;
+    // Achado 2.5: existência real de pelo menos 1 alvo projetado em
+    // qualquer um dos 2 caminhos do Motor de Cenários — mesma leitura
+    // (chartScenario) que EnhancedChart_110_Percent já recebe pra
+    // desenhar, zero segundo cálculo.
+    const hasScenario = Boolean(
+      chartScenario && (chartScenario.pathA.targets.length > 0 || chartScenario.pathB.targets.length > 0),
+    );
     return {
       tradePlanActive: Boolean(chartTradePlan) || Boolean(engineFallbackLevels),
       obstacleZoneCount: chartObstacleZones.length,
@@ -8733,8 +8744,9 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
       // por Risk Engine/Confluência/Radar em vários pontos deste arquivo,
       // zero segundo cálculo.
       marketRegime: engine?.marketRegime?.regime ?? null,
+      hasScenario,
     };
-  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps, engine?.marketRegime]);
+  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps, engine?.marketRegime, chartScenario]);
   const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setLayerRelevance(layerRelevance);
