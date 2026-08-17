@@ -597,3 +597,46 @@ Também não foi possível conferir ao vivo: a rede deste ambiente nega Binance,
 então a validação foi `tsc`/`vitest` 3058/3058/`build` + a trava de matiz.
 Como a mudança do par alta/baixa se sente com dados reais no iPad só o
 Operador pode fechar.
+
+## Achado 3.2 — o que só a captura ao vivo do Operador podia revelar
+
+Duas capturas reais do terminal (BTC/USDT 1H e 15m) mostraram o pior objeto do
+gráfico. **Nenhuma auditoria ou teste anterior tinha pegado**, e a razão é
+estrutural e vale registrar: os 2 bugs só existem com **livro de ordens REAL
+conectado**, e o ambiente de desenvolvimento desta sessão não alcança a Binance
+(a rede nega `fapi.binance.com`). Nenhuma quantidade de leitura de código teria
+encontrado — precisava do olho do Operador no terminal ao vivo.
+
+**Bug 1 — etiqueta literalmente duplicada.** Na captura de 15m aparecem TRÊS
+etiquetas quase no mesmo pixel: `WALL BID 63570`, `WALL BID 63570` (o mesmo
+texto duas vezes) e `WALL ASK 63570`. Causa raiz: `detectWalls()`
+(nexus/order-book-depth.ts) devolve um boolean POR NÍVEL, sem teto e sem
+agrupamento — vários níveis adjacentes do livro passam do multiplicador ao mesmo
+tempo. E `fmtWallPrice()` arredonda para inteiro acima de 1000, então 63570.1 e
+63570.4 renderizam a MESMA string. O desenho não deduplicava nada.
+
+**Bug 2 — etiqueta fora da própria lane.** O x era
+`laneRight - w - size.width - 4`, isto é, à ESQUERDA da barra: para dentro da
+área dos candles. O plugin calcula `laneRight`/`maxBarWidth` via
+`chart-profile-lanes.ts` exatamente para não invadir vizinho — e então a
+etiqueta ignorava a lane que ele mesmo computou. É o que se vê nas 2 capturas:
+caixas largas atravessando a ação do preço na horizontal. Um teste antigo deste
+arquivo ainda TRAVAVA essa posição errada.
+
+**Resolução:** `resolveWallLabels()` (função pura exportada) — as candidatas dos
+DOIS lados entram na mesma competição (a captura mostrou BID e ASK colidindo no
+mesmo preço, então deduplicar por lado não resolveria), vencendo por força real
+do nível (`lvl.size` do livro, nunca fabricado), descartando texto repetido e
+colisão vertical, com teto de `MAX_WALL_LABELS = 3`. O x passou a ser ancorado
+em `laneRight`, dentro da lane. Regra de Ouro 4 preservada: o CONTORNO de
+destaque continua desenhado em toda wall real — só a etiqueta de TEXTO competiu,
+nenhum dado foi escondido.
+
+**Verificação:** `tsc` limpo; `vitest` 3068/3068 (10 testes novos, 7 deles de
+execução real reproduzindo os 2 cenários exatos das capturas); build limpo.
+
+**Lição de método registrada:** esta é a segunda vez nesta sessão que a captura
+do Operador encontrou o que a auditoria de código não encontrou (a primeira foi
+o Achado 2.6, a Kill Zone de altura total). O padrão é claro — bug que só
+aparece com dado real ao vivo não é achável daqui. Captura do Operador é fonte
+de verdade de primeira classe, não confirmação opcional do que já foi decidido.

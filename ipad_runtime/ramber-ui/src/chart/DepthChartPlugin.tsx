@@ -71,6 +71,77 @@ function fmtWallPrice(v: number): string {
   return withDecimals.endsWith(".00") ? v.toFixed(0) : withDecimals;
 }
 
+// ---------------------------------------------------------------------------
+// Achado 3.2 — DUAS capturas reais do terminal ao vivo enviadas pelo Operador
+// (BTC/USDT 1H e 15m) mostraram o pior objeto do gráfico, e nenhum teste ou
+// auditoria anterior tinha pegado porque ambos só aparecem com livro REAL
+// conectado (o ambiente de desenvolvimento aqui não alcança a Binance):
+//
+//   1. ETIQUETA DUPLICADA. Na captura de 15m aparecem TRÊS etiquetas quase
+//      no mesmo pixel: "WALL BID 63570", "WALL BID 63570" (literalmente o
+//      mesmo texto duas vezes) e "WALL ASK 63570". Causa raiz: detectWalls()
+//      devolve um boolean POR NÍVEL, sem teto e sem agrupamento, então vários
+//      níveis adjacentes do livro passam do multiplicador ao mesmo tempo — e
+//      fmtWallPrice() arredonda para inteiro acima de 1000, então 63570.1 e
+//      63570.4 renderizam a MESMA string. O desenho não deduplicava nada.
+//   2. ETIQUETA FORA DA PRÓPRIA LANE. O x era `laneRight - w - largura - 4`,
+//      isto é, à ESQUERDA da barra — para dentro da área dos candles. O
+//      plugin calcula `laneRight`/`maxBarWidth` via chart-profile-lanes.ts
+//      exatamente para não invadir vizinho, e então a etiqueta ignorava a
+//      lane que ele mesmo computou. É o que se vê nas 2 capturas: caixas
+//      largas atravessando a ação do preço na horizontal.
+//
+// Correção: as etiquetas passam a competir entre si (força real do nível
+// decide), deduplicadas por texto renderizado e por proximidade vertical, com
+// teto — mesma disciplina que price-label-stack.ts já aplica no eixo de preço
+// e que o dedup do Sweep já aplica por preço. E o x fica ancorado DENTRO da
+// lane, nunca mais sobre os candles.
+//
+// A resolução é uma função pura exportada porque a matemática é a parte que
+// pode estar sutilmente errada (CLAUDE.md: fronteira ganha teste de execução
+// real, não só padrão de código).
+export const MAX_WALL_LABELS = 3;
+export const WALL_LABEL_MIN_GAP_PX = 2;
+
+export interface WallLabelCandidate {
+  /** Texto já renderizado — é o que o Operador lê, e a chave de deduplicação:
+   *  dois níveis distintos que arredondam para o mesmo preço são, na tela, a
+   *  mesma etiqueta. */
+  text: string;
+  /** Coordenada y real da barra (series.priceToCoordinate). */
+  y: number;
+  /** Tamanho real do nível no livro — a força que decide quem vence a
+   *  competição. Nunca fabricado: é o `lvl.size` do livro real. */
+  size: number;
+  /** Altura real da caixa de rótulo (measureCanvasLabel). */
+  height: number;
+  /** rgba já resolvida do lado (bid/ask) — passthrough. */
+  fill: string;
+}
+
+/** Resolve QUAIS etiquetas de wall desenhar. Ordem de vitória: força real do
+ *  nível (maior `size` primeiro). Descarta texto repetido e qualquer candidata
+ *  que colidiria verticalmente com uma já aceita. Fail-closed por construção:
+ *  lista vazia entra, lista vazia sai. */
+export function resolveWallLabels(
+  candidates: readonly WallLabelCandidate[],
+  maxLabels: number = MAX_WALL_LABELS,
+  minGapPx: number = WALL_LABEL_MIN_GAP_PX,
+): WallLabelCandidate[] {
+  const byStrength = [...candidates].sort((a, b) => b.size - a.size);
+  const kept: WallLabelCandidate[] = [];
+  const seenText = new Set<string>();
+  for (const c of byStrength) {
+    if (kept.length >= maxLabels) break;
+    if (seenText.has(c.text)) continue; // mesmo preço na tela — 1 etiqueta só
+    const collides = kept.some((k) => Math.abs(k.y - c.y) < (k.height + c.height) / 2 + minGapPx);
+    if (collides) continue; // encostaria numa já aceita e mais forte
+    seenText.add(c.text);
+    kept.push(c);
+  }
+  return kept;
+}
+
 interface DepthChartPluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
@@ -124,6 +195,11 @@ export function DepthChartPlugin({ chart, series }: DepthChartPluginProps) {
       const bidWalls = detectWalls(bids);
       const askWalls = detectWalls(asks);
 
+      // Achado 3.2: as candidatas dos DOIS lados entram na mesma competição —
+      // a captura de 15m mostrou uma etiqueta BID e uma ASK colidindo no mesmo
+      // preço, então deduplicar por lado separadamente não resolveria nada.
+      const wallCandidates: WallLabelCandidate[] = [];
+
       const drawSide = (levels: OrderBookLevel[], walls: boolean[], fill: string, sideLabel: "BID" | "ASK") => {
         levels.forEach((lvl, i) => {
           const y = series.priceToCoordinate(lvl.price);
@@ -132,28 +208,35 @@ export function DepthChartPlugin({ chart, series }: DepthChartPluginProps) {
           ctx.fillStyle = fill;
           ctx.fillRect(laneRight - w, y - barHeight / 2, w, barHeight);
           if (!walls[i]) return;
-          // Fio de Seda: 1px sólida real, nunca tracejada.
+          // Fio de Seda: 1px sólida real, nunca tracejada. O CONTORNO de
+          // destaque continua em toda wall real — quem foi filtrado no
+          // Achado 3.2 é só a ETIQUETA de texto, nunca o dado (Regra de
+          // Ouro 4: a wall segue visível e marcada, só não repete o número).
           ctx.lineWidth = 1;
           ctx.strokeStyle = WALL_BORDER;
           ctx.strokeRect(laneRight - w + 0.5, y - barHeight / 2 + 0.5, Math.max(0, w - 1), Math.max(0, barHeight - 1));
           const text = `WALL ${sideLabel} ${fmtWallPrice(lvl.price)}`;
           const size = measureCanvasLabel(ctx, text);
-          // Achado real de screenshot (Operador): a etiqueta WALL BID/WALL
-          // ASK usava o MESMO âmbar do destaque de barra pros dois lados —
-          // a própria barra já é bullish/bearish (fill acima), só a
-          // etiqueta não seguia. Reusa os mesmos helpers canônicos
-          // (chartBullishRgba/chartBearishRgba, já importados, já usados
-          // pela barra) em vez de inventar uma 3ª cor — zero par novo, só
-          // a etiqueta alinhada à barra que ela rotula. WALL_BORDER
-          // continua servindo só o contorno de destaque da barra (papel
-          // diferente: "isto é uma wall", não direção).
+          // A etiqueta segue a direção da própria barra (bid=alta, ask=baixa),
+          // reusando o par canônico de canvas-palette.ts — zero cor nova.
+          // WALL_BORDER continua servindo só o contorno ("isto é uma wall",
+          // papel diferente de direção).
           const labelFill = sideLabel === "BID" ? chartBullishRgba(0.85) : chartBearishRgba(0.85);
-          drawCanvasLabel(ctx, laneRight - w - size.width - 4, y - size.height / 2, { fill: labelFill, text });
+          wallCandidates.push({ text, y, size: lvl.size, height: size.height, fill: labelFill });
         });
       };
 
       drawSide(bids, bidWalls, BID_FILL, "BID");
       drawSide(asks, askWalls, ASK_FILL, "ASK");
+
+      // Achado 3.2: desenha só as vencedoras, e SEMPRE dentro da própria lane.
+      // O x é ancorado à direita da lane (`laneRight`), nunca mais à esquerda
+      // da barra — era isso que jogava a caixa por cima dos candles nas 2
+      // capturas do Operador.
+      for (const c of resolveWallLabels(wallCandidates)) {
+        const size = measureCanvasLabel(ctx, c.text);
+        drawCanvasLabel(ctx, laneRight - size.width - 2, c.y - c.height / 2, { fill: c.fill, text: c.text });
+      }
     };
 
     const markDirty = () => {
