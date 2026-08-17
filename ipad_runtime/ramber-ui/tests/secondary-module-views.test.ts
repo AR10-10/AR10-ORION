@@ -93,7 +93,7 @@ describe('Command bar: Trade Plan strip (critical numbers in the header, fail-cl
     // CANVAS do gráfico (Regra de Ouro 4 — nunca duplicar) — a barra só
     // chama a função e exibe o resultado.
     expect(strip).toContain('const coreDir = engine?.direction ?? null;');
-    expect(strip).toContain('const { reason, tooltip } = tradePlanAbsenceReason(council, coreDir);');
+    expect(strip).toContain('const { reason, tooltip } = tradePlanAbsenceReason(council, coreDir, recentResolution);');
     expect(strip).not.toMatch(/fetch\(/);
     expect(strip).not.toMatch(/Math\.random/);
 
@@ -107,6 +107,59 @@ describe('Command bar: Trade Plan strip (critical numbers in the header, fail-cl
     expect(fnSrc).toContain('reason: `Núcleo ${coreDir}, Conselho neutro`,');
     expect(fnSrc).not.toMatch(/fetch\(/);
     expect(fnSrc).not.toMatch(/Math\.random/);
+  });
+
+  // Achado 2.4 (Visual Cleanup & Rendering Audit — pedido do Operador:
+  // "quando bater o alvo, automaticamente tentar analisar outro
+  // parâmetro"): investigação real (agente de exploração) confirmou que o
+  // Core Engine/Council/Trade Plan já reavaliam continuamente e sem
+  // atraso assim que um plano resolve (signal-track-record.ts zera
+  // `active` no MESMO tick que prova o último alvo) — o gap real era só
+  // de apresentação, nunca de dado. recentResolutionReason() cobre essa
+  // janela reusando DISSOLVE_CONFIG (aura-lifecycle.ts) — mesma
+  // convenção real já usada pela Neural Market Aura, zero limiar novo.
+  it('recentResolutionReason: só TARGET_HIT/PARTIAL_HIT geram a mensagem — STOP_HIT/REPLACED/OPEN caem nos 4 motivos genéricos de sempre', () => {
+    const s = app();
+    const idx = s.indexOf('function recentResolutionReason(');
+    expect(idx, 'recentResolutionReason não encontrada').toBeGreaterThan(-1);
+    const fnSrc = s.slice(idx, s.indexOf('function tradePlanAbsenceReason('));
+    expect(fnSrc).toContain('if (!lastResolvedPlan) return null;');
+    expect(fnSrc).toContain('if (lastResolvedPlan.status !== "TARGET_HIT" && lastResolvedPlan.status !== "PARTIAL_HIT") return null;');
+  });
+
+  it('recentResolutionReason: reusa a MESMA janela real de dissolução da Neural Market Aura (DISSOLVE_CONFIG.expireCandles) — zero limiar novo inventado', () => {
+    const s = app();
+    const idx = s.indexOf('function recentResolutionReason(');
+    const fnSrc = s.slice(idx, s.indexOf('function tradePlanAbsenceReason('));
+    expect(fnSrc).toContain('const ageBars = (nowMs - lastResolvedPlan.resolvedAt) / timeframeMs;');
+    expect(fnSrc).toContain('if (ageBars >= DISSOLVE_CONFIG.expireCandles) return null;');
+    expect(s).toContain('import { computeAuraReading, TIMEFRAME_MS, DISSOLVE_CONFIG } from "./nexus/aura-lifecycle";');
+  });
+
+  it('tradePlanAbsenceReason: a resolução recente (quando existe) tem prioridade sobre os 4 motivos genéricos do Conselho', () => {
+    const s = app();
+    const idx = s.indexOf('function tradePlanAbsenceReason(');
+    const fnSrc = s.slice(idx, s.indexOf('function TradePlanTopStrip('));
+    expect(fnSrc).toContain('recentResolution?: { reason: string; tooltip: string } | null,');
+    expect(fnSrc).toContain('if (recentResolution) return recentResolution;');
+  });
+
+  it('os 2 call sites reais (barra de comando + canvas) computam recentResolution a partir do MESMO histórico real (trackRecord.history), nunca uma leitura fabricada', () => {
+    const s = app();
+    // Barra de comando: useTrackRecordSnapshot já é usado aqui (trackRecord),
+    // zero hook novo — só uma leitura adicional do MESMO objeto.
+    const stripIdx = s.indexOf('function TradePlanTopStrip(');
+    const stripSrc = s.slice(stripIdx, s.indexOf('// --- TOP BAR ---'));
+    expect(stripSrc).toContain('const lastResolved = trackRecord.history[trackRecord.history.length - 1] ?? null;');
+    expect(stripSrc).toContain('const recentResolution = recentResolutionReason(lastResolved, Date.now(), timeframeMs);');
+    // Canvas (ChartWidget): mesmo padrão, useTrackRecordSnapshot dedicado
+    // (zero prop-drilling a partir de App(), mesma disciplina já usada por
+    // councilForChart logo acima).
+    const chartIdx = s.indexOf('function ChartWidget(');
+    expect(chartIdx).toBeGreaterThan(-1);
+    const chartSrc = s.slice(chartIdx, chartIdx + 5000);
+    expect(chartSrc).toContain('const trackRecordForChart = useTrackRecordSnapshot();');
+    expect(chartSrc).toContain('const lastResolvedPlanForChart = trackRecordForChart.history[trackRecordForChart.history.length - 1] ?? null;');
   });
 
   it('LEI 24: o fallback honesto nunca escreve em engine/council/plan — só lê e exibe (mesma disciplina display-only)', () => {

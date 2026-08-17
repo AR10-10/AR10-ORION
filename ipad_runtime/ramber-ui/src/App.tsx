@@ -166,7 +166,7 @@ import { detectInstitutionalTraps } from "./nexus/trap-detection";
 import { buildConvictionReading } from "./nexus/confluence-engine";
 // Neural Market Aura (especificação do Operador, ver o cabeçalho de
 // nexus/aura-lifecycle.ts para o racional completo de escopo/honestidade).
-import { computeAuraReading, TIMEFRAME_MS } from "./nexus/aura-lifecycle";
+import { computeAuraReading, TIMEFRAME_MS, DISSOLVE_CONFIG } from "./nexus/aura-lifecycle";
 import { computeChartIntegrity, type ChartIntegrityStatus } from "./nexus/chart-integrity";
 // Entrega 40: mesmo book já desenhado pelo ladder abaixo — Bid/Ask Ratio e
 // Imbalance são leituras derivadas puras dos MESMOS bids/asks, zero
@@ -6288,10 +6288,54 @@ function BarField({
 // o Núcleo já direcional — a divergência LEI 24 entre Núcleo e Conselho é
 // real e honesta, nunca "corrigida" escondendo um dos dois lados), ou
 // Conselho direcional mas sem estrutura real mapeável.
+// Achado 2.4 (Visual Cleanup & Rendering Audit — pedido do Operador:
+// "quando bater o alvo, automaticamente tentar analisar outro
+// parâmetro"): investigação real confirmou que o Core Engine
+// (setInterval 30s) e o Trade Plan (buildTradePlan, re-derivado a cada
+// ciclo estrutural) já continuam reavaliando sozinhos, sem nenhum atraso
+// — signal-track-record.ts:281-283 zera `active` no MESMO tick que prova
+// o último alvo. O gap real nunca foi de dado, foi de APRESENTAÇÃO: sem
+// plano ativo, tradePlanAbsenceReason() sempre mostrava um dos 4 motivos
+// genéricos abaixo — idêntico a "nunca houve plano nesta sessão", mesmo
+// no instante seguinte a um alvo real validado. Esta função cobre essa
+// janela, reusando a MESMA convenção real que a Neural Market Aura já
+// usa para "por quanto tempo uma resolução ainda é relevante mostrar"
+// (DISSOLVE_CONFIG, aura-lifecycle.ts, agora exportado) — zero limiar
+// novo inventado, zero segunda leitura do histórico (mesmo
+// trackRecord.history que a Aura e o toast de alerta já leem). Só
+// TARGET_HIT/PARTIAL_HIT entram aqui (Regra de Ouro 4: são validações
+// reais dignas de "o sistema já seguiu em frente"); STOP_HIT continua
+// caindo nos 4 motivos genéricos abaixo — uma perda limpa não é uma
+// "resolução para anunciar", e re-explicar por que o Conselho está
+// neutro/travado agora é mais honesto do que insistir no stop antigo.
+function recentResolutionReason(
+  lastResolvedPlan: TrackedPlan | null,
+  nowMs: number,
+  timeframeMs: number,
+): { reason: string; tooltip: string } | null {
+  if (!lastResolvedPlan) return null;
+  if (lastResolvedPlan.status !== "TARGET_HIT" && lastResolvedPlan.status !== "PARTIAL_HIT") return null;
+  if (lastResolvedPlan.resolvedAt === null || !Number.isFinite(timeframeMs) || timeframeMs <= 0) return null;
+  const ageBars = (nowMs - lastResolvedPlan.resolvedAt) / timeframeMs;
+  if (ageBars >= DISSOLVE_CONFIG.expireCandles) return null;
+  if (lastResolvedPlan.status === "TARGET_HIT") {
+    return {
+      reason: "Alvo atingido · reanalisando",
+      tooltip: "O último plano completou todos os alvos reais (ladder inteiro validado). O Core Engine e o Conselho já seguem reavaliando a estrutura ao vivo, no mesmo ciclo de sempre, para o próximo plano real — nunca um placeholder parado no alvo antigo.",
+    };
+  }
+  return {
+    reason: "Alvo parcial · reanalisando",
+    tooltip: "O último plano validou pelo menos um alvo real antes do preço devolver ao stop já ajustado (ganho parcial honesto, nunca contado como perda). O Core Engine e o Conselho já seguem reavaliando a estrutura ao vivo para o próximo plano real.",
+  };
+}
+
 function tradePlanAbsenceReason(
   council: CouncilDecision | null,
   coreDir: "LONG" | "SHORT" | null,
+  recentResolution?: { reason: string; tooltip: string } | null,
 ): { reason: string; tooltip: string } {
+  if (recentResolution) return recentResolution;
   if (!council) {
     return {
       reason: "Aguardando Conselho",
@@ -6331,7 +6375,7 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   // 1 número aqui, o painel Trade Plan (ModulePanel) mostra a escada
   // inteira.
   const trackRecord = useTrackRecordSnapshot();
-  const { convictionReading, etaReading, engine } = useContext(WidgetContext) || {};
+  const { convictionReading, etaReading, engine, chartTimeframe } = useContext(WidgetContext) || {};
   const council = useCouncilSnapshot();
   // Refinamento Final §7 ("integradas ao Trade Plan"): leitura real de
   // Premium/Discount da store — display-only, qualifica a QUALIDADE da
@@ -6355,7 +6399,10 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
     // em tradePlanAbsenceReason (módulo), reaproveitada também pelo
     // CANVAS do gráfico — zero segunda implementação.
     const coreDir = engine?.direction ?? null;
-    const { reason, tooltip } = tradePlanAbsenceReason(council, coreDir);
+    const lastResolved = trackRecord.history[trackRecord.history.length - 1] ?? null;
+    const timeframeMs = TIMEFRAME_MS[chartTimeframe as string] ?? TIMEFRAME_MS["15m"];
+    const recentResolution = recentResolutionReason(lastResolved, Date.now(), timeframeMs);
+    const { reason, tooltip } = tradePlanAbsenceReason(council, coreDir, recentResolution);
     return (
       <div className="flex items-stretch pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap" title={tooltip}>
         <BarField label="Trade Plan" value={reason} labelClass="text-[#8ab4f8]/50" valueClass="text-[#8ab4f8]/70" />
@@ -8380,9 +8427,18 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // nunca uma segunda leitura/lógica. useCouncilSnapshot() é o MESMO hook
   // Zustand que TradePlanTopStrip já usa — zero prop-drilling novo.
   const councilForChart = useCouncilSnapshot();
+  // Achado 2.4: mesmo hook/mesma leitura de histórico que TradePlanTopStrip
+  // já usa (useTrackRecordSnapshot) — zero segunda fonte para "qual foi o
+  // último plano resolvido".
+  const trackRecordForChart = useTrackRecordSnapshot();
+  const lastResolvedPlanForChart = trackRecordForChart.history[trackRecordForChart.history.length - 1] ?? null;
   const chartTradePlanAbsenceReason = chartTradePlan
     ? null
-    : tradePlanAbsenceReason(councilForChart, engine?.direction ?? null).reason;
+    : tradePlanAbsenceReason(
+        councilForChart,
+        engine?.direction ?? null,
+        recentResolutionReason(lastResolvedPlanForChart, Date.now(), TIMEFRAME_MS[chartTimeframe as string] ?? TIMEFRAME_MS["15m"]),
+      ).reason;
   // EPC §5/§6 (continuação — relato direto do Operador: "falta aparecer
   // entrada e alvo/alvo2/alvo3 no gráfico"): o Core Engine (LEI 24, único
   // emissor real de LONG/SHORT/WAIT) já computa seu PRÓPRIO stop/target1/

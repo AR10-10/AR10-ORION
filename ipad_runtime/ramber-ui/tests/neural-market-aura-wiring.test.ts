@@ -169,7 +169,7 @@ describe('EnhancedChart_110_Percent.tsx: aura montada ANTES da caixa de entrada 
 describe('App.tsx: ChartWidget computa auraReading reaproveitando trackRecord real + confluenceCorridor da store (Fase 5)', () => {
   it('importa computeAuraReading/TIMEFRAME_MS de nexus/aura-lifecycle', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('import { computeAuraReading, TIMEFRAME_MS } from "./nexus/aura-lifecycle";');
+    expect(app).toContain('import { computeAuraReading, TIMEFRAME_MS, DISSOLVE_CONFIG } from "./nexus/aura-lifecycle";');
   });
 
   it('usa useTrackRecordSnapshot (mesma fatia real do Signal Track Record) + useConfluenceCorridorSnapshot (Fase 5, já obstáculo-ciente), nunca um segundo cálculo de convicção', () => {

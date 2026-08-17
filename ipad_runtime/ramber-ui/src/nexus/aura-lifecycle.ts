@@ -147,7 +147,12 @@ function birthAlpha(ageBars: number): number {
 
 // Dissolução: reaproveita o MESMO ageAlpha do Ciborgue Vivo (candles, não
 // relógio de parede) — zero segunda matemática de decaimento.
-const DISSOLVE_CONFIG: DecayConfig = { fadeStartCandles: 2, expireCandles: 12, minAlpha: 0.08 };
+// Exportada (Achado 2.4, Visual Cleanup & Rendering Audit): App.tsx reusa
+// esta MESMA janela real de dissolução para decidir por quanto tempo a
+// barra de comando/canvas ainda menciona "acabou de resolver" quando não
+// há plano ativo — zero segunda convenção de "quanto tempo uma resolução
+// ainda é relevante mostrar" inventada à parte.
+export const DISSOLVE_CONFIG: DecayConfig = { fadeStartCandles: 2, expireCandles: 12, minAlpha: 0.08 };
 
 // Proximidade real do alvo, escalada pelo ATR% real (Fase D) — nunca uma
 // porcentagem fixa arbitrária: um ativo com ATR alto precisa de uma banda

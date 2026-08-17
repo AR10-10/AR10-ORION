@@ -267,10 +267,52 @@ nunca mercado real) confirmou zero erro de console/página em 3 execuções
 e presença real de pixels na cor âmbar no canvas renderizado (a
 mudança não quebrou a série de renderização nem removeu a cor).
 
-**Ainda não tratado nesta rodada (honesto, não escondido):** o pedido
-"quando bater o alvo, automaticamente analisar outro parâmetro" e a
-pesquisa mais profunda sobre paleta "que não dói à vista"/precisão por
-timeframe — ambos exigem investigação própria (o primeiro precisa mapear
-o ciclo de vida real de um Trade Plan totalmente resolvido antes de
-desenhar qualquer solução; o segundo precisa de pesquisa direcionada
-nova) e ficam para a próxima rodada desta mesma auditoria.
+**Pesquisa entregue nesta rodada:** paleta "que não dói à vista" —
+confirmado contra fontes reais de 2026 que paletas dark-mode
+profissionais para terminais de trading favorecem saturação moderada e
+preenchimentos translúcidos sobre neon puro, e que um fundo bem escuro
+dessaturado (~#0B0E13) é a base recomendada — o AR10 já usa #0B0E14
+(Fase 1 de convergência TradingView), praticamente idêntico. O gap real
+remanescente é o par neon `#00ffaa`/`#ff0055` ainda usado em ~10 arquivos
+(candles/FVG/OB/structure-breaks/sweep/sessões) — já existe precedente
+direto (Trade Plan/preço vivo migraram para o tom TradingView mais suave
+`#089981`/`#F23645` por exatamente este motivo). Isto é o item #286
+("paleta de cores unificada") — cross-cutting o suficiente (10 arquivos,
+identidade visual inteira do gráfico) para merecer sua própria rodada
+dedicada com comparação antes/depois completa, não uma extensão desta.
+
+### Achado 2.4 — "bateu o alvo, o sistema já analisa outro parâmetro" era um gap de apresentação, não de dado
+
+Pedido do Operador: quando o sistema valida/bate um alvo, ele deveria
+"automaticamente tentar analisar outro parâmetro". Investigação real
+(agente de exploração, `signal-track-record.ts`/`App.tsx`/
+`aura-lifecycle.ts`) confirmou: o Core Engine (`setInterval` 30s) e o
+Trade Plan (`buildTradePlan`, re-derivado a cada ciclo estrutural) já
+continuam reavaliando sozinhos, SEM nenhum atraso — o `active` do
+track record zera no MESMO tick que prova o último alvo
+(`signal-track-record.ts:281-283`), e o próximo `buildTradePlan` real
+assume assim que uma estrutura nova qualificar. O gap real nunca foi de
+dado — foi de APRESENTAÇÃO: sem plano ativo, a barra de comando e o
+canvas sempre mostravam um dos 4 motivos genéricos ("Conselho neutro"
+etc.), indistinguível de "nunca houve plano nesta sessão", mesmo no
+instante seguinte a um TARGET_HIT/PARTIAL_HIT real. Os únicos
+consumidores reais de uma resolução eram todos efêmeros (toast 5s, voz,
+fade da Aura em ~12 candles) — nada persistente.
+
+**Resolução aplicada:** `recentResolutionReason()` (novo, App.tsx) cobre
+essa janela reusando a MESMA convenção real que a Neural Market Aura já
+usa para "por quanto tempo uma resolução ainda é relevante mostrar"
+(`DISSOLVE_CONFIG.expireCandles = 12`, agora exportado de
+`aura-lifecycle.ts` — zero limiar novo inventado). Só TARGET_HIT/
+PARTIAL_HIT entram (validações reais); STOP_HIT continua nos motivos
+genéricos de sempre. `tradePlanAbsenceReason()` passa a checar essa
+resolução recente PRIMEIRO — nos 2 lugares reais que já mostravam o
+motivo de ausência (barra de comando `TradePlanTopStrip` e o canvas via
+`ChartWidget`), ambos lendo o MESMO `trackRecord.history` real (zero
+segunda fonte).
+
+**Verificação:** `tsc --noEmit` limpo; `vitest` 3011/3011 (14 testes
+novos entre as duas correções desta rodada); `npm run build` limpo
+(1889 módulos); Playwright real confirmou zero erro de console/página e
+que o caminho padrão (sem resolução recente) continua renderizando o
+motivo honesto de sempre.
