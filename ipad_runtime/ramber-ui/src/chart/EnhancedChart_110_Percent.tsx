@@ -2766,6 +2766,31 @@ export function EnhancedChart_110_Percent({
         });
       }
     }
+    // Achado real (Visual Cleanup, pedido do Operador "a Fibonacci... bem
+    // detalhada"): as 5 linhas de Fibonacci (acima, useEffect próprio)
+    // desenham com axisLabelVisible:false e NUNCA entravam neste array —
+    // o `title` nativo ("FIB 61.8% ×2") nunca aparecia em lugar nenhum da
+    // tela (nem eixo, nem hover — hover não existe neste app, ver
+    // price-label-stack.ts). Mesmo gap de classe já fechado para POC/VAH/
+    // VAL/IB (task #341) e WALL (task #285): uma linha de preço real sem
+    // nenhum número legível. Gate real (nunca todas as 5 de uma vez —
+    // isso inundaria o teto de 3 rótulos de contexto só com Fibonacci):
+    // só os níveis com confluência REAL (score > 0, o mesmo score que já
+    // decide a opacidade da linha) competem por um rótulo — nível sem
+    // nenhuma fonte real de acordo permanece uma linha discreta sem
+    // etiqueta, honesto (Regra de Ouro 3: score 0 é comum, nunca fabrica
+    // confluência pra caber um rótulo).
+    if (visibility.fibonacci) {
+      for (const level of fibonacciLevels ?? []) {
+        if (!(level.score > 0) || !Number.isFinite(level.price)) continue;
+        out.push({
+          price: level.price,
+          text: `FIB ${(level.ratio * 100).toFixed(1)}% ×${level.score}`,
+          color: "rgba(0, 240, 255, 0.55)", // mesma cor de linha score>0 (useEffect do Fibonacci acima)
+          side: "left",
+        });
+      }
+    }
     // "bater o olho profissional" (pendência honesta do turno anterior): os
     // rótulos de ENTRY/STOP/TARGET entram no MESMO array/sistema
     // anti-colisão dos demais níveis — nunca mais o eixo NATIVO, que os
@@ -3239,7 +3264,7 @@ export function EnhancedChart_110_Percent({
       });
     }
     return out;
-  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights]);
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels]);
 
   return (
     <div className="absolute inset-0">

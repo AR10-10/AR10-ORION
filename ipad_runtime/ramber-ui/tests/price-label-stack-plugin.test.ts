@@ -474,7 +474,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('priceAxisLabels recalcula a cada tick real de livePrice — nunca uma etiqueta de preço congelada', () => {
     const s = chart();
-    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights]);');
+    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels]);');
     expect(depsIdx, 'dependency array de priceAxisLabels não inclui livePrice').toBeGreaterThan(-1);
   });
 
@@ -703,7 +703,7 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
 
   it('engineFallbackLevels entra nas deps de priceAxisLabels — recalcula quando o Núcleo muda de leitura', () => {
     const s = chart();
-    expect(s).toContain('livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights]);');
+    expect(s).toContain('livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels]);');
   });
 
   it('overlay de texto do canto (tradePlanAbsenceReason) nunca fica auto-contraditório: quando as linhas do Núcleo estão visíveis, o texto deixa explícito que é só o plano do CONSELHO que falta — nunca "SEM TRADE PLAN" sozinho com linhas reais na tela', () => {
@@ -884,13 +884,13 @@ describe('Achado real do Operador ("tá ficando só numa lateral direita"): crit
     expect(block).toContain('out.push({ price: emaLastValue, text: `E${activeEmaPeriod} ${fmtAxisLabelPrice(emaLastValue)}`, color: "rgba(6, 182, 212, 0.85)" });');
   });
 
-  it('resultado real esperado: até 14 rótulos possíveis do lado esquerdo (S1/R1/TREND/CHOC/SWEEP/KEY-H/KEY-L/ZONA INSTITUCIONAL/VPOC/TPOC/VAH/VAL/IBH/IBL), até 8 do lado direito (VWAP/NL/EMA + até 5 do plano ativo Conselho OU Núcleo) — redução real de densidade no lado que o Operador reportou, não só estética (Sweep/Key Levels somaram-se depois; Zona Institucional migrou pra cá na Diretriz Final — Polimento Visual; VPOC/TPOC/VAH/VAL/IBH/IBL somaram-se na auditoria "Estratégia de Evolução Elite" — task #341, achado real: essas 5 linhas de preço nunca tinham rótulo legível)', () => {
+  it('resultado real esperado: até 15 rótulos possíveis do lado esquerdo (S1/R1/TREND/CHOC/SWEEP/KEY-H/KEY-L/ZONA INSTITUCIONAL/VPOC/TPOC/VAH/VAL/IBH/IBL/FIB), até 8 do lado direito (VWAP/NL/EMA + até 5 do plano ativo Conselho OU Núcleo) — redução real de densidade no lado que o Operador reportou, não só estética (Sweep/Key Levels somaram-se depois; Zona Institucional migrou pra cá na Diretriz Final — Polimento Visual; VPOC/TPOC/VAH/VAL/IBH/IBL somaram-se na auditoria "Estratégia de Evolução Elite" — task #341, achado real: essas 5 linhas de preço nunca tinham rótulo legível; FIB somou-se no Visual Cleanup — mesmo gap de classe, só níveis com confluência real competem)', () => {
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
     const end = c.indexOf('return out;', idx);
     const block = c.slice(idx, end);
     const leftSideCount = (block.match(/side: "left",/g) ?? []).length;
-    expect(leftSideCount).toBe(14);
+    expect(leftSideCount).toBe(15);
   });
 });
 
@@ -997,6 +997,40 @@ describe('Achado real (task #341): rótulos de preço para POC(VP+TPO)/VAH/VAL/I
     expect(block).toContain('color: "rgba(255, 0, 85, 0.5)", // mesma cor de IB_HIGH em TpoProfilePlugin.tsx');
     expect(block).toContain('text: `IBL ${fmtAxisLabelPrice(tpoProfileForLabels.initialBalanceLow)}`,');
     expect(block).toContain('color: "rgba(0, 255, 170, 0.5)", // mesma cor de IB_LOW em TpoProfilePlugin.tsx');
+  });
+});
+
+// Achado real (Visual Cleanup, pedido direto do Operador — "a Fibonacci...
+// bem detalhada"): as 5 linhas nativas de Fibonacci (createPriceLine,
+// axisLabelVisible:false) tinham um `title` real ("FIB 61.8% ×2") que
+// NUNCA aparecia em lugar nenhum da tela — nem eixo nativo (desligado de
+// propósito), nem este overlay (nunca entrava no array `out`), nem hover
+// (não existe neste app). Mesma classe de gap já fechada pra POC/VAH/VAL/
+// IB (task #341) e WALL (task #285).
+describe('Achado real (Visual Cleanup): rótulos de preço para Fibonacci — só níveis com confluência real', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('só níveis com score > 0 competem por rótulo — score 0 é honesto e comum, nunca fabrica confluência pra caber uma etiqueta', () => {
+    const c = chart();
+    const idx = c.indexOf('const priceAxisLabels = useMemo');
+    const block = c.slice(idx, c.indexOf('return out;', idx));
+    expect(block).toContain('if (visibility.fibonacci) {');
+    expect(block).toContain('for (const level of fibonacciLevels ?? []) {');
+    expect(block).toContain('if (!(level.score > 0) || !Number.isFinite(level.price)) continue;');
+  });
+
+  it('texto reusa EXATAMENTE o mesmo formato do title nativo (ratio×100 + score real), cor idêntica à linha score>0, side:"left"', () => {
+    const c = chart();
+    const idx = c.indexOf('const priceAxisLabels = useMemo');
+    const block = c.slice(idx, c.indexOf('return out;', idx));
+    expect(block).toContain('text: `FIB ${(level.ratio * 100).toFixed(1)}% ×${level.score}`,');
+    expect(block).toContain('color: "rgba(0, 240, 255, 0.55)", // mesma cor de linha score>0 (useEffect do Fibonacci acima)');
+    expect(block).toContain('side: "left",');
+  });
+
+  it('dependências reais do useMemo incluem visibility.fibonacci e fibonacciLevels — senão o rótulo ficaria stale ao ligar/desligar a camada', () => {
+    const c = chart();
+    expect(c).toContain('institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels]);');
   });
 });
 
