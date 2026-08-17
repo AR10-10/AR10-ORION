@@ -640,3 +640,42 @@ do Operador encontrou o que a auditoria de código não encontrou (a primeira fo
 o Achado 2.6, a Kill Zone de altura total). O padrão é claro — bug que só
 aparece com dado real ao vivo não é achável daqui. Captura do Operador é fonte
 de verdade de primeira classe, não confirmação opcional do que já foi decidido.
+
+## Achado 3.3 — "algumas linhas não ficam retas": o defeito era matemático
+
+Reclamação direta do Operador. A investigação começou eliminando as 2 causas
+mais prováveis **com evidência**, e as duas caíram:
+
+| hipótese | verificação | resultado |
+|---|---|---|
+| Desalinhamento de meio-pixel (causa clássica de linha borrada/ondulada em canvas HiDPI) | grep dos 6 pontos que desenham linha horizontal em `chart/*` | **Todos já usavam `Math.round(y) + 0.5`.** Correto |
+| Escala de preço logarítmica (transforma reta em curva) | grep por `PriceScaleMode`/`logarithmic` | **Zero ocorrências** — escala linear |
+| Regressão *rolling* (curva por natureza) | leitura de `computeTrendChannel` | **Ajuste único** — matematicamente uma reta |
+
+O defeito estava no **eixo X** de `nexus/trend-channel-engine.ts`: a regressão
+era ajustada contra a **posição no array** (`slope * i`), mas os pontos emitidos
+são plotados contra o **timestamp real** (`window[i].time`). Enquanto a série
+não tem buraco, índice e tempo são proporcionais e a reta sai reta. Quando falta
+um candle — o que acontece de verdade, a ponto de este projeto ter um
+`Chart Integrity Engine` inteiro só para detectar esses gaps — o índice avança 1
+enquanto o tempo salta 2 intervalos, e **uma reta no espaço de índice vira uma
+linha com joelho no espaço de tempo**, exatamente no buraco.
+
+**O agravante:** este projeto já aprendeu esta lição uma vez. As tasks #195/#196
+corrigiram o erro idêntico em `lorentzian-classifier.js` ("espaçamento
+cronológico"). O canal de tendência tinha a mesma falha e nunca foi auditado
+junto — é a terceira vez nesta sessão que um erro reincide porque a correção
+anterior não foi propagada para os irmãos (as outras: altura da Kill Zone,
+drift de cor).
+
+**Resolução:** o eixo X passa a ser **tempo real**, normalizado pelo intervalo
+**mediano** entre candles (mediana e não média — um gap gigante não pode
+distorcer a unidade). Propriedade que fecha o risco: com espaçamento uniforme
+`xs[i] === i` exatamente, então a saída é **bit-idêntica** à anterior — zero
+regressão no caminho saudável. Só a série com buraco muda, e lá passa a estar
+correta. `slopePerBar` continua significando inclinação por barra.
+
+**Verificação:** `tsc` limpo; `vitest` 3074/3074 (6 testes novos de execução
+real, incluindo série com 1 buraco, com 2 buracos, com gap de 500 barras, e
+uma checagem de colinearidade que exige inclinação idêntica em TODO segmento —
+resíduo zero em todos); `npm run build` limpo.

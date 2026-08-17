@@ -83,13 +83,57 @@ export function computeTrendChannel(
   const window = valid.slice(-Math.min(windowSize, valid.length));
   const n = window.length;
 
-  const xMean = (n - 1) / 2; // eixo X = posição 0..n-1, média fechada
+  // ==========================================================================
+  // Achado 3.3 — reclamação direta do Operador: "algumas linhas não ficam
+  // retas". Investigação eliminou as 2 causas mais prováveis com evidência
+  // (o alinhamento de meio-pixel do canvas JÁ está correto nos 6 pontos que
+  // desenham linha horizontal; a escala de preço é linear, não há
+  // PriceScaleMode logarítmico em lugar nenhum). O defeito real estava AQUI.
+  //
+  // O eixo X da regressão era a POSIÇÃO NO ARRAY (0..n-1), mas os pontos
+  // emitidos abaixo são plotados contra o TIMESTAMP real (`window[i].time`).
+  // Enquanto a série não tem buraco, índice e tempo são proporcionais e a
+  // reta sai reta. Quando falta um candle — o que acontece de verdade, e a
+  // ponto de este projeto ter um Chart Integrity Engine inteiro
+  // (nexus/chart-integrity.ts) só para detectar esses gaps — o índice avança
+  // 1 enquanto o tempo salta 2 intervalos. Uma reta no espaço de ÍNDICE vira
+  // uma linha com JOELHO no espaço de TEMPO, exatamente no buraco. Era isso
+  // que o Operador estava vendo.
+  //
+  // Este projeto já aprendeu esta lição UMA VEZ, em outro motor: as tasks
+  // #195/#196 corrigiram exatamente o mesmo erro no lorentzian-classifier.js
+  // ("espaçamento cronológico"). O canal de tendência tinha a falha idêntica
+  // e nunca foi auditado junto.
+  //
+  // Correção: o eixo X passa a ser TEMPO REAL, normalizado pelo intervalo
+  // MEDIANO entre candles (mediana, não média — um único gap enorme não pode
+  // distorcer a unidade). Propriedade importante: quando o espaçamento é
+  // uniforme (série saudável), `xs[i] === i` exatamente, então a saída é
+  // BIT-IDÊNTICA à de antes — zero regressão no caminho normal. Só a série
+  // com buraco muda, e lá ela passa a estar certa. `slopePerBar` continua
+  // significando o mesmo (inclinação por barra), porque a unidade do eixo
+  // continua sendo uma barra.
+  // ==========================================================================
+  const times = window.map((c) => c.time);
+  const deltas: number[] = [];
+  for (let i = 1; i < n; i++) {
+    const d = times[i] - times[i - 1];
+    if (d > 0) deltas.push(d);
+  }
+  const sortedDeltas = [...deltas].sort((a, b) => a - b);
+  // Fail-closed: sem nenhum delta positivo (timestamps todos iguais — não
+  // deveria ocorrer com candles reais), cai em 1 e o `den === 0` abaixo
+  // devolve null honesto, nunca uma reta inventada.
+  const step = sortedDeltas.length > 0 ? sortedDeltas[Math.floor(sortedDeltas.length / 2)] : 1;
+  const xs = times.map((t) => (t - times[0]) / step);
+
+  const xMean = xs.reduce((sum, x) => sum + x, 0) / n;
   const yMean = window.reduce((sum, c) => sum + c.close, 0) / n;
 
   let num = 0;
   let den = 0;
   for (let i = 0; i < n; i++) {
-    const dx = i - xMean;
+    const dx = xs[i] - xMean;
     num += dx * (window[i].close - yMean);
     den += dx * dx;
   }
@@ -97,11 +141,12 @@ export function computeTrendChannel(
 
   const slope = num / den;
   const intercept = yMean - slope * xMean;
-  const regressionAt = (i: number) => intercept + slope * i;
+  // Recebe a posição no eixo X REAL (tempo normalizado), nunca mais o índice.
+  const regressionAt = (x: number) => intercept + slope * x;
 
   let sumSquaredResidual = 0;
   for (let i = 0; i < n; i++) {
-    const residual = window[i].close - regressionAt(i);
+    const residual = window[i].close - regressionAt(xs[i]);
     sumSquaredResidual += residual * residual;
   }
   const stdDev = n > 2 ? Math.sqrt(sumSquaredResidual / (n - 1)) : 0;
@@ -111,7 +156,10 @@ export function computeTrendChannel(
   const upper: TrendChannelPoint[] = [];
   const lower: TrendChannelPoint[] = [];
   for (let i = 0; i < n; i++) {
-    const value = regressionAt(i);
+    // Achado 3.3: o valor é avaliado no MESMO eixo em que o ponto é plotado
+    // (tempo real, não índice) — é isso que garante uma reta de verdade na
+    // tela mesmo quando a série tem buraco.
+    const value = regressionAt(xs[i]);
     const time = window[i].time;
     mid.push({ time, value });
     upper.push({ time, value: value + band });
