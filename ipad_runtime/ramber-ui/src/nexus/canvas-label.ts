@@ -25,12 +25,41 @@
 // etiqueta por causa de um recurso opcional). Padding/altura/fonte
 // consistentes, contraste garantido (texto escuro sobre fundo colorido —
 // mesma regra já real de PriceLabelStackPlugin).
-export const CANVAS_LABEL_FONT = "9px -apple-system, sans-serif";
+// ESCALA POR TELA (pedido do Operador: "tamanho padrão de qualquer terminal
+// pra qualquer tela, qualquer monitor, iPad").
+//
+// ACHADO MEDIDO: esta primitiva é usada por 5 plugins (KillZoneBands,
+// LiquidationHeatmap, LiquidityZones, InstitutionalZone, MarketSessionBands) e
+// tinha a fonte CONGELADA em 9px, enquanto o eixo nativo do gráfico e o
+// PriceLabelStackPlugin JÁ escalavam via resolveChartUltraWideScale. Num
+// monitor >= 2560px o tick do eixo virava 13px e a etiqueta de zona continuava
+// 9px — 4px de diferença entre dois textos lado a lado. Não era "fonte
+// pequena": eram DUAS decisões de tamanho para a mesma pergunta, e só uma
+// escutava a tela.
+//
+// Agora é uma decisão só, na mesma fonte de verdade.
+import { resolveCanvasLabelFont, resolveCanvasLabelFontPx, CANVAS_LABEL_BASE_FONT_PX } from "../chart/chart-ultrawide-scale";
+
+/** Largura real da viewport, com fallback honesto fora do browser (vitest,
+ *  Worker, SSR): cai no piso de produção, nunca quebra e nunca inventa. */
+function viewportWidth(): number {
+  return typeof window !== "undefined" && Number.isFinite(window.innerWidth) ? window.innerWidth : 0;
+}
+
+/** Fonte da etiqueta NESTA tela. Mantido como função (não constante) porque o
+ *  Operador pode mover a janela entre monitores de tamanhos diferentes com o
+ *  app aberto — uma constante capturada no import ficaria errada para sempre. */
+export function activeCanvasLabelFont(): string {
+  return resolveCanvasLabelFont(viewportWidth());
+}
+
+/** @deprecated Use activeCanvasLabelFont(). Mantido só porque outros módulos
+ *  já importam este nome; agora resolve pela tela real em vez de congelar 9px. */
+export const CANVAS_LABEL_FONT = `${CANVAS_LABEL_BASE_FONT_PX}px -apple-system, sans-serif`;
 export const CANVAS_LABEL_TEXT_COLOR = "#050810";
 export const CANVAS_LABEL_PAD_X = 4;
 export const CANVAS_LABEL_PAD_Y = 2;
 export const CANVAS_LABEL_RADIUS = 3; // suave e discreto — nunca uma "pílula" que compete com o preço (Parte 13 da diretiva).
-const CANVAS_LABEL_FONT_SIZE_PX = 9;
 
 export interface CanvasLabelOptions {
   fill: string; // rgba já resolvida — decaimento/ênfase do chamador (ageAlpha, globalAlpha) continua funcionando por cima, zero mudança de contrato.
@@ -72,9 +101,11 @@ export interface DrawableLabelContext2D {
  *  de comprometer com a posição final (mesmo padrão de honestidade que
  *  MIN_LABEL_WIDTH_PX já aplica nos outros plugins). */
 export function measureCanvasLabel(ctx: DrawableLabelContext2D, text: string, padX = CANVAS_LABEL_PAD_X, padY = CANVAS_LABEL_PAD_Y): CanvasLabelSize {
-  ctx.font = CANVAS_LABEL_FONT;
+  // Medida e desenho usam a MESMA fonte resolvida — se divergissem, a caixa
+  // sairia com largura errada para o texto (o defeito clássico de etiqueta).
+  ctx.font = activeCanvasLabelFont();
   const width = ctx.measureText(text).width + padX * 2;
-  const height = CANVAS_LABEL_FONT_SIZE_PX + padY * 2;
+  const height = resolveCanvasLabelFontPx(viewportWidth()) + padY * 2;
   return { width, height };
 }
 

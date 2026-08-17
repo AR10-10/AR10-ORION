@@ -23,7 +23,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { resolveChartUltraWideScale } from '../src/chart/chart-ultrawide-scale';
+import { resolveChartUltraWideScale, resolveCanvasLabelFontPx, resolveCanvasLabelFont } from '../src/chart/chart-ultrawide-scale';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
@@ -97,5 +97,61 @@ describe('EnhancedChart: os 3 valores responsivos realmente alimentam createChar
     expect(cleanupBlock).toContain('window.removeEventListener("resize", handleUltraWideResize);');
     expect(cleanupBlock).toContain('if (resizeTimeout) clearTimeout(resizeTimeout);');
     expect(cleanupBlock).toContain('chart.remove();');
+  });
+});
+
+// ============================================================================
+// ETIQUETA DE CANVAS — escala por tela (pedido do Operador: "tamanho padrão
+// de qualquer terminal pra qualquer tela, qualquer monitor, iPad")
+// ============================================================================
+describe('resolveCanvasLabelFontPx: uma decisão de tamanho, não duas', () => {
+  it('PISO: nunca desce abaixo do valor que já estava em produção (9px)', () => {
+    // Regressão de tamanho em QUALQUER tela é proibida — mesma disciplina do
+    // helper do eixo. Varre as faixas reais e as bordas.
+    for (const w of [0, 320, 768, 1024, 1366, 1439, 1440, 2559, 2560, 3840, 5120]) {
+      expect(resolveCanvasLabelFontPx(w)).toBeGreaterThanOrEqual(9);
+    }
+  });
+
+  it('iPad (alvo primário real do app) mantém exatamente o tamanho atual', () => {
+    // Regra de Ouro 7: iPad Safari é o alvo primário. 1024 e 1366 são as
+    // larguras reais de iPad/iPad Pro em paisagem.
+    expect(resolveCanvasLabelFontPx(1024)).toBe(9);
+    expect(resolveCanvasLabelFontPx(1366)).toBe(9);
+  });
+
+  it('monitor grande e 4K crescem de verdade — era aqui que a etiqueta ficava congelada', () => {
+    expect(resolveCanvasLabelFontPx(1440)).toBe(10);
+    expect(resolveCanvasLabelFontPx(2560)).toBe(11);
+    expect(resolveCanvasLabelFontPx(3840)).toBe(11);
+  });
+
+  it('fail-closed: largura inválida cai no piso, nunca em NaN na fonte', () => {
+    for (const bad of [Number.NaN, Infinity, -1, -9999]) {
+      expect(resolveCanvasLabelFontPx(bad)).toBe(9);
+      expect(resolveCanvasLabelFont(bad)).toBe('9px -apple-system, sans-serif');
+    }
+  });
+
+  it('HIERARQUIA: a etiqueta de contexto fica sempre ABAIXO da fonte do eixo', () => {
+    // A etiqueta de zona é contexto; o eixo é leitura principal. Se um dia
+    // alguém igualar os dois, o contexto passa a competir com o preço — a
+    // hierarquia que a Parte 13 da diretiva de lapidação estabeleceu.
+    for (const w of [1024, 1366, 1440, 2560, 3840]) {
+      expect(resolveCanvasLabelFontPx(w)).toBeLessThan(resolveChartUltraWideScale(w).fontSize);
+    }
+  });
+
+  it('monotônica: tela maior nunca devolve fonte menor', () => {
+    const widths = [320, 768, 1024, 1366, 1440, 1920, 2560, 3840, 5120];
+    for (let i = 1; i < widths.length; i++) {
+      expect(resolveCanvasLabelFontPx(widths[i])).toBeGreaterThanOrEqual(resolveCanvasLabelFontPx(widths[i - 1]));
+    }
+  });
+
+  it('a família tipográfica é a MESMA do resto do canvas — só o corpo varia', () => {
+    for (const w of [1024, 1440, 2560]) {
+      expect(resolveCanvasLabelFont(w)).toBe(`${resolveCanvasLabelFontPx(w)}px -apple-system, sans-serif`);
+    }
   });
 });

@@ -355,6 +355,7 @@ import { fetchBybitPerpTicker, compareCrossExchange, type CrossExchangeCheck } f
 // Ponta Solta 1 (Auditoria do Ecossistema): leitura real do livro L2 por
 // corretora que a store já capturava e ninguém lia.
 import { computeCrossExchangeBook, describeCrossExchangeBook } from "./nexus/cross-exchange-book";
+import { computeReversalReading, describeReversalReading } from "./nexus/reversal-detector";
 // Terceira fonte real (pedido do Operador: "puxa dados públicos de
 // qualquer outra corretora"): OKX Perpétuo, mesmo papel e mesma trava
 // fail-closed da Bybit acima — ver header de okx-futures.ts.
@@ -2135,6 +2136,39 @@ export default function App() {
     [chartData],
   );
 
+  // ORDEM DO OPERADOR ("não deixa nada no laboratório, ativa tudo"): o
+  // Detector de Reversão sai do Laboratório de Evolução AQUI — e sai como
+  // ALERTA, nunca como decisão.
+  //
+  // POR QUE ALERTA E NÃO DECISÃO: o Operador autorizou ativar "o que estiver
+  // dando acima de 70/90%". Para este detector esse número NÃO EXISTE ainda —
+  // a rede do ambiente de desenvolvimento bloqueia as corretoras e a medição
+  // real (tools/measure-reversal-lead.mjs) nunca rodou sobre mercado. Ativar
+  // como decisão alegando um percentual seria inventá-lo (Regra de Ouro 1/2).
+  // Como ALERTA ele não precisa de percentual nenhum, porque não muda nada:
+  // só mostra ao Operador que a estrutura virou contra o sinal vigente.
+  //
+  // LEI 24 INTACTA: engine.direction não é lido de volta nem mutado aqui.
+  // A adaptação de forma é explícita porque computeBosChoch (engine-bridge)
+  // já normaliza o motor cru — devolve break/structureLabel null quando o
+  // motor não rodou OK, então structureLabel !== null É o "status OK" real
+  // desta fronteira. Sem esta linha o detector receberia status undefined e
+  // ficaria em DADOS_INSUFICIENTES para sempre: uma feature morta silenciosa.
+  const reversalAlert = useMemo(
+    () =>
+      computeReversalReading({
+        bosChoch: {
+          status: bosChoch.structureLabel !== null ? "OK" : "DADOS_INSUFICIENTES",
+          break: bosChoch.break as any,
+        },
+        superTrend: null, // SuperTrend ainda não é calculado no ciclo do gráfico — denominador honesto (1 detector), nunca um segundo inventado.
+        lastIndex: chartData && chartData.length > 0 ? chartData.length - 1 : -1,
+        coreDirection:
+          engine?.direction === "LONG" || engine?.direction === "SHORT" ? engine.direction : null,
+      }),
+    [bosChoch, chartData, engine?.direction],
+  );
+
   // Pedido do Operador ("ver o que está faltando... pra ele chegar na
   // perfeição"): Liquidity Void (SMC/ICT) sobre o MESMO array de candles
   // do gráfico (mesmo motivo de bosChoch/smcZones: `index` alinhado ao
@@ -3440,6 +3474,7 @@ export default function App() {
     () => ({
       widgets,
       toggleWidget,
+      reversalAlert,
       setWidgetWorkspaceState,
       workspaceManagerOpen,
       setWorkspaceManagerOpen,
@@ -3522,9 +3557,7 @@ export default function App() {
       currentRsi,
       currentMacd,
     }),
-    [
-      widgets,
-      toggleWidget,
+    [widgets, toggleWidget, reversalAlert,
       setWidgetWorkspaceState,
       workspaceManagerOpen,
       chartLayersOpen,
@@ -10698,6 +10731,16 @@ function DecisionValidationWidget() {
   // diferentes sobre o mesmo tema, não duplicação.
   //
   // LEI 24: display only, contexto de execução — nunca vira decisão.
+  const { reversalAlert } = useContext(WidgetContext) || {};
+  // Cor pela GRAVIDADE real: reversão CONTRA o sinal vigente é o caso que o
+  // Operador precisa ver na hora; a favor é confirmação; sem leitura é cinza.
+  const reversalColor =
+    reversalAlert?.status !== "OK"
+      ? "text-[#8ab4f8]/50"
+      : reversalAlert.contradictsCore === true
+        ? "text-[#f23645]"
+        : "text-[#089981]";
+
   const exchangeBooks = useExchangeOrderBooks();
   const crossBook = useMemo(
     () => computeCrossExchangeBook(exchangeBooks, Date.now()),
@@ -10881,6 +10924,23 @@ function DecisionValidationWidget() {
           </span>
           <span className={`text-[0.5rem] font-mono font-black ${crossBookColor} break-words`}>
             {crossBookLabel}
+          </span>
+        </div>
+        {/* ORDEM DO OPERADOR ("não deixa nada no laboratório"): Detector de
+            Reversão graduado — como ALERTA, nunca como decisão. Não existe
+            percentual medido para ele (a medição real nunca rodou, ver
+            tools/measure-reversal-lead.mjs), e alertar não precisa de
+            percentual: só informa que a estrutura virou. LEI 24 intacta —
+            o Núcleo continua decidindo sozinho, do mesmo jeito. */}
+        <div
+          className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0"
+          title="Reversão estrutural real (CHoCH — primeiro rompimento CONTRA a estrutura vigente; BOS/continuação nunca conta aqui). É AVISO, não decisão: o Core Engine continua sendo o único emissor de LONG/SHORT/WAIT (LEI 24). Nunca é probabilidade de acerto."
+        >
+          <span className="text-[0.45rem] text-[#8ab4f8]/80 font-bold tracking-widest">
+            REVERSÃO ESTRUTURAL · AVISO
+          </span>
+          <span className={`text-[0.5rem] font-mono font-black ${reversalColor} break-words`}>
+            {reversalAlert ? describeReversalReading(reversalAlert) : AWAIT}
           </span>
         </div>
         {checks.map((c) => (

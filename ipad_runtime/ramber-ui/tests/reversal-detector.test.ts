@@ -308,21 +308,57 @@ describe('describeReversalReading: frase honesta', () => {
   });
 });
 
-describe('ISOLAMENTO: o Laboratório não toca o sistema ao vivo (CLAUDE.md §3)', () => {
-  it('nenhum consumidor real importa este motor ainda — a LEI 24 continua intacta', async () => {
+describe('GRADUAÇÃO: saiu do Laboratório como AVISO, nunca como decisão (LEI 24)', () => {
+  const src = async (rel: string) => {
     const { readFileSync } = await import('node:fs');
     const { resolve } = await import('node:path');
-    const app = readFileSync(resolve(__dirname, '../src/App.tsx'), 'utf-8');
-    const bridge = readFileSync(resolve(__dirname, '../src/engine-bridge.ts'), 'utf-8');
-    expect(app).not.toContain('reversal-detector');
-    expect(bridge).not.toContain('reversal-detector');
+    return readFileSync(resolve(__dirname, rel), 'utf-8');
+  };
+
+  it('App.tsx consome o motor de verdade — não ficou no laboratório', async () => {
+    // Ordem do Operador: "não deixa nada no laboratório, ativa tudo".
+    const app = await src('../src/App.tsx');
+    expect(app).toContain('from "./nexus/reversal-detector"');
+    expect(app).toContain('computeReversalReading({');
+    expect(app).toContain('const reversalAlert = useMemo(');
+  });
+
+  it('a leitura CHEGA na tela — sem consumidor visível seria meia-feature', async () => {
+    const app = await src('../src/App.tsx');
+    expect(app).toContain('describeReversalReading(reversalAlert)');
+    expect(app).toContain('REVERSÃO ESTRUTURAL · AVISO');
+  });
+
+  it('LEI 24: o Núcleo NÃO foi tocado — engine.direction só é lido, nunca escrito a partir daqui', async () => {
+    // Este é o teste que realmente importa nesta graduação. O detector pode
+    // LER a direção vigente para relatar contradição, mas não pode em
+    // hipótese nenhuma virar entrada de decisão.
+    const app = await src('../src/App.tsx');
+    const i = app.indexOf('const reversalAlert = useMemo(');
+    expect(i).toBeGreaterThan(-1);
+    const block = app.slice(i, i + 1400);
+    expect(block).toContain('coreDirection:');       // lê
+    expect(block).not.toMatch(/setCore\s*\(/);        // nunca escreve no Núcleo
+    expect(block).not.toMatch(/engine\.direction\s*=/); // nunca muta
+  });
+
+  it('o motor da DECISÃO continua sem saber que este módulo existe', async () => {
+    // engine-bridge.ts é o caminho real do LONG/SHORT. Se o nome do detector
+    // aparecer aqui, a hierarquia da LEI 24 mudou sem autorização explícita.
+    // Procura IMPORT real, não a string solta: research-engine.js cita o
+    // detector num COMENTÁRIO (explicando por que trendBias foi exportado
+    // para ser medido). Comentário não é dependência — confundir os dois é a
+    // mesma armadilha do caso `isOnline`, e foi este teste que a pegou.
+    const importaDetector = /^\s*(import|require)[^\n]*reversal-detector/m;
+    const bridge = await src('../src/engine-bridge.ts');
+    expect(bridge).not.toMatch(importaDetector);
+    const research = await src('../../js/research/research-engine.js');
+    expect(research).not.toMatch(importaDetector);
   });
 
   it('exportar trendBias foi ADITIVO: research-engine.js segue usando a sua própria função', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { resolve } = await import('node:path');
-    const src = readFileSync(resolve(__dirname, '../../js/research/research-engine.js'), 'utf-8');
-    expect(src).toContain('export function trendBias');
-    expect(src).toContain('const bias = trendBias(frame);'); // o uso interno continua idêntico
+    const s2 = await src('../../js/research/research-engine.js');
+    expect(s2).toContain('export function trendBias');
+    expect(s2).toContain('const bias = trendBias(frame);');
   });
 });

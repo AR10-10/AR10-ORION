@@ -379,11 +379,19 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   `trendBias` foi EXPORTADO de `js/research/research-engine.js` (mudança
   puramente aditiva) para ser medido em vez de reimplementado — uma segunda
   cópia da decisão seria uma segunda decisão paralela.
-  Status: **LABORATÓRIO** — nenhum consumidor real importa (fronteira
-  travada por teste em `ramber-ui/tests/reversal-detector.test.ts`, que
-  verifica que `App.tsx` e `engine-bridge.ts` não o mencionam). A LEI 24
-  segue intacta: o Núcleo continua decidindo sozinho, do mesmo jeito, até
-  o Operador decidir COM O NÚMERO NA MÃO se muda.
+  Status: **GRADUADO COMO AVISO** (ordem do Operador: "não deixa nada no
+  laboratório, ativa tudo"). Consumido por `App.tsx` no card
+  "REVERSÃO ESTRUTURAL · AVISO" do widget Validação Multi-Camada.
+  Graduado como AVISO e não como decisão por um motivo honesto: o Operador
+  autorizou ativar "o que estiver acima de 70/90%", e para este detector esse
+  número NÃO EXISTE — a rede do ambiente bloqueia as corretoras e
+  `tools/measure-reversal-lead.mjs` nunca rodou sobre mercado real. Ativar
+  como decisão alegando um percentual seria inventá-lo. Como AVISO ele não
+  precisa de percentual nenhum, porque não muda nada.
+  **LEI 24 INTACTA e travada por teste**: `engine-bridge.ts` e
+  `research-engine.js` continuam sem importar este módulo (o teste procura
+  IMPORT real, não a string em comentário — distinção que ele mesmo pegou);
+  `engine.direction` é só LIDO para relatar contradição, nunca escrito.
 
 ## Regra de quarentena daqui para frente
 

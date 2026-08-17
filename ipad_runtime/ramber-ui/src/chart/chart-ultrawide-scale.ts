@@ -52,3 +52,49 @@ export function resolveChartUltraWideScale(viewportWidth: number): {
   }
   return { fontSize: 11, minimumWidth: 65, rightOffset: 8 }; // baseline real já em produção — fail-closed (largura inválida) cai aqui também
 }
+
+// ============================================================================
+// ETIQUETAS DE CANVAS — o buraco real da escala, achado medindo
+// ============================================================================
+// Pedido do Operador: "tamanho padrão de qualquer terminal pra qualquer tela,
+// qualquer monitor, iPad".
+//
+// ACHADO: `resolveChartUltraWideScale` acima já escalava 3 coisas (fonte do
+// eixo nativo, largura mínima do eixo, offset da direita) e o
+// PriceLabelStackPlugin a consome. Mas `nexus/canvas-label.ts` — a primitiva
+// COMPARTILHADA que desenha etiqueta em caixa para KillZoneBands,
+// LiquidationHeatmap, LiquidityZones, InstitutionalZone e MarketSessionBands —
+// tinha a fonte HARDCODED em 9px, sem nenhuma ligação com esta escala.
+//
+// O sintoma real: num monitor >= 2560px o tick nativo do eixo cresce para 13px
+// e as etiquetas do eixo acompanham, enquanto TODA etiqueta de zona/sessão
+// continua em 9px — 4px de diferença entre dois textos lado a lado na mesma
+// tela. No iPad o mesmo desalinhamento aparece invertido. Não era "fonte
+// pequena": era DUAS decisões de tamanho para a mesma pergunta, e só uma
+// respondia à tela.
+//
+// Correção: uma decisão só. A etiqueta de canvas passa a derivar da MESMA
+// função de escala, com um degrau a menos que o eixo (a etiqueta de zona é
+// contexto, não leitura principal — deve ficar legível sem competir com o
+// preço, que é a hierarquia que a Parte 13 da diretiva de lapidação já
+// estabeleceu).
+//
+// O piso é o valor que já estava em produção (9px): NUNCA reduz, em nenhuma
+// faixa — mesma disciplina do helper acima, para nenhuma tela regredir.
+export const CANVAS_LABEL_BASE_FONT_PX = 9;
+
+/** Tamanho de fonte real da etiqueta de canvas para esta viewport.
+ *  Um degrau abaixo do eixo de propósito (hierarquia visual: contexto nunca
+ *  compete com preço). Piso 9px em qualquer tela — nunca regride. */
+export function resolveCanvasLabelFontPx(viewportWidth: number): number {
+  if (Number.isFinite(viewportWidth) && viewportWidth >= 2560) return 11;
+  if (Number.isFinite(viewportWidth) && viewportWidth >= 1440) return 10;
+  return CANVAS_LABEL_BASE_FONT_PX; // baseline + fail-closed (largura inválida)
+}
+
+/** A família tipográfica é a MESMA de todo o resto do canvas — só o corpo
+ *  varia. Centralizada aqui para não existir uma segunda string de fonte
+ *  solta em nenhum plugin. */
+export function resolveCanvasLabelFont(viewportWidth: number): string {
+  return `${resolveCanvasLabelFontPx(viewportWidth)}px -apple-system, sans-serif`;
+}
