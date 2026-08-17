@@ -52,7 +52,7 @@ describe('InstitutionalZonePlugin.tsx: confluenceWeight exportado + visualWeight
 
 describe('EnhancedChart_110_Percent.tsx: resolveVisualBudget real — candidatos só das 2 categorias que já tinham peso próprio antes desta rodada', () => {
   it('importa resolveVisualBudget/VisualBudgetCandidate de nexus/visual-budget (zero segunda implementação)', () => {
-    expect(chart()).toContain('import { resolveVisualBudget, type VisualBudgetCandidate } from "../nexus/visual-budget";');
+    expect(chart()).toContain('import { resolveVisualBudget, VISUAL_BUDGET_FLOOR_WEIGHT, type VisualBudgetCandidate } from "../nexus/visual-budget";');
   });
 
   it('importa confluenceWeight do InstitutionalZonePlugin e opacityMultiplierFor do TradePlanZonePlugin — zero segunda fórmula de peso', () => {

@@ -72,9 +72,17 @@ describe('EnhancedChart: níveis Fibonacci reais como price lines fio de seda', 
     expect(s).toMatch(/FIB \$\{\(level\.ratio \* 100\)\.toFixed\(1\)\}%/);
   });
 
-  it('nível com confluência real (score>0) é mais presente — hierarquia por opacidade, nunca por tracejado', () => {
+  it('hierarquia por opacidade real, nunca por tracejado — Achado 2.7: o degrau binário por score virou peso resolvido (ratio + confluência + orçamento visual)', () => {
     const s = chart();
-    expect(s).toContain('level.score > 0 ? "rgba(0, 240, 255, 0.55)" : "rgba(0, 240, 255, 0.20)"');
+    // Antes: `level.score > 0 ? "rgba(0, 240, 255, 0.55)" : "rgba(0, 240,
+    // 255, 0.20)"` — 2 aparências possíveis, o ratio nunca entrava. Agora a
+    // opacidade vem de fibLineAlpha sobre o peso real resolvido; os 2
+    // extremos da banda (FIB_ALPHA_MIN/MAX) continuam sendo exatamente
+    // 0.20 e 0.55, então nada ficou mais forte nem mais fraco que antes —
+    // só passou a existir gradiente entre eles.
+    expect(s).toContain('color: `rgba(0, 240, 255, ${fibLineAlpha(fibonacciVisualWeights[i] ?? null).toFixed(3)})`,');
+    expect(s).toContain('export const FIB_ALPHA_MIN = 0.2;');
+    expect(s).toContain('export const FIB_ALPHA_MAX = 0.55;');
     expect(s).not.toMatch(/LineStyle\.(Dashed|Dotted|LargeDashed|SparseDotted)/);
   });
 

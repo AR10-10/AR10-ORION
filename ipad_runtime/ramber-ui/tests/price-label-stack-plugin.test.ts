@@ -16,7 +16,20 @@ import {
   S1R1_TOUCH_CEIL,
   S1R1_ALPHA_MIN,
   S1R1_ALPHA_MAX,
+  fibRatioStructuralWeight,
+  fibRatioBaseWeight,
+  fibLineAlpha,
+  fibDeservesAxisLabel,
+  FIB_PRIMARY_RATIOS,
+  FIB_SECONDARY_STRUCTURAL_WEIGHT,
+  FIB_SHALLOW_STRUCTURAL_WEIGHT,
+  FIB_STRUCTURAL_SHARE,
+  FIB_CONFLUENCE_CEIL,
+  FIB_ALPHA_MIN,
+  FIB_ALPHA_MAX,
 } from '../src/chart/EnhancedChart_110_Percent';
+import { VISUAL_BUDGET_FLOOR_WEIGHT } from '../src/nexus/visual-budget';
+import { FIB_RETRACEMENT_RATIOS } from '../src/nexus/fibonacci-confluence';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
@@ -486,7 +499,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('priceAxisLabels recalcula a cada tick real de livePrice — nunca uma etiqueta de preço congelada', () => {
     const s = chart();
-    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, supportVisualWeight, resistanceVisualWeight, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels]);');
+    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, supportVisualWeight, resistanceVisualWeight, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels, fibonacciVisualWeights]);');
     expect(depsIdx, 'dependency array de priceAxisLabels não inclui livePrice').toBeGreaterThan(-1);
   });
 
@@ -715,7 +728,7 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
 
   it('engineFallbackLevels entra nas deps de priceAxisLabels — recalcula quando o Núcleo muda de leitura', () => {
     const s = chart();
-    expect(s).toContain('livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels]);');
+    expect(s).toContain('livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels, fibonacciVisualWeights]);');
   });
 
   it('overlay de texto do canto (tradePlanAbsenceReason) nunca fica auto-contraditório: quando as linhas do Núcleo estão visíveis, o texto deixa explícito que é só o plano do CONSELHO que falta — nunca "SEM TRADE PLAN" sozinho com linhas reais na tela', () => {
@@ -1022,27 +1035,34 @@ describe('Achado real (task #341): rótulos de preço para POC(VP+TPO)/VAH/VAL/I
 describe('Achado real (Visual Cleanup): rótulos de preço para Fibonacci — só níveis com confluência real', () => {
   const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
 
-  it('só níveis com score > 0 competem por rótulo — score 0 é honesto e comum, nunca fabrica confluência pra caber uma etiqueta', () => {
+  // Achado 2.7 (pedido do Operador "a Fibonacci tem de ficar diferenciada
+  // pra gente saber qual as linha dela"): o gate antigo (`score > 0` e
+  // pronto) deixava 61.8%/50% — as 2 linhas que o Operador precisa achar
+  // primeiro — sem NENHUM número na tela sempre que nenhuma outra
+  // ferramenta concordasse com aquele preço. Agora primário sempre compete;
+  // raso continua exigindo confluência real (nunca fabricada).
+  it('nível primário (razão áurea/ponto médio) sempre compete por rótulo; raso só com confluência real', () => {
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
     const block = c.slice(idx, c.indexOf('return out;', idx));
     expect(block).toContain('if (visibility.fibonacci) {');
-    expect(block).toContain('for (const level of fibonacciLevels ?? []) {');
-    expect(block).toContain('if (!(level.score > 0) || !Number.isFinite(level.price)) continue;');
+    expect(block).toContain('if (!fibDeservesAxisLabel(level.ratio, level.score)) return;');
+    expect(block).toContain('if (!Number.isFinite(level.price)) return;');
   });
 
-  it('texto reusa EXATAMENTE o mesmo formato do title nativo (ratio×100 + score real), cor idêntica à linha score>0, side:"left"', () => {
+  it('texto reusa EXATAMENTE o mesmo formato do title nativo (ratio×100 + score real quando existe), cor idêntica à LINHA correspondente, side:"left"', () => {
     const c = chart();
     const idx = c.indexOf('const priceAxisLabels = useMemo');
     const block = c.slice(idx, c.indexOf('return out;', idx));
-    expect(block).toContain('text: `FIB ${(level.ratio * 100).toFixed(1)}% ×${level.score}`,');
-    expect(block).toContain('color: "rgba(0, 240, 255, 0.55)", // mesma cor de linha score>0 (useEffect do Fibonacci acima)');
+    expect(block).toContain('text: `FIB ${(level.ratio * 100).toFixed(1)}%${level.score > 0 ? ` ×${level.score}` : ""}`,');
+    // Mesma função/mesmo peso da linha — rótulo e linha nunca divergem.
+    expect(block).toContain('color: `rgba(0, 240, 255, ${fibLineAlpha(fibonacciVisualWeights[i] ?? null).toFixed(3)})`,');
     expect(block).toContain('side: "left",');
   });
 
   it('dependências reais do useMemo incluem visibility.fibonacci e fibonacciLevels — senão o rótulo ficaria stale ao ligar/desligar a camada', () => {
     const c = chart();
-    expect(c).toContain('institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels]);');
+    expect(c).toContain('institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels, fibonacciVisualWeights]);');
   });
 });
 
@@ -1170,5 +1190,144 @@ describe('Achado real (task #341): etiquetas do eixo escalam com o monitor (mesm
     expect(s).toContain('const boxHeight = isBigTier ? liveLabelHeightPx : labelHeightPx;');
     expect(s).toContain('const minGapPx = labelHeightPx + 7;');
     expect(s).toContain('resolveLabelStackPositions(entries, minGapPx)');
+  });
+});
+
+// Achado 2.7 (Visual Cleanup & Rendering Audit, 5ª rodada) — pedido direto
+// do Operador: "a Fibonacci tem de ficar diferenciada pra gente saber qual
+// as linha dela, como que ela está sendo analisada pro visual". Execução
+// REAL (não só padrão de fonte), mesmo critério do Achado 2.3 acima: o bug
+// mais provável aqui é "a matemática está sutilmente errada" (uma inversão
+// de hierarquia, um extremo de banda deslocado), nunca fiação esquecida.
+describe('Achado 2.7 (Visual Cleanup): peso estrutural real da Fibonacci — execução real, zero probabilidade fabricada', () => {
+  it('fibRatioStructuralWeight: razão áurea (61.8%) e ponto médio (50%) são os níveis de decisão — peso pleno', () => {
+    expect(fibRatioStructuralWeight(0.618)).toBe(1);
+    expect(fibRatioStructuralWeight(0.5)).toBe(1);
+    expect([...FIB_PRIMARY_RATIOS]).toEqual([0.5, 0.618]);
+  });
+
+  it('fibRatioStructuralWeight: 38.2% (complemento de 61.8%) é secundário; 23.6%/78.6% são as bordas rasa/profunda', () => {
+    expect(fibRatioStructuralWeight(0.382)).toBe(FIB_SECONDARY_STRUCTURAL_WEIGHT);
+    expect(fibRatioStructuralWeight(0.236)).toBe(FIB_SHALLOW_STRUCTURAL_WEIGHT);
+    expect(fibRatioStructuralWeight(0.786)).toBe(FIB_SHALLOW_STRUCTURAL_WEIGHT);
+    expect(FIB_SECONDARY_STRUCTURAL_WEIGHT).toBeGreaterThan(FIB_SHALLOW_STRUCTURAL_WEIGHT);
+    expect(FIB_SECONDARY_STRUCTURAL_WEIGHT).toBeLessThan(1);
+  });
+
+  it('fibRatioStructuralWeight: cobre TODOS os ratios reais do motor (FIB_RETRACEMENT_RATIOS) — nenhum nível real cai num caso não previsto', () => {
+    for (const ratio of FIB_RETRACEMENT_RATIOS) {
+      const w = fibRatioStructuralWeight(ratio);
+      expect(Number.isFinite(w)).toBe(true);
+      expect(w).toBeGreaterThan(0);
+      expect(w).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('fibRatioStructuralWeight: fail-closed — ratio desconhecido/NaN cai no peso mais baixo, nunca infla', () => {
+    expect(fibRatioStructuralWeight(0.111)).toBe(FIB_SHALLOW_STRUCTURAL_WEIGHT);
+    expect(fibRatioStructuralWeight(NaN)).toBe(FIB_SHALLOW_STRUCTURAL_WEIGHT);
+  });
+
+  it('fibRatioBaseWeight CORRIGE a inversão real que existia: 61.8% sem nenhuma confluência pesa MAIS que 23.6% com confluência máxima — antes era o contrário (o degrau binário por score ignorava o ratio)', () => {
+    const goldenAlone = fibRatioBaseWeight(0.618, 0);
+    const shallowWithFullConfluence = fibRatioBaseWeight(0.236, FIB_CONFLUENCE_CEIL);
+    expect(goldenAlone).toBeGreaterThan(shallowWithFullConfluence);
+  });
+
+  it('fibRatioBaseWeight: a confluência real ainda pesa — o MESMO ratio com mais fontes concordando sobe, monotonicamente', () => {
+    const scores = [0, 1, 2, 3];
+    const weights = scores.map((s) => fibRatioBaseWeight(0.382, s));
+    for (let i = 1; i < weights.length; i++) {
+      expect(weights[i]).toBeGreaterThan(weights[i - 1]);
+    }
+  });
+
+  it('fibRatioBaseWeight: mistura real 70/30 (estrutura/confluência) — teto exatamente 1 no melhor caso possível, nunca acima', () => {
+    expect(fibRatioBaseWeight(0.618, FIB_CONFLUENCE_CEIL)).toBeCloseTo(1, 10);
+    // score acima do teto real não continua inflando (clamp honesto).
+    expect(fibRatioBaseWeight(0.618, 99)).toBeCloseTo(1, 10);
+    expect(fibRatioBaseWeight(0.5, 0)).toBeCloseTo(FIB_STRUCTURAL_SHARE, 10);
+  });
+
+  it('fibRatioBaseWeight: sempre dentro de [0,1] para todo ratio real × score plausível — nunca um alpha fora de faixa chegando ao rgba', () => {
+    for (const ratio of FIB_RETRACEMENT_RATIOS) {
+      for (const score of [-5, 0, 1, 2, 3, 10, NaN]) {
+        const w = fibRatioBaseWeight(ratio, score);
+        expect(w).toBeGreaterThanOrEqual(0);
+        expect(w).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('fibLineAlpha: os 2 extremos da banda são EXATAMENTE os 2 valores fixos de antes (0.20 e 0.55) — zero regressão em qualquer ponta, só passou a existir gradiente entre elas', () => {
+    // Piso real do orçamento visual (nenhum objeto cai abaixo dele) mapeia
+    // no alpha mais fraco que a camada já usava — sem isso a camada mais
+    // fraca ficaria MAIS visível que antes, o oposto do pedido.
+    expect(fibLineAlpha(VISUAL_BUDGET_FLOOR_WEIGHT)).toBeCloseTo(FIB_ALPHA_MIN, 10);
+    expect(fibLineAlpha(1)).toBeCloseTo(FIB_ALPHA_MAX, 10);
+    expect(FIB_ALPHA_MIN).toBe(0.2);
+    expect(FIB_ALPHA_MAX).toBe(0.55);
+  });
+
+  it('fibLineAlpha: monotônica e sempre dentro da banda — nenhuma linha real some (Regra de Ouro 4) nem estoura o teto', () => {
+    const samples = [0, 0.1, VISUAL_BUDGET_FLOOR_WEIGHT, 0.5, 0.75, 1, 1.5];
+    let prev = -Infinity;
+    for (const w of samples) {
+      const a = fibLineAlpha(w);
+      expect(a).toBeGreaterThanOrEqual(FIB_ALPHA_MIN);
+      expect(a).toBeLessThanOrEqual(FIB_ALPHA_MAX);
+      expect(a).toBeGreaterThanOrEqual(prev);
+      prev = a;
+    }
+  });
+
+  it('fibLineAlpha: peso ainda não resolvido (null) preserva o teto de sempre — nunca fabrica um número novo', () => {
+    expect(fibLineAlpha(null)).toBe(FIB_ALPHA_MAX);
+  });
+
+  it('fibDeservesAxisLabel: primário SEMPRE ganha número (é a linha que o Operador precisa achar primeiro), mesmo sem nenhuma confluência real', () => {
+    expect(fibDeservesAxisLabel(0.618, 0)).toBe(true);
+    expect(fibDeservesAxisLabel(0.5, 0)).toBe(true);
+  });
+
+  it('fibDeservesAxisLabel: raso só com confluência REAL — score 0 continua honesto e mudo, nunca fabrica confluência pra caber um rótulo', () => {
+    expect(fibDeservesAxisLabel(0.236, 0)).toBe(false);
+    expect(fibDeservesAxisLabel(0.786, 0)).toBe(false);
+    expect(fibDeservesAxisLabel(0.382, 0)).toBe(false);
+    expect(fibDeservesAxisLabel(0.236, 1)).toBe(true);
+  });
+
+  it('no PIOR caso real (todos os 5 níveis sem nenhuma confluência) só 2 rótulos competem — o gate continua contendo a inundação que o comentário original temia', () => {
+    const competing = FIB_RETRACEMENT_RATIOS.filter((r) => fibDeservesAxisLabel(r, 0));
+    expect(competing).toHaveLength(2);
+    expect([...competing]).toEqual([0.5, 0.618]);
+  });
+});
+
+describe('Achado 2.7: fiação real da Fibonacci no orçamento visual (padrão de código — "esqueceram de ligar A com B")', () => {
+  it('Fibonacci entra como candidato STRUCTURE (mesma categoria de S1/R1 e BOS/CHOCH — contexto estrutural, nunca a decisão do Núcleo/LEI 24)', () => {
+    const s = chart();
+    expect(s).toContain('candidates.push({ id: `fib-${i}`, category: "STRUCTURE", baseWeight: fibRatioBaseWeight(level.ratio, level.score) });');
+    expect(s).toContain('if (visibility.fibonacci) {');
+  });
+
+  it('só compete quando a linha de fato vai ser desenhada — mesmo gate Number.isFinite do useEffect da linha (fail-closed)', () => {
+    const s = chart();
+    const idx = s.indexOf('candidates.push({ id: `fib-${i}`');
+    expect(idx).toBeGreaterThan(-1);
+    const before = s.slice(Math.max(0, idx - 200), idx);
+    expect(before).toContain('if (!Number.isFinite(level.price)) return;');
+  });
+
+  it('o peso resolvido volta por índice (fibonacciVisualWeights) — mesmo padrão de institutionalZoneVisualWeights, zero segunda tabela', () => {
+    const s = chart();
+    expect(s).toContain('const fibonacciVisualWeights = useMemo(() => {');
+    expect(s).toContain('return (fibonacciLevels ?? []).map((_, i) => byId.get(`fib-${i}`) ?? null);');
+    expect(s).toContain('}, [visualBudgetResults, fibonacciLevels]);');
+  });
+
+  it('visibility.fibonacci/fibonacciLevels entram nas deps do orçamento — senão o peso ficaria stale ao ligar/desligar a camada ou trocar de perna', () => {
+    const s = chart();
+    expect(s).toContain('visibility.fibonacci,\n    fibonacciLevels,\n    mainLiquidityCandidates,\n  ]);');
   });
 });

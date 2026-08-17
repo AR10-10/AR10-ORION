@@ -879,14 +879,22 @@ describe('Lapidação institucional (diretiva com imagem de referência): Liquid
     expect(plugin).not.toContain('rgba(255, 200, 0');
   });
 
-  it('Kill Zones NÃO entra nesta diferenciação (banda de fundo, geometria/alpha diferentes — sem colisão real). v3: cores viraram templates dinâmicos com decaimento por idade, mas o TOM âmbar (255,176,32) e os 3 alphas base (0.06/0.22/0.65) seguem os mesmos.', () => {
+  it('Kill Zones NÃO entra nesta diferenciação — o TOM âmbar (255,176,32) segue o mesmo. Achado 2.6: os alphas base foram recalibrados (0.06/0.22 → 0.38/0.55) porque a geometria deixou de ser lavagem de altura total e virou faixa de 6px; LABEL_ALPHA sumiu junto com o rótulo (duplicação do badge do header)', () => {
     const killZones = read('../src/chart/KillZoneBandsPlugin.tsx');
-    expect(killZones).toContain('const FILL_ALPHA = 0.06;');
-    expect(killZones).toContain('const BORDER_ALPHA = 0.22;');
-    expect(killZones).toContain('const LABEL_ALPHA = 0.65;');
+    expect(killZones).toContain('const FILL_ALPHA = 0.38;');
+    expect(killZones).toContain('const BORDER_ALPHA = 0.55;');
+    expect(killZones).not.toContain('LABEL_ALPHA');
     expect(killZones).toContain('rgba(255, 176, 32, ${(alpha * FILL_ALPHA).toFixed(3)})');
     expect(killZones).toContain('rgba(255, 176, 32, ${(alpha * BORDER_ALPHA).toFixed(3)})');
-    expect(killZones).toContain('rgba(255, 176, 32, ${(alpha * LABEL_ALPHA).toFixed(3)})');
+  });
+
+  it('Achado 2.6 (regressão travada): Kill Zones NUNCA mais desenha de altura total — zero `0, clippedWidth, cssHeight` e zero lineTo(x, cssHeight); toda geometria vertical vem da lane compartilhada', () => {
+    const killZones = read('../src/chart/KillZoneBandsPlugin.tsx');
+    expect(killZones).not.toMatch(/fillRect\(clippedX, 0, clippedWidth, cssHeight\)/);
+    expect(killZones).not.toMatch(/lineTo\([^)]*, cssHeight\)/);
+    expect(killZones).toContain('import { getTimeRibbonLaneTopPx, getTimeRibbonLaneBottomPx, getTimeRibbonLaneHeightPx } from "./chart-time-ribbon-lanes";');
+    expect(killZones).toContain('ctx.fillRect(clippedX, laneTop, clippedWidth, laneHeight);');
+    expect(killZones).toContain('ctx.lineTo(Math.round(rectX) + 0.5, laneBottom);');
   });
 });
 
@@ -914,8 +922,12 @@ describe('ADENDO "Refinamento das Sessões e Limpeza Visual": Market Sessions tr
     const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
     // Lapidação por feedback direto do Operador ("está atrapalhando o
     // visual"): faixa afinada 24px→14px, 1 linha só.
-    expect(plugin).toContain('const BAND_HEIGHT_PX = 14;');
-    expect(plugin).toContain('ctx.fillRect(clippedX, 0, clippedWidth, BAND_HEIGHT_PX);');
+    // Achado 2.6: os mesmos 14px no mesmo y=0, mas agora vindos da lane
+    // compartilhada (chart-time-ribbon-lanes.ts) — geometria de fonte única
+    // com a faixa de Kill Zones logo abaixo, zero mudança visual aqui.
+    expect(plugin).toContain('const BAND_TOP_PX = getTimeRibbonLaneTopPx("market_session");');
+    expect(plugin).toContain('const BAND_HEIGHT_PX = getTimeRibbonLaneHeightPx("market_session");');
+    expect(plugin).toContain('ctx.fillRect(clippedX, BAND_TOP_PX, clippedWidth, BAND_HEIGHT_PX);');
     expect(plugin).not.toContain('cssHeight - BAND_HEIGHT_PX');
     expect(plugin).not.toContain('STRIP_HEIGHT_PX');
   });

@@ -72,6 +72,11 @@
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeSessionKeyLevels, sessionGenerationWeight, SESSION_GENERATION_FADE, type SessionKeyLevel } from "../nexus/market-session";
+// Achado 2.6: a altura/posição desta faixa deixou de ser um número local e
+// passou a vir da lane compartilhada — mesmo valor real de sempre (14px no
+// topo, zero mudança visual aqui), agora de fonte única com a faixa de
+// Kill Zones logo abaixo, que antes desenhava por cima do gráfico inteiro.
+import { getTimeRibbonLaneTopPx, getTimeRibbonLaneHeightPx } from "./chart-time-ribbon-lanes";
 
 // Discreto de propósito — contexto de fundo, nunca compete visualmente com
 // estrutura (BOS/CHOCH), liquidez (EQH/EQL) ou o Trade Plan. Mesmo tom
@@ -84,7 +89,10 @@ import { computeSessionKeyLevels, sessionGenerationWeight, SESSION_GENERATION_FA
 // DUPLICAÇÃO literal do header (marketSessionFromUtc — mesmo dado, mesma
 // função), então removê-la daqui é remover redundância, nunca dado real
 // (Regra de Ouro 4: a janela continua visível no header de sempre).
-const BAND_HEIGHT_PX = 14; // topo do painel — nome da sessão em 1 linha.
+// Achado 2.6: mesmo 14px de sempre, agora vindo da lane compartilhada —
+// nunca mais um número local que pode divergir da camada vizinha.
+const BAND_TOP_PX = getTimeRibbonLaneTopPx("market_session"); // 0 — primeira lane da faixa.
+const BAND_HEIGHT_PX = getTimeRibbonLaneHeightPx("market_session"); // topo do painel — nome da sessão em 1 linha.
 const BAND_COLOR_CLOSED = "rgba(148, 163, 184, 0.16)";
 const BAND_COLOR_OPEN = "rgba(148, 163, 184, 0.42)";
 const BORDER_COLOR = "rgba(148, 163, 184, 0.30)";
@@ -189,7 +197,7 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
         ctx.globalAlpha = weight;
 
         ctx.fillStyle = isOpen ? BAND_COLOR_OPEN : BAND_COLOR_CLOSED;
-        ctx.fillRect(clippedX, 0, clippedWidth, BAND_HEIGHT_PX);
+        ctx.fillRect(clippedX, BAND_TOP_PX, clippedWidth, BAND_HEIGHT_PX);
 
         // Divisor real entre sessões (Fio de Seda, Regra de Ouro 5): 1px
         // sólida, nunca setLineDash. Só a borda ESQUERDA de cada segmento
@@ -199,8 +207,8 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
           ctx.lineWidth = 1;
           ctx.strokeStyle = BORDER_COLOR;
           ctx.beginPath();
-          ctx.moveTo(Math.round(rectX) + 0.5, 0);
-          ctx.lineTo(Math.round(rectX) + 0.5, BAND_HEIGHT_PX);
+          ctx.moveTo(Math.round(rectX) + 0.5, BAND_TOP_PX);
+          ctx.lineTo(Math.round(rectX) + 0.5, BAND_TOP_PX + BAND_HEIGHT_PX);
           ctx.stroke();
         }
 
@@ -211,7 +219,7 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
           // 1 linha só (ver comentário de BAND_HEIGHT_PX): a janela UTC que
           // vivia aqui como 2ª linha era o MESMO marketSessionFromUtc do
           // header — removida como duplicação, o dado continua no header.
-          ctx.fillText(level.label.toUpperCase(), clippedX + 4, 3);
+          ctx.fillText(level.label.toUpperCase(), clippedX + 4, BAND_TOP_PX + 3);
         }
         ctx.globalAlpha = 1;
       }

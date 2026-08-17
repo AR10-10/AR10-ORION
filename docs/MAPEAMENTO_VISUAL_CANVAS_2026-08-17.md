@@ -366,3 +366,126 @@ Backlog restante já mapeado e priorizado por evidência real: #286
 (paleta unificada — precedente já existe no Trade Plan), #279 (auditoria
 de tamanho de etiquetas), #283 (caixas de confluência → overlay
 lateral).
+
+## Visual Cleanup & Rendering Audit (5ª rodada — "cada objeto cair em
+caixa perfeitamente", "a Fibonacci diferenciada", "a vertical do mercado
+aberto/fechado não devia descer")
+
+### Achado 2.6 — Kill Zones: a MESMA reclamação, 2ª vez, porque a causa raiz nunca tinha sido tocada
+
+Este é o achado mais importante da rodada, e o mais desconfortável: o
+header de `KillZoneBandsPlugin.tsx` já registrava, palavra por palavra,
+uma reclamação anterior do Operador — *"essas linhas amarelas descendo de
+cima pra baixo estão atrapalhando o gráfico"*. A correção daquela vez
+mexeu em QUANTAS ocorrências desenhavam (passou a desenhar só a mais
+recente de cada janela). A **altura** de cada uma nunca foi tocada:
+`fillRect(x, 0, w, cssHeight)` + duas bordas verticais de `0` a
+`cssHeight` seguiram intactas. Ou seja: tratamos o sintoma (a "cerca" de
+18 janelas) e deixamos a causa (cada janela atravessava todo o preço) —
+por isso a reclamação voltou nesta sessão, quase com as mesmas palavras.
+
+Auditando o par, apareceu o segundo problema, ainda latente: Market
+Sessions e Kill Zones são a MESMA família semântica (janelas de tempo,
+nunca níveis de preço), mas cada uma decidia sozinha sua geometria
+vertical. Nada impedia que uma passasse a desenhar por cima da outra na
+próxima evolução — o mesmo bug de classe que `chart-profile-lanes.ts` já
+resolveu para os 3 perfis do lado direito, que colidiam de fato.
+
+**Resolução aplicada:** novo módulo `chart/chart-time-ribbon-lanes.ts`
+(irmão direto de `chart-profile-lanes.ts`, mesma técnica no eixo
+VERTICAL): `market_session` = 14px no topo (EXATAMENTE o valor real de
+hoje — migração de geometria pura, zero mudança visual nessa camada),
+`kill_zone` = 6px logo abaixo. `KillZoneBandsPlugin` desenha preenchimento
+e bordas dentro da própria lane (`laneTop`/`laneBottom`/`laneHeight`),
+nunca mais `0`/`cssHeight`. Alphas base recalibrados (0.06/0.22 →
+0.38/0.55): os antigos eram calibrados para uma LAVAGEM de altura total,
+e 6% sobre 6px seria literalmente invisível — apagar a camada de fato
+violaria a Regra de Ouro 4. O rótulo de nome da janela saiu junto com a
+altura: era duplicação literal do badge "Kill Zone ·" do header
+(`App.tsx`), a mesma redundância já removida da 2ª linha da faixa de
+sessões, e o próprio pedido dispensa o detalhe explicitamente ("você pode
+nem saber que a hora que o mercado abria"). `computeKillZoneSpans` e o
+decaimento real por idade seguem idênticos — zero dado apagado.
+
+**Verificação REAL (medida, não inspecionada):** o ambiente desta sessão
+tem a política de rede negando `fapi.binance.com` (403 no CONNECT do
+proxy), então o app real fica corretamente fail-closed ("FALHA AO
+CONECTAR AOS FEEDS REAIS (BINANCE)", zero canvas de gráfico) e uma
+captura ao vivo do painel era impossível. Em vez de declarar verificação
+visual que não aconteceu, foi montado um harness Playwright isolado
+(`lightweight-charts` real + `computeKillZoneSpans`/
+`computeSessionKeyLevels` reais + timestamps UTC reais de 4 dias como
+fixture de harness, nunca no fluxo de mercado) e contados TODOS os pixels
+não-transparentes de cada overlay, sem tolerância de cor:
+
+| camada | linhas pintadas | painel |
+|---|---|---|
+| Kill Zone (depois) | **14–19** (6px) | 520px |
+| Kill Zone (antes) | 0–519 (altura total) | 520px |
+| Market Session | **0–13** (14px, inalterada) | 520px |
+
+Zero sobreposição entre as duas (fronteira exata 13 \| 14), e a faixa de
+tempo inteira passou a ocupar 20px de 520 (~3,8%) contra 100% de antes.
+
+### Achado 2.7 — Fibonacci tinha 2 aparências possíveis, e a hierarquia estava invertida
+
+Pedido: *"a Fibonacci tem de ficar diferenciada pra gente saber qual as
+linha dela, como que ela está sendo analisada pro visual"*. Auditoria
+confirmou por que a leitura não funcionava: as 5 linhas
+(`FIB_RETRACEMENT_RATIOS` = 0.236/0.382/0.5/0.618/0.786) tinham
+exatamente 2 aparências — alpha 0.55 se `score > 0`, 0.20 se não. O
+**ratio**, que é o que a ferramenta de fato analisa, não entrava na
+aparência em nenhum ponto. Consequência real e verificável: um 23.6% com
+1 fonte de confluência aparecia MAIS forte que um 61.8% sem nenhuma —
+inversão da hierarquia de leitura, justamente na linha que o Operador
+precisa achar primeiro. E os níveis primários sem confluência não tinham
+NENHUM número na tela (o gate de rótulo era só `score > 0`). Fibonacci
+também era, junto com o Motor de Cenários (Achado 2.5), uma das camadas
+que nunca competiam por `visual-budget.ts`.
+
+**Resolução aplicada:** peso estrutural real por ratio
+(`fibRatioStructuralWeight`): 61.8% (razão áurea) e 50% (ponto médio,
+herdado da Teoria de Dow) = níveis de decisão, peso pleno; 38.2%
+(complemento de 61.8%) = secundário; 23.6%/78.6% = bordas rasa/profunda.
+Isto é hierarquia de LEITURA da ferramenta, explicitamente **nunca** uma
+probabilidade ou taxa de acerto (Regra de Ouro 2 — não existe backtest
+real aqui que sustentasse isso). `fibRatioBaseWeight(ratio, score)` mistura
+70% papel estrutural + 30% confluência real medida — os dois sinais são
+reais e independentes ("qual nível esta ferramenta considera decisivo" vs.
+"quantas OUTRAS ferramentas concordam com este preço"), nenhum responde
+sozinho a pergunta do Operador. Fibonacci entra em `visual-budget.ts` como
+STRUCTURE (mesma categoria/prioridade de S1/R1 e BOS/CHOCH — contexto,
+nunca decisão; LEI 24). `fibLineAlpha` normaliza a partir do PISO do
+orçamento (`VISUAL_BUDGET_FLOOR_WEIGHT`), não de 0, para que os 2 extremos
+da banda caiam exatamente em 0.20 e 0.55 — os mesmos 2 valores de sempre,
+zero regressão em qualquer ponta, só passou a existir gradiente entre eles
+(sem isso o piso de 0.35 empurraria a linha mais fraca para ~0.32,
+deixando a camada MAIS carregada que antes — o oposto do pedido).
+`fibDeservesAxisLabel` libera rótulo para os ratios primários mesmo sem
+confluência; raso continua exigindo confluência real. No pior caso (5
+níveis, nenhuma confluência) só 2 rótulos competem — o teto/anti-colisão
+por proximidade ao preço vivo continua decidindo quantos de fato cabem.
+
+**Verificação:** `tsc --noEmit` limpo; `vitest` 3048/3048 (190 arquivos,
++32 testes novos — 22 de execução real das funções puras novas, 10 de
+fiação); `npm run build` limpo. As funções puras ganharam teste de
+execução real (não só padrão de fonte) porque o bug provável aqui era "a
+matemática está sutilmente errada" — inclusive um teste que trava
+explicitamente a inversão corrigida (61.8% sem confluência > 23.6% com
+confluência máxima) e um que prova os 2 extremos da banda de alpha.
+
+### Limitação honesta desta rodada
+
+A verificação visual do app COMPLETO ao vivo não foi possível (rede do
+ambiente nega Binance; o app fica fail-closed por design, sem canvas). O
+que foi verificado de fato: geometria renderizada em navegador real via
+harness isolado (tabela acima), matemática pura por execução real, fiação
+por padrão de código, `tsc`/`vitest`/`build` limpos. O que continua
+pendente de confirmação: como as 2 mudanças se sentem num painel com
+dados reais ao vivo, no iPad — só o Operador pode fechar isso.
+
+### Backlog restante (inalterado, mesma priorização por evidência)
+
+#286 (paleta unificada — precedente já existe no Trade Plan), #279
+(auditoria de tamanho de etiquetas), #283 (caixas de confluência →
+overlay lateral).

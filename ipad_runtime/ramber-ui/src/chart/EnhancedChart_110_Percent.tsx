@@ -133,7 +133,7 @@ import { TradePlanZonePlugin, opacityMultiplierFor } from "./TradePlanZonePlugin
 // (prioridade 2) — as duas categorias do gráfico que já carregavam um
 // peso 0..1 real e independente (confluenceWeight/opacityMultiplierFor,
 // ambos importados acima, agora reusados aqui sem segunda fórmula).
-import { resolveVisualBudget, type VisualBudgetCandidate } from "../nexus/visual-budget";
+import { resolveVisualBudget, VISUAL_BUDGET_FLOOR_WEIGHT, type VisualBudgetCandidate } from "../nexus/visual-budget";
 // Neural Market Aura (especificação do Operador): corredor de convicção
 // real entre entrada e alvo — ver o cabeçalho de NeuralMarketAuraPlugin.tsx
 // para a divisão de responsabilidade com TradePlanZonePlugin (zero
@@ -681,6 +681,92 @@ export function levelLineAlpha(visualWeight: number | null): number {
   if (visualWeight === null) return S1R1_ALPHA_MAX;
   const clamped = Math.max(0, Math.min(1, visualWeight));
   return S1R1_ALPHA_MIN + clamped * (S1R1_ALPHA_MAX - S1R1_ALPHA_MIN);
+}
+
+// ---------------------------------------------------------------------------
+// Achado 2.7 (Visual Cleanup & Rendering Audit, 5ª rodada) — pedido direto do
+// Operador: "a Fibonacci tem de ficar diferenciada pra gente saber qual as
+// linha dela, como que ela está sendo analisada pro visual".
+//
+// Estado real antes desta rodada: as 5 linhas (FIB_RETRACEMENT_RATIOS =
+// 0.236/0.382/0.5/0.618/0.786, nexus/fibonacci-confluence.ts) desenhavam com
+// EXATAMENTE 2 aparências possíveis — alpha 0.55 se `score > 0`, alpha 0.20
+// se não. O ratio em si (o que a Fibonacci de fato analisa) não entrava na
+// aparência em nenhum ponto. Consequência real e verificável: um 23.6% com
+// 1 fonte de confluência aparecia MAIS forte que um 61.8% sem nenhuma — uma
+// inversão de leitura, já que a razão áurea é justamente o nível que o
+// Operador precisa achar primeiro. E Fibonacci era, junto com o Motor de
+// Cenários (Achado 2.5), uma das camadas que nunca competiam por
+// nexus/visual-budget.ts — desenhava sempre no mesmo peso independente de
+// quantos outros objetos reais disputassem o mesmo espaço.
+//
+// Peso estrutural por ratio: NÃO é uma probabilidade nem uma taxa de acerto
+// (Regra de Ouro 2 — este repositório não tem backtest real que sustentasse
+// isso). É só a hierarquia de LEITURA já padrão da ferramenta: 61.8% (a razão
+// áurea que dá nome ao método) e 50% (o ponto médio da perna, herdado da Teoria
+// de Dow, incluído na lista por convenção e não por Fibonacci) são os níveis de
+// decisão; 38.2% (o complemento de 61.8%) é o secundário; 23.6% e 78.6% são as
+// bordas rasa/profunda. Fail-closed: qualquer ratio fora da tabela cai no peso
+// mais baixo — nunca infla um nível desconhecido.
+export const FIB_PRIMARY_RATIOS = [0.5, 0.618] as const;
+export const FIB_SECONDARY_STRUCTURAL_WEIGHT = 0.6;
+export const FIB_SHALLOW_STRUCTURAL_WEIGHT = 0.3;
+
+export function fibRatioStructuralWeight(ratio: number): number {
+  if (!Number.isFinite(ratio)) return FIB_SHALLOW_STRUCTURAL_WEIGHT;
+  if ((FIB_PRIMARY_RATIOS as readonly number[]).includes(ratio)) return 1;
+  if (ratio === 0.382) return FIB_SECONDARY_STRUCTURAL_WEIGHT;
+  return FIB_SHALLOW_STRUCTURAL_WEIGHT;
+}
+
+/** Fatia do peso final que vem do papel estrutural do próprio ratio; o
+ *  restante vem da confluência REAL já medida (`score`, contagem de fontes
+ *  que concordam com aquele preço — nexus/fibonacci-confluence.ts). Os dois
+ *  sinais são reais e independentes, então ambos entram: o ratio diz "qual
+ *  nível esta ferramenta considera decisivo", o score diz "quantas OUTRAS
+ *  ferramentas concordam com este preço". Nenhum dos dois sozinho responde
+ *  a pergunta do Operador. */
+export const FIB_STRUCTURAL_SHARE = 0.7;
+/** Mesmo teto de contagem de fontes já usado por confluenceWeight()/
+ *  CONFLUENCE_CEIL_SOURCES nas zonas institucionais — zero segunda escala. */
+export const FIB_CONFLUENCE_CEIL = 3;
+
+export function fibRatioBaseWeight(ratio: number, score: number): number {
+  const structural = fibRatioStructuralWeight(ratio);
+  const rawScore = Number.isFinite(score) ? Math.max(0, score) : 0;
+  const confluence = Math.min(1, rawScore / FIB_CONFLUENCE_CEIL);
+  const blended = structural * FIB_STRUCTURAL_SHARE + confluence * (1 - FIB_STRUCTURAL_SHARE);
+  return Math.max(0, Math.min(1, blended));
+}
+
+// Banda real de alpha da Fibonacci. Os DOIS extremos são exatamente os 2
+// valores fixos que a camada já usava antes desta rodada (0.20 e 0.55) — o
+// que muda é que entre eles agora existe um gradiente real em vez de um
+// degrau binário. Ver fibLineAlpha abaixo: a normalização é feita a partir
+// do PISO do orçamento visual (VISUAL_BUDGET_FLOOR_WEIGHT), não de 0, para
+// que o nível mais fraco possível caia em 0.20 cravado — o mesmo valor de
+// sempre. Sem isso o piso de 0.35 do orçamento empurraria o nível mais fraco
+// para ~0.32, deixando a camada MAIS carregada que antes, o oposto do pedido.
+export const FIB_ALPHA_MIN = 0.2;
+export const FIB_ALPHA_MAX = 0.55;
+
+export function fibLineAlpha(visualWeight: number | null): number {
+  if (visualWeight === null) return FIB_ALPHA_MAX;
+  const clamped = Math.max(VISUAL_BUDGET_FLOOR_WEIGHT, Math.min(1, visualWeight));
+  const span = 1 - VISUAL_BUDGET_FLOOR_WEIGHT;
+  const t = span > 0 ? (clamped - VISUAL_BUDGET_FLOOR_WEIGHT) / span : 1;
+  return FIB_ALPHA_MIN + t * (FIB_ALPHA_MAX - FIB_ALPHA_MIN);
+}
+
+/** Um nível primário (razão áurea/ponto médio) sempre merece o número
+ *  visível no eixo — é exatamente "qual linha é a da Fibonacci e o que ela
+ *  está analisando". Os rasos só ganham etiqueta quando têm confluência
+ *  real, o mesmo gate honesto de antes (score 0 é comum e nunca é
+ *  fabricado). O teto/anti-colisão do eixo continua sendo quem decide
+ *  quantas de fato cabem, por proximidade real ao preço vivo
+ *  (chart/price-label-stack.ts) — este predicado só diz quem COMPETE. */
+export function fibDeservesAxisLabel(ratio: number, score: number): boolean {
+  return (FIB_PRIMARY_RATIOS as readonly number[]).includes(ratio) || score > 0;
 }
 
 export function EnhancedChart_110_Percent({
@@ -1928,6 +2014,18 @@ export function EnhancedChart_110_Percent({
     if (Number.isFinite(resistance)) {
       candidates.push({ id: "r1", category: "STRUCTURE", baseWeight: levelStrengthBaseWeight(resistanceStrength) });
     }
+    // Achado 2.7: Fibonacci entra na MESMA competição, como STRUCTURE (é
+    // mapa estrutural de retração, exatamente como S1/R1 e BOS/CHOCH acima —
+    // nunca a decisão real do Core Engine, LEI 24). O peso real de cada
+    // nível vem do ratio + da confluência já medida (fibRatioBaseWeight), e
+    // o id carrega o índice para o efeito da linha reencontrar o seu peso
+    // resolvido — mesmo padrão de `zone-${i}`/`liquidity-fvg-${i}`.
+    if (visibility.fibonacci) {
+      (fibonacciLevels ?? []).forEach((level, i) => {
+        if (!Number.isFinite(level.price)) return;
+        candidates.push({ id: `fib-${i}`, category: "STRUCTURE", baseWeight: fibRatioBaseWeight(level.ratio, level.score) });
+      });
+    }
     mainLiquidityCandidates.fvg.forEach((w, i) => {
       if (w !== null) candidates.push({ id: `liquidity-fvg-${i}`, category: "MAIN_LIQUIDITY", baseWeight: w });
     });
@@ -1945,6 +2043,8 @@ export function EnhancedChart_110_Percent({
     resistance,
     supportStrength,
     resistanceStrength,
+    visibility.fibonacci,
+    fibonacciLevels,
     mainLiquidityCandidates,
   ]);
   const institutionalZoneVisualWeights = useMemo(() => {
@@ -1967,6 +2067,14 @@ export function EnhancedChart_110_Percent({
     () => visualBudgetResults.find((r) => r.id === "r1")?.visualWeight ?? null,
     [visualBudgetResults],
   );
+  // Achado 2.7: peso real resolvido por NÍVEL de Fibonacci — mesmo padrão
+  // por índice de institutionalZoneVisualWeights acima. `undefined` só
+  // ocorre quando o nível nem entrou como candidato (preço não finito ou
+  // camada desligada); fibLineAlpha trata isso como "sem competição".
+  const fibonacciVisualWeights = useMemo(() => {
+    const byId = new Map(visualBudgetResults.map((r) => [r.id, r.visualWeight]));
+    return (fibonacciLevels ?? []).map((_, i) => byId.get(`fib-${i}`) ?? null);
+  }, [visualBudgetResults, fibonacciLevels]);
 
   // S1/R1 reais — o MESMO engine.support/resistance que os outros widgets
   // já exibem, aqui como price lines nativas (createPriceLine), nunca uma
@@ -2083,12 +2191,17 @@ export function EnhancedChart_110_Percent({
     fibLinesRef.current = [];
     if (!visibility.fibonacci) return;
 
-    (fibonacciLevels ?? []).forEach((level) => {
+    (fibonacciLevels ?? []).forEach((level, i) => {
       if (!Number.isFinite(level.price)) return;
       fibLinesRef.current.push(
         series.createPriceLine({
           price: level.price,
-          color: level.score > 0 ? "rgba(0, 240, 255, 0.55)" : "rgba(0, 240, 255, 0.20)",
+          // Achado 2.7: a opacidade deixou de ser um degrau binário
+          // (0.55/0.20 por `score > 0`) e virou o peso real resolvido —
+          // ratio (papel estrutural) + confluência medida + competição de
+          // orçamento visual. É isto que faz a razão áurea se destacar das
+          // retrações rasas sem nenhuma linha desaparecer (piso real).
+          color: `rgba(0, 240, 255, ${fibLineAlpha(fibonacciVisualWeights[i] ?? null).toFixed(3)})`,
           lineWidth: 1,
           lineStyle: LineStyle.Solid,
           axisLabelVisible: false,
@@ -2096,7 +2209,7 @@ export function EnhancedChart_110_Percent({
         }),
       );
     });
-  }, [fibonacciLevels, visibility.fibonacci]);
+  }, [fibonacciLevels, visibility.fibonacci, fibonacciVisualWeights]);
 
   // §6 "Smart Projection Engine" (achado real de auditoria, ver comentário
   // da prop `scenario` acima): as 2 rotas reais do Motor de Cenários
@@ -2889,16 +3002,28 @@ export function EnhancedChart_110_Percent({
     // nenhuma fonte real de acordo permanece uma linha discreta sem
     // etiqueta, honesto (Regra de Ouro 3: score 0 é comum, nunca fabrica
     // confluência pra caber um rótulo).
+    // Achado 2.7 (pedido do Operador "a Fibonacci tem de ficar diferenciada
+    // pra gente saber qual as linha dela"): o gate acima deixava os níveis
+    // PRIMÁRIOS (61.8% razão áurea / 50% ponto médio) mudos sempre que não
+    // tivessem confluência de outra ferramenta — exatamente as 2 linhas que
+    // o Operador precisa identificar primeiro ficavam sem número. Agora
+    // primário sempre compete por rótulo; raso continua exigindo confluência
+    // real (fibDeservesAxisLabel). Quem de fato aparece continua sendo
+    // decidido pelo anti-colisão por proximidade ao preço vivo, não aqui.
     if (visibility.fibonacci) {
-      for (const level of fibonacciLevels ?? []) {
-        if (!(level.score > 0) || !Number.isFinite(level.price)) continue;
+      (fibonacciLevels ?? []).forEach((level, i) => {
+        if (!Number.isFinite(level.price)) return;
+        if (!fibDeservesAxisLabel(level.ratio, level.score)) return;
         out.push({
           price: level.price,
-          text: `FIB ${(level.ratio * 100).toFixed(1)}% ×${level.score}`,
-          color: "rgba(0, 240, 255, 0.55)", // mesma cor de linha score>0 (useEffect do Fibonacci acima)
+          text: `FIB ${(level.ratio * 100).toFixed(1)}%${level.score > 0 ? ` ×${level.score}` : ""}`,
+          // Mesmo alpha real da LINHA correspondente (fibLineAlpha sobre o
+          // mesmo peso resolvido) — rótulo e linha nunca divergem, mesma
+          // disciplina já aplicada a S1/R1 no Achado 2.3.
+          color: `rgba(0, 240, 255, ${fibLineAlpha(fibonacciVisualWeights[i] ?? null).toFixed(3)})`,
           side: "left",
         });
-      }
+      });
     }
     // "bater o olho profissional" (pendência honesta do turno anterior): os
     // rótulos de ENTRY/STOP/TARGET entram no MESMO array/sistema
@@ -3373,7 +3498,7 @@ export function EnhancedChart_110_Percent({
       });
     }
     return out;
-  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, supportVisualWeight, resistanceVisualWeight, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels]);
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, supportVisualWeight, resistanceVisualWeight, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels, fibonacciVisualWeights]);
 
   return (
     <div className="absolute inset-0">

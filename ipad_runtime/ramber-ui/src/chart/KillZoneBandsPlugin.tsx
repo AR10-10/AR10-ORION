@@ -29,24 +29,52 @@
 // pedido pelo Operador pra "marcações antigas" em geral (nenhuma
 // evidência de um número diferente ser necessário especificamente aqui).
 //
+// Correção real (Achado 2.6, Visual Cleanup & Rendering Audit 5ª rodada —
+// SEGUNDA reclamação do Operador sobre o mesmo objeto, com as mesmas
+// palavras: "aquelas outra vertical descendo... do mercado aberto fechado,
+// ela não devia descer não, ela devia aparecer bem pequenininha só uma...
+// não precisa poluir tanto o gráfico"): a correção anterior (comentário
+// abaixo, no loop) mexeu em QUANTAS ocorrências desenhavam, nunca na
+// ALTURA de cada uma — a coluna âmbar continuava indo de y=0 a
+// y=cssHeight, atravessando todo o preço. A causa raiz da reclamação
+// nunca tinha sido tocada, por isso ela voltou.
+//
+// Agora a janela vive numa faixa fina própria no topo, ao lado da faixa de
+// sessões, com geometria vinda de chart-time-ribbon-lanes.ts (fonte única
+// — as duas camadas de contexto de TEMPO nunca mais podem se sobrepor).
+// O que a camada carrega continua real e completo: QUANDO (a extensão em
+// x é exatamente a mesma de antes — quais candles estão dentro da janela)
+// e QUÃO RECENTE (o mesmo alpha do decaimento real por idade). O que saiu
+// foi só a altura e o rótulo de nome — este último era duplicação literal
+// do badge "Kill Zone ·" do header (App.tsx), a mesma redundância já
+// removida da 2ª linha da faixa de sessões, e o próprio pedido dispensa
+// o detalhe explicitamente ("você pode nem saber que a hora que o mercado
+// abria"). Regra de Ouro 4 preservada: computeKillZoneSpans continua
+// computando tudo, zero dado real apagado.
+//
 // LEI 24: display only, puro contexto temporal — nunca uma decisão.
 import { useEffect, useRef } from "react";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeKillZoneSpans, type KillZoneSpan } from "../nexus/kill-zones";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
-// Diretriz Final de Lapidação Visual, Adendo, Parte 11: rótulo de nome da
-// janela virou caixa real (mesma primitiva de LiquidityZonesPlugin/
-// LiquidationHeatmapPlugin/InstitutionalZonePlugin).
-import { drawCanvasLabel } from "../nexus/canvas-label";
+import { getTimeRibbonLaneTopPx, getTimeRibbonLaneBottomPx, getTimeRibbonLaneHeightPx } from "./chart-time-ribbon-lanes";
 
 export const KILL_ZONE_DECAY: DecayConfig = { fadeStartCandles: 50, expireCandles: 200, minAlpha: 0.12 };
 
 // Alphas BASE (na frescura máxima) — multiplicados pelo decaimento real
 // por idade a cada desenho, nunca uma rgba fixa.
-const FILL_ALPHA = 0.06;
-const BORDER_ALPHA = 0.22;
-const LABEL_ALPHA = 0.65;
-const MIN_LABEL_WIDTH_PX = 40; // abaixo disto, o rótulo não cabe — a caixa ainda desenha, só o texto pula.
+//
+// Achado 2.6: os valores antigos (0.06/0.22) eram calibrados para uma
+// LAVAGEM de altura total — 6% de preenchimento sobre a coluna inteira
+// tinha presença visual justamente por cobrir centenas de pixels de
+// altura. Numa faixa de 6px o mesmo 0.06 seria literalmente invisível, o
+// que apagaria a camada de fato (Regra de Ouro 4). Recalibrados para a
+// nova geometria, na mesma ordem de grandeza da faixa de sessões vizinha
+// (BAND_COLOR_OPEN = 0.42 / BORDER_COLOR = 0.30 em
+// MarketSessionBandsPlugin.tsx) — mesma legibilidade de antes num espaço
+// muito menor, nunca mais presença por tamanho.
+const FILL_ALPHA = 0.38;
+const BORDER_ALPHA = 0.55;
 
 interface KillZoneBandsPluginProps {
   chart: IChartApi | null;
@@ -112,8 +140,13 @@ export function KillZoneBandsPlugin({ chart, series, data }: KillZoneBandsPlugin
       // retângulo iria do CENTRO do primeiro candle ao CENTRO do último,
       // cortando visualmente metade de cada candle nas bordas.
       const halfBar = (timeScale.options().barSpacing ?? 0) / 2;
-      ctx.font = "9px -apple-system, sans-serif";
-      ctx.textBaseline = "top";
+
+      // Achado 2.6: geometria vertical vem da lane compartilhada, nunca
+      // mais de `0`/`cssHeight` — a faixa não pode descer o gráfico nem
+      // invadir a faixa de sessões vizinha.
+      const laneTop = getTimeRibbonLaneTopPx("kill_zone");
+      const laneBottom = getTimeRibbonLaneBottomPx("kill_zone");
+      const laneHeight = getTimeRibbonLaneHeightPx("kill_zone");
 
       const totalCandles = dataRef.current.length;
       // Lapidação por captura real do Operador (BTC 1H, ~6 dias visíveis:
@@ -145,24 +178,19 @@ export function KillZoneBandsPlugin({ chart, series, data }: KillZoneBandsPlugin
         if (clippedWidth <= 0) continue;
 
         ctx.fillStyle = `rgba(255, 176, 32, ${(alpha * FILL_ALPHA).toFixed(3)})`;
-        ctx.fillRect(clippedX, 0, clippedWidth, cssHeight);
+        ctx.fillRect(clippedX, laneTop, clippedWidth, laneHeight);
         // Fio de Seda (Regra de Ouro 5): 1px sólida real nas bordas
-        // verticais da janela, nunca setLineDash.
+        // verticais da janela, nunca setLineDash. Achado 2.6: o traço
+        // agora vai só do topo à base da PRÓPRIA lane — é o que marca o
+        // início/fim exatos da janela sem atravessar o preço.
         ctx.lineWidth = 1;
         ctx.strokeStyle = `rgba(255, 176, 32, ${(alpha * BORDER_ALPHA).toFixed(3)})`;
         ctx.beginPath();
-        ctx.moveTo(Math.round(rectX) + 0.5, 0);
-        ctx.lineTo(Math.round(rectX) + 0.5, cssHeight);
-        ctx.moveTo(Math.round(rectX + rectWidth) + 0.5, 0);
-        ctx.lineTo(Math.round(rectX + rectWidth) + 0.5, cssHeight);
+        ctx.moveTo(Math.round(rectX) + 0.5, laneTop);
+        ctx.lineTo(Math.round(rectX) + 0.5, laneBottom);
+        ctx.moveTo(Math.round(rectX + rectWidth) + 0.5, laneTop);
+        ctx.lineTo(Math.round(rectX + rectWidth) + 0.5, laneBottom);
         ctx.stroke();
-
-        if (clippedWidth >= MIN_LABEL_WIDTH_PX) {
-          // Diretriz Final Adendo Parte 11: caixa real em vez de texto nu
-          // — mesma cor/mesmo decaimento real de antes (alpha*LABEL_ALPHA
-          // já bakeada no rgba), só a primitiva de desenho muda.
-          drawCanvasLabel(ctx, clippedX + 3, 3, { fill: `rgba(255, 176, 32, ${(alpha * LABEL_ALPHA).toFixed(3)})`, text: span.label.toUpperCase() });
-        }
       }
     };
 
