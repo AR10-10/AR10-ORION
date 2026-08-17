@@ -145,7 +145,7 @@ describe('§7 Premium/Discount: gráfico + Trade Plan strip (display-only, LEI 2
     expect(c).toContain('premiumDiscount?: PremiumDiscountReading | null;');
     const idx = c.indexOf('premiumDiscountLinesRef.current.forEach((line) => series.removePriceLine(line));');
     expect(idx).toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 900);
+    const block = c.slice(idx, idx + 1500);
     expect(block).toContain('if (!premiumDiscount || !visibility.premium_discount) return;');
     expect(block).toContain('lineWidth: 1,');
     expect(block).toContain('lineStyle: LineStyle.Solid,');
@@ -156,6 +156,31 @@ describe('§7 Premium/Discount: gráfico + Trade Plan strip (display-only, LEI 2
     // ref limpa no unmount, mesma disciplina das outras
     const cleanupIdx = c.indexOf('chart.remove();');
     expect(c.slice(cleanupIdx, cleanupIdx + 600)).toContain('premiumDiscountLinesRef.current = [];');
+  });
+
+  // Achado real (Visual Cleanup & Rendering Audit, "ORDEM DEFINITIVA..."):
+  // Equilibrium (Premium/Discount) e FIB 50.0% (Fibonacci) partem do MESMO
+  // par de swing (findSwings compartilhado — premium-discount.ts §header +
+  // engine-bridge.ts:786) e são matematicamente o MESMO preço sempre que
+  // os dois motores computam com sucesso — 1 conceito, nunca 2 linhas
+  // nativas simultâneas por padrão. Fibonacci vira o dono canônico desse
+  // ponto (carrega confluência real); Premium/Discount some SÓ dessa 1
+  // linha quando isso aconteceria, rangeHigh/rangeLow (que Fibonacci nunca
+  // desenha — FIB_RETRACEMENT_RATIOS não inclui os extremos) continuam
+  // sempre reais.
+  it('Achado 2.1-bis: Equilibrium não desenha quando FIB 50% já cobre o mesmo preço — rangeHigh/rangeLow sempre desenham', () => {
+    const c = chart();
+    const idx = c.indexOf('premiumDiscountLinesRef.current.forEach((line) => series.removePriceLine(line));');
+    const block = c.slice(idx, idx + 1500);
+    expect(block).toContain('const fibAlreadyDrawsEquilibrium =');
+    expect(block).toContain('visibility.fibonacci && (fibonacciLevels ?? []).some((l) => l.ratio === 0.5 && Number.isFinite(l.price));');
+    expect(block).toContain('mkPd(premiumDiscount.rangeHigh.price, "rgba(255, 0, 85, 0.30)", "Premium · topo do range");');
+    expect(block).toMatch(/if \(!fibAlreadyDrawsEquilibrium\) \{\s*mkPd\(premiumDiscount\.equilibrium/);
+    expect(block).toContain('mkPd(premiumDiscount.rangeLow.price, "rgba(0, 255, 170, 0.30)", "Discount · fundo do range");');
+    // dependência real do efeito inclui fibonacci agora — senão o dedup
+    // ficaria stale quando só o toggle Fibonacci muda.
+    const effectIdx = c.indexOf('}, [premiumDiscount, visibility.premium_discount, visibility.fibonacci, fibonacciLevels]);');
+    expect(effectIdx).toBeGreaterThan(idx);
   });
 
   it('ChartWidget passa a MESMA fatia da store ao gráfico (zero segunda leitura)', () => {

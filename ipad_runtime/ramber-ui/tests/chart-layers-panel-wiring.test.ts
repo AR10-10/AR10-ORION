@@ -410,7 +410,11 @@ describe('Auditoria de pendências: os 7 elementos nativos do gráfico ainda sem
   it('Premium/Discount: fail-closed real — sem visibility.premium_discount (E sem leitura real), zero price line desenhada', () => {
     const c = chart();
     expect(c).toContain('if (!premiumDiscount || !visibility.premium_discount) return;');
-    const depsIdx = c.indexOf('}, [premiumDiscount, visibility.premium_discount]);');
+    // Achado 2.1-bis (Visual Cleanup & Rendering Audit): a dependência
+    // ganhou visibility.fibonacci/fibonacciLevels — o dedup real de
+    // Equilibrium×FIB 50% (refinamento-final-wiring.test.ts) precisa
+    // redesenhar quando só o toggle Fibonacci muda, senão fica stale.
+    const depsIdx = c.indexOf('}, [premiumDiscount, visibility.premium_discount, visibility.fibonacci, fibonacciLevels]);');
     expect(depsIdx).toBeGreaterThan(-1);
   });
 

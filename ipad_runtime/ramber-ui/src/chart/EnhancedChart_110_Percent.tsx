@@ -2108,6 +2108,29 @@ export function EnhancedChart_110_Percent({
   // baixa, sem rótulo de eixo. Fail-closed: sem leitura real, zero linhas.
   // Auditoria de pendências: ganha visibility.premium_discount, mesmo
   // fail-closed acima (early-return antes de desenhar).
+  //
+  // Achado real (Visual Cleanup & Rendering Audit, "ORDEM DEFINITIVA..."):
+  // premium-discount.ts e fibonacci-confluence.ts (engine-bridge.ts:786)
+  // partem do MESMO par de swing (último swing high + último swing low
+  // fractal, via findSwings compartilhado) — não é coincidência, é a MESMA
+  // definição de perna. Equilibrium (50% do dealing range) e o nível FIB
+  // 50.0% (FIB_RETRACEMENT_RATIOS inclui 0.5) são matematicamente o MESMO
+  // preço sempre que os dois motores computam com sucesso ao mesmo tempo —
+  // 1 conceito ("meio da perna"), 2 linhas nativas reais simultâneas por
+  // padrão (os dois layers vêm `true` em DEFAULT_CHART_LAYER_VISIBILITY).
+  // Regra nova do Operador: múltiplos produtores podem calcular (os dois
+  // continuam 100% intactos — zero mudança em premium-discount.ts/
+  // fibonacci-confluence.ts, zero mudança em premiumDiscount.equilibrium
+  // usado alhures em App.tsx para % de posição na faixa), mas o CANVAS só
+  // pode ter UMA linha por conceito. FIB 50% já é estritamente mais rica
+  // nesse ponto (carrega confluência real — quantas fontes independentes
+  // caem ali, "×N" no título) que a linha de Equilibrium sozinha, então
+  // vira a representação canônica: Equilibrium só desenha quando Fibonacci
+  // não vai desenhar o mesmo ponto agora (invisível, sem matriz válida, ou
+  // sem o nível 0.5 nela — fail-closed, nunca assume). rangeHigh/rangeLow
+  // continuam sempre desenhados por este motor: Fibonacci nunca traça uma
+  // linha em 0%/100% (FIB_RETRACEMENT_RATIOS não inclui os extremos), então
+  // não há sobreposição real nesses dois pontos.
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
@@ -2127,10 +2150,14 @@ export function EnhancedChart_110_Percent({
         }),
       );
     };
+    const fibAlreadyDrawsEquilibrium =
+      visibility.fibonacci && (fibonacciLevels ?? []).some((l) => l.ratio === 0.5 && Number.isFinite(l.price));
     mkPd(premiumDiscount.rangeHigh.price, "rgba(255, 0, 85, 0.30)", "Premium · topo do range");
-    mkPd(premiumDiscount.equilibrium, "rgba(138, 180, 248, 0.30)", "Equilibrium · 50%");
+    if (!fibAlreadyDrawsEquilibrium) {
+      mkPd(premiumDiscount.equilibrium, "rgba(138, 180, 248, 0.30)", "Equilibrium · 50%");
+    }
     mkPd(premiumDiscount.rangeLow.price, "rgba(0, 255, 170, 0.30)", "Discount · fundo do range");
-  }, [premiumDiscount, visibility.premium_discount]);
+  }, [premiumDiscount, visibility.premium_discount, visibility.fibonacci, fibonacciLevels]);
 
   // Auditoria Final §3 ("caso esteja calculado mas não desenhado, ativar
   // renderização") + Carta Branca (Reconhecimento de Padrões): agora TRÊS
