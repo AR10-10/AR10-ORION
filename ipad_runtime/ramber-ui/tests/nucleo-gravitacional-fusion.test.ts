@@ -152,7 +152,15 @@ describe('ChartWidget: leitura real → Relevance Engine → store → visibilid
     const idx = a.indexOf('const effectiveChartLayerVisibility: ChartLayerVisibility = useMemo(() => {');
     expect(idx).toBeGreaterThan(-1);
     const body = a.slice(idx, a.indexOf('}, [chartLayerAutoMode,', idx));
-    expect(body).toContain('acc[id] = autoMode[id] ? (layerRelevance[id]?.relevant ?? true) : manual[id];');
+    // A regra que este teste guarda é o CONTRATO — auto resolve pelo motor,
+    // manual resolve pelo booleano do Operador — não a linha literal. O teto
+    // de simultaneidade (resolveAutoLayerVisibility) entrou ANTES do fallback
+    // de relevância, preservando a cadeia inteira: se o teto não tiver
+    // decisão para a camada, cai na relevância; se nem isso, cai em `true`.
+    expect(body).toContain('autoMode[id] ?');
+    expect(body).toContain('autoDecision[id]?.show');
+    expect(body).toContain('layerRelevance[id]?.relevant ?? true'); // fallback anti-crash intacto
+    expect(body).toContain(': manual[id];');                        // manual continua mandando sozinho
     expect(a).toContain('layerVisibility={effectiveChartLayerVisibility}');
   });
 });

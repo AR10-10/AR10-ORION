@@ -444,3 +444,144 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
       : { relevant: false, emphasis: "normal", reason: "nenhum alvo real projetado em nenhum dos 2 caminhos do Motor de Cenários" },
   };
 }
+
+// ============================================================================
+// TETO DE SIMULTANEIDADE — "deixa o gráfico mais limpo possível, só com as
+// ferramentas mais precisas" (pedido direto do Operador)
+// ============================================================================
+//
+// ACHADO QUE ORIGINOU ISTO (medido, não suposto):
+//   1. `layer-relevance.ts` (acima) JÁ esconde camada sem leitura real — esse
+//      gate funciona e não é o problema.
+//   2. `visual-budget.ts` tem VISUAL_BUDGET_FLOOR_WEIGHT = 0.35 e o comentário
+//      explícito "nenhum objeto cai abaixo disto — nunca removido". Ou seja: o
+//      orçamento visual NUNCA esconde, só apaga para 35% de opacidade.
+//   3. Não existia, em lugar nenhum, um teto de QUANTAS camadas podem estar
+//      relevantes AO MESMO TEMPO.
+//
+// Consequência real: em mercado ativo a maioria das 25 camadas tem leitura
+// real simultânea, todas passam no gate de relevância, e o gráfico desenha
+// 15+ objetos — vários a 35% de opacidade. Não era "cada camada poluindo": era
+// a AUSÊNCIA de competição entre camadas que passaram no gate.
+//
+// Este é o teto que faltava. Ele NÃO apaga dado (Regra de Ouro 4): a camada
+// continua existindo, o motor continua calculando, o toggle manual continua
+// mandando mais que ele, e a razão de cada camada suprimida fica legível.
+// Ele só decide o que merece a tela AGORA, no modo Automático.
+
+/** Quantas camadas o modo Automático desenha ao mesmo tempo, no máximo.
+ *  Convenção declarada (não medição), calibrada pelo mesmo princípio que a
+ *  pesquisa de paleta já aplicou: a leitura simultânea confiável de um humano
+ *  fica na casa de meia dúzia de categorias distintas. Acima disso o operador
+ *  para de ler e passa a varrer. */
+export const AUTO_LAYER_MAX_SIMULTANEOUS = 6;
+
+/** Ordem de PRECISÃO declarada — do mais acionável ao mais contextual.
+ *  Convenção documentada, no mesmo espírito de VISUAL_BUDGET_PRIORITY_ORDER
+ *  (visual-budget.ts), nunca uma medição. O critério: o que responde "onde
+ *  entro/saio AGORA" vem antes do que responde "como está o cenário".
+ *  Camada fora desta lista entra por último — nunca some por omissão. */
+export const AUTO_LAYER_PRECISION_ORDER: readonly string[] = [
+  "trade_plan_zone",      // o plano ativo: entrada/stop/alvo reais
+  "structure_breaks",     // CHoCH/BOS: a mudança estrutural em si
+  "institutional_zones",  // confluência já consolidada de várias fontes
+  "liquidity_zones",      // FVG/OB não mitigados
+  "order_book_depth",     // livro real ao vivo
+  "volume_profile",       // POC canônico
+  "equal_highs_lows",
+  "liquidity_sweep",
+  "vwap",
+  "ema",
+  "nexus_line",
+  "fibonacci",
+  "premium_discount",
+  "trend_channel",
+  "harmonics",
+  "zigzag",
+  "tpo_profile",
+  "cvd",
+  "order_flow_heatmap",
+  "liquidation_heatmap",
+  "session_key_levels",
+  "market_sessions",
+  "kill_zones",
+  "scenario_projection",
+  "neural_market_aura",
+];
+
+export interface AutoLayerDecision {
+  /** Desenha AGORA no modo Automático. */
+  show: boolean;
+  /** Razão real e legível — nunca "escondido" sem explicação. */
+  reason: string;
+  /** true só quando a camada TINHA leitura real e perdeu por competição.
+   *  Distingue "não há o que mostrar" de "há, mas outra coisa é mais
+   *  precisa agora" — dois estados diferentes que não podem virar um só. */
+  suppressedByCap: boolean;
+}
+
+/**
+ * Decide, entre as camadas que JÁ passaram no gate de relevância, quais
+ * merecem a tela agora. Puro e determinístico.
+ *
+ * `forcedOn` são as camadas que o Operador ligou na mão: elas NUNCA são
+ * suprimidas por este teto e NÃO consomem o orçamento — decisão humana
+ * explícita manda mais que heurística, sempre.
+ *
+ * Critério de ordenação, nesta ordem:
+ *   1. `emphasis === "highlight"` primeiro — é o único gradiente REAL já
+ *      presente no resultado (o mesmo sinal que decidiu relevante=true está
+ *      no seu extremo). Nunca um peso inventado aqui.
+ *   2. ordem de precisão declarada acima.
+ */
+export function resolveAutoLayerVisibility(
+  relevance: Readonly<Record<string, LayerRelevanceResult>>,
+  forcedOn: readonly string[] = [],
+  cap: number = AUTO_LAYER_MAX_SIMULTANEOUS,
+): Record<string, AutoLayerDecision> {
+  const out: Record<string, AutoLayerDecision> = {};
+  const forced = new Set(forcedOn);
+  const effectiveCap = Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : AUTO_LAYER_MAX_SIMULTANEOUS;
+
+  const rank = (id: string) => {
+    const i = AUTO_LAYER_PRECISION_ORDER.indexOf(id);
+    return i === -1 ? AUTO_LAYER_PRECISION_ORDER.length : i;
+  };
+
+  const competing: string[] = [];
+  for (const [id, r] of Object.entries(relevance)) {
+    if (forced.has(id)) {
+      out[id] = { show: true, reason: "ligada manualmente pelo Operador — teto automático não se aplica", suppressedByCap: false };
+      continue;
+    }
+    if (!r || !r.relevant) {
+      out[id] = { show: false, reason: r?.reason ?? "sem leitura real", suppressedByCap: false };
+      continue;
+    }
+    competing.push(id);
+  }
+
+  competing.sort((a, b) => {
+    const ha = relevance[a].emphasis === "highlight" ? 0 : 1;
+    const hb = relevance[b].emphasis === "highlight" ? 0 : 1;
+    if (ha !== hb) return ha - hb;
+    const ra = rank(a);
+    const rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    return a.localeCompare(b); // determinismo total: mesma entrada, mesma saída
+  });
+
+  competing.forEach((id, i) => {
+    if (i < effectiveCap) {
+      out[id] = { show: true, reason: relevance[id].reason, suppressedByCap: false };
+    } else {
+      out[id] = {
+        show: false,
+        reason: `leitura real presente, mas ${effectiveCap} camadas mais precisas ocupam a tela agora (${relevance[id].reason})`,
+        suppressedByCap: true,
+      };
+    }
+  });
+
+  return out;
+}

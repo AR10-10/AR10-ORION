@@ -125,7 +125,10 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
 
   it('Achado real (crash em runtime, Fase 8.1): effectiveChartLayerVisibility nunca lê layerRelevance[id].relevant sem fallback — uma camada sem cobertura própria (ex.: liquidation_heatmap) travava o app inteiro (Cannot read properties of undefined) em modo automático', () => {
     const app = read('../src/App.tsx');
-    const memoMatch = app.match(/const effectiveChartLayerVisibility: ChartLayerVisibility = useMemo\(\(\) => \{([\s\S]*?)\n  \}, \[chartLayerAutoMode, chartLayerVisibility, layerRelevance\]\);/);
+    // Deps ganharam `autoDecision` (teto de simultaneidade). A guarda REAL
+    // deste teste nunca foi a lista de deps — é o fallback contra o crash;
+    // o regex passa a aceitar deps adicionais sem afrouxar isso.
+    const memoMatch = app.match(/const effectiveChartLayerVisibility: ChartLayerVisibility = useMemo\(\(\) => \{([\s\S]*?)\n  \}, \[chartLayerAutoMode, chartLayerVisibility, layerRelevance[^\]]*\]\);/);
     expect(memoMatch, 'effectiveChartLayerVisibility não encontrado').not.toBeNull();
     const body = memoMatch![1];
     expect(body).toContain('layerRelevance[id]?.relevant ?? true');

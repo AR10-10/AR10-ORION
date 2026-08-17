@@ -22,6 +22,7 @@ import {
   VOLUME_PROFILE_PROXIMITY_PCT,
   MARKET_SESSION_RECENT_BOUNDARY_CANDLES,
   type LayerRelevanceInput,
+  resolveAutoLayerVisibility,
 } from "./nexus/layer-relevance";
 import { computeConfluenceCorridor } from "./nexus/confluence-corridor";
 // OMEGA CORE V-MAX (completar Fase 7, Radar/OIH): universo curado real +
@@ -8793,6 +8794,17 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // EnhancedChart_110_Percent recebe só este resultado já resolvido — nunca
   // precisa saber o que é automático ou manual (Regra de Ouro 4: zero
   // segunda implementação do "visible ou não" dentro do componente do canvas).
+  // Competição real entre as camadas que passaram no gate de relevância —
+  // resolve QUAIS merecem a tela agora (motor puro, auto-layer-cap.test.ts).
+  // Camadas fora do modo automático entram como "forçadas": decisão humana
+  // explícita nunca é suprimida por heurística, e não gasta o orçamento.
+  const autoDecision = useMemo(() => {
+    const autoMode: ChartLayerVisibility = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
+    const manual: ChartLayerVisibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
+    const forced = CHART_LAYER_IDS.filter((id) => !autoMode[id] && manual[id]);
+    return resolveAutoLayerVisibility(layerRelevance ?? {}, forced);
+  }, [layerRelevance, chartLayerAutoMode, chartLayerVisibility]);
+
   const effectiveChartLayerVisibility: ChartLayerVisibility = useMemo(() => {
     const autoMode: ChartLayerVisibility = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
     const manual: ChartLayerVisibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
@@ -8809,10 +8821,18 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
       // ?? true`) fica como defesa
       // contra uma camada FUTURA esquecida — nunca derruba o app mesmo se
       // layer-relevance.ts ficar defasado de novo.
-      acc[id] = autoMode[id] ? (layerRelevance[id]?.relevant ?? true) : manual[id];
+      // TETO DE SIMULTANEIDADE (pedido do Operador: "gráfico mais limpo
+      // possível, só com as ferramentas mais precisas"). Antes desta linha,
+      // uma camada em modo automático desenhava sempre que tivesse leitura
+      // real — e em mercado ativo a maioria das 25 tem leitura real ao mesmo
+      // tempo. O gate de relevância nunca foi o problema; a AUSÊNCIA de
+      // competição entre as que passavam no gate era.
+      // `autoDecision` só existe para camada em modo automático; o toggle
+      // manual continua decidindo sozinho, exatamente como antes.
+      acc[id] = autoMode[id] ? (autoDecision[id]?.show ?? layerRelevance[id]?.relevant ?? true) : manual[id];
       return acc;
     }, {} as ChartLayerVisibility);
-  }, [chartLayerAutoMode, chartLayerVisibility, layerRelevance]);
+  }, [chartLayerAutoMode, chartLayerVisibility, layerRelevance, autoDecision]);
 
   return (
     <Widget
