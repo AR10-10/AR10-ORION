@@ -270,3 +270,63 @@ Isso não muda em nenhuma das quatro opções.
 | falta o quê das plataformas de elite? | 2 itens reais (heatmap de livro, delta divergence) + backtest |
 | ele se vira sozinho na reversão? | **Vira, mas tarde** — por cruzamento de média, o detector mais lento que existe |
 | o que trava a evolução? | **Não é matemática faltando. É matemática pronta e proibida de decidir.** |
+
+---
+
+# ADENDO — o executor da medição, e um alerta que ele já produziu
+
+`ipad_runtime/tools/measure-reversal-lead.mjs` fecha a metade que faltava: o
+instrumento de `reversal-detector.ts` era uma biblioteca sem forma de ser
+executada — a mesma "feature construída até a metade" que este documento
+critica, criada por mim na entrega anterior.
+
+```bash
+node ipad_runtime/tools/measure-reversal-lead.mjs
+node ipad_runtime/tools/measure-reversal-lead.mjs --symbol ETHUSDT --interval 1h
+```
+
+Roda os motores REAIS barra a barra (`trendBias` importado, `bos-choch-engine`,
+`supertrend-engine`), **sem lookahead** — cada barra é avaliada só com o
+histórico até ela. Fail-closed: sem rede real, sem número.
+
+## Por que ele não roda aqui
+
+As 5 corretoras são negadas pela política de rede deste ambiente (403 no
+CONNECT), e o único candle do repositório é declaradamente sintético
+(`replay-fixture.v1.json`: `live: false`, `exchange_connection: NONE`). Rodar a
+medição ali produziria um número sobre um gerador. Na máquina do Operador
+(`README_LOCAL.md`) o comando produz o número real.
+
+## Validação de mecanismo (NÃO é resultado de mercado)
+
+Executado sobre o fixture sintético, só para provar que o cano funciona:
+
+| medida | valor |
+|---|---|
+| candles | 640 |
+| viradas do Núcleo emparelhadas | 47 |
+| eventos estruturais | 218 (199 CHoCH + 19 SuperTrend) |
+| mediana da vantagem | **0 barras** |
+| antes / empate / depois | 13 / 14 / **20** |
+
+**O resultado 0 é uma boa notícia sobre o instrumento.** Numa série sem
+estrutura real de mercado, um medidor viciado teria devolvido vantagem
+positiva. Ele devolveu zero, com mais casos "depois" que "antes" — a correção
+anti-viés (janela simétrica) está funcionando de verdade.
+
+## ALERTA REAL que a validação levantou
+
+**199 CHoCH em 580 barras ≈ 1 a cada 3 candles.** CHoCH real é evento raro e
+significativo; nessa frequência ele não é "mudança de caráter", é ruído com
+nome bonito.
+
+Duas explicações possíveis, e a diferença importa muito:
+- a série sintética é patologicamente serrilhada (provável — é um gerador), ou
+- `bos-choch-engine.js` está com o gate de swing frouxo demais.
+
+**Isto precisa ser checado no dado real antes de qualquer decisão.** Se o BTC
+real também der ~1 CHoCH a cada 3 barras, então a evidência estrutural não
+está pronta para influenciar o Núcleo em hipótese nenhuma — e a resposta
+honesta ao pedido do Operador passaria a ser "primeiro apertar o detector,
+depois falar em reversão". O executor imprime `eventosEstruturais` justamente
+para essa checagem ser a primeira coisa que se olha.
