@@ -230,6 +230,28 @@ describe('volume_profile: proximidade real a POC/HVN', () => {
   });
 });
 
+// Achado 2.1 (ORDEM DEFINITIVA — MAPEAMENTO_VISUAL_CANVAS_2026-08-17.md):
+// Volume Profile e TPO Profile calculam o MESMO conceito (Point of
+// Control/Value Area) por 2 metodologias reais diferentes — a regra
+// nova exige 1 representação visual canônica, nunca as 2 automáticas ao
+// mesmo tempo. TPO continua 100% calculado (hasTpoProfile só descreve
+// disponibilidade real do dado) — só para de entrar em modo automático.
+describe('tpo_profile: nunca automático — Volume Profile é o Point of Control canônico (Achado 2.1)', () => {
+  it('perfil TPO disponível, mas nunca relevante em modo automático (Volume Profile já é o canônico)', () => {
+    const r = computeLayerRelevance({ ...BASE, hasTpoProfile: true }).tpo_profile;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('canônico');
+  });
+  it('sem perfil TPO real disponível => motivo honesto de DADOS_INSUFICIENTES, nunca o mesmo motivo de cima', () => {
+    const r = computeLayerRelevance(BASE).tpo_profile;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('candle real suficiente');
+  });
+  it('volume_profile permanece o único gate por proximidade real — nada mudou no lado canônico', () => {
+    expect(computeLayerRelevance({ ...BASE, volumeProfileNearPrice: true }).volume_profile.relevant).toBe(true);
+  });
+});
+
 describe('trade_plan_zone / neural_market_aura: NUNCA sujeitos ao gate — próprio ciclo de vida real', () => {
   it('trade_plan_zone segue tradePlanActive diretamente (Conselho ou fallback do Núcleo, já resolvido pelo chamador)', () => {
     expect(computeLayerRelevance(BASE).trade_plan_zone.relevant).toBe(false);

@@ -133,10 +133,24 @@ export interface LayerRelevanceInput {
   hasOrderBook: boolean;
   // TPO / Market Profile (Entrega 41): true quando computeTpoProfile
   // (nexus/tpo-profile.ts) devolve status OK para a sessão corrente —
-  // mesmo padrão de hasFibonacciLevels acima (existência real do dado,
-  // nunca proximidade). false cobre os 2 casos honestos de
-  // DADOS_INSUFICIENTES do motor (sessão sem candle real ainda, ou faixa
-  // de preço degenerada).
+  // existência real do dado, nunca proximidade. false cobre os 2 casos
+  // honestos de DADOS_INSUFICIENTES do motor (sessão sem candle real
+  // ainda, ou faixa de preço degenerada). Achado 2.1 da ORDEM DEFINITIVA
+  // (MAPEAMENTO_VISUAL_CANVAS_2026-08-17.md): Volume Profile e TPO
+  // Profile computam o MESMO conceito (Point of Control/Value Area) por
+  // 2 metodologias reais diferentes (volume-no-preço vs. tempo-no-preço)
+  // — os dois cálculos continuam intactos (nenhum é apagado, Regra de
+  // Ouro 4), mas só um pode ser a representação visual automática por
+  // vez. O motor NÃO decide qual metodologia é "melhor" agora (isso
+  // seria inventar uma opinião nova) — só resolve QUAL fica em cima por
+  // padrão: Volume Profile, porque sua própria relevância já é
+  // proximidade real ao preço vivo (mais estreita, mais "agora" — ver
+  // volumeProfileNearPrice abaixo), enquanto TPO é gate de mera
+  // existência (mais largo, mostraria quase sempre). TPO nunca some do
+  // sistema — continua 100% calculado e disponível via toggle manual no
+  // Painel de Camadas (§12: "informação secundária permanece acessível
+  // por... layers"), só para de disputar automaticamente o mesmo espaço
+  // visual do POC/Value Area contra o Volume Profile.
   hasTpoProfile: boolean;
   // ZigZag (Entrega 47): true quando computeZigZag (research/engines/
   // zigzag-engine.js) devolve >=2 pivôs confirmados reais — mesmo limiar
@@ -304,11 +318,15 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
       ? { relevant: true, emphasis: "normal", reason: "livro de ofertas ao vivo real presente" }
       : { relevant: false, emphasis: "normal", reason: "sem livro de ofertas ao vivo real neste momento" },
 
-    // Entrega 41: existência real do perfil (computeTpoProfile === OK),
-    // nunca proximidade — mesmo papel de hasFibonacciLevels acima.
-    tpo_profile: input.hasTpoProfile
-      ? { relevant: true, emphasis: "normal", reason: "perfil TPO real da sessão corrente já computável (candles suficientes)" }
-      : { relevant: false, emphasis: "normal", reason: "sessão sem candle real suficiente ainda para um perfil TPO" },
+    // Achado 2.1 (ORDEM DEFINITIVA, MAPEAMENTO_VISUAL_CANVAS_2026-08-17.md
+    // §Camada 4): TPO Profile e Volume Profile representam o MESMO
+    // conceito (Point of Control) — nunca os dois automaticamente ao
+    // mesmo tempo. Volume Profile é o canônico por padrão (ver
+    // hasTpoProfile acima para o raciocínio completo); TPO deixa de
+    // entrar em modo automático, mas continua 100% real e disponível via
+    // toggle manual — nenhum cálculo foi removido, só a exibição
+    // automática.
+    tpo_profile: { relevant: false, emphasis: "normal", reason: input.hasTpoProfile ? "perfil TPO real e disponível (toggle manual) — Volume Profile é o Point of Control canônico automático, evita 2 representações do mesmo conceito ao mesmo tempo" : "sessão sem candle real suficiente ainda para um perfil TPO" },
 
     // Entrega 47: mesmo papel de tpo_profile acima — existência real de
     // pivôs suficientes, nunca proximidade ao preço vivo.
