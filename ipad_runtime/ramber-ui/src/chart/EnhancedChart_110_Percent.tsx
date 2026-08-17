@@ -619,6 +619,56 @@ function levelTitle(base: string, strength: LevelStrength | null | undefined, br
   return `${base} ${strength.label} ${strength.touches}x/${breakouts ?? 0}x`;
 }
 
+// Achado real (Visual Cleanup & Rendering Audit): grep confirmou S1/R1
+// como o único par de linhas do gráfico com ZERO integração em
+// layer-relevance.ts/visual-budget.ts — desenhava sempre no mesmo alpha
+// fixo (0.65), FORTE ou FRACA, sem nenhuma competição visual com o resto
+// do painel. supportStrength/resistanceStrength (LevelStrength.touches,
+// support-resistance-engine.js) já é o sinal real de força do nível —
+// mesmo formato de confluenceWeight() (InstitutionalZonePlugin.tsx):
+// clamp entre piso/teto de toques reais, normaliza para 0..1. Piso=1
+// (o próprio nível sempre bate em si mesmo — nunca 0 toques reais);
+// teto=4, mesma ordem de grandeza do CONFLUENCE_CEIL_SOURCES de zonas
+// institucionais. Zero fabricação: nenhum toque novo é contado aqui, só
+// reusa strength.touches já computado.
+export const S1R1_TOUCH_FLOOR = 1;
+export const S1R1_TOUCH_CEIL = 4;
+
+// Exportada (mesmo padrão de detectPrependCount acima): lógica pura de
+// fronteira ganha teste de execução real, não só padrão no código-fonte
+// (CLAUDE.md).
+export function levelStrengthBaseWeight(strength: LevelStrength | null | undefined): number {
+  // Força ainda não computada (fail-closed): peso pleno, nunca penaliza
+  // um nível real por ausência do cálculo de força, mesmo espírito de
+  // "sem dado real suficiente não fabrica uma leitura pior" (Regra de
+  // Ouro 3).
+  if (!strength) return 1;
+  const span = S1R1_TOUCH_CEIL - S1R1_TOUCH_FLOOR;
+  const clamped = Math.max(S1R1_TOUCH_FLOOR, Math.min(S1R1_TOUCH_CEIL, strength.touches));
+  return span > 0 ? (clamped - S1R1_TOUCH_FLOOR) / span : 1;
+}
+
+// Banda real de alpha para S1/R1 — nunca o baseWeight/visualWeight
+// aplicado direto como alpha (o mesmo cuidado já documentado em
+// InstitutionalZonePlugin.tsx via FILL_ALPHA_MIN/BORDER_ALPHA_MIN):
+// Regra de Ouro 4 proíbe um nível real cair a alpha 0 só por perder a
+// competição de orçamento visual. Teto = o MESMO 0.65 fixo que S1/R1
+// sempre usou antes desta rodada — um nível FORTE sem nenhuma
+// competição real fica visualmente IDÊNTICO ao comportamento anterior;
+// só níveis fracos/espremidos pelo orçamento ficam mais discretos.
+export const S1R1_ALPHA_MIN = 0.35;
+export const S1R1_ALPHA_MAX = 0.65;
+
+// Exportada pelo mesmo motivo de levelStrengthBaseWeight acima.
+export function levelLineAlpha(visualWeight: number | null): number {
+  // Orçamento visual ainda não resolveu este nível (não deveria ocorrer
+  // depois da fiação abaixo) — preserva o valor fixo de sempre, nunca
+  // fabrica um número novo.
+  if (visualWeight === null) return S1R1_ALPHA_MAX;
+  const clamped = Math.max(0, Math.min(1, visualWeight));
+  return S1R1_ALPHA_MIN + clamped * (S1R1_ALPHA_MAX - S1R1_ALPHA_MIN);
+}
+
 export function EnhancedChart_110_Percent({
   data,
   support,
@@ -1422,62 +1472,6 @@ export function EnhancedChart_110_Percent({
     };
   }, [chartReady, onHoverCandleChange, data]);
 
-  // S1/R1 reais — o MESMO engine.support/resistance que os outros widgets
-  // já exibem, aqui como price lines nativas (createPriceLine), nunca uma
-  // linha desenhada à mão em cima do canvas.
-  //
-  // "Fio de seda" (pedido explícito do Operador): TODAS as linhas de
-  // marcação deste gráfico são SÓLIDAS e finas (lineWidth 1, o mínimo da
-  // lib) — nunca pontilhadas/tracejadas. A hierarquia visual entre S1/R1
-  // (nível primário) e as zonas SMC (contexto) vem da OPACIDADE da cor,
-  // não do estilo do traço: S1/R1 mais presentes, zonas mais translúcidas.
-  useEffect(() => {
-    if (!seriesRef.current) return;
-    if (supportLineRef.current) {
-      seriesRef.current.removePriceLine(supportLineRef.current);
-      supportLineRef.current = null;
-    }
-    if (Number.isFinite(support)) {
-      supportLineRef.current = seriesRef.current.createPriceLine({
-        price: support as number,
-        // Especificação Visual Profissional v1 (pedido direto do
-        // Operador): S/R unificados em âmbar #f59e0b — "âmbar único para
-        // todos os níveis", mesma família de EQH/EQL abaixo. Distinto do
-        // caso FVG (pergunta direta ao Operador: mantido verde/vermelho
-        // por um pedido V18.2 anterior e explícito) — S1/R1 nunca teve
-        // essa mesma exigência de preservação de cor.
-        color: "rgba(245, 158, 11, 0.65)",
-        lineWidth: 1,
-        lineStyle: LineStyle.Solid,
-        // Mesmo achado/mesma correção da série de candles acima — o tag
-        // nativo do eixo colidia com VWAP/NL/preço quando os valores
-        // reais ficam próximos; PriceLabelStackPlugin assume o rótulo.
-        axisLabelVisible: false,
-        title: levelTitle("S1", supportStrength, supportBreakouts),
-      });
-    }
-  }, [support, supportStrength, supportBreakouts]);
-
-  useEffect(() => {
-    if (!seriesRef.current) return;
-    if (resistanceLineRef.current) {
-      seriesRef.current.removePriceLine(resistanceLineRef.current);
-      resistanceLineRef.current = null;
-    }
-    if (Number.isFinite(resistance)) {
-      resistanceLineRef.current = seriesRef.current.createPriceLine({
-        price: resistance as number,
-        // Especificação Visual Profissional v1: mesmo âmbar unificado de S1.
-        color: "rgba(245, 158, 11, 0.65)",
-        lineWidth: 1,
-        lineStyle: LineStyle.Solid,
-        // Mesmo achado/mesma correção do S1 acima.
-        axisLabelVisible: false,
-        title: levelTitle("R1", resistanceStrength, resistanceBreakouts),
-      });
-    }
-  }, [resistance, resistanceStrength, resistanceBreakouts]);
-
   // Liquidez (Equal High/Low) continua como price line: LiquidityZone
   // (engine-bridge.ts) só carrega um preço único, nunca um top/bottom —
   // não existe uma "área" real para preencher, então uma linha continua
@@ -1909,6 +1903,17 @@ export function EnhancedChart_110_Percent({
     if (structureBreakBaseWeight !== null) {
       candidates.push({ id: "structure-break", category: "STRUCTURE", baseWeight: structureBreakBaseWeight });
     }
+    // Achado 2.3 (Visual Cleanup & Rendering Audit): S1/R1 nunca competiam
+    // por orçamento visual — entram como STRUCTURE (mesma categoria/
+    // prioridade do BOS/CHOCH acima: contexto estrutural, nunca a decisão
+    // real do Core Engine, LEI 24) só quando a linha de fato vai ser
+    // desenhada (mesmo gate Number.isFinite dos 2 useEffect abaixo).
+    if (Number.isFinite(support)) {
+      candidates.push({ id: "s1", category: "STRUCTURE", baseWeight: levelStrengthBaseWeight(supportStrength) });
+    }
+    if (Number.isFinite(resistance)) {
+      candidates.push({ id: "r1", category: "STRUCTURE", baseWeight: levelStrengthBaseWeight(resistanceStrength) });
+    }
     mainLiquidityCandidates.fvg.forEach((w, i) => {
       if (w !== null) candidates.push({ id: `liquidity-fvg-${i}`, category: "MAIN_LIQUIDITY", baseWeight: w });
     });
@@ -1916,7 +1921,18 @@ export function EnhancedChart_110_Percent({
       if (w !== null) candidates.push({ id: `liquidity-ob-${i}`, category: "MAIN_LIQUIDITY", baseWeight: w });
     });
     return resolveVisualBudget(candidates);
-  }, [visibility.institutional_zones, institutionalZones, hasTradePlanZone, confidenceZone, structureBreakBaseWeight, mainLiquidityCandidates]);
+  }, [
+    visibility.institutional_zones,
+    institutionalZones,
+    hasTradePlanZone,
+    confidenceZone,
+    structureBreakBaseWeight,
+    support,
+    resistance,
+    supportStrength,
+    resistanceStrength,
+    mainLiquidityCandidates,
+  ]);
   const institutionalZoneVisualWeights = useMemo(() => {
     const byId = new Map(visualBudgetResults.map((r) => [r.id, r.visualWeight]));
     return institutionalZones.map((_, i) => byId.get(`zone-${i}`));
@@ -1929,6 +1945,82 @@ export function EnhancedChart_110_Percent({
     () => visualBudgetResults.find((r) => r.id === "structure-break")?.visualWeight ?? null,
     [visualBudgetResults],
   );
+  const supportVisualWeight = useMemo(
+    () => visualBudgetResults.find((r) => r.id === "s1")?.visualWeight ?? null,
+    [visualBudgetResults],
+  );
+  const resistanceVisualWeight = useMemo(
+    () => visualBudgetResults.find((r) => r.id === "r1")?.visualWeight ?? null,
+    [visualBudgetResults],
+  );
+
+  // S1/R1 reais — o MESMO engine.support/resistance que os outros widgets
+  // já exibem, aqui como price lines nativas (createPriceLine), nunca uma
+  // linha desenhada à mão em cima do canvas.
+  //
+  // "Fio de seda" (pedido explícito do Operador): TODAS as linhas de
+  // marcação deste gráfico são SÓLIDAS e finas (lineWidth 1, o mínimo da
+  // lib) — nunca pontilhadas/tracejadas. A hierarquia visual entre S1/R1
+  // (nível primário) e as zonas SMC (contexto) vem da OPACIDADE da cor,
+  // não do estilo do traço: S1/R1 mais presentes, zonas mais translúcidas.
+  // Posicionado aqui (depois de supportVisualWeight/resistanceVisualWeight,
+  // não mais logo após o efeito de crosshair) porque o Achado 2.3 (Visual
+  // Cleanup & Rendering Audit) passou a depender do peso real resolvido
+  // pelo orçamento visual — TDZ do TypeScript exige a leitura depois da
+  // declaração; zero mudança de comportamento, só de posição no arquivo.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    if (supportLineRef.current) {
+      seriesRef.current.removePriceLine(supportLineRef.current);
+      supportLineRef.current = null;
+    }
+    if (Number.isFinite(support)) {
+      supportLineRef.current = seriesRef.current.createPriceLine({
+        price: support as number,
+        // Especificação Visual Profissional v1 (pedido direto do
+        // Operador): S/R unificados em âmbar #f59e0b — "âmbar único para
+        // todos os níveis", mesma família de EQH/EQL abaixo. Distinto do
+        // caso FVG (pergunta direta ao Operador: mantido verde/vermelho
+        // por um pedido V18.2 anterior e explícito) — S1/R1 nunca teve
+        // essa mesma exigência de preservação de cor.
+        // Achado 2.3: alpha agora segue o peso real resolvido pela
+        // competição de orçamento visual (força do nível × concorrência
+        // com Trade Plan/Zonas/Estrutura), nunca mais um 0.65 fixo — teto
+        // igual ao valor fixo de sempre (zero regressão no caso FORTE sem
+        // competição), piso 0.35 (Regra de Ouro 4, nunca desaparece).
+        color: `rgba(245, 158, 11, ${levelLineAlpha(supportVisualWeight).toFixed(3)})`,
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
+        // Mesmo achado/mesma correção da série de candles acima — o tag
+        // nativo do eixo colidia com VWAP/NL/preço quando os valores
+        // reais ficam próximos; PriceLabelStackPlugin assume o rótulo.
+        axisLabelVisible: false,
+        title: levelTitle("S1", supportStrength, supportBreakouts),
+      });
+    }
+  }, [support, supportStrength, supportBreakouts, supportVisualWeight]);
+
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    if (resistanceLineRef.current) {
+      seriesRef.current.removePriceLine(resistanceLineRef.current);
+      resistanceLineRef.current = null;
+    }
+    if (Number.isFinite(resistance)) {
+      resistanceLineRef.current = seriesRef.current.createPriceLine({
+        price: resistance as number,
+        // Especificação Visual Profissional v1: mesmo âmbar unificado de S1.
+        // Achado 2.3: mesmo peso real resolvido do S1 acima (levelLineAlpha).
+        color: `rgba(245, 158, 11, ${levelLineAlpha(resistanceVisualWeight).toFixed(3)})`,
+        lineWidth: 1,
+        lineStyle: LineStyle.Solid,
+        // Mesmo achado/mesma correção do S1 acima.
+        axisLabelVisible: false,
+        title: levelTitle("R1", resistanceStrength, resistanceBreakouts),
+      });
+    }
+  }, [resistance, resistanceStrength, resistanceBreakouts, resistanceVisualWeight]);
+
   const mainLiquidityVisualWeights = useMemo(() => {
     const byId = new Map(visualBudgetResults.map((r) => [r.id, r.visualWeight]));
     return {
@@ -2607,7 +2699,10 @@ export function EnhancedChart_110_Percent({
         price: support as number,
         text: `S1 ${fmtAxisLabelPrice(support as number)}`,
         secondaryText: levelTitle("", supportStrength, supportBreakouts).trim() || undefined,
-        color: "rgba(245, 158, 11, 0.65)",
+        // Achado 2.3: mesma cor real da LINHA (useEffect acima) — nunca
+        // uma segunda leitura de alpha, o rótulo só reflete o peso já
+        // resolvido pelo orçamento visual.
+        color: `rgba(245, 158, 11, ${levelLineAlpha(supportVisualWeight).toFixed(3)})`,
         side: "left",
       });
     }
@@ -2616,7 +2711,7 @@ export function EnhancedChart_110_Percent({
         price: resistance as number,
         text: `R1 ${fmtAxisLabelPrice(resistance as number)}`,
         secondaryText: levelTitle("", resistanceStrength, resistanceBreakouts).trim() || undefined,
-        color: "rgba(245, 158, 11, 0.65)",
+        color: `rgba(245, 158, 11, ${levelLineAlpha(resistanceVisualWeight).toFixed(3)})`,
         side: "left",
       });
     }
@@ -3264,7 +3359,7 @@ export function EnhancedChart_110_Percent({
       });
     }
     return out;
-  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels]);
+  }, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, supportVisualWeight, resistanceVisualWeight, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels]);
 
   return (
     <div className="absolute inset-0">

@@ -212,3 +212,65 @@ clicar; feed de transações com 2 modos de densidade (Classic/Lite). A
 alegação de posições editáveis direto no gráfico não pôde ser confirmada
 por nenhuma fonte encontrada — fica marcada como não verificada, não
 usada como base de comparação.
+
+## Visual Cleanup & Rendering Audit (3ª rodada — "linha grandona"/"linha
+atravessando" do Operador)
+
+Pedido do Operador: reduzir poluição visual, especificamente linhas
+compridas/desnecessárias, com cor profissional "que não dói à vista".
+`createPriceLine` (lightweight-charts) é uma primitiva nativa que sempre
+ocupa 100% da largura do pane — não existe parâmetro de início/fim, então
+"encurtar" uma linha nativa exigiria trocar a técnica de renderização
+inteira (série custom com dados limitados, ou canvas próprio como os
+outros plugins de zona já fazem). Mudança grande demais pra esta rodada;
+o alvo real e tratável é a PROEMINÊNCIA (peso visual/alpha), não a
+geometria.
+
+### Achado 2.3 — S1/R1 era a única price line sem nenhuma competição por orçamento visual
+
+`grep` confirmou: zero menção de "support"/"resistance" em
+`nexus/layer-relevance.ts` E em `nexus/visual-budget.ts`. As linhas
+nativas de S1/R1 (`EnhancedChart_110_Percent.tsx`) desenhavam
+incondicionalmente (`Number.isFinite(support/resistance)`, sem
+`visibility.X`, sem nem entrada em `CHART_LAYER_IDS`) num alpha FIXO
+0.65 — FORTE (≥2 toques reais) ou FRACA (1 toque, o próprio nível),
+sempre a mesma prominência, nunca cedendo espaço quando Trade Plan/Zona
+Institucional/Estrutura já competem pelo mesmo olhar do Operador. Era o
+achado mais concreto e evidenciado desta auditoria: toda outra anotação
+do gráfico tem no mínimo um toggle `visibility.X`, a maioria também tem
+peso resolvido por `nexus/visual-budget.ts` — só S1/R1 não tinha nenhum
+dos dois.
+
+**Resolução aplicada:** `levelStrengthBaseWeight(strength)` (novo,
+exportado) deriva um peso real 0..1 do MESMO `LevelStrength.touches` que
+`support-resistance-engine.js` já computa (piso=1 toque, teto=4 toques —
+mesma ordem de grandeza do `CONFLUENCE_CEIL_SOURCES` das zonas
+institucionais; zero toque novo contado, zero limiar fabricado). S1/R1
+entram como 2 candidatos `category: "STRUCTURE"` no MESMO
+`resolveVisualBudget()` que já resolve Trade Plan/Zona
+Institucional/Estrutura/Liquidez Principal — a mesma competição cruzada
+real, nunca uma segunda arquitetura. `levelLineAlpha(visualWeight)`
+(novo, exportado) mapeia o peso resolvido pra uma banda `[0.35, 0.65]`
+— teto EXATAMENTE igual ao 0.65 fixo de sempre (zero regressão visual
+quando um nível FORTE não tem competição real), piso 0.35 (Regra de Ouro
+4: nunca some, só cede ênfase). A cor final da linha nativa E do rótulo
+do eixo (`priceAxisLabels`, mesmo `levelLineAlpha`, zero segunda
+fórmula) passam a refletir o mesmo peso resolvido.
+
+**Verificação:** `tsc --noEmit` limpo; suíte `vitest` completa
+3007/3007 (11 testes novos — execução real das 2 funções puras +
+padrão de código confirmando a fiação dos candidatos/pesos/cor, mesmo
+critério do resto do arquivo: "matemática sutil" ganha execução real,
+"fiação entre módulos" ganha padrão de fonte); `npm run build` limpo
+(1889 módulos); Playwright real (dataset sintético OFFLINE já rotulado,
+nunca mercado real) confirmou zero erro de console/página em 3 execuções
+e presença real de pixels na cor âmbar no canvas renderizado (a
+mudança não quebrou a série de renderização nem removeu a cor).
+
+**Ainda não tratado nesta rodada (honesto, não escondido):** o pedido
+"quando bater o alvo, automaticamente analisar outro parâmetro" e a
+pesquisa mais profunda sobre paleta "que não dói à vista"/precisão por
+timeframe — ambos exigem investigação própria (o primeiro precisa mapear
+o ciclo de vida real de um Trade Plan totalmente resolvido antes de
+desenhar qualquer solução; o segundo precisa de pesquisa direcionada
+nova) e ficam para a próxima rodada desta mesma auditoria.

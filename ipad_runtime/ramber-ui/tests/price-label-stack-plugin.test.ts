@@ -9,6 +9,14 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import {
+  levelStrengthBaseWeight,
+  levelLineAlpha,
+  S1R1_TOUCH_FLOOR,
+  S1R1_TOUCH_CEIL,
+  S1R1_ALPHA_MIN,
+  S1R1_ALPHA_MAX,
+} from '../src/chart/EnhancedChart_110_Percent';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
@@ -332,9 +340,9 @@ describe('EnhancedChart_110_Percent: os "last value label"/"axis label" NATIVOS 
   it('S1/R1: axisLabelVisible false nas duas price lines (era true) — a LINHA horizontal continua desenhada, só o tag do eixo muda de dono', () => {
     const s = chart();
     const supportIdx = s.indexOf('supportLineRef.current = seriesRef.current.createPriceLine({');
-    expect(s.slice(supportIdx, supportIdx + 900)).toContain('axisLabelVisible: false,');
+    expect(s.slice(supportIdx, supportIdx + 1400)).toContain('axisLabelVisible: false,');
     const resistanceIdx = s.indexOf('resistanceLineRef.current = seriesRef.current.createPriceLine({');
-    expect(s.slice(resistanceIdx, resistanceIdx + 450)).toContain('axisLabelVisible: false,');
+    expect(s.slice(resistanceIdx, resistanceIdx + 600)).toContain('axisLabelVisible: false,');
   });
 
   it('Trade Plan (ENTRY/STOP/TARGET) MIGROU para o overlay ("bater o olho profissional"): a LINHA continua (axisLabelVisible:false, title:""), o RÓTULO vai para priceAxisLabels — era o ÚLTIMO grupo ainda no eixo nativo, podendo sobrepor S1/R1/VWAP', () => {
@@ -410,9 +418,13 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
     expect(block).toContain('secondaryText: levelTitle("", resistanceStrength, resistanceBreakouts).trim() || undefined,');
     // Especificação Visual Profissional v1: S1/R1 unificados em âmbar
     // #f59e0b (era verde/vermelho) — mesma cor real da price line nos
-    // dois casos, nunca uma segunda formatação.
-    expect(block).toContain('color: "rgba(245, 158, 11, 0.65)"'); // mesma cor real da price line S1
-    expect((block.match(/color: "rgba\(245, 158, 11, 0\.65\)"/g) ?? []).length).toBe(2); // S1 e R1 compartilham o mesmo âmbar
+    // dois casos, nunca uma segunda formatação. Achado 2.3 (Visual Cleanup
+    // & Rendering Audit): 0.65 fixo virou levelLineAlpha(*VisualWeight) —
+    // mesma função pura já usada pela price line nativa (useEffect), zero
+    // segunda fórmula de alpha só para o rótulo.
+    expect(block).toContain('color: `rgba(245, 158, 11, ${levelLineAlpha(supportVisualWeight).toFixed(3)})`,');
+    expect(block).toContain('color: `rgba(245, 158, 11, ${levelLineAlpha(resistanceVisualWeight).toFixed(3)})`,');
+    expect((block.match(/color: `rgba\(245, 158, 11, \$\{levelLineAlpha\(\w+VisualWeight\)\.toFixed\(3\)\}\)`,/g) ?? []).length).toBe(2); // S1 e R1 compartilham o mesmo âmbar e a mesma função de alpha
     expect(block).toContain('if (Number.isFinite(support) && supportStrength?.label === "FORTE") {');
     expect(block).toContain('if (Number.isFinite(resistance) && resistanceStrength?.label === "FORTE") {');
   });
@@ -474,7 +486,7 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
 
   it('priceAxisLabels recalcula a cada tick real de livePrice — nunca uma etiqueta de preço congelada', () => {
     const s = chart();
-    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels]);');
+    const depsIdx = s.indexOf('}, [support, resistance, supportStrength, resistanceStrength, supportBreakouts, resistanceBreakouts, supportVisualWeight, resistanceVisualWeight, vwapLastValue, vwapState, visibility.vwap, nlLastValue, nexusLineState, visibility.nexus_line, emaLastValue, activeEmaPeriod, visibility.ema, data, visibility.trend_channel, trendChannelInfo, visibility.volume_profile, volumeProfile, visibility.tpo_profile, tpoProfileForLabels, livePrice, tradePlan, targetsHit, decision, engineFallbackLevels, structureBreak, visibility.structure_breaks, structureBreakVisualWeight, traps, visibility.liquidity_sweep, visibility.session_key_levels, currentSessionKeyLevel, visibility.institutional_zones, institutionalZones, institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels]);');
     expect(depsIdx, 'dependency array de priceAxisLabels não inclui livePrice').toBeGreaterThan(-1);
   });
 
@@ -1031,6 +1043,89 @@ describe('Achado real (Visual Cleanup): rótulos de preço para Fibonacci — s�
   it('dependências reais do useMemo incluem visibility.fibonacci e fibonacciLevels — senão o rótulo ficaria stale ao ligar/desligar a camada', () => {
     const c = chart();
     expect(c).toContain('institutionalZoneVisualWeights, visibility.fibonacci, fibonacciLevels]);');
+  });
+});
+
+// Achado 2.3 (Visual Cleanup & Rendering Audit): grep confirmou S1/R1 como
+// o único par de price lines do gráfico com ZERO integração em
+// layer-relevance.ts/visual-budget.ts — alpha sempre fixo em 0.65,
+// independente de força real (FORTE/FRACA) ou de quanto o resto do painel
+// já estava competindo por destaque (Trade Plan/Zonas/Estrutura). Execução
+// real (não só padrão de fonte) para as 2 funções puras — mesmo critério
+// de detectPrependCount acima no arquivo: "a matemática está sutilmente
+// errada" é o bug mais provável aqui, não fiação entre módulos.
+describe('Achado 2.3 (Visual Cleanup): levelStrengthBaseWeight/levelLineAlpha — execução real, zero peso fabricado', () => {
+  it('levelStrengthBaseWeight: sem força computada ainda (fail-closed) — peso pleno, nunca penaliza por ausência de dado', () => {
+    expect(levelStrengthBaseWeight(null)).toBe(1);
+    expect(levelStrengthBaseWeight(undefined)).toBe(1);
+  });
+
+  it('levelStrengthBaseWeight: piso real em touches=1 (FRACA mínima, o próprio nível bate em si mesmo) — 0, nunca negativo', () => {
+    expect(levelStrengthBaseWeight({ label: 'FRACA', touches: S1R1_TOUCH_FLOOR })).toBe(0);
+    expect(levelStrengthBaseWeight({ label: 'FRACA', touches: 0 })).toBe(0); // clamp: nunca abaixo do piso real
+  });
+
+  it('levelStrengthBaseWeight: teto real em touches>=4 — 1, nunca acima (mais toques que o teto não inflam além de pleno)', () => {
+    expect(levelStrengthBaseWeight({ label: 'FORTE', touches: S1R1_TOUCH_CEIL })).toBe(1);
+    expect(levelStrengthBaseWeight({ label: 'FORTE', touches: 9 })).toBe(1);
+  });
+
+  it('levelStrengthBaseWeight: FORTE mínima (touches=2, STRONG_TOUCH_THRESHOLD real de support-resistance-engine.js) fica a meio caminho real entre o piso e o teto', () => {
+    expect(levelStrengthBaseWeight({ label: 'FORTE', touches: 2 })).toBeCloseTo(1 / 3, 6);
+  });
+
+  it('levelLineAlpha: orçamento visual ainda não resolvido (null) — preserva o valor fixo de sempre (S1R1_ALPHA_MAX), zero número novo fabricado', () => {
+    expect(levelLineAlpha(null)).toBe(S1R1_ALPHA_MAX);
+  });
+
+  it('levelLineAlpha: mapeia peso 0..1 para a banda real [S1R1_ALPHA_MIN, S1R1_ALPHA_MAX] — nunca abaixo do piso (Regra de Ouro 4), nunca acima do teto (zero regressão sobre o 0.65 fixo anterior)', () => {
+    expect(levelLineAlpha(0)).toBeCloseTo(S1R1_ALPHA_MIN, 6);
+    expect(levelLineAlpha(1)).toBeCloseTo(S1R1_ALPHA_MAX, 6);
+    expect(levelLineAlpha(0.5)).toBeCloseTo((S1R1_ALPHA_MIN + S1R1_ALPHA_MAX) / 2, 6);
+  });
+
+  it('S1R1_ALPHA_MAX é exatamente o 0.65 fixo que S1/R1 sempre usaram — um nível FORTE sem nenhuma competição real fica visualmente idêntico ao comportamento anterior a esta rodada', () => {
+    expect(S1R1_ALPHA_MAX).toBe(0.65);
+  });
+});
+
+describe('Achado 2.3 (Visual Cleanup): S1/R1 entram na competição real de orçamento visual (nexus/visual-budget.ts) — mesmo padrão já usado por Trade Plan/Zonas/Estrutura', () => {
+  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('candidatos s1/r1 (categoria STRUCTURE) só entram quando a linha de fato é desenhada — mesmo gate Number.isFinite do useEffect nativo', () => {
+    const c = chart();
+    const idx = c.indexOf('const visualBudgetResults = useMemo(() => {');
+    expect(idx, 'visualBudgetResults não encontrado').toBeGreaterThan(-1);
+    const block = c.slice(idx, c.indexOf('return resolveVisualBudget(candidates);', idx));
+    expect(block).toContain('if (Number.isFinite(support)) {');
+    expect(block).toContain('candidates.push({ id: "s1", category: "STRUCTURE", baseWeight: levelStrengthBaseWeight(supportStrength) });');
+    expect(block).toContain('if (Number.isFinite(resistance)) {');
+    expect(block).toContain('candidates.push({ id: "r1", category: "STRUCTURE", baseWeight: levelStrengthBaseWeight(resistanceStrength) });');
+  });
+
+  it('supportVisualWeight/resistanceVisualWeight seguem o MESMO padrão de lookup por id que structureBreakVisualWeight já usa — zero segunda forma de ler o resultado resolvido', () => {
+    const c = chart();
+    expect(c).toContain('const supportVisualWeight = useMemo(\n    () => visualBudgetResults.find((r) => r.id === "s1")?.visualWeight ?? null,\n    [visualBudgetResults],\n  );');
+    expect(c).toContain('const resistanceVisualWeight = useMemo(\n    () => visualBudgetResults.find((r) => r.id === "r1")?.visualWeight ?? null,\n    [visualBudgetResults],\n  );');
+  });
+
+  it('a price line NATIVA de S1/R1 (createPriceLine) usa levelLineAlpha(supportVisualWeight/resistanceVisualWeight) — nunca mais o 0.65 hardcoded', () => {
+    const c = chart();
+    const supportIdx = c.indexOf('supportLineRef.current = seriesRef.current.createPriceLine({');
+    const supportBlock = c.slice(supportIdx, supportIdx + 1400);
+    expect(supportBlock).toContain('color: `rgba(245, 158, 11, ${levelLineAlpha(supportVisualWeight).toFixed(3)})`,');
+    expect(supportBlock).not.toContain('color: "rgba(245, 158, 11, 0.65)"');
+
+    const resistanceIdx = c.indexOf('resistanceLineRef.current = seriesRef.current.createPriceLine({');
+    const resistanceBlock = c.slice(resistanceIdx, resistanceIdx + 600);
+    expect(resistanceBlock).toContain('color: `rgba(245, 158, 11, ${levelLineAlpha(resistanceVisualWeight).toFixed(3)})`,');
+    expect(resistanceBlock).not.toContain('color: "rgba(245, 158, 11, 0.65)"');
+  });
+
+  it('os 2 useEffect nativos de S1/R1 recalculam quando o peso visual resolvido muda — senão a linha ficaria presa na cor de um orçamento antigo', () => {
+    const c = chart();
+    expect(c).toContain('}, [support, supportStrength, supportBreakouts, supportVisualWeight]);');
+    expect(c).toContain('}, [resistance, resistanceStrength, resistanceBreakouts, resistanceVisualWeight]);');
   });
 });
 
