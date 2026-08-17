@@ -83,7 +83,7 @@ const STORE_RESET = {
   candles: {},
   orderBooks: {},
   connections: {},
-  health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0, isOnline: true, lastUpdatedAt: 0 },
+  health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0, lastUpdatedAt: 0 },
   offline: false,
 };
 

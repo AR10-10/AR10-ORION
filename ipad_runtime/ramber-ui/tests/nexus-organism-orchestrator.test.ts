@@ -286,7 +286,7 @@ describe('OrganismOrchestrator: escrita na store É a publicação — um write 
     bus.on('HEALTH.CHANGED', () => log.push('health'));
     const seqBefore = getSnapshotForEngine().seq;
     useUnifiedSnapshotStore.getState().setHealth({
-      fps: 60, cycleLatencyMs: 10, memoryMb: null, workersAlive: 1, isOnline: true, lastUpdatedAt: Date.now(),
+      fps: 60, cycleLatencyMs: 10, memoryMb: null, workersAlive: 1, lastUpdatedAt: Date.now(),
     });
     expect(log).toEqual([]); // publicador único continua o Health Monitor
     expect(getSnapshotForEngine().seq - seqBefore).toBe(1); // mas a geração conta

@@ -10,7 +10,7 @@ import { buildDiagnosticReport, formatDiagnosticReportMarkdown, type DiagnosticI
 import type { HealthSnapshot } from '../src/nexus/types';
 import { STAGE_ORDER, type StageTrace } from '../src/nexus/stage-runner';
 
-const HEALTHY_HEALTH: HealthSnapshot = { fps: 60, cycleLatencyMs: 300, memoryMb: 50, workersAlive: 1, isOnline: true, lastUpdatedAt: 1 };
+const HEALTHY_HEALTH: HealthSnapshot = { fps: 60, cycleLatencyMs: 300, memoryMb: 50, workersAlive: 1, lastUpdatedAt: 1 };
 
 function baseInput(overrides: Partial<DiagnosticInput> = {}): DiagnosticInput {
   return {
@@ -127,7 +127,7 @@ describe('buildDiagnosticReport: cada sinal real degradado sobe a severidade hon
 
   it('sem dado real ainda (offline=false mas isDataFresh=false, nada mais lido) => WARN honesto, nunca inventa OK', () => {
     const report = buildDiagnosticReport(
-      baseInput({ isDataFresh: false, dataQualityClassification: null, health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 1, isOnline: true, lastUpdatedAt: 0 } }),
+      baseInput({ isDataFresh: false, dataQualityClassification: null, health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 1, lastUpdatedAt: 0 } }),
     );
     expect(report.overallSeverity).not.toBe('OK');
   });

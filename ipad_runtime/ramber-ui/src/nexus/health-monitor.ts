@@ -12,7 +12,7 @@
 //                    uma duplicação real que a Regra de Ouro 9/"zero
 //                    repetição" não deveria ter deixado passar. Corrigido:
 //                    espelha store.uiFps (mesmo padrão já usado para
-//                    cycleLatencyMs/isOnline abaixo), nunca mede de novo.
+//                    cycleLatencyMs abaixo), nunca mede de novo.
 //   memoryMb       — performance.memory.usedJSHeapSize quando o browser
 //                    expõe (Chrome/Safari); null nos que não expõem
 //                    (Firefox) — nunca estimado.
@@ -22,8 +22,6 @@
 //   cycleLatencyMs — espelha core.cycleLatencyMs já real da store (mesmo
 //                    ciclo do motor que os outros widgets já exibem),
 //                    nunca uma segunda medição.
-//   isOnline       — espelha o offline real da store (Fase 0.4,
-//                    navigator.onLine + listeners reais).
 // isDataFresh (fora do HealthSnapshot, mas mesma responsabilidade do
 // Health Monitor por definição do Blueprint) é derivado de
 // price.updatedAt/orderBook.updatedAt reais — "fresco" = o mais recente
@@ -84,7 +82,6 @@ export class HealthMonitor {
       cycleLatencyMs: organism.core.cycleLatencyMs,
       memoryMb: readMemoryMb(),
       workersAlive: getQuantWorkerState() === "ready" ? 1 : 0,
-      isOnline: !organism.offline,
       lastUpdatedAt: Date.now(),
     };
     const actions = useUnifiedSnapshotStore.getState();

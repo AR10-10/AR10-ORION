@@ -16,7 +16,7 @@ const RESET = {
   candles: {},
   orderBooks: {},
   connections: {},
-  health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0, isOnline: true, lastUpdatedAt: 0 },
+  health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0, lastUpdatedAt: 0 },
   offline: false,
   isDataFresh: false,
   uiFps: null,
@@ -205,7 +205,7 @@ describe('unified-snapshot-store (V-MAX Fase 0.4): health/offline honestos, nunc
   });
 
   it('setHealth grava exatamente o snapshot real recebido', () => {
-    const health = { fps: 60, cycleLatencyMs: 8, memoryMb: 120, workersAlive: 1, isOnline: true, lastUpdatedAt: 1700000000000 };
+    const health = { fps: 60, cycleLatencyMs: 8, memoryMb: 120, workersAlive: 1, lastUpdatedAt: 1700000000000 };
     useUnifiedSnapshotStore.getState().setHealth(health);
     expect(useUnifiedSnapshotStore.getState().health).toEqual(health);
   });

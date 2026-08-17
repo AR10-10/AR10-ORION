@@ -45,7 +45,7 @@ describe('TypedEventBus: publica só para assinantes do tipo certo, nunca cross-
 
   it('emit em tipo sem nenhum assinante nunca lança', () => {
     const bus = new TypedEventBus();
-    expect(() => bus.emit({ type: 'HEALTH.CHANGED', payload: { fps: 60, cycleLatencyMs: 10, memoryMb: null, workersAlive: 1, isOnline: true, lastUpdatedAt: Date.now() } })).not.toThrow();
+    expect(() => bus.emit({ type: 'HEALTH.CHANGED', payload: { fps: 60, cycleLatencyMs: 10, memoryMb: null, workersAlive: 1, lastUpdatedAt: Date.now() } })).not.toThrow();
   });
 
   it('clear() remove todos os assinantes de todos os tipos', () => {

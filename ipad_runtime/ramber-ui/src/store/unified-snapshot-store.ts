@@ -159,7 +159,6 @@ const EMPTY_CORE: CoreSnapshot = {
 // honesto de "ainda não medido", não um valor de exemplo.
 const EMPTY_HEALTH: HealthSnapshot = {
   fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0,
-  isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
   lastUpdatedAt: 0,
 };
 const EMPTY_L2_HISTORY: L2HistoryEntry[] = [];

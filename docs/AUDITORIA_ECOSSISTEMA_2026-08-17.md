@@ -242,3 +242,86 @@ rigorosa e tinha um ponto cego que a fazia devolver "está limpo".**
 
 Um "está tudo limpo" só vale acompanhado do método e do seu ponto cego declarado.
 Esta seção existe para que a próxima auditoria comece já sabendo dos três.
+
+---
+
+# 3ª passada — execução das duas pontas soltas
+
+Ordem do Operador (autorização explícita, textual): *"Pode habilitar tudo que
+tem de ser habilitado principalmente das corretora das fontes de dados todas
+pra ficar 100 por cento sincronizados nada pendente... o que você achar
+adiciona achasse se remove."*
+
+Isso resolve as duas decisões que a 2ª passada deixou nomeadas e **não**
+executadas. As duas saídas foram opostas de propósito: uma ponta era feature
+pela metade (habilitar), a outra era duplicação (remover).
+
+## Ponta solta 1 — RESOLVIDA POR SURFACING
+
+`nexus/cross-exchange-book.ts` (motor puro novo) + `tests/cross-exchange-book.test.ts`
+(17 testes de execução real) + card **LIVRO ENTRE PRAÇAS · EXECUÇÃO** no widget
+Validação Multi-Camada.
+
+O que o motor mede sobre o livro L2 que já era capturado:
+
+| leitura | por que só existe cruzando praças |
+|---|---|
+| melhor bid / melhor ask **entre** corretoras | quem opera numa praça precisa saber se outra tem preço melhor — é a diferença entre executar no topo do livro e atrás dele |
+| **spread consolidado** (melhor ask − melhor bid, cruzando praças) | se fica **negativo**, existe desalinhamento real entre praças; impossível de enxergar olhando uma corretora só |
+| desvio de cada mid contra a **mediana** das praças | mediana e não média: uma praça com feed travado não arrasta a referência (mesmo cuidado do Achado 3.3) |
+
+Fail-closed real (Regra de Ouro 3): praça sem livro, sem um dos lados, com
+preço/tamanho não finito, ou com snapshot mais velho que
+`CROSS_EXCHANGE_MAX_BOOK_AGE_MS` (15s) é **excluída**, nunca preenchida com
+zero. Menos de `CROSS_EXCHANGE_MIN_VENUES` (2) praças válidas ⇒
+`DADOS_INSUFICIENTES` com a razão real na tela — comparar um livro de 30s atrás
+com um de agora produziria um "desalinhamento" que é só atraso, não mercado.
+
+LEI 24: display only. O card é rotulado **EXECUÇÃO** e fica **fora** da contagem
+de confluência (`checks[]`), que é sobre direção — este dado é sobre *onde*
+executar, nunca sobre *o quê*.
+
+**Nada da captura foi tocado** (Regra de Ouro 4): os 3 escritores continuam
+gravando exatamente como antes. A entrega é a metade que faltava.
+
+### Erro cometido e corrigido dentro desta própria entrega
+
+A primeira versão do wiring exportou `describeCrossExchangeBook()` e mostrou na
+UI apenas uma linha binária `Livro Entre Praças (3) ✓ REAL` — a frase honesta do
+motor **não tinha consumidor nenhum**. Era a mesma ponta solta que esta entrega
+veio fechar, uma camada acima. Corrigido para o card completo, e o teste
+`cross-exchange-book-wiring.test.ts` passou a travar exatamente isso ("a frase
+honesta do motor chega à tela"). Registro aqui porque o padrão é o assunto do
+documento: **a metade cara é fácil de construir; a metade que aparece é a que
+some.**
+
+## Ponta solta 2 — RESOLVIDA POR REMOÇÃO
+
+`health.isOnline` removido de `nexus/types.ts`, `nexus/health-monitor.ts` (a
+escrita) e `store/unified-snapshot-store.ts` (`EMPTY_HEALTH`), mais 6 fixtures de
+teste. `offline` fica como fonte única — é o campo que os listeners reais de
+`window.online/offline` alimentam e que `useOfflineSnapshot()` exibe.
+
+Zero dado real perdido: o fato ("estamos online?") continua na store, num campo
+só, o que já era o único lido. O comentário em `types.ts` guarda o porquê, e o
+teste em `nexus-health-monitor.test.ts` trava a decisão com regex
+(`\bisOnline\s*\??\s*:`) nos 3 arquivos — se alguém reintroduzir o campo
+duplicado, a suíte quebra em vez de deixar passar.
+
+## Placar depois da 3ª passada
+
+| métrica | 2ª passada | agora |
+|---|---|---|
+| dado morto real | 2 | **0** |
+| seletores nunca importados | 14 | **13** (`useExchangeOrderBooks` saiu da lista — tem leitor real) |
+| campos de estado | 67 | 67 (nenhum adicionado: a leitura é derivada, não uma 2ª cópia) |
+
+## O que continua pendente, honestamente
+
+- **13 seletores exportados sem importador.** Candidatos a poda, não dado morto:
+  são funções de leitura, não estado capturado e descartado. Precisa da mesma
+  separação escritor/leitor aplicada campo a campo antes de remover qualquer um.
+- **Heatmap de livro ao longo do tempo** (estilo Bookmap) — o dado já existe em
+  `l2-history.ts`. É construir, não habilitar.
+- **Validação histórica calibrada** — o teto analítico real deste repositório, e
+  a única coisa que tornaria honesto falar em "probabilidade" (Regra de Ouro 2).

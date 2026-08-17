@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, EMPTY_PRICE } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -352,6 +352,9 @@ import { TradFiRealChart } from "./omnibox/TradFiRealChart";
 // que a Binance já devolve em fetchDerivatives abaixo — nunca uma segunda
 // fonte do Core Engine/Risk Engine (essa trava é da Fase G/Diretriz 2).
 import { fetchBybitPerpTicker, compareCrossExchange, type CrossExchangeCheck } from "./cross-exchange/bybit-futures";
+// Ponta Solta 1 (Auditoria do Ecossistema): leitura real do livro L2 por
+// corretora que a store já capturava e ninguém lia.
+import { computeCrossExchangeBook, describeCrossExchangeBook } from "./nexus/cross-exchange-book";
 // Terceira fonte real (pedido do Operador: "puxa dados públicos de
 // qualquer outra corretora"): OKX Perpétuo, mesmo papel e mesma trava
 // fail-closed da Bybit acima — ver header de okx-futures.ts.
@@ -10678,6 +10681,39 @@ function DecisionValidationWidget() {
   // deixar de ser um NÃO_APLICÁVEL hardcoded.
   const trustScore = useTrustScoreSnapshot();
 
+  // Ponta Solta 1 (Auditoria do Ecossistema, 2ª passada) — ordem do Operador
+  // "habilitar tudo, principalmente das corretoras, das fontes de dados todas".
+  //
+  // A fatia `orderBooks` da store era WRITE-ONLY: 3 escritores reais gravavam
+  // o livro L2 de cada corretora a cada tick (App.tsx:3395,
+  // cross-exchange-service.ts BINANCE e MEXC) e o único leitor exposto
+  // (`useExchangeOrderBooks`) NUNCA era importado. O livro de 3 praças era
+  // capturado e descartado — feature construída até a metade, sendo que a
+  // captura é justamente a parte cara (rede, parsing, memória).
+  //
+  // Esta é a leitura que faltava. `crossExchangeConvergence` (linha abaixo)
+  // compara PREÇO DE MARCA entre corretoras; esta compara o LIVRO real —
+  // melhor bid/ask de cada praça, spread consolidado cruzando praças (negativo
+  // = desalinhamento real) e desvio contra a mediana. São perguntas
+  // diferentes sobre o mesmo tema, não duplicação.
+  //
+  // LEI 24: display only, contexto de execução — nunca vira decisão.
+  const exchangeBooks = useExchangeOrderBooks();
+  const crossBook = useMemo(
+    () => computeCrossExchangeBook(exchangeBooks, Date.now()),
+    [exchangeBooks],
+  );
+  const crossBookLabel = describeCrossExchangeBook(crossBook);
+  // Cor segue o que o dado REALMENTE diz, nunca um verde otimista:
+  // praças desalinhadas (spread consolidado negativo) é um achado que merece
+  // destaque de atenção, não a mesma cor de "tudo normal".
+  const crossBookColor =
+    crossBook.status !== "OK"
+      ? "text-[#8ab4f8]/50"
+      : (crossBook.consolidatedSpread ?? 0) < 0
+        ? "text-[#f0d06f]"
+        : "text-[#00ffaa]";
+
   // Fase H: sugestão de dimensionamento (% equity / % risco). Fail-closed:
   // SEM_SUGESTAO exibe 0% com o motivo real. O selo é PERMANENTE e
   // incondicional (diretriz 3 da ordem de ignição).
@@ -10827,6 +10863,24 @@ function DecisionValidationWidget() {
           </div>
           <span className="text-[0.4rem] text-[#f0d06f]/80 font-bold tracking-widest">
             SUGESTÃO ALGORÍTMICA · NÃO É CONSELHO FINANCEIRO
+          </span>
+        </div>
+        {/* Ponta Solta 1: leitura real do LIVRO entre praças. Card próprio
+            (mesmo padrão dos irmãos ricos acima: Comitê, Confluência Cruzada,
+            Risk Engine) em vez de uma linha binária ✓/aguardando — a
+            informação que importa aqui é ONDE está o melhor preço e se as
+            praças estão alinhadas, nunca só "existe livro". Fora da contagem
+            de confluência de propósito: contexto de execução, não uma
+            camada de opinião sobre a direção (LEI 24). */}
+        <div
+          className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0"
+          title="Compara o livro L2 real já capturado de cada corretora: melhor bid e melhor ask ATRAVÉS das praças, spread consolidado (negativo = praças desalinhadas) e desvio contra a mediana dos meio-preços. Contexto de execução para o Operador — nunca uma decisão de trading."
+        >
+          <span className="text-[0.45rem] text-[#8ab4f8]/80 font-bold tracking-widest">
+            LIVRO ENTRE PRAÇAS · EXECUÇÃO
+          </span>
+          <span className={`text-[0.5rem] font-mono font-black ${crossBookColor} break-words`}>
+            {crossBookLabel}
           </span>
         </div>
         {checks.map((c) => (
