@@ -26,6 +26,7 @@
 // — só o rótulo do bucket de maior notional real (mesmo papel do POC do
 // Volume Profile) usa uma linha, 1px sólida.
 import { useEffect, useRef } from "react";
+import { CHART_LEFT_EDGE_FRACTION } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { computeLiquidationHeatmap, type LiquidationHeatmapResult } from "../nexus/liquidation-heatmap";
 import type { LiquidationEvent } from "../engine-bridge";
@@ -34,7 +35,14 @@ import type { LiquidationEvent } from "../engine-bridge";
 // KillZoneBandsPlugin/InstitutionalZonePlugin).
 import { drawCanvasLabel, measureCanvasLabel } from "../nexus/canvas-label";
 
-const MAX_BAR_WIDTH_FRACTION = 0.14; // fração da largura do chart — camada secundária, nunca compete com o Volume Profile
+// Faixa ESQUERDA declarada (chart-profile-lanes.ts). O 0.14 continua o mesmo
+// número que este plugin sempre usou — mudou de dono: agora é a reserva
+// compartilhada da borda esquerda, não uma constante local que ninguém mais
+// enxergava. Foi justamente isso que produziu a colisão com as etiquetas
+// estruturais do lado esquerdo (LEFT_MARGIN_PX = 2 no PriceLabelStackPlugin):
+// o comentário antigo dizia "nunca compete com o Volume Profile" — verdade, o
+// VP está à direita; ninguém tinha olhado a ESQUERDA.
+const MAX_BAR_WIDTH_FRACTION = CHART_LEFT_EDGE_FRACTION;
 const LONG_FILL = "rgba(8, 153, 129, 0.28)";
 const SHORT_FILL = "rgba(242, 54, 69, 0.28)";
 // Lapidação institucional (§9.4/§9.7 de AUDITORIA_ECOSSISTEMA_VISUAL.md):

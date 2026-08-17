@@ -87,13 +87,36 @@ body {
    animação contínua nenhuma (panel-breathe removido — ver ::before
    abaixo). Gradiente de fundo permanece sutil preto→quase-preto, nunca
    no body (regra 3.1). */
+/* CAMADA DE VIDRO (pedido do Operador: "tipo uma camada de vidro transparente,
+   algum efeito pra ficar bem show" — sem atrapalhar o campo de visão).
+
+   ACHADO QUE ORIGINOU A MUDANÇA: o painel JÁ declarava backdrop-filter:
+   blur(12px), mas com `background: linear-gradient(#000000, #050508)` —
+   totalmente OPACO. Um blur atrás de fundo opaco não tem o que borrar: a GPU
+   calculava o desfoque a cada frame e o resultado era invisível. Custo pago,
+   efeito zero — e num alvo iPad Safari (Regra de Ouro 7) isso é o pior tipo de
+   desperdício. O vidro não estava "fraco": estava DESLIGADO por cima de si
+   mesmo.
+
+   Agora o fundo é translúcido, então o blur passa a fazer o trabalho pelo qual
+   já estava pagando — e ele importa de verdade nas gavetas/painéis que ficam
+   POR CIMA do gráfico, que é justamente onde o efeito aparece.
+
+   O que dá o aspecto de vidro NÃO é o blur sozinho: é a aresta especular (a
+   linha clara no topo, como a quina de uma placa de vidro) somada ao brilho
+   interno. Esses dois são baratos — pintura, não recomputação por frame.
+
+   O CANVAS DO GRÁFICO NUNCA RECEBE ISTO. Vidro sobre o dado é exatamente o
+   "atrapalhar o campo de visão" que o Operador proibiu: aqui é chrome
+   (moldura), nunca leitura. */
 .cyber-panel {
-  background: linear-gradient(165deg, #000000, #050508);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(165deg, rgba(6, 8, 14, 0.72), rgba(3, 4, 9, 0.86));
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
     0 4px 24px rgba(0, 0, 0, 0.5);
   border-radius: 12px;
   position: relative;
@@ -104,10 +127,43 @@ body {
 }
 
 .cyber-panel:hover {
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.16);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
     0 4px 24px rgba(0, 0, 0, 0.6);
+}
+
+/* Aresta especular do vidro: a linha de luz que corre no topo da placa.
+   É ::before com 1px de altura — não intercepta ponteiro, não entra no fluxo,
+   não custa recomputação por frame. É o detalhe que faz ler como VIDRO em vez
+   de "retângulo escuro translúcido". */
+.cyber-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.22) 35%,
+    rgba(255, 255, 255, 0.22) 65%,
+    transparent
+  );
+}
+
+/* Respeito real a quem pediu menos movimento/efeito no sistema operacional:
+   sem blur, fundo sólido. O painel continua 100% legível — o vidro é
+   decoração, o dado nunca depende dele. */
+@media (prefers-reduced-transparency: reduce) {
+  .cyber-panel {
+    background: linear-gradient(165deg, #06080e, #030409);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 /* Acentos neon reservados a DADOS VITAIS (Missão 1, diretriz 4) — cyan

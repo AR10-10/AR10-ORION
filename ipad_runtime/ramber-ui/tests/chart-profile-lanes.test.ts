@@ -18,6 +18,10 @@ import {
   getProfileLaneWidthFraction,
   getProfileLaneRightEdgePx,
   getProfileLaneMaxBarWidthPx,
+  getChartBodyBounds,
+  getChartRightEdgeFraction,
+  CHART_LEFT_EDGE_FRACTION,
+  CHART_MIN_BODY_PX,
   type ChartProfileLaneId,
 } from "../src/chart/chart-profile-lanes";
 
@@ -116,9 +120,88 @@ describe("chart-profile-lanes: fiação real nos 3 plugins (nunca cssWidth liter
     expect(src).not.toContain("cssWidth - w - size.width - 4");
   });
 
-  it("LiquidationHeatmapPlugin NUNCA entra nesta família (ancora à esquerda de propósito, precedente OMEGA CORE V-MAX Fase 8.1)", () => {
+  it("LiquidationHeatmapPlugin NUNCA vira uma LANE DE PERFIL (continua ancorado à esquerda, precedente OMEGA CORE V-MAX Fase 8.1)", () => {
+    // A regra que esta guarda protege é "não entra na família da DIREITA" —
+    // e continua valendo. O que mudou: ele passou a consumir a reserva da
+    // borda ESQUERDA do mesmo módulo (CHART_LEFT_EDGE_FRACTION), porque a
+    // medição achou a colisão dele com as etiquetas estruturais do lado
+    // esquerdo. A guarda antiga proibia a string do módulo inteiro e não
+    // sabia distinguir os dois lados; agora proíbe o que realmente importa.
     const src = read("../src/chart/LiquidationHeatmapPlugin.tsx");
-    expect(src).not.toContain("chart-profile-lanes");
-    expect(src).toContain("ctx.fillRect(0, y, longW, h)");
+    expect(src).not.toContain("getProfileLane");            // nenhuma lane de perfil
+    expect(src).not.toContain("ChartProfileLaneId");
+    expect(src).toContain("CHART_LEFT_EDGE_FRACTION");      // usa a borda esquerda declarada
+    expect(src).toContain("ctx.fillRect(0, y, longW, h)");  // e continua ancorado em x=0
+  });
+});
+
+// ============================================================================
+// RESERVA DE BORDAS — "cada objeto no seu canto, nada cobrindo nada"
+// ============================================================================
+describe('getChartBodyBounds: o corpo livre entre as faixas de borda', () => {
+  it('a faixa direita é a SOMA REAL das 3 lanes — derivada, nunca digitada', () => {
+    // Se alguém mexer numa lane e esquecer deste número, o teste pega.
+    const soma = getProfileLaneWidthFraction('volume_profile')
+      + getProfileLaneWidthFraction('tpo_profile')
+      + getProfileLaneWidthFraction('order_book_depth');
+    expect(getChartRightEdgeFraction()).toBeCloseTo(soma, 10);
+  });
+
+  it('o corpo NÃO invade nenhuma das duas faixas', () => {
+    const w = 1200;
+    const b = getChartBodyBounds(w);
+    expect(b.left).toBeCloseTo(w * CHART_LEFT_EDGE_FRACTION, 6);
+    expect(b.right).toBeCloseTo(w * (1 - getChartRightEdgeFraction()), 6);
+    expect(b.width).toBeGreaterThan(0);
+  });
+
+  it('COLISÃO 1 RESOLVIDA: a barra de liquidação cabe inteira na faixa esquerda', () => {
+    // Ela desenha de x=0 até cssWidth*CHART_LEFT_EDGE_FRACTION; o corpo começa
+    // exatamente onde ela termina. Zero pixel de sobreposição.
+    const w = 1200;
+    const fimDaLiquidacao = w * CHART_LEFT_EDGE_FRACTION;
+    expect(getChartBodyBounds(w).left).toBeCloseTo(fimDaLiquidacao, 6);
+  });
+
+  it('COLISÃO 2 RESOLVIDA: o corpo termina antes da primeira lane de perfil', () => {
+    const w = 1200;
+    const inicioDosPerfis = w * (1 - getChartRightEdgeFraction());
+    expect(getChartBodyBounds(w).right).toBeCloseTo(inicioDosPerfis, 6);
+  });
+
+  it('fail-closed em tela estreita: devolve o gráfico INTEIRO em vez de um corpo inútil', () => {
+    // DEFEITO QUE ESTE TESTE PEGOU: a 1ª versão gateava por `right <= left`.
+    // Como os dois são frações da MESMA largura, a razão é constante e aquilo
+    // nunca podia ser verdade — ramo morto se passando por proteção. O gate
+    // real é um mínimo ABSOLUTO em px.
+    const estreita = 400; // corpo seria 400*0.38 = 152px < CHART_MIN_BODY_PX
+    const b = getChartBodyBounds(estreita);
+    expect(estreita * (1 - getChartRightEdgeFraction()) - estreita * CHART_LEFT_EDGE_FRACTION)
+      .toBeLessThan(CHART_MIN_BODY_PX); // a premissa do cenário é real
+    expect(b.left).toBe(0);
+    expect(b.right).toBe(estreita);
+    expect(b.width).toBe(estreita);
+  });
+
+  it('o fallback é ALCANÇÁVEL e tem fronteira real (não é ramo morto)', () => {
+    const limiar = CHART_MIN_BODY_PX / (1 - getChartRightEdgeFraction() - CHART_LEFT_EDGE_FRACTION);
+    expect(getChartBodyBounds(limiar * 0.9).left).toBe(0);        // abaixo: gráfico inteiro
+    expect(getChartBodyBounds(limiar * 1.1).left).toBeGreaterThan(0); // acima: faixas respeitadas
+  });
+
+  it('fail-closed em largura inválida: zeros honestos, nunca NaN na geometria', () => {
+    for (const bad of [0, -100, Number.NaN, Infinity]) {
+      const b = getChartBodyBounds(bad as number);
+      expect(Number.isFinite(b.left)).toBe(true);
+      expect(Number.isFinite(b.right)).toBe(true);
+      expect(Number.isFinite(b.width)).toBe(true);
+    }
+  });
+
+  it('as faixas somadas deixam corpo real em qualquer tela de uso (iPad a 4K)', () => {
+    for (const w of [1024, 1366, 1440, 1920, 2560, 3840]) {
+      const b = getChartBodyBounds(w);
+      expect(b.width / w).toBeGreaterThan(0.3); // sobra pelo menos 30% para os candles
+    }
   });
 });

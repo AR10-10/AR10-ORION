@@ -41,6 +41,7 @@
 // inofensivo) e usa o canvas de reserva — o mesmo caminho de desenho
 // direto já comprovado em produção pelo LiquidityZonesPlugin.
 import { useEffect, useRef, useState } from "react";
+import { getChartBodyBounds } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { useL2History, useOrderflowHistory } from "../store/unified-snapshot-store";
 import {
@@ -157,6 +158,13 @@ export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPlugin
       let maxVolume = 0;
       for (const entry of of) for (const t of entry.largeTrades) if (t.volume > maxVolume) maxVolume = t.volume;
       const bubbles: HeatmapBubble[] = [];
+      // CORPO REAL do gráfico: o x livre entre as faixas de borda
+      // (chart-profile-lanes.ts). Sem isto as bolhas dos candles MAIS
+      // RECENTES caíam por cima das 3 lanes de perfil, que ocupam ~48% da
+      // borda direita — justamente a área mais importante da tela. Camada
+      // ancorada no tempo desenha no corpo; camada de borda desenha na sua
+      // faixa. Ninguém invade ninguém.
+      const body = getChartBodyBounds(cssWidth);
       for (let i = 0; i < of.length; i++) {
         const entry = of[i];
         const recency = computeRecencyWeight(i, of.length);
@@ -164,6 +172,11 @@ export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPlugin
           const x = timeScale.timeToCoordinate((Math.floor(t.time / 1000)) as unknown as Time);
           const y = series.priceToCoordinate(t.price);
           if (x === null || y === null) continue;
+          // Fora do corpo = dentro de uma faixa reservada: não desenha.
+          // Descartar é honesto aqui — a bolha é contexto de fluxo, e o perfil
+          // que ocupa aquela faixa é leitura de preço; sobrepor os dois
+          // destruiria os dois.
+          if (x < body.left || x > body.right) continue;
           const r = computeBubbleRadius(t.volume, maxVolume);
           const bullish = t.side === "BUY";
           // Pedido do Operador: camada estava "atrapalhando a visão"

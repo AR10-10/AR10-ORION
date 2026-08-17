@@ -89,3 +89,83 @@ export function getProfileLaneRightEdgePx(id: ChartProfileLaneId, cssWidth: numb
 export function getProfileLaneMaxBarWidthPx(id: ChartProfileLaneId, cssWidth: number): number {
   return getProfileLaneWidthFraction(id) * cssWidth;
 }
+
+// ============================================================================
+// RESERVA DE BORDAS — "cada objeto no seu canto, encaixado perfeitamente,
+// nada cobrindo nada" (pedido do Operador)
+// ============================================================================
+//
+// ACHADO MEDIDO (duas colisões reais, não suposição):
+//
+// 1. LIQUIDAÇÃO × ETIQUETAS DA ESQUERDA
+//    LiquidationHeatmapPlugin desenha `ctx.fillRect(0, y, longW, h)` — começa
+//    em x=0 — com MAX_BAR_WIDTH_FRACTION = 0.14. Num gráfico de 1200px a barra
+//    chega a 168px. As etiquetas estruturais do lado esquerdo
+//    (PriceLabelStackPlugin, LEFT_MARGIN_PX = 2) começam em x=2. Sobreposição
+//    direta: a barra passa POR BAIXO do texto e o texto fica ilegível sobre
+//    ela. O comentário do próprio plugin dizia "nunca compete com o Volume
+//    Profile" — verdade, o VP está à direita; ninguém tinha olhado a ESQUERDA.
+//
+// 2. ORDERFLOW HEATMAP × OS 3 PERFIS
+//    OrderFlowHeatmapPlugin ancora cada célula em `timeToCoordinate`, então as
+//    células dos candles MAIS RECENTES chegam na borda direita — exatamente
+//    onde volume_profile + tpo_profile + order_book_depth somam 0.48 da
+//    largura. A área mais importante do gráfico é a que tinha duas camadas
+//    empilhadas.
+//
+// A correção é a mesma ideia que já resolveu VP/TPO/Depth entre si, estendida
+// para as bordas inteiras: existe uma FAIXA RESERVADA em cada lado, e o corpo
+// do gráfico é o que sobra. Camada de borda desenha na sua faixa; camada
+// ancorada no tempo desenha só no corpo. Ninguém invade ninguém.
+
+/** Faixa reservada na borda ESQUERDA, como fração da largura. Cobre a barra
+ *  de liquidação E as etiquetas estruturais que já viviam ali — os dois
+ *  passam a dividir um espaço declarado em vez de disputar o mesmo pixel.
+ *  0.14 é o valor que o LiquidationHeatmapPlugin já usava: nada encolheu,
+ *  só passou a ser respeitado por quem desenha por cima. */
+export const CHART_LEFT_EDGE_FRACTION = 0.14;
+
+/** Faixa reservada na borda DIREITA: a soma real das 3 lanes de perfil.
+ *  Derivada, nunca digitada à mão — se alguém mexer numa lane, isto segue. */
+export function getChartRightEdgeFraction(): number {
+  return LANE_ORDER.reduce((sum, id) => sum + LANE_WIDTH_FRACTION[id], 0);
+}
+
+/** Corpo mínimo (px) abaixo do qual reservar bordas faz mais mal que bem.
+ *  ~30 candles a 7px cada (TARGET_PX_PER_CANDLE de nexus/chart-viewport.ts) —
+ *  reusa a densidade que o sistema já considera legível, nunca um número novo. */
+export const CHART_MIN_BODY_PX = 210;
+
+export interface ChartBodyBounds {
+  /** Primeiro x livre (px) — depois da faixa esquerda. */
+  left: number;
+  /** Último x livre (px) — antes da faixa direita. */
+  right: number;
+  /** right − left. Nunca negativo. */
+  width: number;
+}
+
+/**
+ * O corpo REAL do gráfico: o retângulo horizontal livre de camadas de borda.
+ * Quem ancora no tempo (OrderFlow heatmap, e qualquer camada futura da mesma
+ * natureza) deve clipar aqui em vez de desenhar de ponta a ponta.
+ *
+ * Fail-closed em tela estreita: abaixo de CHART_MIN_BODY_PX de corpo restante,
+ * devolve o gráfico INTEIRO. Um gráfico apertado com sobreposição ainda é
+ * legível; um corpo de 40px não mostra candle nenhum — e sumir com o dado é
+ * pior que sobrepor (Regra de Ouro 4).
+ *
+ * NOTA DE CORREÇÃO (defeito achado pelo próprio teste desta função): a
+ * primeira versão testava `right <= left`. Como AMBOS são frações da MESMA
+ * largura, a razão entre eles é constante (0.14 vs 0.52) e essa condição
+ * nunca poderia ser verdadeira em nenhuma tela — era um ramo MORTO se
+ * passando por proteção. O gate real tem de ser um mínimo ABSOLUTO em pixels,
+ * que é a preocupação de verdade.
+ */
+export function getChartBodyBounds(cssWidth: number): ChartBodyBounds {
+  if (!Number.isFinite(cssWidth) || cssWidth <= 0) return { left: 0, right: 0, width: 0 };
+  const left = cssWidth * CHART_LEFT_EDGE_FRACTION;
+  const right = cssWidth * (1 - getChartRightEdgeFraction());
+  if (right - left < CHART_MIN_BODY_PX) return { left: 0, right: cssWidth, width: cssWidth };
+  return { left, right, width: right - left };
+}
