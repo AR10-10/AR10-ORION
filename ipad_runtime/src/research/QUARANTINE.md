@@ -356,6 +356,35 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   funcionar como mecanismo, só depende dela para que a comparação
   descreva desempenho de mercado real em vez de uma série de teste.
 
+- `ramber-ui/src/nexus/reversal-detector.ts` — **Detector de Reversão**
+  (`computeReversalReading`) + **instrumento de medição**
+  (`measureReversalLead`). Nasceu do achado central do
+  `docs/MAPA_ECOSSISTEMA_2026-08-17.md`: a decisão INTEIRA do Núcleo é
+  `trendBias()` (preço vs SMA, EMA vs SMA) — um cruzamento de médias, o
+  detector de reversão mais lento que existe — enquanto o CHoCH, que é a
+  definição literal de reversão estrutural e dispara antes, já está
+  construído e desenhado na tela sem poder influenciar nada.
+  Lê a evidência REAL já calculada (`bos-choch-engine.js`,
+  `supertrend-engine.js`) e responde duas coisas: "virou?" e, sobretudo,
+  "quantas barras ANTES do Núcleo?".
+  Distinção crítica travada por teste: **BOS não é reversão** (é
+  continuação); só CHOCH conta — tratar BOS como reversão daria o sinal
+  exatamente invertido no momento de tendência mais forte.
+  Anti-viés travado por teste: a janela de pareamento é SIMÉTRICA, então
+  `leadBars` pode ser negativo e a mediana pode honestamente dizer "a troca
+  não vale a pena". A primeira versão só aceitava evidência anterior à
+  virada, o que tornava o resultado favorável POR CONSTRUÇÃO.
+  Regra de Ouro 2: `strength` é massa de evidência concordante, NUNCA
+  probabilidade de acerto.
+  `trendBias` foi EXPORTADO de `js/research/research-engine.js` (mudança
+  puramente aditiva) para ser medido em vez de reimplementado — uma segunda
+  cópia da decisão seria uma segunda decisão paralela.
+  Status: **LABORATÓRIO** — nenhum consumidor real importa (fronteira
+  travada por teste em `ramber-ui/tests/reversal-detector.test.ts`, que
+  verifica que `App.tsx` e `engine-bridge.ts` não o mencionam). A LEI 24
+  segue intacta: o Núcleo continua decidindo sozinho, do mesmo jeito, até
+  o Operador decidir COM O NÚMERO NA MÃO se muda.
+
 ## Regra de quarentena daqui para frente
 
 Nenhum arquivo de `src/research/**` pode ser importado por `js/**` sem,

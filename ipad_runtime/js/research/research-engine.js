@@ -32,7 +32,14 @@
 import { DADOS_INSUFICIENTES, NAO_APLICAVEL } from '../real-data/schema.js';
 import { computeDataSufficiency } from './data-sufficiency.js';
 
-function trendBias(frame) {
+// EXPORTADO (mudança puramente aditiva, zero alteração de comportamento) para
+// que o Laboratório de Evolução possa MEDIR esta decisão em vez de
+// reimplementá-la. `nexus/reversal-detector.ts` compara, sobre histórico real,
+// em que candle este bias vira contra em que candle a evidência estrutural
+// (CHoCH/SuperTrend) já tinha virado — a "vantagem em barras". Reimplementar
+// esta função lá seria criar uma segunda decisão paralela, exatamente o que
+// este repositório proíbe: a fonte da verdade é esta, e é esta que é medida.
+export function trendBias(frame) {
     if (!Number.isFinite(frame.last_price) || !Number.isFinite(frame.sma) || !Number.isFinite(frame.ema)) return 'INDEFINIDO';
     if (frame.last_price > frame.sma && frame.ema >= frame.sma) return 'ALTA';
     if (frame.last_price < frame.sma && frame.ema <= frame.sma) return 'BAIXA';
