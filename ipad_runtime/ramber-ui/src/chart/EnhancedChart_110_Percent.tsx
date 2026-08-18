@@ -3128,7 +3128,6 @@ export function EnhancedChart_110_Percent({
         const rr = tradePlan.riskRewardRatios[i];
         // EPC FINAL §8: TP1/TP2/TP3 sempre numerado (mesmo com 1 alvo só) —
         // a mesma convenção pedida, sem distinção "singular vs plural".
-        const distPct = p !== null && p > 0 ? ` ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";
         // Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4/§11 (achado real
         // de captura: "TP1 FRACA · 0.34% · 1:0.04 · REACHED" ocupava uma
         // faixa horizontal grande sobre as velas — o problema não era o
@@ -3148,14 +3147,19 @@ export function EnhancedChart_110_Percent({
             ? formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)
             : null;
         const secondaryParts = [
-          // Pedido direto do Operador ("deixar só as iniciais, não precisa
-          // aquela numeração na frente nem a porcentagem"): o rótulo
-          // PRIMÁRIO passa a ser só a sigla — TP1/TP2/TP3. A distância NÃO
-          // foi apagada (Regra de Ouro 4): desceu para o secundário, onde
-          // já moram basis/R:R/ETA/obstáculo/REACHED. Continua legível a um
-          // toque de olho, sem competir com a sigla pela mesma faixa
-          // horizontal sobre as velas.
-          distPct.trim() || null,
+          // Pedido do Operador, repetido em duas rodadas com capturas reais:
+          // "deixar só as iniciais, não precisa aquela numeração na frente
+          // NEM A PORCENTAGEM". A primeira tentativa só desceu a distância
+          // para o secundário — e ela continuou aparecendo na tela
+          // (TP1 3.14% FRACA 1:0.42 na captura de ZEC 4H). Agora sai do
+          // canvas de vez.
+          //
+          // Regra de Ouro 4 (nunca apagar dado real, só realocar) está
+          // satisfeita e já estava ANTES desta mudança: a distância
+          // percentual até cada alvo é renderizada no painel do Trade Plan
+          // (App.tsx, linha do target: preço, basis, PORCENTAGEM, R:R, ETA
+          // e obstáculos). O canvas deixa de repetir o que o painel já diz
+          // — o mesmo princípio que tirou o motivo de ausência daqui.
           compactLabels ? null : target.basis,
           compactLabels || rr === null ? null : `1:${rr.toFixed(2)}`,
           etaLabel ? `ETA ${etaLabel}` : null,
@@ -3206,12 +3210,12 @@ export function EnhancedChart_110_Percent({
       // é o plano ATIVO do Operador quando não há um plano do Conselho,
       // não uma referência secundária.
       //
-      // distPct (§4, "distância até o alvo... quando já houver cálculo
-      // real disponível"): o Trade Plan do Conselho acima já calcula essa
-      // distância real (Math.abs(target-p)*100/p) e a exibe — o fallback
-      // do Núcleo nunca reusava a MESMA fórmula, mesmo já tendo `p` em
-      // escopo (usado só para REACHED). Lacuna real fechada aqui: zero
-      // cálculo novo, mesma fórmula, mesmo `p`, mesma convenção "· N.NN%".
+      // A distância percentual até o alvo NÃO é mais desenhada aqui
+      // (pedido repetido do Operador, com captura real mostrando
+      // "TP1 3.14% FRACA 1:0.42" sobre as velas). Ela continua real e
+      // visível no painel do Trade Plan — este canvas parou de repetir o
+      // que o painel já diz. `p` segue em escopo porque REACHED depende
+      // dele.
       // Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4/§11 (achado real de
       // captura: "TP1 FRACA · 0.34% · 1:0.04 · REACHED" — mesmo problema
       // do Trade Plan do Conselho acima, mesma correção: PRIMÁRIO = label
@@ -3233,11 +3237,9 @@ export function EnhancedChart_110_Percent({
       if (Number.isFinite(engineFallbackLevels.target1)) {
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target1 : p <= engineFallbackLevels.target1);
         const rr = engineFallbackLevels.riskRewardRatio;
-        const distPct1 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target1 - p) * 100) / p).toFixed(2)}%` : "";
         const secondary1 = [
-          // Mesma regra do Trade Plan acima: sigla no primário, distância
-          // realocada para o secundário — nunca removida.
-          distPct1.trim() || null,
+          // Mesma regra do Trade Plan acima: a porcentagem sai do canvas e
+          // permanece no painel.
           strengthSuffix(engineFallbackLevels.target1Strength).trim() || null,
           rr !== null ? `1:${rr.toFixed(2)}` : null,
           obstacleSuffix(engineFallbackLevels.target1ObstacleCount).trim() || null,
@@ -3253,9 +3255,7 @@ export function EnhancedChart_110_Percent({
       }
       if (engineFallbackLevels.target2 !== null && Number.isFinite(engineFallbackLevels.target2)) {
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target2 : p <= engineFallbackLevels.target2);
-        const distPct2 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target2 - p) * 100) / p).toFixed(2)}%` : "";
         const secondary2 = [
-          distPct2.trim() || null,
           strengthSuffix(engineFallbackLevels.target2Strength).trim() || null,
           obstacleSuffix(engineFallbackLevels.target2ObstacleCount).trim() || null,
           reached ? "REACHED" : null,
@@ -3275,8 +3275,7 @@ export function EnhancedChart_110_Percent({
       // este nível, nunca um valor fabricado só para preencher o rótulo.
       if (engineFallbackLevels.target3 != null && Number.isFinite(engineFallbackLevels.target3)) {
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target3 : p <= engineFallbackLevels.target3);
-        const distPct3 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target3 - p) * 100) / p).toFixed(2)}%` : "";
-        const secondary3 = [distPct3.trim() || null, reached ? "REACHED" : null].filter(
+        const secondary3 = [reached ? "REACHED" : null].filter(
           (v): v is string => v !== null,
         );
         out.push({

@@ -580,7 +580,16 @@ describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no grá
 
   it('títulos das linhas de alvo carregam distância % ao preço VIVO + ETA em faixa do contrato fundido (guard de preço)', () => {
     const c = chart();
-    expect(c).toContain('const distPct = p !== null && p > 0 ? ` ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";');
+    // REVERTIDO POR PEDIDO REPETIDO DO OPERADOR (duas rodadas, com captura
+    // real de ZEC 4H mostrando "TP1 3.14% FRACA 1:0.42" na tela): a
+    // porcentagem saiu do canvas de vez. Regra de Ouro 4 satisfeita — a
+    // distância percentual continua real e visível no painel do Trade Plan
+    // (App.tsx), que já a renderizava antes desta mudança.
+    // A distância vive no PAINEL, não no canvas — é lá que a asserção
+    // passa a morar.
+    expect(c).not.toContain('const distPct =');
+    const app = read('../src/App.tsx');
+    expect(app).toContain("(Math.abs(target.price - price.price) / price.price * 100).toFixed(2)");
     expect(c).toContain('const fusedTarget = decision?.plan?.targets[i];');
     expect(c).toContain('Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)');
     expect(c).toContain('etaLabel ? `ETA ${etaLabel}` : null,');
