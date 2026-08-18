@@ -61,18 +61,88 @@ export function getProfileLaneWidthFraction(id: ChartProfileLaneId): number {
   return LANE_WIDTH_FRACTION[id];
 }
 
+// ============================================================================
+// EMPACOTAMENTO DINÂMICO — achado real de captura (ZEC 15m/1H/4H)
+// ============================================================================
+//
+// RECLAMAÇÃO DIRETA DO OPERADOR: "aquela etiqueta está atrapalhando a visão
+// do nível de oferta que aparece no meio do gráfico... o livro de liquidez
+// institucional fica encavalado por cima da outra".
+//
+// CAUSA RAIZ MEDIDA, e não é estética: a alocação era ESTÁTICA.
+// getProfileLaneOffsetFraction somava a largura de todas as lanes anteriores
+// em LANE_ORDER **estivessem elas visíveis ou não**. Com Volume Profile e
+// TPO ocultos, a lane do livro AINDA começava a 0.30 da borda — desenhando
+// no meio das velas, com 30% de espaço reservado e VAZIO entre ela e o eixo
+// de preço. A etiqueta "WALL ASK 509.70" no meio do gráfico era isso.
+//
+// Duas correções, as duas derivadas do mesmo princípio (reservar só o que
+// se usa):
+//
+//   1. As lanes são empacotadas sobre as ATIVAS. Uma lane sozinha encosta no
+//      eixo, como sempre deveria ter feito.
+//   2. Existe um TETO para a soma. Antes, as três juntas ocupavam 0.48 — quase
+//      METADE da largura do gráfico só de painéis laterais. O Operador pediu
+//      "deixa só as ferramentas principais... o operador ter uma noção mais
+//      profissional"; um gráfico cujo corpo é minoria da tela não permite isso.
+//
+// O teto é CONVENÇÃO DECLARADA, nunca medição — mesma natureza dos limiares
+// de expectancy.ts. Quando a soma natural das lanes ativas ultrapassa o teto,
+// todas encolhem PROPORCIONALMENTE: nenhuma lane é sacrificada para outra
+// caber (isso seria decidir conteúdo, papel do Relevance Engine, não desta
+// geometria — Regra de Ouro 4).
+export const PROFILE_LANES_MAX_TOTAL_FRACTION = 0.34;
+
+export interface ResolvedProfileLane {
+  /** Largura real desta lane depois do teto, como fração do cssWidth. */
+  widthFraction: number;
+  /** Distância da borda direita até o início desta lane, já empacotada
+   *  sobre as lanes ATIVAS (nunca sobre as ocultas). */
+  offsetFraction: number;
+}
+
+/** Todas as lanes conhecidas, na ordem real de empilhamento. */
+export const ALL_PROFILE_LANES: readonly ChartProfileLaneId[] = LANE_ORDER;
+
+/**
+ * Geometria real das lanes ativas.
+ *
+ * @param active quais lanes estão sendo desenhadas AGORA. Lista vazia
+ *   devolve mapa vazio (nada reservado — é o caso de "nenhum perfil
+ *   visível", em que o gráfico inteiro é corpo).
+ */
+export function resolveProfileLanes(
+  active: readonly ChartProfileLaneId[] = LANE_ORDER,
+): Map<ChartProfileLaneId, ResolvedProfileLane> {
+  const wanted = LANE_ORDER.filter((id) => active.includes(id));
+  const out = new Map<ChartProfileLaneId, ResolvedProfileLane>();
+  if (wanted.length === 0) return out;
+
+  const natural = wanted.reduce((sum, id) => sum + LANE_WIDTH_FRACTION[id], 0);
+  const scale = natural > PROFILE_LANES_MAX_TOTAL_FRACTION
+    ? PROFILE_LANES_MAX_TOTAL_FRACTION / natural
+    : 1;
+
+  let offset = 0;
+  for (const id of wanted) {
+    const widthFraction = LANE_WIDTH_FRACTION[id] * scale;
+    out.set(id, { widthFraction, offsetFraction: offset });
+    offset += widthFraction;
+  }
+  return out;
+}
+
 /** Distância real (fração do cssWidth) entre a borda direita do canvas e
  *  o início da lane deste plugin — soma a largura de todas as lanes que
  *  vêm ANTES dele em LANE_ORDER. Fail-closed: id não cadastrado devolve 0
  *  (nunca NaN/undefined) — no pior caso um plugin novo desconhecido
  *  volta ao comportamento antigo (ancorado no próprio cssWidth) em vez
  *  de quebrar o desenho. */
-export function getProfileLaneOffsetFraction(id: ChartProfileLaneId): number {
-  const index = LANE_ORDER.indexOf(id);
-  if (index < 0) return 0;
-  let offset = 0;
-  for (let i = 0; i < index; i++) offset += LANE_WIDTH_FRACTION[LANE_ORDER[i]];
-  return offset;
+export function getProfileLaneOffsetFraction(
+  id: ChartProfileLaneId,
+  active: readonly ChartProfileLaneId[] = LANE_ORDER,
+): number {
+  return resolveProfileLanes(active).get(id)?.offsetFraction ?? 0;
 }
 
 /** Borda direita real (em px CSS) da lane deste plugin, dado o cssWidth
@@ -80,14 +150,23 @@ export function getProfileLaneOffsetFraction(id: ChartProfileLaneId): number {
  *  puro em TODO desenho ancorado à direita (fillRect/strokeRect/moveTo/
  *  lineTo/posição de label). Para volume_profile (offset 0) o valor é
  *  idêntico a cssWidth — zero mudança visual para essa lane. */
-export function getProfileLaneRightEdgePx(id: ChartProfileLaneId, cssWidth: number): number {
-  return cssWidth - getProfileLaneOffsetFraction(id) * cssWidth;
+export function getProfileLaneRightEdgePx(
+  id: ChartProfileLaneId,
+  cssWidth: number,
+  active: readonly ChartProfileLaneId[] = LANE_ORDER,
+): number {
+  return cssWidth - getProfileLaneOffsetFraction(id, active) * cssWidth;
 }
 
 /** Largura máxima real (em px CSS) da maior barra/nível desta lane, dado
  *  o cssWidth real do canvas — substitui `cssWidth * MAX_BAR_WIDTH_FRACTION`. */
-export function getProfileLaneMaxBarWidthPx(id: ChartProfileLaneId, cssWidth: number): number {
-  return getProfileLaneWidthFraction(id) * cssWidth;
+export function getProfileLaneMaxBarWidthPx(
+  id: ChartProfileLaneId,
+  cssWidth: number,
+  active: readonly ChartProfileLaneId[] = LANE_ORDER,
+): number {
+  const resolved = resolveProfileLanes(active).get(id);
+  return (resolved?.widthFraction ?? LANE_WIDTH_FRACTION[id]) * cssWidth;
 }
 
 // ============================================================================
@@ -127,8 +206,12 @@ export const CHART_LEFT_EDGE_FRACTION = 0.14;
 
 /** Faixa reservada na borda DIREITA: a soma real das 3 lanes de perfil.
  *  Derivada, nunca digitada à mão — se alguém mexer numa lane, isto segue. */
-export function getChartRightEdgeFraction(): number {
-  return LANE_ORDER.reduce((sum, id) => sum + LANE_WIDTH_FRACTION[id], 0);
+export function getChartRightEdgeFraction(
+  active: readonly ChartProfileLaneId[] = LANE_ORDER,
+): number {
+  let sum = 0;
+  for (const lane of resolveProfileLanes(active).values()) sum += lane.widthFraction;
+  return sum;
 }
 
 /** Corpo mínimo (px) abaixo do qual reservar bordas faz mais mal que bem.
@@ -162,10 +245,15 @@ export interface ChartBodyBounds {
  * passando por proteção. O gate real tem de ser um mínimo ABSOLUTO em pixels,
  * que é a preocupação de verdade.
  */
-export function getChartBodyBounds(cssWidth: number): ChartBodyBounds {
+export function getChartBodyBounds(
+  cssWidth: number,
+  active: readonly ChartProfileLaneId[] = LANE_ORDER,
+): ChartBodyBounds {
   if (!Number.isFinite(cssWidth) || cssWidth <= 0) return { left: 0, right: 0, width: 0 };
   const left = cssWidth * CHART_LEFT_EDGE_FRACTION;
-  const right = cssWidth * (1 - getChartRightEdgeFraction());
+  // Reserva só o que as lanes ATIVAS ocupam — com nenhum perfil visível o
+  // corpo vai até a borda, em vez de deixar 48% de faixa vazia reservada.
+  const right = cssWidth * (1 - getChartRightEdgeFraction(active));
   if (right - left < CHART_MIN_BODY_PX) return { left: 0, right: cssWidth, width: cssWidth };
   return { left, right, width: right - left };
 }

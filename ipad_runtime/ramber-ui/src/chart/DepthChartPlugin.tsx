@@ -43,7 +43,7 @@ import { useOrderBookSnapshot, type OrderBookLevel } from "../store/unified-snap
 import { detectWalls } from "../nexus/order-book-depth";
 import { drawCanvasLabel, measureCanvasLabel } from "../nexus/canvas-label";
 import { chartBullishRgba, chartBearishRgba } from "./canvas-palette";
-import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx } from "./chart-profile-lanes";
+import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx, type ChartProfileLaneId } from "./chart-profile-lanes";
 // Achado da AUDITORIA TÉCNICA COMPLETA (item B12): bid/ask usavam Tailwind
 // green-500/red-500, um par DIFERENTE do verde/vermelho universal que todo
 // o resto do gráfico usa para o mesmo conceito alta/baixa (candles, FVG/OB,
@@ -146,9 +146,14 @@ export function resolveWallLabels(
 interface DepthChartPluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
+  /** Quais lanes de perfil estão REALMENTE sendo desenhadas agora. Sem
+   *  isto cada plugin assumia que as outras duas sempre existiam e
+   *  reservava espaço para lanes ocultas — a causa raiz da etiqueta do
+   *  livro flutuando no meio das velas (captura real do Operador). */
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
-export function DepthChartPlugin({ chart, series }: DepthChartPluginProps) {
+export function DepthChartPlugin({ chart, series, activeLanes }: DepthChartPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const book = useOrderBookSnapshot();
   const bookRef = useRef(book);
@@ -190,8 +195,8 @@ export function DepthChartPlugin({ chart, series }: DepthChartPluginProps) {
       );
       if (!(maxSize > 0)) return;
 
-      const laneRight = getProfileLaneRightEdgePx("order_book_depth", cssWidth);
-      const maxBarWidth = getProfileLaneMaxBarWidthPx("order_book_depth", cssWidth);
+      const laneRight = getProfileLaneRightEdgePx("order_book_depth", cssWidth, activeLanes);
+      const maxBarWidth = getProfileLaneMaxBarWidthPx("order_book_depth", cssWidth, activeLanes);
       const barHeight = Math.max(2, cssHeight / 40); // faixa fina real por nível
       const bidWalls = detectWalls(bids);
       const askWalls = detectWalls(asks);

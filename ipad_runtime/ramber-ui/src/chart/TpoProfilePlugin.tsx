@@ -35,7 +35,7 @@ import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { computeTpoProfile, type TpoProfileResult } from "../nexus/tpo-profile";
-import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx } from "./chart-profile-lanes";
+import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx, type ChartProfileLaneId } from "./chart-profile-lanes";
 // Linhas TPO: azul-neutro já usado pra estrutura (mesmo tom-base de
 // #8ab4f8 onipresente no HUD) — deliberadamente NUNCA o cyan do Volume
 // Profile: os dois perfis podem estar ligados ao mesmo tempo, e cores
@@ -58,9 +58,14 @@ interface TpoProfilePluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   data: { time: number; high: number; low: number }[];
+  /** Quais lanes de perfil estão REALMENTE sendo desenhadas agora. Sem
+   *  isto cada plugin assumia que as outras duas sempre existiam e
+   *  reservava espaço para lanes ocultas — a causa raiz da etiqueta do
+   *  livro flutuando no meio das velas (captura real do Operador). */
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
-export function TpoProfilePlugin({ chart, series, data }: TpoProfilePluginProps) {
+export function TpoProfilePlugin({ chart, series, data, activeLanes }: TpoProfilePluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dataRef = useRef(data);
   const markDirtyRef = useRef<(() => void) | null>(null);
@@ -106,8 +111,8 @@ export function TpoProfilePlugin({ chart, series, data }: TpoProfilePluginProps)
       const maxCount = result.rows.reduce((m, row) => Math.max(m, row.letters.length), 0);
       if (!(maxCount > 0)) return;
 
-      const laneRight = getProfileLaneRightEdgePx("tpo_profile", cssWidth);
-      const maxBarWidth = getProfileLaneMaxBarWidthPx("tpo_profile", cssWidth);
+      const laneRight = getProfileLaneRightEdgePx("tpo_profile", cssWidth, activeLanes);
+      const maxBarWidth = getProfileLaneMaxBarWidthPx("tpo_profile", cssWidth, activeLanes);
       const rowWidthPrice = (result.rangeMax - result.rangeMin) / result.rowCount;
 
       for (let i = 0; i < result.rows.length; i++) {

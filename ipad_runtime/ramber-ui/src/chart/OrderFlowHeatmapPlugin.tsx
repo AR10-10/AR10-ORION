@@ -42,7 +42,7 @@
 // direto já comprovado em produção pelo LiquidityZonesPlugin.
 import { useEffect, useRef, useState } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
-import { getChartBodyBounds } from "./chart-profile-lanes";
+import { getChartBodyBounds, type ChartProfileLaneId } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { useL2History, useOrderflowHistory } from "../store/unified-snapshot-store";
 import {
@@ -59,6 +59,11 @@ import {
 interface OrderFlowHeatmapPluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
+  /** Mesmo conjunto de lanes ativas que os 3 perfis recebem: a faixa
+   *  reservada à direita passa a ser a REAL, não a soma das três sempre.
+   *  Sem isto o heatmap se clipava como se 48%% da largura estivessem
+   *  ocupados mesmo com nenhum perfil visível. */
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
 // Altura fixa de cada célula de profundidade (px CSS) — um nível L2 é um
@@ -83,7 +88,7 @@ function supportsOffscreenWorker(): boolean {
   );
 }
 
-export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPluginProps) {
+export function OrderFlowHeatmapPlugin({ chart, series, activeLanes }: OrderFlowHeatmapPluginProps) {
   const l2History = useL2History("BINANCE");
   const orderflowHistory = useOrderflowHistory();
   const dataRef = useRef({ l2History, orderflowHistory });
@@ -165,7 +170,7 @@ export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPlugin
       // borda direita — justamente a área mais importante da tela. Camada
       // ancorada no tempo desenha no corpo; camada de borda desenha na sua
       // faixa. Ninguém invade ninguém.
-      const body = getChartBodyBounds(cssWidth);
+      const body = getChartBodyBounds(cssWidth, activeLanes);
       for (let i = 0; i < of.length; i++) {
         const entry = of[i];
         const recency = computeRecencyWeight(i, of.length);

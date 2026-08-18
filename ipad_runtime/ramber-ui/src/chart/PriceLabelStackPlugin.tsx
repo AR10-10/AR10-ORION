@@ -158,7 +158,36 @@ const FONT_COMPACT_BASE_PX = 9;
 // conector fino de volta ao preço real (ainda na cor real, abaixo):
 // remover a cor do texto não apaga nenhum dado real (Regra de Ouro 4),
 // só para de repetir a mesma informação num segundo canal visual.
-const LABEL_NEUTRAL_COLOR = "#888";
+// BRILHO POR IMPORTÂNCIA — pedido direto do Operador sobre captura real:
+// "aumenta o tom de brilho das ferramentas mais importantes, deixa elas
+// mais vivas, não apagadas demais".
+//
+// O defeito não era o cinza em si: era ele ser LISO. Todo rótulo que não
+// fosse live/critical recebia exatamente o mesmo #888, então um nível
+// estrutural do lado acionável lia igual a um rótulo de contexto de fundo.
+// O `tier` já declarava a diferença de importância (resolveLabelTier:
+// direita → "primary", esquerda → "context") e o desenho a ignorava.
+//
+// Agora o brilho segue essa hierarquia que já existia. Nada ficou mais
+// apagado do que estava — `context` mantém o mesmo peso visual de antes,
+// só ganhou o viés azulado da paleta do app em vez do cinza puro; quem
+// SOBE é o lado que o Operador usa para decidir agora.
+//
+// Deliberadamente NÃO é um aumento geral de brilho: subir todo mundo
+// junto devolveria a "parede" que outras rodadas passaram removendo, e
+// destruiria a própria leitura de hierarquia que ele está pedindo.
+export const LABEL_TIER_COLOR: Record<PriceLabelTier, string> = {
+  // live/critical desenham texto escuro sobre preenchimento sólido — a
+  // cor deles não vem daqui (ver isBigTier abaixo). Declarados mesmo
+  // assim para o Record ser total: um tier novo nunca cai em undefined.
+  live: "#050810",
+  critical: "#050810",
+  // O lado acionável agora: nível estrutural, plano, alvo.
+  primary: "#C3D0DC",
+  // Contexto de fundo: mesma discrição de antes, com o viés azulado da
+  // paleta em vez do cinza puro.
+  context: "#8A94A0",
+};
 // "2px do edge" pedido — distinto do padding interno das caixas sólidas
 // (LABEL_PADDING_X abaixo), que continua servindo só live/critical.
 const COMPACT_EDGE_PADDING_PX = 2;
@@ -457,7 +486,7 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
           // agora também na cor do chip, nunca reconstruída via COR DO
           // TEXTO (Regra de Ouro 4: nenhum dado real some, só para de
           // repetir a mesma informação num terceiro canal visual).
-          const textColor = isBigTier ? "#050810" : LABEL_NEUTRAL_COLOR;
+          const textColor = isBigTier ? "#050810" : LABEL_TIER_COLOR[tier];
           ctx.fillStyle = textColor;
           ctx.textBaseline = "middle";
           ctx.textAlign = "left";

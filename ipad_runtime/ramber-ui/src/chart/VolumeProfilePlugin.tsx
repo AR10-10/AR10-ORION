@@ -36,7 +36,7 @@ import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { useVolumeProfileSnapshot } from "../store/unified-snapshot-store";
 import { bucketMidPrice } from "../nexus/volume-profile";
-import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx } from "./chart-profile-lanes";
+import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx, type ChartProfileLaneId } from "./chart-profile-lanes";
 // Barras: cyan monocromático — achado da Lapidação Institucional
 // (AUDITORIA_ECOSSISTEMA_VISUAL.md §9.4/§9.7, pesquisa real confirmou que
 // isto é um preset legítimo e precedente ("Black Ice", scripts reais de
@@ -61,9 +61,14 @@ const POC_LINE = "rgba(236, 81, 205, 0.75)";
 interface VolumeProfilePluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
+  /** Quais lanes de perfil estão REALMENTE sendo desenhadas agora. Sem
+   *  isto cada plugin assumia que as outras duas sempre existiam e
+   *  reservava espaço para lanes ocultas — a causa raiz da etiqueta do
+   *  livro flutuando no meio das velas (captura real do Operador). */
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
-export function VolumeProfilePlugin({ chart, series }: VolumeProfilePluginProps) {
+export function VolumeProfilePlugin({ chart, series, activeLanes }: VolumeProfilePluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const profile = useVolumeProfileSnapshot();
   const profileRef = useRef(profile);
@@ -105,8 +110,8 @@ export function VolumeProfilePlugin({ chart, series }: VolumeProfilePluginProps)
       const maxVolume = vp.histogram.reduce((a, b) => (b > a ? b : a), 0);
       if (!(maxVolume > 0)) return;
 
-      const laneRight = getProfileLaneRightEdgePx("volume_profile", cssWidth);
-      const maxBarWidth = getProfileLaneMaxBarWidthPx("volume_profile", cssWidth);
+      const laneRight = getProfileLaneRightEdgePx("volume_profile", cssWidth, activeLanes);
+      const maxBarWidth = getProfileLaneMaxBarWidthPx("volume_profile", cssWidth, activeLanes);
       const hvn = new Set(vp.hvnIndices);
       const lvn = new Set(vp.lvnIndices);
 

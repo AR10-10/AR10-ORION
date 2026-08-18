@@ -188,6 +188,7 @@ import { clusterSweptPrices } from "../nexus/trap-detection";
 import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER, type TrendChannelDirection } from "../nexus/trend-channel-engine";
 import { shouldCompactLabels } from "./label-compaction";
 import { formatTickMark } from "./tick-mark-format";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import { PriceLabelStackPlugin, type PriceAxisLabel } from "./PriceLabelStackPlugin";
 
 export interface EnhancedChartCandle {
@@ -824,6 +825,23 @@ export function EnhancedChart_110_Percent({
   onHoverCandleChange,
 }: EnhancedChartProps) {
   const visibility = layerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
+  // Quais lanes de perfil estão REALMENTE na tela agora.
+  //
+  // Achado de captura real (ZEC 15m/1H/4H, reclamação direta do Operador:
+  // "o livro de liquidez institucional fica atrapalhando... encavalado por
+  // cima da outra"): a geometria das lanes era ESTÁTICA — cada plugin
+  // reservava espaço para as outras duas mesmo quando elas estavam
+  // ocultas. Com VP e TPO fora, a lane do livro ainda começava a 30% da
+  // borda e desenhava no meio das velas, com o espaço reservado à direita
+  // dela VAZIO. Passar o conjunto ativo faz uma lane sozinha encostar no
+  // eixo, como sempre deveria ter feito.
+  const activeProfileLanes = useMemo<ChartProfileLaneId[]>(() => {
+    const out: ChartProfileLaneId[] = [];
+    if (visibility.volume_profile) out.push("volume_profile");
+    if (visibility.tpo_profile) out.push("tpo_profile");
+    if (visibility.order_book_depth) out.push("order_book_depth");
+    return out;
+  }, [visibility.volume_profile, visibility.tpo_profile, visibility.order_book_depth]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -3542,6 +3560,7 @@ export function EnhancedChart_110_Percent({
         <OrderFlowHeatmapPlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
+          activeLanes={activeProfileLanes}
         />
       )}
       <div ref={containerRef} className="absolute inset-0" />
@@ -3685,6 +3704,7 @@ export function EnhancedChart_110_Percent({
         <VolumeProfilePlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* OMEGA CORE V-MAX Fase 8.1: densidade real de liquidações JÁ
@@ -3726,6 +3746,7 @@ export function EnhancedChart_110_Percent({
         <DepthChartPlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Entrega 41: perfil TPO real da sessão corrente — mesma `data`
@@ -3736,6 +3757,7 @@ export function EnhancedChart_110_Percent({
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           data={data}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Entrega 47: ZigZag graduado do Laboratório (pedido direto do

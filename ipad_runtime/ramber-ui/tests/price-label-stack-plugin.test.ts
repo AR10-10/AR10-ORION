@@ -6,6 +6,7 @@
 // trade-plan-zone-plugin.test.ts (node env, sem canvas real; verificação
 // visual real via harness Playwright antes do commit).
 import { describe, it, expect } from 'vitest';
+import { LABEL_TIER_COLOR } from '../src/chart/PriceLabelStackPlugin';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -1382,5 +1383,57 @@ describe('Achado 2.7: fiação real da Fibonacci no orçamento visual (padrão d
   it('visibility.fibonacci/fibonacciLevels entram nas deps do orçamento — senão o peso ficaria stale ao ligar/desligar a camada ou trocar de perna', () => {
     const s = chart();
     expect(s).toContain('visibility.fibonacci,\n    fibonacciLevels,\n    mainLiquidityCandidates,\n  ]);');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BRILHO POR IMPORTÂNCIA — pedido do Operador sobre captura real ("aumenta o
+// tom de brilho das ferramentas mais importantes, deixa elas mais vivas, não
+// apagadas demais").
+//
+// O defeito era o cinza LISO: todo rótulo abaixo de live/critical recebia o
+// mesmo #888, então um nível do lado acionável lia igual a um contexto de
+// fundo. O `tier` já declarava a diferença e o desenho a ignorava.
+// ---------------------------------------------------------------------------
+describe('brilho da etiqueta segue o tier — hierarquia visível, nunca cinza liso', () => {
+  /** Luminância relativa (WCAG) — a medida real de "quão claro" um hex é,
+   *  nunca uma comparação ingênua de string. */
+  const luminance = (hex: string): number => {
+    const n = parseInt(hex.slice(1), 16);
+    const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+  };
+
+  it('primary é MAIS claro que context — a hierarquia existe no pixel, não só no tipo', () => {
+    expect(luminance(LABEL_TIER_COLOR.primary)).toBeGreaterThan(luminance(LABEL_TIER_COLOR.context));
+  });
+
+  it('context NÃO ficou mais apagado do que era — o pedido foi subir o importante, nunca afundar o resto', () => {
+    // #888 é a linha de base histórica desta camada.
+    expect(luminance(LABEL_TIER_COLOR.context)).toBeGreaterThanOrEqual(luminance('#888888') - 1e-3);
+  });
+
+  it('primary sobe de verdade — subir 1% não atenderia o pedido', () => {
+    expect(luminance(LABEL_TIER_COLOR.primary)).toBeGreaterThan(luminance('#888888') * 1.5);
+  });
+
+  it('live/critical continuam texto ESCURO (desenham sobre preenchimento sólido)', () => {
+    expect(luminance(LABEL_TIER_COLOR.live)).toBeLessThan(0.05);
+    expect(luminance(LABEL_TIER_COLOR.critical)).toBeLessThan(0.05);
+  });
+
+  it('o mapa é total: nenhum tier cai em undefined', () => {
+    for (const tier of ['live', 'critical', 'primary', 'context'] as const) {
+      expect(LABEL_TIER_COLOR[tier]).toMatch(/^#[0-9a-fA-F]{6}$/);
+    }
+  });
+
+  it('o desenho consome o mapa por tier, nunca uma constante única', () => {
+    const src = read('../src/chart/PriceLabelStackPlugin.tsx');
+    expect(src).toContain('LABEL_TIER_COLOR[tier]');
+    expect(src).not.toContain('LABEL_NEUTRAL_COLOR');
   });
 });

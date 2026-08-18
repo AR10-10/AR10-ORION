@@ -22,6 +22,8 @@ import {
   getChartRightEdgeFraction,
   CHART_LEFT_EDGE_FRACTION,
   CHART_MIN_BODY_PX,
+  PROFILE_LANES_MAX_TOTAL_FRACTION,
+  resolveProfileLanes,
   type ChartProfileLaneId,
 } from "../src/chart/chart-profile-lanes";
 
@@ -34,14 +36,19 @@ describe("chart-profile-lanes: matemática pura de offset/largura", () => {
     expect(getProfileLaneRightEdgePx("volume_profile", 1000)).toBe(1000);
   });
 
-  it("tpo_profile começa exatamente onde a lane do volume_profile termina (0.16)", () => {
-    expect(getProfileLaneOffsetFraction("tpo_profile")).toBeCloseTo(0.16, 10);
-    expect(getProfileLaneRightEdgePx("tpo_profile", 1000)).toBeCloseTo(840, 10);
+  it("tpo_profile começa exatamente onde a lane do volume_profile termina", () => {
+    // Com as 3 ativas o teto PROFILE_LANES_MAX_TOTAL_FRACTION entra em cena
+    // e todas encolhem proporcionalmente — o offset deixou de ser a soma
+    // crua (0.16) e passou a ser a soma ESCALADA. O invariante que importa
+    // continua: começa exatamente onde a anterior acaba.
+    const escala = 0.34 / (0.16 + 0.14 + 0.18);
+    expect(getProfileLaneOffsetFraction("tpo_profile")).toBeCloseTo(0.16 * escala, 10);
+    expect(getProfileLaneRightEdgePx("tpo_profile", 1000)).toBeCloseTo(1000 - 160 * (0.34 / 0.48), 10);
   });
 
-  it("order_book_depth começa depois de volume_profile + tpo_profile somados (0.16 + 0.14)", () => {
-    expect(getProfileLaneOffsetFraction("order_book_depth")).toBeCloseTo(0.3, 10);
-    expect(getProfileLaneRightEdgePx("order_book_depth", 1000)).toBeCloseTo(700, 10);
+  it("order_book_depth começa depois de volume_profile + tpo_profile somados (já escalados pelo teto)", () => {
+    expect(getProfileLaneOffsetFraction("order_book_depth")).toBeCloseTo((0.16 + 0.14) * (0.34 / 0.48), 10);
+    expect(getProfileLaneRightEdgePx("order_book_depth", 1000)).toBeCloseTo(1000 - 300 * (0.34 / 0.48), 10);
   });
 
   it("fail-closed: id desconhecido devolve offset 0 (nunca NaN/undefined)", () => {
@@ -91,18 +98,18 @@ describe("chart-profile-lanes: fiação real nos 3 plugins (nunca cssWidth liter
 
   it("VolumeProfilePlugin importa e usa a lane compartilhada", () => {
     const src = volumeProfilePlugin();
-    expect(src).toContain('import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx } from "./chart-profile-lanes";');
-    expect(src).toContain('getProfileLaneRightEdgePx("volume_profile", cssWidth)');
-    expect(src).toContain('getProfileLaneMaxBarWidthPx("volume_profile", cssWidth)');
+    expect(src).toContain('import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx, type ChartProfileLaneId } from "./chart-profile-lanes";');
+    expect(src).toContain('getProfileLaneRightEdgePx("volume_profile", cssWidth, activeLanes)');
+    expect(src).toContain('getProfileLaneMaxBarWidthPx("volume_profile", cssWidth, activeLanes)');
     expect(src).not.toContain("MAX_BAR_WIDTH_FRACTION");
     expect(src).not.toContain("ctx.fillRect(cssWidth - w,");
   });
 
   it("TpoProfilePlugin importa e usa a lane compartilhada (bars + POC + Initial Balance)", () => {
     const src = tpoProfilePlugin();
-    expect(src).toContain('import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx } from "./chart-profile-lanes";');
-    expect(src).toContain('getProfileLaneRightEdgePx("tpo_profile", cssWidth)');
-    expect(src).toContain('getProfileLaneMaxBarWidthPx("tpo_profile", cssWidth)');
+    expect(src).toContain('import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx, type ChartProfileLaneId } from "./chart-profile-lanes";');
+    expect(src).toContain('getProfileLaneRightEdgePx("tpo_profile", cssWidth, activeLanes)');
+    expect(src).toContain('getProfileLaneMaxBarWidthPx("tpo_profile", cssWidth, activeLanes)');
     expect(src).not.toContain("MAX_BAR_WIDTH_FRACTION");
     expect(src).not.toContain("ctx.fillRect(cssWidth - w,");
     // As 2 linhas de Initial Balance (drawIbLine) também migraram do
@@ -112,9 +119,9 @@ describe("chart-profile-lanes: fiação real nos 3 plugins (nunca cssWidth liter
 
   it("DepthChartPlugin importa e usa a lane compartilhada (bids/asks + wall + label)", () => {
     const src = depthChartPlugin();
-    expect(src).toContain('import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx } from "./chart-profile-lanes";');
-    expect(src).toContain('getProfileLaneRightEdgePx("order_book_depth", cssWidth)');
-    expect(src).toContain('getProfileLaneMaxBarWidthPx("order_book_depth", cssWidth)');
+    expect(src).toContain('import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx, type ChartProfileLaneId } from "./chart-profile-lanes";');
+    expect(src).toContain('getProfileLaneRightEdgePx("order_book_depth", cssWidth, activeLanes)');
+    expect(src).toContain('getProfileLaneMaxBarWidthPx("order_book_depth", cssWidth, activeLanes)');
     expect(src).not.toContain("MAX_BAR_WIDTH_FRACTION");
     expect(src).not.toContain("ctx.fillRect(cssWidth - w,");
     expect(src).not.toContain("cssWidth - w - size.width - 4");
@@ -139,12 +146,15 @@ describe("chart-profile-lanes: fiação real nos 3 plugins (nunca cssWidth liter
 // RESERVA DE BORDAS — "cada objeto no seu canto, nada cobrindo nada"
 // ============================================================================
 describe('getChartBodyBounds: o corpo livre entre as faixas de borda', () => {
-  it('a faixa direita é a SOMA REAL das 3 lanes — derivada, nunca digitada', () => {
-    // Se alguém mexer numa lane e esquecer deste número, o teste pega.
-    const soma = getProfileLaneWidthFraction('volume_profile')
+  it('a faixa direita é a soma real das lanes ATIVAS, já limitada pelo teto', () => {
+    // Antes: soma crua das 3 (0.48 — quase metade da tela só de painéis).
+    // Agora: derivada das ativas E limitada. Se alguém mexer numa lane ou
+    // no teto e esquecer deste número, o teste pega.
+    const somaCrua = getProfileLaneWidthFraction('volume_profile')
       + getProfileLaneWidthFraction('tpo_profile')
       + getProfileLaneWidthFraction('order_book_depth');
-    expect(getChartRightEdgeFraction()).toBeCloseTo(soma, 10);
+    expect(somaCrua).toBeGreaterThan(PROFILE_LANES_MAX_TOTAL_FRACTION);
+    expect(getChartRightEdgeFraction()).toBeCloseTo(PROFILE_LANES_MAX_TOTAL_FRACTION, 10);
   });
 
   it('o corpo NÃO invade nenhuma das duas faixas', () => {
@@ -202,6 +212,64 @@ describe('getChartBodyBounds: o corpo livre entre as faixas de borda', () => {
     for (const w of [1024, 1366, 1440, 1920, 2560, 3840]) {
       const b = getChartBodyBounds(w);
       expect(b.width / w).toBeGreaterThan(0.3); // sobra pelo menos 30% para os candles
+    }
+  });
+});
+
+describe("empacotamento DINÂMICO — a causa raiz da etiqueta no meio do gráfico", () => {
+  it("uma lane sozinha encosta no eixo: offset ZERO, nunca espaço reservado para lanes ocultas", () => {
+    // Era este o defeito: com VP e TPO ocultos, order_book_depth ainda
+    // começava a 0.30 da borda e desenhava sobre as velas, deixando 30%
+    // de faixa reservada e VAZIA à direita dela.
+    expect(getProfileLaneOffsetFraction("order_book_depth", ["order_book_depth"])).toBe(0);
+    expect(getProfileLaneOffsetFraction("tpo_profile", ["tpo_profile"])).toBe(0);
+  });
+
+  it("duas lanes ativas empacotam entre si — a oculta não reserva nada", () => {
+    // VP oculto: depth vem logo depois de tpo, não depois de vp+tpo.
+    const ativo = ["tpo_profile", "order_book_depth"] as const;
+    expect(getProfileLaneOffsetFraction("tpo_profile", ativo)).toBe(0);
+    expect(getProfileLaneOffsetFraction("order_book_depth", ativo)).toBeCloseTo(0.14, 10);
+  });
+
+  it("a ordem de empilhamento é sempre a canônica, não a ordem em que o chamador listou", () => {
+    const embaralhado = ["order_book_depth", "volume_profile"] as const;
+    expect(getProfileLaneOffsetFraction("volume_profile", embaralhado)).toBe(0);
+    expect(getProfileLaneOffsetFraction("order_book_depth", embaralhado)).toBeCloseTo(0.16, 10);
+  });
+
+  it("nenhum perfil visível não reserva NADA — o corpo do gráfico é a tela inteira", () => {
+    expect(getChartRightEdgeFraction([])).toBe(0);
+    const body = getChartBodyBounds(1200, []);
+    expect(body.right).toBe(1200);
+  });
+
+  it("o teto só entra quando a soma natural o ultrapassa — 2 lanes cabem sem encolher", () => {
+    // 0.16 + 0.14 = 0.30 < 0.34, então nada é escalado.
+    expect(getChartRightEdgeFraction(["volume_profile", "tpo_profile"])).toBeCloseTo(0.30, 10);
+    // As 3 somam 0.48 > 0.34 — aí sim encolhem.
+    expect(getChartRightEdgeFraction()).toBeCloseTo(0.34, 10);
+  });
+
+  it("quando o teto entra, todas encolhem PROPORCIONALMENTE — nenhuma é sacrificada", () => {
+    const lanes = resolveProfileLanes();
+    const escala = 0.34 / 0.48;
+    expect(lanes.get("volume_profile")!.widthFraction).toBeCloseTo(0.16 * escala, 10);
+    expect(lanes.get("tpo_profile")!.widthFraction).toBeCloseTo(0.14 * escala, 10);
+    expect(lanes.get("order_book_depth")!.widthFraction).toBeCloseTo(0.18 * escala, 10);
+    // E a proporção relativa entre elas é preservada.
+    expect(lanes.get("order_book_depth")!.widthFraction / lanes.get("tpo_profile")!.widthFraction)
+      .toBeCloseTo(0.18 / 0.14, 10);
+  });
+
+  it("as 3 lanes nunca podem ocupar mais que o teto declarado", () => {
+    expect(PROFILE_LANES_MAX_TOTAL_FRACTION).toBeLessThan(0.5);
+    for (const combo of [
+      ["volume_profile"],
+      ["volume_profile", "tpo_profile"],
+      ["volume_profile", "tpo_profile", "order_book_depth"],
+    ] as const) {
+      expect(getChartRightEdgeFraction(combo)).toBeLessThanOrEqual(PROFILE_LANES_MAX_TOTAL_FRACTION + 1e-9);
     }
   });
 });
