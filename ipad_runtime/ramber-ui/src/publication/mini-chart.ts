@@ -197,16 +197,16 @@ export function drawMiniChart(
   // Entry (zona) — linha superior/inferior da zona real, nunca um único
   // preço fabricado quando o plano é uma faixa.
   if (isFiniteNum(plan.entryLow) && isFiniteNum(plan.entryHigh)) {
-    drawLevelLine(plan.entryHigh!, PUB_COLORS.cyan, `ENTRY ${fmtPrice(plan.entryHigh!)}`, 2);
+    drawLevelLine(plan.entryHigh!, PUB_COLORS.cyan, "EN", 2);
     if (plan.entryHigh !== plan.entryLow) {
-      drawLevelLine(plan.entryLow!, PUB_COLORS.cyan, `ENTRY ${fmtPrice(plan.entryLow!)}`, 2);
+      drawLevelLine(plan.entryLow!, PUB_COLORS.cyan, "EN", 2);
     }
   }
   if (isFiniteNum(plan.stopPrice)) {
-    drawLevelLine(plan.stopPrice!, PUB_COLORS.short, `STOP ${fmtPrice(plan.stopPrice!)}`, 2);
+    drawLevelLine(plan.stopPrice!, PUB_COLORS.short, "ST", 2);
   }
   plan.targets.forEach((t) => {
-    drawLevelLine(t.price, PUB_COLORS.long, `TP${t.index + 1} ${fmtPrice(t.price)}`, 2);
+    drawLevelLine(t.price, PUB_COLORS.long, `TP${t.index + 1}`, 2);
   });
 
   // Preço vivo — a MESMA leitura do topo do card, nunca uma segunda fonte.

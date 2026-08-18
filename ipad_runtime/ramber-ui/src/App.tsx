@@ -9129,6 +9129,14 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // informação existia, mas ficava invisível para o Operador conferir
   // onde ela está. isObstacle casa por low/high real (mesma identidade
   // que LiquidityZonesPlugin já usa internamente), nunca por índice.
+  // Padrões de vela reais no gráfico (pedido direto do Operador: "no
+  // gráfico tem que refletir os padrão das vela"). Mesmo array `chartData`
+  // que os overlays já usam — índice alinhado. Recomputado a cada mudança
+  // real de candle, nunca congelado após um sinal.
+  const chartCandlePatterns = useMemo(
+    () => computeCandlePatterns(chartData).patterns,
+    [chartData],
+  );
   const isRealObstacle = (z: PriceZone) => chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);
   // "a liquidez que amostra no gráfico, só realmente ela fazer diferença nas
   // alterações... se a liquidez razoável pequena que não faz movimento"
@@ -9284,6 +9292,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     return {
       tradePlanActive: Boolean(chartTradePlan) || Boolean(engineFallbackLevels),
       obstacleZoneCount: chartObstacleZones.length,
+      hasCandlePatterns: chartCandlePatterns.length > 0,
       unsweptLiquidityNearPrice,
       hasUnmitigatedStructuralZone,
       structureBreakAlpha,
@@ -9311,7 +9320,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
       marketRegime: engine?.marketRegime?.regime ?? null,
       hasScenario,
     };
-  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps, engine?.marketRegime, chartScenario]);
+  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps, engine?.marketRegime, chartScenario, chartCandlePatterns]);
   const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setLayerRelevance(layerRelevance);
@@ -9481,6 +9490,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
             obstacleZones={chartObstacleZones}
             liquidityZones={unsweptLiquidity}
             structureBreak={bosChoch?.break ?? null}
+            candlePatterns={chartCandlePatterns}
             lastSwingHigh={engine?.lastSwingHigh ?? null}
             lastSwingLow={engine?.lastSwingLow ?? null}
             fibonacciLevels={fibonacciLevels}

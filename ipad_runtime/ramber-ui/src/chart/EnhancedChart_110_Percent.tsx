@@ -51,6 +51,7 @@ import { LiquidityZonesPlugin, ZONE_DECAY, type FillableZone } from "./Liquidity
 // a caixa "EMA 21") — o TEXTO migrou para priceAxisLabels abaixo, reusando
 // a MESMA config de decaimento do plugin (zero segunda curva).
 import { StructureBreakMarkersPlugin, BREAK_DECAY } from "./StructureBreakMarkersPlugin";
+import { CandlePatternMarkersPlugin } from "./CandlePatternMarkersPlugin";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
 // Achado real de captura de tela do Operador (dezenas de rótulos "SWEEP"
 // empilhados — swept é uma flag permanente em LiquidityZone, sem
@@ -177,7 +178,7 @@ import { computeNexusLineSeries } from "../nexus/nexus-line";
 import type { DirectionalLineState } from "../nexus/vwap-state";
 // Ordem "Ciborgue Vivo" §1: BOS/CHOCH real (bos-choch-engine.js via
 // engine-bridge.ts's computeBosChoch) — mesmo tipo que StructureBreakMarkersPlugin usa.
-import type { StructureBreak, LiquidationEvent } from "../engine-bridge";
+import type { StructureBreak, LiquidationEvent, CandlePattern } from "../engine-bridge";
 import type { TrapSignal } from "../nexus/trap-detection";
 import { clusterSweptPrices } from "../nexus/trap-detection";
 // Auditoria do painel do gráfico: "canais de tendência", gap real já
@@ -316,6 +317,11 @@ export const CHART_LAYER_IDS = [
   // VWAP/NL/CVD/Fibonacci/Premium-Discount/harmônico/EQH-EQL (comentário
   // acima).
   "scenario_projection",
+  // Padrões de vela japoneses (research/engines/candlestick-patterns.js,
+  // graduado na entrega anterior). Pedido direto do Operador: "no gráfico
+  // tem que refletir os padrão das vela". O motor já existia e alimentava
+  // as peças publicáveis — o GRÁFICO, que é onde ele pediu, era o gap.
+  "candle_patterns",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -345,6 +351,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   tpo_profile: true,
   zigzag: true,
   scenario_projection: true,
+  candle_patterns: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -377,6 +384,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   tpo_profile: true,
   zigzag: true,
   scenario_projection: true,
+  candle_patterns: true,
 };
 
 interface EnhancedChartProps {
@@ -405,6 +413,9 @@ interface EnhancedChartProps {
   // Ordem "Ciborgue Vivo" §1: rompimento de estrutura real mais recente
   // (BOS/CHOCH). null = nenhum rompimento na amostra, honesto — nunca desenha um palpite.
   structureBreak?: StructureBreak | null;
+  // Padrões de vela reais já detectados (engine-bridge computeCandlePatterns).
+  // Opcional/fail-closed: ausente/vazio => camada simplesmente não desenha.
+  candlePatterns?: CandlePattern[];
   // Evolução Total (fix documentado na Ordem Nº 03 §3): swing high/low
   // fractais mais recentes do ciclo real (analysis-frame.js →
   // engine-bridge.ts) — alimentam APENAS o consolidador de Zonas
@@ -783,6 +794,7 @@ export function EnhancedChart_110_Percent({
   liquidityZones,
   obstacleZones,
   structureBreak,
+  candlePatterns,
   lastSwingHigh,
   lastSwingLow,
   fibonacciLevels,
@@ -3132,6 +3144,14 @@ export function EnhancedChart_110_Percent({
             ? formatEtaRange(fusedTarget.etaMsMin, fusedTarget.etaMs)
             : null;
         const secondaryParts = [
+          // Pedido direto do Operador ("deixar só as iniciais, não precisa
+          // aquela numeração na frente nem a porcentagem"): o rótulo
+          // PRIMÁRIO passa a ser só a sigla — TP1/TP2/TP3. A distância NÃO
+          // foi apagada (Regra de Ouro 4): desceu para o secundário, onde
+          // já moram basis/R:R/ETA/obstáculo/REACHED. Continua legível a um
+          // toque de olho, sem competir com a sigla pela mesma faixa
+          // horizontal sobre as velas.
+          distPct.trim() || null,
           compactLabels ? null : target.basis,
           compactLabels || rr === null ? null : `1:${rr.toFixed(2)}`,
           etaLabel ? `ETA ${etaLabel}` : null,
@@ -3140,7 +3160,7 @@ export function EnhancedChart_110_Percent({
         ].filter((v): v is string => v !== null);
         out.push({
           price: target.price,
-          text: `TP${i + 1}${distPct}`,
+          text: `TP${i + 1}`,
           secondaryText: secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined,
           color: "rgba(8, 153, 129, 0.75)",
           tier: "critical",
@@ -3211,6 +3231,9 @@ export function EnhancedChart_110_Percent({
         const rr = engineFallbackLevels.riskRewardRatio;
         const distPct1 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target1 - p) * 100) / p).toFixed(2)}%` : "";
         const secondary1 = [
+          // Mesma regra do Trade Plan acima: sigla no primário, distância
+          // realocada para o secundário — nunca removida.
+          distPct1.trim() || null,
           strengthSuffix(engineFallbackLevels.target1Strength).trim() || null,
           rr !== null ? `1:${rr.toFixed(2)}` : null,
           obstacleSuffix(engineFallbackLevels.target1ObstacleCount).trim() || null,
@@ -3218,7 +3241,7 @@ export function EnhancedChart_110_Percent({
         ].filter((v): v is string => v !== null);
         out.push({
           price: engineFallbackLevels.target1,
-          text: `TP1${distPct1}`,
+          text: "TP1",
           secondaryText: secondary1.length > 0 ? secondary1.join(" ") : undefined,
           color: "rgba(8, 153, 129, 0.5)",
           tier: "critical",
@@ -3228,13 +3251,14 @@ export function EnhancedChart_110_Percent({
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target2 : p <= engineFallbackLevels.target2);
         const distPct2 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target2 - p) * 100) / p).toFixed(2)}%` : "";
         const secondary2 = [
+          distPct2.trim() || null,
           strengthSuffix(engineFallbackLevels.target2Strength).trim() || null,
           obstacleSuffix(engineFallbackLevels.target2ObstacleCount).trim() || null,
           reached ? "REACHED" : null,
         ].filter((v): v is string => v !== null);
         out.push({
           price: engineFallbackLevels.target2,
-          text: `TP2${distPct2}`,
+          text: "TP2",
           secondaryText: secondary2.length > 0 ? secondary2.join(" ") : undefined,
           color: "rgba(8, 153, 129, 0.35)",
           tier: "critical",
@@ -3248,10 +3272,13 @@ export function EnhancedChart_110_Percent({
       if (engineFallbackLevels.target3 != null && Number.isFinite(engineFallbackLevels.target3)) {
         const reached = p !== null && (longFb ? p >= engineFallbackLevels.target3 : p <= engineFallbackLevels.target3);
         const distPct3 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target3 - p) * 100) / p).toFixed(2)}%` : "";
+        const secondary3 = [distPct3.trim() || null, reached ? "REACHED" : null].filter(
+          (v): v is string => v !== null,
+        );
         out.push({
           price: engineFallbackLevels.target3,
-          text: `TP3${distPct3}`,
-          secondaryText: reached ? "REACHED" : undefined,
+          text: "TP3",
+          secondaryText: secondary3.length > 0 ? secondary3.join(" ") : undefined,
           color: "rgba(8, 153, 129, 0.2)",
           tier: "critical",
         });
@@ -3622,6 +3649,17 @@ export function EnhancedChart_110_Percent({
           data={data}
           structureBreak={structureBreak ?? null}
           visualWeight={structureBreakVisualWeight}
+        />
+      )}
+      {/* Padrões de vela reais (candlestick-patterns.js) — marcador ancorado
+         na vela onde o padrão FECHOU, mesmo array `data` dos overlays
+         acima (índice alinhado). Display only (LEI 24). */}
+      {visibility.candle_patterns && (
+        <CandlePatternMarkersPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          patterns={candlePatterns ?? []}
         />
       )}
       {/* V-MAX Fase 1 (superfície visual): Volume Profile real (Fase 1.3)

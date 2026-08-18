@@ -176,7 +176,10 @@ describe('EnhancedChart_110_Percent: stop/target hit-boost v2 (Ordem Final Auton
     expect(s).toContain('text: "ST",');
     expect(s).toContain(': tradePlan.stop.basis;');
     expect(s).toContain('compactLabels ? null : target.basis,');
-    expect(s).toContain('text: `TP${i + 1}${distPct}`,');
+    // Sigla pura no primário (pedido do Operador); a distância real
+    // continua existindo, no secundário.
+    expect(s).toContain('text: `TP${i + 1}`,');
+    expect(s).toContain('distPct.trim() || null,');
   });
 
   it('v2: "REACHED" is driven by the AUTHORITATIVE targetsHit prop, never re-derived from livePrice alone — a target stays marked reached even if price later pulls back', () => {

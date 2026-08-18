@@ -54,6 +54,10 @@ export const RELEVANCE_LAYER_IDS = [
   // em modo automático sem ter uma janela institucional real ativa
   // agora, mesma lógica das 3 linhas acima.
   "kill_zones",
+  // Padrões de vela (candlestick-patterns.js): mesma disciplina — a
+  // camada só fica visível em modo automático quando existe padrão real
+  // detectado na janela recente, nunca um canvas vazio ligado.
+  "candle_patterns",
   // Pedido do Operador ("Key Levels"): máxima/mínima de sessão é uma
   // referência estrutural de S/R — mesma disciplina de liquidity_zones/
   // equal_highs_lows (relevante quando o preço vivo está PERTO de um
@@ -162,6 +166,13 @@ export interface LayerRelevanceInput {
   // real pra traçar (existência real, nunca proximidade — mesmo padrão
   // de hasTpoProfile/hasFibonacciLevels acima).
   hasZigZagPivots: boolean;
+  // Padrões de vela: pelo menos 1 padrão real detectado na janela recente
+  // (candlestick-patterns.js). Existência real, nunca proximidade —
+  // mesmo padrão de hasZigZagPivots/hasTpoProfile acima. O motor já é
+  // fail-closed (sem estrutura confirmada não emite reversão), então
+  // "existe padrão" aqui já significa "existe padrão que passou por todos
+  // os gates reais".
+  hasCandlePatterns: boolean;
   // Liquidações Forçadas: pelo menos 1 evento real no feed atual — mesma
   // condição que o próprio painel de lista (SecondaryModuleView) já usa
   // para decidir se tem algo real pra mostrar.
@@ -344,6 +355,13 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
     zigzag: input.hasZigZagPivots
       ? { relevant: true, emphasis: "normal", reason: "pivôs ZigZag reais suficientes (deviation%+depth) para uma linha de estrutura" }
       : { relevant: false, emphasis: "normal", reason: "menos de 2 pivôs ZigZag confirmados ainda — sem linha real para desenhar" },
+
+    // Padrão de vela é um evento pontual e perecível: só vale a tela
+    // enquanto existe um real na janela recente. Sem nenhum, a camada sai
+    // sozinha em modo automático em vez de ficar um canvas vazio ligado.
+    candle_patterns: input.hasCandlePatterns
+      ? { relevant: true, emphasis: "normal", reason: "padrão de vela real detectado na janela recente (com o contexto de tendência que a reversão exige)" }
+      : { relevant: false, emphasis: "normal", reason: "nenhum padrão de vela real na janela recente" },
 
     volume_profile: input.volumeProfileNearPrice
       ? { relevant: true, emphasis: "normal", reason: `preço vivo a menos de ${fmtPct(VOLUME_PROFILE_PROXIMITY_PCT)} de um POC/HVN real` }

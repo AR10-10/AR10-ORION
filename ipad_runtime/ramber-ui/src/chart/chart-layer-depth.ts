@@ -100,6 +100,9 @@ const LAYER_TIER: Record<string, ChartDepthTier> = {
   structure_breaks: "event",
   liquidity_sweep: "event",
   harmonics: "event",
+  // Padrão de vela é um EVENTO pontual ("aconteceu nesta vela"), da mesma
+  // classe do BOS/CHOCH e do sweep — nunca uma zona nem uma linha.
+  candle_patterns: "event",
 
   // 6. PLANO — o acionável
   trade_plan_zone: "plan",

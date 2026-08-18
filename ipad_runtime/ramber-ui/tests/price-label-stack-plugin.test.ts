@@ -573,7 +573,13 @@ describe('"bater o olho profissional" (pendência honesta do turno anterior): EN
     // REACHED (como o resto do estado) migrou pro secundário.
     expect(block).toContain('const reached = i < hits;');
     expect(block).toContain('reached ? "REACHED" : null,');
-    expect(block).toContain('text: `TP${i + 1}${distPct}`,');
+    // Pedido do Operador ("deixar só as iniciais, sem a numeração na
+    // frente nem a porcentagem"): o PRIMÁRIO é só a sigla. A distância
+    // não sumiu — desceu para o secundário, e o teste prova as DUAS
+    // coisas: sigla pura no primário E distância presente no secundário
+    // (Regra de Ouro 4: realocar, nunca apagar).
+    expect(block).toContain('text: `TP${i + 1}`,');
+    expect(block).toContain('distPct.trim() || null,');
     expect(block).toContain('color: "rgba(8, 153, 129, 0.75)"');
   });
 
@@ -673,11 +679,13 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     // disponível"): mesma fórmula que o Trade Plan do Conselho já usa
     // (Math.abs(target-p)*100/p), reaproveitada aqui — zero cálculo novo.
     expect(block).toContain('const distPct1 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target1 - p) * 100) / p).toFixed(2)}%` : "";');
-    expect(block).toContain('text: `TP1${distPct1}`,');
+    expect(block).toContain('text: "TP1",');
+    expect(block).toContain('distPct1.trim() || null,');
     expect(block).toContain('strengthSuffix(engineFallbackLevels.target1Strength).trim() || null,');
     expect(block).toContain('rr !== null ? `1:${rr.toFixed(2)}` : null,');
     expect(block).toContain('const distPct2 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target2 - p) * 100) / p).toFixed(2)}%` : "";');
-    expect(block).toContain('text: `TP2${distPct2}`,');
+    expect(block).toContain('text: "TP2",');
+    expect(block).toContain('distPct2.trim() || null,');
     expect(block).toContain('strengthSuffix(engineFallbackLevels.target2Strength).trim() || null,');
     // tier:"critical" (§3, Nível A): plano ATIVO do Núcleo quando não há
     // plano do Conselho — mesmo destaque grande/negrito do preço vivo.
@@ -699,8 +707,14 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     // strengthSuffix/obstacleSuffix (a fonte não calcula esses metadados
     // para este nível — honesto sobre o que existe, nunca fabricado).
     expect(block).toContain('const distPct3 = p !== null && p > 0 ? ` ${((Math.abs(engineFallbackLevels.target3 - p) * 100) / p).toFixed(2)}%` : "";');
-    expect(block).toContain('text: `TP3${distPct3}`,');
-    expect(block).toContain('secondaryText: reached ? "REACHED" : undefined,');
+    expect(block).toContain('text: "TP3",');
+    expect(block).toContain('distPct3.trim() || null,');
+    // TP3 passou a ter lista secundária (antes só REACHED) porque a
+    // distância desceu para lá junto — continua sem strengthSuffix/
+    // obstacleSuffix, que a fonte (support-resistance-engine.js) de fato
+    // não calcula para este nível.
+    expect(block).toContain('const secondary3 = [distPct3.trim() || null, reached ? "REACHED" : null].filter(');
+    expect(block).not.toContain('strengthSuffix(engineFallbackLevels.target3');
     expect(block).not.toContain('strengthSuffix(engineFallbackLevels.target3');
     expect(block).not.toContain('obstacleSuffix(engineFallbackLevels.target3');
   });
