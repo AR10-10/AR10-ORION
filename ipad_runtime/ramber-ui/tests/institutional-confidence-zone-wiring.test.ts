@@ -35,10 +35,24 @@ describe('App.tsx: confidenceZone computado UMA vez sobre o mesmo institutionalS
     const app = read('../src/App.tsx');
     const memoMatch = app.match(/const contextValue = useMemo\(\s*\(\) => \(\{([\s\S]*?)\}\),/);
     expect(memoMatch).not.toBeNull();
-    expect(memoMatch![1]).toContain('institutionalScore,\n      expectancyFilter,\n      calibrationResult,\n      confidenceZone,');
+    // Contrato real: os 4 campos aparecem, NESTA ORDEM, no mesmo bloco. A
+    // versão anterior exigia adjacência literal byte-a-byte, o que quebrava
+    // por qualquer campo novo inserido no meio (aconteceu de verdade com
+    // decisionDistance) sem que nada do contrato tivesse mudado. A checagem
+    // de ORDEM é a que o teste realmente quer — e continua estrita.
+    const ORDEM = ['institutionalScore,', 'expectancyFilter,', 'calibrationResult,', 'confidenceZone,'];
+    const emOrdem = (bloco: string) => {
+      let cursor = -1;
+      for (const campo of ORDEM) {
+        const at = bloco.indexOf(campo, cursor + 1);
+        expect(at, campo).toBeGreaterThan(cursor);
+        cursor = at;
+      }
+    };
+    emOrdem(memoMatch![1]);
     const depsMatch = app.match(/const contextValue = useMemo\([\s\S]*?\[([\s\S]*?)\],\s*\);/);
     expect(depsMatch).not.toBeNull();
-    expect(depsMatch![1]).toContain('institutionalScore,\n      expectancyFilter,\n      calibrationResult,\n      confidenceZone,');
+    emOrdem(depsMatch![1]);
   });
 });
 

@@ -24,6 +24,67 @@ body {
   user-select: none;
 }
 
+/* ==========================================================================
+   ESCALA TIPOGRÁFICA DO DOM — "tamanho padrão de qualquer terminal pra
+   qualquer tela" (pedido do Operador, repetido em 3 rodadas)
+   ==========================================================================
+   ACHADO MEDIDO (grep real em src/**.tsx, não estimativa):
+   282 ocorrências de `text-[0.NNrem]` em App.tsx e 26 nos outros arquivos,
+   em DEZESSEIS corpos diferentes:
+
+     0.30 0.32 0.35 0.38 0.40 0.42 0.45 0.46 0.48 0.50 0.55 0.60 0.62 0.65
+     0.70 0.75
+
+   Dezesseis. Não é uma escala — é o histórico de dezesseis decisões
+   independentes, cada uma tomada num commit diferente, nenhuma conversando
+   com a outra. E os corpos pequenos são pequenos DE VERDADE: 0.45rem = 7.2px,
+   0.3rem = 4.8px. O seletor de timeframe (M1/M5/15m/1H/4H…), que é um
+   CONTROLE INTERATIVO e foi o item citado pelo Operador — "aquela barrinha
+   está muito pequena, a gente não dá nem pra ver" — estava a 0.45rem/7.2px.
+
+   Nenhum terminal profissional desce abaixo de ~10px num controle que o
+   operador precisa acertar com o dedo/cursor. 7.2px não é "compacto": é
+   ilegível, e num iPad é também um alvo de toque abaixo do mínimo.
+
+   A CORREÇÃO: uma escala só, com 4 degraus, todos em clamp() — cresce com a
+   viewport em vez de ficar congelada num tamanho escolhido para um monitor
+   só. Mesma disciplina que chart-ultrawide-scale.ts já aplica no canvas
+   (piso = valor de produção, nunca regride), agora também no DOM:
+
+     --ar10-t-micro  10px → 11px   contexto denso (chips de status, unidades)
+     --ar10-t-label  11px → 12px   rótulo de campo, cabeçalho de painel
+     --ar10-t-body   12px → 13.5px CONTROLE INTERATIVO e leitura corrente
+     --ar10-t-read   14px → 16px   leitura destacada (número que decide)
+
+   O PISO É 10px, EM QUALQUER TELA. Esse é o número que muda a experiência:
+   nada mais desce abaixo dele. O teto usa 1440px como referência de
+   "monitor grande" — a mesma fronteira que resolveChartUltraWideScale já
+   usa, para o DOM e o canvas crescerem juntos em vez de divergirem.
+
+   Migração honesta: estas classes são ADITIVAS. Os 308 usos antigos
+   continuam funcionando; esta rodada migra os controles interativos (onde a
+   ilegibilidade é um defeito de uso, não só de estética). O resto é
+   pendência real, declarada — nunca um "pronto" que não foi feito. */
+:root {
+  --ar10-t-micro: clamp(10px, 0.62vw + 8px, 11px);
+  --ar10-t-label: clamp(11px, 0.68vw + 8.8px, 12px);
+  --ar10-t-body: clamp(12px, 0.9vw + 9.5px, 13.5px);
+  --ar10-t-read: clamp(14px, 1.3vw + 11px, 16px);
+}
+
+.ar10-t-micro {
+  font-size: var(--ar10-t-micro);
+}
+.ar10-t-label {
+  font-size: var(--ar10-t-label);
+}
+.ar10-t-body {
+  font-size: var(--ar10-t-body);
+}
+.ar10-t-read {
+  font-size: var(--ar10-t-read);
+}
+
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
 }

@@ -182,6 +182,8 @@ import { computeTpoProfile } from "./nexus/tpo-profile";
 // uso (expectancyFilter) e em CoreSignalBadge.
 import { simulateTradeCostsBatch } from "./nexus/trade-simulation";
 import { evaluateSignalFilter, MIN_TRADES_FOR_VALID_EXPECTANCY, type FilterResult } from "./nexus/expectancy";
+import { computeDecisionDistance, formatDecisionDistance, describeDecisionDistance, type DecisionDistanceReading } from "./nexus/decision-distance";
+import { resolveFloatingWidgetOrigin } from "./nexus/floating-widget-origin";
 // Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
 // councilVotesToModelVotes/regimeModelVote/fuseModelVotes/alignFusedConfidence
 // (Fase 2, primeiro consumidor real) formam o score orientado à direção do
@@ -2036,8 +2038,30 @@ export default function App() {
       // computada em engine-bridge.ts sobre os mesmos candles do Bus do
       // ciclo — puro passthrough aqui, nunca recomputado na UI.
       marketRegime: cycleOk ? (realCycle?.marketRegime ?? null) : null,
+      // Os 3 números que DECIDEM `direction` logo acima. Passthrough puro
+      // (mesma disciplina de marketRegime), para o Medidor de Distância à
+      // Decisão poder medir a fronteira REAL do Núcleo em vez de estimá-la.
+      // `price` já está no objeto, mas é o preço do ticker ao vivo; a
+      // fronteira do Núcleo usa o ÚLTIMO FECHAMENTO da mesma série de onde
+      // saem SMA/EMA (js/real-data/analysis-frame.js) — comparar o ticker
+      // contra uma SMA de fechamentos daria uma distância sutilmente errada,
+      // então `lastClose` vem separado, da mesma fonte que a SMA.
+      lastClose: cycleOk ? (realCycle?.lastPrice ?? null) : null,
+      sma: cycleOk ? (realCycle?.sma ?? null) : null,
+      ema: cycleOk ? (realCycle?.ema ?? null) : null,
     };
   }, [priceData, orderBook, realCycle, chartData, orderflowSignals]);
+
+  // Medidor de Distância à Decisão (pedido direto do Operador: "tem que ter a
+  // opção do quanto por cento que falta pra long e pra short... tudo isso tem
+  // que acompanhar lá em cima no cabeçalho"). Motor puro
+  // (nexus/decision-distance.ts) sobre os 3 números REAIS que o Core Engine
+  // usa — nunca uma segunda decisão, nunca uma probabilidade (Regra de Ouro
+  // 2): é distância medida até o limiar, e o texto exibido diz isso.
+  const decisionDistance = useMemo(
+    () => computeDecisionDistance({ lastPrice: engine.lastClose, sma: engine.sma, ema: engine.ema }),
+    [engine.lastClose, engine.sma, engine.ema],
+  );
 
   // V11.5 Fase 5 — Consensus Engine: um ÚNICO hook subscrito ao GMIL aqui em
   // App() (antes cada consumidor — EssentialStrip, GmilContextWidget —
@@ -3536,6 +3560,7 @@ export default function App() {
       institutionalScore,
       expectancyFilter,
       calibrationResult,
+      decisionDistance,
       confidenceZone,
       orderflowTrend,
       convictionTrend,
@@ -3606,6 +3631,7 @@ export default function App() {
       institutionalScore,
       expectancyFilter,
       calibrationResult,
+      decisionDistance,
       confidenceZone,
       orderflowTrend,
       convictionTrend,
@@ -6885,6 +6911,77 @@ function CoreSignalBadge({
 }
 
 // --- TOP BAR ---
+// DecisionDistanceBadge — "tem que ter a opção do quanto por cento que falta
+// pra long e pra short, tudo isso tem que acompanhar lá em cima no cabeçalho"
+// (Operador, pedido literal, ao lado do botão do microfone).
+//
+// O QUE ESTE BADGE NÃO É: uma probabilidade. Não existe backtest real neste
+// repositório que sustente "72% de chance de subir" (CLAUDE.md, Regra de Ouro
+// 2), então esse número não é exibido nem inventado.
+//
+// O QUE ELE É: a DISTÂNCIA REAL até o limiar que faria o Core Engine emitir
+// LONG (ou SHORT). O limiar não é opinião — é a desigualdade literal de
+// trendBias() (js/research/research-engine.js), rastreada de ponta a ponta:
+// preço vs SMA e EMA vs SMA. Ver nexus/decision-distance.ts para a
+// derivação completa e a limitação declarada (a fronteira se move a cada
+// candle novo).
+//
+// LEI 24 intacta: isto é display-only. Nenhum número daqui volta para o Core
+// Engine, nenhum suprime ou altera engine.direction — é a MESMA fronteira do
+// Núcleo, lida de fora, nunca uma segunda decisão.
+function DecisionDistanceSide({
+  label,
+  reading,
+  which,
+}: {
+  label: string;
+  reading: DecisionDistanceReading;
+  which: "long" | "short";
+}) {
+  const side = which === "long" ? reading.long : reading.short;
+  const satisfied = side !== null && side.gapPercent === 0;
+  const tone = which === "long" ? "#00ffaa" : "#ff0055";
+  return (
+    <span
+      title={describeDecisionDistance(reading, which)}
+      className="flex items-baseline gap-1 whitespace-nowrap"
+    >
+      <span className="ar10-t-micro font-bold tracking-wider" style={{ color: `${tone}99` }}>
+        {label}
+      </span>
+      <span
+        className="ar10-t-label font-black font-mono tabular-nums"
+        // Lado já satisfeito acende cheio; o lado que falta fica atenuado.
+        // Cor sozinha nunca carrega o significado (o número já diz "0%") —
+        // é reforço, não o canal único.
+        style={{ color: satisfied ? tone : `${tone}80` }}
+      >
+        {side === null ? "—" : formatDecisionDistance(side.gapPercent)}
+      </span>
+    </span>
+  );
+}
+
+function DecisionDistanceBadge() {
+  const { decisionDistance } = useContext(WidgetContext) || {};
+  const reading: DecisionDistanceReading | null = decisionDistance ?? null;
+  // Fail-closed (Regra de Ouro 3): sem os 3 números reais do Núcleo, o badge
+  // não aparece com "0%" nem com um travessão mudo — some, exatamente como o
+  // chip de instrumento faz quando não há tipo real. Um "0%" aqui seria a
+  // pior leitura possível: o Operador entenderia "está colado no limiar".
+  if (!reading || reading.status !== "OK") return null;
+  return (
+    <div
+      className="hidden lg:flex items-center gap-2.5 h-7 px-2.5 rounded-full border border-[#8ab4f825] bg-[#8ab4f808] shrink-0"
+      title="Distância real até cada limiar de decisão do Núcleo (preço vs SMA e EMA vs SMA — a mesma desigualdade que emite LONG/SHORT). É distância medida agora, nunca uma probabilidade de acerto."
+    >
+      <DecisionDistanceSide label="TO LONG" reading={reading} which="long" />
+      <span className="w-px h-3.5 bg-[#8ab4f825]" />
+      <DecisionDistanceSide label="TO SHORT" reading={reading} which="short" />
+    </div>
+  );
+}
+
 function TopBar({ data }: { data?: PriceState | null }) {
   const {
     handleManualRestart,
@@ -7198,6 +7295,13 @@ function TopBar({ data }: { data?: PriceState | null }) {
               power NUNCA entram na região rolável — jamais cobertos, jamais
               fora do alcance. */}
           <div className="flex items-center gap-2 md:gap-3 h-full shrink-0">
+          {/* Medidor de Distância à Decisão — o pedido literal do Operador:
+              "% que falta pra long e pra short, lá em cima no cabeçalho",
+              ao lado do orbe/microfone. Fica na âncora DIREITA FIXA (§5 do
+              header), a região que nunca entra no scroll horizontal — este
+              é um número de leitura contínua, jamais pode ficar fora do
+              alcance por causa de largura de tela. */}
+          {marketMode === "CRYPTO" && <DecisionDistanceBadge />}
           {marketMode === "CRYPTO" && <SystemStatusBadge />}
           {/* V18.1: núcleo + voz sempre visíveis no cantinho, ao lado do
               botão de energia — ver header de NucleoVoiceOrb. Redesenho
@@ -7650,7 +7754,22 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
   if (isFloating) {
     return (
       <Rnd
-        default={{ x: 100, y: 100, width: 400, height: 350 }}
+        /* "dá uma olhada no que tem atrapalhando o campo de visão do
+           operador... nada pode atrapalhar" (Operador). Medido: era
+           `{ x: 100, y: 100 }` LITERAL — todo painel flutuante nascia no
+           MESMO pixel, em cima do canto superior esquerdo do gráfico (onde
+           vivem a faixa de sessões e o aviso do Trade Plan), e dois
+           flutuantes abertos ficavam perfeitamente empilhados, o de baixo
+           invisível. Agora nasce ancorado no canto de MENOR densidade de
+           informação, escalonado por id, com a barra de comando e a régua
+           esquerda como zonas proibidas — ver nexus/floating-widget-origin.ts.
+           Continua 100% arrastável: isto é o ponto de partida, não uma
+           prisão. */
+        default={resolveFloatingWidgetOrigin(
+          id,
+          typeof window !== "undefined" ? window.innerWidth : NaN,
+          typeof window !== "undefined" ? window.innerHeight : NaN,
+        )}
         minWidth={250}
         minHeight={200}
         bounds="window"
@@ -8871,7 +8990,19 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
               estreitas; é rolagem esperada de um seletor real (mesmo
               padrão de qualquer terminal profissional), não uma barra de
               rolagem indesejada de layout quebrado. */}
-          <div className="flex items-center gap-0.5 max-w-[160px] sm:max-w-[260px] overflow-x-auto scrollbar-hide shrink-0">
+          {/* "aquela barrinha está muito pequena, a gente não dá nem pra ver"
+              (Operador, item citado nominalmente). Medido: este seletor —
+              um CONTROLE INTERATIVO de 14 opções — herdava o text-[0.45rem]
+              do container acima, ou seja 7.2px. Não é compacto, é ilegível,
+              e num iPad é também um alvo de toque abaixo do mínimo usável.
+              Agora usa .ar10-t-body (12px→13.5px, piso 12px em QUALQUER
+              tela; ver a escala em index.css) e o padding acompanha, para o
+              alvo de toque crescer junto com o texto — texto maior em botão
+              apertado seria meia correção. A largura máxima sobe na mesma
+              proporção do corpo (160→220 / 260→340) para o número de opções
+              visíveis não CAIR por causa da fonte maior; acima de 14 opções
+              a rolagem horizontal continua, como em qualquer terminal real. */}
+          <div className="ar10-t-body flex items-center gap-0.5 max-w-[220px] sm:max-w-[340px] overflow-x-auto scrollbar-hide shrink-0">
             {CHART_TIMEFRAMES.map((tf) => (
               <button
                 key={tf.value}
@@ -8886,7 +9017,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
                     ? `Timeframe ${tf.label} · ${timeframeProfile(tf.value)!.style} · ETA típico: ${timeframeProfile(tf.value)!.etaHorizon}`
                     : `Timeframe ${tf.label}`
                 }
-                className={`shrink-0 px-1 py-0.5 rounded transition-colors ${chartTimeframe === tf.value ? "bg-[#00f0ff20] text-[#00f0ff] font-bold border border-[#00f0ff40]" : "text-[#8ab4f8]/60 hover:text-[#8ab4f8]"}`}
+                className={`shrink-0 px-1.5 py-1 rounded transition-colors ${chartTimeframe === tf.value ? "bg-[#00f0ff20] text-[#00f0ff] font-bold border border-[#00f0ff40]" : "text-[#8ab4f8]/60 hover:text-[#8ab4f8]"}`}
               >
                 {tf.label}
               </button>

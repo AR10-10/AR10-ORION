@@ -1270,9 +1270,20 @@ describe('Header ancorado (colisão da 1ª foto com dados reais): região centra
     const a = app();
     const anchorIdx = a.indexOf('{/* Âncora direita fixa (§5 do header)');
     expect(anchorIdx).toBeGreaterThan(a.indexOf('[&>*]:shrink-0'));
-    const anchorBlock = a.slice(anchorIdx, anchorIdx + 700);
+    // Fronteira real do bloco, não uma janela de N bytes: a versão anterior
+    // fatiava 700 caracteres fixos e quebrava quando um comentário crescia —
+    // um artefato do teste, nunca do contrato. Agora o bloco vai do
+    // comentário da âncora até o fim do cluster (o botão de energia, o
+    // último item real da âncora).
+    const anchorEnd = a.indexOf('<Power size={14} />', anchorIdx);
+    expect(anchorEnd).toBeGreaterThan(anchorIdx);
+    const anchorBlock = a.slice(anchorIdx, anchorEnd);
     expect(anchorBlock).toContain('<div className="flex items-center gap-2 md:gap-3 h-full shrink-0">');
     expect(anchorBlock).toContain('<SystemStatusBadge />');
+    // E o orbe de voz (o "botão do microfone" do Operador) vive no MESMO
+    // cluster — é o que garante que o medidor de distância ao lado dele
+    // também está fora da região rolável.
+    expect(anchorBlock).toContain('<NucleoVoiceOrb />');
   });
 });
 

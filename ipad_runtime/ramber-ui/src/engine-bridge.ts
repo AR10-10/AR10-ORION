@@ -179,6 +179,17 @@ export interface RealCycleResult {
   // analysis-frame.js. Passthrough puro, zero cálculo novo aqui.
   lastSwingHigh?: number | null;
   lastSwingLow?: number | null;
+  // Os 3 números que DECIDEM o `signal` acima (medido, não suposto):
+  // trendBias(frame) em js/research/research-engine.js compara last_price vs
+  // sma e ema vs sma — nada mais entra. Os três já eram computados todo ciclo
+  // (js/real-data/analysis-frame.js) e `lastPrice` já saía daqui; sma/ema
+  // morriam dentro do frame. Passthrough puro, zero cálculo novo, para o
+  // Medidor de Distância à Decisão (nexus/decision-distance.ts) poder mostrar
+  // ao Operador QUANTO falta para o limiar real — em vez de reimplementar a
+  // fronteira do Núcleo numa segunda cópia, que é o que este repositório
+  // proíbe.
+  sma?: number | null;
+  ema?: number | null;
   entry?: number | null;
   target1?: number | null;
   target2?: number | null;
@@ -559,6 +570,10 @@ export async function runRealAnalysisCycle(symbol = 'BTC', timeframe = '15m'): P
       marketStructure: typeof frame.market_structure === 'string' ? frame.market_structure : null,
       lastSwingHigh: isNum(frame.last_swing_high) ? frame.last_swing_high : null,
       lastSwingLow: isNum(frame.last_swing_low) ? frame.last_swing_low : null,
+      // Mesma disciplina fail-closed dos vizinhos: DADOS_INSUFICIENTES (string)
+      // vira null explícito, nunca vaza pela fronteira tipada.
+      sma: isNum(frame.sma) ? frame.sma : null,
+      ema: isNum(frame.ema) ? frame.ema : null,
       entry: route && isNum(tracker.current_price) ? tracker.current_price : null,
       target1: route && isNum(route.target_1) ? route.target_1 : null,
       target2: route && isNum(route.target_2) ? route.target_2 : null,
