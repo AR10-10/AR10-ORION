@@ -2,9 +2,14 @@
 
 Codinome interno: `AR10_CYBORG_FUSION_RESEARCH_QUARANTINE_V1`.
 
-**Status desta árvore: apenas os 7 engines graduados + 1 utilitário
+**Status desta árvore: apenas os 8 engines graduados + 1 utilitário
 compartilhado abaixo são ACTIVE_READ_ONLY. Todo o restante foi excluído em
 2026-06-30 (purge de código morto).**
+
+**Atualização (graduação de `candlestick-patterns.js`, 2026-08-18):
+8º engine. Contagem conferida contra a tabela abaixo NO MESMO commit —
+justamente o gap de documentação que as duas correções seguintes
+registram como recorrente.**
 
 **Correção (achado de auditoria durante a graduação do ZigZag, Entrega 47,
 2026-08-10): este resumo dizia "5 engines" desde a correção de 2026-07-27
@@ -39,6 +44,7 @@ src/research/
     ├── bos-choch-engine.js            ACTIVE_READ_ONLY (graduado 2026-07-12)
     ├── liquidity-void-engine.js       ACTIVE_READ_ONLY (graduado 2026-08-04)
     ├── zigzag-engine.js               ACTIVE_READ_ONLY (graduado 2026-08-10)
+    ├── candlestick-patterns.js        ACTIVE_READ_ONLY (graduado 2026-08-18)
     ├── supertrend-engine.js           LABORATÓRIO (isolado 2026-08-11, não graduado —
     │                                   ver secao "Laboratório de engines" abaixo)
     ├── fractal-swings.js              utilitário compartilhado (extraído 2026-07-03,
@@ -141,6 +147,66 @@ import reverso de volta para `js/**`.
   pivôs, cor azul-neutro de estrutura) e `nexus/layer-relevance.ts`
   (`hasZigZagPivots`, >=2 pivôs reais). Display only (LEI 24) — estrutura/
   contexto no gráfico, nunca uma segunda decisão de trading. Zero
+  `fetch()`, zero `WebSocket`, zero `Math.random`/`Date.now`.
+
+- **`engines/candlestick-patterns.js`** (graduado 2026-08-18, pedido direto
+  do Operador: "no gráfico tem que refletir os padrão das vela também —
+  quando dá tipo tantas velas fazem um padrão, ele tem de analisar tudo
+  isso aí... existe um tal de padrão de vela que muda o sentido do mercado,
+  não sei como se fala isso, mas o sistema tem que ser inteligente pra
+  saber isso").
+  **Auditoria antes de construir (CLAUDE.md item 1):** `grep -rlin
+  "engolf|marubozu|doji|hammer|harami|shooting.star|inside.bar"` em `src/`,
+  `ramber-ui/src/` e `js/` não retornou NADA — gap genuíno. O sistema lia
+  ESTRUTURA (swings, HH/HL, BOS/CHOCH), ZONAS (FVG/OB/void), REGIME
+  (ADX/ATR) e FLUXO (CVD/absorção), mas nunca a FORMA DA VELA em si.
+  Motores vizinhos conferidos e deliberadamente NÃO reaproveitados:
+  `bos-choch-engine.js` mede rompimento de NÍVEL, `zigzag-engine.js` mede
+  PERNAS de preço — nenhum olha a relação corpo/sombra dentro de uma vela.
+  **Pesquisa real das definições (CLAUDE.md item 2):** confirmadas via
+  WebSearch ANTES de escrever código (Nison como referência clássica;
+  conferidas contra ProRealTime, Babypips, Zerodha Varsity, StockCharts).
+  Achados que mudaram o código: (a) ENGOLFO é regra de CORPO, nunca de
+  pavio; (b) DOJI = corpo <= 10% do range; (c) PIERCING/DARK CLOUD exigem
+  penetração ALÉM de 50% do corpo anterior; (d) MARTELO = sombra inferior
+  >= 2x o corpo com sombra superior curta.
+  **O achado que definiu o desenho do motor:** Martelo e ENFORCADO (hanging
+  man) são a MESMA forma geométrica — o que os separa é a TENDÊNCIA
+  ANTERIOR. Idem estrela cadente vs martelo invertido. Um detector que
+  olhasse só a forma emitiria o lado EXATAMENTE INVERTIDO em metade dos
+  casos (a mesma classe de defeito que `direction-semantics.ts` existe para
+  impedir). Por isso todo padrão de REVERSÃO exige contexto real de
+  tendência, vindo de `market-structure-engine.js` já graduado — zero
+  segunda leitura de tendência, mesmo precedente exato que
+  `bos-choch-engine.js` usa para separar BOS de CHOCH. Sem estrutura
+  confirmada, nenhuma reversão é emitida (padrões de continuação/indecisão
+  continuam, porque não dependem de tendência anterior).
+  **Zero segunda matemática:** reusa `computeAtrPercent` (Wilder,
+  `lorentzian-classifier.js`) para medir "corpo grande" em unidades de ATR
+  — 200 dólares é enorme num ativo calmo e ruído num agitado.
+  **Regra de Ouro 2:** NUNCA reporta probabilidade de acerto. A literatura
+  publica taxas (~60-65% para alguns padrões), mas medidas em outros
+  mercados/períodos/regras de saída — copiá-las para cá seria inventar uma
+  calibração que este repositório não tem. Reporta `bodyAtr` (medição) e
+  `confirmed` (a vela seguinte fechou a favor, sim/não/ainda-não).
+  **Achado do próprio processo de teste (mesma classe do bug do ZigZag e do
+  SuperTrend):** teste de mutação deliberado revelou que a 1ª versão do
+  caso "não engolfa quando só o pavio cobre" passava PELO MOTIVO ERRADO —
+  era recusada pelo guard de tamanho de corpo, não pela regra corpo-vs-
+  pavio; trocar o motor para medir high/low mantinha os 34 testes verdes.
+  Fixture endurecida e re-verificada por mutação. Duas fixtures de
+  tendência anteriores também eram degeneradas (série monotônica = zero
+  swings; senoide amostrada em inteiros = empates exatos de máxima, que a
+  regra estrita de `fractal-swings.js` recusa) — só pivôs explícitos com
+  pico/vale cravado geram a estrutura real. As 3 mutações-chave hoje são
+  pegas: inversão martelo/enforcado (2 testes), engolfo por pavio (1) e
+  remoção do gate de tendência (3).
+  34 testes de execução real em
+  `ramber-ui/tests/candlestick-patterns.test.ts`.
+  Importado por `ramber-ui/src/engine-bridge.ts` (wrapper
+  `computeCandlePatterns`) e consumido pelo Publication Studio (chip do
+  padrão real nas 4 peças publicáveis). Display only (LEI 24) —
+  confluência/contexto, nunca uma segunda decisão de trading. Zero
   `fetch()`, zero `WebSocket`, zero `Math.random`/`Date.now`.
 
 Nota sobre `PRECACHE_URLS`: em 2026-07-03 (Auditoria Mestra 360°, secao 2) o

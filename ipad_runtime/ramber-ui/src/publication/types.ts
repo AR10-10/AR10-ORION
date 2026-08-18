@@ -22,10 +22,24 @@ export interface PublicationCandle {
 // da Entrega 37) + candles reais (a MESMA série que já alimenta o gráfico
 // ao vivo, nunca uma segunda busca) + o preço vivo no instante da geração.
 // Montado UMA vez; os 4 formatos leem exclusivamente este objeto.
+// Padrão de vela real da última leitura (candlestick-patterns.js, via
+// engine-bridge). Entra no SNAPSHOT — nunca é recalculado dentro de um
+// renderer (§6 da Ordem: proibido cada formato consultar motor de novo e
+// produzir leitura diferente). Opcional/fail-closed: ausente ou null =>
+// nenhum chip desenhado, exatamente como antes desta camada existir.
+export interface PublicationCandlePattern {
+  name: string;
+  direction: "ALTA" | "BAIXA" | null;
+  kind: "REVERSAL" | "CONTINUATION" | "INDECISION";
+  /** A vela seguinte confirmou o viés? `null` = padrão recém-formado. */
+  confirmed: boolean | null;
+}
+
 export interface PublicationSnapshot {
   analysis: MarketAnalysis;
   candles: PublicationCandle[];
   livePrice: number | null;
+  candlePattern?: PublicationCandlePattern | null;
 }
 
 export type PublicationFormat = "ANALYSIS" | "STORY" | "X" | "PREMIUM";

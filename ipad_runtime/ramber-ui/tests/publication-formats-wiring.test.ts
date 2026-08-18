@@ -128,3 +128,109 @@ describe('generate.ts: gate ANTES de desenhar (§5) — um formato bloqueado nun
     expect(src).toContain('URL.revokeObjectURL(a.objectUrl)');
   });
 });
+
+// ═══ REGRESSÃO REAL: o aviso legal sumiu de METADE das peças ═══
+//
+// Achado desta rodada (pedido do Operador: "o nome lá embaixo que não é
+// recomendação de investimento tem que estar perfeito também"): o aviso
+// estava escrito à mão em renderAnalysis e renderStory, e SIMPLESMENTE
+// AUSENTE em renderX e renderPremium — os dois formatos de rede social.
+// Metade das peças publicáveis saía sem o aviso.
+//
+// A causa era estrutural (cada formato reescrevia a marca à mão), então a
+// correção também é: uma primitiva única (drawBrandLockup) + estes testes,
+// que quebram se qualquer formato voltar a escrever a marca sozinho.
+describe('Aviso legal: presente em TODAS as 4 peças, sempre — nunca escrito à mão por formato', () => {
+  const src = read('../src/publication/formats.ts');
+  const primitives = read('../src/publication/canvas-primitives.ts');
+
+  it('o texto do aviso existe em UM só lugar (canvas-primitives), nunca literal dentro de formats.ts', () => {
+    expect(primitives).toContain('export const PUBLICATION_DISCLAIMER = "confluência real, não é recomendação de investimento";');
+    // Nenhum formato pode reescrever o texto à mão — se reescrever, some
+    // do controle único e volta a poder faltar num deles.
+    const handWritten = src.split('\n').filter(
+      (l) => l.includes('não é recomendação de investimento') && !l.includes('//'),
+    );
+    expect(handWritten, `aviso escrito à mão em formats.ts: ${handWritten.join(' | ')}`).toHaveLength(0);
+  });
+
+  it('cada uma das 4 render* alcança o aviso (drawBrandLockup ou drawBrandFooter)', () => {
+    const bodies: Array<[string, string]> = [
+      ['renderAnalysis', 'export function renderAnalysis'],
+      ['renderStory', 'export function renderStory'],
+      ['renderX', 'export function renderX'],
+      ['renderPremium', 'export function renderPremium'],
+    ];
+    const starts = bodies.map(([name, marker]) => {
+      const i = src.indexOf(marker);
+      expect(i, `${name} não encontrado`).toBeGreaterThan(-1);
+      return [name, i] as [string, number];
+    });
+    starts.forEach(([name, start], idx) => {
+      const end = idx + 1 < starts.length ? starts[idx + 1][1] : src.length;
+      const body = src.slice(start, end);
+      const reaches = body.includes('drawBrandLockup(') || body.includes('drawBrandFooter(');
+      expect(reaches, `${name} não alcança o aviso legal`).toBe(true);
+    });
+  });
+
+  it('drawBrandFooter (usado pelo formato Análise) carrega o aviso da constante única', () => {
+    expect(src).toContain('drawText(ctx, `AR10 CYBORG · ${PUBLICATION_DISCLAIMER}`');
+  });
+
+  it('drawBrandLockup SEMPRE desenha marca E aviso — nunca só a marca', () => {
+    const start = primitives.indexOf('export function drawBrandLockup');
+    const body = primitives.slice(start, primitives.indexOf('\n}', start));
+    expect(body).toContain('PUBLICATION_BRAND');
+    expect(body).toContain('PUBLICATION_DISCLAIMER');
+  });
+});
+
+describe('Acabamento visual: o efeito carrega o VIÉS real, nunca decoração neutra', () => {
+  const src = read('../src/publication/formats.ts');
+
+  it('as 4 peças pintam a aura/acento na cor do viés já resolvido', () => {
+    expect(src.match(/paintDirectionalAura\(ctx, width, height, color\)/g) ?? []).toHaveLength(4);
+    expect(src.match(/paintAccentEdge\(ctx, width, height, color\)/g) ?? []).toHaveLength(4);
+  });
+
+  it('a cor da aura vem de biasColor (o viés real), nunca um hex escolhido à mão', () => {
+    // Asserção de INTENÇÃO, não de contagem: a 1ª versão deste teste exigia
+    // exatamente 4 ocorrências e quebrou quando renderPremium virou 2
+    // passadas (uma 5ª ocorrência legítima em premiumBody). Contagem fixa
+    // trava refatoração honesta sem provar nada a mais — o que importa é
+    // que TODA atribuição de `color` venha de biasColor.
+    const assignments = src.match(/const color = [^;]+;/g) ?? [];
+    expect(assignments.length).toBeGreaterThanOrEqual(4);
+    for (const a of assignments) {
+      expect(a, `atribuição de cor fora de biasColor: ${a}`).toBe('const color = biasColor(analysis.bias);');
+    }
+  });
+});
+
+describe('Chip de padrão de vela: dado real do snapshot, nunca recalculado no renderer', () => {
+  const src = read('../src/publication/formats.ts');
+
+  it('lê snapshot.candlePattern — nunca chama o motor de padrões dentro do formato', () => {
+    expect(src).toContain('const p = snapshot.candlePattern;');
+    expect(src).not.toContain('candlestick-patterns');
+    expect(src).not.toContain('computeCandlePatterns');
+  });
+
+  it('fail-closed: sem padrão real, nada é desenhado', () => {
+    expect(src).toContain('if (!p) return 0;');
+  });
+
+  it('doji (direção null) nunca é pintado de verde nem vermelho', () => {
+    const start = src.indexOf('function patternChipColor');
+    const body = src.slice(start, src.indexOf('\n}', start));
+    expect(body).toContain('PUB_COLORS.neutral');
+  });
+
+  it('o chip nunca exibe taxa de acerto/probabilidade (Regra de Ouro 2)', () => {
+    const start = src.indexOf('function patternChipText');
+    const body = src.slice(start, src.indexOf('\n}', start));
+    expect(body).not.toMatch(/%/);
+    expect(body).not.toMatch(/probab|winRate|acerto/i);
+  });
+});

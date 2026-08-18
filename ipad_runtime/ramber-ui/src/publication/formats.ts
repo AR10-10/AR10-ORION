@@ -19,6 +19,10 @@ import {
   drawText,
   fmtPrice,
   paintBackground,
+  paintDirectionalAura,
+  paintAccentEdge,
+  drawBrandLockup,
+  PUBLICATION_DISCLAIMER,
   truncateToWidth,
   wrapTextLines,
 } from "./canvas-primitives";
@@ -60,6 +64,47 @@ function corePlanTargets(cp: NonNullable<MarketAnalysis["corePlan"]>): number[] 
 function coreTargetLineText(price: number, index: number, riskRewardRatio: number | null, livePrice: number | null): string {
   const rr = index === 0 && riskRewardRatio !== null ? ` · 1:${riskRewardRatio.toFixed(1)}` : "";
   return `${fmtPrice(price)}${rr}${targetDistanceLabel(price, livePrice)}`;
+}
+
+// ═══ CHIP DE PADRÃO DE VELA ═══
+//
+// "eu acho que falta algo nelas" (Operador, sobre as peças publicáveis).
+// Isto é o que faltava com valor real: o padrão de vela concreto e nomeado
+// que está formado AGORA no gráfico — "Engolfo de Alta", "Martelo",
+// "Estrela da Noite". É a informação de card de rede social por excelência:
+// específica, visual, imediatamente reconhecível por quem opera, e — ao
+// contrário de mais um número — conta a história da vela que acabou de
+// fechar.
+//
+// Honestidade preservada: o chip mostra o NOME real do padrão e se a vela
+// seguinte confirmou (✓) ou se ele acabou de se formar (·). Nunca uma taxa
+// de acerto (Regra de Ouro 2) — a literatura publica percentuais medidos em
+// outros mercados/períodos, e reproduzi-los num card público seria vender
+// uma calibração que este repositório não tem.
+function patternChipText(p: NonNullable<PublicationSnapshot["candlePattern"]>): string {
+  const arrow = p.direction === "ALTA" ? "▲" : p.direction === "BAIXA" ? "▼" : "·";
+  const mark = p.confirmed === true ? " ✓" : "";
+  return `${arrow} ${p.name.toUpperCase()}${mark}`;
+}
+
+function patternChipColor(p: NonNullable<PublicationSnapshot["candlePattern"]>): string {
+  if (p.direction === "ALTA") return PUB_COLORS.long;
+  if (p.direction === "BAIXA") return PUB_COLORS.short;
+  return PUB_COLORS.neutral; // indecisão (Doji) — nunca pintado de um lado
+}
+
+/** Desenha o chip do padrão quando existe; devolve a largura ocupada (0
+ *  quando não há padrão real — fail-closed, nada é desenhado). */
+function drawPatternChip(
+  ctx: CanvasRenderingContext2D,
+  snapshot: PublicationSnapshot,
+  x: number,
+  y: number,
+  fontSize: number,
+): number {
+  const p = snapshot.candlePattern;
+  if (!p) return 0;
+  return drawChip(ctx, x, y, patternChipText(p), patternChipColor(p), fontSize).width;
 }
 
 function biasColor(bias: MarketAnalysis["bias"]): string {
@@ -110,7 +155,7 @@ function drawBrandFooter(
     font: `500 ${fontSize}px ${MONO_FONT}`,
     color: PUB_COLORS.textFaint,
   });
-  drawText(ctx, "AR10 CYBORG · confluência real, não é recomendação de investimento", x + w, y, {
+  drawText(ctx, `AR10 CYBORG · ${PUBLICATION_DISCLAIMER}`, x + w, y, {
     font: `700 ${fontSize}px ${MONO_FONT}`,
     color: PUB_COLORS.cyan,
     align: "right",
@@ -124,13 +169,24 @@ export function renderAnalysis(ctx: CanvasRenderingContext2D, snapshot: Publicat
   paintBackground(ctx, width, height);
   const pad = 56;
   const color = biasColor(analysis.bias);
+  // Acabamento de elite pedido pelo Operador ("efeito bonito pra chamar
+  // atenção"), com a disciplina do Ω-INFINITY: o brilho é pintado NA COR
+  // DO VIÉS REAL, então ele INFORMA a direção antes de qualquer texto ser
+  // lido — nunca um efeito estético neutro. Ver paintDirectionalAura.
+  paintDirectionalAura(ctx, width, height, color);
+  paintAccentEdge(ctx, width, height, color);
 
   drawText(ctx, analysis.symbol, pad, 96, { font: `800 48px ${MONO_FONT}`, color: PUB_COLORS.textPrimary });
   ctx.font = `800 48px ${MONO_FONT}`;
   let cursorX = pad + ctx.measureText(analysis.symbol).width + 24;
   const tfChip = drawChip(ctx, cursorX, 56, analysis.timeframe.toUpperCase(), PUB_COLORS.textMuted, 18);
   cursorX += tfChip.width + 12;
-  drawChip(ctx, cursorX, 56, PUBLIC_BIAS_LABEL[analysis.bias], color, 18);
+  const biasChip = drawChip(ctx, cursorX, 56, PUBLIC_BIAS_LABEL[analysis.bias], color, 18);
+  cursorX += biasChip.width + 12;
+  // Padrão de vela real formado agora (ver drawPatternChip) — o "algo que
+  // faltava" nas peças, sempre ao lado do viés para os dois serem lidos
+  // juntos: o que o sistema lê + o que a vela acabou de fazer.
+  drawPatternChip(ctx, snapshot, cursorX, 56, 18);
 
   if (typeof livePrice === "number" && Number.isFinite(livePrice)) {
     drawText(ctx, fmtPrice(livePrice), width - pad, 96, { font: `800 48px ${MONO_FONT}`, color, align: "right" });
@@ -239,6 +295,12 @@ export function renderStory(ctx: CanvasRenderingContext2D, snapshot: Publication
   paintBackground(ctx, width, height);
   const pad = 64;
   const color = biasColor(analysis.bias);
+  // Acabamento de elite pedido pelo Operador ("efeito bonito pra chamar
+  // atenção"), com a disciplina do Ω-INFINITY: o brilho é pintado NA COR
+  // DO VIÉS REAL, então ele INFORMA a direção antes de qualquer texto ser
+  // lido — nunca um efeito estético neutro. Ver paintDirectionalAura.
+  paintDirectionalAura(ctx, width, height, color);
+  paintAccentEdge(ctx, width, height, color);
   let y = 96;
 
   // 1. Ativo + timeframe
@@ -257,6 +319,17 @@ export function renderStory(ctx: CanvasRenderingContext2D, snapshot: Publication
     color,
     align: "center",
   });
+  // Padrão de vela real formado agora — centrado logo abaixo da direção,
+  // que é onde o olho já está no formato vertical de Story.
+  {
+    const p = snapshot.candlePattern;
+    if (p) {
+      ctx.font = `700 22px ${MONO_FONT}`;
+      const w = ctx.measureText(patternChipText(p)).width + 22 * 1.4;
+      drawPatternChip(ctx, snapshot, width / 2 - w / 2, y + 22, 22);
+      y += 62;
+    }
+  }
   y += 44;
   const contextLine = [analysis.structureLabel, analysis.regimeLabel].filter(Boolean).join("  ·  ");
   if (contextLine) {
@@ -328,13 +401,7 @@ export function renderStory(ctx: CanvasRenderingContext2D, snapshot: Publication
   // existiram de verdade.
   drawSilkLine(ctx, pad, y, width - pad, y, PUB_COLORS.border, 1);
   y += 48;
-  drawText(ctx, "AR10 CYBORG", width / 2, y, { font: `800 30px ${MONO_FONT}`, color: PUB_COLORS.cyan, align: "center", letterSpacing: 3 });
-  y += 32;
-  drawText(ctx, "confluência real, não é recomendação de investimento", width / 2, y, {
-    font: `500 18px ${MONO_FONT}`,
-    color: PUB_COLORS.textFaint,
-    align: "center",
-  });
+  drawBrandLockup(ctx, width / 2, y, { brandSize: 30, disclaimerSize: 18, align: "center", letterSpacing: 3 });
 }
 
 // ── C — X (1200×675) ────────────────────────────────────────────────────
@@ -344,13 +411,21 @@ export function renderX(ctx: CanvasRenderingContext2D, snapshot: PublicationSnap
   paintBackground(ctx, width, height);
   const pad = 40;
   const color = biasColor(analysis.bias);
+  // Acabamento de elite pedido pelo Operador ("efeito bonito pra chamar
+  // atenção"), com a disciplina do Ω-INFINITY: o brilho é pintado NA COR
+  // DO VIÉS REAL, então ele INFORMA a direção antes de qualquer texto ser
+  // lido — nunca um efeito estético neutro. Ver paintDirectionalAura.
+  paintDirectionalAura(ctx, width, height, color);
+  paintAccentEdge(ctx, width, height, color);
 
   const chartW = width * 0.6 - pad * 1.5;
   const chartRect = { x: pad, y: 96, width: chartW, height: height - 96 - 40 };
   drawText(ctx, analysis.symbol, pad, 56, { font: `800 30px ${MONO_FONT}`, color: PUB_COLORS.textPrimary });
   ctx.font = `800 30px ${MONO_FONT}`;
   const symW = ctx.measureText(analysis.symbol).width;
-  drawChip(ctx, pad + symW + 14, 30, analysis.timeframe.toUpperCase(), PUB_COLORS.textMuted, 14);
+  const xTfChip = drawChip(ctx, pad + symW + 14, 30, analysis.timeframe.toUpperCase(), PUB_COLORS.textMuted, 14);
+  // Padrão de vela real ao lado do timeframe (cabeçalho do card do X).
+  drawPatternChip(ctx, snapshot, pad + symW + 14 + xTfChip.width + 10, 30, 14);
   drawMiniChart(ctx, chartRect, candles, toMiniChartPlan(analysis, livePrice), 12);
 
   const colX = pad + chartW + 32;
@@ -407,7 +482,7 @@ export function renderX(ctx: CanvasRenderingContext2D, snapshot: PublicationSnap
   // Story) — nunca um offset fixo do fundo do canvas.
   drawSilkLine(ctx, colX, y, width - pad, y, PUB_COLORS.border, 1);
   y += 28;
-  drawText(ctx, "AR10 CYBORG", colX, y, { font: `800 16px ${MONO_FONT}`, color: PUB_COLORS.cyan, letterSpacing: 2 });
+  drawBrandLockup(ctx, colX, y, { brandSize: 16, disclaimerSize: 12, align: "left" });
 }
 
 // ── D — PREMIUM (1080×1080, sem gráfico por especificação) ──────────────
@@ -425,18 +500,89 @@ export function renderX(ctx: CanvasRenderingContext2D, snapshot: PublicationSnap
 // informação duplicada").
 export function renderPremium(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {
   const { width, height } = PUBLICATION_FORMAT_SPECS.PREMIUM;
-  const { analysis, livePrice } = snapshot;
+  const { analysis } = snapshot;
   paintBackground(ctx, width, height);
+  const color = biasColor(analysis.bias);
+  // Acabamento de elite pedido pelo Operador ("efeito bonito pra chamar
+  // atenção"), com a disciplina do Ω-INFINITY: o brilho é pintado NA COR
+  // DO VIÉS REAL, então ele INFORMA a direção antes de qualquer texto ser
+  // lido — nunca um efeito estético neutro. Ver paintDirectionalAura.
+  paintDirectionalAura(ctx, width, height, color);
+  paintAccentEdge(ctx, width, height, color);
+
+  // ═══ CENTRALIZAÇÃO VERTICAL POR MEDIÇÃO REAL (2 passadas) ═══
+  //
+  // Achado da verificação visual desta rodada (captura real do card
+  // renderizado): com um plano de 3 alvos o conteúdo terminava por volta
+  // de 73% da altura, deixando ~27% do card quadrado como vão morto no
+  // rodapé — a rodada anterior tinha corrigido o vão do MEIO fazendo a
+  // marca seguir o conteúdo, o que empurrou o vão para baixo em vez de
+  // eliminá-lo. Num card 1:1 de feed isso lê como peça inacabada, o
+  // oposto de "profissional de elite".
+  //
+  // A correção NÃO duplica a matemática do layout (que derivaria com
+  // qualquer mudança futura): `premiumBody` é a ÚNICA fonte das posições,
+  // executada primeiro em modo medição (draw=false, zero pixel pintado) só
+  // para devolver a altura real do conteúdo, e depois de verdade a partir
+  // do topo que centraliza esse bloco. Conteúdo maior ou menor se
+  // recentraliza sozinho.
+  // A medição devolve a extensão do BASELINE do título até o baseline do
+  // aviso. Falta o que fica ACIMA do primeiro baseline (a altura das
+  // maiúsculas do símbolo) — sem isso o bloco assenta baixo demais, que foi
+  // exatamente o que a 1ª captura mostrou depois de centralizar. Medido com
+  // métrica real da fonte (actualBoundingBoxAscent), nunca um chute.
+  const baselineSpan = premiumBody(ctx, snapshot, 0, false);
+  ctx.save();
+  ctx.font = `800 40px ${MONO_FONT}`;
+  const m = ctx.measureText(snapshot.analysis.symbol || "M");
+  const titleAscent = m.actualBoundingBoxAscent || 40;
+  ctx.restore();
+  const visualHeight = titleAscent + baselineSpan;
+  const startY = Math.max(96, Math.round(titleAscent + (height - visualHeight) / 2));
+  premiumBody(ctx, snapshot, startY, true);
+}
+
+/**
+ * Corpo do card PREMIUM. `draw=false` percorre exatamente o mesmo layout
+ * sem pintar nada e devolve a altura real ocupada — a passada de medição
+ * da centralização vertical acima. Medições de texto (measureText,
+ * truncateToWidth) rodam nas duas passadas de propósito: elas não pintam e
+ * são o que decide as quebras/posições.
+ */
+function premiumBody(
+  ctx: CanvasRenderingContext2D,
+  snapshot: PublicationSnapshot,
+  startY: number,
+  draw: boolean,
+): number {
+  const { width } = PUBLICATION_FORMAT_SPECS.PREMIUM;
+  const { analysis, livePrice } = snapshot;
   const pad = 72;
   const color = biasColor(analysis.bias);
-  let y = 128;
+  const text = (t: string, x: number, yy: number, o: Parameters<typeof drawText>[4]) => {
+    if (draw) drawText(ctx, t, x, yy, o);
+  };
+  let y = startY;
 
-  drawText(ctx, analysis.symbol, width / 2, y, { font: `800 40px ${MONO_FONT}`, color: PUB_COLORS.textPrimary, align: "center" });
+  text(analysis.symbol, width / 2, y, { font: `800 40px ${MONO_FONT}`, color: PUB_COLORS.textPrimary, align: "center" });
   y += 42;
-  drawText(ctx, analysis.timeframe.toUpperCase(), width / 2, y, { font: `700 22px ${MONO_FONT}`, color: PUB_COLORS.textMuted, align: "center" });
-  y += 72;
+  text(analysis.timeframe.toUpperCase(), width / 2, y, { font: `700 22px ${MONO_FONT}`, color: PUB_COLORS.textMuted, align: "center" });
+  y += 34;
+  // Padrão de vela real, centrado — o card PREMIUM não tem gráfico por
+  // especificação, então este chip é a única pista visual do que a vela
+  // acabou de fazer.
+  {
+    const p = snapshot.candlePattern;
+    if (p) {
+      ctx.font = `700 18px ${MONO_FONT}`;
+      const w = ctx.measureText(patternChipText(p)).width + 18 * 1.4;
+      if (draw) drawPatternChip(ctx, snapshot, width / 2 - w / 2, y, 18);
+      y += 56;
+    }
+  }
+  y += 38;
 
-  drawText(ctx, `${biasArrow(analysis.bias)} ${PUBLIC_BIAS_LABEL[analysis.bias]}`, width / 2, y, {
+  text(`${biasArrow(analysis.bias)} ${PUBLIC_BIAS_LABEL[analysis.bias]}`, width / 2, y, {
     font: `800 56px ${MONO_FONT}`,
     color,
     align: "center",
@@ -444,7 +590,7 @@ export function renderPremium(ctx: CanvasRenderingContext2D, snapshot: Publicati
   y += 38;
   const contextLine = [analysis.structureLabel, analysis.regimeLabel].filter(Boolean).join("  ·  ");
   if (contextLine) {
-    drawText(ctx, truncateToWidth(ctx, contextLine, `600 19px ${MONO_FONT}`, width - pad * 2), width / 2, y, {
+    text(truncateToWidth(ctx, contextLine, `600 19px ${MONO_FONT}`, width - pad * 2), width / 2, y, {
       font: `600 19px ${MONO_FONT}`,
       color: PUB_COLORS.textMuted,
       align: "center",
@@ -452,7 +598,7 @@ export function renderPremium(ctx: CanvasRenderingContext2D, snapshot: Publicati
   }
   y += 46;
   if (typeof livePrice === "number" && Number.isFinite(livePrice)) {
-    drawText(ctx, fmtPrice(livePrice), width / 2, y, { font: `600 22px ${MONO_FONT}`, color: PUB_COLORS.textMuted, align: "center" });
+    text(fmtPrice(livePrice), width / 2, y, { font: `600 22px ${MONO_FONT}`, color: PUB_COLORS.textMuted, align: "center" });
     y += 40;
   }
   y += 20;
@@ -504,9 +650,9 @@ export function renderPremium(ctx: CanvasRenderingContext2D, snapshot: Publicati
     const row = Math.floor(i / 2);
     const x = pad + col * (cellW + colGap);
     const cellY = y + row * (cellH + rowGap);
-    drawRoundedRect(ctx, x, cellY, cellW, cellH, 10, "rgba(255,255,255,0.03)", PUB_COLORS.border);
-    drawText(ctx, f.label, x + 20, cellY + 30, { font: `700 16px ${MONO_FONT}`, color: PUB_COLORS.textMuted, letterSpacing: 1 });
-    drawText(ctx, truncateToWidth(ctx, f.value, `800 24px ${MONO_FONT}`, cellW - 40), x + 20, cellY + 64, {
+    if (draw) drawRoundedRect(ctx, x, cellY, cellW, cellH, 10, "rgba(255,255,255,0.03)", PUB_COLORS.border);
+    text(f.label, x + 20, cellY + 30, { font: `700 16px ${MONO_FONT}`, color: PUB_COLORS.textMuted, letterSpacing: 1 });
+    text(truncateToWidth(ctx, f.value, `800 24px ${MONO_FONT}`, cellW - 40), x + 20, cellY + 64, {
       font: `800 24px ${MONO_FONT}`,
       color: f.color,
     });
@@ -516,7 +662,13 @@ export function renderPremium(ctx: CanvasRenderingContext2D, snapshot: Publicati
 
   // AR10 segue o conteúdo real (mesmo achado do gap vazio do Story/X) —
   // nunca um offset fixo do fundo do canvas.
-  drawSilkLine(ctx, pad, y, width - pad, y, PUB_COLORS.border, 1);
+  if (draw) drawSilkLine(ctx, pad, y, width - pad, y, PUB_COLORS.border, 1);
   y += 40;
-  drawText(ctx, "AR10 CYBORG", width / 2, y, { font: `800 24px ${MONO_FONT}`, color: PUB_COLORS.cyan, align: "center", letterSpacing: 2 });
+  // O lockup desenha marca (baseline em y) + aviso (baseline em y+24*1.15).
+  // A altura devolvida vai do baseline do título ATÉ o baseline do aviso —
+  // a mesma referência que a centralização acima completa com o ascent do
+  // título. Somar o corpo inteiro da fonte do aviso aqui empurraria o bloco
+  // para cima sem motivo real.
+  if (draw) drawBrandLockup(ctx, width / 2, y, { brandSize: 24, disclaimerSize: 15, align: "center" });
+  return y + 24 * 1.15 - startY;
 }

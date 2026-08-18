@@ -124,6 +124,7 @@ import {
   computeBosChoch,
   computeLiquidityVoids,
   computeZigZag,
+  computeCandlePatterns,
   scanRadarCandidate,
 } from "./engine-bridge";
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
@@ -266,6 +267,7 @@ import {
   PUBLICATION_FORMAT_SPECS,
   type PublicationAsset,
   type PublicationCandle,
+  type PublicationCandlePattern,
   type PublicationFormat,
   type PublicationSnapshot,
 } from "./publication/types";
@@ -5135,6 +5137,11 @@ function MarketAnalysisPanel({ priceData, chartData }: { priceData: PriceState |
   // leitura já mostrada na aba Painel durante a mesma sessão do painel).
   const [frozenCandles, setFrozenCandles] = useState<PublicationCandle[]>([]);
   const [frozenLivePrice, setFrozenLivePrice] = useState<number | null>(null);
+  // Padrão de vela real congelado no MESMO instante que os candles acima —
+  // pelo mesmo motivo: a peça publicada precisa descrever exatamente a
+  // fotografia que o Operador viu na aba Painel, nunca um padrão que se
+  // formou depois. Computado UMA vez aqui; os 4 renderers só leem.
+  const [frozenPattern, setFrozenPattern] = useState<PublicationCandlePattern | null>(null);
 
   useEffect(() => {
     if (!marketAnalysisOpen) return;
@@ -5177,6 +5184,20 @@ function MarketAnalysisPanel({ priceData, chartData }: { priceData: PriceState |
     );
     setFrozenCandles(chartData);
     setFrozenLivePrice(livePriceNow);
+    // Mesma fonte de candles do mini-gráfico da peça (chartData), mesmo
+    // instante. `latest` é o padrão mais recente REAL da janela — null
+    // honesto quando não há nenhum (nenhum chip é desenhado).
+    const patternReading = computeCandlePatterns(chartData);
+    setFrozenPattern(
+      patternReading.latest
+        ? {
+            name: patternReading.latest.name,
+            direction: patternReading.latest.direction,
+            kind: patternReading.latest.kind,
+            confirmed: patternReading.latest.confirmed,
+          }
+        : null,
+    );
     setTab("PAINEL");
     // Deps propositalmente estreito: SÓ marketAnalysisOpen. Reabrir o
     // painel é o único gatilho para uma fotografia nova — enquanto o
@@ -5243,7 +5264,9 @@ function MarketAnalysisPanel({ priceData, chartData }: { priceData: PriceState |
 
               {tab === "PAINEL" && <MarketAnalysisPainelTab analysis={analysis} />}
               {tab === "PUBLICACAO" && (
-                <MarketAnalysisPublicationTab snapshot={{ analysis, candles: frozenCandles, livePrice: frozenLivePrice }} />
+                <MarketAnalysisPublicationTab
+                  snapshot={{ analysis, candles: frozenCandles, livePrice: frozenLivePrice, candlePattern: frozenPattern }}
+                />
               )}
             </>
           )}

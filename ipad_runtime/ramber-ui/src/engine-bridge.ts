@@ -74,6 +74,12 @@ import { analyze as analyzeLiquidityVoids } from '../../src/research/engines/liq
 // Laboratório de Evolução (isolado/testado desde a Entrega 35, nunca
 // importado até aqui — ver QUARANTINE.md). Motor puro inalterado.
 import { computeZigZag as computeZigZagPure } from '../../src/research/engines/zigzag-engine.js';
+// Padrões de vela japoneses (candlestick-patterns.js) — pedido direto do
+// Operador ("o gráfico tem que refletir os padrão das vela... existe padrão
+// de vela que muda o sentido do mercado"). Auditoria antes de construir
+// confirmou gap real: o sistema lia estrutura, zonas, regime e fluxo, mas
+// nunca a FORMA da vela. Ver header do motor + QUARANTINE.md.
+import { analyze as analyzeCandlePatterns } from '../../src/research/engines/candlestick-patterns.js';
 import { classifyMarketRegime, RegimeHistory } from '../../src/market-regime/index.js';
 // OMEGA CORE V-MAX Fase 7: mesmo Trade Plan real (Fase 4 do Signal
 // Precision) e mesmo Corredor de Confluência real (Fase 5) que o ativo
@@ -1183,6 +1189,59 @@ export function computeZigZag(
   const result = computeZigZagPure(candles, deviationPct, depth);
   if (result.status !== 'OK') return [];
   return result.points;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Padrões de vela (candlestick-patterns.js) — pedido direto do Operador.
+// Wrapper fino sobre o motor puro, nunca uma segunda implementação: só
+// traduz o resultado para o vocabulário tipado que a UI consome.
+//
+// O contrato importante que este wrapper preserva: `direction` é o VIÉS que
+// o padrão sugere, jamais uma decisão. O Core Engine continua sendo o único
+// emissor de LONG/SHORT/WAIT (LEI 24) — um Engolfo de Alta contra um SHORT
+// do Núcleo aparece como CONTEXTO conflitante para o Operador ler, nunca
+// como um segundo sinal que sobrescreve ou bloqueia o primeiro.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface CandlePattern {
+  code: string;
+  name: string;
+  /** Viés sugerido pelo padrão. `null` em padrões de indecisão (Doji) — que
+   *  deliberadamente NÃO ganham um lado inventado (Regra de Ouro 3). */
+  direction: 'ALTA' | 'BAIXA' | null;
+  kind: 'REVERSAL' | 'CONTINUATION' | 'INDECISION';
+  index: number;
+  time: number;
+  /** Tamanho real do corpo em unidades de ATR — medição, nunca uma
+   *  probabilidade de acerto (Regra de Ouro 2). */
+  bodyAtr: number | null;
+  /** A vela seguinte fechou a favor do viés? `null` quando o padrão acabou
+   *  de se formar e ainda não existe vela seguinte — nunca um `false` que
+   *  se leria como "foi negado". */
+  confirmed: boolean | null;
+  candles: number;
+}
+
+export interface CandlePatternReading {
+  patterns: CandlePattern[];
+  latest: CandlePattern | null;
+  /** Contexto de tendência REAL usado para classificar as reversões
+   *  (market-structure-engine.js). `null` = sem estrutura confirmada, e
+   *  nesse caso nenhum padrão de reversão foi emitido — de propósito. */
+  structureContext: string | null;
+}
+
+const EMPTY_PATTERNS: CandlePatternReading = { patterns: [], latest: null, structureContext: null };
+
+export function computeCandlePatterns(
+  candles: Array<{ open: number; high: number; low: number; close: number }>,
+): CandlePatternReading {
+  const result = analyzeCandlePatterns({ ohlcv_series: candles });
+  if (result.status !== 'OK') return EMPTY_PATTERNS;
+  return {
+    patterns: result.patterns as CandlePattern[],
+    latest: (result.latest ?? null) as CandlePattern | null,
+    structureContext: result.structureContext ?? null,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
