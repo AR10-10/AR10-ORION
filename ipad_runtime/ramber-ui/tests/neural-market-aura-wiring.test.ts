@@ -199,16 +199,19 @@ describe('voice-intents.ts + voice-dispatcher.ts: eventos reais do ciclo de vida
     expect(intents).toContain("convictionVerdict: 'CONFIRMS' | 'CONTRADICTS' | 'MIXED' | null;");
   });
 
-  it('computeAlerts dispara em transição real de abertura/resolução/zona/convicção, nunca por repetição', () => {
-    const dispatcher = read('../src/voice/voice-dispatcher.ts');
-    expect(dispatcher).toContain('if (next.tradePlanOpenKey && next.tradePlanOpenKey !== prev.tradePlanOpenKey) {');
-    expect(dispatcher).toContain('if (!prev.inEntryZone && next.inEntryZone) {');
-    expect(dispatcher).toContain('if (next.tradePlanResolutionKey && next.tradePlanResolutionKey !== prev.tradePlanResolutionKey) {');
+  it('a detecção dispara em transição real de abertura/resolução/zona/convicção, nunca por repetição', () => {
+    // Mudou de casa na unificação dos alertas: quem detecta agora é o
+    // produtor único. Comportamento provado por execução real em
+    // tests/snapshot-alerts.test.ts.
+    const produtor = read('../src/nexus/snapshot-alerts.ts');
+    expect(produtor).toContain('next.tradePlanOpenKey !== prev.tradePlanOpenKey');
+    expect(produtor).toContain('!prev.inEntryZone && next.inEntryZone');
+    expect(produtor).toContain('next.tradePlanResolutionKey !== prev.tradePlanResolutionKey');
   });
 
   it('convicção reduzida só entre DUAS leituras reais (nunca a partir de null = "indisponível" tratado como "reduzida")', () => {
-    const dispatcher = read('../src/voice/voice-dispatcher.ts');
-    expect(dispatcher).toContain('prev.convictionVerdict && next.convictionVerdict &&');
+    const produtor = read('../src/nexus/snapshot-alerts.ts');
+    expect(produtor).toContain('prev.convictionVerdict && next.convictionVerdict &&');
   });
 });
 

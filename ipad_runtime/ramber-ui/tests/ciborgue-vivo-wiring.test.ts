@@ -255,12 +255,20 @@ describe('App.tsx: SystemStatusBadge — indicador compacto de risco/saúde semp
   });
 });
 
-describe('voice-dispatcher.ts: alerta real de BOS/CHOCH reaproveita o MESMO pipeline (zero segundo mecanismo de alerta)', () => {
-  it('CHOCH dispara ALERT, BOS dispara INFO, só numa transição real (chave muda)', () => {
+describe('snapshot-alerts.ts: alerta real de BOS/CHOCH reaproveita o MESMO pipeline (zero segundo mecanismo de alerta)', () => {
+  // A regra mudou de casa na unificação dos alertas (voice-dispatcher.ts
+  // deixou de DETECTAR e passou a CONSUMIR) — a intenção travada aqui é a
+  // mesma: um evento por transição real de chave, CHOCH mais severo que BOS.
+  // A prova de COMPORTAMENTO vive em tests/snapshot-alerts.test.ts, por
+  // execução real; este continua sendo só o guarda barato de fiação.
+  it('a detecção vive no produtor único, nunca mais no dispatcher de voz', () => {
+    const produtor = read('../src/nexus/snapshot-alerts.ts');
+    expect(produtor).toContain('next.structureBreakKey !== prev.structureBreakKey');
+    expect(produtor).toContain('next.structureBreakType === "CHOCH"');
+
     const dispatcher = read('../src/voice/voice-dispatcher.ts');
-    expect(dispatcher).toContain("if (next.structureBreakKey && next.structureBreakKey !== prev.structureBreakKey) {");
-    expect(dispatcher).toContain("if (next.structureBreakType === 'CHOCH') {");
-    expect(dispatcher).toContain("priority: 'ALERT'");
+    expect(dispatcher).not.toContain('structureBreakKey');
+    expect(dispatcher).toContain('deriveSnapshotAlerts');
   });
 });
 

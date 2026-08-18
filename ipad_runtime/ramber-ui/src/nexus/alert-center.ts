@@ -51,9 +51,22 @@ import type { TrapSignal, SweptLevel } from "./trap-detection";
 
 export type AlertTone = "success" | "info" | "danger";
 
+/** Severidade do evento — a mesma escala que a fila de voz já usava
+ *  (voice-engine.ts's VoicePriority). Declarada AQUI, em nexus/, e nunca
+ *  importada de voice/: o evento é que carrega a própria importância, e a
+ *  camada de voz passa a ser consumidora dela, não a dona dela.
+ *  União idêntica de propósito — a compatibilidade estrutural é o que
+ *  permite o adaptador em voice-dispatcher.ts ser uma linha. */
+export type AlertPriority = "CRITICAL" | "ALERT" | "INFO";
+
 export interface AlertEvent {
   id: string;
   tone: AlertTone;
+  /** Quão urgente o evento é. `tone` é COR (como aparece); `priority` é
+   *  URGÊNCIA (se interrompe, se é falado antes dos outros). São eixos
+   *  independentes de propósito: um stop atingido é `danger` + `ALERT`;
+   *  um vetor novo é `info` + `CRITICAL`. */
+  priority: AlertPriority;
   title: string;
   message: string;
   createdAt: number;
@@ -101,26 +114,34 @@ export function deriveTrackRecordAlert(prevLastEntry: TrackedPlan | null, record
     return {
       id,
       tone: "success",
+      priority: "ALERT",
       title: "Alvo atingido",
       message: `${direction} — ${totalTargets}/${totalTargets} alvos reais atingidos em ${price}`,
       createdAt,
+      // Sentença herdada LITERALMENTE do voice-dispatcher, que até aqui
+      // narrava esta mesma resolução por um segundo diff independente.
+      speech: "Alvo real do Trade Plan alcançado.",
     };
   }
   if (last.status === "PARTIAL_HIT") {
     return {
       id,
       tone: "info",
+      priority: "INFO",
       title: "Parcial validado",
       message: `${direction} — ${last.targetsHit}/${totalTargets} alvo(s) real(is) provado(s), encerrado em break-even/além em ${price}`,
       createdAt,
+      speech: "Plano encerrado em break-even após alcançar pelo menos um alvo real.",
     };
   }
   return {
     id,
     tone: "danger",
+    priority: "ALERT",
     title: "Stop atingido",
     message: `${direction} — encerrado em ${price}, zero alvo real provado`,
     createdAt,
+    speech: "Stop real atingido. Estrutura do plano perdida.",
   };
 }
 
@@ -169,6 +190,7 @@ export function deriveSweepAlert(seenIds: Set<string>, traps: TrapSignal[]): Ale
   return {
     id: `sweep-${sweepIdentity(level)}`,
     tone: "info",
+    priority: "ALERT",
     title: kind === "STOP_HUNT_TOPO" ? "SWEEP · TOPO VARRIDO" : "SWEEP · FUNDO VARRIDO",
     message: `${formatPrice(level.price)} · confiança real ${(confidence * 100).toFixed(0)}% · viés ${bullishBias ? "alta" : "baixa"}`,
     createdAt: Date.now(),

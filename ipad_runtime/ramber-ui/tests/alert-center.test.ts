@@ -6,6 +6,28 @@
 // atingido — exatamente o bug que este desenho evita.
 import { describe, it, expect } from 'vitest';
 import { deriveTrackRecordAlert } from '../src/nexus/alert-center';
+import { deriveSnapshotAlerts, type AlertSnapshot } from '../src/nexus/snapshot-alerts';
+
+/** Snapshot neutro — todos os campos no estado "nada acontecendo". */
+const emptySnapshot = (): AlertSnapshot => ({
+  direction: null,
+  engineStatus: 'ok',
+  lorentzianOk: false,
+  lorentzianClassification: null,
+  recentOrderflowTypes: [],
+  recentLiquidationCount: 0,
+  structureBreakKey: null,
+  structureBreakType: null,
+  structureBreakDirection: null,
+  tradePlanOpenKey: null,
+  tradePlanDirection: null,
+  tradePlanResolutionKey: null,
+  tradePlanResolutionStatus: null,
+  tradePlanTargetProgressKey: null,
+  tradePlanTargetsHit: 0,
+  inEntryZone: false,
+  convictionVerdict: null,
+});
 import { TRACK_RECORD_CONTRACT_VERSION, TRACK_RECORD_HISTORY_CAP, type TrackedPlan, type TrackRecordState } from '../src/nexus/signal-track-record';
 import type { TradePlan } from '../src/nexus/trade-plan';
 
@@ -114,16 +136,28 @@ describe('alert-center: deriveTrackRecordAlert', () => {
     expect(alert2!.id).not.toBe(alert1!.id);
   });
 
-  // Achado da auditoria de evolução (voz contínua): voice-dispatcher.ts JÁ
-  // narra a resolução do Trade Plan por um diff independente sobre
-  // TerminalSnapshot. Se deriveTrackRecordAlert ganhasse `speech` e algum
-  // chamador o falasse, o Operador ouviria a MESMA resolução duas vezes.
-  // Trava a decisão registrada no cabeçalho de alert-center.ts: nenhum
-  // alerta de Track Record tem versão falada por este arquivo.
-  it('nunca ganha campo speech — já é narrado por voice-dispatcher.ts, falar aqui também duplicaria', () => {
+  // RECONCILIAÇÃO (unificação dos alertas): a decisão anterior era "nunca
+  // ganha speech, porque voice-dispatcher.ts já narra esta resolução por um
+  // diff independente". Esse diff independente deixou de existir — a
+  // resolução TARGET_HIT/PARTIAL_HIT/STOP_HIT passou a ser produzida SÓ
+  // aqui, porque esta versão é mais rica (preço real de resolução +
+  // contagem alvos-provados/total, que o snapshot não carrega). Sem
+  // `speech` aqui, a voz PERDERIA a narração da resolução — a inversão da
+  // asserção é o que prova que ela não se perdeu.
+  it('carrega speech: é o produtor único da resolução, e sem isso a voz emudeceria', () => {
     const entry = makeTracked('TARGET_HIT');
     const alert = deriveTrackRecordAlert(null, makeRecord([entry]));
-    expect(alert!.speech).toBeUndefined();
+    expect(alert!.speech).toBe('Alvo real do Trade Plan alcançado.');
+    // E o segundo produtor tem de estar realmente morto, não só silenciado.
+    // Prova COMPORTAMENTAL, não textual: os três status aparecem no tipo e
+    // no comentário de snapshot-alerts.ts de propósito (é lá que está
+    // registrado POR QUE ele não os deriva) — procurar a string acusaria um
+    // falso positivo. O que importa é que nenhum deles produza evento.
+    const produtorSilencioso = deriveSnapshotAlerts(
+      emptySnapshot(),
+      { ...emptySnapshot(), tradePlanResolutionKey: 'r1', tradePlanResolutionStatus: 'TARGET_HIT' },
+    );
+    expect(produtorSilencioso).toEqual([]);
   });
 
   it('regressão do teto do ring buffer: history.length parado no CAP ainda detecta a transição real (comparação por identidade, nunca por tamanho)', () => {

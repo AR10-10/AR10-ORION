@@ -332,7 +332,8 @@ import type { TacticalContextInput } from "./llm-bridge";
 // browser's own speechSynthesis/webkitSpeechRecognition (feature-detected,
 // fail-closed), so this static import costs a few KB, no model, no network.
 import { voiceEngine } from "./voice/voice-engine";
-import { computeAlerts } from "./voice/voice-dispatcher";
+import { toVoiceAlerts } from "./voice/voice-dispatcher";
+import { deriveSnapshotAlerts } from "./nexus/snapshot-alerts";
 import type { TerminalSnapshot } from "./voice/voice-intents";
 import { VoiceControlWidget } from "./voice/VoiceControlWidget";
 // GMIL (Global Market Intelligence Layer, src/gmil/) — Providers →
@@ -3306,8 +3307,21 @@ export default function App() {
   const [criticalPulse, setCriticalPulse] = useState(false);
   const prevVoiceSnapshotRef = useRef<TerminalSnapshot | null>(null);
   useEffect(() => {
-    const alerts = computeAlerts(prevVoiceSnapshotRef.current, voiceSnapshot);
-    alerts.forEach((a) => voiceEngine.speak(a.text, a.priority));
+    // PRODUTOR ÚNICO (nexus/snapshot-alerts.ts): a MESMA lista de eventos
+    // alimenta os três consumidores — fala, toast e pulso visual. Antes
+    // desta entrega, estas 11 transições só viravam FALA: o Operador ouvia
+    // um CHoCH que nunca aparecia na tela. Nenhum critério de detecção
+    // mudou; mudou só o fato de o evento ter agora mais de um destino.
+    const events = deriveSnapshotAlerts(prevVoiceSnapshotRef.current, voiceSnapshot);
+    toVoiceAlerts(events).forEach((a) => voiceEngine.speak(a.text, a.priority));
+    if (events.length > 0) {
+      // §9.2: mesmo teto de 5 toasts simultâneos e auto-dismiss de 5s que
+      // os alertas do bus (Track Record/Sweep) já usam — zero segunda
+      // política de apresentação.
+      setAlerts((prev) => [...prev, ...events].slice(-5));
+      const firedIds = new Set(events.map((e) => e.id));
+      setTimeout(() => setAlerts((prev) => prev.filter((a) => !firedIds.has(a.id))), 5000);
+    }
     // Ordem "Ciborgue Vivo" §3: mesma detecção de transição já usada pelos
     // alertas acima (prev.structureBreakKey !== next.structureBreakKey =
     // rompimento REAL novo, não o mesmo evento ainda vivo na tela). Só
@@ -3327,7 +3341,7 @@ export default function App() {
       );
     }
     prevVoiceSnapshotRef.current = voiceSnapshot;
-    if (alerts.some((a) => a.priority === "CRITICAL" || a.priority === "ALERT")) {
+    if (events.some((a) => a.priority === "CRITICAL" || a.priority === "ALERT")) {
       setCriticalPulse(true);
       const t = setTimeout(() => setCriticalPulse(false), 2500);
       return () => clearTimeout(t);
@@ -3548,6 +3562,13 @@ export default function App() {
       // §9.2: máximo 5 toasts simultâneos, auto-dismiss em 5s.
       setAlerts((prev) => [...prev, alert].slice(-5));
       setTimeout(() => setAlerts((prev) => prev.filter((a) => a.id !== alert.id)), 5000);
+      // A resolução do plano passou a ser produzida SÓ aqui (a versão deste
+      // arquivo é mais rica: traz o preço real de resolução e a contagem
+      // alvos-provados/total, que o snapshot não carrega). Antes, o
+      // voice-dispatcher derivava a MESMA resolução por um segundo diff e
+      // era ele quem falava; agora quem fala é o evento único, por este
+      // mesmo caminho — sem isso a voz perderia a narração da resolução.
+      if (alert.speech) voiceEngine.speak(alert.speech, alert.priority);
     });
   }, []);
   // Achado da AUDITORIA TÉCNICA COMPLETA (Seção F): Liquidity Sweep já
