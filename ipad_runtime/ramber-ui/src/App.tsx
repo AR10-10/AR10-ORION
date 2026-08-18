@@ -9262,7 +9262,28 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
               proporção do corpo (160→220 / 260→340) para o número de opções
               visíveis não CAIR por causa da fonte maior; acima de 14 opções
               a rolagem horizontal continua, como em qualquer terminal real. */}
-          <div className="ar10-t-body flex items-center gap-0.5 max-w-[220px] sm:max-w-[340px] overflow-x-auto scrollbar-hide shrink-0">
+          <div
+            /* Correção do beco sem saída medido (relato do Operador: "no
+               computador não tem como arrastar, fica aparecendo até o M8").
+               Conta real com o corpo de 13.5px: a fileira de 14 timeframes
+               precisa de ~445px; o teto era 340px ⇒ 10 de 14 visíveis, último
+               alcançável 8H, e .scrollbar-hide tirava o único jeito de chegar
+               nos outros 4 com mouse.
+               md+ (desktop, onde não há dedo) NÃO tem mais teto: cabem os 14.
+               Abaixo disso o teto continua — mas ali há toque, E o trilho
+               agora é visível (.ar10-scroll-x), então nunca mais é um beco. */
+            className="ar10-t-body flex items-center gap-0.5 max-w-[220px] sm:max-w-[340px] md:max-w-none ar10-scroll-x shrink-0"
+            /* Roda do mouse → rolagem HORIZONTAL. Num contêiner de rolagem
+               horizontal o navegador só responde a shift+roda, que ninguém
+               descobre sozinho. Só intercepta quando há overflow REAL (senão
+               roubaria a rolagem vertical da página sem motivo). */
+            onWheel={(e) => {
+              const el = e.currentTarget;
+              if (el.scrollWidth <= el.clientWidth) return;
+              if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+              el.scrollLeft += e.deltaY;
+            }}
+          >
             {CHART_TIMEFRAMES.map((tf) => (
               <button
                 key={tf.value}

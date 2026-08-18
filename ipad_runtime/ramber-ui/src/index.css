@@ -85,6 +85,43 @@ body {
   font-size: var(--ar10-t-read);
 }
 
+/* Barra rolável horizontal COM trilho visível — o oposto de .scrollbar-hide.
+   ACHADO MEDIDO (relato literal do Operador: "no computador não tem como
+   arrastar o M1 lá em cima, ele fica aparecendo até o M8 na tela"):
+
+   O seletor de timeframe tem 14 opções. Com o corpo legível de 13.5px que a
+   escala tipográfica passou a aplicar, a fileira precisa de ~445px. O
+   contêiner estava limitado a 340px e usava .scrollbar-hide. Conta real:
+   10 de 14 visíveis, último alcançável 8H — exatamente o "M8" que o Operador
+   viu. E sem trilho de rolagem, num computador com mouse, 12H/1D/1W/1M viram
+   um beco sem saída: no iPad o dedo arrasta, no desktop não há como.
+
+   Foi uma regressão introduzida quando o corpo da fonte subiu (a largura
+   máxima subiu junto, mas não o suficiente). Correção em três frentes: teto
+   removido no desktop (md+), trilho VISÍVEL quando ainda houver overflow, e
+   roda do mouse mapeada para rolagem horizontal no componente.
+
+   Trilho discreto de propósito — 4px, cor da própria paleta: precisa ser
+   descobrível, nunca chamativo. */
+.ar10-scroll-x {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 240, 255, 0.35) transparent;
+}
+.ar10-scroll-x::-webkit-scrollbar {
+  height: 4px;
+}
+.ar10-scroll-x::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ar10-scroll-x::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.35);
+  border-radius: 2px;
+}
+.ar10-scroll-x::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.6);
+}
+
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
 }
