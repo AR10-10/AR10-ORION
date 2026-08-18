@@ -184,6 +184,16 @@ import { simulateTradeCostsBatch } from "./nexus/trade-simulation";
 import { evaluateSignalFilter, MIN_TRADES_FOR_VALID_EXPECTANCY, type FilterResult } from "./nexus/expectancy";
 import { computeDecisionDistance, formatDecisionDistance, formatAtrUnits, describeDecisionDistance, type DecisionDistanceReading } from "./nexus/decision-distance";
 import { computeDirectionalConsensus, describeDirectionalConsensus, normalizeSide, sideFromSigned, computeLiquidityMap, liquidityBias, type DirectionalSource, type DirectionalConsensusReading, type LiquidityTarget, type LiquidityMapReading } from "./nexus/directional-consensus";
+import { computeZoneSignificance, formatZoneAtrWidth } from "./nexus/liquidity-significance";
+// "constrói uma bola... um só aparece, tipo longa ou short, com essa
+// porcentagem, bem profissional" (pedido direto do Operador) — geometria
+// pura do anel/gauge; o componente SVG que a consome vive logo antes de
+// DirectionalSyncPanel, mesma leitura de directionalConsensus já em uso ali.
+import { computeGaugeReading, formatGaugePercent, type GaugeReading } from "./nexus/directional-gauge";
+// directionArrow: mesma seta canônica LONG=▲/SHORT=▼ que a guarda de
+// inversão protege — o rótulo central do anel nunca inventa seu próprio
+// glifo.
+import { directionArrow } from "./nexus/direction-semantics";
 import { resolveFloatingWidgetOrigin } from "./nexus/floating-widget-origin";
 // Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
 // councilVotesToModelVotes/regimeModelVote/fuseModelVotes/alignFusedConfidence
@@ -2510,16 +2520,28 @@ export default function App() {
     const p = typeof priceData?.price === "number" ? priceData.price : null;
     if (!Number.isFinite(p)) return computeLiquidityMap(null, []);
     const price = p as number;
+    const atrPercent = engine?.marketRegime?.atrPercent ?? null;
     const targets: LiquidityTarget[] = [];
     // A borda que o preço encontra PRIMEIRO ao caminhar até a zona: a BASE
     // se a zona está acima, o TOPO se está abaixo. Usar sempre o mesmo lado
     // daria uma distância sistematicamente errada em metade dos casos —
     // erro sutil que ninguém notaria olhando a tela.
+    //
+    // Sincronização com o resto do ecossistema (pedido do Operador): o MESMO
+    // filtro de significância por ATR que decide o que aparece DESENHADO no
+    // gráfico (ver isSignificantZone acima) decide o que entra neste mapa —
+    // uma zona pequena demais para valer destaque visual também não deveria
+    // contar como "alvo real" na leitura de acima/abaixo. Uma só verdade.
     const pushZones = (list: PriceZone[] | null | undefined, kind: string) => {
       for (const z of list ?? []) {
         if (z.mitigated) continue;
+        // Uma só chamada real — o resultado decide TANTO se a zona entra
+        // no mapa QUANTO o que o tooltip do painel mostra como motivo
+        // (widthAtrUnits abaixo). Nunca uma segunda avaliação.
+        const sig = computeZoneSignificance(z.top, z.bottom, price, atrPercent);
+        if (!sig.significant) continue;
         const edge = z.bottom > price ? z.bottom : z.top;
-        if (Number.isFinite(edge)) targets.push({ price: edge, kind });
+        if (Number.isFinite(edge)) targets.push({ price: edge, kind, widthAtrUnits: sig.widthAtrUnits });
       }
     };
     pushZones(smcZones?.fairValueGaps, "FVG");
@@ -7149,6 +7171,70 @@ function DecisionDistanceBadge() {
 // faltava e que gerava a dúvida: "BID 54%" ao lado de um badge SHORT só parece
 // contradição enquanto o Operador não sabe que um é liquidez PARADA no livro e
 // o outro é viés de TENDÊNCIA. Agora está escrito.
+// "constrói uma bola... um só aparece, tipo longa ou short, quando tivesse
+// essa porcentagem tanto por cento X pra long ou short, com a certinha bem
+// profissional" (pedido direto do Operador). Anel SVG puro que só traduz em
+// atributos de desenho os números JÁ prontos de computeGaugeReading —
+// stroke-dasharray/stroke-dashoffset é a técnica padrão de "anel de
+// progresso" (mesma citada no header de nexus/directional-gauge.ts). Zero
+// geometria decidida aqui, zero segunda leitura: side/percent/color vêm
+// inteiros do módulo puro, já testado (tests/directional-gauge.test.ts).
+function DirectionalGaugeRing({ reading }: { reading: GaugeReading }) {
+  const { geometry } = reading;
+  const strokeWidth = 9;
+  return (
+    <div
+      className="relative w-[84px] h-[84px] shrink-0"
+      title="Consistência interna do ecossistema — quantas leituras já resolvidas por outros motores reais apontam para o MESMO lado que o Núcleo está emitindo agora. NUNCA uma probabilidade calibrada de acerto do trade (Regra de Ouro 2) — este repositório não tem backtest real que sustente esse número."
+    >
+      <svg viewBox="0 0 100 100" className="w-full h-full" style={{ transform: `rotate(${geometry.rotationDegrees}deg)` }}>
+        {/* Trilho de fundo: os 270° inteiros, sempre visíveis — mostra a
+            escala 0-100% mesmo antes de qualquer leitura real chegar. */}
+        <circle
+          cx={50}
+          cy={50}
+          r={geometry.radius}
+          fill="none"
+          stroke="#1a2436"
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${geometry.trackLength} ${geometry.circumference}`}
+          strokeDashoffset={geometry.trackOffset}
+          strokeLinecap="round"
+        />
+        {/* Preenchimento real — só desenhado com leitura OK (fail-closed: sem
+            direção real do Núcleo, o anel fica só o trilho cinza acima). */}
+        {reading.status === "OK" && (
+          <circle
+            cx={50}
+            cy={50}
+            r={geometry.radius}
+            fill="none"
+            stroke={reading.color}
+            strokeWidth={strokeWidth}
+            strokeDasharray={`${geometry.fillLength} ${geometry.circumference}`}
+            strokeDashoffset={geometry.fillOffset}
+            strokeLinecap="round"
+            style={{ filter: `drop-shadow(0 0 4px ${reading.color}80)`, transition: "stroke-dasharray 0.4s ease" }}
+          />
+        )}
+      </svg>
+      {/* Rótulo central — o único lado real (nunca os dois ao mesmo tempo,
+          pedido explícito do Operador: "um só aparece"), com a seta
+          canônica (directionArrow — mesma guarda de inversão) e o
+          percentual real formatado (piso "<1%", nunca "0%" que se leria
+          como "sem leitura"). */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none gap-0.5">
+        <span className="ar10-t-label font-black font-mono tabular-nums leading-none" style={{ color: reading.color }}>
+          {formatGaugePercent(reading.percent)}
+        </span>
+        <span className="ar10-t-micro font-black tracking-widest leading-none" style={{ color: reading.color }}>
+          {reading.status === "OK" ? `${directionArrow(reading.side)} ${reading.side}` : "—"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function DirectionalSyncPanel() {
   const { directionalConsensus, liquidityMap } = useContext(WidgetContext) || {};
   const r: DirectionalConsensusReading | null = directionalConsensus ?? null;
@@ -7159,20 +7245,29 @@ function DirectionalSyncPanel() {
 
   const sideColor = (side: string | null) =>
     side === "LONG" ? "#00ffaa" : side === "SHORT" ? "#ff0055" : "#8ab4f8";
+  // Mesma leitura de directionalConsensus, só traduzida em geometria de
+  // anel — zero segunda fonte (ver header de directional-gauge.ts).
+  const gaugeReading = computeGaugeReading(r);
 
   return (
     <div className="cyber-panel bg-[#010308]/60 rounded p-2 flex flex-col gap-1.5 min-w-0">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="ar10-t-micro tracking-[0.2em] font-black text-[#00f0ff] uppercase">
-          Sincronia Direcional
-        </span>
-        <span
-          title={describeDirectionalConsensus(r)}
-          className="ar10-t-label font-black font-mono tabular-nums"
-          style={{ color: sideColor(r.core) }}
-        >
-          {r.aligned}/{r.reporting}
-        </span>
+      <div className="flex items-center gap-2.5">
+        <DirectionalGaugeRing reading={gaugeReading} />
+        <div className="flex flex-col gap-1 min-w-0">
+          <span className="ar10-t-micro tracking-[0.2em] font-black text-[#00f0ff] uppercase">
+            Sincronia Direcional
+          </span>
+          {/* Contagem exata continua real e visível (Regra de Ouro 4 — o
+              anel acima é apresentação nova, nunca substitui o dado bruto),
+              só que agora em papel secundário: o anel é a leitura
+              "profissional, sem dúvida" que o Operador pediu. */}
+          <span
+            title={describeDirectionalConsensus(r)}
+            className="ar10-t-micro font-bold font-mono tabular-nums text-[#8ab4f8]/70"
+          >
+            {r.aligned}/{r.reporting} fontes
+          </span>
+        </div>
       </div>
 
       {/* Uma linha por fonte real. Fonte sem leitura aparece como "—" e NÃO
@@ -7200,11 +7295,14 @@ function DirectionalSyncPanel() {
       </div>
 
       {/* Liquidez ACIMA e ABAIXO — para onde o preço tem alvo real a buscar.
-          Não é previsão de direção: é onde estão as zonas. */}
+          Não é previsão de direção: é onde estão as zonas. Tooltip mostra a
+          MESMA largura em ATR (formatZoneAtrWidth) que já decidiu se essa
+          zona é significativa o bastante para entrar aqui — "por que ela
+          conta", não só "quanto falta". */}
       {liq && liq.status === "OK" && (
         <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#00f0ff15]">
           <span
-            title={`Zonas reais NÃO mitigadas acima do preço (FVG, Order Block, Void, pools de liquidez). A mais próxima é a primeira que o preço encontraria subindo.`}
+            title={`Zonas reais NÃO mitigadas acima do preço (FVG, Order Block, Void, pools de liquidez). A mais próxima é a primeira que o preço encontraria subindo${liq.above.nearest ? ` — ${liq.above.nearest.kind} · ${formatZoneAtrWidth(liq.above.nearest.widthAtrUnits)}` : ""}.`}
             className="flex items-center gap-1"
           >
             <span className="ar10-t-micro font-bold text-[#00ffaa]/70">▲ LIQ</span>
@@ -7214,7 +7312,7 @@ function DirectionalSyncPanel() {
             </span>
           </span>
           <span
-            title={`Zonas reais NÃO mitigadas abaixo do preço. A mais próxima é a primeira que o preço encontraria caindo.`}
+            title={`Zonas reais NÃO mitigadas abaixo do preço. A mais próxima é a primeira que o preço encontraria caindo${liq.below.nearest ? ` — ${liq.below.nearest.kind} · ${formatZoneAtrWidth(liq.below.nearest.widthAtrUnits)}` : ""}.`}
             className="flex items-center gap-1"
           >
             <span className="ar10-t-micro font-mono tabular-nums text-[#ff0055]">
@@ -9009,10 +9107,38 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // onde ela está. isObstacle casa por low/high real (mesma identidade
   // que LiquidityZonesPlugin já usa internamente), nunca por índice.
   const isRealObstacle = (z: PriceZone) => chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);
+  // "a liquidez que amostra no gráfico, só realmente ela fazer diferença nas
+  // alterações... se a liquidez razoável pequena que não faz movimento"
+  // (pedido direto do Operador). ACHADO MEDIDO: o teto de 3 abaixo escolhia
+  // pela ORDEM DE CHEGADA, nunca pelo TAMANHO — um FVG de 3 ticks (ruído de
+  // pavio) competia pelas mesmas 3 vagas que um FVG de 2% do preço (um
+  // desequilíbrio real). computeZoneSignificance (nexus/liquidity-significance.ts)
+  // mede a largura real de cada zona em unidades de ATR — a mesma fonte
+  // única já unificada nesta sessão (Wilder 14, regime-engine.js) — e só
+  // zonas grandes o suficiente para não desaparecer dentro do ruído normal
+  // de uma vela competem pelas 3 vagas de destaque. Obstáculo estrutural no
+  // caminho do Trade Plan continua SEMPRE visível independente do tamanho
+  // (Regra de Ouro 4: é informação estrutural, não decoração de destaque).
+  const chartAtrPercent = engine?.marketRegime?.atrPercent ?? null;
+  const isSignificantZone = (z: PriceZone) =>
+    computeZoneSignificance(z.top, z.bottom, livePrice.price, chartAtrPercent).significant;
   const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);
   const unmitigatedBlocksAll = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated);
-  const unmitigatedFvgs = unmitigatedFvgsAll.filter((z, i) => i < 3 || isRealObstacle(z));
-  const unmitigatedBlocks = unmitigatedBlocksAll.filter((z, i) => i < 3 || isRealObstacle(z));
+  const significantFvgs = unmitigatedFvgsAll.filter(isSignificantZone);
+  const significantBlocks = unmitigatedBlocksAll.filter(isSignificantZone);
+  const unmitigatedFvgs = unmitigatedFvgsAll.filter(
+    (z) => isRealObstacle(z) || significantFvgs.indexOf(z) !== -1 && significantFvgs.indexOf(z) < 3,
+  );
+  const unmitigatedBlocks = unmitigatedBlocksAll.filter(
+    (z) => isRealObstacle(z) || significantBlocks.indexOf(z) !== -1 && significantBlocks.indexOf(z) < 3,
+  );
+  // Pools de liquidez (EQH/EQL) NÃO ganham este mesmo filtro — achado real
+  // da auditoria (ver header de liquidity-significance.ts): todo pool que
+  // chega até aqui já exige >= 2 toques reais para existir (a própria
+  // definição de "Equal High/Low" em fvg-order-block-engine.js), o mesmo
+  // piso que support-resistance-engine.js usa para rotular FORTE. Um filtro
+  // extra aqui não removeria zona nenhuma — só duplicaria uma regra que já
+  // vale em outro lugar.
   const unsweptLiquidity = (smcZones?.liquidityZones ?? []).filter((z: LiquidityZone) => !z.swept).slice(0, 4);
   // Liquidity Void (liquidity-void-engine.js): MESMA disciplina real de
   // FVG/Order Block acima — só zonas ainda NÃO mitigadas (preço nunca

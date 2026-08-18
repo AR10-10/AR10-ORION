@@ -197,6 +197,14 @@ export interface LiquidityTarget {
   price: number;
   /** Código curto da família, o mesmo já desenhado no canvas. */
   kind: string;
+  /** Largura real da zona em unidades de ATR — a MESMA leitura que já
+   *  decidiu se esta zona é significativa o bastante para entrar no mapa
+   *  (liquidity-significance.ts, computeZoneSignificance). Opcional:
+   *  `undefined`/`null` para o pool de liquidez (POOL), que não tem
+   *  largura própria — é um preço único, não uma faixa. Existe só para o
+   *  tooltip do painel poder mostrar "por que essa zona conta" sem
+   *  recalcular nada. */
+  widthAtrUnits?: number | null;
 }
 
 export interface LiquiditySideReading {

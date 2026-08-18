@@ -493,13 +493,24 @@ describe('Auditoria de pendências (achado real via harness Playwright, duas ins
 });
 
 describe('Auditoria de pendências: obstacleCount (sem teto) reconciliado com o .slice(0,3) de FVG/OB desenhados no gráfico', () => {
-  it('unmitigatedFvgs/unmitigatedBlocks incluem os 3 mais recentes E qualquer obstáculo real do plano ativo — nunca um obstáculo citado no texto que fica invisível no gráfico', () => {
+  it('unmitigatedFvgs/unmitigatedBlocks incluem os 3 mais SIGNIFICATIVOS (ATR-relativos) E qualquer obstáculo real do plano ativo — nunca um obstáculo citado no texto que fica invisível no gráfico', () => {
+    // "a liquidez que amostra no gráfico, só realmente ela fazer diferença
+    // nas alterações" (Operador) — o teto de 3 deixou de escolher pela
+    // ORDEM DE CHEGADA (i < 3) e passou a escolher pelo TAMANHO real da
+    // zona em unidades de ATR (computeZoneSignificance,
+    // nexus/liquidity-significance.ts). Obstáculo estrutural do plano
+    // ativo continua SEMPRE visível independente de tamanho — essa parte
+    // do contrato não mudou.
     const a = read('../src/App.tsx');
     expect(a).toContain('const isRealObstacle = (z: PriceZone) => chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);');
+    expect(a).toContain('const isSignificantZone = (z: PriceZone) =>');
+    expect(a).toContain('computeZoneSignificance(z.top, z.bottom, livePrice.price, chartAtrPercent).significant;');
     expect(a).toContain('const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);');
     expect(a).toContain('const unmitigatedBlocksAll = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated);');
-    expect(a).toContain('const unmitigatedFvgs = unmitigatedFvgsAll.filter((z, i) => i < 3 || isRealObstacle(z));');
-    expect(a).toContain('const unmitigatedBlocks = unmitigatedBlocksAll.filter((z, i) => i < 3 || isRealObstacle(z));');
+    expect(a).toContain('const significantFvgs = unmitigatedFvgsAll.filter(isSignificantZone);');
+    expect(a).toContain('const significantBlocks = unmitigatedBlocksAll.filter(isSignificantZone);');
+    expect(a).toContain('(z) => isRealObstacle(z) || significantFvgs.indexOf(z) !== -1 && significantFvgs.indexOf(z) < 3,');
+    expect(a).toContain('(z) => isRealObstacle(z) || significantBlocks.indexOf(z) !== -1 && significantBlocks.indexOf(z) < 3,');
   });
 
   it('isRealObstacle referencia chartObstacleZones (a MESMA lista sem teto que já alimenta obstacleCount/LiquidityZonesPlugin) — nunca um segundo cálculo de obstáculo', () => {
