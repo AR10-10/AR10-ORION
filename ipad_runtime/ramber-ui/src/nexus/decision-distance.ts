@@ -76,6 +76,13 @@ export interface DecisionDistanceInput {
   lastPrice: number | null | undefined;
   sma: number | null | undefined;
   ema: number | null | undefined;
+  /** ATR% REAL de Wilder (período 14), do Market Regime Engine
+   *  (src/market-regime/regime-engine.js::atrPercent). Auditado nesta rodada
+   *  como a ÚNICA implementação de ATR do repositório inteiro — todos os
+   *  consumidores (eta-engine, aura-lifecycle, multi-timeframe, risk) são
+   *  passthrough dela, zero segunda fórmula. Opcional de propósito: sem ATR
+   *  real, a leitura em ATR não existe; nunca é estimada. */
+  atrPercent?: number | null;
 }
 
 /** Qual das duas desigualdades está travando o lado. `null` quando o lado
@@ -85,6 +92,8 @@ export type DecisionDistanceBinding = "price" | "ema" | null;
 export interface DecisionDistanceSide {
   /** % do preço atual que falta para ESTE lado passar a valer. 0 = já vale. */
   gapPercent: number;
+  /** A MESMA distância, medida em ATR de Wilder. `null` sem ATR real. */
+  atrUnits: number | null;
   /** Qual condição manda nessa distância — a que está mais longe. */
   binding: DecisionDistanceBinding;
   /** As duas parcelas cruas, para o tooltip poder explicar sem recalcular. */
@@ -114,7 +123,31 @@ function gapPct(distance: number, price: number): number {
   return (distance / price) * 100;
 }
 
-function side(pricePercent: number, emaPercent: number): DecisionDistanceSide {
+/** A distância em UNIDADES DE VOLATILIDADE REALIZADA.
+ *
+ *  POR QUE ISTO TORNA A LEITURA MAIS INTELIGENTE (e não é enfeite): "falta
+ *  0,84%" é um número sem escala. 0,84% é quase nada num mercado que anda 3%
+ *  por vela e é uma eternidade num que anda 0,2%. O operador que olha só o
+ *  percentual precisa ter a volatilidade na cabeça para interpretá-lo — e é
+ *  exatamente isso que o terminal deveria fazer por ele.
+ *
+ *  Normalizar distância por ATR é prática padrão de mesa (é a mesma unidade
+ *  que o próprio Risk Engine deste repositório já usa para dimensionar risco:
+ *  "unidade de risco = max(distância do stop, ATR%)"), nunca uma métrica
+ *  inventada aqui. A conta é uma divisão — ambos já estão em % do preço, então
+ *  a razão é adimensional e direta.
+ *
+ *  Fail-closed: ATR ausente, não-finito ou <= 0 devolve null. Um ATR zero
+ *  dividiria por zero e produziria Infinity, que a UI mostraria como um número
+ *  gigante e falso. */
+function atrUnitsOf(gapPercent: number, atrPercent: number | null | undefined): number | null {
+  if (!Number.isFinite(atrPercent as number)) return null;
+  const atr = atrPercent as number;
+  if (atr <= 0) return null;
+  return gapPercent / atr;
+}
+
+function side(pricePercent: number, emaPercent: number, atrPercent?: number | null): DecisionDistanceSide {
   // O max manda: as duas condições são simultâneas (E lógico), então a
   // que está mais longe é a que define quando o lado passa a valer.
   const gapPercent = Math.max(pricePercent, emaPercent);
@@ -124,7 +157,7 @@ function side(pricePercent: number, emaPercent: number): DecisionDistanceSide {
   // consequência do preço, nunca ao contrário.
   const binding: DecisionDistanceBinding =
     gapPercent === 0 ? null : pricePercent >= emaPercent ? "price" : "ema";
-  return { gapPercent, binding, pricePercent, emaPercent };
+  return { gapPercent, atrUnits: atrUnitsOf(gapPercent, atrPercent), binding, pricePercent, emaPercent };
 }
 
 /**
@@ -146,9 +179,9 @@ export function computeDecisionDistance(input: DecisionDistanceInput): DecisionD
   if (p <= 0) return INSUFFICIENT;
 
   // LONG exige  p > s  E  e >= s.
-  const longSide = side(gapPct(s - p, p), gapPct(s - e, p));
+  const longSide = side(gapPct(s - p, p), gapPct(s - e, p), input.atrPercent);
   // SHORT exige p < s  E  e <= s.
-  const shortSide = side(gapPct(p - s, p), gapPct(e - s, p));
+  const shortSide = side(gapPct(p - s, p), gapPct(e - s, p), input.atrPercent);
 
   // `current` reproduz trendBias() EXATAMENTE — mesma desigualdade, mesma
   // ordem, incluindo o caso de borda p === s (que não satisfaz nem > nem <,
@@ -173,6 +206,19 @@ export function formatDecisionDistance(gapPercent: number | null | undefined): s
   return `${g.toFixed(2)}%`;
 }
 
+/** A distância em ATR, formatada. Uma decisão só de arredondamento, como o
+ *  formatador de porcentagem irmão. "0.3× ATR" lê-se direto: "menos de um
+ *  terço de uma vela típica". Abaixo de 0.05× vira "<0.05×" pelo mesmo motivo
+ *  que o percentual tem piso: um "0.00×" arredondado se confundiria com
+ *  "já satisfeito". */
+export function formatAtrUnits(atrUnits: number | null | undefined): string {
+  if (!Number.isFinite(atrUnits)) return "—";
+  const u = atrUnits as number;
+  if (u === 0) return "0×";
+  if (u < 0.05) return "<0.05×";
+  return `${u.toFixed(2)}× ATR`;
+}
+
 /** Frase honesta do que está travando este lado — o texto real que vai ao
  *  tooltip. Nunca fala em chance/probabilidade. */
 export function describeDecisionDistance(
@@ -190,9 +236,13 @@ export function describeDecisionDistance(
     s.binding === "price"
       ? `o preço precisa andar ${formatDecisionDistance(s.pricePercent)}`
       : `a EMA precisa andar ${formatDecisionDistance(s.emaPercent)} em relação à SMA`;
+  // A leitura em ATR entra SÓ quando existe ATR real. Sem ela, a frase
+  // simplesmente não menciona volatilidade — nunca uma escala inventada.
+  const escala = s.atrUnits === null ? "" : ` Em volatilidade real: ${formatAtrUnits(s.atrUnits)} (ATR de Wilder 14).`;
   return (
     `Distância real até o limiar de ${label} do Núcleo: ${what}. ` +
-    `Preço/SMA: ${formatDecisionDistance(s.pricePercent)} · EMA/SMA: ${formatDecisionDistance(s.emaPercent)}. ` +
-    `É distância medida agora, não probabilidade — e o limiar se move a cada candle novo.`
+    `Preço/SMA: ${formatDecisionDistance(s.pricePercent)} · EMA/SMA: ${formatDecisionDistance(s.emaPercent)}.` +
+    escala +
+    ` É distância medida agora, não probabilidade — e o limiar se move a cada candle novo.`
   );
 }

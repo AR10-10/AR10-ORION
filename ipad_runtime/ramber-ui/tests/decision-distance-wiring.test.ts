@@ -48,10 +48,14 @@ describe("cadeia real: analysis-frame → engine-bridge → App", () => {
   });
 
   it("a leitura é memoizada sobre os 3 campos reais, não recalculada a cada render", () => {
+    expect(app).toMatch(/computeDecisionDistance\(\{[\s\S]{0,600}?lastPrice:\s*engine\.lastClose/);
+    expect(app).toMatch(/computeDecisionDistance\(\{[\s\S]{0,600}?sma:\s*engine\.sma/);
+    expect(app).toMatch(/computeDecisionDistance\(\{[\s\S]{0,600}?ema:\s*engine\.ema/);
+    // O ATR real entra pela MESMA fonte única do Market Regime Engine.
+    expect(app).toMatch(/atrPercent:\s*engine\.marketRegime\?\.atrPercent\s*\?\?\s*null/);
     expect(app).toMatch(
-      /computeDecisionDistance\(\{\s*lastPrice:\s*engine\.lastClose,\s*sma:\s*engine\.sma,\s*ema:\s*engine\.ema\s*\}\)/,
+      /\[engine\.lastClose,\s*engine\.sma,\s*engine\.ema,\s*engine\.marketRegime\?\.atrPercent\]/,
     );
-    expect(app).toMatch(/\[engine\.lastClose,\s*engine\.sma,\s*engine\.ema\]/);
   });
 });
 

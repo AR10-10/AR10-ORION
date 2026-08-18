@@ -73,6 +73,8 @@ import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeSessionKeyLevels, sessionGenerationWeight, SESSION_GENERATION_FADE, type SessionKeyLevel } from "../nexus/market-session";
+import { sessionCode } from "../nexus/session-codes";
+import { activeCanvasLabelFont } from "../nexus/canvas-label";
 // Achado 2.6: a altura/posição desta faixa deixou de ser um número local e
 // passou a vir da lane compartilhada — mesmo valor real de sempre (14px no
 // topo, zero mudança visual aqui), agora de fonte única com a faixa de
@@ -214,13 +216,32 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
         }
 
         if (clippedWidth >= MIN_LABEL_WIDTH_PX) {
-          ctx.font = "9px -apple-system, sans-serif";
+          // ACHADO DO RAIO-X (2 defeitos reais nesta única linha):
+          //
+          // 1. FONTE CONGELADA. Este era o ÚNICO ctx.font hardcoded de todo
+          //    chart/ — grep real: 6 ocorrências, 5 no PriceLabelStackPlugin
+          //    já derivadas da escala responsiva, e esta. Num monitor >=2560px
+          //    o eixo nativo desenha 13px e esta faixa continuava em 9px, lado
+          //    a lado. Agora usa a MESMA primitiva compartilhada
+          //    (activeCanvasLabelFont, nexus/canvas-label.ts) que os outros 5
+          //    plugins de etiqueta já usam — uma decisão de tamanho, não duas.
+          //
+          // 2. NOME INTEIRO NA FAIXA. Desenhava `level.label.toUpperCase()`:
+          //    "LONDRES+NY" (10 caracteres), "NOVA YORK" (9), numa faixa de
+          //    14px de altura por cima das velas. O Operador pediu
+          //    explicitamente as INICIAIS ("não precisa os nome grande").
+          //    Agora desenha o código curto de mesa (LDN+NY, NY, ASIA, PAC —
+          //    ver nexus/session-codes.ts): no máximo 6 caracteres, ~40% menos
+          //    largura. O nome completo NÃO foi apagado (Regra de Ouro 4):
+          //    continua real em level.label e visível no cabeçalho, onde há
+          //    espaço horizontal de sobra.
+          ctx.font = activeCanvasLabelFont();
           ctx.textBaseline = "top";
           ctx.fillStyle = isOpen ? LABEL_COLOR_OPEN : LABEL_COLOR_CLOSED;
           // 1 linha só (ver comentário de BAND_HEIGHT_PX): a janela UTC que
           // vivia aqui como 2ª linha era o MESMO marketSessionFromUtc do
           // header — removida como duplicação, o dado continua no header.
-          ctx.fillText(level.label.toUpperCase(), clippedX + 4, BAND_TOP_PX + 3);
+          ctx.fillText(sessionCode(level.sessionId), clippedX + 4, BAND_TOP_PX + 3);
         }
         ctx.globalAlpha = 1;
       }

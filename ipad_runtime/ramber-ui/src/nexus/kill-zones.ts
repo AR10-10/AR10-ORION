@@ -32,13 +32,24 @@
 // No horário de inverno (EST/GMT padrão), as janelas reais deslocam ~1h
 // mais tarde — mesma aproximação deliberada e mesmo aviso já usado em
 // market-session.ts, nunca fingindo mais precisão do que existe.
+import { sessionCode } from "./session-codes";
+
 export const KILL_ZONE_CONTRACT_VERSION = 1 as const;
 
 export type KillZoneId = "ASIA" | "LONDRES" | "NOVA_YORK" | "LONDRES_CLOSE";
 
 export interface KillZoneWindow {
   id: KillZoneId;
+  /** SÓ o nome da praça — nunca um prefixo de apresentação. Antes era
+   *  "Kill Zone · Fechamento de Londres" (33 caracteres) e a UI arrancava o
+   *  prefixo de volta com `.replace("Kill Zone · ", "")` para poder escrevê-lo
+   *  ela mesma. Duas cópias do mesmo texto, uma removida em runtime por
+   *  cirurgia de string: qualquer mudança de caractere no prefixo faria o
+   *  replace falhar em silêncio e a tela mostraria "Kill Zone · Kill Zone ·
+   *  Ásia". Agora quem exibe compõe; o dado só carrega o fato. */
   label: string;
+  /** Código curto para desenho no gráfico (ver nexus/session-codes.ts). */
+  code: string;
   startHour: number; // UTC, referência de horário de verão americano (ver header)
   endHour: number; // UTC, exclusivo
 }
@@ -46,10 +57,10 @@ export interface KillZoneWindow {
 // Ordem cronológica — usada tanto para a varredura de ativas quanto para
 // "próxima kill zone" (nextKillZone).
 export const KILL_ZONES: readonly KillZoneWindow[] = Object.freeze([
-  { id: "ASIA", label: "Kill Zone · Ásia", startHour: 0, endHour: 4 },
-  { id: "LONDRES", label: "Kill Zone · Londres", startHour: 7, endHour: 10 },
-  { id: "NOVA_YORK", label: "Kill Zone · Nova York", startHour: 12, endHour: 15 },
-  { id: "LONDRES_CLOSE", label: "Kill Zone · Fechamento de Londres", startHour: 14, endHour: 16 },
+  { id: "ASIA", label: "Ásia", code: sessionCode("ASIA"), startHour: 0, endHour: 4 },
+  { id: "LONDRES", label: "Londres", code: sessionCode("LONDRES"), startHour: 7, endHour: 10 },
+  { id: "NOVA_YORK", label: "Nova York", code: sessionCode("NOVA_YORK"), startHour: 12, endHour: 15 },
+  { id: "LONDRES_CLOSE", label: "Fechamento de Londres", code: sessionCode("LONDRES_CLOSE"), startHour: 14, endHour: 16 },
 ]);
 
 export interface KillZoneReading {
@@ -104,7 +115,24 @@ export function nextKillZone(date: Date): { window: KillZoneWindow; hoursUntil: 
 // devolve uma lista nunca deduplicada).
 export interface KillZoneSpan {
   id: KillZoneId;
-  label: string;
+  // ACHADO DO RAIO-X, e a correção HONESTA depois de checar o histórico:
+  //
+  // Este tipo carregava `label: string` — o nome longo da zona — através de
+  // todo o cálculo, e o ÚNICO consumidor (KillZoneBandsPlugin) nunca o
+  // desenhava. Dado morto atravessando o motor.
+  //
+  // A primeira correção tentada foi ressuscitar a etiqueta no canvas. A
+  // guarda de regressão de refinamento-final-wiring.test.ts mostrou que isso
+  // seria DESFAZER uma decisão anterior explícita: o rótulo foi removido
+  // desta camada de propósito, por ser duplicação do badge "Kill Zone · …"
+  // que o cabeçalho já exibe. A decisão continua valendo — o Operador pediu
+  // "nada repetido", e o cabeçalho já responde "qual kill zone".
+  //
+  // Então a correção certa para dado morto aqui é REMOVER o campo morto, não
+  // criar uma segunda superfície para ele. Nada real se perde (Regra de Ouro
+  // 4): nome e código curto continuam em KILL_ZONES[].label/.code e chegam ao
+  // Operador pelo cabeçalho. Este tipo passa a carregar só o que seu
+  // consumidor real usa: id, tempo e índice.
   startTime: number; // candle.time real do primeiro candle desta ocorrência
   endTime: number; // candle.time real do ÚLTIMO candle desta ocorrência (inclusive)
   // Achado real de captura de tela (mesma causa raiz de trap-detection.ts
@@ -118,7 +146,7 @@ export interface KillZoneSpan {
 
 export function computeKillZoneSpans(candles: { time: number }[]): KillZoneSpan[] {
   const spans: KillZoneSpan[] = [];
-  const open = new Map<KillZoneId, { label: string; startTime: number; lastTime: number; lastIndex: number }>();
+  const open = new Map<KillZoneId, { startTime: number; lastTime: number; lastIndex: number }>();
 
   for (let i = 0; i < candles.length; i++) {
     const c = candles[i];
@@ -129,7 +157,7 @@ export function computeKillZoneSpans(candles: { time: number }[]): KillZoneSpan[
     // Fecha qualquer span aberto cuja zona não está mais ativa neste candle.
     for (const [id, o] of open) {
       if (!activeIds.has(id)) {
-        spans.push({ id, label: o.label, startTime: o.startTime, endTime: o.lastTime, endIndex: o.lastIndex });
+        spans.push({ id, startTime: o.startTime, endTime: o.lastTime, endIndex: o.lastIndex });
         open.delete(id);
       }
     }
@@ -140,13 +168,13 @@ export function computeKillZoneSpans(candles: { time: number }[]): KillZoneSpan[
         o.lastTime = c.time;
         o.lastIndex = i;
       } else {
-        open.set(z.id, { label: z.label, startTime: c.time, lastTime: c.time, lastIndex: i });
+        open.set(z.id, { startTime: c.time, lastTime: c.time, lastIndex: i });
       }
     }
   }
   // Fecha qualquer span que ainda seguia aberto no último candle real.
   for (const [id, o] of open) {
-    spans.push({ id, label: o.label, startTime: o.startTime, endTime: o.lastTime, endIndex: o.lastIndex });
+    spans.push({ id, startTime: o.startTime, endTime: o.lastTime, endIndex: o.lastIndex });
   }
   return spans;
 }

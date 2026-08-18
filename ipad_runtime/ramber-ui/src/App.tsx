@@ -182,7 +182,7 @@ import { computeTpoProfile } from "./nexus/tpo-profile";
 // uso (expectancyFilter) e em CoreSignalBadge.
 import { simulateTradeCostsBatch } from "./nexus/trade-simulation";
 import { evaluateSignalFilter, MIN_TRADES_FOR_VALID_EXPECTANCY, type FilterResult } from "./nexus/expectancy";
-import { computeDecisionDistance, formatDecisionDistance, describeDecisionDistance, type DecisionDistanceReading } from "./nexus/decision-distance";
+import { computeDecisionDistance, formatDecisionDistance, formatAtrUnits, describeDecisionDistance, type DecisionDistanceReading } from "./nexus/decision-distance";
 import { resolveFloatingWidgetOrigin } from "./nexus/floating-widget-origin";
 // Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
 // councilVotesToModelVotes/regimeModelVote/fuseModelVotes/alignFusedConfidence
@@ -2059,8 +2059,18 @@ export default function App() {
   // usa — nunca uma segunda decisão, nunca uma probabilidade (Regra de Ouro
   // 2): é distância medida até o limiar, e o texto exibido diz isso.
   const decisionDistance = useMemo(
-    () => computeDecisionDistance({ lastPrice: engine.lastClose, sma: engine.sma, ema: engine.ema }),
-    [engine.lastClose, engine.sma, engine.ema],
+    () =>
+      computeDecisionDistance({
+        lastPrice: engine.lastClose,
+        sma: engine.sma,
+        ema: engine.ema,
+        // ATR% real de Wilder (14) do Market Regime Engine — a MESMA fonte
+        // única que eta-engine/aura-lifecycle/risk já consomem (auditado:
+        // não existe uma segunda implementação de ATR no repositório).
+        // Passthrough, nunca recalculado aqui.
+        atrPercent: engine.marketRegime?.atrPercent ?? null,
+      }),
+    [engine.lastClose, engine.sma, engine.ema, engine.marketRegime?.atrPercent],
   );
 
   // V11.5 Fase 5 — Consensus Engine: um ÚNICO hook subscrito ao GMIL aqui em
@@ -5558,7 +5568,16 @@ function ScoreContextCard() {
         >
           <Crosshair size={11} className="text-[#ffb020] shrink-0" />
           <span className="text-[0.5rem] font-black uppercase tracking-wider text-[#ffb020]">
-            Kill Zone · {killZones.active.map((z) => z.label.replace("Kill Zone · ", "")).join(" + ")}
+            {/* Duplicação real removida (raio-X desta rodada): esta linha
+                escrevia "Kill Zone · " à mão E arrancava o MESMO prefixo de
+                cada rótulo com um replace de string sobre esse mesmo prefixo,
+                porque o
+                prefixo estava assado dentro do dado em kill-zones.ts. Duas
+                cópias do mesmo texto, uma desfeita em runtime por cirurgia de
+                string — e falha SILENCIOSA (tela mostrando "Kill Zone · Kill
+                Zone · Ásia") se um único caractere do prefixo mudasse lá.
+                Agora o dado carrega só o nome da praça e quem exibe compõe. */}
+            Kill Zone · {killZones.active.map((z) => z.label).join(" + ")}
           </span>
         </div>
       )}
@@ -6958,6 +6977,17 @@ function DecisionDistanceSide({
       >
         {side === null ? "—" : formatDecisionDistance(side.gapPercent)}
       </span>
+      {/* A MESMA distância em volatilidade realizada. "0.84%" é um número sem
+          escala: é quase nada num mercado que anda 3% por vela e uma
+          eternidade num que anda 0.2%. O ATR real (Wilder 14, fonte única do
+          Market Regime Engine) dá essa escala. Só aparece quando há ATR real —
+          sem ele, nada é mostrado, nunca uma escala estimada. Discreto de
+          propósito: é o qualificador do número, não o número. */}
+      {side !== null && side.atrUnits !== null && side.gapPercent > 0 && (
+        <span className="ar10-t-micro font-mono tabular-nums text-[#8ab4f8]/55">
+          {formatAtrUnits(side.atrUnits).replace(" ATR", "")}
+        </span>
+      )}
     </span>
   );
 }

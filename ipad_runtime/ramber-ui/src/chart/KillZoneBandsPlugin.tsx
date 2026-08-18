@@ -60,6 +60,7 @@ import { computeKillZoneSpans, type KillZoneSpan } from "../nexus/kill-zones";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
 import { getTimeRibbonLaneTopPx, getTimeRibbonLaneBottomPx, getTimeRibbonLaneHeightPx } from "./chart-time-ribbon-lanes";
 
+
 export const KILL_ZONE_DECAY: DecayConfig = { fadeStartCandles: 50, expireCandles: 200, minAlpha: 0.12 };
 
 // Alphas BASE (na frescura máxima) — multiplicados pelo decaimento real
@@ -192,6 +193,7 @@ export function KillZoneBandsPlugin({ chart, series, data }: KillZoneBandsPlugin
         ctx.moveTo(Math.round(rectX + rectWidth) + 0.5, laneTop);
         ctx.lineTo(Math.round(rectX + rectWidth) + 0.5, laneBottom);
         ctx.stroke();
+
       }
     };
 

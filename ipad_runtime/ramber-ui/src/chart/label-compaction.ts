@@ -18,7 +18,20 @@ export const TARGET_LABEL_COMPACT_PCT = 0.35;
  * perto que TARGET_LABEL_COMPACT_PCT% do seu próprio ponto médio — nunca
  * desloca preço, só decide o FORMATO do rótulo.
  */
-export function shouldCompactLabels(sortedLevels: number[], thresholdPct: number = TARGET_LABEL_COMPACT_PCT): boolean {
+export function shouldCompactLabels(levels: number[], thresholdPct: number = TARGET_LABEL_COMPACT_PCT): boolean {
+  // ACHADO DO RAIO-X (armadilha latente, não bug ao vivo): o parâmetro se
+  // chamava `sortedLevels` e a função CONFIAVA nisso. Com entrada fora de
+  // ordem, `price - anterior` fica NEGATIVO e a comparação `< thresholdPct`
+  // passa a ser trivialmente verdadeira — a função responderia "compacta
+  // tudo" sempre, em silêncio, sem nenhum erro. O único chamador real
+  // (EnhancedChart_110_Percent.tsx) ordena antes, então nada quebrava hoje;
+  // mas um segundo chamador futuro cairia direto na armadilha, e o sintoma
+  // (rótulos compactos sem motivo) não apontaria para cá.
+  //
+  // A função passa a garantir a própria pré-condição: cópia ordenada, O(n log n)
+  // sobre no máximo 5 níveis (stop + 3-4 alvos). Idempotente para quem já
+  // ordena — zero mudança de comportamento no caminho real.
+  const sortedLevels = [...levels].sort((a, b) => a - b);
   return sortedLevels.some((price, i) => {
     if (i === 0) return false;
     const ref = (price + sortedLevels[i - 1]) / 2;

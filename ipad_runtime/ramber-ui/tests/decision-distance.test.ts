@@ -9,6 +9,7 @@ import {
   computeDecisionDistance,
   formatDecisionDistance,
   describeDecisionDistance,
+  formatAtrUnits,
 } from "../src/nexus/decision-distance";
 
 describe("computeDecisionDistance — fail-closed", () => {
@@ -245,5 +246,64 @@ describe("decision-distance — disciplina do módulo", () => {
   it("documenta a limitação real (fronteira móvel) no próprio arquivo", () => {
     expect(src).toMatch(/limita[çc]/i);
     expect(src).toMatch(/fronteira anda|limiar se move/i);
+  });
+});
+
+describe("distância em ATR — a escala de volatilidade real", () => {
+  it("converte a distância para múltiplos do ATR real", () => {
+    // Preço 100, SMA 101 ⇒ falta 1/100 = 1% pra LONG. Com ATR 2%, isso é
+    // meia vela típica: 0.5× ATR. Conta verificável à mão.
+    const r = computeDecisionDistance({ lastPrice: 100, sma: 101, ema: 101, atrPercent: 2 });
+    expect(r.long!.gapPercent).toBeCloseTo(1, 10);
+    expect(r.long!.atrUnits).toBeCloseTo(0.5, 10);
+  });
+
+  it("o MESMO percentual vale coisas diferentes em regimes diferentes", () => {
+    // Este é o ponto inteiro da métrica: 1% de distância é quase nada num
+    // mercado que anda 3% por vela, e muito num que anda 0.2%.
+    const calmo = computeDecisionDistance({ lastPrice: 100, sma: 101, ema: 101, atrPercent: 0.2 });
+    const agitado = computeDecisionDistance({ lastPrice: 100, sma: 101, ema: 101, atrPercent: 3 });
+    expect(calmo.long!.gapPercent).toBeCloseTo(agitado.long!.gapPercent, 10); // mesmo %
+    expect(calmo.long!.atrUnits).toBeCloseTo(5, 10); // 5 velas típicas — longe
+    expect(agitado.long!.atrUnits).toBeCloseTo(1 / 3, 10); // um terço de vela — perto
+    expect(calmo.long!.atrUnits!).toBeGreaterThan(agitado.long!.atrUnits!);
+  });
+
+  it("lado já satisfeito tem 0 em ATR também (nunca um resíduo)", () => {
+    const r = computeDecisionDistance({ lastPrice: 110, sma: 100, ema: 105, atrPercent: 2 });
+    expect(r.long!.gapPercent).toBe(0);
+    expect(r.long!.atrUnits).toBe(0);
+  });
+
+  it("fail-closed: sem ATR real, a leitura em ATR não existe (nunca é estimada)", () => {
+    const semAtr = computeDecisionDistance({ lastPrice: 100, sma: 101, ema: 101 });
+    expect(semAtr.status).toBe("OK"); // o percentual continua real
+    expect(semAtr.long!.atrUnits).toBeNull();
+    expect(semAtr.short!.atrUnits).toBeNull();
+  });
+
+  it("ATR zero ou negativo devolve null, nunca Infinity", () => {
+    // A armadilha real: 1 / 0 = Infinity, que a UI mostraria como um número
+    // gigante e falso em vez de "não sei".
+    for (const atrPercent of [0, -1, NaN, Infinity]) {
+      const r = computeDecisionDistance({ lastPrice: 100, sma: 101, ema: 101, atrPercent });
+      expect(r.long!.atrUnits, String(atrPercent)).toBeNull();
+    }
+  });
+
+  it("formatAtrUnits nunca confunde 'quase zero' com 'já satisfeito'", () => {
+    expect(formatAtrUnits(0)).toBe("0×");
+    expect(formatAtrUnits(0.01)).toBe("<0.05×");
+    expect(formatAtrUnits(0.01)).not.toBe("0.00× ATR");
+    expect(formatAtrUnits(0.5)).toBe("0.50× ATR");
+    expect(formatAtrUnits(null)).toBe("—");
+    expect(formatAtrUnits(NaN)).toBe("—");
+  });
+
+  it("a frase honesta menciona a volatilidade só quando ela é real", () => {
+    const comAtr = computeDecisionDistance({ lastPrice: 100, sma: 101, ema: 101, atrPercent: 2 });
+    const semAtr = computeDecisionDistance({ lastPrice: 100, sma: 101, ema: 101 });
+    expect(describeDecisionDistance(comAtr, "long")).toMatch(/ATR de Wilder 14/);
+    expect(describeDecisionDistance(semAtr, "long")).not.toMatch(/ATR/);
   });
 });

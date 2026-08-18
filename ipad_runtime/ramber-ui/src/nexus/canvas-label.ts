@@ -16,6 +16,17 @@
 // (rectX+3/rectY+2, clippedX+3/3, 6/rectY+h/2, peakW+3/y-1) — a
 // inconsistência real que a diretiva descreve.
 //
+// CORREÇÃO DE DOCUMENTAÇÃO (raio-X do ecossistema): o parágrafo acima é o
+// registro HISTÓRICO de quando este módulo nasceu e ficou desatualizado —
+// KillZoneBandsPlugin e MarketSessionBandsPlugin foram redesenhados depois
+// (faixa de lane fina, Achado 2.6) e hoje NÃO usam drawCanvasLabel: desenham
+// texto simples via ctx.fillText, mas ambos já consomem activeCanvasLabelFont()
+// desta mesma casa — o que importava (uma decisão de tamanho, não duas) está
+// unificado. Consumidores REAIS de drawCanvasLabel hoje, verificados por grep:
+// DepthChartPlugin, LiquidationHeatmapPlugin e LiquidityZonesPlugin — três,
+// não cinco. Documentação que envelhece em silêncio é a mesma classe de
+// defeito que este arquivo existe para evitar.
+//
 // Esta função centraliza o desenho de etiqueta em caixa: cantos suavizados
 // via roundRect REAL do Canvas 2D quando o motor suporta (feature-detect
 // honesto, mesmo padrão já usado por
@@ -28,10 +39,9 @@
 // ESCALA POR TELA (pedido do Operador: "tamanho padrão de qualquer terminal
 // pra qualquer tela, qualquer monitor, iPad").
 //
-// ACHADO MEDIDO: esta primitiva é usada por 5 plugins (KillZoneBands,
-// LiquidationHeatmap, LiquidityZones, InstitutionalZone, MarketSessionBands) e
-// tinha a fonte CONGELADA em 9px, enquanto o eixo nativo do gráfico e o
-// PriceLabelStackPlugin JÁ escalavam via resolveChartUltraWideScale. Num
+// ACHADO MEDIDO: esta primitiva tinha a fonte CONGELADA em 9px, enquanto o
+// eixo nativo do gráfico e o PriceLabelStackPlugin JÁ escalavam via
+// resolveChartUltraWideScale. Num
 // monitor >= 2560px o tick do eixo virava 13px e a etiqueta de zona continuava
 // 9px — 4px de diferença entre dois textos lado a lado. Não era "fonte
 // pequena": eram DUAS decisões de tamanho para a mesma pergunta, e só uma
