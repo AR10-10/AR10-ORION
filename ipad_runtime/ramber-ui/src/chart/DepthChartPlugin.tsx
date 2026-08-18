@@ -37,6 +37,7 @@
 // espaço legível — mesma razão de sempre, valor só realocado pra fonte
 // única).
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { useOrderBookSnapshot, type OrderBookLevel } from "../store/unified-snapshot-store";
 import { detectWalls } from "../nexus/order-book-depth";
@@ -270,7 +271,7 @@ export function DepthChartPlugin({ chart, series }: DepthChartPluginProps) {
       ref={canvasRef}
       data-plugin="depth-chart"
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("order_book_depth") }}
     />
   );
 }

@@ -13,6 +13,7 @@
 // do mercado, nunca uma segunda decisão de trading — o único LONG/SHORT/
 // WAIT real continua sendo o Core Engine.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import type { StructureBreak } from "../engine-bridge";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
@@ -174,7 +175,7 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("structure_breaks") }}
     />
   );
 }

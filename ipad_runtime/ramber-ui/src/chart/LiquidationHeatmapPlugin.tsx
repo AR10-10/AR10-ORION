@@ -26,6 +26,7 @@
 // — só o rótulo do bucket de maior notional real (mesmo papel do POC do
 // Volume Profile) usa uma linha, 1px sólida.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import { CHART_LEFT_EDGE_FRACTION } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { computeLiquidationHeatmap, type LiquidationHeatmapResult } from "../nexus/liquidation-heatmap";
@@ -181,7 +182,7 @@ export function LiquidationHeatmapPlugin({ chart, series, liquidations, symbol }
       ref={canvasRef}
       data-plugin="liquidation-heatmap"
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("liquidation_heatmap") }}
     />
   );
 }

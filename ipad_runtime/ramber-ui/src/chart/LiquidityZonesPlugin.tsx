@@ -34,6 +34,7 @@
 // cada frame incondicionalmente. Main thread sagrado: cada redraw é um
 // punhado de fillRect/strokeRect, não um cálculo pesado.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
 // Diretriz Final de Lapidação Visual, Adendo, Parte 11 ("etiquetas
@@ -350,7 +351,7 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("liquidity_zones") }}
     />
   );
 }

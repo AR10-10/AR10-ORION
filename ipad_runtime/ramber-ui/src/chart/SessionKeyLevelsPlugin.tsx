@@ -57,6 +57,7 @@
 // import de MarketSessionBandsPlugin já migrado, mas manter o nome não
 // quebra nenhum consumidor externo que ainda dependa dele).
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeSessionKeyLevels, sessionGenerationWeight, type SessionKeyLevel } from "../nexus/market-session";
 
@@ -203,7 +204,7 @@ export function SessionKeyLevelsPlugin({ chart, series, data }: SessionKeyLevels
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("session_key_levels") }}
     />
   );
 }

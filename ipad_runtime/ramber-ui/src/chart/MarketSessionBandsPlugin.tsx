@@ -70,6 +70,7 @@
 // desenham, cada uma mais discreta que a anterior, nunca dezenas de
 // faixas na mesma opacidade.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeSessionKeyLevels, sessionGenerationWeight, SESSION_GENERATION_FADE, type SessionKeyLevel } from "../nexus/market-session";
 // Achado 2.6: a altura/posição desta faixa deixou de ser um número local e
@@ -254,7 +255,7 @@ export function MarketSessionBandsPlugin({ chart, series, data }: MarketSessionB
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("market_sessions") }}
     />
   );
 }

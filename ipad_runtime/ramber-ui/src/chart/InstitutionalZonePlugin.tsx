@@ -27,6 +27,7 @@
 // LEI 24: display-only puro — apenas desenha o que o motor já decidiu ser
 // uma confluência geométrica real, nunca lê nem altera decisão nenhuma.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { InstitutionalZone } from "../nexus/institutional-zones";
 
@@ -245,7 +246,7 @@ export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, l
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("institutional_zones") }}
     />
   );
 }

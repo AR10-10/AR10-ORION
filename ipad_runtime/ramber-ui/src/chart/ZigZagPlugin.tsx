@@ -19,6 +19,7 @@
 // ZigZag é leitura de estrutura de swing, nunca um nível de preço isolado
 // (que usaria a família âmbar/liquidez) nem uma direção (verde/vermelho).
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeZigZag, type ZigZagPoint } from "../engine-bridge";
 
@@ -130,7 +131,7 @@ export function ZigZagPlugin({ chart, series, data }: ZigZagPluginProps) {
       ref={canvasRef}
       data-plugin="zigzag"
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("zigzag") }}
     />
   );
 }

@@ -42,6 +42,7 @@
 // desenhada pelo seu próprio plugin — só o chip de texto flutuante é
 // seletivo.
 import { useEffect, useRef } from "react";
+import { CHART_LABEL_Z_INDEX } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import {
   resolveLabelStackPositions,
@@ -524,7 +525,7 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
       // visual que este plugin existe para eliminar. z-index bem acima do
       // maior valor usado pela lib (2) garante que este overlay SEMPRE
       // pinta por último, cobrindo o tick nativo por completo.
-      style={{ width: "100%", height: "100%", zIndex: 5 }}
+      style={{ width: "100%", height: "100%", zIndex: CHART_LABEL_Z_INDEX }}
     />
   );
 }

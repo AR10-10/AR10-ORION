@@ -41,6 +41,7 @@
 // inofensivo) e usa o canvas de reserva — o mesmo caminho de desenho
 // direto já comprovado em produção pelo LiquidityZonesPlugin.
 import { useEffect, useRef, useState } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import { getChartBodyBounds } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { useL2History, useOrderflowHistory } from "../store/unified-snapshot-store";
@@ -310,12 +311,12 @@ export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPlugin
       <canvas
         ref={workerCanvasRef}
         className="absolute inset-0 pointer-events-none"
-        style={{ width: "100%", height: "100%", display: mode === "worker" ? "block" : "none" }}
+        style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("order_flow_heatmap"), display: mode === "worker" ? "block" : "none" }}
       />
       <canvas
         ref={mainCanvasRef}
         className="absolute inset-0 pointer-events-none"
-        style={{ width: "100%", height: "100%", display: mode === "main" ? "block" : "none" }}
+        style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("order_flow_heatmap"), display: mode === "main" ? "block" : "none" }}
       />
     </>
   );

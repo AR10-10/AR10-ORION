@@ -17,6 +17,7 @@
 // past. It spans the full visible width, matching how the price lines it
 // complements already render (createPriceLine is full-width by nature).
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
 
@@ -168,7 +169,7 @@ export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh, confid
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("trade_plan_zone") }}
     />
   );
 }

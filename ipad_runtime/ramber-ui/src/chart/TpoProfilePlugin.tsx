@@ -32,6 +32,7 @@
 // lane, imediatamente à esquerda da lane do Volume Profile — nunca cruza
 // para o espaço dele.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { computeTpoProfile, type TpoProfileResult } from "../nexus/tpo-profile";
 import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx } from "./chart-profile-lanes";
@@ -184,7 +185,7 @@ export function TpoProfilePlugin({ chart, series, data }: TpoProfilePluginProps)
       ref={canvasRef}
       data-plugin="tpo-profile"
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("tpo_profile") }}
     />
   );
 }

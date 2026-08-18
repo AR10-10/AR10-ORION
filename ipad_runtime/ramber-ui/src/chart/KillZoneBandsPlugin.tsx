@@ -54,6 +54,7 @@
 //
 // LEI 24: display only, puro contexto temporal — nunca uma decisão.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeKillZoneSpans, type KillZoneSpan } from "../nexus/kill-zones";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
@@ -223,7 +224,7 @@ export function KillZoneBandsPlugin({ chart, series, data }: KillZoneBandsPlugin
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("kill_zones") }}
     />
   );
 }

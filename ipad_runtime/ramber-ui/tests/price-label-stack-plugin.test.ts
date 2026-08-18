@@ -402,9 +402,16 @@ describe('EnhancedChart_110_Percent: monta PriceLabelStackPlugin como o overlay 
     const idx = p.indexOf('<canvas');
     const closeIdx = p.indexOf('/>', idx);
     const block = p.slice(idx, closeIdx);
-    const zIndexMatch = block.match(/zIndex:\s*(\d+)/);
-    expect(zIndexMatch, 'zIndex explícito não encontrado no <canvas> do PriceLabelStackPlugin').not.toBeNull();
-    expect(Number(zIndexMatch![1])).toBeGreaterThan(2);
+    // O literal `5` virou CHART_LABEL_Z_INDEX (chart-layer-depth.ts). O que
+    // esta guarda protege — "etiqueta é o overlay mais acima, ordem no DOM
+    // sozinha não basta" — continua valendo e agora é SISTÊMICO: o mesmo
+    // módulo dá profundidade às 15 camadas, e chart-layer-depth.test.ts prova
+    // que a etiqueta fica acima de TODAS. A guarda passa a exigir o contrato,
+    // não o número.
+    expect(block).toMatch(/zIndex:\s*CHART_LABEL_Z_INDEX/);
+    const depth = readFileSync(resolve(__dirname, '../src/chart/chart-layer-depth.ts'), 'utf-8');
+    expect(depth).toContain('export const CHART_LABEL_Z_INDEX');
+    expect(depth).toMatch(/label:\s*\d+/);
   });
 
   it('nunca sujeito a um toggle de camada — os rótulos que ele substitui (S1/R1/VWAP/NL/EMA/preço) sempre foram sempre-visíveis por padrão, sem entrada em CHART_LAYER_IDS', () => {

@@ -54,6 +54,7 @@
 //     corredor estático (já existente, já testado) é a leitura honesta —
 //     "chegou"/"parou" não deveria continuar girando.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { AuraReading } from "../nexus/aura-lifecycle";
 import type { CycloneRealParams, CycloneWorkerOutMessage } from "../nexus/conviction-cyclone-draw";
@@ -446,12 +447,12 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
       <canvas
         ref={cycloneCanvasRef}
         className="absolute inset-0 pointer-events-none"
-        style={{ width: "100%", height: "100%", display: "none" }}
+        style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("neural_market_aura"), display: "none" }}
       />
       <canvas
         ref={staticCanvasRef}
         className="absolute inset-0 pointer-events-none"
-        style={{ width: "100%", height: "100%", display: "none" }}
+        style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("neural_market_aura"), display: "none" }}
       />
     </>
   );

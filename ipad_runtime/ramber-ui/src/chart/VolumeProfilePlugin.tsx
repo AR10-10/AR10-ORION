@@ -32,6 +32,7 @@
 // a lane 0 (rightmost) — offset sempre 0, então este plugin continua
 // visualmente idêntico a antes; só o nome da fonte da fração mudou.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { useVolumeProfileSnapshot } from "../store/unified-snapshot-store";
 import { bucketMidPrice } from "../nexus/volume-profile";
@@ -170,7 +171,7 @@ export function VolumeProfilePlugin({ chart, series }: VolumeProfilePluginProps)
       ref={canvasRef}
       data-plugin="volume-profile"
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("volume_profile") }}
     />
   );
 }
