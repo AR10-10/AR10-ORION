@@ -59,7 +59,14 @@ describe('alert-center: deriveSweepAlert', () => {
     expect(alert).not.toBeNull();
     expect(alert!.tone).toBe('info');
     expect(alert!.title).toBe('SWEEP · TOPO VARRIDO');
-    expect(alert!.message).toContain('51000.00');
+    // MUDANÇA REGISTRADA (fonte única de formatação de preço): antes era
+    // "51000.00" — a régua local do alert-center usava 2 casas fixas acima
+    // de 1. A régua canônica usa 0 casa acima de 1000, que é exatamente o
+    // que o eixo do gráfico já fazia. Os dois canais passam a dizer o
+    // mesmo número para o mesmo preço; ".00" em cinquenta e um mil era
+    // ruído, não precisão.
+    expect(alert!.message).toContain('51000');
+    expect(alert!.message).not.toContain('51000.00');
     expect(alert!.message).toContain('92%');
     expect(alert!.message).toContain('viés baixa'); // topo varrido = liquidez compradora tomada, viés de reversão pra baixo
   });

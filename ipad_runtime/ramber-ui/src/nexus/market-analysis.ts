@@ -31,6 +31,7 @@ import {
 } from "./operational-readability";
 import type { NexusDecision } from "./decision-layer";
 import { NEXUS_PLAN_GAP_LABEL } from "./decision-layer";
+import { formatPrice as sharedFormatPrice } from "./price-format";
 
 export const MARKET_ANALYSIS_CONTRACT_VERSION = 1 as const;
 
@@ -283,7 +284,9 @@ export const PUBLIC_BIAS_LABEL: Record<NexusBiasLabel, string> = {
 };
 
 function fmtPrice(v: number): string {
-  return v.toFixed(v >= 1000 ? 0 : 2);
+  // Delega à fonte única — esta função era uma das TRÊS cópias byte a byte
+  // de `v.toFixed(v >= 1000 ? 0 : 2)` espalhadas pelo app.
+  return sharedFormatPrice(v);
 }
 
 /**

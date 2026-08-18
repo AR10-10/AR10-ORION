@@ -48,6 +48,7 @@
 // entrega).
 import type { TrackedPlan, TrackRecordState } from "./signal-track-record";
 import type { TrapSignal, SweptLevel } from "./trap-detection";
+import { formatPrice as sharedFormatPrice } from "./price-format";
 
 export type AlertTone = "success" | "info" | "danger";
 
@@ -78,7 +79,10 @@ export interface AlertEvent {
 }
 
 function formatPrice(price: number): string {
-  return price >= 1 ? price.toFixed(2) : price.toFixed(6);
+  // Delega à fonte única. A régua antiga daqui (6 casas fixas abaixo de 1)
+  // era menos ruim que a das outras cópias, mas ainda cega para preços
+  // muito baixos e ruidosa para os nem tão baixos.
+  return sharedFormatPrice(price);
 }
 
 /** Compara a última entrada de `record.history` contra a última vista

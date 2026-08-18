@@ -384,6 +384,7 @@ import { fetchOkxPerpTicker } from "./cross-exchange/okx-futures";
 // de cross-check — resposta do Operador, secundária/mais completa, nunca
 // substitui a Binance como fonte primária.
 import { fetchMexcFuturesPerpTicker } from "./cross-exchange/mexc-futures";
+import { formatPrice as sharedFormatPrice } from "./nexus/price-format";
 import {
   LayoutDashboard,
   BarChart2,
@@ -4883,7 +4884,9 @@ function RadarPanel() {
 // privado de nexus/market-analysis.ts (que formata para o TEXTO de X, um
 // alvo de renderização diferente).
 function fmtPrice(v: number): string {
-  return v.toFixed(v >= 1000 ? 0 : 2);
+  // Delega à fonte única — esta função era uma das TRÊS cópias byte a byte
+  // de `v.toFixed(v >= 1000 ? 0 : 2)` espalhadas pelo app.
+  return sharedFormatPrice(v);
 }
 
 function MarketAnalysisPainelTab({ analysis }: { analysis: MarketAnalysis }) {
@@ -6772,7 +6775,7 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
   const targetHit = activeTargetIndex < targetsHit; // true once the ladder already proved this rung (authoritative, never re-derived)
   const stopHit = p !== null && !targetHit && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
-  const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
+  const f = (v: number) => sharedFormatPrice(v); // fonte única (nexus/price-format.ts)
   // Diretriz Complementar §3/§7: ETA dinâmica real do alvo ATIVO — mesma
   // leitura única computada em App() (contexto), nunca recalculada aqui.
   // null honesto (sem progresso direcional/ATR/horizonte) => campo ausente.
@@ -6895,7 +6898,7 @@ function StructureLevelsStrip() {
   const support: number | null = engine?.support ?? null;
   const resistance: number | null = engine?.resistance ?? null;
   if (support === null && resistance === null) return null;
-  const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
+  const f = (v: number) => sharedFormatPrice(v); // fonte única (nexus/price-format.ts)
   const strengthNote = (strength: { label: string; touches: number } | null | undefined, breakouts: number | undefined) =>
     strength ? ` · ${strength.label} ${strength.touches}x/${breakouts ?? 0}x` : "";
   return (

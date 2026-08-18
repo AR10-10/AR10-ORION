@@ -188,6 +188,7 @@ import { clusterSweptPrices } from "../nexus/trap-detection";
 import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER, type TrendChannelDirection } from "../nexus/trend-channel-engine";
 import { shouldCompactLabels } from "./label-compaction";
 import { formatTickMark } from "./tick-mark-format";
+import { formatPrice } from "../nexus/price-format";
 import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import { PriceLabelStackPlugin, type PriceAxisLabel } from "./PriceLabelStackPlugin";
 
@@ -601,11 +602,11 @@ const NL_STATE_COLOR: Record<DirectionalLineState, string> = {
 // profissional"). Só o TEXTO do label muda — o preço real usado pra
 // posicionar a linha/conector nunca perde precisão.
 function fmtAxisLabelPrice(v: number): string {
-  if (v >= 1000) return v.toFixed(0);
-  const withDecimals = v.toFixed(2);
-  // "500.00 (nível redondo) → 500": mesmo pedido, aplicado como regra —
-  // nunca um caso especial hardcoded pra um preço específico.
-  return withDecimals.endsWith(".00") ? v.toFixed(0) : withDecimals;
+  // Delega à fonte única (nexus/price-format.ts). O corte de ".00" que
+  // esta função fazia continua — vira o parâmetro `stripRoundZeros`. O que
+  // muda é só ABAIXO de 1, onde as 2 casas fixas escondiam o dígito que o
+  // Operador precisa ler (0,0654 aparecia como "0.07").
+  return formatPrice(v, true);
 }
 
 // Auditoria de arquitetura (revisão completa) — paginação histórica real:

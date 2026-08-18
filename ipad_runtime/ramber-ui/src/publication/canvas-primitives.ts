@@ -4,6 +4,8 @@
 // App.tsx) — zero cor nova inventada só para a exportação, porque a
 // identidade visual do AR10 já existe e a peça publicada precisa parecer
 // a MESMA marca do terminal, não uma segunda skin.
+import { formatPrice as sharedFormatPrice } from "../nexus/price-format";
+
 export const PUB_COLORS = {
   bg: "#010308",
   bgGradientEnd: "#050b16",
@@ -44,7 +46,9 @@ export function drawSilkLine(
 }
 
 export function fmtPrice(v: number): string {
-  return v.toFixed(v >= 1000 ? 0 : 2);
+  // Delega à fonte única — esta função era uma das TRÊS cópias byte a byte
+  // de `v.toFixed(v >= 1000 ? 0 : 2)` espalhadas pelo app.
+  return sharedFormatPrice(v);
 }
 
 export function drawRoundedRect(
