@@ -18,7 +18,7 @@
 // preço real top/bottom de cada zona ainda não mitigada/varrida, o
 // mesmo filtro (!mitigated / !swept) e o mesmo cap de contagem que o
 // componente antigo já usava.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Crosshair } from "lucide-react";
 import {
   createChart,
@@ -782,7 +782,23 @@ export function fibDeservesAxisLabel(ratio: number, score: number): boolean {
   return (FIB_PRIMARY_RATIOS as readonly number[]).includes(ratio) || score > 0;
 }
 
-export function EnhancedChart_110_Percent({
+// MEMOIZADO — achado medido (o Operador relatou "está muito pesado"):
+//
+// App.tsx é UM componente de ~12.000 linhas, e o livro de ofertas atualiza
+// a 5×/s (ORDER_BOOK_THROTTLE_MS = 200). Sem memo, cada um desses ticks
+// re-reconciliava este componente inteiro — o mais pesado do app, com 16
+// plugins de canvas como filhos — cinco vezes por segundo, mesmo quando
+// nenhuma prop que ele lê tinha mudado.
+//
+// Medição que autorizou a mudança: das 40 props do call site, ZERO cria
+// array ou objeto novo inline — todas são primitivos ou identificadores
+// estáveis (fatias da store, useMemo, setState). É exatamente a condição
+// em que a comparação rasa do memo funciona: num tick de livro que não
+// muda nada do gráfico, ele passa e o subárvore inteira é pulada.
+//
+// Só a implementação vira privada; o nome exportado continua idêntico
+// (chamadores e testes não mudam).
+function EnhancedChart_110_PercentImpl({
   data,
   support,
   resistance,
@@ -3834,3 +3850,6 @@ export function EnhancedChart_110_Percent({
     </div>
   );
 }
+
+// O nome público continua sendo este — nenhum chamador ou teste muda.
+export const EnhancedChart_110_Percent = memo(EnhancedChart_110_PercentImpl);
