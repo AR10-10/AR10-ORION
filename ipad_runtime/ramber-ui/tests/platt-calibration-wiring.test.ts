@@ -88,7 +88,13 @@ describe('ExpectancyCard: mostra a probabilidade calibrada real (Fase 3) — nun
   it('consome calibrationResult do WidgetContext e só formata % quando calibrated===true', () => {
     const block = wholeFunction(app(), 'function ExpectancyCard(');
     expect(block).not.toBe('');
-    expect(block).toContain('calibrationResult }: { expectancyFilter?: FilterResult; calibrationResult?: CalibrationResult }');
+    // Intenção, não formatação: o componente lê calibrationResult do
+    // WidgetContext e o tipa. A asserção anterior travava a LINHA exata do
+    // destructuring e quebrou quando um terceiro campo entrou (memória
+    // contextual) — a fiação continuava correta, só tinha mudado de forma.
+    expect(block).toContain('calibrationResult,');
+    expect(block).toContain('calibrationResult?: CalibrationResult;');
+    expect(block).toContain('useContext(WidgetContext)');
     expect(block).toContain('calibrationResult?.calibrated && calibrationResult.probability !== null ? `${calibrationResult.probability}%` : DASH;');
     expect(block).toContain('label="Prob. Calibrada"');
     // razão real (fail-closed) só aparece quando NÃO calibrado — nunca escondida, mesmo padrão do warning de expectancyFilter

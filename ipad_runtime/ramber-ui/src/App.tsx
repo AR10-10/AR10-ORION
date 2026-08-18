@@ -58,7 +58,7 @@ import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } fr
 import { buildTradePlan, effectiveStopForTargetsHit, obstacleZonesInPath, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
 // Autonomy order: honest signal accuracy — plans tracked against the real
 // price, persisted across sessions, felt by the affective memory.
-import { rehydrateTrackRecord, hitRate, EMPTY_TRACK_RECORD, type TrackedPlan } from "./nexus/signal-track-record";
+import { rehydrateTrackRecord, hitRate, EMPTY_TRACK_RECORD, type TrackedPlan, type PlanOpenContext } from "./nexus/signal-track-record";
 import { rehydratePaperTrading, unrealizedPnl, unrealizedPnlPct, paperPositionContext } from "./nexus/paper-trading";
 // v16.0 DEFINITIVO §9: primeiro assinante real de ORGANISM.TRACK_RECORD.UPDATED
 // (event-bus.ts) — evento já emitido pelo OrganismOrchestrator, sem consumidor
@@ -334,6 +334,9 @@ import type { TacticalContextInput } from "./llm-bridge";
 import { voiceEngine } from "./voice/voice-engine";
 import { toVoiceAlerts } from "./voice/voice-dispatcher";
 import { deriveSnapshotAlerts } from "./nexus/snapshot-alerts";
+import { alertEmphasis, sortAlertsByUrgency } from "./nexus/alert-presentation";
+import { computeScenarioFingerprint } from "./nexus/scenario-fingerprint";
+import { recallContext, describeRecall, type ContextualRecall } from "./nexus/contextual-memory";
 import type { TerminalSnapshot } from "./voice/voice-intents";
 import { VoiceControlWidget } from "./voice/VoiceControlWidget";
 // GMIL (Global Market Intelligence Layer, src/gmil/) — Providers →
@@ -3037,6 +3040,37 @@ export default function App() {
     liveModelAgreement,
   ]);
 
+  // MEMÓRIA CONTEXTUAL: o que o histórico real já resolvido diz sobre
+  // contextos como o de AGORA.
+  //
+  // Achado que motivou a ligação: a fingerprint do cenário já era carimbada
+  // em cada plano aberto (efeito acima) e gravada em cada TradeCostResult,
+  // e `groupResultsByFingerprint` já existia — mas era chamada só pelo
+  // próprio teste. O organismo gravava a experiência e nunca a relia.
+  //
+  // Os 4 fatores são EXATAMENTE os mesmos que o efeito de stamping acima
+  // usa — zero segunda classificação, zero segunda fonte. A diferença é o
+  // tempo: lá é o contexto congelado na abertura do plano, aqui é o
+  // contexto vivo de agora, para procurar semelhança no que já resolveu.
+  const liveScenarioFingerprint = useMemo(
+    () =>
+      computeScenarioFingerprint({
+        vwapState: vwapCtx?.state ?? null,
+        nexusLineState: nlState,
+        regime: engine?.marketRegime?.regime ?? null,
+        structureLabel: engine?.marketStructureLabel ?? null,
+      } as PlanOpenContext),
+    [vwapCtx?.state, nlState, engine?.marketRegime?.regime, engine?.marketStructureLabel],
+  );
+  // LEI 24: display only. Isto é contexto exibido ao Operador — nunca
+  // suprime, altera ou gera decisão. E nunca vira probabilidade: o que sai
+  // daqui é contagem observada + expectativa em R sobre amostra real, com
+  // o tamanho da amostra sempre visível ao lado.
+  const contextualRecall = useMemo(
+    () => recallContext(trackRecordResults, liveScenarioFingerprint),
+    [trackRecordResults, liveScenarioFingerprint],
+  );
+
   // Diretriz Complementar §18/§4 ("Conviction Engine"): registra na store a
   // amostra REAL do Score Geral a cada ciclo em que ele existe (WAIT/
   // DADOS_INSUFICIENTES nunca — pontuar o nada seria fabricação). Efeito,
@@ -3726,6 +3760,7 @@ export default function App() {
       institutionalScore,
       expectancyFilter,
       calibrationResult,
+      contextualRecall,
       decisionDistance,
       directionalConsensus,
       liquidityMap,
@@ -3823,6 +3858,7 @@ export default function App() {
       mexcCrossExchangeCheck,
       currentRsi,
       currentMacd,
+      contextualRecall,
     ],
   );
 
@@ -5473,16 +5509,27 @@ function AlertToastStack({ alerts, onDismiss }: { alerts: AlertEvent[]; onDismis
   if (alerts.length === 0) return null;
   return (
     <div className="!fixed !z-[1200] bottom-3 right-3 flex flex-col gap-1.5 w-64 max-w-[85vw] pointer-events-none">
-      {alerts.map((a) => {
+      {/* Mais urgente em cima: com 3 toasts subindo juntos, o olho vai no
+          primeiro — e o primeiro tem de ser o que mais importa. A lista de
+          estado continua na ordem de chegada (é ela que o auto-dismiss
+          usa); só a apresentação reordena. */}
+      {sortAlertsByUrgency(alerts).map((a) => {
         const tone = ALERT_TONE_STYLE[a.tone];
+        // Urgência em FORMA, nunca em cor: a cor já diz o que aconteceu
+        // (bom/neutro/ruim) e um CRITICAL pode ser boa notícia.
+        const emphasis = alertEmphasis(a.priority);
         return (
           <div
             key={a.id}
-            className={`animate-fade-in pointer-events-auto cyber-panel !bg-[#010308]/95 border-l-2 ${tone.border} rounded px-2.5 py-2 relative overflow-hidden`}
+            style={{ borderLeftWidth: `${emphasis.railPx}px`, opacity: emphasis.opacity }}
+            className={`animate-fade-in pointer-events-auto cyber-panel !bg-[#010308]/95 ${tone.border} rounded px-2.5 py-2 relative overflow-hidden${emphasis.ring ? " ring-1 ring-inset" : ""}`}
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className={`text-[0.55rem] font-black tracking-wide ${tone.text}`}>{a.title}</div>
+                <div className={`text-[0.55rem] font-black tracking-wide ${tone.text}`}>
+                  {emphasis.marker && <span className="mr-1 opacity-80">{emphasis.marker}</span>}
+                  {a.title}
+                </div>
                 <div className="text-[0.48rem] text-[#8ab4f8]/80 mt-0.5 leading-snug">{a.message}</div>
               </div>
               <button
@@ -5779,8 +5826,15 @@ function ScoreContextCard() {
 // POR QUE o CoreSignalBadge pode mostrar NEUTRO precisa estar tão visível
 // quanto o próprio badge (LEI 24: supressão nunca é silenciosa).
 function ExpectancyCard() {
-  const { expectancyFilter, calibrationResult }: { expectancyFilter?: FilterResult; calibrationResult?: CalibrationResult } =
-    useContext(WidgetContext) || {};
+  const {
+    expectancyFilter,
+    calibrationResult,
+    contextualRecall,
+  }: {
+    expectancyFilter?: FilterResult;
+    calibrationResult?: CalibrationResult;
+    contextualRecall?: ContextualRecall | null;
+  } = useContext(WidgetContext) || {};
   const stats = expectancyFilter?.stats ?? null;
 
   const badgeColor =
@@ -5859,6 +5913,34 @@ function ExpectancyCard() {
       )}
       {expectancyFilter?.warning && (
         <span className="text-[0.42rem] text-[#f0d06f]/80 leading-tight">{expectancyFilter.warning}</span>
+      )}
+      {/* MEMÓRIA CONTEXTUAL — o que o histórico já resolvido diz sobre
+          contextos como o de agora (regime + estrutura + VWAP + Nexus Line).
+          Diferente da expectância acima, que agrupa por symbol:timeframe:
+          dois trades no mesmo par podem ter acontecido em regimes
+          completamente diferentes e caem na mesma estatística. Esta linha
+          separa maçã de laranja.
+          LEI 24: display only. Nunca é probabilidade — é contagem
+          observada + expectativa em R, com o tamanho da amostra sempre
+          junto do número. Ausente quando não há contexto comparável. */}
+      {contextualRecall && (
+        <div
+          className="flex items-start gap-1.5 border-t border-[#8ab4f8]/15 pt-1.5"
+          title={`Memória contextual. Assinatura procurada: ${contextualRecall.fingerprint}. Fatores realmente casados: ${contextualRecall.matchedFactors.join(", ") || "nenhum"}. Força da amostra: ${contextualRecall.strength}. Contagem observada sobre o Track Record real já resolvido — nunca uma probabilidade de acerto futuro.`}
+        >
+          <span className="text-[0.42rem] tracking-[0.12em] text-[#8ab4f8]/50 shrink-0 uppercase">Memória</span>
+          <span
+            className={`text-[0.42rem] leading-tight ${
+              contextualRecall.strength === "AMOSTRA_INSUFICIENTE"
+                ? "text-[#8ab4f8]/45"
+                : contextualRecall.matchLevel === "EXATO"
+                  ? "text-[#a0f0ff]/85"
+                  : "text-[#8ab4f8]/70"
+            }`}
+          >
+            {describeRecall(contextualRecall)}
+          </span>
+        </div>
       )}
     </div>
   );
