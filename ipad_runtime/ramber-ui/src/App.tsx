@@ -183,6 +183,7 @@ import { computeTpoProfile } from "./nexus/tpo-profile";
 import { simulateTradeCostsBatch } from "./nexus/trade-simulation";
 import { evaluateSignalFilter, MIN_TRADES_FOR_VALID_EXPECTANCY, type FilterResult } from "./nexus/expectancy";
 import { computeDecisionDistance, formatDecisionDistance, formatAtrUnits, describeDecisionDistance, type DecisionDistanceReading } from "./nexus/decision-distance";
+import { computeDirectionalConsensus, describeDirectionalConsensus, normalizeSide, sideFromSigned, computeLiquidityMap, liquidityBias, type DirectionalSource, type DirectionalConsensusReading, type LiquidityTarget, type LiquidityMapReading } from "./nexus/directional-consensus";
 import { resolveFloatingWidgetOrigin } from "./nexus/floating-widget-origin";
 // Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
 // councilVotesToModelVotes/regimeModelVote/fuseModelVotes/alignFusedConfidence
@@ -2496,6 +2497,116 @@ export default function App() {
   const councilFromSnapshot = useCouncilSnapshot();
   const priceFromSnapshot = usePriceSnapshot();
 
+  // ═══ MAPA DE LIQUIDEZ: ACIMA E ABAIXO ═══
+  // "mostrar no gráfico onde tem liquidez que é possível buscar, FVG e essas
+  // coisas, em cima e embaixo" (Operador).
+  //
+  // Achado: as zonas JÁ são todas calculadas e desenhadas (FVG, Order Block,
+  // Void, pools de liquidez). O que NUNCA existiu foi a leitura DIRECIONAL
+  // delas — o Operador via as caixas mas não tinha, em lugar nenhum, "o alvo
+  // mais próximo acima está a X% e abaixo a Y%". Geometria pura sobre dado
+  // real já pronto: zero motor novo, zero rede.
+  const liquidityMap = useMemo<LiquidityMapReading>(() => {
+    const p = typeof priceData?.price === "number" ? priceData.price : null;
+    if (!Number.isFinite(p)) return computeLiquidityMap(null, []);
+    const price = p as number;
+    const targets: LiquidityTarget[] = [];
+    // A borda que o preço encontra PRIMEIRO ao caminhar até a zona: a BASE
+    // se a zona está acima, o TOPO se está abaixo. Usar sempre o mesmo lado
+    // daria uma distância sistematicamente errada em metade dos casos —
+    // erro sutil que ninguém notaria olhando a tela.
+    const pushZones = (list: PriceZone[] | null | undefined, kind: string) => {
+      for (const z of list ?? []) {
+        if (z.mitigated) continue;
+        const edge = z.bottom > price ? z.bottom : z.top;
+        if (Number.isFinite(edge)) targets.push({ price: edge, kind });
+      }
+    };
+    pushZones(smcZones?.fairValueGaps, "FVG");
+    pushZones(smcZones?.orderBlocks, "OB");
+    pushZones(liquidityVoids, "VOID");
+    for (const z of smcZones?.liquidityZones ?? []) {
+      if (z.swept || !Number.isFinite(z.price)) continue;
+      targets.push({ price: z.price, kind: "POOL" });
+    }
+    return computeLiquidityMap(price, targets);
+  }, [smcZones, liquidityVoids, priceData?.price]);
+
+  // ═══ SINCRONIZAÇÃO LONG/SHORT COM TODO O ECOSSISTEMA ═══
+  // "sincroniza o long e o short com todo ecossistema... o operador não vai
+  // ter dúvida na entrada, se é long ou short" (pedido direto do Operador).
+  //
+  // Achado que originou isto: a tela mostrava QUATRO números direcionais
+  // diferentes (BID%, massa do Conselho, long/short ratio, e o badge do
+  // Núcleo) sem NADA declarando como se relacionam. Cada um mede uma coisa
+  // real e diferente — mas "BID 54%" ao lado de um badge "SHORT" parece
+  // contradição, e é essa a dúvida na entrada.
+  //
+  // Aqui NADA é recalculado: cada `side` abaixo é uma leitura que outro motor
+  // JÁ resolveu, só normalizada para um vocabulário único
+  // (nexus/directional-consensus.ts). O Núcleo é a REFERÊNCIA, nunca um voto
+  // (LEI 24). Fonte sem leitura real fica FORA do denominador.
+  const directionalConsensus = useMemo(() => {
+    const sources: DirectionalSource[] = [
+      {
+        code: "ESTR",
+        name: "Estrutura de Mercado",
+        side: normalizeSide(engine.marketStructureLabel),
+        measures: "sequência real de topos e fundos (HH/HL vs LH/LL) no timeframe ativo",
+      },
+      {
+        code: "REG",
+        name: "Regime de Mercado",
+        side: normalizeSide(engine.marketRegime?.direction ?? null),
+        measures: "direção do regime por ADX/DI de Wilder — só existe em tendência, nunca em consolidação",
+      },
+      {
+        code: "HTF",
+        name: `Estrutura ${engine.htfTimeframe ?? "superior"}`,
+        side: normalizeSide(engine.htfMarketStructureLabel),
+        measures: "a mesma leitura de estrutura, num timeframe maior — contexto de prazo mais longo",
+      },
+      {
+        code: "CONS",
+        name: "Conselho",
+        side: normalizeSide(councilFromSnapshot?.stance ?? null),
+        measures: "massa de opinião de um pool linear de agentes — nunca uma probabilidade calibrada",
+      },
+      {
+        code: "kNN",
+        name: "Classificador Lorentziano",
+        side: normalizeSide(realCycle?.lorentzian?.classification ?? null),
+        measures: "k-NN sobre a mesma janela real de candles — confluência independente",
+      },
+      {
+        code: "FLUX",
+        name: "Fluxo (CVD)",
+        side: sideFromSigned(num(cvd) ? cvd : null),
+        measures: "delta cumulativo real de volume: agressão compradora menos vendedora",
+      },
+      {
+        code: "LIVR",
+        name: "Livro (desequilíbrio)",
+        // Zona morta de 5%: sem ela, um desequilíbrio de 0.1% viraria um
+        // "voto" que não carrega informação nenhuma.
+        side: sideFromSigned(engine.imbalance, 0.05),
+        measures: "parcela de liquidez PARADA no livro — é oferta em repouso, nunca intenção de tendência",
+      },
+    ];
+    return computeDirectionalConsensus(normalizeSide(engine.direction), sources);
+  }, [
+    engine.marketStructureLabel,
+    engine.marketRegime?.direction,
+    engine.htfMarketStructureLabel,
+    engine.htfTimeframe,
+    engine.imbalance,
+    engine.direction,
+    councilFromSnapshot?.stance,
+    realCycle?.lorentzian?.classification,
+    cvd,
+  ]);
+
+
   // Phase Ω Priority 2 (Confluence/Conviction Engine): levantado para cá
   // (antes vivia só dentro de DecisionValidationWidget) porque a Neural
   // Market Aura (ChartWidget) agora precisa da MESMA leitura real —
@@ -3571,6 +3682,8 @@ export default function App() {
       expectancyFilter,
       calibrationResult,
       decisionDistance,
+      directionalConsensus,
+      liquidityMap,
       confidenceZone,
       orderflowTrend,
       convictionTrend,
@@ -3642,6 +3755,8 @@ export default function App() {
       expectancyFilter,
       calibrationResult,
       decisionDistance,
+      directionalConsensus,
+      liquidityMap,
       confidenceZone,
       orderflowTrend,
       convictionTrend,
@@ -3799,6 +3914,11 @@ export default function App() {
                         <TradFiEmptyState compact assetLabel="MARKET INTELLIGENCE" />
                       ) : (
                         <>
+                          {/* PRIMEIRO item da gaveta de propósito: é a leitura
+                              que responde "long ou short?" antes de qualquer
+                              detalhe. Pedido literal do Operador — "o operador
+                              não vai ter dúvida na entrada". */}
+                          <DirectionalSyncPanel />
                           <MarketDirectionWidget />
                           <MarketBiasDecisionCard />
                         </>
@@ -7008,6 +7128,116 @@ function DecisionDistanceBadge() {
       <DecisionDistanceSide label="TO LONG" reading={reading} which="long" />
       <span className="w-px h-3.5 bg-[#8ab4f825]" />
       <DecisionDistanceSide label="TO SHORT" reading={reading} which="short" />
+    </div>
+  );
+}
+
+
+// ═══ DirectionalSyncPanel — a superfície que tira a dúvida na entrada ═══
+//
+// "o operador não vai ter dúvida na entrada, se é long ou short" — pedido
+// literal. Uma linha por leitura real do ecossistema, cada uma dizendo:
+//   • o código curto da fonte (as iniciais, tamanho padrão da escala);
+//   • para que lado ELA aponta;
+//   • se isso CONCORDA com o Núcleo (✓) ou não (✗).
+//
+// O que este painel deliberadamente NÃO faz: fundir tudo num "score de LONG".
+// Seriam grandezas de naturezas diferentes — uma média delas não mede nada
+// real, e viraria exatamente o número inventado que a Regra de Ouro 2 proíbe.
+//
+// Cada linha carrega, no tooltip, O QUE aquela fonte mede. É a informação que
+// faltava e que gerava a dúvida: "BID 54%" ao lado de um badge SHORT só parece
+// contradição enquanto o Operador não sabe que um é liquidez PARADA no livro e
+// o outro é viés de TENDÊNCIA. Agora está escrito.
+function DirectionalSyncPanel() {
+  const { directionalConsensus, liquidityMap } = useContext(WidgetContext) || {};
+  const r: DirectionalConsensusReading | null = directionalConsensus ?? null;
+  const liq: LiquidityMapReading | null = liquidityMap ?? null;
+  // Fail-closed: sem nenhuma leitura real, o painel não aparece com zeros —
+  // um "0 de 0 alinhadas" seria pior que silêncio.
+  if (!r || r.status !== "OK") return null;
+
+  const sideColor = (side: string | null) =>
+    side === "LONG" ? "#00ffaa" : side === "SHORT" ? "#ff0055" : "#8ab4f8";
+
+  return (
+    <div className="cyber-panel bg-[#010308]/60 rounded p-2 flex flex-col gap-1.5 min-w-0">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="ar10-t-micro tracking-[0.2em] font-black text-[#00f0ff] uppercase">
+          Sincronia Direcional
+        </span>
+        <span
+          title={describeDirectionalConsensus(r)}
+          className="ar10-t-label font-black font-mono tabular-nums"
+          style={{ color: sideColor(r.core) }}
+        >
+          {r.aligned}/{r.reporting}
+        </span>
+      </div>
+
+      {/* Uma linha por fonte real. Fonte sem leitura aparece como "—" e NÃO
+          entra na contagem acima — silêncio nunca vira voto. */}
+      <div className="flex flex-col gap-[3px]">
+        {r.sources.map((s) => (
+          <div key={s.code} title={`${s.name} — ${s.measures}`} className="flex items-center justify-between gap-2">
+            <span className="ar10-t-micro font-bold tracking-wider text-[#8ab4f8]/70 shrink-0">{s.code}</span>
+            <span className="flex items-center gap-1.5 shrink-0">
+              <span className="ar10-t-micro font-bold font-mono" style={{ color: sideColor(s.side) }}>
+                {s.side ?? "—"}
+              </span>
+              {/* ✓/✗ só existe quando HÁ referência (o Núcleo emitindo) e a
+                  fonte opinou. Nos demais casos fica vazio, nunca um ✗ que o
+                  Operador leria como "esta fonte discorda". */}
+              <span
+                className="ar10-t-micro font-black w-[10px] text-center"
+                style={{ color: s.agrees === true ? "#00ffaa" : s.agrees === false ? "#ff0055" : "transparent" }}
+              >
+                {s.agrees === true ? "✓" : s.agrees === false ? "✗" : "·"}
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Liquidez ACIMA e ABAIXO — para onde o preço tem alvo real a buscar.
+          Não é previsão de direção: é onde estão as zonas. */}
+      {liq && liq.status === "OK" && (
+        <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#00f0ff15]">
+          <span
+            title={`Zonas reais NÃO mitigadas acima do preço (FVG, Order Block, Void, pools de liquidez). A mais próxima é a primeira que o preço encontraria subindo.`}
+            className="flex items-center gap-1"
+          >
+            <span className="ar10-t-micro font-bold text-[#00ffaa]/70">▲ LIQ</span>
+            <span className="ar10-t-micro font-mono tabular-nums text-[#00ffaa]">
+              {liq.above.count}
+              {liq.above.distancePercent !== null ? ` · ${liq.above.distancePercent.toFixed(2)}%` : ""}
+            </span>
+          </span>
+          <span
+            title={`Zonas reais NÃO mitigadas abaixo do preço. A mais próxima é a primeira que o preço encontraria caindo.`}
+            className="flex items-center gap-1"
+          >
+            <span className="ar10-t-micro font-mono tabular-nums text-[#ff0055]">
+              {liq.below.count}
+              {liq.below.distancePercent !== null ? ` · ${liq.below.distancePercent.toFixed(2)}%` : ""}
+            </span>
+            <span className="ar10-t-micro font-bold text-[#ff0055]/70">LIQ ▼</span>
+          </span>
+        </div>
+      )}
+
+      {/* Para onde há MAIS alvo real a buscar. Deliberadamente NÃO é previsão
+          de direção — é a leitura de onde as zonas estão. Empate exato não
+          anuncia vencedor (seria inventar assimetria onde não há), e nesse
+          caso esta linha simplesmente não aparece. */}
+      {liq && liquidityBias(liq) !== null && (
+        <span
+          title="Lado com MAIS zonas reais não mitigadas. É onde há mais alvo de liquidez a buscar — nunca uma previsão de para onde o preço vai."
+          className="ar10-t-micro text-[#8ab4f8]/60"
+        >
+          Mais alvo {liquidityBias(liq) === "ACIMA" ? "acima ▲" : "abaixo ▼"}
+        </span>
+      )}
     </div>
   );
 }
