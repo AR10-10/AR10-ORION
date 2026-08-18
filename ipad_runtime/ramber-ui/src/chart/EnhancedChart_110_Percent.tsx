@@ -187,6 +187,7 @@ import { clusterSweptPrices } from "../nexus/trap-detection";
 // Channel) e a pesquisa que a confirmou.
 import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER, type TrendChannelDirection } from "../nexus/trend-channel-engine";
 import { shouldCompactLabels } from "./label-compaction";
+import { formatTickMark } from "./tick-mark-format";
 import { PriceLabelStackPlugin, type PriceAxisLabel } from "./PriceLabelStackPlugin";
 
 export interface EnhancedChartCandle {
@@ -1082,12 +1083,15 @@ export function EnhancedChart_110_Percent({
         // executa na prática, mas devolve ao formato padrão da lib em vez
         // de fabricar uma data — fail-closed honesto pro tipo que o
         // contrato real da lib ainda exige tratar.
-        tickMarkFormatter: (time, _tickMarkType, locale) => {
+        // O segundo parâmetro (granularidade da marca) era descartado, e
+        // por isso um gráfico de 30m mostrava "16 AGO" quatro vezes
+        // seguidas: quatro HORÁRIOS do mesmo dia, com a hora jogada fora
+        // (defeito visto em captura real do Operador, ZEC/USDT 30m). Agora
+        // ele é honrado — a lógica vive em tick-mark-format.ts, onde dá
+        // para testar; aqui só resta o guard de tipo da lib.
+        tickMarkFormatter: (time, tickMarkType, locale) => {
           if (!isUTCTimestamp(time)) return null;
-          const date = new Date(time * 1000);
-          const day = date.getDate();
-          const month = date.toLocaleString(locale, { month: "short" }).toUpperCase().replace(".", "");
-          return `${String(day).padStart(2, "0")} ${month}`;
+          return formatTickMark(time, tickMarkType, locale);
         },
       },
       // Diretriz explícita do Sprint 1: pan/zoom real e nativo — nunca
@@ -3571,8 +3575,21 @@ export function EnhancedChart_110_Percent({
           className="absolute left-2 top-7 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide rounded-[3px] px-1.5 py-0.5"
           style={{ color: "rgba(138, 180, 248, 0.75)", background: "rgba(5, 8, 16, 0.75)" }}
         >
+          {/* O MOTIVO da ausência não se repete aqui.
+              Achado de captura real do Operador (ZEC/USDT 30m): a frase
+              "Núcleo LONG, Conselho neutro" aparecia ao MESMO TEMPO na
+              faixa TRADE PLAN do cabeçalho e dentro desta etiqueta, no
+              gráfico — mesma string, mesma função de origem
+              (tradePlanAbsenceReason), duas vezes na tela.
+
+              A faixa do cabeçalho é renderizada sem corte responsivo
+              (flex-wrap, sempre presente em modo CRYPTO) e nas MESMAS
+              condições desta etiqueta — então o motivo nunca se perde ao
+              sair daqui. O que esta etiqueta tem de próprio, e que a faixa
+              não pode dizer, é o que as LINHAS DO GRÁFICO são; é só isso
+              que ela guarda agora. */}
           {engineFallbackLevels
-            ? `SEM PLANO DO CONSELHO · ${tradePlanAbsenceReason} · linhas abaixo são do Núcleo`
+            ? "SEM PLANO DO CONSELHO · linhas abaixo são do Núcleo"
             : `SEM TRADE PLAN · ${tradePlanAbsenceReason}`}
         </div>
       )}

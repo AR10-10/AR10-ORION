@@ -759,9 +759,31 @@ describe('EPC §5/§6 (continuação — relato direto do Operador: "falta apare
     // Janela alargada (era 900): achado real de screenshot (Operador,
     // texto sem fundo lendo como flutuante) somou um comentário explicando
     // o fundo/padding novos antes do texto SEM PLANO/SEM TRADE PLAN.
-    const block = s.slice(idx, idx + 1700);
-    expect(block).toContain('? `SEM PLANO DO CONSELHO · ${tradePlanAbsenceReason} · linhas abaixo são do Núcleo`');
+    // Janela alargada de novo: a remocao da duplicacao (abaixo) somou o
+    // comentario que explica por que o MOTIVO nao se repete aqui.
+    const block = s.slice(idx, idx + 3000);
+    // A intencao original, intacta: com as linhas do Nucleo na tela, o
+    // texto diz que falta o plano do CONSELHO — nunca "SEM TRADE PLAN".
+    expect(block).toContain('"SEM PLANO DO CONSELHO · linhas abaixo são do Núcleo"');
     expect(block).toContain(': `SEM TRADE PLAN · ${tradePlanAbsenceReason}`');
+  });
+
+  it('o MOTIVO da ausencia nao se repete no grafico — ele ja vive na faixa TRADE PLAN do cabecalho', () => {
+    // Achado de captura real (ZEC/USDT 30m): "Núcleo LONG, Conselho
+    // neutro" aparecia ao MESMO TEMPO na faixa do cabecalho e dentro da
+    // etiqueta do grafico. Mesma string, mesma funcao de origem, duas
+    // vezes na tela (violacao direta de "nada aparece em dois lugares se
+    // representar a mesma informacao").
+    const s = chart();
+    const idx = s.indexOf('{tradePlanAbsenceReason && (');
+    const block = s.slice(idx, idx + 3000);
+    // No ramo COM linhas do Nucleo, o motivo saiu; no ramo SEM linhas ele
+    // permanece, porque ali a etiqueta e a unica coisa na tela sobre isso.
+    expect(block).not.toContain('SEM PLANO DO CONSELHO · ${tradePlanAbsenceReason}');
+
+    // E a faixa do cabecalho continua sendo quem mostra o motivo, sempre.
+    const app = read('../src/App.tsx');
+    expect(app).toContain('<BarField label="Trade Plan" value={reason}');
   });
 });
 
