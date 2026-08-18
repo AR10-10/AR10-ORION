@@ -26,6 +26,10 @@
 // futuro explícito do Market Data Bus (que hoje transporta só candles) —
 // registrado no relatório da Fase E, não escondido.
 import type { ProviderFetchResult } from '../types';
+// Fonte ÚNICA da fórmula do basis, compartilhada com o Evidence Object por
+// ativo (js/real-data/binance-futures-public.js). Mesma disciplina de
+// fractal-swings.js: quem precisa do cálculo importa, nunca recopia.
+import { computeBasisPct } from '../../../../js/real-data/derivatives-math.js';
 
 export const FUNDING_EXTREME = 0.0005; // ±0.05%/8h ≈ extremo histórico BTC
 
@@ -54,9 +58,10 @@ export function parsePremiumIndex(json: any): {
   const indexPrice = Number.isFinite(indexRaw) && indexRaw > 0 ? indexRaw : null;
   // Basis = prêmio/desconto do perpétuo sobre a cesta spot, em % — o feed
   // combinado Spot×Perpetual em um número (positivo = perp acima do spot).
-  const basisPct = markPrice !== null && indexPrice !== null
-    ? ((markPrice - indexPrice) / indexPrice) * 100
-    : null;
+  // A fórmula saiu daqui para js/real-data/derivatives-math.js quando o
+  // Evidence Object por ativo passou a publicar o mesmo basis: uma
+  // definição, dois consumidores — nunca duas cópias que podem divergir.
+  const basisPct = computeBasisPct(markPrice, indexPrice);
   if (fundingRate === null) {
     return { ok: false, reason: 'campo_lastFundingRate_ausente_ou_invalido', fundingRate, markPrice, indexPrice, basisPct };
   }

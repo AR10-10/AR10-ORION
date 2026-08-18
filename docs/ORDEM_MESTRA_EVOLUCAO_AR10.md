@@ -70,8 +70,8 @@ Nenhum dos 8 motores participa de escolher a direção.
 | Risco / sizing | `src/risk/risk-engine.js` | **CONFIRMADO** — único que dimensiona |
 | Estrutura | `market-structure-engine.js` | **CONFIRMADO** — BOS/CHoCH importa dele |
 | Saúde | `health-monitor.ts` mede; `self-diagnostics.ts` e `organism-health.ts` sintetizam | **CONFIRMADO** — zero segunda medição |
-| **ATR / volatilidade** | — | **DUPLICADO** |
-| **Alertas** | — | **DUPLICADO (cobertura partida)** |
+| ATR / volatilidade | duas definições legítimas, nomeadas | **RESOLVIDO na execução** — Wilder-série × média-escalar, não é duplicação |
+| Alertas | `nexus/snapshot-alerts.ts` + `alert-center.ts` | **RESOLVIDO na execução** — produtor único; voz e UI consomem |
 | Ticker / order book / trades | WS único em `App.tsx:1453` | **CONFIRMADO** — 1 WebSocket real |
 
 ---
@@ -83,8 +83,8 @@ classificação A–F pedida:
 
 | Par | Veredicto | Ação |
 |---|---|---|
-| ATR (`lorentzian-classifier.js:196` × `regime-engine.js:163`) | mesma matemática, 2 implementações vivas | **B — consolidar** |
-| Alert Center × Voice Dispatcher | cobertura disjunta do mesmo domínio | **C — uma fonte, outra derivação** |
+| ATR (`lorentzian-classifier.js` × `regime-engine.js`) | **corrigido na execução:** Wilder recursivo devolvendo série × média simples devolvendo escalar — números diferentes por definição | **A — manter ambas**, agora nomeadas e documentadas |
+| Alert Center × Voice Dispatcher | cobertura disjunta do mesmo domínio | **C — feito:** `snapshot-alerts.ts` é a fonte, o dispatcher virou adaptador |
 | CVD × Delta | CVD é soma corrente do delta; delta da exaustão zera, CVD não | **A — manter ambas** |
 | Volume × Volume Profile | agrega por tempo × por bucket de preço | **A** |
 | Order Book × Liquidity Zones | repouso agora × inferida do histórico | **A** |
@@ -138,17 +138,24 @@ Nenhuma é código morto acidental. **Nenhuma deve ser removida.**
 | Nível | Cadência | Quem | Achado |
 |---|---|---|---|
 | 1 — tick | evento WS | order book, trades, tape | correto |
-| 2 — curto | **30 s** | `fetchSymbolDataGuarded` **e** `runCycle` | **DOIS timers na mesma cadência e no mesmo domínio** |
-| 3 — análise | **60 s** | `fetchDerivativesGuarded` **e** `runMultiTimeframeCycle` | **DOIS timers na mesma cadência** |
+| 2 — curto | **30 s** | `fetchSymbolDataGuarded` (efeito de rede/WS) · `runCycle` (efeito do motor, deps incluem `chartTimeframe`) | mesma cadência, **ciclos de vida diferentes** |
+| 3 — análise | **60 s** | `fetchDerivativesGuarded` · `runMultiTimeframeCycle` (deps **sem** `chartTimeframe`, deliberado) | idem |
 | 3 — análise | `RADAR_SCAN_FULL_CYCLE_MS` | radar | correto |
 | 4 — lento | `provider.intervalMs` | GMIL (por provedor) | correto |
 | UI | 1 s | relógio | correto |
 | infra | próprio | heartbeat, health snapshot, cyclone worker | correto |
 
-**Achado:** 4 dos timers do `App.tsx` colapsam em **2 cadências
-canônicas**. Não é bug — é o "múltiplos timers para o mesmo ciclo" que a
-ordem manda caçar. `live-candle-sync.ts` **não** é um terceiro timer de
-30 s: a menção está num comentário (verificado).
+**Achado inicial CORRIGIDO na execução.** A primeira leitura disse que 4
+timers colapsavam em 2 cadências canônicas. Ao ir fundir, medi as
+dependências: eles vivem em **3 efeitos com arrays de dependência
+diferentes**. O ciclo do motor precisa reiniciar em troca de timeframe; o
+multi-timeframe deliberadamente não pode — está escrito no código que
+"trocar o prazo exibido não deveria disparar um novo ciclo caro dos outros
+5". Não são timers redundantes: são ciclos de vida independentes que por
+acaso compartilham o período. **Fundi-los seria regressão.**
+
+`live-candle-sync.ts` **não** é um terceiro timer de 30 s: a menção está
+num comentário (verificado).
 
 ---
 
@@ -353,13 +360,23 @@ formal e checkpoint/recovery.
   `fuseLiquidityZones`, que já faz exatamente isso para zonas.
 
 ### P2 — performance
-- **P2.1** Unificar as 2 cadências duplicadas (30 s e 60 s).
+- ~~**P2.1** Unificar as 2 cadências duplicadas (30 s e 60 s).~~
+  **CANCELADO na execução.** Os 4 timers vivem em **3 efeitos com arrays
+  de dependência diferentes**: o ciclo do motor precisa reiniciar em troca
+  de timeframe, o multi-timeframe deliberadamente **não** pode (está
+  escrito no código: "trocar o prazo exibido não deveria disparar um novo
+  ciclo caro dos outros 5"). Não são timers redundantes — são ciclos de
+  vida independentes que por acaso compartilham o período. Fundi-los seria
+  regressão, não economia.
 - **P2.2** LLM sob demanda — corta ~80% do primeiro acesso.
 - **P2.3** Core Engine → Worker. **Isolada, sozinha, nunca junto.**
 
 ### P3 — clareza
-- **P3.1** Unificar ATR (task #342), conferindo antes o período efetivo
-  de `regime-engine`.
+- ~~**P3.1** Unificar ATR (task #342).~~ **RECLASSIFICADO na execução:**
+  não é duplicação. Wilder recursivo devolvendo série × média simples
+  devolvendo escalar. Resolvido por nomeação + documentação (risco zero);
+  uma unificação real mudaria dimensionamento de posição e ETA, e precisa
+  de iniciativa própria.
 - **P3.2** Renomear `timeframe-profile.ts` (colisão de nome).
 - **P3.3** Auditoria visual profunda com captura real.
 
@@ -376,8 +393,8 @@ formal e checkpoint/recovery.
 2. **P0.1** (produtor único de alerta; voz e UI viram consumidores).
 3. **P1.1** (backtest) — **portão**: nada de P1.3/P1.4/P4.1 antes disto.
 4. **P1.2** (basis) — barato, independente.
-5. **P2.1** (cadências) — barato, independente.
-6. **P3.1** (ATR).
+5. ~~**P2.1** (cadências)~~ — cancelado, ver backlog.
+6. ~~**P3.1** (ATR)~~ — reclassificado, ver backlog.
 7. **P1.3 / P1.4** (cenário C, target zone).
 8. **P4.1** (graduar motores dormentes).
 9. **P2.2** (LLM sob demanda).
@@ -410,12 +427,12 @@ Antes de declarar qualquer fase concluída:
 
 ## 22. Checklist final
 
-- [ ] Um só produtor de `AlertEvent`; voz e UI só consomem.
+- [x] Um só produtor de `AlertEvent`; voz e UI só consomem.
 - [ ] BOS/CHoCH com fatia na store e evento no bus.
 - [ ] Backtest real executado; número publicado como veio.
-- [ ] `basis` chegando ao frame; comentário obsoleto corrigido.
-- [ ] Uma cadência canônica por domínio.
-- [ ] Um só ATR.
+- [x] `basis` chegando ao frame; comentário obsoleto corrigido; fórmula com fonte única.
+- [x] Cadências verificadas — 4 timers, 3 ciclos de vida distintos, nada a fundir.
+- [x] ATR verificado — duas definições legítimas, agora nomeadas e documentadas.
 - [ ] Cenário C existindo.
 - [ ] Alvos com evidence count.
 - [ ] `READ_ONLY` + `FAIL_CLOSED` intactos e testados.
@@ -477,9 +494,11 @@ Rodar sem look-ahead, out-of-sample, walk-forward, múltiplos regimes,
 com custo real. Publicar o número **como vier**. Se vier ruim, o
 resultado é o entregável.
 
-**Fase 3 — P1.2 + P2.1 + P3.1 (dívidas baratas).**
-`basis` até o frame; comentário obsoleto de `research-engine.js:211`
-corrigido; 4 timers → 2 cadências; ATR unificado após conferir período.
+**Fase 3 — P1.2 (a única dívida barata que sobreviveu à auditoria).**
+`basis` ligado ao frame do Core Engine e o comentário obsoleto de
+`research-engine.js:211` corrigido — feito, com a fórmula extraída para
+uma fonte única (`js/real-data/derivatives-math.js`) consumida pelos dois
+lados. P2.1 e P3.1 caíram na verificação: ver backlog.
 
 **Depois disso, e só depois:** P1.3, P1.4, P4.1, P2.2 e — sozinha —
 P2.3.

@@ -28,14 +28,14 @@ real, não o nome do arquivo.
 | 6 | FVG × Order Blocks | **DISTINTO** | Mesmo arquivo, regras geométricas diferentes: FVG = não-sobreposição entre a vela i−1 e i+1; OB = última vela oposta antes de deslocamento por fechamento. |
 | 7 | Structure × BOS/CHoCH | **DERIVADO** | `bos-choch-engine.js` **importa** `market-structure-engine.js` e `fractal-swings.js`. Zero recálculo. |
 | 8 | EMA × Trend Bias | **DISTINTO (mesma coisa, uma implementação)** | `trendBias()` **é** a comparação preço×SMA e EMA×SMA. Não há duas — há uma, e ela é a decisão inteira (ver auditoria de verificação). |
-| 9 | **ATR em múltiplos lugares** | **DUPLICADO** | Duas implementações vivas independentes: `computeAtrPercent` (Wilder-14, `lorentzian-classifier.js:196`) e `atrPercent` (`regime-engine.js:163`). Uma terceira dorme em `hmm-regime-model.js`. **Única duplicação matemática real encontrada.** |
+| 9 | **ATR em múltiplos lugares** | **~~DUPLICADO~~ → DISTINTO (corrigido na execução)** | A leitura linha a linha desmentiu o veredicto anterior. `computeAtrPercent` (`lorentzian-classifier.js`) é **Wilder recursivo (RMA)** e devolve a **série**, normalizando cada ponto pelo próprio close. `meanTrueRangePercent` (`regime-engine.js`, antes chamado `atrPercent`) é **média simples dos últimos 14 TR** e devolve um **escalar**, normalizando pelo último close. Para os mesmos candles dão números diferentes — são duas definições legítimas, não uma cópia. Resolvido por nomeação e documentação nos dois lados, risco zero. |
 | 10 | Risk em múltiplos lugares | **RESOLVIDO / SSOT-OK** | `src/risk/risk-engine.js` é o único que dimensiona (`min(tamanho_vol%, teto_kelly%, 100)`). `engine-bridge.ts` só repassa campos. Kelly vive uma vez, em WASM. |
 | 11 | **Alertas duplicados** | **ASSIMÉTRICO — achado principal** | Ver seção própria abaixo. |
 | 12 | **Voice dispatcher × Alert Center × GMIL** | **ASSIMÉTRICO** | Idem. GMIL não produz alerta — é contexto macro, categoria à parte. |
 | 13 | Múltiplos verdicts direcionais | **DISTINTO, mas é o problema de produto** | 32 de 99 módulos emitem alta/baixa por matemáticas diferentes (ADX/DI, k-NN Lorentziano, estrutura fractal, MACD, multi-TF). Nenhum decide — só `trendBias()` decide. Não é duplicação de código; é **excesso de opinião sobre uma decisão rasa**. |
 | 14 | Múltiplas fontes de preço | **RESOLVIDO** | `market-data-bus/` é a fonte canônica por `symbol:timeframe`. `engine-bridge.ts:579` documenta que o segundo `fetch()` direto a `api.binance.com/klines` **já foi removido**. Binance/MEXC/Bybit/OKX entram como cross-check, não como segunda verdade. |
 | 15 | Múltiplos cálculos de tendência | **DISTINTO** | Ver #13. |
-| 16 | Múltiplos cálculos de volatilidade | **DUPLICADO** | É o mesmo achado do #9 — ATR é o cálculo de volatilidade. |
+| 16 | Múltiplos cálculos de volatilidade | **DISTINTO** | Mesmo achado corrigido do #9. |
 | 17 | Múltiplas leituras de contexto | **DERIVADO** | `unified-presentation.ts` e Evidence Fusion leem os agregadores existentes; não recalculam. |
 
 ---
@@ -88,7 +88,7 @@ confiança e consumidor. Onde isso já existe:
 | Order Blocks | `fvg-order-block-engine.js` | **existe** |
 | Volume Profile | worker WASM | **existe** |
 | Dimensionamento de risco | `risk-engine.js` | **existe** |
-| **ATR / volatilidade** | — | **NÃO EXISTE** — duas implementações vivas |
+| ATR / volatilidade | por definição, não por domínio | **duas definições legítimas**, agora nomeadas e documentadas |
 | **Alertas** | — | **NÃO EXISTE** — dois produtores independentes |
 
 ---
@@ -99,9 +99,15 @@ confiança e consumidor. Onde isso já existe:
    viram dois **consumidores** do mesmo evento, cada um escolhendo como
    apresentar. Resolve os 8 eventos da tabela de uma vez e acaba com o
    descompasso ver/ouvir. Baixo risco: nenhuma matemática muda.
-2. **Unificar o ATR.** Uma implementação de Wilder-14, os demais
-   consomem. Já rastreado como task #342. Risco baixo, mas exige conferir
-   que `regime-engine` usa o mesmo período efetivo antes de trocar.
+2. **~~Unificar o ATR~~ — cancelado por auditoria.** Conferi o período
+   antes de trocar, como a própria ação mandava, e encontrei mais do que
+   diferença de período: **suavização diferente**. Além disso, o
+   `atr_percent` do regime-engine alimenta o dimensionamento de posição
+   (`risk-engine.js`) e o ETA (`eta-engine.ts`) — trocar a fórmula mudaria
+   os dois. Unificar exigiria iniciativa isolada com comparação
+   antes/depois, nunca um swap de uma linha. Feito no lugar: renomear a
+   função para dizer o que ela calcula e documentar a diferença nos dois
+   arquivos, para nenhuma sessão futura assumir que são intercambiáveis.
 3. **Não mexer em nada de #1 a #8, #10, #14, #17.** Não são duplicação —
    são arquitetura correta. Consolidar ali seria arrumar o que não está
    quebrado.
@@ -115,8 +121,9 @@ confiança e consumidor. Onde isso já existe:
 ## Nota de método
 
 Nenhuma funcionalidade foi removida ou proposta para remoção sem prova de
-redundância, conforme a ordem exige. Dos 17 pares investigados, apenas
-**um** é duplicação matemática real (ATR) e **um** é cobertura partida
-(alertas). Os outros 15 sobreviveram à comparação — o que é, por si, um
+redundância, conforme a ordem exige. Dos 17 pares investigados, **um** era cobertura
+partida (alertas, já corrigido) e **nenhum** se confirmou como duplicação
+matemática real — o ATR, único candidato que restava, caiu na verificação
+da execução. Os outros 16 sobreviveram à comparação — o que é, por si, um
 resultado da auditoria: o ecossistema está mais bem fatorado do que a
 quantidade de módulos sugere.

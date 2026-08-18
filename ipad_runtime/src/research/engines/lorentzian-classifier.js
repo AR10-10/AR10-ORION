@@ -189,8 +189,12 @@ export function computeROC(closes, period = 9) {
     return out;
 }
 
-/** ATR de Wilder, normalizado como % do close (comparavel entre regimes
- *  de preco diferentes). Usa high/low/close BRUTOS (nao suavizados) — ATR
+/** ATR de Wilder (suavizacao recursiva RMA), normalizado como % do close
+ *  (comparavel entre regimes de preco diferentes). Devolve a SERIE.
+ *
+ *  NAO e a mesma coisa que meanTrueRangePercent de market-regime/
+ *  regime-engine.js, que usa media SIMPLES dos TR e devolve um escalar —
+ *  ver o comentario de la para o porque de nao serem consolidados. Usa high/low/close BRUTOS (nao suavizados) — ATR
  *  mede volatilidade real, suavizar a serie removeria o proprio sinal que
  *  ele existe para medir. NaN nos primeiros `period` indices. */
 export function computeAtrPercent(candles, period = 14) {

@@ -208,7 +208,14 @@ export function buildResearchEngineFrame({ frame, evidence, context } = {}) {
         open_interest: evidence.open_interest,
         liquidations: evidence.liquidations,
         long_short_ratio: evidence.long_short_ratio,
-        basis: DADOS_INSUFICIENTES, // nenhum conector compara spot vs futuros nesta fase
+        // O comentario que ficava aqui ("nenhum conector compara spot vs
+        // futuros nesta fase") envelheceu: binance-futures-public.js ja
+        // consulta premiumIndex e agora publica index_price e basis_pct no
+        // Evidence Object. Passthrough puro do numero real — nenhuma
+        // formula vive aqui (a unica esta em real-data/derivatives-math.js).
+        basis: evidence.funding && evidence.funding.basis_pct !== undefined
+            ? evidence.funding.basis_pct
+            : DADOS_INSUFICIENTES,
         data_quality: evidence.data_quality || DADOS_INSUFICIENTES,
     };
 

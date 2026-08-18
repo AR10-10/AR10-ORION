@@ -33,6 +33,7 @@
 
 import { probeJsonEndpoint } from './probe.js';
 import { CONNECTOR_STATES, DADOS_INSUFICIENTES, createEmptyEvidence, markFieldMissing, hashRawSample, computeDataQuality } from './schema.js';
+import { computeBasisPct } from './derivatives-math.js';
 import { SYMBOL_TO_USDT_PAIR as SYMBOL_TO_PAIR } from '../shared/symbols.js';
 
 export const meta = Object.freeze({
@@ -161,9 +162,19 @@ export async function probe({ symbol = 'BTC', interval = '1h', limit = 100, time
 
     if (fundingProbe.state === CONNECTOR_STATES.ACTIVE_READ_ONLY) {
         const f = fundingProbe.json;
+        // index_price e basis_pct sao ADITIVOS: o mesmo premiumIndex ja
+        // consultado aqui sempre trouxe indexPrice, e ele era descartado —
+        // por isso research-engine.js devolvia basis: DADOS_INSUFICIENTES
+        // com um comentario ja obsoleto ("nenhum conector compara spot vs
+        // futuros"). Nada existente muda de valor; dois campos aparecem.
+        const basisPct = computeBasisPct(f.markPrice, f.indexPrice);
         evidence.funding = {
             last_funding_rate: Number(f.lastFundingRate),
             mark_price: Number(f.markPrice),
+            index_price: Number.isFinite(Number(f.indexPrice)) ? Number(f.indexPrice) : DADOS_INSUFICIENTES,
+            // Fail-closed real: sem os dois precos, DADOS_INSUFICIENTES —
+            // nunca um 0 que se leria como "perpetuo no par com o spot".
+            basis_pct: basisPct === null ? DADOS_INSUFICIENTES : basisPct,
             next_funding_time: f.nextFundingTime ? new Date(f.nextFundingTime).toISOString() : DADOS_INSUFICIENTES,
         };
     } else {
