@@ -352,7 +352,7 @@ describe('Diretriz de Refinamento Visual §5: Trend Channel reposicionado para a
     // parâmetros do método (janela OLS, σ), em fonte menor — continuam
     // sendo a única leitura visível deles no app, agora sem atravessar as
     // velas na horizontal.
-    expect(block).toContain('text: `TREND ${TREND_DIRECTION_GLYPH[trendChannelInfo.direction]} ${trendChannelInfo.midPrice.toFixed(2)}`');
+    expect(block).toContain('text: `TREND ${TREND_DIRECTION_GLYPH[trendChannelInfo.direction]} ${fmtAxisLabelPrice(trendChannelInfo.midPrice)}`,');
     expect(block).toContain('secondaryText: `OLS ${trendChannelInfo.windowSize} ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ`');
     // cor = a MESMA cor real da linha mid (definida na criação da série,
     // acima) — nunca uma cor nova inventada só para o rótulo.

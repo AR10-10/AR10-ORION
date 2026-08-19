@@ -124,3 +124,47 @@ describe("fonte única — as sete cópias morreram", () => {
     expect(src).toContain("return formatPrice(v, true);");
   });
 });
+
+// ---------------------------------------------------------------------------
+// PRECISÃO DO EIXO NATIVO — defeito visto em captura real (WLFI/USDT 1H).
+//
+// A régua adaptativa já tinha chegado aos painéis (SUPPORT 0.05598,
+// RESISTÊNCIA 0.061 apareciam certos), mas o EIXO do gráfico mostrava "0.06"
+// para todos eles. Causa: `priceFormat` nunca foi configurado, e a
+// lightweight-charts assume precision 2 / minMove 0.01 por padrão.
+// ---------------------------------------------------------------------------
+describe("precisão do eixo nativo acompanha a magnitude do ativo", () => {
+  const chart = () => readFileSync(resolve(__dirname, "../src/chart/EnhancedChart_110_Percent.tsx"), "utf-8");
+
+  it("o gráfico configura priceFormat — sem isso a lib fixa 2 casas", () => {
+    const src = chart();
+    expect(src).toContain("priceFormat: { type: \"price\", precision, minMove:");
+  });
+
+  it("a precisão vem da MESMA régua dos painéis, nunca de uma segunda", () => {
+    const src = chart();
+    expect(src).toContain("priceDecimals(ref)");
+    expect(src).toContain("price-format");
+  });
+
+  it("minMove é derivado da precisão, nunca um número solto", () => {
+    // minMove errado faz a lib arredondar de novo, anulando a precisão.
+    expect(chart()).toContain("minMove: Math.pow(10, -precision)");
+  });
+
+  it("um ativo de centavos ganha casas suficientes para separar níveis reais", () => {
+    // O caso da captura: 0.05598 e 0.061 tinham de virar rótulos DIFERENTES.
+    const p = priceDecimals(0.06);
+    expect(formatPrice(0.05598)).not.toBe(formatPrice(0.061));
+    expect(p).toBeGreaterThanOrEqual(4);
+  });
+
+  it("nenhum rótulo de PREÇO do gráfico usa toFixed(2) cravado", () => {
+    // Eram três (último preço, TREND, high da sessão) — todos passavam a
+    // mostrar "0.06" num ativo de centavos.
+    const src = chart();
+    expect(src).not.toContain("displayPrice.toFixed(2)");
+    expect(src).not.toContain("midPrice.toFixed(2)");
+    expect(src).not.toContain("high.toFixed(2)");
+  });
+});

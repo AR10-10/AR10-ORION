@@ -188,7 +188,7 @@ import { clusterSweptPrices } from "../nexus/trap-detection";
 import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER, type TrendChannelDirection } from "../nexus/trend-channel-engine";
 import { shouldCompactLabels } from "./label-compaction";
 import { formatTickMark } from "./tick-mark-format";
-import { formatPrice } from "../nexus/price-format";
+import { formatPrice, priceDecimals } from "../nexus/price-format";
 import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import { PriceLabelStackPlugin, type PriceAxisLabel } from "./PriceLabelStackPlugin";
 
@@ -862,6 +862,36 @@ function EnhancedChart_110_PercentImpl({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+
+  // PRECISÃO DO EIXO DE PREÇO — defeito visto em captura real (WLFI/USDT 1H,
+  // ativo a ~0,06).
+  //
+  // A lightweight-charts assume `priceFormat: { precision: 2, minMove: 0.01 }`
+  // quando ninguém configura — e ninguém configurava. Resultado na tela: TODO
+  // nível entre 0,055 e 0,061 virava "0.06". O eixo inteiro, o rótulo do
+  // crosshair e o do último preço mostravam o mesmo número para preços
+  // diferentes, enquanto o painel ao lado exibia SUPPORT 0.05598 e
+  // RESISTÊNCIA 0.061 corretamente — a régua adaptativa (nexus/price-format.ts)
+  // já tinha chegado nos painéis, mas o eixo NATIVO não passa por ela.
+  //
+  // A precisão vem da MAGNITUDE real da série, pela mesma função que os
+  // painéis usam (priceDecimals) — zero segunda régua. Recalculada quando a
+  // série muda: trocar de ativo troca a magnitude, e a precisão tem de
+  // acompanhar.
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series || !data || data.length === 0) return;
+    // Último close real como referência de magnitude — é o preço que o
+    // Operador está lendo agora. Fail-closed: sem close finito, não mexe
+    // (mantém o que a lib já tinha, nunca fabrica precisão).
+    const last = data[data.length - 1];
+    const ref = typeof last?.close === "number" && Number.isFinite(last.close) ? last.close : null;
+    if (ref === null) return;
+    const precision = priceDecimals(ref);
+    series.applyOptions({
+      priceFormat: { type: "price", precision, minMove: Math.pow(10, -precision) },
+    });
+  }, [data]);
   // Evolução Final §5 ("Enquadramento Automático" / Smart Auto-Fit): lido
   // pelo autoscaleInfoProvider da série principal abaixo. Precisa ser ref
   // (não estado/prop direto) porque a série nasce no efeito de montagem
@@ -2938,7 +2968,7 @@ function EnhancedChart_110_PercentImpl({
       const displayPrice = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : lastCandle.close;
       out.push({
         price: displayPrice,
-        text: displayPrice.toFixed(2),
+        text: fmtAxisLabelPrice(displayPrice),
         color: displayPrice >= lastCandle.open ? "#089981" : "#F23645",
         // ÚNICA etiqueta do eixo que declara tier explicitamente (todo o
         // resto deriva do side): é a âncora de leitura do gráfico —
@@ -2970,7 +3000,7 @@ function EnhancedChart_110_PercentImpl({
         // valor; Nível 2 = os PARÂMETROS DO MÉTODO (janela OLS, σ), que
         // são exatamente "informação complementar" na hierarquia da Ordem
         // — continuam visíveis, agora em fonte menor.
-        text: `TREND ${TREND_DIRECTION_GLYPH[trendChannelInfo.direction]} ${trendChannelInfo.midPrice.toFixed(2)}`,
+        text: `TREND ${TREND_DIRECTION_GLYPH[trendChannelInfo.direction]} ${fmtAxisLabelPrice(trendChannelInfo.midPrice)}`,
         secondaryText: `OLS ${trendChannelInfo.windowSize} ±${TREND_CHANNEL_STDDEV_MULTIPLIER}σ`,
         color: "rgba(148, 163, 184, 0.55)",
         side: "left",
@@ -3495,7 +3525,7 @@ function EnhancedChart_110_PercentImpl({
       if (!highAlreadyShownInInstitutionalZone) {
         out.push({
           price: currentSessionKeyLevel.high,
-          text: `H ${currentSessionKeyLevel.high.toFixed(2)}`,
+          text: `H ${fmtAxisLabelPrice(currentSessionKeyLevel.high)}`,
           secondaryText: labelPrefix,
           color: "rgba(242, 54, 69, 0.55)",
           side: "left",
@@ -3504,7 +3534,7 @@ function EnhancedChart_110_PercentImpl({
       if (!lowAlreadyShownInInstitutionalZone) {
         out.push({
           price: currentSessionKeyLevel.low,
-          text: `L ${currentSessionKeyLevel.low.toFixed(2)}`,
+          text: `L ${fmtAxisLabelPrice(currentSessionKeyLevel.low)}`,
           secondaryText: labelPrefix,
           color: "rgba(8, 153, 129, 0.55)",
           side: "left",

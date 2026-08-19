@@ -502,7 +502,12 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
     const block = s.slice(idx, idx + 2500);
     expect(block).toContain('const displayPrice = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : lastCandle.close;');
     expect(block).toContain('price: displayPrice,');
-    expect(block).toContain('text: displayPrice.toFixed(2),');
+    // A intenção deste teste é QUAL VALOR o rótulo usa (livePrice, nunca o
+    // close desatualizado) — não quantas casas decimais ele mostra. O
+    // `.toFixed(2)` cravado saiu porque num ativo de centavos (WLFI a 0,06,
+    // captura real) ele achatava todo nível em "0.06"; a formatação agora
+    // vem da régua adaptativa. O valor de origem continua sendo o mesmo.
+    expect(block).toContain('text: fmtAxisLabelPrice(displayPrice),');
   });
 
   it('priceAxisLabels recalcula a cada tick real de livePrice — nunca uma etiqueta de preço congelada', () => {
