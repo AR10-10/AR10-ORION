@@ -527,6 +527,90 @@ export const AUTO_LAYER_PRECISION_ORDER: readonly string[] = [
   "neural_market_aura",
 ];
 
+// ============================================================================
+// CUSTO VISUAL — o teto passa a contar OBJETOS, não camadas
+// ============================================================================
+//
+// ACHADO MEDIDO (reclamação repetida do Operador: "não ficar vários
+// indicadores no mesmo lugar", "está muito pesado"):
+//
+// O teto acima limitava 6 CAMADAS. Mas camada não é uma unidade de custo —
+// elas desenham quantidades muito diferentes:
+//
+//   vwap            5 séries reais (VWAP + 4 bandas ±σ)
+//   trend_channel   3 séries reais (mid + upper + lower)
+//   candle_patterns até MAX_PATTERN_MARKERS = 4 marcadores
+//   ema             1 série
+//
+// Contadas por camada, "6" podia significar 6 objetos na tela — ou vinte.
+// O peso e a poluição seguem o número de OBJETOS, não o de camadas, e era
+// justamente essa unidade que ninguém estava contando.
+//
+// Este é o mesmo princípio que visual-budget.ts já aplica às anotações
+// (orçamento com peso por objeto, nunca contagem crua). Aqui ele passa a
+// valer também para as camadas — uma disciplina só nos dois lugares.
+
+/** Quantos objetos visuais distintos cada camada desenha.
+ *
+ *  CONTADO NO CÓDIGO (não estimado): vwap = 5 séries (`addSeries` do VWAP
+ *  mais as 4 bandas), trend_channel = 3 séries, candle_patterns =
+ *  MAX_PATTERN_MARKERS. As demais são DECLARADAS — a ordem de grandeza do
+ *  que a camada põe na tela, na mesma natureza de convenção declarada dos
+ *  limiares de expectancy.ts. Camada ausente custa 1: nunca custa zero
+ *  (nada é de graça) e nunca é penalizada por omissão. */
+export const LAYER_VISUAL_COST: Readonly<Record<string, number>> = {
+  // Contados no código
+  vwap: 5,
+  trend_channel: 3,
+  candle_patterns: 4,
+  // Declarados — camadas que desenham um conjunto de níveis/zonas
+  liquidity_zones: 3,
+  fibonacci: 3,
+  trade_plan_zone: 3,
+  equal_highs_lows: 2,
+  structure_breaks: 2,
+  premium_discount: 2,
+  institutional_zones: 2,
+  session_key_levels: 2,
+  liquidity_sweep: 2,
+  scenario_projection: 2,
+  // Declarados — camadas de objeto único (uma linha, um perfil, um mapa)
+  ema: 1,
+  nexus_line: 1,
+  cvd: 1,
+  volume_profile: 1,
+  tpo_profile: 1,
+  order_book_depth: 1,
+  harmonics: 1,
+  zigzag: 1,
+  order_flow_heatmap: 1,
+  liquidation_heatmap: 1,
+  market_sessions: 1,
+  kill_zones: 1,
+  neural_market_aura: 1,
+};
+
+/** Custo real de uma camada. Fail-closed: desconhecida custa 1 — entra na
+ *  competição em pé de igualdade, nunca é excluída por não estar na tabela. */
+export function layerVisualCost(id: string): number {
+  const c = LAYER_VISUAL_COST[id];
+  return Number.isFinite(c) && (c as number) > 0 ? (c as number) : 1;
+}
+
+/** Orçamento de OBJETOS que o modo Automático pode pôr na tela.
+ *
+ *  Convenção declarada, nunca medição. Calibrada com a tabela de custo na
+ *  mão: as camadas do topo da ordem de precisão somam 12 objetos em ~6
+ *  camadas, então a intenção original do teto (meia dúzia de leituras
+ *  simultâneas) é preservada — o que muda é o PIOR caso, que era ~20
+ *  objetos e agora não passa de 12.
+ *
+ *  Calibrei em 12 e não em 10 de propósito: 10 derrubava a contagem típica
+ *  de 6 para 4 camadas, uma mudança grande demais para entregar sem poder
+ *  verificar na tela. Se o Operador quiser mais enxuto, é UM número, num
+ *  lugar só, com teste que o acompanha. */
+export const AUTO_LAYER_MAX_VISUAL_COST = 12;
+
 export interface AutoLayerDecision {
   /** Desenha AGORA no modo Automático. */
   show: boolean;
@@ -589,13 +673,32 @@ export function resolveAutoLayerVisibility(
     return a.localeCompare(b); // determinismo total: mesma entrada, mesma saída
   });
 
-  competing.forEach((id, i) => {
-    if (i < effectiveCap) {
+  // Duas restrições, ambas ativas — a camada precisa caber nas DUAS:
+  //   · contagem  — no máximo `effectiveCap` camadas distintas
+  //   · custo     — no máximo AUTO_LAYER_MAX_VISUAL_COST objetos na tela
+  //
+  // A segunda é a que faltava: sem ela, `vwap` (5 objetos) ocupava o mesmo
+  // "slot" que `ema` (1), e seis camadas podiam virar vinte objetos.
+  //
+  // Uma camada cara que não cabe NÃO trava a fila: as seguintes continuam
+  // sendo avaliadas e uma barata pode entrar no espaço que sobrou. Isso é
+  // deliberado — o objetivo é encher a tela com o que cabe, não parar no
+  // primeiro item grande demais.
+  let shown = 0;
+  let spent = 0;
+  competing.forEach((id) => {
+    const cost = layerVisualCost(id);
+    if (shown < effectiveCap && spent + cost <= AUTO_LAYER_MAX_VISUAL_COST) {
       out[id] = { show: true, reason: relevance[id].reason, suppressedByCap: false };
+      shown += 1;
+      spent += cost;
     } else {
+      const motivo = shown >= effectiveCap
+        ? `${effectiveCap} camadas mais precisas ocupam a tela agora`
+        : `desenha ${cost} objetos e o orçamento visual (${AUTO_LAYER_MAX_VISUAL_COST}) já tem ${spent} ocupados`;
       out[id] = {
         show: false,
-        reason: `leitura real presente, mas ${effectiveCap} camadas mais precisas ocupam a tela agora (${relevance[id].reason})`,
+        reason: `leitura real presente, mas ${motivo} (${relevance[id].reason})`,
         suppressedByCap: true,
       };
     }
