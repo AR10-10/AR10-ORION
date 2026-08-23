@@ -473,3 +473,19 @@ no mesmo commit:
 4. Se o módulo exigir credencial, resolver via política equivalente a
    `WindowsLocalSecretPolicy`/`TelegramAuxSecretPolicy` — nunca no frontend,
    nunca no repositório, nunca no storage do PWA.
+
+## `fvg-order-block-engine.js` — campos aditivos de toque (2026-08-23)
+
+Motor já graduado há muitas rodadas; esta entrada registra uma **extensão
+aditiva**, não uma graduação nova.
+
+`clusterEqualLevels()` passou a exportar `firstIndex` e `touchIndices` junto
+de `touches`/`index` nas zonas de liquidez (EQH/EQL). Nada foi calculado a
+mais: o cluster sempre teve os swings reais em mãos — só o último índice
+saía dele. Sem o primeiro índice não existe "trecho", e a camada visual só
+podia desenhar uma linha de largura total (defeito relatado pelo Operador).
+
+Suíte de execução real: `ramber-ui/tests/liquidity-pool-touches.test.ts`
+(9 casos — índices reais, ordenação, coerência entre `touches` e
+`touchIndices`, e o que já funcionava — `price`/`swept`/mínimo de 2 toques —
+provado idêntico).

@@ -106,9 +106,21 @@ describe('LiquidityZonesPlugin: destaque de obstáculo (Diretriz Restauração/I
     // liquidityVoids/voidVisualWeights (liquidity-void-engine.js) entram no
     // MESMO ref/dep array pelo mesmo motivo — um void novo detectado nunca
     // fica invisível esperando outro prop mudar.
-    expect(p).toContain('const zonesRef = useRef({ fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights });');
-    expect(p).toContain('zonesRef.current = { fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights };');
-    expect(p).toContain('}, [fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights]);');
+    // equalLevels (EQH/EQL) entra no MESMO ref/dep array pelo mesmo motivo:
+    // a camada migrou de price line de largura total para este canvas, e um
+    // pool novo nunca pode ficar invisível esperando outra prop mudar.
+    // Assertiva por PROP, não pela linha literal inteira — a lista cresce a
+    // cada camada que passa a dividir este canvas, e travar a string
+    // completa transformava toda adição aditiva em vermelho sem nenhum fio
+    // realmente rompido.
+    const refInicial = p.match(/const zonesRef = useRef\(\{([^}]*)\}/)?.[1] ?? '';
+    const espelho = p.match(/zonesRef\.current = \{([^}]*)\}/)?.[1] ?? '';
+    const deps = p.match(/markDirtyRef\.current\?\.\(\);\s*\}, \[([^\]]*)\]/)?.[1] ?? '';
+    for (const prop of ['fairValueGaps', 'orderBlocks', 'liquidityVoids', 'data', 'obstacleZones', 'fvgVisualWeights', 'obVisualWeights', 'voidVisualWeights', 'equalLevels']) {
+      expect(refInicial, `${prop} fora do ref inicial`).toContain(prop);
+      expect(espelho, `${prop} fora do espelho por render`).toContain(prop);
+      expect(deps, `${prop} fora do dep array do dirty-flag`).toContain(prop);
+    }
   });
 });
 
@@ -116,7 +128,11 @@ describe('EnhancedChart_110_Percent → LiquidityZonesPlugin: obstacleZones pass
   it('a prop chega ao plugin com fallback honesto para array vazio (nunca undefined quebrando .some acima)', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     expect(chart).toContain('obstacleZones?: { low: number; high: number }[];');
-    expect(chart).toContain('obstacleZones={obstacleZones ?? []}');
+    // O `?? []` inline virou constante de módulo: um array literal novo a
+    // cada render marcava o canvas como sujo eternamente. O fallback
+    // honesto (nunca undefined) continua travado.
+    expect(chart).toContain('obstacleZones={obstacleZones ?? EMPTY_OBSTACLE_ZONES}');
+    expect(chart).toMatch(/const EMPTY_OBSTACLE_ZONES: \{ low: number; high: number \}\[\] = \[\];/);
   });
 });
 
@@ -168,12 +184,12 @@ describe('EnhancedChart_110_Percent: LiquidityZonesPlugin substitui as price lin
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     // Ordem Nº 04: import ganhou ZONE_DECAY (reusado para montar o
     // candidato MAIN_LIQUIDITY — zero segunda curva de decaimento).
-    expect(chart).toContain('import { LiquidityZonesPlugin, ZONE_DECAY, type FillableZone } from "./LiquidityZonesPlugin";');
+    expect(chart).toMatch(/import \{ LiquidityZonesPlugin, ZONE_DECAY, type FillableZone[^}]*\} from "\.\/LiquidityZonesPlugin";/);
     expect(chart).toContain('<LiquidityZonesPlugin');
     expect(chart).toContain('chart={chartReady?.chart ?? null}');
     expect(chart).toContain('series={chartReady?.series ?? null}');
-    expect(chart).toContain('fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}');
-    expect(chart).toContain('orderBlocks={(orderBlocks ?? []) as FillableZone[]}');
+    expect(chart).toMatch(/fairValueGaps=\{.*fairValueGaps \?\? NO_FILLABLE_ZONES.*\}/);
+    expect(chart).toMatch(/orderBlocks=\{.*orderBlocks \?\? NO_FILLABLE_ZONES.*\}/);
   });
 
   it('não cria mais price lines com title "FVG"/"OB" — a área colorida é a única representação agora', () => {
@@ -182,13 +198,30 @@ describe('EnhancedChart_110_Percent: LiquidityZonesPlugin substitui as price lin
     expect(chart).not.toContain('title: "OB"');
   });
 
-  it('liquidez (EQH/EQL) continua como price line real — LiquidityZone não tem top/bottom, uma linha continua honesta', () => {
+  // ESTE TESTE MUDOU DE LADO DE PROPÓSITO — e a razão fica registrada aqui
+  // porque a versão anterior afirmava o contrário ("uma linha continua
+  // honesta").
+  //
+  // Defeito relatado pelo Operador sobre a tela real: "aquela linha amarela
+  // — antigamente elas não atravessavam o gráfico todo, ela só marcava um
+  // pedaço da linha, não ficava grandona, marcava quantas vezes ela testou
+  // naquela mesma zona". A premissa antiga estava certa sobre o DADO
+  // (LiquidityZone não tem top/bottom, então não é uma área) e errada sobre
+  // a EXTENSÃO: `createPriceLine` atravessa o gráfico inteiro por construção
+  // — a lib não tem parâmetro de início/fim — e o `title` que carregava a
+  // contagem nunca foi renderizado no painel de velas.
+  //
+  // A representação honesta é um TRECHO sobre o intervalo real de toques,
+  // desenhado no MESMO canvas de FVG/OB. Ver equal-level-span.ts.
+  it('liquidez (EQH/EQL) deixou de ser price line de largura total — virou trecho no canvas, com a contagem visível', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
-    expect(chart).toContain('EQUAL_HIGH');
-    // Especificação Visual Profissional v1: EQH/EQL migrou pro âmbar
-    // unificado de S1/R1 (era azul H223).
-    expect(chart).toContain('rgba(245, 158, 11, 0.45)');
-    expect(chart).toContain('series.createPriceLine({');
+    const plugin = read('../src/chart/LiquidityZonesPlugin.tsx');
+    // A assinatura exata da price line removida.
+    expect(chart).not.toContain('title: `${z.type === "EQUAL_HIGH" ? "EQH" : "EQL"} x${z.touches}`');
+    expect(chart).toContain('equalLevels={');
+    // Mesmo âmbar unificado de S1/R1 — só a primitiva mudou, nunca a cor.
+    expect(plugin).toContain('rgba(245, 158, 11, 0.45)');
+    expect(plugin).toContain('resolveEqualLevelSegment');
   });
 
   it('EnhancedChartZone ganhou index: number (necessário para a borda esquerda real da área)', () => {

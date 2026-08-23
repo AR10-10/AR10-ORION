@@ -44,7 +44,7 @@ import { useOrderflowHistory, useVolumeProfileSnapshot, useUnifiedSnapshotStore 
 // ZONE_DECAY: Ordem Nº 04 — mesma curva que o plugin já usa isolado,
 // reusada aqui para montar o candidato real de MAIN_LIQUIDITY (visual-
 // budget.ts), mesmo padrão de BREAK_DECAY logo abaixo.
-import { LiquidityZonesPlugin, ZONE_DECAY, type FillableZone } from "./LiquidityZonesPlugin";
+import { LiquidityZonesPlugin, ZONE_DECAY, type FillableZone, type EqualLevelMark } from "./LiquidityZonesPlugin";
 // Ordem "Ciborgue Vivo" §1: anotação temporária de BOS/CHOCH — mesma
 // arquitetura de overlay do LiquidityZonesPlugin acima, dado real diferente.
 // BREAK_DECAY: achado real de captura de tela (rótulo "CHOC" colidindo com
@@ -66,6 +66,17 @@ import { ageAlpha, type DecayConfig } from "./annotation-decay";
 // referência de S/R que continua útil por mais tempo que uma anotação
 // de estrutura recém-rompida.
 const SWEEP_DECAY: DecayConfig = { fadeStartCandles: 50, expireCandles: 200, minAlpha: 0.12 };
+
+// Arrays vazios ESTÁVEIS. Achado real ao ligar EQH/EQL neste mesmo plugin:
+// o call site fazia `(fairValueGaps ?? [])`, que cria um array NOVO a cada
+// render sempre que a prop vem undefined — e o plugin tem um efeito que
+// marca o canvas como sujo quando essas props mudam de identidade. Ou seja:
+// um redraw por render, para sempre, sem nenhuma zona real na tela.
+// Constantes de módulo eliminam isso sem mudar nenhum comportamento
+// visível — parte do "deixa o sistema leve" pedido pelo Operador.
+const NO_FILLABLE_ZONES: FillableZone[] = [];
+const NO_EQUAL_LEVELS: EqualLevelMark[] = [];
+const EMPTY_OBSTACLE_ZONES: { low: number; high: number }[] = [];
 
 // Zoom inteligente (ver efeito de setData): folga real à direita para o
 // preço vivo/etiquetas respirarem. O pan/zoom manual do Operador continua
@@ -187,7 +198,7 @@ import { clusterSweptPrices } from "../nexus/trap-detection";
 // Channel) e a pesquisa que a confirmou.
 import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER, type TrendChannelDirection } from "../nexus/trend-channel-engine";
 import { shouldCompactLabels } from "./label-compaction";
-import { formatTickMark } from "./tick-mark-format";
+import { formatTickMark, chartLocale } from "./tick-mark-format";
 import { formatPrice, nativePriceDecimals } from "../nexus/price-format";
 import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import { PriceLabelStackPlugin, type PriceAxisLabel } from "./PriceLabelStackPlugin";
@@ -217,10 +228,19 @@ export interface EnhancedChartZone {
   index: number;
 }
 
+// Achado ao corrigir o defeito da linha âmbar: este tipo carregava só
+// price/touches — nem o índice do último toque, que o motor sempre teve.
+// Sem índice não existe "trecho", e a única primitiva possível era a price
+// line de largura total. Aditivo e fail-closed: os campos novos são
+// opcionais, e sem eles a camada simplesmente não desenha (nunca volta a
+// atravessar o gráfico).
 export interface EnhancedChartLiquidity {
   type: "EQUAL_HIGH" | "EQUAL_LOW";
   price: number;
   touches: number;
+  index?: number;
+  firstIndex?: number;
+  touchIndices?: number[];
 }
 
 export interface LevelStrength {
@@ -1159,6 +1179,21 @@ function EnhancedChart_110_PercentImpl({
           return formatTickMark(time, tickMarkType, locale);
         },
       },
+      // Defeito encontrado ao RODAR a verificação visual com Playwright (não
+      // em revisão de código): o navegador do ambiente reporta o locale
+      // POSIX `en-US@posix`, e `Intl` rejeita essa forma com RangeError. O
+      // stack real mostrou que quem lançava era o formatador PADRÃO da
+      // própria lightweight-charts — e a exceção acontece DENTRO do ciclo de
+      // pintura, então ela abortava a pintura inteira: a captura saiu com
+      // ZERO velas na tela, e o sintoma ("as velas sumiram") não apontaria
+      // para o locale em lugar nenhum.
+      //
+      // Sanear só dentro do nosso `tickMarkFormatter` não bastaria: ele
+      // devolve `null` no ramo BusinessDay/string, o que entrega o controle
+      // de volta ao formatador padrão que lança, e a lib usa o mesmo locale
+      // no rótulo de tempo do crosshair, fora do nosso formatter. Validar
+      // aqui protege a lib inteira de uma vez. Ver chartLocale().
+      localization: { locale: chartLocale() },
       // Diretriz explícita do Sprint 1: pan/zoom real e nativo — nunca
       // hand-rolled. handleScroll cobre arrastar (mouse + touch);
       // handleScale cobre roda do mouse + pinça (iPad).
@@ -1653,58 +1688,33 @@ function EnhancedChart_110_PercentImpl({
     };
   }, [chartReady, onHoverCandleChange, data]);
 
-  // Liquidez (Equal High/Low) continua como price line: LiquidityZone
-  // (engine-bridge.ts) só carrega um preço único, nunca um top/bottom —
-  // não existe uma "área" real para preencher, então uma linha continua
-  // sendo a representação honesta (mesmo dado, mesmo filtro !swept de
-  // sempre, aplicado rio acima em App.tsx/ChartWidget).
-  // Auditoria de pendências: ganha visibility.equal_highs_lows — mesmo
-  // fail-closed de "sem camada visível, zero linhas" já usado quando o
-  // dado real está ausente (early-return dentro do próprio array vazio).
+  // Liquidez (Equal High/Low): NÃO desenha mais aqui.
+  //
+  // DEFEITO RELATADO (Operador, sobre a tela real): "aquela linha amarela —
+  // antigamente elas não atravessavam o gráfico todo, ela só marcava um
+  // pedaço da linha, não ficava grandona, marcava quantas vezes ela testou
+  // naquela mesma zona".
+  //
+  // CAUSA: `createPriceLine` SEMPRE atravessa o gráfico inteiro — a lib não
+  // tem parâmetro de início/fim. E o `title` que carregava a contagem
+  // ("EQH x3") nunca foi renderizado no painel de velas. A informação real
+  // existia no dado e morria na primitiva escolhida.
+  //
+  // MIGRADO para o LiquidityZonesPlugin (mesmo canvas que FVG/OB/VOID já
+  // usam — zero canvas novo, zero segundo loop de rAF), onde o trecho real
+  // entre o primeiro e o último toque pode ser desenhado com a contagem.
+  // Mesma cor âmbar, mesmo dado, mesmo filtro !swept de sempre — só a
+  // primitiva muda, exatamente como já havia acontecido com as price lines
+  // top/bottom de FVG/OB na Fase 0.7.
+  //
+  // O ref de limpeza continua existindo e sendo esvaziado: se qualquer
+  // rodada futura voltar a criar price lines aqui, elas continuam sendo
+  // removidas corretamente.
   useEffect(() => {
     if (!seriesRef.current) return;
     const series = seriesRef.current;
     zoneLinesRef.current.forEach((line) => series.removePriceLine(line));
     zoneLinesRef.current = [];
-    if (!visibility.equal_highs_lows) return;
-
-    (liquidityZones ?? []).forEach((z) => {
-      zoneLinesRef.current.push(
-        series.createPriceLine({
-          price: z.price,
-          // EPC OMEGA FINAL Parte 2 §10 (Paleta de Cores): era H278 quase
-          // idêntico ao roxo do Harmônico/acento do Conselho (176,38,255,
-          // linhas 887/1612 — "Púrpura, acento do Conselho/opinião
-          // agregada"), <1° de distância de matiz — colisão mais apertada
-          // que a já corrigida entre Liquidation/Sweep. Azul H223 novo:
-          // >40° de qualquer outro matiz já atribuído no app (dourados
-          // ~33-50°, teal LONG ~160°, cyan Volume Profile/Fibonacci ~180°,
-          // roxo Conselho ~278°, magenta POC ~312°, rosa SHORT ~340°) —
-          // mesma luminosidade/peso visual do valor antigo, só o matiz muda.
-          //
-          // Especificação Visual Profissional v1 (pedido direto do
-          // Operador): EQH/EQL migra pro âmbar unificado de S1/R1 —
-          // "âmbar único para todos os níveis" de liquidez/S-R. Achado
-          // real ao aplicar: #f59e0b (H38) fica a só ~5° do laranja do
-          // Sweep (H33, rgba(255,140,0,...) logo abaixo — "SWEEP" é o
-          // MESMO nível EQH/EQL depois de varrido) e ~4-7° do dourado do
-          // Entry/pico do Liquidation Heatmap (H42/H45) — mais perto do
-          // que a própria disciplina de matiz deste arquivo normalmente
-          // aceita (ver comentário acima, >40° para conceitos DIFERENTES).
-          // Aplicado mesmo assim porque cada um destes 4 elementos já
-          // carrega rótulo de texto próprio (EQH/EQL/S1/R1/SWEEP/ENTRY) —
-          // a cor deixa de ser o único jeito de diferenciar, e Sweep é
-          // literalmente o MESMO evento (zona varrida), não um conceito
-          // concorrente. Documentado para o Operador decidir se quer um
-          // ajuste fino de tom numa rodada futura.
-          color: "rgba(245, 158, 11, 0.45)",
-          lineWidth: 1,
-          lineStyle: LineStyle.Solid,
-          axisLabelVisible: false,
-          title: `${z.type === "EQUAL_HIGH" ? "EQH" : "EQL"} x${z.touches}`,
-        }),
-      );
-    });
   }, [liquidityZones, visibility.equal_highs_lows]);
 
   // EPC OMEGA FINAL, Etapa 10 ("Liquidity Sweep: captura/direção/
@@ -2231,6 +2241,27 @@ function EnhancedChart_110_PercentImpl({
       ob: (orderBlocks ?? []).map((_, i) => byId.get(`liquidity-ob-${i}`)),
     };
   }, [visualBudgetResults, fairValueGaps, orderBlocks]);
+
+  // Pools de liquidez que o LiquidityZonesPlugin consegue desenhar como
+  // TRECHO real. Fail-closed explícito: sem `index` (dado de uma versão
+  // anterior do motor, ainda em cache) a zona é descartada do canvas em vez
+  // de virar de novo uma linha de largura total — o defeito que o Operador
+  // relatou. O painel lateral continua listando a zona normalmente; isto
+  // decide apenas o que o canvas pinta.
+  const equalLevelMarks = useMemo<EqualLevelMark[]>(
+    () =>
+      (liquidityZones ?? [])
+        .filter((z) => Number.isFinite(z.price) && Number.isFinite(z.index))
+        .map((z) => ({
+          type: z.type,
+          price: z.price,
+          touches: z.touches,
+          index: z.index as number,
+          firstIndex: z.firstIndex,
+          touchIndices: z.touchIndices,
+        })),
+    [liquidityZones],
+  );
 
   // Auditoria do painel do gráfico: Linear Regression Channel real sobre a
   // MESMA `data` de candles (zero segunda fonte de dado) — mesmo padrão do
@@ -3708,17 +3739,18 @@ function EnhancedChart_110_PercentImpl({
          (Blueprint §3.1 LiquidityZonesPlugin) em vez de duas price lines —
          restaura a cor que o gráfico SVG anterior tinha, sem tirar nenhuma
          cor do gráfico (pedido explícito do Operador). */}
-      {visibility.liquidity_zones && (
+      {(visibility.liquidity_zones || visibility.equal_highs_lows) && (
         <LiquidityZonesPlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           data={data}
-          fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}
-          orderBlocks={(orderBlocks ?? []) as FillableZone[]}
-          liquidityVoids={(liquidityVoids ?? []) as FillableZone[]}
-          obstacleZones={obstacleZones ?? []}
+          fairValueGaps={visibility.liquidity_zones ? ((fairValueGaps ?? NO_FILLABLE_ZONES) as FillableZone[]) : NO_FILLABLE_ZONES}
+          orderBlocks={visibility.liquidity_zones ? ((orderBlocks ?? NO_FILLABLE_ZONES) as FillableZone[]) : NO_FILLABLE_ZONES}
+          liquidityVoids={visibility.liquidity_zones ? ((liquidityVoids ?? NO_FILLABLE_ZONES) as FillableZone[]) : NO_FILLABLE_ZONES}
+          obstacleZones={obstacleZones ?? EMPTY_OBSTACLE_ZONES}
           fvgVisualWeights={mainLiquidityVisualWeights.fvg}
           obVisualWeights={mainLiquidityVisualWeights.ob}
+          equalLevels={visibility.equal_highs_lows ? equalLevelMarks : NO_EQUAL_LEVELS}
         />
       )}
       {/* Ordem "Ciborgue Vivo" §1: BOS/CHOCH real, mesma anotação temporária

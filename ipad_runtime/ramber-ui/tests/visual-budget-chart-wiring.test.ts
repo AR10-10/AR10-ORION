@@ -202,9 +202,15 @@ describe('LiquidityZonesPlugin.tsx: ZONE_DECAY exportado + fvgVisualWeights/obVi
     const s = liquidityZonesPlugin();
     expect(s).toContain('fvgVisualWeights?: (number | undefined)[];');
     expect(s).toContain('obVisualWeights?: (number | undefined)[];');
-    expect(s).toContain(
-      'export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, liquidityVoids, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights }: LiquidityZonesPluginProps) {',
-    );
+    // Assertiva por PROP, não pela assinatura literal inteira: a assinatura
+    // cresce a cada camada nova que passa a dividir este canvas (EQH/EQL foi
+    // a primeira), e travar a string completa transformava toda adição
+    // aditiva em falha vermelha sem nenhum fio realmente rompido. O que
+    // importa continua travado — cada peso É desestruturado de verdade.
+    const assinatura = s.match(/export function LiquidityZonesPlugin\(\{([^}]*)\}/)?.[1] ?? '';
+    for (const prop of ['chart', 'series', 'data', 'fairValueGaps', 'orderBlocks', 'liquidityVoids', 'obstacleZones', 'fvgVisualWeights', 'obVisualWeights', 'voidVisualWeights']) {
+      expect(assinatura, `${prop} não é desestruturado`).toContain(prop);
+    }
     // Liquidity Void (liquidity-void-engine.js) ainda NÃO entra na
     // competição cruzada de orçamento visual — v1 escopado de propósito;
     // undefined cai no MESMO fallback fail-closed de ageAlpha isolado que
@@ -237,19 +243,24 @@ describe('LiquidityZonesPlugin.tsx: ZONE_DECAY exportado + fvgVisualWeights/obVi
 
   it('fvgVisualWeights/obVisualWeights/voidVisualWeights entram no ref/dirty-check igual a fairValueGaps/orderBlocks/liquidityVoids — uma resolução de orçamento nova redesenha', () => {
     const s = liquidityZonesPlugin();
-    expect(s).toContain(
-      'const zonesRef = useRef({ fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights });',
-    );
-    expect(s).toContain(
-      'zonesRef.current = { fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights };',
-    );
-    expect(s).toContain('}, [fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights]);');
+    // Mesma razão da assertiva acima: o que precisa estar travado é que
+    // CADA prop apareça nos TRÊS lugares (ref inicial, espelho a cada
+    // render, dep array do dirty-flag). Faltar em qualquer um deles é
+    // exatamente o bug "fica stale e o canvas não redesenha".
+    const refInicial = s.match(/const zonesRef = useRef\(\{([^}]*)\}/)?.[1] ?? '';
+    const espelho = s.match(/zonesRef\.current = \{([^}]*)\}/)?.[1] ?? '';
+    const deps = s.match(/markDirtyRef\.current\?\.\(\);\s*\}, \[([^\]]*)\]/)?.[1] ?? '';
+    for (const prop of ['fairValueGaps', 'orderBlocks', 'liquidityVoids', 'data', 'obstacleZones', 'fvgVisualWeights', 'obVisualWeights', 'voidVisualWeights']) {
+      expect(refInicial, `${prop} fora do ref inicial`).toContain(prop);
+      expect(espelho, `${prop} fora do espelho por render`).toContain(prop);
+      expect(deps, `${prop} fora do dep array do dirty-flag`).toContain(prop);
+    }
   });
 });
 
 describe('EnhancedChart_110_Percent.tsx: candidato MAIN_LIQUIDITY real — mesma ZONE_DECAY do plugin, zonas-obstáculo excluídas da competição', () => {
   it('importa ZONE_DECAY de LiquidityZonesPlugin — zero segunda curva de decaimento', () => {
-    expect(chart()).toContain('import { LiquidityZonesPlugin, ZONE_DECAY, type FillableZone } from "./LiquidityZonesPlugin";');
+    expect(chart()).toMatch(/import \{ LiquidityZonesPlugin, ZONE_DECAY, type FillableZone[^}]*\} from "\.\/LiquidityZonesPlugin";/);
   });
 
   it('mainLiquidityCandidates: gated por visibility.liquidity_zones, zona-obstáculo vira null (nunca candidato)', () => {
@@ -286,8 +297,12 @@ describe('EnhancedChart_110_Percent.tsx: candidato MAIN_LIQUIDITY real — mesma
     const s = chart();
     const idx = s.indexOf('<LiquidityZonesPlugin');
     const block = s.slice(idx, s.indexOf('/>', idx));
-    expect(block).toContain('fairValueGaps={(fairValueGaps ?? []) as FillableZone[]}');
-    expect(block).toContain('orderBlocks={(orderBlocks ?? []) as FillableZone[]}');
+    // O fallback deixou de ser `?? []` inline: um array literal novo a cada
+    // render marcava o canvas como sujo eternamente (ver NO_FILLABLE_ZONES
+    // no gráfico). O que este teste protege — a prop chegar ao plugin a
+    // partir da fonte real, com fallback honesto — continua travado.
+    expect(block).toMatch(/fairValueGaps=\{.*fairValueGaps \?\? NO_FILLABLE_ZONES.*\}/);
+    expect(block).toMatch(/orderBlocks=\{.*orderBlocks \?\? NO_FILLABLE_ZONES.*\}/);
     expect(block).toContain('fvgVisualWeights={mainLiquidityVisualWeights.fvg}');
     expect(block).toContain('obVisualWeights={mainLiquidityVisualWeights.ob}');
   });

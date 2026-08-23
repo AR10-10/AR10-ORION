@@ -1092,7 +1092,16 @@ export interface LiquidityZone {
   type: 'EQUAL_HIGH' | 'EQUAL_LOW';
   price: number;
   touches: number;
+  /** índice do ÚLTIMO toque real do cluster */
   index: number;
+  /** índice do PRIMEIRO toque real. Aditivo: o cluster do motor sempre
+   *  soube disto, mas só o último índice era exportado — sem o primeiro não
+   *  existe "trecho" e a única primitiva possível era uma linha de largura
+   *  total (defeito relatado pelo Operador sobre a linha âmbar). */
+  firstIndex: number;
+  /** todos os índices de toque, ordenados — a evidência que sustenta
+   *  `touches`, agora desenhável marca a marca no gráfico. */
+  touchIndices: number[];
   swept: boolean;
 }
 

@@ -138,6 +138,16 @@ function clusterEqualLevels(swings, type, candles) {
         if (cluster.length < 2) return;
         const avgPrice = cluster.reduce((sum, c) => sum + c.price, 0) / cluster.length;
         const lastIndex = Math.max(...cluster.map((c) => c.index));
+        // Aditivo (defeito relatado pelo Operador sobre a tela real: "elas
+        // antigamente nao atravessavam o grafico todo, so marcava um pedaco
+        // da linha... marcava quantas vezes ela testou naquela mesma zona").
+        // O cluster SEMPRE soube em quais candles os toques reais
+        // aconteceram — so o ultimo indice era exportado, entao a camada
+        // visual nao tinha como desenhar o TRECHO real do nivel e desenhava
+        // largura total. firstIndex/touchIndices sao leitura direta do mesmo
+        // cluster, zero calculo novo, zero mudanca em price/touches/swept.
+        const firstIndex = Math.min(...cluster.map((c) => c.index));
+        const touchIndices = cluster.map((c) => c.index).sort((a, b) => a - b);
         let swept = false;
         for (let j = lastIndex + 1; j < candles.length; j++) {
             const c = candles[j];
@@ -152,7 +162,7 @@ function clusterEqualLevels(swings, type, candles) {
                 break;
             }
         }
-        zones.push({ type, price: avgPrice, touches: cluster.length, index: lastIndex, swept });
+        zones.push({ type, price: avgPrice, touches: cluster.length, index: lastIndex, firstIndex, touchIndices, swept });
     };
     for (const s of sorted) {
         if (cluster.length === 0) {

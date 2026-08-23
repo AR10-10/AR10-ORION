@@ -183,6 +183,9 @@ describe('Liquidity Void: graduação real ponta a ponta (QUARANTINE.md + bridge
   it('EnhancedChart: prop repassada ao LiquidityZonesPlugin com o mesmo fallback honesto de FVG/OB', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     expect(chart).toContain('liquidityVoids?: EnhancedChartZone[];');
-    expect(chart).toContain('liquidityVoids={(liquidityVoids ?? []) as FillableZone[]}');
+    // O `?? []` inline virou constante de módulo (NO_FILLABLE_ZONES): um
+    // array literal novo a cada render marcava o canvas como sujo
+    // eternamente. O fallback honesto que este teste protege continua lá.
+    expect(chart).toMatch(/liquidityVoids=\{.*liquidityVoids \?\? NO_FILLABLE_ZONES.*\}/);
   });
 });

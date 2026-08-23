@@ -54,6 +54,14 @@ import { drawCanvasLabel } from "../nexus/canvas-label";
 // cálculo de obstáculo/peso/idade (ver uso abaixo).
 import { fuseLiquidityZones, type FusableZoneInput } from "../nexus/liquidity-zone-fusion";
 import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
+// Defeito relatado pelo Operador ("aquela linha amarela... antigamente não
+// atravessava o gráfico todo, só marcava um pedaço, marcava quantas vezes
+// ela testou"): EQH/EQL migra de `createPriceLine` (largura total forçada
+// pela lib) para este MESMO canvas — zero canvas novo, zero segundo loop de
+// rAF. A geometria do trecho vive num módulo puro para ser testada por
+// execução real. Ver equal-level-span.ts para o porquê do trecho ser a
+// representação honesta.
+import { resolveEqualLevelSegment } from "./equal-level-span";
 
 export interface FillableZone {
   type: "BULLISH" | "BEARISH";
@@ -61,6 +69,29 @@ export interface FillableZone {
   bottom: number;
   index: number;
 }
+
+/** Pool de liquidez real (EQH/EQL) do fvg-order-block-engine.js. `firstIndex`
+ *  e `touchIndices` são leitura direta do mesmo cluster que já produzia
+ *  `touches` — nenhum cálculo novo, só campos que antes morriam no motor. */
+export interface EqualLevelMark {
+  type: "EQUAL_HIGH" | "EQUAL_LOW";
+  price: number;
+  touches: number;
+  /** índice do ÚLTIMO toque real */
+  index: number;
+  /** índice do PRIMEIRO toque real */
+  firstIndex?: number;
+  /** todos os índices de toque, já ordenados */
+  touchIndices?: number[];
+}
+
+// Âmbar unificado de S1/R1/EQH/EQL (Especificação Visual Profissional v1,
+// pedido direto do Operador) — MESMO rgba que a price line removida usava.
+// Só a primitiva muda; a cor não.
+const EQUAL_LEVEL_COLOR = "rgba(245, 158, 11, 0.45)";
+const EQUAL_LEVEL_LABEL_COLOR = "rgba(245, 158, 11, 0.85)";
+/** Meia-altura da marca vertical de cada toque real, em pixels. */
+const TOUCH_TICK_HALF_PX = 3;
 
 interface ZonePalette {
   fill: string;
@@ -163,21 +194,25 @@ interface LiquidityZonesPluginProps {
   // orçamento cruzado. Entrar no orçamento é uma evolução futura própria,
   // não um requisito para a camada existir e ser honesta hoje.
   voidVisualWeights?: (number | undefined)[];
+  // Pools de liquidez (EQH/EQL) — antes eram price lines de largura total
+  // no EnhancedChart. Opcional/fail-closed: ausente/vazio => desenho
+  // idêntico ao de antes desta camada existir aqui.
+  equalLevels?: EqualLevelMark[];
 }
 
-export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, liquidityVoids, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights }: LiquidityZonesPluginProps) {
+export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, liquidityVoids, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels }: LiquidityZonesPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const zonesRef = useRef({ fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights });
+  const zonesRef = useRef({ fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente das zonas/candles para o loop de desenho
   // ler — nunca dispara o efeito de setup abaixo de novo (evita reabrir a
   // conexão com o chart/reassinar os listeners a cada atualização de dado).
-  zonesRef.current = { fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights };
+  zonesRef.current = { fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights]);
+  }, [fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -201,7 +236,7 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
       const timeScale = chart.timeScale();
-      const { fairValueGaps: fvgs, orderBlocks: obs, liquidityVoids: voids, data: candles, obstacleZones: obstacles, fvgVisualWeights: fvgWeights, obVisualWeights: obWeights, voidVisualWeights: voidWeights } = zonesRef.current;
+      const { fairValueGaps: fvgs, orderBlocks: obs, liquidityVoids: voids, data: candles, obstacleZones: obstacles, fvgVisualWeights: fvgWeights, obVisualWeights: obWeights, voidVisualWeights: voidWeights, equalLevels: pools } = zonesRef.current;
 
       const currentIndex = candles.length - 1;
       // Identidade por low/high real (mesmos números, zero recálculo) —
@@ -309,6 +344,67 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       drawGroup(obs, obWeights, "OB", "BEARISH");
       drawGroup(voids ?? [], voidWeights, "VOID", "BULLISH");
       drawGroup(voids ?? [], voidWeights, "VOID", "BEARISH");
+
+      // ── Pools de liquidez (EQH/EQL) ──────────────────────────────────
+      // Desenhados por último: são o traço mais fino do canvas e não podem
+      // ficar por baixo do preenchimento translúcido das zonas.
+      //
+      // O que muda em relação à price line que isto substitui: a linha
+      // cobre o TRECHO real entre o primeiro e o último toque (mais uma
+      // sobra curta de legibilidade — ver equal-level-span.ts), cada toque
+      // real ganha uma marca vertical de 1px, e a contagem aparece no
+      // próprio gráfico ("EQH ×3") em vez de morrer num `title` que o
+      // painel de velas nunca renderizou.
+      for (const pool of pools ?? []) {
+        if (!Number.isFinite(pool.price)) continue;
+        const y = series.priceToCoordinate(pool.price);
+        if (y === null) continue; // fora da faixa visível — fail-closed.
+
+        const first = candles[pool.firstIndex ?? pool.index];
+        const last = candles[pool.index];
+        if (!first || !last) continue; // índice fora da janela real de candles.
+        const xFirst = timeScale.timeToCoordinate(first.time as unknown as Time);
+        const xLast = timeScale.timeToCoordinate(last.time as unknown as Time);
+        if (xFirst === null || xLast === null) continue;
+
+        const seg = resolveEqualLevelSegment(xFirst, xLast, cssWidth);
+        if (!seg) continue;
+
+        // Fio de Seda (Regra de Ouro 5): 1px sólida real, nunca setLineDash.
+        // O +0.5 põe o traço no centro do pixel — sem ele um traço de 1px
+        // cai entre dois pixels e o navegador o desenha com 2px borrados.
+        const yLine = Math.round(y) + 0.5;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = EQUAL_LEVEL_COLOR;
+        ctx.beginPath();
+        ctx.moveTo(seg.x1, yLine);
+        ctx.lineTo(seg.x2, yLine);
+        ctx.stroke();
+
+        // Marca vertical em cada toque REAL. É a evidência que sustenta a
+        // contagem do rótulo: o Operador vê ONDE o nível foi testado, não
+        // só quantas vezes. Sem touchIndices (dado antigo em cache), o
+        // rótulo continua correto e só as marcas somem — fail-closed.
+        for (const ti of pool.touchIndices ?? []) {
+          const c = candles[ti];
+          if (!c) continue;
+          const x = timeScale.timeToCoordinate(c.time as unknown as Time);
+          if (x === null || x < 0 || x > cssWidth) continue;
+          const xTick = Math.round(x) + 0.5;
+          ctx.beginPath();
+          ctx.moveTo(xTick, yLine - TOUCH_TICK_HALF_PX);
+          ctx.lineTo(xTick, yLine + TOUCH_TICK_HALF_PX);
+          ctx.stroke();
+        }
+
+        // "marcava quantas vezes ela testou naquela mesma zona" — a
+        // contagem real do cluster, na mesma convenção "×N" já usada por
+        // Sweep/Zona Institucional/FVG fundidos.
+        drawCanvasLabel(ctx, seg.x1 + 2, yLine - 13, {
+          fill: EQUAL_LEVEL_LABEL_COLOR,
+          text: `${pool.type === "EQUAL_HIGH" ? "EQH" : "EQL"} ×${pool.touches}`,
+        });
+      }
     };
 
     const markDirty = () => {

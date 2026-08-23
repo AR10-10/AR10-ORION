@@ -110,3 +110,46 @@ describe("TICK_MARK_TYPE — valores conferidos contra a lib, nunca supostos", (
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// LOCALE INVÁLIDO — defeito encontrado ao RODAR a verificação visual com
+// Playwright (não em revisão de código): o Chromium do ambiente reporta
+// `en-US@posix`, forma POSIX que `Intl` rejeita com RangeError.
+//
+// O impacto real não é o rótulo: este formatador roda dentro do ciclo de
+// pintura da lightweight-charts, então a exceção abortava a pintura INTEIRA.
+// A captura saiu com o gráfico vazio — nenhuma vela — e o sintoma não
+// apontava para o locale em lugar nenhum.
+// ---------------------------------------------------------------------------
+describe("locale que o runtime rejeita nunca derruba a pintura do gráfico", () => {
+  it("o locale POSIX real do ambiente não lança — era este que quebrava", () => {
+    expect(() => formatTickMark(1_755_000_000, TICK_MARK_TYPE.Time, "en-US@posix")).not.toThrow();
+    expect(() => formatTickMark(1_755_000_000, TICK_MARK_TYPE.DayOfMonth, "en-US@posix")).not.toThrow();
+    expect(() => formatTickMark(1_755_000_000, TICK_MARK_TYPE.Year, "en-US@posix")).not.toThrow();
+  });
+
+  it("nenhuma forma malformada de locale lança, em nenhum tipo de marca", () => {
+    const ruins = ["en-US@posix", "", "pt_BR", "not a locale", "!!", "x".repeat(120)];
+    const tipos = Object.values(TICK_MARK_TYPE);
+    for (const l of ruins) {
+      for (const t of tipos) {
+        expect(() => formatTickMark(1_755_000_000, t, l), `locale ${JSON.stringify(l)} tipo ${t}`).not.toThrow();
+      }
+    }
+  });
+
+  it("o rótulo continua sendo uma data REAL, nunca um travessão ou vazio", () => {
+    // Fail-closed aqui é cair para o locale padrão do runtime — nunca
+    // desistir de informar a data, que é a razão da marca existir.
+    const saida = formatTickMark(1_755_000_000, TICK_MARK_TYPE.DayOfMonth, "en-US@posix");
+    expect(saida.length).toBeGreaterThan(0);
+    expect(saida).toMatch(/^\d{2}\s/); // "DD MMM"
+  });
+
+  it("locale VÁLIDO continua sendo respeitado — o saneamento não achata todo mundo", () => {
+    const t = 1_755_000_000;
+    expect(formatTickMark(t, TICK_MARK_TYPE.DayOfMonth, "pt-BR")).not.toBe(
+      formatTickMark(t, TICK_MARK_TYPE.DayOfMonth, "ja-JP"),
+    );
+  });
+});

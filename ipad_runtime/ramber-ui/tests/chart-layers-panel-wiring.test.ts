@@ -58,7 +58,14 @@ describe('EnhancedChart_110_Percent.tsx: lista canônica única de camadas, toda
   it('esconder uma camada DESMONTA o plugin (JSX condicional), nunca só passa chart=null — um plugin dirty-flag só redesenha quando algo muda, então chart=null congelaria o último frame em vez de escondê-lo', () => {
     const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
     expect(chart).toContain('{visibility.order_flow_heatmap && (');
-    expect(chart).toContain('{visibility.liquidity_zones && (');
+    // EQH/EQL passou a dividir o MESMO canvas de FVG/OB (migrou de price
+    // line de largura total — defeito relatado pelo Operador). Por isso o
+    // gate virou uma disjunção: o plugin monta se QUALQUER uma das duas
+    // camadas estiver visível, e cada uma recebe array vazio quando
+    // desligada. Sem isso, desligar "zonas SMC" apagaria EQH/EQL junto —
+    // regressão silenciosa no gerenciador de camadas. A garantia real deste
+    // teste (esconder DESMONTA, nunca chart=null) continua intacta.
+    expect(chart).toContain('{(visibility.liquidity_zones || visibility.equal_highs_lows) && (');
     expect(chart).toContain('{visibility.structure_breaks && (');
     expect(chart).toContain('{visibility.volume_profile && (');
     expect(chart).toContain('{visibility.neural_market_aura && (');
@@ -392,14 +399,18 @@ describe('Auditoria de pendências: os 7 elementos nativos do gráfico ainda sem
     expect(c).toContain('cvdSeriesRef.current.applyOptions({ visible: visibility.cvd });');
   });
 
-  it('EQH/EQL: fail-closed real — sem visibility.equal_highs_lows, zero price line desenhada (mesmo padrão de "sem dado real, zero linhas")', () => {
+  it('EQH/EQL: fail-closed real — sem visibility.equal_highs_lows, zero trecho desenhado (a camada saiu da price line, mas a garantia é a mesma)', () => {
     const c = chart();
+    // A camada migrou de price line de largura total para um trecho no
+    // canvas de FVG/OB. O que este teste protege NÃO mudou: desligar a
+    // camada tem de zerar o desenho, sem depender de nenhum outro estado.
+    expect(c).toContain('equalLevels={visibility.equal_highs_lows ? equalLevelMarks : NO_EQUAL_LEVELS}');
+    expect(c).toMatch(/const NO_EQUAL_LEVELS: EqualLevelMark\[\] = \[\];/);
+    // O ref de limpeza das price lines antigas continua sendo esvaziado —
+    // se alguma rodada futura voltar a criar linha aqui, ela é removida.
     const idx = c.indexOf('zoneLinesRef.current.forEach((line) => series.removePriceLine(line));');
     expect(idx).toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 300);
-    expect(block).toContain('if (!visibility.equal_highs_lows) return;');
-    const depsIdx = c.indexOf('}, [liquidityZones, visibility.equal_highs_lows]);');
-    expect(depsIdx).toBeGreaterThan(-1);
+    expect(c.indexOf('}, [liquidityZones, visibility.equal_highs_lows]);')).toBeGreaterThan(-1);
   });
 
   it('Fibonacci: fail-closed real — sem visibility.fibonacci, zero price line desenhada', () => {
