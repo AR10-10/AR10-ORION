@@ -4725,7 +4725,7 @@ function ChartLayersPanel() {
     <>
       <div className="!fixed !inset-0 !z-[1000]" onClick={() => setChartLayersOpen?.(false)} />
       <div
-        className="!fixed !z-[1001] left-14 md:left-16 bottom-36 w-60 max-w-[85vw] max-h-[70dvh] cyber-panel flex flex-col bg-[#010308]/98"
+        className="!fixed !z-[1001] left-14 md:left-16 bottom-36 w-60 max-w-[85vw] max-h-[70dvh] cyber-panel cyber-panel--solid flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="cyber-header flex items-center justify-between">

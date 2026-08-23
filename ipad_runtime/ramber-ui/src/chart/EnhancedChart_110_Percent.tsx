@@ -188,7 +188,7 @@ import { clusterSweptPrices } from "../nexus/trap-detection";
 import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER, type TrendChannelDirection } from "../nexus/trend-channel-engine";
 import { shouldCompactLabels } from "./label-compaction";
 import { formatTickMark } from "./tick-mark-format";
-import { formatPrice, priceDecimals } from "../nexus/price-format";
+import { formatPrice, nativePriceDecimals } from "../nexus/price-format";
 import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import { PriceLabelStackPlugin, type PriceAxisLabel } from "./PriceLabelStackPlugin";
 
@@ -887,7 +887,7 @@ function EnhancedChart_110_PercentImpl({
     const last = data[data.length - 1];
     const ref = typeof last?.close === "number" && Number.isFinite(last.close) ? last.close : null;
     if (ref === null) return;
-    const precision = priceDecimals(ref);
+    const precision = nativePriceDecimals(ref);
     series.applyOptions({
       priceFormat: { type: "price", precision, minMove: Math.pow(10, -precision) },
     });

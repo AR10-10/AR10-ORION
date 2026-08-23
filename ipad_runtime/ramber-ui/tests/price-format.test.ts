@@ -15,7 +15,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { formatPrice, priceDecimals } from "../src/nexus/price-format";
+import { formatPrice, priceDecimals, nativePriceDecimals } from "../src/nexus/price-format";
 
 describe("o defeito relatado — preço baixo perdia dígito", () => {
   it("ativo de centavos mostra os dígitos reais, nunca arredondado para 2 casas", () => {
@@ -143,7 +143,7 @@ describe("precisão do eixo nativo acompanha a magnitude do ativo", () => {
 
   it("a precisão vem da MESMA régua dos painéis, nunca de uma segunda", () => {
     const src = chart();
-    expect(src).toContain("priceDecimals(ref)");
+    expect(src).toContain("nativePriceDecimals(ref)");
     expect(src).toContain("price-format");
   });
 
@@ -166,5 +166,49 @@ describe("precisão do eixo nativo acompanha a magnitude do ativo", () => {
     expect(src).not.toContain("displayPrice.toFixed(2)");
     expect(src).not.toContain("midPrice.toFixed(2)");
     expect(src).not.toContain("high.toFixed(2)");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REGRESSÃO PEGA ANTES DE CHEGAR NA TELA.
+//
+// A primeira versão do fix do eixo usava `priceDecimals` direto no
+// `priceFormat` nativo. Como ela devolve 0 casas acima de 1000 (herdado do
+// formatador de RÓTULO, onde "65200" lê melhor que "65200.00"), o BTC
+// passaria a mostrar o PREÇO VIVO como "64604" em vez de "64603.79".
+//
+// O `priceFormat` nativo governa três coisas ao mesmo tempo — marcas do
+// eixo, crosshair e último preço — e o preço vivo é o que o Operador mais
+// lê. Perder centavos ali para ganhar um zero a menos numa marca de grade é
+// troca ruim.
+// ---------------------------------------------------------------------------
+describe("nativePriceDecimals — o eixo nativo nunca perde os centavos", () => {
+  it("BTC mantém 2 casas: o preço vivo continua 64603.79, nunca 64604", () => {
+    expect(priceDecimals(64603.79)).toBe(0); // régua de RÓTULO: "65200"
+    expect(nativePriceDecimals(64603.79)).toBe(2); // régua NATIVA: piso de 2
+  });
+
+  it("acima de 1 o piso de 2 casas vale sempre", () => {
+    for (const v of [1, 9.99, 510.28, 1000, 68500.7, 250000]) {
+      expect(nativePriceDecimals(v), `preço ${v}`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it("abaixo de 1 a precisão adaptativa passa inteira — é lá que o defeito vivia", () => {
+    expect(nativePriceDecimals(0.06)).toBe(priceDecimals(0.06));
+    expect(nativePriceDecimals(0.000123)).toBe(priceDecimals(0.000123));
+    expect(nativePriceDecimals(0.06)).toBeGreaterThan(2);
+  });
+
+  it("nunca é MENOR que a régua de rótulo — só sobe, nunca corta precisão", () => {
+    for (const v of [0.00005, 0.005, 0.5, 5, 5000]) {
+      expect(nativePriceDecimals(v)).toBeGreaterThanOrEqual(priceDecimals(v));
+    }
+  });
+
+  it("o gráfico usa a régua NATIVA, não a de rótulo", () => {
+    const src = readFileSync(resolve(__dirname, "../src/chart/EnhancedChart_110_Percent.tsx"), "utf-8");
+    expect(src).toContain("nativePriceDecimals(ref)");
+    expect(src).not.toContain("const precision = priceDecimals(ref)");
   });
 });

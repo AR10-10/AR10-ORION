@@ -88,3 +88,64 @@ describe("frequência real de atualização que justifica tudo isso", () => {
     expect(ms).toBeGreaterThanOrEqual(200);
   });
 });
+
+// ---------------------------------------------------------------------------
+// LEGIBILIDADE DE PAINEL FLUTUANTE — achado de captura real (BTC/USDT 15m
+// com o painel CAMADAS DO GRÁFICO aberto): dava para LER o texto do gráfico
+// através do painel.
+//
+// Causa: `.cyber-panel` define `background` no atalho, incluindo um
+// `linear-gradient` de 72–86% de opacidade que é pintado POR CIMA da cor de
+// fundo — a classe utilitária de 98% não vencia. Somado ao
+// `backdrop-filter: blur`, o que passava virava borrão.
+// ---------------------------------------------------------------------------
+describe('painel que flutua sobre o gráfico é opaco', () => {
+  const css = () => read("../src/index.css");
+
+  /**
+   * className real da casca do dropdown de camadas.
+   *
+   * ANCORAGEM DELIBERADA (a primeira versão deste helper estava errada e o
+   * teste ficou vermelho por isso): "CAMADAS DO GRÁFICO" aparece DUAS vezes
+   * em App.tsx — num comentário de seção ~340 linhas antes, e no JSX real.
+   * `indexOf` pegava o comentário e a janela caía no meio de outro
+   * componente. Ancorar em `>CAMADAS DO GRÁFICO<` só casa o nó de texto JSX,
+   * e daí subimos até o className da casca em vez de contar caracteres.
+   */
+  const cascaDoPainel = (): string => {
+    const src = app();
+    const i = src.indexOf(">CAMADAS DO GRÁFICO<");
+    expect(i, "título do painel de camadas não encontrado no JSX").toBeGreaterThan(-1);
+    const antes = src.slice(0, i);
+    const j = antes.lastIndexOf('className="!fixed !z-[1001]');
+    expect(j, "casca do dropdown de camadas não encontrada").toBeGreaterThan(-1);
+    const fim = antes.indexOf('"', j + 'className="'.length);
+    return antes.slice(j, fim);
+  };
+
+  it('existe um modificador que desliga o gradiente de vidro', () => {
+    const src = css();
+    expect(src).toContain(".cyber-panel--solid");
+    // Sem isto o gradiente do .cyber-panel continua vencendo.
+    expect(src).toMatch(/\.cyber-panel--solid \{[^}]*background-image: none/);
+    expect(src).toMatch(/\.cyber-panel--solid \{[^}]*background-color:/);
+  });
+
+  it('o painel de camadas usa o modificador — é ele que fica sobre as velas', () => {
+    expect(cascaDoPainel()).toContain("cyber-panel--solid");
+  });
+
+  it('a classe utilitária de opacidade que NÃO funcionava saiu junto', () => {
+    // Mantê-la seria deixar no código a impressão de que o painel é 98%
+    // opaco quando o gradiente o torna 72–86%.
+    expect(cascaDoPainel()).not.toContain("bg-[#010308]/98");
+  });
+
+  it('o modificador acompanha a classe base — sozinho ele não tem borda nem padding', () => {
+    // `--solid` só desliga o gradiente. Sem `.cyber-panel` junto, o painel
+    // perderia borda, sombra e tipografia de painel.
+    const casca = cascaDoPainel();
+    expect(casca).toContain("cyber-panel ");
+    expect(casca.indexOf("cyber-panel ")).toBeLessThan(casca.indexOf("cyber-panel--solid"));
+  });
+});

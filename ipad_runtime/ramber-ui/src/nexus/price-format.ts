@@ -47,6 +47,27 @@ export function priceDecimals(value: number): number {
 }
 
 /**
+ * Casas decimais para o `priceFormat` NATIVO da lightweight-charts.
+ *
+ * POR QUE NÃO É A MESMA DE `priceDecimals` (regressão pega antes de chegar
+ * na tela do Operador): `priceDecimals` devolve 0 acima de 1000 — herdado
+ * do formatador de RÓTULO DE EIXO, onde "65200" lê melhor que "65200.00".
+ *
+ * Mas o `priceFormat` nativo governa TRÊS coisas de uma vez: as marcas do
+ * eixo, o rótulo do crosshair e o do ÚLTIMO PREÇO. Aplicar 0 casas no BTC
+ * faria o preço vivo virar "64604" em vez de "64603.79" — perder os
+ * centavos do preço que o Operador está lendo agora, para ganhar um zero a
+ * menos numa marca de grade. Troca ruim.
+ *
+ * Daí o piso de 2 casas acima de 1: o eixo do BTC continua exatamente como
+ * está hoje, e só os ativos abaixo de 1 ganham a precisão que lhes faltava.
+ */
+export function nativePriceDecimals(value: number): number {
+  const base = priceDecimals(value);
+  return Math.abs(value) >= 1 ? Math.max(2, base) : base;
+}
+
+/**
  * Preço formatado para leitura humana.
  *
  * @param value preço real

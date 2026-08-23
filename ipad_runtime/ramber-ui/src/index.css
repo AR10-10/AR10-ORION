@@ -224,6 +224,27 @@ body {
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+/* Painel que FLUTUA sobre o gráfico precisa ser opaco.
+ *
+ * Achado de captura real (Operador, BTC/USDT 15m com o painel CAMADAS DO
+ * GRÁFICO aberto): dava para LER o texto do gráfico através do painel — o
+ * rótulo "Conselho neutro" ao lado do título e a etiqueta de confluência
+ * cruzando o corpo dele.
+ *
+ * A causa não era a classe utilitária de cor (o painel já pedia 98% de
+ * opacidade): `.cyber-panel` define `background` no atalho, o que inclui um
+ * `background-image: linear-gradient(...)` de 72–86% de opacidade pintado
+ * POR CIMA da cor de fundo. O gradiente vence, e o `backdrop-filter: blur`
+ * transforma o que passa num borrão — pior de ler que transparência limpa.
+ *
+ * Este modificador desliga o gradiente e mantém borda/sombra/raio. Vidro é
+ * bonito num painel que fica sobre o fundo do app; sobre CANDLES ele custa
+ * legibilidade, que é a única coisa que um terminal não pode perder. */
+.cyber-panel--solid {
+  background-image: none;
+  background-color: #050912;
+}
+
 .cyber-panel:hover {
   border-color: rgba(255, 255, 255, 0.16);
   box-shadow:
