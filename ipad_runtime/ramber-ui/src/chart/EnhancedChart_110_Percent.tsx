@@ -203,6 +203,7 @@ import { clusterSweptPrices } from "../nexus/trap-detection";
 import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV_MULTIPLIER, type TrendChannelDirection } from "../nexus/trend-channel-engine";
 import { shouldCompactLabels } from "./label-compaction";
 import { formatTickMark, chartLocale } from "./tick-mark-format";
+import { formatZoneMemberList } from "../nexus/zone-member-codes";
 import { formatPrice, nativePriceDecimals } from "../nexus/price-format";
 import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import { PriceLabelStackPlugin, type PriceAxisLabel } from "./PriceLabelStackPlugin";
@@ -3653,11 +3654,18 @@ function EnhancedChart_110_PercentImpl({
       institutionalZones.forEach((zone, i) => {
         // Lapidação por captura real ("◆ Sessão Baixa + Sweep + Sweep +
         // EMA21..."): membros com o MESMO label agregam com contagem real
-        // ("Sweep ×2") em vez de repetir o nome — informação idêntica,
+        // ("SWP×2") em vez de repetir o nome — informação idêntica,
         // etiqueta mais curta e precisa.
-        const labelCounts = new Map<string, number>();
-        for (const m of zone.members) labelCounts.set(m.label, (labelCounts.get(m.label) ?? 0) + 1);
-        const toolNames = [...labelCounts.entries()].map(([l, n]) => (n > 1 ? `${l} ×${n}` : l)).join(" + ");
+        //
+        // Pedido do Operador sobre "o tamanho das etiquetas": medido nas
+        // capturas reais, esta linha chegava a 43 caracteres
+        // ("VWAP + FVG Baixa ×2 + Sweep ×2 + Nexus Line") e atravessava as
+        // velas na horizontal. A agregação continua idêntica; o que mudou é
+        // que cada nome vira seu código curto (zone-member-codes.ts) —
+        // mesma quantidade de itens, mesma ordem, mesma contagem, nenhuma
+        // ferramenta escondida atrás de um "+N outros" (Regra de Ouro 4:
+        // isto é tipografia, nunca poda).
+        const toolNames = formatZoneMemberList(zone.members.map((m) => m.label));
         // Evolução Total ("um objeto, um peso"): quando o orçamento visual
         // REDUZIU a ênfase da faixa desta zona (competição real entre
         // camadas), a etiqueta segue a mesma redução — razão entre o peso

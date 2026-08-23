@@ -1353,7 +1353,14 @@ describe('Lapidação por captura real: kill zone só a ocorrência mais recente
 
   it('Zona Institucional: membros repetidos agregam com contagem real ("Sweep ×2"), nunca nome repetido', () => {
     const c = chart();
-    expect(c).toContain('for (const m of zone.members) labelCounts.set(m.label, (labelCounts.get(m.label) ?? 0) + 1);');
-    expect(c).toContain('const toolNames = [...labelCounts.entries()].map(([l, n]) => (n > 1 ? `${l} ×${n}` : l)).join(" + ");');
+    // A agregação saiu de inline e virou fonte única testável por EXECUÇÃO
+    // real (nexus/zone-member-codes.ts + zone-member-codes.test.ts), junto
+    // com o encurtamento dos nomes que o Operador pediu ("o tamanho das
+    // etiquetas"). O comportamento que ESTE teste protege é o mesmo: nome
+    // repetido nunca aparece duas vezes, vira contagem.
+    expect(c).toContain('formatZoneMemberList(zone.members.map((m) => m.label))');
+    expect(c).toContain('import { formatZoneMemberList } from "../nexus/zone-member-codes";');
+    // E a composição inline não pode ressuscitar em paralelo à fonte única.
+    expect(c).not.toMatch(/^\s*const labelCounts = new Map<string, number>\(\);/m);
   });
 });
