@@ -74,6 +74,10 @@ const SWEEP_DECAY: DecayConfig = { fadeStartCandles: 50, expireCandles: 200, min
 // um redraw por render, para sempre, sem nenhuma zona real na tela.
 // Constantes de módulo eliminam isso sem mudar nenhum comportamento
 // visível — parte do "deixa o sistema leve" pedido pelo Operador.
+/** Linha do crosshair — mesmo matiz `#758696` de sempre, translúcida.
+ *  Ver o comentário no bloco `crosshair:` das opções do chart. */
+const CROSSHAIR_LINE_COLOR = "rgba(117, 134, 150, 0.42)";
+
 const NO_FILLABLE_ZONES: FillableZone[] = [];
 const NO_EQUAL_LEVELS: EqualLevelMark[] = [];
 const EMPTY_OBSTACLE_ZONES: { low: number; high: number }[] = [];
@@ -1125,10 +1129,23 @@ function EnhancedChart_110_PercentImpl({
       // exceção explícita a essa regra específica (nunca perguntada). Um
       // crosshair SÓLIDO ainda é uma melhoria real sobre o default mínimo
       // de antes (só `mode`).
+      // Pedido direto do Operador: "aquela linha que a gente coisa com o
+      // mouse, ela também tem que ficar bem levezinha".
+      //
+      // A largura já era 1 (o mínimo real da lib — Fio de Seda, Regra de
+      // Ouro 5), então a única alavanca restante era a PRESENÇA da cor:
+      // `#758696` opaco é um cinza-azulado claro sobre um fundo quase
+      // preto, e a linha do cursor competia com as próprias velas. Mesmo
+      // matiz, agora translúcida — continua achável na hora de medir um
+      // nível, e para de disputar atenção com o dado.
+      //
+      // Os RÓTULOS do crosshair (eixo de preço/tempo) mantêm o fundo opaco
+      // de propósito: é neles que se lê o número, e um rótulo translúcido
+      // sobre velas seria ilegível — leveza na linha, nunca no número.
       crosshair: {
         mode: CrosshairMode.Magnet,
-        vertLine: { color: "#758696", width: 1, style: LineStyle.Solid, labelBackgroundColor: "#131722" },
-        horzLine: { color: "#758696", width: 1, style: LineStyle.Solid, labelBackgroundColor: "#131722" },
+        vertLine: { color: CROSSHAIR_LINE_COLOR, width: 1, style: LineStyle.Solid, labelBackgroundColor: "#131722" },
+        horzLine: { color: CROSSHAIR_LINE_COLOR, width: 1, style: LineStyle.Solid, labelBackgroundColor: "#131722" },
       },
       // AR10_ESPECIFICACAO_VISUAL_PIXEL_PERFECT.md §5 (Regra de Ouro 5 do
       // documento: escala nunca colapsa pra menos que 65px, mesmo com
@@ -1671,22 +1688,71 @@ function EnhancedChart_110_PercentImpl({
   // segundo fetch ou cálculo. param.time vem undefined quando o cursor sai
   // da área do gráfico (mouse leave nativo da lib): null explícito,
   // volta ao último candle real no chamador — nunca um valor congelado.
+  //
+  // DEFEITO DE DESEMPENHO MEDIDO AQUI (relato do Operador: "aquela linha
+  // que a gente coisa com mouse tem que ficar bem levezinha... não pode ter
+  // delay com a sincronização"). A versão anterior deste handler era:
+  //
+  //     const hovered = data.find((c) => c.time === hoveredTime);
+  //     onHoverCandleChange(hovered ?? null);
+  //
+  // Três custos reais empilhados, todos por EVENTO de crosshair (que dispara
+  // na taxa do ponteiro — dezenas por segundo no trackpad, contínuo durante
+  // um arraste com o dedo no iPad):
+  //
+  //   1. VARREDURA LINEAR do array inteiro de candles a cada evento. Com
+  //      várias centenas de candles reais, é um scan completo por movimento
+  //      de um pixel.
+  //   2. `onHoverCandleChange` chamado SEMPRE, mesmo quando o candle sob o
+  //      cursor não mudou. Mover o mouse dentro da MESMA coluna de candle
+  //      disparava um setState no App (um único componente de ~12.000
+  //      linhas) a cada evento — reconciliação da árvore inteira para
+  //      mostrar exatamente os mesmos números.
+  //   3. `data` no array de dependências: a assinatura era desfeita e
+  //      refeita a cada atualização de candle, ou seja a cada tick.
+  //
+  // Correções, na ordem do impacto: índice O(1) por tempo (Map construído
+  // uma vez por mudança de `data`, nunca por evento); guarda de identidade
+  // que só notifica quando o candle REALMENTE mudou; e a assinatura passa a
+  // viver só enquanto o chart existe, lendo `data` por ref.
+  //
+  // Nenhuma informação se perde: o mesmo candle real, do mesmo array já
+  // desenhado, chega ao mesmo consumidor. Só param as chamadas redundantes.
+  const hoverDataRef = useRef<{ index: Map<number, EnhancedChartCandle>; ultimoTime: number | null }>({
+    index: new Map(),
+    ultimoTime: null,
+  });
+
+  useEffect(() => {
+    const index = new Map<number, EnhancedChartCandle>();
+    for (const c of data) index.set(c.time, c);
+    hoverDataRef.current.index = index;
+    // O candle sob o cursor pode ter mudado de conteúdo sem mudar de tempo
+    // (o candle ao vivo recebe ticks): invalida a guarda para o próximo
+    // evento reemitir com o objeto novo.
+    hoverDataRef.current.ultimoTime = null;
+  }, [data]);
+
   useEffect(() => {
     if (!chartReady || !onHoverCandleChange) return;
     const handler = (param: MouseEventParams) => {
+      const estado = hoverDataRef.current;
       if (param.time === undefined) {
+        if (estado.ultimoTime === null) return; // já estava fora — nada a notificar.
+        estado.ultimoTime = null;
         onHoverCandleChange(null);
         return;
       }
       const hoveredTime = Number(param.time);
-      const hovered = data.find((c) => c.time === hoveredTime);
-      onHoverCandleChange(hovered ?? null);
+      if (hoveredTime === estado.ultimoTime) return; // mesmo candle: zero trabalho.
+      estado.ultimoTime = hoveredTime;
+      onHoverCandleChange(estado.index.get(hoveredTime) ?? null);
     };
     chartReady.chart.subscribeCrosshairMove(handler);
     return () => {
       chartReady.chart.unsubscribeCrosshairMove(handler);
     };
-  }, [chartReady, onHoverCandleChange, data]);
+  }, [chartReady, onHoverCandleChange]);
 
   // Liquidez (Equal High/Low): NÃO desenha mais aqui.
   //

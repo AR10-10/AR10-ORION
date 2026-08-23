@@ -103,13 +103,26 @@ describe('OhlcReadout: tooltip de hover (achado B16 da AUDITORIA TÉCNICA COMPLE
     expect(chart).toContain('chartReady.chart.subscribeCrosshairMove(handler);');
     expect(chart).toContain('chartReady.chart.unsubscribeCrosshairMove(handler);');
     // Fail-closed: cursor fora da área do gráfico -> null explícito, nunca
-    // um candle congelado na última posição conhecida.
-    expect(chart).toMatch(/if \(param\.time === undefined\) {\s*onHoverCandleChange\(null\);/);
+    // um candle congelado na última posição conhecida. A guarda de
+    // identidade adicionada por custo de crosshair (ver
+    // crosshair-cost.test.ts) só evita notificar DUAS vezes seguidas que o
+    // cursor saiu — a primeira notificação continua obrigatória.
+    expect(chart).toMatch(/if \(param\.time === undefined\) \{[\s\S]{0,200}onHoverCandleChange\(null\);/);
+    expect(chart).toContain('estado.ultimoTime = null;');
   });
 
   it('o candle hover vem do MESMO array `data` já desenhado — zero segundo fetch/cálculo', () => {
     const chart = readFileSync(join(__dirname, '../src/chart/EnhancedChart_110_Percent.tsx'), 'utf8');
-    expect(chart).toContain('const hovered = data.find((c) => c.time === hoveredTime);');
+    // A busca deixou de ser `data.find(...)` por evento (varredura linear na
+    // taxa do ponteiro — ver crosshair-cost.test.ts) e virou um índice O(1).
+    // O que ESTE teste protege não mudou: o índice é construído a partir do
+    // MESMO array `data` já desenhado, e nada mais.
+    expect(chart).toMatch(/for \(const c of data\) index\.set\(c\.time, c\);/);
+    expect(chart).toContain('estado.index.get(hoveredTime)');
+    // Forma EXECUTÁVEL (início de linha real), nunca a string solta: o
+    // código antigo aparece de propósito no comentário que explica por que
+    // ele morreu, e casar com o comentário seria falso positivo.
+    expect(chart).not.toMatch(/^\s*const hovered = data\.find\(/m);
   });
 
   it('ChartWidget conecta onHoverCandleChange ao mesmo estado que alimenta OhlcReadout', () => {

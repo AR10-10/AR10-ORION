@@ -135,11 +135,19 @@ describe('Fiação real: App.tsx dedupe, teto de memória e escopo por symbol:ti
     const symbolFnMatch = app.match(/const fetchSymbolData = async \(isStale: \(\) => boolean\): Promise<boolean> => \{([\s\S]*?)\n {2}\};/);
     expect(symbolFnMatch, 'fetchSymbolData não encontrada com o parâmetro isStale').not.toBeNull();
     const symbolBody = symbolFnMatch![1];
-    // 2 checagens: uma depois de getChartCandles, outra depois do fetch do ticker —
-    // o ativo pode trocar durante QUALQUER um dos dois awaits, não só o primeiro.
-    expect(symbolBody.match(/if \(isStale\(\)\) return true;/g)).toHaveLength(2);
+    // 2 checagens: uma depois de getChartCandles, outra depois do fetch do
+    // ticker — o ativo pode trocar durante QUALQUER um dos dois awaits.
+    expect(symbolBody.match(/if \((?:isStale|trocou)\(\)\) return true;/g)).toHaveLength(2);
+    // A PRIMEIRA guarda (a que protege os candles) cobre ativo E TIMEFRAME:
+    // trocar de 15m para 1H com um fetch de 15m em voo fundia duas grades
+    // de tempo numa série só — defeito real desta auditoria. A SEGUNDA
+    // continua sendo só `isStale()` de propósito: ela protege
+    // `setScannerData`, um ticker de 24h de uma lista fixa de símbolos, que
+    // não tem nada a ver com o timeframe do gráfico.
+    expect(symbolBody).toContain('if (trocou()) return true;');
+    expect(symbolBody).toContain('chartTimeframeRef.current !== tfNoInicio');
     // a checagem vem ANTES do setState correspondente, nunca depois
-    expect(symbolBody.indexOf('if (isStale()) return true;')).toBeLessThan(symbolBody.indexOf('setChartData((prev) => mergeFreshTail'));
+    expect(symbolBody.indexOf('if (trocou()) return true;')).toBeLessThan(symbolBody.indexOf('setChartData((prev) => mergeFreshTail'));
 
     const derivFnMatch = app.match(/const fetchDerivatives = async \(isStale: \(\) => boolean\): Promise<boolean> => \{([\s\S]*?)\n {2}\};/);
     expect(derivFnMatch, 'fetchDerivatives não encontrada com o parâmetro isStale').not.toBeNull();
@@ -263,5 +271,99 @@ describe('Fiação real: EnhancedChart_110_Percent desloca a faixa visível SÓ 
     expect(chart).toContain('chartReady.chart.timeScale().subscribeVisibleLogicalRangeChange(handler);');
     expect(chart).toContain('chartReady.chart.timeScale().unsubscribeVisibleLogicalRangeChange(handler);');
     expect(chart).toContain('onRequestOlderCandles?: () => void;');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MISTURA DE TIMEFRAMES — defeito real encontrado em auditoria, partindo do
+// pedido do Operador sobre a Fibonacci ("ela tem de fazer um novo mapeamento
+// na análise, cada tempo gráfico").
+//
+// A guarda de "resposta velha" do fetch periódico cobria só a troca de
+// ATIVO. Trocar de 15m para 1H com um fetch de 15m em voo deixava os candles
+// de 15m serem FUNDIDOS na série de 1H: uma série única com duas grades de
+// tempo, sobre a qual Fibonacci, S/R, SMC e BOS/CHOCH passavam a mapear
+// swings. Nenhum erro, nenhum log — só leitura errada.
+//
+// Aqui o bug provável é "a matemática da fusão aceita o que não devia", por
+// isso execução real da função pura.
+// ---------------------------------------------------------------------------
+describe("mergeFreshTail nunca funde duas grades de tempo diferentes", () => {
+  const H = 3600;
+  const serie = (t0: number, passo: number, n: number): ChartCandle[] =>
+    Array.from({ length: n }, (_, i) => ({
+      time: t0 + i * passo,
+      open: 100,
+      high: 101,
+      low: 99,
+      close: 100,
+      volume: 1,
+    }));
+
+  it("candles de 15m chegando sobre uma série de 1H substituem, nunca fundem", () => {
+    const umaHora = serie(1_700_000_000, H, 200);
+    // 15m cobrindo uma janela recente — exatamente o caso real.
+    const quinzeMin = serie(1_700_000_000 + 150 * H, H / 4, 300);
+    const out = mergeFreshTail(umaHora, quinzeMin);
+    expect(out).toEqual(quinzeMin);
+  });
+
+  it("o contrário também: 1H sobre uma série de 15m substitui", () => {
+    const quinzeMin = serie(1_700_000_000, H / 4, 300);
+    const umaHora = serie(1_700_000_000 + 50 * H, H, 200);
+    expect(mergeFreshTail(quinzeMin, umaHora)).toEqual(umaHora);
+  });
+
+  it("nenhuma série resultante mistura passos — a garantia que interessa", () => {
+    const umaHora = serie(1_700_000_000, H, 200);
+    const quinzeMin = serie(1_700_000_000 + 150 * H, H / 4, 300);
+    const out = mergeFreshTail(umaHora, quinzeMin);
+    const passos = new Set<number>();
+    for (let i = 1; i < out.length; i++) passos.add(out[i].time - out[i - 1].time);
+    expect([...passos]).toEqual([H / 4]);
+  });
+
+  it("MESMA grade continua fundindo — a paginação histórica não pode regredir", () => {
+    // Este é o caso que a função existe para servir: história antiga já
+    // carregada por arraste + refresh da cauda, ambos no MESMO timeframe.
+    const antigos = serie(1_700_000_000, H, 200);
+    const cauda = serie(1_700_000_000 + 150 * H, H, 100);
+    const out = mergeFreshTail(antigos, cauda);
+    expect(out.length).toBeGreaterThan(cauda.length);
+    expect(out[0].time).toBe(antigos[0].time);
+    expect(out[out.length - 1].time).toBe(cauda[cauda.length - 1].time);
+  });
+
+  it("um buraco real no histórico não é confundido com troca de grade", () => {
+    // Manutenção de exchange deixa um vão de várias barras. A mediana dos
+    // passos ignora isso — trocar de timeframe muda a mediana, um buraco
+    // isolado não.
+    const comBuraco = serie(1_700_000_000, H, 100);
+    comBuraco.push({ time: comBuraco[99].time + 12 * H, open: 100, high: 101, low: 99, close: 100, volume: 1 });
+    const cauda = serie(comBuraco[comBuraco.length - 1].time + H, H, 60);
+    const out = mergeFreshTail(comBuraco, cauda);
+    expect(out.length).toBeGreaterThan(cauda.length); // fundiu de verdade
+  });
+
+  it("amostra curta demais não afirma grade nenhuma — fail-closed sem inventar regra", () => {
+    const doisCandles: ChartCandle[] = [
+      { time: 1_700_000_000, open: 1, high: 1, low: 1, close: 1, volume: 0 },
+      { time: 1_700_000_000 + H, open: 1, high: 1, low: 1, close: 1, volume: 0 },
+    ];
+    // Com 2 candles não dá para medir mediana de passo com confiança; a
+    // função volta ao comportamento de fusão de sempre em vez de decidir
+    // por adivinhação.
+    const cauda = serie(1_700_000_000 + 5 * H, H, 50);
+    expect(() => mergeFreshTail(doisCandles, cauda)).not.toThrow();
+  });
+});
+
+describe("a guarda de timeframe existe no fetch periódico (a 1ª camada)", () => {
+  it("o fetch confere o timeframe capturado, não só o ativo", () => {
+    const src = read('../src/App.tsx');
+    expect(src).toContain("const tfNoInicio = chartTimeframeRef.current;");
+    expect(src).toContain("chartTimeframeRef.current !== tfNoInicio");
+    // A gravação Local-First usa o timeframe REALMENTE buscado.
+    expect(src).toContain("saveCandles(selectedAsset, tfNoInicio as Timeframe, candles)");
   });
 });

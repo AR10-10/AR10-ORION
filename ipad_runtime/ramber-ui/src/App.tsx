@@ -656,8 +656,49 @@ export type ChartCandle = { time: number; open: number; high: number; low: numbe
 // formação). Sem paginação nenhuma ainda, existing.length <= fresh.length
 // e isto se comporta identico a um replace — zero mudança de
 // comportamento no caso comum.
+//
+// DEFEITO REAL ENCONTRADO NESTA AUDITORIA (partiu do pedido do Operador
+// sobre a Fibonacci: "ela tem de fazer um novo mapeamento na análise, cada
+// tempo gráfico"). A guarda de "resposta velha" do fetch periódico cobria
+// só a troca de ATIVO, nunca a troca de TIMEFRAME. Sequência real:
+//
+//   1. Operador em 15m; o tick de 30s dispara o fetch de klines.
+//   2. Durante o await, ele troca para 1H. O efeito de timeframe busca e
+//      aplica os candles de 1H.
+//   3. A resposta de 15m chega. Como o efeito do fetch periódico não
+//      depende de `chartTimeframe`, sua flag de cancelamento continua
+//      falsa — e os candles de 15m eram fundidos no array de 1H.
+//
+// O resultado era uma série ÚNICA misturando duas grades de tempo, e todo
+// motor a jusante (Fibonacci, S/R, SMC, BOS/CHOCH, Volume Profile) passava
+// a mapear swings sobre ela. Silencioso: nenhum erro, só leitura errada.
+//
+// Duas camadas de correção, e esta é a segunda (defesa em profundidade — a
+// primeira é a guarda de timeframe em fetchSymbolData): a fusão passa a
+// COMPARAR AS GRADES. Espaçamentos diferentes nunca são fundidos; `fresh`
+// é autoritativo sozinho, como num replace. Fail-closed (Regra de Ouro 3):
+// na dúvida, a série mais recente e internamente coerente vence, nunca uma
+// mistura fabricada.
+function candleStepSeconds(series: ChartCandle[]): number | null {
+  if (series.length < 3) return null; // amostra curta demais para afirmar grade.
+  // Mediana dos passos: um buraco real no histórico (manutenção da
+  // exchange) não muda a mediana, mas mudar de 15m para 1H muda.
+  const passos: number[] = [];
+  for (let i = 1; i < series.length; i++) {
+    const d = series[i].time - series[i - 1].time;
+    if (d > 0) passos.push(d);
+  }
+  if (passos.length === 0) return null;
+  passos.sort((a, b) => a - b);
+  return passos[Math.floor(passos.length / 2)];
+}
+
 export function mergeFreshTail(existing: ChartCandle[], fresh: ChartCandle[]): ChartCandle[] {
   if (existing.length === 0 || fresh.length === 0) return fresh;
+  // Grades diferentes = timeframes diferentes: nunca funde (ver acima).
+  const passoExistente = candleStepSeconds(existing);
+  const passoNovo = candleStepSeconds(fresh);
+  if (passoExistente !== null && passoNovo !== null && passoExistente !== passoNovo) return fresh;
   const freshOldestTime = fresh[0].time;
   const olderPart = existing.filter((c) => c.time < freshOldestTime);
   if (olderPart.length === 0) return fresh;
@@ -1166,15 +1207,27 @@ export default function App() {
   // rotulados sob o título errado.
   const fetchSymbolData = async (isStale: () => boolean): Promise<boolean> => {
     try {
-      const candles = await getChartCandles(selectedAsset, CHART_CANDLE_LIMIT, chartTimeframeRef.current);
+      // Achado real desta auditoria: `isStale` só sabe sobre troca de ATIVO
+      // (a flag vem de um efeito cujas deps são bootGeneration/
+      // selectedAsset — chartTimeframe NÃO está lá). Trocar de timeframe
+      // durante este await deixava uma resposta do timeframe ANTIGO chegar
+      // com isStale() falso e ser fundida na série do timeframe NOVO —
+      // uma série única com duas grades de tempo, sobre a qual todo motor
+      // de swing (Fibonacci, S/R, SMC, BOS/CHOCH) passava a mapear.
+      // Capturado aqui e conferido depois de cada await, exatamente como o
+      // ativo já era.
+      const tfNoInicio = chartTimeframeRef.current;
+      const trocou = () => isStale() || chartTimeframeRef.current !== tfNoInicio;
+      const candles = await getChartCandles(selectedAsset, CHART_CANDLE_LIMIT, tfNoInicio);
       if (!candles) throw new Error('market_data_bus_sem_candles_validos');
-      if (isStale()) return true; // ativo trocou durante o fetch — descarta, nunca aplica dado do ativo errado
+      if (trocou()) return true; // ativo OU timeframe trocou durante o fetch — descarta, nunca aplica dado errado
       // Auditoria de arquitetura: merge, nunca um replace cego — preserva
       // história real que a paginação (arrastar para trás) já carregou.
       setChartData((prev) => mergeFreshTail(prev, candles));
       // Local-First: persist the real series (fire-and-forget — a storage
-      // failure never blocks or delays the live path).
-      void saveCandles(selectedAsset, chartTimeframeRef.current as Timeframe, candles).catch(() => {});
+      // failure never blocks or delays the live path). Grava sob o
+      // timeframe que foi REALMENTE buscado, nunca o atual.
+      void saveCandles(selectedAsset, tfNoInicio as Timeframe, candles).catch(() => {});
 
       const tickerRes = await fetch(
         `https://api.binance.com/api/v3/ticker/24hr?symbols=["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT"]`,
