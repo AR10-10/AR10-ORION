@@ -60,8 +60,9 @@ describe('LiquidityZonesPlugin: destaque de obstáculo (Diretriz Restauração/I
     const fillOpacities = [...p.matchAll(/fill: "rgba\([^)]+, ([0-9.]+)\)"/g)].map((m) => Number(m[1]));
     const borderOpacities = [...p.matchAll(/border: "rgba\([^)]+, ([0-9.]+)\)"/g)].map((m) => Number(m[1]));
     // 4 FVG/OB normais + 4 FVG/OB de obstáculo + 2 VOID normais + 2 VOID de
-    // obstáculo (Liquidity Void, liquidity-void-engine.js — 3º kind real).
-    expect(fillOpacities.length).toBe(12);
+    // obstáculo + 4 BREAKER + 4 MITIGATION (graduação de
+    // institutional-blocks.js — 4º e 5º kinds reais).
+    expect(fillOpacities.length).toBe(20);
     expect(borderOpacities.length).toBe(fillOpacities.length);
     fillOpacities.forEach((fillOpacity, i) => expect(fillOpacity).toBeLessThan(borderOpacities[i]));
   });
@@ -70,9 +71,15 @@ describe('LiquidityZonesPlugin: destaque de obstáculo (Diretriz Restauração/I
     const p = plugin();
     expect(p).toContain('const VOID_BULLISH: ZonePalette = { fill: "rgba(0, 98, 255, 0.10)", border: "rgba(0, 98, 255, 0.35)" };');
     expect(p).toContain('const VOID_BEARISH: ZonePalette = { fill: "rgba(236, 81, 205, 0.10)", border: "rgba(236, 81, 205, 0.35)" };');
-    // paletteFor resolve os 3 kinds reais — nunca cai no ramo de OB por engano.
-    expect(p).toContain('function paletteFor(kind: "FVG" | "OB" | "VOID", type: "BULLISH" | "BEARISH", isObstacle: boolean): ZonePalette {');
-    expect(p).toContain('if (kind === "VOID") {');
+    // paletteFor resolve TODOS os kinds reais — nunca cai no ramo de OB por
+    // engano. A união virou um tipo nomeado (ZoneKind) quando Breaker e
+    // Mitigation entraram; o que importa aqui é que cada kind tenha o SEU
+    // ramo explícito.
+    expect(p).toContain('export type ZoneKind = "FVG" | "OB" | "VOID" | "BREAKER" | "MITIGATION";');
+    expect(p).toContain('function paletteFor(kind: ZoneKind, type: "BULLISH" | "BEARISH", isObstacle: boolean): ZonePalette {');
+    for (const kind of ['VOID', 'BREAKER', 'MITIGATION']) {
+      expect(p, `kind ${kind} sem ramo próprio em paletteFor`).toContain(`if (kind === "${kind}") {`);
+    }
   });
 
   it('pergunta do Operador ("era pra cima ou pra baixo?"): o rótulo da zona carrega a DIREÇÃO por glifo ↑/↓, nunca só a cor — BULLISH=↑ (demanda), BEARISH=↓ (oferta), o glifo vem de type real do motor SMC', () => {
@@ -82,7 +89,11 @@ describe('LiquidityZonesPlugin: destaque de obstáculo (Diretriz Restauração/I
     // por zona bruta virou rótulo por GRUPO fundido (drawGroup) — mesmo
     // glifo de direção, ganhou "×N" quando várias zonas reais se fundem e
     // preservou o "⚠" de obstáculo, nunca escondido pela fusão.
-    expect(p).toContain('const label = `${kind}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;');
+    // O kind passa por uma forma curta (BRK/MIT) antes de entrar no rótulo —
+    // mesma disciplina de "o tamanho das etiquetas" pedida pelo Operador.
+    // O glifo de direção e a contagem ×N seguem exatamente iguais.
+    expect(p).toContain('const label = `${kindLabel}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;');
+    expect(p).toContain('const kindLabel = kind === "BREAKER" ? "BRK" : kind === "MITIGATION" ? "MIT" : kind;');
     // o glifo nunca substitui a marca de obstáculo (⚠), só a acompanha
     expect(p).toContain('" ⚠"');
   });

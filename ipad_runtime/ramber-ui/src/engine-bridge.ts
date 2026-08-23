@@ -70,6 +70,10 @@ import { analyze as analyzeBosChoch } from '../../src/research/engines/bos-choch
 // candles com participação de volume anormalmente baixa, distinto de FVG
 // (ver header do próprio arquivo + QUARANTINE.md).
 import { analyze as analyzeLiquidityVoids } from '../../src/research/engines/liquidity-void-engine.js';
+// Graduação de institutional-blocks.js (Breaker/Mitigation Block). O motor
+// e sua suíte de execução real existiam desde a entrega anterior e nunca
+// tinham chegado ao sistema ao vivo — 0 importadores. Ver QUARANTINE.md.
+import { analyze as analyzeInstitutionalBlocks } from '../../src/research/engines/institutional-blocks.js';
 // Entrega 47 (pedido direto do Operador): graduação do ZigZag do
 // Laboratório de Evolução (isolado/testado desde a Entrega 35, nunca
 // importado até aqui — ver QUARANTINE.md). Motor puro inalterado.
@@ -1142,6 +1146,51 @@ export interface StructureBreak {
   level: number;
   index: number;
   time: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GRADUAÇÃO — Breaker / Mitigation Blocks (institutional-blocks.js).
+//
+// O motor classifica Order Blocks que FALHARAM (preço fechou através deles)
+// em dois tipos, pelo único critério que a pesquisa confirmou distinguí-los:
+// houve varredura de liquidez ANTES da falha (BREAKER, polaridade INVERTE)
+// ou não houve (MITIGATION, polaridade se MANTÉM).
+//
+// Zero matemática nova: os Order Blocks vêm de fvg-order-block-engine.js e
+// os swings de fractal-swings.js — o motor só classifica o que já é
+// detectado. Computado contra o MESMO array de candles do gráfico que
+// computeSmcZones/computeBosChoch já recebem (mesmo motivo de sempre: o
+// `index` só faz sentido alinhado ao array que o caller desenha).
+//
+// LEI 24 — display only: alimenta anotação visual e contexto, NUNCA uma
+// segunda decisão de trading e nunca um bloqueio da decisão do Núcleo.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface InstitutionalBlock {
+  kind: 'BREAKER' | 'MITIGATION';
+  /** Direção OPERACIONAL depois da falha — já com a inversão de polaridade
+   *  do Breaker aplicada. Nunca é o mesmo campo que `originType`. */
+  direction: 'ALTA' | 'BAIXA';
+  /** Polaridade ORIGINAL do Order Block, antes da falha. */
+  originType: 'BULLISH' | 'BEARISH';
+  index: number;
+  failIndex: number;
+  top: number;
+  bottom: number;
+  sweptLevel: number | null;
+  sweepIndex: number | null;
+  /** true quando o preço já voltou para dentro do bloco depois da falha —
+   *  antes disso é uma zona identificada, não testada. */
+  retested: boolean;
+}
+
+export function computeInstitutionalBlocks(
+  candles: Array<{ open: number; high: number; low: number; close: number }>,
+): InstitutionalBlock[] {
+  const result = analyzeInstitutionalBlocks({ ohlcv_series: candles });
+  // Fail-closed (Regra de Ouro 3): sem dado real suficiente, lista vazia —
+  // nunca um bloco fabricado para preencher a camada.
+  if (result.status !== 'OK') return [];
+  return result.blocks;
 }
 
 export function computeBosChoch(

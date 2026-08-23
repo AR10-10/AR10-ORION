@@ -61,7 +61,7 @@ describe('App.tsx → EnhancedChart_110_Percent: structureBreak passa ponta a po
     const app = read('../src/App.tsx');
     // liquidityVoids (liquidity-void-engine.js) viaja pelo MESMO contexto,
     // na mesma posição — zero segunda rota de dado até o gráfico.
-    expect(app).toContain('const { smcZones, tradePlanStructureZones, bosChoch, liquidityVoids, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
+    expect(app).toContain('const { smcZones, tradePlanStructureZones, bosChoch, liquidityVoids, institutionalBlocks, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
     expect(app).toContain('structureBreak={bosChoch?.break ?? null}');
   });
 
@@ -111,7 +111,10 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
     // Ouro 4).
     expect(plugin).toContain('const obstacle = isObstacle(z);');
     expect(plugin).toContain('fusable.push({ top: z.top, bottom: z.bottom, index: z.index, isObstacle: obstacle, alpha: resolveAlpha(z, obstacle, weights?.[i]) });');
-    expect(plugin).toContain('const label = `${kind}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;');
+    // O kind passa por uma forma curta (BRK/MIT) antes de entrar no rótulo,
+    // desde a graduação de institutional-blocks.js — mesma disciplina de "o
+    // tamanho das etiquetas". Glifo de direção e contagem ×N inalterados.
+    expect(plugin).toContain('const label = `${kindLabel}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;');
   });
 
   it('Diretriz Consolidação/Auditoria/Evolução (achado real): zona-obstáculo de um plano ATIVO nunca esmaece por idade fixa — alpha=1 enquanto isObstacleZone, ageAlpha normal caso contrário', () => {

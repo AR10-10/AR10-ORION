@@ -15,7 +15,7 @@ import "../../src/index.css";
 import { createRoot } from "react-dom/client";
 import { useEffect, useRef, useState } from "react";
 import { createChart, CandlestickSeries, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
-import { LiquidityZonesPlugin, type EqualLevelMark } from "../../src/chart/LiquidityZonesPlugin";
+import { LiquidityZonesPlugin, type EqualLevelMark, type FillableZone } from "../../src/chart/LiquidityZonesPlugin";
 import { chartLocale } from "../../src/chart/tick-mark-format";
 
 const T0 = 1_700_000_000;
@@ -30,6 +30,14 @@ const data = Array.from({ length: 60 }, (_, i) => {
 const pools: EqualLevelMark[] = [
   { type: "EQUAL_HIGH", price: 110, touches: 3, index: 30, firstIndex: 10, touchIndices: PEAKS },
 ];
+
+// Graduação de institutional-blocks.js: um Breaker (direção OPERACIONAL já
+// invertida pelo motor) e um Mitigation, para conferir na tela que os dois
+// desenham no MESMO canvas com a hierarquia certa (borda presente,
+// preenchimento fraco — um bloco que já falhou é referência estrutural,
+// não zona ativa de mesma força).
+const breakers: FillableZone[] = [{ type: "BEARISH", top: 103, bottom: 101.5, index: 36 }];
+const mitigations: FillableZone[] = [{ type: "BULLISH", top: 99.5, bottom: 98.2, index: 44 }];
 
 function Harness() {
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -63,6 +71,8 @@ function Harness() {
         fairValueGaps={[]}
         orderBlocks={[]}
         equalLevels={pools}
+        breakerBlocks={breakers}
+        mitigationBlocks={mitigations}
       />
     </div>
   );

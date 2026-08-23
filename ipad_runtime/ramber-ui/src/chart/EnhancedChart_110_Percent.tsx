@@ -430,6 +430,13 @@ interface EnhancedChartProps {
   // real de fairValueGaps/orderBlocks, repassado direto ao
   // LiquidityZonesPlugin como um 3º kind ("VOID") de zona preenchida.
   liquidityVoids?: EnhancedChartZone[];
+  // GRADUAÇÃO de institutional-blocks.js — Breaker / Mitigation Block.
+  // Mesmo shape real EnhancedChartZone: `type` é a direção OPERACIONAL já
+  // resolvida pelo motor (o Breaker INVERTE a polaridade do OB original),
+  // nunca a polaridade original. Repassado direto ao LiquidityZonesPlugin
+  // como dois kinds novos — zero canvas novo, zero arquitetura nova.
+  breakerBlocks?: EnhancedChartZone[];
+  mitigationBlocks?: EnhancedChartZone[];
   liquidityZones?: EnhancedChartLiquidity[];
   // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
   // estrutural"): quais dessas MESMAS zonas (por low/high real) o Trade
@@ -835,6 +842,8 @@ function EnhancedChart_110_PercentImpl({
   fairValueGaps,
   orderBlocks,
   liquidityVoids,
+  breakerBlocks,
+  mitigationBlocks,
   liquidityZones,
   obstacleZones,
   structureBreak,
@@ -3825,6 +3834,8 @@ function EnhancedChart_110_PercentImpl({
           fvgVisualWeights={mainLiquidityVisualWeights.fvg}
           obVisualWeights={mainLiquidityVisualWeights.ob}
           equalLevels={visibility.equal_highs_lows ? equalLevelMarks : NO_EQUAL_LEVELS}
+          breakerBlocks={visibility.liquidity_zones ? ((breakerBlocks ?? NO_FILLABLE_ZONES) as FillableZone[]) : NO_FILLABLE_ZONES}
+          mitigationBlocks={visibility.liquidity_zones ? ((mitigationBlocks ?? NO_FILLABLE_ZONES) as FillableZone[]) : NO_FILLABLE_ZONES}
         />
       )}
       {/* Ordem "Ciborgue Vivo" §1: BOS/CHOCH real, mesma anotação temporária

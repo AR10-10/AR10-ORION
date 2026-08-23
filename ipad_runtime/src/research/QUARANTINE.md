@@ -489,3 +489,61 @@ Suíte de execução real: `ramber-ui/tests/liquidity-pool-touches.test.ts`
 (9 casos — índices reais, ordenação, coerência entre `touches` e
 `touchIndices`, e o que já funcionava — `price`/`swept`/mínimo de 2 toques —
 provado idêntico).
+
+## `institutional-blocks.js` — GRADUADO (2026-08-23)
+
+Breaker Blocks e Mitigation Blocks: Order Blocks que **falharam** (preço
+fechou através deles), classificados pelo único critério que a pesquisa
+confirmou distingui-los — houve varredura de liquidez **antes** da falha
+(BREAKER, a polaridade **inverte**) ou não houve (MITIGATION, a polaridade
+se **mantém**).
+
+**Por que só agora.** O motor e sua suíte de execução real
+(`ramber-ui/tests/institutional-blocks.test.ts`, 24 casos) existiam desde a
+entrega anterior, e `grep` confirmava **zero importadores**. Um motor
+correto que ninguém consome não é inteligência entregue — é código morto
+com testes verdes. Fica registrado como o padrão de falha a evitar, não
+como um detalhe de cronograma.
+
+**Zero matemática nova.** Order Blocks vêm de `fvg-order-block-engine.js`,
+swings de `fractal-swings.js`. Este motor apenas classifica o que já é
+detectado.
+
+**Causalidade real.** A referência de liquidez é o último swing fractal
+**já confirmado** no momento do Order Block (`index + FRACTAL_K <= obIndex`)
+— nunca um swing que só se tornaria visível no futuro. Sem isso o motor
+"acertaria" no backtest usando informação que não existia.
+
+**Ligação real (a regra de graduação):**
+- `ramber-ui/src/engine-bridge.ts` — `computeInstitutionalBlocks()`, wrapper
+  fino sobre o motor, fail-closed para `[]`.
+- `ramber-ui/src/App.tsx` — memo sobre o MESMO `chartData` do gráfico
+  (o `index` de cada bloco só faz sentido alinhado ao array desenhado).
+- `ramber-ui/src/chart/LiquidityZonesPlugin.tsx` — dois kinds novos
+  (`BREAKER`/`MITIGATION`) no canvas que FVG/OB/VOID já usam: zero canvas
+  novo, zero loop de rAF novo, mesma fusão/decaimento/ênfase de obstáculo.
+
+**LEI 24 — display only.** Contexto exibido ao Operador. Nunca emite uma
+segunda decisão de trading, nunca bloqueia ou altera a decisão do Núcleo.
+
+**Recortes declarados antes do canvas** (mesma disciplina dos Liquidity
+Voids, "só as marca certeira"): apenas blocos ainda **não retestados**, e
+teto de 3 por tipo — com a mesma escapatória de sempre, um bloco que é
+obstáculo real no caminho entrada→alvo do plano ATIVO nunca é cortado pelo
+teto. O dado completo continua no motor; isto decide só o que o canvas
+pinta.
+
+**Pendências honestas:**
+- Ainda **fora** da competição cruzada de orçamento visual
+  (`nexus/visual-budget.ts`), pelo mesmo motivo escopado dos Liquidity
+  Voids — cai no fallback fail-closed de `ageAlpha` isolado.
+- Ainda **sem** o filtro de significância por ATR
+  (`nexus/liquidity-significance.ts`) que FVG/OB já usam: o teto de 3
+  escolhe por ordem de chegada, não por tamanho relativo da zona.
+- Sem entrada própria no gerenciador de camadas: acompanha
+  `liquidity_zones`, mesma decisão já tomada para Liquidity Void (evitar
+  mais um interruptor para o Operador).
+
+**Suítes:** `institutional-blocks.test.ts` (24, execução real da
+matemática) + `institutional-blocks-graduation.test.ts` (14, fiação ponta a
+ponta e LEI 24).

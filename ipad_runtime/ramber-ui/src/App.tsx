@@ -118,6 +118,8 @@ import {
   getOlderChartCandles,
   computeRealVolumeProfile,
   computeRealFibonacciConfluence,
+  computeInstitutionalBlocks,
+  type InstitutionalBlock,
   computeRealTrustScore,
   type ConfluenceSource,
   buildMultiTimeframeContext,
@@ -2285,6 +2287,20 @@ export default function App() {
     [chartData],
   );
 
+  // GRADUAÇÃO de institutional-blocks.js (Breaker / Mitigation Block) — o
+  // motor e sua suíte de execução real existiam desde a entrega anterior e
+  // nunca tinham chegado ao sistema ao vivo (0 importadores). Mesmo padrão
+  // exato do memo acima: MESMO array de candles do gráfico (o `index` de
+  // cada bloco só faz sentido alinhado ao array que o caller desenha),
+  // fail-closed para lista vazia.
+  //
+  // LEI 24 — display only: contexto exibido ao Operador, nunca uma segunda
+  // decisão de trading e nunca um bloqueio da decisão do Núcleo.
+  const institutionalBlocks = useMemo<InstitutionalBlock[]>(
+    () => (chartData && chartData.length > 0 ? computeInstitutionalBlocks(chartData) : []),
+    [chartData],
+  );
+
   // voiceSnapshot/criticalPulse/voiceEngine.init() moved below trackRecordSlice
   // (Signal Track Record) and convictionReading — Neural Market Aura's voice
   // events need tradePlanStatus/inEntryZone/convictionVerdict, and those only
@@ -3785,6 +3801,7 @@ export default function App() {
       tradePlanStructureZones,
       bosChoch,
       liquidityVoids,
+      institutionalBlocks,
       bootAt,
       engineStatus,
       realCycle,
@@ -3862,6 +3879,7 @@ export default function App() {
       tradePlanStructureZones,
       bosChoch,
       liquidityVoids,
+      institutionalBlocks,
       bootAt,
       engineStatus,
       realCycle,
@@ -9077,7 +9095,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, tradePlanStructureZones, bosChoch, liquidityVoids, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};
+  const { smcZones, tradePlanStructureZones, bosChoch, liquidityVoids, institutionalBlocks, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};
   // OMEGA CORE V-MAX Fase 5 (Corredor de Confluência): a Neural Market
   // Aura lia direto convictionReading (só o pool de 3 subsistemas) para a
   // largura do corredor — mesma leitura que confluenceCorridor.intensity
@@ -9296,7 +9314,12 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     () => computeCandlePatterns(chartData).patterns,
     [chartData],
   );
-  const isRealObstacle = (z: PriceZone) => chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);
+  // Assinatura estreitada ao que a função REALMENTE lê (top/bottom), em vez
+  // de exigir um PriceZone inteiro: os Breaker/Mitigation Blocks têm os
+  // mesmos dois campos e um shape próprio, e um cast só para satisfazer a
+  // assinatura seria uma mentira de tipo sem nenhum ganho.
+  const isRealObstacle = (z: { top: number; bottom: number }) =>
+    chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);
   // "a liquidez que amostra no gráfico, só realmente ela fazer diferença nas
   // alterações... se a liquidez razoável pequena que não faz movimento"
   // (pedido direto do Operador). ACHADO MEDIDO: o teto de 3 abaixo escolhia
@@ -9339,6 +9362,35 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   const unmitigatedVoids = (liquidityVoids ?? [])
     .filter((z: PriceZone) => !z.mitigated)
     .filter((z: PriceZone, i: number) => i < 3 || isRealObstacle(z));
+  // GRADUAÇÃO de institutional-blocks.js. Dois recortes deliberados antes
+  // de chegar ao canvas, ambos pela mesma razão que os Voids já têm o seu
+  // ("não ficar poluído, só as marca certeira"):
+  //
+  //   1. só blocos AINDA NÃO RETESTADOS. Um bloco que o preço já voltou a
+  //      testar cumpriu seu papel — continua no dado real (o motor devolve
+  //      todos), só não disputa espaço no gráfico.
+  //   2. teto de contagem, com a MESMA escapatória de obstáculo real do
+  //      plano ativo que os Voids usam: um bloco que está no caminho
+  //      entrada→alvo nunca é cortado pelo teto.
+  //
+  // `type` é a direção OPERACIONAL do motor (ALTA/BAIXA — já com a
+  // inversão de polaridade do Breaker aplicada), traduzida aqui para o
+  // vocabulário BULLISH/BEARISH que o canvas já usa. Zero recálculo.
+  const blocosVisiveis = (institutionalBlocks ?? []).filter((b: InstitutionalBlock) => !b.retested);
+  const toChartZone = (b: InstitutionalBlock) => ({
+    type: (b.direction === "ALTA" ? "BULLISH" : "BEARISH") as "BULLISH" | "BEARISH",
+    top: b.top,
+    bottom: b.bottom,
+    index: b.failIndex,
+  });
+  const breakerZones = blocosVisiveis
+    .filter((b: InstitutionalBlock) => b.kind === "BREAKER")
+    .filter((b: InstitutionalBlock, i: number) => i < 3 || isRealObstacle(b))
+    .map(toChartZone);
+  const mitigationZones = blocosVisiveis
+    .filter((b: InstitutionalBlock) => b.kind === "MITIGATION")
+    .filter((b: InstitutionalBlock, i: number) => i < 3 || isRealObstacle(b))
+    .map(toChartZone);
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // (Fase 1.4) — mesma store que os agentes leem, só mapeada para o formato
   // do chart (price/ratio/score reais, nada recalculado aqui).
@@ -9646,6 +9698,8 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
             fairValueGaps={unmitigatedFvgs}
             orderBlocks={unmitigatedBlocks}
             liquidityVoids={unmitigatedVoids}
+            breakerBlocks={breakerZones}
+            mitigationBlocks={mitigationZones}
             obstacleZones={chartObstacleZones}
             liquidityZones={unsweptLiquidity}
             structureBreak={bosChoch?.break ?? null}

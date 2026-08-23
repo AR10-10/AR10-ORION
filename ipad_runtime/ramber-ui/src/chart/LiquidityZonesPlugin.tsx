@@ -134,7 +134,42 @@ const VOID_BEARISH: ZonePalette = { fill: "rgba(236, 81, 205, 0.10)", border: "r
 const VOID_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 98, 255, 0.10)", border: "rgba(0, 98, 255, 0.85)" };
 const VOID_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(236, 81, 205, 0.10)", border: "rgba(236, 81, 205, 0.85)" };
 
-function paletteFor(kind: "FVG" | "OB" | "VOID", type: "BULLISH" | "BEARISH", isObstacle: boolean): ZonePalette {
+// GRADUAÇÃO de institutional-blocks.js — Breaker / Mitigation Block.
+//
+// Ambos são Order Blocks que FALHARAM. Por isso reusam deliberadamente o
+// MESMO par verde/vermelho de FVG/OB (a família visual de "zona de
+// oferta/demanda"), com uma diferença real e legível: são DESENHADOS COM
+// BORDA MAIS PRESENTE E PREENCHIMENTO MAIS FRACO que um OB vivo — um bloco
+// que já falhou é uma referência estrutural, não uma zona ativa de mesma
+// força. A distinção entre os dois vem do RÓTULO (BRK/MIT), nunca de mais
+// um matiz: a disciplina de matiz deste arquivo (>40° entre conceitos
+// diferentes) já está apertada, e inventar duas cores novas para um
+// conceito que É um OB seria exatamente a "parede de cor" que a Ordem de
+// Fechamento corrigiu.
+//
+// A direção usada é a OPERACIONAL (pós-inversão do Breaker), calculada no
+// motor — nunca a polaridade original. É ela que responde "esta zona agora
+// empurra pra cima ou pra baixo".
+const BREAKER_BULLISH: ZonePalette = { fill: "rgba(8, 153, 129, 0.07)", border: "rgba(8, 153, 129, 0.55)" };
+const BREAKER_BEARISH: ZonePalette = { fill: "rgba(242, 54, 69, 0.07)", border: "rgba(242, 54, 69, 0.55)" };
+const BREAKER_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(8, 153, 129, 0.07)", border: "rgba(8, 153, 129, 0.85)" };
+const BREAKER_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(242, 54, 69, 0.07)", border: "rgba(242, 54, 69, 0.85)" };
+const MITIGATION_BULLISH: ZonePalette = { fill: "rgba(8, 153, 129, 0.05)", border: "rgba(8, 153, 129, 0.38)" };
+const MITIGATION_BEARISH: ZonePalette = { fill: "rgba(242, 54, 69, 0.05)", border: "rgba(242, 54, 69, 0.38)" };
+const MITIGATION_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(8, 153, 129, 0.05)", border: "rgba(8, 153, 129, 0.85)" };
+const MITIGATION_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(242, 54, 69, 0.05)", border: "rgba(242, 54, 69, 0.85)" };
+
+export type ZoneKind = "FVG" | "OB" | "VOID" | "BREAKER" | "MITIGATION";
+
+function paletteFor(kind: ZoneKind, type: "BULLISH" | "BEARISH", isObstacle: boolean): ZonePalette {
+  if (kind === "BREAKER") {
+    if (isObstacle) return type === "BULLISH" ? BREAKER_BULLISH_OBSTACLE : BREAKER_BEARISH_OBSTACLE;
+    return type === "BULLISH" ? BREAKER_BULLISH : BREAKER_BEARISH;
+  }
+  if (kind === "MITIGATION") {
+    if (isObstacle) return type === "BULLISH" ? MITIGATION_BULLISH_OBSTACLE : MITIGATION_BEARISH_OBSTACLE;
+    return type === "BULLISH" ? MITIGATION_BULLISH : MITIGATION_BEARISH;
+  }
   if (kind === "FVG") {
     if (isObstacle) return type === "BULLISH" ? FVG_BULLISH_OBSTACLE : FVG_BEARISH_OBSTACLE;
     return type === "BULLISH" ? FVG_BULLISH : FVG_BEARISH;
@@ -198,21 +233,28 @@ interface LiquidityZonesPluginProps {
   // no EnhancedChart. Opcional/fail-closed: ausente/vazio => desenho
   // idêntico ao de antes desta camada existir aqui.
   equalLevels?: EqualLevelMark[];
+  // Breaker / Mitigation Blocks (institutional-blocks.js). Mesmo shape real
+  // FillableZone: `type` aqui é a direção OPERACIONAL já resolvida pelo
+  // motor (o Breaker inverte a polaridade do OB original), nunca a
+  // polaridade original. Opcional/fail-closed: ausente/vazio => desenho
+  // idêntico ao de antes desta camada existir.
+  breakerBlocks?: FillableZone[];
+  mitigationBlocks?: FillableZone[];
 }
 
-export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, liquidityVoids, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels }: LiquidityZonesPluginProps) {
+export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, liquidityVoids, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks }: LiquidityZonesPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const zonesRef = useRef({ fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels });
+  const zonesRef = useRef({ fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente das zonas/candles para o loop de desenho
   // ler — nunca dispara o efeito de setup abaixo de novo (evita reabrir a
   // conexão com o chart/reassinar os listeners a cada atualização de dado).
-  zonesRef.current = { fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels };
+  zonesRef.current = { fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels]);
+  }, [fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -236,7 +278,7 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
       const timeScale = chart.timeScale();
-      const { fairValueGaps: fvgs, orderBlocks: obs, liquidityVoids: voids, data: candles, obstacleZones: obstacles, fvgVisualWeights: fvgWeights, obVisualWeights: obWeights, voidVisualWeights: voidWeights, equalLevels: pools } = zonesRef.current;
+      const { fairValueGaps: fvgs, orderBlocks: obs, liquidityVoids: voids, data: candles, obstacleZones: obstacles, fvgVisualWeights: fvgWeights, obVisualWeights: obWeights, voidVisualWeights: voidWeights, equalLevels: pools, breakerBlocks: breakers, mitigationBlocks: mitigations } = zonesRef.current;
 
       const currentIndex = candles.length - 1;
       // Identidade por low/high real (mesmos números, zero recálculo) —
@@ -324,7 +366,7 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       // estruturais reais distintos; fundi-los apagaria informação real
       // (Regra de Ouro 4). memberCount>1 vira "×N" no rótulo — mesma
       // convenção já usada por Sweep/Zona Institucional agrupados.
-      const drawGroup = (raw: FillableZone[], weights: (number | undefined)[] | undefined, kind: "FVG" | "OB" | "VOID", type: "BULLISH" | "BEARISH") => {
+      const drawGroup = (raw: FillableZone[], weights: (number | undefined)[] | undefined, kind: ZoneKind, type: "BULLISH" | "BEARISH") => {
         const fusable: FusableZoneInput[] = [];
         raw.forEach((z, i) => {
           if (z.type !== type) return;
@@ -333,7 +375,12 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
         });
         for (const group of fuseLiquidityZones(fusable, LIQUIDITY_PROXIMITY_PCT)) {
           const palette = paletteFor(kind, type, group.isObstacle);
-          const label = `${kind}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;
+          // Rótulo curto — mesma disciplina de "o tamanho das etiquetas"
+          // aplicada em zone-member-codes.ts: BRK/MIT em vez de
+          // BREAKER/MITIGATION, que são 7 e 10 caracteres a mais numa
+          // etiqueta que já vive dentro da própria zona.
+          const kindLabel = kind === "BREAKER" ? "BRK" : kind === "MITIGATION" ? "MIT" : kind;
+          const label = `${kindLabel}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;
           drawZone(group, palette, label);
         }
       };
@@ -344,6 +391,16 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       drawGroup(obs, obWeights, "OB", "BEARISH");
       drawGroup(voids ?? [], voidWeights, "VOID", "BULLISH");
       drawGroup(voids ?? [], voidWeights, "VOID", "BEARISH");
+      // Breaker / Mitigation: mesma fusão, mesmo decaimento, mesma ênfase de
+      // obstáculo que todo o resto — zero arquitetura nova. Ainda fora da
+      // competição cruzada de orçamento visual (visual-budget.ts), pelo
+      // MESMO motivo escopado de Liquidity Void: undefined cai no fallback
+      // fail-closed de ageAlpha isolado. Entrar no orçamento é evolução
+      // futura própria, não requisito para a camada existir e ser honesta.
+      drawGroup(breakers ?? [], undefined, "BREAKER", "BULLISH");
+      drawGroup(breakers ?? [], undefined, "BREAKER", "BEARISH");
+      drawGroup(mitigations ?? [], undefined, "MITIGATION", "BULLISH");
+      drawGroup(mitigations ?? [], undefined, "MITIGATION", "BEARISH");
 
       // ── Pools de liquidez (EQH/EQL) ──────────────────────────────────
       // Desenhados por último: são o traço mais fino do canvas e não podem

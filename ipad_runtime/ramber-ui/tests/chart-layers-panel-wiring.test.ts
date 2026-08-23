@@ -513,7 +513,12 @@ describe('Auditoria de pendências: obstacleCount (sem teto) reconciliado com o 
     // ativo continua SEMPRE visível independente de tamanho — essa parte
     // do contrato não mudou.
     const a = read('../src/App.tsx');
-    expect(a).toContain('const isRealObstacle = (z: PriceZone) => chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);');
+    // A assinatura estreitou para o que a função REALMENTE lê (top/bottom):
+    // Breaker/Mitigation Blocks têm os mesmos dois campos e um shape próprio,
+    // e um cast só para satisfazer PriceZone seria mentira de tipo. O
+    // CONTRATO — comparar por low/high real, nunca por índice — não mudou.
+    expect(a).toContain('const isRealObstacle = (z: { top: number; bottom: number }) =>');
+    expect(a).toContain('chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);');
     expect(a).toContain('const isSignificantZone = (z: PriceZone) =>');
     expect(a).toContain('computeZoneSignificance(z.top, z.bottom, livePrice.price, chartAtrPercent).significant;');
     expect(a).toContain('const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);');
