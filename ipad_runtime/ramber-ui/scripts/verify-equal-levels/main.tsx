@@ -14,17 +14,28 @@
 import "../../src/index.css";
 import { createRoot } from "react-dom/client";
 import { useEffect, useRef, useState } from "react";
-import { createChart, CandlestickSeries, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
+import { createChart, CandlestickSeries, LineSeries, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
 import { LiquidityZonesPlugin, type EqualLevelMark, type FillableZone } from "../../src/chart/LiquidityZonesPlugin";
 import { chartLocale } from "../../src/chart/tick-mark-format";
+// SuperTrend: as MESMAS funções reais que o gráfico usa — o bridge do motor
+// e a separação em duas séries. Nunca uma cópia da lógica, que poderia
+// divergir e fazer esta verificação mentir.
+import { computeSuperTrend } from "../../src/engine-bridge";
+import { splitSuperTrendSeries } from "../../src/chart/supertrend-series";
 
 const T0 = 1_700_000_000;
 const PEAKS = [10, 20, 30];
-const data = Array.from({ length: 60 }, (_, i) => {
-  const alto = PEAKS.includes(i);
-  const low = alto ? 105 : 98;
-  const high = alto ? 110 : 100;
-  return { time: (T0 + i * 900) as UTCTimestamp, open: (low + high) / 2, high, low, close: (low + high) / 2 };
+// Série com um platô (onde vivem os topos iguais do EQH) seguido de alta e
+// reversão — o suficiente para o SuperTrend aquecer o ATR de Wilder e
+// mostrar os DOIS sentidos com um flip real no meio.
+const data = Array.from({ length: 120 }, (_, i) => {
+  let mid: number;
+  if (i < 60) mid = PEAKS.includes(i) ? 107.5 : 99;
+  else if (i < 90) mid = 99 + (i - 60) * 0.9;
+  else mid = 126 - (i - 90) * 1.1;
+  const low = mid - 1.2;
+  const high = mid + 1.2;
+  return { time: (T0 + i * 900) as UTCTimestamp, open: mid, high, low, close: mid };
 });
 
 const pools: EqualLevelMark[] = [
@@ -56,6 +67,23 @@ function Harness() {
     });
     const series = chart.addSeries(CandlestickSeries, {});
     series.setData(data);
+
+    // Mesmas duas LineSeries do gráfico real (verde alta / vermelha baixa,
+    // 1px sólidas), alimentadas pela MESMA função de separação.
+    const stUp = chart.addSeries(LineSeries, {
+      color: "rgba(8, 153, 129, 0.70)", lineWidth: 1, priceLineVisible: false,
+      lastValueVisible: false, crosshairMarkerVisible: false, title: "",
+    });
+    const stDown = chart.addSeries(LineSeries, {
+      color: "rgba(242, 54, 69, 0.70)", lineWidth: 1, priceLineVisible: false,
+      lastValueVisible: false, crosshairMarkerVisible: false, title: "",
+    });
+    const { up, down } = splitSuperTrendSeries<UTCTimestamp>(
+      computeSuperTrend(data),
+      (i) => (data[i] ? data[i].time : undefined),
+    );
+    stUp.setData(up);
+    stDown.setData(down);
     chart.timeScale().fitContent();
     setReady({ chart, series });
     (window as unknown as { __pronto: boolean }).__pronto = true;

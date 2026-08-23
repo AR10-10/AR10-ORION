@@ -119,6 +119,7 @@ import {
   computeRealVolumeProfile,
   computeRealFibonacciConfluence,
   computeInstitutionalBlocks,
+  computeSuperTrend,
   type InstitutionalBlock,
   computeRealTrustScore,
   type ConfluenceSource,
@@ -4573,6 +4574,7 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // de Evolução (research/engines/zigzag-engine.js, isolado e testado
   // desde a Entrega 35) — pivôs confirmados por deviation%+depth.
   { id: "zigzag", label: "ZIGZAG" },
+  { id: "supertrend", label: "SUPERTREND" },
   // Achado 2.5 (Visual Cleanup & Rendering Audit): SCENARIO A/B ("Future
   // Path Map", scenario-engine.ts) ganha o mesmo toggle/relevância que
   // toda outra camada real já tinha — era a única sem nenhum dos dois.
@@ -9493,6 +9495,11 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     // se tem uma linha real pra traçar — nunca marca relevante sem ter
     // nada real pra mostrar.
     const hasZigZagPivots = Array.isArray(chartData) && computeZigZag(chartData).length >= 2;
+    // GRADUAÇÃO de supertrend-engine.js: existência real (o motor devolve
+    // lista vazia até o aquecimento de Wilder ser cumprido), nunca
+    // proximidade — um trailing stop é justamente mais informativo quando
+    // está longe do preço.
+    const hasSuperTrend = Array.isArray(chartData) && computeSuperTrend(chartData).length > 0;
     // Achado 2.5: existência real de pelo menos 1 alvo projetado em
     // qualquer um dos 2 caminhos do Motor de Cenários — mesma leitura
     // (chartScenario) que EnhancedChart_110_Percent já recebe pra
@@ -9519,6 +9526,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
       hasOrderBook: Boolean(engine?.hasBook),
       hasTpoProfile,
       hasZigZagPivots,
+      hasSuperTrend,
       hasRecentLiquidation: Array.isArray(liquidations) && liquidations.length > 0,
       hasRecentLiquiditySweep: (traps ?? []).some((t) => t.kind === "STOP_HUNT_TOPO" || t.kind === "STOP_HUNT_FUNDO"),
       recentSessionBoundary,

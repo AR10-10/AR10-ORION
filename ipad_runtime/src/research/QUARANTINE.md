@@ -547,3 +547,52 @@ pinta.
 **Suítes:** `institutional-blocks.test.ts` (24, execução real da
 matemática) + `institutional-blocks-graduation.test.ts` (14, fiação ponta a
 ponta e LEI 24).
+
+## `supertrend-engine.js` — GRADUADO (2026-08-23)
+
+SuperTrend (Olivier Seban): um **trailing stop** que trilha o preço e trava.
+A banda de cima só desce ou fica parada enquanto o preço está acima dela; a
+de baixo só sobe ou fica parada enquanto o preço está abaixo. É essa
+catraca — não as bandas — que separa o SuperTrend real de um par tipo
+Keltner que inverte a cada respiro do mercado. O flip só acontece por
+**fechamento** além da banda final oposta, nunca por pavio.
+
+**Por que só agora.** Segundo motor desta rodada com suíte de execução real
+(18 casos) e **zero importadores**, mesmo padrão de falha registrado acima
+para `institutional-blocks.js`.
+
+**Por que camada própria e não reaproveitamento.** `regime-engine.js`
+classifica REGIME (ADX/DI + largura de banda); `trend-channel-engine.ts`
+ajusta um canal de REGRESSÃO (OLS ±σ). Nenhum dos dois produz um stop que
+segue o preço e não volta atrás — o conceito não existia no ecossistema.
+
+**Zero segunda matemática.** O ATR de Wilder vem de
+`lorentzian-classifier.js` (`computeAtrPercent`), reusado tal qual.
+
+**Ligação real (a regra de graduação):**
+- `ramber-ui/src/engine-bridge.ts` — `computeSuperTrend()`, wrapper fino,
+  fail-closed para `[]` enquanto o aquecimento de Wilder não fecha.
+- `ramber-ui/src/chart/EnhancedChart_110_Percent.tsx` — **duas** LineSeries
+  nativas (a lightweight-charts não colore segmentos distintos de uma mesma
+  série): uma desenha os trechos de alta, a outra os de baixa, cada uma com
+  *whitespace* onde a outra manda. Sem esses buracos a lib interpolaria uma
+  reta ligando os trechos e desenharia um stop que nunca existiu. O candle
+  do **flip** entra nas duas de propósito — sem ele haveria um vão de 1
+  candle exatamente no instante que mais importa ler.
+- `chart-layer-depth.ts` / `nexus/layer-relevance.ts` / painel de camadas —
+  camada real, controlável e competindo no orçamento visual como qualquer
+  outra.
+
+**Decisão de relevância que é fácil de errar:** a régua é EXISTÊNCIA real,
+nunca proximidade ao preço. Um trailing stop é justamente mais informativo
+quando está **longe** do preço (mostra quanta folga a tendência ainda tem);
+aplicar a régua de proximidade esconderia a camada exatamente quando ela
+mais diz alguma coisa.
+
+**LEI 24 — display only.** Mesmo papel de VWAP/EMA/Trend Channel: contexto
+desenhado ao Operador. Nunca uma segunda decisão de LONG/SHORT, nunca um
+filtro sobre a decisão do Núcleo.
+
+**Suítes:** `supertrend.test.ts` (18, execução real da matemática, incluindo
+a catraca) + `supertrend-graduation.test.ts` (18, fiação ponta a ponta,
+fail-closed por execução real e LEI 24).

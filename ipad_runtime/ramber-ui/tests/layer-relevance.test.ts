@@ -49,6 +49,7 @@ const BASE: LayerRelevanceInput = {
   hasOrderBook: false,
   hasTpoProfile: false,
   hasZigZagPivots: false,
+  hasSuperTrend: false,
   hasRecentLiquidation: false,
   hasRecentLiquiditySweep: false,
   recentSessionBoundary: false,
@@ -77,7 +78,7 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of chartIds) {
       expect(relevanceSet.has(id), `camada "${id}" existe em CHART_LAYER_IDS mas não em RELEVANCE_LAYER_IDS`).toBe(true);
     }
-    expect(chartIds.length).toBe(26);
+    expect(chartIds.length).toBe(27); // +supertrend (graduação de supertrend-engine.js)
   });
 
   it('toda chave de RELEVANCE_LAYER_IDS é uma camada real de CHART_LAYER_IDS — nunca uma chave órfã', () => {
@@ -87,12 +88,12 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(chartIds.has(id), `RELEVANCE_LAYER_IDS tem "${id}" que não existe mais em CHART_LAYER_IDS`).toBe(true);
     }
-    expect(RELEVANCE_LAYER_IDS.length).toBe(26);
+    expect(RELEVANCE_LAYER_IDS.length).toBe(27); // +supertrend
   });
 });
 
 describe('computeLayerRelevance: completude — sempre devolve as 25 chaves, nunca uma faltando', () => {
-  it('baseline vazio ainda produz um resultado para cada uma das 25 camadas', () => {
+  it('baseline vazio ainda produz um resultado para cada camada real', () => {
     const reading = computeLayerRelevance(BASE);
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(reading[id], `faltando chave ${id}`).toBeDefined();

@@ -89,6 +89,10 @@ const LAYER_TIER: Record<string, ChartDepthTier> = {
   fibonacci: "line",
   trend_channel: "line",
   zigzag: "line",
+  // SuperTrend é literalmente um stop de 1px que trilha o preço — mesma
+  // camada de profundidade de EMA/VWAP/ZigZag, nunca abaixo de
+  // preenchimento.
+  supertrend: "line",
   session_key_levels: "line",
   equal_highs_lows: "line",
   // CVD é fluxo, mas desenha como LINHA de 1px — e linha nunca pode ficar

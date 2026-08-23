@@ -80,6 +80,11 @@ export const RELEVANCE_LAYER_IDS = [
   // — mesmo padrão de tpo_profile acima (existência real de pivôs
   // suficientes pro motor desenhar uma linha, nunca proximidade).
   "zigzag",
+  // GRADUAÇÃO de supertrend-engine.js — mesmo padrão de existência real de
+  // tpo_profile/zigzag acima (o motor precisa do aquecimento de Wilder para
+  // produzir um único ponto), nunca proximidade ao preço vivo: um trailing
+  // stop é útil justamente quando está LONGE do preço.
+  "supertrend",
   // Achado 2.5 (Visual Cleanup & Rendering Audit): SCENARIO A/B (Future
   // Path Map, scenario-engine.ts) — mesmo padrão de existência real de
   // tpo_profile/zigzag/fibonacci acima (hasScenario), nunca proximidade.
@@ -166,6 +171,9 @@ export interface LayerRelevanceInput {
   // real pra traçar (existência real, nunca proximidade — mesmo padrão
   // de hasTpoProfile/hasFibonacciLevels acima).
   hasZigZagPivots: boolean;
+  /** SuperTrend produziu pelo menos um ponto real (aquecimento de Wilder
+   *  cumprido). Existência real, nunca proximidade. */
+  hasSuperTrend: boolean;
   // Padrões de vela: pelo menos 1 padrão real detectado na janela recente
   // (candlestick-patterns.js). Existência real, nunca proximidade —
   // mesmo padrão de hasZigZagPivots/hasTpoProfile acima. O motor já é
@@ -356,6 +364,15 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
       ? { relevant: true, emphasis: "normal", reason: "pivôs ZigZag reais suficientes (deviation%+depth) para uma linha de estrutura" }
       : { relevant: false, emphasis: "normal", reason: "menos de 2 pivôs ZigZag confirmados ainda — sem linha real para desenhar" },
 
+    // GRADUAÇÃO de supertrend-engine.js: existência real, nunca
+    // proximidade. Um trailing stop é justamente mais informativo quando
+    // está LONGE do preço (mostra quanta folga a tendência ainda tem) —
+    // aplicar a régua de proximidade aqui esconderia a camada exatamente
+    // quando ela mais diz alguma coisa.
+    supertrend: input.hasSuperTrend
+      ? { relevant: true, emphasis: "normal", reason: "SuperTrend real com aquecimento de Wilder cumprido — o stop que trilha o preço" }
+      : { relevant: false, emphasis: "normal", reason: "candles insuficientes para o aquecimento do ATR de Wilder — sem linha real para desenhar" },
+
     // Padrão de vela é um evento pontual e perecível: só vale a tela
     // enquanto existe um real na janela recente. Sem nenhum, a camada sai
     // sozinha em modo automático em vez de ficar um canvas vazio ligado.
@@ -514,6 +531,7 @@ export const AUTO_LAYER_PRECISION_ORDER: readonly string[] = [
   "fibonacci",
   "premium_discount",
   "trend_channel",
+  "supertrend",
   "harmonics",
   "zigzag",
   "tpo_profile",
@@ -583,6 +601,10 @@ export const LAYER_VISUAL_COST: Readonly<Record<string, number>> = {
   order_book_depth: 1,
   harmonics: 1,
   zigzag: 1,
+  // Duas LineSeries nativas (uma por sentido de tendência) — mas a lib
+  // desenha um único traço contínuo na tela, então o custo de LEITURA é 1,
+  // igual a qualquer outra linha.
+  supertrend: 1,
   order_flow_heatmap: 1,
   liquidation_heatmap: 1,
   market_sessions: 1,

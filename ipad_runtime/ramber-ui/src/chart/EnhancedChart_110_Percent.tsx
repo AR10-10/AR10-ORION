@@ -204,6 +204,8 @@ import { computeTrendChannel, TREND_CHANNEL_DEFAULT_WINDOW, TREND_CHANNEL_STDDEV
 import { shouldCompactLabels } from "./label-compaction";
 import { formatTickMark, chartLocale } from "./tick-mark-format";
 import { formatZoneMemberList } from "../nexus/zone-member-codes";
+import { computeSuperTrend } from "../engine-bridge";
+import { splitSuperTrendSeries } from "./supertrend-series";
 import { formatPrice, nativePriceDecimals } from "../nexus/price-format";
 import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import { PriceLabelStackPlugin, type PriceAxisLabel } from "./PriceLabelStackPlugin";
@@ -333,6 +335,13 @@ export const CHART_LAYER_IDS = [
   // Laboratório de Evolução (research/engines/zigzag-engine.js, isolado e
   // testado desde a Entrega 35) — pivôs confirmados por deviation%+depth.
   "zigzag",
+  // GRADUAÇÃO de supertrend-engine.js (SuperTrend de Olivier Seban): um
+  // TRAILING STOP que trilha o preço e trava — conceito que nenhuma camada
+  // existente cobria. regime-engine classifica REGIME (ADX/DI),
+  // trend-channel ajusta um canal de REGRESSÃO; nenhum dos dois produz um
+  // stop que segue o preço e não volta atrás. Camada própria por isso.
+  // LEI 24: display only, como VWAP/EMA/Trend Channel.
+  "supertrend",
   // Achado 2.5 (Visual Cleanup & Rendering Audit — auditoria pedida
   // diretamente pelo Operador: "tirar os excessos de linha"): o Motor de
   // Cenários (SCENARIO A/B, "Future Path Map", scenario-engine.ts) era a
@@ -378,6 +387,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   order_book_depth: true,
   tpo_profile: true,
   zigzag: true,
+  supertrend: true,
   scenario_projection: true,
   candle_patterns: true,
 };
@@ -411,6 +421,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   order_book_depth: true,
   tpo_profile: true,
   zigzag: true,
+  supertrend: true,
   scenario_projection: true,
   candle_patterns: true,
 };
@@ -1018,6 +1029,14 @@ function EnhancedChart_110_PercentImpl({
   // nunca reaproveitando a paleta semântica (verde/vermelho=direção,
   // âmbar=zona de entrada, roxo=liquidez EQH/EQL).
   const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // GRADUAÇÃO de supertrend-engine.js. DUAS séries nativas, não uma: a
+  // lightweight-charts não colore segmentos diferentes de uma mesma
+  // LineSeries. Uma série desenha os trechos de tendência de ALTA e a
+  // outra os de BAIXA, cada uma com buracos (whitespace) onde a outra
+  // manda — é assim que a linha muda de cor no ponto exato do flip sem
+  // perder um único candle de história.
+  const supertrendUpRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const supertrendDownRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Consolidação Final §26-§29: Nexus Line na MESMA escala de preço (é um
   // nível de equilíbrio real, como VWAP/EMA) — nunca uma segunda escala.
   const nexusLineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
@@ -1382,6 +1401,33 @@ function EnhancedChart_110_PercentImpl({
       title: "",
     });
     emaSeriesRef.current = emaSeries;
+
+    // SuperTrend: verde/vermelho da MESMA família já usada para
+    // alta/baixa em todo o gráfico (FVG/OB/sessão) — a linha diz "o stop
+    // que trilha está embaixo (alta)" ou "está em cima (baixa)", que é
+    // exatamente a mesma semântica de direção. Fio de Seda: 1px sólida.
+    // Sem rótulo de eixo (lastValueVisible false): o eixo já está disputado
+    // por VWAP/NL/EMA/CHOCH e a linha se lê pela posição.
+    const supertrendUp = chart.addSeries(LineSeries, {
+      color: "rgba(8, 153, 129, 0.70)",
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      title: "",
+    });
+    const supertrendDown = chart.addSeries(LineSeries, {
+      color: "rgba(242, 54, 69, 0.70)",
+      lineWidth: 1,
+      lineStyle: LineStyle.Solid,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+      title: "",
+    });
+    supertrendUpRef.current = supertrendUp;
+    supertrendDownRef.current = supertrendDown;
     // Consolidação Final §29: Nexus Line — "extremamente fina, elegante,
     // suavizada" = fio de seda (1px sólida, obrigatório de qualquer forma)
     // em branco-dourado neutro mais discreto que a VWAP; a cor de estado
@@ -1526,6 +1572,8 @@ function EnhancedChart_110_PercentImpl({
       vwapBandUpper2Ref.current = null;
       vwapBandLower2Ref.current = null;
       emaSeriesRef.current = null;
+      supertrendUpRef.current = null;
+      supertrendDownRef.current = null;
       nexusLineSeriesRef.current = null;
       trendChannelMidRef.current = null;
       trendChannelUpperRef.current = null;
@@ -2355,6 +2403,50 @@ function EnhancedChart_110_PercentImpl({
     const midTail = reading && reading.mid.length > 0 ? reading.mid[reading.mid.length - 1].value : null;
     setTrendChannelInfo(reading && midTail !== null ? { direction: reading.direction, windowSize: reading.windowSize, midPrice: midTail } : null);
   }, [data]);
+
+  // SuperTrend real sobre o MESMO array de candles do gráfico (zero segunda
+  // fonte de dado, mesmo padrão da EMA acima). A leitura é recomputada
+  // inteira a cada mudança de `data` — o motor é O(n) e o travamento das
+  // bandas é recursivo desde o início da série, então não existe versão
+  // incremental honesta que dê o mesmo resultado.
+  //
+  // As DUAS séries recebem a série COMPLETA de tempos; onde a tendência é
+  // a outra, o ponto entra como whitespace (`{ time }` sem `value`). Sem
+  // isso a lib interpolaria uma reta ligando os trechos e desenharia um
+  // stop que nunca existiu.
+  //
+  // O ponto do FLIP entra nas DUAS séries de propósito: é o mesmo preço, e
+  // sem ele haveria um buraco de 1 candle exatamente no instante que mais
+  // importa ler.
+  useEffect(() => {
+    if (!supertrendUpRef.current || !supertrendDownRef.current) return;
+    const pontos = computeSuperTrend(data);
+    if (pontos.length === 0) {
+      // Fail-closed: sem aquecimento real de Wilder, nada é desenhado —
+      // nunca uma linha extrapolada sobre janela insuficiente.
+      supertrendUpRef.current.setData([]);
+      supertrendDownRef.current.setData([]);
+      return;
+    }
+    // A separação em duas séries com whitespace é a única parte não-óbvia
+    // deste desenho — vive em supertrend-series.ts, com execução real de
+    // teste, e é a MESMA função que o harness de verificação visual usa
+    // (nunca uma cópia que pudesse divergir do app).
+    const { up, down } = splitSuperTrendSeries<UTCTimestamp>(
+      pontos,
+      (i) => (data[i] ? (data[i].time as UTCTimestamp) : undefined),
+    );
+    supertrendUpRef.current.setData(up);
+    supertrendDownRef.current.setData(down);
+  }, [data]);
+
+  // Camadas do Gráfico: mesmo padrão de "ema" — esconder alterna visible
+  // nas séries nativas, nunca desmonta/recomputa.
+  useEffect(() => {
+    if (!supertrendUpRef.current || !supertrendDownRef.current) return;
+    supertrendUpRef.current.applyOptions({ visible: visibility.supertrend });
+    supertrendDownRef.current.applyOptions({ visible: visibility.supertrend });
+  }, [visibility.supertrend]);
 
   // Camadas do Gráfico: mesmo padrão de "ema" — esconder alterna visible
   // nas três séries nativas, nunca desmonta/recomputa.

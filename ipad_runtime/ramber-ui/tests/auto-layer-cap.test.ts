@@ -15,16 +15,19 @@ import {
 const rel = (relevant: boolean, emphasis: 'normal' | 'highlight' = 'normal') =>
   ({ relevant, emphasis, reason: relevant ? 'leitura real' : 'sem leitura real' }) as any;
 
-/** Todas as 25 camadas com leitura real ao mesmo tempo — o cenário de mercado
+/** Todas as camadas com leitura real ao mesmo tempo — o cenário de mercado
  *  ativo que produzia a poluição. */
 const todasRelevantes = () =>
   Object.fromEntries(AUTO_LAYER_PRECISION_ORDER.map((id) => [id, rel(true)]));
 
 describe('resolveAutoLayerVisibility: o teto que faltava', () => {
-  it('com TODAS as 25 camadas relevantes, desenha no máximo o teto', () => {
+  it('com TODAS as camadas relevantes, desenha no máximo o teto', () => {
     const out = resolveAutoLayerVisibility(todasRelevantes());
     const visiveis = Object.values(out).filter((d) => d.show);
-    expect(Object.keys(out)).toHaveLength(25);
+    // Conferido contra a própria ordem de precisão em vez de um número
+    // cravado: uma camada nova entra na lista e este teste continua medindo
+    // o que importa (o TETO), não a contagem.
+    expect(Object.keys(out)).toHaveLength(AUTO_LAYER_PRECISION_ORDER.length);
     expect(visiveis).toHaveLength(AUTO_LAYER_MAX_SIMULTANEOUS);
   });
 

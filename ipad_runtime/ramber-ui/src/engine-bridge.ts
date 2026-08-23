@@ -78,6 +78,11 @@ import { analyze as analyzeInstitutionalBlocks } from '../../src/research/engine
 // Laboratório de Evolução (isolado/testado desde a Entrega 35, nunca
 // importado até aqui — ver QUARANTINE.md). Motor puro inalterado.
 import { computeZigZag as computeZigZagPure } from '../../src/research/engines/zigzag-engine.js';
+// Graduação de supertrend-engine.js. O motor e sua suíte de execução real
+// (18 casos) existiam desde a entrega anterior e nunca tinham chegado ao
+// sistema ao vivo — 0 importadores, mesmo padrão de falha registrado para
+// institutional-blocks.js. Ver QUARANTINE.md.
+import { computeSuperTrend as computeSuperTrendPure } from '../../src/research/engines/supertrend-engine.js';
 // Padrões de vela japoneses (candlestick-patterns.js) — pedido direto do
 // Operador ("o gráfico tem que refletir os padrão das vela... existe padrão
 // de vela que muda o sentido do mercado"). Auditoria antes de construir
@@ -1237,6 +1242,41 @@ export interface ZigZagPoint {
   index: number;
   price: number;
   kind: 'HIGH' | 'LOW';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GRADUAÇÃO — SuperTrend (supertrend-engine.js).
+//
+// Um TRAILING STOP que trilha o preço e trava: a banda de cima só desce ou
+// fica parada enquanto o preço está acima dela, a de baixo só sobe ou fica
+// parada enquanto o preço está abaixo. É a regra de travamento — não as
+// bandas em si — que separa o SuperTrend real de um par de bandas tipo
+// Keltner que inverte a cada respiro do mercado.
+//
+// LEI 24 — display only: a `trend` de cada ponto é CONTEXTO desenhado ao
+// Operador, nunca uma segunda decisão de LONG/SHORT e nunca um filtro sobre
+// a decisão do Núcleo. É o mesmo papel que VWAP/EMA/Trend Channel já têm.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface SuperTrendPoint {
+  index: number;
+  /** preço da linha (o stop que trilha) naquele candle */
+  line: number;
+  trend: 'UP' | 'DOWN';
+  /** true no candle em que a tendência virou — nunca por pavio, só por
+   *  fechamento além da banda final oposta. */
+  flipped: boolean;
+}
+
+export function computeSuperTrend(
+  candles: Array<{ open: number; high: number; low: number; close: number }>,
+  period?: number,
+  multiplier?: number,
+): SuperTrendPoint[] {
+  const result = computeSuperTrendPure(candles, period, multiplier);
+  // Fail-closed (Regra de Ouro 3): sem aquecimento real de Wilder, lista
+  // vazia — nunca uma linha extrapolada sobre janela insuficiente.
+  if (result.status !== 'OK') return [];
+  return result.points;
 }
 
 export function computeZigZag(

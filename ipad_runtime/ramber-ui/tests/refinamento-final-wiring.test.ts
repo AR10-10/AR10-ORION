@@ -571,7 +571,14 @@ describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no grá
     expect(seriesBlock).toContain('lineStyle: LineStyle.Solid');
     // limpa no unmount, mesma disciplina de todas as outras refs (incluindo as 3 novas)
     const cleanupIdx = c.indexOf('chart.remove();');
-    const cleanupBlock = c.slice(cleanupIdx, cleanupIdx + 1100);
+    expect(cleanupIdx, 'bloco de cleanup do chart não encontrado').toBeGreaterThan(-1);
+    // Delimitado pelo FECHAMENTO real do callback de cleanup, nunca por uma
+    // contagem de caracteres: cada ref nova adicionada ali empurrava a
+    // janela fixa e derrubava este teste sem nenhum fio realmente rompido
+    // (aconteceu na graduação do SuperTrend, que somou 2 refs ao bloco).
+    const cleanupEnd = c.indexOf('\n    };', cleanupIdx);
+    expect(cleanupEnd, 'fim do bloco de cleanup não encontrado').toBeGreaterThan(cleanupIdx);
+    const cleanupBlock = c.slice(cleanupIdx, cleanupEnd);
     expect(cleanupBlock).toContain('harmonicPolylineRef.current = null;');
     expect(cleanupBlock).toContain('triangleResistanceLineRef.current = null;');
     expect(cleanupBlock).toContain('triangleSupportLineRef.current = null;');
