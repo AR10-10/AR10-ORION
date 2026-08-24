@@ -1037,12 +1037,15 @@ describe('Kill Zones ICT no canvas (badge do header já existia, §6.48 — este
     expect(c).toContain('kill_zones: true,');
   });
 
-  it('painel "Camadas do Gráfico" (App.tsx) ganha a linha KILL ZONES (ICT), no Modo Inteligência (leitura de mercado, nunca específica do plano ativo)', () => {
+  it('painel "Camadas do Gráfico" (App.tsx) ganha a linha KILL ZONES (ICT)', () => {
     const a = app();
     expect(a).toContain('{ id: "kill_zones", label: "KILL ZONES (ICT)" }');
-    const intelMatch = a.match(/const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>\(\[([\s\S]*?)\]\);/);
-    expect(intelMatch, 'CHART_LAYERS_INTELLIGENCE_PRESET não encontrado').not.toBeNull();
-    expect(intelMatch![1]).toContain('"kill_zones"');
+    // A segunda metade deste teste checava a pertinência ao preset
+    // "Inteligência". Os 3 presets manuais foram removidos a pedido do
+    // Operador ("deixa só o modo"); a cobertura que importa — a camada
+    // EXISTIR no painel — continua acima, e agora também está travada
+    // universalmente em chart-layers-panel-wiring.test.ts, que compara o
+    // painel inteiro contra CHART_LAYER_IDS.
   });
 
   it('Relevance Engine cobre kill_zones desde o nascimento da camada — nunca repete o gap retroativo do Task #93 (liquidation_heatmap/liquidity_sweep/market_sessions sem regra própria)', () => {
@@ -1076,12 +1079,15 @@ describe('Session Key Levels (pedido do Operador, captura de indicador de refer�
     expect(c).toContain('session_key_levels: true,');
   });
 
-  it('painel "Camadas do Gráfico" (App.tsx) ganha a linha KEY LEVELS (SESSÕES), no Modo Inteligência (mesmo papel estrutural de S1/R1, nunca específica do plano ativo)', () => {
+  it('painel "Camadas do Gráfico" (App.tsx) ganha a linha KEY LEVELS (SESSÕES)', () => {
     const a = app();
     expect(a).toContain('{ id: "session_key_levels", label: "KEY LEVELS (SESSÕES)" }');
-    const intelMatch = a.match(/const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>\(\[([\s\S]*?)\]\);/);
-    expect(intelMatch, 'CHART_LAYERS_INTELLIGENCE_PRESET não encontrado').not.toBeNull();
-    expect(intelMatch![1]).toContain('"session_key_levels"');
+    // A segunda metade deste teste checava a pertinência ao preset
+    // "Inteligência". Os 3 presets manuais foram removidos a pedido do
+    // Operador ("deixa só o modo"); a cobertura que importa — a camada
+    // EXISTIR no painel — continua acima, e agora também está travada
+    // universalmente em chart-layers-panel-wiring.test.ts, que compara o
+    // painel inteiro contra CHART_LAYER_IDS.
   });
 
   it('Relevance Engine cobre session_key_levels desde o nascimento da camada — mesma disciplina de kill_zones/§6.55, nunca repete o gap retroativo do Task #93', () => {

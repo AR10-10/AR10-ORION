@@ -875,55 +875,17 @@ export default function App() {
   const resetChartLayerToAuto = useCallback((id: ChartLayerId) => {
     setChartLayerAutoMode((prev) => ({ ...prev, [id]: true }));
   }, []);
-  // Diretriz de Evolução Autônoma Integral §11 ("MODO OPERACIONAL... E:
-  // MODO AUDITORIA"), achado real de auditoria: o painel só tinha toggle
-  // individual por camada — nenhum atalho para as 2 leituras reais que o
-  // Operador de fato alterna entre si. Parâmetro declarado (convenção,
-  // nunca medição — mesmo espírito do piso R:R): as 3 camadas que
-  // desenham o PLANO em si (trade_plan_zone/neural_market_aura) e a
-  // direção de tendência mais lida "de relance" (ema) — mapeiam
-  // diretamente às prioridades visuais 1-6 da diretriz (direção/entrada/
-  // invalidação/TP1-3); as outras 5 (estrutura/contexto, prioridades
-  // 7-8) ficam ligadas só no Modo Auditoria. Puramente aditivo: nenhuma
-  // camada é removida, o cálculo de todas continua ativo — só a exibição
-  // muda, e o toggle individual continua funcionando normalmente depois.
-  // Diretriz Suprema de Evolução Integrativa §8 ("Modo Inteligência"):
-  // achado real de auditoria — só existiam 2 presets (Operacional/
-  // Auditoria); a diretriz pede um 3º para análise profunda sem o ruído
-  // do plano ativo. Mesmo mecanismo aditivo dos outros dois — nenhuma
-  // camada nova, nenhum cálculo novo, só uma pré-seleção a mais.
-  // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: um preset é curadoria manual
-  // deliberada (mesma categoria do toggle individual) — aplicar
-  // operational/audit/intelligence também sai do automático em todas as
-  // camadas, para o resultado do preset nunca ser silenciosamente
-  // sobrescrito pelo Relevance Engine. "automatic" é o 4º preset novo: a
-  // única ação que devolve TODAS as camadas ao comportamento automático
-  // de uma vez (o reset por camada individual, resetChartLayerToAuto,
-  // continua existindo para ajustes finos).
-  const applyChartLayerPreset = useCallback((preset: "operational" | "audit" | "intelligence" | "automatic") => {
-    if (preset === "automatic") {
-      setChartLayerAutoMode(
-        CHART_LAYER_IDS.reduce((acc, id) => {
-          acc[id] = true;
-          return acc;
-        }, {} as ChartLayerVisibility),
-      );
-      return;
-    }
+  // UM MODO SÓ (pedido direto do Operador). Antes esta função aplicava 4
+  // presets — 3 manuais (operational/audit/intelligence) e 1 automático.
+  // Os 3 manuais eram atalhos de curadoria em lote sobre os MESMOS toggles
+  // camada-a-camada que continuam existindo; nenhum era capacidade própria.
+  // Sobrou a única ação que o Operador pediu para manter: devolver TODAS as
+  // camadas ao comportamento automático de uma vez. O reset por camada
+  // individual (resetChartLayerToAuto, logo acima) continua para ajuste fino.
+  const restoreChartLayersToAuto = useCallback(() => {
     setChartLayerAutoMode(
       CHART_LAYER_IDS.reduce((acc, id) => {
-        acc[id] = false;
-        return acc;
-      }, {} as ChartLayerVisibility),
-    );
-    if (preset === "audit") {
-      setChartLayerVisibility(DEFAULT_CHART_LAYER_VISIBILITY);
-      return;
-    }
-    const activeSet = preset === "intelligence" ? CHART_LAYERS_INTELLIGENCE_PRESET : CHART_LAYERS_OPERATIONAL_PRESET;
-    setChartLayerVisibility(
-      CHART_LAYER_IDS.reduce((acc, id) => {
-        acc[id] = activeSet.has(id);
+        acc[id] = true;
         return acc;
       }, {} as ChartLayerVisibility),
     );
@@ -3795,7 +3757,7 @@ export default function App() {
       setPaperTradingOpen,
       chartLayerVisibility,
       toggleChartLayer,
-      applyChartLayerPreset,
+      restoreChartLayersToAuto,
       chartLayerAutoMode,
       resetChartLayerToAuto,
       emaPeriod,
@@ -4478,62 +4440,21 @@ function WorkspaceManagerPanel() {
 // overlays do CANVAS do gráfico em vez dos widgets do layout. Toggle
 // simples ligado/desligado (não 5 estados como o Workspace Manager — uma
 // camada de canvas só faz sentido visível ou invisível, não "flutuante").
-// Diretriz de Evolução Autônoma Integral §11 — as camadas do Modo
-// Operacional: as que desenham o PLANO em si (entrada/stop/TPs, o
-// corredor de convicção que reforça visualmente o mesmo plano) mais a
-// direção de tendência mais lida "de relance" — prioridades visuais 1-6
-// da diretriz (direção/entrada/invalidação/TP1-3). As outras 5 camadas
-// (estrutura/contexto, prioridades 7-8: FVG/OB, BOS/CHOCH, heatmap,
-// volume profile, trend channel) só aparecem no Modo Auditoria.
-const CHART_LAYERS_OPERATIONAL_PRESET = new Set<ChartLayerId>(["trade_plan_zone", "neural_market_aura", "ema"]);
-// Diretriz Suprema de Evolução Integrativa §8 ("Modo Inteligência"): o
-// COMPLEMENTO do Operacional — todas as camadas de leitura
-// estrutural/contexto (FVG/OB, BOS/CHOCH, heatmap de liquidez, volume
-// profile, trend channel) mais EMA (mesma direção de tendência "de
-// relance" que já ajuda o Operacional), SEM as duas camadas que só fazem
-// sentido quando existe um plano ATIVO (trade_plan_zone/neural_market_
-// aura) — análise profunda do mercado, não do plano em si.
-// Auditoria de pendências: os 7 novos toggles (VWAP/Nexus Line/CVD/
-// Fibonacci/Premium-Discount/harmônico/EQH-EQL) são TODOS leitura de
-// mercado/estrutura — nenhum é específico do plano ativo — então entram
-// aqui pela mesma lógica, nunca no Operacional (que fica deliberadamente
-// enxuto).
-const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>([
-  "liquidity_zones",
-  "structure_breaks",
-  "order_flow_heatmap",
-  "volume_profile",
-  "ema",
-  "trend_channel",
-  "vwap",
-  "nexus_line",
-  "cvd",
-  "fibonacci",
-  "premium_discount",
-  "harmonics",
-  "equal_highs_lows",
-  // OMEGA CORE V-MAX Fase 8.1: mesma lógica — densidade de liquidações
-  // reais é leitura de mercado/estrutura, nunca específica do plano
-  // ativo, então entra aqui, nunca no Operacional.
-  "liquidation_heatmap",
-  // EPC OMEGA FINAL Etapa 10: sweep de liquidez e sessão institucional são
-  // igualmente leitura de mercado/estrutura, nunca específicas do plano
-  // ativo — mesma lógica acima.
-  "liquidity_sweep",
-  "market_sessions",
-  // Ferramentas Institucionais: Kill Zone ICT é a mesma família de
-  // contexto temporal de market_sessions acima — leitura de mercado,
-  // nunca específica do plano ativo.
-  "kill_zones",
-  // Pedido do Operador ("Key Levels"): máxima/mínima de sessão é leitura
-  // estrutural de mercado (mesmo papel de S1/R1 acima), nunca específica
-  // do plano ativo.
-  "session_key_levels",
-  // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4: confluência real entre
-  // ferramentas de ESTRUTURA/MERCADO (EMA/VWAP/FVG/OB/liquidez) — mesma
-  // categoria das demais acima, nunca específica do plano ativo.
-  "institutional_zones",
-]);
+// UM MODO SÓ (pedido direto do Operador: "tem vários modos, deixa só o modo,
+// só pra ficar mais profissional... e é só a gente habilitar se quiser, e
+// deixa o modo automático").
+//
+// O QUE FOI REMOVIDO E POR QUE ISSO NÃO É PERDA DE FUNCIONALIDADE
+// (Regra de Ouro 4): existiam 3 presets manuais — Operacional, Inteligência
+// e Auditoria. Nenhum deles era uma CAPACIDADE: os três eram atalhos que
+// setavam em lote exatamente os mesmos toggles camada-a-camada que
+// continuam existindo inteiros logo abaixo. Auditoria = ligar todas;
+// Operacional/Inteligência = dois recortes fixos. Nenhuma camada, nenhum
+// motor e nenhum dado saiu do sistema — o que saiu foi a ADMINISTRAÇÃO DE
+// MODOS, que era justamente o que o Operador pediu para não existir mais.
+//
+// O que sobra é exatamente o que foi pedido: um estado automático (a
+// inteligência decide) + habilitar camada a camada se quiser.
 
 const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "liquidity_zones", label: "FVG / ORDER BLOCKS" },
@@ -4590,6 +4511,16 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // Path Map", scenario-engine.ts) ganha o mesmo toggle/relevância que
   // toda outra camada real já tinha — era a única sem nenhum dos dois.
   { id: "scenario_projection", label: "CENÁRIOS (FUTURE PATH MAP)" },
+  // ACHADO DESTA RODADA, pego por um teste novo que compara as duas listas:
+  // `candle_patterns` estava em CHART_LAYER_IDS (o canvas monta o plugin em
+  // `{visibility.candle_patterns && (`), em RELEVANCE_LAYER_IDS e no custo
+  // visual (LAYER_VISUAL_COST = 4) — ou seja, DESENHA e DISPUTA vaga no
+  // orçamento automático — mas nunca entrou aqui. Consequência real: era a
+  // única camada que o Operador não conseguia habilitar/desabilitar, e que
+  // também não aparecia na LEITURA do painel (o resumo itera esta lista).
+  // Uma ferramenta desenhando no gráfico sem existir no painel é exatamente
+  // o oposto de "as ferramentas principais aparecerem na leitura".
+  { id: "candle_patterns", label: "PADRÕES DE VELA" },
 ];
 
 // Extraído de ChartLayersPanel (painel Properties 320px, pedido do
@@ -4603,7 +4534,7 @@ function ChartLayersPanelContent() {
   const {
     chartLayerVisibility,
     toggleChartLayer,
-    applyChartLayerPreset,
+    restoreChartLayersToAuto,
     chartLayerAutoMode,
     resetChartLayerToAuto,
     emaPeriod,
@@ -4615,7 +4546,7 @@ function ChartLayersPanelContent() {
   // vez que o painel abre, mesma filosofia de "operador não administra
   // modos" (a seção manual não fica "grudada" aberta de uma sessão pra
   // outra por acidente).
-  const [advancedPresetsOpen, setAdvancedPresetsOpen] = useState(false);
+  const [habilitarManualAberto, setHabilitarManualAberto] = useState(false);
   // Decisão JÁ resolvida do canvas (store) — a MESMA que o gráfico desenha.
   // Antes desta rodada o painel resolvia por conta própria com
   // `relevance.relevant`, SEM o teto de competição, e listava ~20 camadas
@@ -4623,17 +4554,12 @@ function ChartLayersPanelContent() {
   const layerDecision = useChartLayerDecisionSnapshot();
   const visibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
   const autoMode = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
-  // Highlight real (não decorativo): compara o estado atual byte-a-byte
-  // contra os dois presets — só acende quando bate exatamente, nunca um
-  // "quase" fingido de correspondência. NÚCLEO GRAVITACIONAL AUTÔNOMO §1:
-  // os 3 presets manuais exigem TODAS as 21 camadas fora do automático —
-  // uma camada em modo automático que coincidentemente bate com o preset
-  // agora não é a mesma coisa que o Operador ter escolhido esse preset.
-  const allManual = CHART_LAYER_IDS.every((id) => autoMode[id] === false);
-  const isOperationalPreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_OPERATIONAL_PRESET.has(id));
-  const isAuditPreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === true);
-  const isIntelligencePreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));
-  const isAutomaticPreset = CHART_LAYER_IDS.every((id) => autoMode[id] === true);
+  // Highlight real (não decorativo): só acende quando TODA camada está
+  // mesmo em automático, nunca um "quase" fingido de correspondência. Uma
+  // única camada fixada à mão já apaga o destaque — é assim que o Operador
+  // vê, de relance, se está no estado limpo ou se sobrou um override
+  // esquecido de outra sessão.
+  const emEstadoAutomatico = CHART_LAYER_IDS.every((id) => autoMode[id] === true);
   // Pedido do Operador: "eu quero só UM modo, e ele é o modo inteligente...
   // que apareça só as ferramentas necessárias pra o operador bater o olho e
   // saber". O painel deixa de ser uma PAREDE DE INTERRUPTORES por padrão e
@@ -4644,34 +4570,26 @@ function ChartLayersPanelContent() {
 
   return (
     <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
-      {/* "HOMOLOGAÇÃO DA ORDEM Nº 03 / ORGANISMO INTELIGENTE ADAPTATIVO":
-          "o operador não deve administrar modos... deve receber uma
-          leitura pronta e contextualizada". Reorganizado, NUNCA apagado
-          (Regra de Ouro 4 — funcionalidade real preservada por
-          inteiro): os 4 presets e o toggle individual abaixo continuam
-          existindo e funcionando byte-a-byte como antes; só a
-          PRIORIDADE VISUAL mudou — Automático é agora a única ação
-          primária sempre visível (o estado adaptativo real: Relevance
-          Engine + Visual Budget, já ligados ao vivo), e os 3 presets
-          manuais viram uma seção secundária, recolhida por padrão, para
-          quem especificamente precisa de uma leitura manual pontual
-          (ex.: Preset Auditoria para revisão profunda). Decisão de design
-          deliberada, não a exclusão literal pedida pela diretriz — ver
-          docs/RELATORIO_HOMOLOGACAO_03_ORGANISMO_ADAPTATIVO.md §3 para
-          o raciocínio completo. */}
+      {/* UM MODO SÓ. A rodada anterior tinha DESPRIORIZADO os 3 presets
+          manuais (recolhidos atrás de "avançado"); o Operador voltou ao
+          assunto e pediu a remoção — "tem vários modos, deixa só o modo".
+          Agora existe uma única ação de estado (voltar tudo ao automático)
+          e, abaixo dela, a leitura do que a inteligência decidiu.
+          Habilitar camada a camada continua inteiro, um clique abaixo —
+          "é só a gente habilitar se quiser". */}
       <button
         type="button"
-        onClick={() => applyChartLayerPreset?.("automatic")}
+        onClick={() => restoreChartLayersToAuto?.()}
         title="Cada camada aparece só quando tem relevância estatística real agora (Relevance Engine) + competição real de destaque entre camadas (Visual Budget) — nunca precisa ser administrado manualmente."
         className={`w-full flex flex-col items-center gap-0.5 py-2.5 rounded border-2 font-bold uppercase tracking-wider transition-colors ${
-          isAutomaticPreset
+          emEstadoAutomatico
             ? "border-[#00ffaa] bg-[#00ffaa15] text-[#00ffaa]"
             : "border-[#8ab4f8]/30 text-[#8ab4f8]/70 hover:text-[#8ab4f8] hover:border-[#8ab4f8]/50"
         }`}
       >
         <span className="text-[0.55rem] tracking-[0.2em]">AR10 CYBORG · Estado Inteligente Adaptativo</span>
         <span className="text-[0.38rem] font-normal normal-case tracking-normal opacity-80">
-          {isAutomaticPreset ? "ativo agora — leitura pronta, sem modo pra administrar" : "clique para voltar ao estado adaptativo padrão"}
+          {emEstadoAutomatico ? "ativo agora — leitura pronta, sem modo pra administrar" : "clique para voltar ao estado adaptativo padrão"}
         </span>
       </button>
       {/* A LEITURA que substitui a parede de interruptores no estado padrão.
@@ -4715,55 +4633,18 @@ function ChartLayersPanelContent() {
       </div>
       <button
         type="button"
-        onClick={() => setAdvancedPresetsOpen((v) => !v)}
+        onClick={() => setHabilitarManualAberto((v) => !v)}
         className="text-[0.4rem] text-[#8ab4f8]/50 hover:text-[#8ab4f8] tracking-[0.15em] uppercase text-left flex items-center gap-1"
       >
-        <span>{advancedPresetsOpen ? "▾" : "▸"}</span>
-        <span>Controle manual camada a camada (avançado)</span>
+        <span>{habilitarManualAberto ? "▾" : "▸"}</span>
+        <span>Habilitar camada a camada, se quiser</span>
       </button>
-      {advancedPresetsOpen && (
-        <div className="flex gap-1.5">
-          <button
-            type="button"
-            onClick={() => applyChartLayerPreset?.("operational")}
-            className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-              isOperationalPreset
-                ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-            }`}
-          >
-            Preset Operacional
-          </button>
-          <button
-            type="button"
-            onClick={() => applyChartLayerPreset?.("intelligence")}
-            className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-              isIntelligencePreset
-                ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-            }`}
-          >
-            Preset Inteligência
-          </button>
-          <button
-            type="button"
-            onClick={() => applyChartLayerPreset?.("audit")}
-            className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-              isAuditPreset
-                ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-            }`}
-          >
-            Preset Auditoria
-          </button>
-        </div>
-      )}
-      {advancedPresetsOpen && (
+      {habilitarManualAberto && (
         <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
           Overlays reais do canvas — esconder uma camada nunca altera o dado, só a exibição
         </span>
       )}
-      {advancedPresetsOpen && CHART_LAYER_PANEL_MODULES.map(({ id, label }) => {
+      {habilitarManualAberto && CHART_LAYER_PANEL_MODULES.map(({ id, label }) => {
         // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: em modo automático, o
         // estado real vem do Relevance Engine (nunca do boolean manual,
         // que só é o valor efetivo quando o Operador assumiu controle

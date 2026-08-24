@@ -150,15 +150,32 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(clIdx).toBeGreaterThan(-1);
   });
 
-  it('CHART_LAYER_PANEL_MODULES lista exatamente as 26 camadas reais, cada id um ChartLayerId válido (o próprio TypeScript trava isso — este teste só confirma que a lista não encolheu/cresceu silenciosamente)', () => {
+  it('CHART_LAYER_PANEL_MODULES cobre TODA camada do canvas — derivado de CHART_LAYER_IDS, nunca um número escrito à mão', () => {
     const app = read('../src/App.tsx');
     const listMatch = app.match(/const CHART_LAYER_PANEL_MODULES: \{ id: ChartLayerId; label: string \}\[\] = \[([\s\S]*?)\];/);
     expect(listMatch, 'CHART_LAYER_PANEL_MODULES não encontrado').not.toBeNull();
     // Conta ocorrências reais de `{ id: "..."` — robusto a comentários
     // explicativos entre entradas (ex.: liquidation_heatmap, Fase 8.1),
     // nunca uma contagem ingênua de linhas não-vazias.
-    const entries = Array.from(listMatch![1].matchAll(/\{ id: "[a-z_]+"/g));
-    expect(entries).toHaveLength(26); // +supertrend (graduação de supertrend-engine.js)
+    const entries = Array.from(listMatch![1].matchAll(/\{ id: "([a-z_]+)"/g));
+    // ANTES esta assertiva era um NÚMERO ESCRITO À MÃO (26). Ele ficou
+    // desatualizado em silêncio e escondeu um defeito real: `candle_patterns`
+    // desenhava no canvas, disputava vaga no orçamento automático, e não
+    // existia no painel — o Operador não conseguia habilitá-la nem a via na
+    // leitura. Um contador manual não pega esse tipo de divergência; comparar
+    // as duas listas pega. É o mesmo princípio de fonte única já aplicado em
+    // todo o resto do projeto.
+    const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
+    const canonicaIdx = chart.indexOf('export const CHART_LAYER_IDS = [');
+    const canonicas = Array.from(
+      chart.slice(canonicaIdx, chart.indexOf('] as const;', canonicaIdx)).matchAll(/^\s{2}"([a-z_]+)",$/gm),
+    ).map((m) => m[1]);
+    expect(canonicas.length, 'CHART_LAYER_IDS não extraída').toBeGreaterThan(15);
+    const doPainel = entries.map((m) => m[1]);
+    for (const id of canonicas) {
+      expect(doPainel, `camada ${id} desenha no canvas mas não existe no painel`).toContain(id);
+    }
+    expect(entries).toHaveLength(canonicas.length);
     expect(listMatch![1]).toContain('{ id: "trend_channel", label: "TREND CHANNEL" }');
     // EPC OMEGA FINAL Etapa 10.
     expect(listMatch![1]).toContain('{ id: "liquidity_sweep", label: "LIQUIDITY SWEEP" }');
@@ -193,19 +210,6 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(body).toContain('{ id: "equal_highs_lows", label: "EQH / EQL" }');
   });
 
-  it('Auditoria de pendências: os 7 toggles novos entram no Modo Inteligência (leitura de mercado/estrutura, nenhum específico do plano ativo) — nunca no Modo Operacional (que fica enxuto de propósito)', () => {
-    const app = read('../src/App.tsx');
-    const intelMatch = app.match(/const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>\(\[([\s\S]*?)\]\);/);
-    expect(intelMatch, 'CHART_LAYERS_INTELLIGENCE_PRESET não encontrado').not.toBeNull();
-    const intelBody = intelMatch![1];
-    for (const id of ['"vwap"', '"nexus_line"', '"cvd"', '"fibonacci"', '"premium_discount"', '"harmonics"', '"equal_highs_lows"']) {
-      expect(intelBody).toContain(id);
-    }
-    const opIdx = app.indexOf('const CHART_LAYERS_OPERATIONAL_PRESET = new Set<ChartLayerId>([');
-    const opEnd = app.indexOf(']);', opIdx);
-    const opBody = app.slice(opIdx, opEnd);
-    expect(opBody).toEqual(expect.not.stringContaining('"vwap"'));
-  });
 
   it('painel expõe o seletor real de período da EMA (4 períodos padrão, controle único, nunca uma pilha de linhas)', () => {
     const app = read('../src/App.tsx');
@@ -240,72 +244,7 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     expect(block).not.toContain('title: "TREND -2σ"');
   });
 
-  it('Diretriz de Evolução Autônoma Integral §11: Modo Operacional/Auditoria — preset real sobre o mesmo estado do toggle individual, nunca uma segunda fonte de visibilidade', () => {
-    const app = read('../src/App.tsx');
-    const presetMatch = app.match(/const CHART_LAYERS_OPERATIONAL_PRESET = new Set<ChartLayerId>\(\[([\s\S]*?)\]\);/);
-    expect(presetMatch, 'CHART_LAYERS_OPERATIONAL_PRESET não encontrado').not.toBeNull();
-    // as 3 camadas que desenham o PLANO/direção de relance — nunca as de
-    // estrutura/contexto (prioridades 7-8 da diretriz).
-    expect(presetMatch![1]).toContain('"trade_plan_zone"');
-    expect(presetMatch![1]).toContain('"neural_market_aura"');
-    expect(presetMatch![1]).toContain('"ema"');
-    expect(presetMatch![1]).not.toContain('"liquidity_zones"');
-    expect(presetMatch![1]).not.toContain('"structure_breaks"');
-    expect(presetMatch![1]).not.toContain('"order_flow_heatmap"');
-    expect(presetMatch![1]).not.toContain('"volume_profile"');
-    expect(presetMatch![1]).not.toContain('"trend_channel"');
 
-    // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: applyChartLayerPreset ganhou um 4º
-    // valor ("automatic") — aplicar um preset manual (operational/audit/
-    // intelligence) também sai do automático nas 15 camadas (curadoria
-    // deliberada, mesma categoria do toggle individual); "automatic" é a
-    // única ação que devolve todas ao comportamento automático de uma vez.
-    const fnMatch = app.match(/const applyChartLayerPreset = useCallback\(\(preset: "operational" \| "audit" \| "intelligence" \| "automatic"\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
-    expect(fnMatch, 'applyChartLayerPreset não encontrada').not.toBeNull();
-    const body = fnMatch![1];
-    expect(body).toContain('if (preset === "automatic") {');
-    // audit = o MESMO default de sempre (todas ligadas), nunca uma segunda lista
-    expect(body).toContain('setChartLayerVisibility(DEFAULT_CHART_LAYER_VISIBILITY);');
-    // operational/intelligence = reduz sobre CHART_LAYER_IDS (a lista canônica única), nunca hardcoded
-    expect(body).toContain('CHART_LAYER_IDS.reduce(');
-    expect(body).toContain('activeSet.has(id)');
-    expect(body).toContain('preset === "intelligence" ? CHART_LAYERS_INTELLIGENCE_PRESET : CHART_LAYERS_OPERATIONAL_PRESET');
-
-    // exposto no contexto e consumido pelo painel — nunca um segundo painel
-    expect(app).toContain('applyChartLayerPreset,');
-    expect(app).toContain('toggleChartLayer,');
-    expect(app).toContain('applyChartLayerPreset,');
-    expect(app).toContain('chartLayerAutoMode,');
-    expect(app).toContain('resetChartLayerToAuto,');
-    expect(app).toContain('onClick={() => applyChartLayerPreset?.("operational")}');
-    expect(app).toContain('onClick={() => applyChartLayerPreset?.("audit")}');
-    // o botão continua sendo um atalho — o toggle individual não foi removido
-    expect(app).toContain('onClick={() => toggleChartLayer?.(id)}');
-  });
-
-  it('Diretriz Suprema de Evolução Integrativa §8 ("Modo Inteligência"): 3º preset real — todas as camadas de leitura estrutural/contexto, SEM as duas que só existem para o plano ATIVO', () => {
-    const app = read('../src/App.tsx');
-    const presetMatch = app.match(/const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>\(\[([\s\S]*?)\]\);/);
-    expect(presetMatch, 'CHART_LAYERS_INTELLIGENCE_PRESET não encontrado').not.toBeNull();
-    const body = presetMatch![1];
-    expect(body).toContain('"liquidity_zones"');
-    expect(body).toContain('"structure_breaks"');
-    expect(body).toContain('"order_flow_heatmap"');
-    expect(body).toContain('"volume_profile"');
-    expect(body).toContain('"ema"');
-    expect(body).toContain('"trend_channel"');
-    // as duas camadas do plano ATIVO nunca entram no Modo Inteligência —
-    // análise profunda do MERCADO, não do plano em si.
-    expect(body).not.toContain('"trade_plan_zone"');
-    expect(body).not.toContain('"neural_market_aura"');
-
-    expect(app).toContain('onClick={() => applyChartLayerPreset?.("intelligence")}');
-    // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: highlight do preset agora também
-    // exige todas as 15 camadas fora do automático (allManual) — um preset
-    // é curadoria manual deliberada, nunca uma coincidência do automático.
-    expect(app).toContain('const isIntelligencePreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));');
-    expect(app).toContain('Preset Inteligência');
-  });
 });
 
 describe('Diretriz de Refinamento Visual §5: Trend Channel reposicionado para a lateral do eixo de preço (mesmo sistema anti-colisão de R1/NL/VWAP/EMA/S1)', () => {
@@ -563,42 +502,77 @@ describe('Auditoria de pendências: obstacleCount (sem teto) reconciliado com o 
 // nada foi apagado (mesmos 3 onClick reais ainda no arquivo) E a
 // hierarquia visual realmente mudou (Automático fora do bloco condicional
 // dos outros 3).
-describe('ChartLayersPanel: Estado Inteligente Adaptativo é a ação primária; presets manuais viram seção "avançado" recolhida — reorganizado, nunca apagado', () => {
-  it('botão primário "AR10 CYBORG · Estado Inteligente Adaptativo" chama applyChartLayerPreset("automatic"), fora de qualquer bloco condicional', () => {
+describe('UM MODO SÓ: o automático é a única ação de estado; habilitar camada a camada é opt-in', () => {
+  // O Operador voltou ao assunto depois da rodada que só DESPRIORIZOU os
+  // presets: "tem vários modos, deixa só o modo, só pra ficar mais
+  // profissional... e é só a gente habilitar se quiser, e deixa o modo
+  // automático". Os 3 presets manuais foram removidos.
+  //
+  // POR QUE ISSO NÃO FERE A REGRA DE OURO 4: nenhum dos 3 era capacidade
+  // própria — os três setavam em lote os MESMOS toggles camada-a-camada que
+  // continuam existindo. Auditoria = ligar todas; Operacional/Inteligência =
+  // dois recortes fixos. Nenhuma camada, motor ou dado saiu do sistema.
+  // Estes testes travam exatamente isso: o modo sumiu, o controle não.
+
+  it('a única ação de estado é voltar tudo ao automático — fora de qualquer bloco condicional', () => {
     const a = read('../src/App.tsx');
     const idx = a.indexOf('AR10 CYBORG · Estado Inteligente Adaptativo');
     expect(idx, 'botão primário não encontrado').toBeGreaterThan(-1);
     const block = a.slice(a.lastIndexOf('<button', idx), idx);
-    expect(block).toContain('onClick={() => applyChartLayerPreset?.("automatic")}');
+    expect(block).toContain('onClick={() => restoreChartLayersToAuto?.()}');
   });
 
-  it('disclosure "Predefinições manuais (avançado)" começa recolhida (useState(false)) — nunca aberta por padrão', () => {
+  it('NENHUM preset manual sobrou — nem função, nem constante, nem botão', () => {
     const a = read('../src/App.tsx');
-    expect(a).toContain('const [advancedPresetsOpen, setAdvancedPresetsOpen] = useState(false);');
-    expect(a).toContain('onClick={() => setAdvancedPresetsOpen((v) => !v)}');
+    // Forma executável em cada caso, nunca a palavra solta (que apareceria
+    // em comentário explicando a própria remoção — o erro que já mordeu
+    // esta trilha 4 vezes).
+    expect(a).not.toMatch(/const CHART_LAYERS_OPERATIONAL_PRESET\s*=/);
+    expect(a).not.toMatch(/const CHART_LAYERS_INTELLIGENCE_PRESET\s*=/);
+    expect(a).not.toMatch(/applyChartLayerPreset\s*\?\.\(/);
+    expect(a).not.toMatch(/const applyChartLayerPreset\s*=/);
+    for (const rotulo of ['>Preset Operacional<', '>Preset Inteligência<', '>Preset Auditoria<']) {
+      expect(a).not.toContain(rotulo);
+    }
   });
 
-  it('os 3 presets manuais continuam existindo por inteiro (zero exclusão real) — só dentro do bloco condicional {advancedPresetsOpen && (...)}', () => {
+  it('a função que sobrou devolve TODAS as camadas ao automático, sobre a lista canônica', () => {
     const a = read('../src/App.tsx');
-    const discloseIdx = a.indexOf('{advancedPresetsOpen && (');
-    expect(discloseIdx, 'bloco condicional não encontrado').toBeGreaterThan(-1);
-    const nextPanelSectionIdx = a.indexOf('Overlays reais do canvas', discloseIdx);
-    const block = a.slice(discloseIdx, nextPanelSectionIdx);
-    expect(block).toContain('onClick={() => applyChartLayerPreset?.("operational")}');
-    expect(block).toContain('onClick={() => applyChartLayerPreset?.("intelligence")}');
-    expect(block).toContain('onClick={() => applyChartLayerPreset?.("audit")}');
-    expect(block).toContain('Preset Operacional');
-    expect(block).toContain('Preset Inteligência');
-    expect(block).toContain('Preset Auditoria');
+    const m = a.match(/const restoreChartLayersToAuto = useCallback\(\(\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
+    expect(m, 'restoreChartLayersToAuto não encontrada').not.toBeNull();
+    const body = m![1];
+    // reduz sobre CHART_LAYER_IDS (fonte única), nunca uma segunda lista
+    expect(body).toContain('CHART_LAYER_IDS.reduce(');
+    expect(body).toContain('acc[id] = true;');
+    expect(body).toContain('setChartLayerAutoMode(');
+    // e NUNCA mexe na visibilidade manual: sair do automático é decisão do
+    // Operador camada a camada, voltar pro automático não apaga a escolha
+    // dele, só para de consultá-la.
+    expect(body).not.toContain('setChartLayerVisibility');
   });
 
-  it('o toggle individual por camada (toggleChartLayer/resetChartLayerToAuto) fica FORA do bloco recolhido — nunca escondido, categoricamente diferente de "administrar um modo"', () => {
+  it('habilitar camada a camada continua INTEIRO, recolhido por padrão — "é só a gente habilitar se quiser"', () => {
     const a = read('../src/App.tsx');
-    const discloseIdx = a.indexOf('{advancedPresetsOpen && (');
-    const disclosureEnd = a.indexOf(')}', a.indexOf('Preset Auditoria', discloseIdx));
-    const toggleIdx = a.indexOf('onClick={() => toggleChartLayer?.(id)}');
-    expect(toggleIdx, 'toggle individual não encontrado').toBeGreaterThan(-1);
-    expect(toggleIdx).toBeGreaterThan(disclosureEnd);
+    expect(a).toContain('const [habilitarManualAberto, setHabilitarManualAberto] = useState(false);');
+    expect(a).toContain('onClick={() => setHabilitarManualAberto((v) => !v)}');
+    expect(a).toContain('<span>Habilitar camada a camada, se quiser</span>');
+    // o toggle real e o reset por camada continuam existindo
+    expect(a).toContain('onClick={() => toggleChartLayer?.(id)}');
+    expect(a).toContain('resetChartLayerToAuto,');
+  });
+
+  it('o painel ainda lista TODAS as camadas — remover o modo não removeu ferramenta nenhuma', () => {
+    const a = read('../src/App.tsx');
+    const chart = read('../src/chart/EnhancedChart_110_Percent.tsx');
+    const ids = [...chart.matchAll(/^\s{2}"([a-z_]+)",$/gm)].map((m) => m[1]);
+    expect(ids.length, 'CHART_LAYER_IDS não extraída').toBeGreaterThan(15);
+    const painel = a.slice(a.indexOf('const CHART_LAYER_PANEL_MODULES'), a.indexOf('];', a.indexOf('const CHART_LAYER_PANEL_MODULES')));
+    for (const id of ids) expect(painel, `camada ${id} sumiu do painel`).toContain(`id: "${id}"`);
+  });
+
+  it('o destaque do estado automático exige TODA camada em auto — um override esquecido apaga o destaque', () => {
+    const a = read('../src/App.tsx');
+    expect(a).toContain('const emEstadoAutomatico = CHART_LAYER_IDS.every((id) => autoMode[id] === true);');
   });
 });
 

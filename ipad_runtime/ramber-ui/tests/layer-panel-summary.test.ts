@@ -165,10 +165,13 @@ describe("a frase de estado diz a verdade, de relance", () => {
 describe("o painel virou UMA leitura, não uma parede de interruptores", () => {
   const app = () => read("../src/App.tsx");
 
-  it("a parede de 26 camadas só existe dentro do avançado", () => {
-    // Pedido literal: "eu quero só UM modo". O controle continua inteiro
-    // (Regra de Ouro 4), um clique abaixo.
-    expect(app()).toContain("{advancedPresetsOpen && CHART_LAYER_PANEL_MODULES.map(");
+  it("a parede de camadas só existe dentro do opt-in — nunca por padrão", () => {
+    // Pedido literal, repetido: "tem vários modos, deixa só o modo... e é só
+    // a gente habilitar se quiser". O controle continua inteiro (Regra de
+    // Ouro 4), um clique abaixo. Sem número escrito à mão: quantas camadas
+    // existem é assunto de chart-layers-panel-wiring.test.ts, que compara
+    // com a lista canônica do canvas.
+    expect(app()).toContain("{habilitarManualAberto && CHART_LAYER_PANEL_MODULES.map(");
   });
 
   it("o painel lê a decisão do CANVAS, nunca resolve por conta própria", () => {

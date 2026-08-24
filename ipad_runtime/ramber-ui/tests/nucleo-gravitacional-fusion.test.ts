@@ -72,26 +72,28 @@ describe('Modelo paralelo de visibilidade (resposta do Operador: toggles continu
   });
 });
 
-describe('applyChartLayerPreset: 4º valor "automatic" + os 3 presets manuais saem do automático (curadoria deliberada)', () => {
-  it('preset "automatic" liga chartLayerAutoMode para as 15 camadas de uma vez, nunca mexe em chartLayerVisibility', () => {
+describe('restoreChartLayersToAuto: a ÚNICA ação de estado que sobrou (um modo só)', () => {
+  // Os 3 presets manuais (operational/audit/intelligence) foram removidos a
+  // pedido do Operador. Nenhum era capacidade própria — os três setavam em
+  // lote os mesmos toggles camada-a-camada que continuam existindo, então
+  // remover o MODO não removeu controle nenhum (Regra de Ouro 4).
+  it('liga chartLayerAutoMode para TODA camada de uma vez, e nunca mexe em chartLayerVisibility', () => {
     const a = app();
-    const idx = a.indexOf('const applyChartLayerPreset = useCallback((preset: "operational" | "audit" | "intelligence" | "automatic") => {');
+    const idx = a.indexOf('const restoreChartLayersToAuto = useCallback(() => {');
     expect(idx).toBeGreaterThan(-1);
     const body = a.slice(idx, a.indexOf('}, []);', idx));
-    const autoBranch = body.slice(body.indexOf('if (preset === "automatic") {'), body.indexOf('if (preset === "audit") {'));
-    expect(autoBranch).toContain('setChartLayerAutoMode(');
-    expect(autoBranch).toContain('acc[id] = true;');
-    expect(autoBranch).not.toContain('setChartLayerVisibility');
+    expect(body).toContain('setChartLayerAutoMode(');
+    expect(body).toContain('CHART_LAYER_IDS.reduce('); // fonte única, nunca uma segunda lista
+    expect(body).toContain('acc[id] = true;');
+    // Voltar ao automático NÃO apaga a escolha manual do Operador — só para
+    // de consultá-la. Essa distinção é o que permite ir e voltar sem perder
+    // a curadoria dele.
+    expect(body).not.toContain('setChartLayerVisibility');
   });
 
-  it('operational/audit/intelligence saem do automático ANTES de fixar o boolean manual (curadoria = override, sempre)', () => {
+  it('não sobrou nenhuma função de preset manual', () => {
     const a = app();
-    const idx = a.indexOf('const applyChartLayerPreset = useCallback((preset: "operational" | "audit" | "intelligence" | "automatic") => {');
-    const body = a.slice(idx, a.indexOf('}, []);', idx));
-    const autoOffIdx = body.indexOf('acc[id] = false;');
-    const auditIdx = body.indexOf('if (preset === "audit") {');
-    expect(autoOffIdx).toBeGreaterThan(-1);
-    expect(autoOffIdx).toBeLessThan(auditIdx); // desliga o automático antes de qualquer branch de preset
+    expect(a).not.toMatch(/const applyChartLayerPreset\s*=/);
   });
 });
 
@@ -174,10 +176,12 @@ describe('Painel: badge AUTO real + reset por camada + 4º preset — nunca um s
     expect(a).toContain('onClick={() => resetChartLayerToAuto?.(id)}');
   });
 
-  it('botão "Automático" (4º preset) existe e acende só quando as 15 camadas estão realmente em modo automático', () => {
+  it('a ação de voltar ao automático existe e o destaque exige TODA camada em auto', () => {
     const a = app();
-    expect(a).toContain('onClick={() => applyChartLayerPreset?.("automatic")}');
-    expect(a).toContain('const isAutomaticPreset = CHART_LAYER_IDS.every((id) => autoMode[id] === true);');
+    expect(a).toContain('onClick={() => restoreChartLayersToAuto?.()}');
+    // Uma única camada fixada à mão já apaga o destaque — é assim que o
+    // Operador vê de relance se sobrou um override esquecido.
+    expect(a).toContain('const emEstadoAutomatico = CHART_LAYER_IDS.every((id) => autoMode[id] === true);');
   });
 });
 
