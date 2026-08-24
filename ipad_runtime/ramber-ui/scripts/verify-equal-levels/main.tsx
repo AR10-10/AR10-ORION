@@ -14,7 +14,7 @@
 import "../../src/index.css";
 import { createRoot } from "react-dom/client";
 import { useEffect, useRef, useState } from "react";
-import { createChart, CandlestickSeries, LineSeries, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
+import { createChart, createSeriesMarkers, CandlestickSeries, LineSeries, type IChartApi, type ISeriesApi, type UTCTimestamp } from "lightweight-charts";
 import { LiquidityZonesPlugin, type EqualLevelMark, type FillableZone } from "../../src/chart/LiquidityZonesPlugin";
 import { chartLocale } from "../../src/chart/tick-mark-format";
 // SuperTrend: as MESMAS funções reais que o gráfico usa — o bridge do motor
@@ -22,6 +22,8 @@ import { chartLocale } from "../../src/chart/tick-mark-format";
 // divergir e fazer esta verificação mentir.
 import { computeSuperTrend } from "../../src/engine-bridge";
 import { splitSuperTrendSeries } from "../../src/chart/supertrend-series";
+// Setas de entrada/saída: a MESMA função real do app.
+import { buildPlanMarkers, type PlanMarkerSource } from "../../src/chart/plan-markers";
 
 const T0 = 1_700_000_000;
 const PEAKS = [10, 20, 30];
@@ -84,6 +86,14 @@ function Harness() {
     );
     stUp.setData(up);
     stDown.setData(down);
+
+    // Dois planos registrados: um LONG que bateu alvo, um SHORT que bateu
+    // stop — fixture de RENDERIZAÇÃO, o formato real do Track Record.
+    const planos: PlanMarkerSource[] = [
+      { plan: { direction: "LONG" }, openedAt: (data[62].time + 60) * 1000, status: "TARGET_HIT", resolvedAt: (data[86].time + 60) * 1000 },
+      { plan: { direction: "SHORT" }, openedAt: (data[92].time + 60) * 1000, status: "STOP_HIT", resolvedAt: (data[104].time + 60) * 1000 },
+    ];
+    createSeriesMarkers(series, buildPlanMarkers(planos, data));
     chart.timeScale().fitContent();
     setReady({ chart, series });
     (window as unknown as { __pronto: boolean }).__pronto = true;

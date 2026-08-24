@@ -22,6 +22,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Crosshair } from "lucide-react";
 import {
   createChart,
+  createSeriesMarkers,
   CandlestickSeries,
   LineSeries,
   ColorType,
@@ -206,6 +207,11 @@ import { formatTickMark, chartLocale } from "./tick-mark-format";
 import { formatZoneMemberList } from "../nexus/zone-member-codes";
 import { computeSuperTrend } from "../engine-bridge";
 import { splitSuperTrendSeries } from "./supertrend-series";
+// Setas de entrada/saída (pedido do Operador: "com as setinhas indicando a
+// entrada e saída"). Auditoria confirmou ZERO marcadores em todo o
+// repositório antes desta rodada — as etiquetas EN/ST/TP respondem "a que
+// PREÇO", nunca "em QUAL MOMENTO".
+import { buildPlanMarkers, type PlanMarkerSource } from "./plan-markers";
 import { formatPrice, nativePriceDecimals } from "../nexus/price-format";
 import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import { PriceLabelStackPlugin, type PriceAxisLabel } from "./PriceLabelStackPlugin";
@@ -446,6 +452,9 @@ interface EnhancedChartProps {
   // resolvida pelo motor (o Breaker INVERTE a polaridade do OB original),
   // nunca a polaridade original. Repassado direto ao LiquidityZonesPlugin
   // como dois kinds novos — zero canvas novo, zero arquitetura nova.
+  // Planos JÁ REGISTRADOS pelo Track Record (ativo + histórico). Cada seta
+  // é um evento real que aconteceu, nunca uma previsão — ver plan-markers.ts.
+  planMarkers?: PlanMarkerSource[];
   breakerBlocks?: EnhancedChartZone[];
   mitigationBlocks?: EnhancedChartZone[];
   liquidityZones?: EnhancedChartLiquidity[];
@@ -853,6 +862,7 @@ function EnhancedChart_110_PercentImpl({
   fairValueGaps,
   orderBlocks,
   liquidityVoids,
+  planMarkers,
   breakerBlocks,
   mitigationBlocks,
   liquidityZones,
@@ -1035,6 +1045,7 @@ function EnhancedChart_110_PercentImpl({
   // outra os de BAIXA, cada uma com buracos (whitespace) onde a outra
   // manda — é assim que a linha muda de cor no ponto exato do flip sem
   // perder um único candle de história.
+  const planMarkersRef = useRef<ReturnType<typeof createSeriesMarkers> | null>(null);
   const supertrendUpRef = useRef<ISeriesApi<"Line"> | null>(null);
   const supertrendDownRef = useRef<ISeriesApi<"Line"> | null>(null);
   // Consolidação Final §26-§29: Nexus Line na MESMA escala de preço (é um
@@ -1574,6 +1585,7 @@ function EnhancedChart_110_PercentImpl({
       emaSeriesRef.current = null;
       supertrendUpRef.current = null;
       supertrendDownRef.current = null;
+      planMarkersRef.current = null;
       nexusLineSeriesRef.current = null;
       trendChannelMidRef.current = null;
       trendChannelUpperRef.current = null;
@@ -2473,6 +2485,30 @@ function EnhancedChart_110_PercentImpl({
     supertrendUpRef.current.setData(up);
     supertrendDownRef.current.setData(down);
   }, [data, superTrendPoints]);
+
+  // SETAS DE ENTRADA E SAÍDA — pedido direto do Operador ("com as setinhas
+  // indicando a entrada e saída, todo no gráfico").
+  //
+  // Marcador nativo da própria lib (createSeriesMarkers), nunca um canvas
+  // novo: a seta precisa ficar ancorada na VELA, e a primitiva da lib já
+  // resolve isso em pan/zoom sem nenhum loop de rAF a mais.
+  //
+  // Acompanha `trade_plan_zone` de propósito, sem interruptor próprio: o
+  // Operador pediu explicitamente MENOS modos, e as setas são o registro do
+  // mesmo plano que essa camada já representa. Mesma decisão já tomada para
+  // Liquidity Void (que acompanha liquidity_zones).
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    const markers = visibility.trade_plan_zone ? buildPlanMarkers(planMarkers ?? [], data) : [];
+    if (planMarkersRef.current) {
+      planMarkersRef.current.setMarkers(markers);
+      return;
+    }
+    // Só cria o plugin quando existe a primeira seta real — nunca anexa uma
+    // primitiva vazia à série por precaução.
+    if (markers.length === 0) return;
+    planMarkersRef.current = createSeriesMarkers(seriesRef.current, markers);
+  }, [planMarkers, data, visibility.trade_plan_zone]);
 
   // Camadas do Gráfico: mesmo padrão de "ema" — esconder alterna visible
   // nas séries nativas, nunca desmonta/recomputa.

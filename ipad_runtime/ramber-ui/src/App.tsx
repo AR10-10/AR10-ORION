@@ -9217,6 +9217,14 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // último plano resolvido".
   const trackRecordForChart = useTrackRecordSnapshot();
   const lastResolvedPlanForChart = trackRecordForChart.history[trackRecordForChart.history.length - 1] ?? null;
+  // Setas de entrada/saída (pedido do Operador). Ativo + histórico, na
+  // ordem cronológica real — o MESMO snapshot que o resto do widget já lê,
+  // zero segunda fonte. O plano ativo entra por último porque ele é o mais
+  // recente; sem ele a entrada em curso não apareceria no gráfico.
+  const planMarkersForChart = useMemo(
+    () => [...trackRecordForChart.history, ...(trackRecordForChart.active ? [trackRecordForChart.active] : [])],
+    [trackRecordForChart],
+  );
   const chartTradePlanAbsenceReason = chartTradePlan
     ? null
     : tradePlanAbsenceReason(
@@ -9780,6 +9788,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
             fairValueGaps={unmitigatedFvgs}
             orderBlocks={unmitigatedBlocks}
             liquidityVoids={unmitigatedVoids}
+            planMarkers={planMarkersForChart}
             breakerBlocks={breakerZones}
             mitigationBlocks={mitigationZones}
             obstacleZones={chartObstacleZones}
