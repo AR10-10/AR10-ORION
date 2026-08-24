@@ -26,11 +26,28 @@ import { AUTO_LAYER_PRECISION_ORDER, resolveAutoLayerVisibility, AUTO_LAYER_MAX_
 const read = (p: string) => readFileSync(resolve(__dirname, p), "utf-8");
 
 describe("fluxo de ordens: a regra vem da janela REAL retida, não de opinião", () => {
-  it("a janela declarada bate com a retenção real do poller", () => {
-    // ORDERFLOW_HISTORY_CAPACITY = 120 amostras a ~4s => ~8 minutos.
+  it("a janela declarada é DERIVADA da retenção real do poller, nunca escrita à mão", () => {
+    // Os dois números precisam andar juntos: se a capacidade subir e a
+    // cobertura não, a regra de horizonte passa a mentir sobre quanto dado
+    // existe. Aqui a correspondência é CALCULADA, não duas constantes
+    // afirmadas lado a lado (que foi como elas se desencontraram antes).
     const src = read("../src/nexus/orderflow-history.ts");
-    expect(src).toContain("export const ORDERFLOW_HISTORY_CAPACITY = 120;");
-    expect(ORDER_FLOW_COVERAGE_MINUTES).toBe(8);
+    const m = src.match(/export const ORDERFLOW_HISTORY_CAPACITY = (\d+);/);
+    expect(m, "ORDERFLOW_HISTORY_CAPACITY não encontrada").not.toBeNull();
+    const capacidade = Number(m![1]);
+    const SEGUNDOS_POR_CICLO = 4; // cadência real do poller MEXC em produção
+    expect(ORDER_FLOW_COVERAGE_MINUTES).toBe(Math.round((capacidade * SEGUNDOS_POR_CICLO) / 60));
+  });
+
+  it("a leitura de TENDÊNCIA tem janela própria — não é mais a retenção inteira", () => {
+    // Defeito real corrigido nesta rodada: computeOrderflowTrend dividia o
+    // histórico INTEIRO ao meio, então retenção e significado da frase
+    // "fluxo FORTALECENDO/ENFRAQUECENDO" eram a mesma coisa por acidente.
+    // Subir a retenção teria mudado a leitura em silêncio.
+    const src = read("../src/nexus/orderflow-history.ts");
+    expect(src).toContain("export const ORDERFLOW_TREND_WINDOW = 120;");
+    expect(src).toMatch(/window: number = ORDERFLOW_TREND_WINDOW/);
+    expect(src).toMatch(/history\.slice\(history\.length - janela\)/);
   });
 
   it("em 1m/5m o fluxo é CORE — a vela inteira cabe na janela retida", () => {
@@ -41,16 +58,24 @@ describe("fluxo de ordens: a regra vem da janela REAL retida, não de opinião",
     }
   });
 
-  it("em 15m/1h vira CONTEXTO — a janela cobre só parte da vela", () => {
+  it("com 60 min retidos, 15m/30m/1h passam a ser CORE — a vela inteira cabe", () => {
+    // Mudança real desta rodada: com capacidade 120 (~8 min) estes três
+    // eram apenas "contexto". A vela inteira agora cabe na janela retida.
     for (const tf of ["15m", "30m", "1h"]) {
+      expect(layerHorizonFit("cvd", tf), `cvd em ${tf}`).toBe("core");
+    }
+  });
+
+  it("em 2h/4h vira CONTEXTO — a janela cobre um pedaço real, nunca a vela toda", () => {
+    for (const tf of ["2h", "4h"]) {
       expect(layerHorizonFit("cvd", tf), `cvd em ${tf}`).toBe("context");
     }
   });
 
-  it("em 4h/1d/1w é UNFIT — o dado retido não cobre nem a vela em formação", () => {
-    // Não é "menos útil": é ausência de dado. A mesma limitação já está
-    // documentada em multi-timeframe-engine.ts.
-    for (const tf of ["4h", "1d", "1w"]) {
+  it("em 1d/1w é UNFIT — o retido não cobre nem um quarto da vela em formação", () => {
+    // Não é "menos útil": é ausência de dado relevante. A mesma limitação
+    // já está documentada em multi-timeframe-engine.ts.
+    for (const tf of ["1d", "1w"]) {
       expect(layerHorizonFit("cvd", tf), `cvd em ${tf}`).toBe("unfit");
     }
     expect(read("../src/nexus/multi-timeframe-engine.ts")).toContain("não existe dado real retido para calcular Order Flow");
@@ -137,13 +162,14 @@ describe("fail-closed", () => {
 
 describe("a razão é DITA, não só aplicada", () => {
   it("camada empurrada carrega uma explicação legível", () => {
-    expect(horizonFitReason("cvd", "4h")).toContain("~8 min");
+    expect(horizonFitReason("cvd", "4h")).toContain("~60 min");
     expect(horizonFitReason("vwap", "1d")).toContain("dia inteiro");
   });
 
   it("camada core não inventa explicação nenhuma", () => {
     expect(horizonFitReason("trade_plan_zone", "1d")).toBeNull();
     expect(horizonFitReason("cvd", "1m")).toBeNull();
+    expect(horizonFitReason("cvd", "1h")).toBeNull(); // agora core: nada a explicar
   });
 });
 
@@ -208,7 +234,7 @@ describe("o gráfico realmente muda de ferramenta conforme o tempo", () => {
     const d = resolveAutoLayerVisibility(todasRelevantes(), [], undefined, "1d");
     const cvd = d["cvd"];
     expect(cvd.show).toBe(false);
-    expect(cvd.reason).toContain("~8 min");
+    expect(cvd.reason).toContain("~60 min");
   });
 });
 
