@@ -56,7 +56,7 @@ import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
 import type { TrianglePatternHit } from "../nexus/triangle-pattern";
 import type { HeadShouldersHit } from "../nexus/head-shoulders-pattern";
 import type { InstitutionalZone } from "../nexus/institutional-zones";
-import type { LayerRelevanceReading } from "../nexus/layer-relevance";
+import type { LayerRelevanceReading, AutoLayerDecision } from "../nexus/layer-relevance";
 import type { EvidenceFusionReading } from "../nexus/evidence-fusion";
 import type { ConfluenceCorridorReading } from "../nexus/confluence-corridor";
 import type { RadarQualificationResult } from "../nexus/radar-qualification";
@@ -241,6 +241,23 @@ export interface UnifiedSnapshotState {
   // outro consumidor (o painel de camadas precisa da mesma leitura, sem
   // recomputar). null = ainda sem nenhum ciclo real processado.
   layerRelevance: LayerRelevanceReading | null;
+  // DEFEITO REAL CORRIGIDO POR ESTA FATIA (relato do Operador: "não aparece
+  // essas ferramentas necessárias"): o painel de camadas e o CANVAS usavam
+  // resoluções DIFERENTES do que está visível.
+  //
+  //   painel  →  relevance.relevant          (só o gate de relevância)
+  //   canvas  →  autoDecision.show           (gate + TETO de competição)
+  //
+  // Em mercado ativo a maioria das camadas passa no gate, e o teto
+  // (AUTO_LAYER_MAX_SIMULTANEOUS) derruba quase todas. O painel exibia
+  // ~20 camadas como "VISÍVEL" enquanto o gráfico desenhava 6. Nenhum erro,
+  // nenhum log — só o painel mentindo sobre a própria tela.
+  //
+  // A decisão resolvida passa a ser publicada por quem já a computa
+  // (ChartWidget, zero segundo cálculo) e lida pelo painel. `suppressedByCap`
+  // deixa o painel dizer a VERDADE útil: não é "oculta", é "cedeu espaço
+  // para camadas mais precisas agora".
+  chartLayerDecision: Record<string, AutoLayerDecision> | null;
   // Ordem Fechamento (§3, "Evidence Fusion... barramento inteligente do
   // ecossistema"): mesmo achado de auditoria de institutionalZones acima —
   // fuseEvidence() já era computado a cada render dentro de CouncilWidget,
@@ -426,6 +443,7 @@ interface UnifiedSnapshotActions {
   setHeadShouldersPattern: (hit: HeadShouldersHit | null) => void;
   setInstitutionalZones: (zones: InstitutionalZone[]) => void;
   setLayerRelevance: (reading: LayerRelevanceReading | null) => void;
+  setChartLayerDecision: (decision: Record<string, AutoLayerDecision> | null) => void;
   setEvidenceFusion: (reading: EvidenceFusionReading | null) => void;
   setSmc: (zones: SmcZonesSnapshot | null) => void;
   setCvd: (cvd: number | null) => void;
@@ -509,6 +527,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     headShouldersPattern: null,
     institutionalZones: [],
     layerRelevance: null,
+    chartLayerDecision: null,
     evidenceFusion: null,
     smc: null,
     cvd: null,
@@ -573,6 +592,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setHeadShouldersPattern: (hit) => set((s) => { s.headShouldersPattern = hit; }),
     setInstitutionalZones: (zones) => set((s) => { s.institutionalZones = zones; }),
     setLayerRelevance: (reading) => set((s) => { s.layerRelevance = reading; }),
+    setChartLayerDecision: (decision) => set((s) => { s.chartLayerDecision = decision; }),
     setEvidenceFusion: (reading) => set((s) => { s.evidenceFusion = reading; }),
     setSmc: (zones) => set((s) => { s.smc = zones; }),
     setCvd: (cvd) => set((s) => { s.cvd = cvd; }),
@@ -694,6 +714,8 @@ export const useInstitutionalZonesSnapshot = (): InstitutionalZone[] =>
   useUnifiedSnapshotStore((s) => s.institutionalZones ?? EMPTY_INSTITUTIONAL_ZONES);
 export const useLayerRelevanceSnapshot = (): LayerRelevanceReading | null =>
   useUnifiedSnapshotStore((s) => s.layerRelevance);
+export const useChartLayerDecisionSnapshot = (): Record<string, AutoLayerDecision> | null =>
+  useUnifiedSnapshotStore((s) => s.chartLayerDecision);
 export const useEvidenceFusionSnapshot = (): EvidenceFusionReading | null =>
   useUnifiedSnapshotStore((s) => s.evidenceFusion);
 export const useSmcSnapshot = (): SmcZonesSnapshot | null =>

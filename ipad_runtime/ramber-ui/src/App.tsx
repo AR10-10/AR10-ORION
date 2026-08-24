@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -143,6 +143,7 @@ import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD, type CouncilDecisio
 // reforma a leitura ad hoc de council.votes para passar pelo contrato
 // único, sem duplicar UI nem criar um segundo painel.
 import { deriveEngineSignalsFromCouncil, deriveEngineSignalsFromInstitutionalZones } from "./nexus/engine-signal-contract";
+import { summarizeLayerPanel, describeLayerPanel } from "./nexus/layer-panel-summary";
 // Carta Branca: consumidor real do Evidence Fusion Engine — SYSTEM_HANDBOOK
 // §6.72/§6.74/§6.76 classificaram isto como "iniciativa de arquitetura
 // própria" por 3 rodadas seguidas; agora tem seu primeiro consumidor vivo.
@@ -4605,6 +4606,11 @@ function ChartLayersPanelContent() {
   // modos" (a seção manual não fica "grudada" aberta de uma sessão pra
   // outra por acidente).
   const [advancedPresetsOpen, setAdvancedPresetsOpen] = useState(false);
+  // Decisão JÁ resolvida do canvas (store) — a MESMA que o gráfico desenha.
+  // Antes desta rodada o painel resolvia por conta própria com
+  // `relevance.relevant`, SEM o teto de competição, e listava ~20 camadas
+  // como "VISÍVEL" enquanto o gráfico desenhava 6.
+  const layerDecision = useChartLayerDecisionSnapshot();
   const visibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
   const autoMode = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
   // Highlight real (não decorativo): compara o estado atual byte-a-byte
@@ -4618,6 +4624,13 @@ function ChartLayersPanelContent() {
   const isAuditPreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === true);
   const isIntelligencePreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));
   const isAutomaticPreset = CHART_LAYER_IDS.every((id) => autoMode[id] === true);
+  // Pedido do Operador: "eu quero só UM modo, e ele é o modo inteligente...
+  // que apareça só as ferramentas necessárias pra o operador bater o olho e
+  // saber". O painel deixa de ser uma PAREDE DE INTERRUPTORES por padrão e
+  // passa a ser uma LEITURA do que a inteligência decidiu — o controle
+  // camada a camada continua inteiro, um clique abaixo (Regra de Ouro 4:
+  // reorganizar, nunca apagar).
+  const resumo = summarizeLayerPanel(CHART_LAYER_PANEL_MODULES, layerDecision, autoMode, visibility);
 
   return (
     <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
@@ -4651,13 +4664,52 @@ function ChartLayersPanelContent() {
           {isAutomaticPreset ? "ativo agora — leitura pronta, sem modo pra administrar" : "clique para voltar ao estado adaptativo padrão"}
         </span>
       </button>
+      {/* A LEITURA que substitui a parede de interruptores no estado padrão.
+          Não é decoração: cada chip é uma camada que está MESMO desenhada
+          agora, resolvida pela mesma decisão que o canvas recebeu. "Cedeu
+          espaço" é dito com todas as letras — é diferente de "sem leitura
+          real", e essa diferença é a que sustenta a confiança no automático. */}
+      <div className="flex flex-col gap-1.5 bg-[#010205] border border-[#00ffaa20] rounded-lg px-3 py-2">
+        <span className="text-[0.45rem] text-[#00ffaa]/80 tracking-[0.15em] uppercase font-bold">
+          {describeLayerPanel(resumo)}
+        </span>
+        {resumo.ativas.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {resumo.ativas.map((m) => (
+              <span
+                key={m.id}
+                className="text-[0.4rem] px-1.5 py-0.5 rounded border border-[#00f0ff40] bg-[#00f0ff15] text-[#00f0ff] font-bold uppercase tracking-wider"
+              >
+                {m.label}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="text-[0.4rem] text-[#8ab4f8]/50 normal-case tracking-normal">
+            nenhuma camada com leitura real ainda neste ciclo
+          </span>
+        )}
+        {resumo.manuais.length > 0 && (
+          <div className="flex flex-wrap gap-1 items-center">
+            <span className="text-[0.38rem] text-[#8ab4f8]/50 uppercase tracking-wider">fixadas por você</span>
+            {resumo.manuais.map((m) => (
+              <span
+                key={m.id}
+                className="text-[0.4rem] px-1.5 py-0.5 rounded border border-[#8ab4f8]/40 text-[#8ab4f8]/80 font-bold uppercase tracking-wider"
+              >
+                {m.label}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
       <button
         type="button"
         onClick={() => setAdvancedPresetsOpen((v) => !v)}
         className="text-[0.4rem] text-[#8ab4f8]/50 hover:text-[#8ab4f8] tracking-[0.15em] uppercase text-left flex items-center gap-1"
       >
         <span>{advancedPresetsOpen ? "▾" : "▸"}</span>
-        <span>Predefinições manuais (avançado)</span>
+        <span>Controle manual camada a camada (avançado)</span>
       </button>
       {advancedPresetsOpen && (
         <div className="flex gap-1.5">
@@ -4696,10 +4748,12 @@ function ChartLayersPanelContent() {
           </button>
         </div>
       )}
-      <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
-        Overlays reais do canvas — esconder uma camada nunca altera o dado, só a exibição
-      </span>
-      {CHART_LAYER_PANEL_MODULES.map(({ id, label }) => {
+      {advancedPresetsOpen && (
+        <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
+          Overlays reais do canvas — esconder uma camada nunca altera o dado, só a exibição
+        </span>
+      )}
+      {advancedPresetsOpen && CHART_LAYER_PANEL_MODULES.map(({ id, label }) => {
         // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: em modo automático, o
         // estado real vem do Relevance Engine (nunca do boolean manual,
         // que só é o valor efetivo quando o Operador assumiu controle
@@ -4707,7 +4761,12 @@ function ChartLayersPanelContent() {
         // pro canvas, aqui só pra exibir corretamente no painel).
         const isAuto = autoMode[id];
         const relevance = layerRelevance?.[id] ?? null;
-        const on = isAuto ? (relevance?.relevant ?? true) : visibility[id];
+        // A MESMA decisão que o canvas recebe — nunca uma segunda resolução.
+        // `relevance.relevant` sozinho ignora o teto de competição e dizia
+        // "visível" para camadas que o gráfico não desenhava.
+        const decisao = layerDecision?.[id] ?? null;
+        const on = isAuto ? (decisao?.show ?? false) : visibility[id];
+        const cedeuEspaco = isAuto && !on && (decisao?.suppressedByCap ?? false);
         return (
           <div
             key={id}
@@ -4735,14 +4794,20 @@ function ChartLayersPanelContent() {
                 <button
                   type="button"
                   onClick={() => toggleChartLayer?.(id)}
-                  title={isAuto ? "Clicar assume controle manual desta camada (override real)." : "Override manual ativo."}
+                  title={
+                    cedeuEspaco
+                      ? `Tem leitura real agora, mas cedeu espaço para camadas mais precisas: ${decisao?.reason ?? ""}. Clicar fixa esta camada na tela.`
+                      : isAuto
+                        ? `Clicar assume controle manual desta camada (override real). ${decisao?.reason ?? ""}`
+                        : "Override manual ativo."
+                  }
                   className={`text-[0.4rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
                     on
                       ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
                       : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
                   }`}
                 >
-                  {on ? "visível" : "oculta"}
+                  {on ? "visível" : cedeuEspaco ? "cedeu espaço" : "oculta"}
                 </button>
                 {!isAuto && (
                   <button
@@ -9560,6 +9625,15 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     const forced = CHART_LAYER_IDS.filter((id) => !autoMode[id] && manual[id]);
     return resolveAutoLayerVisibility(layerRelevance ?? {}, forced);
   }, [layerRelevance, chartLayerAutoMode, chartLayerVisibility]);
+
+  // Publica a decisão JÁ resolvida (zero segundo cálculo) para o painel de
+  // camadas ler exatamente o que o canvas desenha. Antes disto o painel
+  // resolvia por conta própria usando só `relevance.relevant` — sem o TETO
+  // de competição — e exibia ~20 camadas como "VISÍVEL" enquanto o gráfico
+  // desenhava 6. Mesmo padrão de publicação de layerRelevance acima.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setChartLayerDecision(autoDecision);
+  }, [autoDecision]);
 
   const effectiveChartLayerVisibility: ChartLayerVisibility = useMemo(() => {
     const autoMode: ChartLayerVisibility = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
