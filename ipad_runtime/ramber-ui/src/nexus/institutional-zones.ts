@@ -36,6 +36,7 @@
 // duas Order Blocks vizinhas nunca viram uma "Zona Institucional" sozinhas
 // (seriam só... duas Order Blocks vizinhas, a mesma ferramenta duas
 // vezes, não uma confluência cruzada real).
+import { clusterByPriceProximity } from '../../../src/research/engines/price-clustering.js';
 export const INSTITUTIONAL_ZONE_CONTRACT_VERSION = 1 as const;
 
 export type InstitutionalZoneSourceKind =
@@ -262,27 +263,14 @@ export function computeInstitutionalZones(input: InstitutionalZoneInput): Instit
   // dentro de proximityPct do PRIMEIRO membro do grupo em crescimento —
   // nunca uma média móvel, então um membro no limite nunca arrasta a
   // âncora para longe do preço que originou o grupo.
-  const sorted = [...members].sort((a, b) => a.price - b.price);
-  const groups: InstitutionalZoneMember[][] = [];
-  let current: InstitutionalZoneMember[] = [];
-  const flush = () => {
-    if (current.length > 0) groups.push(current);
-  };
-  for (const m of sorted) {
-    if (current.length === 0) {
-      current = [m];
-      continue;
-    }
-    const anchor = current[0].price;
-    const closeEnough = anchor !== 0 && (Math.abs(m.price - anchor) * 100) / anchor <= proximityPct;
-    if (closeEnough) {
-      current.push(m);
-    } else {
-      flush();
-      current = [m];
-    }
-  }
-  flush();
+  // Fonte única do agrupamento (research/engines/price-clustering.js): este
+  // laço era byte a byte o mesmo de trap-detection.ts e o mesmo (em outra
+  // unidade) de fvg-order-block-engine.js — três cópias da mesma âncora
+  // fixa e da mesma guarda de zero. Mesma remediação que findSwings já
+  // recebeu quando estava triplicado. O que continua vivendo AQUI é a
+  // REDUÇÃO específica de zona (top/bottom/centro/fontes distintas), que
+  // nunca pertenceu ao agrupamento.
+  const groups = clusterByPriceProximity(members, (m: InstitutionalZoneMember) => m.price, proximityPct);
 
   const zones: InstitutionalZone[] = [];
   for (const group of groups) {

@@ -46,6 +46,7 @@
 // exatamente como já faz para BOS/CHOCH (annotation-decay.ts::ageAlpha)
 // para esmaecer e eventualmente ocultar sweeps antigos, mesma disciplina
 // já provada, nunca uma segunda técnica de decaimento inventada.
+import { clusterByPriceProximity } from '../../../src/research/engines/price-clustering.js';
 export const TRAP_CONTRACT_VERSION = 3 as const;
 
 export type TrapKind =
@@ -169,31 +170,18 @@ export interface SweptPriceCluster {
 }
 
 export function clusterSweptPrices(levels: { price: number; index: number }[], proximityPct: number): SweptPriceCluster[] {
-  const sorted = levels
-    .filter((l) => Number.isFinite(l.price) && Number.isFinite(l.index))
-    .sort((a, b) => a.price - b.price);
-  const clusters: SweptPriceCluster[] = [];
-  let current: { price: number; index: number }[] = [];
-  const flush = () => {
-    if (current.length === 0) return;
-    const avgPrice = current.reduce((sum, l) => sum + l.price, 0) / current.length;
-    const latestIndex = Math.max(...current.map((l) => l.index));
-    clusters.push({ avgPrice, count: current.length, latestIndex });
-  };
-  for (const level of sorted) {
-    if (current.length === 0) {
-      current.push(level);
-      continue;
-    }
-    const anchor = current[0].price;
-    const closeEnough = anchor !== 0 && (Math.abs(level.price - anchor) * 100) / anchor <= proximityPct;
-    if (closeEnough) {
-      current.push(level);
-    } else {
-      flush();
-      current = [level];
-    }
-  }
-  flush();
-  return clusters;
+  // Fonte única do agrupamento (research/engines/price-clustering.js): este
+  // laço era byte a byte o mesmo de institutional-zones.ts e o mesmo (em
+  // outra unidade) de fvg-order-block-engine.js. Mesma remediação que
+  // findSwings já recebeu quando estava triplicado.
+  //
+  // O filtro de `index` finito continua AQUI de propósito: é uma exigência
+  // deste consumidor (a redução usa `latestIndex`), não do agrupamento —
+  // price-clustering só garante preço real.
+  const validos = levels.filter((l) => Number.isFinite(l.price) && Number.isFinite(l.index));
+  return clusterByPriceProximity(validos, (l) => l.price, proximityPct).map((grupo) => ({
+    avgPrice: grupo.reduce((sum, l) => sum + l.price, 0) / grupo.length,
+    count: grupo.length,
+    latestIndex: Math.max(...grupo.map((l) => l.index)),
+  }));
 }

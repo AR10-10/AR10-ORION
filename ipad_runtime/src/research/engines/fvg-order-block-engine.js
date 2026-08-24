@@ -34,6 +34,11 @@
 // Mestra 360°, secao 7): o mesmo algoritmo estava triplicado neste arquivo,
 // em support-resistance-engine.js e em market-structure-engine.js.
 import { FRACTAL_K, findSwings } from './fractal-swings.js';
+// Agrupamento por ancora fixa: MESMO algoritmo que institutional-zones.ts e
+// trap-detection.ts usavam, escrito tres vezes. Extraido para
+// price-clustering.js pelo mesmo motivo (e no mesmo lugar) que findSwings
+// ja tinha sido — ver o cabecalho de la.
+import { clusterByPriceProximity } from './price-clustering.js';
 
 export const metadata = {
     engine: 'fvg-order-block-engine',
@@ -49,7 +54,12 @@ export const metadata = {
 };
 
 const MIN_CANDLES = 5;
-const EQUAL_TOLERANCE_PCT = 0.0015;
+// PERCENTUAL, nao fracao. Era `0.0015` comparado como `|p-a|/a` — o mesmo
+// numero, mas a constante se chamava "_PCT" e o valor era uma fracao, o que
+// tornava impossivel comparar esta tolerancia com LIQUIDITY_PROXIMITY_PCT
+// (0.5) e INSTITUTIONAL_ZONE_PROXIMITY_PCT (0.35) sem converter de cabeca.
+// 0.0015 fracao === 0.15 percentual: zero mudanca de comportamento.
+const EQUAL_TOLERANCE_PCT = 0.15;
 
 /** Fair Value Gaps: uma por trinca de candles consecutivos. `mitigated`
  *  = true se algum candle POSTERIOR ja' voltou a tocar dentro da zona
@@ -131,7 +141,6 @@ function findOrderBlocks(candles) {
  *  swings afastados um a um). Grupos com < 2 membros nao viram zona: uma
  *  "equal high/low" real precisa de pelo menos 2 toques reais no nivel. */
 function clusterEqualLevels(swings, type, candles) {
-    const sorted = [...swings].sort((a, b) => a.price - b.price);
     const zones = [];
     let cluster = [];
     const flush = () => {
@@ -164,20 +173,14 @@ function clusterEqualLevels(swings, type, candles) {
         }
         zones.push({ type, price: avgPrice, touches: cluster.length, index: lastIndex, firstIndex, touchIndices, swept });
     };
-    for (const s of sorted) {
-        if (cluster.length === 0) {
-            cluster.push(s);
-            continue;
-        }
-        const anchor = cluster[0].price;
-        if (anchor !== 0 && Math.abs(s.price - anchor) / anchor <= EQUAL_TOLERANCE_PCT) {
-            cluster.push(s);
-        } else {
-            flush();
-            cluster = [s];
-        }
+    // Fonte unica do agrupamento (price-clustering.js) — mesma ancora fixa,
+    // mesma guarda de zero. `flush` continua sendo a reducao ESPECIFICA
+    // deste motor (preco medio, contagem de toques, indices, swept), que
+    // nunca pertenceu ao agrupamento em si.
+    for (const grupo of clusterByPriceProximity(swings, (x) => x.price, EQUAL_TOLERANCE_PCT)) {
+        cluster = grupo;
+        flush();
     }
-    flush();
     return zones;
 }
 

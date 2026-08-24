@@ -103,6 +103,17 @@ autorização para suprimir o Núcleo a partir deste precedente.
 - `ipad_runtime/src/research/engines/fractal-swings.js` — detecção
   fractal de swing compartilhada; qualquer motor novo que precise de
   swing high/low importa daqui, nunca reimplementa.
+- `ipad_runtime/src/research/engines/price-clustering.js` — agrupamento de
+  preços por proximidade a uma **âncora fixa** (nunca média rodante).
+  Segunda aplicação do mesmo precedente de `fractal-swings.js`: o algoritmo
+  estava escrito três vezes (`fvg-order-block-engine.js`,
+  `nexus/institutional-zones.ts`, `nexus/trap-detection.ts`), e em duas
+  unidades diferentes. A tolerância é sempre **percentual** — a mesma
+  unidade de `LIQUIDITY_PROXIMITY_PCT`/`INSTITUTIONAL_ZONE_PROXIMITY_PCT`.
+  O agrupamento é compartilhado; a REDUÇÃO de cada grupo (o que se calcula
+  a partir dele) continua sendo de cada consumidor. Vive em
+  `src/research/engines/` porque a direção real de dependência é
+  `ramber-ui → src/research/`, nunca o contrário.
 - `ipad_runtime/src/market-data-bus/` — fonte canônica única por
   `symbol:timeframe`. Fetches de "snapshot mais recente" passam por
   `requestSnapshot()`; paginação histórica (candles antigos) NUNCA passa
