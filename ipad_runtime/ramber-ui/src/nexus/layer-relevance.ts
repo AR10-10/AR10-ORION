@@ -526,6 +526,25 @@ export const AUTO_LAYER_PRECISION_ORDER: readonly string[] = [
   "volume_profile",       // POC canônico
   "equal_highs_lows",
   "liquidity_sweep",
+  // ACHADO MEDIDO (pedido do Operador: "nada que está pra trás"):
+  // candle_patterns estava FORA desta lista. O comentário acima promete que
+  // "camada fora desta lista entra por último — nunca some por omissão", mas
+  // a medição mostrou que, na prática, "por último" era "nunca": com todas as
+  // camadas relevantes, ela não aparecia em NENHUM timeframe (1m..1w), porque
+  // rank = fim da fila e o teto de 6 já é consumido antes. E o único caminho
+  // que a resgataria — `emphasis: "highlight"`, que ordena antes do rank —
+  // ela nunca usa: a regra dela emite "normal" nos dois ramos. Resultado: uma
+  // camada calculada, com plugin montado e custando 4 do orçamento de 12, que
+  // era impossível de ver no modo automático.
+  //
+  // POSIÇÃO ESCOLHIDA PELO CRITÉRIO JÁ DECLARADO no topo desta lista ("o que
+  // responde 'onde entro/saio AGORA' antes do que responde 'como está o
+  // cenário'"), nunca por gosto: um padrão de vela é um evento PONTUAL E
+  // PERECÍVEL num preço e num instante — a mesma natureza de liquidity_sweep
+  // logo acima, e por isso o mesmo grupo. Fica depois das âncoras estruturais
+  // (plano, BOS/CHOCH, zonas) e antes das linhas de contexto contínuo
+  // (VWAP/EMA/Nexus Line), que respondem "como está", não "agora".
+  "candle_patterns",
   "vwap",
   "ema",
   "nexus_line",

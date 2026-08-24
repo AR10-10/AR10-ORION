@@ -211,3 +211,123 @@ describe("o gráfico realmente muda de ferramenta conforme o tempo", () => {
     expect(cvd.reason).toContain("~8 min");
   });
 });
+
+// ---------------------------------------------------------------------------
+// "NADA QUE ESTÁ PRA TRÁS" (pedido direto do Operador: tudo que foi
+// adicionado precisa estar mesmo ATIVO no modo automático, não só existir).
+//
+// Uma camada só chega à tela em modo automático se estiver em SEIS listas.
+// Estar em cinco delas é indistinguível de estar em nenhuma, e não havia
+// nada travando as seis juntas — foi assim que `candle_patterns` ficou
+// calculada, com plugin montado e custando 4 do orçamento de 12, sem poder
+// aparecer nunca.
+// ---------------------------------------------------------------------------
+describe("cobertura de fiação: toda camada do canvas existe em TODAS as listas que a fazem aparecer", () => {
+  const bloco = (s: string, ini: string, fim: string) => {
+    const i = s.indexOf(ini);
+    expect(i, `bloco ${ini} não encontrado`).toBeGreaterThan(-1);
+    return s.slice(i, s.indexOf(fim, i));
+  };
+  const capturar = (txt: string, re: RegExp) => [...txt.matchAll(re)].map((m) => m[1]);
+
+  const chart = read("../src/chart/EnhancedChart_110_Percent.tsx");
+  const app = read("../src/App.tsx");
+  const rel = read("../src/nexus/layer-relevance.ts");
+
+  const canonicas = capturar(bloco(chart, "export const CHART_LAYER_IDS = [", "] as const;"), /^\s{2}"([a-z_]+)",$/gm);
+
+  it("a lista canônica foi mesmo extraída (a guarda não passa por vacuidade)", () => {
+    expect(canonicas.length).toBeGreaterThan(20);
+    expect(canonicas).toContain("trade_plan_zone");
+    expect(canonicas).toContain("candle_patterns");
+  });
+
+  const listas: Record<string, string[]> = {
+    DEFAULT_CHART_LAYER_VISIBILITY: capturar(bloco(chart, "export const DEFAULT_CHART_LAYER_VISIBILITY", "};"), /^\s{2}([a-z_]+):\s*true,/gm),
+    DEFAULT_CHART_LAYER_AUTO_MODE: capturar(bloco(chart, "export const DEFAULT_CHART_LAYER_AUTO_MODE", "};"), /^\s{2}([a-z_]+):\s*true,/gm),
+    RELEVANCE_LAYER_IDS: capturar(bloco(rel, "export const RELEVANCE_LAYER_IDS = [", "] as const;"), /^\s{2}"([a-z_]+)",$/gm),
+    // Sem âncora `$`: várias entradas desta lista carregam um comentário à
+    // direita ("trade_plan_zone",      // o plano ativo…). Com `$` a extração
+    // capturava só as entradas sem comentário e a guarda acusava camadas
+    // reais como ausentes — falso positivo do próprio teste, pego na
+    // primeira execução. O escopo continua seguro porque `bloco()` já
+    // recorta exatamente esta declaração.
+    AUTO_LAYER_PRECISION_ORDER: capturar(bloco(rel, "export const AUTO_LAYER_PRECISION_ORDER", "];"), /^\s{2}"([a-z_]+)",/gm),
+    LAYER_VISUAL_COST: capturar(bloco(rel, "export const LAYER_VISUAL_COST", "};"), /^\s{2}([a-z_]+):/gm),
+    CHART_LAYER_PANEL_MODULES: capturar(bloco(app, "const CHART_LAYER_PANEL_MODULES", "\n];"), /id: "([a-z_]+)"/g),
+  };
+
+  for (const [nome, lista] of Object.entries(listas)) {
+    it(`${nome} cobre TODA camada canônica`, () => {
+      expect(lista.length, `${nome} não foi extraída`).toBeGreaterThan(20);
+      for (const id of canonicas) {
+        expect(lista, `camada "${id}" não está em ${nome} — fica invisível ou incontrolável`).toContain(id);
+      }
+    });
+  }
+
+  it("nenhuma lista inventa uma camada que o canvas não conhece", () => {
+    for (const [nome, lista] of Object.entries(listas)) {
+      for (const id of lista) {
+        expect(canonicas, `"${id}" está em ${nome} mas não em CHART_LAYER_IDS`).toContain(id);
+      }
+    }
+  });
+});
+
+describe("candle_patterns: de invisível-por-omissão a competidora real", () => {
+  // MEDIÇÃO REAL que motivou a mudança (2000 ciclos por densidade, gerador
+  // determinístico). "Densidade" = fração das OUTRAS camadas com leitura
+  // real no mesmo ciclo:
+  //
+  //            densidade   ANTES (fora da ordem)   DEPOIS (rank 8)
+  //               20%              44,7%                98,7%
+  //               35%               4,1%                87,0%
+  //               50%               0,1%                62,1%
+  //               70%               0,0%                23,9%
+  //              100%               0,0%                 0,0%
+  //
+  // Em mercado normal (35–50% das camadas com leitura) ela saía de
+  // praticamente nunca para a maioria dos ciclos. Em saturação total ela
+  // continua cedendo — correto: não deve deslocar plano/estrutura.
+  it("está na ordem de precisão — sem isso, rank = fim da fila = nunca", () => {
+    expect(AUTO_LAYER_PRECISION_ORDER).toContain("candle_patterns");
+  });
+
+  it("fica no grupo dos eventos pontuais, nunca antes das âncoras estruturais", () => {
+    const pos = (id: string) => AUTO_LAYER_PRECISION_ORDER.indexOf(id);
+    // depois do plano, da mudança estrutural e das zonas — um padrão de vela
+    // não manda mais que a estrutura que o contém.
+    for (const ancora of ["trade_plan_zone", "structure_breaks", "institutional_zones", "liquidity_zones"]) {
+      expect(pos("candle_patterns"), `candle_patterns passou na frente de ${ancora}`).toBeGreaterThan(pos(ancora));
+    }
+    // e antes das linhas de contexto contínuo, que respondem "como está",
+    // não "agora" — é o critério declarado no topo da própria lista.
+    for (const contexto of ["vwap", "ema", "nexus_line", "trend_channel"]) {
+      expect(pos("candle_patterns"), `candle_patterns ficou atrás de ${contexto}`).toBeLessThan(pos(contexto));
+    }
+  });
+
+  it("com as camadas mais precisas caladas, ela REALMENTE chega à tela", () => {
+    // Execução real do resolvedor, não inspeção de lista: é a única forma de
+    // provar que a posição nova produz visibilidade de fato.
+    const rel: Record<string, any> = {
+      candle_patterns: { relevant: true, emphasis: "normal", reason: "padrão real" },
+      vwap: { relevant: true, emphasis: "normal", reason: "r" },
+      ema: { relevant: true, emphasis: "normal", reason: "r" },
+    };
+    expect(resolveAutoLayerVisibility(rel, [], undefined, "15m")["candle_patterns"].show).toBe(true);
+  });
+
+  it("em saturação total ela cede — o plano e a estrutura continuam mandando", () => {
+    const todas = Object.fromEntries(
+      AUTO_LAYER_PRECISION_ORDER.map((id) => [id, { relevant: true, emphasis: "normal" as const, reason: "r" }]),
+    );
+    const d = resolveAutoLayerVisibility(todas, [], undefined, "15m");
+    expect(d["candle_patterns"].show).toBe(false);
+    expect(d["trade_plan_zone"].show).toBe(true);
+    // e a razão é dita, nunca um sumiço silencioso
+    expect(d["candle_patterns"].suppressedByCap).toBe(true);
+    expect(d["candle_patterns"].reason.length).toBeGreaterThan(10);
+  });
+});
