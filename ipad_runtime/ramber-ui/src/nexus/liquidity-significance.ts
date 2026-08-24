@@ -26,6 +26,31 @@
 // Zero segunda fórmula: este módulo só compara a largura real da zona contra
 // o ATR% real já calculado em outro lugar.
 //
+// ═══ CORREÇÃO DE HONESTIDADE DESTE CABEÇALHO (auditoria posterior) ═══
+//
+// O parágrafo acima dizia "FVG/Order Block/Void". O filtro real em App.tsx
+// sempre chegou a FVG e Order Block — NUNCA a Void. A auditoria confirmou
+// que o CÓDIGO está certo e o COMENTÁRIO estava errado, e o motivo é o
+// mesmo argumento já feito abaixo para os pools EQH/EQL:
+//
+//   liquidity-void-engine.js só marca um candle como candidato a void com
+//   `range >= VOID_MIN_DISPLACEMENT_RATIO * ATR` (= 1x ATR), e só forma
+//   zona com um run de VOID_MIN_RUN_LENGTH (= 2) candles consecutivos. A
+//   zona resultante é `max(high) - min(low)` do run, portanto NUNCA menor
+//   que o maior candle do run, portanto nunca menor que 1x ATR.
+//
+// 1x ATR é mais de 8x o piso deste módulo (MIN_ZONE_ATR_FRACTION = 0.12).
+// Aplicar o filtro a Voids não removeria zona nenhuma — só duplicaria uma
+// regra que já vive, mais forte, dentro do próprio motor. (Os dois ATR não
+// são o mesmo cálculo — o motor usa computeAtrPercent de
+// lorentzian-classifier.js sobre a própria janela, este módulo recebe o
+// atrPercent de regime-engine.js — mas ambos são Wilder 14, e a margem de
+// 8x absorve com folga qualquer diferença de janela entre eles.)
+//
+// A invariante fica travada por teste (liquidity-significance.test.ts):
+// se alguém baixar o piso do motor de voids para perto de 0.12x ATR, a
+// redundância deixa de ser redundância e o teste avisa.
+//
 // ═══ POR QUE NÃO FILTREI POOLS DE LIQUIDEZ (EQH/EQL) POR TOQUES ═══
 //
 // Pesquisei antes de construir (auditoria real, não suposição):

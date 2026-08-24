@@ -112,3 +112,92 @@ describe("liquidity-significance — disciplina do módulo", () => {
     expect(src).toMatch(/JÁ passou pelo piso/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// AUDITORIA: as TRÊS populações de banda de preço que disputam as mesmas 3
+// vagas de destaque no canvas — FVG/OB, Voids, e Breaker/Mitigation.
+//
+// O cabeçalho deste módulo dizia que o filtro cobria "FVG/Order Block/Void".
+// Medição real: ele só chegava a FVG e Order Block. As duas ausências têm
+// veredictos DIFERENTES, e os dois ficam travados aqui.
+// ---------------------------------------------------------------------------
+describe("Voids: o filtro seria redundante — e a redundância é uma INVARIANTE, não uma coincidência", () => {
+  const motor = readFileSync(
+    resolve(__dirname, "../../src/research/engines/liquidity-void-engine.js"),
+    "utf8",
+  );
+
+  it("o motor de voids já exige >= 1x ATR de deslocamento por candle", () => {
+    // Forma EXECUTÁVEL (a declaração real), nunca a string solta: o nome da
+    // constante também aparece na lista de `limitations` do metadata e num
+    // comentário, e casar com qualquer uma delas provaria nada.
+    expect(motor).toMatch(/const\s+VOID_MIN_DISPLACEMENT_RATIO\s*=\s*1\s*;/);
+    expect(motor).toMatch(/const\s+VOID_MIN_RUN_LENGTH\s*=\s*2\s*;/);
+  });
+
+  it("a zona de void é o envelope do run — nunca mais estreita que o maior candle dele", () => {
+    // top = max(high) e bottom = min(low) sobre o run. É isso que garante
+    // que a largura da ZONA herda o piso de 1x ATR do CANDLE.
+    expect(motor).toMatch(/if\s*\(h\s*>\s*top\)\s*top\s*=\s*h;/);
+    expect(motor).toMatch(/if\s*\(l\s*<\s*bottom\)\s*bottom\s*=\s*l;/);
+  });
+
+  it("1x ATR fica MUITO acima do piso deste módulo — por isso o filtro não removeria nada", () => {
+    const pisoDoMotorEmAtr = 1; // VOID_MIN_DISPLACEMENT_RATIO
+    expect(MIN_ZONE_ATR_FRACTION).toBeLessThan(pisoDoMotorEmAtr);
+    // A margem é o que torna o argumento robusto mesmo com os dois ATR
+    // vindo de janelas diferentes (motor: lorentzian-classifier.js;
+    // este módulo: regime-engine.js — ambos Wilder 14).
+    expect(pisoDoMotorEmAtr / MIN_ZONE_ATR_FRACTION).toBeGreaterThan(8);
+    // Prova executável de que o filtro é no-op nesta faixa: uma zona no
+    // MENOR tamanho que o motor de voids consegue produzir já é significativa.
+    const atrPct = 2;
+    const preco = 100;
+    const larguraMinimaDeVoid = (preco * atrPct) / 100; // exatamente 1x ATR
+    const r = computeZoneSignificance(preco + larguraMinimaDeVoid, preco, preco, atrPct);
+    expect(r.status).toBe("OK");
+    expect(r.significant).toBe(true);
+  });
+
+  it("o cabeçalho registra o achado em vez de deixar a contradição de pé", () => {
+    const src = readFileSync(resolve(__dirname, "../src/nexus/liquidity-significance.ts"), "utf8");
+    expect(src).toMatch(/NUNCA a Void/);
+    expect(src).toMatch(/VOID_MIN_DISPLACEMENT_RATIO/);
+  });
+});
+
+describe("Breaker/Mitigation: aqui o filtro FALTAVA de verdade — e agora está ligado", () => {
+  const app = readFileSync(resolve(__dirname, "../src/App.tsx"), "utf8");
+
+  it("as 3 vagas são disputadas dentro do subconjunto SIGNIFICATIVO, igual a FVG/OB", () => {
+    // Quarta vez nesta trilha que uma mutação de FIAÇÃO passaria verde com o
+    // motor testado a fundo e a CHAMADA não travada. Aqui a chamada real fica
+    // travada, nos dois tipos de bloco.
+    expect(app).toContain("const significantBreakers = breakerAll.filter(isSignificantZone);");
+    expect(app).toContain("const significantMitigations = mitigationAll.filter(isSignificantZone);");
+    expect(app).toContain("significantBreakers.indexOf(b) !== -1 && significantBreakers.indexOf(b) < 3");
+    expect(app).toContain("significantMitigations.indexOf(b) !== -1 && significantMitigations.indexOf(b) < 3");
+  });
+
+  it("obstáculo real do plano ativo continua ESCAPANDO do teto (Regra de Ouro 4)", () => {
+    // A escapatória é o que impede o filtro de apagar informação estrutural:
+    // um bloco no caminho entrada→alvo aparece independente do tamanho.
+    for (const trecho of [
+      "isRealObstacle(b) || significantBreakers.indexOf(b)",
+      "isRealObstacle(b) || significantMitigations.indexOf(b)",
+    ]) {
+      expect(app).toContain(trecho);
+    }
+  });
+
+  it("a assinatura de isSignificantZone é estrutural — um bloco não é PriceZone", () => {
+    // Se voltasse a exigir PriceZone, os blocos precisariam de um cast (uma
+    // mentira de tipo) ou de uma SEGUNDA chamada duplicada.
+    expect(app).toContain("const isSignificantZone = (z: { top: number; bottom: number }) =>");
+  });
+
+  it("a medição que motivou a mudança fica registrada, não só o resultado", () => {
+    expect(app).toMatch(/2985 blocos/);
+    expect(app).toMatch(/1,27% abaixo do piso/);
+  });
+});

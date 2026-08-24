@@ -519,7 +519,13 @@ describe('Auditoria de pendências: obstacleCount (sem teto) reconciliado com o 
     // CONTRATO — comparar por low/high real, nunca por índice — não mudou.
     expect(a).toContain('const isRealObstacle = (z: { top: number; bottom: number }) =>');
     expect(a).toContain('chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);');
-    expect(a).toContain('const isSignificantZone = (z: PriceZone) =>');
+    // A assinatura de isSignificantZone estreitou pela MESMA razão que a de
+    // isRealObstacle logo acima, e na mesma auditoria: Breaker/Mitigation
+    // Block passaram a usar este filtro (antes disputavam as 3 vagas por
+    // ordem de chegada), e eles têm top/bottom sem serem PriceZone. O
+    // CONTRATO — medir largura real contra o ATR real — não mudou; a linha
+    // seguinte, que é onde ele vive, continua idêntica.
+    expect(a).toContain('const isSignificantZone = (z: { top: number; bottom: number }) =>');
     expect(a).toContain('computeZoneSignificance(z.top, z.bottom, livePrice.price, chartAtrPercent).significant;');
     expect(a).toContain('const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);');
     expect(a).toContain('const unmitigatedBlocksAll = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated);');

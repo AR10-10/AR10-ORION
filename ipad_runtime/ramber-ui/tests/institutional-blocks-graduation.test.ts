@@ -124,8 +124,17 @@ describe("recortes antes do canvas — declarados, nunca silenciosos", () => {
   it("teto de contagem com a MESMA escapatória de obstáculo real dos Voids", () => {
     // Um bloco no caminho entrada→alvo nunca pode ser cortado pelo teto:
     // é risco estrutural do plano ATIVO, não decoração de destaque.
+    //
+    // A FORMA mudou (auditoria posterior, ver liquidity-significance.test.ts):
+    // as 3 vagas deixaram de ser por ORDEM DE CHEGADA (`i < 3`) e passaram a
+    // ser disputadas dentro do subconjunto SIGNIFICATIVO em unidades de ATR —
+    // o mesmo filtro que FVG/Order Block já tinham e que nunca chegou aqui.
+    // O CONTRATO que este teste guarda não mudou: a escapatória de obstáculo
+    // real continua existindo, e continua existindo nos DOIS tipos de bloco.
     const src = app();
-    expect(src.match(/i < 3 \|\| isRealObstacle\(b\)/g)?.length).toBe(2); // breaker + mitigation
+    expect(src.match(/isRealObstacle\(b\) \|\| significant(?:Breakers|Mitigations)\.indexOf\(b\)/g)?.length).toBe(2);
+    // E o teto continua sendo 3 nos dois — não virou "todos".
+    expect(src.match(/significant(?:Breakers|Mitigations)\.indexOf\(b\) < 3/g)?.length).toBe(2);
   });
 });
 

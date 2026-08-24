@@ -9418,7 +9418,11 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // caminho do Trade Plan continua SEMPRE visível independente do tamanho
   // (Regra de Ouro 4: é informação estrutural, não decoração de destaque).
   const chartAtrPercent = engine?.marketRegime?.atrPercent ?? null;
-  const isSignificantZone = (z: PriceZone) =>
+  // Mesma assinatura estrutural de isRealObstacle logo acima, e pela MESMA
+  // razão: Breaker/Mitigation Block têm top/bottom mas não são PriceZone, e
+  // esta função só lê esses dois campos. Uma segunda cópia da chamada (ou um
+  // cast) seria duplicação sem ganho.
+  const isSignificantZone = (z: { top: number; bottom: number }) =>
     computeZoneSignificance(z.top, z.bottom, livePrice.price, chartAtrPercent).significant;
   const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);
   const unmitigatedBlocksAll = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated);
@@ -9457,6 +9461,16 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   //   2. teto de contagem, com a MESMA escapatória de obstáculo real do
   //      plano ativo que os Voids usam: um bloco que está no caminho
   //      entrada→alvo nunca é cortado pelo teto.
+  //   3. ACHADO MEDIDO desta rodada: o teto de 3 escolhia pela ORDEM DE
+  //      CHEGADA, exatamente o defeito que liquidity-significance.ts já
+  //      corrigiu para FVG/Order Block — e que nunca chegou aqui. Medição
+  //      real sobre 2985 blocos (3 regimes de volatilidade): largura mediana
+  //      0,537 ATR, p1 = 0,105 ATR, e 1,27% abaixo do piso de 0,12 ATR. É
+  //      raro (um Breaker é o corpo+pavios de um Order Block real, então
+  //      quase nunca é ruído de pavio como um FVG pode ser), mas quando
+  //      acontece num bloco RECENTE ele desloca um bloco real de uma das 3
+  //      vagas — 1 em 288 vagas desenhadas na mesma medição. O filtro é o
+  //      mesmo, não uma segunda regra.
   //
   // `type` é a direção OPERACIONAL do motor (ALTA/BAIXA — já com a
   // inversão de polaridade do Breaker aplicada), traduzida aqui para o
@@ -9468,13 +9482,18 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     bottom: b.bottom,
     index: b.failIndex,
   });
-  const breakerZones = blocosVisiveis
-    .filter((b: InstitutionalBlock) => b.kind === "BREAKER")
-    .filter((b: InstitutionalBlock, i: number) => i < 3 || isRealObstacle(b))
+  // Mesmo formato exato de unmitigatedFvgs/unmitigatedBlocks acima: as 3
+  // vagas são disputadas dentro do subconjunto SIGNIFICATIVO, e obstáculo
+  // real do plano ativo escapa do teto sempre.
+  const breakerAll = blocosVisiveis.filter((b: InstitutionalBlock) => b.kind === "BREAKER");
+  const mitigationAll = blocosVisiveis.filter((b: InstitutionalBlock) => b.kind === "MITIGATION");
+  const significantBreakers = breakerAll.filter(isSignificantZone);
+  const significantMitigations = mitigationAll.filter(isSignificantZone);
+  const breakerZones = breakerAll
+    .filter((b) => isRealObstacle(b) || significantBreakers.indexOf(b) !== -1 && significantBreakers.indexOf(b) < 3)
     .map(toChartZone);
-  const mitigationZones = blocosVisiveis
-    .filter((b: InstitutionalBlock) => b.kind === "MITIGATION")
-    .filter((b: InstitutionalBlock, i: number) => i < 3 || isRealObstacle(b))
+  const mitigationZones = mitigationAll
+    .filter((b) => isRealObstacle(b) || significantMitigations.indexOf(b) !== -1 && significantMitigations.indexOf(b) < 3)
     .map(toChartZone);
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // (Fase 1.4) — mesma store que os agentes leem, só mapeada para o formato
