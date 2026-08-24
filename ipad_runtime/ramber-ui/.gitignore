@@ -1,0 +1,4 @@
+
+# Segredos locais do portão de acesso (ver docs/ACESSO_PRIVADO.md)
+.env.local
+.env

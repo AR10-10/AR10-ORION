@@ -1,13 +1,30 @@
 name: Deploy iPad Runtime (GitHub Pages)
 
+# ═══════════════════════════════════════════════════════════════════════
+# PUBLICAÇÃO AUTOMÁTICA DESLIGADA (pedido do Operador: "eu queria deixar
+# privado... só eu acessar, e outras pessoas só se eu autorizar").
+#
+# MOTIVO REAL, não preferência: num plano Free/Pro do GitHub, um site do
+# GitHub Pages é PÚBLICO por URL — inclusive com o repositório privado
+# (Pages de visibilidade restrita só existe no GitHub Enterprise Cloud).
+# Enquanto este workflow publicasse a cada push, o painel continuaria
+# acessível a qualquer pessoa com o link, e nenhuma trava no código
+# mudaria isso: o portão em JavaScript só roda DEPOIS de o app inteiro já
+# ter sido entregue ao navegador.
+#
+# O deploy real agora é deploy-cloudflare-pages.yml, onde a autenticação
+# acontece no servidor (Cloudflare Access), antes da entrega.
+#
+# NADA FOI APAGADO: o gatilho `push` virou `workflow_dispatch` apenas, então
+# este workflow continua existindo e pode ser executado à mão a qualquer
+# momento (Actions > este workflow > Run workflow) — é reversível numa
+# linha. Mas note: executá-lo volta a publicar um site PÚBLICO.
+#
+# ATENÇÃO — desligar isto NÃO tira do ar o que já foi publicado. O site
+# atual do GitHub Pages continua no ar até o Operador desativar Pages em
+# Settings > Pages. Ver docs/ACESSO_PRIVADO.md.
+# ═══════════════════════════════════════════════════════════════════════
 on:
-  push:
-    branches:
-      - main
-      - claude/eloquent-cannon-qyt86y
-    paths:
-      - 'ipad_runtime/**'
-      - '.github/workflows/deploy-ipad-pwa.yml'
   workflow_dispatch:
 
 permissions:
