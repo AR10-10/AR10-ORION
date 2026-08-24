@@ -111,3 +111,67 @@ describe("trava de proveniência — o caso real que motivou tudo", () => {
     expect(recusa(payload)).toContain("sintetico");
   });
 });
+
+// ---------------------------------------------------------------------------
+// O EXECUTOR PRECISA RODAR NO NODE — e não rodava.
+//
+// DEFEITO REAL, encontrado executando a ferramenta em vez de lê-la: a captura
+// abortava com `self is not defined` na página 0, ANTES de qualquer chamada
+// de rede. `self` existe em browser e Web Worker, nunca no Node. Como o
+// sandbox deste projeto não tem egress, a falha vinha sendo lida como "sem
+// internet" — mas o executor estava quebrado para TODO MUNDO, inclusive numa
+// máquina com rede, que é exatamente o único lugar onde ele serve para algo.
+//
+// A cadeia abaixo é o que `run-backtest.mjs` carrega. Qualquer global só de
+// browser nela derruba a única ferramenta capaz de produzir um número real.
+// ---------------------------------------------------------------------------
+describe("a cadeia do executor de backtest roda em Node puro", () => {
+  const CADEIA = [
+    "../../tools/run-backtest.mjs",
+    "../../src/research/backtest/history-capture.js",
+    "../../src/research/backtest/structural-backtest.js",
+    "../../src/market-data-bus/binance-futures-candle-connector.js",
+    "../../js/real-data/probe.js",
+    "../../js/real-data/binance-futures-public.js",
+  ];
+
+  /** Remove comentários antes de procurar o global: `self` e `window`
+   *  aparecem legitimamente em texto explicativo (inclusive no comentário
+   *  que documenta esta própria correção). Sexta ocorrência nesta trilha da
+   *  mesma armadilha — afirmar uma string que também casa com comentário. */
+  const semComentarios = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+
+  it("nenhum módulo da cadeia usa global exclusivo de browser", () => {
+    for (const rel of CADEIA) {
+      const src = semComentarios(readFileSync(resolve(__dirname, rel), "utf8"));
+      // `self` como identificador solto, nunca `.self` nem `self_algo`.
+      expect(src, `${rel} usa 'self'`).not.toMatch(/(^|[^.\w])self\s*[.)\[]/);
+      expect(src, `${rel} usa 'window'`).not.toMatch(/(^|[^.\w])window\s*[.)\[]/);
+      expect(src, `${rel} usa 'document'`).not.toMatch(/(^|[^.\w])document\s*[.)\[]/);
+      expect(src, `${rel} usa 'localStorage'`).not.toMatch(/(^|[^.\w])localStorage\s*[.)\[]/);
+    }
+  });
+
+  it("a varredura está mesmo olhando arquivos reais (não passa por vacuidade)", () => {
+    for (const rel of CADEIA) {
+      const src = readFileSync(resolve(__dirname, rel), "utf8");
+      expect(src.length, `${rel} vazio`).toBeGreaterThan(500);
+    }
+  });
+
+  it("a detecção de AbortController é agnóstica de runtime", () => {
+    const probe = readFileSync(resolve(__dirname, "../../js/real-data/probe.js"), "utf8");
+    // Forma executável: a checagem real, nunca a palavra solta.
+    expect(probe).toContain("typeof AbortController === 'function'");
+    expect(probe).not.toMatch(/'AbortController'\s+in\s+self/);
+  });
+
+  it("a cadeia inteira IMPORTA de verdade no Node — a prova final", async () => {
+    // Um import real derruba qualquer global de browser no topo do módulo,
+    // que é a forma como este defeito apareceu. Nenhuma regex substitui isto.
+    for (const rel of CADEIA) {
+      await expect(import(resolve(__dirname, rel)), `${rel} não importa em Node`).resolves.toBeDefined();
+    }
+  });
+});
