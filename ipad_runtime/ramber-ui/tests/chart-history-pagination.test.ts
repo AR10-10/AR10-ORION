@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { mergeFreshTail, type ChartCandle } from '../src/App.tsx';
+import { mergeFreshTail, expectedStepSeconds, seriesMatchesTimeframe, type ChartCandle } from '../src/App.tsx';
 import { detectPrependCount, type EnhancedChartCandle } from '../src/chart/EnhancedChart_110_Percent';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -365,5 +365,99 @@ describe("a guarda de timeframe existe no fetch periódico (a 1ª camada)", () =
     expect(src).toContain("chartTimeframeRef.current !== tfNoInicio");
     // A gravação Local-First usa o timeframe REALMENTE buscado.
     expect(src).toContain("saveCandles(selectedAsset, tfNoInicio as Timeframe, candles)");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SINCRONIA DE TEMPO GRÁFICO (pedido do Operador: "pra não ter erro do tempo
+// gráfico de um horário pra outro").
+//
+// O caminho de REDE já era guardado em dois pontos: `tfNoInicio`/`trocou()`
+// em fetchSymbolData, e a comparação de grades em mergeFreshTail. A
+// hidratação do CACHE (IndexedDB) não tinha nenhum dos dois — e é a única
+// outra porta por onde uma série entra no gráfico.
+// ---------------------------------------------------------------------------
+describe("grade da série x timeframe declarado", () => {
+  const serie = (passoSegundos: number, n = 10): ChartCandle[] =>
+    Array.from({ length: n }, (_, i) => ({
+      time: 1_700_000_000 + i * passoSegundos,
+      open: 100, high: 101, low: 99, close: 100, volume: 5,
+    })) as ChartCandle[];
+
+  it("o passo esperado vem da MESMA tabela do perfil de camadas, nunca de uma segunda", () => {
+    expect(expectedStepSeconds("1m")).toBe(60);
+    expect(expectedStepSeconds("15m")).toBe(900);
+    expect(expectedStepSeconds("1h")).toBe(3600);
+    expect(expectedStepSeconds("4h")).toBe(14400);
+    expect(expectedStepSeconds("1d")).toBe(86400);
+  });
+
+  it("aceita a série cuja grade REALMENTE bate com o timeframe", () => {
+    expect(seriesMatchesTimeframe(serie(900), "15m")).toBe(true);
+    expect(seriesMatchesTimeframe(serie(3600), "1h")).toBe(true);
+  });
+
+  it("REJEITA a série de outra grade sob o timeframe errado — o defeito real", () => {
+    // Cache gravado como 15m contendo série de 1h (contaminação real possível
+    // no IndexedDB, gravada antes da correção de mistura de grades), ou série
+    // do timeframe antigo chegando depois de uma troca.
+    expect(seriesMatchesTimeframe(serie(3600), "15m")).toBe(false);
+    expect(seriesMatchesTimeframe(serie(900), "1h")).toBe(false);
+    expect(seriesMatchesTimeframe(serie(60), "1d")).toBe(false);
+  });
+
+  it("um buraco real no histórico NÃO faz a série ser rejeitada (mediana, nunca média)", () => {
+    // Paragem de exchange: um intervalo maior no meio. A grade continua sendo
+    // 15m — rejeitar aqui seria descartar dado real por suposição.
+    const comBuraco = serie(900, 12);
+    comBuraco[6].time += 900 * 5; // um salto real
+    for (let i = 7; i < comBuraco.length; i++) comBuraco[i].time += 900 * 5;
+    expect(seriesMatchesTimeframe(comBuraco, "15m")).toBe(true);
+  });
+
+  it("FAIL-CLOSED nas duas direções: sem timeframe conhecido ou sem amostra, nunca rejeita", () => {
+    // Regra de Ouro 4: não dá para provar que a série está errada sem saber o
+    // passo esperado — na dúvida o dado real permanece.
+    for (const tf of [null, undefined, "", "abacaxi"]) {
+      expect(seriesMatchesTimeframe(serie(900), tf as string), `tf ${tf}`).toBe(true);
+    }
+    expect(expectedStepSeconds("abacaxi")).toBeNull();
+    // amostra curta demais para afirmar uma grade
+    expect(seriesMatchesTimeframe(serie(3600, 2), "15m")).toBe(true);
+  });
+});
+
+describe("a hidratação do cache guarda o timeframe como o caminho de rede", () => {
+  const app = () => read("../src/App.tsx");
+
+  it("captura o timeframe ANTES do await e descarta se trocou durante ele", () => {
+    // Quinta vez nesta trilha que uma mutação de FIAÇÃO passaria verde com a
+    // função pura testada a fundo e a CHAMADA não travada. Aqui a chamada
+    // real fica travada.
+    const src = app();
+    const i = src.indexOf("const persisted = await loadCandles(");
+    expect(i, "hidratação do cache não encontrada").toBeGreaterThan(-1);
+    const bloco = src.slice(i - 400, i + 700);
+    expect(bloco).toContain("const tfNoInicio = chartTimeframeRef.current;");
+    expect(bloco).toContain("await loadCandles(selectedAsset, tfNoInicio as Timeframe)");
+    expect(bloco).toContain("if (cancelled || chartTimeframeRef.current !== tfNoInicio) return;");
+  });
+
+  it("valida a GRADE da série persistida antes de aplicar", () => {
+    const src = app();
+    const i = src.indexOf("const persisted = await loadCandles(");
+    const bloco = src.slice(i, i + 900);
+    expect(bloco).toContain("if (!seriesMatchesTimeframe(persisted as ChartCandle[], tfNoInicio)) return;");
+  });
+
+  it("o guard antigo cobria só troca de ATIVO — a regressão que isto impede", () => {
+    // Se o `cancelled` voltasse a ser a única condição, a série do timeframe
+    // antigo entraria de novo. O efeito não recria ao trocar de timeframe
+    // (deps são [bootGeneration, selectedAsset]), então `cancelled` nunca
+    // dispara nesse caso.
+    const src = app();
+    const i = src.indexOf("const persisted = await loadCandles(");
+    const bloco = src.slice(i, i + 400);
+    expect(bloco).not.toMatch(/if \(cancelled \|\| !persisted/);
   });
 });

@@ -144,6 +144,7 @@ import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD, type CouncilDecisio
 // único, sem duplicar UI nem criar um segundo painel.
 import { deriveEngineSignalsFromCouncil, deriveEngineSignalsFromInstitutionalZones } from "./nexus/engine-signal-contract";
 import { summarizeLayerPanel, describeLayerPanel } from "./nexus/layer-panel-summary";
+import { timeframeMinutes } from "./nexus/timeframe-layer-profile";
 // Carta Branca: consumidor real do Evidence Fusion Engine — SYSTEM_HANDBOOK
 // §6.72/§6.74/§6.76 classificaram isto como "iniciativa de arquitetura
 // própria" por 3 rodadas seguidas; agora tem seu primeiro consumidor vivo.
@@ -683,7 +684,46 @@ export type ChartCandle = { time: number; open: number; high: number; low: numbe
 // é autoritativo sozinho, como num replace. Fail-closed (Regra de Ouro 3):
 // na dúvida, a série mais recente e internamente coerente vence, nunca uma
 // mistura fabricada.
-function candleStepSeconds(series: ChartCandle[]): number | null {
+/** Passo esperado de uma grade, em segundos, para um timeframe declarado.
+ *  Fonte única: timeframeMinutes (nexus/timeframe-layer-profile.ts), a mesma
+ *  tabela que o perfil de camadas já usa — nunca uma segunda tabela de
+ *  durações. `null` para timeframe desconhecido (fail-closed: sem saber o
+ *  passo esperado, este módulo não rejeita nada). */
+export function expectedStepSeconds(timeframe: string | null | undefined): number | null {
+  const min = timeframeMinutes(timeframe);
+  return min === null ? null : min * 60;
+}
+
+/**
+ * A grade real de `series` corresponde ao timeframe declarado?
+ *
+ * DEFEITO REAL QUE ISTO FECHA: a hidratação do cache (IndexedDB) aplicava a
+ * série persistida sem nenhuma verificação de grade — diferente do caminho
+ * de rede, que passa por mergeFreshTail e compara grades. Duas formas de
+ * errar, ambas produzindo exatamente "erro do tempo gráfico de um horário
+ * pra outro" (relato do Operador):
+ *
+ *   1. CORRIDA: `loadCandles` lê o timeframe, faz await de IndexedDB, e
+ *      aplica. Se o Operador troca de timeframe durante o await, a série do
+ *      timeframe ANTIGO entra num gráfico que já mostra outro. O guard
+ *      `cancelled` só cobre troca de ATIVO, nunca de timeframe.
+ *   2. CACHE CONTAMINADO: séries gravadas antes da correção de mistura de
+ *      grades podem estar no IndexedDB com a grade errada sob a chave
+ *      certa. Nada as rejeitava na leitura.
+ *
+ * Fail-closed em AMBAS as direções: sem timeframe conhecido ou sem amostra
+ * suficiente para afirmar uma grade, devolve `true` (não rejeita) — nunca
+ * descarta dado real por suposição (Regra de Ouro 4).
+ */
+export function seriesMatchesTimeframe(series: ChartCandle[], timeframe: string | null | undefined): boolean {
+  const esperado = expectedStepSeconds(timeframe);
+  if (esperado === null) return true;
+  const real = candleStepSeconds(series);
+  if (real === null) return true;
+  return real === esperado;
+}
+
+export function candleStepSeconds(series: ChartCandle[]): number | null {
   if (series.length < 3) return null; // amostra curta demais para afirmar grade.
   // Mediana dos passos: um buraco real no histórico (manutenção da
   // exchange) não muda a mediana, mas mudar de 15m para 1H muda.
@@ -3594,9 +3634,20 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const persisted = await loadCandles(selectedAsset, chartTimeframeRef.current as Timeframe).catch(() => null);
-      if (cancelled || !persisted || persisted.length === 0) return;
+      // Mesmo padrão do caminho de rede (fetchSymbolData): captura o
+      // timeframe ANTES do await e descarta se ele trocou durante a leitura.
+      // O guard `cancelled` abaixo só cobre troca de ATIVO — o efeito não
+      // recria ao trocar de timeframe, então sem isto a série antiga entrava
+      // num gráfico que já mostra outro tempo.
+      const tfNoInicio = chartTimeframeRef.current;
+      const persisted = await loadCandles(selectedAsset, tfNoInicio as Timeframe).catch(() => null);
+      if (cancelled || chartTimeframeRef.current !== tfNoInicio) return;
+      if (!persisted || persisted.length === 0) return;
       if (!persisted.every((c: any) => Number.isFinite(c.volume))) return;
+      // E a grade da série precisa BATER com o timeframe pedido: o cache
+      // pode conter série contaminada por mistura de grades gravada antes da
+      // correção daquele defeito. A chave certa não garante o conteúdo certo.
+      if (!seriesMatchesTimeframe(persisted as ChartCandle[], tfNoInicio)) return;
       setChartData((prev) => (prev.length > 0 ? prev : (persisted as typeof prev)));
     })();
     return () => { cancelled = true; };
