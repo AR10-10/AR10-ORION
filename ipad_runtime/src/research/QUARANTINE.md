@@ -596,3 +596,63 @@ filtro sobre a decisão do Núcleo.
 **Suítes:** `supertrend.test.ts` (18, execução real da matemática, incluindo
 a catraca) + `supertrend-graduation.test.ts` (18, fiação ponta a ponta,
 fail-closed por execução real e LEI 24).
+
+## `delta-divergence-engine.js` — EM QUARENTENA (2026-08-24)
+
+Divergência entre **preço e CVD** (Cumulative Volume Delta): preço faz topo
+mais alto enquanto o CVD faz topo mais baixo (exaustão compradora), ou o
+espelho no fundo (exaustão vendedora).
+
+**Por que existe.** Comparação real com plataformas concorrentes pedida
+pelo Operador. `grep -ri "divergen"` no repositório inteiro só encontrava
+divergência **entre corretoras** (trust score, cross-exchange). Divergência
+de DELTA não existia — e é o item que todas as plataformas de order flow
+consultadas destacam (Sierra Chart nomeia "Delta Divergence"
+explicitamente; ATAS, Tape Delta, GoCharting e Bookmap trazem o mesmo).
+
+**Definição pesquisada, não inventada** (WebSearch, múltiplas fontes
+independentes, antes de escrever código). As fontes também separam
+**exaustão** (ausência de pressão) de **absorção** (pressão batendo numa
+parede) — este motor calcula só a primeira; absorção já vive em
+`src/orderflow/signal-engine.js`.
+
+**LEI 24, e aqui a pesquisa e a lei do projeto dizem a mesma coisa:** as
+fontes afirmam que a divergência "marca um LOCAL de possível exaustão, não
+um GATILHO — espere o preço confirmar". É literalmente a definição de
+camada de confluência display-only.
+
+**Zero matemática nova.** Swings vêm de `fractal-swings.js`; o CVD vem da
+série real já retida pelo poller. O motor não coleta, não estima e não
+interpola nada.
+
+### NÃO GRADUADO — e a razão é de DADO, não de código
+
+O CVD retido cobre **~8 minutos reais**
+(`ORDERFLOW_HISTORY_CAPACITY = 120` a ~4s/ciclo). Num gráfico de 15m isso é
+**menos de uma vela**. O motor devolve `DADOS_INSUFICIENTES` — com o número
+real de velas cobertas, para a UI poder dizer ao Operador exatamente o que
+falta — em vez de extrapolar CVD.
+
+A mesma causa raiz já está documentada em `nexus/multi-timeframe-engine.ts`
+("não existe dado real retido para calcular Order Flow honesto em
+1H/4H/1D"). **É uma limitação só, não duas.**
+
+**O que destravaria:** aumentar a retenção. Mas `pushOrderflowHistory` faz
+`[...ring, entry]` — cópia do array **inteiro a cada ciclo de 4s**. Subir a
+capacidade de 120 para ~1800 (2h) multiplicaria por 15 o custo desse copy,
+a cada 4 segundos, no main thread — contra a Regra de Ouro 6/7. A evolução
+honesta é trocar o ring por uma estrutura de custo O(1) por push ANTES de
+subir a capacidade. Registrado como o próximo passo real, **não feito às
+pressas junto**.
+
+**Suíte:** `ramber-ui/tests/delta-divergence-engine.test.ts` (26, execução
+real — as duas direções da definição, "preço e CVD juntos NÃO é
+divergência", mapeamento CVD→vela, sufixo contíguo nunca costurado por cima
+de um buraco, fail-closed em todas as formas, índices devolvidos na série
+ORIGINAL, e LEI 24/Regra de Ouro 2).
+
+**Achado registrado (teste de mutação):** a primeira versão tinha um filtro
+de causalidade próprio (`s.index + FRACTAL_K <= ultimo`) que **não filtrava
+nada** — `findSwings` já varre só `k <= i < length - k`. Um guard que não
+guarda é pior que nenhum. Removido, e a garantia real passou a ser travada
+por teste em cima de `findSwings`, onde ela de fato vive.
