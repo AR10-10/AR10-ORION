@@ -6,6 +6,7 @@
 // trade-plan-zone-plugin.test.ts (node env, sem canvas real; verificação
 // visual real via harness Playwright antes do commit).
 import { describe, it, expect } from 'vitest';
+import { LABEL_HEIGHT_PX, LIVE_LABEL_HEIGHT_PX, LIVE_RING_TOTAL_PX } from '../src/chart/PriceLabelStackPlugin';
 import { LABEL_TIER_COLOR } from '../src/chart/PriceLabelStackPlugin';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -166,7 +167,7 @@ describe('PriceLabelStackPlugin: side opcional (left/right) — dois lados resol
     // paralela reinventada por lado.
     const drawSideIdx = s.indexOf('const drawSide = ');
     const drawSideBlock = s.slice(drawSideIdx, drawSideIdx + 600);
-    expect(drawSideBlock).toContain('resolveLabelStackPositions(entries, minGapPx)');
+    expect(drawSideBlock).toContain('resolveLabelStackPositions<PriceAxisLabel & { naturalY: number }>(');
   });
 
   it('geometria espelhada real: boxX ancora na margem mínima de cada lado — mesma margem nos dois lados, seja o tier live/critical (LEFT_MARGIN_PX/RIGHT_MARGIN_PX) ou primary/context compacto (COMPACT_EDGE_PADDING_PX, Especificação Visual v1: "2px do edge")', () => {
@@ -253,7 +254,7 @@ describe('PriceLabelStackPlugin: geometria real via lightweight-charts, nunca po
     // Achado real do Operador (densidade só do lado direito): a resolução
     // agora roda uma vez por lado (drawSide), cada lado 100% independente
     // — mesma função pura, chamada 2x (nunca uma segunda heurística).
-    expect(plugin()).toContain('resolveLabelStackPositions(entries, minGapPx)');
+    expect(plugin()).toContain('resolveLabelStackPositions<PriceAxisLabel & { naturalY: number }>(');
     expect(plugin()).toContain('drawSide(withNaturalY("right"), "right");');
     expect(plugin()).toContain('drawSide(withNaturalY("left"), "left");');
   });
@@ -269,17 +270,41 @@ describe('PriceLabelStackPlugin: geometria real via lightweight-charts, nunca po
     // computados por desenho (LABEL_HEIGHT_PX + fontDelta, escala
     // responsiva ULTRA LED) em vez de constantes de módulo fixas — a
     // fórmula real (+7) e o invariante abaixo continuam idênticos.
-    expect(plugin()).toContain('const minGapPx = labelHeightPx + 7;');
+    // ACHADO DESTA RODADA, e a razão de este teste ter mudado de forma: o
+    // gap escalar era derivado SÓ da caixa pequena, então a fresta real
+    // dependia da altura das vizinhas. A conta antiga já mostrava isso e
+    // passava raspando — 25 > 24 por UM pixel: o preço vivo, a etiqueta
+    // mais importante da tela, era a que menos respirava.
+    //
+    // Agora o gap é PAREADO: (altura_a + altura_b)/2 + folga. O escalar
+    // continua existindo como fallback para caixas comuns.
+    expect(plugin()).toContain('const LABEL_EDGE_GAP_PX = 7;');
+    expect(plugin()).toContain('const minGapPx = labelHeightPx + LABEL_EDGE_GAP_PX;');
+    expect(plugin()).toContain('(alturaFisica(a) + alturaFisica(b)) / 2 + LABEL_EDGE_GAP_PX;');
+    // DEFINIR o gap pareado não basta — ele tem de ser PASSADO ao resolver.
+    // A primeira versão deste teste checava só a definição, e uma mutação
+    // que removia o argumento passava verde. Achado real, corrigido aqui.
+    expect(plugin()).toMatch(
+      /resolveLabelStackPositions<PriceAxisLabel & \{ naturalY: number \}>\(\s*entries,\s*minGapPx,\s*gapEntre,\s*\)/,
+    );
     expect(plugin()).toContain('export const LABEL_HEIGHT_PX = 18;');
     expect(plugin()).toContain('export const LIVE_LABEL_HEIGHT_PX = 21;');
-    // invariante REAL (não só o literal): o passo cobre a maior caixa +
-    // o anel dos dois lados, com fresta sobrando.
-    const LABEL_HEIGHT_PX = 18;
-    const LIVE_LABEL_HEIGHT_PX = 21;
-    const MIN_GAP_PX = LABEL_HEIGHT_PX + 7;
-    const livePhysicalHeight = LIVE_LABEL_HEIGHT_PX + 1.5 * 2; // caixa + anel
-    expect(MIN_GAP_PX).toBeGreaterThan(livePhysicalHeight);
-    expect(MIN_GAP_PX).toBeGreaterThan(LABEL_HEIGHT_PX);
+    expect(plugin()).toContain('export const LIVE_RING_TOTAL_PX = 3;');
+
+    // Invariante REAL, calculado com as MESMAS constantes do módulo: para
+    // QUALQUER combinação de alturas físicas, a fresta entre bordas é
+    // exatamente a folga declarada — nunca menos.
+    const alturas = [LABEL_HEIGHT_PX, LIVE_LABEL_HEIGHT_PX, LIVE_LABEL_HEIGHT_PX + LIVE_RING_TOTAL_PX];
+    for (const ha of alturas) {
+      for (const hb of alturas) {
+        const centros = (ha + hb) / 2 + 7;
+        const fresta = centros - (ha / 2 + hb / 2);
+        expect(fresta, `alturas ${ha}/${hb}`).toBeCloseTo(7, 6);
+      }
+    }
+    // E a regra antiga falhava exatamente onde este teste já suspeitava.
+    const frestaAntiga = LABEL_HEIGHT_PX + 7 - (LIVE_LABEL_HEIGHT_PX + LIVE_RING_TOTAL_PX);
+    expect(frestaAntiga).toBeLessThan(7);
   });
 });
 
@@ -1247,8 +1272,14 @@ describe('Achado real (task #341): etiquetas do eixo escalam com o monitor (mesm
     expect(s).toContain('const primaryFont = isBigTier ? fontLive : fontCompact;');
     expect(s).toContain('ctx.font = fontSecondary;');
     expect(s).toContain('const boxHeight = isBigTier ? liveLabelHeightPx : labelHeightPx;');
-    expect(s).toContain('const minGapPx = labelHeightPx + 7;');
-    expect(s).toContain('resolveLabelStackPositions(entries, minGapPx)');
+    expect(s).toContain('const minGapPx = labelHeightPx + LABEL_EDGE_GAP_PX;');
+    expect(s).toContain('resolveLabelStackPositions<PriceAxisLabel & { naturalY: number }>(');
+    // O gap pareado também tem de vir das variáveis responsivas — se
+    // alguém cravar uma altura de módulo ali, a pilha para de escalar com
+    // o monitor exatamente como parava antes da task #341.
+    expect(s).toContain('if (tier === "live") return liveLabelHeightPx + LIVE_RING_TOTAL_PX;');
+    expect(s).toContain('if (tier === "critical") return liveLabelHeightPx;');
+    expect(s).toContain('return labelHeightPx;');
   });
 });
 

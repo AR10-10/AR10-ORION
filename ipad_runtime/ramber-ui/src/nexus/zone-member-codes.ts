@@ -44,6 +44,12 @@ const CODIGOS: Record<string, string> = {
   "Sessão Alta": "SES↑",
   "Sessão Baixa": "SES↓",
   Sweep: "SWP",
+  // Graduações desta rodada. "SuperTrend" (10 caracteres) e "Mitigation"
+  // (10) eram, de longe, os nomes mais longos que podiam entrar nesta
+  // linha — exatamente o que o pedido "o tamanho das etiquetas" combate.
+  SuperTrend: "ST",
+  Breaker: "BRK",
+  Mitigation: "MIT",
   "Swing H": "SW↑",
   "Swing L": "SW↓",
 };

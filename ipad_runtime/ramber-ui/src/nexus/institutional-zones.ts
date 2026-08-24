@@ -55,6 +55,13 @@ export type InstitutionalZoneSourceKind =
   | "VOLUME_PROFILE_POC"
   | "SESSION_KEY_LEVEL"
   | "LIQUIDITY_SWEEP"
+  // Graduações desta rodada (supertrend-engine.js e institutional-blocks.js):
+  // chegavam ao gráfico mas não alimentavam este consolidador — mesma classe
+  // de lacuna de fiação já corrigida antes para S1/R1. Ver o comentário em
+  // superTrendLine/institutionalBlocks no input.
+  | "SUPERTREND"
+  | "BREAKER_BLOCK"
+  | "MITIGATION_BLOCK"
   // Evolução Total (fix documentado na Ordem Nº 03 §3, executado sob
   // "não deixa nada pendente"): os 2 swings fractais mais recentes do
   // market-structure-engine.js — a 11ª fonte real, a única que a
@@ -122,6 +129,24 @@ export interface InstitutionalZoneInput {
   // estrutura real (fail-closed, membro simplesmente omitido).
   lastSwingHigh: number | null;
   lastSwingLow: number | null;
+  // ACHADO DE AUDITORIA (pedido do Operador: "ver o que que tá faltando pra
+  // adicionar"): as duas camadas graduadas nesta rodada — SuperTrend e
+  // Breaker/Mitigation Block — chegavam ao gráfico mas NÃO entravam nesta
+  // consolidação. Mesma classe de lacuna de fiação já corrigida antes para
+  // S1/R1 (§6 acima): o dado real existia, o consolidador não o via.
+  //
+  // O efeito prático de faltar aqui é o contrário do que o Operador quer:
+  // um SuperTrend parado exatamente sobre VWAP+OB é uma ferramenta
+  // independente A MAIS concordando naquele preço, e a contagem de fontes
+  // ("4F") saía menor do que a realidade. Consolidar também REDUZ desenho
+  // repetido — é o mecanismo que existe justamente para isso.
+  //
+  // Ambos opcionais/fail-closed: ausentes => resultado idêntico ao de antes
+  // desta rodada.
+  superTrendLine?: number | null;
+  /** Blocos já filtrados pelo chamador (não retestados) — este motor nunca
+   *  reimplementa o filtro, só recebe o que sobreviveu a ele. */
+  institutionalBlocks?: { kind: "BREAKER" | "MITIGATION"; top: number; bottom: number }[];
   proximityPct?: number;
 }
 
@@ -207,6 +232,27 @@ export function computeInstitutionalZones(input: InstitutionalZoneInput): Instit
   }
   if (fin(input.lastSwingLow)) {
     members.push({ sourceKind: "MARKET_STRUCTURE_SWING", label: "Swing L", price: input.lastSwingLow, top: input.lastSwingLow, bottom: input.lastSwingLow });
+  }
+  // SuperTrend: membro PONTUAL (o stop que trilha é um preço único),
+  // mesmo padrão de EMA/VWAP/Nexus Line.
+  if (fin(input.superTrendLine)) {
+    members.push({ sourceKind: "SUPERTREND", label: "SuperTrend", price: input.superTrendLine, top: input.superTrendLine, bottom: input.superTrendLine });
+  }
+  // Breaker / Mitigation: membros de FAIXA (top/bottom reais), mesmo padrão
+  // de FVG/Order Block. Os dois tipos entram como sourceKinds DISTINTOS de
+  // propósito — são fenômenos estruturais diferentes (um varreu liquidez
+  // antes de falhar, o outro não), e fundi-los num só apagaria informação
+  // real e inflaria a contagem de fontes com uma concordância que não
+  // existe (Regra de Ouro 4).
+  for (const b of input.institutionalBlocks ?? []) {
+    if (!fin(b.top) || !fin(b.bottom)) continue;
+    members.push({
+      sourceKind: b.kind === "BREAKER" ? "BREAKER_BLOCK" : "MITIGATION_BLOCK",
+      label: b.kind === "BREAKER" ? "Breaker" : "Mitigation",
+      price: (b.top + b.bottom) / 2,
+      top: b.top,
+      bottom: b.bottom,
+    });
   }
 
   if (members.length < MIN_DISTINCT_SOURCES_FOR_ZONE) return [];

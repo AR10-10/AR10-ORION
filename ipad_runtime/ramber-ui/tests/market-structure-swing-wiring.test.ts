@@ -61,9 +61,34 @@ describe('App.tsx → EnhancedChart: props reais threaded até o consolidador', 
     expect(s).toContain('lastSwingLow?: number | null;');
     expect(s).toContain('lastSwingHigh: lastSwingHigh ?? null,');
     expect(s).toContain('lastSwingLow: lastSwingLow ?? null,');
-    expect(s).toContain(
-      '[emaLastValue, activeEmaPeriod, vwapLastValue, nlLastValue, fairValueGaps, orderBlocks, liquidityZones, support, resistance, volumeProfile, freshestSessionKeyLevel, institutionalZoneSweeps, lastSwingHigh, lastSwingLow],',
-    );
+    // Assertiva POR DEPENDÊNCIA, não pela linha literal inteira: o array
+    // cresce a cada fonte nova que passa a alimentar o consolidador
+    // (SuperTrend e Breaker/Mitigation entraram nesta rodada), e travar a
+    // string completa transformava toda adição aditiva em vermelho sem
+    // nenhum fio realmente rompido. O que importa continua travado — o
+    // swing REALMENTE está no dep array, e uma dep esquecida ali é
+    // exatamente o bug "a zona não recomputa quando o swing muda".
+    const deps =
+      s.match(/const institutionalZoneInput = useMemo<InstitutionalZoneInput>\([\s\S]*?\n {4}\[([^\]]*)\],/)?.[1] ?? '';
+    expect(deps, 'dep array de institutionalZoneInput não encontrado').not.toBe('');
+    for (const dep of [
+      'emaLastValue',
+      'activeEmaPeriod',
+      'vwapLastValue',
+      'nlLastValue',
+      'fairValueGaps',
+      'orderBlocks',
+      'liquidityZones',
+      'support',
+      'resistance',
+      'volumeProfile',
+      'freshestSessionKeyLevel',
+      'institutionalZoneSweeps',
+      'lastSwingHigh',
+      'lastSwingLow',
+    ]) {
+      expect(deps, `${dep} fora do dep array de institutionalZoneInput`).toContain(dep);
+    }
   });
 });
 

@@ -228,3 +228,138 @@ describe('selectRelevantLabels: `critical` nunca é podado — mesma garantia de
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// GAP PAREADO — pedido do Operador: "cada objeto a distância correta".
+//
+// DEFEITO MEDIDO: o gap era um ESCALAR, e o chamador o derivava da caixa
+// PEQUENA (18px + 7 de folga = 25). Mas `live` (o preço agora) e `critical`
+// (o plano ativo) desenham uma caixa de 21px, e o `live` ainda leva um anel
+// de +3px. Como cada caixa é centrada no seu resolvedY, a fresta real entre
+// um preço vivo e sua vizinha era 25 − 24 = UM pixel — a etiqueta mais
+// importante da tela era a que menos respirava.
+//
+// Não bastava usar sempre a caixa maior: isso afastaria demais um par de
+// etiquetas pequenas, e cada pixel de afastamento é um pixel a mais entre a
+// etiqueta e o preço real que ela nomeia (o conector existe justamente
+// porque esse deslocamento é uma dívida, não um recurso).
+// ---------------------------------------------------------------------------
+describe('gap pareado: a fresta é a declarada para QUALQUER combinação de alturas', () => {
+  type L = { naturalY: number; h: number };
+  const FOLGA = 7;
+  const gap = (a: L, b: L) => (a.h + b.h) / 2 + FOLGA;
+
+  /** Menor fresta real entre bordas de caixas centradas em resolvedY. */
+  const menorFresta = (out: (L & { resolvedY: number })[]) => {
+    let min = Infinity;
+    for (let i = 1; i < out.length; i++) {
+      const borda = out[i].resolvedY - out[i].h / 2 - (out[i - 1].resolvedY + out[i - 1].h / 2);
+      min = Math.min(min, borda);
+    }
+    return min;
+  };
+
+  it('duas caixas grandes coladas ficam com a folga inteira, nunca com 4px', () => {
+    const entradas: L[] = [
+      { naturalY: 100, h: 24 }, // live: caixa 21 + anel 3
+      { naturalY: 104, h: 21 }, // critical
+    ];
+    const out = resolveLabelStackPositions(entradas, 25, gap);
+    expect(menorFresta(out)).toBeCloseTo(FOLGA, 6);
+  });
+
+  it('a régua antiga (escalar) produziria menos que a folga no mesmo caso', () => {
+    const entradas: L[] = [
+      { naturalY: 100, h: 24 },
+      { naturalY: 104, h: 21 },
+    ];
+    const out = resolveLabelStackPositions(entradas, 25); // sem gapBetween
+    expect(menorFresta(out)).toBeLessThan(FOLGA);
+  });
+
+  it('caixas pequenas NÃO são afastadas mais do que o necessário', () => {
+    // Usar sempre a maior altura custaria deslocamento extra em toda pilha
+    // de etiquetas comuns — e deslocamento é distância entre a etiqueta e o
+    // preço que ela nomeia.
+    const entradas: L[] = [
+      { naturalY: 100, h: 18 },
+      { naturalY: 105, h: 18 },
+      { naturalY: 110, h: 18 },
+    ];
+    const out = resolveLabelStackPositions(entradas, 25, gap);
+    expect(menorFresta(out)).toBeCloseTo(FOLGA, 6);
+    // span total = 2 * (18 + 7) = 50, não 2 * (24 + 7) = 62
+    expect(out[2].resolvedY - out[0].resolvedY).toBeCloseTo(50, 6);
+  });
+
+  it('pilha misturada respeita a folga em TODOS os pares, não só no pior', () => {
+    const entradas: L[] = [
+      { naturalY: 100, h: 18 },
+      { naturalY: 103, h: 24 },
+      { naturalY: 106, h: 21 },
+      { naturalY: 109, h: 18 },
+      { naturalY: 112, h: 18 },
+    ];
+    const out = resolveLabelStackPositions(entradas, 25, gap);
+    for (let i = 1; i < out.length; i++) {
+      const borda = out[i].resolvedY - out[i].h / 2 - (out[i - 1].resolvedY + out[i - 1].h / 2);
+      expect(borda, `par ${i - 1}/${i}`).toBeGreaterThanOrEqual(FOLGA - 1e-9);
+    }
+  });
+
+  it('o bloco continua CENTRADO na média das posições naturais', () => {
+    // A propriedade que o resolver sempre teve: ninguém é deslocado mais do
+    // que o necessário, e o grupo fica onde o grupo realmente está.
+    const entradas: L[] = [
+      { naturalY: 100, h: 24 },
+      { naturalY: 104, h: 21 },
+    ];
+    const out = resolveLabelStackPositions(entradas, 25, gap);
+    const centroNatural = (100 + 104) / 2;
+    const centroResolvido = (out[0].resolvedY + out[1].resolvedY) / 2;
+    expect(centroResolvido).toBeCloseTo(centroNatural, 6);
+  });
+});
+
+describe('gap pareado: compatibilidade e fail-closed', () => {
+  type L = { naturalY: number };
+
+  it('sem gapBetween o comportamento é IDÊNTICO ao de antes', () => {
+    const entradas: L[] = [{ naturalY: 100 }, { naturalY: 102 }, { naturalY: 103 }];
+    const out = resolveLabelStackPositions(entradas, 25);
+    // Fórmula anterior: centrado, passos uniformes de 25.
+    expect(out[1].resolvedY - out[0].resolvedY).toBeCloseTo(25, 6);
+    expect(out[2].resolvedY - out[1].resolvedY).toBeCloseTo(25, 6);
+    const centro = (100 + 102 + 103) / 3;
+    expect((out[0].resolvedY + out[2].resolvedY) / 2).toBeCloseTo(centro, 6);
+  });
+
+  it('gapBetween que devolve valor inválido cai no escalar, nunca numa posição inventada', () => {
+    const entradas: L[] = [{ naturalY: 100 }, { naturalY: 101 }];
+    for (const ruim of [NaN, -5, 0, Infinity]) {
+      const out = resolveLabelStackPositions(entradas, 25, () => ruim);
+      expect(out[1].resolvedY - out[0].resolvedY, `gap ${ruim}`).toBeCloseTo(25, 6);
+    }
+  });
+
+  it('a invariante ABSOLUTA continua valendo com gaps variáveis', () => {
+    // Nenhum par pode terminar mais perto que o gap exigido, inclusive
+    // depois da passada de segurança que cascateia grupos vizinhos.
+    type H = { naturalY: number; h: number };
+    const gap = (a: H, b: H) => (a.h + b.h) / 2 + 7;
+    const entradas: H[] = [
+      { naturalY: 0, h: 18 },
+      { naturalY: 1, h: 24 },
+      { naturalY: 2, h: 18 },
+      { naturalY: 30, h: 21 },
+      { naturalY: 31, h: 18 },
+      { naturalY: 60, h: 18 },
+    ];
+    const out = resolveLabelStackPositions(entradas, 25, gap);
+    for (let i = 1; i < out.length; i++) {
+      expect(out[i].resolvedY - out[i - 1].resolvedY).toBeGreaterThanOrEqual(
+        gap(out[i - 1], out[i]) - 1e-9,
+      );
+    }
+  });
+});

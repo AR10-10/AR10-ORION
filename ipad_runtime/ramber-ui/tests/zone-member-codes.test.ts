@@ -121,3 +121,49 @@ describe("fiação — o gráfico usa a fonte única, não uma segunda régua", 
     expect(chart()).toContain("text: `${zone.distinctSourceCount}F`");
   });
 });
+
+// ---------------------------------------------------------------------------
+// FONTES NOVAS NA ZONA INSTITUCIONAL — "SuperTrend" (10 caracteres) e
+// "Mitigation" (10) eram, de longe, os nomes mais longos que podiam entrar
+// na linha secundária da etiqueta. Sem código curto, a graduação das duas
+// camadas teria desfeito exatamente o que o Operador pediu sobre "o tamanho
+// das etiquetas".
+// ---------------------------------------------------------------------------
+describe("as fontes graduadas nesta rodada também têm código curto", () => {
+  it("SuperTrend, Breaker e Mitigation encurtam", () => {
+    expect(zoneMemberCode("SuperTrend")).toBe("ST");
+    expect(zoneMemberCode("Breaker")).toBe("BRK");
+    expect(zoneMemberCode("Mitigation")).toBe("MIT");
+  });
+
+  it("nenhuma delas colide com um código já existente", () => {
+    // Uma colisão faria duas ferramentas distintas agregarem como "×2",
+    // inventando uma confluência que não existe.
+    const todos = [
+      "VWAP", "Nexus Line", "S1", "R1", "FVG Alta", "FVG Baixa", "OB Alta",
+      "OB Baixa", "EQH", "EQL", "POC", "Sessão Alta", "Sessão Baixa", "Sweep",
+      "Swing H", "Swing L", "EMA21", "SuperTrend", "Breaker", "Mitigation",
+    ];
+    expect(new Set(todos.map(zoneMemberCode)).size).toBe(todos.length);
+  });
+
+  it("uma zona com as fontes novas continua curta", () => {
+    const antes = "VWAP + SuperTrend + Breaker + Mitigation";
+    const depois = formatZoneMemberList(["VWAP", "SuperTrend", "Breaker", "Mitigation"]);
+    expect(depois).toBe("VWAP + ST + BRK + MIT");
+    expect(depois.length).toBeLessThan(antes.length * 0.6);
+  });
+
+  it("TODO label que o motor de zonas produz tem código — nenhum escapa por extenso", () => {
+    // Guarda contra a única forma real de regressão aqui: alguém adiciona
+    // uma fonte nova ao motor e esquece o código, e o nome longo volta a
+    // atravessar as velas sem nenhum teste vermelho avisando.
+    const motor = readFileSync(resolve(__dirname, "../src/nexus/institutional-zones.ts"), "utf-8");
+    const labels = [...motor.matchAll(/label: "([^"]+)"/g)].map((m) => m[1]);
+    expect(labels.length, "nenhum label encontrado no motor").toBeGreaterThan(10);
+    for (const l of labels) {
+      const codigo = zoneMemberCode(l);
+      expect(codigo.length, `"${l}" não tem código curto (ficaria por extenso na etiqueta)`).toBeLessThanOrEqual(6);
+    }
+  });
+});

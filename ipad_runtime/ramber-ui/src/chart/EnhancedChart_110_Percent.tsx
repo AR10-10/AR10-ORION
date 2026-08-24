@@ -2109,6 +2109,27 @@ function EnhancedChart_110_PercentImpl({
     const latest = levels[levels.length - 1];
     return latest ? { high: latest.high, low: latest.low } : null;
   }, [data]);
+  // Fonte ÚNICA da leitura do SuperTrend: o desenho (efeito abaixo) e a
+  // confluência (institutionalZoneInput) leem o MESMO memo. Antes de a
+  // camada entrar na Zona Institucional isto era uma chamada solta dentro
+  // do efeito; deixá-la lá e adicionar uma segunda chamada para a
+  // confluência seria exatamente o "computar duas vezes" que a Regra de
+  // Ouro 4 proíbe.
+  const superTrendPoints = useMemo(() => computeSuperTrend(data), [data]);
+  /** Último valor real da linha — membro PONTUAL da confluência, mesmo
+   *  papel de emaLastValue/vwapLastValue. */
+  const superTrendLastLine = useMemo(() => {
+    const last = superTrendPoints[superTrendPoints.length - 1];
+    return last && Number.isFinite(last.line) ? last.line : null;
+  }, [superTrendPoints]);
+  const institutionalBlockMembers = useMemo(
+    () => [
+      ...(breakerBlocks ?? []).map((b) => ({ kind: "BREAKER" as const, top: b.top, bottom: b.bottom })),
+      ...(mitigationBlocks ?? []).map((b) => ({ kind: "MITIGATION" as const, top: b.top, bottom: b.bottom })),
+    ],
+    [breakerBlocks, mitigationBlocks],
+  );
+
   const institutionalZoneSweeps = useMemo(() => {
     const seen = new Set<number>();
     const out: { price: number }[] = [];
@@ -2142,8 +2163,21 @@ function EnhancedChart_110_PercentImpl({
       // membro omitido pelo próprio motor).
       lastSwingHigh: lastSwingHigh ?? null,
       lastSwingLow: lastSwingLow ?? null,
+      // ACHADO DE AUDITORIA desta rodada: as duas camadas graduadas
+      // (SuperTrend e Breaker/Mitigation) chegavam ao canvas mas NÃO
+      // alimentavam este consolidador — mesma classe de lacuna de fiação já
+      // corrigida antes para S1/R1. O efeito era o contrário do pedido do
+      // Operador: um SuperTrend parado exatamente sobre VWAP+OB é uma
+      // ferramenta independente A MAIS concordando ali, e a contagem "4F"
+      // saía menor que a realidade.
+      //
+      // São exatamente as MESMAS leituras já desenhadas (superTrendLastLine
+      // vem da mesma `superTrendPoints`, os blocos vêm da mesma prop já
+      // filtrada pelo App) — zero segundo cálculo.
+      superTrendLine: superTrendLastLine,
+      institutionalBlocks: institutionalBlockMembers,
     }),
-    [emaLastValue, activeEmaPeriod, vwapLastValue, nlLastValue, fairValueGaps, orderBlocks, liquidityZones, support, resistance, volumeProfile, freshestSessionKeyLevel, institutionalZoneSweeps, lastSwingHigh, lastSwingLow],
+    [emaLastValue, activeEmaPeriod, vwapLastValue, nlLastValue, fairValueGaps, orderBlocks, liquidityZones, support, resistance, volumeProfile, freshestSessionKeyLevel, institutionalZoneSweeps, lastSwingHigh, lastSwingLow, superTrendLastLine, institutionalBlockMembers],
   );
   const institutionalZones = useMemo(() => computeInstitutionalZones(institutionalZoneInput), [institutionalZoneInput]);
   // Carta Branca (Evidence Fusion Engine): achado real de auditoria — este
@@ -2420,7 +2454,7 @@ function EnhancedChart_110_PercentImpl({
   // importa ler.
   useEffect(() => {
     if (!supertrendUpRef.current || !supertrendDownRef.current) return;
-    const pontos = computeSuperTrend(data);
+    const pontos = superTrendPoints;
     if (pontos.length === 0) {
       // Fail-closed: sem aquecimento real de Wilder, nada é desenhado —
       // nunca uma linha extrapolada sobre janela insuficiente.
@@ -2438,7 +2472,7 @@ function EnhancedChart_110_PercentImpl({
     );
     supertrendUpRef.current.setData(up);
     supertrendDownRef.current.setData(down);
-  }, [data]);
+  }, [data, superTrendPoints]);
 
   // Camadas do Gráfico: mesmo padrão de "ema" — esconder alterna visible
   // nas séries nativas, nunca desmonta/recomputa.

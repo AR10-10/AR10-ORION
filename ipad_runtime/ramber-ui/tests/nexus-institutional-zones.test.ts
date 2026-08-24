@@ -309,3 +309,135 @@ describe('EPC OMEGA FINAL Parte 2 §7: 3 fontes novas (Volume Profile POC, Sessi
     expect(computeInstitutionalZones({ ...emptyInput, liquiditySweeps: [{ price: NaN }], vwap: 100000 })).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// FONTES 12 E 13 — SuperTrend e Breaker/Mitigation Block.
+//
+// ACHADO DE AUDITORIA (pedido do Operador: "ver o que que tá faltando pra
+// adicionar"): as duas camadas graduadas na rodada anterior chegavam ao
+// gráfico mas NÃO alimentavam este consolidador — a mesma classe de lacuna
+// de fiação que já tinha acontecido com S1/R1 e com os swings fractais.
+//
+// O efeito era o contrário do que o Operador quer: um SuperTrend parado
+// exatamente sobre VWAP+OB é uma ferramenta independente A MAIS
+// concordando naquele preço, e a contagem exibida ("4F") saía menor que a
+// realidade. E consolidar REDUZ desenho repetido — é o mecanismo que existe
+// justamente para isso.
+// ---------------------------------------------------------------------------
+describe('SuperTrend como fonte real de confluência', () => {
+  it('entra como membro pontual, igual a EMA/VWAP/Nexus Line', () => {
+    const zonas = computeInstitutionalZones({
+      ...emptyInput,
+      vwap: 100,
+      superTrendLine: 100.1,
+    });
+    expect(zonas).toHaveLength(1);
+    expect(zonas[0].members.map((m) => m.label).sort()).toEqual(['SuperTrend', 'VWAP']);
+    expect(zonas[0].distinctSourceCount).toBe(2);
+  });
+
+  it('AUMENTA a contagem real quando concorda com outras ferramentas', () => {
+    const semST = computeInstitutionalZones({ ...emptyInput, vwap: 100, support: 100.1 });
+    const comST = computeInstitutionalZones({
+      ...emptyInput,
+      vwap: 100,
+      support: 100.1,
+      superTrendLine: 100.05,
+    });
+    expect(semST[0].distinctSourceCount).toBe(2);
+    expect(comST[0].distinctSourceCount).toBe(3);
+  });
+
+  it('sozinho NUNCA vira zona — a regra de 2 fontes independentes vale para ele também', () => {
+    expect(computeInstitutionalZones({ ...emptyInput, superTrendLine: 100 })).toEqual([]);
+  });
+
+  it('fail-closed: ausente ou não-finito => resultado idêntico ao de antes desta fonte existir', () => {
+    const base = computeInstitutionalZones({ ...emptyInput, vwap: 100, support: 100.1 });
+    for (const v of [undefined, null, NaN, Infinity]) {
+      expect(
+        computeInstitutionalZones({ ...emptyInput, vwap: 100, support: 100.1, superTrendLine: v as number }),
+        `superTrendLine ${String(v)}`,
+      ).toEqual(base);
+    }
+  });
+});
+
+describe('Breaker / Mitigation Block como fontes reais de confluência', () => {
+  it('entram como membros de FAIXA, igual a FVG/Order Block', () => {
+    const zonas = computeInstitutionalZones({
+      ...emptyInput,
+      vwap: 100,
+      institutionalBlocks: [{ kind: 'BREAKER', top: 100.2, bottom: 99.9 }],
+    });
+    expect(zonas).toHaveLength(1);
+    const breaker = zonas[0].members.find((m) => m.label === 'Breaker');
+    expect(breaker, 'membro Breaker ausente').toBeDefined();
+    expect(breaker!.top).toBe(100.2);
+    expect(breaker!.bottom).toBe(99.9);
+  });
+
+  it('BREAKER e MITIGATION são sourceKinds DISTINTOS — nunca fundidos num só', () => {
+    // São fenômenos estruturais diferentes (um varreu liquidez antes de
+    // falhar, o outro não). Tratá-los como a mesma fonte inflaria a
+    // contagem com uma concordância que não existe, ou apagaria informação
+    // real (Regra de Ouro 4) — depende do lado do erro.
+    const zonas = computeInstitutionalZones({
+      ...emptyInput,
+      institutionalBlocks: [
+        { kind: 'BREAKER', top: 100.1, bottom: 100 },
+        { kind: 'MITIGATION', top: 100.15, bottom: 100.05 },
+      ],
+    });
+    expect(zonas).toHaveLength(1);
+    expect(zonas[0].distinctSourceCount).toBe(2);
+    expect(zonas[0].members.map((m) => m.label).sort()).toEqual(['Breaker', 'Mitigation']);
+  });
+
+  it('dois blocos do MESMO tipo contam como UMA fonte — concordância real, não repetição', () => {
+    const zonas = computeInstitutionalZones({
+      ...emptyInput,
+      vwap: 100,
+      institutionalBlocks: [
+        { kind: 'BREAKER', top: 100.1, bottom: 100 },
+        { kind: 'BREAKER', top: 100.15, bottom: 100.05 },
+      ],
+    });
+    expect(zonas).toHaveLength(1);
+    // 2 membros Breaker, mas UMA fonte distinta + VWAP = 2.
+    expect(zonas[0].distinctSourceCount).toBe(2);
+  });
+
+  it('fail-closed: lista ausente, vazia ou com faixa inválida não muda nada', () => {
+    const base = computeInstitutionalZones({ ...emptyInput, vwap: 100, support: 100.1 });
+    expect(computeInstitutionalZones({ ...emptyInput, vwap: 100, support: 100.1 })).toEqual(base);
+    expect(
+      computeInstitutionalZones({ ...emptyInput, vwap: 100, support: 100.1, institutionalBlocks: [] }),
+    ).toEqual(base);
+    expect(
+      computeInstitutionalZones({
+        ...emptyInput,
+        vwap: 100,
+        support: 100.1,
+        institutionalBlocks: [{ kind: 'BREAKER', top: NaN, bottom: 99 }],
+      }),
+    ).toEqual(base);
+  });
+});
+
+describe('as fontes novas não mexem em nada que já funcionava', () => {
+  it('sem nenhuma das duas, toda leitura anterior é byte a byte a mesma', () => {
+    const antes: InstitutionalZoneInput = {
+      ...emptyInput,
+      ema: { period: 21, value: 100 },
+      vwap: 100.1,
+      nexusLine: 100.05,
+      support: 99.95,
+      volumeProfilePoc: 100.2,
+      liquiditySweeps: [{ price: 100.15 }],
+      lastSwingHigh: 100.25,
+    };
+    const depois = computeInstitutionalZones({ ...antes, superTrendLine: null, institutionalBlocks: [] });
+    expect(depois).toEqual(computeInstitutionalZones(antes));
+  });
+});

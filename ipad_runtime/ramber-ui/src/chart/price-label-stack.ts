@@ -161,32 +161,66 @@ export function selectRelevantLabels<T extends RelevanceCandidate>(
 
 /**
  * Garantia absoluta: no array devolvido, nenhum par de resolvedY fica a
- * menos de minGapPx um do outro (segunda passada de segurança cobre o
+ * menos do gap exigido um do outro (segunda passada de segurança cobre o
  * caso raro em que centralizar um grupo o empurra pra perto do próximo).
+ *
+ * DEFEITO DE GEOMETRIA CORRIGIDO AQUI (pedido do Operador: "cada objeto a
+ * distância correta"). O gap era um ESCALAR único, e o chamador o derivava
+ * da caixa PEQUENA (18px + 7 de folga = 25). Mas nem toda etiqueta tem a
+ * mesma altura: `live` (o preço agora) e `critical` (o plano ativo) usam
+ * uma caixa de 21px. Como cada caixa é centrada no seu resolvedY, duas
+ * caixas grandes a 25px de distância ficam com 25 − 21 = **4px** entre as
+ * bordas, não os 7 declarados — as duas etiquetas mais importantes do
+ * gráfico eram justamente as que respiravam menos.
+ *
+ * `gapBetween` resolve isso de forma exata em vez de aproximada: o gap
+ * exigido entre dois vizinhos é `(altura_a + altura_b)/2 + folga`. Não
+ * basta usar sempre a caixa maior — isso afastaria demais um par de
+ * etiquetas pequenas, e cada pixel de afastamento é um pixel a mais entre
+ * a etiqueta e o preço real que ela nomeia.
+ *
+ * Omitir `gapBetween` mantém EXATAMENTE o comportamento anterior (gap
+ * uniforme `minGapPx`) — aditivo e fail-closed.
  */
 export function resolveLabelStackPositions<T extends PositionedLabel>(
   entries: readonly T[],
   minGapPx: number,
+  gapBetween?: (a: T, b: T) => number,
 ): (T & { resolvedY: number })[] {
   if (entries.length === 0) return [];
   const sorted = [...entries].sort((a, b) => a.naturalY - b.naturalY);
   const result: (T & { resolvedY: number })[] = [];
+
+  // Um gap inválido (NaN, negativo) do chamador nunca vira uma posição
+  // inventada: cai no escalar de sempre.
+  const gap = (a: T, b: T): number => {
+    if (!gapBetween) return minGapPx;
+    const g = gapBetween(a, b);
+    return Number.isFinite(g) && g > 0 ? g : minGapPx;
+  };
 
   let clusterStart = 0;
   while (clusterStart < sorted.length) {
     let clusterEnd = clusterStart;
     while (
       clusterEnd + 1 < sorted.length &&
-      sorted[clusterEnd + 1].naturalY - sorted[clusterEnd].naturalY < minGapPx
+      sorted[clusterEnd + 1].naturalY - sorted[clusterEnd].naturalY <
+        gap(sorted[clusterEnd], sorted[clusterEnd + 1])
     ) {
       clusterEnd++;
     }
     const cluster = sorted.slice(clusterStart, clusterEnd + 1);
     const center = cluster.reduce((sum, e) => sum + e.naturalY, 0) / cluster.length;
     const k = cluster.length;
+    // Posições acumuladas com gaps VARIÁVEIS, depois o bloco inteiro é
+    // centrado. Com gap uniforme isto reduz exatamente à fórmula anterior
+    // (`i * minGapPx`, span `(k-1) * minGapPx`) — zero mudança de
+    // comportamento para quem não passa gapBetween.
+    const offsets: number[] = [0];
+    for (let i = 1; i < k; i++) offsets.push(offsets[i - 1] + gap(cluster[i - 1], cluster[i]));
+    const span = offsets[k - 1];
     cluster.forEach((entry, i) => {
-      const resolvedY = center - ((k - 1) * minGapPx) / 2 + i * minGapPx;
-      result.push({ ...entry, resolvedY });
+      result.push({ ...entry, resolvedY: center - span / 2 + offsets[i] });
     });
     clusterStart = clusterEnd + 1;
   }
@@ -198,8 +232,9 @@ export function resolveLabelStackPositions<T extends PositionedLabel>(
   // ABSOLUTA pedida ("nunca um objeto em cima do outro") mesmo nesse
   // caso raro — nunca reduz um gap já correto, só corrige violação real.
   for (let i = 1; i < result.length; i++) {
-    if (result[i].resolvedY < result[i - 1].resolvedY + minGapPx) {
-      result[i] = { ...result[i], resolvedY: result[i - 1].resolvedY + minGapPx };
+    const exigido = gap(result[i - 1], result[i]);
+    if (result[i].resolvedY < result[i - 1].resolvedY + exigido) {
+      result[i] = { ...result[i], resolvedY: result[i - 1].resolvedY + exigido };
     }
   }
 

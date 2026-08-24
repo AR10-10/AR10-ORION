@@ -133,6 +133,11 @@ export const LABEL_HEIGHT_PX = 18;
 // achar sem procurar, só sem o anel (exclusivo do preço, a única âncora
 // de "o instante agora"; ver isBigTier abaixo).
 export const LIVE_LABEL_HEIGHT_PX = 21;
+/** Anel do preço vivo: 1px de traço a 1.5px de distância da caixa, nos dois
+ *  lados — 3px reais somados à altura física. Exportado porque o gap entre
+ *  etiquetas tem de contar com ele: sem isso a conta promete 7px de fresta
+ *  e entrega 4 justamente no par mais importante do gráfico. */
+export const LIVE_RING_TOTAL_PX = 3;
 const FONT_BASE = "10px -apple-system, sans-serif";
 // Tamanhos-base real das 3 fontes deste plugin (px, <1440px — mesma
 // baseline real de LABEL_HEIGHT_PX/LIVE_LABEL_HEIGHT_PX acima). A string
@@ -325,7 +330,31 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
       const fontSecondary = `${FONT_SECONDARY_BASE_PX + fontDelta}px -apple-system, sans-serif`;
       const labelHeightPx = LABEL_HEIGHT_PX + fontDelta;
       const liveLabelHeightPx = LIVE_LABEL_HEIGHT_PX + fontDelta;
-      const minGapPx = labelHeightPx + 7; // mesma folga real de MIN_GAP_PX, escalada junto
+      // Folga real ENTRE AS BORDAS de duas caixas vizinhas. Era o valor
+      // inteiro do gap entre CENTROS — e como a caixa `live`/`critical` é
+      // mais alta que a comum (e a `live` ainda leva anel), o par mais
+      // importante do gráfico acabava com 1px de respiro em vez destes 7.
+      const LABEL_EDGE_GAP_PX = 7;
+      const minGapPx = labelHeightPx + LABEL_EDGE_GAP_PX; // fallback uniforme (caixas comuns)
+      // Altura FÍSICA real de uma entrada — a MESMA regra usada no desenho
+      // (`isBigTier ? liveLabelHeightPx : labelHeightPx`), nunca uma segunda
+      // tabela de alturas que pudesse divergir do que é pintado, MAIS o
+      // anel que só o `live` desenha. O anel é pixel pintado: ignorá-lo
+      // faria a conta prometer 7px de fresta e entregar 4.
+      const alturaFisica = (l: PriceAxisLabel) => {
+        const tier = resolveLabelTier(l.side, l.tier);
+        if (tier === "live") return liveLabelHeightPx + LIVE_RING_TOTAL_PX;
+        if (tier === "critical") return liveLabelHeightPx;
+        return labelHeightPx;
+      };
+      // Distância entre CENTROS que garante exatamente LABEL_EDGE_GAP_PX
+      // entre as bordas, para qualquer combinação de alturas. Usar sempre a
+      // maior altura afastaria demais um par de etiquetas pequenas — e cada
+      // pixel de afastamento é um pixel a mais entre a etiqueta e o preço
+      // real que ela nomeia (o conector existe porque isso é dívida, não
+      // recurso).
+      const gapEntre = (a: PriceAxisLabel, b: PriceAxisLabel) =>
+        (alturaFisica(a) + alturaFisica(b)) / 2 + LABEL_EDGE_GAP_PX;
 
       // Uma só primitiva de caixa para os 3 níveis (Regra de Ouro 4: zero
       // lógica duplicada) — o que muda entre eles é só preenchimento vs.
@@ -378,7 +407,14 @@ export function PriceLabelStackPlugin({ chart, series, labels }: PriceLabelStack
       // Ouro 4): a única diferença real entre os dois lados é geométrica.
       const drawSide = (entries: (PriceAxisLabel & { naturalY: number })[], side: "left" | "right") => {
         if (entries.length === 0) return;
-        const resolved = resolveLabelStackPositions(entries, minGapPx);
+        // T explícito: sem isso o TypeScript infere o genérico a partir do
+        // parâmetro `gapBetween` (posição contravariante) e o colapsa em
+        // PositionedLabel, perdendo os campos reais da etiqueta no retorno.
+        const resolved = resolveLabelStackPositions<PriceAxisLabel & { naturalY: number }>(
+          entries,
+          minGapPx,
+          gapEntre,
+        );
 
         for (const entry of resolved) {
           // Decaimento real por idade (BOS/CHOCH) — default 1 preserva o
