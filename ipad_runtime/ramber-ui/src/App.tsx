@@ -2811,13 +2811,23 @@ export default function App() {
         price: priceFromSnapshot.price,
         zones,
         levels: planLevels,
+        // ATR em UNIDADES DE PREÇO: o regime publica percentual, e o piso
+        // de invalidação do stop precisa da distância absoluta. Fail-closed
+        // — sem regime real ou sem preço real, `null` e nada é filtrado.
+        atr:
+          typeof engine?.marketRegime?.atrPercent === "number" &&
+          Number.isFinite(engine.marketRegime.atrPercent) &&
+          typeof priceFromSnapshot.price === "number" &&
+          Number.isFinite(priceFromSnapshot.price)
+            ? (priceFromSnapshot.price * engine.marketRegime.atrPercent) / 100
+            : null,
       }),
     );
   // Mesmo achado de auditoria: só support/resistance (lentos) entram nos
   // níveis do plano — `engine` inteiro recomputava/reescrevia o Trade Plan
   // a cada tick de livro/preço, disparando remoção/recriação desnecessária
   // das price-lines reais no gráfico (EnhancedChart_110_Percent.tsx).
-  }, [councilFromSnapshot, priceFromSnapshot, tradePlanStructureZones, engine?.support, engine?.resistance, fibonacciMatrix, volumeProfileSnapshot]);
+  }, [councilFromSnapshot, priceFromSnapshot, tradePlanStructureZones, engine?.support, engine?.resistance, engine?.marketRegime?.atrPercent, fibonacciMatrix, volumeProfileSnapshot]);
 
   // Autonomy order — honest signal accuracy. Store-mediated chain:
   // (1) the tradePlan slice feeds the tracker (same-value re-derivations

@@ -4,7 +4,12 @@
 // geometry, including up to MAX_TARGETS real opposing levels. Pure logic,
 // no network, no store.
 import { describe, it, expect } from 'vitest';
-import { buildTradePlan, effectiveStopForTargetsHit, obstacleZonesInPath, TRADE_PLAN_CONTRACT_VERSION, MAX_TARGETS, type TradePlanInputs, type TradePlanStructureZone } from '../src/nexus/trade-plan';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+const here = dirname(fileURLToPath(import.meta.url));
+import { buildTradePlan, effectiveStopForTargetsHit, obstacleZonesInPath, TRADE_PLAN_CONTRACT_VERSION, MAX_TARGETS, MIN_STOP_ATR_MULTIPLE, type TradePlanInputs, type TradePlanStructureZone } from '../src/nexus/trade-plan';
 
 const BASE: TradePlanInputs = {
   stance: 'LONG',
@@ -346,5 +351,107 @@ describe('effectiveStopForTargetsHit: single real source for the trailing-stop r
 
   it('a negative targetsHit is treated the same as zero — never an out-of-bounds read', () => {
     expect(effectiveStopForTargetsHit(plan, -1)).toBe(plan.stop.price);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PISO DE INVALIDAÇÃO DO STOP — pedido do Operador: "os alvos têm que estar
+// mais precisos, quando aparecer realmente dar uma chance de bater o alvo".
+//
+// DEFEITO MEDIDO POR SONDA REAL antes de escrever uma linha: o stop era "o
+// nível de invalidação mais PRÓXIMO além da entrada", sem piso de distância.
+// Com um nível a 1 centavo da entrada:
+//
+//     entrada 99.50 · stop 99.49 (VP_POC)  →  R:R 1:550 e 1:1050
+//
+// O R:R não estava errado aritmeticamente — o STOP é que não era uma
+// invalidação. Um centavo é ruído de UMA vela, não a prova de que a tese
+// morreu. E como todo alvo é julgado por reward/risk, um risco degenerado
+// faz QUALQUER alvo parecer certeza: é exatamente a imprecisão que aparece
+// na tela.
+//
+// A regra é PESQUISADA, não inventada (WebSearch antes de escolher o
+// número): a convenção de mesa é "stop ESTRUTURAL com piso de 1× ATR" —
+// nunca trocar estrutura por ATR.
+// ---------------------------------------------------------------------------
+describe('piso de invalidação: o stop nunca é ruído de uma vela', () => {
+  const niveis = [
+    { price: 99.5, kind: 'SR_SUPPORT_1' },   // entrada
+    { price: 99.49, kind: 'VP_POC' },        // "invalidação" a 1 centavo
+    { price: 95, kind: 'SR_SUPPORT_2' },     // invalidação estrutural real
+    { price: 105, kind: 'SR_RESISTANCE_1' },
+    { price: 110, kind: 'EQH' },
+  ];
+  const base: TradePlanInputs = { stance: 'LONG', riskGated: false, price: 100, zones: [], levels: niveis };
+
+  it('reproduz o defeito: SEM ATR, o stop cola na entrada e o R:R explode', () => {
+    const p = buildTradePlan(base)!;
+    expect(p.stop.price).toBe(99.49);
+    expect(p.riskRewardRatios[0]!).toBeGreaterThan(100); // absurdo real medido
+  });
+
+  it('COM ATR real, o stop pula para a invalidação ESTRUTURAL de verdade', () => {
+    // ATR = 2 em unidades de preço. 99.49 está a 0.01 da entrada — dentro do
+    // ruído. 95 está a 4.5 — invalidação real.
+    const p = buildTradePlan({ ...base, atr: 2 })!;
+    expect(p.stop.price).toBe(95);
+    expect(p.stop.basis).toBe('SR_SUPPORT_2');
+  });
+
+  it('e o R:R volta a ser um número que significa alguma coisa', () => {
+    const p = buildTradePlan({ ...base, atr: 2 })!;
+    for (const rr of p.riskRewardRatios) {
+      expect(rr!).toBeGreaterThan(0);
+      expect(rr!).toBeLessThan(10); // nada de 1:550
+    }
+  });
+
+  it('o stop continua ESTRUTURAL — o ATR é piso, nunca substitui o nível', () => {
+    // A regra pesquisada é "estrutura COM piso de ATR". Se o motor passasse
+    // a usar `entrada − 1×ATR` como preço, o stop perderia a basis real.
+    const p = buildTradePlan({ ...base, atr: 2 })!;
+    expect(niveis.some((n) => n.price === p.stop.price)).toBe(true);
+    expect(p.stop.price).not.toBe(100 - 2);
+  });
+
+  it('fail-closed: ATR ausente ou inválido não filtra nada', () => {
+    // Nenhum consumidor que ainda não passa ATR pode mudar de comportamento.
+    // `computedAt` fixo: o motor já aceita o parâmetro, e sem ele o
+    // timestamp difere entre as duas chamadas e mascara a comparação.
+    const T = 1_700_000_000_000;
+    const semAtr = buildTradePlan(base, T);
+    for (const atr of [null, undefined, NaN, 0, -1]) {
+      expect(buildTradePlan({ ...base, atr: atr as number }, T), `atr ${String(atr)}`).toEqual(semAtr);
+    }
+  });
+
+  it('se NENHUMA âncora respeita o piso, não há plano — nunca um stop de mentira', () => {
+    // ATR gigante: toda invalidação disponível está dentro do ruído. A
+    // resposta honesta é "sem plano", a mesma já dada quando não existe
+    // nível de invalidação nenhum.
+    expect(buildTradePlan({ ...base, atr: 50 })).toBeNull();
+  });
+
+  it('SHORT é o espelho exato', () => {
+    const niveisShort = [
+      { price: 100.5, kind: 'SR_RESISTANCE_1' }, // entrada
+      { price: 100.51, kind: 'VP_POC' },         // ruído
+      { price: 105, kind: 'SR_RESISTANCE_2' },   // invalidação real
+      { price: 95, kind: 'SR_SUPPORT_1' },
+    ];
+    const p = buildTradePlan({ stance: 'SHORT', riskGated: false, price: 100, zones: [], levels: niveisShort, atr: 2 })!;
+    expect(p.stop.price).toBe(105);
+    expect(p.riskRewardRatios[0]!).toBeLessThan(10);
+  });
+
+  it('o multiplicador é declarado e ajustável, nunca escondido no meio do código', () => {
+    expect(MIN_STOP_ATR_MULTIPLE).toBe(1);
+  });
+
+  it('o gráfico recebe o ATR em UNIDADES DE PREÇO, nunca o percentual cru', () => {
+    // Passar `atrPercent` direto tornaria o piso ~100x menor e o defeito
+    // voltaria em silêncio — a conversão é a parte fácil de errar aqui.
+    const app = readFileSync(resolve(here, '../src/App.tsx'), 'utf8');
+    expect(app).toContain('(priceFromSnapshot.price * engine.marketRegime.atrPercent) / 100');
   });
 });
