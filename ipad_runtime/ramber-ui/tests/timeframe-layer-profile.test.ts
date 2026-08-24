@@ -357,3 +357,55 @@ describe("candle_patterns: de invisível-por-omissão a competidora real", () =>
     expect(d["candle_patterns"].reason.length).toBeGreaterThan(10);
   });
 });
+
+// ---------------------------------------------------------------------------
+// COLISÃO "1m" (minuto) x "1M" (mês) — defeito real, achado a partir de uma
+// captura de tela do Operador.
+//
+// A tabela de durações tem as DUAS chaves, e ambas são timeframes reais que
+// o Operador pode selecionar: CHART_TIMEFRAMES (App.tsx) termina com
+// `{ value: "1M", label: "1M" }`. A busca fazia `.toLowerCase()` PRIMEIRO,
+// então "1M" virava "1m" e um gráfico MENSAL era lido como de 1 MINUTO —
+// erro de fator 43.200.
+// ---------------------------------------------------------------------------
+describe('"1m" e "1M" são timeframes DIFERENTES, e a tabela precisa saber disso', () => {
+  it("o minuto e o mês resolvem para durações próprias", () => {
+    expect(timeframeMinutes("1m")).toBe(1);
+    expect(timeframeMinutes("1M")).toBe(43200);
+  });
+
+  it("as variantes de caixa alta que NÃO colidem continuam funcionando", () => {
+    // O fallback minúsculo existe para estas; a correção não pode quebrá-las.
+    expect(timeframeMinutes("1H")).toBe(60);
+    expect(timeframeMinutes("4H")).toBe(240);
+    expect(timeframeMinutes("15M")).toBe(15); // 15 minutos: não há "15 meses"
+    expect(timeframeMinutes("30M")).toBe(30);
+    expect(timeframeMinutes("1D")).toBe(1440);
+    expect(timeframeMinutes("1W")).toBe(10080);
+  });
+
+  it("num gráfico MENSAL o fluxo de ordens é UNFIT — era classificado CORE", () => {
+    // Esta era a consequência mais grave: com "1M" lido como 1 minuto, as
+    // camadas de fluxo (janela real de ~60 min) apareciam como leitura
+    // principal de um gráfico de 1 mês.
+    for (const id of ["cvd", "order_flow_heatmap", "liquidation_heatmap", "order_book_depth"]) {
+      expect(layerHorizonFit(id, "1M"), `${id} em 1M`).toBe("unfit");
+    }
+    // e a VWAP ancorada ao dia também não tem onde existir numa vela mensal
+    expect(layerHorizonFit("vwap", "1M")).toBe("unfit");
+  });
+
+  it("a razão dita ao Operador também deixa de mentir sobre o horizonte", () => {
+    expect(horizonFitReason("cvd", "1M")).toContain("1M");
+    expect(horizonFitReason("cvd", "1M")).toContain("~60 min");
+  });
+
+  it('CHART_TIMEFRAMES realmente oferece "1M" — a colisão não é hipotética', () => {
+    const app = read("../src/App.tsx");
+    const i = app.indexOf("const CHART_TIMEFRAMES");
+    expect(i).toBeGreaterThan(-1);
+    const bloco = app.slice(i, app.indexOf("];", i));
+    expect(bloco).toContain('{ value: "1M", label: "1M" }');
+    expect(bloco).toContain('{ value: "1m", label: "1m" }');
+  });
+});

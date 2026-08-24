@@ -384,6 +384,20 @@ describe("grade da série x timeframe declarado", () => {
       open: 100, high: 101, low: 99, close: 100, volume: 5,
     })) as ChartCandle[];
 
+  it("o MENSAL não é confundido com o MINUTO — a colisão 1m x 1M", () => {
+    // Achado a partir de uma captura de tela do Operador: a tabela de
+    // durações tem "1m" e "1M", e a busca fazia .toLowerCase() PRIMEIRO. O
+    // gráfico mensal passava a esperar velas de 60s, e esta própria guarda
+    // REJEITAVA a série mensal legítima vinda do cache — ou seja, a guarda
+    // que eu adicionei para impedir dado errado passou a impedir dado CERTO.
+    expect(expectedStepSeconds("1M")).toBe(2_592_000); // 43200 min x 60
+    expect(expectedStepSeconds("1m")).toBe(60);
+    expect(seriesMatchesTimeframe(serie(2_592_000), "1M")).toBe(true);
+    // e a grade errada continua sendo rejeitada nos DOIS sentidos
+    expect(seriesMatchesTimeframe(serie(60), "1M")).toBe(false);
+    expect(seriesMatchesTimeframe(serie(2_592_000), "1m")).toBe(false);
+  });
+
   it("o passo esperado vem da MESMA tabela do perfil de camadas, nunca de uma segunda", () => {
     expect(expectedStepSeconds("1m")).toBe(60);
     expect(expectedStepSeconds("15m")).toBe(900);

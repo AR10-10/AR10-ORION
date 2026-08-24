@@ -98,9 +98,30 @@ const INTRADAY_ANCHORED_LAYERS = new Set([
   "tpo_profile",
 ]);
 
+/**
+ * Duração de uma vela, em minutos.
+ *
+ * A CHAVE EXATA VEM PRIMEIRO — e a ordem aqui é um defeito real corrigido,
+ * não estilo. A tabela tem "1m" (1 minuto) E "1M" (1 mês), e ambos são
+ * timeframes REAIS que o Operador pode selecionar (CHART_TIMEFRAMES em
+ * App.tsx inclui `{ value: "1M", label: "1M" }`). Com o `.toLowerCase()`
+ * sendo tentado primeiro, "1M" virava "1m" e devolvia 1 MINUTO para um
+ * gráfico MENSAL — um erro de fator 43.200.
+ *
+ * Consequências reais que isso produzia, ambas verificadas por execução:
+ *   · `layerHorizonFit` tratava um gráfico mensal como de 1 minuto, então
+ *     CVD/heatmaps/livro eram classificados CORE num gráfico de 1 mês —
+ *     exatamente o oposto do que este módulo existe para decidir;
+ *   · `seriesMatchesTimeframe` (App.tsx) esperava velas de 60 segundos num
+ *     gráfico mensal e REJEITAVA a série mensal legítima vinda do cache.
+ *
+ * Com a chave exata primeiro, "1M" resolve para o mês e "1m" para o minuto;
+ * o fallback minúsculo continua aceitando as variantes de caixa alta que
+ * não colidem ("1H", "15M", "1W", "1D"), que é para o que ele existe.
+ */
 export function timeframeMinutes(timeframe: string | null | undefined): number | null {
   if (typeof timeframe !== "string") return null;
-  const m = TIMEFRAME_MINUTES[timeframe.toLowerCase()] ?? TIMEFRAME_MINUTES[timeframe];
+  const m = TIMEFRAME_MINUTES[timeframe] ?? TIMEFRAME_MINUTES[timeframe.toLowerCase()];
   return typeof m === "number" && Number.isFinite(m) ? m : null;
 }
 
