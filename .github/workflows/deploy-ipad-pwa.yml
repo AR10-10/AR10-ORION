@@ -71,8 +71,35 @@ jobs:
           npm ci --include=dev
           npm run test
 
+      # TRAVA ANTI-BLOQUEIO (aprendida antes de acontecer, nao depois).
+      #
+      # O portao de acesso virou fail-closed: sem VITE_ACCESS_HASH o app
+      # mostra "Acesso nao configurado" e NAO ABRE. Se este workflow fosse
+      # religado sem o segredo estar cadastrado, ele publicaria por cima do
+      # site que o Operador usa hoje um build que TRANCA ele para fora do
+      # proprio painel — uma regressao pior do que nao publicar nada.
+      #
+      # Por isso a checagem vem ANTES do build, e falha alto com a causa.
+      - name: Verificar segredo do portao antes de publicar
+        env:
+          VITE_ACCESS_HASH: ${{ secrets.VITE_ACCESS_HASH }}
+        run: |
+          if [ -z "$VITE_ACCESS_HASH" ]; then
+            echo "::error::VITE_ACCESS_HASH nao esta definido — publicar agora TRANCARIA o Operador para fora do painel."
+            echo "::error::Cadastre em Settings > Secrets and variables > Actions antes de reativar este deploy."
+            echo "::error::Gere o hash com: printf '%s' 'SUA_SENHA' | shasum -a 256   (ver docs/ACESSO_PRIVADO.md)"
+            exit 1
+          fi
+          if ! printf '%s' "$VITE_ACCESS_HASH" | grep -Eq '^[0-9a-fA-F]{64}$'; then
+            echo "::error::VITE_ACCESS_HASH nao e um SHA-256 hexadecimal de 64 caracteres."
+            exit 1
+          fi
+          echo "Segredo presente — publicar nao vai trancar o acesso."
+
       - name: Build RAMBER UI (React/Vite) and place at ipad_runtime root
         working-directory: ipad_runtime/ramber-ui
+        env:
+          VITE_ACCESS_HASH: ${{ secrets.VITE_ACCESS_HASH }}
         run: |
           npm ci --include=dev
           npm run build
