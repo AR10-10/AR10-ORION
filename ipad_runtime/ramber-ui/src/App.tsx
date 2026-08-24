@@ -9641,8 +9641,11 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     const autoMode: ChartLayerVisibility = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
     const manual: ChartLayerVisibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
     const forced = CHART_LAYER_IDS.filter((id) => !autoMode[id] && manual[id]);
-    return resolveAutoLayerVisibility(layerRelevance ?? {}, forced);
-  }, [layerRelevance, chartLayerAutoMode, chartLayerVisibility]);
+    // O timeframe entra na decisão: a ordem de precisão passa a ser
+    // resolvida pelo horizonte real (timeframe-layer-profile.ts). Sem ele,
+    // a mesma régua valia em 1m e em 1W.
+    return resolveAutoLayerVisibility(layerRelevance ?? {}, forced, undefined, chartTimeframe ?? null);
+  }, [layerRelevance, chartLayerAutoMode, chartLayerVisibility, chartTimeframe]);
 
   // Publica a decisão JÁ resolvida (zero segundo cálculo) para o painel de
   // camadas ler exatamente o que o canvas desenha. Antes disto o painel

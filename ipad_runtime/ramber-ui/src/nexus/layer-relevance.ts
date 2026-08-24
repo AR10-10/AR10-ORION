@@ -15,6 +15,7 @@
 // (idade→alpha de BOS/CHOCH é resolvida pelo chamador via ageAlpha/
 // annotation-decay.ts antes de chegar aqui — este módulo só recebe o
 // alpha já pronto, nunca reimplementa a curva de decaimento.)
+import { resolveTimeframePrecisionOrder, horizonFitReason } from "./timeframe-layer-profile";
 import type { DirectionalLineState } from "./vwap-state";
 import type { PremiumDiscountZone } from "./premium-discount";
 
@@ -662,14 +663,22 @@ export function resolveAutoLayerVisibility(
   relevance: Readonly<Record<string, LayerRelevanceResult>>,
   forcedOn: readonly string[] = [],
   cap: number = AUTO_LAYER_MAX_SIMULTANEOUS,
+  timeframe: string | null = null,
 ): Record<string, AutoLayerDecision> {
   const out: Record<string, AutoLayerDecision> = {};
   const forced = new Set(forcedOn);
   const effectiveCap = Number.isFinite(cap) && cap > 0 ? Math.floor(cap) : AUTO_LAYER_MAX_SIMULTANEOUS;
 
+  // Pedido do Operador ("o que é necessário pra operar em CADA tempo
+  // gráfico"): a ordem de precisão passa a ser resolvida pelo horizonte
+  // atual. O critério não é gosto — é COBERTURA REAL DE DADO (ver
+  // timeframe-layer-profile.ts: fluxo retido cobre ~8 min; VWAP/sessões são
+  // ancoradas ao dia UTC). Fail-closed: `timeframe` ausente ou desconhecido
+  // devolve a ordem declarada intacta, byte a byte como antes.
+  const ordem = resolveTimeframePrecisionOrder(AUTO_LAYER_PRECISION_ORDER, timeframe);
   const rank = (id: string) => {
-    const i = AUTO_LAYER_PRECISION_ORDER.indexOf(id);
-    return i === -1 ? AUTO_LAYER_PRECISION_ORDER.length : i;
+    const i = ordem.indexOf(id);
+    return i === -1 ? ordem.length : i;
   };
 
   const competing: string[] = [];
@@ -718,9 +727,16 @@ export function resolveAutoLayerVisibility(
       const motivo = shown >= effectiveCap
         ? `${effectiveCap} camadas mais precisas ocupam a tela agora`
         : `desenha ${cost} objetos e o orçamento visual (${AUTO_LAYER_MAX_VISUAL_COST}) já tem ${spent} ocupados`;
+      // Quando o HORIZONTE é o que empurrou a camada para trás, a razão
+      // real é essa — e ela é muito mais útil ao Operador do que "perdeu a
+      // competição". Dizer "o fluxo retido cobre ~8 min e não cobre uma
+      // vela de 4h" explica; "cedeu espaço" só constata.
+      const porHorizonte = horizonFitReason(id, timeframe);
       out[id] = {
         show: false,
-        reason: `leitura real presente, mas ${motivo} (${relevance[id].reason})`,
+        reason: porHorizonte
+          ? `${porHorizonte} — ${motivo} (${relevance[id].reason})`
+          : `leitura real presente, mas ${motivo} (${relevance[id].reason})`,
         suppressedByCap: true,
       };
     }
