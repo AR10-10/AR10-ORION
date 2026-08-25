@@ -17,6 +17,31 @@ const bootUnix = () => readFileSync(raiz("AR10-INSTALADOR.command"), "utf8");
 const bootWin = () => readFileSync(raiz("AR10-INSTALADOR.bat"), "utf8");
 const win = () => readFileSync(raiz("INSTALAR-E-RODAR.bat"), "utf8");
 
+// ---------------------------------------------------------------------------
+// SÓ O QUE O COMPUTADOR EXECUTA.
+//
+// Nona ocorrência da mesma classe de falha nesta trilha: uma asserção que
+// procura um texto acaba casando com o COMENTÁRIO que explica esse texto, e
+// passa verde mesmo depois de a linha executável sumir. Estes dois helpers
+// removem os comentários antes de qualquer varredura — o que sobra é o que a
+// máquina realmente roda.
+// ---------------------------------------------------------------------------
+const semComentariosSh = (src: string) =>
+  src
+    .split("\n")
+    .filter((l) => !/^\s*#/.test(l))
+    .join("\n");
+const semComentariosBat = (src: string) =>
+  src
+    .split("\n")
+    .filter((l) => !/^\s*(REM\b|::)/i.test(l))
+    .join("\n");
+const semComentariosTs = (src: string) =>
+  src
+    .split("\n")
+    .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+    .join("\n");
+
 describe("instaladores: a senha nunca é gravada nem exposta", () => {
   it("os dois passam a senha para setup-local.mjs e limpam a variável depois", () => {
     for (const [nome, src] of [["unix", unix()], ["win", win()]] as const) {
@@ -302,6 +327,163 @@ describe("instalador completo: nunca destrói nada do Operador", () => {
 
   it("o do Unix tem permissão de execução (sem isso o duplo clique não roda)", () => {
     expect(statSync(raiz("AR10-INSTALADOR.command")).mode & 0o111).toBeGreaterThan(0);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// MODO APLICATIVO.
+//
+// Pedido do Operador: "o painel dele abrir já o modo aplicativo, bem
+// profissional, igual abrindo no outro" — no iPad ele usa o painel como app da
+// tela de início, sem barra de endereço.
+//
+// `--app=URL` no Chrome/Edge abre uma janela sem barra de endereço, sem abas e
+// sem menus. O jeito de isso falhar em silêncio é abrir cedo demais (erro de
+// conexão) ou bloquear o servidor (nada liga).
+// ---------------------------------------------------------------------------
+describe("instaladores: abrem o painel em janela de aplicativo", () => {
+  it("os dois passam --app, não uma aba comum de navegador", () => {
+    expect(semComentariosSh(unix()), "unix: não abre em modo aplicativo").toMatch(
+      /--app="\$URL"/,
+    );
+    expect(semComentariosBat(win()), "win: não abre em modo aplicativo").toMatch(
+      /--app=!APPURL!/,
+    );
+  });
+
+  it("a abertura NUNCA bloqueia o servidor — ela roda em segundo plano", () => {
+    // Este é o erro que derrubaria tudo: esperar o navegador na frente do
+    // `npm run dev` significa que o servidor nunca sobe, e a espera nunca
+    // termina — trava mútua.
+    const u = semComentariosSh(unix());
+    expect(u, "unix: a espera não foi para segundo plano").toMatch(
+      /\(\s*esperar_servidor && abrir_como_app\s*\)[^\n]*&\s*$/m,
+    );
+    expect(u.indexOf("abrir_como_app )"), "unix: abre depois de ligar o servidor").toBeLessThan(
+      u.indexOf("npm run dev"),
+    );
+    // no Windows, `start` devolve o controle na hora; o PowerShell espera
+    // sozinho, em outra janela
+    const w = semComentariosBat(win());
+    expect(w, "win: não solta a espera em outro processo").toMatch(
+      /start "" \/min powershell/,
+    );
+    expect(w.indexOf("start \"\" /min powershell")).toBeLessThan(w.indexOf("npm run dev"));
+  });
+
+  it("espera o painel RESPONDER, não um tempo fixo", () => {
+    // A primeira versão dormia 4s e abria. Numa primeira execução o Vite
+    // ainda não respondeu, e a janela de aplicativo abriria num erro de
+    // conexão — com o painel funcionando atrás. Confirmado por execução real:
+    // com o servidor subindo aos 3s, a função esperou e só então abriu.
+    const u = semComentariosSh(unix());
+    expect(u, "unix: voltou ao tempo fixo").not.toMatch(/\(\s*sleep \d+;\s*abrir_como_app/);
+    expect(u, "unix: não testa a porta de verdade").toContain("/dev/tcp/127.0.0.1/5173");
+    const w = semComentariosBat(win());
+    expect(w, "win: voltou ao tempo fixo").not.toMatch(/timeout \/t \d+ \/nobreak[^\n]*--app/);
+    expect(w, "win: não testa a porta de verdade").toContain("TcpClient");
+  });
+
+  it("a espera tem teto — nunca fica presa quando o painel não sobe", () => {
+    // Sem teto, um servidor que falhou deixaria um processo girando para
+    // sempre em segundo plano. Confirmado por execução real com o teto
+    // reduzido: desiste e retorna erro.
+    expect(semComentariosSh(unix())).toMatch(/TENTATIVA" -lt \d+/);
+    expect(semComentariosBat(win())).toMatch(/\$i -lt \d+/);
+  });
+
+  it("degradam até o navegador padrão — abrir de algum jeito é melhor que não abrir", () => {
+    const u = semComentariosSh(unix());
+    // Mac: Chrome, Edge, Brave e por fim o `open` puro
+    expect(u).toMatch(/open "\$URL"/);
+    // Linux: a lista de binários e o xdg-open no fim
+    expect(u).toContain("xdg-open");
+    // Windows: sem Chrome/Edge, o navegador padrão pela URL
+    expect(semComentariosBat(win())).toMatch(/Start-Process '!APPURL!'/);
+  });
+
+  it("no Windows os três lugares onde o Chrome/Edge se instalam são cobertos", () => {
+    // Faltando qualquer um deles, a máquina do Operador cairia no navegador
+    // padrão sem ninguém entender por quê.
+    const w = semComentariosBat(win());
+    for (const raizInstalacao of ["%ProgramFiles%", "%ProgramFiles(x86)%", "%LocalAppData%"]) {
+      expect(w, `win: não procura em ${raizInstalacao}`).toContain(raizInstalacao);
+    }
+    expect(w).toContain("chrome.exe");
+    expect(w).toContain("msedge.exe");
+  });
+
+  it("a tela explica o modo aplicativo e como fixar o ícone", () => {
+    // Sem isso, a janela limpa parece defeito ("sumiu a barra de endereço").
+    expect(unix()).toMatch(/janela de APLICATIVO/);
+    expect(win()).toMatch(/janela de APLICATIVO/);
+    expect(unix()).toContain("Instalar AR10 CYBORG");
+    expect(win()).toContain("Instalar AR10 CYBORG");
+  });
+
+  it("o manifesto do PWA existe e declara standalone — é o que faz o ícone virar app", () => {
+    // O `--app=` resolve a JANELA; o manifesto resolve a INSTALAÇÃO como
+    // aplicativo de verdade. Sem `display: standalone`, o Chrome nem oferece.
+    const man = JSON.parse(readFileSync(raiz("ipad_runtime/manifest.webmanifest"), "utf8"));
+    expect(man.display).toBe("standalone");
+    expect(man.name).toBeTruthy();
+    expect(Array.isArray(man.icons) && man.icons.length).toBeGreaterThan(0);
+  });
+
+  it("o manifesto é SERVIDO ao painel — o bug que fingia estar resolvido", () => {
+    // MEDIDO: antes desta ponte, `/manifest.webmanifest` respondia HTTP 200
+    // com `Content-Type: text/html` — o fallback SPA do Vite devolvendo o
+    // index.html. Um "200" que não é o arquivo. O Chrome não conseguia ler o
+    // manifesto e por isso nunca oferecia "Instalar AR10 CYBORG", enquanto a
+    // tela do instalador prometia exatamente essa opção.
+    const cfg = semComentariosTs(
+      readFileSync(raiz("ipad_runtime/ramber-ui/vite.config.ts"), "utf8"),
+    );
+    expect(cfg, "não há ponte para os arquivos do PWA").toContain("ar10-pwa-assets");
+    // dev: middleware; build: emissão para o dist. Os dois caminhos importam —
+    // faltando o de build, o app publicado volta a não ser instalável.
+    expect(cfg, "não serve em dev").toMatch(/configureServer/);
+    expect(cfg, "não emite no build").toMatch(/generateBundle/);
+    expect(cfg, "o manifesto não é servido com o tipo certo").toContain(
+      "application/manifest+json",
+    );
+  });
+
+  it("a ponte roda ANTES do service worker — senão o app instalado não abre offline", () => {
+    // O plugin do SW varre o dist e monta o precache com o que encontra. Se a
+    // emissão dos arquivos do PWA acontecesse depois, eles ficariam de fora.
+    // Verificado no build real: os quatro aparecem na lista do sw.js.
+    const cfg = semComentariosTs(
+      readFileSync(raiz("ipad_runtime/ramber-ui/vite.config.ts"), "utf8"),
+    );
+    const linha = cfg.split("\n").find((l) => l.includes("plugins:")) ?? "";
+    expect(linha, "os dois plugins não estão na mesma lista").toContain("pwaAssetsPlugin");
+    expect(linha.indexOf("pwaAssetsPlugin"), "a ponte roda depois do SW").toBeLessThan(
+      linha.indexOf("serviceWorkerPlugin"),
+    );
+  });
+
+  it("todo arquivo que a ponte promete servir existe mesmo no disco", () => {
+    // Uma renomeação silenciosa de ícone devolveria o 404 que este trabalho
+    // acabou de fechar — e de novo sem ninguém perceber.
+    const cfg = readFileSync(raiz("ipad_runtime/ramber-ui/vite.config.ts"), "utf8");
+    const bloco = cfg.slice(cfg.indexOf("const PWA_ARQUIVOS"));
+    const lista = [...bloco.slice(0, bloco.indexOf("]")).matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    expect(lista.length, "a lista de arquivos do PWA está vazia").toBeGreaterThan(3);
+    for (const rel of lista) {
+      expect(
+        statSync(raiz(`ipad_runtime/${rel}`)).size,
+        `arquivo do PWA some do disco: ${rel}`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("o index.html do painel realmente aponta para o manifesto", () => {
+    // Sem o <link>, a ponte serviria um arquivo que ninguém pede.
+    expect(readFileSync(raiz("ipad_runtime/ramber-ui/index.html"), "utf8")).toMatch(
+      /<link rel="manifest" href="manifest\.webmanifest"/,
+    );
   });
 });
 

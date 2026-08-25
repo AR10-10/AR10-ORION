@@ -183,11 +183,50 @@ if defined IP_LOCAL (
     echo       ^(nao consegui descobrir o endereco da rede local^)
 )
 echo.
+echo       Abre em janela de APLICATIVO ^(sem barra de endereco^), se voce tiver
+echo       Chrome ou Edge. Senao, abre no navegador padrao.
+echo.
+echo       Quer o icone no computador? No Chrome/Edge: menu ^(...^) ^>
+echo       "Instalar AR10 CYBORG" -- vira app de verdade, com icone.
+echo.
 echo       Desligar: feche esta janela, ou Control+C.
 echo       Ligar de novo: clique neste arquivo outra vez -- ele ja atualiza junto.
 echo.
 
-start "" cmd /c "timeout /t 5 /nobreak >nul && start http://localhost:5173"
+REM MODO APLICATIVO (pedido do Operador: "abrir ja o modo aplicativo, bem
+REM profissional, igual abrindo no outro" -- no iPad ele usa como app da tela
+REM de inicio, sem barra de endereco).
+REM
+REM `--app=URL` no Chrome/Edge abre uma janela LIMPA: sem barra de endereco,
+REM sem abas, sem menus. Edge existe em todo Windows 10/11, entao o fallback
+REM praticamente sempre pega. Ultimo recurso: navegador padrao -- abrir de
+REM algum jeito e melhor do que nao abrir.
+set "APPURL=http://localhost:5173"
+set "NAV="
+if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "NAV=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
+if not defined NAV if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" set "NAV=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
+if not defined NAV if exist "%LocalAppData%\Google\Chrome\Application\chrome.exe" set "NAV=%LocalAppData%\Google\Chrome\Application\chrome.exe"
+if not defined NAV if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" set "NAV=%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"
+if not defined NAV if exist "%ProgramFiles%\Microsoft\Edge\Application\msedge.exe" set "NAV=%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"
+
+REM ESPERAR O SERVIDOR, NAO UM TEMPO FIXO.
+REM
+REM A versao anterior dormia 5 segundos e abria. Numa primeira execucao -- ou
+REM numa maquina mais lenta -- o Vite ainda nao respondeu aos 5 segundos, e a
+REM janela de aplicativo abriria direto num erro de conexao. Aqui a porta e
+REM testada de verdade, e a janela so abre quando o painel responde. Teto de
+REM ~45s para nunca ficar preso.
+REM
+REM PowerShell em vez de `cmd /c "... && start """" ...`: aquele encadeamento
+REM precisava de aspas dentro de aspas dentro de aspas, e o caminho do Chrome
+REM contem parenteses ("Program Files (x86)"). Uma aspa a mais ali falha em
+REM silencio -- o painel liga e a janela simplesmente nunca abre.
+set "PSESPERA=for($i=0;$i -lt 90;$i++){ try{ $c=New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',5173); $c.Close(); break }catch{ Start-Sleep -Milliseconds 500 } };"
+if defined NAV (
+    start "" /min powershell -NoProfile -WindowStyle Hidden -Command "!PSESPERA! Start-Process -FilePath '!NAV!' -ArgumentList '--app=!APPURL!'"
+) else (
+    start "" /min powershell -NoProfile -WindowStyle Hidden -Command "!PSESPERA! Start-Process '!APPURL!'"
+)
 
 call npm run dev -- --host
 pause

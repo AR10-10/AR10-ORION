@@ -1,6 +1,6 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'path';
 import { defineConfig, type Plugin } from 'vite';
 import { generateSwSource } from './sw/build-sw.mjs';
@@ -34,12 +34,66 @@ function serviceWorkerPlugin(): Plugin {
   };
 }
 
+// PWA — o manifesto e os ícones vivem em ipad_runtime/, um nível ACIMA da
+// raiz deste app (é a mesma fonte que o app iPad original já usa).
+//
+// Sem esta ponte, o `<link rel="manifest">` do index.html cai no fallback SPA
+// do Vite e volta HTML. MEDIDO, não suposto: `/manifest.webmanifest` e
+// `/icons/icon-192.png` respondiam HTTP 200 com `Content-Type: text/html` e o
+// corpo do index.html — parecia funcionar e não funcionava. O efeito real é
+// que o Chrome/Edge nunca conseguia ler o manifesto e por isso NUNCA oferecia
+// "Instalar AR10 CYBORG", justamente o modo aplicativo que o Operador pediu.
+// No `dist` era pior: os arquivos simplesmente não existiam.
+//
+// A ponte SERVE a mesma fonte em vez de duplicar o arquivo — duas cópias
+// divergiriam na primeira edição feita só num lado. Os caminhos relativos de
+// dentro do manifesto (`./index.html`, `icons/...`) resolvem certo para os
+// dois apps justamente por serem relativos ao endereço do próprio manifesto.
+const PWA_ORIGEM = path.resolve(__dirname, '..');
+const PWA_ARQUIVOS = [
+  'manifest.webmanifest',
+  'icons/icon-192.png',
+  'icons/icon-512.png',
+  'icons/icon-maskable-512.png',
+];
+
+function pwaAssetsPlugin(): Plugin {
+  return {
+    name: 'ar10-pwa-assets',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const alvo = (req.url ?? '').split('?')[0].replace(/^\//, '');
+        if (!PWA_ARQUIVOS.includes(alvo)) return next();
+        const abs = path.join(PWA_ORIGEM, alvo);
+        if (!existsSync(abs)) return next();
+        res.setHeader(
+          'Content-Type',
+          alvo.endsWith('.png') ? 'image/png' : 'application/manifest+json',
+        );
+        res.end(readFileSync(abs));
+      });
+    },
+    // generateBundle, e não closeBundle: os arquivos precisam estar no dist
+    // ANTES de o plugin do service worker varrer o diretório, senão ficam de
+    // fora do precache e o app instalado não abriria offline.
+    generateBundle() {
+      for (const rel of PWA_ARQUIVOS) {
+        const abs = path.join(PWA_ORIGEM, rel);
+        if (!existsSync(abs)) continue;
+        this.emitFile({ type: 'asset', fileName: rel, source: readFileSync(abs) });
+      }
+    },
+  };
+}
+
 // base: './' — this app is served from a nested static path
 // (.../ipad_runtime/ramber-ui/) inside the existing RAMBER GitHub Pages
 // site, not from a domain root, so all built asset URLs must resolve
 // relative to the HTML file rather than absolute from '/'.
 export default defineConfig({
-  plugins: [react(), tailwindcss(), serviceWorkerPlugin()],
+  // pwaAssetsPlugin antes do serviceWorkerPlugin: a varredura do precache
+  // acontece depois, e assim enxerga o manifesto e os ícones.
+  plugins: [react(), tailwindcss(), pwaAssetsPlugin(), serviceWorkerPlugin()],
   base: './',
   build: {
     // The ~6MB llm-worker/llm-bridge chunks are the opt-in local Llama 3

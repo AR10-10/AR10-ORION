@@ -171,13 +171,59 @@ else
   echo "      (não consegui descobrir o endereço da rede local)"
 fi
 echo ""
+echo -e "      ${AZUL}Abre em janela de APLICATIVO${FIM} (sem barra de endereço), se você"
+echo -e "      ${AZUL}tiver Chrome, Edge ou Brave. Senão, abre no navegador padrão.${FIM}"
+echo ""
+echo -e "      ${AZUL}Quer o ícone no computador?${FIM} No Chrome/Edge: menu (⋮) >"
+echo -e "      ${AZUL}\"Instalar AR10 CYBORG\" — vira app de verdade, com ícone.${FIM}"
+echo ""
 echo -e "      ${AMARELO}Desligar:${FIM} feche esta janela, ou Control+C."
 echo -e "      ${AMARELO}Ligar de novo:${FIM} clique neste arquivo outra vez — ele já atualiza junto."
 echo ""
 
-( sleep 4
-  if command -v open >/dev/null 2>&1; then open http://localhost:5173
-  elif command -v xdg-open >/dev/null 2>&1; then xdg-open http://localhost:5173
-  fi ) >/dev/null 2>&1 &
+# MODO APLICATIVO (pedido do Operador: "abrir já o modo aplicativo, bem
+# profissional, igual abrindo no outro" — no iPad ele usa como app da tela de
+# início, sem barra de endereço).
+#
+# `--app=URL` no Chrome/Edge abre uma janela LIMPA: sem barra de endereço, sem
+# abas, sem menus. É o mais perto de um aplicativo nativo sem empacotar nada.
+# Fallback em cascata até o navegador comum — abrir de algum jeito é melhor do
+# que não abrir, e o painel funciona igual nos dois.
+abrir_como_app() {
+  local URL="http://localhost:5173"
+  if [ "$(uname)" = "Darwin" ]; then
+    open -na "Google Chrome" --args --app="$URL" 2>/dev/null && return 0
+    open -na "Microsoft Edge" --args --app="$URL" 2>/dev/null && return 0
+    open -na "Brave Browser" --args --app="$URL" 2>/dev/null && return 0
+    open "$URL" 2>/dev/null && return 0
+  else
+    for NAV in google-chrome google-chrome-stable chromium chromium-browser microsoft-edge brave-browser; do
+      command -v "$NAV" >/dev/null 2>&1 && { "$NAV" --app="$URL" >/dev/null 2>&1 & return 0; }
+    done
+    command -v xdg-open >/dev/null 2>&1 && { xdg-open "$URL" >/dev/null 2>&1 & return 0; }
+  fi
+  return 1
+}
+
+# ESPERAR O SERVIDOR, NÃO UM TEMPO FIXO.
+#
+# A versão anterior dormia 4 segundos e abria. Numa primeira execução — ou
+# numa máquina mais lenta — o Vite ainda não respondeu aos 4 segundos, e a
+# janela de aplicativo abriria direto num erro de conexão. Aqui a porta é
+# testada de verdade (bash abre um socket em /dev/tcp) e a janela só abre
+# quando o painel realmente responde. Teto de ~45s para nunca ficar preso.
+esperar_servidor() {
+  local TENTATIVA=0
+  while [ "$TENTATIVA" -lt 90 ]; do
+    if (exec 3<>/dev/tcp/127.0.0.1/5173) 2>/dev/null; then
+      exec 3<&- 3>&- 2>/dev/null
+      return 0
+    fi
+    sleep 0.5
+    TENTATIVA=$((TENTATIVA + 1))
+  done
+  return 1
+}
+( esperar_servidor && abrir_como_app ) >/dev/null 2>&1 &
 
 npm run dev -- --host
