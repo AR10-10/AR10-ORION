@@ -122,3 +122,77 @@ describe("instaladores: chegam ao mesmo lugar", () => {
     expect(guia).toContain("não pode ser aberto");
   });
 });
+
+
+// ---------------------------------------------------------------------------
+// AUTOATUALIZAÇÃO E REDE LOCAL.
+//
+// Pedido do Operador: "ele fazer o restante tudo automático... não precisa
+// estar fazendo download manual" e "pra rede local minha". Duas capacidades
+// novas, e as duas têm um jeito de dar errado em silêncio: atualizar por cima
+// de trabalho não salvo, e expor na rede sem avisar.
+// ---------------------------------------------------------------------------
+describe("instaladores: atualizam sozinhos, sem atropelar nada", () => {
+  it("os dois buscam atualização com --ff-only, nunca um merge que pode conflitar", () => {
+    for (const [nome, src] of [["unix", unix()], ["win", win()]] as const) {
+      expect(src, `${nome}: não busca atualização`).toContain("git pull --ff-only");
+      // `--ff-only` recusa em vez de criar um merge que o Operador não saberia
+      // resolver. Um `git pull` cru poderia deixar a pasta num estado que só
+      // alguém técnico desfaz.
+      expect(src, `${nome}: usa pull sem --ff-only`).not.toMatch(/git pull(?!\s+--ff-only)/);
+      // e NUNCA descarta trabalho local à força
+      expect(src, `${nome}: usa reset --hard`).not.toMatch(/git (reset --hard|checkout -f|clean -fd)/);
+    }
+  });
+
+  it("mudança local não salva IMPEDE a atualização — nunca sobrescreve em silêncio", () => {
+    expect(unix()).toContain('git status --porcelain');
+    expect(unix()).toContain("não vou atualizar por cima");
+    expect(win()).toContain("git status --porcelain");
+    expect(win()).toContain("nao vou atualizar por cima");
+  });
+
+  it("sem git (pasta de ZIP) o painel AINDA roda — a atualização é opcional, não requisito", () => {
+    // Se a ausência de git parasse o script, quem baixou o ZIP ficaria sem
+    // sistema nenhum. Ele avisa e segue.
+    const src = unix();
+    const i = src.indexOf("esta pasta veio de ZIP");
+    expect(i).toBeGreaterThan(-1);
+    // o bloco do ZIP não chama `parar`
+    const bloco = src.slice(i, src.indexOf("# ── 3.", i));
+    expect(bloco).not.toContain("parar ");
+    expect(bloco).toContain("git clone");
+  });
+
+  it("reinstala dependências só quando a atualização trouxe algo — não a cada execução", () => {
+    for (const [nome, src] of [["unix", unix()], ["win", win()]] as const) {
+      expect(src, `${nome}: não rastreia se atualizou`).toMatch(/ATUALIZOU/);
+    }
+  });
+});
+
+describe("instaladores: rede local com o aviso junto", () => {
+  it("os dois ligam com --host e mostram o endereço da rede", () => {
+    for (const [nome, src] of [["unix", unix()], ["win", win()]] as const) {
+      expect(src, `${nome}: não liga na rede`).toMatch(/npm run dev -- --host/);
+      expect(src, `${nome}: não descobre o IP`).toContain("networkInterfaces()");
+      expect(src, `${nome}: não mostra o endereço`).toMatch(/iPad\/celular/);
+    }
+  });
+
+  it("o aviso de quem alcança o painel é OBRIGATÓRIO, não uma nota de rodapé", () => {
+    // Expor na rede sem dizer quem alcança seria a mesma classe de erro do
+    // portão de senha que fingia ser segurança.
+    expect(unix()).toContain("qualquer aparelho na SUA rede alcança esse endereço");
+    expect(unix()).toContain("A senha é a única barreira");
+    expect(win()).toContain("qualquer aparelho na SUA rede alcanca esse endereco");
+    expect(win()).toContain("A senha e a unica barreira");
+  });
+
+  it("não pergunta a senha de novo quando já está configurada", () => {
+    // Perguntar a cada execução transformaria o uso diário num formulário.
+    expect(unix()).toContain("já configurada");
+    expect(win()).toContain("ja configurada");
+    expect(unix()).toMatch(/VITE_ACCESS_HASH=\[0-9a-fA-F\]/);
+  });
+});

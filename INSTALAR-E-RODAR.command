@@ -1,22 +1,33 @@
 #!/bin/bash
 # INSTALAR-E-RODAR.command — Mac e Linux.
 #
-# Feito para ser CLICADO DUAS VEZES, não digitado. O Operador disse, com
-# todas as letras, que não sabe fazer o download nem instalar — então este
-# arquivo faz tudo: confere o Node, instala as dependências, prepara a senha
-# e liga o painel, explicando cada passo em português enquanto trabalha.
+# Clique duplo. Faz tudo: atualiza, prepara e liga.
 #
-# Ele não instala o Node sozinho de propósito: instalar runtime na máquina de
-# alguém sem avisar é invasivo. Se faltar, ele PARA e diz exatamente o que
-# baixar e onde.
+# ═══ POR QUE ELE ATUALIZA SOZINHO ═══
+#
+# Pedido do Operador: "ele fazer o restante tudo automático... não precisa
+# estar fazendo download manual". Se a pasta veio de `git clone`, este script
+# BUSCA AS ATUALIZAÇÕES sozinho a cada vez que roda — nada de baixar ZIP de
+# novo quando o sistema evolui.
+#
+# Se veio de ZIP (sem `.git`), ele avisa e explica como trocar uma vez só.
+# Não converte por conta própria: mexer no jeito como a pasta existe é
+# decisão de quem instalou, não do script.
+#
+# ═══ REDE LOCAL ═══
+#
+# Liga com `--host` para o painel ficar acessível do iPad e do celular na
+# MESMA rede. O endereço aparece na tela. Isso é o que o Operador pediu — e
+# significa que qualquer aparelho na rede alcança o painel, com a senha como
+# única barreira. Está dito na tela, não escondido aqui.
 
 cd "$(dirname "$0")" || exit 1
 
-VERDE='\033[0;32m'; VERMELHO='\033[0;31m'; AMARELO='\033[1;33m'; FORTE='\033[1m'; FIM='\033[0m'
+VERDE='\033[0;32m'; VERMELHO='\033[0;31m'; AMARELO='\033[1;33m'; AZUL='\033[0;36m'; FORTE='\033[1m'; FIM='\033[0m'
 
 echo ""
 echo -e "${FORTE}  ╔══════════════════════════════════════════╗${FIM}"
-echo -e "${FORTE}  ║   AR10 CYBORG — instalar e rodar         ║${FIM}"
+echo -e "${FORTE}  ║   AR10 CYBORG — atualizar e rodar        ║${FIM}"
 echo -e "${FORTE}  ╚══════════════════════════════════════════╝${FIM}"
 echo ""
 
@@ -31,7 +42,7 @@ parar() {
 }
 
 # ── 1. Node ────────────────────────────────────────────────────────────────
-echo -e "  ${FORTE}[1/4]${FIM} Procurando o Node..."
+echo -e "  ${FORTE}[1/5]${FIM} Procurando o Node..."
 if ! command -v node >/dev/null 2>&1; then
   parar "o Node não está instalado nesta máquina." \
     "Baixe a versão LTS em https://nodejs.org , instale (é só avançar), e clique neste arquivo de novo."
@@ -43,66 +54,130 @@ if [ -z "$NODE_MAIOR" ] || [ "$NODE_MAIOR" -lt 20 ]; then
 fi
 echo -e "      ${VERDE}✓${FIM} Node $(node --version)"
 
-# ── 2. Senha ───────────────────────────────────────────────────────────────
+# ── 2. Atualização automática ──────────────────────────────────────────────
 echo ""
-echo -e "  ${FORTE}[2/4]${FIM} Senha do painel"
-echo "      Ela só vale nesta máquina. Nunca é gravada — só o código"
-echo "      embaralhado dela (hash) vai para um arquivo local."
-echo ""
-SENHA=""
-TENTATIVAS=0
-while [ ${#SENHA} -lt 4 ]; do
-  # `|| break` é essencial: sem ele, uma entrada fechada (EOF) faz `read`
-  # devolver vazio para sempre e o laço gira infinitamente. Pego por teste
-  # real — um instalador que congela é pior do que um que recusa.
-  read -r -s -p "      Escolha uma senha (mínimo 4 caracteres): " SENHA || break
-  echo ""
-  TENTATIVAS=$((TENTATIVAS + 1))
-  if [ ${#SENHA} -lt 4 ]; then
-    echo -e "      ${AMARELO}muito curta, tente de novo${FIM}"
-    [ "$TENTATIVAS" -ge 5 ] && break
+echo -e "  ${FORTE}[2/5]${FIM} Buscando atualizações"
+ATUALIZOU="nao"
+if [ -d .git ] && command -v git >/dev/null 2>&1; then
+  ANTES="$(git rev-parse HEAD 2>/dev/null)"
+  # Nunca descarta trabalho local: se houver mudança não salva, o script
+  # AVISA e segue sem atualizar, em vez de sobrescrever silenciosamente.
+  if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+    echo -e "      ${AMARELO}!${FIM} há mudanças locais não salvas — não vou atualizar por cima"
+    echo "        (o painel roda normalmente com o que já está aqui)"
+  elif git pull --ff-only >/dev/null 2>&1; then
+    DEPOIS="$(git rev-parse HEAD 2>/dev/null)"
+    if [ "$ANTES" != "$DEPOIS" ]; then
+      echo -e "      ${VERDE}✓${FIM} atualizado ($(git log --oneline -1 | cut -c1-60))"
+      ATUALIZOU="sim"
+    else
+      echo -e "      ${VERDE}✓${FIM} já estava na versão mais recente"
+    fi
+  else
+    echo -e "      ${AMARELO}!${FIM} não consegui buscar atualizações (sem internet, ou login necessário)"
+    echo "        (o painel roda normalmente com o que já está aqui)"
   fi
-done
-if [ ${#SENHA} -lt 4 ]; then
-  parar "não recebi uma senha válida." \
-    "Se você clicou duas vezes e a janela não deixou digitar, abra o Terminal nesta pasta e rode: ./INSTALAR-E-RODAR.command"
-fi
-node ipad_runtime/tools/setup-local.mjs "$SENHA" >/dev/null 2>&1 \
-  || parar "não consegui preparar a senha." "Rode manualmente: node ipad_runtime/tools/setup-local.mjs \"sua-senha\""
-SENHA=""
-echo -e "      ${VERDE}✓${FIM} senha preparada"
-
-# ── 3. Dependências ────────────────────────────────────────────────────────
-echo ""
-echo -e "  ${FORTE}[3/4]${FIM} Instalando as peças do sistema"
-cd ipad_runtime/ramber-ui || parar "não encontrei a pasta do painel." "O arquivo ZIP pode ter sido descompactado pela metade."
-if [ -d node_modules ]; then
-  echo -e "      ${VERDE}✓${FIM} já estavam instaladas"
 else
-  echo "      Isto demora alguns minutos NA PRIMEIRA VEZ. Não feche a janela."
+  echo -e "      ${AMARELO}!${FIM} esta pasta veio de ZIP — não atualiza sozinha"
   echo ""
-  npm ci || parar "a instalação das dependências falhou." "Verifique se a internet está funcionando e tente de novo."
+  echo "        Para nunca mais baixar ZIP na mão, instale UMA VEZ assim,"
+  echo "        numa pasta nova (peça para quem entende, se preferir):"
+  echo ""
+  echo -e "          ${AZUL}git clone https://github.com/AR10-10/AR10-ORION.git${FIM}"
+  echo ""
+  echo "        Depois é só clicar neste arquivo lá dentro: ele se atualiza"
+  echo "        sozinho toda vez."
+fi
+
+# ── 3. Senha ───────────────────────────────────────────────────────────────
+echo ""
+echo -e "  ${FORTE}[3/5]${FIM} Senha do painel"
+if [ -f ipad_runtime/ramber-ui/.env.local ] && grep -q '^VITE_ACCESS_HASH=[0-9a-fA-F]\{64\}$' ipad_runtime/ramber-ui/.env.local 2>/dev/null; then
+  # Já configurada: não pergunta de novo. Perguntar toda vez transformaria
+  # o uso diário num formulário.
+  echo -e "      ${VERDE}✓${FIM} já configurada (para trocar, apague o arquivo"
+  echo "        ipad_runtime/ramber-ui/.env.local e rode de novo)"
+else
+  echo "      Ela só vale nesta máquina. Nunca é gravada — só o código"
+  echo "      embaralhado dela (hash) vai para um arquivo local."
+  echo ""
+  SENHA=""
+  TENTATIVAS=0
+  while [ ${#SENHA} -lt 4 ]; do
+    # `|| break` é essencial: sem ele, uma entrada fechada (EOF) faz `read`
+    # devolver vazio para sempre e o laço gira infinitamente. Pego por teste
+    # real — um instalador que congela é pior do que um que recusa.
+    read -r -s -p "      Escolha uma senha (mínimo 4 caracteres): " SENHA || break
+    echo ""
+    TENTATIVAS=$((TENTATIVAS + 1))
+    if [ ${#SENHA} -lt 4 ]; then
+      echo -e "      ${AMARELO}muito curta, tente de novo${FIM}"
+      [ "$TENTATIVAS" -ge 5 ] && break
+    fi
+  done
+  if [ ${#SENHA} -lt 4 ]; then
+    parar "não recebi uma senha válida." \
+      "Se você clicou duas vezes e a janela não deixou digitar, abra o Terminal nesta pasta e rode: ./INSTALAR-E-RODAR.command"
+  fi
+  node ipad_runtime/tools/setup-local.mjs "$SENHA" >/dev/null 2>&1 \
+    || parar "não consegui preparar a senha." "Rode manualmente: node ipad_runtime/tools/setup-local.mjs \"sua-senha\""
+  SENHA=""
+  echo -e "      ${VERDE}✓${FIM} senha preparada"
+fi
+
+# ── 4. Dependências ────────────────────────────────────────────────────────
+echo ""
+echo -e "  ${FORTE}[4/5]${FIM} Peças do sistema"
+cd ipad_runtime/ramber-ui || parar "não encontrei a pasta do painel." "O download pode ter vindo pela metade."
+if [ ! -d node_modules ]; then
+  echo "      Instalando. Demora alguns minutos NA PRIMEIRA VEZ — não feche."
+  echo ""
+  npm ci || parar "a instalação das peças falhou." "Verifique a internet e tente de novo."
   echo ""
   echo -e "      ${VERDE}✓${FIM} instaladas"
+elif [ "$ATUALIZOU" = "sim" ]; then
+  # Uma atualização pode ter trazido dependências novas. Reinstalar só nesse
+  # caso evita minutos de espera em toda execução.
+  echo "      O sistema foi atualizado — conferindo se há peças novas..."
+  npm ci || parar "a atualização das peças falhou." "Verifique a internet e tente de novo."
+  echo -e "      ${VERDE}✓${FIM} em dia"
+else
+  echo -e "      ${VERDE}✓${FIM} já estavam instaladas"
 fi
 
-# ── 4. Ligar ───────────────────────────────────────────────────────────────
+# ── 5. Ligar ───────────────────────────────────────────────────────────────
 echo ""
-echo -e "  ${FORTE}[4/4]${FIM} Ligando o painel..."
+echo -e "  ${FORTE}[5/5]${FIM} Ligando o painel..."
+
+IP_LOCAL="$(node -e '
+const os = require("os");
+const nets = os.networkInterfaces();
+for (const nome of Object.keys(nets)) {
+  for (const n of nets[nome] || []) {
+    if (n.family === "IPv4" && !n.internal) { console.log(n.address); process.exit(0); }
+  }
+}
+' 2>/dev/null)"
+
 echo ""
-echo -e "      Vai abrir no navegador em ${FORTE}http://localhost:5173${FIM}"
-echo "      Use a senha que você acabou de escolher."
+echo -e "      Neste computador:  ${FORTE}http://localhost:5173${FIM}"
+if [ -n "$IP_LOCAL" ]; then
+  echo -e "      No iPad/celular:   ${FORTE}http://${IP_LOCAL}:5173${FIM}"
+  echo ""
+  echo -e "      ${AMARELO}Atenção:${FIM} qualquer aparelho na SUA rede alcança esse endereço."
+  echo "      A senha é a única barreira. Numa rede de casa está ok; numa rede"
+  echo "      pública ou compartilhada, não use."
+else
+  echo "      (não consegui descobrir o endereço da rede local)"
+fi
 echo ""
-echo -e "      ${AMARELO}Para DESLIGAR:${FIM} feche esta janela, ou aperte Control+C."
-echo -e "      ${AMARELO}Para ligar de novo depois:${FIM} clique neste arquivo outra vez."
+echo -e "      ${AMARELO}Desligar:${FIM} feche esta janela, ou Control+C."
+echo -e "      ${AMARELO}Ligar de novo:${FIM} clique neste arquivo outra vez — ele já atualiza junto."
 echo ""
 
-# Abre o navegador sozinho depois que o servidor sobe. Em segundo plano, com
-# uma espera curta — se abrir antes do servidor responder, o navegador mostra
-# erro e o Operador acha que não funcionou.
 ( sleep 4
   if command -v open >/dev/null 2>&1; then open http://localhost:5173
   elif command -v xdg-open >/dev/null 2>&1; then xdg-open http://localhost:5173
   fi ) >/dev/null 2>&1 &
 
-npm run dev
+npm run dev -- --host

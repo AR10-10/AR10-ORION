@@ -1,23 +1,30 @@
 @echo off
 REM INSTALAR-E-RODAR.bat -- Windows.
 REM
-REM Feito para ser CLICADO DUAS VEZES, nao digitado. Mesmo conteudo do
-REM INSTALAR-E-RODAR.command (Mac/Linux), escrito para o cmd do Windows.
+REM Clique duplo. Faz tudo: atualiza, prepara e liga.
+REM Mesmo conteudo do INSTALAR-E-RODAR.command (Mac/Linux).
 REM
-REM Nao instala o Node sozinho de proposito: instalar runtime na maquina de
-REM alguem sem avisar e invasivo. Se faltar, PARA e diz o que baixar.
+REM ATUALIZA SOZINHO: se a pasta veio de `git clone`, busca as atualizacoes a
+REM cada execucao -- nada de baixar ZIP de novo quando o sistema evolui. Se
+REM veio de ZIP, avisa e explica como trocar uma vez so; nao converte por
+REM conta propria, porque mexer no jeito como a pasta existe e decisao de quem
+REM instalou.
+REM
+REM REDE LOCAL: liga com --host, entao o painel fica acessivel do iPad e do
+REM celular na MESMA rede. Qualquer aparelho da rede alcanca, com a senha como
+REM unica barreira -- isso esta dito na tela, nao escondido aqui.
 
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 echo.
 echo   ============================================
-echo      AR10 CYBORG -- instalar e rodar
+echo      AR10 CYBORG -- atualizar e rodar
 echo   ============================================
 echo.
 
 REM -- 1. Node ---------------------------------------------------------------
-echo   [1/4] Procurando o Node...
+echo   [1/5] Procurando o Node...
 where node >nul 2>&1
 if errorlevel 1 (
     echo.
@@ -39,9 +46,65 @@ if !NODE_MAIOR! LSS 20 (
 )
 for /f "delims=" %%v in ('node --version') do echo       [OK] Node %%v
 
-REM -- 2. Senha --------------------------------------------------------------
+REM -- 2. Atualizacao automatica --------------------------------------------
 echo.
-echo   [2/4] Senha do painel
+echo   [2/5] Buscando atualizacoes
+set "ATUALIZOU=nao"
+where git >nul 2>&1
+if errorlevel 1 goto semGit
+if not exist ".git" goto semGit
+for /f "delims=" %%h in ('git rev-parse HEAD 2^>nul') do set ANTES=%%h
+REM Nunca descarta trabalho local: havendo mudanca nao salva, AVISA e segue
+REM sem atualizar, em vez de sobrescrever silenciosamente.
+for /f "delims=" %%s in ('git status --porcelain 2^>nul') do set SUJO=1
+if defined SUJO (
+    echo       [!] ha mudancas locais nao salvas -- nao vou atualizar por cima
+    echo           ^(o painel roda normalmente com o que ja esta aqui^)
+    goto fimAtualizacao
+)
+git pull --ff-only >nul 2>&1
+if errorlevel 1 (
+    echo       [!] nao consegui buscar atualizacoes ^(sem internet, ou login necessario^)
+    echo           ^(o painel roda normalmente com o que ja esta aqui^)
+    goto fimAtualizacao
+)
+for /f "delims=" %%h in ('git rev-parse HEAD 2^>nul') do set DEPOIS=%%h
+if not "!ANTES!"=="!DEPOIS!" (
+    echo       [OK] atualizado
+    set "ATUALIZOU=sim"
+) else (
+    echo       [OK] ja estava na versao mais recente
+)
+goto fimAtualizacao
+
+:semGit
+echo       [!] esta pasta veio de ZIP -- nao atualiza sozinha
+echo.
+echo           Para nunca mais baixar ZIP na mao, instale UMA VEZ assim,
+echo           numa pasta nova ^(peca para quem entende, se preferir^):
+echo.
+echo             git clone https://github.com/AR10-10/AR10-ORION.git
+echo.
+echo           Depois e so clicar neste arquivo la dentro: ele se atualiza
+echo           sozinho toda vez.
+
+:fimAtualizacao
+
+REM -- 3. Senha --------------------------------------------------------------
+echo.
+echo   [3/5] Senha do painel
+set "TEM_SENHA="
+if exist "ipad_runtime\ramber-ui\.env.local" (
+    findstr /R /C:"^VITE_ACCESS_HASH=[0-9a-fA-F][0-9a-fA-F]*$" "ipad_runtime\ramber-ui\.env.local" >nul 2>&1
+    if not errorlevel 1 set TEM_SENHA=1
+)
+if defined TEM_SENHA (
+    REM Ja configurada: nao pergunta de novo. Perguntar toda vez
+    REM transformaria o uso diario num formulario.
+    echo       [OK] ja configurada ^(para trocar, apague o arquivo
+    echo            ipad_runtime\ramber-ui\.env.local e rode de novo^)
+    goto fimSenha
+)
 echo       Ela so vale nesta maquina. Nunca e gravada -- so o codigo
 echo       embaralhado dela ^(hash^) vai para um arquivo local.
 echo.
@@ -65,45 +128,68 @@ if errorlevel 1 (
 )
 set "SENHA="
 echo       [OK] senha preparada
+:fimSenha
 
-REM -- 3. Dependencias -------------------------------------------------------
+REM -- 4. Dependencias -------------------------------------------------------
 echo.
-echo   [3/4] Instalando as pecas do sistema
+echo   [4/5] Pecas do sistema
 cd ipad_runtime\ramber-ui
-if exist node_modules (
-    echo       [OK] ja estavam instaladas
-) else (
-    echo       Isto demora alguns minutos NA PRIMEIRA VEZ. Nao feche a janela.
+if not exist node_modules (
+    echo       Instalando. Demora alguns minutos NA PRIMEIRA VEZ -- nao feche.
     echo.
     call npm ci
     if errorlevel 1 (
         echo.
-        echo   [X] PAROU AQUI: a instalacao das dependencias falhou.
-        echo       Verifique se a internet esta funcionando e tente de novo.
+        echo   [X] PAROU AQUI: a instalacao das pecas falhou.
+        echo       Verifique a internet e tente de novo.
         echo.
         pause
         exit /b 1
     )
     echo.
     echo       [OK] instaladas
+) else (
+    if "!ATUALIZOU!"=="sim" (
+        REM Uma atualizacao pode ter trazido dependencias novas. Reinstalar so
+        REM nesse caso evita minutos de espera em toda execucao.
+        echo       O sistema foi atualizado -- conferindo se ha pecas novas...
+        call npm ci
+        if errorlevel 1 (
+            echo.
+            echo   [X] PAROU AQUI: a atualizacao das pecas falhou.
+            echo.
+            pause
+            exit /b 1
+        )
+        echo       [OK] em dia
+    ) else (
+        echo       [OK] ja estavam instaladas
+    )
 )
 
-REM -- 4. Ligar --------------------------------------------------------------
+REM -- 5. Ligar --------------------------------------------------------------
 echo.
-echo   [4/4] Ligando o painel...
+echo   [5/5] Ligando o painel...
+for /f "delims=" %%i in ('node -e "const n=require('os').networkInterfaces();for(const k in n)for(const i of n[k]||[])if(i.family==='IPv4'^&^&!i.internal){console.log(i.address);process.exit(0)}"') do set IP_LOCAL=%%i
 echo.
-echo       Vai abrir no navegador em http://localhost:5173
-echo       Use a senha que voce acabou de escolher.
+echo       Neste computador:  http://localhost:5173
+if defined IP_LOCAL (
+    echo       No iPad/celular:   http://!IP_LOCAL!:5173
+    echo.
+    echo       Atencao: qualquer aparelho na SUA rede alcanca esse endereco.
+    echo       A senha e a unica barreira. Numa rede de casa esta ok; numa rede
+    echo       publica ou compartilhada, nao use.
+) else (
+    echo       ^(nao consegui descobrir o endereco da rede local^)
+)
 echo.
-echo       Para DESLIGAR: feche esta janela, ou aperte Control+C.
-echo       Para ligar de novo depois: clique neste arquivo outra vez.
+echo       Desligar: feche esta janela, ou Control+C.
+echo       Ligar de novo: clique neste arquivo outra vez -- ele ja atualiza junto.
 echo.
 
-REM Abre o navegador depois de uma espera curta -- se abrir antes do servidor
-REM responder, o navegador mostra erro e o Operador acha que nao funcionou.
 start "" cmd /c "timeout /t 5 /nobreak >nul && start http://localhost:5173"
 
-call npm run dev
+call npm run dev -- --host
 pause
 exit /b 0
 
