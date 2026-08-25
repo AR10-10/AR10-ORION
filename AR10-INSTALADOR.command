@@ -37,7 +37,38 @@ REPO="AR10-10/AR10-ORION"
 # nenhuma das correções recentes. Quando a PR for mesclada, troque para
 # "main" — é a única linha que muda.
 RAMO="claude/eloquent-cannon-qyt86y"
-DESTINO_PADRAO="$HOME/AR10-CYBORG"
+
+# ── ONDE O SISTEMA MORA ────────────────────────────────────────────────────
+#
+# Pedido do Operador: "os arquivos ser salvo, todo o sistema, nos meus
+# documentos do meu computador... tudo sendo salvo lá e tudo executado por lá".
+#
+# Por que não a pasta de usuário crua: ali ficam as pastas do próprio sistema
+# operacional, e um projeto no meio delas some de vista. Documentos é onde o
+# Operador já procura as coisas dele.
+#
+# Por que não "$HOME/Documents" fixo: no Linux em português a pasta real chama
+# "Documentos". `xdg-user-dir` responde o caminho REAL configurado — é a única
+# forma que não erra. No Mac o nome em disco é sempre "Documents" (o
+# "Documentos" que aparece no Finder é só rótulo de exibição).
+descobrir_documentos() {
+  local D=""
+  if command -v xdg-user-dir >/dev/null 2>&1; then
+    D="$(xdg-user-dir DOCUMENTS 2>/dev/null)"
+  fi
+  # xdg-user-dir devolve o PRÓPRIO $HOME quando não há nada configurado.
+  # Aceitar essa resposta jogaria o sistema na raiz da pasta de usuário —
+  # exatamente o que este bloco existe para evitar.
+  if [ -z "$D" ] || [ "$D" = "$HOME" ]; then
+    if [ -d "$HOME/Documents" ]; then D="$HOME/Documents"
+    elif [ -d "$HOME/Documentos" ]; then D="$HOME/Documentos"
+    else D="$HOME/Documents"
+    fi
+  fi
+  printf '%s' "$D"
+}
+DOCUMENTOS="$(descobrir_documentos)"
+DESTINO_PADRAO="$DOCUMENTOS/AR10-CYBORG"
 
 echo ""
 echo -e "${FORTE}  ╔══════════════════════════════════════════════╗${FIM}"
@@ -79,7 +110,25 @@ echo -e "      ${VERDE}✓${FIM} Node $(node --version)"
 echo ""
 echo -e "  ${FORTE}[2/4]${FIM} Onde guardar o sistema"
 echo ""
-echo -e "      Sugestão: ${AZUL}${DESTINO_PADRAO}${FIM}"
+echo -e "      Na sua pasta ${FORTE}Documentos${FIM}: ${AZUL}${DESTINO_PADRAO}${FIM}"
+
+# Aviso honesto ANTES da pergunta, para que ainda dê para escolher outro
+# caminho. Com "Desktop e Documentos no iCloud" (Mac), OneDrive (Windows) ou
+# Dropbox, a pasta Documentos é SINCRONIZADA — o painel funciona igual, mas as
+# dezenas de milhares de peças do node_modules entram na fila de sincronização.
+# Melhor o Operador saber agora do que descobrir pelo ventilador da máquina.
+DOC_REAL="$(cd "$DOCUMENTOS" 2>/dev/null && pwd -P || printf '%s' "$DOCUMENTOS")"
+case "$DOC_REAL" in
+  *"Mobile Documents"*|*OneDrive*|*Dropbox*)
+    echo ""
+    echo -e "      ${AMARELO}Atenção:${FIM} sua pasta Documentos é sincronizada na nuvem."
+    echo "      O painel funciona igual, mas as peças do sistema (milhares de"
+    echo "      arquivos) vão subir junto. Se preferir evitar, digite outro"
+    echo "      caminho abaixo — por exemplo: $HOME/AR10-CYBORG"
+    ;;
+esac
+
+echo ""
 read -r -p "      Aperte ENTER para aceitar, ou digite outro caminho: " ESCOLHA 2>/dev/null || ESCOLHA=""
 DESTINO="${ESCOLHA:-$DESTINO_PADRAO}"
 # Expande o ~ se o Operador digitar manualmente.
@@ -105,6 +154,10 @@ elif command -v git >/dev/null 2>&1; then
   echo "      Usando git (melhor: depois atualiza sozinho)..."
   echo -e "      ${AMARELO}Se o repositório for privado, o GitHub vai pedir seu login agora.${FIM}"
   echo ""
+  # A pasta Documentos existe em qualquer máquina, mas um caminho digitado à
+  # mão pode ter um nível que ainda não existe. `mkdir -p` só cria o CAMINHO
+  # até o destino — nunca toca no que já está lá.
+  mkdir -p "$(dirname "$DESTINO")" 2>/dev/null || true
   git clone --branch "$RAMO" --single-branch "https://github.com/${REPO}.git" "$DESTINO" \
     || parar "o download falhou." \
       "Duas causas prováveis:

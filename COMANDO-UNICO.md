@@ -47,8 +47,8 @@ curl -fsSL "https://raw.githubusercontent.com/AR10-10/AR10-ORION/refs/heads/clau
 
 **Duas coisas você digita, e só:**
 
-1. **ENTER** para aceitar a pasta sugerida (`AR10-CYBORG` na sua pasta de
-   usuário). Se quiser outra, digite o caminho.
+1. **ENTER** para aceitar a pasta sugerida — `AR10-CYBORG` **dentro dos seus
+   Documentos**. Se quiser outra, digite o caminho.
 2. **Uma senha** para o painel. Ela nunca é gravada — só o código embaralhado.
 
 O resto é automático: cria a pasta, baixa tudo, instala as peças, liga o
@@ -89,11 +89,17 @@ Para ligar de novo, **não use mais este comando**. Use o arquivo que ficou
 dentro da pasta:
 
 ```
-AR10-CYBORG\INSTALAR-E-RODAR.bat        (Windows)
-AR10-CYBORG/INSTALAR-E-RODAR.command    (Mac)
+Documentos\AR10-CYBORG\INSTALAR-E-RODAR.bat        (Windows)
+Documentos/AR10-CYBORG/INSTALAR-E-RODAR.command    (Mac)
 ```
 
 Dois cliques. Ele já busca as atualizações sozinho antes de ligar.
+
+> **Onde exatamente:** é a mesma pasta **Documentos** que aparece no
+> Explorador (Windows) ou no Finder (Mac). Se o seu Documentos estiver no
+> OneDrive ou no iCloud, o instalador detecta o caminho de verdade e usa
+> aquele — mas avisa antes, porque nesse caso as peças do sistema também
+> sobem para a nuvem.
 
 ---
 

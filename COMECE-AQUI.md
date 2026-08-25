@@ -27,8 +27,25 @@ as peças e abre o painel.
 O único pré-requisito é o **Node** (Passo 1 abaixo). Se faltar, o próprio
 instalador abre o site para você e explica.
 
-Ele pergunta **onde guardar** (sugere uma pasta; é só apertar ENTER) e o resto
-é automático.
+**Onde ele instala:** dentro dos seus **Documentos**, numa pasta chamada
+`AR10-CYBORG`. É a mesma pasta Documentos que você abre no Explorador
+(Windows) ou no Finder (Mac) — o sistema inteiro fica ali, e roda dali.
+
+```
+Documentos/
+└── AR10-CYBORG/          <- o sistema inteiro
+    ├── INSTALAR-E-RODAR  <- é neste que você clica para ligar
+    ├── ipad_runtime/
+    └── docs/
+```
+
+Ele mostra o caminho e pergunta se está bom (é só apertar ENTER; se quiser
+outro lugar, digite). O resto é automático.
+
+> **Se o seu Documentos estiver no OneDrive ou no iCloud**, o instalador
+> descobre o caminho de verdade e usa aquele — mas avisa antes de baixar,
+> porque nesse caso as peças do sistema (milhares de arquivos) também vão
+> subir para a nuvem. Se preferir evitar, é só digitar outro caminho na hora.
 
 > **Ele nunca apaga nada.** Se a pasta que você escolher já existir e tiver
 > arquivos, ele **para e avisa** em vez de mexer no que está lá.
@@ -60,10 +77,12 @@ qualquer programa.
 ### Jeito recomendado: `git clone` (uma vez só, e nunca mais baixa nada)
 
 Quem entende de computador faz isso em 30 segundos. Abra o Terminal (Mac) ou
-o Prompt de Comando (Windows), vá até onde quer guardar o sistema, e rode:
+o Prompt de Comando (Windows) e rode — a primeira linha entra nos Documentos,
+que é onde o sistema deve ficar:
 
 ```sh
-git clone https://github.com/AR10-10/AR10-ORION.git
+cd ~/Documents        # no Windows: cd "%USERPROFILE%\Documents"
+git clone https://github.com/AR10-10/AR10-ORION.git AR10-CYBORG
 ```
 
 **Por que este é o jeito certo:** instalado assim, o sistema **se atualiza
@@ -78,7 +97,7 @@ alguma coisa, ela chega na sua máquina sem você baixar nada.
 
 1. Abra <https://github.com/AR10-10/AR10-ORION>
 2. Botão verde **`< > Code`** → **Download ZIP**
-3. Descompacte (dois cliques)
+3. Descompacte (dois cliques) **e mova a pasta para os seus Documentos**
 
 Vai aparecer a pasta **`AR10-ORION-main`**. O painel roda igual, mas a cada
 melhoria você teria que baixar o ZIP de novo — por isso o jeito de cima é
@@ -89,7 +108,8 @@ de ZIP, e mostra o comando para trocar.
 
 ## Ligar o painel (quando já tem a pasta)
 
-Entre na pasta e dê **dois cliques** no arquivo do seu sistema:
+Abra **Documentos → `AR10-CYBORG`** e dê **dois cliques** no arquivo do seu
+sistema:
 
 | Seu computador | Arquivo |
 |---|---|
@@ -163,6 +183,9 @@ Digite o segundo no navegador do iPad, **na mesma rede de casa**. Mesma senha.
 
 ## O que você ganha rodando assim
 
+- **Tudo na sua pasta Documentos.** O sistema inteiro fica em
+  `Documentos/AR10-CYBORG`, e roda dali. Nada espalhado por pastas escondidas
+  do sistema.
 - **Ninguém de fora tem acesso.** O painel existe só na sua máquina e na sua
   rede — não há endereço na internet para alguém abrir.
 - **Dados reais.** Mercado ao vivo direto da Binance.

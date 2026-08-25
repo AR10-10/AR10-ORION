@@ -332,6 +332,139 @@ describe("instalador completo: nunca destrói nada do Operador", () => {
 
 
 // ---------------------------------------------------------------------------
+// O SISTEMA MORA NOS DOCUMENTOS.
+//
+// Pedido do Operador: "os arquivos ser salvo, todo o sistema, nos meus
+// documentos do meu computador... tudo sendo salvo lá e tudo executado por lá".
+//
+// A armadilha real aqui NÃO é escrever "Documents" — é escrever o caminho
+// ERRADO de Documents. No Windows com OneDrive (a maioria hoje) a pasta que
+// aparece no Explorador é ...\OneDrive\Documentos, e a antiga ou não existe ou
+// existe vazia. No Linux em português ela chama "Documentos". Instalar no
+// lugar errado é pior do que a pasta de usuário crua: o Operador procuraria
+// num lugar onde não está.
+// ---------------------------------------------------------------------------
+describe("instalador completo: instala DENTRO dos Documentos do Operador", () => {
+  it("o padrão dos dois é Documentos — a pasta de usuário crua não é mais o destino", () => {
+    const u = semComentariosSh(bootUnix());
+    const w = semComentariosBat(bootWin());
+    expect(u, "unix: o padrão não sai de DOCUMENTOS").toMatch(
+      /DESTINO_PADRAO="\$DOCUMENTOS\/AR10-CYBORG"/,
+    );
+    expect(w, "win: o padrão não sai de DOCUMENTOS").toMatch(
+      /set "DESTINO_PADRAO=!DOCUMENTOS!\\AR10-CYBORG"/,
+    );
+    // e o destino antigo — a raiz do perfil — não pode voltar por descuido
+    expect(u, "unix: voltou a jogar na raiz do perfil").not.toMatch(
+      /DESTINO_PADRAO="\$HOME\/AR10-CYBORG"/,
+    );
+    expect(w, "win: voltou a jogar na raiz do perfil").not.toMatch(
+      /set "DESTINO_PADRAO=%USERPROFILE%\\AR10-CYBORG"/,
+    );
+  });
+
+  it("no Unix o caminho vem do sistema (xdg-user-dir), não de um nome chutado", () => {
+    // "Documents" em inglês é chute: no Linux em pt-BR a pasta real chama
+    // "Documentos". xdg-user-dir responde o caminho configurado de verdade.
+    const u = semComentariosSh(bootUnix());
+    expect(u).toContain("xdg-user-dir DOCUMENTS");
+    // e os dois nomes existem como rede de proteção quando não há xdg
+    expect(u).toContain('$HOME/Documents');
+    expect(u).toContain('$HOME/Documentos');
+  });
+
+  it("a guarda do xdg-user-dir que devolve o PRÓPRIO $HOME é load-bearing", () => {
+    // Sem configuração, `xdg-user-dir DOCUMENTS` devolve $HOME. Aceitar essa
+    // resposta jogaria o sistema exatamente onde este trabalho tirou dali.
+    // Confirmado por mutação: removendo esta comparação, o cenário do
+    // xdg-devolvendo-HOME cai na raiz do perfil.
+    expect(semComentariosSh(bootUnix())).toMatch(/\[ "\$D" = "\$HOME" \]/);
+  });
+
+  it("no Windows o caminho vem do sistema, cobrindo o redirecionamento do OneDrive", () => {
+    // Um `%USERPROFILE%\Documents` fixo é o erro mais provável desta mudança:
+    // com OneDrive ligado, essa pasta não é a que o Operador enxerga.
+    const w = semComentariosBat(bootWin());
+    expect(w, "win: não pergunta ao sistema onde é Documentos").toContain(
+      "GetFolderPath('MyDocuments')",
+    );
+    expect(w, "win: não tem o registro como segunda tentativa").toContain(
+      "User Shell Folders",
+    );
+    // e o valor do registro é REG_EXPAND_SZ — sem expandir, o caminho vem com
+    // "%USERPROFILE%" literal dentro e nada é encontrado.
+    expect(w, "win: não expande as variáveis do valor do registro").toContain(
+      "ExpandEnvironmentVariables",
+    );
+  });
+
+  it("os dois AINDA deixam escolher outro caminho — Documentos é padrão, não prisão", () => {
+    expect(semComentariosSh(bootUnix())).toMatch(/read -r -p .*digite outro caminho/);
+    expect(semComentariosBat(bootWin())).toMatch(/set \/p "ESCOLHA=.*digite outro caminho/);
+  });
+
+  it("o aviso de pasta sincronizada vem ANTES da pergunta, não depois", () => {
+    // Um aviso depois da escolha é inútil: node_modules são dezenas de
+    // milhares de arquivos, e numa pasta sincronizada eles sobem todos. O
+    // Operador só consegue decidir se souber antes de responder.
+    const u = semComentariosSh(bootUnix());
+    const iAvisoU = u.indexOf("sincronizada na nuvem");
+    const iPerguntaU = u.indexOf("Aperte ENTER para aceitar");
+    expect(iAvisoU, "unix: não avisa sobre pasta sincronizada").toBeGreaterThan(-1);
+    expect(iAvisoU, "unix: avisa DEPOIS de perguntar").toBeLessThan(iPerguntaU);
+
+    const w = semComentariosBat(bootWin());
+    const iAvisoW = w.indexOf("sincronizada no OneDrive");
+    const iPerguntaW = w.indexOf("Aperte ENTER para aceitar");
+    expect(iAvisoW, "win: não avisa sobre OneDrive").toBeGreaterThan(-1);
+    expect(iAvisoW, "win: avisa DEPOIS de perguntar").toBeLessThan(iPerguntaW);
+  });
+
+  it("cria só o CAMINHO até o destino — continua sem apagar nada", () => {
+    // `mkdir -p` / `mkdir` aqui são aditivos. A recusa de pasta não-vazia,
+    // travada mais acima neste arquivo, continua sendo a proteção real.
+    expect(semComentariosSh(bootUnix())).toMatch(/mkdir -p "\$\(dirname "\$DESTINO"\)"/);
+    expect(semComentariosBat(bootWin())).toMatch(/if not exist "!PAI!" mkdir "!PAI!"/);
+  });
+
+  it("os guias contam a mesma história que os instaladores", () => {
+    // Se o guia mandar procurar na pasta de usuário e o instalador gravar em
+    // Documentos, o Operador não acha o sistema que acabou de instalar.
+    const comece = readFileSync(raiz("COMECE-AQUI.md"), "utf8");
+    const comando = readFileSync(raiz("COMANDO-UNICO.md"), "utf8");
+    const local = readFileSync(raiz("TRABALHAR-LOCAL-COMIGO.md"), "utf8");
+
+    expect(comece, "COMECE-AQUI não diz que instala em Documentos").toContain(
+      "Documentos/\n└── AR10-CYBORG/",
+    );
+    expect(comando).toContain("Documentos\\AR10-CYBORG\\INSTALAR-E-RODAR.bat");
+    expect(local).toContain("~/Documents/AR10-CYBORG");
+
+    // nenhum guia pode continuar mandando para a raiz do perfil
+    for (const [nome, doc] of [
+      ["COMECE-AQUI", comece],
+      ["COMANDO-UNICO", comando],
+      ["TRABALHAR-LOCAL", local],
+    ] as const) {
+      expect(doc, `${nome}: aponta para a raiz do perfil`).not.toMatch(
+        /~\/AR10-CYBORG|%USERPROFILE%\\AR10-CYBORG/,
+      );
+    }
+  });
+
+  it("os guias não escondem a parte que NÃO fica em Documentos", () => {
+    // O Operador pediu "tudo salvo lá". O código fica; o Track Record fica no
+    // banco interno do navegador, e isso é limitação do navegador, não
+    // escolha do projeto. Prometer o contrário seria mentir.
+    const local = readFileSync(raiz("TRABALHAR-LOCAL-COMIGO.md"), "utf8");
+    expect(local).toContain("IndexedDB");
+    expect(local).toMatch(/limitação real/);
+    expect(local).toContain("ainda não\n> está construído");
+  });
+});
+
+
+// ---------------------------------------------------------------------------
 // MODO APLICATIVO.
 //
 // Pedido do Operador: "o painel dele abrir já o modo aplicativo, bem

@@ -6,26 +6,39 @@ lugar salvo**.
 
 ---
 
-## Parte 1 — Onde seus dados ficam (já é como você quer)
+## Parte 1 — Onde cada coisa fica
 
-Verificado no código, não suposto (`nexus/persistence.ts`):
+Verificado no código, não suposto (`nexus/persistence.ts`).
 
-| O quê | Onde fica | Vai para o GitHub? |
-|---|---|---|
-| Candles do gráfico | IndexedDB do navegador (`ar10-cyborg-nexus`) | **Não** |
-| Track Record (seus sinais e desfechos) | IndexedDB | **Não** |
-| Paper trading | IndexedDB | **Não** |
-| Preferências dos painéis | localStorage do navegador | **Não** |
-| Senha do painel | `.env.local`, na sua pasta | **Não** (está no `.gitignore`) |
-| **Só o código** | GitHub | Sim |
+**O sistema inteiro mora em `Documentos/AR10-CYBORG`** — é lá que o instalador
+o coloca e é de lá que ele roda. Mas nem tudo que o painel guarda fica *dentro
+dessa pasta*, e isso precisa estar dito com todas as letras:
 
-**Ou seja: já está do jeito que você pediu.** Roda no navegador, salva tudo no
-seu computador, e o GitHub serve só de cópia de segurança do código.
+| O quê | Onde fica de verdade | Está em Documentos? | Vai para o GitHub? |
+|---|---|---|---|
+| Código, motores, gráficos | `Documentos/AR10-CYBORG/` | **Sim** | Sim |
+| Senha do painel | `Documentos/AR10-CYBORG/ipad_runtime/ramber-ui/.env.local` | **Sim** | **Não** (está no `.gitignore`) |
+| Candles do gráfico | IndexedDB do navegador (`ar10-cyborg-nexus`) | **Não** | Não |
+| Track Record (seus sinais e desfechos) | IndexedDB | **Não** | Não |
+| Paper trading | IndexedDB | **Não** | Não |
+| Preferências dos painéis | localStorage do navegador | **Não** | Não |
 
-> **Um detalhe honesto:** o IndexedDB é separado por endereço. O histórico que
-> você acumulou no site antigo (GitHub Pages) **não vem junto** para o
-> `localhost` — são bancos diferentes, do ponto de vista do navegador. O
-> Track Record local começa do zero, e vai enchendo conforme você usa.
+**O que isso significa na prática:** o programa é seu e está nos seus
+Documentos. O **histórico de operações** ainda não — ele fica no banco interno
+do navegador, que é na sua máquina, mas num lugar que você não abre pelo
+Explorador nem copia num pen drive.
+
+> **Isso é uma limitação real, não uma escolha.** Uma página no navegador não
+> tem permissão para escrever em qualquer pasta do computador — é o próprio
+> navegador que proíbe. Para o Track Record cair como arquivo dentro de
+> `Documentos/AR10-CYBORG/dados/`, é preciso uma peça a mais: uma rota de
+> gravação no servidor local que já sobe junto com o painel. **Isso ainda não
+> está construído.** Me peça e eu construo — é um passo real, não um "talvez".
+
+> **Um segundo detalhe honesto:** o IndexedDB é separado por endereço. O
+> histórico que você acumulou no site antigo (GitHub Pages) **não vem junto**
+> para o `localhost` — são bancos diferentes, do ponto de vista do navegador.
+> O Track Record local começa do zero, e vai enchendo conforme você usa.
 
 ---
 
@@ -40,7 +53,7 @@ ter: o **Node**, que o instalador do painel já pediu.
 2. Instale (é só ir avançando)
 3. Abra e entre com sua conta Claude
 4. Aponte para a pasta do sistema — a que o instalador criou, normalmente
-   `AR10-CYBORG`
+   `Documentos/AR10-CYBORG`
 
 Pronto. A partir daí você conversa comigo ali, e eu mexo direto nos arquivos
 da sua máquina.
@@ -49,11 +62,13 @@ da sua máquina.
 
 ```sh
 npm install -g @anthropic-ai/claude-code
-cd ~/AR10-CYBORG
+cd ~/Documents/AR10-CYBORG
 claude
 ```
 
-No Windows, o caminho é `%USERPROFILE%\AR10-CYBORG`.
+No Windows, o caminho é `%USERPROFILE%\Documents\AR10-CYBORG` — ou, se o seu
+Documentos estiver no OneDrive, o caminho dentro dele. O instalador mostra na
+tela o caminho que usou de verdade; é esse que vale.
 
 ---
 

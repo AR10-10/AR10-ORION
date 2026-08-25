@@ -25,7 +25,30 @@ REM ainda nao foi mesclada), entao baixar `main` entregaria um sistema sem
 REM nenhuma das correcoes recentes. Quando a PR for mesclada, troque para
 REM "main" -- e a unica linha que muda.
 set "RAMO=claude/eloquent-cannon-qyt86y"
-set "DESTINO_PADRAO=%USERPROFILE%\AR10-CYBORG"
+
+REM -- ONDE O SISTEMA MORA ---------------------------------------------------
+REM
+REM Pedido do Operador: tudo salvo e executado na pasta Documentos dele.
+REM
+REM Por que NAO usar um caminho fixo de Documentos: na maioria dos Windows
+REM atuais o OneDrive REDIRECIONA a pasta Documentos para dentro dele
+REM (...\OneDrive\Documentos). Nesse caso a pasta antiga ou nao existe, ou
+REM existe vazia e NAO e a que aparece no Explorador -- instalar ali seria
+REM instalar num lugar que o Operador nunca acha. O caminho REAL esta no
+REM registro do Windows (valor "Personal"), e e isso que a linha abaixo le,
+REM via API do proprio sistema, com o registro como segunda tentativa.
+REM O comando fica numa VARIAVEL, e nao escrito direto dentro do `for /f`, de
+REM proposito: o `for /f` usa parenteses como delimitador, e o comando abaixo
+REM tem varios parenteses dentro. Escrito direto, o parser do cmd pode fechar o
+REM bloco no lugar errado -- uma falha que so aparece na maquina do Operador.
+REM Com `!PSDOC!`, o parser nao ve parentese nenhum: a expansao acontece depois.
+set "PSDOC=$p=[Environment]::GetFolderPath('MyDocuments'); if(-not $p){ $p=(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders' -EA SilentlyContinue).Personal; if($p){ $p=[Environment]::ExpandEnvironmentVariables($p) } }; if(-not $p){ $p=Join-Path $env:USERPROFILE 'Documents' }; Write-Output $p"
+set "DOCUMENTOS="
+for /f "usebackq delims=" %%d in (`powershell -NoProfile -Command "!PSDOC!" 2^>nul`) do set "DOCUMENTOS=%%d"
+REM Ultimo recurso: se o PowerShell estiver bloqueado por politica, o caminho
+REM classico ainda e melhor do que jogar o projeto na raiz do perfil.
+if not defined DOCUMENTOS set "DOCUMENTOS=%USERPROFILE%\Documents"
+set "DESTINO_PADRAO=!DOCUMENTOS!\AR10-CYBORG"
 
 echo.
 echo   ================================================
@@ -64,11 +87,33 @@ REM -- 2. Onde guardar -------------------------------------------------------
 echo.
 echo   [2/4] Onde guardar o sistema
 echo.
-echo       Sugestao: !DESTINO_PADRAO!
+echo       Na sua pasta Documentos: !DESTINO_PADRAO!
+
+REM Aviso honesto ANTES da pergunta, para que ainda de para escolher outro
+REM caminho. Com o OneDrive, a pasta Documentos e SINCRONIZADA -- o painel
+REM funciona igual, mas as dezenas de milhares de pecas do node_modules entram
+REM na fila de sincronizacao. Melhor o Operador saber agora do que descobrir
+REM depois pelo disco cheio.
+echo !DESTINO_PADRAO!| findstr /i /c:"OneDrive" >nul
+if not errorlevel 1 (
+    echo.
+    echo       Atencao: sua pasta Documentos e sincronizada no OneDrive.
+    echo       O painel funciona igual, mas as pecas do sistema ^(milhares de
+    echo       arquivos^) vao subir junto. Se preferir evitar, digite outro
+    echo       caminho abaixo -- por exemplo: %USERPROFILE%\AR10-CYBORG
+)
+
+echo.
 set "ESCOLHA="
 set /p "ESCOLHA=      Aperte ENTER para aceitar, ou digite outro caminho: "
 if "!ESCOLHA!"=="" (set "DESTINO=!DESTINO_PADRAO!") else (set "DESTINO=!ESCOLHA!")
 echo       [OK] !DESTINO!
+
+REM A pasta Documentos existe em qualquer Windows, mas um caminho digitado a
+REM mao pode ter um nivel que ainda nao existe. `mkdir` aqui so cria o CAMINHO
+REM ate o destino -- nunca toca no que ja esta la.
+for %%p in ("!DESTINO!\..") do set "PAI=%%~fp"
+if not exist "!PAI!" mkdir "!PAI!" >nul 2>&1
 
 REM -- 3. Baixar -------------------------------------------------------------
 echo.
