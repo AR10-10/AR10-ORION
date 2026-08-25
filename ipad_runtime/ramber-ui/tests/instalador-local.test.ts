@@ -127,6 +127,23 @@ describe("instaladores: chegam ao mesmo lugar", () => {
     expect(guia).toContain("https://nodejs.org");
     // o aviso do Gatekeeper do Mac: sem ele o Operador trava no primeiro clique
     expect(guia).toContain("não pode ser aberto");
+    // e o índice para os outros guias — sem ele, eles ficam invisíveis
+    for (const outro of ["FECHAR-ACESSO-PUBLICO.md", "TRABALHAR-LOCAL-COMIGO.md", "docs/RODAR_LOCAL.md"]) {
+      expect(guia, `COMECE-AQUI não aponta para ${outro}`).toContain(outro);
+    }
+  });
+
+  it("o guia de trabalho local não promete o que o ambiente da nuvem não faz", () => {
+    const g = readFileSync(raiz("TRABALHAR-LOCAL-COMIGO.md"), "utf8");
+    // O ponto do documento é justamente a diferença MEDIDA entre os dois
+    // ambientes — se ela sumir do texto, ele vira propaganda.
+    expect(g).toContain("HTTP 000");
+    // onde os dados realmente ficam, conferido em persistence.ts
+    expect(g).toContain("IndexedDB");
+    // e a armadilha real: o histórico do site antigo NÃO migra sozinho
+    expect(g).toContain("não vem junto");
+    // as regras do projeto viajam junto com a pasta
+    expect(g).toContain("CLAUDE.md");
   });
 });
 

@@ -160,5 +160,12 @@ Digite o segundo no navegador do iPad, **na mesma rede de casa**. Mesma senha.
 - **A taxa de acerto de verdade.** Aba **RISK** → botão **MEDIR**. Ele busca
   2000 candles reais e conta os desfechos.
 
-Detalhes técnicos, o que roda e o que não roda, e como tirar do ar o site que
-está publicado hoje: **`docs/RODAR_LOCAL.md`**.
+---
+
+## Outros guias
+
+| Arquivo | Para quê |
+|---|---|
+| `FECHAR-ACESSO-PUBLICO.md` | Tirar do ar o site publicado hoje — os 3 passos, na ordem |
+| `TRABALHAR-LOCAL-COMIGO.md` | Onde seus dados ficam salvos, e como me instalar na sua máquina |
+| `docs/RODAR_LOCAL.md` | Detalhes técnicos: o que roda com dado real e o que não roda |
