@@ -213,6 +213,40 @@ describe("instaladores: atualizam sozinhos, sem atropelar nada", () => {
     expect(bloco).toContain("git clone");
   });
 
+  it("instala as peças de desenvolvimento à força — NODE_ENV não pode decidir isso", () => {
+    // Defeito real, pego rodando o instalador de ponta a ponta: numa máquina
+    // com NODE_ENV=production o `npm ci` pula as devDependencies, e o vite —
+    // o motor que liga o painel — é uma delas. O npm termina dizendo
+    // "sucesso" (32 pacotes em vez de 87) e a falha só aparece depois, como
+    // `vite: not found`, sem nenhuma pista da causa.
+    for (const [nome, src] of [
+      ["unix", semComentariosSh(unix())],
+      ["win", semComentariosBat(win())],
+    ] as const) {
+      const chamadas = [...src.matchAll(/npm ci[^\n|&]*/g)].map((m) => m[0]);
+      expect(chamadas.length, `${nome}: não instala as peças`).toBeGreaterThan(0);
+      for (const c of chamadas) {
+        expect(c, `${nome}: npm ci sem --include=dev -> ${c.trim()}`).toContain(
+          "--include=dev",
+        );
+      }
+    }
+  });
+
+  it("confere o vite DEPOIS de instalar — não confia no 'sucesso' do npm", () => {
+    // Sem esta checagem o Operador veria `vite: not found`, mensagem que não
+    // diz nada a quem não programa. Com ela, a parada nomeia a causa.
+    const u = semComentariosSh(unix());
+    expect(u, "unix: não confere o vite").toMatch(/! -x node_modules\/\.bin\/vite/);
+    expect(u).toContain("NODE_ENV");
+    const w = semComentariosBat(win());
+    expect(w, "win: não confere o vite").toMatch(/if not exist "node_modules\\\.bin\\vite\.cmd"/);
+    expect(w).toContain("NODE_ENV");
+    // e a checagem vem ANTES de tentar ligar o painel
+    expect(u.indexOf("node_modules/.bin/vite")).toBeLessThan(u.indexOf("npm run dev"));
+    expect(w.indexOf("node_modules\\.bin\\vite.cmd")).toBeLessThan(w.indexOf("npm run dev"));
+  });
+
   it("reinstala dependências só quando a atualização trouxe algo — não a cada execução", () => {
     for (const [nome, src] of [["unix", unix()], ["win", win()]] as const) {
       expect(src, `${nome}: não rastreia se atualizou`).toMatch(/ATUALIZOU/);

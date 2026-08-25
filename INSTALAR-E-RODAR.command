@@ -129,20 +129,36 @@ fi
 echo ""
 echo -e "  ${FORTE}[4/5]${FIM} Peças do sistema"
 cd ipad_runtime/ramber-ui || parar "não encontrei a pasta do painel." "O download pode ter vindo pela metade."
+# `--include=dev` NÃO é enfeite. Pego rodando o instalador de ponta a ponta:
+# numa máquina com a variável NODE_ENV valendo "production", o `npm ci` pula
+# TODAS as peças de desenvolvimento — e o vite, que é justamente o motor que
+# liga o painel, é uma delas. O npm termina dizendo "sucesso" (32 pacotes em
+# vez de 87) e só lá na frente aparece `vite: not found`, sem nenhuma pista da
+# causa. Este sinalizador força a instalação completa, independente de como a
+# máquina do Operador estiver configurada.
 if [ ! -d node_modules ]; then
   echo "      Instalando. Demora alguns minutos NA PRIMEIRA VEZ — não feche."
   echo ""
-  npm ci || parar "a instalação das peças falhou." "Verifique a internet e tente de novo."
+  npm ci --include=dev || parar "a instalação das peças falhou." "Verifique a internet e tente de novo."
   echo ""
   echo -e "      ${VERDE}✓${FIM} instaladas"
 elif [ "$ATUALIZOU" = "sim" ]; then
   # Uma atualização pode ter trazido dependências novas. Reinstalar só nesse
   # caso evita minutos de espera em toda execução.
   echo "      O sistema foi atualizado — conferindo se há peças novas..."
-  npm ci || parar "a atualização das peças falhou." "Verifique a internet e tente de novo."
+  npm ci --include=dev || parar "a atualização das peças falhou." "Verifique a internet e tente de novo."
   echo -e "      ${VERDE}✓${FIM} em dia"
 else
   echo -e "      ${VERDE}✓${FIM} já estavam instaladas"
+fi
+
+# Confere a peça que REALMENTE liga o painel, em vez de confiar no "sucesso"
+# do npm. Sem esta checagem o Operador veria `sh: vite: not found` — uma
+# mensagem que não diz nada a quem não programa.
+if [ ! -x node_modules/.bin/vite ]; then
+  parar "as peças foram instaladas, mas o motor do painel (vite) não veio junto." \
+    "Causa quase certa: esta máquina tem a variável NODE_ENV valendo 'production', e isso faz o npm pular as peças de desenvolvimento.
+    Saída: apague a pasta ipad_runtime/ramber-ui/node_modules e rode este arquivo de novo."
 fi
 
 # ── 5. Ligar ───────────────────────────────────────────────────────────────

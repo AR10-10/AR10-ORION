@@ -134,10 +134,17 @@ REM -- 4. Dependencias -------------------------------------------------------
 echo.
 echo   [4/5] Pecas do sistema
 cd ipad_runtime\ramber-ui
+REM `--include=dev` NAO e enfeite. Pego rodando o instalador de ponta a ponta:
+REM numa maquina com a variavel NODE_ENV valendo "production", o `npm ci` pula
+REM TODAS as pecas de desenvolvimento -- e o vite, que e justamente o motor que
+REM liga o painel, e uma delas. O npm termina dizendo "sucesso" (32 pacotes em
+REM vez de 87) e so la na frente aparece `vite: not found`, sem nenhuma pista
+REM da causa. Este sinalizador forca a instalacao completa, independente de
+REM como a maquina do Operador estiver configurada.
 if not exist node_modules (
     echo       Instalando. Demora alguns minutos NA PRIMEIRA VEZ -- nao feche.
     echo.
-    call npm ci
+    call npm ci --include=dev
     if errorlevel 1 (
         echo.
         echo   [X] PAROU AQUI: a instalacao das pecas falhou.
@@ -153,7 +160,7 @@ if not exist node_modules (
         REM Uma atualizacao pode ter trazido dependencias novas. Reinstalar so
         REM nesse caso evita minutos de espera em toda execucao.
         echo       O sistema foi atualizado -- conferindo se ha pecas novas...
-        call npm ci
+        call npm ci --include=dev
         if errorlevel 1 (
             echo.
             echo   [X] PAROU AQUI: a atualizacao das pecas falhou.
@@ -165,6 +172,23 @@ if not exist node_modules (
     ) else (
         echo       [OK] ja estavam instaladas
     )
+)
+
+REM Confere a peca que REALMENTE liga o painel, em vez de confiar no "sucesso"
+REM do npm. Sem esta checagem o Operador veria `vite: not found` -- uma
+REM mensagem que nao diz nada a quem nao programa.
+if not exist "node_modules\.bin\vite.cmd" (
+    echo.
+    echo   [X] PAROU AQUI: as pecas foram instaladas, mas o motor do painel
+    echo       ^(vite^) nao veio junto.
+    echo.
+    echo       Causa quase certa: esta maquina tem a variavel NODE_ENV valendo
+    echo       "production", e isso faz o npm pular as pecas de desenvolvimento.
+    echo       Saida: apague a pasta ipad_runtime\ramber-ui\node_modules e
+    echo       rode este arquivo de novo.
+    echo.
+    pause
+    exit /b 1
 )
 
 REM -- 5. Ligar --------------------------------------------------------------
