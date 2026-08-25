@@ -1,6 +1,32 @@
 # COMECE AQUI
 
-**Você não precisa saber programar.** São 3 passos e nenhum comando para digitar.
+**Você não precisa saber programar, nem baixar nada na mão.**
+
+---
+
+## O jeito mais simples: um arquivo só
+
+Baixe **um** arquivo e dê dois cliques. Ele faz tudo sozinho: busca o sistema
+inteiro no GitHub, monta a pasta no seu computador, prepara a senha, instala
+as peças e abre o painel.
+
+| Seu computador | Baixe este arquivo |
+|---|---|
+| **Windows** | `AR10-INSTALADOR.bat` |
+| **Mac** | `AR10-INSTALADOR.command` |
+
+O único pré-requisito é o **Node** (Passo 1 abaixo). Se faltar, o próprio
+instalador abre o site para você e explica.
+
+Ele pergunta **onde guardar** (sugere uma pasta; é só apertar ENTER) e o resto
+é automático.
+
+> **Ele nunca apaga nada.** Se a pasta que você escolher já existir e tiver
+> arquivos, ele **para e avisa** em vez de mexer no que está lá.
+
+Depois dessa primeira vez, para ligar de novo você usa o
+`INSTALAR-E-RODAR` que ficou **dentro** da pasta — e ele já busca as
+atualizações sozinho.
 
 ---
 
@@ -18,7 +44,7 @@ qualquer programa.
 
 ---
 
-## Passo 2 — Baixar o sistema
+## Se preferir fazer na mão (ou já tem a pasta)
 
 **Há dois jeitos. O primeiro é melhor — e é o que faz tudo virar automático.**
 
@@ -52,7 +78,7 @@ de ZIP, e mostra o comando para trocar.
 
 ---
 
-## Passo 3 — Clicar duas vezes
+## Ligar o painel (quando já tem a pasta)
 
 Entre na pasta e dê **dois cliques** no arquivo do seu sistema:
 

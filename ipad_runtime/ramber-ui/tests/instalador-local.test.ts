@@ -13,6 +13,8 @@ import { resolve } from "node:path";
 
 const raiz = (p: string) => resolve(__dirname, "../../../", p);
 const unix = () => readFileSync(raiz("INSTALAR-E-RODAR.command"), "utf8");
+const bootUnix = () => readFileSync(raiz("AR10-INSTALADOR.command"), "utf8");
+const bootWin = () => readFileSync(raiz("AR10-INSTALADOR.bat"), "utf8");
 const win = () => readFileSync(raiz("INSTALAR-E-RODAR.bat"), "utf8");
 
 describe("instaladores: a senha nunca é gravada nem exposta", () => {
@@ -117,6 +119,11 @@ describe("instaladores: chegam ao mesmo lugar", () => {
     const guia = readFileSync(raiz("COMECE-AQUI.md"), "utf8");
     expect(guia).toContain("INSTALAR-E-RODAR.bat");
     expect(guia).toContain("INSTALAR-E-RODAR.command");
+    // o instalador de um arquivo so precisa aparecer PRIMEIRO — e ele que
+    // resolve o pedido "baixo um arquivo e ele faz tudo".
+    expect(guia).toContain("AR10-INSTALADOR.bat");
+    expect(guia).toContain("AR10-INSTALADOR.command");
+    expect(guia.indexOf("AR10-INSTALADOR")).toBeLessThan(guia.indexOf("INSTALAR-E-RODAR"));
     expect(guia).toContain("https://nodejs.org");
     // o aviso do Gatekeeper do Mac: sem ele o Operador trava no primeiro clique
     expect(guia).toContain("não pode ser aberto");
@@ -194,5 +201,76 @@ describe("instaladores: rede local com o aviso junto", () => {
     expect(unix()).toContain("já configurada");
     expect(win()).toContain("ja configurada");
     expect(unix()).toMatch(/VITE_ACCESS_HASH=\[0-9a-fA-F\]/);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// O INSTALADOR COMPLETO (bootstrap).
+//
+// Pedido do Operador: "tu gera um arquivo, executa ele, abaixa tudo que tem
+// de baixar, arruma tudo no meu computador e faz todo processo tudinho".
+//
+// É o único arquivo que ele baixa. Isso o torna a peça com MAIS poder de
+// estragar a máquina dele — ele escolhe um caminho e o script cria pasta e
+// baixa arquivos ali. O que não pode regredir está travado aqui.
+// ---------------------------------------------------------------------------
+describe("instalador completo: nunca destrói nada do Operador", () => {
+  it("recusa uma pasta que já existe e tem conteúdo — em vez de apagar", () => {
+    // O risco real: o Operador digita "Documentos" ou a Área de Trabalho por
+    // engano. Um `rm -rf` ali levaria junto o que estava lá.
+    expect(bootUnix()).toContain("já existe e NÃO está vazia");
+    expect(bootWin()).toContain("ja existe e NAO esta vazia");
+    expect(bootUnix()).toContain("Não vou mexer no que já está lá");
+  });
+
+  it("NENHUM dos dois apaga pasta recursivamente fora de um temporário", () => {
+    for (const [nome, src] of [["unix", bootUnix()], ["win", bootWin()]] as const) {
+      const remocoes = [...src.matchAll(/(rm -rf|rmdir \/s \/q)\s+"?([^"\n]+)"?/g)].map((m) => m[2]);
+      for (const alvo of remocoes) {
+        // Só o diretório temporário do próprio download pode ser removido.
+        expect(alvo, `${nome}: apaga ${alvo}`).toMatch(/TMP/);
+      }
+    }
+  });
+
+  it("baixa o RAMO que realmente tem o trabalho, não o main desatualizado", () => {
+    // `main` está 194 commits atrás (PR #15 aberta). Clonar main entregaria
+    // um sistema sem nenhuma das correções — e o Operador não teria como
+    // saber. Quando a PR for mesclada, esta é a única linha que muda.
+    for (const [nome, src] of [["unix", bootUnix()], ["win", bootWin()]] as const) {
+      expect(src, `${nome}: não fixa o ramo`).toMatch(/RAMO="?claude\/eloquent-cannon-qyt86y"?/);
+      expect(src, `${nome}: clona sem escolher ramo`).toMatch(/--branch/);
+    }
+  });
+
+  it("funciona SEM git — o ZIP é caminho de verdade, não desculpa", () => {
+    expect(bootUnix()).toContain("codeload.github.com");
+    expect(bootWin()).toContain("codeload.github.com");
+    // e explica a diferença em vez de esconder
+    expect(bootUnix()).toContain("não vai se atualizar sozinho depois");
+    expect(bootWin()).toContain("nao vai se atualizar sozinho depois");
+  });
+
+  it("entrega para o instalador já testado — nunca reimplementa a preparação", () => {
+    // Duas cópias da mesma preparação divergiriam na primeira correção feita
+    // só num lado.
+    expect(bootUnix()).toContain('INTERNO="$DESTINO/INSTALAR-E-RODAR.command"');
+    expect(bootWin()).toContain("INSTALAR-E-RODAR.bat");
+    // o bootstrap NÃO refaz senha nem npm ci
+    expect(bootUnix()).not.toContain("setup-local.mjs");
+    expect(bootUnix()).not.toMatch(/npm ci/);
+    expect(bootWin()).not.toContain("setup-local.mjs");
+  });
+
+  it("não instala Node nem pede privilégio", () => {
+    for (const [nome, src] of [["unix", bootUnix()], ["win", bootWin()]] as const) {
+      expect(src, `${nome}: usa sudo`).not.toMatch(/\bsudo\b/);
+      expect(src, `${nome}: instala node`).not.toMatch(/brew install|apt-get install|choco install|winget install/);
+    }
+  });
+
+  it("o do Unix tem permissão de execução (sem isso o duplo clique não roda)", () => {
+    expect(statSync(raiz("AR10-INSTALADOR.command")).mode & 0o111).toBeGreaterThan(0);
   });
 });
