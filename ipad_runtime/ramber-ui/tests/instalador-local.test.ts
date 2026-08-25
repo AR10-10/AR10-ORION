@@ -270,6 +270,19 @@ describe("instalador completo: nunca destrói nada do Operador", () => {
     }
   });
 
+  it("explica o caso REPOSITÓRIO PRIVADO — a causa mais provável depois do fechamento", () => {
+    // Assim que o repositório virar privado, o ZIP anônimo passa a dar 404.
+    // Dizer só "verifique a internet" mandaria o Operador procurar no lugar
+    // errado por horas. Os dois caminhos precisam nomear a causa certa.
+    for (const [nome, src] of [["unix", bootUnix()], ["win", bootWin()]] as const) {
+      expect(src, `${nome}: não explica o ZIP em repo privado`).toMatch(/PRIVADO/);
+      expect(src, `${nome}: não aponta a saída (git)`).toContain("git-scm.com/downloads");
+    }
+    // e o clone avisa ANTES que vai pedir login, para o prompt não assustar
+    expect(bootUnix()).toContain("o GitHub vai pedir seu login agora");
+    expect(bootWin()).toContain("o GitHub vai pedir seu login agora");
+  });
+
   it("o do Unix tem permissão de execução (sem isso o duplo clique não roda)", () => {
     expect(statSync(raiz("AR10-INSTALADOR.command")).mode & 0o111).toBeGreaterThan(0);
   });

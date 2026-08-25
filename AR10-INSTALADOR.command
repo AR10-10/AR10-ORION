@@ -103,8 +103,13 @@ elif [ -d "$DESTINO" ] && [ -n "$(ls -A "$DESTINO" 2>/dev/null)" ]; then
     "Escolha outro caminho, ou apague/renomeie essa pasta você mesmo. Não vou mexer no que já está lá."
 elif command -v git >/dev/null 2>&1; then
   echo "      Usando git (melhor: depois atualiza sozinho)..."
+  echo -e "      ${AMARELO}Se o repositório for privado, o GitHub vai pedir seu login agora.${FIM}"
+  echo ""
   git clone --branch "$RAMO" --single-branch "https://github.com/${REPO}.git" "$DESTINO" \
-    || parar "o download falhou." "Verifique a internet. Se o repositório for privado, faça login no GitHub primeiro."
+    || parar "o download falhou." \
+      "Duas causas prováveis:
+    · repositório PRIVADO e login não aceito — no Mac/Linux o Git costuma pedir usuário e um TOKEN (não a senha da conta). Crie um em github.com > Settings > Developer settings > Personal access tokens, com permissão 'repo'.
+    · sem internet — verifique a conexão."
   echo -e "      ${VERDE}✓${FIM} baixado"
 else
   echo -e "      ${AMARELO}!${FIM} git não encontrado — baixando o ZIP"
@@ -112,8 +117,16 @@ else
   echo -e "         para ter atualização automática, instale: ${AZUL}https://git-scm.com/downloads${FIM})"
   echo ""
   TMP="$(mktemp -d)"
-  curl -fL --progress-bar "https://codeload.github.com/${REPO}/zip/refs/heads/${RAMO}" -o "$TMP/ar10.zip" \
-    || parar "o download do ZIP falhou." "Verifique a internet."
+  if ! curl -fL --progress-bar "https://codeload.github.com/${REPO}/zip/refs/heads/${RAMO}" -o "$TMP/ar10.zip"; then
+    rm -rf "$TMP"
+    # Causa MAIS PROVÁVEL depois que o repositório vira privado: o download
+    # anônimo por ZIP deixa de existir (404). Dizer só "verifique a internet"
+    # mandaria o Operador procurar no lugar errado.
+    parar "o download do ZIP falhou." \
+      "Se o repositório JÁ FOI TORNADO PRIVADO, este caminho não funciona mais — ZIP anônimo só existe em repositório público.
+    A saída é instalar o Git (https://git-scm.com/downloads) e rodar este instalador de novo: ele vai pedir seu login do GitHub e funciona normalmente.
+    Se o repositório ainda é público, então é internet: verifique a conexão."
+  fi
   unzip -q "$TMP/ar10.zip" -d "$TMP" || parar "não consegui descompactar o arquivo baixado."
   PASTA_INTERNA="$(find "$TMP" -maxdepth 1 -type d -name 'AR10-ORION-*' | head -1)"
   [ -z "$PASTA_INTERNA" ] && parar "o ZIP veio com uma estrutura inesperada."

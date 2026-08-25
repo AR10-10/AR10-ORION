@@ -102,12 +102,16 @@ where git >nul 2>&1
 if errorlevel 1 goto baixarZip
 
 echo       Usando git ^(melhor: depois atualiza sozinho^)...
+echo       Se o repositorio for privado, o GitHub vai pedir seu login agora.
+echo.
 git clone --branch "!RAMO!" --single-branch "https://github.com/!REPO!.git" "!DESTINO!"
 if errorlevel 1 (
     echo.
-    echo   [X] PAROU AQUI: o download falhou.
-    echo       Verifique a internet. Se o repositorio for privado, faca login
-    echo       no GitHub primeiro.
+    echo   [X] PAROU AQUI: o download falhou. Duas causas provaveis:
+    echo       - repositorio PRIVADO e login nao aceito. No Windows o Git abre
+    echo         uma janela do navegador para entrar na conta -- se nao abriu,
+    echo         instale o Git de novo marcando "Git Credential Manager".
+    echo       - sem internet -- verifique a conexao.
     echo.
     pause
     exit /b 1
@@ -124,8 +128,16 @@ set "TMPZIP=%TEMP%\ar10-%RANDOM%"
 mkdir "!TMPZIP!" >nul 2>&1
 powershell -NoProfile -Command "$ErrorActionPreference='Stop'; try { Invoke-WebRequest -Uri 'https://codeload.github.com/%REPO%/zip/refs/heads/%RAMO%' -OutFile '!TMPZIP!\ar10.zip'; Expand-Archive -Path '!TMPZIP!\ar10.zip' -DestinationPath '!TMPZIP!' -Force; exit 0 } catch { exit 1 }"
 if errorlevel 1 (
+    rmdir /s /q "!TMPZIP!" >nul 2>&1
     echo.
-    echo   [X] PAROU AQUI: o download do ZIP falhou. Verifique a internet.
+    echo   [X] PAROU AQUI: o download do ZIP falhou.
+    echo.
+    echo       Se o repositorio JA FOI TORNADO PRIVADO, este caminho nao
+    echo       funciona mais -- ZIP anonimo so existe em repositorio publico.
+    echo       A saida e instalar o Git ^(https://git-scm.com/downloads^) e rodar
+    echo       este instalador de novo: ele pede seu login e funciona normal.
+    echo.
+    echo       Se o repositorio ainda e publico, entao e internet.
     echo.
     pause
     exit /b 1
