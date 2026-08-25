@@ -139,7 +139,7 @@ describe("os outros módulos de laboratório continuam cercados", () => {
   // inteira continua fechada, para o padrão não se perder.
   it("o guarda da Fase 2 do backtest continua existindo", () => {
     expect(readFileSync(resolve(__dirname, "history-capture.test.ts"), "utf8")).toContain(
-      "nenhum módulo de produção importa a Fase 2 do backtest",
+      "só o worker de backtest autorizado importa a Fase 2",
     );
   });
 

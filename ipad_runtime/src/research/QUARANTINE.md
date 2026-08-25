@@ -656,3 +656,50 @@ de causalidade próprio (`s.index + FRACTAL_K <= ultimo`) que **não filtrava
 nada** — `findSwings` já varre só `k <= i < length - k`. Um guard que não
 guarda é pior que nenhum. Removido, e a garantia real passou a ser travada
 por teste em cima de `findSwings`, onde ela de fato vive.
+
+## GRADUAÇÃO — backtest estrutural para dentro do app (superfície de UI)
+
+**Autorização:** pedido explícito do Operador, registrado via `AskUserQuestion`
+("constrói o botão de backtest dentro do app, para a taxa de acerto rodar no
+próprio iPad"). O cabeçalho de `history-capture.js` já previa exatamente esta
+decisão: *"este módulo não tem, ainda, nenhum gatilho de UI — é a peça de
+código pronta para quando essa decisão de superfície for tomada
+explicitamente"*.
+
+**O que graduou:** `structural-backtest.js` (walk-forward zero-lookahead) e
+`history-capture.js` (paginação real com proveniência) passam a ter UM
+consumidor de produção.
+
+**Consumidor único autorizado:** `ramber-ui/src/workers/backtest-worker.ts`.
+Nenhum outro módulo pode importar do laboratório — e isso não é convenção, é
+teste: `structural-backtest.test.ts` e `history-capture.test.ts` varrem
+`ramber-ui/src` e `ipad_runtime/src` inteiros e falham se qualquer arquivo
+além do worker importar de lá. A guarda ficou MAIS específica do que era
+(antes dizia "ninguém", agora nomeia o autorizado e proíbe o resto);
+verificado por mutação: importar em `App.tsx` derruba a suíte.
+
+**Por que Worker (Regra de Ouro 6):** o walk-forward roda um frame de replay
+por candle e executa dois motores graduados por frame. Com milhares de
+candles são segundos de CPU — no main thread o gráfico congelaria e os 60 FPS
+do iPad iriam junto. Sem Worker disponível NÃO há fallback: o hook falha
+com `worker_indisponivel`, porque é melhor não medir do que travar o terminal.
+
+**LEI 24 preservada:** display-only. Nada realimenta decisão; travado por
+teste que varre o corpo do `BacktestPanel` procurando qualquer escrita em
+estado de decisão.
+
+**Regra de Ouro 2 preservada:** `taxaAlvoAmostra` é a fração real da amostra
+resolvida que tocou o alvo antes do stop — aritmética sobre eventos passados,
+nunca probabilidade do próximo trade. O aviso que diz isso é obrigatório e
+fica sempre visível na tela, nunca só no tooltip.
+
+**Fail-closed em três pontos:** pedido inválido recusado antes de gastar rede;
+captura vazia ou curta demais nunca vira backtest (preservando o `stopReason`
+real, que é a causa que o Operador pode agir); e `null` jamais é formatado
+como `0%` — vira travessão, porque ausência de medida não é medida zero.
+
+**Piso de amostra reaproveitado, não inventado:** `BACKTEST_MIN_RESOLVED_FOR_RATE
+= 30` é o MESMO piso que `nexus/expectancy.ts` já usa para o Track Record
+real (`MIN_TRADES_FOR_VALID_EXPECTANCY`), e há teste comparando os dois.
+Abaixo dele o número real continua visível, com a ressalva junto — esconder
+seria tão desonesto quanto apresentar como sólido.

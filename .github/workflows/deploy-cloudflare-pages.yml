@@ -15,14 +15,11 @@ name: Deploy AR10 CYBORG (Cloudflare Pages)
 # Passo a passo de configuração (contas, tokens, lista de acesso):
 # docs/ACESSO_PRIVADO.md
 
+# So sob demanda: o Operador optou por rodar LOCAL, entao nao ha publicacao
+# automatica. O workflow continua inteiro e pronto — se um dia ele quiser o
+# painel acessivel de fora com autenticacao real, basta cadastrar os tres
+# segredos e rodar isto a mao (Actions > Run workflow). Nada foi apagado.
 on:
-  push:
-    branches:
-      - main
-      - claude/eloquent-cannon-qyt86y
-    paths:
-      - 'ipad_runtime/**'
-      - '.github/workflows/deploy-cloudflare-pages.yml'
   workflow_dispatch:
 
 permissions:

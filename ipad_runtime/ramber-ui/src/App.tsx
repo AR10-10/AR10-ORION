@@ -144,6 +144,16 @@ import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD, type CouncilDecisio
 // único, sem duplicar UI nem criar um segundo painel.
 import { deriveEngineSignalsFromCouncil, deriveEngineSignalsFromInstitutionalZones } from "./nexus/engine-signal-contract";
 import { summarizeLayerPanel, describeLayerPanel } from "./nexus/layer-panel-summary";
+import { useBacktestRunner } from "./nexus/use-backtest-runner";
+import {
+  descreverTaxa,
+  formatarFracao,
+  formatarR,
+  avisoObrigatorio,
+  explicarFalha,
+  type BacktestAggregate,
+  type BacktestProvenance,
+} from "./nexus/backtest-presentation";
 import { timeframeMinutes } from "./nexus/timeframe-layer-profile";
 // Carta Branca: consumidor real do Evidence Fusion Engine — SYSTEM_HANDBOOK
 // §6.72/§6.74/§6.76 classificaram isto como "iniciativa de arquitetura
@@ -8474,6 +8484,77 @@ function ModuleStat({ label, value, tone }: { label: string; value: string; tone
 
 const MODULE_EMPTY = "AWAITING REAL DATA"; // honest fail-closed value, never a fabricated number
 
+// BacktestPanel — a taxa de acerto REAL, medida dentro do app (pedido do
+// Operador: rodar isso no iPad, sem depender de um computador com terminal).
+//
+// LEI 24: display-only. Nada aqui emite ou altera decisão — é contagem de
+// desfechos históricos. REGRA DE OURO 2: `taxaAlvoAmostra` é a fração real
+// da amostra resolvida, nunca probabilidade do próximo trade, e o aviso que
+// diz isso é obrigatório e fica SEMPRE visível, nunca só no tooltip.
+function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: string }) {
+  const { estado, rodar } = useBacktestRunner();
+  const r = estado.resultado as
+    | { status?: string; aggregate?: BacktestAggregate; provenance?: BacktestProvenance; reason?: string }
+    | null;
+  const agg = r?.status === "OK" ? r.aggregate ?? null : null;
+  const prov = r?.status === "OK" ? r.provenance ?? null : null;
+  const taxa = agg ? descreverTaxa(agg) : null;
+
+  return (
+    <ModulePanel title="Backtest Estrutural (desfechos reais, walk-forward zero-lookahead)">
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          disabled={estado.rodando}
+          onClick={() => rodar(symbol, timeframe, 2000)}
+          className={`text-[0.45rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
+            estado.rodando
+              ? "border-[#8ab4f8]/20 text-[#8ab4f8]/40"
+              : "border-[#00f0ff40] bg-[#00f0ff15] text-[#00f0ff] hover:border-[#00f0ff]"
+          }`}
+        >
+          {estado.rodando ? "MEDINDO…" : `MEDIR ${symbol} ${timeframe}`}
+        </button>
+        <span className="text-[0.42rem] text-[#8ab4f8]/40">2000 candles reais · READ_ONLY</span>
+      </div>
+
+      {estado.fase && <span className="text-[0.42rem] text-[#8ab4f8]/60">{estado.fase}</span>}
+
+      {estado.erro && (
+        <span className="text-[0.45rem] text-[#ff0055] leading-tight">
+          Não foi possível medir — {explicarFalha(estado.erro.motivo, estado.erro.detalhe)}
+        </span>
+      )}
+
+      {r && r.status !== "OK" && !estado.erro && (
+        <span className="text-[0.45rem] text-[#8ab4f8]/60">DADOS_INSUFICIENTES — {r.reason ?? "sem razão declarada"}</span>
+      )}
+
+      {agg && taxa && (
+        <>
+          <ModuleStat
+            label="Alvo antes do stop (amostra resolvida)"
+            value={taxa.valor}
+            tone={taxa.forca === "SUFICIENTE" && agg.taxaAlvoAmostra !== null && agg.taxaAlvoAmostra >= 0.5 ? "long" : "neutral"}
+          />
+          <ModuleStat label="Cenários medidos" value={`${agg.samples} (${agg.resolved} resolvidos, ${agg.unresolved} sem desfecho)`} />
+          <ModuleStat label="Alvos / Stops" value={`${agg.targetHits} / ${agg.stopHits}`} />
+          <ModuleStat label="Empates contados como STOP" value={String(agg.bothTouchedCountedAsStop)} />
+          <ModuleStat label="MFE / MAE médios" value={`${formatarR(agg.avgMfeR)} / ${formatarR(agg.avgMaeR)}`} />
+          <ModuleStat
+            label="Alvo estrutural distante"
+            value={agg.farTargetEligible > 0 ? `${formatarFracao(agg.farTargetHitRate)} de ${agg.farTargetEligible}` : "—"}
+          />
+          {taxa.ressalva && (
+            <span className="text-[0.45rem] text-[#ffaa00] leading-tight">⚠ {taxa.ressalva}</span>
+          )}
+          {prov && <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-tight">{avisoObrigatorio(prov)}</span>}
+        </>
+      )}
+    </ModulePanel>
+  );
+}
+
 function SecondaryModuleView({ tab }: { tab: string }) {
   const ctx = useContext(WidgetContext) || {};
   const {
@@ -8886,6 +8967,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         <ModulePanel title="Perception Index (CPI · reward/pain memory, real transitions)">
           <ModuleStat label="CPI" value={cpi !== null ? pct(cpi) : MODULE_EMPTY} tone={cpi !== null && cpi >= 0.5 ? "long" : cpi !== null ? "short" : "neutral"} />
         </ModulePanel>
+        <BacktestPanel symbol={selectedAsset ?? "BTCUSDT"} timeframe={chartTimeframe ?? "15m"} />
         <ModulePanel title="Signal Track Record (real first-touch outcomes, persisted)">
           <ModuleStat label="Open Plan" value={trackRecord.active ? `${trackRecord.active.plan.direction} since ${new Date(trackRecord.active.openedAt).toLocaleTimeString("en-US", { hour12: false })}` : "NONE"} />
           <ModuleStat label="Target Hits" value={String(trackRecord.targetHits)} tone="long" />

@@ -24,9 +24,8 @@ mais forte que esse.
 > o painel do celular, de outro lugar. Se for só você, na sua máquina, não
 > precisa de nada disso — e `docs/ACESSO_PRIVADO.md` vira plano B.
 >
-> **Continua valendo a pena:** tornar o repositório privado e desativar o
-> GitHub Pages. O código e o site já publicados seguem abertos até você fazer
-> isso (passos 3.1 e 3.2 do outro documento).
+> **Mas o que já está publicado continua no ar** até você desativar — ver a
+> seção "Tirar do ar o que já está publicado" logo abaixo.
 
 ### 2. Dado real — destravado
 
@@ -36,6 +35,28 @@ uma taxa de acerto real.
 
 **Seu computador tem internet normal.** Lá as chamadas públicas de mercado
 funcionam — inclusive o executor de backtest.
+
+---
+
+## Tirar do ar o que já está publicado
+
+Esta é a parte que **só você pode fazer**, e é a única que realmente fecha o
+acesso. Eu já desliguei a publicação automática (nenhum push publica mais
+nada), mas **o site que já foi publicado continua no ar até você desativar**.
+
+São três coisas, em ordem de importância:
+
+| # | O quê | Onde | Efeito |
+|---|---|---|---|
+| 1 | **Desativar o Pages** | `Settings` → `Pages` → Build and deployment → Source: **None** | **Tira o site do ar.** É este que fecha o acesso de quem tem o link |
+| 2 | **Tornar o repositório privado** | `Settings` → Danger Zone → **Change repository visibility** → Make private | Esconde o código-fonte |
+| 3 | **Trocar a senha do portão** | `node ipad_runtime/tools/setup-local.mjs "nova-senha"` | A antiga esteve pública em repositório aberto |
+
+> **O que isso não desfaz:** o repositório foi público até agora. Quem já
+> clonou ou forkou continua com aquela cópia. Fechar agora impede acesso
+> *futuro* — por isso o passo 3 não é opcional.
+
+Depois disso, o painel existe **só na sua máquina**.
 
 ---
 
@@ -96,7 +117,26 @@ senha do passo 3.
 
 ---
 
-## A taxa de acerto real
+## A taxa de acerto real — agora dentro do app
+
+**Novidade desta rodada:** não precisa mais de terminal. Com o painel aberto,
+vá na aba **RISK** e clique em **MEDIR BTCUSDT 15m**.
+
+Ele captura 2000 candles reais da Binance e mede os desfechos num **Web
+Worker** — a thread principal fica livre, o gráfico não trava (Regra de Ouro
+6). O resultado mostra:
+
+- **Alvo antes do stop** sobre a amostra resolvida
+- **Quantos cenários** foram medidos, resolvidos e não resolvidos
+- **Empates contados como STOP** (o motor é conservador: empate nunca é acerto)
+- **MFE / MAE médios** em R-múltiplo
+- E, sempre visível, o aviso do que a medida **não** é
+
+Se a amostra resolvida for menor que 30, o número real continua aparecendo —
+mas com a ressalva de que ainda é instável. Esconder seria tão desonesto
+quanto apresentar como sólido.
+
+### Pelo terminal, se preferir
 
 É aqui que a sua máquina faz o que a minha não podia:
 
@@ -131,7 +171,7 @@ Me mande a saída que eu analiso de verdade.
 | Livro de ofertas / profundidade | **Real** | |
 | Fluxo de ordens / CVD | **Real** | Enche a ~4s por ciclo: 1 h de fluxo exige a aba aberta 1 h |
 | Motores estruturais (S/R, BOS/CHOCH, FVG/OB, Fibonacci, zonas) | **Real** | Puros, sobre candles reais |
-| Backtest / taxa de acerto | **Real** | O comando acima |
+| Backtest / taxa de acerto | **Real** | Botão **MEDIR** na aba RISK, dentro do próprio app — ou o comando acima |
 | Liquidações | **Real** | |
 | Neural Core (LLM) | **Real, com ressalva** | Precisa de **WebGPU** — Chrome ou Edge. No Safari não liga. Baixa ~1 GB de pesos na primeira vez |
 | Divergência de delta | **Ainda não** | Em quarentena: precisa cobrir 12 velas de CVD. Com 1 h de retenção funciona em 1m e 5m, não em 15m+ |

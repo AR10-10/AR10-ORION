@@ -15,14 +15,23 @@ name: Deploy iPad Runtime (GitHub Pages)
 # O deploy real agora é deploy-cloudflare-pages.yml, onde a autenticação
 # acontece no servidor (Cloudflare Access), antes da entrega.
 #
-# NADA FOI APAGADO: o gatilho `push` virou `workflow_dispatch` apenas, então
-# este workflow continua existindo e pode ser executado à mão a qualquer
-# momento (Actions > este workflow > Run workflow) — é reversível numa
-# linha. Mas note: executá-lo volta a publicar um site PÚBLICO.
+# DESLIGADO DE NOVO — instrucao mais recente do Operador, que substitui a
+# anterior: "prepara o sistema todo pra rodar localmente na minha maquina...
+# todos os dados fica privado na minha, so eu ter acesso... tem como bloquear
+# esse que ta publicado la, ou remover, pra ele nao ficar publico".
 #
-# ATENÇÃO — desligar isto NÃO tira do ar o que já foi publicado. O site
-# atual do GitHub Pages continua no ar até o Operador desativar Pages em
-# Settings > Pages. Ver docs/ACESSO_PRIVADO.md.
+# A escolha anterior ("GitHub Pages de novo") foi feita quando o objetivo era
+# manter o iPad atualizado. O objetivo mudou: rodar local. Publicar deixou de
+# ser desejado, entao o gatilho `push` sai de novo.
+#
+# ATENCAO, e isto e o que realmente importa: desligar este workflow impede
+# NOVAS publicacoes, mas NAO tira do ar o site ja publicado. Isso so acontece
+# em Settings > Pages > Source: None — passo que so o Operador pode executar.
+# Ver docs/RODAR_LOCAL.md secao "Tirar o que ja esta publicado do ar".
+#
+# O QUE PROTEGE ESTE DEPLOY AGORA: o passo "Verificar segredo do portao"
+# abaixo. Sem VITE_ACCESS_HASH cadastrado, este workflow FALHA em vez de
+# publicar um build que trancaria o Operador para fora do proprio painel.
 # ═══════════════════════════════════════════════════════════════════════
 on:
   workflow_dispatch:
