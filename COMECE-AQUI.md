@@ -4,7 +4,16 @@
 
 ---
 
-## O jeito mais simples: um arquivo só
+## O jeito MAIS simples: um comando
+
+Não baixa nada, não clica em nada. Abre o **Prompt de Comando** (Windows) ou o
+**Terminal** (Mac), cola uma linha, ENTER. Ele faz tudo.
+
+**Os comandos estão em `COMANDO-UNICO.md`.**
+
+---
+
+## O jeito simples: um arquivo só
 
 Baixe **um** arquivo e dê dois cliques. Ele faz tudo sozinho: busca o sistema
 inteiro no GitHub, monta a pasta no seu computador, prepara a senha, instala
@@ -166,6 +175,7 @@ Digite o segundo no navegador do iPad, **na mesma rede de casa**. Mesma senha.
 
 | Arquivo | Para quê |
 |---|---|
+| `COMANDO-UNICO.md` | O comando para colar no CMD/Terminal — instala tudo sem baixar arquivo |
 | `FECHAR-ACESSO-PUBLICO.md` | Tirar do ar o site publicado hoje — os 3 passos, na ordem |
 | `TRABALHAR-LOCAL-COMIGO.md` | Onde seus dados ficam salvos, e como me instalar na sua máquina |
 | `docs/RODAR_LOCAL.md` | Detalhes técnicos: o que roda com dado real e o que não roda |

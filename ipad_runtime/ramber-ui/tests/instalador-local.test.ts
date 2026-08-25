@@ -304,3 +304,45 @@ describe("instalador completo: nunca destrói nada do Operador", () => {
     expect(statSync(raiz("AR10-INSTALADOR.command")).mode & 0o111).toBeGreaterThan(0);
   });
 });
+
+
+describe("comando único: a linha que o Operador cola no CMD/Terminal", () => {
+  const cmd = () => readFileSync(raiz("COMANDO-UNICO.md"), "utf8");
+
+  it("aponta para o RAMO que tem o trabalho, igual aos instaladores", () => {
+    // Se o documento apontasse para outro ramo que os instaladores, o
+    // Operador baixaria uma versão e rodaria outra.
+    const doc = cmd();
+    expect(doc).toContain("refs/heads/claude/eloquent-cannon-qyt86y");
+    expect(bootUnix()).toContain("claude/eloquent-cannon-qyt86y");
+    expect(bootWin()).toContain("claude/eloquent-cannon-qyt86y");
+  });
+
+  it("cobre os dois sistemas e o caso de curl ausente", () => {
+    const doc = cmd();
+    expect(doc).toContain("AR10-INSTALADOR.bat");
+    expect(doc).toContain("AR10-INSTALADOR.command");
+    // Windows antigo não tem curl — sem alternativa, o Operador trava.
+    expect(doc).toContain("powershell");
+  });
+
+  it("EXPLICA o que o comando faz — colar da internet não é confiança cega", () => {
+    const doc = cmd();
+    expect(doc).toMatch(/O que esse comando faz/);
+    expect(doc).toContain("não pede senha de administrador");
+    // e diz que dá para ler o arquivo antes
+    expect(doc).toMatch(/abra o endereço no\s*\n?navegador|abrir no navegador/);
+  });
+
+  it("avisa que o comando morre quando o repositório virar privado", () => {
+    // Esta é a armadilha real: ele fecha o acesso e depois o comando para de
+    // funcionar sem explicação. A ordem certa precisa estar escrita.
+    const doc = cmd();
+    expect(doc).toContain("enquanto o repositório estiver público");
+    expect(doc).toMatch(/Rode este comando \*\*agora\*\*/);
+  });
+
+  it("o COMECE-AQUI aponta para ele", () => {
+    expect(readFileSync(raiz("COMECE-AQUI.md"), "utf8")).toContain("COMANDO-UNICO.md");
+  });
+});
