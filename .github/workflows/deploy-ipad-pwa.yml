@@ -43,11 +43,26 @@ name: Deploy iPad Runtime (GitHub Pages)
 # abaixo. Sem VITE_ACCESS_HASH cadastrado, este workflow FALHA em vez de
 # publicar um build que trancaria o Operador para fora do proprio painel.
 # ═══════════════════════════════════════════════════════════════════════
+# MEDIDO EM EXECUCAO REAL (2026-08-31), corrigindo a tentativa anterior:
+# incluir a branch de trabalho aqui NAO funciona. O job morreu em 2 SEGUNDOS,
+# sem log de nenhum passo — ou seja, rejeitado ANTES do checkout, no nivel do
+# `environment: github-pages` declarado abaixo, nunca no codigo.
+#
+# A causa nao e' "Pages nao aceita branch que nao seja a padrao": os deploys
+# de 24/08 rodaram com SUCESSO a partir de `claude/eloquent-cannon-qyt86y`,
+# que tambem nao era a padrao. O ambiente tem uma LISTA de branches
+# autorizadas, e ela ficou com a branch antiga — nao com esta.
+#
+# Isso e' configuracao de repositorio (Settings > Environments >
+# github-pages > Deployment branches), fora do alcance de qualquer commit.
+# Entao o caminho honesto nao e' insistir aqui: e' `main`, que ja e' a
+# origem naturalmente autorizada. Para o site publicar a versao ATUAL, o
+# que falta e' mergear PR #15 e PR #16 — o mesmo passo que tira o `main` de
+# 208 commits de atraso. Um passo resolve os dois problemas.
 on:
   push:
     branches:
       - main
-      - claude/localizar-arquivo-nuvem-qr0z6x
     paths:
       - 'ipad_runtime/**'
       - '.github/workflows/deploy-ipad-pwa.yml'
