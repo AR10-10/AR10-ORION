@@ -45,7 +45,7 @@ nessa ordem:
    para o porquê isso não pode ser feito por nenhum token de Action).
 2. Reexecutar o workflow `deploy-ipad-pwa.yml` (push novo ou
    `workflow_dispatch`).
-3. Confirmar `https://ar10-10.github.io/ar10-orion/` responde 200.
+3. Confirmar `https://ar10-10.github.io/AR10-ORION/` responde 200.
 4. Rodar o checklist de `docs/IPAD_DIRECT_GUIDE.md` num iPad real.
 5. Só então promover este item de `HOLD` para `PASS` no próximo relatório.
 
