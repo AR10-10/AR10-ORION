@@ -2419,8 +2419,11 @@ export default function App() {
         point("VP_HVN", bucketMidPrice(i, vp.rangeMin, vp.rangeMax, vp.bucketCount));
       });
     }
+    // O ATR% real do tempo gráfico SELECIONADO entra aqui: é ele que faz o
+    // limiar da perna escalar com o período (ver fibLegDeviationPct,
+    // engine-bridge.ts). Sem ele, a perna voltaria a ser a mesma em 1m e 1W.
     useUnifiedSnapshotStore.getState().setFibonacciConfluence(
-      computeRealFibonacciConfluence(chartData, sources),
+      computeRealFibonacciConfluence(chartData, sources, engine?.marketRegime?.atrPercent ?? null),
     );
   // Achado real de auditoria (sincronização/performance): `engine` inteiro
   // troca de referência a cada tick de livro/preço (5-6x/s) porque agrupa
@@ -2429,7 +2432,10 @@ export default function App() {
   // do objeto inteiro e recomputava/escrevia na store nessa cadência rápida
   // por nada. Estreitado aos 2 campos reais lidos acima (mesmo padrão já
   // usado por ensembleConsensus/consensusRadar/auraReading neste arquivo).
-  }, [chartData, smcZones, engine?.support, engine?.resistance, volumeProfileSnapshot]);
+  // atrPercent entra na lista pelo mesmo critério dos 2 campos acima: é um
+  // campo LENTO (muda no ciclo real do motor, ~30s), nunca na cadência de
+  // tick do livro — incluí-lo não reintroduz o recálculo de 5-6x/s.
+  }, [chartData, smcZones, engine?.support, engine?.resistance, engine?.marketRegime?.atrPercent, volumeProfileSnapshot]);
 
   // Refinamento Final §7 (Premium/Discount) + §8 (harmônicos): os dois
   // motores novos leem a MESMA série real do gráfico (chartData) e escrevem

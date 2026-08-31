@@ -199,12 +199,19 @@ describe('Fibonacci refaz o mapeamento a cada tempo gráfico', () => {
 
   it('o produtor da matriz depende de chartData — a série do timeframe ATUAL', () => {
     const src = app();
-    const i = src.indexOf('setFibonacciConfluence(\n      computeRealFibonacciConfluence(chartData, sources)');
+    const i = src.indexOf('computeRealFibonacciConfluence(chartData, sources,');
     expect(i, 'produtor da confluência Fibonacci não encontrado').toBeGreaterThan(-1);
     // O array de dependências do efeito tem de incluir chartData: é ele que
     // troca quando o Operador muda de tempo gráfico.
-    const deps = src.slice(i, i + 900);
+    const deps = src.slice(i, i + 1200);
     expect(deps).toContain('}, [chartData,');
+    // REFORÇO desta rodada: depender de chartData garante que a série é a do
+    // timeframe atual, mas NÃO garantia que o critério da perna mudasse com
+    // ele — com FRACTAL_K = 2 fixo, a perna era a menor ondulação possível
+    // em 1m e em 1W igualmente. O ATR% real do período agora entra como
+    // terceiro argumento e escala o limiar do ZigZag da perna.
+    expect(src).toContain('engine?.marketRegime?.atrPercent ?? null),');
+    expect(deps).toContain("engine?.marketRegime?.atrPercent");
   });
 
   it('a matriz é zerada quando não há série real — nunca reaproveita a do timeframe anterior', () => {

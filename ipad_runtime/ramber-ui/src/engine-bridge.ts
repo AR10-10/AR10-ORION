@@ -77,7 +77,11 @@ import { analyze as analyzeInstitutionalBlocks } from '../../src/research/engine
 // Entrega 47 (pedido direto do Operador): graduação do ZigZag do
 // Laboratório de Evolução (isolado/testado desde a Entrega 35, nunca
 // importado até aqui — ver QUARANTINE.md). Motor puro inalterado.
-import { computeZigZag as computeZigZagPure } from '../../src/research/engines/zigzag-engine.js';
+import {
+  computeZigZag as computeZigZagPure,
+  ZIGZAG_DEFAULT_DEVIATION_PCT,
+  ZIGZAG_DEFAULT_DEPTH,
+} from '../../src/research/engines/zigzag-engine.js';
 // Graduação de supertrend-engine.js. O motor e sua suíte de execução real
 // (18 casos) existiam desde a entrega anterior e nunca tinham chegado ao
 // sistema ao vivo — 0 importadores, mesmo padrão de falha registrado para
@@ -111,7 +115,6 @@ import { detectHvnLvn, bucketMidPrice, type VolumeProfileResult } from './nexus/
 // motores graduados (fractal-swings.js, extração da Auditoria Mestra) —
 // a perna da retração Fibonacci é a MESMA perna real da extensão 61.8% do
 // motor de S/R, nunca uma segunda definição de swing.
-import { findSwings, FRACTAL_K } from '../../src/research/engines/fractal-swings.js';
 import { buildFibonacciConfluence, type ConfluenceSource, type FibonacciConfluenceMatrix } from './nexus/fibonacci-confluence';
 // Fase Ω Priority 1 (Adaptive Multi-Timeframe Intelligence): motor puro
 // já reaproveita analyzeMarketStructure/classifyMarketRegime/S-R/RSI por
@@ -794,27 +797,108 @@ export type { ConfluenceSource, FibonacciConfluenceMatrix, FibConfluenceLevel } 
 // ─────────────────────────────────────────────────────────────────────────────
 // V-MAX Fase 1.4 — Matriz de Confluência Fibonacci (agente transversal).
 //
-// A perna é derivada EXATAMENTE como no support-resistance-engine.js
-// (último swing high/low fractal via o MESMO findSwings compartilhado,
-// direção = qual confirmou por último) — a retração aqui e a extensão
-// 61.8% já em produção falam da MESMA perna real. Cálculo O(n·k) trivial
-// (mesma classe do computeSmcZones que já roda em useMemo), não precisa
-// de worker. Camada de análise/exibição — nunca alimenta o Core Engine.
+// A perna era derivada EXATAMENTE como no support-resistance-engine.js
+// (último swing high/low fractal, K=2), e por isso a retração aqui e a
+// extensão de 161.8% em produção falavam da MESMA perna. ISSO MUDOU nesta
+// rodada, e a divergência está registrada de propósito em vez de escondida:
+//
+//   retração (aqui) ...... perna do ZigZag, limiar escalado pelo ATR real
+//                          do tempo gráfico — a perna ESTRUTURAL
+//   extensão 161.8% ...... support-resistance-engine.js, ainda fractal K=2
+//                          — a última ondulação confirmada
+//
+// PENDÊNCIA CONSCIENTE, não esquecimento: unificar as duas exige mexer no
+// motor que alimenta `extendedTarget` (engine-bridge.ts, campo que o
+// Operador VÊ como alvo). Trocar um alvo exibido é mudança de outra
+// natureza que lapidar uma camada de confluência, e não entra de carona
+// numa rodada de Fibonacci sem o Operador decidir. Enquanto isso, os dois
+// números continuam individualmente corretos — só não são a mesma perna.
+//
+// Cálculo O(n) trivial (mesma classe do computeSmcZones que já roda em
+// useMemo), não precisa de worker. Camada de análise/exibição — LEI 24:
+// nunca alimenta o Core Engine.
 // ─────────────────────────────────────────────────────────────────────────────
+// ═══ A PERNA DO FIBONACCI ESCALA COM O TEMPO GRÁFICO ═══
+//
+// PEDIDO DO OPERADOR: "ele tem que pegar [que] eu estou no gráfico em tal
+// período e puxar baseado naquilo, pra o Fibonacci ficar igual os
+// profissional".
+//
+// DEFEITO REAL, medido: a perna vinha de `findSwings(candles, FRACTAL_K)`
+// com FRACTAL_K = 2 — um swing confirmado por 2 velas de cada lado, ou
+// seja, a MENOR ondulação que existe. O Fibonacci era traçado no último
+// tremor do preço, não na perna estrutural, e o critério era o MESMO em 1m
+// e em 1W. FRACTAL_K é uma constante fixa; nada ali olhava o tempo gráfico.
+//
+// PESQUISA REAL antes de inventar variante própria (Disciplina §2 —
+// TradingView Auto Fib Retracement e implementações derivadas): o padrão
+// da categoria não usa fractal cru. Usa ZigZag com LIMIAR DE
+// SIGNIFICÂNCIA, e a sensibilidade escala com a volatilidade — "a
+// significance threshold that can be set as a multiple of ATR... letting
+// the sensitivity of the zigzag scale with volatility". Os níveis são
+// projetados sobre o ÚLTIMO SWING CONFIRMADO (0 = origem, 1 = extremo).
+//
+// REAPROVEITAMENTO, ZERO MATEMÁTICA NOVA: este repositório já tinha as
+// duas peças e elas nunca tinham se encontrado — `zigzag-engine.js`
+// (graduado, deviation% + depth, os 2 parâmetros reais do indicador) e o
+// ATR% de Wilder já calculado por `regime-engine.js`. O ATR do tempo
+// gráfico SELECIONADO é exatamente o que torna o limiar consciente do
+// período: 1W tem ATR% muito maior que 1m, então o mesmo múltiplo produz
+// uma perna proporcional em cada um, sem nenhuma tabela por timeframe.
+
+/** Múltiplo de ATR que vira o limiar de reversão do ZigZag da perna.
+ *
+ *  ANCORADO, não escolhido por gosto: o default clássico do indicador é 5%
+ *  (documentado em zigzag-engine.js a partir de StockCharts/CFI/Capital.com).
+ *  Com múltiplo 5, um ativo de ATR% = 1 reproduz exatamente esse 5% — o
+ *  comportamento conhecido continua sendo o caso base, e o que muda é só a
+ *  ESCALA quando a volatilidade real do período é outra. */
+export const FIB_LEG_ATR_MULTIPLE = 5;
+/** Piso e teto do limiar. O piso impede que um ATR degenerado (perto de
+ *  zero) transforme cada vela num pivô; o teto respeita a faixa usual
+ *  documentada do indicador (5-30% conforme volatilidade/timeframe). */
+export const FIB_LEG_MIN_DEVIATION_PCT = 0.5;
+export const FIB_LEG_MAX_DEVIATION_PCT = 30;
+
+/** Limiar de reversão do ZigZag para a perna do Fibonacci, derivado do ATR
+ *  real do tempo gráfico em uso.
+ *
+ *  Sem ATR real cai no default CLÁSSICO do próprio motor (5%) — que é uma
+ *  convenção pesquisada e documentada, nunca um número neutro fabricado.
+ *  Isso é deliberado: fazer o Fibonacci SUMIR por falta de ATR seria trocar
+ *  um defeito por outro pior. */
+export function fibLegDeviationPct(atrPercent: number | null | undefined): number {
+  if (!Number.isFinite(atrPercent) || (atrPercent as number) <= 0) {
+    return ZIGZAG_DEFAULT_DEVIATION_PCT;
+  }
+  const escalado = (atrPercent as number) * FIB_LEG_ATR_MULTIPLE;
+  return Math.min(FIB_LEG_MAX_DEVIATION_PCT, Math.max(FIB_LEG_MIN_DEVIATION_PCT, escalado));
+}
+
 export function computeRealFibonacciConfluence(
-  candles: Array<{ high: number; low: number }>,
+  candles: Array<{ open: number; high: number; low: number; close: number }>,
   sources: ConfluenceSource[],
+  atrPercent?: number | null,
 ): FibonacciConfluenceMatrix | null {
   if (!Array.isArray(candles) || candles.length === 0) return null;
-  const swingHighs = findSwings(candles, FRACTAL_K, true);
-  const swingLows = findSwings(candles, FRACTAL_K, false);
-  if (swingHighs.length < 1 || swingLows.length < 1) return null;
-  const lastHigh = swingHighs[swingHighs.length - 1];
-  const lastLow = swingLows[swingLows.length - 1];
-  const legIsUp = lastHigh.index > lastLow.index;
-  // lastLow acima de lastHigh (tendência forte cruzada) não é uma perna
-  // retracionável — buildFibonacciConfluence devolve null (FAIL_CLOSED).
-  return buildFibonacciConfluence(lastLow.price, lastHigh.price, legIsUp, sources);
+  const pivots = computeZigZagPure(
+    candles,
+    fibLegDeviationPct(atrPercent),
+    ZIGZAG_DEFAULT_DEPTH,
+  );
+  // O motor só devolve pivô CONFIRMADO (a perna em formação nunca aparece),
+  // então os 2 últimos são o último swing fechado — origem e extremo, na
+  // mesma definição que a pesquisa descreve. Menos de 2 pivôs é uma resposta
+  // real ("sem perna relevante com este limiar"), nunca um erro: FAIL_CLOSED.
+  if (pivots.status !== 'OK' || pivots.points.length < 2) return null;
+  const extremo = pivots.points[pivots.points.length - 1];
+  const origem = pivots.points[pivots.points.length - 2];
+  const legIsUp = extremo.price > origem.price;
+  const legLow = Math.min(origem.price, extremo.price);
+  const legHigh = Math.max(origem.price, extremo.price);
+  // Perna degenerada (extremos iguais) — buildFibonacciConfluence devolve
+  // null por conta própria (FAIL_CLOSED), nunca uma faixa de largura zero.
+  return buildFibonacciConfluence(legLow, legHigh, legIsUp, sources);
 }
 
 // ~um bucket por ~8px de altura típica de chart (janela de legibilidade,
