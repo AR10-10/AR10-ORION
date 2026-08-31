@@ -15,14 +15,24 @@ name: Deploy iPad Runtime (GitHub Pages)
 # O deploy real agora é deploy-cloudflare-pages.yml, onde a autenticação
 # acontece no servidor (Cloudflare Access), antes da entrega.
 #
-# DESLIGADO DE NOVO — instrucao mais recente do Operador, que substitui a
-# anterior: "prepara o sistema todo pra rodar localmente na minha maquina...
-# todos os dados fica privado na minha, so eu ter acesso... tem como bloquear
-# esse que ta publicado la, ou remover, pra ele nao ficar publico".
+# RELIGADO (2026-08-31) — instrucao mais recente do Operador, que substitui
+# a anterior: "a gente vai desabilitar o servidor local por enquanto, focar
+# so na parte da nuvem" e depois "ligue correndo o oficial, certinho, pra me
+# usar".
 #
-# A escolha anterior ("GitHub Pages de novo") foi feita quando o objetivo era
-# manter o iPad atualizado. O objetivo mudou: rodar local. Publicar deixou de
-# ser desejado, entao o gatilho `push` sai de novo.
+# O historico completo desta gangorra fica registrado de proposito, porque
+# cada virada teve uma razao real: Pages -> desligado por privacidade ->
+# Cloudflare Access -> rodar local -> Pages de novo. O que mudou agora e' o
+# objetivo declarado: o Operador quer USAR o painel pela URL oficial
+# (https://ar10-10.github.io/AR10-ORION/).
+#
+# POR QUE O GATILHO APONTA PARA A BRANCH DE TRABALHO, E NAO SO' PARA main:
+# medido nesta data, `main` esta 208 commits ATRAS da branch de trabalho
+# (PR #15 e PR #16 ainda nao mergeadas). Publicar a partir de main colocaria
+# no ar algo AINDA MAIS VELHO que o build de 24/08 que ja esta la — inclusive
+# sem a correcao do defeito em que o grafico MENSAL era lido como de 1 MINUTO
+# (erro de fator 43.200). main segue na lista para o dia em que as PRs forem
+# mergeadas; ate' la, a branch de trabalho e' a unica fonte honesta.
 #
 # ATENCAO, e isto e o que realmente importa: desligar este workflow impede
 # NOVAS publicacoes, mas NAO tira do ar o site ja publicado. Isso so acontece
@@ -34,6 +44,13 @@ name: Deploy iPad Runtime (GitHub Pages)
 # publicar um build que trancaria o Operador para fora do proprio painel.
 # ═══════════════════════════════════════════════════════════════════════
 on:
+  push:
+    branches:
+      - main
+      - claude/localizar-arquivo-nuvem-qr0z6x
+    paths:
+      - 'ipad_runtime/**'
+      - '.github/workflows/deploy-ipad-pwa.yml'
   workflow_dispatch:
 
 permissions:
