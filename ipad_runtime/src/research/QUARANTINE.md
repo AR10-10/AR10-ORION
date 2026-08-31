@@ -45,13 +45,33 @@ src/research/
     ├── liquidity-void-engine.js       ACTIVE_READ_ONLY (graduado 2026-08-04)
     ├── zigzag-engine.js               ACTIVE_READ_ONLY (graduado 2026-08-10)
     ├── candlestick-patterns.js        ACTIVE_READ_ONLY (graduado 2026-08-18)
-    ├── supertrend-engine.js           LABORATÓRIO (isolado 2026-08-11, não graduado —
-    │                                   ver secao "Laboratório de engines" abaixo)
+    ├── institutional-blocks.js        ACTIVE_READ_ONLY (graduado 2026-08-23 —
+    │                                   ver secao própria abaixo)
+    ├── supertrend-engine.js           ACTIVE_READ_ONLY (graduado 2026-08-23 —
+    │                                   ver secao própria abaixo)
+    ├── delta-divergence-engine.js     EM QUARENTENA (2026-08-24, não graduado —
+    │                                   ver secao própria abaixo)
     ├── fractal-swings.js              utilitário compartilhado (extraído 2026-07-03,
     │                                   não é um engine — ver secao "Utilitários" abaixo)
+    ├── price-clustering.js            utilitário compartilhado (extraído 2026-08-24,
+    │                                   não é um engine — mesmo papel de
+    │                                   fractal-swings.js: o agrupamento por âncora
+    │                                   fixa estava escrito 3 vezes)
     └── hmm-regime-model.js            LABORATÓRIO (isolado 2026-08-10, não graduado —
                                         ver secao "Laboratório de engines" abaixo)
 ```
+
+> **Esta árvore é gerada da realidade, não de memória.** Ela ficou errada uma
+> vez e vale registrar como, porque é o modo de errar mais fácil deste
+> arquivo: dizia `supertrend-engine.js LABORATÓRIO (não graduado)` enquanto a
+> seção própria dele, no mesmo arquivo, dizia `GRADUADO (2026-08-23)` — e o
+> `engine-bridge.ts` já o importava, com camada própria no gráfico. Listava 11
+> motores quando existiam 14. Quem lesse só o resumo concluiria que o
+> SuperTrend não estava ligado.
+>
+> Conferência de 10 segundos, quando mexer em `engines/`:
+> `ls engines/*.js` tem de bater com esta lista, e cada `GRADUADO` daqui tem
+> de ter um `import` real em `ramber-ui/src/engine-bridge.ts`.
 
 **Removidos em 2026-06-30 (purge):**
 - `connectors/` — diretório inteiro (13 stubs binance, coingecko, coinglass, custom,
