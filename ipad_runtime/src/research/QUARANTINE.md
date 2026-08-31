@@ -469,7 +469,9 @@ no mesmo commit:
 2. Adicionar o(s) arquivo(s) a `PRECACHE_URLS` em `ipad_runtime/service-worker.js` —
    import novo sem precache quebra a 1ª navegação offline.
 3. Se o módulo exigir rede real, adicionar o domínio à CSP `connect-src` de
-   `ipad_runtime/index.html` como diff isolado e revisável.
+   `ipad_runtime/ramber-ui/index.html` (a CSP real e versionada) como diff
+   isolado e revisável — nunca em `ipad_runtime/index.html`, que é saída de
+   build gerada pelo deploy e não existe no repositório.
 4. Se o módulo exigir credencial, resolver via política equivalente a
    `WindowsLocalSecretPolicy`/`TelegramAuxSecretPolicy` — nunca no frontend,
    nunca no repositório, nunca no storage do PWA.
