@@ -108,3 +108,71 @@ describe('QUARANTINE.md: "graduado" significa fiação real, não intenção', (
     ).toEqual([]);
   });
 });
+
+// ═══ A TERCEIRA FONTE: o metadata que cada motor declara sobre si ═══
+//
+// Alem da arvore-resumo e das secoes detalhadas do QUARANTINE.md, cada motor
+// carrega `export const metadata = { ..., status }`. Nada consome esse campo
+// (verificado por grep) — e' documentacao. Foi justamente por isso que ele
+// envelheceu sem ninguem notar, nos DOIS sentidos ao mesmo tempo:
+//
+//   supertrend-engine.js      dizia LABORATORIO       — ligado ha 8 dias
+//   delta-divergence-engine.js dizia ACTIVE_READ_ONLY — sem nenhum importador
+//
+// Documentacao que ninguem le programaticamente e' documentacao que mente
+// devagar. Estes testes fazem alguem ler.
+describe('metadata.status de cada motor bate com a fiacao real', () => {
+  const engines = readdirSync(RAIZ_ENGINES).filter((f) => f.endsWith('.js'));
+
+  const statusDe = (arquivo: string): string | null => {
+    const src = readFileSync(resolve(RAIZ_ENGINES, arquivo), 'utf-8');
+    const i = src.indexOf('export const metadata');
+    if (i === -1) return null;
+    // so' dentro do bloco de metadata — nunca um `status: 'OK'` de retorno
+    const bloco = src.slice(i, src.indexOf('\n};', i));
+    return bloco.match(/status:\s*'([A-Z_]+)'/)?.[1] ?? null;
+  };
+
+  it("ACTIVE_READ_ONLY exige import real na ponte", () => {
+    const mentindo = engines.filter(
+      (e) => statusDe(e) === 'ACTIVE_READ_ONLY' && !bridge.includes(`engines/${e}`),
+    );
+    expect(mentindo, `dizem ACTIVE_READ_ONLY sem importador: ${mentindo.join(', ')}`).toEqual([]);
+  });
+
+  it('LABORATORIO exige AUSENCIA de import — graduar em silencio e o defeito oposto', () => {
+    const ligados = engines.filter(
+      (e) => statusDe(e) === 'LABORATORIO' && bridge.includes(`engines/${e}`),
+    );
+    expect(ligados, `dizem LABORATORIO mas ja estao ligados: ${ligados.join(', ')}`).toEqual([]);
+  });
+
+  it('o metadata nao contradiz a arvore do QUARANTINE.md', () => {
+    for (const e of engines) {
+      const st = statusDe(e);
+      if (!st) continue;
+      const linha = quarantine.split('\n').find((l) => l.includes(e) && (l.includes('ACTIVE_READ_ONLY') || l.includes('LABORATÓRIO') || l.includes('EM QUARENTENA')));
+      if (!linha) continue;
+      if (st === 'ACTIVE_READ_ONLY') {
+        expect(linha.includes('ACTIVE_READ_ONLY'), `${e}: metadata diz ativo, árvore não`).toBe(true);
+      }
+    }
+  });
+});
+
+describe('QUARANTINE.md nao cita constante que ja mudou de valor', () => {
+  it('a retencao de order flow citada e a real', () => {
+    // O defeito que motivou este teste: a secao do delta-divergence dizia que
+    // o CVD retido cobria "~8 minutos (capacidade 120)" e que ISSO era o
+    // bloqueio para gradua-lo. A capacidade tinha subido para 900 (~1h) uma
+    // semana antes — ou seja, o motivo do bloqueio ja nao existia, e o
+    // registro seguia mandando a proxima sessao nem olhar.
+    const oh = readFileSync(resolve(__dirname, '../src/nexus/orderflow-history.ts'), 'utf-8');
+    const real = oh.match(/ORDERFLOW_HISTORY_CAPACITY = (\d+)/)?.[1];
+    expect(real, 'ORDERFLOW_HISTORY_CAPACITY não encontrada').toBeTruthy();
+    expect(
+      quarantine.includes(`${real}`),
+      `QUARANTINE.md não cita o valor real (${real}) de ORDERFLOW_HISTORY_CAPACITY`,
+    ).toBe(true);
+  });
+});

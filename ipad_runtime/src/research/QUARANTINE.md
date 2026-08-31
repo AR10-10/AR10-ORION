@@ -647,10 +647,26 @@ camada de confluência display-only.
 série real já retida pelo poller. O motor não coleta, não estima e não
 interpola nada.
 
-### NÃO GRADUADO — e a razão é de DADO, não de código
+### NÃO GRADUADO — mas a razão original CAIU (revisado 2026-08-31)
 
-O CVD retido cobre **~8 minutos reais**
-(`ORDERFLOW_HISTORY_CAPACITY = 120` a ~4s/ciclo). Num gráfico de 15m isso é
+> **O bloqueio descrito abaixo não existe mais, e o texto ficou desatualizado
+> por uma semana.** `ORDERFLOW_HISTORY_CAPACITY` foi de **120 para 900** em
+> 2026-08-24 (commit "retencao de fluxo 8min -> 1h"), depois que a medição
+> mostrou que o custo por push é irrelevante (~0,0085 ms a cada 4 s). A
+> retenção real hoje cobre **~1 hora**, ou seja **4 velas inteiras em 15m** —
+> não "menos de uma vela".
+>
+> O que sobra é uma **decisão**, não um impedimento: graduar este motor é
+> ligar um `import` no `engine-bridge.ts` e uma camada nova no gráfico, com
+> as 26 suítes de execução real que ele já tem. Fica registrado como decisão
+> em aberto do Operador, não como bloqueio técnico — a diferença importa,
+> porque "bloqueado" faz a próxima sessão nem olhar.
+
+O texto original, preservado porque explica o critério (a régua é cobertura
+real de dado, nunca vontade de ligar a camada):
+
+O CVD retido cobria **~8 minutos reais**
+(`ORDERFLOW_HISTORY_CAPACITY = 120` a ~4s/ciclo). Num gráfico de 15m isso era
 **menos de uma vela**. O motor devolve `DADOS_INSUFICIENTES` — com o número
 real de velas cobertas, para a UI poder dizer ao Operador exatamente o que
 falta — em vez de extrapolar CVD.

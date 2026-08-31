@@ -239,8 +239,24 @@ describe('supertrend-engine: determinismo e contrato', () => {
     }
   });
 
-  it('metadata declara LABORATORIO (ainda não graduado) e as limitações honestas', () => {
-    expect(metadata.status).toBe('LABORATORIO');
+  it('metadata declara ACTIVE_READ_ONLY (graduado em 2026-08-23) e as limitações honestas', () => {
+    // ESTE TESTE FAZIA PARTE DO DEFEITO. Ele travava `LABORATORIO` — correto
+    // quando foi escrito, e não atualizado na graduação (2026-08-23). Um
+    // teste que enshrina um valor obsoleto não protege nada: ele IMPEDE a
+    // correção e faz a mentira parecer verificada.
+    //
+    // A lição vale mais que o valor: asserção sobre status só tem sentido se
+    // amarrada à realidade que ele descreve. Por isso o teste agora exige as
+    // duas coisas juntas — e quarantine-registry.test.ts guarda o elo
+    // genérico (ACTIVE_READ_ONLY exige import real na ponte).
+    expect(metadata.status).toBe('ACTIVE_READ_ONLY');
+    const bridge = read('../src/engine-bridge.ts');
+    expect(
+      bridge.includes('engines/supertrend-engine.js'),
+      'declara ACTIVE_READ_ONLY mas a ponte não o importa',
+    ).toBe(true);
+    // As limitações honestas continuam valendo depois da graduação: graduar
+    // liga a camada, não apaga o que o motor ainda não sabe.
     expect(metadata.limitations.join(' ')).toContain('SEED');
     expect(metadata.limitations.join(' ')).toContain('nenhum backtest local');
   });
