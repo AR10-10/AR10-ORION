@@ -267,7 +267,15 @@ describe('ZigZag: graduação real ponta a ponta (QUARANTINE.md + bridge + App +
   it('App.tsx: relevância real (>=2 pivôs) sobre o MESMO chartData, e entrada no painel Camadas do Gráfico', () => {
     const app = read('../src/App.tsx');
     expect(app).toContain('computeZigZag,');
-    expect(app).toContain('const hasZigZagPivots = Array.isArray(chartData) && computeZigZag(chartData).length >= 2;');
+    // Independente de formatação: a checagem virou multilinha quando passou a
+    // usar o MESMO limiar adaptativo por ATR que o desenho real usa (achado
+    // da auditoria do ecossistema — antes, existência e desenho podiam
+    // divergir). O que este teste guarda é o CONTRATO — chartData real,
+    // limiar adaptativo real, teto real de 2 pivôs —, nunca o estilo de
+    // quebra de linha.
+    expect(app).toMatch(
+      /const hasZigZagPivots =\s*Array\.isArray\(chartData\)\s*&&\s*computeZigZag\(chartData,\s*atrScaledZigZagDeviationPct\(chartAtrPercent\)\)\.length >= 2;/,
+    );
     expect(app).toContain('{ id: "zigzag", label: "ZIGZAG" },');
   });
 

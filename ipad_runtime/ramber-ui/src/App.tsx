@@ -127,6 +127,7 @@ import {
   computeBosChoch,
   computeLiquidityVoids,
   computeZigZag,
+  atrScaledZigZagDeviationPct,
   computeCandlePatterns,
   scanRadarCandidate,
 } from "./engine-bridge";
@@ -2420,7 +2421,7 @@ export default function App() {
       });
     }
     // O ATR% real do tempo gráfico SELECIONADO entra aqui: é ele que faz o
-    // limiar da perna escalar com o período (ver fibLegDeviationPct,
+    // limiar da perna escalar com o período (ver atrScaledZigZagDeviationPct,
     // engine-bridge.ts). Sem ele, a perna voltaria a ser a mesma em 1m e 1W.
     useUnifiedSnapshotStore.getState().setFibonacciConfluence(
       computeRealFibonacciConfluence(chartData, sources, engine?.marketRegime?.atrPercent ?? null),
@@ -9690,8 +9691,16 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     // (mesmo princípio já usado por TpoProfilePlugin/SessionKeyLevelsPlugin).
     // Mesmo limiar mínimo (>=2 pivôs) que o próprio plugin usa pra decidir
     // se tem uma linha real pra traçar — nunca marca relevante sem ter
-    // nada real pra mostrar.
-    const hasZigZagPivots = Array.isArray(chartData) && computeZigZag(chartData).length >= 2;
+    // nada real pra mostrar. MESMO limiar adaptativo por ATR que o plugin
+    // agora desenha (auditoria do ecossistema de indicadores): sem isto, a
+    // checagem de relevância podia dizer "tem ZigZag" com o limiar fixo
+    // antigo enquanto o desenho real (limiar por ATR) discordava — o mesmo
+    // defeito já corrigido para institutional_zones/neural_market_aura
+    // nesta mesma auditoria, só que na direção "existência mentindo por
+    // usar um cálculo diferente do que é desenhado".
+    const hasZigZagPivots =
+      Array.isArray(chartData) &&
+      computeZigZag(chartData, atrScaledZigZagDeviationPct(chartAtrPercent)).length >= 2;
     // GRADUAÇÃO de supertrend-engine.js: existência real (o motor devolve
     // lista vazia até o aquecimento de Wilder ser cumprido), nunca
     // proximidade — um trailing stop é justamente mais informativo quando
@@ -9954,6 +9963,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
             layerVisibility={effectiveChartLayerVisibility}
             emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}
+            chartAtrPercent={chartAtrPercent}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">

@@ -845,34 +845,47 @@ export type { ConfluenceSource, FibonacciConfluenceMatrix, FibConfluenceLevel } 
 // gráfico SELECIONADO é exatamente o que torna o limiar consciente do
 // período: 1W tem ATR% muito maior que 1m, então o mesmo múltiplo produz
 // uma perna proporcional em cada um, sem nenhuma tabela por timeframe.
+//
+// ATUALIZAÇÃO (auditoria do ecossistema de indicadores): esta escala deixou
+// de ser exclusiva da perna do Fibonacci. `atrScaledZigZagDeviationPct`
+// abaixo nasceu aqui com o nome `fibLegDeviationPct`, mas a lógica sempre
+// foi 100% genérica — "limiar de reversão do ZigZag escalado pelo ATR do
+// tempo gráfico", sem nada específico de Fibonacci nela. O ZigZag VISÍVEL
+// no gráfico (ZigZagPlugin.tsx) tinha o mesmo defeito que a perna do
+// Fibonacci tinha antes desta rodada: limiar FIXO, idêntico em 1m e em 1W.
+// Renomeado para o nome que descreve o algoritmo, não o primeiro chamador —
+// mesmo precedente já aplicado a fractal-swings.js e price-clustering.js.
 
-/** Múltiplo de ATR que vira o limiar de reversão do ZigZag da perna.
+/** Múltiplo de ATR que vira o limiar de reversão do ZigZag.
  *
  *  ANCORADO, não escolhido por gosto: o default clássico do indicador é 5%
  *  (documentado em zigzag-engine.js a partir de StockCharts/CFI/Capital.com).
  *  Com múltiplo 5, um ativo de ATR% = 1 reproduz exatamente esse 5% — o
  *  comportamento conhecido continua sendo o caso base, e o que muda é só a
  *  ESCALA quando a volatilidade real do período é outra. */
-export const FIB_LEG_ATR_MULTIPLE = 5;
+export const ZIGZAG_ATR_MULTIPLE = 5;
 /** Piso e teto do limiar. O piso impede que um ATR degenerado (perto de
  *  zero) transforme cada vela num pivô; o teto respeita a faixa usual
  *  documentada do indicador (5-30% conforme volatilidade/timeframe). */
-export const FIB_LEG_MIN_DEVIATION_PCT = 0.5;
-export const FIB_LEG_MAX_DEVIATION_PCT = 30;
+export const ZIGZAG_ATR_DEVIATION_MIN_PCT = 0.5;
+export const ZIGZAG_ATR_DEVIATION_MAX_PCT = 30;
 
-/** Limiar de reversão do ZigZag para a perna do Fibonacci, derivado do ATR
- *  real do tempo gráfico em uso.
+/** Limiar de reversão do ZigZag derivado do ATR real do tempo gráfico em
+ *  uso — usado tanto pela perna do Fibonacci (computeRealFibonacciConfluence
+ *  abaixo) quanto pelo ZigZag visível no gráfico (ZigZagPlugin.tsx via
+ *  ChartWidget em App.tsx): mesmo indicador, mesmo limiar adaptativo, um só
+ *  lugar que decide o número.
  *
  *  Sem ATR real cai no default CLÁSSICO do próprio motor (5%) — que é uma
  *  convenção pesquisada e documentada, nunca um número neutro fabricado.
- *  Isso é deliberado: fazer o Fibonacci SUMIR por falta de ATR seria trocar
+ *  Isso é deliberado: fazer o ZigZag SUMIR por falta de ATR seria trocar
  *  um defeito por outro pior. */
-export function fibLegDeviationPct(atrPercent: number | null | undefined): number {
+export function atrScaledZigZagDeviationPct(atrPercent: number | null | undefined): number {
   if (!Number.isFinite(atrPercent) || (atrPercent as number) <= 0) {
     return ZIGZAG_DEFAULT_DEVIATION_PCT;
   }
-  const escalado = (atrPercent as number) * FIB_LEG_ATR_MULTIPLE;
-  return Math.min(FIB_LEG_MAX_DEVIATION_PCT, Math.max(FIB_LEG_MIN_DEVIATION_PCT, escalado));
+  const escalado = (atrPercent as number) * ZIGZAG_ATR_MULTIPLE;
+  return Math.min(ZIGZAG_ATR_DEVIATION_MAX_PCT, Math.max(ZIGZAG_ATR_DEVIATION_MIN_PCT, escalado));
 }
 
 export function computeRealFibonacciConfluence(
@@ -883,7 +896,7 @@ export function computeRealFibonacciConfluence(
   if (!Array.isArray(candles) || candles.length === 0) return null;
   const pivots = computeZigZagPure(
     candles,
-    fibLegDeviationPct(atrPercent),
+    atrScaledZigZagDeviationPct(atrPercent),
     ZIGZAG_DEFAULT_DEPTH,
   );
   // O motor só devolve pivô CONFIRMADO (a perna em formação nunca aparece),

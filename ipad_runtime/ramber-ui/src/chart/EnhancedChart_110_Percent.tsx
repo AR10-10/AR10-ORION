@@ -559,6 +559,13 @@ interface EnhancedChartProps {
   // como buscar/mesclar a página nova; este componente só detecta a
   // intenção real do usuário.
   onRequestOlderCandles?: () => void;
+  // Auditoria do ecossistema de indicadores: ATR% real do tempo gráfico
+  // (regime-engine.js via engine.marketRegime), repassado ao ZigZagPlugin
+  // pra escalar o limiar de reversão pelo período — mesmo cálculo que a
+  // perna do Fibonacci já usa (engine-bridge.ts, atrScaledZigZagDeviationPct).
+  // Optional/fail-closed: null/ausente cai no default clássico do próprio
+  // motor (5%), nunca um número fabricado.
+  chartAtrPercent?: number | null;
   // §6 "Smart Projection Engine" (Diretriz Complementar): achado real de
   // auditoria — o Motor de Cenários (scenario-engine.ts) já existia,
   // já é 100% honesto (basis: "COUNCIL_OPINION_MASS_NOT_MARKET_PROBABILITY",
@@ -895,6 +902,7 @@ function EnhancedChart_110_PercentImpl({
   emaPeriod,
   onRequestOlderCandles,
   onHoverCandleChange,
+  chartAtrPercent,
 }: EnhancedChartProps) {
   const visibility = layerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
   // Quais lanes de perfil estão REALMENTE na tela agora.
@@ -4117,12 +4125,16 @@ function EnhancedChart_110_PercentImpl({
         />
       )}
       {/* Entrega 47: ZigZag graduado do Laboratório (pedido direto do
-         Operador) — mesma `data` real, zero fetch novo. */}
+         Operador) — mesma `data` real, zero fetch novo. Auditoria do
+         ecossistema de indicadores: atrPercent escala o limiar de reversão
+         pelo tempo gráfico selecionado (mesmo princípio real já aplicado à
+         perna do Fibonacci) — sem ele, cai no default clássico do motor. */}
       {visibility.zigzag && (
         <ZigZagPlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           data={data}
+          atrPercent={chartAtrPercent}
         />
       )}
       {/* Neural Market Aura: the conviction corridor, mounted BEFORE the
