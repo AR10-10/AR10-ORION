@@ -238,8 +238,9 @@ export interface RealCycleResult {
   target2Strength?: { label: 'FORTE' | 'FRACA'; touches: number } | null;
   // Achado de auditoria (ADITIVO V-MAX: Ferramentas Institucionais):
   // support-resistance-engine.js já calcula fib_extension_long_target/
-  // fib_extension_short_target TODO ciclo (extensão de Fibonacci 61.8%
-  // sobre a última perna confirmada) — o comentário da própria EPC §5/§6
+  // fib_extension_short_target TODO ciclo (extensão de Fibonacci de
+  // 161.8% sobre a última perna confirmada — a notação profissional do
+  // nível; ver a identidade documentada em support-resistance-engine.js) — o comentário da própria EPC §5/§6
   // no chart ("falta aparecer entrada e alvo/alvo2/alvo3") já esperava
   // este campo, mas ele morria dentro de research-engine.js (só como
   // texto formatado em rota_a_long/rota_b_short) e nunca chegava aqui.

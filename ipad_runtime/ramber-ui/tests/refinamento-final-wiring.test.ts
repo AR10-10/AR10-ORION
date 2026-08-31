@@ -514,9 +514,10 @@ describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no grá
     const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
     expect(idx).toBeGreaterThan(-1);
     // Carta Branca: o efeito unificado cresceu para caber as 3 famílias —
-    // janela ampliada o bastante para cobrir do início até depois do ramo
-    // HEAD_SHOULDERS (medido via node -e contra o arquivo real: ~9.3k chars).
-    const block = c.slice(idx, idx + 9500);
+    // janela ampliada o bastante para cobrir do início até depois do bloco
+    // independente do Triângulo, que agora vem DEPOIS do encadeamento
+    // (medido contra o arquivo real: rótulo APEX em ~10.9k chars).
+    const block = c.slice(idx, idx + 11500);
     expect(block).toContain('const harmonicTop = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;');
     expect(block).toContain('const harmonicValid = harmonicTop && Number.isFinite(harmonicTop.points.D.price) ? harmonicTop : null;');
     // EPC §4 (rótulos compactos por iniciais): PRZ com glifo ↑/↓, EPA sem
@@ -525,10 +526,21 @@ describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no grá
     expect(block).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
     expect(block).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`'); // §6: + ETA do ápice (compacto EPC §4)
     expect(block).toContain('lineStyle: LineStyle.Solid,');
-    // Carta Branca: Triângulo (2 retas reais) + Ombro-Cabeça-Ombro (outline
-    // reusando o mesmo zigue-zague + neckline extrapolada) — ver os 2 ramos.
-    expect(block).toContain('winner.family === "TRIANGLE" && trianglePattern');
-    expect(block).toContain('winner.family === "HEAD_SHOULDERS" && headShouldersPattern');
+    // Ombro-Cabeça-Ombro segue no encadeamento do vencedor (outline reusando
+    // o mesmo zigue-zague + neckline extrapolada).
+    expect(block).toContain('winner?.family === "HEAD_SHOULDERS" && headShouldersPattern');
+    // Triângulo NÃO compete mais: geometria diferente (2 retas convergindo
+    // no mesmo intervalo, não uma polilinha por pivôs) e fitScore de motores
+    // distintos são escalas incomparáveis — ele sumia do gráfico por perder
+    // um desempate sem sentido, não por ser um padrão pior. Agora desenha
+    // por conta própria, fora do encadeamento.
+    expect(block).not.toContain('family: "TRIANGLE"');
+    expect(block).not.toContain('winner.family === "TRIANGLE"');
+    expect(block).toContain('if (trianglePattern) {');
+    // ...e a disputa restante é só entre as DUAS famílias de mesma geometria.
+    expect(block).toContain(
+      'const candidates: Array<{ family: "HARMONIC" | "HEAD_SHOULDERS"; fitScore: number }> = [];',
+    );
     expect(block).toContain('`${trianglePattern.kind} ${dirGlyph} APEX ${(trianglePattern.fitScore * 100).toFixed(0)}%${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
     expect(block).toContain('`${hs.kind === "REGULAR" ? "H&S" : "INV H&S"} ${hsDirGlyph} NECKLINE ${(hs.fitScore * 100).toFixed(0)}%`');
     const cleanupIdx = c.indexOf('chart.remove();');
@@ -539,12 +551,14 @@ describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no grá
     const c = chart();
     expect(c).toContain('const harmonicPolylineRef = useRef<ISeriesApi<"Line"> | null>(null);');
     const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
-    const block = c.slice(idx, idx + 9500);
+    const block = c.slice(idx, idx + 11500);
     // limpa a polilinha (E as 3 séries novas do Triângulo/neckline) ANTES
     // do guard real de "nenhuma das 3 famílias tem hit" — nunca deixa uma
-    // figura velha na tela.
+    // figura velha na tela. O guard agora cobre também o Triângulo, que
+    // saiu do encadeamento: só retorna cedo quando NEM ziguezague NEM
+    // triângulo existem, senão o triângulo real deixaria de desenhar.
     const clearIdx = block.indexOf('harmonicPolylineRef.current?.setData([]);');
-    const guardIdx = block.indexOf('if (candidates.length === 0) return;');
+    const guardIdx = block.indexOf('if (candidates.length === 0 && !trianglePattern) return;');
     expect(clearIdx).toBeGreaterThan(-1);
     expect(guardIdx).toBeGreaterThan(clearIdx);
     expect(block).toContain('triangleResistanceLineRef.current?.setData([]);');

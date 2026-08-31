@@ -2766,14 +2766,38 @@ function EnhancedChart_110_PercentImpl({
 
     const harmonicTop = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;
     const harmonicValid = harmonicTop && Number.isFinite(harmonicTop.points.D.price) ? harmonicTop : null;
-    const candidates: Array<{ family: "HARMONIC" | "TRIANGLE" | "HEAD_SHOULDERS"; fitScore: number }> = [];
+    // Só as famílias de MESMA geometria competem entre si. Harmônico e H&S
+    // são ambos uma POLILINHA em ziguezague por pivôs alternados, desenhada
+    // na mesma região — duas delas juntas viram rabisco, então continua
+    // valendo "só o melhor vai pro canvas".
+    //
+    // O Triângulo saiu desta disputa (pedido do Operador: "adiciona
+    // triângulo, tá faltando"), por dois motivos reais e não por
+    // preferência:
+    //
+    // 1. GEOMETRIA DIFERENTE — são 2 retas convergindo sobre o MESMO
+    //    intervalo de tempo, não uma polilinha por pivôs. Isso já estava
+    //    reconhecido no próprio código, que lhe deu 2 séries dedicadas em
+    //    vez de reusar harmonicPolylineRef. O argumento "3 geometrias
+    //    competindo pela mesma área" nunca se aplicou a ele: ele não
+    //    disputa a área do ziguezague, ocupa o envelope do range.
+    // 2. ESCALAS INCOMPARÁVEIS — o desempate era por fitScore entre motores
+    //    diferentes, e o comentário original já admitia que cada um mede
+    //    aderência de um jeito distinto (razão Fibonacci × R² de reta ×
+    //    simetria de ombros). O triângulo podia perder por ter R² numa
+    //    escala mais dura, não por ser um padrão pior — e aí sumia do
+    //    gráfico mesmo sendo real.
+    //
+    // Teto visual continua 2 figuras (um ziguezague + o triângulo), nunca
+    // 3, e a família inteira mantém a MESMA linguagem visual púrpura.
+    const candidates: Array<{ family: "HARMONIC" | "HEAD_SHOULDERS"; fitScore: number }> = [];
     if (harmonicValid) candidates.push({ family: "HARMONIC", fitScore: harmonicValid.fitScore });
-    if (trianglePattern) candidates.push({ family: "TRIANGLE", fitScore: trianglePattern.fitScore });
     if (headShouldersPattern) candidates.push({ family: "HEAD_SHOULDERS", fitScore: headShouldersPattern.fitScore });
-    if (candidates.length === 0) return;
-    let winner = candidates[0];
+    // Fail-closed: sem ziguezague E sem triângulo, zero linhas.
+    if (candidates.length === 0 && !trianglePattern) return;
+    let winner: { family: "HARMONIC" | "HEAD_SHOULDERS"; fitScore: number } | null = candidates[0] ?? null;
     for (const c of candidates.slice(1)) {
-      if (c.fitScore > winner.fitScore) winner = c;
+      if (winner && c.fitScore > winner.fitScore) winner = c;
     }
 
     const mkH = (price: number, title: string) => {
@@ -2809,7 +2833,7 @@ function EnhancedChart_110_PercentImpl({
       if (polylinePoints.length >= 2) harmonicPolylineRef.current?.setData(polylinePoints);
     };
 
-    if (winner.family === "HARMONIC" && harmonicValid) {
+    if (winner?.family === "HARMONIC" && harmonicValid) {
       const top = harmonicValid;
       drawZigzagOutline([top.points.X, top.points.A, top.points.B, top.points.C, top.points.D]);
       // Consolidação Final §6 (terminologia profissional): o ponto de
@@ -2841,7 +2865,34 @@ function EnhancedChart_110_PercentImpl({
         // EPA/ETA da Wolfe continua documentado em harmonic-patterns.ts).
         mkH(top.epaPrice, `WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`);
       }
-    } else if (winner.family === "TRIANGLE" && trianglePattern) {
+    } else if (winner?.family === "HEAD_SHOULDERS" && headShouldersPattern) {
+      const hs = headShouldersPattern;
+      // Outline real LS→neckline1→Cabeça→neckline2→RS — geometricamente o
+      // MESMO zigue-zague de um XABCD (5 pivôs em ordem de tempo crescente
+      // por construção do motor), reusa a função acima sem nenhuma segunda
+      // implementação.
+      drawZigzagOutline([hs.leftShoulder, hs.neckline1, hs.head, hs.neckline2, hs.rightShoulder]);
+      // Neckline real extrapolada — reta separada do outline (pode ter
+      // slope diferente do segmento RS→neckline2), do 1º ponto real até o
+      // último candle carregado, exatamente o valor já exposto em
+      // necklineAtLastCandle.
+      const necklineStartCandle = data[hs.neckline1.index];
+      const lastCandle = data[data.length - 1];
+      if (necklineStartCandle && lastCandle && Number.isFinite(hs.necklineAtLastCandle) && necklineStartCandle.time < lastCandle.time) {
+        necklineExtensionLineRef.current?.setData([
+          { time: necklineStartCandle.time as UTCTimestamp, value: hs.neckline1.price },
+          { time: lastCandle.time as UTCTimestamp, value: hs.necklineAtLastCandle },
+        ]);
+      }
+      const hsDirGlyph = hs.direction === "BULLISH" ? "↑" : "↓";
+      mkH(hs.necklineAtLastCandle, `${hs.kind === "REGULAR" ? "H&S" : "INV H&S"} ${hsDirGlyph} NECKLINE ${(hs.fitScore * 100).toFixed(0)}%`);
+    }
+
+    // TRIÂNGULO — desenha sempre que o motor o encontrou, independente de
+    // qual ziguezague venceu acima (justificativa completa na seleção de
+    // candidatos). Fail-closed preservado: sem padrão real, as séries
+    // dedicadas já foram esvaziadas no topo deste efeito.
+    if (trianglePattern) {
       // Carta Branca: as 2 retas reais (mínimos quadrados) do triângulo —
       // avaliadas na PRÓPRIA reta ajustada (nunca no preço bruto do toque,
       // mesmo quando R²<1) do 1º toque real até o último candle carregado,
@@ -2879,27 +2930,6 @@ function EnhancedChart_110_PercentImpl({
         const dirGlyph = trianglePattern.direction === "BULLISH" ? "↑" : trianglePattern.direction === "BEARISH" ? "↓" : "↔";
         mkH(apexPrice, `${trianglePattern.kind} ${dirGlyph} APEX ${(trianglePattern.fitScore * 100).toFixed(0)}%${etaLabel ? ` · ETA ${etaLabel}` : ""}`);
       }
-    } else if (winner.family === "HEAD_SHOULDERS" && headShouldersPattern) {
-      const hs = headShouldersPattern;
-      // Outline real LS→neckline1→Cabeça→neckline2→RS — geometricamente o
-      // MESMO zigue-zague de um XABCD (5 pivôs em ordem de tempo crescente
-      // por construção do motor), reusa a função acima sem nenhuma segunda
-      // implementação.
-      drawZigzagOutline([hs.leftShoulder, hs.neckline1, hs.head, hs.neckline2, hs.rightShoulder]);
-      // Neckline real extrapolada — reta separada do outline (pode ter
-      // slope diferente do segmento RS→neckline2), do 1º ponto real até o
-      // último candle carregado, exatamente o valor já exposto em
-      // necklineAtLastCandle.
-      const necklineStartCandle = data[hs.neckline1.index];
-      const lastCandle = data[data.length - 1];
-      if (necklineStartCandle && lastCandle && Number.isFinite(hs.necklineAtLastCandle) && necklineStartCandle.time < lastCandle.time) {
-        necklineExtensionLineRef.current?.setData([
-          { time: necklineStartCandle.time as UTCTimestamp, value: hs.neckline1.price },
-          { time: lastCandle.time as UTCTimestamp, value: hs.necklineAtLastCandle },
-        ]);
-      }
-      const hsDirGlyph = hs.direction === "BULLISH" ? "↑" : "↓";
-      mkH(hs.necklineAtLastCandle, `${hs.kind === "REGULAR" ? "H&S" : "INV H&S"} ${hsDirGlyph} NECKLINE ${(hs.fitScore * 100).toFixed(0)}%`);
     }
   }, [harmonicHits, trianglePattern, headShouldersPattern, data, visibility.harmonics]);
 

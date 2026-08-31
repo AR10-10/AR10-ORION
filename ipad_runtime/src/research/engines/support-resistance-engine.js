@@ -2,7 +2,7 @@
 // ver QUARANTINE.md secao "Engines graduados").
 // Identifica niveis reais a partir de Pivots/Swing High-Low (metodo
 // fractal: maximo/minimo local confirmado por K candles de cada lado) e
-// projeta extensao de Fibonacci (61.8%) sobre a ultima perna confirmada —
+// projeta extensao de Fibonacci de 161.8% sobre a ultima perna confirmada —
 // sempre niveis derivados de candles reais (ohlcv_series), nunca uma
 // instrucao de compra/venda. Pura funcao de calculo: zero fetch, zero
 // rede, zero estado global.
@@ -102,10 +102,24 @@ export function analyze(input = {}) {
         resistance_2_strength: resistance2Strength,
         support_1_strength: support1Strength,
         support_2_strength: support2Strength,
-        // Extensao de Fibonacci (61.8%) projetada a partir da ultima perna
-        // confirmada — so' preenche o lado cuja ultima perna real confirma a
-        // direcao (subida confirma projecao de alta, queda confirma projecao
-        // de baixa); o outro lado fica DADOS_INSUFICIENTES de proposito em vez
+        // Extensao de Fibonacci de 161.8% projetada a partir da ultima perna
+        // confirmada.
+        //
+        // NOTACAO (corrigido — a matematica sempre esteve certa, o nome nao):
+        // este campo era descrito como "extensao de 61.8%", o que em notacao
+        // profissional significa outra coisa. A identidade real e:
+        //
+        //     lastHigh + legRange * 0.618  ===  lastLow + legRange * 1.618
+        //
+        // ou seja, projetar 61.8% da perna ALEM do topo e' exatamente o nivel
+        // de 161.8% medido da origem da perna — que e' como todo terminal
+        // profissional rotula esse alvo. Uma "extensao de 61.8%" de verdade
+        // cairia DENTRO da perna, e ai seria retracao, nao extensao. O fator
+        // 0.618 abaixo fica porque a conta parte do topo/fundo, nao da origem.
+        //
+        // So' preenche o lado cuja ultima perna real confirma a direcao
+        // (subida confirma projecao de alta, queda confirma projecao de
+        // baixa); o outro lado fica DADOS_INSUFICIENTES de proposito em vez
         // de forcar uma projecao sobre a perna errada.
         fib_extension_long_target: (legRange > 0 && lastLegIsUp) ? lastHigh.price + legRange * 0.618 : 'DADOS_INSUFICIENTES',
         fib_extension_short_target: (legRange > 0 && !lastLegIsUp) ? lastLow.price - legRange * 0.618 : 'DADOS_INSUFICIENTES',
