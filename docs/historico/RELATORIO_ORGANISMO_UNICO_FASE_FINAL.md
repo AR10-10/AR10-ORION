@@ -3,7 +3,7 @@
 ## §0. Contexto e teste aplicado
 
 A Ordem chega logo depois da homologação da rodada anterior (Entrega 22,
-commit `1bb3d41`, `docs/RELATORIO_HOMOLOGACAO_FINAL_ORGANISMO.md`) e é
+commit `1bb3d41`, `docs/historico/RELATORIO_HOMOLOGACAO_FINAL_ORGANISMO.md`) e é
 explícita: **"o objetivo NÃO é criar novos módulos, novos motores ou
 novas funcionalidades... é consolidar definitivamente"**. Traz 10
 diretrizes obrigatórias e uma Regra de Ouro única para qualquer mudança

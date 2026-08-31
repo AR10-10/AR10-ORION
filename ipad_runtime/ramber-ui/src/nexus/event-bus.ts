@@ -72,12 +72,12 @@ export type NexusEvent =
   | { type: "QUANT.ORDERFLOW_SIGNALS.UPDATED"; payload: { signals: OrderflowSignal[] } }
   | { type: "QUANT.CONFLUENCE_CORRIDOR.UPDATED"; payload: { reading: ConfluenceCorridorReading | null } }
   // Achado da auditoria de evolução (Unificação da Inteligência,
-  // docs/AUDITORIA_UNIFICACAO_VOZ.md §4 item 1): computeInstitutionalZones
+  // docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4 item 1): computeInstitutionalZones
   // já tinha fatia real na store (Carta Branca) mas nunca ganhou evento —
   // nenhum assinante podia reagir a "uma zona nova se formou" sem antes
   // recomputar tudo sozinho. Mesmo padrão passthrough de QUANT.SMC acima.
   | { type: "QUANT.INSTITUTIONAL_ZONES.UPDATED"; payload: { zones: InstitutionalZone[] } }
-  // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // Achado da auditoria de evolução (docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4
   // item 2): riskSuggestion (risk-engine.js) já era computado real em
   // App.tsx mas não tinha fatia na store nem evento — nenhum consumidor
   // fora da árvore React do App podia lê-lo.

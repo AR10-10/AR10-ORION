@@ -1,5 +1,5 @@
 // global-error-boundary.tsx — Achado real da AUDITORIA TÉCNICA COMPLETA
-// (docs/AUDITORIA_TECNICA_COMPLETA_PREENCHIDA.md, item A9): WidgetErrorBoundary
+// (docs/historico/AUDITORIA_TECNICA_COMPLETA_PREENCHIDA.md, item A9): WidgetErrorBoundary
 // (App.tsx) só protege DENTRO de um Widget — um erro de render fora dele
 // (no shell do App, no AccessGate, num Provider) derrubava a tela inteira
 // sem fallback nenhum, sem nem uma tela em branco explicada. Mesmo padrão de

@@ -1195,7 +1195,7 @@ cálculo novo (`z.type` já é a direção real do motor). Verificado com
 harness Playwright: a zona vermelha lê `OB ↓`/`FVG ↓` sem ambiguidade.
 
 **Pesquisa/revisão (entregável principal)**: documento honesto em
-`docs/AUDITORIA_ECOSSISTEMA_VISUAL.md` — inventário completo das 22
+`docs/historico/AUDITORIA_ECOSSISTEMA_VISUAL.md` — inventário completo das 22
 camadas visuais reais, comparação com terminais profissionais (ATAS/
 Bookmap/GetChart/LuxAlgo, pesquisa real com fontes), e lista priorizada
 com veredito. Conclusão honesta: no núcleo order flow + SMC o AR10 já
@@ -1998,7 +1998,7 @@ duplicação real VOLATILIDADE/ATR% encontrada e eliminada
 Auditoria completa nas 7 seções pedidas pelo Operador (Certificação/Trade
 Plan/Auditoria de Dados/Auditoria Matemática/Auditoria Visual/Demanda e
 Oferta/Relatório Final) — relatório completo em
-`docs/RELATORIO_AUDITORIA_FINAL.md`. Achado real (§3/§4): a row
+`docs/historico/RELATORIO_AUDITORIA_FINAL.md`. Achado real (§3/§4): a row
 "VOLATILIDADE" do painel Market Regime recomputava seu próprio proxy
 (média ingênua de `(high-low)/close`, sem gaps) na mesma hora em que
 `regime-engine.js` já calcula o ATR% real (true range com gaps, Wilder) e
@@ -3992,7 +3992,7 @@ eficiência de rede (requisição obsoleta continua em voo até resolver,
 mesmo descartada), baixa prioridade, documentada no backlog.
 
 **Entregável único** (§8 da diretiva):
-`docs/AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` — inventário, mapa de
+`docs/historico/AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` — inventário, mapa de
 arquitetura/dependências/sincronização/elementos visuais, pesquisa,
 lacunas, conflitos, registro de melhorias com justificativa técnica,
 backlog priorizado, riscos/benefícios. Cita `ELITE_TRADING_RESEARCH_MAP.md`
@@ -4458,7 +4458,7 @@ encaixar apressado no fim de uma rodada já longa).
 iniciada: diferenciação real Liquidity Sweep × pico do Liquidation Heatmap
 
 **Task #101** ("LAPIDAÇÃO PROFISSIONAL DO GRÁFICO") foi entregue como nova
-§9 de `docs/AUDITORIA_ECOSSISTEMA_VISUAL.md` (não um documento novo —
+§9 de `docs/historico/AUDITORIA_ECOSSISTEMA_VISUAL.md` (não um documento novo —
 mesma disciplina de fonte única já usada em §6.27/§6.50): inventário
 completo de ~28 elementos reais do gráfico com módulo/cor/dependência,
 framework de prioridade de 4 níveis (Máxima/Alta/Média/Baixa, critério
@@ -5252,7 +5252,7 @@ diretiva) — cobre §6.35 a §6.41 em conjunto
 
 ### 6.67 EPC OMEGA FINAL — diretiva de 4 partes (Meta Engine, gráfico
 World Class, performance/autoaprendizado, homologação final); relatório
-completo em `docs/RELATORIO_EPC_OMEGA_FINAL.md`
+completo em `docs/historico/RELATORIO_EPC_OMEGA_FINAL.md`
 
 Diretiva do Operador em 4 partes sequenciais ("ler tudo antes de
 implementar" — seguido à risca: as 4 partes foram lidas por completo antes
@@ -5322,7 +5322,7 @@ fora do bundle real).
 
 ### 6.68 Diretriz Final de Integração Total — fechar o que já existe:
 GMIL → store, MACD graduado, estágio NEXUS_DECISION; relatório completo
-em `docs/RELATORIO_MESTRE_HOMOLOGACAO.md`
+em `docs/historico/RELATORIO_MESTRE_HOMOLOGACAO.md`
 
 Diretiva de consolidação pura (Operador foi explícito: "não" a motores
 novos, "sim" a concluir ligações já existentes). Varredura de todo
@@ -5381,7 +5381,7 @@ presente no DOM renderizado.
 ### 6.69 "DIRETRIZ FINAL — LAPIDAÇÃO VISUAL E ACABAMENTO PROFISSIONAL":
 último passo antes da homologação — 2 achados reais corrigidos, 5 seções
 reconfirmadas; relatório atualizado em
-`docs/RELATORIO_MESTRE_HOMOLOGACAO.md` §9
+`docs/historico/RELATORIO_MESTRE_HOMOLOGACAO.md` §9
 
 Diretiva explicitamente restrita a qualidade visual/acabamento — zero
 funcionalidade nova. Auditoria das 8 seções pedidas contra o código real
@@ -5548,7 +5548,7 @@ valor real observado no sandbox, não fabricado).
 CONSOLIDAÇÃO, EVOLUÇÃO E AUTONOMIA TÉCNICA": `traceStages()` ganha
 consumidor real; 2 recomendações da própria sessão corrigidas após
 investigação mais profunda; relatório completo em
-`docs/RELATORIO_ORDEM_01_CONSOLIDACAO.md`
+`docs/historico/RELATORIO_ORDEM_01_CONSOLIDACAO.md`
 
 Ordem de escopo total ("todo o ecossistema... nada deve permanecer
 isolado"), mas o próprio texto da Ordem encerra dizendo que a
@@ -5608,7 +5608,7 @@ AUTODIAGNÓSTICO" produzindo o achado "Pipeline causal" ao vivo na UI.
 ### 6.73 "DIRETRIZ Nº 02 — CAMADA DE INTELIGÊNCIA VISUAL": dois conflitos
 com regras inegociáveis resolvidos + `nexus/visual-budget.ts` (isolado,
 testado); relatório completo em
-`docs/RELATORIO_DIRETRIZ_02_INTELIGENCIA_VISUAL.md`
+`docs/historico/RELATORIO_DIRETRIZ_02_INTELIGENCIA_VISUAL.md`
 
 Diretriz descreve o pipeline final desejado (`... → Knowledge Graph →
 Evidence Fusion Engine → Quality Governor → Meta Engine → Core Engine →
@@ -5662,7 +5662,7 @@ OPERACIONAL E INTEGRAÇÃO TOTAL": primeira graduação real de
 `nexus/visual-budget.ts` (competição INSTITUTIONAL_ZONE × TRADE_PLAN no
 gráfico ao vivo) + auditoria de isolamento completa do ecossistema;
 relatório completo em
-`docs/RELATORIO_ORDEM_03_IMPLEMENTACAO_OPERACIONAL.md`
+`docs/historico/RELATORIO_ORDEM_03_IMPLEMENTACAO_OPERACIONAL.md`
 
 Ordem muda o critério de "pronto": um motor com testes aprovados mas
 zero consumidor real fica classificado "EM IMPLEMENTAÇÃO" até cumprir o
@@ -5729,7 +5729,7 @@ da fiação real.
 INTELIGENTE ADAPTATIVO": Market Regime real como "contexto operacional"
 em `layer-relevance.ts` + reorganização (não exclusão) da administração
 de modos no painel "Camadas do Gráfico"; relatório completo em
-`docs/RELATORIO_HOMOLOGACAO_03_ORGANISMO_ADAPTATIVO.md`
+`docs/historico/RELATORIO_HOMOLOGACAO_03_ORGANISMO_ADAPTATIVO.md`
 
 Diretriz descreve 6 dimensões adaptativas (prioridade visual/intensidade/
 quantidade de informação/frequência de atualização/relevância dos
@@ -5774,7 +5774,7 @@ reorganizado.
 
 ### 6.76 Evolução Visual (pedido informal): STRUCTURE como 3ª categoria
 real de `visual-budget.ts` + poda mecânica de 8 declarações mortas;
-relatório completo em `docs/RELATORIO_EVOLUCAO_VISUAL_STRUCTURE_PODA.md`
+relatório completo em `docs/historico/RELATORIO_EVOLUCAO_VISUAL_STRUCTURE_PODA.md`
 
 Pedido do Operador em português informal/ditado ("foca na parte visual
 pra ficar mais automático, menos etiqueta... o que você acha que tem de
@@ -5820,7 +5820,7 @@ estrutural (zero erro de React).
 ### 6.77 "ORDEM Nº 04 — CONSOLIDAÇÃO DO ORGANISMO INTELIGENTE
 ADAPTATIVO": auditoria real dos 7 componentes nomeados + 2 entregas
 proporcionais; relatório completo em
-`docs/RELATORIO_ORDEM_04_CONSOLIDACAO.md`
+`docs/historico/RELATORIO_ORDEM_04_CONSOLIDACAO.md`
 
 Ordem formal pedindo integração/coordenação (não novos módulos
 isolados) sobre 7 camadas nomeadas: `layer-relevance`, `visual-budget`,
@@ -5888,7 +5888,7 @@ depender de candles).
 ### 6.78 Evolução Total Autônoma (pedido informal, "autonomia total...
 não deixa nada pendente... sem pedir permissão"): pendência mais antiga
 executada + "um objeto, um peso" + rastreamento reconciliado; relatório
-completo em `docs/RELATORIO_EVOLUCAO_TOTAL_AUTONOMA.md`
+completo em `docs/historico/RELATORIO_EVOLUCAO_TOTAL_AUTONOMA.md`
 
 **Market Structure em `analysis-frame.js` — EXECUTADO** (o fix
 documentado na Ordem Nº 03 §3, adiado 3 rodadas por Regra de Ouro 6,
@@ -6010,7 +6010,7 @@ que esperavam o texto exato sem o qualificador.
 ### 6.81 "Carta Branca" — otimização do motor matemático, reconhecimento
 de padrões (Triângulo + Ombro-Cabeça-Ombro), Evidence Fusion Engine
 finalizado, precisão das etiquetas laterais; relatório completo em
-`docs/RELATORIO_CARTA_BRANCA_CIBORGUE_ELITE.md`
+`docs/historico/RELATORIO_CARTA_BRANCA_CIBORGUE_ELITE.md`
 
 Mega-diretriz em português informal/ditado pedindo, em bloco único:
 organizar a arquitetura do motor matemático e eliminar redundância real;
@@ -6127,7 +6127,7 @@ foi necessária — inventar uma só para "fazer algo" violaria a disciplina
 de não adicionar mudança sem justificativa real já seguida em toda esta
 sessão.
 
-**Relatório completo**: `docs/RELATORIO_CARTA_BRANCA_CIBORGUE_ELITE.md`.
+**Relatório completo**: `docs/historico/RELATORIO_CARTA_BRANCA_CIBORGUE_ELITE.md`.
 
 **Testes executados**: `tsc --noEmit` limpo · **134 arquivos / 2269
 testes** (100%, +48 novos: 9 Triângulo + 7 Ombro-Cabeça-Ombro + 9
@@ -6146,7 +6146,7 @@ bloqueia WebSocket real da Binance, gráfico fica honestamente em
 
 ### 6.82 "Ordem Oficial de Execução — Consolidação Final do AR10 Cyborg"
 (fase: transição de motores para um organismo único); relatório completo
-em `docs/RELATORIO_CONSOLIDACAO_FINAL_ORGANISMO_UNICO.md`
+em `docs/historico/RELATORIO_CONSOLIDACAO_FINAL_ORGANISMO_UNICO.md`
 
 Diretriz formal, prioridade máxima, 11 prioridades numeradas: o foco muda
 de criar módulos novos para consolidar tudo já construído num organismo
@@ -6208,7 +6208,7 @@ console novo, zero regressão de layout.
 
 ### 6.83 "Ordem Oficial: Fechamento da Arquitetura" (última fase de
 consolidação) — relatório completo em
-`docs/RELATORIO_FECHAMENTO_ARQUITETURA.md`
+`docs/historico/RELATORIO_FECHAMENTO_ARQUITETURA.md`
 
 Diretriz formal encerrando a fase de expansão do sistema. Diretriz
 Principal: não criar novos motores/contratos/camadas/módulos — só fazê-los
@@ -6281,7 +6281,7 @@ relatório; zero erro de console novo, zero regressão de layout.
 
 ### 6.84 "Ordem Final: Validação Integral do Ecossistema AR10 Cyborg"
 (homologação, zero código novo) — relatório completo em
-`docs/RELATORIO_HOMOLOGACAO_FINAL_ORGANISMO.md`
+`docs/historico/RELATORIO_HOMOLOGACAO_FINAL_ORGANISMO.md`
 
 Ordem de homologação pura: comprovar com evidência real que o
 ecossistema funciona como um único organismo — sem criar/alterar nada.
@@ -6350,7 +6350,7 @@ medição e o relatório, conforme a própria Ordem pediu.
 
 ### 6.85 "Ordem Oficial: Consolidação Final do AR10 Cyborg" (Fase Final —
 "transformar todos os motores em um único organismo inteligente") —
-relatório completo em `docs/RELATORIO_ORGANISMO_UNICO_FASE_FINAL.md`
+relatório completo em `docs/historico/RELATORIO_ORGANISMO_UNICO_FASE_FINAL.md`
 
 Segunda Ordem de consolidação pura em sequência (a Entrega 22 já tinha
 homologado o ecossistema): 10 diretrizes obrigatórias + uma Regra de
@@ -6405,7 +6405,7 @@ reaberta.
 
 ### 6.86 "Ordem Oficial de Execução: Consolidação Final" (rodada 3,
 endereçada a "Agente 4") — relatório completo em
-`docs/RELATORIO_ORGANISMO_UNICO_RODADA_3.md`
+`docs/historico/RELATORIO_ORGANISMO_UNICO_RODADA_3.md`
 
 Terceira Ordem de consolidação em sequência, mesmo conteúdo substantivo
 das duas anteriores. **Evento de segurança tratado antes de agir**: a
@@ -6440,7 +6440,7 @@ na Entrega 23 minutos antes).
 
 ### 6.87 "Ordem Oficial: Fase de Lapidação, Sincronia e Experiência do
 Operador" (endereçada a "Agente 4", 3ª vez) — relatório completo em
-`docs/RELATORIO_LAPIDACAO_SINCRONIA_EXPERIENCIA.md`
+`docs/historico/RELATORIO_LAPIDACAO_SINCRONIA_EXPERIENCIA.md`
 
 Diferente das 3 Ordens de consolidação anteriores (zero código novo):
 esta pede execução visual/UX real. Mesma Regra de Ouro aplicada a cada
@@ -6503,7 +6503,7 @@ overflow nos 6 breakpoints.
 
 ### 6.88 "Ordem Entrega 26: Lapidação Visual Final + Experiência
 Operacional" — relatório completo em
-`docs/RELATORIO_ENTREGA_26_LAPIDACAO_FINAL.md`
+`docs/historico/RELATORIO_ENTREGA_26_LAPIDACAO_FINAL.md`
 
 10 Prioridades; 6 delas (1, 2, 5, 7, 9, 10) repetem frentes que a
 Entrega 25 auditou horas antes com evidência fresca e concluiu já
@@ -6570,7 +6570,7 @@ delas).
 ---
 
 ### 6.89 "Ordem Oficial: Etapa de Lapidação Matemática e Visual" —
-relatório completo em `docs/RELATORIO_LAPIDACAO_MATEMATICA.md`
+relatório completo em `docs/historico/RELATORIO_LAPIDACAO_MATEMATICA.md`
 
 Ordem legítima (sem endereçamento a persona fictícia) fechando
 explicitamente a fase de criação de motores novos: só upgrades de
@@ -6638,7 +6638,7 @@ pretendidos tocados.
 ---
 
 ### 6.90 "Ordem Oficial: Fase de Lapidação de Elite" (EPC-05) — relatório
-completo em `docs/RELATORIO_EPC05_LAPIDACAO_ELITE.md`
+completo em `docs/historico/RELATORIO_EPC05_LAPIDACAO_ELITE.md`
 
 Quinta mensagem "Agente 4", sem elementos novos de suspeita — conteúdo
 autorizado, persona nunca adotada. A lista de plataformas de referência
@@ -6693,7 +6693,7 @@ arquivos de `src/orderflow/` + 1 teste novo tocados.
 
 ---
 
-### 6.91 "Ordem Mestra — AR-10 CYBORG" (47 seções) — relatório completo em `docs/RELATORIO_ORDEM_MESTRA.md`
+### 6.91 "Ordem Mestra — AR-10 CYBORG" (47 seções) — relatório completo em `docs/historico/RELATORIO_ORDEM_MESTRA.md`
 
 Texto original não sobreviveu literalmente à compactação de contexto
 desta sessão — relatório é síntese honesta por tema (não pontuação

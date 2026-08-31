@@ -1,5 +1,5 @@
 // nexus-scenario-fingerprint.test.ts — Escopo Cirúrgico (Operador, Fase 1
-// confirmada em docs/AUDITORIA_SINCRONIZACAO_DADOS.md §5.3): execução real
+// confirmada em docs/historico/AUDITORIA_SINCRONIZACAO_DADOS.md §5.3): execução real
 // de computeScenarioFingerprint/groupResultsByFingerprint.
 import { describe, it, expect } from 'vitest';
 import { computeScenarioFingerprint, groupResultsByFingerprint } from '../src/nexus/scenario-fingerprint';

@@ -55,12 +55,12 @@ que já existe no código — nunca um "seria legal ter" sem essa base.
 **Reaproveitamento, não duplicação**: este projeto já tem 2 rodadas
 reais de pesquisa técnica anterior, com fontes citadas e verificadas:
 
-- `docs/AUDITORIA_ECOSSISTEMA_VISUAL.md` §3 (comparação com terminais
+- `docs/historico/AUDITORIA_ECOSSISTEMA_VISUAL.md` §3 (comparação com terminais
   profissionais — ATAS/Bookmap/GetChart/LuxAlgo), §7 (inventário do
   motor quantitativo/`nexus/`), §8 (Sierra Chart/Exocharts, IA
   aplicada a previsão de cripto — papers reais). Data de referência:
   2026-07-21.
-- `docs/RELATORIO_EPC.md` — inteligências recuperadas/bugs corrigidos
+- `docs/historico/RELATORIO_EPC.md` — inteligências recuperadas/bugs corrigidos
   na mesma trilha.
 
 Este documento CITA e ATUALIZA essas seções (parte do inventário do
@@ -660,7 +660,7 @@ custo futuro da migração.
 ## 14. Fontes e referências técnicas
 
 ### Herdadas de pesquisa anterior desta sessão
-`docs/AUDITORIA_ECOSSISTEMA_VISUAL.md` — ATAS, Bookmap, GetChart,
+`docs/historico/AUDITORIA_ECOSSISTEMA_VISUAL.md` — ATAS, Bookmap, GetChart,
 LuxAlgo (order flow/heatmap); Sierra Chart, TraderVPS, Exocharts
 (terminais profissionais); MDPI/Forecast, ScienceDirect, Springer,
 PMC, arXiv (IA aplicada a previsão de cripto).

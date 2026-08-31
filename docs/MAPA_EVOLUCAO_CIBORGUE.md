@@ -29,7 +29,7 @@ de ser feito e a evolução de todos os sistema do ciborgue".
   e nomeado) · **AUSENTE** (zero ocorrência no código) · **RECUSADO**
   (avaliado e descartado deliberadamente, com razão registrada — não é a
   mesma coisa que AUSENTE, que só significa "ainda não construído").
-- **Também NÃO é** o `docs/AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` — aquele
+- **Também NÃO é** o `docs/historico/AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` — aquele
   documento é o registro de UMA rodada específica de auditoria profunda
   (duplicação/gargalos de código, censo visual completo, sincronização/
   consistência de decisão) com achados, correções aplicadas e

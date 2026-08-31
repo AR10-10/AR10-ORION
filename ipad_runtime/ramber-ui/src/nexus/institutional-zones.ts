@@ -51,7 +51,7 @@ export type InstitutionalZoneSourceKind =
   // EPC OMEGA FINAL Parte 2 §7 (Confluência Visual): 3 fontes que a
   // diretiva nomeia explicitamente e ainda não alimentavam este
   // consolidador (achado real de auditoria — ver
-  // docs/RELATORIO_EPC_OMEGA_FINAL.md) — fecham os pares Volume
+  // docs/historico/RELATORIO_EPC_OMEGA_FINAL.md) — fecham os pares Volume
   // Profile+S/R, Session Key Level+Liquidez e FVG+Sweep.
   | "VOLUME_PROFILE_POC"
   | "SESSION_KEY_LEVEL"

@@ -822,7 +822,7 @@ export function computeRealFibonacciConfluence(
 const VP_BUCKET_COUNT = 96;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4 item
+// Achado da auditoria de evolução (docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4 item
 // 2): buildRiskSuggestion (ipad_runtime/src/risk/risk-engine.js, chamado
 // direto por App.tsx, não por este arquivo) nunca tinha um nome de tipo TS
 // real — cada consumidor via inferência estrutural implícita. Nomeado aqui

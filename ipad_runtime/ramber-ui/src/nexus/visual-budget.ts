@@ -2,7 +2,7 @@
 // seção "BUDGET VISUAL": motor puro e isolado (Laboratório de Evolução —
 // nasce sem nenhuma ligação com App.tsx/o gráfico até a suíte de testes
 // provar o comportamento; graduação real fica para uma rodada própria,
-// ver docs/RELATORIO_DIRETRIZ_02_INTELIGENCIA_VISUAL.md).
+// ver docs/historico/RELATORIO_DIRETRIZ_02_INTELIGENCIA_VISUAL.md).
 //
 // O QUE ESTE MOTOR É: a formalização real da regra que a diretiva pede —
 // "quando existir excesso de informação, o próprio sistema deverá

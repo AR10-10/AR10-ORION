@@ -1,5 +1,5 @@
 // global-error-boundary-wiring.test.ts — Achado real da AUDITORIA TÉCNICA
-// COMPLETA (docs/AUDITORIA_TECNICA_COMPLETA_PREENCHIDA.md, item A9):
+// COMPLETA (docs/historico/AUDITORIA_TECNICA_COMPLETA_PREENCHIDA.md, item A9):
 // WidgetErrorBoundary (App.tsx) só protegia DENTRO de um Widget; um erro fora
 // dele (shell do App, AccessGate) derrubava a tela inteira sem fallback.
 // Source-level wiring lock, mesma disciplina de ciborgue-vivo-wiring.test.ts:

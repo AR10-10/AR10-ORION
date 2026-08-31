@@ -291,7 +291,7 @@ export interface UnifiedSnapshotState {
   // LONG/SHORT/WAIT (LEI 24). null enquanto o Core Engine está em WAIT ou
   // nenhum componente real está disponível ainda.
   confluenceCorridor: ConfluenceCorridorReading | null;
-  // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // Achado da auditoria de evolução (docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4
   // item 2): buildRiskSuggestion (risk-engine.js) já era computado real em
   // App.tsx (useMemo) mas nunca ganhou fatia própria aqui — ao contrário de
   // QUALQUER outro motor real deste app, nenhum consumidor fora da árvore

@@ -5,7 +5,7 @@
 //
 // EPC OMEGA FINAL Parte 1 §11 / Parte 3 §7: um dos indicadores nomeados
 // pela diretiva e confirmado AUSENTE pela auditoria real (ver
-// docs/RELATORIO_EPC_OMEGA_FINAL.md) — dado 100% real (os MESMOS candles
+// docs/historico/RELATORIO_EPC_OMEGA_FINAL.md) — dado 100% real (os MESMOS candles
 // já usados por EMA), zero API nova, seguro implementar sem violar a
 // Regra de Ouro 1 (ao contrário de itens como On-Chain/Whale Activity,
 // confirmados impossíveis sem API paga).

@@ -3084,7 +3084,7 @@ export default function App() {
       expectancyFilter,
     ],
   );
-  // Achado da auditoria de evolução (docs/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // Achado da auditoria de evolução (docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4
   // item 2): riskSuggestion já era computado real acima mas nunca ganhava
   // fatia própria na store — mesmo padrão passthrough de nexusDecision
   // (App.tsx, poucas linhas abaixo): zero segundo cálculo, só espelha a
