@@ -17,6 +17,7 @@
 // alpha já pronto, nunca reimplementa a curva de decaimento.)
 import { resolveTimeframePrecisionOrder, horizonFitReason } from "./timeframe-layer-profile";
 import { SHARED_ZONE_HIGHLIGHT_SLOTS } from "./liquidity-significance";
+import { FIB_RETRACEMENT_RATIOS } from "./fibonacci-confluence";
 import type { DirectionalLineState } from "./vwap-state";
 import type { PremiumDiscountZone } from "./premium-discount";
 
@@ -612,8 +613,17 @@ export const LAYER_VISUAL_COST: Readonly<Record<string, number>> = {
   // número virou CONTADO — é literalmente o mesmo teto, importado da
   // fonte, nunca uma segunda constante que pode divergir em silêncio.
   liquidity_zones: SHARED_ZONE_HIGHLIGHT_SLOTS,
-  // Declarados — camadas que desenham um conjunto de níveis/zonas
-  fibonacci: 3,
+  // CORRIGIDO na mesma cacada do liquidity_zones acima — o mesmo defeito
+  // aparecia em mais tres linhas desta tabela, e as tres agora sao CONTADAS
+  // em vez de estimadas:
+  //
+  //   fibonacci  — declarava 3, desenha 5. O grafico faz
+  //     `fibonacciLevels.forEach` SEM filtro, e o proprio comentario de la
+  //     diz "sem nenhuma linha desaparecer (piso real)": as 5 razoes sempre
+  //     entram, so' a opacidade varia. Agora vem da fonte
+  //     (FIB_RETRACEMENT_RATIOS.length), entao acrescentar uma razao nova
+  //     ajusta o custo sozinho — nao da' pra divergir de novo em silencio.
+  fibonacci: FIB_RETRACEMENT_RATIOS.length,
   trade_plan_zone: 3,
   equal_highs_lows: 2,
   structure_breaks: 2,
@@ -629,7 +639,17 @@ export const LAYER_VISUAL_COST: Readonly<Record<string, number>> = {
   volume_profile: 1,
   tpo_profile: 1,
   order_book_depth: 1,
-  harmonics: 1,
+  //   harmonics — declarava 1, e este eu PIOREI. A unidade desta tabela é o
+  //     objeto que o OLHO vê (ver a justificativa do supertrend logo
+  //     abaixo: 2 séries que a lib desenha como um traço só custam 1).
+  //     Antes, só UMA família de padrão desenhava por vez, então o pior
+  //     caso era o ziguezague + a neckline do OCO = 2 figuras. Ao tirar o
+  //     Triângulo da disputa — para ele parar de sumir do gráfico —, o pior
+  //     caso simultâneo virou ziguezague + neckline + o Triângulo (suas 2
+  //     retas convergentes são UMA figura, não duas) = 3.
+  //     Corrigir a etiqueta é parte da mesma mudança, não um extra: eu subi
+  //     o custo real e a declaração tinha de acompanhar.
+  harmonics: 3,
   zigzag: 1,
   // Duas LineSeries nativas (uma por sentido de tendência) — mas a lib
   // desenha um único traço contínuo na tela, então o custo de LEITURA é 1,

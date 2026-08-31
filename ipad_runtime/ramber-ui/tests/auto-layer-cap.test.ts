@@ -230,3 +230,74 @@ describe('Fibonacci refaz o mapeamento a cada tempo gráfico', () => {
     expect(src).toContain('fibonacciMatrix.levels.map((l) => ({ ratio: l.ratio, price: l.price, score: l.score }))');
   });
 });
+
+// ═══ O CUSTO DECLARADO TEM DE BATER COM O QUE A TELA RECEBE ═══
+//
+// Esta suite existe por um padrao que se repetiu quatro vezes nesta trilha:
+// um comentario/constante AFIRMA uma coisa e o codigo faz outra. O caso mais
+// caro foi `liquidity_zones`, que declarava 3 objetos e desenhava ate 15 —
+// numa camada cujo orcamento total do canvas e' 12.
+//
+// A unidade da tabela e' o objeto que o OLHO ve, nao a contagem de artefatos
+// de codigo: `supertrend` cria 2 LineSeries que a lib desenha como um traco
+// unico, e por isso custa 1 com razao. Os testes abaixo travam so' os casos
+// em que ha uma FONTE verificavel para comparar.
+describe('LAYER_VISUAL_COST: declarado x real', () => {
+  const src = (p: string) => readFileSync(resolve(__dirname, p), 'utf-8');
+
+  it('fibonacci custa exatamente o numero de razoes que ele desenha', () => {
+    // Vem de FIB_RETRACEMENT_RATIOS.length por import, entao acrescentar uma
+    // razao ajusta o custo sozinho. Este teste guarda o ELO: se alguem trocar
+    // o import por um numero cravado, a igualdade quebra na primeira mudanca.
+    const fib = src('../src/nexus/fibonacci-confluence.ts');
+    const razoes = fib.match(/FIB_RETRACEMENT_RATIOS = \[([^\]]*)\]/)?.[1] ?? '';
+    const quantas = razoes.split(',').filter((s) => s.trim().length > 0).length;
+    expect(quantas).toBeGreaterThan(0);
+    expect(layerVisualCost('fibonacci')).toBe(quantas);
+  });
+
+  it('a premissa do custo do fibonacci: o grafico desenha TODAS as razoes, sem filtro', () => {
+    // Se alguem passar a filtrar niveis antes de desenhar, o custo deixa de
+    // ser o numero de razoes — e este teste avisa em vez de deixar a tabela
+    // mentir de novo. O forEach nao pode ganhar um filter/slice antes dele.
+    const chart = src('../src/chart/EnhancedChart_110_Percent.tsx');
+    // Ancora no efeito de DESENHO (o guard de visibilidade e' unico dele) —
+    // `fibLinesRef.current = []` sozinho tambem casa com o teardown.
+    const i = chart.indexOf('if (!visibility.fibonacci) return;');
+    expect(i).toBeGreaterThan(-1);
+    const bloco = chart.slice(i, i + 300);
+    expect(bloco).toContain('(fibonacciLevels ?? []).forEach((level, i) => {');
+    expect(bloco).not.toContain('.filter(');
+    expect(bloco).not.toContain('.slice(');
+  });
+
+  it('harmonics cobre as figuras que podem aparecer JUNTAS', () => {
+    // O Triangulo saiu da disputa (para parar de sumir), entao ziguezague,
+    // neckline e Triangulo podem coexistir. As 4 series dedicadas existem;
+    // o custo e' 3 porque as 2 retas convergentes do Triangulo sao UMA
+    // figura para quem olha.
+    const chart = src('../src/chart/EnhancedChart_110_Percent.tsx');
+    for (const serie of [
+      'harmonicPolyline = chart.addSeries(',
+      'triangleResistanceLineRef.current = chart.addSeries(',
+      'triangleSupportLineRef.current = chart.addSeries(',
+      'necklineExtensionLineRef.current = chart.addSeries(',
+    ]) {
+      expect(chart).toContain(serie);
+    }
+    // E o Triangulo desenha FORA do encadeamento do vencedor — e' isso que
+    // torna a coexistencia real, e portanto o custo 3 em vez de 2.
+    expect(chart).toContain('if (trianglePattern) {');
+    expect(layerVisualCost('harmonics')).toBe(3);
+  });
+
+  it('nenhuma camada sozinha estoura o orcamento inteiro do canvas', () => {
+    // O defeito estrutural do liquidity_zones em uma linha: uma camada
+    // custando mais que AUTO_LAYER_MAX_VISUAL_COST nunca caberia, e antes da
+    // correcao ela cabia mentindo. Se alguem declarar um custo assim, o
+    // orcamento vira ficcao — entao isto e' um piso permanente.
+    for (const id of AUTO_LAYER_PRECISION_ORDER) {
+      expect(layerVisualCost(id)).toBeLessThanOrEqual(AUTO_LAYER_MAX_VISUAL_COST);
+    }
+  });
+});
