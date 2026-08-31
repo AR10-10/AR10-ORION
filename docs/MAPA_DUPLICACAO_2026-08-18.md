@@ -30,8 +30,8 @@ real, não o nome do arquivo.
 | 8 | EMA × Trend Bias | **DISTINTO (mesma coisa, uma implementação)** | `trendBias()` **é** a comparação preço×SMA e EMA×SMA. Não há duas — há uma, e ela é a decisão inteira (ver auditoria de verificação). |
 | 9 | **ATR em múltiplos lugares** | **~~DUPLICADO~~ → DISTINTO (corrigido na execução)** | A leitura linha a linha desmentiu o veredicto anterior. `computeAtrPercent` (`lorentzian-classifier.js`) é **Wilder recursivo (RMA)** e devolve a **série**, normalizando cada ponto pelo próprio close. `meanTrueRangePercent` (`regime-engine.js`, antes chamado `atrPercent`) é **média simples dos últimos 14 TR** e devolve um **escalar**, normalizando pelo último close. Para os mesmos candles dão números diferentes — são duas definições legítimas, não uma cópia. Resolvido por nomeação e documentação nos dois lados, risco zero. |
 | 10 | Risk em múltiplos lugares | **RESOLVIDO / SSOT-OK** | `src/risk/risk-engine.js` é o único que dimensiona (`min(tamanho_vol%, teto_kelly%, 100)`). `engine-bridge.ts` só repassa campos. Kelly vive uma vez, em WASM. |
-| 11 | **Alertas duplicados** | **ASSIMÉTRICO — achado principal** | Ver seção própria abaixo. |
-| 12 | **Voice dispatcher × Alert Center × GMIL** | **ASSIMÉTRICO** | Idem. GMIL não produz alerta — é contexto macro, categoria à parte. |
+| 11 | **Alertas duplicados** | ~~ASSIMÉTRICO~~ → **RESOLVIDO** (2026-08-31) | Ver seção própria abaixo — `nexus/snapshot-alerts.ts` virou o produtor único. |
+| 12 | **Voice dispatcher × Alert Center × GMIL** | ~~ASSIMÉTRICO~~ → **RESOLVIDO** (2026-08-31) | Idem — a voz deixou de detectar e passou a consumir. GMIL não produz alerta — é contexto macro, categoria à parte. |
 | 13 | Múltiplos verdicts direcionais | **DISTINTO, mas é o problema de produto** | 32 de 99 módulos emitem alta/baixa por matemáticas diferentes (ADX/DI, k-NN Lorentziano, estrutura fractal, MACD, multi-TF). Nenhum decide — só `trendBias()` decide. Não é duplicação de código; é **excesso de opinião sobre uma decisão rasa**. |
 | 14 | Múltiplas fontes de preço | **RESOLVIDO** | `market-data-bus/` é a fonte canônica por `symbol:timeframe`. `engine-bridge.ts:579` documenta que o segundo `fetch()` direto a `api.binance.com/klines` **já foi removido**. Binance/MEXC/Bybit/OKX entram como cross-check, não como segunda verdade. |
 | 15 | Múltiplos cálculos de tendência | **DISTINTO** | Ver #13. |
@@ -41,6 +41,21 @@ real, não o nome do arquivo.
 ---
 
 ## Achado principal — cobertura de alerta partida
+
+> **✅ RESOLVIDO (verificado em 2026-08-31).** Este achado foi corrigido e o
+> texto abaixo é o diagnóstico histórico, não o estado atual.
+> `nexus/snapshot-alerts.ts` é hoje o **produtor único** dos alertas de
+> transição: `voice-dispatcher.ts` virou adaptador fino
+> (`toVoiceAlerts(deriveSnapshotAlerts(prev, next))`) e a UI de toast consome
+> exatamente a mesma lista. BOS/CHoCH produz alerta em
+> `snapshot-alerts.ts:192`. O Operador não ouve mais um evento que a tela não
+> mostra.
+>
+> Registrado aqui, e não num documento novo, porque documentação viva se
+> corrige (`CLAUDE.md`, Disciplina §6): quem lesse este mapa hoje iria caçar
+> um problema já morto — exatamente a armadilha que `QUARANTINE.md` tinha
+> quando mandava editar um arquivo que não existe mais.
+
 
 Não é duplicação de código. É pior e mais barato de corrigir: **dois
 motores de alerta independentes, com cobertura quase disjunta.**

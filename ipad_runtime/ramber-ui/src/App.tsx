@@ -200,7 +200,7 @@ import { simulateTradeCostsBatch } from "./nexus/trade-simulation";
 import { evaluateSignalFilter, MIN_TRADES_FOR_VALID_EXPECTANCY, type FilterResult } from "./nexus/expectancy";
 import { computeDecisionDistance, formatDecisionDistance, formatAtrUnits, describeDecisionDistance, type DecisionDistanceReading } from "./nexus/decision-distance";
 import { computeDirectionalConsensus, describeDirectionalConsensus, normalizeSide, sideFromSigned, computeLiquidityMap, liquidityBias, type DirectionalSource, type DirectionalConsensusReading, type LiquidityTarget, type LiquidityMapReading } from "./nexus/directional-consensus";
-import { computeZoneSignificance, formatZoneAtrWidth } from "./nexus/liquidity-significance";
+import { computeZoneSignificance, formatZoneAtrWidth, selectSharedZoneHighlights } from "./nexus/liquidity-significance";
 // "constrói uma bola... um só aparece, tipo longa ou short, com essa
 // porcentagem, bem profissional" (pedido direto do Operador) — geometria
 // pura do anel/gauge; o componente SVG que a consome vive logo antes de
@@ -9436,18 +9436,10 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // razão: Breaker/Mitigation Block têm top/bottom mas não são PriceZone, e
   // esta função só lê esses dois campos. Uma segunda cópia da chamada (ou um
   // cast) seria duplicação sem ganho.
-  const isSignificantZone = (z: { top: number; bottom: number }) =>
-    computeZoneSignificance(z.top, z.bottom, livePrice.price, chartAtrPercent).significant;
+  // As populacoes so sao COLETADAS aqui; quem entra na tela e' decidido uma
+  // vez so, mais abaixo, quando as cinco ja existem (orcamento compartilhado).
   const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);
   const unmitigatedBlocksAll = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated);
-  const significantFvgs = unmitigatedFvgsAll.filter(isSignificantZone);
-  const significantBlocks = unmitigatedBlocksAll.filter(isSignificantZone);
-  const unmitigatedFvgs = unmitigatedFvgsAll.filter(
-    (z) => isRealObstacle(z) || significantFvgs.indexOf(z) !== -1 && significantFvgs.indexOf(z) < 3,
-  );
-  const unmitigatedBlocks = unmitigatedBlocksAll.filter(
-    (z) => isRealObstacle(z) || significantBlocks.indexOf(z) !== -1 && significantBlocks.indexOf(z) < 3,
-  );
   // Pools de liquidez (EQH/EQL) NÃO ganham este mesmo filtro — achado real
   // da auditoria (ver header de liquidity-significance.ts): todo pool que
   // chega até aqui já exige >= 2 toques reais para existir (a própria
@@ -9462,9 +9454,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // uma referência real) e mesmo teto de decluttering de 3, com a mesma
   // união de obstáculos reais do plano ativo (um void que o plano cruza
   // nunca fica invisível por causa do teto).
-  const unmitigatedVoids = (liquidityVoids ?? [])
-    .filter((z: PriceZone) => !z.mitigated)
-    .filter((z: PriceZone, i: number) => i < 3 || isRealObstacle(z));
+  const unmitigatedVoidsAll = (liquidityVoids ?? []).filter((z: PriceZone) => !z.mitigated);
   // GRADUAÇÃO de institutional-blocks.js. Dois recortes deliberados antes
   // de chegar ao canvas, ambos pela mesma razão que os Voids já têm o seu
   // ("não ficar poluído, só as marca certeira"):
@@ -9501,14 +9491,43 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // real do plano ativo escapa do teto sempre.
   const breakerAll = blocosVisiveis.filter((b: InstitutionalBlock) => b.kind === "BREAKER");
   const mitigationAll = blocosVisiveis.filter((b: InstitutionalBlock) => b.kind === "MITIGATION");
-  const significantBreakers = breakerAll.filter(isSignificantZone);
-  const significantMitigations = mitigationAll.filter(isSignificantZone);
-  const breakerZones = breakerAll
-    .filter((b) => isRealObstacle(b) || significantBreakers.indexOf(b) !== -1 && significantBreakers.indexOf(b) < 3)
-    .map(toChartZone);
-  const mitigationZones = mitigationAll
-    .filter((b) => isRealObstacle(b) || significantMitigations.indexOf(b) !== -1 && significantMitigations.indexOf(b) < 3)
-    .map(toChartZone);
+
+  // ═══ ORÇAMENTO COMPARTILHADO DAS BANDAS DE PREÇO ═══
+  //
+  // ACHADO MEDIDO desta rodada: cada uma das CINCO populações de banda
+  // tinha um teto PRÓPRIO de 3 — FVG, Order Block, Void, Breaker e
+  // Mitigation — e nenhuma sabia das outras. No pior caso a camada
+  // `liquidity_zones` punha 15 retângulos na tela enquanto DECLARAVA custo
+  // 3 em LAYER_VISUAL_COST, e o orçamento automático do canvas inteiro é
+  // 12 (AUTO_LAYER_MAX_VISUAL_COST). Uma camada só podia estourar sozinha
+  // o orçamento de todas — o mecanismo anti-poluição derrotado justamente
+  // pelo seu maior consumidor.
+  //
+  // Pior que o volume: sem comparação cruzada, "os 3 melhores de cada
+  // família" não é "os melhores da tela". Um Breaker de 0,2× ATR entrava
+  // por ser o 3º da sua família enquanto um FVG de 3× ATR ficava fora por
+  // ser o 4º da dele.
+  //
+  // Agora as cinco disputam UM orçamento, ordenado pela largura real em
+  // ATR que computeZoneSignificance já calculava — mesma disciplina que
+  // visual-budget.ts aplica às anotações. Zero matemática nova, e o custo
+  // declarado da camada passa a ser CONTÁVEL em vez de estimado.
+  //
+  // Obstáculo real do plano ativo continua SEMPRE visível, fora do teto
+  // (Regra de Ouro 4: informação estrutural, não decoração de destaque) —
+  // a mesma escapatória que cada população já tinha isoladamente.
+  const zonasEmDestaque = selectSharedZoneHighlights(
+    [unmitigatedFvgsAll, unmitigatedBlocksAll, unmitigatedVoidsAll, breakerAll, mitigationAll],
+    livePrice.price,
+    chartAtrPercent,
+  ) as ReadonlySet<unknown>;
+  const emDestaque = <Z extends { top: number; bottom: number }>(z: Z) =>
+    isRealObstacle(z) || zonasEmDestaque.has(z);
+  const unmitigatedFvgs = unmitigatedFvgsAll.filter(emDestaque);
+  const unmitigatedBlocks = unmitigatedBlocksAll.filter(emDestaque);
+  const unmitigatedVoids = unmitigatedVoidsAll.filter(emDestaque);
+  const breakerZones = breakerAll.filter(emDestaque).map(toChartZone);
+  const mitigationZones = mitigationAll.filter(emDestaque).map(toChartZone);
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // (Fase 1.4) — mesma store que os agentes leem, só mapeada para o formato
   // do chart (price/ratio/score reais, nada recalculado aqui).

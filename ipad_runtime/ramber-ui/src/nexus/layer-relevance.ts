@@ -16,6 +16,7 @@
 // annotation-decay.ts antes de chegar aqui — este módulo só recebe o
 // alpha já pronto, nunca reimplementa a curva de decaimento.)
 import { resolveTimeframePrecisionOrder, horizonFitReason } from "./timeframe-layer-profile";
+import { SHARED_ZONE_HIGHLIGHT_SLOTS } from "./liquidity-significance";
 import type { DirectionalLineState } from "./vwap-state";
 import type { PremiumDiscountZone } from "./premium-discount";
 
@@ -601,8 +602,17 @@ export const LAYER_VISUAL_COST: Readonly<Record<string, number>> = {
   vwap: 5,
   trend_channel: 3,
   candle_patterns: 4,
+  // CORRIGIDO (achado medido): estava DECLARADO como 3 e o valor real
+  // chegava a 15 — cinco populações de banda (FVG, Order Block, Void,
+  // Breaker, Mitigation) com um teto próprio de 3 cada, nenhuma sabendo
+  // das outras. Uma subdeclaração de 5x justamente na camada que mais
+  // desenha, num orçamento total de 12: ela sozinha podia estourar o
+  // canvas inteiro. Agora as cinco disputam UM orçamento
+  // (selectSharedZoneHighlights, liquidity-significance.ts), então este
+  // número virou CONTADO — é literalmente o mesmo teto, importado da
+  // fonte, nunca uma segunda constante que pode divergir em silêncio.
+  liquidity_zones: SHARED_ZONE_HIGHLIGHT_SLOTS,
   // Declarados — camadas que desenham um conjunto de níveis/zonas
-  liquidity_zones: 3,
   fibonacci: 3,
   trade_plan_zone: 3,
   equal_highs_lows: 2,

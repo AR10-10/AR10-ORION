@@ -172,11 +172,14 @@ describe('Liquidity Void: graduação real ponta a ponta (QUARANTINE.md + bridge
     const app = read('../src/App.tsx');
     expect(app).toContain('const liquidityVoids = useMemo<PriceZone[]>(');
     expect(app).toContain('() => (chartData && chartData.length > 0 ? computeLiquidityVoids(chartData) : []),');
-    expect(app).toContain('const unmitigatedVoids = (liquidityVoids ?? [])');
-    expect(app).toContain('.filter((z: PriceZone) => !z.mitigated)');
-    // Mesmo teto/união de obstáculos reais que FVG/OB já usam — um void que
-    // o plano ativo cruza nunca fica invisível por causa do decluttering.
-    expect(app).toContain('.filter((z: PriceZone, i: number) => i < 3 || isRealObstacle(z));');
+    expect(app).toContain('const unmitigatedVoidsAll = (liquidityVoids ?? []).filter((z: PriceZone) => !z.mitigated);');
+    // O teto do Void era o único que escolhia por ORDEM DE CHEGADA pura
+    // (`i < 3`), sem sequer olhar a largura. Agora ele disputa o mesmo
+    // orçamento das outras quatro famílias, por largura real em ATR — e a
+    // união de obstáculos reais continua: um void que o plano ativo cruza
+    // nunca fica invisível por causa do decluttering.
+    expect(app).toContain('const unmitigatedVoids = unmitigatedVoidsAll.filter(emDestaque);');
+    expect(app).not.toContain('i < 3 || isRealObstacle(z)');
     expect(app).toContain('liquidityVoids={unmitigatedVoids}');
   });
 

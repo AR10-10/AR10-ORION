@@ -5,6 +5,8 @@ import {
   computeZoneSignificance,
   formatZoneAtrWidth,
   MIN_ZONE_ATR_FRACTION,
+  SHARED_ZONE_HIGHLIGHT_SLOTS,
+  selectSharedZoneHighlights,
 } from "../src/nexus/liquidity-significance";
 
 describe("computeZoneSignificance — fail-closed", () => {
@@ -169,35 +171,122 @@ describe("Voids: o filtro seria redundante — e a redundância é uma INVARIANT
 describe("Breaker/Mitigation: aqui o filtro FALTAVA de verdade — e agora está ligado", () => {
   const app = readFileSync(resolve(__dirname, "../src/App.tsx"), "utf8");
 
-  it("as 3 vagas são disputadas dentro do subconjunto SIGNIFICATIVO, igual a FVG/OB", () => {
+  it("as vagas são UMA disputa só, entre as CINCO populações — nunca 3 por família", () => {
     // Quarta vez nesta trilha que uma mutação de FIAÇÃO passaria verde com o
     // motor testado a fundo e a CHAMADA não travada. Aqui a chamada real fica
-    // travada, nos dois tipos de bloco.
-    expect(app).toContain("const significantBreakers = breakerAll.filter(isSignificantZone);");
-    expect(app).toContain("const significantMitigations = mitigationAll.filter(isSignificantZone);");
-    expect(app).toContain("significantBreakers.indexOf(b) !== -1 && significantBreakers.indexOf(b) < 3");
-    expect(app).toContain("significantMitigations.indexOf(b) !== -1 && significantMitigations.indexOf(b) < 3");
+    // travada — e o que ela trava mudou: os tetos por família (3 para FVG, 3
+    // para OB, 3 para Void, 3 para Breaker, 3 para Mitigation = até 15
+    // retângulos numa camada que DECLARAVA custar 3) viraram um orçamento
+    // único disputado por largura real em ATR.
+    expect(app).toContain("const zonasEmDestaque = selectSharedZoneHighlights(");
+    // As cinco populações entram na MESMA chamada, na mesma ordem do array.
+    expect(app).toContain(
+      "[unmitigatedFvgsAll, unmitigatedBlocksAll, unmitigatedVoidsAll, breakerAll, mitigationAll],",
+    );
+    // ...e as cinco saem pelo MESMO filtro. Se alguém devolver um teto
+    // próprio a qualquer família, alguma destas cinco linhas some.
+    for (const trecho of [
+      "const unmitigatedFvgs = unmitigatedFvgsAll.filter(emDestaque);",
+      "const unmitigatedBlocks = unmitigatedBlocksAll.filter(emDestaque);",
+      "const unmitigatedVoids = unmitigatedVoidsAll.filter(emDestaque);",
+      "const breakerZones = breakerAll.filter(emDestaque).map(toChartZone);",
+      "const mitigationZones = mitigationAll.filter(emDestaque).map(toChartZone);",
+    ]) {
+      expect(app).toContain(trecho);
+    }
+    // Nenhum teto por família pode ter sobrevivido.
+    expect(app).not.toContain("significantBreakers");
+    expect(app).not.toContain("significantMitigations");
+    expect(app).not.toContain("significantFvgs");
+    expect(app).not.toContain("significantBlocks");
   });
 
   it("obstáculo real do plano ativo continua ESCAPANDO do teto (Regra de Ouro 4)", () => {
     // A escapatória é o que impede o filtro de apagar informação estrutural:
-    // um bloco no caminho entrada→alvo aparece independente do tamanho.
-    for (const trecho of [
-      "isRealObstacle(b) || significantBreakers.indexOf(b)",
-      "isRealObstacle(b) || significantMitigations.indexOf(b)",
-    ]) {
-      expect(app).toContain(trecho);
-    }
+    // uma zona no caminho entrada→alvo aparece independente do tamanho. Agora
+    // ela vive num lugar só, válida para as cinco famílias de uma vez.
+    expect(app).toContain("isRealObstacle(z) || zonasEmDestaque.has(z)");
   });
 
-  it("a assinatura de isSignificantZone é estrutural — um bloco não é PriceZone", () => {
+  it("a assinatura do filtro é estrutural — um bloco não é PriceZone", () => {
     // Se voltasse a exigir PriceZone, os blocos precisariam de um cast (uma
-    // mentira de tipo) ou de uma SEGUNDA chamada duplicada.
-    expect(app).toContain("const isSignificantZone = (z: { top: number; bottom: number }) =>");
+    // mentira de tipo) ou de uma SEGUNDA chamada duplicada. O genérico abaixo
+    // aceita as cinco famílias lendo só top/bottom.
+    expect(app).toContain("const emDestaque = <Z extends { top: number; bottom: number }>(z: Z) =>");
   });
 
   it("a medição que motivou a mudança fica registrada, não só o resultado", () => {
     expect(app).toMatch(/2985 blocos/);
     expect(app).toMatch(/1,27% abaixo do piso/);
+  });
+});
+
+// ═══ EXECUÇÃO REAL: a arbitragem cruzada entre as populações ═══
+//
+// Teste de execução (não de padrão) porque o risco aqui é "a matemática de
+// seleção está sutilmente errada" — a ordenação decide o que o Operador vê.
+describe("selectSharedZoneHighlights — um orçamento, cinco famílias", () => {
+  const PRICE = 100;
+  const ATR_PCT = 1; // 1% => 1 unidade de ATR == 1 de preço
+
+  /** Zona de largura exata em unidades de ATR (com ATR_PCT = 1). */
+  const zonaDe = (larguraAtr: number, id: string) => ({
+    id,
+    bottom: PRICE,
+    top: PRICE + larguraAtr,
+  });
+
+  it("escolhe as MAIORES da tela, não as 3 melhores de cada família", () => {
+    // O defeito antigo em uma linha: um Breaker pequeno entrava por ser o
+    // melhor da sua família enquanto um FVG grande ficava fora por ser o 4º
+    // da dele. Aqui as famílias são deliberadamente desiguais.
+    const fvgs = [zonaDe(5, "fvg-5"), zonaDe(4, "fvg-4"), zonaDe(3, "fvg-3"), zonaDe(2, "fvg-2")];
+    const breakers = [zonaDe(0.5, "brk-0.5")];
+
+    const vencedoras = selectSharedZoneHighlights([fvgs, breakers], PRICE, ATR_PCT, 3);
+    const ids = [...vencedoras].map((z) => z.id).sort();
+
+    // As 3 maiores da TELA são todas FVG — o Breaker de 0.5x perde, mesmo
+    // sendo o único da sua família. Com tetos por família ele entraria.
+    expect(ids).toEqual(["fvg-3", "fvg-4", "fvg-5"]);
+    expect(vencedoras.has(breakers[0])).toBe(false);
+  });
+
+  it("nunca devolve mais que as vagas — o teto é real, não uma sugestão", () => {
+    const muitas = Array.from({ length: 40 }, (_, i) => zonaDe(1 + i, `z${i}`));
+    const vencedoras = selectSharedZoneHighlights([muitas], PRICE, ATR_PCT);
+    expect(vencedoras.size).toBe(SHARED_ZONE_HIGHLIGHT_SLOTS);
+  });
+
+  it("zona abaixo do piso de significância nunca ocupa vaga, mesmo sobrando espaço", () => {
+    // Uma vaga vazia não é motivo para promover ruído: o piso continua
+    // valendo antes da disputa.
+    const ruido = zonaDe(MIN_ZONE_ATR_FRACTION / 2, "ruido");
+    const real = zonaDe(3, "real");
+    const vencedoras = selectSharedZoneHighlights([[ruido, real]], PRICE, ATR_PCT, 5);
+    expect(vencedoras.has(real)).toBe(true);
+    expect(vencedoras.has(ruido)).toBe(false);
+    expect(vencedoras.size).toBe(1);
+  });
+
+  it("fail-closed sem ATR real: conjunto vazio, nunca um destaque fabricado", () => {
+    const zonas = [zonaDe(5, "a"), zonaDe(4, "b")];
+    expect(selectSharedZoneHighlights([zonas], PRICE, null).size).toBe(0);
+    expect(selectSharedZoneHighlights([zonas], PRICE, 0).size).toBe(0);
+    expect(selectSharedZoneHighlights([zonas], null, ATR_PCT).size).toBe(0);
+  });
+
+  it("populações ausentes/vazias não quebram — as outras seguem disputando", () => {
+    const fvgs = [zonaDe(2, "fvg")];
+    const vencedoras = selectSharedZoneHighlights([fvgs, null, undefined, []], PRICE, ATR_PCT);
+    expect([...vencedoras].map((z) => z.id)).toEqual(["fvg"]);
+  });
+
+  it("empate mantém a ordem de chegada — o critério antigo vira desempate, não some", () => {
+    const primeira = zonaDe(2, "primeira");
+    const segunda = zonaDe(2, "segunda");
+    const vencedoras = selectSharedZoneHighlights([[primeira, segunda]], PRICE, ATR_PCT, 1);
+    expect(vencedoras.has(primeira)).toBe(true);
+    expect(vencedoras.has(segunda)).toBe(false);
   });
 });

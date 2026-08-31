@@ -125,16 +125,29 @@ describe("recortes antes do canvas — declarados, nunca silenciosos", () => {
     // Um bloco no caminho entrada→alvo nunca pode ser cortado pelo teto:
     // é risco estrutural do plano ATIVO, não decoração de destaque.
     //
-    // A FORMA mudou (auditoria posterior, ver liquidity-significance.test.ts):
-    // as 3 vagas deixaram de ser por ORDEM DE CHEGADA (`i < 3`) e passaram a
-    // ser disputadas dentro do subconjunto SIGNIFICATIVO em unidades de ATR —
-    // o mesmo filtro que FVG/Order Block já tinham e que nunca chegou aqui.
-    // O CONTRATO que este teste guarda não mudou: a escapatória de obstáculo
-    // real continua existindo, e continua existindo nos DOIS tipos de bloco.
+    // A FORMA mudou DUAS vezes (ver liquidity-significance.test.ts). Primeiro
+    // as vagas deixaram de ser por ORDEM DE CHEGADA e passaram a exigir
+    // significância em ATR. Depois os cinco tetos por família (FVG, OB, Void,
+    // Breaker, Mitigation — 3 vagas cada, até 15 retângulos numa camada que
+    // declarava custar 3) viraram UM orçamento compartilhado.
+    //
+    // O CONTRATO que este teste guarda nunca mudou: a escapatória de
+    // obstáculo real continua existindo, e continua valendo para os DOIS
+    // tipos de bloco. Só que agora ela vive num lugar só.
     const src = app();
-    expect(src.match(/isRealObstacle\(b\) \|\| significant(?:Breakers|Mitigations)\.indexOf\(b\)/g)?.length).toBe(2);
-    // E o teto continua sendo 3 nos dois — não virou "todos".
-    expect(src.match(/significant(?:Breakers|Mitigations)\.indexOf\(b\) < 3/g)?.length).toBe(2);
+    // Os dois tipos passam pelo MESMO filtro — e é ele que carrega a
+    // escapatória, para as cinco famílias de uma vez.
+    expect(src).toContain("const breakerZones = breakerAll.filter(emDestaque).map(toChartZone);");
+    expect(src).toContain("const mitigationZones = mitigationAll.filter(emDestaque).map(toChartZone);");
+    expect(src).toContain("isRealObstacle(z) || zonasEmDestaque.has(z)");
+    // E os dois entram na disputa — se um sumisse do array, o outro comeria
+    // as vagas sozinho e este teste não veria nada errado sem esta linha.
+    expect(src).toContain("unmitigatedVoidsAll, breakerAll, mitigationAll],");
+    // O teto continua FINITO — não virou "todos". A constante é a fonte
+    // única, importada por LAYER_VISUAL_COST, nunca um número solto aqui.
+    expect(readFileSync(resolve(__dirname, "../src/nexus/liquidity-significance.ts"), "utf8")).toMatch(
+      /export const SHARED_ZONE_HIGHLIGHT_SLOTS = [1-9]\d*;/,
+    );
   });
 });
 

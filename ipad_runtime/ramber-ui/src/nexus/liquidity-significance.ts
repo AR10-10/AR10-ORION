@@ -125,3 +125,99 @@ export function formatZoneAtrWidth(widthAtrUnits: number | null | undefined): st
   if (u < 0.05) return "<0.05×";
   return `${u.toFixed(2)}× ATR`;
 }
+
+// ═══ ARBITRAGEM CRUZADA ENTRE AS POPULAÇÕES DE BANDA ═══
+//
+// ACHADO MEDIDO (auditoria do orçamento visual): o filtro acima resolve
+// "esta zona é grande o bastante para aparecer?", mas nunca resolveu
+// "quantas bandas cabem no gráfico ao todo?". App.tsx dava a CADA população
+// de banda de preço um teto PRÓPRIO de 3:
+//
+//   FVG (3) + Order Block (3) + Void (3) + Breaker (3) + Mitigation (3) = 15
+//
+// Cinco orçamentos independentes, e nenhum deles sabia da existência dos
+// outros quatro. Duas consequências reais, ambas medidas no código:
+//
+//   1. `LAYER_VISUAL_COST.liquidity_zones` DECLARAVA 3 objetos e recebia até
+//      15 — uma subdeclaração de 5x, justamente na camada que mais desenha.
+//      O orçamento automático (AUTO_LAYER_MAX_VISUAL_COST = 12) admitia a
+//      camada como se ela custasse 3: uma única camada podia estourar
+//      sozinha o orçamento do canvas inteiro, o mecanismo anti-poluição
+//      derrotado pelo seu maior consumidor. O declarado estava certo; era a
+//      realidade que precisava obedecê-lo (ver SHARED_ZONE_HIGHLIGHT_SLOTS).
+//
+//   2. Um Breaker de 0,2x ATR entrava porque era um dos 3 melhores DA SUA
+//      família, enquanto um FVG de 3x ATR ficava de fora por ser o 4º da
+//      dele. Sem comparação cruzada, "os 3 melhores de cada" não é o mesmo
+//      que "os melhores da tela".
+//
+// A correção é a mesma disciplina que visual-budget.ts já aplica às
+// anotações — orçamento único, disputado por medição real — só que agora
+// entre populações de zona. Zero matemática nova: ordena pelo
+// `widthAtrUnits` que computeZoneSignificance acima já calcula.
+
+/** Vagas de destaque disputadas por TODAS as populações de banda de preço.
+ *
+ *  POR QUE 3, E NÃO 15 NEM 5 — a escolha foi medida, não estética:
+ *
+ *  `LAYER_VISUAL_COST.liquidity_zones` já declarava 3, e todo o orçamento
+ *  automático (AUTO_LAYER_MAX_VISUAL_COST = 12, AUTO_LAYER_MAX_SIMULTANEOUS
+ *  = 6) foi calibrado em cima desse 3. O defeito nunca foi o número
+ *  declarado: era a REALIDADE não bater com ele — cinco populações × 3
+ *  vagas próprias = até 15 retângulos.
+ *
+ *  Havia dois jeitos de fazer os dois números coincidirem. Subir o
+ *  declarado até a realidade (5, ou 15) foi TENTADO e medido: com custo 5,
+ *  o orçamento de 12 se esgota em 4 camadas em vez de 6 — o Operador
+ *  passaria a VER MENOS coisa no modo automático, o oposto do objetivo.
+ *
+ *  Então a realidade desce até o declarado. Efeito duplo: o pior caso do
+ *  canvas cai de 15 bandas para 3, que é o decluttering pedido, e nenhum
+ *  outro teto do sistema precisa ser re-sintonizado.
+ *
+ *  3 vagas para 5 famílias é apertado de propósito — é o "não ficar
+ *  poluído, só as marca certeira" que o próprio App.tsx já citava. E
+ *  aperta sem esconder nada estrutural: obstáculo real do caminho do Trade
+ *  Plan escapa do teto sempre, do lado de quem chama. */
+export const SHARED_ZONE_HIGHLIGHT_SLOTS = 3;
+
+/** Só o que este módulo precisa ler — o mesmo subconjunto estrutural que
+ *  computeZoneSignificance usa, para Breaker/Mitigation (que não são
+ *  PriceZone) entrarem sem cast nem segunda cópia. */
+export interface RankableZone {
+  top: number;
+  bottom: number;
+}
+
+/**
+ * Escolhe, ENTRE TODAS as populações, as zonas de maior largura real em ATR.
+ *
+ * Devolve um Set por identidade: quem chama mantém suas próprias listas e só
+ * pergunta "esta zona ganhou vaga?", sem reordenar nada e sem que este módulo
+ * precise conhecer o formato de cada família.
+ *
+ * Fail-closed: sem ATR real, `computeZoneSignificance` devolve NO_ATR e
+ * nenhuma zona é considerada significativa — o Set volta vazio e quem chama
+ * cai na sua própria regra de obstáculo, nunca num destaque fabricado.
+ */
+export function selectSharedZoneHighlights<T extends RankableZone>(
+  populations: ReadonlyArray<ReadonlyArray<T> | null | undefined>,
+  price: number | null | undefined,
+  atrPercent: number | null | undefined,
+  slots: number = SHARED_ZONE_HIGHLIGHT_SLOTS,
+): Set<T> {
+  const ranked: Array<{ zone: T; width: number }> = [];
+  for (const pop of populations) {
+    for (const zone of pop ?? []) {
+      const sig = computeZoneSignificance(zone.top, zone.bottom, price, atrPercent);
+      if (sig.status !== "OK" || !sig.significant) continue;
+      ranked.push({ zone, width: sig.widthAtrUnits });
+    }
+  }
+  // Maior largura primeiro. Empate mantém a ordem de chegada (sort estável
+  // em ES2019+), que preserva o critério anterior como desempate em vez de
+  // trocá-lo por um arbitrário.
+  ranked.sort((a, b) => b.width - a.width);
+  const limite = Number.isFinite(slots) && slots > 0 ? Math.floor(slots) : SHARED_ZONE_HIGHLIGHT_SLOTS;
+  return new Set(ranked.slice(0, limite).map((r) => r.zone));
+}

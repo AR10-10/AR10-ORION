@@ -458,20 +458,20 @@ describe('Auditoria de pendências: obstacleCount (sem teto) reconciliado com o 
     // CONTRATO — comparar por low/high real, nunca por índice — não mudou.
     expect(a).toContain('const isRealObstacle = (z: { top: number; bottom: number }) =>');
     expect(a).toContain('chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);');
-    // A assinatura de isSignificantZone estreitou pela MESMA razão que a de
-    // isRealObstacle logo acima, e na mesma auditoria: Breaker/Mitigation
-    // Block passaram a usar este filtro (antes disputavam as 3 vagas por
-    // ordem de chegada), e eles têm top/bottom sem serem PriceZone. O
-    // CONTRATO — medir largura real contra o ATR real — não mudou; a linha
-    // seguinte, que é onde ele vive, continua idêntica.
-    expect(a).toContain('const isSignificantZone = (z: { top: number; bottom: number }) =>');
-    expect(a).toContain('computeZoneSignificance(z.top, z.bottom, livePrice.price, chartAtrPercent).significant;');
+    // As populações são só COLETADAS aqui; quem entra na tela é decidido uma
+    // vez só, mais abaixo, quando as cinco já existem. Antes cada uma tinha
+    // teto próprio de 3 — até 15 retângulos numa camada que declarava custar
+    // 3 — e nenhuma sabia das outras quatro.
     expect(a).toContain('const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);');
     expect(a).toContain('const unmitigatedBlocksAll = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated);');
-    expect(a).toContain('const significantFvgs = unmitigatedFvgsAll.filter(isSignificantZone);');
-    expect(a).toContain('const significantBlocks = unmitigatedBlocksAll.filter(isSignificantZone);');
-    expect(a).toContain('(z) => isRealObstacle(z) || significantFvgs.indexOf(z) !== -1 && significantFvgs.indexOf(z) < 3,');
-    expect(a).toContain('(z) => isRealObstacle(z) || significantBlocks.indexOf(z) !== -1 && significantBlocks.indexOf(z) < 3,');
+    // O CONTRATO — medir largura real contra o ATR real — não mudou de lugar,
+    // só deixou de ser aplicado cinco vezes em paralelo: agora é uma disputa
+    // única, e a escapatória de obstáculo vale para as cinco de uma vez.
+    expect(a).toContain('const zonasEmDestaque = selectSharedZoneHighlights(');
+    expect(a).toContain('const emDestaque = <Z extends { top: number; bottom: number }>(z: Z) =>');
+    expect(a).toContain('isRealObstacle(z) || zonasEmDestaque.has(z)');
+    expect(a).toContain('const unmitigatedFvgs = unmitigatedFvgsAll.filter(emDestaque);');
+    expect(a).toContain('const unmitigatedBlocks = unmitigatedBlocksAll.filter(emDestaque);');
   });
 
   it('isRealObstacle referencia chartObstacleZones (a MESMA lista sem teto que já alimenta obstacleCount/LiquidityZonesPlugin) — nunca um segundo cálculo de obstáculo', () => {
