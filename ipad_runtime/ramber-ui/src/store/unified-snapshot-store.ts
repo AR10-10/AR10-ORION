@@ -674,6 +674,23 @@ if (typeof window !== "undefined") {
 // re-renderiza o componente quando a fatia SELECIONADA muda (comparação
 // por referência do Zustand), nunca a cada atualização de qualquer parte
 // do snapshot — é isto que resolve o gargalo do Sprint 1.
+//
+// ═══ 13 DESTES SELETORES NÃO TÊM CONSUMIDOR HOJE, E ISSO É DE PROPÓSITO ═══
+//
+// Medido em 2026-08-31 (auditoria de código morto): `useCandles`,
+// `useSmcSnapshot`, `useNexusDecisionSnapshot`, `useSymbolSnapshot` e outros
+// nove não são importados por ninguém — nem por teste. Uma varredura
+// automática de "exports órfãos" os aponta como removíveis. NÃO SÃO.
+//
+// A regra da store (CLAUDE.md, seção Arquitetura) é que todo campo aparece
+// em EXATAMENTE 4 lugares: state → action → default → seletor. A auditoria
+// confirmou 48 campos com os 4 lugares completos, sem uma falha. O preço
+// dessa consistência é justamente este: alguns seletores nascem antes do
+// primeiro consumidor. Removê-los "para limpar" quebraria a regra e faria o
+// próximo campo novo parecer opcional.
+//
+// O custo real é zero: Rollup remove export não usado do bundle. O que fica
+// é fonte, e fonte consistente é o ponto.
 // ─────────────────────────────────────────────────────────────────────────
 
 // §1 MERCADO
