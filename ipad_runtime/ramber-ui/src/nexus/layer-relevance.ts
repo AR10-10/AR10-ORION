@@ -67,10 +67,12 @@ export const RELEVANCE_LAYER_IDS = [
   // nível real, nunca sempre-ligado).
   "session_key_levels",
   // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4 ("Consolidação de zonas"):
-  // mesmo papel de trade_plan_zone/neural_market_aura abaixo — ciclo de
-  // vida próprio (computeInstitutionalZones, nexus/institutional-zones.ts
-  // já devolve lista vazia sem confluência real cruzada), nunca sujeito a
-  // uma SEGUNDA regra de relevância aqui.
+  // existência real de confluência entre ≥2 fontes independentes
+  // (computeInstitutionalZones, nexus/institutional-zones.ts) — mesmo
+  // padrão de tpo_profile/zigzag abaixo. Era "nunca sujeito ao gate" até
+  // um achado medido mostrar que isso fazia a camada vencer vaga de topo
+  // do teto automático mesmo vazia (ver LayerRelevanceInput,
+  // institutionalZoneCount).
   "institutional_zones",
   // Entrega 40: mesma condição de order_flow_heatmap logo abaixo — o
   // livro de ofertas real é o MESMO dado para as duas camadas, nunca uma
@@ -222,6 +224,26 @@ export interface LayerRelevanceInput {
   // acima, nunca proximidade ao preço vivo (as 2 rotas já cobrem LONG e
   // SHORT simultaneamente, então "perto do preço" não distinguiria nada).
   hasScenario: boolean;
+  // CORRIGIDO (achado medido, auditoria "sem utilidade... atrapalhando"):
+  // institutional_zones e neural_market_aura eram RELEVANT:TRUE
+  // incondicional. O raciocinio original nao estava errado sobre o
+  // DESENHO (computeInstitutionalZones devolve [] honesto, a Aura tem
+  // fadeAlpha 0) — estava incompleto sobre a DISPUTA: relevant:true
+  // incondicional faz a camada entrar SEMPRE na competicao do modo AUTO
+  // (resolveAutoLayerVisibility), consumindo 1 das AUTO_LAYER_MAX_
+  // SIMULTANEOUS vagas mesmo sem nada real pra mostrar.
+  //
+  // institutional_zones e' o caso grave: rank 3 em AUTO_LAYER_PRECISION_
+  // ORDER, atras so' de trade_plan_zone/structure_breaks. Uma zona vazia
+  // (comum — exige >=2 fontes reais em confluencia) ocupava um dos 3
+  // lugares mais precisos do teto, empurrando pra fora uma camada com
+  // CONTEUDO real de posicao mais baixa (liquidity_zones, volume_profile,
+  // equal_highs_lows...). Exatamente "atrapalhando... nao necessario".
+  //
+  // Mesmo padrao de todo outro campo deste contrato: existencia real,
+  // nunca fiacao nova (os dois valores ja sao computados em App.tsx).
+  institutionalZoneCount: number; // institutionalZones.length real
+  hasAuraSignal: boolean; // auraReading.status === 'OK' && auraReading.plan !== null
 }
 
 export interface LayerRelevanceResult {
@@ -387,15 +409,21 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
       ? { relevant: true, emphasis: "normal", reason: `preço vivo a menos de ${fmtPct(VOLUME_PROFILE_PROXIMITY_PCT)} de um POC/HVN real` }
       : { relevant: false, emphasis: "normal", reason: "preço vivo longe de qualquer POC/HVN real" },
 
-    // Trade Plan Zone e Neural Market Aura são o núcleo do plano em si —
-    // a diretiva pede menos POLUIÇÃO, não menos PLANO: seguem sua própria
-    // lógica de ciclo de vida real (trade-plan.ts / aura-lifecycle.ts),
-    // nunca ficam sujeitas ao gate de relevância (ficariam sem sentido
-    // como "camada opcional" quando são o próprio resultado da decisão).
+    // Trade Plan Zone segue a mesma disciplina de existência real de toda
+    // outra camada — nunca "sem gate" por ser o núcleo do plano, só por
+    // não ter dado (mesmo padrão de tradePlanActive de sempre).
     trade_plan_zone: input.tradePlanActive
-      ? { relevant: true, emphasis: "normal", reason: "plano real ativo (Conselho ou fallback do Núcleo) — nunca sujeito ao gate de relevância" }
+      ? { relevant: true, emphasis: "normal", reason: "plano real ativo (Conselho ou fallback do Núcleo)" }
       : { relevant: false, emphasis: "normal", reason: "nenhum plano real ativo agora" },
-    neural_market_aura: { relevant: true, emphasis: "normal", reason: "ciclo de vida próprio (aura-lifecycle.ts) — nunca sujeito ao gate de relevância" },
+    // CORRIGIDO: era relevant:true incondicional ("ciclo de vida próprio,
+    // nunca sujeito ao gate"). Passou a exigir sinal real da Aura —
+    // status OK e um plano geometricamente presente — pela mesma razão de
+    // institutional_zones logo abaixo: sem isto, uma Aura "vazia"
+    // (DADOS_INSUFICIENTES ou sem plano) ainda vencia vaga no teto do modo
+    // automático em troca de nada visível.
+    neural_market_aura: input.hasAuraSignal
+      ? { relevant: true, emphasis: "normal", reason: "corredor real da Aura ativo (aura-lifecycle.ts)" }
+      : { relevant: false, emphasis: "normal", reason: "Aura sem plano real (DADOS_INSUFICIENTES) — nada pra desenhar" },
 
     ema: emaRelevant
       ? { relevant: true, emphasis: "normal", reason: "referência de tendência central — mantida junto de VWAP/Nexus Line quando alguma leitura é direcional (ou sem leitura real ainda)" }
@@ -469,10 +497,19 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
       : { relevant: false, emphasis: "normal", reason: "nenhum Key Level de sessão real próximo do preço vivo" },
 
     // Mesmo princípio de neural_market_aura acima: ciclo de vida próprio
-    // (computeInstitutionalZones já devolve [] sem confluência real
-    // cruzada entre >=2 ferramentas independentes) — nunca sujeito a uma
-    // segunda regra de relevância aqui.
-    institutional_zones: { relevant: true, emphasis: "normal", reason: "ciclo de vida próprio (institutional-zones.ts) — sem confluência real cruzada, a lista de zonas vem vazia e nada é desenhado" },
+    // CORRIGIDO (achado medido): era relevant:true incondicional. A lógica
+    // original — "computeInstitutionalZones já devolve [] sem confluência
+    // real, então o gate aqui seria redundante" — está certa sobre o
+    // DESENHO (uma lista vazia não pinta nada) e errada sobre a DISPUTA:
+    // institutional_zones é rank 3 em AUTO_LAYER_PRECISION_ORDER, e
+    // relevant:true incondicional a fazia vencer um dos 3 lugares mais
+    // precisos do teto do modo automático MESMO VAZIA — empurrando pra
+    // fora uma camada de posição mais baixa que tinha conteúdo real. Agora
+    // segue o mesmo padrão de hasFibonacciLevels/hasZigZagPivots acima:
+    // existência real, nunca proximidade.
+    institutional_zones: input.institutionalZoneCount > 0
+      ? { relevant: true, emphasis: "normal", reason: `${input.institutionalZoneCount} zona(s) real(is) de confluência institucional` }
+      : { relevant: false, emphasis: "normal", reason: "sem confluência real cruzada entre ≥2 fontes ainda — lista de zonas vazia" },
 
     // Achado 2.5: mesmo papel de tpo_profile/zigzag acima — existência
     // real de pelo menos 1 alvo projetado em qualquer caminho, nunca

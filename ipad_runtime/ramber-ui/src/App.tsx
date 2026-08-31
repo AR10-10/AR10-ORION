@@ -9618,6 +9618,12 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     () => computeTrendChannel((chartData ?? []).map((c: any) => ({ time: c.time, close: c.close })), TREND_CHANNEL_DEFAULT_WINDOW),
     [chartData],
   );
+  // institutional_zones precisa da CONTAGEM real para decidir relevância
+  // (achado desta rodada). Segunda leitura independente do MESMO seletor
+  // Zustand que CouncilWidget já usa mais abaixo — zero cálculo novo, só
+  // uma segunda assinatura da mesma fatia da store (padrão Zustand normal:
+  // um seletor não é "dado" que se duplica, é leitura).
+  const institutionalZones = useInstitutionalZonesSnapshot();
   const relevanceInput: LayerRelevanceInput = useMemo(() => {
     const p = typeof livePrice.price === "number" && Number.isFinite(livePrice.price) ? livePrice.price : null;
     const withinPct = (target: number, pct: number) => p !== null && p > 0 && (Math.abs(target - p) * 100) / p <= pct;
@@ -9729,8 +9735,15 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
       // zero segundo cálculo.
       marketRegime: engine?.marketRegime?.regime ?? null,
       hasScenario,
+      // Achado desta rodada: as duas camadas abaixo eram relevant:true
+      // incondicional (ver histórico no módulo puro). institutionalZones
+      // já é lido aqui em cima (institutionalSignals); auraReading já é
+      // computado antes deste useMemo — zero cálculo novo, só passar o
+      // dado real adiante.
+      institutionalZoneCount: institutionalZones.length,
+      hasAuraSignal: auraReading.status === "OK" && auraReading.plan !== null,
     };
-  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps, engine?.marketRegime, chartScenario, chartCandlePatterns]);
+  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps, engine?.marketRegime, chartScenario, chartCandlePatterns, institutionalZones, auraReading]);
   const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setLayerRelevance(layerRelevance);

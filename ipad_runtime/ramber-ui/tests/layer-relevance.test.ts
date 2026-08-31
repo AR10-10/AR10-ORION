@@ -58,6 +58,8 @@ const BASE: LayerRelevanceInput = {
   marketRegime: null,
   hasScenario: false,
   hasCandlePatterns: false,
+  institutionalZoneCount: 0,
+  hasAuraSignal: false,
 };
 
 describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent.tsx) 1:1 — zero drift, zero gap', () => {
@@ -277,24 +279,40 @@ describe('scenario_projection: existência real (Achado 2.5) — mesmo padrão d
   });
 });
 
-describe('trade_plan_zone / neural_market_aura: NUNCA sujeitos ao gate — próprio ciclo de vida real', () => {
+describe('trade_plan_zone / neural_market_aura / institutional_zones: existência real, nunca "sem gate"', () => {
   it('trade_plan_zone segue tradePlanActive diretamente (Conselho ou fallback do Núcleo, já resolvido pelo chamador)', () => {
     expect(computeLayerRelevance(BASE).trade_plan_zone.relevant).toBe(false);
     expect(computeLayerRelevance({ ...BASE, tradePlanActive: true }).trade_plan_zone.relevant).toBe(true);
   });
-  it('neural_market_aura é sempre relevante — motivo explicita que não é sujeito ao gate', () => {
-    const r = computeLayerRelevance(BASE).neural_market_aura;
-    expect(r.relevant).toBe(true);
-    expect(r.reason).toContain('nunca sujeito ao gate');
+
+  // CORRIGIDO (achado medido desta rodada): neural_market_aura e
+  // institutional_zones eram relevant:true INCONDICIONAL — "ciclo de vida
+  // próprio, nunca sujeito ao gate". O raciocínio original estava certo
+  // sobre o DESENHO (uma Aura sem plano / uma lista de zonas vazia não
+  // pinta nada) e errado sobre a DISPUTA: relevant:true incondicional fazia
+  // a camada vencer SEMPRE uma vaga no teto do modo automático
+  // (resolveAutoLayerVisibility), mesmo sem nada real pra mostrar —
+  // institutional_zones é rank 3 em AUTO_LAYER_PRECISION_ORDER, então uma
+  // zona vazia (comum: exige ≥2 fontes em confluência) empurrava pra fora
+  // uma camada de posição mais baixa com CONTEÚDO real. Estes dois testes
+  // agora provam o invariante oposto do original: nada real -> IRrelevante.
+  it('neural_market_aura exige sinal real da Aura (status OK e um plano geométrico presente)', () => {
+    const semSinal = computeLayerRelevance({ ...BASE, hasAuraSignal: false }).neural_market_aura;
+    expect(semSinal.relevant, 'Aura vazia não pode vencer vaga no teto automático').toBe(false);
+
+    const comSinal = computeLayerRelevance({ ...BASE, hasAuraSignal: true }).neural_market_aura;
+    expect(comSinal.relevant).toBe(true);
+    expect(comSinal.reason).toContain('corredor real');
   });
-  // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4: mesmo papel de
-  // neural_market_aura acima — computeInstitutionalZones (institutional-
-  // zones.ts) já devolve [] honesto sem confluência real, então o gate
-  // aqui seria uma segunda regra redundante.
-  it('institutional_zones é sempre relevante — ciclo de vida próprio (institutional-zones.ts devolve [] sem confluência real)', () => {
-    const r = computeLayerRelevance(BASE).institutional_zones;
-    expect(r.relevant).toBe(true);
-    expect(r.reason.length).toBeGreaterThan(0);
+
+  it('institutional_zones exige contagem real de confluência (>0), nunca relevante com lista vazia', () => {
+    const vazia = computeLayerRelevance({ ...BASE, institutionalZoneCount: 0 }).institutional_zones;
+    expect(vazia.relevant, 'lista vazia não pode vencer vaga no teto automático').toBe(false);
+    expect(vazia.reason).toContain('vazia');
+
+    const comZonas = computeLayerRelevance({ ...BASE, institutionalZoneCount: 2 }).institutional_zones;
+    expect(comZonas.relevant).toBe(true);
+    expect(comZonas.reason).toContain('2');
   });
 });
 

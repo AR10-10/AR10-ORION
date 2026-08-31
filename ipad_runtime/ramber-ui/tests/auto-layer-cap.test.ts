@@ -301,3 +301,66 @@ describe('LAYER_VISUAL_COST: declarado x real', () => {
     }
   });
 });
+
+// ═══ A PROVA DO MECANISMO: uma camada vazia não pode custar a vaga de uma ═══
+// ═══ camada com conteúdo real (achado desta rodada)                       ═══
+//
+// layer-relevance.test.ts já prova a regra ISOLADA (institutional_zones sem
+// zona real -> relevant:false). O que falta aqui é o EFEITO no teto do modo
+// automático — é o que o Operador via de verdade: "atrapalhando... só os
+// necessário". Antes desta correção, institutional_zones era relevant:true
+// SEMPRE, e por ser rank 3 (atrás só de trade_plan_zone/structure_breaks)
+// vencia vaga contra qualquer camada de posição mais baixa, mesmo desenhando
+// nada.
+describe('institutional_zones/neural_market_aura vazias não custam vaga de camada com conteúdo real', () => {
+  it('CENÁRIO DO DEFEITO (documentado, não mais reproduzível): 2 camadas de topo + 4 reais de posição baixa cabem todas quando as vazias saem da disputa', () => {
+    // Rank real (AUTO_LAYER_PRECISION_ORDER): trade_plan_zone(1),
+    // structure_breaks(2), institutional_zones(3) — todas ANTES das 4
+    // escolhidas abaixo. institutional_zones e neural_market_aura entram
+    // como IRRELEVANTES (o estado real de "vazias" depois da correção) —
+    // exatamente o que a regra corrigida devolve.
+    const relevance = {
+      trade_plan_zone: rel(true),
+      structure_breaks: rel(true),
+      institutional_zones: rel(false), // vazia — não compete mais
+      neural_market_aura: rel(false), // sem plano — não compete mais
+      liquidity_zones: rel(true),
+      order_book_depth: rel(true),
+      volume_profile: rel(true),
+      equal_highs_lows: rel(true),
+    };
+    const out = resolveAutoLayerVisibility(relevance, [], 6);
+    const visiveis = Object.entries(out)
+      .filter(([, d]) => d.show)
+      .map(([id]) => id);
+    // As 6 camadas com conteúdo real cabem TODAS no teto de 6 — nenhuma
+    // ficou de fora por causa de uma vaga gasta com nada.
+    expect(visiveis.sort()).toEqual(
+      [
+        'trade_plan_zone',
+        'structure_breaks',
+        'liquidity_zones',
+        'order_book_depth',
+        'volume_profile',
+        'equal_highs_lows',
+      ].sort(),
+    );
+    expect(out.institutional_zones.show).toBe(false);
+    expect(out.neural_market_aura.show).toBe(false);
+  });
+
+  it('institutional_zones vazia perdendo pra order_book_depth seria o defeito — aqui ela nem entra na disputa', () => {
+    // Se institutional_zones voltasse a ser relevant:true incondicional,
+    // ela venceria order_book_depth (rank mais baixo) só por estar vazia.
+    // Este teste falha se essa regressão voltar.
+    const relevance = {
+      trade_plan_zone: rel(false),
+      structure_breaks: rel(false),
+      institutional_zones: rel(false), // vazia
+      order_book_depth: rel(true), // conteúdo real
+    };
+    const out = resolveAutoLayerVisibility(relevance, [], 1);
+    expect(out.order_book_depth.show, 'camada com conteúdo real perdeu pra uma vazia').toBe(true);
+    expect(out.institutional_zones.show).toBe(false);
+  });
+});
