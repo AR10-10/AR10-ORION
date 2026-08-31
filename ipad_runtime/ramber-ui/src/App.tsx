@@ -7936,6 +7936,56 @@ function TopBar({ data }: { data?: PriceState | null }) {
           <ContextReadStrip />
         </div>
       )}
+
+      {/* FILEIRA DE ATALHOS DE ATIVO — restaurada (o Operador relatou que
+          "a barrinha de favorito não tá aparecendo no iPad").
+
+          POR QUE ELA TINHA SUMIDO, e por que voltar assim e não como era:
+          a versão anterior morava DENTRO da linha 1 (h-[46px]) e foi
+          removida a pedido do próprio Operador porque, com os 12 botões,
+          "comia" o espaço da barra e CORTAVA o preço/variação ao vivo em
+          telas reais. O pedido era legítimo e a remoção resolveu o
+          sintoma — mas custou o atalho de 1 toque.
+
+          Agora ela tem LINHA PRÓPRIA e rola na horizontal. É isso que
+          impede o defeito de voltar: nada aqui pode comprimir a linha do
+          preço, porque não divide espaço com ela. Em iPad estreito os
+          chips saem de vista pela borda em vez de espremer qualquer coisa
+          (overflow interno — a Regra de Ouro é zero scroll de PÁGINA, e
+          este é de container).
+
+          Zero fiação nova: usa o MESMO ASSETS já real e a MESMA transição
+          canônica de openCandidate (setMarketMode/setSelectedTradFiAsset/
+          setSelectedAsset), nunca um segundo caminho de troca de ativo. */}
+      <div
+        className="flex items-center gap-1 px-3 lg:px-5 pb-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+        style={{ scrollbarWidth: "none" }}
+        role="group"
+        aria-label="Atalhos de ativo"
+      >
+        {ASSETS.map((a) => {
+          const ativo = marketMode === "CRYPTO" && selectedAsset === a;
+          return (
+            <button
+              key={a}
+              type="button"
+              aria-pressed={ativo}
+              onClick={() => {
+                setMarketMode?.("CRYPTO");
+                setSelectedTradFiAsset?.(null);
+                setSelectedAsset?.(a);
+              }}
+              className={`h-7 px-2.5 rounded-full border text-[0.55rem] font-bold tracking-wider shrink-0 transition-colors ${
+                ativo
+                  ? "bg-[#00f0ff20] border-[#00f0ff60] text-[#00f0ff] shadow-[0_0_10px_rgba(0,240,255,0.2)]"
+                  : "bg-transparent border-[#00f0ff20] text-[#8ab4f8]/70 hover:text-[#00f0ff] hover:border-[#00f0ff40]"
+              }`}
+            >
+              {a}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
