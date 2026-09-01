@@ -140,6 +140,7 @@ import {
   computeLiquidityVoids,
   computeZigZag,
   atrScaledZigZagDeviationPct,
+  computeIchimoku,
   computeCandlePatterns,
   scanRadarCandidate,
   getPivotPoints,
@@ -4638,6 +4639,11 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // (CHART_LAYER_IDS, aqui, RELEVANCE_LAYER_IDS, LAYER_VISUAL_COST) no
   // mesmo commit, pro teste de consistência não pegar o mesmo gap de novo.
   { id: "pivot_points", label: "PIVOT POINTS" },
+  // Auditoria do ecossistema de indicadores, segundo (e ultimo) gap real
+  // nao-redundante: Ichimoku Kinko Hyo (Hosoda) — 5 linhas + nuvem Kumo.
+  // Mesma disciplina das 5 listas em um so commit (CHART_LAYER_IDS +
+  // defaults, aqui, RELEVANCE_LAYER_IDS + regra + custo, LAYER_TIER).
+  { id: "ichimoku", label: "ICHIMOKU" },
 ];
 
 // Extraído de ChartLayersPanel (painel Properties 320px, pedido do
@@ -9891,6 +9897,12 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     // proximidade — um trailing stop é justamente mais informativo quando
     // está longe do preço.
     const hasSuperTrend = Array.isArray(chartData) && computeSuperTrend(chartData).length > 0;
+    // Ichimoku: existencia real pelo MESMO wrapper que o plugin desenha
+    // (computeIchimoku devolve null enquanto o aquecimento de 52 candles
+    // nao fecha) — nunca um `length >= 52` paralelo, que e exatamente o
+    // defeito "existencia mentindo por usar um calculo diferente do que e
+    // desenhado" ja corrigido acima para o ZigZag nesta mesma auditoria.
+    const hasIchimoku = Array.isArray(chartData) && computeIchimoku(chartData) !== null;
     // Achado 2.5: existência real de pelo menos 1 alvo projetado em
     // qualquer um dos 2 caminhos do Motor de Cenários — mesma leitura
     // (chartScenario) que EnhancedChart_110_Percent já recebe pra
@@ -9940,6 +9952,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
       // diário anterior fechado disponível), nunca proximidade — mesmo
       // padrão de hasZigZagPivots/hasTpoProfile acima.
       hasPivotPoints: pivotPointsSnapshot?.status === "OK",
+      hasIchimoku,
     };
   }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps, engine?.marketRegime, chartScenario, chartCandlePatterns, institutionalZones, auraReading, pivotPointsSnapshot]);
   const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);

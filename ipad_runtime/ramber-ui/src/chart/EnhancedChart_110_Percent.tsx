@@ -138,6 +138,7 @@ import { TpoProfilePlugin } from "./TpoProfilePlugin";
 import { computeTpoProfile } from "../nexus/tpo-profile";
 import { resolveChartUltraWideScale } from "./chart-ultrawide-scale";
 import { ZigZagPlugin } from "./ZigZagPlugin";
+import { IchimokuPlugin } from "./IchimokuPlugin";
 import { chartPaletteRgba } from "./canvas-palette";
 import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
@@ -372,6 +373,11 @@ export const CHART_LAYER_IDS = [
   // diário anterior fechado. Camada própria: fonte diferente (candle
   // diário fixo, não swing fractal) de S1/R1.
   "pivot_points",
+  // Ichimoku Kinko Hyo (Hosoda) — última ferramenta clássica ausente da
+  // auditoria do ecossistema que sobreviveu ao julgamento de redundância.
+  // Camada própria: nenhuma outra projeta nível PARA FRENTE no tempo nem
+  // mede equilíbrio por ponto médio de extremos.
+  "ichimoku",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -404,6 +410,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   scenario_projection: true,
   candle_patterns: true,
   pivot_points: true,
+  ichimoku: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -439,6 +446,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   scenario_projection: true,
   candle_patterns: true,
   pivot_points: true,
+  ichimoku: true,
 };
 
 interface EnhancedChartProps {
@@ -4205,6 +4213,19 @@ function EnhancedChart_110_PercentImpl({
           series={chartReady?.series ?? null}
           data={data}
           atrPercent={chartAtrPercent}
+        />
+      )}
+      {/* Auditoria do ecossistema de indicadores: Ichimoku Kinko Hyo, a
+         segunda (e ultima) ferramenta classica realmente ausente do
+         ecossistema. Montado ANTES das camadas de linha fina porque a
+         nuvem e preenchimento amplo — a profundidade real vem de
+         chart-layer-depth.ts ("zone"), esta ordem so acompanha. Mesma
+         `data` real dos demais overlays, zero fetch novo. */}
+      {visibility.ichimoku && (
+        <IchimokuPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
         />
       )}
       {/* Neural Market Aura: the conviction corridor, mounted BEFORE the

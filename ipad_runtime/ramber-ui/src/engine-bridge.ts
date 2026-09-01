@@ -93,6 +93,13 @@ import { computeSuperTrend as computeSuperTrendPure } from '../../src/research/e
 // puro novo, isolado e testado (10 casos de execução real) antes de entrar
 // aqui. Ver QUARANTINE.md.
 import { computePivotPoints as computePivotPointsPure } from '../../src/research/engines/pivot-points-engine.js';
+// Ichimoku Kinko Hyo (Hosoda) — última ferramenta clássica ausente que
+// sobreviveu ao julgamento de redundância da auditoria do ecossistema
+// (as outras 6 são substituíveis pelo que já existe; ver header do motor).
+import {
+  computeIchimoku as computeIchimokuPure,
+  ichimokuCloudPosition as ichimokuCloudPositionPure,
+} from '../../src/research/engines/ichimoku-engine.js';
 // Padrões de vela japoneses (candlestick-patterns.js) — pedido direto do
 // Operador ("o gráfico tem que refletir os padrão das vela... existe padrão
 // de vela que muda o sentido do mercado"). Auditoria antes de construir
@@ -1460,6 +1467,57 @@ export function computeSuperTrend(
   // vazia — nunca uma linha extrapolada sobre janela insuficiente.
   if (result.status !== 'OK') return [];
   return result.points;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ichimoku Kinko Hyo — wrapper fino sobre o motor puro, nunca uma segunda
+// implementação. As séries já vêm POSICIONADAS no índice de desenho pelo
+// próprio motor (ver contrato de deslocamento no header dele) — este
+// wrapper não reaplica shift nenhum, que é justamente onde integrações de
+// Ichimoku costumam errar o sinal.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface IchimokuResult {
+  tenkan: number[];
+  kijun: number[];
+  senkouA: number[];
+  senkouB: number[];
+  chikou: number[];
+  futureSenkouA: number[];
+  futureSenkouB: number[];
+  displacement: number;
+}
+
+export interface IchimokuCloudReading {
+  position: 'ACIMA' | 'ABAIXO' | 'DENTRO';
+  cloudTop: number;
+  cloudBottom: number;
+  thicknessPct: number | null;
+  bearishCloud: boolean;
+}
+
+/** Fail-closed (Regra de Ouro 3): sem candles suficientes para o
+ *  aquecimento real de 52, devolve null — nunca uma nuvem parcial. */
+export function computeIchimoku(
+  candles: Array<{ open: number; high: number; low: number; close: number }>,
+): IchimokuResult | null {
+  const result = computeIchimokuPure(candles) as { status: string } & IchimokuResult;
+  if (result.status !== 'OK') return null;
+  return result;
+}
+
+/** Leitura descritiva da nuvem no último candle — CONTEXTO, nunca direção
+ *  (LEI 24: o único emissor de LONG/SHORT/WAIT continua sendo o Core
+ *  Engine; "preço acima da nuvem" aqui tem o mesmo peso de
+ *  "ESTRUTURA_ALTA" do market-structure-engine). */
+export function computeIchimokuCloudReading(
+  result: IchimokuResult | null,
+  lastClose: number | null | undefined,
+): IchimokuCloudReading | null {
+  if (!result || !Number.isFinite(lastClose)) return null;
+  return ichimokuCloudPositionPure(
+    { status: 'OK', ...result },
+    lastClose as number,
+  ) as IchimokuCloudReading | null;
 }
 
 export function computeZigZag(

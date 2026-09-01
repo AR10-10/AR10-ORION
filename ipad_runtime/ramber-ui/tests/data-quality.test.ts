@@ -49,6 +49,36 @@ describe('data-quality: timeframeToSeconds parses only the real closed grammar',
     expect(timeframeToSeconds(null as any)).toBeNull();
     expect(timeframeToSeconds('0m')).toBeNull();
   });
+
+  it("mensal ('1M') devolve null POR DECISÃO — mês não tem passo fixo", () => {
+    // Antes isto acontecia por acidente (o regex não tinha o M) e nada
+    // registrava o porquê. A razão real: computeConsistency compara cada
+    // delta contra o passo com 1% de tolerância; um passo fixo de 30 dias
+    // marcaria como inconsistente todo mês de 28/29/31 dias — 8 dos 12 —
+    // sobre dado íntegro. Dimensão ausente é honesto; dimensão errada não.
+    expect(timeframeToSeconds('1M')).toBeNull();
+    expect(timeframeToSeconds('3M')).toBeNull();
+  });
+
+  it("'m' minúsculo é MINUTO e 'M' maiúsculo é MÊS — a colisão que já causou bug real aqui", () => {
+    // O gráfico mensal já foi lido como de 1 minuto neste projeto. Esta
+    // função é case-sensitive de propósito: '1m' resolve, '1M' não.
+    expect(timeframeToSeconds('1m')).toBe(60);
+    expect(timeframeToSeconds('1M')).toBeNull();
+  });
+
+  it('consistência de dimensão ausente é EXCLUÍDA da média, nunca pontuada como zero', () => {
+    // A consequência prática de devolver null: computeConsistency devolve
+    // null, e composeQualityReport não pode transformar isso num zero que
+    // puniria um dado íntegro. Prova por execução real do próprio motor.
+    const mensal = computeConsistency(
+      [
+        { t: 0 }, { t: 2_592_000_000 }, { t: 5_184_000_000 },
+      ] as any,
+      '1M',
+    );
+    expect(mensal).toBeNull();
+  });
 });
 
 describe('data-quality: latency dimension is a documented linear ramp, anchored to the real probe timeout', () => {

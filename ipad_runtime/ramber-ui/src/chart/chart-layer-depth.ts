@@ -99,6 +99,11 @@ const LAYER_TIER: Record<string, ChartDepthTier> = {
   // (PP+R1-3+S1-3) — mesma natureza de session_key_levels/equal_highs_lows
   // logo acima, nunca abaixo de preenchimento.
   pivot_points: "line",
+  // A nuvem (Kumo) é um PREENCHIMENTO amplo — se ficasse no nível "line"
+  // cobriria EMA/VWAP/Fibonacci, que são precisão de 1px. Fica em "zone"
+  // com as demais faixas de preço; as 3 linhas do Ichimoku descem junto,
+  // o que é correto: Ichimoku é contexto de fundo, não medição fina.
+  ichimoku: "zone",
   // CVD é fluxo, mas desenha como LINHA de 1px — e linha nunca pode ficar
   // abaixo de preenchimento. Esquecido na 1ª versão deste mapa; pego pelo
   // teste de cobertura 1:1 contra CHART_LAYER_IDS, não pela tela do Operador.

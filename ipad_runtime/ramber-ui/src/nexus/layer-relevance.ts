@@ -100,6 +100,10 @@ export const RELEVANCE_LAYER_IDS = [
   // acima (hasPivotPoints), nunca proximidade — um nível diário estático
   // continua útil o dia inteiro.
   "pivot_points",
+  // Ichimoku: existência real (aquecimento de 52 candles cumprido), nunca
+  // proximidade — a nuvem é contexto contínuo, informativa inclusive
+  // quando o preço está longe dela.
+  "ichimoku",
 ] as const;
 export type RelevanceLayerId = (typeof RELEVANCE_LAYER_IDS)[number];
 
@@ -257,6 +261,9 @@ export interface LayerRelevanceInput {
   // acima: um nível estático é útil o dia inteiro, não só quando o preço
   // está em cima dele agora.
   hasPivotPoints: boolean;
+  /** Ichimoku produziu as 5 linhas reais (52 candles de aquecimento).
+   *  Existência real, nunca proximidade. */
+  hasIchimoku: boolean;
 }
 
 export interface LayerRelevanceResult {
@@ -537,6 +544,11 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
     pivot_points: input.hasPivotPoints
       ? { relevant: true, emphasis: "normal", reason: "Pivot Points reais do candle diário anterior fechado" }
       : { relevant: false, emphasis: "normal", reason: "sem candle diário fechado real ainda (dado ainda carregando ou símbolo sem histórico diário suficiente)" },
+
+    // Mesmo padrão de existência real das demais graduações.
+    ichimoku: input.hasIchimoku
+      ? { relevant: true, emphasis: "normal", reason: "Ichimoku real com aquecimento de 52 candles cumprido — nuvem e linhas de equilíbrio" }
+      : { relevant: false, emphasis: "normal", reason: "menos de 52 candles reais — sem nuvem honesta para desenhar" },
   };
 }
 
@@ -626,6 +638,11 @@ export const AUTO_LAYER_PRECISION_ORDER: readonly string[] = [
   // dele existir. Mesmo raciocínio já aplicado a candle_patterns acima,
   // na direção oposta (ordem por critério declarado, nunca por gosto).
   "pivot_points",
+  // Ichimoku é contexto CONTÍNUO de fundo (como VWAP/EMA), não âncora
+  // acionável nem evento pontual — e custa 4. Rank baixo pelo mesmo
+  // critério declarado no topo desta lista: responde "como está o
+  // cenário", nunca "onde entro/saio agora".
+  "ichimoku",
   "market_sessions",
   "kill_zones",
   "scenario_projection",
@@ -732,6 +749,11 @@ export const LAYER_VISUAL_COST: Readonly<Record<string, number>> = {
   // como supertrend). Honesto mesmo sendo um custo alto: mentir pra caber
   // no orçamento seria repetir o defeito que este arquivo já corrigiu 3x.
   pivot_points: 7,
+  // CONTADO: 3 linhas (Tenkan/Kijun/Chikou) + a nuvem, que o olho lê como
+  // UMA faixa só (mesma unidade "objeto percebido" que faz supertrend
+  // custar 1 com 2 séries). As 2 bordas Senkou fazem parte da faixa, não
+  // são leituras separadas.
+  ichimoku: 4,
 };
 
 /** Custo real de uma camada. Fail-closed: desconhecida custa 1 — entra na

@@ -2,9 +2,16 @@
 
 Codinome interno: `AR10_CYBORG_FUSION_RESEARCH_QUARANTINE_V1`.
 
-**Status desta árvore: 11 engines graduados + 2 utilitários compartilhados
+**Status desta árvore: 12 engines graduados + 2 utilitários compartilhados
 abaixo são ACTIVE_READ_ONLY. Todo o restante foi excluído em 2026-06-30
 (purge de código morto).**
+
+**Atualização (graduação de `ichimoku-engine.js`, 2026-09-01, mesma auditoria
+do ecossistema de indicadores): 12º engine — a segunda e última ferramenta
+clássica realmente ausente do ecossistema, ver a seção própria abaixo. A
+contagem desta linha foi conferida contra a árvore NO MESMO commit; é
+literalmente o gap que as 5 correções abaixo registram como recorrente, e a
+única forma de não empilhar um 6º caso é conferir toda vez.**
 
 **Atualização (graduação de `pivot-points-engine.js`, 2026-09-01, auditoria
 do ecossistema de indicadores pedida diretamente pelo Operador): 11º
@@ -60,6 +67,8 @@ src/research/
     ├── supertrend-engine.js           ACTIVE_READ_ONLY (graduado 2026-08-23 —
     │                                   ver secao própria abaixo)
     ├── pivot-points-engine.js         ACTIVE_READ_ONLY (graduado 2026-09-01 —
+    │                                   ver secao própria abaixo)
+    ├── ichimoku-engine.js             ACTIVE_READ_ONLY (graduado 2026-09-01 —
     │                                   ver secao própria abaixo)
     ├── delta-divergence-engine.js     EM QUARENTENA (2026-08-24, não graduado —
     │                                   ver secao própria abaixo)
@@ -676,6 +685,70 @@ deste motor).
 - painel "Camadas do Gráfico" (App.tsx) — toggle próprio, `pivot_points`
   nas 4 listas (CHART_LAYER_IDS/painel/RELEVANCE_LAYER_IDS/
   LAYER_VISUAL_COST) no mesmo commit.
+
+---
+
+## `ichimoku-engine.js` — GRADUADO (2026-09-01)
+
+Ichimoku Kinko Hyo (Goichi Hosoda) completo: Tenkan-sen (9), Kijun-sen (26),
+Senkou Span A/B (26/52), Chikou Span (26) e a nuvem Kumo.
+
+**Por que agora.** Era a segunda metade do gap real da auditoria do
+ecossistema de indicadores (ver a seção do `pivot-points-engine.js` acima):
+dos 7 clássicos ausentes, só Pivot Points e Ichimoku sobreviveram ao juízo de
+redundância, e o Ichimoku ficou de fora daquela rodada por tamanho, não por
+mérito. Esta rodada fecha o gap.
+
+**O erro de implementação que este motor NÃO comete.** As 4 linhas do
+Ichimoku são o **ponto médio dos extremos** do período — `(máxima_do_período +
+mínima_do_período) / 2` — e **não** uma média móvel de fechamentos. É o erro
+mais comum em implementações caseiras, e ele não aparece como bug: produz uma
+curva plausível, só que de outro indicador. O teste
+`ichimoku-engine.test.ts` separa os dois casos sem ambiguidade com um fixture
+assimétrico (`high` crescente, `low`/`close` fixos em 50): a implementação
+errada devolveria 50, a correta devolve 79,5.
+
+**O deslocamento é contrato, não pós-processamento.** As séries voltam **já
+posicionadas no índice em que se desenham**: `senkouA[i]` é o valor calculado
+em `i-26`; `chikou[i]` é o fechamento de `i+26`. A projeção que passa do fim
+da série vive em `futureSenkouA`/`futureSenkouB` (26 pontos), arrays
+separados — nenhum candle é inventado para pendurá-la. Antes do índice 77
+(52 de aquecimento + 26 de deslocamento) as séries trazem NaN honesto, nunca
+um valor extrapolado para preencher o começo do gráfico.
+
+**Zero segunda matemática.** `grep -ri "ichimoku\|tenkan\|kijun\|senkou\|kumo"`
+confirmou zero ocorrência no repositório antes deste motor.
+
+**Ligação real (a regra de graduação):**
+- `ramber-ui/src/engine-bridge.ts` — `computeIchimoku()` e
+  `computeIchimokuCloudReading()`, wrappers finos sobre o motor puro.
+- `ramber-ui/src/chart/IchimokuPlugin.tsx` — canvas próprio no padrão dos
+  demais overlays. **Técnica nova neste repositório:**
+  `timeScale().logicalToCoordinate()` para desenhar as 26 barras de nuvem
+  ALÉM do último candle. O precedente até aqui (ápice do Triângulo, EPA da
+  Wolfe) resolvia o futuro mostrando preço + ETA em texto, por não ter candle
+  onde pendurar o ponto; aqui isso não serviria — um Ichimoku sem nuvem
+  projetada é outro indicador.
+- Cor: família `measurement` inteira (canvas-palette.ts), **deliberadamente
+  não** o par verde/vermelho. Nesta paleta esse par significa LONG/SHORT, e
+  pintar a nuvem com ele faria leitura de contexto parecer sinal de entrada
+  (LEI 24). A torção da nuvem continua sendo fato real, reportada por
+  `ichimokuCloudPosition()` como leitura — nunca codificada numa cor que se
+  leria errado.
+- `chart-layer-depth.ts` — nível `"zone"`, não `"line"`: a nuvem é
+  preenchimento amplo e cobriria EMA/VWAP/Fibonacci se subisse ao nível das
+  linhas de 1px.
+- painel "Camadas do Gráfico" (App.tsx) — toggle próprio, `ichimoku` nas 5
+  listas (CHART_LAYER_IDS + defaults / painel / RELEVANCE_LAYER_IDS + regra +
+  LAYER_VISUAL_COST / AUTO_LAYER_PRECISION_ORDER / LAYER_TIER) no mesmo
+  commit.
+
+**O que este motor NÃO faz.** Não emite direção. Cruzamento Tenkan×Kijun e
+preço×nuvem são leitura do Operador — LEI 24: o único emissor de
+LONG/SHORT/WAIT continua sendo o Core Engine. Os períodos são os clássicos
+9/26/52/26 de Hosoda; as variantes de cripto 24h (10/30/60, 20/60/120) não
+estão implementadas porque são escolhas diferentes, não "a mesma conta
+ajustada".
 
 **Limitação declarada.** Só a variante CLÁSSICA (pesos iguais H+L+C).
 Woodie/Camarilla/Fibonacci Pivots usam fórmulas REAIS diferentes — não

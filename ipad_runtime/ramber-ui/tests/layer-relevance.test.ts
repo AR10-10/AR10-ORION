@@ -61,6 +61,7 @@ const BASE: LayerRelevanceInput = {
   institutionalZoneCount: 0,
   hasAuraSignal: false,
   hasPivotPoints: false,
+  hasIchimoku: false,
 };
 
 describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent.tsx) 1:1 — zero drift, zero gap', () => {
@@ -81,7 +82,7 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of chartIds) {
       expect(relevanceSet.has(id), `camada "${id}" existe em CHART_LAYER_IDS mas não em RELEVANCE_LAYER_IDS`).toBe(true);
     }
-    expect(chartIds.length).toBe(28); // +pivot_points (auditoria do ecossistema de indicadores)
+    expect(chartIds.length).toBe(29); // +pivot_points, +ichimoku (auditoria do ecossistema de indicadores)
   });
 
   it('toda chave de RELEVANCE_LAYER_IDS é uma camada real de CHART_LAYER_IDS — nunca uma chave órfã', () => {
@@ -91,7 +92,7 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(chartIds.has(id), `RELEVANCE_LAYER_IDS tem "${id}" que não existe mais em CHART_LAYER_IDS`).toBe(true);
     }
-    expect(RELEVANCE_LAYER_IDS.length).toBe(28); // +pivot_points
+    expect(RELEVANCE_LAYER_IDS.length).toBe(29); // +pivot_points, +ichimoku
   });
 });
 
@@ -297,6 +298,25 @@ describe('pivot_points: existência real (candle diário fechado disponível) �
   });
   it('nunca fica highlight — booleano puro, mesma honestidade de scenario_projection/zigzag', () => {
     expect(computeLayerRelevance({ ...BASE, hasPivotPoints: true }).pivot_points.emphasis).toBe('normal');
+  });
+});
+
+describe('ichimoku: existência real (aquecimento de 52 candles), nunca proximidade', () => {
+  it('sem aquecimento cumprido => não relevante, motivo honesto', () => {
+    const r = computeLayerRelevance(BASE).ichimoku;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('52');
+  });
+  it('com Ichimoku real => relevante', () => {
+    const r = computeLayerRelevance({ ...BASE, hasIchimoku: true }).ichimoku;
+    expect(r.relevant).toBe(true);
+    expect(r.reason).toContain('Ichimoku');
+  });
+  // A nuvem é contexto CONTÍNUO de fundo (como VWAP/EMA), nunca um evento
+  // pontual: um destaque aqui competiria com BOS/sweep, que são o
+  // "aconteceu AQUI" real. Mesmo motivo do zigzag/pivot_points acima.
+  it('nunca fica highlight — contexto contínuo não disputa atenção com evento', () => {
+    expect(computeLayerRelevance({ ...BASE, hasIchimoku: true }).ichimoku.emphasis).toBe('normal');
   });
 });
 
