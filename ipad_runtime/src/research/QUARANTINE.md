@@ -84,6 +84,8 @@ src/research/
     │                                   não é um engine — mesmo papel de
     │                                   fractal-swings.js: o agrupamento por âncora
     │                                   fixa estava escrito 3 vezes)
+    ├── andrews-pitchfork-engine.js    LABORATÓRIO (isolado 2026-09-01, não graduado —
+    │                                   ver secao própria abaixo)
     └── hmm-regime-model.js            LABORATÓRIO (isolado 2026-08-10, não graduado —
                                         ver secao "Laboratório de engines" abaixo)
 ```
@@ -766,6 +768,70 @@ referência exibido ao Operador. Nunca uma segunda decisão de LONG/SHORT.
 **Suítes:** `pivot-points-engine.test.ts` (10, execução real da fórmula +
 fail-closed) + `pivot-points-fetch.test.ts` (6, fronteira de rede real
 mockada, filtro por tempo do dia fechado).
+
+## `andrews-pitchfork-engine.js` — LABORATÓRIO (isolado 2026-09-01)
+
+Andrews Pitchfork / Median Line Analysis (Alan H. Andrews): três pivôs
+alternados reais → linha mediana + duas paralelas.
+
+**Por que existe.** Auditoria do ecossistema de indicadores. Depois de Pivot
+Points e Ichimoku entrarem, o Pitchfork ficou como o **único** desenho de
+gráfico com nome próprio ainda ausente que não estava bloqueado por
+disponibilidade de dado (como o Footprint) nem por decisão pendente do
+Operador. `grep -ri "pitchfork|andrews|median line"` no repositório inteiro
+voltou **zero** ocorrência antes deste motor.
+
+**Definição pesquisada, não inventada** (fontes independentes antes de
+escrever código: StockCharts ChartSchool, Optuma "Median Line Analysis",
+GoCharting, Coghlan Capital). Três pivôs alternados — `low-high-low` (garfo
+ascendente) ou `high-low-high` (descendente). A **Median Line** parte de P0 e
+passa pelo **ponto médio de P1-P2**; as paralelas passam por P1 e por P2.
+
+**A INCLINAÇÃO É EM ÍNDICE DE BARRA, NÃO EM TEMPO DE RELÓGIO** — decisão
+real, não detalhe. O eixo x da lightweight-charts espaça BARRAS
+uniformemente, ignorando fim de semana e buraco de dado. Uma inclinação em
+milissegundos produziria um garfo que ENTORTA em cada vão: as três linhas
+deixariam de ser paralelas na tela, que é a única coisa que o Pitchfork
+promete.
+
+**O que este motor SE RECUSA a fazer.** A literatura repete uma afirmação
+atribuída ao próprio Andrews: *"o preço retorna à mediana em cerca de 80% das
+vezes"*. Esse número não aparece em lugar nenhum do motor — nem constante,
+nem campo de saída, nem texto de leitura. Regra de Ouro 2: sem backtest real
+neste repositório, repetir um número de terceiro como se fosse medição
+própria é exatamente a fabricação que a regra proíbe. As `limitations` da
+metadata **citam** os 80% de propósito, para declarar a recusa — e um teste
+trava a ausência do número na LEITURA COMPUTADA, que é o que chegaria à tela.
+
+**Zero matemática nova de swing:** os pivôs vêm de `fractal-swings.js`, o
+mesmo K=2 compartilhado. A alternância (dois pivôs do mesmo tipo em sequência
+→ fica o mais extremo) é a única regra própria, e está testada nos dois
+sentidos.
+
+**NÃO GRADUADO.** Motor puro + 21 testes de execução real, zero ligação com
+`engine-bridge.ts`/`App.tsx`. A graduação (plugin de canvas + as 5 listas de
+camada) é rodada própria — a disciplina do Laboratório não muda porque o
+motor ficou pronto rápido.
+
+**Achado da própria suíte, antes de qualquer integração:** `analyze(null)`
+estourava num TypeError. O default `input = {}` cobre `undefined`, não
+`null`. Um motor que explode não é fail-closed, é só quebrado — corrigido com
+guarda explícita. É o argumento do Laboratório em uma linha: o defeito
+apareceu no banco de testes, não no gráfico do Operador.
+
+**Suíte:** `ramber-ui/tests/andrews-pitchfork-engine.test.ts` (21, execução
+real). O teste central usa um fixture onde as três leituras plausíveis
+divergem — mediana correta (slope 25/15), "reta P0→P1" (slope 4) e "reta
+P0→P2" (slope 0,5) — para que a implementação errada não passe por parecer
+plausível.
+
+**Correção registrada de um erro meu no fixture:** a primeira versão do
+construtor de série usava banda plana fixa (99..101), então um "fundo"
+plantado em 100 ficava ACIMA do piso e não virava swing low. `analyze`
+devolvia `DADOS_INSUFICIENTES` corretamente enquanto o teste acusava o motor.
+A banda passou a ser DERIVADA dos pivôs pedidos.
+
+---
 
 ## `delta-divergence-engine.js` — GRADUADO (2026-09-01, criado 2026-08-24)
 
