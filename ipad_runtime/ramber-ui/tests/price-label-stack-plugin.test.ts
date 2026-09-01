@@ -170,12 +170,30 @@ describe('PriceLabelStackPlugin: side opcional (left/right) — dois lados resol
     expect(drawSideBlock).toContain('resolveLabelStackPositions<PriceAxisLabel & { naturalY: number }>(');
   });
 
-  it('geometria espelhada real: boxX ancora na margem mínima de cada lado — mesma margem nos dois lados, seja o tier live/critical (LEFT_MARGIN_PX/RIGHT_MARGIN_PX) ou primary/context compacto (COMPACT_EDGE_PADDING_PX, Especificação Visual v1: "2px do edge")', () => {
+  // A GEOMETRIA DO LADO DIREITO MUDOU DE PROPOSITO (pedido do Operador
+  // sobre a barra lateral do eixo). Antes cada etiqueta era alinhada a borda
+  // do CONTAINER, entao o X de inicio dependia do texto — borda serrilhada —
+  // e as largas invadiam as velas (medido: "VWAP 68.412,5" invadia 20,3px).
+  // Agora o lado direito e uma COLUNA: mesma borda esquerda e mesma largura
+  // para todas, ancorada na fronteira medida do eixo. O lado ESQUERDO nao
+  // mudou (nao existe eixo ali), e por isso este teste continua cobrindo os
+  // dois — o espelhamento agora e assimetrico DE PROPOSITO, e o teste diz
+  // isso em vez de fingir que os dois lados seguem a mesma regra.
+  it('lado direito e uma COLUNA ancorada no eixo; lado esquerdo segue na margem minima', () => {
     const s = plugin();
     expect(s).toContain('const LEFT_MARGIN_PX = 2;');
     expect(s).toContain('const RIGHT_MARGIN_PX = 2;');
     expect(s).toContain('const COMPACT_EDGE_PADDING_PX = 2;');
-    expect(drawSideBody()).toContain('const boxX = side === "right" ? cssWidth - edgePaddingX - boxWidth : edgePaddingXLeft;');
+    const corpo = drawSideBody();
+    // A coluna: borda e largura compartilhadas, derivadas da fronteira real.
+    expect(corpo).toContain('const colunaDireita = cssWidth - RIGHT_MARGIN_PX;');
+    expect(corpo).toContain('const colunaEsquerda = Math.min(axisLeft, colunaDireita - larguraMaxima);');
+    expect(corpo).toContain('const boxX = side === "right" ? colunaEsquerda : edgePaddingXLeft;');
+    expect(corpo).toContain('const boxWidth = side === "right" ? colunaLargura : textWidth + textPaddingX * 2;');
+    expect(s).toContain('measurePlotArea');
+    // O defeito original, travado pelo nome: alinhar a etiqueta pela borda
+    // do container e o que produzia o serrilhado e a invasao das velas.
+    expect(corpo).not.toContain('cssWidth - edgePaddingX - boxWidth');
   });
 
   it('o conector do lado esquerdo fica na borda DIREITA da caixa (espelhado do direito, que fica na borda esquerda) — sempre entre a caixa e o centro do gráfico, nunca cortando pra fora da tela', () => {

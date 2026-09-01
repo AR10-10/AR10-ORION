@@ -152,7 +152,13 @@ describe('StructureBreakMarkersPlugin.tsx: mesma arquitetura de overlay do Liqui
     // a linha real (moveTo/lineTo/stroke) continua real; só o ponto de
     // partida deslocou para depois da seta, nunca mais sobre ela.
     expect(plugin).toContain('ctx.moveTo(x1 + ARROW_HALF_SIZE + ARROW_GAP_PX, yLine);');
-    expect(plugin).toContain('ctx.lineTo(cssWidth, yLine);');
+    // A linha para na FRONTEIRA MEDIDA do eixo (chart-plot-area.ts), nunca
+    // em cssWidth — que e a borda do CONTAINER e faria a linha correr por
+    // baixo dos numeros do preco. Invariante somado, nao afrouxado: a
+    // asserção negativa abaixo trava o retorno ao valor antigo.
+    expect(plugin).toContain('ctx.lineTo(plotRight, yLine);');
+    expect(plugin).toContain('measurePlotArea');
+    expect(plugin).not.toContain('ctx.lineTo(cssWidth, yLine);');
     expect(plugin).toContain('ctx.stroke();');
   });
 

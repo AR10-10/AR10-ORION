@@ -18,6 +18,7 @@
 // complements already render (createPriceLine is full-width by nature).
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
 
@@ -114,6 +115,12 @@ export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh, confid
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
+      // Fronteira medida do eixo (chart-plot-area.ts): o desenho para na
+      // borda do eixo, nunca corre por baixo dos numeros do preco. Achado
+      // medido: nenhum dos 18 overlays deste projeto media isso — todos
+      // iam ate `cssWidth`, que inclui os ~72px da faixa do eixo.
+      const { plotRight } = measurePlotArea(chart, cssWidth);
+
       const { entryLow: low, entryHigh: high, confidenceZone: zone, visualWeight: resolvedWeight } = rangeRef.current;
       // No plan, or a zero-width zone (single acceptance price): the
       // existing price line already covers it — a box here would
@@ -133,11 +140,11 @@ export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh, confid
       // sempre.
       const multiplier = resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : opacityMultiplierFor(zone);
       ctx.fillStyle = withAlpha(ZONE_FILL, alphaOf(ZONE_FILL) * multiplier);
-      ctx.fillRect(0, rectY, cssWidth, rectHeight);
+      ctx.fillRect(0, rectY, plotRight, rectHeight);
       // Fio de Seda: 1px solid real border (Canvas 2D, never setLineDash).
       ctx.lineWidth = 1;
       ctx.strokeStyle = withAlpha(ZONE_BORDER, alphaOf(ZONE_BORDER) * multiplier);
-      ctx.strokeRect(0.5, rectY + 0.5, Math.max(0, cssWidth - 1), Math.max(0, rectHeight - 1));
+      ctx.strokeRect(0.5, rectY + 0.5, Math.max(0, plotRight - 1), Math.max(0, rectHeight - 1));
     };
 
     const markDirty = () => {

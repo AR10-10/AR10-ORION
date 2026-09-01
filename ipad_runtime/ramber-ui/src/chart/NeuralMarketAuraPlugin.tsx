@@ -55,6 +55,7 @@
 //     "chegou"/"parou" não deveria continuar girando.
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { AuraReading } from "../nexus/aura-lifecycle";
 import type { CycloneRealParams, CycloneWorkerOutMessage } from "../nexus/conviction-cyclone-draw";
@@ -193,6 +194,11 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
+      // Fronteira medida do eixo (chart-plot-area.ts): o corredor e a linha
+      // do alvo param na borda do eixo, nunca correm por baixo dos numeros
+      // do preco. Ancorar em `cssWidth` era ancorar na borda do CONTAINER.
+      const { plotRight } = measurePlotArea(chart, cssWidth);
+
       const { aura: reading } = stateRef.current;
       // Sem leitura real (nenhum plano rastreado, ou já dissolvida por
       // completo) => nada a desenhar, honesto — mesma regra do
@@ -212,8 +218,8 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
       const top = Math.min(yEntry, yTarget);
       const bottom = Math.max(yEntry, yTarget);
       const bandHeight = Math.max(1, bottom - top);
-      const bandWidth = Math.min(cssWidth, corridorWidthPx(corridorWidthFactor));
-      const bandX = cssWidth - bandWidth; // ancorado na borda direita (preço atual), o corredor se estende para trás no tempo.
+      const bandWidth = Math.min(plotRight, corridorWidthPx(corridorWidthFactor));
+      const bandX = plotRight - bandWidth; // ancorado na FRONTEIRA DO EIXO (preço atual), o corredor se estende para trás no tempo.
 
       // Preenchimento em gradiente vertical (entrada -> alvo) — dois sinais
       // reais e DISTINTOS falam aqui, nunca por uma linha de marcação:
@@ -242,13 +248,13 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
       // Borda do lado do alvo — sempre o lado "novo" do corredor, independente da direção.
       ctx.beginPath();
       ctx.moveTo(bandX, Math.round(yTarget) + 0.5);
-      ctx.lineTo(cssWidth, Math.round(yTarget) + 0.5);
+      ctx.lineTo(plotRight, Math.round(yTarget) + 0.5);
       ctx.stroke();
 
       // Marcador de proximidade do alvo — 3 estados reais (Target Life
       // Cycle da especificação, comprimido para o único alvo real que o
       // TradePlan atual tem — ver cabeçalho de aura-lifecycle.ts).
-      const markerX = cssWidth - 14;
+      const markerX = plotRight - 14;
       const markerY = yTarget;
       ctx.globalAlpha = fadeAlpha;
       ctx.lineWidth = 1;
@@ -325,13 +331,15 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
 
       const top = Math.min(yEntry, yTarget);
       const bottom = Math.max(yEntry, yTarget);
-      const bandWidth = Math.min(cssWidth, corridorWidthPx(corridorWidthFactor));
-      const bandX = cssWidth - bandWidth;
+      const { plotRight: cyclonePlotRight } = measurePlotArea(chart, cssWidth);
+      const bandWidth = Math.min(cyclonePlotRight, corridorWidthPx(corridorWidthFactor));
+      const bandX = cyclonePlotRight - bandWidth;
       const collapse = targetProximity === "APPROACHING" ? APPROACH_COLLAPSE : 0;
 
       return {
         bandX,
         cssWidth,
+        plotRight: cyclonePlotRight,
         cssHeight,
         dpr: window.devicePixelRatio || 1,
         top,

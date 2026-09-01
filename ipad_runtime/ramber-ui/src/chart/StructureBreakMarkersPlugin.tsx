@@ -14,6 +14,7 @@
 // WAIT real continua sendo o Core Engine.
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import type { StructureBreak } from "../engine-bridge";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
@@ -80,6 +81,12 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
+      // Fronteira medida do eixo (chart-plot-area.ts): o desenho para na
+      // borda do eixo, nunca corre por baixo dos numeros do preco. Achado
+      // medido: nenhum dos 18 overlays deste projeto media isso — todos
+      // iam ate `cssWidth`, que inclui os ~72px da faixa do eixo.
+      const { plotRight } = measurePlotArea(chart, cssWidth);
+
       const { structureBreak: brk, data: candles, visualWeight: resolvedWeight } = stateRef.current;
       if (!brk) return; // sem rompimento real na amostra — nada a desenhar, honesto.
       const point = candles[brk.index];
@@ -141,7 +148,7 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
       ctx.strokeStyle = color;
       ctx.beginPath();
       ctx.moveTo(x1 + ARROW_HALF_SIZE + ARROW_GAP_PX, yLine);
-      ctx.lineTo(cssWidth, yLine);
+      ctx.lineTo(plotRight, yLine);
       ctx.stroke();
       ctx.globalAlpha = 1;
     };

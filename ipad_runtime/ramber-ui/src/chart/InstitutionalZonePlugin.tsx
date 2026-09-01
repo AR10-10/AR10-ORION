@@ -28,6 +28,7 @@
 // uma confluência geométrica real, nunca lê nem altera decisão nenhuma.
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { InstitutionalZone } from "../nexus/institutional-zones";
 
@@ -179,6 +180,12 @@ export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, l
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
+      // Fronteira medida do eixo (chart-plot-area.ts): o desenho para na
+      // borda do eixo, nunca corre por baixo dos numeros do preco. Achado
+      // medido: nenhum dos 18 overlays deste projeto media isso — todos
+      // iam ate `cssWidth`, que inclui os ~72px da faixa do eixo.
+      const { plotRight } = measurePlotArea(chart, cssWidth);
+
       const currentZones = zonesRef.current;
       if (currentZones.length === 0) return; // sem confluência real agora — nada desenhado, nunca um exemplo.
       const currentVisualWeights = visualWeightsRef.current;
@@ -203,16 +210,16 @@ export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, l
         const weight = baseWeight * proximityFactor(zone.centerPrice, livePriceRef.current);
 
         ctx.fillStyle = `rgba(${ZONE_HUE_RGB}, ${(FILL_ALPHA_MIN + weight * (FILL_ALPHA_MAX - FILL_ALPHA_MIN)).toFixed(3)})`;
-        ctx.fillRect(0, rectY, cssWidth, rectHeight);
+        ctx.fillRect(0, rectY, plotRight, rectHeight);
         // Fio de Seda (Regra de Ouro 5): 1px sólida real nas bordas
         // horizontais da faixa, nunca setLineDash.
         ctx.lineWidth = 1;
         ctx.strokeStyle = `rgba(${ZONE_HUE_RGB}, ${(BORDER_ALPHA_MIN + weight * (BORDER_ALPHA_MAX - BORDER_ALPHA_MIN)).toFixed(3)})`;
         ctx.beginPath();
         ctx.moveTo(0, Math.round(rectY) + 0.5);
-        ctx.lineTo(cssWidth, Math.round(rectY) + 0.5);
+        ctx.lineTo(plotRight, Math.round(rectY) + 0.5);
         ctx.moveTo(0, Math.round(rectY + rectHeight) + 0.5);
-        ctx.lineTo(cssWidth, Math.round(rectY + rectHeight) + 0.5);
+        ctx.lineTo(plotRight, Math.round(rectY + rectHeight) + 0.5);
         ctx.stroke();
       }
     };

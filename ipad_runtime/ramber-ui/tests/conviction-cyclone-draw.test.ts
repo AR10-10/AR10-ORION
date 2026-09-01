@@ -14,6 +14,10 @@ function realParams(overrides: Partial<CycloneRealParams> = {}): CycloneRealPara
   return {
     bandX: 100,
     cssWidth: 300,
+    // Fronteira medida com o eixo (chart-plot-area.ts). Deliberadamente
+    // MENOR que cssWidth no fixture: se os dois fossem iguais, um retorno
+    // ao antigo `real.cssWidth - real.bandX` passaria despercebido.
+    plotRight: 280,
     cssHeight: 200,
     dpr: 2,
     top: 50,
@@ -61,12 +65,18 @@ describe('computeCycloneFrame: convicção real controla a quantidade de partíc
 });
 
 describe('computeCycloneFrame: collapse real = proximidade do alvo — nunca uma contagem regressiva inventada, só geometria ao vivo', () => {
-  it('collapse=1 (TARGET_HIT) colapsa TODAS as partículas exatamente no ponto do alvo (x=cssWidth, y=midY)', () => {
+  // O ponto do alvo passou a ser `plotRight` (a fronteira medida com o eixo
+  // de preço) e não mais `cssWidth` (a borda do CONTAINER) — o corredor
+  // corria por baixo dos números do eixo. A asserção continua sendo
+  // igualdade EXATA, e o fixture mantém plotRight (280) ≠ cssWidth (300) de
+  // propósito: um retorno ao valor antigo falha aqui em vez de passar.
+  it('collapse=1 (TARGET_HIT) colapsa TODAS as partículas exatamente no ponto do alvo (x=plotRight, y=midY)', () => {
     const params = realParams({ collapse: 1, turbulence: 0.9, conviction: 0.8 });
     const frame = computeCycloneFrame(params, 777);
     const midY = (params.top + params.bottom) / 2;
     for (const pt of frame.points) {
-      expect(pt.x).toBe(params.cssWidth);
+      expect(pt.x).toBe(params.plotRight);
+      expect(pt.x).not.toBe(params.cssWidth);
       expect(pt.y).toBe(midY);
     }
   });

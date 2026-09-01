@@ -58,6 +58,7 @@
 // quebra nenhum consumidor externo que ainda dependa dele).
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeSessionKeyLevels, sessionGenerationWeight, type SessionKeyLevel } from "../nexus/market-session";
 
@@ -117,6 +118,12 @@ export function SessionKeyLevelsPlugin({ chart, series, data }: SessionKeyLevels
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
+      // Fronteira medida do eixo (chart-plot-area.ts): o desenho para na
+      // borda do eixo, nunca corre por baixo dos numeros do preco. Achado
+      // medido: nenhum dos 18 overlays deste projeto media isso — todos
+      // iam ate `cssWidth`, que inclui os ~72px da faixa do eixo.
+      const { plotRight } = measurePlotArea(chart, cssWidth);
+
       const cached = levelsCacheRef.current;
       let levels: SessionKeyLevel[];
       if (cached && cached.data === dataRef.current) {
@@ -143,7 +150,7 @@ export function SessionKeyLevelsPlugin({ chart, series, data }: SessionKeyLevels
         // KillZoneBandsPlugin: o nível ainda é real, só a origem exata que
         // fica fora de vista.
         const xStart = xStartRaw === null ? 0 : Math.max(0, xStartRaw);
-        if (xStart >= cssWidth) return; // sessão inteira à direita da área visível — nada real a desenhar ainda.
+        if (xStart >= plotRight) return; // sessão inteira à direita da área visível — nada real a desenhar ainda.
         const yLine = Math.round(y) + 0.5;
 
         // Fio de Seda (Regra de Ouro 5): 1px sólida real, nunca setLineDash.
@@ -151,7 +158,7 @@ export function SessionKeyLevelsPlugin({ chart, series, data }: SessionKeyLevels
         ctx.strokeStyle = color;
         ctx.beginPath();
         ctx.moveTo(xStart, yLine);
-        ctx.lineTo(cssWidth, yLine);
+        ctx.lineTo(plotRight, yLine);
         ctx.stroke();
       };
 

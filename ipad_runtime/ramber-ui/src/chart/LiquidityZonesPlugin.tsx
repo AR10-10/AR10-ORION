@@ -35,6 +35,7 @@
 // punhado de fillRect/strokeRect, não um cálculo pesado.
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
 // Diretriz Final de Lapidação Visual, Adendo, Parte 11 ("etiquetas
@@ -277,6 +278,12 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
+      // Fronteira medida do eixo (chart-plot-area.ts): o desenho para na
+      // borda do eixo, nunca corre por baixo dos numeros do preco. Achado
+      // medido: nenhum dos 18 overlays deste projeto media isso — todos
+      // iam ate `cssWidth`, que inclui os ~72px da faixa do eixo.
+      const { plotRight } = measurePlotArea(chart, cssWidth);
+
       const timeScale = chart.timeScale();
       const { fairValueGaps: fvgs, orderBlocks: obs, liquidityVoids: voids, data: candles, obstacleZones: obstacles, fvgVisualWeights: fvgWeights, obVisualWeights: obWeights, voidVisualWeights: voidWeights, equalLevels: pools, breakerBlocks: breakers, mitigationBlocks: mitigations } = zonesRef.current;
 
@@ -321,7 +328,7 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
         const rectX = x1;
         const rectY = Math.min(y1, y2);
         const rectHeight = Math.max(1, Math.abs(y2 - y1));
-        const rectWidth = cssWidth - rectX;
+        const rectWidth = plotRight - rectX;
         if (rectWidth <= 0) return;
         ctx.globalAlpha = zone.alpha;
         ctx.fillStyle = palette.fill;
@@ -424,7 +431,7 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
         const xLast = timeScale.timeToCoordinate(last.time as unknown as Time);
         if (xFirst === null || xLast === null) continue;
 
-        const seg = resolveEqualLevelSegment(xFirst, xLast, cssWidth);
+        const seg = resolveEqualLevelSegment(xFirst, xLast, plotRight);
         if (!seg) continue;
 
         // Fio de Seda (Regra de Ouro 5): 1px sólida real, nunca setLineDash.
@@ -446,7 +453,7 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
           const c = candles[ti];
           if (!c) continue;
           const x = timeScale.timeToCoordinate(c.time as unknown as Time);
-          if (x === null || x < 0 || x > cssWidth) continue;
+          if (x === null || x < 0 || x > plotRight) continue;
           const xTick = Math.round(x) + 0.5;
           ctx.beginPath();
           ctx.moveTo(xTick, yLine - TOUCH_TICK_HALF_PX);

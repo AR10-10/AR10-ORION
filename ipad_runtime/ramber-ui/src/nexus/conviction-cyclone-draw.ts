@@ -56,7 +56,14 @@ export interface CyclonePoint {
 // princípio de orderflow-heatmap-draw.ts: só recebe pixels reais prontos).
 export interface CycloneRealParams {
   bandX: number; // borda esquerda real do corredor (lado da entrada)
-  cssWidth: number; // largura real do canvas — borda direita = lado do alvo (preço atual)
+  cssWidth: number; // largura real do CANVAS — só para dimensionar/limpar
+  // Borda direita real do DESENHO: a fronteira medida com o eixo de preço
+  // (chart-plot-area.ts). Campo próprio porque `cssWidth` acima estava
+  // fazendo dois trabalhos — tamanho do canvas E extensão do corredor — e
+  // por isso o corredor corria por baixo dos números do eixo. É o mesmo
+  // defeito de fundo que o módulo chart-plot-area.ts documenta, aqui na
+  // forma "um nome, duas responsabilidades".
+  plotRight: number;
   cssHeight: number;
   dpr: number;
   top: number; // y real do topo (min(yEntry, yTarget))
@@ -71,6 +78,8 @@ export interface CycloneRealParams {
 
 export interface CycloneFrame {
   cssWidth: number;
+  /** Ver CycloneRealParams.plotRight — a borda do desenho, não do canvas. */
+  plotRight: number;
   cssHeight: number;
   dpr: number;
   color: string;
@@ -109,7 +118,7 @@ export function computeCycloneFrame(real: CycloneRealParams, tMs: number): Cyclo
   const turbulence = Math.max(0, Math.min(1, real.turbulence));
   const collapse = Math.max(0, Math.min(1, real.collapse));
   const n = particleCount(conviction);
-  const bandWidth = Math.max(1, real.cssWidth - real.bandX);
+  const bandWidth = Math.max(1, real.plotRight - real.bandX);
   const bandHeight = Math.max(1, real.bottom - real.top);
   const midY = (real.top + real.bottom) / 2;
   const maxFunnelRadius = bandHeight * 0.42; // metade da altura real do corredor, folga documentada pra nunca vazar dele
@@ -143,6 +152,7 @@ export function computeCycloneFrame(real: CycloneRealParams, tMs: number): Cyclo
 
   return {
     cssWidth: real.cssWidth,
+    plotRight: real.plotRight,
     cssHeight: real.cssHeight,
     dpr: real.dpr,
     color: real.color,
@@ -172,7 +182,7 @@ export interface CycloneDrawableContext2D {
 }
 
 export function drawCycloneFrame(ctx: CycloneDrawableContext2D, frame: CycloneFrame): void {
-  const { cssWidth, cssHeight, dpr, color, points, edgeY, bandX, fadeAlpha } = frame;
+  const { cssWidth, plotRight, cssHeight, dpr, color, points, edgeY, bandX, fadeAlpha } = frame;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, cssWidth, cssHeight);
 
@@ -195,7 +205,7 @@ export function drawCycloneFrame(ctx: CycloneDrawableContext2D, frame: CycloneFr
     ctx.strokeStyle = `rgba(${color}, 0.9)`;
     ctx.beginPath();
     ctx.moveTo(bandX, Math.round(edgeY) + 0.5);
-    ctx.lineTo(cssWidth, Math.round(edgeY) + 0.5);
+    ctx.lineTo(plotRight, Math.round(edgeY) + 0.5);
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
