@@ -123,6 +123,16 @@ autorização para suprimir o Núcleo a partir deste precedente.
   motores `.js` e o React/TypeScript; toda nova função de cálculo exposta
   à UI nasce aqui como wrapper fino sobre o motor real, nunca uma
   segunda implementação.
+- `ipad_runtime/ramber-ui/src/llm-bridge.ts` + `llm-worker.ts` — síntese
+  tática em linguagem natural via Llama 3 local (`@mlc-ai/web-llm`,
+  WebGPU), isolada em Worker dedicado (Regra de Ouro 6), opt-in (nunca
+  baixa os pesos sem o Operador ativar explicitamente). `buildTacticalContext()`
+  serializa só campos reais já computados por `engine-bridge.ts` — o
+  prompt de sistema proíbe inventar nível de preço e proíbe qualquer
+  linguagem que implique ordem enviada/a enviar (o app não tem caminho
+  de execução). Categoria diferente de um Motor de Autocrítica sobre a
+  própria arquitetura do AR10 (esse, sim, ainda não construído) — não
+  confundir as duas aplicações de "IA Orchestration (Llama)".
 - `ipad_runtime/ramber-ui/src/store/unified-snapshot-store.ts` — store
   Zustand+Immer organizada por domínio (§1 Mercado, §2 Séries
   Históricas, §3 Motores Quant, §4 Cérebro, §5 Organismo). Todo campo
