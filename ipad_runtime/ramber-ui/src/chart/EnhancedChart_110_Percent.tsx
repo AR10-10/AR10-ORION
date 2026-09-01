@@ -139,6 +139,7 @@ import { computeTpoProfile } from "../nexus/tpo-profile";
 import { resolveChartUltraWideScale } from "./chart-ultrawide-scale";
 import { ZigZagPlugin } from "./ZigZagPlugin";
 import { IchimokuPlugin } from "./IchimokuPlugin";
+import { DeltaDivergencePlugin } from "./DeltaDivergencePlugin";
 import { chartPaletteRgba } from "./canvas-palette";
 import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
@@ -378,6 +379,11 @@ export const CHART_LAYER_IDS = [
   // Camada própria: nenhuma outra projeta nível PARA FRENTE no tempo nem
   // mede equilíbrio por ponto médio de extremos.
   "ichimoku",
+  // Divergência de Delta (preço × CVD). Camada própria e não um caso de
+  // structure_breaks: aquela lê a ESTRUTURA de preço (BOS/CHOCH); esta
+  // compara duas séries independentes (preço e fluxo líquido) e só existe
+  // enquanto o CVD retido cobrir velas reais suficientes.
+  "delta_divergence",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -411,6 +417,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   candle_patterns: true,
   pivot_points: true,
   ichimoku: true,
+  delta_divergence: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -447,6 +454,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   candle_patterns: true,
   pivot_points: true,
   ichimoku: true,
+  delta_divergence: true,
 };
 
 interface EnhancedChartProps {
@@ -4223,6 +4231,18 @@ function EnhancedChart_110_PercentImpl({
          `data` real dos demais overlays, zero fetch novo. */}
       {visibility.ichimoku && (
         <IchimokuPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+        />
+      )}
+      {/* Graduacao de delta-divergence-engine.js (quarentena levantada: a
+         retencao de CVD subiu de 120 para 900 amostras, ~1h). Le a serie de
+         CVD direto da store (useOrderflowHistory), como o
+         OrderFlowHeatmapPlugin ja faz — passar um ring que cresce a cada 4s
+         por prop re-renderizaria este componente inteiro por overlay. */}
+      {visibility.delta_divergence && (
+        <DeltaDivergencePlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           data={data}

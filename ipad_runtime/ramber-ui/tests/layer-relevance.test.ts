@@ -12,6 +12,7 @@ import { dirname, resolve } from 'node:path';
 import {
   computeLayerRelevance,
   RELEVANCE_LAYER_IDS,
+  AUTO_LAYER_PRECISION_ORDER,
   LIQUIDITY_PROXIMITY_PCT,
   VOLUME_PROFILE_PROXIMITY_PCT,
   FIBONACCI_PROXIMITY_PCT,
@@ -62,6 +63,8 @@ const BASE: LayerRelevanceInput = {
   hasAuraSignal: false,
   hasPivotPoints: false,
   hasIchimoku: false,
+  hasDeltaDivergence: false,
+  deltaDivergenceCoveredCandles: 0,
 };
 
 describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent.tsx) 1:1 — zero drift, zero gap', () => {
@@ -82,7 +85,7 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of chartIds) {
       expect(relevanceSet.has(id), `camada "${id}" existe em CHART_LAYER_IDS mas não em RELEVANCE_LAYER_IDS`).toBe(true);
     }
-    expect(chartIds.length).toBe(29); // +pivot_points, +ichimoku (auditoria do ecossistema de indicadores)
+    expect(chartIds.length).toBe(30); // +pivot_points, +ichimoku, +delta_divergence
   });
 
   it('toda chave de RELEVANCE_LAYER_IDS é uma camada real de CHART_LAYER_IDS — nunca uma chave órfã', () => {
@@ -92,7 +95,7 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(chartIds.has(id), `RELEVANCE_LAYER_IDS tem "${id}" que não existe mais em CHART_LAYER_IDS`).toBe(true);
     }
-    expect(RELEVANCE_LAYER_IDS.length).toBe(29); // +pivot_points, +ichimoku
+    expect(RELEVANCE_LAYER_IDS.length).toBe(30); // +pivot_points, +ichimoku, +delta_divergence
   });
 });
 
@@ -317,6 +320,33 @@ describe('ichimoku: existência real (aquecimento de 52 candles), nunca proximid
   // "aconteceu AQUI" real. Mesmo motivo do zigzag/pivot_points acima.
   it('nunca fica highlight — contexto contínuo não disputa atenção com evento', () => {
     expect(computeLayerRelevance({ ...BASE, hasIchimoku: true }).ichimoku.emphasis).toBe('normal');
+  });
+});
+
+// A ÚNICA camada cuja régua é a LEITURA e não a existência do motor. O teste
+// existe para travar isso: se alguém "uniformizar" a regra para o padrão de
+// existência das demais graduações, a camada passa a ocupar vaga do teto de 6
+// desenhando nada — o oposto do que o teto foi criado para resolver.
+describe('delta_divergence: relevância é a LEITURA, nunca a disponibilidade do motor', () => {
+  it('sem divergência e sem CVD retido => motivo ensina o que falta, não "sem dado"', () => {
+    const r = computeLayerRelevance(BASE).delta_divergence;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('CVD');
+  });
+  it('com CVD real mas SEM divergência => não relevante, e o motivo traz o número real de velas', () => {
+    const r = computeLayerRelevance({ ...BASE, deltaDivergenceCoveredCandles: 4 }).delta_divergence;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('4 velas');
+  });
+  it('com divergência real => relevante E highlight (evento raro merece a tela)', () => {
+    const r = computeLayerRelevance({ ...BASE, hasDeltaDivergence: true }).delta_divergence;
+    expect(r.relevant).toBe(true);
+    expect(r.emphasis).toBe('highlight');
+  });
+  // O achado medido de candle_patterns: "fora da lista entra por último" era,
+  // na prática, "nunca". Esta camada não pode repetir aquilo.
+  it('está cadastrada em AUTO_LAYER_PRECISION_ORDER — nunca dependendo do "por último"', () => {
+    expect(AUTO_LAYER_PRECISION_ORDER).toContain('delta_divergence');
   });
 });
 

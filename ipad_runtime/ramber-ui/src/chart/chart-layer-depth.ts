@@ -111,6 +111,10 @@ const LAYER_TIER: Record<string, ChartDepthTier> = {
 
   // 5. EVENTO — "aconteceu aqui"
   structure_breaks: "event",
+  // Divergência de Delta: marca pontual entre DOIS swings confirmados —
+  // mesma natureza do BOS/CHOCH logo acima ("aconteceu AQUI"), nunca uma
+  // zona nem uma linha de referência contínua.
+  delta_divergence: "event",
   liquidity_sweep: "event",
   harmonics: "event",
   // Padrão de vela é um EVENTO pontual ("aconteceu nesta vela"), da mesma

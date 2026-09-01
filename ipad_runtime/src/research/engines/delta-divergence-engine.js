@@ -69,7 +69,7 @@ export const metadata = {
     // causa ja caiu — ORDERFLOW_HISTORY_CAPACITY foi de 120 para 900 (~1h).
     // Hoje o que falta e' a decisao de graduar, nao um impedimento tecnico.
     // Ver a secao deste motor no QUARANTINE.md.
-    status: 'LABORATORIO',
+    status: 'ACTIVE_READ_ONLY',
     limitations: [
         'Depende da janela real de CVD retida pelo poller — sem cobertura suficiente devolve DADOS_INSUFICIENTES, nunca extrapola.',
         'Exaustao NAO e absorcao: este motor mede ausencia de pressao, nao pressao batendo numa parede (absorcao vive em src/orderflow/signal-engine.js).',

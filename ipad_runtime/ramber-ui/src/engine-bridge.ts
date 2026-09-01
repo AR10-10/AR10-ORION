@@ -100,6 +100,10 @@ import {
   computeIchimoku as computeIchimokuPure,
   ichimokuCloudPosition as ichimokuCloudPositionPure,
 } from '../../src/research/engines/ichimoku-engine.js';
+// Divergência de Delta (preço × CVD) — motor de 2026-08-24 que ficou em
+// quarentena por retenção curta de CVD; o bloqueio caiu quando
+// ORDERFLOW_HISTORY_CAPACITY subiu de 120 para 900 (~1h). Graduado agora.
+import { analyze as analyzeDeltaDivergencePure } from '../../src/research/engines/delta-divergence-engine.js';
 // Padrões de vela japoneses (candlestick-patterns.js) — pedido direto do
 // Operador ("o gráfico tem que refletir os padrão das vela... existe padrão
 // de vela que muda o sentido do mercado"). Auditoria antes de construir
@@ -1518,6 +1522,45 @@ export function computeIchimokuCloudReading(
     { status: 'OK', ...result },
     lastClose as number,
   ) as IchimokuCloudReading | null;
+}
+
+// ── Divergência de Delta (preço × CVD) ──────────────────────────────────
+// Wrapper fino sobre o motor puro, nunca uma segunda implementação. A
+// conversão de unidade acontece AQUI e só aqui: a store retém CVD com
+// `time` em MILISSEGUNDOS (OrderflowHistoryEntry) e os candles do gráfico
+// usam `time` em SEGUNDOS — o motor documenta esse contrato e faz a
+// divisão internamente, então o que este wrapper faz é só garantir a
+// FORMA que ele espera, sem tocar em nenhum dos dois valores.
+export interface DeltaDivergenceMark {
+  type: 'BAIXISTA' | 'ALTISTA';
+  /** Índices no array ORIGINAL de candles — já alinhados ao que está na tela. */
+  fromIndex: number;
+  toIndex: number;
+  fromPrice: number;
+  toPrice: number;
+  fromCvd: number;
+  toCvd: number;
+}
+
+export interface DeltaDivergenceReading {
+  status: 'OK' | 'DADOS_INSUFICIENTES';
+  /** Motivo real e legível quando não há leitura — nunca um silêncio. */
+  reason: string | null;
+  divergence: DeltaDivergenceMark | null;
+  /** Quantas velas o CVD retido realmente cobre. É o número que a UI usa
+   *  para dizer ao Operador exatamente o que falta, em vez de "sem dado". */
+  coveredCandles: number;
+}
+
+export function computeDeltaDivergence(
+  candles: Array<{ time: number; open: number; high: number; low: number; close: number }>,
+  cvdSamples: Array<{ time: number; cvd: number }>,
+): DeltaDivergenceReading | null {
+  if (!Array.isArray(candles) || !Array.isArray(cvdSamples)) return null;
+  return analyzeDeltaDivergencePure({
+    ohlcv_series: candles,
+    cvd_samples: cvdSamples,
+  }) as DeltaDivergenceReading;
 }
 
 export function computeZigZag(

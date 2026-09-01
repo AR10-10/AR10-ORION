@@ -141,6 +141,7 @@ import {
   computeZigZag,
   atrScaledZigZagDeviationPct,
   computeIchimoku,
+  computeDeltaDivergence,
   computeCandlePatterns,
   scanRadarCandidate,
   getPivotPoints,
@@ -4644,6 +4645,11 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // Mesma disciplina das 5 listas em um so commit (CHART_LAYER_IDS +
   // defaults, aqui, RELEVANCE_LAYER_IDS + regra + custo, LAYER_TIER).
   { id: "ichimoku", label: "ICHIMOKU" },
+  // Graduacao de delta-divergence-engine.js (motor de 2026-08-24 destravado
+  // quando a retencao de CVD subiu de 120 para 900 amostras, ~1h). Camada
+  // propria: compara duas SERIES (preco e CVD), enquanto structure_breaks le
+  // so a estrutura de preco.
+  { id: "delta_divergence", label: "DIVERGÊNCIA DE DELTA" },
 ];
 
 // Extraído de ChartLayersPanel (painel Properties 320px, pedido do
@@ -9431,6 +9437,11 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // até o alvo (Fase 5, confluence-corridor.ts). Seletor direto da store
   // (mesmo padrão de useLayerRelevanceSnapshot já usado neste componente),
   // nunca uma segunda leitura via WidgetContext para o mesmo dado.
+  // Serie real de CVD para a Divergencia de Delta. Seletor direto da store,
+  // mesmo padrao de useConfluenceCorridorSnapshot logo abaixo — o
+  // `orderflowHistoryForTrend` que ja existe neste arquivo vive noutro
+  // componente e nao alcanca este escopo.
+  const orderflowHistoryForDivergence = useOrderflowHistory();
   const confluenceCorridor = useConfluenceCorridorSnapshot();
   // EPC OMEGA FINAL, Etapa 10 ("Liquidity Sweep"): mesma store que
   // AssistantOrb/CouncilWidget já leem (nexus/trap-detection.ts) — o
@@ -9903,6 +9914,14 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     // defeito "existencia mentindo por usar um calculo diferente do que e
     // desenhado" ja corrigido acima para o ZigZag nesta mesma auditoria.
     const hasIchimoku = Array.isArray(chartData) && computeIchimoku(chartData) !== null;
+    // Divergencia de Delta: unica camada cuja relevancia e a LEITURA e nao a
+    // existencia do motor — uma divergencia e rara por definicao, e o overlay
+    // desenha NADA quando nao ha uma. Mesmo calculo real que o plugin faz
+    // (computeDeltaDivergence), nunca uma checagem paralela.
+    const deltaDivergence =
+      Array.isArray(chartData) && Array.isArray(orderflowHistoryForDivergence)
+        ? computeDeltaDivergence(chartData, orderflowHistoryForDivergence)
+        : null;
     // Achado 2.5: existência real de pelo menos 1 alvo projetado em
     // qualquer um dos 2 caminhos do Motor de Cenários — mesma leitura
     // (chartScenario) que EnhancedChart_110_Percent já recebe pra
@@ -9953,8 +9972,10 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
       // padrão de hasZigZagPivots/hasTpoProfile acima.
       hasPivotPoints: pivotPointsSnapshot?.status === "OK",
       hasIchimoku,
+      hasDeltaDivergence: deltaDivergence?.status === "OK" && deltaDivergence.divergence !== null,
+      deltaDivergenceCoveredCandles: deltaDivergence?.coveredCandles ?? 0,
     };
-  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps, engine?.marketRegime, chartScenario, chartCandlePatterns, institutionalZones, auraReading, pivotPointsSnapshot]);
+  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps, engine?.marketRegime, chartScenario, chartCandlePatterns, institutionalZones, auraReading, pivotPointsSnapshot, orderflowHistoryForDivergence]);
   const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setLayerRelevance(layerRelevance);

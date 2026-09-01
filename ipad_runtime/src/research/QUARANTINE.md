@@ -2,9 +2,15 @@
 
 Codinome interno: `AR10_CYBORG_FUSION_RESEARCH_QUARANTINE_V1`.
 
-**Status desta árvore: 12 engines graduados + 2 utilitários compartilhados
+**Status desta árvore: 13 engines graduados + 2 utilitários compartilhados
 abaixo são ACTIVE_READ_ONLY. Todo o restante foi excluído em 2026-06-30
 (purge de código morto).**
+
+**Atualização (graduação de `delta-divergence-engine.js`, 2026-09-01): 13º
+engine. Não é uma descoberta nova — é a decisão em aberto que a própria
+revisão de 2026-08-31 registrou na seção dele ("o bloqueio não existe mais...
+fica registrado como decisão em aberto do Operador, não como bloqueio
+técnico"). O Operador pediu evolução em carta branca; esta é a decisão.**
 
 **Atualização (graduação de `ichimoku-engine.js`, 2026-09-01, mesma auditoria
 do ecossistema de indicadores): 12º engine — a segunda e última ferramenta
@@ -70,7 +76,7 @@ src/research/
     │                                   ver secao própria abaixo)
     ├── ichimoku-engine.js             ACTIVE_READ_ONLY (graduado 2026-09-01 —
     │                                   ver secao própria abaixo)
-    ├── delta-divergence-engine.js     EM QUARENTENA (2026-08-24, não graduado —
+    ├── delta-divergence-engine.js     ACTIVE_READ_ONLY (graduado 2026-09-01 —
     │                                   ver secao própria abaixo)
     ├── fractal-swings.js              utilitário compartilhado (extraído 2026-07-03,
     │                                   não é um engine — ver secao "Utilitários" abaixo)
@@ -761,7 +767,7 @@ referência exibido ao Operador. Nunca uma segunda decisão de LONG/SHORT.
 fail-closed) + `pivot-points-fetch.test.ts` (6, fronteira de rede real
 mockada, filtro por tempo do dia fechado).
 
-## `delta-divergence-engine.js` — EM QUARENTENA (2026-08-24)
+## `delta-divergence-engine.js` — GRADUADO (2026-09-01, criado 2026-08-24)
 
 Divergência entre **preço e CVD** (Cumulative Volume Delta): preço faz topo
 mais alto enquanto o CVD faz topo mais baixo (exaustão compradora), ou o
@@ -789,7 +795,37 @@ camada de confluência display-only.
 série real já retida pelo poller. O motor não coleta, não estima e não
 interpola nada.
 
-### NÃO GRADUADO — mas a razão original CAIU (revisado 2026-08-31)
+### GRADUADO 2026-09-01 — a decisão em aberto foi tomada
+
+**Ligação real (a regra de graduação):**
+- `ramber-ui/src/engine-bridge.ts` — `computeDeltaDivergence(candles, cvdSamples)`,
+  wrapper fino sobre `analyze()`.
+- `ramber-ui/src/chart/DeltaDivergencePlugin.tsx` — overlay no padrão provado.
+  Lê a série de CVD **direto da store** (`useOrderflowHistory()`), como o
+  `OrderFlowHeatmapPlugin` já faz: o ring cresce a cada 4 s, e passá-lo por
+  prop re-renderizaria `EnhancedChart_110_Percent` inteiro a cada ciclo do
+  poller só para alimentar um overlay (Regra de Ouro 6/7).
+- Cor: o par `bullish`/`bearish`, seguindo o precedente real do
+  `StructureBreakMarkersPlugin` (BOS/CHOCH) — mesma categoria, um EVENTO
+  pontual com direção intrínseca. É o oposto da decisão tomada para o
+  Ichimoku no mesmo dia, e a diferença é a categoria e não capricho: a nuvem
+  é um CAMPO contínuo que ficaria permanentemente aceso e leria como sinal
+  parado; uma divergência é uma marca pontual. LEI 24 intacta nos dois.
+- `chart-layer-depth.ts` — nível `"event"`, com BOS/CHOCH e sweep.
+- `nexus/layer-relevance.ts` — **a única camada cuja relevância é a LEITURA,
+  não a existência do motor.** Uma divergência é rara por definição e o
+  overlay desenha NADA quando não há uma; marcar relevante só porque o CVD
+  cobre velas suficientes gastaria vaga do teto de 6 numa camada em branco.
+  Quando há leitura, emite `highlight` — e está cadastrada explicitamente em
+  `AUTO_LAYER_PRECISION_ORDER` em vez de confiar no "entra por último", que
+  a medição do caso `candle_patterns` provou ser "nunca" na prática.
+- O motivo quando não há leitura carrega o número real de velas cobertas
+  ("cobre 4 velas, o mínimo é 12"), nunca um "sem dado" que não ensina nada.
+- `metadata.status` do motor: `LABORATORIO` → `ACTIVE_READ_ONLY`, no mesmo
+  commit — as três fontes (árvore, seção, metadata) mexidas juntas, que é
+  exatamente o que `quarantine-registry.test.ts` existe para exigir.
+
+### O histórico do bloqueio (preservado — a razão original CAIU em 2026-08-31)
 
 > **O bloqueio descrito abaixo não existe mais, e o texto ficou desatualizado
 > por uma semana.** `ORDERFLOW_HISTORY_CAPACITY` foi de **120 para 900** em

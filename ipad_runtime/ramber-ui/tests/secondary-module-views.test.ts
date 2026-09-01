@@ -157,7 +157,14 @@ describe('Command bar: Trade Plan strip (critical numbers in the header, fail-cl
     // councilForChart logo acima).
     const chartIdx = s.indexOf('function ChartWidget(');
     expect(chartIdx).toBeGreaterThan(-1);
-    const chartSrc = s.slice(chartIdx, chartIdx + 5000);
+    // O limite era `chartIdx + 5000` — um número mágico, não uma fronteira
+    // real. Ele quebrou ao inserir um hook novo perto do topo do ChartWidget:
+    // as duas linhas continuavam DENTRO do componente (o que este teste
+    // afirma), só saíram da janela arbitrária. Agora o corte é o mesmo tipo
+    // de marcador real já usado para TradePlanTopStrip logo acima — a
+    // asserção passa a ser "está dentro do ChartWidget", que é o que ela
+    // sempre quis dizer, em vez de "está nos primeiros 5000 caracteres dele".
+    const chartSrc = s.slice(chartIdx, s.indexOf('// --- ORDER FLOW WIDGET ---'));
     expect(chartSrc).toContain('const trackRecordForChart = useTrackRecordSnapshot();');
     expect(chartSrc).toContain('const lastResolvedPlanForChart = trackRecordForChart.history[trackRecordForChart.history.length - 1] ?? null;');
   });

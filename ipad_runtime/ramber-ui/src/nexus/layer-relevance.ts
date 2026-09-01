@@ -104,6 +104,11 @@ export const RELEVANCE_LAYER_IDS = [
   // proximidade — a nuvem é contexto contínuo, informativa inclusive
   // quando o preço está longe dela.
   "ichimoku",
+  // Divergência de Delta: existência real da LEITURA (status OK com uma
+  // divergência), não do motor — diferente de todas as camadas acima. Uma
+  // divergência é um evento raro por definição; "o motor rodou" não é
+  // motivo para ocupar vaga no orçamento visual.
+  "delta_divergence",
 ] as const;
 export type RelevanceLayerId = (typeof RELEVANCE_LAYER_IDS)[number];
 
@@ -264,6 +269,14 @@ export interface LayerRelevanceInput {
   /** Ichimoku produziu as 5 linhas reais (52 candles de aquecimento).
    *  Existência real, nunca proximidade. */
   hasIchimoku: boolean;
+  /** Uma divergência preço×CVD REAL está detectada agora (não apenas "o
+   *  motor tem dado"). Ver o comentário em RELEVANCE_LAYER_IDS: aqui a
+   *  régua é a leitura, não a disponibilidade. */
+  hasDeltaDivergence: boolean;
+  /** Quantas velas o CVD retido cobre de verdade. Usado só para o MOTIVO
+   *  quando não há leitura — para o painel poder dizer "cobre 4 velas, o
+   *  mínimo é 12" em vez de "sem dado", que não ensina nada. */
+  deltaDivergenceCoveredCandles: number;
 }
 
 export interface LayerRelevanceResult {
@@ -549,6 +562,21 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
     ichimoku: input.hasIchimoku
       ? { relevant: true, emphasis: "normal", reason: "Ichimoku real com aquecimento de 52 candles cumprido — nuvem e linhas de equilíbrio" }
       : { relevant: false, emphasis: "normal", reason: "menos de 52 candles reais — sem nuvem honesta para desenhar" },
+
+    // ÚNICA camada cuja relevância é a LEITURA, não a existência do motor:
+    // uma divergência é rara por definição, e o overlay desenha NADA quando
+    // não há uma. Marcar relevante só porque o CVD cobre velas suficientes
+    // gastaria vaga do teto de 6 numa camada em branco.
+    delta_divergence: input.hasDeltaDivergence
+      ? { relevant: true, emphasis: "highlight", reason: "divergência real entre preço e CVD detectada — exaustão de um dos lados" }
+      : {
+          relevant: false,
+          emphasis: "normal",
+          reason:
+            input.deltaDivergenceCoveredCandles > 0
+              ? `sem divergência agora (CVD real cobre ${input.deltaDivergenceCoveredCandles} velas)`
+              : "sem CVD real retido ainda — o histórico enche a ~4s por amostra durante a sessão",
+        },
   };
 }
 
@@ -597,6 +625,14 @@ export const AUTO_LAYER_PRECISION_ORDER: readonly string[] = [
   "volume_profile",       // POC canônico
   "equal_highs_lows",
   "liquidity_sweep",
+  // Mesma classe de evento do sweep logo acima ("aconteceu AQUI"), e
+  // cadastrada de propósito em vez de confiar no "entra por último": o
+  // ACHADO MEDIDO logo abaixo prova que, na prática, "por último" era
+  // "nunca". A regra de delta_divergence emite `highlight` quando há
+  // leitura real — o caminho que o mesmo achado identifica como o único
+  // resgate — mas depender só disso repetiria o erro de candle_patterns
+  // com um passo a mais de sorte.
+  "delta_divergence",
   // ACHADO MEDIDO (pedido do Operador: "nada que está pra trás"):
   // candle_patterns estava FORA desta lista. O comentário acima promete que
   // "camada fora desta lista entra por último — nunca some por omissão", mas
@@ -754,6 +790,10 @@ export const LAYER_VISUAL_COST: Readonly<Record<string, number>> = {
   // custar 1 com 2 séries). As 2 bordas Senkou fazem parte da faixa, não
   // são leituras separadas.
   ichimoku: 4,
+  // CONTADO: 1 linha + 2 pontos + 1 rótulo, e só quando existe leitura —
+  // na maior parte do tempo esta camada custa isso e desenha nada. Mesma
+  // unidade "objeto percebido" das demais.
+  delta_divergence: 2,
 };
 
 /** Custo real de uma camada. Fail-closed: desconhecida custa 1 — entra na
