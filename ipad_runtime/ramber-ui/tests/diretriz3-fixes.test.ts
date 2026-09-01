@@ -151,7 +151,7 @@ describe('diretriz 2 + V15.1 GOD TIER: roteamento Futuros exclusivo — Gráfico
     expect(helper).not.toContain('collectBinanceKlines');
   });
 
-  it('as 4 chamadas reais ao ciclo Binance-only (HTF, ciclo principal, getChartCandles, Fase Ω Multi-Timeframe) passam por requestFuturesCandleSnapshot — nenhuma chama requestSnapshot() direto', () => {
+  it('as 5 chamadas reais ao ciclo Binance-only (HTF, ciclo principal, getChartCandles, Fase Ω Multi-Timeframe, Pivot Points) passam por requestFuturesCandleSnapshot — nenhuma chama requestSnapshot() direto', () => {
     const bridge = read('../src/engine-bridge.ts');
     const helperCallSites = bridge.match(/await requestFuturesCandleSnapshot\(\{/g) ?? [];
     // Fase Ω Priority 1: buildMultiTimeframeContext somou um 4º call site
@@ -161,7 +161,11 @@ describe('diretriz 2 + V15.1 GOD TIER: roteamento Futuros exclusivo — Gráfico
     // referência) para requestRadarCandleSnapshot (provider-aware, ver
     // teste abaixo) — o ciclo real do Core Engine/gráfico permanece 100%
     // Binance, intocado, sempre por este helper.
-    expect(helperCallSites).toHaveLength(4);
+    // Auditoria do ecossistema de indicadores (2026-09-01): 5º call site,
+    // refreshPivotPointsInBackground (getPivotPoints) — mesmo helper, candle
+    // diário (1d), mesmo contrato não-bloqueante de
+    // refreshHtfMarketStructureInBackground logo acima dele no arquivo real.
+    expect(helperCallSites).toHaveLength(5);
     // requestSnapshot() aparece DENTRO de 3 pontos reais: os dois helpers
     // cripto (requestFuturesCandleSnapshot Binance-only;
     // requestRadarCandleSnapshot provider-aware, só Radar) MAIS

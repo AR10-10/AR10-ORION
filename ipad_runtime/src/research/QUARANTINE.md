@@ -2,9 +2,19 @@
 
 Codinome interno: `AR10_CYBORG_FUSION_RESEARCH_QUARANTINE_V1`.
 
-**Status desta árvore: apenas os 8 engines graduados + 1 utilitário
-compartilhado abaixo são ACTIVE_READ_ONLY. Todo o restante foi excluído em
-2026-06-30 (purge de código morto).**
+**Status desta árvore: 11 engines graduados + 2 utilitários compartilhados
+abaixo são ACTIVE_READ_ONLY. Todo o restante foi excluído em 2026-06-30
+(purge de código morto).**
+
+**Atualização (graduação de `pivot-points-engine.js`, 2026-09-01, auditoria
+do ecossistema de indicadores pedida diretamente pelo Operador): 11º
+engine. Achado ao editar este resumo — ele já dizia "8 engines" desde
+2026-08-18, mas a árvore abaixo já listava 10 ACTIVE_READ_ONLY (mais
+`institutional-blocks.js` e `supertrend-engine.js`, graduados 2026-08-23,
+sem esta linha ser atualizada) e 2 utilitários (`price-clustering.js`
+somado desde 2026-08-24). Mesmo gap de documentação recorrente que as
+correções abaixo já descrevem — corrigido no mesmo commit da nova
+graduação, para não empilhar um 10º caso.**
 
 **Atualização (graduação de `candlestick-patterns.js`, 2026-08-18):
 8º engine. Contagem conferida contra a tabela abaixo NO MESMO commit —
@@ -48,6 +58,8 @@ src/research/
     ├── institutional-blocks.js        ACTIVE_READ_ONLY (graduado 2026-08-23 —
     │                                   ver secao própria abaixo)
     ├── supertrend-engine.js           ACTIVE_READ_ONLY (graduado 2026-08-23 —
+    │                                   ver secao própria abaixo)
+    ├── pivot-points-engine.js         ACTIVE_READ_ONLY (graduado 2026-09-01 —
     │                                   ver secao própria abaixo)
     ├── delta-divergence-engine.js     EM QUARENTENA (2026-08-24, não graduado —
     │                                   ver secao própria abaixo)
@@ -618,6 +630,63 @@ filtro sobre a decisão do Núcleo.
 **Suítes:** `supertrend.test.ts` (18, execução real da matemática, incluindo
 a catraca) + `supertrend-graduation.test.ts` (18, fiação ponta a ponta,
 fail-closed por execução real e LEI 24).
+
+## `pivot-points-engine.js` — GRADUADO (2026-09-01)
+
+Pivot Points clássicos (Floor Trader): PP/R1-3/S1-3 a partir do candle
+DIÁRIO anterior FECHADO, fórmula padrão pesquisada (PP=(H+L+C)/3, R1=2PP-L,
+S1=2PP-H, R2=PP+(H-L), S2=PP-(H-L), R3=H+2(PP-L), S3=L-2(H-PP)).
+
+**Por que agora.** Auditoria do ecossistema de indicadores pedida
+diretamente pelo Operador ("qual ferramenta que está faltando"). Do
+conjunto de 7 ferramentas clássicas ausentes confirmadas por grep real
+(CCI, Stochastic, Williams %R, MFI, Ichimoku, Pivot Points, Keltner),
+Pivot Points foi o único gap não-redundante para um terminal de futuros
+intradiário — os outros 4 osciladores substituíveis por RSI de Wilder +
+CVD/Delta/Volume Profile já reais, Keltner redundante com Bollinger
+Bandwidth + SuperTrend já existentes, Ichimoku (5 linhas + nuvem com
+projeção pra frente/trás) grande demais pra entrar de carona nesta rodada.
+
+**Fonte de dado — a parte que exigiu mais cuidado.** O motor puro nunca
+decide "qual candle é ontem": recebe candles diários já resolvidos e usa
+sempre o ÚLTIMO do array. Quem resolve isso é `getPivotPoints()`
+(engine-bridge.ts), que filtra por TEMPO real (`candle.t + 24h <= agora`)
+para achar o último dia genuinamente fechado — nunca por posição no array,
+porque não há garantia contratual de que a API inclua ou não o dia ainda
+em formação como último elemento. Mesmo padrão não-bloqueante de
+`getHtfMarketStructure` (cache + refresh em segundo plano, nunca trava o
+ciclo principal por um dado contextual que só muda 1x por dia real).
+
+**Zero segunda matemática.** Nenhuma outra parte do repositório calculava
+Pivot Points (`grep -ri "pivot point"` confirmou zero ocorrência antes
+deste motor).
+
+**Ligação real (a regra de graduação):**
+- `ramber-ui/src/engine-bridge.ts` — `getPivotPoints(symbol)`, cache
+  não-bloqueante + `computePivotPoints()` (motor puro) por trás.
+- `ramber-ui/src/chart/EnhancedChart_110_Percent.tsx` — até 7
+  `createPriceLine` reais (mesma técnica de S1/R1), família de cor
+  "attention" (canvas-palette.ts) — mesma cor de S1/R1 por serem a MESMA
+  categoria conceitual (nível de suporte/resistência a observar), títulos
+  prefixados "PVT " para não colidir visualmente com o S1/R1 de swing.
+- `nexus/layer-relevance.ts` — existência real (`hasPivotPoints`), custo
+  visual CONTADO (7, não estimado) e rank deliberadamente baixo em
+  `AUTO_LAYER_PRECISION_ORDER` (custo alto não pode dominar o teto de 12
+  sempre que relevante).
+- painel "Camadas do Gráfico" (App.tsx) — toggle próprio, `pivot_points`
+  nas 4 listas (CHART_LAYER_IDS/painel/RELEVANCE_LAYER_IDS/
+  LAYER_VISUAL_COST) no mesmo commit.
+
+**Limitação declarada.** Só a variante CLÁSSICA (pesos iguais H+L+C).
+Woodie/Camarilla/Fibonacci Pivots usam fórmulas REAIS diferentes — não
+estão implementadas, e a metadata do motor diz isso explicitamente.
+
+**LEI 24 — display only.** Mesmo papel de S1/R1/VWAP/EMA: nível de
+referência exibido ao Operador. Nunca uma segunda decisão de LONG/SHORT.
+
+**Suítes:** `pivot-points-engine.test.ts` (10, execução real da fórmula +
+fail-closed) + `pivot-points-fetch.test.ts` (6, fronteira de rede real
+mockada, filtro por tempo do dia fechado).
 
 ## `delta-divergence-engine.js` — EM QUARENTENA (2026-08-24)
 

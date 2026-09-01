@@ -60,6 +60,7 @@ const BASE: LayerRelevanceInput = {
   hasCandlePatterns: false,
   institutionalZoneCount: 0,
   hasAuraSignal: false,
+  hasPivotPoints: false,
 };
 
 describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent.tsx) 1:1 — zero drift, zero gap', () => {
@@ -80,7 +81,7 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of chartIds) {
       expect(relevanceSet.has(id), `camada "${id}" existe em CHART_LAYER_IDS mas não em RELEVANCE_LAYER_IDS`).toBe(true);
     }
-    expect(chartIds.length).toBe(27); // +supertrend (graduação de supertrend-engine.js)
+    expect(chartIds.length).toBe(28); // +pivot_points (auditoria do ecossistema de indicadores)
   });
 
   it('toda chave de RELEVANCE_LAYER_IDS é uma camada real de CHART_LAYER_IDS — nunca uma chave órfã', () => {
@@ -90,7 +91,7 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(chartIds.has(id), `RELEVANCE_LAYER_IDS tem "${id}" que não existe mais em CHART_LAYER_IDS`).toBe(true);
     }
-    expect(RELEVANCE_LAYER_IDS.length).toBe(27); // +supertrend
+    expect(RELEVANCE_LAYER_IDS.length).toBe(28); // +pivot_points
   });
 });
 
@@ -276,6 +277,26 @@ describe('scenario_projection: existência real (Achado 2.5) — mesmo padrão d
   });
   it('nunca fica highlight — sem gradiente real de força pra medir (booleano puro, mesma honestidade das outras camadas de existência)', () => {
     expect(computeLayerRelevance({ ...BASE, hasScenario: true }).scenario_projection.emphasis).toBe('normal');
+  });
+});
+
+// Auditoria do ecossistema de indicadores (pedido direto do Operador: "qual
+// ferramenta que está faltando"): mesma disciplina de existência real de
+// hasZigZagPivots/hasTpoProfile/hasScenario acima — nunca proximidade, um
+// nível diário estático continua útil o dia inteiro.
+describe('pivot_points: existência real (candle diário fechado disponível) — mesmo padrão de hasZigZagPivots/hasTpoProfile', () => {
+  it('sem candle diário fechado real ainda => não relevante, motivo honesto', () => {
+    const r = computeLayerRelevance(BASE).pivot_points;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('sem candle diário fechado real');
+  });
+  it('com Pivot Points reais disponíveis => relevante', () => {
+    const r = computeLayerRelevance({ ...BASE, hasPivotPoints: true }).pivot_points;
+    expect(r.relevant).toBe(true);
+    expect(r.reason).toContain('Pivot Points reais');
+  });
+  it('nunca fica highlight — booleano puro, mesma honestidade de scenario_projection/zigzag', () => {
+    expect(computeLayerRelevance({ ...BASE, hasPivotPoints: true }).pivot_points.emphasis).toBe('normal');
   });
 });
 

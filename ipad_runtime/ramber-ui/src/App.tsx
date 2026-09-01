@@ -130,6 +130,7 @@ import {
   atrScaledZigZagDeviationPct,
   computeCandlePatterns,
   scanRadarCandidate,
+  getPivotPoints,
 } from "./engine-bridge";
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
 // pura — a matemática pesada roda no WASM do quant-worker).
@@ -4589,6 +4590,13 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // Uma ferramenta desenhando no gráfico sem existir no painel é exatamente
   // o oposto de "as ferramentas principais aparecerem na leitura".
   { id: "candle_patterns", label: "PADRÕES DE VELA" },
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador:
+  // "qual ferramenta que está faltando"): Pivot Points clássicos (Floor
+  // Trader) — único gap real não-redundante encontrado. Mesmo cuidado do
+  // comentário de candle_patterns acima: entra nas 4 listas juntas
+  // (CHART_LAYER_IDS, aqui, RELEVANCE_LAYER_IDS, LAYER_VISUAL_COST) no
+  // mesmo commit, pro teste de consistência não pegar o mesmo gap de novo.
+  { id: "pivot_points", label: "PIVOT POINTS" },
 ];
 
 // Extraído de ChartLayersPanel (painel Properties 320px, pedido do
@@ -9489,6 +9497,17 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // caminho do Trade Plan continua SEMPRE visível independente do tamanho
   // (Regra de Ouro 4: é informação estrutural, não decoração de destaque).
   const chartAtrPercent = engine?.marketRegime?.atrPercent ?? null;
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador:
+  // "qual ferramenta que está faltando"): Pivot Points clássicos — leitura
+  // síncrona de cache, NUNCA memoizada por [selectedAsset]: o cache é
+  // atualizado em segundo plano (getPivotPoints já dispara o refresh
+  // quando expira, mesmo contrato não-bloqueante de getHtfMarketStructure
+  // em engine-bridge.ts) e este componente já re-renderiza a cada ciclo
+  // real (candle/preço vivo) — memoizar por asset perderia justamente a
+  // atualização que chega DEPOIS do primeiro render, antes de qualquer
+  // troca de ativo. Retorna a MESMA referência de objeto entre um refresh
+  // e outro (zero re-render adicional nos filhos por identidade).
+  const pivotPointsSnapshot = selectedAsset ? getPivotPoints(selectedAsset) : null;
   // Mesma assinatura estrutural de isRealObstacle logo acima, e pela MESMA
   // razão: Breaker/Mitigation Block têm top/bottom mas não são PriceZone, e
   // esta função só lê esses dois campos. Uma segunda cópia da chamada (ou um
@@ -9751,8 +9770,12 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
       // dado real adiante.
       institutionalZoneCount: institutionalZones.length,
       hasAuraSignal: auraReading.status === "OK" && auraReading.plan !== null,
+      // Auditoria do ecossistema de indicadores: existência real (candle
+      // diário anterior fechado disponível), nunca proximidade — mesmo
+      // padrão de hasZigZagPivots/hasTpoProfile acima.
+      hasPivotPoints: pivotPointsSnapshot?.status === "OK",
     };
-  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps, engine?.marketRegime, chartScenario, chartCandlePatterns, institutionalZones, auraReading]);
+  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps, engine?.marketRegime, chartScenario, chartCandlePatterns, institutionalZones, auraReading, pivotPointsSnapshot]);
   const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setLayerRelevance(layerRelevance);
@@ -9964,6 +9987,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
             emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}
             chartAtrPercent={chartAtrPercent}
+            pivotPoints={pivotPointsSnapshot}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">

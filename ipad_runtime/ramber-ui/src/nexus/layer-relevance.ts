@@ -94,6 +94,12 @@ export const RELEVANCE_LAYER_IDS = [
   // Path Map, scenario-engine.ts) — mesmo padrão de existência real de
   // tpo_profile/zigzag/fibonacci acima (hasScenario), nunca proximidade.
   "scenario_projection",
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador:
+  // "qual ferramenta que está faltando"): Pivot Points clássicos, mesmo
+  // padrão de existência real de tpo_profile/zigzag/scenario_projection
+  // acima (hasPivotPoints), nunca proximidade — um nível diário estático
+  // continua útil o dia inteiro.
+  "pivot_points",
 ] as const;
 export type RelevanceLayerId = (typeof RELEVANCE_LAYER_IDS)[number];
 
@@ -244,6 +250,13 @@ export interface LayerRelevanceInput {
   // nunca fiacao nova (os dois valores ja sao computados em App.tsx).
   institutionalZoneCount: number; // institutionalZones.length real
   hasAuraSignal: boolean; // auraReading.status === 'OK' && auraReading.plan !== null
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador):
+  // Pivot Points clássicos — true quando getPivotPoints(symbol) devolve
+  // status:'OK' real (candle diário anterior fechado disponível). Existência
+  // real, nunca proximidade — mesmo padrão de hasZigZagPivots/hasTpoProfile
+  // acima: um nível estático é útil o dia inteiro, não só quando o preço
+  // está em cima dele agora.
+  hasPivotPoints: boolean;
 }
 
 export interface LayerRelevanceResult {
@@ -517,6 +530,13 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
     scenario_projection: input.hasScenario
       ? { relevant: true, emphasis: "normal", reason: "Motor de Cenários real com pelo menos 1 alvo projetado (pathA ou pathB)" }
       : { relevant: false, emphasis: "normal", reason: "nenhum alvo real projetado em nenhum dos 2 caminhos do Motor de Cenários" },
+
+    // Auditoria do ecossistema de indicadores: mesmo papel de tpo_profile/
+    // zigzag/scenario_projection acima — existência real (candle diário
+    // anterior fechado disponível), nunca proximidade ao preço vivo.
+    pivot_points: input.hasPivotPoints
+      ? { relevant: true, emphasis: "normal", reason: "Pivot Points reais do candle diário anterior fechado" }
+      : { relevant: false, emphasis: "normal", reason: "sem candle diário fechado real ainda (dado ainda carregando ou símbolo sem histórico diário suficiente)" },
   };
 }
 
@@ -598,6 +618,14 @@ export const AUTO_LAYER_PRECISION_ORDER: readonly string[] = [
   "order_flow_heatmap",
   "liquidation_heatmap",
   "session_key_levels",
+  // Auditoria do ecossistema de indicadores: rank deliberadamente BAIXO,
+  // apesar de ser um nível estrutural real — o custo real é 7 objetos (mais
+  // da metade do orçamento de 12), então rankeá-lo alto faria uma única
+  // camada nova dominar o teto sempre que relevante, empurrando pra fora
+  // âncoras mais acionáveis (plano/BOS/zonas) que já estavam na tela antes
+  // dele existir. Mesmo raciocínio já aplicado a candle_patterns acima,
+  // na direção oposta (ordem por critério declarado, nunca por gosto).
+  "pivot_points",
   "market_sessions",
   "kill_zones",
   "scenario_projection",
@@ -697,6 +725,13 @@ export const LAYER_VISUAL_COST: Readonly<Record<string, number>> = {
   market_sessions: 1,
   kill_zones: 1,
   neural_market_aura: 1,
+  // Auditoria do ecossistema de indicadores: CONTADO no código, não
+  // estimado (mesma disciplina desta tabela) — createPriceLine é chamado
+  // até 7 vezes (PP+R1-3+S1-3), cada linha um objeto que o olho vê
+  // separadamente (7 alturas de preço distintas, não um traço contínuo
+  // como supertrend). Honesto mesmo sendo um custo alto: mentir pra caber
+  // no orçamento seria repetir o defeito que este arquivo já corrigiu 3x.
+  pivot_points: 7,
 };
 
 /** Custo real de uma camada. Fail-closed: desconhecida custa 1 — entra na

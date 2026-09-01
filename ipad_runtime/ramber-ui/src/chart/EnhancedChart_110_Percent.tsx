@@ -138,6 +138,7 @@ import { TpoProfilePlugin } from "./TpoProfilePlugin";
 import { computeTpoProfile } from "../nexus/tpo-profile";
 import { resolveChartUltraWideScale } from "./chart-ultrawide-scale";
 import { ZigZagPlugin } from "./ZigZagPlugin";
+import { chartPaletteRgba } from "./canvas-palette";
 import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
 // the chart-side companion to the price lines below.
@@ -365,6 +366,12 @@ export const CHART_LAYER_IDS = [
   // tem que refletir os padrão das vela". O motor já existia e alimentava
   // as peças publicáveis — o GRÁFICO, que é onde ele pediu, era o gap.
   "candle_patterns",
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador:
+  // "qual ferramenta que está faltando" — pivot-points-engine.js, único gap
+  // real não-redundante encontrado). PP/R1-3/S1-3 clássicos do candle
+  // diário anterior fechado. Camada própria: fonte diferente (candle
+  // diário fixo, não swing fractal) de S1/R1.
+  "pivot_points",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -396,6 +403,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   supertrend: true,
   scenario_projection: true,
   candle_patterns: true,
+  pivot_points: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -430,6 +438,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   supertrend: true,
   scenario_projection: true,
   candle_patterns: true,
+  pivot_points: true,
 };
 
 interface EnhancedChartProps {
@@ -440,6 +449,17 @@ interface EnhancedChartProps {
   resistanceStrength?: LevelStrength | null;
   supportBreakouts?: number;
   resistanceBreakouts?: number;
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador:
+  // "qual ferramenta que está faltando"): Pivot Points clássicos (Floor
+  // Trader), PP/R1-3/S1-3 do candle diário anterior fechado — ver
+  // pivot-points-engine.js. Optional/fail-closed: null/ausente desenha
+  // nada, igual a todo outro overlay opcional deste componente.
+  pivotPoints?: {
+    status: "OK" | "DADOS_INSUFICIENTES";
+    pp: number | null;
+    r1: number | null; r2: number | null; r3: number | null;
+    s1: number | null; s2: number | null; s3: number | null;
+  } | null;
   fairValueGaps?: EnhancedChartZone[];
   orderBlocks?: EnhancedChartZone[];
   // Pedido do Operador ("ver o que está faltando... pra ele chegar na
@@ -866,6 +886,7 @@ function EnhancedChart_110_PercentImpl({
   resistanceStrength,
   supportBreakouts,
   resistanceBreakouts,
+  pivotPoints,
   fairValueGaps,
   orderBlocks,
   liquidityVoids,
@@ -974,6 +995,11 @@ function EnhancedChart_110_PercentImpl({
   const supportLineRef = useRef<IPriceLine | null>(null);
   const resistanceLineRef = useRef<IPriceLine | null>(null);
   const zoneLinesRef = useRef<IPriceLine[]>([]);
+  // Auditoria do ecossistema de indicadores: 7 linhas reais (PP+R1-3+S1-3),
+  // ref PRÓPRIA em array — mesmo padrão de zoneLinesRef acima, ciclo de
+  // limpeza/redesenho independente de S1/R1 (fontes diferentes: candle
+  // diário fechado vs. swing fractal).
+  const pivotLinesRef = useRef<IPriceLine[]>([]);
   // EPC OMEGA FINAL, Etapa 10: price lines do sweep real (TrapSignal.
   // sweptPrices) — ref PRÓPRIA, nunca reusa zoneLinesRef (ciclos de
   // limpeza/redesenho independentes, mesma separação que support/
@@ -2411,6 +2437,50 @@ function EnhancedChart_110_PercentImpl({
       });
     }
   }, [resistance, resistanceStrength, resistanceBreakouts, resistanceVisualWeight]);
+
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador:
+  // "qual ferramenta que está faltando" — Pivot Points era o único gap real
+  // não-redundante encontrado). Mesma técnica de S1/R1 acima (createPriceLine
+  // nativo, remove-then-create), mas em ref PRÓPRIA (pivotLinesRef): fonte de
+  // dado diferente (candle diário fechado, não swing fractal), ciclo de
+  // redesenho independente. Títulos "PVT " prefixados de propósito — sem o
+  // prefixo, "R1"/"S1" colidiria visualmente com o R1/S1 de swing já
+  // desenhado acima, dois níveis DIFERENTES soando como o mesmo rótulo.
+  useEffect(() => {
+    if (!seriesRef.current) return;
+    for (const line of pivotLinesRef.current) seriesRef.current.removePriceLine(line);
+    pivotLinesRef.current = [];
+    if (!visibility.pivot_points || pivotPoints?.status !== "OK") return;
+
+    // Família "attention" (canvas-palette.ts) — mesma cor de S1/R1: os dois
+    // são, conceitualmente, a MESMA categoria (nível de suporte/resistência
+    // a observar), só com fórmulas diferentes. PP ganha um pouco mais de
+    // peso (é a âncora); R2/R3/S2/S3 ficam mais discretos — mesmo princípio
+    // de hierarquia por opacidade já usado em todo o resto do canvas, nunca
+    // uma cor nova (travado por tests/canvas-palette.test.ts).
+    const levels: Array<[string, number | null, number]> = [
+      ["PVT R3", pivotPoints.r3, 0.22],
+      ["PVT R2", pivotPoints.r2, 0.26],
+      ["PVT R1", pivotPoints.r1, 0.32],
+      ["PVT PP", pivotPoints.pp, 0.4],
+      ["PVT S1", pivotPoints.s1, 0.32],
+      ["PVT S2", pivotPoints.s2, 0.26],
+      ["PVT S3", pivotPoints.s3, 0.22],
+    ];
+    for (const [title, price, alpha] of levels) {
+      if (!Number.isFinite(price)) continue;
+      pivotLinesRef.current.push(
+        seriesRef.current.createPriceLine({
+          price: price as number,
+          color: chartPaletteRgba("attention", alpha),
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: false,
+          title,
+        }),
+      );
+    }
+  }, [pivotPoints, visibility.pivot_points]);
 
   const mainLiquidityVisualWeights = useMemo(() => {
     const byId = new Map(visualBudgetResults.map((r) => [r.id, r.visualWeight]));

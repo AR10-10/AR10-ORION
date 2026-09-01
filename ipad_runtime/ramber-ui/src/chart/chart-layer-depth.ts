@@ -95,6 +95,10 @@ const LAYER_TIER: Record<string, ChartDepthTier> = {
   supertrend: "line",
   session_key_levels: "line",
   equal_highs_lows: "line",
+  // Auditoria do ecossistema de indicadores: até 7 createPriceLine de 1px
+  // (PP+R1-3+S1-3) — mesma natureza de session_key_levels/equal_highs_lows
+  // logo acima, nunca abaixo de preenchimento.
+  pivot_points: "line",
   // CVD é fluxo, mas desenha como LINHA de 1px — e linha nunca pode ficar
   // abaixo de preenchimento. Esquecido na 1ª versão deste mapa; pego pelo
   // teste de cobertura 1:1 contra CHART_LAYER_IDS, não pela tela do Operador.

@@ -87,6 +87,12 @@ import {
 // sistema ao vivo — 0 importadores, mesmo padrão de falha registrado para
 // institutional-blocks.js. Ver QUARANTINE.md.
 import { computeSuperTrend as computeSuperTrendPure } from '../../src/research/engines/supertrend-engine.js';
+// Auditoria do ecossistema de indicadores (pedido direto do Operador: "qual
+// ferramenta que está faltando"): Pivot Points (Classic/Floor Trader) era o
+// único gap real não-redundante encontrado — ver header do motor. Motor
+// puro novo, isolado e testado (10 casos de execução real) antes de entrar
+// aqui. Ver QUARANTINE.md.
+import { computePivotPoints as computePivotPointsPure } from '../../src/research/engines/pivot-points-engine.js';
 // Padrões de vela japoneses (candlestick-patterns.js) — pedido direto do
 // Operador ("o gráfico tem que refletir os padrão das vela... existe padrão
 // de vela que muda o sentido do mercado"). Auditoria antes de construir
@@ -450,6 +456,85 @@ function getHtfMarketStructure(symbol: string): { label: string | null; updatedA
     return { label: htfCache.structureLabel, updatedAt: htfCache.fetchedAt };
   }
   return { label: null, updatedAt: null };
+}
+
+// Pivot Points (Classic) — MESMO padrão não-bloqueante de
+// getHtfMarketStructure acima: pivots diários mudam no máximo 1x por dia
+// real (fronteira 00:00 UTC), então buscar toda vez que o Operador troca de
+// ativo/timeframe seria uma sonda de rede redundante sem nenhum ganho de
+// informação. PIVOT_REFRESH_MS é bem mais folgado que HTF_REFRESH_MS de
+// propósito: o dado de referência não muda dentro do dia.
+const PIVOT_INTERVAL = '1d';
+const PIVOT_REFRESH_MS = 30 * 60_000;
+const ONE_DAY_MS = 24 * 60 * 60_000;
+export interface PivotPointsSnapshot {
+  status: 'OK' | 'DADOS_INSUFICIENTES';
+  pp: number | null;
+  r1: number | null; r2: number | null; r3: number | null;
+  s1: number | null; s2: number | null; s3: number | null;
+  referenceDayCloseTime: number | null;
+  updatedAt: number | null;
+}
+const PIVOT_INSUFICIENTE: Omit<PivotPointsSnapshot, 'updatedAt'> = {
+  status: 'DADOS_INSUFICIENTES', pp: null, r1: null, r2: null, r3: null, s1: null, s2: null, s3: null,
+  referenceDayCloseTime: null,
+};
+let pivotCache: { symbol: string; snapshot: PivotPointsSnapshot } | null = null;
+let pivotFetchInFlight = false;
+
+function refreshPivotPointsInBackground(symbol: string): void {
+  if (pivotFetchInFlight) return;
+  pivotFetchInFlight = true;
+  (async () => {
+    try {
+      // limit:3 dá folga real: mesmo se a API devolver só dias JÁ FECHADOS
+      // (sem o dia em formação), ainda sobra >=1 candle após o filtro de
+      // tempo abaixo. V15.1 GOD TIER: Futuros exclusivo, sem fallback.
+      const snapshot = await requestFuturesCandleSnapshot({
+        symbol, timeframe: PIVOT_INTERVAL, limit: 3, maxAgeMs: PIVOT_REFRESH_MS,
+      });
+      if (!snapshot.ok) {
+        pivotCache = { symbol, snapshot: { ...PIVOT_INSUFICIENTE, updatedAt: Date.now() } };
+        return;
+      }
+      // O candle de referência tem que estar REALMENTE fechado — nunca
+      // uma posição no array assumida (a API pode ou não incluir o dia
+      // ainda em formação como último elemento; não se sabe por contrato,
+      // só por checagem real de tempo). Um dia só conta como fechado
+      // quando seu período INTEIRO já passou.
+      const now = Date.now();
+      const diasFechados = snapshot.candles.filter((c) => c.t + ONE_DAY_MS <= now);
+      const result = computePivotPointsPure(diasFechados);
+      if (result.status !== 'OK') {
+        pivotCache = { symbol, snapshot: { ...PIVOT_INSUFICIENTE, updatedAt: Date.now() } };
+        return;
+      }
+      pivotCache = {
+        symbol,
+        snapshot: {
+          status: 'OK', pp: result.pp, r1: result.r1, r2: result.r2, r3: result.r3,
+          s1: result.s1, s2: result.s2, s3: result.s3,
+          referenceDayCloseTime: (result.referenceCandle.time as number | null) ?? null,
+          updatedAt: now,
+        },
+      };
+    } catch {
+      pivotCache = { symbol, snapshot: { ...PIVOT_INSUFICIENTE, updatedAt: Date.now() } };
+    } finally {
+      pivotFetchInFlight = false;
+    }
+  })();
+}
+
+/** Snapshot atual (síncrono, cache) + dispara refresh em segundo plano
+ *  quando o cache expirou — nunca bloqueia o ciclo principal por um dado
+ *  puramente contextual/secundário (mesmo contrato de getHtfMarketStructure). */
+export function getPivotPoints(symbol: string): PivotPointsSnapshot {
+  const now = Date.now();
+  const cacheValid = !!pivotCache && pivotCache.symbol === symbol && now - (pivotCache.snapshot.updatedAt ?? 0) < PIVOT_REFRESH_MS;
+  if (!cacheValid) refreshPivotPointsInBackground(symbol);
+  if (pivotCache && pivotCache.symbol === symbol) return pivotCache.snapshot;
+  return { ...PIVOT_INSUFICIENTE, updatedAt: null };
 }
 
 // One full real cycle: real Binance probe -> real WASM analysis frame ->
