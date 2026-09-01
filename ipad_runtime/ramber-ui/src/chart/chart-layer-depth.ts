@@ -74,8 +74,8 @@ const LAYER_TIER: Record<string, ChartDepthTier> = {
   // 2. ZONA — faixa de preço com contorno
   liquidity_zones: "zone",
   institutional_zones: "zone",
-  premium_discount: "zone",
-  scenario_projection: "zone",
+
+
 
   // 3. PERFIL — histograma de borda
   volume_profile: "profile",
@@ -99,6 +99,21 @@ const LAYER_TIER: Record<string, ChartDepthTier> = {
   // (PP+R1-3+S1-3) — mesma natureza de session_key_levels/equal_highs_lows
   // logo acima, nunca abaixo de preenchimento.
   pivot_points: "line",
+  // CORRIGIDAS de "zone" para "line" (achado ao investigar a pendência de
+  // migrar as camadas nativas para canvas próprio). As duas estavam
+  // declaradas como ZONA, mas NENHUMA das duas tem plugin de canvas e o
+  // desenho inteiro delas é `series.createPriceLine(...)` — ou seja, LINHA
+  // horizontal de 1px, nunca uma faixa preenchida. Verificado lendo o
+  // código: zero `fillRect`, zero plugin que as referencie.
+  //
+  // Hoje isso era INERTE (as duas são nativas, então renderizam em
+  // CHART_NATIVE_CANVAS_Z_INDEX qualquer que seja o nível declarado) — mas
+  // era uma ARMADILHA: a própria recomendação de migrá-las para canvas
+  // próprio as colocaria em z=20, abaixo de toda área pintada, refazendo
+  // exatamente a violação da regra 4 que acabou de ser corrigida. Consertar
+  // a declaração agora é o que torna aquela migração segura de fazer.
+  premium_discount: "line",
+  scenario_projection: "line",
   // A nuvem (Kumo) é um PREENCHIMENTO amplo — se ficasse no nível "line"
   // cobriria EMA/VWAP/Fibonacci, que são precisão de 1px. Fica em "zone"
   // com as demais faixas de preço; as 3 linhas do Ichimoku descem junto,
@@ -156,21 +171,24 @@ export function getChartLayerTier(layerId: string): ChartDepthTier {
  *  overlays — inclusive do nível CAMPO (z=10), que é justamente o mais
  *  difuso e o que cobre mais área.
  *
- *  As 7 nativas e o nível que este arquivo declarava para elas:
+ *  As 7 nativas e o nível declarado de cada uma (já COM a correção descrita
+ *  logo abaixo, em CHART_LINE_ONLY_LAYER_IDS):
  *    cvd .................. "line"    supertrend ......... "line"
- *    pivot_points ......... "line"    premium_discount ... "zone"
- *    scenario_projection .. "zone"    harmonics .......... "event"
+ *    pivot_points ......... "line"    premium_discount ... "line" *
+ *    scenario_projection .. "line" *  harmonics .......... "event"
  *    liquidity_sweep ...... "event"
+ *    (*) as duas estavam declaradas "zone" e foram corrigidas — nenhuma
+ *        das duas pinta área nenhuma, as duas são só createPriceLine.
  *
- *  Três delas são LINHA de 1px — e a regra 4 no topo deste arquivo diz, com
- *  todas as letras, que "nenhuma linha pode ficar abaixo de área pintada".
- *  Era exatamente o sintoma que originou este módulo, resolvido para metade
- *  das camadas e nunca para a outra metade.
+ *  CINCO delas são LINHA de 1px — e a regra 4 no topo deste arquivo diz,
+ *  com todas as letras, que "nenhuma linha pode ficar abaixo de área
+ *  pintada". Era exatamente o sintoma que originou este módulo, resolvido
+ *  para metade das camadas e nunca para a outra metade.
  *
  *  ── POR QUE 35, E O QUE ELE NÃO RESOLVE ──────────────────────────────
  *  35 fica entre PERFIL (30) e LINHA (40) — o uso exato do espaçamento de
  *  10 que este arquivo reservou desde o início. Nele:
- *    - as 3 linhas nativas sobem acima de TODA área pintada (campo/zona/
+ *    - as 5 linhas nativas sobem acima de TODA área pintada (campo/zona/
  *      perfil). A regra 4 passa a valer para as 30 camadas, não 23.
  *    - as VELAS sobem junto (compartilham o canvas) e passam a ficar acima
  *      das faixas de fundo — que é o certo: contexto atrás do preço.
@@ -178,17 +196,52 @@ export function getChartLayerTier(layerId: string): ChartDepthTier {
  *      das velas; eventos em 50; plano em 60; etiquetas em 70.
  *
  *  RESÍDUO HONESTO, declarado em vez de escondido: as 7 nativas dividem UM
- *  canvas só, então só podem ter UM z. Com 35:
- *    - harmonics/liquidity_sweep (declaradas "event", 50) ficam abaixo dos
- *      eventos de canvas (BOS/CHOCH, padrões de vela);
- *    - premium_discount/scenario_projection (declaradas "zone", 20) ficam
- *      acima das zonas de canvas.
- *  Consertar isso exige migrar essas 4 para canvas próprio — mudança maior,
- *  não feita de carona aqui. Entre "linha de 1px some embaixo de
- *  preenchimento" e "duas zonas trocam de ordem entre si", a primeira é
- *  claramente pior, e é a que 35 resolve.
+ *  canvas só, então só podem ter UM z. Com 35, harmonics e liquidity_sweep
+ *  (declaradas "event", 50) ficam abaixo dos eventos de canvas (BOS/CHOCH,
+ *  padrões de vela). São DUAS camadas, não quatro: as outras duas que este
+ *  parágrafo listava — premium_discount e scenario_projection — não eram
+ *  resíduo de posicionamento, eram DECLARAÇÃO ERRADA, e foram corrigidas
+ *  (ver CHART_LINE_ONLY_LAYER_IDS abaixo). Em 35 as duas já estão no lugar
+ *  certo: acima de toda área pintada, que é o que uma linha de 1px exige.
+ *
+ *  Fechar o resíduo restante exige migrar harmonics/liquidity_sweep para
+ *  canvas próprio — mudança maior, não feita de carona aqui. E ela só é
+ *  SEGURA de fazer depois da correção de declaração acima: migrar uma
+ *  camada que se declara "zone" a coloca em z=20, abaixo de todo
+ *  preenchimento, refazendo a violação da regra 4 que este bloco corrigiu.
  */
 export const CHART_NATIVE_CANVAS_Z_INDEX = TIER_Z.profile + 5;
+
+/** Camadas cujo desenho inteiro é LINHA de 1px — verificado lendo o código
+ *  de cada uma nesta sessão, nunca presumido pelo nome:
+ *
+ *    premium_discount ..... 3x createPriceLine (topo/equilíbrio/fundo)
+ *    scenario_projection .. createPriceLine por alvo projetado
+ *    liquidity_sweep ...... 1 createPriceLine por cluster real de sweep
+ *    cvd .................. série de linha própria no seu painel
+ *    supertrend ........... 2 séries de linha (up/down)
+ *    pivot_points ......... até 7 createPriceLine (PP + R1-3 + S1-3)
+ *
+ *  A REGRA que esta lista trava é a regra 4 no topo deste arquivo, dita como
+ *  predicado testável: nenhuma delas pode ficar num nível que PINTA ÁREA
+ *  (campo/zona/perfil), porque uma linha de 1px coberta por preenchimento
+ *  simplesmente some. Foi assim que `premium_discount` e
+ *  `scenario_projection` foram pegas declaradas como "zone".
+ *
+ *  A lista é o conjunto VERIFICADO, não um censo do arquivo inteiro: para
+ *  somar uma camada aqui, confirme antes que o desenho dela não tem
+ *  `fillRect`/faixa — e que ela não ganhou um plugin de canvas depois. */
+export const CHART_LINE_ONLY_LAYER_IDS: readonly string[] = [
+  "premium_discount",
+  "scenario_projection",
+  "liquidity_sweep",
+  "cvd",
+  "supertrend",
+  "pivot_points",
+];
+
+/** Níveis que PINTAM ÁREA — o conjunto proibido para as camadas acima. */
+export const CHART_FILL_TIERS: readonly ChartDepthTier[] = ["field", "zone", "profile"];
 
 /** As camadas desenhadas por primitiva NATIVA da lib (sem canvas próprio),
  *  e por isso presas todas ao mesmo z. Exportado para o teste provar que a

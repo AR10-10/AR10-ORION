@@ -13,6 +13,8 @@ import {
   CHART_DEPTH_REGISTERED_IDS,
   CHART_NATIVE_CANVAS_Z_INDEX,
   CHART_NATIVE_LAYER_IDS,
+  CHART_LINE_ONLY_LAYER_IDS,
+  CHART_FILL_TIERS,
 } from '../src/chart/chart-layer-depth';
 
 const chartSrc = readFileSync(resolve(__dirname, '../src/chart/EnhancedChart_110_Percent.tsx'), 'utf-8');
@@ -35,8 +37,13 @@ describe('Profundidade declarada: nada mais depende da ordem acidental do DOM', 
     // Uma linha de 1px coberta por área pintada simplesmente SOME. É o
     // sintoma exato que o Operador relatou.
     const campo = ['market_sessions', 'kill_zones', 'neural_market_aura', 'order_flow_heatmap', 'liquidation_heatmap'];
-    const zonas = ['liquidity_zones', 'institutional_zones', 'premium_discount'];
-    const linhas = ['ema', 'vwap', 'nexus_line', 'fibonacci', 'trend_channel', 'zigzag', 'session_key_levels', 'equal_highs_lows'];
+    // `premium_discount` SAIU desta lista de zonas: ela nunca pintou área
+    // nenhuma — o desenho inteiro dela é createPriceLine, e ela não tem
+    // plugin de canvas. Este teste carregava a MESMA suposição errada que o
+    // LAYER_TIER carregava, e por isso não pegou o defeito. Agora ela está
+    // entre as linhas, que é o que ela é de verdade.
+    const zonas = ['liquidity_zones', 'institutional_zones', 'ichimoku'];
+    const linhas = ['ema', 'vwap', 'nexus_line', 'fibonacci', 'trend_channel', 'zigzag', 'session_key_levels', 'equal_highs_lows', 'premium_discount', 'scenario_projection'];
     for (const c of campo) for (const z of zonas) expect(getChartLayerZIndex(c)).toBeLessThan(getChartLayerZIndex(z));
     for (const z of zonas) for (const l of linhas) expect(getChartLayerZIndex(z)).toBeLessThan(getChartLayerZIndex(l));
   });
@@ -150,6 +157,68 @@ describe('Canvas nativo da lib: as velas e as 7 camadas nativas também obedecem
       expect(
         chartSrc.includes(`{visibility.${id} && (`),
         `${id} está listada como NATIVA mas monta um overlay próprio — atualize CHART_NATIVE_LAYER_IDS`,
+      ).toBe(false);
+    }
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// A REGRA 4 COMO PREDICADO TESTAVEL.
+//
+// O arquivo diz no topo: "uma linha coberta por preenchimento simplesmente
+// SOME: nenhuma linha pode ficar abaixo de area pintada". Isso era uma FRASE,
+// e uma frase nao pega ninguem. Foi assim que `premium_discount` e
+// `scenario_projection` ficaram declaradas como "zone" — as duas desenham
+// exclusivamente createPriceLine (1px), zero preenchimento, zero plugin de
+// canvas — sem que nada reclamasse.
+//
+// Hoje o erro era INERTE (as duas sao nativas, renderizam em
+// CHART_NATIVE_CANVAS_Z_INDEX qualquer que seja o nivel declarado). Mas era
+// uma ARMADILHA: migra-las para canvas proprio, que e' a evolucao
+// recomendada, as colocaria em z=20 — abaixo de toda area pintada.
+// ---------------------------------------------------------------------------
+describe('Regra 4: camada que so desenha linha de 1px nunca fica num nivel que pinta area', () => {
+  it.each(CHART_LINE_ONLY_LAYER_IDS)('%s nao esta declarada num nivel de preenchimento', (id) => {
+    const tier = getChartLayerTier(id);
+    expect(
+      CHART_FILL_TIERS.includes(tier),
+      `"${id}" desenha so linha de 1px mas esta declarada como "${tier}" — ` +
+        `um preenchimento por cima faria ela SUMIR (regra 4 no topo do modulo)`,
+    ).toBe(false);
+  });
+
+  it('e todas elas ficam acima de toda area pintada, por z-index real', () => {
+    const tetoDePreenchimento = Math.max(
+      ...['market_sessions', 'liquidity_zones', 'volume_profile'].map(getChartLayerZIndex),
+    );
+    for (const id of CHART_LINE_ONLY_LAYER_IDS) {
+      expect(getChartLayerZIndex(id), `${id} precisa ficar acima de toda area pintada`)
+        .toBeGreaterThan(tetoDePreenchimento);
+    }
+  });
+
+  // Guarda anti-vacuidade: uma lista que encolhe para zero passaria calada.
+  it('a lista e real e aponta para camadas que existem', () => {
+    expect(CHART_LINE_ONLY_LAYER_IDS.length).toBeGreaterThanOrEqual(6);
+    expect(CHART_FILL_TIERS.length).toBe(3);
+    for (const id of CHART_LINE_ONLY_LAYER_IDS) {
+      expect(layerIds, `${id} precisa existir em CHART_LAYER_IDS`).toContain(id);
+    }
+  });
+
+  // O caso concreto que originou tudo isto — travado pelo nome, para que uma
+  // reversao acidental falhe com a mensagem certa em vez de passar.
+  it('premium_discount e scenario_projection sao "line" (eram "zone", e nao pintam nada)', () => {
+    expect(getChartLayerTier('premium_discount')).toBe('line');
+    expect(getChartLayerTier('scenario_projection')).toBe('line');
+    // prova de que a premissa continua valendo: nenhuma das duas tem plugin
+    // de canvas, e o desenho delas no chart e' createPriceLine.
+    for (const id of ['premium_discount', 'scenario_projection']) {
+      expect(chartSrc).toContain(`visibility.${id}`);
+      expect(
+        chartSrc.includes(`{visibility.${id} && (`),
+        `${id} ganhou um overlay proprio — reveja o nivel declarado e esta lista`,
       ).toBe(false);
     }
   });
