@@ -59,7 +59,19 @@ import { buildTradePlan, effectiveStopForTargetsHit, obstacleZonesInPath, type T
 // Autonomy order: honest signal accuracy — plans tracked against the real
 // price, persisted across sessions, felt by the affective memory.
 import { rehydrateTrackRecord, hitRate, EMPTY_TRACK_RECORD, type TrackedPlan, type PlanOpenContext } from "./nexus/signal-track-record";
-import { rehydratePaperTrading, unrealizedPnl, unrealizedPnlPct, paperPositionContext } from "./nexus/paper-trading";
+import {
+  rehydratePaperTrading,
+  unrealizedPnl,
+  unrealizedPnlPct,
+  paperPositionContext,
+  paperMarginUsed,
+  paperLiquidationStatus,
+  paperEquity,
+  paperDrawdown,
+  PAPER_MAX_LEVERAGE,
+  PAPER_MAINTENANCE_MARGIN_RATE,
+  PAPER_EQUITY_SAMPLE_MS,
+} from "./nexus/paper-trading";
 // v16.0 DEFINITIVO §9: primeiro assinante real de ORGANISM.TRACK_RECORD.UPDATED
 // (event-bus.ts) — evento já emitido pelo OrganismOrchestrator, sem consumidor
 // até esta entrega. Achado da AUDITORIA TÉCNICA COMPLETA (Seção F):
@@ -2916,6 +2928,35 @@ export default function App() {
   useEffect(() => {
     void savePaperTrading(paperTradingSlice).catch(() => {});
   }, [paperTradingSlice]);
+  // Contrato v2 — AMOSTRAGEM DA CURVA DE CAPITAL.
+  //
+  // ACHADO REAL desta rodada: `recordPaperEquity` existia na store e no
+  // motor, o painel já exibia contador de pontos e drawdown MÁXIMO — e
+  // nada nunca chamava a amostragem. Os dois ficariam presos em 0 para
+  // sempre: um número exibido que não podia ficar verdadeiro nunca (mesma
+  // classe de "declaração ≠ realidade" que esta trilha vem caçando).
+  //
+  // POR QUE ISTO NÃO FERE O "ZERO AUTOMAÇÃO" decidido pelo Operador:
+  // amostrar equity é OBSERVAÇÃO contábil — não abre, não fecha e não
+  // altera posição nenhuma (ver item 4 do cabeçalho de paper-trading.ts).
+  // As três TRANSIÇÕES reais (abrir/aportar/fechar) continuam existindo
+  // só dentro de onClick, e o teste de fiação trava exatamente isso.
+  //
+  // CADÊNCIA: 5s, e só com posição aberta. Amostrar a cada tick encheria
+  // o anel de 500 pontos em ~1 minuto de ticker rápido; amostrar com a
+  // conta parada gastaria o anel com linha reta sem informação. Roda
+  // independente do painel estar aberto — a curva é história da conta,
+  // não do modal.
+  useEffect(() => {
+    if (!paperTradingSlice.position) return;
+    const id = setInterval(() => {
+      const p = useUnifiedSnapshotStore.getState().price?.price;
+      if (typeof p === "number" && Number.isFinite(p)) {
+        useUnifiedSnapshotStore.getState().recordPaperEquity(p);
+      }
+    }, PAPER_EQUITY_SAMPLE_MS);
+    return () => clearInterval(id);
+  }, [paperTradingSlice.position]);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -5455,6 +5496,8 @@ function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
   const tradePlan = useTradePlanSnapshot();
   const paperTrading = usePaperTradingSnapshot();
   const [sizeInput, setSizeInput] = useState("100");
+  const [leverageInput, setLeverageInput] = useState("1");
+  const { selectedAsset } = useContext(WidgetContext) || {};
 
   if (!paperTradingOpen) return null;
   const close = () => setPaperTradingOpen?.(false);
@@ -5464,11 +5507,25 @@ function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
   const pnl = position && livePrice !== null ? unrealizedPnl(position, livePrice) : null;
   const pnlPct = position && livePrice !== null ? unrealizedPnlPct(position, livePrice) : null;
   const ctx = position && livePrice !== null ? paperPositionContext(position, livePrice) : null;
+  // Conta simulada (contrato v2): margem/liquidação só existem de verdade
+  // com alavancagem; equity/drawdown existem sempre.
+  const margin = paperMarginUsed(position);
+  const liq = livePrice !== null ? paperLiquidationStatus(position, livePrice) : null;
+  const equity = livePrice !== null ? paperEquity(paperTrading, livePrice) : paperTrading.balance;
+  const drawdown = livePrice !== null ? paperDrawdown(paperTrading, livePrice) : null;
 
   const handleOpen = () => {
     const size = Number(sizeInput);
+    const lev = Number(leverageInput);
     if (!tradePlan || !Number.isFinite(size) || size <= 0) return;
-    useUnifiedSnapshotStore.getState().openPaperPosition(tradePlan, size);
+    useUnifiedSnapshotStore.getState().openPaperPosition(tradePlan, size, selectedAsset ?? null, lev);
+  };
+  // DCA — aporte no preço ATUAL, sempre por clique. Some o nocional e
+  // recalcula o preço médio real (custo/unidades, ver weightedAveragePrice).
+  const handleAddEntry = () => {
+    const size = Number(sizeInput);
+    if (!position || livePrice === null || !Number.isFinite(size) || size <= 0) return;
+    useUnifiedSnapshotStore.getState().addPaperEntry(livePrice, size);
   };
   // SEMPRE um clique do Operador — reason só documenta qual leitura ele
   // reconheceu (perto do alvo/stop) ao decidir fechar, nunca uma decisão
@@ -5477,6 +5534,11 @@ function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
     if (!position || livePrice === null) return;
     const reason: "TARGET" | "STOP" | "MANUAL" = ctx?.nearTarget ? "TARGET" : ctx?.nearStop ? "STOP" : "MANUAL";
     useUnifiedSnapshotStore.getState().closePaperPosition(livePrice, reason);
+    // O degrau realizado precisa cair na curva: o amostrador de 5s só roda
+    // com posição ABERTA, então sem este ponto o resultado do trade que
+    // acabou de fechar nunca apareceria na curva de capital. Continua sendo
+    // observação (não abre/fecha nada) e continua dentro do clique.
+    useUnifiedSnapshotStore.getState().recordPaperEquity(livePrice);
   };
 
   return (
@@ -5495,6 +5557,31 @@ function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
           </button>
         </div>
         <div className="p-3 overflow-y-auto flex-1 space-y-3 text-[0.7rem]">
+          {/* CONTA SIMULADA — saldo realizado, equity ao vivo e drawdown.
+              Saldo só muda quando uma posição FECHA; equity inclui o
+              flutuante da aberta (ver nexus/paper-trading.ts). */}
+          <div className="cyber-panel bg-black/30 p-2 space-y-1">
+            <div className="flex justify-between">
+              <span className="text-[#8ab4f8]/50">Saldo realizado</span>
+              <span>{fmt(paperTrading.balance, 2)} USDT</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#8ab4f8]/50">Equity (com flutuante)</span>
+              <span className={equity >= paperTrading.balance ? "text-[#00ffaa]" : "text-[#ff4d6d]"}>
+                {fmt(equity, 2)} USDT
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#8ab4f8]/50">Drawdown atual / máx</span>
+              <span>
+                {drawdown ? `${drawdown.currentPct.toFixed(2)}% / ${drawdown.maxPct.toFixed(2)}%` : "—"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#8ab4f8]/50">Pontos na curva</span>
+              <span className="text-[#8ab4f8]/40">{paperTrading.equityCurve.length}</span>
+            </div>
+          </div>
           {!position ? (
             <>
               {!tradePlan ? (
@@ -5529,6 +5616,25 @@ function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
                   className="w-24 bg-black/40 border border-[#8ab4f8]/20 rounded px-2 py-1 text-right text-[#e8f4ff]"
                 />
               </label>
+              <label className="flex items-center justify-between gap-2">
+                <span className="text-[#8ab4f8]/50">Alavancagem (x)</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={PAPER_MAX_LEVERAGE}
+                  value={leverageInput}
+                  onChange={(e) => setLeverageInput(e.target.value)}
+                  className="w-24 bg-black/40 border border-[#8ab4f8]/20 rounded px-2 py-1 text-right text-[#e8f4ff]"
+                />
+              </label>
+              {Number(leverageInput) > 1 && (
+                <div className="text-[#f0d06f]/70 text-[0.62rem] leading-relaxed">
+                  Com {Number(leverageInput)}x, a margem é {fmt(Number(sizeInput) / Math.max(1, Number(leverageInput)), 2)} USDT
+                  e a posição tem preço de liquidação — o prejuízo simulado nunca passa da margem.
+                  O nível é ESTIMADO (margem isolada, taxa de manutenção declarada de{" "}
+                  {(PAPER_MAINTENANCE_MARGIN_RATE * 100).toFixed(1)}%), nunca o preço exato de uma corretora.
+                </div>
+              )}
               <button
                 type="button"
                 onClick={handleOpen}
@@ -5550,14 +5656,56 @@ function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
                   <span>{fmt(position.entryPrice)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#8ab4f8]/50">Tamanho</span>
-                  <span>{fmt(position.sizeUsdt, 0)} USDT</span>
+                  <span className="text-[#8ab4f8]/50">
+                    {position.entries.length > 1 ? `Preço médio (${position.entries.length} aportes)` : "Tamanho"}
+                  </span>
+                  <span>{position.entries.length > 1 ? fmt(position.entryPrice) : `${fmt(position.sizeUsdt, 0)} USDT`}</span>
                 </div>
+                {position.entries.length > 1 && (
+                  <div className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">Nocional total</span>
+                    <span>{fmt(position.sizeUsdt, 0)} USDT</span>
+                  </div>
+                )}
+                {position.symbol && (
+                  <div className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">Ativo</span>
+                    <span>{position.symbol}</span>
+                  </div>
+                )}
+                {position.leverage > 1 && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-[#8ab4f8]/50">Alavancagem</span>
+                      <span className="text-[#f0d06f]">{position.leverage}x</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#8ab4f8]/50">Margem usada</span>
+                      <span>{margin !== null ? `${fmt(margin, 2)} USDT` : "—"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#8ab4f8]/50">Liquidação (estimada)</span>
+                      <span className="text-[#ff4d6d]">{liq?.liquidationPrice != null ? fmt(liq.liquidationPrice) : "—"}</span>
+                    </div>
+                  </>
+                )}
                 <div className="flex justify-between">
                   <span className="text-[#8ab4f8]/50">Preço atual</span>
                   <span>{livePrice !== null ? fmt(livePrice) : "—"}</span>
                 </div>
               </div>
+              {/* Aviso de liquidação: LEITURA, nunca ação. O motor não fecha
+                  nada sozinho — quem decide é o Operador (escopo fixado no
+                  header de nexus/paper-trading.ts). */}
+              {liq?.breached && (
+                <div className="cyber-panel bg-[#ff4d6d]/10 border-[#ff4d6d]/40 p-2 text-center text-[#ff4d6d] leading-relaxed">
+                  PREÇO JÁ CRUZOU O NÍVEL ESTIMADO DE LIQUIDAÇÃO.
+                  <div className="text-[0.62rem] text-[#ff4d6d]/70 mt-1">
+                    Numa corretora real esta posição já teria sido encerrada. O prejuízo mostrado está travado no
+                    teto da margem. Nada aqui fecha sozinho — a decisão continua sua.
+                  </div>
+                </div>
+              )}
               <div className="cyber-panel bg-black/30 p-2 text-center">
                 <div className="text-[#8ab4f8]/50 mb-1">P&amp;L NÃO REALIZADO</div>
                 <div className={`text-lg font-bold ${pnl !== null && pnl >= 0 ? "text-[#00ffaa]" : "text-[#ff4d6d]"}`}>
@@ -5570,6 +5718,24 @@ function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
                   {ctx.nearTarget ? "Perto do Alvo 1 — considere fechar" : "Perto do Stop — considere fechar"}
                 </div>
               )}
+              <label className="flex items-center justify-between gap-2">
+                <span className="text-[#8ab4f8]/50">Aporte (USDT)</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={sizeInput}
+                  onChange={(e) => setSizeInput(e.target.value)}
+                  className="w-24 bg-black/40 border border-[#8ab4f8]/20 rounded px-2 py-1 text-right text-[#e8f4ff]"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={handleAddEntry}
+                disabled={livePrice === null || !(Number(sizeInput) > 0)}
+                className="w-full py-2 rounded bg-[#8ab4f8]/10 border border-[#8ab4f8]/30 text-[#8ab4f8] disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                APORTAR NO PREÇO ATUAL (DCA)
+              </button>
               <button
                 type="button"
                 onClick={handleClose}

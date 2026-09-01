@@ -83,6 +83,8 @@ import {
 import {
   openPaperPosition,
   closePaperPosition,
+  addPaperEntry,
+  recordPaperEquity,
   EMPTY_PAPER_TRADING_STATE,
   type PaperTradingState,
   type PaperCloseReason,
@@ -499,8 +501,14 @@ interface UnifiedSnapshotActions {
   // real do Operador na UI — nunca por um efeito de tick de preço (ver
   // header de nexus/paper-trading.ts). hydratePaperTrading é só para o
   // boot (IndexedDB) e testes, mesmo padrão de hydrateTrackRecord.
-  openPaperPosition: (plan: TradePlan | null, sizeUsdt: number) => void;
+  openPaperPosition: (plan: TradePlan | null, sizeUsdt: number, symbol?: string | null, leverage?: number) => void;
   closePaperPosition: (currentPrice: number, reason: PaperCloseReason) => void;
+  /** DCA — aporte na posição aberta, sempre a partir de um clique real. */
+  addPaperEntry: (price: number, sizeUsdt: number) => void;
+  /** Amostra a curva de capital. OBSERVAÇÃO, nunca transição: não abre nem
+   *  fecha posição, então pode ser chamada de um tick de preço sem violar o
+   *  escopo "zero automação" do módulo (ver header de nexus/paper-trading.ts). */
+  recordPaperEquity: (currentPrice: number) => void;
   hydratePaperTrading: (state: PaperTradingState) => void;
 }
 
@@ -650,11 +658,17 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
       s.trackRecord = closed;
       s.trackRecordArchive[key] = closed;
     }),
-    openPaperPosition: (plan, sizeUsdt) => set((s) => {
-      s.paperTrading = openPaperPosition(s.paperTrading as PaperTradingState, plan, sizeUsdt, Date.now());
+    openPaperPosition: (plan, sizeUsdt, symbol, leverage) => set((s) => {
+      s.paperTrading = openPaperPosition(s.paperTrading as PaperTradingState, plan, sizeUsdt, Date.now(), symbol, leverage);
     }),
     closePaperPosition: (currentPrice, reason) => set((s) => {
       s.paperTrading = closePaperPosition(s.paperTrading as PaperTradingState, currentPrice, Date.now(), reason);
+    }),
+    addPaperEntry: (price, sizeUsdt) => set((s) => {
+      s.paperTrading = addPaperEntry(s.paperTrading as PaperTradingState, price, sizeUsdt, Date.now());
+    }),
+    recordPaperEquity: (currentPrice) => set((s) => {
+      s.paperTrading = recordPaperEquity(s.paperTrading as PaperTradingState, currentPrice, Date.now());
     }),
     hydratePaperTrading: (state) => set((s) => { s.paperTrading = state; }),
   })),
