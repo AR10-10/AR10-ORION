@@ -109,6 +109,10 @@ export const RELEVANCE_LAYER_IDS = [
   // divergência é um evento raro por definição; "o motor rodou" não é
   // motivo para ocupar vaga no orçamento visual.
   "delta_divergence",
+  // Andrews Pitchfork: existencia real (3 pivos alternados confirmados),
+  // nunca proximidade — um canal e informativo justamente quando o preco
+  // esta longe de uma das bordas.
+  "andrews_pitchfork",
 ] as const;
 export type RelevanceLayerId = (typeof RELEVANCE_LAYER_IDS)[number];
 
@@ -277,6 +281,8 @@ export interface LayerRelevanceInput {
    *  quando não há leitura — para o painel poder dizer "cobre 4 velas, o
    *  mínimo é 12" em vez de "sem dado", que não ensina nada. */
   deltaDivergenceCoveredCandles: number;
+  /** O garfo tem os 3 pivos alternados confirmados. Existencia real. */
+  hasAndrewsPitchfork: boolean;
 }
 
 export interface LayerRelevanceResult {
@@ -577,6 +583,11 @@ export function computeLayerRelevance(input: LayerRelevanceInput): LayerRelevanc
               ? `sem divergência agora (CVD real cobre ${input.deltaDivergenceCoveredCandles} velas)`
               : "sem CVD real retido ainda — o histórico enche a ~4s por amostra durante a sessão",
         },
+
+    // Mesmo padrao de existencia real das demais graduacoes.
+    andrews_pitchfork: input.hasAndrewsPitchfork
+      ? { relevant: true, emphasis: "normal", reason: "garfo real sobre 3 pivos alternados confirmados — mediana e paralelas" }
+      : { relevant: false, emphasis: "normal", reason: "sem 3 pivos alternados confirmados ainda — nenhum garfo honesto para desenhar" },
   };
 }
 
@@ -679,6 +690,9 @@ export const AUTO_LAYER_PRECISION_ORDER: readonly string[] = [
   // critério declarado no topo desta lista: responde "como está o
   // cenário", nunca "onde entro/saio agora".
   "ichimoku",
+  // Mesmo criterio do ichimoku logo acima: canal de contexto continuo,
+  // responde "como esta o cenario", nunca "onde entro agora".
+  "andrews_pitchfork",
   "market_sessions",
   "kill_zones",
   "scenario_projection",
@@ -794,6 +808,9 @@ export const LAYER_VISUAL_COST: Readonly<Record<string, number>> = {
   // na maior parte do tempo esta camada custa isso e desenha nada. Mesma
   // unidade "objeto percebido" das demais.
   delta_divergence: 2,
+  // CONTADO: 3 retas. Os 3 pontos de pivo sao marcas de 2,5px que o olho le
+  // como parte das retas, nao como objetos separados.
+  andrews_pitchfork: 3,
 };
 
 /** Custo real de uma camada. Fail-closed: desconhecida custa 1 — entra na

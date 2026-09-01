@@ -278,6 +278,12 @@ describe('LEI 24 e Regra de Ouro 2: geometria, nunca direção nem probabilidade
     const lim = metadata.limitations.join(' ');
     expect(lim).toContain('Schiff');
     expect(lim.toLowerCase()).toContain('80%');
-    expect(metadata.status).toBe('LABORATORIO');
+    // ATENÇÃO — esta é a MESMA asserção que ficou obsoleta no
+    // delta-divergence-engine e virou um dos nove casos de "declaração ≠
+    // realidade" desta trilha: um teste travando `LABORATORIO` depois da
+    // graduação, protegendo a mentira em vez de pegá-la. Aqui ela cumpriu o
+    // papel — falhou no commit da graduação e forçou esta atualização.
+    // Quem mudar o status de novo tem de mexer aqui no MESMO commit.
+    expect(metadata.status).toBe('ACTIVE_READ_ONLY');
   });
 });

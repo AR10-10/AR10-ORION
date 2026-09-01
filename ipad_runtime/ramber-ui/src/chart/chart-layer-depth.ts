@@ -114,6 +114,10 @@ const LAYER_TIER: Record<string, ChartDepthTier> = {
   // a declaração agora é o que torna aquela migração segura de fazer.
   premium_discount: "line",
   scenario_projection: "line",
+  // Andrews Pitchfork: 3 retas de 1px. Nivel "line" pelo mesmo criterio que
+  // acabou de pegar as duas acima — o que ele desenha e linha, entao um
+  // preenchimento por cima o faria sumir.
+  andrews_pitchfork: "line",
   // A nuvem (Kumo) é um PREENCHIMENTO amplo — se ficasse no nível "line"
   // cobriria EMA/VWAP/Fibonacci, que são precisão de 1px. Fica em "zone"
   // com as demais faixas de preço; as 3 linhas do Ichimoku descem junto,
@@ -238,6 +242,7 @@ export const CHART_LINE_ONLY_LAYER_IDS: readonly string[] = [
   "cvd",
   "supertrend",
   "pivot_points",
+  "andrews_pitchfork",
 ];
 
 /** Níveis que PINTAM ÁREA — o conjunto proibido para as camadas acima. */

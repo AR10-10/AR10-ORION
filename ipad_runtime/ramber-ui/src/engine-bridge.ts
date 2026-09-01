@@ -104,6 +104,10 @@ import {
 // quarentena por retenção curta de CVD; o bloqueio caiu quando
 // ORDERFLOW_HISTORY_CAPACITY subiu de 120 para 900 (~1h). Graduado agora.
 import { analyze as analyzeDeltaDivergencePure } from '../../src/research/engines/delta-divergence-engine.js';
+// Andrews Pitchfork (Median Line Analysis) — ultima ferramenta de grafico
+// com nome proprio ausente que nao estava bloqueada por dado nem por
+// decisao. Graduado do Laboratorio.
+import { analyze as analyzeAndrewsPitchforkPure } from '../../src/research/engines/andrews-pitchfork-engine.js';
 // Padrões de vela japoneses (candlestick-patterns.js) — pedido direto do
 // Operador ("o gráfico tem que refletir os padrão das vela... existe padrão
 // de vela que muda o sentido do mercado"). Auditoria antes de construir
@@ -1550,6 +1554,44 @@ export interface DeltaDivergenceReading {
   /** Quantas velas o CVD retido realmente cobre. É o número que a UI usa
    *  para dizer ao Operador exatamente o que falta, em vez de "sem dado". */
   coveredCandles: number;
+}
+
+// ── Andrews Pitchfork ───────────────────────────────────────────────────
+// Wrapper fino sobre o motor puro, nunca uma segunda implementacao.
+export interface PitchforkPivot {
+  index: number;
+  price: number;
+  isHigh: boolean;
+}
+
+export interface PitchforkGeometry {
+  p0: PitchforkPivot;
+  p1: PitchforkPivot;
+  p2: PitchforkPivot;
+  /** Preco por BARRA (nunca por milissegundo) — ver o cabecalho do motor:
+   *  o eixo x espaca barras uniformemente, e uma inclinacao em tempo de
+   *  relogio entortaria o garfo em cada fim de semana. */
+  slope: number;
+  /** Fato dos pivos (P0 e fundo => ascendente), nunca uma direcao de trade
+   *  (LEI 24). */
+  ascending: boolean;
+  median: { index: number; price: number };
+  upper: { index: number; price: number };
+  lower: { index: number; price: number };
+  midpoint: { index: number; price: number };
+}
+
+export interface AndrewsPitchforkReading {
+  status: 'OK' | 'DADOS_INSUFICIENTES';
+  reason: string | null;
+  pitchfork: PitchforkGeometry | null;
+}
+
+export function computeAndrewsPitchfork(
+  candles: Array<{ open: number; high: number; low: number; close: number }>,
+): AndrewsPitchforkReading | null {
+  if (!Array.isArray(candles)) return null;
+  return analyzeAndrewsPitchforkPure({ ohlcv_series: candles }) as AndrewsPitchforkReading;
 }
 
 export function computeDeltaDivergence(

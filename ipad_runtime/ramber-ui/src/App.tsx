@@ -142,6 +142,7 @@ import {
   atrScaledZigZagDeviationPct,
   computeIchimoku,
   computeDeltaDivergence,
+  computeAndrewsPitchfork,
   computeCandlePatterns,
   scanRadarCandidate,
   getPivotPoints,
@@ -4650,6 +4651,10 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // propria: compara duas SERIES (preco e CVD), enquanto structure_breaks le
   // so a estrutura de preco.
   { id: "delta_divergence", label: "DIVERGÊNCIA DE DELTA" },
+  // Graduacao de andrews-pitchfork-engine.js — ultima ferramenta de grafico
+  // com nome proprio ausente que nao estava bloqueada por dado nem por
+  // decisao do Operador.
+  { id: "andrews_pitchfork", label: "ANDREWS PITCHFORK" },
 ];
 
 // Extraído de ChartLayersPanel (painel Properties 320px, pedido do
@@ -9914,6 +9919,11 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
     // defeito "existencia mentindo por usar um calculo diferente do que e
     // desenhado" ja corrigido acima para o ZigZag nesta mesma auditoria.
     const hasIchimoku = Array.isArray(chartData) && computeIchimoku(chartData) !== null;
+    // Pitchfork: existencia real pelo MESMO wrapper que o plugin desenha —
+    // nunca uma contagem de pivos paralela, que e o defeito "existencia
+    // mentindo por usar um calculo diferente do que e desenhado".
+    const hasAndrewsPitchfork =
+      Array.isArray(chartData) && computeAndrewsPitchfork(chartData)?.status === "OK";
     // Divergencia de Delta: unica camada cuja relevancia e a LEITURA e nao a
     // existencia do motor — uma divergencia e rara por definicao, e o overlay
     // desenha NADA quando nao ha uma. Mesmo calculo real que o plugin faz
@@ -9972,6 +9982,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
       // padrão de hasZigZagPivots/hasTpoProfile acima.
       hasPivotPoints: pivotPointsSnapshot?.status === "OK",
       hasIchimoku,
+      hasAndrewsPitchfork,
       hasDeltaDivergence: deltaDivergence?.status === "OK" && deltaDivergence.divergence !== null,
       deltaDivergenceCoveredCandles: deltaDivergence?.coveredCandles ?? 0,
     };

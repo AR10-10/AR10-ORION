@@ -2,9 +2,14 @@
 
 Codinome interno: `AR10_CYBORG_FUSION_RESEARCH_QUARANTINE_V1`.
 
-**Status desta árvore: 13 engines graduados + 2 utilitários compartilhados
+**Status desta árvore: 14 engines graduados + 2 utilitários compartilhados
 abaixo são ACTIVE_READ_ONLY. Todo o restante foi excluído em 2026-06-30
 (purge de código morto).**
+
+**Atualização (graduação de `andrews-pitchfork-engine.js`, 2026-09-01): 14º
+engine — a última ferramenta de gráfico com nome próprio ausente que não
+estava bloqueada por dado nem por decisão. Contagem conferida contra a árvore
+no mesmo commit, como sempre.**
 
 **Atualização (graduação de `delta-divergence-engine.js`, 2026-09-01): 13º
 engine. Não é uma descoberta nova — é a decisão em aberto que a própria
@@ -84,7 +89,7 @@ src/research/
     │                                   não é um engine — mesmo papel de
     │                                   fractal-swings.js: o agrupamento por âncora
     │                                   fixa estava escrito 3 vezes)
-    ├── andrews-pitchfork-engine.js    LABORATÓRIO (isolado 2026-09-01, não graduado —
+    ├── andrews-pitchfork-engine.js    ACTIVE_READ_ONLY (graduado 2026-09-01 —
     │                                   ver secao própria abaixo)
     └── hmm-regime-model.js            LABORATÓRIO (isolado 2026-08-10, não graduado —
                                         ver secao "Laboratório de engines" abaixo)
@@ -769,7 +774,7 @@ referência exibido ao Operador. Nunca uma segunda decisão de LONG/SHORT.
 fail-closed) + `pivot-points-fetch.test.ts` (6, fronteira de rede real
 mockada, filtro por tempo do dia fechado).
 
-## `andrews-pitchfork-engine.js` — LABORATÓRIO (isolado 2026-09-01)
+## `andrews-pitchfork-engine.js` — GRADUADO (2026-09-01, isolado no mesmo dia)
 
 Andrews Pitchfork / Median Line Analysis (Alan H. Andrews): três pivôs
 alternados reais → linha mediana + duas paralelas.
@@ -808,10 +813,29 @@ mesmo K=2 compartilhado. A alternância (dois pivôs do mesmo tipo em sequência
 → fica o mais extremo) é a única regra própria, e está testada nos dois
 sentidos.
 
-**NÃO GRADUADO.** Motor puro + 21 testes de execução real, zero ligação com
-`engine-bridge.ts`/`App.tsx`. A graduação (plugin de canvas + as 5 listas de
-camada) é rodada própria — a disciplina do Laboratório não muda porque o
-motor ficou pronto rápido.
+**GRADUADO na rodada seguinte**, depois das 21 suítes provarem o
+comportamento — a ordem do Laboratório foi respeitada (isolado e provado
+primeiro, ligado depois), não encurtada porque o motor ficou pronto rápido.
+
+**Ligação real (a regra de graduação):**
+- `ramber-ui/src/engine-bridge.ts` — `computeAndrewsPitchfork()`, wrapper fino.
+- `ramber-ui/src/chart/AndrewsPitchforkPlugin.tsx` — canvas próprio no padrão
+  dos demais overlays. Projeta **60 barras além do último candle** (a razão de
+  existir do garfo: as três retas são infinitas e o que interessa é onde elas
+  estarão), pela mesma técnica `timeScale().logicalToCoordinate()` que o
+  IchimokuPlugin introduziu. As retas param em `plotRight`
+  (chart-plot-area.ts) — nunca correm por baixo dos números do eixo.
+- Os 3 pivôs são desenhados como pontos: sem eles a construção é uma
+  afirmação sem endereço, e o Operador não consegue conferir de onde saiu a
+  inclinação.
+- Cor: família `measurement`, a mesma de Fibonacci/VWAP/ZigZag/Ichimoku —
+  medição sem viés direcional. Deliberadamente **não** o par verde/vermelho,
+  que nesta paleta significa LONG/SHORT (LEI 24).
+- `chart-layer-depth.ts` — nível `"line"` (são 3 retas de 1px), e entrou
+  também em `CHART_LINE_ONLY_LAYER_IDS`: o predicado da regra 4 passa a
+  cobri-lo, então ele nunca poderá ser declarado num nível que pinta área.
+- painel "Camadas do Gráfico" (App.tsx) — toggle próprio, `andrews_pitchfork`
+  nas 5 listas no mesmo commit.
 
 **Achado da própria suíte, antes de qualquer integração:** `analyze(null)`
 estourava num TypeError. O default `input = {}` cobre `undefined`, não

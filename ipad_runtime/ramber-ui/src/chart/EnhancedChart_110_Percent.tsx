@@ -141,6 +141,7 @@ import { CHART_NATIVE_CANVAS_Z_INDEX } from "./chart-layer-depth";
 import { ZigZagPlugin } from "./ZigZagPlugin";
 import { IchimokuPlugin } from "./IchimokuPlugin";
 import { DeltaDivergencePlugin } from "./DeltaDivergencePlugin";
+import { AndrewsPitchforkPlugin } from "./AndrewsPitchforkPlugin";
 import { chartPaletteRgba } from "./canvas-palette";
 import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
 // Ordem Final Autonomia Evolução §1: entry zone as a translucent box —
@@ -385,6 +386,11 @@ export const CHART_LAYER_IDS = [
   // compara duas séries independentes (preço e fluxo líquido) e só existe
   // enquanto o CVD retido cobrir velas reais suficientes.
   "delta_divergence",
+  // Andrews Pitchfork (Median Line Analysis). Camada propria: nenhuma outra
+  // constroi um canal a partir de TRES pivos alternados com inclinacao
+  // definida por ponto medio — o trend_channel e regressao sobre a serie,
+  // conceito diferente.
+  "andrews_pitchfork",
 ] as const;
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
@@ -419,6 +425,7 @@ export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
   pivot_points: true,
   ichimoku: true,
   delta_divergence: true,
+  andrews_pitchfork: true,
 };
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: mesma forma de ChartLayerVisibility
 // (Record<ChartLayerId, boolean>), reaproveitada como um flag PARALELO —
@@ -456,6 +463,7 @@ export const DEFAULT_CHART_LAYER_AUTO_MODE: ChartLayerVisibility = {
   pivot_points: true,
   ichimoku: true,
   delta_divergence: true,
+  andrews_pitchfork: true,
 };
 
 interface EnhancedChartProps {
@@ -4254,6 +4262,17 @@ function EnhancedChart_110_PercentImpl({
          por prop re-renderizaria este componente inteiro por overlay. */}
       {visibility.delta_divergence && (
         <DeltaDivergencePlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+        />
+      )}
+      {/* Graduacao de andrews-pitchfork-engine.js. Projeta 60 barras alem do
+         ultimo candle (a razao de existir do garfo), pela mesma tecnica
+         `logicalToCoordinate` que o Ichimoku introduziu, e para na fronteira
+         medida do eixo. Mesma `data` real, zero fetch novo. */}
+      {visibility.andrews_pitchfork && (
+        <AndrewsPitchforkPlugin
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           data={data}

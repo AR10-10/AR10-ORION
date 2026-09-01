@@ -61,7 +61,7 @@ export const metadata = {
         'Inclinacao em INDICE DE BARRA, nunca em tempo de relogio',
     ],
     required_data: ['ohlcv_series com high/low reais'],
-    status: 'LABORATORIO',
+    status: 'ACTIVE_READ_ONLY',
     limitations: [
         'Usa os 3 pivos alternados mais RECENTES. Escolher outro P0 muda a inclinacao do garfo inteiro — e a escolha manual de P0 e uma decisao do operador humano em toda plataforma, nao um automatismo. Aqui a escolha e declarada e fixa: os 3 ultimos confirmados.',
         'Variantes NAO implementadas: Schiff Pitchfork (P0 deslocado para o ponto medio de P0-P1) e Modified Schiff. Sao construcoes diferentes, nao "o mesmo garfo ajustado".',
