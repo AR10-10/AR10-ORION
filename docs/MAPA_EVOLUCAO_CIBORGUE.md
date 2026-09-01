@@ -1,8 +1,19 @@
 # AR10 CYBORG — Mapa de Evolução do Organismo
 
-**Data**: 2026-07-27 · **Escopo**: `ipad_runtime/` (read-only, USDT-M
-Futures/Perpétuo) · **Pedido de origem**: Operador — "mapeia tudo que tem
-de ser feito e a evolução de todos os sistema do ciborgue".
+**Fotografia de**: 2026-09-01 (revisão) · **Criado em**: 2026-07-27 ·
+**Escopo**: `ipad_runtime/` (read-only, USDT-M Futures/Perpétuo) ·
+**Pedido de origem**: Operador — "mapeia tudo que tem de ser feito e a
+evolução de todos os sistema do ciborgue".
+
+> **Revisão de 2026-09-01 — por que ela existe.** Este documento se declara
+> uma FOTOGRAFIA, e a nota de manutenção no rodapé manda refrescar a tabela
+> "nunca deixe uma classificação ficar sabidamente errada". Ele tinha
+> derivado por 5 semanas: dizia 21 camadas de gráfico quando existem 30,
+> classificava como PARCIAL/AUSENTE três subsistemas que foram concluídos
+> desde então, e listava como pendente um item de backlog que já estava
+> entregue. Cada linha abaixo marcada "(revisão 2026-09-01)" foi conferida
+> contra o código por `grep`/contagem real nesta sessão, nunca de memória —
+> as contagens vêm das guardas de teste que travam esses mesmos números.
 
 ## O que este documento É e o que ele NÃO É
 
@@ -47,7 +58,7 @@ de ser feito e a evolução de todos os sistema do ciborgue".
 | Conselho (Council) | IMPLEMENTADO | 7 agentes reais, linear opinion pool Stone (1961)/DeGroot (1974) via `src/consensus`. Limitação real e documentada: `OrderflowAgent` lê CVD spot MEXC enquanto o resto do Conselho lê perp Binance — cross-market por design, não um bug. |
 | Risk Engine | IMPLEMENTADO | `risk-engine.js` — dimensionamento Vol/ATR + capping por Kelly fracionado fixo por faixa de força do Comitê; nunca estima win-rate real (`ASSUMED_WIN_RATE = 0.5` permanente). Validado externamente pelo research map §7 como a resolução mais defensável da controvérsia Samuelson vs. Ziemba/Thorp do Critério de Kelly. |
 | Trade Plan | IMPLEMENTADO | ETA (`eta-engine.ts`), Obstáculos (`obstacleCount`), Conviction (`institutional-score.ts`) — cada campo com módulo de dono único. Break Even/Trailing Stop são Council-only por decisão já resolvida. |
-| Stage Runner | PARCIAL | `nexus/stage-runner.ts` é um traçador read-only real (`DATA→CORE_ENGINE→COUNCIL→TRADE_PLAN`) — nunca bloqueia nada, mas ainda não está fiado a `App.tsx`/UI; hoje só o próprio teste o chama. |
+| Stage Runner | **IMPLEMENTADO** (revisão 2026-09-01) | `nexus/stage-runner.ts` deixou de ser chamado só pelo próprio teste: `App.tsx` importa `traceStages` e o alimenta com o snapshot real (`stageTrace: traceStages(engineView.snapshot, engineView.seq)`). Continua read-only — nunca bloqueia nada, exatamente como a classificação PARCIAL anterior descrevia que deveria. |
 | Chart Integrity Engine | AUSENTE | Zero verificação real de desincronização Snapshot→TradePlan→HUD→Chart→Voice — nada no código impede um render defasado entre essas 5 camadas. |
 
 ## 2. Dados, qualidade e memória
@@ -59,15 +70,16 @@ de ser feito e a evolução de todos os sistema do ciborgue".
 | GMIL (consenso global) | PARCIAL | 4 de 6 categorias com provider real; ONCHAIN/MACRO ficam `null` permanentemente — exigiriam chave de API, proibida pelas Restrições Permanentes. |
 | Data Quality Monitor | **IMPLEMENTADO** (mudou desde §6.42) | Antes fragmentado em 3 motores sem vocabulário comum; `nexus/data-quality-vocabulary.ts` (§6.47/§6.50) unificou rótulo/cor sobre Market Data Bus + GMIL + `data-sufficiency.js`, sem fundir a matemática deles. `research.data_sufficiency` deixou de ser descartado — agora chega em `RealCycleResult.dataSufficiency`. |
 | Cross-Exchange (Bybit/OKX/MEXC vs. Binance) | IMPLEMENTADO | `trustScore.crossExchangeConvergence`, real 0-1; corrigido nesta trilha para alimentar também a linha "Consenso Entre Corretoras" do `DecisionValidationWidget` (bug de comentário desatualizado, §6.49). |
-| Track Record / Backtest estrutural | IMPLEMENTADO | `structural-backtest.js` (núcleo puro) + captura de histórico com proveniência; arquivado por `symbol:timeframe`. Sem paper-trading/drawdown ao vivo — confirmado pertencer a outro projeto do Operador, fora de escopo. |
+| Track Record / Backtest estrutural | IMPLEMENTADO | `structural-backtest.js` (núcleo puro) + captura de histórico com proveniência; arquivado por `symbol:timeframe`. Botão de backtest real dentro do app (autorizado pelo Operador via `AskUserQuestion`). |
+| Paper Trading (simulação local) | **IMPLEMENTADO** (revisão 2026-09-01 — a linha acima dizia "fora de escopo") | O Operador pediu explicitamente, com especificação própria, e a classificação anterior ("pertence a outro projeto") deixou de valer. `nexus/paper-trading.ts` (contrato v2): saldo simulado, curva de capital, drawdown atual/máximo, DCA com preço médio ponderado, alavancagem+margem e leitura honesta de liquidação. É **aritmética local sobre preço real**, categoricamente diferente de execução — nenhuma ordem sai do app, nenhuma credencial existe, a Restrição Permanente #1 continua intacta. A liquidação é uma LEITURA derivada, nunca uma mutação automática de posição. |
 | Affective Memory (reward/pain) | IMPLEMENTADO | 8 call sites reais; exposto via tooltip no `CouncilWidget` (§6.49) — antes só o ratio derivado (CPI) era visível. |
 
 ## 3. Gráfico e visual
 
 | Subsistema | Estado | Evidência / nota |
 |---|---|---|
-| Camadas do gráfico (canvas) | IMPLEMENTADO | 21 camadas reais (`CHART_LAYER_IDS`) — FVG/OB, BOS/CHOCH, Liquidity Heatmap, Volume Profile, Trade Plan Zone, Neural Market Aura, EMA, Trend Channel, VWAP, Nexus Line, CVD, Fibonacci, Premium/Discount, Harmônicos, EQH/EQL, Liquidações Forçadas, Liquidity Sweep, Sessões, Kill Zones (ICT, §6.55), Session Key Levels (§6.57), Zona Institucional (§6.64). |
-| Relevance Engine (Fusion) | **IMPLEMENTADO — 21/21** (mudou desde §6.63) | `nexus/layer-relevance.ts` cobria 15/18 desde a Fase 8.1, fechou 18/18 em §6.51; `kill_zones` (§6.55), `session_key_levels` (§6.57) e `institutional_zones` (§6.64) somaram-se depois, todas já com regra própria desde o nascimento (nunca repetiram o gap retroativo) — cobertura continua 1:1 com `CHART_LAYER_IDS`, sem exceção documentada. |
+| Camadas do gráfico (canvas) | IMPLEMENTADO — **30 camadas** (revisão 2026-09-01; a linha dizia 21) | 30 camadas reais (`CHART_LAYER_IDS`, contagem travada por teste) — FVG/OB, BOS/CHOCH, Liquidity Heatmap, Volume Profile, Trade Plan Zone, Neural Market Aura, EMA, Trend Channel, VWAP, Nexus Line, CVD, Fibonacci, Premium/Discount, Harmônicos, EQH/EQL, Liquidações Forçadas, Liquidity Sweep, Sessões, Kill Zones (ICT, §6.55), Session Key Levels (§6.57), Zona Institucional (§6.64). |
+| Relevance Engine (Fusion) | **IMPLEMENTADO — 30/30** (revisão 2026-09-01; dizia 21/21) | `nexus/layer-relevance.ts` cobria 15/18 desde a Fase 8.1, fechou 18/18 em §6.51; `kill_zones` (§6.55), `session_key_levels` (§6.57) e `institutional_zones` (§6.64) somaram-se depois, todas já com regra própria desde o nascimento (nunca repetiram o gap retroativo) — cobertura continua 1:1 com `CHART_LAYER_IDS`, sem exceção documentada. |
 | Zona Institucional (confluência de preço entre ferramentas) | **IMPLEMENTADO — metade aditiva** (novo, §6.64) | `nexus/institutional-zones.ts` agrupa EMA/VWAP/Nexus Line/FVG/OB/EQH-EQL por proximidade real de preço (>=2 ferramentas distintas) numa faixa única (`InstitutionalZonePlugin.tsx`). Deliberadamente NÃO reduz o detalhe individual de cada ferramenta quando já coberta pela faixa (a metade "reduzindo sobreposição" da diretiva) — decisão de UX maior, candidata a rodada isolada própria. |
 | Target 1/2/3 no canvas | IMPLEMENTADO | Target 3 (extensão Fibonacci 61.8%) chegava a ser calculado todo ciclo e descartado antes da UI — corrigido em §6.49 (threading completo `support-resistance-engine.js` → `engine-bridge.ts` → canvas). |
 | Smart Labels / anti-colisão | IMPLEMENTADO | `chart/label-compaction.ts`. |
@@ -75,7 +87,14 @@ de ser feito e a evolução de todos os sistema do ciborgue".
 | Auto Layout | PARCIAL | `audit-header-maxcontent.mjs` cobre 11 viewports reais, mas só TopBar + 1 painel — não a área do gráfico/grid completo. |
 | Forecast no canvas | PARCIAL | `realCycle.forecast` existe e é real, mas só aparece como lista de texto no HUD, nunca desenhado no canvas. |
 | OI/Funding como camada do gráfico | AUSENTE | Dado real já existe (GMIL/cross-exchange), mas nunca é desenhado no canvas — hoje só texto em painel. |
-| ZigZag como overlay próprio | PARCIAL | Existe só como helper interno em `fractal-swings.js`, nunca uma camada própria toggleable. |
+| ZigZag como overlay próprio | **IMPLEMENTADO** (revisão 2026-09-01; a linha dizia PARCIAL) | Graduado do Laboratório na Entrega 47 (`research/engines/zigzag-engine.js` → `ZigZagPlugin.tsx`), camada `zigzag` própria e toggleable. Depois disso o limiar de reversão passou a escalar pelo ATR% do timeframe selecionado (`atrScaledZigZagDeviationPct`), em vez do default fixo. |
+| SuperTrend | **IMPLEMENTADO** (novo nesta revisão) | `research/engines/supertrend-engine.js` graduado 2026-08-23 — trailing stop de 1px, camada própria. |
+| Padrões de vela (Nison) | **IMPLEMENTADO** (novo nesta revisão) | `research/engines/candlestick-patterns.js` graduado 2026-08-18, detecção por corpo/sombra real. |
+| Perfil TPO (Steidlmayer/CBOT) | **IMPLEMENTADO** (novo nesta revisão) | `nexus/tpo-profile.ts` + `TpoProfilePlugin.tsx` — gap nomeado desde a auditoria v16.0 ULTRA. |
+| Pivot Points clássicos (Floor Trader) | **IMPLEMENTADO** (novo nesta revisão) | `research/engines/pivot-points-engine.js` graduado 2026-09-01 — PP/R1-3/S1-3 do candle diário anterior FECHADO (filtrado por tempo real, nunca por posição no array). Primeiro dos 2 gaps não-redundantes da auditoria do ecossistema de indicadores. |
+| Ichimoku Kinko Hyo | **IMPLEMENTADO** (novo nesta revisão) | `research/engines/ichimoku-engine.js` graduado 2026-09-01 — Tenkan/Kijun/Senkou A-B/Chikou + nuvem Kumo projetada 26 barras à frente. Segundo e último gap não-redundante da mesma auditoria. Introduziu no projeto a técnica de desenhar ALÉM do último candle (`timeScale().logicalToCoordinate`), que nenhum overlay anterior fazia. |
+| Divergência de Delta (preço × CVD) | **IMPLEMENTADO** (novo nesta revisão) | `research/engines/delta-divergence-engine.js` graduado 2026-09-01. Ficou 8 dias em quarentena por uma razão que já tinha caído (retenção de CVD subiu de 120 para 900 amostras no mesmo dia em que foi registrada). Única camada cuja relevância é a LEITURA e não a existência do motor. |
+| Paleta canônica do canvas | **IMPLEMENTADO** (revisão 2026-09-01 — ver Tier 3 item 19) | `chart/canvas-palette.ts`: exatamente 6 famílias semânticas (`attention`/`bullish`/`measurement`/`projection`/`institutional`/`bearish`), com `tests/canvas-palette.test.ts` impedindo a entrada de qualquer matiz saturado novo. Resolve, no lado do GRÁFICO, o item que o Tier 3 listava como "precisa de decisão do Operador". |
 | Kill Zones (ICT) | **IMPLEMENTADO — canvas incluído** (mudou desde §6.53) | `nexus/kill-zones.ts` (§6.48) — badge no header; `KillZoneBandsPlugin.tsx` (§6.55) fechou o desenho real no canvas (retângulo âmbar, mesma cor do badge), camada própria com Relevance Engine desde o nascimento. |
 | VWAP ±σ bands | **IMPLEMENTADO** (mudou desde §6.53) | `nexus/vwap-bands.ts` (§6.54) — desvio-padrão real ponderado por volume, k=1/2, mesmo toggle da VWAP (nunca uma nova camada). |
 | Session Key Levels (máxima/mínima de sessão) | **IMPLEMENTADO** (novo, §6.57) | Pedido do Operador (captura de indicador de referência) — `computeSessionKeyLevels` em `market-session.ts` (reaproveita a partição já real), `SessionKeyLevelsPlugin.tsx`, cor reaproveitada de S1/R1, camada própria com Relevance Engine desde o nascimento. PDH/PDL (companion comum deste tipo de indicador) fica como candidato de próxima rodada, não implementado ainda. |
@@ -87,7 +106,7 @@ de ser feito e a evolução de todos os sistema do ciborgue".
 | Multi-Timeframe Matrix | IMPLEMENTADO | Confluência real entre timeframes, nunca uma 2ª decisão (LEI 24). |
 | Confluence Corridor (ex-"Corredor de Probabilidade") | IMPLEMENTADO | Nome corrigido para honestidade (Regra de Ouro 2) na trilha Fusion; contrato v2 corrigido em §6.40. |
 | Radar / OIH (Oportunidades) | **IMPLEMENTADO** (mudou desde §6.42) | v1 real (§6.38/§6.39) rodava só sobre `asset-universe.default.json` (~30-41 símbolos curados Binance); scan real MEXC-wide (`fetchMexcUsdtSymbols` + `scanRadarCandidate(..., 'MEXC')`) foi ligado ao painel "OPORTUNIDADES" (§6.45/task #85) — universo hoje cobre Binance curado + MEXC completo, não mais só a lista curada. |
-| Market Regime Detector | PARCIAL | Motor real (Wilder ADX/DI + Bollinger, `market-regime/regime-engine.js`) segue existindo, mas **ainda não alimenta `layer-relevance.ts`** — confirmado nesta rodada (grep direto, zero ocorrência). Candidato natural: relevância de `trend_channel`/`ema` reagindo ao regime real (tendência vs. lateralização), não só à largura de banda. |
+| Market Regime Detector | **IMPLEMENTADO** (revisão 2026-09-01; a linha dizia PARCIAL com "zero ocorrência") | O gap fechou exatamente como a linha antiga previa: `layer-relevance.ts` hoje lê `marketRegime` (7 ocorrências, campo próprio em `LayerRelevanceInput`), e a relevância de `trend_channel` combina largura de banda real COM regime real — "compressão e momentum confirmados juntos", ou momentum por ADX/DI mesmo com banda larga. Era o item 9 do backlog Tier 2. |
 | Organism Health | PARCIAL | `nexus/organism-orchestrator.ts` + `useHealthSnapshot()` já são contínuos, confirmados ligados em `App.tsx` nesta rodada; `self-diagnostics.ts` (relatório profundo) continua sob demanda (clique), não um monitor contínuo — mesma leitura de §6.42, sem mudança. |
 | Voice (TTS/STT) | IMPLEMENTADO | Reais do browser, push-to-talk; `computeAlerts` só reage a transição real de estado. |
 | Event Bus | IMPLEMENTADO | `nexus/event-bus.ts` + `gmil/event-bus.ts` — domínios separados de propósito. |
@@ -107,8 +126,14 @@ Distinção importante para não reabrir debate já fechado sem motivo novo:
 
 ## 6. AUSENTES sem decisão de recusa (backlog real, não descarte)
 
-Pitchfork/Andrews Pitchfork, Elliott Wave, Triângulos, Wyckoff (confirmado
-por grep — zero ocorrência), Footprint (zero ocorrência — bloqueado por
+**Revisão 2026-09-01:** Triângulos saiu desta lista — `nexus/triangle-
+pattern.ts` existe e é real (com o ápice projetado no gráfico), assim como
+`head-shoulders-pattern.ts` e a EPA da Wolfe em `harmonic-patterns.ts`.
+Pitchfork/Andrews Pitchfork, Elliott Wave e Wyckoff seguem confirmados por
+grep com zero ocorrência.
+
+Pitchfork/Andrews Pitchfork, Elliott Wave, Wyckoff (reconfirmado
+por grep 2026-09-01 — zero ocorrência), Footprint (zero ocorrência — bloqueado por
 disponibilidade de dado, não por decisão de produto), SMT Divergence
 (precisaria de um 2º ativo correlacionado no pipeline), Previous Day
 High/Low — PDH/PDL (§6.57: companion comum do mesmo tipo de indicador
@@ -148,11 +173,17 @@ abertos desta auditoria + achados novos de
 ### Tier 2 — médio, 1 rodada dedicada cada
 8. Andrews Pitchfork (motor puro + plugin de canvas) — já priorizado
    pelo Operador em rodada anterior.
-9. Market Regime → Relevance Engine (fechar o gap confirmado na §4
-   acima — `regime-engine.js` real, mas `layer-relevance.ts` ainda não
-   lê nada dele).
-10. Drawdown/Track Record — métricas adicionais sobre o histórico já
-    real e arquivado.
+9. ~~Market Regime → Relevance Engine~~ — **feito** (revisão 2026-09-01):
+   `layer-relevance.ts` lê `marketRegime` e a relevância de `trend_channel`
+   combina largura de banda real com regime real. Ver §4 acima.
+10. ~~Drawdown/Track Record~~ — **feito** (revisão 2026-09-01), por um
+    caminho diferente do previsto: as métricas nasceram no Paper Trading
+    (`nexus/paper-trading.ts` v2 — curva de capital, drawdown atual/máximo,
+    pico de equity), a pedido explícito do Operador, e não como um cálculo
+    adicional sobre o Track Record arquivado. O item continua aberto SE o
+    que se quiser for drawdown do histórico REAL resolvido — são duas
+    séries diferentes, e confundi-las seria o tipo de imprecisão que este
+    documento existe para evitar.
 11. Auto Layout — estender `audit-header-maxcontent.mjs` (ou
     equivalente) para cobrir a área do gráfico/grid inteira, não só
     TopBar+1 painel.
@@ -198,6 +229,15 @@ abertos desta auditoria + achados novos de
     Zones/Sweep) e o mesmo cyan exato pra Fibonacci E Volume Profile —
     mesmas 2 decisões pendentes de design, agora com inventário completo
     e cores exatas nomeadas.
+    **Resolvido no lado do GRÁFICO (revisão 2026-09-01):**
+    `chart/canvas-palette.ts` fechou o inventário inteiro em 6 famílias
+    semânticas declaradas, com `tests/canvas-palette.test.ts` travando a
+    regra — nenhum matiz saturado novo entra sem passar por ela. Os 5 tons
+    de amarelo viraram a família `attention` única; o cyan
+    Fibonacci×Volume Profile virou `measurement`. **O que continua em
+    aberto é só o lado dos WIDGETS** (os 9 eixos semânticos fora do
+    canvas), que segue precisando de decisão de design do Operador.
+    Registro anterior preservado:
     **Parcialmente resolvido em §6.59** (`SYSTEM_HANDBOOK.md`): dentro da
     família amarela, o par Sweep×pico-Liquidation não era ambiguidade de
     design — era 2° de matiz na mesma luminosidade/saturação/alpha
@@ -273,13 +313,20 @@ abertos desta auditoria + achados novos de
    "ferramentas mais precisas". Restam: touch-target 44×44pt,
    list-virtualization, `reconnecting-websocket`, escopo de toggle para
    S1/R1/Trade Plan/Cenário.
-2. Market Regime → Relevance Engine (fecha o último gap real do Fusion
-   Engine; depois deste, TODA relevância de camada vem de sinal real
-   já mapeado, zero exceção pendente).
-3. Andrews Pitchfork (ferramenta institucional já priorizada).
+2. ~~Market Regime → Relevance Engine~~ — **feito** (revisão 2026-09-01).
+   Com ele, toda relevância de camada vem de sinal real já mapeado.
+3. Andrews Pitchfork (ferramenta institucional já priorizada) — hoje o
+   **único** item de desenho de gráfico com nome próprio ainda ausente que
+   não está bloqueado por dado nem por decisão. A auditoria do ecossistema
+   de indicadores (2026-09-01) fechou os outros dois candidatos reais
+   (Pivot Points, Ichimoku) e descartou 4 osciladores por redundância
+   comprovada — RSI de Wilder + CVD/Delta/Volume Profile já cobrem o que
+   CCI/Stochastic/Williams %R/MFI dariam, e Keltner é redundante com
+   Bollinger Bandwidth + SuperTrend.
 4. Decisão do Operador sobre os itens de Tier 3 (Footprint, SMT
-   Divergence, escopo do Chart Integrity Engine, nova paleta de cores
-   por eixo semântico) — sem essa decisão, qualquer trabalho nesses 4
+   Divergence, escopo do Chart Integrity Engine, paleta por eixo semântico
+   **do lado dos widgets** — o lado do gráfico já foi resolvido por
+   `canvas-palette.ts`, ver Tier 3 item 19) — sem essa decisão, qualquer trabalho nesses 4
    itens seria suposição, não implementação.
 5. Tier 4 — cada item como sua própria trilha isolada e cuidadosa
    (mesma disciplina já usada para toda mudança de Main Thread/Core
@@ -291,3 +338,16 @@ abertos desta auditoria + achados novos de
 um item real de estado mudar (mesmo padrão do `CLAUDE.md`), nunca deixe
 uma classificação ficar sabidamente errada. O histórico de COMO cada
 mudança aconteceu continua vivendo em `docs/SYSTEM_HANDBOOK.md` §6.*
+
+*Lição medida na revisão de 2026-09-01, registrada porque é o modo de
+falhar deste arquivo: a instrução acima existia desde o primeiro dia e
+mesmo assim ele derivou 5 semanas — 21 camadas viraram 30, três PARCIAIS
+viraram IMPLEMENTADOS, e um item de backlog seguia listado como pendente
+depois de entregue. Uma fotografia desatualizada é pior que nenhuma: ela
+manda a próxima sessão construir algo que já existe, ou ignorar algo que
+quebrou. O único remédio que funcionou aqui foi conferir cada linha contra
+o código com `grep`/contagem real — as afirmações numéricas deste
+documento têm guarda de teste no repositório (a contagem de camadas, por
+exemplo, quebra a suíte se alguém somar uma sem atualizar as 5 listas).
+É o mesmo defeito recorrente que o `QUARANTINE.md` registra 5 vezes:
+uma declaração afirmando o que o código não faz.*
