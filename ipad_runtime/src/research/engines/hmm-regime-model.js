@@ -69,6 +69,35 @@
 // nenhum caminho de produção (fronteira travada por teste, mesmo padrão de
 // zigzag-engine.js — ver QUARANTINE.md).
 import { computeAdx, classifyMarketRegime } from "../../market-regime/regime-engine.js";
+// ACHADO REAL (auditoria "milímetro a milímetro" pedida pelo Operador,
+// 2026-09-01): junto de zigzag-engine.js, este era o outro motor real sem
+// `export const metadata` — o buraco na terceira fonte de verdade que
+// `quarantine-registry.test.ts` cruza (ver o comentário equivalente em
+// zigzag-engine.js). Aqui o buraco era mais sério na direção oposta: a
+// checagem "LABORATORIO exige AUSENCIA de import" também pulava este
+// arquivo em silêncio — se alguém ligasse este motor ao engine-bridge.ts
+// por engano enquanto a árvore do QUARANTINE.md ainda dissesse
+// LABORATÓRIO, nada nesta rede de testes capturaria a contradição. Hoje
+// não é o caso (confirmado por leitura direta: zero import em
+// engine-bridge.ts) — mas era um ponto cego real, não hipotético.
+export const metadata = {
+    engine: 'hmm-regime-model',
+    description: 'Hidden Markov Model de 3 estados (Rabiner 1989) para leitura PROBABILISTICA de regime de mercado — complementar ao classificador determinístico já graduado (market-regime/regime-engine.js), nunca uma segunda curva de ADX/ATR.',
+    concepts: [
+        'Forward-backward ESCALONADO (Rabiner §V-A) — o forward/backward ingênuo sofre underflow por volta de 150-200 passos',
+        'Baum-Welch (treino não-supervisionado) + Viterbi em espaço-log',
+        'Rotulação de estado por concordância empírica com regime-engine.js, nunca suposição fixa de índice',
+    ],
+    required_data: ['ohlcv_series suficiente para ADX+1 candle (HMM_MIN_CANDLES_FOR_FEATURES)'],
+    status: 'LABORATORIO',
+    limitations: [
+        'Pipeline de treino em Web Worker, persistência IndexedDB e retreino semanal automático deliberadamente NÃO construídos — a parte "ao vivo" exigiria dado real de mercado que este sandbox nunca teve (zero egress em toda a sessão).',
+        'Integração com o Profitability Engine (expectância filtrada por regime) é ideia válida para o futuro, mas depende de um HMM treinado E de trades suficientes rotulados por regime — nenhum dos dois existe ainda.',
+        'NÃO importado por nenhum caminho de produção — fronteira travada por teste próprio (hmm-regime-model.test.ts), não só por esta metadata.',
+    ],
+};
+
+
 import { computeAtrPercent } from "./lorentzian-classifier.js";
 
 export const HMM_STATE_COUNT = 3;
