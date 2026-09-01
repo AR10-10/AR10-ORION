@@ -137,6 +137,7 @@ import { DepthChartPlugin } from "./DepthChartPlugin";
 import { TpoProfilePlugin } from "./TpoProfilePlugin";
 import { computeTpoProfile } from "../nexus/tpo-profile";
 import { resolveChartUltraWideScale } from "./chart-ultrawide-scale";
+import { CHART_NATIVE_CANVAS_Z_INDEX } from "./chart-layer-depth";
 import { ZigZagPlugin } from "./ZigZagPlugin";
 import { IchimokuPlugin } from "./IchimokuPlugin";
 import { DeltaDivergencePlugin } from "./DeltaDivergencePlugin";
@@ -4010,7 +4011,17 @@ function EnhancedChart_110_PercentImpl({
           activeLanes={activeProfileLanes}
         />
       )}
-      <div ref={containerRef} className="absolute inset-0" />
+      {/* z-index EXPLICITO (chart-layer-depth.ts): este container carrega as
+         velas e as 7 camadas desenhadas por primitiva nativa da lib. Sem
+         z-index ele era `auto`, e um overlay com z=10 pinta por cima de
+         `auto` mesmo vindo antes no DOM (provado em Chromium) — entao as
+         linhas nativas de 1px (CVD/SuperTrend/Pivot Points) ficavam embaixo
+         de TODA area pintada, violando a regra 4 do proprio modulo. */}
+      <div
+        ref={containerRef}
+        className="absolute inset-0"
+        style={{ zIndex: CHART_NATIVE_CANVAS_Z_INDEX }}
+      />
       {/* EPC §5/§6 ("Nunca simplesmente esconder essas informações"): sem
          Trade Plan ativo, o canto superior esquerdo (vazio desde que o
          Trend Channel migrou pro eixo, Diretriz de Refinamento Visual §5)

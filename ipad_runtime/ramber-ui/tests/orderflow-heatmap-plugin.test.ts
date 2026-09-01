@@ -4,6 +4,7 @@
 // DOM/canvas real neste ambiente de teste 'node' — padrão no código,
 // verificação visual real feita à parte via harness Playwright).
 import { describe, it, expect } from 'vitest';
+import { getChartLayerZIndex, CHART_NATIVE_CANVAS_Z_INDEX } from '../src/chart/chart-layer-depth';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -120,14 +121,24 @@ describe('OrderFlowHeatmapPlugin: OffscreenCanvas + fallback via handshake real,
 });
 
 describe('EnhancedChart_110_Percent: monta o heatmap ANTES do container do chart (atrás das velas, fundo transparent)', () => {
-  it('importa e monta OrderFlowHeatmapPlugin com o chart/série reais antes de <div ref={containerRef}>', () => {
+  // ESTE TESTE MUDOU DE MECANISMO, NÃO DE INTENÇÃO.
+  //
+  // Ele afirmava "atrás das velas" travando a ORDEM DE DOM (heatmap montado
+  // antes do container). Isso era o único controle disponível quando foi
+  // escrito — e é exatamente o defeito que chart-layer-depth.ts existe para
+  // acabar: empilhamento por ordem acidental de montagem, que muda se alguém
+  // reordenar o JSX.
+  //
+  // Agora o container do chart tem z-index EXPLÍCITO
+  // (CHART_NATIVE_CANVAS_Z_INDEX) e o heatmap é do nível CAMPO. "Atrás das
+  // velas" passa a ser uma consequência da profundidade DECLARADA, que a
+  // ordem do JSX não consegue mais quebrar. Invariante mais forte, não mais
+  // fraco: o teste antigo passaria com o z-index errado, este não.
+  it('monta OrderFlowHeatmapPlugin e fica atrás das velas pela PROFUNDIDADE declarada, não pela ordem do JSX', () => {
     const chartFile = read('../src/chart/EnhancedChart_110_Percent.tsx');
     expect(chartFile).toContain('import { OrderFlowHeatmapPlugin } from "./OrderFlowHeatmapPlugin";');
-    const heatmapIdx = chartFile.indexOf('<OrderFlowHeatmapPlugin');
-    const containerIdx = chartFile.indexOf('<div ref={containerRef}');
-    expect(heatmapIdx).toBeGreaterThan(-1);
-    expect(containerIdx).toBeGreaterThan(-1);
-    expect(heatmapIdx).toBeLessThan(containerIdx);
+    expect(chartFile.indexOf('<OrderFlowHeatmapPlugin')).toBeGreaterThan(-1);
+    expect(getChartLayerZIndex('order_flow_heatmap')).toBeLessThan(CHART_NATIVE_CANVAS_Z_INDEX);
   });
 
   it('passa chart/série reais (nunca null fabricado por padrão)', () => {

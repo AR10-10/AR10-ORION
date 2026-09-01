@@ -140,6 +140,70 @@ export function getChartLayerTier(layerId: string): ChartDepthTier {
   return LAYER_TIER[layerId] ?? "zone";
 }
 
+/** z-index do CANVAS NATIVO da lightweight-charts (as velas + tudo que é
+ *  desenhado por primitiva da própria lib: `addSeries`, `createPriceLine`,
+ *  marcadores).
+ *
+ *  ── O SEGUNDO ACHADO DESTE MÓDULO, medido ────────────────────────────
+ *  Este arquivo declara profundidade para as 30 camadas, mas só as ~18 que
+ *  têm canvas PRÓPRIO obedeciam. As outras 7 são desenhadas por primitiva
+ *  nativa e vivem todas dentro do `<div ref={containerRef}>` — que era
+ *  `absolute inset-0` SEM z-index nenhum, ou seja `z-index: auto`.
+ *
+ *  Provado em Chromium (não deduzido): um overlay com `z-index: 10` pinta
+ *  POR CIMA de um container `z-index: auto` mesmo quando o container vem
+ *  DEPOIS no DOM. Ou seja, as 7 camadas nativas ficavam embaixo de TODOS os
+ *  overlays — inclusive do nível CAMPO (z=10), que é justamente o mais
+ *  difuso e o que cobre mais área.
+ *
+ *  As 7 nativas e o nível que este arquivo declarava para elas:
+ *    cvd .................. "line"    supertrend ......... "line"
+ *    pivot_points ......... "line"    premium_discount ... "zone"
+ *    scenario_projection .. "zone"    harmonics .......... "event"
+ *    liquidity_sweep ...... "event"
+ *
+ *  Três delas são LINHA de 1px — e a regra 4 no topo deste arquivo diz, com
+ *  todas as letras, que "nenhuma linha pode ficar abaixo de área pintada".
+ *  Era exatamente o sintoma que originou este módulo, resolvido para metade
+ *  das camadas e nunca para a outra metade.
+ *
+ *  ── POR QUE 35, E O QUE ELE NÃO RESOLVE ──────────────────────────────
+ *  35 fica entre PERFIL (30) e LINHA (40) — o uso exato do espaçamento de
+ *  10 que este arquivo reservou desde o início. Nele:
+ *    - as 3 linhas nativas sobem acima de TODA área pintada (campo/zona/
+ *      perfil). A regra 4 passa a valer para as 30 camadas, não 23.
+ *    - as VELAS sobem junto (compartilham o canvas) e passam a ficar acima
+ *      das faixas de fundo — que é o certo: contexto atrás do preço.
+ *    - as linhas de canvas (EMA/VWAP/Fibonacci/ZigZag) seguem em 40, acima
+ *      das velas; eventos em 50; plano em 60; etiquetas em 70.
+ *
+ *  RESÍDUO HONESTO, declarado em vez de escondido: as 7 nativas dividem UM
+ *  canvas só, então só podem ter UM z. Com 35:
+ *    - harmonics/liquidity_sweep (declaradas "event", 50) ficam abaixo dos
+ *      eventos de canvas (BOS/CHOCH, padrões de vela);
+ *    - premium_discount/scenario_projection (declaradas "zone", 20) ficam
+ *      acima das zonas de canvas.
+ *  Consertar isso exige migrar essas 4 para canvas próprio — mudança maior,
+ *  não feita de carona aqui. Entre "linha de 1px some embaixo de
+ *  preenchimento" e "duas zonas trocam de ordem entre si", a primeira é
+ *  claramente pior, e é a que 35 resolve.
+ */
+export const CHART_NATIVE_CANVAS_Z_INDEX = TIER_Z.profile + 5;
+
+/** As camadas desenhadas por primitiva NATIVA da lib (sem canvas próprio),
+ *  e por isso presas todas ao mesmo z. Exportado para o teste provar que a
+ *  lista bate com a realidade — se alguém migrar uma delas para canvas
+ *  próprio, tem de sair daqui no mesmo commit. */
+export const CHART_NATIVE_LAYER_IDS: readonly string[] = [
+  "cvd",
+  "supertrend",
+  "pivot_points",
+  "premium_discount",
+  "scenario_projection",
+  "harmonics",
+  "liquidity_sweep",
+];
+
 /** z-index das etiquetas de preço. Constante própria porque o
  *  PriceLabelStackPlugin já tinha z=5 hardcoded ANTES deste módulo existir —
  *  e aquele 5 é justamente o sintoma: era o único que sabia que precisava
