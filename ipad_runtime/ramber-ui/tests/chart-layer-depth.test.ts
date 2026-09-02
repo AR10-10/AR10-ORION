@@ -153,8 +153,10 @@ describe('Canvas nativo da lib: as velas e as 7 camadas nativas também obedecem
   // lista (SMC Harmonic Fusion): a seta de confluência já tem canvas próprio
   // (HarmonicConfluenceArrowPlugin), mesmo que o zigue-zague/PRZ continuem
   // nativos — "sem canvas próprio nenhum" deixou de ser verdade pra ela.
-  it('as 6 nativas restantes realmente não têm canvas próprio montado por `visibility.X &&`', () => {
-    expect(CHART_NATIVE_LAYER_IDS.length).toBe(6);
+  // `liquidity_sweep` saiu da lista também (pendência #6): migrou por
+  // completo pra LiquiditySweepLinesPlugin.tsx — 7→6→5 restantes.
+  it('as 5 nativas restantes realmente não têm canvas próprio montado por `visibility.X &&`', () => {
+    expect(CHART_NATIVE_LAYER_IDS.length).toBe(5);
     for (const id of CHART_NATIVE_LAYER_IDS) {
       expect(layerIds, `${id} precisa existir em CHART_LAYER_IDS`).toContain(id);
       expect(

@@ -221,18 +221,23 @@ export function getChartLayerTier(layerId: string): ChartDepthTier {
  *  carona aqui (mudança maior, players nativos da lib são mais baratos de
  *  desenhar um ziguezague que muda pouco por candle).
  *
- *  RESÍDUO HONESTO, declarado em vez de escondido: as 6 nativas restantes
- *  dividem UM canvas só, então só podem ter UM z. Com 35, liquidity_sweep
- *  (declarada "event", 50) fica abaixo dos eventos de canvas (BOS/CHOCH,
- *  padrões de vela, e agora a seta de harmonics). É UMA camada, não quatro:
- *  as outras três que este parágrafo já listou — premium_discount e
- *  scenario_projection (declaração errada, corrigidas — ver
- *  CHART_LINE_ONLY_LAYER_IDS abaixo) e harmonics (migração parcial, acima)
- *  — já saíram do resíduo real de posicionamento.
+ *  liquidity_sweep MIGROU POR COMPLETO (pendência #6, "chegar na
+ *  perfeição"): `LiquiditySweepLinesPlugin.tsx` desenha a mesma linha de
+ *  sweep real (mesmo dado, mesma clusterização, mesmo decaimento) em
+ *  canvas próprio, `getChartLayerZIndex("liquidity_sweep")` = 50 (event) —
+ *  saiu de CHART_NATIVE_LAYER_IDS e de CHART_LINE_ONLY_LAYER_IDS, primeira
+ *  das 6 nativas restantes a fechar o resíduo por completo.
  *
- *  Fechar o resíduo restante exige migrar liquidity_sweep (e a perna nativa
- *  remanescente de harmonics) para canvas próprio — mudança maior, não
- *  feita de carona aqui.
+ *  RESÍDUO HONESTO, declarado em vez de escondido: as 5 nativas restantes
+ *  dividem UM canvas só, então só podem ter UM z. As outras três camadas
+ *  que este parágrafo já citou — premium_discount e scenario_projection
+ *  (declaração errada, corrigidas — ver CHART_LINE_ONLY_LAYER_IDS abaixo),
+ *  harmonics (migração parcial) e liquidity_sweep (migração completa, logo
+ *  acima) — já saíram do resíduo real de posicionamento.
+ *
+ *  Fechar o resíduo restante exige migrar a perna nativa remanescente de
+ *  harmonics (zigue-zague XABCD/Wolfe + PRZ) para canvas próprio — mudança
+ *  maior, não feita de carona aqui.
  */
 export const CHART_NATIVE_CANVAS_Z_INDEX = TIER_Z.profile + 5;
 
@@ -241,7 +246,6 @@ export const CHART_NATIVE_CANVAS_Z_INDEX = TIER_Z.profile + 5;
  *
  *    premium_discount ..... 3x createPriceLine (topo/equilíbrio/fundo)
  *    scenario_projection .. createPriceLine por alvo projetado
- *    liquidity_sweep ...... 1 createPriceLine por cluster real de sweep
  *    cvd .................. série de linha própria no seu painel
  *    supertrend ........... 2 séries de linha (up/down)
  *    pivot_points ......... até 7 createPriceLine (PP + R1-3 + S1-3)
@@ -252,13 +256,17 @@ export const CHART_NATIVE_CANVAS_Z_INDEX = TIER_Z.profile + 5;
  *  simplesmente some. Foi assim que `premium_discount` e
  *  `scenario_projection` foram pegas declaradas como "zone".
  *
+ *  `liquidity_sweep` SAIU desta lista (pendência #6): migrou pra canvas
+ *  próprio (`LiquiditySweepLinesPlugin.tsx`), então não compete mais pelo
+ *  z=35 nativo compartilhado — a regra 4 não se aplica mais a ela aqui,
+ *  ela já tem seu próprio z=50 real via `getChartLayerZIndex`.
+ *
  *  A lista é o conjunto VERIFICADO, não um censo do arquivo inteiro: para
  *  somar uma camada aqui, confirme antes que o desenho dela não tem
  *  `fillRect`/faixa — e que ela não ganhou um plugin de canvas depois. */
 export const CHART_LINE_ONLY_LAYER_IDS: readonly string[] = [
   "premium_discount",
   "scenario_projection",
-  "liquidity_sweep",
   "cvd",
   "supertrend",
   "pivot_points",
@@ -271,14 +279,14 @@ export const CHART_FILL_TIERS: readonly ChartDepthTier[] = ["field", "zone", "pr
 /** As camadas desenhadas por primitiva NATIVA da lib (sem canvas próprio),
  *  e por isso presas todas ao mesmo z. Exportado para o teste provar que a
  *  lista bate com a realidade — se alguém migrar uma delas para canvas
- *  próprio, tem de sair daqui no mesmo commit. */
+ *  próprio, tem de sair daqui no mesmo commit (pendência #6: `liquidity_
+ *  sweep` foi a primeira a sair, 6→5 restantes). */
 export const CHART_NATIVE_LAYER_IDS: readonly string[] = [
   "cvd",
   "supertrend",
   "pivot_points",
   "premium_discount",
   "scenario_projection",
-  "liquidity_sweep",
 ];
 
 /** z-index das etiquetas de preço. Constante própria porque o

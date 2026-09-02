@@ -53,7 +53,7 @@ import { LiquidityZonesPlugin, ZONE_DECAY, type FillableZone, type EqualLevelMar
 // a MESMA config de decaimento do plugin (zero segunda curva).
 import { StructureBreakMarkersPlugin, BREAK_DECAY } from "./StructureBreakMarkersPlugin";
 import { CandlePatternMarkersPlugin } from "./CandlePatternMarkersPlugin";
-import { ageAlpha, type DecayConfig } from "./annotation-decay";
+import { ageAlpha } from "./annotation-decay";
 // Achado real de captura de tela do Operador (dezenas de rótulos "SWEEP"
 // empilhados — swept é uma flag permanente em LiquidityZone, sem
 // decaimento por idade nenhum evento nunca "sumia"). Diretiva formal
@@ -65,8 +65,10 @@ import { ageAlpha, type DecayConfig } from "./annotation-decay";
 // baixo o bastante pra ficar quase invisível pouco antes de sumir de
 // vez. Horizonte maior que BREAK_DECAY (100) de propósito — Sweep é
 // referência de S/R que continua útil por mais tempo que uma anotação
-// de estrutura recém-rompida.
-const SWEEP_DECAY: DecayConfig = { fadeStartCandles: 50, expireCandles: 200, minAlpha: 0.12 };
+// de estrutura recém-rompida. Constante canônica migrou pra
+// LiquiditySweepLinesPlugin.tsx (pendência #6) — importada aqui porque as
+// etiquetas do eixo (priceAxisLabels, abaixo) precisam da MESMA idade/
+// alpha que a linha do canvas usa, nunca uma segunda cópia divergente.
 
 // Arrays vazios ESTÁVEIS. Achado real ao ligar EQH/EQL neste mesmo plugin:
 // o call site fazia `(fairValueGaps ?? [])`, que cria um array NOVO a cada
@@ -182,6 +184,11 @@ import { HarmonicConfluenceArrowPlugin } from "./HarmonicConfluenceArrowPlugin";
 // + seta única da decisão atual — ver cabeçalho de cada plugin.
 import { StructureTracePlugin } from "./StructureTracePlugin";
 import { ConfidenceDirectionArrowPlugin } from "./ConfidenceDirectionArrowPlugin";
+// Pendência #6 (migração nativo→canvas): fecha o resíduo de
+// liquidity_sweep documentado em chart-layer-depth.ts — ver cabeçalho do
+// plugin. SWEEP_DECAY é a fonte única do decaimento (também usada pelas
+// etiquetas do eixo abaixo).
+import { LiquiditySweepLinesPlugin, SWEEP_DECAY } from "./LiquiditySweepLinesPlugin";
 import type { TrianglePatternHit } from "../nexus/triangle-pattern";
 import type { HeadShouldersHit } from "../nexus/head-shoulders-pattern";
 import type { NexusDecision } from "../nexus/decision-layer";
@@ -1067,11 +1074,6 @@ function EnhancedChart_110_PercentImpl({
   // limpeza/redesenho independente de S1/R1 (fontes diferentes: candle
   // diário fechado vs. swing fractal).
   const pivotLinesRef = useRef<IPriceLine[]>([]);
-  // EPC OMEGA FINAL, Etapa 10: price lines do sweep real (TrapSignal.
-  // sweptPrices) — ref PRÓPRIA, nunca reusa zoneLinesRef (ciclos de
-  // limpeza/redesenho independentes, mesma separação que support/
-  // resistance já têm entre si).
-  const sweepLinesRef = useRef<IPriceLine[]>([]);
   const fibLinesRef = useRef<IPriceLine[]>([]);
   const tradePlanLinesRef = useRef<IPriceLine[]>([]);
   // EPC §5/§6 (continuação): linhas do fallback do Core Engine
@@ -1671,7 +1673,6 @@ function EnhancedChart_110_PercentImpl({
       supportLineRef.current = null;
       resistanceLineRef.current = null;
       zoneLinesRef.current = [];
-      sweepLinesRef.current = [];
       fibLinesRef.current = [];
       tradePlanLinesRef.current = [];
       scenarioLinesRef.current = [];
@@ -1955,87 +1956,17 @@ function EnhancedChart_110_PercentImpl({
   }, [liquidityZones, visibility.equal_highs_lows]);
 
   // EPC OMEGA FINAL, Etapa 10 ("Liquidity Sweep: captura/direção/
-  // absorção"): auditoria da Etapa 1 encontrou trap-detection.ts real e já
-  // corroborando sweeps (STOP_HUNT_TOPO/FUNDO), mas a zona EQH/EQL varrida
-  // simplesmente some do bloco acima (filtro !swept) sem deixar rastro do
-  // momento do sweep — mesmo mecanismo de price line, cor âmbar própria
-  // (nunca usada por EQH/EQL roxo nem OB/FVG verde/vermelho), preço real
-  // de TrapSignal.sweptLevels (zero recálculo, mesmo dado que a zona já
-  // tinha antes de sumir).
-  //
-  // v3 (achado real de captura de tela do Operador — dezenas de rótulos
-  // "SWEEP" empilhados cobrindo o gráfico inteiro): `swept` em
-  // LiquidityZone é uma flag PERMANENTE — sem decaimento por idade, todo
-  // sweep da história inteira carregada virava um rótulo pra sempre.
-  // Mesma disciplina JÁ REAL de BOS/CHOCH (annotation-decay.ts::ageAlpha
-  // + BREAK_DECAY, ver useMemo de priceAxisLabels abaixo) — zero segunda
-  // técnica de decaimento inventada, só um SWEEP_DECAY próprio porque o
-  // Operador pediu um horizonte maior pra Sweep (~200 candles) do que
-  // BOS/CHOCH já usa (100 candles — evento estrutural mais rápido de
-  // ficar obsoleto). `data.length` entra nas deps porque a IDADE muda a
-  // cada candle novo, não só quando `traps` muda.
-  useEffect(() => {
-    if (!seriesRef.current) return;
-    const series = seriesRef.current;
-    sweepLinesRef.current.forEach((line) => series.removePriceLine(line));
-    sweepLinesRef.current = [];
-    if (!visibility.liquidity_sweep) return;
-
-    // Achado real do Operador (captura de tela: "SWEEP ZONE (2x)" com 2
-    // linhas separadas por trás dela): este efeito desenhava 1 price line
-    // POR NÍVEL BRUTO (t.sweptLevels.forEach), enquanto priceAxisLabels
-    // abaixo já deduplicava+clusterizava (seenSweepPrices + clusterSweptPrices)
-    // pra desenhar 1 rótulo por cluster real — um cluster "(2x)" tinha 1
-    // caixa de texto mas 2 linhas nativas quase idênticas empilhadas por
-    // baixo, o mismatch real que lia como poluição/duplicação. Mesma
-    // deduplicação (Set global de preço, mesmo espírito de dedup entre
-    // traps distintos) + MESMO clusterSweptPrices/LIQUIDITY_PROXIMITY_PCT
-    // do bloco de rótulos — zero segunda regra: 1 cluster real = 1 linha.
-    const seenSweepPrices = new Set<number>();
-    (traps ?? []).forEach((t) => {
-      if (t.kind !== "STOP_HUNT_TOPO" && t.kind !== "STOP_HUNT_FUNDO") return;
-      const uniqueLevels = t.sweptLevels.filter((l) => Number.isFinite(l.price) && !seenSweepPrices.has(l.price));
-      uniqueLevels.forEach((l) => seenSweepPrices.add(l.price));
-      for (const cluster of clusterSweptPrices(uniqueLevels, LIQUIDITY_PROXIMITY_PCT)) {
-        const age = data.length - 1 - cluster.latestIndex;
-        const alpha = ageAlpha(age, SWEEP_DECAY);
-        if (alpha <= 0) continue; // expirado (>200 candles) — some da TELA, dado real intacto em trap-detection.ts.
-        sweepLinesRef.current.push(
-          series.createPriceLine({
-            price: cluster.avgPrice,
-            // Lapidação institucional: H33 laranja — era H45 (255,191,0), a
-            // 2° do pico do Liquidation Heatmap (LiquidationHeatmapPlugin.tsx
-            // PEAK_LABEL_COLOR). Mesma luminosidade/saturação/alpha a 2° de
-            // matiz = mesma cor a olho nu. Sweep fica no lado mais laranja
-            // (evento pontual já ocorrido), heatmap no lado mais amarelo
-            // (pico ao vivo, recalculado a cada tick) — mesma dupla,
-            // diferenciação real (ver comentário completo lá). Alpha final
-            // multiplicado pelo decaimento real por idade (0.85 é o teto
-            // na freshest, nunca um valor fixo).
-            color: `rgba(255, 162, 0, ${(alpha * 0.85).toFixed(3)})`,
-            lineWidth: 1,
-            lineStyle: LineStyle.Solid,
-            axisLabelVisible: false,
-            // Achado real do Operador ("linha amarela que eu não sei o que
-            // significa") — causa raiz confirmada no código-fonte real da
-            // lib (custom-price-line-price-axis-view.ts,
-            // _updateRendererData): quando axisLabelVisible é false, o
-            // método retorna ANTES de setar visible=true pro título — ou
-            // seja, este `title` nunca foi desenhado em lugar NENHUM (nem
-            // eixo, nem painel), sempre foi metadado inerte. O problema
-            // real não era colisão de texto — era ausência TOTAL de rótulo
-            // legível pra esta linha âmbar. O texto real agora vive em
-            // priceAxisLabels (useMemo abaixo), mesmo preço/mesma cor,
-            // dentro do sistema anti-colisão real — mesma migração já
-            // aplicada a BOS/CHOCH, mas aqui fechando uma ausência, não uma
-            // sobreposição. title vazio aqui só documenta que este campo
-            // nunca teve efeito visual — remover não muda nada renderizado.
-            title: "",
-          }),
-        );
-      }
-    });
-  }, [traps, visibility.liquidity_sweep, data.length]);
+  // absorção") + migração pra canvas (pendência #6 da PR #16, "chegar na
+  // perfeição"): a price line nativa que vivia aqui (cor âmbar,
+  // SWEEP_DECAY, clusterSweptPrices) preso ao z=35 compartilhado das
+  // primitivas nativas, abaixo dos eventos reais de canvas (BOS/CHOCH,
+  // padrão de vela, harmônico) — exatamente o resíduo que
+  // chart-layer-depth.ts já documentava. `LiquiditySweepLinesPlugin.tsx`
+  // (novo) desenha a MESMA linha, MESMO dado (traps), MESMA clusterização/
+  // decaimento — só no z=50 real que "event" sempre devia ter tido. Ver
+  // cabeçalho do plugin novo para o resto do raciocínio (inclusive a
+  // correção da cor: era um rgba redigitado que já MEDIA a família
+  // canônica attention, nunca precisou de um tom próprio).
 
   // V-MAX Fase 1 (fechamento do §3.1): alimenta a série de CVD com o
   // histórico REAL da store (mesmo orderflowHistory do heatmap — um dado,
@@ -4220,6 +4151,17 @@ function EnhancedChart_110_PercentImpl({
           series={chartReady?.series ?? null}
           data={data}
           patterns={candlePatterns ?? []}
+        />
+      )}
+      {/* Pendência #6: liquidity_sweep migrado de createPriceLine nativo
+         pra canvas — mesmo toggle de sempre, agora no z=50 real de
+         "event" (chart-layer-depth.ts) em vez do z=35 nativo compartilhado. */}
+      {visibility.liquidity_sweep && (
+        <LiquiditySweepLinesPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          traps={traps}
         />
       )}
       {/* SMC Harmonic Fusion (pedido do Operador): seta triangular real no

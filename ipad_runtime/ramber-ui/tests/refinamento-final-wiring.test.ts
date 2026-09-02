@@ -819,17 +819,16 @@ describe('Evolução do Organismo (Fase 2, "menor cálculos duplicados"): cache 
 });
 
 describe('Achado real do Operador ("linha amarela que eu não sei o que significa" + "etiquetas não podem ficar em cima do valor do ativo"): Liquidity Sweep migra pro eixo anti-colisão, Session Key Levels perde o rótulo flutuante', () => {
-  it('Liquidity Sweep: title nativo da price line fica vazio (nunca teve efeito visual real com axisLabelVisible:false — o texto real agora vive em priceAxisLabels, um rótulo de verdade onde antes não havia nenhum)', () => {
-    const c = chart();
-    // v3 (decaimento por idade): a cor nativa virou template dinâmico
-    // (alpha real multiplicado no desenho), não mais uma string fixa.
-    const idx = c.indexOf('color: `rgba(255, 162, 0, ${(alpha * 0.85).toFixed(3)})`,');
-    expect(idx, 'price line de Liquidity Sweep não encontrada').toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 1300);
-    expect(block).toContain('title: "",');
-    expect(block).not.toContain('⚡ SWEEP');
-  });
-
+  // Pendência #6 (migração nativo→canvas, "chegar na perfeição") REVOGOU a
+  // premissa do teste que vivia aqui ("title nativo da price line fica
+  // vazio com axisLabelVisible:false") — registrado de propósito em vez de
+  // apagado, mesma disciplina do bloco "Lapidação institucional" abaixo.
+  // A price line nativa (e o campo `title` morto que a acompanhava) não
+  // existe mais: LiquiditySweepLinesPlugin.tsx desenha em canvas puro, que
+  // nunca teve esse campo pra começo de conversa — a pergunta que o teste
+  // fazia deixou de fazer sentido, não só de falhar. Ver
+  // liquidity-sweep-lines-plugin-wiring.test.ts para a cobertura real do
+  // plugin novo.
   it('Liquidity Sweep: o texto real (⚡ SWEEP ↑/↓ N%) agora vive em priceAxisLabels, dedupe por preço, side:"left" (estrutural/histórico)', () => {
     const c = chart();
     const idx = c.indexOf('if (visibility.liquidity_sweep) {', c.indexOf('const priceAxisLabels = useMemo'));
@@ -946,21 +945,26 @@ describe('Lapidação institucional (diretiva com imagem de referência): Liquid
   // vs. um pico no heatmap lateral), não cor. Agora ambos usam o mesmo
   // `attention` canônico.
   it('Achado 3.1: Sweep e pico do Heatmap convergem para o MESMO âmbar canônico — o que os distingue é geometria, nunca 12° de matiz', () => {
-    const c = chart();
+    // Pendência #6: a price line nativa (antes em EnhancedChart_110_
+    // Percent.tsx) migrou pra LiquiditySweepLinesPlugin.tsx — os dois agora
+    // usam a MESMA chamada chartPaletteRgba("attention", ...) em vez de
+    // dois rgba(255,162,0,...) redigitados coincidentemente iguais.
+    const sweep = read('../src/chart/LiquiditySweepLinesPlugin.tsx');
     const heatmap = read('../src/chart/LiquidationHeatmapPlugin.tsx');
-    expect(c).toContain('color: "rgba(255, 162, 0, 0.85)", // mesmo tom laranja da price line');
-    expect(c).toContain('color: `rgba(255, 162, 0, ${(alpha * 0.85).toFixed(3)})`,');
-    expect(heatmap).toContain('const PEAK_LABEL_COLOR = "rgba(255, 162, 0, 0.85)";');
+    expect(sweep).toContain('chartPaletteRgba("attention", alpha * 0.85)');
+    expect(heatmap).toContain('const PEAK_LABEL_COLOR = chartPaletteRgba("attention", 0.85);');
   });
 
   it('Achado 3.1: o âmbar do Sweep/Heatmap está no matiz da família attention — a trava de canvas-palette.test.ts governa o resto', () => {
-    // 255,162,0 = matiz 38°, o canônico de `attention`. Os tons antigos desta
-    // dupla (255,140,0 = H33 e 255,191,0 = H45) não existem mais.
-    const c = chart();
+    // Os tons antigos desta dupla (255,140,0 = H33, 255,191,0 = H45,
+    // 255,200,0 = H47) não existem mais — nem redigitados, nem via helper.
+    const sweep = read('../src/chart/LiquiditySweepLinesPlugin.tsx');
     const heatmap = read('../src/chart/LiquidationHeatmapPlugin.tsx');
-    expect(c).not.toContain('rgba(255, 140, 0');
+    expect(sweep).not.toContain('rgba(255, 140, 0');
+    expect(sweep).not.toContain('rgba(255, 162, 0');
     expect(heatmap).not.toContain('rgba(255, 191, 0');
     expect(heatmap).not.toContain('rgba(255, 200, 0');
+    expect(heatmap).not.toContain('rgba(255, 162, 0');
   });
 
   it('Kill Zones NÃO entra nesta diferenciação — o TOM âmbar (255,176,32) segue o mesmo. Achado 2.6: os alphas base foram recalibrados (0.06/0.22 → 0.38/0.55) porque a geometria deixou de ser lavagem de altura total e virou faixa de 6px; LABEL_ALPHA sumiu junto com o rótulo (duplicação do badge do header)', () => {

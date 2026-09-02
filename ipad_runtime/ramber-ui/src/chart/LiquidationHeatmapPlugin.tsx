@@ -35,6 +35,7 @@ import type { LiquidationEvent } from "../engine-bridge";
 // virou caixa real (mesma primitiva de LiquidityZonesPlugin/
 // KillZoneBandsPlugin/InstitutionalZonePlugin).
 import { drawCanvasLabel, measureCanvasLabel } from "../nexus/canvas-label";
+import { chartPaletteRgba } from "./canvas-palette";
 
 // Faixa ESQUERDA declarada (chart-profile-lanes.ts). O 0.14 continua o mesmo
 // número que este plugin sempre usou — mudou de dono: agora é a reserva
@@ -46,15 +47,22 @@ import { drawCanvasLabel, measureCanvasLabel } from "../nexus/canvas-label";
 const MAX_BAR_WIDTH_FRACTION = CHART_LEFT_EDGE_FRACTION;
 const LONG_FILL = "rgba(8, 153, 129, 0.28)";
 const SHORT_FILL = "rgba(242, 54, 69, 0.28)";
-// Lapidação institucional (§9.4/§9.7 de AUDITORIA_ECOSSISTEMA_VISUAL.md):
-// H50 puro ("ouro") — era H47 (255,200,0), a 2° de Liquidity Sweep (H45,
-// EnhancedChart_110_Percent.tsx). 2° de matiz na mesma luminosidade/
-// saturação/alpha é indistinguível a olho; agora a 17° real de Sweep
-// (H33, laranja), que segue sendo o mais quente da dupla "evento pontual"
-// (ver comentário completo no site do Sweep). Kill Zones (H39, âmbar)
-// não entra nesta diferenciação: geometria diferente (banda vertical de
-// fundo, alpha 0.06-0.22) nunca compete lado a lado com estas duas linhas.
-const PEAK_LABEL_COLOR = "rgba(255, 162, 0, 0.85)";
+// Correção real (auditoria de conteúdo, 2026-09-02 — "remove o que não
+// tem utilidade"): este comentário dizia "H50 puro... a 17° real de
+// Liquidity Sweep (H33)" — não bate com o código real. O tom aqui e o do
+// Sweep (LiquiditySweepLinesPlugin.tsx) sempre foram o MESMO triplo
+// (255,162,0) desde antes desta migração — nunca 17° apart. Medido:
+// chartRgbToHsl(255,162,0) = 38°, idêntico à família canônica `attention`
+// (245,158,11 = 38°) depois de canvas-palette.ts consolidar as 6 famílias
+// — a diferenciação de 17° descrita aqui foi superada por essa
+// consolidação numa rodada posterior e a prosa nunca foi atualizada. Os
+// dois eventos (pico de liquidação ao vivo, sweep já ocorrido) hoje se
+// distinguem por FORMA/papel visual (rótulo de pico vs. linha horizontal
+// de referência), nunca por sub-matiz — mesmo princípio que `bullish`/
+// `bearish` já aplicam a dezenas de elementos diferentes no resto do
+// canvas. Kill Zones (âmbar, banda vertical de fundo) nunca competiu com
+// nenhum dos dois — geometria diferente, isso continua verdade.
+const PEAK_LABEL_COLOR = chartPaletteRgba("attention", 0.85);
 
 interface LiquidationHeatmapPluginProps {
   chart: IChartApi | null;

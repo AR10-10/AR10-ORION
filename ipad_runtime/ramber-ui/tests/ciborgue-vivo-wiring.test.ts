@@ -214,7 +214,12 @@ describe('Achado real de captura de tela do Operador: rótulo BOS/CHOCH migrado 
   it('EnhancedChart_110_Percent importa BREAK_DECAY do plugin e ageAlpha de annotation-decay — mesma dupla real, zero segunda fonte', () => {
     const c = chart();
     expect(c).toContain('import { StructureBreakMarkersPlugin, BREAK_DECAY } from "./StructureBreakMarkersPlugin";');
-    expect(c).toContain('import { ageAlpha, type DecayConfig } from "./annotation-decay";');
+    // Pendência #6: `type DecayConfig` saiu deste import — deixou de ser
+    // usado no arquivo quando SWEEP_DECAY migrou para
+    // LiquiditySweepLinesPlugin.tsx (import próprio, ver
+    // liquidity-sweep-lines-plugin-wiring.test.ts). ageAlpha continua real
+    // aqui (etiquetas do eixo de BOS/CHOCH e de Sweep).
+    expect(c).toContain('import { ageAlpha } from "./annotation-decay";');
   });
 
   it('a entrada em priceAxisLabels usa o MESMO price/type/direction do structureBreak real — nunca uma segunda leitura', () => {
