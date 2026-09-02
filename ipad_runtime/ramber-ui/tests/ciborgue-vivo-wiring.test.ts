@@ -114,7 +114,15 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
     // O kind passa por uma forma curta (BRK/MIT) antes de entrar no rótulo,
     // desde a graduação de institutional-blocks.js — mesma disciplina de "o
     // tamanho das etiquetas". Glifo de direção e contagem ×N inalterados.
-    expect(plugin).toContain('const label = `${kindLabel}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;');
+    // Achado real ("o gráfico não tá legal"): a montagem do label virou uma
+    // função própria (labelFor), reusada tanto por Void (fusão+desenho
+    // juntos, drawGroup) quanto pelo grupo compartilhado FVG/OB/Breaker/
+    // Mitigation (drawSharedFillGroup) — zero segunda implementação de
+    // rótulo, mesmo texto exato.
+    expect(plugin).toContain(
+      'const labelFor = (kind: ZoneKind, type: "BULLISH" | "BEARISH", group: { memberCount: number; isObstacle: boolean }) =>',
+    );
+    expect(plugin).toContain('`${kindLabelOf(kind)}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;');
   });
 
   it('Diretriz Consolidação/Auditoria/Evolução (achado real): zona-obstáculo de um plano ATIVO nunca esmaece por idade fixa — alpha=1 enquanto isObstacleZone, ageAlpha normal caso contrário', () => {

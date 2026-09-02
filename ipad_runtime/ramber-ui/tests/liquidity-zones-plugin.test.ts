@@ -91,9 +91,13 @@ describe('LiquidityZonesPlugin: destaque de obstáculo (Diretriz Restauração/I
     // preservou o "⚠" de obstáculo, nunca escondido pela fusão.
     // O kind passa por uma forma curta (BRK/MIT) antes de entrar no rótulo —
     // mesma disciplina de "o tamanho das etiquetas" pedida pelo Operador.
-    // O glifo de direção e a contagem ×N seguem exatamente iguais.
-    expect(p).toContain('const label = `${kindLabel}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;');
-    expect(p).toContain('const kindLabel = kind === "BREAKER" ? "BRK" : kind === "MITIGATION" ? "MIT" : kind;');
+    // O glifo de direção e a contagem ×N seguem exatamente iguais. Achado
+    // real ("o gráfico não tá legal"): label/kindLabel viraram funções
+    // próprias (labelFor/kindLabelOf), reusadas tanto por Void (drawGroup)
+    // quanto pelo grupo compartilhado FVG/OB/Breaker/Mitigation
+    // (drawSharedFillGroup) — mesmo texto exato, zero segunda implementação.
+    expect(p).toContain('`${kindLabelOf(kind)}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;');
+    expect(p).toContain('const kindLabelOf = (kind: ZoneKind) => (kind === "BREAKER" ? "BRK" : kind === "MITIGATION" ? "MIT" : kind);');
     // o glifo nunca substitui a marca de obstáculo (⚠), só a acompanha
     expect(p).toContain('" ⚠"');
   });

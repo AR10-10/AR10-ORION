@@ -227,16 +227,24 @@ describe('LiquidityZonesPlugin.tsx: ZONE_DECAY exportado + fvgVisualWeights/obVi
 
   it('drawGroup passa o peso resolvido por índice para resolveAlpha (fvgWeights?.[i] / obWeights?.[i]) ao montar cada FusableZoneInput — mesma garantia de antes, agora por zona bruta pré-fusão (Ordem de Fechamento: fuseLiquidityZones funde zonas próximas/sobrepostas do mesmo kind+type, "não ficar poluído... marca certeira")', () => {
     const s = liquidityZonesPlugin();
-    expect(s).toContain(
-      'fusable.push({ top: z.top, bottom: z.bottom, index: z.index, isObstacle: obstacle, alpha: resolveAlpha(z, obstacle, weights?.[i]) });',
-    );
-    expect(s).toContain('drawGroup(fvgs, fvgWeights, "FVG", "BULLISH");');
-    expect(s).toContain('drawGroup(fvgs, fvgWeights, "FVG", "BEARISH");');
-    expect(s).toContain('drawGroup(obs, obWeights, "OB", "BULLISH");');
-    expect(s).toContain('drawGroup(obs, obWeights, "OB", "BEARISH");');
-    // Liquidity Void reusa a MESMA maquinaria de fusão/desenho (3º kind),
+    // fusable.push(...) aparece 2x agora: uma vez em drawGroup (Void), uma
+    // vez em collectFusedGroups (FVG/OB/Breaker/Mitigation, achado real "o
+    // gráfico não tá legal" — ver zone-fill-overlap.ts). MESMO texto exato
+    // nas duas, zero segunda fórmula de resolveAlpha.
+    const fusablePushOccurrences = s.split('fusable.push({ top: z.top, bottom: z.bottom, index: z.index, isObstacle: obstacle, alpha: resolveAlpha(z, obstacle, weights?.[i]) });').length - 1;
+    expect(fusablePushOccurrences).toBe(2);
+    // FVG/OB saíram do drawGroup direto e entraram no grupo de
+    // preenchimento compartilhado (drawSharedFillGroup) — mesmos pesos
+    // (fvgWeights/obWeights) passados pra collectFusedGroups.
+    expect(s).toContain('const fvgGroups = collectFusedGroups(fvgs, fvgWeights, type);');
+    expect(s).toContain('const obGroups = collectFusedGroups(obs, obWeights, type);');
+    expect(s).toContain('drawSharedFillGroup("BULLISH");');
+    expect(s).toContain('drawSharedFillGroup("BEARISH");');
+    // Liquidity Void reusa a MESMA maquinaria de fusão/desenho (drawGroup),
     // nunca um segundo caminho de render — `voids ?? []` mantém o
-    // fail-closed real quando a camada ainda não tem dado.
+    // fail-closed real quando a camada ainda não tem dado. Cor própria
+    // deliberadamente distinta (ver header do arquivo) mantém Void fora do
+    // grupo de preenchimento compartilhado.
     expect(s).toContain('drawGroup(voids ?? [], voidWeights, "VOID", "BULLISH");');
     expect(s).toContain('drawGroup(voids ?? [], voidWeights, "VOID", "BEARISH");');
   });

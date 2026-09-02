@@ -70,8 +70,14 @@ describe("chega à tela pelo canvas que já existe — zero arquitetura nova", (
     // Um 17º canvas seria mais um ResizeObserver e mais um loop no main
     // thread, contra Regra de Ouro 6/7 e o "deixa o sistema leve".
     const src = plugin();
-    expect(src).toContain('drawGroup(breakers ?? [], undefined, "BREAKER", "BULLISH");');
-    expect(src).toContain('drawGroup(mitigations ?? [], undefined, "MITIGATION", "BEARISH");');
+    // Achado real ("o gráfico não tá legal"): Breaker/Mitigation saíram do
+    // drawGroup direto e entraram no grupo de preenchimento compartilhado
+    // (drawSharedFillGroup, ver zone-fill-overlap.ts) — mesmo canvas, zero
+    // arquitetura nova, só o preenchimento cross-kind parou de empilhar.
+    expect(src).toContain('const brkGroups = collectFusedGroups(breakers ?? [], undefined, type);');
+    expect(src).toContain('const mitGroups = collectFusedGroups(mitigations ?? [], undefined, type);');
+    expect(src).toContain('drawSharedFillGroup("BULLISH");');
+    expect(src).toContain('drawSharedFillGroup("BEARISH");');
     // Um único elemento <canvas> real no arquivo, como antes. Contado pelo
     // ref (forma executável) e não pela string "<canvas", que aparece de
     // propósito nos comentários de arquitetura deste mesmo arquivo.
