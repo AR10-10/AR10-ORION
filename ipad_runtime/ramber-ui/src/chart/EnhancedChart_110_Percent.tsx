@@ -586,6 +586,13 @@ interface EnhancedChartProps {
   // confluência real. Optional/fail-closed: absent/null => peso neutro
   // default (ver TradePlanZonePlugin).
   confidenceZone?: InstitutionalConfidenceZone | null;
+  // Pedido do Operador (evolução): a porcentagem real de confluência volta
+  // a aparecer nas etiquetas EN/ST/TP1/TP2 do canvas — mesmo score de
+  // `confidenceZone` acima, só que o NÚMERO (institutional-score.ts,
+  // `computeInstitutionalScore().score`), não só a banda. Optional/
+  // fail-closed: null/ausente nunca vira "?%" fabricado — a etiqueta
+  // simplesmente não ganha o sufixo.
+  institutionalScoreValue?: number | null;
   // Camadas do Gráfico (Finding M): per-plugin visibility toggle from the
   // new settings panel. Optional and fail-closed: absent/undefined means
   // every layer stays visible (DEFAULT_CHART_LAYER_VISIBILITY), the exact
@@ -933,6 +940,7 @@ function EnhancedChart_110_PercentImpl({
   aura,
   targetsHit,
   confidenceZone,
+  institutionalScoreValue,
   scenario,
   premiumDiscount,
   harmonicHits,
@@ -3533,6 +3541,18 @@ function EnhancedChart_110_PercentImpl({
       const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
       const long = tradePlan.direction === "LONG";
       const entryColor = "rgba(240, 193, 111, 0.75)";
+      // Pedido do Operador (evolução, revertendo — com confirmação explícita
+      // — a decisão registrada abaixo): a % real de confluência volta ao
+      // canvas. Compacta de propósito: um só token, nunca a frase que
+      // motivou a remoção original ("TP1 3.14% FRACA 1:0.42" ocupava uma
+      // faixa inteira sobre as velas). MESMO score em EN/ST/TP1/TP2 — é o
+      // MESMO plano, uma única leitura real de confluência
+      // (institutional-score.ts), nunca um número inventado por alvo.
+      // Fail-open: score indisponível nunca vira "?%" fabricado.
+      const scoreToken = Number.isFinite(institutionalScoreValue as number)
+        ? `${Math.round(institutionalScoreValue as number)}%`
+        : null;
+      const withScore = (text?: string | null) => [text, scoreToken].filter(Boolean).join(" ") || undefined;
       // EPC FINAL §8 ("Objetos Inteligentes"): nomenclatura curta e
       // padronizada pedida explicitamente — EN/ST/TP1/TP2/TP3 nos OBJETOS
       // GRÁFICOS do canvas (aqui). A barra de comando (BarField "Entry
@@ -3551,14 +3571,14 @@ function EnhancedChart_110_PercentImpl({
       // Zero dado apagado: o basis continua sempre visível, em fonte menor.
       if (tradePlan.entry.low === tradePlan.entry.high) {
         if (Number.isFinite(tradePlan.entry.low)) {
-          out.push({ price: tradePlan.entry.low, text: `EN ${tradePlan.direction}`, secondaryText: tradePlan.entry.basis, color: entryColor, tier: "critical" });
+          out.push({ price: tradePlan.entry.low, text: `EN ${tradePlan.direction}`, secondaryText: withScore(tradePlan.entry.basis), color: entryColor, tier: "critical" });
         }
       } else {
         if (Number.isFinite(tradePlan.entry.high)) {
-          out.push({ price: tradePlan.entry.high, text: `EN ${tradePlan.direction}`, secondaryText: tradePlan.entry.basis, color: entryColor, tier: "critical" });
+          out.push({ price: tradePlan.entry.high, text: `EN ${tradePlan.direction}`, secondaryText: withScore(tradePlan.entry.basis), color: entryColor, tier: "critical" });
         }
         if (Number.isFinite(tradePlan.entry.low)) {
-          out.push({ price: tradePlan.entry.low, text: "EN", secondaryText: "ZONE LOW", color: entryColor, tier: "critical" });
+          out.push({ price: tradePlan.entry.low, text: "EN", secondaryText: withScore("ZONE LOW"), color: entryColor, tier: "critical" });
         }
       }
       // Stop no preço EFETIVO (ratchet real, MESMA função pura do efeito da
@@ -3579,7 +3599,7 @@ function EnhancedChart_110_PercentImpl({
         out.push({
           price: effectiveStopPrice,
           text: "ST",
-          secondaryText: stopHitNow ? `${stopSecondary} BREACHED` : stopSecondary,
+          secondaryText: withScore(stopHitNow ? `${stopSecondary} BREACHED` : stopSecondary),
           color: "rgba(242, 54, 69, 0.75)",
           tier: "critical",
         });
@@ -3616,17 +3636,19 @@ function EnhancedChart_110_PercentImpl({
         const secondaryParts = [
           // Pedido do Operador, repetido em duas rodadas com capturas reais:
           // "deixar só as iniciais, não precisa aquela numeração na frente
-          // NEM A PORCENTAGEM". A primeira tentativa só desceu a distância
-          // para o secundário — e ela continuou aparecendo na tela
-          // (TP1 3.14% FRACA 1:0.42 na captura de ZEC 4H). Agora sai do
-          // canvas de vez.
+          // NEM A PORCENTAGEM [de DISTÂNCIA até o alvo]". A primeira
+          // tentativa só desceu a distância para o secundário — e ela
+          // continuou aparecendo na tela (TP1 3.14% FRACA 1:0.42 na captura
+          // de ZEC 4H). Essa % de distância continua fora do canvas — ela
+          // segue no painel do Trade Plan (App.tsx). O `withScore` abaixo é
+          // outro número: a % de CONFLUÊNCIA do plano (institutional-score.ts),
+          // pedida de volta numa rodada posterior — compacta de propósito
+          // (um token, não a frase inteira que motivou a remoção original).
           //
           // Regra de Ouro 4 (nunca apagar dado real, só realocar) está
-          // satisfeita e já estava ANTES desta mudança: a distância
-          // percentual até cada alvo é renderizada no painel do Trade Plan
-          // (App.tsx, linha do target: preço, basis, PORCENTAGEM, R:R, ETA
-          // e obstáculos). O canvas deixa de repetir o que o painel já diz
-          // — o mesmo princípio que tirou o motivo de ausência daqui.
+          // satisfeita: a distância percentual até cada alvo continua
+          // renderizada no painel do Trade Plan (App.tsx, linha do target:
+          // preço, basis, PORCENTAGEM, R:R, ETA e obstáculos).
           compactLabels ? null : target.basis,
           compactLabels || rr === null ? null : `1:${rr.toFixed(2)}`,
           etaLabel ? `ETA ${etaLabel}` : null,
@@ -3636,7 +3658,7 @@ function EnhancedChart_110_PercentImpl({
         out.push({
           price: target.price,
           text: `TP${i + 1}`,
-          secondaryText: secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined,
+          secondaryText: withScore(secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined),
           color: "rgba(8, 153, 129, 0.75)",
           tier: "critical",
         });

@@ -603,17 +603,39 @@ describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no grá
     const c = chart();
     // REVERTIDO POR PEDIDO REPETIDO DO OPERADOR (duas rodadas, com captura
     // real de ZEC 4H mostrando "TP1 3.14% FRACA 1:0.42" na tela): a
-    // porcentagem saiu do canvas de vez. Regra de Ouro 4 satisfeita — a
-    // distância percentual continua real e visível no painel do Trade Plan
-    // (App.tsx), que já a renderizava antes desta mudança.
-    // A distância vive no PAINEL, não no canvas — é lá que a asserção
-    // passa a morar.
+    // porcentagem de DISTÂNCIA até o alvo saiu do canvas de vez. Regra de
+    // Ouro 4 satisfeita — a distância percentual continua real e visível no
+    // painel do Trade Plan (App.tsx), que já a renderizava antes desta
+    // mudança. A distância vive no PAINEL, não no canvas — é lá que a
+    // asserção passa a morar.
+    //
+    // Isto NÃO é o mesmo "%" que withScore() (mesmo arquivo, abaixo) volta a
+    // desenhar numa rodada posterior — aquele é a % de CONFLUÊNCIA do plano
+    // (institutional-score.ts), um número por PLANO, não por alvo, pedido
+    // de volta explicitamente pelo Operador. Duas percentagens diferentes;
+    // só a de distância-por-alvo continua banida do canvas.
     expect(c).not.toContain('const distPct =');
     const app = read('../src/App.tsx');
     expect(app).toContain("(Math.abs(target.price - price.price) / price.price * 100).toFixed(2)");
     expect(c).toContain('const fusedTarget = decision?.plan?.targets[i];');
     expect(c).toContain('Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)');
     expect(c).toContain('etaLabel ? `ETA ${etaLabel}` : null,');
+  });
+
+  it('withScore devolve a % real de confluência do plano às etiquetas EN/ST/TP1/TP2 (revertido, com autorização explícita)', () => {
+    // Pedido do Operador: "tenha a porcentagem pra poder lá aparecer" —
+    // confirmado via AskUserQuestion (duas opções escolhidas: setas de
+    // entrada E reverter em EN/ST/TP1/TP2), depois do achado acima. Compacto
+    // de propósito — um token só, nunca a frase inteira que motivou a
+    // remoção original.
+    const c = chart();
+    expect(c).toContain('institutionalScoreValue?: number | null;');
+    expect(c).toContain('const withScore = (text?: string | null) => [text, scoreToken].filter(Boolean).join(" ") || undefined;');
+    expect(c).toContain('secondaryText: withScore(tradePlan.entry.basis)');
+    expect(c).toContain('secondaryText: withScore(stopHitNow ? `${stopSecondary} BREACHED` : stopSecondary)');
+    expect(c).toContain('secondaryText: withScore(secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined)');
+    const app = read('../src/App.tsx');
+    expect(app).toContain('institutionalScoreValue={institutionalScore?.score ?? null}');
   });
 
   it('ChartWidget passa harmonicHits (mesma fatia da ANALYSIS) e decision (contrato fundido) ao gráfico', () => {
@@ -1237,7 +1259,9 @@ describe('Continuidade §6: níveis apertados => rótulos TP compactos, preço N
     expect(c).toContain('etaLabel ? `ETA ${etaLabel}` : null,');
     expect(c).toContain('obstacleSuffix(target.obstacleCount).trim() || null,');
     expect(c).toContain('reached ? "REACHED" : null,');
-    expect(c).toContain('secondaryText: secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined,');
+    // withScore() (Pedido do Operador, rodada posterior) envolve o texto —
+    // ver o teste de withScore acima; o conteúdo interno continua o mesmo.
+    expect(c).toContain('secondaryText: withScore(secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined),');
   });
 
   it('a âncora do preço real permanece documentada onde a decisão de compactar agora vive (label-compaction.ts): applyOptions nunca recebe um price deslocado no título compacto', () => {

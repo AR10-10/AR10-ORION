@@ -192,6 +192,13 @@ export function buildPlanMarkers(
 
     const iEntrada = candleIndexAt(candles, p?.openedAt);
     if (iEntrada !== -1) {
+      // Pedido do Operador: a etiqueta da entrada mostra a % real de
+      // confluência que já a filtra (scoreAtOpen acima) — nunca um número
+      // novo. Só na entrada: é o instante em que o score foi medido; a
+      // saída não tem um score próprio (mediria "confiança no fechamento",
+      // que este app nunca calculou) — fabricar um aqui repetiria o mesmo
+      // valor sob um rótulo que afirmaria outra coisa.
+      const scoreText = scoreAtOpen !== null ? ` · ${Math.round(scoreAtOpen)}%` : "";
       out.push({
         time: candles[iEntrada].time as UTCTimestamp,
         position: long ? "belowBar" : "aboveBar",
@@ -201,7 +208,7 @@ export function buildPlanMarkers(
         // diferenciar dois marcadores na MESMA vela (entrada de um plano e
         // saída do anterior caem juntas com frequência real).
         id: `plan-${i}-entry`,
-        text: `ENTRADA ${p.plan.direction}`,
+        text: `ENTRADA ${p.plan.direction}${scoreText}`,
       });
     }
 

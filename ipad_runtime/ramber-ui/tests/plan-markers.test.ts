@@ -168,6 +168,27 @@ describe("filtro de confiança — pedido do Operador: só a entrada com conflu�
   });
 });
 
+describe("a etiqueta de ENTRADA mostra a % real de confluência (pedido do Operador)", () => {
+  it("score real aparece arredondado, na entrada", () => {
+    const c = velas(20);
+    const [entrada] = buildPlanMarkers([plano({ contextAtOpen: { score: 77.6 } })], c);
+    expect(entrada.text).toBe("ENTRADA LONG · 78%");
+  });
+
+  it("fail-open: sem score real, a etiqueta não ganha sufixo fabricado", () => {
+    const c = velas(20);
+    const { contextAtOpen: _omit, ...semContexto } = plano();
+    const [entrada] = buildPlanMarkers([semContexto as PlanMarkerSource], c);
+    expect(entrada.text).toBe("ENTRADA LONG");
+  });
+
+  it("a SAÍDA nunca ganha a % — não existe um score próprio no fechamento", () => {
+    const c = velas(20);
+    const [, saida] = buildPlanMarkers([plano({ contextAtOpen: { score: 90 } })], c);
+    expect(saida.text).not.toMatch(/%/);
+  });
+});
+
 describe("fail-closed — nunca uma seta num momento que não existiu", () => {
   it("plano ABERTO não ganha seta de saída", () => {
     const m = buildPlanMarkers([plano({ status: "OPEN", resolvedAt: null })], velas(20));

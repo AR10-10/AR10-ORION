@@ -612,7 +612,7 @@ describe('"bater o olho profissional" (pendência honesta do turno anterior): EN
     // (EPC FINAL §8: nomenclatura curta EN/ST/TP1-3 nos objetos gráficos).
     // Ordem "FECHAMENTO" §3: o MOTIVO estrutural (basis) é Nível 2 — saiu
     // do primário para o secundário (fonte menor), nunca foi apagado.
-    expect(block).toContain('text: `EN ${tradePlan.direction}`, secondaryText: tradePlan.entry.basis, color: entryColor');
+    expect(block).toContain('text: `EN ${tradePlan.direction}`, secondaryText: withScore(tradePlan.entry.basis), color: entryColor');
     expect(block).toContain('const entryColor = "rgba(240, 193, 111, 0.75)";');
     // STOP vermelho no preço EFETIVO (ratchet real), BREACHED do preço vivo
     expect(block).toContain('const effectiveStopPrice = effectiveStopForTargetsHit(tradePlan, hits);');
@@ -630,9 +630,12 @@ describe('"bater o olho profissional" (pendência honesta do turno anterior): EN
     expect(block).toContain('text: `TP${i + 1}`,');
     // REVERTIDO POR PEDIDO REPETIDO DO OPERADOR (duas rodadas, com captura
     // real de ZEC 4H mostrando "TP1 3.14% FRACA 1:0.42" na tela): a
-    // porcentagem saiu do canvas de vez. Regra de Ouro 4 satisfeita — a
-    // distância percentual continua real e visível no painel do Trade Plan
-    // (App.tsx), que já a renderizava antes desta mudança.
+    // porcentagem de DISTÂNCIA até o alvo saiu do canvas de vez. Regra de
+    // Ouro 4 satisfeita — a distância percentual continua real e visível no
+    // painel do Trade Plan (App.tsx), que já a renderizava antes desta
+    // mudança. `distPct` nunca volta — mas withScore() (rodada posterior,
+    // ver refinamento-final-wiring.test.ts) traz de volta um número
+    // DIFERENTE: a % de confluência do plano, um só token por etiqueta.
     expect(block).not.toContain('distPct');
     expect(block).toContain('color: "rgba(8, 153, 129, 0.75)"');
   });

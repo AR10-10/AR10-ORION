@@ -124,7 +124,7 @@ describe('App.tsx: estado real do painel + toggle por camada, compartilhado via 
     // NÚCLEO GRAVITACIONAL AUTÔNOMO §1: o componente do canvas nunca sabe o
     // que é automático ou manual (Regra de Ouro 4) — recebe só o resultado
     // já resolvido de effectiveChartLayerVisibility.
-    expect(app).toContain('chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
+    expect(app).toContain('chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, institutionalScore, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
     expect(app).toContain('layerVisibility={effectiveChartLayerVisibility}');
     expect(app).not.toContain('layerVisibility={chartLayerVisibility}');
     expect(app).toContain('emaPeriod={emaPeriod}');
