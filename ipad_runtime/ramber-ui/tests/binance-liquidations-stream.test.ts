@@ -64,6 +64,45 @@ class FakeWebSocket {
   }
 }
 
+describe('startLiquidationStream: migração real da URL (Binance descomissionou a legada em 2026-04-23)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    FakeWebSocket.instances.length = 0;
+  });
+
+  it('conecta na URL /market/stream?streams= — nunca na legada /ws/ descomissionada', () => {
+    vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket);
+    startLiquidationStream({ onEvent: () => {}, onState: () => {} });
+    const ws = FakeWebSocket.instances[0];
+    expect(ws.url).toBe('wss://fstream.binance.com/market/stream?streams=!forceOrder@arr');
+    expect(ws.url).not.toContain('/ws/!forceOrder');
+  });
+
+  it('desembrulha o envelope real {stream, data} do formato combinado antes de parsear', () => {
+    vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket);
+    const events: unknown[] = [];
+    startLiquidationStream({ onEvent: (e) => events.push(e), onState: () => {} });
+    const ws = FakeWebSocket.instances[0];
+    const envelope = {
+      stream: '!forceOrder@arr',
+      data: { e: 'forceOrder', o: { s: 'BTCUSDT', S: 'SELL', q: '2', ap: '50000', T: 1_700_000_000_000 } },
+    };
+    ws.onmessage?.({ data: JSON.stringify(envelope) });
+    expect(events).toHaveLength(1);
+    expect((events[0] as { symbol: string }).symbol).toBe('BTCUSDT');
+  });
+
+  it('mensagem sem envelope (payload cru, sem propriedade data) continua funcionando — fail-open na forma, nunca trava', () => {
+    vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket);
+    const events: unknown[] = [];
+    startLiquidationStream({ onEvent: (e) => events.push(e), onState: () => {} });
+    const ws = FakeWebSocket.instances[0];
+    const raw = { e: 'forceOrder', o: { s: 'ETHUSDT', S: 'BUY', q: '20', ap: '3000', T: 1 } };
+    ws.onmessage?.({ data: JSON.stringify(raw) });
+    expect(events).toHaveLength(1);
+  });
+});
+
 describe('startLiquidationStream: BUG real corrigido — onopen não reporta ACTIVE_READ_ONLY numa corrida pós-stop()', () => {
   afterEach(() => {
     vi.unstubAllGlobals();

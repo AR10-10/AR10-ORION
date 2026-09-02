@@ -708,30 +708,23 @@ Disciplina de trabalho do CLAUDE.md item 1: "toda limitação real
 encontrada... entra na resposta ao Operador mesmo quando não é o foco
 da tarefa"):**
 
-- **Feed de liquidações pode estar silenciosamente degradado desde
-  23/04/2026.** `js/real-data/binance-liquidations-stream.js` conecta
-  em `wss://fstream.binance.com/ws/!forceOrder@arr` — o endpoint
-  LEGADO de USDⓈ-M Futures. A Binance publicou (`developers.binance.com`,
-  "Important WebSocket Change Notice") uma reestruturação de URL
-  (`/public`, `/market`, `/private`) com prazo de decomissionamento das
-  URLs legadas em **23/04/2026 — já passado**. Segundo a mesma fonte,
-  conexões não migradas não são simplesmente recusadas: ficam
-  restritas a `/public`, e os canais categorizados como `/market`
-  (dado regular de mercado, categoria mais provável de liquidações,
-  que não são o tier de maior frequência) **param de empurrar dado —
-  silenciosamente, sem erro de conexão**. **Não consegui confirmar com
-  100% de certeza nesta sessão**: `WebFetch` para
-  `developers.binance.com` é bloqueado neste sandbox (mesma barreira de
-  rede já documentada para todo domínio de exchange), e este sandbox
-  não tem egress real pra testar a conexão ao vivo — a mesma honestidade
-  de limitação que o próprio cabeçalho deste conector já registra
-  ("formato exato da mensagem NÃO foi reverificado ao vivo... mesma
-  barreira de rede do sandbox"). **Ação recomendada**: verificar no seu
-  ambiente (que tem egress real) se o painel "INSTITUTIONAL
-  LIQUIDATIONS · REAL" ainda recebe eventos; se não, checar
-  `developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Important-WebSocket-Change-Notice`
-  pelo mapeamento exato de URL antes de qualquer patch (nunca chutar a
-  URL nova sem confirmar contra a fonte primária).
+- **Feed de liquidações — RESOLVIDO (02/09/2026).** A suspeita acima
+  (feed degradado desde 23/04/2026) foi confirmada e corrigida. A
+  confirmação que faltava (WebFetch bloqueado, sem egress real neste
+  sandbox) veio via `WebSearch` — os resultados indexados da própria
+  página "Important WebSocket Change Notice" e do anúncio de upgrade
+  (`binance.com`, 06/03/2026) confirmam: `!forceOrder@arr` pertence à
+  categoria `/market`, e a URL nova é o formato combinado
+  `wss://fstream.binance.com/market/stream?streams=!forceOrder@arr`
+  (envelope `{stream, data}`, mesmo padrão que `App.tsx` já usa para
+  ticker/depth). `js/real-data/binance-liquidations-stream.js` corrigido
+  (URL + desembrulho do envelope antes de `parseLiquidationMessage`,
+  que continua puro/inalterado), 3 testes novos em
+  `binance-liquidations-stream.test.ts` (URL correta, desembrulho real,
+  fail-open na forma). **Ainda não verificado contra uma conexão ao
+  vivo** (mesma barreira de rede de sempre) — o Operador confirma no
+  ambiente com egress real se o painel "INSTITUTIONAL LIQUIDATIONS ·
+  REAL" volta a receber eventos.
 - **Preço/book ao vivo (ticker+depth, `App.tsx`) conecta em Binance
   SPOT (`stream.binance.com`), não Futures — inconsistente com a
   arquitetura declarada do próprio projeto.** V15.1 GOD TIER (já
