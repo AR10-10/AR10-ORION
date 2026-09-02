@@ -86,6 +86,52 @@ function pwaAssetsPlugin(): Plugin {
   };
 }
 
+// Workers reais (workers/quant-worker.js, workers/orderflow-worker.js) —
+// mesma classe de problema que a pwaAssetsPlugin acima já documentou e
+// resolveu para o manifesto/ícones, achada agora numa auditoria "rode o
+// app de verdade" (Playwright real contra `npm run dev`): os dois workers
+// são arquivos ESTÁTICOS pré-existentes em ipad_runtime/workers/ (o
+// deploy real os copia para o lado de dist/, engine-bridge.ts resolve a
+// URL relativa a window.location.href) — mas o servidor de DEV do Vite,
+// rodando isolado dentro de ramber-ui/, não enxerga esse diretório-irmão e
+// cai no MESMO fallback SPA (200 text/html) que a pwaAssetsPlugin já
+// descreve. MEDIDO, não suposto: sem esta ponte, o próprio construtor de
+// Worker falha (MIME 'text/html' não é um script válido), e a falha
+// chega ao console como um `[object Event]` sem stack — exatamente o
+// `describeError` de engine-bridge.ts já existe pra decifrar, mas só
+// depois que o Worker já falhou. Cada worker ainda importa outros
+// arquivos-irmãos por caminho relativo à própria URL
+// (workers/orderflow-worker.js importa ../src/orderflow/*.js e
+// ../js/orderflow-tick-codec.js; workers/quant-worker.js busca
+// ../wasm/*.wasm) — por isso as 3 pastas abaixo, não só workers/.
+// Produção nunca teve este problema (o deploy já copia dist/ pra dentro
+// de ipad_runtime/, onde estas pastas já são vizinhas reais) — esta ponte
+// é estritamente de conveniência de `npm run dev` isolado, nunca roda no
+// build (configureServer só é chamado pelo servidor de dev do Vite).
+const SIBLING_ORIGEM = path.resolve(__dirname, '..');
+const SIBLING_PREFIXOS = ['workers/', 'wasm/', 'js/', 'src/orderflow/'];
+const SIBLING_CONTENT_TYPE: Record<string, string> = {
+  '.js': 'text/javascript',
+  '.wasm': 'application/wasm',
+};
+
+function siblingRuntimeAssetsPlugin(): Plugin {
+  return {
+    name: 'ar10-sibling-runtime-assets',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const alvo = (req.url ?? '').split('?')[0].replace(/^\//, '');
+        if (!SIBLING_PREFIXOS.some((p) => alvo.startsWith(p))) return next();
+        const abs = path.join(SIBLING_ORIGEM, alvo);
+        if (!existsSync(abs) || !statSync(abs).isFile()) return next();
+        const ext = path.extname(abs);
+        if (SIBLING_CONTENT_TYPE[ext]) res.setHeader('Content-Type', SIBLING_CONTENT_TYPE[ext]);
+        res.end(readFileSync(abs));
+      });
+    },
+  };
+}
+
 // base: './' — this app is served from a nested static path
 // (.../ipad_runtime/ramber-ui/) inside the existing RAMBER GitHub Pages
 // site, not from a domain root, so all built asset URLs must resolve
@@ -93,7 +139,7 @@ function pwaAssetsPlugin(): Plugin {
 export default defineConfig({
   // pwaAssetsPlugin antes do serviceWorkerPlugin: a varredura do precache
   // acontece depois, e assim enxerga o manifesto e os ícones.
-  plugins: [react(), tailwindcss(), pwaAssetsPlugin(), serviceWorkerPlugin()],
+  plugins: [react(), tailwindcss(), pwaAssetsPlugin(), siblingRuntimeAssetsPlugin(), serviceWorkerPlugin()],
   base: './',
   build: {
     // The ~6MB llm-worker/llm-bridge chunks are the opt-in local Llama 3

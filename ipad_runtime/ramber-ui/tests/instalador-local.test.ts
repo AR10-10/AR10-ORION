@@ -654,6 +654,65 @@ describe("instaladores: abrem o painel em janela de aplicativo", () => {
   });
 });
 
+describe("ponte de dev para os workers/wasm/orderflow reais (mesma classe de defeito da ponte do PWA)", () => {
+  // Achado real rodando `npm run dev` isolado (auditoria "rode o app de
+  // verdade", Playwright real): workers/quant-worker.js e
+  // workers/orderflow-worker.js são arquivos ESTÁTICOS pré-existentes em
+  // ipad_runtime/workers/ — só viram vizinhos reais de dist/index.html
+  // depois do deploy (`cp -r dist/. ../`). O servidor de dev isolado do
+  // Vite não os enxerga e cai no MESMO fallback SPA (200 text/html) que a
+  // ponte do PWA acima já existe pra evitar — e o construtor de Worker,
+  // ao receber HTML em vez de JS, falha com um `[object Event]` sem
+  // stack. `describeError` (engine-bridge.ts) já sabia decifrar esse
+  // evento — mas só depois que o Worker já tinha falhado.
+  const cfg = () => readFileSync(raiz("ipad_runtime/ramber-ui/vite.config.ts"), "utf8");
+
+  it("a ponte existe, roda em dev, e serve os 4 prefixos reais que os workers importam", () => {
+    const c = cfg();
+    expect(c, "não há ponte pros arquivos-irmãos dos workers").toContain("ar10-sibling-runtime-assets");
+    expect(c, "não serve em dev").toMatch(/configureServer/);
+    for (const prefixo of ["workers/", "wasm/", "js/", "src/orderflow/"]) {
+      expect(c, `prefixo ausente: ${prefixo}`).toContain(`'${prefixo}'`);
+    }
+  });
+
+  it("NUNCA usa o prefixo genérico 'src/' — colidiria com o /src/ real que o Vite já serve pro app", () => {
+    // ramber-ui/src/ existe de verdade e É servido pelo Vite em dev
+    // (App.tsx chega ao navegador via /src/App.tsx). Interceptar 'src/'
+    // inteiro redirecionaria esses pedidos pra ipad_runtime/src/ — que
+    // não tem App.tsx nenhum — e quebraria o app inteiro em dev, um bug
+    // estritamente pior do que o console.error que esta ponte resolve.
+    const bloco = cfg().slice(cfg().indexOf("SIBLING_PREFIXOS"));
+    const lista = [...bloco.slice(0, bloco.indexOf("]")).matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    expect(lista).not.toContain("src/");
+    expect(lista).toContain("src/orderflow/");
+  });
+
+  it("registrada na lista de plugins de verdade, não só declarada", () => {
+    const linha = cfg().split("\n").find((l) => l.includes("plugins:")) ?? "";
+    expect(linha, "a ponte existe mas nunca é ligada").toContain("siblingRuntimeAssetsPlugin");
+  });
+
+  it("todo arquivo real que os dois workers importam por caminho relativo existe no disco", () => {
+    // Os mesmos 7 arquivos que quant-worker.js/orderflow-worker.js
+    // resolvem via new URL('../...', import.meta.url) — se um sumir ou
+    // for renomeado, o 404 real volta, e desta vez em produção também.
+    const arquivos = [
+      "ipad_runtime/workers/quant-worker.js",
+      "ipad_runtime/workers/orderflow-worker.js",
+      "ipad_runtime/wasm/cyborg_quant_core.wasm",
+      "ipad_runtime/wasm/cyborg_quant_core_simd.wasm",
+      "ipad_runtime/src/orderflow/value-objects.js",
+      "ipad_runtime/src/orderflow/ring-buffer.js",
+      "ipad_runtime/src/orderflow/signal-engine.js",
+      "ipad_runtime/js/orderflow-tick-codec.js",
+    ];
+    for (const rel of arquivos) {
+      expect(statSync(raiz(rel)).size, `arquivo some do disco: ${rel}`).toBeGreaterThan(0);
+    }
+  });
+});
+
 
 describe("comando único: a linha que o Operador cola no CMD/Terminal", () => {
   const cmd = () => readFileSync(raiz("COMANDO-UNICO.md"), "utf8");
