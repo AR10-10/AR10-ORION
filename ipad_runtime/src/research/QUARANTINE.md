@@ -284,6 +284,18 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
 
 ## Laboratório de engines (isolado, não graduado)
 
+> **Achado auditando esta seção ("vê o que tá faltando", 2026-09-02): o
+> bullet abaixo continuava aqui com `Status: LABORATÓRIO`, mas
+> `supertrend-engine.js` GRADUOU em 2026-08-23 — tem seção própria `##
+> supertrend-engine.js — GRADUADO` mais abaixo, e `engine-bridge.ts` já o
+> importa de verdade. Mesma classe "declaração ≠ realidade" que a nota de
+> 10 segundos no topo deste arquivo já corrigiu para a árvore de diretório
+> — só que aquela correção nunca foi reconferida contra esta seção
+> separada. Conteúdo abaixo preservado tal qual (Regra de Ouro 4 — nunca
+> apagar): é o registro real da pesquisa/auditoria/mutação do isolamento
+> original; só o rótulo de status ao final estava desatualizado —
+> corrigido lá.**
+
 - **`engines/supertrend-engine.js`** (2026-08-11, pedido do Operador
   "adicione todos os requisitos que foi pesquisado ... evoluir o
   ecossistema"). `computeSuperTrend(candles, period, multiplier)` —
@@ -333,10 +345,12 @@ não por `js/**`, e por isso não se aplicam ao passo 2 da regra abaixo.
   fixtures endurecidas sim.
   18 testes de execução real em `ramber-ui/tests/supertrend-engine.test.ts`.
   Zero `fetch()`, zero `WebSocket`, zero `Math.random`/`Date.now`.
-  Status: **LABORATÓRIO** — nenhum módulo de produção importa daqui.
-  Graduação (import por `engine-bridge.ts`, entrada em `CHART_LAYER_IDS`,
-  plugin de canvas próprio) é um passo seguinte deliberadamente separado,
-  ainda não construído.
+  Status no momento deste registro (2026-08-11): **LABORATÓRIO**. Graduou
+  em **2026-08-23** — import real por `engine-bridge.ts`, camada própria
+  em `CHART_LAYER_IDS`, plugin de canvas (duas `LineSeries` nativas) — ver
+  `## supertrend-engine.js — GRADUADO` mais abaixo para o registro
+  completo da graduação, incluindo por que camada própria (não
+  reaproveitamento) e a decisão de relevância por existência.
 
 - **`engines/hmm-regime-model.js`** (2026-08-10, "Entrega 43" — evento de
   segurança tratado antes de construir: documento externo endereçando

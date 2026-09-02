@@ -505,100 +505,20 @@ describe('§6: painel Síntese Operacional — 6 eixos derivados do MESMO NexusD
   });
 });
 
+// Achado 3.1 (mesmo espírito): a §3 abaixo REVOGOU a premissa dos 2 testes
+// que existiam aqui ("EnhancedChart: linha do ponto D..." e "Continuidade:
+// a figura XABCD/Wolfe COMPLETA... é uma polilinha nativa real") — pendência
+// #6 migrou o zigue-zague/PRZ/EPA/NECKLINE/APEX/triângulo inteiro de
+// createPriceLine/addSeries nativo pra HarmonicGeometryPlugin.tsx (canvas
+// próprio). As refs que os 2 testes checavam (harmonicPolylineRef,
+// harmonicLinesRef, triangleResistanceLineRef, etc.) não existem mais em
+// EnhancedChart_110_Percent.tsx. Registrado aqui de propósito em vez de
+// apagado sem rastro (mesma disciplina já usada quando a Achado 3.1
+// original revogou a premissa dos 2 testes de sweep em
+// liquidity-sweep-lines-plugin-wiring.test.ts) — a cobertura real do
+// winner-selection/zigue-zague/rótulos agora vive em
+// harmonic-geometry-plugin-wiring.test.ts.
 describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no gráfico', () => {
-  it('EnhancedChart: linha do ponto D do melhor padrão (fit desc entre as 3 famílias, Carta Branca) + EPA quando Wolfe — fio de seda, rótulo honesto', () => {
-    const c = chart();
-    expect(c).toContain('harmonicHits?: HarmonicPatternHit[] | null;');
-    expect(c).toContain('trianglePattern?: TrianglePatternHit | null;');
-    expect(c).toContain('headShouldersPattern?: HeadShouldersHit | null;');
-    const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
-    expect(idx).toBeGreaterThan(-1);
-    // Carta Branca: o efeito unificado cresceu para caber as 3 famílias —
-    // janela ampliada o bastante para cobrir do início até depois do bloco
-    // independente do Triângulo, que agora vem DEPOIS do encadeamento
-    // (medido contra o arquivo real: rótulo APEX em ~10.9k chars).
-    const block = c.slice(idx, idx + 11500);
-    expect(block).toContain('const harmonicTop = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;');
-    expect(block).toContain('const harmonicValid = harmonicTop && Number.isFinite(harmonicTop.points.D.price) ? harmonicTop : null;');
-    // EPC §4 (rótulos compactos por iniciais): PRZ com glifo ↑/↓, EPA sem
-    // as descrições parentéticas — o disclaimer/significado seguem no
-    // painel Chart Patterns e em harmonic-patterns.ts.
-    expect(block).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
-    expect(block).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`'); // §6: + ETA do ápice (compacto EPC §4)
-    expect(block).toContain('lineStyle: LineStyle.Solid,');
-    // Ombro-Cabeça-Ombro segue no encadeamento do vencedor (outline reusando
-    // o mesmo zigue-zague + neckline extrapolada).
-    expect(block).toContain('winner?.family === "HEAD_SHOULDERS" && headShouldersPattern');
-    // Triângulo NÃO compete mais: geometria diferente (2 retas convergindo
-    // no mesmo intervalo, não uma polilinha por pivôs) e fitScore de motores
-    // distintos são escalas incomparáveis — ele sumia do gráfico por perder
-    // um desempate sem sentido, não por ser um padrão pior. Agora desenha
-    // por conta própria, fora do encadeamento.
-    expect(block).not.toContain('family: "TRIANGLE"');
-    expect(block).not.toContain('winner.family === "TRIANGLE"');
-    expect(block).toContain('if (trianglePattern) {');
-    // ...e a disputa restante é só entre as DUAS famílias de mesma geometria.
-    expect(block).toContain(
-      'const candidates: Array<{ family: "HARMONIC" | "HEAD_SHOULDERS"; fitScore: number }> = [];',
-    );
-    expect(block).toContain('`${trianglePattern.kind} ${dirGlyph} APEX ${(trianglePattern.fitScore * 100).toFixed(0)}%${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
-    expect(block).toContain('`${hs.kind === "REGULAR" ? "H&S" : "INV H&S"} ${hsDirGlyph} NECKLINE ${(hs.fitScore * 100).toFixed(0)}%`');
-    const cleanupIdx = c.indexOf('chart.remove();');
-    expect(c.slice(cleanupIdx, cleanupIdx + 700)).toContain('harmonicLinesRef.current = [];');
-  });
-
-  it('Continuidade: a figura XABCD/Wolfe COMPLETA (não só o ponto D/PRZ) é uma polilinha nativa real, limpa fail-closed antes do early-return, tempo estritamente crescente na borda de renderização (Carta Branca: mesma polilinha reusada pelo outline do Ombro-Cabeça-Ombro, guard agora cobre as 3 famílias)', () => {
-    const c = chart();
-    expect(c).toContain('const harmonicPolylineRef = useRef<ISeriesApi<"Line"> | null>(null);');
-    const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
-    const block = c.slice(idx, idx + 11500);
-    // limpa a polilinha (E as 3 séries novas do Triângulo/neckline) ANTES
-    // do guard real de "nenhuma das 3 famílias tem hit" — nunca deixa uma
-    // figura velha na tela. O guard agora cobre também o Triângulo, que
-    // saiu do encadeamento: só retorna cedo quando NEM ziguezague NEM
-    // triângulo existem, senão o triângulo real deixaria de desenhar.
-    const clearIdx = block.indexOf('harmonicPolylineRef.current?.setData([]);');
-    const guardIdx = block.indexOf('if (candidates.length === 0 && !trianglePattern) return;');
-    expect(clearIdx).toBeGreaterThan(-1);
-    expect(guardIdx).toBeGreaterThan(clearIdx);
-    expect(block).toContain('triangleResistanceLineRef.current?.setData([]);');
-    expect(block).toContain('triangleSupportLineRef.current?.setData([]);');
-    expect(block).toContain('necklineExtensionLineRef.current?.setData([]);');
-    // drawZigzagOutline: função compartilhada real (harmônico E H&S usam a
-    // MESMA implementação, zero segunda cópia) — os 5 pontos reais (X
-    // opcional/A/B/C/D na chamada harmônica), nunca um ponto fabricado
-    // para AB=CD.
-    expect(block).toContain('const drawZigzagOutline = (points: Array<HarmonicPoint | undefined>) => {');
-    expect(block).toContain('.filter((p): p is HarmonicPoint => p !== undefined)');
-    expect(block).toContain('drawZigzagOutline([top.points.X, top.points.A, top.points.B, top.points.C, top.points.D]);');
-    expect(block).toContain('drawZigzagOutline([hs.leftShoulder, hs.neckline1, hs.head, hs.neckline2, hs.rightShoulder]);');
-    // trava defensiva real na borda (a lib exige tempo estritamente crescente)
-    expect(block).toContain('.sort((a, b) => a.time - b.time)');
-    expect(block).toContain('i === 0 || p.time !== arr[i - 1].time');
-    expect(block).toContain('if (polylinePoints.length >= 2) harmonicPolylineRef.current?.setData(polylinePoints);');
-    // criada como série nativa (mesmo padrão de EMA/Nexus Line/Trend Channel) — zero rótulo de eixo/último valor
-    const seriesIdx = c.indexOf('const harmonicPolyline = chart.addSeries(LineSeries, {');
-    expect(seriesIdx).toBeGreaterThan(-1);
-    const seriesBlock = c.slice(seriesIdx, seriesIdx + 300);
-    expect(seriesBlock).toContain('priceLineVisible: false');
-    expect(seriesBlock).toContain('lastValueVisible: false');
-    expect(seriesBlock).toContain('lineStyle: LineStyle.Solid');
-    // limpa no unmount, mesma disciplina de todas as outras refs (incluindo as 3 novas)
-    const cleanupIdx = c.indexOf('chart.remove();');
-    expect(cleanupIdx, 'bloco de cleanup do chart não encontrado').toBeGreaterThan(-1);
-    // Delimitado pelo FECHAMENTO real do callback de cleanup, nunca por uma
-    // contagem de caracteres: cada ref nova adicionada ali empurrava a
-    // janela fixa e derrubava este teste sem nenhum fio realmente rompido
-    // (aconteceu na graduação do SuperTrend, que somou 2 refs ao bloco).
-    const cleanupEnd = c.indexOf('\n    };', cleanupIdx);
-    expect(cleanupEnd, 'fim do bloco de cleanup não encontrado').toBeGreaterThan(cleanupIdx);
-    const cleanupBlock = c.slice(cleanupIdx, cleanupEnd);
-    expect(cleanupBlock).toContain('harmonicPolylineRef.current = null;');
-    expect(cleanupBlock).toContain('triangleResistanceLineRef.current = null;');
-    expect(cleanupBlock).toContain('triangleSupportLineRef.current = null;');
-    expect(cleanupBlock).toContain('necklineExtensionLineRef.current = null;');
-  });
-
   it('títulos das linhas de alvo carregam distância % ao preço VIVO + ETA em faixa do contrato fundido (guard de preço)', () => {
     const c = chart();
     // REVERTIDO POR PEDIDO REPETIDO DO OPERADOR (duas rodadas, com captura
@@ -1218,12 +1138,10 @@ describe('Consolidação Final §5/§6: SHARK + AB=CD no motor, PRZ/ETA na super
     expect(h).toContain('etaIndex?: number;');
   });
 
-  it('gráfico: terminologia PRZ profissional + ETA do ápice na linha EPA da Wolfe (rótulos compactos EPC §4)', () => {
-    const c = chart();
-    expect(c).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
-    expect(c).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
-    // Carta Branca: dependency array cresceu para as 2 famílias novas; intervalo real de barra continua vindo de data.
-    expect(c).toContain('}, [harmonicHits, trianglePattern, headShouldersPattern, data, visibility.harmonics]);');
+  it('terminologia PRZ profissional + ETA do ápice na linha EPA da Wolfe (rótulos compactos EPC §4) — migrado pra HarmonicGeometryPlugin.tsx (pendência #6), cobertura completa em harmonic-geometry-plugin-wiring.test.ts', () => {
+    const plugin = readFileSync(resolve(__dirname, '../src/chart/HarmonicGeometryPlugin.tsx'), 'utf8');
+    expect(plugin).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
+    expect(plugin).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
   });
 
   it('ANALYSIS usa PRZ no lugar do rótulo D cru', () => {

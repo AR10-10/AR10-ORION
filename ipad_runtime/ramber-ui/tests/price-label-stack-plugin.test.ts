@@ -567,28 +567,16 @@ describe('EnhancedChart_110_Percent: priceAxisLabels — reusa os MESMOS valores
   });
 });
 
-describe('Auditoria de pendências (achado real via harness Playwright): a polilinha harmônica (XABCD/Wolfe) também tinha title nativo poluindo o eixo — terceira ocorrência do MESMO achado do Trend Channel/VWAP/NL/EMA', () => {
-  const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
-
-  it('harmonicPolyline nasce com title:"" — o comentário original presumia que lastValueVisible:false já bastava, mas a lib desenha title no eixo mesmo assim (mesmo achado real)', () => {
-    const s = chart();
-    expect(s).not.toContain('title: "XABCD"');
-    const idx = s.indexOf('const harmonicPolyline = chart.addSeries(LineSeries, {');
-    expect(idx, 'criação da série harmonicPolyline não encontrada').toBeGreaterThan(-1);
-    const closeIdx = s.indexOf('harmonicPolylineRef.current = harmonicPolyline;');
-    expect(s.slice(idx, closeIdx)).toContain('title: "",');
-  });
-
-  it('zero informação perdida: a forma da polilinha + o title real da PRZ (price line do ponto D) já comunicam o padrão — nunca um rótulo redundante flutuando na posição natural sem resolução de colisão', () => {
-    const s = chart();
-    // EPC §4 ("apenas as iniciais... menor poluição"): rótulo compacto
-    // `${pattern} ↑/↓ PRZ ${fit}%` — o disclaimer "never probability"
-    // vive íntegro no título do painel Harmonic Patterns (App.tsx), não
-    // repetido no rótulo flutuante do gráfico.
-    expect(s).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
-    expect(s).toContain('const hDirGlyph = top.direction === "BULLISH" ? "↑" : "↓";');
-  });
-});
+// REVOGADO (pendência #6, mesma disciplina de "registrado em vez de
+// apagado" já usada na migração do liquidity_sweep): a describe block que
+// existia aqui testava a polilinha harmônica NATIVA (harmonicPolyline,
+// title:"" pra suprimir o rótulo no eixo). Ela migrou por completo pra
+// HarmonicGeometryPlugin.tsx (canvas próprio) — zero série nativa
+// restante. Achado real feito NA migração: axisLabelVisible:false por si
+// só já suprimia o `title` completamente (nem chegava ao eixo, nem a
+// lugar nenhum da tela) — o rótulo PRZ nunca foi visto pelo Operador; o
+// plugin novo desenha o texto de verdade via drawCanvasLabel. Cobertura
+// completa em harmonic-geometry-plugin-wiring.test.ts.
 
 describe('"bater o olho profissional" (pendência honesta do turno anterior): ENTRY/STOP/TARGET migram do eixo NATIVO para o sistema anti-colisão (priceAxisLabels) — eram o ÚLTIMO grupo que ainda podia sobrepor S1/R1/VWAP', () => {
   const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');

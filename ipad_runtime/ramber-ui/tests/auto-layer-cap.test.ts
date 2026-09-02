@@ -273,21 +273,20 @@ describe('LAYER_VISUAL_COST: declarado x real', () => {
 
   it('harmonics cobre as figuras que podem aparecer JUNTAS', () => {
     // O Triangulo saiu da disputa (para parar de sumir), entao ziguezague,
-    // neckline e Triangulo podem coexistir. As 4 series dedicadas existem;
-    // o custo e' 3 porque as 2 retas convergentes do Triangulo sao UMA
-    // figura para quem olha.
-    const chart = src('../src/chart/EnhancedChart_110_Percent.tsx');
-    for (const serie of [
-      'harmonicPolyline = chart.addSeries(',
-      'triangleResistanceLineRef.current = chart.addSeries(',
-      'triangleSupportLineRef.current = chart.addSeries(',
-      'necklineExtensionLineRef.current = chart.addSeries(',
-    ]) {
-      expect(chart).toContain(serie);
-    }
+    // neckline e Triangulo podem coexistir — custo 3 porque as 2 retas
+    // convergentes do Triangulo sao UMA figura para quem olha. Pendência
+    // #6: a geometria inteira migrou de createPriceLine/addSeries nativo
+    // (4 séries dedicadas) pra HarmonicGeometryPlugin.tsx (canvas próprio,
+    // zero série nativa) — o NÚMERO de figuras visíveis simultâneas não
+    // mudou (mesma disputa/mesma coexistência), só o mecanismo de desenho;
+    // por isso o custo declarado continua 3, verificado agora contra o
+    // plugin em vez de contra séries nativas que não existem mais.
+    const plugin = src('../src/chart/HarmonicGeometryPlugin.tsx');
+    expect(plugin).toContain('const drawZigzagOutline = (points: Array<HarmonicPoint | undefined>) => {');
+    expect(plugin).toContain('const drawSegment = (startPrice: number, startTime: number, endPrice: number, endTime: number) => {');
     // E o Triangulo desenha FORA do encadeamento do vencedor — e' isso que
     // torna a coexistencia real, e portanto o custo 3 em vez de 2.
-    expect(chart).toContain('if (trianglePattern) {');
+    expect(plugin).toContain('if (triangle) {');
     expect(layerVisualCost('harmonics')).toBe(3);
   });
 

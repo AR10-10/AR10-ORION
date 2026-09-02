@@ -376,22 +376,16 @@ describe('Auditoria de pendências: os 7 elementos nativos do gráfico ainda sem
     expect(depsIdx).toBeGreaterThan(-1);
   });
 
-  it('Harmônico: fail-closed real — sem visibility.harmonics, zero price line E zero polilinha (limpa ANTES do early-return, mesma disciplina das outras camadas)', () => {
+  it('Harmônico: fail-closed real — sem visibility.harmonics, HarmonicGeometryPlugin nem monta (pendência #6: migrou de createPriceLine/addSeries nativo pra canvas próprio, gate agora é JSX condicional em vez de early-return dentro de um useEffect)', () => {
     const c = chart();
-    const idx = c.indexOf('harmonicPolylineRef.current?.setData([]);');
-    expect(idx).toBeGreaterThan(-1);
-    // Carta Branca: 3 chamadas setData([]) novas (Triângulo ×2 + neckline)
-    // ficam entre esta polilinha e o guard real — janela ampliada.
-    const block = c.slice(idx, idx + 550);
-    expect(block).toContain('triangleResistanceLineRef.current?.setData([]);');
-    expect(block).toContain('triangleSupportLineRef.current?.setData([]);');
-    expect(block).toContain('necklineExtensionLineRef.current?.setData([]);');
-    expect(block).toContain('if (!visibility.harmonics) return;');
-    // Carta Branca: a dependency array agora inclui as 2 famílias novas
-    // que competem pelo mesmo desenho (trianglePattern/headShouldersPattern)
-    // — mesmo gate visibility.harmonics, mesma disciplina de limpeza acima.
-    const depsIdx = c.indexOf('}, [harmonicHits, trianglePattern, headShouldersPattern, data, visibility.harmonics]);');
-    expect(depsIdx).toBeGreaterThan(-1);
+    const idx = c.indexOf('<HarmonicGeometryPlugin');
+    expect(idx, 'HarmonicGeometryPlugin não montado').toBeGreaterThan(-1);
+    const before = c.slice(Math.max(0, idx - 120), idx);
+    expect(before).toContain('visibility.harmonics && (');
+    const block = c.slice(idx, idx + 320);
+    expect(block).toContain('harmonicHits={harmonicHits}');
+    expect(block).toContain('trianglePattern={trianglePattern}');
+    expect(block).toContain('headShouldersPattern={headShouldersPattern}');
   });
 
   it('esconder uma camada nunca apaga o dado computado — só a exibição (Regra de Ouro 4): nenhum dos 7 novos gates remove um setData/computeXxx real, só envolve o desenho em early-return/applyOptions', () => {

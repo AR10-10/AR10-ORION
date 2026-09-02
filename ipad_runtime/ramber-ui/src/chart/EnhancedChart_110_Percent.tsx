@@ -177,7 +177,7 @@ import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import { describeScenarioConfidence, describeScenarioReaction } from "../nexus/scenario-engine";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
-import type { HarmonicPatternHit, HarmonicPoint } from "../nexus/harmonic-patterns";
+import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
 import type { SmcHarmonicFusionResult } from "../nexus/smc-harmonic-fusion";
 import { HarmonicConfluenceArrowPlugin } from "./HarmonicConfluenceArrowPlugin";
 // MD-7 (Visual Confidence Trace): traçado roxo estrutural (fractal-swings)
@@ -189,10 +189,15 @@ import { ConfidenceDirectionArrowPlugin } from "./ConfidenceDirectionArrowPlugin
 // plugin. SWEEP_DECAY é a fonte única do decaimento (também usada pelas
 // etiquetas do eixo abaixo).
 import { LiquiditySweepLinesPlugin, SWEEP_DECAY } from "./LiquiditySweepLinesPlugin";
+// Pendência #6, perna final: fecha o resíduo restante de `harmonics`
+// (zigue-zague XABCD/Wolfe/H&S, PRZ/EPA/NECKLINE/APEX, triângulo) — ver
+// cabeçalho do plugin, inclusive o achado real dos 4 rótulos que nunca
+// chegavam à tela.
+import { HarmonicGeometryPlugin } from "./HarmonicGeometryPlugin";
 import type { TrianglePatternHit } from "../nexus/triangle-pattern";
 import type { HeadShouldersHit } from "../nexus/head-shoulders-pattern";
 import type { NexusDecision } from "../nexus/decision-layer";
-import { formatEtaRange, formatEtaDuration } from "../nexus/eta-engine";
+import { formatEtaRange } from "../nexus/eta-engine";
 // Research-driven precision order: VWAP, the institutional-standard
 // intraday reference level this system was missing entirely (confirmed
 // via a full-codebase grep before writing nexus/vwap.ts).
@@ -1086,30 +1091,13 @@ function EnhancedChart_110_PercentImpl({
   const engineFallbackLinesRef = useRef<IPriceLine[]>([]);
   const scenarioLinesRef = useRef<IPriceLine[]>([]);
   const premiumDiscountLinesRef = useRef<IPriceLine[]>([]);
-  const harmonicLinesRef = useRef<IPriceLine[]>([]);
-  // Continuidade (pendência honesta já documentada em 3 PRs anteriores:
-  // "polilinha XABCD/Wolfe no canvas — hoje só a linha do ponto D"): a
-  // FIGURA GEOMÉTRICA COMPLETA do melhor padrão real, não só a PRZ. Série
-  // NATIVA (mesmo padrão de EMA/Nexus Line/Trend Channel) — X/A/B/C/D já
-  // vêm em ordem temporal por construção do próprio motor (cada ponto é um
-  // swing fractal mais recente que o anterior), então uma LineSeries comum
-  // com esses pontos plotados em ordem de tempo desenha exatamente o
-  // zigue-zague clássico, zero overlay de canvas novo.
-  const harmonicPolylineRef = useRef<ISeriesApi<"Line"> | null>(null);
-  // Carta Branca (Reconhecimento de Padrões): mesmo padrão nativo acima,
-  // reaproveitado para as 2 famílias novas que competem pelo MESMO desenho
-  // de "único melhor padrão" (ver o useEffect unificado abaixo). O
-  // outline zigue-zague do Ombro-Cabeça-Ombro (LS→neckline1→Head→
-  // neckline2→RS) é geometricamente idêntico a um XABCD — reusa
-  // harmonicPolylineRef diretamente, zero série nova. O Triângulo NÃO é um
-  // zigue-zague (2 retas paralelas/convergentes avançando no MESMO
-  // intervalo de tempo, não pontos sequenciais) — precisa de 2 séries
-  // dedicadas; a extrapolação da neckline do H&S também é uma reta
-  // separada do outline (index do 1º ponto → índice do último candle),
-  // então ganha sua própria série.
-  const triangleResistanceLineRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const triangleSupportLineRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const necklineExtensionLineRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Pendência #6 (migração nativo→canvas), perna final: a figura
+  // geométrica inteira do harmônico/H&S/triângulo — antes 1 LineSeries
+  // (harmonicPolylineRef) + 2 séries do triângulo + 1 da neckline + 1
+  // array de createPriceLine (harmonicLinesRef, os rótulos PRZ/EPA/
+  // NECKLINE/APEX que descobrimos nunca chegar à tela) — migrou pra
+  // HarmonicGeometryPlugin.tsx (canvas próprio, ver cabeçalho do plugin).
+  // Zero refs nativas restantes aqui.
   // Named refs to the stop/target lines specifically (a subset of
   // tradePlanLinesRef above) — lets the hit-boost effect below update
   // color/title in place via applyOptions() instead of tearing down and
@@ -1593,45 +1581,9 @@ function EnhancedChart_110_PercentImpl({
     trendChannelMidRef.current = trendChannelMid;
     trendChannelUpperRef.current = trendChannelUpper;
     trendChannelLowerRef.current = trendChannelLower;
-    // Continuidade: figura XABCD/Wolfe completa — mesma cor roxa da PRZ já
-    // existente (acento do Conselho/opinião agregada), um pouco mais forte
-    // no TRAÇO em si (a PRZ continua a leitura de preço mais importante).
-    // Zero rótulo de eixo/último valor: a forma da polilinha já comunica o
-    // padrão, um rótulo repetiria a mesma informação do title da PRZ.
-    // Auditoria de pendências (achado real via harness Playwright): o
-    // title:"XABCD" acima presumia que lastValueVisible:false já bastava
-    // pra suprimir o rótulo — MESMO achado/MESMA correção do Trend
-    // Channel/VWAP/NL/EMA (a lib desenha `title` no eixo mesmo assim). O
-    // texto ficava flutuando na posição NATURAL da polilinha (sem nenhuma
-    // resolução de colisão), exatamente a poluição que o comentário
-    // original queria evitar. title:"" agora — zero informação perdida
-    // (o próprio comentário original já argumentava que o rótulo era
-    // redundante com o title da PRZ).
-    const harmonicPolyline = chart.addSeries(LineSeries, {
-      color: "rgba(167, 139, 250, 0.55)",
-      lineWidth: 1,
-      lineStyle: LineStyle.Solid,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-      title: "",
-    });
-    harmonicPolylineRef.current = harmonicPolyline;
-    // Carta Branca: mesma cor de acento roxo do padrão geométrico (harmonic
-    // Polyline acima) — as 3 famílias são uma ÚNICA linguagem visual
-    // ("padrão gráfico detectado"), nunca 3 paletas competindo por atenção.
-    const triangleLineOptions = {
-      color: "rgba(167, 139, 250, 0.55)",
-      lineWidth: 1 as const,
-      lineStyle: LineStyle.Solid,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-      title: "",
-    };
-    triangleResistanceLineRef.current = chart.addSeries(LineSeries, triangleLineOptions);
-    triangleSupportLineRef.current = chart.addSeries(LineSeries, triangleLineOptions);
-    necklineExtensionLineRef.current = chart.addSeries(LineSeries, triangleLineOptions);
+    // Pendência #6: a figura XABCD/Wolfe/H&S/triângulo inteira (antes 4
+    // séries nativas criadas aqui) migrou pra HarmonicGeometryPlugin.tsx —
+    // canvas próprio, ver cabeçalho do plugin.
     chartRef.current = chart;
     seriesRef.current = series;
     setChartReady({ chart, series });
@@ -1677,7 +1629,6 @@ function EnhancedChart_110_PercentImpl({
       tradePlanLinesRef.current = [];
       scenarioLinesRef.current = [];
       premiumDiscountLinesRef.current = [];
-      harmonicLinesRef.current = [];
       cvdSeriesRef.current = null;
       vwapSeriesRef.current = null;
       vwapBandUpper1Ref.current = null;
@@ -1692,10 +1643,6 @@ function EnhancedChart_110_PercentImpl({
       trendChannelMidRef.current = null;
       trendChannelUpperRef.current = null;
       trendChannelLowerRef.current = null;
-      harmonicPolylineRef.current = null;
-      triangleResistanceLineRef.current = null;
-      triangleSupportLineRef.current = null;
-      necklineExtensionLineRef.current = null;
       setChartReady(null);
     };
   }, []);
@@ -2804,210 +2751,14 @@ function EnhancedChart_110_PercentImpl({
     mkPd(premiumDiscount.rangeLow.price, "rgba(8, 153, 129, 0.30)", "Discount · fundo do range");
   }, [premiumDiscount, visibility.premium_discount, visibility.fibonacci, fibonacciLevels]);
 
-  // Auditoria Final §3 ("caso esteja calculado mas não desenhado, ativar
-  // renderização") + Carta Branca (Reconhecimento de Padrões): agora TRÊS
-  // famílias de padrão geométrico competem pelo mesmo desenho — harmônicos
-  // XABCD/Wolfe (harmonic-patterns.ts), Triângulo (triangle-pattern.ts) e
-  // Ombro-Cabeça-Ombro (head-shoulders-pattern.ts). Cada motor já entrega
-  // seu próprio melhor hit (harmonicHits vem pré-ordenado por fit desc;
-  // trianglePattern/headShouldersPattern já são o único melhor da janela);
-  // o vencedor ÚNICO entre as 3 famílias é o de maior fitScore — mesma
-  // disciplina de "só o melhor vai pro canvas, o resto fica no painel"
-  // já usada pelo harmônico sozinho antes desta rodada (visual budget:
-  // silk-thread, zero 3 geometrias competindo pela mesma área). Comparar
-  // fitScore entre motores DIFERENTES é uma heurística declarada (cada um
-  // mede aderência de um jeito distinto — razão Fibonacci/R² de trendline/
-  // simetria de ombros), nunca uma medição única calibrada; empate resolve
-  // pela ordem de checagem abaixo (harmônico > triângulo > H&S), arbitrária
-  // mas determinística. Púrpura (acento do Conselho/opinião agregada) em
-  // toda a família — uma ÚNICA linguagem visual, nunca 3 paletas
-  // competindo por atenção; fio de seda; título carrega o fit com o rótulo
-  // honesto — aderência, nunca probabilidade. Fail-closed: sem padrão
-  // algum, zero linhas. Ganha visibility.harmonics (rótulo do painel
-  // ampliado para "PADRÕES GRÁFICOS", App.tsx) — early-return antes de
-  // desenhar qualquer price line/polilinha nova.
-  useEffect(() => {
-    if (!seriesRef.current) return;
-    const series = seriesRef.current;
-    harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));
-    harmonicLinesRef.current = [];
-    // Limpa TODAS as geometrias das 3 famílias ANTES de decidir o vencedor
-    // — sem padrão real agora (ou trocou de vencedor), zero figura antiga
-    // lingerindo na tela (mesmo fail-closed das price lines desta função).
-    harmonicPolylineRef.current?.setData([]);
-    triangleResistanceLineRef.current?.setData([]);
-    triangleSupportLineRef.current?.setData([]);
-    necklineExtensionLineRef.current?.setData([]);
-    if (!visibility.harmonics) return;
-
-    const harmonicTop = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;
-    const harmonicValid = harmonicTop && Number.isFinite(harmonicTop.points.D.price) ? harmonicTop : null;
-    // Só as famílias de MESMA geometria competem entre si. Harmônico e H&S
-    // são ambos uma POLILINHA em ziguezague por pivôs alternados, desenhada
-    // na mesma região — duas delas juntas viram rabisco, então continua
-    // valendo "só o melhor vai pro canvas".
-    //
-    // O Triângulo saiu desta disputa (pedido do Operador: "adiciona
-    // triângulo, tá faltando"), por dois motivos reais e não por
-    // preferência:
-    //
-    // 1. GEOMETRIA DIFERENTE — são 2 retas convergindo sobre o MESMO
-    //    intervalo de tempo, não uma polilinha por pivôs. Isso já estava
-    //    reconhecido no próprio código, que lhe deu 2 séries dedicadas em
-    //    vez de reusar harmonicPolylineRef. O argumento "3 geometrias
-    //    competindo pela mesma área" nunca se aplicou a ele: ele não
-    //    disputa a área do ziguezague, ocupa o envelope do range.
-    // 2. ESCALAS INCOMPARÁVEIS — o desempate era por fitScore entre motores
-    //    diferentes, e o comentário original já admitia que cada um mede
-    //    aderência de um jeito distinto (razão Fibonacci × R² de reta ×
-    //    simetria de ombros). O triângulo podia perder por ter R² numa
-    //    escala mais dura, não por ser um padrão pior — e aí sumia do
-    //    gráfico mesmo sendo real.
-    //
-    // Teto visual continua 2 figuras (um ziguezague + o triângulo), nunca
-    // 3, e a família inteira mantém a MESMA linguagem visual púrpura.
-    const candidates: Array<{ family: "HARMONIC" | "HEAD_SHOULDERS"; fitScore: number }> = [];
-    if (harmonicValid) candidates.push({ family: "HARMONIC", fitScore: harmonicValid.fitScore });
-    if (headShouldersPattern) candidates.push({ family: "HEAD_SHOULDERS", fitScore: headShouldersPattern.fitScore });
-    // Fail-closed: sem ziguezague E sem triângulo, zero linhas.
-    if (candidates.length === 0 && !trianglePattern) return;
-    let winner: { family: "HARMONIC" | "HEAD_SHOULDERS"; fitScore: number } | null = candidates[0] ?? null;
-    for (const c of candidates.slice(1)) {
-      if (winner && c.fitScore > winner.fitScore) winner = c;
-    }
-
-    const mkH = (price: number, title: string) => {
-      if (!Number.isFinite(price)) return;
-      harmonicLinesRef.current.push(
-        series.createPriceLine({
-          price,
-          color: "rgba(167, 139, 250, 0.40)",
-          lineWidth: 1,
-          lineStyle: LineStyle.Solid,
-          axisLabelVisible: false,
-          title,
-        }),
-      );
-    };
-    // Mesma técnica de zigue-zague em ordem de tempo para QUALQUER família
-    // cuja figura seja uma sequência de pivôs alternados (harmônico e H&S
-    // — o Triângulo NÃO é: são 2 retas avançando no MESMO intervalo de
-    // tempo, tratado à parte abaixo). Tempo estritamente crescente é
-    // exigência real da lib, nunca uma segunda regra de ordenação
-    // inventada; pontos undefined (AB=CD honestamente não tem X) são
-    // filtrados, nunca fabricados para "completar" a figura.
-    const drawZigzagOutline = (points: Array<HarmonicPoint | undefined>) => {
-      const polylinePoints = points
-        .filter((p): p is HarmonicPoint => p !== undefined)
-        .map((p) => {
-          const candle = data[p.index];
-          return candle && Number.isFinite(p.price) ? { time: candle.time as UTCTimestamp, value: p.price } : null;
-        })
-        .filter((p): p is { time: UTCTimestamp; value: number } => p !== null)
-        .sort((a, b) => a.time - b.time)
-        .filter((p, i, arr) => i === 0 || p.time !== arr[i - 1].time);
-      if (polylinePoints.length >= 2) harmonicPolylineRef.current?.setData(polylinePoints);
-    };
-
-    if (winner?.family === "HARMONIC" && harmonicValid) {
-      const top = harmonicValid;
-      drawZigzagOutline([top.points.X, top.points.A, top.points.B, top.points.C, top.points.D]);
-      // Consolidação Final §6 (terminologia profissional): o ponto de
-      // reversão esperado é a PRZ — Potential Reversal Zone (D nos XABCD/
-      // AB=CD; ponto 5 na Wolfe). EPC §4 ("apenas as iniciais... menor
-      // poluição"): direção BULLISH/BEARISH vira glifo ↑/↓ (mesmo
-      // vocabulário de FVG/OB/VWAP/NL) e o disclaimer "(aderência, nunca
-      // probabilidade)" sai do rótulo flutuante — já vive, íntegro, no
-      // título do painel Chart Patterns ("geometric fit, never
-      // probability", App.tsx) — mesma disciplina de zero-repetição do
-      // "(Núcleo)".
-      const hDirGlyph = top.direction === "BULLISH" ? "↑" : "↓";
-      mkH(top.points.D.price, `${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`);
-      if (top.pattern === "WOLFE" && typeof top.epaPrice === "number" && Number.isFinite(top.epaPrice)) {
-        // §6: ETA canônica da Wolfe = ápice da cunha (cruzamento real
-        // 1→3 × 2→4, etaIndex do motor). Convertida em tempo pelo
-        // intervalo REAL entre as duas últimas barras carregadas — nunca
-        // um mapa de timeframe paralelo. Sem ápice à frente => só a EPA,
-        // sem ETA.
-        const barSec = data.length >= 2 ? data[data.length - 1].time - data[data.length - 2].time : null;
-        const remainingBars = typeof top.etaIndex === "number" ? top.etaIndex - (data.length - 1) : null;
-        const etaLabel =
-          barSec !== null && remainingBars !== null && remainingBars > 0
-            ? formatEtaDuration(remainingBars * barSec * 1000)
-            : null;
-        // EPC §4: EPA já é a sigla profissional (Estimated Price at
-        // Apex); "(linha 1→4 real)"/"(ápice da cunha)" eram descrições,
-        // não dado — removidas do rótulo flutuante (o significado da
-        // EPA/ETA da Wolfe continua documentado em harmonic-patterns.ts).
-        mkH(top.epaPrice, `WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`);
-      }
-    } else if (winner?.family === "HEAD_SHOULDERS" && headShouldersPattern) {
-      const hs = headShouldersPattern;
-      // Outline real LS→neckline1→Cabeça→neckline2→RS — geometricamente o
-      // MESMO zigue-zague de um XABCD (5 pivôs em ordem de tempo crescente
-      // por construção do motor), reusa a função acima sem nenhuma segunda
-      // implementação.
-      drawZigzagOutline([hs.leftShoulder, hs.neckline1, hs.head, hs.neckline2, hs.rightShoulder]);
-      // Neckline real extrapolada — reta separada do outline (pode ter
-      // slope diferente do segmento RS→neckline2), do 1º ponto real até o
-      // último candle carregado, exatamente o valor já exposto em
-      // necklineAtLastCandle.
-      const necklineStartCandle = data[hs.neckline1.index];
-      const lastCandle = data[data.length - 1];
-      if (necklineStartCandle && lastCandle && Number.isFinite(hs.necklineAtLastCandle) && necklineStartCandle.time < lastCandle.time) {
-        necklineExtensionLineRef.current?.setData([
-          { time: necklineStartCandle.time as UTCTimestamp, value: hs.neckline1.price },
-          { time: lastCandle.time as UTCTimestamp, value: hs.necklineAtLastCandle },
-        ]);
-      }
-      const hsDirGlyph = hs.direction === "BULLISH" ? "↑" : "↓";
-      mkH(hs.necklineAtLastCandle, `${hs.kind === "REGULAR" ? "H&S" : "INV H&S"} ${hsDirGlyph} NECKLINE ${(hs.fitScore * 100).toFixed(0)}%`);
-    }
-
-    // TRIÂNGULO — desenha sempre que o motor o encontrou, independente de
-    // qual ziguezague venceu acima (justificativa completa na seleção de
-    // candidatos). Fail-closed preservado: sem padrão real, as séries
-    // dedicadas já foram esvaziadas no topo deste efeito.
-    if (trianglePattern) {
-      // Carta Branca: as 2 retas reais (mínimos quadrados) do triângulo —
-      // avaliadas na PRÓPRIA reta ajustada (nunca no preço bruto do toque,
-      // mesmo quando R²<1) do 1º toque real até o último candle carregado,
-      // exatamente o mesmo valor já exposto em resistanceAtLastCandle/
-      // supportAtLastCandle. Duas retas simultâneas no MESMO intervalo de
-      // tempo — geometria diferente do zigue-zague acima, por isso 2
-      // séries dedicadas em vez de reusar harmonicPolylineRef.
-      const lastIndex = data.length - 1;
-      const lastCandle = data[lastIndex];
-      const firstRes = trianglePattern.resistancePoints[0];
-      const firstSup = trianglePattern.supportPoints[0];
-      const resCandle = firstRes ? data[firstRes.index] : null;
-      const supCandle = firstSup ? data[firstSup.index] : null;
-      if (resCandle && lastCandle && Number.isFinite(trianglePattern.resistanceAtLastCandle) && resCandle.time < lastCandle.time) {
-        triangleResistanceLineRef.current?.setData([
-          { time: resCandle.time as UTCTimestamp, value: trianglePattern.resistanceSlope * firstRes.index + trianglePattern.resistanceIntercept },
-          { time: lastCandle.time as UTCTimestamp, value: trianglePattern.resistanceAtLastCandle },
-        ]);
-      }
-      if (supCandle && lastCandle && Number.isFinite(trianglePattern.supportAtLastCandle) && supCandle.time < lastCandle.time) {
-        triangleSupportLineRef.current?.setData([
-          { time: supCandle.time as UTCTimestamp, value: trianglePattern.supportSlope * firstSup.index + trianglePattern.supportIntercept },
-          { time: lastCandle.time as UTCTimestamp, value: trianglePattern.supportAtLastCandle },
-        ]);
-      }
-      // Ápice real: no cruzamento das 2 retas, resistência e suporte valem
-      // o MESMO preço por definição geométrica — número honesto mesmo sem
-      // um candle futuro pra plotar o ponto (mesma técnica de EPA/ETA da
-      // Wolfe: preço real conhecido agora, tempo mostrado via ETA em texto).
-      if (trianglePattern.apexIndex !== null) {
-        const apexPrice = trianglePattern.resistanceSlope * trianglePattern.apexIndex + trianglePattern.resistanceIntercept;
-        const barSec = data.length >= 2 ? data[data.length - 1].time - data[data.length - 2].time : null;
-        const remainingBars = trianglePattern.apexIndex - lastIndex;
-        const etaLabel = barSec !== null && remainingBars > 0 ? formatEtaDuration(remainingBars * barSec * 1000) : null;
-        const dirGlyph = trianglePattern.direction === "BULLISH" ? "↑" : trianglePattern.direction === "BEARISH" ? "↓" : "↔";
-        mkH(apexPrice, `${trianglePattern.kind} ${dirGlyph} APEX ${(trianglePattern.fitScore * 100).toFixed(0)}%${etaLabel ? ` · ETA ${etaLabel}` : ""}`);
-      }
-    }
-  }, [harmonicHits, trianglePattern, headShouldersPattern, data, visibility.harmonics]);
+  // Pendência #6 (migração nativo→canvas), perna final: a disputa de
+  // vencedor entre harmônico/H&S/triângulo, o desenho do zigue-zague, das
+  // 2 retas do triângulo, da neckline e das etiquetas PRZ/EPA/NECKLINE/
+  // APEX — tudo isto migrou pra HarmonicGeometryPlugin.tsx (canvas
+  // próprio, montado condicionalmente por visibility.harmonics logo
+  // abaixo no JSX). Mesma lógica exata (zero segunda matemática), incluindo
+  // o achado real de que os 4 rótulos nunca chegavam à tela com
+  // axisLabelVisible:false — ver cabeçalho do plugin.
 
   // Evolução Final §5: mantém autoFitLevelsRef (lido pelo
   // autoscaleInfoProvider da série, efeito de montagem única acima)
@@ -4175,6 +3926,22 @@ function EnhancedChart_110_PercentImpl({
           series={chartReady?.series ?? null}
           data={data}
           fusion={harmonicConfluence ?? null}
+        />
+      )}
+      {/* Pendência #6, perna final: zigue-zague XABCD/Wolfe/H&S, PRZ/EPA/
+         NECKLINE/APEX e triângulo migrados de createPriceLine/addSeries
+         nativo pra canvas — mesmo toggle de sempre (visibility.harmonics),
+         agora no z=50 real de "event" em vez do z=35 nativo compartilhado.
+         Ver cabeçalho do plugin para o achado real dos 4 rótulos que nunca
+         chegavam à tela. */}
+      {visibility.harmonics && (
+        <HarmonicGeometryPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          harmonicHits={harmonicHits}
+          trianglePattern={trianglePattern}
+          headShouldersPattern={headShouldersPattern}
         />
       )}
       {/* MD-7 (Visual Confidence Trace, pedido direto do Operador):

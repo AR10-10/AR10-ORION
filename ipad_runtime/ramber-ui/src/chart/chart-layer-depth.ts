@@ -210,34 +210,33 @@ export function getChartLayerTier(layerId: string): ChartDepthTier {
  *    - as linhas de canvas (EMA/VWAP/Fibonacci/ZigZag) seguem em 40, acima
  *      das velas; eventos em 50; plano em 60; etiquetas em 70.
  *
- *  harmonics MIGROU PARCIALMENTE (SMC Harmonic Fusion, pedido do Operador):
- *  a seta de confluência institucional (HarmonicConfluenceArrowPlugin) já
- *  tem canvas PRÓPRIO, em `getChartLayerZIndex("harmonics")` = 50 (event) —
- *  correto, fora deste resíduo. O zigue-zague XABCD/Wolfe e a linha PRZ
- *  (EnhancedChart_110_Percent.tsx) continuam nativos (`createPriceLine`/
- *  `addSeries`), então harmonics saiu de CHART_NATIVE_LAYER_IDS (não é mais
- *  "sem canvas próprio nenhum") mas ainda tem UMA perna em 35 — migrar
- *  também o zigue-zague/PRZ fecharia o resíduo por completo; não feito de
- *  carona aqui (mudança maior, players nativos da lib são mais baratos de
- *  desenhar um ziguezague que muda pouco por candle).
+ *  harmonics MIGROU POR COMPLETO (pendência #6, duas rodadas): a seta de
+ *  confluência institucional (SMC Harmonic Fusion, HarmonicConfluenceArrow
+ *  Plugin) migrou primeiro; o zigue-zague XABCD/Wolfe/H&S, a PRZ/EPA/
+ *  NECKLINE/APEX e o triângulo (antes nativos, `createPriceLine`/
+ *  `addSeries` em EnhancedChart_110_Percent.tsx) fecharam o resíduo na
+ *  rodada seguinte — `HarmonicGeometryPlugin.tsx`, mesma lógica de
+ *  disputa/geometria, zero segunda matemática. Achado real dessa 2ª
+ *  rodada: os 4 rótulos de texto (PRZ/EPA/NECKLINE/APEX) nunca chegavam à
+ *  tela com `axisLabelVisible:false` (mesma classe de defeito já corrigida
+ *  para Fibonacci/scenario_projection/POC-VAH-VAL-IB/WALL) — corrigidos
+ *  junto, via `drawCanvasLabel`. `harmonics` inteira agora em
+ *  `getChartLayerZIndex("harmonics")` = 50 (event) real.
  *
- *  liquidity_sweep MIGROU POR COMPLETO (pendência #6, "chegar na
- *  perfeição"): `LiquiditySweepLinesPlugin.tsx` desenha a mesma linha de
- *  sweep real (mesmo dado, mesma clusterização, mesmo decaimento) em
- *  canvas próprio, `getChartLayerZIndex("liquidity_sweep")` = 50 (event) —
- *  saiu de CHART_NATIVE_LAYER_IDS e de CHART_LINE_ONLY_LAYER_IDS, primeira
- *  das 6 nativas restantes a fechar o resíduo por completo.
+ *  liquidity_sweep MIGROU POR COMPLETO (pendência #6, 1ª rodada):
+ *  `LiquiditySweepLinesPlugin.tsx` desenha a mesma linha de sweep real
+ *  (mesmo dado, mesma clusterização, mesmo decaimento) em canvas próprio,
+ *  `getChartLayerZIndex("liquidity_sweep")` = 50 (event).
  *
  *  RESÍDUO HONESTO, declarado em vez de escondido: as 5 nativas restantes
- *  dividem UM canvas só, então só podem ter UM z. As outras três camadas
- *  que este parágrafo já citou — premium_discount e scenario_projection
- *  (declaração errada, corrigidas — ver CHART_LINE_ONLY_LAYER_IDS abaixo),
- *  harmonics (migração parcial) e liquidity_sweep (migração completa, logo
- *  acima) — já saíram do resíduo real de posicionamento.
- *
- *  Fechar o resíduo restante exige migrar a perna nativa remanescente de
- *  harmonics (zigue-zague XABCD/Wolfe + PRZ) para canvas próprio — mudança
- *  maior, não feita de carona aqui.
+ *  (CHART_NATIVE_LAYER_IDS abaixo) dividem UM canvas só, então só podem
+ *  ter UM z — cvd/supertrend/pivot_points/premium_discount/
+ *  scenario_projection. premium_discount e scenario_projection já tinham
+ *  a declaração corrigida (ver CHART_LINE_ONLY_LAYER_IDS abaixo); harmonics
+ *  e liquidity_sweep, as duas únicas camadas "event" que chegaram a ser
+ *  nativas, já saíram por completo. Migrar as 5 restantes para canvas
+ *  próprio continua sendo o passo seguinte real para fechar 35 de vez —
+ *  mudança maior, cada uma sua própria rodada.
  */
 export const CHART_NATIVE_CANVAS_Z_INDEX = TIER_Z.profile + 5;
 
