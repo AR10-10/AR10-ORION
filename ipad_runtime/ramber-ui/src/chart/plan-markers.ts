@@ -24,8 +24,35 @@
 // A alternativa preguiçosa — prender na primeira/última vela — poria a
 // seta numa vela onde nada aconteceu, e o Operador leria uma entrada num
 // momento que nunca existiu.
+//
+// PEDIDO DO OPERADOR (evolução): "as etiquetas só dá as entrada... quando
+// ela tiver tanto por cento de certeza... pra não ficar enchendo o
+// gráfico de risco de sinais... como um profissional lê o gráfico". Um
+// profissional não reage a toda leitura fraca — só às que passam de um
+// piso real de confluência.
+//
+// A régua reusada é `contextAtOpen.score` (signal-track-record.ts): o
+// Institutional Score REAL (nexus/institutional-score.ts), carimbado UMA
+// única vez no instante em que o plano abriu — nunca recalculado com o
+// score de AGORA. Usar o score de agora faria a seta de um plano de
+// semanas atrás piscar sempre que a confluência ATUAL do ativo mudasse,
+// o que não tem relação nenhuma com aquele plano — e seria ilegível.
+// Mesmo piso já usado em todo o resto do app para "comunicar
+// oportunidade" (DEFAULT_MIN_OPPORTUNITY_SCORE) — zero segunda régua.
+//
+// FAIL-OPEN deliberado quando o score é desconhecido: registros antigos
+// (de antes de `contextAtOpen` existir) e a janela real em que o score
+// não pôde ser calculado na abertura NUNCA são tratados como "abaixo do
+// piso" — apagar um evento real da tela por FALTA de metadado violaria a
+// Regra de Ouro 4 (nunca apagar dado real). O dado completo, sem este
+// filtro, continua disponível no painel de Track Record.
+//
+// LEI 24 intacta: o filtro decide se uma ANOTAÇÃO histórica aparece no
+// gráfico, nunca o que o Core Engine decidiu — `engine.direction` e o
+// Track Record em si (nexus/signal-track-record.ts) não são tocados.
 
 import type { SeriesMarker, Time, UTCTimestamp } from "lightweight-charts";
+import { DEFAULT_MIN_OPPORTUNITY_SCORE } from "../nexus/institutional-score";
 
 /** Só o que este módulo realmente lê de um TrackedPlan — declarado
  *  estruturalmente para o módulo continuar puro e testável sem arrastar o
@@ -35,6 +62,11 @@ export interface PlanMarkerSource {
   openedAt: number; // ms real
   status: "OPEN" | "TARGET_HIT" | "PARTIAL_HIT" | "STOP_HIT" | "REPLACED";
   resolvedAt: number | null; // ms real
+  // Fotografia REAL do Institutional Score no instante da abertura
+  // (TrackedPlan.contextAtOpen, signal-track-record.ts) — nunca o score de
+  // agora. Ausente/null = registro antigo ou score indisponível na janela
+  // real da abertura; ver nota de FAIL-OPEN no topo do arquivo.
+  contextAtOpen?: { score: number | null } | null;
 }
 
 export interface MarkerCandle {
@@ -148,6 +180,14 @@ export function buildPlanMarkers(
   const out: SeriesMarker<Time>[] = [];
 
   plans.forEach((p, i) => {
+    // Filtro de confiança (pedido do Operador): abaixo do piso real de
+    // "oportunidade" já usado em todo o resto do app, nem a entrada nem a
+    // saída deste plano viram seta — omitir só uma das duas deixaria a
+    // outra órfã no gráfico (uma SAÍDA sem ENTRADA correspondente, ou
+    // vice-versa). null (score indisponível na abertura) nunca é "abaixo".
+    const scoreAtOpen = p?.contextAtOpen?.score ?? null;
+    if (scoreAtOpen !== null && scoreAtOpen < DEFAULT_MIN_OPPORTUNITY_SCORE) return;
+
     const long = p?.plan?.direction === "LONG";
 
     const iEntrada = candleIndexAt(candles, p?.openedAt);

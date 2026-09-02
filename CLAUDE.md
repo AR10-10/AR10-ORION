@@ -93,6 +93,30 @@ visível (nunca só no tooltip): no subtítulo do próprio badge e no
 é escopada só a este caso — nenhuma outra camada de confluência ganha
 autorização para suprimir o Núcleo a partir deste precedente.
 
+**Esclarecimento de escopo (2026-09-02, setas de entrada/saída no
+gráfico):** "display only" já cobria QUANTO de uma anotação de
+confluência/contexto aparece, não só o quê — mas isso nunca tinha sido
+escrito explicitamente, e uma sessão futura sem esta linha poderia tratar
+qualquer filtro de visibilidade como se precisasse do mesmo tipo de
+autorização pontual da Entrega 42 acima. Não precisa: filtrar a
+DENSIDADE de uma camada de confluência/contexto (ex.: uma anotação só
+aparecer quando a confluência real que a acompanha passa de um piso
+documentado) continua sendo o "display only" de sempre, contanto que
+`engine.direction`/`CoreSignalBadge` — a leitura real do Núcleo —
+continue sempre visível e nunca seja substituída ou escondida por esse
+filtro. Isso é categoricamente diferente da exceção da Entrega 42: lá o
+próprio VALOR mostrado pelo badge do Núcleo muda (LONG/SHORT vira
+NEUTRO); aqui o Núcleo nunca muda — só uma anotação AO REDOR dele passa a
+exigir confluência real para se desenhar. Primeiro exemplo real:
+`ipad_runtime/ramber-ui/src/chart/plan-markers.ts` só desenha a seta de
+entrada/saída de um plano do Track Record quando `contextAtOpen.score`
+(Institutional Score real, `nexus/institutional-score.ts`, congelado no
+instante da abertura — nunca recalculado com o score de agora) atinge
+`DEFAULT_MIN_OPPORTUNITY_SCORE`. Omite, nunca fabrica: score desconhecido
+(registro antigo, ou janela real em que não pôde ser calculado) nunca é
+tratado como "abaixo do piso" — o dado completo, sem o filtro, continua
+disponível no painel de Track Record (Regra de Ouro 4).
+
 ## Arquitetura — onde as coisas vivem
 
 - `ipad_runtime/src/research/engines/` — motores puros graduados
