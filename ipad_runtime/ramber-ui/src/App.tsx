@@ -81,7 +81,12 @@ import { deriveTrackRecordAlert, deriveSweepAlert, sweepIdentity, type AlertEven
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
-import type { Timeframe } from "./nexus/types";
+import type { Timeframe, ExchangeConnectionState } from "./nexus/types";
+// Migração Spot→Futures do feed ao vivo (02/09/2026): reusa a máquina de
+// reconnect+backoff+heartbeat já construída e testada em
+// connection-manager.ts em vez de escrever uma segunda fórmula à mão no
+// efeito de boot abaixo.
+import { ConnectionManager } from "./nexus/connection-manager";
 // V-MAX Fase 0.8: Health Monitor real, ligado direto (ver comentário no
 // efeito de boot mais abaixo sobre por que este, diferente do
 // CrossExchangeService da Fase 0.5, não fica dormente).
@@ -1508,10 +1513,6 @@ export default function App() {
     const restInterval = setInterval(fetchSymbolDataGuarded, 30000);
     const derivInterval = setInterval(fetchDerivativesGuarded, 60000);
 
-    let ws: WebSocket | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let reconnectDelayMs = 1000;
-
     // depth10@100ms can fire up to 10x/s — coalesce into a trailing update
     // capped at ~5/s so the order-book-derived UI (heatmap, flow pressure,
     // market direction) doesn't re-render faster than a mobile Safari
@@ -1539,73 +1540,112 @@ export default function App() {
     const tickerStream = `${wsSymbol}usdt@ticker`;
     const depthStream = `${wsSymbol}usdt@depth10@100ms`;
 
-    const connect = () => {
-      if (unmounted) return;
-      ws = new WebSocket(
-        `wss://stream.binance.com:9443/stream?streams=${tickerStream}/${depthStream}`,
-      );
-      ws.onopen = () => {
-        setWsLive(true);
-        reconnectDelayMs = 1000;
-      };
-      ws.onclose = () => {
-        setWsLive(false);
-        if (unmounted) return;
-        reconnectTimer = setTimeout(connect, reconnectDelayMs);
-        reconnectDelayMs = Math.min(reconnectDelayMs * 2, 15000);
-      };
-      ws.onerror = () => ws?.close();
+    // Migração Spot→Futures (02/09/2026, achado registrado em
+    // ELITE_TRADING_RESEARCH_MAP.md §13): o resto do app (candles REST,
+    // diretriz3-fixes.test.ts) já é Futures-exclusivo, mas o preço/book AO
+    // VIVO ainda conectava em Binance SPOT (stream.binance.com) —
+    // inconsistente com a arquitetura declarada do próprio projeto
+    // (CLAUDE.md: Binance USDT-M Futures/Perpétuo como fonte primária).
+    //
+    // Reestruturação de URL da Binance (anúncio 2026-03-06, URLs legadas
+    // desligadas 2026-04-23, mesma família já aplicada ao feed de
+    // liquidações nesta sessão): dados de mercado Futures agora se dividem
+    // por categoria — "/market" para feeds regulares (ticker/kline/
+    // markPrice/aggTrade) e "/public" para feeds de alta frequência
+    // (depth) — cada categoria é a raiz da sua própria conexão, não dá
+    // mais pra multiplexar as duas no mesmo socket como no Spot legado.
+    // Isso força duas conexões reais — cada uma supervisionada pela mesma
+    // ConnectionManager (reconnect+backoff+heartbeat) já construída e
+    // testada em connection-manager.ts, nunca uma segunda fórmula de
+    // reconexão escrita à mão de novo aqui.
+    const tickerUrl = `wss://fstream.binance.com/market/stream?streams=${tickerStream}`;
+    const depthUrl = `wss://fstream.binance.com/public/stream?streams=${depthStream}`;
 
-      ws.onmessage = (event) => {
+    let tickerState: ExchangeConnectionState = "IDLE";
+    let depthState: ExchangeConnectionState = "IDLE";
+    // Fail-closed honesto (Regra de Ouro 3): LIVE só quando AMBAS as
+    // conexões (preço E book) estão realmente entregando dado fresco —
+    // nunca mostra "LIVE" com o book travado só porque o ticker respondeu,
+    // e nunca faz fallback silencioso pra Spot se uma delas cair (a
+    // conexão simplesmente fica OFFLINE/reconectando, nunca troca de fonte).
+    const recomputeWsLive = () => {
+      if (unmounted) return;
+      setWsLive(tickerState === "LIVE" && depthState === "LIVE");
+    };
+
+    const tickerManager = new ConnectionManager({
+      connect: () => new WebSocket(tickerUrl),
+      onStateChange: (state) => {
+        tickerState = state;
+        recomputeWsLive();
+      },
+      onMessage: (raw) => {
         let msg: any;
         try {
-          msg = JSON.parse(event.data);
+          msg = JSON.parse(raw);
         } catch {
           return; // malformed frame — drop it, keep the connection alive
         }
-        if (msg.stream === tickerStream) {
-          const d = msg.data;
-          const currentPrice = Number(d.c);
-          const open = Number(d.o);
-          const delta = currentPrice - open;
-          setPriceData({
-            price: currentPrice,
-            delta,
-            deltaPct: Number(d.P),
-            high: Number(d.h),
-            low: Number(d.l),
-            volume: Number(d.v),
-            direction: delta >= 0 ? "LONG" : "SHORT",
-          });
-          setPriceUpdatedAt(Date.now());
-        } else if (msg.stream === depthStream) {
-          const d = msg.data;
-          if (d.bids && d.asks) {
-            pendingOrderBook = {
-              bids: d.bids
-                .slice(0, 8)
-                .map((b: string[]) => ({ price: Number(b[0]), size: Number(b[1]) })),
-              asks: d.asks
-                .slice(0, 8)
-                .map((a: string[]) => ({ price: Number(a[0]), size: Number(a[1]) }))
-                .reverse(),
-            };
-            if (!orderBookFlushTimer) {
-              orderBookFlushTimer = setTimeout(flushOrderBook, ORDER_BOOK_THROTTLE_MS);
-            }
+        if (msg.stream !== tickerStream || !msg.data) return;
+        const d = msg.data;
+        const currentPrice = Number(d.c);
+        const open = Number(d.o);
+        const delta = currentPrice - open;
+        setPriceData({
+          price: currentPrice,
+          delta,
+          deltaPct: Number(d.P),
+          high: Number(d.h),
+          low: Number(d.l),
+          volume: Number(d.v),
+          direction: delta >= 0 ? "LONG" : "SHORT",
+        });
+        setPriceUpdatedAt(Date.now());
+      },
+    });
+
+    const depthManager = new ConnectionManager({
+      connect: () => new WebSocket(depthUrl),
+      onStateChange: (state) => {
+        depthState = state;
+        recomputeWsLive();
+      },
+      onMessage: (raw) => {
+        let msg: any;
+        try {
+          msg = JSON.parse(raw);
+        } catch {
+          return; // malformed frame — drop it, keep the connection alive
+        }
+        if (msg.stream !== depthStream || !msg.data) return;
+        const d = msg.data;
+        if (d.bids && d.asks) {
+          pendingOrderBook = {
+            bids: d.bids
+              .slice(0, 8)
+              .map((b: string[]) => ({ price: Number(b[0]), size: Number(b[1]) })),
+            asks: d.asks
+              .slice(0, 8)
+              .map((a: string[]) => ({ price: Number(a[0]), size: Number(a[1]) }))
+              .reverse(),
+          };
+          if (!orderBookFlushTimer) {
+            orderBookFlushTimer = setTimeout(flushOrderBook, ORDER_BOOK_THROTTLE_MS);
           }
         }
-      };
-    };
-    connect();
+      },
+    });
+
+    tickerManager.start();
+    depthManager.start();
 
     return () => {
       unmounted = true;
       clearInterval(restInterval);
       clearInterval(derivInterval);
-      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (orderBookFlushTimer) clearTimeout(orderBookFlushTimer);
-      ws?.close();
+      tickerManager.stop();
+      depthManager.stop();
     };
   }, [bootGeneration, selectedAsset]);
 

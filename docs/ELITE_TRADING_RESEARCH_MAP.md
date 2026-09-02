@@ -725,27 +725,37 @@ da tarefa"):**
   vivo** (mesma barreira de rede de sempre) — o Operador confirma no
   ambiente com egress real se o painel "INSTITUTIONAL LIQUIDATIONS ·
   REAL" volta a receber eventos.
-- **Preço/book ao vivo (ticker+depth, `App.tsx`) conecta em Binance
-  SPOT (`stream.binance.com`), não Futures — inconsistente com a
-  arquitetura declarada do próprio projeto.** V15.1 GOD TIER (já
-  documentado em `diretriz3-fixes.test.ts`) afirma "Futuros exclusivo...
-  extinguindo qualquer roteamento de gráficos para mercado Spot" para
-  TODO o resto do sistema (candles via REST, funding/OI, Pivot Points).
-  O WS de ticker+depth que alimenta `priceData.price` — usado em 8
-  pontos reais de `App.tsx`, inclusive o patch cirúrgico da vela em
-  formação no gráfico — é a única exceção real encontrada, e nenhum
-  comentário no código explica se é deliberado (ex.: Spot WS mais
-  estável) ou um resíduo de uma versão anterior à decisão V15.1. A
-  diferença de preço real entre Spot e Futures (o "basis", dirigido por
-  funding rate) costuma ser pequena mas não é zero, especialmente em
-  eventos de funding extremo. **Não corrigido nesta rodada** — a
-  arquitetura de migração existe e é direta (Binance Futures expõe o
-  mesmo formato de combined-stream, `wss://fstream.binance.com/stream?
-  streams=...`, confirmado via pesquisa desta mesma sessão), mas
-  `priceData.price` é usado de forma pervasiva o bastante (preço ao
-  vivo exibido, patch de vela, Trade Plan) para merecer sua própria
-  rodada isolada e cuidadosa de verificação, não uma edição de
-  passagem dentro desta pesquisa.
+- **Preço/book ao vivo (ticker+depth, `App.tsx`) conectava em Binance
+  SPOT (`stream.binance.com`), não Futures — RESOLVIDO (02/09/2026).**
+  V15.1 GOD TIER (já documentado em `diretriz3-fixes.test.ts`) afirma
+  "Futuros exclusivo... extinguindo qualquer roteamento de gráficos para
+  mercado Spot" para todo o resto do sistema (candles via REST,
+  funding/OI, Pivot Points) — o WS de ticker+depth que alimenta
+  `priceData.price` era a única exceção real. Corrigido com autorização
+  explícita do Operador (a mudança altera os NÚMEROS exibidos ao vivo):
+  migrado para `wss://fstream.binance.com` real. A arquitetura final
+  ficou diferente da hipótese registrada aqui antes — não é um único
+  combined-stream `/stream?streams=ticker/depth` como se imaginava, e
+  sim **duas conexões separadas por categoria** (mesma reestruturação de
+  URL de 06/03/2026 já aplicada ao fix de liquidações acima):
+  `wss://fstream.binance.com/market/stream?streams=<symbol>usdt@ticker`
+  (categoria `/market`, confirmado via pesquisa) e
+  `wss://fstream.binance.com/public/stream?streams=<symbol>usdt@depth10@100ms`
+  (categoria `/public` — feeds de alta frequência como `@depth`,
+  evidência forte mas não uma citação direta tão explícita quanto a do
+  ticker). Cada conexão agora é supervisionada por uma
+  `ConnectionManager` real (`nexus/connection-manager.ts` — máquina de
+  reconnect+backoff+heartbeat já construída e testada nesta mesma
+  sessão) em vez do reconnect manual que existia antes; `wsLive` agora é
+  fail-closed de verdade — só `true` quando AMBAS as conexões (preço E
+  book) estão `LIVE`, nunca um fallback silencioso pra Spot se uma
+  cair. 5 testes novos de padrão-no-código-fonte em
+  `ws-live-feed-futures-migration.test.ts`. **Ainda não verificado
+  contra uma conexão ao vivo** (mesma barreira de rede de sempre,
+  agravada aqui pela incerteza real sobre `/public` vs `/market` para
+  depth) — o Operador confirma no ambiente com egress real se o preço/
+  book seguem atualizando normalmente e se o "basis" Spot↔Futures
+  desaparece dos números exibidos.
 
 - **Risco de escopo**: este documento tem ~40 itens catalogados
   entre as 9 categorias. A tentação real é tratá-lo como um checklist
