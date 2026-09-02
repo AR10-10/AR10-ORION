@@ -51,8 +51,12 @@ import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/s
 // único OK/WARNING/FAIL/DADOS_INSUFICIENTES por cima dos 3 motores de
 // qualidade reais (Bus/GMIL/Research) — nunca um 4º cálculo, só leitura.
 import { classifyBusQuality, classifyWeight, classifySufficiencyScore, DATA_QUALITY_COLOR, type DataQualityLabel } from "./nexus/data-quality-vocabulary";
-// Fase Ω Priority 1: tipos + lista canônica dos 6 prazos — mesma fonte que
-// engine-bridge.ts usa para orquestrar, nunca uma segunda lista duplicada.
+// Fase Ω Priority 1: tipos + lista canônica dos prazos (MULTI_TIMEFRAME_LIST,
+// hoje 9: 1m/3m/5m/15m/30m/1h/4h/1d/1w) — mesma fonte que engine-bridge.ts
+// usa para orquestrar, nunca uma segunda lista duplicada nem uma contagem
+// escrita à mão em prosa (achado real: "6 prazos" tinha ficado pra trás
+// desde a ampliação da Diretriz Mestra §7 — ver MULTI_TIMEFRAME_LIST.length
+// abaixo em vez de um número que pode divergir de novo em silêncio).
 import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } from "./nexus/multi-timeframe-engine";
 // Signal Precision order (phase 4): actionable plan from real structure.
 import { buildTradePlan, effectiveStopForTargetsHit, obstacleZonesInPath, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
@@ -1771,9 +1775,10 @@ export default function App() {
   // mais lenta que o ciclo principal (30s) porque isto é confluência/
   // contexto entre prazos, nunca o caminho crítico do sinal principal (LEI
   // 24: nunca um segundo motor de decisão). Deliberadamente NÃO depende de
-  // chartTimeframe: os 6 prazos são computados juntos, sempre, independente
-  // de qual está selecionado no gráfico — trocar o prazo exibido não deveria
-  // disparar um novo ciclo caro dos outros 5 que não mudaram. Sempre escreve
+  // chartTimeframe: os prazos de MULTI_TIMEFRAME_LIST são computados juntos,
+  // sempre, independente de qual está selecionado no gráfico — trocar o
+  // prazo exibido não deveria disparar um novo ciclo caro dos outros que não
+  // mudaram. Sempre escreve
   // o resultado (mesmo null): mesmo padrão do ciclo principal acima
   // (setRealCycle sempre escreve); na prática o próprio Bus já serve o
   // último candle BOM por chave em vez de ok:false num hiccup transitório
@@ -11647,9 +11652,11 @@ function MultiTimeframeMatrixWidget() {
       <div className="flex flex-col gap-1 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
         <div
           className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff20]"
-          title="Contagem real de quantos dos 6 prazos (com leitura real) concordam — NUNCA uma probabilidade calibrada (este repositório não tem backtest para sustentar essa afirmação honestamente)."
+          title={`Contagem real de quantos dos ${MULTI_TIMEFRAME_LIST.length} prazos (com leitura real) concordam — NUNCA uma probabilidade calibrada (este repositório não tem backtest para sustentar essa afirmação honestamente).`}
         >
-          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CONFLUÊNCIA · 6 PRAZOS</span>
+          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">
+            CONFLUÊNCIA · {MULTI_TIMEFRAME_LIST.length} PRAZOS
+          </span>
           <span className={`text-[0.55rem] font-mono font-black ${confluenceColor}`}>{confluenceLabel}</span>
         </div>
         {rows.map(({ tf, ctx }) => {
@@ -11665,6 +11672,15 @@ function MultiTimeframeMatrixWidget() {
                 ctx.support1 !== null ? `S1 ${ctx.support1.toFixed(0)}` : null,
                 ctx.resistance1 !== null ? `R1 ${ctx.resistance1.toFixed(0)}` : null,
                 ctx.atrPercent !== null ? `ATR ${ctx.atrPercent.toFixed(2)}%` : null,
+                // SMC Harmonic Fusion (auditoria de sincronismo, pedido do
+                // Operador): Liquidez real (OB/FVG/EQL) deste prazo, mesmo
+                // motor do gráfico principal — só entra na tooltip quando o
+                // trio veio real (os 3 nascem/morrem juntos, ver
+                // multi-timeframe-engine.ts), nunca um "0" fabricado quando
+                // o motor de liquidez não teve leitura.
+                ctx.unmitigatedOrderBlockCount !== null
+                  ? `OB ${ctx.unmitigatedOrderBlockCount} · FVG ${ctx.unmitigatedFvgCount} · EQL livre ${ctx.unsweptLiquidityZoneCount}`
+                  : null,
               ]
                 .filter(Boolean)
                 .join(" · ") || "sem métrica adicional real nesta janela";

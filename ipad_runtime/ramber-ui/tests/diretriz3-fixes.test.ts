@@ -155,7 +155,8 @@ describe('diretriz 2 + V15.1 GOD TIER: roteamento Futuros exclusivo — Gráfico
     const bridge = read('../src/engine-bridge.ts');
     const helperCallSites = bridge.match(/await requestFuturesCandleSnapshot\(\{/g) ?? [];
     // Fase Ω Priority 1: buildMultiTimeframeContext somou um 4º call site
-    // real (mesmo helper, 6 prazos em paralelo) — nenhuma perna de spot,
+    // real (mesmo helper, os prazos de MULTI_TIMEFRAME_LIST em paralelo) —
+    // nenhuma perna de spot,
     // nenhum bypass do helper. ADITIVO V-MAX Etapa 9: scanRadarCandidate
     // migrou seus 2 call sites (o candidato em si + o loop de 3 prazos de
     // referência) para requestRadarCandleSnapshot (provider-aware, ver
