@@ -40,6 +40,21 @@
 > Sutton & Barto, Pearl, McNeil/Frey/Embrechts, etc. são livros-texto reais).
 > O que fica arquivado como **não-autorizado por si só** é o roteiro de
 > implementação e a atribuição de prioridade/sequência de entregas.
+>
+> **Auditoria de conteúdo (2026-09-02, pendência #8 da PR #16).** Reconferi
+> os 30 motores do ÍNDICE (`❌ Não existe`) contra o código real via grep
+> (Kalman/VaR-ES-EVT/Kelly/Monte Carlo/entropia-informação mútua/Copula/
+> Ornstein-Uhlenbeck/GMM/LSTM/PPO-SAC/algoritmo genético/simulated
+> annealing/Hawkes/Lyapunov) — os 30 continuam honestamente `❌ Não existe`,
+> zero divergência. A única linha que já não bate é da tabela **Roteiro de
+> Implementação** (não do índice dos 30): item **44 — Kelly Criterion +
+> Position Sizing** já é real hoje, fora deste catálogo e sem relação com
+> ele — `ipad_runtime/src/risk/risk-engine.js` (`kellyFractionForForca`,
+> Kelly fracionado ½/¼/⅛ por faixa de força do Conselho), chamado ao vivo
+> por `App.tsx` via `buildRiskSuggestion`. Não muda a conclusão da seção
+> STATUS abaixo ("zero destes 30 motores está implementado") — Kelly nunca
+> foi um dos 30, só uma linha da tabela de roteiro já explicitamente
+> desautorizada por si só no parágrafo acima.
 
 ---
 
