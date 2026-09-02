@@ -175,8 +175,8 @@ export function getChartLayerTier(layerId: string): ChartDepthTier {
  *  overlays — inclusive do nível CAMPO (z=10), que é justamente o mais
  *  difuso e o que cobre mais área.
  *
- *  As 7 nativas e o nível declarado de cada uma (já COM a correção descrita
- *  logo abaixo, em CHART_LINE_ONLY_LAYER_IDS):
+ *  As 7 nativas ORIGINAIS e o nível declarado de cada uma (já COM a
+ *  correção descrita logo abaixo, em CHART_LINE_ONLY_LAYER_IDS):
  *    cvd .................. "line"    supertrend ......... "line"
  *    pivot_points ......... "line"    premium_discount ... "line" *
  *    scenario_projection .. "line" *  harmonics .......... "event"
@@ -199,20 +199,29 @@ export function getChartLayerTier(layerId: string): ChartDepthTier {
  *    - as linhas de canvas (EMA/VWAP/Fibonacci/ZigZag) seguem em 40, acima
  *      das velas; eventos em 50; plano em 60; etiquetas em 70.
  *
- *  RESÍDUO HONESTO, declarado em vez de escondido: as 7 nativas dividem UM
- *  canvas só, então só podem ter UM z. Com 35, harmonics e liquidity_sweep
- *  (declaradas "event", 50) ficam abaixo dos eventos de canvas (BOS/CHOCH,
- *  padrões de vela). São DUAS camadas, não quatro: as outras duas que este
- *  parágrafo listava — premium_discount e scenario_projection — não eram
- *  resíduo de posicionamento, eram DECLARAÇÃO ERRADA, e foram corrigidas
- *  (ver CHART_LINE_ONLY_LAYER_IDS abaixo). Em 35 as duas já estão no lugar
- *  certo: acima de toda área pintada, que é o que uma linha de 1px exige.
+ *  harmonics MIGROU PARCIALMENTE (SMC Harmonic Fusion, pedido do Operador):
+ *  a seta de confluência institucional (HarmonicConfluenceArrowPlugin) já
+ *  tem canvas PRÓPRIO, em `getChartLayerZIndex("harmonics")` = 50 (event) —
+ *  correto, fora deste resíduo. O zigue-zague XABCD/Wolfe e a linha PRZ
+ *  (EnhancedChart_110_Percent.tsx) continuam nativos (`createPriceLine`/
+ *  `addSeries`), então harmonics saiu de CHART_NATIVE_LAYER_IDS (não é mais
+ *  "sem canvas próprio nenhum") mas ainda tem UMA perna em 35 — migrar
+ *  também o zigue-zague/PRZ fecharia o resíduo por completo; não feito de
+ *  carona aqui (mudança maior, players nativos da lib são mais baratos de
+ *  desenhar um ziguezague que muda pouco por candle).
  *
- *  Fechar o resíduo restante exige migrar harmonics/liquidity_sweep para
- *  canvas próprio — mudança maior, não feita de carona aqui. E ela só é
- *  SEGURA de fazer depois da correção de declaração acima: migrar uma
- *  camada que se declara "zone" a coloca em z=20, abaixo de todo
- *  preenchimento, refazendo a violação da regra 4 que este bloco corrigiu.
+ *  RESÍDUO HONESTO, declarado em vez de escondido: as 6 nativas restantes
+ *  dividem UM canvas só, então só podem ter UM z. Com 35, liquidity_sweep
+ *  (declarada "event", 50) fica abaixo dos eventos de canvas (BOS/CHOCH,
+ *  padrões de vela, e agora a seta de harmonics). É UMA camada, não quatro:
+ *  as outras três que este parágrafo já listou — premium_discount e
+ *  scenario_projection (declaração errada, corrigidas — ver
+ *  CHART_LINE_ONLY_LAYER_IDS abaixo) e harmonics (migração parcial, acima)
+ *  — já saíram do resíduo real de posicionamento.
+ *
+ *  Fechar o resíduo restante exige migrar liquidity_sweep (e a perna nativa
+ *  remanescente de harmonics) para canvas próprio — mudança maior, não
+ *  feita de carona aqui.
  */
 export const CHART_NATIVE_CANVAS_Z_INDEX = TIER_Z.profile + 5;
 
@@ -258,7 +267,6 @@ export const CHART_NATIVE_LAYER_IDS: readonly string[] = [
   "pivot_points",
   "premium_discount",
   "scenario_projection",
-  "harmonics",
   "liquidity_sweep",
 ];
 

@@ -641,8 +641,19 @@ describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no grá
   it('ChartWidget passa harmonicHits (mesma fatia da ANALYSIS) e decision (contrato fundido) ao gráfico', () => {
     const a = app();
     expect(a).toContain('const chartHarmonics = useHarmonicPatternsSnapshot();');
-    expect(a).toContain('harmonicHits={chartHarmonics}');
     expect(a).toContain('decision={nexusDecision ?? null}');
+  });
+
+  // SMC Harmonic Fusion (pedido do Operador): o gráfico não recebe mais o
+  // array cru — App.tsx filtra por confluência real (OB/FVG/POC/exaustão/
+  // sweep, smc-harmonic-fusion.ts) antes de passar. `chartHarmonics` cru
+  // continua existindo (painel ANALYSIS, harmonicBestFitScore) — só o
+  // que chega ao CANVAS mudou.
+  it('ChartWidget passa harmonicHits já FILTRADO por confluência real (chartHarmonicsConfirmed), nunca o array cru de chartHarmonics', () => {
+    const a = app();
+    expect(a).toContain('harmonicHits={chartHarmonicsConfirmed}');
+    expect(a).not.toContain('harmonicHits={chartHarmonics}');
+    expect(a).toContain('harmonicConfluence={bestConfirmedHarmonicFusion}');
   });
 });
 

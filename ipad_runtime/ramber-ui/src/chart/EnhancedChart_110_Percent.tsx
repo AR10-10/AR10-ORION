@@ -176,6 +176,8 @@ import type { ScenarioProjection } from "../nexus/scenario-engine";
 import { describeScenarioConfidence, describeScenarioReaction } from "../nexus/scenario-engine";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
 import type { HarmonicPatternHit, HarmonicPoint } from "../nexus/harmonic-patterns";
+import type { SmcHarmonicFusionResult } from "../nexus/smc-harmonic-fusion";
+import { HarmonicConfluenceArrowPlugin } from "./HarmonicConfluenceArrowPlugin";
 import type { TrianglePatternHit } from "../nexus/triangle-pattern";
 import type { HeadShouldersHit } from "../nexus/head-shoulders-pattern";
 import type { NexusDecision } from "../nexus/decision-layer";
@@ -632,8 +634,16 @@ interface EnhancedChartProps {
   // (premium-discount.ts) — 3 linhas fio-de-seda discretas. Fail-closed.
   premiumDiscount?: PremiumDiscountReading | null;
   // Auditoria Final §3: harmônicos RENDERIZADOS — a linha do ponto D do
-  // melhor padrão real (fit desc) + EPA quando Wolfe. Fail-closed.
+  // melhor padrão real (fit desc) + EPA quando Wolfe. Fail-closed. SMC
+  // Harmonic Fusion (pedido do Operador): App.tsx já filtra este array
+  // para só os hits com confluência institucional CONFIRMADA — um
+  // harmônico geometricamente válido mas sem confluência real simplesmente
+  // não chega aqui, nunca "perde a disputa" pro Triângulo/H&S por engano.
   harmonicHits?: HarmonicPatternHit[] | null;
+  // Melhor fusão CONFIRMADA (mesmo hit que harmonicHits[0] quando presente)
+  // — usada só pela seta triangular de HarmonicConfluenceArrowPlugin.
+  // Fail-closed: null = sem confluência suficiente, zero seta.
+  harmonicConfluence?: SmcHarmonicFusionResult | null;
   // Carta Branca (Reconhecimento de Padrões): as 2 famílias novas que
   // competem com harmonicHits[0] pelo MESMO desenho de "único melhor
   // padrão" — ver o useEffect unificado abaixo. Cada motor já devolve o
@@ -944,6 +954,7 @@ function EnhancedChart_110_PercentImpl({
   scenario,
   premiumDiscount,
   harmonicHits,
+  harmonicConfluence,
   trianglePattern,
   headShouldersPattern,
   decision,
@@ -4186,6 +4197,19 @@ function EnhancedChart_110_PercentImpl({
           series={chartReady?.series ?? null}
           data={data}
           patterns={candlePatterns ?? []}
+        />
+      )}
+      {/* SMC Harmonic Fusion (pedido do Operador): seta triangular real no
+         ponto D só quando App.tsx já confirmou confluência institucional
+         suficiente (harmonicConfluence não-nulo) — mesmo toggle de
+         `harmonics` que já gateia o zigzag/PRZ do padrão, nunca uma
+         camada nova a mais no painel de visibilidade. */}
+      {visibility.harmonics && (
+        <HarmonicConfluenceArrowPlugin
+          chart={chartReady?.chart ?? null}
+          series={chartReady?.series ?? null}
+          data={data}
+          fusion={harmonicConfluence ?? null}
         />
       )}
       {/* V-MAX Fase 1 (superfície visual): Volume Profile real (Fase 1.3)

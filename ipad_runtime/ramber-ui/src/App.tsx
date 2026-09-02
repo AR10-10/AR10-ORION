@@ -263,6 +263,7 @@ import { timeframeProfile } from "./nexus/timeframe-profile";
 import { buildAssistantMessages } from "./nexus/operation-assistant";
 import { computePremiumDiscount } from "./nexus/premium-discount";
 import { detectHarmonicPatterns, MIN_FIT_SCORE } from "./nexus/harmonic-patterns";
+import { evaluateSmcHarmonicFusion, type SmcHarmonicFusionResult } from "./nexus/smc-harmonic-fusion";
 // Carta Branca (Reconhecimento de Padrões): Triângulo e Ombro-Cabeça-Ombro —
 // mesma disciplina de harmonic-patterns.ts (fail-closed, fitScore nunca
 // probabilidade), motores isolados graduados agora ao pipeline real.
@@ -9862,6 +9863,37 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // Matriz de Confluência Fibonacci em App() — 2º consumidor do MESMO
   // seletor Zustand, zero segunda computação.
   const volumeProfileSnapshot = useVolumeProfileSnapshot();
+  // SMC Harmonic Fusion (pedido direto do Operador): cruza a geometria
+  // harmônica real (chartHarmonics, já ordenada por fitScore) contra as
+  // confluências institucionais que já existem em paralelo no mesmo ciclo
+  // — OB/FVG/EQL (smcZones), POC (volumeProfileSnapshot) e candle de
+  // exaustão (chartCandlePatterns). Zero motor novo: evaluateSmcHarmonicFusion
+  // só avalia o que os 5 motores reais já calculam. `chartHarmonicsConfirmed`
+  // é a lista filtrada (mesma ordem, só os hits com confluência real >= piso)
+  // que substitui `chartHarmonics` NO GRÁFICO — a regra do Operador é clara
+  // ("se as confluências não alinham, não desenha a estrutura nem a seta");
+  // o painel ANALYSIS e `relevanceInput` continuam lendo `chartHarmonics`
+  // cru (geometria completa, Regra de Ouro 4: nunca esconder dado real).
+  const harmonicFusionResults = useMemo(
+    () =>
+      evaluateSmcHarmonicFusion({
+        harmonicHits: chartHarmonics ?? [],
+        orderBlocks: smcZones?.orderBlocks ?? [],
+        fairValueGaps: smcZones?.fairValueGaps ?? [],
+        liquidityZones: smcZones?.liquidityZones ?? [],
+        pocPrice: volumeProfileSnapshot?.fixedRange?.pocPrice ?? null,
+        candlePatterns: chartCandlePatterns ?? [],
+      }),
+    [chartHarmonics, smcZones, volumeProfileSnapshot, chartCandlePatterns],
+  );
+  // Ordem preservada (chartHarmonics já vem por fitScore desc): o primeiro
+  // confirmado é o melhor confirmado, mesma convenção de "único vencedor"
+  // que o resto da família de padrões gráficos já usa.
+  const bestConfirmedHarmonicFusion: SmcHarmonicFusionResult | null = harmonicFusionResults.find((r) => r.confirmed) ?? null;
+  const chartHarmonicsConfirmed = useMemo(
+    () => harmonicFusionResults.filter((r) => r.confirmed).map((r) => r.hit),
+    [harmonicFusionResults],
+  );
   const trendChannelForRelevance = useMemo(
     () => computeTrendChannel((chartData ?? []).map((c: any) => ({ time: c.time, close: c.close })), TREND_CHANNEL_DEFAULT_WINDOW),
     [chartData],
@@ -10226,7 +10258,8 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
             institutionalScoreValue={institutionalScore?.score ?? null}
             scenario={chartScenario ?? null}
             premiumDiscount={chartPremiumDiscount ?? null}
-            harmonicHits={chartHarmonics}
+            harmonicHits={chartHarmonicsConfirmed}
+            harmonicConfluence={bestConfirmedHarmonicFusion}
             trianglePattern={chartTrianglePattern}
             headShouldersPattern={chartHeadShoulders}
             decision={nexusDecision ?? null}
