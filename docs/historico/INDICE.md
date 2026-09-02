@@ -10,10 +10,22 @@ eram 32 relatórios soltos entre 78 arquivos — 41% de `docs/` era registro
 de sessão passada, e nem `CLAUDE.md` nem `README.md` citavam um só.
 
 **Atualização 2026-09-01** (auditoria "milímetro a milímetro" pedida pelo
-Operador): o mesmo padrão tinha se acumulado de novo — 9 documentos
-datados (`2026-07-11` a `2026-08-18`) viviam soltos em `docs/` sem
-nenhuma citação em `CLAUDE.md`, `README.md` ou neste índice. Movidos para
-cá. É o mesmo defeito, reaparecendo: nada nas Regras de Ouro nem no
+Operador, em 2 passadas na mesma sessão): o mesmo padrão tinha se
+acumulado de novo. 1ª passada — 9 documentos com data NO NOME
+(`2026-07-11` a `2026-08-18`) viviam soltos em `docs/`, zero citação em
+`CLAUDE.md`/`README.md`/este índice. 2ª passada — uma varredura mais
+ampla (checando toda citação em prosa, não só nome de arquivo com data)
+achou mais 5, incluindo 3 SEM data no nome (`ALINHAMENTO_LOCAL_NUVEM.md`,
+`ORDEM_MESTRA_EVOLUCAO_AR10.md`, `RELEASE_NOTES_RC2.md` — data real obtida
+de `git log --diff-filter=A`, a fonte confiável quando o próprio nome não
+declara). As 14 ao todo, movidas para cá. Outros 3 arquivos igualmente
+sem citação (`BIBLIOTECA_MATEMATICA_AVANCADA.md`,
+`MULTI_ASSET_RESEARCH_LIBRARY.md`, `MULTI_SOURCE_DATA_FLOW.md`)
+FICARAM em `docs/` — são catálogo/arquitetura, não registro de sessão; o
+defeito deles é outro (referência morta, ninguém aponta pra eles), não
+"fora do lugar".
+
+É o mesmo defeito reaparecendo: nada nas Regras de Ouro nem no
 `CLAUDE.md` impede um relatório novo de nascer direto em `docs/` — só a
 disciplina de quem trabalha aqui depois de terminar. Registrado, não só
 corrigido, porque a lição real é "confira de novo na próxima sessão",
@@ -22,11 +34,14 @@ não "resolvido para sempre".
 Para saber o estado ATUAL do sistema, use `CLAUDE.md`,
 `docs/SYSTEM_HANDBOOK.md` e `ipad_runtime/src/research/QUARANTINE.md`.
 
-## Os 41 registros, em ordem cronológica
+## Os 46 registros, em ordem cronológica
 
 | Data | Arquivo | Assunto |
 |---|---|---|
 | 2026-06-30 | [`AUDITORIA_ECOSSISTEMA_VISUAL.md`](AUDITORIA_ECOSSISTEMA_VISUAL.md) | AUDITORIA + PESQUISA DO ECOSSISTEMA VISUAL DO GRÁFICO |
+| 2026-07-03 | [`RELEASE_NOTES_RC2.md`](RELEASE_NOTES_RC2.md) | RAMBER · Terminal V-PRIME ELITE — Release Notes (arco RC1 → RC2 / Gold Master) |
+| 2026-07-10 | [`VMAX_FASE0_AUDIT_REPORT.md`](VMAX_FASE0_AUDIT_REPORT.md) | Auditoria: Blueprint V-MAX, Fase 0 ("O Tronco") |
+| 2026-07-11 | [`VMAX_FASE1_AUDIT_REPORT.md`](VMAX_FASE1_AUDIT_REPORT.md) | Auditoria: Blueprint V-MAX, Fase 1 ("Densidade Institucional") |
 | 2026-07-11 | [`AUDIT_REPORT_CURRENT_STATE_2026-07-11.md`](AUDIT_REPORT_CURRENT_STATE_2026-07-11.md) | Relatório de Estado Atual do Sistema (para Auditoria Externa) |
 | 2026-07-21 | [`RELATORIO_AUDITORIA_FINAL.md`](RELATORIO_AUDITORIA_FINAL.md) | RELATÓRIO — ORDEM DE AUDITORIA FINAL (Certificação de Qualidade Operacional) |
 | 2026-07-21 | [`RELATORIO_EPC.md`](RELATORIO_EPC.md) | RELATÓRIO EPC — Auditoria de Evolução Suprema (AR10 CYBORG / PRO) |
@@ -63,7 +78,9 @@ Para saber o estado ATUAL do sistema, use `CLAUDE.md`,
 | 2026-08-17 | [`MAPA_ECOSSISTEMA_2026-08-17.md`](MAPA_ECOSSISTEMA_2026-08-17.md) | Mapa do Ecossistema AR10 CYBORG — medido, não opinado |
 | 2026-08-17 | [`MAPEAMENTO_VISUAL_CANVAS_2026-08-17.md`](MAPEAMENTO_VISUAL_CANVAS_2026-08-17.md) | Mapeamento Visual do Canvas |
 | 2026-08-17 | [`AUDITORIA_ECOSSISTEMA_2026-08-17.md`](AUDITORIA_ECOSSISTEMA_2026-08-17.md) | Auditoria do Ecossistema — 2026-08-17 |
+| 2026-08-18 | [`ORDEM_MESTRA_EVOLUCAO_AR10.md`](ORDEM_MESTRA_EVOLUCAO_AR10.md) | Ordem Mestra — auditoria cruzada código × documentação |
 | 2026-08-18 | [`MAPA_DUPLICACAO_2026-08-18.md`](MAPA_DUPLICACAO_2026-08-18.md) | Mapa de duplicação — AR10 ORION |
 | 2026-08-18 | [`MAPA_LACUNAS_RESEARCH_BOOK_2026-08-18.md`](MAPA_LACUNAS_RESEARCH_BOOK_2026-08-18.md) | Mapa de lacunas — AR10 Research Book × código real |
 | 2026-08-18 | [`AVALIACAO_PRONTIDAO_COMERCIAL_2026-08-18.md`](AVALIACAO_PRONTIDAO_COMERCIAL_2026-08-18.md) | Avaliação de prontidão comercial |
 | 2026-08-18 | [`AUDITORIA_VERIFICACAO_PARECER_2026-08-18.md`](AUDITORIA_VERIFICACAO_PARECER_2026-08-18.md) | Auditoria de verificação do parecer de prontidão — AR10 ORION |
+| 2026-08-31 | [`ALINHAMENTO_LOCAL_NUVEM.md`](ALINHAMENTO_LOCAL_NUVEM.md) | Alinhamento Local × Nuvem — qual é a base correta (a mesma investigação que abriu a PR #16) |
