@@ -9481,6 +9481,30 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
   const { smcZones, tradePlanStructureZones, bosChoch, liquidityVoids, institutionalBlocks, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, institutionalScore, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};
+  // MD-7 (Visual Confidence Trace): segundo useContext deliberado (nunca
+  // somado à desestruturação grande acima) — 3 testes de wiring
+  // pré-existentes (chart-layers-panel-wiring/ciborgue-vivo-wiring/trade-
+  // plan-zone-plugin) travam aquela linha literal inteira; tocá-la para
+  // somar `expectancyFilter` quebraria os três por um motivo que não é o
+  // deles. useContext duplicado no mesmo componente é barato e comum em
+  // React — mesmo objeto de contexto, zero segunda fonte de dado.
+  const { expectancyFilter } = useContext(WidgetContext) || {};
+  // MESMA fórmula que CoreSignalBadge já usa pra effectiveDirection
+  // (App.tsx, componente CoreSignalBadge acima) — nunca uma segunda regra
+  // (LEI 24, memo do Operador item 6: "não criar uma regra paralela").
+  // Reproduzida aqui (não extraída pra um helper compartilhado) porque
+  // CoreSignalBadge é o componente protegido pela exceção pontual da
+  // Entrega 42 — tocar seu corpo interno está fora do escopo desta
+  // entrega ("execute somente esta alteração visual"). wiring-test
+  // (visual-confidence-trace-wiring.test.ts) trava as DUAS fórmulas
+  // idênticas por padrão de código, então drift nunca passa silencioso.
+  const confidenceDirection: "LONG" | "SHORT" | null = useMemo(() => {
+    const dir = engine?.direction ?? null;
+    const isLong = dir === "LONG";
+    const isShort = dir === "SHORT";
+    const suppressed = (isLong || isShort) && expectancyFilter?.show === false;
+    return suppressed ? null : dir;
+  }, [engine?.direction, expectancyFilter]);
   // OMEGA CORE V-MAX Fase 5 (Corredor de Confluência): a Neural Market
   // Aura lia direto convictionReading (só o pool de 3 subsistemas) para a
   // largura do corredor — mesma leitura que confluenceCorridor.intensity
@@ -10265,6 +10289,7 @@ function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
             premiumDiscount={chartPremiumDiscount ?? null}
             harmonicHits={chartHarmonicsConfirmed}
             harmonicConfluence={bestConfirmedHarmonicFusion}
+            confidenceDirection={confidenceDirection}
             trianglePattern={chartTrianglePattern}
             headShouldersPattern={chartHeadShoulders}
             decision={nexusDecision ?? null}

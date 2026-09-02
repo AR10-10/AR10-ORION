@@ -55,6 +55,13 @@ import { startLiquidationStream } from '../../js/real-data/binance-liquidations-
 import { analyze as analyzeFvgOrderBlocks } from '../../src/research/engines/fvg-order-block-engine.js';
 import { classify as classifyLorentzian } from '../../src/research/engines/lorentzian-classifier.js';
 import { analyze as analyzeMarketStructure } from '../../src/research/engines/market-structure-engine.js';
+// MD-7 (Visual Confidence Trace, pedido direto do Operador): o MESMO
+// findSwings/FRACTAL_K que market-structure-engine.js/support-resistance-
+// engine.js/fvg-order-block-engine.js já importam — nunca um segundo
+// ZigZag (o Operador foi explícito: "não reativar o zigzag completo").
+// Import direto porque este wrapper não classifica nada (zero rótulo de
+// estrutura) — só expõe os pivôs confirmados crus para o traçado visual.
+import { FRACTAL_K, findSwings } from '../../src/research/engines/fractal-swings.js';
 // OMEGA CORE V-MAX Fase 7 (completar o Radar/OIH): mesmo motor real de
 // S/R que o ciclo principal já usa (via analysis-frame.js) — importado
 // aqui diretamente porque o scanner do Radar roda para ativos que NÃO
@@ -1613,6 +1620,43 @@ export function computeZigZag(
   const result = computeZigZagPure(candles, deviationPct, depth);
   if (result.status !== 'OK') return [];
   return result.points;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MD-7 (Visual Confidence Trace) — Traçado Roxo Estrutural. Pedido direto do
+// Operador: "restaurar o traçado roxo dos pivôs... usar o mecanismo de
+// swings já existente, especialmente fractal-swings — não implementar um
+// segundo ZigZag". Wrapper fino: chama findSwings(candles, FRACTAL_K, ...)
+// duas vezes (highs/lows) — o MESMO par de chamadas que market-structure-
+// engine.js já faz para rotular HH/HL/LH/LL — e devolve os pontos
+// mesclados em ordem cronológica de índice, no MESMO shape ZigZagPoint já
+// usado pelo ZigZag (index/price/kind), zero segundo tipo.
+//
+// Só pivôs CONFIRMADOS: findSwings só inclui um pivô no índice i quando
+// existem FRACTAL_K candles reais depois dele confirmando o máximo/mínimo
+// local (i < candles.length - k) — Zero Look-Ahead por construção do
+// próprio motor, não uma garantia extra deste wrapper. A borda viva
+// (últimos FRACTAL_K candles) nunca aparece até confirmar, exatamente como
+// o resto do sistema já trata swing high/low.
+//
+// Mescla simples por índice, nunca uma alternância forçada: dois highs
+// confirmados consecutivos (sem low confirmado real entre eles) aparecem
+// como dois pontos conectados direto — é o que o motor realmente detectou,
+// nunca uma reinterpretação. Zero matemática nova além do merge-sort.
+export function computeStructuralSwings(
+  candles: Array<{ high: number; low: number }>,
+): ZigZagPoint[] {
+  const highs = findSwings(candles, FRACTAL_K, true).map((p: { index: number; price: number }) => ({
+    index: p.index,
+    price: p.price,
+    kind: 'HIGH' as const,
+  }));
+  const lows = findSwings(candles, FRACTAL_K, false).map((p: { index: number; price: number }) => ({
+    index: p.index,
+    price: p.price,
+    kind: 'LOW' as const,
+  }));
+  return [...highs, ...lows].sort((a, b) => a.index - b.index);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

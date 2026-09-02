@@ -178,6 +178,10 @@ import type { PremiumDiscountReading } from "../nexus/premium-discount";
 import type { HarmonicPatternHit, HarmonicPoint } from "../nexus/harmonic-patterns";
 import type { SmcHarmonicFusionResult } from "../nexus/smc-harmonic-fusion";
 import { HarmonicConfluenceArrowPlugin } from "./HarmonicConfluenceArrowPlugin";
+// MD-7 (Visual Confidence Trace): traçado roxo estrutural (fractal-swings)
+// + seta única da decisão atual — ver cabeçalho de cada plugin.
+import { StructureTracePlugin } from "./StructureTracePlugin";
+import { ConfidenceDirectionArrowPlugin } from "./ConfidenceDirectionArrowPlugin";
 import type { TrianglePatternHit } from "../nexus/triangle-pattern";
 import type { HeadShouldersHit } from "../nexus/head-shoulders-pattern";
 import type { NexusDecision } from "../nexus/decision-layer";
@@ -394,6 +398,19 @@ export const CHART_LAYER_IDS = [
   // conceito diferente.
   "andrews_pitchfork",
 ] as const;
+// MD-7 (Visual Confidence Trace, pedido direto do Operador): traçado roxo
+// estrutural (StructureTracePlugin) + seta única da decisão atual
+// (ConfidenceDirectionArrowPlugin) NÃO entram em CHART_LAYER_IDS — o memo
+// do Operador pede "sempre disponível por padrão... não exigir ativação
+// manual", e todo id cadastrado aqui herda DEFAULT_CHART_LAYER_AUTO_MODE
+// = true (travado por teste — timeframe-layer-profile.test.ts exige "true"
+// literal para TODA camada canônica, sem exceção), o que deixaria as duas
+// sujeitas ao Relevance Engine escondê-las por disputa de espaço. Mesmo
+// precedente já real de PriceLabelStackPlugin logo abaixo (também montado
+// sem `visibility.x &&`, também fora desta lista): existem camadas
+// centrais/sempre-on neste gráfico que nunca foram pensadas como
+// "overlay opcional" — as duas são montadas incondicionalmente onde a
+// candlestick series já é real, exatamente como o preço/eixo nativos.
 export type ChartLayerId = (typeof CHART_LAYER_IDS)[number];
 export type ChartLayerVisibility = Record<ChartLayerId, boolean>;
 export const DEFAULT_CHART_LAYER_VISIBILITY: ChartLayerVisibility = {
@@ -644,6 +661,11 @@ interface EnhancedChartProps {
   // — usada só pela seta triangular de HarmonicConfluenceArrowPlugin.
   // Fail-closed: null = sem confluência suficiente, zero seta.
   harmonicConfluence?: SmcHarmonicFusionResult | null;
+  // MD-7 (Visual Confidence Trace): passthrough EXATO do effectiveDirection
+  // já computado por CoreSignalBadge (App.tsx) — nunca um segundo cálculo.
+  // Usado só por ConfidenceDirectionArrowPlugin. null/undefined = WAIT ou
+  // suprimido (LEI 24, Entrega 42): nenhuma seta.
+  confidenceDirection?: "LONG" | "SHORT" | null;
   // Carta Branca (Reconhecimento de Padrões): as 2 famílias novas que
   // competem com harmonicHits[0] pelo MESMO desenho de "único melhor
   // padrão" — ver o useEffect unificado abaixo. Cada motor já devolve o
@@ -955,6 +977,7 @@ function EnhancedChart_110_PercentImpl({
   premiumDiscount,
   harmonicHits,
   harmonicConfluence,
+  confidenceDirection,
   trianglePattern,
   headShouldersPattern,
   decision,
@@ -4212,6 +4235,32 @@ function EnhancedChart_110_PercentImpl({
           fusion={harmonicConfluence ?? null}
         />
       )}
+      {/* MD-7 (Visual Confidence Trace, pedido direto do Operador):
+         traçado roxo estrutural (pivôs fractais confirmados,
+         fractal-swings.js via computeStructuralSwings) — mesma `data` dos
+         overlays acima. Montado SEM `visibility.x &&` de propósito (ver
+         comentário completo em CHART_LAYER_IDS acima): o memo exige
+         "sempre disponível por padrão, nunca exigir ativação manual", e
+         todo id do painel de camadas herda o Relevance Engine automático
+         por padrão (travado por teste) — incompatível com essa garantia.
+         Mesmo precedente de PriceLabelStackPlugin logo abaixo. */}
+      <StructureTracePlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+        data={data}
+      />
+      {/* MD-7: seta única da decisão atual — passthrough EXATO do
+         effectiveDirection que CoreSignalBadge já exibe (App.tsx), nunca
+         um segundo cálculo. Mesma razão acima para não ter `visibility.x
+         &&`: WAIT/decisão suprimida já resulta em "nada desenhado" dentro
+         do próprio plugin (fail-closed), então a garantia de "sempre
+         disponível" nunca vira "sempre visível mesmo sem decisão real". */}
+      <ConfidenceDirectionArrowPlugin
+        chart={chartReady?.chart ?? null}
+        series={chartReady?.series ?? null}
+        data={data}
+        direction={confidenceDirection ?? null}
+      />
       {/* V-MAX Fase 1 (superfície visual): Volume Profile real (Fase 1.3)
          como barras à direita + linha do POC — overlay por cima do chart
          (pointer-events-none), dado direto da store. */}

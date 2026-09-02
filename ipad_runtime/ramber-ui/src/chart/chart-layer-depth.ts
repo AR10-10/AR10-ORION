@@ -127,6 +127,11 @@ const LAYER_TIER: Record<string, ChartDepthTier> = {
   // abaixo de preenchimento. Esquecido na 1ª versão deste mapa; pego pelo
   // teste de cobertura 1:1 contra CHART_LAYER_IDS, não pela tela do Operador.
   cvd: "line",
+  // MD-7 (Visual Confidence Trace): traçado roxo conectando os pivôs
+  // fractais confirmados (fractal-swings.js via computeStructuralSwings) —
+  // mesma natureza de precisão de 1px que zigzag logo acima, nunca abaixo
+  // de preenchimento.
+  structure_trace: "line",
 
   // 5. EVENTO — "aconteceu aqui"
   structure_breaks: "event",
@@ -139,6 +144,12 @@ const LAYER_TIER: Record<string, ChartDepthTier> = {
   // Padrão de vela é um EVENTO pontual ("aconteceu nesta vela"), da mesma
   // classe do BOS/CHOCH e do sweep — nunca uma zona nem uma linha.
   candle_patterns: "event",
+  // MD-7 (Visual Confidence Trace): seta única da decisão atual do Núcleo
+  // — marca pontual ("a decisão é ESTA agora"), nunca podem ser encobertas
+  // por preenchimento/zona/perfil, mesma classe funcional dos eventos
+  // acima. Nunca "plan": não representa Entry/Stop/Target (item 7 do memo,
+  // "a seta não representa ENTRY").
+  confidence_direction: "event",
 
   // 6. PLANO — o acionável
   trade_plan_zone: "plan",
