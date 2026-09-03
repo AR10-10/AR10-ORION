@@ -7212,6 +7212,56 @@ idêntico em módulos/bytes ao commit anterior.
 > (`widgets.events.visible: false`) — precisa do Workspace Manager pra
 > ligar, comportamento pré-existente não alterado por esta rodada.
 
+> **Correção honesta do título desta seção + §38-45 mapeadas (03/09/2026):**
+> o título acima diz "37 seções" — estava errado. O Operador colou as
+> seções §38-45 (RESPONSIVE SIZING/DENSITY CONTROL, iPad Mini, TERMINAL
+> DENSITY, CHART-FIRST LAYOUT, ANTI-OVERFLOW, VISUAL ACCEPTANCE,
+> DIMENSIONAMENTO FINAL, ACEITAÇÃO VISUAL), provando que a Ordem 3 tem
+> pelo menos 45 seções, não 37 — a mesma classe de erro já registrada
+> nesta sessão para "32 módulos" (§14 da PR) e "visual-budget.ts nunca
+> ligado" (§6.93): uma alegação minha sem remedição contra o dado real.
+> Não corrijo o número no título acima (Regra de Ouro 4 — nunca reescrever
+> silenciosamente o registro original) — só documento aqui que ele está
+> desatualizado.
+>
+> Mapeamento honesto de §38-45 (auditoria de arquivo, não memória):
+>
+> | Seção | Estado real |
+> |---|---|
+> | §38 Responsive sizing (tipografia/spacing) | **Parcial.** `index.css` já tem uma escala `clamp()` de 4 degraus pra TIPOGRAFIA (`--ar10-t-micro/label/body/read`) e `env(safe-area-inset-top/bottom)`. **Gap real:** nenhuma escala `clamp()` equivalente pra ESPAÇAMENTO/padding/gap — são classes Tailwind estáticas, com 52 ocorrências de `h-[Npx]`/`w-[Npx]` hardcoded só em `App.tsx`. Zero `container-type`/`@container` (CSS container queries) em todo o `src/`. |
+> | §39 iPad Mini — regra de ouro | **Ausente como caso codificado.** `nexus/chart-viewport.ts` cita "iPad Mini retrato (~700px)" só em comentário — nenhum arquivo trata 768px (a largura CSS real do iPad Mini portrait) como breakpoint/caso distinto em CSS ou TS. A prioridade pedida (gráfico > preço > decisão > trade plan > terminal > detalhes) não existe como regra codificada em lugar nenhum. |
+> | §40 Terminal density (COMPACT/STANDARD/EXPANDED) | **Gap real, Stage 1 fechado nesta rodada — ver abaixo.** Antes desta rodada: zero conceito de densidade no código — só um interruptor binário não-nomeado (`min-[1120px]:`, 4+ ocorrências em `App.tsx`). |
+> | §41 Chart-first layout | **Parcial.** O mecanismo já É chart-first: `App.tsx:4111` usa `h-[100dvh]` (unidade de viewport dinâmica) com `pt-safe`/`pb-safe`, e o container do gráfico é `flex-1 min-h-0` (cresce pra preencher o espaço restante via flexbox, não um valor fixo). **Gap real:** isso é distribuição IMPLÍCITA do flexbox, não uma fórmula explícita "altura do gráfico = viewport − header − terminal − controles" como a Ordem pede — não há um cálculo nomeado que alguém possa auditar ou testar isoladamente. |
+> | §42 Anti-overflow | **Parcial.** `overflow-x`/`overflow-hidden`/`truncate`/`whitespace-nowrap` aparecem 85+ vezes em `App.tsx` e mais 6 arquivos, incluindo `.ar10-scroll-x` documentado em `index.css` como correção real de uma regressão de overflow horizontal anterior. **Gap real:** aplicado ad-hoc por bug encontrado, nunca como disciplina/utilitário sistemático — sem uma varredura dedicada por viewport (iPad Mini/iPad/iPad Pro/desktop, portrait/landscape) que prove ausência de overflow em TODOS os componentes listados pela Ordem. |
+> | §43 Visual acceptance / §45 Aceitação visual | **Não verificado.** Nenhum teste (Playwright ou outro) commitado captura screenshots multi-viewport — `package.json` não tem `playwright` como dependência; os harnesses Playwright usados nesta sessão pra outras rodadas (§17/§21/§23/§25/§26/§27/§28/§29/§30/§34/§35) foram sempre ad-hoc, nunca commitados. Critério de aceitação da Ordem (zero sobreposição, zero corte de texto/botão, zero label sobre preço) nunca foi medido sistematicamente. |
+> | §44 Dimensionamento final (MIN/PREFERRED/MAX) | **Ausente como método.** Nenhum componente declara MIN/PREFERRED/MAX explicitamente — os 52 `h-[Npx]`/`min-h-[Npx]` de `App.tsx` são valores únicos hardcoded, não uma faixa com 3 pontos nomeados. |
+>
+> **Solução aplicada — Stage 1, mesma disciplina "carta branca, nunca
+> big-bang":** `nexus/density-tier.ts` (novo, puro, Laboratório de
+> Evolução — não ligado a nenhum componente ainda). `resolveDensityTier()`
+> resolve exatamente o pedido do §40 (COMPACT/STANDARD/EXPANDED, STANDARD
+> como padrão/fail-closed) reusando os DOIS limiares que já são reais e
+> testados em produção — `1120px` (o interruptor não-nomeado já em
+> `App.tsx`) e `1440px` (o piso de `resolveChartUltraWideScale`,
+> chart/chart-ultrawide-scale.ts) — zero número novo inventado. 6 testes
+> de execução real (`tests/density-tier.test.ts`): fronteiras exatas nos
+> dois limiares, larguras de dispositivo reais (iPad Mini 768/1024, iPad
+> Pro 834/1194, laptop 1366, desktop 1920, ultrawide 3440), fail-closed
+> pra STANDARD em largura inválida (nunca um extremo), monotonicidade
+> (aumentar a largura nunca reduz a densidade).
+>
+> **O que este round honestamente NÃO fez:** o overhaul responsivo em si
+> — nenhum componente (HEADER/SYMBOL SELECTOR/TIMEFRAME SELECTOR/CHART/
+> PRICE AXIS/TERMINAL/EVENT LOG/ANALYSIS PANEL/TRADE PLAN/LABELS/BUTTONS)
+> foi tocado; `resolveDensityTier()` ainda não decide NADA visível. Escala
+> `clamp()` pra espaçamento (§38); iPad Mini como caso codificado com
+> prioridade de conteúdo (§39); fórmula explícita de altura do gráfico
+> (§41); auditoria sistemática de anti-overflow multi-viewport (§42);
+> captura de screenshot multi-viewport commitada (§43/§45); MIN/PREFERRED/
+> MAX por componente (§44) — todos gaps reais, nenhum fechado nesta
+> rodada. Escopo genuinamente maior que um Stage 1 — cada item acima é
+> candidato a sua própria sessão.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
