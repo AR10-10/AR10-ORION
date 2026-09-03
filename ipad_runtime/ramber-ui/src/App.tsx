@@ -38,6 +38,12 @@ import assetUniverseDefault from "../../configs/asset-universe.default.json";
 import { ageAlpha } from "./chart/annotation-decay";
 import { BREAK_DECAY } from "./chart/StructureBreakMarkersPlugin";
 import { MAX_KEY_LEVELS_SHOWN } from "./chart/SessionKeyLevelsPlugin";
+// Acessibilidade real (achado de auditoria: zero aria-live em toda a base,
+// grep confirmado) — região sr-only que anuncia mudança de direção do
+// Núcleo e de estado LIVE/OFF pra quem usa leitor de tela. Componente
+// desacoplado (recebe só direction/wsLive por prop, mesma arquitetura de
+// voice/VoiceControlWidget.tsx) — ver header de a11y/LiveRegionAnnouncer.tsx.
+import { LiveRegionAnnouncer } from "./a11y/LiveRegionAnnouncer";
 // Mesmo motor puro que EnhancedChart_110_Percent.tsx já usa para desenhar
 // o canal — chamado uma 2ª vez aqui de propósito (função determinística
 // sobre os MESMOS candles reais, nunca uma segunda fórmula) porque o
@@ -3112,6 +3118,20 @@ export default function App() {
     () => evaluateSignalFilter(trackRecordResults),
     [trackRecordResults],
   );
+  // Acessibilidade real — LiveRegionAnnouncer (import acima). MESMA fórmula
+  // que CoreSignalBadge/ChartWidget já usam pra effectiveDirection/
+  // confidenceDirection (LEI 24, memo do Operador item 6: "não criar uma
+  // regra paralela") — reproduzida aqui pela 3ª vez, nunca importada de
+  // dentro de CoreSignalBadge (Entrega 42: tocar seu corpo interno está
+  // fora do escopo). Quem ouve o anúncio tem que ouvir exatamente o que o
+  // badge mostra, nunca uma segunda opinião de direção.
+  const announcerDirection: "LONG" | "SHORT" | null = useMemo(() => {
+    const dir = engine?.direction ?? null;
+    const isLong = dir === "LONG";
+    const isShort = dir === "SHORT";
+    const suppressed = (isLong || isShort) && expectancyFilter?.show === false;
+    return suppressed ? null : dir;
+  }, [engine?.direction, expectancyFilter]);
   // Escopo Cirúrgico (Operador, Fase 3): leitura ATUAL da fusão de modelos
   // (Fase 2), orientada à direção do plano rastreado agora — councilFromSnapshot.votes
   // já é a MESMA CouncilDecision deste ciclo (zero segunda chamada aos
@@ -4075,6 +4095,7 @@ export default function App() {
           (barra de comando cortada em pé e deitado). Em navegador comum
           env() é 0 e nada muda. */}
       <div className="flex flex-col h-[100dvh] pt-safe pb-safe bg-[#020610] text-[#a0f0ff] font-mono overflow-hidden selection:bg-[#00f0ff30]">
+        <LiveRegionAnnouncer direction={announcerDirection} wsLive={wsLive} />
         <TopBar data={priceData} />
         {bootRestFailed && (
           <div className="shrink-0 bg-[#ff005515] border-b border-[#ff005550] px-4 py-2 flex items-center justify-between gap-3">
