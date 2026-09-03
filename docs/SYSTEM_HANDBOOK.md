@@ -6954,12 +6954,40 @@ dependências `source → engine → signal → pillar → decision` que este
 memo novo pede — é o degrau anterior (agregação plana, sem grafo de
 dependência nem pilares nomeados).
 
+**Correção sobre a própria auditoria acima, feita minutos depois de
+escrita (erro meu, não do código)**: a frase logo acima ("`visual-
+budget.ts`... nunca ligado a nenhum componente vivo até hoje: confirmado
+de novo nesta auditoria, zero import fora do próprio teste") estava
+**errada** — baseada só no que o relatório da Diretriz Nº 02 dizia na
+época, sem grep fresco contra `EnhancedChart_110_Percent.tsx` antes de
+afirmar "confirmado de novo". `resolveVisualBudget` está, de fato,
+importado e ativo lá (linha ~2275), com `docs/historico/
+RELATORIO_ORDEM_03_IMPLEMENTACAO_OPERACIONAL.md` e `RELATORIO_ORDEM_04_
+CONSOLIDACAO.md` documentando a graduação real: 4 das 7 categorias
+declaradas em `VISUAL_BUDGET_PRIORITY_ORDER` já têm candidato real e
+competem por orçamento visual ao vivo — `INSTITUTIONAL_ZONE` (Zonas
+Institucionais), `TRADE_PLAN` (zona do plano), `STRUCTURE` (BOS/CHOCH,
+S1/R1, Fibonacci) e `MAIN_LIQUIDITY` (FVG/Order Block não-obstáculo). As
+3 restantes (`TARGET`, `INVALIDATION`, `RADAR`) ficaram deliberadamente
+de fora, com razão técnica real documentada no §4 do Ordem Nº 04 (não
+esquecimento): `TARGET`/`INVALIDATION` não têm hoje uma fonte de peso
+PRÓPRIA e isolada por objeto individual (TP1/TP2/TP3, linha de STOP) —
+`TradePlanZonePlugin.tsx` trata o plano inteiro como uma zona única, já
+graduada; inventar peso por alvo individual sem uma fonte real seria a
+fabricação que a Regra de Ouro 2 proíbe. `RADAR` não tem hoje um objeto
+visual próprio desenhado no canvas do gráfico (vive em painel separado)
+— graduar exigiria construir um objeto novo só para a categoria, não
+uma consolidação do que já existe. As linhas 2 e 14 da tabela abaixo
+foram corrigidas para refletir este estado real — nenhuma outra linha
+desta tabela foi re-verificada por este mesmo erro, mas cada uma cita
+sua própria evidência (arquivo/grep), não memória.
+
 **Mapeamento por seção, evidência real (não memória):**
 
 | # | Seção do memo | Estado real |
 |---|---|---|
 | 1 | Gráfico (Lightweight Charts, Primitives) | Mantido, sem substituição cogitada. Uso de Primitives modernas (Series/Pane Primitives) não auditado plugin-a-plugin nesta rodada — a maioria dos ~14 plugins de canvas usa a API de `addSeries`/canvas overlay clássica, não as Primitives novas da lib; migração seria uma auditoria própria. |
-| 2 | Visual Intelligence Layer | **Parcial, disperso, não consolidado.** `layer-relevance.ts` (mostra/esconde camada) + `visual-budget.ts` (isolado, nunca ligado) + `chart-layer-depth.ts` (profundidade) já fazem, cada um separadamente, uma fatia do que o memo pede como camada única. Consolidar é trabalho real, não ficção — mas о precedente (Diretriz 02 §6) já recomendava exatamente isso como próximo passo. |
+| 2 | Visual Intelligence Layer | **Parcial, disperso, não consolidado — mas mais real do que a auditoria inicial (corrigida acima) reconheceu.** `layer-relevance.ts` (mostra/esconde camada) + `visual-budget.ts` (**ativo ao vivo, 4/7 categorias**, ver correção acima) + `chart-layer-depth.ts` (profundidade) já fazem, cada um separadamente, uma fatia real do que o memo pede como camada única — nenhuma delas é código morto. Falta só o NOME/módulo consolidado, não a função. |
 | 3 | Modo padrão do gráfico | **Já é a direção que a sessão vem tomando** (§29/§30 desta PR: declutter da navegação, correção de sobreposição) mas o memo pede uma lista literal fixa (candles/volume/estrutura/traço roxo/FVG-OB relevantes/Trade Plan/invalidação/decisão/1 seta) que hoje **não é o padrão real** — `layer-relevance.ts` decide dinamicamente por relevância, não por uma lista fixa deste tamanho. Divergência real a resolver com decisão explícita (é isto que o memo pede, ou é a relevância dinâmica que já existe?). |
 | 4 | Progressive disclosure (LABORATORY) | Existe em espírito (`ChartLayersPanelContent`, "Estado Inteligente Adaptativo", resumo por padrão + controle completo 1 clique abaixo) mas sem o vocabulário "LABORATORY" nem o ciclo explícito ativação→visualização→fechamento→retorno. |
 | 5 | Evidence Graph | **Gap real.** `engine-signal-contract.ts` + `evidence-fusion.ts` existem mas são agregação PLANA (contagens/cobertura), não um grafo com dependências nomeadas nem pilares. `fractal-swings.js` (a atenção especial que o memo pede) já é módulo único compartilhado por 17+ consumidores reais (`research/engines/*`, `nexus/*`, `engine-bridge.ts`) — a preocupação do memo ("não duplicar") já está satisfeita na prática, mesmo sem um Evidence Graph formal por cima. |
@@ -6971,7 +6999,7 @@ dependência nem pilares nomeados).
 | 11 | IA (ONNX/Transformers.js) | **Ausente.** O único caminho de IA hoje é `llm-bridge.ts`/`llm-worker.ts` via `@mlc-ai/web-llm` (Llama 3 local, WebGPU) para síntese tática em linguagem natural — opt-in, isolado, nunca gera LONG/SHORT (mesma linha vermelha que o memo pede). ONNX Runtime Web/Transformers.js seriam um caminho PARALELO para classificação/resumo, não construído. |
 | 12 | WebGPU | **Parcial.** Já usado, mas só dentro do caminho do LLM (`llm-worker.ts`, `voice-dispatcher.ts`, `synthetic-reading.ts`) — não existe hoje uma arquitetura "GPU-ready" genérica para o motor quantitativo, com WASM como fallback formal. |
 | 13 | iPad-first | **Disciplina permanente já real** — Regra de Ouro 7 do CLAUDE.md (60 FPS, zero scroll de página), testado em Chromium com viewport iPad Pro 11" em múltiplas rodadas desta sessão (§4, §27, §29 desta PR). Nunca testado em dispositivo físico. |
-| 14 | Visual Budget | **Já existe, já com o nome certo** — `nexus/visual-budget.ts` (§2 acima), só nunca ligado a um componente vivo. |
+| 14 | Visual Budget | **Já existe, já com o nome certo, e já ativo ao vivo** — `nexus/visual-budget.ts`, graduado (Ordem Nº 03/04) para 4 das 7 categorias declaradas; as 3 restantes ficaram de fora por falta real de fonte de peso individual (`TARGET`/`INVALIDATION`) ou de objeto visual próprio (`RADAR`), não por esquecimento. |
 | 15 | Anti-colisão | **Já real e maduro** — `price-label-stack.ts`, usado por 10+ famílias de rótulo (S1/R1/VWAP/NL/EMA/TREND/ENTRY/STOP/TARGET/CHOCH e mais), extensivamente testado ao longo desta sessão inteira (§10-§13, §25-§27 desta PR). |
 | 16 | Zero look-ahead | **Já é princípio testado** — `structural-backtest.js` (walk-forward, 521 janelas), `structural-swings-trace.test.ts` (zero-look-ahead explícito), replay sem look-ahead documentado em §6 deste handbook. |
 | 17 | Testes (benchmark de candles) | **Parcial.** `npm run verify` (tsc+vitest+build) já é obrigatório e rodado toda rodada. Benchmark formal por contagem de candles (500/1k/5k/10k) + FPS/latência/memória/CPU registrados não existe como suíte própria — gap real. |
@@ -6979,13 +7007,14 @@ dependência nem pilares nomeados).
 | 19 | Processo (MAPEAR→POC→BENCHMARK→integrar) | **Esta entrada é exatamente isso** — o mapeamento, sem código. |
 | 20 | Princípio final | Já é o vocabulário real desta sessão (Regra de Ouro 2/3, LEI 24, "declaração ≠ realidade") só sem o slogan "CALCULAR MUITO. MOSTRAR POUCO." |
 
-**Nenhum código alterado nesta rodada.** Próximo passo real: escolher,
-com o Operador, qual peça concreta vira Stage 1 (candidatas de baixo
-risco, mesmo padrão de `visual-budget.ts`: graduar `visual-budget.ts`
-ao vivo; consolidar `layer-relevance.ts`+`visual-budget.ts`+
-`chart-layer-depth.ts` num módulo nomeado "Visual Intelligence Layer";
-POC isolado de DuckDB-WASM; ou benchmark formal de candles/FPS) — nunca
-as 20 seções de uma vez.
+**Nenhum código alterado nesta rodada.** Próximo passo real (corrigido:
+`visual-budget.ts` já está graduado, não é mais candidato de Stage 1):
+consolidar `layer-relevance.ts`+`visual-budget.ts`+`chart-layer-
+depth.ts` num módulo nomeado "Visual Intelligence Layer" (sem mudar
+comportamento — só dar à arquitetura dispersa já real o nome/estrutura
+que o memo pede); benchmark formal de candles/FPS (item 17, gap real);
+ou POC isolado de DuckDB-WASM — nunca as 20 seções de uma vez. Carta
+branca do Operador recebida para executar; escolha registrada abaixo.
 
 ---
 
