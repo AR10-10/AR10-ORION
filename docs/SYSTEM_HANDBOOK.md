@@ -7022,6 +7022,82 @@ isolado de DuckDB-WASM — nenhum dos dois tentado nesta rodada.
 
 ---
 
+### 6.94 "ORDEM 2 — FUTURE MAP / TRADE PLAN / REVERSAL ENGINE" (29 seções)
+— mapeamento honesto + `trade-plan-view.ts` (compositor puro, zero motor
+novo)
+
+Pedido do Operador: memo de 29 seções pedindo a camada de análise
+OPERACIONAL do AR10 (companheira do memo de 20 seções da §6.93, que era
+sobre a camada visual) — Trade Plan unificado (DIRECTION/ENTRY/
+INVALIDATION/T1-T3/REVERSAL ZONES/CONFIDENCE STATE/SCENARIO/STATUS),
+Future Path Engine, Reversal Engine (3 tiers), Liquidity Map ranqueado,
+Trade Semantics (`DIRECTION != ENTRY`, `ENTRY != CURRENT PRICE`
+automático), P1 Five Pillars, P3 Evidence Graph, cenários BASE/
+ALTERNATIVE/INVALIDATION, zero look-ahead, hierarquia visual, testes
+obrigatórios. Regra explícita: *"O objetivo NÃO é criar um indicador
+novo... reutilizar os componentes existentes"* (§2) — a mesma disciplina
+de auditar antes de construir que já rege este projeto inteiro.
+
+**Achado central: a maior parte já existe, sob vocabulário diferente —
+auditoria seção-a-seção, arquivo por arquivo, nunca por memória:**
+
+| Seção da Ordem 2 | Estado real |
+|---|---|
+| §17 Purple Structural Trace | **JÁ CONSTRUÍDO, exatamente como pedido** — `StructureTracePlugin.tsx` (§23 da PR #16 desta mesma sessão, "MD-7 Visual Confidence Trace"): linha fina, cor `projection`, pivôs fractais CONFIRMADOS (`fractal-swings.js`), nunca um 2º ZigZag. |
+| §18 Direction Arrow | **JÁ CONSTRUÍDO, exatamente como pedido** — `ConfidenceDirectionArrowPlugin.tsx` (mesma §23): LONG↑/SHORT↓/WAIT=nada, deliberadamente na posição OPOSTA de `plan-markers.ts` para nunca ser confundida com ENTRY — "DIRECTION ≠ ENTRY" já é comentário literal no código. |
+| §3/§8 Trade Semantics (`NOT_DEFINED`/`MARKET`/`LIMIT`/`TRIGGER`) | **Já resolvido, com vocabulário diferente — construir um 2º classificador duplicaria.** `deriveEntryState()` (`operational-readability.ts`) já responde exatamente "existe confirmação de timing AGORA?" a partir de preço-dentro-da-zona-real-ou-não: `ENTRY_CONFIRMED`≈MARKET, `WAITING_FOR_RETEST`≈LIMIT, `NO_ENTRY`/`ENTRY_INVALIDATED`≈NOT_DEFINED. `TRIGGER` não tem análogo real: `trade-plan.ts` só constrói entradas do lado de PULLBACK (suporte para LONG/resistência para SHORT), nunca do lado de rompimento — não fabricado. |
+| §4 Trade Plan (forma única) | **Ingredientes reais existem em 5 sistemas separados, nunca compostos numa view única** — `trade-plan.ts` (direction/entry/stop/targets/R:R reais), `signal-track-record.ts` (status de ciclo de vida), `scenario-engine.ts` (pathA/pathB com invalidation embutida), `reversal-detector.ts` (leitura de reversão), `institutional-score.ts` (confiança qualitativa). Fechado nesta rodada — ver abaixo. |
+| §11 Cenários BASE/ALTERNATIVE/INVALIDATION | **Já existe, nome diferente** — `scenario-engine.ts`'s `pathA`/`pathB`, cada `ScenarioPath` já carrega `invalidation` (nível real) embutido — nunca um 3º objeto separado. |
+| §12 Probabilidade qualitativa | **Já correto hoje** — `institutionalConfidenceZone()` banda o score real 0-100 em 5 tiers (MUITO_FORTE/FORTE/MODERADA/FRACA/INVALIDA), nunca uma % fabricada (Regra de Ouro 2 já em vigor). |
+| §15 Zero look-ahead | **Já é princípio testado** — mesma cobertura já citada na §6.93 (walk-forward real, `structural-swings-trace.test.ts`). |
+| §25 Não alterar o homologado | **Já é a disciplina real desta sessão inteira** (LEI 24, "execute somente esta alteração" — citado literalmente §23/§28 da PR #16). Nada em `trade-plan-view.ts` toca Core Engine/Decision Engine/Risk architecture. |
+| §6 Reversal Engine (3 tiers: REACTION ZONE/REVERSAL WATCH/CONFIRMED REVERSAL) | **Parcial — só o tier mais forte existe.** `reversal-detector.ts` já produz uma leitura real de reversão CONFIRMADA (CHoCH real ou flip real do SuperTrend, nunca BOS — que é continuação, não reversão) e já está graduado (`App.tsx`, linha ~2351). REACTION ZONE (antes de qualquer rompimento) e REVERSAL WATCH (alerta antecipado) exigiriam lógica de proximidade NOVA — que nível? que limiar de distância? — gap real, não inventado nesta rodada para não fabricar um piso sem justificativa (Regra de Ouro 2). |
+| §7 Liquidity Map (ranking BUY/SELL-SIDE, EQH/EQL, stop clusters) | **Parcial.** `selectSharedZoneHighlights()` (`liquidity-significance.ts`) já ranqueia por significância real (`SHARED_ZONE_HIGHLIGHT_SLOTS=3`) — mas para zonas Order Block/FVG, não especificamente EQH/EQL/liquidity pools que a Ordem pede. Gap real, não fechado. |
+| §13 P1 Five Pillars (nomes exatos STRUCTURE/LIQUIDITY/MOMENTUM/CONTEXT/RISK) | **Nome formal ainda não existe** (mesmo achado da §6.93) — `council.ts` tem 7 agentes com categorização diferente; `SYSTEM_HANDBOOK.md §7` tem uma tabela A-E também diferente. Decisão de arquitetura (substituir? resumir? coexistir?), não mecânica. |
+| §14 P3 Evidence Graph (genealogia, "quantas fontes realmente independentes") | **Parcial, mais alinhado do que a §6.93 tinha percebido.** `evidence-fusion.ts` já EXCLUI deliberadamente o Scenario Engine como fonte própria porque `ScenarioPath.opinionWeight` já é a MESMA massa de opinião do Conselho — exatamente o "não contar a mesma fonte duas vezes" que a Ordem 2 §2/§14 pede. Ainda não é um grafo com dependência NOMEADA (`source → engine → signal → pillar → decision`) — continua agregação/contagem, não uma estrutura de grafo navegável. |
+
+**Solução aplicada — Stage 1, escolhido por ser o de menor risco real
+entre os candidatos (mesma disciplina de "carta branca, nunca big-bang"
+já estabelecida na §6.93):** `nexus/trade-plan-view.ts` (novo, puro,
+Laboratório de Evolução — isolado, zero import por nenhum componente
+vivo, confirmado pelo build idêntico: mesmos 1937 módulos, mesmos bytes
+de bundle antes/depois). `composeTradePlanView()` é PURAMENTE um
+compositor — nenhum campo é calculado, cada um é passthrough real ou
+mapeamento de enum já existente: `entry`/`invalidation`/`targets`/`R:R`
+vêm direto de `TradePlan`; `status` resolve entre `TrackedPlanStatus`
+(plano já aberto) e `NexusSetupState`/`NexusEntryState` (antes de existir
+plano) — nunca os dois ao mesmo tempo; `confidenceState` é o tier
+qualitativo real de `institutionalConfidenceZone()`; `reversal` é
+passthrough integral de `ReversalReading`, nunca reinterpretado num tier
+mais fraco; `scenario.base`/`scenario.alternative` escolhem entre
+`pathA`/`pathB` pela direção real do plano (ou a convenção real de
+`scenario-engine.ts` quando não há plano ainda).
+
+22 testes de execução real (`tests/trade-plan-view.test.ts`): os 6
+valores de `status` cobertos por transição real (incluindo "plano real
+existe mas 1º ciclo ainda sem tracked status → ACTIVE, nunca WAIT");
+passthrough real de entry/invalidation/targets; os 5 tiers de confiança
++ `DADOS_INSUFICIENTES` honesto; passthrough por identidade de
+`ReversalReading`; resolução de BASE/ALTERNATIVE para LONG e para SHORT
++ a convenção real sem plano; pureza (mesma entrada → mesma saída, nunca
+muta o `TradePlan` recebido); contrato versionado.
+
+**O que este round honestamente NÃO fez, do memo maior:** graduar
+`trade-plan-view.ts` a um painel/canvas visível (fica Laboratório de
+Evolução, mesma disciplina de `visual-budget.ts` antes de sua própria
+graduação, §6.93) — próxima rodada, com sua própria verificação visual;
+Future Path Engine (§5, projeção visual discreta do caminho — maior,
+toca desenho no gráfico); Reversal Engine com os 3 tiers completos (§6,
+gap real registrado acima); Liquidity Map EQH/EQL ranqueado (§7, gap
+real registrado acima); Five Pillars/Evidence Graph formais (§13/§14,
+decisão de arquitetura, não mecânica).
+
+`npm run verify`: **256 arquivos / 4385 testes**, tsc limpo, build
+idêntico em módulos/bytes ao commit anterior — confirmando isolamento
+real, não só declarado.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
