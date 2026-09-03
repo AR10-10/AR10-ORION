@@ -3857,6 +3857,7 @@ function EnhancedChart_110_PercentImpl({
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           data={data}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* V-MAX Fase 0.7: FVG/Order Blocks (bullish|bearish) — mesmo dado real
@@ -3879,6 +3880,7 @@ function EnhancedChart_110_PercentImpl({
           equalLevels={visibility.equal_highs_lows ? equalLevelMarks : NO_EQUAL_LEVELS}
           breakerBlocks={visibility.liquidity_zones ? ((breakerBlocks ?? NO_FILLABLE_ZONES) as FillableZone[]) : NO_FILLABLE_ZONES}
           mitigationBlocks={visibility.liquidity_zones ? ((mitigationBlocks ?? NO_FILLABLE_ZONES) as FillableZone[]) : NO_FILLABLE_ZONES}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Ordem "Ciborgue Vivo" §1: BOS/CHOCH real, mesma anotação temporária
@@ -3891,6 +3893,7 @@ function EnhancedChart_110_PercentImpl({
           data={data}
           structureBreak={structureBreak ?? null}
           visualWeight={structureBreakVisualWeight}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Padrões de vela reais (candlestick-patterns.js) — marcador ancorado
@@ -3913,6 +3916,7 @@ function EnhancedChart_110_PercentImpl({
           series={chartReady?.series ?? null}
           data={data}
           traps={traps}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* SMC Harmonic Fusion (pedido do Operador): seta triangular real no
@@ -3942,6 +3946,7 @@ function EnhancedChart_110_PercentImpl({
           harmonicHits={harmonicHits}
           trianglePattern={trianglePattern}
           headShouldersPattern={headShouldersPattern}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* MD-7 (Visual Confidence Trace, pedido direto do Operador):
@@ -4010,6 +4015,7 @@ function EnhancedChart_110_PercentImpl({
           zones={institutionalZones}
           visualWeights={institutionalZoneVisualWeights}
           livePrice={typeof livePrice === "number" ? livePrice : null}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Entrega 40: livro de ofertas real como camada de gráfico — gap
@@ -4080,6 +4086,7 @@ function EnhancedChart_110_PercentImpl({
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           data={data}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Neural Market Aura: the conviction corridor, mounted BEFORE the
@@ -4090,6 +4097,7 @@ function EnhancedChart_110_PercentImpl({
           chart={chartReady?.chart ?? null}
           series={chartReady?.series ?? null}
           aura={aura ?? null}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Ordem Final Autonomia Evolução §1 ("caixas semi-transparentes"):
@@ -4104,6 +4112,7 @@ function EnhancedChart_110_PercentImpl({
           entryHigh={tradePlan?.entry.high ?? null}
           confidenceZone={confidenceZone ?? null}
           visualWeight={tradePlanVisualWeight}
+          activeLanes={activeProfileLanes}
         />
       )}
       {/* Nível 0 (ver comentário acima do useMemo de priceAxisLabels):

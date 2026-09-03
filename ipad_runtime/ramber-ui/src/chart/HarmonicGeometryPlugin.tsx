@@ -58,6 +58,7 @@
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
 import { measurePlotArea } from "./chart-plot-area";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import { chartPaletteRgba } from "./canvas-palette";
 import { drawCanvasLabel, measureCanvasLabel } from "../nexus/canvas-label";
 import { formatEtaDuration } from "../nexus/eta-engine";
@@ -80,6 +81,11 @@ interface HarmonicGeometryPluginProps {
   harmonicHits: HarmonicPatternHit[] | null | undefined;
   trianglePattern: TrianglePatternHit | null | undefined;
   headShouldersPattern: HeadShouldersHit | null | undefined;
+  // Achado real (auditoria "cada item no seu canto, nada cobrindo nada"):
+  // sem isto, a geometria full-width (PRZ/EPA/NECKLINE/APEX) ia até
+  // plotRight puro — cruzando por cima da lane do Volume Profile/TPO/
+  // Order Book Depth quando ativas. Opcional/fail-closed.
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
 export function HarmonicGeometryPlugin({
@@ -89,16 +95,17 @@ export function HarmonicGeometryPlugin({
   harmonicHits,
   trianglePattern,
   headShouldersPattern,
+  activeLanes,
 }: HarmonicGeometryPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const stateRef = useRef({ data, harmonicHits, trianglePattern, headShouldersPattern });
+  const stateRef = useRef({ data, harmonicHits, trianglePattern, headShouldersPattern, activeLanes });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
-  stateRef.current = { data, harmonicHits, trianglePattern, headShouldersPattern };
+  stateRef.current = { data, harmonicHits, trianglePattern, headShouldersPattern, activeLanes };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [data, harmonicHits, trianglePattern, headShouldersPattern]);
+  }, [data, harmonicHits, trianglePattern, headShouldersPattern, activeLanes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -121,9 +128,9 @@ export function HarmonicGeometryPlugin({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      const { data: candles, harmonicHits: hits, trianglePattern: triangle, headShouldersPattern: hs } = stateRef.current;
+      const { data: candles, harmonicHits: hits, trianglePattern: triangle, headShouldersPattern: hs, activeLanes: lanes } = stateRef.current;
       const timeScale = chart.timeScale();
-      const { plotRight } = measurePlotArea(chart, cssWidth);
+      const { plotRight } = measurePlotArea(chart, cssWidth, lanes);
 
       const harmonicTop = hits && hits.length > 0 ? hits[0] : null;
       const harmonicValid = harmonicTop && Number.isFinite(harmonicTop.points.D.price) ? harmonicTop : null;

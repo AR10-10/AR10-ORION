@@ -32,6 +32,7 @@
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
 import { measurePlotArea } from "./chart-plot-area";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
 import { chartPaletteRgba } from "./canvas-palette";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
@@ -50,18 +51,23 @@ interface LiquiditySweepLinesPluginProps {
   series: ISeriesApi<"Candlestick"> | null;
   data: { length: number };
   traps: TrapSignal[] | undefined;
+  // Achado real (auditoria "cada item no seu canto, nada cobrindo nada"):
+  // sem isto a linha de sweep ia de x=0 até plotRight puro — cruzando a
+  // lane do Volume Profile/TPO/Order Book Depth quando ativas.
+  // Opcional/fail-closed.
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
-export function LiquiditySweepLinesPlugin({ chart, series, data, traps }: LiquiditySweepLinesPluginProps) {
+export function LiquiditySweepLinesPlugin({ chart, series, data, traps, activeLanes }: LiquiditySweepLinesPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const stateRef = useRef({ data, traps });
+  const stateRef = useRef({ data, traps, activeLanes });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
-  stateRef.current = { data, traps };
+  stateRef.current = { data, traps, activeLanes };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [data, traps]);
+  }, [data, traps, activeLanes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -84,10 +90,10 @@ export function LiquiditySweepLinesPlugin({ chart, series, data, traps }: Liquid
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      const { data: candles, traps: list } = stateRef.current;
+      const { data: candles, traps: list, activeLanes: lanes } = stateRef.current;
       if (!Array.isArray(list) || list.length === 0) return;
 
-      const { plotRight } = measurePlotArea(chart, cssWidth);
+      const { plotRight } = measurePlotArea(chart, cssWidth, lanes);
 
       // Mesma dedup por preço + clusterização real já usada pelo bloco de
       // etiquetas do eixo (priceAxisLabels) — 1 cluster real = 1 linha,

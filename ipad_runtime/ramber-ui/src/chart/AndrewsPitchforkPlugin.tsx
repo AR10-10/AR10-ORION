@@ -32,6 +32,7 @@
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
 import { measurePlotArea } from "./chart-plot-area";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi, Time, Logical } from "lightweight-charts";
 import { computeAndrewsPitchfork, type AndrewsPitchforkReading } from "../engine-bridge";
 import { chartPaletteRgba } from "./canvas-palette";
@@ -52,11 +53,17 @@ interface AndrewsPitchforkPluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   data: { time: number; open: number; high: number; low: number; close: number }[];
+  // Achado real (auditoria "cada item no seu canto, nada cobrindo nada"):
+  // sem isto o garfo projetado ia até plotRight puro — cruzando a lane
+  // do Volume Profile/TPO/Order Book Depth quando ativas. Opcional/
+  // fail-closed.
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
-export function AndrewsPitchforkPlugin({ chart, series, data }: AndrewsPitchforkPluginProps) {
+export function AndrewsPitchforkPlugin({ chart, series, data, activeLanes }: AndrewsPitchforkPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dataRef = useRef(data);
+  const activeLanesRef = useRef(activeLanes);
   const markDirtyRef = useRef<(() => void) | null>(null);
   const cacheRef = useRef<{ data: typeof data; reading: AndrewsPitchforkReading | null }>({
     data: [],
@@ -64,10 +71,11 @@ export function AndrewsPitchforkPlugin({ chart, series, data }: AndrewsPitchfork
   });
 
   dataRef.current = data;
+  activeLanesRef.current = activeLanes;
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [data]);
+  }, [data, activeLanes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -102,7 +110,7 @@ export function AndrewsPitchforkPlugin({ chart, series, data }: AndrewsPitchfork
       // NADA — nunca um garfo com 2 pontos ou uma reta chutada.
       if (!reading || reading.status !== "OK" || !reading.pitchfork) return;
 
-      const { plotRight } = measurePlotArea(chart, cssWidth);
+      const { plotRight } = measurePlotArea(chart, cssWidth, activeLanesRef.current);
       const timeScale = chart.timeScale();
       const n = candles.length;
       const fork = reading.pitchfork;

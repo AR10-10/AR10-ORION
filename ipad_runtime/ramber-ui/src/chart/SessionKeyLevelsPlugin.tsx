@@ -59,6 +59,7 @@
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
 import { measurePlotArea } from "./chart-plot-area";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { computeSessionKeyLevels, sessionGenerationWeight, type SessionKeyLevel } from "../nexus/market-session";
 
@@ -78,11 +79,19 @@ interface SessionKeyLevelsPluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   data: { time: number; high: number; low: number }[];
+  // Achado real (auditoria do pedido do Operador "cada item no seu canto,
+  // nada cobrindo nada", medido em harness Playwright: uma linha desta
+  // camada desenhava de x=498 a x=837 num canvas de 900px, cobrindo por
+  // completo a lane do livro de ofertas em x=594-708). Sem isto o nível
+  // ia até plotRight puro — cruzando a lane do Volume Profile/TPO/Order
+  // Book Depth quando ativas. Opcional/fail-closed.
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
-export function SessionKeyLevelsPlugin({ chart, series, data }: SessionKeyLevelsPluginProps) {
+export function SessionKeyLevelsPlugin({ chart, series, data, activeLanes }: SessionKeyLevelsPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const dataRef = useRef(data);
+  const activeLanesRef = useRef(activeLanes);
   const markDirtyRef = useRef<(() => void) | null>(null);
   // Mesmo achado/mesmo fix de §6.56 (KillZoneBandsPlugin/
   // MarketSessionBandsPlugin) — computeSessionKeyLevels só depende de
@@ -92,10 +101,11 @@ export function SessionKeyLevelsPlugin({ chart, series, data }: SessionKeyLevels
   const levelsCacheRef = useRef<{ data: typeof data; levels: SessionKeyLevel[] } | null>(null);
 
   dataRef.current = data;
+  activeLanesRef.current = activeLanes;
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [data]);
+  }, [data, activeLanes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -118,11 +128,10 @@ export function SessionKeyLevelsPlugin({ chart, series, data }: SessionKeyLevels
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      // Fronteira medida do eixo (chart-plot-area.ts): o desenho para na
-      // borda do eixo, nunca corre por baixo dos numeros do preco. Achado
-      // medido: nenhum dos 18 overlays deste projeto media isso — todos
-      // iam ate `cssWidth`, que inclui os ~72px da faixa do eixo.
-      const { plotRight } = measurePlotArea(chart, cssWidth);
+      // Fronteira medida do eixo (chart-plot-area.ts) + lanes de perfil
+      // ATIVAS (chart-profile-lanes.ts): o desenho para antes do eixo E
+      // antes da lane do Volume Profile/TPO/Order Book Depth.
+      const { plotRight } = measurePlotArea(chart, cssWidth, activeLanesRef.current);
 
       const cached = levelsCacheRef.current;
       let levels: SessionKeyLevel[];

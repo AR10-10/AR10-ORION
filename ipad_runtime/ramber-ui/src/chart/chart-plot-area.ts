@@ -45,7 +45,33 @@
 //   chart-time-ribbon-lanes.ts  → faixas VERTICAIS (y)
 //   chart-layer-depth.ts        → PROFUNDIDADE (z)
 //   chart-plot-area.ts          → a FRONTEIRA com o eixo  ← este
+//
+// ── SEGUNDA FRONTEIRA, achada auditando o pedido do Operador sobre "o
+//    livro de oferta aparecendo em cima do valor... cada item no seu
+//    canto" ────────────────────────────────────────────────────────────
+// chart-profile-lanes.ts já declara (getChartBodyBounds, header do
+// arquivo) que "quem ancora no tempo deve clipar aqui em vez de desenhar
+// de ponta a ponta" — mas medindo de verdade (harness Playwright,
+// getImageData nos dois canvases): só OrderFlowHeatmapPlugin usava
+// getChartBodyBounds. Os outros 9 plugins que chamam measurePlotArea
+// (LiquidityZones/HarmonicGeometry/LiquiditySweepLines/AndrewsPitchfork/
+// NeuralMarketAura/TradePlanZone/StructureBreakMarkers/SessionKeyLevels/
+// InstitutionalZone) iam até plotRight, que só exclui o EIXO — nunca as
+// lanes de perfil (Volume Profile/TPO/Order Book Depth, até 34% da
+// largura quando as três estão ativas, o padrão). Medido: com as 3 lanes
+// ativas, uma linha de SessionKeyLevelsPlugin desenhava de x=498 a
+// x=837 num canvas de 900px, cobrindo por completo a lane do livro de
+// ofertas (x=594-708) — a MESMA classe de sobreposição que motivou
+// chart-profile-lanes.ts originalmente, só que entre um plugin de fora
+// da família de perfis e os três de dentro dela.
+//
+// `measurePlotArea` ganha um 3º parâmetro OPCIONAL (`activeLanes`) —
+// quando presente, `plotRight` já exclui a reserva real das lanes
+// ativas, e todo consumidor que já chama `measurePlotArea(chart,
+// cssWidth)` continua funcionando sem mudança nenhuma (aditivo, nunca
+// uma mudança de contrato pros que não passarem o novo argumento).
 import type { IChartApi } from "lightweight-charts";
+import { getChartRightEdgeFraction, type ChartProfileLaneId } from "./chart-profile-lanes";
 
 /** Folga entre o fim do desenho e a borda do eixo. É a "medida padrão"
  *  que o Operador descreveu: sem ela uma zona encosta no número do preço e
@@ -139,18 +165,29 @@ export interface PlotArea {
  * a borda", que é exatamente o defeito que este módulo corrige). Um eixo
  * mais largo que o próprio container também não pode produzir um
  * `plotRight` negativo — nesse caso a área de plotagem é 0, honestamente.
+ *
+ * `reservedRightPx` (opcional, default 0): reserva ADICIONAL além do
+ * eixo — hoje só as lanes de perfil (ver `measurePlotArea`), mas
+ * qualquer faixa futura reservada na borda direita passa por aqui, nunca
+ * um clip próprio de cada plugin. Negativo é tratado como 0 (nunca
+ * EXPANDE plotRight além do que o eixo sozinho já permite).
  */
-export function resolvePlotArea(cssWidth: number, axisWidth: number): PlotArea {
+export function resolvePlotArea(
+  cssWidth: number,
+  axisWidth: number,
+  reservedRightPx: number = 0,
+): PlotArea {
   const w = Number.isFinite(cssWidth) && cssWidth > 0 ? cssWidth : 0;
   const rawAxis =
     Number.isFinite(axisWidth) && axisWidth > 0 ? axisWidth : PLOT_AXIS_FALLBACK_WIDTH_PX;
   // Eixo nunca pode comer mais que o container inteiro.
   const axis = Math.min(rawAxis, w);
   const axisLeft = w - axis;
+  const reserved = Number.isFinite(reservedRightPx) && reservedRightPx > 0 ? reservedRightPx : 0;
   return {
     axisWidth: axis,
     axisLeft,
-    plotRight: Math.max(0, axisLeft - PLOT_AXIS_GAP_PX),
+    plotRight: Math.max(0, axisLeft - PLOT_AXIS_GAP_PX - reserved),
   };
 }
 
@@ -162,8 +199,21 @@ export function resolvePlotArea(cssWidth: number, axisWidth: number): PlotArea {
  * Existe como função própria, e não inline em cada plugin, pelo mesmo
  * motivo de `chart-layer-depth.ts`: 18 plugins precisando da mesma resposta
  * é uma decisão só, nunca 18 cópias que divergem em silêncio.
+ *
+ * `activeLanes` (opcional): quando um plugin passa as lanes de perfil
+ * REALMENTE ativas agora (o mesmo `activeProfileLanes` que
+ * EnhancedChart_110_Percent.tsx já calcula pra VolumeProfile/TPO/Order
+ * Book Depth), `plotRight` já vem descontado da reserva real dessas
+ * lanes — nunca mais uma linha/zona cruzando por cima do livro de
+ * ofertas ou dos perfis de volume. Omitir o argumento preserva o
+ * comportamento antigo (só o eixo) — aditivo, nunca uma mudança de
+ * contrato pra quem já chamava `measurePlotArea(chart, cssWidth)`.
  */
-export function measurePlotArea(chart: IChartApi | null, cssWidth: number): PlotArea {
+export function measurePlotArea(
+  chart: IChartApi | null,
+  cssWidth: number,
+  activeLanes?: readonly ChartProfileLaneId[],
+): PlotArea {
   let axisWidth = PLOT_AXIS_FALLBACK_WIDTH_PX;
   try {
     const measured = chart?.priceScale("right").width();
@@ -175,5 +225,6 @@ export function measurePlotArea(chart: IChartApi | null, cssWidth: number): Plot
     // engolir aqui é o certo — um overlay nunca deve derrubar o gráfico
     // por não conseguir medir uma borda.
   }
-  return resolvePlotArea(cssWidth, axisWidth);
+  const reservedRightPx = activeLanes ? getChartRightEdgeFraction(activeLanes) * cssWidth : 0;
+  return resolvePlotArea(cssWidth, axisWidth, reservedRightPx);
 }

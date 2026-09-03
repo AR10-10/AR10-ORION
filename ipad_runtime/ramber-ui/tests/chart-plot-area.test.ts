@@ -78,6 +78,58 @@ describe('resolvePlotArea: a fronteira real, medida e não suposta', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// SEGUNDA FRONTEIRA — achado real de auditoria do pedido do Operador ("o
+// livro de oferta aparecendo em cima do valor... cada item no seu canto,
+// nada cobrindo nada"). Medido em harness Playwright: com as 3 lanes de
+// perfil ativas (Volume Profile/TPO/Order Book Depth), SessionKeyLevelsPlugin
+// desenhava de x=498 a x=837 num canvas de 900px — cobrindo por completo a
+// lane do livro de ofertas (x=594-708). `reservedRightPx` é a reserva
+// ADICIONAL (além do eixo) que resolve isso.
+// ---------------------------------------------------------------------------
+describe('resolvePlotArea(cssWidth, axisWidth, reservedRightPx): a reserva das lanes de perfil, nunca só o eixo', () => {
+  it('reservedRightPx ausente (default 0) é IDÊNTICO ao comportamento antigo — aditivo, nunca uma mudança de contrato', () => {
+    for (const [w, a] of [[834, 72], [1440, 65], [900, 65]] as const) {
+      expect(resolvePlotArea(w, a, 0)).toEqual(resolvePlotArea(w, a));
+    }
+  });
+
+  it('reservedRightPx real desconta de plotRight, além do eixo', () => {
+    const semReserva = resolvePlotArea(900, 65);
+    const comReserva = resolvePlotArea(900, 65, 120);
+    expect(comReserva.plotRight).toBe(semReserva.plotRight - 120);
+    // axisWidth/axisLeft são fronteira do EIXO — a reserva de lane nunca
+    // os move, só plotRight (a fronteira de DESENHO).
+    expect(comReserva.axisWidth).toBe(semReserva.axisWidth);
+    expect(comReserva.axisLeft).toBe(semReserva.axisLeft);
+  });
+
+  it('caso medido no harness: 900px de canvas, eixo 65 (fallback), 3 lanes reais somando 0,34 (PROFILE_LANES_MAX_TOTAL_FRACTION) — plotRight cai o suficiente pra nunca mais cruzar a lane do livro de ofertas', () => {
+    const r = resolvePlotArea(900, 65, 0.34 * 900);
+    // A lane do Order Book Depth (a mais próxima do eixo) começa, no
+    // pior caso medido, bem depois de plotRight — nunca mais colide.
+    expect(r.plotRight).toBeLessThan(900 * (1 - 0.34));
+  });
+
+  it('reservedRightPx negativo é tratado como 0 — nunca EXPANDE plotRight além do que o eixo sozinho permite', () => {
+    const semReserva = resolvePlotArea(900, 65);
+    for (const ruim of [-1, -100, -Infinity]) {
+      expect(resolvePlotArea(900, 65, ruim).plotRight).toBe(semReserva.plotRight);
+    }
+  });
+
+  it('reservedRightPx não-finito (NaN) é tratado como 0 — fail-closed, nunca um plotRight NaN se propagando pro canvas', () => {
+    const r = resolvePlotArea(900, 65, NaN);
+    expect(Number.isFinite(r.plotRight)).toBe(true);
+    expect(r.plotRight).toBe(resolvePlotArea(900, 65).plotRight);
+  });
+
+  it('reserva maior que a área de plotagem inteira: plotRight cai em 0, honesto, nunca negativo', () => {
+    const r = resolvePlotArea(900, 65, 10000);
+    expect(r.plotRight).toBe(0);
+  });
+});
+
 describe('resolveAxisWidthForLabels: o eixo ganha a largura do próprio conteúdo', () => {
   // O caso real medido: a etiqueta mais larga do conjunto ("VWAP 68.412,5")
   // tem 90,3px e o eixo mede 72 — 20,3px de invasão nas velas. Alinhar a
@@ -144,7 +196,26 @@ const PLUGINS_QUE_DESENHAM_ATE_A_BORDA = [
   'StructureBreakMarkersPlugin.tsx',
   'TradePlanZonePlugin.tsx',
   'PriceLabelStackPlugin.tsx',
+  // 3 achados reais de auditoria (rodada de acessibilidade da navegação/
+  // gráfico): estes três plugins já chamavam measurePlotArea/plotRight
+  // desde que foram graduados, mas nunca entraram nesta lista curada —
+  // exatamente a classe "declaração ≠ realidade" que este arquivo inteiro
+  // existe pra prevenir, só que na própria lista de verificação.
+  'HarmonicGeometryPlugin.tsx',
+  'LiquiditySweepLinesPlugin.tsx',
+  'AndrewsPitchforkPlugin.tsx',
 ];
+
+// Achado real (auditoria do pedido do Operador "cada item no seu canto,
+// nada cobrindo nada", medido em harness Playwright — ver header da
+// segunda descrição de resolvePlotArea acima): destes, todos MENOS
+// PriceLabelStackPlugin (que não usa plotRight — só axisLeft/axisWidth
+// pra ancorar rótulos, ver seu próprio import) competem pela MESMA faixa
+// que Volume Profile/TPO/Order Book Depth reservam à direita — então
+// precisam de activeLanes pra measurePlotArea descontar essa reserva.
+const PLUGINS_QUE_COMPETEM_PELA_LANE_DE_PERFIL = PLUGINS_QUE_DESENHAM_ATE_A_BORDA.filter(
+  (f) => f !== 'PriceLabelStackPlugin.tsx',
+);
 
 describe('todo plugin que desenha até a borda direita usa a fronteira medida', () => {
   it.each(PLUGINS_QUE_DESENHAM_ATE_A_BORDA)('%s importa e usa measurePlotArea', (arquivo) => {
@@ -171,5 +242,57 @@ describe('todo plugin que desenha até a borda direita usa a fronteira medida', 
         expect(padrao.test(src), `${arquivo} ainda usa ${padrao} — volta a vazar sob o eixo`).toBe(false);
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Achado real de auditoria (harness Playwright, pedido do Operador "o
+// livro de oferta aparecendo em cima do valor... cada item no seu canto"):
+// medindo os DOIS canvases reais (DepthChartPlugin + SessionKeyLevelsPlugin)
+// com as 3 lanes de perfil ativas, SessionKeyLevelsPlugin desenhava de
+// x=498 a x=837 num canvas de 900px — cobrindo por completo a lane real do
+// livro de ofertas (x=594-708, medida no MESMO canvas). Só
+// OrderFlowHeatmapPlugin (getChartBodyBounds) respeitava a reserva das
+// lanes; os outros 9 consumidores de measurePlotArea iam até plotRight
+// puro (só o eixo). Depois da correção, medido de novo: SessionKeyLevelsPlugin
+// cai pra x=498-531 — nunca mais alcança a lane do livro de ofertas.
+// ---------------------------------------------------------------------------
+describe('cada plugin que compete pela lane de perfil agora passa activeLanes pra measurePlotArea', () => {
+  it.each(PLUGINS_QUE_COMPETEM_PELA_LANE_DE_PERFIL)('%s declara activeLanes na prop e nunca chama measurePlotArea sem ele', (arquivo) => {
+    const src = read(`../src/chart/${arquivo}`);
+    expect(src, `${arquivo} não declara activeLanes na interface de props`).toContain(
+      'activeLanes?: readonly ChartProfileLaneId[];',
+    );
+    expect(src, `${arquivo} não importa ChartProfileLaneId`).toContain(
+      'import type { ChartProfileLaneId } from "./chart-profile-lanes";',
+    );
+    // Nenhuma chamada bare — todas as ocorrências de measurePlotArea(chart,
+    // cssWidth) reais deste arquivo devem ter um 3º argumento.
+    const chamadasBare = src.match(/measurePlotArea\(chart,\s*cssWidth\)/g) ?? [];
+    expect(chamadasBare, `${arquivo} ainda tem measurePlotArea(chart, cssWidth) sem activeLanes`).toEqual([]);
+  });
+});
+
+describe('EnhancedChart_110_Percent.tsx: os 9 plugins recebem activeProfileLanes de verdade, nunca só a prop declarada', () => {
+  const enhancedChart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it.each([
+    'SessionKeyLevelsPlugin',
+    'LiquidityZonesPlugin',
+    'StructureBreakMarkersPlugin',
+    'LiquiditySweepLinesPlugin',
+    'HarmonicGeometryPlugin',
+    'InstitutionalZonePlugin',
+    'AndrewsPitchforkPlugin',
+    'NeuralMarketAuraPlugin',
+    'TradePlanZonePlugin',
+  ])('<%s ... /> é montado com activeLanes={activeProfileLanes}', (componente) => {
+    const src = enhancedChart();
+    const idx = src.indexOf(`<${componente}\n`);
+    expect(idx, `<${componente} não encontrado`).toBeGreaterThan(-1);
+    const fimTag = src.indexOf('/>', idx);
+    expect(fimTag, `fechamento de <${componente} não encontrado`).toBeGreaterThan(idx);
+    const bloco = src.slice(idx, fimTag);
+    expect(bloco, `<${componente} não recebe activeLanes`).toContain('activeLanes={activeProfileLanes}');
   });
 });

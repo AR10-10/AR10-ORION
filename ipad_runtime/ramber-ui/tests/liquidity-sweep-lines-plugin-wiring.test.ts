@@ -61,7 +61,12 @@ describe('LiquiditySweepLinesPlugin: fonte real, zero segunda lógica de cluster
   });
 
   it('geometria full-width (x=0 até plotRight) — MESMO comportamento visual da price line nativa que substitui, nunca truncada pelo instante do evento (diferente de SessionKeyLevelsPlugin)', () => {
-    expect(plugin).toContain('measurePlotArea(chart, cssWidth)');
+    // Rodada de acessibilidade da navegação/gráfico (achado real: "cada
+    // item no seu canto, nada cobrindo nada") — plotRight agora também
+    // exclui a lane real do Volume Profile/TPO/Order Book Depth quando
+    // ativas (activeLanes), nunca só o eixo.
+    expect(plugin).toContain('measurePlotArea(chart, cssWidth, lanes)');
+    expect(plugin).toContain('activeLanes?: readonly ChartProfileLaneId[];');
     expect(plugin).toContain('ctx.moveTo(0, yLine)');
     expect(plugin).toContain('ctx.lineTo(plotRight, yLine)');
   });

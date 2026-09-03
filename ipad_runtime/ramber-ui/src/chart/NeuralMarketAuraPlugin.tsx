@@ -56,6 +56,7 @@
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
 import { measurePlotArea } from "./chart-plot-area";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { AuraReading } from "../nexus/aura-lifecycle";
 import type { CycloneRealParams, CycloneWorkerOutMessage } from "../nexus/conviction-cyclone-draw";
@@ -64,6 +65,11 @@ interface NeuralMarketAuraPluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   aura: AuraReading | null;
+  // Achado real (auditoria "cada item no seu canto, nada cobrindo nada"):
+  // sem isto o corredor/Ciclone ancorava em plotRight puro — bandX
+  // (borda direita do corredor) caindo em cima da lane do Volume
+  // Profile/TPO/Order Book Depth quando ativas. Opcional/fail-closed.
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
 // Mesma paleta direcional já usada em toda a UI (BOS/CHOCH, badges de
@@ -139,10 +145,10 @@ function prefersReducedMotion(): boolean {
     : false;
 }
 
-export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAuraPluginProps) {
+export function NeuralMarketAuraPlugin({ chart, series, aura, activeLanes }: NeuralMarketAuraPluginProps) {
   const cycloneCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const staticCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const stateRef = useRef({ aura });
+  const stateRef = useRef({ aura, activeLanes });
   const markDirtyRef = useRef<(() => void) | null>(null);
   // modeRef é lido pelo laço de desenho (draw()/decideRenderer) — de
   // propósito NUNCA promovido a estado React reativo: qual canvas fica
@@ -155,11 +161,11 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
   // dentro do efeito) desde o primeiro render — nunca pelo JSX.
   const modeRef = useRef<RendererMode>("pending");
 
-  stateRef.current = { aura };
+  stateRef.current = { aura, activeLanes };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [aura]);
+  }, [aura, activeLanes]);
 
   useEffect(() => {
     const cycloneCanvas = cycloneCanvasRef.current;
@@ -194,10 +200,12 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      // Fronteira medida do eixo (chart-plot-area.ts): o corredor e a linha
-      // do alvo param na borda do eixo, nunca correm por baixo dos numeros
-      // do preco. Ancorar em `cssWidth` era ancorar na borda do CONTAINER.
-      const { plotRight } = measurePlotArea(chart, cssWidth);
+      // Fronteira medida do eixo (chart-plot-area.ts) + lanes de perfil
+      // ATIVAS (chart-profile-lanes.ts): o corredor e a linha do alvo
+      // param antes do eixo E antes da lane do Volume Profile/TPO/Order
+      // Book Depth quando ativas — nunca mais por cima do livro de
+      // ofertas. Ancorar em `cssWidth` era ancorar na borda do CONTAINER.
+      const { plotRight } = measurePlotArea(chart, cssWidth, stateRef.current.activeLanes);
 
       const { aura: reading } = stateRef.current;
       // Sem leitura real (nenhum plano rastreado, ou já dissolvida por
@@ -331,7 +339,7 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
 
       const top = Math.min(yEntry, yTarget);
       const bottom = Math.max(yEntry, yTarget);
-      const { plotRight: cyclonePlotRight } = measurePlotArea(chart, cssWidth);
+      const { plotRight: cyclonePlotRight } = measurePlotArea(chart, cssWidth, stateRef.current.activeLanes);
       const bandWidth = Math.min(cyclonePlotRight, corridorWidthPx(corridorWidthFactor));
       const bandX = cyclonePlotRight - bandWidth;
       const collapse = targetProximity === "APPROACHING" ? APPROACH_COLLAPSE : 0;

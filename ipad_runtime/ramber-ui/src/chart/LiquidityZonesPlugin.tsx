@@ -36,6 +36,7 @@
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
 import { measurePlotArea } from "./chart-plot-area";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
 // Diretriz Final de Lapidação Visual, Adendo, Parte 11 ("etiquetas
@@ -251,21 +252,28 @@ interface LiquidityZonesPluginProps {
   // idêntico ao de antes desta camada existir.
   breakerBlocks?: FillableZone[];
   mitigationBlocks?: FillableZone[];
+  // Achado real (auditoria do pedido do Operador "cada item no seu canto,
+  // nada cobrindo nada"): sem isto, esta camada desenhava até plotRight,
+  // que só exclui o eixo — nunca a lane real do Volume Profile/TPO/Order
+  // Book Depth, medida em 34% da largura quando as três estão ativas
+  // (padrão). Opcional/fail-closed: ausente => comportamento antigo
+  // (plotRight puro), nunca uma quebra pra quem ainda não passa a prop.
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
-export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, liquidityVoids, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks }: LiquidityZonesPluginProps) {
+export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, liquidityVoids, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks, activeLanes }: LiquidityZonesPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const zonesRef = useRef({ fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks });
+  const zonesRef = useRef({ fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks, activeLanes });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente das zonas/candles para o loop de desenho
   // ler — nunca dispara o efeito de setup abaixo de novo (evita reabrir a
   // conexão com o chart/reassinar os listeners a cada atualização de dado).
-  zonesRef.current = { fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks };
+  zonesRef.current = { fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks, activeLanes };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks]);
+  }, [fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks, activeLanes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -288,11 +296,11 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      // Fronteira medida do eixo (chart-plot-area.ts): o desenho para na
-      // borda do eixo, nunca corre por baixo dos numeros do preco. Achado
-      // medido: nenhum dos 18 overlays deste projeto media isso — todos
-      // iam ate `cssWidth`, que inclui os ~72px da faixa do eixo.
-      const { plotRight } = measurePlotArea(chart, cssWidth);
+      // Fronteira medida do eixo (chart-plot-area.ts) + lanes de perfil
+      // (chart-profile-lanes.ts) ATIVAS agora: o desenho para antes do
+      // eixo E antes da lane real do Volume Profile/TPO/Order Book Depth
+      // — nunca mais uma zona cruzando por cima do livro de ofertas.
+      const { plotRight } = measurePlotArea(chart, cssWidth, zonesRef.current.activeLanes);
 
       const timeScale = chart.timeScale();
       const { fairValueGaps: fvgs, orderBlocks: obs, liquidityVoids: voids, data: candles, obstacleZones: obstacles, fvgVisualWeights: fvgWeights, obVisualWeights: obWeights, voidVisualWeights: voidWeights, equalLevels: pools, breakerBlocks: breakers, mitigationBlocks: mitigations } = zonesRef.current;

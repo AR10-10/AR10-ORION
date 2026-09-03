@@ -19,6 +19,7 @@
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
 import { measurePlotArea } from "./chart-plot-area";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { InstitutionalConfidenceZone } from "../nexus/institutional-score";
 
@@ -41,6 +42,11 @@ interface TradePlanZonePluginProps {
   // opacityMultiplierFor(confidenceZone) (comportamento já validado antes
   // desta rodada, nunca um valor fabricado).
   visualWeight?: number | null;
+  // Achado real (auditoria "cada item no seu canto, nada cobrindo nada"):
+  // sem isto a zona de entrada (full-width por natureza) desenhava por
+  // cima da lane do Volume Profile/TPO/Order Book Depth quando ativas.
+  // Opcional/fail-closed.
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
 // Same exact amber already used for the entry price lines in
@@ -81,18 +87,18 @@ function withAlpha(rgba: string, alpha: number): string {
   return rgba.replace(/,\s*[0-9.]+\)$/, `, ${alpha.toFixed(3)})`);
 }
 
-export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh, confidenceZone, visualWeight }: TradePlanZonePluginProps) {
+export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh, confidenceZone, visualWeight, activeLanes }: TradePlanZonePluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const rangeRef = useRef({ entryLow, entryHigh, confidenceZone, visualWeight });
+  const rangeRef = useRef({ entryLow, entryHigh, confidenceZone, visualWeight, activeLanes });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Always the latest range/zone for the draw loop to read — never
   // re-triggers the setup effect below (same technique as LiquidityZonesPlugin).
-  rangeRef.current = { entryLow, entryHigh, confidenceZone, visualWeight };
+  rangeRef.current = { entryLow, entryHigh, confidenceZone, visualWeight, activeLanes };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [entryLow, entryHigh, confidenceZone, visualWeight]);
+  }, [entryLow, entryHigh, confidenceZone, visualWeight, activeLanes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -115,11 +121,10 @@ export function TradePlanZonePlugin({ chart, series, entryLow, entryHigh, confid
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      // Fronteira medida do eixo (chart-plot-area.ts): o desenho para na
-      // borda do eixo, nunca corre por baixo dos numeros do preco. Achado
-      // medido: nenhum dos 18 overlays deste projeto media isso — todos
-      // iam ate `cssWidth`, que inclui os ~72px da faixa do eixo.
-      const { plotRight } = measurePlotArea(chart, cssWidth);
+      // Fronteira medida do eixo (chart-plot-area.ts) + lanes de perfil
+      // ATIVAS (chart-profile-lanes.ts): o desenho para antes do eixo E
+      // antes da lane do Volume Profile/TPO/Order Book Depth.
+      const { plotRight } = measurePlotArea(chart, cssWidth, rangeRef.current.activeLanes);
 
       const { entryLow: low, entryHigh: high, confidenceZone: zone, visualWeight: resolvedWeight } = rangeRef.current;
       // No plan, or a zero-width zone (single acceptance price): the

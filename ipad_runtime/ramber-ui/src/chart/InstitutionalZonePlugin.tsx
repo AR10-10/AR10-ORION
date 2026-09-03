@@ -29,6 +29,7 @@
 import { useEffect, useRef } from "react";
 import { getChartLayerZIndex } from "./chart-layer-depth";
 import { measurePlotArea } from "./chart-plot-area";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { InstitutionalZone } from "../nexus/institutional-zones";
 
@@ -140,13 +141,19 @@ interface InstitutionalZonePluginProps {
   // `live` do eixo) — zero segunda coleta. Opcional/fail-closed: ausente
   // = comportamento de sempre (peso só por confluência).
   livePrice?: number | null;
+  // Achado real (auditoria "cada item no seu canto, nada cobrindo nada"):
+  // sem isto a faixa (largura total por natureza) ia até plotRight puro
+  // — cruzando a lane do Volume Profile/TPO/Order Book Depth quando
+  // ativas. Opcional/fail-closed.
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
-export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, livePrice }: InstitutionalZonePluginProps) {
+export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, livePrice, activeLanes }: InstitutionalZonePluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const zonesRef = useRef(zones);
   const visualWeightsRef = useRef(visualWeights);
   const livePriceRef = useRef(livePrice);
+  const activeLanesRef = useRef(activeLanes);
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente para o loop de desenho ler — mesmo
@@ -154,10 +161,11 @@ export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, l
   zonesRef.current = zones;
   visualWeightsRef.current = visualWeights;
   livePriceRef.current = livePrice;
+  activeLanesRef.current = activeLanes;
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [zones, visualWeights, livePrice]);
+  }, [zones, visualWeights, livePrice, activeLanes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -180,11 +188,10 @@ export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, l
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      // Fronteira medida do eixo (chart-plot-area.ts): o desenho para na
-      // borda do eixo, nunca corre por baixo dos numeros do preco. Achado
-      // medido: nenhum dos 18 overlays deste projeto media isso — todos
-      // iam ate `cssWidth`, que inclui os ~72px da faixa do eixo.
-      const { plotRight } = measurePlotArea(chart, cssWidth);
+      // Fronteira medida do eixo (chart-plot-area.ts) + lanes de perfil
+      // ATIVAS (chart-profile-lanes.ts): o desenho para antes do eixo E
+      // antes da lane do Volume Profile/TPO/Order Book Depth.
+      const { plotRight } = measurePlotArea(chart, cssWidth, activeLanesRef.current);
 
       const currentZones = zonesRef.current;
       if (currentZones.length === 0) return; // sem confluência real agora — nada desenhado, nunca um exemplo.

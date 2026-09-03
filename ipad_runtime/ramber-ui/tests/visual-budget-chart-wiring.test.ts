@@ -27,9 +27,11 @@ describe('InstitutionalZonePlugin.tsx: confluenceWeight exportado + visualWeight
     const s = institutionalZonePlugin();
     expect(s).toContain('visualWeights?: (number | undefined)[];');
     // livePrice (Ordem "Lapidação Visual Final + Nova Linguagem de
-    // Gráfico" §3 — intensidade real por proximidade ao preço): 4º prop,
-    // assinatura re-fixada.
-    expect(s).toContain('export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, livePrice }: InstitutionalZonePluginProps) {');
+    // Gráfico" §3 — intensidade real por proximidade ao preço) +
+    // activeLanes (rodada de acessibilidade da navegação/gráfico, achado
+    // real: "cada item no seu canto, nada cobrindo nada") — assinatura
+    // re-fixada com os dois.
+    expect(s).toContain('export function InstitutionalZonePlugin({ chart, series, zones, visualWeights, livePrice, activeLanes }: InstitutionalZonePluginProps) {');
   });
 
   it('o loop de desenho usa visualWeights[i] quando real (!== undefined); cai em confluenceWeight isolado (comportamento pré-Ordem 03) quando ausente — nunca um valor fabricado', () => {
@@ -46,7 +48,9 @@ describe('InstitutionalZonePlugin.tsx: confluenceWeight exportado + visualWeight
   it('visualWeights entra no dirty-check (useEffect deps) igual a zones — uma resolução de orçamento nova redesenha', () => {
     // livePrice entrou no mesmo dirty-check (§3): um tick real de preço
     // que cruza um limiar de proximidade também precisa redesenhar.
-    expect(institutionalZonePlugin()).toContain('}, [zones, visualWeights, livePrice]);');
+    // activeLanes entrou no mesmo dirty-check (rodada de acessibilidade
+    // da navegação/gráfico): uma lane que liga/desliga também redesenha.
+    expect(institutionalZonePlugin()).toContain('}, [zones, visualWeights, livePrice, activeLanes]);');
   });
 });
 
@@ -138,8 +142,11 @@ describe('StructureBreakMarkersPlugin.tsx: aceita visualWeight real com fallback
   it('nova prop visualWeight documentada e aceita pelo componente', () => {
     const s = structureBreakMarkersPlugin();
     expect(s).toContain('visualWeight?: number | null;');
+    // activeLanes (rodada de acessibilidade da navegação/gráfico, achado
+    // real: "cada item no seu canto, nada cobrindo nada") — assinatura
+    // re-fixada com o novo prop.
     expect(s).toContain(
-      'export function StructureBreakMarkersPlugin({ chart, series, data, structureBreak, visualWeight }: StructureBreakMarkersPluginProps) {',
+      'export function StructureBreakMarkersPlugin({ chart, series, data, structureBreak, visualWeight, activeLanes }: StructureBreakMarkersPluginProps) {',
     );
   });
 
@@ -152,9 +159,11 @@ describe('StructureBreakMarkersPlugin.tsx: aceita visualWeight real com fallback
 
   it('visualWeight entra no ref/dirty-check igual a structureBreak/data — uma resolução de orçamento nova redesenha', () => {
     const s = structureBreakMarkersPlugin();
-    expect(s).toContain('const stateRef = useRef({ structureBreak, data, visualWeight });');
-    expect(s).toContain('stateRef.current = { structureBreak, data, visualWeight };');
-    expect(s).toContain('}, [structureBreak, data, visualWeight]);');
+    // activeLanes entra no MESMO ref/dirty-check (rodada de acessibilidade
+    // da navegação/gráfico) — mesmo padrão já provado por visualWeight.
+    expect(s).toContain('const stateRef = useRef({ structureBreak, data, visualWeight, activeLanes });');
+    expect(s).toContain('stateRef.current = { structureBreak, data, visualWeight, activeLanes };');
+    expect(s).toContain('}, [structureBreak, data, visualWeight, activeLanes]);');
   });
 });
 

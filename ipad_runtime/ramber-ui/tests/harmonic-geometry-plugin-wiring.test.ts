@@ -74,7 +74,12 @@ describe('HarmonicGeometryPlugin: zero segunda matemática — mesma disputa/geo
 
   it('geometria full-width para PRZ/EPA/NECKLINE/APEX (x=0 até plotRight) — MESMO comportamento visual de series.createPriceLine que substitui', () => {
     expect(plugin).toContain('import { measurePlotArea } from "./chart-plot-area"');
-    expect(plugin).toContain('const { plotRight } = measurePlotArea(chart, cssWidth);');
+    // Rodada de acessibilidade da navegação/gráfico (achado real: "cada
+    // item no seu canto, nada cobrindo nada") — plotRight agora também
+    // exclui a lane real do Volume Profile/TPO/Order Book Depth quando
+    // ativas (activeLanes), nunca só o eixo.
+    expect(plugin).toContain('const { plotRight } = measurePlotArea(chart, cssWidth, lanes);');
+    expect(plugin).toContain('activeLanes?: readonly ChartProfileLaneId[];');
     expect(plugin).toContain('ctx.moveTo(0, yLine);');
     expect(plugin).toContain('ctx.lineTo(plotRight, yLine);');
   });
