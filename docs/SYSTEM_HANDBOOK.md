@@ -6912,6 +6912,83 @@ documentados no item 6 continuam reais.
 
 ---
 
+### 6.93 Memo de 20 seções ("CALCULAR MUITO. MOSTRAR POUCO. EXPLICAR SOB
+DEMANDA.") — mapeamento honesto contra o código real, sem escrever
+código ainda (a própria ordem do memo: "MAPEAR. Depois: POC. Depois:
+BENCHMARK. Somente então integrar." / "EXECUTAR EM ETAPAS. NÃO FAZER
+BIG-BANG.")
+
+Pedido do Operador: memo de 20 seções (Lightweight Charts como engine
+único, Visual Intelligence Layer entre Decision Engine e o gráfico, modo
+padrão enxuto, progressive disclosure, Evidence Graph, Five Pillars,
+semântica de RISK como WARNING não-gate, Web Workers/WASM, Data Fabric,
+DuckDB-WASM para histórico/replay, IA auxiliar via ONNX/Transformers.js,
+WebGPU opcional, disciplina iPad-first, orçamento visual, anti-colisão,
+zero look-ahead, suíte de testes com benchmark de candles, regra de
+não-regressão, processo MAPEAR→POC→BENCHMARK→integrar). Zero código
+alterado nesta rodada — só auditoria, conforme o próprio processo que o
+memo pede.
+
+**Precedente direto, não redescoberto do zero**: a Diretriz Nº 02
+(`docs/historico/RELATORIO_DIRETRIZ_02_INTELIGENCIA_VISUAL.md`) já pediu
+quase o mesmo pipeline (`Motores → Knowledge Graph → Evidence Fusion
+Engine → Quality Governor → Meta Engine → Core Engine → Visual
+Intelligence Layer → Gráfico`) e decidiu, com razão documentada, **não**
+tentar a inversão completa numa rodada (alto blast-radius: tocaria os
+12+ plugins de canvas + `EnhancedChart_110_Percent.tsx` inteiro de uma
+vez, baixíssima reversibilidade) — construiu só a peça concreta e segura
+(`nexus/visual-budget.ts`, isolado, **nunca ligado a nenhum componente
+vivo até hoje**: confirmado de novo nesta auditoria, zero import fora do
+próprio teste). Esse relatório continua a referência viva sobre por que
+a inversão completa não foi tentada — nada neste memo novo invalida esse
+raciocínio; pelo contrário, o próprio memo pede a mesma cautela
+("não fazer big-bang").
+
+**O que mudou desde a Diretriz Nº 02**: `nexus/evidence-fusion.ts` foi
+construído (Carta Branca, §6.7x-6.8x) — consumidor real de
+`engine-signal-contract.ts` (Conselho + Zonas Institucionais), mas
+**estritamente não-direcional**: mede cobertura/consenso/dispersão sobre
+a evidência agregada, nunca combina em score ou direção (LEI 24 intacta
+por construção, não por convenção). Ainda não é o "Evidence Graph" com
+dependências `source → engine → signal → pillar → decision` que este
+memo novo pede — é o degrau anterior (agregação plana, sem grafo de
+dependência nem pilares nomeados).
+
+**Mapeamento por seção, evidência real (não memória):**
+
+| # | Seção do memo | Estado real |
+|---|---|---|
+| 1 | Gráfico (Lightweight Charts, Primitives) | Mantido, sem substituição cogitada. Uso de Primitives modernas (Series/Pane Primitives) não auditado plugin-a-plugin nesta rodada — a maioria dos ~14 plugins de canvas usa a API de `addSeries`/canvas overlay clássica, não as Primitives novas da lib; migração seria uma auditoria própria. |
+| 2 | Visual Intelligence Layer | **Parcial, disperso, não consolidado.** `layer-relevance.ts` (mostra/esconde camada) + `visual-budget.ts` (isolado, nunca ligado) + `chart-layer-depth.ts` (profundidade) já fazem, cada um separadamente, uma fatia do que o memo pede como camada única. Consolidar é trabalho real, não ficção — mas о precedente (Diretriz 02 §6) já recomendava exatamente isso como próximo passo. |
+| 3 | Modo padrão do gráfico | **Já é a direção que a sessão vem tomando** (§29/§30 desta PR: declutter da navegação, correção de sobreposição) mas o memo pede uma lista literal fixa (candles/volume/estrutura/traço roxo/FVG-OB relevantes/Trade Plan/invalidação/decisão/1 seta) que hoje **não é o padrão real** — `layer-relevance.ts` decide dinamicamente por relevância, não por uma lista fixa deste tamanho. Divergência real a resolver com decisão explícita (é isto que o memo pede, ou é a relevância dinâmica que já existe?). |
+| 4 | Progressive disclosure (LABORATORY) | Existe em espírito (`ChartLayersPanelContent`, "Estado Inteligente Adaptativo", resumo por padrão + controle completo 1 clique abaixo) mas sem o vocabulário "LABORATORY" nem o ciclo explícito ativação→visualização→fechamento→retorno. |
+| 5 | Evidence Graph | **Gap real.** `engine-signal-contract.ts` + `evidence-fusion.ts` existem mas são agregação PLANA (contagens/cobertura), não um grafo com dependências nomeadas nem pilares. `fractal-swings.js` (a atenção especial que o memo pede) já é módulo único compartilhado por 17+ consumidores reais (`research/engines/*`, `nexus/*`, `engine-bridge.ts`) — a preocupação do memo ("não duplicar") já está satisfeita na prática, mesmo sem um Evidence Graph formal por cima. |
+| 6 | Five Pillars | **Nome não existe no código.** O que existe é `council.ts` — 7 agentes (Liquidity/Structure/Orderflow/Risk/Manipulation/Fibonacci/Momentum), categorização diferente dos 5 pilares nomeados pelo memo (STRUCTURE/LIQUIDITY/MOMENTUM/CONTEXT/RISK). `docs/SYSTEM_HANDBOOK.md §7` já tem uma tabela A-E (DIREÇÃO/ESTRUTURA/TIMING/RISCO/CONTEXTO) que é a peça mais próxima — também não os mesmos 5 nomes. Formalizar os Five Pillars exigiria decidir explicitamente se substituem, resumem ou coexistem com essas duas classificações já reais — decisão de arquitetura, não implementação mecânica. |
+| 7 | Risk (WARNING ≠ gate) | **Já correto hoje.** `RR_QUALITY_FLOOR = 2` (`nexus/rr-quality.ts`) é usado como sufixo textual de aviso (`rrFloorSuffix`), nunca bloqueia a leitura do Núcleo — confirmado por grep, nenhum consumidor usa o piso como gate de decisão. |
+| 8 | Performance (Workers/WASM) | **Já real.** 4 Workers dedicados (`llm-worker.ts`, `backtest-worker.ts`, `orderflow-heatmap-worker.ts`, `conviction-cyclone-worker.ts`) + `quant-worker.js` (estático, servido em produção) + WASM real (`cyborg_quant_core.wasm`/variante SIMD) para Volume Profile/TrustScore (Regra de Ouro 6 do CLAUDE.md, já não-negociável). Benchmark formal de FPS/latência/CPU por contagem de candles (item 17 do memo) não existe como suíte própria. |
+| 9 | Data Fabric | **Já é a arquitetura real** — `market-data-bus/` como fonte canônica por `symbol:timeframe`, WS como caminho principal (§20 desta mesma PR: migração Spot→Futures), REST reservado a bootstrap/histórico/reconciliação. Já documentado em `docs/MARKET_DATA_FABRIC.md`. |
+| 10 | DuckDB-WASM | **Ausente, e o memo já concorda que deve ficar assim até POC.** Zero presença no repositório. Nenhuma ação requerida agora — é exatamente o que o memo pede ("não introduzir ainda sem benchmark"). |
+| 11 | IA (ONNX/Transformers.js) | **Ausente.** O único caminho de IA hoje é `llm-bridge.ts`/`llm-worker.ts` via `@mlc-ai/web-llm` (Llama 3 local, WebGPU) para síntese tática em linguagem natural — opt-in, isolado, nunca gera LONG/SHORT (mesma linha vermelha que o memo pede). ONNX Runtime Web/Transformers.js seriam um caminho PARALELO para classificação/resumo, não construído. |
+| 12 | WebGPU | **Parcial.** Já usado, mas só dentro do caminho do LLM (`llm-worker.ts`, `voice-dispatcher.ts`, `synthetic-reading.ts`) — não existe hoje uma arquitetura "GPU-ready" genérica para o motor quantitativo, com WASM como fallback formal. |
+| 13 | iPad-first | **Disciplina permanente já real** — Regra de Ouro 7 do CLAUDE.md (60 FPS, zero scroll de página), testado em Chromium com viewport iPad Pro 11" em múltiplas rodadas desta sessão (§4, §27, §29 desta PR). Nunca testado em dispositivo físico. |
+| 14 | Visual Budget | **Já existe, já com o nome certo** — `nexus/visual-budget.ts` (§2 acima), só nunca ligado a um componente vivo. |
+| 15 | Anti-colisão | **Já real e maduro** — `price-label-stack.ts`, usado por 10+ famílias de rótulo (S1/R1/VWAP/NL/EMA/TREND/ENTRY/STOP/TARGET/CHOCH e mais), extensivamente testado ao longo desta sessão inteira (§10-§13, §25-§27 desta PR). |
+| 16 | Zero look-ahead | **Já é princípio testado** — `structural-backtest.js` (walk-forward, 521 janelas), `structural-swings-trace.test.ts` (zero-look-ahead explícito), replay sem look-ahead documentado em §6 deste handbook. |
+| 17 | Testes (benchmark de candles) | **Parcial.** `npm run verify` (tsc+vitest+build) já é obrigatório e rodado toda rodada. Benchmark formal por contagem de candles (500/1k/5k/10k) + FPS/latência/memória/CPU registrados não existe como suíte própria — gap real. |
+| 18 | Não-regressão (Core/Decision/Risk/Evidence Graph semantics) | Já é a disciplina de fato desta sessão inteira (LEI 24, "execute somente esta alteração", citado literalmente em §23/§28 desta PR) — nunca formalizado como checklist único. |
+| 19 | Processo (MAPEAR→POC→BENCHMARK→integrar) | **Esta entrada é exatamente isso** — o mapeamento, sem código. |
+| 20 | Princípio final | Já é o vocabulário real desta sessão (Regra de Ouro 2/3, LEI 24, "declaração ≠ realidade") só sem o slogan "CALCULAR MUITO. MOSTRAR POUCO." |
+
+**Nenhum código alterado nesta rodada.** Próximo passo real: escolher,
+com o Operador, qual peça concreta vira Stage 1 (candidatas de baixo
+risco, mesmo padrão de `visual-budget.ts`: graduar `visual-budget.ts`
+ao vivo; consolidar `layer-relevance.ts`+`visual-budget.ts`+
+`chart-layer-depth.ts` num módulo nomeado "Visual Intelligence Layer";
+POC isolado de DuckDB-WASM; ou benchmark formal de candles/FPS) — nunca
+as 20 seções de uma vez.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
