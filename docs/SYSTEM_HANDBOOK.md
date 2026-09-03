@@ -7098,6 +7098,79 @@ real, não só declarado.
 
 ---
 
+### 6.95 "ORDEM 3 — PROFESSIONAL MARKET TERMINAL" (37 seções) —
+mapeamento honesto + `terminal-event-log.ts`, compositor puro sem motor
+novo
+
+Terceira ordem da mesma família (memo de 20 seções §6.93; Ordem 2 de 29
+seções §6.94) — desta vez sobre o TERMINAL em si: multi-asset,
+multi-timeframe, context-aware, um único `MARKET SNAPSHOT`/`ANALYSIS
+SNAPSHOT` por symbol:timeframe:timestamp, isolamento arquitetural entre
+ativos/timeframes, Terminal Header/Chart Header com status real, Terminal
+Event Log, Layer Trace, state machine formal, audit trail, testes
+extensivos (troca de ativo/timeframe, race condition, cache
+contamination), responsividade iPad, performance.
+
+**Achado central, auditoria arquivo-a-arquivo (nunca por memória):** a
+maior parte da visão desta Ordem já existe — e mais madura do que a
+suposição inicial de "terminal cripto simples" sugeriria.
+
+| Seção da Ordem 3 | Estado real |
+|---|---|
+| §2/§27 Symbol Selector / Universal Asset Contract | **Já existe, multi-asset-class de verdade.** `src/market-data-bus/instrument-registry.js` (392 linhas) — catálogo real de futuros CME (EQUITY_INDEX/EQUITY/METALS/ENERGY/RATES/FX, tick size/value pesquisados via WebSearch, nunca inventados) + `marketMode: "CRYPTO" \| "TRADFI"` já real em `App.tsx`, com seletor, sessão persistida, e `tradfi-delayed-connector.js`. Cripto não é a única classe de ativo suportada. |
+| §6-8 Market Snapshot / Data Synchronization | **Já é a arquitetura real** — `market-data-bus/bus.js`, fonte canônica por `symbol:timeframe` (já documentado em `CLAUDE.md`). `unified-snapshot-store.ts` (5 domínios: Mercado/Séries/Motores Quant/Cérebro/Organismo) é o "Analysis Snapshot" real, só sem esse nome. |
+| §19/§22/§24 Timestamp Integrity / Real Data Status / Latency | **Já existe, vocabulário diferente.** `market-data-bus/quality-engine.js`+`quality-monitor.js`: Data Quality Layer real POR `symbol:timeframe`, 4 dimensões (latência/disponibilidade/consistência/estabilidade) → `QUALITY_CLASSIFICATION` (EXCELENTE/SAUDAVEL/DEGRADADA/QUARENTENA/DADOS_INSUFICIENTES) — não é literalmente LIVE/DELAYED/STALE/OFFLINE/ERROR, mas cobre a mesma função com mais rigor (score contínuo + circuito de quarentena por sequência de falhas). |
+| §20/§21 Multi-Asset/Multi-Timeframe Isolation | **Já corrigido numa rodada anterior, achado real registrado no próprio código.** `App.tsx` (`seriesMatchesTimeframe`, `fetchSymbolData`): comentário explícito ("Diretriz de Evolução Geral do Organismo — auditoria de sincronização") documenta que o guard `cancelled` só cobria troca de ATIVO — trocar de timeframe durante um fetch em voo podia misturar duas grades na mesma série. Já corrigido com captura de `tfNoInicio` antes do await + verificação dupla (ativo OU timeframe mudou) depois — path de rede E path de hidratação do IndexedDB, ambos comparados linha a linha nesta auditoria. `fetchDerivatives` (funding/OI) usa só o guard de ativo, corretamente — funding/OI não dependem de timeframe. |
+| §25 Performance Monitor | **Já existe, painel dedicado, já fora da UI operacional** — Widget "SYSTEM HEALTH" (`App.tsx`): saúde do organismo, qualidade do Bus, suficiência de dados, qualidade GMIL, integridade do gráfico, variante WASM, latência do ciclo (rotulada com o timeframe!), FPS real, memória JS — exatamente §25, já separado do painel operacional principal. |
+| §29 Terminal + Graph Link | **Já é regra estrutural testada** — `NexusDecision` (`decision-layer.ts`) é a ÚNICA fonte que qualquer consumidor visual lê; "nenhum consumidor visual recalcula direção/entrada/stop/alvo — todos leem o mesmo `NexusDecision`" já é frase literal deste handbook (§2), provada por teste. Chart e terminal divergirem no mesmo snapshot já é estruturalmente impossível, não uma disciplina visual. |
+| §18 Layer Trace | **Parcial — infraestrutura real, granularidade menor que a pedida.** `nexus/stage-runner.ts` já expõe `STAGE_ORDER = ["DATA","CORE_ENGINE","COUNCIL","TRADE_PLAN","NEXUS_DECISION"]` (5 estágios, não os 9 da Ordem) com `traceStages()` real; `nexus/self-diagnostics.ts` já consome isso + Health Monitor + Data Quality Layer num relatório sob demanda (`buildDiagnosticReport`/`formatDiagnosticReportMarkdown`, ligado em `App.tsx`). Gap real: não é uma UI expansível camada-por-camada, é markdown gerado sob pedido. |
+| §17 Terminal Event Log | **Gap real, fechado nesta rodada (Stage 1) — ver abaixo.** |
+| §3 Timeframe Selector (disponibilidade real por ativo) | **Gap real.** Nenhum `availableTimeframes` por instrumento — o seletor assume o mesmo conjunto fixo para todo ativo, nunca consulta a fonte real. |
+| §30 Professional State Machine (11 estados nomeados) | **Gap parcial — estados reais existem, espalhados, vocabulário diferente.** `NexusSetupState`/`NexusEntryState` (operational-readability.ts), `TrackedPlanStatus` (signal-track-record.ts), `QUALITY_CLASSIFICATION` (quality-engine.js), `engineStatus: 'ok'\|'error'\|'pending'` — nenhum se chama `INITIALIZING`/`SYNCING`/`SIGNAL_DEVELOPING` etc., e unificar sob um único enum arrisca duplicar o que já existe (mesmo risco já registrado na §6.94 para Five Pillars) — não tentado nesta rodada. |
+| §31 Audit Trail | **Parcial.** `TrackedPlan.contextAtOpen` (signal-track-record.ts) já congela score/regime/VWAP/Nexus Line no instante da abertura — reconstrução parcial real. Não existe uma trilha completa ligando evidência→motor→decisão por decisão individual (isso é o mesmo Evidence Graph com genealogia já registrado como gap na §6.94). |
+
+**Solução aplicada — Stage 1:** `nexus/terminal-event-log.ts` (novo, puro,
+Laboratório de Evolução — isolado, build idêntico ao commit anterior).
+Fecha o gap mais concreto e explicitamente exemplificado da Ordem (§17,
+com formato literal no próprio texto: `"12:43:21 [MARKET] BTCUSDT 5m
+snapshot updated"`). Descoberta que tornou isto possível sem inventar
+nada: `nexus/event-bus.ts` já é um `TypedEventBus` real com 22 tipos de
+evento REAIS, publicados hoje por `OrganismOrchestrator`/Health
+Monitor/CrossExchangeService (o próprio arquivo documenta, por auditoria
+anterior, que só os 3 eventos `DATA.*` não têm publicador vivo ainda,
+porque `cross-exchange-service.ts` não é iniciado nesta fase — decisão
+deliberada, não esquecimento). `formatTerminalLogEntry()` não fabrica
+nenhuma mensagem: cada linha é um `switch` sobre o tipo real do evento,
+lendo só campos que o payload real já carrega — payload nulo vira
+"cleared"/"unavailable" honesto, nunca um valor inventado.
+`appendTerminalLogEntry()` é o ring buffer real (piso de 200 entradas,
+convenção declarada, mesma natureza de outros pisos deste repositório).
+
+15 testes de execução real (`tests/terminal-event-log.test.ts`): o
+exemplo literal da própria Ordem (`DATA.CANDLES_UPDATED` → "BTCUSDT 5m
+snapshot updated"); cada categoria mapeada a partir do NOME real do
+evento (nunca uma reclassificação por conteúdo); payload nulo → mensagem
+honesta em 3 famílias diferentes de evento; array real contado, nunca
+redigitado; `HEALTH.CHANGED` com campo `null` virando "n/d"; ring buffer
+com descarte real das entradas mais antigas, imutabilidade, e fail-closed
+em `max` inválido (0/negativo/NaN cai no default, nunca trunca pra
+buffer vazio).
+
+**O que este round honestamente NÃO fez:** graduar `terminal-event-log.ts`
+a um painel visível (fica Laboratório de Evolução, mesma disciplina de
+`visual-budget.ts`/`trade-plan-view.ts` antes de suas próprias
+graduações — a próxima rodada assina o `core.bus` de verdade e monta o
+painel); `availableTimeframes` por instrumento (§3); state machine
+unificada (§30, risco real de duplicar o que já existe sob nomes
+diferentes); Layer Trace com a granularidade de 9 estágios pedida (§18,
+hoje 5 reais); Audit Trail completo com genealogia por decisão (§31,
+mesmo gap do Evidence Graph já registrado na §6.94).
+
+`npm run verify`: **257 arquivos / 4400 testes**, tsc limpo, build
+idêntico em módulos/bytes ao commit anterior.
+
+---
+
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
 
 Nenhum indicador existe "porque existe" (Evolução Integrativa §5). Papel
