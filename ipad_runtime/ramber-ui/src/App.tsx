@@ -66,6 +66,12 @@ import { classifyBusQuality, classifyWeight, classifySufficiencyScore, DATA_QUAL
 import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } from "./nexus/multi-timeframe-engine";
 // Signal Precision order (phase 4): actionable plan from real structure.
 import { buildTradePlan, effectiveStopForTargetsHit, obstacleZonesInPath, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
+// Ordem 2 §4 (Trade Plan unificado), graduado: compositor puro sobre 5
+// sistemas já reais (trade-plan/signal-track-record/operational-readability/
+// scenario-engine/institutional-score) — SecondaryModuleView usa isto só
+// para o campo STATUS que nenhum painel existente resume hoje (Entry/Stop/
+// Target já são exibidos direto de `tradePlan`, zero repetição).
+import { composeTradePlanView } from "./nexus/trade-plan-view";
 // Autonomy order: honest signal accuracy — plans tracked against the real
 // price, persisted across sessions, felt by the affective memory.
 import { rehydrateTrackRecord, hitRate, EMPTY_TRACK_RECORD, type TrackedPlan, type PlanOpenContext } from "./nexus/signal-track-record";
@@ -111,6 +117,13 @@ import { getOrganismOrchestrator, getSnapshotForEngine } from "./nexus/organism-
 // consumidor ao vivo — só o Relatório de Autodiagnóstico (TelemetryHealthWidget),
 // sob demanda, mesma disciplina de "read-only observer" do próprio módulo.
 import { traceStages } from "./nexus/stage-runner";
+// Ordem 3 §17 (Terminal Event Log), graduado: formatter puro do NexusEvent
+// real (event-bus.ts) em linha de log legível — EventsWidget usa isto como
+// 2ª fonte do MESMO painel "EVENT TELEMETRY" (a 1ª, gmilBus, só cobre 2
+// eventos de provedor GMIL; esta cobre os 27 tipos do organismo inteiro via
+// TypedEventBus.onAny()). Zero segunda formatação: o texto de cada linha
+// nasce inteiro aqui, nunca recomputado no componente.
+import { formatTerminalLogEntry } from "./nexus/terminal-event-log";
 // Local-First (closes the persistence gap flagged in the audit): candles
 // persisted to IndexedDB on every real REST arrival; on boot the chart
 // paints instantly from the last REAL session before the network answers.
@@ -8977,6 +8990,13 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     // Evolução Integrativa §6: o contrato fundido para a Síntese
     // Operacional da aba ANALYSIS — mesma fonte única do badge (LEI 24).
     nexusDecision,
+    // Ordem 2 §4 (Trade Plan unificado), graduado: MESMAS leituras já reais
+    // que alimentam outros painéis desta view — institutionalScore.score já
+    // é o "Score Institucional" mostrado alhures, reversalAlert já é a
+    // leitura de reversão mostrada no Siriform Core (linha ~12478) — zero
+    // segunda medição, só reusadas aqui para compor o STATUS unificado.
+    institutionalScore,
+    reversalAlert,
   } = ctx as any;
   const connections = useConnectionsSnapshot();
   const derivatives = useDerivativesSnapshot();
@@ -9112,6 +9132,23 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     // iPad) porque o tooltip do badge não aparece em tap — a mesma lição da
     // Auditoria Final de Integração.
     const synthRisk = nexusDecision ? deriveRiskState(nexusDecision) : null;
+    // Ordem 2 §4 (Trade Plan unificado), graduado: composeTradePlanView() é
+    // um compositor puro (zero motor novo) — cada input abaixo já é uma
+    // leitura real já usada em outro lugar desta mesma view (tradePlan no
+    // painel Trade Plan, trackRecord.active no strip do topo, deriveSetupState/
+    // deriveEntryState na Síntese Operacional acima, scenario no painel
+    // Scenario Paths, institutionalScore.score no header, reversalAlert no
+    // Siriform Core). O único campo novo que aparece na tela é `status` — o
+    // resumo único que hoje só existe mentalmente, combinando 3 painéis.
+    const tradePlanView = composeTradePlanView({
+      plan: tradePlan,
+      trackedStatus: trackRecord.active?.status ?? null,
+      setupState: nexusDecision ? deriveSetupState(nexusDecision) : null,
+      entryState: nexusDecision ? deriveEntryState(nexusDecision) : null,
+      scenario: scenario ?? null,
+      reversal: reversalAlert ?? null,
+      confidenceScore: institutionalScore?.score ?? null,
+    });
     body = (
       <>
         <ModulePanel title="Síntese Operacional · 6 eixos auditáveis (mesma fonte do badge)">
@@ -9157,6 +9194,23 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         <ModulePanel title="Trade Plan · real structure only (advisory, read-only)">
           {tradePlan ? (
             <>
+              {/* Ordem 2 §4/§23 (Trade Plan unificado), graduado: o único
+                  campo novo desta seção — ACTIVE/TARGET_REACHED/INVALIDATED
+                  resumido num só lugar (composeTradePlanView acima), em vez
+                  de o Operador combinar mentalmente trackRecord.active.status
+                  com os avisos transitórios "TARGET REACHED"/"STOP BREACHED"
+                  do strip do topo. */}
+              <ModuleStat
+                label="Status"
+                value={tradePlanView.status}
+                tone={
+                  tradePlanView.status === "TARGET_REACHED" || tradePlanView.status === "ACTIVE"
+                    ? "long"
+                    : tradePlanView.status === "INVALIDATED"
+                      ? "short"
+                      : "neutral"
+                }
+              />
               {/* Diretriz Complementar §7 ("Inteligência Temporal"): rótulo
                   real de contexto do timeframe ativo — nunca uma medição,
                   ver nexus/timeframe-profile.ts. */}
@@ -11066,18 +11120,32 @@ interface GmilLogEntry {
   id: string;
   timestamp: number;
   text: string;
-  tone: "ok" | "warn" | "error";
+  // "info" (Ordem 3 §17, achado da graduação): terminal-event-log.ts é
+  // deliberadamente um log de ATIVIDADE, nunca um classificador de
+  // severidade (essa é a fatia do alert-center.ts) — inventar tom ok/warn/
+  // error por categoria aqui duplicaria o próprio mecanismo de alertas sob
+  // um rótulo diferente. Toda linha vinda do Nexus Core usa "info"; só as 2
+  // linhas de proveniência GMIL (já existentes) continuam usando ok/warn/error.
+  tone: "ok" | "warn" | "error" | "info";
 }
 
 const fmtClock = (ts: number) =>
   new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+// Ordem 3 §17 (graduação): o painel passou de 2 tipos de evento (GMIL) para
+// 27 (organismo inteiro) — 8 linhas visíveis ficariam obsoletas em segundos
+// com o volume novo. 20 é o mesmo tipo de piso de memória já declarado em
+// outros ring buffers deste repositório (TERMINAL_LOG_MAX_ENTRIES,
+// SHARED_ZONE_HIGHLIGHT_SLOTS): convenção documentada para um painel
+// compacto, não medição de quantas linhas "deveriam" caber.
+const EVENTS_WIDGET_MAX_ROWS = 20;
 
 function EventsWidget() {
   const [log, setLog] = useState<GmilLogEntry[]>([]);
 
   useEffect(() => {
     const pushEntry = (entry: GmilLogEntry) => {
-      setLog((prev) => [entry, ...prev].slice(0, 8));
+      setLog((prev) => [entry, ...prev].slice(0, EVENTS_WIDGET_MAX_ROWS));
     };
     const offReading = gmilBus.on<{ providerId: string; result: { ok: boolean; reason?: string } }>(
       "PROVIDER_READING",
@@ -11105,9 +11173,28 @@ function EventsWidget() {
         if (spoken) voiceEngine.speak(spoken, "ALERT");
       },
     );
+    // Ordem 3 §17 (Terminal Event Log), graduado: 2ª fonte real do MESMO
+    // painel. onAny() entrega o NexusEvent completo pros 27 tipos do
+    // organismo (DATA/HEALTH/UI/QUANT/BRAIN/ORGANISM) — formatTerminalLogEntry()
+    // já decide o texto/categoria (zero segunda formatação aqui, só adapta
+    // pro mesmo shape GmilLogEntry que este painel já renderiza, pra não
+    // duplicar o painel inteiro por uma diferença de tipo). Formato
+    // "[CATEGORIA] mensagem" reproduz literalmente o exemplo da Ordem
+    // ("[MARKET] BTCUSDT 5m snapshot updated").
+    const core = getNexusCore();
+    const offNexus = core.bus.onAny((event) => {
+      const formatted = formatTerminalLogEntry(event, Date.now());
+      pushEntry({
+        id: `n-${formatted.timestamp}-${formatted.eventType}`,
+        timestamp: formatted.timestamp,
+        text: `[${formatted.category}] ${formatted.message}`,
+        tone: "info",
+      });
+    });
     return () => {
       offReading();
       offHealth();
+      offNexus();
     };
   }, []);
 
@@ -11124,7 +11211,13 @@ function EventsWidget() {
               <span className="text-[#8ab4f8]/50 shrink-0">{fmtClock(entry.timestamp)}</span>
               <span
                 className={`shrink-0 w-1 h-1 rounded-full ${
-                  entry.tone === "ok" ? "bg-[#00ffaa]" : entry.tone === "warn" ? "bg-[#f0d06f]" : "bg-[#ff0055]"
+                  entry.tone === "ok"
+                    ? "bg-[#00ffaa]"
+                    : entry.tone === "warn"
+                      ? "bg-[#f0d06f]"
+                      : entry.tone === "error"
+                        ? "bg-[#ff0055]"
+                        : "bg-[#8ab4f8]"
                 }`}
               ></span>
               <span className="text-[#a0f0ff]/80 truncate">{entry.text}</span>
