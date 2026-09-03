@@ -7002,19 +7002,23 @@ sua própria evidência (arquivo/grep), não memória.
 | 14 | Visual Budget | **Já existe, já com o nome certo, e já ativo ao vivo** — `nexus/visual-budget.ts`, graduado (Ordem Nº 03/04) para 4 das 7 categorias declaradas; as 3 restantes ficaram de fora por falta real de fonte de peso individual (`TARGET`/`INVALIDATION`) ou de objeto visual próprio (`RADAR`), não por esquecimento. |
 | 15 | Anti-colisão | **Já real e maduro** — `price-label-stack.ts`, usado por 10+ famílias de rótulo (S1/R1/VWAP/NL/EMA/TREND/ENTRY/STOP/TARGET/CHOCH e mais), extensivamente testado ao longo desta sessão inteira (§10-§13, §25-§27 desta PR). |
 | 16 | Zero look-ahead | **Já é princípio testado** — `structural-backtest.js` (walk-forward, 521 janelas), `structural-swings-trace.test.ts` (zero-look-ahead explícito), replay sem look-ahead documentado em §6 deste handbook. |
-| 17 | Testes (benchmark de candles) | **Parcial.** `npm run verify` (tsc+vitest+build) já é obrigatório e rodado toda rodada. Benchmark formal por contagem de candles (500/1k/5k/10k) + FPS/latência/memória/CPU registrados não existe como suíte própria — gap real. |
+| 17 | Testes (benchmark de candles) | **Fechado nesta mesma rodada (Stage 1, carta branca) — `tools/benchmark-chart-render.mjs`.** Mede o `createChart`+`addSeries(CandlestickSeries)` REAL (mesma chamada de `EnhancedChart_110_Percent.tsx`) em 500/1k/5k/10k candles sintéticos: setData(ms), FPS real por amostragem de `requestAnimationFrame`, p95 de frame, heap JS. Rodado de verdade neste sandbox (Chromium via Playwright, já disponível no ambiente): 58-60 FPS em todas as contagens, p95 de frame ~16.7-16.8ms (teto real de 60Hz), heap subindo linearmente 4,3MB→21,5MB. Limitação honesta, documentada no próprio script: Chromium headless aqui, não Safari/iPad real; só a série de candles, sem os ~14 plugins de overlay; execução única, sem repetição estatística. |
 | 18 | Não-regressão (Core/Decision/Risk/Evidence Graph semantics) | Já é a disciplina de fato desta sessão inteira (LEI 24, "execute somente esta alteração", citado literalmente em §23/§28 desta PR) — nunca formalizado como checklist único. |
 | 19 | Processo (MAPEAR→POC→BENCHMARK→integrar) | **Esta entrada é exatamente isso** — o mapeamento, sem código. |
 | 20 | Princípio final | Já é o vocabulário real desta sessão (Regra de Ouro 2/3, LEI 24, "declaração ≠ realidade") só sem o slogan "CALCULAR MUITO. MOSTRAR POUCO." |
 
-**Nenhum código alterado nesta rodada.** Próximo passo real (corrigido:
-`visual-budget.ts` já está graduado, não é mais candidato de Stage 1):
-consolidar `layer-relevance.ts`+`visual-budget.ts`+`chart-layer-
-depth.ts` num módulo nomeado "Visual Intelligence Layer" (sem mudar
-comportamento — só dar à arquitetura dispersa já real o nome/estrutura
-que o memo pede); benchmark formal de candles/FPS (item 17, gap real);
-ou POC isolado de DuckDB-WASM — nunca as 20 seções de uma vez. Carta
-branca do Operador recebida para executar; escolha registrada abaixo.
+**Stage 1 escolhido e executado nesta mesma rodada, sob carta branca do
+Operador**: entre as candidatas (graduar `visual-budget.ts` — já feita,
+ver correção acima; consolidar a Visual Intelligence Layer nomeada; POC
+de DuckDB-WASM; benchmark formal de candles/FPS), escolhi o benchmark
+(item 17) — menor risco real (zero código de produção tocado, ferramenta
+de bancada isolada fora de `npm run verify`/CI) e o único que produz dado
+que as outras decisões (consolidar a camada, avaliar DuckDB-WASM/WebGPU)
+vão precisar depois. Ver linha 17 da tabela acima e `tools/benchmark-
+chart-render.mjs` (+ `tests/benchmark-chart-render.test.ts`, 6 testes de
+execução real para o gerador de candles sintéticos). Próximo passo real
+ainda em aberto: consolidar a Visual Intelligence Layer nomeada, ou POC
+isolado de DuckDB-WASM — nenhum dos dois tentado nesta rodada.
 
 ---
 
