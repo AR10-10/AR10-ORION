@@ -7262,6 +7262,49 @@ idêntico em módulos/bytes ao commit anterior.
 > rodada. Escopo genuinamente maior que um Stage 1 — cada item acima é
 > candidato a sua própria sessão.
 
+> **"TERMINAL — VISUAL + INFORMATIONAL INTEGRITY" mapeada + `terminal-field-priority.ts`
+> (03/09/2026):** continuação direta da mesma trilha — o Operador colou mais
+> uma seção sem numeração explícita, fechando (pelo tom de síntese —
+> "CHART-FIRST + TERMINAL-INTEGRITY + RESPONSIVE-SIZING + ADAPTIVE-DENSITY +
+> PROGRESSIVE-DISCLOSURE") o mesmo documento que trouxe §38-45. Define a
+> hierarquia real de que campo do Terminal sobrevive quando o espaço aperta:
+> DECISION > PRICE > TRADE PLAN > INVALIDATION > TARGETS > ESSENTIAL
+> EVIDENCE > SECONDARY INFORMATION, com uma regra "NUNCA" explícita (não
+> esconder Entry/Invalidation/Targets, não fabricar placeholder no lugar de
+> dado real, não sobrepor informação, não encolher texto crítico até
+> ilegível). Achado real antes de construir: "Progressive Disclosure" já é
+> um termo usado neste repositório (`App.tsx`, Workspace Manager §2) — mas
+> pra um mecanismo DIFERENTE (módulos secundários ocultos por escolha do
+> Operador, independente do tamanho da tela, trabalho da §29). O uso desta
+> seção é disclosure dirigido pelo VIEWPORT — mesma família de padrão de
+> UX, nunca o mesmo mecanismo; documentado explicitamente para não
+> confundir as duas leituras.
+>
+> `nexus/terminal-field-priority.ts` (novo, puro, Laboratório de Evolução —
+> não ligado a nenhum componente ainda) codifica os 7 tiers na ordem
+> literal do texto e consome `resolveDensityTier()` (`density-tier.ts`,
+> §36) em vez de reimplementar densidade — `resolveVisibleTerminalFieldTiers()`
+> só ativa disclosure em COMPACT, escondendo exclusivamente
+> `ESSENTIAL_EVIDENCE`/`SECONDARY_INFORMATION`; os 5 tiers centrais nunca
+> saem da lista, em nenhuma densidade. A divisão exata "5 nunca escondem, 2
+> compactáveis" é uma LEITURA minha do texto — a regra "NUNCA" nomeia
+> Entry/Invalidation/Targets explicitamente (partes concretas de 3 dos 5
+> tiers centrais) e DECISION/PRICE são os dois primeiros da própria
+> hierarquia — nunca um número dado literalmente no texto, registrado aqui
+> como interpretação, não fato. 13 testes de execução real
+> (`tests/terminal-field-priority.test.ts`): ordem exata dos 7 tiers,
+> visibilidade de cada tier individual, COMPACT vs STANDARD/EXPANDED,
+> pureza (nunca muta a lista canônica), preservação de ordem no
+> subconjunto visível.
+>
+> **O que este round honestamente NÃO fez:** nenhum componente real do
+> Terminal foi tocado — `resolveVisibleTerminalFieldTiers()` ainda não
+> decide nada visível na tela; a divisão 5-vs-2 nunca foi confirmada com o
+> Operador, é minha melhor leitura do texto; compactação de espaçamento,
+> reorganização de regiões, e a prevenção mecânica de sobreposição/texto
+> ilegível (itens do "MAS NUNCA" que são sobre RENDERIZAÇÃO, não sobre
+> QUAIS campos aparecem) seguem inteiramente não tentados.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)
