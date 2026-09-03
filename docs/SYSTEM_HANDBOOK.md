@@ -7096,6 +7096,25 @@ decisão de arquitetura, não mecânica).
 idêntico em módulos/bytes ao commit anterior — confirmando isolamento
 real, não só declarado.
 
+> **Graduação (03/09/2026, pedido direto do Operador: "gradue os dois"):**
+> `trade-plan-view.ts` deixou de ser Laboratório de Evolução.
+> `composeTradePlanView()` está ligado ao ciclo real dentro de
+> `SecondaryModuleView` (aba ANALYSIS) — cada input já é uma leitura já
+> exibida em outro painel desta mesma view (`tradePlan`/`trackRecord.active`/
+> `scenario`/`institutionalScore.score`/`reversalAlert`), e o único campo
+> genuinamente novo na tela é `status` (`ModuleStat label="Status"`, painel
+> "Trade Plan"), que resume ACTIVE/TARGET_REACHED/INVALIDATED/etc. num só
+> lugar em vez de o Operador combinar 3 painéis mentalmente. Verificado ao
+> vivo via Playwright (dev server real): a aba ANALYSIS renderiza sem
+> crash e sem erro novo de console — mas o campo `Status` em si nunca foi
+> visto renderizado com um `TradePlan` real neste sandbox (zero egress,
+> então nunca há plano real aqui); a lógica está coberta por 22 testes de
+> `composeTradePlanView()` + 5 testes novos de fiação
+> (`trade-plan-view-graduation-wiring.test.ts`). Ainda NÃO fez: Future
+> Path Engine, Reversal Engine com os 3 tiers, Liquidity Map EQH/EQL,
+> Five Pillars/Evidence Graph — os mesmos gaps de antes, inalterados por
+> esta graduação.
+
 ---
 
 ### 6.95 "ORDEM 3 — PROFESSIONAL MARKET TERMINAL" (37 seções) —
@@ -7168,6 +7187,30 @@ mesmo gap do Evidence Graph já registrado na §6.94).
 
 `npm run verify`: **257 arquivos / 4400 testes**, tsc limpo, build
 idêntico em módulos/bytes ao commit anterior.
+
+> **Graduação (03/09/2026, pedido direto do Operador: "gradue os dois"):**
+> `terminal-event-log.ts` deixou de ser Laboratório de Evolução.
+> `TypedEventBus` ganhou `onAny()` (canal aditivo — nunca muda
+> `on()`/`emit()`/`clear()` existentes, 7 testes novos em
+> `nexus-core.test.ts`) para entregar o `NexusEvent` completo a um único
+> assinante. Achado real na hora de graduar: já existia um painel "EVENT
+> TELEMETRY" (`EventsWidget`) ligado a `gmilBus`, cobrindo só 2 eventos de
+> proveniência GMIL — a graduação certa era ESTENDER esse painel (2ª fonte
+> real via `core.bus.onAny()`, formato `[CATEGORIA] mensagem` idêntico ao
+> exemplo literal da Ordem), nunca criar um painel/ícone novo (§29 tinha
+> acabado de decluttar a régua de navegação). Tom das linhas do Nexus Core
+> é sempre "info" (nunca ok/warn/error fabricado — isso é território do
+> `alert-center.ts`). Verificado AO VIVO via Playwright (dev server real,
+> hash de acesso temporário): linhas reais `[SYSTEM]`/`[DECISION]`/
+> `[QUANT]`/`[BRAIN]`/`[ORGANISM]`/`[RISK]` — 7 tipos de evento distintos
+> — atualizando em tempo real numa janela de 6 segundos, zero erro de
+> página. 9 testes novos de fiação
+> (`terminal-event-log-graduation-wiring.test.ts`). Ainda NÃO fez:
+> `availableTimeframes`, state machine unificada, Layer Trace de 9
+> estágios, Audit Trail completo — os mesmos gaps de antes, inalterados
+> por esta graduação. O painel continua oculto por padrão
+> (`widgets.events.visible: false`) — precisa do Workspace Manager pra
+> ligar, comportamento pré-existente não alterado por esta rodada.
 
 ---
 
