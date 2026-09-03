@@ -468,6 +468,7 @@ import {
   Download,
   Wallet,
   SlidersHorizontal,
+  MoreHorizontal,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -8366,24 +8367,54 @@ function SideBar({
   // waiting placeholder no longer exists. DASHBOARD/SETTINGS keep their
   // own behavior (activeTab ternary in App()); labels render only as
   // tooltips (NavRailButton), never visible text on the rail (Fase M.1).
-  const items: { icon: any; id: string; label: string }[] = [
+  //
+  // Pedido do Operador (áudio): "muita ferramenta atrapalhar outra...
+  // indicador aparecendo sem necessidade... deixa só os principais que o
+  // analista usa no dia a dia... sistema leve profissional, não deleta
+  // nada". MESMO princípio já provado no painel de Camadas do Gráfico
+  // (ChartLayersPanelContent, "Estado Inteligente Adaptativo" — resumo por
+  // padrão, controle completo um clique abaixo, Regra de Ouro 4:
+  // reorganizar, nunca apagar), aplicado agora à régua de navegação — que
+  // tinha 15 ícones reais nesta única coluna (9 abas + 6 gavetas de
+  // rodapé). Diferente do gráfico, não existe aqui um sinal de relevância
+  // ESTATÍSTICA (navegação é preferência de fluxo de trabalho, não leitura
+  // de mercado) — a divisão principal/secundário é ancorada em evidência
+  // real do próprio código, nunca em suposição:
+  //   • DASHBOARD é o activeTab inicial (useState acima) — pra onde o app
+  //     sempre abre.
+  //   • MARKETS/ANALYSIS/RISK alimentam o loop de decisão com dado ao
+  //     vivo, não configuração; ALERTS é reativo por natureza (o
+  //     Operador precisa ver isso batendo o olho, sem abrir nada).
+  //   • EXECUTION é "permanently empty by design" (SecondaryModuleView
+  //     abaixo — nunca mostra dado real, é um aviso fixo do read-only).
+  //   • NEWS "has no real feed connected" (mesmo comentário) — vazio hoje.
+  //   • SCANNER/SETTINGS são reais mas de uso pontual, não contínuo.
+  const PRIMARY_TABS: { icon: any; id: string; label: string }[] = [
     { icon: LayoutDashboard, id: "DASHBOARD", label: "COCKPIT" },
     { icon: BarChart2, id: "MARKETS", label: "MARKETS" },
     { icon: Activity, id: "ANALYSIS", label: "ANALYSIS" },
     { icon: ShieldCheck, id: "RISK", label: "RISK" },
-    { icon: Zap, id: "EXECUTION", label: "EXECUTION" },
+    { icon: Bell, id: "ALERTS", label: "ALERTS" },
+  ];
+  const SECONDARY_TABS: { icon: any; id: string; label: string }[] = [
     { icon: Scan, id: "SCANNER", label: "SCANNER" },
     { icon: Newspaper, id: "NEWS", label: "NEWS" },
-    { icon: Bell, id: "ALERTS", label: "ALERTS" },
     { icon: Settings, id: "SETTINGS", label: "SETTINGS" },
+    { icon: Zap, id: "EXECUTION", label: "EXECUTION" },
   ];
+  // Nunca persistido (mesma filosofia de habilitarManualAberto em
+  // ChartLayersPanelContent — "operador não administra modos"): a régua
+  // volta ao resumo enxuto a cada boot/refresh, nunca lembra um "aberto"
+  // esquecido de outra sessão.
+  const [moreTabsOpen, setMoreTabsOpen] = useState(false);
+  const [moreDrawersOpen, setMoreDrawersOpen] = useState(false);
   return (
     <div className="w-12 md:w-14 border-r border-[#00f0ff20] bg-[#010308]/95 flex flex-col items-center py-3 gap-1 shrink-0 z-10 overflow-y-auto scrollbar-hide backdrop-blur-md">
       <div className="relative mb-2">
         <Target className="text-[#00f0ff] opacity-90" size={20} strokeWidth={1.5} />
         <div className="absolute inset-0 border border-[#00f0ff] rounded-full animate-ping opacity-30"></div>
       </div>
-      {items.map((item) => (
+      {PRIMARY_TABS.map((item) => (
         <NavRailButton
           key={item.id}
           icon={item.icon}
@@ -8392,10 +8423,38 @@ function SideBar({
           onClick={() => setActiveTab(item.id)}
         />
       ))}
+      {/* Abas secundárias (SCANNER/NEWS/SETTINGS/EXECUTION) — reais, nunca
+          removidas, só recolhidas por padrão. Continuam alcançáveis num
+          clique, exatamente como o controle camada-a-camada do painel de
+          Camadas do Gráfico continua inteiro atrás do mesmo tipo de
+          disclosure. */}
+      <button
+        type="button"
+        onClick={() => setMoreTabsOpen((v) => !v)}
+        title={moreTabsOpen ? "Menos abas" : "Mais abas — Scanner, News, Settings, Execution"}
+        aria-label={moreTabsOpen ? "Menos abas" : "Mais abas"}
+        aria-expanded={moreTabsOpen}
+        className={`flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors shrink-0 ${moreTabsOpen ? "text-[#00f0ff]" : "text-[#8ab4f8]/50 hover:text-[#8ab4f8]"}`}
+      >
+        <MoreHorizontal size={17} className="relative z-10" />
+      </button>
+      {moreTabsOpen &&
+        SECONDARY_TABS.map((item) => (
+          <NavRailButton
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            active={activeTab === item.id}
+            onClick={() => setActiveTab(item.id)}
+          />
+        ))}
       {/* Fase M.1: Market Intelligence entra na régua esquerda — mesmo
           lado da gaveta .terminal-left que ela abre (o ícone e a gaveta
           deslizam do mesmo lado da tela). Substitui a alça solta que
-          existia na borda do gráfico: um único mecanismo de acesso. */}
+          existia na borda do gráfico: um único mecanismo de acesso.
+          Continua sempre visível (fora do "mais gavetas" abaixo) — é o
+          único destes seis que troca o CONTEXTO do gráfico principal, não
+          um painel auxiliar à parte. */}
       <div className="w-full border-t border-[#00f0ff15] mt-1 pt-1">
         <NavRailButton
           icon={PanelLeft}
@@ -8404,38 +8463,16 @@ function SideBar({
           onClick={() => toggleLeftDrawer?.()}
         />
       </div>
-      {/* V16 Workspace Manager entry point — a single, discoverable way in
-          to the Pinned/Docked/Collapsed/Hidden/Floating controls for every
-          secondary module, instead of a gear icon per module. Pinned to
-          the bottom (mt-auto) like the reference layout's footer link. */}
-      <button
-        type="button"
-        onClick={() => setWorkspaceManagerOpen?.((v: boolean) => !v)}
-        title="Workspace Manager"
-        aria-label="Workspace Manager"
-        className="mt-auto flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
-      >
-        <LayoutGrid size={17} className="relative z-10" />
-      </button>
-      {/* Camadas do Gráfico (Finding M) — segundo entry point no mesmo
-          rodapé, mesmo padrão do Workspace Manager acima (toggle de
-          visibilidade em vez de estado de widget). */}
-      <button
-        type="button"
-        onClick={() => setChartLayersOpen?.((v: boolean) => !v)}
-        title="Camadas do Gráfico"
-        aria-label="Camadas do Gráfico"
-        className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
-      >
-        <Layers size={17} className="relative z-10" />
-      </button>
-      {/* OMEGA CORE V-MAX (completar Fase 7, Radar/OIH) — terceiro entry
-          point no mesmo rodapé, mesmo padrão dos dois acima. Rótulo
-          visível "Oportunidades" (nunca "Radar"): o cockpit já tem um
-          widget real chamado "RADAR DE CONSENSO" (CouncilWidget) e uma aba
-          "SCANNER" com heurística de %-change de 24h (ScannerWidget) —
-          nenhum dos dois é este módulo; um terceiro rótulo com a mesma
-          palavra confundiria o Operador sobre qual painel está abrindo. */}
+      {/* OMEGA CORE V-MAX (completar Fase 7, Radar/OIH). Rótulo visível
+          "Oportunidades" (nunca "Radar"): o cockpit já tem um widget real
+          chamado "RADAR DE CONSENSO" (CouncilWidget) e uma aba "SCANNER"
+          com heurística de %-change de 24h (ScannerWidget) — nenhum dos
+          dois é este módulo; um terceiro rótulo com a mesma palavra
+          confundiria o Operador sobre qual painel está abrindo. Continua
+          sempre visível (fora do "mais gavetas" abaixo): é o único destes
+          seis com um contador AO VIVO (radarCandidateCount) — escondê-lo
+          atrás de um clique apagaria justamente o sinal que ele existe
+          pra dar de relance. */}
       <button
         type="button"
         onClick={() => setRadarPanelOpen?.((v: boolean) => !v)}
@@ -8450,34 +8487,76 @@ function SideBar({
           </span>
         )}
       </button>
-      {/* Ordem "Market Analysis & Publication Engine" §2: "ação simples,
-          discreta e fácil de encontrar" — quarto botão no mesmo rodapé,
-          mesmo padrão dos três acima (toggle de visibilidade do painel).
-          Ícone de compartilhamento (não um dos glifos já usados pelas 9
-          abas + 3 gavetas) porque a ação é literalmente gerar conteúdo
-          publicável, nunca uma view de dado a mais. */}
+      {/* Gavetas secundárias (Workspace Manager/Camadas do Gráfico/Análise
+          de Mercado/Paper Trading) — mesma disciplina das abas acima:
+          reais, nunca removidas, só recolhidas por padrão. mt-auto migrou
+          pra este toggle (era do Workspace Manager) — continua ancorado
+          no rodapé quando sobra espaço vertical, e os 4 itens aparecem
+          logo abaixo dele quando expandido. */}
       <button
         type="button"
-        onClick={() => setMarketAnalysisOpen?.((v: boolean) => !v)}
-        title="Análise de Mercado — gerar leitura publicável (Painel/X/Story)"
-        aria-label="Análise de Mercado — gerar leitura publicável (Painel/X/Story)"
-        className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+        onClick={() => setMoreDrawersOpen((v) => !v)}
+        title={moreDrawersOpen ? "Menos gavetas" : "Mais gavetas — Workspace, Camadas do Gráfico, Análise de Mercado, Paper Trading"}
+        aria-label={moreDrawersOpen ? "Menos gavetas" : "Mais gavetas"}
+        aria-expanded={moreDrawersOpen}
+        className={`mt-auto flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors shrink-0 ${moreDrawersOpen ? "text-[#00f0ff]" : "text-[#8ab4f8]/50 hover:text-[#8ab4f8]"}`}
       >
-        <Share2 size={17} className="relative z-10" />
+        <MoreHorizontal size={17} className="relative z-10" />
       </button>
-      {/* v16.0 PRO MAX §9.1/§9.4 ("Paper Trading"): quinto botão no mesmo
-          rodapé, mesmo padrão dos quatro acima. Posição simulada MANUAL —
-          decisão do Operador via AskUserQuestion: zero automação, o painel
-          só existe para o Operador abrir/fechar por conta própria. */}
-      <button
-        type="button"
-        onClick={() => setPaperTradingOpen?.((v: boolean) => !v)}
-        title="Paper Trading — posição simulada manual (P&L ao vivo, sem automação)"
-        aria-label="Paper Trading — posição simulada manual (P&L ao vivo, sem automação)"
-        className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
-      >
-        <Wallet size={17} className="relative z-10" />
-      </button>
+      {moreDrawersOpen && (
+        <>
+          {/* V16 Workspace Manager entry point — a single, discoverable way in
+              to the Pinned/Docked/Collapsed/Hidden/Floating controls for every
+              secondary module, instead of a gear icon per module. */}
+          <button
+            type="button"
+            onClick={() => setWorkspaceManagerOpen?.((v: boolean) => !v)}
+            title="Workspace Manager"
+            aria-label="Workspace Manager"
+            className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+          >
+            <LayoutGrid size={17} className="relative z-10" />
+          </button>
+          {/* Camadas do Gráfico (Finding M). O painel em si já resolveu a
+              própria sobrecarga (ChartLayersPanelContent, "Estado
+              Inteligente Adaptativo") — o entry point também deixa de
+              precisar estar sempre à mostra. */}
+          <button
+            type="button"
+            onClick={() => setChartLayersOpen?.((v: boolean) => !v)}
+            title="Camadas do Gráfico"
+            aria-label="Camadas do Gráfico"
+            className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+          >
+            <Layers size={17} className="relative z-10" />
+          </button>
+          {/* Ordem "Market Analysis & Publication Engine" §2: "ação simples,
+              discreta e fácil de encontrar" — ação pontual (gerar conteúdo
+              publicável), não uma view de dado contínua. */}
+          <button
+            type="button"
+            onClick={() => setMarketAnalysisOpen?.((v: boolean) => !v)}
+            title="Análise de Mercado — gerar leitura publicável (Painel/X/Story)"
+            aria-label="Análise de Mercado — gerar leitura publicável (Painel/X/Story)"
+            className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+          >
+            <Share2 size={17} className="relative z-10" />
+          </button>
+          {/* v16.0 PRO MAX §9.1/§9.4 ("Paper Trading"). Posição simulada
+              MANUAL — decisão do Operador via AskUserQuestion: zero
+              automação, o painel só existe para o Operador abrir/fechar
+              por conta própria, uso pontual por definição. */}
+          <button
+            type="button"
+            onClick={() => setPaperTradingOpen?.((v: boolean) => !v)}
+            title="Paper Trading — posição simulada manual (P&L ao vivo, sem automação)"
+            aria-label="Paper Trading — posição simulada manual (P&L ao vivo, sem automação)"
+            className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+          >
+            <Wallet size={17} className="relative z-10" />
+          </button>
+        </>
+      )}
     </div>
   );
 }
