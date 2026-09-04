@@ -117,6 +117,22 @@ export function avisoObrigatorio(p: BacktestProvenance): string {
   );
 }
 
+/** GRADUAÇÃO do módulo de comparação do Laboratório de backtest (Fase 9,
+ *  "Autoevolução Controlada"): como o VEREDITO estatístico (não o número
+ *  bruto, ver compareBacktestRuns) é DITO ao
+ *  Operador. Mesma disciplina do resto deste arquivo — o motor já devolve o
+ *  veredito correto, o risco na apresentação é fazer "MELHOROU"/"PIOROU"
+ *  soarem como aprovação automática em vez de leitura estatística que ainda
+ *  exige decisão humana (a Fase 9 exige isso sempre, mesmo com MELHOROU). */
+export type VeredictoComparacao = "MELHOROU" | "PIOROU" | "NEUTRO" | "DADOS_INSUFICIENTES";
+
+export function descreverVeredito(verdict: VeredictoComparacao): { label: string; tone: "long" | "short" | "neutral" } {
+  if (verdict === "MELHOROU") return { label: "MELHOROU (95% de confiança)", tone: "long" };
+  if (verdict === "PIOROU") return { label: "PIOROU (95% de confiança)", tone: "short" };
+  if (verdict === "NEUTRO") return { label: "NEUTRO — diferença não distinguível de ruído amostral", tone: "neutral" };
+  return { label: "DADOS_INSUFICIENTES", tone: "neutral" };
+}
+
 /** Motivos de falha em linguagem que o Operador entende, com a causa real
  *  preservada. Um "erro desconhecido" faria ele não saber se é internet,
  *  dado ou defeito — e essa distinção é a única coisa que ele pode agir. */

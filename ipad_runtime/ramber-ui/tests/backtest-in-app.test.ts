@@ -23,10 +23,12 @@ import {
   descreverTaxa,
   avisoObrigatorio,
   explicarFalha,
+  descreverVeredito,
   BACKTEST_MIN_RESOLVED_FOR_RATE,
   type BacktestAggregate,
   type BacktestProvenance,
 } from "../src/nexus/backtest-presentation";
+import { compareBacktestRuns, COMPARE_RUNS_AVISO } from "../../src/research/backtest/compare-runs.js";
 
 const read = (p: string) => readFileSync(resolve(__dirname, p), "utf8");
 
@@ -166,6 +168,75 @@ describe("falhas explicadas em linguagem acionável", () => {
 
   it("motivo desconhecido preserva a causa em vez de virar 'erro'", () => {
     expect(explicarFalha("coisa_nova", "detalhe cru")).toContain("detalhe cru");
+  });
+});
+
+describe("GRADUAÇÃO: compare-runs.js sai do Laboratório de Evolução (Fase 9)", () => {
+  it("descreverVeredito rotula os 4 vereditos reais com o tom certo, nunca soando como aprovação automática", () => {
+    expect(descreverVeredito("MELHOROU")).toEqual({ label: "MELHOROU (95% de confiança)", tone: "long" });
+    expect(descreverVeredito("PIOROU")).toEqual({ label: "PIOROU (95% de confiança)", tone: "short" });
+    expect(descreverVeredito("NEUTRO").tone).toBe("neutral");
+    expect(descreverVeredito("NEUTRO").label).toContain("ruído amostral");
+    expect(descreverVeredito("DADOS_INSUFICIENTES")).toEqual({ label: "DADOS_INSUFICIENTES", tone: "neutral" });
+  });
+
+  it("BacktestPanel importa compareBacktestRuns/COMPARE_RUNS_AVISO e nunca reimplementa o z-test", () => {
+    const app = read("../src/App.tsx");
+    expect(app).toContain('from "../../src/research/backtest/compare-runs.js"');
+    const i = app.indexOf("function BacktestPanel(");
+    const bloco = app.slice(i, app.indexOf("\nfunction SecondaryModuleView", i));
+    expect(bloco).toContain("compareBacktestRuns(baseline, r)");
+    expect(bloco).not.toMatch(/zScore\s*=.*\/.*se|pooled\s*=/); // nenhuma segunda matemática do z-test aqui
+  });
+
+  it("baseline é estado local do painel, nunca persistido nem outra corrida ao vivo", () => {
+    const app = read("../src/App.tsx");
+    const i = app.indexOf("function BacktestPanel(");
+    const bloco = app.slice(i, app.indexOf("\nfunction SecondaryModuleView", i));
+    expect(bloco).toContain("const [baseline, setBaseline] = useState<typeof r | null>(null);");
+    expect(bloco).not.toMatch(/localStorage|sessionStorage|IndexedDB|saveCandles/);
+  });
+
+  it("o aviso obrigatório da Fase 9 é renderizado, nunca só definido (a fiação real)", () => {
+    const app = read("../src/App.tsx");
+    expect(app).toContain("{COMPARE_RUNS_AVISO}");
+    expect(COMPARE_RUNS_AVISO).toContain("nunca uma aprovação automática de mudança em produção");
+  });
+
+  it("comparação só aparece quando baseline E a corrida atual resolveram OK — nunca compara um DADOS_INSUFICIENTES silenciosamente", () => {
+    const app = read("../src/App.tsx");
+    const i = app.indexOf("function BacktestPanel(");
+    const bloco = app.slice(i, app.indexOf("\nfunction SecondaryModuleView", i));
+    expect(bloco).toContain('baseline?.status === "OK" && r?.status === "OK" ? compareBacktestRuns(baseline, r) : null');
+  });
+
+  it("execução real: comparar duas corridas fake reproduz o mesmo veredito que compare-runs.test.ts já prova", () => {
+    const baseline = { status: "OK", provenance: { symbol: "BTC", timeframe: "15m" }, aggregate: { targetHits: 20, resolved: 50 } };
+    const candidate = { status: "OK", provenance: { symbol: "BTC", timeframe: "15m" }, aggregate: { targetHits: 35, resolved: 50 } };
+    const r = compareBacktestRuns(baseline as never, candidate as never);
+    expect(r.verdict).toBe("MELHOROU");
+    expect(descreverVeredito(r.verdict).tone).toBe("long");
+  });
+});
+
+describe("CORREÇÃO REAL (achado via Playwright ao vivo): BacktestPanel sempre recebia um símbolo inválido", () => {
+  it("o call site monta o par completo (baseAsset+USDT), nunca o baseAsset puro — validarPedido exige >=5 caracteres", () => {
+    // Bug real: <BacktestPanel symbol={selectedAsset ?? "BTCUSDT"}> passava
+    // "BTC"/"ETH"/"SOL"/... (3-4 caracteres) direto pro worker. validarPedido
+    // exige /^[A-Z0-9]{5,20}$/ — MEDIR sempre devolvia simbolo_invalido para
+    // QUALQUER ativo real. Nunca pego pelos testes de execução real porque
+    // eles chamam validarPedido/executarPedido direto com "BTCUSDT" fixo,
+    // nunca através deste call site real do App.
+    const app = read("../src/App.tsx");
+    expect(app).toContain('<BacktestPanel symbol={`${selectedAsset ?? "BTC"}USDT`} timeframe={chartTimeframe ?? "15m"} />');
+    expect(app).not.toContain('<BacktestPanel symbol={selectedAsset ?? "BTCUSDT"}');
+  });
+
+  it("execução real: o símbolo que o call site monta hoje passa em validarPedido para os ativos reais do seletor", () => {
+    for (const baseAsset of ["BTC", "ETH", "SOL", "BNB", "XRP", "DOGE", "ADA", "AVAX", "LINK", "DOT", "TON", "TRX"]) {
+      const symbol = `${baseAsset}USDT`;
+      expect(validarPedido({ symbol, timeframe: "15m", targetCandleCount: 2000 }), symbol).toEqual({ ok: true });
+    }
   });
 });
 

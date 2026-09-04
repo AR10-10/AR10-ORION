@@ -196,9 +196,20 @@ import {
   formatarR,
   avisoObrigatorio,
   explicarFalha,
+  descreverVeredito,
   type BacktestAggregate,
   type BacktestProvenance,
 } from "./nexus/backtest-presentation";
+// GRADUAÇÃO (pedido do Operador: "organiza tudo que tem no laboratório"):
+// compareBacktestRuns saía do Laboratório de Evolução sem nenhum consumidor
+// de produção (fronteira travada por teste em compare-runs.test.ts, agora
+// atualizada para nomear App.tsx como o único importador autorizado — mesmo
+// padrão real já usado quando structural-backtest.js/history-capture.js
+// graduaram via backtest-worker.ts). App.tsx é o consumidor certo aqui (e
+// não um Worker novo): compareBacktestRuns é um z-test síncrono sobre dois
+// resultados JÁ medidos — nenhum trabalho pesado, nada que justifique a
+// complexidade de mais um Worker.
+import { compareBacktestRuns, COMPARE_RUNS_AVISO } from "../../src/research/backtest/compare-runs.js";
 import { timeframeMinutes } from "./nexus/timeframe-layer-profile";
 // Carta Branca: consumidor real do Evidence Fusion Engine — SYSTEM_HANDBOOK
 // §6.72/§6.74/§6.76 classificaram isto como "iniciativa de arquitetura
@@ -8980,6 +8991,20 @@ function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: strin
   const prov = r?.status === "OK" ? r.provenance ?? null : null;
   const taxa = agg ? descreverTaxa(agg) : null;
 
+  // GRADUAÇÃO (Fase 9, "Autoevolução Controlada"): baseline é uma FOTOGRAFIA
+  // local de uma corrida já resolvida — nunca outra corrida ao vivo, nunca
+  // persistida (comparar é uma decisão pontual do Operador, não um estado
+  // do app). "Comparar" só aparece quando as duas corridas (baseline +
+  // atual) resolveram com status OK — compareBacktestRuns já devolve
+  // DADOS_INSUFICIENTES honesto para o resto (amostra pequena, variância
+  // nula), então este componente só decide QUANDO chamar, nunca reimplementa
+  // as guardas.
+  const [baseline, setBaseline] = useState<typeof r | null>(null);
+  const baselineAgg = baseline?.status === "OK" ? baseline.aggregate ?? null : null;
+  const baselineProv = baseline?.status === "OK" ? baseline.provenance ?? null : null;
+  const comparison = baseline?.status === "OK" && r?.status === "OK" ? compareBacktestRuns(baseline, r) : null;
+  const veredito = comparison ? descreverVeredito(comparison.verdict) : null;
+
   return (
     <ModulePanel title="Backtest Estrutural (desfechos reais, walk-forward zero-lookahead)">
       <div className="flex items-center gap-2 flex-wrap">
@@ -9029,7 +9054,41 @@ function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: strin
             <span className="text-[0.45rem] text-[#ffaa00] leading-tight">⚠ {taxa.ressalva}</span>
           )}
           {prov && <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-tight">{avisoObrigatorio(prov)}</span>}
+          <button
+            type="button"
+            onClick={() => setBaseline(r)}
+            className="self-start text-[0.42rem] px-1.5 py-0.5 rounded border border-[#8ab4f8]/30 text-[#8ab4f8] font-bold uppercase tracking-wider hover:border-[#8ab4f8]/60"
+          >
+            Salvar como baseline
+          </button>
         </>
+      )}
+
+      {baselineAgg && baselineProv && (
+        <div className="border-t border-[#8ab4f8]/10 pt-1 mt-1 flex flex-col gap-0.5">
+          <span className="text-[0.42rem] text-[#8ab4f8]/50 uppercase tracking-wider">
+            Baseline salva: {baselineProv.symbol} {baselineProv.timeframe} · {formatarFracao(baselineAgg.taxaAlvoAmostra)} ({baselineAgg.resolved} resolvidos)
+          </span>
+          {comparison && veredito ? (
+            <>
+              <ModuleStat label="Comparação vs. baseline" value={veredito.label} tone={veredito.tone} />
+              {comparison.zScore !== null && (
+                <ModuleStat label="z-score / Δ taxa" value={`${comparison.zScore.toFixed(2)} / ${formatarFracao(comparison.delta)}`} />
+              )}
+              {comparison.sameContext === false && (
+                <span className="text-[0.42rem] text-[#ffaa00] leading-tight">
+                  ⚠ Baseline e corrida atual são de símbolo/timeframe diferentes — comparação entre contextos distintos.
+                </span>
+              )}
+              {comparison.reason && (
+                <span className="text-[0.42rem] text-[#8ab4f8]/60 leading-tight">{comparison.reason}</span>
+              )}
+              <span className="text-[0.4rem] text-[#8ab4f8]/45 leading-tight">{COMPARE_RUNS_AVISO}</span>
+            </>
+          ) : (
+            <span className="text-[0.42rem] text-[#8ab4f8]/40">Meça a corrida atual (status OK) para comparar com a baseline.</span>
+          )}
+        </div>
       )}
     </ModulePanel>
   );
@@ -9488,7 +9547,19 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         <ModulePanel title="Perception Index (CPI · reward/pain memory, real transitions)">
           <ModuleStat label="CPI" value={cpi !== null ? pct(cpi) : MODULE_EMPTY} tone={cpi !== null && cpi >= 0.5 ? "long" : cpi !== null ? "short" : "neutral"} />
         </ModulePanel>
-        <BacktestPanel symbol={selectedAsset ?? "BTCUSDT"} timeframe={chartTimeframe ?? "15m"} />
+        {/* Achado real via verificação ao vivo (Playwright, sandbox de rede
+            bloqueada): symbol={selectedAsset} passava o baseAsset puro
+            ("BTC", 3 caracteres) — mas validarPedido (backtest-worker.ts)
+            exige /^[A-Z0-9]{5,20}$/, o mesmo par completo que todo o resto
+            do app já usa (SmartOmnibox's `${selectedAsset}USDT`,
+            requestFuturesCandleSnapshot's `-PERP`). "MEDIR" sempre
+            devolvia simbolo_invalido para QUALQUER ativo real (BTC/ETH/
+            SOL/... — todos com menos de 5 caracteres) — bug pré-existente,
+            nunca pego porque os testes de execução real chamam
+            validarPedido/executarPedido direto com "BTCUSDT" fixo, nunca
+            através deste call site. Corrigido montando o mesmo par
+            completo, nunca um símbolo novo/inventado. */}
+        <BacktestPanel symbol={`${selectedAsset ?? "BTC"}USDT`} timeframe={chartTimeframe ?? "15m"} />
         <ModulePanel title="Signal Track Record (real first-touch outcomes, persisted)">
           <ModuleStat label="Open Plan" value={trackRecord.active ? `${trackRecord.active.plan.direction} since ${new Date(trackRecord.active.openedAt).toLocaleTimeString("en-US", { hour12: false })}` : "NONE"} />
           <ModuleStat label="Target Hits" value={String(trackRecord.targetHits)} tone="long" />
