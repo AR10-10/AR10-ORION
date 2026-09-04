@@ -123,6 +123,29 @@ export async function loadTrackRecord(): Promise<unknown | null> {
   }
 }
 
+// v16.0 PRO MAX §9.1/§9.4: a posição simulada (paper trading) sobrevive a
+// reloads pelo mesmo motivo do track record — é conhecimento acumulado
+// real (histórico de fechamentos manuais), não um cache descartável. Mesma
+// chave-valor no mesmo SNAPSHOT_STORE genérico, mesmo best-effort.
+export async function savePaperTrading(state: unknown): Promise<void> {
+  try {
+    const db = await getDb();
+    await db.put(SNAPSHOT_STORE, { key: "paper-trading", state, savedAt: Date.now() });
+  } catch {
+    // best-effort — see file header.
+  }
+}
+
+export async function loadPaperTrading(): Promise<unknown | null> {
+  try {
+    const db = await getDb();
+    const record = (await db.get(SNAPSHOT_STORE, "paper-trading")) as { state?: unknown } | undefined;
+    return record?.state ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Consolidação Operacional §5: envelhecimento/compactação automática ───
 // A store de candles ganha uma chave por symbol:timeframe visitado e nunca
 // perdia nenhuma — crescimento indefinido real (um Operador curioso no

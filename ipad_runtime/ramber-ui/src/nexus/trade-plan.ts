@@ -89,7 +89,40 @@ export interface TradePlanInputs {
   price: number | null;
   zones: TradePlanStructureZone[];
   levels: TradePlanLevelInput[];
+  // ATR real em UNIDADES DE PREÇO (não percentual) — piso de invalidação do
+  // stop. Ver MIN_STOP_ATR_MULTIPLE abaixo para o porquê e para a pesquisa.
+  // Opcional e fail-closed: ausente/inválido => comportamento byte a byte
+  // idêntico ao de antes deste piso existir.
+  atr?: number | null;
 }
+
+// DEFEITO REAL MEDIDO (pedido do Operador: "os alvos têm que estar mais
+// precisos, quando aparecer realmente dar uma chance de bater o alvo").
+//
+// O stop era "o nível de invalidação mais PRÓXIMO além da entrada", sem
+// nenhum piso de distância. Sonda real, com um nível a 1 centavo da
+// entrada:
+//
+//     entrada 99.50 · stop 99.49 (VP_POC)  ->  R:R 1:550 e 1:1050
+//
+// O R:R não estava errado aritmeticamente — o STOP é que não era uma
+// invalidação. Um centavo é ruído de UMA vela, não a prova de que a tese
+// morreu. E como todo alvo é julgado por `reward / risk`, um risco
+// degenerado faz QUALQUER alvo parecer certeza: é exatamente a imprecisão
+// que o Operador está vendo na tela.
+//
+// A REGRA (pesquisada, não inventada — WebSearch antes de escolher o
+// número, múltiplas fontes de gestão de risco): a convenção de mesa é
+// "stop ESTRUTURAL com piso de 1× ATR". Não é trocar estrutura por ATR —
+// este motor continua ancorando em nível real, sempre. O ATR só descarta
+// âncoras que estão dentro do ruído normal de uma vela, e a busca segue
+// para a próxima âncora REAL mais distante.
+//
+// 1× é o padrão prático citado pelas fontes para o piso (multiplicadores
+// maiores — 1.5×–3× — são para stops PUROS de ATR, que não é o caso aqui:
+// aqui o ATR é só o piso de um stop que continua sendo estrutural).
+// Declarado e ajustável AQUI, mesma natureza de RR_QUALITY_FLOOR.
+export const MIN_STOP_ATR_MULTIPLE = 1;
 
 const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -173,7 +206,25 @@ export function buildTradePlan(inputs: TradePlanInputs, computedAt: number = Dat
   ];
   const beyondEntry = invalidationAnchors.filter((l) => (long ? l.price < entry.low : l.price > entry.high));
   if (beyondEntry.length === 0) return null; // no real invalidation level → no plan
-  const stopAnchor = beyondEntry.reduce((best, l) =>
+
+  // Piso de invalidação: uma âncora dentro do ruído de uma vela não é
+  // invalidação (ver MIN_STOP_ATR_MULTIPLE). Medido contra o MESMO ponto
+  // que alimenta o R:R (o meio da entrada) — é exatamente a distância que
+  // um stop colado inflava.
+  //
+  // Fail-closed em duas direções: sem ATR real, nada é filtrado (o
+  // comportamento anterior fica intacto); e se NENHUMA âncora respeitar o
+  // piso, o plano não existe — mesma honestidade do `return null` acima,
+  // nunca um stop de mentira para o plano poder aparecer.
+  const entryMidForStop = (entry.low + entry.high) / 2;
+  const pisoDeInvalidacao = fin(inputs.atr) && inputs.atr > 0 ? inputs.atr * MIN_STOP_ATR_MULTIPLE : null;
+  const ancorasValidas =
+    pisoDeInvalidacao === null
+      ? beyondEntry
+      : beyondEntry.filter((l) => Math.abs(entryMidForStop - l.price) >= pisoDeInvalidacao);
+  if (ancorasValidas.length === 0) return null;
+
+  const stopAnchor = ancorasValidas.reduce((best, l) =>
     (long ? l.price > best.price : l.price < best.price) ? l : best,
   );
   const stop: TradePlanLevel = { price: stopAnchor.price, basis: stopAnchor.kind };

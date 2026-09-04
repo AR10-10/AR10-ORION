@@ -228,7 +228,10 @@ describe('V16 §3 Chart Engine: R1/S1 no gráfico usam força/toques REAIS (pass
 
   it('ChartWidget passa engine.support/resistance/strength/breakouts REAIS para EnhancedChart_110_Percent — mesma fonte de sempre, nunca recomputado', () => {
     const app = read('../src/App.tsx');
-    const fnMatch = app.match(/function ChartWidget\(\{ chartData, onRequestOlderCandles \}: any\) \{([\s\S]*?)\n\}\n/);
+    // priceData (Ordem "Unificação da Inteligência Operacional" §4 —
+    // correção de latência real, gap-price-sync-wiring): assinatura
+    // re-fixada, mesma garantia de sempre.
+    const fnMatch = app.match(/function ChartWidget\(\{ chartData, onRequestOlderCandles, priceData \}: any\) \{([\s\S]*?)\n\}\n/);
     expect(fnMatch, 'ChartWidget não encontrada').not.toBeNull();
     const body = fnMatch![1];
     expect(body).toContain('<EnhancedChart_110_Percent');
@@ -262,16 +265,55 @@ describe('V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas): e
     const app = read('../src/App.tsx');
     expect(app).toContain('const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);');
     expect(app).toContain('const [rightDrawerOpen, setRightDrawerOpen] = useState(false);');
+    // Painel Properties 320px (pedido do Operador): 3ª gaveta, mesmo
+    // mecanismo, mesma regra de "fechada por padrão".
+    expect(app).toContain('const [propertiesDrawerOpen, setPropertiesDrawerOpen] = useState(false);');
   });
 
-  it('.terminal-left/.terminal-right usam position:absolute (nunca dividem flexbox com .terminal-main) e começam deslocadas para fora da tela (transform translateX)', () => {
+  it('.terminal-left/.terminal-right/.terminal-properties usam position:absolute (nunca dividem flexbox com .terminal-main) e começam deslocadas para fora da tela (transform translateX)', () => {
     const css = read('../src/index.css');
-    const sharedMatch = css.match(/\.terminal-left,\s*\n\.terminal-right \{([\s\S]*?)\n\}/);
-    expect(sharedMatch, 'regra combinada .terminal-left/.terminal-right não encontrada').not.toBeNull();
+    const sharedMatch = css.match(/\.terminal-left,\s*\n\.terminal-right,\s*\n\.terminal-properties \{([\s\S]*?)\n\}/);
+    expect(sharedMatch, 'regra combinada .terminal-left/.terminal-right/.terminal-properties não encontrada').not.toBeNull();
     expect(sharedMatch![1]).toContain('position: absolute');
     expect(css).toMatch(/\.terminal-left \{[\s\S]*?transform: translateX\(-110%\);/);
-    expect(css).toMatch(/\.terminal-right \{[\s\S]*?transform: translateX\(110%\);/);
+    // .terminal-properties ocupa o MESMO slot visual de .terminal-right
+    // (right:0, mesmo translateX) — nunca as duas abertas ao mesmo tempo
+    // (mutual exclusion real, testada abaixo), então compartilhar a regra
+    // é seguro e evita duplicar CSS.
+    expect(css).toMatch(/\.terminal-right,\s*\n\.terminal-properties \{[\s\S]*?transform: translateX\(110%\);/);
+    expect(css).toContain('.terminal-left.drawer-open,');
+    expect(css).toContain('.terminal-right.drawer-open,');
+    expect(css).toContain('.terminal-properties.drawer-open {');
     expect(css).toContain('.drawer-open');
+  });
+
+  it('Painel Properties 320px: togglePropertiesDrawer fecha as outras 2 gavetas (mesma mutual exclusion), RightRail ganha o 2º botão, e a gaveta reusa ChartLayersPanelContent (zero segunda implementação)', () => {
+    const app = read('../src/App.tsx');
+    const toggleMatch = app.match(/const togglePropertiesDrawer = useCallback\(\(\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
+    expect(toggleMatch, 'togglePropertiesDrawer não encontrado').not.toBeNull();
+    expect(toggleMatch![1]).toContain('setLeftDrawerOpen(false);');
+    expect(toggleMatch![1]).toContain('setRightDrawerOpen(false);');
+    expect(toggleMatch![1]).toContain('setPropertiesDrawerOpen((v) => !v);');
+    // toggleLeft/toggleRight também fecham a nova 3ª gaveta agora.
+    const toggleLeftMatch = app.match(/const toggleLeftDrawer = useCallback\(\(\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
+    expect(toggleLeftMatch![1]).toContain('setPropertiesDrawerOpen(false);');
+    const toggleRightMatch = app.match(/const toggleRightDrawer = useCallback\(\(\) => \{([\s\S]*?)\n {2}\}, \[\]\);/);
+    expect(toggleRightMatch![1]).toContain('setPropertiesDrawerOpen(false);');
+    // ESC também fecha a 3ª gaveta.
+    expect(app).toContain('setPropertiesDrawerOpen((v) => (v ? false : v));');
+    // RightRail: 2º NavRailButton, ícone distinto (nunca reusa PanelRight).
+    const railIdx = app.indexOf('function RightRail() {');
+    expect(railIdx).toBeGreaterThan(-1);
+    const railBody = app.slice(railIdx, app.indexOf('\n}', railIdx));
+    expect(railBody).toContain('icon={SlidersHorizontal}');
+    expect(railBody).toContain('label="Properties"');
+    expect(railBody).toContain('onClick={() => togglePropertiesDrawer?.()}');
+    // Zero segunda implementação: a gaveta docada e o dropdown da SideBar
+    // renderizam o MESMO componente de conteúdo real.
+    expect(app).toContain('function ChartLayersPanelContent() {');
+    expect(app).toContain('<ChartLayersPanelContent />');
+    const contentUsages = app.match(/<ChartLayersPanelContent \/>/g) ?? [];
+    expect(contentUsages).toHaveLength(2);
   });
 
   it('Fase M.1: as réguas de navegação (SideBar/RightRail) abrem cada gaveta via toggleLeftDrawer/toggleRightDrawer; o backdrop e o X do cabeçalho fecham', () => {
@@ -338,15 +380,22 @@ describe('V16.1 correção crítica (Protocolo TradingView e Gavetas Ocultas): e
 describe('Fusão visual (imagem de referência AR10 CYBORG v15.1 GOD TIER): SideBar renomeada, ganho circular do Siriform, DIREÇÃO/POSITION MANAGEMENT em cards separados', () => {
   it('SideBar desacopla id (roteamento real) de label (texto exibido) — só DASHBOARD/SETTINGS continuam com comportamento próprio', () => {
     const app = read('../src/App.tsx');
-    const itemsMatch = app.match(/const items: \{ icon: any; id: string; label: string \}\[\] = \[([\s\S]*?)\n {2}\];/);
-    expect(itemsMatch, 'items do SideBar não encontrado').not.toBeNull();
-    const body = itemsMatch![1];
-    expect(body).toContain('id: "DASHBOARD", label: "COCKPIT"');
+    // Rodada de acessibilidade de navegação (pedido do Operador: "deixa só
+    // os principais... sistema leve profissional, não deleta nada") split
+    // o antigo array único `items` em PRIMARY_TABS (sempre visível) +
+    // SECONDARY_TABS (atrás de "Mais abas") — SETTINGS migrou pra
+    // secundária, mas o roteamento real (id) e o comportamento próprio de
+    // DASHBOARD/SETTINGS no ternário de App() continuam intactos.
+    const primaryMatch = app.match(/const PRIMARY_TABS: \{ icon: any; id: string; label: string \}\[\] = \[([\s\S]*?)\n {2}\];/);
+    const secondaryMatch = app.match(/const SECONDARY_TABS: \{ icon: any; id: string; label: string \}\[\] = \[([\s\S]*?)\n {2}\];/);
+    expect(primaryMatch, 'PRIMARY_TABS do SideBar não encontrado').not.toBeNull();
+    expect(secondaryMatch, 'SECONDARY_TABS do SideBar não encontrado').not.toBeNull();
+    expect(primaryMatch![1]).toContain('id: "DASHBOARD", label: "COCKPIT"');
     // Ordem de migração de idioma: ids/labels da navegação migraram para
     // inglês (SETTINGS/MARKETS/ANALYSIS/...) — as views secundárias agora
     // roteiam dado real via SecondaryModuleView, então os ids são
     // roteamento vivo, não mais só rótulo.
-    expect(body).toContain('id: "SETTINGS", label: "SETTINGS"');
+    expect(secondaryMatch![1]).toContain('id: "SETTINGS", label: "SETTINGS"');
     expect(app).toContain('activeTab === "DASHBOARD" ?');
     expect(app).toContain('activeTab === "SETTINGS" ?');
     expect(app).toContain('onClick={() => setActiveTab(item.id)}');

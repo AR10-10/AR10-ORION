@@ -2,6 +2,8 @@
 // de trades grandes (percentil real da amostra observada, nunca um limiar
 // fixo) e o ring de histórico CVD+bolhas. Lógica pura, sem rede.
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   computeLargeTradeThreshold,
   ingestTradesForLargeDetection,
@@ -9,6 +11,7 @@ import {
   computeOrderflowTrend,
   EMPTY_THRESHOLD_STATE,
   ORDERFLOW_HISTORY_CAPACITY,
+  ORDERFLOW_TREND_WINDOW,
   type OrderflowTrade,
   type OrderflowHistoryEntry,
 } from '../src/nexus/orderflow-history';
@@ -158,5 +161,139 @@ describe('computeOrderflowTrend: tendência real de força do fluxo (Diretriz Co
     const history = Array.from({ length: 20 }, (_, i) => entry(i, i));
     const r = computeOrderflowTrend(history);
     expect(JSON.stringify(r).toLowerCase()).not.toContain('probabilidade');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RETENÇÃO ≠ JANELA DE LEITURA (defeito real corrigido).
+//
+// `computeOrderflowTrend` dividia o histórico INTEIRO ao meio. Enquanto
+// retenção e janela eram o mesmo número (capacidade 120), isso passava
+// despercebido — mas são duas perguntas diferentes que ficaram acopladas por
+// acidente. Ao subir a retenção para 900 (~1h), a MESMA frase exibida ao
+// Operador ("fluxo FORTALECENDO/ENFRAQUECENDO") passaria a comparar os
+// últimos 30 min contra os 30 anteriores, sem nada na tela mudar de nome.
+//
+// Estes testes travam a separação por EXECUÇÃO REAL — a matemática é o que
+// pode estar sutilmente errado aqui, não a fiação.
+// ---------------------------------------------------------------------------
+describe('a leitura de tendência não muda de significado quando a retenção cresce', () => {
+  const entry = (t: number, cvd: number): OrderflowHistoryEntry => ({ time: t, cvd, largeTrades: [] });
+
+  /** Série com um passado LONGO e plano e um final recente em aceleração
+   *  forte. Se a função olhasse o histórico inteiro, o passado plano diluiria
+   *  a aceleração; olhando só a janela, ela aparece. */
+  const passadoPlanoDepoisAceleracao = (totalAntigo: number) => [
+    ...Array.from({ length: totalAntigo }, (_, i) => entry(i, 0)), // CVD parado
+    ...Array.from({ length: 60 }, (_, i) => entry(totalAntigo + i, i * 0.1)), // subida leve
+    ...Array.from({ length: 60 }, (_, i) => entry(totalAntigo + 60 + i, 6 + (i + 1) * 25)), // aceleração real
+  ];
+
+  it('a mesma janela recente dá a MESMA leitura, com 200 ou com 5000 entradas retidas', () => {
+    const curto = computeOrderflowTrend(passadoPlanoDepoisAceleracao(200));
+    const longo = computeOrderflowTrend(passadoPlanoDepoisAceleracao(5000));
+    expect(curto.status).toBe('OK');
+    expect(longo.status).toBe('OK');
+    expect(longo.trend).toBe(curto.trend);
+    // e não só o rótulo: as inclinações reais são idênticas, porque o
+    // recorte avaliado é literalmente o mesmo.
+    expect(longo.recentSlope).toBe(curto.recentSlope);
+    expect(longo.priorSlope).toBe(curto.priorSlope);
+  });
+
+  it('sem a janela, a leitura falaria de OUTRO intervalo de tempo — a prova de que isto importa', () => {
+    // Reproduz o comportamento antigo passando uma janela = tamanho total.
+    const serie = passadoPlanoDepoisAceleracao(2000);
+    const comJanela = computeOrderflowTrend(serie);
+    const historicoInteiro = computeOrderflowTrend(serie, Date.now(), serie.length);
+    expect(comJanela.trend).toBe('FORTALECENDO');
+
+    // A assertiva certa aqui é sobre a INCLINAÇÃO, não sobre o rótulo. Com o
+    // erro de dimensão corrigido, os dois podem até concordar no rótulo
+    // nesta série — mas descrevem intervalos completamente diferentes, e é
+    // isso que tornaria a frase exibida ao Operador ambígua conforme o ring
+    // enchesse. A aceleração real dos últimos ciclos aparece diluída quando
+    // espalhada por 2000 pontos parados.
+    expect(historicoInteiro.recentSlope).not.toBe(comJanela.recentSlope);
+    expect(Math.abs(historicoInteiro.recentSlope!)).toBeLessThan(Math.abs(comJanela.recentSlope!) / 5);
+  });
+
+  it('a leitura é ESCALÁVEL: a mesma aceleração é detectada em QUALQUER janela', () => {
+    // ESTE é o teste que faltava e que teria pego o erro de dimensão: a
+    // suíte inteira usava séries de 20 amostras, o único tamanho em que a
+    // fórmula antiga ainda funcionava. Acima de ~40 ela era incapaz de sair
+    // de ESTAVEL por maior que fosse a aceleração.
+    const rampa = (n: number, r: number) => {
+      const h = n / 2;
+      return [
+        ...Array.from({ length: h }, (_, i) => entry(i, 0)),
+        ...Array.from({ length: h }, (_, i) => entry(h + i, (i + 1) * r)),
+      ];
+    };
+    for (const n of [20, 40, 60, 120, 240]) {
+      expect(computeOrderflowTrend(rampa(n, 10), Date.now(), n).trend, `janela ${n}`).toBe('FORTALECENDO');
+    }
+  });
+
+  it('a zona-morta é IDÊNTICA à antiga em n=20 — a correção não recalibrou nada', () => {
+    // O múltiplo foi escolhido para preservar byte a byte o comportamento no
+    // único tamanho onde a fórmula original de fato funcionava (e onde ela
+    // foi calibrada e testada): 1 x amplitude/20 === 0,05 x amplitude.
+    // Sem isso, "corrigir a dimensão" viraria disfarce para escolher um
+    // limiar novo a olho, sem dado que o sustente.
+    const src = readFileSync(resolve(__dirname, '../src/nexus/orderflow-history.ts'), 'utf8');
+    expect(src).toContain('const TREND_DEADBAND_MULTIPLE = 1;');
+    expect(src).toContain('const movimentoTipicoPorCiclo = totalRange / recorte.length;');
+    // e a fórmula antiga (amplitude sem dividir) não pode voltar
+    expect(src).not.toMatch(/deadband\s*=\s*totalRange\s*\*/);
+  });
+
+  it('a janela é a declarada, e o recorte é o FINAL da série (o mais recente)', () => {
+    expect(ORDERFLOW_TREND_WINDOW).toBe(120);
+    // Um final em queda depois de um começo em alta só pode dar
+    // ENFRAQUECENDO se o recorte for mesmo o final.
+    const serie = [
+      ...Array.from({ length: 500 }, (_, i) => entry(i, i * 10)), // alta forte, antiga
+      ...Array.from({ length: 60 }, (_, i) => entry(500 + i, 5000 + i * 0.1)), // quase parado
+      ...Array.from({ length: 60 }, (_, i) => entry(560 + i, 5006 - (i + 1) * 30)), // queda real
+    ];
+    expect(computeOrderflowTrend(serie).trend).toBe('ENFRAQUECENDO');
+  });
+
+  it('com o ring ainda curto usa o que há — e o piso de amostra continua mandando', () => {
+    // Início de sessão: o ring tem menos que a janela. Não é motivo para
+    // recusar leitura, mas abaixo de 10 entradas continua fail-closed.
+    const nove = Array.from({ length: 9 }, (_, i) => entry(i, i));
+    expect(computeOrderflowTrend(nove).status).toBe('DADOS_INSUFICIENTES');
+    const vinte = [
+      ...Array.from({ length: 10 }, (_, i) => entry(i, i)),
+      ...Array.from({ length: 10 }, (_, i) => entry(10 + i, 9 + (i + 1) * 10)),
+    ];
+    expect(computeOrderflowTrend(vinte).status).toBe('OK');
+  });
+
+  it('fail-closed no próprio parâmetro: janela inválida cai na declarada, nunca num recorte absurdo', () => {
+    const serie = passadoPlanoDepoisAceleracao(300);
+    const esperado = computeOrderflowTrend(serie).trend;
+    for (const ruim of [0, -5, 3, NaN, Infinity]) {
+      expect(computeOrderflowTrend(serie, Date.now(), ruim as number).trend, `janela ${ruim}`).toBe(esperado);
+    }
+  });
+});
+
+describe('a retenção subiu, e o custo real disso foi medido antes', () => {
+  it('a capacidade é a nova, e continua sendo um teto de verdade', () => {
+    expect(ORDERFLOW_HISTORY_CAPACITY).toBe(900);
+    let ring: OrderflowHistoryEntry[] = [];
+    for (let i = 0; i < ORDERFLOW_HISTORY_CAPACITY + 50; i++) {
+      ring = pushOrderflowHistory(ring, { time: i, cvd: i, largeTrades: [] });
+    }
+    expect(ring.length).toBe(ORDERFLOW_HISTORY_CAPACITY);
+    // e o que sobrou é o FINAL da série, nunca o começo
+    expect(ring[ring.length - 1].time).toBe(ORDERFLOW_HISTORY_CAPACITY + 49);
+  });
+
+  it('a retenção é MAIOR que a janela de tendência — senão a separação seria decorativa', () => {
+    expect(ORDERFLOW_HISTORY_CAPACITY).toBeGreaterThan(ORDERFLOW_TREND_WINDOW);
   });
 });

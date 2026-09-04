@@ -50,6 +50,15 @@ describe('VolumeProfilePlugin: Fio de Seda + geometria real + dirty-flag (mesmas
     expect(s).toContain('useVolumeProfileSnapshot()');
     expect(s).not.toMatch(/fetch\(/);
   });
+
+  it('Lapidação institucional: barras seguem cyan monocromático (precedente real "Black Ice"), mas o POC (mesma forma de linha que Fibonacci) ganha acento magenta próprio — nunca o mesmo cyan exato de Fibonacci numa LINHA', () => {
+    const s = src();
+    expect(s).toContain('const BAR_FILL = "rgba(0, 98, 255, 0.10)";');
+    expect(s).toContain('const BAR_FILL_HVN = "rgba(0, 98, 255, 0.22)";');
+    expect(s).toContain('const BAR_FILL_LVN = "rgba(0, 98, 255, 0.04)";');
+    expect(s).toContain('const POC_LINE = "rgba(236, 81, 205, 0.75)";');
+    expect(s).not.toContain('const POC_LINE = "rgba(0, 98, 255');
+  });
 });
 
 describe('EnhancedChart: níveis Fibonacci reais como price lines fio de seda', () => {
@@ -63,9 +72,17 @@ describe('EnhancedChart: níveis Fibonacci reais como price lines fio de seda', 
     expect(s).toMatch(/FIB \$\{\(level\.ratio \* 100\)\.toFixed\(1\)\}%/);
   });
 
-  it('nível com confluência real (score>0) é mais presente — hierarquia por opacidade, nunca por tracejado', () => {
+  it('hierarquia por opacidade real, nunca por tracejado — Achado 2.7: o degrau binário por score virou peso resolvido (ratio + confluência + orçamento visual)', () => {
     const s = chart();
-    expect(s).toContain('level.score > 0 ? "rgba(0, 240, 255, 0.55)" : "rgba(0, 240, 255, 0.20)"');
+    // Antes: `level.score > 0 ? "rgba(0, 98, 255, 0.55)" : "rgba(0, 240,
+    // 255, 0.20)"` — 2 aparências possíveis, o ratio nunca entrava. Agora a
+    // opacidade vem de fibLineAlpha sobre o peso real resolvido; os 2
+    // extremos da banda (FIB_ALPHA_MIN/MAX) continuam sendo exatamente
+    // 0.20 e 0.55, então nada ficou mais forte nem mais fraco que antes —
+    // só passou a existir gradiente entre eles.
+    expect(s).toContain('color: `rgba(0, 98, 255, ${fibLineAlpha(fibonacciVisualWeights[i] ?? null).toFixed(3)})`,');
+    expect(s).toContain('export const FIB_ALPHA_MIN = 0.2;');
+    expect(s).toContain('export const FIB_ALPHA_MAX = 0.55;');
     expect(s).not.toMatch(/LineStyle\.(Dashed|Dotted|LargeDashed|SparseDotted)/);
   });
 
@@ -133,7 +150,14 @@ describe('EnhancedChart: correção de latência (patch da vela em formação) i
     // visível num prepend real), mas o array de deps do efeito continua
     // exatamente [data], nunca ganhou livePrice/activeTimeframe.
     expect(s).toContain('seriesRef.current.setData(formatted);');
-    const setDataEffectMatch = s.match(/const prevChartDataRef = useRef[\s\S]*?seriesRef\.current\.setData\(formatted\);[\s\S]*?\n {2}\}, \[data\]\);/);
+    // Zoom inteligente (Lapidação por feedback): existe agora um efeito
+    // PRÓPRIO da flag smartZoomPendingRef entre prevChartDataRef e o
+    // efeito de setData — ele depende de [activeTimeframe, symbol] de
+    // propósito (é a troca de contexto que arma o enquadre). A âncora do
+    // match começa no PRÓPRIO efeito de setData para continuar travando o
+    // que sempre travou: as deps dele são [data], nunca livePrice/
+    // activeTimeframe (a flag é ref — lida, nunca subscrita).
+    const setDataEffectMatch = s.match(/useEffect\(\(\) => \{\n    if \(!seriesRef\.current \|\| !data \|\| data\.length === 0\) return;\n    const formatted[\s\S]*?seriesRef\.current\.setData\(formatted\);[\s\S]*?\n {2}\}, \[data\]\);/);
     expect(setDataEffectMatch, 'efeito de setData(formatted) não encontrado com deps [data]').not.toBeNull();
     expect(setDataEffectMatch![0]).not.toContain('livePrice');
     expect(setDataEffectMatch![0]).not.toContain('activeTimeframe');
@@ -157,11 +181,12 @@ describe('EnhancedChart: Trade Plan drawn as silk-thread price lines (Signal Pre
     expect(block).not.toMatch(/LineStyle\.(Dashed|Dotted|LargeDashed|SparseDotted)/);
   });
 
-  it('English labels carry the real structure basis and the R:R (EN/ST/TP short form, EPC FINAL §8, v2: one line per real target)', () => {
+  it('English labels carry the real structure basis and the R:R (EN/ST/TP short form, EPC FINAL §8, v2: one line per real target); Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4 moved basis/R:R into the secondary (smaller-font) text, primary text is label+distance only', () => {
     const s = chart();
     expect(s).toContain('`EN ${tradePlan.direction}');
-    expect(s).toContain('`ST · ${tradePlan.stop.basis}`');
-    expect(s).toContain('${label} · ${target.basis}');
+    expect(s).toContain('text: "ST",');
+    expect(s).toContain(': tradePlan.stop.basis;');
+    expect(s).toContain('compactLabels ? null : target.basis,');
   });
 
   it('fail-closed: no plan draws nothing, and lines are cleared on every change and on unmount', () => {

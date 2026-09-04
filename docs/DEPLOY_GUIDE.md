@@ -17,7 +17,7 @@ de ambiente sensível. Qualquer host HTTPS estático serve.
 - Workflow: `.github/workflows/deploy-ipad-pwa.yml`.
 - Dispara em push para `main` ou `claude/eloquent-cannon-qyt86y` que toque
   `ipad_runtime/**`, ou manualmente via Actions → Run workflow.
-- URL final: `https://ar10-10.github.io/ar10-orion/`.
+- URL final: `https://ar10-10.github.io/AR10-ORION/`.
 - **Status atual: bloqueado** por um passo manual único de admin — ver
   `docs/GITHUB_PAGES_FIX.md` para o diagnóstico completo e a correção.
 
@@ -62,7 +62,7 @@ Confirmado nesta sessão: `index.html`, `css/ipad-runtime.css`,
 `index.html`, `service-worker.js` e o manifest usam apenas caminhos
 relativos (`./js/app.js`, `./css/ipad-runtime.css`, scope `./`), então o
 mesmo build funciona tanto em
-`https://ar10-10.github.io/ar10-orion/` (sub-path) quanto em um domínio
+`https://ar10-10.github.io/AR10-ORION/` (sub-path) quanto em um domínio
 raiz (Cloudflare/Vercel/Netlify). Nenhum ajuste de path é necessário ao
 trocar de rota de deploy.
 

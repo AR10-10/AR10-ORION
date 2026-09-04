@@ -1,0 +1,204 @@
+# COMECE AQUI
+
+**Você não precisa saber programar, nem baixar nada na mão.**
+
+---
+
+## O jeito MAIS simples: um comando
+
+Não baixa nada, não clica em nada. Abre o **Prompt de Comando** (Windows) ou o
+**Terminal** (Mac), cola uma linha, ENTER. Ele faz tudo.
+
+**Os comandos estão em `COMANDO-UNICO.md`.**
+
+---
+
+## O jeito simples: um arquivo só
+
+Baixe **um** arquivo e dê dois cliques. Ele faz tudo sozinho: busca o sistema
+inteiro no GitHub, monta a pasta no seu computador, prepara a senha, instala
+as peças e abre o painel.
+
+| Seu computador | Baixe este arquivo |
+|---|---|
+| **Windows** | `AR10-INSTALADOR.bat` |
+| **Mac** | `AR10-INSTALADOR.command` |
+
+O único pré-requisito é o **Node** (Passo 1 abaixo). Se faltar, o próprio
+instalador abre o site para você e explica.
+
+**Onde ele instala:** dentro dos seus **Documentos**, numa pasta chamada
+`AR10-CYBORG`. É a mesma pasta Documentos que você abre no Explorador
+(Windows) ou no Finder (Mac) — o sistema inteiro fica ali, e roda dali.
+
+```
+Documentos/
+└── AR10-CYBORG/          <- o sistema inteiro
+    ├── INSTALAR-E-RODAR  <- é neste que você clica para ligar
+    ├── ipad_runtime/
+    └── docs/
+```
+
+Ele mostra o caminho e pergunta se está bom (é só apertar ENTER; se quiser
+outro lugar, digite). O resto é automático.
+
+> **Se o seu Documentos estiver no OneDrive ou no iCloud**, o instalador
+> descobre o caminho de verdade e usa aquele — mas avisa antes de baixar,
+> porque nesse caso as peças do sistema (milhares de arquivos) também vão
+> subir para a nuvem. Se preferir evitar, é só digitar outro caminho na hora.
+
+> **Ele nunca apaga nada.** Se a pasta que você escolher já existir e tiver
+> arquivos, ele **para e avisa** em vez de mexer no que está lá.
+
+Depois dessa primeira vez, para ligar de novo você usa o
+`INSTALAR-E-RODAR` que ficou **dentro** da pasta — e ele já busca as
+atualizações sozinho.
+
+---
+
+## Passo 1 — Instalar o Node (uma vez só)
+
+O Node é o motor que faz o sistema rodar. É um instalador comum, igual a
+qualquer programa.
+
+1. Abra <https://nodejs.org>
+2. Clique no botão grande que diz **LTS**
+3. Abra o arquivo baixado e vá clicando em **Avançar / Continuar** até o fim
+
+> Já tem Node? Pode pular. O instalador do passo 3 confere sozinho e avisa se
+> a versão for antiga.
+
+---
+
+## Se preferir fazer na mão (ou já tem a pasta)
+
+**Há dois jeitos. O primeiro é melhor — e é o que faz tudo virar automático.**
+
+### Jeito recomendado: `git clone` (uma vez só, e nunca mais baixa nada)
+
+Quem entende de computador faz isso em 30 segundos. Abra o Terminal (Mac) ou
+o Prompt de Comando (Windows) e rode — a primeira linha entra nos Documentos,
+que é onde o sistema deve ficar:
+
+```sh
+cd ~/Documents        # no Windows: cd "%USERPROFILE%\Documents"
+git clone https://github.com/AR10-10/AR10-ORION.git AR10-CYBORG
+```
+
+**Por que este é o jeito certo:** instalado assim, o sistema **se atualiza
+sozinho** toda vez que você clica no arquivo do Passo 3. Quando eu melhorar
+alguma coisa, ela chega na sua máquina sem você baixar nada.
+
+> Precisa do Git instalado: <https://git-scm.com/downloads>. Se der erro
+> dizendo que o repositório é privado, é só entrar com a sua conta do GitHub
+> — e é sinal de que a privacidade está funcionando.
+
+### Jeito simples: ZIP (funciona, mas não atualiza sozinho)
+
+1. Abra <https://github.com/AR10-10/AR10-ORION>
+2. Botão verde **`< > Code`** → **Download ZIP**
+3. Descompacte (dois cliques) **e mova a pasta para os seus Documentos**
+
+Vai aparecer a pasta **`AR10-ORION-main`**. O painel roda igual, mas a cada
+melhoria você teria que baixar o ZIP de novo — por isso o jeito de cima é
+melhor. O próprio instalador avisa na tela quando percebe que a pasta veio
+de ZIP, e mostra o comando para trocar.
+
+---
+
+## Ligar o painel (quando já tem a pasta)
+
+Abra **Documentos → `AR10-CYBORG`** e dê **dois cliques** no arquivo do seu
+sistema:
+
+| Seu computador | Arquivo |
+|---|---|
+| **Windows** | `INSTALAR-E-RODAR.bat` |
+| **Mac** | `INSTALAR-E-RODAR.command` |
+
+Ele faz o resto sozinho: confere o Node, pede uma senha, instala as peças e
+liga o painel. **A primeira vez demora alguns minutos** — é normal, não feche
+a janela.
+
+Quando terminar, o navegador abre em `http://localhost:5173`. Digite a senha
+que você escolheu e pronto.
+
+### No Mac, se aparecer "não pode ser aberto"
+
+O Mac bloqueia arquivos baixados da internet na primeira vez. Faça assim:
+
+- **Clique com o botão direito** no arquivo → **Abrir** → **Abrir** de novo na
+  caixa que aparecer.
+
+Só precisa disso uma vez.
+
+---
+
+## Usar do iPad e do celular
+
+Quando o painel liga, a janela mostra **dois endereços**:
+
+```
+Neste computador:  http://localhost:5173
+No iPad/celular:   http://192.168.x.x:5173
+```
+
+Digite o segundo no navegador do iPad, **na mesma rede de casa**. Mesma senha.
+
+> **Quem alcança:** qualquer aparelho ligado na sua rede consegue abrir esse
+> endereço, e a senha é a única barreira. Em rede de casa está ok. Em rede de
+> hotel, aeroporto ou trabalho compartilhado, **não use** — ali o computador
+> deve ficar só no `localhost`.
+
+---
+
+## Depois
+
+- **Para ligar de novo:** dois cliques no mesmo arquivo. **Ele já busca as
+  atualizações sozinho** antes de ligar — você não precisa baixar nada.
+- **Para desligar:** feche a janela preta.
+- **Para trocar a senha:** apague o arquivo
+  `ipad_runtime/ramber-ui/.env.local` e clique no instalador de novo.
+
+> **Se você tiver mexido em algum arquivo do sistema**, o instalador percebe
+> e **não atualiza por cima** — ele avisa e roda com o que já está aí. Seu
+> trabalho nunca é sobrescrito sem você saber.
+
+---
+
+## Se algo der errado
+
+| O que aparece | O que fazer |
+|---|---|
+| "o Node não está instalado" | Faça o Passo 1 e clique no arquivo de novo |
+| "o Node é antigo demais" | Instale a versão **LTS** do Passo 1 por cima |
+| "a instalação das dependências falhou" | Confira a internet e clique de novo |
+| "Acesso não configurado" no navegador | Feche a janela preta e clique no arquivo de novo |
+| "esta pasta veio de ZIP" | Normal — o painel roda igual. Para virar automático, use o `git clone` do Passo 2 |
+| "há mudanças locais não salvas" | Alguém editou um arquivo do sistema. O painel roda; a atualização fica para depois |
+| O endereço do iPad não abre | O iPad está em outra rede (dados móveis, ou outro Wi-Fi) |
+| Gráfico vazio | Abra <https://api.binance.com/api/v3/ping> no navegador. Se não abrir, sua rede bloqueia a Binance |
+
+---
+
+## O que você ganha rodando assim
+
+- **Tudo na sua pasta Documentos.** O sistema inteiro fica em
+  `Documentos/AR10-CYBORG`, e roda dali. Nada espalhado por pastas escondidas
+  do sistema.
+- **Ninguém de fora tem acesso.** O painel existe só na sua máquina e na sua
+  rede — não há endereço na internet para alguém abrir.
+- **Dados reais.** Mercado ao vivo direto da Binance.
+- **A taxa de acerto de verdade.** Aba **RISK** → botão **MEDIR**. Ele busca
+  2000 candles reais e conta os desfechos.
+
+---
+
+## Outros guias
+
+| Arquivo | Para quê |
+|---|---|
+| `COMANDO-UNICO.md` | O comando para colar no CMD/Terminal — instala tudo sem baixar arquivo |
+| `FECHAR-ACESSO-PUBLICO.md` | Tirar do ar o site publicado hoje — os 3 passos, na ordem |
+| `TRABALHAR-LOCAL-COMIGO.md` | Onde seus dados ficam salvos, e como me instalar na sua máquina |
+| `docs/RODAR_LOCAL.md` | Detalhes técnicos: o que roda com dado real e o que não roda |

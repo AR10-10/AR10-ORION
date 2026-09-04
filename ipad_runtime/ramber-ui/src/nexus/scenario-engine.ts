@@ -105,9 +105,44 @@ export function buildScenarioProjection(
   };
 }
 
+// Diretriz Final — Camada de Cenários Inteligentes §4 ("apresentar uma
+// estimativa de confiança... não utilizar porcentagens arbitrárias...
+// caso não exista base estatística suficiente, utilizar apenas
+// classificações qualitativas"): opinionWeight já é honesto (massa real
+// do pool do Conselho, nunca inventada — ver header do arquivo), mas
+// esta base não tem backtest real que calibre o que "62%" realmente
+// significa em acerto de mercado (Regra de Ouro 2). Mesmo espírito de
+// `heatTier` (heat-score.ts): cortes uniformes de 25%, parâmetro
+// documentado para leitura rápida, não uma medição/calibração — só a
+// APRESENTAÇÃO muda de número para faixa qualitativa, o número real
+// continua 100% intacto em `opinionWeight` para quem precisar dele.
+export type ScenarioConfidenceLabel = "MUITO_FORTE" | "FORTE" | "MODERADA" | "FRACA";
+
+export function describeScenarioConfidence(weight: number | null): ScenarioConfidenceLabel | null {
+  if (weight === null || !Number.isFinite(weight)) return null;
+  const w = Math.max(0, Math.min(1, weight));
+  return w < 0.25 ? "FRACA" : w < 0.5 ? "MODERADA" : w < 0.75 ? "FORTE" : "MUITO_FORTE";
+}
+
+// §3 ("Pontos de Reteste... possível pullback/rejeição/continuação/
+// reversão... sempre derivados de cálculos reais"): classificação
+// honesta do TIPO de reação esperada num nível real, derivada só do
+// `sourceKind` que o próprio nível JÁ carrega (zero motor novo, zero
+// inferência nova — mesma disciplina de reaproveitar dado real de todo
+// o resto deste arquivo). Prefixo de sourceKind desconhecido (engine
+// futuro ainda não mapeado aqui) cai num rótulo genérico honesto, nunca
+// lança exceção nem inventa uma categoria específica sem base real.
+export function describeScenarioReaction(sourceKind: string): string {
+  if (sourceKind.startsWith("EQH") || sourceKind.startsWith("EQL")) return "possível varredura de liquidez";
+  if (sourceKind.startsWith("SR_")) return "possível pullback/rejeição";
+  if (sourceKind.startsWith("FIB_")) return "possível retração";
+  if (sourceKind.startsWith("VP_")) return "possível ímã de volume";
+  return "possível reação estrutural";
+}
+
 // Diretriz Suprema §5/§6: formata um ScenarioPath para exibição textual
 // compacta — alvo real mais próximo + quantos outros existem no caminho +
-// invalidação real + peso real. Único formatador (App.tsx tinha esta
+// invalidação real + confiança real. Único formatador (App.tsx tinha esta
 // mesma lógica duplicada em 2 pontos antes desta evolução — Scenario
 // Paths panel e CouncilWidget — unificados aqui, zero cálculo duplicado).
 export function formatScenarioPathLabel(p: ScenarioPath): string {
@@ -116,6 +151,7 @@ export function formatScenarioPathLabel(p: ScenarioPath): string {
     ? `${nearest.price.toFixed(0)} (${nearest.sourceKind})${p.targets.length > 1 ? ` +${p.targets.length - 1}` : ""}`
     : "no real level";
   const inv = p.invalidation !== null ? ` · inv ${p.invalidation.price.toFixed(0)}` : "";
-  const weight = p.opinionWeight !== null ? ` · opinion ${Math.round(p.opinionWeight * 100)}%` : "";
+  const confidence = describeScenarioConfidence(p.opinionWeight);
+  const weight = confidence !== null ? ` · opinion ${confidence}` : "";
   return `${p.direction} → ${target}${inv}${weight}`;
 }

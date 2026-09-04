@@ -18,6 +18,7 @@ import { fetchCoinGeckoGlobal } from './providers/coingecko-provider';
 import { fetchFearGreedIndex } from './providers/fear-greed-provider';
 import { fetchTrendingCoins } from './providers/trending-provider';
 import { fetchDerivativesPositioning } from './providers/derivatives-provider';
+import { fetchOnchainTvlFlow } from './providers/defillama-provider';
 import type { GmilProviderDef, ProviderFetchResult } from './types';
 
 // Fontes concretamente viáveis para uma PWA estática sem backend (ver
@@ -58,6 +59,18 @@ const PROVIDERS: GmilProviderDef[] = [
     category: 'DERIVATIVES',
     intervalMs: 120_000,
     fetch: fetchDerivativesPositioning,
+  },
+  {
+    // Ordem Mestra §7 (On-Chain e DeFi): categoria ONCHAIN sai do null
+    // honesto pela primeira vez — TVL agregado real via DefiLlama, sem
+    // chave. Intervalo longo: TVL histórico só atualiza 1x/dia na fonte,
+    // sondar mais rápido não traria dado novo (mesma lógica de
+    // trending_coins acima).
+    id: 'onchain_tvl_flow',
+    label: 'DefiLlama · Fluxo de TVL Agregado (7d)',
+    category: 'ONCHAIN',
+    intervalMs: 300_000,
+    fetch: fetchOnchainTvlFlow,
   },
 ];
 

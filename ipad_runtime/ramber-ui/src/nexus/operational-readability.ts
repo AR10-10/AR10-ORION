@@ -158,7 +158,11 @@ export function deriveEntryState(decision: NexusDecision): NexusEntryState {
   return "NO_ENTRY";
 }
 
-const ENTRY_CLAUSE: Record<NexusEntryState, string> = {
+// Exportado (Ordem "Market Analysis & Publication Engine" §4): a
+// Análise de Mercado reusa literalmente a cláusula WAITING_FOR_RETEST
+// como condição do campo RETESTE — mesmo texto, zero segunda redação do
+// mesmo conceito.
+export const ENTRY_CLAUSE: Record<NexusEntryState, string> = {
   ENTRY_CONFIRMED: "confirmação estrutural — timing agora",
   WAITING_FOR_RETEST: "aguardando o preço retornar ao nível real mapeado",
   WAITING_FOR_CONFIRMATION: "estrutura ainda insuficiente — timing ausente",
@@ -297,4 +301,102 @@ export function buildOperationalSummary(decision: NexusDecision | null | undefin
     decision.reasonsFor.length > 0 ? `Favoráveis: ${decision.reasonsFor.join(" · ")}` : null,
     decision.reasonsAgainst.length > 0 ? `Contrários: ${decision.reasonsAgainst.join(" · ")}` : null,
   ].filter((l): l is string => l !== null);
+}
+
+// Ordem "Lapidação, Sincronia e Experiência do Operador" §6 — "Inteligência
+// Narrativa": um resumo em prosa, nunca uma segunda fonte de verdade. Reusa
+// EXATAMENTE os mesmos eixos já derivados acima (bias/setup/entry/risk/
+// confluence/outcome) e os mesmos reasonsFor/reasonsAgainst do
+// NexusDecision (decision-layer.ts's buildReasons — já cita Conselho,
+// Premium/Discount, VWAP, Nexus Line, Heat Score) — zero motor novo, zero
+// input novo, só reescreve a MESMA leitura como frases conectadas em vez
+// de linhas rotuladas. Existe porque buildOperationalSummary() só chega ao
+// Operador via `title=` (tooltip nativo) — e o próprio CoreSignalBadge já
+// documenta que tooltips nunca aparecem em toque no iPad Safari (App.tsx,
+// CoreSignalBadge): sem esta função, a leitura consolidada real do sistema
+// fica matematicamente correta mas 100% inacessível na tela real do
+// Operador. Fail-closed: decision null ou sem viés real vira uma frase
+// honesta de ausência, nunca um parágrafo fabricado sobre o nada.
+// Entrega 26 Prioridade 8 ("refinar a LEITURA CONSOLIDADA... deve parecer
+// um copiloto institucional"): contexto de mercado REAL já calculado por
+// outros motores, repassado pelo CHAMADOR — nunca calculado aqui (mesmo
+// precedente já usado por EvidenceFusionSourceGroup.relevance, que também
+// recebe pronto em vez de adivinhar). `regimeLabel` vem do REGIME_DISPLAY
+// que o painel MARKET REGIME já usa (zero segundo vocabulário); `flow` é o
+// sinal do CVD real, mesma regra do mesmo painel. Ambos opcionais: sem
+// leitura real, a frase correspondente simplesmente não existe — nunca um
+// "regime desconhecido" fabricado para preencher a narrativa.
+export interface NarrativeMarketContext {
+  regimeLabel: string | null;
+  flow: "COMPRADOR" | "VENDEDOR" | null;
+}
+
+export function buildNarrativeSummary(
+  decision: NexusDecision | null | undefined,
+  context?: NarrativeMarketContext | null,
+): string {
+  if (!decision) return "Sem leitura real do motor ainda — aguardando o primeiro ciclo.";
+  const bias = deriveBiasLabel(decision);
+  if (bias === "INSUFFICIENT_DATA") {
+    return "Dado real insuficiente agora — sem viés direcional para relatar.";
+  }
+
+  const BIAS_SENTENCE: Record<Exclude<NexusBiasLabel, "INSUFFICIENT_DATA">, string> = {
+    LONG_BIAS: "Mercado com viés de alta.",
+    SHORT_BIAS: "Mercado com viés de baixa.",
+    NEUTRAL_BIAS: "Mercado sem viés direcional definido agora.",
+    CONFLICTED_BIAS: "Estrutura mapeada contradiz o viés do motor — leitura conflitante.",
+  };
+  const sentences: string[] = [BIAS_SENTENCE[bias]];
+
+  // Contexto de mercado real logo após o viés — a ordem de leitura que a
+  // própria Ordem exemplifica ("Mercado em tendência de alta. Liquidez...").
+  if (context?.regimeLabel) sentences.push(`Regime de mercado: ${context.regimeLabel}.`);
+  if (context?.flow) {
+    sentences.push(`Pressão de fluxo ${context.flow === "COMPRADOR" ? "compradora" : "vendedora"}.`);
+  }
+
+  const setup = deriveSetupState(decision);
+  const entry = deriveEntryState(decision);
+  if (setup === "LONG_SETUP" || setup === "SHORT_SETUP") {
+    sentences.push(
+      entry === "ENTRY_CONFIRMED"
+        ? "Estrutura real mapeada e entrada confirmada agora."
+        : "Estrutura real mapeada; entrada ainda aguarda confirmação de timing.",
+    );
+  } else if (setup === "INVALIDATED") {
+    sentences.push("Estrutura anterior foi invalidada.");
+  } else {
+    sentences.push("Nenhuma estrutura real mapeada no momento.");
+  }
+
+  if (decision.reasonsFor.length > 0) {
+    sentences.push(`Confluência a favor: ${decision.reasonsFor.slice(0, 3).join("; ")}.`);
+  }
+  if (decision.reasonsAgainst.length > 0) {
+    sentences.push(`Fatores contrários: ${decision.reasonsAgainst.slice(0, 3).join("; ")}.`);
+  }
+
+  const risk = deriveRiskState(decision);
+  if (risk) {
+    const RISK_SENTENCE: Record<NexusRiskState, string> = {
+      "ACEITÁVEL": "Risco operacional dentro do aceitável.",
+      "ELEVADO": `Risco elevado: ${risk.basis}.`,
+      "INVÁLIDO": `Plano inválido: ${risk.basis}.`,
+    };
+    sentences.push(RISK_SENTENCE[risk.state]);
+  }
+
+  const outcome = deriveOutcomeLabel(decision);
+  const OUTCOME_SENTENCE: Record<NexusOutcomeLabel, string> = {
+    LONG: "Entrada permanece ativa (LONG).",
+    SHORT: "Entrada permanece ativa (SHORT).",
+    "AGUARDAR LONG": "Viés de alta real, mas entrada ainda não confirmada.",
+    "AGUARDAR SHORT": "Viés de baixa real, mas entrada ainda não confirmada.",
+    OBSERVAR: "Sem estrutura real para operar agora — leitura em acompanhamento.",
+    "SEM OPERAÇÃO": "Nenhum viés real neste momento.",
+  };
+  sentences.push(OUTCOME_SENTENCE[outcome]);
+
+  return sentences.join(" ");
 }

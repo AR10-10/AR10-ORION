@@ -44,20 +44,27 @@ import type {
 import { maybeSampleL2History, type L2HistoryEntry } from "../nexus/l2-history";
 import { touchCandlesSymbol } from "../nexus/candles-cache";
 import { pushOrderflowHistory, type OrderflowHistoryEntry } from "../nexus/orderflow-history";
-import { pushConvictionHistory, type ConvictionScoreSample } from "../nexus/institutional-score";
+import { pushConvictionHistory, type ConvictionScoreSample, type InstitutionalScoreReading } from "../nexus/institutional-score";
+import type { HeatScoreReading } from "../nexus/heat-score";
+import type { NexusDecision } from "../nexus/decision-layer";
 import type { VolumeProfileSnapshot } from "../nexus/volume-profile";
 import type { FibonacciConfluenceMatrix } from "../nexus/fibonacci-confluence";
 import type { CouncilDecision } from "../nexus/council";
 import type { ConsensusRadarReading } from "../nexus/consensus-radar";
 import type { PremiumDiscountReading } from "../nexus/premium-discount";
 import type { HarmonicPatternHit } from "../nexus/harmonic-patterns";
-import type { LayerRelevanceReading } from "../nexus/layer-relevance";
+import type { TrianglePatternHit } from "../nexus/triangle-pattern";
+import type { HeadShouldersHit } from "../nexus/head-shoulders-pattern";
+import type { InstitutionalZone } from "../nexus/institutional-zones";
+import type { LayerRelevanceReading, AutoLayerDecision } from "../nexus/layer-relevance";
+import type { EvidenceFusionReading } from "../nexus/evidence-fusion";
 import type { ConfluenceCorridorReading } from "../nexus/confluence-corridor";
 import type { RadarQualificationResult } from "../nexus/radar-qualification";
 import type { ScenarioProjection } from "../nexus/scenario-engine";
 import type { TrapSignal } from "../nexus/trap-detection";
 import type { TradePlan } from "../nexus/trade-plan";
 import type { MultiTimeframeMatrix } from "../nexus/multi-timeframe-engine";
+import type { GmilSnapshot } from "../gmil/gmil-orchestrator";
 import {
   trackPlanTransition,
   trackPriceTick,
@@ -73,9 +80,18 @@ import {
   type AffectiveMemoryState,
   type AffectiveEventSource,
 } from "../nexus/affective-memory";
+import {
+  openPaperPosition,
+  closePaperPosition,
+  addPaperEntry,
+  recordPaperEquity,
+  EMPTY_PAPER_TRADING_STATE,
+  type PaperTradingState,
+  type PaperCloseReason,
+} from "../nexus/paper-trading";
 // import type puro — apagado na compilação, nunca puxa o engine-bridge
 // (e seus módulos js pesados) para dentro do bundle da store em runtime.
-import type { TrustScoreSnapshot, SmcZonesSnapshot, OrderflowSignal } from "../engine-bridge";
+import type { TrustScoreSnapshot, SmcZonesSnapshot, OrderflowSignal, RiskSuggestion } from "../engine-bridge";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Formas (§1 e §5 — as demais vêm dos módulos nexus/, um contrato por motor)
@@ -106,6 +122,7 @@ export interface OrderBookSnapshot {
 export interface DerivativesSnapshot {
   fundingRate: number | null;
   openInterest: number | null;
+  longShortRatio: number | null;
 }
 
 export type EngineStatus = "pending" | "ok" | "error";
@@ -136,7 +153,7 @@ export const EMPTY_PRICE: PriceSnapshot = {
   price: null, delta: null, deltaPct: null, high: null, low: null, volume: null, direction: null, updatedAt: null,
 };
 const EMPTY_ORDER_BOOK: OrderBookSnapshot = { bids: [], asks: [], updatedAt: null };
-const EMPTY_DERIVATIVES: DerivativesSnapshot = { fundingRate: null, openInterest: null };
+const EMPTY_DERIVATIVES: DerivativesSnapshot = { fundingRate: null, openInterest: null, longShortRatio: null };
 const EMPTY_CORE: CoreSnapshot = {
   engineStatus: "pending", direction: null, confidence: null, lastUpdateAt: null, cycleLatencyMs: null,
 };
@@ -144,7 +161,6 @@ const EMPTY_CORE: CoreSnapshot = {
 // honesto de "ainda não medido", não um valor de exemplo.
 const EMPTY_HEALTH: HealthSnapshot = {
   fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0,
-  isOnline: typeof navigator === "undefined" ? true : navigator.onLine,
   lastUpdatedAt: 0,
 };
 const EMPTY_L2_HISTORY: L2HistoryEntry[] = [];
@@ -153,6 +169,7 @@ const EMPTY_TRAPS: TrapSignal[] = [];
 const EMPTY_CONVICTION_HISTORY: ConvictionScoreSample[] = [];
 const EMPTY_HARMONIC_HITS: HarmonicPatternHit[] = [];
 const EMPTY_ORDERFLOW_SIGNALS: OrderflowSignal[] = [];
+const EMPTY_INSTITUTIONAL_ZONES: InstitutionalZone[] = [];
 
 // ─────────────────────────────────────────────────────────────────────────
 // Estado — na ordem canônica dos domínios (§1 → §5)
@@ -202,12 +219,56 @@ export interface UnifiedSnapshotState {
   // MIN_FIT_SCORE, D recente). Lista vazia é o estado honesto comum;
   // fitScore é aderência de razão, NUNCA probabilidade (Regra de Ouro 2).
   harmonicPatterns: HarmonicPatternHit[];
+  // Carta Branca (Reconhecimento de Padrões) — Triângulo (Ascendente/
+  // Descendente/Simétrico, nexus/triangle-pattern.ts) e Ombro-Cabeça-Ombro
+  // (regular/inverso, nexus/head-shoulders-pattern.ts): mesma disciplina de
+  // harmonicPatterns acima (fitScore é aderência geométrica, NUNCA
+  // probabilidade). Cada motor já devolve o único melhor hit da janela
+  // (não uma lista) — null é o estado honesto comum.
+  trianglePattern: TrianglePatternHit | null;
+  headShouldersPattern: HeadShouldersHit | null;
+  // Carta Branca (Evidence Fusion Engine): achado real de auditoria —
+  // computeInstitutionalZones (nexus/institutional-zones.ts) já era
+  // computado há várias rodadas dentro de EnhancedChart_110_Percent.tsx
+  // (useMemo local, só para o gráfico), mas nunca tinha ganhado uma fatia
+  // própria aqui — ao contrário de QUALQUER outro motor real deste app.
+  // Publicado pelo próprio componente do gráfico (zero segundo cálculo,
+  // mesmo array já resolvido) para que CouncilWidget/Evidence Fusion Engine
+  // leiam a MESMA leitura, sem recomputar zonas fora do gráfico. Lista
+  // vazia é o estado honesto comum (sem confluência real >=2 fontes agora).
+  institutionalZones: InstitutionalZone[];
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6 — leitura real do Relevance Engine
   // (nexus/layer-relevance.ts), computada uma vez em ChartWidget (onde os
   // sinais reais que a alimentam já convergem) e lida daqui por QUALQUER
   // outro consumidor (o painel de camadas precisa da mesma leitura, sem
   // recomputar). null = ainda sem nenhum ciclo real processado.
   layerRelevance: LayerRelevanceReading | null;
+  // DEFEITO REAL CORRIGIDO POR ESTA FATIA (relato do Operador: "não aparece
+  // essas ferramentas necessárias"): o painel de camadas e o CANVAS usavam
+  // resoluções DIFERENTES do que está visível.
+  //
+  //   painel  →  relevance.relevant          (só o gate de relevância)
+  //   canvas  →  autoDecision.show           (gate + TETO de competição)
+  //
+  // Em mercado ativo a maioria das camadas passa no gate, e o teto
+  // (AUTO_LAYER_MAX_SIMULTANEOUS) derruba quase todas. O painel exibia
+  // ~20 camadas como "VISÍVEL" enquanto o gráfico desenhava 6. Nenhum erro,
+  // nenhum log — só o painel mentindo sobre a própria tela.
+  //
+  // A decisão resolvida passa a ser publicada por quem já a computa
+  // (ChartWidget, zero segundo cálculo) e lida pelo painel. `suppressedByCap`
+  // deixa o painel dizer a VERDADE útil: não é "oculta", é "cedeu espaço
+  // para camadas mais precisas agora".
+  chartLayerDecision: Record<string, AutoLayerDecision> | null;
+  // Ordem Fechamento (§3, "Evidence Fusion... barramento inteligente do
+  // ecossistema"): mesmo achado de auditoria de institutionalZones acima —
+  // fuseEvidence() já era computado a cada render dentro de CouncilWidget,
+  // mas SEM fatia própria, nenhum outro consumidor conseguia ler a mesma
+  // leitura. Publicado pelo próprio CouncilWidget (zero segundo cálculo)
+  // para que qualquer consumidor futuro (ex.: self-diagnostics.ts) leia a
+  // MESMA leitura via getSnapshotForEngine(), nunca recompute. null = ainda
+  // sem nenhum ciclo real do CouncilWidget processado nesta sessão.
+  evidenceFusion: EvidenceFusionReading | null;
   // OMEGA CORE V-MAX (Fase 1.1, "matar a segunda verdade") — Fair Value
   // Gaps/Order Blocks/liquidez (fvg-order-block-engine.js via
   // engine-bridge.ts's computeSmcZones) e o Order Flow ao vivo (CVD +
@@ -232,6 +293,14 @@ export interface UnifiedSnapshotState {
   // LONG/SHORT/WAIT (LEI 24). null enquanto o Core Engine está em WAIT ou
   // nenhum componente real está disponível ainda.
   confluenceCorridor: ConfluenceCorridorReading | null;
+  // Achado da auditoria de evolução (docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // item 2): buildRiskSuggestion (risk-engine.js) já era computado real em
+  // App.tsx (useMemo) mas nunca ganhou fatia própria aqui — ao contrário de
+  // QUALQUER outro motor real deste app, nenhum consumidor fora da árvore
+  // React do App podia lê-lo. Publicado pelo próprio App.tsx (zero segundo
+  // cálculo, mesmo objeto já resolvido). null enquanto o Core Engine não
+  // emitiu direção real ainda (mesmo estado honesto comum do resto do §3).
+  riskSuggestion: RiskSuggestion | null;
 
   // §4 CÉREBRO (camada de análise — LEI 24: jamais alimenta o Core Engine)
   // Item 4 — Conselho Multi-Agente (contrato versionado): 6 votos reais +
@@ -271,6 +340,26 @@ export interface UnifiedSnapshotState {
   // pontuar o nada seria fabricação). Escopada ao ativo ativo, mesmo
   // padrão de orderflowHistory.
   institutionalScoreHistory: ConvictionScoreSample[];
+  // EPC OMEGA FINAL Parte 1 ("Meta Engine", achado de auditoria): estas 3
+  // leituras já existiam como useMemo local em App.tsx — nunca tinham fatia
+  // própria no organismo, então recomputavam a cada consumidor e ficavam
+  // invisíveis para qualquer assinante futuro do bus (getSnapshotForEngine).
+  // Passthrough puro (LEI 24): nenhuma matemática nova, os motores
+  // continuam decision-layer.ts/institutional-score.ts/heat-score.ts.
+  nexusDecision: NexusDecision | null;
+  institutionalScoreReading: InstitutionalScoreReading | null;
+  heatScoreReading: HeatScoreReading | null;
+  // Diretriz Final de Integração Total ("nenhum módulo permaneça
+  // parcialmente conectado sem justificativa"): o GMIL (gmil/) já
+  // alimentava a UI real via useGmilSnapshot() (App.tsx, múltiplos
+  // widgets) — mas nunca tinha fatia no organismo central, então
+  // qualquer assinante futuro do bus (getSnapshotForEngine()) não via
+  // esse contexto. Passthrough puro do MESMO snapshot já lido pela UI —
+  // zero segunda assinatura, zero segunda leitura do gmilOrchestrator.
+  // LEI 04/24 intactas por construção: engine-bridge.ts continua sem
+  // nenhum import de gmil/ (core-engine-boundary.test.ts trava isso),
+  // esta fatia só existe no lado de exibição/contexto do organismo.
+  gmil: GmilSnapshot | null;
 
   // §5 ORGANISMO
   // Estado REAL do motor de análise (engineStatus/direção/confiança do
@@ -309,6 +398,13 @@ export interface UnifiedSnapshotState {
   // rastreamento AO VIVO do que está na tela agora, nunca deve
   // reaparecer stale de uma combinação antiga.
   trackRecordArchive: Record<string, TrackRecordState>;
+  // v16.0 PRO MAX §9.1/§9.4 ("Paper Trading"): posição simulada MANUAL
+  // (decisão explícita do Operador — AskUserQuestion — zero automação:
+  // fechamento e "trailing" só acontecem em resposta a um clique real).
+  // Distinta de trackRecord acima (aquilo resolve sozinho contra o preço,
+  // um scorecard retrospectivo de precisão; isto nunca resolve sozinho).
+  // Persistida em IndexedDB pelo mesmo motivo — histórico real acumulado.
+  paperTrading: PaperTradingState;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -345,11 +441,17 @@ interface UnifiedSnapshotActions {
   setFibonacciConfluence: (matrix: FibonacciConfluenceMatrix | null) => void;
   setPremiumDiscount: (reading: PremiumDiscountReading | null) => void;
   setHarmonicPatterns: (hits: HarmonicPatternHit[]) => void;
+  setTrianglePattern: (hit: TrianglePatternHit | null) => void;
+  setHeadShouldersPattern: (hit: HeadShouldersHit | null) => void;
+  setInstitutionalZones: (zones: InstitutionalZone[]) => void;
   setLayerRelevance: (reading: LayerRelevanceReading | null) => void;
+  setChartLayerDecision: (decision: Record<string, AutoLayerDecision> | null) => void;
+  setEvidenceFusion: (reading: EvidenceFusionReading | null) => void;
   setSmc: (zones: SmcZonesSnapshot | null) => void;
   setCvd: (cvd: number | null) => void;
   setOrderflowSignals: (signals: OrderflowSignal[]) => void;
   setConfluenceCorridor: (reading: ConfluenceCorridorReading | null) => void;
+  setRiskSuggestion: (suggestion: RiskSuggestion | null) => void;
 
   // §4 CÉREBRO
   setCouncil: (decision: CouncilDecision | null) => void;
@@ -363,6 +465,10 @@ interface UnifiedSnapshotActions {
   // (nunca chamado com null/WAIT — o efeito que chama já filtra isso).
   recordInstitutionalScore: (score: number) => void;
   resetInstitutionalScoreHistory: () => void;
+  setNexusDecision: (decision: NexusDecision | null) => void;
+  setInstitutionalScoreReading: (reading: InstitutionalScoreReading | null) => void;
+  setHeatScoreReading: (reading: HeatScoreReading | null) => void;
+  setGmil: (snapshot: GmilSnapshot | null) => void;
 
   // §5 ORGANISMO
   setCore: (core: CoreSnapshot) => void;
@@ -391,6 +497,19 @@ interface UnifiedSnapshotActions {
   // sob `key` — chamado só no cleanup do efeito de troca de
   // ativo/timeframe (App.tsx), nunca durante o uso normal.
   archiveTrackRecord: (key: string) => void;
+  // v16.0 PRO MAX §9.1/§9.4: abrir/fechar são SEMPRE chamadas por um clique
+  // real do Operador na UI — nunca por um efeito de tick de preço (ver
+  // header de nexus/paper-trading.ts). hydratePaperTrading é só para o
+  // boot (IndexedDB) e testes, mesmo padrão de hydrateTrackRecord.
+  openPaperPosition: (plan: TradePlan | null, sizeUsdt: number, symbol?: string | null, leverage?: number) => void;
+  closePaperPosition: (currentPrice: number, reason: PaperCloseReason) => void;
+  /** DCA — aporte na posição aberta, sempre a partir de um clique real. */
+  addPaperEntry: (price: number, sizeUsdt: number) => void;
+  /** Amostra a curva de capital. OBSERVAÇÃO, nunca transição: não abre nem
+   *  fecha posição, então pode ser chamada de um tick de preço sem violar o
+   *  escopo "zero automação" do módulo (ver header de nexus/paper-trading.ts). */
+  recordPaperEquity: (currentPrice: number) => void;
+  hydratePaperTrading: (state: PaperTradingState) => void;
 }
 
 export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnapshotActions>()(
@@ -412,11 +531,17 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     fibonacciConfluence: null,
     premiumDiscount: null,
     harmonicPatterns: [],
+    trianglePattern: null,
+    headShouldersPattern: null,
+    institutionalZones: [],
     layerRelevance: null,
+    chartLayerDecision: null,
+    evidenceFusion: null,
     smc: null,
     cvd: null,
     orderflowSignals: [],
     confluenceCorridor: null,
+    riskSuggestion: null,
     // §4 CÉREBRO
     council: null,
     scenario: null,
@@ -426,6 +551,10 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     multiTimeframeContext: null,
     radarCandidates: [],
     institutionalScoreHistory: [],
+    nexusDecision: null,
+    institutionalScoreReading: null,
+    heatScoreReading: null,
+    gmil: null,
     // §5 ORGANISMO
     core: EMPTY_CORE,
     health: EMPTY_HEALTH,
@@ -437,6 +566,7 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     cpi: null,
     trackRecord: EMPTY_TRACK_RECORD,
     trackRecordArchive: {},
+    paperTrading: EMPTY_PAPER_TRADING_STATE,
 
     // §1 MERCADO
     setSymbol: (symbol) => set((s) => { s.symbol = symbol; }),
@@ -466,11 +596,17 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
     setFibonacciConfluence: (matrix) => set((s) => { s.fibonacciConfluence = matrix; }),
     setPremiumDiscount: (reading) => set((s) => { s.premiumDiscount = reading; }),
     setHarmonicPatterns: (hits) => set((s) => { s.harmonicPatterns = hits; }),
+    setTrianglePattern: (hit) => set((s) => { s.trianglePattern = hit; }),
+    setHeadShouldersPattern: (hit) => set((s) => { s.headShouldersPattern = hit; }),
+    setInstitutionalZones: (zones) => set((s) => { s.institutionalZones = zones; }),
     setLayerRelevance: (reading) => set((s) => { s.layerRelevance = reading; }),
+    setChartLayerDecision: (decision) => set((s) => { s.chartLayerDecision = decision; }),
+    setEvidenceFusion: (reading) => set((s) => { s.evidenceFusion = reading; }),
     setSmc: (zones) => set((s) => { s.smc = zones; }),
     setCvd: (cvd) => set((s) => { s.cvd = cvd; }),
     setOrderflowSignals: (signals) => set((s) => { s.orderflowSignals = signals; }),
     setConfluenceCorridor: (reading) => set((s) => { s.confluenceCorridor = reading; }),
+    setRiskSuggestion: (suggestion) => set((s) => { s.riskSuggestion = suggestion; }),
     // §4 CÉREBRO
     setCouncil: (decision) => set((s) => { s.council = decision; }),
     setScenario: (projection) => set((s) => { s.scenario = projection; }),
@@ -483,6 +619,10 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
       s.institutionalScoreHistory = pushConvictionHistory(s.institutionalScoreHistory as ConvictionScoreSample[], { score, at: Date.now() });
     }),
     resetInstitutionalScoreHistory: () => set((s) => { s.institutionalScoreHistory = []; }),
+    setNexusDecision: (decision) => set((s) => { s.nexusDecision = decision; }),
+    setInstitutionalScoreReading: (reading) => set((s) => { s.institutionalScoreReading = reading; }),
+    setHeatScoreReading: (reading) => set((s) => { s.heatScoreReading = reading; }),
+    setGmil: (snapshot) => set((s) => { s.gmil = snapshot; }),
     // §5 ORGANISMO
     setCore: (core) => set((s) => { s.core = core; }),
     setHealth: (health) => set((s) => { s.health = health; }),
@@ -518,6 +658,19 @@ export const useUnifiedSnapshotStore = create<UnifiedSnapshotState & UnifiedSnap
       s.trackRecord = closed;
       s.trackRecordArchive[key] = closed;
     }),
+    openPaperPosition: (plan, sizeUsdt, symbol, leverage) => set((s) => {
+      s.paperTrading = openPaperPosition(s.paperTrading as PaperTradingState, plan, sizeUsdt, Date.now(), symbol, leverage);
+    }),
+    closePaperPosition: (currentPrice, reason) => set((s) => {
+      s.paperTrading = closePaperPosition(s.paperTrading as PaperTradingState, currentPrice, Date.now(), reason);
+    }),
+    addPaperEntry: (price, sizeUsdt) => set((s) => {
+      s.paperTrading = addPaperEntry(s.paperTrading as PaperTradingState, price, sizeUsdt, Date.now());
+    }),
+    recordPaperEquity: (currentPrice) => set((s) => {
+      s.paperTrading = recordPaperEquity(s.paperTrading as PaperTradingState, currentPrice, Date.now());
+    }),
+    hydratePaperTrading: (state) => set((s) => { s.paperTrading = state; }),
   })),
 );
 
@@ -535,6 +688,23 @@ if (typeof window !== "undefined") {
 // re-renderiza o componente quando a fatia SELECIONADA muda (comparação
 // por referência do Zustand), nunca a cada atualização de qualquer parte
 // do snapshot — é isto que resolve o gargalo do Sprint 1.
+//
+// ═══ 13 DESTES SELETORES NÃO TÊM CONSUMIDOR HOJE, E ISSO É DE PROPÓSITO ═══
+//
+// Medido em 2026-08-31 (auditoria de código morto): `useCandles`,
+// `useSmcSnapshot`, `useNexusDecisionSnapshot`, `useSymbolSnapshot` e outros
+// nove não são importados por ninguém — nem por teste. Uma varredura
+// automática de "exports órfãos" os aponta como removíveis. NÃO SÃO.
+//
+// A regra da store (CLAUDE.md, seção Arquitetura) é que todo campo aparece
+// em EXATAMENTE 4 lugares: state → action → default → seletor. A auditoria
+// confirmou 48 campos com os 4 lugares completos, sem uma falha. O preço
+// dessa consistência é justamente este: alguns seletores nascem antes do
+// primeiro consumidor. Removê-los "para limpar" quebraria a regra e faria o
+// próximo campo novo parecer opcional.
+//
+// O custo real é zero: Rollup remove export não usado do bundle. O que fica
+// é fonte, e fonte consistente é o ponto.
 // ─────────────────────────────────────────────────────────────────────────
 
 // §1 MERCADO
@@ -567,8 +737,18 @@ export const usePremiumDiscountSnapshot = (): PremiumDiscountReading | null =>
   useUnifiedSnapshotStore((s) => s.premiumDiscount);
 export const useHarmonicPatternsSnapshot = (): HarmonicPatternHit[] =>
   useUnifiedSnapshotStore((s) => s.harmonicPatterns ?? EMPTY_HARMONIC_HITS);
+export const useTrianglePatternSnapshot = (): TrianglePatternHit | null =>
+  useUnifiedSnapshotStore((s) => s.trianglePattern);
+export const useHeadShouldersPatternSnapshot = (): HeadShouldersHit | null =>
+  useUnifiedSnapshotStore((s) => s.headShouldersPattern);
+export const useInstitutionalZonesSnapshot = (): InstitutionalZone[] =>
+  useUnifiedSnapshotStore((s) => s.institutionalZones ?? EMPTY_INSTITUTIONAL_ZONES);
 export const useLayerRelevanceSnapshot = (): LayerRelevanceReading | null =>
   useUnifiedSnapshotStore((s) => s.layerRelevance);
+export const useChartLayerDecisionSnapshot = (): Record<string, AutoLayerDecision> | null =>
+  useUnifiedSnapshotStore((s) => s.chartLayerDecision);
+export const useEvidenceFusionSnapshot = (): EvidenceFusionReading | null =>
+  useUnifiedSnapshotStore((s) => s.evidenceFusion);
 export const useSmcSnapshot = (): SmcZonesSnapshot | null =>
   useUnifiedSnapshotStore((s) => s.smc);
 export const useCvdSnapshot = (): number | null =>
@@ -577,6 +757,8 @@ export const useOrderflowSignalsSnapshot = (): OrderflowSignal[] =>
   useUnifiedSnapshotStore((s) => s.orderflowSignals ?? EMPTY_ORDERFLOW_SIGNALS);
 export const useConfluenceCorridorSnapshot = (): ConfluenceCorridorReading | null =>
   useUnifiedSnapshotStore((s) => s.confluenceCorridor);
+export const useRiskSuggestionSnapshot = (): RiskSuggestion | null =>
+  useUnifiedSnapshotStore((s) => s.riskSuggestion);
 
 // §4 CÉREBRO
 export const useCouncilSnapshot = (): CouncilDecision | null =>
@@ -596,6 +778,14 @@ export const useRadarCandidatesSnapshot = (): RadarQualificationResult[] =>
   useUnifiedSnapshotStore((s) => s.radarCandidates ?? EMPTY_RADAR_CANDIDATES);
 export const useInstitutionalScoreHistory = (): ConvictionScoreSample[] =>
   useUnifiedSnapshotStore((s) => s.institutionalScoreHistory ?? EMPTY_CONVICTION_HISTORY);
+export const useNexusDecisionSnapshot = (): NexusDecision | null =>
+  useUnifiedSnapshotStore((s) => s.nexusDecision);
+export const useInstitutionalScoreReadingSnapshot = (): InstitutionalScoreReading | null =>
+  useUnifiedSnapshotStore((s) => s.institutionalScoreReading);
+export const useHeatScoreReadingSnapshot = (): HeatScoreReading | null =>
+  useUnifiedSnapshotStore((s) => s.heatScoreReading);
+export const useGmilSnapshotFromStore = (): GmilSnapshot | null =>
+  useUnifiedSnapshotStore((s) => s.gmil);
 
 // §5 ORGANISMO
 export const useCoreSnapshot = (): CoreSnapshot => useUnifiedSnapshotStore((s) => s.core);
@@ -612,3 +802,5 @@ export const useTrackRecordSnapshot = (): TrackRecordState =>
   useUnifiedSnapshotStore((s) => s.trackRecord);
 export const useTrackRecordArchive = (): Record<string, TrackRecordState> =>
   useUnifiedSnapshotStore((s) => s.trackRecordArchive);
+export const usePaperTradingSnapshot = (): PaperTradingState =>
+  useUnifiedSnapshotStore((s) => s.paperTrading);

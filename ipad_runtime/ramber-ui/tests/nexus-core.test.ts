@@ -45,7 +45,7 @@ describe('TypedEventBus: publica só para assinantes do tipo certo, nunca cross-
 
   it('emit em tipo sem nenhum assinante nunca lança', () => {
     const bus = new TypedEventBus();
-    expect(() => bus.emit({ type: 'HEALTH.CHANGED', payload: { fps: 60, cycleLatencyMs: 10, memoryMb: null, workersAlive: 1, isOnline: true, lastUpdatedAt: Date.now() } })).not.toThrow();
+    expect(() => bus.emit({ type: 'HEALTH.CHANGED', payload: { fps: 60, cycleLatencyMs: 10, memoryMb: null, workersAlive: 1, lastUpdatedAt: Date.now() } })).not.toThrow();
   });
 
   it('clear() remove todos os assinantes de todos os tipos', () => {
@@ -55,6 +55,75 @@ describe('TypedEventBus: publica só para assinantes do tipo certo, nunca cross-
     bus.clear();
     expect(bus.listenerCount('UI.SYMBOL_CHANGED')).toBe(0);
     expect(bus.listenerCount('UI.TIMEFRAME_CHANGED')).toBe(0);
+  });
+});
+
+describe('TypedEventBus.onAny: canal de observação para todo tipo de evento de uma vez (Terminal Event Log)', () => {
+  it('onAny recebe o evento COMPLETO (type + payload), nunca só o payload', () => {
+    const bus = new TypedEventBus();
+    const received: any[] = [];
+    bus.onAny((event) => received.push(event));
+    bus.emit({ type: 'UI.SYMBOL_CHANGED', payload: { symbol: 'ETH' } });
+    expect(received).toEqual([{ type: 'UI.SYMBOL_CHANGED', payload: { symbol: 'ETH' } }]);
+  });
+
+  it('onAny recebe eventos de tipos DIFERENTES na mesma assinatura, sem precisar de um on() por tipo', () => {
+    const bus = new TypedEventBus();
+    const types: string[] = [];
+    bus.onAny((event) => types.push(event.type));
+    bus.emit({ type: 'UI.SYMBOL_CHANGED', payload: { symbol: 'ETH' } });
+    bus.emit({ type: 'OFFLINE.CHANGED', payload: { offline: true } });
+    bus.emit({ type: 'BRAIN.NEXUS_DECISION.UPDATED', payload: { decision: null } });
+    expect(types).toEqual(['UI.SYMBOL_CHANGED', 'OFFLINE.CHANGED', 'BRAIN.NEXUS_DECISION.UPDATED']);
+  });
+
+  it('on() de um tipo específico e onAny coexistem — os dois recebem o mesmo emit(), nenhum bloqueia o outro', () => {
+    const bus = new TypedEventBus();
+    const specific: any[] = [];
+    const any_: any[] = [];
+    bus.on('OFFLINE.CHANGED', (p) => specific.push(p));
+    bus.onAny((e) => any_.push(e));
+    bus.emit({ type: 'OFFLINE.CHANGED', payload: { offline: false } });
+    expect(specific).toEqual([{ offline: false }]);
+    expect(any_).toEqual([{ type: 'OFFLINE.CHANGED', payload: { offline: false } }]);
+  });
+
+  it('a função de cancelamento devolvida por onAny para de receber eventos', () => {
+    const bus = new TypedEventBus();
+    const received: any[] = [];
+    const off = bus.onAny((e) => received.push(e));
+    bus.emit({ type: 'UI.SYMBOL_CHANGED', payload: { symbol: 'BTC' } });
+    off();
+    bus.emit({ type: 'UI.SYMBOL_CHANGED', payload: { symbol: 'SOL' } });
+    expect(received.length).toBe(1);
+  });
+
+  it('um assinante onAny que lança exceção nunca impede outro onAny nem os on() específicos de receber', () => {
+    const bus = new TypedEventBus();
+    const received: any[] = [];
+    bus.onAny(() => {
+      throw new Error('assinante onAny com bug');
+    });
+    bus.onAny((e) => received.push(e));
+    const specific: any[] = [];
+    bus.on('OFFLINE.CHANGED', (p) => specific.push(p));
+    expect(() => bus.emit({ type: 'OFFLINE.CHANGED', payload: { offline: true } })).not.toThrow();
+    expect(received.length).toBe(1);
+    expect(specific).toEqual([{ offline: true }]);
+  });
+
+  it('clear() remove também os assinantes onAny, não só os on() por tipo', () => {
+    const bus = new TypedEventBus();
+    const received: any[] = [];
+    bus.onAny((e) => received.push(e));
+    bus.clear();
+    bus.emit({ type: 'UI.SYMBOL_CHANGED', payload: { symbol: 'ETH' } });
+    expect(received).toEqual([]);
+  });
+
+  it('emit sem nenhum assinante onAny nunca lança', () => {
+    const bus = new TypedEventBus();
+    expect(() => bus.emit({ type: 'UI.SYMBOL_CHANGED', payload: { symbol: 'BTC' } })).not.toThrow();
   });
 });
 

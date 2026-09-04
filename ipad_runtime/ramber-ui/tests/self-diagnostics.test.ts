@@ -8,8 +8,9 @@
 import { describe, it, expect } from 'vitest';
 import { buildDiagnosticReport, formatDiagnosticReportMarkdown, type DiagnosticInput } from '../src/nexus/self-diagnostics';
 import type { HealthSnapshot } from '../src/nexus/types';
+import { STAGE_ORDER, type StageTrace } from '../src/nexus/stage-runner';
 
-const HEALTHY_HEALTH: HealthSnapshot = { fps: 60, cycleLatencyMs: 300, memoryMb: 50, workersAlive: 1, isOnline: true, lastUpdatedAt: 1 };
+const HEALTHY_HEALTH: HealthSnapshot = { fps: 60, cycleLatencyMs: 300, memoryMb: 50, workersAlive: 1, lastUpdatedAt: 1 };
 
 function baseInput(overrides: Partial<DiagnosticInput> = {}): DiagnosticInput {
   return {
@@ -20,9 +21,35 @@ function baseInput(overrides: Partial<DiagnosticInput> = {}): DiagnosticInput {
     engineReason: null,
     dataQualityClassification: 'EXCELENTE',
     connections: {},
+    // null honesto por padrão nesta suíte (a maioria dos casos aqui não
+    // testa o pipeline causal) — ver describe dedicado abaixo.
+    stageTrace: null,
+    // null honesto por padrão (a maioria dos casos aqui não testa Evidence
+    // Fusion) — ver describe dedicado abaixo.
+    evidenceFusionFieldCoverage: null,
     ...overrides,
   };
 }
+
+// Fixture real (nunca fabricada à mão fora de forma): mesma estrutura que
+// traceStages() de fato devolve, construída explicitamente para os 2
+// cenários reais que importam aqui — cadeia completa e cadeia quebrada.
+const completeTrace = (seq: number): StageTrace => ({
+  seq,
+  stages: STAGE_ORDER.map((id) => ({ id, ok: true, reason: 'ok real' })),
+  reachedIndex: STAGE_ORDER.length - 1,
+});
+const brokenTrace = (seq: number): StageTrace => ({
+  seq,
+  stages: [
+    { id: 'DATA', ok: true, reason: 'preço real recebido' },
+    { id: 'CORE_ENGINE', ok: false, reason: 'ciclo real do motor falhou (rede/wasm) — nunca fabricar direção a partir daqui' },
+    { id: 'COUNCIL', ok: false, reason: 'estágio anterior (CORE_ENGINE) sem insumo real' },
+    { id: 'TRADE_PLAN', ok: false, reason: 'estágio anterior (COUNCIL) sem insumo real' },
+    { id: 'NEXUS_DECISION', ok: false, reason: 'estágio anterior (TRADE_PLAN) sem insumo real' },
+  ],
+  reachedIndex: 0,
+});
 
 describe('buildDiagnosticReport: tudo saudável => severidade geral OK, nenhum achado real de alerta', () => {
   it('sinais todos bons => OK, zero achados WARN/CRITICAL', () => {
@@ -100,9 +127,96 @@ describe('buildDiagnosticReport: cada sinal real degradado sobe a severidade hon
 
   it('sem dado real ainda (offline=false mas isDataFresh=false, nada mais lido) => WARN honesto, nunca inventa OK', () => {
     const report = buildDiagnosticReport(
-      baseInput({ isDataFresh: false, dataQualityClassification: null, health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 1, isOnline: true, lastUpdatedAt: 0 } }),
+      baseInput({ isDataFresh: false, dataQualityClassification: null, health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 1, lastUpdatedAt: 0 } }),
     );
     expect(report.overallSeverity).not.toBe('OK');
+  });
+});
+
+describe('EPC OMEGA FINAL Parte 3: memória real (heap JS) agora vira achado visível, sem limiar fabricado', () => {
+  it('memoryMb real presente => achado OK com o número real, nunca um julgamento de severidade sem calibração', () => {
+    const report = buildDiagnosticReport(baseInput({ health: { ...HEALTHY_HEALTH, memoryMb: 128.4 } }));
+    const finding = report.findings.find((f) => f.label === 'Memória (heap JS)');
+    expect(finding?.severity).toBe('OK');
+    expect(finding?.detail).toContain('128MB');
+  });
+
+  it('memoryMb null (browser não expõe, ex. Firefox) => OK honesto, nunca WARN/CRITICAL por ausência de instrumentação', () => {
+    const report = buildDiagnosticReport(baseInput({ health: { ...HEALTHY_HEALTH, memoryMb: null } }));
+    const finding = report.findings.find((f) => f.label === 'Memória (heap JS)');
+    expect(finding?.severity).toBe('OK');
+    expect(finding?.detail).toContain('não expõe');
+  });
+});
+
+// ORDEM OFICIAL Nº 01 (Autogovernança): traceStages() ganha seu primeiro
+// consumidor ao vivo aqui — trava que o achado "Pipeline causal" reflete
+// SÓ o StageTrace real recebido (zero segunda leitura, zero fabricação) e
+// nunca escala a severidade geral além de WARN (a causa raiz de um
+// estágio quebrado já é CRITICAL em outro achado — nunca um alarme
+// duplicado).
+describe('buildDiagnosticReport: "Pipeline causal" (ORDEM Nº 01) — traceStages() real, nunca uma segunda detecção', () => {
+  it('stageTrace null (chamador ainda sem leitura real) => nenhum achado "Pipeline causal" fabricado', () => {
+    const report = buildDiagnosticReport(baseInput({ stageTrace: null }));
+    expect(report.findings.find((f) => f.label === 'Pipeline causal')).toBeUndefined();
+  });
+
+  it('cadeia real completa (reachedIndex = último estágio) => OK, lista a ordem real STAGE_ORDER', () => {
+    const report = buildDiagnosticReport(baseInput({ stageTrace: completeTrace(7) }));
+    const finding = report.findings.find((f) => f.label === 'Pipeline causal');
+    expect(finding?.severity).toBe('OK');
+    expect(finding?.detail).toBe(`Cadeia completa: ${STAGE_ORDER.join(' → ')}.`);
+  });
+
+  it('cadeia real quebrada (CORE_ENGINE falhou) => WARN, motivo é o `reason` REAL do estágio quebrado — zero re-redação', () => {
+    const report = buildDiagnosticReport(baseInput({ stageTrace: brokenTrace(7) }));
+    const finding = report.findings.find((f) => f.label === 'Pipeline causal');
+    expect(finding?.severity).toBe('WARN');
+    expect(finding?.detail).toContain('Alcançou até DATA');
+    expect(finding?.detail).toContain('ciclo real do motor falhou (rede/wasm) — nunca fabricar direção a partir daqui');
+  });
+
+  it('"Pipeline causal" NUNCA escala overallSeverity além de WARN, mesmo com toda a cadeia quebrada e o resto do input saudável — a causa raiz já é CRITICAL em outro achado, nunca um alarme duplicado', () => {
+    const report = buildDiagnosticReport(baseInput({ stageTrace: brokenTrace(1) }));
+    expect(report.overallSeverity).toBe('WARN');
+  });
+
+  it('reachedIndex -1 (nem o primeiro estágio real) => "nenhum estágio" honesto, nunca um índice negativo vazando pro texto', () => {
+    const allBroken: StageTrace = {
+      seq: 1,
+      stages: [{ id: 'DATA', ok: false, reason: 'sem tick real ainda (boot ou troca de ativo recente)' }],
+      reachedIndex: -1,
+    };
+    const report = buildDiagnosticReport(baseInput({ stageTrace: allBroken }));
+    const finding = report.findings.find((f) => f.label === 'Pipeline causal');
+    expect(finding?.detail).toContain('Alcançou até nenhum estágio');
+    expect(finding?.detail).not.toContain('-1');
+  });
+});
+
+// Ordem Fechamento (§3, "Evidence Fusion... barramento inteligente"):
+// primeiro consumidor real de evidenceFusion via a store — mesma
+// disciplina de "Pipeline causal" acima (nunca uma 2ª medição, achado
+// sempre OK porque este repositório não tem limiar calibrado, mesmo
+// princípio de "Memória (heap JS)" acima).
+describe('buildDiagnosticReport: "Evidence Fusion · cobertura do contrato" (Ordem Fechamento §3)', () => {
+  it('evidenceFusionFieldCoverage null (nenhuma leitura publicada ainda) => OK honesto, texto explica a ausência', () => {
+    const report = buildDiagnosticReport(baseInput({ evidenceFusionFieldCoverage: null }));
+    const finding = report.findings.find((f) => f.label === 'Evidence Fusion · cobertura do contrato');
+    expect(finding?.severity).toBe('OK');
+    expect(finding?.detail).toContain('Ainda sem leitura real publicada');
+  });
+
+  it('evidenceFusionFieldCoverage real (0.5 = 5/10 campos) => OK, número real formatado como porcentagem, nunca WARN/CRITICAL sem limiar calibrado', () => {
+    const report = buildDiagnosticReport(baseInput({ evidenceFusionFieldCoverage: 0.5 }));
+    const finding = report.findings.find((f) => f.label === 'Evidence Fusion · cobertura do contrato');
+    expect(finding?.severity).toBe('OK');
+    expect(finding?.detail).toContain('50%');
+  });
+
+  it('evidenceFusionFieldCoverage nunca eleva overallSeverity (sempre OK, mesmo cobertura baixa) — mesmo princípio de "Memória (heap JS)"', () => {
+    const report = buildDiagnosticReport(baseInput({ evidenceFusionFieldCoverage: 0.1 }));
+    expect(report.overallSeverity).toBe('OK');
   });
 });
 

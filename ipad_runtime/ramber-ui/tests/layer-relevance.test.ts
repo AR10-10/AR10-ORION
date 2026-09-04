@@ -12,6 +12,7 @@ import { dirname, resolve } from 'node:path';
 import {
   computeLayerRelevance,
   RELEVANCE_LAYER_IDS,
+  AUTO_LAYER_PRECISION_ORDER,
   LIQUIDITY_PROXIMITY_PCT,
   VOLUME_PROFILE_PROXIMITY_PCT,
   FIBONACCI_PROXIMITY_PCT,
@@ -21,6 +22,7 @@ import {
   TREND_CHANNEL_HIGHLIGHT_BANDWIDTH_PCT,
   STRUCTURE_BREAK_HIGHLIGHT_MIN_ALPHA,
   LIQUIDITY_HIGHLIGHT_MIN_OBSTACLES,
+  MARKET_REGIME_TREND_LABELS,
   type LayerRelevanceInput,
 } from '../src/nexus/layer-relevance';
 
@@ -34,27 +36,47 @@ const BASE: LayerRelevanceInput = {
   tradePlanActive: false,
   obstacleZoneCount: 0,
   unsweptLiquidityNearPrice: false,
+  hasUnmitigatedStructuralZone: false,
   structureBreakAlpha: null,
   volumeProfileNearPrice: false,
   harmonicBestFitScore: null,
   fibonacciNearPrice: false,
+  hasFibonacciLevels: false,
   premiumDiscountZone: null,
   vwapState: null,
   nexusLineState: null,
   trendChannelBandwidthPct: null,
   orderflowTrendActive: false,
   hasOrderBook: false,
+  hasTpoProfile: false,
+  hasZigZagPivots: false,
+  hasSuperTrend: false,
   hasRecentLiquidation: false,
   hasRecentLiquiditySweep: false,
   recentSessionBoundary: false,
+  hasActiveKillZone: false,
+  hasSessionKeyLevelNearPrice: false,
+  marketRegime: null,
+  hasScenario: false,
+  hasCandlePatterns: false,
+  institutionalZoneCount: 0,
+  hasAuraSignal: false,
+  hasPivotPoints: false,
+  hasIchimoku: false,
+  hasDeltaDivergence: false,
+  hasAndrewsPitchfork: false,
+  deltaDivergenceCoveredCandles: 0,
 };
 
 describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent.tsx) 1:1 — zero drift, zero gap', () => {
   // Declutter do gráfico (pedido direto do Operador): os 3 gaps antigos
   // (liquidation_heatmap/liquidity_sweep/market_sessions sem regra própria
   // de relevância, caindo no fallback `relevance?.relevant ?? true` do
-  // ChartLayersPanel) foram fechados — as 18 camadas reais agora têm
-  // cobertura 1:1, sem exceção documentada nenhuma.
+  // ChartLayersPanel) foram fechados — as 24 camadas reais agora têm
+  // cobertura 1:1, sem exceção documentada nenhuma (kill_zones/
+  // session_key_levels/institutional_zones/order_book_depth/tpo_profile/
+  // zigzag somaram-se depois, mesma disciplina desde o nascimento de cada
+  // camada — zigzag graduado do Laboratório na Entrega 47).
   it('toda chave de CHART_LAYER_IDS está em RELEVANCE_LAYER_IDS — nunca esquecida silenciosamente', () => {
     const chartSrc = read('../src/chart/EnhancedChart_110_Percent.tsx');
     const m = chartSrc.match(/export const CHART_LAYER_IDS = \[([\s\S]*?)\] as const;/);
@@ -64,7 +86,7 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of chartIds) {
       expect(relevanceSet.has(id), `camada "${id}" existe em CHART_LAYER_IDS mas não em RELEVANCE_LAYER_IDS`).toBe(true);
     }
-    expect(chartIds.length).toBe(18);
+    expect(chartIds.length).toBe(31); // +pivot_points, +ichimoku, +delta_divergence, +andrews_pitchfork
   });
 
   it('toda chave de RELEVANCE_LAYER_IDS é uma camada real de CHART_LAYER_IDS — nunca uma chave órfã', () => {
@@ -74,12 +96,12 @@ describe('RELEVANCE_LAYER_IDS espelha CHART_LAYER_IDS (EnhancedChart_110_Percent
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(chartIds.has(id), `RELEVANCE_LAYER_IDS tem "${id}" que não existe mais em CHART_LAYER_IDS`).toBe(true);
     }
-    expect(RELEVANCE_LAYER_IDS.length).toBe(18);
+    expect(RELEVANCE_LAYER_IDS.length).toBe(31); // +pivot_points, +ichimoku, +delta_divergence, +andrews_pitchfork
   });
 });
 
-describe('computeLayerRelevance: completude — sempre devolve as 18 chaves, nunca uma faltando', () => {
-  it('baseline vazio ainda produz um resultado para cada uma das 18 camadas', () => {
+describe('computeLayerRelevance: completude — sempre devolve as 25 chaves, nunca uma faltando', () => {
+  it('baseline vazio ainda produz um resultado para cada camada real', () => {
     const reading = computeLayerRelevance(BASE);
     for (const id of RELEVANCE_LAYER_IDS) {
       expect(reading[id], `faltando chave ${id}`).toBeDefined();
@@ -141,15 +163,17 @@ describe('EPC FINAL §3/§12: emphasis (destaque) — só sobre um gradiente REA
       hasRecentLiquidation: true,
       hasRecentLiquiditySweep: true,
       recentSessionBoundary: true,
+      hasActiveKillZone: true,
+      hasSessionKeyLevelNearPrice: true,
     });
-    for (const id of ['volume_profile', 'fibonacci', 'order_flow_heatmap', 'cvd', 'premium_discount', 'vwap', 'nexus_line', 'ema', 'equal_highs_lows', 'liquidation_heatmap', 'liquidity_sweep', 'market_sessions'] as const) {
+    for (const id of ['volume_profile', 'fibonacci', 'order_flow_heatmap', 'cvd', 'premium_discount', 'vwap', 'nexus_line', 'ema', 'equal_highs_lows', 'liquidation_heatmap', 'liquidity_sweep', 'market_sessions', 'kill_zones', 'session_key_levels'] as const) {
       expect(r[id].emphasis, `${id} não deveria ter highlight fabricado`).toBe('normal');
     }
   });
 });
 
-describe('liquidity_zones: obstáculo real no caminho OU liquidez real próxima, nunca inventado', () => {
-  it('sem plano ativo e sem liquidez próxima => não relevante', () => {
+describe('liquidity_zones: obstáculo real no caminho OU liquidez real próxima OU FVG/OB real não mitigado, nunca inventado', () => {
+  it('sem plano ativo, sem liquidez próxima e sem FVG/OB real => não relevante', () => {
     expect(computeLayerRelevance(BASE).liquidity_zones.relevant).toBe(false);
   });
   it('plano ativo mas 0 obstáculos reais no caminho => não relevante por obstáculo (obstacleZoneCount governa, não só tradePlanActive)', () => {
@@ -164,6 +188,20 @@ describe('liquidity_zones: obstáculo real no caminho OU liquidez real próxima,
   it('sem plano mas liquidez real não varrida perto do preço => relevante mesmo assim', () => {
     const r = computeLayerRelevance({ ...BASE, unsweptLiquidityNearPrice: true });
     expect(r.liquidity_zones.relevant).toBe(true);
+  });
+  // Achado real (relato do Operador após captura de tela real: FVG/Order
+  // Blocks somem do gráfico depois de um movimento forte de preço) —
+  // existência real de uma zona não mitigada já basta, mesmo longe do
+  // preço vivo e sem obstáculo no caminho do plano.
+  it('sem obstáculo, sem liquidez próxima, mas com FVG/Order Block real não mitigado (longe do preço) => relevante mesmo assim', () => {
+    const r = computeLayerRelevance({ ...BASE, hasUnmitigatedStructuralZone: true });
+    expect(r.liquidity_zones.relevant).toBe(true);
+    expect(r.liquidity_zones.reason).toContain('não mitigado');
+  });
+  it('nenhum dos 3 sinais reais (obstáculo/proximidade/zona não mitigada) => motivo honesto cita os 3', () => {
+    const r = computeLayerRelevance(BASE).liquidity_zones;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('nenhuma zona real no caminho');
   });
 });
 
@@ -203,15 +241,150 @@ describe('volume_profile: proximidade real a POC/HVN', () => {
   });
 });
 
-describe('trade_plan_zone / neural_market_aura: NUNCA sujeitos ao gate — próprio ciclo de vida real', () => {
+// Achado 2.1 (ORDEM DEFINITIVA — MAPEAMENTO_VISUAL_CANVAS_2026-08-17.md):
+// Volume Profile e TPO Profile calculam o MESMO conceito (Point of
+// Control/Value Area) por 2 metodologias reais diferentes — a regra
+// nova exige 1 representação visual canônica, nunca as 2 automáticas ao
+// mesmo tempo. TPO continua 100% calculado (hasTpoProfile só descreve
+// disponibilidade real do dado) — só para de entrar em modo automático.
+describe('tpo_profile: nunca automático — Volume Profile é o Point of Control canônico (Achado 2.1)', () => {
+  it('perfil TPO disponível, mas nunca relevante em modo automático (Volume Profile já é o canônico)', () => {
+    const r = computeLayerRelevance({ ...BASE, hasTpoProfile: true }).tpo_profile;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('canônico');
+  });
+  it('sem perfil TPO real disponível => motivo honesto de DADOS_INSUFICIENTES, nunca o mesmo motivo de cima', () => {
+    const r = computeLayerRelevance(BASE).tpo_profile;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('candle real suficiente');
+  });
+  it('volume_profile permanece o único gate por proximidade real — nada mudou no lado canônico', () => {
+    expect(computeLayerRelevance({ ...BASE, volumeProfileNearPrice: true }).volume_profile.relevant).toBe(true);
+  });
+});
+
+// Achado 2.5 (Visual Cleanup & Rendering Audit — pedido do Operador:
+// "tirar os excessos de linha"): grep confirmou que o Motor de Cenários
+// (SCENARIO A/B, "Future Path Map") era a ÚNICA camada real do gráfico
+// sem NENHUM controle — nem toggle manual (CHART_LAYER_IDS), nem regra
+// de relevância automática. Mesma disciplina de existência real de
+// hasFibonacciLevels/hasZigZagPivots/hasTpoProfile — nunca proximidade.
+describe('scenario_projection: existência real (Achado 2.5) — mesmo padrão de hasFibonacciLevels/hasZigZagPivots', () => {
+  it('sem nenhum alvo real projetado em nenhum caminho => não relevante, motivo honesto', () => {
+    const r = computeLayerRelevance(BASE).scenario_projection;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('nenhum alvo real projetado');
+  });
+  it('com pelo menos 1 alvo real projetado => relevante, motivo cita o Motor de Cenários', () => {
+    const r = computeLayerRelevance({ ...BASE, hasScenario: true }).scenario_projection;
+    expect(r.relevant).toBe(true);
+    expect(r.reason).toContain('Motor de Cenários');
+  });
+  it('nunca fica highlight — sem gradiente real de força pra medir (booleano puro, mesma honestidade das outras camadas de existência)', () => {
+    expect(computeLayerRelevance({ ...BASE, hasScenario: true }).scenario_projection.emphasis).toBe('normal');
+  });
+});
+
+// Auditoria do ecossistema de indicadores (pedido direto do Operador: "qual
+// ferramenta que está faltando"): mesma disciplina de existência real de
+// hasZigZagPivots/hasTpoProfile/hasScenario acima — nunca proximidade, um
+// nível diário estático continua útil o dia inteiro.
+describe('pivot_points: existência real (candle diário fechado disponível) — mesmo padrão de hasZigZagPivots/hasTpoProfile', () => {
+  it('sem candle diário fechado real ainda => não relevante, motivo honesto', () => {
+    const r = computeLayerRelevance(BASE).pivot_points;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('sem candle diário fechado real');
+  });
+  it('com Pivot Points reais disponíveis => relevante', () => {
+    const r = computeLayerRelevance({ ...BASE, hasPivotPoints: true }).pivot_points;
+    expect(r.relevant).toBe(true);
+    expect(r.reason).toContain('Pivot Points reais');
+  });
+  it('nunca fica highlight — booleano puro, mesma honestidade de scenario_projection/zigzag', () => {
+    expect(computeLayerRelevance({ ...BASE, hasPivotPoints: true }).pivot_points.emphasis).toBe('normal');
+  });
+});
+
+describe('ichimoku: existência real (aquecimento de 52 candles), nunca proximidade', () => {
+  it('sem aquecimento cumprido => não relevante, motivo honesto', () => {
+    const r = computeLayerRelevance(BASE).ichimoku;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('52');
+  });
+  it('com Ichimoku real => relevante', () => {
+    const r = computeLayerRelevance({ ...BASE, hasIchimoku: true }).ichimoku;
+    expect(r.relevant).toBe(true);
+    expect(r.reason).toContain('Ichimoku');
+  });
+  // A nuvem é contexto CONTÍNUO de fundo (como VWAP/EMA), nunca um evento
+  // pontual: um destaque aqui competiria com BOS/sweep, que são o
+  // "aconteceu AQUI" real. Mesmo motivo do zigzag/pivot_points acima.
+  it('nunca fica highlight — contexto contínuo não disputa atenção com evento', () => {
+    expect(computeLayerRelevance({ ...BASE, hasIchimoku: true }).ichimoku.emphasis).toBe('normal');
+  });
+});
+
+// A ÚNICA camada cuja régua é a LEITURA e não a existência do motor. O teste
+// existe para travar isso: se alguém "uniformizar" a regra para o padrão de
+// existência das demais graduações, a camada passa a ocupar vaga do teto de 6
+// desenhando nada — o oposto do que o teto foi criado para resolver.
+describe('delta_divergence: relevância é a LEITURA, nunca a disponibilidade do motor', () => {
+  it('sem divergência e sem CVD retido => motivo ensina o que falta, não "sem dado"', () => {
+    const r = computeLayerRelevance(BASE).delta_divergence;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('CVD');
+  });
+  it('com CVD real mas SEM divergência => não relevante, e o motivo traz o número real de velas', () => {
+    const r = computeLayerRelevance({ ...BASE, deltaDivergenceCoveredCandles: 4 }).delta_divergence;
+    expect(r.relevant).toBe(false);
+    expect(r.reason).toContain('4 velas');
+  });
+  it('com divergência real => relevante E highlight (evento raro merece a tela)', () => {
+    const r = computeLayerRelevance({ ...BASE, hasDeltaDivergence: true }).delta_divergence;
+    expect(r.relevant).toBe(true);
+    expect(r.emphasis).toBe('highlight');
+  });
+  // O achado medido de candle_patterns: "fora da lista entra por último" era,
+  // na prática, "nunca". Esta camada não pode repetir aquilo.
+  it('está cadastrada em AUTO_LAYER_PRECISION_ORDER — nunca dependendo do "por último"', () => {
+    expect(AUTO_LAYER_PRECISION_ORDER).toContain('delta_divergence');
+  });
+});
+
+describe('trade_plan_zone / neural_market_aura / institutional_zones: existência real, nunca "sem gate"', () => {
   it('trade_plan_zone segue tradePlanActive diretamente (Conselho ou fallback do Núcleo, já resolvido pelo chamador)', () => {
     expect(computeLayerRelevance(BASE).trade_plan_zone.relevant).toBe(false);
     expect(computeLayerRelevance({ ...BASE, tradePlanActive: true }).trade_plan_zone.relevant).toBe(true);
   });
-  it('neural_market_aura é sempre relevante — motivo explicita que não é sujeito ao gate', () => {
-    const r = computeLayerRelevance(BASE).neural_market_aura;
-    expect(r.relevant).toBe(true);
-    expect(r.reason).toContain('nunca sujeito ao gate');
+
+  // CORRIGIDO (achado medido desta rodada): neural_market_aura e
+  // institutional_zones eram relevant:true INCONDICIONAL — "ciclo de vida
+  // próprio, nunca sujeito ao gate". O raciocínio original estava certo
+  // sobre o DESENHO (uma Aura sem plano / uma lista de zonas vazia não
+  // pinta nada) e errado sobre a DISPUTA: relevant:true incondicional fazia
+  // a camada vencer SEMPRE uma vaga no teto do modo automático
+  // (resolveAutoLayerVisibility), mesmo sem nada real pra mostrar —
+  // institutional_zones é rank 3 em AUTO_LAYER_PRECISION_ORDER, então uma
+  // zona vazia (comum: exige ≥2 fontes em confluência) empurrava pra fora
+  // uma camada de posição mais baixa com CONTEÚDO real. Estes dois testes
+  // agora provam o invariante oposto do original: nada real -> IRrelevante.
+  it('neural_market_aura exige sinal real da Aura (status OK e um plano geométrico presente)', () => {
+    const semSinal = computeLayerRelevance({ ...BASE, hasAuraSignal: false }).neural_market_aura;
+    expect(semSinal.relevant, 'Aura vazia não pode vencer vaga no teto automático').toBe(false);
+
+    const comSinal = computeLayerRelevance({ ...BASE, hasAuraSignal: true }).neural_market_aura;
+    expect(comSinal.relevant).toBe(true);
+    expect(comSinal.reason).toContain('corredor real');
+  });
+
+  it('institutional_zones exige contagem real de confluência (>0), nunca relevante com lista vazia', () => {
+    const vazia = computeLayerRelevance({ ...BASE, institutionalZoneCount: 0 }).institutional_zones;
+    expect(vazia.relevant, 'lista vazia não pode vencer vaga no teto automático').toBe(false);
+    expect(vazia.reason).toContain('vazia');
+
+    const comZonas = computeLayerRelevance({ ...BASE, institutionalZoneCount: 2 }).institutional_zones;
+    expect(comZonas.relevant).toBe(true);
+    expect(comZonas.reason).toContain('2');
   });
 });
 
@@ -243,6 +416,65 @@ describe('trend_channel: banda real estreita = estruturalmente informativo', () 
   });
 });
 
+// "HOMOLOGAÇÃO DA ORDEM Nº 03 / ORGANISMO INTELIGENTE ADAPTATIVO":
+// contexto operacional real (regime-engine.js) como 2ª justificativa
+// INDEPENDENTE de relevância — banda larga não invalida um regime real
+// de momentum confirmado (o canal pode estar largo justamente porque
+// está expandindo COM a tendência).
+describe('trend_channel: regime real (contexto operacional) confirma relevância mesmo com banda larga/desconhecida', () => {
+  it('MARKET_REGIME_TREND_LABELS contém exatamente os 2 rótulos reais de momentum confirmado', () => {
+    expect(MARKET_REGIME_TREND_LABELS).toEqual(new Set(['TENDENCIA_FORTE', 'BREAKOUT']));
+  });
+
+  it('regime TENDENCIA_FORTE real, banda ainda null (não calculada) => relevante mesmo assim', () => {
+    const r = computeLayerRelevance({ ...BASE, marketRegime: 'TENDENCIA_FORTE' });
+    expect(r.trend_channel.relevant).toBe(true);
+    expect(r.trend_channel.reason).toContain('TENDENCIA_FORTE');
+  });
+
+  it('regime BREAKOUT real, banda real LARGA (acima do limiar) => relevante mesmo assim (momentum vence banda larga)', () => {
+    const r = computeLayerRelevance({ ...BASE, marketRegime: 'BREAKOUT', trendChannelBandwidthPct: TREND_CHANNEL_TIGHT_BANDWIDTH_PCT + 10 });
+    expect(r.trend_channel.relevant).toBe(true);
+  });
+
+  it('regime BREAKOUT real sozinho (banda null) => highlight direto — o rótulo mais extremo do motor não precisa de banda estreita também', () => {
+    const r = computeLayerRelevance({ ...BASE, marketRegime: 'BREAKOUT' });
+    expect(r.trend_channel.emphasis).toBe('highlight');
+  });
+
+  it('regime TENDENCIA_FORTE real sozinho (banda null) => relevante mas SEM highlight — só BREAKOUT confirma o extremo sozinho', () => {
+    const r = computeLayerRelevance({ ...BASE, marketRegime: 'TENDENCIA_FORTE' });
+    expect(r.trend_channel.relevant).toBe(true);
+    expect(r.trend_channel.emphasis).toBe('normal');
+  });
+
+  it('regime CONSOLIDACAO/COMPRESSAO real (sem momentum confirmado) => nunca confirma relevância sozinho', () => {
+    expect(computeLayerRelevance({ ...BASE, marketRegime: 'CONSOLIDACAO' }).trend_channel.relevant).toBe(false);
+    expect(computeLayerRelevance({ ...BASE, marketRegime: 'COMPRESSAO' }).trend_channel.relevant).toBe(false);
+  });
+
+  it('regime TENDENCIA_MODERADA real (ambíguo por design do próprio motor) => nunca confirma relevância sozinho', () => {
+    expect(computeLayerRelevance({ ...BASE, marketRegime: 'TENDENCIA_MODERADA' }).trend_channel.relevant).toBe(false);
+  });
+
+  it('banda estreita real E regime real confirmado juntos => reason honesto cita as DUAS justificativas, nunca uma só', () => {
+    const r = computeLayerRelevance({ ...BASE, marketRegime: 'TENDENCIA_FORTE', trendChannelBandwidthPct: TREND_CHANNEL_TIGHT_BANDWIDTH_PCT });
+    expect(r.trend_channel.relevant).toBe(true);
+    expect(r.trend_channel.reason).toContain('banda real estreita');
+    expect(r.trend_channel.reason).toContain('TENDENCIA_FORTE');
+  });
+
+  it('nunca usa `!` não-nulo sobre trendChannelBandwidthPct — banda null com regime confirmado não pode virar highlight por coerção null->0', () => {
+    // Regressão real: null <= N avalia true em JS (null vira 0 na
+    // comparação) — se o motor ainda usasse `input.trendChannelBandwidthPct!`
+    // aqui, regime TENDENCIA_FORTE sozinho (banda null) acenderia
+    // highlight por acidente. Trava o comportamento correto (§ acima:
+    // TENDENCIA_FORTE sozinho fica normal, nunca highlight).
+    const r = computeLayerRelevance({ ...BASE, marketRegime: 'TENDENCIA_FORTE', trendChannelBandwidthPct: null });
+    expect(r.trend_channel.emphasis).toBe('normal');
+  });
+});
+
 describe('vwap / nexus_line: relevante só quando a leitura real é direcional (nunca NEUTRAL)', () => {
   it('vwap NEUTRAL real => não relevante', () => {
     expect(computeLayerRelevance({ ...BASE, vwapState: 'NEUTRAL' }).vwap.relevant).toBe(false);
@@ -267,14 +499,29 @@ describe('cvd: tendência real do fluxo (fortalecendo/enfraquecendo), nunca a le
   });
 });
 
-describe('fibonacci: proximidade real a um nível confirmado da Matriz de Confluência', () => {
-  it('sem nível próximo real => não relevante', () => {
+describe('fibonacci: existência real de nível na Matriz de Confluência decide relevant; proximidade decide só o destaque', () => {
+  // Achado real (relato do Operador após captura de tela real: a grade de
+  // Fibonacci some do gráfico depois de um movimento forte de preço) —
+  // a Matriz de Confluência é referência estrutural válida a partir do
+  // swing que a originou, não só quando o preço está em cima dela agora.
+  it('sem nenhum nível real calculado ainda => não relevante', () => {
     expect(computeLayerRelevance(BASE).fibonacci.relevant).toBe(false);
   });
-  it('com nível real próximo => relevante, motivo cita o limiar declarado', () => {
-    const r = computeLayerRelevance({ ...BASE, fibonacciNearPrice: true });
+  it('nível(is) real(is) calculado(s) mas longe do preço vivo => relevante mesmo assim, emphasis normal', () => {
+    const r = computeLayerRelevance({ ...BASE, hasFibonacciLevels: true });
     expect(r.fibonacci.relevant).toBe(true);
+    expect(r.fibonacci.emphasis).toBe('normal');
+    expect(r.fibonacci.reason).toContain('grade de retração');
+  });
+  it('nível real E perto do preço vivo => relevante COM destaque, motivo cita o limiar declarado', () => {
+    const r = computeLayerRelevance({ ...BASE, hasFibonacciLevels: true, fibonacciNearPrice: true });
+    expect(r.fibonacci.relevant).toBe(true);
+    expect(r.fibonacci.emphasis).toBe('highlight');
     expect(r.fibonacci.reason).toContain(`${FIBONACCI_PROXIMITY_PCT.toFixed(1)}%`);
+  });
+  it('fail-closed defensivo: fibonacciNearPrice sozinho (sem hasFibonacciLevels) nunca basta — existência real governa relevant, nunca proximidade isolada', () => {
+    const r = computeLayerRelevance({ ...BASE, fibonacciNearPrice: true });
+    expect(r.fibonacci.relevant).toBe(false);
   });
 });
 
@@ -352,6 +599,32 @@ describe('market_sessions: mesma computeSessionBoundaries pura que MarketSession
     const r = computeLayerRelevance({ ...BASE, recentSessionBoundary: true });
     expect(r.market_sessions.relevant).toBe(true);
     expect(r.market_sessions.reason).toContain('candles');
+  });
+});
+
+describe('kill_zones: mesma condição real (activeKillZones) que o badge do header (§6.48) já usa', () => {
+  it('sem kill zone ICT ativa agora => não relevante', () => {
+    const r = computeLayerRelevance(BASE);
+    expect(r.kill_zones.relevant).toBe(false);
+    expect(r.kill_zones.reason).toContain('nenhuma kill zone');
+  });
+  it('com pelo menos 1 kill zone ICT ativa agora => relevante', () => {
+    const r = computeLayerRelevance({ ...BASE, hasActiveKillZone: true });
+    expect(r.kill_zones.relevant).toBe(true);
+    expect(r.kill_zones.reason).toContain('institucional');
+  });
+});
+
+describe('session_key_levels: mesmo papel estrutural de liquidity_zones (relevante só quando o preço vivo está PERTO de um Key Level real)', () => {
+  it('sem Key Level de sessão real próximo => não relevante', () => {
+    const r = computeLayerRelevance(BASE);
+    expect(r.session_key_levels.relevant).toBe(false);
+    expect(r.session_key_levels.reason).toContain('nenhum Key Level');
+  });
+  it('com preço vivo real perto de uma máxima/mínima de sessão => relevante, motivo cita o limiar declarado', () => {
+    const r = computeLayerRelevance({ ...BASE, hasSessionKeyLevelNearPrice: true });
+    expect(r.session_key_levels.relevant).toBe(true);
+    expect(r.session_key_levels.reason).toContain(`${LIQUIDITY_PROXIMITY_PCT.toFixed(1)}%`);
   });
 });
 

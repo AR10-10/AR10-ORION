@@ -38,7 +38,15 @@ export async function probeJsonEndpoint({ url, timeoutMs = 8000, validate }) {
         return result;
     }
 
-    const controller = ('AbortController' in self) ? new AbortController() : null;
+    // `self` existe em browser e Web Worker, mas NÃO no Node — e este mesmo
+    // arquivo já checa `typeof fetch` logo acima de forma agnóstica de
+    // runtime, então a intenção sempre foi rodar nos dois. Esta linha era a
+    // única que escapava, e ela quebrava `tools/run-backtest.mjs` com
+    // "self is not defined" ANTES de qualquer chamada de rede — ou seja, o
+    // executor de backtest não rodava nem numa máquina COM internet, que é
+    // exatamente onde ele precisa rodar. `typeof` segue o padrão da checagem
+    // vizinha e funciona em todo runtime.
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
 
     let response;
@@ -65,6 +73,13 @@ export async function probeJsonEndpoint({ url, timeoutMs = 8000, validate }) {
     result.elapsed_ms = Date.now() - startedAt;
     result.http_status = response.status;
 
+    // Defesa futura, nao um caminho vivo hoje: com mode:'cors' (unico modo
+    // usado acima), um bloqueio real de CORS faz fetch() REJEITAR (capturado
+    // no catch acima) em vez de resolver com response.type==='opaque' — isso
+    // so aconteceria com mode:'no-cors', que este modulo nunca usa. Mantido
+    // caso um chamador futuro precise de no-cors; nunca removido porque
+    // Regra de Ouro 4 (nunca apagar funcionalidade real) tambem cobre
+    // salvaguardas defensivas ainda corretas.
     if (response.type === 'opaque') {
         result.state = CONNECTOR_STATES.BLOCKED_BY_CORS;
         result.reason = 'resposta_opaca_modo_no-cors_corpo_inacessivel';

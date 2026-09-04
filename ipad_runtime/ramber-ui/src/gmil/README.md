@@ -29,7 +29,7 @@ providers/*.ts  →  circuit-breaker.ts + quality-engine.ts  →  event-bus.ts  
   provedor (LEI 08), função pura separada do `voice-dispatcher.ts` do
   Core Engine para não misturar os dois domínios num único tipo.
 
-## Provedores ativos (4)
+## Provedores ativos (5)
 
 | Provedor | Categoria | Endpoint real | Por quê |
 |---|---|---|---|
@@ -37,6 +37,7 @@ providers/*.ts  →  circuit-breaker.ts + quality-engine.ts  →  event-bus.ts  
 | `fear_greed_index` | SENTIMENT | `api.alternative.me/fng/` | Público, sem chave, CORS aberto. Índice de sentimento cripto mais referenciado que não exige autenticação. |
 | `trending_coins` | ATTENTION | `api.coingecko.com/api/v3/search/trending` | (V11.5 Fase 4) Mesmo host já integrado por `coingecko_global`, endpoint diferente. Top símbolos mais buscados nas últimas 24h — sinal real de atenção de mercado, categoria distinta de sentimento. `lean` é sempre `null`: "o que está sendo mais buscado" não tem direção alta/baixa inerente, e inventar uma violaria o princípio de dado real deste módulo — por isso nunca entra no `GLOBAL_CONSENSUS_SCORE`, só aparece como contexto exibido. |
 | `derivatives_positioning` | DERIVATIVES | `fapi.binance.com/fapi/v1/premiumIndex` | (V15 Fase E) Público, sem chave — mesmo host que o painel de derivativos do App já usa. Funding rate + basis (mark×index) numa única resposta atômica: o feed combinado Spot×Perpetual do Cap. 7. `lean` = posicionamento por funding (±0.05%/8h clampado), nunca recomendação. |
+| `onchain_tvl_flow` | ONCHAIN | `api.llama.fi/v2/historicalChainTvl` | (Ordem Mestra §7) Público, sem chave. Fluxo real de TVL agregado (soma de todas as chains rastreadas) — variação real de 7 dias vs. valor atual, nunca interpolado. `lean` = capital entrando/saindo (±5%/7d clampado). Nota honesta: é um proxy de fluxo agregado de capital on-chain, não rastreamento de whale/carteira individual (a definição original desta categoria em `types.ts`) — nenhuma fonte keyless de whale-tracking foi encontrada; documentado como tal, nunca apresentado como equivalente. CORS de `api.llama.fi` não foi verificado ao vivo nesta sessão (rede do sandbox bloqueada) — confiança moderada por uso amplo conhecido em dashboards DeFi client-side, não uma certeza confirmada; `probeJsonEndpoint`/fetch já classifica `BLOCKED_BY_CORS` honestamente se a suposição estiver errada. |
 
 ## Fase E — agregação por categoria (V15 Cap. 6)
 
@@ -44,12 +45,14 @@ providers/*.ts  →  circuit-breaker.ts + quality-engine.ts  →  event-bus.ts  
 MESMAS linhas de provedor do snapshot, com a MESMA `computeConsensus`
 (LEI 04 — só particionamento por categoria, nunca uma segunda matemática):
 `contextScore` (todas), `institutionalBias` (DERIVATIVES+ONCHAIN),
-`macroBias` (MACRO), `liquidityBias` (BLOCKCHAIN). Categorias sem provedor
-ativo (ONCHAIN, MACRO — toda fonte prescrita exige chave de API ou não tem
-CORS keyless verificado, ver tabela abaixo) produzem score `null` honesto:
-o gancho existe e é visível na UI como AGUARDANDO; um provedor futuro é
-1 arquivo em `providers/` + 1 linha de registro no orquestrador, e o viés
-da categoria passa a existir sozinho.
+`macroBias` (MACRO), `liquidityBias` (BLOCKCHAIN). `institutionalBias`
+agora tem 2 categorias reais contribuindo (DERIVATIVES + ONCHAIN, desde a
+Ordem Mestra §7). MACRO continua sem provedor ativo — toda fonte
+prescrita exige chave de API ou não tem CORS keyless verificado (ver
+tabela abaixo e "Fontes avaliadas e adiadas") — produz score `null`
+honesto: o gancho existe e é visível na UI como AGUARDANDO; um provedor
+futuro é 1 arquivo em `providers/` + 1 linha de registro no orquestrador,
+e o viés da categoria passa a existir sozinho.
 
 ## Fontes avaliadas e adiadas (com motivo real, não silenciosamente ignoradas)
 
@@ -72,8 +75,32 @@ embutido". As demais:
 - **Stooq** (Macro Market) — endpoint público existe mas o suporte a CORS
   não é oficialmente documentado nem estável o bastante para prometer como
   "real e funcionando".
-- **Economic Calendar** — nenhuma fonte gratuita, sem chave, CORS-aberta e
-  compatível com os termos de uso foi identificada.
+- **Economic Calendar** (Fed/CPI/NFP — Ordem Mestra §36, pesquisa
+  reconfirmada via WebSearch em 2026-08) — nenhuma fonte de CALENDÁRIO
+  (datas/horários de eventos futuros, tipo Trading Economics/FXStreet/
+  Forex Factory/Investing.com) gratuita, sem chave e CORS-aberta foi
+  identificada; toda agregadora de calendário encontrada (Trading
+  Economics, EODHD, Finnhub, Financial Modeling Prep, FXStreet, OHLC.dev)
+  exige chave de API, mesma objeção já aplicada a FRED/Alpha Vantage
+  acima. Achado novo desta rodada: a API pública do BLS
+  (`bls.gov/bls/api_features.htm`) É genuinamente sem-registro para uso
+  básico — mas entrega SÉRIE TEMPORAL de dado já publicado (o número do
+  CPI/payroll depois de sair), não um calendário do que ainda vai sair, e
+  seu suporte a CORS não está documentado (mesma incerteza já vista em
+  Stooq) nem foi possível confirmar ao vivo (sandbox sem saída de rede,
+  mesma limitação de sempre) — não resolve o pedido original. **Caminho
+  alternativo real, não construído nesta rodada:** BLS
+  (`bls.gov/schedule/`) e o Federal Reserve
+  (`federalreserve.gov/data/releaseschedule.htm`) publicam o calendário
+  do ANO INTEIRO de divulgações com bastante antecedência, como
+  informação pública oficial — um arquivo local estático curado à mão
+  (mesmo padrão de `instrument-registry.js`: dado de referência real,
+  confirmado por pesquisa, versionado e revisado por humano, nunca uma
+  chamada de rede ao vivo) resolveria "próximo evento de alto impacto"
+  sem precisar de chave nem CORS. Não é live/autoatualizável — exigiria
+  revisão manual periódica (o calendário raramente muda, mas pode) — por
+  isso não foi implementado sem decisão explícita do Operador; fica
+  documentado aqui como opção real e viável para uma rodada futura.
 - **RSS financeiro / notícias** — RSS/XML não é pensado para `fetch()` de
   navegador; a maioria dos publishers não envia cabeçalho CORS permissivo.
 - **Blockchain.com stats, Book Depth agregado entre exchanges** — viáveis

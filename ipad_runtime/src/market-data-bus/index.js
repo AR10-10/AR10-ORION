@@ -11,6 +11,26 @@ export { collectBinanceFuturesKlines } from './binance-futures-candle-connector.
 // ADITIVO V-MAX Etapa 1 (Market Data Adapter): irmão MEXC do conector
 // acima, mesmo contrato de collect() — ver mexc-futures-candle-connector.js.
 export { collectMexcFuturesKlines } from './mexc-futures-candle-connector.js';
+// Ordem Market Data Fabric, Fase 1: irmão TradFi/CME dos dois acima —
+// mesmo contrato de collect(), fonte delayed (Yahoo, não-oficial) em vez
+// de exchange cripto, ver tradfi-delayed-connector.js.
+export { collectTradfiDelayedKlines } from './tradfi-delayed-connector.js';
+export {
+    ASSET_CLASS,
+    PRIORITY_TIER,
+    TRADFI_FUTURES_INSTRUMENT_TYPE,
+    INSTRUMENT_REGISTRY,
+    listInstruments,
+    listByPriorityTier,
+    listByAssetClass,
+    findByInstrumentId,
+    findByContractCode,
+    findByContinuousSymbolHint,
+    findByLegacyTradFiAssetSymbol,
+    listAssetClasses,
+    listDesignatedContractMarkets,
+    buildCascadingSelectorTree,
+} from './instrument-registry.js';
 export { normalizeCandles } from './normalizer.js';
 export { validateCandleSeries } from './integrity-validator.js';
 export { computeAsOf, computeAgeMs, isStale } from './time-synchronizer.js';

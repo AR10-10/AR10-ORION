@@ -10,13 +10,13 @@ const RESET = {
   symbol: 'BTC',
   price: { price: null, delta: null, deltaPct: null, high: null, low: null, volume: null, direction: null, updatedAt: null },
   orderBook: { bids: [], asks: [], updatedAt: null },
-  derivatives: { fundingRate: null, openInterest: null },
+  derivatives: { fundingRate: null, openInterest: null, longShortRatio: null },
   core: { engineStatus: 'pending' as const, direction: null, confidence: null, lastUpdateAt: null, cycleLatencyMs: null },
   activeTimeframe: '15m' as const,
   candles: {},
   orderBooks: {},
   connections: {},
-  health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0, isOnline: true, lastUpdatedAt: 0 },
+  health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0, lastUpdatedAt: 0 },
   offline: false,
   isDataFresh: false,
   uiFps: null,
@@ -96,8 +96,8 @@ describe('unified-snapshot-store: setters escrevem exatamente o dado real recebi
   });
 
   it('setDerivatives grava exatamente o objeto recebido (sem timestamp — funding/OI já carregam sua própria idade em outro lugar)', () => {
-    useUnifiedSnapshotStore.getState().setDerivatives({ fundingRate: 0.0001, openInterest: 98765 });
-    expect(useUnifiedSnapshotStore.getState().derivatives).toEqual({ fundingRate: 0.0001, openInterest: 98765 });
+    useUnifiedSnapshotStore.getState().setDerivatives({ fundingRate: 0.0001, openInterest: 98765, longShortRatio: 1.42 });
+    expect(useUnifiedSnapshotStore.getState().derivatives).toEqual({ fundingRate: 0.0001, openInterest: 98765, longShortRatio: 1.42 });
   });
 
   it('setCore grava o estado real do motor (engineStatus/direção/confiança categórica), nunca um score inventado', () => {
@@ -205,7 +205,7 @@ describe('unified-snapshot-store (V-MAX Fase 0.4): health/offline honestos, nunc
   });
 
   it('setHealth grava exatamente o snapshot real recebido', () => {
-    const health = { fps: 60, cycleLatencyMs: 8, memoryMb: 120, workersAlive: 1, isOnline: true, lastUpdatedAt: 1700000000000 };
+    const health = { fps: 60, cycleLatencyMs: 8, memoryMb: 120, workersAlive: 1, lastUpdatedAt: 1700000000000 };
     useUnifiedSnapshotStore.getState().setHealth(health);
     expect(useUnifiedSnapshotStore.getState().health).toEqual(health);
   });

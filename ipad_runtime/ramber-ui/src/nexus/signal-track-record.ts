@@ -36,12 +36,26 @@
 //     If a single tick satisfies both simultaneously (a gap through the
 //     whole bracket), the CONSERVATIVE reading wins: the stop/break-even —
 //     the record must never flatter itself.
-//   - A materially different plan (direction, or any level/target array
-//     changed) REPLACES the open one. Replaced plans are counted
-//     separately — never as a win, never as a loss (they were advisory
-//     readings superseded by structure, not resolved trades). Re-
+//   - A materially different plan (direction, entry, stop, or any ALREADY
+//     PROVEN target changed) REPLACES the open one. Replaced plans are
+//     counted separately — never as a win, never as a loss (they were
+//     advisory readings superseded by structure, not resolved trades). Re-
 //     derivations with identical numbers are the SAME plan (the engine
 //     recomputes per tick; identity is by values).
+//   - Ordem "Recálculo Vivo do Trade Plan" §7/§24 (achado real: buildTradePlan
+//     re-deriva TODO o plano do zero a cada ciclo estrutural — antes desta
+//     correção, qualquer mudança em QUALQUER alvo, mesmo um TP2/TP3 ainda
+//     não tocado, contava como REPLACED e zerava targetsHit/openedAt/
+//     breakEvenSuggested, mesmo segundos depois de um TP1 real ter sido
+//     provado). Quando pelo menos 1 alvo real já foi provado
+//     (targetsHit > 0) E direção/entry/stop/todo alvo JÁ PROVADO continuam
+//     idênticos, uma mudança que só afeta os alvos SEGUINTES é REAVALIAÇÃO
+//     do mesmo plano (isTargetRefinement abaixo) — "TP2 mantido/ajustado
+//     somente se os motores justificarem" é exatamente essa fresta: nem
+//     ignorar a estrutura nova (ficaria com um TP2 morto) nem descartar o
+//     progresso real já provado (contaria um TP1 real como se nunca tivesse
+//     acontecido). Zero motor novo: mesmos dados, mesmo buildTradePlan —
+//     só a CLASSIFICAÇÃO da transição fica mais precisa.
 //   - hitRate = (targetHits + partialHits) / (targetHits + partialHits +
 //     stopHits): reaching at least one real target validates the
 //     structural read even if the ladder didn't complete; a clean stop
@@ -70,6 +84,31 @@ export interface PlanOpenContext {
   vwapState: "BULLISH" | "BEARISH" | "NEUTRAL" | null;
   nexusLineState: "BULLISH" | "BEARISH" | "NEUTRAL" | null;
   score: number | null; // Institutional Score na abertura
+  // Entrega 42 (Profitability Engine): rótulo REAL de engine.marketRegime.
+  // regime (market-regime/regime-engine.js, ADX/Bollinger) na abertura —
+  // mesmo motor já usado pelo header/Relevance Engine, zero classificador
+  // novo. Opcional (registros antigos persistidos nunca tiveram este
+  // campo) — expectancy estratificada por regime simplesmente exclui
+  // trades sem este dado, nunca inventa um regime retroativo.
+  regime?: string | null;
+  // Escopo Cirúrgico (Operador, Fase 1 — ScenarioFingerprint): rótulo REAL
+  // de engine.marketStructureLabel (cleanStructureLabel sobre a saída de
+  // market-structure-engine.js) na abertura — mesmo campo já lido pelo
+  // header/Relevance Engine, zero classificador novo. Opcional pela mesma
+  // razão de `regime` acima; nexus/scenario-fingerprint.ts usa o que
+  // estiver disponível, nunca fabrica o resto.
+  structureLabel?: string | null;
+  // Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
+  // leitura REAL de nexus/model-fusion.ts (Fase 2) na abertura, já
+  // orientada à direção do plano (alignFusedConfidence) — sinal -1..1,
+  // positivo = modelos (SMC/Order Flow/Regime) a favor da direção
+  // efetivamente tomada, negativo = contra. Esta é a amostra que
+  // nexus/platt-calibration.ts consome via TradeCostResult depois que o
+  // plano resolve. Opcional pela mesma razão de `regime`/`structureLabel`
+  // acima (registros antigos, ou nenhum modelo teve voto real no
+  // instante da abertura); ausência aqui nunca é fabricada como 0 —
+  // platt-calibration.ts exclui a amostra inteira quando null.
+  modelAgreement?: number | null;
 }
 
 export interface TrackedPlan {
@@ -135,6 +174,28 @@ function pushHistory(history: TrackedPlan[], entry: TrackedPlan): TrackedPlan[] 
   return next.length > TRACK_RECORD_HISTORY_CAP ? next.slice(next.length - TRACK_RECORD_HISTORY_CAP) : next;
 }
 
+/** Ordem "Recálculo Vivo do Trade Plan" §7/§24: true quando `next` é a
+ *  MESMA leitura de `prev` reavaliada pela estrutura fresca — direção,
+ *  entry, stop e todo alvo já PROVADO (índices 0..targetsHit-1) idênticos,
+ *  só os alvos AINDA NÃO tocados podem ter mudado de preço/base real. Só
+ *  chamada quando targetsHit > 0 (§7: "quando um alvo for atingido" é o
+ *  próprio gatilho da Ordem — antes do 1º alvo real, qualquer mudança
+ *  continua sendo um sinal genuinamente novo, comportamento intocado).
+ *  `next.targets.length < targetsHit` (a estrutura fresca não tem mais os
+ *  níveis já tocados) nunca reivindica continuidade — cai no REPLACED de
+ *  sempre, a mesma honestidade de "não fingir que sei o que não sei". */
+export function isTargetRefinement(prev: TradePlan, next: TradePlan, targetsHit: number): boolean {
+  if (targetsHit <= 0) return false;
+  if (prev.direction !== next.direction) return false;
+  if (prev.entry.low !== next.entry.low || prev.entry.high !== next.entry.high) return false;
+  if (prev.stop.price !== next.stop.price) return false;
+  if (next.targets.length < targetsHit) return false;
+  for (let i = 0; i < targetsHit; i++) {
+    if (prev.targets[i].price !== next.targets[i].price) return false;
+  }
+  return true;
+}
+
 /** Plan slice changed (or re-derived). Opens/replaces/closes the active
  *  tracked plan accordingly. Same-value re-derivations return the ORIGINAL
  *  state (no transition, no event). */
@@ -154,6 +215,14 @@ export function trackPlanTransition(state: TrackRecordState, plan: TradePlan | n
     return { ...state, active: { plan, openedAt: now, status: "OPEN", resolvedAt: null, resolvedPrice: null, targetsHit: 0, breakEvenSuggested: false } };
   }
   if (samePlan(state.active.plan, plan)) return state; // same advisory reading — keep original openedAt/progress
+  // Ordem "Recálculo Vivo do Trade Plan" §7/§24: reavaliação do MESMO
+  // plano (alvo já provado intocado, só os seguintes mudaram) — preserva
+  // openedAt/targetsHit/breakEvenSuggested/contextAtOpen reais, troca só o
+  // plano (o alvo seguinte que trackPriceTick lê passa a ser o refinado).
+  // Nunca conta como REPLACED: nenhum progresso real foi perdido.
+  if (isTargetRefinement(state.active.plan, plan, state.active.targetsHit)) {
+    return { ...state, active: { ...state.active, plan } };
+  }
   return {
     ...state,
     active: { plan, openedAt: now, status: "OPEN", resolvedAt: null, resolvedPrice: null, targetsHit: 0, breakEvenSuggested: false },

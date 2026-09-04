@@ -39,12 +39,15 @@ function tfContext(status: 'OK' | 'DADOS_INSUFICIENTES', confidenceStance: 'LONG
     resistance1: null,
     confidence,
     confidenceStance,
+    unmitigatedOrderBlockCount: null,
+    unmitigatedFvgCount: null,
+    unsweptLiquidityZoneCount: null,
     candlesUsed: status === 'OK' ? 50 : 0,
     computedAt: Date.now(),
   };
 }
 
-/** Matriz real com os 6 prazos, todos na mesma leitura por padrão —
+/** Matriz real com os prazos de MULTI_TIMEFRAME_LIST, todos na mesma leitura por padrão —
  *  `overrides` substitui prazos específicos por outra leitura. */
 function matrix(
   defaultStance: 'LONG' | 'SHORT' | 'NEUTRAL' | null,

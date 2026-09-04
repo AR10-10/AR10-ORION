@@ -2,7 +2,7 @@
 // rótulos de eixo (achado real de captura de tela do Operador: R1/VWAP/
 // NL/último preço empilhados quando os valores reais ficam próximos).
 import { describe, it, expect } from 'vitest';
-import { resolveLabelStackPositions } from '../src/chart/price-label-stack';
+import { resolveLabelStackPositions, resolveLabelTier, selectRelevantLabels, type RelevanceCandidate } from '../src/chart/price-label-stack';
 
 describe('resolveLabelStackPositions: garantia absoluta de "nunca um objeto em cima do outro"', () => {
   it('vazio => vazio', () => {
@@ -90,5 +90,276 @@ describe('resolveLabelStackPositions: garantia absoluta de "nunca um objeto em c
   it('nunca perde nenhuma entrada — length da saída sempre igual à da entrada', () => {
     const entries = Array.from({ length: 7 }, (_, i) => ({ naturalY: i * 3 }));
     expect(resolveLabelStackPositions(entries, 16)).toHaveLength(7);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// selectRelevantLabels — achado real de captura de tela do Operador (iPad,
+// ZECUSDT 1H ao vivo): 11 etiquetas de contexto empilhadas na lateral
+// esquerda, cobrindo o primeiro terço das velas. Execução REAL (não padrão
+// de fonte): o bug mais provável aqui é "a matemática de relevância está
+// sutilmente errada" (podar o nível errado, podar uma leitura viva, ou
+// apagar dois níveis distintos que só por acaso têm o mesmo texto), não
+// "esqueceram de conectar A com B" — convenção mista do CLAUDE.md.
+describe('selectRelevantLabels: hierarquia + teto de densidade, sem nunca apagar dado real', () => {
+  // Mesma forma real que EnhancedChart_110_Percent.tsx empilha em
+  // priceAxisLabels: side ausente = "acionável agora" (direita/primary),
+  // side:"left" = mapa estrutural (context), tier explícito só no preço vivo.
+  type Candidate = RelevanceCandidate;
+  const ctx = (price: number, text: string): Candidate => ({ price, text, side: 'left' });
+  const live = (price: number): Candidate => ({ price, text: String(price), tier: 'live' });
+  const primary = (price: number, text: string): Candidate => ({ price, text });
+
+  it('cenário REAL da captura (11 etiquetas de contexto à esquerda, preço vivo 481.40): sobram exatamente as 5 mais próximas do preço — as mais distantes saem primeiro', () => {
+    const labels = [
+      ctx(484.52, 'ÁSIA H 484.52'),
+      ctx(483.90, '◆ Sessão Baixa + VWAP + Nexus Line'),
+      ctx(481.10, 'ÁSIA L 481.10'),
+      ctx(486.20, '⚡ SWEEP ZONE ↑ (3x)'),
+      ctx(485.60, '◆ FVG Alta + Sweep'),
+      ctx(487.10, '⚡ SWEEP ZONE ↑ (2x)'),
+      ctx(488.40, '◆ FVG Alta + Sweep'),
+      ctx(479.80, '⚡ SWEEP ↓'),
+      ctx(478.90, '◆ Sweep + EQL'),
+      ctx(477.20, '⚡ SWEEP ↓'),
+      ctx(476.10, '◆ EQL + S1'),
+      live(481.40),
+    ];
+    const out = selectRelevantLabels(labels, 481.40, 5);
+    const kept = out.filter((l) => l.side === 'left').map((l) => l.price);
+    expect(kept).toHaveLength(5);
+    // as 5 realmente mais próximas de 481.40, nada além disso
+    expect(new Set(kept)).toEqual(new Set([481.10, 479.80, 483.90, 484.52, 478.90]));
+    // a distante (476.10, ~1.1% abaixo) não sobrevive
+    expect(kept).not.toContain(476.10);
+  });
+
+  it('live e primary NUNCA são podados, por mais denso que o gráfico esteja — só contexto tem teto', () => {
+    const labels = [
+      live(481.40),
+      primary(482.25, 'VWAP ↓ 482.25'),
+      primary(482.51, 'NL ↓ 482.51'),
+      primary(483.23, 'EMA 21 483.23'),
+      primary(479.00, 'ST · BREACHED'),
+      primary(490.00, 'TP1 · 1:2.10'),
+      ...Array.from({ length: 12 }, (_, i) => ctx(500 + i, `CTX ${i}`)),
+    ];
+    const out = selectRelevantLabels(labels, 481.40, 5);
+    expect(out.filter((l) => l.tier === 'live')).toHaveLength(1);
+    expect(out.filter((l) => l.side !== 'left' && !l.tier)).toHaveLength(5);
+    expect(out.filter((l) => l.side === 'left')).toHaveLength(5);
+  });
+
+  it('dois níveis DISTINTOS com o mesmo texto ("⚡ SWEEP ↓" em 2 preços) são dois níveis reais — nunca deduplicados por texto (Regra de Ouro 4: seria apagar um preço)', () => {
+    const labels = [ctx(479.80, '⚡ SWEEP ↓'), ctx(477.20, '⚡ SWEEP ↓'), live(481.40)];
+    const out = selectRelevantLabels(labels, 481.40, 5);
+    expect(out.filter((l) => l.text === '⚡ SWEEP ↓')).toHaveLength(2);
+  });
+
+  it('redundância PURA (mesmo lado + mesmo texto + mesmo preço) sai — é o único caso indistinguível na tela', () => {
+    const labels = [ctx(479.80, '⚡ SWEEP ↓'), ctx(479.80, '⚡ SWEEP ↓'), live(481.40)];
+    const out = selectRelevantLabels(labels, 481.40, 5);
+    expect(out.filter((l) => l.text === '⚡ SWEEP ↓')).toHaveLength(1);
+  });
+
+  it('fail-closed: sem preço de referência (antes do primeiro tick real), nunca inventa distância — mantém as N primeiras na ordem de montagem, determinístico', () => {
+    const labels = Array.from({ length: 9 }, (_, i) => ctx(400 + i, `CTX ${i}`));
+    const out = selectRelevantLabels(labels, null, 5);
+    expect(out.map((l) => l.text)).toEqual(['CTX 0', 'CTX 1', 'CTX 2', 'CTX 3', 'CTX 4']);
+    // e é estável: a mesma entrada devolve exatamente a mesma saída
+    expect(selectRelevantLabels(labels, null, 5).map((l) => l.text)).toEqual(out.map((l) => l.text));
+  });
+
+  it('preço não-finito nunca vira etiqueta (fail-closed), mesmo declarando tier', () => {
+    const labels = [ctx(NaN, 'S1 lixo'), ctx(Infinity, 'R1 lixo'), ctx(481.0, 'S1 real'), live(481.40)];
+    const out = selectRelevantLabels(labels, 481.40, 5);
+    expect(out.map((l) => l.text)).toEqual(['S1 real', '481.4']);
+  });
+
+  it('abaixo do teto, nada é tocado — a lista sai idêntica e na ordem original', () => {
+    const labels = [ctx(479, 'A'), ctx(480, 'B'), live(481.40), primary(482, 'VWAP')];
+    expect(selectRelevantLabels(labels, 481.40, 5)).toEqual(labels);
+  });
+});
+
+describe('resolveLabelTier: o default deriva do lado, para nenhum dos ~20 pontos de push precisar declarar o campo', () => {
+  it('esquerda = mapa estrutural = context; direita (e ausente) = acionável agora = primary', () => {
+    expect(resolveLabelTier('left', undefined)).toBe('context');
+    expect(resolveLabelTier('right', undefined)).toBe('primary');
+    expect(resolveLabelTier(undefined, undefined)).toBe('primary');
+  });
+
+  it('tier explícito sempre vence o default — é assim que o preço vivo vira `live` mesmo estando à direita', () => {
+    expect(resolveLabelTier('right', 'live')).toBe('live');
+    expect(resolveLabelTier('left', 'primary')).toBe('primary');
+  });
+});
+
+describe('resolveLabelTier: `critical` (Ordem "Lapidação Visual Final e Sincronia Operacional" §3, Nível A) nunca deriva por default — só tier explícito', () => {
+  it('side sozinho NUNCA produz "critical" — só live/primary/context nascem de default', () => {
+    expect(resolveLabelTier('right', undefined)).not.toBe('critical');
+    expect(resolveLabelTier('left', undefined)).not.toBe('critical');
+    expect(resolveLabelTier(undefined, undefined)).not.toBe('critical');
+  });
+
+  it('tier:"critical" explícito sempre vence, em qualquer lado', () => {
+    expect(resolveLabelTier('right', 'critical')).toBe('critical');
+    expect(resolveLabelTier('left', 'critical')).toBe('critical');
+    expect(resolveLabelTier(undefined, 'critical')).toBe('critical');
+  });
+});
+
+describe('selectRelevantLabels: `critical` nunca é podado — mesma garantia de live/primary, só context tem teto', () => {
+  it('EN/ST/TP (critical) sobrevivem mesmo com o eixo cheio de contexto', () => {
+    const live = { price: 481.4, text: '481.40', tier: 'live' as const };
+    const critical = [
+      { price: 480.0, text: 'EN LONG · retest', tier: 'critical' as const },
+      { price: 478.5, text: 'ST · stop real', tier: 'critical' as const },
+      { price: 490.0, text: 'TP1 · 2.10%', tier: 'critical' as const },
+    ];
+    const ctxFlood = Array.from({ length: 12 }, (_, i) => ({
+      price: 500 + i,
+      text: `CTX ${i}`,
+      side: 'left' as const,
+    }));
+    const out = selectRelevantLabels([live, ...critical, ...ctxFlood], 481.4, 5);
+    for (const c of critical) {
+      expect(out.some((l) => l.text === c.text && l.price === c.price)).toBe(true);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GAP PAREADO — pedido do Operador: "cada objeto a distância correta".
+//
+// DEFEITO MEDIDO: o gap era um ESCALAR, e o chamador o derivava da caixa
+// PEQUENA (18px + 7 de folga = 25). Mas `live` (o preço agora) e `critical`
+// (o plano ativo) desenham uma caixa de 21px, e o `live` ainda leva um anel
+// de +3px. Como cada caixa é centrada no seu resolvedY, a fresta real entre
+// um preço vivo e sua vizinha era 25 − 24 = UM pixel — a etiqueta mais
+// importante da tela era a que menos respirava.
+//
+// Não bastava usar sempre a caixa maior: isso afastaria demais um par de
+// etiquetas pequenas, e cada pixel de afastamento é um pixel a mais entre a
+// etiqueta e o preço real que ela nomeia (o conector existe justamente
+// porque esse deslocamento é uma dívida, não um recurso).
+// ---------------------------------------------------------------------------
+describe('gap pareado: a fresta é a declarada para QUALQUER combinação de alturas', () => {
+  type L = { naturalY: number; h: number };
+  const FOLGA = 7;
+  const gap = (a: L, b: L) => (a.h + b.h) / 2 + FOLGA;
+
+  /** Menor fresta real entre bordas de caixas centradas em resolvedY. */
+  const menorFresta = (out: (L & { resolvedY: number })[]) => {
+    let min = Infinity;
+    for (let i = 1; i < out.length; i++) {
+      const borda = out[i].resolvedY - out[i].h / 2 - (out[i - 1].resolvedY + out[i - 1].h / 2);
+      min = Math.min(min, borda);
+    }
+    return min;
+  };
+
+  it('duas caixas grandes coladas ficam com a folga inteira, nunca com 4px', () => {
+    const entradas: L[] = [
+      { naturalY: 100, h: 24 }, // live: caixa 21 + anel 3
+      { naturalY: 104, h: 21 }, // critical
+    ];
+    const out = resolveLabelStackPositions(entradas, 25, gap);
+    expect(menorFresta(out)).toBeCloseTo(FOLGA, 6);
+  });
+
+  it('a régua antiga (escalar) produziria menos que a folga no mesmo caso', () => {
+    const entradas: L[] = [
+      { naturalY: 100, h: 24 },
+      { naturalY: 104, h: 21 },
+    ];
+    const out = resolveLabelStackPositions(entradas, 25); // sem gapBetween
+    expect(menorFresta(out)).toBeLessThan(FOLGA);
+  });
+
+  it('caixas pequenas NÃO são afastadas mais do que o necessário', () => {
+    // Usar sempre a maior altura custaria deslocamento extra em toda pilha
+    // de etiquetas comuns — e deslocamento é distância entre a etiqueta e o
+    // preço que ela nomeia.
+    const entradas: L[] = [
+      { naturalY: 100, h: 18 },
+      { naturalY: 105, h: 18 },
+      { naturalY: 110, h: 18 },
+    ];
+    const out = resolveLabelStackPositions(entradas, 25, gap);
+    expect(menorFresta(out)).toBeCloseTo(FOLGA, 6);
+    // span total = 2 * (18 + 7) = 50, não 2 * (24 + 7) = 62
+    expect(out[2].resolvedY - out[0].resolvedY).toBeCloseTo(50, 6);
+  });
+
+  it('pilha misturada respeita a folga em TODOS os pares, não só no pior', () => {
+    const entradas: L[] = [
+      { naturalY: 100, h: 18 },
+      { naturalY: 103, h: 24 },
+      { naturalY: 106, h: 21 },
+      { naturalY: 109, h: 18 },
+      { naturalY: 112, h: 18 },
+    ];
+    const out = resolveLabelStackPositions(entradas, 25, gap);
+    for (let i = 1; i < out.length; i++) {
+      const borda = out[i].resolvedY - out[i].h / 2 - (out[i - 1].resolvedY + out[i - 1].h / 2);
+      expect(borda, `par ${i - 1}/${i}`).toBeGreaterThanOrEqual(FOLGA - 1e-9);
+    }
+  });
+
+  it('o bloco continua CENTRADO na média das posições naturais', () => {
+    // A propriedade que o resolver sempre teve: ninguém é deslocado mais do
+    // que o necessário, e o grupo fica onde o grupo realmente está.
+    const entradas: L[] = [
+      { naturalY: 100, h: 24 },
+      { naturalY: 104, h: 21 },
+    ];
+    const out = resolveLabelStackPositions(entradas, 25, gap);
+    const centroNatural = (100 + 104) / 2;
+    const centroResolvido = (out[0].resolvedY + out[1].resolvedY) / 2;
+    expect(centroResolvido).toBeCloseTo(centroNatural, 6);
+  });
+});
+
+describe('gap pareado: compatibilidade e fail-closed', () => {
+  type L = { naturalY: number };
+
+  it('sem gapBetween o comportamento é IDÊNTICO ao de antes', () => {
+    const entradas: L[] = [{ naturalY: 100 }, { naturalY: 102 }, { naturalY: 103 }];
+    const out = resolveLabelStackPositions(entradas, 25);
+    // Fórmula anterior: centrado, passos uniformes de 25.
+    expect(out[1].resolvedY - out[0].resolvedY).toBeCloseTo(25, 6);
+    expect(out[2].resolvedY - out[1].resolvedY).toBeCloseTo(25, 6);
+    const centro = (100 + 102 + 103) / 3;
+    expect((out[0].resolvedY + out[2].resolvedY) / 2).toBeCloseTo(centro, 6);
+  });
+
+  it('gapBetween que devolve valor inválido cai no escalar, nunca numa posição inventada', () => {
+    const entradas: L[] = [{ naturalY: 100 }, { naturalY: 101 }];
+    for (const ruim of [NaN, -5, 0, Infinity]) {
+      const out = resolveLabelStackPositions(entradas, 25, () => ruim);
+      expect(out[1].resolvedY - out[0].resolvedY, `gap ${ruim}`).toBeCloseTo(25, 6);
+    }
+  });
+
+  it('a invariante ABSOLUTA continua valendo com gaps variáveis', () => {
+    // Nenhum par pode terminar mais perto que o gap exigido, inclusive
+    // depois da passada de segurança que cascateia grupos vizinhos.
+    type H = { naturalY: number; h: number };
+    const gap = (a: H, b: H) => (a.h + b.h) / 2 + 7;
+    const entradas: H[] = [
+      { naturalY: 0, h: 18 },
+      { naturalY: 1, h: 24 },
+      { naturalY: 2, h: 18 },
+      { naturalY: 30, h: 21 },
+      { naturalY: 31, h: 18 },
+      { naturalY: 60, h: 18 },
+    ];
+    const out = resolveLabelStackPositions(entradas, 25, gap);
+    for (let i = 1; i < out.length; i++) {
+      expect(out[i].resolvedY - out[i - 1].resolvedY).toBeGreaterThanOrEqual(
+        gap(out[i - 1], out[i]) - 1e-9,
+      );
+    }
   });
 });

@@ -5,6 +5,57 @@
 (`src/`, `config/`, `data/`) — são produtos não relacionados dentro do
 mesmo repositório.*
 
+> **Nota de atualização (2026-09-02, auditoria de conteúdo — pendência #8
+> da PR #16).** Este documento descreve o estado de `research/engines/`
+> em **2026-06-20** (mesmo commit que criou os 13 stubs abaixo,
+> `528203d`). Esse estado **não existe mais** — confirmado lendo o
+> diretório real e o `git log` de cada um dos 13 nomes, não supondo:
+>
+> - **5 dias depois** (`db85c77`, 2026-06-25, "Wire real S/R/market-
+>   structure engines... ruthlessly prune Engine Room"): `market-
+>   structure-engine.js` e `support-resistance-engine.js` foram
+>   REESCRITOS — o nome do arquivo sobreviveu, o conteúdo não. Os dois
+>   hoje são motores reais e graduados (`QUARANTINE.md`), sem nenhuma
+>   relação com o stub `{ status: 'FUTURE' }` que este documento descreve
+>   para eles — não confundir "2 dos 13 chegaram a ser implementados como
+>   planejado aqui" com o que realmente aconteceu (substituição, não
+>   preenchimento do contrato original).
+> - **5 dias depois disso** (`165676a`, 2026-06-30, "chore(purge+org):
+>   delete all dead stubs..."): os outros **11** arquivos desta tabela —
+>   `liquidity-engine.js`, `volume-profile-engine.js`, `futures-flow-
+>   engine.js`, `funding-oi-engine.js`, `volatility-regime-engine.js`,
+>   `retracement-engine.js`, `trend-engine.js`, `momentum-engine.js`,
+>   `risk-engine.js`, `signal-fusion-engine.js`, `scenario-builder.js` —
+>   e o `index.js` agregador foram **deliberadamente apagados**, ainda
+>   `FUTURE`, nunca implementados como este documento planejava. Decisão
+>   real de uma sessão anterior (mensagem do commit é explícita: "delete
+>   all dead stubs"), não um bug — mas este documento nunca foi
+>   atualizado para refletir essa decisão, e ficou descrevendo um
+>   diretório que deixou de existir há mais de 2 meses.
+>
+> `research/engines/` hoje tem **17 motores reais**, nenhum deles parte
+> desta tabela de 13: `fractal-swings.js` (swing high/low compartilhado —
+> ver `CLAUDE.md`), `market-structure-engine.js`,
+> `support-resistance-engine.js`, `bos-choch-engine.js`,
+> `fvg-order-block-engine.js`, `institutional-blocks.js`,
+> `liquidity-void-engine.js`, `candlestick-patterns.js`,
+> `lorentzian-classifier.js`, `zigzag-engine.js`, `supertrend-engine.js`,
+> `pivot-points-engine.js`, `ichimoku-engine.js`,
+> `delta-divergence-engine.js`, `andrews-pitchfork-engine.js`,
+> `hmm-regime-model.js`, `price-clustering.js` — todos crescidos
+> organicamente pelo ciclo real do Laboratório de Evolução (auditar → nomear →
+> isolar em `research/engines/` com suíte de execução real → graduar via
+> `engine-bridge.ts`), nunca pelo scaffold de 13 arquivos que este
+> documento planejou. `QUARANTINE.md` é a fonte de verdade sobre o que
+> existe agora — nunca a tabela abaixo.
+>
+> O que continua real e válido neste documento, preservado como registro
+> histórico (nunca apagado — Regra de Ouro 4): a garantia de design
+> "saída sempre descritiva, nunca prescritiva" e a fronteira
+> `READ_ONLY`/`FAIL_CLOSED` — esses princípios seguem valendo para TODO
+> motor real de `research/engines/` hoje, mesmo que nenhum tenha nascido
+> pelo caminho de scaffold que este documento descreve.
+
 ## Propósito
 
 Este documento descreve a **fundação arquitetural** de uma biblioteca de

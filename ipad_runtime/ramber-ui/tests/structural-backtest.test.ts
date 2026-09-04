@@ -317,7 +317,21 @@ describe('runStructuralBacktest — fail-closed e fronteira de laboratório', ()
     expect(badHorizon.reason).toBe('horizonte_invalido');
   });
 
-  it('FRONTEIRA (LEI 24): nenhum módulo de produção importa do laboratório de backtest — só testes', () => {
+  it('FRONTEIRA (LEI 24): só o worker de backtest autorizado importa do laboratório — mais ninguém', () => {
+    // GRADUAÇÃO AUTORIZADA (pedido explícito do Operador, registrado via
+    // AskUserQuestion: "constrói o botão de backtest dentro do app"). O
+    // cabeçalho de history-capture.js já previa exatamente isto — "a peça de
+    // código pronta para quando essa decisão de superfície for tomada
+    // explicitamente".
+    //
+    // A guarda NÃO foi afrouxada: ela ficou MAIS específica. Antes dizia
+    // "ninguém"; agora nomeia o ÚNICO consumidor autorizado e continua
+    // proibindo todo o resto. Um segundo importador — em App.tsx, num motor,
+    // no Core Engine — derruba a suíte, que é exatamente o risco que esta
+    // fronteira existe para impedir: o laboratório vazar para o caminho de
+    // decisão. O worker é display-only (LEI 24) e está travado como tal em
+    // backtest-in-app.test.ts.
+    const CONSUMIDOR_AUTORIZADO = 'workers/backtest-worker.ts';
     const roots = [resolve(here, '../src'), resolve(here, '../../src')];
     const offenders: string[] = [];
     const walk = (dir: string) => {
@@ -328,12 +342,13 @@ describe('runStructuralBacktest — fail-closed e fronteira de laboratório', ()
           walk(p);
         } else if (/\.(ts|tsx|js|mjs)$/.test(entry.name)) {
           const src = readFileSync(p, 'utf8');
-          if (src.includes('research/backtest/structural-backtest')) offenders.push(p);
+          if (src.includes('research/backtest/structural-backtest') && !p.replace(/\\/g, '/').endsWith(CONSUMIDOR_AUTORIZADO)) offenders.push(p);
         }
       }
     };
     for (const root of roots) walk(root);
     expect(offenders).toEqual([]);
+
   });
 
   it('o próprio fonte do laboratório declara a honestidade: aviso no contrato, zero rede/relógio/aleatoriedade', () => {

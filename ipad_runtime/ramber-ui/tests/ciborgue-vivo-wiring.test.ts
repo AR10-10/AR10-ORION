@@ -59,7 +59,9 @@ describe('App.tsx: bosChoch computado antes de voiceSnapshot (dependência real 
 describe('App.tsx → EnhancedChart_110_Percent: structureBreak passa ponta a ponta até o plugin', () => {
   it('ChartWidget lê bosChoch do contexto e repassa structureBreak={bosChoch?.break ?? null}', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
+    // liquidityVoids (liquidity-void-engine.js) viaja pelo MESMO contexto,
+    // na mesma posição — zero segunda rota de dado até o gráfico.
+    expect(app).toContain('const { smcZones, tradePlanStructureZones, bosChoch, liquidityVoids, institutionalBlocks, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, institutionalScore, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
     expect(app).toContain('structureBreak={bosChoch?.break ?? null}');
   });
 
@@ -79,7 +81,12 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
     const plugin = read('../src/chart/LiquidityZonesPlugin.tsx');
     expect(plugin).toContain('import { ageAlpha, type DecayConfig } from "./annotation-decay";');
     expect(plugin).toContain('const ZONE_DECAY: DecayConfig = { fadeStartCandles: 30, expireCandles: 100, minAlpha: 0.15 };');
-    expect(plugin).toContain('if (alpha <= 0) return;');
+    // Ordem de Fechamento ("não ficar poluído... marca certeira", fusão de
+    // zonas via liquidity-zone-fusion.ts): alpha agora chega PRÉ-RESOLVIDO
+    // no objeto de grupo fundido (resolveAlpha roda 1x por zona bruta, antes
+    // da fusão) — o gate "esquecida" continua o mesmo, só lê zone.alpha em
+    // vez de uma variável solta local a drawZone.
+    expect(plugin).toContain('if (zone.alpha <= 0) return;');
     // Fio de Seda (Regra de Ouro 2) continua 1px sólida real — o decay usa
     // globalAlpha, nunca setLineDash.
     expect(plugin).not.toContain('.setLineDash(');
@@ -93,10 +100,41 @@ describe('LiquidityZonesPlugin.tsx: decaimento real por idade + labels elegantes
     // paleta ganha o 3º argumento isObstacle(z) quando a MESMA zona é um
     // obstáculo real do plano ativo. Auditoria do ecossistema visual
     // (pergunta do Operador "era pra cima ou pra baixo?"): o label também
-    // carrega o glifo de direção ↑/↓ real (z.type do motor SMC), nunca só
-    // a cor — mesma chamada de sempre, só honesta sobre mais informação.
-    expect(plugin).toContain('fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
-    expect(plugin).toContain('obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));');
+    // carrega o glifo de direção ↑/↓ real (type real do motor SMC), nunca só
+    // a cor.
+    //
+    // Ordem de Fechamento: o label por zona bruta virou label por GRUPO
+    // FUNDIDO (drawGroup) — obstacle continua computado 1x por zona bruta
+    // (isObstacle(z), zero 2º cálculo) e entra no FusableZoneInput; o grupo
+    // herda isObstacle=true se QUALQUER membro real for obstáculo
+    // (fuseLiquidityZones, OR real, nunca escondido pela fusão — Regra de
+    // Ouro 4).
+    expect(plugin).toContain('const obstacle = isObstacle(z);');
+    expect(plugin).toContain('fusable.push({ top: z.top, bottom: z.bottom, index: z.index, isObstacle: obstacle, alpha: resolveAlpha(z, obstacle, weights?.[i]) });');
+    // O kind passa por uma forma curta (BRK/MIT) antes de entrar no rótulo,
+    // desde a graduação de institutional-blocks.js — mesma disciplina de "o
+    // tamanho das etiquetas". Glifo de direção e contagem ×N inalterados.
+    // Achado real ("o gráfico não tá legal"): a montagem do label virou uma
+    // função própria (labelFor), reusada tanto por Void (fusão+desenho
+    // juntos, drawGroup) quanto pelo grupo compartilhado FVG/OB/Breaker/
+    // Mitigation (drawSharedFillGroup) — zero segunda implementação de
+    // rótulo, mesmo texto exato.
+    expect(plugin).toContain(
+      'const labelFor = (kind: ZoneKind, type: "BULLISH" | "BEARISH", group: { memberCount: number; isObstacle: boolean }) =>',
+    );
+    expect(plugin).toContain('`${kindLabelOf(kind)}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;');
+  });
+
+  it('Diretriz Consolidação/Auditoria/Evolução (achado real): zona-obstáculo de um plano ATIVO nunca esmaece por idade fixa — alpha=1 enquanto isObstacleZone, ageAlpha normal caso contrário', () => {
+    const plugin = read('../src/chart/LiquidityZonesPlugin.tsx');
+    // Ordem de Fechamento: a lógica que antes vivia dentro de drawZone
+    // (5º argumento resolvedWeight) virou resolveAlpha, uma função própria
+    // chamada 1x por zona BRUTA antes da fusão — mesma regra exata: zona-
+    // obstáculo continua alpha=1 incondicional, IGNORANDO resolvedWeight de
+    // propósito (ver visual-budget-chart-wiring.test.ts para a cobertura
+    // completa desta regra).
+    expect(plugin).toContain('const resolveAlpha = (zone: FillableZone, isObstacleZone: boolean, resolvedWeight?: number) => {');
+    expect(plugin).toContain('return isObstacleZone ? 1 : resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, ZONE_DECAY);');
   });
 });
 
@@ -115,13 +153,20 @@ describe('StructureBreakMarkersPlugin.tsx: mesma arquitetura de overlay do Liqui
     expect(plugin).toContain('if (!brk) return; // sem rompimento real na amostra — nada a desenhar, honesto.');
   });
 
-  it('achado real de captura de tela do Operador ("CHOC" cortado/sobreposto pela caixa "EMA 21"): o TEXTO ("BOS"/"CHOCH") não é mais desenhado neste canvas próprio — migrou pra priceAxisLabels; a LINHA de rompimento continua intocada', () => {
+  it('achado real de captura de tela do Operador ("CHOC" cortado/sobreposto pela caixa "EMA 21"): o TEXTO ("BOS"/"CHOCH") não é mais desenhado neste canvas próprio — migrou pra priceAxisLabels; a LINHA de rompimento continua real, só nasce depois da seta (Ordem "FECHAMENTO INTEGRAL" §12, ver describe abaixo) em vez de em x1', () => {
     const plugin = read('../src/chart/StructureBreakMarkersPlugin.tsx');
     expect(plugin).not.toMatch(/ctx\.fillText\(brk\.type/);
     expect(plugin).not.toContain('ctx.font = "10px -apple-system, sans-serif";');
-    // a linha real (moveTo/lineTo/stroke) continua exatamente como antes
-    expect(plugin).toContain('ctx.moveTo(x1, yLine);');
-    expect(plugin).toContain('ctx.lineTo(cssWidth, yLine);');
+    // a linha real (moveTo/lineTo/stroke) continua real; só o ponto de
+    // partida deslocou para depois da seta, nunca mais sobre ela.
+    expect(plugin).toContain('ctx.moveTo(x1 + ARROW_HALF_SIZE + ARROW_GAP_PX, yLine);');
+    // A linha para na FRONTEIRA MEDIDA do eixo (chart-plot-area.ts), nunca
+    // em cssWidth — que e a borda do CONTAINER e faria a linha correr por
+    // baixo dos numeros do preco. Invariante somado, nao afrouxado: a
+    // asserção negativa abaixo trava o retorno ao valor antigo.
+    expect(plugin).toContain('ctx.lineTo(plotRight, yLine);');
+    expect(plugin).toContain('measurePlotArea');
+    expect(plugin).not.toContain('ctx.lineTo(cssWidth, yLine);');
     expect(plugin).toContain('ctx.stroke();');
   });
 
@@ -131,34 +176,83 @@ describe('StructureBreakMarkersPlugin.tsx: mesma arquitetura de overlay do Liqui
   });
 });
 
+// Ordem "FECHAMENTO INTEGRAL" §12 ("Setas e Direção"): seta pequena,
+// precisa, orientada, no ponto real do rompimento — zero dado novo (mesma
+// brk.direction/x1/y que a linha companheira já usa), zero segunda curva
+// de decaimento (mesmo alpha resolvido acima govern a seta também, via
+// ctx.globalAlpha já setado antes do bloco).
+describe('Ordem "FECHAMENTO INTEGRAL" §12: seta de direção no ponto real do rompimento BOS/CHOCH', () => {
+  const plugin = () => read('../src/chart/StructureBreakMarkersPlugin.tsx');
+
+  it('triângulo pequeno (±4px) apontando para a direção real do rompimento — ALTA aponta para cima, o resto para baixo', () => {
+    const p = plugin();
+    expect(p).toContain('const ARROW_HALF_SIZE = 4;');
+    expect(p).toContain('const ARROW_GAP_PX = 3;');
+    // bullish (ALTA): ápice em y - HALF, base em y + HALF — aponta pra cima.
+    expect(p).toContain('ctx.moveTo(x1, y - ARROW_HALF_SIZE);');
+    expect(p).toContain('ctx.lineTo(x1 - ARROW_HALF_SIZE, y + ARROW_HALF_SIZE);');
+    expect(p).toContain('ctx.lineTo(x1 + ARROW_HALF_SIZE, y + ARROW_HALF_SIZE);');
+    // bearish: ápice em y + HALF, base em y - HALF — aponta pra baixo.
+    expect(p).toContain('ctx.moveTo(x1, y + ARROW_HALF_SIZE);');
+    expect(p).toContain('ctx.lineTo(x1 - ARROW_HALF_SIZE, y - ARROW_HALF_SIZE);');
+    expect(p).toContain('ctx.lineTo(x1 + ARROW_HALF_SIZE, y - ARROW_HALF_SIZE);');
+  });
+
+  it('MESMA cor real da linha (color, já derivada de brk.direction acima) — nunca uma cor nova só para a seta', () => {
+    const p = plugin();
+    const idx = p.indexOf('const ARROW_HALF_SIZE = 4;');
+    const block = p.slice(idx, p.indexOf('ctx.fill();', idx) + 'ctx.fill();'.length);
+    expect(block).toContain('ctx.fillStyle = color;');
+    expect(block).toContain('ctx.fill();');
+    expect(block).not.toContain('fillStyle = "');
+  });
+
+  it('seta e linha nunca se sobrepõem: a seta desenha ANTES (no ponto x1), a linha nasce só depois do respiro (x1 + ARROW_HALF_SIZE + ARROW_GAP_PX) — "não deixar setas atravessarem... textos" vale também para a linha companheira', () => {
+    const p = plugin();
+    const arrowIdx = p.indexOf('const ARROW_HALF_SIZE = 4;');
+    const lineIdx = p.indexOf('ctx.moveTo(x1 + ARROW_HALF_SIZE + ARROW_GAP_PX, yLine);');
+    expect(arrowIdx).toBeGreaterThan(-1);
+    expect(lineIdx).toBeGreaterThan(arrowIdx);
+  });
+});
+
 describe('Achado real de captura de tela do Operador: rótulo BOS/CHOCH migrado para priceAxisLabels (mesmo sistema anti-colisão de S1/R1/VWAP/NL/EMA/TREND/Trade Plan) — nunca mais atrás da caixa de outro rótulo', () => {
   const chart = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
 
   it('EnhancedChart_110_Percent importa BREAK_DECAY do plugin e ageAlpha de annotation-decay — mesma dupla real, zero segunda fonte', () => {
     const c = chart();
     expect(c).toContain('import { StructureBreakMarkersPlugin, BREAK_DECAY } from "./StructureBreakMarkersPlugin";');
+    // Pendência #6: `type DecayConfig` saiu deste import — deixou de ser
+    // usado no arquivo quando SWEEP_DECAY migrou para
+    // LiquiditySweepLinesPlugin.tsx (import próprio, ver
+    // liquidity-sweep-lines-plugin-wiring.test.ts). ageAlpha continua real
+    // aqui (etiquetas do eixo de BOS/CHOCH e de Sweep).
     expect(c).toContain('import { ageAlpha } from "./annotation-decay";');
   });
 
   it('a entrada em priceAxisLabels usa o MESMO price/type/direction do structureBreak real — nunca uma segunda leitura', () => {
     const c = chart();
-    const idx = c.indexOf('if (structureBreak) {', c.indexOf('const priceAxisLabels = useMemo'));
+    // Evolução Total: bloco ganhou gate de visibility.structure_breaks
+    // (mesma disciplina de todo outro bloco do eixo) e o alpha agora é o
+    // MESMO peso resolvido pelo orçamento visual que o marcador já usa
+    // ("um objeto, um peso"), com o ageAlpha isolado como fallback.
+    const idx = c.indexOf('if (visibility.structure_breaks && structureBreak) {', c.indexOf('const priceAxisLabels = useMemo'));
     expect(idx, 'bloco do structureBreak não encontrado em priceAxisLabels').toBeGreaterThan(-1);
     const end = c.indexOf('return out;', idx);
     const block = c.slice(idx, end);
     expect(block).toContain('const point = data[structureBreak.index];');
     expect(block).toContain('const age = data.length - 1 - structureBreak.index;');
-    expect(block).toContain('const alpha = ageAlpha(age, BREAK_DECAY);');
+    expect(block).toContain('const alpha = structureBreakVisualWeight ?? ageAlpha(age, BREAK_DECAY);');
     expect(block).toContain('const bullish = structureBreak.direction === "ALTA";');
     expect(block).toContain('price: structureBreak.level,');
     expect(block).toContain('text: structureBreak.type,');
-    expect(block).toContain('color: bullish ? "rgba(0, 255, 170, 0.75)" : "rgba(255, 0, 85, 0.75)",');
+    expect(block).toContain('color: bullish ? "rgba(8, 153, 129, 0.75)" : "rgba(242, 54, 69, 0.75)",');
     expect(block).toContain('alpha,');
   });
 
   it('fail-closed: sem ponto real na janela de candles carregada, ou alpha já esquecido (<=0), nunca empurra a etiqueta', () => {
     const c = chart();
-    const idx = c.indexOf('if (structureBreak) {', c.indexOf('const priceAxisLabels = useMemo'));
+    const idx = c.indexOf('if (visibility.structure_breaks && structureBreak) {', c.indexOf('const priceAxisLabels = useMemo'));
     const end = c.indexOf('return out;', idx);
     const block = c.slice(idx, end);
     expect(block).toContain('if (point) {');
@@ -183,12 +277,20 @@ describe('App.tsx: SystemStatusBadge — indicador compacto de risco/saúde semp
   });
 });
 
-describe('voice-dispatcher.ts: alerta real de BOS/CHOCH reaproveita o MESMO pipeline (zero segundo mecanismo de alerta)', () => {
-  it('CHOCH dispara ALERT, BOS dispara INFO, só numa transição real (chave muda)', () => {
+describe('snapshot-alerts.ts: alerta real de BOS/CHOCH reaproveita o MESMO pipeline (zero segundo mecanismo de alerta)', () => {
+  // A regra mudou de casa na unificação dos alertas (voice-dispatcher.ts
+  // deixou de DETECTAR e passou a CONSUMIR) — a intenção travada aqui é a
+  // mesma: um evento por transição real de chave, CHOCH mais severo que BOS.
+  // A prova de COMPORTAMENTO vive em tests/snapshot-alerts.test.ts, por
+  // execução real; este continua sendo só o guarda barato de fiação.
+  it('a detecção vive no produtor único, nunca mais no dispatcher de voz', () => {
+    const produtor = read('../src/nexus/snapshot-alerts.ts');
+    expect(produtor).toContain('next.structureBreakKey !== prev.structureBreakKey');
+    expect(produtor).toContain('next.structureBreakType === "CHOCH"');
+
     const dispatcher = read('../src/voice/voice-dispatcher.ts');
-    expect(dispatcher).toContain("if (next.structureBreakKey && next.structureBreakKey !== prev.structureBreakKey) {");
-    expect(dispatcher).toContain("if (next.structureBreakType === 'CHOCH') {");
-    expect(dispatcher).toContain("priority: 'ALERT'");
+    expect(dispatcher).not.toContain('structureBreakKey');
+    expect(dispatcher).toContain('deriveSnapshotAlerts');
   });
 });
 
@@ -231,6 +333,21 @@ describe('App.tsx: TelemetryHealthWidget ganha o gerador de relatório de autodi
     expect(body).toContain('health,');
     expect(body).toContain('connections,');
     expect(body).toContain('formatDiagnosticReportMarkdown(diagnosticReport)');
+  });
+
+  // ORDEM OFICIAL Nº 01 (Autogovernança): traceStages() (stage-runner.ts,
+  // já real e testado) ganha aqui seu primeiro consumidor ao vivo — a
+  // mesma visão versionada/read-only que os motores reais já usam
+  // (getSnapshotForEngine), nunca uma segunda leitura da store, nunca um
+  // motor novo.
+  it('lê o snapshot real via getSnapshotForEngine() e passa traceStages(...) real como stageTrace — zero segunda fonte, zero seq fabricado', () => {
+    const app = read('../src/App.tsx');
+    expect(app).toContain('import { getOrganismOrchestrator, getSnapshotForEngine } from "./nexus/organism-orchestrator";');
+    expect(app).toContain('import { traceStages } from "./nexus/stage-runner";');
+    const fnMatch = app.match(/function TelemetryHealthWidget\(\) \{([\s\S]*?)\n\}\n/);
+    const body = fnMatch![1];
+    expect(body).toContain('const engineView = getSnapshotForEngine();');
+    expect(body).toContain('stageTrace: traceStages(engineView.snapshot, engineView.seq),');
   });
 });
 

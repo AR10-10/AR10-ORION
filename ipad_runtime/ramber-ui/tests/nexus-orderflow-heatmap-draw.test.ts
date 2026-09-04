@@ -11,6 +11,8 @@ import {
   drawHeatmapFrame,
   computeCellAlpha,
   computeBubbleRadius,
+  computeRecencyWeight,
+  RECENCY_FADE_FLOOR,
   type DrawableContext2D,
   type HeatmapFrame,
 } from '../src/nexus/orderflow-heatmap-draw';
@@ -37,11 +39,11 @@ function fakeCtx(): DrawableContext2D & { calls: string[] } {
 
 describe('computeCellAlpha: opacidade real proporcional ao tamanho DENTRO do frame, nunca um limiar fixo (Regra de Ouro 1)', () => {
   it('nível no máximo real observado recebe a maior opacidade da janela', () => {
-    expect(computeCellAlpha(100, 100)).toBeCloseTo(0.30, 5);
+    expect(computeCellAlpha(100, 100)).toBeCloseTo(0.16, 5);
   });
 
   it('metade do máximo real recebe opacidade proporcional real, nunca arredondada a um valor de exemplo', () => {
-    expect(computeCellAlpha(50, 100)).toBeCloseTo(0.04 + 0.5 * (0.30 - 0.04), 5);
+    expect(computeCellAlpha(50, 100)).toBeCloseTo(0.03 + 0.5 * (0.16 - 0.03), 5);
   });
 
   it('sem profundidade real (size<=0) nunca desenha — zero alpha honesto, nunca um piso fabricado', () => {
@@ -54,13 +56,13 @@ describe('computeCellAlpha: opacidade real proporcional ao tamanho DENTRO do fra
   });
 
   it('nunca ultrapassa o teto real mesmo se size > maxSize por alguma inconsistência de amostragem', () => {
-    expect(computeCellAlpha(500, 100)).toBeCloseTo(0.30, 5);
+    expect(computeCellAlpha(500, 100)).toBeCloseTo(0.16, 5);
   });
 });
 
 describe('computeBubbleRadius: raio real proporcional ao volume — trade grande real nunca fica invisível', () => {
   it('volume no máximo real observado recebe o maior raio da janela', () => {
-    expect(computeBubbleRadius(1000, 1000)).toBeCloseTo(11, 5);
+    expect(computeBubbleRadius(1000, 1000)).toBeCloseTo(9, 5);
   });
 
   it('caso degenerado (maxVolume indisponível) devolve o raio MÍNIMO visível, nunca 0 — o trade já é real', () => {
@@ -70,6 +72,37 @@ describe('computeBubbleRadius: raio real proporcional ao volume — trade grande
   it('volume inválido (<=0) também cai no raio mínimo, nunca um raio negativo/NaN', () => {
     expect(computeBubbleRadius(0, 1000)).toBe(3);
     expect(computeBubbleRadius(-10, 1000)).toBe(3);
+  });
+});
+
+describe('computeRecencyWeight: fade real por posição no ring buffer (Diretriz Final de Lapidação Visual, Partes 3/4)', () => {
+  it('amostra mais recente (último índice) recebe peso máximo real (1)', () => {
+    expect(computeRecencyWeight(9, 10)).toBe(1);
+  });
+
+  it('amostra mais antiga (índice 0) recebe exatamente RECENCY_FADE_FLOOR, nunca 0 — dado real nunca é apagado', () => {
+    expect(computeRecencyWeight(0, 10)).toBeCloseTo(RECENCY_FADE_FLOOR, 5);
+    expect(computeRecencyWeight(0, 10)).toBeGreaterThan(0);
+  });
+
+  it('amostra no meio do buffer recebe peso real interpolado linearmente', () => {
+    // índice 4 de 0..9 (10 amostras) => fraction = 4/9
+    const expected = RECENCY_FADE_FLOOR + (4 / 9) * (1 - RECENCY_FADE_FLOOR);
+    expect(computeRecencyWeight(4, 10)).toBeCloseTo(expected, 5);
+  });
+
+  it('buffer com 1 única amostra real => peso máximo (nada pra interpolar, honesto)', () => {
+    expect(computeRecencyWeight(0, 1)).toBe(1);
+  });
+
+  it('buffer vazio (length 0) => peso máximo por convenção segura, nunca NaN/divisão por zero', () => {
+    expect(computeRecencyWeight(0, 0)).toBe(1);
+    expect(Number.isFinite(computeRecencyWeight(0, 0))).toBe(true);
+  });
+
+  it('peso é monotonicamente crescente com o índice — mais recente nunca pesa menos que uma amostra mais antiga', () => {
+    const weights = Array.from({ length: 10 }, (_, i) => computeRecencyWeight(i, 10));
+    for (let i = 1; i < weights.length; i++) expect(weights[i]).toBeGreaterThanOrEqual(weights[i - 1]);
   });
 });
 

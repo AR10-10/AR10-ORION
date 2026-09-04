@@ -1,7 +1,7 @@
 // wolfe-eta-range.test.ts — Diretriz Mestra §9 (Wolfe Waves) + §6 (faixa
 // mínimo–provável da ETA): execução real das duas extensões.
 import { describe, it, expect } from 'vitest';
-import { detectHarmonicPatterns, MIN_FIT_SCORE } from '../src/nexus/harmonic-patterns';
+import { detectHarmonicPatterns } from '../src/nexus/harmonic-patterns';
 import { computeTargetEtas, formatEtaRange } from '../src/nexus/eta-engine';
 import type { TradePlan } from '../src/nexus/trade-plan';
 

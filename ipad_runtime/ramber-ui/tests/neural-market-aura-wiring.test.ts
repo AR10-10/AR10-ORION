@@ -38,7 +38,14 @@ describe('chart/NeuralMarketAuraPlugin.tsx: mesma arquitetura de overlay das irm
   it('largura do corredor vem de corridorWidthFactor (convicção real), nunca uma largura fixa arbitrária', () => {
     const plugin = read('../src/chart/NeuralMarketAuraPlugin.tsx');
     expect(plugin).toContain('function corridorWidthPx(widthFactor: number | null): number {');
-    expect(plugin).toContain('const bandWidth = Math.min(cssWidth, corridorWidthPx(corridorWidthFactor));');
+    // O teto do corredor passou de cssWidth (borda do CONTAINER) para a
+    // fronteira medida do eixo — o corredor corria por baixo dos numeros do
+    // preco. A afirmacao real deste teste (a largura vem de
+    // corridorWidthFactor, nunca de um numero fixo) segue intacta, e ganhou
+    // a asserção negativa que trava o retorno.
+    expect(plugin).toContain('const bandWidth = Math.min(plotRight, corridorWidthPx(corridorWidthFactor));');
+    expect(plugin).toContain('measurePlotArea');
+    expect(plugin).not.toMatch(/bandWidth = Math\.min\(cssWidth,/);
   });
 
   it('resolução (TARGET_HIT/PARTIAL_HIT/STOP_HIT) usa cor de RESULTADO real, não de direção — um SHORT que bate o alvo é sucesso (verde), não "vermelho porque é short"', () => {
@@ -169,7 +176,7 @@ describe('EnhancedChart_110_Percent.tsx: aura montada ANTES da caixa de entrada 
 describe('App.tsx: ChartWidget computa auraReading reaproveitando trackRecord real + confluenceCorridor da store (Fase 5)', () => {
   it('importa computeAuraReading/TIMEFRAME_MS de nexus/aura-lifecycle', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('import { computeAuraReading, TIMEFRAME_MS } from "./nexus/aura-lifecycle";');
+    expect(app).toContain('import { computeAuraReading, TIMEFRAME_MS, DISSOLVE_CONFIG } from "./nexus/aura-lifecycle";');
   });
 
   it('usa useTrackRecordSnapshot (mesma fatia real do Signal Track Record) + useConfluenceCorridorSnapshot (Fase 5, já obstáculo-ciente), nunca um segundo cálculo de convicção', () => {
@@ -199,16 +206,19 @@ describe('voice-intents.ts + voice-dispatcher.ts: eventos reais do ciclo de vida
     expect(intents).toContain("convictionVerdict: 'CONFIRMS' | 'CONTRADICTS' | 'MIXED' | null;");
   });
 
-  it('computeAlerts dispara em transição real de abertura/resolução/zona/convicção, nunca por repetição', () => {
-    const dispatcher = read('../src/voice/voice-dispatcher.ts');
-    expect(dispatcher).toContain('if (next.tradePlanOpenKey && next.tradePlanOpenKey !== prev.tradePlanOpenKey) {');
-    expect(dispatcher).toContain('if (!prev.inEntryZone && next.inEntryZone) {');
-    expect(dispatcher).toContain('if (next.tradePlanResolutionKey && next.tradePlanResolutionKey !== prev.tradePlanResolutionKey) {');
+  it('a detecção dispara em transição real de abertura/resolução/zona/convicção, nunca por repetição', () => {
+    // Mudou de casa na unificação dos alertas: quem detecta agora é o
+    // produtor único. Comportamento provado por execução real em
+    // tests/snapshot-alerts.test.ts.
+    const produtor = read('../src/nexus/snapshot-alerts.ts');
+    expect(produtor).toContain('next.tradePlanOpenKey !== prev.tradePlanOpenKey');
+    expect(produtor).toContain('!prev.inEntryZone && next.inEntryZone');
+    expect(produtor).toContain('next.tradePlanResolutionKey !== prev.tradePlanResolutionKey');
   });
 
   it('convicção reduzida só entre DUAS leituras reais (nunca a partir de null = "indisponível" tratado como "reduzida")', () => {
-    const dispatcher = read('../src/voice/voice-dispatcher.ts');
-    expect(dispatcher).toContain('prev.convictionVerdict && next.convictionVerdict &&');
+    const produtor = read('../src/nexus/snapshot-alerts.ts');
+    expect(produtor).toContain('prev.convictionVerdict && next.convictionVerdict &&');
   });
 });
 

@@ -1,10 +1,68 @@
 name: Deploy iPad Runtime (GitHub Pages)
 
+# ═══════════════════════════════════════════════════════════════════════
+# PUBLICAÇÃO AUTOMÁTICA DESLIGADA (pedido do Operador: "eu queria deixar
+# privado... só eu acessar, e outras pessoas só se eu autorizar").
+#
+# MOTIVO REAL, não preferência: num plano Free/Pro do GitHub, um site do
+# GitHub Pages é PÚBLICO por URL — inclusive com o repositório privado
+# (Pages de visibilidade restrita só existe no GitHub Enterprise Cloud).
+# Enquanto este workflow publicasse a cada push, o painel continuaria
+# acessível a qualquer pessoa com o link, e nenhuma trava no código
+# mudaria isso: o portão em JavaScript só roda DEPOIS de o app inteiro já
+# ter sido entregue ao navegador.
+#
+# O deploy real agora é deploy-cloudflare-pages.yml, onde a autenticação
+# acontece no servidor (Cloudflare Access), antes da entrega.
+#
+# RELIGADO (2026-08-31) — instrucao mais recente do Operador, que substitui
+# a anterior: "a gente vai desabilitar o servidor local por enquanto, focar
+# so na parte da nuvem" e depois "ligue correndo o oficial, certinho, pra me
+# usar".
+#
+# O historico completo desta gangorra fica registrado de proposito, porque
+# cada virada teve uma razao real: Pages -> desligado por privacidade ->
+# Cloudflare Access -> rodar local -> Pages de novo. O que mudou agora e' o
+# objetivo declarado: o Operador quer USAR o painel pela URL oficial
+# (https://ar10-10.github.io/AR10-ORION/).
+#
+# POR QUE O GATILHO APONTA PARA A BRANCH DE TRABALHO, E NAO SO' PARA main:
+# medido nesta data, `main` esta 208 commits ATRAS da branch de trabalho
+# (PR #15 e PR #16 ainda nao mergeadas). Publicar a partir de main colocaria
+# no ar algo AINDA MAIS VELHO que o build de 24/08 que ja esta la — inclusive
+# sem a correcao do defeito em que o grafico MENSAL era lido como de 1 MINUTO
+# (erro de fator 43.200). main segue na lista para o dia em que as PRs forem
+# mergeadas; ate' la, a branch de trabalho e' a unica fonte honesta.
+#
+# ATENCAO, e isto e o que realmente importa: desligar este workflow impede
+# NOVAS publicacoes, mas NAO tira do ar o site ja publicado. Isso so acontece
+# em Settings > Pages > Source: None — passo que so o Operador pode executar.
+# Ver docs/RODAR_LOCAL.md secao "Tirar o que ja esta publicado do ar".
+#
+# O QUE PROTEGE ESTE DEPLOY AGORA: o passo "Verificar segredo do portao"
+# abaixo. Sem VITE_ACCESS_HASH cadastrado, este workflow FALHA em vez de
+# publicar um build que trancaria o Operador para fora do proprio painel.
+# ═══════════════════════════════════════════════════════════════════════
+# MEDIDO EM EXECUCAO REAL (2026-08-31), corrigindo a tentativa anterior:
+# incluir a branch de trabalho aqui NAO funciona. O job morreu em 2 SEGUNDOS,
+# sem log de nenhum passo — ou seja, rejeitado ANTES do checkout, no nivel do
+# `environment: github-pages` declarado abaixo, nunca no codigo.
+#
+# A causa nao e' "Pages nao aceita branch que nao seja a padrao": os deploys
+# de 24/08 rodaram com SUCESSO a partir de `claude/eloquent-cannon-qyt86y`,
+# que tambem nao era a padrao. O ambiente tem uma LISTA de branches
+# autorizadas, e ela ficou com a branch antiga — nao com esta.
+#
+# Isso e' configuracao de repositorio (Settings > Environments >
+# github-pages > Deployment branches), fora do alcance de qualquer commit.
+# Entao o caminho honesto nao e' insistir aqui: e' `main`, que ja e' a
+# origem naturalmente autorizada. Para o site publicar a versao ATUAL, o
+# que falta e' mergear PR #15 e PR #16 — o mesmo passo que tira o `main` de
+# 208 commits de atraso. Um passo resolve os dois problemas.
 on:
   push:
     branches:
       - main
-      - claude/eloquent-cannon-qyt86y
     paths:
       - 'ipad_runtime/**'
       - '.github/workflows/deploy-ipad-pwa.yml'
@@ -27,7 +85,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # ramber-ui/ is the source tree for the RAMBER terminal (React/
       # Vite) — the ONLY app served at this repo's root. Its build output
@@ -36,7 +94,7 @@ jobs:
       # committed (generated fresh on every deploy), same reasoning as
       # node_modules/dist being gitignored — only source is versioned.
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
@@ -54,8 +112,35 @@ jobs:
           npm ci --include=dev
           npm run test
 
+      # TRAVA ANTI-BLOQUEIO (aprendida antes de acontecer, nao depois).
+      #
+      # O portao de acesso virou fail-closed: sem VITE_ACCESS_HASH o app
+      # mostra "Acesso nao configurado" e NAO ABRE. Se este workflow fosse
+      # religado sem o segredo estar cadastrado, ele publicaria por cima do
+      # site que o Operador usa hoje um build que TRANCA ele para fora do
+      # proprio painel — uma regressao pior do que nao publicar nada.
+      #
+      # Por isso a checagem vem ANTES do build, e falha alto com a causa.
+      - name: Verificar segredo do portao antes de publicar
+        env:
+          VITE_ACCESS_HASH: ${{ secrets.VITE_ACCESS_HASH }}
+        run: |
+          if [ -z "$VITE_ACCESS_HASH" ]; then
+            echo "::error::VITE_ACCESS_HASH nao esta definido — publicar agora TRANCARIA o Operador para fora do painel."
+            echo "::error::Cadastre em Settings > Secrets and variables > Actions antes de reativar este deploy."
+            echo "::error::Gere o hash com: printf '%s' 'SUA_SENHA' | shasum -a 256   (ver docs/ACESSO_PRIVADO.md)"
+            exit 1
+          fi
+          if ! printf '%s' "$VITE_ACCESS_HASH" | grep -Eq '^[0-9a-fA-F]{64}$'; then
+            echo "::error::VITE_ACCESS_HASH nao e um SHA-256 hexadecimal de 64 caracteres."
+            exit 1
+          fi
+          echo "Segredo presente — publicar nao vai trancar o acesso."
+
       - name: Build RAMBER UI (React/Vite) and place at ipad_runtime root
         working-directory: ipad_runtime/ramber-ui
+        env:
+          VITE_ACCESS_HASH: ${{ secrets.VITE_ACCESS_HASH }}
         run: |
           npm ci --include=dev
           npm run build

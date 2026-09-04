@@ -57,6 +57,12 @@ export interface HealthSnapshot {
   cycleLatencyMs: number | null;
   memoryMb: number | null; // null quando performance.memory não existe (Safari) — nunca fabricado
   workersAlive: number;
-  isOnline: boolean;
+  // Ponta Solta 2 (Auditoria do Ecossistema, 2ª passada): `isOnline` vivia
+  // aqui como um SEGUNDO campo para o mesmo fato que `offline` (topo da
+  // store) já carrega — e, ao contrário de `offline`, nunca teve um único
+  // leitor. `offline` é escrito pelos listeners reais de window.online/
+  // offline e é lido por useOfflineSnapshot() em App.tsx, aparecendo na
+  // tela. Duas caixinhas para o mesmo fato só produzem divergência; ficou a
+  // que é usada. Zero dado real perdido (Regra de Ouro 4).
   lastUpdatedAt: number;
 }

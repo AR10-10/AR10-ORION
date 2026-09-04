@@ -19,6 +19,27 @@
 // large regime-shift outliers on the distance metric, so a single volatile
 // bar doesn't dominate which historical neighbors get selected.
 //
+// Chronological spacing (Ordem "Lapidação Matemática e Visual" — pesquisa
+// real confirmada antes de implementar): a técnica de referência (jdehorty,
+// "ML: Lorentzian Classification") só aceita um vizinho candidato a cada 4
+// barras de distância cronológica entre si — documentado pelo próprio autor
+// como necessário para "garantir distribuição cronologicamente uniforme dos
+// vizinhos" e "prevenir viés de agrupamento temporal no treino". Motivo real
+// e mensurável: RSI/ROC/ATR% são recorrências sobre janelas móveis — candles
+// adjacentes têm features quase idênticas por construção (autocorrelação),
+// então sem espaçamento os k=8 vizinhos mais próximos tendem a vir todos da
+// MESMA janela contígua recente (uma única tendência, contada 8 vezes) em
+// vez de 8 analogias históricas de fato independentes — infla a confiança
+// reportada sem nenhum ganho real de evidência. computeCandidateIndices()
+// abaixo pega só o espaçamento (uma ideia com justificativa estatística
+// real, DIRETRIZ 3/8/9); o mecanismo de streaming do Pine original
+// (lastDistance crescente + FIFO shift) é uma aproximação motivada pelo
+// orçamento de execução por-barra do TradingView, não uma técnica
+// estatisticamente superior a um top-k por ordenação completa — este motor
+// já ordena o pool inteiro (linha ~280), o que é estritamente mais preciso
+// que a aproximação; portar aquele mecanismo seria só complexidade sem
+// ganho.
+//
 // Honesty constraints specific to this engine: with only ~100 real
 // candles available in this app (one REST probe's worth), the usable
 // labeled training set after warmup/horizon trimming is small (typically
@@ -31,13 +52,14 @@
 export const metadata = {
     engine: 'lorentzian-classifier',
     description: 'Classificador k-NN com distância Lorentziana sobre features reais (RSI/ROC/ATR%) extraídas de candles reais, com suavização de Fourier (passa-baixa) no preço de fechamento.',
-    concepts: ['Lorentzian distance k-NN', 'Fourier low-pass smoothing', 'RSI', 'Rate of Change', 'ATR normalizado'],
+    concepts: ['Lorentzian distance k-NN', 'Fourier low-pass smoothing', 'RSI', 'Rate of Change', 'ATR normalizado', 'Espaçamento cronológico anti-autocorrelação'],
     required_data: ['ohlcv_series'],
     status: 'ACTIVE_READ_ONLY',
     limitations: [
-        'k-NN construído em tempo real sobre a janela de candles disponível nesta sessão (tipicamente ~100) — não é um modelo pré-treinado, e o conjunto de treino rotulado utilizável é pequeno (~60-80 pontos após warmup/horizonte). sample_size sempre reportado, nunca escondido.',
+        'k-NN construído em tempo real sobre a janela de candles disponível nesta sessão (tipicamente ~100) — não é um modelo pré-treinado, e o conjunto de treino rotulado utilizável é pequeno (~15-20 pontos após warmup/horizonte/espaçamento cronológico). sample_size sempre reportado, nunca escondido.',
+        'Espaçamento cronológico (>=4 candles entre candidatos, mesma convenção da técnica de referência): reduz autocorrelação entre vizinhos, mas também reduz o pool de treino em ~4x frente à versão sem espaçamento — troca deliberada de disponibilidade por rigor estatístico (mais casos honestos de DADOS_INSUFICIENTES em janelas pequenas), nunca escondida.',
         'É um sinal de confluência independente — não substitui nem sobrepõe o sinal LONG/SHORT/WAIT da heurística de tendência real (engine-bridge.ts) — esse sinal vem de SMA/EMA em JS puro, não do WASM (Auditoria Mestra 360°, secao 3).',
-        'Sem candles suficientes para o warmup dos indicadores + horizonte de rótulo + k vizinhos, cai em DADOS_INSUFICIENTES.',
+        'Sem candles suficientes para o warmup dos indicadores + horizonte de rótulo + k vizinhos espaçados, cai em DADOS_INSUFICIENTES.',
     ],
 };
 
@@ -167,8 +189,12 @@ export function computeROC(closes, period = 9) {
     return out;
 }
 
-/** ATR de Wilder, normalizado como % do close (comparavel entre regimes
- *  de preco diferentes). Usa high/low/close BRUTOS (nao suavizados) — ATR
+/** ATR de Wilder (suavizacao recursiva RMA), normalizado como % do close
+ *  (comparavel entre regimes de preco diferentes). Devolve a SERIE.
+ *
+ *  NAO e a mesma coisa que meanTrueRangePercent de market-regime/
+ *  regime-engine.js, que usa media SIMPLES dos TR e devolve um escalar —
+ *  ver o comentario de la para o porque de nao serem consolidados. Usa high/low/close BRUTOS (nao suavizados) — ATR
  *  mede volatilidade real, suavizar a serie removeria o proprio sinal que
  *  ele existe para medir. NaN nos primeiros `period` indices. */
 export function computeAtrPercent(candles, period = 14) {
@@ -209,6 +235,14 @@ const SMOOTH_WINDOW = 32;
 const FOURIER_KEEP_COMPONENTS = 6;
 const DEFAULT_LABEL_HORIZON = 4;
 const DEFAULT_K = 8;
+// Espaçamento cronológico mínimo (em candles) entre candidatos do pool de
+// treino — mesmo valor da técnica de referência (ver bloco de comentário
+// no topo do arquivo). Ancorado no índice ABSOLUTO do candle (nunca
+// relativo a currentIndex/candles.length): um valor estável garante que
+// anexar 1 candle novo só pode tornar exatamente 1 índice novo elegível,
+// nunca reclassificar candidatos antigos — mesma invariante que o teste
+// "never grows sample_size by more than 1" já cobre.
+export const CHRONOLOGICAL_SPACING = 4;
 
 /**
  * @param {{ ohlcv_series: Array<{t?:number,o?:number,h?:number,l?:number,c?:number,open?:number,high?:number,low?:number,close?:number}>, k?: number, horizon?: number }} input
@@ -262,9 +296,17 @@ export function classify(input = {}) {
     // Conjunto de treino: todo indice i cujo rotulo (i+horizon) já está
     // resolvido E que é estritamente anterior ao candle atual — nunca usa
     // informação futura em relação ao ponto que está sendo classificado.
+    // Espaçamento cronológico (i % CHRONOLOGICAL_SPACING === 0): como
+    // QUALQUER par de múltiplos de 4 difere em pelo menos 4, filtrar o pool
+    // de candidatos aqui já garante que os k vizinhos finais (escolhidos por
+    // ordenação completa da distância Lorentziana sobre este pool, abaixo)
+    // ficam mutuamente espaçados — mesma propriedade da técnica de
+    // referência, sem precisar reimplementar a aproximação de streaming
+    // dela (ver comentário no topo do arquivo).
     const trainingSet = [];
     const lastLabelableIndex = candles.length - 1 - LABEL_HORIZON;
     for (let i = warmup; i <= lastLabelableIndex; i++) {
+        if (i % CHRONOLOGICAL_SPACING !== 0) continue;
         if (!isValidFeature(features[i])) continue;
         const label = Math.sign(closes[i + LABEL_HORIZON] - closes[i]);
         if (label === 0) continue; // sem movimento real -> nao adiciona ruido ao voto

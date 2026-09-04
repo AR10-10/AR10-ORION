@@ -13,6 +13,9 @@
 // do mercado, nunca uma segunda decisão de trading — o único LONG/SHORT/
 // WAIT real continua sendo o Core Engine.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import type { StructureBreak } from "../engine-bridge";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
@@ -35,21 +38,33 @@ interface StructureBreakMarkersPluginProps {
   series: ISeriesApi<"Candlestick"> | null;
   data: { time: number }[];
   structureBreak: StructureBreak | null;
+  // Ordem Nº 03 / Homologação: peso visual final real, já resolvido por
+  // resolveVisualBudget (nexus/visual-budget.ts) — competição CRUZADA com
+  // Zonas Institucionais/Trade Plan, nunca só a idade PRÓPRIA do
+  // rompimento. undefined/null = sem competição real ainda resolvida pelo
+  // chamador; cai de volta em ageAlpha(age, BREAK_DECAY) (comportamento já
+  // validado antes desta rodada, nunca um valor fabricado).
+  visualWeight?: number | null;
+  // Achado real (auditoria "cada item no seu canto, nada cobrindo nada"):
+  // sem isto o marcador ia até plotRight puro — cruzando a lane do
+  // Volume Profile/TPO/Order Book Depth quando ativas. Opcional/
+  // fail-closed.
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
-export function StructureBreakMarkersPlugin({ chart, series, data, structureBreak }: StructureBreakMarkersPluginProps) {
+export function StructureBreakMarkersPlugin({ chart, series, data, structureBreak, visualWeight, activeLanes }: StructureBreakMarkersPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const stateRef = useRef({ structureBreak, data });
+  const stateRef = useRef({ structureBreak, data, visualWeight, activeLanes });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente para o loop de desenho ler — mesmo padrão
   // do LiquidityZonesPlugin (nunca reabre a conexão com o chart a cada
   // atualização de dado).
-  stateRef.current = { structureBreak, data };
+  stateRef.current = { structureBreak, data, visualWeight, activeLanes };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [structureBreak, data]);
+  }, [structureBreak, data, visualWeight, activeLanes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -72,12 +87,20 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      const { structureBreak: brk, data: candles } = stateRef.current;
+      // Fronteira medida do eixo (chart-plot-area.ts) + lanes de perfil
+      // ATIVAS (chart-profile-lanes.ts): o desenho para antes do eixo E
+      // antes da lane do Volume Profile/TPO/Order Book Depth.
+      const { plotRight } = measurePlotArea(chart, cssWidth, stateRef.current.activeLanes);
+
+      const { structureBreak: brk, data: candles, visualWeight: resolvedWeight } = stateRef.current;
       if (!brk) return; // sem rompimento real na amostra — nada a desenhar, honesto.
       const point = candles[brk.index];
       if (!point) return; // índice fora da janela real de candles carregada.
       const age = candles.length - 1 - brk.index;
-      const alpha = ageAlpha(age, BREAK_DECAY);
+      // Ordem Nº 03: resolvedWeight (já competido contra outras categorias
+      // reais) vence quando o chamador o forneceu; senão cai na idade
+      // PRÓPRIA de sempre.
+      const alpha = resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, BREAK_DECAY);
       if (alpha <= 0) return; // "esquecido" — só da tela, o dado real segue intacto em engine-bridge.ts.
 
       const timeScale = chart.timeScale();
@@ -86,10 +109,33 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
       if (x1 === null || y === null) return; // fora da área visível agora — Fail-Closed: nunca extrapola.
 
       const bullish = brk.direction === "ALTA";
-      const color = bullish ? "rgba(0, 255, 170, 0.75)" : "rgba(255, 0, 85, 0.75)";
+      const color = bullish ? "rgba(8, 153, 129, 0.75)" : "rgba(242, 54, 69, 0.75)";
       const yLine = Math.round(y) + 0.5;
 
       ctx.globalAlpha = alpha;
+      // Ordem "FECHAMENTO INTEGRAL" §12: seta de direção pequena e precisa
+      // no ponto real do rompimento — ↑ para BOS/CHOCH de alta, ↓ para
+      // baixa. Zero dado novo: MESMA direção/preço/tempo que a linha ao
+      // lado já usa (brk.direction/x1/y), só um segundo traço geométrico
+      // no mesmo ponto. Desenhada ANTES da linha começar (a linha nasce em
+      // x1 + ARROW_HALF_SIZE + ARROW_GAP_PX, nunca em x1) para os dois
+      // elementos nunca se sobreporem — "não deixar setas atravessarem...
+      // textos" também vale para a própria linha companheira.
+      const ARROW_HALF_SIZE = 4;
+      const ARROW_GAP_PX = 3;
+      ctx.beginPath();
+      if (bullish) {
+        ctx.moveTo(x1, y - ARROW_HALF_SIZE);
+        ctx.lineTo(x1 - ARROW_HALF_SIZE, y + ARROW_HALF_SIZE);
+        ctx.lineTo(x1 + ARROW_HALF_SIZE, y + ARROW_HALF_SIZE);
+      } else {
+        ctx.moveTo(x1, y + ARROW_HALF_SIZE);
+        ctx.lineTo(x1 - ARROW_HALF_SIZE, y - ARROW_HALF_SIZE);
+        ctx.lineTo(x1 + ARROW_HALF_SIZE, y - ARROW_HALF_SIZE);
+      }
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
       // Fio de Seda (Regra de Ouro 2): 1px sólida real, do ponto real de
       // rompimento até a borda direita — mesma primitiva do
       // LiquidityZonesPlugin, nunca setLineDash. O TEXTO ("BOS"/"CHOCH")
@@ -106,8 +152,8 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
       ctx.lineWidth = 1;
       ctx.strokeStyle = color;
       ctx.beginPath();
-      ctx.moveTo(x1, yLine);
-      ctx.lineTo(cssWidth, yLine);
+      ctx.moveTo(x1 + ARROW_HALF_SIZE + ARROW_GAP_PX, yLine);
+      ctx.lineTo(plotRight, yLine);
       ctx.stroke();
       ctx.globalAlpha = 1;
     };
@@ -141,7 +187,7 @@ export function StructureBreakMarkersPlugin({ chart, series, data, structureBrea
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("structure_breaks") }}
     />
   );
 }

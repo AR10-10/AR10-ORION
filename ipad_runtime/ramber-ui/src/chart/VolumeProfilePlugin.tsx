@@ -24,23 +24,51 @@
 // Largura máxima das barras: fração documentada da largura do chart
 // (legibilidade — o perfil contextualiza, nunca cobre as velas). O VALOR
 // de cada barra continua 100% real (proporção volume/maxVolume).
+//
+// Lane própria (achado real, ver chart-profile-lanes.ts): Volume Profile,
+// TPO Profile e Order Book Depth desenhavam TODOS a partir do mesmo
+// cssWidth — mesma faixa de pixels sempre que mais de um estava visível
+// ao mesmo tempo (o caso comum: os 3 defaults são true). Volume Profile é
+// a lane 0 (rightmost) — offset sempre 0, então este plugin continua
+// visualmente idêntico a antes; só o nome da fonte da fração mudou.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { useVolumeProfileSnapshot } from "../store/unified-snapshot-store";
 import { bucketMidPrice } from "../nexus/volume-profile";
-
-const MAX_BAR_WIDTH_FRACTION = 0.16; // 16% da largura do chart para a barra de maior volume real
-const BAR_FILL = "rgba(0, 240, 255, 0.10)";
-const BAR_FILL_HVN = "rgba(0, 240, 255, 0.22)";
-const BAR_FILL_LVN = "rgba(0, 240, 255, 0.04)";
-const POC_LINE = "rgba(0, 240, 255, 0.65)";
+import { getProfileLaneRightEdgePx, getProfileLaneMaxBarWidthPx, type ChartProfileLaneId } from "./chart-profile-lanes";
+// Barras: cyan monocromático — achado da Lapidação Institucional
+// (AUDITORIA_ECOSSISTEMA_VISUAL.md §9.4/§9.7, pesquisa real confirmou que
+// isto é um preset legítimo e precedente ("Black Ice", scripts reais de
+// Volume Profile no TradingView) mitigado pela FORMA (barra, nunca linha)
+// vs. Fibonacci, que também usa este cyan — mesmo raciocínio já aplicado
+// a Kill Zones × Sweep (§6.59). Nenhuma mudança aqui.
+const BAR_FILL = "rgba(0, 98, 255, 0.10)";
+const BAR_FILL_HVN = "rgba(0, 98, 255, 0.22)";
+const BAR_FILL_LVN = "rgba(0, 98, 255, 0.04)";
+// POC: achado real diferente do das barras — esta É uma linha de preço
+// (mesma forma que Fibonacci), então o mesmo cyan exato aqui seria a
+// mesma classe de colisão objetiva já corrigida em Sweep×Liquidation-peak
+// (§6.59), só que contra Fibonacci em vez de outro elemento âmbar.
+// Pesquisa real confirmou precedente pra destacar o POC com um acento
+// PRÓPRIO dentro de um perfil monocromático ("Aurora Glass" usa magenta
+// pro POC sobre gradiente cyan; "Obsidian Precision" usa branco pro POC
+// sobre acento cyan) — magenta H312 escolhido por cair no único
+// corredor de matiz real e aberto entre a família roxa (Harmônicos/EQH-
+// EQL, H278) e o vermelho SHORT (H340), a ~30° de ambos.
+const POC_LINE = "rgba(236, 81, 205, 0.75)";
 
 interface VolumeProfilePluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
+  /** Quais lanes de perfil estão REALMENTE sendo desenhadas agora. Sem
+   *  isto cada plugin assumia que as outras duas sempre existiam e
+   *  reservava espaço para lanes ocultas — a causa raiz da etiqueta do
+   *  livro flutuando no meio das velas (captura real do Operador). */
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
-export function VolumeProfilePlugin({ chart, series }: VolumeProfilePluginProps) {
+export function VolumeProfilePlugin({ chart, series, activeLanes }: VolumeProfilePluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const profile = useVolumeProfileSnapshot();
   const profileRef = useRef(profile);
@@ -82,7 +110,8 @@ export function VolumeProfilePlugin({ chart, series }: VolumeProfilePluginProps)
       const maxVolume = vp.histogram.reduce((a, b) => (b > a ? b : a), 0);
       if (!(maxVolume > 0)) return;
 
-      const maxBarWidth = cssWidth * MAX_BAR_WIDTH_FRACTION;
+      const laneRight = getProfileLaneRightEdgePx("volume_profile", cssWidth, activeLanes);
+      const maxBarWidth = getProfileLaneMaxBarWidthPx("volume_profile", cssWidth, activeLanes);
       const hvn = new Set(vp.hvnIndices);
       const lvn = new Set(vp.lvnIndices);
 
@@ -100,7 +129,7 @@ export function VolumeProfilePlugin({ chart, series }: VolumeProfilePluginProps)
         const h = Math.max(1, Math.abs(yLow - yHigh) - 0.5);
         const w = (volume / maxVolume) * maxBarWidth;
         ctx.fillStyle = hvn.has(i) ? BAR_FILL_HVN : lvn.has(i) ? BAR_FILL_LVN : BAR_FILL;
-        ctx.fillRect(cssWidth - w, y, w, h);
+        ctx.fillRect(laneRight - w, y, w, h);
       }
 
       // POC: linha horizontal fio de seda no preço real do bucket de maior
@@ -110,8 +139,8 @@ export function VolumeProfilePlugin({ chart, series }: VolumeProfilePluginProps)
         ctx.lineWidth = 1;
         ctx.strokeStyle = POC_LINE;
         ctx.beginPath();
-        ctx.moveTo(cssWidth - maxBarWidth, pocY + 0.5);
-        ctx.lineTo(cssWidth, pocY + 0.5);
+        ctx.moveTo(laneRight - maxBarWidth, pocY + 0.5);
+        ctx.lineTo(laneRight, pocY + 0.5);
         ctx.stroke();
       }
     };
@@ -147,7 +176,7 @@ export function VolumeProfilePlugin({ chart, series }: VolumeProfilePluginProps)
       ref={canvasRef}
       data-plugin="volume-profile"
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("volume_profile") }}
     />
   );
 }

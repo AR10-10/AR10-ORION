@@ -8,6 +8,7 @@ import {
   kellyFractionForForca,
   RISK_PER_TRADE_PCT_DEFAULT,
   ASSUMED_WIN_RATE,
+  MIN_SAMPLE_FOR_REAL_WIN_RATE,
   MAX_POSITION_PCT,
   DISCLAIMER,
   KELLY_FRACTION_TIERS,
@@ -92,6 +93,67 @@ describe('risk-engine: multiplicadores FIXOS por faixa de força do comitê (ord
     const r = buildRiskSuggestion({ ...BASE, ensembleForca: 0.1 });
     expect(r.kelly_fraction_tier).toBe(0.125);
     expect(r.suggested_position_pct).toBeCloseTo(3.125, 10);
+  });
+});
+
+describe('risk-engine: Entrega 44 — taxa de acerto REAL (Track Record) substitui o p₀=0.5 assumido quando há amostra', () => {
+  it('sem realWinRate/realWinRateSampleSize: comportamento IDÊNTICO ao de antes (regressão)', () => {
+    const r = buildRiskSuggestion(BASE);
+    expect(r.effective_win_rate).toBe(ASSUMED_WIN_RATE);
+    expect(r.win_rate_source).toBe('assumed_0.5');
+    expect(r.suggested_position_pct).toBeCloseTo(12.5, 10);
+  });
+
+  it('amostra real >= mínimo (30): usa a taxa REAL — cenário base recalculado à mão', () => {
+    // p=0.6, b=2 => Kelly_pleno = 0.6 - 0.4/2 = 0.4; força 0.7 => 1/2-Kelly
+    // => teto 20%; vol_size continua 50% (não depende de win rate) =>
+    // sugestão = min(50, 20, 100) = 20%; risco efetivo = 20 × 2/100 = 0.4%.
+    const r = buildRiskSuggestion({ ...BASE, realWinRate: 0.6, realWinRateSampleSize: MIN_SAMPLE_FOR_REAL_WIN_RATE });
+    expect(r.status).toBe('OK');
+    expect(r.effective_win_rate).toBe(0.6);
+    expect(r.win_rate_source).toBe('track_record_real');
+    expect(r.kelly_cap_pct).toBeCloseTo(20, 10);
+    expect(r.suggested_position_pct).toBeCloseTo(20, 10);
+    expect(r.effective_risk_pct).toBeCloseTo(0.4, 10);
+    // assumed_win_rate continua ecoando o fallback fixo — nunca reescrito.
+    expect(r.assumed_win_rate).toBe(0.5);
+  });
+
+  it('amostra 1 abaixo do mínimo (29): cai no fallback 0.5, mesmo resultado do cenário base', () => {
+    const r = buildRiskSuggestion({ ...BASE, realWinRate: 0.6, realWinRateSampleSize: MIN_SAMPLE_FOR_REAL_WIN_RATE - 1 });
+    expect(r.effective_win_rate).toBe(ASSUMED_WIN_RATE);
+    expect(r.win_rate_source).toBe('assumed_0.5');
+    expect(r.suggested_position_pct).toBeCloseTo(12.5, 10);
+  });
+
+  it('realWinRate fora de [0,1] (mesmo com amostra suficiente): fail-closed pro fallback, nunca usa o valor inválido', () => {
+    const negative = buildRiskSuggestion({ ...BASE, realWinRate: -0.1, realWinRateSampleSize: 50 });
+    const tooHigh = buildRiskSuggestion({ ...BASE, realWinRate: 1.5, realWinRateSampleSize: 50 });
+    const notFinite = buildRiskSuggestion({ ...BASE, realWinRate: NaN, realWinRateSampleSize: 50 });
+    for (const r of [negative, tooHigh, notFinite]) {
+      expect(r.effective_win_rate).toBe(ASSUMED_WIN_RATE);
+      expect(r.win_rate_source).toBe('assumed_0.5');
+    }
+  });
+
+  it('realWinRateSampleSize não-finita: fail-closed pro fallback', () => {
+    const r = buildRiskSuggestion({ ...BASE, realWinRate: 0.6, realWinRateSampleSize: NaN });
+    expect(r.effective_win_rate).toBe(ASSUMED_WIN_RATE);
+    expect(r.win_rate_source).toBe('assumed_0.5');
+  });
+
+  it('SEM_SUGESTAO: effective_win_rate e win_rate_source são null (nada foi de fato calculado)', () => {
+    const r = buildRiskSuggestion({ ...BASE, signal: null, realWinRate: 0.6, realWinRateSampleSize: 50 } as any);
+    expect(r.status).toBe('SEM_SUGESTAO');
+    expect(r.effective_win_rate).toBeNull();
+    expect(r.win_rate_source).toBeNull();
+  });
+
+  it('taxa real muito baixa ainda pode zerar o Kelly (mesma regra de assimetria de payoff)', () => {
+    // p=0.3, b=1 (sem BASE override de rr) => Kelly = 0.3 - 0.7/1 = -0.4 <= 0.
+    const r = buildRiskSuggestion({ ...BASE, riskRewardRatio: 1, realWinRate: 0.3, realWinRateSampleSize: 40 });
+    expect(r.status).toBe('SEM_SUGESTAO');
+    expect(r.reason).toContain('kelly_nao_positivo');
   });
 });
 

@@ -1,0 +1,674 @@
+// publication/formats.ts — Ordem "AR10 PUBLICATION STUDIO" §2 + Evolução
+// Final §10/§11: os 4 formatos publicáveis. Cada render* função é pura
+// composição sobre o MESMO PublicationSnapshot (zero segunda leitura de
+// motor, §1/§10/§16) — todas leem literalmente os mesmos
+// analysis.plan/bias/confluence/risk/narrative. Hierarquia (§4 original,
+// §8 Evolução Final): candles + Entry/Stop/Target são os ÚNICOS elementos
+// de mercado desenhados no mini-gráfico — nenhum overlay de contexto
+// (VWAP/EMA/sessões/sweeps/BOS-CHOCH/zonas/Fibonacci/S-R) entra na
+// composição publicável, a forma mais literal de garantir que nada tenha
+// o mesmo peso visual do plano (ver cabeçalho de mini-chart.ts).
+import type { MarketAnalysis, MarketAnalysisTarget } from "../nexus/market-analysis";
+import { PUBLIC_BIAS_LABEL } from "../nexus/market-analysis";
+import {
+  MONO_FONT,
+  PUB_COLORS,
+  drawChip,
+  drawRoundedRect,
+  drawSilkLine,
+  drawText,
+  fmtPrice,
+  paintBackground,
+  paintDirectionalAura,
+  paintAccentEdge,
+  drawBrandLockup,
+  PUBLICATION_DISCLAIMER,
+  truncateToWidth,
+  wrapTextLines,
+} from "./canvas-primitives";
+import { drawMiniChart, type MiniChartPlan } from "./mini-chart";
+import { publicationTimestampSlug } from "./filenames";
+import { PUBLICATION_FORMAT_SPECS, type PublicationSnapshot } from "./types";
+
+// §5 da Ordem "Correção Definitiva": Conselho sempre vence; o mini-gráfico
+// só cai no plano do Núcleo quando o Conselho não tem nenhum (mesma
+// exclusividade mútua de sempre). Sem os dois: zero linha, só candles —
+// nunca uma faixa fabricada.
+function toMiniChartPlan(analysis: MarketAnalysis, livePrice: number | null): MiniChartPlan {
+  if (analysis.plan) {
+    return {
+      entryLow: analysis.plan.entryLow,
+      entryHigh: analysis.plan.entryHigh,
+      stopPrice: analysis.plan.invalidationPrice,
+      targets: analysis.plan.targets.map((t: MarketAnalysisTarget) => ({ price: t.price, index: t.index, reached: t.reached })),
+      livePrice,
+    };
+  }
+  if (analysis.corePlan) {
+    const cp = analysis.corePlan;
+    const targets = [cp.target1, cp.target2, cp.target3]
+      .filter((v): v is number => v !== null)
+      .map((price, i) => ({ price, index: i, reached: false }));
+    return { entryLow: null, entryHigh: null, stopPrice: cp.stop, targets, livePrice };
+  }
+  return { entryLow: null, entryHigh: null, stopPrice: null, targets: [], livePrice };
+}
+
+// §5/§6 da Ordem "Correção Definitiva": alvos reais do Núcleo como a MESMA
+// forma {label, price} usada por targetLineText — TP1/TP2/TP3 na ordem
+// real, nunca reordenados por magnitude.
+function corePlanTargets(cp: NonNullable<MarketAnalysis["corePlan"]>): number[] {
+  return [cp.target1, cp.target2, cp.target3].filter((v): v is number => v !== null);
+}
+
+function coreTargetLineText(price: number, index: number, riskRewardRatio: number | null, livePrice: number | null): string {
+  const rr = index === 0 && riskRewardRatio !== null ? ` · 1:${riskRewardRatio.toFixed(1)}` : "";
+  return `${fmtPrice(price)}${rr}${targetDistanceLabel(price, livePrice)}`;
+}
+
+// ═══ CHIP DE PADRÃO DE VELA ═══
+//
+// "eu acho que falta algo nelas" (Operador, sobre as peças publicáveis).
+// Isto é o que faltava com valor real: o padrão de vela concreto e nomeado
+// que está formado AGORA no gráfico — "Engolfo de Alta", "Martelo",
+// "Estrela da Noite". É a informação de card de rede social por excelência:
+// específica, visual, imediatamente reconhecível por quem opera, e — ao
+// contrário de mais um número — conta a história da vela que acabou de
+// fechar.
+//
+// Honestidade preservada: o chip mostra o NOME real do padrão e se a vela
+// seguinte confirmou (✓) ou se ele acabou de se formar (·). Nunca uma taxa
+// de acerto (Regra de Ouro 2) — a literatura publica percentuais medidos em
+// outros mercados/períodos, e reproduzi-los num card público seria vender
+// uma calibração que este repositório não tem.
+function patternChipText(p: NonNullable<PublicationSnapshot["candlePattern"]>): string {
+  const arrow = p.direction === "ALTA" ? "▲" : p.direction === "BAIXA" ? "▼" : "·";
+  const mark = p.confirmed === true ? " ✓" : "";
+  return `${arrow} ${p.name.toUpperCase()}${mark}`;
+}
+
+function patternChipColor(p: NonNullable<PublicationSnapshot["candlePattern"]>): string {
+  if (p.direction === "ALTA") return PUB_COLORS.long;
+  if (p.direction === "BAIXA") return PUB_COLORS.short;
+  return PUB_COLORS.neutral; // indecisão (Doji) — nunca pintado de um lado
+}
+
+/** Desenha o chip do padrão quando existe; devolve a largura ocupada (0
+ *  quando não há padrão real — fail-closed, nada é desenhado). */
+function drawPatternChip(
+  ctx: CanvasRenderingContext2D,
+  snapshot: PublicationSnapshot,
+  x: number,
+  y: number,
+  fontSize: number,
+): number {
+  const p = snapshot.candlePattern;
+  if (!p) return 0;
+  return drawChip(ctx, x, y, patternChipText(p), patternChipColor(p), fontSize).width;
+}
+
+function biasColor(bias: MarketAnalysis["bias"]): string {
+  if (bias === "LONG_BIAS") return PUB_COLORS.long;
+  if (bias === "SHORT_BIAS") return PUB_COLORS.short;
+  if (bias === "CONFLICTED_BIAS") return PUB_COLORS.neutral;
+  return PUB_COLORS.textMuted;
+}
+
+function biasArrow(bias: MarketAnalysis["bias"]): string {
+  if (bias === "LONG_BIAS") return "▲";
+  if (bias === "SHORT_BIAS") return "▼";
+  if (bias === "CONFLICTED_BIAS") return "⚠";
+  return "◆";
+}
+
+function generatedAtLabel(generatedAt: number): string {
+  const { datePart, timePart } = publicationTimestampSlug(generatedAt);
+  return `${datePart} ${timePart.slice(0, 2)}:${timePart.slice(2)}`;
+}
+
+// Evolução Final §11 ("distância até alvo"): MESMA fórmula já usada pelos
+// rótulos do eixo do gráfico ao vivo (EnhancedChart_110_Percent.tsx,
+// priceAxisLabels — distPct1/2/3) — zero segunda fórmula. Fail-closed: sem
+// preço vivo real, nenhum sufixo (nunca uma distância fabricada a partir
+// de um preço ausente).
+function targetDistanceLabel(price: number, livePrice: number | null): string {
+  if (livePrice === null || !Number.isFinite(livePrice) || livePrice <= 0) return "";
+  return ` · ${((Math.abs(price - livePrice) * 100) / livePrice).toFixed(2)}%`;
+}
+
+function targetLineText(t: MarketAnalysisTarget, livePrice: number | null, checkmark: boolean): string {
+  const rr = t.riskReward !== null ? ` · 1:${t.riskReward.toFixed(1)}` : "";
+  const dist = targetDistanceLabel(t.price, livePrice);
+  const reached = checkmark && t.reached ? " ✓" : "";
+  return `${fmtPrice(t.price)}${rr}${dist}${reached}`;
+}
+
+function drawBrandFooter(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  generatedAt: number,
+  fontSize: number,
+): void {
+  drawText(ctx, `Gerado em ${generatedAtLabel(generatedAt)} · fotografia congelada`, x, y, {
+    font: `500 ${fontSize}px ${MONO_FONT}`,
+    color: PUB_COLORS.textFaint,
+  });
+  drawText(ctx, `AR10 CYBORG · ${PUBLICATION_DISCLAIMER}`, x + w, y, {
+    font: `700 ${fontSize}px ${MONO_FONT}`,
+    color: PUB_COLORS.cyan,
+    align: "right",
+  });
+}
+
+// ── A — MARKET TERMINAL (1920×1080) ─────────────────────────────────────
+export function renderAnalysis(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {
+  const { width, height } = PUBLICATION_FORMAT_SPECS.ANALYSIS;
+  const { analysis, candles, livePrice } = snapshot;
+  paintBackground(ctx, width, height);
+  const pad = 56;
+  const color = biasColor(analysis.bias);
+  // Acabamento de elite pedido pelo Operador ("efeito bonito pra chamar
+  // atenção"), com a disciplina do Ω-INFINITY: o brilho é pintado NA COR
+  // DO VIÉS REAL, então ele INFORMA a direção antes de qualquer texto ser
+  // lido — nunca um efeito estético neutro. Ver paintDirectionalAura.
+  paintDirectionalAura(ctx, width, height, color);
+  paintAccentEdge(ctx, width, height, color);
+
+  drawText(ctx, analysis.symbol, pad, 96, { font: `800 48px ${MONO_FONT}`, color: PUB_COLORS.textPrimary });
+  ctx.font = `800 48px ${MONO_FONT}`;
+  let cursorX = pad + ctx.measureText(analysis.symbol).width + 24;
+  const tfChip = drawChip(ctx, cursorX, 56, analysis.timeframe.toUpperCase(), PUB_COLORS.textMuted, 18);
+  cursorX += tfChip.width + 12;
+  const biasChip = drawChip(ctx, cursorX, 56, PUBLIC_BIAS_LABEL[analysis.bias], color, 18);
+  cursorX += biasChip.width + 12;
+  // Padrão de vela real formado agora (ver drawPatternChip) — o "algo que
+  // faltava" nas peças, sempre ao lado do viés para os dois serem lidos
+  // juntos: o que o sistema lê + o que a vela acabou de fazer.
+  drawPatternChip(ctx, snapshot, cursorX, 56, 18);
+
+  if (typeof livePrice === "number" && Number.isFinite(livePrice)) {
+    drawText(ctx, fmtPrice(livePrice), width - pad, 96, { font: `800 48px ${MONO_FONT}`, color, align: "right" });
+  }
+  drawSilkLine(ctx, pad, 138, width - pad, 138, PUB_COLORS.border, 1);
+
+  // Evolução Final §11 ("leitura consolidada"): a MESMA sentença real do
+  // painel "LEITURA CONSOLIDADA" (App.tsx), nunca uma segunda redação —
+  // truncada em no máximo 2 linhas medidas de verdade (wrapTextLines),
+  // nunca um chute de caracteres por linha.
+  if (analysis.narrative) {
+    const narrativeFont = `500 20px ${MONO_FONT}`;
+    const narrativeLines = wrapTextLines(ctx, analysis.narrative, narrativeFont, width - pad * 2, 2);
+    narrativeLines.forEach((line, i) => {
+      drawText(ctx, line, pad, 172 + i * 26, { font: narrativeFont, color: PUB_COLORS.textMuted });
+    });
+  }
+
+  // Altura do gráfico reduzida (era 552) para abrir espaço real à
+  // narrativa acima, SEM mover nenhum elemento abaixo — a borda inferior
+  // do gráfico permanece exatamente em 736, mesma posição de sempre.
+  const chartRect = { x: pad, y: 222, width: width - pad * 2, height: 514 };
+  drawMiniChart(ctx, chartRect, candles, toMiniChartPlan(analysis, livePrice), 16);
+  drawSilkLine(ctx, pad, 736, width - pad, 736, PUB_COLORS.border, 1);
+
+  const colW = (width - pad * 2) / 4;
+  const colY = 764;
+  // Evolução Final §11 (distância até alvo): ALVOS ganhou mais texto por
+  // linha (R:R + distância) — achado real da verificação visual: a 30px o
+  // texto do 3º alvo estourava a coluna e truncava exatamente onde a
+  // distância aparece. fontSize agora é por-coluna (default 30, ALVOS usa
+  // 22) em vez de travado — a mesma truncateToWidth continua como rede de
+  // segurança final, nunca depende só do tamanho escolhido a olho.
+  const drawCol = (i: number, label: string, lines: { text: string; color?: string }[], fontSize = 30) => {
+    const x = pad + i * colW;
+    drawText(ctx, label, x, colY, { font: `700 17px ${MONO_FONT}`, color: PUB_COLORS.textMuted, letterSpacing: 1.5 });
+    lines.forEach((l, li) => {
+      const font = `700 ${fontSize}px ${MONO_FONT}`;
+      drawText(ctx, truncateToWidth(ctx, l.text, font, colW - 24), x, colY + 46 + li * 40, {
+        font,
+        color: l.color ?? PUB_COLORS.textPrimary,
+      });
+    });
+  };
+
+  drawCol(
+    0,
+    "CENÁRIO",
+    [analysis.structureLabel ? { text: analysis.structureLabel } : null, analysis.regimeLabel ? { text: analysis.regimeLabel } : null].filter(
+      (v): v is { text: string } => v !== null,
+    ),
+  );
+  if (analysis.plan) {
+    drawCol(1, "ENTRY", [{ text: `${fmtPrice(analysis.plan.entryLow)}–${fmtPrice(analysis.plan.entryHigh)}`, color: PUB_COLORS.cyan }]);
+    drawCol(2, "STOP", [{ text: fmtPrice(analysis.plan.invalidationPrice), color: PUB_COLORS.short }]);
+    drawCol(
+      3,
+      "ALVOS",
+      analysis.plan.targets.map((t) => ({
+        text: `TP${t.index + 1} ${targetLineText(t, livePrice, true)}`,
+        color: PUB_COLORS.long,
+      })),
+      22,
+    );
+  } else if (analysis.corePlan) {
+    // §5 da Ordem "Correção Definitiva": Núcleo tem direção real mas o
+    // Conselho está neutro — mostra o STOP/ALVOS reais que o Núcleo já
+    // calcula (o mesmo fallback do gráfico ao vivo), rotulados "(NÚCLEO)"
+    // pra nunca parecer um plano do Conselho. ENTRY fica de fora (mesmo
+    // motivo do gráfico: seria só o preço vivo, já exibido acima).
+    const cp = analysis.corePlan;
+    if (analysis.planGapLabel) {
+      drawCol(1, "CONSELHO", [{ text: truncateToWidth(ctx, analysis.planGapLabel, `700 22px ${MONO_FONT}`, colW - 24), color: PUB_COLORS.textMuted }], 22);
+    }
+    drawCol(2, "STOP (NÚCLEO)", [{ text: fmtPrice(cp.stop), color: PUB_COLORS.short }]);
+    drawCol(
+      3,
+      "ALVOS (NÚCLEO)",
+      corePlanTargets(cp).map((price, i) => ({
+        text: `TP${i + 1} ${coreTargetLineText(price, i, cp.riskRewardRatio, livePrice)}`,
+        color: PUB_COLORS.long,
+      })),
+      22,
+    );
+  } else if (analysis.planGapLabel) {
+    drawCol(1, "PLANO", [{ text: truncateToWidth(ctx, analysis.planGapLabel, `700 26px ${MONO_FONT}`, colW * 2 - 24), color: PUB_COLORS.textMuted }]);
+  }
+
+  const secondaryY = 940;
+  const secondaryParts = [
+    `CONFLUÊNCIA: ${analysis.confluence}`,
+    analysis.risk ? `RISCO: ${analysis.risk.state}` : null,
+    analysis.retest ? `RETESTE: ${fmtPrice(analysis.retest.low)}–${fmtPrice(analysis.retest.high)}` : null,
+    analysis.plan ? `INVALIDAÇÃO ABAIXO/ACIMA DE ${fmtPrice(analysis.plan.invalidationPrice)}` : null,
+  ].filter((v): v is string => v !== null);
+  drawText(ctx, secondaryParts.join("   ·   "), pad, secondaryY, { font: `600 19px ${MONO_FONT}`, color: PUB_COLORS.textMuted });
+
+  drawSilkLine(ctx, pad, height - 56, width - pad, height - 56, PUB_COLORS.border, 1);
+  drawBrandFooter(ctx, pad, height - 28, width - pad * 2, analysis.generatedAt, 15);
+}
+
+// ── B — INSTAGRAM STORY (1080×1920) ─────────────────────────────────────
+export function renderStory(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {
+  const { width, height } = PUBLICATION_FORMAT_SPECS.STORY;
+  const { analysis, candles, livePrice } = snapshot;
+  paintBackground(ctx, width, height);
+  const pad = 64;
+  const color = biasColor(analysis.bias);
+  // Acabamento de elite pedido pelo Operador ("efeito bonito pra chamar
+  // atenção"), com a disciplina do Ω-INFINITY: o brilho é pintado NA COR
+  // DO VIÉS REAL, então ele INFORMA a direção antes de qualquer texto ser
+  // lido — nunca um efeito estético neutro. Ver paintDirectionalAura.
+  paintDirectionalAura(ctx, width, height, color);
+  paintAccentEdge(ctx, width, height, color);
+  let y = 96;
+
+  // 1. Ativo + timeframe
+  drawText(ctx, analysis.symbol, pad, y, { font: `800 44px ${MONO_FONT}`, color: PUB_COLORS.textPrimary });
+  drawText(ctx, analysis.timeframe.toUpperCase(), width - pad, y, { font: `700 30px ${MONO_FONT}`, color: PUB_COLORS.textMuted, align: "right" });
+  y += 56;
+  if (typeof livePrice === "number" && Number.isFinite(livePrice)) {
+    drawText(ctx, fmtPrice(livePrice), pad, y, { font: `600 26px ${MONO_FONT}`, color: PUB_COLORS.textMuted });
+    y += 44;
+  }
+
+  // 2. Direção/cenário
+  y += 36;
+  drawText(ctx, `${biasArrow(analysis.bias)} ${PUBLIC_BIAS_LABEL[analysis.bias]}`, width / 2, y, {
+    font: `800 76px ${MONO_FONT}`,
+    color,
+    align: "center",
+  });
+  // Padrão de vela real formado agora — centrado logo abaixo da direção,
+  // que é onde o olho já está no formato vertical de Story.
+  {
+    const p = snapshot.candlePattern;
+    if (p) {
+      ctx.font = `700 22px ${MONO_FONT}`;
+      const w = ctx.measureText(patternChipText(p)).width + 22 * 1.4;
+      drawPatternChip(ctx, snapshot, width / 2 - w / 2, y + 22, 22);
+      y += 62;
+    }
+  }
+  y += 44;
+  const contextLine = [analysis.structureLabel, analysis.regimeLabel].filter(Boolean).join("  ·  ");
+  if (contextLine) {
+    drawText(ctx, truncateToWidth(ctx, contextLine, `600 24px ${MONO_FONT}`, width - pad * 2), width / 2, y, {
+      font: `600 24px ${MONO_FONT}`,
+      color: PUB_COLORS.textMuted,
+      align: "center",
+    });
+  }
+  y += 56;
+
+  // 3. Gráfico — protagonista (§4): recebe o espaço que sobrar antes do
+  // bloco de plano, nunca uma altura mínima que deixaria a marca AR10
+  // flutuando sobre um vão vazio quando há menos alvos/sem reteste.
+  const chartHeight = 700;
+  drawMiniChart(ctx, { x: pad, y, width: width - pad * 2, height: chartHeight }, candles, toMiniChartPlan(analysis, livePrice), 18);
+  y += chartHeight + 56;
+
+  const rowH = 78;
+  const drawPlanRow = (label: string, value: string, valueColor: string) => {
+    drawRoundedRect(ctx, pad, y, width - pad * 2, rowH - 14, 10, "rgba(255,255,255,0.03)", PUB_COLORS.border);
+    drawText(ctx, label, pad + 28, y + rowH / 2 - 3, { font: `700 22px ${MONO_FONT}`, color: PUB_COLORS.textMuted, baseline: "middle" });
+    drawText(ctx, value, width - pad - 28, y + rowH / 2 - 3, { font: `800 32px ${MONO_FONT}`, color: valueColor, align: "right", baseline: "middle" });
+    y += rowH;
+  };
+
+  if (analysis.plan) {
+    // 4. Entry
+    drawPlanRow("ENTRY", `${fmtPrice(analysis.plan.entryLow)}–${fmtPrice(analysis.plan.entryHigh)}`, PUB_COLORS.cyan);
+    // 5. Reteste (§6 da Ordem "Correção Definitiva": trajetória real
+    // ENTRY → RETESTE → alvos, STOP sempre por último/separado — mesma
+    // ordem de leitura de um plano operacional real, não uma lista solta).
+    if (analysis.retest) {
+      drawPlanRow("RETESTE", `${fmtPrice(analysis.retest.low)}–${fmtPrice(analysis.retest.high)}`, PUB_COLORS.neutral);
+    }
+    // 6. Targets (+ distância até alvo, §11)
+    analysis.plan.targets.forEach((t) => {
+      drawPlanRow(`ALVO ${t.index + 1}`, targetLineText(t, livePrice, false), PUB_COLORS.long);
+    });
+    // 7. Stop / invalidação
+    drawPlanRow("STOP / INVALIDAÇÃO", fmtPrice(analysis.plan.invalidationPrice), PUB_COLORS.short);
+  } else if (analysis.corePlan) {
+    // §5: Núcleo tem direção real, Conselho está neutro — mostra o motivo
+    // real (quando existe) + o STOP/ALVOS reais do Núcleo, nunca inventado.
+    const cp = analysis.corePlan;
+    if (analysis.planGapLabel) {
+      drawPlanRow("CONSELHO", analysis.planGapLabel, PUB_COLORS.textMuted);
+    }
+    corePlanTargets(cp).forEach((price, i) => {
+      drawPlanRow(`ALVO ${i + 1} (NÚCLEO)`, coreTargetLineText(price, i, cp.riskRewardRatio, livePrice), PUB_COLORS.long);
+    });
+    drawPlanRow("STOP (NÚCLEO)", fmtPrice(cp.stop), PUB_COLORS.short);
+  } else if (analysis.planGapLabel) {
+    drawPlanRow("PLANO", analysis.planGapLabel, PUB_COLORS.textMuted);
+  }
+  y += 20;
+
+  // 8. Leitura consolidada
+  const readingParts = [`Confluência ${analysis.confluence}`, analysis.risk ? `Risco ${analysis.risk.state}` : null].filter(
+    (v): v is string => v !== null,
+  );
+  drawText(ctx, readingParts.join("  ·  "), width / 2, y, { font: `600 24px ${MONO_FONT}`, color: PUB_COLORS.textMuted, align: "center" });
+  y += 72;
+
+  // 9. Identidade AR10 — segue o CONTEÚDO real (nunca um offset fixo do
+  // fundo do canvas): achado real da 1a verificação visual — com menos
+  // alvos a marca ficava presa lá embaixo, sobrando um vão vazio grande
+  // no meio do card. y aqui já reflete exatamente quantas linhas de plano
+  // existiram de verdade.
+  drawSilkLine(ctx, pad, y, width - pad, y, PUB_COLORS.border, 1);
+  y += 48;
+  drawBrandLockup(ctx, width / 2, y, { brandSize: 30, disclaimerSize: 18, align: "center", letterSpacing: 3 });
+}
+
+// ── C — X (1200×675) ────────────────────────────────────────────────────
+export function renderX(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {
+  const { width, height } = PUBLICATION_FORMAT_SPECS.X;
+  const { analysis, candles, livePrice } = snapshot;
+  paintBackground(ctx, width, height);
+  const pad = 40;
+  const color = biasColor(analysis.bias);
+  // Acabamento de elite pedido pelo Operador ("efeito bonito pra chamar
+  // atenção"), com a disciplina do Ω-INFINITY: o brilho é pintado NA COR
+  // DO VIÉS REAL, então ele INFORMA a direção antes de qualquer texto ser
+  // lido — nunca um efeito estético neutro. Ver paintDirectionalAura.
+  paintDirectionalAura(ctx, width, height, color);
+  paintAccentEdge(ctx, width, height, color);
+
+  const chartW = width * 0.6 - pad * 1.5;
+  const chartRect = { x: pad, y: 96, width: chartW, height: height - 96 - 40 };
+  drawText(ctx, analysis.symbol, pad, 56, { font: `800 30px ${MONO_FONT}`, color: PUB_COLORS.textPrimary });
+  ctx.font = `800 30px ${MONO_FONT}`;
+  const symW = ctx.measureText(analysis.symbol).width;
+  const xTfChip = drawChip(ctx, pad + symW + 14, 30, analysis.timeframe.toUpperCase(), PUB_COLORS.textMuted, 14);
+  // Padrão de vela real ao lado do timeframe (cabeçalho do card do X).
+  drawPatternChip(ctx, snapshot, pad + symW + 14 + xTfChip.width + 10, 30, 14);
+  drawMiniChart(ctx, chartRect, candles, toMiniChartPlan(analysis, livePrice), 12);
+
+  const colX = pad + chartW + 32;
+  const colW = width - colX - pad;
+  let y = 56;
+  drawText(ctx, `${biasArrow(analysis.bias)} ${PUBLIC_BIAS_LABEL[analysis.bias]}`, colX, y, { font: `800 32px ${MONO_FONT}`, color });
+  if (typeof livePrice === "number" && Number.isFinite(livePrice)) {
+    drawText(ctx, fmtPrice(livePrice), colX, y + 34, { font: `600 20px ${MONO_FONT}`, color: PUB_COLORS.textMuted });
+  }
+  y += 78;
+
+  const drawRow = (label: string, value: string, valueColor: string) => {
+    drawText(ctx, label, colX, y, { font: `700 14px ${MONO_FONT}`, color: PUB_COLORS.textMuted });
+    drawText(ctx, truncateToWidth(ctx, value, `800 22px ${MONO_FONT}`, colW), colX, y + 26, { font: `800 22px ${MONO_FONT}`, color: valueColor });
+    y += 56;
+  };
+
+  if (analysis.plan) {
+    drawRow("ENTRY", `${fmtPrice(analysis.plan.entryLow)}–${fmtPrice(analysis.plan.entryHigh)}`, PUB_COLORS.cyan);
+    // §6 da Ordem "Correção Definitiva": trajetória real ENTRY → RETESTE →
+    // alvos, STOP sempre por último/separado.
+    if (analysis.retest) {
+      drawRow("RETESTE", `${fmtPrice(analysis.retest.low)}–${fmtPrice(analysis.retest.high)}`, PUB_COLORS.neutral);
+    }
+    // Achado real da 1a verificação visual (Entrega 38): 3 alvos numa única
+    // linha ("TP1 · TP2 · TP3") transbordava a coluna e truncava pra "T…" —
+    // cada alvo é a SUA PRÓPRIA linha, nunca cortado. Distância até alvo
+    // (§11) reusa a mesma targetLineText do formato Story.
+    analysis.plan.targets.forEach((t) => {
+      drawRow(`ALVO ${t.index + 1}`, targetLineText(t, livePrice, false), PUB_COLORS.long);
+    });
+    drawRow("STOP / INVALIDAÇÃO", fmtPrice(analysis.plan.invalidationPrice), PUB_COLORS.short);
+  } else if (analysis.corePlan) {
+    // §5: Núcleo tem direção real, Conselho está neutro.
+    const cp = analysis.corePlan;
+    if (analysis.planGapLabel) {
+      drawRow("CONSELHO", analysis.planGapLabel, PUB_COLORS.textMuted);
+    }
+    corePlanTargets(cp).forEach((price, i) => {
+      drawRow(`ALVO ${i + 1} (NÚCLEO)`, coreTargetLineText(price, i, cp.riskRewardRatio, livePrice), PUB_COLORS.long);
+    });
+    drawRow("STOP (NÚCLEO)", fmtPrice(cp.stop), PUB_COLORS.short);
+  } else if (analysis.planGapLabel) {
+    drawRow("PLANO", analysis.planGapLabel, PUB_COLORS.textMuted);
+  }
+
+  const contextParts = [`Confluência ${analysis.confluence}`, analysis.risk ? `Risco ${analysis.risk.state}` : null].filter(
+    (v): v is string => v !== null,
+  );
+  drawText(ctx, contextParts.join("  ·  "), colX, y, { font: `600 15px ${MONO_FONT}`, color: PUB_COLORS.textMuted });
+  y += 40;
+
+  // AR10 segue o conteúdo real da coluna (mesmo achado do gap vazio do
+  // Story) — nunca um offset fixo do fundo do canvas.
+  drawSilkLine(ctx, colX, y, width - pad, y, PUB_COLORS.border, 1);
+  y += 28;
+  drawBrandLockup(ctx, colX, y, { brandSize: 16, disclaimerSize: 12, align: "left" });
+}
+
+// ── D — PREMIUM (1080×1080, sem gráfico por especificação) ──────────────
+// Evolução Final §10-D ("versão visual mais sofisticada"): evolução real do
+// antigo Card Executivo — antes só ENTRY + 1º alvo + STOP; agora TODOS os
+// alvos reais (com R:R + distância), RETESTE quando existe, CONFLUÊNCIA e
+// RISCO como campos próprios, organizados numa grade real de 2 colunas
+// (referência visual estudada: grade de campos do Painel D) em vez de uma
+// pilha de linhas. Decisão consciente de NÃO adotar o rating de estrelas
+// da referência para "confiança": implicaria uma probabilidade calibrada
+// ao leitor leigo — contradiria a Regra de Ouro 2 (confiança/confluência
+// nunca é probabilidade). "Invalidação" também não vira um campo à parte:
+// é o MESMO preço já mostrado em STOP (o único preço de invalidação real
+// do plano) — um campo próprio duplicaria informação (§15: "nenhuma
+// informação duplicada").
+export function renderPremium(ctx: CanvasRenderingContext2D, snapshot: PublicationSnapshot): void {
+  const { width, height } = PUBLICATION_FORMAT_SPECS.PREMIUM;
+  const { analysis } = snapshot;
+  paintBackground(ctx, width, height);
+  const color = biasColor(analysis.bias);
+  // Acabamento de elite pedido pelo Operador ("efeito bonito pra chamar
+  // atenção"), com a disciplina do Ω-INFINITY: o brilho é pintado NA COR
+  // DO VIÉS REAL, então ele INFORMA a direção antes de qualquer texto ser
+  // lido — nunca um efeito estético neutro. Ver paintDirectionalAura.
+  paintDirectionalAura(ctx, width, height, color);
+  paintAccentEdge(ctx, width, height, color);
+
+  // ═══ CENTRALIZAÇÃO VERTICAL POR MEDIÇÃO REAL (2 passadas) ═══
+  //
+  // Achado da verificação visual desta rodada (captura real do card
+  // renderizado): com um plano de 3 alvos o conteúdo terminava por volta
+  // de 73% da altura, deixando ~27% do card quadrado como vão morto no
+  // rodapé — a rodada anterior tinha corrigido o vão do MEIO fazendo a
+  // marca seguir o conteúdo, o que empurrou o vão para baixo em vez de
+  // eliminá-lo. Num card 1:1 de feed isso lê como peça inacabada, o
+  // oposto de "profissional de elite".
+  //
+  // A correção NÃO duplica a matemática do layout (que derivaria com
+  // qualquer mudança futura): `premiumBody` é a ÚNICA fonte das posições,
+  // executada primeiro em modo medição (draw=false, zero pixel pintado) só
+  // para devolver a altura real do conteúdo, e depois de verdade a partir
+  // do topo que centraliza esse bloco. Conteúdo maior ou menor se
+  // recentraliza sozinho.
+  // A medição devolve a extensão do BASELINE do título até o baseline do
+  // aviso. Falta o que fica ACIMA do primeiro baseline (a altura das
+  // maiúsculas do símbolo) — sem isso o bloco assenta baixo demais, que foi
+  // exatamente o que a 1ª captura mostrou depois de centralizar. Medido com
+  // métrica real da fonte (actualBoundingBoxAscent), nunca um chute.
+  const baselineSpan = premiumBody(ctx, snapshot, 0, false);
+  ctx.save();
+  ctx.font = `800 40px ${MONO_FONT}`;
+  const m = ctx.measureText(snapshot.analysis.symbol || "M");
+  const titleAscent = m.actualBoundingBoxAscent || 40;
+  ctx.restore();
+  const visualHeight = titleAscent + baselineSpan;
+  const startY = Math.max(96, Math.round(titleAscent + (height - visualHeight) / 2));
+  premiumBody(ctx, snapshot, startY, true);
+}
+
+/**
+ * Corpo do card PREMIUM. `draw=false` percorre exatamente o mesmo layout
+ * sem pintar nada e devolve a altura real ocupada — a passada de medição
+ * da centralização vertical acima. Medições de texto (measureText,
+ * truncateToWidth) rodam nas duas passadas de propósito: elas não pintam e
+ * são o que decide as quebras/posições.
+ */
+function premiumBody(
+  ctx: CanvasRenderingContext2D,
+  snapshot: PublicationSnapshot,
+  startY: number,
+  draw: boolean,
+): number {
+  const { width } = PUBLICATION_FORMAT_SPECS.PREMIUM;
+  const { analysis, livePrice } = snapshot;
+  const pad = 72;
+  const color = biasColor(analysis.bias);
+  const text = (t: string, x: number, yy: number, o: Parameters<typeof drawText>[4]) => {
+    if (draw) drawText(ctx, t, x, yy, o);
+  };
+  let y = startY;
+
+  text(analysis.symbol, width / 2, y, { font: `800 40px ${MONO_FONT}`, color: PUB_COLORS.textPrimary, align: "center" });
+  y += 42;
+  text(analysis.timeframe.toUpperCase(), width / 2, y, { font: `700 22px ${MONO_FONT}`, color: PUB_COLORS.textMuted, align: "center" });
+  y += 34;
+  // Padrão de vela real, centrado — o card PREMIUM não tem gráfico por
+  // especificação, então este chip é a única pista visual do que a vela
+  // acabou de fazer.
+  {
+    const p = snapshot.candlePattern;
+    if (p) {
+      ctx.font = `700 18px ${MONO_FONT}`;
+      const w = ctx.measureText(patternChipText(p)).width + 18 * 1.4;
+      if (draw) drawPatternChip(ctx, snapshot, width / 2 - w / 2, y, 18);
+      y += 56;
+    }
+  }
+  y += 38;
+
+  text(`${biasArrow(analysis.bias)} ${PUBLIC_BIAS_LABEL[analysis.bias]}`, width / 2, y, {
+    font: `800 56px ${MONO_FONT}`,
+    color,
+    align: "center",
+  });
+  y += 38;
+  const contextLine = [analysis.structureLabel, analysis.regimeLabel].filter(Boolean).join("  ·  ");
+  if (contextLine) {
+    text(truncateToWidth(ctx, contextLine, `600 19px ${MONO_FONT}`, width - pad * 2), width / 2, y, {
+      font: `600 19px ${MONO_FONT}`,
+      color: PUB_COLORS.textMuted,
+      align: "center",
+    });
+  }
+  y += 46;
+  if (typeof livePrice === "number" && Number.isFinite(livePrice)) {
+    text(fmtPrice(livePrice), width / 2, y, { font: `600 22px ${MONO_FONT}`, color: PUB_COLORS.textMuted, align: "center" });
+    y += 40;
+  }
+  y += 20;
+
+  // Campos reais, só os que existem (fail-closed) — layout mecânico em
+  // grade de 2 colunas (índice par → esquerda, ímpar → direita), nunca um
+  // pareamento manual frágil de campos específicos.
+  type Field = { label: string; value: string; color: string };
+  const fields: Field[] = [];
+  if (analysis.plan) {
+    fields.push({ label: "ENTRY", value: `${fmtPrice(analysis.plan.entryLow)}–${fmtPrice(analysis.plan.entryHigh)}`, color: PUB_COLORS.cyan });
+    fields.push({ label: "STOP", value: fmtPrice(analysis.plan.invalidationPrice), color: PUB_COLORS.short });
+    analysis.plan.targets.forEach((t) => {
+      fields.push({ label: `ALVO ${t.index + 1}`, value: targetLineText(t, livePrice, false), color: PUB_COLORS.long });
+    });
+  } else if (analysis.corePlan) {
+    // §5 da Ordem "Correção Definitiva": Núcleo tem direção real, Conselho
+    // está neutro — grade continua em ordem mecânica (par/ímpar), STOP
+    // deliberadamente NÃO fica ao lado do último alvo (ver comentário do
+    // reorder em renderStory/renderX — aqui a grade 2 colunas já separa
+    // STOP visualmente pela cor+posição, reordenar quebraria o pareamento
+    // mecânico par/ímpar sem ganho real).
+    const cp = analysis.corePlan;
+    if (analysis.planGapLabel) {
+      fields.push({ label: "CONSELHO", value: analysis.planGapLabel, color: PUB_COLORS.textMuted });
+    }
+    fields.push({ label: "STOP (NÚCLEO)", value: fmtPrice(cp.stop), color: PUB_COLORS.short });
+    corePlanTargets(cp).forEach((price, i) => {
+      fields.push({ label: `ALVO ${i + 1} (NÚCLEO)`, value: coreTargetLineText(price, i, cp.riskRewardRatio, livePrice), color: PUB_COLORS.long });
+    });
+  } else if (analysis.planGapLabel) {
+    fields.push({ label: "PLANO", value: analysis.planGapLabel, color: PUB_COLORS.textMuted });
+  }
+  if (analysis.retest) {
+    fields.push({ label: "RETESTE", value: `${fmtPrice(analysis.retest.low)}–${fmtPrice(analysis.retest.high)}`, color: PUB_COLORS.neutral });
+  }
+  fields.push({ label: "CONFLUÊNCIA", value: analysis.confluence, color: PUB_COLORS.textPrimary });
+  if (analysis.risk) {
+    fields.push({ label: "RISCO", value: analysis.risk.state, color: PUB_COLORS.textPrimary });
+  }
+
+  const gridW = width - pad * 2;
+  const colGap = 16;
+  const cellW = (gridW - colGap) / 2;
+  const cellH = 92;
+  const rowGap = 14;
+  fields.forEach((f, i) => {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const x = pad + col * (cellW + colGap);
+    const cellY = y + row * (cellH + rowGap);
+    if (draw) drawRoundedRect(ctx, x, cellY, cellW, cellH, 10, "rgba(255,255,255,0.03)", PUB_COLORS.border);
+    text(f.label, x + 20, cellY + 30, { font: `700 16px ${MONO_FONT}`, color: PUB_COLORS.textMuted, letterSpacing: 1 });
+    text(truncateToWidth(ctx, f.value, `800 24px ${MONO_FONT}`, cellW - 40), x + 20, cellY + 64, {
+      font: `800 24px ${MONO_FONT}`,
+      color: f.color,
+    });
+  });
+  const rows = Math.ceil(fields.length / 2);
+  y += rows * (cellH + rowGap) + 12;
+
+  // AR10 segue o conteúdo real (mesmo achado do gap vazio do Story/X) —
+  // nunca um offset fixo do fundo do canvas.
+  if (draw) drawSilkLine(ctx, pad, y, width - pad, y, PUB_COLORS.border, 1);
+  y += 40;
+  // O lockup desenha marca (baseline em y) + aviso (baseline em y+24*1.15).
+  // A altura devolvida vai do baseline do título ATÉ o baseline do aviso —
+  // a mesma referência que a centralização acima completa com o ascent do
+  // título. Somar o corpo inteiro da fonte do aviso aqui empurraria o bloco
+  // para cima sem motivo real.
+  if (draw) drawBrandLockup(ctx, width / 2, y, { brandSize: 24, disclaimerSize: 15, align: "center" });
+  return y + 24 * 1.15 - startY;
+}

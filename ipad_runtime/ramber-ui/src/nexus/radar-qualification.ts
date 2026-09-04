@@ -87,6 +87,29 @@ export interface RadarQualificationResult {
 
 const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
+// Único código-motivo real que hoje chega à UI (rankRadarCandidates só
+// deixa passar qualifies=true, e este é o único caminho que retorna
+// qualifies: true) — nomeado para nunca duplicar o literal em dois
+// lugares (Single Source of Truth).
+export const RADAR_QUALIFIES_REASON =
+  "estrutura_confirmada_trade_plan_valido_risco_liberado_confluencia_suficiente";
+
+/** Diretriz Final — Lapidação Visual §6 ("apresentar justificativas
+ *  objetivas para cada oportunidade"): traduz o código-motivo (sempre
+ *  honesto, nunca fabricado — é o mesmo `reason` já retornado por
+ *  qualifyRadarCandidate acima) para uma frase curta legível. Só o caso
+ *  que qualifica tem tradução dedicada porque é o único que a UI hoje
+ *  mostra; qualquer outro código (os `reject()` acima, hoje nunca
+ *  renderizados) cai num fallback honesto — o próprio código com "_"
+ *  trocado por espaço — nunca uma frase inventada para um motivo sem
+ *  tradução dedicada. */
+export function describeRadarQualificationReason(reason: string): string {
+  if (reason === RADAR_QUALIFIES_REASON) {
+    return "Estrutura confirmada · Trade Plan válido · risco liberado pelo Conselho · confluência suficiente";
+  }
+  return reason.replace(/_/g, " ");
+}
+
 /** Avalia UM candidato real contra o filtro mínimo da diretiva — puro,
  *  read-only, zero rede/motor. Chamado uma vez por ativo pelo varredor
  *  futuro (fora do escopo desta v1). */
@@ -123,7 +146,7 @@ export function qualifyRadarCandidate(input: RadarCandidateInput, now: number = 
   return {
     ...base,
     qualifies: true,
-    reason: "estrutura_confirmada_trade_plan_valido_risco_liberado_confluencia_suficiente",
+    reason: RADAR_QUALIFIES_REASON,
     qualityIndex: input.confluence.intensity,
   };
 }

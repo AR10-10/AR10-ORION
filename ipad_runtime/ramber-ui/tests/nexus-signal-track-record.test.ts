@@ -10,6 +10,7 @@ import {
   trackPriceTick,
   hitRate,
   samePlan,
+  isTargetRefinement,
   rehydrateTrackRecord,
   EMPTY_TRACK_RECORD,
   TRACK_RECORD_CONTRACT_VERSION,
@@ -339,5 +340,106 @@ describe('§11 stampOpenContext: carimbo único, nunca reescrita retroativa', ()
     const legacy = JSON.parse(JSON.stringify(resolved));
     delete legacy.history[legacy.history.length - 1].contextAtOpen;
     expect(rehydrateTrackRecord(legacy).history.length).toBe(resolved.history.length);
+  });
+});
+
+describe('isTargetRefinement (Ordem "Recálculo Vivo do Trade Plan" §7/§24): mudança que só afeta alvos AINDA NÃO tocados é reavaliação, não um sinal novo', () => {
+  it('targetsHit=0: nunca é refinamento — antes do 1º alvo real, qualquer mudança continua um sinal genuinamente novo (comportamento intocado)', () => {
+    const a = twoTargetPlan();
+    const b = { ...a, targets: [a.targets[0], { ...a.targets[1], price: 53_000 }] };
+    expect(isTargetRefinement(a, b, 0)).toBe(false);
+  });
+
+  it('targetsHit=1: só o alvo SEGUINTE mudou, direção/entry/stop/alvo já provado idênticos => refinamento real', () => {
+    const a = twoTargetPlan();
+    const b = { ...a, targets: [a.targets[0], { ...a.targets[1], price: 53_000 }] };
+    expect(isTargetRefinement(a, b, 1)).toBe(true);
+  });
+
+  it('o próprio alvo JÁ PROVADO mudou de preço => nunca refinamento, mesmo com targetsHit>0 (não fingir continuidade que não existe)', () => {
+    const a = twoTargetPlan();
+    const b = { ...a, targets: [{ ...a.targets[0], price: a.targets[0].price + 1 }, a.targets[1]] };
+    expect(isTargetRefinement(a, b, 1)).toBe(false);
+  });
+
+  it('direção mudou => nunca refinamento (é literalmente outro sinal)', () => {
+    const a = twoTargetPlan();
+    const b = { ...a, direction: 'SHORT' as const };
+    expect(isTargetRefinement(a, b, 1)).toBe(false);
+  });
+
+  it('entry ou stop mudaram => nunca refinamento', () => {
+    const a = twoTargetPlan();
+    expect(isTargetRefinement(a, { ...a, entry: { ...a.entry, low: a.entry.low - 1 } }, 1)).toBe(false);
+    expect(isTargetRefinement(a, { ...a, stop: { ...a.stop, price: a.stop.price - 1 } }, 1)).toBe(false);
+  });
+
+  it('a nova estrutura tem MENOS alvos do que os já provados => nunca refinamento (os níveis tocados não existem mais — não reivindica continuidade que não pode provar)', () => {
+    const a = twoTargetPlan();
+    const b = { ...a, targets: [a.targets[0]] }; // só 1 alvo, mas targetsHit=2 exigiria 2
+    expect(isTargetRefinement(a, b, 2)).toBe(false);
+  });
+
+  it('valores idênticos (samePlan) também satisfazem isTargetRefinement — é um superconjunto honesto, nunca o oposto', () => {
+    const a = twoTargetPlan();
+    const b = { ...a };
+    expect(isTargetRefinement(a, b, 1)).toBe(true);
+  });
+});
+
+describe('trackPlanTransition + isTargetRefinement integrados: TP1 real provado sobrevive a uma reavaliação estrutural do TP2 seguinte', () => {
+  it('após TP1 real (targetsHit=1), uma mudança SÓ no TP2 preserva openedAt/targetsHit/breakEvenSuggested — nunca conta como REPLACED', () => {
+    let s = trackPlanTransition(EMPTY_TRACK_RECORD, twoTargetPlan(), 1_000);
+    s = trackPriceTick(s, 51_000, 2_000); // TP1 real provado
+    expect(s.active?.targetsHit).toBe(1);
+    expect(s.active?.breakEvenSuggested).toBe(true);
+
+    const refinedPlan = {
+      ...s.active!.plan,
+      targets: [s.active!.plan.targets[0], { ...s.active!.plan.targets[1], price: 53_000 }],
+    };
+    const s2 = trackPlanTransition(s, refinedPlan, 3_000);
+
+    expect(s2.active).not.toBeNull();
+    expect(s2.active!.openedAt).toBe(1_000); // progresso real preservado, nunca reaberto
+    expect(s2.active!.targetsHit).toBe(1);
+    expect(s2.active!.breakEvenSuggested).toBe(true);
+    expect(s2.replaced).toBe(0); // nunca contado como sinal superseded
+    expect(s2.history).toHaveLength(0);
+    expect(s2.active!.plan.targets[1].price).toBe(53_000); // TP2 refinado está vivo
+    expect(s2.active!.plan.targets[0].price).toBe(51_000); // TP1 já provado, intocado
+  });
+
+  it('mesmo cenário, mas o alvo JÁ PROVADO (TP1) muda de preço na estrutura fresca => REPLACED de verdade, targetsHit reinicia honestamente (não finge que o TP1 antigo ainda é o mesmo)', () => {
+    let s = trackPlanTransition(EMPTY_TRACK_RECORD, twoTargetPlan(), 1_000);
+    s = trackPriceTick(s, 51_000, 2_000);
+
+    const changedFirstTarget = {
+      ...s.active!.plan,
+      targets: [{ ...s.active!.plan.targets[0], price: 51_500 }, s.active!.plan.targets[1]],
+    };
+    const s2 = trackPlanTransition(s, changedFirstTarget, 3_000);
+
+    expect(s2.replaced).toBe(1);
+    expect(s2.history[0]).toMatchObject({ status: 'REPLACED', targetsHit: 1 }); // o progresso real vira histórico, honestamente
+    expect(s2.active!.targetsHit).toBe(0); // plano novo, sem progresso fabricado
+    expect(s2.active!.openedAt).toBe(3_000);
+  });
+
+  it('o refinamento realmente muda o que trackPriceTick avalia a seguir: o próximo tick lê o TP2 REFINADO, não o antigo — recálculo vivo de verdade, não só um rótulo', () => {
+    let s = trackPlanTransition(EMPTY_TRACK_RECORD, twoTargetPlan(), 1_000);
+    s = trackPriceTick(s, 51_000, 2_000);
+    const refinedPlan = {
+      ...s.active!.plan,
+      targets: [s.active!.plan.targets[0], { ...s.active!.plan.targets[1], price: 53_000 }],
+    };
+    const s2 = trackPlanTransition(s, refinedPlan, 3_000);
+    // o preço antigo do TP2 (52_200) não resolve mais nada — a estrutura já não o justifica.
+    expect(trackPriceTick(s2, 52_200, 3_500)).toBe(s2);
+    // o preço NOVO do TP2 (53_000) resolve o ladder completo.
+    const s3 = trackPriceTick(s2, 53_000, 4_000);
+    expect(s3.active).toBeNull();
+    expect(s3.targetHits).toBe(1);
+    expect(s3.history[0]).toMatchObject({ status: 'TARGET_HIT', resolvedPrice: 53_000, targetsHit: 2 });
   });
 });

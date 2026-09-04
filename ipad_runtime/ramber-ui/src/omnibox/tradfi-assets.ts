@@ -1,10 +1,18 @@
 // tradfi-assets.ts — Overhaul Cross-Market (Missão 2, diretriz 3): a
 // taxonomia de mercado tradicional exigida pela ordem de ignição.
-// HARDCODED DE PROPÓSITO: este sistema não tem (e não finge ter) nenhuma
-// API Macro ligada hoje — a lista existe para o Operador navegar a
-// categorização e para a conexão FUTURA de uma fonte real; escolher
-// qualquer um destes ativos nunca dispara uma chamada de rede (ver
-// TradFiEmptyState.tsx e o modo `marketMode==='TRADFI'` em App.tsx).
+// Nascida HARDCODED DE PROPÓSITO ("nenhuma API Macro ligada"), mas isso
+// mudou na Ordem Market Data Fabric (ver docs/MARKET_DATA_FABRIC.md):
+// findByLegacyTradFiAssetSymbol (src/market-data-bus/instrument-registry.js)
+// hoje resolve 14 dos 17 símbolos abaixo para um instrumento real com
+// conector Yahoo delayed (9 futuros CME + 5 ações NASDAQ) — escolher um
+// desses 14 monta TradFiRealChart (candle real) em vez de TradFiEmptyState.
+// Os outros 3 (GER40/Eurex, UKOIL/ICE, USDJPY com convenção de cotação
+// invertida do futuro) continuam sem mapeamento seguro, honestamente em
+// TradFiEmptyState — ver notes de cada InstrumentDefinition não-mapeada.
+// AVISO REAL herdado pelos 14 mapeados: o conector Yahoo delayed tem um
+// bloqueio estrutural de CORS documentado (docs/MARKET_DATA_FABRIC.md) —
+// "resolve pra um instrumento real" não é o mesmo que "confirmado
+// funcionando ao vivo contra a rede real".
 export type TradFiCategory = "INDICES_GLOBAIS" | "ACOES_BIG_TECH" | "COMMODITIES" | "FOREX";
 
 export interface TradFiAsset {

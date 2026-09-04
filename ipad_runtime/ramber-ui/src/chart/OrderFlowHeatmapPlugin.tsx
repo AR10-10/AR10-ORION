@@ -41,12 +41,15 @@
 // inofensivo) e usa o canvas de reserva — o mesmo caminho de desenho
 // direto já comprovado em produção pelo LiquidityZonesPlugin.
 import { useEffect, useRef, useState } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
+import { getChartBodyBounds, type ChartProfileLaneId } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { useL2History, useOrderflowHistory } from "../store/unified-snapshot-store";
 import {
   drawHeatmapFrame,
   computeCellAlpha,
   computeBubbleRadius,
+  computeRecencyWeight,
   type HeatmapCell,
   type HeatmapBubble,
   type HeatmapFrame,
@@ -56,6 +59,11 @@ import {
 interface OrderFlowHeatmapPluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
+  /** Mesmo conjunto de lanes ativas que os 3 perfis recebem: a faixa
+   *  reservada à direita passa a ser a REAL, não a soma das três sempre.
+   *  Sem isto o heatmap se clipava como se 48%% da largura estivessem
+   *  ocupados mesmo com nenhum perfil visível. */
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
 // Altura fixa de cada célula de profundidade (px CSS) — um nível L2 é um
@@ -80,7 +88,7 @@ function supportsOffscreenWorker(): boolean {
   );
 }
 
-export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPluginProps) {
+export function OrderFlowHeatmapPlugin({ chart, series, activeLanes }: OrderFlowHeatmapPluginProps) {
   const l2History = useL2History("BINANCE");
   const orderflowHistory = useOrderflowHistory();
   const dataRef = useRef({ l2History, orderflowHistory });
@@ -119,9 +127,16 @@ export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPlugin
         for (const lvl of entry.asks) if (lvl.size > maxAsk) maxAsk = lvl.size;
       }
 
+      // Diretriz Final de Lapidação Visual, Partes 3/4 ("ciclo de vida
+      // automático, sem corte abrupto"): computeRecencyWeight pondera pela
+      // POSIÇÃO real de cada amostra no ring buffer (l2/orderflowHistory
+      // são capacidade fixa, não janela de tempo) — a amostra mais antiga
+      // já esmaece ANTES de ser evictada, então sair do buffer nunca é um
+      // corte visual perceptível de um frame pro outro.
       const cells: HeatmapCell[] = [];
       for (let i = 0; i < l2.length; i++) {
         const entry = l2[i];
+        const recency = computeRecencyWeight(i, l2.length);
         const x1 = timeScale.timeToCoordinate((Math.floor(entry.time / 1000)) as unknown as Time);
         if (x1 === null) continue;
         const next = l2[i + 1];
@@ -133,33 +148,53 @@ export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPlugin
         for (const lvl of entry.bids) {
           const y = series.priceToCoordinate(lvl.price);
           if (y === null) continue;
-          const alpha = computeCellAlpha(lvl.size, maxBid);
+          const alpha = computeCellAlpha(lvl.size, maxBid) * recency;
           if (alpha <= 0) continue;
-          cells.push({ x: x1, y: y - CELL_HEIGHT / 2, w: cellWidth, h: CELL_HEIGHT, color: `rgba(0, 255, 170, ${alpha.toFixed(3)})` });
+          cells.push({ x: x1, y: y - CELL_HEIGHT / 2, w: cellWidth, h: CELL_HEIGHT, color: `rgba(8, 153, 129, ${alpha.toFixed(3)})` });
         }
         for (const lvl of entry.asks) {
           const y = series.priceToCoordinate(lvl.price);
           if (y === null) continue;
-          const alpha = computeCellAlpha(lvl.size, maxAsk);
+          const alpha = computeCellAlpha(lvl.size, maxAsk) * recency;
           if (alpha <= 0) continue;
-          cells.push({ x: x1, y: y - CELL_HEIGHT / 2, w: cellWidth, h: CELL_HEIGHT, color: `rgba(255, 0, 85, ${alpha.toFixed(3)})` });
+          cells.push({ x: x1, y: y - CELL_HEIGHT / 2, w: cellWidth, h: CELL_HEIGHT, color: `rgba(242, 54, 69, ${alpha.toFixed(3)})` });
         }
       }
 
       let maxVolume = 0;
       for (const entry of of) for (const t of entry.largeTrades) if (t.volume > maxVolume) maxVolume = t.volume;
       const bubbles: HeatmapBubble[] = [];
-      for (const entry of of) {
+      // CORPO REAL do gráfico: o x livre entre as faixas de borda
+      // (chart-profile-lanes.ts). Sem isto as bolhas dos candles MAIS
+      // RECENTES caíam por cima das 3 lanes de perfil, que ocupam ~48% da
+      // borda direita — justamente a área mais importante da tela. Camada
+      // ancorada no tempo desenha no corpo; camada de borda desenha na sua
+      // faixa. Ninguém invade ninguém.
+      const body = getChartBodyBounds(cssWidth, activeLanes);
+      for (let i = 0; i < of.length; i++) {
+        const entry = of[i];
+        const recency = computeRecencyWeight(i, of.length);
         for (const t of entry.largeTrades) {
           const x = timeScale.timeToCoordinate((Math.floor(t.time / 1000)) as unknown as Time);
           const y = series.priceToCoordinate(t.price);
           if (x === null || y === null) continue;
+          // Fora do corpo = dentro de uma faixa reservada: não desenha.
+          // Descartar é honesto aqui — a bolha é contexto de fluxo, e o perfil
+          // que ocupa aquela faixa é leitura de preço; sobrepor os dois
+          // destruiria os dois.
+          if (x < body.left || x > body.right) continue;
           const r = computeBubbleRadius(t.volume, maxVolume);
           const bullish = t.side === "BUY";
+          // Pedido do Operador: camada estava "atrapalhando a visão"
+          // (hasOrderBook é quase sempre true ao vivo, então isto aparece
+          // quase o tempo todo) — coeficientes reduzidos de 0.35/0.85 para
+          // 0.22/0.55, mesmo espírito de computeCellAlpha acima.
+          const fillAlpha = (0.22 * recency).toFixed(3);
+          const strokeAlpha = (0.55 * recency).toFixed(3);
           bubbles.push({
             x, y, r,
-            fill: bullish ? "rgba(0, 255, 170, 0.35)" : "rgba(255, 0, 85, 0.35)",
-            stroke: bullish ? "rgba(0, 255, 170, 0.85)" : "rgba(255, 0, 85, 0.85)",
+            fill: bullish ? `rgba(8, 153, 129, ${fillAlpha})` : `rgba(242, 54, 69, ${fillAlpha})`,
+            stroke: bullish ? `rgba(8, 153, 129, ${strokeAlpha})` : `rgba(242, 54, 69, ${strokeAlpha})`,
           });
         }
       }
@@ -281,12 +316,12 @@ export function OrderFlowHeatmapPlugin({ chart, series }: OrderFlowHeatmapPlugin
       <canvas
         ref={workerCanvasRef}
         className="absolute inset-0 pointer-events-none"
-        style={{ width: "100%", height: "100%", display: mode === "worker" ? "block" : "none" }}
+        style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("order_flow_heatmap"), display: mode === "worker" ? "block" : "none" }}
       />
       <canvas
         ref={mainCanvasRef}
         className="absolute inset-0 pointer-events-none"
-        style={{ width: "100%", height: "100%", display: mode === "main" ? "block" : "none" }}
+        style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("order_flow_heatmap"), display: mode === "main" ? "block" : "none" }}
       />
     </>
   );

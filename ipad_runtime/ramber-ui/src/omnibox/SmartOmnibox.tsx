@@ -1,31 +1,46 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { fetchBinanceUsdtSymbols, partitionCryptoSymbols, type BinanceUsdtSymbol } from "./binance-symbols";
+import { fetchMexcUsdtSymbols, type MexcUsdtSymbol } from "./mexc-symbols";
+import { fromBinanceSymbol, fromMexcSymbol, type UniversalCryptoSymbol } from "./universal-symbol";
 import { TRADFI_ASSETS, TRADFI_CATEGORY_LABELS, TRADFI_CATEGORY_ORDER, type TradFiAsset } from "./tradfi-assets";
 
 // SmartOmnibox.tsx — Overhaul Cross-Market (Missão 2, diretriz 1): busca
 // categorizada multi-mercado no cabeçalho, substituindo o seletor fixo de
-// 5 moedas como forma PRIMÁRIA de trocar de ativo. Duas fontes, uma UI:
+// 5 moedas como forma PRIMÁRIA de trocar de ativo. Três fontes, uma UI:
 //   CRYPTO / MEME COINS — reais, buscados uma vez da Binance ao abrir
 //     (diretriz 2), filtrados no cliente pela digitação.
+//   CRYPTO · MEXC — Ordem "MEXC ASSET DISCOVERY" + "UNIVERSAL ASSET
+//     DISCOVERY" (ambas a mesma pedido do Operador, a segunda generaliza a
+//     primeira): mesma fonte real que já alimentava só o universo de fundo
+//     do Radar (omnibox/mexc-symbols.ts), agora também pesquisável aqui —
+//     buscada em paralelo à Binance, com falha independente (Ordem
+//     Universal §1: nunca esconder um ativo só porque não existe na
+//     Binance). Cada resultado normalizado por universal-symbol.ts, com a
+//     exchange SEMPRE rotulada (Ordem MEXC §7/§12, Ordem Universal §12) —
+//     nunca um item sem dizer de qual mercado ele é.
 //   ÍNDICES / AÇÕES / COMMODITIES / FOREX — taxonomia TradFi hardcoded
 //     (diretriz 3), sempre disponível, nunca dispara rede.
-// Fail-closed embutido: se o fetch da Binance falhar, as seções
-// CRYPTO/MEME mostram um aviso honesto — nunca uma lista velha ou
-// inventada; as seções TradFi continuam funcionando normalmente (são
-// dados estáticos, não dependem de rede).
+// Fail-closed embutido: se o fetch de uma exchange falhar, só a SEÇÃO
+// DAQUELA exchange mostra um aviso honesto — nunca uma lista velha ou
+// inventada, e nunca derruba as outras seções (cada fonte tem seu próprio
+// estado de carregamento, nunca um único booleano compartilhado); as
+// seções TradFi continuam funcionando normalmente (são dados estáticos,
+// não dependem de rede).
 export function SmartOmnibox({
   selectedLabel,
   onSelectCrypto,
   onSelectTradFi,
 }: {
   selectedLabel: string;
-  onSelectCrypto: (baseAsset: string) => void;
+  onSelectCrypto: (selection: UniversalCryptoSymbol) => void;
   onSelectTradFi: (asset: TradFiAsset) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [cryptoSymbols, setCryptoSymbols] = useState<BinanceUsdtSymbol[] | null>(null); // null = ainda não carregado
   const [loadFailed, setLoadFailed] = useState(false);
+  const [mexcSymbols, setMexcSymbols] = useState<MexcUsdtSymbol[] | null>(null); // null = ainda não carregado
+  const [mexcLoadFailed, setMexcLoadFailed] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
   // Carrega a lista real uma única vez, no primeiro momento em que o
@@ -43,6 +58,23 @@ export function SmartOmnibox({
       cancelled = true;
     };
   }, [open, cryptoSymbols]);
+
+  // Mesma disciplina acima, fonte MEXC — efeito PRÓPRIO e independente:
+  // uma falha aqui nunca bloqueia nem atrasa a Binance (Promise separada,
+  // nunca Promise.all), exatamente a arquitetura fail-closed-por-fonte que
+  // já rege esta UI.
+  useEffect(() => {
+    if (!open || mexcSymbols !== null) return;
+    let cancelled = false;
+    fetchMexcUsdtSymbols().then((list) => {
+      if (cancelled) return;
+      setMexcLoadFailed(list.length === 0);
+      setMexcSymbols(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, mexcSymbols]);
 
   useEffect(() => {
     if (!open) return;
@@ -66,6 +98,10 @@ export function SmartOmnibox({
     () => meme.filter((s) => textMatches(s.baseAsset)).slice(0, 40),
     [meme, q],
   );
+  const filteredMexc = useMemo(
+    () => (mexcSymbols ?? []).filter((s) => textMatches(s.baseAsset)).slice(0, 40),
+    [mexcSymbols, q],
+  );
   const filteredTradFiByCategory = useMemo(() => {
     const map = new Map<string, TradFiAsset[]>();
     for (const a of TRADFI_ASSETS) {
@@ -77,8 +113,8 @@ export function SmartOmnibox({
     return map;
   }, [q]);
 
-  function selectCrypto(baseAsset: string) {
-    onSelectCrypto(baseAsset);
+  function selectCrypto(selection: UniversalCryptoSymbol) {
+    onSelectCrypto(selection);
     setOpen(false);
     setQuery("");
   }
@@ -150,8 +186,8 @@ export function SmartOmnibox({
                 <OmniboxItem
                   key={s.symbol}
                   label={s.baseAsset}
-                  sub={s.market === "perp" ? "USDT-M · Perp" : "USDT · Spot"}
-                  onClick={() => selectCrypto(s.baseAsset)}
+                  sub={`BINANCE • ${s.market === "perp" ? "FUTURES" : "SPOT"}`}
+                  onClick={() => selectCrypto(fromBinanceSymbol(s))}
                 />
               ))
             )}
@@ -169,8 +205,33 @@ export function SmartOmnibox({
                 <OmniboxItem
                   key={s.symbol}
                   label={s.baseAsset}
-                  sub={s.market === "perp" ? "USDT-M · Perp" : "USDT · Spot"}
-                  onClick={() => selectCrypto(s.baseAsset)}
+                  sub={`BINANCE • ${s.market === "perp" ? "FUTURES" : "SPOT"}`}
+                  onClick={() => selectCrypto(fromBinanceSymbol(s))}
+                />
+              ))
+            )}
+          </OmniboxSection>
+
+          {/* Ordem "MEXC ASSET DISCOVERY" §3 / Ordem "UNIVERSAL ASSET
+              DISCOVERY" §5: resultado agrupado por exchange, rótulo
+              "EXCHANGE • MERCADO" sempre visível em cada item — nunca
+              escondido atrás de um tooltip. Só Futures existe nesta
+              Etapa 1 (mexc-symbols.ts não descobre Spot — ver header de
+              universal-symbol.ts). */}
+          <OmniboxSection title="Cripto · MEXC (Tempo Real)">
+            {mexcSymbols === null ? (
+              <OmniboxNote text="AGUARDANDO..." />
+            ) : mexcLoadFailed ? (
+              <OmniboxNote text="SEM_CONEXAO_MEXC" tone="warn" />
+            ) : filteredMexc.length === 0 ? (
+              <OmniboxNote text="Nenhum resultado" />
+            ) : (
+              filteredMexc.map((s) => (
+                <OmniboxItem
+                  key={s.symbol}
+                  label={s.baseAsset}
+                  sub="MEXC • FUTURES"
+                  onClick={() => selectCrypto(fromMexcSymbol(s))}
                 />
               ))
             )}

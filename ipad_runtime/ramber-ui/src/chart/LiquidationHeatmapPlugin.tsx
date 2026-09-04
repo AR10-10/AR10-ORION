@@ -26,14 +26,43 @@
 // — só o rótulo do bucket de maior notional real (mesmo papel do POC do
 // Volume Profile) usa uma linha, 1px sólida.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
+import { CHART_LEFT_EDGE_FRACTION } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import { computeLiquidationHeatmap, type LiquidationHeatmapResult } from "../nexus/liquidation-heatmap";
 import type { LiquidationEvent } from "../engine-bridge";
+// Diretriz Final de Lapidação Visual, Adendo, Parte 11: rótulo de pico
+// virou caixa real (mesma primitiva de LiquidityZonesPlugin/
+// KillZoneBandsPlugin/InstitutionalZonePlugin).
+import { drawCanvasLabel, measureCanvasLabel } from "../nexus/canvas-label";
+import { chartPaletteRgba } from "./canvas-palette";
 
-const MAX_BAR_WIDTH_FRACTION = 0.14; // fração da largura do chart — camada secundária, nunca compete com o Volume Profile
-const LONG_FILL = "rgba(0, 255, 170, 0.28)";
-const SHORT_FILL = "rgba(255, 0, 85, 0.28)";
-const PEAK_LABEL_COLOR = "rgba(255, 200, 0, 0.85)";
+// Faixa ESQUERDA declarada (chart-profile-lanes.ts). O 0.14 continua o mesmo
+// número que este plugin sempre usou — mudou de dono: agora é a reserva
+// compartilhada da borda esquerda, não uma constante local que ninguém mais
+// enxergava. Foi justamente isso que produziu a colisão com as etiquetas
+// estruturais do lado esquerdo (LEFT_MARGIN_PX = 2 no PriceLabelStackPlugin):
+// o comentário antigo dizia "nunca compete com o Volume Profile" — verdade, o
+// VP está à direita; ninguém tinha olhado a ESQUERDA.
+const MAX_BAR_WIDTH_FRACTION = CHART_LEFT_EDGE_FRACTION;
+const LONG_FILL = "rgba(8, 153, 129, 0.28)";
+const SHORT_FILL = "rgba(242, 54, 69, 0.28)";
+// Correção real (auditoria de conteúdo, 2026-09-02 — "remove o que não
+// tem utilidade"): este comentário dizia "H50 puro... a 17° real de
+// Liquidity Sweep (H33)" — não bate com o código real. O tom aqui e o do
+// Sweep (LiquiditySweepLinesPlugin.tsx) sempre foram o MESMO triplo
+// (255,162,0) desde antes desta migração — nunca 17° apart. Medido:
+// chartRgbToHsl(255,162,0) = 38°, idêntico à família canônica `attention`
+// (245,158,11 = 38°) depois de canvas-palette.ts consolidar as 6 famílias
+// — a diferenciação de 17° descrita aqui foi superada por essa
+// consolidação numa rodada posterior e a prosa nunca foi atualizada. Os
+// dois eventos (pico de liquidação ao vivo, sweep já ocorrido) hoje se
+// distinguem por FORMA/papel visual (rótulo de pico vs. linha horizontal
+// de referência), nunca por sub-matiz — mesmo princípio que `bullish`/
+// `bearish` já aplicam a dezenas de elementos diferentes no resto do
+// canvas. Kill Zones (âmbar, banda vertical de fundo) nunca competiu com
+// nenhum dos dois — geometria diferente, isso continua verdade.
+const PEAK_LABEL_COLOR = chartPaletteRgba("attention", 0.85);
 
 interface LiquidationHeatmapPluginProps {
   chart: IChartApi | null;
@@ -114,16 +143,20 @@ export function LiquidationHeatmapPlugin({ chart, series, liquidations, symbol }
 
       // Rótulo real do bucket de maior notional (mesmo papel do POC no
       // Volume Profile) — um único número honesto, nunca um por bucket.
+      // Diretriz Final Adendo Parte 11: caixa real (canto suave +
+      // contraste garantido) em vez de texto nu — posição igual a antes
+      // (base da caixa 1px acima da barra), só a primitiva de desenho
+      // muda; measureCanvasLabel resolve a altura real antes de
+      // posicionar, nunca um deslocamento aproximado.
       if (peakBucket.totalNotionalUsd > 0) {
         const yLow = series.priceToCoordinate(peakBucket.priceLow);
         const yHigh = series.priceToCoordinate(peakBucket.priceHigh);
         if (yLow !== null && yHigh !== null) {
           const y = Math.min(yLow, yHigh);
           const peakW = (peakBucket.totalNotionalUsd / heat.maxBucketNotionalUsd!) * maxBarWidth;
-          ctx.font = "9px -apple-system, sans-serif";
-          ctx.fillStyle = PEAK_LABEL_COLOR;
-          ctx.textBaseline = "bottom";
-          ctx.fillText(formatUsd(peakBucket.totalNotionalUsd), Math.max(2, peakW + 3), y - 1);
+          const text = formatUsd(peakBucket.totalNotionalUsd);
+          const size = measureCanvasLabel(ctx, text);
+          drawCanvasLabel(ctx, Math.max(2, peakW + 3), y - 1 - size.height, { fill: PEAK_LABEL_COLOR, text });
         }
       }
     };
@@ -157,7 +190,7 @@ export function LiquidationHeatmapPlugin({ chart, series, liquidations, symbol }
       ref={canvasRef}
       data-plugin="liquidation-heatmap"
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("liquidation_heatmap") }}
     />
   );
 }

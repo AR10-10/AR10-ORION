@@ -1195,7 +1195,7 @@ cálculo novo (`z.type` já é a direção real do motor). Verificado com
 harness Playwright: a zona vermelha lê `OB ↓`/`FVG ↓` sem ambiguidade.
 
 **Pesquisa/revisão (entregável principal)**: documento honesto em
-`docs/AUDITORIA_ECOSSISTEMA_VISUAL.md` — inventário completo das 22
+`docs/historico/AUDITORIA_ECOSSISTEMA_VISUAL.md` — inventário completo das 22
 camadas visuais reais, comparação com terminais profissionais (ATAS/
 Bookmap/GetChart/LuxAlgo, pesquisa real com fontes), e lista priorizada
 com veredito. Conclusão honesta: no núcleo order flow + SMC o AR10 já
@@ -1998,7 +1998,7 @@ duplicação real VOLATILIDADE/ATR% encontrada e eliminada
 Auditoria completa nas 7 seções pedidas pelo Operador (Certificação/Trade
 Plan/Auditoria de Dados/Auditoria Matemática/Auditoria Visual/Demanda e
 Oferta/Relatório Final) — relatório completo em
-`docs/RELATORIO_AUDITORIA_FINAL.md`. Achado real (§3/§4): a row
+`docs/historico/RELATORIO_AUDITORIA_FINAL.md`. Achado real (§3/§4): a row
 "VOLATILIDADE" do painel Market Regime recomputava seu próprio proxy
 (média ingênua de `(high-low)/close`, sem gaps) na mesma hora em que
 `regime-engine.js` já calcula o ATR% real (true range com gaps, Wilder) e
@@ -3992,7 +3992,7 @@ eficiência de rede (requisição obsoleta continua em voo até resolver,
 mesmo descartada), baixa prioridade, documentada no backlog.
 
 **Entregável único** (§8 da diretiva):
-`docs/AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` — inventário, mapa de
+`docs/historico/AUDITORIA_CONSOLIDACAO_EVOLUCAO.md` — inventário, mapa de
 arquitetura/dependências/sincronização/elementos visuais, pesquisa,
 lacunas, conflitos, registro de melhorias com justificativa técnica,
 backlog priorizado, riscos/benefícios. Cita `ELITE_TRADING_RESEARCH_MAP.md`
@@ -4011,6 +4011,1163 @@ inalterados) · 2 janelas de teste de padrão-fixo widened (mesma
 manutenção de baixo risco já vista em rodadas anteriores) ·
 verificação Playwright ao vivo ("VOTO DO CONSELHO" + tooltip
 renderizados corretamente, zero erro de console real).
+
+### 6.54 VWAP Standard Deviation Bands — primeiro item Tier 1 do backlog
+executado (pedido do Operador: "ferramentas mais precisas")
+
+PR #14 foi mergeada durante a rodada anterior — branch reiniciada de
+`origin/main` (histórico só já mergeado, nenhum commit local extra
+perdido) antes de começar este trabalho, seguindo a disciplina do
+ambiente para PR já fechada.
+
+Pesquisa real confirmada via WebSearch (TradingView, Sierra Chart,
+TrendSpider, MultiCharts — mesma fórmula documentada em todas):
+banda = VWAP ± k×desvio-padrão PONDERADO POR VOLUME (nunca o desvio-
+padrão simples dos closes, que ignoraria o próprio peso que dá nome à
+ferramenta). `variância = Σ(volume×precoTípico²)/Σvolume − VWAP²`.
+
+**Solução aplicada**: `nexus/vwap-bands.ts` (novo) — `computeVwapBands`,
+companion module de `nexus/vwap.ts` (cuja matemática fica INTOCADA por
+diretiva anterior, §20: "não modificar seu núcleo") — consome
+`computeSessionVwapSeries` já real e acumula a variância por cima, zero
+segunda fórmula de VWAP. k=1 e k=2, mesma convenção de multiplicador
+±σ já usada por `trend-channel-engine.ts`. Wiring no canvas
+(`EnhancedChart_110_Percent.tsx`): 4 novas séries nativas
+(upper1/lower1/upper2/lower2), MESMO efeito/mesmos candles que a
+própria VWAP (nunca dessincroniza), MESMO toggle `visibility.vwap` —
+decisão deliberada de NÃO criar uma 19ª camada no painel "Camadas do
+Gráfico": as bandas são a mesma ferramenta que a VWAP, não um conceito
+novo e separado. Cor: mesmo tom branco/neutro já "dono" da VWAP, só
+mais translúcido (1σ mais visível que 2σ) — reaproveita o papel visual
+já existente em vez de introduzir mais uma cor (achado direto da
+auditoria de consolidação de paleta, §6.53).
+
+**Verificação ao vivo (Playwright)**: painel "Camadas do Gráfico"
+segue mostrando exatamente 18 linhas (nenhuma nova) e "VWAP" aparece
+só 1 vez no painel — confirma que as bandas não geraram uma camada
+duplicada. Zero erro real de console.
+
+**Riscos conhecidos**: nenhum — módulo puro aditivo + 4 séries nativas
+seguindo exatamente o padrão já usado por Trend Channel; nenhuma
+mudança em `vwap.ts`, nenhuma mudança de comportamento pra quem nunca
+liga o toggle VWAP.
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 1963 testes** (100%,
++13 novos: 8 de execução real em `nexus-vwap-bands.test.ts`
+— incluindo um caso hand-verified, VWAP=175/stdDev=25√3≈43.301 —, 5 de
+padrão-de-fonte em `refinamento-final-wiring.test.ts`) · build de
+produção ok · verificação Playwright ao vivo.
+
+**Backlog**: primeiro item Tier 1 de `MAPA_EVOLUCAO_CIBORGUE.md` §7
+executado; Kill Zones no canvas continua o próximo natural.
+
+### 6.55 Kill Zones ICT no canvas — segundo item Tier 1 do backlog
+executado (o badge do header já existia desde §6.48; este plugin fecha
+a lacuna do desenho real)
+
+Pesquisa real confirmada via WebSearch antes de implementar (scripts
+reais publicados de ICT Killzones no TradingView — TFLab,
+TakingProphets, BryceWH, 0xCryptoVince): a convenção visual real é um
+retângulo/caixa sombreada cobrindo a janela de tempo inteira, nunca uma
+linha única — geometria diferente de `MarketSessionBandsPlugin`
+(partição contínua de 24h, desenhada como linhas de transição) porque
+Kill Zone é um conceito ICT distinto (janela ESTREITA e institucional
+dentro de cada sessão; a maior parte do dia não tem nenhuma zona ativa,
+e Nova York/Fechamento de Londres se sobrepõem de propósito — ver
+header de `nexus/kill-zones.ts`, §6.48).
+
+**Solução aplicada**:
+- `nexus/kill-zones.ts` ganhou `computeKillZoneSpans(candles)` —
+  varredura real run-length sobre a série de candles, devolvendo um
+  `KillZoneSpan` (id/label/startTime/endTime) por ocorrência CONTÍGUA
+  real de cada zona; overlaps reais (Nova York × Fechamento de Londres)
+  produzem 2 spans concorrentes, nunca mesclados; zonas ainda abertas no
+  último candle da série são fechadas honestamente no fim da varredura.
+- `chart/KillZoneBandsPlugin.tsx` (novo) — 4ª instância da arquitetura
+  de overlay já provada (`LiquidityZonesPlugin`/
+  `StructureBreakMarkersPlugin`/`MarketSessionBandsPlugin`): canvas
+  próprio, dirty-flag + `requestAnimationFrame`, `ResizeObserver`,
+  geometria via `timeToCoordinate` + meia-largura real de
+  `timeScale.options().barSpacing` (para o retângulo cobrir o candle
+  inteiro, não só do centro ao centro), Fio de Seda (bordas 1px sólidas,
+  nunca `setLineDash`), fail-closed (`timeToCoordinate` fora da área
+  visível retorna `null` → span pulado, nunca extrapolado). Cor: o
+  MESMO âmbar `#ffb020` já usado pelo badge de Kill Zone no header —
+  reaproveita o papel visual já existente em vez de introduzir um tom
+  novo (mesma disciplina de paleta de §6.53/§6.54).
+- Camada PRÓPRIA (`kill_zones`) em `CHART_LAYER_IDS`/
+  `DEFAULT_CHART_LAYER_VISIBILITY`/`DEFAULT_CHART_LAYER_AUTO_MODE`,
+  nunca dobrada dentro de `market_sessions` — decisão deliberada, o
+  oposto da decisão tomada para as bandas de VWAP em §6.54: ali as
+  bandas eram a MESMA ferramenta que a VWAP (reaproveitou o toggle);
+  aqui Kill Zone é um conceito conceitualmente distinto de sessão de
+  mercado (o próprio header de `kill-zones.ts` já documentava isso, e o
+  badge do header já os trata como elementos separados) — a mesma
+  disciplina de "reusar vs. criar novo" aplicada com o critério real de
+  cada caso, não uma regra cega.
+- Painel "Camadas do Gráfico" (`App.tsx`) ganha a linha "KILL ZONES
+  (ICT)", entra no Modo Inteligência (leitura de mercado/estrutura,
+  nunca específica do plano ativo — mesma classificação de
+  `market_sessions`).
+- **Relevance Engine** (`nexus/layer-relevance.ts`) ganha cobertura
+  DESDE O NASCIMENTO da camada — `hasActiveKillZone` computado em
+  `App.tsx` com a MESMA função (`activeKillZones(new Date())`) que o
+  badge do header já usa, zero segunda leitura. Fechar isso já na
+  criação evita repetir o gap retroativo que o Task #93 teve que
+  corrigir depois para 3 camadas (`liquidation_heatmap`/
+  `liquidity_sweep`/`market_sessions`, achado real de crash em
+  runtime, §6.41) — aqui a camada nasce com regra própria, nunca cai
+  no fallback `?? true` por omissão.
+
+**Verificação ao vivo (Playwright)**: painel "Camadas do Gráfico" agora
+mostra 19 linhas (era 18 em §6.54), "KILL ZONES (ICT)" aparece como
+última linha com badge AUTO/VISÍVEL — a leitura real no momento do
+teste tinha a Kill Zone Ásia ativa (mesmo instante, mesmo dado, badge do
+header mostrando "ÁSIA"), confirmando que o Relevance Engine e o badge
+do header concordam por usarem a MESMA função pura. O canvas do gráfico
+em si ficou em `AWAITING CANDLES...` (fail-closed honesto — este
+ambiente sandboxed não tem acesso de rede real à Binance, mesma
+limitação que já existia para verificar visualmente qualquer overlay de
+canvas anterior nesta sessão) — o desenho real do retângulo amber fica
+verificado pela suíte de execução real de `computeKillZoneSpans`
+(23/23 em `kill-zones.test.ts`) mais os testes de padrão-de-fonte que
+travam a fiação (mount point, cor, geometria). Zero erro de console
+atribuível ao código novo (os únicos erros de console observados são
+`ERR_TUNNEL_CONNECTION_FAILED`/WebSocket, rede indisponível no sandbox).
+
+**Riscos conhecidos**: nenhum novo — módulo puro aditivo + plugin de
+canvas seguindo exatamente o padrão já usado 3x; `kill-zones.ts` só
+ganhou uma função nova (`computeKillZoneSpans`), zero mudança em
+`activeKillZones`/`nextKillZone` (comportamento do badge do header
+intocado).
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 1976 testes** (100%,
++13 novos desde §6.54: 6 de execução real em `kill-zones.test.ts`
+— overlap Nova York × Fechamento de Londres, não-mesclagem entre dias
+diferentes, span aberto fechado no fim da série —, 2 em
+`layer-relevance.test.ts` (describe `kill_zones`) + ajuste de contagem
+18→19 nos 2 testes de sincronia RELEVANCE_LAYER_IDS↔CHART_LAYER_IDS, 1
+ajuste de contagem em `chart-layers-panel-wiring.test.ts`
+(`CHART_LAYER_PANEL_MODULES` 18→19 entradas), 5 de padrão-de-fonte em
+`refinamento-final-wiring.test.ts` (import, mount point, camada própria,
+label no painel, cobertura do Relevance Engine)) · build de produção ok
+· verificação Playwright ao vivo.
+
+**Backlog**: segundo item Tier 1 de `MAPA_EVOLUCAO_CIBORGUE.md` §7
+executado (VWAP bands em §6.54, Kill Zones aqui); próximos itens Tier 1
+restantes: auditoria de touch-target 44×44pt (iPad Safari),
+list-virtualization (order book/Radar/Omnibox), dependência
+`reconnecting-websocket`, escopo de toggle para S1/R1/Trade Plan/
+Scenario lines (hoje sem gate nenhum), `AbortController` nos 2 fetches
+privados fora do Bus (ticker, funding+OI).
+
+### 6.56 EXTENSÃO OFICIAL — Fase de Evolução do Organismo: achado real de
+performance (cache por referência em 2 plugins de canvas), evidência
+medida antes de mexer em qualquer coisa
+
+Diretiva do Operador ("EXTENSÃO OFICIAL — FASE DE EVOLUÇÃO DO
+ORGANISMO"): usar o conhecimento da auditoria para reduzir "cálculos
+duplicados"/"renderizações desnecessárias"/latência, sem criar segunda
+arquitetura. Em vez de reabrir a auditoria inteira de novo (já
+consolidada em `AUDITORIA_CONSOLIDACAO_EVOLUCAO.md`/
+`MAPA_EVOLUCAO_CIBORGUE.md`), esta entrada audita concretamente o
+próprio código que acabou de nascer em §6.55 — a disciplina real de
+"organismo vivo" é auto-observação contínua, não só sobre módulos
+antigos.
+
+**Investigação (evidência antes de decisão, nunca suposição)**: os 9
+plugins de overlay do canvas seguem a mesma arquitetura (dirty-flag +
+rAF). Uma varredura (`grep` por `compute[A-Z]` dentro de cada `draw()`)
+achou 3 plugins que chamam uma função de derivação pura DIRETAMENTE
+dentro do closure de desenho: `KillZoneBandsPlugin`
+(`computeKillZoneSpans`), `MarketSessionBandsPlugin`
+(`computeSessionBoundaries`) e `LiquidationHeatmapPlugin`
+(`computeLiquidationHeatmap`). Nos 3 casos, o resultado só depende de
+`data`/`liquidations` (não do range visível), mas `draw()` roda a cada
+pan/zoom/resize via `subscribeVisibleLogicalRangeChange`/
+`ResizeObserver` — ou seja, um recálculo idêntico e descartado a cada
+redraw. Em vez de "consertar os 3 por padrão", um benchmark real
+(candles/eventos sintéticos nos tetos reais do app — `MAX_CHART_HISTORY
+= 2000` de `App.tsx` para candles, retenção de 500 para o feed de
+liquidação) mediu o custo de cada um:
+
+| Função | custo/chamada no teto real |
+|---|---|
+| `computeKillZoneSpans` (N=2000) | ~1,0-1,2ms |
+| `computeSessionBoundaries` (N=2000) | ~0,49-0,57ms |
+| `computeLiquidationHeatmap` (N=500) | ~0,006ms |
+
+`computeKillZoneSpans`/`computeSessionBoundaries` custam 2-3 ordens de
+magnitude mais que `computeLiquidationHeatmap` (o primeiro itera
+`new Date()` + filtro de 4 zonas por candle; o segundo é uma soma linear
+simples sobre eventos, tipicamente dezenas). Num orçamento de 16,6ms/
+frame (60fps, Regra de Ouro 7), ~1,2ms+0,57ms de trabalho REDUNDANTE a
+cada pan contínuo é uma fração real (~10%) só destes dois; 0,006ms não
+é.
+
+**Solução aplicada** (só onde a evidência apoiou): `KillZoneBandsPlugin`
+e `MarketSessionBandsPlugin` ganharam um cache por IDENTIDADE de
+referência (`spansCacheRef`/`boundariesCacheRef`) — `dataRef.current`
+só troca de objeto quando `App.tsx` chama `setChartData` de verdade
+(candle novo/troca de símbolo/timeframe), nunca em pan/zoom/resize
+(confirmado lendo a cadeia real de props: `chartData` state → `data`
+prop de `ChartWidget` → `data` prop de `EnhancedChart_110_Percent` →
+`data` prop do plugin, sem nenhum `.slice()`/spread intermediário que
+quebraria a identidade). `LiquidationHeatmapPlugin` NÃO recebeu o mesmo
+cache — a diretiva pede reduzir latência real, não "consistência" pela
+consistência; adicionar uma abstração sem benefício medido violaria a
+própria disciplina de engenharia deste repositório (CLAUDE.md: não
+introduzir complexidade além do que a tarefa exige).
+
+**Impacto esperado**: pan/zoom contínuo com Kill Zones e/ou Sessões
+ativas deixa de recomputar spans/boundaries a cada frame — só recomputa
+quando candles novos chegam. Zero mudança de comportamento visual
+(mesmo resultado, só sem o trabalho redundante).
+
+**Riscos conhecidos**: nenhum — cache por `===` de referência é
+correto por construção (nunca fica stale, porque QUALQUER mudança real
+de `data` troca a referência); reversível trivialmente (remover as 2
+linhas de cache volta ao comportamento anterior, idêntico exceto no
+custo).
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 1979 testes** (100%,
++3 novos: padrão-de-fonte em `refinamento-final-wiring.test.ts`
+confirmando o cache nos 2 plugins corrigidos e a AUSÊNCIA deliberada do
+cache no 3º, para a decisão de não-mexer ficar travada por teste tanto
+quanto a decisão de mexer) · build de produção ok · verificação
+Playwright ao vivo (painel "Camadas do Gráfico" seguindo idêntico,
+zero regressão). Benchmark descartável (não commitado, `_bench-
+throwaway.test.ts`, deletado após medir).
+
+**Backlog/próximos passos honestos**: este achado nasceu de uma
+varredura focada nos plugins mais recentes, não de uma auditoria
+sistemática dos 9 plugins de overlay — os outros 6
+(`LiquidityZonesPlugin`/`StructureBreakMarkersPlugin`/
+`VolumeProfilePlugin`/`OrderFlowHeatmapPlugin`/`NeuralMarketAuraPlugin`/
+`TradePlanZonePlugin`) recebem dados JÁ pré-computados via props
+(`useMemo` em `App.tsx`), não chamam `compute*` dentro do próprio
+`draw()` — confirmado pela mesma varredura `grep`, não uma suposição.
+Nenhum destes 6 tem o mesmo padrão de recálculo redundante.
+
+### 6.57 Session Key Levels no canvas — pedido do Operador (captura de
+indicador de referência "Key Levels")
+
+O Operador enviou a legenda de um indicador de referência real (formato
+"NIPS Key Levels · Standard · 30 250 · Medium Small Solid · 1030-1700 ·
+America/New_York · 0300-1200 0800-1700 1900-0400") pedindo para a
+plataforma evoluir "onde encaixar perfeitamente".
+
+**Pesquisa real antes de implementar** (Disciplina de trabalho item 2 —
+nome próprio, confirmar antes de implementar): WebSearch identificou a
+família real desse indicador (TradingView — "Session Highs & Lows", "Key
+Session & Levels", "Trading Sessions with High/Low Levels") — o padrão
+real é plotar a MÁXIMA e a MÍNIMA de cada sessão institucional (Ásia/
+Londres/Nova York) como um NÍVEL HORIZONTAL de preço, ancorado num
+timezone configurável. Conceito ICT/SMC real: liquidez tende a descansar
+acima da máxima/abaixo da mínima de uma sessão já encerrada (varredura de
+stops) — o extremo vira referência de S/R para as sessões seguintes. Os 3
+horários da legenda (0300-1200/0800-1700/1900-0400, timezone America/
+New_York) batem, dentro da aproximação de ±1h já documentada neste
+projeto para DST, com Londres/Nova York/Ásia convertidos de UTC — mesmas
+sessões que `market-session.ts` já modela.
+
+**Decisão de arquitetura (zero 3ª fonte de "o que é uma sessão")**: em
+vez de introduzir uma nova definição paralela de janelas (o codebase já
+tem DUAS: a partição contínua de 24h em `market-session.ts` e a janela
+estreita ICT em `kill-zones.ts`, cada uma com um propósito documentado
+diferente), Key Levels REAPROVEITA a partição já real de
+`market-session.ts` — `computeSessionKeyLevels` é uma companion function
+no mesmo arquivo (mesmo padrão de `computeSessionBoundaries`), que varre
+a série real de candles UMA vez, acumulando `Math.max`/`Math.min` de
+high/low por ocorrência de sessão.
+
+**Solução aplicada**:
+- `nexus/market-session.ts` ganha `computeSessionKeyLevels(candles)` —
+  devolve um `SessionKeyLevel` (sessionId/label/startTime/endTime/high/
+  low/closed) por ocorrência real; `closed:false` na sessão mais recente
+  (ainda em andamento, extremos podem crescer), `closed:true` nas
+  anteriores (extremos finais).
+- `chart/SessionKeyLevelsPlugin.tsx` (novo) — 5ª instância da arquitetura
+  de overlay já provada, cache por identidade de referência DESDE O
+  NASCIMENTO (aprendizado de §6.56 aplicado, nunca uma correção
+  retroativa desta vez). Desenha 2 linhas horizontais por sessão (máxima/
+  mínima), da hora real de abertura da sessão até a borda direita
+  visível (mesmo espírito "referência válida daqui pra frente" de
+  `TradePlanZonePlugin`). Declutter deliberado: só as últimas
+  `MAX_KEY_LEVELS_SHOWN = 5` ocorrências (convenção declarada, mesmo
+  espírito de `MARKET_SESSION_RECENT_BOUNDARY_CANDLES`) — nunca a
+  história inteira carregada.
+- Cor: reaproveita a MESMA dupla vermelho/verde já usada por Suporte/
+  Resistência (S1/R1) e por `LONG_RGB`/`SHORT_RGB`
+  (`NeuralMarketAuraPlugin`) — a máxima de sessão é estruturalmente um
+  teto (mesmo papel de R1), a mínima um piso (mesmo papel de S1). Zero
+  tom novo na paleta (mesma disciplina de §6.53-§6.55).
+- Camada PRÓPRIA `session_key_levels` (nível de PREÇO, conceito adicional
+  a `market_sessions`, que já marca as transições de TEMPO) — painel
+  "Camadas do Gráfico" ganha "KEY LEVELS (SESSÕES)", Modo Inteligência.
+- **Relevance Engine coberto desde o nascimento** — `hasSessionKeyLevelNearPrice`
+  reusa o mesmo limiar `LIQUIDITY_PROXIMITY_PCT` já usado por liquidez/
+  EQH-EQL (mesmo papel estrutural), calculado SÓ sobre os últimos
+  `MAX_KEY_LEVELS_SHOWN` níveis (a mesma constante que o plugin usa para
+  desenhar — importada de `SessionKeyLevelsPlugin.tsx`, nunca um segundo
+  número solto) — nunca marca relevante por um nível que nem está
+  desenhado na tela.
+
+**Verificação ao vivo (Playwright)**: painel "Camadas do Gráfico" passa
+de 19 para 20 linhas; "KEY LEVELS (SESSÕES)" aparece como última linha
+com badge AUTO/OCULTA (honesto — sem candle real neste sandbox sem rede
+à Binance, `sessionKeyLevels` fica `[]`, então `hasSessionKeyLevelNearPrice`
+é `false` e o Relevance Engine corretamente marca não-relevante, mesmo
+comportamento fail-closed de qualquer outra camada dependente de dado
+real). Zero erro de console atribuível ao código novo.
+
+**Riscos conhecidos**: nenhum — módulo puro aditivo + plugin seguindo
+exatamente o padrão já usado 4x, com o cache de §6.56 aplicado desde o
+início; zero mudança em `marketSessionFromUtc`/`computeSessionBoundaries`
+(header/`MarketSessionBandsPlugin` intocados).
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 1996 testes** (100%,
++17 novos: 7 de execução real em `market-session.test.ts`
+— acumulação real de high/low por Math.max/Math.min, transição fechando
+o nível anterior com extremos finais, candle NaN pulado sem contaminar,
+4 sessões em sequência sem contaminação cruzada —, 2 em
+`layer-relevance.test.ts` (describe `session_key_levels`) + ajuste de
+contagem 19→20, 1 ajuste de contagem em `chart-layers-panel-wiring.test.ts`,
+7 de padrão-de-fonte em `refinamento-final-wiring.test.ts` (import, mount
+point, camada própria, label no painel, cobertura do Relevance Engine,
+mesma constante de janela entre plugin/relevância, cor reaproveitada,
+cache desde o nascimento) — 1 teste pré-existente (`Header §1`) precisou
+de ajuste honesto porque o import real de `market-session.ts` mudou de
+string) · build de produção ok · verificação Playwright ao vivo.
+
+**Backlog honesto**: a exibição atual estende a linha do início real da
+sessão até a borda direita — uma versão futura poderia rastrear o candle
+EXATO onde o extremo ocorreu (não só o início da sessão), mas isso
+exigiria um 2º campo de índice/tempo no motor puro (`highTime`/
+`lowTime`) sem benefício visual demonstrado ainda; Previous Day High/Low
+(PDH/PDL, companion comum deste tipo de indicador) é um candidato real
+de próxima rodada — mesma função generalizada para uma partição diária
+em vez da partição de 5 sessões, mas não implementado agora (escopo desta
+entrega era responder ao pedido concreto do Operador, não expandir além
+dele sem pedido).
+
+### 6.58 "Linha amarela que eu não sei o que significa" + "etiquetas em
+cima do valor do ativo" — achado real com causa raiz identificada e
+corrigida (primeira fatia da "LAPIDAÇÃO PROFISSIONAL DO GRÁFICO")
+
+O Operador reportou (3ª vez nesta sessão que a pergunta sobre "linha
+amarela" aparece) não reconhecer um elemento amarelo no gráfico, mais um
+pedido geral de que rótulos nunca fiquem em cima do preço/candle. Em vez
+de repetir a resposta anterior (Entry price line, `#f0d06f`) sem
+verificar de novo, esta rodada fez um inventário REAL (grep) de toda cor
+amarelo/âmbar/dourada no `chart/`:
+
+| Cor | Papel real |
+|---|---|
+| `rgba(240, 208, 111, ...)` | Entry (Trade Plan) — já tinha rótulo "EN" no eixo |
+| `rgba(255, 235, 190/214, ...)` | VWAP/Nexus Line em estado NEUTRAL |
+| `rgba(255, 200, 0, ...)` | Pico do Liquidation Heatmap (texto condicional) |
+| `rgba(255, 176, 32, ...)` | Kill Zones (§6.55) — já tem rótulo próprio no retângulo |
+| **`rgba(255, 191, 0, ...)`** | **Liquidity Sweep — SEM equivalente em `priceAxisLabels`** |
+
+**Causa raiz real**: `createPriceLine` do Liquidity Sweep (EPC OMEGA
+FINAL Etapa 10) sempre teve `title: "⚡ SWEEP ↑/↓ N%"`, mas nunca um
+`priceAxisLabels` correspondente — diferente de TODO outro nível
+(S1/R1/VWAP/NL/EMA/Entry/Stop/Target/BOS-CHOCH), que tem ambos (linha
+nativa + rótulo no eixo anti-colisão).
+**Correção honesta do mecanismo** (a primeira versão desta entrega
+afirmou que o `title` nativo desenhava solto no painel, competindo com o
+candle — pesquisa mais profunda, direto no código-fonte real da lib
+(`custom-price-line-price-axis-view.ts`, método `_updateRendererData`),
+mostrou que isso está ERRADO): quando `axisLabelVisible` é `false`, o
+método retorna ANTES de marcar o título como visível — `title` nunca é
+desenhado em lugar NENHUM (nem eixo, nem painel) quando `axisLabelVisible:
+false`. O problema real nunca foi "texto sobreposto ao candle" — foi
+AUSÊNCIA TOTAL de qualquer rótulo legível para a linha âmbar (o `title`
+sempre foi metadado morto). Isso ainda explica exatamente a queixa do
+Operador ("linha amarela que eu não sei o que significa"): uma linha sem
+NENHUM texto é tão confusa quanto uma com texto mal posicionado. A
+correção (mover para `priceAxisLabels`) continua certa e necessária —
+antes a linha não tinha rótulo nenhum, agora tem um real e sem colisão —
+só a explicação do "porquê" foi corrigida aqui para não deixar uma
+afirmação técnica errada registrada.
+
+A mesma auditoria checou `SessionKeyLevelsPlugin.tsx` (§6.57, entregue na
+rodada anterior desta mesma PR) por um motivo DIFERENTE: seu rótulo
+usava `ctx.fillText` num canvas próprio — mecanismo totalmente
+independente do `title` nativo da lib, sem nenhum gate equivalente a
+`axisLabelVisible`. Esse desenhava mesmo, sempre, direto na coordenada Y
+do próprio high/low — esse SIM era colisão real de texto com candle, o
+mesmo padrão de bug autoinfligido no código mais recente da sessão.
+
+**Solução aplicada** (mesmo precedente já usado para BOS/CHOCH, EPC §5/§6
+— Task #29 do histórico):
+- Liquidity Sweep: `title: ""` na price line nativa (só a linha colorida
+  permanece); o texto migra para `priceAxisLabels` (mesmo preço/cor,
+  dedupe por preço — múltiplos traps podem citar o mesmo pool),
+  `side:"left"` (evento estrutural/histórico, mesma categoria de
+  S1/R1/Trend Channel/BOS-CHOCH).
+- Session Key Levels: só a sessão CORRENTE (a mais recente, ainda em
+  andamento) ganha rótulo real — via novo `currentSessionKeyLevel`
+  (useMemo puro em `EnhancedChart_110_Percent.tsx`, sempre a última
+  entrada de `computeSessionKeyLevels(data)`) empurrado em
+  `priceAxisLabels`, `side:"left"`. `SessionKeyLevelsPlugin.tsx` perdeu
+  TODO o desenho de texto (zero `ctx.fillText`) — as sessões já fechadas
+  continuam como linha de referência real (cor + posição), sem rótulo
+  próprio flutuante.
+
+**Impacto esperado**: Liquidity Sweep ganha um rótulo real onde antes não
+tinha NENHUM; Session Key Levels perde o texto que competia diretamente
+com candles na coordenada exata do high/low. O lado esquerdo do eixo
+(contexto estrutural) ganha até 3 novas entradas possíveis (Sweep + Key
+Level High/Low), sempre dentro do sistema anti-colisão já provado (nunca
+mais de ~7 no pior caso, a mesma escala que S1/R1/VWAP/NL/EMA/Entry/Stop/
+Target/BOS-CHOCH já convivem sem sobreposição há várias rodadas).
+
+**Riscos conhecidos**: nenhum — mesma técnica de migração já usada e
+testada para BOS/CHOCH; a LINHA em si (cor/posição/geometria) de nenhum
+dos dois elementos mudou, só o rótulo textual (antes inerte no Sweep,
+antes flutuante no Session Key Levels).
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 2001 testes** (100%,
++4 novos: 1 em `price-label-stack-plugin.test.ts` confirmando Sweep/Key
+Levels com `side:"left"` + 2 ajustes honestos de contagem/string (deps
+array/contagem de rótulos à esquerda, que mudaram de verdade), 4 em
+`refinamento-final-wiring.test.ts` (title vazio na price line nativa,
+entrada real em priceAxisLabels, `currentSessionKeyLevel` real,
+regressão travada contra `ctx.fillText` voltar ao plugin)) · build de
+produção ok · smoke Playwright ao vivo (painel idêntico, zero erro de
+console novo).
+
+**Escopo honesto desta rodada vs. a diretiva completa "LAPIDAÇÃO
+PROFISSIONAL DO GRÁFICO"**: o Operador enviou depois uma diretiva formal
+muito mais ampla (hierarquia de prioridade visual de 4 níveis para TODO
+elemento do gráfico, consolidação de S/R/liquidez/FVG/OB/VWAP/EMA,
+auditoria de paleta completa, mapeamento de TODOS os elementos
+desenhados com origem/módulo/finalidade/prioridade, pesquisa de técnicas
+modernas de visualização). Esta entrega resolve o achado CONCRETO e
+verificável (2 elementos com bug real de sobreposição, identificados com
+evidência, corrigidos com o mesmo padrão já provado) — não é a auditoria
+completa de hierarquia/paleta/consolidação pedida na diretiva formal, que
+é um trabalho real e maior, candidato a uma rodada dedicada própria
+(mapear os ~20 elementos reais do canvas um a um, com critério objetivo
+de prioridade, é trabalho de auditoria visual sistemática, não algo para
+encaixar apressado no fim de uma rodada já longa).
+
+### 6.59 Task #101 concluída (inventário + paleta + prioridade) + Task #102
+iniciada: diferenciação real Liquidity Sweep × pico do Liquidation Heatmap
+
+**Task #101** ("LAPIDAÇÃO PROFISSIONAL DO GRÁFICO") foi entregue como nova
+§9 de `docs/historico/AUDITORIA_ECOSSISTEMA_VISUAL.md` (não um documento novo —
+mesma disciplina de fonte única já usada em §6.27/§6.50): inventário
+completo de ~28 elementos reais do gráfico com módulo/cor/dependência,
+framework de prioridade de 4 níveis (Máxima/Alta/Média/Baixa, critério
+objetivo — ver §9.2 daquele arquivo), auditoria de paleta em 8 famílias
+de matiz reais (2 conflitos genuínos achados: família amarela com 5 tons
+para 5 conceitos, cyan compartilhado por Fibonacci e Volume Profile), e
+pesquisa externa de convenções profissionais.
+
+**Task #102** ("ADENDO — lapidação final, nível institucional") foi
+retomada com uma diretiva formal adicional do Operador, desta vez com uma
+imagem de referência conceitual (mockup de terminal, explicitamente "não
+é para ser copiada literalmente"). Duas honestidades registradas sobre
+essa diretiva:
+- O documento endereça "Agente 4" — nome que não corresponde a como o
+  Operador se dirige a esta sessão diretamente nas outras mensagens deste
+  mesmo histórico. Avaliado à luz da regra de segurança contra instruções
+  injetadas (item 7 da Disciplina de Trabalho, `CLAUDE.md`): o conteúdo
+  em si não pede nada que viole READ_ONLY/LEI 24/SSOT — pelo contrário,
+  reafirma essas 3 restrições nominalmente antes de conceder autonomia de
+  implementação — e chegou pelo canal direto de mensagem do usuário desta
+  sessão (não um arquivo/upload de terceiro), com o mesmo registro formal
+  ("DIRETIVA OFICIAL"/"SOLICITAÇÃO"/"ADENDO") já usado pelo Operador nesta
+  mesma sessão. Tratada como legítima, sinalizada aqui em vez de
+  silenciosamente ignorada (nem bloqueada sem necessidade real).
+- A imagem de referência tem 2 elementos que este sistema NÃO vai copiar,
+  por conflito direto com regra permanente: um donut "PROBABILIDADE"
+  (LONG 78% / SHORT 18% / NEUTRO 4%) — exatamente o tipo de número
+  calibrado que a Regra de Ouro 2 proíbe sem backtest real que sustente a
+  alegação; e uma barra de abas "ORDENS ABERTAS / POSIÇÕES / EXECUÇÕES"
+  com contagens ao vivo — implica conectividade real de corretora, o que
+  viola READ_ONLY. O resto da imagem (hierarquia, rótulos ao lado do
+  preço nunca em cima, zonas consolidadas, paleta por categoria) está
+  alinhado com o que este sistema já persegue.
+
+**Ação concreta desta entrega** (primeira de possivelmente várias dentro
+da Task #102): a diretiva pede explicitamente auditoria de "fios
+dourados" — e a própria §9.4 já tinha achado que Liquidity Sweep
+(`rgba(255, 191, 0, 0.85)`, H45) e o rótulo de pico do Liquidation Heatmap
+(`rgba(255, 200, 0, 0.85)`, H47) diferem por **2° de matiz** na mesma
+luminosidade/saturação/alpha — indistinguível a olho, apesar de serem 2
+conceitos totalmente diferentes (um evento pontual já ocorrido vs. um
+agregado ao vivo recalculado a cada tick). Corrigido para:
+- Liquidity Sweep → `rgba(255, 140, 0, 0.85)` (H33, laranja) —
+  `EnhancedChart_110_Percent.tsx`, price line nativa + `priceAxisLabels`.
+- Liquidation Heatmap (pico) → `rgba(255, 213, 0, 0.85)` (H50, ouro puro)
+  — `LiquidationHeatmapPlugin.tsx::PEAK_LABEL_COLOR`.
+
+Kill Zones (`rgba(255, 176, 32, ...)`, H39) **não** entrou nesta
+diferenciação: é banda de fundo vertical (não linha de preço horizontal),
+alpha muito mais baixo (0.06 fill / 0.22 borda, só o rótulo do retângulo
+em 0.65) — geometria e peso visual já suficientemente distintos, sem
+colisão real demonstrada (mesmo raciocínio já aplicado a Fibonacci ×
+Volume Profile em §9.4: forma diferente mitiga cor igual). Entry
+(`rgba(240,208,111,...)`) e o estado NEUTRAL de VWAP/NL também ficaram de
+fora: tratamento visual já distinto (zona preenchida + linha grossa para
+Entry; tom deliberadamente pálido/dessaturado para o estado neutro, já
+documentado no §22 original) — mudar essas cores sem um problema
+demonstrado quebraria a associação visual que o Operador já tem com
+"onde eu entraria" sem ganho real.
+
+**Escopo que continua propositalmente aberto** (não é esquecimento,
+é a mesma disciplina de não decidir identidade visual sem fundamento
+novo): consolidação total da família amarela (Entry/VWAP-neutro/Kill
+Zones ainda não tocados) e cor própria para Volume Profile (ainda cyan,
+igual a Fibonacci) — ambos registrados em `MAPA_EVOLUCAO_CIBORGUE.md` §7
+item 19, seguem como Tier 3, candidatos a uma rodada futura da Task #102
+se o Operador confirmar que o achado de 2° de matiz acima foi na direção
+certa.
+
+**Confirmação "SINCRONIZAÇÃO TOTAL"** (seção explícita da diretiva —
+"nunca permitir LONG em um lugar e SHORT em outro"): grep dirigido às 4
+camadas de canvas mais recentes (VWAP Bands, Kill Zones, Session Key
+Levels, Market Sessions — `chart/*Plugin.tsx`) e seus motores puros
+correspondentes (`nexus/vwap-bands.ts`, `nexus/kill-zones.ts`,
+`nexus/market-session.ts`) por qualquer literal `"LONG"`/`"SHORT"`/
+`"WAIT"` ou atribuição a `engine.direction`/`coreDecision`: zero
+ocorrência em qualquer um dos 6 arquivos. Confirma estruturalmente (não
+só por convenção documentada) que nenhuma dessas 4 camadas TEM COMO
+emitir ou influenciar uma decisão — elas nunca constroem esse conceito,
+só geometria/preço. Não substitui os audits completos de pipeline já
+feitos (Tasks #25/#31/#44, `RELATORIO_AUDITORIA_FINAL.md`) — é uma
+confirmação focada nas 4 adições mais novas desde aquele último audit
+completo, que ainda não tinham sido varridas por essa lente específica.
+
+**Testes**: `tsc --noEmit` limpo · suíte completa `vitest` passando
+(2 strings pinadas corrigidas em `refinamento-final-wiring.test.ts` +
+3 testes novos travando as 2 cores novas e confirmando Kill Zones
+intocado) · build de produção ok.
+
+### 6.60 ADENDO "Refinamento das Sessões e Limpeza Visual": Market Sessions
+troca N linhas de altura total por 1 faixa fina por segmento
+
+Complemento formal à diretiva institucional de §6.59 (mesmo endereçamento
+"Agente 4", mesma imagem de referência, mesma avaliação de legitimidade —
+ver nota honesta em §6.59, vale integralmente aqui também): auditoria
+específica da camada Market Sessions, apontada como fonte real de
+poluição visual ("linhas verticais repetidas... competindo com o preço").
+
+**Causa raiz confirmada no código-fonte real** (não suposição):
+`MarketSessionBandsPlugin.tsx` desenhava uma linha 1px de ALTURA TOTAL
+(topo a base do painel) para CADA transição de sessão retornada por
+`computeSessionBoundaries` — e sessões trocam ~5x/dia (Ásia/Londres/
+Londres+NY/Nova York/Pacífico, `nexus/market-session.ts`). Sem nenhum
+limiar de decluttering (diferente de Session Key Levels, que já tinha
+`MAX_KEY_LEVELS_SHOWN`), qualquer janela de alguns dias em timeframe
+baixo empilhava dezenas de linhas quase idênticas cruzando toda a área
+de candle. Confirmado também que o gate de relevância (`layer-
+relevance.ts::market_sessions`) só controla se a camada INTEIRA
+aparece (auto/forced_on/forced_off) — uma vez visível, desenhava TODAS
+as transições sem filtro interno, nunca só a mais recente.
+
+**Solução aplicada**: reescrita completa do plugin.
+- Geometria: de "1 linha vertical de altura total por transição" para
+  "1 faixa fina (`STRIP_HEIGHT_PX = 4`) rente à borda inferior do
+  painel, por SEGMENTO de sessão" — zero pixel cruzando a área de
+  candle. Mesma ideia da sugestão nº1 da própria diretiva ("faixas
+  discretas no topo/eixo do tempo").
+- Dado: migrado de `computeSessionBoundaries` (pontos de transição) para
+  `computeSessionKeyLevels` (segmentos reais com startTime/endTime/
+  closed — já real, já testada, já consumida por `SessionKeyLevelsPlugin`
+  e `currentSessionKeyLevel`) — zero 3ª função de derivação de sessão.
+  `computeSessionBoundaries` continua viva (App.tsx ainda a usa para o
+  sinal `recentSessionBoundary` da Relevance Engine — consumidor e
+  propósito diferentes).
+- Ênfase: só a sessão CORRENTE (closed:false) tem alpha alto (0.50) e
+  ganha rótulo de texto; sessões fechadas ficam com alpha baixo (0.22),
+  sem texto próprio — mesma disciplina já provada 2x nesta sessão
+  (Session Key Levels open/closed, BOS/CHOCH ageAlpha), aplicada pela
+  primeira vez a Market Sessions.
+- Por que faixa FINA (nunca altura total como Kill Zones): sessão é uma
+  PARTIÇÃO CONTÍNUA — 100% do tempo pertence a alguma sessão, nunca
+  lacuna — enquanto Kill Zone é OCASIONAL (só algumas horas/dia). Uma
+  faixa sempre-presente em altura total tingiria o painel inteiro o
+  tempo todo — a mesma classe de poluição sendo corrigida, só trocando
+  "muitas linhas" por "um bloco permanente". Geometrias opostas para
+  papéis opostos, documentado no header do arquivo pra próxima sessão
+  não reverter por engano.
+
+**Impacto esperado**: zero linha vertical cruzando a área de candle;
+contexto de sessão preservado por completo (toda sessão real ainda
+aparece, agora como faixa) — Regra de Ouro 4, realoca nunca apaga;
+apenas 1 rótulo de texto no total (a sessão corrente) em vez de um por
+transição visível.
+
+**Riscos conhecidos**: nenhuma mudança de dado/cálculo, só geometria de
+desenho — `computeSessionKeyLevels` já era usada em produção por
+`SessionKeyLevelsPlugin`.
+
+**Verificação real**: `tsc --noEmit` limpo · **120 arquivos / 2009
+testes** (100%, +5 novos travando a nova geometria — zero linha de
+altura total, uso real de `computeSessionKeyLevels`, faixa fina rente à
+base, ênfase open/closed, wiring inalterado no call site) · build de
+produção ok · smoke Playwright real: app carrega, painel "Camadas do
+Gráfico" abre, zero erro JS novo introduzido pela mudança — confirmado
+por comparação direta contra o baseline pré-mudança (mesmo script
+Playwright rodado nos dois: o único erro de console (`pageerror:
+Event`) aparece IDENTICAMENTE em ambos, é o WebSocket bloqueado do
+proxy deste sandbox (`wss://fstream.binance.com`, mesma limitação já
+documentada §6.55/§6.57/§9.1), não algo introduzido aqui. Não foi
+possível verificar visualmente a geometria da faixa com candles reais
+(mesma limitação honesta de sempre — zero rede real à Binance neste
+ambiente).
+
+### 6.61 "DIRETIVA FINAL — LAPIDAÇÃO INSTITUCIONAL" (autonomia explícita
+do Operador): POC do Volume Profile + agrupamento real de Sweeps
+
+Duas diretivas formais adicionais chegaram nesta rodada, ambas com
+"Autorização: Aprovada"/"Operador" explícitos e SEM o endereçamento
+"Agente 4" das anteriores (§6.59) — tratadas como continuidade direta,
+sem ressalva nova. Ambas concedem autonomia técnica ampla, condicionada
+a preservar LEI 24/READ_ONLY/SSOT/arquitetura — nenhuma pediu nada que
+violasse essas 4 restrições.
+
+**Auditorias de confirmação (sem achado novo, registradas por
+completude)**:
+- **Loop de animação no main thread**: grep dirigido a `requestAnimationFrame`
+  nos 13 plugins de canvas — todos usam o mesmo padrão dirty-flag (1
+  `requestAnimationFrame` por arquivo, sempre dentro de `markDirty()`,
+  nunca auto-reagendado incondicionalmente). `NeuralMarketAuraPlugin.tsx`
+  confirmado como o único caso real de animação contínua, e ela já vive
+  isolada em `conviction-cyclone-worker.ts` via `OffscreenCanvas`
+  (Regra de Ouro 6 intacta) — main thread só despacha `postMessage`
+  quando dirty, nunca anima ele mesmo.
+- **"Fios de liquidez"**: `LiquidityZonesPlugin.tsx` (FVG/Order Blocks)
+  já é área preenchida + borda 1px (Fio de Seda) desde V-MAX Fase 0.7 —
+  não são "fios" soltos, já é zona consolidada. Nenhuma ação necessária.
+
+**Achado real 1 — POC do Volume Profile compartilhava o cyan exato de
+Fibonacci na MESMA forma (linha)**: reexame da família cyan (§9.4) com o
+mesmo rigor já aplicado a Sweep×Liquidation-peak (§6.59) — a colisão
+real nunca foi "barras vs. Fibonacci" (mitigado por forma, já
+documentado), era o POC (a única LINHA real do Volume Profile,
+`POC_LINE`) usando o MESMO `rgba(0,240,255,...)` que as price lines de
+Fibonacci. Pesquisa real (WebSearch, presets documentados de Volume
+Profile no TradingView) confirmou 2 precedentes: "Black Ice" (perfil
+inteiro monocromático cyan — valida manter as barras como estão) e
+"Aurora Glass"/"Obsidian Precision" (POC com acento PRÓPRIO sobre um
+perfil de cor única — valida diferenciar só o POC). Corrigido:
+`POC_LINE` → `rgba(236, 81, 205, 0.75)` magenta H312, escolhido por
+cair no único corredor de matiz real aberto entre a família roxa
+(Harmônicos/EQH-EQL, H278) e o vermelho SHORT (H340) — a ~30° de ambos,
+sem colidir com nenhuma família já existente. Barras (HVN/LVN/normal)
+continuam cyan, intocadas.
+
+**Achado real 2 — Sweeps podem legitimamente aparecer em cluster,
+confirmado no motor real (não especulativo)**: a diretiva pediu
+"agrupar automaticamente eventos repetidos próximos (ex.: 8 SWEEPs
+consecutivos → SWEEP ZONE)". Antes de implementar, auditei
+`trap-detection.ts`/`fvg-order-block-engine.js::clusterEqualLevels` pra
+confirmar se isso é um cenário real: `clusterEqualLevels` já consolida
+swings BRUTOS numa zona EQH/EQL por ancoragem fixa (>=2 toques reais),
+mas zonas DISTINTAS (ex. 2 clusters de EQH a alguns pontos de distância,
+cada um já >=2 toques) continuam entradas SEPARADAS em `liquidityZones`
+— se ambas forem varridas na mesma janela, `TrapSignal.sweptPrices`
+carrega os 2 preços próximos, e cada um virava um rótulo próprio no
+canvas. Confirmado: estruturalmente real, não hipotético (embora "8" do
+exemplo do Operador seja provavelmente ilustrativo/exagerado, não uma
+contagem observada).
+
+**Solução aplicada**: nova função pura `clusterSweptPrices` em
+`trap-detection.ts` (companion function, mesmo arquivo que já define
+`TrapSignal`/`sweptPrices` — dono real do dado) — mesmo idioma de
+clusterização por ÂNCORA FIXA (nunca média rodante) de
+`clusterEqualLevels`, reimplementado localmente porque ramber-ui e o
+engine `.js` legado vivem em pacotes/runtimes diferentes (nunca um
+import cross-package). Usa o mesmo limiar já real desta família de dado
+(`LIQUIDITY_PROXIMITY_PCT`, `layer-relevance.ts` — já usado por
+`unsweptLiquidityNearPrice`/`hasSessionKeyLevelNearPrice`), zero limiar
+novo inventado. `EnhancedChart_110_Percent.tsx::priceAxisLabels` agora
+chama `clusterSweptPrices` por trap (TOPO/FUNDO separados, já que são
+direções semanticamente diferentes) — 1 preço isolado mantém `⚡ SWEEP
+↑/↓ N%`; 2+ preços próximos viram `⚡ SWEEP ZONE ↑/↓ (Nx) N%`, ancorado no
+preço médio do cluster.
+
+**Impacto esperado**: quando múltiplas zonas de liquidez próximas forem
+varridas na mesma janela, o Operador vê 1 rótulo consolidado com
+contagem real em vez de N rótulos quase sobrepostos — mesmo espírito de
+"menos linhas, mais contexto" da diretiva, aplicado com evidência do
+motor real, não por suposição.
+
+**Riscos conhecidos**: nenhum — `detectInstitutionalTraps` (a função que
+POPULA `sweptPrices`) está intocada; a clusterização é 100% no lado do
+CANVAS (leitura/agrupamento de exibição), zero mudança na detecção real
+do evento.
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 2018 testes** (100%,
++9 novos: 8 de execução real hand-verified em `nexus-trap-detection.test.ts`
+para `clusterSweptPrices` — incluindo um caso de âncora fixa vs. média
+rodante deliberadamente adversarial — +1 travando o novo `POC_LINE` em
+`volume-profile-plugin.test.ts`; mais ajustes honestos de pinned-string
+em `refinamento-final-wiring.test.ts`/`price-label-stack-plugin.test.ts`
+que mudaram de verdade com o refactor, sem contagem líquida nova) ·
+build de produção ok · smoke
+Playwright real: app carrega, `AWAITING CANDLES…` honesto (zero dado
+real neste sandbox, mesma limitação de sempre), footer mostra `FAIL-
+CLOSED · SEM ORDENS · SEM CHAVES` — zero erro JS novo (único erro de
+console é o WebSocket bloqueado do proxy, já confirmado pré-existente
+em §6.60).
+
+### 6.62 Market Sessions, redesenho #2: "chegar mais próximo" de uma
+imagem de referência — topo do painel, todas as sessões rotuladas
+
+Pedido explícito do Operador, direto ("Preciso que o modelo chegue mais
+próximo possível dessa [imagem] que eu te mandei... e fica melhor ainda
+que ela") após uma pergunta de esclarecimento minha (via `AskUserQuestion`
+— a nova imagem de referência mostrava a faixa de sessões bem mais
+proeminente que o §6.60 acabou de entregar; o Operador respondeu "sem
+preferência", então a decisão de design real ficou por minha conta,
+documentada aqui).
+
+**Mudança real**: `MarketSessionBandsPlugin.tsx` migra pela 2ª vez nesta
+sessão.
+- Posição: da base (§6.60) pro **topo** do painel (y=0) — mesmo espírito
+  da referência. Risco de colisão com candle avaliado ANTES de mover
+  (não suposição): a escala de preço principal usa a margem PADRÃO real
+  da lib lightweight-charts (`scaleMargins: { top: 0.2, bottom: 0.1 }`,
+  confirmado direto em
+  `node_modules/lightweight-charts/dist/typings.d.ts`) — 20% de respiro
+  já reservado acima do maior preço visível, folga real suficiente pra
+  uma faixa de 24px sem precisar tocar no `scaleMargins` do painel
+  principal (mudança maior/mais arriscada, não necessária aqui).
+- Rótulo: TODA sessão visível ganha nome + janela UTC real (via
+  `marketSessionFromUtc`, mesmo dado do header — zero segunda fonte),
+  não só a corrente (era o comportamento do §6.60) — mas só desenha
+  texto se a largura real do segmento comportar
+  (`MIN_LABEL_WIDTH_PX`/`MIN_SUBLABEL_WIDTH_PX`), nunca espremido
+  ilegível.
+- Cor: decisão CONSCIENTE de não copiar a paleta multicolorida da
+  referência (uma cor por sessão) — a auditoria de paleta desta mesma
+  sessão (`AUDITORIA_ECOSSISTEMA_VISUAL.md` §9.4/§9.6) já documentou
+  Market Sessions como Prioridade Baixa por design (pano de fundo, nunca
+  deveria competir por atenção) e que introduzir família de cor nova
+  por sessão contradiria o próprio achado ("evitar cor demais"). O
+  efeito de "uma sessão se destaca" da referência é alcançado por
+  INTENSIDADE (a corrente com alpha bem mais alto: 0.42 vs. 0.16 das
+  fechadas), não por matiz novo — mesmo tom slate-gray de sempre.
+- Divisor 1px sólido real entre segmentos (Fio de Seda, Regra de Ouro 5)
+  — só a borda esquerda de cada um (partição contígua, a direita de um
+  já é a esquerda do próximo).
+- `tradePlanAbsenceReason` (overlay de texto condicional do canto)
+  desce de `top-2` pra `top-7` — abre espaço real pra faixa nova de
+  24px, nunca 2 textos reais sobrepostos.
+
+**2 elementos da imagem de referência que continuam fora, pela mesma
+razão já registrada em §6.59** (não repetidos aqui em detalhe): o donut
+"PROBABILIDADE" calibrado e as abas de ORDENS/POSIÇÕES/EXECUÇÕES ao
+vivo — nenhum dos dois apareceu nesta imagem específica, mas a regra
+permanece se aparecerem numa próxima.
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 2021 testes** (100%,
++3 novos: janela UTC real via `marketSessionFromUtc` não fabricada,
+divisor 1px sem `setLineDash`, `tradePlanAbsenceReason` na posição nova
+— mais os pinned-strings do §6.60 reescritos pra refletir a 2ª migração,
+não uma contagem líquida nova de achados) · build de produção ok · smoke
+Playwright real: app carrega, painel "Camadas do Gráfico" idêntico, zero
+erro JS novo (mesmo único erro pré-existente do WebSocket bloqueado).
+Geometria da faixa em si não verificável visualmente neste sandbox
+(zero rede real à Binance, mesma limitação de sempre).
+
+### 6.63 BUG CRÍTICO confirmado por captura de tela real: Sweep/Kill Zones
+acumulavam sem decaimento por idade — causa raiz + correção + auditoria
+completa das demais camadas
+
+O Operador enviou uma captura de tela REAL do app rodando (ZECUSDT 1H) —
+não uma referência conceitual como as anteriores. A imagem mostra ~20
+rótulos "⚡ SWEEP"/"⚡ SWEEP ZONE" empilhados cobrindo TODO o lado esquerdo
+do gráfico, além de múltiplas listras verticais âmbar finas atravessando
+toda a largura. Diretiva formal complementar ("V3.0") confirmou o pedido
+com um horizonte numérico preciso: 0-50 candles = prioridade máxima,
+50-100 = média, 100-200 = transparência reduzida, >200 = ocultar
+automático — mesmo espírito, gradual, "sem desaparecer de forma brusca",
+já implementado pelo utilitário real `annotation-decay.ts::ageAlpha`
+(usado por BOS/CHOCH via `BREAK_DECAY` desde uma rodada anterior).
+
+**Causa raiz real, confirmada no código-fonte (não suposição)**:
+`swept` em `LiquidityZone` (engine-bridge.ts) é uma flag PERMANENTE — uma
+vez que um pool EQH/EQL é varrido, ele nunca "desvarre". `trap-detection.ts`
+agregava TODO nível já varrido na história inteira carregada
+(potencialmente semanas) em `sweptPrices`, sem nenhum filtro por idade —
+`clusterSweptPrices` (Task #104) já agrupava preços PRÓXIMOS
+corretamente, mas nunca removia preços VELHOS. O mesmo padrão existia,
+de forma independente, em `KillZoneBandsPlugin.tsx`: o loop de spans
+desenhava TODA ocorrência de Kill Zone (recorrem diariamente) sem cap
+nenhum — confirmado por leitura direta do `draw()`, não assumido.
+
+**Solução aplicada — raiz, não paliativo**:
+- `LiquidityZone`/`clusterEqualLevels` (fvg-order-block-engine.js) JÁ
+  computavam `index` real (posição do candle) — só nunca era exposto na
+  interface TS estreita de `TrapInputs.liquidityZones`. Corrigido: o tipo
+  agora inclui `index: number` (o dado real já fluía em runtime via
+  structural typing — TypeScript só não o "via").
+- `TrapSignal.sweptPrices: number[]` → `sweptLevels: { price: number;
+  index: number }[]` (`TRAP_CONTRACT_VERSION` 2→3, breaking change
+  interno documentado). `clusterSweptPrices` ganha `latestIndex` por
+  cluster — o MAIOR índice entre os membros (evidência mais recente do
+  grupo, nunca uma média — mesmo princípio de "âncora fixa" já usado
+  pela clusterização em si).
+- `EnhancedChart_110_Percent.tsx`: novo `SWEEP_DECAY = { fadeStartCandles:
+  50, expireCandles: 200, minAlpha: 0.12 }` — horizonte MAIOR que
+  `BREAK_DECAY` (100) de propósito: Sweep é referência de S/R que
+  continua útil por mais tempo que uma anotação de estrutura recém-
+  rompida. Aplicado tanto na price line nativa (cor agora um template
+  dinâmico `rgba(255,140,0,${alpha*0.85})`) quanto em `priceAxisLabels`
+  (novo campo `alpha` no objeto, cluster expirado nunca entra no `out[]`).
+- `computeKillZoneSpans` (nexus/kill-zones.ts) ganha `endIndex: number`
+  real (índice do último candle de cada ocorrência). `KillZoneBandsPlugin.tsx`
+  ganha `KILL_ZONE_DECAY` (mesmos valores 50/200/0.12 — nenhuma evidência
+  de um horizonte diferente ser necessário especificamente aqui) e as 3
+  cores (fill/border/label) viram templates dinâmicos multiplicados pelo
+  alpha real da idade.
+
+**Auditoria honesta das DEMAIS camadas** (o Operador pediu explicitamente
+"sem faltar nada" — verificado por leitura de código, não assumido):
+| Camada | Bound real | Onde |
+|---|---|---|
+| BOS/CHOCH | `ageAlpha`/`BREAK_DECAY` | já existia (rodada anterior) |
+| Liquidity Sweep | `ageAlpha`/`SWEEP_DECAY` | **corrigido agora** |
+| Kill Zones | `ageAlpha`/`KILL_ZONE_DECAY` | **corrigido agora** |
+| FVG/Order Blocks | `.filter((z,i) => i<3 \|\| isRealObstacle(z))` | já existia (App.tsx:6832-6833) |
+| EQH/EQL | `.slice(0,4)` | já existia (App.tsx:6834) |
+| Session Key Levels | `MAX_KEY_LEVELS_SHOWN=5` | já existia (§6.57) |
+| Market Sessions | recortado pelo range de tempo VISÍVEL (`timeToCoordinate` retorna null fora da tela) + faixa fina por design (§6.60/§6.62) — categoria diferente (contexto de "o que aconteceu na janela que você está olhando", não "evento antigo que devia sumir") | sem mudança necessária |
+
+Todos os itens citados nominalmente na diretiva ("Liquidity Sweep antigo,
+FVG antigo, BOS antigo, CHOCH antigo, Session antiga, Marcações antigas")
+confirmados cobertos. "Ordem histórica" da diretiva não se aplica —
+AR10 é READ_ONLY, nunca guarda histórico de ordens reais.
+
+**Testes**: `tsc --noEmit` limpo · **120 arquivos / 2025 testes** (100%,
++10 novos: 8 testes hand-verified para `clusterSweptPrices` com
+`latestIndex` real — incluindo um caso adversarial onde o preço mais
+alto do cluster NÃO é o de índice mais recente —, 3 para `endIndex` real
+de `computeKillZoneSpans` incluindo overlap concorrente; mais os
+pinned-strings de 3 arquivos de teste reescritos pra refletir a
+migração `sweptPrices`→`sweptLevels` e as cores dinâmicas) · build de
+produção ok.
+
+**Riscos conhecidos**: nenhum de decisão (LEI 24 intacta — mudança
+puramente de decaimento visual); geometria/timing do decaimento em si
+não verificável ao vivo neste sandbox (zero rede real à Binance).
+
+**Escopo honesto**: o horizonte de Kill Zones (50/200/0.12, idêntico ao
+de Sweep) foi uma decisão sem evidência numérica própria — reaproveitar
+em vez de inventar um número novo sem justificativa. Se o Operador notar
+que Kill Zones ainda acumula demais dentro da janela de 200 candles
+(recorre com mais frequência que Sweep), esse horizonte específico é
+candidato a ajuste numérico isolado, não uma nova arquitetura.
+
+### 6.64 "DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO E EVOLUÇÃO VISUAL" (18
+seções) — auditoria honesta seção-a-seção + a única lacuna real
+implementada: Consolidação de Zonas Institucionais (§4)
+
+A diretiva chegou como uma visão de 18 seções (limpeza visual, memória
+dinâmica, organização automática, consolidação de zonas, sessões,
+hierarquia, sistema adaptativo, pesquisa contínua, evolução
+arquitetural, sincronização, refinamento visual, motor de análise
+institucional, pesquisa quantitativa/de ferramentas profissionais,
+organismo adaptativo, pesquisa de gaps). Antes de escrever qualquer
+código (CLAUDE.md, "audite antes de construir"), cada seção foi
+verificada contra o código-fonte real — não assumida como pendente só
+por estar numa diretiva nova.
+
+**Auditoria seção-a-seção**:
+| § | Pedido | Estado real |
+|---|---|---|
+| 1 | Limpeza visual inteligente | Relevance Engine (`layer-relevance.ts`, §6.47/§6.93) já decide show/hide por camada |
+| 2 | Memória visual dinâmica (0-50/50-100/100-200/>200) | `annotation-decay.ts::ageAlpha` já cobre BOS/CHOCH, Sweep, Kill Zones (§6.63) |
+| 3 | Organização automática | Relevance Engine + modo 3-estados auto/manual (§6.46-6.48) |
+| **4** | **Consolidação de zonas (EMA/VWAP/FVG/OB/Liquidity → 1 Zona Institucional)** | **LACUNA REAL — implementada nesta entrega (ver abaixo)** |
+| 5 | Sessões: faixa discreta, não linha vertical | `MarketSessionBandsPlugin` já redesenhado 2x (§6.60/§6.62) |
+| 6 | Hierarquia visual (Candles > Trade Plan > Estrutura > ...) | LEI 24 já garante Core Engine como único emissor; z-order dos plugins já segue esta ordem (Trade Plan/Aura montados por último) |
+| 7 | Sistema adaptativo (timeframe/zoom/ativo/volatilidade) | Relevance Engine já lê sinais ao vivo (proximidade/estado direcional/densidade), recalcula a cada ciclo real |
+| 8 | Pesquisa contínua em plataformas profissionais | Já documentada em `AUDITORIA_ECOSSISTEMA_VISUAL.md` (Bloomberg/Quantower/NinjaTrader/TradingView, múltiplas rodadas) |
+| 9 | Evolução arquitetural (preservando LEI 24/READ_ONLY/SSOT) | Princípio já seguido em toda a sessão — nenhuma mudança violou os 3 |
+| 10 | Sincronização (SSOT, sem sinais contraditórios) | Store única (`unified-snapshot-store.ts`), Core Engine como única decisão — arquitetura já estabelecida |
+| 11 | Refinamento visual (paleta/linhas/tipografia/...) | Auditorias reais já feitas (`AUDITORIA_ECOSSISTEMA_VISUAL.md` §9), itens objetivos corrigidos (Sweep×Liquidação, POC magenta); consolidação subjetiva da paleta amber/Volume Profile permanece decisão do Operador, não implementada (`MAPA_EVOLUCAO_CIBORGUE.md` item 19) |
+| 12 | Resultado esperado (institucional/legível) | Objetivo contínuo, não uma tarefa fechável — guia todas as rodadas de lapidação já feitas |
+| 13 | Motor de Análise Institucional (estrutura/liquidez/regime/confluência/cenários com invalidação, "nunca certeza") | `scenario-engine.ts` (`buildScenarioProjection`) já entrega exatamente isto — `basis: "COUNCIL_OPINION_MASS_NOT_MARKET_PROBABILITY"`, alvos + invalidação reais, rotulado hipótese |
+| 14 | Pesquisa de métodos quantitativos (BOS/CHOCH, Wyckoff, CVD, VWAP, ATR, fractais, clustering, ...) | Já motores reais no repositório para a maioria (ver `ipad_runtime/src/research/engines/`, `QUARANTINE.md`); Wyckoff/footprint charts continuam gaps reais não implementados, já flagados em `MAPA_EVOLUCAO_CIBORGUE.md` |
+| 15 | Pesquisa de ferramentas profissionais | `ELITE TRADING RESEARCH MAP` (Task #92) + `AUDITORIA_ECOSSISTEMA_VISUAL.md` já cobrem isto |
+| 16 | Organismo adaptativo (reorganiza sozinho) | Relevance Engine + decay por idade juntos já formam este comportamento |
+| 17 | Pesquisa de gaps (indicadores ausentes, redundâncias, conflitos) | Disciplina já seguida every rodada (ver achados de auditoria citados em quase toda entrada deste handbook) |
+| 18 | Resultado final | Mesmo objetivo contínuo do §12 |
+
+**A única lacuna real: §4, Consolidação de Zonas**. Os 3 motores de
+"confluência" já existentes no repositório foram lidos antes de escrever
+qualquer linha nova (`confluence-engine.ts` — concordância DIRECIONAL
+entre Ensemble/Council/Multi-Timeframe; `confluence-corridor.ts` —
+intensidade visual do mesmo pool; `layer-relevance.ts` — mostrar/esconder
+camada inteira). Nenhum dos três agrupa por PROXIMIDADE DE PREÇO entre
+ferramentas estruturalmente independentes — confirmado gap real, não
+duplicação.
+
+**Entregue**: `nexus/institutional-zones.ts` — motor puro
+(`computeInstitutionalZones`) que agrupa por proximidade de preço
+(`INSTITUTIONAL_ZONE_PROXIMITY_PCT = 0.35%`, mesma família de convenção
+documentada de `VOLUME_PROFILE_PROXIMITY_PCT`) os níveis JÁ reais de EMA
+atual, VWAP atual, Nexus Line atual, FVG não mitigadas, Order Blocks não
+mitigados e EQH/EQL não varridas — mesmo padrão de clustering por
+"âncora fixa" já usado por `clusterEqualLevels`/`clusterSweptPrices`
+(nunca uma média móvel, um membro no limite nunca arrasta o grupo).
+Confluência real exige `MIN_DISTINCT_SOURCES_FOR_ZONE = 2` FERRAMENTAS
+distintas — duas instâncias da mesma ferramenta (ex.: 2 Order Blocks
+vizinhos) nunca formam uma "Zona Institucional" sozinhas, só ferramentas
+genuinamente independentes concordando. Teto real `MAX_INSTITUTIONAL_ZONES
+= 5` (mesma natureza de `MAX_KEY_LEVELS_SHOWN`), as mais fortes primeiro.
+
+Zero prop nova em `App.tsx`: todo insumo já vivia dentro de
+`EnhancedChart_110_Percent.tsx` (`emaLastValue`/`vwapLastValue`/
+`nlLastValue`, já computados do mesmo array `data`; `fairValueGaps`/
+`orderBlocks`/`liquidityZones`, já chegam pré-filtrados como props —
+mesmo padrão de `App.tsx:6830-6834`). `InstitutionalZonePlugin.tsx` novo
+(21ª camada do painel "Camadas do Gráfico") desenha a faixa real via
+`series.priceToCoordinate` (mesmo padrão de `LiquidationHeatmapPlugin`),
+cor violeta nunca usada antes na paleta (âmbar=Kill Zones/Sweep,
+dourado=Trade Plan Zone, magenta=POC, ciano=Volume Profile), fio de seda
+1px. Mounted ANTES de Neural Market Aura/Trade Plan Zone no z-order —
+fica visualmente atrás do núcleo do plano, nunca compete com ele (§6 da
+própria diretiva: Trade Plan > Confluências). `layer-relevance.ts` ganha
+`institutional_zones` com `relevant: true` incondicional — mesmo
+princípio já usado por `neural_market_aura`: o motor já devolve `[]`
+honesto sem confluência real cruzada, uma segunda regra de relevância
+aqui seria redundante, não mais correta.
+
+**Camada ADITIVA, nunca substituição** (Regra de Ouro 4): as linhas/zonas
+individuais de EMA/VWAP/Nexus Line/FVG/Order Block/Liquidez continuam
+desenhadas exatamente como antes pelos seus próprios plugins/séries —
+esta faixa só soma um destaque visual por trás delas.
+
+**Escopo honesto — o que fica para depois**: a diretiva pede
+"reduzindo sobreposição" — a entrega desta rodada mostra ONDE a
+confluência real está, mas ainda NÃO reduz o detalhe individual de cada
+ferramenta quando já coberta por uma Zona Institucional (ex.: afinar a
+linha de EMA quando ela já está dentro de uma zona destacada). Essa
+segunda metade tocaria simultaneamente os renderizadores de EMA, VWAP,
+Nexus Line, FVG/OB e Liquidez — um raio de mudança maior que esta
+entrega, e uma decisão de UX real (qual camada "cede" visualmente à
+outra) que merece sua própria rodada isolada e verificada, não
+empacotada com a primeira metade.
+
+**Testes**: `tsc --noEmit` limpo · **121 arquivos / 2040 testes** (100%,
++15 novos: 14 de execução real para `computeInstitutionalZones`
+—incluindo o caso adversarial de 2 Order Blocks vizinhos NÃO formando
+confluência sozinhos, e o caso de âncora fixa dividindo 2 zonas reais
+mesmo com vizinhos próximos em cadeia — mais 1 de relevância; 2 arquivos
+de teste com contagem de camadas atualizada de 20→21) · `npm run build`
+ok.
+
+**Riscos conhecidos**: nenhum de decisão (LEI 24 intacta — camada
+puramente informativa/geométrica, nunca gera Entry/Stop/Target).
+
+### 6.65 Captura real (ZECUSDT 1H) + relato do Operador: 3 achados
+distintos — duplicação real de Sweep, "triângulo" no canto sem código
+correspondente, e FVG/OB/Fibonacci somem depois de um movimento forte
+
+O Operador enviou uma segunda captura de tela REAL do app ao vivo,
+apontando 3 problemas concretos. Cada um investigado separadamente antes
+de qualquer correção (nenhum consertado por suposição).
+
+**1) "SWEEP ZONE ↑ (2x) 31%" (caixa larga) sobreposta a "SWEEP ↑ 33%"
+(linha fina) — duplicação real confirmada.** Causa raiz: `priceAxisLabels`
+(rótulos) já deduplicava por preço e clusterizava via `clusterSweptPrices`
+antes de desenhar — 1 cluster real = 1 caixa de texto. O efeito que
+desenha as price lines NATIVAS (`sweepLinesRef`) nunca recebeu a mesma
+disciplina: iterava `t.sweptLevels.forEach` bruto, 1 linha por nível não
+deduplicado. Um cluster "(2x)" tinha 1 rótulo mas 2 linhas quase
+idênticas empilhadas por baixo dele — o mismatch real que lia como
+poluição/duplicação. Corrigido: o efeito da price line agora usa a
+MESMA deduplicação (`Set` global de preço) + o MESMO `clusterSweptPrices`/
+`LIQUIDITY_PROXIMITY_PCT` do bloco de rótulos — 1 cluster real = 1 linha,
+nunca mais.
+
+**2) Forma triangular/hachurada no canto superior esquerdo — investigada,
+sem código correspondente encontrado.** Busca exaustiva (`ctx.rotate`,
+`ctx.clip(path)`, `createPattern`, hachura, wedge/triângulo) em todos os
+plugins de canvas: zero ocorrência em todo o repositório — nenhum plugin
+desenha diagonal ou padrão hachurado (a própria regra "Fio de Seda" já
+proíbe `setLineDash`, e não existe nenhum equivalente pra preenchimento).
+Hipótese fundamentada (não suposição — baseada na ordem real de montagem
+dos plugins, `EnhancedChart_110_Percent.tsx:2196-2299`): múltiplos
+retângulos translúcidos alinhados a eixo de plugins DIFERENTES (banda
+âmbar do Kill Zone recortada na borda esquerda dos dados visíveis +
+linha/caixa de Sweep + eventualmente a banda da Zona Institucional)
+pintando na MESMA região do canto superior esquerdo, comprimidos numa
+captura de tela, podem ler visualmente como "hachurado" mesmo sendo cada
+um deles um retângulo/linha reta comum. A correção do item 1 acima já
+reduz a densidade real de retângulos amber sobrepostos nessa região —
+sem uma nova captura pós-correção, não dá pra confirmar se o efeito
+óptico desaparece por completo; fica como item a reobservar.
+
+**3) FVG/Order Blocks e a grade de Fibonacci sumiam do gráfico depois de
+um movimento forte de preço — achado real, não bug de renderização.**
+Causa raiz confirmada no código: `liquidity_zones` (FVG/OB) e `fibonacci`
+só ficavam `relevant` quando havia obstáculo real no caminho do plano OU
+o nível estava a menos de ~0.4-0.5% do preço vivo — nenhuma das duas
+condições cobre "a zona/nível existe de verdade, só não está perto agora".
+Depois de um movimento de -6.63% como o da captura, toda a estrutura
+mapeada perto do topo anterior fica >5% longe do preço — a Relevance
+Engine escondia CORRETAMENTE por essa regra, mas a regra em si tratava
+proximidade como sinônimo de existência para duas camadas que são
+referência ESTRUTURAL (uma FVG/OB é válida até ser mitigada, a grade de
+Fibonacci é válida a partir do swing que a originou — nenhuma das duas
+"expira" só por o preço se afastar). Corrigido: `LayerRelevanceInput`
+ganha `hasUnmitigatedStructuralZone` (>=1 FVG ou Order Block real não
+mitigado, qualquer distância) e `hasFibonacciLevels` (Matriz de
+Confluência tem >=1 nível real calculado) — cada um vira uma 3ª condição
+real de `relevant`. A proximidade antiga (`fibonacciNearPrice`) não foi
+descartada: virou o sinal de `emphasis: "highlight"` (mesmo mecanismo já
+real do EPC FINAL §3/§12) — perto do preço agora só deixa a camada mais
+destacada, nunca decide sozinha se ela aparece.
+
+**Harmonics ("triângulo" na fala do Operador pode se referir a isto
+também) — gate MANTIDO de propósito, distinção explicada, não uma
+omissão.** `harmonicBestFitScore >= 0.75` não é um filtro de
+PROXIMIDADE — é um filtro de QUALIDADE geométrica do próprio padrão
+(aderência real de razão XABCD). Desenhar um padrão de fit baixo seria
+ativamente enganoso (uma forma que parece um Gartley/Bat mas não bate a
+proporção Fibonacci de verdade), categoria diferente de "referência real
+mas momentaneamente longe do preço". Sem evidência de um limiar melhor
+que 0.75, o número não foi alterado — só a semântica documentada com
+clareza para não confundir com o achado 3 acima.
+
+**Escopo honesto — o que NÃO foi alterado nesta rodada**: `equal_highs_
+lows` (EQH/EQL) continua com o mesmo gate de proximidade
+(`unsweptLiquidityNearPrice`) — mantido de propósito: EQH/EQL é
+fundamentalmente sobre "o preço está prestes a varrer este nível", uma
+pergunta de proximidade genuína (diferente de FVG/OB), e é a MESMA
+matéria-prima do Sweep, que já teve um bug real de acúmulo corrigido em
+§6.63 — soltar o gate aqui reabriria exatamente aquele risco. Se o
+Operador achar que EQH/EQL também deveria aparecer mais, é uma decisão
+separada, não uma extensão automática desta.
+
+**Testes**: `tsc --noEmit` limpo · **121 arquivos / 2044 testes** (100%,
++4 novos: 2 para `liquidity_zones` com `hasUnmitigatedStructuralZone`
+real, incluindo o caso adversarial de proximidade sozinha nunca bastar;
+2 para `fibonacci` reescritos para o novo contrato relevant/emphasis,
+incluindo o mesmo caso adversarial fail-closed) · `npm run build` ok.
+
+**Riscos conhecidos**: nenhum de decisão (LEI 24 intacta). Risco de
+produto, não de arquitetura: mostrar FVG/OB/Fibonacci mais frequentemente
+reintroduz ALGUMA densidade visual que a Relevance Engine existe para
+reduzir — mitigado por manter a decisão binária (existe ou não existe
+zona real), nunca voltar a "sempre visível incondicional", e por manter
+`emphasis` fazendo o trabalho fino de destacar só o que está genuinamente
+perto do preço agora.
+
+### 6.66 Diretriz Consolidação/Auditoria/Evolução do Ecossistema —
+auditoria real de 4 frentes + correção dos achados confirmados
+
+Diretriz do Operador (formato "carta de intenção", endereçada a um
+"Agente 4" que não existe nas mensagens diretas — CLAUDE.md §7 exige
+confirmar antes de agir nesse padrão; tratado como autorizado porque veio
+direto no chat e o conteúdo só reforça LEI 24/READ_ONLY/SSOT, nunca pede
+para contorná-los) pedindo consolidação ampla: auditoria de conflitos/
+duplicação, unificação da Confluência, ciclo de vida real por camada
+visual, sincronização total, performance, e documentação atualizada.
+Escopo real demais para uma rodada só sem virar trabalho especulativo —
+disciplina aplicada: **auditar antes de construir** (item 1 da Disciplina
+de Trabalho), corrigir só o que a auditoria confirmou com evidência
+arquivo:linha, documentar o resto como backlog honesto (task #82).
+
+**Auditoria (4 agentes paralelos, só leitura, evidência real):**
+
+1. **LEI 24 / duplicação de cálculo.** Zero violação em swing/FVG-OB/
+   opinionMass (todos passthrough real ou motor único). Um achado real:
+   `App.tsx:3930` afirmava que o Radar "nunca recalcula nem emite LONG/
+   SHORT por conta própria (LEI 24)" — falso por leitura direta:
+   `engine-bridge.ts:1138-1166` (`directionFromRegime`/
+   `scanRadarCandidate`) computa LONG/SHORT via `classifyMarketRegime`
+   (regime de mercado, não o Core Engine real) para candidatos em segundo
+   plano, nunca para o ativo selecionado. Texto corrigido para descrever
+   o que o código de fato faz. Um achado documentado, não corrigido: o
+   Trade Plan do Council (`nexus/trade-plan.ts:217`, `direction: stance`)
+   pode divergir de `engine.direction` — design deliberado da task #40
+   ("Council-only por design"), com aviso já existente na UI, não é bug
+   novo. Pergunta explícita levada ao Operador: manter o Radar assim
+   (fora do escopo textual de LEI 24, que fala "para o timeframe
+   selecionado no gráfico") ou converter em ranking sem direção.
+2. **Ciclo de vida visual dos 12 plugins de canvas** (a diretriz falava
+   em 13; confirmado por grep dos imports que são 12). Achado mais grave:
+   `MarketSessionBandsPlugin` era o ÚNICO sem nenhum mecanismo de
+   ciclo de vida — o próprio cabeçalho do arquivo documentava um teto que
+   existiu no "Redesenho real #1" e foi removido no "Redesenho real #2"
+   para mostrar todas as sessões, uma regressão real. Corrigido: mesmo
+   teto `MAX_KEY_LEVELS_SHOWN` já declarado por `SessionKeyLevelsPlugin`
+   (zero segunda constante). Segundo achado: `LiquidityZonesPlugin`
+   deixava uma zona-obstáculo de um plano ATIVO esmaecer por idade fixa
+   (`ageAlpha`) mesmo continuando a bloquear o caminho do plano —
+   corrigido para `alpha=1` enquanto `isObstacleZone`, decaimento normal
+   assim que deixar de ser obstáculo. Três achados de menor severidade
+   (LiquidationHeatmapPlugin sem peso de idade/símbolo,
+   SessionKeyLevelsPlugin com corte abrupto em vez de fade,
+   OrderFlowHeatmapPlugin sem fade gradual no ring buffer) documentados
+   no backlog — refinamentos, não regressões.
+3. **Unificação de Confluência.** `institutional-zones.ts` unificava só
+   4 das ~9 fontes reais pedidas (EMA/VWAP/FVG/OB, + liquidez parcial).
+   Veredito do agente: lacuna de FIAÇÃO, não de matemática — os motores
+   de Suporte/Resistência, Market Structure, Volume Profile e Session Key
+   Levels já são reais e graduados, só nunca alimentavam este
+   consolidador. Fechado nesta rodada: Suporte/Resistência (S1/R1) — dado
+   já era prop existente de `EnhancedChart_110_Percent.tsx`, zero
+   plumbing novo, mesmo princípio "zero prop nova de App.tsx" já
+   documentado no arquivo. Os 3 restantes (Market Structure, Volume
+   Profile POC, Session Key Levels) e o evento de Liquidity Sweep exigem
+   1 prop nova cada — documentados no backlog. Confirmado sem sobreposição
+   real entre `institutional-zones.ts` (domínio de PREÇO),
+   `confluence-engine.ts` e `confluence-corridor.ts` (domínio de
+   DIREÇÃO/CONVICÇÃO) — três perguntas diferentes, não duplicação.
+4. **Performance/infraestrutura.** Nenhum gargalo urgente confirmado: 2
+   loops não-memoizados são "não catastróficos" (O(n) pequeno, teto
+   baixo); o recompute de `relevanceInput`/`priceAxisLabels`/
+   `auraReading` a cada tick de `livePrice` é uma troca JÁ deliberada e
+   documentada no próprio comentário-fonte, não um bug oculto. Achado
+   real de documentação: `docs/READ_ONLY_MARKET_SAFETY.md` e
+   `docs/AR10_CYBORG_2_REAL_DATA_LAYER_RUNTIME_PROBE_V1.md` descreviam um
+   `storage.js` com "OPFS + fallback IndexedDB" que NUNCA existiu no
+   repositório (confirmado por busca no filesystem inteiro) — a
+   persistência real hoje é `nexus/persistence.ts` (IndexedDB via pacote
+   `idb`). Ambos os documentos corrigidos, mantendo o texto original como
+   registro histórico do design nunca implementado (nunca apagar
+   informação real). Achado arquitetural real, só documentado (backlog):
+   `nexus/event-bus.ts` tem 3 publishers reais e ZERO subscribers em todo
+   `ramber-ui/src` — infraestrutura pronta, nunca conectada; a UI lê
+   estado via seletores diretos do Zustand, não via o bus.
+
+**Testes**: `tsc --noEmit` limpo · **121 arquivos / 2047 testes** (100%,
++3 novos: 1 para confluência real S1+EMA em `institutional-zones.ts`, 1
+para a disciplina "2 instâncias da mesma ferramenta não bastam" aplicada
+a S1/R1, 1 travando o comportamento real de `alpha=1` para zona-obstáculo
+em `LiquidityZonesPlugin`) · `npm run build` ok · verificação com
+Playwright real (Chromium headless, bypass documentado do próprio
+`access-gate.tsx` — "cortina contra abertura acidental", não segurança
+real): app carrega sem crash, zero erro de console rastreável aos
+arquivos alterados, e confirmou bônus real — o Fail-Closed funciona
+(sandbox sem egress a exchanges, mesma limitação já documentada em
+`QUARANTINE.md` para `history-capture.js`, produz "AWAITING CANDLES…"
+honesto, nunca um candle fabricado). Sem candles reais disponíveis no
+sandbox, não foi possível confirmar pixel-a-pixel os 2 fixes de canvas —
+decisão deliberada de NÃO injetar candle sintético no pipeline de render
+só para a screenshot, mesmo sendo só verificação local (Regra de Ouro 1).
+Confiança na correção vem da leitura linha-a-linha do código real + dos
+testes que travam o comportamento exato.
+
+**Riscos conhecidos**: nenhum de decisão (LEI 24 intacta nos itens
+corrigidos). O achado do Radar (item 1 acima) continua uma pergunta em
+aberto para o Operador — não uma correção unilateral, porque toca
+diretamente a lei mais importante do projeto. Verificação visual dos 2
+fixes de canvas fica pendente de uma sessão com egress real às exchanges
+(iPad do Operador ou ambiente com rede liberada).
 
 ## Relatório final (Entregáveis de cada ciclo/PR, pedido explícito da
 diretiva) — cobre §6.35 a §6.41 em conjunto
@@ -4090,6 +5247,2204 @@ diretiva) — cobre §6.35 a §6.41 em conjunto
   pós-refatoração do Corredor de Confluência (§6.40) e do painel
   "Camadas do Gráfico" com "LIQUIDAÇÕES FORÇADAS" pós-correção do crash
   de `effectiveChartLayerVisibility` (§6.41).
+
+---
+
+### 6.67 EPC OMEGA FINAL — diretiva de 4 partes (Meta Engine, gráfico
+World Class, performance/autoaprendizado, homologação final); relatório
+completo em `docs/historico/RELATORIO_EPC_OMEGA_FINAL.md`
+
+Diretiva do Operador em 4 partes sequenciais ("ler tudo antes de
+implementar" — seguido à risca: as 4 partes foram lidas por completo antes
+de qualquer auditoria). Auditoria real de 5 frentes paralelas confirmou que
+a maior parte do "Meta Engine" pedido já existia em fragmentos reais
+(Conselho, `decision-layer.ts`, `confluence-engine.ts`,
+`organism-orchestrator.ts`) — trabalho real foi consolidar, não construir
+do zero. Achado-chave que mudou o escopo seguro do resto da diretiva: dos
+~40 indicadores nomeados, 12 são AUSENTES no repositório, e 2 deles
+(On-Chain, Whale Activity) são auto-documentados em `gmil/README.md`/
+`gmil/types.ts` como impossíveis sem API paga embutida no cliente
+(proibido) — não uma lacuna, uma fronteira real do produto.
+
+**Implementado**: (1) `nexus/engine-signal-contract.ts` novo — contrato
+`EngineSignal` com os 10 campos pedidos (peso/confiança/relevância/
+validade/contexto/justificativa/prioridade/qualidade/horizonte/vida útil),
+`deriveEngineSignalsFromCouncil()` populando só o que é real hoje (4/10
+campos), resto `null` honesto; (2) `unified-snapshot-store.ts` §4 CÉREBRO:
+`nexusDecision`/`institutionalScoreReading`/`heatScoreReading` ganharam os
+4 lugares canônicos + evento próprio no bus (`event-bus.ts`/
+`organism-orchestrator.ts`) — antes só existiam como `useMemo` local em
+`App.tsx`, invisíveis para qualquer assinante futuro do organismo; (3)
+`institutional-zones.ts`: +3 fontes (Volume Profile POC, Session Key
+Level, Liquidity Sweep) — fecha 3 dos 4 pares de confluência que a
+diretiva nomeia explicitamente; (4) 1 colisão real de cor corrigida
+(EQH/EQL vs. roxo do Conselho/Harmônico, <1° de matiz —
+`rgba(200, 107, 255)` → `rgba(110, 150, 255)`, azul H223, >40° de
+qualquer outro matiz já atribuído no app); (5) `InstitutionalZonePlugin`:
+opacidade agora escala com `distinctSourceCount` real (antes sempre a
+mesma, independente da força de confluência); (6) `self-diagnostics.ts`:
+novo achado "Memória (heap JS)" expõe `health.memoryMb` (já medido, nunca
+reportado); (7) `nexus/macd.ts` novo — reusa `computeEmaSeries` duas
+vezes (linhas rápida/lenta sobre o preço, sinal sobre o próprio MACD),
+um dos 12 indicadores confirmados ausentes e o único puro-matemático
+sobre dado já real. Construído e testado, mas DELIBERADAMENTE não ligado
+a `engine-bridge.ts`/UI ainda (Laboratório de Evolução, isolar antes de
+integrar) — confirmado que nem entra no bundle de produção hoje
+(tree-shaking, ninguém importa).
+
+**Autocorreção real durante a rodada, registrada por transparência**: eu
+ia estender o cache por referência (padrão `KillZoneBandsPlugin`) para
+`LiquidationHeatmapPlugin` por analogia de padrão — a suíte de testes já
+tinha uma trava (`refinamento-final-wiring.test.ts`) provando que uma
+rodada anterior já bancou essa pergunta com benchmark real
+(`computeLiquidationHeatmap` ~0,006ms/chamada a N=500 vs. ~1,2ms do caso
+que justificou o cache do KillZone) e concluiu que o cache ali seria
+complexidade sem benefício medido. Revertido antes do commit — a suíte de
+testes funcionou exatamente como uma trava de regressão deveria.
+
+**Deliberadamente não implementado, com motivo real** (detalhe completo
+no relatório): reconhecimento automático de padrão gráfico ("Rabiscos
+Inteligentes" — confirmado que não existe nada disso hoje), motor de
+auto-otimização contínuo (sem gargalo urgente confirmado em 3 documentos
+independentes), autoaprendizado real (fundação passiva existe,
+recalibração de peso é trabalho novo e estatisticamente sensível),
+Footprint/Breaker-Mitigation-IFVG/Elliott-Pitchfork-Gann/Correlação
+cross-asset (dado real existe ou pesquisa é necessária, mas cada um
+merece rodada própria), GMIL dentro da store unificada (cruza uma
+fronteira hoje protegida por CI, decisão grande demais para esta rodada).
+
+**Testes executados**: `tsc --noEmit` limpo · **124 arquivos / 2097
+testes** (100%, +28 novos) · `npm run build` ok (869,66 kB / gzip
+264,94 kB, +2,7 kB desta rodada — idêntico com ou sem `macd.ts`, ainda
+fora do bundle real).
+
+---
+
+### 6.68 Diretriz Final de Integração Total — fechar o que já existe:
+GMIL → store, MACD graduado, estágio NEXUS_DECISION; relatório completo
+em `docs/historico/RELATORIO_MESTRE_HOMOLOGACAO.md`
+
+Diretiva de consolidação pura (Operador foi explícito: "não" a motores
+novos, "sim" a concluir ligações já existentes). Varredura de todo
+`nexus/*.ts` por módulos sem importador real fora dos próprios testes
+(em vez de nova bateria de agentes — o estado do sistema já era
+conhecido em profundidade da rodada anterior, mesma sessão) confirmou 3
+lacunas genuínas e várias já corretamente resolvidas.
+
+**Fechado**: (1) GMIL — já alimentava a UI ao vivo (`useGmilSnapshot()`,
+App.tsx:1881, desde a Fase 5) mas nunca tinha fatia em
+`unified-snapshot-store`/evento no `organism-orchestrator.ts`; o
+relatório anterior tinha descrito isso de forma imprecisa como
+"isolado" — correção registrada aqui. Mesmo snapshot já lido, zero
+segunda assinatura, agora também em §4 CÉREBRO (`gmil`) +
+`BRAIN.GMIL.UPDATED`. `core-engine-boundary.test.ts` (6/6) confirmado
+intacto — a fatia nova vive só no lado de exibição, nunca no Core
+Engine. (2) MACD (`nexus/macd.ts`, criado na rodada anterior mas
+tree-shaken do bundle por falta de importador real) graduado: mesmo
+padrão exato de `currentRsi`, nova Row no painel MARKET REGIME —
+deliberadamente não um novo plugin de canvas (a diretiva pede menos
+poluição visual, não mais camadas). Bundle cresceu +0,98 kB, primeira
+mudança real desde a criação do arquivo — prova objetiva de que agora é
+alcançável. (3) `stage-runner.ts`: o próprio cabeçalho do arquivo já
+documentava um TODO explícito — `NexusDecision` "só fica rastreável
+aqui quando ganhar fatia própria" — que a integração do EPC OMEGA FINAL
+já tinha destravado sem ninguém voltar para fechar. Novo estágio
+`NEXUS_DECISION` em `STAGE_ORDER`, mesma disciplina causal dos 4
+existentes.
+
+**Reconfirmado, não retrabalhado** (cada um já tinha justificativa real
+documentada): `PriceLabelStackPlugin` sem `drawCanvasLabel` (reabrir
+sem ganho real), cache de `LiquidationHeatmapPlugin` (já revertido com
+benchmark), `cross-exchange-service.ts` sem publicador (deferimento
+deliberado documentado), `candle-tick-synthesizer.js` órfão (estado
+seguro correto — gerador `SYNTHETIC_DERIVED` NUNCA deveria ser
+"integrado"), colisão de cor cyan (decisão de design pesquisada, não
+bug).
+
+**Limitação real que permanece, documentada não contornada**:
+`OperationalReadability` (`operational-readability.ts`) é o último elo
+do pipeline (`§2` acima) ainda sem fatia própria na store — mesmo motivo
+honesto que bloqueava NEXUS_DECISION até esta rodada. `traceStages()`
+continua sem consumidor ao vivo na UI (motor correto/testado, ninguém
+chama fora dos testes ainda) — recomendado como próximo passo
+(`self-diagnostics.ts`), não implementado às pressas nesta rodada.
+
+**Testes executados**: `tsc --noEmit` limpo · **125 arquivos / 2107
+testes** (100%, +10 novos) · `core-engine-boundary.test.ts` 6/6
+confirmado intacto · `npm run build` ok (870,64 kB / gzip 265,29 kB,
++0,98 kB — único movimento real sendo MACD agora alcançável) ·
+Playwright real confirmou zero novo erro de console e o texto "MACD"
+presente no DOM renderizado.
+
+---
+
+### 6.69 "DIRETRIZ FINAL — LAPIDAÇÃO VISUAL E ACABAMENTO PROFISSIONAL":
+último passo antes da homologação — 2 achados reais corrigidos, 5 seções
+reconfirmadas; relatório atualizado em
+`docs/historico/RELATORIO_MESTRE_HOMOLOGACAO.md` §9
+
+Diretiva explicitamente restrita a qualidade visual/acabamento — zero
+funcionalidade nova. Auditoria das 8 seções pedidas contra o código real
+do gráfico e do Radar (sem novo swarm de agentes — conhecimento já
+profundo da mesma sessão).
+
+**Corrigido**: (1) `InstitutionalZonePlugin.tsx` prefixava cada rótulo
+com "◆ ZONA INSTITUCIONAL · " — redundante com o que a própria faixa
+violeta (cor+borda) já comunica; comprimido para "◆ " + nomes das
+ferramentas, conteúdo real intacto. (2) `RadarQualificationResult.reason`
+já carregava uma justificativa real de por que um candidato qualificou,
+mas nunca chegava à UI; `nexus/radar-qualification.ts` ganhou
+`RADAR_QUALIFIES_REASON` + `describeRadarQualificationReason()` (zero
+segunda fonte de verdade), agora exposta como `title` no botão de cada
+candidato — mesmo padrão de tooltip já usado pelos votos do Conselho.
+
+**Reconfirmado, não retrabalhado**: Fio de Seda 100% conforme em todo
+`chart/*.tsx` (grep confirmou zero `setLineDash`/`lineWidth`>1 real);
+ordem de pintura dos 12 plugins de canvas (`InstitutionalZonePlugin`
+ficar atrás de Neural Market Aura/Trade Plan Zone já tem justificativa
+real documentada no próprio ponto de montagem — investigado a fundo,
+nenhuma colisão real observada que justificasse reabrir); ciclo de vida
+real + Relevance Engine já cobrem poluição visual; `conviction-cyclone-
+worker.ts` (única animação contínua real) já isolada em Worker, 25fps,
+movimento contínuo sem saltos.
+
+**Testes executados**: `tsc --noEmit` limpo · **125 arquivos / 2113
+testes** (100%, +6 novos) · `npm run build` ok · Playwright real (bypass
+documentado do access-gate, mesmo usado por
+`scripts/audit-header-maxcontent.mjs`) confirmou o painel OPORTUNIDADES
+renderizando corretamente, zero erro de console novo além da limitação
+de rede já conhecida do sandbox.
+
+---
+
+### 6.70 "DIRETRIZ FINAL — CAMADA DE CENÁRIOS INTELIGENTES (SMART
+SCENARIO LAYER)": auditoria revela que a maior parte já existia
+(`scenario-engine.ts` + projeção nativa no canvas); 2 achados reais
+fechados (confiança qualitativa, tipo de reação)
+
+Diretiva pedia uma camada visual de "Cenário A/Cenário B" com linhas de
+projeção discretas, pontos de reteste, confiança qualitativa (nunca
+porcentagem arbitrária) e explicação visual — auditoria (`grep`/leitura
+de `nexus/scenario-engine.ts`, `tests/scenario-projection-chart.test.ts`)
+confirmou que isto **já existe**, construído em rodadas anteriores desta
+mesma sessão ("Diretriz Suprema §5/§6 — Future Path Map",
+"Diretriz Complementar §6 — Smart Projection Engine",
+"Diretriz Restauração/Inteligência Visual §3"): `buildScenarioProjection`
+já produz Path A (postura real do conselho)/Path B (oposto) com até
+`MAX_SCENARIO_TARGETS` níveis reais por lado (EQH/EQL, S/R, Fibonacci com
+score real, VP POC/HVN), invalidação = nível real mais próximo do lado
+oposto (deliberadamente sem linha própria — seria a "linha fantasma"
+redundante que a diretiva proíbe), já desenhado como price lines nativas
+lavanda (cor dedicada, nunca a mesma de LONG/SHORT confirmado), Fio de
+Seda respeitado (`LineStyle.Solid`, `lineWidth: 1`), opacidade por rank +
+peso real do Conselho, sempre abaixo do teto do Trade Plan ativo (LEI
+24), recomputado a cada mudança real de insumo (câmara viva já
+implementada).
+
+**Achados reais fechados nesta rodada**: (1) §4 — o peso do Conselho
+aparecia como porcentagem bruta ("opinion 62%") no painel visível
+(CouncilWidget) e no metadado da price line — a própria diretiva pede
+"não utilizar porcentagens arbitrárias... usar classificações
+qualitativas". `describeScenarioConfidence()` (novo,
+`nexus/scenario-engine.ts`) traduz o peso real para MUITO_FORTE/FORTE/
+MODERADA/FRACA — mesmos cortes uniformes de 25% já usados por `heatTier`
+(`heat-score.ts`), parâmetro documentado, não uma calibração (Regra de
+Ouro 2). `formatScenarioPathLabel()` (consumido pelos 2 painéis de texto
+já visíveis) e o título da price line no canvas foram atualizados; o
+número real (`opinionWeight`) continua 100% intacto no contrato, só a
+apresentação mudou. (2) §3 — os alvos reais (pontos de "reteste") não
+tinham nenhuma classificação de tipo de reação. `describeScenarioReaction
+()` (novo) deriva um rótulo honesto — varredura de liquidez (EQH/EQL),
+pullback/rejeição (S/R), retração (Fibonacci), ímã de volume (Volume
+Profile) — só do `sourceKind` que o nível já carrega, zero motor novo,
+fallback genérico honesto para família desconhecida. Adicionado ao
+metadado `title` de cada price line de projeção.
+
+**Deliberadamente não implementado, com motivo real**: trajetória
+curva/pontilhada (§5, fraseado como exemplo condicional — "caso o
+sistema represente uma trajetória") — uma curva suave interpolada
+implicaria visualmente um caminho previsto de preço, mais forte do que
+"aqui está um nível real", e uma linha pontilhada violaria Fio de Seda
+(Regra de Ouro 5, zero exceção); a implementação real (linhas retas
+horizontais nos níveis reais, já existente) é mais honesta e já foi essa
+mesma decisão de uma rodada anterior. Glifo/marcador dedicado para
+"pontos de reteste" (§3) além da price line já existente no mesmo preço
+— seria geometria duplicada no mesmo pixel (poluição visual, contra o
+próprio §7 da diretiva) e arriscaria reabrir a colisão de rótulos no
+eixo de preço já corrigida em múltiplas rodadas anteriores; a
+classificação real (texto) foi adicionada ao metadado já existente em
+vez disso.
+
+**Testes executados**: `tsc --noEmit` limpo · **125 arquivos / 2123
+testes** (100%, +10 novos) · `npm run build` ok (871,21 kB, +0,42 kB) ·
+Playwright real confirmou o app e o painel Market Intelligence
+renderizando sem regressão (bloco SCENARIO A/B ausente honestamente —
+sandbox sem rede real para popular `scenario` — mesma limitação já
+documentada em rodadas anteriores).
+
+---
+
+### 6.71 "DIRETRIZ FINAL — POLIMENTO VISUAL E SINCRONIZAÇÃO GLOBAL": bug
+real de colisão confirmado por captura de tela (Zona Institucional ×
+Sweep/Sessão) corrigido; botão de energia vira "Sincronizar Agora" com
+status real
+
+O Operador anexou uma captura de tela real (BTC/USDT 1H) mostrando
+colisão severa de rótulos do lado esquerdo do gráfico — o texto "ZONA
+INSTITUCIONAL · ..." sobrepondo/colidindo visivelmente com "LONDRES
+H/L" e "SWEEP ZONE". Auditoria confirmou a causa raiz: `SWEEP`/`SWEEP
+ZONE`/Session Key Levels/S1/R1/TREND já entravam no sistema anti-colisão
+real (`priceAxisLabels`/`PriceLabelStackPlugin`/`price-label-stack.ts`,
+construído em rodadas anteriores exatamente para isto), mas o rótulo de
+texto da Zona Institucional (`InstitutionalZonePlugin.tsx`) desenhava
+num canvas PRÓPRIO, com posição vertical PRÓPRIA, sem nenhuma
+consciência do que a pilha já tinha resolvido — os dois sistemas
+desenhavam no mesmo espaço de tela sem se falar.
+
+**Corrigido**: o TEXTO da Zona Institucional migrou para
+`priceAxisLabels` (`price = centro real da zona`, `side: "left"`) — a
+MESMA pilha anti-colisão que já resolve Sweep/Session/S1/R1/TREND, com o
+MESMO conector fino de volta ao preço quando precisa deslocar.
+`InstitutionalZonePlugin.tsx` continua dono exclusivo da FAIXA
+(fill+borda, geometria real, zero mudança); `LABEL_COLOR` exportado para
+ser a única fonte real dessa cor (zero duplicação de literal em 2
+arquivos). Este é o achado mais concreto e evidenciado de toda a
+diretiva — resolve diretamente §1 (nunca uma etiqueta cobre outra), §2
+(mesma caixa/tipografia consistente do resto do eixo) e §5
+(reorganização automática, zero intervenção do Operador) para esta
+camada específica.
+
+**Botão de energia (§4, "sincronizador global")**: auditoria confirmou
+que `handleManualRestart` (App.tsx) já ERA um sincronizador global real
+desde antes desta rodada — bumpar `bootGeneration` já reconecta REST+WS+
+ciclo do motor+feeds (comentário real já existente no próprio código).
+Faltava só o que a diretiva pedia de fato: título honesto ("Sincronizar
+Agora", trocado do inglês "Force reconnection of all real feeds") + um
+status real e discreto — reaproveita `price.updatedAt` (já real, `Date.
+now()` em `setPrice`) via `usePriceSnapshot()` + `ageLabelOf()` (helper
+já existente, usado por preço/livro/ciclo/HTF/GMIL) — zero conceito novo
+inventado, zero segundo formatador de idade.
+
+**Reconfirmado sem retrabalho**: §3 (Rabiscos Inteligentes — Fio de Seda
+1px sólido já 100% respeitado, ciclo de vida/decaimento já real em todo
+plugin que precisava, "curvas suaves" deliberadamente não implementadas
+pela mesma razão já documentada na Entrega anterior — implicaria uma
+trajetória de preço prevista, mais forte que "aqui está um nível real");
+etiquetas FVG/OB/BOS/CHOCH já usam a primitiva compartilhada
+`canvas-label.ts` desde o "Adendo Final: etiquetas institucionais
+unificadas" (rodada anterior).
+
+**Testes executados**: `tsc --noEmit` limpo · **126 arquivos / 2130
+testes** (100%, +7 novos: 3 travam a migração do rótulo de Zona
+Institucional, 4 travam a fiação do botão de sincronização) · `npm run
+build` ok (871,37 kB, +0,16 kB) · Playwright real confirmou o app
+carregando sem regressão e o novo título do botão renderizando com
+status real (`"Sincronizar Agora — ... Última leitura real: há 3s."` —
+valor real observado no sandbox, não fabricado).
+
+---
+
+### 6.72 "ORDEM OFICIAL DE EXECUÇÃO Nº 01 — DIRETRIZ MESTRE DE
+CONSOLIDAÇÃO, EVOLUÇÃO E AUTONOMIA TÉCNICA": `traceStages()` ganha
+consumidor real; 2 recomendações da própria sessão corrigidas após
+investigação mais profunda; relatório completo em
+`docs/historico/RELATORIO_ORDEM_01_CONSOLIDACAO.md`
+
+Ordem de escopo total ("todo o ecossistema... nada deve permanecer
+isolado"), mas o próprio texto da Ordem encerra dizendo que a
+Arquitetura Mestre (Knowledge Graph, Evidence Fusion Engine, Quality
+Governor, Lifecycle Manager, gráfico com desenho centralizado por uma
+única camada de inteligência) **será iniciada DEPOIS desta Ordem** —
+uma diretriz futura e mais detalhada. Interpretação aplicada (detalhe
+completo no relatório, §0): esta rodada é auditoria/consolidação real
+sobre o que já existe, não a construção antecipada do que a próxima
+Ordem vai detalhar — tentar isso agora, sem a especificação, arriscaria
+quebrar os 12 plugins de canvas testados e estáveis (o oposto de
+"preservar tudo o que já foi validado", objetivo explícito da própria
+Ordem).
+
+**Implementado**: `traceStages()` (stage-runner.ts, OMEGA CORE V-MAX
+Fase 3 — pipeline causal real DATA→CORE_ENGINE→COUNCIL→TRADE_PLAN→
+NEXUS_DECISION) ganhou seu primeiro consumidor ao vivo — um novo achado
+"Pipeline causal" em `self-diagnostics.ts` (Relatório de
+Autodiagnóstico), lido via a mesma visão versionada/read-only que os
+motores reais já usam (`getSnapshotForEngine()`). Severidade nunca
+escala além de WARN por design (a causa raiz de qualquer estágio
+quebrado já é CRITICAL em outro achado — repetir seria alarme
+duplicado). Evidência real: bundle foi de 1844 para 1845 módulos
+transformados (stage-runner.ts deixou de ser tree-shaken).
+
+**Corrigido (não executado mecanicamente)**: duas recomendações
+registradas em rodadas anteriores — dar a `operational-readability.ts`
+e a `engine-signal-contract.ts` uma fatia própria em
+`unified-snapshot-store.ts` — foram reexaminadas e a conclusão mudou:
+as duas são funções PURAS de um único insumo já central
+(`nexusDecision`/`council`, respectivamente), ao contrário de
+`nexusDecision`/`gmil`/etc. (que fundem múltiplos insumos dispersos —
+por isso JUSTIFICAM uma fatia própria). Dar-lhes uma fatia seria mirror
+sintético e redundante, não uma integração real. Aplicar o mesmo padrão
+mecanicamente, só porque funcionou antes, seria exatamente a
+complexidade desnecessária que esta Ordem pede para evitar.
+
+**Reconfirmado, não removido**: varredura de módulos órfãos em
+`nexus/*.ts` confirmou `cross-exchange-service.ts`/
+`connection-manager.ts` ainda sem publicador — já documentado como
+adiamento deliberado (maior risco do projeto) em `event-bus.ts`,
+nenhuma mudança. `engine-signal-contract.ts` continua sem consumidor —
+não é esquecimento, é o contrato de 10 campos (peso/confiança/
+relevância/qualidade/contexto/horizonte/validade/justificativa/
+prioridade) já pronto e testado, esperando exatamente o motor de fusão
+que a PRÓXIMA Ordem vai especificar.
+
+**Testes executados**: `tsc --noEmit` limpo · **126 arquivos / 2136
+testes** (100%, +6 novos: 5 em `self-diagnostics.test.ts`, 1 em
+`ciborgue-vivo-wiring.test.ts`) · `core-engine-boundary.test.ts` 6/6
+confirmado intacto · `npm run build` ok (873,37 kB, 1845 módulos, +1) ·
+Playwright real confirmou clique real em "GERAR RELATÓRIO DE
+AUTODIAGNÓSTICO" produzindo o achado "Pipeline causal" ao vivo na UI.
+
+---
+
+### 6.73 "DIRETRIZ Nº 02 — CAMADA DE INTELIGÊNCIA VISUAL": dois conflitos
+com regras inegociáveis resolvidos + `nexus/visual-budget.ts` (isolado,
+testado); relatório completo em
+`docs/historico/RELATORIO_DIRETRIZ_02_INTELIGENCIA_VISUAL.md`
+
+Diretriz descreve o pipeline final desejado (`... → Knowledge Graph →
+Evidence Fusion Engine → Quality Governor → Meta Engine → Core Engine →
+Visual Intelligence Layer → Gráfico`) e o princípio "nenhum módulo
+poderá desenhar diretamente no gráfico" — mas, ao contrário da Ordem
+Nº 01, não escreve sua própria cláusula de escopo. Interpretação
+aplicada (detalhe completo no relatório, §0): a inversão completa dos 12
+plugins de canvas é alto blast-radius/baixa reversibilidade sem uma
+"Camada de Inteligência Visual" central ainda existente para migrar os
+plugins PARA — mesma disciplina de "isolar antes de integrar" de todo
+motor novo deste projeto, não construída de uma vez.
+
+**Dois conflitos diretos com regras inegociáveis, resolvidos por
+substituição honesta (mesmo padrão do Corredor de Confluência e da
+Camada de Cenários)**:
+1. "Probability Score" (ex.: "87% de probabilidade de reteste") vs.
+   Regra de Ouro 2 — nenhuma probabilidade calibrada nova introduzida;
+   `visual-budget.ts` trabalha só com peso de confluência real (0..1).
+2. Ordenação "Meta Engine → Core Engine" do diagrama vs. LEI 24 —
+   reafirmado que ordem de camada VISUAL não é ordem de autoridade de
+   DECISÃO, citando o precedente já real de `decision-layer.ts`
+   (`operation` é passthrough literal da direção do Core Engine).
+
+**Implementado**: `nexus/visual-budget.ts` — motor puro implementando a
+seção "BUDGET VISUAL" da própria Diretriz: os 7 níveis de prioridade
+declarados (`TRADE_PLAN > INSTITUTIONAL_ZONE > TARGET > INVALIDATION >
+RADAR > MAIN_LIQUIDITY > STRUCTURE`) e `resolveVisualBudget(candidates,
+budget?)`, que resolve competição cruzada por destaque entre objetos já
+relevantes (aditivo sobre `layer-relevance.ts`, que decide relevância/
+ênfase por camada isoladamente). "Esconder automaticamente" da Diretriz
+é reinterpretado honestamente como REDUZIR ÊNFASE (Regra de Ouro 4):
+todo objeto sempre recebe `visualWeight >= VISUAL_BUDGET_FLOOR_WEIGHT`
+(0.35), nunca zero.
+
+**Isolamento real, não só declarado**: `npm run build` produziu os
+mesmos 1845 módulos/873,37 kB de antes desta rodada — prova objetiva de
+que o motor não tem nenhum consumidor vivo ainda (mesma técnica de
+verificação usada na rodada anterior para provar o oposto, quando
+`stage-runner.ts` ganhou seu primeiro consumidor real: 1844 → 1845).
+
+**Testes executados**: `tsc --noEmit` limpo · **127 arquivos / 2149
+testes** (100%, +13 novos em `tests/visual-budget.test.ts`) · `npm run
+build` ok, módulos/bundle idênticos à rodada anterior (isolamento
+confirmado) · Playwright não executado (nenhuma superfície visual nova
+para verificar).
+
+---
+
+### 6.74 "ORDEM OFICIAL DE EXECUÇÃO Nº 03 — FASE DE IMPLEMENTAÇÃO
+OPERACIONAL E INTEGRAÇÃO TOTAL": primeira graduação real de
+`nexus/visual-budget.ts` (competição INSTITUTIONAL_ZONE × TRADE_PLAN no
+gráfico ao vivo) + auditoria de isolamento completa do ecossistema;
+relatório completo em
+`docs/historico/RELATORIO_ORDEM_03_IMPLEMENTACAO_OPERACIONAL.md`
+
+Ordem muda o critério de "pronto": um motor com testes aprovados mas
+zero consumidor real fica classificado "EM IMPLEMENTAÇÃO" até cumprir o
+ciclo completo (Implementação → Integração → Testes → Validação →
+Operação em tempo real → Consumo por módulos reais → Disponibilização ao
+Operador). Auditoria de importadores reais (`nexus/*.ts`,
+`research/engines/*.js`, `research/backtest/*.js`, 12 plugins de canvas)
+confirmou o ecossistema já muito mais integrado do que o tom de abertura
+da Ordem presume — só 3 módulos reais sem consumidor (`visual-budget.ts`,
+`engine-signal-contract.ts`, `cross-exchange-service.ts`), e o "laboratório
+de backtest" (`structural-backtest.js`/`history-capture.js`/
+`compare-runs.js`) tem isolamento TESTADO como fronteira deliberada
+(`structural-backtest.test.ts`: "nenhum módulo de produção importa do
+laboratório de backtest — só testes"), não uma peça esquecida.
+
+**Implementado**: `resolveVisualBudget()` (Diretriz Nº 02, construído
+isolado/testado na rodada anterior, zero consumidor vivo até esta
+rodada) agora resolve competição real de destaque entre Zonas
+Institucionais e Trade Plan — as 2 categorias que já carregavam peso 0..1
+real e independente (`confluenceWeight`/`opacityMultiplierFor`, ambas
+exportadas e reusadas, zero segunda fórmula). `InstitutionalZonePlugin.
+tsx`/`TradePlanZonePlugin.tsx` ganharam novas props (`visualWeights`/
+`visualWeight`) com fallback automático para o comportamento pré-Ordem-03
+quando ausentes. Regra de Ouro 4 preservada: piso `VISUAL_BUDGET_
+FLOOR_WEIGHT` (0.35), nenhuma zona/plano é escondido, só menos
+enfatizado. Evidência objetiva: `npm run build` foi de 1845→1846 módulos
+(+874,86 kB, +1,49 kB) — mesma técnica de prova usada na Ordem Nº 01.
+
+**Investigado e deliberadamente adiado (não esquecido)**: Market
+Structure como fonte de `institutional-zones.ts` — rastreado até a causa
+raiz exata (`ipad_runtime/js/real-data/analysis-frame.js:123` já calcula
+`last_swing_high`/`last_swing_low` via `market-structure-engine.js`, mas
+descarta os 2 preços antes de retornar o frame, só `structure_label`
+sobrevive). Correção seria pequena (2 campos num objeto literal), mas o
+único ponto de correção é dentro do cálculo canônico do Core Engine — "o
+caminho mais crítico do app" (Regra de Ouro 6) — e por isso fica para sua
+própria iniciativa isolada, com o diagnóstico completo (incluindo os 4
+passos exatos de implementação) já registrado no relatório §3, para
+nenhuma rodada futura precisar reinvestigar.
+
+**Reafirmado com leitura fresca (não repetição mecânica)**:
+`cross-exchange-service.ts` (cutover do WS/REST ao vivo é "o passo de
+maior risco", escopo próprio desde sua criação) e
+`engine-signal-contract.ts` (só 1 dos 10 campos tem montador real hoje;
+um consumidor forçado agora duplicaria a leitura do Conselho ou exigiria
+construir o Evidence Fusion Engine inteiro) continuam isolados por
+motivo técnico específico, não negligência.
+
+**Testes executados**: `tsc --noEmit` limpo · **128 arquivos / 2165
+testes** (100%, +16 novos: 15 em `tests/visual-budget-chart-wiring.test.ts`,
+1 em `trade-plan-zone-plugin.test.ts`) · `npm run build` ok (1846
+módulos, 874,86 kB) · Playwright executado contra o dev server real —
+app carrega sem regressão estrutural, mas a rede de saída do ambiente
+bloqueia os WebSockets reais da Binance (`ERR_TUNNEL_CONNECTION_FAILED`
+no proxy do container), então o gráfico fica honestamente em "AWAITING
+CANDLES…" (fail-closed correto) em vez de mostrar zonas/plano com dado ao
+vivo — limitação do ambiente de verificação, documentada explicitamente
+em vez de omitida, com a suíte de padrão de fonte cobrindo cada literal
+da fiação real.
+
+---
+
+### 6.75 "HOMOLOGAÇÃO DA ORDEM Nº 03 E PRÓXIMA EVOLUÇÃO — ORGANISMO
+INTELIGENTE ADAPTATIVO": Market Regime real como "contexto operacional"
+em `layer-relevance.ts` + reorganização (não exclusão) da administração
+de modos no painel "Camadas do Gráfico"; relatório completo em
+`docs/historico/RELATORIO_HOMOLOGACAO_03_ORGANISMO_ADAPTATIVO.md`
+
+Diretriz descreve 6 dimensões adaptativas (prioridade visual/intensidade/
+quantidade de informação/frequência de atualização/relevância dos
+motores/contexto operacional) e pede substituir "Modo Automático/
+Operador/Inteligente/Configurações manuais redundantes" por um único
+"Estado Inteligente Adaptativo". Investigação confirma que os 4 "modos"
+mapeiam byte a byte para código real (`ChartLayersPanel`, `App.tsx:3741`
+— 4 presets + toggle individual por camada) e que 4 das 6 dimensões já
+eram reais (visual-budget.ts/layer-relevance.ts) — só precisavam ser
+reconhecidas como tal.
+
+**Tensão real, nomeada sem rodeio**: a diretriz pede exclusão literal
+dos modos; Regra de Ouro 4 proíbe apagar funcionalidade real, oferecendo
+"realocar/reorganizar" como alternativa. Resolução: **reorganizar,
+nunca apagar**. "Automático" (renomeado na UI para "AR10 CYBORG · Estado
+Inteligente Adaptativo") vira a única ação primária sempre visível; os
+3 presets manuais continuam existindo por inteiro, só recolhidos numa
+seção "avançado" (`useState(false)`, local, nunca persistida); o toggle
+fino por camada fica FORA da seção recolhida (categoricamente diferente
+de "administrar um modo"). Verificado com Playwright real (2 capturas:
+painel recolhido e expandido, ambos funcionando).
+
+**Implementado — contexto operacional real**: `marketRegime` (rótulo
+já calculado a cada ciclo por `regime-engine.js`, zero segundo cálculo)
+entra em `LayerRelevanceInput` e passa a confirmar relevância de
+`trend_channel` por uma segunda via INDEPENDENTE da banda estreita —
+`TENDENCIA_FORTE`/`BREAKOUT` (momentum confirmado por ADX/DI) mesmo com
+banda ainda larga ou desconhecida. Bug real evitado durante a
+implementação: a antiga non-null assertion (`bandwidthPct!`) teria
+acendido highlight por coerção `null <= N → true` do JavaScript quando só
+o regime confirmasse relevância — corrigido com checagem explícita,
+travado por teste de regressão dedicado.
+
+**Testes executados**: `tsc --noEmit` limpo · **128 arquivos / 2179
+testes** (100%, +14 novos: 9 em `layer-relevance.test.ts`, 1 em
+`nucleo-gravitacional-fusion.test.ts`, 4 em
+`chart-layers-panel-wiring.test.ts`) · `npm run build` ok (1846 módulos,
+876,24 kB) · Playwright real confirmou os 2 estados do painel
+reorganizado.
+
+---
+
+### 6.76 Evolução Visual (pedido informal): STRUCTURE como 3ª categoria
+real de `visual-budget.ts` + poda mecânica de 8 declarações mortas;
+relatório completo em `docs/historico/RELATORIO_EVOLUCAO_VISUAL_STRUCTURE_PODA.md`
+
+Pedido do Operador em português informal/ditado ("foca na parte visual
+pra ficar mais automático, menos etiqueta... o que você acha que tem de
+melhorar... execute o necessário... liberdade pra achar a melhor
+estratégia") — reconstrução comunicada ao Operador antes de agir (sem
+pergunta bloqueante: a mensagem já autoriza execução explicitamente).
+
+**Implementado — STRUCTURE**: `StructureBreakMarkersPlugin.tsx` ganha
+`visualWeight?: number | null` com fallback fail-closed para
+`ageAlpha(age, BREAK_DECAY)` isolado. `EnhancedChart_110_Percent.tsx`
+monta o candidato real (`structureBreakBaseWeight`, mesma fórmula
+EXATA já usada pelo rótulo BOS/CHOCH em `priceAxisLabels`) e alimenta
+`resolveVisualBudget` junto de `INSTITUTIONAL_ZONE`/`TRADE_PLAN` — 3 das
+7 categorias reais da Diretriz Nº 02 agora graduadas.
+
+**Avaliação honesta entregue** (resposta direta ao pedido de opinião):
+maior alavanca real do lado de sistema é o Evidence Fusion Engine
+(`engine-signal-contract.ts`, 4 rodadas sem consumidor real além de 1
+campo) — recomendado, não construído (é iniciativa de arquitetura
+própria, não poda/graduação incremental).
+
+**Poda real**: `noUnusedLocals`/`noUnusedParameters` habilitados como
+diagnóstico no `tsconfig.json`, 8 declarações genuinamente mortas
+encontradas e investigadas individualmente (nenhuma removida às
+cegas). Dois achados revelaram história real: `NEXUS_PLAN_GAP_LABEL`
+importado em `App.tsx` mas relocado para `operational-readability.ts`
+numa rodada anterior (import vestigial); `POOL_DIRECTION_TO_STANCE` em
+`council.ts` era o mapeamento direto ALTA/BAIXA/NEUTRO→LONG/SHORT/
+NEUTRAL substituído por `councilStanceWithHysteresis` (histerese de 2
+bandas) numa evolução anterior, nunca removido. Os outros 6 (import/
+variável/parâmetro/helper de teste não lidos) corrigidos com a mesma
+disciplina. Flags mantidas permanentemente no `tsconfig.json` — melhoria
+estrutural de precisão do processo, não só limpeza pontual.
+
+**Testes executados**: `tsc --noEmit` limpo (com as novas flags
+permanentes) · **128 arquivos / 2185 testes** (100%, +6 novos em
+`tests/visual-budget-chart-wiring.test.ts`) · `npm run build` ok (1846
+módulos, 876,67 kB) · Playwright real confirmou zero regressão
+estrutural (zero erro de React).
+
+---
+
+### 6.77 "ORDEM Nº 04 — CONSOLIDAÇÃO DO ORGANISMO INTELIGENTE
+ADAPTATIVO": auditoria real dos 7 componentes nomeados + 2 entregas
+proporcionais; relatório completo em
+`docs/historico/RELATORIO_ORDEM_04_CONSOLIDACAO.md`
+
+Ordem formal pedindo integração/coordenação (não novos módulos
+isolados) sobre 7 camadas nomeadas: `layer-relevance`, `visual-budget`,
+`scenario-engine`, `institutional-zones`, `trade-plan`, `radar`, `engine
+signals`. Auditoria obrigatória (§7) antes de qualquer mudança.
+
+**Auditoria real (grep/leitura direta, antes de qualquer edição)**: 6
+das 7 camadas já tinham consumidores reais confirmados — reportado
+honestamente em vez de fabricar integração onde já existia. Único
+componente genuinamente isolado: `engine-signal-contract.ts` (EPC OMEGA
+FINAL Parte 1) — zero import fora do próprio arquivo em todo `src/`,
+apesar de ter contrato testado (8 testes) e função real
+(`deriveEngineSignalsFromCouncil`) há 4 rodadas. Achado secundário: a
+categoria `RADAR` de `visual-budget.ts` não tem candidato real no canvas
+(Radar renderiza só em painéis próprios, nunca no `chart/`) — graduá-la
+exigiria inventar um objeto visual, decisão deliberada de não fazer.
+
+**Entrega 1 — `engine-signal-contract.ts` consolidado no
+`CouncilWidget`**: `deriveEngineSignalsFromCouncil(council)` roda em
+paralelo à leitura ad hoc já existente de `council.votes` (zero
+regressão nos campos antigos), expõe o campo real `weight` (já refletia
+corretamente `aggregateCouncil`/`council.ts:429-431`, nunca antes
+exibido por voto) como um marcador visual novo `· fora do pool` em
+qualquer voto RISK/ABSTAIN. Confirmado com captura Playwright AO VIVO
+contra o dev server real (não depende de candles, diferente das
+graduações de `visual-budget.ts`) — os 6 votos ABSTAIN reais mostraram o
+marcador, o único voto direcional real (ORDER FLOW, NEUTRAL 0%) não
+mostrou, exatamente como desenhado. 6 testes novos em
+`tests/engine-signal-consolidation-wiring.test.ts`.
+
+**Entrega 2 — `MAIN_LIQUIDITY` como 4ª categoria real de
+`visual-budget.ts`**: `LiquidityZonesPlugin.tsx` (FVG/Order Blocks) já
+calculava `ageAlpha(age, ZONE_DECAY)` por zona — exportado (mesmo padrão
+de `BREAK_DECAY`), `EnhancedChart_110_Percent.tsx` monta candidatos
+reais só para zonas não-obstáculo. Regra nova (não presente nas 3
+graduações anteriores): zona que é obstáculo real do Trade Plan ativo
+fica FORA da competição de propósito — mantém `alpha=1` incondicional
+(garantia pré-existente da Diretriz Restauração/Inteligência Visual §6),
+nunca reduzida pelo orçamento visual. 9 testes novos em
+`tests/visual-budget-chart-wiring.test.ts`; 4 asserções literais
+pré-existentes (`ciborgue-vivo-wiring.test.ts`,
+`liquidity-zones-plugin.test.ts`) atualizadas para o código real atual
+(mesma manutenção já vista em rodadas anteriores após mudança de
+assinatura).
+
+**O que não foi tocado, e por quê**: `TARGET`/`INVALIDATION` (sem fonte
+de peso individual já isolada, diferente de TRADE_PLAN que trata o plano
+como zona única); `RADAR` (sem candidato real no canvas); os 5 campos
+ainda não instrumentados do contrato de sinais (`relevance`/`priority`/
+`quality`/`temporalHorizon`/`lifespanCandles` — trabalho de motor novo,
+fora do escopo de consolidação); Market Structure em
+`analysis-frame.js`/frequência adaptativa (Regra de Ouro 6, pendências
+já registradas). Zero componente removido.
+
+**Testes executados**: `tsc --noEmit` limpo · **129 arquivos / 2201
+testes** (100%, +6 engine signals +9 MAIN_LIQUIDITY sobre os 2185
+anteriores, líquido de ajustes) · `npm run build` ok (1847 módulos,
+878,48 kB) · Playwright real confirmou zero erro de React E capturou
+visualmente ao vivo o comportamento correto do marcador "fora do pool"
+(evidência mais forte que o padrão usual desta sandbox, por não
+depender de candles).
+
+---
+
+### 6.78 Evolução Total Autônoma (pedido informal, "autonomia total...
+não deixa nada pendente... sem pedir permissão"): pendência mais antiga
+executada + "um objeto, um peso" + rastreamento reconciliado; relatório
+completo em `docs/historico/RELATORIO_EVOLUCAO_TOTAL_AUTONOMA.md`
+
+**Market Structure em `analysis-frame.js` — EXECUTADO** (o fix
+documentado na Ordem Nº 03 §3, adiado 3 rodadas por Regra de Ouro 6,
+agora autorizado): `last_swing_high`/`last_swing_low` (já computados por
+`analyzeMarketStructure` a cada ciclo, antes descartados) saem no frame
+→ passthrough puro em `engine-bridge.ts` (`lastSwingHigh`/`lastSwingLow`)
+→ props do chart → 11ª fonte real de `institutional-zones.ts`
+(`MARKET_STRUCTURE_SWING`, "Swing H"/"Swing L"). Puramente aditivo —
+`core-decision-rules.test.ts` (caracterização congelada do Core Engine)
+passou INTACTA; 2 testes aditivos de execução real (zigzag → frame ↔
+motor consistentes; candles chapados → DADOS_INSUFICIENTES honesto) + 8
+de wiring (`market-structure-swing-wiring.test.ts`) + 3 de execução real
+da 11ª fonte (swing sozinho nunca vira zona; high+low = mesma
+ferramenta, distinctSourceCount não dobra).
+
+**"Um objeto, um peso"** (achado de auditoria visual): etiquetas do eixo
+anti-colisão agora seguem o MESMO peso resolvido pelo orçamento visual
+que os objetos que nomeiam — BOS/CHOCH usa `structureBreakVisualWeight`
+(fallback `ageAlpha` isolado), Zona Institucional segue a redução da
+faixa (razão `resolved/base`, 1 sem competição, nunca zero). Achado
+extra corrigido: o bloco da etiqueta BOS/CHOCH era o ÚNICO do eixo sem
+gate de `visibility` — camada desligada sumia com a linha mas a etiqueta
+ficava; agora `visibility.structure_breaks` gate o bloco.
+
+**Peso no sistema — auditoria honesta**: `llm-worker`/`llm-bridge`
+(12MB do build) reverificados — já 100% lazy (`await import()` nos
+handlers), zero peso no boot; nada removido porque nada pesava de
+verdade ali. Rastreamento obsoleto reconciliado: task #114 (pergunta
+antiga do Radar) DECIDIDA sob autonomia total — manter direção de
+candidatos via regime (display-only, LEI 24 governa só o símbolo ativo;
+pipeline completo por símbolo escaneado violaria Regra de Ouro 6); task
+#82 (umbrella V-MAX in_progress obsoleta) reconciliada com o histórico
+real de entregas, resto virou backlog honesto explícito.
+
+**Testes executados**: `tsc --noEmit` limpo · **130 arquivos / 2218
+testes** (100%, +17 novos) · `npm run build` ok (1847 módulos, 879,39
+kB) · Playwright real no baseline pré-mudança (zero erro de React, zero
+regressão estrutural).
+
+---
+
+### 6.79 Lapidação por feedback direto: faixa de sessões afinada + zoom
+inteligente na troca de timeframe
+
+Feedback verbal do Operador: a "faixinha dos mercados" (Nova Iorque/
+Londres/Ásia) "da forma que está não está bom, está atrapalhando o
+visual"; e ao trocar de timeframe o gráfico deveria ter "um zoom
+inteligente que fica bom na tela pra gente não estar puxando o zoom".
+
+**Faixa de sessões** (`MarketSessionBandsPlugin.tsx`): afinada de
+24px/2 linhas para **14px/1 linha**. A 2ª linha (janela UTC) era
+duplicação literal do header (`marketSessionFromUtc` — mesmo dado, mesma
+função) — removida como redundância, nunca dado real (Regra de Ouro 4:
+a janela continua no header). A relevância adaptativa já real
+(`recentSessionBoundary` em layer-relevance.ts) continua decidindo
+quando a faixa sequer aparece no estado automático.
+
+**Zoom inteligente** (`EnhancedChart_110_Percent.tsx`): primeira fatia
+real do "Adaptive Zoom" do backlog V-MAX — flag `smartZoomPendingRef`
+armada SÓ por troca de `[activeTimeframe, symbol]` (e no mount),
+consumida no efeito real de `setData`: enquadra as últimas
+`SMART_ZOOM_CANDLES` (120) velas + `SMART_ZOOM_RIGHT_PAD_BARS` (6) de
+folga à direita, SOMENTE depois que os candles do novo contexto
+chegaram — nunca sobre dado velho, nunca em tick (o pan/zoom manual do
+Operador continua soberano fora da troca). Convive com a preservação de
+faixa do prepend (paginação histórica): o enquadre pendente tem
+precedência só na troca de contexto.
+
+**Testes executados**: `tsc --noEmit` limpo · **130 arquivos / 2218
+testes** (100% — 2 novos de zoom inteligente, 5 asserções da faixa
+atualizadas para a forma real, 1 regex re-ancorado no efeito certo de
+setData preservando a trava original) · `npm run build` ok (1847
+módulos, 879,38 kB).
+
+---
+
+### 6.80 Lapidação por captura real (BTC 1H): kill zones só a ocorrência
+mais recente + teto de etiquetas Sweep + dedupe de membros da Zona
+(achado de auditoria: esta entrega existia commitada — 522874c — mas
+nunca tinha ganho sua própria entrada aqui; corrigido agora, junto da
+Carta Branca §6.81, para o handbook continuar a memória evolutiva real)
+
+Captura de tela real do Operador (BTC/USDT 1H): "linhas amarelas"
+verticais repetidas cruzando o gráfico inteiro — sem explicação visível
+do que eram.
+
+**Causa raiz real**: `KillZoneBandsPlugin.tsx` desenhava TODA ocorrência
+histórica de cada Kill Zone ICT (Londres/NY/Ásia) ainda dentro da janela
+de candles carregada — em 1H, isso significa várias faixas repetidas da
+MESMA sessão em dias diferentes, todas simultâneas na tela.
+
+**Corrigido**: `latestSpanPerZone` (Map, chave = `span.id`, mantém só o
+`endIndex` mais alto por zona) — o laço de desenho passa a iterar
+`latestSpanPerZone.values()` em vez de `spans` inteiro. Dado real
+intacto (Regra de Ouro 4): só a mais recente de cada zona ganha desenho,
+nunca a lista subjacente é podada.
+
+**2 achados adicionais da mesma captura, mesma disciplina**:
+1. **Teto real de etiquetas Sweep** (`MAX_SWEEP_AXIS_LABELS = 4`):
+   `sweepLabelCandidates` ordenado por `latestIndex` desc e cortado em 4
+   — as price lines nativas continuam desenhadas para TODOS os clusters
+   reais (dado intacto), só a etiqueta de texto no eixo fica seletiva
+   (mesmo princípio depois reusado pela Carta Branca em S1/R1, §6.81).
+2. **Dedupe de membros repetidos na etiqueta de Zona Institucional**:
+   `labelCounts` (Map) agrega membros com o mesmo `label` em "Sweep ×2"
+   em vez de repetir o nome cru — informação idêntica, texto mais curto.
+
+**Correção incidental**: 3 ocorrências de `side: "left" as const,`
+viraram `side: "left",` — o `as const` desnecessário (o tipo do array já
+inferia o literal corretamente) quebrava 3 testes de padrão de código
+que esperavam o texto exato sem o qualificador.
+
+**Testes executados**: `tsc --noEmit` limpo · 3 novos em
+`tests/refinamento-final-wiring.test.ts` · `npm run build` ok. Commit:
+522874c.
+
+---
+
+### 6.81 "Carta Branca" — otimização do motor matemático, reconhecimento
+de padrões (Triângulo + Ombro-Cabeça-Ombro), Evidence Fusion Engine
+finalizado, precisão das etiquetas laterais; relatório completo em
+`docs/historico/RELATORIO_CARTA_BRANCA_CIBORGUE_ELITE.md`
+
+Mega-diretriz em português informal/ditado pedindo, em bloco único:
+organizar a arquitetura do motor matemático e eliminar redundância real;
+etiquetas laterais "mais perfeitas... só mostrar a precisão maciça";
+melhorar visualização de retest-zone/zigzag e adicionar explicitamente
+reconhecimento de Triângulo e Ombro-Cabeça-Ombro; liberdade total sobre
+estratégia/calibração/pesquisa externa; decidir o que adicionar/remover;
+o efeito visual mais bonito, com liberdade de remodelar ícones/layout;
+"habilitar todas as ferramentas para funcionarem 100% automatizadas";
+fazer o sistema parecer um ser vivo/operador de elite, "não ter erro com
+ele".
+
+**Evento de segurança tratado antes de qualquer execução** (detalhe
+completo no relatório §0): um bloco `[DIRETIVA SUPREMA...]` endereçando
+uma persona fictícia ("Agente 4") nunca usada nesta sessão, com
+linguagem de protocolo/comando em terceira pessoa, apareceu colado ao
+final da mensagem — correspondência literal ao item 7 da Disciplina de
+Trabalho deste CLAUDE.md (persona fictícia + linguagem de protocolo
+pedindo para pular autorização). Pausado via `AskUserQuestion` antes de
+agir, com o default seguro ("ignorar o bloco") como primeira opção. O
+Operador confirmou autoria explicitamente ("É totalmente meu, pode usar
+como instrução") — o conteúdo substantivo entrou no escopo autorizado
+desta rodada; a persona "Agente 4" nunca foi adotada.
+
+**Pesquisa real executada antes de implementar** (WebSearch, fontes
+citadas no relatório): definição de Triângulo Ascendente/Descendente/
+Simétrico (FXOpen, ChartMill, Strike.money, Titan FX, Scanz — regra real
+de mínimo 2 toques por linha, convergente entre todas as fontes) e de
+Ombro-Cabeça-Ombro regular/inverso (LightningChart, Dukascopy, LuxAlgo,
+OANDA — neckline real, ombros aproximadamente simétricos medidos sobre a
+própria neckline).
+
+**2 motores novos, isolados e testados antes de qualquer graduação**
+(Laboratório de Evolução): `nexus/triangle-pattern.ts`
+(`detectTrianglePattern`, mínimos quadrados reais + R² real sobre os
+MESMOS swings fractais de `fractal-swings.js`; SIMÉTRICO nunca ganha uma
+direção fabricada — Regra de Ouro 3, a literatura confirma que o lado do
+rompimento não é geométrico) e `nexus/head-shoulders-pattern.ts`
+(`detectHeadAndShoulders`, reusa `buildAlternatingPivots` de
+`harmonic-patterns.ts` sem segunda implementação de zigzag; neckline
+real extrapolada por regressão de 2 pontos, ombros medidos ACIMA da
+neckline, nunca do preço bruto). 16 testes de execução real somados.
+
+**Graduação ao gráfico real** (reusa o pipeline já existente do melhor
+padrão harmônico, nunca uma segunda arquitetura de desenho): o vencedor
+único entre as 3 famílias (harmônico/Triângulo/H&S) é escolhido por
+`fitScore` desc e desenhado — harmônico como já era (polilinha XABCD/
+Wolfe + PRZ/EPA); Triângulo como 2 retas reais dedicadas (mínimos
+quadrados avaliados do 1º toque até o último candle) + preço real do
+ápice (interseção das 2 retas) quando à frente do candle atual; H&S como
+outline reusando a MESMA função de zigzag do harmônico + reta dedicada da
+neckline extrapolada. Painel lateral consolidado em um único "Chart
+Patterns · geometric fit, never probability" (nunca 3 painéis
+separados — "não é excesso demais", feedback já dado pelo Operador em
+rodada anterior). Toggle "HARMÔNICOS" renomeado para "PADRÕES GRÁFICOS"
+(mesmo id interno, zero migração de preferência salva) — agora cobre as
+3 famílias com honestidade.
+
+**Evidence Fusion Engine finalizado** — item que SYSTEM_HANDBOOK §6.72/
+§6.74/§6.76 (3 rodadas seguidas) classificou como "iniciativa de
+arquitetura própria, recomendado, nunca construído": `nexus/evidence-
+fusion.ts` (`fuseEvidence`) agrega `EngineSignal[]` de fontes JÁ reais e
+JÁ independentes (Conselho + Zonas Institucionais — 2º montador real,
+`deriveEngineSignalsFromInstitutionalZones`) em estatística REAL de
+cobertura/volume de evidência — nunca uma segunda pool de DIREÇÃO (LEI
+24 intacta, mesma linha vermelha do cabeçalho de `engine-signal-
+contract.ts`, repetida de propósito no novo arquivo). Scenario Engine
+deliberadamente EXCLUÍDO como 3ª fonte (documentado): `opinionWeight`
+já É a mesma massa de opinião do Conselho, somar as duas contaria a
+MESMA evidência 2x — a redundância que a própria Carta Branca pediu para
+eliminar, não multiplicar. Achado real de auditoria corrigido no
+caminho: `computeInstitutionalZones` já era calculado há várias rodadas
+só dentro do gráfico (`useMemo` local), sem NENHUMA fatia própria na
+store — `institutionalZones` ganhou os 4 lugares reais (state → actions
+→ defaults → seletor) e o gráfico agora TAMBÉM publica o mesmo array já
+computado (zero segundo cálculo). Novo consumidor real em
+`CouncilWidget`: linha "EVIDENCE FUSION · coverage, never a score" —
+cor SEMPRE neutra de propósito (nunca verde/vermelho), garantia visual
+de que a leitura nunca é lida como sinal direcional. Confirmado ao vivo
+via Playwright contra o dev server real: `1/7 válidos · 5/10 campos`,
+número real mesmo sob dados de mercado bloqueados pelo proxy do sandbox.
+
+**Etiquetas laterais — gate real de precisão** ("só mostrar a precisão
+maciça"): S1/R1 no eixo anti-colisão agora exigem `strength.label ===
+"FORTE"` (>=2 toques independentes reais, `STRONG_TOUCH_THRESHOLD` já
+existente em `support-resistance-engine.js` — zero limiar novo
+inventado). Achado de auditoria que tornou o gate significativo (não um
+no-op): `touches` nunca é 0 na prática (o próprio nível sempre conta a si
+mesmo), então "FRACA" significa literalmente "nenhum OUTRO swing
+independente confirmou esta zona ainda" — o caso genuinamente menos
+preciso. Regra de Ouro 4 preservada com cuidado: só a ETIQUETA fica mais
+rigorosa — a linha nativa (`supportLineRef`/`resistanceLineRef`,
+`useEffect` dedicado) e o valor real de support/resistance (usado pelo
+Core Engine/StructureLevelsStrip) continuam incondicionais, intocados.
+TP1/TP2/TP3 do Trade Plan/fallback do Núcleo deliberadamente NÃO
+ganharam o mesmo gate (documentado): são a informação mais acionável do
+sistema, esconder por força fraca removeria dado real que o Operador
+precisa mesmo quando ainda não confirmado 2x.
+
+**Auditoria "automático cobre tudo" + ícones**: verificado por inspeção
+direta de código (não uma suposição) — `DEFAULT_CHART_LAYER_AUTO_MODE` e
+`RELEVANCE_LAYER_IDS` já cobriam as 21 `CHART_LAYER_IDS` reais 1:1 antes
+desta rodada (TypeScript's `Record<ChartLayerId,boolean>` torna uma
+chave faltando um erro de compilação, não uma suposição barata); nenhuma
+camada nova foi criada nesta rodada (Triângulo/H&S reusam o id
+"harmonics" já existente), então nada ficou de fora. Radar já escaneia
+em `setInterval` real, não exige clique manual para o ciclo central.
+Inventário de ícones (App.tsx, 9 ícones do rail de navegação + ~19 do
+resto do app) revisado: zero duplicação semântica, zero placeholder/TODO
+encontrado — consistente com as 5+ rodadas de polimento visual dedicado
+já feitas antes desta (Lapidação Profissional do Gráfico, 2×Adendo,
+2×Polimento/Lapidação Visual). Achado honesto: nenhuma mudança de ícone
+foi necessária — inventar uma só para "fazer algo" violaria a disciplina
+de não adicionar mudança sem justificativa real já seguida em toda esta
+sessão.
+
+**Relatório completo**: `docs/historico/RELATORIO_CARTA_BRANCA_CIBORGUE_ELITE.md`.
+
+**Testes executados**: `tsc --noEmit` limpo · **134 arquivos / 2269
+testes** (100%, +48 novos: 9 Triângulo + 7 Ombro-Cabeça-Ombro + 9
+Evidence Fusion + 6 institutional-zones assembler + 11 consolidação
+Evidence Fusion Engine wiring + 6 institutional-zones store wiring, mais
+ajustes de janela/literal em testes de padrão pré-existentes shiftados
+pelas novas linhas — nenhum enfraquecido, todos continuam checando a
+mesma garantia real de antes, só a posição/texto exato mudou) ·
+`npm run build` ok (1850 módulos, 888,38 kB) · Playwright real contra o
+dev server: confirmado o toggle "PADRÕES GRÁFICOS" renderizando (troca
+de "HARMÔNICOS"), o painel "Chart Patterns" com o piso honesto de 75%
+FIT, e a linha "EVIDENCE FUSION" com dado real ao vivo — mesma limitação
+de ambiente já documentada em rodadas anteriores (proxy do sandbox
+bloqueia WebSocket real da Binance, gráfico fica honestamente em
+"AWAITING CANDLES…"; não impede a verificação da UI estática/painéis).
+
+### 6.82 "Ordem Oficial de Execução — Consolidação Final do AR10 Cyborg"
+(fase: transição de motores para um organismo único); relatório completo
+em `docs/historico/RELATORIO_CONSOLIDACAO_FINAL_ORGANISMO_UNICO.md`
+
+Diretriz formal, prioridade máxima, 11 prioridades numeradas: o foco muda
+de criar módulos novos para consolidar tudo já construído num organismo
+único. Teste explícito definido pela própria Ordem para toda decisão
+desta rodada: "torna o AR10 mais inteligente como organismo único, ou só
+adiciona mais um módulo? Se só adicionar complexidade: não implementar."
+
+**Prioridade 1 (auditoria total de redundância)**: 2 técnicas
+independentes — contagem de importadores reais por módulo `nexus/*.ts` e
+consumidores reais de cada seletor da store. Achado único, já conhecido
+desde a Ordem 04: `cross-exchange-service.ts`/`connection-manager.ts`
+continuam isolados de propósito (cutover WS/REST ao vivo, maior risco
+técnico do projeto). Zero seletor órfão na store.
+
+**Prioridade 3 (Evidence Fusion Engine vira centro de inteligência)**:
+v2 de `nexus/evidence-fusion.ts` mapeia as 9 dimensões pedidas contra o
+que já existe, honestamente — sem fabricar campo novo só para "bater a
+lista". `weightConsensus: number | null` (novo): desvio padrão real sobre
+os `weight` pooled de TODOS os sinais (não por fonte), normalizado pelo
+teto real de 0.5 (`weight` vive em `[0,1]`) — um único campo cobre
+consenso E conflito de propósito (mesma estatística, dois ângulos; dois
+campos seria a redundância que a própria P1 desta Ordem pede para
+eliminar). `relevance` (novo, passthrough em `EvidenceFusionSourceGroup`/
+`EvidenceFusionSourceBreakdown`): `fuseEvidence` nunca calcula
+relevância — recebe o `LayerRelevanceResult` REAL já pronto do CHAMADOR
+(`CouncilWidget`, mesma fatia `useLayerRelevanceSnapshot` do painel de
+camadas), mesmo raciocínio que `engine-signal-contract.ts` já usava para
+deixar `relevance` null por sinal individual (granularidade certa: o
+GRUPO de fonte, que mapeia 1:1 pra uma camada, não o sinal). Qualidade/
+maturidade/contexto continuam mapeados para campos já existentes da v1,
+sem duplicação. Estabilidade/consistência temporal/persistência
+DEFERIDAS, documentado — exigem série temporal real (ring buffer) que
+não existe ainda.
+
+**Prioridades 6/7 (reconfirmação Gráfico Inteligente/Etiquetas)**:
+auditoria, não reconstrução — 21/21 camadas reais seguem cobertas pelo
+Relevance Engine, `PriceLabelStackPlugin` já tem `alpha`/`side` reais
+(opacidade dinâmica + anti-colisão), só 2 arquivos em `chart/` chamam
+`fillText` direto (o próprio stack + 1 rótulo de sessão já refinado em 2
+rodadas). Achado novo e honesto, deliberadamente fora de escopo: 13 call
+sites de `series.createPriceLine` nativo (EQH/EQL, Premium/Discount,
+vencedor de padrão) e o stack customizado são 2 mecanismos de rótulo
+paralelos sem consciência um do outro — característica arquitetural
+observada, sem confirmação visual de colisão real; migrar quebraria o
+pareamento nativo linha+rótulo, um refactor real sem sintoma confirmado
+(a própria P1 desta Ordem pede o oposto).
+
+**Testes**: `tsc --noEmit` limpo · **134 arquivos / 2280 testes** (100%,
++11 novos: 6 `weightConsensus` + 3 `relevance` passthrough + 2 wiring; 5
+testes de padrão pré-existentes com assertions ajustadas à nova forma
+real, mesma garantia, nenhuma enfraquecida) · `npm run build` ok (1850
+módulos, 889,04 kB) · Playwright real contra o dev server (`localStorage`
+do cortão de acesso desbloqueado localmente, mecanismo não-adversário que
+o próprio `access-gate.tsx` documenta): `relevance` passthrough
+confirmado ao vivo ("Zonas Institucionais... relevante agora", valor
+real), `weightConsensus` corretamente `null` com 1 único peso disponível
+("sem amostra real (menos de 2 pesos)", nunca fabricado), zero erro de
+console novo, zero regressão de layout.
+
+### 6.83 "Ordem Oficial: Fechamento da Arquitetura" (última fase de
+consolidação) — relatório completo em
+`docs/historico/RELATORIO_FECHAMENTO_ARQUITETURA.md`
+
+Diretriz formal encerrando a fase de expansão do sistema. Diretriz
+Principal: não criar novos motores/contratos/camadas/módulos — só fazê-los
+trabalhar como um único ecossistema. Consequência aplicada à própria
+classificação pedida (IMPLEMENTAR AGORA / MANTER ISOLADO COM
+JUSTIFICATIVA TÉCNICA DEFINITIVA / DESCARTAR): IMPLEMENTAR AGORA só é
+válido para wiring/integração de código já existente, nunca construção
+nova.
+
+**§1 (pendências recorrentes)**: auditoria dos próprios relatórios das
+últimas ~8 rodadas + reconfirmação de cada status por leitura direta do
+código. 12 itens classificados com tabela completa no relatório. Achado
+que fecha uma pendência sem escrever código: a alegação "3 fades de
+plugins pendentes" (desde a Entrega 16) estava desatualizada —
+`SessionKeyLevelsPlugin`/`OrderFlowHeatmapPlugin` já têm decaimento real
+por render (`sessionGenerationWeight`/`computeRecencyWeight`),
+`LiquidationHeatmapPlugin` já decai por MAGNITUDE dentro do próprio motor
+(`ageAlpha(ageMinutes, LIQUIDATION_DECAY)` em
+`computeLiquidationHeatmap`, bucket de eventos velhos soma
+efetivamente zero) — retirado do backlog, não implementado.
+`cross-exchange-service.ts` e o backlog V-MAX (Liquidity Voids/Volume
+Clusters/Cross-TF/Footprint/Auto Layout) reconfirmados MANTER ISOLADO
+com justificativa definitiva (o 2º pela própria Diretriz Principal desta
+Ordem). `visual-budget.ts` TARGET/INVALIDATION/RADAR e o pacote
+`01_SYSTEM_ARCHITECTURE...11_FINAL_STATUS` classificados DESCARTAR, com
+motivo real cada um (não fonte de peso individual sem fabricar;
+estruturalmente incompatível com o modelo; 15+ rodadas sem necessidade
+real, já coberto por `SYSTEM_HANDBOOK.md`/`RELATORIO_*.md`).
+
+**§2 (Consolidação Definitiva)**: reconfirmado — consumidor real
+(mesma auditoria de 2 técnicas do §1), função clara + documentação
+(convenção estrutural já em vigor), integração completa (garantida
+estruturalmente por `noUnusedLocals`/`noUnusedParameters` permanentes +
+`tsc` limpo). Único gap real encontrado: `evidenceFusion` computado mas
+nunca publicado — fechado no próprio §3 desta rodada.
+
+**§3 (Evidence Fusion vira barramento)**: `evidenceFusion` ganhou os 4
+lugares reais na store (`unified-snapshot-store.ts`, mesmo padrão de
+`institutionalZones`/`layerRelevance`) — `CouncilWidget` publica a MESMA
+leitura já computada (zero segundo cálculo), agora com `useMemo` real
+(sem isto, `setEvidenceFusion` dispararia em todo render, não só em
+mudança real). Primeiro consumidor novo: `self-diagnostics.ts` ganha
+`evidenceFusionFieldCoverage` (mesma fórmula do painel "EVIDENCE FUSION")
+e um achado novo "Evidence Fusion · cobertura do contrato", severidade
+sempre OK (mesmo princípio de "Memória (heap JS)": sem limiar calibrado,
+nunca fabricar um corte). `consensus-radar.ts` avaliado e rejeitado como
+3ª fonte: 4 de suas 6 categorias são as MESMAS confidences dos votos do
+Conselho re-fatiadas — somar contaria a mesma evidência 2x, mesma razão
+que já excluiu Scenario Engine na Carta Branca.
+
+**§4 (Experiência do Operador)**: revisão linha a linha do painel CORE
+INTELLIGENCE — "SINCRONIZAÇÃO · IDADE DAS FONTES" mantido (defesa real
+contra confiar em dado velho, não ruído); as 3 linhas de confluência de
+"VALIDAÇÃO MULTI-CAMADA" medem 3 coisas genuinamente diferentes, fundir
+perderia sinal real; disclaimer financeiro aparece 1 única vez; painéis
+sempre-visíveis já são uma categoria arquitetural deliberada
+("ALWAYS-docked"). Resultado honesto: nenhuma redução nova — depois de
+10+ rodadas dedicadas de UX já reais, forçar um corte sem achado
+concreto seria a mesma fabricação de trabalho já evitada na auditoria de
+ícones da Carta Branca.
+
+**Testes**: `tsc --noEmit` limpo · **135 arquivos / 2291 testes** (100%,
++11 novos: 4 store-wiring de `evidenceFusion` + 2 self-diagnostics + 5
+assertions de padrão pré-existentes ajustadas à nova forma real,
+nenhuma garantia enfraquecida) · `npm run build` ok (1850 módulos, 889,78
+kB) · Playwright real contra o dev server: clique real em "GERAR
+RELATÓRIO DE AUTODIAGNÓSTICO" produziu `[OK] Evidence Fusion · cobertura
+do contrato — 50%...` — o mesmo número real do painel, agora também no
+relatório; zero erro de console novo, zero regressão de layout.
+
+### 6.84 "Ordem Final: Validação Integral do Ecossistema AR10 Cyborg"
+(homologação, zero código novo) — relatório completo em
+`docs/historico/RELATORIO_HOMOLOGACAO_FINAL_ORGANISMO.md`
+
+Ordem de homologação pura: comprovar com evidência real que o
+ecossistema funciona como um único organismo — sem criar/alterar nada.
+5 etapas.
+
+**Etapa 1 (auditoria)**: 2 técnicas de importador real (60/61 módulos
+com consumidor real; único isolado, `cross-exchange-service.ts`, já
+justificado 5+ rodadas) + auditoria de 40 seletores da store (39/40 com
+consumidor real; `useUnifiedSnapshot` reconfirmado falso-positivo de
+regex). **Achado investigado e resolvido**: `useEvidenceFusionSnapshot`
+tem zero chamadas como hook React — mas o VALOR tem 2 consumidores reais
+(`CouncilWidget` via `useMemo`, `self-diagnostics.ts` via
+`getSnapshotForEngine()`, a única forma válida dentro de um `onClick`,
+já que Hooks não podem rodar em callbacks) — não é código morto.
+**Dependência circular: zero**, confirmado por ferramenta (`madge
+--circular`) em 164 arquivos TS + 20 arquivos JS — primeira vez nesta
+sessão que este check específico roda com uma ferramenta dedicada, não
+auditoria manual.
+
+**Etapa 2 (execução real)**: Playwright contra dev server E build de
+produção (`vite preview`) — todos os 6 painéis do CORE INTELLIGENCE, os
+7 agentes do Council, Evidence Fusion, Chart Layers Panel ("ESTADO
+INTELIGENTE ADAPTATIVO"), Radar/OIH, Pattern Engine ("PADRÕES
+GRÁFICOS") e Self-Diagnostics confirmados ao vivo. 2 discrepâncias
+aparentes (falta de "Adaptativo"/"PADRÕES GRÁFICOS" num primeiro
+grep) investigadas a fundo e resolvidas como falhas do PRÓPRIO script
+de teste (case-sensitivity contra `text-transform: uppercase`; timing
+de sequência de cliques) — não da aplicação. Canvas do gráfico
+confirmado 0 nesta sandbox POR DESENHO (`chartData.length > 0 ?
+<Chart/> : <div>AWAITING...` — o componente inteiro só monta com
+candles reais).
+
+**Etapa 3 (integração)**: rastreamento real da cadeia de dependências
+corrige a sequência que a própria Ordem propôs — "Evidence Fusion →
+Council" está invertido (confirmado por import: `council.ts` tem ZERO
+referência a evidence-fusion; a direção real é Council → Evidence
+Fusion, uma das 2 fontes de entrada); Pattern Engine não é downstream
+do Motor Matemático (lê os mesmos candles brutos em paralelo); Market
+Structure é PARTE do Motor Matemático, não um estágio separado. A
+cadeia REAL funciona sem quebra, confirmada ao vivo (Council →
+Evidence Fusion com dado real mesmo sob rede bloqueada).
+
+**Etapa 4 (performance, só medir)**: bundle de produção com só 3
+requisições reais no boot (266 KB JS gzip + 11 KB CSS + 1 ícone;
+llm-worker/llm-bridge de 6 MB confirmados nunca buscados sem ativação
+do Neural Core) · `domContentLoaded` ~112ms, conteúdo montado ~340ms
+(localhost) · 60fps fluido · ~9MB heap JS. **Achado real de ambiente de
+teste, não de produção**: o Quant Worker WASM sempre reporta "não vivo"
+em teste local isolado — rastreado até a causa raiz exata: o arquivo
+físico vive em `ipad_runtime/workers/`, um nível acima de `ramber-ui/`,
+e só fica ao lado do `index.html` real pelo `cp -r dist/. ../` do
+workflow de deploy (`.github/workflows/deploy-ipad-pwa.yml:62`) — que
+roda só no CI, nunca num preview local isolado. Explica, pela primeira
+vez com causa raiz documentada, por que este check específico nunca
+passou em nenhuma verificação Playwright desta sessão inteira.
+
+**Etapa 5**: relatório único com as 10 seções exatas pedidas
+(arquitetura, fluxograma Mermaid, motores, responsabilidades,
+consumidores, dependências, fluxo de dados, gargalos, pendências reais,
+melhorias futuras só listadas).
+
+**Zero código de produção alterado** — só auditoria, execução real,
+medição e o relatório, conforme a própria Ordem pediu.
+
+---
+
+### 6.85 "Ordem Oficial: Consolidação Final do AR10 Cyborg" (Fase Final —
+"transformar todos os motores em um único organismo inteligente") —
+relatório completo em `docs/historico/RELATORIO_ORGANISMO_UNICO_FASE_FINAL.md`
+
+Segunda Ordem de consolidação pura em sequência (a Entrega 22 já tinha
+homologado o ecossistema): 10 diretrizes obrigatórias + uma Regra de
+Ouro única ("esta mudança torna o AR10 mais inteligente como organismo
+único, ou só adiciona complexidade?"). Aplicada a cada candidato de
+mudança considerado — nenhum sobreviveu ao teste.
+
+**As 8 dimensões pedidas da Evidence Fusion** (contexto/consenso/
+cobertura/qualidade/maturidade/relevância/conflito/leitura consolidada)
+já são campos reais em `nexus/evidence-fusion.ts` — mapeadas de novo,
+com leitura fresca do código atual (não do comentário de cabeçalho da
+Entrega 20): `qualidade` mapeada honestamente a `validSignals/
+totalSignals` (razão real derivável de 2 campos já existentes, zero
+campo novo) — distinta de `cobertura` (`fieldCoverage`, sobre o
+CONTRATO) mesmo sem ganhar seu próprio campo, porque criar um só para
+repetir o nome seria a mesma redundância que a Ordem anterior já pediu
+para eliminar.
+
+**Achado mais importante da rodada**: o diagrama que esta Ordem propõe
+no §3 (`Core Engine → Pattern Engine → Institutional Zones → Council →
+Evidence Fusion → Trade Plan → Painéis`) diverge do grafo real em 3
+pontos, confirmados por grep de import desta rodada — Pattern Engine lê
+os mesmos candles brutos em paralelo ao Core Engine (não é downstream);
+Institutional Zones não alimenta o Council; e, o ponto que importa,
+`buildTradePlan` NUNCA importa `evidence-fusion.ts` — consome só
+`council.stance`/`riskGated` + zonas estruturais brutas (OB/FVG/S-R/Fib/
+VP). Implementar a seta "Evidence Fusion → Trade Plan" literalmente
+introduziria uma segunda influência sobre o dado mais acionável do
+terminal — exatamente a "decisão paralela" que o §3 da própria Ordem
+proíbe e que a LEI 24 (reafirmada no §2 dela) já barra. O código atual
+obedece a intenção da Ordem melhor do que o diagrama literal dela — não
+corrigido para "bater" com o desenho.
+
+**Auditoria nova de `nexus/*.ts`**: as 10 ocorrências reais de import
+não-`type` entre módulos `nexus/*.ts` foram listadas e classificadas
+individualmente — todas caem em utilitário matemático puro (EMA→MACD,
+VWAP→bandas/Nexus Line, percentile compartilhado), infraestrutura
+(ConnectionManager, TypedEventBus), a API de leitura sancionada da
+Snapshot (`getSnapshotForEngine`), ou formatação read-only de uma
+decisão já fechada (`operational-readability.ts` ← `decision-layer.ts`).
+Zero caso de um motor consumindo a OPINIÃO de outro motor diretamente —
+a arquitetura já satisfaz "Motor → Store → Snapshot → Consumidor" (§5)
+sem nenhuma mudança.
+
+**Verificação**: `tsc --noEmit` limpo · `vitest run` 135 arquivos / 2291
+testes (100%, idêntico à Entrega 22 — zero código de produção mudou) ·
+`npm run build` 1850 módulos / 889,78 kB (byte-a-byte idêntico).
+Playwright não executado (zero superfície nova/alterada). Zero pendência
+reaberta.
+
+---
+
+### 6.86 "Ordem Oficial de Execução: Consolidação Final" (rodada 3,
+endereçada a "Agente 4") — relatório completo em
+`docs/historico/RELATORIO_ORGANISMO_UNICO_RODADA_3.md`
+
+Terceira Ordem de consolidação em sequência, mesmo conteúdo substantivo
+das duas anteriores. **Evento de segurança tratado antes de agir**: a
+mensagem chegou endereçada a "Agente 4 (Executor Principal)" com
+"Status: AUTORIZADO PARA EXECUÇÃO" e terminava com 5 repetições de um
+rodapé de interrupção/"continue" sem correspondência real nesta
+sessão — mesmo padrão do item 7 da Disciplina de Trabalho. Pausado via
+pergunta direta ao Operador antes de qualquer execução; confirmado como
+próprio (mesma resolução da vez anterior que "Agente 4" apareceu, na
+Carta Branca) — conteúdo substantivo autorizado, persona nunca adotada,
+rodapé de interrupção tratado como ruído.
+
+`git log`/`git status` confirmaram **zero drift** desde a Entrega 23
+(commit `0571ced` ainda `HEAD`) — reexecutar a mesma bateria de
+auditoria rodada minutos antes, sobre o mesmo código, não produziria
+achado novo. Relatório desta rodada é proporcionalmente mais curto:
+reconfirma §2-§10 por referência direta à Entrega 23 (mesmo código,
+mesma evidência) e investiga a fundo só o que é genuinamente novo — o
+diagrama desta Ordem posiciona "Core Engine (única decisão)" DEPOIS de
+Evidence Fusion, diferente das 2 Ordens anteriores. `grep` novo em
+`ipad_runtime/js/real-data/` (onde o Core Engine real calcula) confirma
+zero referência a `evidence-fusion` — o Core Engine é comprovadamente
+independente. Implementar essa seta do diagrama faria da Evidence Fusion
+"outro motor alterando a decisão", violando o §3 da PRÓPRIA Ordem
+("nenhum outro motor poderá alterar essa decisão") — mantido como está.
+
+Zero código de produção alterado; `tsc`/`vitest`/`build` não
+reexecutados (nenhuma mudança para invalidar os números já confirmados
+na Entrega 23 minutos antes).
+
+---
+
+### 6.87 "Ordem Oficial: Fase de Lapidação, Sincronia e Experiência do
+Operador" (endereçada a "Agente 4", 3ª vez) — relatório completo em
+`docs/historico/RELATORIO_LAPIDACAO_SINCRONIA_EXPERIENCIA.md`
+
+Diferente das 3 Ordens de consolidação anteriores (zero código novo):
+esta pede execução visual/UX real. Mesma Regra de Ouro aplicada a cada
+candidato antes de implementar. "Agente 4" reconfirmado sem elemento
+novo de suspeita — mesma resolução já estabelecida.
+
+**Auditoria com 2 agentes de exploração em paralelo + Playwright real**
+encontrou 3 achados concretos entre os 9 pontos pedidos:
+
+1. **§3/§5/§6 (o achado central)**: Nível 1 (`MarketDirectionWidget`) e
+Nível 3 (`CouncilWidget`/`GmilContextWidget`) vivem nas MESMAS gavetas
+fechadas por padrão (App.tsx:774-775); dentro da gaveta, Nível 4
+(`TelemetryHealthWidget`) não tem diferenciação visual de Nível 3. O
+único texto que já sintetizava BIAS/SETUP/ENTRY/RISCO/CONFLUÊNCIA em
+linguagem (`buildOperationalSummary`) só chegava ao Operador via
+`title=` — tooltip que o próprio código já documentava nunca aparecer
+em toque no iPad Safari. **Implementado**: `buildNarrativeSummary()`
+(novo, `operational-readability.ts`) reusa os MESMOS eixos já
+derivados/testados + `reasonsFor`/`reasonsAgainst` de
+`decision-layer.ts` — zero motor novo, só prosa em vez de linhas
+rotuladas; fail-closed por construção (decision null/INSUFFICIENT_DATA
+vira frase honesta de ausência). `NarrativeSummaryCard` exibe o texto
+como parágrafo VISÍVEL, primeiro item da gaveta "Core Intelligence" —
+confirmado ao vivo via Playwright mostrando o texto fail-closed
+correto sob rede bloqueada. Reestruturar as gavetas em si (Nível 1
+sempre visível fora de qualquer gaveta) foi avaliado e propositalmente
+NÃO tentado — alto blast-radius sobre o TopBar/chrome já muito
+ajustado, sem captura real do Operador confirmando o problema em uso.
+
+2. **§9 (redundância real)**: `engine.confidence` aparecia com 2
+rótulos diferentes — "CONFIANÇA" (App.tsx:4319) e, mais grave, um
+falso cognato "Conviction (Core Engine)" (App.tsx:7655) colidindo com
+o sistema DE FATO chamado Conviction (`convictionReading.conviction`,
+massa de opinião de 3 subsistemas). Corrigido: renomeado para
+"Confiança (Core Engine)" — 1 linha de texto, zero lógica.
+
+3. **§7 (responsividade, reconfirmada limpa)**: Playwright real em 6
+breakpoints (iPad Mini portrait/landscape, iPad Air, iPad Pro, Desktop,
+Ultrawide) — zero scroll de página em qualquer um. Um alarme falso
+("342 elementos overflowing") investigado até a causa real: as gavetas
+fechadas usam `transform: translateX(±110%)` (off-canvas), então
+`getBoundingClientRect()` nos filhos reporta a posição fora da tela por
+design — não é overflow real. Reconfirmado com a gaveta aberta de
+verdade: 320px fixos, dentro do viewport nas 3 larguras testadas.
+
+**Demais seções (§1, §2, §4, §8) reconfirmadas já satisfeitas** com
+evidência fresca (paleta consistente exceto 1 âmbar já documentado como
+intencional; sincronização garantida por Store única + React;
+`visual-budget.ts` já cobre BOS/CHOCH/FVG/OB/Liquidez/Trade Plan;
+coerência visual sem achado novo) — nenhuma mudança fabricada onde não
+havia gap real.
+
+**Testes**: `tsc --noEmit` limpo · 135 arquivos / 2296 testes (100%,
++5 novos de `buildNarrativeSummary`) · `npm run build` ok (1850
+módulos, 891,75 kB, +1,97 kB evidência real do código novo) ·
+Playwright real confirmou o card "LEITURA CONSOLIDADA" ao vivo e zero
+overflow nos 6 breakpoints.
+
+---
+
+### 6.88 "Ordem Entrega 26: Lapidação Visual Final + Experiência
+Operacional" — relatório completo em
+`docs/historico/RELATORIO_ENTREGA_26_LAPIDACAO_FINAL.md`
+
+10 Prioridades; 6 delas (1, 2, 5, 7, 9, 10) repetem frentes que a
+Entrega 25 auditou horas antes com evidência fresca e concluiu já
+satisfeitas — referenciadas, não reauditadas. O trabalho real desta
+rodada concentrou-se no que era genuinamente novo ou pendente.
+
+**Prioridade 4 — a pendência da Entrega 25, agora FECHADA.** A Entrega
+25 encontrou que Nível 1 e Nível 3 viviam nas mesmas gavetas fechadas
+por padrão, mitigou parcialmente e registrou a raiz no backlog com um
+gatilho declarado ("uma captura de tela real do Operador"). Esta Ordem
+diz literalmente "Sem abrir gavetas. Sem procurar informações." — é o
+gatilho, por escrito. Implementado `ContextReadStrip`: faixa nova na
+LINHA 2 do cabeçalho (a mesma linha sempre visível de
+`TradePlanTopStrip`/`StructureLevelsStrip`), com 4 leituras que os
+motores JÁ produziam e que só apareciam dentro de gavetas — REGIME
+(`engine.marketRegime` + o mesmo `REGIME_DISPLAY` do painel), FLUXO
+(sinal do CVD, mesma regra do mesmo painel), RISCO
+(`deriveRiskState`), CONFLUÊNCIA (`deriveConfluenceState`). Zero
+cálculo novo (travado por teste que proíbe `Math.*`/`reduce(` no
+bloco), zero sistema visual novo (reusa `BarField`, atendendo a
+Prioridade 5), zero redundância com a linha 1 (direção e score ficam
+deliberadamente de fora — travado por teste), fail-closed campo a
+campo.
+
+**Verificação ao vivo + correção do próprio método**: a primeira sonda
+Playwright usava `body.innerText` e reportou os 4 rótulos presentes —
+**falso positivo**, porque gavetas fechadas usam `translateX(±110%)`,
+que tira da tela mas não de `innerText`; ela estava lendo os rótulos
+homônimos DENTRO das gavetas. Refeita por geometria
+(`getBoundingClientRect`) + ancestralidade (`closest`): RISCO=ELEVADO e
+CONFLUÊNCIA=INSUFICIENTE confirmados a `top:46px`, fora de qualquer
+gaveta, em iPad Air e iPad Mini portrait, `hOverflow:0`. REGIME e FLUXO
+corretamente ausentes — sem candles nesta sandbox não existe regime nem
+CVD, e o fail-closed fez o campo sumir em vez de inventar. O resultado
+real (2 ao vivo, 2 corretamente ausentes) é mais fraco que o primeiro
+relatado, e é o que vale.
+
+**Prioridade 8**: `buildNarrativeSummary(decision, context?)` ganhou 2º
+parâmetro OPCIONAL `{ regimeLabel, flow }` — contexto real repassado
+pelo chamador, nunca calculado no módulo (mesmo precedente de
+`EvidenceFusionSourceGroup.relevance`). Fail-closed testado por
+igualdade literal: omitir o parâmetro e passá-lo vazio produzem a mesma
+string.
+
+**Prioridade 6 — 1 achado real**: das 19 animações em `App.tsx`, 18 são
+condicionais a estado real (conexão viva, microfone falando, ciclo em
+andamento) e foram mantidas; o botão "Sincronizar Agora" pulsava
+PERMANENTEMENTE, independente de estado — movimento constante com zero
+informação. Removido.
+
+**Prioridade 3 — NÃO implementada, com motivo**: "distância até o alvo/
+percentual/ATR restante" não existem como valor calculado hoje;
+produzi-los seria cálculo novo na interface, que a própria Ordem proíbe
+duas vezes. Registrado no backlog: o caminho honesto é um motor puro
+derivá-los com testes, nunca a UI inline.
+
+**Testes**: `tsc` limpo · 136 arquivos / 2308 testes (100%, +12 novos) ·
+build 1850 módulos / 893,77 kB (+3,99 kB, evidência do código novo) ·
+Playwright real em 2 resoluções. 1 asserção minha foi corrigida durante
+a verificação (confundia posição no arquivo com aninhamento de JSX —
+a barra de comando é definida depois das gavetas, mas não está dentro
+delas).
+
+---
+
+### 6.89 "Ordem Oficial: Etapa de Lapidação Matemática e Visual" —
+relatório completo em `docs/historico/RELATORIO_LAPIDACAO_MATEMATICA.md`
+
+Ordem legítima (sem endereçamento a persona fictícia) fechando
+explicitamente a fase de criação de motores novos: só upgrades de
+precisão em cima do que já existe, gate duplo (justificativa matemática
+real + evidência de que ficou mais preciso, não só mais complexo).
+
+**Auditoria dos engines nomeados contra a definição de referência**:
+ADX/DI de Wilder (`regime-engine.js`), RSI/ROC/ATR de Wilder
+(`lorentzian-classifier.js`), MACD (`macd.ts`), VWAP + bandas de
+desvio-padrão ponderado por volume (`vwap.ts`/`vwap-bands.ts`), linear
+opinion pool de Stone/DeGroot (`council.ts`), pivots/Fibonacci
+(`support-resistance-engine.js`) — todos conferidos e confirmados
+corretos contra a literatura. Nenhuma "modernização" cosmética aplicada
+a nenhum deles.
+
+**O único gap real, pesquisado antes de implementar**: o classificador
+k-NN Lorentziano já citava a técnica de referência (jdehorty, "ML:
+Lorentzian Classification") só para a métrica de distância. `WebSearch` +
+`WebFetch` confirmaram que a técnica original tem uma segunda
+característica não portada — espaçamento cronológico mínimo de 4 barras
+entre vizinhos candidatos, documentado pelo próprio autor como necessário
+para "prevenir viés de agrupamento temporal no treino." Motivo real:
+RSI/ROC/ATR% são recorrências sobre janela móvel — sem espaçamento, os
+k=8 vizinhos mais próximos tendem a vir todos da mesma janela contígua
+recente (1 tendência contada 8 vezes, não 8 analogias independentes),
+inflando a confiança reportada sem ganho real de evidência.
+
+**O que foi portado e o que não foi**: só a ideia com justificativa
+estatística real (o espaçamento) — não o mecanismo de seleção por
+streaming do Pine original (`lastDistance` crescente + FIFO), que é uma
+aproximação motivada pelo orçamento de execução por-barra do TradingView,
+não uma técnica superior ao top-k por ordenação completa que este motor
+já faz em JS. Portar aquele mecanismo teria sido só complexidade sem
+ganho.
+
+**Implementação**: nova constante `CHRONOLOGICAL_SPACING = 4`, filtro de
+uma linha no laço que constrói o `trainingSet` (`i % 4 === 0`), ancorado
+no índice ABSOLUTO do candle — nunca relativo ao candle atual, para
+preservar a invariante já testada de que anexar 1 candle novo nunca pode
+crescer `sample_size` em mais de 1. Qualquer par de múltiplos de 4 difere
+em ≥4 por construção, então o pool já sai mutuamente espaçado sem
+reimplementar a aproximação do original. Tradeoff documentado com
+honestidade em `metadata.limitations`: pool de treino efetivo caiu de
+~60-80 para ~15-20 pontos — mais rigor estatístico, mais casos honestos
+de `DADOS_INSUFICIENTES` em janelas pequenas.
+
+**Interface**: nenhuma mudança necessária — `App.tsx` já exibe "k-NN
+LORENTZ. {classificação} · {confiança}% (n={sample_size})" sem nunca usar
+a palavra "probabilidade" e sempre mostrando o `n` real; um `n` menor e
+mais honesto flui pelo mesmo caminho.
+
+**Visual (DIRETRIZ 5-7)**: Entregas 25/26 (mesma sessão, horas antes) já
+auditaram hierarquia/ruído/cores/camadas com evidência fresca —
+referenciadas, não reauditadas. Verificação direta feita: o rótulo
+"k-NN LORENTZ." (única superfície de UI que este achado toca) confirmado
+fail-closed e livre de linguagem de probabilidade.
+
+**Testes**: `tsc` limpo · **136 arquivos / 2311 testes (100%, +3 novos)**
+— valor da constante, contagem exata do pool espaçado (prova que o
+filtro está ativo, não é comentário morto), propriedade de espaçamento
+mútuo · build 1850 módulos / 893,78 kB (+0,01 kB, consistente com poucas
+linhas em um único módulo) · `git diff --stat` confirma só os 2 arquivos
+pretendidos tocados.
+
+---
+
+### 6.90 "Ordem Oficial: Fase de Lapidação de Elite" (EPC-05) — relatório
+completo em `docs/historico/RELATORIO_EPC05_LAPIDACAO_ELITE.md`
+
+Quinta mensagem "Agente 4", sem elementos novos de suspeita — conteúdo
+autorizado, persona nunca adotada. A lista de plataformas de referência
+desta Ordem repete quase palavra por palavra a DIRETRIZ 6/7 da Entrega 27
+— não reauditada. Foco real: `src/orderflow/signal-engine.js` (motor
+OFI/Absorption/Exhaustion, porta byte-a-byte de `golden-master.html`),
+nunca lido nem testado por esta sessão antes, apesar de já alimentar o
+Conselho, `trap-detection.ts` e o feed "MEXC ORDERFLOW" visível.
+
+**Achado 1 — nomenclatura**: pesquisa real (`WebSearch`) confirmou que o
+Order Flow Imbalance formal (Cont/Kukanov/Stoikov 2010/2014) é definido
+sobre EVENTOS DO LIVRO DE OFERTAS (mudança de fila no melhor bid/ask) —
+não sobre trades executados. O que este motor calcula sob o mesmo nome
+"OFI" é um desequilíbrio real de volume agressor (compra vs. venda) sobre
+trades — métrica real e útil, mas estruturalmente diferente do conceito
+acadêmico. O projeto não tem (nem pode fabricar, Regra de Ouro 1) fonte
+L2 real — só o poller público de trades da MEXC — então o OFI acadêmico é
+honestamente impossível aqui. Renomear a string de tipo em runtime
+divergiria do vocabulário do próprio `golden-master.html` (protegido) —
+risco desproporcional para uma imprecisão de nome. Corrigido via
+**documentação honesta** (cabeçalho + `metadata`), zero mudança de
+comportamento.
+
+**Achado 2 — zero cobertura de teste**: `processSignals`/
+`createEngineState` nunca tiveram teste de execução real apesar de já
+alimentarem decisão de confluência em produção. Novo
+`signal-engine.test.ts`, 15 testes reais: CVD, OFI (janela real de 400,
+limiar 0.6, volume mínimo 100, cooldown real de 500ms via
+`vi.useFakeTimers`), ABSORPTION (janela real de 5s, gate de preço 0.1%,
+volume mínimo 500), EXHAUSTION (só dispara com os DOIS portões reais —
+z-score extremo E reversão de preço — nunca com o pico de delta sozinho).
+
+**Achado colateral, registrado sem tentativa e erro**: `reversalConfirmation:
+0.2` de produção exige 20% de movimento de preço em só 10 trades para
+confirmar reversão — uma barra alta para o cadenciamento real de tick da
+MEXC. Sem dado real de estatística de tick nesta base para julgar
+calibração, o número foi documentado honestamente (código +
+relatório), **nunca alterado por suposição** — a própria Ordem proíbe
+"tentativa e erro".
+
+**Efeito colateral**: escrever o 1º consumidor TS real do motor expôs
+falta de JSDoc em `processSignals`/`Signal.metadata` (TS inferia tipos
+literais estreitos demais). Corrigido com `@typedef`/`@param` reais —
+zero mudança de runtime, benefício para qualquer consumidor futuro.
+`src/orderflow/` (pasta protegida, só extensões aditivas): nenhuma linha
+de cálculo tocada, só comentários/JSDoc/metadata.
+
+**Testes**: `tsc` limpo · **137 arquivos / 2326 testes (100%, +15
+novos)** · build 1850 módulos / 893,78 kB (byte-idêntico — confirma zero
+mudança de comportamento de produção) · `git diff --stat` confirma só 2
+arquivos de `src/orderflow/` + 1 teste novo tocados.
+
+---
+
+### 6.91 "Ordem Mestra — AR-10 CYBORG" (47 seções) — relatório completo em `docs/historico/RELATORIO_ORDEM_MESTRA.md`
+
+Texto original não sobreviveu literalmente à compactação de contexto
+desta sessão — relatório é síntese honesta por tema (não pontuação
+item-a-item do checklist de 30 itens original, que não está mais
+disponível verbatim), evidenciada por commit/arquivo/teste real.
+
+**Entregue nesta Ordem**: provedor real DefiLlama (GMIL categoria ONCHAIN
+sai do `null`, `gmil/providers/defillama-provider.ts`, 15 testes) ·
+renomeação "Modo Operacional/Inteligência/Auditoria" → "Preset ..." no
+painel Camadas do Gráfico (achado: "Modo" lia como 2º cérebro decisório
+mesmo sendo só preset de visibilidade, risco cosmético vs. LEI 24) ·
+pesquisa real (WebSearch) + documentação honesta dos bloqueios
+estruturais de MT5 (nenhuma API pública alcançável por `fetch()` de
+navegador — toda rota real exige processo fora do navegador ou
+credencial de corretora a terceiro) e calendário macro (nenhuma fonte
+keyless/CORS-aberta; caminho alternativo real documentado — schedule
+estático curado de `bls.gov`/`federalreserve.gov` — não construído sem
+decisão do Operador).
+
+**Achado real fora do pedido original, corrigido do mesmo jeito
+(Disciplina de trabalho §1)**: 3 bugs reais confirmados por auditoria
+contra um documento externo separado ("Plano de Evolução Orgânica") que
+pedia vocabulário biológico obrigatório + arquitetura wrapper-only —
+ambos rejeitados pelo Operador via `AskUserQuestion` em favor do estilo
+direto já estabelecido. Bugs reais corrigidos: `worker-client.terminate()`
+nunca rejeitava promises pendentes (chamada em voo ficava presa para
+sempre); `quant-worker.compute_series` era o único dos 3 handlers de
+cálculo sem guarda upfront contra `window` inválido; `mexc-trades-
+stream.tradesToTicks()` fabricava tick com `Number(null)===0` (mesma
+classe de bug já corrigida antes em `tradfi-delayed-yahoo.js`).
+
+**2º achado fora do pedido original, mesmo padrão**: verificação
+Playwright real (exigida por CLAUDE.md para toda mudança de UI, mesmo o
+rename cosmético dos botões) capturou um erro de CSP não relacionado —
+`api.llama.fi` bloqueado por `connect-src` incompleta, MESMA classe de
+bug que este projeto já tinha documentado ter acontecido com
+`api.bybit.com`/`www.okx.com` antes. Auditoria estática subsequente (todo
+host `https://` do código-fonte contra a allowlist) achou uma 2ª
+ocorrência pré-existente: `query1.finance.yahoo.com`. Ambos corrigidos +
+nova trava de regressão permanente (`production-seal.test.ts`, "diretriz
+5") para que uma 3ª ocorrência não dependa de alguém abrir o DevTools por
+acaso.
+
+**Testes**: `tsc` limpo · **159 arquivos / 2589 testes (100%)** · build
+ok · verificação Playwright real (dev server + Chromium do ambiente,
+viewport 430×932 `hasTouch:true`).
+
+---
+
+### 6.92 Fechamento honesto do ADITIVO V-MAX (Etapas 2-15, task interna
+#82) — "execute tudo, habilite todos os modos ativos" (autonomia total
+concedida pelo Operador, aplicada dentro do READ_ONLY permanente)
+
+Pedido do Operador (informal, direto): rodar tudo que falta, sair do modo
+"só teste interno", "habilitar todos os modos ativos". Uma leitura
+possível ("modo ativo" = execução real de ordens) é permanentemente
+proibida por este mesmo arquivo — confirmado via `AskUserQuestion` antes
+de agir; o Operador respondeu concedendo autonomia total em vez de
+escolher uma opção. Interpretação aplicada, ancorada no próprio texto
+deste arquivo ("a reformulação não muda o que o código faria" e "carta
+branca... você faz a escolha mais correta"): verificação/execução
+completas dentro da arquitetura READ_ONLY já existente + fechar
+honestamente o backlog interno "ADITIVO V-MAX Etapas 2-15" (#82), aberto
+desde §6.42 e nunca fechado de ponta a ponta.
+
+**0. Auditoria de um documento externo antes de construir ("Bíblia da
+Evolução")**: mesmo padrão do "Plano de Evolução Orgânica" (§6.91) — um
+2º documento externo (v2.0, mesma dupla de personas fictícias) pedindo
+vocabulário biológico obrigatório + arquitetura `nervous-system/`
+wrapper-only + reorganização de 44 dias/9 fases, com "15 Bugs Críticos".
+Rejeitado via `AskUserQuestion` (Operador escolheu "Auditar + corrigir
+bugs reais, sem vocabulário novo"). Auditoria dos 15 achados contra o
+código REAL antes de qualquer fix: 2 já corrigidos nesta sessão, 1
+repetia uma alegação já derrubada, 6 eram falsos (código já correto),
+5 reais + 1 cosmético corrigidos (commit `5307fca`):
+`worker-client.js`/`quant-worker.js`/`binance-liquidations-stream.js`/
+`analysis-frame.js` tinham 3 símbolos duplicados fora de `shared/
+symbols.js` (novo, `SYMBOL_TO_USDT_PAIR`, único agora); `mexc-trades-
+stream.js.start()` disparava `cycle()` sem `.catch()` no primeiro tick
+(mesmo idioma fire-and-forget já usado em `gmil-orchestrator.ts`,
+faltava só neste ponto); `quant-worker.compute_series` sempre computava
+`rollingSma`/`rollingZ` mesmo quando o chamador não pedia (agora
+condicional via `includeRolling`); `binance-liquidations-stream.js`
+`onopen` não checava `stopped` antes de resetar o backoff (mesma classe
+de bug já corrigida em outros streams); `analysis-frame.js` usava
+`Math.min(...array)`/`Math.max(...array)` — `RangeError` real em arrays
+muito grandes (>~100k elementos), substituído por acumulador com a MESMA
+semântica de propagação de NaN. 1 achado cosmético: comentário
+esclarecendo um `if` defensivo genuinamente inalcançável em `probe.js`.
+
+**1. Chart Integrity Engine (Etapa 17 do V-MAX) — motor novo, commit
+`328f048`**: auditoria prévia (Disciplina de trabalho item 1) achou que o
+`cancelled` do efeito `runCycle` em `App.tsx` já evita a PIOR forma de
+desync (ciclo velho sobrescrevendo a seleção nova de symbol/timeframe) —
+mas isso é um invariante IMPLÍCITO, sem sinal visível se um refactor
+futuro quebrar a guarda. `nexus/chart-integrity.ts` (motor puro,
+`computeChartIntegrity`) torna isso EXPLÍCITO: 4 estados (`SYNCED`/
+`SYMBOL_MISMATCH`/`STALE_DATA`/`DADOS_INSUFICIENTES`), staleness
+calculada como 3× o intervalo real da barra (`TIMEFRAME_MS`, reusado de
+`aura-lifecycle.ts`, nunca redefinido). Graduado: `engine-bridge.ts`
+passa `symbol`/`timeframe`/`candleAgeMs` como passthrough puro (mesmos
+valores já usados no ciclo, nunca uma 2ª leitura); nova Row "INTEGRIDADE
+DO GRÁFICO" no painel SYSTEM HEALTH, mesma paleta `DATA_QUALITY_COLOR`
+das outras 3 linhas de qualidade. 17 testes (10 motor puro + 7 fiação).
+Verificado AO VIVO nesta rodada (Playwright, dev server real): a Row
+renderiza e mostra corretamente `DADOS_INSUFICIENTES` ("AGUARDANDO")
+porque este sandbox não tem egress real para Binance (túnel do proxy
+recusa o WebSocket) — o caminho fail-closed é o único verificável aqui
+sem rede real, e é o mais importante dos 4 (prova que o motor nunca
+fabrica um `SYNCED` falso quando não há candle real).
+
+**2. Organism Health — widget persistente (Etapa 19) + Footprint
+RECUSADO (Etapa 18, achado que virou decisão) — commit `5454194`**:
+`self-diagnostics.ts` (relatório profundo, 10 achados) já existia mas é
+SOB DEMANDA (clique). `nexus/organism-health.ts` (motor puro,
+`computeOrganismHealth`) fecha a lacuna oposta: um veredito agregado
+SEMPRE VISÍVEL, reduzindo os MESMOS 8 sinais já nomeados linha a linha no
+painel (Bus/Suficiência/GMIL/Integridade do Gráfico/FPS/Latência do
+Ciclo/offline/Worker WASM — 3 deles promovidos de inline para const
+nomeada, só para permitir o reuso, zero segunda medição) a "pior sinal
+vence", com um 4º degrau `AGUARDANDO` que nunca é mascarado como OK nem
+como CRITICAL (ausência real de medição ≠ problema confirmado — Regra de
+Ouro 3). Nova Row "SAÚDE DO ORGANISMO", primeira do painel, mesma
+paleta. 18 testes (12 motor puro + 6 fiação). Verificado ao vivo: valor
+de pior caso ("CRÍTICO · Integridade do gráfico", a combinação mais
+longa possível) não estoura a largura do próprio painel nem causa scroll
+de página.
+
+Investigação paralela de Footprint (motor de volume-por-preço-POR-
+CANDLE) esbarrou num achado estrutural: `volume-profile.ts` já
+documentava que não existe tick stream real de Binance Futures neste
+codebase (só klines/liquidations via `forceOrder`/probes REST de
+premium-index) — confirmado de novo por grep direto (`aggTrade`/`@trade`
+— zero ocorrência em `binance-futures-public.js`). O único tick stream
+real do repositório é MEXC Spot, outro mercado. Um Footprint honesto
+precisa de compra-vs-venda dentro do MESMO candle; bucketar ticks MEXC
+Spot dentro de candles Binance Futures atribuiria fluxo de ordens de UM
+mercado a candles de OUTRO — uma classe de dado fabricado mais grave que
+a aproximação OHLCV já declarada do próprio Volume Profile (que ao menos
+preserva o mesmo instrumento/período). **Decisão: RECUSADO**, registrada
+no próprio `volume-profile.ts` (mesmo padrão da nota de escopo honesta
+que já vivia ali) — não construído até existir um tick stream real de
+Binance Futures neste codebase.
+
+**3. Fechamento de #234 (Volume Clusters / Cross-Timeframe Liquidity)**:
+reconfirmados nesta rodada, sem mudança de estado — Volume Clusters
+continua **RECUSADO** (duplicaria Volume Profile como conceito
+distinto); Cross-Timeframe Liquidity continua **RECUSADO** (documentado
+em `multi-timeframe-engine.ts`: Volume Profile/Liquidez ficam fora do
+escopo da Fase Ω v1 por custo de Worker sem necessidade para a pergunta
+central "os prazos concordam?"). Mesma distinção AUSENTE-vs-RECUSADO já
+formalizada em `MAPA_EVOLUCAO_CIBORGUE.md`.
+
+**4. Correção de registro: "Adaptive Zoom" não está AUSENTE** — achado
+de auditoria (Disciplina de trabalho item 1) ao investigar o que
+realmente falta no V-MAX antes de fechar #82: várias entradas deste
+handbook (§6.42, e uma reconfirmação posterior "por grep") classificam
+Adaptive Zoom como AUSENTE, mas §6.79 já tinha entregue e documentado
+"primeira fatia real" (`EnhancedChart_110_Percent.tsx`:
+`smartZoomPendingRef`/`SMART_ZOOM_CANDLES`/`SMART_ZOOM_RIGHT_PAD_BARS` —
+reenquadra as últimas 120 velas + 6 de folga ao trocar symbol/timeframe,
+nunca sobre dado velho, nunca em tick) e §6.42/§221 outro ângulo
+(`nexus/chart-viewport.ts`, janela de candles adaptativa). Confirmado
+por grep direto nesta rodada: ambos os arquivos e símbolos continuam
+reais no código atual, não regrediram. Estado real, honesto: **PARCIAL**
+— reenquadre automático funciona na troca de contexto; o que
+genuinamente falta (zoom reativo contínuo a volatilidade/regime, fora de
+uma troca de symbol/timeframe) nunca foi construído nem prometido, e não
+foi tentado nesta rodada (escopo novo de motor, pesquisa própria, fora
+do que esta rodada já grande comporta com segurança).
+
+**5. Auto Layout (Etapa 18, #240) — fechamento honesto de escopo**:
+`scripts/audit-header-maxcontent.mjs` (11 viewports reais, iPad→
+ultrawide) cobre 3 superfícies reais com fixture de PIOR CASO de
+conteúdo (não só estado vazio): TopBar (3 zonas + chips), gaveta Market
+Intelligence (MarketDirectionWidget + MarketBiasDecisionCard) e o painel
+Síntese Operacional da aba ANALYSIS — correção de registro: entradas
+anteriores diziam "TopBar + 1 painel", são na verdade 3 superfícies
+distintas, todas com fixture dedicada. O que fica de fora, honestamente:
+os demais painéis widget (SYSTEM HEALTH, CouncilWidget, OPORTUNIDADES,
+Publication Studio, Chart Layers) usam os MESMOS primitivos responsivos
+(`flex`/`overflow-y-auto scrollbar-hide`/`min-h-0`) mas nunca passaram
+pelo mesmo script de regressão multi-viewport com fixture de pior caso —
+estender o script para cada um exigiria uma fixture bespoke por painel
+(o próprio script já mostra o quanto de mutação DOM manual cada
+superfície pediu) — escopo real de uma rodada própria, não tentado aqui.
+Como este próprio round adicionou 2 Rows novas ao painel SYSTEM HEALTH
+(Chart Integrity + Organism Health), a superfície que efetivamente
+mudou nesta rodada foi verificada ao vivo (item 2 acima) — não a
+totalidade dos painéis, mas a fatia real que este trabalho tocou.
+
+**6. Fechamento de #82**: com os 13 itens nomeados de Etapas 2-15 agora
+com estado real e decidido (IMPLEMENTADO: Chart Integrity, Liquidity
+Void, ferramentas institucionais, Radar MEXC-wide, Data Quality, Market
+Regime→Relevance, Organism Health · PARCIAL com fatia real registrada:
+Adaptive Zoom, Auto Layout · RECUSADO com razão registrada: Volume
+Clusters, Cross-Timeframe Liquidity, Footprint) — nenhum item
+silenciosamente esquecido — a task interna #82 é fechada nesta entrada.
+PARCIAL não é IMPLEMENTADO: os 2 gaps nomeados acima (zoom reativo a
+volatilidade; cobertura do audit script para os demais painéis)
+continuam reais e abertos para uma rodada futura, não fabricados como
+concluídos aqui.
+
+**Testes**: `tsc --noEmit` limpo · **165 arquivos / 2643 testes (100%)**
+· `npm run build` ok (1869 módulos) · verificação Playwright ao vivo em
+2 rodadas (Chart Integrity + Organism Health, dev server real, viewport
+430×932 `hasTouch:true`) — únicos erros de console são os já conhecidos
+de rede bloqueada pelo proxy do sandbox (WebSocket `forceOrder` para
+`fstream.binance.com`), nunca um erro da aplicação.
+
+**Riscos conhecidos**: este sandbox nunca teve egress real para Binance
+em nenhuma verificação desta sessão — todo veredito `SYNCED`/`OK` dos 2
+motores novos ficou coberto só por teste de execução real (unitário),
+nunca visto ao vivo com dado de mercado de verdade; os 2 gaps PARCIAIS
+documentados no item 6 continuam reais.
+
+---
+
+### 6.93 Memo de 20 seções ("CALCULAR MUITO. MOSTRAR POUCO. EXPLICAR SOB
+DEMANDA.") — mapeamento honesto contra o código real, sem escrever
+código ainda (a própria ordem do memo: "MAPEAR. Depois: POC. Depois:
+BENCHMARK. Somente então integrar." / "EXECUTAR EM ETAPAS. NÃO FAZER
+BIG-BANG.")
+
+Pedido do Operador: memo de 20 seções (Lightweight Charts como engine
+único, Visual Intelligence Layer entre Decision Engine e o gráfico, modo
+padrão enxuto, progressive disclosure, Evidence Graph, Five Pillars,
+semântica de RISK como WARNING não-gate, Web Workers/WASM, Data Fabric,
+DuckDB-WASM para histórico/replay, IA auxiliar via ONNX/Transformers.js,
+WebGPU opcional, disciplina iPad-first, orçamento visual, anti-colisão,
+zero look-ahead, suíte de testes com benchmark de candles, regra de
+não-regressão, processo MAPEAR→POC→BENCHMARK→integrar). Zero código
+alterado nesta rodada — só auditoria, conforme o próprio processo que o
+memo pede.
+
+**Precedente direto, não redescoberto do zero**: a Diretriz Nº 02
+(`docs/historico/RELATORIO_DIRETRIZ_02_INTELIGENCIA_VISUAL.md`) já pediu
+quase o mesmo pipeline (`Motores → Knowledge Graph → Evidence Fusion
+Engine → Quality Governor → Meta Engine → Core Engine → Visual
+Intelligence Layer → Gráfico`) e decidiu, com razão documentada, **não**
+tentar a inversão completa numa rodada (alto blast-radius: tocaria os
+12+ plugins de canvas + `EnhancedChart_110_Percent.tsx` inteiro de uma
+vez, baixíssima reversibilidade) — construiu só a peça concreta e segura
+(`nexus/visual-budget.ts`, isolado, **nunca ligado a nenhum componente
+vivo até hoje**: confirmado de novo nesta auditoria, zero import fora do
+próprio teste). Esse relatório continua a referência viva sobre por que
+a inversão completa não foi tentada — nada neste memo novo invalida esse
+raciocínio; pelo contrário, o próprio memo pede a mesma cautela
+("não fazer big-bang").
+
+**O que mudou desde a Diretriz Nº 02**: `nexus/evidence-fusion.ts` foi
+construído (Carta Branca, §6.7x-6.8x) — consumidor real de
+`engine-signal-contract.ts` (Conselho + Zonas Institucionais), mas
+**estritamente não-direcional**: mede cobertura/consenso/dispersão sobre
+a evidência agregada, nunca combina em score ou direção (LEI 24 intacta
+por construção, não por convenção). Ainda não é o "Evidence Graph" com
+dependências `source → engine → signal → pillar → decision` que este
+memo novo pede — é o degrau anterior (agregação plana, sem grafo de
+dependência nem pilares nomeados).
+
+**Correção sobre a própria auditoria acima, feita minutos depois de
+escrita (erro meu, não do código)**: a frase logo acima ("`visual-
+budget.ts`... nunca ligado a nenhum componente vivo até hoje: confirmado
+de novo nesta auditoria, zero import fora do próprio teste") estava
+**errada** — baseada só no que o relatório da Diretriz Nº 02 dizia na
+época, sem grep fresco contra `EnhancedChart_110_Percent.tsx` antes de
+afirmar "confirmado de novo". `resolveVisualBudget` está, de fato,
+importado e ativo lá (linha ~2275), com `docs/historico/
+RELATORIO_ORDEM_03_IMPLEMENTACAO_OPERACIONAL.md` e `RELATORIO_ORDEM_04_
+CONSOLIDACAO.md` documentando a graduação real: 4 das 7 categorias
+declaradas em `VISUAL_BUDGET_PRIORITY_ORDER` já têm candidato real e
+competem por orçamento visual ao vivo — `INSTITUTIONAL_ZONE` (Zonas
+Institucionais), `TRADE_PLAN` (zona do plano), `STRUCTURE` (BOS/CHOCH,
+S1/R1, Fibonacci) e `MAIN_LIQUIDITY` (FVG/Order Block não-obstáculo). As
+3 restantes (`TARGET`, `INVALIDATION`, `RADAR`) ficaram deliberadamente
+de fora, com razão técnica real documentada no §4 do Ordem Nº 04 (não
+esquecimento): `TARGET`/`INVALIDATION` não têm hoje uma fonte de peso
+PRÓPRIA e isolada por objeto individual (TP1/TP2/TP3, linha de STOP) —
+`TradePlanZonePlugin.tsx` trata o plano inteiro como uma zona única, já
+graduada; inventar peso por alvo individual sem uma fonte real seria a
+fabricação que a Regra de Ouro 2 proíbe. `RADAR` não tem hoje um objeto
+visual próprio desenhado no canvas do gráfico (vive em painel separado)
+— graduar exigiria construir um objeto novo só para a categoria, não
+uma consolidação do que já existe. As linhas 2 e 14 da tabela abaixo
+foram corrigidas para refletir este estado real — nenhuma outra linha
+desta tabela foi re-verificada por este mesmo erro, mas cada uma cita
+sua própria evidência (arquivo/grep), não memória.
+
+**Mapeamento por seção, evidência real (não memória):**
+
+| # | Seção do memo | Estado real |
+|---|---|---|
+| 1 | Gráfico (Lightweight Charts, Primitives) | Mantido, sem substituição cogitada. Uso de Primitives modernas (Series/Pane Primitives) não auditado plugin-a-plugin nesta rodada — a maioria dos ~14 plugins de canvas usa a API de `addSeries`/canvas overlay clássica, não as Primitives novas da lib; migração seria uma auditoria própria. |
+| 2 | Visual Intelligence Layer | **Parcial, disperso, não consolidado — mas mais real do que a auditoria inicial (corrigida acima) reconheceu.** `layer-relevance.ts` (mostra/esconde camada) + `visual-budget.ts` (**ativo ao vivo, 4/7 categorias**, ver correção acima) + `chart-layer-depth.ts` (profundidade) já fazem, cada um separadamente, uma fatia real do que o memo pede como camada única — nenhuma delas é código morto. Falta só o NOME/módulo consolidado, não a função. |
+| 3 | Modo padrão do gráfico | **Já é a direção que a sessão vem tomando** (§29/§30 desta PR: declutter da navegação, correção de sobreposição) mas o memo pede uma lista literal fixa (candles/volume/estrutura/traço roxo/FVG-OB relevantes/Trade Plan/invalidação/decisão/1 seta) que hoje **não é o padrão real** — `layer-relevance.ts` decide dinamicamente por relevância, não por uma lista fixa deste tamanho. Divergência real a resolver com decisão explícita (é isto que o memo pede, ou é a relevância dinâmica que já existe?). |
+| 4 | Progressive disclosure (LABORATORY) | Existe em espírito (`ChartLayersPanelContent`, "Estado Inteligente Adaptativo", resumo por padrão + controle completo 1 clique abaixo) mas sem o vocabulário "LABORATORY" nem o ciclo explícito ativação→visualização→fechamento→retorno. |
+| 5 | Evidence Graph | **Gap real.** `engine-signal-contract.ts` + `evidence-fusion.ts` existem mas são agregação PLANA (contagens/cobertura), não um grafo com dependências nomeadas nem pilares. `fractal-swings.js` (a atenção especial que o memo pede) já é módulo único compartilhado por 17+ consumidores reais (`research/engines/*`, `nexus/*`, `engine-bridge.ts`) — a preocupação do memo ("não duplicar") já está satisfeita na prática, mesmo sem um Evidence Graph formal por cima. |
+| 6 | Five Pillars | **Nome não existe no código.** O que existe é `council.ts` — 7 agentes (Liquidity/Structure/Orderflow/Risk/Manipulation/Fibonacci/Momentum), categorização diferente dos 5 pilares nomeados pelo memo (STRUCTURE/LIQUIDITY/MOMENTUM/CONTEXT/RISK). `docs/SYSTEM_HANDBOOK.md §7` já tem uma tabela A-E (DIREÇÃO/ESTRUTURA/TIMING/RISCO/CONTEXTO) que é a peça mais próxima — também não os mesmos 5 nomes. Formalizar os Five Pillars exigiria decidir explicitamente se substituem, resumem ou coexistem com essas duas classificações já reais — decisão de arquitetura, não implementação mecânica. |
+| 7 | Risk (WARNING ≠ gate) | **Já correto hoje.** `RR_QUALITY_FLOOR = 2` (`nexus/rr-quality.ts`) é usado como sufixo textual de aviso (`rrFloorSuffix`), nunca bloqueia a leitura do Núcleo — confirmado por grep, nenhum consumidor usa o piso como gate de decisão. |
+| 8 | Performance (Workers/WASM) | **Já real.** 4 Workers dedicados (`llm-worker.ts`, `backtest-worker.ts`, `orderflow-heatmap-worker.ts`, `conviction-cyclone-worker.ts`) + `quant-worker.js` (estático, servido em produção) + WASM real (`cyborg_quant_core.wasm`/variante SIMD) para Volume Profile/TrustScore (Regra de Ouro 6 do CLAUDE.md, já não-negociável). Benchmark formal de FPS/latência/CPU por contagem de candles (item 17 do memo) não existe como suíte própria. |
+| 9 | Data Fabric | **Já é a arquitetura real** — `market-data-bus/` como fonte canônica por `symbol:timeframe`, WS como caminho principal (§20 desta mesma PR: migração Spot→Futures), REST reservado a bootstrap/histórico/reconciliação. Já documentado em `docs/MARKET_DATA_FABRIC.md`. |
+| 10 | DuckDB-WASM | **Ausente, e o memo já concorda que deve ficar assim até POC.** Zero presença no repositório. Nenhuma ação requerida agora — é exatamente o que o memo pede ("não introduzir ainda sem benchmark"). |
+| 11 | IA (ONNX/Transformers.js) | **Ausente.** O único caminho de IA hoje é `llm-bridge.ts`/`llm-worker.ts` via `@mlc-ai/web-llm` (Llama 3 local, WebGPU) para síntese tática em linguagem natural — opt-in, isolado, nunca gera LONG/SHORT (mesma linha vermelha que o memo pede). ONNX Runtime Web/Transformers.js seriam um caminho PARALELO para classificação/resumo, não construído. |
+| 12 | WebGPU | **Parcial.** Já usado, mas só dentro do caminho do LLM (`llm-worker.ts`, `voice-dispatcher.ts`, `synthetic-reading.ts`) — não existe hoje uma arquitetura "GPU-ready" genérica para o motor quantitativo, com WASM como fallback formal. |
+| 13 | iPad-first | **Disciplina permanente já real** — Regra de Ouro 7 do CLAUDE.md (60 FPS, zero scroll de página), testado em Chromium com viewport iPad Pro 11" em múltiplas rodadas desta sessão (§4, §27, §29 desta PR). Nunca testado em dispositivo físico. |
+| 14 | Visual Budget | **Já existe, já com o nome certo, e já ativo ao vivo** — `nexus/visual-budget.ts`, graduado (Ordem Nº 03/04) para 4 das 7 categorias declaradas; as 3 restantes ficaram de fora por falta real de fonte de peso individual (`TARGET`/`INVALIDATION`) ou de objeto visual próprio (`RADAR`), não por esquecimento. |
+| 15 | Anti-colisão | **Já real e maduro** — `price-label-stack.ts`, usado por 10+ famílias de rótulo (S1/R1/VWAP/NL/EMA/TREND/ENTRY/STOP/TARGET/CHOCH e mais), extensivamente testado ao longo desta sessão inteira (§10-§13, §25-§27 desta PR). |
+| 16 | Zero look-ahead | **Já é princípio testado** — `structural-backtest.js` (walk-forward, 521 janelas), `structural-swings-trace.test.ts` (zero-look-ahead explícito), replay sem look-ahead documentado em §6 deste handbook. |
+| 17 | Testes (benchmark de candles) | **Fechado nesta mesma rodada (Stage 1, carta branca) — `tools/benchmark-chart-render.mjs`.** Mede o `createChart`+`addSeries(CandlestickSeries)` REAL (mesma chamada de `EnhancedChart_110_Percent.tsx`) em 500/1k/5k/10k candles sintéticos: setData(ms), FPS real por amostragem de `requestAnimationFrame`, p95 de frame, heap JS. Rodado de verdade neste sandbox (Chromium via Playwright, já disponível no ambiente): 58-60 FPS em todas as contagens, p95 de frame ~16.7-16.8ms (teto real de 60Hz), heap subindo linearmente 4,3MB→21,5MB. Limitação honesta, documentada no próprio script: Chromium headless aqui, não Safari/iPad real; só a série de candles, sem os ~14 plugins de overlay; execução única, sem repetição estatística. |
+| 18 | Não-regressão (Core/Decision/Risk/Evidence Graph semantics) | Já é a disciplina de fato desta sessão inteira (LEI 24, "execute somente esta alteração", citado literalmente em §23/§28 desta PR) — nunca formalizado como checklist único. |
+| 19 | Processo (MAPEAR→POC→BENCHMARK→integrar) | **Esta entrada é exatamente isso** — o mapeamento, sem código. |
+| 20 | Princípio final | Já é o vocabulário real desta sessão (Regra de Ouro 2/3, LEI 24, "declaração ≠ realidade") só sem o slogan "CALCULAR MUITO. MOSTRAR POUCO." |
+
+**Stage 1 escolhido e executado nesta mesma rodada, sob carta branca do
+Operador**: entre as candidatas (graduar `visual-budget.ts` — já feita,
+ver correção acima; consolidar a Visual Intelligence Layer nomeada; POC
+de DuckDB-WASM; benchmark formal de candles/FPS), escolhi o benchmark
+(item 17) — menor risco real (zero código de produção tocado, ferramenta
+de bancada isolada fora de `npm run verify`/CI) e o único que produz dado
+que as outras decisões (consolidar a camada, avaliar DuckDB-WASM/WebGPU)
+vão precisar depois. Ver linha 17 da tabela acima e `tools/benchmark-
+chart-render.mjs` (+ `tests/benchmark-chart-render.test.ts`, 6 testes de
+execução real para o gerador de candles sintéticos). Próximo passo real
+ainda em aberto: consolidar a Visual Intelligence Layer nomeada, ou POC
+isolado de DuckDB-WASM — nenhum dos dois tentado nesta rodada.
+
+---
+
+### 6.94 "ORDEM 2 — FUTURE MAP / TRADE PLAN / REVERSAL ENGINE" (29 seções)
+— mapeamento honesto + `trade-plan-view.ts` (compositor puro, zero motor
+novo)
+
+Pedido do Operador: memo de 29 seções pedindo a camada de análise
+OPERACIONAL do AR10 (companheira do memo de 20 seções da §6.93, que era
+sobre a camada visual) — Trade Plan unificado (DIRECTION/ENTRY/
+INVALIDATION/T1-T3/REVERSAL ZONES/CONFIDENCE STATE/SCENARIO/STATUS),
+Future Path Engine, Reversal Engine (3 tiers), Liquidity Map ranqueado,
+Trade Semantics (`DIRECTION != ENTRY`, `ENTRY != CURRENT PRICE`
+automático), P1 Five Pillars, P3 Evidence Graph, cenários BASE/
+ALTERNATIVE/INVALIDATION, zero look-ahead, hierarquia visual, testes
+obrigatórios. Regra explícita: *"O objetivo NÃO é criar um indicador
+novo... reutilizar os componentes existentes"* (§2) — a mesma disciplina
+de auditar antes de construir que já rege este projeto inteiro.
+
+**Achado central: a maior parte já existe, sob vocabulário diferente —
+auditoria seção-a-seção, arquivo por arquivo, nunca por memória:**
+
+| Seção da Ordem 2 | Estado real |
+|---|---|
+| §17 Purple Structural Trace | **JÁ CONSTRUÍDO, exatamente como pedido** — `StructureTracePlugin.tsx` (§23 da PR #16 desta mesma sessão, "MD-7 Visual Confidence Trace"): linha fina, cor `projection`, pivôs fractais CONFIRMADOS (`fractal-swings.js`), nunca um 2º ZigZag. |
+| §18 Direction Arrow | **JÁ CONSTRUÍDO, exatamente como pedido** — `ConfidenceDirectionArrowPlugin.tsx` (mesma §23): LONG↑/SHORT↓/WAIT=nada, deliberadamente na posição OPOSTA de `plan-markers.ts` para nunca ser confundida com ENTRY — "DIRECTION ≠ ENTRY" já é comentário literal no código. |
+| §3/§8 Trade Semantics (`NOT_DEFINED`/`MARKET`/`LIMIT`/`TRIGGER`) | **Já resolvido, com vocabulário diferente — construir um 2º classificador duplicaria.** `deriveEntryState()` (`operational-readability.ts`) já responde exatamente "existe confirmação de timing AGORA?" a partir de preço-dentro-da-zona-real-ou-não: `ENTRY_CONFIRMED`≈MARKET, `WAITING_FOR_RETEST`≈LIMIT, `NO_ENTRY`/`ENTRY_INVALIDATED`≈NOT_DEFINED. `TRIGGER` não tem análogo real: `trade-plan.ts` só constrói entradas do lado de PULLBACK (suporte para LONG/resistência para SHORT), nunca do lado de rompimento — não fabricado. |
+| §4 Trade Plan (forma única) | **Ingredientes reais existem em 5 sistemas separados, nunca compostos numa view única** — `trade-plan.ts` (direction/entry/stop/targets/R:R reais), `signal-track-record.ts` (status de ciclo de vida), `scenario-engine.ts` (pathA/pathB com invalidation embutida), `reversal-detector.ts` (leitura de reversão), `institutional-score.ts` (confiança qualitativa). Fechado nesta rodada — ver abaixo. |
+| §11 Cenários BASE/ALTERNATIVE/INVALIDATION | **Já existe, nome diferente** — `scenario-engine.ts`'s `pathA`/`pathB`, cada `ScenarioPath` já carrega `invalidation` (nível real) embutido — nunca um 3º objeto separado. |
+| §12 Probabilidade qualitativa | **Já correto hoje** — `institutionalConfidenceZone()` banda o score real 0-100 em 5 tiers (MUITO_FORTE/FORTE/MODERADA/FRACA/INVALIDA), nunca uma % fabricada (Regra de Ouro 2 já em vigor). |
+| §15 Zero look-ahead | **Já é princípio testado** — mesma cobertura já citada na §6.93 (walk-forward real, `structural-swings-trace.test.ts`). |
+| §25 Não alterar o homologado | **Já é a disciplina real desta sessão inteira** (LEI 24, "execute somente esta alteração" — citado literalmente §23/§28 da PR #16). Nada em `trade-plan-view.ts` toca Core Engine/Decision Engine/Risk architecture. |
+| §6 Reversal Engine (3 tiers: REACTION ZONE/REVERSAL WATCH/CONFIRMED REVERSAL) | **Parcial — só o tier mais forte existe.** `reversal-detector.ts` já produz uma leitura real de reversão CONFIRMADA (CHoCH real ou flip real do SuperTrend, nunca BOS — que é continuação, não reversão) e já está graduado (`App.tsx`, linha ~2351). REACTION ZONE (antes de qualquer rompimento) e REVERSAL WATCH (alerta antecipado) exigiriam lógica de proximidade NOVA — que nível? que limiar de distância? — gap real, não inventado nesta rodada para não fabricar um piso sem justificativa (Regra de Ouro 2). |
+| §7 Liquidity Map (ranking BUY/SELL-SIDE, EQH/EQL, stop clusters) | **Parcial.** `selectSharedZoneHighlights()` (`liquidity-significance.ts`) já ranqueia por significância real (`SHARED_ZONE_HIGHLIGHT_SLOTS=3`) — mas para zonas Order Block/FVG, não especificamente EQH/EQL/liquidity pools que a Ordem pede. Gap real, não fechado. |
+| §13 P1 Five Pillars (nomes exatos STRUCTURE/LIQUIDITY/MOMENTUM/CONTEXT/RISK) | **Nome formal ainda não existe** (mesmo achado da §6.93) — `council.ts` tem 7 agentes com categorização diferente; `SYSTEM_HANDBOOK.md §7` tem uma tabela A-E também diferente. Decisão de arquitetura (substituir? resumir? coexistir?), não mecânica. |
+| §14 P3 Evidence Graph (genealogia, "quantas fontes realmente independentes") | **Parcial, mais alinhado do que a §6.93 tinha percebido.** `evidence-fusion.ts` já EXCLUI deliberadamente o Scenario Engine como fonte própria porque `ScenarioPath.opinionWeight` já é a MESMA massa de opinião do Conselho — exatamente o "não contar a mesma fonte duas vezes" que a Ordem 2 §2/§14 pede. Ainda não é um grafo com dependência NOMEADA (`source → engine → signal → pillar → decision`) — continua agregação/contagem, não uma estrutura de grafo navegável. |
+
+**Solução aplicada — Stage 1, escolhido por ser o de menor risco real
+entre os candidatos (mesma disciplina de "carta branca, nunca big-bang"
+já estabelecida na §6.93):** `nexus/trade-plan-view.ts` (novo, puro,
+Laboratório de Evolução — isolado, zero import por nenhum componente
+vivo, confirmado pelo build idêntico: mesmos 1937 módulos, mesmos bytes
+de bundle antes/depois). `composeTradePlanView()` é PURAMENTE um
+compositor — nenhum campo é calculado, cada um é passthrough real ou
+mapeamento de enum já existente: `entry`/`invalidation`/`targets`/`R:R`
+vêm direto de `TradePlan`; `status` resolve entre `TrackedPlanStatus`
+(plano já aberto) e `NexusSetupState`/`NexusEntryState` (antes de existir
+plano) — nunca os dois ao mesmo tempo; `confidenceState` é o tier
+qualitativo real de `institutionalConfidenceZone()`; `reversal` é
+passthrough integral de `ReversalReading`, nunca reinterpretado num tier
+mais fraco; `scenario.base`/`scenario.alternative` escolhem entre
+`pathA`/`pathB` pela direção real do plano (ou a convenção real de
+`scenario-engine.ts` quando não há plano ainda).
+
+22 testes de execução real (`tests/trade-plan-view.test.ts`): os 6
+valores de `status` cobertos por transição real (incluindo "plano real
+existe mas 1º ciclo ainda sem tracked status → ACTIVE, nunca WAIT");
+passthrough real de entry/invalidation/targets; os 5 tiers de confiança
++ `DADOS_INSUFICIENTES` honesto; passthrough por identidade de
+`ReversalReading`; resolução de BASE/ALTERNATIVE para LONG e para SHORT
++ a convenção real sem plano; pureza (mesma entrada → mesma saída, nunca
+muta o `TradePlan` recebido); contrato versionado.
+
+**O que este round honestamente NÃO fez, do memo maior:** graduar
+`trade-plan-view.ts` a um painel/canvas visível (fica Laboratório de
+Evolução, mesma disciplina de `visual-budget.ts` antes de sua própria
+graduação, §6.93) — próxima rodada, com sua própria verificação visual;
+Future Path Engine (§5, projeção visual discreta do caminho — maior,
+toca desenho no gráfico); Reversal Engine com os 3 tiers completos (§6,
+gap real registrado acima); Liquidity Map EQH/EQL ranqueado (§7, gap
+real registrado acima); Five Pillars/Evidence Graph formais (§13/§14,
+decisão de arquitetura, não mecânica).
+
+`npm run verify`: **256 arquivos / 4385 testes**, tsc limpo, build
+idêntico em módulos/bytes ao commit anterior — confirmando isolamento
+real, não só declarado.
+
+> **Graduação (03/09/2026, pedido direto do Operador: "gradue os dois"):**
+> `trade-plan-view.ts` deixou de ser Laboratório de Evolução.
+> `composeTradePlanView()` está ligado ao ciclo real dentro de
+> `SecondaryModuleView` (aba ANALYSIS) — cada input já é uma leitura já
+> exibida em outro painel desta mesma view (`tradePlan`/`trackRecord.active`/
+> `scenario`/`institutionalScore.score`/`reversalAlert`), e o único campo
+> genuinamente novo na tela é `status` (`ModuleStat label="Status"`, painel
+> "Trade Plan"), que resume ACTIVE/TARGET_REACHED/INVALIDATED/etc. num só
+> lugar em vez de o Operador combinar 3 painéis mentalmente. Verificado ao
+> vivo via Playwright (dev server real): a aba ANALYSIS renderiza sem
+> crash e sem erro novo de console — mas o campo `Status` em si nunca foi
+> visto renderizado com um `TradePlan` real neste sandbox (zero egress,
+> então nunca há plano real aqui); a lógica está coberta por 22 testes de
+> `composeTradePlanView()` + 5 testes novos de fiação
+> (`trade-plan-view-graduation-wiring.test.ts`). Ainda NÃO fez: Future
+> Path Engine, Reversal Engine com os 3 tiers, Liquidity Map EQH/EQL,
+> Five Pillars/Evidence Graph — os mesmos gaps de antes, inalterados por
+> esta graduação.
+
+---
+
+### 6.95 "ORDEM 3 — PROFESSIONAL MARKET TERMINAL" (37 seções) —
+mapeamento honesto + `terminal-event-log.ts`, compositor puro sem motor
+novo
+
+Terceira ordem da mesma família (memo de 20 seções §6.93; Ordem 2 de 29
+seções §6.94) — desta vez sobre o TERMINAL em si: multi-asset,
+multi-timeframe, context-aware, um único `MARKET SNAPSHOT`/`ANALYSIS
+SNAPSHOT` por symbol:timeframe:timestamp, isolamento arquitetural entre
+ativos/timeframes, Terminal Header/Chart Header com status real, Terminal
+Event Log, Layer Trace, state machine formal, audit trail, testes
+extensivos (troca de ativo/timeframe, race condition, cache
+contamination), responsividade iPad, performance.
+
+**Achado central, auditoria arquivo-a-arquivo (nunca por memória):** a
+maior parte da visão desta Ordem já existe — e mais madura do que a
+suposição inicial de "terminal cripto simples" sugeriria.
+
+| Seção da Ordem 3 | Estado real |
+|---|---|
+| §2/§27 Symbol Selector / Universal Asset Contract | **Já existe, multi-asset-class de verdade.** `src/market-data-bus/instrument-registry.js` (392 linhas) — catálogo real de futuros CME (EQUITY_INDEX/EQUITY/METALS/ENERGY/RATES/FX, tick size/value pesquisados via WebSearch, nunca inventados) + `marketMode: "CRYPTO" \| "TRADFI"` já real em `App.tsx`, com seletor, sessão persistida, e `tradfi-delayed-connector.js`. Cripto não é a única classe de ativo suportada. |
+| §6-8 Market Snapshot / Data Synchronization | **Já é a arquitetura real** — `market-data-bus/bus.js`, fonte canônica por `symbol:timeframe` (já documentado em `CLAUDE.md`). `unified-snapshot-store.ts` (5 domínios: Mercado/Séries/Motores Quant/Cérebro/Organismo) é o "Analysis Snapshot" real, só sem esse nome. |
+| §19/§22/§24 Timestamp Integrity / Real Data Status / Latency | **Já existe, vocabulário diferente.** `market-data-bus/quality-engine.js`+`quality-monitor.js`: Data Quality Layer real POR `symbol:timeframe`, 4 dimensões (latência/disponibilidade/consistência/estabilidade) → `QUALITY_CLASSIFICATION` (EXCELENTE/SAUDAVEL/DEGRADADA/QUARENTENA/DADOS_INSUFICIENTES) — não é literalmente LIVE/DELAYED/STALE/OFFLINE/ERROR, mas cobre a mesma função com mais rigor (score contínuo + circuito de quarentena por sequência de falhas). |
+| §20/§21 Multi-Asset/Multi-Timeframe Isolation | **Já corrigido numa rodada anterior, achado real registrado no próprio código.** `App.tsx` (`seriesMatchesTimeframe`, `fetchSymbolData`): comentário explícito ("Diretriz de Evolução Geral do Organismo — auditoria de sincronização") documenta que o guard `cancelled` só cobria troca de ATIVO — trocar de timeframe durante um fetch em voo podia misturar duas grades na mesma série. Já corrigido com captura de `tfNoInicio` antes do await + verificação dupla (ativo OU timeframe mudou) depois — path de rede E path de hidratação do IndexedDB, ambos comparados linha a linha nesta auditoria. `fetchDerivatives` (funding/OI) usa só o guard de ativo, corretamente — funding/OI não dependem de timeframe. |
+| §25 Performance Monitor | **Já existe, painel dedicado, já fora da UI operacional** — Widget "SYSTEM HEALTH" (`App.tsx`): saúde do organismo, qualidade do Bus, suficiência de dados, qualidade GMIL, integridade do gráfico, variante WASM, latência do ciclo (rotulada com o timeframe!), FPS real, memória JS — exatamente §25, já separado do painel operacional principal. |
+| §29 Terminal + Graph Link | **Já é regra estrutural testada** — `NexusDecision` (`decision-layer.ts`) é a ÚNICA fonte que qualquer consumidor visual lê; "nenhum consumidor visual recalcula direção/entrada/stop/alvo — todos leem o mesmo `NexusDecision`" já é frase literal deste handbook (§2), provada por teste. Chart e terminal divergirem no mesmo snapshot já é estruturalmente impossível, não uma disciplina visual. |
+| §18 Layer Trace | **Parcial — infraestrutura real, granularidade menor que a pedida.** `nexus/stage-runner.ts` já expõe `STAGE_ORDER = ["DATA","CORE_ENGINE","COUNCIL","TRADE_PLAN","NEXUS_DECISION"]` (5 estágios, não os 9 da Ordem) com `traceStages()` real; `nexus/self-diagnostics.ts` já consome isso + Health Monitor + Data Quality Layer num relatório sob demanda (`buildDiagnosticReport`/`formatDiagnosticReportMarkdown`, ligado em `App.tsx`). Gap real: não é uma UI expansível camada-por-camada, é markdown gerado sob pedido. |
+| §17 Terminal Event Log | **Gap real, fechado nesta rodada (Stage 1) — ver abaixo.** |
+| §3 Timeframe Selector (disponibilidade real por ativo) | **Gap real.** Nenhum `availableTimeframes` por instrumento — o seletor assume o mesmo conjunto fixo para todo ativo, nunca consulta a fonte real. |
+| §30 Professional State Machine (11 estados nomeados) | **Gap parcial — estados reais existem, espalhados, vocabulário diferente.** `NexusSetupState`/`NexusEntryState` (operational-readability.ts), `TrackedPlanStatus` (signal-track-record.ts), `QUALITY_CLASSIFICATION` (quality-engine.js), `engineStatus: 'ok'\|'error'\|'pending'` — nenhum se chama `INITIALIZING`/`SYNCING`/`SIGNAL_DEVELOPING` etc., e unificar sob um único enum arrisca duplicar o que já existe (mesmo risco já registrado na §6.94 para Five Pillars) — não tentado nesta rodada. |
+| §31 Audit Trail | **Parcial.** `TrackedPlan.contextAtOpen` (signal-track-record.ts) já congela score/regime/VWAP/Nexus Line no instante da abertura — reconstrução parcial real. Não existe uma trilha completa ligando evidência→motor→decisão por decisão individual (isso é o mesmo Evidence Graph com genealogia já registrado como gap na §6.94). |
+
+**Solução aplicada — Stage 1:** `nexus/terminal-event-log.ts` (novo, puro,
+Laboratório de Evolução — isolado, build idêntico ao commit anterior).
+Fecha o gap mais concreto e explicitamente exemplificado da Ordem (§17,
+com formato literal no próprio texto: `"12:43:21 [MARKET] BTCUSDT 5m
+snapshot updated"`). Descoberta que tornou isto possível sem inventar
+nada: `nexus/event-bus.ts` já é um `TypedEventBus` real com 22 tipos de
+evento REAIS, publicados hoje por `OrganismOrchestrator`/Health
+Monitor/CrossExchangeService (o próprio arquivo documenta, por auditoria
+anterior, que só os 3 eventos `DATA.*` não têm publicador vivo ainda,
+porque `cross-exchange-service.ts` não é iniciado nesta fase — decisão
+deliberada, não esquecimento). `formatTerminalLogEntry()` não fabrica
+nenhuma mensagem: cada linha é um `switch` sobre o tipo real do evento,
+lendo só campos que o payload real já carrega — payload nulo vira
+"cleared"/"unavailable" honesto, nunca um valor inventado.
+`appendTerminalLogEntry()` é o ring buffer real (piso de 200 entradas,
+convenção declarada, mesma natureza de outros pisos deste repositório).
+
+15 testes de execução real (`tests/terminal-event-log.test.ts`): o
+exemplo literal da própria Ordem (`DATA.CANDLES_UPDATED` → "BTCUSDT 5m
+snapshot updated"); cada categoria mapeada a partir do NOME real do
+evento (nunca uma reclassificação por conteúdo); payload nulo → mensagem
+honesta em 3 famílias diferentes de evento; array real contado, nunca
+redigitado; `HEALTH.CHANGED` com campo `null` virando "n/d"; ring buffer
+com descarte real das entradas mais antigas, imutabilidade, e fail-closed
+em `max` inválido (0/negativo/NaN cai no default, nunca trunca pra
+buffer vazio).
+
+**O que este round honestamente NÃO fez:** graduar `terminal-event-log.ts`
+a um painel visível (fica Laboratório de Evolução, mesma disciplina de
+`visual-budget.ts`/`trade-plan-view.ts` antes de suas próprias
+graduações — a próxima rodada assina o `core.bus` de verdade e monta o
+painel); `availableTimeframes` por instrumento (§3); state machine
+unificada (§30, risco real de duplicar o que já existe sob nomes
+diferentes); Layer Trace com a granularidade de 9 estágios pedida (§18,
+hoje 5 reais); Audit Trail completo com genealogia por decisão (§31,
+mesmo gap do Evidence Graph já registrado na §6.94).
+
+`npm run verify`: **257 arquivos / 4400 testes**, tsc limpo, build
+idêntico em módulos/bytes ao commit anterior.
+
+> **Graduação (03/09/2026, pedido direto do Operador: "gradue os dois"):**
+> `terminal-event-log.ts` deixou de ser Laboratório de Evolução.
+> `TypedEventBus` ganhou `onAny()` (canal aditivo — nunca muda
+> `on()`/`emit()`/`clear()` existentes, 7 testes novos em
+> `nexus-core.test.ts`) para entregar o `NexusEvent` completo a um único
+> assinante. Achado real na hora de graduar: já existia um painel "EVENT
+> TELEMETRY" (`EventsWidget`) ligado a `gmilBus`, cobrindo só 2 eventos de
+> proveniência GMIL — a graduação certa era ESTENDER esse painel (2ª fonte
+> real via `core.bus.onAny()`, formato `[CATEGORIA] mensagem` idêntico ao
+> exemplo literal da Ordem), nunca criar um painel/ícone novo (§29 tinha
+> acabado de decluttar a régua de navegação). Tom das linhas do Nexus Core
+> é sempre "info" (nunca ok/warn/error fabricado — isso é território do
+> `alert-center.ts`). Verificado AO VIVO via Playwright (dev server real,
+> hash de acesso temporário): linhas reais `[SYSTEM]`/`[DECISION]`/
+> `[QUANT]`/`[BRAIN]`/`[ORGANISM]`/`[RISK]` — 7 tipos de evento distintos
+> — atualizando em tempo real numa janela de 6 segundos, zero erro de
+> página. 9 testes novos de fiação
+> (`terminal-event-log-graduation-wiring.test.ts`). Ainda NÃO fez:
+> `availableTimeframes`, state machine unificada, Layer Trace de 9
+> estágios, Audit Trail completo — os mesmos gaps de antes, inalterados
+> por esta graduação. O painel continua oculto por padrão
+> (`widgets.events.visible: false`) — precisa do Workspace Manager pra
+> ligar, comportamento pré-existente não alterado por esta rodada.
+
+> **Correção honesta do título desta seção + §38-45 mapeadas (03/09/2026):**
+> o título acima diz "37 seções" — estava errado. O Operador colou as
+> seções §38-45 (RESPONSIVE SIZING/DENSITY CONTROL, iPad Mini, TERMINAL
+> DENSITY, CHART-FIRST LAYOUT, ANTI-OVERFLOW, VISUAL ACCEPTANCE,
+> DIMENSIONAMENTO FINAL, ACEITAÇÃO VISUAL), provando que a Ordem 3 tem
+> pelo menos 45 seções, não 37 — a mesma classe de erro já registrada
+> nesta sessão para "32 módulos" (§14 da PR) e "visual-budget.ts nunca
+> ligado" (§6.93): uma alegação minha sem remedição contra o dado real.
+> Não corrijo o número no título acima (Regra de Ouro 4 — nunca reescrever
+> silenciosamente o registro original) — só documento aqui que ele está
+> desatualizado.
+>
+> Mapeamento honesto de §38-45 (auditoria de arquivo, não memória):
+>
+> | Seção | Estado real |
+> |---|---|
+> | §38 Responsive sizing (tipografia/spacing) | **Parcial.** `index.css` já tem uma escala `clamp()` de 4 degraus pra TIPOGRAFIA (`--ar10-t-micro/label/body/read`) e `env(safe-area-inset-top/bottom)`. **Gap real:** nenhuma escala `clamp()` equivalente pra ESPAÇAMENTO/padding/gap — são classes Tailwind estáticas, com 52 ocorrências de `h-[Npx]`/`w-[Npx]` hardcoded só em `App.tsx`. Zero `container-type`/`@container` (CSS container queries) em todo o `src/`. |
+> | §39 iPad Mini — regra de ouro | **Ausente como caso codificado.** `nexus/chart-viewport.ts` cita "iPad Mini retrato (~700px)" só em comentário — nenhum arquivo trata 768px (a largura CSS real do iPad Mini portrait) como breakpoint/caso distinto em CSS ou TS. A prioridade pedida (gráfico > preço > decisão > trade plan > terminal > detalhes) não existe como regra codificada em lugar nenhum. |
+> | §40 Terminal density (COMPACT/STANDARD/EXPANDED) | **Gap real, Stage 1 fechado nesta rodada — ver abaixo.** Antes desta rodada: zero conceito de densidade no código — só um interruptor binário não-nomeado (`min-[1120px]:`, 4+ ocorrências em `App.tsx`). |
+> | §41 Chart-first layout | **Parcial.** O mecanismo já É chart-first: `App.tsx:4111` usa `h-[100dvh]` (unidade de viewport dinâmica) com `pt-safe`/`pb-safe`, e o container do gráfico é `flex-1 min-h-0` (cresce pra preencher o espaço restante via flexbox, não um valor fixo). **Gap real:** isso é distribuição IMPLÍCITA do flexbox, não uma fórmula explícita "altura do gráfico = viewport − header − terminal − controles" como a Ordem pede — não há um cálculo nomeado que alguém possa auditar ou testar isoladamente. |
+> | §42 Anti-overflow | **Parcial.** `overflow-x`/`overflow-hidden`/`truncate`/`whitespace-nowrap` aparecem 85+ vezes em `App.tsx` e mais 6 arquivos, incluindo `.ar10-scroll-x` documentado em `index.css` como correção real de uma regressão de overflow horizontal anterior. **Gap real:** aplicado ad-hoc por bug encontrado, nunca como disciplina/utilitário sistemático — sem uma varredura dedicada por viewport (iPad Mini/iPad/iPad Pro/desktop, portrait/landscape) que prove ausência de overflow em TODOS os componentes listados pela Ordem. |
+> | §43 Visual acceptance / §45 Aceitação visual | **Não verificado.** Nenhum teste (Playwright ou outro) commitado captura screenshots multi-viewport — `package.json` não tem `playwright` como dependência; os harnesses Playwright usados nesta sessão pra outras rodadas (§17/§21/§23/§25/§26/§27/§28/§29/§30/§34/§35) foram sempre ad-hoc, nunca commitados. Critério de aceitação da Ordem (zero sobreposição, zero corte de texto/botão, zero label sobre preço) nunca foi medido sistematicamente. |
+> | §44 Dimensionamento final (MIN/PREFERRED/MAX) | **Ausente como método.** Nenhum componente declara MIN/PREFERRED/MAX explicitamente — os 52 `h-[Npx]`/`min-h-[Npx]` de `App.tsx` são valores únicos hardcoded, não uma faixa com 3 pontos nomeados. |
+>
+> **Solução aplicada — Stage 1, mesma disciplina "carta branca, nunca
+> big-bang":** `nexus/density-tier.ts` (novo, puro, Laboratório de
+> Evolução — não ligado a nenhum componente ainda). `resolveDensityTier()`
+> resolve exatamente o pedido do §40 (COMPACT/STANDARD/EXPANDED, STANDARD
+> como padrão/fail-closed) reusando os DOIS limiares que já são reais e
+> testados em produção — `1120px` (o interruptor não-nomeado já em
+> `App.tsx`) e `1440px` (o piso de `resolveChartUltraWideScale`,
+> chart/chart-ultrawide-scale.ts) — zero número novo inventado. 6 testes
+> de execução real (`tests/density-tier.test.ts`): fronteiras exatas nos
+> dois limiares, larguras de dispositivo reais (iPad Mini 768/1024, iPad
+> Pro 834/1194, laptop 1366, desktop 1920, ultrawide 3440), fail-closed
+> pra STANDARD em largura inválida (nunca um extremo), monotonicidade
+> (aumentar a largura nunca reduz a densidade).
+>
+> **O que este round honestamente NÃO fez:** o overhaul responsivo em si
+> — nenhum componente (HEADER/SYMBOL SELECTOR/TIMEFRAME SELECTOR/CHART/
+> PRICE AXIS/TERMINAL/EVENT LOG/ANALYSIS PANEL/TRADE PLAN/LABELS/BUTTONS)
+> foi tocado; `resolveDensityTier()` ainda não decide NADA visível. Escala
+> `clamp()` pra espaçamento (§38); iPad Mini como caso codificado com
+> prioridade de conteúdo (§39); fórmula explícita de altura do gráfico
+> (§41); auditoria sistemática de anti-overflow multi-viewport (§42);
+> captura de screenshot multi-viewport commitada (§43/§45); MIN/PREFERRED/
+> MAX por componente (§44) — todos gaps reais, nenhum fechado nesta
+> rodada. Escopo genuinamente maior que um Stage 1 — cada item acima é
+> candidato a sua própria sessão.
+
+> **"TERMINAL — VISUAL + INFORMATIONAL INTEGRITY" mapeada + `terminal-field-priority.ts`
+> (03/09/2026):** continuação direta da mesma trilha — o Operador colou mais
+> uma seção sem numeração explícita, fechando (pelo tom de síntese —
+> "CHART-FIRST + TERMINAL-INTEGRITY + RESPONSIVE-SIZING + ADAPTIVE-DENSITY +
+> PROGRESSIVE-DISCLOSURE") o mesmo documento que trouxe §38-45. Define a
+> hierarquia real de que campo do Terminal sobrevive quando o espaço aperta:
+> DECISION > PRICE > TRADE PLAN > INVALIDATION > TARGETS > ESSENTIAL
+> EVIDENCE > SECONDARY INFORMATION, com uma regra "NUNCA" explícita (não
+> esconder Entry/Invalidation/Targets, não fabricar placeholder no lugar de
+> dado real, não sobrepor informação, não encolher texto crítico até
+> ilegível). Achado real antes de construir: "Progressive Disclosure" já é
+> um termo usado neste repositório (`App.tsx`, Workspace Manager §2) — mas
+> pra um mecanismo DIFERENTE (módulos secundários ocultos por escolha do
+> Operador, independente do tamanho da tela, trabalho da §29). O uso desta
+> seção é disclosure dirigido pelo VIEWPORT — mesma família de padrão de
+> UX, nunca o mesmo mecanismo; documentado explicitamente para não
+> confundir as duas leituras.
+>
+> `nexus/terminal-field-priority.ts` (novo, puro, Laboratório de Evolução —
+> não ligado a nenhum componente ainda) codifica os 7 tiers na ordem
+> literal do texto e consome `resolveDensityTier()` (`density-tier.ts`,
+> §36) em vez de reimplementar densidade — `resolveVisibleTerminalFieldTiers()`
+> só ativa disclosure em COMPACT, escondendo exclusivamente
+> `ESSENTIAL_EVIDENCE`/`SECONDARY_INFORMATION`; os 5 tiers centrais nunca
+> saem da lista, em nenhuma densidade. A divisão exata "5 nunca escondem, 2
+> compactáveis" é uma LEITURA minha do texto — a regra "NUNCA" nomeia
+> Entry/Invalidation/Targets explicitamente (partes concretas de 3 dos 5
+> tiers centrais) e DECISION/PRICE são os dois primeiros da própria
+> hierarquia — nunca um número dado literalmente no texto, registrado aqui
+> como interpretação, não fato. 13 testes de execução real
+> (`tests/terminal-field-priority.test.ts`): ordem exata dos 7 tiers,
+> visibilidade de cada tier individual, COMPACT vs STANDARD/EXPANDED,
+> pureza (nunca muta a lista canônica), preservação de ordem no
+> subconjunto visível.
+>
+> **O que este round honestamente NÃO fez:** nenhum componente real do
+> Terminal foi tocado — `resolveVisibleTerminalFieldTiers()` ainda não
+> decide nada visível na tela; a divisão 5-vs-2 nunca foi confirmada com o
+> Operador, é minha melhor leitura do texto; compactação de espaçamento,
+> reorganização de regiões, e a prevenção mecânica de sobreposição/texto
+> ilegível (itens do "MAS NUNCA" que são sobre RENDERIZAÇÃO, não sobre
+> QUAIS campos aparecem) seguem inteiramente não tentados.
+
+> **"ORDEM — MEXC ASSET DISCOVERY + NATIVE MARKET DATA" +
+> "ORDEM — UNIVERSAL ASSET DISCOVERY" (04/09/2026):** duas ordens do mesmo
+> pedido — a 2ª chegou logo depois da 1ª e generaliza a mesma exigência
+> ("BINANCE CONTINUA, MEXC É ADICIONADA... nunca esconder um ativo só
+> porque não existe na Binance") sob o vocabulário de `Universal Asset
+> Catalog`/`ExchangeAdapter`. O Operador reforçou o núcleo do pedido em
+> mensagem direta, informal: dado público real da MEXC, "mesmo processo"
+> já usado pra Binance, "o que precisar" pra analisar — não uma listagem
+> cosmética.
+>
+> **Auditoria antes de construir (CLAUDE.md item 1) — achado real, notícia
+> boa:** a maior parte da infraestrutura que as duas Ordens pedem já
+> existia, só não estava ligada à seleção do usuário:
+> `market-data-adapter.ts` (ADITIVO V-MAX Etapa 1) já é um
+> `MarketDataProviderId = 'BINANCE' | 'MEXC' | 'TRADFI_DELAYED'` com
+> provider como parâmetro explícito por chamada (nunca um toggle global);
+> `mexc-futures-candle-connector.js`/`mexc-futures-public.js` já buscam
+> candle real da MEXC (`toMexcSymbol('BTC') → 'BTC_USDT'`); o sufixo de
+> cache-key `-MEXC` (vs. `-PERP` da Binance) já existia e já está em uso
+> real por `requestRadarCandleSnapshot`/`scanRadarCandidate` (scanner de
+> fundo do Radar) há sessões — provando que o par provider+sufixo
+> funciona sem colidir Binance/MEXC na mesma chave do Bus;
+> `omnibox/mexc-symbols.ts` já busca a lista real de símbolos USDT-M
+> Futures da MEXC (`contract.mexc.com/api/v1/contract/detail`) para o
+> universo de fundo do Radar. O ÚNICO ponto realmente faltando: nenhum
+> desse caminho era alcançável a partir da seleção do Operador
+> (`SmartOmnibox`'s `onSelectCrypto: (baseAsset: string) => void` não
+> carregava identidade de exchange nenhuma).
+>
+> **Solução aplicada — Stage 1, "conectar peças já reais, nunca duplicar"
+> (Ordem MEXC §15/Ordem Universal §10, mandato explícito de ambas):**
+> - `omnibox/universal-symbol.ts` (novo, puro): normaliza
+>   `BinanceUsdtSymbol`/`MexcUsdtSymbol` num único
+>   `UniversalCryptoSymbol{baseAsset, exchange, market, nativeSymbol}` —
+>   `nativeSymbol` preserva o formato real de cada exchange
+>   (`"BTCUSDT"` vs. `"BTC_USDT"`, Ordem Universal §7), nunca reconstruído.
+>   Escopo honesto: só BINANCE/MEXC (os 2 providers de candle reais hoje —
+>   `CryptoExchangeId` é um recorte de `Exchange`, nunca uma união
+>   paralela) e só mercado `perp` (mexc-symbols.ts não descobre Spot).
+> - `SmartOmnibox.tsx`: novo fetch paralelo e independente
+>   (`fetchMexcUsdtSymbols()`, falha isolada — nunca bloqueia/derruba a
+>   seção Binance), nova seção "Cripto · MEXC (Tempo Real)", cada item
+>   rotulado `"EXCHANGE • MERCADO"` sempre visível (Ordem MEXC §7/§12,
+>   Ordem Universal §12 e §5 — mock literal do texto). `onSelectCrypto`
+>   mudou de `(baseAsset: string)` para `(selection: UniversalCryptoSymbol)`
+>   — única mudança de assinatura, único call site (App.tsx), sem shim de
+>   compatibilidade (CLAUDE.md: "mudar o código, não criar atalho").
+> - `engine-bridge.ts`: `getMexcChartCandles(symbol, limit, timeframe)` —
+>   mesmo contrato exato de `getChartCandles`/`getTradFiChartCandles`,
+>   reaproveita `getMarketDataProvider('MEXC')` + sufixo `-MEXC` já real
+>   (mesmo par que `requestRadarCandleSnapshot` já prova funcionar).
+> - `omnibox/MexcRealChart.tsx` (novo componente, espelha
+>   `TradFiRealChart.tsx` byte a byte na disciplina): candlestick real MEXC
+>   + badge "MEXC · FUTURES (Tempo Real)" sempre visível, 4 estados
+>   honestos (`LOADING`/`OK`/`HISTORICO_INSUFICIENTE`/`DADOS_INSUFICIENTES`
+>   — o 3º novo, Ordem MEXC §9/§13/Ordem Universal §9: ativo recém-listado
+>   nunca fabrica candle/estrutura, só declara amostra insuficiente).
+>   **ZERO import de nexus-core/Council/orderflow** — LEI 24 preservada
+>   por construção, mesmo raciocínio exato do precedente TradFi (o
+>   Operador pediu para VER/ANALISAR o ativo real, nunca para o Core
+>   Engine emitir uma segunda decisão sobre uma fonte nova).
+> - `App.tsx`: `marketMode` ganhou um 3º valor (`"MEXC"`, runtime-only —
+>   nunca entra em `RestoredSession`/`persistSessionState`: recarregar a
+>   página volta pro default CRYPTO/BTC, mesmo fallback já real para
+>   qualquer `marketMode` desconhecido) e `selectedMexcAsset` é estado
+>   PRÓPRIO, nunca reaproveita `selectedAsset`/`selectedTradFiAsset`
+>   (misturar identidade seria o "misturar dado de exchanges diferentes"
+>   que as duas Ordens proíbem, §8/§6). **Achado real de auditoria durante
+>   a fiação:** ~10 painéis do Terminal (Order Book/Order Flow/Liquidity
+>   Map/Council/Siriform/Regime/Score/Expectancy/preço do header/ícone do
+>   ativo) liam `selectedAsset`/`data`/`priceData` — todos ainda o ÚLTIMO
+>   símbolo Binance real, intocado, quando o modo vira MEXC. Sem gate,
+>   esses painéis mostrariam dado Binance estale sob o rótulo de um ativo
+>   MEXC diferente — exatamente o "misturar candle de uma exchange com
+>   preço de outra como se fosse o mesmo mercado" que a Ordem MEXC §8
+>   proíbe explicitamente. Corrigido generalizando o gate que já existia
+>   pra TRADFI (`marketMode === "TRADFI" ? <TradFiEmptyState/> : <Real/>`)
+>   para `isFullCryptoMode = marketMode === "CRYPTO"` — MEXC e TRADFI
+>   ficam do mesmo lado do gate em todo painel Binance-only, com um texto
+>   honesto PRÓPRIO (`reason` novo em `TradFiEmptyState`, nunca o texto
+>   fixo "Aguardando... Macro API" — seria falso pra MEXC, que está
+>   conectada de verdade, só esses painéis específicos não foram
+>   estendidos a ela nesta Etapa 1).
+>
+> **Testes (execução real + padrão):** `universal-symbol.test.ts` (9,
+> merge puro), `engine-bridge-mexc.test.ts` (5, mocka só a fronteira
+> `market-data-bus/index.js`, mesma convenção de
+> `engine-bridge-tradfi.test.ts`), `mexc-real-chart-wiring.test.ts` (12,
+> fiação App.tsx↔MexcRealChart↔universal-symbol, inclui a prova de que
+> nenhum painel Binance-only escapa do gate) + atualização de 3 testes de
+> padrão que quebraram honestamente por causa da mudança real de fonte
+> (`header-asset-cluster.test.ts`, `institutional-decision-layer-wiring.test.ts`,
+> `refinamento-final-wiring.test.ts`) e 1 de contagem de call site real
+> (`diretriz3-fixes.test.ts`: `getMarketDataBus().requestSnapshot()` 3→4
+> pontos reais, o 4º é `getMexcChartCandles`, mesmo raciocínio do 3º
+> `getTradFiChartCandles`) e 1 de contagem de `<TradFiEmptyState>`
+> (`tradfi-real-chart-wiring.test.ts`: 10→11, o 11º é o branch MEXC sem
+> ativo selecionado). `npm run verify`: **264 arquivos / 4466 testes**,
+> tsc limpo, build ok (1941 módulos, +2 sobre a baseline —
+> `universal-symbol.ts`/`MexcRealChart.tsx` agora graduados/ligados).
+>
+> **O que este round honestamente NÃO fez:**
+> - **Verificação ao vivo contra a MEXC real**: nenhuma chamada de rede
+>   real foi feita nesta sessão (mesmo bloqueio de política de rede do
+>   sandbox de implementação já documentado em
+>   `docs/MARKET_DATA_FABRIC.md`) — a Ordem MEXC §19 pede confirmação com
+>   ≥3 ativos reais end-to-end; isso só é possível num ambiente com saída
+>   de rede liberada (dispositivo real do Operador).
+> - **MEXC Spot**: não descoberto (`mexc-symbols.ts` só cobre Futures) nem
+>   analisável — Ordem MEXC §6/Ordem Universal §6 pedem Spot e Futures
+>   distintos por exchange; hoje só Futures existe dos dois lados
+>   (Binance também só oferece Futures como primário, Spot é fallback).
+> - **Core Engine/Council/Order Flow/Liquidations/Order Book real**: NUNCA
+>   estendidos à MEXC — permanecem 100% Binance, LEI 24 intacta por
+>   construção (MexcRealChart nunca importa essas camadas). Isto é
+>   deliberado, não esquecido: estender o ciclo de decisão real para uma
+>   segunda fonte é uma mudança arquitetural maior que este Stage 1, e o
+>   precedente do Footprint recusado (commit `5454194`, tick MEXC Spot
+>   rejeitado para Footprint por atribuição cross-exchange incorreta) já
+>   estabeleceu que misturar fontes no caminho de decisão real exige muito
+>   mais cuidado do que uma tela de leitura.
+> - **Persistência IndexedDB (`nexus/persistence.ts`)**: `candleKey` não
+>   ganhou sufixo de exchange — `selectedMexcAsset` é runtime-only nesta
+>   Etapa 1 (mesmo escopo que `TradFiRealChart` já tinha: não persiste),
+>   então o risco de colisão Binance/MEXC no cache do IndexedDB
+>   identificado na auditoria fica latente e sem exercício real ainda,
+>   documentado aqui para quem estender a Etapa 2.
+> - **Auto-detecção de novas listagens MEXC (Ordem MEXC §10/Ordem
+>   Universal §4/§11, "atualização automática do catálogo")**: nenhum
+>   polling/cadência nova foi criada — o Omnibox busca a lista real uma
+>   vez por abertura (mesmo padrão já real da seção Binance), nunca em
+>   segundo plano. Um ativo recém-listado na MEXC aparece assim que a
+>   MEXC o retornar no `contract/detail` e o Operador abrir/reabrir o
+>   Omnibox — não instantaneamente via push/poll de fundo.
+> - **`ExchangeAdapter` formal (Ordem Universal §10)**: não construída
+>   como abstração nomeada — `MarketDataProviderId`/`getMarketDataProvider()`
+>   já cumpre o papel real (provider por parâmetro explícito, zero
+>   `if exchange === MEXC` espalhado), só nunca foi batizado com esse nome
+>   exato; renomear/formalizar fica para quando um 4º provider real
+>   (Bybit/OKX/Hyperliquid) precisar do mesmo padrão.
 
 ---
 

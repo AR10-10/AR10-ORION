@@ -27,9 +27,23 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
     const s = src();
     const idx = s.indexOf('scenarioLinesRef.current.forEach((line) => series.removePriceLine(line));');
     expect(idx, 'efeito de scenario não encontrado').toBeGreaterThan(-1);
-    const block = s.slice(idx, idx + 150);
+    const block = s.slice(idx, idx + 200);
     expect(block).toContain('scenarioLinesRef.current = [];');
-    expect(block).toContain('if (!scenario) return;');
+    // Achado 2.5 (Visual Cleanup & Rendering Audit): mesmo early-return de
+    // sempre, agora TAMBÉM fail-closed por visibilidade — scenario_projection
+    // ganhou o mesmo toggle manual/AUTO que toda outra camada real já tinha.
+    expect(block).toContain('if (!scenario || !visibility.scenario_projection) return;');
+  });
+
+  it('Achado 2.5: scenario_projection existe em CHART_LAYER_IDS (toggle manual real) — era a única camada sem nenhum', () => {
+    const s = src();
+    expect(s).toContain('"scenario_projection",');
+    expect(s).toContain('scenario_projection: true,');
+  });
+
+  it('Achado 2.5: o efeito recomputa quando visibility.scenario_projection muda — senão desligar a camada no painel não desenharia/limparia nada até o próximo tick de scenario', () => {
+    const s = src();
+    expect(s).toContain('}, [scenario, visibility.scenario_projection]);');
   });
 
   it('Fio de Seda: LineStyle.Solid sempre, zero setLineDash em qualquer lugar do arquivo', () => {
@@ -70,8 +84,8 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
     const s = src();
     const idx = s.indexOf('const PROJECTION_RGB');
     const block = s.slice(idx, idx + 700);
-    expect(block).not.toContain('0, 255, 170');
-    expect(block).not.toContain('255, 0, 85');
+    expect(block).not.toContain('8, 153, 129');
+    expect(block).not.toContain('242, 54, 69');
   });
 
   it('opacidade real escala linearmente por opinionWeight (0..1), piso honesto quando null — nunca invisível, nunca inventado', () => {
@@ -88,15 +102,29 @@ describe('EnhancedChart_110_Percent: Scenario Path A/B como price lines nativas 
     const alphaIdx = s.indexOf('const alphaOf = (weight: number | null): number => {');
     const block = s.slice(alphaIdx, alphaIdx + 300);
     expect(block).toMatch(/const ceiling = 0\.55/);
-    expect(s).toContain('rgba(255, 0, 85, 0.75)'); // linha real do Stop do Trade Plan, referência do teto
+    expect(s).toContain('rgba(242, 54, 69, 0.75)'); // linha real do Stop do Trade Plan, referência do teto
   });
 
-  it('axisLabelVisible false (mais discreto que o Trade Plan, que usa true) e título carrega direção + rank real (TP1/TP2/TP3) + fonte real + peso real', () => {
+  it('axisLabelVisible false (mais discreto que o Trade Plan, que usa true) e título carrega direção + rank real (TP1/TP2/TP3) + fonte real + tipo de reação real + confiança real', () => {
     const s = src();
     const idx = s.indexOf('scenarioLinesRef.current.push(');
     const block = s.slice(idx, idx + 1100);
     expect(block).toContain('axisLabelVisible: false,');
-    expect(block).toContain('title: `PROJEÇÃO · ${label} · ${path.direction} · TP${i + 1} · ${target.sourceKind} · ${weightLabel}`,');
+    expect(block).toContain('title: `PROJEÇÃO · ${label} · ${path.direction} · TP${i + 1} · ${target.sourceKind} (${reaction}) · ${weightLabel}`,');
+  });
+
+  it('Diretriz Final — Camada de Cenários Inteligentes §3: reaction real (describeScenarioReaction) computado por alvo, derivado só do sourceKind já real — zero motor novo', () => {
+    const s = src();
+    expect(s).toContain('import { describeScenarioConfidence, describeScenarioReaction } from "../nexus/scenario-engine";');
+    const idx = s.indexOf('const reaction = describeScenarioReaction(target.sourceKind);');
+    expect(idx).toBeGreaterThan(-1);
+  });
+
+  it('Diretriz Final — Camada de Cenários Inteligentes §4: weightLabel usa describeScenarioConfidence (qualitativo), nunca mais Math.round(...*100)', () => {
+    const s = src();
+    expect(s).toContain('const confidence = describeScenarioConfidence(path.opinionWeight);');
+    expect(s).toContain('const weightLabel = confidence !== null ? `opinion ${confidence}` : "opinion n/a";');
+    expect(s).not.toContain('Math.round(path.opinionWeight * 100)');
   });
 
   it('Diretriz Restauração/Inteligência Visual §3: título começa explicitamente com "PROJEÇÃO" — passado/presente/projeção nunca se confundem só pela cor/opacidade', () => {

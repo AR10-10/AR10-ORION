@@ -33,7 +33,7 @@ describe('TradePlanZonePlugin: "Fio de Seda" (Regra de Ouro 2) — border never 
   });
 
   it('reuses the exact amber already used for the entry price lines — one color per role, never a second palette', () => {
-    expect(plugin()).toContain('rgba(240, 208, 111,');
+    expect(plugin()).toContain('rgba(240, 193, 111,');
   });
 });
 
@@ -68,9 +68,20 @@ describe('TradePlanZonePlugin: §17 confidence-scaled opacity — the SAME real 
 
   it('confidenceZone is threaded through the same ref pattern as entryLow/entryHigh — always latest, never re-triggers the setup effect', () => {
     const s = plugin();
-    expect(s).toContain('const rangeRef = useRef({ entryLow, entryHigh, confidenceZone });');
-    expect(s).toContain('rangeRef.current = { entryLow, entryHigh, confidenceZone };');
-    expect(s).toContain('}, [entryLow, entryHigh, confidenceZone]);');
+    // Rodada de acessibilidade da navegação/gráfico (achado real: "cada
+    // item no seu canto, nada cobrindo nada") — activeLanes entra no
+    // MESMO ref/dirty-check, mesmo padrão já provado por
+    // entryLow/entryHigh/confidenceZone/visualWeight.
+    expect(s).toContain('const rangeRef = useRef({ entryLow, entryHigh, confidenceZone, visualWeight, activeLanes });');
+    expect(s).toContain('rangeRef.current = { entryLow, entryHigh, confidenceZone, visualWeight, activeLanes };');
+    expect(s).toContain('}, [entryLow, entryHigh, confidenceZone, visualWeight, activeLanes]);');
+  });
+
+  it('Ordem Nº 03: visualWeight (competição cruzada real via nexus/visual-budget.ts) vence quando fornecido; cai em opacityMultiplierFor(zone) — nunca um segundo esquema — quando ausente', () => {
+    const s = plugin();
+    expect(s).toContain(
+      'const multiplier = resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : opacityMultiplierFor(zone);',
+    );
   });
 });
 
@@ -115,7 +126,7 @@ describe('TradePlanZonePlugin: dirty-flag + requestAnimationFrame, never a perpe
 describe('EnhancedChart_110_Percent: mounts TradePlanZonePlugin as the topmost overlay, real chart/series/plan only', () => {
   it('imports and mounts it with the real chart/series (never a fabricated default) and the real entry range', () => {
     const s = chart();
-    expect(s).toContain('import { TradePlanZonePlugin } from "./TradePlanZonePlugin";');
+    expect(s).toContain('import { TradePlanZonePlugin, opacityMultiplierFor } from "./TradePlanZonePlugin";');
     expect(s).toContain('<TradePlanZonePlugin');
     expect(s).toContain('chart={chartReady?.chart ?? null}');
     expect(s).toContain('series={chartReady?.series ?? null}');
@@ -133,7 +144,7 @@ describe('EnhancedChart_110_Percent: mounts TradePlanZonePlugin as the topmost o
 describe('App.tsx: threads the real confidenceZone (§16) from context into ChartWidget → EnhancedChart_110_Percent', () => {
   it('ChartWidget destructures confidenceZone from the shared WidgetContext', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
+    expect(app).toContain('setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, institutionalScore, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};');
   });
 
   it('passes it straight through to EnhancedChart_110_Percent — zero recomputation', () => {
@@ -163,12 +174,19 @@ describe('EnhancedChart_110_Percent: stop/target hit-boost v2 (Ordem Final Auton
     expect(chart()).toContain('}, [tradePlan, livePrice, targetsHit]);');
   });
 
-  it('as literais base de EN/ST/TP continuam consistentes — em priceAxisLabels (sistema anti-colisão), nomenclatura curta real (EPC FINAL §8)', () => {
+  it('as literais base de EN/ST/TP continuam consistentes — em priceAxisLabels (sistema anti-colisão), nomenclatura curta real (EPC FINAL §8); Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4 moveu basis/estado pro secundário, texto primário ficou só EN/ST/TP (a porcentagem saiu do canvas de vez)', () => {
     const s = chart();
     expect(s).toContain('`EN ${tradePlan.direction}');
-    expect(s).toContain('`ST · ${tradePlan.stop.basis}`');
-    expect(s).toContain('${label} · ${target.basis}');
-    expect(s).toContain('const label = `TP${i + 1}`;');
+    expect(s).toContain('text: "ST",');
+    expect(s).toContain(': tradePlan.stop.basis;');
+    expect(s).toContain('compactLabels ? null : target.basis,');
+    // Sigla pura no primário (pedido do Operador).
+    expect(s).toContain('text: `TP${i + 1}`,');
+    // E a porcentagem NÃO volta ao canvas: pedido repetido em duas rodadas,
+    // com captura real de ZEC 4H mostrando "TP1 3.14% FRACA 1:0.42" sobre
+    // as velas. A distância real continua no painel do Trade Plan
+    // (App.tsx) — realocada, nunca apagada (Regra de Ouro 4).
+    expect(s).not.toContain('distPct');
   });
 
   it('v2: "REACHED" is driven by the AUTHORITATIVE targetsHit prop, never re-derived from livePrice alone — a target stays marked reached even if price later pulls back', () => {
@@ -227,7 +245,7 @@ describe('EnhancedChart_110_Percent: VWAP wiring (research-driven precision orde
 
   it('the ref is cleared on unmount, same discipline as every other series ref', () => {
     const s = chart();
-    const teardown = s.slice(s.indexOf('return () => {\n      chart.remove();'), s.indexOf('setChartReady(null);'));
+    const teardown = s.slice(s.indexOf('chart.remove();'), s.indexOf('setChartReady(null);'));
     expect(teardown).toContain('vwapSeriesRef.current = null;');
   });
 });

@@ -30,17 +30,43 @@
 // existe para nunca apresentar 1-2 pontos isolados como se fossem uma
 // densidade real.
 import type { LiquidationEvent } from "../engine-bridge";
+// Diretriz Final de Lapidação Visual, Parte 4 ("peso de idade"): ageAlpha é
+// agnóstico de unidade (só faz interpolação linear sobre um número real) —
+// reaproveitado aqui com MINUTOS reais de idade em vez de candles (mesmo
+// padrão já usado por nexus/aura-lifecycle.ts importando de chart/), nunca
+// uma segunda função de decaimento.
+import { ageAlpha, type DecayConfig } from "../chart/annotation-decay";
 
 export const LIQUIDATION_HEATMAP_CONTRACT_VERSION = 1 as const;
+
+// Documentado (mesma natureza de MIN_EVENTS_FOR_HEATMAP abaixo) — nunca uma
+// medição: eventos dos primeiros 10 minutos pesam cheio; entre 10 e 60 min
+// esmaecem linearmente até 10%; a partir de 1h (escala de sessão, mesmo
+// horizonte já usado pela honestidade retrospectiva do módulo) pesam 0 no
+// AGREGADO VISUAL — mesmo comportamento real de ageAlpha já usado por
+// LiquidityZonesPlugin/StructureBreakMarkersPlugin/KillZoneBandsPlugin
+// (decai até minAlpha, depois cai a 0), nunca um piso permanente. O evento
+// em si nunca é apagado do FEED real (eventCount conta todos, sempre) —
+// só o peso no totalNotionalUsd deste render específico chega a 0, mesma
+// disciplina de "esquecida da TELA, nunca do dado real" já documentada em
+// annotation-decay.ts.
+export const LIQUIDATION_DECAY: DecayConfig = { fadeStartCandles: 10, expireCandles: 60, minAlpha: 0.1 };
 
 export interface LiquidationHeatmapBucket {
   priceLow: number;
   priceHigh: number;
   // Soma real (nunca estimada) de notionalUsd dos eventos LONG_LIQUIDATED
-  // / SHORT_LIQUIDATED cujo price real caiu neste bucket.
+  // / SHORT_LIQUIDATED cujo price real caiu neste bucket — ponderada por
+  // idade real via LIQUIDATION_DECAY (evento recente pesa mais que um
+  // antigo da mesma sessão, evento com mais de 1h pesa 0 neste agregado),
+  // nunca um valor inventado: o dólar em si é sempre real, só o PESO no
+  // agregado muda com o tempo.
   longNotionalUsd: number;
   shortNotionalUsd: number;
   totalNotionalUsd: number;
+  // Contagem real de eventos — nunca afetada pelo peso de idade (é sobre
+  // "quantos eventos reais existem aqui", uma pergunta diferente de "quanto
+  // isso pesa visualmente agora").
   eventCount: number;
 }
 
@@ -133,9 +159,12 @@ export function computeLiquidationHeatmap(
     if (idx >= bucketCount) idx = bucketCount - 1; // topo real inclusive (mesmo evento no preço máximo exato)
     if (idx < 0) idx = 0;
     const bucket = buckets[idx];
-    if (e.side === "LONG_LIQUIDATED") bucket.longNotionalUsd += e.notionalUsd;
-    else bucket.shortNotionalUsd += e.notionalUsd;
-    bucket.totalNotionalUsd += e.notionalUsd;
+    const ageMinutes = Math.max(0, (now - e.timestamp) / 60_000);
+    const weight = ageAlpha(ageMinutes, LIQUIDATION_DECAY);
+    const weightedNotional = e.notionalUsd * weight;
+    if (e.side === "LONG_LIQUIDATED") bucket.longNotionalUsd += weightedNotional;
+    else bucket.shortNotionalUsd += weightedNotional;
+    bucket.totalNotionalUsd += weightedNotional;
     bucket.eventCount += 1;
   }
 

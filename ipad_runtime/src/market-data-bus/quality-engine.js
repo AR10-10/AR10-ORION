@@ -72,6 +72,27 @@ export const QUALITY_CLASSIFICATION = Object.freeze({
 
 /** '15m' -> 900, '1h' -> 3600, '1d' -> 86400. null para formato
  *  desconhecido — consistência vira null (não medida), nunca chutada. */
+/** Passo em segundos de um timeframe de passo FIXO.
+ *
+ *  O 'M' MAIÚSCULO (mensal) fica DELIBERADAMENTE fora da gramática, e isto
+ *  é uma decisão, não um esquecimento — a versão anterior devolvia null
+ *  para '1M' por acidente (o regex simplesmente não tinha o M) e ninguém
+ *  tinha registrado o porquê nem travado com teste.
+ *
+ *  A razão real: mês não tem passo fixo (28 a 31 dias). Como
+ *  computeConsistency compara cada delta contra o passo com tolerância de
+ *  CONSISTENCY_TOLERANCE (1%), um passo fixo de 30 dias marcaria como
+ *  INCONSISTENTE todo mês que não tivesse exatamente 30 dias — 8 dos 12 —
+ *  sobre um dado perfeitamente íntegro. Trocaria "dimensão ausente"
+ *  (honesto) por "dimensão errada" (pior). Enquanto a consistência aqui
+ *  for baseada em passo fixo, null é a resposta correta para mensal, e
+ *  composeQualityReport já exclui dimensão null da média em vez de
+ *  puni-la com zero.
+ *
+ *  Cuidado permanente: 'm' minúsculo é MINUTO e 'M' maiúsculo é MÊS. Esta
+ *  função é case-sensitive de propósito — a mesma colisão já causou um bug
+ *  real neste projeto (gráfico mensal lido como de 1 minuto), corrigido em
+ *  nexus/timeframe-layer-profile.ts com busca por chave exata primeiro. */
 export function timeframeToSeconds(timeframe) {
     const match = /^(\d+)(s|m|h|d|w)$/.exec(String(timeframe || '').trim());
     if (!match) return null;

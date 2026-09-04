@@ -10,18 +10,34 @@
 //
 // Pura funcao de calculo sobre ticks publicos (preco/volume/lado) — nunca
 // network, nunca ordem, nunca decisao de compra/venda.
+//
+// Honestidade de nomenclatura (Ordem EPC-05, "pesquisar a matematica" —
+// pesquisa real confirmada antes de documentar): o "OFI" deste motor NAO
+// e' o Order-Flow Imbalance formal de Cont/Kukanov/Stoikov ("The Price
+// Impact of Order Book Events", 2014/2010) — aquele e' definido sobre
+// EVENTOS DO LIVRO DE OFERTAS (mudancas no tamanho da fila no melhor
+// bid/ask), nao sobre trades executados. O que este motor calcula e' um
+// desequilibrio real de VOLUME AGRESSOR (compra vs. venda) numa janela de
+// ticks de trade — uma metrica real e amplamente usada em terminais de
+// order flow (Bookmap/ATAS/Sierra Chart chamam variantes disso de "Delta"/
+// "Trade Imbalance"), mas estruturalmente diferente do OFI academico.
+// Este projeto nao tem (e nao pode fabricar, Regra de Ouro 1) uma fonte
+// real de L2/livro de ofertas — so o poller publico de trades da MEXC
+// (mexc-trades-stream.js) — entao o OFI academico e' honestamente
+// impossivel de calcular aqui, nao uma omissao por preguica.
 
 import { Side, SignalType, Signal } from './value-objects.js';
 
 export const metadata = {
     engine: 'signal-engine',
-    description: 'Sinais de microestrutura (Order Flow Imbalance, Absorption, Exhaustion) sobre uma janela de ticks publicos de trades.',
-    concepts: ['Order Flow Imbalance', 'Volume Absorption', 'Delta Exhaustion (z-score + reversao de preco)'],
+    description: 'Sinais de microestrutura (desequilibrio de volume agressor tipo "OFI", Absorption, Exhaustion) sobre uma janela de ticks publicos de trades.',
+    concepts: ['Trade-based Order Flow Imbalance (nao o OFI de livro de ofertas de Cont/Kukanov/Stoikov)', 'Volume Absorption', 'Delta Exhaustion (z-score + reversao de preco)'],
     required_data: ['trade_ticks (price, volume, side, timestamp)'],
     status: 'ACTIVE_READ_ONLY',
     limitations: [
         'Roda inteiramente sobre os ticks recebidos nesta sessao (REPLAY sintetico ou stream publico real) — nunca extrapola tick que nao foi observado.',
         'Exhaustion exige amostra >= deltaLookback antes de poder emitir qualquer sinal; abaixo disso e silencio, nunca um falso sinal.',
+        '"OFI" aqui e desequilibrio de volume agressor sobre trades (ver nota de nomenclatura acima) — nao o OFI formal de livro de ofertas, que exigiria dado L2 que este projeto nao tem.',
     ],
 };
 
@@ -40,6 +56,16 @@ export const defaultSettings = Object.freeze({
     exhaustion: Object.freeze({
         deltaLookback: 500,
         exhaustionThreshold: 3.0,
+        // Achado real de auditoria (Ordem EPC-05): comparado direto contra
+        // um retorno fracionario bruto de preco nos ultimos 10 ticks, 0.2
+        // exige um movimento de PRECO de 20% dentro de so' 10 trades para
+        // confirmar reversao — uma barra alta para o cadenciamento real de
+        // tick da MEXC (poller publico, nao um stream denso). Nao ha dado
+        // real de estatistica de tick nesta base para julgar se 0.2 esta
+        // calibrado ou foi herdado sem ajuste do replay sintetico de
+        // golden-master.html; mudar o numero sem essa evidencia seria
+        // "tentativa e erro" (a propria Ordem EPC-05 proibe). Registrado
+        // honestamente, nao alterado — ver signal-engine.test.ts.
         reversalConfirmation: 0.2,
         minDeltaVolume: 1000,
     }),
@@ -75,9 +101,30 @@ function stdDev(arr, avg) {
     return Math.sqrt(sum / (arr.length - 1));
 }
 
+/**
+ * Forma estrutural real de `defaultSettings` (tipada explicitamente —
+ * achado real da Ordem EPC-05: sem esta anotação, TS infere os literais
+ * exatos de `defaultSettings`, ex. `windowSize: 400` em vez de `number`,
+ * porque `settings = defaultSettings` é o único sinal de tipo que o
+ * parâmetro tinha. Isso nunca incomodou nenhum consumidor até agora
+ * porque nenhum atravessava a fronteira JS→TS tipada — o primeiro foi
+ * `signal-engine.test.ts` desta própria Ordem, testando `settings`
+ * customizados/menores para não precisar de 500 ticks reais por caso).
+ * Puramente uma anotação JSDoc: zero mudança de comportamento em tempo
+ * de execução.
+ * @typedef {Object} SignalEngineSettings
+ * @property {{windowSize: number, imbalanceThreshold: number, minVolume: number, cooldownMs: number}} ofi
+ * @property {{absorptionThreshold: number, timeWindowMs: number, minAbsorptionVolume: number}} absorption
+ * @property {{deltaLookback: number, exhaustionThreshold: number, reversalConfirmation: number, minDeltaVolume: number}} exhaustion
+ */
+
 /** Processa um lote de Tick (ordem cronologica) e devolve os Signal
  *  emitidos. `state` e mutado incrementalmente (e o acumulador entre
- *  lotes); `settings` e opcional e cai em defaultSettings congelado. */
+ *  lotes); `settings` e opcional e cai em defaultSettings congelado.
+ *  @param {InstanceType<typeof import('./value-objects.js').Tick>[]} ticks
+ *  @param {ReturnType<typeof createEngineState>} state
+ *  @param {SignalEngineSettings} [settings]
+ */
 export function processSignals(ticks, state, settings = defaultSettings) {
     const signals = [];
     const now = Date.now();

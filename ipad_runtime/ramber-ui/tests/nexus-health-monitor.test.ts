@@ -8,8 +8,16 @@
 // App.tsx já mede FPS via requestAnimationFrame desde antes da Fase 0 —
 // "FPS (UI REAL)" — o Health Monitor tinha uma segunda amostragem
 // paralela, uma duplicação real removida). Agora fps só espelha
-// store.uiFps, mesmo padrão de cycleLatencyMs/isOnline — testado como tal.
+// store.uiFps, mesmo padrão de cycleLatencyMs — testado como tal.
+//
+// Ponta Solta 2 (Auditoria do Ecossistema, 2ª passada): `health.isOnline`
+// era uma SEGUNDA cópia de conectividade — escrita aqui como `!offline` e
+// nunca lida por ninguém, enquanto a UI inteira lia `store.offline` direto
+// (fonte única real, alimentada por navigator.onLine em App.tsx). O campo
+// foi removido; o teste abaixo trava a decisão para ela não voltar.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { TypedEventBus } from '../src/nexus/event-bus';
 import { useUnifiedSnapshotStore } from '../src/store/unified-snapshot-store';
 
@@ -23,13 +31,13 @@ const STORE_RESET = {
   symbol: 'BTC',
   price: { price: null, delta: null, deltaPct: null, high: null, low: null, volume: null, direction: null, updatedAt: null },
   orderBook: { bids: [], asks: [], updatedAt: null },
-  derivatives: { fundingRate: null, openInterest: null },
+  derivatives: { fundingRate: null, openInterest: null, longShortRatio: null },
   core: { engineStatus: 'pending' as const, direction: null, confidence: null, lastUpdateAt: null, cycleLatencyMs: null },
   activeTimeframe: '15m' as const,
   candles: {},
   orderBooks: {},
   connections: {},
-  health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0, isOnline: true, lastUpdatedAt: 0 },
+  health: { fps: null, cycleLatencyMs: null, memoryMb: null, workersAlive: 0, lastUpdatedAt: 0 },
   offline: false,
   isDataFresh: false,
   uiFps: null,
@@ -125,12 +133,28 @@ describe('HealthMonitor: cada campo é medido de verdade ou fica null/0 honesto 
     expect(useUnifiedSnapshotStore.getState().health.cycleLatencyMs).toBe(842);
   });
 
-  it('isOnline espelha !offline real da store (Fase 0.4, navigator.onLine)', () => {
+  // Ponta Solta 2: conectividade tem UMA fonte real — `store.offline`,
+  // escrita pelos listeners de window.online/offline em App.tsx e lida por
+  // useOfflineSnapshot(). O HealthSnapshot não carrega mais uma segunda
+  // cópia do mesmo fato. Metade execução real (o campo sobrevivente
+  // continua funcionando), metade padrão no código-fonte (CLAUDE.md: o bug
+  // provável aqui é "alguém reintroduz a duplicata", não matemática).
+  it('conectividade não é duplicada: store.offline continua sendo a única fonte real', () => {
     useUnifiedSnapshotStore.getState().setOffline(true);
     const bus = new TypedEventBus();
     monitor = new HealthMonitor(bus);
     monitor.start();
-    expect(useUnifiedSnapshotStore.getState().health.isOnline).toBe(false);
+    const state = useUnifiedSnapshotStore.getState();
+    expect(state.offline).toBe(true); // a fonte que a UI lê continua viva
+    expect(Object.keys(state.health)).not.toContain('isOnline');
+
+    const src = (p: string) => readFileSync(resolve(__dirname, p), 'utf-8');
+    // `\bisOnline\s*:` pega declaração de campo e escrita de objeto; a
+    // menção em comentário histórico (types.ts) não tem dois-pontos.
+    const duplicateField = /\bisOnline\s*\??\s*:/;
+    expect(src('../src/nexus/types.ts')).not.toMatch(duplicateField);
+    expect(src('../src/nexus/health-monitor.ts')).not.toMatch(duplicateField);
+    expect(src('../src/store/unified-snapshot-store.ts')).not.toMatch(duplicateField);
   });
 
   it('publica HEALTH.CHANGED no bus real a cada snapshot', () => {

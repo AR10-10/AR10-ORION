@@ -34,8 +34,46 @@
 // cada frame incondicionalmente. Main thread sagrado: cada redraw é um
 // punhado de fillRect/strokeRect, não um cálculo pesado.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi, Time } from "lightweight-charts";
 import { ageAlpha, type DecayConfig } from "./annotation-decay";
+// Diretriz Final de Lapidação Visual, Adendo, Parte 11 ("etiquetas
+// profissionais"): texto nu direto sobre a zona virou caixa real (canto
+// suave + contraste garantido) — mesma primitiva compartilhada por
+// KillZoneBandsPlugin/LiquidationHeatmapPlugin/InstitutionalZonePlugin,
+// zero segunda implementação de "caixa de etiqueta".
+import { drawCanvasLabel } from "../nexus/canvas-label";
+// Ordem de Fechamento (Operador: "não ficar poluído, só as marca certeira"):
+// achado real de auditoria — cada FVG/OB bruto desenhava seu próprio
+// retângulo full-width independente, sem nenhuma consciência de outras
+// zonas do MESMO tipo sobrepostas no preço. Com muitas zonas reais ativas
+// ao mesmo tempo (comum em mercado real), o preenchimento translúcido de
+// cada caixa EMPILHA visualmente (alpha composto) — a "parede de cor"
+// literal que a Ordem descreve. fuseLiquidityZones funde, só para exibição,
+// zonas próximas/sobrepostas do MESMO grupo semântico — zero segundo
+// cálculo de obstáculo/peso/idade (ver uso abaixo).
+import { fuseLiquidityZones, type FusableZoneInput, type FusedLiquidityZone } from "../nexus/liquidity-zone-fusion";
+import { LIQUIDITY_PROXIMITY_PCT } from "../nexus/layer-relevance";
+// Achado real (captura de tela do Operador, BTC/USDT 30m: "o jeito que tá
+// o gráfico agora não tá legal"): FVG/OB/Breaker/Mitigation do MESMO type
+// nunca se fundem entre kinds diferentes (fuseLiquidityZones acima, por
+// design), então quando 2+ se sobrepõem no preço cada um continua
+// desenhando seu próprio preenchimento translúcido — e via compositing
+// "source-over" padrão, empilha (MEDIDO num harness real: até ~55-60% de
+// opacidade onde 4 zonas reais se cruzam, contra ~10% de uma sozinha) — a
+// MESMA "parede de cor" que este arquivo já resolveu pro caso intra-kind,
+// nunca medida/resolvida pro caso cross-kind. Ver cabeçalho do módulo.
+import { capOverlappingFillAlpha, rgbaWithAlpha, parseRgbaAlpha, type FillRectInput } from "../nexus/zone-fill-overlap";
+// Defeito relatado pelo Operador ("aquela linha amarela... antigamente não
+// atravessava o gráfico todo, só marcava um pedaço, marcava quantas vezes
+// ela testou"): EQH/EQL migra de `createPriceLine` (largura total forçada
+// pela lib) para este MESMO canvas — zero canvas novo, zero segundo loop de
+// rAF. A geometria do trecho vive num módulo puro para ser testada por
+// execução real. Ver equal-level-span.ts para o porquê do trecho ser a
+// representação honesta.
+import { resolveEqualLevelSegment } from "./equal-level-span";
 
 export interface FillableZone {
   type: "BULLISH" | "BEARISH";
@@ -43,6 +81,29 @@ export interface FillableZone {
   bottom: number;
   index: number;
 }
+
+/** Pool de liquidez real (EQH/EQL) do fvg-order-block-engine.js. `firstIndex`
+ *  e `touchIndices` são leitura direta do mesmo cluster que já produzia
+ *  `touches` — nenhum cálculo novo, só campos que antes morriam no motor. */
+export interface EqualLevelMark {
+  type: "EQUAL_HIGH" | "EQUAL_LOW";
+  price: number;
+  touches: number;
+  /** índice do ÚLTIMO toque real */
+  index: number;
+  /** índice do PRIMEIRO toque real */
+  firstIndex?: number;
+  /** todos os índices de toque, já ordenados */
+  touchIndices?: number[];
+}
+
+// Âmbar unificado de S1/R1/EQH/EQL (Especificação Visual Profissional v1,
+// pedido direto do Operador) — MESMO rgba que a price line removida usava.
+// Só a primitiva muda; a cor não.
+const EQUAL_LEVEL_COLOR = "rgba(245, 158, 11, 0.45)";
+const EQUAL_LEVEL_LABEL_COLOR = "rgba(245, 158, 11, 0.85)";
+/** Meia-altura da marca vertical de cada toque real, em pixels. */
+const TOUCH_TICK_HALF_PX = 3;
 
 interface ZonePalette {
   fill: string;
@@ -52,10 +113,10 @@ interface ZonePalette {
 // Mesmo rgba exato das price lines que este overlay substitui — a
 // hierarquia visual (OB mais presente que FVG) já existia, só ganha um
 // preenchimento proporcionalmente mais translúcido que a borda.
-const FVG_BULLISH: ZonePalette = { fill: "rgba(0, 255, 170, 0.10)", border: "rgba(0, 255, 170, 0.30)" };
-const FVG_BEARISH: ZonePalette = { fill: "rgba(255, 0, 85, 0.10)", border: "rgba(255, 0, 85, 0.30)" };
-const OB_BULLISH: ZonePalette = { fill: "rgba(0, 255, 170, 0.15)", border: "rgba(0, 255, 170, 0.40)" };
-const OB_BEARISH: ZonePalette = { fill: "rgba(255, 0, 85, 0.15)", border: "rgba(255, 0, 85, 0.40)" };
+const FVG_BULLISH: ZonePalette = { fill: "rgba(8, 153, 129, 0.10)", border: "rgba(8, 153, 129, 0.30)" };
+const FVG_BEARISH: ZonePalette = { fill: "rgba(242, 54, 69, 0.10)", border: "rgba(242, 54, 69, 0.30)" };
+const OB_BULLISH: ZonePalette = { fill: "rgba(8, 153, 129, 0.15)", border: "rgba(8, 153, 129, 0.40)" };
+const OB_BEARISH: ZonePalette = { fill: "rgba(242, 54, 69, 0.15)", border: "rgba(242, 54, 69, 0.40)" };
 
 // Diretriz Restauração/Inteligência Visual §6 ("risco visual... obstáculo
 // estrutural"): MESMA cor/hierarquia acima — o preenchimento nunca muda
@@ -64,15 +125,70 @@ const OB_BEARISH: ZonePalette = { fill: "rgba(255, 0, 85, 0.15)", border: "rgba(
 // plano ATIVO, um obstáculo real no caminho entrada→alvo
 // (trade-plan.ts:obstacleZonesInPath, reusado por App.tsx — zero segundo
 // cálculo). Sem plano ativo, obstacleZones vem vazio e nada muda.
-const FVG_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 255, 170, 0.10)", border: "rgba(0, 255, 170, 0.85)" };
-const FVG_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.10)", border: "rgba(255, 0, 85, 0.85)" };
-const OB_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 255, 170, 0.15)", border: "rgba(0, 255, 170, 0.85)" };
-const OB_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(255, 0, 85, 0.15)", border: "rgba(255, 0, 85, 0.85)" };
+const FVG_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(8, 153, 129, 0.10)", border: "rgba(8, 153, 129, 0.85)" };
+const FVG_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(242, 54, 69, 0.10)", border: "rgba(242, 54, 69, 0.85)" };
+const OB_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(8, 153, 129, 0.15)", border: "rgba(8, 153, 129, 0.85)" };
+const OB_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(242, 54, 69, 0.15)", border: "rgba(242, 54, 69, 0.85)" };
 
-function paletteFor(kind: "FVG" | "OB", type: "BULLISH" | "BEARISH", isObstacle: boolean): ZonePalette {
+// Pedido do Operador ("ver o que está faltando... pra ele chegar na
+// perfeição"): Liquidity Void (liquidity-void-engine.js) — deliberadamente
+// NÃO reusa o par verde/vermelho de FVG/OB. Pesquisa real (WebSearch,
+// citada no motor) confirma que um Void tipicamente CONTÉM vários FVGs —
+// as duas camadas vão se sobrepor no preço com frequência real, e
+// fuseLiquidityZones (abaixo) nunca funde entre kinds diferentes (Regra de
+// Ouro 4) — reusar a mesma cor faria exatamente a "parede de cor" que a
+// Ordem de Fechamento já corrigiu para zonas do MESMO kind. Par
+// ciano/magenta: alta distinção visual, nenhuma outra camada do gráfico
+// usa essa família (FVG/OB/Sessão=verde/vermelho, Sweep=laranja,
+// harmônico/triângulo/OCO=roxo, Zona Institucional=lavanda).
+const VOID_BULLISH: ZonePalette = { fill: "rgba(0, 98, 255, 0.10)", border: "rgba(0, 98, 255, 0.35)" };
+const VOID_BEARISH: ZonePalette = { fill: "rgba(236, 81, 205, 0.10)", border: "rgba(236, 81, 205, 0.35)" };
+const VOID_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(0, 98, 255, 0.10)", border: "rgba(0, 98, 255, 0.85)" };
+const VOID_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(236, 81, 205, 0.10)", border: "rgba(236, 81, 205, 0.85)" };
+
+// GRADUAÇÃO de institutional-blocks.js — Breaker / Mitigation Block.
+//
+// Ambos são Order Blocks que FALHARAM. Por isso reusam deliberadamente o
+// MESMO par verde/vermelho de FVG/OB (a família visual de "zona de
+// oferta/demanda"), com uma diferença real e legível: são DESENHADOS COM
+// BORDA MAIS PRESENTE E PREENCHIMENTO MAIS FRACO que um OB vivo — um bloco
+// que já falhou é uma referência estrutural, não uma zona ativa de mesma
+// força. A distinção entre os dois vem do RÓTULO (BRK/MIT), nunca de mais
+// um matiz: a disciplina de matiz deste arquivo (>40° entre conceitos
+// diferentes) já está apertada, e inventar duas cores novas para um
+// conceito que É um OB seria exatamente a "parede de cor" que a Ordem de
+// Fechamento corrigiu.
+//
+// A direção usada é a OPERACIONAL (pós-inversão do Breaker), calculada no
+// motor — nunca a polaridade original. É ela que responde "esta zona agora
+// empurra pra cima ou pra baixo".
+const BREAKER_BULLISH: ZonePalette = { fill: "rgba(8, 153, 129, 0.07)", border: "rgba(8, 153, 129, 0.55)" };
+const BREAKER_BEARISH: ZonePalette = { fill: "rgba(242, 54, 69, 0.07)", border: "rgba(242, 54, 69, 0.55)" };
+const BREAKER_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(8, 153, 129, 0.07)", border: "rgba(8, 153, 129, 0.85)" };
+const BREAKER_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(242, 54, 69, 0.07)", border: "rgba(242, 54, 69, 0.85)" };
+const MITIGATION_BULLISH: ZonePalette = { fill: "rgba(8, 153, 129, 0.05)", border: "rgba(8, 153, 129, 0.38)" };
+const MITIGATION_BEARISH: ZonePalette = { fill: "rgba(242, 54, 69, 0.05)", border: "rgba(242, 54, 69, 0.38)" };
+const MITIGATION_BULLISH_OBSTACLE: ZonePalette = { fill: "rgba(8, 153, 129, 0.05)", border: "rgba(8, 153, 129, 0.85)" };
+const MITIGATION_BEARISH_OBSTACLE: ZonePalette = { fill: "rgba(242, 54, 69, 0.05)", border: "rgba(242, 54, 69, 0.85)" };
+
+export type ZoneKind = "FVG" | "OB" | "VOID" | "BREAKER" | "MITIGATION";
+
+function paletteFor(kind: ZoneKind, type: "BULLISH" | "BEARISH", isObstacle: boolean): ZonePalette {
+  if (kind === "BREAKER") {
+    if (isObstacle) return type === "BULLISH" ? BREAKER_BULLISH_OBSTACLE : BREAKER_BEARISH_OBSTACLE;
+    return type === "BULLISH" ? BREAKER_BULLISH : BREAKER_BEARISH;
+  }
+  if (kind === "MITIGATION") {
+    if (isObstacle) return type === "BULLISH" ? MITIGATION_BULLISH_OBSTACLE : MITIGATION_BEARISH_OBSTACLE;
+    return type === "BULLISH" ? MITIGATION_BULLISH : MITIGATION_BEARISH;
+  }
   if (kind === "FVG") {
     if (isObstacle) return type === "BULLISH" ? FVG_BULLISH_OBSTACLE : FVG_BEARISH_OBSTACLE;
     return type === "BULLISH" ? FVG_BULLISH : FVG_BEARISH;
+  }
+  if (kind === "VOID") {
+    if (isObstacle) return type === "BULLISH" ? VOID_BULLISH_OBSTACLE : VOID_BEARISH_OBSTACLE;
+    return type === "BULLISH" ? VOID_BULLISH : VOID_BEARISH;
   }
   if (isObstacle) return type === "BULLISH" ? OB_BULLISH_OBSTACLE : OB_BEARISH_OBSTACLE;
   return type === "BULLISH" ? OB_BULLISH : OB_BEARISH;
@@ -86,7 +202,11 @@ function paletteFor(kind: "FVG" | "OB", type: "BULLISH" | "BEARISH", isObstacle:
 // some do desenho — "esquecida" apenas da TELA, nunca do dado real:
 // smcZones (App.tsx) continua com o registro completo para qualquer outro
 // consumidor (ex. Trade Plan), isto só decide o que este canvas pinta.
-const ZONE_DECAY: DecayConfig = { fadeStartCandles: 30, expireCandles: 100, minAlpha: 0.15 };
+// Ordem Nº 04 (§4/§5, MAIN_LIQUIDITY em visual-budget.ts): exportado pelo
+// mesmo motivo que BREAK_DECAY já é exportado de StructureBreakMarkersPlugin
+// — EnhancedChart_110_Percent.tsx reusa esta MESMA curva para montar o
+// candidato de orçamento visual, zero segunda curva de decaimento.
+export const ZONE_DECAY: DecayConfig = { fadeStartCandles: 30, expireCandles: 100, minAlpha: 0.15 };
 
 interface LiquidityZonesPluginProps {
   chart: IChartApi | null;
@@ -94,26 +214,66 @@ interface LiquidityZonesPluginProps {
   data: { time: number }[];
   fairValueGaps: FillableZone[];
   orderBlocks: FillableZone[];
+  // Pedido do Operador ("ver o que está faltando... pra ele chegar na
+  // perfeição"): Liquidity Void (liquidity-void-engine.js) — mesmo shape
+  // real FillableZone (type/top/bottom/index), kind próprio ("VOID") na
+  // fusão/paleta abaixo. Opcional/fail-closed: ausente/vazio => desenho
+  // idêntico ao de antes desta camada existir.
+  liquidityVoids?: FillableZone[];
   // Diretriz Restauração/Inteligência Visual §6: zonas reais (as MESMAS já
   // desenhadas acima, identificadas por low/high) que o Trade Plan ATIVO
   // cruza a caminho de algum alvo — opcional/fail-closed: ausente/vazio =>
   // desenho idêntico ao de sempre, nenhuma zona em ênfase.
   obstacleZones?: { low: number; high: number }[];
+  // Ordem Nº 04: peso visual já resolvido pelo orçamento visual cruzado
+  // (visual-budget.ts, categoria MAIN_LIQUIDITY), por posição no array
+  // ORIGINAL de fairValueGaps/orderBlocks — undefined/null (padrão) cai no
+  // ageAlpha isolado de sempre (fail-closed, comportamento anterior
+  // preservado). Zonas-obstáculo IGNORAM este peso de propósito (ver
+  // drawZone abaixo) — a garantia de alpha=1 é mais forte que a
+  // competição por orçamento.
+  fvgVisualWeights?: (number | undefined)[];
+  obVisualWeights?: (number | undefined)[];
+  // Liquidity Void ainda não entra na competição cruzada de orçamento
+  // visual (visual-budget.ts) — v1 deliberadamente escopado: undefined
+  // aqui cai no MESMO fallback fail-closed de ageAlpha isolado que
+  // fvgVisualWeights/obVisualWeights já tinham antes de entrarem no
+  // orçamento cruzado. Entrar no orçamento é uma evolução futura própria,
+  // não um requisito para a camada existir e ser honesta hoje.
+  voidVisualWeights?: (number | undefined)[];
+  // Pools de liquidez (EQH/EQL) — antes eram price lines de largura total
+  // no EnhancedChart. Opcional/fail-closed: ausente/vazio => desenho
+  // idêntico ao de antes desta camada existir aqui.
+  equalLevels?: EqualLevelMark[];
+  // Breaker / Mitigation Blocks (institutional-blocks.js). Mesmo shape real
+  // FillableZone: `type` aqui é a direção OPERACIONAL já resolvida pelo
+  // motor (o Breaker inverte a polaridade do OB original), nunca a
+  // polaridade original. Opcional/fail-closed: ausente/vazio => desenho
+  // idêntico ao de antes desta camada existir.
+  breakerBlocks?: FillableZone[];
+  mitigationBlocks?: FillableZone[];
+  // Achado real (auditoria do pedido do Operador "cada item no seu canto,
+  // nada cobrindo nada"): sem isto, esta camada desenhava até plotRight,
+  // que só exclui o eixo — nunca a lane real do Volume Profile/TPO/Order
+  // Book Depth, medida em 34% da largura quando as três estão ativas
+  // (padrão). Opcional/fail-closed: ausente => comportamento antigo
+  // (plotRight puro), nunca uma quebra pra quem ainda não passa a prop.
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
-export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, obstacleZones }: LiquidityZonesPluginProps) {
+export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, orderBlocks, liquidityVoids, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks, activeLanes }: LiquidityZonesPluginProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const zonesRef = useRef({ fairValueGaps, orderBlocks, data, obstacleZones });
+  const zonesRef = useRef({ fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks, activeLanes });
   const markDirtyRef = useRef<(() => void) | null>(null);
 
   // Sempre a versão mais recente das zonas/candles para o loop de desenho
   // ler — nunca dispara o efeito de setup abaixo de novo (evita reabrir a
   // conexão com o chart/reassinar os listeners a cada atualização de dado).
-  zonesRef.current = { fairValueGaps, orderBlocks, data, obstacleZones };
+  zonesRef.current = { fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks, activeLanes };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [fairValueGaps, orderBlocks, data, obstacleZones]);
+  }, [fairValueGaps, orderBlocks, liquidityVoids, data, obstacleZones, fvgVisualWeights, obVisualWeights, voidVisualWeights, equalLevels, breakerBlocks, mitigationBlocks, activeLanes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -136,8 +296,14 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
+      // Fronteira medida do eixo (chart-plot-area.ts) + lanes de perfil
+      // (chart-profile-lanes.ts) ATIVAS agora: o desenho para antes do
+      // eixo E antes da lane real do Volume Profile/TPO/Order Book Depth
+      // — nunca mais uma zona cruzando por cima do livro de ofertas.
+      const { plotRight } = measurePlotArea(chart, cssWidth, zonesRef.current.activeLanes);
+
       const timeScale = chart.timeScale();
-      const { fairValueGaps: fvgs, orderBlocks: obs, data: candles, obstacleZones: obstacles } = zonesRef.current;
+      const { fairValueGaps: fvgs, orderBlocks: obs, liquidityVoids: voids, data: candles, obstacleZones: obstacles, fvgVisualWeights: fvgWeights, obVisualWeights: obWeights, voidVisualWeights: voidWeights, equalLevels: pools, breakerBlocks: breakers, mitigationBlocks: mitigations } = zonesRef.current;
 
       const currentIndex = candles.length - 1;
       // Identidade por low/high real (mesmos números, zero recálculo) —
@@ -146,12 +312,33 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       const isObstacle = (zone: FillableZone) =>
         (obstacles ?? []).some((o) => o.low === zone.bottom && o.high === zone.top);
 
-      const drawZone = (zone: FillableZone, palette: ZonePalette, label: string) => {
+      // Correção real (Diretriz Consolidação/Auditoria/Evolução, auditoria
+      // de ciclo de vida, achado confirmado): uma zona que é obstáculo
+      // real do plano ATIVO agora (mesma isObstacle() usada na paleta e no
+      // rótulo ⚠ abaixo — zero segundo cálculo) nunca deve esmaecer por
+      // idade fixa enquanto continuar bloqueando o caminho do plano —
+      // "nunca em tempo fixo, sempre por relevância real" é exatamente o
+      // caso de uma zona antiga que ainda é o obstáculo estrutural de uma
+      // operação aberta. Volta a decair normalmente assim que deixar de
+      // ser obstáculo (plano fechado ou preço já passou da zona).
+      //
+      // Ordem Nº 04: zona-obstáculo IGNORA resolvedWeight de propósito —
+      // a garantia de alpha=1 (risco real do plano ativo) nunca se dobra
+      // à competição por orçamento visual. Zona comum usa o peso já
+      // resolvido pela competição cruzada (visual-budget.ts) quando
+      // presente; ausente/null cai no ageAlpha isolado de sempre
+      // (fail-closed, mesmo comportamento de antes desta rodada). Resolvido
+      // por zona BRUTA, antes da fusão — a fusão abaixo só decide como
+      // agrupar/desenhar, nunca recalcula decaimento/obstáculo.
+      const resolveAlpha = (zone: FillableZone, isObstacleZone: boolean, resolvedWeight?: number) => {
+        const age = currentIndex - zone.index;
+        return isObstacleZone ? 1 : resolvedWeight !== undefined && resolvedWeight !== null ? resolvedWeight : ageAlpha(age, ZONE_DECAY);
+      };
+
+      const drawZoneBorderAndLabel = (zone: { top: number; bottom: number; index: number; alpha: number }, palette: ZonePalette, label: string) => {
         const point = candles[zone.index];
         if (!point) return; // índice fora da janela real de candles — nunca desenha um palpite.
-        const age = currentIndex - zone.index;
-        const alpha = ageAlpha(age, ZONE_DECAY);
-        if (alpha <= 0) return; // "esquecida" — só da tela, ver comentário de ageAlpha acima.
+        if (zone.alpha <= 0) return; // "esquecida" — só da tela, ver comentário de ageAlpha acima.
         const x1 = timeScale.timeToCoordinate(point.time as unknown as Time);
         const y1 = series.priceToCoordinate(zone.top);
         const y2 = series.priceToCoordinate(zone.bottom);
@@ -159,25 +346,48 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
         const rectX = x1;
         const rectY = Math.min(y1, y2);
         const rectHeight = Math.max(1, Math.abs(y2 - y1));
-        const rectWidth = cssWidth - rectX;
+        const rectWidth = plotRight - rectX;
         if (rectWidth <= 0) return;
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = palette.fill;
-        ctx.fillRect(rectX, rectY, rectWidth, rectHeight);
+        ctx.globalAlpha = zone.alpha;
         // Fio de Seda: 1px sólida real (Canvas 2D nunca usa setLineDash aqui).
         ctx.lineWidth = 1;
         ctx.strokeStyle = palette.border;
         ctx.strokeRect(rectX + 0.5, rectY + 0.5, Math.max(0, rectWidth - 1), Math.max(0, rectHeight - 1));
-        // Label elegante (Ordem "Ciborgue Vivo" §1): identifica o tipo direto
-        // no gráfico, sem abrir painel nenhum — mesma opacidade decrescente
-        // da própria zona, nunca compete visualmente com uma zona já velha.
+        // Label elegante (Ordem "Ciborgue Vivo" §1, caixa real desde a
+        // Diretriz Final Adendo Parte 11): identifica o tipo direto no
+        // gráfico, sem abrir painel nenhum — mesma opacidade decrescente
+        // da própria zona (globalAlpha já ativo aqui), nunca compete
+        // visualmente com uma zona já velha. Caixa usa a cor de borda da
+        // paleta (mais opaca que o fill) — contraste garantido pela
+        // primitiva, nunca decidido por acaso.
         if (rectWidth > 24 && rectHeight > 10) {
-          ctx.font = "9px -apple-system, sans-serif";
-          ctx.fillStyle = palette.border;
-          ctx.textBaseline = "top";
-          ctx.fillText(label, rectX + 3, rectY + 2);
+          drawCanvasLabel(ctx, rectX + 3, rectY + 3, { fill: palette.border, text: label });
         }
         ctx.globalAlpha = 1;
+      };
+
+      // Zona completa (preenchimento + borda + etiqueta juntos) — usada só
+      // por Liquidity Void abaixo, que fica FORA do grupo de preenchimento
+      // compartilhado (ver drawSharedFillGroup): cor própria deliberadamente
+      // distinta de FVG/OB/Breaker/Mitigation (ver VOID_BULLISH/VOID_BEARISH
+      // acima, "reusar a mesma cor faria exatamente a 'parede de cor'"), então
+      // nunca compõe parede com eles; sobreposição de Void consigo mesmo
+      // continua rara o bastante pra não precisar do mesmo tratamento nesta
+      // rodada.
+      const drawZoneWithFill = (zone: { top: number; bottom: number; index: number; alpha: number }, palette: ZonePalette, label: string) => {
+        const point = candles[zone.index];
+        if (!point || zone.alpha <= 0) return;
+        const x1 = timeScale.timeToCoordinate(point.time as unknown as Time);
+        const y1 = series.priceToCoordinate(zone.top);
+        const y2 = series.priceToCoordinate(zone.bottom);
+        if (x1 === null || y1 === null || y2 === null) return;
+        const rectWidth = plotRight - x1;
+        if (rectWidth <= 0) return;
+        ctx.globalAlpha = zone.alpha;
+        ctx.fillStyle = palette.fill;
+        ctx.fillRect(x1, Math.min(y1, y2), rectWidth, Math.max(1, Math.abs(y2 - y1)));
+        ctx.globalAlpha = 1;
+        drawZoneBorderAndLabel(zone, palette, label);
       };
 
       // Achado real (pergunta do Operador: "aquela zona vermelha tipo
@@ -193,8 +403,168 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
       // sigla e o glifo) — havia um espaço aqui. Zero mudança de
       // informação/cor/direção, só a mesma string mais compacta.
       const dir = (t: "BULLISH" | "BEARISH") => (t === "BULLISH" ? "↑" : "↓");
-      fvgs.forEach((z) => drawZone(z, paletteFor("FVG", z.type, isObstacle(z)), `FVG${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));
-      obs.forEach((z) => drawZone(z, paletteFor("OB", z.type, isObstacle(z)), `OB${dir(z.type)}${isObstacle(z) ? " ⚠" : ""}`));
+      const kindLabelOf = (kind: ZoneKind) => (kind === "BREAKER" ? "BRK" : kind === "MITIGATION" ? "MIT" : kind);
+      const labelFor = (kind: ZoneKind, type: "BULLISH" | "BEARISH", group: { memberCount: number; isObstacle: boolean }) =>
+        `${kindLabelOf(kind)}${dir(type)}${group.memberCount > 1 ? ` ×${group.memberCount}` : ""}${group.isObstacle ? " ⚠" : ""}`;
+
+      // Ordem de Fechamento (Operador: "não ficar poluído... marca
+      // certeira"): funde, só para exibição, zonas do MESMO kind+type cujo
+      // intervalo de preço se sobrepõe ou fica próximo
+      // (LIQUIDITY_PROXIMITY_PCT — mesma constante real já usada para
+      // clusterizar Sweeps/Session Key Levels, zero limiar novo inventado).
+      // BULLISH nunca funde com BEARISH, FVG nunca funde com OB — fenômenos
+      // estruturais reais distintos; fundi-los apagaria informação real
+      // (Regra de Ouro 4). memberCount>1 vira "×N" no rótulo — mesma
+      // convenção já usada por Sweep/Zona Institucional agrupados.
+      const drawGroup = (raw: FillableZone[], weights: (number | undefined)[] | undefined, kind: ZoneKind, type: "BULLISH" | "BEARISH") => {
+        const fusable: FusableZoneInput[] = [];
+        raw.forEach((z, i) => {
+          if (z.type !== type) return;
+          const obstacle = isObstacle(z);
+          fusable.push({ top: z.top, bottom: z.bottom, index: z.index, isObstacle: obstacle, alpha: resolveAlpha(z, obstacle, weights?.[i]) });
+        });
+        for (const group of fuseLiquidityZones(fusable, LIQUIDITY_PROXIMITY_PCT)) {
+          drawZoneWithFill(group, paletteFor(kind, type, group.isObstacle), labelFor(kind, type, group));
+        }
+      };
+
+      // ── FVG/OB/Breaker/Mitigation: preenchimento COMPARTILHADO ───────
+      // Achado real (captura de tela do Operador, BTC/USDT 30m: "o jeito
+      // que tá o gráfico agora não tá legal") — ver zone-fill-overlap.ts
+      // pro cabeçalho completo. Os 4 kinds compartilham a MESMA tripla RGB
+      // por type (vermelho 242,54,69=BEARISH / verde 8,153,129=BULLISH —
+      // só o alpha PRÓPRIO de cada kind difere, a mesma hierarquia visual
+      // já documentada nas paletas acima). fuseLiquidityZones continua
+      // fundindo só DENTRO de cada kind (nunca entre kinds — Regra de Ouro
+      // 4, identidade estrutural preservada: borda+etiqueta de cada kind
+      // continuam desenhando por conta própria logo abaixo); o que muda é
+      // o PREENCHIMENTO: em vez de cada uma das 4 fusões desenhar seu
+      // próprio fillRect translúcido (que empilha via "source-over" padrão
+      // do Canvas — MEDIDO num harness real: até ~55-60% de opacidade onde
+      // 4 zonas reais se cruzam, contra ~10% de uma sozinha), as 4
+      // colecionam seus retângulos de preenchimento numa lista só e
+      // capOverlappingFillAlpha decompõe tudo numa passada sem
+      // sobreposição, no alpha MÁXIMO real entre elas — nunca empilhado.
+      const collectFusedGroups = (raw: FillableZone[], weights: (number | undefined)[] | undefined, type: "BULLISH" | "BEARISH") => {
+        const fusable: FusableZoneInput[] = [];
+        raw.forEach((z, i) => {
+          if (z.type !== type) return;
+          const obstacle = isObstacle(z);
+          fusable.push({ top: z.top, bottom: z.bottom, index: z.index, isObstacle: obstacle, alpha: resolveAlpha(z, obstacle, weights?.[i]) });
+        });
+        return fuseLiquidityZones(fusable, LIQUIDITY_PROXIMITY_PCT);
+      };
+
+      const drawSharedFillGroup = (type: "BULLISH" | "BEARISH") => {
+        const fvgGroups = collectFusedGroups(fvgs, fvgWeights, type);
+        const obGroups = collectFusedGroups(obs, obWeights, type);
+        const brkGroups = collectFusedGroups(breakers ?? [], undefined, type);
+        const mitGroups = collectFusedGroups(mitigations ?? [], undefined, type);
+
+        const fillInputs: FillRectInput[] = [];
+        const collect = (groups: FusedLiquidityZone[], ownFillAlpha: number) => {
+          for (const group of groups) {
+            const point = candles[group.index];
+            if (!point || group.alpha <= 0) continue;
+            const gx1 = timeScale.timeToCoordinate(point.time as unknown as Time);
+            const gy1 = series.priceToCoordinate(group.top);
+            const gy2 = series.priceToCoordinate(group.bottom);
+            if (gx1 === null || gy1 === null || gy2 === null) continue;
+            const w = plotRight - gx1;
+            if (w <= 0) continue;
+            fillInputs.push({ x1: gx1, x2: plotRight, yTop: Math.min(gy1, gy2), yBottom: Math.max(gy1, gy2), alpha: group.alpha * ownFillAlpha });
+          }
+        };
+        // Alpha PRÓPRIO de cada kind extraído da MESMA paleta declarada
+        // acima (parseRgbaAlpha) — nunca um número redigitado à parte.
+        // Idêntico pra variante normal/obstáculo: obstáculo só altera a
+        // BORDA (ver *_OBSTACLE acima), nunca o preenchimento.
+        collect(fvgGroups, parseRgbaAlpha((type === "BULLISH" ? FVG_BULLISH : FVG_BEARISH).fill));
+        collect(obGroups, parseRgbaAlpha((type === "BULLISH" ? OB_BULLISH : OB_BEARISH).fill));
+        collect(brkGroups, parseRgbaAlpha((type === "BULLISH" ? BREAKER_BULLISH : BREAKER_BEARISH).fill));
+        collect(mitGroups, parseRgbaAlpha((type === "BULLISH" ? MITIGATION_BULLISH : MITIGATION_BEARISH).fill));
+
+        // Mesma tripla RGB das 4 (só o alpha muda entre kinds) — reusa a
+        // string já declarada em OB_* em vez de redigitar "242, 54, 69"/
+        // "8, 153, 129" aqui.
+        const referenceFill = (type === "BULLISH" ? OB_BULLISH : OB_BEARISH).fill;
+        ctx.globalAlpha = 1;
+        for (const capped of capOverlappingFillAlpha(fillInputs)) {
+          ctx.fillStyle = rgbaWithAlpha(referenceFill, capped.alpha);
+          ctx.fillRect(capped.x1, capped.yTop, capped.x2 - capped.x1, capped.yBottom - capped.yTop);
+        }
+
+        for (const group of fvgGroups) drawZoneBorderAndLabel(group, paletteFor("FVG", type, group.isObstacle), labelFor("FVG", type, group));
+        for (const group of obGroups) drawZoneBorderAndLabel(group, paletteFor("OB", type, group.isObstacle), labelFor("OB", type, group));
+        for (const group of brkGroups) drawZoneBorderAndLabel(group, paletteFor("BREAKER", type, group.isObstacle), labelFor("BREAKER", type, group));
+        for (const group of mitGroups) drawZoneBorderAndLabel(group, paletteFor("MITIGATION", type, group.isObstacle), labelFor("MITIGATION", type, group));
+      };
+
+      drawSharedFillGroup("BULLISH");
+      drawSharedFillGroup("BEARISH");
+      drawGroup(voids ?? [], voidWeights, "VOID", "BULLISH");
+      drawGroup(voids ?? [], voidWeights, "VOID", "BEARISH");
+
+      // ── Pools de liquidez (EQH/EQL) ──────────────────────────────────
+      // Desenhados por último: são o traço mais fino do canvas e não podem
+      // ficar por baixo do preenchimento translúcido das zonas.
+      //
+      // O que muda em relação à price line que isto substitui: a linha
+      // cobre o TRECHO real entre o primeiro e o último toque (mais uma
+      // sobra curta de legibilidade — ver equal-level-span.ts), cada toque
+      // real ganha uma marca vertical de 1px, e a contagem aparece no
+      // próprio gráfico ("EQH ×3") em vez de morrer num `title` que o
+      // painel de velas nunca renderizou.
+      for (const pool of pools ?? []) {
+        if (!Number.isFinite(pool.price)) continue;
+        const y = series.priceToCoordinate(pool.price);
+        if (y === null) continue; // fora da faixa visível — fail-closed.
+
+        const first = candles[pool.firstIndex ?? pool.index];
+        const last = candles[pool.index];
+        if (!first || !last) continue; // índice fora da janela real de candles.
+        const xFirst = timeScale.timeToCoordinate(first.time as unknown as Time);
+        const xLast = timeScale.timeToCoordinate(last.time as unknown as Time);
+        if (xFirst === null || xLast === null) continue;
+
+        const seg = resolveEqualLevelSegment(xFirst, xLast, plotRight);
+        if (!seg) continue;
+
+        // Fio de Seda (Regra de Ouro 5): 1px sólida real, nunca setLineDash.
+        // O +0.5 põe o traço no centro do pixel — sem ele um traço de 1px
+        // cai entre dois pixels e o navegador o desenha com 2px borrados.
+        const yLine = Math.round(y) + 0.5;
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = EQUAL_LEVEL_COLOR;
+        ctx.beginPath();
+        ctx.moveTo(seg.x1, yLine);
+        ctx.lineTo(seg.x2, yLine);
+        ctx.stroke();
+
+        // Marca vertical em cada toque REAL. É a evidência que sustenta a
+        // contagem do rótulo: o Operador vê ONDE o nível foi testado, não
+        // só quantas vezes. Sem touchIndices (dado antigo em cache), o
+        // rótulo continua correto e só as marcas somem — fail-closed.
+        for (const ti of pool.touchIndices ?? []) {
+          const c = candles[ti];
+          if (!c) continue;
+          const x = timeScale.timeToCoordinate(c.time as unknown as Time);
+          if (x === null || x < 0 || x > plotRight) continue;
+          const xTick = Math.round(x) + 0.5;
+          ctx.beginPath();
+          ctx.moveTo(xTick, yLine - TOUCH_TICK_HALF_PX);
+          ctx.lineTo(xTick, yLine + TOUCH_TICK_HALF_PX);
+          ctx.stroke();
+        }
+
+        // "marcava quantas vezes ela testou naquela mesma zona" — a
+        // contagem real do cluster, na mesma convenção "×N" já usada por
+        // Sweep/Zona Institucional/FVG fundidos.
+        drawCanvasLabel(ctx, seg.x1 + 2, yLine - 13, {
+          fill: EQUAL_LEVEL_LABEL_COLOR,
+          text: `${pool.type === "EQUAL_HIGH" ? "EQH" : "EQL"} ×${pool.touches}`,
+        });
+      }
     };
 
     const markDirty = () => {
@@ -237,7 +607,7 @@ export function LiquidityZonesPlugin({ chart, series, data, fairValueGaps, order
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ width: "100%", height: "100%" }}
+      style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("liquidity_zones") }}
     />
   );
 }

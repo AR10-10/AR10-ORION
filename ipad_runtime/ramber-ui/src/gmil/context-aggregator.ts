@@ -13,9 +13,11 @@
 //   contextScore      TODAS as categorias — é o consenso global existente,
 //                     agora com o nome que a Constituição usa.
 //   institutionalBias DERIVATIVES + ONCHAIN — posicionamento de players
-//                     alavancados/institucionais. Hoje: 1 provedor real
-//                     (derivatives_positioning); ONCHAIN sem fonte keyless
-//                     (gancho honesto — entra sozinho quando existir).
+//                     alavancados/institucionais. Hoje: 2 provedores reais
+//                     (derivatives_positioning; onchain_tvl_flow desde a
+//                     Ordem Mestra §7 — fluxo de TVL agregado real via
+//                     DefiLlama, proxy honesto de capital on-chain, não
+//                     whale-tracking individual, ver README.md).
 //   macroBias         MACRO — DXY/Treasuries/calendário. Zero provedores
 //                     hoje => score null SEMPRE (nunca um neutro
 //                     fabricado); a UI mostra AGUARDANDO FONTE.

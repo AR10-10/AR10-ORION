@@ -54,6 +54,9 @@
 //     corredor estático (já existente, já testado) é a leitura honesta —
 //     "chegou"/"parou" não deveria continuar girando.
 import { useEffect, useRef } from "react";
+import { getChartLayerZIndex } from "./chart-layer-depth";
+import { measurePlotArea } from "./chart-plot-area";
+import type { ChartProfileLaneId } from "./chart-profile-lanes";
 import type { IChartApi, ISeriesApi } from "lightweight-charts";
 import type { AuraReading } from "../nexus/aura-lifecycle";
 import type { CycloneRealParams, CycloneWorkerOutMessage } from "../nexus/conviction-cyclone-draw";
@@ -62,13 +65,18 @@ interface NeuralMarketAuraPluginProps {
   chart: IChartApi | null;
   series: ISeriesApi<"Candlestick"> | null;
   aura: AuraReading | null;
+  // Achado real (auditoria "cada item no seu canto, nada cobrindo nada"):
+  // sem isto o corredor/Ciclone ancorava em plotRight puro — bandX
+  // (borda direita do corredor) caindo em cima da lane do Volume
+  // Profile/TPO/Order Book Depth quando ativas. Opcional/fail-closed.
+  activeLanes?: readonly ChartProfileLaneId[];
 }
 
 // Mesma paleta direcional já usada em toda a UI (BOS/CHOCH, badges de
 // direção): verde real para ALTA/sucesso, vermelho real para BAIXA/stop —
 // um significado por cor em todo o app, nunca uma segunda paleta.
-const LONG_RGB = "0, 255, 170";
-const SHORT_RGB = "255, 0, 85";
+const LONG_RGB = "8, 153, 129";
+const SHORT_RGB = "242, 54, 69";
 const NEUTRAL_RGB = "138, 180, 248"; // mesmo azul-acinzentado usado para "neutro/informativo" em toda a UI
 
 // Correção real de auditoria (FASE Ω Priority 3, Finding I): a versão
@@ -137,10 +145,10 @@ function prefersReducedMotion(): boolean {
     : false;
 }
 
-export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAuraPluginProps) {
+export function NeuralMarketAuraPlugin({ chart, series, aura, activeLanes }: NeuralMarketAuraPluginProps) {
   const cycloneCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const staticCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const stateRef = useRef({ aura });
+  const stateRef = useRef({ aura, activeLanes });
   const markDirtyRef = useRef<(() => void) | null>(null);
   // modeRef é lido pelo laço de desenho (draw()/decideRenderer) — de
   // propósito NUNCA promovido a estado React reativo: qual canvas fica
@@ -153,11 +161,11 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
   // dentro do efeito) desde o primeiro render — nunca pelo JSX.
   const modeRef = useRef<RendererMode>("pending");
 
-  stateRef.current = { aura };
+  stateRef.current = { aura, activeLanes };
 
   useEffect(() => {
     markDirtyRef.current?.();
-  }, [aura]);
+  }, [aura, activeLanes]);
 
   useEffect(() => {
     const cycloneCanvas = cycloneCanvasRef.current;
@@ -192,6 +200,13 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
+      // Fronteira medida do eixo (chart-plot-area.ts) + lanes de perfil
+      // ATIVAS (chart-profile-lanes.ts): o corredor e a linha do alvo
+      // param antes do eixo E antes da lane do Volume Profile/TPO/Order
+      // Book Depth quando ativas — nunca mais por cima do livro de
+      // ofertas. Ancorar em `cssWidth` era ancorar na borda do CONTAINER.
+      const { plotRight } = measurePlotArea(chart, cssWidth, stateRef.current.activeLanes);
+
       const { aura: reading } = stateRef.current;
       // Sem leitura real (nenhum plano rastreado, ou já dissolvida por
       // completo) => nada a desenhar, honesto — mesma regra do
@@ -211,8 +226,8 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
       const top = Math.min(yEntry, yTarget);
       const bottom = Math.max(yEntry, yTarget);
       const bandHeight = Math.max(1, bottom - top);
-      const bandWidth = Math.min(cssWidth, corridorWidthPx(corridorWidthFactor));
-      const bandX = cssWidth - bandWidth; // ancorado na borda direita (preço atual), o corredor se estende para trás no tempo.
+      const bandWidth = Math.min(plotRight, corridorWidthPx(corridorWidthFactor));
+      const bandX = plotRight - bandWidth; // ancorado na FRONTEIRA DO EIXO (preço atual), o corredor se estende para trás no tempo.
 
       // Preenchimento em gradiente vertical (entrada -> alvo) — dois sinais
       // reais e DISTINTOS falam aqui, nunca por uma linha de marcação:
@@ -241,13 +256,13 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
       // Borda do lado do alvo — sempre o lado "novo" do corredor, independente da direção.
       ctx.beginPath();
       ctx.moveTo(bandX, Math.round(yTarget) + 0.5);
-      ctx.lineTo(cssWidth, Math.round(yTarget) + 0.5);
+      ctx.lineTo(plotRight, Math.round(yTarget) + 0.5);
       ctx.stroke();
 
       // Marcador de proximidade do alvo — 3 estados reais (Target Life
       // Cycle da especificação, comprimido para o único alvo real que o
       // TradePlan atual tem — ver cabeçalho de aura-lifecycle.ts).
-      const markerX = cssWidth - 14;
+      const markerX = plotRight - 14;
       const markerY = yTarget;
       ctx.globalAlpha = fadeAlpha;
       ctx.lineWidth = 1;
@@ -324,13 +339,15 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
 
       const top = Math.min(yEntry, yTarget);
       const bottom = Math.max(yEntry, yTarget);
-      const bandWidth = Math.min(cssWidth, corridorWidthPx(corridorWidthFactor));
-      const bandX = cssWidth - bandWidth;
+      const { plotRight: cyclonePlotRight } = measurePlotArea(chart, cssWidth, stateRef.current.activeLanes);
+      const bandWidth = Math.min(cyclonePlotRight, corridorWidthPx(corridorWidthFactor));
+      const bandX = cyclonePlotRight - bandWidth;
       const collapse = targetProximity === "APPROACHING" ? APPROACH_COLLAPSE : 0;
 
       return {
         bandX,
         cssWidth,
+        plotRight: cyclonePlotRight,
         cssHeight,
         dpr: window.devicePixelRatio || 1,
         top,
@@ -446,12 +463,12 @@ export function NeuralMarketAuraPlugin({ chart, series, aura }: NeuralMarketAura
       <canvas
         ref={cycloneCanvasRef}
         className="absolute inset-0 pointer-events-none"
-        style={{ width: "100%", height: "100%", display: "none" }}
+        style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("neural_market_aura"), display: "none" }}
       />
       <canvas
         ref={staticCanvasRef}
         className="absolute inset-0 pointer-events-none"
-        style={{ width: "100%", height: "100%", display: "none" }}
+        style={{ width: "100%", height: "100%", zIndex: getChartLayerZIndex("neural_market_aura"), display: "none" }}
       />
     </>
   );

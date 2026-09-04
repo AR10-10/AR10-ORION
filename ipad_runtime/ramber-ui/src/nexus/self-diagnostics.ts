@@ -11,6 +11,14 @@
 import { classifyFps, classifyCycleLatency } from '../../../src/telemetry/index.js';
 import { classifyBusQuality } from './data-quality-vocabulary';
 import type { Exchange, ExchangeConnectionState, HealthSnapshot } from './types';
+// ORDEM OFICIAL Nº 01 ("Autogovernança... detectar falhas ou
+// comportamentos anormais"): traceStages() (stage-runner.ts) já é um
+// observador real e testado do pipeline causal canônico (SYSTEM_HANDBOOK.md
+// §2), mas nunca tinha ganho um consumidor ao vivo — gap honesto já
+// documentado no próprio cabeçalho de stage-runner.ts desde a rodada
+// anterior. Fechado aqui: zero motor novo, zero segunda leitura — este
+// módulo só recebe o StageTrace já real e o traduz num achado a mais.
+import { STAGE_ORDER, type StageTrace } from './stage-runner';
 
 export type DiagnosticSeverity = 'OK' | 'WARN' | 'CRITICAL';
 
@@ -28,6 +36,19 @@ export interface DiagnosticInput {
   engineReason: string | null;
   dataQualityClassification: string | null;
   connections: Partial<Record<Exchange, ExchangeConnectionState>>;
+  // ORDEM Nº 01: leitura real já resolvida por traceStages() (stage-
+  // runner.ts) — null honesto quando o chamador ainda não tem uma (nunca
+  // fabricado por este módulo; a mesma disciplina fail-closed do resto do
+  // arquivo).
+  stageTrace: StageTrace | null;
+  // Ordem Fechamento (§3, "Evidence Fusion... barramento inteligente"):
+  // fração real (0..1) dos 10 campos do contrato de evidência (EngineSignal,
+  // engine-signal-contract.ts) hoje instrumentados por pelo menos 1 motor
+  // real — o MESMO número já mostrado no painel "EVIDENCE FUSION" do
+  // CouncilWidget (fieldCoverage), lido daqui via a store (evidenceFusion),
+  // nunca uma 2ª medição. null honesto quando nenhuma leitura real do
+  // Evidence Fusion Engine foi publicada ainda nesta sessão.
+  evidenceFusionFieldCoverage: number | null;
 }
 
 export interface DiagnosticReport {
@@ -108,11 +129,62 @@ export function buildDiagnosticReport(input: DiagnosticInput): DiagnosticReport 
         : { severity: 'WARN', label: 'Latência do ciclo', detail: 'Ainda sem amostra real de latência do ciclo.' },
   );
 
+  // EPC OMEGA FINAL Parte 3 §2 (auditoria real): input.health.memoryMb já
+  // era medido pelo Health Monitor (performance.memory.usedJSHeapSize)
+  // desde antes desta rodada, mas nunca virava um achado — a única leitura
+  // de memória do relatório ficava invisível pro Operador. Severidade
+  // sempre OK (nunca WARN/CRITICAL): este repositório não tem backtest de
+  // orçamento de memória por dispositivo pra calibrar um limiar honesto
+  // (mesma disciplina de "nunca fabricar um corte sem medição real" já
+  // documentada em layer-relevance.ts) — o valor real é reportado, o
+  // julgamento de "é muito" fica para uma calibração futura.
+  findings.push(
+    input.health.memoryMb !== null
+      ? { severity: 'OK', label: 'Memória (heap JS)', detail: `${input.health.memoryMb.toFixed(0)}MB reais em uso (performance.memory.usedJSHeapSize) — sem limiar calibrado, número honesto sem julgamento de severidade.` }
+      : { severity: 'OK', label: 'Memória (heap JS)', detail: 'Navegador não expõe performance.memory (comum no Firefox) — ausência de instrumentação, não uma falha real.' },
+  );
+
   findings.push(
     input.health.workersAlive === 0
       ? { severity: 'CRITICAL', label: 'Worker WASM', detail: 'Nenhum Worker do Quant Engine vivo — cálculo pesado não tem onde rodar.' }
       : { severity: 'OK', label: 'Worker WASM', detail: `${input.health.workersAlive} worker(s) real(is) vivo(s).` },
   );
+
+  // Ordem Fechamento (§3): mesma disciplina de "Memória (heap JS)" acima —
+  // este repositório não tem uma calibração real de "cobertura mínima
+  // aceitável" do contrato de evidência, então a severidade nunca passa de
+  // OK (nunca fabricar um corte sem medição real, layer-relevance.ts já
+  // documenta o mesmo princípio). O valor é reportado honestamente; o
+  // julgamento de "é pouco" fica para quando novos montadores existirem.
+  findings.push(
+    input.evidenceFusionFieldCoverage === null
+      ? { severity: 'OK', label: 'Evidence Fusion · cobertura do contrato', detail: 'Ainda sem leitura real publicada nesta sessão (aguardando o primeiro cálculo do CouncilWidget).' }
+      : { severity: 'OK', label: 'Evidence Fusion · cobertura do contrato', detail: `${Math.round(input.evidenceFusionFieldCoverage * 100)}% dos 10 campos do contrato de evidência instrumentados por pelo menos 1 motor real hoje.` },
+  );
+
+  // ORDEM Nº 01 (Autogovernança): a VISÃO ENCADEADA real do pipeline
+  // causal — até onde DATA→CORE_ENGINE→COUNCIL→TRADE_PLAN→NEXUS_DECISION
+  // chegou de verdade nesta leitura. Severidade nunca passa de WARN: a
+  // causa raiz de qualquer estágio quebrado já vira CRITICAL em outro
+  // achado acima (ex.: offline => Conectividade CRITICAL; engineStatus
+  // error => Motor de análise CRITICAL) — repetir a mesma causa como um
+  // segundo CRITICAL aqui seria alarme duplicado, não informação nova
+  // (Ordem Nº 01: "nenhum [motor] deverá competir entre si"). O valor
+  // real deste achado é mostrar a CADEIA, não redetectar a falha.
+  if (input.stageTrace) {
+    const { stages, reachedIndex } = input.stageTrace;
+    const complete = reachedIndex === stages.length - 1;
+    const firstBroken = stages.find((s) => !s.ok) ?? null;
+    findings.push(
+      complete
+        ? { severity: 'OK', label: 'Pipeline causal', detail: `Cadeia completa: ${STAGE_ORDER.join(' → ')}.` }
+        : {
+            severity: 'WARN',
+            label: 'Pipeline causal',
+            detail: `Alcançou até ${reachedIndex >= 0 ? STAGE_ORDER[reachedIndex] : 'nenhum estágio'} — ${firstBroken?.reason ?? 'motivo não reportado'}.`,
+          },
+    );
+  }
 
   for (const [exchange, state] of Object.entries(input.connections) as Array<[Exchange, ExchangeConnectionState | undefined]>) {
     if (!state) continue;

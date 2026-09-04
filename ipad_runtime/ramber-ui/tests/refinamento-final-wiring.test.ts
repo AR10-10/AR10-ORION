@@ -42,21 +42,27 @@ describe('Store: premiumDiscount + harmonicPatterns nos 4 lugares canônicos do 
 });
 
 describe('App: efeito único computa os 2 motores novos da MESMA série real do gráfico', () => {
-  it('lê chartData, usa o último CLOSE real como referência do P/D (30s, nunca o tick de 1s), escreve as 2 fatias', () => {
+  it('lê chartData, usa o último CLOSE real como referência do P/D (30s, nunca o tick de 1s), escreve as 4 fatias (Carta Branca: + Triângulo + Ombro-Cabeça-Ombro no MESMO efeito)', () => {
     const a = app();
     const idx = a.indexOf('st.setPremiumDiscount(computePremiumDiscount({ candles: chartData, price: lastClose }));');
     expect(idx, 'efeito de cômputo §7/§8 não encontrado').toBeGreaterThan(-1);
-    const block = a.slice(Math.max(0, idx - 700), idx + 300);
+    const block = a.slice(Math.max(0, idx - 700), idx + 750);
     expect(block).toContain('const lastClose = chartData[chartData.length - 1]?.close ?? null;');
     expect(block).toContain('st.setHarmonicPatterns(detectHarmonicPatterns({ candles: chartData }));');
+    // Carta Branca: mesma série real, zero segunda assinatura de chartData.
+    expect(block).toContain('st.setTrianglePattern(detectTrianglePattern({ candles: chartData }));');
+    expect(block).toContain('st.setHeadShouldersPattern(detectHeadAndShoulders({ candles: chartData }));');
     expect(block).toContain('}, [chartData]);');
   });
 
-  it('fail-closed: sem candles => null/[] explícitos, nunca leitura velha retida', () => {
+  it('fail-closed: sem candles => null/[] explícitos, nunca leitura velha retida (4 fatias, Carta Branca inclui as 2 novas)', () => {
     const a = app();
     const idx = a.indexOf('st.setPremiumDiscount(null);');
     expect(idx).toBeGreaterThan(-1);
-    expect(a.slice(idx, idx + 120)).toContain('st.setHarmonicPatterns([]);');
+    const block = a.slice(idx, idx + 220);
+    expect(block).toContain('st.setHarmonicPatterns([]);');
+    expect(block).toContain('st.setTrianglePattern(null);');
+    expect(block).toContain('st.setHeadShouldersPattern(null);');
   });
 
   it('§10 Inteligência Temporal: trocar timeframe reseta a série do Score (nunca mistura regimes na tendência)', () => {
@@ -126,7 +132,7 @@ describe('Header §1: TF + LIVE + latência + sessão — todas leituras REAIS j
 
   it('sessão: derivação pura do relógio UTC real (market-session.ts), tooltip divulga a janela verificável', () => {
     const a = app();
-    expect(a).toContain('import { marketSessionFromUtc, computeSessionBoundaries } from "./nexus/market-session";');
+    expect(a).toContain('import { marketSessionFromUtc, computeSessionBoundaries, computeSessionKeyLevels } from "./nexus/market-session";');
     expect(a).toContain('const marketSession = marketSessionFromUtc(new Date());');
     expect(a).toContain('{marketSession.label}');
     expect(a).toContain('${marketSession.windowUtc}');
@@ -139,7 +145,7 @@ describe('§7 Premium/Discount: gráfico + Trade Plan strip (display-only, LEI 2
     expect(c).toContain('premiumDiscount?: PremiumDiscountReading | null;');
     const idx = c.indexOf('premiumDiscountLinesRef.current.forEach((line) => series.removePriceLine(line));');
     expect(idx).toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 900);
+    const block = c.slice(idx, idx + 1500);
     expect(block).toContain('if (!premiumDiscount || !visibility.premium_discount) return;');
     expect(block).toContain('lineWidth: 1,');
     expect(block).toContain('lineStyle: LineStyle.Solid,');
@@ -150,6 +156,31 @@ describe('§7 Premium/Discount: gráfico + Trade Plan strip (display-only, LEI 2
     // ref limpa no unmount, mesma disciplina das outras
     const cleanupIdx = c.indexOf('chart.remove();');
     expect(c.slice(cleanupIdx, cleanupIdx + 600)).toContain('premiumDiscountLinesRef.current = [];');
+  });
+
+  // Achado real (Visual Cleanup & Rendering Audit, "ORDEM DEFINITIVA..."):
+  // Equilibrium (Premium/Discount) e FIB 50.0% (Fibonacci) partem do MESMO
+  // par de swing (findSwings compartilhado — premium-discount.ts §header +
+  // engine-bridge.ts:786) e são matematicamente o MESMO preço sempre que
+  // os dois motores computam com sucesso — 1 conceito, nunca 2 linhas
+  // nativas simultâneas por padrão. Fibonacci vira o dono canônico desse
+  // ponto (carrega confluência real); Premium/Discount some SÓ dessa 1
+  // linha quando isso aconteceria, rangeHigh/rangeLow (que Fibonacci nunca
+  // desenha — FIB_RETRACEMENT_RATIOS não inclui os extremos) continuam
+  // sempre reais.
+  it('Achado 2.1-bis: Equilibrium não desenha quando FIB 50% já cobre o mesmo preço — rangeHigh/rangeLow sempre desenham', () => {
+    const c = chart();
+    const idx = c.indexOf('premiumDiscountLinesRef.current.forEach((line) => series.removePriceLine(line));');
+    const block = c.slice(idx, idx + 1500);
+    expect(block).toContain('const fibAlreadyDrawsEquilibrium =');
+    expect(block).toContain('visibility.fibonacci && (fibonacciLevels ?? []).some((l) => l.ratio === 0.5 && Number.isFinite(l.price));');
+    expect(block).toContain('mkPd(premiumDiscount.rangeHigh.price, "rgba(242, 54, 69, 0.30)", "Premium · topo do range");');
+    expect(block).toMatch(/if \(!fibAlreadyDrawsEquilibrium\) \{\s*mkPd\(premiumDiscount\.equilibrium/);
+    expect(block).toContain('mkPd(premiumDiscount.rangeLow.price, "rgba(8, 153, 129, 0.30)", "Discount · fundo do range");');
+    // dependência real do efeito inclui fibonacci agora — senão o dedup
+    // ficaria stale quando só o toggle Fibonacci muda.
+    const effectIdx = c.indexOf('}, [premiumDiscount, visibility.premium_discount, visibility.fibonacci, fibonacciLevels]);');
+    expect(effectIdx).toBeGreaterThan(idx);
   });
 
   it('ChartWidget passa a MESMA fatia da store ao gráfico (zero segunda leitura)', () => {
@@ -170,13 +201,18 @@ describe('§7 Premium/Discount: gráfico + Trade Plan strip (display-only, LEI 2
 });
 
 describe('§8 Harmônicos: display gated pelo fit mínimo honesto', () => {
-  it('aba ANALYSIS lista os hits reais da store; título nega probabilidade; vazio honesto mostra o piso', () => {
+  it('aba ANALYSIS lista os hits reais da store; título nega probabilidade; vazio honesto mostra o piso (Carta Branca: painel único ampliado para as 3 famílias — harmônico + Triângulo + Ombro-Cabeça-Ombro)', () => {
     const a = app();
     expect(a).toContain('const harmonicHits = useHarmonicPatternsSnapshot();');
-    expect(a).toContain('title="Harmonic Patterns · ratio fit, never probability"');
-    expect(a).toContain('NO FRESH XABCD PATTERN ≥ {(MIN_FIT_SCORE * 100).toFixed(0)}% RATIO FIT (honest result)');
+    expect(a).toContain('const trianglePattern = useTrianglePatternSnapshot();');
+    expect(a).toContain('const headShouldersPattern = useHeadShouldersPatternSnapshot();');
+    expect(a).toContain('title="Chart Patterns · geometric fit, never probability"');
+    expect(a).toContain('NO FRESH GEOMETRIC PATTERN ≥ {(MIN_FIT_SCORE * 100).toFixed(0)}% FIT (honest result)');
     // Consolidação Final §6: rótulo profissional PRZ no lugar do D cru (contrato novo deliberado)
     expect(a).toContain('value={`PRZ @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}');
+    // Carta Branca: as 2 famílias novas ganham sua própria linha honesta no MESMO painel único.
+    expect(a).toContain('label={`${trianglePattern.kind} TRIANGLE`}');
+    expect(a).toContain('label={headShouldersPattern.kind === "REGULAR" ? "HEAD & SHOULDERS" : "INVERSE H&S"}');
   });
 
   it('LEI 24: o motor harmônico nunca alimenta engine/tradePlan — só a própria fatia de display', () => {
@@ -203,9 +239,9 @@ describe('Diretriz Mestra: Heat Score + TENDÊNCIA no header, Magnet, futuro, MT
     expect(ctx![1]).toContain('heatReading,');
   });
 
-  it('chip HEAT no header: DASH honesto sem 2 componentes; tooltip nega probabilidade/direção', () => {
+  it('chip HEAT (ScoreContextCard, gaveta Core Intelligence): DASH honesto sem 2 componentes; tooltip nega probabilidade/direção', () => {
     const a = app();
-    expect(a).toContain('{heatReading?.status === "OK" ? heatReading.score : DASH}');
+    expect(a).toContain('const heatValue = heatReading?.status === "OK" ? `${heatReading.score}/100 · ${heatReading.tier}` : DASH;');
     expect(a).toContain('Nunca probabilidade, nunca direção.');
   });
 
@@ -218,9 +254,23 @@ describe('Diretriz Mestra: Heat Score + TENDÊNCIA no header, Magnet, futuro, MT
 
   it('§2: crosshair Magnet (snap real da lib) + rightOffset para a região futura', () => {
     const c = chart();
-    expect(c).toContain('crosshair: { mode: CrosshairMode.Magnet }');
+    // AR10_ESPECIFICACAO_VISUAL_PIXEL_PERFECT.md: crosshair ganhou
+    // vertLine/horzLine estilizados (cor + labelBackgroundColor reais) —
+    // `mode` continua Magnet, só deixou de ser a ÚNICA chave do objeto.
+    const crosshairIdx = c.indexOf('crosshair: {');
+    expect(crosshairIdx, 'bloco crosshair não encontrado').toBeGreaterThan(-1);
+    const crosshairBlock = c.slice(crosshairIdx, crosshairIdx + 400);
+    expect(crosshairBlock).toContain('mode: CrosshairMode.Magnet,');
+    // Regra de Ouro 5 ("Fio de Seda", zero exceção): mesmo estilizado, a
+    // linha do crosshair nunca é tracejada.
+    expect(crosshairBlock).toContain('LineStyle.Solid');
+    expect(crosshairBlock).not.toMatch(/LineStyle\.(Dashed|Dotted|LargeDashed|SparseDotted)/);
     expect(c).not.toContain('CrosshairMode.Normal');
-    expect(c).toContain('rightOffset: 8,');
+    // AR10_ORDEM_ULTRA_LED_v3.md (Fase A): rightOffset deixou de ser um
+    // literal fixo e passou a vir de resolveChartUltraWideScale
+    // (baseline real ainda 8 até 1440px — ver chart-ultrawide-scale.test.ts
+    // para a tabela completa de breakpoints).
+    expect(c).toContain('rightOffset: initialScale.rightOffset,');
   });
 
   it('§6: barra e painel usam a FAIXA formatEtaRange(msMin, ms) — nunca mais um único número', () => {
@@ -257,7 +307,13 @@ describe('Sessão Local-First: ativo/timeframe/modo sobrevivem a refresh ("o sis
     const a = app();
     expect(a).toContain('useState<AssetSymbol>(() => restoredSession.asset)');
     expect(a).toContain('useState(() => restoredSession.timeframe)');
-    expect(a).toContain('useState<"CRYPTO" | "TRADFI">(() => restoredSession.marketMode)');
+    // Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET DISCOVERY": marketMode
+    // ganhou um 3º valor ("MEXC") — RestoredSession/readRestoredSession em
+    // si NUNCA mudaram (o tipo lá continua "CRYPTO" | "TRADFI" de
+    // propósito: selecionar um ativo MEXC é runtime-only nesta Etapa 1,
+    // nunca persistido — ver selectedMexcAsset, estado separado que não
+    // entra neste efeito nem em RestoredSession).
+    expect(a).toContain('useState<"CRYPTO" | "TRADFI" | "MEXC">(() => restoredSession.marketMode)');
     expect(a).toContain('useState<TradFiAsset | null>(() => restoredSession.tradFiAsset)');
     const m = a.match(/persistSessionState\(\{[\s\S]*?\}\);\n  \}, \[selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, chartLayerAutoMode, emaPeriod\]\);/);
     expect(m, 'efeito único de persistência não encontrado').not.toBeNull();
@@ -283,7 +339,11 @@ describe('Nexus Decision Layer: leitura única fundida, computada 1x e exposta n
     expect(m![1]).toContain('targetsHit: trackRecordSlice.active?.targetsHit ?? 0');
     expect(m![1]).toContain('etaReading,');
     expect(m![1]).toContain('councilStance: councilFromSnapshot?.stance ?? null');
-    expect(a).toContain('import { buildNexusDecision, NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./nexus/decision-layer";');
+    // NEXUS_PLAN_GAP_LABEL foi realocado (Evolução Visual — poda de import
+    // morto): a leitura real vive em operational-readability.ts, que já
+    // importa direto de decision-layer.ts — App.tsx nunca lia o valor por
+    // conta própria, só a caixa/tipo do decision-layer continuam aqui.
+    expect(a).toContain('import { buildNexusDecision, type NexusDecision } from "./nexus/decision-layer";');
     const ctx = a.match(/const contextValue = useMemo\(\s*\(\) => \(\{([\s\S]*?)\}\),/);
     expect(ctx![1]).toContain('nexusDecision,');
   });
@@ -293,7 +353,12 @@ describe('Nexus Decision Layer: leitura única fundida, computada 1x e exposta n
     expect(a).toContain('decision?: NexusDecision | null;');
     // realocado (nunca apagado): a montagem vive no módulo nomeado; o
     // conteúdo das linhas é travado por EXECUÇÃO REAL no teste do módulo.
-    expect(a).toContain('const fusedTitle = buildOperationalSummary(decision).join("\\n");');
+    // Entrega 42 (LEI 24): fusedTitle ganhou um ramo condicional (linha de
+    // explicação da supressão quando suppressed) mas as DUAS ramificações
+    // continuam chamando buildOperationalSummary(decision) — zero segunda
+    // montagem manual das linhas reais do módulo.
+    expect(a).toContain('...buildOperationalSummary(decision),');
+    expect(a).toContain(': buildOperationalSummary(decision)\n  ).join("\\n");');
     expect(a).not.toContain('NEXUS DECISION · Operação: ${'); // inline extinto no App
     expect(a).toContain('title={fusedTitle}');
     expect(a).toContain('decision={nexusDecision ?? null}');
@@ -324,7 +389,6 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
   });
 
   it('badge herói: estado no subtítulo existente e tooltip com Estado + Favoráveis/Contrários', () => {
-    const a = app();
     // §7: Estado/Favoráveis/Contrários agora nascem na Readability Layer
     const layer = read('../src/nexus/operational-readability.ts');
     expect(layer).toContain('· Estado: ${decision.operationalState}');
@@ -335,7 +399,7 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
   it('Auditoria Final de Integração: o subtítulo VISÍVEL do badge herói (nunca só o tooltip, que não aparece em toque no iPad) qualifica BIAS≠ENTRY com deriveOutcomeLabel — mesmo dado real do Estado, agora legível sem hover', () => {
     const a = app();
     expect(a).toContain('const outcome = decision ? deriveOutcomeLabel(decision) : null;');
-    expect(a).toContain('{outcomeQualifier ? ` · ${outcomeQualifier}` : ""}');
+    expect(a).toContain('{!suppressed && outcomeQualifier ? ` · ${outcomeQualifier}` : ""}');
     // v7: import multi-linha (ganhou os derives dos 6 eixos) — trava o bloco inteiro vindo do módulo certo
     const importMatch = a.match(/import \{([\s\S]*?)\} from "\.\/nexus\/operational-readability";/);
     expect(importMatch, 'import da Readability Layer não encontrado').not.toBeNull();
@@ -353,8 +417,12 @@ describe('Nexus V2: estado no badge herói e justificativa estruturada no toolti
   it('Achado real (captura do Operador, janela ~1000px lógicos): o subtítulo do badge herói NÃO carrega mais o prefixo "Confidence · " — a região central rolável cortava "CONFIDENCE · MEDIUM · AGUARDANDO ENTRADA" em "AGUARDAN"; o rótulo categórico cru agora vai direto ao ponto (o rótulo "Confiança:" já existe na linha própria do tooltip)', () => {
     const block = wholeFunction(app(), 'function CoreSignalBadge(');
     expect(block).not.toBe('');
-    expect(block).toContain('{confidence ?? AWAIT}');
-    expect(block).toContain('{outcomeQualifier ? ` · ${outcomeQualifier}` : ""}');
+    // Entrega 42 (LEI 24): o rótulo cru ganhou um ramo condicional
+    // (suppressed exibe o rótulo real do FilterEngine em vez de NEUTRO
+    // genérico) — o valor real (confidence ?? AWAIT) continua intocado no
+    // ramo não-suprimido, mesma disciplina de sempre.
+    expect(block).toContain('(confidence ?? AWAIT)');
+    expect(block).toContain('{!suppressed && outcomeQualifier ? ` · ${outcomeQualifier}` : ""}');
     // regressão: o prefixo decorativo não pode voltar a colidir com a borda real medida
     expect(block).not.toContain('`Confidence · ${confidence}`');
   });
@@ -443,67 +511,75 @@ describe('§6: painel Síntese Operacional — 6 eixos derivados do MESMO NexusD
   });
 });
 
+// Achado 3.1 (mesmo espírito): a §3 abaixo REVOGOU a premissa dos 2 testes
+// que existiam aqui ("EnhancedChart: linha do ponto D..." e "Continuidade:
+// a figura XABCD/Wolfe COMPLETA... é uma polilinha nativa real") — pendência
+// #6 migrou o zigue-zague/PRZ/EPA/NECKLINE/APEX/triângulo inteiro de
+// createPriceLine/addSeries nativo pra HarmonicGeometryPlugin.tsx (canvas
+// próprio). As refs que os 2 testes checavam (harmonicPolylineRef,
+// harmonicLinesRef, triangleResistanceLineRef, etc.) não existem mais em
+// EnhancedChart_110_Percent.tsx. Registrado aqui de propósito em vez de
+// apagado sem rastro (mesma disciplina já usada quando a Achado 3.1
+// original revogou a premissa dos 2 testes de sweep em
+// liquidity-sweep-lines-plugin-wiring.test.ts) — a cobertura real do
+// winner-selection/zigue-zague/rótulos agora vive em
+// harmonic-geometry-plugin-wiring.test.ts.
 describe('Auditoria §3: harmônicos e ETA/distância agora RENDERIZADOS no gráfico', () => {
-  it('EnhancedChart: linha do ponto D do melhor padrão (fit desc) + EPA quando Wolfe — fio de seda, rótulo honesto', () => {
-    const c = chart();
-    expect(c).toContain('harmonicHits?: HarmonicPatternHit[] | null;');
-    const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
-    expect(idx).toBeGreaterThan(-1);
-    const block = c.slice(idx, idx + 4200);
-    expect(block).toContain('const top = harmonicHits && harmonicHits.length > 0 ? harmonicHits[0] : null;');
-    // EPC §4 (rótulos compactos por iniciais): PRZ com glifo ↑/↓, EPA sem
-    // as descrições parentéticas — o disclaimer/significado seguem no
-    // painel Harmonic Patterns e em harmonic-patterns.ts.
-    expect(block).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
-    expect(block).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`'); // §6: + ETA do ápice (compacto EPC §4)
-    expect(block).toContain('lineStyle: LineStyle.Solid,');
-    const cleanupIdx = c.indexOf('chart.remove();');
-    expect(c.slice(cleanupIdx, cleanupIdx + 700)).toContain('harmonicLinesRef.current = [];');
-  });
-
-  it('Continuidade: a figura XABCD/Wolfe COMPLETA (não só o ponto D/PRZ) é uma polilinha nativa real, limpa fail-closed antes do early-return, tempo estritamente crescente na borda de renderização', () => {
-    const c = chart();
-    expect(c).toContain('const harmonicPolylineRef = useRef<ISeriesApi<"Line"> | null>(null);');
-    const idx = c.indexOf('harmonicLinesRef.current.forEach((line) => series.removePriceLine(line));');
-    const block = c.slice(idx, idx + 3600);
-    // limpa a polilinha ANTES do guard de "sem padrão" — nunca deixa uma figura velha na tela
-    const clearIdx = block.indexOf('harmonicPolylineRef.current?.setData([]);');
-    const guardIdx = block.indexOf('if (!top || !Number.isFinite(top.points.D.price)) return;');
-    expect(clearIdx).toBeGreaterThan(-1);
-    expect(guardIdx).toBeGreaterThan(clearIdx);
-    // os 5 pontos reais (X opcional/A/B/C/D), nunca um ponto fabricado para AB=CD
-    expect(block).toContain('[top.points.X, top.points.A, top.points.B, top.points.C, top.points.D].filter(');
-    expect(block).toContain('(p): p is HarmonicPoint => p !== undefined,');
-    // trava defensiva real na borda (a lib exige tempo estritamente crescente)
-    expect(block).toContain('.sort((a, b) => a.time - b.time)');
-    expect(block).toContain('i === 0 || p.time !== arr[i - 1].time');
-    expect(block).toContain('if (polylinePoints.length >= 2) {');
-    expect(block).toContain('harmonicPolylineRef.current?.setData(polylinePoints);');
-    // criada como série nativa (mesmo padrão de EMA/Nexus Line/Trend Channel) — zero rótulo de eixo/último valor
-    const seriesIdx = c.indexOf('const harmonicPolyline = chart.addSeries(LineSeries, {');
-    expect(seriesIdx).toBeGreaterThan(-1);
-    const seriesBlock = c.slice(seriesIdx, seriesIdx + 300);
-    expect(seriesBlock).toContain('priceLineVisible: false');
-    expect(seriesBlock).toContain('lastValueVisible: false');
-    expect(seriesBlock).toContain('lineStyle: LineStyle.Solid');
-    // limpa no unmount, mesma disciplina de todas as outras refs
-    const cleanupIdx = c.indexOf('chart.remove();');
-    expect(c.slice(cleanupIdx, cleanupIdx + 900)).toContain('harmonicPolylineRef.current = null;');
-  });
-
   it('títulos das linhas de alvo carregam distância % ao preço VIVO + ETA em faixa do contrato fundido (guard de preço)', () => {
     const c = chart();
-    expect(c).toContain('const distPct = p !== null && p > 0 ? ` · ${((Math.abs(target.price - p) * 100) / p).toFixed(2)}%` : "";');
+    // REVERTIDO POR PEDIDO REPETIDO DO OPERADOR (duas rodadas, com captura
+    // real de ZEC 4H mostrando "TP1 3.14% FRACA 1:0.42" na tela): a
+    // porcentagem de DISTÂNCIA até o alvo saiu do canvas de vez. Regra de
+    // Ouro 4 satisfeita — a distância percentual continua real e visível no
+    // painel do Trade Plan (App.tsx), que já a renderizava antes desta
+    // mudança. A distância vive no PAINEL, não no canvas — é lá que a
+    // asserção passa a morar.
+    //
+    // Isto NÃO é o mesmo "%" que withScore() (mesmo arquivo, abaixo) volta a
+    // desenhar numa rodada posterior — aquele é a % de CONFLUÊNCIA do plano
+    // (institutional-score.ts), um número por PLANO, não por alvo, pedido
+    // de volta explicitamente pelo Operador. Duas percentagens diferentes;
+    // só a de distância-por-alvo continua banida do canvas.
+    expect(c).not.toContain('const distPct =');
+    const app = read('../src/App.tsx');
+    expect(app).toContain("(Math.abs(target.price - price.price) / price.price * 100).toFixed(2)");
     expect(c).toContain('const fusedTarget = decision?.plan?.targets[i];');
     expect(c).toContain('Math.abs(fusedTarget.price - target.price) < Math.max(1e-9, target.price * 1e-9)');
-    expect(c).toContain('${etaLabel ? ` · ETA ${etaLabel}` : ""}');
+    expect(c).toContain('etaLabel ? `ETA ${etaLabel}` : null,');
+  });
+
+  it('withScore devolve a % real de confluência do plano às etiquetas EN/ST/TP1/TP2 (revertido, com autorização explícita)', () => {
+    // Pedido do Operador: "tenha a porcentagem pra poder lá aparecer" —
+    // confirmado via AskUserQuestion (duas opções escolhidas: setas de
+    // entrada E reverter em EN/ST/TP1/TP2), depois do achado acima. Compacto
+    // de propósito — um token só, nunca a frase inteira que motivou a
+    // remoção original.
+    const c = chart();
+    expect(c).toContain('institutionalScoreValue?: number | null;');
+    expect(c).toContain('const withScore = (text?: string | null) => [text, scoreToken].filter(Boolean).join(" ") || undefined;');
+    expect(c).toContain('secondaryText: withScore(tradePlan.entry.basis)');
+    expect(c).toContain('secondaryText: withScore(stopHitNow ? `${stopSecondary} BREACHED` : stopSecondary)');
+    expect(c).toContain('secondaryText: withScore(secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined)');
+    const app = read('../src/App.tsx');
+    expect(app).toContain('institutionalScoreValue={institutionalScore?.score ?? null}');
   });
 
   it('ChartWidget passa harmonicHits (mesma fatia da ANALYSIS) e decision (contrato fundido) ao gráfico', () => {
     const a = app();
     expect(a).toContain('const chartHarmonics = useHarmonicPatternsSnapshot();');
-    expect(a).toContain('harmonicHits={chartHarmonics}');
     expect(a).toContain('decision={nexusDecision ?? null}');
+  });
+
+  // SMC Harmonic Fusion (pedido do Operador): o gráfico não recebe mais o
+  // array cru — App.tsx filtra por confluência real (OB/FVG/POC/exaustão/
+  // sweep, smc-harmonic-fusion.ts) antes de passar. `chartHarmonics` cru
+  // continua existindo (painel ANALYSIS, harmonicBestFitScore) — só o
+  // que chega ao CANVAS mudou.
+  it('ChartWidget passa harmonicHits já FILTRADO por confluência real (chartHarmonicsConfirmed), nunca o array cru de chartHarmonics', () => {
+    const a = app();
+    expect(a).toContain('harmonicHits={chartHarmonicsConfirmed}');
+    expect(a).not.toContain('harmonicHits={chartHarmonics}');
+    expect(a).toContain('harmonicConfluence={bestConfirmedHarmonicFusion}');
   });
 });
 
@@ -563,9 +639,11 @@ describe('Consolidação Final §20-§25: VWAP com estados/histerese SEM tocar a
     expect(a).toContain('setNlState((prev) => nexusLineState(prev, livePriceForZone, nexusLineNow, atrAbsForLines));');
   });
 
-  it('cartão VWAP no header (§23): estado + Preço×VWAP % real, e o TopBar lê do contexto único', () => {
+  it('cartão VWAP (ScoreContextCard, gaveta Core Intelligence) (§23): estado + Preço×VWAP % real, self-contained via o mesmo WidgetContext', () => {
     const a = app();
-    expect(a).toContain('tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">\n                VWAP'); // §5: rótulo agora carrega sufixo NL ✓/⚠
+    // v16.0 PRO Fase 1: saiu da TopBar para ScoreContextCard — mesmos
+    // dados reais (vwapCtx do WidgetContext), zero segunda leitura.
+    expect(a).toContain('const vwapLabel = nexusConfluence ? `VWAP ${nexusConfluence === "ALINHADA" ? "✓" : "⚠"}` : "VWAP";');
     expect(a).toContain('${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}%');
     expect(a).toContain('"VWAP aguardando volume real da sessão UTC (fail-closed, nunca um valor fabricado)."');
   });
@@ -582,6 +660,438 @@ describe('Consolidação Final §20-§25: VWAP com estados/histerese SEM tocar a
     const idx = c.indexOf('const vwapSeries = chart.addSeries(LineSeries, {');
     const closeIdx = c.indexOf('vwapSeriesRef.current = vwapSeries;');
     expect(c.slice(idx, closeIdx)).toContain('title: "",');
+  });
+});
+
+describe('VWAP Standard Deviation Bands (pedido do Operador, "ferramentas mais precisas"): 4 séries nativas, mesmo toggle da VWAP, zero segunda matemática', () => {
+  it('importa computeVwapBands de nexus/vwap-bands — nunca uma fórmula própria dentro do componente do gráfico', () => {
+    const c = chart();
+    expect(c).toContain('import { computeVwapBands } from "../nexus/vwap-bands";');
+  });
+
+  it('cria as 4 séries nativas (upper1/lower1/upper2/lower2) com o mesmo contrato "fio de seda" da VWAP/Trend Channel (sem rótulo nativo, sem dash)', () => {
+    const c = chart();
+    for (const ref of ['vwapBandUpper1', 'vwapBandLower1', 'vwapBandUpper2', 'vwapBandLower2']) {
+      expect(c, `${ref}Ref.current nunca atribuído`).toContain(`${ref}Ref.current = ${ref};`);
+    }
+    const idx = c.indexOf('const vwapBandSeriesOptions = {');
+    const closeIdx = c.indexOf('vwapBandUpper2Ref.current = vwapBandUpper2;');
+    const block = c.slice(idx, closeIdx);
+    expect(block).toContain('title: "",');
+    expect(block).toContain('lineStyle: LineStyle.Solid');
+    expect(block).not.toContain('setLineDash');
+  });
+
+  it('as 4 séries são nulificadas no cleanup do chart, mesmo padrão de vwapSeriesRef/trendChannelUpperRef', () => {
+    const c = chart();
+    for (const ref of ['vwapBandUpper1', 'vwapBandLower1', 'vwapBandUpper2', 'vwapBandLower2']) {
+      expect(c).toContain(`${ref}Ref.current = null;`);
+    }
+  });
+
+  it('computeVwapBands roda no MESMO useEffect/mesmos candles que computeSessionVwapSeries — nunca dessincroniza da própria VWAP que envolve', () => {
+    const c = chart();
+    const idx = c.indexOf('const series = computeSessionVwapSeries(data);');
+    const closeIdx = c.indexOf('// Consolidação Final §26-§28: a Nexus Line nasce do MESMO array real,');
+    expect(idx).toBeGreaterThan(-1);
+    expect(closeIdx).toBeGreaterThan(idx);
+    const block = c.slice(idx, closeIdx);
+    expect(block).toContain('const bands = computeVwapBands(data);');
+  });
+
+  it('bandas seguem o MESMO interruptor visibility.vwap — nunca uma camada própria no painel "Camadas do Gráfico"', () => {
+    const c = chart();
+    const idx = c.indexOf('if (!vwapBandUpper1Ref.current');
+    expect(idx).toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 700);
+    expect(block).toContain('vwapBandUpper1Ref.current.applyOptions({ visible: visibility.vwap });');
+    expect(block).toContain('vwapBandLower1Ref.current.applyOptions({ visible: visibility.vwap });');
+    expect(block).toContain('vwapBandUpper2Ref.current.applyOptions({ visible: visibility.vwap });');
+    expect(block).toContain('vwapBandLower2Ref.current.applyOptions({ visible: visibility.vwap });');
+    expect(block).toContain('[visibility.vwap]');
+  });
+});
+
+describe('Evolução do Organismo (Fase 2, "menor cálculos duplicados"): cache por referência evita recomputar spans/boundaries a cada pan/zoom (achado com evidência real de benchmark)', () => {
+  it('KillZoneBandsPlugin cacheia computeKillZoneSpans por identidade de `data` — só recalcula quando a referência muda, nunca a cada redraw', () => {
+    const src = read('../src/chart/KillZoneBandsPlugin.tsx');
+    expect(src).toContain('const spansCacheRef = useRef<{ data: typeof data; spans: KillZoneSpan[] } | null>(null);');
+    const idx = src.indexOf('const cached = spansCacheRef.current;');
+    expect(idx, 'bloco de cache não encontrado antes do computeKillZoneSpans').toBeGreaterThan(-1);
+    const block = src.slice(idx, idx + 400);
+    expect(block).toContain('if (cached && cached.data === dataRef.current) {');
+    expect(block).toContain('spans = cached.spans;');
+    expect(block).toContain('spans = computeKillZoneSpans(dataRef.current);');
+    expect(block).toContain('spansCacheRef.current = { data: dataRef.current, spans };');
+  });
+
+  it('MarketSessionBandsPlugin recebe o MESMO fix (achado idêntico, mesma causa raiz) — cache por identidade de `data` para computeSessionKeyLevels (pós-redesenho da faixa, ver describe abaixo)', () => {
+    const src = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    expect(src).toContain('const levelsCacheRef = useRef<{ data: typeof data; levels: SessionKeyLevel[] } | null>(null);');
+    const idx = src.indexOf('const cached = levelsCacheRef.current;');
+    expect(idx, 'bloco de cache não encontrado antes do computeSessionKeyLevels').toBeGreaterThan(-1);
+    const block = src.slice(idx, idx + 400);
+    expect(block).toContain('if (cached && cached.data === dataRef.current) {');
+    expect(block).toContain('levels = cached.levels;');
+    expect(block).toContain('levels = computeSessionKeyLevels(dataRef.current);');
+    expect(block).toContain('levelsCacheRef.current = { data: dataRef.current, levels };');
+  });
+
+  it('LiquidationHeatmapPlugin NÃO ganhou o mesmo cache — benchmark real confirmou custo desprezível (computeLiquidationHeatmap ~0.006ms/chamada a N=500, teto real do feed) vs. computeKillZoneSpans (~1.2ms a N=2000): adicionar cache ali seria complexidade sem benefício medido, não "consistência" pela consistência', () => {
+    const src = read('../src/chart/LiquidationHeatmapPlugin.tsx');
+    expect(src).not.toContain('CacheRef');
+    expect(src).toContain('const heat: LiquidationHeatmapResult = computeLiquidationHeatmap(events, sym);');
+  });
+});
+
+describe('Achado real do Operador ("linha amarela que eu não sei o que significa" + "etiquetas não podem ficar em cima do valor do ativo"): Liquidity Sweep migra pro eixo anti-colisão, Session Key Levels perde o rótulo flutuante', () => {
+  // Pendência #6 (migração nativo→canvas, "chegar na perfeição") REVOGOU a
+  // premissa do teste que vivia aqui ("title nativo da price line fica
+  // vazio com axisLabelVisible:false") — registrado de propósito em vez de
+  // apagado, mesma disciplina do bloco "Lapidação institucional" abaixo.
+  // A price line nativa (e o campo `title` morto que a acompanhava) não
+  // existe mais: LiquiditySweepLinesPlugin.tsx desenha em canvas puro, que
+  // nunca teve esse campo pra começo de conversa — a pergunta que o teste
+  // fazia deixou de fazer sentido, não só de falhar. Ver
+  // liquidity-sweep-lines-plugin-wiring.test.ts para a cobertura real do
+  // plugin novo.
+  it('Liquidity Sweep: o texto real (⚡ SWEEP ↑/↓ N%) agora vive em priceAxisLabels, dedupe por preço, side:"left" (estrutural/histórico)', () => {
+    const c = chart();
+    const idx = c.indexOf('if (visibility.liquidity_sweep) {', c.indexOf('const priceAxisLabels = useMemo'));
+    expect(idx, 'bloco de Sweep em priceAxisLabels não encontrado').toBeGreaterThan(-1);
+    // Janela delimitada pelo FIM REAL do bloco (o comentário do bloco de
+    // Session Key Levels, que vem logo depois), nunca por "os próximos N
+    // chars". Histórico honesto: já foi 1300, depois 2400, e falhou de
+    // novo na Ordem "FECHAMENTO" — sempre pelo TAMANHO da janela, nunca
+    // porque a garantia real tivesse mudado. Uma fronteira estrutural
+    // elimina a classe inteira de falso-negativo.
+    const block = c.slice(idx, c.indexOf('// Pedido do Operador ("Key Levels")', idx));
+    expect(block).toContain('const seenSweepPrices = new Set<number>();');
+    // Lapidação institucional ("agrupar SWEEPs próximos"): clusterSweptPrices
+    // (trap-detection.ts) substitui o loop plano por preço — 1 evento isolado
+    // mantém o texto simples, 2+ eventos próximos viram "SWEEP ZONE (Nx)".
+    expect(block).toContain('for (const cluster of clusterSweptPrices(uniqueLevels, LIQUIDITY_PROXIMITY_PCT)) {');
+    // Lapidação Visual do Gráfico §4: "N%" removido do texto — era o MESMO
+    // número em todos os chips (confidence é do trap, não do nível), então
+    // repetia sem discriminar. Valor real preservado no painel
+    // "Institutional Traps"; seta e contagem do cluster permanecem.
+    expect(block).toContain('`⚡ SWEEP ${arrow}`');
+    // Ordem "FECHAMENTO DO AR10 CYBORG" §3: a contagem do cluster migrou
+    // para o segmento secundário (fonte menor, mesma caixa) — o primário
+    // ficou idêntico nas duas variantes. Zero dado perdido.
+    expect(block).toContain('secondaryText: cluster.count > 1 ? `ZONE ${cluster.count}x` : undefined,');
+    expect(block).toContain('side: "left",');
+    // Achado real de captura de tela (decaimento por idade): cluster
+    // expirado (>200 candles) nunca entra no eixo.
+    expect(block).toContain('const alpha = ageAlpha(age, SWEEP_DECAY);');
+    expect(block).toContain('if (alpha <= 0) continue;');
+  });
+
+  it('Liquidity Sweep: rótulo solto suprimido quando o MESMO cluster.avgPrice já é membro LIQUIDITY_SWEEP de uma Zona Institucional visível — achado real de captura ("+2 FONTES Sweep + R1" ao lado de "⚡ SWEEP ↑" solto, mesmo evento 2x)', () => {
+    const c = chart();
+    const idx = c.indexOf('if (visibility.liquidity_sweep) {', c.indexOf('const priceAxisLabels = useMemo'));
+    const block = c.slice(idx, c.indexOf('// Pedido do Operador ("Key Levels")', idx));
+    // Gated por visibility.institutional_zones: nunca suprime a ÚLTIMA
+    // cópia visível de um evento real (Regra de Ouro 4) — se a camada de
+    // zonas estiver desligada, o sweep solto continua sendo a única
+    // representação e não pode ser descartado.
+    expect(block).toContain('const alreadyShownInInstitutionalZone =\n            visibility.institutional_zones &&\n            institutionalZones.some((zone) => zone.members.some((m) => m.sourceKind === "LIQUIDITY_SWEEP" && m.price === cluster.avgPrice));');
+    expect(block).toContain('if (alreadyShownInInstitutionalZone) continue;');
+    // A checagem roda ANTES de empurrar pra sweepLabelCandidates — nunca
+    // depois (senão o rótulo duplicado já teria entrado na lista).
+    const suppressIdx = block.indexOf('alreadyShownInInstitutionalZone) continue;');
+    const pushIdx = block.indexOf('sweepLabelCandidates.push({');
+    expect(suppressIdx).toBeGreaterThan(-1);
+    expect(pushIdx).toBeGreaterThan(suppressIdx);
+  });
+
+  it('Session Key Levels: currentSessionKeyLevel (useMemo puro, sempre a última ocorrência real) alimenta 2 entradas no eixo (High/Low), side:"left"', () => {
+    const c = chart();
+    expect(c).toContain('import { computeSessionKeyLevels } from "../nexus/market-session";');
+    const memoIdx = c.indexOf('const currentSessionKeyLevel = useMemo(() => {');
+    expect(memoIdx, 'currentSessionKeyLevel não encontrado').toBeGreaterThan(-1);
+    const memoBlock = c.slice(memoIdx, memoIdx + 400);
+    expect(memoBlock).toContain('if (data.length === 0) return null;');
+    expect(memoBlock).toContain('const levels = computeSessionKeyLevels(data);');
+    expect(memoBlock).toContain('return levels.length > 0 ? levels[levels.length - 1] : null;');
+
+    const pushIdx = c.indexOf('if (visibility.session_key_levels && currentSessionKeyLevel) {');
+    expect(pushIdx, 'bloco de Session Key Levels em priceAxisLabels não encontrado').toBeGreaterThan(-1);
+    // Fatiado até o comentário do bloco seguinte (Zona Institucional),
+    // nunca até 'return out;' — aquele bloco também tem seu próprio
+    // side:"left" real (Diretriz Final — Polimento Visual).
+    const pushBlock = c.slice(pushIdx, c.indexOf('// Diretriz Final — Polimento Visual', pushIdx));
+    expect(pushBlock).toContain('price: currentSessionKeyLevel.high,');
+    expect(pushBlock).toContain('price: currentSessionKeyLevel.low,');
+    expect((pushBlock.match(/side: "left",/g) ?? []).length).toBe(2);
+  });
+
+  it('Session Key Levels: rótulo H/L solto suprimido quando o MESMO preço já é membro SESSION_KEY_LEVEL de uma Zona Institucional visível — mesma classe de achado do bloco de Sweep (etiquetas amontoadas)', () => {
+    const c = chart();
+    const pushIdx = c.indexOf('if (visibility.session_key_levels && currentSessionKeyLevel) {');
+    const pushBlock = c.slice(pushIdx, c.indexOf('// Diretriz Final — Polimento Visual', pushIdx));
+    expect(pushBlock).toContain('const highAlreadyShownInInstitutionalZone =\n        visibility.institutional_zones &&\n        institutionalZones.some((zone) => zone.members.some((m) => m.sourceKind === "SESSION_KEY_LEVEL" && m.price === currentSessionKeyLevel.high));');
+    expect(pushBlock).toContain('const lowAlreadyShownInInstitutionalZone =\n        visibility.institutional_zones &&\n        institutionalZones.some((zone) => zone.members.some((m) => m.sourceKind === "SESSION_KEY_LEVEL" && m.price === currentSessionKeyLevel.low));');
+    expect(pushBlock).toContain('if (!highAlreadyShownInInstitutionalZone) {');
+    expect(pushBlock).toContain('if (!lowAlreadyShownInInstitutionalZone) {');
+    // Cada push continua condicionado ao seu PRÓPRIO gate (H nunca some
+    // por causa do gate do L, e vice-versa — são preços independentes).
+    const highGateIdx = pushBlock.indexOf('if (!highAlreadyShownInInstitutionalZone) {');
+    const highPushIdx = pushBlock.indexOf('price: currentSessionKeyLevel.high,');
+    const lowGateIdx = pushBlock.indexOf('if (!lowAlreadyShownInInstitutionalZone) {');
+    const lowPushIdx = pushBlock.indexOf('price: currentSessionKeyLevel.low,');
+    expect(highPushIdx).toBeGreaterThan(highGateIdx);
+    expect(lowPushIdx).toBeGreaterThan(lowGateIdx);
+    expect(lowGateIdx).toBeGreaterThan(highPushIdx); // blocos não se entrelaçam
+  });
+
+  it('SessionKeyLevelsPlugin.tsx: NUNCA mais desenha texto flutuante no canvas (zero ctx.fillText) — só a linha real; regressão travada por teste, não só por revisão manual', () => {
+    const plugin = read('../src/chart/SessionKeyLevelsPlugin.tsx');
+    expect(plugin).not.toContain('ctx.fillText');
+    expect(plugin).not.toContain('ctx.font');
+    expect(plugin).toContain('ctx.stroke();');
+  });
+});
+
+describe('Lapidação institucional (diretiva com imagem de referência): Liquidity Sweep vs. pico do Liquidation Heatmap deixam de compartilhar praticamente o mesmo tom (H45 vs H47, mesma L/S/alpha — imperceptível a olho)', () => {
+  // Achado 3.1 (Auditoria Visual Sistemática) REVOGOU a premissa dos 2 testes
+  // abaixo, e isso é registrado aqui de propósito em vez de apagado.
+  //
+  // A diretiva original pediu que o Liquidity Sweep (laranja H33) e o pico do
+  // Liquidation Heatmap (âmbar H45) deixassem de "compartilhar praticamente o
+  // mesmo tom". A intenção era certa — dois objetos diferentes não podem ser
+  // indistinguíveis — mas a SOLUÇÃO estava errada: separar 2 tons por 12° não
+  // resolve nada (a discriminação humana de matiz em alta saturação precisa de
+  // ~15-25°), e ainda ajudou a produzir os 8 âmbares num intervalo de 17° que a
+  // medição desta rodada encontrou.
+  //
+  // A resposta certa para "estes dois não podem se confundir" nunca foi mais
+  // um matiz: os dois SÃO a mesma família semântica (nível âmbar a observar),
+  // e o que os separa é GEOMETRIA e POSIÇÃO (uma price line horizontal no preço
+  // vs. um pico no heatmap lateral), não cor. Agora ambos usam o mesmo
+  // `attention` canônico.
+  it('Achado 3.1: Sweep e pico do Heatmap convergem para o MESMO âmbar canônico — o que os distingue é geometria, nunca 12° de matiz', () => {
+    // Pendência #6: a price line nativa (antes em EnhancedChart_110_
+    // Percent.tsx) migrou pra LiquiditySweepLinesPlugin.tsx — os dois agora
+    // usam a MESMA chamada chartPaletteRgba("attention", ...) em vez de
+    // dois rgba(255,162,0,...) redigitados coincidentemente iguais.
+    const sweep = read('../src/chart/LiquiditySweepLinesPlugin.tsx');
+    const heatmap = read('../src/chart/LiquidationHeatmapPlugin.tsx');
+    expect(sweep).toContain('chartPaletteRgba("attention", alpha * 0.85)');
+    expect(heatmap).toContain('const PEAK_LABEL_COLOR = chartPaletteRgba("attention", 0.85);');
+  });
+
+  it('Achado 3.1: o âmbar do Sweep/Heatmap está no matiz da família attention — a trava de canvas-palette.test.ts governa o resto', () => {
+    // Os tons antigos desta dupla (255,140,0 = H33, 255,191,0 = H45,
+    // 255,200,0 = H47) não existem mais — nem redigitados, nem via helper.
+    const sweep = read('../src/chart/LiquiditySweepLinesPlugin.tsx');
+    const heatmap = read('../src/chart/LiquidationHeatmapPlugin.tsx');
+    expect(sweep).not.toContain('rgba(255, 140, 0');
+    expect(sweep).not.toContain('rgba(255, 162, 0');
+    expect(heatmap).not.toContain('rgba(255, 191, 0');
+    expect(heatmap).not.toContain('rgba(255, 200, 0');
+    expect(heatmap).not.toContain('rgba(255, 162, 0');
+  });
+
+  it('Kill Zones NÃO entra nesta diferenciação — o TOM âmbar (255,176,32) segue o mesmo. Achado 2.6: os alphas base foram recalibrados (0.06/0.22 → 0.38/0.55) porque a geometria deixou de ser lavagem de altura total e virou faixa de 6px; LABEL_ALPHA sumiu junto com o rótulo (duplicação do badge do header)', () => {
+    const killZones = read('../src/chart/KillZoneBandsPlugin.tsx');
+    expect(killZones).toContain('const FILL_ALPHA = 0.38;');
+    expect(killZones).toContain('const BORDER_ALPHA = 0.55;');
+    expect(killZones).not.toContain('LABEL_ALPHA');
+    expect(killZones).toContain('rgba(255, 173, 32, ${(alpha * FILL_ALPHA).toFixed(3)})');
+    expect(killZones).toContain('rgba(255, 173, 32, ${(alpha * BORDER_ALPHA).toFixed(3)})');
+  });
+
+  it('Achado 2.6 (regressão travada): Kill Zones NUNCA mais desenha de altura total — zero `0, clippedWidth, cssHeight` e zero lineTo(x, cssHeight); toda geometria vertical vem da lane compartilhada', () => {
+    const killZones = read('../src/chart/KillZoneBandsPlugin.tsx');
+    expect(killZones).not.toMatch(/fillRect\(clippedX, 0, clippedWidth, cssHeight\)/);
+    expect(killZones).not.toMatch(/lineTo\([^)]*, cssHeight\)/);
+    expect(killZones).toContain('import { getTimeRibbonLaneTopPx, getTimeRibbonLaneBottomPx, getTimeRibbonLaneHeightPx } from "./chart-time-ribbon-lanes";');
+    expect(killZones).toContain('ctx.fillRect(clippedX, laneTop, clippedWidth, laneHeight);');
+    expect(killZones).toContain('ctx.lineTo(Math.round(rectX) + 0.5, laneBottom);');
+  });
+});
+
+describe('ADENDO "Refinamento das Sessões e Limpeza Visual": Market Sessions troca N linhas de altura total (1 por transição) por 1 faixa fina por segmento rente à base', () => {
+  it('NUNCA mais desenha linha vertical de altura total (zero ctx.moveTo(x, 0) / lineTo(x, cssHeight)) — regressão travada por teste, não só por revisão manual', () => {
+    const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    expect(plugin).not.toContain('ctx.moveTo(xLine, 0);');
+    // computeSessionBoundaries/SessionBoundary só podem aparecer em PROSA
+    // (comentário explicando a migração/o consumidor que continua vivo em
+    // App.tsx) — nunca em import ou chamada real dentro deste plugin.
+    expect(plugin).not.toContain('import { computeSessionBoundaries');
+    expect(plugin).not.toContain('computeSessionBoundaries(dataRef.current)');
+    expect(plugin).not.toContain(': SessionBoundary[]');
+  });
+
+  it('consome computeSessionKeyLevels (segmentos reais), nunca uma 3ª derivação paralela de sessão', () => {
+    const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    // Lapidação por feedback (faixa 14px/1 linha): marketSessionFromUtc
+    // saiu do import — a janela UTC era duplicação literal do header.
+    expect(plugin).toContain('import { computeSessionKeyLevels, sessionGenerationWeight, SESSION_GENERATION_FADE, type SessionKeyLevel } from "../nexus/market-session";');
+    expect(plugin).toContain('levels = computeSessionKeyLevels(dataRef.current);');
+  });
+
+  it('redesenho #2 ("chegar mais próximo" da imagem de referência): faixa no TOPO (y=0), não mais rente à base — nunca altura total como Kill Zones (papel real é oposto: sessão é partição contínua, sempre presente — teria que ser fina; Kill Zone é ocasional — pode ser alta)', () => {
+    const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    // Lapidação por feedback direto do Operador ("está atrapalhando o
+    // visual"): faixa afinada 24px→14px, 1 linha só.
+    // Achado 2.6: os mesmos 14px no mesmo y=0, mas agora vindos da lane
+    // compartilhada (chart-time-ribbon-lanes.ts) — geometria de fonte única
+    // com a faixa de Kill Zones logo abaixo, zero mudança visual aqui.
+    expect(plugin).toContain('const BAND_TOP_PX = getTimeRibbonLaneTopPx("market_session");');
+    expect(plugin).toContain('const BAND_HEIGHT_PX = getTimeRibbonLaneHeightPx("market_session");');
+    expect(plugin).toContain('ctx.fillRect(clippedX, BAND_TOP_PX, clippedWidth, BAND_HEIGHT_PX);');
+    expect(plugin).not.toContain('cssHeight - BAND_HEIGHT_PX');
+    expect(plugin).not.toContain('STRIP_HEIGHT_PX');
+  });
+
+  it('sessão corrente (closed:false) recebe alpha mais alto e estende até a borda direita; TODA sessão visível tenta rótulo (nome — a janela UTC saiu como duplicação do header), não só a corrente — mas só desenha texto com largura real suficiente', () => {
+    const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    expect(plugin).toContain('const BAND_COLOR_CLOSED = "rgba(148, 163, 184, 0.16)";');
+    expect(plugin).toContain('const BAND_COLOR_OPEN = "rgba(148, 163, 184, 0.42)";');
+    expect(plugin).toContain('const isOpen = !level.closed;');
+    expect(plugin).toContain('const x2 = isOpen ? cssWidth : timeScale.timeToCoordinate(level.endTime as unknown as Time);');
+    // achado real (não fica preso a "só a última"): o gate de rótulo é
+    // por LARGURA do segmento, nunca por índice/posição na lista.
+    expect(plugin).not.toContain('i === lastIndex');
+    expect(plugin).toContain('if (clippedWidth >= MIN_LABEL_WIDTH_PX) {');
+  });
+
+  it('Lapidação por feedback: a 2ª linha (janela UTC) foi removida como DUPLICAÇÃO do header — o plugin nunca mais chama marketSessionFromUtc (o dado continua no header, Regra de Ouro 4 intacta)', () => {
+    const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    expect(plugin).not.toContain('marketSessionFromUtc(new Date(');
+    expect(plugin).not.toContain('MIN_SUBLABEL_WIDTH_PX');
+  });
+
+  it('divisor real entre sessões: 1px sólida (Fio de Seda), só a borda esquerda de cada segmento (partição contígua — desenhar as duas dobraria o traço)', () => {
+    const plugin = read('../src/chart/MarketSessionBandsPlugin.tsx');
+    const idx = plugin.indexOf('if (i > 0) {');
+    expect(idx, 'bloco de divisor não encontrado').toBeGreaterThan(-1);
+    const block = plugin.slice(idx, idx + 300);
+    expect(block).toContain('ctx.lineWidth = 1;');
+    expect(block).not.toContain('setLineDash');
+  });
+
+  it('tradePlanAbsenceReason (overlay de texto do canto) desce de top-2 pra top-7 pra abrir espaço real pra faixa nova de 24px — nunca 2 textos reais sobrepostos', () => {
+    const c = chart();
+    expect(c).toContain('className="absolute left-2 top-7 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide rounded-[3px] px-1.5 py-0.5"');
+    expect(c).not.toContain('className="absolute left-2 top-2 pointer-events-none select-none font-mono whitespace-nowrap text-[10px] tracking-wide"');
+  });
+
+  it('EnhancedChart_110_Percent.tsx: chamada continua recebendo chart/series/data sem prop nova — o redesenho é inteiramente interno ao plugin', () => {
+    const c = chart();
+    const idx = c.indexOf('{visibility.market_sessions && (');
+    expect(idx, 'montagem condicional de MarketSessionBandsPlugin não encontrada').toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 200);
+    expect(block).toContain('<MarketSessionBandsPlugin');
+    expect(block).toContain('chart={chartReady?.chart ?? null}');
+    expect(block).toContain('series={chartReady?.series ?? null}');
+    expect(block).toContain('data={data}');
+  });
+});
+
+describe('Kill Zones ICT no canvas (badge do header já existia, §6.48 — este plugin fecha o desenho real): camada própria, nunca dobrada em market_sessions', () => {
+  it('importa KillZoneBandsPlugin — nunca uma segunda implementação de retângulo dentro de EnhancedChart_110_Percent', () => {
+    const c = chart();
+    expect(c).toContain('import { KillZoneBandsPlugin } from "./KillZoneBandsPlugin";');
+  });
+
+  it('montado condicionalmente por visibility.kill_zones, recebendo chart/series/data — mesmo contrato de props de MarketSessionBandsPlugin', () => {
+    const c = chart();
+    const idx = c.indexOf('{visibility.kill_zones && (');
+    expect(idx, 'mount point de KillZoneBandsPlugin não encontrado').toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 300);
+    expect(block).toContain('<KillZoneBandsPlugin');
+    expect(block).toContain('chart={chartReady?.chart ?? null}');
+    expect(block).toContain('series={chartReady?.series ?? null}');
+    expect(block).toContain('data={data}');
+  });
+
+  it('kill_zones é uma camada PRÓPRIA em CHART_LAYER_IDS/DEFAULT_CHART_LAYER_VISIBILITY/DEFAULT_CHART_LAYER_AUTO_MODE — nunca reaproveita market_sessions (conceito distinto, ver header de kill-zones.ts)', () => {
+    const c = chart();
+    expect(c).toContain('"kill_zones",');
+    expect(c).toContain('kill_zones: true,');
+  });
+
+  it('painel "Camadas do Gráfico" (App.tsx) ganha a linha KILL ZONES (ICT)', () => {
+    const a = app();
+    expect(a).toContain('{ id: "kill_zones", label: "KILL ZONES (ICT)" }');
+    // A segunda metade deste teste checava a pertinência ao preset
+    // "Inteligência". Os 3 presets manuais foram removidos a pedido do
+    // Operador ("deixa só o modo"); a cobertura que importa — a camada
+    // EXISTIR no painel — continua acima, e agora também está travada
+    // universalmente em chart-layers-panel-wiring.test.ts, que compara o
+    // painel inteiro contra CHART_LAYER_IDS.
+  });
+
+  it('Relevance Engine cobre kill_zones desde o nascimento da camada — nunca repete o gap retroativo do Task #93 (liquidation_heatmap/liquidity_sweep/market_sessions sem regra própria)', () => {
+    const a = app();
+    expect(a).toContain('import { activeKillZones } from "./nexus/kill-zones";');
+    expect(a).toContain('const hasActiveKillZone = (activeKillZones(new Date())?.active.length ?? 0) > 0;');
+    expect(a).toContain('hasActiveKillZone,');
+  });
+});
+
+describe('Session Key Levels (pedido do Operador, captura de indicador de referência "Key Levels"): máxima/mínima real de cada sessão como nível horizontal, reaproveitando market-session.ts', () => {
+  it('importa SessionKeyLevelsPlugin — nunca uma segunda geometria de retângulo/linha dentro de EnhancedChart_110_Percent', () => {
+    const c = chart();
+    expect(c).toContain('import { SessionKeyLevelsPlugin } from "./SessionKeyLevelsPlugin";');
+  });
+
+  it('montado condicionalmente por visibility.session_key_levels, recebendo chart/series/data — mesmo contrato de props de MarketSessionBandsPlugin/KillZoneBandsPlugin', () => {
+    const c = chart();
+    const idx = c.indexOf('{visibility.session_key_levels && (');
+    expect(idx, 'mount point de SessionKeyLevelsPlugin não encontrado').toBeGreaterThan(-1);
+    const block = c.slice(idx, idx + 300);
+    expect(block).toContain('<SessionKeyLevelsPlugin');
+    expect(block).toContain('chart={chartReady?.chart ?? null}');
+    expect(block).toContain('series={chartReady?.series ?? null}');
+    expect(block).toContain('data={data}');
+  });
+
+  it('session_key_levels é uma camada PRÓPRIA em CHART_LAYER_IDS/DEFAULT_CHART_LAYER_VISIBILITY/DEFAULT_CHART_LAYER_AUTO_MODE', () => {
+    const c = chart();
+    expect(c).toContain('"session_key_levels",');
+    expect(c).toContain('session_key_levels: true,');
+  });
+
+  it('painel "Camadas do Gráfico" (App.tsx) ganha a linha KEY LEVELS (SESSÕES)', () => {
+    const a = app();
+    expect(a).toContain('{ id: "session_key_levels", label: "KEY LEVELS (SESSÕES)" }');
+    // A segunda metade deste teste checava a pertinência ao preset
+    // "Inteligência". Os 3 presets manuais foram removidos a pedido do
+    // Operador ("deixa só o modo"); a cobertura que importa — a camada
+    // EXISTIR no painel — continua acima, e agora também está travada
+    // universalmente em chart-layers-panel-wiring.test.ts, que compara o
+    // painel inteiro contra CHART_LAYER_IDS.
+  });
+
+  it('Relevance Engine cobre session_key_levels desde o nascimento da camada — mesma disciplina de kill_zones/§6.55, nunca repete o gap retroativo do Task #93', () => {
+    const a = app();
+    expect(a).toContain('import { MAX_KEY_LEVELS_SHOWN } from "./chart/SessionKeyLevelsPlugin";');
+    expect(a).toContain('import { marketSessionFromUtc, computeSessionBoundaries, computeSessionKeyLevels } from "./nexus/market-session";');
+    expect(a).toContain('const sessionKeyLevels = Array.isArray(chartData) ? computeSessionKeyLevels(chartData) : [];');
+    expect(a).toContain('const recentSessionKeyLevels = sessionKeyLevels.slice(-MAX_KEY_LEVELS_SHOWN);');
+    expect(a).toContain('hasSessionKeyLevelNearPrice,');
+  });
+
+  it('a janela de exibição (MAX_KEY_LEVELS_SHOWN) usada pelo plugin e pela relevância é a MESMA constante — nunca duas fontes de "quantos níveis contam"', () => {
+    const plugin = read('../src/chart/SessionKeyLevelsPlugin.tsx');
+    expect(plugin).toContain('export const MAX_KEY_LEVELS_SHOWN = 5;');
+    expect(plugin).toContain('const recent = levels.slice(-MAX_KEY_LEVELS_SHOWN);');
+  });
+
+  it('cor reaproveitada de Suporte/Resistência (S1/R1) — máxima da sessão usa o MESMO vermelho de resistência, mínima o MESMO verde de suporte, zero tom novo na paleta', () => {
+    const plugin = read('../src/chart/SessionKeyLevelsPlugin.tsx');
+    expect(plugin).toContain('rgba(242, 54, 69,'); // mesmo tom de R1/SHORT_RGB
+    expect(plugin).toContain('rgba(8, 153, 129,'); // mesmo tom de S1/LONG_RGB
+  });
+
+  it('cache por identidade de referência desde o NASCIMENTO do plugin (aprendizado de §6.56 aplicado, nunca uma correção retroativa)', () => {
+    const plugin = read('../src/chart/SessionKeyLevelsPlugin.tsx');
+    expect(plugin).toContain('const levelsCacheRef = useRef<{ data: typeof data; levels: SessionKeyLevel[] } | null>(null);');
+    expect(plugin).toContain('if (cached && cached.data === dataRef.current) {');
   });
 });
 
@@ -634,11 +1144,10 @@ describe('Consolidação Final §5/§6: SHARK + AB=CD no motor, PRZ/ETA na super
     expect(h).toContain('etaIndex?: number;');
   });
 
-  it('gráfico: terminologia PRZ profissional + ETA do ápice na linha EPA da Wolfe (rótulos compactos EPC §4)', () => {
-    const c = chart();
-    expect(c).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
-    expect(c).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
-    expect(c).toContain('}, [harmonicHits, data, visibility.harmonics]);'); // intervalo real de barra vem de data
+  it('terminologia PRZ profissional + ETA do ápice na linha EPA da Wolfe (rótulos compactos EPC §4) — migrado pra HarmonicGeometryPlugin.tsx (pendência #6), cobertura completa em harmonic-geometry-plugin-wiring.test.ts', () => {
+    const plugin = readFileSync(resolve(__dirname, '../src/chart/HarmonicGeometryPlugin.tsx'), 'utf8');
+    expect(plugin).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
+    expect(plugin).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
   });
 
   it('ANALYSIS usa PRZ no lugar do rótulo D cru', () => {
@@ -648,19 +1157,28 @@ describe('Consolidação Final §5/§6: SHARK + AB=CD no motor, PRZ/ETA na super
 });
 
 // ─── Diretriz de Continuidade §5: cartão VWAP com valor + estado nomeado ───
-describe('Continuidade §5: o cartão VWAP exibe o VALOR real + estado COMPRADOR/VENDEDOR/NEUTRA', () => {
-  it('valor com o MESMO formatador fmt() do header; estado nomeado; DADOS INSUFICIENTES no vazio (nunca dash mudo)', () => {
+describe('Continuidade §5: o cartão VWAP (ScoreContextCard) exibe o VALOR real + estado COMPRADOR/VENDEDOR/NEUTRA', () => {
+  it('valor com o MESMO formatador fmt() de sempre; estado nomeado (vwapStateLabel, reusado no valor visível E no tooltip); DADOS INSUFICIENTES no vazio (nunca dash mudo)', () => {
     const a = app();
-    expect(a).toContain('{vwapCtx ? fmt(vwapCtx.vwap, vwapCtx.vwap >= 1000 ? 0 : 2) : "DADOS"}');
-    expect(a).toContain('vwapCtx.state === "BULLISH" ? "COMPRADOR" : vwapCtx.state === "BEARISH" ? "VENDEDOR" : "NEUTRA"');
-    expect(a).toContain(': "INSUFICIENTES"}');
+    expect(a).toContain('fmt(vwapCtx.vwap, vwapCtx.vwap >= 1000 ? 0 : 2)');
+    expect(a).toContain('? "COMPRADOR"');
+    expect(a).toContain('? "VENDEDOR"');
+    expect(a).toContain(': "NEUTRA"');
+    expect(a).toContain(': "INSUFICIENTES";');
+    expect(a).toContain(': "DADOS INSUFICIENTES";');
     // a % continua vindo do fmtSignedPct compartilhado (zero segunda formatação)
-    expect(a).toContain('${fmtSignedPct(vwapCtx.distancePct)} · ${');
+    expect(a).toContain('${fmtSignedPct(vwapCtx.distancePct)} · ${vwapStateLabel}');
   });
 
-  it('confluência NL vira sufixo discreto no rótulo (✓/⚠) — detalhe completo segue no tooltip/ANALYSIS', () => {
+  // Diretriz "Lapidação, Sincronia e Experiência do Operador" (achado já
+  // documentado nesta base): title= nunca aparece em toque no iPad Safari
+  // — por isso o veredito ✓/⚠ precisa estar no RÓTULO sempre visível
+  // (vwapLabel), nunca só escondido dentro do tooltip.
+  it('confluência NL vira sufixo visível no rótulo (✓/⚠) — nunca só no tooltip (touch não mostra title=)', () => {
     const a = app();
-    expect(a).toContain('{nexusConfluence === "ALINHADA" ? " ✓" : " ⚠"}');
+    expect(a).toContain('const vwapLabel = nexusConfluence ? `VWAP ${nexusConfluence === "ALINHADA" ? "✓" : "⚠"}` : "VWAP";');
+    expect(a).toContain('<MiniStat label="Score Institucional"');
+    expect(a).toContain('label={vwapLabel}');
   });
 });
 
@@ -673,10 +1191,16 @@ describe('Continuidade §6: níveis apertados => rótulos TP compactos, preço N
     expect(c).toContain('const compactLabels = shouldCompactLabels(levels);');
   });
 
-  it('modo compacto: label + distância + ETA (basis/R:R seguem no strip); modo cheio inalterado; OMEGA CORE V-MAX Fase 4 (§4.2) acrescentou o sufixo real de obstáculos aos dois modos', () => {
+  it('modo compacto: secundário sem basis/R:R (ETA/obstáculo/REACHED seguem); modo cheio inclui basis+R:R; OMEGA CORE V-MAX Fase 4 (§4.2) acrescentou o sufixo real de obstáculos aos dois modos — Ordem "Lapidação das Etiquetas TP1/TP2" §3/§4 moveu todo esse detalhe pro secundário (texto primário é só label+distância nos dois modos, ver o teste de "bater o olho profissional" em price-label-stack-plugin.test.ts)', () => {
     const c = chart();
-    expect(c).toContain('? `${label}${distPct}${etaLabel ? ` · ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`');
-    expect(c).toContain(': `${label} · ${target.basis}${rr !== null ? ` · 1:${rr.toFixed(2)}` : ""}${distPct}${etaLabel ? ` · ETA ${etaLabel}` : ""}${obstacleSuffix(target.obstacleCount)}`');
+    expect(c).toContain('compactLabels ? null : target.basis,');
+    expect(c).toContain('compactLabels || rr === null ? null : `1:${rr.toFixed(2)}`,');
+    expect(c).toContain('etaLabel ? `ETA ${etaLabel}` : null,');
+    expect(c).toContain('obstacleSuffix(target.obstacleCount).trim() || null,');
+    expect(c).toContain('reached ? "REACHED" : null,');
+    // withScore() (Pedido do Operador, rodada posterior) envolve o texto —
+    // ver o teste de withScore acima; o conteúdo interno continua o mesmo.
+    expect(c).toContain('secondaryText: withScore(secondaryParts.length > 0 ? secondaryParts.join(" ") : undefined),');
   });
 
   it('a âncora do preço real permanece documentada onde a decisão de compactar agora vive (label-compaction.ts): applyOptions nunca recebe um price deslocado no título compacto', () => {
@@ -701,6 +1225,13 @@ describe('Cockpit §11: carimbo do contexto de abertura + ETA previsto × realiz
     expect(a).toContain('if (!active || active.contextAtOpen !== undefined) return;');
     expect(a).toContain('useUnifiedSnapshotStore.getState().stampPlanOpenContext({');
     expect(a).toContain('etaMsAtOpen: nextEta?.ms ?? null,');
+  });
+
+  it('Escopo Cirúrgico (Fase 1, ScenarioFingerprint): structureLabel carimbado no MESMO efeito, zero segunda classificação', () => {
+    const a = app();
+    const idx = a.indexOf('useUnifiedSnapshotStore.getState().stampPlanOpenContext({');
+    const block = a.slice(idx, idx + 1000);
+    expect(block).toContain('structureLabel: engine?.marketStructureLabel ?? null,');
   });
 
   it('store expõe a ação stampPlanOpenContext ligada ao stampOpenContext puro', () => {
@@ -738,8 +1269,88 @@ describe('Header ancorado (colisão da 1ª foto com dados reais): região centra
     const a = app();
     const anchorIdx = a.indexOf('{/* Âncora direita fixa (§5 do header)');
     expect(anchorIdx).toBeGreaterThan(a.indexOf('[&>*]:shrink-0'));
-    const anchorBlock = a.slice(anchorIdx, anchorIdx + 700);
+    // Fronteira real do bloco, não uma janela de N bytes: a versão anterior
+    // fatiava 700 caracteres fixos e quebrava quando um comentário crescia —
+    // um artefato do teste, nunca do contrato. Agora o bloco vai do
+    // comentário da âncora até o fim do cluster (o botão de energia, o
+    // último item real da âncora).
+    const anchorEnd = a.indexOf('<Power size={14} />', anchorIdx);
+    expect(anchorEnd).toBeGreaterThan(anchorIdx);
+    const anchorBlock = a.slice(anchorIdx, anchorEnd);
     expect(anchorBlock).toContain('<div className="flex items-center gap-2 md:gap-3 h-full shrink-0">');
     expect(anchorBlock).toContain('<SystemStatusBadge />');
+    // E o orbe de voz (o "botão do microfone" do Operador) vive no MESMO
+    // cluster — é o que garante que o medidor de distância ao lado dele
+    // também está fora da região rolável.
+    expect(anchorBlock).toContain('<NucleoVoiceOrb />');
+  });
+});
+
+// Lapidação por feedback direto do Operador ("zoom inteligente que fica
+// bom na tela pra gente não estar puxando o zoom"): enquadre automático
+// das últimas N velas na troca de timeframe/símbolo. Ordem "FECHAMENTO DO
+// AR10 CYBORG" §5: N deixou de ser a constante fixa 120 e passou a vir de
+// computeViewportCandles (nexus/chart-viewport.ts) — 60-200 adaptativo à
+// largura REAL de plotagem e à densidade de dados real. A matemática em si
+// é testada por execução real em chart-viewport.test.ts; aqui só a fiação.
+describe('EnhancedChart: zoom inteligente na troca de timeframe/símbolo (flag pendente, nunca em tick)', () => {
+  const chartSrc = () => read('../src/chart/EnhancedChart_110_Percent.tsx');
+
+  it('janela adaptativa importada do motor puro + flag armada SÓ por [activeTimeframe, symbol] — pan/zoom manual continua soberano fora da troca', () => {
+    const s = chartSrc();
+    expect(s).toContain('import { computeViewportCandles } from "../nexus/chart-viewport";');
+    expect(s).toContain('const SMART_ZOOM_RIGHT_PAD_BARS = 6;');
+    expect(s).toContain('const smartZoomPendingRef = useRef(true);');
+    expect(s).toContain('smartZoomPendingRef.current = true;\n  }, [activeTimeframe, symbol]);');
+    // regressão: a constante fixa nunca volta a existir como número real
+    // (só é citada em comentário histórico, nunca declarada).
+    expect(s).not.toContain('const SMART_ZOOM_CANDLES =');
+  });
+
+  it('a flag é consumida no efeito real de setData — o enquadre só acontece DEPOIS que os candles novos chegaram, nunca sobre dado velho', () => {
+    const s = chartSrc();
+    expect(s).toContain('if (smartZoomPendingRef.current && formatted.length > 0 && chartRef.current) {');
+    expect(s).toContain('smartZoomPendingRef.current = false;');
+    expect(s).toContain('from: Math.max(0, formatted.length - candles),');
+    expect(s).toContain('to: formatted.length - 1 + SMART_ZOOM_RIGHT_PAD_BARS,');
+  });
+
+  it('a largura que alimenta a janela é a área REAL de plotagem da lib (timeScale().width(), já sem o gutter do eixo) — nunca a largura do container inteiro', () => {
+    const s = chartSrc();
+    const idx = s.indexOf('if (smartZoomPendingRef.current && formatted.length > 0 && chartRef.current) {');
+    const block = s.slice(idx, s.indexOf('} else if (prependedCount > 0', idx));
+    expect(block).toContain('widthPx: chartRef.current.timeScale().width(),');
+    expect(block).toContain('availableCandles: formatted.length,');
+  });
+});
+
+// Lapidação por captura real do Operador (BTC 1H, "linhas amarelas
+// descendo... bagunça"): 3 fontes reais de poluição corrigidas.
+describe('Lapidação por captura real: kill zone só a ocorrência mais recente + teto de etiquetas Sweep + dedupe de membros da Zona', () => {
+  it('KillZoneBandsPlugin: só a ocorrência MAIS RECENTE de cada janela desenha (latestSpanPerZone) — histórico não vira cerca de faixas verticais', () => {
+    const p = read('../src/chart/KillZoneBandsPlugin.tsx');
+    expect(p).toContain('const latestSpanPerZone = new Map<string, KillZoneSpan>();');
+    expect(p).toContain('if (!prev || span.endIndex > prev.endIndex) latestSpanPerZone.set(span.id, span);');
+    expect(p).toContain('for (const span of latestSpanPerZone.values()) {');
+  });
+
+  it('EnhancedChart: etiquetas de Sweep no eixo têm teto real (MAX_SWEEP_AXIS_LABELS=4, mais recentes primeiro) — price lines de todos continuam', () => {
+    const c = chart();
+    expect(c).toContain('const MAX_SWEEP_AXIS_LABELS = 4;');
+    expect(c).toContain('sweepLabelCandidates.sort((a, b) => b.latestIndex - a.latestIndex);');
+    expect(c).toContain('for (const c of sweepLabelCandidates.slice(0, MAX_SWEEP_AXIS_LABELS)) out.push(c.label);');
+  });
+
+  it('Zona Institucional: membros repetidos agregam com contagem real ("Sweep ×2"), nunca nome repetido', () => {
+    const c = chart();
+    // A agregação saiu de inline e virou fonte única testável por EXECUÇÃO
+    // real (nexus/zone-member-codes.ts + zone-member-codes.test.ts), junto
+    // com o encurtamento dos nomes que o Operador pediu ("o tamanho das
+    // etiquetas"). O comportamento que ESTE teste protege é o mesmo: nome
+    // repetido nunca aparece duas vezes, vira contagem.
+    expect(c).toContain('formatZoneMemberList(zone.members.map((m) => m.label))');
+    expect(c).toContain('import { formatZoneMemberList } from "../nexus/zone-member-codes";');
+    // E a composição inline não pode ressuscitar em paralelo à fonte única.
+    expect(c).not.toMatch(/^\s*const labelCounts = new Map<string, number>\(\);/m);
   });
 });

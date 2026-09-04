@@ -11,7 +11,7 @@ import { Rnd } from "react-rnd";
 // V18 Sprint 1 (Tarefa A): UnifiedGlobalSnapshot — ver header do arquivo
 // para por que é uma store ADITIVA (App.tsx continua a única fonte real de
 // coleta; um efeito abaixo só espelha o dado já real para dentro dela).
-import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useLayerRelevanceSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, EMPTY_PRICE } from "./store/unified-snapshot-store";
+import { useUnifiedSnapshotStore, usePriceSnapshot, useOfflineSnapshot, useDataFreshSnapshot, useVolumeProfileSnapshot, useFibonacciConfluenceSnapshot, useCpiSnapshot, useAffectiveMemorySnapshot, useCouncilSnapshot, useScenarioSnapshot, useTrapSignalsSnapshot, useConsensusRadarSnapshot, useTrustScoreSnapshot, useConnectionsSnapshot, useDerivativesSnapshot, useTradePlanSnapshot, useTrackRecordSnapshot, useMultiTimeframeSnapshot, useHealthSnapshot, useOrderflowHistory, useInstitutionalScoreHistory, usePremiumDiscountSnapshot, useHarmonicPatternsSnapshot, useTrianglePatternSnapshot, useHeadShouldersPatternSnapshot, useInstitutionalZonesSnapshot, useLayerRelevanceSnapshot, useChartLayerDecisionSnapshot, useRadarCandidatesSnapshot, useConfluenceCorridorSnapshot, usePaperTradingSnapshot, useExchangeOrderBooks, EMPTY_PRICE } from "./store/unified-snapshot-store";
 // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6: motor puro de relevância por
 // camada — display-only (resposta do Operador: nunca gera/altera Entry/
 // Stop/Target/Risco, LEI 24 intacta).
@@ -22,13 +22,14 @@ import {
   VOLUME_PROFILE_PROXIMITY_PCT,
   MARKET_SESSION_RECENT_BOUNDARY_CANDLES,
   type LayerRelevanceInput,
+  resolveAutoLayerVisibility,
 } from "./nexus/layer-relevance";
 import { computeConfluenceCorridor } from "./nexus/confluence-corridor";
 // OMEGA CORE V-MAX (completar Fase 7, Radar/OIH): universo curado real +
 // núcleo puro de qualificação/ranking (Fase 7 v1) + scanner real por
 // ativo (engine-bridge.ts) — nenhum dos 3 é reimplementado aqui.
 import { extractRadarUniverseSymbols, type AssetUniverseFile } from "./nexus/radar-universe";
-import { qualifyRadarCandidate, rankRadarCandidates, type RadarQualificationResult } from "./nexus/radar-qualification";
+import { qualifyRadarCandidate, rankRadarCandidates, describeRadarQualificationReason, type RadarQualificationResult } from "./nexus/radar-qualification";
 // ADITIVO V-MAX Etapa 9: universo MEXC real (irmão de binance-symbols.ts,
 // já usado pelo SmartOmnibox) — busca dinâmica, nunca uma lista curada
 // estática como a Binance acima.
@@ -36,6 +37,13 @@ import { fetchMexcUsdtSymbols } from "./omnibox/mexc-symbols";
 import assetUniverseDefault from "../../configs/asset-universe.default.json";
 import { ageAlpha } from "./chart/annotation-decay";
 import { BREAK_DECAY } from "./chart/StructureBreakMarkersPlugin";
+import { MAX_KEY_LEVELS_SHOWN } from "./chart/SessionKeyLevelsPlugin";
+// Acessibilidade real (achado de auditoria: zero aria-live em toda a base,
+// grep confirmado) — região sr-only que anuncia mudança de direção do
+// Núcleo e de estado LIVE/OFF pra quem usa leitor de tela. Componente
+// desacoplado (recebe só direction/wsLive por prop, mesma arquitetura de
+// voice/VoiceControlWidget.tsx) — ver header de a11y/LiveRegionAnnouncer.tsx.
+import { LiveRegionAnnouncer } from "./a11y/LiveRegionAnnouncer";
 // Mesmo motor puro que EnhancedChart_110_Percent.tsx já usa para desenhar
 // o canal — chamado uma 2ª vez aqui de propósito (função determinística
 // sobre os MESMOS candles reais, nunca uma segunda fórmula) porque o
@@ -48,19 +56,53 @@ import { buildDiagnosticReport, formatDiagnosticReportMarkdown } from "./nexus/s
 // ADITIVO V-MAX Etapa 10 (Data Quality Monitor unificado): vocabulário
 // único OK/WARNING/FAIL/DADOS_INSUFICIENTES por cima dos 3 motores de
 // qualidade reais (Bus/GMIL/Research) — nunca um 4º cálculo, só leitura.
-import { classifyBusQuality, classifyWeight, classifySufficiencyScore, DATA_QUALITY_COLOR } from "./nexus/data-quality-vocabulary";
-// Fase Ω Priority 1: tipos + lista canônica dos 6 prazos — mesma fonte que
-// engine-bridge.ts usa para orquestrar, nunca uma segunda lista duplicada.
+import { classifyBusQuality, classifyWeight, classifySufficiencyScore, DATA_QUALITY_COLOR, type DataQualityLabel } from "./nexus/data-quality-vocabulary";
+// Fase Ω Priority 1: tipos + lista canônica dos prazos (MULTI_TIMEFRAME_LIST,
+// hoje 9: 1m/3m/5m/15m/30m/1h/4h/1d/1w) — mesma fonte que engine-bridge.ts
+// usa para orquestrar, nunca uma segunda lista duplicada nem uma contagem
+// escrita à mão em prosa (achado real: "6 prazos" tinha ficado pra trás
+// desde a ampliação da Diretriz Mestra §7 — ver MULTI_TIMEFRAME_LIST.length
+// abaixo em vez de um número que pode divergir de novo em silêncio).
 import { MULTI_TIMEFRAME_LIST, type MultiTimeframeId, type TimeframeContext } from "./nexus/multi-timeframe-engine";
 // Signal Precision order (phase 4): actionable plan from real structure.
 import { buildTradePlan, effectiveStopForTargetsHit, obstacleZonesInPath, type TradePlanStructureZone, type TradePlanLevelInput } from "./nexus/trade-plan";
+// Ordem 2 §4 (Trade Plan unificado), graduado: compositor puro sobre 5
+// sistemas já reais (trade-plan/signal-track-record/operational-readability/
+// scenario-engine/institutional-score) — SecondaryModuleView usa isto só
+// para o campo STATUS que nenhum painel existente resume hoje (Entry/Stop/
+// Target já são exibidos direto de `tradePlan`, zero repetição).
+import { composeTradePlanView } from "./nexus/trade-plan-view";
 // Autonomy order: honest signal accuracy — plans tracked against the real
 // price, persisted across sessions, felt by the affective memory.
-import { rehydrateTrackRecord, hitRate, EMPTY_TRACK_RECORD } from "./nexus/signal-track-record";
+import { rehydrateTrackRecord, hitRate, EMPTY_TRACK_RECORD, type TrackedPlan, type PlanOpenContext } from "./nexus/signal-track-record";
+import {
+  rehydratePaperTrading,
+  unrealizedPnl,
+  unrealizedPnlPct,
+  paperPositionContext,
+  paperMarginUsed,
+  paperLiquidationStatus,
+  paperEquity,
+  paperDrawdown,
+  PAPER_MAX_LEVERAGE,
+  PAPER_MAINTENANCE_MARGIN_RATE,
+  PAPER_EQUITY_SAMPLE_MS,
+} from "./nexus/paper-trading";
+// v16.0 DEFINITIVO §9: primeiro assinante real de ORGANISM.TRACK_RECORD.UPDATED
+// (event-bus.ts) — evento já emitido pelo OrganismOrchestrator, sem consumidor
+// até esta entrega. Achado da AUDITORIA TÉCNICA COMPLETA (Seção F):
+// deriveSweepAlert assina BRAIN.TRAPS.UPDATED, o segundo publicador real já
+// existente sem consumidor de alerta (ver header de alert-center.ts).
+import { deriveTrackRecordAlert, deriveSweepAlert, sweepIdentity, type AlertEvent } from "./nexus/alert-center";
 // V-MAX Fase 0.4: chartTimeframe/CHART_TIMEFRAMES abaixo continuam string
 // solta (pré-existente) — este cast é o único ponto de costura com o tipo
 // estrito do Nexus, não uma reescrita do tipo legado.
-import type { Timeframe } from "./nexus/types";
+import type { Timeframe, ExchangeConnectionState } from "./nexus/types";
+// Migração Spot→Futures do feed ao vivo (02/09/2026): reusa a máquina de
+// reconnect+backoff+heartbeat já construída e testada em
+// connection-manager.ts em vez de escrever uma segunda fórmula à mão no
+// efeito de boot abaixo.
+import { ConnectionManager } from "./nexus/connection-manager";
 // V-MAX Fase 0.8: Health Monitor real, ligado direto (ver comentário no
 // efeito de boot mais abaixo sobre por que este, diferente do
 // CrossExchangeService da Fase 0.5, não fica dormente).
@@ -70,11 +112,22 @@ import { getHealthMonitor } from "./nexus/health-monitor";
 // de fatia de saída de motor no UnifiedGlobalSnapshot em um evento tipado no
 // bus do Nexus Core — a publicação dos motores é a própria escrita na store,
 // nunca um emit() manual espalhado pelos efeitos.
-import { getOrganismOrchestrator } from "./nexus/organism-orchestrator";
+import { getOrganismOrchestrator, getSnapshotForEngine } from "./nexus/organism-orchestrator";
+// ORDEM OFICIAL Nº 01 (Autogovernança): traceStages() ganha o primeiro
+// consumidor ao vivo — só o Relatório de Autodiagnóstico (TelemetryHealthWidget),
+// sob demanda, mesma disciplina de "read-only observer" do próprio módulo.
+import { traceStages } from "./nexus/stage-runner";
+// Ordem 3 §17 (Terminal Event Log), graduado: formatter puro do NexusEvent
+// real (event-bus.ts) em linha de log legível — EventsWidget usa isto como
+// 2ª fonte do MESMO painel "EVENT TELEMETRY" (a 1ª, gmilBus, só cobre 2
+// eventos de provedor GMIL; esta cobre os 27 tipos do organismo inteiro via
+// TypedEventBus.onAny()). Zero segunda formatação: o texto de cada linha
+// nasce inteiro aqui, nunca recomputado no componente.
+import { formatTerminalLogEntry } from "./nexus/terminal-event-log";
 // Local-First (closes the persistence gap flagged in the audit): candles
 // persisted to IndexedDB on every real REST arrival; on boot the chart
 // paints instantly from the last REAL session before the network answers.
-import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord, compactPersistedCandles, candleKey } from "./nexus/persistence";
+import { saveCandles, loadCandles, saveTrackRecord, loadTrackRecord, savePaperTrading, loadPaperTrading, compactPersistedCandles, candleKey } from "./nexus/persistence";
 // V18 Sprint 1 (Tarefa B): "Destravar o Gráfico Institucional" — substitui
 // o SVG feito à mão por lightweight-charts (pan/zoom/crosshair nativos).
 import {
@@ -105,11 +158,22 @@ import {
   getOlderChartCandles,
   computeRealVolumeProfile,
   computeRealFibonacciConfluence,
+  computeInstitutionalBlocks,
+  computeSuperTrend,
+  type InstitutionalBlock,
   computeRealTrustScore,
   type ConfluenceSource,
   buildMultiTimeframeContext,
   computeBosChoch,
+  computeLiquidityVoids,
+  computeZigZag,
+  atrScaledZigZagDeviationPct,
+  computeIchimoku,
+  computeDeltaDivergence,
+  computeAndrewsPitchfork,
+  computeCandlePatterns,
   scanRadarCandidate,
+  getPivotPoints,
 } from "./engine-bridge";
 // V-MAX Fase 1.3: recorte de sessão UTC real para o Volume Profile (função
 // pura — a matemática pesada roda no WASM do quant-worker).
@@ -117,6 +181,29 @@ import { filterSessionCandles, bucketMidPrice } from "./nexus/volume-profile";
 // V-MAX Fase 1 item 4: Conselho Multi-Agente (7 agentes puros + Meta-Agent
 // que delega a agregação ao linear opinion pool real da Fase F).
 import { buildCouncilDecision, RSI_OVERBOUGHT, RSI_OVERSOLD, type CouncilDecision } from "./nexus/council";
+// Ordem Nº 04 (§4, "consolidar camadas existentes... engine signals"):
+// achado real de auditoria — engine-signal-contract.ts existia desde EPC
+// OMEGA FINAL Parte 1 sem NENHUM consumidor real (zero import fora do
+// próprio arquivo). CouncilWidget abaixo é o primeiro consumidor real —
+// reforma a leitura ad hoc de council.votes para passar pelo contrato
+// único, sem duplicar UI nem criar um segundo painel.
+import { deriveEngineSignalsFromCouncil, deriveEngineSignalsFromInstitutionalZones } from "./nexus/engine-signal-contract";
+import { summarizeLayerPanel, describeLayerPanel } from "./nexus/layer-panel-summary";
+import { useBacktestRunner } from "./nexus/use-backtest-runner";
+import {
+  descreverTaxa,
+  formatarFracao,
+  formatarR,
+  avisoObrigatorio,
+  explicarFalha,
+  type BacktestAggregate,
+  type BacktestProvenance,
+} from "./nexus/backtest-presentation";
+import { timeframeMinutes } from "./nexus/timeframe-layer-profile";
+// Carta Branca: consumidor real do Evidence Fusion Engine — SYSTEM_HANDBOOK
+// §6.72/§6.74/§6.76 classificaram isto como "iniciativa de arquitetura
+// própria" por 3 rodadas seguidas; agora tem seu primeiro consumidor vivo.
+import { fuseEvidence, type EvidenceFusionSourceGroup } from "./nexus/evidence-fusion";
 import { computeConsensusRadar, type ConsensusRadarCategory } from "./nexus/consensus-radar";
 // MomentumAgent order ("chegando à perfeição"): RSI de Wilder, o mesmo
 // exato computeRSI já real/exportado como feature interna do
@@ -124,6 +211,10 @@ import { computeConsensusRadar, type ConsensusRadarCategory } from "./nexus/cons
 // matemática de RSI). Mesmo padrão de import relativo já usado por
 // engine-bridge.ts para este mesmo arquivo legado.
 import { computeRSI } from "../../src/research/engines/lorentzian-classifier.js";
+// Diretriz Final de Integração Total: graduação real do MACD (EPC OMEGA
+// FINAL) — motor já construído/testado, este é o primeiro consumidor
+// real ao vivo.
+import { computeMacdSeries, latestMacd } from "./nexus/macd";
 // V-MAX Fase 2: cenários Path A/B (níveis reais + massa de opinião real do
 // conselho) e armadilhas por corroboração de eventos reais.
 import { buildScenarioProjection, formatScenarioPathLabel, type ScenarioLevel } from "./nexus/scenario-engine";
@@ -137,7 +228,43 @@ import { detectInstitutionalTraps } from "./nexus/trap-detection";
 import { buildConvictionReading } from "./nexus/confluence-engine";
 // Neural Market Aura (especificação do Operador, ver o cabeçalho de
 // nexus/aura-lifecycle.ts para o racional completo de escopo/honestidade).
-import { computeAuraReading, TIMEFRAME_MS } from "./nexus/aura-lifecycle";
+import { computeAuraReading, TIMEFRAME_MS, DISSOLVE_CONFIG } from "./nexus/aura-lifecycle";
+import { computeChartIntegrity, type ChartIntegrityStatus } from "./nexus/chart-integrity";
+// Entrega 40: mesmo book já desenhado pelo ladder abaixo — Bid/Ask Ratio e
+// Imbalance são leituras derivadas puras dos MESMOS bids/asks, zero
+// segunda assinatura de WebSocket (ver cabeçalho de nexus/order-book-depth.ts).
+import { computeBidAskRatio, computeImbalance } from "./nexus/order-book-depth";
+// Entrega 41: mesmo motor real do TpoProfilePlugin, usado aqui só pra
+// derivar o sinal de relevância hasTpoProfile (ver relevanceInput abaixo).
+import { computeTpoProfile } from "./nexus/tpo-profile";
+// Entrega 42 ("Profitability Engine"): custo real sobre o Track Record JÁ
+// resolvido (nunca um replay sintético) + expectativa/FilterEngine. LEI 24
+// (exceção pontual autorizada pelo Operador) — ver comentário no ponto de
+// uso (expectancyFilter) e em CoreSignalBadge.
+import { simulateTradeCostsBatch } from "./nexus/trade-simulation";
+import { evaluateSignalFilter, MIN_TRADES_FOR_VALID_EXPECTANCY, type FilterResult } from "./nexus/expectancy";
+import { computeDecisionDistance, formatDecisionDistance, formatAtrUnits, describeDecisionDistance, type DecisionDistanceReading } from "./nexus/decision-distance";
+import { computeDirectionalConsensus, describeDirectionalConsensus, normalizeSide, sideFromSigned, computeLiquidityMap, liquidityBias, type DirectionalSource, type DirectionalConsensusReading, type LiquidityTarget, type LiquidityMapReading } from "./nexus/directional-consensus";
+import { computeZoneSignificance, formatZoneAtrWidth, selectSharedZoneHighlights } from "./nexus/liquidity-significance";
+// "constrói uma bola... um só aparece, tipo longa ou short, com essa
+// porcentagem, bem profissional" (pedido direto do Operador) — geometria
+// pura do anel/gauge; o componente SVG que a consome vive logo antes de
+// DirectionalSyncPanel, mesma leitura de directionalConsensus já em uso ali.
+import { computeGaugeReading, formatGaugePercent, type GaugeReading } from "./nexus/directional-gauge";
+// directionArrow: mesma seta canônica LONG=▲/SHORT=▼ que a guarda de
+// inversão protege — o rótulo central do anel nunca inventa seu próprio
+// glifo.
+import { directionArrow } from "./nexus/direction-semantics";
+import { resolveFloatingWidgetOrigin } from "./nexus/floating-widget-origin";
+// Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
+// councilVotesToModelVotes/regimeModelVote/fuseModelVotes/alignFusedConfidence
+// (Fase 2, primeiro consumidor real) formam o score orientado à direção do
+// plano; calibrateConfidence (Fase 3) o transforma em probabilidade
+// calibrada só quando a amostra real sustenta isso — ver header dos dois
+// arquivos para a auditoria completa.
+import { councilVotesToModelVotes, regimeModelVote, fuseModelVotes, alignFusedConfidence } from "./nexus/model-fusion";
+import { calibrateConfidence, type CalibrationResult } from "./nexus/platt-calibration";
+import { computeOrganismHealth, type OrganismHealthVerdict } from "./nexus/organism-health";
 // Diretriz Complementar (Nexus Predictive Engine) §3: ETA dinâmica por
 // alvo — ATR real × Efficiency Ratio de Kaufman sobre os closes reais do
 // gráfico; estimativa recomputada a cada ciclo, nunca uma garantia (ver
@@ -159,6 +286,12 @@ import { timeframeProfile } from "./nexus/timeframe-profile";
 import { buildAssistantMessages } from "./nexus/operation-assistant";
 import { computePremiumDiscount } from "./nexus/premium-discount";
 import { detectHarmonicPatterns, MIN_FIT_SCORE } from "./nexus/harmonic-patterns";
+import { evaluateSmcHarmonicFusion, type SmcHarmonicFusionResult } from "./nexus/smc-harmonic-fusion";
+// Carta Branca (Reconhecimento de Padrões): Triângulo e Ombro-Cabeça-Ombro —
+// mesma disciplina de harmonic-patterns.ts (fail-closed, fitScore nunca
+// probabilidade), motores isolados graduados agora ao pipeline real.
+import { detectTrianglePattern } from "./nexus/triangle-pattern";
+import { detectHeadAndShoulders } from "./nexus/head-shoulders-pattern";
 // Consolidação Final §20-§30: estados da VWAP (matemática intocada, §20) +
 // Nexus Line proprietária + confluência informativa — módulos puros novos.
 import { computeSessionVwapSeries, latestVwap } from "./nexus/vwap";
@@ -167,6 +300,7 @@ import { computeNexusLineSeries, latestNexusLine, nexusLineState, nexusConfluenc
 // Evolução Integrativa §7: Operational Readability Layer — NexusDecision
 // vira apresentação num módulo puro nomeado (zero matemática de direção).
 import {
+  buildNarrativeSummary,
   buildOperationalSummary,
   deriveBiasLabel,
   deriveConfluenceState,
@@ -177,16 +311,42 @@ import {
   obstacleSuffix,
   type NexusOutcomeLabel,
 } from "./nexus/operational-readability";
+// Ordem "Market Analysis & Publication Engine": camada de apresentação/
+// publicação PURA sobre o NexusDecision já real (zero cérebro novo, LEI 24
+// intacta) — ver cabeçalho de nexus/market-analysis.ts para o racional
+// completo. buildMarketAnalysis monta a mesma fotografia consumida pelas
+// 3 vistas (Painel/X/Story); formatMarketAnalysisForX e PUBLIC_BIAS_LABEL
+// são a ÚNICA tradução pública (vocabulário §9), reusada tal e qual em
+// qualquer superfície publicável — nunca uma segunda redação por vista.
+import { buildMarketAnalysis, formatMarketAnalysisForX, type MarketAnalysis } from "./nexus/market-analysis";
+// Ordem "AR10 PUBLICATION STUDIO": camada de EXPORTAÇÃO sobre a mesma
+// MarketAnalysis acima — 4 formatos publicáveis (Análise/Story/X/Card)
+// desenhados em canvas puro, zero segunda inteligência (ver cabeçalho de
+// publication/types.ts para o contrato completo).
+import { renderPublicationAssets, revokePublicationAssets } from "./publication/generate";
+import {
+  PUBLICATION_FORMAT_SPECS,
+  type PublicationAsset,
+  type PublicationCandle,
+  type PublicationCandlePattern,
+  type PublicationFormat,
+  type PublicationSnapshot,
+} from "./publication/types";
 // Fecho da pendência "R:R mínimo": piso DECLARADO 1:2 (ver rr-quality.ts),
 // display-only — anota, nunca esconde/bloqueia um plano real (LEI 24).
 import { rrFloorSuffix } from "./nexus/rr-quality";
-import { marketSessionFromUtc, computeSessionBoundaries } from "./nexus/market-session";
+import { marketSessionFromUtc, computeSessionBoundaries, computeSessionKeyLevels } from "./nexus/market-session";
 // Ferramentas Institucionais (ADITIVO V-MAX/MED, prioridade #1): ICT Kill
 // Zones — janela ESTREITA de alta probabilidade dentro da sessão, nunca
 // uma 2ª partição de 24h (ver header de kill-zones.ts).
 import { activeKillZones } from "./nexus/kill-zones";
 import { computeHeatScore } from "./nexus/heat-score";
-import { buildNexusDecision, NEXUS_PLAN_GAP_LABEL, type NexusDecision } from "./nexus/decision-layer";
+import { buildNexusDecision, type NexusDecision } from "./nexus/decision-layer";
+// Evolução Incremental da Inteligência Central, Fase 1→2: primeiro
+// consumidor real de unified-presentation.ts (nasceu isolado/testado,
+// graduado aqui como badge ADITIVO — nunca substitui os badges reais
+// existentes, Regra de Ouro 4).
+import { computePresentationState } from "./nexus/unified-presentation";
 // V-MAX Fase 1.2: "trade grande" real (percentil da amostra observada, ver
 // header do arquivo) — nunca um limiar fixo inventado aqui na UI.
 import {
@@ -233,7 +393,11 @@ import type { TacticalContextInput } from "./llm-bridge";
 // browser's own speechSynthesis/webkitSpeechRecognition (feature-detected,
 // fail-closed), so this static import costs a few KB, no model, no network.
 import { voiceEngine } from "./voice/voice-engine";
-import { computeAlerts } from "./voice/voice-dispatcher";
+import { toVoiceAlerts } from "./voice/voice-dispatcher";
+import { deriveSnapshotAlerts } from "./nexus/snapshot-alerts";
+import { alertEmphasis, sortAlertsByUrgency } from "./nexus/alert-presentation";
+import { computeScenarioFingerprint } from "./nexus/scenario-fingerprint";
+import { recallContext, describeRecall, type ContextualRecall } from "./nexus/contextual-memory";
 import type { TerminalSnapshot } from "./voice/voice-intents";
 import { VoiceControlWidget } from "./voice/VoiceControlWidget";
 // GMIL (Global Market Intelligence Layer, src/gmil/) — Providers →
@@ -252,12 +416,29 @@ import { computeConsensus, type ConsensusInput } from "./gmil/consensus-engine";
 import { SmartOmnibox } from "./omnibox/SmartOmnibox";
 import { TradFiEmptyState } from "./omnibox/TradFiEmptyState";
 import { TRADFI_ASSETS, type TradFiAsset } from "./omnibox/tradfi-assets";
+// Ordem Market Data Fabric, Fase 1: findByLegacyTradFiAssetSymbol conecta
+// o TradFiAsset escolhido acima (ex. 'SPX') ao Instrument Registry
+// TradFi/CME real (ex. CME_ES) SEM duplicar o catálogo/seletor já
+// existente — 14 dos 17 ativos legados agora resolvem para um contrato
+// real (9 futuros CME + 5 ações NASDAQ); o resto continua honesto em
+// TradFiEmptyState (ver notes de cada
+// InstrumentDefinition mapeada em instrument-registry.js). TradFiRealChart
+// é deliberadamente minimalista (candlestick real, zero overlay do
+// Institutional Chart Engine, zero Core Engine — LEI 24 intacta).
+import { findByLegacyTradFiAssetSymbol } from "../../src/market-data-bus/index.js";
+import { TradFiRealChart } from "./omnibox/TradFiRealChart";
+import { MexcRealChart } from "./omnibox/MexcRealChart";
+import type { UniversalCryptoSymbol } from "./omnibox/universal-symbol";
 // Master Panel handoff (Multi-Source Market Data Fusion, escopo reduzido a
 // UMA fonte adicional real por decisão do Operador): Bybit USDT-M Perpétuo
 // como segundo dado real e independente, comparado só contra o markPrice
 // que a Binance já devolve em fetchDerivatives abaixo — nunca uma segunda
 // fonte do Core Engine/Risk Engine (essa trava é da Fase G/Diretriz 2).
 import { fetchBybitPerpTicker, compareCrossExchange, type CrossExchangeCheck } from "./cross-exchange/bybit-futures";
+// Ponta Solta 1 (Auditoria do Ecossistema): leitura real do livro L2 por
+// corretora que a store já capturava e ninguém lia.
+import { computeCrossExchangeBook, describeCrossExchangeBook } from "./nexus/cross-exchange-book";
+import { computeReversalReading, describeReversalReading } from "./nexus/reversal-detector";
 // Terceira fonte real (pedido do Operador: "puxa dados públicos de
 // qualquer outra corretora"): OKX Perpétuo, mesmo papel e mesma trava
 // fail-closed da Bybit acima — ver header de okx-futures.ts.
@@ -266,6 +447,7 @@ import { fetchOkxPerpTicker } from "./cross-exchange/okx-futures";
 // de cross-check — resposta do Operador, secundária/mais completa, nunca
 // substitui a Binance como fonte primária.
 import { fetchMexcFuturesPerpTicker } from "./cross-exchange/mexc-futures";
+import { formatPrice as sharedFormatPrice } from "./nexus/price-format";
 import {
   LayoutDashboard,
   BarChart2,
@@ -295,6 +477,13 @@ import {
   MicOff,
   Layers,
   Radar as RadarIcon,
+  Share2,
+  Copy,
+  Check,
+  Download,
+  Wallet,
+  SlidersHorizontal,
+  MoreHorizontal,
 } from "lucide-react";
 
 export const WidgetContext = createContext<any>(null);
@@ -531,8 +720,88 @@ export type ChartCandle = { time: number; open: number; high: number; low: numbe
 // formação). Sem paginação nenhuma ainda, existing.length <= fresh.length
 // e isto se comporta identico a um replace — zero mudança de
 // comportamento no caso comum.
+//
+// DEFEITO REAL ENCONTRADO NESTA AUDITORIA (partiu do pedido do Operador
+// sobre a Fibonacci: "ela tem de fazer um novo mapeamento na análise, cada
+// tempo gráfico"). A guarda de "resposta velha" do fetch periódico cobria
+// só a troca de ATIVO, nunca a troca de TIMEFRAME. Sequência real:
+//
+//   1. Operador em 15m; o tick de 30s dispara o fetch de klines.
+//   2. Durante o await, ele troca para 1H. O efeito de timeframe busca e
+//      aplica os candles de 1H.
+//   3. A resposta de 15m chega. Como o efeito do fetch periódico não
+//      depende de `chartTimeframe`, sua flag de cancelamento continua
+//      falsa — e os candles de 15m eram fundidos no array de 1H.
+//
+// O resultado era uma série ÚNICA misturando duas grades de tempo, e todo
+// motor a jusante (Fibonacci, S/R, SMC, BOS/CHOCH, Volume Profile) passava
+// a mapear swings sobre ela. Silencioso: nenhum erro, só leitura errada.
+//
+// Duas camadas de correção, e esta é a segunda (defesa em profundidade — a
+// primeira é a guarda de timeframe em fetchSymbolData): a fusão passa a
+// COMPARAR AS GRADES. Espaçamentos diferentes nunca são fundidos; `fresh`
+// é autoritativo sozinho, como num replace. Fail-closed (Regra de Ouro 3):
+// na dúvida, a série mais recente e internamente coerente vence, nunca uma
+// mistura fabricada.
+/** Passo esperado de uma grade, em segundos, para um timeframe declarado.
+ *  Fonte única: timeframeMinutes (nexus/timeframe-layer-profile.ts), a mesma
+ *  tabela que o perfil de camadas já usa — nunca uma segunda tabela de
+ *  durações. `null` para timeframe desconhecido (fail-closed: sem saber o
+ *  passo esperado, este módulo não rejeita nada). */
+export function expectedStepSeconds(timeframe: string | null | undefined): number | null {
+  const min = timeframeMinutes(timeframe);
+  return min === null ? null : min * 60;
+}
+
+/**
+ * A grade real de `series` corresponde ao timeframe declarado?
+ *
+ * DEFEITO REAL QUE ISTO FECHA: a hidratação do cache (IndexedDB) aplicava a
+ * série persistida sem nenhuma verificação de grade — diferente do caminho
+ * de rede, que passa por mergeFreshTail e compara grades. Duas formas de
+ * errar, ambas produzindo exatamente "erro do tempo gráfico de um horário
+ * pra outro" (relato do Operador):
+ *
+ *   1. CORRIDA: `loadCandles` lê o timeframe, faz await de IndexedDB, e
+ *      aplica. Se o Operador troca de timeframe durante o await, a série do
+ *      timeframe ANTIGO entra num gráfico que já mostra outro. O guard
+ *      `cancelled` só cobre troca de ATIVO, nunca de timeframe.
+ *   2. CACHE CONTAMINADO: séries gravadas antes da correção de mistura de
+ *      grades podem estar no IndexedDB com a grade errada sob a chave
+ *      certa. Nada as rejeitava na leitura.
+ *
+ * Fail-closed em AMBAS as direções: sem timeframe conhecido ou sem amostra
+ * suficiente para afirmar uma grade, devolve `true` (não rejeita) — nunca
+ * descarta dado real por suposição (Regra de Ouro 4).
+ */
+export function seriesMatchesTimeframe(series: ChartCandle[], timeframe: string | null | undefined): boolean {
+  const esperado = expectedStepSeconds(timeframe);
+  if (esperado === null) return true;
+  const real = candleStepSeconds(series);
+  if (real === null) return true;
+  return real === esperado;
+}
+
+export function candleStepSeconds(series: ChartCandle[]): number | null {
+  if (series.length < 3) return null; // amostra curta demais para afirmar grade.
+  // Mediana dos passos: um buraco real no histórico (manutenção da
+  // exchange) não muda a mediana, mas mudar de 15m para 1H muda.
+  const passos: number[] = [];
+  for (let i = 1; i < series.length; i++) {
+    const d = series[i].time - series[i - 1].time;
+    if (d > 0) passos.push(d);
+  }
+  if (passos.length === 0) return null;
+  passos.sort((a, b) => a - b);
+  return passos[Math.floor(passos.length / 2)];
+}
+
 export function mergeFreshTail(existing: ChartCandle[], fresh: ChartCandle[]): ChartCandle[] {
   if (existing.length === 0 || fresh.length === 0) return fresh;
+  // Grades diferentes = timeframes diferentes: nunca funde (ver acima).
+  const passoExistente = candleStepSeconds(existing);
+  const passoNovo = candleStepSeconds(fresh);
+  if (passoExistente !== null && passoNovo !== null && passoExistente !== passoNovo) return fresh;
   const freshOldestTime = fresh[0].time;
   const olderPart = existing.filter((c) => c.time < freshOldestTime);
   if (olderPart.length === 0) return fresh;
@@ -569,6 +838,11 @@ interface PriceState {
 interface DerivativesState {
   fundingRate: number | null; // real, Binance futures premiumIndex
   openInterest: number | null; // real, Binance futures openInterest (BTC)
+  // v16.0 ULTRA §15.4: razão global de contas long/short, Binance futures
+  // globalLongShortAccountRatio (público, keyless, período 5m). >1 = mais
+  // contas long que short; <1 = mais short. Posicionamento agregado, nunca
+  // um sinal de entrada.
+  longShortRatio: number | null;
 }
 
 interface Level {
@@ -603,6 +877,7 @@ export default function App() {
   const [derivatives, setDerivatives] = useState<DerivativesState>({
     fundingRate: null,
     openInterest: null,
+    longShortRatio: null,
   });
   // V-MAX Fase 1.3: `volume` real por candle (o `v` que o Bus sempre
   // carregou, agora repassado por getChartCandles) — insumo do Volume
@@ -660,9 +935,23 @@ export default function App() {
   // painel, nunca o próprio scan em segundo plano (que roda independente
   // do painel estar aberto, mesmo espírito do Workspace Manager).
   const [radarPanelOpen, setRadarPanelOpen] = useState(false);
+  // Ordem "Market Analysis & Publication Engine" §2: mesmo padrão exato dos
+  // 3 painéis acima (toggle simples, botão dedicado na SideBar, painel
+  // fixed/centered) — a única novidade é o conteúdo (camada de publicação),
+  // nunca um mecanismo de painel diferente.
+  const [marketAnalysisOpen, setMarketAnalysisOpen] = useState(false);
+  // v16.0 PRO MAX §9.1/§9.4: mesmo padrão exato dos painéis acima (toggle
+  // simples, botão dedicado na SideBar, painel fixed/centered).
+  const [paperTradingOpen, setPaperTradingOpen] = useState(false);
+  // v16.0 DEFINITIVO §9: fila de toasts — sempre-visível, sem toggle (as
+  // notificações aparecem por conta própria quando uma transição real
+  // acontece). Efêmera por natureza (auto-dismiss em 5s): não entra na
+  // store Local-First, não sobrevive a um reload — persistir um toast já
+  // expirado seria uma confusão, não uma feature.
+  const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [chartLayerVisibility, setChartLayerVisibility] = useState<ChartLayerVisibility>(() => restoredSession.chartLayers);
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7 (resposta do Operador à pergunta
-  // de escopo: os 18 toggles manuais continuam existindo como OVERRIDE
+  // de escopo: os 20 toggles manuais continuam existindo como OVERRIDE
   // real, o padrão novo é o comportamento automático por trás deles).
   // Estrutura paralela, NUNCA uma reforma do tipo existente
   // (ChartLayerVisibility continua Record<ChartLayerId, boolean>, zero
@@ -685,55 +974,17 @@ export default function App() {
   const resetChartLayerToAuto = useCallback((id: ChartLayerId) => {
     setChartLayerAutoMode((prev) => ({ ...prev, [id]: true }));
   }, []);
-  // Diretriz de Evolução Autônoma Integral §11 ("MODO OPERACIONAL... E:
-  // MODO AUDITORIA"), achado real de auditoria: o painel só tinha toggle
-  // individual por camada — nenhum atalho para as 2 leituras reais que o
-  // Operador de fato alterna entre si. Parâmetro declarado (convenção,
-  // nunca medição — mesmo espírito do piso R:R): as 3 camadas que
-  // desenham o PLANO em si (trade_plan_zone/neural_market_aura) e a
-  // direção de tendência mais lida "de relance" (ema) — mapeiam
-  // diretamente às prioridades visuais 1-6 da diretriz (direção/entrada/
-  // invalidação/TP1-3); as outras 5 (estrutura/contexto, prioridades
-  // 7-8) ficam ligadas só no Modo Auditoria. Puramente aditivo: nenhuma
-  // camada é removida, o cálculo de todas continua ativo — só a exibição
-  // muda, e o toggle individual continua funcionando normalmente depois.
-  // Diretriz Suprema de Evolução Integrativa §8 ("Modo Inteligência"):
-  // achado real de auditoria — só existiam 2 presets (Operacional/
-  // Auditoria); a diretriz pede um 3º para análise profunda sem o ruído
-  // do plano ativo. Mesmo mecanismo aditivo dos outros dois — nenhuma
-  // camada nova, nenhum cálculo novo, só uma pré-seleção a mais.
-  // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: um preset é curadoria manual
-  // deliberada (mesma categoria do toggle individual) — aplicar
-  // operational/audit/intelligence também sai do automático em todas as
-  // camadas, para o resultado do preset nunca ser silenciosamente
-  // sobrescrito pelo Relevance Engine. "automatic" é o 4º preset novo: a
-  // única ação que devolve TODAS as camadas ao comportamento automático
-  // de uma vez (o reset por camada individual, resetChartLayerToAuto,
-  // continua existindo para ajustes finos).
-  const applyChartLayerPreset = useCallback((preset: "operational" | "audit" | "intelligence" | "automatic") => {
-    if (preset === "automatic") {
-      setChartLayerAutoMode(
-        CHART_LAYER_IDS.reduce((acc, id) => {
-          acc[id] = true;
-          return acc;
-        }, {} as ChartLayerVisibility),
-      );
-      return;
-    }
+  // UM MODO SÓ (pedido direto do Operador). Antes esta função aplicava 4
+  // presets — 3 manuais (operational/audit/intelligence) e 1 automático.
+  // Os 3 manuais eram atalhos de curadoria em lote sobre os MESMOS toggles
+  // camada-a-camada que continuam existindo; nenhum era capacidade própria.
+  // Sobrou a única ação que o Operador pediu para manter: devolver TODAS as
+  // camadas ao comportamento automático de uma vez. O reset por camada
+  // individual (resetChartLayerToAuto, logo acima) continua para ajuste fino.
+  const restoreChartLayersToAuto = useCallback(() => {
     setChartLayerAutoMode(
       CHART_LAYER_IDS.reduce((acc, id) => {
-        acc[id] = false;
-        return acc;
-      }, {} as ChartLayerVisibility),
-    );
-    if (preset === "audit") {
-      setChartLayerVisibility(DEFAULT_CHART_LAYER_VISIBILITY);
-      return;
-    }
-    const activeSet = preset === "intelligence" ? CHART_LAYERS_INTELLIGENCE_PRESET : CHART_LAYERS_OPERATIONAL_PRESET;
-    setChartLayerVisibility(
-      CHART_LAYER_IDS.reduce((acc, id) => {
-        acc[id] = activeSet.has(id);
+        acc[id] = true;
         return acc;
       }, {} as ChartLayerVisibility),
     );
@@ -748,18 +999,32 @@ export default function App() {
   // gavetas fechadas por padrão — o Gráfico reina sozinho no boot.
   const [leftDrawerOpen, setLeftDrawerOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  // Painel Properties 320px (pedido do Operador, "painel e o visual...
+  // nada repetido"): 3ª gaveta, mesmo mecanismo exato de esquerda/direita
+  // (position:absolute, translateX, fechada por padrão) — ocupa o MESMO
+  // slot visual da direita (.terminal-right/.terminal-properties
+  // compartilham right:0 em index.css), nunca as duas ao mesmo tempo
+  // (mutual exclusion abaixo cobre os 3 pares agora, não só 1).
+  const [propertiesDrawerOpen, setPropertiesDrawerOpen] = useState(false);
   // Fase M.1 (Navigation Rail + Overlay Drawers): "Nunca permitir múltiplos
   // Drawers abertos simultaneamente. Somente um módulo poderá permanecer
-  // aberto" — abrir uma gaveta fecha a outra; re-clicar no mesmo ícone da
+  // aberto" — abrir uma gaveta fecha as outras; re-clicar no mesmo ícone da
   // régua fecha (toggle), como pedido em "Fechamento automático quando:
   // clicar novamente no ícone".
   const toggleLeftDrawer = useCallback(() => {
     setRightDrawerOpen(false);
+    setPropertiesDrawerOpen(false);
     setLeftDrawerOpen((v) => !v);
   }, []);
   const toggleRightDrawer = useCallback(() => {
     setLeftDrawerOpen(false);
+    setPropertiesDrawerOpen(false);
     setRightDrawerOpen((v) => !v);
+  }, []);
+  const togglePropertiesDrawer = useCallback(() => {
+    setLeftDrawerOpen(false);
+    setRightDrawerOpen(false);
+    setPropertiesDrawerOpen((v) => !v);
   }, []);
   // "Fechamento automático quando:... pressionar ESC (Desktop)". Estado
   // funcional (v ? false : v) em vez de useCallback-com-dependência: o
@@ -769,6 +1034,7 @@ export default function App() {
       if (e.key !== "Escape") return;
       setLeftDrawerOpen((v) => (v ? false : v));
       setRightDrawerOpen((v) => (v ? false : v));
+      setPropertiesDrawerOpen((v) => (v ? false : v));
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -789,15 +1055,46 @@ export default function App() {
   const [selectedAsset, setSelectedAsset] = useState<AssetSymbol>(() => restoredSession.asset);
 
   // Overhaul Cross-Market (Missão 2): o Smart Omnibox também lista a
-  // taxonomia TradFi (índices/ações/commodities/forex) para conexão
-  // FUTURA — hoje NENHUMA API macro existe neste sistema. Escolher um
-  // ativo TradFi NUNCA muda `selectedAsset` (o motor real continua
-  // rodando sobre a última cripto real, intocado) — só liga o modo
-  // TRADFI, que faz os painéis específicos de ativo mostrarem o Empty
-  // State fail-closed em vez de tentar (e falhar) puxar dado da Binance
-  // para um símbolo que não é dela (diretriz 4, Modo Fail-Closed).
-  const [marketMode, setMarketMode] = useState<"CRYPTO" | "TRADFI">(() => restoredSession.marketMode);
+  // taxonomia TradFi (índices/ações/commodities/forex). Escolher um ativo
+  // TradFi NUNCA muda `selectedAsset` (o motor real continua rodando sobre
+  // a última cripto real, intocado) — só liga o modo TRADFI, que faz os
+  // painéis específicos de CRIPTO (order book/flow/heatmap/Council/
+  // Siriform/Regime — mecânica de perpétuo, NAO_APLICAVEL para um futuro
+  // CME) mostrarem o Empty State fail-closed em vez de tentar (e falhar)
+  // puxar dado da Binance para um símbolo que não é dela (diretriz 4, Modo
+  // Fail-Closed). Ordem Market Data Fabric, Fase 1: o GRÁFICO PRINCIPAL
+  // não é mais sempre Empty State — resolvedTradFiInstrument abaixo resolve
+  // 14 dos 17 ativos legados (9 futuros CME + 5 ações NASDAQ) para um
+  // contrato real do Instrument Registry (Yahoo delayed); o resto
+  // continua honesto em Empty State.
+  const [marketMode, setMarketMode] = useState<"CRYPTO" | "TRADFI" | "MEXC">(() => restoredSession.marketMode);
   const [selectedTradFiAsset, setSelectedTradFiAsset] = useState<TradFiAsset | null>(() => restoredSession.tradFiAsset);
+  const resolvedTradFiInstrument = useMemo(
+    () => (selectedTradFiAsset ? findByLegacyTradFiAssetSymbol(selectedTradFiAsset.symbol) : null),
+    [selectedTradFiAsset],
+  );
+  // Ordem "MEXC ASSET DISCOVERY" / "UNIVERSAL ASSET DISCOVERY": terceiro
+  // marketMode, paralelo a TRADFI — runtime-only de propósito nesta Etapa 1
+  // (nunca entra em RestoredSession/persistSessionState: recarregar a
+  // página volta pro default CRYPTO/BTC, o mesmo fallback já real de
+  // sempre para qualquer marketMode desconhecido/não-TRADFI — ver
+  // readRestoredSession acima, não precisou de nenhuma mudança). Estado
+  // PRÓPRIO, nunca reaproveita selectedAsset/selectedTradFiAsset: misturar
+  // a identidade MEXC num campo pensado para símbolo Binance ou ativo
+  // TradFi seria exatamente o "misturar dado de exchanges diferentes" que
+  // a Ordem proíbe (§8/§6).
+  const [selectedMexcAsset, setSelectedMexcAsset] = useState<UniversalCryptoSymbol | null>(null);
+  const isFullCryptoMode = marketMode === "CRYPTO";
+  // Texto honesto para os painéis Binance-only quando o modo é MEXC —
+  // nunca o texto padrão de TradFiEmptyState ("Aguardando... Macro API"):
+  // seria literalmente falso aqui, MEXC está conectada de verdade, só
+  // esses painéis específicos (Council/Order Flow/Liquidity Map/etc.) não
+  // foram estendidos a ela nesta Etapa 1 (LEI 24 + precedente do Footprint
+  // recusado — ver SYSTEM_HANDBOOK.md).
+  const nonCryptoEmptyStateReason =
+    marketMode === "MEXC"
+      ? "Fora do escopo desta Etapa 1 (MEXC) — Core Engine/Order Flow/Liquidity Map continuam Binance-only. Ver SYSTEM_HANDBOOK.md."
+      : undefined;
 
   // Bumping bootGeneration tears down and re-runs every real boot effect
   // below (REST fetch + WS connect, engine cycle, order flow feed,
@@ -997,15 +1294,27 @@ export default function App() {
   // rotulados sob o título errado.
   const fetchSymbolData = async (isStale: () => boolean): Promise<boolean> => {
     try {
-      const candles = await getChartCandles(selectedAsset, CHART_CANDLE_LIMIT, chartTimeframeRef.current);
+      // Achado real desta auditoria: `isStale` só sabe sobre troca de ATIVO
+      // (a flag vem de um efeito cujas deps são bootGeneration/
+      // selectedAsset — chartTimeframe NÃO está lá). Trocar de timeframe
+      // durante este await deixava uma resposta do timeframe ANTIGO chegar
+      // com isStale() falso e ser fundida na série do timeframe NOVO —
+      // uma série única com duas grades de tempo, sobre a qual todo motor
+      // de swing (Fibonacci, S/R, SMC, BOS/CHOCH) passava a mapear.
+      // Capturado aqui e conferido depois de cada await, exatamente como o
+      // ativo já era.
+      const tfNoInicio = chartTimeframeRef.current;
+      const trocou = () => isStale() || chartTimeframeRef.current !== tfNoInicio;
+      const candles = await getChartCandles(selectedAsset, CHART_CANDLE_LIMIT, tfNoInicio);
       if (!candles) throw new Error('market_data_bus_sem_candles_validos');
-      if (isStale()) return true; // ativo trocou durante o fetch — descarta, nunca aplica dado do ativo errado
+      if (trocou()) return true; // ativo OU timeframe trocou durante o fetch — descarta, nunca aplica dado errado
       // Auditoria de arquitetura: merge, nunca um replace cego — preserva
       // história real que a paginação (arrastar para trás) já carregou.
       setChartData((prev) => mergeFreshTail(prev, candles));
       // Local-First: persist the real series (fire-and-forget — a storage
-      // failure never blocks or delays the live path).
-      void saveCandles(selectedAsset, chartTimeframeRef.current as Timeframe, candles).catch(() => {});
+      // failure never blocks or delays the live path). Grava sob o
+      // timeframe que foi REALMENTE buscado, nunca o atual.
+      void saveCandles(selectedAsset, tfNoInicio as Timeframe, candles).catch(() => {});
 
       const tickerRes = await fetch(
         `https://api.binance.com/api/v3/ticker/24hr?symbols=["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT"]`,
@@ -1051,18 +1360,43 @@ export default function App() {
       const oi = await oiRes.json();
       binanceMarkPrice = num(Number(funding?.markPrice)) ? Number(funding.markPrice) : null;
       if (!isStale()) {
-        setDerivatives({
+        setDerivatives((prev) => ({
+          ...prev,
           fundingRate: num(Number(funding?.lastFundingRate))
             ? Number(funding.lastFundingRate)
             : null,
           openInterest: num(Number(oi?.openInterest))
             ? Number(oi.openInterest)
             : null,
-        });
+        }));
       }
       binanceOk = true;
     } catch {
-      if (!isStale()) setDerivatives({ fundingRate: null, openInterest: null });
+      if (!isStale()) setDerivatives((prev) => ({ ...prev, fundingRate: null, openInterest: null }));
+    }
+
+    // v16.0 ULTRA §15.4: long/short ratio — endpoint público keyless
+    // próprio (globalLongShortAccountRatio), confirmado via WebSearch
+    // contra a documentação oficial da Binance (WebFetch direto ao
+    // domínio foi bloqueado pelo proxy deste sandbox — mesma limitação de
+    // rede de qualquer outro acesso à Binance nesta sessão, nunca
+    // verificado ao vivo aqui). Try/catch PRÓPRIO, independente do de
+    // funding/OI acima: são 2 requisições a endpoints diferentes: uma
+    // falha transitória num nunca deve apagar o outro se ele respondeu
+    // com sucesso no mesmo ciclo — por isso o update funcional (prev =>
+    // ...), nunca um objeto literal que sobrescreveria o campo do outro
+    // fetch por engano numa corrida entre os dois.
+    try {
+      const lsRes = await fetch(
+        `https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${selectedAsset}USDT&period=5m&limit=1`,
+      );
+      if (!lsRes.ok) throw new Error(`long_short HTTP ${lsRes.status}`);
+      const lsJson = await lsRes.json();
+      const latest = Array.isArray(lsJson) ? lsJson[lsJson.length - 1] : null;
+      const ratio = num(Number(latest?.longShortRatio)) ? Number(latest.longShortRatio) : null;
+      if (!isStale()) setDerivatives((prev) => ({ ...prev, longShortRatio: ratio }));
+    } catch {
+      if (!isStale()) setDerivatives((prev) => ({ ...prev, longShortRatio: null }));
     }
 
     // Master Panel handoff: cross-check Bybit + OKX + MEXC Futures —
@@ -1150,7 +1484,7 @@ export default function App() {
     // novo. Mesmos valores iniciais dos useState acima — o mesmo "estado
     // de carregamento honesto" que o primeiro boot já usa, nunca um dado
     // fabricado do ativo novo.
-    setDerivatives({ fundingRate: null, openInterest: null });
+    setDerivatives({ fundingRate: null, openInterest: null, longShortRatio: null });
     setCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
     setOkxCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
     setMexcCrossExchangeCheck({ ok: false, priceDeltaPct: null, consensus: "INDISPONIVEL" });
@@ -1228,10 +1562,6 @@ export default function App() {
     const restInterval = setInterval(fetchSymbolDataGuarded, 30000);
     const derivInterval = setInterval(fetchDerivativesGuarded, 60000);
 
-    let ws: WebSocket | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let reconnectDelayMs = 1000;
-
     // depth10@100ms can fire up to 10x/s — coalesce into a trailing update
     // capped at ~5/s so the order-book-derived UI (heatmap, flow pressure,
     // market direction) doesn't re-render faster than a mobile Safari
@@ -1259,73 +1589,112 @@ export default function App() {
     const tickerStream = `${wsSymbol}usdt@ticker`;
     const depthStream = `${wsSymbol}usdt@depth10@100ms`;
 
-    const connect = () => {
-      if (unmounted) return;
-      ws = new WebSocket(
-        `wss://stream.binance.com:9443/stream?streams=${tickerStream}/${depthStream}`,
-      );
-      ws.onopen = () => {
-        setWsLive(true);
-        reconnectDelayMs = 1000;
-      };
-      ws.onclose = () => {
-        setWsLive(false);
-        if (unmounted) return;
-        reconnectTimer = setTimeout(connect, reconnectDelayMs);
-        reconnectDelayMs = Math.min(reconnectDelayMs * 2, 15000);
-      };
-      ws.onerror = () => ws?.close();
+    // Migração Spot→Futures (02/09/2026, achado registrado em
+    // ELITE_TRADING_RESEARCH_MAP.md §13): o resto do app (candles REST,
+    // diretriz3-fixes.test.ts) já é Futures-exclusivo, mas o preço/book AO
+    // VIVO ainda conectava em Binance SPOT (stream.binance.com) —
+    // inconsistente com a arquitetura declarada do próprio projeto
+    // (CLAUDE.md: Binance USDT-M Futures/Perpétuo como fonte primária).
+    //
+    // Reestruturação de URL da Binance (anúncio 2026-03-06, URLs legadas
+    // desligadas 2026-04-23, mesma família já aplicada ao feed de
+    // liquidações nesta sessão): dados de mercado Futures agora se dividem
+    // por categoria — "/market" para feeds regulares (ticker/kline/
+    // markPrice/aggTrade) e "/public" para feeds de alta frequência
+    // (depth) — cada categoria é a raiz da sua própria conexão, não dá
+    // mais pra multiplexar as duas no mesmo socket como no Spot legado.
+    // Isso força duas conexões reais — cada uma supervisionada pela mesma
+    // ConnectionManager (reconnect+backoff+heartbeat) já construída e
+    // testada em connection-manager.ts, nunca uma segunda fórmula de
+    // reconexão escrita à mão de novo aqui.
+    const tickerUrl = `wss://fstream.binance.com/market/stream?streams=${tickerStream}`;
+    const depthUrl = `wss://fstream.binance.com/public/stream?streams=${depthStream}`;
 
-      ws.onmessage = (event) => {
+    let tickerState: ExchangeConnectionState = "IDLE";
+    let depthState: ExchangeConnectionState = "IDLE";
+    // Fail-closed honesto (Regra de Ouro 3): LIVE só quando AMBAS as
+    // conexões (preço E book) estão realmente entregando dado fresco —
+    // nunca mostra "LIVE" com o book travado só porque o ticker respondeu,
+    // e nunca faz fallback silencioso pra Spot se uma delas cair (a
+    // conexão simplesmente fica OFFLINE/reconectando, nunca troca de fonte).
+    const recomputeWsLive = () => {
+      if (unmounted) return;
+      setWsLive(tickerState === "LIVE" && depthState === "LIVE");
+    };
+
+    const tickerManager = new ConnectionManager({
+      connect: () => new WebSocket(tickerUrl),
+      onStateChange: (state) => {
+        tickerState = state;
+        recomputeWsLive();
+      },
+      onMessage: (raw) => {
         let msg: any;
         try {
-          msg = JSON.parse(event.data);
+          msg = JSON.parse(raw);
         } catch {
           return; // malformed frame — drop it, keep the connection alive
         }
-        if (msg.stream === tickerStream) {
-          const d = msg.data;
-          const currentPrice = Number(d.c);
-          const open = Number(d.o);
-          const delta = currentPrice - open;
-          setPriceData({
-            price: currentPrice,
-            delta,
-            deltaPct: Number(d.P),
-            high: Number(d.h),
-            low: Number(d.l),
-            volume: Number(d.v),
-            direction: delta >= 0 ? "LONG" : "SHORT",
-          });
-          setPriceUpdatedAt(Date.now());
-        } else if (msg.stream === depthStream) {
-          const d = msg.data;
-          if (d.bids && d.asks) {
-            pendingOrderBook = {
-              bids: d.bids
-                .slice(0, 8)
-                .map((b: string[]) => ({ price: Number(b[0]), size: Number(b[1]) })),
-              asks: d.asks
-                .slice(0, 8)
-                .map((a: string[]) => ({ price: Number(a[0]), size: Number(a[1]) }))
-                .reverse(),
-            };
-            if (!orderBookFlushTimer) {
-              orderBookFlushTimer = setTimeout(flushOrderBook, ORDER_BOOK_THROTTLE_MS);
-            }
+        if (msg.stream !== tickerStream || !msg.data) return;
+        const d = msg.data;
+        const currentPrice = Number(d.c);
+        const open = Number(d.o);
+        const delta = currentPrice - open;
+        setPriceData({
+          price: currentPrice,
+          delta,
+          deltaPct: Number(d.P),
+          high: Number(d.h),
+          low: Number(d.l),
+          volume: Number(d.v),
+          direction: delta >= 0 ? "LONG" : "SHORT",
+        });
+        setPriceUpdatedAt(Date.now());
+      },
+    });
+
+    const depthManager = new ConnectionManager({
+      connect: () => new WebSocket(depthUrl),
+      onStateChange: (state) => {
+        depthState = state;
+        recomputeWsLive();
+      },
+      onMessage: (raw) => {
+        let msg: any;
+        try {
+          msg = JSON.parse(raw);
+        } catch {
+          return; // malformed frame — drop it, keep the connection alive
+        }
+        if (msg.stream !== depthStream || !msg.data) return;
+        const d = msg.data;
+        if (d.bids && d.asks) {
+          pendingOrderBook = {
+            bids: d.bids
+              .slice(0, 8)
+              .map((b: string[]) => ({ price: Number(b[0]), size: Number(b[1]) })),
+            asks: d.asks
+              .slice(0, 8)
+              .map((a: string[]) => ({ price: Number(a[0]), size: Number(a[1]) }))
+              .reverse(),
+          };
+          if (!orderBookFlushTimer) {
+            orderBookFlushTimer = setTimeout(flushOrderBook, ORDER_BOOK_THROTTLE_MS);
           }
         }
-      };
-    };
-    connect();
+      },
+    });
+
+    tickerManager.start();
+    depthManager.start();
 
     return () => {
       unmounted = true;
       clearInterval(restInterval);
       clearInterval(derivInterval);
-      if (reconnectTimer) clearTimeout(reconnectTimer);
       if (orderBookFlushTimer) clearTimeout(orderBookFlushTimer);
-      ws?.close();
+      tickerManager.stop();
+      depthManager.stop();
     };
   }, [bootGeneration, selectedAsset]);
 
@@ -1450,9 +1819,10 @@ export default function App() {
   // mais lenta que o ciclo principal (30s) porque isto é confluência/
   // contexto entre prazos, nunca o caminho crítico do sinal principal (LEI
   // 24: nunca um segundo motor de decisão). Deliberadamente NÃO depende de
-  // chartTimeframe: os 6 prazos são computados juntos, sempre, independente
-  // de qual está selecionado no gráfico — trocar o prazo exibido não deveria
-  // disparar um novo ciclo caro dos outros 5 que não mudaram. Sempre escreve
+  // chartTimeframe: os prazos de MULTI_TIMEFRAME_LIST são computados juntos,
+  // sempre, independente de qual está selecionado no gráfico — trocar o
+  // prazo exibido não deveria disparar um novo ciclo caro dos outros que não
+  // mudaram. Sempre escreve
   // o resultado (mesmo null): mesmo padrão do ciclo principal acima
   // (setRealCycle sempre escreve); na prática o próprio Bus já serve o
   // último candle BOM por chave em vez de ok:false num hiccup transitório
@@ -1862,8 +2232,40 @@ export default function App() {
       // computada em engine-bridge.ts sobre os mesmos candles do Bus do
       // ciclo — puro passthrough aqui, nunca recomputado na UI.
       marketRegime: cycleOk ? (realCycle?.marketRegime ?? null) : null,
+      // Os 3 números que DECIDEM `direction` logo acima. Passthrough puro
+      // (mesma disciplina de marketRegime), para o Medidor de Distância à
+      // Decisão poder medir a fronteira REAL do Núcleo em vez de estimá-la.
+      // `price` já está no objeto, mas é o preço do ticker ao vivo; a
+      // fronteira do Núcleo usa o ÚLTIMO FECHAMENTO da mesma série de onde
+      // saem SMA/EMA (js/real-data/analysis-frame.js) — comparar o ticker
+      // contra uma SMA de fechamentos daria uma distância sutilmente errada,
+      // então `lastClose` vem separado, da mesma fonte que a SMA.
+      lastClose: cycleOk ? (realCycle?.lastPrice ?? null) : null,
+      sma: cycleOk ? (realCycle?.sma ?? null) : null,
+      ema: cycleOk ? (realCycle?.ema ?? null) : null,
     };
   }, [priceData, orderBook, realCycle, chartData, orderflowSignals]);
+
+  // Medidor de Distância à Decisão (pedido direto do Operador: "tem que ter a
+  // opção do quanto por cento que falta pra long e pra short... tudo isso tem
+  // que acompanhar lá em cima no cabeçalho"). Motor puro
+  // (nexus/decision-distance.ts) sobre os 3 números REAIS que o Core Engine
+  // usa — nunca uma segunda decisão, nunca uma probabilidade (Regra de Ouro
+  // 2): é distância medida até o limiar, e o texto exibido diz isso.
+  const decisionDistance = useMemo(
+    () =>
+      computeDecisionDistance({
+        lastPrice: engine.lastClose,
+        sma: engine.sma,
+        ema: engine.ema,
+        // ATR% real de Wilder (14) do Market Regime Engine — a MESMA fonte
+        // única que eta-engine/aura-lifecycle/risk já consomem (auditado:
+        // não existe uma segunda implementação de ATR no repositório).
+        // Passthrough, nunca recalculado aqui.
+        atrPercent: engine.marketRegime?.atrPercent ?? null,
+      }),
+    [engine.lastClose, engine.sma, engine.ema, engine.marketRegime?.atrPercent],
+  );
 
   // V11.5 Fase 5 — Consensus Engine: um ÚNICO hook subscrito ao GMIL aqui em
   // App() (antes cada consumidor — EssentialStrip, GmilContextWidget —
@@ -1877,7 +2279,19 @@ export default function App() {
   // engine-bridge.ts nem altera realCycle/engine.direction/confidence.
   // Fase E: além dos provedores, o snapshot agora traz os 4 vieses da
   // Constituição (context-aggregator.ts) — passthrough puro para a UI.
-  const { providers: gmilProviders, biases: gmilBiases } = useGmilSnapshot();
+  const gmilSnapshot = useGmilSnapshot();
+  const { providers: gmilProviders, biases: gmilBiases } = gmilSnapshot;
+  // Diretriz Final de Integração Total ("nenhum módulo permaneça
+  // parcialmente conectado sem justificativa"): o MESMO snapshot que já
+  // alimenta os widgets acima também ganha uma fatia real no organismo
+  // central (unified-snapshot-store §4) — zero segunda assinatura, zero
+  // segunda leitura do gmilOrchestrator, só um espelho para que um
+  // assinante futuro do bus (getSnapshotForEngine()) também veja este
+  // contexto. engine-bridge.ts continua sem nenhum import de gmil/
+  // (core-engine-boundary.test.ts trava isso).
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setGmil(gmilSnapshot);
+  }, [gmilSnapshot]);
   const institutionalConsensus = useMemo(() => {
     const localInputs: ConsensusInput[] = [
       { providerId: "liquidez_livro_ofertas", lean: engine.imbalance, weight: engine.hasBook ? 1 : 0 },
@@ -1936,32 +2350,6 @@ export default function App() {
     });
   }, [realCycle, engine.marketStructureLabel, engine.htfMarketStructureLabel, engine.marketRegime, cvd, gmilBiases, chartTimeframe]);
 
-  // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
-  // NUNCA valor monetário (o sistema não conhece o capital do operador).
-  // Fail-closed por construção: qualquer insumo ausente/não-finito, comitê
-  // dividido ou contrário ao sinal => 0%. A UI exibe o selo obrigatório ao
-  // lado dos números. Consultivo: nada aqui é lido de volta pelo Core.
-  //
-  // Fase L (diretriz 1 — correção de governança do achado da Fase K): o
-  // Kelly fracionado consome a força AJUSTADA pela qualidade da fonte
-  // (forca_ajustada = forca × peso do Bus da Fase C), nunca mais a força
-  // bruta. Consequência deliberada: fonte em quarentena (peso 0) ou nunca
-  // medida (peso null) => força 0/null => sugestão 0% — a qualidade da
-  // rede agora impacta o lote final, fail-closed de ponta a ponta.
-  const riskSuggestion = useMemo(
-    () =>
-      buildRiskSuggestion({
-        signal: engine.direction === "LONG" || engine.direction === "SHORT" ? engine.direction : null,
-        entry: engine.entry,
-        stop: engine.stop,
-        atrPercent: engine.marketRegime?.atrPercent ?? null,
-        riskRewardRatio: engine.riskRewardRatio,
-        ensembleDirection: ensembleConsensus?.status === "OK" ? ensembleConsensus.direcao : null,
-        ensembleForca: ensembleConsensus?.status === "OK" ? ensembleConsensus.forca_ajustada : null,
-      }),
-    [engine.direction, engine.entry, engine.stop, engine.marketRegime, engine.riskRewardRatio, ensembleConsensus],
-  );
-
   // IRON-VOICE: espelho somente-leitura do estado real para a camada de voz
   // (src/voice/). Mesmos campos que a UI renderiza — nenhum valor novo é
   // computado aqui, só repassado.
@@ -1974,6 +2362,63 @@ export default function App() {
   // de estrutura ali dentro.
   const bosChoch = useMemo(
     () => (chartData && chartData.length > 0 ? computeBosChoch(chartData) : { break: null, structureLabel: null }),
+    [chartData],
+  );
+
+  // ORDEM DO OPERADOR ("não deixa nada no laboratório, ativa tudo"): o
+  // Detector de Reversão sai do Laboratório de Evolução AQUI — e sai como
+  // ALERTA, nunca como decisão.
+  //
+  // POR QUE ALERTA E NÃO DECISÃO: o Operador autorizou ativar "o que estiver
+  // dando acima de 70/90%". Para este detector esse número NÃO EXISTE ainda —
+  // a rede do ambiente de desenvolvimento bloqueia as corretoras e a medição
+  // real (tools/measure-reversal-lead.mjs) nunca rodou sobre mercado. Ativar
+  // como decisão alegando um percentual seria inventá-lo (Regra de Ouro 1/2).
+  // Como ALERTA ele não precisa de percentual nenhum, porque não muda nada:
+  // só mostra ao Operador que a estrutura virou contra o sinal vigente.
+  //
+  // LEI 24 INTACTA: engine.direction não é lido de volta nem mutado aqui.
+  // A adaptação de forma é explícita porque computeBosChoch (engine-bridge)
+  // já normaliza o motor cru — devolve break/structureLabel null quando o
+  // motor não rodou OK, então structureLabel !== null É o "status OK" real
+  // desta fronteira. Sem esta linha o detector receberia status undefined e
+  // ficaria em DADOS_INSUFICIENTES para sempre: uma feature morta silenciosa.
+  const reversalAlert = useMemo(
+    () =>
+      computeReversalReading({
+        bosChoch: {
+          status: bosChoch.structureLabel !== null ? "OK" : "DADOS_INSUFICIENTES",
+          break: bosChoch.break as any,
+        },
+        superTrend: null, // SuperTrend ainda não é calculado no ciclo do gráfico — denominador honesto (1 detector), nunca um segundo inventado.
+        lastIndex: chartData && chartData.length > 0 ? chartData.length - 1 : -1,
+        coreDirection:
+          engine?.direction === "LONG" || engine?.direction === "SHORT" ? engine.direction : null,
+      }),
+    [bosChoch, chartData, engine?.direction],
+  );
+
+  // Pedido do Operador ("ver o que está faltando... pra ele chegar na
+  // perfeição"): Liquidity Void (SMC/ICT) sobre o MESMO array de candles
+  // do gráfico (mesmo motivo de bosChoch/smcZones: `index` alinhado ao
+  // array que o caller desenha) — precisa de `volume` real por candle,
+  // que chartData sempre carrega (ver comentário no useState acima).
+  const liquidityVoids = useMemo<PriceZone[]>(
+    () => (chartData && chartData.length > 0 ? computeLiquidityVoids(chartData) : []),
+    [chartData],
+  );
+
+  // GRADUAÇÃO de institutional-blocks.js (Breaker / Mitigation Block) — o
+  // motor e sua suíte de execução real existiam desde a entrega anterior e
+  // nunca tinham chegado ao sistema ao vivo (0 importadores). Mesmo padrão
+  // exato do memo acima: MESMO array de candles do gráfico (o `index` de
+  // cada bloco só faz sentido alinhado ao array que o caller desenha),
+  // fail-closed para lista vazia.
+  //
+  // LEI 24 — display only: contexto exibido ao Operador, nunca uma segunda
+  // decisão de trading e nunca um bloqueio da decisão do Núcleo.
+  const institutionalBlocks = useMemo<InstitutionalBlock[]>(
+    () => (chartData && chartData.length > 0 ? computeInstitutionalBlocks(chartData) : []),
     [chartData],
   );
 
@@ -2081,8 +2526,11 @@ export default function App() {
         point("VP_HVN", bucketMidPrice(i, vp.rangeMin, vp.rangeMax, vp.bucketCount));
       });
     }
+    // O ATR% real do tempo gráfico SELECIONADO entra aqui: é ele que faz o
+    // limiar da perna escalar com o período (ver atrScaledZigZagDeviationPct,
+    // engine-bridge.ts). Sem ele, a perna voltaria a ser a mesma em 1m e 1W.
     useUnifiedSnapshotStore.getState().setFibonacciConfluence(
-      computeRealFibonacciConfluence(chartData, sources),
+      computeRealFibonacciConfluence(chartData, sources, engine?.marketRegime?.atrPercent ?? null),
     );
   // Achado real de auditoria (sincronização/performance): `engine` inteiro
   // troca de referência a cada tick de livro/preço (5-6x/s) porque agrupa
@@ -2091,7 +2539,10 @@ export default function App() {
   // do objeto inteiro e recomputava/escrevia na store nessa cadência rápida
   // por nada. Estreitado aos 2 campos reais lidos acima (mesmo padrão já
   // usado por ensembleConsensus/consensusRadar/auraReading neste arquivo).
-  }, [chartData, smcZones, engine?.support, engine?.resistance, volumeProfileSnapshot]);
+  // atrPercent entra na lista pelo mesmo critério dos 2 campos acima: é um
+  // campo LENTO (muda no ciclo real do motor, ~30s), nunca na cadência de
+  // tick do livro — incluí-lo não reintroduz o recálculo de 5-6x/s.
+  }, [chartData, smcZones, engine?.support, engine?.resistance, engine?.marketRegime?.atrPercent, volumeProfileSnapshot]);
 
   // Refinamento Final §7 (Premium/Discount) + §8 (harmônicos): os dois
   // motores novos leem a MESMA série real do gráfico (chartData) e escrevem
@@ -2107,11 +2558,18 @@ export default function App() {
     if (!chartData || chartData.length === 0) {
       st.setPremiumDiscount(null);
       st.setHarmonicPatterns([]);
+      st.setTrianglePattern(null);
+      st.setHeadShouldersPattern(null);
       return;
     }
     const lastClose = chartData[chartData.length - 1]?.close ?? null;
     st.setPremiumDiscount(computePremiumDiscount({ candles: chartData, price: lastClose }));
     st.setHarmonicPatterns(detectHarmonicPatterns({ candles: chartData }));
+    // Carta Branca: mesma série real (chartData), mesma cadência de 30s
+    // (candle fechado) — zero segunda assinatura de dado, zero tick de 1s
+    // recomputando geometria de padrão à toa (Main Thread sagrada).
+    st.setTrianglePattern(detectTrianglePattern({ candles: chartData }));
+    st.setHeadShouldersPattern(detectHeadAndShoulders({ candles: chartData }));
   }, [chartData]);
 
   // Refinamento Final §10 (Inteligência Temporal, "sem reaproveitar
@@ -2189,6 +2647,18 @@ export default function App() {
     const last = series[series.length - 1];
     return Number.isFinite(last) ? (last as number) : null;
   }, [chartData]);
+  // Diretriz Final de Integração Total ("habilitar recursos já
+  // implementados, mas ainda não conectados ao fluxo principal"):
+  // nexus/macd.ts (EPC OMEGA FINAL) foi construído e testado, mas ficou
+  // isolado — este é o wiring real, mesmo padrão exato de currentRsi
+  // acima (useMemo sobre os MESMOS closes reais de chartData, computado
+  // uma vez aqui). Display-only puro (LEI 24): não participa da votação
+  // do Conselho, é só uma leitura a mais no painel.
+  const currentMacd = useMemo(() => {
+    if (chartData.length === 0) return null;
+    const series = computeMacdSeries(chartData.map((c: { time: number; close: number }) => ({ time: c.time, close: c.close })));
+    return latestMacd(series);
+  }, [chartData]);
   useEffect(() => {
     const price = typeof priceData?.price === "number" ? priceData.price : null;
     // EPC §5/§6 (achado real de auditoria, prioridade máxima): este
@@ -2239,6 +2709,128 @@ export default function App() {
   // pré-store do coletor único (App) — ver docs/ORGANISM_DATA_FLOW.md.
   const councilFromSnapshot = useCouncilSnapshot();
   const priceFromSnapshot = usePriceSnapshot();
+
+  // ═══ MAPA DE LIQUIDEZ: ACIMA E ABAIXO ═══
+  // "mostrar no gráfico onde tem liquidez que é possível buscar, FVG e essas
+  // coisas, em cima e embaixo" (Operador).
+  //
+  // Achado: as zonas JÁ são todas calculadas e desenhadas (FVG, Order Block,
+  // Void, pools de liquidez). O que NUNCA existiu foi a leitura DIRECIONAL
+  // delas — o Operador via as caixas mas não tinha, em lugar nenhum, "o alvo
+  // mais próximo acima está a X% e abaixo a Y%". Geometria pura sobre dado
+  // real já pronto: zero motor novo, zero rede.
+  const liquidityMap = useMemo<LiquidityMapReading>(() => {
+    const p = typeof priceData?.price === "number" ? priceData.price : null;
+    if (!Number.isFinite(p)) return computeLiquidityMap(null, []);
+    const price = p as number;
+    const atrPercent = engine?.marketRegime?.atrPercent ?? null;
+    const targets: LiquidityTarget[] = [];
+    // A borda que o preço encontra PRIMEIRO ao caminhar até a zona: a BASE
+    // se a zona está acima, o TOPO se está abaixo. Usar sempre o mesmo lado
+    // daria uma distância sistematicamente errada em metade dos casos —
+    // erro sutil que ninguém notaria olhando a tela.
+    //
+    // Sincronização com o resto do ecossistema (pedido do Operador): o MESMO
+    // filtro de significância por ATR que decide o que aparece DESENHADO no
+    // gráfico (ver isSignificantZone acima) decide o que entra neste mapa —
+    // uma zona pequena demais para valer destaque visual também não deveria
+    // contar como "alvo real" na leitura de acima/abaixo. Uma só verdade.
+    const pushZones = (list: PriceZone[] | null | undefined, kind: string) => {
+      for (const z of list ?? []) {
+        if (z.mitigated) continue;
+        // Uma só chamada real — o resultado decide TANTO se a zona entra
+        // no mapa QUANTO o que o tooltip do painel mostra como motivo
+        // (widthAtrUnits abaixo). Nunca uma segunda avaliação.
+        const sig = computeZoneSignificance(z.top, z.bottom, price, atrPercent);
+        if (!sig.significant) continue;
+        const edge = z.bottom > price ? z.bottom : z.top;
+        if (Number.isFinite(edge)) targets.push({ price: edge, kind, widthAtrUnits: sig.widthAtrUnits });
+      }
+    };
+    pushZones(smcZones?.fairValueGaps, "FVG");
+    pushZones(smcZones?.orderBlocks, "OB");
+    pushZones(liquidityVoids, "VOID");
+    for (const z of smcZones?.liquidityZones ?? []) {
+      if (z.swept || !Number.isFinite(z.price)) continue;
+      targets.push({ price: z.price, kind: "POOL" });
+    }
+    return computeLiquidityMap(price, targets);
+  }, [smcZones, liquidityVoids, priceData?.price]);
+
+  // ═══ SINCRONIZAÇÃO LONG/SHORT COM TODO O ECOSSISTEMA ═══
+  // "sincroniza o long e o short com todo ecossistema... o operador não vai
+  // ter dúvida na entrada, se é long ou short" (pedido direto do Operador).
+  //
+  // Achado que originou isto: a tela mostrava QUATRO números direcionais
+  // diferentes (BID%, massa do Conselho, long/short ratio, e o badge do
+  // Núcleo) sem NADA declarando como se relacionam. Cada um mede uma coisa
+  // real e diferente — mas "BID 54%" ao lado de um badge "SHORT" parece
+  // contradição, e é essa a dúvida na entrada.
+  //
+  // Aqui NADA é recalculado: cada `side` abaixo é uma leitura que outro motor
+  // JÁ resolveu, só normalizada para um vocabulário único
+  // (nexus/directional-consensus.ts). O Núcleo é a REFERÊNCIA, nunca um voto
+  // (LEI 24). Fonte sem leitura real fica FORA do denominador.
+  const directionalConsensus = useMemo(() => {
+    const sources: DirectionalSource[] = [
+      {
+        code: "ESTR",
+        name: "Estrutura de Mercado",
+        side: normalizeSide(engine.marketStructureLabel),
+        measures: "sequência real de topos e fundos (HH/HL vs LH/LL) no timeframe ativo",
+      },
+      {
+        code: "REG",
+        name: "Regime de Mercado",
+        side: normalizeSide(engine.marketRegime?.direction ?? null),
+        measures: "direção do regime por ADX/DI de Wilder — só existe em tendência, nunca em consolidação",
+      },
+      {
+        code: "HTF",
+        name: `Estrutura ${engine.htfTimeframe ?? "superior"}`,
+        side: normalizeSide(engine.htfMarketStructureLabel),
+        measures: "a mesma leitura de estrutura, num timeframe maior — contexto de prazo mais longo",
+      },
+      {
+        code: "CONS",
+        name: "Conselho",
+        side: normalizeSide(councilFromSnapshot?.stance ?? null),
+        measures: "massa de opinião de um pool linear de agentes — nunca uma probabilidade calibrada",
+      },
+      {
+        code: "kNN",
+        name: "Classificador Lorentziano",
+        side: normalizeSide(realCycle?.lorentzian?.classification ?? null),
+        measures: "k-NN sobre a mesma janela real de candles — confluência independente",
+      },
+      {
+        code: "FLUX",
+        name: "Fluxo (CVD)",
+        side: sideFromSigned(num(cvd) ? cvd : null),
+        measures: "delta cumulativo real de volume: agressão compradora menos vendedora",
+      },
+      {
+        code: "LIVR",
+        name: "Livro (desequilíbrio)",
+        // Zona morta de 5%: sem ela, um desequilíbrio de 0.1% viraria um
+        // "voto" que não carrega informação nenhuma.
+        side: sideFromSigned(engine.imbalance, 0.05),
+        measures: "parcela de liquidez PARADA no livro — é oferta em repouso, nunca intenção de tendência",
+      },
+    ];
+    return computeDirectionalConsensus(normalizeSide(engine.direction), sources);
+  }, [
+    engine.marketStructureLabel,
+    engine.marketRegime?.direction,
+    engine.htfMarketStructureLabel,
+    engine.htfTimeframe,
+    engine.imbalance,
+    engine.direction,
+    councilFromSnapshot?.stance,
+    realCycle?.lorentzian?.classification,
+    cvd,
+  ]);
+
 
   // Phase Ω Priority 2 (Confluence/Conviction Engine): levantado para cá
   // (antes vivia só dentro de DecisionValidationWidget) porque a Neural
@@ -2344,13 +2936,23 @@ export default function App() {
         price: priceFromSnapshot.price,
         zones,
         levels: planLevels,
+        // ATR em UNIDADES DE PREÇO: o regime publica percentual, e o piso
+        // de invalidação do stop precisa da distância absoluta. Fail-closed
+        // — sem regime real ou sem preço real, `null` e nada é filtrado.
+        atr:
+          typeof engine?.marketRegime?.atrPercent === "number" &&
+          Number.isFinite(engine.marketRegime.atrPercent) &&
+          typeof priceFromSnapshot.price === "number" &&
+          Number.isFinite(priceFromSnapshot.price)
+            ? (priceFromSnapshot.price * engine.marketRegime.atrPercent) / 100
+            : null,
       }),
     );
   // Mesmo achado de auditoria: só support/resistance (lentos) entram nos
   // níveis do plano — `engine` inteiro recomputava/reescrevia o Trade Plan
   // a cada tick de livro/preço, disparando remoção/recriação desnecessária
   // das price-lines reais no gráfico (EnhancedChart_110_Percent.tsx).
-  }, [councilFromSnapshot, priceFromSnapshot, tradePlanStructureZones, engine?.support, engine?.resistance, fibonacciMatrix, volumeProfileSnapshot]);
+  }, [councilFromSnapshot, priceFromSnapshot, tradePlanStructureZones, engine?.support, engine?.resistance, engine?.marketRegime?.atrPercent, fibonacciMatrix, volumeProfileSnapshot]);
 
   // Autonomy order — honest signal accuracy. Store-mediated chain:
   // (1) the tradePlan slice feeds the tracker (same-value re-derivations
@@ -2373,6 +2975,7 @@ export default function App() {
     }
   }, [priceFromSnapshot]);
   const trackRecordSlice = useTrackRecordSnapshot();
+  const paperTradingSlice = usePaperTradingSnapshot();
   // Diretriz Complementar §18: mesma série real de CVD já retida na store
   // (o heatmap já consome este exato hook) — zero fetch novo, zero segunda
   // série.
@@ -2407,6 +3010,53 @@ export default function App() {
     // candles roda UMA vez por boot, fire-and-forget — nunca no caminho
     // quente, nunca bloqueia a hidratação acima (stores independentes).
     void compactPersistedCandles().catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  // v16.0 PRO MAX §9.1/§9.4: mesmo padrão exato de persistência do track
+  // record acima (best-effort save-on-change + hydrate no boot) — a
+  // posição/histórico simulados sobrevivem a reloads pelo mesmo motivo
+  // (memória real acumulada, Local-First). Zero automação aqui: este
+  // efeito só PERSISTE o que já mudou por um clique do Operador, nunca
+  // decide abrir/fechar nada sozinho.
+  useEffect(() => {
+    void savePaperTrading(paperTradingSlice).catch(() => {});
+  }, [paperTradingSlice]);
+  // Contrato v2 — AMOSTRAGEM DA CURVA DE CAPITAL.
+  //
+  // ACHADO REAL desta rodada: `recordPaperEquity` existia na store e no
+  // motor, o painel já exibia contador de pontos e drawdown MÁXIMO — e
+  // nada nunca chamava a amostragem. Os dois ficariam presos em 0 para
+  // sempre: um número exibido que não podia ficar verdadeiro nunca (mesma
+  // classe de "declaração ≠ realidade" que esta trilha vem caçando).
+  //
+  // POR QUE ISTO NÃO FERE O "ZERO AUTOMAÇÃO" decidido pelo Operador:
+  // amostrar equity é OBSERVAÇÃO contábil — não abre, não fecha e não
+  // altera posição nenhuma (ver item 4 do cabeçalho de paper-trading.ts).
+  // As três TRANSIÇÕES reais (abrir/aportar/fechar) continuam existindo
+  // só dentro de onClick, e o teste de fiação trava exatamente isso.
+  //
+  // CADÊNCIA: 5s, e só com posição aberta. Amostrar a cada tick encheria
+  // o anel de 500 pontos em ~1 minuto de ticker rápido; amostrar com a
+  // conta parada gastaria o anel com linha reta sem informação. Roda
+  // independente do painel estar aberto — a curva é história da conta,
+  // não do modal.
+  useEffect(() => {
+    if (!paperTradingSlice.position) return;
+    const id = setInterval(() => {
+      const p = useUnifiedSnapshotStore.getState().price?.price;
+      if (typeof p === "number" && Number.isFinite(p)) {
+        useUnifiedSnapshotStore.getState().recordPaperEquity(p);
+      }
+    }, PAPER_EQUITY_SAMPLE_MS);
+    return () => clearInterval(id);
+  }, [paperTradingSlice.position]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const raw = await loadPaperTrading().catch(() => null);
+      if (cancelled || raw === null) return;
+      useUnifiedSnapshotStore.getState().hydratePaperTrading(rehydratePaperTrading(raw));
+    })();
     return () => { cancelled = true; };
   }, []);
 
@@ -2488,6 +3138,117 @@ export default function App() {
       }),
     [engineStatus, engine?.direction, convictionReading, councilFromSnapshot],
   );
+  // Entrega 42 ("Profitability Engine"): expectativa real (R-múltiplo após
+  // comissão+slippage+funding) sobre o Track Record JÁ resolvido deste
+  // symbol:timeframe (trackRecordSlice.history) — nunca um replay sintético
+  // (ver cabeçalho de nexus/trade-simulation.ts para a auditoria completa
+  // do porquê). LEI 24 — exceção pontual autorizada pelo Operador (ver
+  // CLAUDE.md, seção "LEI 24"): CoreSignalBadge usa
+  // expectancyFilter.show para decidir entre a direção real do Núcleo e
+  // NEUTRO quando a expectativa líquida histórica é negativa. O Núcleo em
+  // si (engine.direction) NUNCA é mutado por este cálculo — a supressão é
+  // só de apresentação, computada aqui e consumida no badge/ExpectancyCard.
+  // Fase 3: fatorado de dentro do useMemo abaixo para ser compartilhado com
+  // calibrationResult sem recomputar simulateTradeCostsBatch uma 2ª vez
+  // sobre o mesmo trackRecordSlice.history (zero segunda fonte).
+  const trackRecordResults = useMemo(() => simulateTradeCostsBatch(trackRecordSlice.history), [trackRecordSlice.history]);
+  const expectancyFilter: FilterResult = useMemo(
+    () => evaluateSignalFilter(trackRecordResults),
+    [trackRecordResults],
+  );
+  // Acessibilidade real — LiveRegionAnnouncer (import acima). MESMA fórmula
+  // que CoreSignalBadge/ChartWidget já usam pra effectiveDirection/
+  // confidenceDirection (LEI 24, memo do Operador item 6: "não criar uma
+  // regra paralela") — reproduzida aqui pela 3ª vez, nunca importada de
+  // dentro de CoreSignalBadge (Entrega 42: tocar seu corpo interno está
+  // fora do escopo). Quem ouve o anúncio tem que ouvir exatamente o que o
+  // badge mostra, nunca uma segunda opinião de direção.
+  const announcerDirection: "LONG" | "SHORT" | null = useMemo(() => {
+    const dir = engine?.direction ?? null;
+    const isLong = dir === "LONG";
+    const isShort = dir === "SHORT";
+    const suppressed = (isLong || isShort) && expectancyFilter?.show === false;
+    return suppressed ? null : dir;
+  }, [engine?.direction, expectancyFilter]);
+  // Escopo Cirúrgico (Operador, Fase 3): leitura ATUAL da fusão de modelos
+  // (Fase 2), orientada à direção do plano rastreado agora — councilFromSnapshot.votes
+  // já é a MESMA CouncilDecision deste ciclo (zero segunda chamada aos
+  // agentes), engine.marketRegime.direction/adx já são reais e já fluem
+  // pela bridge (engine-bridge.ts) mas nunca tinham consumidor até aqui.
+  // Recalculada a cada render: serve tanto para o carimbo único de abertura
+  // (abaixo) quanto para "o que a calibração diria se um trade fosse aberto
+  // agora" (ExpectancyCard). null sem plano ativo ou sem nenhum modelo com
+  // voto real — fail-closed, nunca um score fabricado.
+  const liveModelAgreement = useMemo(() => {
+    const direction = trackRecordSlice.active?.plan.direction ?? null;
+    if (direction === null) return null;
+    const modelVotes = [
+      ...councilVotesToModelVotes(councilFromSnapshot?.votes ?? []),
+      regimeModelVote(engine?.marketRegime?.direction ?? null, engine?.marketRegime?.adx ?? null),
+    ];
+    return alignFusedConfidence(fuseModelVotes(modelVotes), direction);
+  }, [trackRecordSlice.active, councilFromSnapshot, engine?.marketRegime]);
+  // Platt scaling (Platt 1999, pesquisado via WebSearch antes de
+  // implementar — ver header de nexus/platt-calibration.ts) sobre o MESMO
+  // Track Record real de expectancyFilter — nunca uma 2ª amostra.
+  const calibrationResult: CalibrationResult = useMemo(
+    () => calibrateConfidence(liveModelAgreement, trackRecordResults),
+    [liveModelAgreement, trackRecordResults],
+  );
+
+  // Fase H (V15): sugestão de dimensionamento — % do equity e % de risco,
+  // NUNCA valor monetário (o sistema não conhece o capital do operador).
+  // Fail-closed por construção: qualquer insumo ausente/não-finito, comitê
+  // dividido ou contrário ao sinal => 0%. A UI exibe o selo obrigatório ao
+  // lado dos números. Consultivo: nada aqui é lido de volta pelo Core.
+  //
+  // Fase L (diretriz 1 — correção de governança do achado da Fase K): o
+  // Kelly fracionado consome a força AJUSTADA pela qualidade da fonte
+  // (forca_ajustada = forca × peso do Bus da Fase C), nunca mais a força
+  // bruta. Consequência deliberada: fonte em quarentena (peso 0) ou nunca
+  // medida (peso null) => força 0/null => sugestão 0% — a qualidade da
+  // rede agora impacta o lote final, fail-closed de ponta a ponta.
+  //
+  // Entrega 44: declarado DEPOIS de expectancyFilter (relocado de perto do
+  // Comitê, nada entre as duas posições antigas lia riskSuggestion) para
+  // consumir a taxa de acerto REAL já computada ali (nexus/expectancy.ts,
+  // ≥30 trades reais resolvidos deste symbol:timeframe) — risk-engine.js
+  // usa essa taxa no lugar do p₀=0.5 assumido quando a amostra existe,
+  // mesmo comportamento de antes quando não existe (ver header de
+  // risk-engine.js). Nenhum motor novo: mesma fórmula, insumo mais
+  // honesto quando disponível.
+  const riskSuggestion = useMemo(
+    () =>
+      buildRiskSuggestion({
+        signal: engine.direction === "LONG" || engine.direction === "SHORT" ? engine.direction : null,
+        entry: engine.entry,
+        stop: engine.stop,
+        atrPercent: engine.marketRegime?.atrPercent ?? null,
+        riskRewardRatio: engine.riskRewardRatio,
+        ensembleDirection: ensembleConsensus?.status === "OK" ? ensembleConsensus.direcao : null,
+        ensembleForca: ensembleConsensus?.status === "OK" ? ensembleConsensus.forca_ajustada : null,
+        realWinRate: expectancyFilter.stats?.winRate ?? null,
+        realWinRateSampleSize: expectancyFilter.stats?.totalTrades ?? null,
+      }),
+    [
+      engine.direction,
+      engine.entry,
+      engine.stop,
+      engine.marketRegime,
+      engine.riskRewardRatio,
+      ensembleConsensus,
+      expectancyFilter,
+    ],
+  );
+  // Achado da auditoria de evolução (docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // item 2): riskSuggestion já era computado real acima mas nunca ganhava
+  // fatia própria na store — mesmo padrão passthrough de nexusDecision
+  // (App.tsx, poucas linhas abaixo): zero segundo cálculo, só espelha a
+  // MESMA referência já resolvida para que o organismo (voz/GMIL/futuros
+  // consumidores) possa lê-la sem reimplementar buildRiskSuggestion.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setRiskSuggestion(riskSuggestion);
+  }, [riskSuggestion]);
   // Cockpit de Leitura §11 ("ETA previsto / ETA realizado" + contexto):
   // carimbo ÚNICO do contexto real de abertura no plano ativo. O guard do
   // stampOpenContext puro garante que só o PRIMEIRO ciclo com leituras do
@@ -2504,8 +3265,61 @@ export default function App() {
       vwapState: vwapCtx?.state ?? null,
       nexusLineState: nlState,
       score: institutionalScore?.score ?? null,
+      // Entrega 42: mesmo engine.marketRegime.regime já lido em vários
+      // outros pontos deste arquivo (relevanceInput, Trade Plan Zone) —
+      // zero segunda classificação.
+      regime: engine?.marketRegime?.regime ?? null,
+      // Escopo Cirúrgico (Fase 1, ScenarioFingerprint): mesmo
+      // engine.marketStructureLabel já lido pelo header/Relevance Engine
+      // — zero segunda classificação.
+      structureLabel: engine?.marketStructureLabel ?? null,
+      // Escopo Cirúrgico (Fase 3, Calibração de Probabilidade): mesmo
+      // liveModelAgreement computado acima neste render (o plano recém-
+      // aberto que este efeito está carimbando é o MESMO que liveModelAgreement
+      // já leu via trackRecordSlice.active) — zero segunda fusão.
+      modelAgreement: liveModelAgreement,
     });
-  }, [trackRecordSlice.active, etaReading, vwapCtx, nlState, institutionalScore]);
+  }, [
+    trackRecordSlice.active,
+    etaReading,
+    vwapCtx,
+    nlState,
+    institutionalScore,
+    engine?.marketRegime,
+    engine?.marketStructureLabel,
+    liveModelAgreement,
+  ]);
+
+  // MEMÓRIA CONTEXTUAL: o que o histórico real já resolvido diz sobre
+  // contextos como o de AGORA.
+  //
+  // Achado que motivou a ligação: a fingerprint do cenário já era carimbada
+  // em cada plano aberto (efeito acima) e gravada em cada TradeCostResult,
+  // e `groupResultsByFingerprint` já existia — mas era chamada só pelo
+  // próprio teste. O organismo gravava a experiência e nunca a relia.
+  //
+  // Os 4 fatores são EXATAMENTE os mesmos que o efeito de stamping acima
+  // usa — zero segunda classificação, zero segunda fonte. A diferença é o
+  // tempo: lá é o contexto congelado na abertura do plano, aqui é o
+  // contexto vivo de agora, para procurar semelhança no que já resolveu.
+  const liveScenarioFingerprint = useMemo(
+    () =>
+      computeScenarioFingerprint({
+        vwapState: vwapCtx?.state ?? null,
+        nexusLineState: nlState,
+        regime: engine?.marketRegime?.regime ?? null,
+        structureLabel: engine?.marketStructureLabel ?? null,
+      } as PlanOpenContext),
+    [vwapCtx?.state, nlState, engine?.marketRegime?.regime, engine?.marketStructureLabel],
+  );
+  // LEI 24: display only. Isto é contexto exibido ao Operador — nunca
+  // suprime, altera ou gera decisão. E nunca vira probabilidade: o que sai
+  // daqui é contagem observada + expectativa em R sobre amostra real, com
+  // o tamanho da amostra sempre visível ao lado.
+  const contextualRecall = useMemo(
+    () => recallContext(trackRecordResults, liveScenarioFingerprint),
+    [trackRecordResults, liveScenarioFingerprint],
+  );
 
   // Diretriz Complementar §18/§4 ("Conviction Engine"): registra na store a
   // amostra REAL do Score Geral a cada ciclo em que ele existe (WAIT/
@@ -2515,6 +3329,13 @@ export default function App() {
     if (institutionalScore.score !== null) {
       useUnifiedSnapshotStore.getState().recordInstitutionalScore(institutionalScore.score);
     }
+  }, [institutionalScore]);
+  // EPC OMEGA FINAL Parte 1 ("Meta Engine", achado de auditoria): a leitura
+  // INTEIRA (não só o número da série histórica acima) ganha fatia própria
+  // no organismo — mesmo padrão já usado por confluenceCorridor logo
+  // abaixo, zero segunda leitura.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setInstitutionalScoreReading(institutionalScore);
   }, [institutionalScore]);
   // Diretriz Complementar §16 ("Zona de Confiança Institucional"): banda
   // pura de apresentação sobre o mesmo institutionalScore acima — zero
@@ -2566,6 +3387,11 @@ export default function App() {
       }),
     [engine?.marketRegime, priceData?.deltaPct, liquidations],
   );
+  // EPC OMEGA FINAL Parte 1: mesmo motivo/mesmo padrão do efeito de
+  // institutionalScore acima — Heat Score nunca tinha fatia própria.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setHeatScoreReading(heatReading);
+  }, [heatReading]);
 
   const assistantMessages = useMemo(
     () =>
@@ -2641,6 +3467,15 @@ export default function App() {
       }),
     [engine?.direction, engine?.confidence, trackedPlan, trackRecordSlice, etaReading, institutionalScore, confidenceZone, convictionTrend, councilFromSnapshot, assistantMessages, inEntryZoneNow, convictionReading, heatReading, pdForDecision, vwapCtx, nlState],
   );
+  // EPC OMEGA FINAL Parte 1 ("Meta Engine", achado de auditoria): o
+  // contrato único do Nexus Decision Layer ganha fatia própria no
+  // organismo — hoje só existia como useMemo local, invisível para
+  // qualquer assinante do bus (getSnapshotForEngine). operation continua
+  // passthrough literal do Core Engine (decision-layer.ts) — esta escrita
+  // não muda o que o contrato significa, só onde ele mora.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setNexusDecision(nexusDecision);
+  }, [nexusDecision]);
 
   // Consolidação Final §30: confluência VWAP × Nexus Line × Decision Layer
   // — veredito INFORMATIVO ("informar conflito estrutural"); LEI 24: nunca
@@ -2648,6 +3483,35 @@ export default function App() {
   const nexusConfluence = useMemo(
     () => nexusConfluenceVerdict(vwapCtx?.state ?? "NEUTRAL", nlState, nexusDecision?.operation ?? null),
     [vwapCtx, nlState, nexusDecision],
+  );
+
+  // Evolução Incremental da Inteligência Central, Fase 1→2: mesmo padrão
+  // informativo de nexusConfluence acima, generalizado para os pares que
+  // unified-presentation.ts (Fase 1, isolado/testado) já resolve —
+  // Regime×Structure e Risk×Conselho. LEI 24: só informa, nunca altera o
+  // Núcleo. Adapta engine.marketRegime (shape achatado do App) para o
+  // RegimeReading real, e engine.marketStructureLabel (já limpo por
+  // cleanStructureLabel) de volta ao vocabulário ESTRUTURA_* do motor.
+  const displayConflicts = useMemo(
+    () =>
+      computePresentationState({
+        decision: nexusDecision,
+        council: councilFromSnapshot,
+        regime: engine?.marketRegime
+          ? { status: "OK", regime: engine.marketRegime.regime, direction: engine.marketRegime.direction }
+          : null,
+        aura: null,
+        structureLabel:
+          engine?.marketStructureLabel === "ALTA"
+            ? "ESTRUTURA_ALTA"
+            : engine?.marketStructureLabel === "BAIXA"
+              ? "ESTRUTURA_BAIXA"
+              : engine?.marketStructureLabel === "LATERAL"
+                ? "ESTRUTURA_LATERAL"
+                : null,
+        riskStatus: riskSuggestion?.status ?? null,
+      }).displayConflicts,
+    [nexusDecision, councilFromSnapshot, engine?.marketRegime, engine?.marketStructureLabel, riskSuggestion],
   );
 
   // Achado real de auditoria (sincronização/performance): este objeto era
@@ -2727,8 +3591,21 @@ export default function App() {
   const [criticalPulse, setCriticalPulse] = useState(false);
   const prevVoiceSnapshotRef = useRef<TerminalSnapshot | null>(null);
   useEffect(() => {
-    const alerts = computeAlerts(prevVoiceSnapshotRef.current, voiceSnapshot);
-    alerts.forEach((a) => voiceEngine.speak(a.text, a.priority));
+    // PRODUTOR ÚNICO (nexus/snapshot-alerts.ts): a MESMA lista de eventos
+    // alimenta os três consumidores — fala, toast e pulso visual. Antes
+    // desta entrega, estas 11 transições só viravam FALA: o Operador ouvia
+    // um CHoCH que nunca aparecia na tela. Nenhum critério de detecção
+    // mudou; mudou só o fato de o evento ter agora mais de um destino.
+    const events = deriveSnapshotAlerts(prevVoiceSnapshotRef.current, voiceSnapshot);
+    toVoiceAlerts(events).forEach((a) => voiceEngine.speak(a.text, a.priority));
+    if (events.length > 0) {
+      // §9.2: mesmo teto de 5 toasts simultâneos e auto-dismiss de 5s que
+      // os alertas do bus (Track Record/Sweep) já usam — zero segunda
+      // política de apresentação.
+      setAlerts((prev) => [...prev, ...events].slice(-5));
+      const firedIds = new Set(events.map((e) => e.id));
+      setTimeout(() => setAlerts((prev) => prev.filter((a) => !firedIds.has(a.id))), 5000);
+    }
     // Ordem "Ciborgue Vivo" §3: mesma detecção de transição já usada pelos
     // alertas acima (prev.structureBreakKey !== next.structureBreakKey =
     // rompimento REAL novo, não o mesmo evento ainda vivo na tela). Só
@@ -2748,7 +3625,7 @@ export default function App() {
       );
     }
     prevVoiceSnapshotRef.current = voiceSnapshot;
-    if (alerts.some((a) => a.priority === "CRITICAL" || a.priority === "ALERT")) {
+    if (events.some((a) => a.priority === "CRITICAL" || a.priority === "ALERT")) {
       setCriticalPulse(true);
       const t = setTimeout(() => setCriticalPulse(false), 2500);
       return () => clearTimeout(t);
@@ -2923,9 +3800,20 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const persisted = await loadCandles(selectedAsset, chartTimeframeRef.current as Timeframe).catch(() => null);
-      if (cancelled || !persisted || persisted.length === 0) return;
+      // Mesmo padrão do caminho de rede (fetchSymbolData): captura o
+      // timeframe ANTES do await e descarta se ele trocou durante a leitura.
+      // O guard `cancelled` abaixo só cobre troca de ATIVO — o efeito não
+      // recria ao trocar de timeframe, então sem isto a série antiga entrava
+      // num gráfico que já mostra outro tempo.
+      const tfNoInicio = chartTimeframeRef.current;
+      const persisted = await loadCandles(selectedAsset, tfNoInicio as Timeframe).catch(() => null);
+      if (cancelled || chartTimeframeRef.current !== tfNoInicio) return;
+      if (!persisted || persisted.length === 0) return;
       if (!persisted.every((c: any) => Number.isFinite(c.volume))) return;
+      // E a grade da série precisa BATER com o timeframe pedido: o cache
+      // pode conter série contaminada por mistura de grades gravada antes da
+      // correção daquele defeito. A chave certa não garante o conteúdo certo.
+      if (!seriesMatchesTimeframe(persisted as ChartCandle[], tfNoInicio)) return;
       setChartData((prev) => (prev.length > 0 ? prev : (persisted as typeof prev)));
     })();
     return () => { cancelled = true; };
@@ -2946,6 +3834,69 @@ export default function App() {
       monitor.stop();
       orchestrator.stop();
     };
+  }, []);
+  // v16.0 DEFINITIVO §9 ("Sistema de Sobrevivência"): assina o mesmo bus do
+  // orquestrador acima para o único evento com publicador real hoje
+  // (ORGANISM.TRACK_RECORD.UPDATED — "uma transição real, um evento",
+  // organism-orchestrator.ts). chartIntegrity/organismHealth ainda são
+  // computados por render dentro do SystemHealthWidget, sem fatia própria
+  // na store nem publicador no bus — alertar sobre eles fica para quando
+  // ganharem um (ver Próximos passos), nunca uma segunda medição aqui.
+  // O watermark começa no ÚLTIMO registro já persistido (nunca `null` cru)
+  // para que histórico reidratado de uma sessão anterior nunca dispare um
+  // alerta fantasma no boot.
+  const lastTrackRecordEntryRef = useRef<TrackedPlan | null>(
+    useUnifiedSnapshotStore.getState().trackRecord.history.at(-1) ?? null,
+  );
+  useEffect(() => {
+    const core = getNexusCore();
+    return core.bus.on("ORGANISM.TRACK_RECORD.UPDATED", ({ record }) => {
+      const alert = deriveTrackRecordAlert(lastTrackRecordEntryRef.current, record);
+      lastTrackRecordEntryRef.current = record.history.at(-1) ?? lastTrackRecordEntryRef.current;
+      if (!alert) return;
+      // §9.2: máximo 5 toasts simultâneos, auto-dismiss em 5s.
+      setAlerts((prev) => [...prev, alert].slice(-5));
+      setTimeout(() => setAlerts((prev) => prev.filter((a) => a.id !== alert.id)), 5000);
+      // A resolução do plano passou a ser produzida SÓ aqui (a versão deste
+      // arquivo é mais rica: traz o preço real de resolução e a contagem
+      // alvos-provados/total, que o snapshot não carrega). Antes, o
+      // voice-dispatcher derivava a MESMA resolução por um segundo diff e
+      // era ele quem falava; agora quem fala é o evento único, por este
+      // mesmo caminho — sem isso a voz perderia a narração da resolução.
+      if (alert.speech) voiceEngine.speak(alert.speech, alert.priority);
+    });
+  }, []);
+  // Achado da AUDITORIA TÉCNICA COMPLETA (Seção F): Liquidity Sweep já
+  // tinha publicador real (BRAIN.TRAPS.UPDATED, mesma fatia trapSignals que
+  // CouncilWidget/canvas já leem) mas nunca alertava — só era desenhado.
+  // Watermark seeded com os sweeps JÁ presentes no boot (mesmo cuidado do
+  // Track Record acima: histórico reidratado nunca dispara alerta
+  // fantasma) — sweepIdentity é a identidade REAL e estável (candle+preço
+  // do nível varrido), nunca `trap.at` (recarimbado a cada recomputo).
+  const seenSweepIdsRef = useRef<Set<string>>(
+    new Set(
+      useUnifiedSnapshotStore.getState().trapSignals.flatMap((t) =>
+        t.kind === "STOP_HUNT_TOPO" || t.kind === "STOP_HUNT_FUNDO" ? t.sweptLevels.map(sweepIdentity) : [],
+      ),
+    ),
+  );
+  useEffect(() => {
+    const core = getNexusCore();
+    return core.bus.on("BRAIN.TRAPS.UPDATED", ({ traps }) => {
+      const alert = deriveSweepAlert(seenSweepIdsRef.current, traps);
+      if (!alert) return;
+      setAlerts((prev) => [...prev, alert].slice(-5));
+      setTimeout(() => setAlerts((prev) => prev.filter((a) => a.id !== alert.id)), 5000);
+      // Achado da auditoria de evolução: a voz já existe e já narra
+      // eventos institucionais parecidos (liquidação, absorção — ambos
+      // ALERT em voice-dispatcher.ts), mas nunca lia daqui — o Sweep era
+      // só toast. `speech` é a sentença natural do MESMO evento (nunca
+      // title/message, pontuados pra leitura visual). ALERT (não INFO):
+      // mesma prioridade que voice-dispatcher.ts já usa pra liquidação/
+      // absorção, o precedente mais próximo de "evento institucional real
+      // que vale interromper a fila de voz".
+      if (alert.speech) voiceEngine.speak(alert.speech, "ALERT");
+    });
   }, []);
   // V-MAX Fase 0.4: mesmo princípio de espelhamento acima, para as novas
   // fatias do UnifiedGlobalSnapshot (Blueprint §2.3) — nenhuma delas dispara
@@ -3009,6 +3960,7 @@ export default function App() {
     () => ({
       widgets,
       toggleWidget,
+      reversalAlert,
       setWidgetWorkspaceState,
       workspaceManagerOpen,
       setWorkspaceManagerOpen,
@@ -3016,9 +3968,13 @@ export default function App() {
       setChartLayersOpen,
       radarPanelOpen,
       setRadarPanelOpen,
+      marketAnalysisOpen,
+      setMarketAnalysisOpen,
+      paperTradingOpen,
+      setPaperTradingOpen,
       chartLayerVisibility,
       toggleChartLayer,
-      applyChartLayerPreset,
+      restoreChartLayersToAuto,
       chartLayerAutoMode,
       resetChartLayerToAuto,
       emaPeriod,
@@ -3027,12 +3983,16 @@ export default function App() {
       toggleLeftDrawer,
       rightDrawerOpen,
       toggleRightDrawer,
+      propertiesDrawerOpen,
+      togglePropertiesDrawer,
       chartTimeframe,
       setChartTimeframe,
       engine,
       smcZones,
       tradePlanStructureZones,
       bosChoch,
+      liquidityVoids,
+      institutionalBlocks,
       bootAt,
       engineStatus,
       realCycle,
@@ -3053,6 +4013,8 @@ export default function App() {
       setMarketMode,
       selectedTradFiAsset,
       setSelectedTradFiAsset,
+      selectedMexcAsset,
+      setSelectedMexcAsset,
       scannerData,
       gmilProviders,
       gmilBiases,
@@ -3060,6 +4022,12 @@ export default function App() {
       ensembleConsensus,
       convictionReading,
       institutionalScore,
+      expectancyFilter,
+      calibrationResult,
+      contextualRecall,
+      decisionDistance,
+      directionalConsensus,
+      liquidityMap,
       confidenceZone,
       orderflowTrend,
       convictionTrend,
@@ -3069,6 +4037,7 @@ export default function App() {
       vwapCtx,
       nlState,
       nexusConfluence,
+      displayConflicts,
       etaReading,
       riskSuggestion,
       cycleLatencyMs,
@@ -3079,14 +4048,15 @@ export default function App() {
       okxCrossExchangeCheck,
       mexcCrossExchangeCheck,
       currentRsi,
+      currentMacd,
     }),
-    [
-      widgets,
-      toggleWidget,
+    [widgets, toggleWidget, reversalAlert,
       setWidgetWorkspaceState,
       workspaceManagerOpen,
       chartLayersOpen,
       radarPanelOpen,
+      marketAnalysisOpen,
+      paperTradingOpen,
       chartLayerVisibility,
       chartLayerAutoMode,
       emaPeriod,
@@ -3094,11 +4064,15 @@ export default function App() {
       toggleLeftDrawer,
       rightDrawerOpen,
       toggleRightDrawer,
+      propertiesDrawerOpen,
+      togglePropertiesDrawer,
       chartTimeframe,
       engine,
       smcZones,
       tradePlanStructureZones,
       bosChoch,
+      liquidityVoids,
+      institutionalBlocks,
       bootAt,
       engineStatus,
       realCycle,
@@ -3116,6 +4090,7 @@ export default function App() {
       selectedAsset,
       marketMode,
       selectedTradFiAsset,
+      selectedMexcAsset,
       scannerData,
       gmilProviders,
       gmilBiases,
@@ -3123,6 +4098,11 @@ export default function App() {
       ensembleConsensus,
       convictionReading,
       institutionalScore,
+      expectancyFilter,
+      calibrationResult,
+      decisionDistance,
+      directionalConsensus,
+      liquidityMap,
       confidenceZone,
       orderflowTrend,
       convictionTrend,
@@ -3132,6 +4112,7 @@ export default function App() {
       vwapCtx,
       nlState,
       nexusConfluence,
+      displayConflicts,
       etaReading,
       riskSuggestion,
       cycleLatencyMs,
@@ -3142,6 +4123,8 @@ export default function App() {
       okxCrossExchangeCheck,
       mexcCrossExchangeCheck,
       currentRsi,
+      currentMacd,
+      contextualRecall,
     ],
   );
 
@@ -3153,6 +4136,7 @@ export default function App() {
           (barra de comando cortada em pé e deitado). Em navegador comum
           env() é 0 e nada muda. */}
       <div className="flex flex-col h-[100dvh] pt-safe pb-safe bg-[#020610] text-[#a0f0ff] font-mono overflow-hidden selection:bg-[#00f0ff30]">
+        <LiveRegionAnnouncer direction={announcerDirection} wsLive={wsLive} />
         <TopBar data={priceData} />
         {bootRestFailed && (
           <div className="shrink-0 bg-[#ff005515] border-b border-[#ff005550] px-4 py-2 flex items-center justify-between gap-3">
@@ -3199,7 +4183,18 @@ export default function App() {
                     Eventos/Núcleo Neural/Heatmap de ativos) vivem, à
                     parte, no Workspace Manager (Pinned/Docked/Collapsed/
                     Hidden/Floating — ver WorkspaceManagerPanel). */}
-                <div className="terminal-grid flex-1 min-h-0 overflow-y-auto min-[1120px]:overflow-hidden scrollbar-hide p-1">
+                {/* Lapidação Visual (DIRETRIZ 1 — "o gráfico é o
+                    protagonista: maximizar a área útil"): medição real com
+                    Playwright mostrou o painel do gráfico recuado 68px de
+                    cada lado num viewport de 1180 — 56px são as réguas de
+                    navegação (funcionais, ficam), mas os 12px restantes eram
+                    DOIS acolchoamentos aninhados fazendo o mesmo trabalho: o
+                    `p-2` do container-coluna logo acima E este `p-1`. O
+                    externo já dá o respiro entre cabeçalho/grade/rodapé;
+                    este só duplicava o recuo. Removido — a moldura e o
+                    espaçamento entre painéis (`gap-2`) continuam intactos,
+                    o gráfico só deixa de pagar a margem duas vezes. */}
+                <div className="terminal-grid flex-1 min-h-0 overflow-y-auto min-[1120px]:overflow-hidden scrollbar-hide">
                   <div className="terminal-row min-h-0">
                     {/* MAIN — o Gráfico é o coração da operação; sozinho em
                         .terminal-main, sem colunas fixas disputando
@@ -3208,11 +4203,30 @@ export default function App() {
                     <div className="terminal-main min-h-0 overflow-y-auto scrollbar-hide flex flex-col gap-2">
                       {widgets.chart.visible &&
                         (marketMode === "TRADFI" ? (
-                          <TradFiEmptyState
-                            assetLabel={`${selectedTradFiAsset?.symbol ?? ""} · ${selectedTradFiAsset?.name ?? ""}`}
-                          />
+                          resolvedTradFiInstrument ? (
+                            // Ordem Market Data Fabric, Fase 1: candle REAL
+                            // (delayed, Yahoo) — só para os 9 ativos legados
+                            // com mapeamento seguro (ver instrument-registry.js).
+                            // chartTimeframe reaproveitado (mesmo seletor de
+                            // timeframe que o modo cripto já usa).
+                            <TradFiRealChart instrument={resolvedTradFiInstrument} timeframe={chartTimeframe} />
+                          ) : (
+                            <TradFiEmptyState
+                              assetLabel={`${selectedTradFiAsset?.symbol ?? ""} · ${selectedTradFiAsset?.name ?? ""}`}
+                            />
+                          )
+                        ) : marketMode === "MEXC" ? (
+                          // Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET
+                          // DISCOVERY": candle REAL da MEXC (mesmo caminho
+                          // já provado por scanRadarCandidate) — chartTimeframe
+                          // reaproveitado, mesmo seletor de sempre.
+                          selectedMexcAsset ? (
+                            <MexcRealChart asset={selectedMexcAsset} timeframe={chartTimeframe} />
+                          ) : (
+                            <TradFiEmptyState assetLabel="MEXC" reason={nonCryptoEmptyStateReason} />
+                          )
                         ) : (
-                          <ChartWidget chartData={chartData} onRequestOlderCandles={handleRequestOlderCandles} />
+                          <ChartWidget chartData={chartData} onRequestOlderCandles={handleRequestOlderCandles} priceData={priceData} />
                         ))}
                     </div>
 
@@ -3220,10 +4234,11 @@ export default function App() {
                         fecha; um único elemento cobre a área do cockpit
                         (nunca a TopBar/FooterBar) para as duas gavetas. */}
                     <div
-                      className={`terminal-drawer-backdrop ${leftDrawerOpen || rightDrawerOpen ? "drawer-open" : ""}`}
+                      className={`terminal-drawer-backdrop ${leftDrawerOpen || rightDrawerOpen || propertiesDrawerOpen ? "drawer-open" : ""}`}
                       onClick={() => {
                         setLeftDrawerOpen(false);
                         setRightDrawerOpen(false);
+                        setPropertiesDrawerOpen(false);
                       }}
                     />
 
@@ -3253,10 +4268,15 @@ export default function App() {
                           <X size={12} />
                         </div>
                       </div>
-                      {marketMode === "TRADFI" ? (
-                        <TradFiEmptyState compact assetLabel="MARKET INTELLIGENCE" />
+                      {!isFullCryptoMode ? (
+                        <TradFiEmptyState compact assetLabel="MARKET INTELLIGENCE" reason={nonCryptoEmptyStateReason} />
                       ) : (
                         <>
+                          {/* PRIMEIRO item da gaveta de propósito: é a leitura
+                              que responde "long ou short?" antes de qualquer
+                              detalhe. Pedido literal do Operador — "o operador
+                              não vai ter dúvida na entrada". */}
+                          <DirectionalSyncPanel />
                           <MarketDirectionWidget />
                           <MarketBiasDecisionCard />
                         </>
@@ -3291,14 +4311,34 @@ export default function App() {
                           é contexto macro global, sempre real
                           independente do ativo selecionado (mesmo
                           comportamento de sempre, só a posição mudou). */}
-                      {marketMode === "TRADFI" ? (
-                        <TradFiEmptyState compact assetLabel="SIRIFORM CORE" />
+                      {isFullCryptoMode && <NarrativeSummaryCard />}
+                      {!isFullCryptoMode ? (
+                        <TradFiEmptyState compact assetLabel="SIRIFORM CORE" reason={nonCryptoEmptyStateReason} />
                       ) : (
                         widgets.se_core.visible && <SiriformCoreCard />
                       )}
+                      {/* v16.0 PRO Fase 1: destino real dos itens que saíram
+                          da TopBar (Score/Heat/VWAP/Kill Zone) — mesmo
+                          gate CRYPTO-only da origem (institutional-score.ts,
+                          heat-score.ts, vwap-bands.ts e kill-zones.ts não
+                          têm leitura real em modo TRADFI). */}
+                      {!isFullCryptoMode ? (
+                        <TradFiEmptyState compact assetLabel="SCORE & CONTEXTO" reason={nonCryptoEmptyStateReason} />
+                      ) : (
+                        <ScoreContextCard />
+                      )}
+                      {/* Entrega 42: mesmo gate CRYPTO-only de ScoreContextCard
+                          acima — Track Record/expectancy não têm leitura real
+                          em modo TRADFI (Core Engine só emite LONG/SHORT/WAIT
+                          para cripto nesta base). */}
+                      {!isFullCryptoMode ? (
+                        <TradFiEmptyState compact assetLabel="MOTOR DE LUCRATIVIDADE" reason={nonCryptoEmptyStateReason} />
+                      ) : (
+                        <ExpectancyCard />
+                      )}
                       <GmilContextWidget />
-                      {marketMode === "TRADFI" ? (
-                        <TradFiEmptyState compact assetLabel="REGIME · COMITÊ DE DECISÃO" />
+                      {!isFullCryptoMode ? (
+                        <TradFiEmptyState compact assetLabel="REGIME · COMITÊ DE DECISÃO" reason={nonCryptoEmptyStateReason} />
                       ) : (
                         (widgets.market_regime.visible || widgets.decision_validation.visible) && (
                           <>
@@ -3312,8 +4352,47 @@ export default function App() {
                           logo abaixo do comitê de validação (mesma família de
                           leitura consultiva, LEI 24). Só em modo cripto: os
                           agentes leem feeds cripto reais. */}
-                      {marketMode !== "TRADFI" && widgets.council?.visible && <CouncilWidget />}
+                      {isFullCryptoMode && widgets.council?.visible && <CouncilWidget />}
                       <TelemetryHealthWidget />
+                    </div>
+
+                    {/* RIGHT (gaveta) — Properties: Layer Manager docado (o
+                        MESMO conteúdo real de ChartLayersPanel, extraído
+                        para ChartLayersPanelContent e reusado aqui byte-a-
+                        byte — zero segunda implementação) + atalho para
+                        Configurações. Ocupa o MESMO slot visual de
+                        .terminal-right (right:0 em index.css) — nunca as
+                        duas abertas ao mesmo tempo (mutual exclusion em
+                        toggleLeftDrawer/toggleRightDrawer/
+                        togglePropertiesDrawer acima). Risk/Alerts ficaram
+                        FORA de propósito (pedido do Operador: "nada
+                        repetido") — já têm aba própria e mais completa em
+                        SecondaryModuleView (RISK: Position Sizing/Trust
+                        Score/CPI/Track Record/Traps; ALERTS: Order Flow/
+                        Liquidations/Traps); reduplicar aqui, mesmo que só
+                        os 2 números de riskSuggestion, seria exatamente a
+                        "camada duplicada" que este painel existe pra
+                        eliminar. */}
+                    <div
+                      className={`terminal-properties flex flex-col gap-2 ${propertiesDrawerOpen ? "drawer-open" : ""}`}
+                    >
+                      <div className="flex items-center justify-between shrink-0 pb-1 border-b border-[#00f0ff15]">
+                        <span className="text-[0.5rem] font-bold tracking-[0.2em] uppercase text-[#00f0ff]">
+                          Properties
+                        </span>
+                        <div
+                          className="text-[#8ab4f8]/50 hover:text-[#ff0055] px-1 py-0.5 rounded cursor-pointer"
+                          onClick={() => setPropertiesDrawerOpen(false)}
+                        >
+                          <X size={12} />
+                        </div>
+                      </div>
+                      <PropertiesPanelBody
+                        onOpenSettings={() => {
+                          setActiveTab("SETTINGS");
+                          setPropertiesDrawerOpen(false);
+                        }}
+                      />
                     </div>
                   </div>
 
@@ -3336,8 +4415,8 @@ export default function App() {
                     widgets.multi_timeframe.visible) && (
                     <div className="terminal-strip shrink-0 flex flex-col gap-2 max-h-[46dvh] min-[1120px]:max-h-[38dvh] overflow-y-auto scrollbar-hide">
                       {!widgets.se_core.collapsed &&
-                        (marketMode === "TRADFI" ? (
-                          <TradFiEmptyState compact assetLabel="SIRIFORM CORE · DETALHE COMPLETO" />
+                        (!isFullCryptoMode ? (
+                          <TradFiEmptyState compact assetLabel="SIRIFORM CORE · DETALHE COMPLETO" reason={nonCryptoEmptyStateReason} />
                         ) : (
                           <AssistantOrb inCenter={true} />
                         ))}
@@ -3345,8 +4424,8 @@ export default function App() {
                         <div className="flex gap-2 overflow-x-auto scrollbar-hide h-[200px] min-[1120px]:h-[168px] shrink-0">
                           {widgets.orderbook.visible && (
                             <div className="min-w-[260px] flex-1 flex flex-col">
-                              {marketMode === "TRADFI" ? (
-                                <TradFiEmptyState compact assetLabel="ORDER BOOK" />
+                              {!isFullCryptoMode ? (
+                                <TradFiEmptyState compact assetLabel="ORDER BOOK" reason={nonCryptoEmptyStateReason} />
                               ) : (
                                 <OrderBookWidget data={priceData} book={orderBook} />
                               )}
@@ -3354,8 +4433,8 @@ export default function App() {
                           )}
                           {widgets.orderflow.visible && (
                             <div className="min-w-[240px] flex-1 flex flex-col">
-                              {marketMode === "TRADFI" ? (
-                                <TradFiEmptyState compact assetLabel="ORDER FLOW" />
+                              {!isFullCryptoMode ? (
+                                <TradFiEmptyState compact assetLabel="ORDER FLOW" reason={nonCryptoEmptyStateReason} />
                               ) : (
                                 <OrderFlowWidget />
                               )}
@@ -3363,8 +4442,8 @@ export default function App() {
                           )}
                           {widgets.heatmap.visible && (
                             <div className="min-w-[240px] flex-1 flex flex-col">
-                              {marketMode === "TRADFI" ? (
-                                <TradFiEmptyState compact assetLabel="LIQUIDITY MAP" />
+                              {!isFullCryptoMode ? (
+                                <TradFiEmptyState compact assetLabel="LIQUIDITY MAP" reason={nonCryptoEmptyStateReason} />
                               ) : (
                                 <HeatmapWidget book={orderBook} data={priceData} />
                               )}
@@ -3404,6 +4483,9 @@ export default function App() {
         <WorkspaceManagerPanel />
         <ChartLayersPanel />
         <RadarPanel />
+        <MarketAnalysisPanel priceData={priceData} chartData={chartData} />
+        <PaperTradingPanel priceData={priceData} />
+        <AlertToastStack alerts={alerts} onDismiss={(id) => setAlerts((prev) => prev.filter((a) => a.id !== id))} />
       </div>
     </WidgetContext.Provider>
   );
@@ -3589,50 +4671,21 @@ function WorkspaceManagerPanel() {
 // overlays do CANVAS do gráfico em vez dos widgets do layout. Toggle
 // simples ligado/desligado (não 5 estados como o Workspace Manager — uma
 // camada de canvas só faz sentido visível ou invisível, não "flutuante").
-// Diretriz de Evolução Autônoma Integral §11 — as camadas do Modo
-// Operacional: as que desenham o PLANO em si (entrada/stop/TPs, o
-// corredor de convicção que reforça visualmente o mesmo plano) mais a
-// direção de tendência mais lida "de relance" — prioridades visuais 1-6
-// da diretriz (direção/entrada/invalidação/TP1-3). As outras 5 camadas
-// (estrutura/contexto, prioridades 7-8: FVG/OB, BOS/CHOCH, heatmap,
-// volume profile, trend channel) só aparecem no Modo Auditoria.
-const CHART_LAYERS_OPERATIONAL_PRESET = new Set<ChartLayerId>(["trade_plan_zone", "neural_market_aura", "ema"]);
-// Diretriz Suprema de Evolução Integrativa §8 ("Modo Inteligência"): o
-// COMPLEMENTO do Operacional — todas as camadas de leitura
-// estrutural/contexto (FVG/OB, BOS/CHOCH, heatmap de liquidez, volume
-// profile, trend channel) mais EMA (mesma direção de tendência "de
-// relance" que já ajuda o Operacional), SEM as duas camadas que só fazem
-// sentido quando existe um plano ATIVO (trade_plan_zone/neural_market_
-// aura) — análise profunda do mercado, não do plano em si.
-// Auditoria de pendências: os 7 novos toggles (VWAP/Nexus Line/CVD/
-// Fibonacci/Premium-Discount/harmônico/EQH-EQL) são TODOS leitura de
-// mercado/estrutura — nenhum é específico do plano ativo — então entram
-// aqui pela mesma lógica, nunca no Operacional (que fica deliberadamente
-// enxuto).
-const CHART_LAYERS_INTELLIGENCE_PRESET = new Set<ChartLayerId>([
-  "liquidity_zones",
-  "structure_breaks",
-  "order_flow_heatmap",
-  "volume_profile",
-  "ema",
-  "trend_channel",
-  "vwap",
-  "nexus_line",
-  "cvd",
-  "fibonacci",
-  "premium_discount",
-  "harmonics",
-  "equal_highs_lows",
-  // OMEGA CORE V-MAX Fase 8.1: mesma lógica — densidade de liquidações
-  // reais é leitura de mercado/estrutura, nunca específica do plano
-  // ativo, então entra aqui, nunca no Operacional.
-  "liquidation_heatmap",
-  // EPC OMEGA FINAL Etapa 10: sweep de liquidez e sessão institucional são
-  // igualmente leitura de mercado/estrutura, nunca específicas do plano
-  // ativo — mesma lógica acima.
-  "liquidity_sweep",
-  "market_sessions",
-]);
+// UM MODO SÓ (pedido direto do Operador: "tem vários modos, deixa só o modo,
+// só pra ficar mais profissional... e é só a gente habilitar se quiser, e
+// deixa o modo automático").
+//
+// O QUE FOI REMOVIDO E POR QUE ISSO NÃO É PERDA DE FUNCIONALIDADE
+// (Regra de Ouro 4): existiam 3 presets manuais — Operacional, Inteligência
+// e Auditoria. Nenhum deles era uma CAPACIDADE: os três eram atalhos que
+// setavam em lote exatamente os mesmos toggles camada-a-camada que
+// continuam existindo inteiros logo abaixo. Auditoria = ligar todas;
+// Operacional/Inteligência = dois recortes fixos. Nenhuma camada, nenhum
+// motor e nenhum dado saiu do sistema — o que saiu foi a ADMINISTRAÇÃO DE
+// MODOS, que era justamente o que o Operador pediu para não existir mais.
+//
+// O que sobra é exatamente o que foi pedido: um estado automático (a
+// inteligência decide) + habilitar camada a camada se quiser.
 
 const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "liquidity_zones", label: "FVG / ORDER BLOCKS" },
@@ -3648,7 +4701,13 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   { id: "cvd", label: "CVD" },
   { id: "fibonacci", label: "FIBONACCI" },
   { id: "premium_discount", label: "PREMIUM / DISCOUNT" },
-  { id: "harmonics", label: "HARMÔNICOS" },
+  // Carta Branca: o id interno "harmonics" continua o mesmo (zero migração
+  // de preferência salva do Operador — mesma disciplina de versionamento
+  // aditivo já usada em toda a store), mas o rótulo visível agora cobre as
+  // 3 famílias reais que competem pelo MESMO desenho no canvas (harmônico
+  // XABCD/Wolfe, Triângulo, Ombro-Cabeça-Ombro — ver EnhancedChart_110_
+  // Percent.tsx, useEffect do padrão vencedor).
+  { id: "harmonics", label: "PADRÕES GRÁFICOS" },
   { id: "equal_highs_lows", label: "EQH / EQL" },
   // OMEGA CORE V-MAX Fase 8.1: rótulo deliberadamente "LIQUIDAÇÕES
   // FORÇADAS" (mesmo termo já usado no painel de lista real, "Forced
@@ -3659,43 +4718,295 @@ const CHART_LAYER_PANEL_MODULES: { id: ChartLayerId; label: string }[] = [
   // EPC OMEGA FINAL Etapa 10 (Novas Camadas Institucionais).
   { id: "liquidity_sweep", label: "LIQUIDITY SWEEP" },
   { id: "market_sessions", label: "SESSÕES (ÁSIA/LONDRES/NY)" },
+  // Ferramentas Institucionais: badge do header já existia (§6.48), esta
+  // linha liga o canvas (KillZoneBandsPlugin) ao painel de camadas.
+  { id: "kill_zones", label: "KILL ZONES (ICT)" },
+  // Pedido do Operador ("Key Levels"): máxima/mínima real de cada sessão
+  // como nível horizontal (SessionKeyLevelsPlugin).
+  { id: "session_key_levels", label: "KEY LEVELS (SESSÕES)" },
+  // DIRETIVA FINAL DE LAPIDAÇÃO DO GRÁFICO §4: faixa real de confluência
+  // entre >=2 ferramentas independentes (InstitutionalZonePlugin).
+  { id: "institutional_zones", label: "ZONA INSTITUCIONAL" },
+  // Entrega 40: livro de ofertas real (DepthChartPlugin) como camada de
+  // gráfico — gap nomeado desde a Entrega 35 §4.
+  { id: "order_book_depth", label: "PROFUNDIDADE DO LIVRO" },
+  // Entrega 41: perfil TPO real da sessão corrente (Steidlmayer/CBOT) —
+  // gap real nomeado desde a auditoria v16.0 ULTRA §12.2/12.3.
+  { id: "tpo_profile", label: "PERFIL TPO" },
+  // Entrega 47 (pedido direto do Operador): ZigZag graduado do Laboratório
+  // de Evolução (research/engines/zigzag-engine.js, isolado e testado
+  // desde a Entrega 35) — pivôs confirmados por deviation%+depth.
+  { id: "zigzag", label: "ZIGZAG" },
+  { id: "supertrend", label: "SUPERTREND" },
+  // Achado 2.5 (Visual Cleanup & Rendering Audit): SCENARIO A/B ("Future
+  // Path Map", scenario-engine.ts) ganha o mesmo toggle/relevância que
+  // toda outra camada real já tinha — era a única sem nenhum dos dois.
+  { id: "scenario_projection", label: "CENÁRIOS (FUTURE PATH MAP)" },
+  // ACHADO DESTA RODADA, pego por um teste novo que compara as duas listas:
+  // `candle_patterns` estava em CHART_LAYER_IDS (o canvas monta o plugin em
+  // `{visibility.candle_patterns && (`), em RELEVANCE_LAYER_IDS e no custo
+  // visual (LAYER_VISUAL_COST = 4) — ou seja, DESENHA e DISPUTA vaga no
+  // orçamento automático — mas nunca entrou aqui. Consequência real: era a
+  // única camada que o Operador não conseguia habilitar/desabilitar, e que
+  // também não aparecia na LEITURA do painel (o resumo itera esta lista).
+  // Uma ferramenta desenhando no gráfico sem existir no painel é exatamente
+  // o oposto de "as ferramentas principais aparecerem na leitura".
+  { id: "candle_patterns", label: "PADRÕES DE VELA" },
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador:
+  // "qual ferramenta que está faltando"): Pivot Points clássicos (Floor
+  // Trader) — único gap real não-redundante encontrado. Mesmo cuidado do
+  // comentário de candle_patterns acima: entra nas 4 listas juntas
+  // (CHART_LAYER_IDS, aqui, RELEVANCE_LAYER_IDS, LAYER_VISUAL_COST) no
+  // mesmo commit, pro teste de consistência não pegar o mesmo gap de novo.
+  { id: "pivot_points", label: "PIVOT POINTS" },
+  // Auditoria do ecossistema de indicadores, segundo (e ultimo) gap real
+  // nao-redundante: Ichimoku Kinko Hyo (Hosoda) — 5 linhas + nuvem Kumo.
+  // Mesma disciplina das 5 listas em um so commit (CHART_LAYER_IDS +
+  // defaults, aqui, RELEVANCE_LAYER_IDS + regra + custo, LAYER_TIER).
+  { id: "ichimoku", label: "ICHIMOKU" },
+  // Graduacao de delta-divergence-engine.js (motor de 2026-08-24 destravado
+  // quando a retencao de CVD subiu de 120 para 900 amostras, ~1h). Camada
+  // propria: compara duas SERIES (preco e CVD), enquanto structure_breaks le
+  // so a estrutura de preco.
+  { id: "delta_divergence", label: "DIVERGÊNCIA DE DELTA" },
+  // Graduacao de andrews-pitchfork-engine.js — ultima ferramenta de grafico
+  // com nome proprio ausente que nao estava bloqueada por dado nem por
+  // decisao do Operador.
+  { id: "andrews_pitchfork", label: "ANDREWS PITCHFORK" },
 ];
 
-function ChartLayersPanel() {
+// Extraído de ChartLayersPanel (painel Properties 320px, pedido do
+// Operador): o dropdown ancorado na SideBar E o novo painel docado em
+// .terminal-properties precisam do MESMO conteúdo real (presets + toggle
+// por camada + seletor de EMA) — casca (overlay flutuante vs. gaveta fixa)
+// muda, a lógica/JSX de dentro é uma única implementação real, nunca
+// duas. Lê o mesmo WidgetContext que ChartLayersPanel lia antes, menos os
+// 2 campos que agora ficam só no wrapper (chartLayersOpen/setChartLayersOpen).
+function ChartLayersPanelContent() {
   const {
-    chartLayersOpen,
-    setChartLayersOpen,
     chartLayerVisibility,
     toggleChartLayer,
-    applyChartLayerPreset,
+    restoreChartLayersToAuto,
     chartLayerAutoMode,
     resetChartLayerToAuto,
     emaPeriod,
     setEmaPeriod,
   } = useContext(WidgetContext) || {};
   const layerRelevance = useLayerRelevanceSnapshot();
-  if (!chartLayersOpen) return null;
+  // "HOMOLOGAÇÃO DA ORDEM Nº 03": estado puramente local de disclosure do
+  // painel (nunca persistido/sessão real) — recolhido por padrão a cada
+  // vez que o painel abre, mesma filosofia de "operador não administra
+  // modos" (a seção manual não fica "grudada" aberta de uma sessão pra
+  // outra por acidente).
+  const [habilitarManualAberto, setHabilitarManualAberto] = useState(false);
+  // Decisão JÁ resolvida do canvas (store) — a MESMA que o gráfico desenha.
+  // Antes desta rodada o painel resolvia por conta própria com
+  // `relevance.relevant`, SEM o teto de competição, e listava ~20 camadas
+  // como "VISÍVEL" enquanto o gráfico desenhava 6.
+  const layerDecision = useChartLayerDecisionSnapshot();
   const visibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
   const autoMode = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
-  // Highlight real (não decorativo): compara o estado atual byte-a-byte
-  // contra os dois presets — só acende quando bate exatamente, nunca um
-  // "quase" fingido de correspondência. NÚCLEO GRAVITACIONAL AUTÔNOMO §1:
-  // os 3 presets manuais exigem TODAS as 18 camadas fora do automático —
-  // uma camada em modo automático que coincidentemente bate com o preset
-  // agora não é a mesma coisa que o Operador ter escolhido esse preset.
-  const allManual = CHART_LAYER_IDS.every((id) => autoMode[id] === false);
-  const isOperationalPreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_OPERATIONAL_PRESET.has(id));
-  const isAuditPreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === true);
-  const isIntelligencePreset = allManual && CHART_LAYER_IDS.every((id) => visibility[id] === CHART_LAYERS_INTELLIGENCE_PRESET.has(id));
-  const isAutomaticPreset = CHART_LAYER_IDS.every((id) => autoMode[id] === true);
+  // Highlight real (não decorativo): só acende quando TODA camada está
+  // mesmo em automático, nunca um "quase" fingido de correspondência. Uma
+  // única camada fixada à mão já apaga o destaque — é assim que o Operador
+  // vê, de relance, se está no estado limpo ou se sobrou um override
+  // esquecido de outra sessão.
+  const emEstadoAutomatico = CHART_LAYER_IDS.every((id) => autoMode[id] === true);
+  // Pedido do Operador: "eu quero só UM modo, e ele é o modo inteligente...
+  // que apareça só as ferramentas necessárias pra o operador bater o olho e
+  // saber". O painel deixa de ser uma PAREDE DE INTERRUPTORES por padrão e
+  // passa a ser uma LEITURA do que a inteligência decidiu — o controle
+  // camada a camada continua inteiro, um clique abaixo (Regra de Ouro 4:
+  // reorganizar, nunca apagar).
+  const resumo = summarizeLayerPanel(CHART_LAYER_PANEL_MODULES, layerDecision, autoMode, visibility);
 
   return (
-    <div
-      className="!fixed !inset-0 !z-[1001] bg-[#010308]/80 backdrop-blur-sm flex items-center justify-center p-4"
-      onClick={() => setChartLayersOpen?.(false)}
-    >
+    <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+      {/* UM MODO SÓ. A rodada anterior tinha DESPRIORIZADO os 3 presets
+          manuais (recolhidos atrás de "avançado"); o Operador voltou ao
+          assunto e pediu a remoção — "tem vários modos, deixa só o modo".
+          Agora existe uma única ação de estado (voltar tudo ao automático)
+          e, abaixo dela, a leitura do que a inteligência decidiu.
+          Habilitar camada a camada continua inteiro, um clique abaixo —
+          "é só a gente habilitar se quiser". */}
+      <button
+        type="button"
+        onClick={() => restoreChartLayersToAuto?.()}
+        title="Cada camada aparece só quando tem relevância estatística real agora (Relevance Engine) + competição real de destaque entre camadas (Visual Budget) — nunca precisa ser administrado manualmente."
+        className={`w-full flex flex-col items-center gap-0.5 py-2.5 rounded border-2 font-bold uppercase tracking-wider transition-colors ${
+          emEstadoAutomatico
+            ? "border-[#00ffaa] bg-[#00ffaa15] text-[#00ffaa]"
+            : "border-[#8ab4f8]/30 text-[#8ab4f8]/70 hover:text-[#8ab4f8] hover:border-[#8ab4f8]/50"
+        }`}
+      >
+        <span className="text-[0.55rem] tracking-[0.2em]">AR10 CYBORG · Estado Inteligente Adaptativo</span>
+        <span className="text-[0.38rem] font-normal normal-case tracking-normal opacity-80">
+          {emEstadoAutomatico ? "ativo agora — leitura pronta, sem modo pra administrar" : "clique para voltar ao estado adaptativo padrão"}
+        </span>
+      </button>
+      {/* A LEITURA que substitui a parede de interruptores no estado padrão.
+          Não é decoração: cada chip é uma camada que está MESMO desenhada
+          agora, resolvida pela mesma decisão que o canvas recebeu. "Cedeu
+          espaço" é dito com todas as letras — é diferente de "sem leitura
+          real", e essa diferença é a que sustenta a confiança no automático. */}
+      <div className="flex flex-col gap-1.5 bg-[#010205] border border-[#00ffaa20] rounded-lg px-3 py-2">
+        <span className="text-[0.45rem] text-[#00ffaa]/80 tracking-[0.15em] uppercase font-bold">
+          {describeLayerPanel(resumo)}
+        </span>
+        {resumo.ativas.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {resumo.ativas.map((m) => (
+              <span
+                key={m.id}
+                className="text-[0.4rem] px-1.5 py-0.5 rounded border border-[#00f0ff40] bg-[#00f0ff15] text-[#00f0ff] font-bold uppercase tracking-wider"
+              >
+                {m.label}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="text-[0.4rem] text-[#8ab4f8]/50 normal-case tracking-normal">
+            nenhuma camada com leitura real ainda neste ciclo
+          </span>
+        )}
+        {resumo.manuais.length > 0 && (
+          <div className="flex flex-wrap gap-1 items-center">
+            <span className="text-[0.38rem] text-[#8ab4f8]/50 uppercase tracking-wider">fixadas por você</span>
+            {resumo.manuais.map((m) => (
+              <span
+                key={m.id}
+                className="text-[0.4rem] px-1.5 py-0.5 rounded border border-[#8ab4f8]/40 text-[#8ab4f8]/80 font-bold uppercase tracking-wider"
+              >
+                {m.label}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => setHabilitarManualAberto((v) => !v)}
+        className="text-[0.4rem] text-[#8ab4f8]/50 hover:text-[#8ab4f8] tracking-[0.15em] uppercase text-left flex items-center gap-1"
+      >
+        <span>{habilitarManualAberto ? "▾" : "▸"}</span>
+        <span>Habilitar camada a camada, se quiser</span>
+      </button>
+      {habilitarManualAberto && (
+        <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
+          Overlays reais do canvas — esconder uma camada nunca altera o dado, só a exibição
+        </span>
+      )}
+      {habilitarManualAberto && CHART_LAYER_PANEL_MODULES.map(({ id, label }) => {
+        // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: em modo automático, o
+        // estado real vem do Relevance Engine (nunca do boolean manual,
+        // que só é o valor efetivo quando o Operador assumiu controle
+        // — mesma resolução que effectiveChartLayerVisibility já faz
+        // pro canvas, aqui só pra exibir corretamente no painel).
+        const isAuto = autoMode[id];
+        const relevance = layerRelevance?.[id] ?? null;
+        // A MESMA decisão que o canvas recebe — nunca uma segunda resolução.
+        // `relevance.relevant` sozinho ignora o teto de competição e dizia
+        // "visível" para camadas que o gráfico não desenhava.
+        const decisao = layerDecision?.[id] ?? null;
+        const on = isAuto ? (decisao?.show ?? false) : visibility[id];
+        const cedeuEspaco = isAuto && !on && (decisao?.suppressedByCap ?? false);
+        return (
+          <div
+            key={id}
+            className="flex flex-col gap-1.5 bg-[#010205] border border-[#00f0ff15] rounded-lg px-3 py-2"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[0.55rem] font-bold tracking-widest text-white">{label}</span>
+              <div className="flex items-center gap-1">
+                {isAuto && (
+                  // EPC FINAL §3/§12 ("quando destacar"): emphasis real
+                  // (só existe onde há um gradiente real no sinal, ver
+                  // layer-relevance.ts) some no texto do badge — nunca
+                  // um efeito visual novo sem motivo real por trás.
+                  <span
+                    className={`text-[0.38rem] px-1.5 py-1 rounded border font-bold uppercase tracking-wider ${
+                      relevance?.emphasis === "highlight"
+                        ? "border-[#00ffaa] bg-[#00ffaa20] text-[#00ffaa]"
+                        : "border-[#00ffaa]/40 text-[#00ffaa]/80"
+                    }`}
+                    title={relevance?.reason ?? "Relevance Engine ainda sem leitura real neste ciclo."}
+                  >
+                    auto{relevance?.emphasis === "highlight" ? " · destaque" : ""}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => toggleChartLayer?.(id)}
+                  title={
+                    cedeuEspaco
+                      ? `Tem leitura real agora, mas cedeu espaço para camadas mais precisas: ${decisao?.reason ?? ""}. Clicar fixa esta camada na tela.`
+                      : isAuto
+                        ? `Clicar assume controle manual desta camada (override real). ${decisao?.reason ?? ""}`
+                        : "Override manual ativo."
+                  }
+                  className={`text-[0.4rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
+                    on
+                      ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                      : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
+                  }`}
+                >
+                  {on ? "visível" : cedeuEspaco ? "cedeu espaço" : "oculta"}
+                </button>
+                {!isAuto && (
+                  <button
+                    type="button"
+                    onClick={() => resetChartLayerToAuto?.(id)}
+                    title="Devolver esta camada ao comportamento automático (Relevance Engine decide)."
+                    className="text-[0.38rem] px-1.5 py-1 rounded border border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#00ffaa] hover:border-[#00ffaa]/40 font-bold uppercase tracking-wider"
+                  >
+                    ⟲ auto
+                  </button>
+                )}
+              </div>
+            </div>
+            {/* Diretriz Camada de Decisão Profissional, item 1: período
+                real da EMA — um único controle, os 4 períodos padrão da
+                indústria (nexus/ema.ts), nunca uma lista arbitrária. */}
+            {id === "ema" && (
+              <div className="flex items-center gap-1">
+                {EMA_PERIODS.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setEmaPeriod?.(p)}
+                    className={`flex-1 text-[0.4rem] py-1 rounded border font-bold tracking-wider ${
+                      emaPeriod === p
+                        ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
+                        : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ChartLayersPanel() {
+  const { chartLayersOpen, setChartLayersOpen } = useContext(WidgetContext) || {};
+  if (!chartLayersOpen) return null;
+  // v16.0 DEFINITIVO §5.3 ("Layer Manager — UI"): dropdown compacto
+  // ancorado no ícone real que já abre este painel (SideBar, "Camadas do
+  // Gráfico") — nunca mais um modal de tela cheia. O click-catcher
+  // invisível substitui o antigo backdrop escurecido — um dropdown
+  // compacto não deve escurecer a tela inteira atrás dele, só fechar ao
+  // clicar fora. Conteúdo real (presets/toggle/EMA) vive em
+  // ChartLayersPanelContent — este componente é só a casca do dropdown.
+  return (
+    <>
+      <div className="!fixed !inset-0 !z-[1000]" onClick={() => setChartLayersOpen?.(false)} />
       <div
-        className="cyber-panel w-full max-w-md max-h-[80dvh] flex flex-col bg-[#010308]/98"
+        className="!fixed !z-[1001] left-14 md:left-16 bottom-36 w-60 max-w-[85vw] max-h-[70dvh] cyber-panel cyber-panel--solid flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="cyber-header flex items-center justify-between">
@@ -3707,148 +5018,31 @@ function ChartLayersPanel() {
             <X size={14} />
           </div>
         </div>
-        <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
-          {/* Diretriz de Evolução Autônoma Integral §11: atalho para os 2
-              modos reais — nunca substitui o toggle individual abaixo,
-              só pré-seleciona o que ele já controla. */}
-          <div className="flex gap-1.5">
-            {/* NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: 4º preset — a única ação
-                que devolve as 18 camadas ao comportamento automático de uma
-                vez (resposta do Operador: toggles continuam existindo como
-                override, mas o padrão novo é automático). */}
-            <button
-              type="button"
-              onClick={() => applyChartLayerPreset?.("automatic")}
-              title="Cada camada aparece só quando tem relevância estatística real agora (Relevance Engine) — nunca precisa ser ligada manualmente."
-              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-                isAutomaticPreset
-                  ? "border-[#00ffaa] bg-[#00ffaa20] text-[#00ffaa]"
-                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-              }`}
-            >
-              Automático
-            </button>
-            <button
-              type="button"
-              onClick={() => applyChartLayerPreset?.("operational")}
-              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-                isOperationalPreset
-                  ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-              }`}
-            >
-              Modo Operacional
-            </button>
-            <button
-              type="button"
-              onClick={() => applyChartLayerPreset?.("intelligence")}
-              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-                isIntelligencePreset
-                  ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-              }`}
-            >
-              Modo Inteligência
-            </button>
-            <button
-              type="button"
-              onClick={() => applyChartLayerPreset?.("audit")}
-              className={`flex-1 text-[0.42rem] py-1.5 rounded border font-bold uppercase tracking-wider ${
-                isAuditPreset
-                  ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                  : "border-[#8ab4f8]/20 text-[#8ab4f8]/60 hover:text-[#8ab4f8]"
-              }`}
-            >
-              Modo Auditoria
-            </button>
-          </div>
-          <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
-            Overlays reais do canvas — esconder uma camada nunca altera o dado, só a exibição
-          </span>
-          {CHART_LAYER_PANEL_MODULES.map(({ id, label }) => {
-            // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§7: em modo automático, o
-            // estado real vem do Relevance Engine (nunca do boolean manual,
-            // que só é o valor efetivo quando o Operador assumiu controle
-            // — mesma resolução que effectiveChartLayerVisibility já faz
-            // pro canvas, aqui só pra exibir corretamente no painel).
-            const isAuto = autoMode[id];
-            const relevance = layerRelevance?.[id] ?? null;
-            const on = isAuto ? (relevance?.relevant ?? true) : visibility[id];
-            return (
-              <div
-                key={id}
-                className="flex flex-col gap-1.5 bg-[#010205] border border-[#00f0ff15] rounded-lg px-3 py-2"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[0.55rem] font-bold tracking-widest text-white">{label}</span>
-                  <div className="flex items-center gap-1">
-                    {isAuto && (
-                      // EPC FINAL §3/§12 ("quando destacar"): emphasis real
-                      // (só existe onde há um gradiente real no sinal, ver
-                      // layer-relevance.ts) some no texto do badge — nunca
-                      // um efeito visual novo sem motivo real por trás.
-                      <span
-                        className={`text-[0.38rem] px-1.5 py-1 rounded border font-bold uppercase tracking-wider ${
-                          relevance?.emphasis === "highlight"
-                            ? "border-[#00ffaa] bg-[#00ffaa20] text-[#00ffaa]"
-                            : "border-[#00ffaa]/40 text-[#00ffaa]/80"
-                        }`}
-                        title={relevance?.reason ?? "Relevance Engine ainda sem leitura real neste ciclo."}
-                      >
-                        auto{relevance?.emphasis === "highlight" ? " · destaque" : ""}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => toggleChartLayer?.(id)}
-                      title={isAuto ? "Clicar assume controle manual desta camada (override real)." : "Override manual ativo."}
-                      className={`text-[0.4rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
-                        on
-                          ? "border-[#00f0ff] bg-[#00f0ff20] text-[#00f0ff]"
-                          : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
-                      }`}
-                    >
-                      {on ? "visível" : "oculta"}
-                    </button>
-                    {!isAuto && (
-                      <button
-                        type="button"
-                        onClick={() => resetChartLayerToAuto?.(id)}
-                        title="Devolver esta camada ao comportamento automático (Relevance Engine decide)."
-                        className="text-[0.38rem] px-1.5 py-1 rounded border border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#00ffaa] hover:border-[#00ffaa]/40 font-bold uppercase tracking-wider"
-                      >
-                        ⟲ auto
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {/* Diretriz Camada de Decisão Profissional, item 1: período
-                    real da EMA — um único controle, os 4 períodos padrão da
-                    indústria (nexus/ema.ts), nunca uma lista arbitrária. */}
-                {id === "ema" && (
-                  <div className="flex items-center gap-1">
-                    {EMA_PERIODS.map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setEmaPeriod?.(p)}
-                        className={`flex-1 text-[0.4rem] py-1 rounded border font-bold tracking-wider ${
-                          emaPeriod === p
-                            ? "border-[#42a5f5] bg-[#42a5f515] text-[#42a5f5]"
-                            : "border-[#8ab4f8]/20 text-[#8ab4f8]/50 hover:text-[#8ab4f8]"
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <ChartLayersPanelContent />
       </div>
-    </div>
+    </>
+  );
+}
+
+// Painel Properties 320px (pedido do Operador — ver .terminal-properties em
+// App()): corpo real do painel docado, mesmo ChartLayersPanelContent do
+// dropdown acima (zero segunda implementação) + atalho para Configurações.
+// Risk/Alerts deliberadamente FORA (ver comentário real em .terminal-
+// properties): já têm aba própria e mais completa em SecondaryModuleView.
+function PropertiesPanelBody({ onOpenSettings }: { onOpenSettings: () => void }) {
+  return (
+    <>
+      <ChartLayersPanelContent />
+      <button
+        type="button"
+        onClick={onOpenSettings}
+        title="Ir para Configurações do Sistema (aba SETTINGS)"
+        className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 rounded border border-[#8ab4f8]/20 text-[#8ab4f8]/70 hover:text-[#00f0ff] hover:border-[#00f0ff]/40 text-[0.45rem] font-bold uppercase tracking-wider transition-colors"
+      >
+        <span>Configurações do Sistema</span>
+        <Settings size={12} />
+      </button>
+    </>
   );
 }
 
@@ -3905,7 +5099,7 @@ function RadarPanel() {
         </div>
         <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
           <span className="text-[0.5rem] text-[#8ab4f8]/70 tracking-[0.15em] uppercase">
-            Radar/OIH — varredura real em segundo plano (Binance + MEXC), nunca recalcula nem emite LONG/SHORT por conta própria (LEI 24). Só lista quem já tem estrutura confirmada, Trade Plan real e confluência suficiente.
+            Radar/OIH — varredura real em segundo plano (Binance + MEXC): direção por Regime de Mercado real (ADX), nunca o Núcleo do ativo selecionado — que continua sendo o único emissor real de LONG/SHORT/WAIT do gráfico (LEI 24). Só lista quem já tem estrutura confirmada, Trade Plan real e confluência suficiente.
           </span>
           {candidates.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center">
@@ -3925,6 +5119,7 @@ function RadarPanel() {
                   key={`${c.provider}:${c.symbol}:${c.timeframe}`}
                   type="button"
                   onClick={() => openCandidate(c.symbol)}
+                  title={describeRadarQualificationReason(c.reason)}
                   className="flex items-center justify-between gap-2 bg-[#010205] border border-[#00f0ff15] hover:border-[#00f0ff40] rounded-lg px-3 py-2 text-left transition-colors"
                 >
                   <div className="flex items-center gap-2">
@@ -3964,6 +5159,805 @@ function RadarPanel() {
   );
 }
 
+// Ordem "Market Analysis & Publication Engine": preço formatado com a MESMA
+// regra já repetida em outros pontos do painel (StructureLevelsStrip etc.)
+// — convenção de exibição da UI, deliberadamente separada do fmtPrice
+// privado de nexus/market-analysis.ts (que formata para o TEXTO de X, um
+// alvo de renderização diferente).
+function fmtPrice(v: number): string {
+  // Delega à fonte única — esta função era uma das TRÊS cópias byte a byte
+  // de `v.toFixed(v >= 1000 ? 0 : 2)` espalhadas pelo app.
+  return sharedFormatPrice(v);
+}
+
+function MarketAnalysisPainelTab({ analysis }: { analysis: MarketAnalysis }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <ModulePanel title="Leitura">
+        <ModuleStat
+          label="Viés"
+          value={analysis.bias}
+          tone={analysis.bias === "LONG_BIAS" ? "long" : analysis.bias === "SHORT_BIAS" ? "short" : "neutral"}
+        />
+        {analysis.regimeLabel && <ModuleStat label="Regime" value={analysis.regimeLabel} />}
+        {analysis.structureLabel && <ModuleStat label="Estrutura" value={analysis.structureLabel} />}
+        <ModuleStat label="Confluência" value={analysis.confluence} />
+        <ModuleStat
+          label="Decisão"
+          value={analysis.outcome}
+          tone={analysis.outcome === "LONG" ? "long" : analysis.outcome === "SHORT" ? "short" : "neutral"}
+        />
+        {analysis.risk && (
+          <ModuleStat
+            label="Risco"
+            value={`${analysis.risk.state} — ${analysis.risk.basis}`}
+            tone={analysis.risk.state === "ACEITÁVEL" ? "long" : "short"}
+          />
+        )}
+        {analysis.confidenceLabel && <ModuleStat label="Confiança" value={analysis.confidenceLabel} />}
+        {analysis.score !== null && <ModuleStat label="Score" value={`${analysis.score}`} />}
+      </ModulePanel>
+
+      {analysis.zoneOfInterest && (
+        <ModulePanel title="Zona de Interesse">
+          <ModuleStat
+            label={analysis.zoneOfInterest.label}
+            value={`${fmtPrice(analysis.zoneOfInterest.price)} · ${analysis.zoneOfInterest.touches}x`}
+          />
+        </ModulePanel>
+      )}
+
+      {analysis.plan ? (
+        <ModulePanel title="Plano">
+          <ModuleStat label="Entry" value={`${fmtPrice(analysis.plan.entryLow)}–${fmtPrice(analysis.plan.entryHigh)}`} />
+          <ModuleStat label="Stop" value={fmtPrice(analysis.plan.invalidationPrice)} tone="short" />
+          {analysis.plan.targets.map((t) => (
+            <ModuleStat
+              key={t.index}
+              label={`Alvo ${t.index + 1}`}
+              value={`${fmtPrice(t.price)}${t.riskReward !== null ? ` · R:R 1:${t.riskReward.toFixed(2)}` : ""}${t.reached ? " · ATINGIDO" : ""}`}
+              tone="long"
+            />
+          ))}
+        </ModulePanel>
+      ) : analysis.corePlan ? (
+        // Ordem "Correção Definitiva do Market Analysis / Social Card" §5:
+        // MESMA extensão da aba Publicação — o Conselho está neutro, mas o
+        // Núcleo (LEI 24) já tem direção e stop/target reais agora (o
+        // mesmo fallback que o gráfico ao vivo já desenha). Nunca
+        // apresentado como se fosse um plano do Conselho.
+        <ModulePanel title="Plano (Núcleo)">
+          {analysis.planGapLabel && <ModuleStat label="Conselho" value={analysis.planGapLabel} />}
+          <ModuleStat label="Stop" value={fmtPrice(analysis.corePlan.stop)} tone="short" />
+          {[analysis.corePlan.target1, analysis.corePlan.target2, analysis.corePlan.target3]
+            .filter((v): v is number => v !== null)
+            .map((price, i) => (
+              <ModuleStat
+                key={i}
+                label={`Alvo ${i + 1}`}
+                value={`${fmtPrice(price)}${i === 0 && analysis.corePlan!.riskRewardRatio !== null ? ` · R:R 1:${analysis.corePlan!.riskRewardRatio!.toFixed(2)}` : ""}`}
+                tone="long"
+              />
+            ))}
+        </ModulePanel>
+      ) : (
+        analysis.planGapLabel && (
+          <ModulePanel title="Plano">
+            <ModuleStat label="Status" value={analysis.planGapLabel} />
+          </ModulePanel>
+        )
+      )}
+
+      {analysis.retest && (
+        <ModulePanel title="Reteste">
+          <ModuleStat label="Zona" value={`${fmtPrice(analysis.retest.low)}–${fmtPrice(analysis.retest.high)}`} />
+          <span className="text-[0.42rem] text-[#8ab4f8]/50">
+            {analysis.retest.condition} ({analysis.retest.context})
+          </span>
+        </ModulePanel>
+      )}
+    </div>
+  );
+}
+
+// Ordem "AR10 PUBLICATION STUDIO": substitui as antigas abas X (texto) e
+// STORY (prévia DOM, screenshot manual) da Ordem anterior por UMA aba só,
+// "Publicação" — Regra de Ouro 4 (realocar, nunca apagar): a legenda de
+// texto para X sobrevive integralmente (mesma formatMarketAnalysisForX,
+// mesmo botão Copiar) ao lado da imagem real; a prévia de Story vira a
+// peça PNG de verdade em vez de exigir screenshot manual (§3/§7 da nova
+// Ordem: "não depender de screenshot manual"). §1: as 4 peças nascem do
+// MESMO snapshot já congelado que o painel recebe por prop — este
+// componente nunca chama buildMarketAnalysis/motor nenhum, só desenha.
+function MarketAnalysisPublicationTab({ snapshot }: { snapshot: PublicationSnapshot }) {
+  const [assets, setAssets] = useState<PublicationAsset[] | null>(null);
+  const [genState, setGenState] = useState<"idle" | "generating" | "ready" | "failed">("idle");
+  const [activeFormat, setActiveFormat] = useState<PublicationFormat>("ANALYSIS");
+  const [shareState, setShareState] = useState<"idle" | "sharing" | "unsupported">("idle");
+  const [captionCopyState, setCaptionCopyState] = useState<"idle" | "copied" | "failed">("idle");
+
+  // Object URLs vivem só enquanto esta sessão de publicação existe —
+  // liberados ao desmontar (painel fechado) ou antes de um novo lote
+  // (regeração), nunca acumulados.
+  useEffect(() => {
+    return () => {
+      setAssets((prev) => {
+        if (prev) revokePublicationAssets(prev);
+        return prev;
+      });
+    };
+  }, []);
+
+  const handleGenerate = async () => {
+    setGenState("generating");
+    const next = await renderPublicationAssets(snapshot);
+    setAssets((prev) => {
+      if (prev) revokePublicationAssets(prev);
+      return next;
+    });
+    if (next.length > 0) {
+      setActiveFormat(next[0].format);
+      setGenState("ready");
+    } else {
+      setGenState("failed");
+    }
+  };
+
+  const downloadAsset = (asset: PublicationAsset) => {
+    const a = document.createElement("a");
+    a.href = asset.objectUrl;
+    a.download = asset.filename;
+    a.click();
+  };
+
+  const downloadAll = () => {
+    if (!assets) return;
+    // Disparados a partir do MESMO gesto do Operador (onClick síncrono),
+    // só espaçados pra não colidir no navegador — nunca um novo gesto por
+    // arquivo.
+    assets.forEach((a, i) => setTimeout(() => downloadAsset(a), i * 200));
+  };
+
+  const shareAll = async () => {
+    if (!assets) return;
+    const files = assets.map((a) => new File([a.blob], a.filename, { type: "image/png" }));
+    const nav = navigator as Navigator & { canShare?: (data?: ShareData) => boolean; share?: (data?: ShareData) => Promise<void> };
+    if (!nav.share || !nav.canShare || !nav.canShare({ files })) {
+      setShareState("unsupported");
+      setTimeout(() => setShareState("idle"), 2600);
+      return;
+    }
+    setShareState("sharing");
+    try {
+      await nav.share({ files, title: `${snapshot.analysis.symbol} · ${snapshot.analysis.timeframe.toUpperCase()}`, text: "Análise gerada pelo AR10 CYBORG" });
+    } catch {
+      // AbortError (Operador cancelou a folha de compartilhamento nativa)
+      // cai aqui também — cancelar não é uma falha, nunca reporta erro.
+    }
+    setShareState("idle");
+  };
+
+  const handleCopyCaption = async () => {
+    try {
+      await navigator.clipboard.writeText(formatMarketAnalysisForX(snapshot.analysis));
+      setCaptionCopyState("copied");
+    } catch {
+      setCaptionCopyState("failed");
+    }
+    setTimeout(() => setCaptionCopyState("idle"), 2000);
+  };
+
+  const active = assets?.find((a) => a.format === activeFormat) ?? null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <button
+        type="button"
+        onClick={handleGenerate}
+        disabled={genState === "generating"}
+        className="flex items-center justify-center gap-2 px-4 py-2.5 rounded border border-[#00f0ff60] bg-[#00f0ff1a] text-[#00f0ff] text-[0.6rem] font-black tracking-[0.2em] uppercase cursor-pointer hover:bg-[#00f0ff2a] disabled:opacity-50 disabled:cursor-wait"
+      >
+        <Share2 size={13} />
+        {genState === "generating" ? "Gerando as 4 peças…" : "Gerar Publicação"}
+      </button>
+
+      {genState === "failed" && (
+        <span className="text-[0.45rem] text-[#ff0055] text-center uppercase tracking-wide">
+          DADOS INSUFICIENTES — sem candles reais suficientes para gerar as peças com gráfico agora.
+        </span>
+      )}
+
+      {genState === "ready" && assets && assets.length > 0 && (
+        <>
+          <div className="flex gap-1 flex-wrap justify-center">
+            {assets.map((a) => (
+              <button
+                key={a.format}
+                type="button"
+                onClick={() => setActiveFormat(a.format)}
+                className={`px-2 py-1 rounded text-[0.42rem] font-black tracking-[0.1em] uppercase cursor-pointer transition-colors ${
+                  activeFormat === a.format
+                    ? "bg-[#00f0ff1a] text-[#00f0ff] border border-[#00f0ff40]"
+                    : "text-[#8ab4f8]/50 border border-transparent hover:text-[#8ab4f8]"
+                }`}
+              >
+                {PUBLICATION_FORMAT_SPECS[a.format].label}
+              </button>
+            ))}
+          </div>
+
+          {active && (
+            <div className="flex flex-col items-center gap-1.5">
+              <img
+                src={active.objectUrl}
+                alt={PUBLICATION_FORMAT_SPECS[active.format].label}
+                className="max-w-full rounded border border-[#00f0ff20]"
+                style={{ maxHeight: 300 }}
+              />
+              <button
+                type="button"
+                onClick={() => downloadAsset(active)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#00f0ff40] bg-[#00f0ff1a] text-[#00f0ff] text-[0.48rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:bg-[#00f0ff2a]"
+              >
+                <Download size={12} />
+                Baixar {PUBLICATION_FORMAT_SPECS[active.format].label}
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1">
+            <span className="text-[0.42rem] text-[#8ab4f8]/50 uppercase tracking-[0.1em]">Legenda sugerida para X</span>
+            <pre className="whitespace-pre-wrap break-words text-[0.46rem] leading-relaxed text-[#a0f0ff] bg-[#010205] border border-[#00f0ff15] rounded p-2 font-mono">
+              {formatMarketAnalysisForX(snapshot.analysis)}
+            </pre>
+            <button
+              type="button"
+              onClick={handleCopyCaption}
+              className="self-end flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#00f0ff40] bg-[#00f0ff1a] text-[#00f0ff] text-[0.48rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:bg-[#00f0ff2a]"
+            >
+              {captionCopyState === "copied" ? <Check size={12} /> : <Copy size={12} />}
+              {captionCopyState === "copied" ? "Copiado" : captionCopyState === "failed" ? "Falhou — copie manualmente" : "Copiar legenda"}
+            </button>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={downloadAll}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded border border-[#8ab4f840] text-[#8ab4f8] text-[0.5rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:border-[#8ab4f870]"
+            >
+              <Download size={12} />
+              Baixar Todas
+            </button>
+            <button
+              type="button"
+              onClick={shareAll}
+              disabled={shareState === "sharing"}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded border border-[#8ab4f840] text-[#8ab4f8] text-[0.5rem] font-black tracking-[0.15em] uppercase cursor-pointer hover:border-[#8ab4f870] disabled:opacity-50"
+            >
+              <Share2 size={12} />
+              {shareState === "sharing" ? "Compartilhando…" : "Compartilhar"}
+            </button>
+          </div>
+          {shareState === "unsupported" && (
+            <span className="text-[0.42rem] text-[#8ab4f8]/50 text-center">
+              Compartilhamento nativo não disponível neste navegador — use Baixar Todas.
+            </span>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Ordem "Market Analysis & Publication Engine": camada de apresentação/
+// publicação sobre o NexusDecision já real — mesmo shell modal do
+// RadarPanel acima (fixed inset-0 + cyber-panel centralizado). §12
+// sincronia: o snapshot congela no INSTANTE em que o painel abre (useEffect
+// com dependência única `marketAnalysisOpen`) — Painel/X/Story sempre leem
+// a MESMA fotografia durante toda a sessão de publicação, mesmo que
+// preço/decisão reais sigam mudando por trás enquanto o painel está aberto
+// (o Operador pode demorar para escolher o texto/print certo; a leitura
+// não pode mudar debaixo dele no meio disso). Fail-closed (§6):
+// buildMarketAnalysis já devolve null sem leitura real do Core Engine —
+// este componente só traduz esse null em "DADOS INSUFICIENTES" visível,
+// nunca uma leitura parcial fabricada. priceData chega por PROP (nunca via
+// Context) — mesmo padrão fixado pela Ordem "Unificação da Inteligência
+// Operacional" (commit f74c533): o preço ao vivo tem exatamente 1 caminho
+// de distribuição real (o state raiz de App()), nunca um espelho.
+function MarketAnalysisPanel({ priceData, chartData }: { priceData: PriceState | null; chartData: PublicationCandle[] }) {
+  const { marketAnalysisOpen, setMarketAnalysisOpen, selectedAsset, chartTimeframe, nexusDecision, engine, cvd } =
+    useContext(WidgetContext) || {};
+  const [tab, setTab] = useState<"PAINEL" | "PUBLICACAO">("PAINEL");
+  const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
+  // Ordem "AR10 PUBLICATION STUDIO" §1: candles/preço vivo congelados no
+  // MESMO instante e pelo MESMO gatilho que `analysis` — as 4 peças
+  // publicáveis (aba Publicação) precisam do gráfico real, e ele só pode
+  // vir do exato mesmo momento da leitura, nunca de um tick mais novo
+  // capturado só no clique de "Gerar Publicação" (isso divergiria da
+  // leitura já mostrada na aba Painel durante a mesma sessão do painel).
+  const [frozenCandles, setFrozenCandles] = useState<PublicationCandle[]>([]);
+  const [frozenLivePrice, setFrozenLivePrice] = useState<number | null>(null);
+  // Padrão de vela real congelado no MESMO instante que os candles acima —
+  // pelo mesmo motivo: a peça publicada precisa descrever exatamente a
+  // fotografia que o Operador viu na aba Painel, nunca um padrão que se
+  // formou depois. Computado UMA vez aqui; os 4 renderers só leem.
+  const [frozenPattern, setFrozenPattern] = useState<PublicationCandlePattern | null>(null);
+
+  useEffect(() => {
+    if (!marketAnalysisOpen) return;
+    const regime = engine?.marketRegime ?? null;
+    const regimeDisplay = regime ? REGIME_DISPLAY[regime.regime] : null;
+    const livePriceNow = typeof priceData?.price === "number" ? priceData.price : null;
+    setAnalysis(
+      buildMarketAnalysis({
+        symbol: selectedAsset ?? "",
+        timeframe: chartTimeframe ?? "",
+        decision: nexusDecision ?? null,
+        regimeLabel: regimeDisplay ? `${regimeDisplay.label}${regime!.direction ? ` ${regime!.direction}` : ""}` : null,
+        structureLabel: engine?.marketStructureLabel ?? null,
+        support: engine?.support ?? null,
+        supportStrength: engine?.supportStrength ?? null,
+        resistance: engine?.resistance ?? null,
+        resistanceStrength: engine?.resistanceStrength ?? null,
+        livePrice: livePriceNow,
+        // Evolução Final §11 ("leitura consolidada"): MESMA derivação de
+        // fluxo que NarrativeSummaryCard já usa (nexus/market-analysis.ts
+        // repassa direto pra buildNarrativeSummary) — zero segunda fórmula.
+        flow: num(cvd) && cvd !== 0 ? (cvd! > 0 ? "COMPRADOR" : "VENDEDOR") : null,
+        // Ordem "Correção Definitiva" §5: OS MESMOS campos brutos de
+        // `engine` que engineFallbackLevels (abaixo, ChartWidget) já lê
+        // para desenhar o fallback do Núcleo no gráfico ao vivo — cru de
+        // propósito, buildMarketAnalysis valida (finito/direção real)
+        // internamente, mesmo padrão de support/resistance acima. Nunca
+        // uma segunda leitura de campo (mesmos nomes: engine?.target é
+        // target1, engine?.extendedTarget é target3 — achado de nomenclatura
+        // já documentado em engineFallbackLevels).
+        coreFallback: {
+          direction: engine?.direction ?? null,
+          stop: engine?.stop ?? null,
+          target1: engine?.target ?? null,
+          target2: engine?.target2 ?? null,
+          target3: engine?.extendedTarget ?? null,
+          riskRewardRatio: engine?.riskRewardRatio ?? null,
+        },
+      }),
+    );
+    setFrozenCandles(chartData);
+    setFrozenLivePrice(livePriceNow);
+    // Mesma fonte de candles do mini-gráfico da peça (chartData), mesmo
+    // instante. `latest` é o padrão mais recente REAL da janela — null
+    // honesto quando não há nenhum (nenhum chip é desenhado).
+    const patternReading = computeCandlePatterns(chartData);
+    setFrozenPattern(
+      patternReading.latest
+        ? {
+            name: patternReading.latest.name,
+            direction: patternReading.latest.direction,
+            kind: patternReading.latest.kind,
+            confirmed: patternReading.latest.confirmed,
+          }
+        : null,
+    );
+    setTab("PAINEL");
+    // Deps propositalmente estreito: SÓ marketAnalysisOpen. Reabrir o
+    // painel é o único gatilho para uma fotografia nova — enquanto o
+    // painel segue aberto, ticks reais de preço/decisão/candle no fundo
+    // NUNCA reescrevem o que já foi gerado.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketAnalysisOpen]);
+
+  if (!marketAnalysisOpen) return null;
+  const close = () => setMarketAnalysisOpen?.(false);
+
+  return (
+    <div
+      className="!fixed !inset-0 !z-[1001] bg-[#010308]/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={close}
+    >
+      <div
+        className="cyber-panel w-full max-w-lg max-h-[92dvh] flex flex-col bg-[#010308]/98"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="cyber-header flex items-center justify-between">
+          <span className="font-bold tracking-[0.2em]">ANÁLISE DE MERCADO</span>
+          <div
+            className="text-[#8ab4f8]/50 hover:text-[#00f0ff] px-1 py-0.5 rounded cursor-pointer"
+            onClick={close}
+          >
+            <X size={14} />
+          </div>
+        </div>
+        <div className="p-3 flex flex-col gap-2 overflow-y-auto scrollbar-hide">
+          {!analysis ? (
+            <div className="flex flex-col items-center justify-center gap-1.5 py-8 text-center">
+              <Share2 size={22} className="text-[#8ab4f8]/30" />
+              <span className="text-[0.5rem] text-[#8ab4f8]/50 tracking-[0.1em] uppercase">DADOS INSUFICIENTES</span>
+              <span className="text-[0.42rem] text-[#8ab4f8]/35 max-w-[260px]">
+                O Núcleo ainda não tem leitura real suficiente para {selectedAsset || "este ativo"} agora — nenhum
+                cenário publicável até que exista viés/estrutura reais.
+              </span>
+            </div>
+          ) : (
+            <>
+              <span className="text-[0.42rem] text-[#8ab4f8]/50 tracking-[0.1em] uppercase">
+                {analysis.symbol} · {analysis.timeframe.toUpperCase()} · fotografia congelada há {ageLabelOf(analysis.generatedAt)}
+              </span>
+              <span className="text-[0.4rem] text-[#8ab4f8]/35 leading-tight">
+                Gerado sob demanda pelo Operador — esta tela nunca publica sozinha; copiar/capturar é sempre uma ação sua.
+              </span>
+              <div className="flex gap-1 border-b border-[#00f0ff15] pb-2">
+                {(["PAINEL", "PUBLICACAO"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTab(t)}
+                    className={`px-2 py-1 rounded text-[0.45rem] font-black tracking-[0.15em] uppercase cursor-pointer transition-colors ${
+                      tab === t
+                        ? "bg-[#00f0ff1a] text-[#00f0ff] border border-[#00f0ff40]"
+                        : "text-[#8ab4f8]/50 border border-transparent hover:text-[#8ab4f8]"
+                    }`}
+                  >
+                    {t === "PAINEL" ? "PAINEL" : "PUBLICAÇÃO"}
+                  </button>
+                ))}
+              </div>
+
+              {tab === "PAINEL" && <MarketAnalysisPainelTab analysis={analysis} />}
+              {tab === "PUBLICACAO" && (
+                <MarketAnalysisPublicationTab
+                  snapshot={{ analysis, candles: frozenCandles, livePrice: frozenLivePrice, candlePattern: frozenPattern }}
+                />
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// v16.0 PRO MAX §9.1/§9.4 ("Paper Trading"): posição simulada MANUAL —
+// decisão explícita do Operador (AskUserQuestion, resposta literal "Só
+// painel manual, sem automação"): ZERO automação. Nenhum useEffect aqui
+// chama openPaperPosition/closePaperPosition — as duas únicas chamadas
+// reais vivem nos onClick abaixo, sempre em resposta a um clique real.
+// P&L é aritmética real sobre o MESMO priceData ao vivo que o resto do
+// terminal usa (PROP, nunca Context — mesmo padrão fixado por
+// MarketAnalysisPanel acima); nunca toca exchange real, nunca guarda
+// credencial, nunca envia ordem (nexus/paper-trading.ts).
+function PaperTradingPanel({ priceData }: { priceData: PriceState | null }) {
+  const { paperTradingOpen, setPaperTradingOpen } = useContext(WidgetContext) || {};
+  const tradePlan = useTradePlanSnapshot();
+  const paperTrading = usePaperTradingSnapshot();
+  const [sizeInput, setSizeInput] = useState("100");
+  const [leverageInput, setLeverageInput] = useState("1");
+  const { selectedAsset } = useContext(WidgetContext) || {};
+
+  if (!paperTradingOpen) return null;
+  const close = () => setPaperTradingOpen?.(false);
+  const livePrice = typeof priceData?.price === "number" ? priceData.price : null;
+  const position = paperTrading.position;
+
+  const pnl = position && livePrice !== null ? unrealizedPnl(position, livePrice) : null;
+  const pnlPct = position && livePrice !== null ? unrealizedPnlPct(position, livePrice) : null;
+  const ctx = position && livePrice !== null ? paperPositionContext(position, livePrice) : null;
+  // Conta simulada (contrato v2): margem/liquidação só existem de verdade
+  // com alavancagem; equity/drawdown existem sempre.
+  const margin = paperMarginUsed(position);
+  const liq = livePrice !== null ? paperLiquidationStatus(position, livePrice) : null;
+  const equity = livePrice !== null ? paperEquity(paperTrading, livePrice) : paperTrading.balance;
+  const drawdown = livePrice !== null ? paperDrawdown(paperTrading, livePrice) : null;
+
+  const handleOpen = () => {
+    const size = Number(sizeInput);
+    const lev = Number(leverageInput);
+    if (!tradePlan || !Number.isFinite(size) || size <= 0) return;
+    useUnifiedSnapshotStore.getState().openPaperPosition(tradePlan, size, selectedAsset ?? null, lev);
+  };
+  // DCA — aporte no preço ATUAL, sempre por clique. Some o nocional e
+  // recalcula o preço médio real (custo/unidades, ver weightedAveragePrice).
+  const handleAddEntry = () => {
+    const size = Number(sizeInput);
+    if (!position || livePrice === null || !Number.isFinite(size) || size <= 0) return;
+    useUnifiedSnapshotStore.getState().addPaperEntry(livePrice, size);
+  };
+  // SEMPRE um clique do Operador — reason só documenta qual leitura ele
+  // reconheceu (perto do alvo/stop) ao decidir fechar, nunca uma decisão
+  // automática do motor (ver header do arquivo nexus/paper-trading.ts).
+  const handleClose = () => {
+    if (!position || livePrice === null) return;
+    const reason: "TARGET" | "STOP" | "MANUAL" = ctx?.nearTarget ? "TARGET" : ctx?.nearStop ? "STOP" : "MANUAL";
+    useUnifiedSnapshotStore.getState().closePaperPosition(livePrice, reason);
+    // O degrau realizado precisa cair na curva: o amostrador de 5s só roda
+    // com posição ABERTA, então sem este ponto o resultado do trade que
+    // acabou de fechar nunca apareceria na curva de capital. Continua sendo
+    // observação (não abre/fecha nada) e continua dentro do clique.
+    useUnifiedSnapshotStore.getState().recordPaperEquity(livePrice);
+  };
+
+  return (
+    <div
+      className="!fixed !inset-0 !z-[1001] bg-[#010308]/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={close}
+    >
+      <div
+        className="cyber-panel w-full max-w-sm max-h-[92dvh] flex flex-col bg-[#010308]/98"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="cyber-header flex items-center justify-between">
+          <span className="font-bold tracking-[0.2em]">PAPER TRADING</span>
+          <button type="button" onClick={close} aria-label="Fechar" className="text-[#8ab4f8]/60 hover:text-[#00f0ff]">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="p-3 overflow-y-auto flex-1 space-y-3 text-[0.7rem]">
+          {/* CONTA SIMULADA — saldo realizado, equity ao vivo e drawdown.
+              Saldo só muda quando uma posição FECHA; equity inclui o
+              flutuante da aberta (ver nexus/paper-trading.ts). */}
+          <div className="cyber-panel bg-black/30 p-2 space-y-1">
+            <div className="flex justify-between">
+              <span className="text-[#8ab4f8]/50">Saldo realizado</span>
+              <span>{fmt(paperTrading.balance, 2)} USDT</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#8ab4f8]/50">Equity (com flutuante)</span>
+              <span className={equity >= paperTrading.balance ? "text-[#00ffaa]" : "text-[#ff4d6d]"}>
+                {fmt(equity, 2)} USDT
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#8ab4f8]/50">Drawdown atual / máx</span>
+              <span>
+                {drawdown ? `${drawdown.currentPct.toFixed(2)}% / ${drawdown.maxPct.toFixed(2)}%` : "—"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#8ab4f8]/50">Pontos na curva</span>
+              <span className="text-[#8ab4f8]/40">{paperTrading.equityCurve.length}</span>
+            </div>
+          </div>
+          {!position ? (
+            <>
+              {!tradePlan ? (
+                <div className="text-[#8ab4f8]/50 text-center py-4">DADOS INSUFICIENTES — sem Trade Plan ativo agora.</div>
+              ) : (
+                <div className="cyber-panel bg-black/30 p-2 space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">Direção</span>
+                    <span className={tradePlan.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff4d6d]"}>{tradePlan.direction}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">Entrada</span>
+                    <span>{fmt((tradePlan.entry.low + tradePlan.entry.high) / 2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">Stop</span>
+                    <span>{fmt(tradePlan.stop.price)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">Alvo 1</span>
+                    <span>{fmt(tradePlan.targets[0]?.price)}</span>
+                  </div>
+                </div>
+              )}
+              <label className="flex items-center justify-between gap-2">
+                <span className="text-[#8ab4f8]/50">Tamanho (USDT)</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={sizeInput}
+                  onChange={(e) => setSizeInput(e.target.value)}
+                  className="w-24 bg-black/40 border border-[#8ab4f8]/20 rounded px-2 py-1 text-right text-[#e8f4ff]"
+                />
+              </label>
+              <label className="flex items-center justify-between gap-2">
+                <span className="text-[#8ab4f8]/50">Alavancagem (x)</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={PAPER_MAX_LEVERAGE}
+                  value={leverageInput}
+                  onChange={(e) => setLeverageInput(e.target.value)}
+                  className="w-24 bg-black/40 border border-[#8ab4f8]/20 rounded px-2 py-1 text-right text-[#e8f4ff]"
+                />
+              </label>
+              {Number(leverageInput) > 1 && (
+                <div className="text-[#f0d06f]/70 text-[0.62rem] leading-relaxed">
+                  Com {Number(leverageInput)}x, a margem é {fmt(Number(sizeInput) / Math.max(1, Number(leverageInput)), 2)} USDT
+                  e a posição tem preço de liquidação — o prejuízo simulado nunca passa da margem.
+                  O nível é ESTIMADO (margem isolada, taxa de manutenção declarada de{" "}
+                  {(PAPER_MAINTENANCE_MARGIN_RATE * 100).toFixed(1)}%), nunca o preço exato de uma corretora.
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={handleOpen}
+                disabled={!tradePlan || !(Number(sizeInput) > 0)}
+                className="w-full py-2 rounded bg-[#00f0ff]/15 border border-[#00f0ff]/40 text-[#00f0ff] disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                ABRIR POSIÇÃO SIMULADA
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="cyber-panel bg-black/30 p-2 space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-[#8ab4f8]/50">Direção</span>
+                  <span className={position.direction === "LONG" ? "text-[#00ffaa]" : "text-[#ff4d6d]"}>{position.direction}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#8ab4f8]/50">Entrada</span>
+                  <span>{fmt(position.entryPrice)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#8ab4f8]/50">
+                    {position.entries.length > 1 ? `Preço médio (${position.entries.length} aportes)` : "Tamanho"}
+                  </span>
+                  <span>{position.entries.length > 1 ? fmt(position.entryPrice) : `${fmt(position.sizeUsdt, 0)} USDT`}</span>
+                </div>
+                {position.entries.length > 1 && (
+                  <div className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">Nocional total</span>
+                    <span>{fmt(position.sizeUsdt, 0)} USDT</span>
+                  </div>
+                )}
+                {position.symbol && (
+                  <div className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">Ativo</span>
+                    <span>{position.symbol}</span>
+                  </div>
+                )}
+                {position.leverage > 1 && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-[#8ab4f8]/50">Alavancagem</span>
+                      <span className="text-[#f0d06f]">{position.leverage}x</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#8ab4f8]/50">Margem usada</span>
+                      <span>{margin !== null ? `${fmt(margin, 2)} USDT` : "—"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[#8ab4f8]/50">Liquidação (estimada)</span>
+                      <span className="text-[#ff4d6d]">{liq?.liquidationPrice != null ? fmt(liq.liquidationPrice) : "—"}</span>
+                    </div>
+                  </>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-[#8ab4f8]/50">Preço atual</span>
+                  <span>{livePrice !== null ? fmt(livePrice) : "—"}</span>
+                </div>
+              </div>
+              {/* Aviso de liquidação: LEITURA, nunca ação. O motor não fecha
+                  nada sozinho — quem decide é o Operador (escopo fixado no
+                  header de nexus/paper-trading.ts). */}
+              {liq?.breached && (
+                <div className="cyber-panel bg-[#ff4d6d]/10 border-[#ff4d6d]/40 p-2 text-center text-[#ff4d6d] leading-relaxed">
+                  PREÇO JÁ CRUZOU O NÍVEL ESTIMADO DE LIQUIDAÇÃO.
+                  <div className="text-[0.62rem] text-[#ff4d6d]/70 mt-1">
+                    Numa corretora real esta posição já teria sido encerrada. O prejuízo mostrado está travado no
+                    teto da margem. Nada aqui fecha sozinho — a decisão continua sua.
+                  </div>
+                </div>
+              )}
+              <div className="cyber-panel bg-black/30 p-2 text-center">
+                <div className="text-[#8ab4f8]/50 mb-1">P&amp;L NÃO REALIZADO</div>
+                <div className={`text-lg font-bold ${pnl !== null && pnl >= 0 ? "text-[#00ffaa]" : "text-[#ff4d6d]"}`}>
+                  {pnl !== null ? `${pnl >= 0 ? "+" : ""}${fmt(pnl, 2)} USDT` : "DADOS INSUFICIENTES"}
+                </div>
+                {pnlPct !== null && <div className="text-[#8ab4f8]/40">{fmtSignedPct(pnlPct)}</div>}
+              </div>
+              {ctx && (ctx.nearTarget || ctx.nearStop) && (
+                <div className={`text-center ${ctx.nearTarget ? "text-[#00ffaa]" : "text-[#ff4d6d]"}`}>
+                  {ctx.nearTarget ? "Perto do Alvo 1 — considere fechar" : "Perto do Stop — considere fechar"}
+                </div>
+              )}
+              <label className="flex items-center justify-between gap-2">
+                <span className="text-[#8ab4f8]/50">Aporte (USDT)</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={sizeInput}
+                  onChange={(e) => setSizeInput(e.target.value)}
+                  className="w-24 bg-black/40 border border-[#8ab4f8]/20 rounded px-2 py-1 text-right text-[#e8f4ff]"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={handleAddEntry}
+                disabled={livePrice === null || !(Number(sizeInput) > 0)}
+                className="w-full py-2 rounded bg-[#8ab4f8]/10 border border-[#8ab4f8]/30 text-[#8ab4f8] disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                APORTAR NO PREÇO ATUAL (DCA)
+              </button>
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={livePrice === null}
+                className="w-full py-2 rounded bg-[#ff4d6d]/15 border border-[#ff4d6d]/40 text-[#ff4d6d] disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                FECHAR POSIÇÃO AGORA
+              </button>
+            </>
+          )}
+          {paperTrading.history.length > 0 && (
+            <div className="pt-2 border-t border-[#8ab4f8]/10">
+              <div className="text-[#8ab4f8]/40 mb-1">HISTÓRICO ({paperTrading.history.length})</div>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {[...paperTrading.history].reverse().slice(0, 20).map((rec, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span className="text-[#8ab4f8]/50">{rec.direction} · {rec.closeReason}</span>
+                    <span className={rec.realizedPnl !== null && rec.realizedPnl >= 0 ? "text-[#00ffaa]" : "text-[#ff4d6d]"}>
+                      {rec.realizedPnl !== null ? `${rec.realizedPnl >= 0 ? "+" : ""}${fmt(rec.realizedPnl, 2)}` : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// v16.0 DEFINITIVO §9.2: pilha de toasts, canto inferior direito, máx 5
+// simultâneos (fila mais antiga cai primeiro — ver o `.slice(-5)` em
+// App()). Puramente apresentacional: recebe `alerts` já prontos e um
+// `onDismiss`, nunca lê a store nem o bus diretamente — mesma separação
+// já usada por MarketAnalysisPanel/PaperTradingPanel (props vindas de
+// App(), painel só desenha).
+const ALERT_TONE_STYLE: Record<AlertEvent["tone"], { hex: string; border: string; text: string }> = {
+  success: { hex: "#00ffaa", border: "border-l-[#00ffaa]", text: "text-[#00ffaa]" },
+  info: { hex: "#00f0ff", border: "border-l-[#00f0ff]", text: "text-[#00f0ff]" },
+  danger: { hex: "#ff0055", border: "border-l-[#ff0055]", text: "text-[#ff0055]" },
+};
+
+function AlertToastStack({ alerts, onDismiss }: { alerts: AlertEvent[]; onDismiss: (id: string) => void }) {
+  if (alerts.length === 0) return null;
+  return (
+    <div className="!fixed !z-[1200] bottom-3 right-3 flex flex-col gap-1.5 w-64 max-w-[85vw] pointer-events-none">
+      {/* Mais urgente em cima: com 3 toasts subindo juntos, o olho vai no
+          primeiro — e o primeiro tem de ser o que mais importa. A lista de
+          estado continua na ordem de chegada (é ela que o auto-dismiss
+          usa); só a apresentação reordena. */}
+      {sortAlertsByUrgency(alerts).map((a) => {
+        const tone = ALERT_TONE_STYLE[a.tone];
+        // Urgência em FORMA, nunca em cor: a cor já diz o que aconteceu
+        // (bom/neutro/ruim) e um CRITICAL pode ser boa notícia.
+        const emphasis = alertEmphasis(a.priority);
+        return (
+          <div
+            key={a.id}
+            style={{ borderLeftWidth: `${emphasis.railPx}px`, opacity: emphasis.opacity }}
+            className={`animate-fade-in pointer-events-auto cyber-panel !bg-[#010308]/95 ${tone.border} rounded px-2.5 py-2 relative overflow-hidden${emphasis.ring ? " ring-1 ring-inset" : ""}`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className={`text-[0.55rem] font-black tracking-wide ${tone.text}`}>
+                  {emphasis.marker && <span className="mr-1 opacity-80">{emphasis.marker}</span>}
+                  {a.title}
+                </div>
+                <div className="text-[0.48rem] text-[#8ab4f8]/80 mt-0.5 leading-snug">{a.message}</div>
+              </div>
+              <button
+                type="button"
+                aria-label="Fechar alerta"
+                onClick={() => onDismiss(a.id)}
+                className="text-[#8ab4f8]/50 active:text-[#8ab4f8] text-[0.6rem] leading-none shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="alert-toast-progress absolute left-0 bottom-0 h-[2px]" style={{ backgroundColor: tone.hex }} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // --- RIGHT COLUMN: SIRIFORM CORE (V16 §1/§3) — compact real-status summary
 // docked in the right column by default (se_core.collapsed: true). Never a
 // second computation: engineStatus/direction/confidence/lorentzian all come
@@ -3972,6 +5966,46 @@ function RadarPanel() {
 // Workspace Manager panel controls — the full, unmodified AssistantOrb
 // (forecast/voice/quick actions, nothing removed) renders below the
 // 3-column row when expanded (see the DASHBOARD strip in App()).
+// Ordem "Lapidação, Sincronia e Experiência do Operador" §6 ("Inteligência
+// Narrativa") + §5 (painéis devem responder "por que o sistema está
+// comprado?"): buildNarrativeSummary() já existe e já é testado
+// (operational-readability.ts) — este componente só a exibe como TEXTO
+// VISÍVEL, nunca um tooltip. Achado real de auditoria que motivou isto:
+// o único lugar que já sintetizava BIAS/SETUP/ENTRY/RISCO/CONFLUÊNCIA em
+// linguagem (buildOperationalSummary) só chegava ao Operador via
+// `title=` no CoreSignalBadge — e o comentário do próprio badge documenta
+// que tooltips nativos nunca aparecem em toque no iPad Safari (a
+// plataforma-alvo real). Primeiro card da gaveta "Core Intelligence"
+// (antes de SiriformCoreCard) — mesma leitura consolidada que o Operador
+// já tinha matematicamente, agora genuinamente visível. Zero segunda
+// leitura: reusa o MESMO nexusDecision que CoreSignalBadge já consome.
+function NarrativeSummaryCard() {
+  const { nexusDecision, engine, cvd } = useContext(WidgetContext) || {};
+  // Entrega 26 Prioridade 8: contexto de mercado REAL repassado à narrativa
+  // — regime pelo MESMO REGIME_DISPLAY do painel MARKET REGIME, fluxo pelo
+  // MESMO sinal de CVD. Zero cálculo aqui: só leitura do que já existe.
+  const regime = engine?.marketRegime ?? null;
+  const regimeDisplay = regime ? REGIME_DISPLAY[regime.regime] : null;
+  const narrative = buildNarrativeSummary(nexusDecision ?? null, {
+    regimeLabel: regimeDisplay
+      ? `${regimeDisplay.label}${regime!.direction ? ` ${regime!.direction}` : ""}`
+      : null,
+    flow: num(cvd) && cvd !== 0 ? (cvd! > 0 ? "COMPRADOR" : "VENDEDOR") : null,
+  });
+  return (
+    <div className="cyber-panel shrink-0 flex flex-col gap-1.5 p-3">
+      <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">
+        LEITURA CONSOLIDADA
+      </span>
+      {/* Lapidação Visual (DIRETRIZ 7): #c8d4e6 era um cinza-azulado de uso
+          único em toda a árvore — trocado pela cor de texto base real do app
+          (#a0f0ff, a mesma do container raiz), levemente suavizada para
+          leitura prolongada de prosa. Zero cor nova. */}
+      <p className="text-[0.65rem] leading-relaxed text-[#a0f0ff]/85">{narrative}</p>
+    </div>
+  );
+}
+
 function SiriformCoreCard() {
   const { engine, engineStatus, realCycle, widgets, toggleWidget, nexusDecision } = useContext(WidgetContext) || {};
   const direction: Direction = engine?.direction ?? null;
@@ -4044,6 +6078,279 @@ function SiriformCoreCard() {
           color="text-[#8ab4f8]"
         />
       </div>
+    </div>
+  );
+}
+
+// v16.0 PRO Fase 1 ("Header Minimalista"): destino real dos 5 itens que
+// saíram da barra sempre-visível — Score Institucional (+ tendência de
+// Conviction), Heat Score, cartão VWAP, mensagem do Assistente e Kill
+// Zone ICT. Mesmos dados reais, mesmas fórmulas (institutional-score.ts/
+// heat-score.ts/vwap-bands.ts/operation-assistant.ts/kill-zones.ts), zero
+// segunda leitura — só um novo lugar para ler, self-contained como os
+// outros cards desta gaveta (SiriformCoreCard, GmilContextWidget). O
+// tooltip de cada MiniStat carrega o mesmo detalhe que a TopBar já
+// mostrava.
+function ScoreContextCard() {
+  const { institutionalScore, confidenceZone, convictionTrend, assistantMessages, heatReading, vwapCtx, nlState, nexusConfluence } =
+    useContext(WidgetContext) || {};
+  const killZones = activeKillZones(new Date());
+
+  const scoreValue =
+    institutionalScore?.score !== null && institutionalScore?.score !== undefined
+      ? `${confidenceZone ? `${confidenceZone.emoji} ` : ""}${institutionalScore.score}%${
+          convictionTrend?.status === "OK" && convictionTrend.trend
+            ? ` ${convictionTrend.trend === "FORTALECENDO" ? "▲" : convictionTrend.trend === "ENFRAQUECENDO" ? "▼" : "▬"}`
+            : ""
+        }`
+      : DASH;
+  const scoreColor = confidenceZone === null ? "text-[#8ab4f8]/40" : confidenceZone.colorClass;
+  const scoreTitle =
+    institutionalScore?.score !== null && institutionalScore?.score !== undefined
+      ? `Score real de confluência entre subsistemas (0-100), exibido como percentual — nunca probabilidade de acerto. Zona: ${confidenceZone?.label ?? DASH}. ${
+          convictionTrend?.status === "OK" && convictionTrend.trend
+            ? `Tendência: ${convictionTrend.trend} (média recente ${convictionTrend.recentAverage!.toFixed(1)} vs. anterior ${convictionTrend.priorAverage!.toFixed(1)}).`
+            : "Histórico real ainda insuficiente para uma tendência honesta."
+        }`
+      : "Sem oportunidade direcional a pontuar agora (Core Engine em WAIT ou dados insuficientes).";
+
+  const heatValue = heatReading?.status === "OK" ? `${heatReading.score}/100 · ${heatReading.tier}` : DASH;
+  const heatColor =
+    heatReading?.status !== "OK"
+      ? "text-[#8ab4f8]/40"
+      : heatReading.tier === "EXTREMO"
+        ? "text-[#ff0055]"
+        : heatReading.tier === "QUENTE"
+          ? "text-[#f0d06f]"
+          : heatReading.tier === "MORNO"
+            ? "text-[#a0f0ff]"
+            : "text-[#8ab4f8]/70";
+  const heatTitle =
+    heatReading?.status === "OK"
+      ? `Heat ${heatReading.score}/100 (${heatReading.tier}) — intensidade de ATIVIDADE real: ${heatReading.components.map((c: { id: string; value01: number }) => `${c.id} ${(c.value01 * 100).toFixed(0)}%`).join(" · ")}. Nunca probabilidade, nunca direção.`
+      : "Heat Score aguardando ao menos 2 componentes reais medidas (volatilidade/Δ24h/liquidações).";
+
+  const vwapStateLabel = vwapCtx
+    ? vwapCtx.state === "BULLISH"
+      ? "COMPRADOR"
+      : vwapCtx.state === "BEARISH"
+        ? "VENDEDOR"
+        : "NEUTRA"
+    : "INSUFICIENTES";
+  // Diretriz "Lapidação, Sincronia e Experiência do Operador" (achado já
+  // documentado nesta base): tooltip nativo (title=) nunca aparece em
+  // toque no iPad Safari, a plataforma-alvo real — por isso vwapStateLabel
+  // precisa estar no VALOR visível, nunca só escondido no tooltip
+  // (vwapTitle repete o mesmo rótulo como reforço para mouse/trackpad,
+  // nunca como única fonte).
+  const vwapValue = vwapCtx
+    ? `${fmt(vwapCtx.vwap, vwapCtx.vwap >= 1000 ? 0 : 2)} ${vwapCtx.state === "BULLISH" ? "↑" : vwapCtx.state === "BEARISH" ? "↓" : "•"} ${fmtSignedPct(vwapCtx.distancePct)} · ${vwapStateLabel}`
+    : "DADOS INSUFICIENTES";
+  const vwapColor = !vwapCtx
+    ? "text-[#8ab4f8]/40"
+    : vwapCtx.state === "BULLISH"
+      ? "text-[#00ffaa]"
+      : vwapCtx.state === "BEARISH"
+        ? "text-[#ff0055]"
+        : "text-[#f0d06f]";
+  const vwapTitle = vwapCtx
+    ? `Preço ${vwapCtx.side === "ACIMA" ? "acima" : vwapCtx.side === "ABAIXO" ? "abaixo" : "na linha"} da VWAP: ${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}% (${vwapCtx.distanceAbs >= 0 ? "+" : ""}${vwapCtx.distanceAbs.toFixed(2)} abs). Estado ${vwapCtx.state} (${vwapStateLabel}) com histerese real. Nexus Line: ${nlState}. ${
+        nexusConfluence === "ALINHADA"
+          ? "Confluência VWAP×NL×Decisão: ALINHADA."
+          : nexusConfluence === "CONFLITO_ESTRUTURAL"
+            ? "CONFLITO ESTRUTURAL VWAP/NL/Decisão — informativo, nunca altera a operação (LEI 24)."
+            : "Sem veredito de confluência (leitura incompleta ou AGUARDAR)."
+      }`
+    : "VWAP aguardando volume real da sessão UTC (fail-closed, nunca um valor fabricado).";
+  // §30 (confluência VWAP×NL×Decisão): sufixo ✓/⚠ visível no RÓTULO — a
+  // mesma posição/semântica de sempre, mas title= não aparece em toque no
+  // iPad Safari (achado já documentado nesta base), então o veredito
+  // precisa estar no texto sempre visível, não só no tooltip acima.
+  const vwapLabel = nexusConfluence ? `VWAP ${nexusConfluence === "ALINHADA" ? "✓" : "⚠"}` : "VWAP";
+
+  return (
+    <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
+      <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">
+        SCORE &amp; CONTEXTO
+      </span>
+      <div className="grid grid-cols-2 gap-1.5">
+        <MiniStat label="Score Institucional" value={scoreValue} color={scoreColor} title={scoreTitle} />
+        <MiniStat label="Heat Score" value={heatValue} color={heatColor} title={heatTitle} />
+        <MiniStat label={vwapLabel} value={vwapValue} color={vwapColor} title={vwapTitle} />
+      </div>
+      {/* Diretriz V-MAX item 6: Assistente Operacional — a frase curta mais
+          prioritária, sempre tradução de leitura real (LEI 24, ver
+          operation-assistant.ts). O tooltip carrega a base real
+          verificável ("nunca recomendação sem justificativa"). */}
+      {assistantMessages && assistantMessages.length > 0 && (
+        <div
+          className="flex flex-col bg-[#010308] px-2 py-1.5 rounded border border-[#8ab4f8]/10"
+          title={assistantMessages.map((m: { text: string; basis: string }) => `${m.text} — ${m.basis}`).join("\n")}
+        >
+          <span className="text-[0.4rem] text-[#8ab4f8]/60 font-bold tracking-widest uppercase">Assistente</span>
+          <span
+            className={`text-[0.55rem] font-bold tracking-wider uppercase ${
+              assistantMessages[0].tone === "POSITIVE"
+                ? "text-[#00ffaa]"
+                : assistantMessages[0].tone === "RISK"
+                  ? "text-[#ff0055]"
+                  : assistantMessages[0].tone === "CAUTION"
+                    ? "text-[#f0d06f]"
+                    : "text-[#8ab4f8]/80"
+            }`}
+          >
+            {assistantMessages[0].text}
+          </span>
+        </div>
+      )}
+      {killZones.active.length > 0 && (
+        <div
+          title="Kill Zone ICT ativa agora — janela estreita onde a atividade institucional (varredura de liquidez) historicamente se concentra. Janela fixa em UTC, aproximação de DST — nunca finge mais precisão do que existe."
+          className="flex items-center gap-1.5 bg-[#010308] px-2 py-1.5 rounded border border-[#ffb02030]"
+        >
+          <Crosshair size={11} className="text-[#ffb020] shrink-0" />
+          <span className="text-[0.5rem] font-black uppercase tracking-wider text-[#ffb020]">
+            {/* Duplicação real removida (raio-X desta rodada): esta linha
+                escrevia "Kill Zone · " à mão E arrancava o MESMO prefixo de
+                cada rótulo com um replace de string sobre esse mesmo prefixo,
+                porque o
+                prefixo estava assado dentro do dado em kill-zones.ts. Duas
+                cópias do mesmo texto, uma desfeita em runtime por cirurgia de
+                string — e falha SILENCIOSA (tela mostrando "Kill Zone · Kill
+                Zone · Ásia") se um único caractere do prefixo mudasse lá.
+                Agora o dado carrega só o nome da praça e quem exibe compõe. */}
+            Kill Zone · {killZones.active.map((z) => z.label).join(" + ")}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Entrega 42 ("Profitability Engine"): expectativa real (após custos) do
+// Track Record deste symbol:timeframe — mesmo expectancyFilter computado
+// uma vez em App() e compartilhado via contextValue (ver comentário no
+// ponto de cálculo). Mesmo padrão visual de ScoreContextCard acima
+// (cyber-panel + MiniStat), sempre visível junto dele — a explicação de
+// POR QUE o CoreSignalBadge pode mostrar NEUTRO precisa estar tão visível
+// quanto o próprio badge (LEI 24: supressão nunca é silenciosa).
+function ExpectancyCard() {
+  const {
+    expectancyFilter,
+    calibrationResult,
+    contextualRecall,
+  }: {
+    expectancyFilter?: FilterResult;
+    calibrationResult?: CalibrationResult;
+    contextualRecall?: ContextualRecall | null;
+  } = useContext(WidgetContext) || {};
+  const stats = expectancyFilter?.stats ?? null;
+
+  const badgeColor =
+    expectancyFilter?.badge === "green"
+      ? "text-[#00ffaa]"
+      : expectancyFilter?.badge === "cyan"
+        ? "text-[#a0f0ff]"
+        : expectancyFilter?.badge === "amber"
+          ? "text-[#f0d06f]"
+          : expectancyFilter?.badge === "red"
+            ? "text-[#ff0055]"
+            : "text-[#8ab4f8]/40";
+
+  const expectancyValue = stats ? `${stats.expectancyR >= 0 ? "+" : ""}${stats.expectancyR.toFixed(2)}R` : DASH;
+  const winRateValue = stats ? `${(stats.winRate * 100).toFixed(0)}%` : DASH;
+  const sharpeValue = stats && stats.sharpeRatio !== null ? stats.sharpeRatio.toFixed(2) : DASH;
+  const maxDdValue = stats ? `${stats.maxDrawdownR.toFixed(2)}R` : DASH;
+  const costValue = stats
+    ? `${(stats.commissionImpactR + stats.slippageImpactR + stats.fundingImpactR).toFixed(3)}R`
+    : DASH;
+  const sampleValue = stats ? `${stats.totalTrades}` : "0";
+
+  const expectancyTitle =
+    "Expectativa real por trade (R-múltiplo) após comissão+slippage+funding reais sobre o Track Record JÁ resolvido — nunca hitRate isolado (Regra de Ouro 2: taxa de acerto alta com R:R ruim ainda perde dinheiro).";
+  const sampleTitle = `Trades reais resolvidos rastreados neste symbol:timeframe. Amostra mínima de ${MIN_TRADES_FOR_VALID_EXPECTANCY} para uma leitura de expectativa válida — abaixo disso o badge fica neutro e o Núcleo nunca é suprimido (ausência de prova não é prova de inviabilidade).`;
+
+  // Escopo Cirúrgico (Operador, Fase 3 — Calibração de Probabilidade):
+  // "probabilidade" aqui só aparece quando REALMENTE calibrada (Platt 1999)
+  // contra o Track Record real deste symbol:timeframe, com amostra
+  // suficiente e tamanho sempre visível — exatamente a exceção honesta à
+  // Regra de Ouro 2 (confiança nunca é probabilidade fabricada; isto não é
+  // fabricado, é ajustado a outcomes reais, com o "n" sempre exposto).
+  const calibratedValue =
+    calibrationResult?.calibrated && calibrationResult.probability !== null ? `${calibrationResult.probability}%` : DASH;
+  const calibratedTitle =
+    "Probabilidade calibrada (Platt Scaling, Platt 1999) do score de fusão de modelos atual (SMC+Order Flow+Regime, orientado à direção do plano) contra o Track Record REAL deste symbol:timeframe — alvos suavizados (nunca 0/1 crus), nunca reivindica mais certeza do que a amostra sustenta.";
+
+  return (
+    <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-bold tracking-[0.2em] text-[0.55rem] uppercase text-[#00f0ff]">
+          MOTOR DE LUCRATIVIDADE
+        </span>
+        <span className={`text-[0.45rem] font-black uppercase tracking-wide ${badgeColor}`}>
+          {expectancyFilter?.label ?? DASH}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        <MiniStat label="Expectativa" value={expectancyValue} color={badgeColor} title={expectancyTitle} />
+        <MiniStat label="Amostra" value={sampleValue} color="text-[#8ab4f8]/70" title={sampleTitle} />
+        <MiniStat label="Taxa de Acerto" value={winRateValue} color="text-[#8ab4f8]" title="Proporção real de trades resolvidos com resultado líquido positivo (já após custos)." />
+        <MiniStat label="Sharpe" value={sharpeValue} color="text-[#8ab4f8]" title="Média/desvio padrão real do netR da amostra — traço nunca aparece quando o desvio padrão é zero (divisão fabricada nunca acontece aqui)." />
+        <MiniStat label="Drawdown Máx." value={maxDdValue} color="text-[#8ab4f8]" title="Maior queda real pico-a-vale da curva de equity acumulada (soma de netR, ordem cronológica real)." />
+        <MiniStat label="Custo Médio" value={costValue} color="text-[#8ab4f8]/70" title="Comissão + slippage + funding médios reais por trade, em R (taker fee e intervalo de funding verificados via pesquisa real; slippage é fração declarada do risco, nunca medida)." />
+        <MiniStat
+          label="Prob. Calibrada"
+          value={calibratedValue}
+          color={calibrationResult?.calibrated ? "text-[#00ffaa]" : "text-[#8ab4f8]/40"}
+          title={calibratedTitle}
+        />
+      </div>
+      {calibrationResult && !calibrationResult.calibrated && calibrationResult.reason && (
+        <span className="text-[0.42rem] text-[#8ab4f8]/60 leading-tight">{calibrationResult.reason}</span>
+      )}
+      {/* LEI 24 — exceção pontual autorizada pelo Operador (ver CLAUDE.md,
+          seção "LEI 24"): quando expectancyFilter.show é false, o
+          CoreSignalBadge substitui a direção real do Núcleo por NEUTRO.
+          Esta linha é a explicação SEMPRE visível dessa supressão — nunca
+          silenciosa, nunca só no tooltip do badge. */}
+      {expectancyFilter?.show === false && (
+        <div className="flex items-start gap-1.5 bg-[#ff00550f] border border-[#ff005530] rounded px-2 py-1.5">
+          <span className="text-[0.42rem] text-[#ff0055] leading-tight">
+            Expectativa líquida real negativa nesta amostra — badge principal exibe NEUTRO no lugar da direção real do Núcleo (LEI 24, exceção autorizada pelo Operador). O Núcleo em si não foi alterado.
+          </span>
+        </div>
+      )}
+      {expectancyFilter?.warning && (
+        <span className="text-[0.42rem] text-[#f0d06f]/80 leading-tight">{expectancyFilter.warning}</span>
+      )}
+      {/* MEMÓRIA CONTEXTUAL — o que o histórico já resolvido diz sobre
+          contextos como o de agora (regime + estrutura + VWAP + Nexus Line).
+          Diferente da expectância acima, que agrupa por symbol:timeframe:
+          dois trades no mesmo par podem ter acontecido em regimes
+          completamente diferentes e caem na mesma estatística. Esta linha
+          separa maçã de laranja.
+          LEI 24: display only. Nunca é probabilidade — é contagem
+          observada + expectativa em R, com o tamanho da amostra sempre
+          junto do número. Ausente quando não há contexto comparável. */}
+      {contextualRecall && (
+        <div
+          className="flex items-start gap-1.5 border-t border-[#8ab4f8]/15 pt-1.5"
+          title={`Memória contextual. Assinatura procurada: ${contextualRecall.fingerprint}. Fatores realmente casados: ${contextualRecall.matchedFactors.join(", ") || "nenhum"}. Força da amostra: ${contextualRecall.strength}. Contagem observada sobre o Track Record real já resolvido — nunca uma probabilidade de acerto futuro.`}
+        >
+          <span className="text-[0.42rem] tracking-[0.12em] text-[#8ab4f8]/50 shrink-0 uppercase">Memória</span>
+          <span
+            className={`text-[0.42rem] leading-tight ${
+              contextualRecall.strength === "AMOSTRA_INSUFICIENTE"
+                ? "text-[#8ab4f8]/45"
+                : contextualRecall.matchLevel === "EXATO"
+                  ? "text-[#a0f0ff]/85"
+                  : "text-[#8ab4f8]/70"
+            }`}
+          >
+            {describeRecall(contextualRecall)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -4512,8 +6819,8 @@ function AssistantOrb({ inCenter = false }: { inCenter?: boolean }) {
                     {[40, 70, 30, 80, 55, 90, 45, 65].map((h, i) => (
                       <div
                         key={i}
-                        className="w-[2px] sm:w-[3px] bg-[#00f0ff] rounded-full animate-[sound-wave_1s_ease-in-out_infinite]"
-                        style={{ height: `${h}%`, animationDelay: `${i * 0.05}s` }}
+                        className="w-[2px] sm:w-[3px] bg-[#00f0ff]/40 rounded-full"
+                        style={{ height: `${h}%` }}
                       ></div>
                     ))}
                   </div>
@@ -4666,45 +6973,28 @@ function NucleoVoiceOrb() {
     if (next) voiceEngine.speak("Voz operacional. Modo somente leitura.", "INFO");
   };
 
-  // Redesenho radical (modelo do Operador): o botão vira uma esfera
-  // brilhante prominente no canto — mesma cor 100% real (coreColor,
-  // derivada de offline/engineStatus/stale acima, ZERO mudança de lógica)
-  // agora expressa como um orbe com profundidade (radial-gradient +
-  // camadas de glow) em vez de um círculo plano de 32px.
+  // v16.0 PRO Fase 1 ("Orbs de Núcleo/Voz... botão discreto no canto, não
+  // orb visual pesado"): mesma cor 100% real (coreColor, derivada de
+  // offline/engineStatus/stale acima, ZERO mudança de lógica), agora um
+  // círculo plano pequeno (28px, mesma escala do badge de ativo à
+  // esquerda da barra) — sem gradiente radial, sem halo em camadas, sem
+  // anel orbital girando. O estado real continua 100% legível (cor da
+  // borda/ícone + tooltip); só o peso visual foi removido.
   return (
     <button
       type="button"
       onClick={handleToggleVoice}
       title={`Núcleo S.E. · ${coreLabel} · CPI ${cpiLabel} · Voz ${!ttsSupported ? "INDISPONÍVEL" : voiceStatus.enabled ? "ATIVA" : "DESLIGADA"} (toque para alternar)`}
-      className="relative ml-1.5 w-10 h-10 rounded-full flex items-center justify-center transition-all active:scale-95 shrink-0"
+      className="ml-1.5 w-7 h-7 rounded-full flex items-center justify-center transition-colors active:scale-95 shrink-0 border"
       style={{
-        border: `1px solid ${coreColor}66`,
-        background: `radial-gradient(circle at 32% 28%, ${coreColor}4d, ${coreColor}12 55%, #010308 100%)`,
-        boxShadow: `0 0 18px ${coreColor}55, 0 0 4px ${coreColor}99, inset 0 0 10px ${coreColor}30`,
+        borderColor: `${coreColor}55`,
+        backgroundColor: `${coreColor}15`,
       }}
     >
-      {/* Halo externo suave — puro estilo (blur via box-shadow, barato no
-          compositor), a MESMA coreColor real, nunca uma segunda fonte. */}
-      <div
-        className="absolute -inset-1.5 rounded-full pointer-events-none opacity-60"
-        style={{ boxShadow: `0 0 14px 2px ${coreColor}40` }}
-      ></div>
-      {/* A "bolinha circulando" — mesma linguagem visual dos anéis
-          orbitais do orb grande; gira rápido enquanto o ciclo real ainda
-          não sincronizou (pending), lento em regime normal. Movimento é
-          estilo, não dado: a INFORMAÇÃO honesta é a cor (engineStatus). */}
-      <div
-        className={`absolute inset-0 rounded-full pointer-events-none ${engineStatus === "pending" ? "animate-[spin_1.4s_linear_infinite]" : "animate-[spin_7s_linear_infinite]"}`}
-      >
-        <div
-          className="absolute -top-[2px] left-1/2 -translate-x-1/2 w-2 h-2 rounded-full"
-          style={{ background: coreColor, boxShadow: `0 0 7px ${coreColor}` }}
-        ></div>
-      </div>
       {ttsSupported && voiceStatus.enabled ? (
-        <Mic size={15} className={voiceStatus.speaking ? "animate-pulse" : ""} style={{ color: coreColor }} />
+        <Mic size={13} className={voiceStatus.speaking ? "animate-pulse" : ""} style={{ color: coreColor }} />
       ) : (
-        <MicOff size={15} className="text-[#8ab4f8]/50" />
+        <MicOff size={13} className="text-[#8ab4f8]/50" />
       )}
     </button>
   );
@@ -4761,10 +7051,54 @@ function BarField({
 // o Núcleo já direcional — a divergência LEI 24 entre Núcleo e Conselho é
 // real e honesta, nunca "corrigida" escondendo um dos dois lados), ou
 // Conselho direcional mas sem estrutura real mapeável.
+// Achado 2.4 (Visual Cleanup & Rendering Audit — pedido do Operador:
+// "quando bater o alvo, automaticamente tentar analisar outro
+// parâmetro"): investigação real confirmou que o Core Engine
+// (setInterval 30s) e o Trade Plan (buildTradePlan, re-derivado a cada
+// ciclo estrutural) já continuam reavaliando sozinhos, sem nenhum atraso
+// — signal-track-record.ts:281-283 zera `active` no MESMO tick que prova
+// o último alvo. O gap real nunca foi de dado, foi de APRESENTAÇÃO: sem
+// plano ativo, tradePlanAbsenceReason() sempre mostrava um dos 4 motivos
+// genéricos abaixo — idêntico a "nunca houve plano nesta sessão", mesmo
+// no instante seguinte a um alvo real validado. Esta função cobre essa
+// janela, reusando a MESMA convenção real que a Neural Market Aura já
+// usa para "por quanto tempo uma resolução ainda é relevante mostrar"
+// (DISSOLVE_CONFIG, aura-lifecycle.ts, agora exportado) — zero limiar
+// novo inventado, zero segunda leitura do histórico (mesmo
+// trackRecord.history que a Aura e o toast de alerta já leem). Só
+// TARGET_HIT/PARTIAL_HIT entram aqui (Regra de Ouro 4: são validações
+// reais dignas de "o sistema já seguiu em frente"); STOP_HIT continua
+// caindo nos 4 motivos genéricos abaixo — uma perda limpa não é uma
+// "resolução para anunciar", e re-explicar por que o Conselho está
+// neutro/travado agora é mais honesto do que insistir no stop antigo.
+function recentResolutionReason(
+  lastResolvedPlan: TrackedPlan | null,
+  nowMs: number,
+  timeframeMs: number,
+): { reason: string; tooltip: string } | null {
+  if (!lastResolvedPlan) return null;
+  if (lastResolvedPlan.status !== "TARGET_HIT" && lastResolvedPlan.status !== "PARTIAL_HIT") return null;
+  if (lastResolvedPlan.resolvedAt === null || !Number.isFinite(timeframeMs) || timeframeMs <= 0) return null;
+  const ageBars = (nowMs - lastResolvedPlan.resolvedAt) / timeframeMs;
+  if (ageBars >= DISSOLVE_CONFIG.expireCandles) return null;
+  if (lastResolvedPlan.status === "TARGET_HIT") {
+    return {
+      reason: "Alvo atingido · reanalisando",
+      tooltip: "O último plano completou todos os alvos reais (ladder inteiro validado). O Core Engine e o Conselho já seguem reavaliando a estrutura ao vivo, no mesmo ciclo de sempre, para o próximo plano real — nunca um placeholder parado no alvo antigo.",
+    };
+  }
+  return {
+    reason: "Alvo parcial · reanalisando",
+    tooltip: "O último plano validou pelo menos um alvo real antes do preço devolver ao stop já ajustado (ganho parcial honesto, nunca contado como perda). O Core Engine e o Conselho já seguem reavaliando a estrutura ao vivo para o próximo plano real.",
+  };
+}
+
 function tradePlanAbsenceReason(
   council: CouncilDecision | null,
   coreDir: "LONG" | "SHORT" | null,
+  recentResolution?: { reason: string; tooltip: string } | null,
 ): { reason: string; tooltip: string } {
+  if (recentResolution) return recentResolution;
   if (!council) {
     return {
       reason: "Aguardando Conselho",
@@ -4804,7 +7138,7 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   // 1 número aqui, o painel Trade Plan (ModulePanel) mostra a escada
   // inteira.
   const trackRecord = useTrackRecordSnapshot();
-  const { convictionReading, etaReading, engine } = useContext(WidgetContext) || {};
+  const { convictionReading, etaReading, engine, chartTimeframe } = useContext(WidgetContext) || {};
   const council = useCouncilSnapshot();
   // Refinamento Final §7 ("integradas ao Trade Plan"): leitura real de
   // Premium/Discount da store — display-only, qualifica a QUALIDADE da
@@ -4828,7 +7162,10 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
     // em tradePlanAbsenceReason (módulo), reaproveitada também pelo
     // CANVAS do gráfico — zero segunda implementação.
     const coreDir = engine?.direction ?? null;
-    const { reason, tooltip } = tradePlanAbsenceReason(council, coreDir);
+    const lastResolved = trackRecord.history[trackRecord.history.length - 1] ?? null;
+    const timeframeMs = TIMEFRAME_MS[chartTimeframe as string] ?? TIMEFRAME_MS["15m"];
+    const recentResolution = recentResolutionReason(lastResolved, Date.now(), timeframeMs);
+    const { reason, tooltip } = tradePlanAbsenceReason(council, coreDir, recentResolution);
     return (
       <div className="flex items-stretch pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap" title={tooltip}>
         <BarField label="Trade Plan" value={reason} labelClass="text-[#8ab4f8]/50" valueClass="text-[#8ab4f8]/70" />
@@ -4844,7 +7181,7 @@ function TradePlanTopStrip({ livePrice }: { livePrice: number | null }) {
   const p = typeof livePrice === "number" && Number.isFinite(livePrice) ? livePrice : null;
   const targetHit = activeTargetIndex < targetsHit; // true once the ladder already proved this rung (authoritative, never re-derived)
   const stopHit = p !== null && !targetHit && (long ? p <= effectiveStopPrice : p >= effectiveStopPrice);
-  const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
+  const f = (v: number) => sharedFormatPrice(v); // fonte única (nexus/price-format.ts)
   // Diretriz Complementar §3/§7: ETA dinâmica real do alvo ATIVO — mesma
   // leitura única computada em App() (contexto), nunca recalculada aqui.
   // null honesto (sem progresso direcional/ATR/horizonte) => campo ausente.
@@ -4967,7 +7304,7 @@ function StructureLevelsStrip() {
   const support: number | null = engine?.support ?? null;
   const resistance: number | null = engine?.resistance ?? null;
   if (support === null && resistance === null) return null;
-  const f = (v: number) => v.toFixed(v >= 1000 ? 0 : 2);
+  const f = (v: number) => sharedFormatPrice(v); // fonte única (nexus/price-format.ts)
   const strengthNote = (strength: { label: string; touches: number } | null | undefined, breakouts: number | undefined) =>
     strength ? ` · ${strength.label} ${strength.touches}x/${breakouts ?? 0}x` : "";
   return (
@@ -4991,6 +7328,126 @@ function StructureLevelsStrip() {
           labelClass="text-[#ff0055]/70"
           valueClass="text-[#ff0055]/90"
           title={`Resistance (R1)${strengthNote(engine?.resistanceStrength, engine?.resistanceBreakouts)}`}
+        />
+      )}
+    </div>
+  );
+}
+
+// Ordem "Entrega 26" Prioridade 4 ("O Operador deve conseguir responder em
+// menos de 2 segundos: tendência? força? risco? liquidez? contexto? SEM
+// ABRIR GAVETAS"): a Entrega 25 identificou exatamente esta lacuna — as
+// leituras consolidadas viviam só dentro das gavetas fechadas por padrão —
+// e a deixou registrada no backlog aguardando um gatilho explícito do
+// Operador. Esta Ordem é esse gatilho, por escrito.
+//
+// Zero cálculo novo (regra explícita desta Ordem: "não recalcular dados na
+// interface"): os 4 campos são leituras que os motores JÁ produzem e que
+// hoje só aparecem dentro de painéis/gavetas —
+//   REGIME      -> engine.marketRegime (regime-engine.js, ADX/DI), mesmo
+//                  REGIME_DISPLAY que MarketRegimeWidget usa (zero segundo
+//                  vocabulário de rótulo);
+//   FLUXO       -> sinal do CVD real, MESMA regra de MarketRegimeWidget
+//                  (>0 comprador, <0 vendedor) — a leitura de "liquidez/
+//                  pressão" que a Ordem pede;
+//   RISCO       -> deriveRiskState(nexusDecision) (operational-readability),
+//                  o mesmo já exibido no painel Trade Plan;
+//   CONFLUÊNCIA -> deriveConfluenceState(nexusDecision), idem.
+// Deliberadamente FORA daqui, por já estarem sempre visíveis na linha 1
+// (evitar a redundância que as Prioridades 1/9 desta mesma Ordem pedem
+// para eliminar): direção LONG/SHORT (CoreSignalBadge) e o percentual de
+// confluência institucional (badge de score).
+//
+// Fail-closed campo a campo: cada BarField só existe quando o valor real
+// existe; sem nenhum valor real, a faixa inteira some (altura zero), nunca
+// uma fileira de trações fabricados.
+function ContextReadStrip() {
+  const { engine, cvd, nexusDecision, displayConflicts } = useContext(WidgetContext) || {};
+  const regime = engine?.marketRegime ?? null;
+  const regimeDisplay = regime ? REGIME_DISPLAY[regime.regime] : null;
+  const risk = nexusDecision ? deriveRiskState(nexusDecision) : null;
+  const confluence = nexusDecision ? deriveConfluenceState(nexusDecision) : null;
+  const flowReal = num(cvd) && cvd !== 0;
+  // Evolução Incremental da Inteligência Central, Fase 2 (aditivo): badge
+  // NOVO, nunca substitui os 4 acima — só aparece quando há um conflito
+  // real nomeado (unified-presentation.ts/conflict-detector.ts). LEI 24:
+  // informativo, nunca altera o Núcleo.
+  const conflicts: Array<{ motorA: string; motorB: string; severity: string }> = displayConflicts ?? [];
+  const topConflict = conflicts[0] ?? null;
+
+  if (!regimeDisplay && !flowReal && !risk && !confluence && !topConflict) return null;
+
+  // Classes SEMPRE literais completas (mesma nota do BarField acima: o
+  // scanner JIT do Tailwind só gera CSS para tokens que aparecem por
+  // extenso no fonte) — por isso mapas literais, nunca concatenação.
+  const RISK_TONE: Record<string, string> = {
+    "ACEITÁVEL": "text-[#00ffaa]/90",
+    ELEVADO: "text-[#f0d06f]/90",
+    "INVÁLIDO": "text-[#ff0055]/90",
+  };
+  const CONFLUENCE_TONE: Record<string, string> = {
+    ALINHADA: "text-[#00ffaa]/90",
+    MISTA: "text-[#f0d06f]/90",
+    CONFLITANTE: "text-[#ff0055]/90",
+    INSUFICIENTE: "text-[#8ab4f8]/70",
+  };
+  const CONFLICT_TONE: Record<string, string> = {
+    CRITICO: "text-[#ff0055]/90",
+    ALTO: "text-[#f0d06f]/90",
+    MEDIO: "text-[#8ab4f8]/70",
+  };
+
+  return (
+    <div className="flex items-stretch whitespace-nowrap">
+      {regimeDisplay && (
+        <BarField
+          label="Regime"
+          value={`${regimeDisplay.label}${regime!.direction ? ` ${regime!.direction}` : ""}`}
+          labelClass="text-[#8ab4f8]/50"
+          valueClass={
+            regime!.direction === "ALTA"
+              ? "text-[#00ffaa]/90"
+              : regime!.direction === "BAIXA"
+                ? "text-[#ff0055]/90"
+                : "text-[#8ab4f8]/90"
+          }
+          title="Regime de mercado real (ADX/DI + percentil de banda, regime-engine) — o mesmo já exibido no painel MARKET REGIME, aqui sempre visível."
+        />
+      )}
+      {flowReal && (
+        <BarField
+          label="Fluxo"
+          value={cvd! > 0 ? "COMPRADOR" : "VENDEDOR"}
+          labelClass="text-[#8ab4f8]/50"
+          valueClass={cvd! > 0 ? "text-[#00ffaa]/90" : "text-[#ff0055]/90"}
+          title="Pressão real de fluxo pelo sinal do CVD acumulado — mesma leitura do painel MARKET REGIME, nunca um segundo cálculo."
+        />
+      )}
+      {risk && (
+        <BarField
+          label="Risco"
+          value={risk.state}
+          labelClass="text-[#8ab4f8]/50"
+          valueClass={RISK_TONE[risk.state] ?? "text-[#8ab4f8]/90"}
+          title={`Risco: ${risk.state} — ${risk.basis}. Leitura real da Operational Readability Layer, idêntica à do painel Trade Plan.`}
+        />
+      )}
+      {confluence && (
+        <BarField
+          label="Confluência"
+          value={confluence}
+          labelClass="text-[#8ab4f8]/50"
+          valueClass={CONFLUENCE_TONE[confluence] ?? "text-[#8ab4f8]/90"}
+          title="Alinhamento real entre direção, estrutura e timing (Operational Readability Layer) — confluência, nunca probabilidade."
+        />
+      )}
+      {topConflict && (
+        <BarField
+          label="Conflitos"
+          value={conflicts.length > 1 ? `${topConflict.motorA}×${topConflict.motorB} +${conflicts.length - 1}` : `${topConflict.motorA}×${topConflict.motorB}`}
+          labelClass="text-[#8ab4f8]/50"
+          valueClass={CONFLICT_TONE[topConflict.severity] ?? "text-[#8ab4f8]/90"}
+          title={`Divergência real entre motores (unified-presentation.ts) — informativo, nunca altera o Núcleo (LEI 24). ${conflicts.map((c) => `${c.motorA}×${c.motorB}: ${c.severity}`).join(" · ")}`}
         />
       )}
     </div>
@@ -5029,6 +7486,7 @@ function CoreSignalBadge({
   direction,
   confidence,
   decision,
+  expectancyFilter,
 }: {
   direction: "LONG" | "SHORT" | null;
   confidence: string | null;
@@ -5037,29 +7495,57 @@ function CoreSignalBadge({
   // num toque (Operação/Confiança/Entrada/Stop/TPs/ETA/R:R/Motivo), sem um
   // pixel novo na tela (§6 da própria diretriz: fusão nunca vira poluição).
   decision?: NexusDecision | null;
+  // Entrega 42 — LEI 24, exceção pontual autorizada pelo Operador (ver
+  // CLAUDE.md, seção "LEI 24"). Ver bloco "suppressed" abaixo para o único
+  // ponto real onde essa exceção é aplicada.
+  expectancyFilter?: FilterResult | null;
 }) {
-  const isLong = direction === "LONG";
-  const isShort = direction === "SHORT";
+  const rawIsLong = direction === "LONG";
+  const rawIsShort = direction === "SHORT";
+  // LEI 24 — exceção pontual autorizada pelo Operador: quando existe uma
+  // direção real do Núcleo (LONG/SHORT) E expectancyFilter.show é false
+  // (expectativa líquida real negativa sobre o Track Record deste
+  // symbol:timeframe, amostra >= MIN_TRADES_FOR_VALID_EXPECTANCY), o badge
+  // exibe NEUTRO em vez da direção real — SÓ na apresentação: `direction`
+  // continua sendo o passthrough literal de engine.direction (o Núcleo em
+  // si nunca é mutado, nunca recebe um segundo emissor de decisão). Esta é
+  // a ÚNICA leitura deste flag no componente inteiro — todo o resto do
+  // badge (tom, corpo grande, subtítulo) deriva de `effectiveDirection`
+  // computado aqui, nunca de `direction` bruto de novo.
+  const suppressed = (rawIsLong || rawIsShort) && expectancyFilter?.show === false;
+  const effectiveDirection: "LONG" | "SHORT" | null = suppressed ? null : direction;
+  const isLong = effectiveDirection === "LONG";
+  const isShort = effectiveDirection === "SHORT";
   // Evolução Integrativa §7: a montagem multi-linha foi REALOCADA para a
   // Operational Readability Layer (nexus/operational-readability.ts) —
   // camada nomeada, pura e com execução real de teste. Conteúdo idêntico;
   // o badge só exibe (§7: consumidores nunca reinterpretam).
-  const fusedTitle = buildOperationalSummary(decision).join("\n");
+  const fusedTitle = (
+    suppressed
+      ? [
+          `NEUTRO (exibição) — Núcleo real: ${direction}. Expectativa líquida real negativa neste Track Record (${expectancyFilter!.label}${expectancyFilter!.stats ? `, ${expectancyFilter!.stats.expectancyR >= 0 ? "+" : ""}${expectancyFilter!.stats.expectancyR.toFixed(2)}R sobre ${expectancyFilter!.stats.totalTrades} trades reais` : ""}). LEI 24, exceção autorizada pelo Operador — ver MOTOR DE LUCRATIVIDADE. O Núcleo em si não foi alterado.`,
+          ...buildOperationalSummary(decision),
+        ]
+      : buildOperationalSummary(decision)
+  ).join("\n");
   // Auditoria Final de Integração (achado real): title=fusedTitle é um
   // tooltip nativo — nunca aparece em toque/tap no iPad Safari (a
   // plataforma-alvo real deste app, CLAUDE.md "60 FPS em iPad Safari").
   // Sem esta linha, BIAS/SETUP/ENTRY ficavam matematicamente corretos mas
-  // 100% inacessíveis na tela real do Operador: o texto grande (`direction`)
-  // é o passthrough literal do Núcleo (LEI 24, nunca alterado aqui), mas
+  // 100% inacessíveis na tela real do Operador: o texto grande
+  // (`effectiveDirection`) é o passthrough literal do Núcleo (LEI 24, nunca
+  // alterado aqui — exceto pela exceção pontual `suppressed` acima), mas
   // sozinho ele não distinguia "LONG com entrada confirmada" de "LONG só
   // como viés" — exatamente o "LONG + entrada forçada" que a Diretriz
   // BIAS≠ENTRY pediu para nunca comunicar. O qualificador abaixo é uma
   // RELOCAÇÃO do mesmo rótulo já real e testado (deriveOutcomeLabel), só
   // visível agora sem precisar de hover — nenhuma matemática nova.
   const outcome = decision ? deriveOutcomeLabel(decision) : null;
-  const outcomeQualifier: string | null = outcome
-    ? OUTCOME_QUALIFIER[outcome] ?? null
-    : null;
+  const outcomeQualifier: string | null = suppressed
+    ? null
+    : outcome
+      ? OUTCOME_QUALIFIER[outcome] ?? null
+      : null;
   const textTone = isLong
     ? "text-[#00ffaa] drop-shadow-[0_0_10px_rgba(0,255,170,0.65)]"
     : isShort
@@ -5075,7 +7561,23 @@ function CoreSignalBadge({
       className={`flex flex-col items-center justify-center leading-none h-[38px] px-3 md:px-4 rounded-lg border mr-2 md:mr-3 shrink-0 ${boxTone}`}
       title={fusedTitle}
     >
-      <span className={`text-sm md:text-base font-black tracking-wider ${textTone}`}>{direction ?? AWAIT}</span>
+      <span className={`text-sm md:text-base font-black tracking-wider ${textTone}`}>
+        {suppressed ? "NEUTRO" : (effectiveDirection ?? AWAIT)}
+      </span>
+      {/* Lapidação Visual (DIRETRIZ 2 — "sempre que dois elementos
+          transmitirem praticamente a mesma informação, manter apenas o
+          melhor"): sem direção real E sem confiança real E sem qualificador,
+          este subtítulo renderizava literalmente o MESMO "AGUARDANDO" já
+          escrito em corpo grande logo acima — duas linhas para um único bit
+          ("ainda não há leitura"), visível em toda captura do estado
+          fail-closed. A condição é deliberadamente ESTREITA — exige que a
+          linha grande também esteja em AGUARDANDO (direction null): com uma
+          direção real na tela, "AGUARDANDO" no subtítulo deixa de ser eco e
+          passa a ser informação de verdade ("direção existe, confiança
+          ainda não"), então continua aparecendo. Nada é escondido: no caso
+          suprimido a ausência já está dita, em corpo maior, um pixel acima.
+          A altura fixa (h-[38px]) mantém o cabeçalho sem salto de layout. */}
+      {(suppressed || direction || confidence || outcomeQualifier) && (
       <span className="text-[0.4rem] md:text-[0.45rem] font-bold text-[#8ab4f8]/60 tracking-[0.18em] uppercase mt-[1px] whitespace-nowrap">
         {/* V2 §3: o estado operacional único no subtítulo do MESMO badge —
             header alimentado pelo contrato sem um elemento novo. Auditoria
@@ -5083,7 +7585,11 @@ function CoreSignalBadge({
             AGUARDANDO ENTRADA / SEM ESTRUTURA) substitui o operationalState
             cru — o mesmo dado real continua na linha 1 do tooltip
             ("Estado: ..."), aqui vira a síntese que o Operador reconhece
-            sem abrir o tooltip. */}
+            sem abrir o tooltip. LEI 24 (suppressed): a mesma linha vira a
+            explicação SEMPRE VISÍVEL da supressão (nunca só no tooltip,
+            mesmo achado real de "title= nunca aparece em toque no iPad
+            Safari" citado acima) — rótulo real do FilterEngine, nunca um
+            texto fixo genérico. */}
         {/* Achado real (captura do Operador, janela ~1000px lógicos): a
             região central rolável corta o badge na borda sem indício — o
             subtítulo "CONFIDENCE · MEDIUM · AGUARDANDO ENTRADA" morria em
@@ -5092,17 +7598,285 @@ function CoreSignalBadge({
             faz o pior caso real caber na janela real medida (~30 chars).
             Os DOIS valores reais permanecem: o rótulo categórico do motor
             e o qualificador BIAS≠ENTRY. */}
-        {confidence ?? AWAIT}
-        {outcomeQualifier ? ` · ${outcomeQualifier}` : ""}
+        {suppressed ? `${expectancyFilter!.label} · SUPRIMIDO` : (confidence ?? AWAIT)}
+        {!suppressed && outcomeQualifier ? ` · ${outcomeQualifier}` : ""}
       </span>
+      )}
     </div>
   );
 }
 
 // --- TOP BAR ---
+// DecisionDistanceBadge — "tem que ter a opção do quanto por cento que falta
+// pra long e pra short, tudo isso tem que acompanhar lá em cima no cabeçalho"
+// (Operador, pedido literal, ao lado do botão do microfone).
+//
+// O QUE ESTE BADGE NÃO É: uma probabilidade. Não existe backtest real neste
+// repositório que sustente "72% de chance de subir" (CLAUDE.md, Regra de Ouro
+// 2), então esse número não é exibido nem inventado.
+//
+// O QUE ELE É: a DISTÂNCIA REAL até o limiar que faria o Core Engine emitir
+// LONG (ou SHORT). O limiar não é opinião — é a desigualdade literal de
+// trendBias() (js/research/research-engine.js), rastreada de ponta a ponta:
+// preço vs SMA e EMA vs SMA. Ver nexus/decision-distance.ts para a
+// derivação completa e a limitação declarada (a fronteira se move a cada
+// candle novo).
+//
+// LEI 24 intacta: isto é display-only. Nenhum número daqui volta para o Core
+// Engine, nenhum suprime ou altera engine.direction — é a MESMA fronteira do
+// Núcleo, lida de fora, nunca uma segunda decisão.
+function DecisionDistanceSide({
+  label,
+  reading,
+  which,
+}: {
+  label: string;
+  reading: DecisionDistanceReading;
+  which: "long" | "short";
+}) {
+  const side = which === "long" ? reading.long : reading.short;
+  const satisfied = side !== null && side.gapPercent === 0;
+  const tone = which === "long" ? "#00ffaa" : "#ff0055";
+  return (
+    <span
+      title={describeDecisionDistance(reading, which)}
+      className="flex items-baseline gap-1 whitespace-nowrap"
+    >
+      <span className="ar10-t-micro font-bold tracking-wider" style={{ color: `${tone}99` }}>
+        {label}
+      </span>
+      <span
+        className="ar10-t-label font-black font-mono tabular-nums"
+        // Lado já satisfeito acende cheio; o lado que falta fica atenuado.
+        // Cor sozinha nunca carrega o significado (o número já diz "0%") —
+        // é reforço, não o canal único.
+        style={{ color: satisfied ? tone : `${tone}80` }}
+      >
+        {side === null ? "—" : formatDecisionDistance(side.gapPercent)}
+      </span>
+      {/* A MESMA distância em volatilidade realizada. "0.84%" é um número sem
+          escala: é quase nada num mercado que anda 3% por vela e uma
+          eternidade num que anda 0.2%. O ATR real (Wilder 14, fonte única do
+          Market Regime Engine) dá essa escala. Só aparece quando há ATR real —
+          sem ele, nada é mostrado, nunca uma escala estimada. Discreto de
+          propósito: é o qualificador do número, não o número. */}
+      {side !== null && side.atrUnits !== null && side.gapPercent > 0 && (
+        <span className="ar10-t-micro font-mono tabular-nums text-[#8ab4f8]/55">
+          {formatAtrUnits(side.atrUnits).replace(" ATR", "")}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function DecisionDistanceBadge() {
+  const { decisionDistance } = useContext(WidgetContext) || {};
+  const reading: DecisionDistanceReading | null = decisionDistance ?? null;
+  // Fail-closed (Regra de Ouro 3): sem os 3 números reais do Núcleo, o badge
+  // não aparece com "0%" nem com um travessão mudo — some, exatamente como o
+  // chip de instrumento faz quando não há tipo real. Um "0%" aqui seria a
+  // pior leitura possível: o Operador entenderia "está colado no limiar".
+  if (!reading || reading.status !== "OK") return null;
+  return (
+    <div
+      className="hidden lg:flex items-center gap-2.5 h-7 px-2.5 rounded-full border border-[#8ab4f825] bg-[#8ab4f808] shrink-0"
+      title="Distância real até cada limiar de decisão do Núcleo (preço vs SMA e EMA vs SMA — a mesma desigualdade que emite LONG/SHORT). É distância medida agora, nunca uma probabilidade de acerto."
+    >
+      <DecisionDistanceSide label="TO LONG" reading={reading} which="long" />
+      <span className="w-px h-3.5 bg-[#8ab4f825]" />
+      <DecisionDistanceSide label="TO SHORT" reading={reading} which="short" />
+    </div>
+  );
+}
+
+
+// ═══ DirectionalSyncPanel — a superfície que tira a dúvida na entrada ═══
+//
+// "o operador não vai ter dúvida na entrada, se é long ou short" — pedido
+// literal. Uma linha por leitura real do ecossistema, cada uma dizendo:
+//   • o código curto da fonte (as iniciais, tamanho padrão da escala);
+//   • para que lado ELA aponta;
+//   • se isso CONCORDA com o Núcleo (✓) ou não (✗).
+//
+// O que este painel deliberadamente NÃO faz: fundir tudo num "score de LONG".
+// Seriam grandezas de naturezas diferentes — uma média delas não mede nada
+// real, e viraria exatamente o número inventado que a Regra de Ouro 2 proíbe.
+//
+// Cada linha carrega, no tooltip, O QUE aquela fonte mede. É a informação que
+// faltava e que gerava a dúvida: "BID 54%" ao lado de um badge SHORT só parece
+// contradição enquanto o Operador não sabe que um é liquidez PARADA no livro e
+// o outro é viés de TENDÊNCIA. Agora está escrito.
+// "constrói uma bola... um só aparece, tipo longa ou short, quando tivesse
+// essa porcentagem tanto por cento X pra long ou short, com a certinha bem
+// profissional" (pedido direto do Operador). Anel SVG puro que só traduz em
+// atributos de desenho os números JÁ prontos de computeGaugeReading —
+// stroke-dasharray/stroke-dashoffset é a técnica padrão de "anel de
+// progresso" (mesma citada no header de nexus/directional-gauge.ts). Zero
+// geometria decidida aqui, zero segunda leitura: side/percent/color vêm
+// inteiros do módulo puro, já testado (tests/directional-gauge.test.ts).
+function DirectionalGaugeRing({ reading }: { reading: GaugeReading }) {
+  const { geometry } = reading;
+  const strokeWidth = 9;
+  return (
+    <div
+      className="relative w-[84px] h-[84px] shrink-0"
+      title="Consistência interna do ecossistema — quantas leituras já resolvidas por outros motores reais apontam para o MESMO lado que o Núcleo está emitindo agora. NUNCA uma probabilidade calibrada de acerto do trade (Regra de Ouro 2) — este repositório não tem backtest real que sustente esse número."
+    >
+      <svg viewBox="0 0 100 100" className="w-full h-full" style={{ transform: `rotate(${geometry.rotationDegrees}deg)` }}>
+        {/* Trilho de fundo: os 270° inteiros, sempre visíveis — mostra a
+            escala 0-100% mesmo antes de qualquer leitura real chegar. */}
+        <circle
+          cx={50}
+          cy={50}
+          r={geometry.radius}
+          fill="none"
+          stroke="#1a2436"
+          strokeWidth={strokeWidth}
+          strokeDasharray={`${geometry.trackLength} ${geometry.circumference}`}
+          strokeDashoffset={geometry.trackOffset}
+          strokeLinecap="round"
+        />
+        {/* Preenchimento real — só desenhado com leitura OK (fail-closed: sem
+            direção real do Núcleo, o anel fica só o trilho cinza acima). */}
+        {reading.status === "OK" && (
+          <circle
+            cx={50}
+            cy={50}
+            r={geometry.radius}
+            fill="none"
+            stroke={reading.color}
+            strokeWidth={strokeWidth}
+            strokeDasharray={`${geometry.fillLength} ${geometry.circumference}`}
+            strokeDashoffset={geometry.fillOffset}
+            strokeLinecap="round"
+            style={{ filter: `drop-shadow(0 0 4px ${reading.color}80)`, transition: "stroke-dasharray 0.4s ease" }}
+          />
+        )}
+      </svg>
+      {/* Rótulo central — o único lado real (nunca os dois ao mesmo tempo,
+          pedido explícito do Operador: "um só aparece"), com a seta
+          canônica (directionArrow — mesma guarda de inversão) e o
+          percentual real formatado (piso "<1%", nunca "0%" que se leria
+          como "sem leitura"). */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none gap-0.5">
+        <span className="ar10-t-label font-black font-mono tabular-nums leading-none" style={{ color: reading.color }}>
+          {formatGaugePercent(reading.percent)}
+        </span>
+        <span className="ar10-t-micro font-black tracking-widest leading-none" style={{ color: reading.color }}>
+          {reading.status === "OK" ? `${directionArrow(reading.side)} ${reading.side}` : "—"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function DirectionalSyncPanel() {
+  const { directionalConsensus, liquidityMap } = useContext(WidgetContext) || {};
+  const r: DirectionalConsensusReading | null = directionalConsensus ?? null;
+  const liq: LiquidityMapReading | null = liquidityMap ?? null;
+  // Fail-closed: sem nenhuma leitura real, o painel não aparece com zeros —
+  // um "0 de 0 alinhadas" seria pior que silêncio.
+  if (!r || r.status !== "OK") return null;
+
+  const sideColor = (side: string | null) =>
+    side === "LONG" ? "#00ffaa" : side === "SHORT" ? "#ff0055" : "#8ab4f8";
+  // Mesma leitura de directionalConsensus, só traduzida em geometria de
+  // anel — zero segunda fonte (ver header de directional-gauge.ts).
+  const gaugeReading = computeGaugeReading(r);
+
+  return (
+    <div className="cyber-panel bg-[#010308]/60 rounded p-2 flex flex-col gap-1.5 min-w-0">
+      <div className="flex items-center gap-2.5">
+        <DirectionalGaugeRing reading={gaugeReading} />
+        <div className="flex flex-col gap-1 min-w-0">
+          <span className="ar10-t-micro tracking-[0.2em] font-black text-[#00f0ff] uppercase">
+            Sincronia Direcional
+          </span>
+          {/* Contagem exata continua real e visível (Regra de Ouro 4 — o
+              anel acima é apresentação nova, nunca substitui o dado bruto),
+              só que agora em papel secundário: o anel é a leitura
+              "profissional, sem dúvida" que o Operador pediu. */}
+          <span
+            title={describeDirectionalConsensus(r)}
+            className="ar10-t-micro font-bold font-mono tabular-nums text-[#8ab4f8]/70"
+          >
+            {r.aligned}/{r.reporting} fontes
+          </span>
+        </div>
+      </div>
+
+      {/* Uma linha por fonte real. Fonte sem leitura aparece como "—" e NÃO
+          entra na contagem acima — silêncio nunca vira voto. */}
+      <div className="flex flex-col gap-[3px]">
+        {r.sources.map((s) => (
+          <div key={s.code} title={`${s.name} — ${s.measures}`} className="flex items-center justify-between gap-2">
+            <span className="ar10-t-micro font-bold tracking-wider text-[#8ab4f8]/70 shrink-0">{s.code}</span>
+            <span className="flex items-center gap-1.5 shrink-0">
+              <span className="ar10-t-micro font-bold font-mono" style={{ color: sideColor(s.side) }}>
+                {s.side ?? "—"}
+              </span>
+              {/* ✓/✗ só existe quando HÁ referência (o Núcleo emitindo) e a
+                  fonte opinou. Nos demais casos fica vazio, nunca um ✗ que o
+                  Operador leria como "esta fonte discorda". */}
+              <span
+                className="ar10-t-micro font-black w-[10px] text-center"
+                style={{ color: s.agrees === true ? "#00ffaa" : s.agrees === false ? "#ff0055" : "transparent" }}
+              >
+                {s.agrees === true ? "✓" : s.agrees === false ? "✗" : "·"}
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Liquidez ACIMA e ABAIXO — para onde o preço tem alvo real a buscar.
+          Não é previsão de direção: é onde estão as zonas. Tooltip mostra a
+          MESMA largura em ATR (formatZoneAtrWidth) que já decidiu se essa
+          zona é significativa o bastante para entrar aqui — "por que ela
+          conta", não só "quanto falta". */}
+      {liq && liq.status === "OK" && (
+        <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#00f0ff15]">
+          <span
+            title={`Zonas reais NÃO mitigadas acima do preço (FVG, Order Block, Void, pools de liquidez). A mais próxima é a primeira que o preço encontraria subindo${liq.above.nearest ? ` — ${liq.above.nearest.kind} · ${formatZoneAtrWidth(liq.above.nearest.widthAtrUnits)}` : ""}.`}
+            className="flex items-center gap-1"
+          >
+            <span className="ar10-t-micro font-bold text-[#00ffaa]/70">▲ LIQ</span>
+            <span className="ar10-t-micro font-mono tabular-nums text-[#00ffaa]">
+              {liq.above.count}
+              {liq.above.distancePercent !== null ? ` · ${liq.above.distancePercent.toFixed(2)}%` : ""}
+            </span>
+          </span>
+          <span
+            title={`Zonas reais NÃO mitigadas abaixo do preço. A mais próxima é a primeira que o preço encontraria caindo${liq.below.nearest ? ` — ${liq.below.nearest.kind} · ${formatZoneAtrWidth(liq.below.nearest.widthAtrUnits)}` : ""}.`}
+            className="flex items-center gap-1"
+          >
+            <span className="ar10-t-micro font-mono tabular-nums text-[#ff0055]">
+              {liq.below.count}
+              {liq.below.distancePercent !== null ? ` · ${liq.below.distancePercent.toFixed(2)}%` : ""}
+            </span>
+            <span className="ar10-t-micro font-bold text-[#ff0055]/70">LIQ ▼</span>
+          </span>
+        </div>
+      )}
+
+      {/* Para onde há MAIS alvo real a buscar. Deliberadamente NÃO é previsão
+          de direção — é a leitura de onde as zonas estão. Empate exato não
+          anuncia vencedor (seria inventar assimetria onde não há), e nesse
+          caso esta linha simplesmente não aparece. */}
+      {liq && liquidityBias(liq) !== null && (
+        <span
+          title="Lado com MAIS zonas reais não mitigadas. É onde há mais alvo de liquidez a buscar — nunca uma previsão de para onde o preço vai."
+          className="ar10-t-micro text-[#8ab4f8]/60"
+        >
+          Mais alvo {liquidityBias(liq) === "ACIMA" ? "acima ▲" : "abaixo ▼"}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function TopBar({ data }: { data?: PriceState | null }) {
   const {
-    bootAt,
     handleManualRestart,
     selectedAsset,
     setSelectedAsset,
@@ -5111,23 +7885,26 @@ function TopBar({ data }: { data?: PriceState | null }) {
     setMarketMode,
     selectedTradFiAsset,
     setSelectedTradFiAsset,
+    selectedMexcAsset,
+    setSelectedMexcAsset,
     realCycle,
     engine,
-    institutionalScore,
-    confidenceZone,
-    convictionTrend,
-    assistantMessages,
     chartTimeframe,
     cycleLatencyMs,
     voiceSnapshot,
-    heatReading,
     nexusDecision,
-    // Consolidação Final §23/§30: cartão VWAP + confluência no header —
-    // mesmas leituras únicas do App (contexto), zero recomputação.
-    vwapCtx,
-    nlState,
-    nexusConfluence,
+    expectancyFilter,
   } = useContext(WidgetContext) || {};
+  // Diretriz Final — Polimento Visual e Sincronização Global §4
+  // ("Sincronizar Agora... exibir discretamente o status da
+  // sincronização"): price.updatedAt já é o timestamp real do último tick
+  // de mercado aceito pela store (setPrice, unified-snapshot-store.ts) —
+  // reaproveitado aqui como a leitura mais honesta de "há quanto tempo o
+  // organismo está realmente sincronizado", zero conceito novo inventado
+  // (o botão abaixo já dispara handleManualRestart, que já reconecta REST+
+  // WS+ciclo do motor+feeds — "sincronizador global" já real desde antes
+  // desta rodada, só faltava o status visível).
+  const syncPriceSnapshot = usePriceSnapshot();
   // Refinamento Final §1 ("Sessão Atual"): derivação pura do relógio UTC
   // real (market-session.ts). Computada no render — a TopBar re-renderiza
   // ao menos 1x/s pelo tick de preço, então o rótulo nunca fica >1s
@@ -5138,19 +7915,31 @@ function TopBar({ data }: { data?: PriceState | null }) {
   // kill-zones.ts). Mesmo princípio de computação no render que
   // marketSession já usa acima (TopBar re-renderiza >=1x/s pelo tick de
   // preço — nunca fica desatualizado sem precisar de timer próprio).
-  const killZones = activeKillZones(new Date());
+  // v16.0 PRO Fase 1: Kill Zone ICT saiu da TopBar — activeKillZones()
+  // agora só é chamada dentro de ScoreContextCard (gaveta Core
+  // Intelligence), mesmo padrão self-contained dos outros cards da gaveta.
   const wsLiveNow: boolean = voiceSnapshot?.wsLive === true;
   // Overhaul Cross-Market (Diretriz 2): o rótulo do mercado é passthrough
   // REAL de realCycle.instrumentType (mesmo padrão de wasmVariant) — nunca
   // uma string fixa. Antes de qualquer ciclo bem-sucedido (ou se o fetch
   // de futuros falhar), fica AGUARDANDO honesto em vez de afirmar
   // "Futures/Perp" sem ter recebido dado real nenhum.
-  const cryptoMarketLabel =
+  // Lapidação Visual (PRIORIDADE 2 — "badges redundantes / textos
+  // repetidos"): sonda real do cabeçalho encontrou "AGUARDANDO" escrito
+  // DUAS vezes na mesma linha — aqui e no CoreSignalBadge, em corpo bem
+  // maior. Pior: é erro de categoria, porque este chip responde "QUAL
+  // instrumento?" (Futures/Perp vs Spot) e não "qual o estado do dado?" —
+  // pergunta que o badge grande e o selo "MOTOR EM FALHA" já respondem.
+  // Sem tipo real de instrumento ainda, não há nada a dizer sobre o
+  // instrumento: o chip vira null e some (fail-closed intacto — nunca
+  // afirma "Futures/Perp" sem dado real, que era a razão original do
+  // fallback).
+  const cryptoMarketLabel: string | null =
     realCycle?.instrumentType === "crypto_futures"
       ? "Futures/Perp"
       : realCycle?.instrumentType === "crypto_spot"
         ? "Spot"
-        : AWAIT;
+        : null;
   const isPos = (data?.deltaPct ?? 0) >= 0;
 
   return (
@@ -5209,17 +7998,21 @@ function TopBar({ data }: { data?: PriceState | null }) {
               className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
                 marketMode === "TRADFI"
                   ? "bg-[#b026ff20] border border-[#b026ff40] shadow-[0_0_10px_rgba(176,38,255,0.25)]"
-                  : selectedAsset === "BTC"
-                    ? "bg-[#f7931a] shadow-[0_0_10px_rgba(247,147,26,0.4)]"
-                    : "bg-[#00f0ff20] border border-[#00f0ff40] shadow-[0_0_10px_rgba(0,240,255,0.2)]"
+                  : marketMode === "MEXC"
+                    ? "bg-[#00e0a020] border border-[#00e0a040] shadow-[0_0_10px_rgba(0,224,160,0.25)]"
+                    : selectedAsset === "BTC"
+                      ? "bg-[#f7931a] shadow-[0_0_10px_rgba(247,147,26,0.4)]"
+                      : "bg-[#00f0ff20] border border-[#00f0ff40] shadow-[0_0_10px_rgba(0,240,255,0.2)]"
               }`}
             >
               <span className="text-white font-bold text-xs">
                 {marketMode === "TRADFI"
                   ? (selectedTradFiAsset?.symbol?.[0] ?? "?")
-                  : selectedAsset === "BTC"
-                    ? "₿"
-                    : selectedAsset?.[0]}
+                  : marketMode === "MEXC"
+                    ? (selectedMexcAsset?.baseAsset?.[0] ?? "?")
+                    : selectedAsset === "BTC"
+                      ? "₿"
+                      : selectedAsset?.[0]}
               </span>
             </div>
             {/* Diretriz V-MAX item 7 ("Header Profissional"): o gatilho vira
@@ -5227,24 +8020,47 @@ function TopBar({ data }: { data?: PriceState | null }) {
                 de busca genérico ocupando espaço; a busca continua inteira
                 dentro do dropdown do próprio Omnibox. */}
             <SmartOmnibox
-              selectedLabel={marketMode === "TRADFI" ? (selectedTradFiAsset?.symbol ?? "Buscar ativo") : `${selectedAsset}USDT`}
-              onSelectCrypto={(baseAsset: string) => {
-                setMarketMode?.("CRYPTO");
+              selectedLabel={
+                marketMode === "TRADFI"
+                  ? (selectedTradFiAsset?.symbol ?? "Buscar ativo")
+                  : marketMode === "MEXC"
+                    ? (selectedMexcAsset ? `${selectedMexcAsset.baseAsset}/USDT` : "Buscar ativo")
+                    : `${selectedAsset}USDT`
+              }
+              onSelectCrypto={(selection: UniversalCryptoSymbol) => {
                 setSelectedTradFiAsset?.(null);
-                setSelectedAsset?.(baseAsset);
+                if (selection.exchange === "MEXC") {
+                  // Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET DISCOVERY":
+                  // estado PRÓPRIO, nunca reaproveita selectedAsset (que
+                  // permanece o último símbolo Binance real, intocado —
+                  // voltar para CRYPTO restaura exatamente de onde saiu).
+                  setMarketMode?.("MEXC");
+                  setSelectedMexcAsset?.(selection);
+                } else {
+                  setMarketMode?.("CRYPTO");
+                  setSelectedMexcAsset?.(null);
+                  setSelectedAsset?.(selection.baseAsset);
+                }
               }}
               onSelectTradFi={(asset: TradFiAsset) => {
                 setMarketMode?.("TRADFI");
+                setSelectedMexcAsset?.(null);
                 setSelectedTradFiAsset?.(asset);
               }}
             />
-            <span
-              className={`text-[0.5rem] px-1 py-0.5 rounded uppercase tracking-wider whitespace-nowrap shrink-0 ${
-                marketMode === "TRADFI" ? "bg-[#b026ff20] text-[#b026ff]" : "bg-[#00f0ff20] text-[#00f0ff]"
-              }`}
-            >
-              {marketMode === "TRADFI" ? "Macro" : cryptoMarketLabel}
-            </span>
+            {(marketMode === "TRADFI" || marketMode === "MEXC" || cryptoMarketLabel) && (
+              <span
+                className={`text-[0.5rem] px-1 py-0.5 rounded uppercase tracking-wider whitespace-nowrap shrink-0 ${
+                  marketMode === "TRADFI"
+                    ? "bg-[#b026ff20] text-[#b026ff]"
+                    : marketMode === "MEXC"
+                      ? "bg-[#00e0a020] text-[#00e0a0]"
+                      : "bg-[#00f0ff20] text-[#00f0ff]"
+                }`}
+              >
+                {marketMode === "TRADFI" ? "Macro" : marketMode === "MEXC" ? "MEXC · Futures" : cryptoMarketLabel}
+              </span>
+            )}
             {/* Refinamento Final §1 ("Timeframe" no header): chip DISPLAY-ONLY
                 do timeframe realmente selecionado — a troca continua no
                 seletor interativo do painel do gráfico (um único controle,
@@ -5293,13 +8109,22 @@ function TopBar({ data }: { data?: PriceState | null }) {
               ancorados à direita, nunca cobertos. */}
           <div className="flex gap-2 md:gap-3 items-center h-full flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
           {/* O preço — única ocorrência em toda a interface. Em modo
-              TRADFI não existe fonte real ligada (fail-closed, Missão 2
-              diretriz 4): mostra o rótulo honesto em vez de um preço de
-              cripto sem nenhuma relação com o ativo selecionado. */}
+              TRADFI/MEXC, `data`/`priceData` continuam sendo o feed
+              Binance do ÚLTIMO selectedAsset — mostrar esse número aqui
+              seria exatamente o "misturar preço de uma exchange com
+              candle de outra como se fosse o mesmo mercado" que a Ordem
+              proíbe (§8/§6). Fail-closed honesto em vez disso (mesma
+              disciplina de sempre, Missão 2 diretriz 4). */}
           {marketMode === "TRADFI" ? (
             <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap">
               <span className="text-[0.55rem] font-bold text-[#8ab4f8]/50 uppercase tracking-wider">
                 {AWAIT} · Macro API
+              </span>
+            </div>
+          ) : marketMode === "MEXC" ? (
+            <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap">
+              <span className="text-[0.55rem] font-bold text-[#00e0a0]/70 uppercase tracking-wider">
+                Preço real no gráfico · MEXC
               </span>
             </div>
           ) : (
@@ -5319,195 +8144,34 @@ function TopBar({ data }: { data?: PriceState | null }) {
             </div>
           )}
 
-          {marketMode === "CRYPTO" && <CoreSignalBadge direction={engine?.direction ?? null} confidence={engine?.confidence ?? null} decision={nexusDecision ?? null} />}
-
-          {/* Diretriz V-MAX item 5/7 + Diretriz Complementar §16 (Zona de
-              Confiança Institucional): Score Geral 0-100 no header — massa
-              real de confluência entre subsistemas (institutional-score.ts),
-              NUNCA probabilidade (Regra de Ouro 2, tooltip diz isso). null
-              honesto (—) em WAIT: pontuar o nada seria fabricação. A cor e o
-              rótulo do tier vêm 1:1 de confidenceZone — zero segunda
-              matemática, mesmo score bandado nas 5 faixas da diretriz. */}
           {marketMode === "CRYPTO" && (
-            // EPC FINAL §35 ("Indicador Institucional do Cabeçalho"): achado
-            // real — este indicador mostrava a palavra "Score" (nunca deve
-            // aparecer) e o tier (Muito Forte/Forte/...) como uma linha
-            // sempre visível separada, em vez de só cor+percentual juntos.
-            // Fonte real única preservada (institutionalScore/confidenceZone,
-            // institutional-score.ts) — confirmado por grep que este é o
-            // ÚNICO ponto de renderização visual deste score em todo o app
-            // (SSOT já real, não precisou de nova ligação). O rótulo do tier
-            // não foi apagado (Regra de Ouro 4) — só realocado para o
-            // tooltip, que já carregava "Zona: ${confidenceZone.label}".
-            <div
-              className="hidden md:flex flex-col items-center justify-center pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
-              title={
-                institutionalScore?.score !== null && institutionalScore?.score !== undefined
-                  ? `Score real de confluência entre subsistemas (0-100), exibido como percentual — nunca probabilidade de acerto. Zona: ${confidenceZone?.label ?? DASH}. ${institutionalScore.opportunity ? "Acima do nível mínimo de oportunidade." : "Abaixo do nível mínimo, ou risco travado."} ${
-                      convictionTrend?.status === "OK" && convictionTrend.trend
-                        ? `Tendência: ${convictionTrend.trend} (média recente ${convictionTrend.recentAverage!.toFixed(1)} vs. anterior ${convictionTrend.priorAverage!.toFixed(1)}).`
-                        : "Diretriz Complementar §4 (Conviction Engine): histórico real ainda insuficiente para uma tendência honesta."
-                    }`
-                  : "Sem oportunidade direcional a pontuar agora (Core Engine em WAIT ou dados insuficientes)."
-              }
-            >
-              <div className="flex items-center gap-1">
-                <span
-                  className={`text-[0.85rem] font-black font-mono tabular-nums leading-none ${
-                    confidenceZone === null ? "text-[#8ab4f8]/40" : `${confidenceZone.colorClass} drop-shadow-[0_0_5px_currentColor]`
-                  }`}
-                >
-                  {confidenceZone ? `${confidenceZone.emoji} ` : ""}
-                  {institutionalScore?.score ?? DASH}
-                  {institutionalScore?.score !== null && institutionalScore?.score !== undefined ? "%" : ""}
-                </span>
-                {/* Diretriz Complementar §4 ("Conviction Engine"): ▲/▬/▼ real
-                    sobre a MESMA série do score acima — nunca substitui o
-                    valor, só informa se a confluência está subindo/caindo. */}
-                {convictionTrend?.status === "OK" && convictionTrend.trend && (
-                  <span
-                    className={`text-[0.55rem] font-black leading-none ${
-                      convictionTrend.trend === "FORTALECENDO"
-                        ? "text-[#00ffaa]"
-                        : convictionTrend.trend === "ENFRAQUECENDO"
-                          ? "text-[#ff0055]"
-                          : "text-[#8ab4f8]/60"
-                    }`}
-                  >
-                    {convictionTrend.trend === "FORTALECENDO" ? "▲" : convictionTrend.trend === "ENFRAQUECENDO" ? "▼" : "▬"}
-                  </span>
-                )}
-              </div>
-            </div>
+            <CoreSignalBadge
+              direction={engine?.direction ?? null}
+              confidence={engine?.confidence ?? null}
+              decision={nexusDecision ?? null}
+              expectancyFilter={expectancyFilter ?? null}
+            />
           )}
 
-          {/* Diretriz Mestra §12 ("HEAT SCORE"): intensidade de atividade
-              real do mercado (heat-score.ts) — NUNCA probabilidade nem
-              direção; o tooltip carrega as componentes reais. Ao lado do
-              Score de confluência, como a diretriz pede. leading-none nos
-              três spans: a auditoria de responsividade pegou o chip
-              estourando os 46px da linha (empilhado dentro do Score por um
-              bug de inserção + line-height padrão) — corrigido junto. */}
-          {marketMode === "CRYPTO" && (
-            <div
-              className="hidden md:flex flex-col items-center justify-center gap-[2px] pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
-              title={
-                heatReading?.status === "OK"
-                  ? `Heat ${heatReading.score}/100 (${heatReading.tier}) — intensidade de ATIVIDADE real: ${heatReading.components.map((c: { id: string; value01: number }) => `${c.id} ${(c.value01 * 100).toFixed(0)}%`).join(" · ")}. Nunca probabilidade, nunca direção.`
-                  : "Heat Score aguardando ao menos 2 componentes reais medidas (volatilidade/Δ24h/liquidações)."
-              }
-            >
-              <span className="text-[0.42rem] leading-none tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">Heat</span>
-              <span
-                className={`text-[0.7rem] leading-none font-black font-mono tabular-nums ${
-                  heatReading?.status !== "OK"
-                    ? "text-[#8ab4f8]/40"
-                    : heatReading.tier === "EXTREMO"
-                      ? "text-[#ff0055] drop-shadow-[0_0_5px_currentColor]"
-                      : heatReading.tier === "QUENTE"
-                        ? "text-[#f0d06f] drop-shadow-[0_0_5px_currentColor]"
-                        : heatReading.tier === "MORNO"
-                          ? "text-[#a0f0ff]"
-                          : "text-[#8ab4f8]/70"
-                }`}
-              >
-                {heatReading?.status === "OK" ? heatReading.score : DASH}
-              </span>
-              {heatReading?.status === "OK" && heatReading.tier && (
-                <span className="text-[0.38rem] leading-none font-bold uppercase tracking-wider text-[#8ab4f8]/60">{heatReading.tier}</span>
-              )}
-            </div>
-          )}
-
-          {/* Consolidação Final §23: cartão VWAP — estado com histerese
-              (§22, nunca troca a cada candle) + Preço×VWAP em % real
-              (§24). Display-only: contexto, nunca decisão (§25, LEI 24).
-              O tooltip carrega distância absoluta + o veredito §30 da
-              confluência VWAP × Nexus Line × Decision Layer. */}
-          {marketMode === "CRYPTO" && (
-            <div
-              className="hidden md:flex flex-col items-center justify-center gap-[2px] pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
-              title={
-                vwapCtx
-                  ? `Preço ${vwapCtx.side === "ACIMA" ? "acima" : vwapCtx.side === "ABAIXO" ? "abaixo" : "na linha"} da VWAP: ${vwapCtx.distancePct >= 0 ? "+" : ""}${vwapCtx.distancePct.toFixed(2)}% (${vwapCtx.distanceAbs >= 0 ? "+" : ""}${vwapCtx.distanceAbs.toFixed(2)} abs). Estado ${vwapCtx.state} com histerese real. Nexus Line: ${nlState}. ${
-                      nexusConfluence === "ALINHADA"
-                        ? "Confluência VWAP×NL×Decisão: ALINHADA."
-                        : nexusConfluence === "CONFLITO_ESTRUTURAL"
-                          ? "CONFLITO ESTRUTURAL VWAP/NL/Decisão — informativo, nunca altera a operação (LEI 24)."
-                          : "Sem veredito de confluência (leitura incompleta ou AGUARDAR)."
-                    }`
-                  : "VWAP aguardando volume real da sessão UTC (fail-closed, nunca um valor fabricado)."
-              }
-            >
-              <span className="text-[0.42rem] leading-none tracking-[0.2em] text-[#8ab4f8]/50 font-bold uppercase">
-                VWAP
-                {/* §30 compacto: veredito da confluência NL como sufixo
-                    discreto — detalhe completo no tooltip e na ANALYSIS. */}
-                {nexusConfluence && (
-                  <span className={nexusConfluence === "ALINHADA" ? "text-[#00ffaa]/80" : "text-[#ff0055]/80"}>
-                    {nexusConfluence === "ALINHADA" ? " ✓" : " ⚠"}
-                  </span>
-                )}
-              </span>
-              {/* Continuidade §5: o VALOR real da VWAP visível (nunca só a
-                  relação) — mesmo formatador fmt() do resto do header. */}
-              <span
-                className={`text-[0.7rem] leading-none font-black font-mono tabular-nums ${
-                  !vwapCtx
-                    ? "text-[#8ab4f8]/40"
-                    : vwapCtx.state === "BULLISH"
-                      ? "text-[#00ffaa] drop-shadow-[0_0_5px_currentColor]"
-                      : vwapCtx.state === "BEARISH"
-                        ? "text-[#ff0055] drop-shadow-[0_0_5px_currentColor]"
-                        : "text-[#f0d06f]"
-                }`}
-              >
-                {vwapCtx ? fmt(vwapCtx.vwap, vwapCtx.vwap >= 1000 ? 0 : 2) : "DADOS"}
-              </span>
-              <span
-                className={`text-[0.38rem] leading-none font-bold uppercase tracking-wider ${
-                  !vwapCtx
-                    ? "text-[#8ab4f8]/40"
-                    : vwapCtx.state === "BULLISH"
-                      ? "text-[#00ffaa]/80"
-                      : vwapCtx.state === "BEARISH"
-                        ? "text-[#ff0055]/80"
-                        : "text-[#8ab4f8]/60"
-                }`}
-              >
-                {vwapCtx
-                  ? `${vwapCtx.state === "BULLISH" ? "↑" : vwapCtx.state === "BEARISH" ? "↓" : "•"} ${fmtSignedPct(vwapCtx.distancePct)} · ${
-                      vwapCtx.state === "BULLISH" ? "COMPRADOR" : vwapCtx.state === "BEARISH" ? "VENDEDOR" : "NEUTRA"
-                    }`
-                  : "INSUFICIENTES"}
-              </span>
-            </div>
-          )}
-
-          {/* Diretriz V-MAX item 6: Assistente Operacional — a frase curta
-              mais prioritária, sempre tradução de leitura real (LEI 24,
-              ver operation-assistant.ts). O tooltip carrega a base real
-              verificável ("nunca recomendação sem justificativa"). */}
-          {marketMode === "CRYPTO" && assistantMessages && assistantMessages.length > 0 && (
-            <div
-              className="hidden lg:flex items-center pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap"
-              title={assistantMessages.map((m: { text: string; basis: string }) => `${m.text} — ${m.basis}`).join("\n")}
-            >
-              <span
-                className={`text-[0.55rem] font-bold tracking-wider uppercase ${
-                  assistantMessages[0].tone === "POSITIVE"
-                    ? "text-[#00ffaa]"
-                    : assistantMessages[0].tone === "RISK"
-                      ? "text-[#ff0055]"
-                      : assistantMessages[0].tone === "CAUTION"
-                        ? "text-[#f0d06f]"
-                        : "text-[#8ab4f8]/80"
-                }`}
-              >
-                {assistantMessages[0].text}
-              </span>
-            </div>
-          )}
+          {/* v16.0 PRO Fase 1 ("Header Minimalista"): Score institucional,
+              Heat Score, cartão VWAP e a mensagem do Assistente saíram da
+              barra sempre-visível — mesmos dados reais, zero cálculo
+              perdido (Regra de Ouro 4), agora na gaveta "Core Intelligence"
+              (ScoreContextCard, ao lado do Siriform Core) em vez de
+              competir com o único sinal que precisa ser lido em <5s (o
+              CoreSignalBadge acima). Achado real ao verificar (nunca
+              suposto): AssistantOrb, a única outra superfície nesta
+              gaveta com "Assistente" no nome, NÃO consome o assistantMessages
+              real (operation-assistant.ts) — usa uma rotação decorativa
+              própria (ASSISTANT_MESSAGES, texto fixo tipo "NÚCLEO EM MODO
+              LEITURA"). O resumo real com base verificável (tooltip)
+              teria ficado sem nenhuma casa — corrigido: ScoreContextCard
+              agora exibe a MESMA leitura real que a TopBar mostrava.
+              CoreSignalBadge continua na barra: é o único emissor real de
+              LONG/SHORT/WAIT (LEI 24), a leitura mais essencial de todas —
+              a lista de 6 itens do prompt v16.0 não o menciona por nome,
+              tratado aqui como omissão do documento, não como pedido de
+              remoção (removê-lo esvaziaria o propósito do terminal). */}
         </div>
 
         <div className="flex gap-1 md:gap-2 h-full items-center justify-end shrink-0">
@@ -5543,23 +8207,12 @@ function TopBar({ data }: { data?: PriceState | null }) {
                   {marketSession.label}
                 </span>
               )}
-              {/* Ferramentas Institucionais: Kill Zone ICT — só aparece
-                  quando uma janela ESTREITA de alta probabilidade está de
-                  fato em curso (a maior parte do dia não tem nenhuma,
-                  honestamente omitido em vez de um estado "inativo" ocupando
-                  espaço na barra sempre-visível). Contexto de leitura, LEI 24
-                  intacta: nunca gera nem altera o sinal do Core Engine. */}
-              {killZones && killZones.active.length > 0 && (
-                <span
-                  title={`Kill Zone ICT ativa agora — janela estreita onde a atividade institucional (varredura de liquidez) historicamente se concentra. Janela fixa em UTC, mesma aproximação de DST da Sessão Atual — nunca finge mais precisão do que existe.`}
-                  className="flex items-center gap-1 text-[0.5rem] font-black uppercase tracking-wider text-[#ffb020] animate-pulse"
-                >
-                  <Crosshair size={10} />
-                  {killZones.active.map((z) => z.label.replace("Kill Zone · ", "")).join(" + ")}
-                </span>
-              )}
             </div>
           )}
+          {/* v16.0 PRO Fase 1: Kill Zone ICT saiu da barra sempre-visível
+              (item explícito da lista "REMOVER do header") — mesma leitura
+              real (activeKillZones), agora só na gaveta Core Intelligence
+              (ScoreContextCard). Zero cálculo perdido, Regra de Ouro 4. */}
           {/* Ordem "Ciborgue Vivo" §2: indicador compacto de risco/saúde
               sempre visível, sem abrir aba nenhuma — pedido explícito do
               Operador. Só reaparece aqui o que o redesenho radical abaixo
@@ -5571,6 +8224,13 @@ function TopBar({ data }: { data?: PriceState | null }) {
               power NUNCA entram na região rolável — jamais cobertos, jamais
               fora do alcance. */}
           <div className="flex items-center gap-2 md:gap-3 h-full shrink-0">
+          {/* Medidor de Distância à Decisão — o pedido literal do Operador:
+              "% que falta pra long e pra short, lá em cima no cabeçalho",
+              ao lado do orbe/microfone. Fica na âncora DIREITA FIXA (§5 do
+              header), a região que nunca entra no scroll horizontal — este
+              é um número de leitura contínua, jamais pode ficar fora do
+              alcance por causa de largura de tela. */}
+          {marketMode === "CRYPTO" && <DecisionDistanceBadge />}
           {marketMode === "CRYPTO" && <SystemStatusBadge />}
           {/* V18.1: núcleo + voz sempre visíveis no cantinho, ao lado do
               botão de energia — ver header de NucleoVoiceOrb. Redesenho
@@ -5583,8 +8243,17 @@ function TopBar({ data }: { data?: PriceState | null }) {
           <button
             type="button"
             onClick={handleManualRestart}
-            title="Force reconnection of all real feeds"
-            className="ml-1 w-8 h-8 rounded-full border border-[#00f0ff40] bg-[#00f0ff08] flex items-center justify-center text-[#00f0ff] hover:bg-[#00f0ff20] active:scale-95 transition-all shadow-[0_0_10px_rgba(0,240,255,0.15)] animate-pulse"
+            title={`Sincronizar Agora — recarrega dados de mercado, motores, feeds em tempo real e cache. Última leitura real: ${syncPriceSnapshot.updatedAt === null ? "aguardando conexão" : `há ${ageLabelOf(syncPriceSnapshot.updatedAt)}`}.`}
+            /* Entrega 26 Prioridade 6 ("eliminar movimentos desnecessários...
+               transições quase imperceptíveis"): este botão pulsava
+               PERMANENTEMENTE, independente de qualquer estado — movimento
+               constante carregando zero informação, no canto mais estável
+               da barra. Todas as demais animações do app foram auditadas e
+               MANTIDAS: cada uma é condicional a um estado real (ponto de
+               conexão ao vivo, microfone falando, ciclo em andamento) e
+               portanto informa algo. Só esta era ruído puro. Hover/active
+               continuam dando o feedback de interação. */
+            className="ml-1 w-8 h-8 rounded-full border border-[#00f0ff40] bg-[#00f0ff08] flex items-center justify-center text-[#00f0ff] hover:bg-[#00f0ff20] active:scale-95 transition-all shadow-[0_0_10px_rgba(0,240,255,0.15)]"
           >
             <Power size={14} />
           </button>
@@ -5607,8 +8276,62 @@ function TopBar({ data }: { data?: PriceState | null }) {
         <div className="flex flex-wrap items-center gap-y-1 px-3 lg:px-5 pb-1.5">
           <TradePlanTopStrip livePrice={data?.price ?? null} />
           <StructureLevelsStrip />
+          {/* Entrega 26 Prioridade 4: a leitura de contexto (regime/fluxo/
+              risco/confluência) passa a viver AQUI, na mesma linha sempre
+              visível — antes exigia abrir a gaveta "Core Intelligence". */}
+          <ContextReadStrip />
         </div>
       )}
+
+      {/* FILEIRA DE ATALHOS DE ATIVO — restaurada (o Operador relatou que
+          "a barrinha de favorito não tá aparecendo no iPad").
+
+          POR QUE ELA TINHA SUMIDO, e por que voltar assim e não como era:
+          a versão anterior morava DENTRO da linha 1 (h-[46px]) e foi
+          removida a pedido do próprio Operador porque, com os 12 botões,
+          "comia" o espaço da barra e CORTAVA o preço/variação ao vivo em
+          telas reais. O pedido era legítimo e a remoção resolveu o
+          sintoma — mas custou o atalho de 1 toque.
+
+          Agora ela tem LINHA PRÓPRIA e rola na horizontal. É isso que
+          impede o defeito de voltar: nada aqui pode comprimir a linha do
+          preço, porque não divide espaço com ela. Em iPad estreito os
+          chips saem de vista pela borda em vez de espremer qualquer coisa
+          (overflow interno — a Regra de Ouro é zero scroll de PÁGINA, e
+          este é de container).
+
+          Zero fiação nova: usa o MESMO ASSETS já real e a MESMA transição
+          canônica de openCandidate (setMarketMode/setSelectedTradFiAsset/
+          setSelectedAsset), nunca um segundo caminho de troca de ativo. */}
+      <div
+        className="flex items-center gap-1 px-3 lg:px-5 pb-1.5 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+        style={{ scrollbarWidth: "none" }}
+        role="group"
+        aria-label="Atalhos de ativo"
+      >
+        {ASSETS.map((a) => {
+          const ativo = marketMode === "CRYPTO" && selectedAsset === a;
+          return (
+            <button
+              key={a}
+              type="button"
+              aria-pressed={ativo}
+              onClick={() => {
+                setMarketMode?.("CRYPTO");
+                setSelectedTradFiAsset?.(null);
+                setSelectedAsset?.(a);
+              }}
+              className={`h-7 px-2.5 rounded-full border text-[0.55rem] font-bold tracking-wider shrink-0 transition-colors ${
+                ativo
+                  ? "bg-[#00f0ff20] border-[#00f0ff60] text-[#00f0ff] shadow-[0_0_10px_rgba(0,240,255,0.2)]"
+                  : "bg-transparent border-[#00f0ff20] text-[#8ab4f8]/70 hover:text-[#00f0ff] hover:border-[#00f0ff40]"
+              }`}
+            >
+              {a}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -5696,6 +8419,8 @@ function NavRailButton({
       type="button"
       onClick={onClick}
       title={label}
+      aria-label={label}
+      aria-pressed={active}
       className={`flex items-center justify-center w-full py-2.5 shrink-0 cursor-pointer transition-colors relative ${active ? "text-[#00f0ff] bg-gradient-to-r from-[#00f0ff1a] to-transparent" : "text-[#8ab4f8]/50 hover:text-[#8ab4f8]"}`}
     >
       {active && (
@@ -5716,7 +8441,7 @@ function SideBar({
   activeTab: string;
   setActiveTab: (t: string) => void;
 }) {
-  const { setWorkspaceManagerOpen, setChartLayersOpen, setRadarPanelOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
+  const { setWorkspaceManagerOpen, setChartLayersOpen, setRadarPanelOpen, setMarketAnalysisOpen, setPaperTradingOpen, leftDrawerOpen, toggleLeftDrawer } = useContext(WidgetContext) || {};
   // OMEGA CORE V-MAX (completar Fase 7): contagem real do próprio snapshot
   // — nunca um badge decorativo. "Substitui o botão pulsante" (diretiva):
   // um número real (0 quando não há nada) é honesto; uma animação
@@ -5728,24 +8453,54 @@ function SideBar({
   // waiting placeholder no longer exists. DASHBOARD/SETTINGS keep their
   // own behavior (activeTab ternary in App()); labels render only as
   // tooltips (NavRailButton), never visible text on the rail (Fase M.1).
-  const items: { icon: any; id: string; label: string }[] = [
+  //
+  // Pedido do Operador (áudio): "muita ferramenta atrapalhar outra...
+  // indicador aparecendo sem necessidade... deixa só os principais que o
+  // analista usa no dia a dia... sistema leve profissional, não deleta
+  // nada". MESMO princípio já provado no painel de Camadas do Gráfico
+  // (ChartLayersPanelContent, "Estado Inteligente Adaptativo" — resumo por
+  // padrão, controle completo um clique abaixo, Regra de Ouro 4:
+  // reorganizar, nunca apagar), aplicado agora à régua de navegação — que
+  // tinha 15 ícones reais nesta única coluna (9 abas + 6 gavetas de
+  // rodapé). Diferente do gráfico, não existe aqui um sinal de relevância
+  // ESTATÍSTICA (navegação é preferência de fluxo de trabalho, não leitura
+  // de mercado) — a divisão principal/secundário é ancorada em evidência
+  // real do próprio código, nunca em suposição:
+  //   • DASHBOARD é o activeTab inicial (useState acima) — pra onde o app
+  //     sempre abre.
+  //   • MARKETS/ANALYSIS/RISK alimentam o loop de decisão com dado ao
+  //     vivo, não configuração; ALERTS é reativo por natureza (o
+  //     Operador precisa ver isso batendo o olho, sem abrir nada).
+  //   • EXECUTION é "permanently empty by design" (SecondaryModuleView
+  //     abaixo — nunca mostra dado real, é um aviso fixo do read-only).
+  //   • NEWS "has no real feed connected" (mesmo comentário) — vazio hoje.
+  //   • SCANNER/SETTINGS são reais mas de uso pontual, não contínuo.
+  const PRIMARY_TABS: { icon: any; id: string; label: string }[] = [
     { icon: LayoutDashboard, id: "DASHBOARD", label: "COCKPIT" },
     { icon: BarChart2, id: "MARKETS", label: "MARKETS" },
     { icon: Activity, id: "ANALYSIS", label: "ANALYSIS" },
     { icon: ShieldCheck, id: "RISK", label: "RISK" },
-    { icon: Zap, id: "EXECUTION", label: "EXECUTION" },
+    { icon: Bell, id: "ALERTS", label: "ALERTS" },
+  ];
+  const SECONDARY_TABS: { icon: any; id: string; label: string }[] = [
     { icon: Scan, id: "SCANNER", label: "SCANNER" },
     { icon: Newspaper, id: "NEWS", label: "NEWS" },
-    { icon: Bell, id: "ALERTS", label: "ALERTS" },
     { icon: Settings, id: "SETTINGS", label: "SETTINGS" },
+    { icon: Zap, id: "EXECUTION", label: "EXECUTION" },
   ];
+  // Nunca persistido (mesma filosofia de habilitarManualAberto em
+  // ChartLayersPanelContent — "operador não administra modos"): a régua
+  // volta ao resumo enxuto a cada boot/refresh, nunca lembra um "aberto"
+  // esquecido de outra sessão.
+  const [moreTabsOpen, setMoreTabsOpen] = useState(false);
+  const [moreDrawersOpen, setMoreDrawersOpen] = useState(false);
   return (
     <div className="w-12 md:w-14 border-r border-[#00f0ff20] bg-[#010308]/95 flex flex-col items-center py-3 gap-1 shrink-0 z-10 overflow-y-auto scrollbar-hide backdrop-blur-md">
       <div className="relative mb-2">
         <Target className="text-[#00f0ff] opacity-90" size={20} strokeWidth={1.5} />
         <div className="absolute inset-0 border border-[#00f0ff] rounded-full animate-ping opacity-30"></div>
       </div>
-      {items.map((item) => (
+      {PRIMARY_TABS.map((item) => (
         <NavRailButton
           key={item.id}
           icon={item.icon}
@@ -5754,10 +8509,38 @@ function SideBar({
           onClick={() => setActiveTab(item.id)}
         />
       ))}
+      {/* Abas secundárias (SCANNER/NEWS/SETTINGS/EXECUTION) — reais, nunca
+          removidas, só recolhidas por padrão. Continuam alcançáveis num
+          clique, exatamente como o controle camada-a-camada do painel de
+          Camadas do Gráfico continua inteiro atrás do mesmo tipo de
+          disclosure. */}
+      <button
+        type="button"
+        onClick={() => setMoreTabsOpen((v) => !v)}
+        title={moreTabsOpen ? "Menos abas" : "Mais abas — Scanner, News, Settings, Execution"}
+        aria-label={moreTabsOpen ? "Menos abas" : "Mais abas"}
+        aria-expanded={moreTabsOpen}
+        className={`flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors shrink-0 ${moreTabsOpen ? "text-[#00f0ff]" : "text-[#8ab4f8]/50 hover:text-[#8ab4f8]"}`}
+      >
+        <MoreHorizontal size={17} className="relative z-10" />
+      </button>
+      {moreTabsOpen &&
+        SECONDARY_TABS.map((item) => (
+          <NavRailButton
+            key={item.id}
+            icon={item.icon}
+            label={item.label}
+            active={activeTab === item.id}
+            onClick={() => setActiveTab(item.id)}
+          />
+        ))}
       {/* Fase M.1: Market Intelligence entra na régua esquerda — mesmo
           lado da gaveta .terminal-left que ela abre (o ícone e a gaveta
           deslizam do mesmo lado da tela). Substitui a alça solta que
-          existia na borda do gráfico: um único mecanismo de acesso. */}
+          existia na borda do gráfico: um único mecanismo de acesso.
+          Continua sempre visível (fora do "mais gavetas" abaixo) — é o
+          único destes seis que troca o CONTEXTO do gráfico principal, não
+          um painel auxiliar à parte. */}
       <div className="w-full border-t border-[#00f0ff15] mt-1 pt-1">
         <NavRailButton
           icon={PanelLeft}
@@ -5766,40 +8549,21 @@ function SideBar({
           onClick={() => toggleLeftDrawer?.()}
         />
       </div>
-      {/* V16 Workspace Manager entry point — a single, discoverable way in
-          to the Pinned/Docked/Collapsed/Hidden/Floating controls for every
-          secondary module, instead of a gear icon per module. Pinned to
-          the bottom (mt-auto) like the reference layout's footer link. */}
-      <button
-        type="button"
-        onClick={() => setWorkspaceManagerOpen?.((v: boolean) => !v)}
-        title="Workspace Manager"
-        className="mt-auto flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
-      >
-        <LayoutGrid size={17} className="relative z-10" />
-      </button>
-      {/* Camadas do Gráfico (Finding M) — segundo entry point no mesmo
-          rodapé, mesmo padrão do Workspace Manager acima (toggle de
-          visibilidade em vez de estado de widget). */}
-      <button
-        type="button"
-        onClick={() => setChartLayersOpen?.((v: boolean) => !v)}
-        title="Camadas do Gráfico"
-        className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
-      >
-        <Layers size={17} className="relative z-10" />
-      </button>
-      {/* OMEGA CORE V-MAX (completar Fase 7, Radar/OIH) — terceiro entry
-          point no mesmo rodapé, mesmo padrão dos dois acima. Rótulo
-          visível "Oportunidades" (nunca "Radar"): o cockpit já tem um
-          widget real chamado "RADAR DE CONSENSO" (CouncilWidget) e uma aba
-          "SCANNER" com heurística de %-change de 24h (ScannerWidget) —
-          nenhum dos dois é este módulo; um terceiro rótulo com a mesma
-          palavra confundiria o Operador sobre qual painel está abrindo. */}
+      {/* OMEGA CORE V-MAX (completar Fase 7, Radar/OIH). Rótulo visível
+          "Oportunidades" (nunca "Radar"): o cockpit já tem um widget real
+          chamado "RADAR DE CONSENSO" (CouncilWidget) e uma aba "SCANNER"
+          com heurística de %-change de 24h (ScannerWidget) — nenhum dos
+          dois é este módulo; um terceiro rótulo com a mesma palavra
+          confundiria o Operador sobre qual painel está abrindo. Continua
+          sempre visível (fora do "mais gavetas" abaixo): é o único destes
+          seis com um contador AO VIVO (radarCandidateCount) — escondê-lo
+          atrás de um clique apagaria justamente o sinal que ele existe
+          pra dar de relance. */}
       <button
         type="button"
         onClick={() => setRadarPanelOpen?.((v: boolean) => !v)}
         title="Radar / OIH — Oportunidades já validadas pelo organismo"
+        aria-label="Radar / OIH — Oportunidades já validadas pelo organismo"
         className="relative flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
       >
         <RadarIcon size={17} className="relative z-10" />
@@ -5809,21 +8573,93 @@ function SideBar({
           </span>
         )}
       </button>
+      {/* Gavetas secundárias (Workspace Manager/Camadas do Gráfico/Análise
+          de Mercado/Paper Trading) — mesma disciplina das abas acima:
+          reais, nunca removidas, só recolhidas por padrão. mt-auto migrou
+          pra este toggle (era do Workspace Manager) — continua ancorado
+          no rodapé quando sobra espaço vertical, e os 4 itens aparecem
+          logo abaixo dele quando expandido. */}
+      <button
+        type="button"
+        onClick={() => setMoreDrawersOpen((v) => !v)}
+        title={moreDrawersOpen ? "Menos gavetas" : "Mais gavetas — Workspace, Camadas do Gráfico, Análise de Mercado, Paper Trading"}
+        aria-label={moreDrawersOpen ? "Menos gavetas" : "Mais gavetas"}
+        aria-expanded={moreDrawersOpen}
+        className={`mt-auto flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors shrink-0 ${moreDrawersOpen ? "text-[#00f0ff]" : "text-[#8ab4f8]/50 hover:text-[#8ab4f8]"}`}
+      >
+        <MoreHorizontal size={17} className="relative z-10" />
+      </button>
+      {moreDrawersOpen && (
+        <>
+          {/* V16 Workspace Manager entry point — a single, discoverable way in
+              to the Pinned/Docked/Collapsed/Hidden/Floating controls for every
+              secondary module, instead of a gear icon per module. */}
+          <button
+            type="button"
+            onClick={() => setWorkspaceManagerOpen?.((v: boolean) => !v)}
+            title="Workspace Manager"
+            aria-label="Workspace Manager"
+            className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+          >
+            <LayoutGrid size={17} className="relative z-10" />
+          </button>
+          {/* Camadas do Gráfico (Finding M). O painel em si já resolveu a
+              própria sobrecarga (ChartLayersPanelContent, "Estado
+              Inteligente Adaptativo") — o entry point também deixa de
+              precisar estar sempre à mostra. */}
+          <button
+            type="button"
+            onClick={() => setChartLayersOpen?.((v: boolean) => !v)}
+            title="Camadas do Gráfico"
+            aria-label="Camadas do Gráfico"
+            className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+          >
+            <Layers size={17} className="relative z-10" />
+          </button>
+          {/* Ordem "Market Analysis & Publication Engine" §2: "ação simples,
+              discreta e fácil de encontrar" — ação pontual (gerar conteúdo
+              publicável), não uma view de dado contínua. */}
+          <button
+            type="button"
+            onClick={() => setMarketAnalysisOpen?.((v: boolean) => !v)}
+            title="Análise de Mercado — gerar leitura publicável (Painel/X/Story)"
+            aria-label="Análise de Mercado — gerar leitura publicável (Painel/X/Story)"
+            className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+          >
+            <Share2 size={17} className="relative z-10" />
+          </button>
+          {/* v16.0 PRO MAX §9.1/§9.4 ("Paper Trading"). Posição simulada
+              MANUAL — decisão do Operador via AskUserQuestion: zero
+              automação, o painel só existe para o Operador abrir/fechar
+              por conta própria, uso pontual por definição. */}
+          <button
+            type="button"
+            onClick={() => setPaperTradingOpen?.((v: boolean) => !v)}
+            title="Paper Trading — posição simulada manual (P&L ao vivo, sem automação)"
+            aria-label="Paper Trading — posição simulada manual (P&L ao vivo, sem automação)"
+            className="flex items-center justify-center w-full py-2.5 cursor-pointer transition-colors text-[#8ab4f8]/50 hover:text-[#00f0ff] shrink-0"
+          >
+            <Wallet size={17} className="relative z-10" />
+          </button>
+        </>
+      )}
     </div>
   );
 }
 
 // --- RIGHT RAIL (Fase M.1: Navigation Rail + Overlay Drawers) ---
-// Espelho da SideBar à direita — mesma régua fina, um ícone real (Core
-// Intelligence: Siriform/GMIL/Regime/Validação/Saúde, o mesmo conteúdo
-// que já existia atrás da alça antiga). Deliberadamente não preenchida
-// com ícones extra só para "parecer completa": cada módulo sugerido na
-// diretriz (GMIL/Consensus/Risk/Telemetria) já vive DENTRO desta única
-// gaveta real — fragmentar em várias gavetas vazias violaria zero
-// fabricação (nenhum dado novo apareceria do nada) sem ganhar nada em
-// troca, já que só uma gaveta pode ficar aberta por vez de qualquer forma.
+// Espelho da SideBar à direita — mesma régua fina, dois ícones reais: Core
+// Intelligence (Siriform/GMIL/Regime/Validação/Saúde, o mesmo conteúdo que
+// já existia atrás da alça antiga) e Properties (painel Properties 320px,
+// pedido do Operador — Layer Manager docado). Cada um abre um conteúdo
+// genuinamente diferente — nunca a mesma informação fragmentada em duas
+// gavetas vazias só para "parecer completa" (isso violaria zero
+// fabricação, nenhum dado novo apareceria do nada sem ganhar nada em
+// troca). Mutual exclusion (App(), toggleRightDrawer/
+// togglePropertiesDrawer) garante que só uma gaveta fica aberta por vez,
+// mesmo com 2 entry points nesta régua.
 function RightRail() {
-  const { rightDrawerOpen, toggleRightDrawer } = useContext(WidgetContext) || {};
+  const { rightDrawerOpen, toggleRightDrawer, propertiesDrawerOpen, togglePropertiesDrawer } = useContext(WidgetContext) || {};
   return (
     <div className="w-12 md:w-14 border-l border-[#00f0ff20] bg-[#010308]/95 flex flex-col items-center py-3 gap-1 shrink-0 z-10 overflow-y-auto scrollbar-hide backdrop-blur-md">
       <NavRailButton
@@ -5831,6 +8667,19 @@ function RightRail() {
         label="Core Intelligence"
         active={!!rightDrawerOpen}
         onClick={() => toggleRightDrawer?.()}
+        edge="right"
+      />
+      {/* Painel Properties 320px (pedido do Operador): mesmo padrão do
+          botão acima, mesmo slot visual (.terminal-properties), ícone
+          distinto (SlidersHorizontal) para nunca confundir com o de
+          "Camadas do Gráfico" (Layers) da SideBar — chrome diferente
+          (dropdown transitório vs. painel docado), mesmo conteúdo real
+          por baixo (ChartLayersPanelContent). */}
+      <NavRailButton
+        icon={SlidersHorizontal}
+        label="Properties"
+        active={!!propertiesDrawerOpen}
+        onClick={() => togglePropertiesDrawer?.()}
         edge="right"
       />
     </div>
@@ -5962,7 +8811,22 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
   if (isFloating) {
     return (
       <Rnd
-        default={{ x: 100, y: 100, width: 400, height: 350 }}
+        /* "dá uma olhada no que tem atrapalhando o campo de visão do
+           operador... nada pode atrapalhar" (Operador). Medido: era
+           `{ x: 100, y: 100 }` LITERAL — todo painel flutuante nascia no
+           MESMO pixel, em cima do canto superior esquerdo do gráfico (onde
+           vivem a faixa de sessões e o aviso do Trade Plan), e dois
+           flutuantes abertos ficavam perfeitamente empilhados, o de baixo
+           invisível. Agora nasce ancorado no canto de MENOR densidade de
+           informação, escalonado por id, com a barra de comando e a régua
+           esquerda como zonas proibidas — ver nexus/floating-widget-origin.ts.
+           Continua 100% arrastável: isto é o ponto de partida, não uma
+           prisão. */
+        default={resolveFloatingWidgetOrigin(
+          id,
+          typeof window !== "undefined" ? window.innerWidth : NaN,
+          typeof window !== "undefined" ? window.innerHeight : NaN,
+        )}
         minWidth={250}
         minHeight={200}
         bounds="window"
@@ -5974,7 +8838,6 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
         >
           {title && renderHeader(true)}
           <div className="flex-1 min-h-0 relative p-2 overflow-hidden flex flex-col z-10">
-            <div className="cyber-scanline z-0"></div>
             <WidgetErrorBoundary title={title}>{children}</WidgetErrorBoundary>
           </div>
         </div>
@@ -6037,7 +8900,6 @@ function Widget({ id, children, title, className = "", flex = "flex-1", extraHea
         className="flex-1 min-h-0 relative p-2 overflow-hidden flex flex-col z-10"
         onDoubleClick={(e) => e.stopPropagation()}
       >
-        <div className="cyber-scanline z-0"></div>
         <WidgetErrorBoundary title={title}>{children}</WidgetErrorBoundary>
       </div>
     </div>
@@ -6102,6 +8964,77 @@ function ModuleStat({ label, value, tone }: { label: string; value: string; tone
 
 const MODULE_EMPTY = "AWAITING REAL DATA"; // honest fail-closed value, never a fabricated number
 
+// BacktestPanel — a taxa de acerto REAL, medida dentro do app (pedido do
+// Operador: rodar isso no iPad, sem depender de um computador com terminal).
+//
+// LEI 24: display-only. Nada aqui emite ou altera decisão — é contagem de
+// desfechos históricos. REGRA DE OURO 2: `taxaAlvoAmostra` é a fração real
+// da amostra resolvida, nunca probabilidade do próximo trade, e o aviso que
+// diz isso é obrigatório e fica SEMPRE visível, nunca só no tooltip.
+function BacktestPanel({ symbol, timeframe }: { symbol: string; timeframe: string }) {
+  const { estado, rodar } = useBacktestRunner();
+  const r = estado.resultado as
+    | { status?: string; aggregate?: BacktestAggregate; provenance?: BacktestProvenance; reason?: string }
+    | null;
+  const agg = r?.status === "OK" ? r.aggregate ?? null : null;
+  const prov = r?.status === "OK" ? r.provenance ?? null : null;
+  const taxa = agg ? descreverTaxa(agg) : null;
+
+  return (
+    <ModulePanel title="Backtest Estrutural (desfechos reais, walk-forward zero-lookahead)">
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          disabled={estado.rodando}
+          onClick={() => rodar(symbol, timeframe, 2000)}
+          className={`text-[0.45rem] px-2 py-1 rounded border font-bold uppercase tracking-wider ${
+            estado.rodando
+              ? "border-[#8ab4f8]/20 text-[#8ab4f8]/40"
+              : "border-[#00f0ff40] bg-[#00f0ff15] text-[#00f0ff] hover:border-[#00f0ff]"
+          }`}
+        >
+          {estado.rodando ? "MEDINDO…" : `MEDIR ${symbol} ${timeframe}`}
+        </button>
+        <span className="text-[0.42rem] text-[#8ab4f8]/40">2000 candles reais · READ_ONLY</span>
+      </div>
+
+      {estado.fase && <span className="text-[0.42rem] text-[#8ab4f8]/60">{estado.fase}</span>}
+
+      {estado.erro && (
+        <span className="text-[0.45rem] text-[#ff0055] leading-tight">
+          Não foi possível medir — {explicarFalha(estado.erro.motivo, estado.erro.detalhe)}
+        </span>
+      )}
+
+      {r && r.status !== "OK" && !estado.erro && (
+        <span className="text-[0.45rem] text-[#8ab4f8]/60">DADOS_INSUFICIENTES — {r.reason ?? "sem razão declarada"}</span>
+      )}
+
+      {agg && taxa && (
+        <>
+          <ModuleStat
+            label="Alvo antes do stop (amostra resolvida)"
+            value={taxa.valor}
+            tone={taxa.forca === "SUFICIENTE" && agg.taxaAlvoAmostra !== null && agg.taxaAlvoAmostra >= 0.5 ? "long" : "neutral"}
+          />
+          <ModuleStat label="Cenários medidos" value={`${agg.samples} (${agg.resolved} resolvidos, ${agg.unresolved} sem desfecho)`} />
+          <ModuleStat label="Alvos / Stops" value={`${agg.targetHits} / ${agg.stopHits}`} />
+          <ModuleStat label="Empates contados como STOP" value={String(agg.bothTouchedCountedAsStop)} />
+          <ModuleStat label="MFE / MAE médios" value={`${formatarR(agg.avgMfeR)} / ${formatarR(agg.avgMaeR)}`} />
+          <ModuleStat
+            label="Alvo estrutural distante"
+            value={agg.farTargetEligible > 0 ? `${formatarFracao(agg.farTargetHitRate)} de ${agg.farTargetEligible}` : "—"}
+          />
+          {taxa.ressalva && (
+            <span className="text-[0.45rem] text-[#ffaa00] leading-tight">⚠ {taxa.ressalva}</span>
+          )}
+          {prov && <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-tight">{avisoObrigatorio(prov)}</span>}
+        </>
+      )}
+    </ModulePanel>
+  );
+}
+
 function SecondaryModuleView({ tab }: { tab: string }) {
   const ctx = useContext(WidgetContext) || {};
   const {
@@ -6130,6 +9063,13 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     // Evolução Integrativa §6: o contrato fundido para a Síntese
     // Operacional da aba ANALYSIS — mesma fonte única do badge (LEI 24).
     nexusDecision,
+    // Ordem 2 §4 (Trade Plan unificado), graduado: MESMAS leituras já reais
+    // que alimentam outros painéis desta view — institutionalScore.score já
+    // é o "Score Institucional" mostrado alhures, reversalAlert já é a
+    // leitura de reversão mostrada no Siriform Core (linha ~12478) — zero
+    // segunda medição, só reusadas aqui para compor o STATUS unificado.
+    institutionalScore,
+    reversalAlert,
   } = ctx as any;
   const connections = useConnectionsSnapshot();
   const derivatives = useDerivativesSnapshot();
@@ -6145,6 +9085,10 @@ function SecondaryModuleView({ tab }: { tab: string }) {
   const trackRecord = useTrackRecordSnapshot();
   // Refinamento Final §7/§8 — mesmas fatias reais desenhadas no gráfico.
   const harmonicHits = useHarmonicPatternsSnapshot();
+  // Carta Branca — mesmas fatias reais desenhadas no gráfico (Triângulo e
+  // Ombro-Cabeça-Ombro), mesma disciplina de harmonicHits acima.
+  const trianglePattern = useTrianglePatternSnapshot();
+  const headShouldersPattern = useHeadShouldersPatternSnapshot();
   const premiumDiscountView = usePremiumDiscountSnapshot();
 
   const pct = (v: number | null | undefined, digits = 0) =>
@@ -6191,6 +9135,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
           <ModuleStat label="24H Volume" value={typeof price.volume === "number" ? Math.round(price.volume).toLocaleString("en-US") : MODULE_EMPTY} />
           <ModuleStat label="Funding Rate" value={typeof derivatives.fundingRate === "number" ? `${(derivatives.fundingRate * 100).toFixed(4)}%` : MODULE_EMPTY} />
           <ModuleStat label="Open Interest" value={num(derivatives.openInterest, 0)} />
+          <ModuleStat label="Long/Short Ratio" value={num(derivatives.longShortRatio)} />
         </ModulePanel>
         {/* Master Panel handoff (Multi-Source Market Data Fusion): cross-
             check real Binance-vs-Bybit/OKX — puramente informativo, nunca
@@ -6260,6 +9205,23 @@ function SecondaryModuleView({ tab }: { tab: string }) {
     // iPad) porque o tooltip do badge não aparece em tap — a mesma lição da
     // Auditoria Final de Integração.
     const synthRisk = nexusDecision ? deriveRiskState(nexusDecision) : null;
+    // Ordem 2 §4 (Trade Plan unificado), graduado: composeTradePlanView() é
+    // um compositor puro (zero motor novo) — cada input abaixo já é uma
+    // leitura real já usada em outro lugar desta mesma view (tradePlan no
+    // painel Trade Plan, trackRecord.active no strip do topo, deriveSetupState/
+    // deriveEntryState na Síntese Operacional acima, scenario no painel
+    // Scenario Paths, institutionalScore.score no header, reversalAlert no
+    // Siriform Core). O único campo novo que aparece na tela é `status` — o
+    // resumo único que hoje só existe mentalmente, combinando 3 painéis.
+    const tradePlanView = composeTradePlanView({
+      plan: tradePlan,
+      trackedStatus: trackRecord.active?.status ?? null,
+      setupState: nexusDecision ? deriveSetupState(nexusDecision) : null,
+      entryState: nexusDecision ? deriveEntryState(nexusDecision) : null,
+      scenario: scenario ?? null,
+      reversal: reversalAlert ?? null,
+      confidenceScore: institutionalScore?.score ?? null,
+    });
     body = (
       <>
         <ModulePanel title="Síntese Operacional · 6 eixos auditáveis (mesma fonte do badge)">
@@ -6305,6 +9267,23 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         <ModulePanel title="Trade Plan · real structure only (advisory, read-only)">
           {tradePlan ? (
             <>
+              {/* Ordem 2 §4/§23 (Trade Plan unificado), graduado: o único
+                  campo novo desta seção — ACTIVE/TARGET_REACHED/INVALIDATED
+                  resumido num só lugar (composeTradePlanView acima), em vez
+                  de o Operador combinar mentalmente trackRecord.active.status
+                  com os avisos transitórios "TARGET REACHED"/"STOP BREACHED"
+                  do strip do topo. */}
+              <ModuleStat
+                label="Status"
+                value={tradePlanView.status}
+                tone={
+                  tradePlanView.status === "TARGET_REACHED" || tradePlanView.status === "ACTIVE"
+                    ? "long"
+                    : tradePlanView.status === "INVALIDATED"
+                      ? "short"
+                      : "neutral"
+                }
+              />
               {/* Diretriz Complementar §7 ("Inteligência Temporal"): rótulo
                   real de contexto do timeframe ativo — nunca uma medição,
                   ver nexus/timeframe-profile.ts. */}
@@ -6402,25 +9381,47 @@ function SecondaryModuleView({ tab }: { tab: string }) {
             <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">NO CONFLUENT LEVEL IN THIS WINDOW (honest result)</span>
           )}
         </ModulePanel>
-        {/* Refinamento Final §8: padrões harmônicos XABCD reais detectados
-            sobre os swings fractais compartilhados (harmonic-patterns.ts).
-            "fit" é ADERÊNCIA DE RAZÃO às tabelas de Fibonacci do padrão —
-            nunca probabilidade de acerto (Regra de Ouro 2; o título diz
-            isso). Lista vazia é o estado honesto comum: padrões harmônicos
-            completos e frescos são raros por construção. */}
-        <ModulePanel title="Harmonic Patterns · ratio fit, never probability">
-          {harmonicHits.length > 0 ? (
-            harmonicHits.map((h, i) => (
-              <ModuleStat
-                key={i}
-                label={`${h.pattern} ${h.direction}`}
-                value={`PRZ @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}
-                tone={h.direction === "BULLISH" ? "long" : "short"}
-              />
-            ))
+        {/* Refinamento Final §8 + Carta Branca (Reconhecimento de Padrões):
+            todas as famílias de padrão geométrico real detectadas sobre os
+            MESMOS swings fractais compartilhados — harmônicos XABCD/Wolfe
+            (harmonic-patterns.ts), Triângulo (triangle-pattern.ts) e
+            Ombro-Cabeça-Ombro (head-shoulders-pattern.ts). "fit" é
+            ADERÊNCIA GEOMÉTRICA de cada motor (razão Fibonacci/R² do
+            trendline/simetria de ombros) — nunca probabilidade de acerto
+            (Regra de Ouro 2; o título diz isso). Painel único ("não é
+            excesso demais", feedback do Operador): cada família soma no
+            máximo 1-3 linhas honestas, nunca um painel próprio por família.
+            Lista vazia é o estado honesto comum: padrões completos e
+            frescos são raros por construção. */}
+        <ModulePanel title="Chart Patterns · geometric fit, never probability">
+          {harmonicHits.length > 0 || trianglePattern || headShouldersPattern ? (
+            <>
+              {harmonicHits.map((h, i) => (
+                <ModuleStat
+                  key={`harmonic-${i}`}
+                  label={`${h.pattern} ${h.direction}`}
+                  value={`PRZ @ ${h.points.D.price.toFixed(0)} · fit ${(h.fitScore * 100).toFixed(0)}%`}
+                  tone={h.direction === "BULLISH" ? "long" : "short"}
+                />
+              ))}
+              {trianglePattern && (
+                <ModuleStat
+                  label={`${trianglePattern.kind} TRIANGLE`}
+                  value={`${trianglePattern.apexIndex !== null ? `Apex ahead · fit` : `Apex behind · fit`} ${(trianglePattern.fitScore * 100).toFixed(0)}%`}
+                  tone={trianglePattern.direction === "BULLISH" ? "long" : trianglePattern.direction === "BEARISH" ? "short" : "neutral"}
+                />
+              )}
+              {headShouldersPattern && (
+                <ModuleStat
+                  label={headShouldersPattern.kind === "REGULAR" ? "HEAD & SHOULDERS" : "INVERSE H&S"}
+                  value={`Neckline @ ${headShouldersPattern.necklineAtLastCandle.toFixed(0)} · fit ${(headShouldersPattern.fitScore * 100).toFixed(0)}%`}
+                  tone={headShouldersPattern.direction === "BULLISH" ? "long" : "short"}
+                />
+              )}
+            </>
           ) : (
             <span className="text-[0.45rem] text-[#8ab4f8]/40 tracking-widest">
-              NO FRESH XABCD PATTERN ≥ {(MIN_FIT_SCORE * 100).toFixed(0)}% RATIO FIT (honest result)
+              NO FRESH GEOMETRIC PATTERN ≥ {(MIN_FIT_SCORE * 100).toFixed(0)}% FIT (honest result)
             </span>
           )}
         </ModulePanel>
@@ -6487,6 +9488,7 @@ function SecondaryModuleView({ tab }: { tab: string }) {
         <ModulePanel title="Perception Index (CPI · reward/pain memory, real transitions)">
           <ModuleStat label="CPI" value={cpi !== null ? pct(cpi) : MODULE_EMPTY} tone={cpi !== null && cpi >= 0.5 ? "long" : cpi !== null ? "short" : "neutral"} />
         </ModulePanel>
+        <BacktestPanel symbol={selectedAsset ?? "BTCUSDT"} timeframe={chartTimeframe ?? "15m"} />
         <ModulePanel title="Signal Track Record (real first-touch outcomes, persisted)">
           <ModuleStat label="Open Plan" value={trackRecord.active ? `${trackRecord.active.plan.direction} since ${new Date(trackRecord.active.openedAt).toLocaleTimeString("en-US", { hour12: false })}` : "NONE"} />
           <ModuleStat label="Target Hits" value={String(trackRecord.targetHits)} tone="long" />
@@ -6619,7 +9621,84 @@ function SecondaryModuleView({ tab }: { tab: string }) {
   );
 }
 
-function ChartWidget({ chartData, onRequestOlderCandles }: any) {
+// Ordem "Lapidação Visual Final" §7 — leitura O/H/L/C do candle real mais
+// recente. Puramente exibição: lê os campos crus do MESMO array que o
+// gráfico desenha, nunca deriva nada (variação/percentual seriam cálculo
+// novo na UI, que a §6 da própria Ordem proíbe — e a Ordem pede
+// literalmente "O / H / L / C", não a variação). Fail-closed: sem candle
+// real com os 4 campos O/H/L/C finitos, devolve null e some — nunca um
+// traço ou zero fabricado ocupando espaço no cabeçalho do gráfico.
+//
+// Especificação Visual Profissional v1 (pedido direto do Operador): V
+// (volume) somado como 5º campo, mesma disciplina — `candle.volume` é o
+// MESMO dado real que já alimenta Footprint/Volume Profile/Liquidity
+// Void neste app (zero segundo cálculo), nunca `volume × preço` (isso
+// SIM seria um cálculo novo — Regra de Ouro 1/4). Rótulo fica "V", nunca
+// "$V" ou qualquer prefixo de moeda: a unidade real de `volume` neste
+// app é o ATIVO-BASE (engine-bridge.ts: `unit: 'base_asset'`, ex. BTC),
+// não notional em USD — um prefixo de dólar aqui seria uma alegação
+// falsa sobre o próprio dado. Opcional/aditivo: candles sem `volume`
+// finito continuam mostrando só O/H/L/C, como sempre (fail-closed por
+// campo, não all-or-nothing).
+// Cores por campo (paleta v1): O neutro, H verde, L vermelho, C branco
+// (o mais recente/acionável), V ciano — mesma família semântica já
+// usada no resto do gráfico (verde/vermelho = alta/baixa, ciano = EMA/
+// referência técnica).
+function fmtVolume(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return v.toFixed(2);
+}
+function OhlcReadout({
+  candles,
+  hoverCandle,
+}: {
+  candles?: Array<{ open?: number; high?: number; low?: number; close?: number; volume?: number }>;
+  // Achado real da AUDITORIA TÉCNICA COMPLETA (item B16): candle real sob o
+  // cursor/dedo (EnhancedChart_110_Percent's onHoverCandleChange, via
+  // subscribeCrosshairMove nativo da lib). null/absent = cursor fora do
+  // gráfico ou chamador que ainda não passa a prop — cai no último candle
+  // real, o comportamento de sempre (fail-closed, nunca um estado novo
+  // quebra um caso que já funcionava).
+  hoverCandle?: { open?: number; high?: number; low?: number; close?: number; volume?: number } | null;
+}) {
+  const last = Array.isArray(candles) && candles.length > 0 ? candles[candles.length - 1] : null;
+  const isHover = !!hoverCandle;
+  const shown = hoverCandle ?? last;
+  if (!shown) return null;
+  const fields: Array<[string, number | undefined, string]> = [
+    ["O", shown.open, "text-[#888888]"],
+    ["H", shown.high, "text-[#22c55e]"],
+    ["L", shown.low, "text-[#ef4444]"],
+    ["C", shown.close, "text-[#e5e5e5] font-semibold"],
+  ];
+  if (!fields.every(([, v]) => num(v))) return null;
+  const hasVolume = num(shown.volume);
+  return (
+    <div
+      className={`hidden lg:flex items-center gap-1.5 mr-2 font-mono whitespace-nowrap shrink-0 ${isHover ? "border-b border-[#00f0ff60]" : ""}`}
+      title={
+        isHover
+          ? "Abertura/Máxima/Mínima/Fechamento/Volume do candle sob o cursor — mesmo array que o gráfico desenha, nunca um segundo cálculo. Volume em unidade do ativo-base, nunca notional USD."
+          : "Abertura/Máxima/Mínima/Fechamento/Volume do candle real mais recente, do mesmo array que o gráfico desenha — nunca um segundo cálculo. Volume em unidade do ativo-base, nunca notional USD."
+      }
+    >
+      {isHover && <Crosshair size={9} className="text-[#00f0ff]" strokeWidth={2} />}
+      {fields.map(([k, v, color]) => (
+        <span key={k} className={color}>
+          <span className="text-[#8ab4f8]/40">{k}</span> {fmt(v)}
+        </span>
+      ))}
+      {hasVolume && (
+        <span className="text-[#06b6d4]">
+          <span className="text-[#8ab4f8]/40">V</span> {fmtVolume(shown.volume as number)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ChartWidget({ chartData, onRequestOlderCandles, priceData }: any) {
   // Real Fair Value Gaps / Order Blocks / Liquidity zones — computed once
   // in App() (see contextValue) against this exact candle array, shared
   // with the Neural Core widget's tactical-context prompt so both use the
@@ -6628,7 +9707,31 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // dado REAL sem janela/offset manual — pan/zoom nativos da própria lib
   // navegam o histórico completo já carregado, então o remapeamento de
   // índice que o zoom "fatiado" antigo exigia deixou de existir.
-  const { smcZones, tradePlanStructureZones, bosChoch, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};
+  const { smcZones, tradePlanStructureZones, bosChoch, liquidityVoids, institutionalBlocks, selectedAsset, engine, chartTimeframe, setChartTimeframe, chartLayerVisibility, chartLayerAutoMode, emaPeriod, confidenceZone, institutionalScore, nexusDecision, vwapCtx, nlState, orderflowTrend, liquidations } = useContext(WidgetContext) || {};
+  // MD-7 (Visual Confidence Trace): segundo useContext deliberado (nunca
+  // somado à desestruturação grande acima) — 3 testes de wiring
+  // pré-existentes (chart-layers-panel-wiring/ciborgue-vivo-wiring/trade-
+  // plan-zone-plugin) travam aquela linha literal inteira; tocá-la para
+  // somar `expectancyFilter` quebraria os três por um motivo que não é o
+  // deles. useContext duplicado no mesmo componente é barato e comum em
+  // React — mesmo objeto de contexto, zero segunda fonte de dado.
+  const { expectancyFilter } = useContext(WidgetContext) || {};
+  // MESMA fórmula que CoreSignalBadge já usa pra effectiveDirection
+  // (App.tsx, componente CoreSignalBadge acima) — nunca uma segunda regra
+  // (LEI 24, memo do Operador item 6: "não criar uma regra paralela").
+  // Reproduzida aqui (não extraída pra um helper compartilhado) porque
+  // CoreSignalBadge é o componente protegido pela exceção pontual da
+  // Entrega 42 — tocar seu corpo interno está fora do escopo desta
+  // entrega ("execute somente esta alteração visual"). wiring-test
+  // (visual-confidence-trace-wiring.test.ts) trava as DUAS fórmulas
+  // idênticas por padrão de código, então drift nunca passa silencioso.
+  const confidenceDirection: "LONG" | "SHORT" | null = useMemo(() => {
+    const dir = engine?.direction ?? null;
+    const isLong = dir === "LONG";
+    const isShort = dir === "SHORT";
+    const suppressed = (isLong || isShort) && expectancyFilter?.show === false;
+    return suppressed ? null : dir;
+  }, [engine?.direction, expectancyFilter]);
   // OMEGA CORE V-MAX Fase 5 (Corredor de Confluência): a Neural Market
   // Aura lia direto convictionReading (só o pool de 3 subsistemas) para a
   // largura do corredor — mesma leitura que confluenceCorridor.intensity
@@ -6636,6 +9739,11 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // até o alvo (Fase 5, confluence-corridor.ts). Seletor direto da store
   // (mesmo padrão de useLayerRelevanceSnapshot já usado neste componente),
   // nunca uma segunda leitura via WidgetContext para o mesmo dado.
+  // Serie real de CVD para a Divergencia de Delta. Seletor direto da store,
+  // mesmo padrao de useConfluenceCorridorSnapshot logo abaixo — o
+  // `orderflowHistoryForTrend` que ja existe neste arquivo vive noutro
+  // componente e nao alcanca este escopo.
+  const orderflowHistoryForDivergence = useOrderflowHistory();
   const confluenceCorridor = useConfluenceCorridorSnapshot();
   // EPC OMEGA FINAL, Etapa 10 ("Liquidity Sweep"): mesma store que
   // AssistantOrb/CouncilWidget já leem (nexus/trap-detection.ts) — o
@@ -6644,12 +9752,31 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // painéis). Zero segunda coleta/cálculo.
   const traps = useTrapSignalsSnapshot();
   const stopBubble = (e: React.SyntheticEvent) => e.stopPropagation();
-  // Correção de latência: o MESMO preço real que já alimenta a barra
-  // superior (usePriceSnapshot — escrito na store a cada tick do WS,
-  // zero segunda coleta) — o gráfico funde este preço na vela em formação
-  // via series.update() dentro de EnhancedChart_110_Percent, isolado do
-  // recomputo de chartData/SMC/Fibonacci.
-  const livePrice = usePriceSnapshot();
+  // Achado real da AUDITORIA TÉCNICA COMPLETA (item B16): candle sob o
+  // cursor/dedo, alimentado por EnhancedChart_110_Percent's
+  // onHoverCandleChange (subscribeCrosshairMove nativo da lib — zero mouse
+  // tracking manual aqui). null = cursor fora do gráfico; OhlcReadout cai
+  // de volta no último candle real, o comportamento de sempre.
+  const [hoveredCandle, setHoveredCandle] = useState<{ time: number; open: number; high: number; low: number; close: number; volume?: number } | null>(null);
+  // Correção de latência REAL (achado de auditoria — Ordem "Unificação da
+  // Inteligência Operacional" §4: "preço de uma atualização com níveis de
+  // outra... um painel atualizado e outro atrasado"): esta leitura vinha
+  // do hook de preço da store, um espelho Zustand que um useEffect
+  // (`[priceData]`) em App() escreve — sempre UM commit de render DEPOIS
+  // da barra
+  // superior, que lê `priceData` direto por prop (síncrono com o próprio
+  // tick de WS). Gap documentado no header de EnhancedChart_110_Percent.tsx
+  // desde a captura real que o achou ("~30s de defasagem possível"),
+  // registrado como pendência e nunca fechado até agora. `priceData`
+  // chega aqui como prop — mesmo valor, mesmo commit que a TopBar já usa,
+  // zero segunda coleta de rede — então o preço do gráfico e o da barra
+  // superior agora vêm sempre do mesmo render, nunca mais um atrás do
+  // outro. useMemo por valor (não pela referência sempre-nova que
+  // setPrice() cria a cada tick, mesmo quando só delta/volume mudam):
+  // os dois useMemo abaixo que dependem de `livePrice` só recomputam
+  // quando o NÚMERO do preço muda de verdade — igual ou melhor que a
+  // referência do Zustand, nunca pior.
+  const livePrice = useMemo(() => ({ price: priceData?.price ?? null }), [priceData?.price]);
   // Signal Precision order: the same real Trade Plan slice the ANALYSIS
   // view shows, now drawn on the chart as silk-thread price lines.
   const chartTradePlan = useTradePlanSnapshot();
@@ -6659,9 +9786,26 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // nunca uma segunda leitura/lógica. useCouncilSnapshot() é o MESMO hook
   // Zustand que TradePlanTopStrip já usa — zero prop-drilling novo.
   const councilForChart = useCouncilSnapshot();
+  // Achado 2.4: mesmo hook/mesma leitura de histórico que TradePlanTopStrip
+  // já usa (useTrackRecordSnapshot) — zero segunda fonte para "qual foi o
+  // último plano resolvido".
+  const trackRecordForChart = useTrackRecordSnapshot();
+  const lastResolvedPlanForChart = trackRecordForChart.history[trackRecordForChart.history.length - 1] ?? null;
+  // Setas de entrada/saída (pedido do Operador). Ativo + histórico, na
+  // ordem cronológica real — o MESMO snapshot que o resto do widget já lê,
+  // zero segunda fonte. O plano ativo entra por último porque ele é o mais
+  // recente; sem ele a entrada em curso não apareceria no gráfico.
+  const planMarkersForChart = useMemo(
+    () => [...trackRecordForChart.history, ...(trackRecordForChart.active ? [trackRecordForChart.active] : [])],
+    [trackRecordForChart],
+  );
   const chartTradePlanAbsenceReason = chartTradePlan
     ? null
-    : tradePlanAbsenceReason(councilForChart, engine?.direction ?? null).reason;
+    : tradePlanAbsenceReason(
+        councilForChart,
+        engine?.direction ?? null,
+        recentResolutionReason(lastResolvedPlanForChart, Date.now(), TIMEFRAME_MS[chartTimeframe as string] ?? TIMEFRAME_MS["15m"]),
+      ).reason;
   // EPC §5/§6 (continuação — relato direto do Operador: "falta aparecer
   // entrada e alvo/alvo2/alvo3 no gráfico"): o Core Engine (LEI 24, único
   // emissor real de LONG/SHORT/WAIT) já computa seu PRÓPRIO stop/target1/
@@ -6811,12 +9955,140 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // informação existia, mas ficava invisível para o Operador conferir
   // onde ela está. isObstacle casa por low/high real (mesma identidade
   // que LiquidityZonesPlugin já usa internamente), nunca por índice.
-  const isRealObstacle = (z: PriceZone) => chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);
+  // Padrões de vela reais no gráfico (pedido direto do Operador: "no
+  // gráfico tem que refletir os padrão das vela"). Mesmo array `chartData`
+  // que os overlays já usam — índice alinhado. Recomputado a cada mudança
+  // real de candle, nunca congelado após um sinal.
+  const chartCandlePatterns = useMemo(
+    () => computeCandlePatterns(chartData).patterns,
+    [chartData],
+  );
+  // Assinatura estreitada ao que a função REALMENTE lê (top/bottom), em vez
+  // de exigir um PriceZone inteiro: os Breaker/Mitigation Blocks têm os
+  // mesmos dois campos e um shape próprio, e um cast só para satisfazer a
+  // assinatura seria uma mentira de tipo sem nenhum ganho.
+  const isRealObstacle = (z: { top: number; bottom: number }) =>
+    chartObstacleZones.some((o) => o.low === z.bottom && o.high === z.top);
+  // "a liquidez que amostra no gráfico, só realmente ela fazer diferença nas
+  // alterações... se a liquidez razoável pequena que não faz movimento"
+  // (pedido direto do Operador). ACHADO MEDIDO: o teto de 3 abaixo escolhia
+  // pela ORDEM DE CHEGADA, nunca pelo TAMANHO — um FVG de 3 ticks (ruído de
+  // pavio) competia pelas mesmas 3 vagas que um FVG de 2% do preço (um
+  // desequilíbrio real). computeZoneSignificance (nexus/liquidity-significance.ts)
+  // mede a largura real de cada zona em unidades de ATR — a mesma fonte
+  // única já unificada nesta sessão (Wilder 14, regime-engine.js) — e só
+  // zonas grandes o suficiente para não desaparecer dentro do ruído normal
+  // de uma vela competem pelas 3 vagas de destaque. Obstáculo estrutural no
+  // caminho do Trade Plan continua SEMPRE visível independente do tamanho
+  // (Regra de Ouro 4: é informação estrutural, não decoração de destaque).
+  const chartAtrPercent = engine?.marketRegime?.atrPercent ?? null;
+  // Auditoria do ecossistema de indicadores (pedido direto do Operador:
+  // "qual ferramenta que está faltando"): Pivot Points clássicos — leitura
+  // síncrona de cache, NUNCA memoizada por [selectedAsset]: o cache é
+  // atualizado em segundo plano (getPivotPoints já dispara o refresh
+  // quando expira, mesmo contrato não-bloqueante de getHtfMarketStructure
+  // em engine-bridge.ts) e este componente já re-renderiza a cada ciclo
+  // real (candle/preço vivo) — memoizar por asset perderia justamente a
+  // atualização que chega DEPOIS do primeiro render, antes de qualquer
+  // troca de ativo. Retorna a MESMA referência de objeto entre um refresh
+  // e outro (zero re-render adicional nos filhos por identidade).
+  const pivotPointsSnapshot = selectedAsset ? getPivotPoints(selectedAsset) : null;
+  // Mesma assinatura estrutural de isRealObstacle logo acima, e pela MESMA
+  // razão: Breaker/Mitigation Block têm top/bottom mas não são PriceZone, e
+  // esta função só lê esses dois campos. Uma segunda cópia da chamada (ou um
+  // cast) seria duplicação sem ganho.
+  // As populacoes so sao COLETADAS aqui; quem entra na tela e' decidido uma
+  // vez so, mais abaixo, quando as cinco ja existem (orcamento compartilhado).
   const unmitigatedFvgsAll = (smcZones?.fairValueGaps ?? []).filter((z: PriceZone) => !z.mitigated);
   const unmitigatedBlocksAll = (smcZones?.orderBlocks ?? []).filter((z: PriceZone) => !z.mitigated);
-  const unmitigatedFvgs = unmitigatedFvgsAll.filter((z, i) => i < 3 || isRealObstacle(z));
-  const unmitigatedBlocks = unmitigatedBlocksAll.filter((z, i) => i < 3 || isRealObstacle(z));
+  // Pools de liquidez (EQH/EQL) NÃO ganham este mesmo filtro — achado real
+  // da auditoria (ver header de liquidity-significance.ts): todo pool que
+  // chega até aqui já exige >= 2 toques reais para existir (a própria
+  // definição de "Equal High/Low" em fvg-order-block-engine.js), o mesmo
+  // piso que support-resistance-engine.js usa para rotular FORTE. Um filtro
+  // extra aqui não removeria zona nenhuma — só duplicaria uma regra que já
+  // vale em outro lugar.
   const unsweptLiquidity = (smcZones?.liquidityZones ?? []).filter((z: LiquidityZone) => !z.swept).slice(0, 4);
+  // Liquidity Void (liquidity-void-engine.js): MESMA disciplina real de
+  // FVG/Order Block acima — só zonas ainda NÃO mitigadas (preço nunca
+  // voltou a preencher o vazio; uma vez preenchido, o void deixou de ser
+  // uma referência real) e mesmo teto de decluttering de 3, com a mesma
+  // união de obstáculos reais do plano ativo (um void que o plano cruza
+  // nunca fica invisível por causa do teto).
+  const unmitigatedVoidsAll = (liquidityVoids ?? []).filter((z: PriceZone) => !z.mitigated);
+  // GRADUAÇÃO de institutional-blocks.js. Dois recortes deliberados antes
+  // de chegar ao canvas, ambos pela mesma razão que os Voids já têm o seu
+  // ("não ficar poluído, só as marca certeira"):
+  //
+  //   1. só blocos AINDA NÃO RETESTADOS. Um bloco que o preço já voltou a
+  //      testar cumpriu seu papel — continua no dado real (o motor devolve
+  //      todos), só não disputa espaço no gráfico.
+  //   2. teto de contagem, com a MESMA escapatória de obstáculo real do
+  //      plano ativo que os Voids usam: um bloco que está no caminho
+  //      entrada→alvo nunca é cortado pelo teto.
+  //   3. ACHADO MEDIDO desta rodada: o teto de 3 escolhia pela ORDEM DE
+  //      CHEGADA, exatamente o defeito que liquidity-significance.ts já
+  //      corrigiu para FVG/Order Block — e que nunca chegou aqui. Medição
+  //      real sobre 2985 blocos (3 regimes de volatilidade): largura mediana
+  //      0,537 ATR, p1 = 0,105 ATR, e 1,27% abaixo do piso de 0,12 ATR. É
+  //      raro (um Breaker é o corpo+pavios de um Order Block real, então
+  //      quase nunca é ruído de pavio como um FVG pode ser), mas quando
+  //      acontece num bloco RECENTE ele desloca um bloco real de uma das 3
+  //      vagas — 1 em 288 vagas desenhadas na mesma medição. O filtro é o
+  //      mesmo, não uma segunda regra.
+  //
+  // `type` é a direção OPERACIONAL do motor (ALTA/BAIXA — já com a
+  // inversão de polaridade do Breaker aplicada), traduzida aqui para o
+  // vocabulário BULLISH/BEARISH que o canvas já usa. Zero recálculo.
+  const blocosVisiveis = (institutionalBlocks ?? []).filter((b: InstitutionalBlock) => !b.retested);
+  const toChartZone = (b: InstitutionalBlock) => ({
+    type: (b.direction === "ALTA" ? "BULLISH" : "BEARISH") as "BULLISH" | "BEARISH",
+    top: b.top,
+    bottom: b.bottom,
+    index: b.failIndex,
+  });
+  // Mesmo formato exato de unmitigatedFvgs/unmitigatedBlocks acima: as 3
+  // vagas são disputadas dentro do subconjunto SIGNIFICATIVO, e obstáculo
+  // real do plano ativo escapa do teto sempre.
+  const breakerAll = blocosVisiveis.filter((b: InstitutionalBlock) => b.kind === "BREAKER");
+  const mitigationAll = blocosVisiveis.filter((b: InstitutionalBlock) => b.kind === "MITIGATION");
+
+  // ═══ ORÇAMENTO COMPARTILHADO DAS BANDAS DE PREÇO ═══
+  //
+  // ACHADO MEDIDO desta rodada: cada uma das CINCO populações de banda
+  // tinha um teto PRÓPRIO de 3 — FVG, Order Block, Void, Breaker e
+  // Mitigation — e nenhuma sabia das outras. No pior caso a camada
+  // `liquidity_zones` punha 15 retângulos na tela enquanto DECLARAVA custo
+  // 3 em LAYER_VISUAL_COST, e o orçamento automático do canvas inteiro é
+  // 12 (AUTO_LAYER_MAX_VISUAL_COST). Uma camada só podia estourar sozinha
+  // o orçamento de todas — o mecanismo anti-poluição derrotado justamente
+  // pelo seu maior consumidor.
+  //
+  // Pior que o volume: sem comparação cruzada, "os 3 melhores de cada
+  // família" não é "os melhores da tela". Um Breaker de 0,2× ATR entrava
+  // por ser o 3º da sua família enquanto um FVG de 3× ATR ficava fora por
+  // ser o 4º da dele.
+  //
+  // Agora as cinco disputam UM orçamento, ordenado pela largura real em
+  // ATR que computeZoneSignificance já calculava — mesma disciplina que
+  // visual-budget.ts aplica às anotações. Zero matemática nova, e o custo
+  // declarado da camada passa a ser CONTÁVEL em vez de estimado.
+  //
+  // Obstáculo real do plano ativo continua SEMPRE visível, fora do teto
+  // (Regra de Ouro 4: informação estrutural, não decoração de destaque) —
+  // a mesma escapatória que cada população já tinha isoladamente.
+  const zonasEmDestaque = selectSharedZoneHighlights(
+    [unmitigatedFvgsAll, unmitigatedBlocksAll, unmitigatedVoidsAll, breakerAll, mitigationAll],
+    livePrice.price,
+    chartAtrPercent,
+  ) as ReadonlySet<unknown>;
+  const emDestaque = <Z extends { top: number; bottom: number }>(z: Z) =>
+    isRealObstacle(z) || zonasEmDestaque.has(z);
+  const unmitigatedFvgs = unmitigatedFvgsAll.filter(emDestaque);
+  const unmitigatedBlocks = unmitigatedBlocksAll.filter(emDestaque);
+  const unmitigatedVoids = unmitigatedVoidsAll.filter(emDestaque);
+  const breakerZones = breakerAll.filter(emDestaque).map(toChartZone);
+  const mitigationZones = mitigationAll.filter(emDestaque).map(toChartZone);
   // V-MAX Fase 1 (superfície visual): níveis reais da Matriz de Confluência
   // (Fase 1.4) — mesma store que os agentes leem, só mapeada para o formato
   // do chart (price/ratio/score reais, nada recalculado aqui).
@@ -6835,6 +10107,11 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // Auditoria Final §3: melhor padrão harmônico real renderizado no
   // gráfico (mesma fatia da store lida pela aba ANALYSIS).
   const chartHarmonics = useHarmonicPatternsSnapshot();
+  // Carta Branca: mesmas fatias reais (Triângulo/Ombro-Cabeça-Ombro) que o
+  // painel ANALYSIS lê — 2º consumidor da MESMA computação em App.tsx,
+  // zero segunda detecção de padrão.
+  const chartTrianglePattern = useTrianglePatternSnapshot();
+  const chartHeadShoulders = useHeadShouldersPatternSnapshot();
 
   // NÚCLEO GRAVITACIONAL AUTÔNOMO §1/§6/§7 — Fase 1 (respostas do
   // Operador: display-only, LEI 24 intacta; toggles manuais continuam
@@ -6842,17 +10119,64 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // Matriz de Confluência Fibonacci em App() — 2º consumidor do MESMO
   // seletor Zustand, zero segunda computação.
   const volumeProfileSnapshot = useVolumeProfileSnapshot();
+  // SMC Harmonic Fusion (pedido direto do Operador): cruza a geometria
+  // harmônica real (chartHarmonics, já ordenada por fitScore) contra as
+  // confluências institucionais que já existem em paralelo no mesmo ciclo
+  // — OB/FVG/EQL (smcZones), POC (volumeProfileSnapshot) e candle de
+  // exaustão (chartCandlePatterns). Zero motor novo: evaluateSmcHarmonicFusion
+  // só avalia o que os 5 motores reais já calculam. `chartHarmonicsConfirmed`
+  // é a lista filtrada (mesma ordem, só os hits com confluência real >= piso)
+  // que substitui `chartHarmonics` NO GRÁFICO — a regra do Operador é clara
+  // ("se as confluências não alinham, não desenha a estrutura nem a seta");
+  // o painel ANALYSIS e `relevanceInput` continuam lendo `chartHarmonics`
+  // cru (geometria completa, Regra de Ouro 4: nunca esconder dado real).
+  const harmonicFusionResults = useMemo(
+    () =>
+      evaluateSmcHarmonicFusion({
+        harmonicHits: chartHarmonics ?? [],
+        orderBlocks: smcZones?.orderBlocks ?? [],
+        fairValueGaps: smcZones?.fairValueGaps ?? [],
+        liquidityZones: smcZones?.liquidityZones ?? [],
+        pocPrice: volumeProfileSnapshot?.fixedRange?.pocPrice ?? null,
+        candlePatterns: chartCandlePatterns ?? [],
+      }),
+    [chartHarmonics, smcZones, volumeProfileSnapshot, chartCandlePatterns],
+  );
+  // Ordem preservada (chartHarmonics já vem por fitScore desc): o primeiro
+  // confirmado é o melhor confirmado, mesma convenção de "único vencedor"
+  // que o resto da família de padrões gráficos já usa.
+  const bestConfirmedHarmonicFusion: SmcHarmonicFusionResult | null = harmonicFusionResults.find((r) => r.confirmed) ?? null;
+  const chartHarmonicsConfirmed = useMemo(
+    () => harmonicFusionResults.filter((r) => r.confirmed).map((r) => r.hit),
+    [harmonicFusionResults],
+  );
   const trendChannelForRelevance = useMemo(
     () => computeTrendChannel((chartData ?? []).map((c: any) => ({ time: c.time, close: c.close })), TREND_CHANNEL_DEFAULT_WINDOW),
     [chartData],
   );
+  // institutional_zones precisa da CONTAGEM real para decidir relevância
+  // (achado desta rodada). Segunda leitura independente do MESMO seletor
+  // Zustand que CouncilWidget já usa mais abaixo — zero cálculo novo, só
+  // uma segunda assinatura da mesma fatia da store (padrão Zustand normal:
+  // um seletor não é "dado" que se duplica, é leitura).
+  const institutionalZones = useInstitutionalZonesSnapshot();
   const relevanceInput: LayerRelevanceInput = useMemo(() => {
     const p = typeof livePrice.price === "number" && Number.isFinite(livePrice.price) ? livePrice.price : null;
     const withinPct = (target: number, pct: number) => p !== null && p > 0 && (Math.abs(target - p) * 100) / p <= pct;
     const liquidityZones: LiquidityZone[] = smcZones?.liquidityZones ?? [];
     const unsweptLiquidityNearPrice = liquidityZones.some((z) => !z.swept && withinPct(z.price, LIQUIDITY_PROXIMITY_PCT));
+    // Achado real (relato do Operador após captura de tela — FVG/Order
+    // Blocks somem do gráfico depois de um movimento forte): existência
+    // real, qualquer distância do preço — proximidade fica só como sinal
+    // de destaque em outras camadas (Liquidity/Volume Profile), nunca
+    // como gate único para uma zona ESTRUTURAL que continua válida até
+    // ser mitigada.
+    const hasUnmitigatedStructuralZone =
+      (smcZones?.fairValueGaps ?? []).some((z: PriceZone) => !z.mitigated) ||
+      (smcZones?.orderBlocks ?? []).some((z: PriceZone) => !z.mitigated);
     const fibLevels = fibonacciMatrix?.levels ?? [];
     const fibonacciNearPrice = fibLevels.some((l) => withinPct(l.price, FIBONACCI_PROXIMITY_PCT));
+    const hasFibonacciLevels = fibLevels.length > 0;
     const vp = volumeProfileSnapshot?.fixedRange;
     const volumeProfileNearPrice = !vp
       ? false
@@ -6875,25 +10199,122 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       lastSessionBoundary !== null && Array.isArray(chartData) && chartData.length > 0
         ? chartData.length - 1 - lastSessionBoundary.index < MARKET_SESSION_RECENT_BOUNDARY_CANDLES
         : false;
+    // Kill Zone ICT: mesma condição/mesma função (activeKillZones) que o
+    // badge do header (TopBar, §6.48) já usa — computado no render, nunca
+    // um segundo timer (este useMemo já reroda >=1x/s via livePrice nas
+    // deps abaixo, mesmo princípio de marketSession na TopBar).
+    const hasActiveKillZone = (activeKillZones(new Date())?.active.length ?? 0) > 0;
+    // "Key Levels" (pedido do Operador): mesma janela real de exibição do
+    // plugin (MAX_KEY_LEVELS_SHOWN) — nunca marca relevante por causa de um
+    // nível antigo que nem está desenhado na tela. Mesmo limiar de
+    // proximidade já usado por liquidez/EQH-EQL (papel estrutural idêntico:
+    // extremo de sessão é uma referência de S/R real).
+    const sessionKeyLevels = Array.isArray(chartData) ? computeSessionKeyLevels(chartData) : [];
+    const recentSessionKeyLevels = sessionKeyLevels.slice(-MAX_KEY_LEVELS_SHOWN);
+    const hasSessionKeyLevelNearPrice = recentSessionKeyLevels.some(
+      (l) => withinPct(l.high, LIQUIDITY_PROXIMITY_PCT) || withinPct(l.low, LIQUIDITY_PROXIMITY_PCT),
+    );
+    // Entrega 41: existência real do perfil TPO da sessão corrente — só
+    // pra relevância (mesmo espírito de sessionKeyLevels acima); o
+    // TpoProfilePlugin computa o mesmo motor de novo, com cache por
+    // referência, pra desenhar (mesmo padrão real já usado por
+    // SessionKeyLevelsPlugin — função pura barata, zero fetch).
+    const hasTpoProfile = Array.isArray(chartData) && computeTpoProfile(chartData).status === "OK";
+    // Entrega 47: mesmo padrão de hasTpoProfile acima — função pura barata
+    // (zero fetch), recomputada aqui só pra relevância; o ZigZagPlugin
+    // computa o mesmo motor de novo com cache por referência pra desenhar
+    // (mesmo princípio já usado por TpoProfilePlugin/SessionKeyLevelsPlugin).
+    // Mesmo limiar mínimo (>=2 pivôs) que o próprio plugin usa pra decidir
+    // se tem uma linha real pra traçar — nunca marca relevante sem ter
+    // nada real pra mostrar. MESMO limiar adaptativo por ATR que o plugin
+    // agora desenha (auditoria do ecossistema de indicadores): sem isto, a
+    // checagem de relevância podia dizer "tem ZigZag" com o limiar fixo
+    // antigo enquanto o desenho real (limiar por ATR) discordava — o mesmo
+    // defeito já corrigido para institutional_zones/neural_market_aura
+    // nesta mesma auditoria, só que na direção "existência mentindo por
+    // usar um cálculo diferente do que é desenhado".
+    const hasZigZagPivots =
+      Array.isArray(chartData) &&
+      computeZigZag(chartData, atrScaledZigZagDeviationPct(chartAtrPercent)).length >= 2;
+    // GRADUAÇÃO de supertrend-engine.js: existência real (o motor devolve
+    // lista vazia até o aquecimento de Wilder ser cumprido), nunca
+    // proximidade — um trailing stop é justamente mais informativo quando
+    // está longe do preço.
+    const hasSuperTrend = Array.isArray(chartData) && computeSuperTrend(chartData).length > 0;
+    // Ichimoku: existencia real pelo MESMO wrapper que o plugin desenha
+    // (computeIchimoku devolve null enquanto o aquecimento de 52 candles
+    // nao fecha) — nunca um `length >= 52` paralelo, que e exatamente o
+    // defeito "existencia mentindo por usar um calculo diferente do que e
+    // desenhado" ja corrigido acima para o ZigZag nesta mesma auditoria.
+    const hasIchimoku = Array.isArray(chartData) && computeIchimoku(chartData) !== null;
+    // Pitchfork: existencia real pelo MESMO wrapper que o plugin desenha —
+    // nunca uma contagem de pivos paralela, que e o defeito "existencia
+    // mentindo por usar um calculo diferente do que e desenhado".
+    const hasAndrewsPitchfork =
+      Array.isArray(chartData) && computeAndrewsPitchfork(chartData)?.status === "OK";
+    // Divergencia de Delta: unica camada cuja relevancia e a LEITURA e nao a
+    // existencia do motor — uma divergencia e rara por definicao, e o overlay
+    // desenha NADA quando nao ha uma. Mesmo calculo real que o plugin faz
+    // (computeDeltaDivergence), nunca uma checagem paralela.
+    const deltaDivergence =
+      Array.isArray(chartData) && Array.isArray(orderflowHistoryForDivergence)
+        ? computeDeltaDivergence(chartData, orderflowHistoryForDivergence)
+        : null;
+    // Achado 2.5: existência real de pelo menos 1 alvo projetado em
+    // qualquer um dos 2 caminhos do Motor de Cenários — mesma leitura
+    // (chartScenario) que EnhancedChart_110_Percent já recebe pra
+    // desenhar, zero segundo cálculo.
+    const hasScenario = Boolean(
+      chartScenario && (chartScenario.pathA.targets.length > 0 || chartScenario.pathB.targets.length > 0),
+    );
     return {
       tradePlanActive: Boolean(chartTradePlan) || Boolean(engineFallbackLevels),
       obstacleZoneCount: chartObstacleZones.length,
+      hasCandlePatterns: chartCandlePatterns.length > 0,
       unsweptLiquidityNearPrice,
+      hasUnmitigatedStructuralZone,
       structureBreakAlpha,
       volumeProfileNearPrice,
       harmonicBestFitScore: chartHarmonics && chartHarmonics.length > 0 ? chartHarmonics[0].fitScore : null,
       fibonacciNearPrice,
+      hasFibonacciLevels,
       premiumDiscountZone: chartPremiumDiscount?.zone ?? null,
       vwapState: vwapCtx?.state ?? null,
       nexusLineState: nlState ?? null,
       trendChannelBandwidthPct,
       orderflowTrendActive: orderflowTrend?.status === "OK" && orderflowTrend.trend !== "ESTAVEL",
       hasOrderBook: Boolean(engine?.hasBook),
+      hasTpoProfile,
+      hasZigZagPivots,
+      hasSuperTrend,
       hasRecentLiquidation: Array.isArray(liquidations) && liquidations.length > 0,
       hasRecentLiquiditySweep: (traps ?? []).some((t) => t.kind === "STOP_HUNT_TOPO" || t.kind === "STOP_HUNT_FUNDO"),
       recentSessionBoundary,
+      hasActiveKillZone,
+      hasSessionKeyLevelNearPrice,
+      // "HOMOLOGAÇÃO DA ORDEM Nº 03 / ORGANISMO INTELIGENTE ADAPTATIVO":
+      // contexto operacional real — mesmo engine.marketRegime já usado
+      // por Risk Engine/Confluência/Radar em vários pontos deste arquivo,
+      // zero segundo cálculo.
+      marketRegime: engine?.marketRegime?.regime ?? null,
+      hasScenario,
+      // Achado desta rodada: as duas camadas abaixo eram relevant:true
+      // incondicional (ver histórico no módulo puro). institutionalZones
+      // já é lido aqui em cima (institutionalSignals); auraReading já é
+      // computado antes deste useMemo — zero cálculo novo, só passar o
+      // dado real adiante.
+      institutionalZoneCount: institutionalZones.length,
+      hasAuraSignal: auraReading.status === "OK" && auraReading.plan !== null,
+      // Auditoria do ecossistema de indicadores: existência real (candle
+      // diário anterior fechado disponível), nunca proximidade — mesmo
+      // padrão de hasZigZagPivots/hasTpoProfile acima.
+      hasPivotPoints: pivotPointsSnapshot?.status === "OK",
+      hasIchimoku,
+      hasAndrewsPitchfork,
+      hasDeltaDivergence: deltaDivergence?.status === "OK" && deltaDivergence.divergence !== null,
+      deltaDivergenceCoveredCandles: deltaDivergence?.coveredCandles ?? 0,
     };
-  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps]);
+  }, [livePrice, smcZones, fibonacciMatrix, volumeProfileSnapshot, bosChoch, chartData, trendChannelForRelevance, chartTradePlan, engineFallbackLevels, chartObstacleZones, chartHarmonics, chartPremiumDiscount, vwapCtx, nlState, orderflowTrend, engine?.hasBook, liquidations, traps, engine?.marketRegime, chartScenario, chartCandlePatterns, institutionalZones, auraReading, pivotPointsSnapshot, orderflowHistoryForDivergence]);
   const layerRelevance = useMemo(() => computeLayerRelevance(relevanceInput), [relevanceInput]);
   useEffect(() => {
     useUnifiedSnapshotStore.getState().setLayerRelevance(layerRelevance);
@@ -6904,6 +10325,29 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
   // EnhancedChart_110_Percent recebe só este resultado já resolvido — nunca
   // precisa saber o que é automático ou manual (Regra de Ouro 4: zero
   // segunda implementação do "visible ou não" dentro do componente do canvas).
+  // Competição real entre as camadas que passaram no gate de relevância —
+  // resolve QUAIS merecem a tela agora (motor puro, auto-layer-cap.test.ts).
+  // Camadas fora do modo automático entram como "forçadas": decisão humana
+  // explícita nunca é suprimida por heurística, e não gasta o orçamento.
+  const autoDecision = useMemo(() => {
+    const autoMode: ChartLayerVisibility = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
+    const manual: ChartLayerVisibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
+    const forced = CHART_LAYER_IDS.filter((id) => !autoMode[id] && manual[id]);
+    // O timeframe entra na decisão: a ordem de precisão passa a ser
+    // resolvida pelo horizonte real (timeframe-layer-profile.ts). Sem ele,
+    // a mesma régua valia em 1m e em 1W.
+    return resolveAutoLayerVisibility(layerRelevance ?? {}, forced, undefined, chartTimeframe ?? null);
+  }, [layerRelevance, chartLayerAutoMode, chartLayerVisibility, chartTimeframe]);
+
+  // Publica a decisão JÁ resolvida (zero segundo cálculo) para o painel de
+  // camadas ler exatamente o que o canvas desenha. Antes disto o painel
+  // resolvia por conta própria usando só `relevance.relevant` — sem o TETO
+  // de competição — e exibia ~20 camadas como "VISÍVEL" enquanto o gráfico
+  // desenhava 6. Mesmo padrão de publicação de layerRelevance acima.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setChartLayerDecision(autoDecision);
+  }, [autoDecision]);
+
   const effectiveChartLayerVisibility: ChartLayerVisibility = useMemo(() => {
     const autoMode: ChartLayerVisibility = chartLayerAutoMode ?? DEFAULT_CHART_LAYER_AUTO_MODE;
     const manual: ChartLayerVisibility = chartLayerVisibility ?? DEFAULT_CHART_LAYER_VISIBILITY;
@@ -6912,23 +10356,53 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
       // cobria 15 das 18 camadas reais — uma camada nova em modo automático
       // sem cobertura (liquidation_heatmap/liquidity_sweep/market_sessions,
       // fechado no declutter do gráfico) fazia layerRelevance[id] vir
-      // undefined, e ".relevant" quebrava o render inteiro. As 18 camadas
+      // undefined, e ".relevant" quebrava o render inteiro. As 21 camadas
       // já têm regra própria agora (layer-relevance.test.ts prova 1:1 com
-      // CHART_LAYER_IDS), mas o fallback (`relevance?.relevant ?? true`)
-      // fica como defesa contra uma camada FUTURA esquecida — nunca derruba
-      // o app mesmo se layer-relevance.ts ficar defasado de novo.
-      acc[id] = autoMode[id] ? (layerRelevance[id]?.relevant ?? true) : manual[id];
+      // CHART_LAYER_IDS, institutional_zones incluída desde o nascimento
+      // da camada, mesma disciplina de kill_zones/session_key_levels
+      // antes dela), mas o fallback (`relevance?.relevant
+      // ?? true`) fica como defesa
+      // contra uma camada FUTURA esquecida — nunca derruba o app mesmo se
+      // layer-relevance.ts ficar defasado de novo.
+      // TETO DE SIMULTANEIDADE (pedido do Operador: "gráfico mais limpo
+      // possível, só com as ferramentas mais precisas"). Antes desta linha,
+      // uma camada em modo automático desenhava sempre que tivesse leitura
+      // real — e em mercado ativo a maioria das 25 tem leitura real ao mesmo
+      // tempo. O gate de relevância nunca foi o problema; a AUSÊNCIA de
+      // competição entre as que passavam no gate era.
+      // `autoDecision` só existe para camada em modo automático; o toggle
+      // manual continua decidindo sozinho, exatamente como antes.
+      acc[id] = autoMode[id] ? (autoDecision[id]?.show ?? layerRelevance[id]?.relevant ?? true) : manual[id];
       return acc;
     }, {} as ChartLayerVisibility);
-  }, [chartLayerAutoMode, chartLayerVisibility, layerRelevance]);
+  }, [chartLayerAutoMode, chartLayerVisibility, layerRelevance, autoDecision]);
 
   return (
     <Widget
       id="chart"
-      title={`GRÁFICO · ${selectedAsset ?? ""}/USDT`}
+      // Lapidação Visual (DIRETRIZ 2 — "não repetir informação"): o prefixo
+      // "GRÁFICO · " rotulava o óbvio (o maior elemento da tela, cheio de
+      // candles) e o par já aparece no seletor de ativo da barra superior.
+      // Nenhuma plataforma de referência escreve "CHART" no cabeçalho do
+      // gráfico — elas usam essa linha para a identidade do instrumento.
+      // Mantido só o par, que identifica o painel quando ele está
+      // minimizado/listado no Workspace Manager.
+      title={`${selectedAsset ?? ""}/USDT`}
       flex="flex-[1.8] min-h-[320px]"
       extraHeader={
         <div className="flex items-center gap-1 text-[0.45rem]">
+          {/* Ordem "Lapidação Visual Final" §7 (OHLC): leitura compacta do
+              candle REAL mais recente do MESMO array que o gráfico desenha
+              (chartData, prop direta) — zero cálculo novo, zero segunda
+              fonte: são os 4 campos crus do candle, não uma derivação.
+              Sincronizado por construção com símbolo/timeframe (§10): quando
+              chartTimeframe muda, chartData é refetchado e este bloco lê o
+              novo array, nunca um snapshot próprio. Fail-closed (§7): sem
+              candle real, não renderiza nada — nunca um O/H/L/C fabricado.
+              Discreto de propósito (§7 "sem competir com preço"): mesmo
+              0.45rem do seletor de timeframe irmão, rótulos a 40% de opacidade,
+              escondido abaixo de lg para não espremer o seletor no iPad Mini. */}
+          <OhlcReadout candles={chartData} hoverCandle={hoveredCandle} />
           {/* Auditoria de estabilização (P1): antes disto, esta linha era
               só <span> sem onClick — nunca respondia a toque nenhum, e
               "15M" ficava marcado ativo por um literal fixo
@@ -6940,7 +10414,40 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
               estreitas; é rolagem esperada de um seletor real (mesmo
               padrão de qualquer terminal profissional), não uma barra de
               rolagem indesejada de layout quebrado. */}
-          <div className="flex items-center gap-0.5 max-w-[160px] sm:max-w-[260px] overflow-x-auto scrollbar-hide shrink-0">
+          {/* "aquela barrinha está muito pequena, a gente não dá nem pra ver"
+              (Operador, item citado nominalmente). Medido: este seletor —
+              um CONTROLE INTERATIVO de 14 opções — herdava o text-[0.45rem]
+              do container acima, ou seja 7.2px. Não é compacto, é ilegível,
+              e num iPad é também um alvo de toque abaixo do mínimo usável.
+              Agora usa .ar10-t-body (12px→13.5px, piso 12px em QUALQUER
+              tela; ver a escala em index.css) e o padding acompanha, para o
+              alvo de toque crescer junto com o texto — texto maior em botão
+              apertado seria meia correção. A largura máxima sobe na mesma
+              proporção do corpo (160→220 / 260→340) para o número de opções
+              visíveis não CAIR por causa da fonte maior; acima de 14 opções
+              a rolagem horizontal continua, como em qualquer terminal real. */}
+          <div
+            /* Correção do beco sem saída medido (relato do Operador: "no
+               computador não tem como arrastar, fica aparecendo até o M8").
+               Conta real com o corpo de 13.5px: a fileira de 14 timeframes
+               precisa de ~445px; o teto era 340px ⇒ 10 de 14 visíveis, último
+               alcançável 8H, e .scrollbar-hide tirava o único jeito de chegar
+               nos outros 4 com mouse.
+               md+ (desktop, onde não há dedo) NÃO tem mais teto: cabem os 14.
+               Abaixo disso o teto continua — mas ali há toque, E o trilho
+               agora é visível (.ar10-scroll-x), então nunca mais é um beco. */
+            className="ar10-t-body flex items-center gap-0.5 max-w-[220px] sm:max-w-[340px] md:max-w-none ar10-scroll-x shrink-0"
+            /* Roda do mouse → rolagem HORIZONTAL. Num contêiner de rolagem
+               horizontal o navegador só responde a shift+roda, que ninguém
+               descobre sozinho. Só intercepta quando há overflow REAL (senão
+               roubaria a rolagem vertical da página sem motivo). */
+            onWheel={(e) => {
+              const el = e.currentTarget;
+              if (el.scrollWidth <= el.clientWidth) return;
+              if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+              el.scrollLeft += e.deltaY;
+            }}
+          >
             {CHART_TIMEFRAMES.map((tf) => (
               <button
                 key={tf.value}
@@ -6955,7 +10462,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
                     ? `Timeframe ${tf.label} · ${timeframeProfile(tf.value)!.style} · ETA típico: ${timeframeProfile(tf.value)!.etaHorizon}`
                     : `Timeframe ${tf.label}`
                 }
-                className={`shrink-0 px-1 py-0.5 rounded transition-colors ${chartTimeframe === tf.value ? "bg-[#00f0ff20] text-[#00f0ff] font-bold border border-[#00f0ff40]" : "text-[#8ab4f8]/60 hover:text-[#8ab4f8]"}`}
+                className={`shrink-0 px-1.5 py-1 rounded transition-colors ${chartTimeframe === tf.value ? "bg-[#00f0ff20] text-[#00f0ff] font-bold border border-[#00f0ff40]" : "text-[#8ab4f8]/60 hover:text-[#8ab4f8]"}`}
               >
                 {tf.label}
               </button>
@@ -6976,6 +10483,7 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
         {chartData && chartData.length > 0 ? (
           <EnhancedChart_110_Percent
             data={chartData}
+            onHoverCandleChange={setHoveredCandle}
             support={engine?.support ?? null}
             resistance={engine?.resistance ?? null}
             supportStrength={engine?.supportStrength ?? null}
@@ -6984,9 +10492,16 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             resistanceBreakouts={engine?.resistanceBreakouts ?? 0}
             fairValueGaps={unmitigatedFvgs}
             orderBlocks={unmitigatedBlocks}
+            liquidityVoids={unmitigatedVoids}
+            planMarkers={planMarkersForChart}
+            breakerBlocks={breakerZones}
+            mitigationBlocks={mitigationZones}
             obstacleZones={chartObstacleZones}
             liquidityZones={unsweptLiquidity}
             structureBreak={bosChoch?.break ?? null}
+            candlePatterns={chartCandlePatterns}
+            lastSwingHigh={engine?.lastSwingHigh ?? null}
+            lastSwingLow={engine?.lastSwingLow ?? null}
             fibonacciLevels={fibonacciLevels}
             livePrice={livePrice.price}
             activeTimeframe={chartTimeframe as Timeframe}
@@ -6996,9 +10511,14 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             aura={auraReading}
             targetsHit={auraTrackRecord.active?.targetsHit ?? 0}
             confidenceZone={confidenceZone ?? null}
+            institutionalScoreValue={institutionalScore?.score ?? null}
             scenario={chartScenario ?? null}
             premiumDiscount={chartPremiumDiscount ?? null}
-            harmonicHits={chartHarmonics}
+            harmonicHits={chartHarmonicsConfirmed}
+            harmonicConfluence={bestConfirmedHarmonicFusion}
+            confidenceDirection={confidenceDirection}
+            trianglePattern={chartTrianglePattern}
+            headShouldersPattern={chartHeadShoulders}
             decision={nexusDecision ?? null}
             vwapState={vwapCtx?.state ?? null}
             nexusLineState={nlState ?? null}
@@ -7008,6 +10528,8 @@ function ChartWidget({ chartData, onRequestOlderCandles }: any) {
             layerVisibility={effectiveChartLayerVisibility}
             emaPeriod={emaPeriod}
             onRequestOlderCandles={onRequestOlderCandles}
+            chartAtrPercent={chartAtrPercent}
+            pivotPoints={pivotPointsSnapshot}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-[0.55rem] tracking-[0.3em] text-[#8ab4f8]/40 font-bold">
@@ -7071,15 +10593,11 @@ function OrderFlowWidget() {
           <div
             className="h-full bg-gradient-to-r from-[#00ffaa10] to-[#00ffaa60] border-r border-[#00ffaa] relative overflow-hidden transition-[background-color,opacity] duration-500"
             style={{ width: `${num(buyPercent) ? buyPercent : 50}%` }}
-          >
-            <div className="absolute top-0 bottom-0 w-[50px] bg-gradient-to-r from-transparent via-[#00ffaa] to-transparent opacity-30 -translate-x-full animate-[scan-horizontal_2s_linear_infinite]"></div>
-          </div>
+          ></div>
           <div
             className="h-full bg-gradient-to-l from-[#ff005510] to-[#ff005560] border-l border-[#ff0055] relative overflow-hidden transition-[background-color,opacity] duration-500"
             style={{ width: `${num(sellPercent) ? sellPercent : 50}%` }}
-          >
-            <div className="absolute top-0 bottom-0 w-[50px] bg-gradient-to-l from-transparent via-[#ff0055] to-transparent opacity-30 translate-x-[500%] animate-[scan-horizontal_2s_linear_infinite_reverse]"></div>
-          </div>
+          ></div>
         </div>
 
         {/* Real Order Flow Engine (OFI/Absorption/Exhaustion) fed by real
@@ -7319,9 +10837,9 @@ function MarketDirectionWidget() {
 // instead of a bare LONG/SHORT button. Every number here is a real
 // passthrough from `engine`/`riskSuggestion` (already computed elsewhere
 // in this file, see contextValue) — nothing is recomputed or invented.
-function MiniStat({ label, value, color }: { label: string; value: string; color: string }) {
+function MiniStat({ label, value, color, title }: { label: string; value: string; color: string; title?: string }) {
   return (
-    <div className="flex flex-col bg-[#010308] px-2 py-1.5 rounded border border-[#8ab4f8]/10 min-w-0">
+    <div className="flex flex-col bg-[#010308] px-2 py-1.5 rounded border border-[#8ab4f8]/10 min-w-0" title={title}>
       <span className="text-[0.4rem] text-[#8ab4f8]/60 font-bold tracking-widest uppercase truncate">{label}</span>
       <span className={`text-[0.55rem] font-mono font-black truncate ${color}`}>{value}</span>
     </div>
@@ -7437,7 +10955,7 @@ function MarketBiasDecisionCard() {
           )}
         </span>
 
-        <MiniStat label="Conviction (Core Engine)" value={confidenceLabel} color="text-[#8ab4f8]" />
+        <MiniStat label="Confiança (Core Engine)" value={confidenceLabel} color="text-[#8ab4f8]" />
       </div>
 
       <div className="cyber-panel shrink-0 flex flex-col gap-2 p-3">
@@ -7505,6 +11023,10 @@ function OrderBookWidget({ data, book }: any) {
   const asks: Level[] = book?.asks ?? [];
   const bids: Level[] = book?.bids ?? [];
   const hasBook = asks.length > 0 || bids.length > 0;
+  // Entrega 40: derivações puras sobre o MESMO book acima — nunca uma
+  // segunda leitura (ver cabeçalho de nexus/order-book-depth.ts).
+  const bidAskRatio = computeBidAskRatio(bids, asks);
+  const imbalance = computeImbalance(bids, asks);
 
   let accumAsk = 0;
   let accumBid = 0;
@@ -7564,6 +11086,25 @@ function OrderBookWidget({ data, book }: any) {
                   </div>
                 );
               })}
+            </div>
+
+            <div className="flex justify-between items-center px-1 pt-1 mt-[2px] border-t border-[#00f0ff1a] shrink-0 gap-2">
+              <div className="flex items-center gap-1">
+                <span className="text-[0.42rem] text-[#8ab4f8]/60 font-bold tracking-wide uppercase">RATIO B/A</span>
+                <span
+                  className={`text-[0.5rem] font-mono font-black ${bidAskRatio === null ? "text-[#8ab4f8]/40" : bidAskRatio >= 1 ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+                >
+                  {fmt(bidAskRatio, 2)}
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[0.42rem] text-[#8ab4f8]/60 font-bold tracking-wide uppercase">IMBALANCE</span>
+                <span
+                  className={`text-[0.5rem] font-mono font-black ${imbalance === null ? "text-[#8ab4f8]/40" : imbalance >= 0 ? "text-[#00ffaa]" : "text-[#ff0055]"}`}
+                >
+                  {fmtSignedPct(imbalance === null ? null : imbalance * 100, 0)}
+                </span>
+              </div>
             </div>
           </>
         )}
@@ -7652,18 +11193,32 @@ interface GmilLogEntry {
   id: string;
   timestamp: number;
   text: string;
-  tone: "ok" | "warn" | "error";
+  // "info" (Ordem 3 §17, achado da graduação): terminal-event-log.ts é
+  // deliberadamente um log de ATIVIDADE, nunca um classificador de
+  // severidade (essa é a fatia do alert-center.ts) — inventar tom ok/warn/
+  // error por categoria aqui duplicaria o próprio mecanismo de alertas sob
+  // um rótulo diferente. Toda linha vinda do Nexus Core usa "info"; só as 2
+  // linhas de proveniência GMIL (já existentes) continuam usando ok/warn/error.
+  tone: "ok" | "warn" | "error" | "info";
 }
 
 const fmtClock = (ts: number) =>
   new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+// Ordem 3 §17 (graduação): o painel passou de 2 tipos de evento (GMIL) para
+// 27 (organismo inteiro) — 8 linhas visíveis ficariam obsoletas em segundos
+// com o volume novo. 20 é o mesmo tipo de piso de memória já declarado em
+// outros ring buffers deste repositório (TERMINAL_LOG_MAX_ENTRIES,
+// SHARED_ZONE_HIGHLIGHT_SLOTS): convenção documentada para um painel
+// compacto, não medição de quantas linhas "deveriam" caber.
+const EVENTS_WIDGET_MAX_ROWS = 20;
 
 function EventsWidget() {
   const [log, setLog] = useState<GmilLogEntry[]>([]);
 
   useEffect(() => {
     const pushEntry = (entry: GmilLogEntry) => {
-      setLog((prev) => [entry, ...prev].slice(0, 8));
+      setLog((prev) => [entry, ...prev].slice(0, EVENTS_WIDGET_MAX_ROWS));
     };
     const offReading = gmilBus.on<{ providerId: string; result: { ok: boolean; reason?: string } }>(
       "PROVIDER_READING",
@@ -7691,9 +11246,28 @@ function EventsWidget() {
         if (spoken) voiceEngine.speak(spoken, "ALERT");
       },
     );
+    // Ordem 3 §17 (Terminal Event Log), graduado: 2ª fonte real do MESMO
+    // painel. onAny() entrega o NexusEvent completo pros 27 tipos do
+    // organismo (DATA/HEALTH/UI/QUANT/BRAIN/ORGANISM) — formatTerminalLogEntry()
+    // já decide o texto/categoria (zero segunda formatação aqui, só adapta
+    // pro mesmo shape GmilLogEntry que este painel já renderiza, pra não
+    // duplicar o painel inteiro por uma diferença de tipo). Formato
+    // "[CATEGORIA] mensagem" reproduz literalmente o exemplo da Ordem
+    // ("[MARKET] BTCUSDT 5m snapshot updated").
+    const core = getNexusCore();
+    const offNexus = core.bus.onAny((event) => {
+      const formatted = formatTerminalLogEntry(event, Date.now());
+      pushEntry({
+        id: `n-${formatted.timestamp}-${formatted.eventType}`,
+        timestamp: formatted.timestamp,
+        text: `[${formatted.category}] ${formatted.message}`,
+        tone: "info",
+      });
+    });
     return () => {
       offReading();
       offHealth();
+      offNexus();
     };
   }, []);
 
@@ -7710,7 +11284,13 @@ function EventsWidget() {
               <span className="text-[#8ab4f8]/50 shrink-0">{fmtClock(entry.timestamp)}</span>
               <span
                 className={`shrink-0 w-1 h-1 rounded-full ${
-                  entry.tone === "ok" ? "bg-[#00ffaa]" : entry.tone === "warn" ? "bg-[#f0d06f]" : "bg-[#ff0055]"
+                  entry.tone === "ok"
+                    ? "bg-[#00ffaa]"
+                    : entry.tone === "warn"
+                      ? "bg-[#f0d06f]"
+                      : entry.tone === "error"
+                        ? "bg-[#ff0055]"
+                        : "bg-[#8ab4f8]"
                 }`}
               ></span>
               <span className="text-[#a0f0ff]/80 truncate">{entry.text}</span>
@@ -7866,7 +11446,7 @@ const REGIME_DISPLAY: Record<string, { label: string; color: string }> = {
 };
 
 function MarketRegimeWidget() {
-  const { engine, cvd, currentRsi, chartTimeframe, orderflowTrend } = useContext(WidgetContext) || {};
+  const { engine, cvd, currentRsi, currentMacd, chartTimeframe, orderflowTrend } = useContext(WidgetContext) || {};
 
   // Fase D: linha oficial do Market Regime Engine (ADX/DI + percentil de
   // banda, ver src/market-regime/). Direção colore o rótulo composto;
@@ -7936,6 +11516,20 @@ function MarketRegimeWidget() {
         ? "text-[#00ffaa]"
         : "text-[#8ab4f8]";
 
+  // Diretriz Final de Integração Total: graduação real do MACD
+  // (nexus/macd.ts, EPC OMEGA FINAL) — mesmo padrão de rsiLabel/rsiColor
+  // acima. Histograma > 0 (linha rápida cruzou acima da linha de sinal)
+  // lê como momentum comprador, < 0 como vendedor — mesma paleta
+  // direcional teal/rosa já usada em toda a UI (nunca uma cor nova).
+  const macdLabel = num(currentMacd?.histogram) ? currentMacd.histogram.toFixed(1) : AWAIT;
+  const macdColor = !num(currentMacd?.histogram)
+    ? "text-[#8ab4f8]"
+    : currentMacd.histogram > 0
+      ? "text-[#00ffaa]"
+      : currentMacd.histogram < 0
+        ? "text-[#ff0055]"
+        : "text-[#8ab4f8]";
+
   // ORDEM DE AUDITORIA FINAL §3/§4 (achado real): esta row recomputava um
   // proxy PRÓPRIO (média ingênua de (high-low)/close, sem gaps) quando o
   // Market Regime Engine (regime-engine.js) já calcula o ATR% REAL (true
@@ -7988,6 +11582,7 @@ function MarketRegimeWidget() {
         <Row label="MOMENTUM (CVD)" value={momentumLabel} valueClass={momentumColor} />
         <Row label="TENDÊNCIA DO FLUXO" value={flowTrendLabel} valueClass={flowTrendColor} />
         <Row label="RSI (14)" value={rsiLabel} valueClass={rsiColor} />
+        <Row label="MACD (12,26,9)" value={macdLabel} valueClass={macdColor} />
         <Row label="VOLATILIDADE (ATR%)" value={volLabel} valueClass={volColor} />
       </div>
     </Widget>
@@ -8029,6 +11624,53 @@ const CONSENSUS_RADAR_LABEL: Record<ConsensusRadarCategory, string> = {
 
 function CouncilWidget() {
   const council = useCouncilSnapshot();
+  // Ordem Nº 04 (§4): forma única real (EngineSignal) sobre os MESMOS votos
+  // de `council.votes` — deriveEngineSignalsFromCouncil só reempacota,
+  // nunca recalcula (LEI 24 intacta). Mesma ordem/comprimento de
+  // `council.votes` sempre (decision.votes.map em engine-signal-
+  // contract.ts) — pareável por índice abaixo, zero parsing de `id`.
+  const engineSignals = useMemo(() => deriveEngineSignalsFromCouncil(council), [council]);
+  // Carta Branca (Evidence Fusion Engine): 2ª fonte real e independente
+  // (zero voto de agente envolvido) — mesma fatia da store que o gráfico
+  // já publica (institutionalZones), zero segundo cálculo. fuseEvidence
+  // NUNCA produz direção/score — só estatística real de cobertura/volume
+  // (ver cabeçalho de nexus/evidence-fusion.ts).
+  const institutionalZones = useInstitutionalZonesSnapshot();
+  const institutionalSignals = useMemo(
+    () => deriveEngineSignalsFromInstitutionalZones(institutionalZones),
+    [institutionalZones],
+  );
+  // Ordem Consolidação Final (Prioridade 3, "medir relevância"): mesma
+  // fatia real que o painel de camadas já usa (useLayerRelevanceSnapshot,
+  // linha ~3782) — zero segundo cálculo. Zonas Institucionais mapeia 1:1
+  // para a camada real "institutional_zones"; Conselho não é uma camada de
+  // gráfico togglable, então recebe null honesto (não um valor fabricado).
+  const layerRelevance = useLayerRelevanceSnapshot();
+  // Ordem Fechamento (§3, "Evidence Fusion... barramento inteligente do
+  // ecossistema"): useMemo (não só o cálculo puro) porque o resultado
+  // agora também é PUBLICADO na store logo abaixo — sem isto, uma nova
+  // referência a cada render de CouncilWidget dispararia setEvidenceFusion
+  // (e o produce/freeze do Immer) em todo tick, mesmo quando council/
+  // institutionalZones/layerRelevance não mudaram de verdade.
+  const evidenceFusion = useMemo(
+    () =>
+      fuseEvidence([
+        { source: "Conselho", signals: engineSignals, relevance: null },
+        {
+          source: "Zonas Institucionais",
+          signals: institutionalSignals,
+          relevance: layerRelevance?.institutional_zones ?? null,
+        },
+      ] satisfies EvidenceFusionSourceGroup[]),
+    [engineSignals, institutionalSignals, layerRelevance],
+  );
+  // Publica a MESMA leitura já computada acima (zero segundo cálculo) na
+  // store, mesmo padrão de institutionalZones/layerRelevance — agora
+  // qualquer consumidor futuro (self-diagnostics.ts é o primeiro) lê via
+  // useEvidenceFusionSnapshot()/getSnapshotForEngine() em vez de recomputar.
+  useEffect(() => {
+    useUnifiedSnapshotStore.getState().setEvidenceFusion(evidenceFusion);
+  }, [evidenceFusion]);
   const cpi = useCpiSnapshot();
   // Achado de auditoria: reward/pain/eventCount reais já são alimentados
   // por 8 call sites reais de recordAffectiveEvent (App.tsx) mas só o
@@ -8120,24 +11762,42 @@ function CouncilWidget() {
             <span className="text-[0.4rem] text-[#8ab4f8]/40 text-center py-1">{AWAIT}</span>
           )}
         </div>
-        {(council?.votes ?? []).map((v) => (
-          <div
-            key={v.agent}
-            className="flex flex-col bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
-            title={v.evidence.length > 0 ? v.evidence.join(" · ") : v.rationale}
-          >
-            <div className="flex justify-between items-center">
-              <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">
-                {COUNCIL_AGENT_LABEL[v.agent] ?? v.agent}
-              </span>
-              <span className={`text-[0.5rem] font-mono font-black ${COUNCIL_STANCE_COLOR[v.stance]}`}>
-                {v.stance}
-                {v.confidence !== null ? <span className="text-[#8ab4f8]/60 font-normal"> {Math.round(v.confidence * 100)}%</span> : null}
-              </span>
+        {(council?.votes ?? []).map((v, i) => {
+          // Ordem Nº 04: signal.weight real (engine-signal-contract.ts,
+          // espelha aggregateCouncil/council.ts:429-431 — RISK nunca é
+          // direcional, ABSTAIN nunca tem opinião real) diz se este voto
+          // especificamente ENTROU no linear opinion pool (Stone 1961/
+          // DeGroot 1974) que formou VOTO DO CONSELHO acima. Informação já
+          // real e computada hoje (riskGated/quorum), nunca antes exibida
+          // POR VOTO — só o efeito agregado (quórum N/6) aparecia.
+          const inPool = engineSignals[i]?.weight !== null && engineSignals[i]?.weight !== undefined;
+          return (
+            <div
+              key={v.agent}
+              className="flex flex-col bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+              title={v.evidence.length > 0 ? v.evidence.join(" · ") : v.rationale}
+            >
+              <div className="flex justify-between items-center">
+                <span className={`text-[0.45rem] font-bold tracking-wide ${inPool ? "text-[#8ab4f8]/70" : "text-[#8ab4f8]/40"}`}>
+                  {COUNCIL_AGENT_LABEL[v.agent] ?? v.agent}
+                  {!inPool && (
+                    <span
+                      className="text-[0.38rem] font-normal italic text-[#8ab4f8]/40"
+                      title="Fora do pool linear real do Conselho: RISK é um portão fail-closed (nunca uma opinião direcional); ABSTAIN é ausência real de opinião nesta janela. Nenhum dos dois entra na massa de opinião que forma VOTO DO CONSELHO."
+                    >
+                      {" "}· fora do pool
+                    </span>
+                  )}
+                </span>
+                <span className={`text-[0.5rem] font-mono font-black ${COUNCIL_STANCE_COLOR[v.stance]}`}>
+                  {v.stance}
+                  {v.confidence !== null ? <span className="text-[#8ab4f8]/60 font-normal"> {Math.round(v.confidence * 100)}%</span> : null}
+                </span>
+              </div>
+              <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-tight truncate">{v.rationale}</span>
             </div>
-            <span className="text-[0.42rem] text-[#8ab4f8]/50 leading-tight truncate">{v.rationale}</span>
-          </div>
-        ))}
+          );
+        })}
         {!council && (
           <div className="flex items-center justify-center text-[0.5rem] tracking-[0.25em] text-[#8ab4f8]/40 font-bold py-3">
             {AWAIT}
@@ -8202,6 +11862,30 @@ function CouncilWidget() {
             {trustScore === null ? AWAIT : `${Math.round(trustScore.score * 100)}%`}
           </span>
         </div>
+        {/* Carta Branca (Evidence Fusion Engine): primeiro consumidor real
+            de engine-signal-contract.ts — SYSTEM_HANDBOOK §6.72/§6.74/§6.76
+            chamavam isto de "iniciativa de arquitetura própria" por 3
+            rodadas seguidas, nunca construído até agora. Cor SEMPRE neutra
+            de propósito (nunca verde/vermelho): é o único jeito visual de
+            garantir, num relance, que isto nunca é lido como um sinal
+            direcional — mesma disciplina de SCENARIO A/B acima, que usa a
+            cor real do LONG/SHORT porque É uma leitura direcional; esta
+            linha nunca é. */}
+        <div
+          className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10"
+          title={
+            evidenceFusion.totalSignals > 0
+              ? `${evidenceFusion.bySource.map((b) => `${b.source}: ${b.valid}/${b.total} válidos${b.meanWeight !== null ? ` · peso médio ${Math.round(b.meanWeight * 100)}%` : ""}${b.relevance ? ` · ${b.relevance.relevant ? "relevante agora" : "fora de relevância agora"}` : ""}`).join(" · ")} · Confiança média (só válidos): ${evidenceFusion.meanConfidence !== null ? `${Math.round(evidenceFusion.meanConfidence * 100)}%` : "sem amostra real"} · Consenso de peso entre fontes: ${evidenceFusion.weightConsensus !== null ? `${Math.round(evidenceFusion.weightConsensus * 100)}%` : "sem amostra real (menos de 2 pesos)"} · Cobertura do contrato de 10 campos: ${Object.values(evidenceFusion.fieldCoverage).filter((v) => v > 0).length}/10 instrumentados — estatística real de cobertura/volume, NUNCA uma direção ou score combinado (LEI 24)`
+              : "Nenhuma fonte real montada ainda (Conselho sem quórum e/ou zero Zona Institucional confluente agora)"
+          }
+        >
+          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">EVIDENCE FUSION · coverage, never a score</span>
+          <span className="text-[0.5rem] font-mono font-black text-[#8ab4f8]">
+            {evidenceFusion.totalSignals > 0
+              ? `${evidenceFusion.validSignals}/${evidenceFusion.totalSignals} válidos · ${Object.values(evidenceFusion.fieldCoverage).filter((v) => v > 0).length}/10 campos${evidenceFusion.weightConsensus !== null ? ` · consenso ${Math.round(evidenceFusion.weightConsensus * 100)}%` : ""}`
+              : AWAIT}
+          </span>
+        </div>
       </div>
     </Widget>
   );
@@ -8259,9 +11943,11 @@ function MultiTimeframeMatrixWidget() {
       <div className="flex flex-col gap-1 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
         <div
           className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff20]"
-          title="Contagem real de quantos dos 6 prazos (com leitura real) concordam — NUNCA uma probabilidade calibrada (este repositório não tem backtest para sustentar essa afirmação honestamente)."
+          title={`Contagem real de quantos dos ${MULTI_TIMEFRAME_LIST.length} prazos (com leitura real) concordam — NUNCA uma probabilidade calibrada (este repositório não tem backtest para sustentar essa afirmação honestamente).`}
         >
-          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">CONFLUÊNCIA · 6 PRAZOS</span>
+          <span className="text-[0.45rem] text-[#8ab4f8]/70 font-bold tracking-wide">
+            CONFLUÊNCIA · {MULTI_TIMEFRAME_LIST.length} PRAZOS
+          </span>
           <span className={`text-[0.55rem] font-mono font-black ${confluenceColor}`}>{confluenceLabel}</span>
         </div>
         {rows.map(({ tf, ctx }) => {
@@ -8277,6 +11963,15 @@ function MultiTimeframeMatrixWidget() {
                 ctx.support1 !== null ? `S1 ${ctx.support1.toFixed(0)}` : null,
                 ctx.resistance1 !== null ? `R1 ${ctx.resistance1.toFixed(0)}` : null,
                 ctx.atrPercent !== null ? `ATR ${ctx.atrPercent.toFixed(2)}%` : null,
+                // SMC Harmonic Fusion (auditoria de sincronismo, pedido do
+                // Operador): Liquidez real (OB/FVG/EQL) deste prazo, mesmo
+                // motor do gráfico principal — só entra na tooltip quando o
+                // trio veio real (os 3 nascem/morrem juntos, ver
+                // multi-timeframe-engine.ts), nunca um "0" fabricado quando
+                // o motor de liquidez não teve leitura.
+                ctx.unmitigatedOrderBlockCount !== null
+                  ? `OB ${ctx.unmitigatedOrderBlockCount} · FVG ${ctx.unmitigatedFvgCount} · EQL livre ${ctx.unsweptLiquidityZoneCount}`
+                  : null,
               ]
                 .filter(Boolean)
                 .join(" · ") || "sem métrica adicional real nesta janela";
@@ -8313,8 +12008,41 @@ function MultiTimeframeMatrixWidget() {
 // (Chromium; Safari => SEM_API declarado, nunca um número fabricado).
 // ZERO REPETIÇÃO: nenhum destes indicadores aparece em outro painel —
 // regime/vieses/comitê/risco moram nos painéis das suas fases.
+// ADITIVO V-MAX Etapa 17 (Chart Integrity Engine): vocabulário/cor
+// próprios (mapeados para a MESMA paleta DATA_QUALITY_COLOR já usada
+// pelas outras linhas deste painel — nunca uma 2ª paleta), rótulo curto
+// para caber na largura do Row.
+const CHART_INTEGRITY_LABEL: Record<ChartIntegrityStatus, string> = {
+  SYNCED: "SINCRONIZADO",
+  SYMBOL_MISMATCH: "DESSINCRONIZADO",
+  STALE_DATA: "DADO ATRASADO",
+  DADOS_INSUFICIENTES: "AGUARDANDO",
+};
+const CHART_INTEGRITY_QUALITY: Record<ChartIntegrityStatus, DataQualityLabel> = {
+  SYNCED: "OK",
+  STALE_DATA: "WARNING",
+  SYMBOL_MISMATCH: "FAIL",
+  DADOS_INSUFICIENTES: "DADOS_INSUFICIENTES",
+};
+
+// ADITIVO V-MAX Etapa 19 (Organism Health): mesmo padrão de par rótulo+cor
+// das 2 constantes acima — nunca uma 3ª paleta, sempre a mesma
+// DATA_QUALITY_COLOR de 4 estados.
+const ORGANISM_HEALTH_LABEL: Record<OrganismHealthVerdict, string> = {
+  OK: "SAUDÁVEL",
+  WARN: "ATENÇÃO",
+  CRITICAL: "CRÍTICO",
+  AGUARDANDO: "AGUARDANDO",
+};
+const ORGANISM_HEALTH_QUALITY: Record<OrganismHealthVerdict, DataQualityLabel> = {
+  OK: "OK",
+  WARN: "WARNING",
+  CRITICAL: "FAIL",
+  AGUARDANDO: "DADOS_INSUFICIENTES",
+};
+
 function TelemetryHealthWidget() {
-  const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus, gmilProviders } = useContext(WidgetContext) || {};
+  const { engine, realCycle, cycleLatencyMs, fps, chartTimeframe, engineStatus, gmilProviders, selectedAsset } = useContext(WidgetContext) || {};
   // Ordem "Ciborgue Vivo" §3: mesmos sinais reais já lidos abaixo para as
   // Rows existentes, mais os que só o relatório precisa (offline/frescor/
   // conexões por exchange) — zero segunda medição, só uma segunda síntese
@@ -8329,7 +12057,10 @@ function TelemetryHealthWidget() {
   const qualityLabel = quality
     ? `${quality.classification}${num(quality.weight) ? ` · peso ${(quality.weight * 100).toFixed(0)}%` : ""}`
     : AWAIT;
-  const qualityColor = DATA_QUALITY_COLOR[classifyBusQuality(quality?.classification ?? null)];
+  // Nomeado (em vez de inline) para que Organism Health (Etapa 19) reuse a
+  // MESMA classificação da Row abaixo — zero segunda medição divergente.
+  const busQualityState = classifyBusQuality(quality?.classification ?? null);
+  const qualityColor = DATA_QUALITY_COLOR[busQualityState];
 
   // ADITIVO V-MAX Etapa 10 (achado de auditoria): data-sufficiency.js já
   // computa um score real 0-100 de cobertura de campos EM TODO ciclo
@@ -8340,7 +12071,8 @@ function TelemetryHealthWidget() {
   // recomputado aqui.
   const sufficiency = realCycle?.dataSufficiency ?? null;
   const sufficiencyLabel = sufficiency ? `${sufficiency.score}/${sufficiency.max_score}` : AWAIT;
-  const sufficiencyColor = DATA_QUALITY_COLOR[classifySufficiencyScore(sufficiency?.score ?? null, sufficiency?.max_score ?? 100)];
+  const sufficiencyState = classifySufficiencyScore(sufficiency?.score ?? null, sufficiency?.max_score ?? 100);
+  const sufficiencyColor = DATA_QUALITY_COLOR[sufficiencyState];
 
   // ADITIVO V-MAX Etapa 10 (achado de auditoria): GmilOrchestrator.getSnapshot()
   // já computa um weight 0-1 real por provedor (mesmo computeQuality de
@@ -8362,7 +12094,23 @@ function TelemetryHealthWidget() {
   const gmilLabel = gmilAvgWeight !== null
     ? `${(gmilAvgWeight * 100).toFixed(0)}% · ${gmilAttempted.length}/${gmilList.length} fontes`
     : AWAIT;
-  const gmilColor = DATA_QUALITY_COLOR[classifyWeight(gmilAvgWeight)];
+  const gmilQualityState = classifyWeight(gmilAvgWeight);
+  const gmilColor = DATA_QUALITY_COLOR[gmilQualityState];
+
+  // ADITIVO V-MAX Etapa 17 (Chart Integrity Engine, achado de auditoria):
+  // o `cancelled` do efeito que dispara runRealAnalysisCycle já evita a
+  // pior forma de desync (ciclo velho sobrescrevendo a seleção nova), mas
+  // nada tornava isso um invariante VISÍVEL/verificável — se um refactor
+  // futuro quebrasse essa guarda, nenhum sinal avisaria o Operador. Puro
+  // passthrough dos mesmos campos que já chegam via realCycle/WidgetContext.
+  const chartIntegrity = computeChartIntegrity({
+    selectedSymbol: selectedAsset ?? null,
+    selectedTimeframe: chartTimeframe ?? null,
+    cycleSymbol: realCycle?.symbol ?? null,
+    cycleTimeframe: realCycle?.timeframe ?? null,
+    candleAgeMs: realCycle?.candleAgeMs ?? null,
+  });
+  const chartIntegrityColor = DATA_QUALITY_COLOR[CHART_INTEGRITY_QUALITY[chartIntegrity.status]];
 
   const variant = wasmVariantLabel(realCycle?.wasmVariant ?? null);
   const fpsClass = classifyFps(fps);
@@ -8370,6 +12118,24 @@ function TelemetryHealthWidget() {
   const cycleClass = classifyCycleLatency(cycleLatencyMs);
   const cycleColor = cycleClass === "RAPIDO" ? "text-[#00ffaa]" : cycleClass === "OK" ? "text-[#f0d06f]" : cycleClass === "LENTO" ? "text-[#ff0055]" : "text-[#8ab4f8]/50";
   const memMB = typeof performance !== "undefined" ? memoryUsedMB(performance as any) : null;
+
+  // ADITIVO V-MAX Etapa 19 (Organism Health, achado de auditoria): as 8
+  // Rows abaixo já eram cada uma um sinal real de saúde, mas nenhuma
+  // resumia isso num veredito único e SEMPRE VISÍVEL — o Operador só via
+  // "tudo bem" ao ler linha por linha, ou clicando em GERAR RELATÓRIO DE
+  // AUTODIAGNÓSTICO (self-diagnostics.ts, sob demanda). Puro reduce dos
+  // MESMOS estados já nomeados acima — zero segunda medição.
+  const organismHealth = computeOrganismHealth({
+    offline,
+    workersAlive: health.workersAlive,
+    busQuality: busQualityState,
+    sufficiencyQuality: sufficiencyState,
+    gmilQuality: gmilQualityState,
+    chartIntegrityQuality: CHART_INTEGRITY_QUALITY[chartIntegrity.status],
+    fpsClass,
+    cycleClass,
+  });
+  const organismHealthColor = DATA_QUALITY_COLOR[ORGANISM_HEALTH_QUALITY[organismHealth.verdict]];
 
   const Row = ({ label, value, valueClass }: { label: string; value: string; valueClass: string }) => (
     <div className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#8ab4f8]/10">
@@ -8381,9 +12147,25 @@ function TelemetryHealthWidget() {
   return (
     <Widget id="system_health" title="SYSTEM HEALTH" flex="flex-[0.8] min-h-[170px]">
       <div className="flex flex-col gap-1.5 px-1 py-1 h-full min-h-0 overflow-y-auto scrollbar-hide">
+        {/* ADITIVO V-MAX Etapa 19 (Organism Health): veredito agregado
+            SEMPRE VISÍVEL, primeira linha do painel de propósito — as
+            Rows abaixo continuam existindo intactas para quem quer o
+            detalhe por sinal; esta é só a leitura de 1 olhar. Sufixo com
+            o sinal responsável só aparece quando o veredito não é OK
+            (nunca verboso quando está tudo bem). */}
+        <Row
+          label="SAÚDE DO ORGANISMO"
+          value={
+            organismHealth.verdict === "OK"
+              ? ORGANISM_HEALTH_LABEL[organismHealth.verdict]
+              : `${ORGANISM_HEALTH_LABEL[organismHealth.verdict]} · ${organismHealth.worstSignal}`
+          }
+          valueClass={organismHealthColor}
+        />
         <Row label="QUALIDADE DA FONTE (BUS)" value={qualityLabel} valueClass={qualityColor} />
         <Row label="SUFICIÊNCIA DE DADOS" value={sufficiencyLabel} valueClass={sufficiencyColor} />
         <Row label="QUALIDADE GMIL (CONTEXTO)" value={gmilLabel} valueClass={gmilColor} />
+        <Row label="INTEGRIDADE DO GRÁFICO" value={CHART_INTEGRITY_LABEL[chartIntegrity.status]} valueClass={chartIntegrityColor} />
         <Row label="WASM ENGINE" value={variant ?? AWAIT} valueClass={variant === "SIMD128" ? "text-[#00ffaa]" : "text-[#8ab4f8]"} />
         <Row
           label={`LATÊNCIA DO CICLO (${chartTimeframe?.toUpperCase() ?? "15M"})`}
@@ -8410,7 +12192,21 @@ function TelemetryHealthWidget() {
             estado real visível, não substitui nem duplica aquilo. */}
         <button
           type="button"
-          onClick={() =>
+          onClick={() => {
+            // ORDEM Nº 01: mesma visão versionada/read-only que os motores
+            // reais já usam (getSnapshotForEngine, organism-orchestrator.ts)
+            // — este botão é um OBSERVADOR externo (como o próprio stage-
+            // runner.ts se descreve), nunca um motor, então lê sob demanda
+            // em vez de assinar.
+            const engineView = getSnapshotForEngine();
+            // Ordem Fechamento (§3): MESMA fórmula já usada pelo painel
+            // "EVIDENCE FUSION" do CouncilWidget (N campos com pelo menos 1
+            // montador real / 10) — zero segunda medição, só lida daqui via
+            // a visão versionada em vez de recomputar fuseEvidence.
+            const evidenceFusion = engineView.snapshot.evidenceFusion;
+            const evidenceFusionFieldCoverage = evidenceFusion
+              ? Object.values(evidenceFusion.fieldCoverage).filter((v) => v > 0).length / 10
+              : null;
             setDiagnosticReport(
               buildDiagnosticReport({
                 offline,
@@ -8420,9 +12216,11 @@ function TelemetryHealthWidget() {
                 engineReason: realCycle?.reason ?? null,
                 dataQualityClassification: quality?.classification ?? null,
                 connections,
+                stageTrace: traceStages(engineView.snapshot, engineView.seq),
+                evidenceFusionFieldCoverage,
               }),
-            )
-          }
+            );
+          }}
           className="flex justify-between items-center bg-[#010308] px-2 py-1 rounded border border-[#00f0ff30] hover:bg-[#00f0ff10] transition-colors text-left"
         >
           <span className="text-[0.45rem] text-[#00f0ff] font-bold tracking-wide">GERAR RELATÓRIO DE AUTODIAGNÓSTICO</span>
@@ -8571,6 +12369,49 @@ function DecisionValidationWidget() {
   // deixar de ser um NÃO_APLICÁVEL hardcoded.
   const trustScore = useTrustScoreSnapshot();
 
+  // Ponta Solta 1 (Auditoria do Ecossistema, 2ª passada) — ordem do Operador
+  // "habilitar tudo, principalmente das corretoras, das fontes de dados todas".
+  //
+  // A fatia `orderBooks` da store era WRITE-ONLY: 3 escritores reais gravavam
+  // o livro L2 de cada corretora a cada tick (App.tsx:3395,
+  // cross-exchange-service.ts BINANCE e MEXC) e o único leitor exposto
+  // (`useExchangeOrderBooks`) NUNCA era importado. O livro de 3 praças era
+  // capturado e descartado — feature construída até a metade, sendo que a
+  // captura é justamente a parte cara (rede, parsing, memória).
+  //
+  // Esta é a leitura que faltava. `crossExchangeConvergence` (linha abaixo)
+  // compara PREÇO DE MARCA entre corretoras; esta compara o LIVRO real —
+  // melhor bid/ask de cada praça, spread consolidado cruzando praças (negativo
+  // = desalinhamento real) e desvio contra a mediana. São perguntas
+  // diferentes sobre o mesmo tema, não duplicação.
+  //
+  // LEI 24: display only, contexto de execução — nunca vira decisão.
+  const { reversalAlert } = useContext(WidgetContext) || {};
+  // Cor pela GRAVIDADE real: reversão CONTRA o sinal vigente é o caso que o
+  // Operador precisa ver na hora; a favor é confirmação; sem leitura é cinza.
+  const reversalColor =
+    reversalAlert?.status !== "OK"
+      ? "text-[#8ab4f8]/50"
+      : reversalAlert.contradictsCore === true
+        ? "text-[#f23645]"
+        : "text-[#089981]";
+
+  const exchangeBooks = useExchangeOrderBooks();
+  const crossBook = useMemo(
+    () => computeCrossExchangeBook(exchangeBooks, Date.now()),
+    [exchangeBooks],
+  );
+  const crossBookLabel = describeCrossExchangeBook(crossBook);
+  // Cor segue o que o dado REALMENTE diz, nunca um verde otimista:
+  // praças desalinhadas (spread consolidado negativo) é um achado que merece
+  // destaque de atenção, não a mesma cor de "tudo normal".
+  const crossBookColor =
+    crossBook.status !== "OK"
+      ? "text-[#8ab4f8]/50"
+      : (crossBook.consolidatedSpread ?? 0) < 0
+        ? "text-[#f0d06f]"
+        : "text-[#00ffaa]";
+
   // Fase H: sugestão de dimensionamento (% equity / % risco). Fail-closed:
   // SEM_SUGESTAO exibe 0% com o motivo real. O selo é PERMANENTE e
   // incondicional (diretriz 3 da ordem de ignição).
@@ -8697,7 +12538,15 @@ function DecisionValidationWidget() {
           className="flex justify-between items-center bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0"
           title="Motor de Confluência Cruzada: concordância real entre Ensemble, Comitê e Matriz Multi-Timeframe com a direção já emitida pelo Core Engine. Nunca probabilidade de acerto de mercado."
         >
-          <span className="text-[0.45rem] text-[#c07dff] font-bold tracking-widest">
+          {/* Lapidação Visual (DIRETRIZ 7 — consistência): este rótulo usava
+              o hex solto #c07dff, um quase-duplicado feito à mão do
+              .accent-consensus (#c86bff) que o index.css já define e
+              documenta como "púrpura marca a leitura do Comitê/GMIL (opinião
+              agregada)" — exatamente o que "confluência cruzada entre 3
+              subsistemas" É. Passa a usar a classe nomeada: zero cor nova,
+              mesma semântica declarada dos irmãos accent-risk/accent-consensus
+              deste mesmo cartão. */}
+          <span className="text-[0.45rem] accent-consensus font-bold tracking-widest">
             CONFLUÊNCIA CRUZADA · 3 SUBSISTEMAS
           </span>
           <span className={`text-[0.55rem] font-mono font-black ${convictionColor}`}>{convictionLabel}</span>
@@ -8712,6 +12561,41 @@ function DecisionValidationWidget() {
           </div>
           <span className="text-[0.4rem] text-[#f0d06f]/80 font-bold tracking-widest">
             SUGESTÃO ALGORÍTMICA · NÃO É CONSELHO FINANCEIRO
+          </span>
+        </div>
+        {/* Ponta Solta 1: leitura real do LIVRO entre praças. Card próprio
+            (mesmo padrão dos irmãos ricos acima: Comitê, Confluência Cruzada,
+            Risk Engine) em vez de uma linha binária ✓/aguardando — a
+            informação que importa aqui é ONDE está o melhor preço e se as
+            praças estão alinhadas, nunca só "existe livro". Fora da contagem
+            de confluência de propósito: contexto de execução, não uma
+            camada de opinião sobre a direção (LEI 24). */}
+        <div
+          className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0"
+          title="Compara o livro L2 real já capturado de cada corretora: melhor bid e melhor ask ATRAVÉS das praças, spread consolidado (negativo = praças desalinhadas) e desvio contra a mediana dos meio-preços. Contexto de execução para o Operador — nunca uma decisão de trading."
+        >
+          <span className="text-[0.45rem] text-[#8ab4f8]/80 font-bold tracking-widest">
+            LIVRO ENTRE PRAÇAS · EXECUÇÃO
+          </span>
+          <span className={`text-[0.5rem] font-mono font-black ${crossBookColor} break-words`}>
+            {crossBookLabel}
+          </span>
+        </div>
+        {/* ORDEM DO OPERADOR ("não deixa nada no laboratório"): Detector de
+            Reversão graduado — como ALERTA, nunca como decisão. Não existe
+            percentual medido para ele (a medição real nunca rodou, ver
+            tools/measure-reversal-lead.mjs), e alertar não precisa de
+            percentual: só informa que a estrutura virou. LEI 24 intacta —
+            o Núcleo continua decidindo sozinho, do mesmo jeito. */}
+        <div
+          className="flex flex-col gap-0.5 bg-[#010308] px-2 py-1.5 rounded border border-[#00f0ff20] shrink-0"
+          title="Reversão estrutural real (CHoCH — primeiro rompimento CONTRA a estrutura vigente; BOS/continuação nunca conta aqui). É AVISO, não decisão: o Core Engine continua sendo o único emissor de LONG/SHORT/WAIT (LEI 24). Nunca é probabilidade de acerto."
+        >
+          <span className="text-[0.45rem] text-[#8ab4f8]/80 font-bold tracking-widest">
+            REVERSÃO ESTRUTURAL · AVISO
+          </span>
+          <span className={`text-[0.5rem] font-mono font-black ${reversalColor} break-words`}>
+            {reversalAlert ? describeReversalReading(reversalAlert) : AWAIT}
           </span>
         </div>
         {checks.map((c) => (

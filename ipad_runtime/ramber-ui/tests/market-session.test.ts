@@ -3,13 +3,19 @@
 // de coisa fácil de errar em silêncio — convenção: lógica pura => teste de
 // execução real).
 import { describe, it, expect } from 'vitest';
-import { marketSessionFromUtc, computeSessionBoundaries, MARKET_SESSION_CONTRACT_VERSION } from '../src/nexus/market-session';
+import { marketSessionFromUtc, computeSessionBoundaries, computeSessionKeyLevels, MARKET_SESSION_CONTRACT_VERSION } from '../src/nexus/market-session';
 
 const at = (hourUtc: number, minute = 0) => new Date(Date.UTC(2026, 6, 14, hourUtc, minute, 0));
 // candle.time real é em segundos (mesma convenção de todo o resto do app —
 // lightweight-charts/Binance klines), nunca ms.
 const candleAt = (dayOffset: number, hourUtc: number, minute = 0) =>
   Math.floor(new Date(Date.UTC(2026, 6, 14 + dayOffset, hourUtc, minute, 0)).getTime() / 1000);
+// Candle OHLC real (só high/low importam para computeSessionKeyLevels).
+const candleHL = (dayOffset: number, hourUtc: number, high: number, low: number, minute = 0) => ({
+  time: candleAt(dayOffset, hourUtc, minute),
+  high,
+  low,
+});
 
 describe('marketSessionFromUtc: janelas fixas UTC, 24h cobertas sem buraco', () => {
   it('00:00 => ÁSIA (borda inicial inclusiva)', () => {
@@ -96,5 +102,63 @@ describe('EPC OMEGA FINAL Etapa 10: computeSessionBoundaries — só TRANSIÇÕE
     expect(boundaries).toHaveLength(1);
     expect(boundaries[0].index).toBe(2); // compara contra a última sessão REAL (índice 0), não contra o NaN pulado
     expect(boundaries[0].session.id).toBe('LONDRES');
+  });
+});
+
+describe('"Key Levels" (pedido do Operador): computeSessionKeyLevels — máxima/mínima real de cada sessão, reaproveitando a MESMA partição de SESSIONS', () => {
+  it('série vazia => []', () => {
+    expect(computeSessionKeyLevels([])).toEqual([]);
+  });
+
+  it('1 candle único => 1 nível ainda ABERTO (closed:false), high=low=o próprio candle', () => {
+    const candles = [candleHL(0, 1, 105, 95)];
+    const levels = computeSessionKeyLevels(candles);
+    expect(levels).toHaveLength(1);
+    expect(levels[0]).toMatchObject({ sessionId: 'ASIA', high: 105, low: 95, closed: false, startIndex: 0, endIndex: 0 });
+  });
+
+  it('3 candles na MESMA sessão real (ÁSIA) => 1 nível só, high/low acumulados por Math.max/Math.min real (nunca o último candle sozinho)', () => {
+    const candles = [candleHL(0, 0, 100, 90), candleHL(0, 2, 108, 94), candleHL(0, 4, 103, 85)];
+    const levels = computeSessionKeyLevels(candles);
+    expect(levels).toHaveLength(1);
+    expect(levels[0].high).toBe(108); // do candle do meio, não do último
+    expect(levels[0].low).toBe(85); // do último candle, não do primeiro
+    expect(levels[0].closed).toBe(false); // série termina dentro da própria ÁSIA
+  });
+
+  it('transição real ÁSIA→LONDRES (07h): a ÁSIA fecha com closed:true e extremos finais; LONDRES abre closed:false', () => {
+    const candles = [candleHL(0, 5, 100, 90), candleHL(0, 6, 110, 88), candleHL(0, 7, 120, 115)];
+    const levels = computeSessionKeyLevels(candles);
+    expect(levels).toHaveLength(2);
+    expect(levels[0]).toMatchObject({ sessionId: 'ASIA', high: 110, low: 88, closed: true, startIndex: 0, endIndex: 1 });
+    expect(levels[1]).toMatchObject({ sessionId: 'LONDRES', high: 120, low: 115, closed: false, startIndex: 2, endIndex: 2 });
+  });
+
+  it('4 sessões reais em sequência (ÁSIA/LONDRES/LONDRES+NY/NOVA YORK) — cada uma fecha com seu próprio extremo real, nunca contaminado pela vizinha', () => {
+    const candles = [
+      candleHL(0, 1, 100, 90), // ÁSIA
+      candleHL(0, 8, 105, 95), // LONDRES
+      candleHL(0, 13, 112, 108), // LONDRES+NY
+      candleHL(0, 17, 99, 92), // NOVA YORK (ainda aberta)
+    ];
+    const levels = computeSessionKeyLevels(candles);
+    expect(levels.map((l) => l.sessionId)).toEqual(['ASIA', 'LONDRES', 'LONDRES_NY', 'NOVA_YORK']);
+    expect(levels.slice(0, 3).every((l) => l.closed)).toBe(true);
+    expect(levels[3].closed).toBe(false);
+    expect(levels[1]).toMatchObject({ high: 105, low: 95 });
+  });
+
+  it('candle com Date inválida (NaN) é pulado honestamente — não reseta a sessão corrente nem contamina high/low', () => {
+    const candles = [candleHL(0, 1, 100, 90), { time: NaN, high: 999, low: 1 }, candleHL(0, 3, 102, 92)];
+    const levels = computeSessionKeyLevels(candles);
+    expect(levels).toHaveLength(1);
+    expect(levels[0]).toMatchObject({ high: 102, low: 90, closed: false });
+  });
+
+  it('mesma zona de risco de computeSessionBoundaries (candles diários, sempre 00:00 UTC) => 1 nível só, ÁSIA, sem quebra artificial', () => {
+    const candles = [0, 1, 2].map((d) => candleHL(d, 0, 100 + d, 90 - d));
+    const levels = computeSessionKeyLevels(candles);
+    expect(levels).toHaveLength(1);
+    expect(levels[0]).toMatchObject({ sessionId: 'ASIA', high: 102, low: 88, closed: false });
   });
 });

@@ -12,9 +12,10 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 vi.mock('../../src/market-data-bus/index.js', () => ({
   collectBinanceFuturesKlines: vi.fn(),
   collectMexcFuturesKlines: vi.fn(),
+  collectTradfiDelayedKlines: vi.fn(),
 }));
 
-import { collectBinanceFuturesKlines, collectMexcFuturesKlines } from '../../src/market-data-bus/index.js';
+import { collectBinanceFuturesKlines, collectMexcFuturesKlines, collectTradfiDelayedKlines } from '../../src/market-data-bus/index.js';
 import {
   getMarketDataProvider,
   DEFAULT_MARKET_DATA_PROVIDER,
@@ -23,6 +24,7 @@ import {
 
 const mockedBinance = collectBinanceFuturesKlines as unknown as ReturnType<typeof vi.fn>;
 const mockedMexc = collectMexcFuturesKlines as unknown as ReturnType<typeof vi.fn>;
+const mockedTradfi = collectTradfiDelayedKlines as unknown as ReturnType<typeof vi.fn>;
 
 function fakeCandles() {
   return [{ t: 1700000000, o: 100, h: 105, l: 95, c: 102, v: 10 }];
@@ -32,6 +34,7 @@ describe('MarketDataAdapter: provider é parâmetro explícito, nunca um toggle 
   afterEach(() => {
     mockedBinance.mockReset();
     mockedMexc.mockReset();
+    mockedTradfi.mockReset();
   });
 
   it('DEFAULT_MARKET_DATA_PROVIDER é BINANCE — fonte primária, trava permanente do CLAUDE.md', () => {
@@ -58,8 +61,22 @@ describe('MarketDataAdapter: provider é parâmetro explícito, nunca um toggle 
     expect(result).toEqual(fakeCandles());
   });
 
-  it('MARKET_DATA_PROVIDER_IDS lista exatamente os 2 providers reais desta entrega — Bybit/OKX/Hyperliquid ficam para quando forem pedidos', () => {
-    expect(MARKET_DATA_PROVIDER_IDS).toEqual(['BINANCE', 'MEXC']);
+  it('getMarketDataProvider("TRADFI_DELAYED").collect chama exatamente collectTradfiDelayedKlines (Ordem Market Data Fabric, Fase 1) — nunca reusa/mistura com Binance/MEXC', async () => {
+    mockedTradfi.mockResolvedValue(fakeCandles());
+    const result = await getMarketDataProvider('TRADFI_DELAYED').collect({ symbol: 'CME_ES', timeframe: '1h', limit: 200 });
+    expect(mockedTradfi).toHaveBeenCalledWith({ symbol: 'CME_ES', timeframe: '1h', limit: 200 });
+    expect(mockedBinance).not.toHaveBeenCalled();
+    expect(mockedMexc).not.toHaveBeenCalled();
+    expect(result).toEqual(fakeCandles());
+  });
+
+  it('MARKET_DATA_PROVIDER_IDS lista exatamente os 3 providers reais desta entrega — Bybit/OKX/Hyperliquid ficam para quando forem pedidos', () => {
+    expect(MARKET_DATA_PROVIDER_IDS).toEqual(['BINANCE', 'MEXC', 'TRADFI_DELAYED']);
+  });
+
+  it('adicionar TRADFI_DELAYED não muda o default nem o comportamento de nenhum consumidor cripto existente', () => {
+    expect(DEFAULT_MARKET_DATA_PROVIDER).toBe('BINANCE');
+    expect(getMarketDataProvider().id).toBe('BINANCE');
   });
 
   it('cada provider carrega um label real e distinto — nunca dois rótulos idênticos que confundiriam diagnóstico/UI', () => {

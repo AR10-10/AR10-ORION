@@ -35,22 +35,42 @@ describe('App.tsx: confidenceZone computado UMA vez sobre o mesmo institutionalS
     const app = read('../src/App.tsx');
     const memoMatch = app.match(/const contextValue = useMemo\(\s*\(\) => \(\{([\s\S]*?)\}\),/);
     expect(memoMatch).not.toBeNull();
-    expect(memoMatch![1]).toContain('institutionalScore,\n      confidenceZone,');
+    // Contrato real: os 4 campos aparecem, NESTA ORDEM, no mesmo bloco. A
+    // versão anterior exigia adjacência literal byte-a-byte, o que quebrava
+    // por qualquer campo novo inserido no meio (aconteceu de verdade com
+    // decisionDistance) sem que nada do contrato tivesse mudado. A checagem
+    // de ORDEM é a que o teste realmente quer — e continua estrita.
+    const ORDEM = ['institutionalScore,', 'expectancyFilter,', 'calibrationResult,', 'confidenceZone,'];
+    const emOrdem = (bloco: string) => {
+      let cursor = -1;
+      for (const campo of ORDEM) {
+        const at = bloco.indexOf(campo, cursor + 1);
+        expect(at, campo).toBeGreaterThan(cursor);
+        cursor = at;
+      }
+    };
+    emOrdem(memoMatch![1]);
     const depsMatch = app.match(/const contextValue = useMemo\([\s\S]*?\[([\s\S]*?)\],\s*\);/);
     expect(depsMatch).not.toBeNull();
-    expect(depsMatch![1]).toContain('institutionalScore,\n      confidenceZone,');
+    emOrdem(depsMatch![1]);
   });
 });
 
-describe('Header: Score badge exibe a banda real §16 — cor e rótulo 1:1 com confidenceZone, nunca um segundo cálculo', () => {
+describe('ScoreContextCard (gaveta Core Intelligence): Score badge exibe a banda real §16 — cor e rótulo 1:1 com confidenceZone, nunca um segundo cálculo', () => {
+  // v16.0 PRO Fase 1: o Score saiu da TopBar (item explícito da lista
+  // "REMOVER do header") — mesmos dados reais, mesma fórmula, agora lidos
+  // por ScoreContextCard (self-contained, mesmo padrão dos outros cards
+  // da gaveta Core Intelligence).
   it('destrutura confidenceZone do WidgetContext ao lado de institutionalScore', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('institutionalScore,\n    confidenceZone,\n    convictionTrend,\n    assistantMessages,');
+    expect(app).toContain(
+      'const { institutionalScore, confidenceZone, convictionTrend, assistantMessages, heatReading, vwapCtx, nlState, nexusConfluence } =',
+    );
   });
 
   it('a cor do número vem de confidenceZone.colorClass — nunca um limiar redundante hardcoded', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('confidenceZone === null ? "text-[#8ab4f8]/40" : `${confidenceZone.colorClass} drop-shadow-[0_0_5px_currentColor]`');
+    expect(app).toContain('const scoreColor = confidenceZone === null ? "text-[#8ab4f8]/40" : confidenceZone.colorClass;');
   });
 
   // EPC FINAL §35 ("Indicador Institucional do Cabeçalho"): achado real —
@@ -62,9 +82,8 @@ describe('Header: Score badge exibe a banda real §16 — cor e rótulo 1:1 com 
   // só realocado pro tooltip, que já carregava "Zona: ${confidenceZone.label}".
   it('emoji real da zona entra junto do percentual (nunca sozinho), null honesto em WAIT não vira um emoji fabricado', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('{confidenceZone ? `${confidenceZone.emoji} ` : ""}');
-    expect(app).toContain('{institutionalScore?.score ?? DASH}');
-    expect(app).toContain('{institutionalScore?.score !== null && institutionalScore?.score !== undefined ? "%" : ""}');
+    expect(app).toContain('`${confidenceZone ? `${confidenceZone.emoji} ` : ""}${institutionalScore.score}%');
+    expect(app).toContain('institutionalScore?.score !== null && institutionalScore?.score !== undefined\n      ? `${confidenceZone');
     expect(app).not.toContain('>Score</span>');
   });
 

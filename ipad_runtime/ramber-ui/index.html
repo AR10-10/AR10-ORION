@@ -24,8 +24,39 @@
          entrada o próprio navegador bloqueava o fetch() ANTES de qualquer
          chamada de rede sair (CSP violado), então fetchOkxPerpTicker()
          nunca teria funcionado em produção nenhuma, mesmo com CORS/rede
-         perfeitos do lado da OKX — bug real, não uma limitação de sandbox. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.binance.com https://fapi.binance.com wss://stream.binance.com:9443 wss://fstream.binance.com https://api.mexc.com https://api.bybit.com https://www.okx.com https://api.coingecko.com https://api.alternative.me https://*.huggingface.co https://*.hf.co https://raw.githubusercontent.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">
+         perfeitos do lado da OKX — bug real, não uma limitação de sandbox.
+         api.llama.fi adicionado (Ordem Mestra §7, achado real de verificação
+         Playwright pós-implementação): MESMA classe de bug do OKX acima —
+         fetchOnchainTvlFlow() (gmil/providers/defillama-provider.ts) tinha
+         sido documentado só com "CORS não verificado ao vivo", mas o
+         DevTools console real mostrou "Refused to connect... violates
+         Content-Security-Policy" ANTES de qualquer chamada de rede sair —
+         um bloqueio mais severo e garantido que a incerteza de CORS
+         documentada, e que só a verificação Playwright (nunca tsc/vitest)
+         seria capaz de revelar.
+         query1.finance.yahoo.com adicionado (mesmo achado, auditoria
+         estática de varredura de todo `https://` literal no código-fonte
+         contra esta lista, feita ao escrever a trava de regressão desta
+         classe de bug): TERCEIRA ocorrência — js/real-data/tradfi-delayed-
+         yahoo.js (CHART_BASE, Fase 1 do Market Data Fabric) nunca tinha
+         entrado aqui. current_status deste conector continua PLANNED (não
+         verificado ao vivo, ver docs/MARKET_DATA_FABRIC.md) — mas mesmo
+         assim a CSP precisa listar o host real que o código de fato usa,
+         nunca depender de um conector nunca ter sido exercitado para
+         "esconder" a lacuna.
+         s3.tradingview.com (script-src) + *.tradingview.com/*.tradingview-
+         widget.com (frame-src, novo diretiva) adicionados (achado real:
+         Yahoo delayed confirmado bloqueado por CORS pelo próprio Operador
+         rodando no PC dele — ver docs/MARKET_DATA_FABRIC.md "Fase 3").
+         Autorizado explicitamente pelo Operador via AskUserQuestion,
+         sabendo a troca real (1ª vez que este projeto roda script de
+         terceiro na tela) — nunca uma abertura silenciosa da CSP. Escopo
+         deliberadamente mínimo: só o host que o widget realmente carrega,
+         nunca um script-src/frame-src genérico. frame-src não existia
+         antes porque nenhum recurso deste projeto tinha sido embutido via
+         iframe até agora — default-src 'self' já bloqueava isso
+         implicitamente; a diretiva explícita documenta a exceção real. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://s3.tradingview.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.binance.com https://fapi.binance.com wss://stream.binance.com:9443 wss://fstream.binance.com https://api.mexc.com https://api.bybit.com https://www.okx.com https://api.coingecko.com https://api.alternative.me https://api.llama.fi https://query1.finance.yahoo.com https://*.huggingface.co https://*.hf.co https://raw.githubusercontent.com; frame-src https://*.tradingview.com https://*.tradingview-widget.com; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none';">
     <link rel="apple-touch-icon" href="../icons/apple-touch-icon-180.png" />
     <link rel="icon" href="../icons/icon-192.png" />
     <link rel="manifest" href="manifest.webmanifest" />

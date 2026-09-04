@@ -1,0 +1,90 @@
+name: Deploy AR10 CYBORG (Cloudflare Pages)
+
+# POR QUE ESTE WORKFLOW EXISTE
+#
+# O deploy anterior era GitHub Pages. Num plano Free/Pro, um site do GitHub
+# Pages é PÚBLICO por URL — inclusive quando o repositório é privado (Pages
+# com visibilidade restrita só existe no GitHub Enterprise Cloud). Ou seja:
+# não havia como o painel ser só do Operador ali.
+#
+# Cloudflare Access resolve isso de verdade: a autenticação acontece NO
+# SERVIDOR, antes de qualquer byte do app sair para o navegador. Quem não
+# está na lista de e-mails autorizados nunca recebe o HTML — diferente de um
+# portão em JavaScript, que só roda depois de o app já ter sido entregue.
+#
+# Passo a passo de configuração (contas, tokens, lista de acesso):
+# docs/ACESSO_PRIVADO.md
+
+# So sob demanda: o Operador optou por rodar LOCAL, entao nao ha publicacao
+# automatica. O workflow continua inteiro e pronto — se um dia ele quiser o
+# painel acessivel de fora com autenticacao real, basta cadastrar os tres
+# segredos e rodar isto a mao (Actions > Run workflow). Nada foi apagado.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ipad_runtime/ramber-ui/package-lock.json
+
+      # Mesmo portão de qualidade do workflow anterior: se um teste quebra, o
+      # job para aqui e nem build nem deploy rodam.
+      - name: Run test suite (Vitest)
+        working-directory: ipad_runtime/ramber-ui
+        run: |
+          npm ci --include=dev
+          npm run test
+
+      # FAIL-CLOSED DE CONFIGURAÇÃO: sem o segredo do portão, o build
+      # produziria um app que ninguém abre (ver access-gate.tsx). Melhor
+      # falhar aqui, com a causa dita, do que publicar um painel morto.
+      - name: Verificar segredo do portão de acesso
+        env:
+          VITE_ACCESS_HASH: ${{ secrets.VITE_ACCESS_HASH }}
+        run: |
+          if [ -z "$VITE_ACCESS_HASH" ]; then
+            echo "::error::O segredo VITE_ACCESS_HASH não está definido no repositório."
+            echo "::error::Defina em Settings > Secrets and variables > Actions."
+            echo "::error::Ele é o SHA-256 da senha do portão — ver docs/ACESSO_PRIVADO.md."
+            exit 1
+          fi
+          if ! printf '%s' "$VITE_ACCESS_HASH" | grep -Eq '^[0-9a-fA-F]{64}$'; then
+            echo "::error::VITE_ACCESS_HASH não é um SHA-256 hexadecimal de 64 caracteres."
+            exit 1
+          fi
+          echo "Segredo presente e no formato correto."
+
+      - name: Build AR10 CYBORG (React/Vite)
+        working-directory: ipad_runtime/ramber-ui
+        env:
+          # Injetado no build. O Vite inlina variáveis VITE_* no bundle — o
+          # hash sai do código-fonte versionado, mas continua legível no
+          # JavaScript publicado. Isso é inevitável em site estático, e por
+          # isso a trava real é o Cloudflare Access, nunca este portão.
+          VITE_ACCESS_HASH: ${{ secrets.VITE_ACCESS_HASH }}
+        run: |
+          npm ci --include=dev
+          npm run build
+
+      - name: Publicar no Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy ipad_runtime/ramber-ui/dist --project-name=ar10-cyborg

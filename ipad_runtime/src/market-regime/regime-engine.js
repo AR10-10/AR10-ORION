@@ -160,7 +160,29 @@ export function percentileRank(values, current) {
     return below / values.length;
 }
 
-function atrPercent(candles, period = ADX_PERIOD) {
+/**
+ * Média SIMPLES dos últimos `period` True Ranges, normalizada pelo ÚLTIMO
+ * close, em %. Devolve um ESCALAR.
+ *
+ * NÃO CONFUNDIR com `computeAtrPercent` de research/engines/
+ * lorentzian-classifier.js, apesar de os dois serem chamados "ATR%" por aí:
+ *
+ *   este aqui  → média simples (SMA) dos TR · escalar · normaliza pelo
+ *                último close
+ *   o outro    → suavização recursiva de Wilder (RMA) · SÉRIE completa ·
+ *                normaliza cada ponto pelo próprio close
+ *
+ * Para os mesmos candles eles dão NÚMEROS DIFERENTES, e isso é esperado —
+ * são duas definições legítimas de ATR, não uma duplicação a consolidar.
+ * A auditoria de duplicação chegou a marcá-los como "mesma matemática em
+ * dois lugares"; a leitura linha a linha desmentiu.
+ *
+ * Unificar exigiria uma iniciativa isolada, NUNCA um swap de uma linha: o
+ * `atr_percent` que sai daqui alimenta o dimensionamento de posição
+ * (risk-engine.js) e o ETA (eta-engine.ts). Trocar a fórmula mudaria os
+ * dois, e isso precisa de comparação antes/depois própria.
+ */
+function meanTrueRangePercent(candles, period = ADX_PERIOD) {
     if (candles.length < period + 1) return null;
     const rows = candles.map(toOhlc);
     const tr = [];
@@ -244,7 +266,7 @@ export function classifyMarketRegime({ ohlcv_series, timeframe } = {}) {
             bandwidth_percentile: bandwidthPercentile,
             prev_bandwidth_percentile: prevBandwidthPercentile,
             close_position: closePosition,
-            atr_percent: atrPercent(ohlcv_series),
+            atr_percent: meanTrueRangePercent(ohlcv_series),
         }),
         candles_used: ohlcv_series.length,
         timeframe: timeframe ?? null,

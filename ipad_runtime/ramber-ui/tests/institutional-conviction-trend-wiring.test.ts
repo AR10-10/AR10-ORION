@@ -67,32 +67,39 @@ describe('App.tsx: institutionalScoreHistory alimentada em efeito real, convicti
   });
 });
 
-describe('Header: glifo ▲/▬/▼ real do Conviction Engine (Evolução da Inteligência Operacional §4)', () => {
+describe('ScoreContextCard (gaveta Core Intelligence): glifo ▲/▬/▼ real do Conviction Engine (Evolução da Inteligência Operacional §4)', () => {
+  // v16.0 PRO Fase 1: mesmo destino de institutional-confidence-zone-
+  // wiring.test.ts — Score/Conviction saíram da TopBar, mesmos dados
+  // reais, agora em ScoreContextCard (self-contained).
   it('destrutura convictionTrend do WidgetContext ao lado de confidenceZone', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('confidenceZone,\n    convictionTrend,\n    assistantMessages,');
+    expect(app).toContain(
+      'const { institutionalScore, confidenceZone, convictionTrend, assistantMessages, heatReading, vwapCtx, nlState, nexusConfluence } =',
+    );
   });
 
   it('os 3 glifos exatos da diretriz — FORTALECENDO=▲, ENFRAQUECENDO=▼, ESTAVEL=▬ — nunca um quarto símbolo inventado', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('{convictionTrend.trend === "FORTALECENDO" ? "▲" : convictionTrend.trend === "ENFRAQUECENDO" ? "▼" : "▬"}');
+    expect(app).toContain('convictionTrend.trend === "FORTALECENDO" ? "▲" : convictionTrend.trend === "ENFRAQUECENDO" ? "▼" : "▬"');
   });
 
   it('o glifo só renderiza com uma leitura OK real — histórico insuficiente não vira um símbolo fabricado', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('{convictionTrend?.status === "OK" && convictionTrend.trend && (');
+    expect(app).toContain('convictionTrend?.status === "OK" && convictionTrend.trend\n            ? `');
   });
 
   it('o Conviction Engine NUNCA substitui o score — é um glifo adicional ao lado do número, não uma segunda métrica separada', () => {
     const app = read('../src/App.tsx');
-    // Âncora estável (EPC FINAL §35 acrescentou um bloco de comentário
-    // entre o `&& (` e a `<div>` — este ponto de partida não depende
-    // desse comentário nem de nenhum outro que venha a ser inserido ali).
-    const badgeStart = app.indexOf('institutionalScore?.score !== null && institutionalScore?.score !== undefined\n                  ? `Score real de confluência');
-    const badgeEnd = app.indexOf('</div>\n          )}\n\n          {/* Diretriz V-MAX item 6', badgeStart);
-    expect(badgeStart).toBeGreaterThan(-1);
-    const block = app.slice(badgeStart, badgeEnd > -1 ? badgeEnd : badgeStart + 2500);
-    expect(block).toContain('{institutionalScore?.score ?? DASH}');
+    // Âncora estável: o bloco real de scoreValue (nunca scoreTitle, que
+    // repete a mesma condição de guarda mas é um texto de tooltip
+    // separado) — limitado até a próxima const para nunca vazar para
+    // scoreColor/scoreTitle abaixo.
+    const start = app.indexOf('const scoreValue =');
+    const end = app.indexOf('const scoreColor =', start);
+    expect(start, 'scoreValue não encontrado').toBeGreaterThan(-1);
+    expect(end, 'fim de scoreValue não encontrado').toBeGreaterThan(start);
+    const block = app.slice(start, end);
+    expect(block).toContain('${institutionalScore.score}%');
     expect(block).toContain('convictionTrend.trend === "FORTALECENDO"');
   });
 });

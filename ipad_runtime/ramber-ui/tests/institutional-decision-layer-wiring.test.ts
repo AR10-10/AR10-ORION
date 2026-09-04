@@ -65,10 +65,18 @@ describe('App.tsx: Score + Assistente computados UMA vez (padrão convictionRead
   });
 });
 
-describe('TopBar: Score 0-100 honesto + frase do Assistente + gatilho "SÍMBOLO ▼" (Diretriz V-MAX item 7)', () => {
+describe('TopBar/ScoreContextCard: Score 0-100 honesto + frase do Assistente + gatilho "SÍMBOLO ▼" (Diretriz V-MAX item 7)', () => {
+  // v16.0 PRO Fase 1: Score + Assistente saíram da TopBar para
+  // ScoreContextCard (gaveta Core Intelligence) — mesmos dados reais.
   it('Score exibe DASH honesto quando null (WAIT) — nunca um 0 fabricado', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('{institutionalScore?.score ?? DASH}');
+    const start = app.indexOf('const scoreValue =');
+    const end = app.indexOf('const scoreColor =', start);
+    expect(start, 'scoreValue não encontrado').toBeGreaterThan(-1);
+    expect(end, 'fim de scoreValue não encontrado').toBeGreaterThan(start);
+    const block = app.slice(start, end);
+    expect(block).toContain('institutionalScore?.score !== null && institutionalScore?.score !== undefined');
+    expect(block).toContain(': DASH;');
   });
 
   it('tooltip do Score afirma explicitamente "nunca probabilidade" (Regra de Ouro 2)', () => {
@@ -84,7 +92,11 @@ describe('TopBar: Score 0-100 honesto + frase do Assistente + gatilho "SÍMBOLO 
 
   it('Omnibox: App passa o símbolo REAL selecionado como rótulo do gatilho', () => {
     const app = read('../src/App.tsx');
-    expect(app).toContain('selectedLabel={marketMode === "TRADFI" ? (selectedTradFiAsset?.symbol ?? "Buscar ativo") : `${selectedAsset}USDT`}');
+    // Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET DISCOVERY": selectedLabel
+    // ganhou um 3º ramo (MEXC) — os dois ramos originais (TRADFI/fallback
+    // Binance) continuam presentes e reais.
+    expect(app).toContain('marketMode === "TRADFI"\n                  ? (selectedTradFiAsset?.symbol ?? "Buscar ativo")');
+    expect(app).toContain('`${selectedAsset}USDT`');
   });
 
   it('SmartOmnibox: gatilho é "rótulo + ▼" (ícone de busca saiu do header; a busca continua no input do dropdown)', () => {

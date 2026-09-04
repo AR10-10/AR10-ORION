@@ -31,21 +31,37 @@
 // a confluência 15m/1H já respondia para UM prazo extra, agora para todos.
 //
 // Escopo desta Fase Ω v1 (decisão deliberada, documentada, não um
-// esquecimento): Volume Profile e Liquidez (SMC) ficam de fora por ora —
-// rodar o Volume Profile real (WASM/Worker) 6x a cada ciclo sobrecarregaria
-// o Worker sem necessidade para a pergunta central ("os prazos
-// concordam?"); é um fast-follow real, não fabricado aqui como
-// placeholder. Order Flow por timeframe também fica de fora: o histórico
-// real de CVD retido (orderflow-history.ts, ORDERFLOW_HISTORY_CAPACITY)
-// cobre só ~8 minutos reais — real o suficiente para 1m/5m/15m, mas
-// simplesmente não existe dado real retido para calcular Order Flow
-// honesto em 1H/4H/1D. Documentado como limitação real, não fabricado.
+// esquecimento): Volume Profile fica de fora — rodar o Volume Profile real
+// (WASM/Worker) 9x a cada ciclo sobrecarregaria o Worker sem necessidade
+// para a pergunta central ("os prazos concordam?"); continua um fast-follow
+// real, não fabricado aqui como placeholder. Order Flow por timeframe
+// também fica de fora: o histórico real de CVD retido
+// (orderflow-history.ts, ORDERFLOW_HISTORY_CAPACITY) cobre só ~8 minutos
+// reais — real o suficiente para 1m/5m/15m, mas simplesmente
+// não existe dado real retido para calcular Order Flow honesto em 1H/4H/1D.
+// Documentado como limitação real, não fabricado.
+//
+// Liquidez (SMC: Order Block/FVG/Equal Highs-Lows) ENTROU nesta rodada
+// (pedido direto do Operador, auditoria de sincronismo pós-SMC Harmonic
+// Fusion) — categoricamente diferente de Volume Profile: fvg-order-block-
+// engine.js é JS puro determinístico sobre OHLC (a mesma função que
+// computeSmcZones já chama para o gráfico principal), zero WASM, zero
+// Worker, custo real medido em frações de milissegundo mesmo com dezenas
+// de zonas (ver smc-harmonic-fusion.ts para a mesma ordem de grandeza) —
+// rodar 9x por ciclo de 60s não tem o problema de carga que bloqueava o
+// Volume Profile. Só CONTAGENS entram aqui (unmitigated OB/FVG, unswept
+// EQL/EQH) — nunca as zonas inteiras: a Matriz é confluência/contexto
+// compacto por prazo, as zonas completas do timeframe SELECIONADO já
+// vivem no gráfico principal (computeSmcZones) sem duplicação nenhuma.
 import { analyze as analyzeMarketStructureRaw } from '../../../src/research/engines/market-structure-engine.js';
 import { analyze as analyzeSupportResistanceRaw } from '../../../src/research/engines/support-resistance-engine.js';
 import { classifyMarketRegime as classifyMarketRegimeRaw } from '../../../src/market-regime/index.js';
 import { computeRSI } from '../../../src/research/engines/lorentzian-classifier.js';
 import { buildEnsembleConsensus, opinionFromLabel, opinionFromVote } from '../../../src/consensus/index.js';
 import { momentumAgentVote } from './council';
+// MESMO motor que computeSmcZones (engine-bridge.ts) já usa para o gráfico
+// principal — zero segunda implementação de FVG/Order Block/Equal Highs-Lows.
+import { analyze as analyzeFvgOrderBlocksRaw } from '../../../src/research/engines/fvg-order-block-engine.js';
 
 // Diretriz Mestra §7: lista ampliada com 3m/30m/1w (intervalos nativos da
 // Binance Futures — o Bus repassa a string direto; +3 fetches por ciclo de
@@ -80,6 +96,14 @@ export interface TimeframeContext {
   // leitura real (fail-closed honesto, nunca 0 fabricado).
   confidence: number | null;
   confidenceStance: TimeframeStance | null;
+  // Liquidez SMC real deste prazo (fvg-order-block-engine.js, mesmo motor
+  // do gráfico principal) — só CONTAGENS (ver cabeçalho do arquivo). Os
+  // três nascem/morrem juntos: ou os três são números reais (status OK do
+  // motor de liquidez), ou os três são null honesto — nunca um trio
+  // parcialmente fabricado.
+  unmitigatedOrderBlockCount: number | null;
+  unmitigatedFvgCount: number | null;
+  unsweptLiquidityZoneCount: number | null;
   candlesUsed: number;
   computedAt: number;
 }
@@ -98,6 +122,9 @@ function baseInsufficient(timeframe: MultiTimeframeId, reason: string, computedA
     resistance1: null,
     confidence: null,
     confidenceStance: null,
+    unmitigatedOrderBlockCount: null,
+    unmitigatedFvgCount: null,
+    unsweptLiquidityZoneCount: null,
     candlesUsed: 0,
     computedAt,
   };
@@ -179,6 +206,21 @@ export function analyzeTimeframe(timeframe: MultiTimeframeId, candles: MultiTime
     return baseInsufficient(timeframe, 'nenhum_motor_real_teve_leitura_nesta_janela', computedAt);
   }
 
+  // Liquidez SMC (OB/FVG/EQL) — calculada só depois de já saber que este
+  // prazo tem leitura real de pelo menos um dos 3 motores acima: nunca gate
+  // sozinha (o mínimo real do motor de liquidez, 5 candles, é mais baixo
+  // que o dos outros — deixá-la decidir `anyRealReading` sozinha mudaria o
+  // contrato já testado de "candles insuficientes para os motores
+  // principais = DADOS_INSUFICIENTES", mesmo com zonas tecnicamente
+  // calculáveis numa amostra pequena demais pra confluência real).
+  const liquidityResult = analyzeFvgOrderBlocksRaw({ ohlcv_series: candles }) as any;
+  const unmitigatedOrderBlockCount: number | null =
+    liquidityResult.status === 'OK' ? liquidityResult.unmitigated_order_block_count : null;
+  const unmitigatedFvgCount: number | null =
+    liquidityResult.status === 'OK' ? liquidityResult.unmitigated_fvg_count : null;
+  const unsweptLiquidityZoneCount: number | null =
+    liquidityResult.status === 'OK' ? liquidityResult.unswept_liquidity_zone_count : null;
+
   return {
     timeframe,
     status: 'OK',
@@ -192,6 +234,9 @@ export function analyzeTimeframe(timeframe: MultiTimeframeId, candles: MultiTime
     resistance1,
     confidence,
     confidenceStance: stance,
+    unmitigatedOrderBlockCount,
+    unmitigatedFvgCount,
+    unsweptLiquidityZoneCount,
     candlesUsed: candles.length,
     computedAt,
   };

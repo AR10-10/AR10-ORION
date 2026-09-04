@@ -31,6 +31,12 @@ import { detectInstitutionalTraps } from '../src/nexus/trap-detection';
 import { buildTradePlan } from '../src/nexus/trade-plan';
 import { computeSmcZones, type OrderflowSignal } from '../src/engine-bridge';
 import { computeConfluenceCorridor } from '../src/nexus/confluence-corridor';
+import { computeInstitutionalZones } from '../src/nexus/institutional-zones';
+import { buildRiskSuggestion } from '../../src/risk/index.js';
+import { buildNexusDecision } from '../src/nexus/decision-layer';
+import { computeInstitutionalScore } from '../src/nexus/institutional-score';
+import { computeHeatScore } from '../src/nexus/heat-score';
+import { gmilOrchestrator } from '../src/gmil/gmil-orchestrator';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
@@ -74,6 +80,10 @@ beforeEach(() => {
   s.setCvd(null);
   s.setOrderflowSignals([]);
   s.setConfluenceCorridor(null);
+  s.setNexusDecision(null);
+  s.setInstitutionalScoreReading(null);
+  s.setHeatScoreReading(null);
+  s.setGmil(null);
   s.setSymbol('BTC');
   s.setActiveTimeframe('15m');
   s.setOffline(false);
@@ -161,7 +171,7 @@ describe('OrganismOrchestrator: escrita na store É a publicação — um write 
     const received: unknown[] = [];
     bus.on('BRAIN.TRAPS.UPDATED', (p) => received.push(p.traps));
     const traps = detectInstitutionalTraps({
-      liquidityZones: [{ type: 'EQUAL_HIGH', price: 51_000, swept: true }],
+      liquidityZones: [{ type: 'EQUAL_HIGH', price: 51_000, index: 10, swept: true }],
       orderflowSignals: [],
       now: Date.now(),
     });
@@ -276,7 +286,7 @@ describe('OrganismOrchestrator: escrita na store É a publicação — um write 
     bus.on('HEALTH.CHANGED', () => log.push('health'));
     const seqBefore = getSnapshotForEngine().seq;
     useUnifiedSnapshotStore.getState().setHealth({
-      fps: 60, cycleLatencyMs: 10, memoryMb: null, workersAlive: 1, isOnline: true, lastUpdatedAt: Date.now(),
+      fps: 60, cycleLatencyMs: 10, memoryMb: null, workersAlive: 1, lastUpdatedAt: Date.now(),
     });
     expect(log).toEqual([]); // publicador único continua o Health Monitor
     expect(getSnapshotForEngine().seq - seqBefore).toBe(1); // mas a geração conta
@@ -377,6 +387,129 @@ describe('OMEGA CORE V-MAX (Fase 1.1): smc/cvd/orderflowSignals — insumos pré
     expect(received[0]).toBe(reading);
     expect(received[0]).toBe(useUnifiedSnapshotStore.getState().confluenceCorridor);
   });
+
+  // Achado da auditoria de evolução (docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // item 1): institutionalZones já tinha fatia real na store (Carta
+  // Branca) mas nenhum evento — nenhum assinante podia reagir a "uma zona
+  // nova se formou". Mesmo padrão diff-por-referência de todo QUANT.*.
+  it('setInstitutionalZones(saída real de computeInstitutionalZones) publica QUANT.INSTITUTIONAL_ZONES.UPDATED com a MESMA referência', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('QUANT.INSTITUTIONAL_ZONES.UPDATED', (p) => received.push(p.zones));
+    const zones = computeInstitutionalZones({
+      ema: { period: 21, value: 50000 },
+      vwap: 50010,
+      nexusLine: null,
+      fairValueGaps: [],
+      orderBlocks: [],
+      liquidityZones: [],
+      support: null,
+      resistance: null,
+      volumeProfilePoc: null,
+      sessionKeyLevel: null,
+      liquiditySweeps: [],
+      lastSwingHigh: null,
+      lastSwingLow: null,
+    });
+    expect(zones.length).toBeGreaterThan(0); // sanidade: EMA+VWAP próximos formam confluência real (>=2 fontes)
+    useUnifiedSnapshotStore.getState().setInstitutionalZones(zones);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(zones);
+    expect(received[0]).toBe(useUnifiedSnapshotStore.getState().institutionalZones);
+  });
+
+  // Achado da auditoria de evolução (docs/historico/AUDITORIA_UNIFICACAO_VOZ.md §4
+  // item 2): riskSuggestion (risk-engine.js) já era computado real em
+  // App.tsx mas não tinha fatia na store nem evento.
+  it('setRiskSuggestion(saída real de buildRiskSuggestion) publica QUANT.RISK_SUGGESTION.UPDATED com a MESMA referência', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('QUANT.RISK_SUGGESTION.UPDATED', (p) => received.push(p.suggestion));
+    const suggestion = buildRiskSuggestion({
+      signal: 'LONG',
+      entry: 100,
+      stop: 95,
+      atrPercent: 2,
+      riskRewardRatio: 3,
+      ensembleDirection: 'ALTA',
+      ensembleForca: 0.65,
+    });
+    expect(suggestion.status).toBe('OK'); // sanidade: o motor real produziu uma sugestão
+    useUnifiedSnapshotStore.getState().setRiskSuggestion(suggestion);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(suggestion);
+    expect(received[0]).toBe(useUnifiedSnapshotStore.getState().riskSuggestion);
+  });
+});
+
+describe('EPC OMEGA FINAL Parte 1 ("Meta Engine"): nexusDecision/institutionalScoreReading/heatScoreReading ganham fatia própria', () => {
+  it('setNexusDecision(saída real de buildNexusDecision) publica BRAIN.NEXUS_DECISION.UPDATED com a MESMA referência', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('BRAIN.NEXUS_DECISION.UPDATED', (p) => received.push(p.decision));
+    const decision = buildNexusDecision({
+      coreDirection: null,
+      coreConfidence: null,
+      plan: null,
+      targetsHit: 0,
+      etaReading: null,
+      score: null,
+      scoreZoneLabel: null,
+      scoreTrend: null,
+      councilStance: null,
+      councilRiskGated: null,
+      assistantMessage: null,
+      inEntryZone: null,
+      lastResolvedAt: null,
+      councilVotes: null,
+      convictionMembers: null,
+      heatTier: null,
+      premiumDiscountZone: null,
+    });
+    expect(decision.operation).toBe('AGUARDAR'); // sanidade: passthrough honesto sem direção real do Core Engine
+    useUnifiedSnapshotStore.getState().setNexusDecision(decision);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(decision);
+    expect(received[0]).toBe(useUnifiedSnapshotStore.getState().nexusDecision);
+  });
+
+  it('setInstitutionalScoreReading(saída real de computeInstitutionalScore) publica BRAIN.INSTITUTIONAL_SCORE.UPDATED com a mesma referência', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('BRAIN.INSTITUTIONAL_SCORE.UPDATED', (p) => received.push(p.reading));
+    const reading = computeInstitutionalScore({ engineStatus: 'pending', coreDirection: null, conviction: null, riskGated: false });
+    useUnifiedSnapshotStore.getState().setInstitutionalScoreReading(reading);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(reading);
+  });
+
+  it('setHeatScoreReading(saída real de computeHeatScore) publica BRAIN.HEAT_SCORE.UPDATED com a mesma referência', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('BRAIN.HEAT_SCORE.UPDATED', (p) => received.push(p.reading));
+    const reading = computeHeatScore({ bandwidthPercentile: null, deltaPct: null, recentLiquidationCount: null });
+    expect(reading.status).toBe('DADOS_INSUFICIENTES'); // sanidade: fail-closed honesto sem componentes reais
+    useUnifiedSnapshotStore.getState().setHeatScoreReading(reading);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(reading);
+  });
+
+  it('setGmil(snapshot real do gmilOrchestrator) publica BRAIN.GMIL.UPDATED com a mesma referência — já alimentava a UI, agora ganha fatia no organismo', () => {
+    orch = new OrganismOrchestrator(bus);
+    orch.start();
+    const received: unknown[] = [];
+    bus.on('BRAIN.GMIL.UPDATED', (p) => received.push(p.snapshot));
+    const snapshot = gmilOrchestrator.getSnapshot();
+    useUnifiedSnapshotStore.getState().setGmil(snapshot);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(snapshot);
+    expect(received[0]).toBe(useUnifiedSnapshotStore.getState().gmil);
+  });
 });
 
 describe('Sincronização fim-a-fim (a prova da Ordem): conselho ESCREVE → bus NOTIFICA → cenário RELÊ do snapshot', () => {
@@ -447,5 +580,24 @@ describe('Fiação real no código-fonte: App e Health Monitor obedecem a camada
     expect(block).toContain('conviction: convictionReading,');
     expect(block).toContain('activeObstacleCount: trackedPlan?.targets?.[0]?.obstacleCount ?? null,');
     expect(block).toContain('useUnifiedSnapshotStore.getState().setConfluenceCorridor(confluenceCorridor);');
+  });
+
+  it('App.tsx: EPC OMEGA FINAL Parte 1 — nexusDecision/institutionalScore/heatReading são espelhados na store (mesmo padrão de confluenceCorridor)', () => {
+    const s = read('../src/App.tsx');
+    expect(s).toContain('useUnifiedSnapshotStore.getState().setNexusDecision(nexusDecision);');
+    expect(s).toContain('useUnifiedSnapshotStore.getState().setInstitutionalScoreReading(institutionalScore);');
+    expect(s).toContain('useUnifiedSnapshotStore.getState().setHeatScoreReading(heatReading);');
+    expect(s).toContain('}, [nexusDecision]);');
+    expect(s).toContain('}, [heatReading]);');
+  });
+
+  it('App.tsx: Diretriz Final de Integração Total — o MESMO snapshot do GMIL já usado pelos widgets é espelhado na store (zero segunda assinatura de useGmilSnapshot)', () => {
+    const s = read('../src/App.tsx');
+    expect(s).toContain('const gmilSnapshot = useGmilSnapshot();');
+    expect(s).toContain('useUnifiedSnapshotStore.getState().setGmil(gmilSnapshot);');
+    expect(s).toContain('}, [gmilSnapshot]);');
+    // Nunca uma segunda CHAMADA real ao hook (comentários que citam
+    // "useGmilSnapshot()" em prosa não contam — só atribuições reais).
+    expect(s.match(/= useGmilSnapshot\(\)/g)?.length).toBe(1);
   });
 });

@@ -9,14 +9,14 @@
     monospace;
 }
 
+/* v16.0 PRO Fase 1 ("Fundo do Sistema — PRETO OBRIGATÓRIO"): preto puro,
+   zero grid de fundo, zero scanline/CRT (body::after removido por
+   inteiro abaixo) — acentos ciano/âmbar/verde/vermelho ficam vivos e de
+   alto contraste contra um fundo neutro em vez de competir com padrões
+   decorativos atrás deles. */
 body {
   font-family: var(--font-mono);
-  background-color: #010205; /* Deepest space black */
-  background-image:
-    linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 240, 255, 0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  background-position: center center;
+  background-color: #000000;
   color: #a0f0ff;
   overflow: hidden;
   -webkit-touch-callout: none;
@@ -24,26 +24,102 @@ body {
   user-select: none;
 }
 
-body::after {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background:
-    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
-    linear-gradient(
-      90deg,
-      rgba(255, 0, 0, 0.03),
-      rgba(0, 255, 0, 0.01),
-      rgba(0, 0, 255, 0.03)
-    );
-  background-size:
-    100% 3px,
-    6px 100%;
-  pointer-events: none;
-  z-index: 9999;
+/* ==========================================================================
+   ESCALA TIPOGRÁFICA DO DOM — "tamanho padrão de qualquer terminal pra
+   qualquer tela" (pedido do Operador, repetido em 3 rodadas)
+   ==========================================================================
+   ACHADO MEDIDO (grep real em src/**.tsx, não estimativa):
+   282 ocorrências de `text-[0.NNrem]` em App.tsx e 26 nos outros arquivos,
+   em DEZESSEIS corpos diferentes:
+
+     0.30 0.32 0.35 0.38 0.40 0.42 0.45 0.46 0.48 0.50 0.55 0.60 0.62 0.65
+     0.70 0.75
+
+   Dezesseis. Não é uma escala — é o histórico de dezesseis decisões
+   independentes, cada uma tomada num commit diferente, nenhuma conversando
+   com a outra. E os corpos pequenos são pequenos DE VERDADE: 0.45rem = 7.2px,
+   0.3rem = 4.8px. O seletor de timeframe (M1/M5/15m/1H/4H…), que é um
+   CONTROLE INTERATIVO e foi o item citado pelo Operador — "aquela barrinha
+   está muito pequena, a gente não dá nem pra ver" — estava a 0.45rem/7.2px.
+
+   Nenhum terminal profissional desce abaixo de ~10px num controle que o
+   operador precisa acertar com o dedo/cursor. 7.2px não é "compacto": é
+   ilegível, e num iPad é também um alvo de toque abaixo do mínimo.
+
+   A CORREÇÃO: uma escala só, com 4 degraus, todos em clamp() — cresce com a
+   viewport em vez de ficar congelada num tamanho escolhido para um monitor
+   só. Mesma disciplina que chart-ultrawide-scale.ts já aplica no canvas
+   (piso = valor de produção, nunca regride), agora também no DOM:
+
+     --ar10-t-micro  10px → 11px   contexto denso (chips de status, unidades)
+     --ar10-t-label  11px → 12px   rótulo de campo, cabeçalho de painel
+     --ar10-t-body   12px → 13.5px CONTROLE INTERATIVO e leitura corrente
+     --ar10-t-read   14px → 16px   leitura destacada (número que decide)
+
+   O PISO É 10px, EM QUALQUER TELA. Esse é o número que muda a experiência:
+   nada mais desce abaixo dele. O teto usa 1440px como referência de
+   "monitor grande" — a mesma fronteira que resolveChartUltraWideScale já
+   usa, para o DOM e o canvas crescerem juntos em vez de divergirem.
+
+   Migração honesta: estas classes são ADITIVAS. Os 308 usos antigos
+   continuam funcionando; esta rodada migra os controles interativos (onde a
+   ilegibilidade é um defeito de uso, não só de estética). O resto é
+   pendência real, declarada — nunca um "pronto" que não foi feito. */
+:root {
+  --ar10-t-micro: clamp(10px, 0.62vw + 8px, 11px);
+  --ar10-t-label: clamp(11px, 0.68vw + 8.8px, 12px);
+  --ar10-t-body: clamp(12px, 0.9vw + 9.5px, 13.5px);
+  --ar10-t-read: clamp(14px, 1.3vw + 11px, 16px);
+}
+
+.ar10-t-micro {
+  font-size: var(--ar10-t-micro);
+}
+.ar10-t-label {
+  font-size: var(--ar10-t-label);
+}
+.ar10-t-body {
+  font-size: var(--ar10-t-body);
+}
+.ar10-t-read {
+  font-size: var(--ar10-t-read);
+}
+
+/* Barra rolável horizontal COM trilho visível — o oposto de .scrollbar-hide.
+   ACHADO MEDIDO (relato literal do Operador: "no computador não tem como
+   arrastar o M1 lá em cima, ele fica aparecendo até o M8 na tela"):
+
+   O seletor de timeframe tem 14 opções. Com o corpo legível de 13.5px que a
+   escala tipográfica passou a aplicar, a fileira precisa de ~445px. O
+   contêiner estava limitado a 340px e usava .scrollbar-hide. Conta real:
+   10 de 14 visíveis, último alcançável 8H — exatamente o "M8" que o Operador
+   viu. E sem trilho de rolagem, num computador com mouse, 12H/1D/1W/1M viram
+   um beco sem saída: no iPad o dedo arrasta, no desktop não há como.
+
+   Foi uma regressão introduzida quando o corpo da fonte subiu (a largura
+   máxima subiu junto, mas não o suficiente). Correção em três frentes: teto
+   removido no desktop (md+), trilho VISÍVEL quando ainda houver overflow, e
+   roda do mouse mapeada para rolagem horizontal no componente.
+
+   Trilho discreto de propósito — 4px, cor da própria paleta: precisa ser
+   descobrível, nunca chamativo. */
+.ar10-scroll-x {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 240, 255, 0.35) transparent;
+}
+.ar10-scroll-x::-webkit-scrollbar {
+  height: 4px;
+}
+.ar10-scroll-x::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ar10-scroll-x::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.35);
+  border-radius: 2px;
+}
+.ar10-scroll-x::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.6);
 }
 
 .pb-safe {
@@ -100,37 +176,113 @@ body::after {
    gradiente, saturação atrás do blur, borda +21% presente, highlight de
    1px no topo e halo interno/externo reforçado), zero cirurgia por
    painel. :hover mantém um degrau extra para trackpad/mouse. */
-/* Overhaul Cross-Market (Missão 1, diretriz 4) — elevação para Midnight
-   Blue/Black: gradiente mais diagonal e mais escuro no pé, borda mais
-   FINA/translúcida (0.34→0.20 de opacidade — lê como fio delicado, não
-   contorno sólido) e blur mais intenso (24px→30px). Continua sendo UMA
-   classe compartilhada: todo widget que já usa .cyber-panel herda a
-   elevação de graça, sem cirurgia por painel. */
+/* v16.0 PRO Fase 1 ("Glassmorphism — Reduzir ao Essencial"): blur 30px→
+   12px, borda cyan→neutra fina, sombras internas/externas trocadas por
+   valores discretos (nunca mais um glow ciano de 30-40px por painel
+   estático — cada widget inteiro "respirando" competia com os poucos
+   acentos de cor que carregam dado real). Painéis ficam estáticos por
+   padrão; :hover mantém só um passo modesto (trackpad/mouse), sem
+   animação contínua nenhuma (panel-breathe removido — ver ::before
+   abaixo). Gradiente de fundo permanece sutil preto→quase-preto, nunca
+   no body (regra 3.1). */
+/* CAMADA DE VIDRO (pedido do Operador: "tipo uma camada de vidro transparente,
+   algum efeito pra ficar bem show" — sem atrapalhar o campo de visão).
+
+   ACHADO QUE ORIGINOU A MUDANÇA: o painel JÁ declarava backdrop-filter:
+   blur(12px), mas com `background: linear-gradient(#000000, #050508)` —
+   totalmente OPACO. Um blur atrás de fundo opaco não tem o que borrar: a GPU
+   calculava o desfoque a cada frame e o resultado era invisível. Custo pago,
+   efeito zero — e num alvo iPad Safari (Regra de Ouro 7) isso é o pior tipo de
+   desperdício. O vidro não estava "fraco": estava DESLIGADO por cima de si
+   mesmo.
+
+   Agora o fundo é translúcido, então o blur passa a fazer o trabalho pelo qual
+   já estava pagando — e ele importa de verdade nas gavetas/painéis que ficam
+   POR CIMA do gráfico, que é justamente onde o efeito aparece.
+
+   O que dá o aspecto de vidro NÃO é o blur sozinho: é a aresta especular (a
+   linha clara no topo, como a quina de uma placa de vidro) somada ao brilho
+   interno. Esses dois são baratos — pintura, não recomputação por frame.
+
+   O CANVAS DO GRÁFICO NUNCA RECEBE ISTO. Vidro sobre o dado é exatamente o
+   "atrapalhar o campo de visão" que o Operador proibiu: aqui é chrome
+   (moldura), nunca leitura. */
 .cyber-panel {
-  background: linear-gradient(165deg, rgba(6, 10, 28, 0.8), rgba(1, 3, 9, 0.7));
-  backdrop-filter: blur(30px) saturate(1.25);
-  -webkit-backdrop-filter: blur(30px) saturate(1.25);
-  border: 1px solid rgba(0, 240, 255, 0.2);
+  background: linear-gradient(165deg, rgba(6, 8, 14, 0.72), rgba(3, 4, 9, 0.86));
+  backdrop-filter: blur(12px) saturate(1.15);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
-    inset 0 0 34px rgba(0, 240, 255, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 0 30px rgba(0, 240, 255, 0.08),
-    0 10px 40px rgba(0, 0, 0, 0.7);
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    0 4px 24px rgba(0, 0, 0, 0.5);
   border-radius: 12px;
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Painel que FLUTUA sobre o gráfico precisa ser opaco.
+ *
+ * Achado de captura real (Operador, BTC/USDT 15m com o painel CAMADAS DO
+ * GRÁFICO aberto): dava para LER o texto do gráfico através do painel — o
+ * rótulo "Conselho neutro" ao lado do título e a etiqueta de confluência
+ * cruzando o corpo dele.
+ *
+ * A causa não era a classe utilitária de cor (o painel já pedia 98% de
+ * opacidade): `.cyber-panel` define `background` no atalho, o que inclui um
+ * `background-image: linear-gradient(...)` de 72–86% de opacidade pintado
+ * POR CIMA da cor de fundo. O gradiente vence, e o `backdrop-filter: blur`
+ * transforma o que passa num borrão — pior de ler que transparência limpa.
+ *
+ * Este modificador desliga o gradiente e mantém borda/sombra/raio. Vidro é
+ * bonito num painel que fica sobre o fundo do app; sobre CANDLES ele custa
+ * legibilidade, que é a única coisa que um terminal não pode perder. */
+.cyber-panel--solid {
+  background-image: none;
+  background-color: #050912;
 }
 
 .cyber-panel:hover {
-  border-color: rgba(0, 240, 255, 0.34);
+  border-color: rgba(255, 255, 255, 0.16);
   box-shadow:
-    inset 0 0 38px rgba(0, 240, 255, 0.13),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06),
-    0 0 36px rgba(0, 240, 255, 0.11),
-    0 10px 40px rgba(0, 240, 255, 0.09);
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    0 4px 24px rgba(0, 0, 0, 0.6);
+}
+
+/* Aresta especular do vidro: a linha de luz que corre no topo da placa.
+   É ::before com 1px de altura — não intercepta ponteiro, não entra no fluxo,
+   não custa recomputação por frame. É o detalhe que faz ler como VIDRO em vez
+   de "retângulo escuro translúcido". */
+.cyber-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.22) 35%,
+    rgba(255, 255, 255, 0.22) 65%,
+    transparent
+  );
+}
+
+/* Respeito real a quem pediu menos movimento/efeito no sistema operacional:
+   sem blur, fundo sólido. O painel continua 100% legível — o vidro é
+   decoração, o dado nunca depende dele. */
+@media (prefers-reduced-transparency: reduce) {
+  .cyber-panel {
+    background: linear-gradient(165deg, #06080e, #030409);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 /* Acentos neon reservados a DADOS VITAIS (Missão 1, diretriz 4) — cyan
@@ -147,35 +299,6 @@ body::after {
   text-shadow: 0 0 6px rgba(176, 38, 255, 0.45);
 }
 
-.cyber-panel::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(0, 240, 255, 0.4),
-    transparent
-  );
-  /* Slow, subtle "breathing" highlight — the only genuinely new motion
-     this pass adds, and it's on a 1px line, not a whole panel glow, to
-     stay well short of "chamativo" (flashy). */
-  animation: panel-breathe 5s ease-in-out infinite;
-}
-
-@keyframes panel-breathe {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
 .cyber-header {
   border-bottom: 1px solid rgba(0, 240, 255, 0.1);
   padding: 8px 16px;
@@ -190,44 +313,6 @@ body::after {
   flex-shrink: 0;
 }
 
-.cyber-scanline {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 100%;
-  background: linear-gradient(
-    to bottom,
-    transparent,
-    rgba(0, 240, 255, 0.08) 50%,
-    transparent
-  );
-  animation: scan 3s linear infinite;
-  pointer-events: none;
-  will-change: transform;
-}
-
-@keyframes scan {
-  0% {
-    transform: translateY(-100%);
-  }
-  100% {
-    transform: translateY(100%);
-  }
-}
-
-@keyframes scan-horizontal {
-  0% {
-    transform: translateX(0);
-  }
-  50% {
-    transform: translateX(1000%);
-  }
-  100% {
-    transform: translateX(0);
-  }
-}
-
 @keyframes fade-in {
   0% {
     opacity: 0;
@@ -239,19 +324,21 @@ body::after {
   }
 }
 
-@keyframes sound-wave {
-  0%,
-  100% {
-    transform: scaleY(0.3);
-  }
-  50% {
-    transform: scaleY(1);
-  }
-}
-
 .animate-fade-in {
   animation: fade-in 0.3s ease-out forwards;
   will-change: transform, opacity;
+}
+
+/* v16.0 DEFINITIVO §9.2: barra de progresso do toast — mesma duração do
+   auto-dismiss (5s) fixado em App.tsx (AlertToastStack), nunca duas fontes
+   de verdade para o tempo de vida do alerta (a barra só ILUSTRA o mesmo
+   setTimeout que já remove o toast). */
+@keyframes alert-toast-progress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+.alert-toast-progress {
+  animation: alert-toast-progress 5s linear forwards;
 }
 
 /* Shimmer loading skeleton — used only for the real engine's "pending"
@@ -325,7 +412,8 @@ body::after {
    esquerda), e ainda rola internamente sem vazar quando o conteúdo é
    maior que o espaço disponível (gaveta direita, ~5-6 cards). */
 .terminal-left,
-.terminal-right {
+.terminal-right,
+.terminal-properties {
   position: absolute;
   top: 0;
   max-height: 100%;
@@ -345,14 +433,21 @@ body::after {
   border-bottom-right-radius: 0.75rem;
   transform: translateX(-110%);
 }
-.terminal-right {
+/* .terminal-properties (painel Properties 320px): MESMO slot visual de
+   .terminal-right (right:0) — Core Intelligence e Properties nunca abertas
+   ao mesmo tempo (mutual exclusion real em App.tsx), então compartilhar a
+   posição é seguro e evita duplicar as 4 declarações abaixo por um terceiro
+   bloco idêntico. */
+.terminal-right,
+.terminal-properties {
   right: 0;
   border-left: 1px solid rgba(0, 240, 255, 0.15);
   border-bottom-left-radius: 0.75rem;
   transform: translateX(110%);
 }
 .terminal-left.drawer-open,
-.terminal-right.drawer-open {
+.terminal-right.drawer-open,
+.terminal-properties.drawer-open {
   transform: translateX(0);
 }
 /* Clique fora fecha a gaveta — o mesmo padrão de "overlay modal" já usado
@@ -392,11 +487,27 @@ body::after {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cyber-scanline,
   .animate-fade-in,
   .skeleton-shimmer,
-  .cyber-panel::before,
   .animate-pulse-glow {
     animation: none;
   }
+}
+
+/* Acessibilidade real (achado de auditoria: grep por :focus/focus-visible
+   em todo src/ voltou ZERO ocorrência — nenhum indicador de foco de
+   teclado existia em lugar nenhum) — WCAG 2.4.7 (Focus Visible). Rede de
+   segurança GLOBAL: vence qualquer `outline-none` já escrito em componente
+   (App.tsx/SmartOmnibox.tsx/access-gate.tsx usam a utilidade do Tailwind
+   pra tirar o outline padrão do navegador sem nunca repor um — nenhum dos
+   três é maldoso, só nenhum previa este caso). !important é deliberado
+   aqui: esta é a ÚLTIMA linha de defesa contra um controle interativo
+   ficar sem NENHUM indicador visível pra quem navega por teclado — nunca
+   pode ser silenciosamente vencida por uma classe utilitária mais
+   específica escrita depois. Cor reaproveita o ciano canônico já usado
+   como acento de foco em SmartOmnibox/access-gate (#00f0ff) — nenhuma cor
+   nova na paleta. */
+:focus-visible {
+  outline: 2px solid #00f0ff !important;
+  outline-offset: 2px;
 }
