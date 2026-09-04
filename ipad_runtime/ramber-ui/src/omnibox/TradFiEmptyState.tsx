@@ -9,12 +9,21 @@ import { Radio } from "lucide-react";
 // MESMO vocabulário honesto já usado em todo o resto do sistema
 // (AGUARDANDO / SEM_API / DADOS_INSUFICIENTES): declarar a ausência,
 // nunca fabricar um número.
+// `reason` (Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET DISCOVERY"):
+// override opcional do texto padrão abaixo — o modo MEXC tem uma conexão
+// pública real (nunca "aguardando fonte"), só que esses painéis
+// específicos não foram estendidos a ela nesta Etapa 1. Usar o texto fixo
+// de "Macro API" para esse caso seria uma afirmação falsa (Regra de Ouro
+// 1). Default omitido preserva 100% do texto/comportamento original de
+// sempre para o modo TRADFI.
 export function TradFiEmptyState({
   assetLabel,
   compact = false,
+  reason,
 }: {
   assetLabel: string;
   compact?: boolean;
+  reason?: string;
 }) {
   return (
     <div
@@ -27,7 +36,7 @@ export function TradFiEmptyState({
         <div className="text-[0.6rem] font-bold text-[#a0f0ff]/80 tracking-wide uppercase">{assetLabel}</div>
       ) : null}
       <div className="text-[0.55rem] tracking-[0.15em] text-[#8ab4f8]/70 uppercase max-w-[300px] leading-relaxed font-bold">
-        Aguardando conexão de fonte real (Macro API) - Modo Read-Only
+        {reason ?? "Aguardando conexão de fonte real (Macro API) - Modo Read-Only"}
       </div>
     </div>
   );

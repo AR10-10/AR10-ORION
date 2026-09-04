@@ -42,10 +42,11 @@ describe('App.tsx: resolvedTradFiInstrument liga selectedTradFiAsset ao Instrume
     // 1 no branch sem mapeamento do gráfico principal + 9 nos painéis
     // crypto-específicos (Market Intelligence, Siriform, ScoreContextCard
     // [v16.0 PRO Fase 1], ExpectancyCard [Entrega 42, novo], Regime/Comitê,
-    // Siriform detalhe, Order Book, Order Flow, Liquidity Map) — mesma
-    // contagem de antes, +1 pelo novo card gated (Track Record/expectancy
-    // não têm leitura real em TRADFI, mesmo gate que os demais).
-    expect(tradfiEmptyStateCount).toBe(10);
+    // Siriform detalhe, Order Book, Order Flow, Liquidity Map) + 1 no
+    // branch sem mapeamento do modo MEXC (Ordem "MEXC ASSET DISCOVERY"/
+    // "UNIVERSAL ASSET DISCOVERY", reaproveita o mesmo componente honesto,
+    // nunca uma segunda implementação) — 11 ao todo.
+    expect(tradfiEmptyStateCount).toBe(11);
   });
 });
 

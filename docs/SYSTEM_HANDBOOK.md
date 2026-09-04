@@ -7305,6 +7305,147 @@ idêntico em módulos/bytes ao commit anterior.
 > ilegível (itens do "MAS NUNCA" que são sobre RENDERIZAÇÃO, não sobre
 > QUAIS campos aparecem) seguem inteiramente não tentados.
 
+> **"ORDEM — MEXC ASSET DISCOVERY + NATIVE MARKET DATA" +
+> "ORDEM — UNIVERSAL ASSET DISCOVERY" (04/09/2026):** duas ordens do mesmo
+> pedido — a 2ª chegou logo depois da 1ª e generaliza a mesma exigência
+> ("BINANCE CONTINUA, MEXC É ADICIONADA... nunca esconder um ativo só
+> porque não existe na Binance") sob o vocabulário de `Universal Asset
+> Catalog`/`ExchangeAdapter`. O Operador reforçou o núcleo do pedido em
+> mensagem direta, informal: dado público real da MEXC, "mesmo processo"
+> já usado pra Binance, "o que precisar" pra analisar — não uma listagem
+> cosmética.
+>
+> **Auditoria antes de construir (CLAUDE.md item 1) — achado real, notícia
+> boa:** a maior parte da infraestrutura que as duas Ordens pedem já
+> existia, só não estava ligada à seleção do usuário:
+> `market-data-adapter.ts` (ADITIVO V-MAX Etapa 1) já é um
+> `MarketDataProviderId = 'BINANCE' | 'MEXC' | 'TRADFI_DELAYED'` com
+> provider como parâmetro explícito por chamada (nunca um toggle global);
+> `mexc-futures-candle-connector.js`/`mexc-futures-public.js` já buscam
+> candle real da MEXC (`toMexcSymbol('BTC') → 'BTC_USDT'`); o sufixo de
+> cache-key `-MEXC` (vs. `-PERP` da Binance) já existia e já está em uso
+> real por `requestRadarCandleSnapshot`/`scanRadarCandidate` (scanner de
+> fundo do Radar) há sessões — provando que o par provider+sufixo
+> funciona sem colidir Binance/MEXC na mesma chave do Bus;
+> `omnibox/mexc-symbols.ts` já busca a lista real de símbolos USDT-M
+> Futures da MEXC (`contract.mexc.com/api/v1/contract/detail`) para o
+> universo de fundo do Radar. O ÚNICO ponto realmente faltando: nenhum
+> desse caminho era alcançável a partir da seleção do Operador
+> (`SmartOmnibox`'s `onSelectCrypto: (baseAsset: string) => void` não
+> carregava identidade de exchange nenhuma).
+>
+> **Solução aplicada — Stage 1, "conectar peças já reais, nunca duplicar"
+> (Ordem MEXC §15/Ordem Universal §10, mandato explícito de ambas):**
+> - `omnibox/universal-symbol.ts` (novo, puro): normaliza
+>   `BinanceUsdtSymbol`/`MexcUsdtSymbol` num único
+>   `UniversalCryptoSymbol{baseAsset, exchange, market, nativeSymbol}` —
+>   `nativeSymbol` preserva o formato real de cada exchange
+>   (`"BTCUSDT"` vs. `"BTC_USDT"`, Ordem Universal §7), nunca reconstruído.
+>   Escopo honesto: só BINANCE/MEXC (os 2 providers de candle reais hoje —
+>   `CryptoExchangeId` é um recorte de `Exchange`, nunca uma união
+>   paralela) e só mercado `perp` (mexc-symbols.ts não descobre Spot).
+> - `SmartOmnibox.tsx`: novo fetch paralelo e independente
+>   (`fetchMexcUsdtSymbols()`, falha isolada — nunca bloqueia/derruba a
+>   seção Binance), nova seção "Cripto · MEXC (Tempo Real)", cada item
+>   rotulado `"EXCHANGE • MERCADO"` sempre visível (Ordem MEXC §7/§12,
+>   Ordem Universal §12 e §5 — mock literal do texto). `onSelectCrypto`
+>   mudou de `(baseAsset: string)` para `(selection: UniversalCryptoSymbol)`
+>   — única mudança de assinatura, único call site (App.tsx), sem shim de
+>   compatibilidade (CLAUDE.md: "mudar o código, não criar atalho").
+> - `engine-bridge.ts`: `getMexcChartCandles(symbol, limit, timeframe)` —
+>   mesmo contrato exato de `getChartCandles`/`getTradFiChartCandles`,
+>   reaproveita `getMarketDataProvider('MEXC')` + sufixo `-MEXC` já real
+>   (mesmo par que `requestRadarCandleSnapshot` já prova funcionar).
+> - `omnibox/MexcRealChart.tsx` (novo componente, espelha
+>   `TradFiRealChart.tsx` byte a byte na disciplina): candlestick real MEXC
+>   + badge "MEXC · FUTURES (Tempo Real)" sempre visível, 4 estados
+>   honestos (`LOADING`/`OK`/`HISTORICO_INSUFICIENTE`/`DADOS_INSUFICIENTES`
+>   — o 3º novo, Ordem MEXC §9/§13/Ordem Universal §9: ativo recém-listado
+>   nunca fabrica candle/estrutura, só declara amostra insuficiente).
+>   **ZERO import de nexus-core/Council/orderflow** — LEI 24 preservada
+>   por construção, mesmo raciocínio exato do precedente TradFi (o
+>   Operador pediu para VER/ANALISAR o ativo real, nunca para o Core
+>   Engine emitir uma segunda decisão sobre uma fonte nova).
+> - `App.tsx`: `marketMode` ganhou um 3º valor (`"MEXC"`, runtime-only —
+>   nunca entra em `RestoredSession`/`persistSessionState`: recarregar a
+>   página volta pro default CRYPTO/BTC, mesmo fallback já real para
+>   qualquer `marketMode` desconhecido) e `selectedMexcAsset` é estado
+>   PRÓPRIO, nunca reaproveita `selectedAsset`/`selectedTradFiAsset`
+>   (misturar identidade seria o "misturar dado de exchanges diferentes"
+>   que as duas Ordens proíbem, §8/§6). **Achado real de auditoria durante
+>   a fiação:** ~10 painéis do Terminal (Order Book/Order Flow/Liquidity
+>   Map/Council/Siriform/Regime/Score/Expectancy/preço do header/ícone do
+>   ativo) liam `selectedAsset`/`data`/`priceData` — todos ainda o ÚLTIMO
+>   símbolo Binance real, intocado, quando o modo vira MEXC. Sem gate,
+>   esses painéis mostrariam dado Binance estale sob o rótulo de um ativo
+>   MEXC diferente — exatamente o "misturar candle de uma exchange com
+>   preço de outra como se fosse o mesmo mercado" que a Ordem MEXC §8
+>   proíbe explicitamente. Corrigido generalizando o gate que já existia
+>   pra TRADFI (`marketMode === "TRADFI" ? <TradFiEmptyState/> : <Real/>`)
+>   para `isFullCryptoMode = marketMode === "CRYPTO"` — MEXC e TRADFI
+>   ficam do mesmo lado do gate em todo painel Binance-only, com um texto
+>   honesto PRÓPRIO (`reason` novo em `TradFiEmptyState`, nunca o texto
+>   fixo "Aguardando... Macro API" — seria falso pra MEXC, que está
+>   conectada de verdade, só esses painéis específicos não foram
+>   estendidos a ela nesta Etapa 1).
+>
+> **Testes (execução real + padrão):** `universal-symbol.test.ts` (9,
+> merge puro), `engine-bridge-mexc.test.ts` (5, mocka só a fronteira
+> `market-data-bus/index.js`, mesma convenção de
+> `engine-bridge-tradfi.test.ts`), `mexc-real-chart-wiring.test.ts` (12,
+> fiação App.tsx↔MexcRealChart↔universal-symbol, inclui a prova de que
+> nenhum painel Binance-only escapa do gate) + atualização de 3 testes de
+> padrão que quebraram honestamente por causa da mudança real de fonte
+> (`header-asset-cluster.test.ts`, `institutional-decision-layer-wiring.test.ts`,
+> `refinamento-final-wiring.test.ts`) e 1 de contagem de call site real
+> (`diretriz3-fixes.test.ts`: `getMarketDataBus().requestSnapshot()` 3→4
+> pontos reais, o 4º é `getMexcChartCandles`, mesmo raciocínio do 3º
+> `getTradFiChartCandles`) e 1 de contagem de `<TradFiEmptyState>`
+> (`tradfi-real-chart-wiring.test.ts`: 10→11, o 11º é o branch MEXC sem
+> ativo selecionado). `npm run verify`: **264 arquivos / 4466 testes**,
+> tsc limpo, build ok (1941 módulos, +2 sobre a baseline —
+> `universal-symbol.ts`/`MexcRealChart.tsx` agora graduados/ligados).
+>
+> **O que este round honestamente NÃO fez:**
+> - **Verificação ao vivo contra a MEXC real**: nenhuma chamada de rede
+>   real foi feita nesta sessão (mesmo bloqueio de política de rede do
+>   sandbox de implementação já documentado em
+>   `docs/MARKET_DATA_FABRIC.md`) — a Ordem MEXC §19 pede confirmação com
+>   ≥3 ativos reais end-to-end; isso só é possível num ambiente com saída
+>   de rede liberada (dispositivo real do Operador).
+> - **MEXC Spot**: não descoberto (`mexc-symbols.ts` só cobre Futures) nem
+>   analisável — Ordem MEXC §6/Ordem Universal §6 pedem Spot e Futures
+>   distintos por exchange; hoje só Futures existe dos dois lados
+>   (Binance também só oferece Futures como primário, Spot é fallback).
+> - **Core Engine/Council/Order Flow/Liquidations/Order Book real**: NUNCA
+>   estendidos à MEXC — permanecem 100% Binance, LEI 24 intacta por
+>   construção (MexcRealChart nunca importa essas camadas). Isto é
+>   deliberado, não esquecido: estender o ciclo de decisão real para uma
+>   segunda fonte é uma mudança arquitetural maior que este Stage 1, e o
+>   precedente do Footprint recusado (commit `5454194`, tick MEXC Spot
+>   rejeitado para Footprint por atribuição cross-exchange incorreta) já
+>   estabeleceu que misturar fontes no caminho de decisão real exige muito
+>   mais cuidado do que uma tela de leitura.
+> - **Persistência IndexedDB (`nexus/persistence.ts`)**: `candleKey` não
+>   ganhou sufixo de exchange — `selectedMexcAsset` é runtime-only nesta
+>   Etapa 1 (mesmo escopo que `TradFiRealChart` já tinha: não persiste),
+>   então o risco de colisão Binance/MEXC no cache do IndexedDB
+>   identificado na auditoria fica latente e sem exercício real ainda,
+>   documentado aqui para quem estender a Etapa 2.
+> - **Auto-detecção de novas listagens MEXC (Ordem MEXC §10/Ordem
+>   Universal §4/§11, "atualização automática do catálogo")**: nenhum
+>   polling/cadência nova foi criada — o Omnibox busca a lista real uma
+>   vez por abertura (mesmo padrão já real da seção Binance), nunca em
+>   segundo plano. Um ativo recém-listado na MEXC aparece assim que a
+>   MEXC o retornar no `contract/detail` e o Operador abrir/reabrir o
+>   Omnibox — não instantaneamente via push/poll de fundo.
+> - **`ExchangeAdapter` formal (Ordem Universal §10)**: não construída
+>   como abstração nomeada — `MarketDataProviderId`/`getMarketDataProvider()`
+>   já cumpre o papel real (provider por parâmetro explícito, zero
+>   `if exchange === MEXC` espalhado), só nunca foi batizado com esse nome
+>   exato; renomear/formalizar fica para quando um 4º provider real
+>   (Bybit/OKX/Hyperliquid) precisar do mesmo padrão.
+
 ---
 
 ## 7. Conciliação matemática — papel explícito de cada fonte (A-E)

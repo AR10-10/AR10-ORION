@@ -30,17 +30,28 @@ describe('Header: cluster de identidade do ativo — sem fileira de botões redu
 
   it('o badge do ativo ATUAL (ícone ₿/primeira letra) continua real e intacto no canto', () => {
     const s = app();
-    expect(s).toContain('selectedAsset === "BTC"\n                    ? "₿"\n                    : selectedAsset?.[0]}');
+    // Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET DISCOVERY": ganhou um
+    // 3º ramo (marketMode === "MEXC") entre TRADFI e o fallback ₿/letra —
+    // o fallback Binance em si (BTC/₿) continua intacto, só um nível mais
+    // fundo na ternária.
+    expect(s).toContain('selectedAsset === "BTC"\n                      ? "₿"\n                      : selectedAsset?.[0]}');
   });
 
   it('SmartOmnibox continua sendo o único caminho real de troca de ativo no header — mesma transição de estado que os botões removidos faziam', () => {
     const s = app();
     const idx = s.indexOf('<SmartOmnibox');
     const block = s.slice(idx, s.indexOf('/>', s.indexOf('onSelectTradFi', idx)));
-    expect(block).toContain('selectedLabel={marketMode === "TRADFI" ? (selectedTradFiAsset?.symbol ?? "Buscar ativo") : `${selectedAsset}USDT`}');
+    // Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET DISCOVERY": selectedLabel
+    // ganhou um 3º ramo (MEXC) e onSelectCrypto agora recebe a identidade
+    // completa (UniversalCryptoSymbol), não só o baseAsset — a transição de
+    // estado real (CRYPTO/BINANCE) continua a mesma de sempre.
+    expect(block).toContain('marketMode === "TRADFI"');
+    expect(block).toContain('(selectedTradFiAsset?.symbol ?? "Buscar ativo")');
+    expect(block).toContain('`${selectedAsset}USDT`');
+    expect(block).toContain('onSelectCrypto={(selection: UniversalCryptoSymbol) => {');
     expect(block).toContain('setMarketMode?.("CRYPTO");');
     expect(block).toContain('setSelectedTradFiAsset?.(null);');
-    expect(block).toContain('setSelectedAsset?.(baseAsset);');
+    expect(block).toContain('setSelectedAsset?.(selection.baseAsset);');
   });
 
   it('ASSETS continua real e em uso (AssetHeatmapWidget) — nunca apagado, só realocado para onde ainda faz sentido (Regra de Ouro 4)', () => {

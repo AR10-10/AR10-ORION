@@ -427,6 +427,8 @@ import { TRADFI_ASSETS, type TradFiAsset } from "./omnibox/tradfi-assets";
 // Institutional Chart Engine, zero Core Engine — LEI 24 intacta).
 import { findByLegacyTradFiAssetSymbol } from "../../src/market-data-bus/index.js";
 import { TradFiRealChart } from "./omnibox/TradFiRealChart";
+import { MexcRealChart } from "./omnibox/MexcRealChart";
+import type { UniversalCryptoSymbol } from "./omnibox/universal-symbol";
 // Master Panel handoff (Multi-Source Market Data Fusion, escopo reduzido a
 // UMA fonte adicional real por decisão do Operador): Bybit USDT-M Perpétuo
 // como segundo dado real e independente, comparado só contra o markPrice
@@ -1065,12 +1067,34 @@ export default function App() {
   // 14 dos 17 ativos legados (9 futuros CME + 5 ações NASDAQ) para um
   // contrato real do Instrument Registry (Yahoo delayed); o resto
   // continua honesto em Empty State.
-  const [marketMode, setMarketMode] = useState<"CRYPTO" | "TRADFI">(() => restoredSession.marketMode);
+  const [marketMode, setMarketMode] = useState<"CRYPTO" | "TRADFI" | "MEXC">(() => restoredSession.marketMode);
   const [selectedTradFiAsset, setSelectedTradFiAsset] = useState<TradFiAsset | null>(() => restoredSession.tradFiAsset);
   const resolvedTradFiInstrument = useMemo(
     () => (selectedTradFiAsset ? findByLegacyTradFiAssetSymbol(selectedTradFiAsset.symbol) : null),
     [selectedTradFiAsset],
   );
+  // Ordem "MEXC ASSET DISCOVERY" / "UNIVERSAL ASSET DISCOVERY": terceiro
+  // marketMode, paralelo a TRADFI — runtime-only de propósito nesta Etapa 1
+  // (nunca entra em RestoredSession/persistSessionState: recarregar a
+  // página volta pro default CRYPTO/BTC, o mesmo fallback já real de
+  // sempre para qualquer marketMode desconhecido/não-TRADFI — ver
+  // readRestoredSession acima, não precisou de nenhuma mudança). Estado
+  // PRÓPRIO, nunca reaproveita selectedAsset/selectedTradFiAsset: misturar
+  // a identidade MEXC num campo pensado para símbolo Binance ou ativo
+  // TradFi seria exatamente o "misturar dado de exchanges diferentes" que
+  // a Ordem proíbe (§8/§6).
+  const [selectedMexcAsset, setSelectedMexcAsset] = useState<UniversalCryptoSymbol | null>(null);
+  const isFullCryptoMode = marketMode === "CRYPTO";
+  // Texto honesto para os painéis Binance-only quando o modo é MEXC —
+  // nunca o texto padrão de TradFiEmptyState ("Aguardando... Macro API"):
+  // seria literalmente falso aqui, MEXC está conectada de verdade, só
+  // esses painéis específicos (Council/Order Flow/Liquidity Map/etc.) não
+  // foram estendidos a ela nesta Etapa 1 (LEI 24 + precedente do Footprint
+  // recusado — ver SYSTEM_HANDBOOK.md).
+  const nonCryptoEmptyStateReason =
+    marketMode === "MEXC"
+      ? "Fora do escopo desta Etapa 1 (MEXC) — Core Engine/Order Flow/Liquidity Map continuam Binance-only. Ver SYSTEM_HANDBOOK.md."
+      : undefined;
 
   // Bumping bootGeneration tears down and re-runs every real boot effect
   // below (REST fetch + WS connect, engine cycle, order flow feed,
@@ -3989,6 +4013,8 @@ export default function App() {
       setMarketMode,
       selectedTradFiAsset,
       setSelectedTradFiAsset,
+      selectedMexcAsset,
+      setSelectedMexcAsset,
       scannerData,
       gmilProviders,
       gmilBiases,
@@ -4064,6 +4090,7 @@ export default function App() {
       selectedAsset,
       marketMode,
       selectedTradFiAsset,
+      selectedMexcAsset,
       scannerData,
       gmilProviders,
       gmilBiases,
@@ -4188,6 +4215,16 @@ export default function App() {
                               assetLabel={`${selectedTradFiAsset?.symbol ?? ""} · ${selectedTradFiAsset?.name ?? ""}`}
                             />
                           )
+                        ) : marketMode === "MEXC" ? (
+                          // Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET
+                          // DISCOVERY": candle REAL da MEXC (mesmo caminho
+                          // já provado por scanRadarCandidate) — chartTimeframe
+                          // reaproveitado, mesmo seletor de sempre.
+                          selectedMexcAsset ? (
+                            <MexcRealChart asset={selectedMexcAsset} timeframe={chartTimeframe} />
+                          ) : (
+                            <TradFiEmptyState assetLabel="MEXC" reason={nonCryptoEmptyStateReason} />
+                          )
                         ) : (
                           <ChartWidget chartData={chartData} onRequestOlderCandles={handleRequestOlderCandles} priceData={priceData} />
                         ))}
@@ -4231,8 +4268,8 @@ export default function App() {
                           <X size={12} />
                         </div>
                       </div>
-                      {marketMode === "TRADFI" ? (
-                        <TradFiEmptyState compact assetLabel="MARKET INTELLIGENCE" />
+                      {!isFullCryptoMode ? (
+                        <TradFiEmptyState compact assetLabel="MARKET INTELLIGENCE" reason={nonCryptoEmptyStateReason} />
                       ) : (
                         <>
                           {/* PRIMEIRO item da gaveta de propósito: é a leitura
@@ -4274,9 +4311,9 @@ export default function App() {
                           é contexto macro global, sempre real
                           independente do ativo selecionado (mesmo
                           comportamento de sempre, só a posição mudou). */}
-                      {marketMode !== "TRADFI" && <NarrativeSummaryCard />}
-                      {marketMode === "TRADFI" ? (
-                        <TradFiEmptyState compact assetLabel="SIRIFORM CORE" />
+                      {isFullCryptoMode && <NarrativeSummaryCard />}
+                      {!isFullCryptoMode ? (
+                        <TradFiEmptyState compact assetLabel="SIRIFORM CORE" reason={nonCryptoEmptyStateReason} />
                       ) : (
                         widgets.se_core.visible && <SiriformCoreCard />
                       )}
@@ -4285,8 +4322,8 @@ export default function App() {
                           gate CRYPTO-only da origem (institutional-score.ts,
                           heat-score.ts, vwap-bands.ts e kill-zones.ts não
                           têm leitura real em modo TRADFI). */}
-                      {marketMode === "TRADFI" ? (
-                        <TradFiEmptyState compact assetLabel="SCORE & CONTEXTO" />
+                      {!isFullCryptoMode ? (
+                        <TradFiEmptyState compact assetLabel="SCORE & CONTEXTO" reason={nonCryptoEmptyStateReason} />
                       ) : (
                         <ScoreContextCard />
                       )}
@@ -4294,14 +4331,14 @@ export default function App() {
                           acima — Track Record/expectancy não têm leitura real
                           em modo TRADFI (Core Engine só emite LONG/SHORT/WAIT
                           para cripto nesta base). */}
-                      {marketMode === "TRADFI" ? (
-                        <TradFiEmptyState compact assetLabel="MOTOR DE LUCRATIVIDADE" />
+                      {!isFullCryptoMode ? (
+                        <TradFiEmptyState compact assetLabel="MOTOR DE LUCRATIVIDADE" reason={nonCryptoEmptyStateReason} />
                       ) : (
                         <ExpectancyCard />
                       )}
                       <GmilContextWidget />
-                      {marketMode === "TRADFI" ? (
-                        <TradFiEmptyState compact assetLabel="REGIME · COMITÊ DE DECISÃO" />
+                      {!isFullCryptoMode ? (
+                        <TradFiEmptyState compact assetLabel="REGIME · COMITÊ DE DECISÃO" reason={nonCryptoEmptyStateReason} />
                       ) : (
                         (widgets.market_regime.visible || widgets.decision_validation.visible) && (
                           <>
@@ -4315,7 +4352,7 @@ export default function App() {
                           logo abaixo do comitê de validação (mesma família de
                           leitura consultiva, LEI 24). Só em modo cripto: os
                           agentes leem feeds cripto reais. */}
-                      {marketMode !== "TRADFI" && widgets.council?.visible && <CouncilWidget />}
+                      {isFullCryptoMode && widgets.council?.visible && <CouncilWidget />}
                       <TelemetryHealthWidget />
                     </div>
 
@@ -4378,8 +4415,8 @@ export default function App() {
                     widgets.multi_timeframe.visible) && (
                     <div className="terminal-strip shrink-0 flex flex-col gap-2 max-h-[46dvh] min-[1120px]:max-h-[38dvh] overflow-y-auto scrollbar-hide">
                       {!widgets.se_core.collapsed &&
-                        (marketMode === "TRADFI" ? (
-                          <TradFiEmptyState compact assetLabel="SIRIFORM CORE · DETALHE COMPLETO" />
+                        (!isFullCryptoMode ? (
+                          <TradFiEmptyState compact assetLabel="SIRIFORM CORE · DETALHE COMPLETO" reason={nonCryptoEmptyStateReason} />
                         ) : (
                           <AssistantOrb inCenter={true} />
                         ))}
@@ -4387,8 +4424,8 @@ export default function App() {
                         <div className="flex gap-2 overflow-x-auto scrollbar-hide h-[200px] min-[1120px]:h-[168px] shrink-0">
                           {widgets.orderbook.visible && (
                             <div className="min-w-[260px] flex-1 flex flex-col">
-                              {marketMode === "TRADFI" ? (
-                                <TradFiEmptyState compact assetLabel="ORDER BOOK" />
+                              {!isFullCryptoMode ? (
+                                <TradFiEmptyState compact assetLabel="ORDER BOOK" reason={nonCryptoEmptyStateReason} />
                               ) : (
                                 <OrderBookWidget data={priceData} book={orderBook} />
                               )}
@@ -4396,8 +4433,8 @@ export default function App() {
                           )}
                           {widgets.orderflow.visible && (
                             <div className="min-w-[240px] flex-1 flex flex-col">
-                              {marketMode === "TRADFI" ? (
-                                <TradFiEmptyState compact assetLabel="ORDER FLOW" />
+                              {!isFullCryptoMode ? (
+                                <TradFiEmptyState compact assetLabel="ORDER FLOW" reason={nonCryptoEmptyStateReason} />
                               ) : (
                                 <OrderFlowWidget />
                               )}
@@ -4405,8 +4442,8 @@ export default function App() {
                           )}
                           {widgets.heatmap.visible && (
                             <div className="min-w-[240px] flex-1 flex flex-col">
-                              {marketMode === "TRADFI" ? (
-                                <TradFiEmptyState compact assetLabel="LIQUIDITY MAP" />
+                              {!isFullCryptoMode ? (
+                                <TradFiEmptyState compact assetLabel="LIQUIDITY MAP" reason={nonCryptoEmptyStateReason} />
                               ) : (
                                 <HeatmapWidget book={orderBook} data={priceData} />
                               )}
@@ -7848,6 +7885,8 @@ function TopBar({ data }: { data?: PriceState | null }) {
     setMarketMode,
     selectedTradFiAsset,
     setSelectedTradFiAsset,
+    selectedMexcAsset,
+    setSelectedMexcAsset,
     realCycle,
     engine,
     chartTimeframe,
@@ -7959,17 +7998,21 @@ function TopBar({ data }: { data?: PriceState | null }) {
               className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
                 marketMode === "TRADFI"
                   ? "bg-[#b026ff20] border border-[#b026ff40] shadow-[0_0_10px_rgba(176,38,255,0.25)]"
-                  : selectedAsset === "BTC"
-                    ? "bg-[#f7931a] shadow-[0_0_10px_rgba(247,147,26,0.4)]"
-                    : "bg-[#00f0ff20] border border-[#00f0ff40] shadow-[0_0_10px_rgba(0,240,255,0.2)]"
+                  : marketMode === "MEXC"
+                    ? "bg-[#00e0a020] border border-[#00e0a040] shadow-[0_0_10px_rgba(0,224,160,0.25)]"
+                    : selectedAsset === "BTC"
+                      ? "bg-[#f7931a] shadow-[0_0_10px_rgba(247,147,26,0.4)]"
+                      : "bg-[#00f0ff20] border border-[#00f0ff40] shadow-[0_0_10px_rgba(0,240,255,0.2)]"
               }`}
             >
               <span className="text-white font-bold text-xs">
                 {marketMode === "TRADFI"
                   ? (selectedTradFiAsset?.symbol?.[0] ?? "?")
-                  : selectedAsset === "BTC"
-                    ? "₿"
-                    : selectedAsset?.[0]}
+                  : marketMode === "MEXC"
+                    ? (selectedMexcAsset?.baseAsset?.[0] ?? "?")
+                    : selectedAsset === "BTC"
+                      ? "₿"
+                      : selectedAsset?.[0]}
               </span>
             </div>
             {/* Diretriz V-MAX item 7 ("Header Profissional"): o gatilho vira
@@ -7977,24 +8020,45 @@ function TopBar({ data }: { data?: PriceState | null }) {
                 de busca genérico ocupando espaço; a busca continua inteira
                 dentro do dropdown do próprio Omnibox. */}
             <SmartOmnibox
-              selectedLabel={marketMode === "TRADFI" ? (selectedTradFiAsset?.symbol ?? "Buscar ativo") : `${selectedAsset}USDT`}
-              onSelectCrypto={(baseAsset: string) => {
-                setMarketMode?.("CRYPTO");
+              selectedLabel={
+                marketMode === "TRADFI"
+                  ? (selectedTradFiAsset?.symbol ?? "Buscar ativo")
+                  : marketMode === "MEXC"
+                    ? (selectedMexcAsset ? `${selectedMexcAsset.baseAsset}/USDT` : "Buscar ativo")
+                    : `${selectedAsset}USDT`
+              }
+              onSelectCrypto={(selection: UniversalCryptoSymbol) => {
                 setSelectedTradFiAsset?.(null);
-                setSelectedAsset?.(baseAsset);
+                if (selection.exchange === "MEXC") {
+                  // Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET DISCOVERY":
+                  // estado PRÓPRIO, nunca reaproveita selectedAsset (que
+                  // permanece o último símbolo Binance real, intocado —
+                  // voltar para CRYPTO restaura exatamente de onde saiu).
+                  setMarketMode?.("MEXC");
+                  setSelectedMexcAsset?.(selection);
+                } else {
+                  setMarketMode?.("CRYPTO");
+                  setSelectedMexcAsset?.(null);
+                  setSelectedAsset?.(selection.baseAsset);
+                }
               }}
               onSelectTradFi={(asset: TradFiAsset) => {
                 setMarketMode?.("TRADFI");
+                setSelectedMexcAsset?.(null);
                 setSelectedTradFiAsset?.(asset);
               }}
             />
-            {(marketMode === "TRADFI" || cryptoMarketLabel) && (
+            {(marketMode === "TRADFI" || marketMode === "MEXC" || cryptoMarketLabel) && (
               <span
                 className={`text-[0.5rem] px-1 py-0.5 rounded uppercase tracking-wider whitespace-nowrap shrink-0 ${
-                  marketMode === "TRADFI" ? "bg-[#b026ff20] text-[#b026ff]" : "bg-[#00f0ff20] text-[#00f0ff]"
+                  marketMode === "TRADFI"
+                    ? "bg-[#b026ff20] text-[#b026ff]"
+                    : marketMode === "MEXC"
+                      ? "bg-[#00e0a020] text-[#00e0a0]"
+                      : "bg-[#00f0ff20] text-[#00f0ff]"
                 }`}
               >
-                {marketMode === "TRADFI" ? "Macro" : cryptoMarketLabel}
+                {marketMode === "TRADFI" ? "Macro" : marketMode === "MEXC" ? "MEXC · Futures" : cryptoMarketLabel}
               </span>
             )}
             {/* Refinamento Final §1 ("Timeframe" no header): chip DISPLAY-ONLY
@@ -8045,13 +8109,22 @@ function TopBar({ data }: { data?: PriceState | null }) {
               ancorados à direita, nunca cobertos. */}
           <div className="flex gap-2 md:gap-3 items-center h-full flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0">
           {/* O preço — única ocorrência em toda a interface. Em modo
-              TRADFI não existe fonte real ligada (fail-closed, Missão 2
-              diretriz 4): mostra o rótulo honesto em vez de um preço de
-              cripto sem nenhuma relação com o ativo selecionado. */}
+              TRADFI/MEXC, `data`/`priceData` continuam sendo o feed
+              Binance do ÚLTIMO selectedAsset — mostrar esse número aqui
+              seria exatamente o "misturar preço de uma exchange com
+              candle de outra como se fosse o mesmo mercado" que a Ordem
+              proíbe (§8/§6). Fail-closed honesto em vez disso (mesma
+              disciplina de sempre, Missão 2 diretriz 4). */}
           {marketMode === "TRADFI" ? (
             <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap">
               <span className="text-[0.55rem] font-bold text-[#8ab4f8]/50 uppercase tracking-wider">
                 {AWAIT} · Macro API
+              </span>
+            </div>
+          ) : marketMode === "MEXC" ? (
+            <div className="flex items-center gap-1.5 pr-2 md:pr-3 border-r border-[#00f0ff20] whitespace-nowrap">
+              <span className="text-[0.55rem] font-bold text-[#00e0a0]/70 uppercase tracking-wider">
+                Preço real no gráfico · MEXC
               </span>
             </div>
           ) : (

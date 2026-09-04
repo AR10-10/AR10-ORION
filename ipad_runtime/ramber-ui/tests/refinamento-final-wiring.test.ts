@@ -307,7 +307,13 @@ describe('Sessão Local-First: ativo/timeframe/modo sobrevivem a refresh ("o sis
     const a = app();
     expect(a).toContain('useState<AssetSymbol>(() => restoredSession.asset)');
     expect(a).toContain('useState(() => restoredSession.timeframe)');
-    expect(a).toContain('useState<"CRYPTO" | "TRADFI">(() => restoredSession.marketMode)');
+    // Ordem "MEXC ASSET DISCOVERY"/"UNIVERSAL ASSET DISCOVERY": marketMode
+    // ganhou um 3º valor ("MEXC") — RestoredSession/readRestoredSession em
+    // si NUNCA mudaram (o tipo lá continua "CRYPTO" | "TRADFI" de
+    // propósito: selecionar um ativo MEXC é runtime-only nesta Etapa 1,
+    // nunca persistido — ver selectedMexcAsset, estado separado que não
+    // entra neste efeito nem em RestoredSession).
+    expect(a).toContain('useState<"CRYPTO" | "TRADFI" | "MEXC">(() => restoredSession.marketMode)');
     expect(a).toContain('useState<TradFiAsset | null>(() => restoredSession.tradFiAsset)');
     const m = a.match(/persistSessionState\(\{[\s\S]*?\}\);\n  \}, \[selectedAsset, chartTimeframe, marketMode, selectedTradFiAsset, chartLayerVisibility, chartLayerAutoMode, emaPeriod\]\);/);
     expect(m, 'efeito único de persistência não encontrado').not.toBeNull();

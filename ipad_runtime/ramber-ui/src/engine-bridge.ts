@@ -813,6 +813,33 @@ export async function getTradFiChartCandles(
   }));
 }
 
+// getMexcChartCandles — Ordem "MEXC ASSET DISCOVERY" + "UNIVERSAL ASSET
+// DISCOVERY" (mesmo pedido, a 2ª generaliza a 1ª): MESMA FORMA/CONTRATO de
+// getChartCandles/getTradFiChartCandles acima (candle canônico {time,open,
+// high,low,close,volume} | null honesto), agora para um baseAsset MEXC
+// (ex. 'BTC') em vez do par cripto Binance padrão ou de um instrumento
+// TradFi. Auditado antes de escrever (CLAUDE.md item 1): o provider MEXC e
+// o cache-suffix `-MEXC` JÁ existiam e já são reais — requestRadarCandleSnapshot
+// (scanRadarCandidate, background do Radar) usa exatamente este mesmo par
+// provider+sufixo há sessões; este wrapper só expõe o mesmo caminho real
+// um nível acima, para o gráfico principal em vez do scanner de fundo.
+// Symbol permanece o baseAsset puro ('BTC', nunca 'BTC_USDT') — a conversão
+// para o formato nativo underscore da MEXC já acontece dentro de
+// mexc-futures-public.js's toMexcSymbol, nunca duplicada aqui.
+export async function getMexcChartCandles(
+  symbol: string,
+  limit = 200,
+  timeframe = '15m',
+): Promise<Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }> | null> {
+  const snapshot: BusSnapshot = await getMarketDataBus().requestSnapshot({
+    symbol: `${symbol}-MEXC`, timeframe, limit, collect: getMarketDataProvider('MEXC').collect, maxAgeMs: 25_000,
+  });
+  if (!snapshot.ok) return null;
+  return snapshot.candles.map((c: { t: number; o: number; h: number; l: number; c: number; v: number }) => ({
+    time: c.t, open: c.o, high: c.h, low: c.l, close: c.c, volume: c.v,
+  }));
+}
+
 // Auditoria de arquitetura (revisão completa): paginação histórica real do
 // gráfico — achado: CHART_CANDLE_LIMIT era uma janela fixa de 200 candles,
 // sem NENHUM caminho para carregar mais história ao arrastar para trás
