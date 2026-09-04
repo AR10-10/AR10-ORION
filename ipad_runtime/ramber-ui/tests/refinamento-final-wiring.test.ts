@@ -1146,7 +1146,10 @@ describe('Consolidação Final §5/§6: SHARK + AB=CD no motor, PRZ/ETA na super
 
   it('terminologia PRZ profissional + ETA do ápice na linha EPA da Wolfe (rótulos compactos EPC §4) — migrado pra HarmonicGeometryPlugin.tsx (pendência #6), cobertura completa em harmonic-geometry-plugin-wiring.test.ts', () => {
     const plugin = readFileSync(resolve(__dirname, '../src/chart/HarmonicGeometryPlugin.tsx'), 'utf8');
-    expect(plugin).toContain('`${top.pattern} ${hDirGlyph} PRZ ${(top.fitScore * 100).toFixed(0)}%`');
+    // ATUALIZAÇÃO 04/09/2026: PRZ agora desenha por hit dentro de um loop
+    // (fim do winner-take-all, pedido direto do Operador) — variável renomeada
+    // de `top` para `hit`, mesmo texto/terminologia.
+    expect(plugin).toContain('`${hit.pattern} ${hDirGlyph} PRZ ${(hit.fitScore * 100).toFixed(0)}%`');
     expect(plugin).toContain('`WOLFE EPA${etaLabel ? ` · ETA ${etaLabel}` : ""}`');
   });
 
